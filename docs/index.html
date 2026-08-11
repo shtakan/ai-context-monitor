@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Context Monitor — Мониторинг контекстного окна ИИ</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: #14161f;
+    color: #e2e4e9;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 20px 60px;
+  }
+
+  /* Заголовок */
+  .hero {
+    text-align: center;
+    padding: 60px 0 40px;
+  }
+
+  .hero h1 {
+    font-size: 2.6rem;
+    font-weight: 800;
+    color: #22c55e;
+    margin-bottom: 12px;
+    letter-spacing: -0.02em;
+  }
+
+  .hero .subtitle {
+    font-size: 1.15rem;
+    color: #9ca3af;
+    max-width: 560px;
+    margin: 0 auto;
+  }
+
+  /* Платформы */
+  .platforms {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px 20px;
+    margin-bottom: 40px;
+    color: #6b7280;
+    font-size: 0.95rem;
+  }
+
+  .platforms span {
+    white-space: nowrap;
+  }
+
+  .platforms span::before {
+    content: "▸ ";
+    color: #22c55e;
+  }
+
+  /* Кнопки */
+  .actions {
+    text-align: center;
+    margin-bottom: 56px;
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 14px 36px;
+    border-radius: 10px;
+    font-size: 1.05rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background 0.2s, transform 0.15s;
+    margin: 8px 6px;
+  }
+
+  .btn:hover {
+    transform: translateY(-1px);
+  }
+
+  .btn-primary {
+    background: #22c55e;
+    color: #0a0e12;
+  }
+
+  .btn-primary:hover {
+    background: #16a34a;
+  }
+
+  .btn-secondary {
+    background: #1f2330;
+    color: #d1d5db;
+    border: 1px solid #2d3143;
+  }
+
+  .btn-secondary:hover {
+    background: #2a2f3d;
+  }
+
+  /* Разделы */
+  .section {
+    margin-bottom: 48px;
+  }
+
+  .section h2 {
+    font-size: 1.55rem;
+    font-weight: 700;
+    color: #f0f1f5;
+    margin-bottom: 18px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #242838;
+  }
+
+  /* Как это работает */
+  .features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 18px;
+  }
+
+  .feature-card {
+    background: #1a1e2b;
+    border: 1px solid #242838;
+    border-radius: 12px;
+    padding: 22px 20px;
+  }
+
+  .feature-card .icon {
+    font-size: 1.5rem;
+    margin-bottom: 10px;
+  }
+
+  .feature-card h3 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #e2e4e9;
+    margin-bottom: 6px;
+  }
+
+  .feature-card p {
+    font-size: 0.93rem;
+    color: #9ca3af;
+  }
+
+  /* Установка */
+  .install-steps {
+    background: #1a1e2b;
+    border: 1px solid #242838;
+    border-radius: 12px;
+    padding: 28px 30px;
+  }
+
+  .install-steps ol {
+    counter-reset: step;
+    list-style: none;
+  }
+
+  .install-steps li {
+    counter-increment: step;
+    position: relative;
+    padding: 10px 0 10px 44px;
+    color: #d1d5db;
+    font-size: 0.98rem;
+    border-bottom: 1px solid #242838;
+  }
+
+  .install-steps li:last-child {
+    border-bottom: none;
+  }
+
+  .install-steps li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 10px;
+    width: 28px;
+    height: 28px;
+    background: #22c55e;
+    color: #0a0e12;
+    border-radius: 50%;
+    font-size: 0.85rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Скриншоты */
+  .screenshots {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+
+  .screenshot-item {
+    background: #1a1e2b;
+    border: 1px solid #242838;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .screenshot-item img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .screenshot-item .caption {
+    padding: 14px 18px;
+    font-size: 0.93rem;
+    color: #9ca3af;
+    background: #161a26;
+  }
+
+  /* Подвал */
+  .footer {
+    text-align: center;
+    padding-top: 40px;
+    margin-top: 20px;
+    border-top: 1px solid #242838;
+    color: #6b7280;
+    font-size: 0.88rem;
+  }
+
+  .footer span {
+    margin: 0 6px;
+  }
+
+  /* Адаптивность */
+  @media (max-width: 600px) {
+    .hero h1 {
+      font-size: 1.9rem;
+    }
+
+    .hero .subtitle {
+      font-size: 1rem;
+    }
+
+    .container {
+      padding: 24px 16px 40px;
+    }
+
+    .hero {
+      padding: 36px 0 28px;
+    }
+
+    .btn {
+      display: block;
+      text-align: center;
+      margin: 8px 0;
+    }
+
+    .install-steps {
+      padding: 20px 18px;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Заголовок -->
+  <div class="hero">
+    <h1>AI Context Monitor</h1>
+    <p class="subtitle">Chrome-расширение для мониторинга заполнения контекстного окна ИИ-моделей</p>
+  </div>
+
+  <!-- Платформы -->
+  <div class="platforms">
+    <span>Google Gemini</span>
+    <span>ChatGPT</span>
+    <span>DeepSeek</span>
+    <span>Google AI Search</span>
+  </div>
+
+  <!-- Кнопки -->
+  <div class="actions">
+    <a class="btn btn-primary" href="https://github.com/shtakan/ai-context-monitor/archive/refs/heads/main.zip">Скачать расширение (ZIP)</a>
+    <a class="btn btn-secondary" href="https://github.com/shtakan/ai-context-monitor">Проект на GitHub</a>
+  </div>
+
+  <!-- Как это работает -->
+  <div class="section">
+    <h2>Как это работает</h2>
+    <div class="features">
+      <div class="feature-card">
+        <div class="icon">📊</div>
+        <h3>Индикатор в углу экрана</h3>
+        <p>Показывает процент заполнения контекстного окна от лимита в реальном времени.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🔄</div>
+        <h3>Автоматический сбор истории</h3>
+        <p>История диалога подтягивается автоматически из сети, без прокрутки чата.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">⚡</div>
+        <h3>Обновление в реальном времени</h3>
+        <p>Процент и цвет индикатора обновляются с каждым новым сообщением в диалоге.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🧠</div>
+        <h3>Автоопределение модели</h3>
+        <p>Модель определяется автоматически по данным сайта — не нужно настраивать вручную.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Установка -->
+  <div class="section">
+    <h2>Установка</h2>
+    <div class="install-steps">
+      <ol>
+        <li>Скачайте и распакуйте архив с расширением в любую папку на компьютере.</li>
+        <li>Откройте <code style="background:#242838;padding:2px 6px;border-radius:4px;">chrome://extensions</code> в адресной строке браузера.</li>
+        <li>Включите <strong>«Режим разработчика»</strong> (переключатель в правом верхнем углу).</li>
+        <li>Нажмите <strong>«Загрузить распакованное расширение»</strong>.</li>
+        <li>Выберите распакованную папку с расширением и подтвердите.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- Скриншоты -->
+  <div class="section">
+    <h2>Скриншоты</h2>
+    <div class="screenshots">
+      <div class="screenshot-item">
+        <img src="screenshots/google-search-popup.png" alt="Google AI Search — зелёная зона и окно расширения" loading="lazy">
+        <div class="caption">Google AI Search: зелёная зона и окно расширения</div>
+      </div>
+      <div class="screenshot-item">
+        <img src="screenshots/chatgpt-red.png" alt="ChatGPT — красная зона" loading="lazy">
+        <div class="caption">ChatGPT: красная зона (больше 80%)</div>
+      </div>
+      <div class="screenshot-item">
+        <img src="screenshots/gemini-yellow.png" alt="Gemini — жёлтая зона" loading="lazy">
+        <div class="caption">Gemini: жёлтая зона (больше 50%)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Подвал -->
+  <div class="footer">
+    <span>Версия 1.0.0</span>
+    <span>·</span>
+    <span>Лицензия MIT</span>
+    <span>·</span>
+    <span>Расширение не собирает и не передаёт ваши персональные данные</span>
+  </div>
+
+</div>
+</body>
+</html>
