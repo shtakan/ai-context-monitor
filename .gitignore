@@ -1,0 +1,28 @@
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Archives
+*.zip
+*.crx
+*.pem
+
+# Node
+node_modules/
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log
+
+# Environment
+.env
+.env.local
+
+# Project-specific
+.clinerules

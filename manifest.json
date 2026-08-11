@@ -1,0 +1,64 @@
+{
+  "manifest_version": 3,
+  "name": "AI Context Monitor",
+  "version": "1.0.0",
+  "description": "Мониторинг заполнения контекстного окна AI-моделей в реальном времени",
+
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://gemini.google.com/*",
+    "https://chat.deepseek.com/*",
+    "https://aistudio.google.com/*",
+    "https://www.google.com/*",
+    "https://generativelanguage.googleapis.com/*"
+  ],
+
+  "background": {
+    "service_worker": "core/background.js"
+  },
+
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://gemini.google.com/*",
+        "https://chat.deepseek.com/*",
+        "https://aistudio.google.com/*",
+		"https://www.google.com/*"
+      ],
+      "js": [
+        "utils/debug.js",
+        "utils/tokenizer.js",
+        "utils/model-config.js",
+        "adapters/base-adapter.js",
+        "adapters/chatgpt-adapter.js",
+        "adapters/gemini-adapter.js",
+        "adapters/deepseek-adapter.js",
+		"adapters/google-search-adapter.js",
+        "core/content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "action": {
+    "default_popup": "options/options.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Context Monitor</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="popup">
+    <div class="header">
+      <span class="logo">📊</span>
+      <h1>AI Context Monitor</h1>
+    </div>
+
+    <div class="stats" id="stats">
+      <div class="stat-row">
+        <span class="stat-label">Сайт:</span>
+        <span class="stat-value" id="stat-site">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Модель:</span>
+        <span class="stat-value" id="stat-model">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Токены:</span>
+        <span class="stat-value" id="stat-tokens">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Лимит:</span>
+        <span class="stat-value" id="stat-limit">—</span>
+      </div>
+      <div class="stat-row highlight">
+        <span class="stat-label">Заполнение:</span>
+        <span class="stat-value" id="stat-percent">—</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <label class="label">Модель:</label>
+      <select id="model-select">
+        <option value="auto">Автоопределение</option>
+        <optgroup label="OpenAI">
+          <option value="gpt-4o">GPT-4o (128K)</option>
+          <option value="gpt-4o-mini">GPT-4o Mini (128K)</option>
+          <option value="gpt-4-turbo">GPT-4 Turbo (128K)</option>
+          <option value="gpt-4">GPT-4 (8K)</option>
+          <option value="gpt-3.5-turbo">GPT-3.5 Turbo (16K)</option>
+        </optgroup>
+        <optgroup label="Google">
+          <option value="gemini-2.5-pro">Gemini 2.5 Pro (1M)</option>
+          <option value="gemini-2.5-flash">Gemini 2.5 Flash (1M)</option>
+          <option value="gemini-1.5-pro">Gemini 1.5 Pro (2M)</option>
+        </optgroup>
+        <optgroup label="DeepSeek">
+          <option value="deepseek-v3">DeepSeek V3 (128K)</option>
+          <option value="deepseek-r1">DeepSeek R1 (128K)</option>
+        </optgroup>
+      </select>
+    </div>
+
+    <div class="section">
+      <label class="label">Лимит контекста:</label>
+      <div class="input-row">
+        <input type="number" id="custom-limit" placeholder="Авто" min="1000" max="10000000" step="1000">
+        <button id="reset-limit" class="btn-reset">Авто</button>
+      </div>
+      <span class="hint">Оставьте пустым или нажмите "Авто"</span>
+    </div>
+
+    <div class="section checkbox-row">
+      <input type="checkbox" id="show-widget" checked>
+      <label for="show-widget">Показывать индикатор на странице</label>
+    </div>
+
+    <div class="section">
+      <label class="label">Gemini API — точный подсчёт токенов</label>
+      <div class="api-key-row">
+        <input type="password" id="api-key" placeholder="Введите API-ключ Google AI Studio" autocomplete="off">
+        <button id="toggle-api-key" class="btn-toggle" type="button" title="Показать/скрыть ключ">👁</button>
+      </div>
+      <span class="hint">Ключ хранится локально в вашем браузере</span>
+    </div>
+
+    <div class="section checkbox-row">
+      <input type="checkbox" id="exact-count">
+      <label for="exact-count">Точный подсчёт токенов через Gemini API</label>
+    </div>
+
+    <div class="footer">
+      <span class="version">v1.0.0</span>
+    </div>
+  </div>
+</body>
+<script src="options.js"></script>
+</html>
