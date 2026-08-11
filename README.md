@@ -1,5 +1,8 @@
 # AI Context Monitor
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/badge/version-1.0.0-green.svg)](https://github.com/shtakan/ai-context-monitor/releases)
+
 Расширение работает **без API-ключа** «из коробки» — ключ нужен только для повышения точности подсчёта токенов на Google Gemini.
 
 Расширение для Google Chrome, которое показывает в процентах, насколько заполнено контекстное окно вашего диалога с ИИ на поддерживаемых сайтах. Когда переписка становится слишком длинной, модель начинает терять детали — индикатор помогает вовремя это заметить, меняя цвет с зелёного на жёлтый, а затем на красный.
@@ -21,6 +24,20 @@
 - Изображения включаются в расчёт как приблизительная оценка токенов.
 - Без API-ключа используется приблизительная локальная оценка токенов.
 - С API-ключом — точный подсчёт через официальный Gemini API (countTokens).
+
+## Скриншоты
+
+**Google AI Search — зелёная зона (35%) и окно расширения:**
+
+![Google AI Search](docs/screenshots/google-search-popup.png)
+
+**ChatGPT — красная зона (больше 80%):**
+
+![ChatGPT](docs/screenshots/chatgpt-red.png)
+
+**Gemini — жёлтая зона (больше 50%):**
+
+![Gemini](docs/screenshots/gemini-yellow.png)
 
 ## Точный подсчёт через API-ключ (необязательно)
 
