@@ -1,43 +1,34 @@
-name: Build and Release
+name: Release ZIP
 
 on:
   release:
     types: [published]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Read version
+        id: version
+        run: echo "VERSION=$(node -p "require('./manifest.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Create ZIP
+        run: |
+          zip -r "ai-context-monitor-v${{ steps.version.outputs.VERSION }}.zip" . \
+            -x ".git/*" ".github/*" "node_modules/*" "tests/*" "docs/*" "coverage/*" \
+            -x "*.md" ".gitignore" "package.json" "package-lock.json"
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
         with:
-          node-version: '20'
-
-      - name: Read version from manifest.json
-        run: |
-          node -e "const m = require('./manifest.json'); require('fs').appendFileSync(process.env.GITHUB_ENV, 'VERSION=' + m.version + '\n')"
-
-      - name: Create ZIP archive
-        run: |
-          zip -r "ai-context-monitor-v${VERSION}.zip" . \
-            -x ".git/*" \
-            -x ".github/*" \
-            -x "node_modules/*" \
-            -x "tests/*" \
-            -x "*.md" \
-            -x ".gitignore" \
-            -x "package.json" \
-            -x "package-lock.json"
-
-      - name: Upload ZIP as release asset
-        uses: actions/upload-release-asset@v1
+          tag_name: ${{ github.event.release.tag_name || format('v{0}', steps.version.outputs.VERSION) }}
+          files: ai-context-monitor-v${{ steps.version.outputs.VERSION }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./ai-context-monitor-v${VERSION}.zip
-          asset_name: ai-context-monitor-v${VERSION}.zip
-          asset_content_type: application/zip
