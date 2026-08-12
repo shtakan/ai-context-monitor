@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI Context Monitor",
-  "version": "1.1.0",
+"version": "1.2.0",
   "description": "Мониторинг заполнения контекстного окна AI-моделей в реальном времени",
 
   "permissions": [
@@ -17,6 +17,8 @@
     "https://aistudio.google.com/*",
     "https://www.google.com/*",
     "https://claude.ai/*",
+    "https://www.perplexity.ai/*",
+    "https://perplexity.ai/*",
     "https://generativelanguage.googleapis.com/*"
   ],
 
@@ -32,21 +34,24 @@
         "https://chat.deepseek.com/*",
         "https://aistudio.google.com/*",
 		"https://www.google.com/*",
-        "https://claude.ai/*"
-      ],
-      "js": [
-        "utils/debug.js",
-        "utils/tokenizer.js",
-        "utils/model-config.js",
-        "adapters/base-adapter.js",
-        "adapters/chatgpt-adapter.js",
-        "adapters/gemini-adapter.js",
-        "adapters/deepseek-adapter.js",
-		"adapters/google-search-adapter.js",
-        "adapters/claude-adapter.js",
-        "core/content.js"
-      ],
-      "run_at": "document_idle"
+    "https://claude.ai/*",
+    "https://www.perplexity.ai/*",
+    "https://perplexity.ai/*"
+  ],
+  "js": [
+    "utils/debug.js",
+    "utils/tokenizer.js",
+    "utils/model-config.js",
+    "adapters/base-adapter.js",
+    "adapters/chatgpt-adapter.js",
+    "adapters/gemini-adapter.js",
+    "adapters/deepseek-adapter.js",
+    "adapters/google-search-adapter.js",
+    "adapters/claude-adapter.js",
+    "adapters/perplexity-adapter.js",
+    "core/content.js"
+  ],
+  "run_at": "document_idle"
     }
   ],
 

@@ -489,6 +489,8 @@ async function initialize() {
     currentAdapter = new GoogleSearchAdapter();
   } else if (hostname.includes('claude.ai')) {
     currentAdapter = new ClaudeAdapter();
+  } else if (hostname.includes('perplexity.ai')) {
+    currentAdapter = new PerplexityAdapter();
   }
   if (!currentAdapter) return;
   debugLog('log', 'Адаптер:', currentAdapter.siteName);

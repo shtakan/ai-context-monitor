@@ -73,6 +73,19 @@ async function ensureInterceptor() {
       console.log('AI Context Monitor: перехватчик Claude зарегистрирован (мир сайта, document_start)');
     }
 
+    // перехватчик Perplexity
+    if (ids.indexOf('ai-cm-perplexity-intercept') === -1) {
+      await chrome.scripting.registerContentScripts([{
+        id: 'ai-cm-perplexity-intercept',
+        matches: ['https://www.perplexity.ai/*', 'https://perplexity.ai/*'],
+        js: ['utils/debug.js', 'utils/perplexity-parser.js', 'core/perplexity-intercept.js'],
+        runAt: 'document_start',
+        world: 'MAIN',
+        allFrames: false
+      }]);
+      console.log('AI Context Monitor: перехватчик Perplexity зарегистрирован (мир сайта, document_start)');
+    }
+
     // перехватчик Google Search AI
     if (ids.indexOf('ai-cm-google-search-intercept') === -1) {
       await chrome.scripting.registerContentScripts([{
