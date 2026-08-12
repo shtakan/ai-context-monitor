@@ -1,0 +1,87 @@
+{
+  "uuid": "conv-00000000-0000-4000-a000-000000000001",
+  "name": "Синтетический тестовый диалог",
+  "model": "claude-sonnet-4-6",
+  "current_leaf_message_uuid": "msg-00000000-0000-4000-a000-000000000004",
+  "chat_messages": [
+    {
+      "uuid": "msg-00000000-0000-4000-a000-000000000001",
+      "sender": "human",
+      "parent_message_uuid": null,
+      "created_at": "2026-08-11T10:00:00.000Z",
+      "updated_at": "2026-08-11T10:00:00.000Z",
+      "content": [
+        {
+          "type": "text",
+          "text": "Синтетический вопрос номер один"
+        }
+      ]
+    },
+    {
+      "uuid": "msg-00000000-0000-4000-a000-000000000002",
+      "sender": "assistant",
+      "parent_message_uuid": "msg-00000000-0000-4000-a000-000000000001",
+      "created_at": "2026-08-11T10:00:05.000Z",
+      "updated_at": "2026-08-11T10:00:05.000Z",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "Синтетическое рассуждение"
+        },
+        {
+          "type": "text",
+          "text": "Синтетический ответ один"
+        }
+      ]
+    },
+    {
+      "uuid": "msg-00000000-0000-4000-a000-000000000003",
+      "sender": "human",
+      "parent_message_uuid": "msg-00000000-0000-4000-a000-000000000002",
+      "created_at": "2026-08-11T10:01:00.000Z",
+      "updated_at": "2026-08-11T10:01:00.000Z",
+      "content": [
+        {
+          "type": "text",
+          "text": "Синтетический вопрос два"
+        }
+      ]
+    },
+    {
+      "uuid": "msg-00000000-0000-4000-a000-000000000004",
+      "sender": "assistant",
+      "parent_message_uuid": "msg-00000000-0000-4000-a000-000000000003",
+      "created_at": "2026-08-11T10:01:10.000Z",
+      "updated_at": "2026-08-11T10:01:10.000Z",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "Рассуждение два"
+        },
+        {
+          "type": "tool_use",
+          "name": "web_search",
+          "id": "toolu_01AbCdEfGhIjKlMnOp",
+          "input": {
+            "query": "test"
+          }
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_01AbCdEfGhIjKlMnOp",
+          "content": [
+            {
+              "type": "text",
+              "text": "результат"
+            }
+          ],
+          "is_error": false
+        },
+        {
+          "type": "text",
+          "text": "Синтетический ответ два с тулзами"
+        }
+      ]
+    }
+  ]
+}

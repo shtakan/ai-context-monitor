@@ -92,13 +92,81 @@ provider: 'DeepSeek',
 contextLimit: 131072,
 description: 'Флагманская модель DeepSeek'
 },
-'DeepSeek-R1': {
-name: 'DeepSeek R1',
-provider: 'DeepSeek',
-contextLimit: 131072,
-description: 'Модель с усиленным reasoning'
-},
-// ---- Gemini: строковые ключи (на случай, если детектор даст имя с префиксом/капсом) ----
+    'DeepSeek-R1': {
+      name: 'DeepSeek R1',
+      provider: 'DeepSeek',
+      contextLimit: 131072,
+      description: 'Модель с усиленным reasoning'
+    },
+    // ---- Claude (200K для всех актуальных моделей) ----
+    'claude-sonnet-5': {
+      name: 'Claude Sonnet 5',
+      provider: 'Anthropic',
+      contextLimit: 200000,
+      effectiveLimit: 128000,
+      description: 'Claude Sonnet 5 (окно 200K, Sonnet 4.6 Max)'
+    },
+    'claude-sonnet-4-6': {
+      name: 'Claude Sonnet 4.6',
+      provider: 'Anthropic',
+      contextLimit: 200000,
+      description: 'Claude Sonnet 4.6 (окно 200K)'
+    },
+    'claude-sonnet-4-5': {
+      name: 'Claude Sonnet 4.5',
+      provider: 'Anthropic',
+      contextLimit: 200000,
+      description: 'Claude Sonnet 4.5 (окно 200K)'
+    },
+    'claude-opus-4-6': {
+      name: 'Claude Opus 4.6',
+      provider: 'Anthropic',
+      contextLimit: 200000,
+      description: 'Claude Opus 4.6 (окно 200K)'
+    },
+    'claude-opus-4-5': {
+      name: 'Claude Opus 4.5',
+      provider: 'Anthropic',
+      contextLimit: 200000,
+      description: 'Claude Opus 4.5 (окно 200K)'
+    },
+    'claude-haiku-4-5': {
+      name: 'Claude Haiku 4.5',
+      provider: 'Anthropic',
+      contextLimit: 200000,
+      description: 'Claude Haiku 4.5 (окно 200K)'
+    },
+    'claude-3-5-sonnet': {
+      name: 'Claude 3.5 Sonnet',
+      provider: 'Anthropic',
+      contextLimit: 200000,
+      description: 'Claude 3.5 Sonnet (окно 200K)'
+    },
+    'claude-3-5-haiku': {
+      name: 'Claude 3.5 Haiku',
+      provider: 'Anthropic',
+      contextLimit: 200000,
+      description: 'Claude 3.5 Haiku (окно 200K)'
+    },
+    'claude-3-opus': {
+      name: 'Claude 3 Opus',
+      provider: 'Anthropic',
+      contextLimit: 200000,
+      description: 'Claude 3 Opus (окно 200K)'
+    },
+    'claude-3-haiku': {
+      name: 'Claude 3 Haiku',
+      provider: 'Anthropic',
+      contextLimit: 200000,
+      description: 'Claude 3 Haiku (окно 200K)'
+    },
+    'claude-3-sonnet': {
+      name: 'Claude 3 Sonnet',
+      provider: 'Anthropic',
+      contextLimit: 200000,
+      description: 'Claude 3 Sonnet (окно 200K)'
+    },
+    // ---- Gemini: строковые ключи (на случай, если детектор даст имя с префиксом/капсом) ----
 'Gemini 2.5 Pro': {
 name: 'Gemini 2.5 Pro',
 provider: 'Google',
@@ -112,13 +180,14 @@ contextLimit: 1048576,
 description: 'Быстрая модель Google'
 }
 },
-siteDefaults: {
-'chatgpt': 'gpt-5.5',
-'gemini': 'gemini-2.5-flash',
-'aistudio': 'gemini-2.5-pro',
-'google_search': 'gemini-2.5-flash',
-'deepseek': 'deepseek-v3'
-},
+  siteDefaults: {
+    'chatgpt': 'gpt-5.5',
+    'gemini': 'gemini-2.5-flash',
+    'aistudio': 'gemini-2.5-pro',
+    'google_search': 'gemini-2.5-flash',
+    'deepseek': 'deepseek-v3',
+    'claude': 'claude-sonnet-4-6'
+  },
 getModel(modelId) {
 return this.models[modelId] || null;
 },

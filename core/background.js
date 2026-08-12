@@ -60,6 +60,19 @@ async function ensureInterceptor() {
       console.log('AI Context Monitor: перехватчик DeepSeek зарегистрирован (мир сайта, document_start)');
     }
 
+    // перехватчик Claude
+    if (ids.indexOf('ai-cm-claude-intercept') === -1) {
+      await chrome.scripting.registerContentScripts([{
+        id: 'ai-cm-claude-intercept',
+        matches: ['https://claude.ai/*'],
+        js: ['utils/debug.js', 'core/claude-intercept.js'],
+        runAt: 'document_start',
+        world: 'MAIN',
+        allFrames: false
+      }]);
+      console.log('AI Context Monitor: перехватчик Claude зарегистрирован (мир сайта, document_start)');
+    }
+
     // перехватчик Google Search AI
     if (ids.indexOf('ai-cm-google-search-intercept') === -1) {
       await chrome.scripting.registerContentScripts([{

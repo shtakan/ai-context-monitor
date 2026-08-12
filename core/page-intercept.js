@@ -346,50 +346,58 @@
     setTimeout(function () { activeRefresh(reason); }, delay);
   }
 
-  // ---- v15: активная дозагрузка снимка при открытии чата (без заголовков, credentials:include) ----
-  function bootFetchSnapshot(convId) {
-    if (!convId) return;
-    var url = location.origin + '/backend-api/conversation/' + convId;
-    console.log('[ai-cm-intercept] активная дозагрузка снимка при открытии чата (convId=' + convId + ')');
-    bootFetchDone = true;
-    originalFetch(url, { method: 'GET', credentials: 'include' })
-      .then(function (resp) {
-        if (!resp || !resp.ok) {
-          debugLog('log', '[ai-cm-intercept] bootFetch не прошёл (статус ' + (resp ? resp.status : 'none') + ') для ' + convId);
-          return null;
-        }
-        return resp.json();
-      })
-      .then(function (data) {
-        if (!data) return;
-        // проверка гонки: не применяем, если чат уже сменился
-        if (convId !== currentConvId) {
-          debugLog('log', '[ai-cm-intercept] bootFetch: чат сменился (' + convId + ' → ' + currentConvId + '), ответ отброшен');
-          return;
-        }
-        // не перезаписываем, если снимок уже пришёл пассивно
-        if (lastLoadedConvId === currentConvId && lastSnapshotUrl) return;
-        var parsed = parseHistory(data);
-        if (parsed.text) {
-          lastSnapshotUrl = url;
-          emitSnapshot(parsed, 'bootFetch');
-          dirty = false;
-        }
-      })
-      .catch(function (err) {
-        debugLog('log', '[ai-cm-intercept] bootFetch ошибка: ' + err + ' для ' + convId);
-      });
-  }
+   // ---- v16: активная дозагрузка снимка при открытии чата (только при наличии auth-заголовков) ----
+   function bootFetchSnapshot(convId) {
+     if (!convId) return;
+     // Пропуск: пассивный снимок уже пришёл для этого чата
+     if (lastLoadedConvId === convId) {
+       console.log('[ai-cm-intercept] bootFetch: пропуск (пассивный снимок уже получен)');
+       return;
+     }
+     // Пропуск: нет сохранённых auth-заголовков
+     if (!lastHeaders || !hasAuth(lastHeaders)) {
+       console.log('[ai-cm-intercept] bootFetch: пропуск (нет сохранённых auth-заголовков)');
+       return;
+     }
+     var url = location.origin + '/backend-api/conversation/' + convId;
+     console.log('[ai-cm-intercept] активная дозагрузка снимка при открытии чата (convId=' + convId + ')');
+     bootFetchDone = true;
+     originalFetch(url, { method: 'GET', credentials: 'include' })
+       .then(function (resp) {
+         if (!resp || !resp.ok) {
+           console.log('[ai-cm-intercept] bootFetch: статус ' + (resp ? resp.status : 'none') + ' для ' + convId);
+           return null;
+         }
+         return resp.json();
+       })
+       .then(function (data) {
+         if (!data) return;
+         // проверка гонки: не применяем, если чат уже сменился
+         if (convId !== currentConvId) {
+           debugLog('log', '[ai-cm-intercept] bootFetch: чат сменился (' + convId + ' → ' + currentConvId + '), ответ отброшен');
+           return;
+         }
+         // не перезаписываем, если снимок уже пришёл пассивно
+         if (lastLoadedConvId === currentConvId && lastSnapshotUrl) return;
+         var parsed = parseHistory(data);
+         if (parsed.text) {
+           lastSnapshotUrl = url;
+           emitSnapshot(parsed, 'bootFetch');
+           dirty = false;
+         }
+       })
+       .catch(function (err) {
+         console.log('[ai-cm-intercept] bootFetch ошибка: ' + err + ' для ' + convId);
+       });
+   }
 
-  function scheduleBootFetch(convId, delay) {
-    try { clearTimeout(bootFetchTimer); } catch (e) {}
-    bootFetchTimer = setTimeout(function () {
-      if (!convId) return;
-      // не дублируем: если снимок уже пришёл — не дёргаем
-      if (lastLoadedConvId === convId) return;
-      bootFetchSnapshot(convId);
-    }, delay);
-  }
+   function scheduleBootFetch(convId, delay) {
+     try { clearTimeout(bootFetchTimer); } catch (e) {}
+     bootFetchTimer = setTimeout(function () {
+       if (!convId) return;
+       bootFetchSnapshot(convId);
+     }, delay);
+   }
 
   // ---- v13: switch-refetch — покрывает случай, когда сайт не ходит в сеть при SPA-переключении ----
   function scheduleSwitchRefetch() {

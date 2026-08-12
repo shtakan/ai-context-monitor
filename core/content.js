@@ -485,8 +485,10 @@ async function initialize() {
     currentAdapter = new GeminiAdapter();
   } else if (hostname.includes('chat.deepseek.com')) {
     currentAdapter = new DeepSeekAdapter();
-  } else if (hostname.includes('google.com')) {
+  } else if (hostname.includes('google.com') && !hostname.includes('aistudio')) {
     currentAdapter = new GoogleSearchAdapter();
+  } else if (hostname.includes('claude.ai')) {
+    currentAdapter = new ClaudeAdapter();
   }
   if (!currentAdapter) return;
   debugLog('log', 'Адаптер:', currentAdapter.siteName);
@@ -788,6 +790,21 @@ function processAndSend() {
     if (hasChanged) {
       const tag = (typeof safePct === 'number' && safePct > 0) ? ('порог ' + safePct + '% от Авто') : 'Авто';
       debugLog('log', `📊 ${ModelConfig.getModel(modelId)?.name || modelId}: ${maxTokenCount} / ${displayLimit.toLocaleString()} (${tag}) · окно ${contextLimit.toLocaleString()} · ${percentage}%` + (netAttachTokens > 0 ? ` · вложения≈${netAttachTokens}` : '') + (netServerTokens > 0 ? ' · serverTokens' : '') + (baseComplete ? ' · по базе' : ''));
+    }
+
+    // Снапшот для попапа в chrome.storage.local
+    if (isExtensionValid()) {
+      try {
+        chrome.storage.local.set({ aiCmState: {
+          host: window.location.hostname,
+          site: currentAdapter.siteName,
+          model: ModelConfig.getModel(modelId)?.name || modelId,
+          tokens: maxTokenCount,
+          limit: displayLimit,
+          percent: percentage,
+          updatedAt: Date.now()
+        }});
+      } catch (e) {}
     }
     if (isExtensionValid()) {
       chrome.runtime.sendMessage({

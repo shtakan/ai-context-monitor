@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI Context Monitor",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Мониторинг заполнения контекстного окна AI-моделей в реальном времени",
 
   "permissions": [
@@ -16,6 +16,7 @@
     "https://chat.deepseek.com/*",
     "https://aistudio.google.com/*",
     "https://www.google.com/*",
+    "https://claude.ai/*",
     "https://generativelanguage.googleapis.com/*"
   ],
 
@@ -30,7 +31,8 @@
         "https://gemini.google.com/*",
         "https://chat.deepseek.com/*",
         "https://aistudio.google.com/*",
-		"https://www.google.com/*"
+		"https://www.google.com/*",
+        "https://claude.ai/*"
       ],
       "js": [
         "utils/debug.js",
@@ -41,6 +43,7 @@
         "adapters/gemini-adapter.js",
         "adapters/deepseek-adapter.js",
 		"adapters/google-search-adapter.js",
+        "adapters/claude-adapter.js",
         "core/content.js"
       ],
       "run_at": "document_idle"
