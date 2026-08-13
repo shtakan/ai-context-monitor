@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.2.1 — 2026-08-13
+- Исправлен регресс Perplexity после рефакторинга парсера: emitSnapshot больше не обрывается молча (пустые catch заменены логами ошибок), контракт window.parsePerplexityThread и emitSnapshot приведён к единому формату { model, messages, text, count }
+- Лендинг и README: Claude и Perplexity добавлены в список поддерживаемых платформ, скриншоты docs/screenshots/claude.png и docs/screenshots/perplexity.png
+
 ## v1.2.0 — 2026-08-12
 - Добавлена поддержка Perplexity (perplexity.ai и www.perplexity.ai): перехват истории /rest/thread/{slug}, стрим perplexity_ask с виртуальным F5, bootstrap по выученному шаблону URL, SPA-детектор переключения тредов
 - Trim-устойчивый парсер Perplexity (сервер отдаёт JSON с пробелами в ключах) вынесен в utils/perplexity-parser.js — единый источник для боевого кода и тестов

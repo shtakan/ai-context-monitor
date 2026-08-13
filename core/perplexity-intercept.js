@@ -15,6 +15,7 @@
 (function () {
   if (window.__aiCmPerplexityInterceptInstalled) return;
   window.__aiCmPerplexityInterceptInstalled = true;
+  console.log('[perplexity-intercept] parser available: ' + typeof window.parsePerplexityThread);
 
   var originalFetch = window.fetch;
   if (typeof originalFetch !== 'function') return;
@@ -165,12 +166,18 @@
 
   // ---- эмит снимка через window.parsePerplexityThread ----
   function emitSnapshot(data, when) {
-    var parsed = window.parsePerplexityThread ? window.parsePerplexityThread(data) : { text: '', count: 0 };
-    if (!parsed.text) return;
+    var parsed = { text: '', count: 0 };
+    try {
+      parsed = window.parsePerplexityThread ? window.parsePerplexityThread(data) : { text: '', count: 0 };
+    } catch (e) {
+      console.log('[perplexity-intercept] ошибка emitSnapshot:', e && e.message);
+      return;
+    }
+    if (!parsed || !parsed.text) return;
     var model = parsed.model || lastModel || '';
     if (model) lastModel = model;
     console.log('[perplexity-intercept] ' + String.fromCodePoint(0x1F4E5) + ' полный снимок (' + when + '): ' + parsed.count +
-      ' сообщений' + (model ? ', model=' + model : '') + ' (без скролла)');
+      ' сообщений, model=' + (model || '(неизвестно)'));
     try {
       window.dispatchEvent(new CustomEvent('ai-cm-full-history', {
         detail: {
@@ -180,7 +187,9 @@
           historyComplete: true, serverTokens: 0
         }
       }));
-    } catch (e) {}
+    } catch (e) {
+      console.log('[perplexity-intercept] ошибка emitSnapshot:', e && e.message);
+    }
   }
 
   function tryBuildTemplate(url, data) {
@@ -249,7 +258,7 @@
           var data = JSON.parse(rawText);
           if (hasEntriesAndMetadata(data)) processHistoryData(data, url, source);
           else { var he = getTrim(data, 'entries'); if (he !== undefined) debugLog('log', '[perplexity-intercept] JSON с entries но нет thread_metadata'); }
-        } catch (e) {}
+        } catch (e) { console.log('[perplexity-intercept] ошибка emitSnapshot:', e && e.message); }
       }).catch(function () {});
     } catch (e) {}
   }
@@ -274,7 +283,7 @@
             var data = JSON.parse(xhr.responseText);
             if (hasEntriesAndMetadata(data)) processHistoryData(data, respUrl || url, 'XHR');
             else { var he = getTrim(data, 'entries'); if (he !== undefined) debugLog('log', '[perplexity-intercept] XHR: JSON с entries но нет thread_metadata'); }
-          } catch (e) {}
+          } catch (e) { console.log('[perplexity-intercept] ошибка emitSnapshot:', e && e.message); }
         });
       }
       return origXHRSend.apply(this, arguments);
