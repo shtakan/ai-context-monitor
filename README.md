@@ -15,6 +15,8 @@
 - **Google AI Search** (google.com/search, режим ИИ) — поиск с ИИ-ответами
 - **ChatGPT** (chatgpt.com)
 - **DeepSeek** (chat.deepseek.com)
+- **Claude** (claude.ai) — чат с ИИ
+- **Perplexity** (perplexity.ai) — поиск и чат с ИИ
 
 ## Как это работает
 
