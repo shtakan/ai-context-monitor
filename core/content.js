@@ -1,4 +1,4 @@
-console.log('AI Context Monitor v1.23 (serverTokens для DeepSeek — точный серверный числитель без токенизатора)');
+console.log('AI Context Monitor v1.24 — индикатор заполнения контекста (ChatGPT, Gemini, DeepSeek, Claude, Perplexity, Google Search AI)');
 // Проверка валидности контекста расширения
 function isExtensionValid() {
   try {
@@ -395,6 +395,16 @@ window.addEventListener('ai-cm-full-history', function (ev) {
     (netServerTokens > 0 ? ', serverTokens=' + netServerTokens : '') +
     (baseComplete ? ', история ПОЛНАЯ по сети (индикатор по базе, DOM игнор)' : ''));
   debugLog('log', '[content-trace] EMIT принят seq=' + (window.__aiCmTraceSeq || 0) + ' baseComplete=' + baseComplete + ' baseCount=' + baseCount + ' textLen=' + (baseText ? baseText.length : 0) + ' t=' + Date.now());
+
+  // ФИКС: сеть дала базу, но DOM-инициализация ещё не случилась (SPA-переход по сайдбару без F5 —
+  //   ретраи initialize уже отработали вхолостую, а bootFetch пропущен). Запускаем инициализацию
+  //   наблюдателя, чтобы isInitialized стало true и realtime после обмена заработал без F5.
+  //   DOM может отрендериться чуть позже снимка — делаем несколько попыток.
+  if (!isInitialized) {
+    tryInit();
+    setTimeout(function () { if (!isInitialized) tryInit(); }, 500);
+    setTimeout(function () { if (!isInitialized) tryInit(); }, 1500);
+  }
 
   // v28: сохраняем полную ленту в chrome.storage.local для восстановления после F5/переоткрытия
   // v30: сохраняем ТОЛЬКО если restoreDone === true — не даём первому неполному эмиту

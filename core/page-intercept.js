@@ -79,9 +79,9 @@
   var lastLoadedConvId = '';
   var switchRefetchTimer = null;
 
-  // ---- v15: активная дозагрузка снимка при открытии чата (без заголовков) ----
-  var bootFetchTimer = null;
-  var bootFetchDone = false;
+  var activeRetryCount = 0;       // счётчик ретраев activeRefresh при устаревшем JSON (последнее — user)
+  var passiveGetInFlight = false; // флаг: пассивный GET полного снимка для текущего чата ещё в полёте
+  var fallbackTimer = null;       // таймер отложенного фолбэка снимка при открытии/переключении
 
   // ============== v11: детектор смены чата в SPA (образец: gemini-intercept.js v17) ==============
   function getConvId() {
@@ -104,11 +104,11 @@
     attachTokens = 0;
     attachBreak = { imgTokens: 0, docTokens: 0, imgCount: 0, docCount: 0 };
     loggedAttach = false;
-    bootFetchDone = false;
+    activeRetryCount = 0;
     debugLog('log', '[ai-cm-intercept] смена чата → состояние перехватчика сброшено (convId=' + (currentConvId || '(не чат)') + ')');
     try { window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); } catch (e) {}
     scheduleSwitchRefetch();
-    scheduleBootFetch(currentConvId, 2000);
+    scheduleFallback(currentConvId, 2000);
   }
 
   function checkConvChange() {
@@ -124,7 +124,7 @@
     if (origPush) {
       history.pushState = function () {
         var r = origPush.apply(this, arguments);
-        try { checkConvChange(); } catch (e) {}
+        try { checkConvChange(); } catch (e) { }
         return r;
       };
     }
@@ -132,12 +132,12 @@
     if (origReplace) {
       history.replaceState = function () {
         var r = origReplace.apply(this, arguments);
-        try { checkConvChange(); } catch (e) {}
+        try { checkConvChange(); } catch (e) { }
         return r;
       };
     }
-    window.addEventListener('popstate', function () { try { checkConvChange(); } catch (e) {} });
-  } catch (e) {}
+    window.addEventListener('popstate', function () { try { checkConvChange(); } catch (e) { } });
+  } catch (e) { }
   // ============================================================================================
 
   // ---- v12: извлечь convId из URL бэкенд-запроса (для проверки гонки) ----
@@ -150,11 +150,11 @@
   }
 
   function urlOf(input) {
-    try { if (typeof input === 'string') return input; if (input && input.url) return input.url; } catch (e) {}
+    try { if (typeof input === 'string') return input; if (input && input.url) return input.url; } catch (e) { }
     return '';
   }
   function methodOf(input, init) {
-    try { if (init && init.method) return String(init.method).toUpperCase(); if (input && input.method) return String(input.method).toUpperCase(); } catch (e) {}
+    try { if (init && init.method) return String(init.method).toUpperCase(); if (input && input.method) return String(input.method).toUpperCase(); } catch (e) { }
     return 'GET';
   }
   function tail(url) {
@@ -186,7 +186,7 @@
       if (typeof Request !== 'undefined' && input instanceof Request && input.headers && typeof input.headers.forEach === 'function') {
         input.headers.forEach(function (v, k) { h[k] = v; });
       }
-    } catch (e) {}
+    } catch (e) { }
     try {
       if (init && init.headers) {
         var hh = init.headers;
@@ -194,7 +194,7 @@
         else if (Array.isArray(hh)) { for (var i = 0; i < hh.length; i++) if (hh[i] && hh[i][0]) h[hh[i][0]] = hh[i][1]; }
         else if (typeof hh === 'object') { for (var k in hh) h[k] = hh[k]; }
       }
-    } catch (e) {}
+    } catch (e) { }
     return h;
   }
   function hasAuth(h) {
@@ -206,7 +206,7 @@
   // ---- разбор полного снимка (тот же, что при F5) ----
   function parseHistory(data) {
     var mapping = (data && data.mapping) ? data.mapping : {};
-    var pieces = []; var ids = []; var count = 0; var lastText = ''; var lastModelSlug = '';
+    var pieces = []; var ids = []; var roles = []; var count = 0; var lastText = ''; var lastModelSlug = ''; var lastRole = '';
     var localImgSeen = {}; var imgCount = 0; var imgTokens = 0;
     for (var key in mapping) {
       var node = mapping[key]; var msg = node && node.message;
@@ -226,7 +226,7 @@
           if (!isImage && parts[i].asset_pointer) isImage = true;
           if (!isImage) {
             // вложения могут иметь content_type с 'image' или быть картинкой-мультиформатом
-            try { if (parts[i].content_type && typeof parts[i].content_type === 'string') isImage = true; } catch (e) {}
+            try { if (parts[i].content_type && typeof parts[i].content_type === 'string') isImage = true; } catch (e) { }
           }
           if (isImage) {
             var imgKey = key + '_' + i;
@@ -248,7 +248,7 @@
       var meta = msg.metadata || {};
       var slug = meta.model_slug || meta.model || '';
       if (text) {
-        pieces.push(text); ids.push(String(key)); count++; lastText = text;
+        pieces.push(text); ids.push(String(key)); roles.push(role); count++; lastText = text; lastRole = role;
         if (slug) lastModelSlug = slug;
       }
     }
@@ -259,11 +259,20 @@
         ', добавлено токенов: ' + attachBreak.imgTokens +
         ' (по ' + IMAGE_DEFAULT_TOKENS + ' ток/изобр, high-detail оценка OpenAI 1024×1024)');
     }
-    return { text: pieces.join('\n'), count: count, lastText: lastText, lastModelSlug: lastModelSlug, pieces: pieces, ids: ids, imgCount: imgCount, imgTokens: imgTokens };
+    return { text: pieces.join('\n'), count: count, lastText: lastText, lastModelSlug: lastModelSlug, pieces: pieces, ids: ids, roles: roles, lastRole: lastRole, imgCount: imgCount, imgTokens: imgTokens };
   }
   function emitSnapshot(parsed, when) {
     if (!parsed.text) return;
     lastLoadedConvId = currentConvId;
+    // Диагностика: роли и длины последних 3 сообщений распарсенного JSON (до попадания в базу).
+    // Показывает, есть ли ответ ассистента в самом JSON или бэкенд отдал устаревшую версию.
+    var diagTail = [];
+    var diagPieces = parsed.pieces || [];
+    var diagRoles = parsed.roles || [];
+    for (var di = Math.max(0, diagRoles.length - 3); di < diagRoles.length; di++) {
+      diagTail.push(diagRoles[di] + ':' + (diagPieces[di] ? diagPieces[di].length : 0));
+    }
+    console.log('[ai-cm-intercept] diag: хвост снимка: ' + JSON.stringify(diagTail));
     console.log('[ai-cm-intercept] 📥 полный снимок (' + when + '): ' + parsed.count +
       ' сообщений' + (parsed.lastModelSlug ? ', model_slug=' + parsed.lastModelSlug : '') +
       (attachTokens > 0 ? ', картинок=' + attachBreak.imgCount + ' ≈' + attachBreak.imgTokens + ' ток' : '') +
@@ -274,21 +283,23 @@
           text: parsed.text, count: parsed.count, lastMessageText: parsed.lastText,
           modelSlug: parsed.lastModelSlug, messageTexts: parsed.pieces, messageIds: parsed.ids,
           attachTokens: attachTokens,
-          attachBreak: { imgTokens: attachBreak.imgTokens, docTokens: attachBreak.docTokens, imgCount: attachBreak.imgCount, docCount: attachBreak.docCount }
+          attachBreak: { imgTokens: attachBreak.imgTokens, docTokens: attachBreak.docTokens, imgCount: attachBreak.imgCount, docCount: attachBreak.docCount },
+          historyComplete: true,
+          serverTokens: 0
         }
       }));
-    } catch (e) {}
+    } catch (e) { }
   }
   function handleSnapshot(response, when, expectedConvId) {
     var copy = response.clone();
     copy.json().then(function (data) {
       // v12: проверка гонки — ответ от старого чата игнорируем
       if (expectedConvId && expectedConvId !== currentConvId) {
-         debugLog('log', '[ai-cm-intercept] пропущен устаревший снимок (convId ответа ' + expectedConvId + ' != текущий ' + currentConvId + ')');
+        debugLog('log', '[ai-cm-intercept] пропущен устаревший снимок (convId ответа ' + expectedConvId + ' != текущий ' + currentConvId + ')');
         return;
       }
       emitSnapshot(parseHistory(data), when);
-    }).catch(function () {});
+    }).catch(function () { });
   }
 
   // ---- «виртуальный F5»: активный GET полного снимка заголовками сайта ----
@@ -296,7 +307,7 @@
     if (activeDisabled || refreshBusy) return;
     var baseUrl = lastSnapshotUrl || (currentConvId ? (location.origin + '/backend-api/conversation/' + currentConvId) : null);
     if (!baseUrl || !lastHeaders || !hasAuth(lastHeaders)) {
-       if (!loggedActiveStatus) { loggedActiveStatus = true; debugLog('log', '[virtual-f5] активный запрос отложен: нет адреса/пропуска пока'); }
+      if (!loggedActiveStatus) { loggedActiveStatus = true; debugLog('log', '[virtual-f5] активный запрос отложен: нет адреса/пропуска пока'); }
       return;
     }
     // v12: запоминаем convId на момент отправки для проверки гонки
@@ -306,7 +317,7 @@
     for (var k in lastHeaders) headers[k] = lastHeaders[k]; // воспроизводим свежий набор сайта
     // помечаем URL, чтобы наша обёртка не словила свой же запрос как входящий снимок
     var sep = baseUrl.indexOf('?') === -1 ? '?' : '&';
-    var markedUrl = baseUrl + sep + guardToken + '=1';
+    var markedUrl = baseUrl + sep + guardToken + '=1&cb=' + Date.now();
     originalFetch(markedUrl, { method: 'GET', headers: headers, credentials: 'include' })
       .then(function (resp) {
         if (!loggedActiveStatus) {
@@ -326,11 +337,24 @@
         if (!data) return;
         // v12: проверка гонки
         if (sentConvId !== currentConvId) {
-           debugLog('log', '[ai-cm-intercept] пропущен устаревший снимок (convId ответа ' + sentConvId + ' != текущий ' + currentConvId + ')');
+          debugLog('log', '[ai-cm-intercept] пропущен устаревший снимок (convId ответа ' + sentConvId + ' != текущий ' + currentConvId + ')');
           return;
         }
         var parsed = parseHistory(data);
-        if (parsed.text) { emitSnapshot(parsed, 'виртуальный F5'); dirty = false; }
+        if (parsed.text) {
+          emitSnapshot(parsed, 'виртуальный F5');
+          dirty = false;
+          // Ветка А: если последнее сообщение в JSON — user, значит ответ ассистента ещё не записался
+          // (бэкенд/CDN отдал устаревшую версию). Повторяем активный GET через 1500/4000/9000/16000 мс (до 4 ретраев).
+          if (parsed.lastRole === 'user' && activeRetryCount < 4) {
+            activeRetryCount++;
+            var retrySchedule = [1500, 4000, 9000, 16000];
+            var retryDelay = retrySchedule[activeRetryCount - 1] || 16000;
+            setTimeout(function () { activeRefresh('ретрай после ответа #' + activeRetryCount); }, retryDelay);
+          } else if (parsed.lastRole === 'assistant') {
+            activeRetryCount = 0;
+          }
+        }
       })
       .catch(function (err) {
         if (!loggedActiveStatus) { loggedActiveStatus = true; }
@@ -346,68 +370,56 @@
     setTimeout(function () { activeRefresh(reason); }, delay);
   }
 
-   // ---- v16: активная дозагрузка снимка при открытии чата (только при наличии auth-заголовков) ----
-   function bootFetchSnapshot(convId) {
-     if (!convId) return;
-     // Пропуск: пассивный снимок уже пришёл для этого чата
-     if (lastLoadedConvId === convId) {
-       console.log('[ai-cm-intercept] bootFetch: пропуск (пассивный снимок уже получен)');
-       return;
-     }
-     // Пропуск: нет сохранённых auth-заголовков
-     if (!lastHeaders || !hasAuth(lastHeaders)) {
-       console.log('[ai-cm-intercept] bootFetch: пропуск (нет сохранённых auth-заголовков)');
-       return;
-     }
-     var url = location.origin + '/backend-api/conversation/' + convId;
-     console.log('[ai-cm-intercept] активная дозагрузка снимка при открытии чата (convId=' + convId + ')');
-     bootFetchDone = true;
-     originalFetch(url, { method: 'GET', credentials: 'include' })
-       .then(function (resp) {
-         if (!resp || !resp.ok) {
-           console.log('[ai-cm-intercept] bootFetch: статус ' + (resp ? resp.status : 'none') + ' для ' + convId);
-           return null;
-         }
-         return resp.json();
-       })
-       .then(function (data) {
-         if (!data) return;
-         // проверка гонки: не применяем, если чат уже сменился
-         if (convId !== currentConvId) {
-           debugLog('log', '[ai-cm-intercept] bootFetch: чат сменился (' + convId + ' → ' + currentConvId + '), ответ отброшен');
-           return;
-         }
-         // не перезаписываем, если снимок уже пришёл пассивно
-         if (lastLoadedConvId === currentConvId && lastSnapshotUrl) return;
-         var parsed = parseHistory(data);
-         if (parsed.text) {
-           lastSnapshotUrl = url;
-           emitSnapshot(parsed, 'bootFetch');
-           dirty = false;
-         }
-       })
-       .catch(function (err) {
-         console.log('[ai-cm-intercept] bootFetch ошибка: ' + err + ' для ' + convId);
-       });
-   }
+  // ---- отложенный фолбэк активного снимка (для аккаунтов, где сайт не делает пассивный GET) ----
+  function fallbackSnapshot(convId) {
+    if (!convId) return;
+    // Пропуск: пассивный снимок для текущего convId уже получен
+    if (lastLoadedConvId === convId) {
+      console.log('[ai-cm-intercept] fallback: пропуск (пассивный снимок уже получен)');
+      return;
+    }
+    // Пропуск: пассивный GET для текущего convId ещё в полёте
+    if (passiveGetInFlight) {
+      console.log('[ai-cm-intercept] fallback: пропуск (пассивный GET ещё в полёте)');
+      return;
+    }
+    console.log('[ai-cm-intercept] fallback: активный снимок');
+    var url = location.origin + '/backend-api/conversation/' + convId;
+    var init = { method: 'GET', credentials: 'include' };
+    if (lastHeaders && hasAuth(lastHeaders)) {
+      var fh = {};
+      for (var fk in lastHeaders) fh[fk] = lastHeaders[fk];
+      init.headers = fh;
+    }
+    originalFetch(url, init)
+      .then(function (resp) {
+        if (!resp || !resp.ok) {
+          console.log('[ai-cm-intercept] fallback: статус ' + (resp ? resp.status : 'none') + ' для ' + convId);
+          return null;
+        }
+        handleSnapshot(resp, 'fallback', convId);
+        return null;
+      })
+      .catch(function () { /* тихо */ });
+  }
 
-   function scheduleBootFetch(convId, delay) {
-     try { clearTimeout(bootFetchTimer); } catch (e) {}
-     bootFetchTimer = setTimeout(function () {
-       if (!convId) return;
-       bootFetchSnapshot(convId);
-     }, delay);
-   }
+  function scheduleFallback(convId, delay) {
+    try { clearTimeout(fallbackTimer); } catch (e) { }
+    fallbackTimer = setTimeout(function () {
+      if (!convId) return;
+      fallbackSnapshot(convId);
+    }, delay);
+  }
 
   // ---- v13: switch-refetch — покрывает случай, когда сайт не ходит в сеть при SPA-переключении ----
   function scheduleSwitchRefetch() {
-    try { clearTimeout(switchRefetchTimer); } catch (e) {}
+    try { clearTimeout(switchRefetchTimer); } catch (e) { }
     switchRefetchTimer = setTimeout(function () {
       try {
         if (currentConvId && currentConvId !== lastLoadedConvId && lastHeaders && hasAuth(lastHeaders)) {
           activeRefresh('переключение чата (сайт не сходил в сеть)');
         }
-      } catch (e) {}
+      } catch (e) { }
     }, 1200);
   }
 
@@ -441,6 +453,9 @@
       debugLog('log', '[ai-cm-intercept] req GET ' + tail(url));
       // v12: извлекаем convId из URL запроса для проверки гонки
       var snapshotConvId = convIdFromBackendUrl(url);
+      // флаг «пассивный GET в полёте» — чтобы фолбэк не дублировал сайт и не уходил в 404
+      var isPassiveForCurrent = !!(snapshotConvId && snapshotConvId === currentConvId);
+      if (isPassiveForCurrent) passiveGetInFlight = true;
       responsePromise.then(function (resp) {
         try {
           if (resp && resp.ok) {
@@ -448,9 +463,13 @@
             dirty = false;                  // свежий снимок — хвост/активный не нужны
             handleSnapshot(resp, (document.readyState === 'complete') ? 'после ответа/обновления' : 'при загрузке', snapshotConvId);
           }
-        } catch (e) {}
+        } catch (e) { }
+        if (isPassiveForCurrent) passiveGetInFlight = false;
         return resp;
-      }, function () { /* v14: тихо — не создаём висячий Promise.reject */ });
+      }, function () {
+        if (isPassiveForCurrent) passiveGetInFlight = false;
+        /* v14: тихо — не создаём висячий Promise.reject */
+      });
     }
 
     // триггеры обмена → планируем «виртуальный F5» (даём серверу время зафиксировать)
@@ -460,16 +479,16 @@
     return responsePromise;
   };
 
-  // ---- v15: активная дозагрузка снимка при первом открытии (window.load + 2000 мс) ----
+  // ---- отложенный фолбэк снимка при первом открытии чата ----
   window.addEventListener('load', function () {
     var cid = getConvId();
-    if (cid) scheduleBootFetch(cid, 2000);
+    if (cid) scheduleFallback(cid, 2000);
   });
   // если к моменту установки скрипта страница уже загружена — запускаем сразу
   if (document.readyState === 'complete') {
     var cid2 = getConvId();
-    if (cid2) scheduleBootFetch(cid2, 2000);
+    if (cid2) scheduleFallback(cid2, 2000);
   }
 
-  console.log('[ai-cm-intercept] перехватчик v14 (виртуальный F5 + пассивная ловля + детектор смены чата + фикс гонки GET + switch-refetch с constructedUrl + подавление чужих unhandled fetch + активная дозагрузка v15) установлен');
+  console.log('[ai-cm-intercept] перехватчик v14 (виртуальный F5 + пассивная ловля + детектор смены чата + фикс гонки GET + switch-refetch с constructedUrl + подавление чужих unhandled fetch + отложенный фолбэк снимка) установлен');
 })();
