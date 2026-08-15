@@ -32,11 +32,16 @@ let baseSkelSet = null;
 let baseAnchors = null;
 const ANCHOR_MIN = 40;
 
+// ========== САМОДИАГНОСТИКА: флаг stale (интеграция могла устареть) ==========
+let stale = false;      // сетевого снимка нет 12с, хотя диалог с сообщениями в DOM есть
+let staleTimer = null;
+
 // ========== ЭКСПОРТ ИСТОРИИ (aiCmHistory) ==========
 // Роли сообщений берём из detail.messages перехватчика (если есть);
 // иначе — фолбэк: первое сообщение user, далее чередование user/assistant.
 let lastDetailMessages = null; // [{role,text}] из последнего detail.messages (или null)
 let lastHistoryWroteKey = null; // сигнатура 'baseCount|textLen' последней записи aiCmHistory
+let lastThreadId = null; // threadId последнего применённого снимка Google (для сброса при SPA-возврате)
 function buildHistoryMessages() {
   var texts = lastBaseTexts || [];
   var out = [];
@@ -51,6 +56,31 @@ function buildHistoryMessages() {
     }
   }
   return out;
+}
+
+// Самодиагностика: через 12с после загрузки/смены диалога, если диалог с сообщениями
+// в DOM есть (isInitialized=true и extractMessages()>0), но сетевой снимок не пришёл
+// (baseSeen=false) — взводим stale. На пустых чатах extractMessages()=0 → не взводим.
+function scheduleStaleCheck() {
+  if (!isExtensionValid()) return;
+  try { clearTimeout(staleTimer); } catch (e) { }
+  stale = false;
+  staleTimer = setTimeout(function () {
+    staleTimer = null;
+    if (isInitialized && !baseSeen) {
+      var hasMessages = false;
+      try {
+        if (currentAdapter) {
+          var msgs = currentAdapter.extractMessages();
+          hasMessages = !!msgs && msgs.length > 0;
+        }
+      } catch (e) { hasMessages = false; }
+      if (hasMessages) {
+        stale = true;
+        processAndSend();
+      }
+    }
+  }, 12000);
 }
 
 // ========== v28: ХРАНИЛИЩЕ ПОЛНОЙ ЛЕНТЫ GEMINI (chrome.storage.local) ==========
@@ -248,6 +278,7 @@ function resetConversationState() {
   lastBaseTexts = [];
   lastDetailMessages = null;
   lastHistoryWroteKey = null;
+  lastThreadId = null;
   detectedModelSlug = '';
   netAttachTokens = 0;
   netAttachBreak = null;
@@ -259,6 +290,8 @@ function resetConversationState() {
   lastResolvedModelId = null;
   restoredTapeLoaded = false; // v28: разрешаем повторное восстановление при смене чата
   restoreDone = false; // v30: сбрасываем флаг восстановления при смене чата
+  stale = false; // сбрасываем флаг устаревшей интеграции
+  scheduleStaleCheck(); // фиксируем момент смены диалога для 12с-проверки
   if (widgetElement) {
     const circle = widgetElement.querySelector('.ai-widget-fill');
     const pt = widgetElement.querySelector('.ai-widget-text');
@@ -387,6 +420,13 @@ function getEffectiveCount(fallbackCount) {
 window.addEventListener('ai-cm-full-history', function (ev) {
   const detail = ev && ev.detail;
   if (!detail || !detail.text) return;
+  // Сброс при смене threadId (Google SPA): сначала чистим состояние виджета, затем применяем базу.
+  if (detail.threadId) {
+    if (lastThreadId !== null && detail.threadId !== lastThreadId) {
+      resetConversationState();
+    }
+    lastThreadId = detail.threadId;
+  }
   // ФИКС: взводим baseComplete из флага перехватчика. При переходе «сеть стала полной» сбрасываем
   //   монотонный максимум, чтобы добить любой пик, накопленный DOM-путём до этого.
   const newBaseComplete = !!detail.historyComplete;
@@ -400,6 +440,7 @@ window.addEventListener('ai-cm-full-history', function (ev) {
   netServerTokens = detail.serverTokens || 0;
   netEffectiveLen = (typeof detail.effectiveLen === 'number' && detail.effectiveLen > 0) ? detail.effectiveLen : 0;
   baseSeen = true;
+  stale = false; // сетевой снимок пришёл — интеграция актуальна
   var texts = Array.isArray(detail.messageTexts) ? detail.messageTexts : [];
   var ids = Array.isArray(detail.messageIds) ? detail.messageIds : [];
   lastBaseIds = ids;
@@ -642,13 +683,13 @@ function requestExactTokens(fullText, modelId) {
   if (!isExtensionValid()) return;
   if (!exactCountEnabled || !geminiApiKey) { netServerTokens = 0; return; }
   if (!fullText) { netServerTokens = 0; return; }
-  
+
   console.log('[byok-src] baseComplete=' + baseComplete +
-  ' baseSeen=' + baseSeen +
-  ' fullIsBase=' + (fullText === baseText) +
-  ' baseLen=' + baseText.length +
-  ' fullLen=' + fullText.length +
-  ' baseCount=' + baseCount);
+    ' baseSeen=' + baseSeen +
+    ' fullIsBase=' + (fullText === baseText) +
+    ' baseLen=' + baseText.length +
+    ' fullLen=' + fullText.length +
+    ' baseCount=' + baseCount);
 
   // Кэш: текст не изменился — не дёргаем API
   if (fullText === lastCountTokensText) {
@@ -833,24 +874,8 @@ function processAndSend() {
     // Снапшот для попапа в chrome.storage.local
     if (isExtensionValid()) {
       try {
-        chrome.storage.local.set({ aiCmState: {
-          host: window.location.hostname,
-          site: currentAdapter.siteName,
-          model: ModelConfig.getModel(modelId)?.name || modelId,
-          tokens: maxTokenCount,
-          limit: displayLimit,
-          percent: percentage,
-          updatedAt: Date.now()
-        }});
-      } catch (e) {}
-    }
-    // Экспорт истории: пишем aiCmHistory только когда история реально изменилась (baseCount или textLen).
-    if (isExtensionValid() && baseSeen && lastBaseTexts.length > 0) {
-      var histKey = baseCount + '|' + (baseText ? baseText.length : 0);
-      if (histKey !== lastHistoryWroteKey) {
-        lastHistoryWroteKey = histKey;
-        try {
-          chrome.storage.local.set({ aiCmHistory: {
+        chrome.storage.local.set({
+          aiCmState: {
             host: window.location.hostname,
             site: currentAdapter.siteName,
             model: ModelConfig.getModel(modelId)?.name || modelId,
@@ -858,9 +883,30 @@ function processAndSend() {
             limit: displayLimit,
             percent: percentage,
             updatedAt: Date.now(),
-            messages: buildHistoryMessages()
-          }});
-        } catch (e) {}
+            stale: stale
+          }
+        });
+      } catch (e) { }
+    }
+    // Экспорт истории: пишем aiCmHistory только когда история реально изменилась (baseCount или textLen).
+    if (isExtensionValid() && baseSeen && lastBaseTexts.length > 0) {
+      var histKey = baseCount + '|' + (baseText ? baseText.length : 0);
+      if (histKey !== lastHistoryWroteKey) {
+        lastHistoryWroteKey = histKey;
+        try {
+          chrome.storage.local.set({
+            aiCmHistory: {
+              host: window.location.hostname,
+              site: currentAdapter.siteName,
+              model: ModelConfig.getModel(modelId)?.name || modelId,
+              tokens: maxTokenCount,
+              limit: displayLimit,
+              percent: percentage,
+              updatedAt: Date.now(),
+              messages: buildHistoryMessages()
+            }
+          });
+        } catch (e) { }
       }
     }
     if (isExtensionValid()) {
@@ -929,7 +975,7 @@ function updateWidget(percentage, tokens, effectiveLimit, contextLimit, displayL
   circle.style.strokeDasharray = circumference;
   circle.style.strokeDashoffset = offset;
   circle.style.stroke = zoneColor(percentage);
-  percentText.textContent = percentage.toFixed(1) + '%';
+  percentText.textContent = stale ? '—' : (percentage.toFixed(1) + '%');
   if (tooltip) {
     const limLine = (typeof safePct === 'number' && safePct > 0)
       ? `Предел: ${safePct}% от Авто = ${displayLimit.toLocaleString()} ток`
@@ -986,6 +1032,7 @@ if (isExtensionValid()) {
 }
 // ========== ЗАПУСК ==========
 setTimeout(() => initialize(), 1500);
+scheduleStaleCheck(); // фиксируем момент загрузки страницы для 12с-проверки
 // ========== ГОРЯЧАЯ КЛАВИША Ctrl+Shift+D: скачать JSON дампа ==========
 document.addEventListener('keydown', function (e) {
   if (e.ctrlKey && e.shiftKey && e.code === 'KeyD') {
@@ -993,8 +1040,10 @@ document.addEventListener('keydown', function (e) {
     var turns = [];
     for (var i = 0; i < lastBaseIds.length; i++) {
       var t = lastBaseTexts[i] || '';
-      turns.push({ id: lastBaseIds[i], len: t.length,
-        preview: t.slice(0, 60).replace(/\s+/g, ' ') });
+      turns.push({
+        id: lastBaseIds[i], len: t.length,
+        preview: t.slice(0, 60).replace(/\s+/g, ' ')
+      });
     }
     var payload = {
       convId: (location.pathname.match(/\/app\/([A-Za-z0-9_-]+)/) || [])[1] || '',

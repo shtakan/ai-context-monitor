@@ -15,6 +15,7 @@ const versionEl = document.querySelector('.version');
 const exportMdBtn = document.getElementById('export-md');
 const exportJsonBtn = document.getElementById('export-json');
 const exportHintEl = document.getElementById('export-hint');
+const staleWarningEl = document.getElementById('stale-warning');
 
 // Цветовые пороги — те же, что в content.js (zoneColor: <50 зелёный, <80 жёлтый, красный)
 function percentColor(p) { if (p < 50) return '#22c55e'; if (p < 80) return '#eab308'; return '#ef4444'; }
@@ -104,6 +105,19 @@ function updateStatsFromState(state) {
   var p = state.percent || 0;
   percentEl.textContent = p + '%';
   percentEl.style.color = percentColor(p);
+  updateStaleWarning(state);
+}
+
+function updateStaleWarning(state) {
+  if (!staleWarningEl) return;
+  if (state && state.stale === true) {
+    var siteLabel = siteLabels[state.site] || state.site || 'сайтом';
+    staleWarningEl.textContent = 'Интеграция с ' + siteLabel + ' могла устареть: сайт не отдаёт данные диалога. Проверьте обновление расширения.';
+    staleWarningEl.style.display = 'block';
+  } else {
+    staleWarningEl.style.display = 'none';
+    staleWarningEl.textContent = '';
+  }
 }
 
 function showNoData(message) {

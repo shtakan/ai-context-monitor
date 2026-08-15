@@ -200,3 +200,14 @@ select:focus, input:focus {
   color: #666688;
   cursor: not-allowed;
 }
+
+.stale-warning {
+  background: #3a1f2b;
+  border: 1px solid #7c3aed;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #f0b0c0;
+}

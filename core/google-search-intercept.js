@@ -4,20 +4,46 @@
 //
 // v6: поддержка folwr (полная история) + folif (realtime), модель из сети,
 //     фолбэк вопросов из TgQPHd, полные ответы через compareDocumentPosition.
+// v7: единый источник правды — window.parseGoogleFolwrOpen. detail.text и
+//     detail.messages строятся из одних данных (parser.messages), поэтому таблицы
+//     и подзаголовки попадают и в расчёт, и в экспорт одинаково.
+// v8: кэш полных снимков по threadId (Map ≤ 10 записей) + опрос DOM раз в 1000мс.
+//     При SPA-возврате на уже посещённый тред сайт отдаёт его из памяти без сетевого
+//     folwr — перехватчик эмитит кэшированный снимок по threadId, а content.js
+//     по смене threadId сначала сбрасывает состояние виджета.
 
 (function () {
   if (window.__aiCmGoogleSearchInterceptInstalled) return;
   window.__aiCmGoogleSearchInterceptInstalled = true;
 
-  // ---- модульное хранилище базы ----
-  var baseTurns = [];
+  var MAX_CACHE_ENTRIES = 10;
+
+  // ---- хранилище ----
   var seenKeys = {};
   var detectedModelSlug = null;
-  var lastFullTurns = [];       // полная база последнего folwr-open снимка (turns)
-  var lastFullMessages = [];    // плоские messages полного снимка
-  var lastFullSnapshot = null;  // detail (payload) последнего полного снимка
+  var lastFullTurns = [];       // turns последнего активного снимка
+  var lastFullMessages = [];    // messages последнего активного снимка
+  var lastFullSnapshot = null;  // detail последнего активного снимка
+  var currentThreadId = '';     // threadId активного треда (по DOM)
+  var emittedThreadId = '';     // threadId, на котором зафиксирована база
 
-  // ---- диагностика: какие запросы Google Search AI поднимает историю ----
+  // кэш полных снимков по threadId (порядок вставки сохраняем для вытеснения)
+  var threadCache = new Map(); // threadId -> { turns, messages, snapshot }
+
+  function cacheSet(threadId, entry) {
+    if (!threadId) return;
+    if (threadCache.has(threadId)) {
+      threadCache.delete(threadId);
+    }
+    threadCache.set(threadId, entry);
+    // вытесняем старейшие сверх лимита
+    while (threadCache.size > MAX_CACHE_ENTRIES) {
+      var oldestKey = threadCache.keys().next().value;
+      threadCache.delete(oldestKey);
+    }
+  }
+
+  // ---- диагностика ----
   function isDiagTarget(rawUrl) {
     if (!rawUrl) return false;
     try {
@@ -51,7 +77,7 @@
     return txt.slice(0, 300);
   }
 
-  // ---- извлечение модели из сетевого ответа ----
+  // ---- модель из сетевого ответа ----
   function extractModel(htmlText) {
     try {
       var re = new RegExp('model:\\s*&' + 'quot;([A-Za-z0-9.\\-]+)&' + 'quot;', 'g');
@@ -66,91 +92,43 @@
     }
   }
 
-  // ---- пересборка плоских messages из полной базы ----
-  function rebuildLastFullMessages() {
+  // ---- чтение threadId из DOM ----
+  function readDomThreadId() {
+    try {
+      var el = document.querySelector('[data-session-thread-id]');
+      if (el) {
+        var v = el.getAttribute('data-session-thread-id');
+        return v ? v.trim() : '';
+      }
+    } catch (e) { }
+    return '';
+  }
+
+  // ---- плоские messages из turns (fallback) ----
+  function messagesFromTurns(turns) {
     var msgs = [];
-    for (var i = 0; i < lastFullTurns.length; i++) {
-      var t = lastFullTurns[i];
+    for (var i = 0; i < turns.length; i++) {
+      var t = turns[i];
       if (t.userText) msgs.push({ role: 'user', text: t.userText });
       if (t.assistantText) msgs.push({ role: 'assistant', text: t.assistantText });
     }
-    lastFullMessages = msgs;
+    return msgs;
   }
 
-  // ---- слияние стрим-ходов с полной базой (без уменьшения) ----
-  function mergeStreamTurns(streamTurns) {
-    var merged = [];
-    var seen = {};
-    function addTurn(t) {
-      var key = (t && t.userText ? t.userText : '') + '||' + (t && t.assistantText ? t.assistantText : '');
-      if (key !== '||' && seen[key]) return;
-      seen[key] = true;
-      merged.push({ id: (t && t.id) || ('x' + merged.length), userText: t ? t.userText : null, assistantText: t ? t.assistantText : null });
-    }
-    for (var i = 0; i < lastFullTurns.length; i++) addTurn(lastFullTurns[i]);
-    for (var j = 0; j < streamTurns.length; j++) addTurn(streamTurns[j]);
-    lastFullTurns = merged;
-    rebuildLastFullMessages();
-    lastFullSnapshot = buildDetail(lastFullTurns);
-    console.log('[ai-cm-google-search] стрим: слияние с полной базой, всего сообщений:', lastFullMessages.length);
-    emitDetail(lastFullSnapshot);
-  }
-
-  // ---- слияние новых ходов и эмит ----
-  function mergeTurns(newTurns, isFull) {
-    if (isFull) {
-      // Защитный merge: не перезаписываем базу меньшим снимком (стрим-гонка).
-      if (lastFullTurns.length > 0 && newTurns.length < lastFullTurns.length) {
-        mergeStreamTurns(newTurns);
-        return;
-      }
-      // folwr: полная перезапись базы
-      lastFullTurns = newTurns.slice();
-      seenKeys = {};
-      for (var i = 0; i < newTurns.length; i++) {
-        var t = newTurns[i];
-        var key = (t.userText || '') + '||' + (t.assistantText || '');
-        seenKeys[key] = true;
-      }
-    } else {
-      // folif: добавление новых ходов
-      for (var j = 0; j < newTurns.length; j++) {
-        var nt = newTurns[j];
-        var key2 = (nt.userText || '') + '||' + (nt.assistantText || '');
-        if (!seenKeys[key2]) {
-          seenKeys[key2] = true;
-          lastFullTurns.push(nt);
-        }
-      }
-    }
-    rebuildLastFullMessages();
-    if (lastFullTurns.length > 0) {
-      lastFullSnapshot = buildDetail(lastFullTurns);
-      emitDetail(lastFullSnapshot);
-    }
-  }
-
-  // ---- сборка detail снимка (без dispatch) ----
-  function buildDetail(turns) {
-    var messageTexts = [];
+  // ---- сборка detail снимка ----
+  function buildDetail(turns, messages, threadId) {
+    if (!messages) messages = messagesFromTurns(turns);
+    var messageTexts = messages.map(function (m) { return m.text; });
     var messageIds = [];
-    var messages = [];
     for (var i = 0; i < turns.length; i++) {
       var t = turns[i];
-      if (t.userText) {
-        messageTexts.push(t.userText);
-        messageIds.push(t.id + '_user');
-        messages.push({ role: 'user', text: t.userText });
-      }
-      if (t.assistantText) {
-        messageTexts.push(t.assistantText);
-        messageIds.push(t.id + '_assistant');
-        messages.push({ role: 'assistant', text: t.assistantText });
-      }
+      if (t.userText) messageIds.push(t.id + '_user');
+      if (t.assistantText) messageIds.push(t.id + '_assistant');
     }
     var text = messageTexts.join('\n');
     return {
       convId: '',
+      threadId: threadId || '',
       text: text,
       count: messageTexts.length,
       effectiveLen: text.length,
@@ -171,26 +149,107 @@
     } catch (e) { }
   }
 
-  // ---- эмит базы в content.js ----
-  function emitBaseSnapshot(turns) {
-    emitDetail(buildDetail(turns));
+  // ---- установка активной базы из готового снимка (для сетевого и кэш-эмита) ----
+  function applySnapshot(parsed, threadId) {
+    if (!parsed || !parsed.turns || parsed.turns.length === 0) return;
+    lastFullTurns = parsed.turns.slice();
+    lastFullMessages = Array.isArray(parsed.messages) ? parsed.messages.slice() : messagesFromTurns(lastFullTurns);
+    seenKeys = {};
+    for (var si = 0; si < lastFullTurns.length; si++) {
+      var st = lastFullTurns[si];
+      seenKeys[(st.userText || '') + '||' + (st.assistantText || '')] = true;
+    }
+    lastFullSnapshot = buildDetail(lastFullTurns, lastFullMessages, threadId);
+    emittedThreadId = threadId || '';
+    if (threadId) cacheSet(threadId, { turns: lastFullTurns, messages: lastFullMessages, snapshot: lastFullSnapshot });
   }
 
-  // ---- парсинг HTML-ответа ----
+  // ---- слияние стрим-ходов с полной базой (без уменьшения) ----
+  function mergeStreamTurns(streamTurns, threadId) {
+    var merged = [];
+    var seen = {};
+    function addTurn(t) {
+      var key = (t && t.userText ? t.userText : '') + '||' + (t && t.assistantText ? t.assistantText : '');
+      if (key !== '||' && seen[key]) return;
+      seen[key] = true;
+      merged.push({ id: (t && t.id) || ('x' + merged.length), userText: t ? t.userText : null, assistantText: t ? t.assistantText : null });
+    }
+    for (var i = 0; i < lastFullTurns.length; i++) addTurn(lastFullTurns[i]);
+    for (var j = 0; j < streamTurns.length; j++) addTurn(streamTurns[j]);
+    lastFullTurns = merged;
+    lastFullMessages = messagesFromTurns(lastFullTurns);
+    lastFullSnapshot = buildDetail(lastFullTurns, lastFullMessages, threadId || currentThreadId || emittedThreadId);
+    emittedThreadId = lastFullSnapshot.threadId || '';
+    if (emittedThreadId) cacheSet(emittedThreadId, { turns: lastFullTurns, messages: lastFullMessages, snapshot: lastFullSnapshot });
+    emitDetail(lastFullSnapshot);
+  }
+
+  // ---- слияние новых ходов ----
+  function mergeTurns(newTurns, isFull) {
+    var threadId = currentThreadId || emittedThreadId;
+    if (isFull) {
+      if (lastFullTurns.length > 0 && newTurns.length < lastFullTurns.length) {
+        mergeStreamTurns(newTurns, threadId);
+        return;
+      }
+      lastFullTurns = newTurns.slice();
+      seenKeys = {};
+      for (var i = 0; i < newTurns.length; i++) {
+        var t = newTurns[i];
+        var key = (t.userText || '') + '||' + (t.assistantText || '');
+        seenKeys[key] = true;
+      }
+    } else {
+      for (var j = 0; j < newTurns.length; j++) {
+        var nt = newTurns[j];
+        var key2 = (nt.userText || '') + '||' + (nt.assistantText || '');
+        if (!seenKeys[key2]) {
+          seenKeys[key2] = true;
+          lastFullTurns.push(nt);
+        }
+      }
+    }
+    lastFullMessages = messagesFromTurns(lastFullTurns);
+    if (lastFullTurns.length > 0) {
+      lastFullSnapshot = buildDetail(lastFullTurns, lastFullMessages, threadId);
+      emittedThreadId = lastFullSnapshot.threadId || '';
+      if (emittedThreadId) cacheSet(emittedThreadId, { turns: lastFullTurns, messages: lastFullMessages, snapshot: lastFullSnapshot });
+      emitDetail(lastFullSnapshot);
+    }
+  }
+
+  // ---- парсинг через единый парсер ----
+  function parseWithParser(htmlText) {
+    try {
+      if (window.parseGoogleFolwrOpen) {
+        var p = window.parseGoogleFolwrOpen(htmlText);
+        if (p && p.turns && p.turns.length > 0) {
+          return p;
+        }
+      }
+    } catch (e) { }
+    var turns = parseTurns(htmlText);
+    var messages = messagesFromTurns(turns);
+    return {
+      threadId: readDomThreadId(),
+      turns: turns,
+      messages: messages,
+      text: messages.map(function (m) { return m.text; }).join('\n'),
+      count: messages.length
+    };
+  }
+
   function parseTurns(htmlText) {
     var doc;
     try {
       doc = new DOMParser().parseFromString(htmlText, 'text/html');
     } catch (e) {
-      console.warn('[ai-cm-google-search] DOMParser не сработал:', e);
       return [];
     }
-
     var turns = doc.querySelectorAll('[data-scope-id="turn"]');
     var allAimfl = doc.querySelectorAll('[data-subtree="aimfl"]');
     var allN6 = doc.querySelectorAll('.n6owBd.awi2gc');
 
-    // Извлечь вопросы из turn-контейнеров (h2.iMqumd)
     var questions = [];
     for (var i = 0; i < turns.length; i++) {
       var h2 = turns[i].querySelector('h2.iMqumd');
@@ -198,20 +257,13 @@
       if (h2) {
         var raw = h2.textContent.trim();
         var match = raw.match(/^Вы сказали:\s*"([\s\S]*)"$/);
-        if (match) {
-          questionText = match[1].trim();
-        } else {
-          questionText = raw;
-        }
+        questionText = match ? match[1].trim() : raw;
       }
       questions.push(questionText);
     }
 
-    // Распределить блоки .n6owBd.awi2gc по turn'ам через compareDocumentPosition
     var answers = [];
-    for (var ti = 0; ti < turns.length; ti++) {
-      answers[ti] = [];
-    }
+    for (var ti = 0; ti < turns.length; ti++) answers[ti] = [];
     var blocks = doc.querySelectorAll('.n6owBd.awi2gc');
     for (var b = 0; b < blocks.length; b++) {
       var block = blocks[b];
@@ -219,21 +271,16 @@
       for (var ti2 = 0; ti2 < turns.length; ti2++) {
         if (turns[ti2].compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING) {
           assignedIdx = ti2;
-        } else {
-          break;
-        }
+        } else break;
       }
       if (assignedIdx >= 0 && assignedIdx < turns.length) {
         var cloneBlock = block.cloneNode(true);
-        cloneBlock.querySelectorAll('script, style, button, svg').forEach(function(el) { el.remove(); });
+        cloneBlock.querySelectorAll('script, style, button, svg').forEach(function (el) { el.remove(); });
         var blockText = cloneBlock.textContent.trim();
-        if (blockText) {
-          answers[assignedIdx].push(blockText);
-        }
+        if (blockText) answers[assignedIdx].push(blockText);
       }
     }
 
-    // Собрать ответы для каждого turn + фолбэк из allAimfl
     var assistantTexts = [];
     for (var ti3 = 0; ti3 < turns.length; ti3++) {
       var joined = answers[ti3].length > 0 ? answers[ti3].join('\n\n') : null;
@@ -244,7 +291,6 @@
       assistantTexts.push(joined);
     }
 
-    // Сопоставить вопросы и ответы по индексу
     var result = [];
     var count = questions.length;
     for (var k = 0; k < count; k++) {
@@ -255,7 +301,7 @@
       });
     }
 
-    // Фолбэк вопросов из TgQPHd для ходов с userText === null (folif)
+    // Фолбэк вопросов из TgQPHd
     var needTgBackfill = false;
     for (var bi = 0; bi < result.length; bi++) {
       if (!result[bi].userText) { needTgBackfill = true; break; }
@@ -270,8 +316,7 @@
           commentB = commentB.replace(new RegExp('&' + 'quot;', 'g'), '"');
           commentB = commentB.replace(new RegExp('&' + 'amp;', 'g'), '&');
           var longStrReB = /"([^"]{20,})"/g;
-          var longMatchB;
-          var foundB = null;
+          var longMatchB, foundB = null;
           while ((longMatchB = longStrReB.exec(commentB)) !== null) {
             var candidateB = longMatchB[1];
             if (candidateB.indexOf('\\u0026') !== -1) continue;
@@ -284,8 +329,7 @@
           }
           commentQuestions.push(foundB);
         }
-      } catch (e) { /* тихо */ }
-
+      } catch (e) { }
       var cqi = 0;
       for (var bi2 = 0; bi2 < result.length; bi2++) {
         if (!result[bi2].userText && cqi < commentQuestions.length && commentQuestions[cqi]) {
@@ -295,7 +339,7 @@
       }
     }
 
-    // Фолбэк для folif: если turn-контейнеров не нашлось совсем
+    // Фолбэк folif
     if (result.length === 0) {
       try {
         var tgRe2 = /<!--TgQPHd\|[\s\S]*?-->/g;
@@ -317,9 +361,7 @@
             folifQuestion = candidate;
             break;
           }
-          if (folifQuestion) break;
         }
-
         var folifAnswer = null;
         if (allAimfl.length > 0) {
           for (var aa = 0; aa < allAimfl.length; aa++) {
@@ -330,24 +372,52 @@
         if (!folifAnswer && allN6.length > 0) {
           for (var bb = 0; bb < allN6.length; bb++) {
             var clone2 = allN6[bb].cloneNode(true);
-            clone2.querySelectorAll('script, style, button, svg').forEach(function(el) { el.remove(); });
+            clone2.querySelectorAll('script, style, button, svg').forEach(function (el) { el.remove(); });
             var ntext = clone2.textContent.trim();
             if (ntext) { folifAnswer = ntext; break; }
           }
         }
-
         if (folifQuestion || folifAnswer) {
-          result.push({
-            id: 'folif_' + Date.now(),
-            userText: folifQuestion,
-            assistantText: folifAnswer
-          });
+          result.push({ id: 'folif_' + Date.now(), userText: folifQuestion, assistantText: folifAnswer });
         }
-      } catch (e) { /* тихо */ }
+      } catch (e) { }
     }
 
     return result;
   }
+
+  // ---- применение кэша при смене threadId (SPA-возврат без сети) ----
+  function checkThreadSwitch() {
+    var tid = readDomThreadId();
+    if (!tid) return;
+    if (tid === currentThreadId) return false; // без смены
+    // threadId сменился
+    currentThreadId = tid;
+    var cached = threadCache.get(tid);
+    if (cached && cached.snapshot) {
+      lastFullTurns = (cached.turns || []).slice();
+      lastFullMessages = (cached.messages || []).slice();
+      lastFullSnapshot = cached.snapshot;
+      emittedThreadId = tid;
+      console.log('[ai-cm-google-search] threadId сменился → эмит кэша (' + tid + ')');
+      emitDetail(lastFullSnapshot);
+    } else {
+      // нет кэша — сбрасываем базу и ждём сетевой folwr
+      lastFullTurns = [];
+      lastFullMessages = [];
+      lastFullSnapshot = null;
+      seenKeys = {};
+      emittedThreadId = '';
+      console.log('[ai-cm-google-search] threadId сменился → кэша нет, ждём сетевой folwr (' + tid + ')');
+    }
+    return true;
+  }
+
+  // ---- инициализация/опрос threadId ----
+  currentThreadId = readDomThreadId();
+  setInterval(function () {
+    checkThreadSwitch();
+  }, 1000);
 
   // ---- 1. Перехват window.fetch ----
   var origFetch = window.fetch;
@@ -358,30 +428,12 @@
     var method = '';
     try { method = (init && init.method) ? String(init.method).toUpperCase() : 'GET'; } catch (e) { }
 
-    if (isDiagTarget(url)) {
-      console.log('[ai-cm-google-search] diag: fetch', method, url.slice(0, 160));
-    }
-
     var isFolwr = url.indexOf('/folwr') !== -1;
     var isFolif = url.indexOf('/folif') !== -1;
     var isOpenFolwr = url.indexOf('/async/folwr') !== -1;
 
     var promise;
     try { promise = origFetch.apply(this, arguments); } catch (e) { return Promise.reject(e); }
-
-    if (isDiagTarget(url) && method !== 'POST') {
-      promise.then(function (resp) {
-        try {
-          if (resp && typeof resp.clone === 'function') {
-            resp.clone().text().then(function (txt) {
-              if (txt && txt.length > 2000) {
-                console.log('[ai-cm-google-search] diag: большой ответ', url.slice(0, 160), txt.length, diagPreview(txt));
-              }
-            }).catch(function () { });
-          }
-        } catch (e) { }
-      }).catch(function () { });
-    }
 
     if ((isFolwr || isFolif) && !isOpenFolwr) {
       var isFull = isFolwr;
@@ -391,10 +443,9 @@
             resp.clone().text().then(function (txt) {
               var model = extractModel(txt);
               if (model) detectedModelSlug = model;
-
-              var turns = parseTurns(txt);
-              if (turns.length > 0) {
-                mergeTurns(turns, isFull);
+              var parsed = parseWithParser(txt);
+              if (parsed.turns.length > 0) {
+                mergeTurns(parsed.turns, isFull);
               }
             }).catch(function () { });
           }
@@ -403,59 +454,32 @@
       }, function () { });
     }
 
-    // GET /async/folwr при открытии треда: полная история (~1 МБ HTML-поток).
-    // Извлекаем ВСЕ ходы и эмитим полный снимок (historyComplete: true).
+    // GET /async/folwr — полная история
     if (isOpenFolwr && method !== 'POST') {
       promise.then(function (resp) {
         if (resp && resp.ok) {
           resp.clone().text().then(function (txt) {
             if (txt && txt.length > 100000) {
-              console.log('[ai-cm-google-search] folwr-open: ветка сработала, длина =', txt.length);
-
               var model = extractModel(txt);
               if (model) detectedModelSlug = model;
-
               try {
-                var parsed = window.parseGoogleFolwrOpen
-                  ? window.parseGoogleFolwrOpen(txt)
-                  : {
-                      turns: parseTurns(txt),
-                      messages: [],
-                      text: '',
-                      count: 0
-                    };
-
+                var parsed = parseWithParser(txt);
+                var tid = parsed.threadId || readDomThreadId();
+                if (tid) currentThreadId = tid;
                 if (parsed && parsed.turns && parsed.turns.length > 0) {
-                  // сохраняем полный снимок для handshake и защиты от стрим-сжатия
-                  lastFullTurns = parsed.turns.slice();
-                  rebuildLastFullMessages();
-                  seenKeys = {};
-                  for (var si = 0; si < lastFullTurns.length; si++) {
-                    var st = lastFullTurns[si];
-                    seenKeys[(st.userText || '') + '||' + (st.assistantText || '')] = true;
-                  }
-                  lastFullSnapshot = buildDetail(lastFullTurns);
+                  applySnapshot(parsed, tid);
                   console.log('[ai-cm-google-search] folwr-open: распарсено сообщений:',
-                    parsed.turns.length, ', text len =', (parsed.text ? parsed.text.length : 0));
-                  console.log('[ai-cm-google-search] folwr-open: эмит полного снимка');
+                    lastFullMessages.length, ', text len =', (lastFullSnapshot.text ? lastFullSnapshot.text.length : 0),
+                    ', threadId =', tid);
                   emitDetail(lastFullSnapshot);
-                } else {
-                  console.log('[ai-cm-google-search] folwr-open: пустой результат парсинга (turns =',
-                    (parsed && parsed.turns) ? parsed.turns.length : 'n/a') + ')';
                 }
               } catch (e) {
                 console.log('[ai-cm-google-search] folwr-open: ошибка:', e && e.message);
               }
-            } else {
-              console.log('[ai-cm-google-search] folwr-open: ответ короткий, пропуск (длина =', txt ? txt.length : 0, ')');
             }
-          }).catch(function (err) {
-            console.log('[ai-cm-google-search] folwr-open: ошибка чтения текста:', err && err.message);
-          });
+          }).catch(function () { });
         }
-      }).catch(function (err) {
-        console.log('[ai-cm-google-search] folwr-open: ошибка fetch:', err && err.message);
-      });
+      }).catch(function () { });
     }
 
     return promise;
@@ -484,22 +508,6 @@
       var method = '';
       try { method = (this.__aiCmMethod || 'GET').toUpperCase(); } catch (e) { }
 
-      if (isDiagTarget(url)) {
-        console.log('[ai-cm-google-search] diag: xhr', method, url.slice(0, 160));
-      }
-
-      if (isDiagTarget(url) && method !== 'POST') {
-        var xhrDiag = this;
-        this.addEventListener('load', function () {
-          try {
-            var txt = xhrDiag.responseText;
-            if (txt && txt.length > 2000) {
-              console.log('[ai-cm-google-search] diag: большой ответ', url.slice(0, 160), txt.length, diagPreview(txt));
-            }
-          } catch (e) { }
-        });
-      }
-
       var isFolwr = url.indexOf('/folwr') !== -1;
       var isFolif = url.indexOf('/folif') !== -1;
 
@@ -510,13 +518,11 @@
           try {
             if (self.status >= 200 && self.status < 300 && self.responseText) {
               var txt = self.responseText;
-
               var modelXhr = extractModel(txt);
               if (modelXhr) detectedModelSlug = modelXhr;
-
-              var turns = parseTurns(txt);
-              if (turns.length > 0) {
-                mergeTurns(turns, isFullXhr);
+              var parsed = parseWithParser(txt);
+              if (parsed.turns.length > 0) {
+                mergeTurns(parsed.turns, isFullXhr);
               }
             }
           } catch (e) { }
@@ -527,7 +533,7 @@
     };
   }
 
-  // Handshake: адаптер присылает ready после подписки content.js — повторно эмитим полный снимок.
+  // Handshake
   window.addEventListener('ai-cm-google-search-ready', function () {
     if (lastFullSnapshot) {
       console.log('[ai-cm-google-search] folwr-open: повторный эмит по handshake');
