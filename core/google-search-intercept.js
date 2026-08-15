@@ -13,6 +13,43 @@
   var baseTurns = [];
   var seenKeys = {};
   var detectedModelSlug = null;
+  var lastFullTurns = [];       // полная база последнего folwr-open снимка (turns)
+  var lastFullMessages = [];    // плоские messages полного снимка
+  var lastFullSnapshot = null;  // detail (payload) последнего полного снимка
+
+  // ---- диагностика: какие запросы Google Search AI поднимает историю ----
+  function isDiagTarget(rawUrl) {
+    if (!rawUrl) return false;
+    try {
+      var u = new URL(rawUrl, location.href);
+      var host = u.hostname.toLowerCase();
+      if (host !== 'google.com' && host !== 'www.google.com') return false;
+      var s = u.href;
+      if (s.indexOf('.js') !== -1) return false;
+      if (s.indexOf('.css') !== -1) return false;
+      if (s.indexOf('.png') !== -1) return false;
+      if (s.indexOf('.svg') !== -1) return false;
+      if (s.indexOf('.woff') !== -1) return false;
+      if (s.indexOf('gstatic') !== -1) return false;
+      if (s.indexOf('googleapis') !== -1) return false;
+      if (s.indexOf('_next/static') !== -1) return false;
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function diagPreview(txt) {
+    if (!txt) return '';
+    if (txt.indexOf(")]}'") === 0) {
+      var rest = txt.slice(4).replace(/^\s+/, '');
+      var idx = -1;
+      for (var i = 0; i < rest.length; i++) {
+        if (rest[i] === '{' || rest[i] === '[') { idx = i; break; }
+      }
+      if (idx >= 0) rest = rest.slice(idx);
+      return rest.slice(0, 300);
+    }
+    return txt.slice(0, 300);
+  }
 
   // ---- извлечение модели из сетевого ответа ----
   function extractModel(htmlText) {
@@ -29,11 +66,46 @@
     }
   }
 
+  // ---- пересборка плоских messages из полной базы ----
+  function rebuildLastFullMessages() {
+    var msgs = [];
+    for (var i = 0; i < lastFullTurns.length; i++) {
+      var t = lastFullTurns[i];
+      if (t.userText) msgs.push({ role: 'user', text: t.userText });
+      if (t.assistantText) msgs.push({ role: 'assistant', text: t.assistantText });
+    }
+    lastFullMessages = msgs;
+  }
+
+  // ---- слияние стрим-ходов с полной базой (без уменьшения) ----
+  function mergeStreamTurns(streamTurns) {
+    var merged = [];
+    var seen = {};
+    function addTurn(t) {
+      var key = (t && t.userText ? t.userText : '') + '||' + (t && t.assistantText ? t.assistantText : '');
+      if (key !== '||' && seen[key]) return;
+      seen[key] = true;
+      merged.push({ id: (t && t.id) || ('x' + merged.length), userText: t ? t.userText : null, assistantText: t ? t.assistantText : null });
+    }
+    for (var i = 0; i < lastFullTurns.length; i++) addTurn(lastFullTurns[i]);
+    for (var j = 0; j < streamTurns.length; j++) addTurn(streamTurns[j]);
+    lastFullTurns = merged;
+    rebuildLastFullMessages();
+    lastFullSnapshot = buildDetail(lastFullTurns);
+    console.log('[ai-cm-google-search] стрим: слияние с полной базой, всего сообщений:', lastFullMessages.length);
+    emitDetail(lastFullSnapshot);
+  }
+
   // ---- слияние новых ходов и эмит ----
   function mergeTurns(newTurns, isFull) {
     if (isFull) {
+      // Защитный merge: не перезаписываем базу меньшим снимком (стрим-гонка).
+      if (lastFullTurns.length > 0 && newTurns.length < lastFullTurns.length) {
+        mergeStreamTurns(newTurns);
+        return;
+      }
       // folwr: полная перезапись базы
-      baseTurns = newTurns;
+      lastFullTurns = newTurns.slice();
       seenKeys = {};
       for (var i = 0; i < newTurns.length; i++) {
         var t = newTurns[i];
@@ -47,17 +119,19 @@
         var key2 = (nt.userText || '') + '||' + (nt.assistantText || '');
         if (!seenKeys[key2]) {
           seenKeys[key2] = true;
-          baseTurns.push(nt);
+          lastFullTurns.push(nt);
         }
       }
     }
-    if (baseTurns.length > 0) {
-      emitBaseSnapshot(baseTurns);
+    rebuildLastFullMessages();
+    if (lastFullTurns.length > 0) {
+      lastFullSnapshot = buildDetail(lastFullTurns);
+      emitDetail(lastFullSnapshot);
     }
   }
 
-  // ---- эмит базы в content.js ----
-  function emitBaseSnapshot(turns) {
+  // ---- сборка detail снимка (без dispatch) ----
+  function buildDetail(turns) {
     var messageTexts = [];
     var messageIds = [];
     for (var i = 0; i < turns.length; i++) {
@@ -72,25 +146,30 @@
       }
     }
     var text = messageTexts.join('\n');
-    var count = messageTexts.length;
+    return {
+      convId: '',
+      text: text,
+      count: messageTexts.length,
+      effectiveLen: text.length,
+      lastMessageText: messageTexts.length ? messageTexts[messageTexts.length - 1] : '',
+      modelSlug: detectedModelSlug || '',
+      messageTexts: messageTexts,
+      messageIds: messageIds,
+      attachTokens: 0,
+      attachBreak: { imgTokens: 0, docTokens: 0, imgCount: 0, docCount: 0 },
+      historyComplete: true
+    };
+  }
 
+  function emitDetail(detail) {
     try {
-      window.dispatchEvent(new CustomEvent('ai-cm-full-history', {
-        detail: {
-          convId: '',
-          text: text,
-          count: count,
-          effectiveLen: text.length,
-          lastMessageText: messageTexts.length ? messageTexts[messageTexts.length - 1] : '',
-          modelSlug: detectedModelSlug || '',
-          messageTexts: messageTexts,
-          messageIds: messageIds,
-          attachTokens: 0,
-          attachBreak: { imgTokens: 0, docTokens: 0, imgCount: 0, docCount: 0 },
-          historyComplete: true
-        }
-      }));
+      window.dispatchEvent(new CustomEvent('ai-cm-full-history', { detail: detail }));
     } catch (e) { }
+  }
+
+  // ---- эмит базы в content.js ----
+  function emitBaseSnapshot(turns) {
+    emitDetail(buildDetail(turns));
   }
 
   // ---- парсинг HTML-ответа ----
@@ -272,14 +351,35 @@
   window.fetch = function (input, init) {
     var url = '';
     try { url = (typeof input === 'string') ? input : (input && input.url) || ''; } catch (e) { }
+    var method = '';
+    try { method = (init && init.method) ? String(init.method).toUpperCase() : 'GET'; } catch (e) { }
+
+    if (isDiagTarget(url)) {
+      console.log('[ai-cm-google-search] diag: fetch', method, url.slice(0, 160));
+    }
 
     var isFolwr = url.indexOf('/folwr') !== -1;
     var isFolif = url.indexOf('/folif') !== -1;
+    var isOpenFolwr = url.indexOf('/async/folwr') !== -1;
 
     var promise;
     try { promise = origFetch.apply(this, arguments); } catch (e) { return Promise.reject(e); }
 
-    if (isFolwr || isFolif) {
+    if (isDiagTarget(url) && method !== 'POST') {
+      promise.then(function (resp) {
+        try {
+          if (resp && typeof resp.clone === 'function') {
+            resp.clone().text().then(function (txt) {
+              if (txt && txt.length > 2000) {
+                console.log('[ai-cm-google-search] diag: большой ответ', url.slice(0, 160), txt.length, diagPreview(txt));
+              }
+            }).catch(function () { });
+          }
+        } catch (e) { }
+      }).catch(function () { });
+    }
+
+    if ((isFolwr || isFolif) && !isOpenFolwr) {
       var isFull = isFolwr;
       promise.then(function (resp) {
         try {
@@ -299,6 +399,61 @@
       }, function () { });
     }
 
+    // GET /async/folwr при открытии треда: полная история (~1 МБ HTML-поток).
+    // Извлекаем ВСЕ ходы и эмитим полный снимок (historyComplete: true).
+    if (isOpenFolwr && method !== 'POST') {
+      promise.then(function (resp) {
+        if (resp && resp.ok) {
+          resp.clone().text().then(function (txt) {
+            if (txt && txt.length > 100000) {
+              console.log('[ai-cm-google-search] folwr-open: ветка сработала, длина =', txt.length);
+
+              var model = extractModel(txt);
+              if (model) detectedModelSlug = model;
+
+              try {
+                var parsed = window.parseGoogleFolwrOpen
+                  ? window.parseGoogleFolwrOpen(txt)
+                  : {
+                      turns: parseTurns(txt),
+                      messages: [],
+                      text: '',
+                      count: 0
+                    };
+
+                if (parsed && parsed.turns && parsed.turns.length > 0) {
+                  // сохраняем полный снимок для handshake и защиты от стрим-сжатия
+                  lastFullTurns = parsed.turns.slice();
+                  rebuildLastFullMessages();
+                  seenKeys = {};
+                  for (var si = 0; si < lastFullTurns.length; si++) {
+                    var st = lastFullTurns[si];
+                    seenKeys[(st.userText || '') + '||' + (st.assistantText || '')] = true;
+                  }
+                  lastFullSnapshot = buildDetail(lastFullTurns);
+                  console.log('[ai-cm-google-search] folwr-open: распарсено сообщений:',
+                    parsed.turns.length, ', text len =', (parsed.text ? parsed.text.length : 0));
+                  console.log('[ai-cm-google-search] folwr-open: эмит полного снимка');
+                  emitDetail(lastFullSnapshot);
+                } else {
+                  console.log('[ai-cm-google-search] folwr-open: пустой результат парсинга (turns =',
+                    (parsed && parsed.turns) ? parsed.turns.length : 'n/a') + ')';
+                }
+              } catch (e) {
+                console.log('[ai-cm-google-search] folwr-open: ошибка:', e && e.message);
+              }
+            } else {
+              console.log('[ai-cm-google-search] folwr-open: ответ короткий, пропуск (длина =', txt ? txt.length : 0, ')');
+            }
+          }).catch(function (err) {
+            console.log('[ai-cm-google-search] folwr-open: ошибка чтения текста:', err && err.message);
+          });
+        }
+      }).catch(function (err) {
+        console.log('[ai-cm-google-search] folwr-open: ошибка fetch:', err && err.message);
+      });
+    }
+
     return promise;
   };
 
@@ -311,8 +466,10 @@
     OrigXHR.prototype.open = function (method, url) {
       try {
         this.__aiCmUrl = String(url || '');
+        this.__aiCmMethod = String(method || 'GET');
       } catch (e) {
         this.__aiCmUrl = '';
+        this.__aiCmMethod = 'GET';
       }
       return origOpen.apply(this, arguments);
     };
@@ -320,6 +477,24 @@
     OrigXHR.prototype.send = function (body) {
       var url = '';
       try { url = this.__aiCmUrl || ''; } catch (e) { }
+      var method = '';
+      try { method = (this.__aiCmMethod || 'GET').toUpperCase(); } catch (e) { }
+
+      if (isDiagTarget(url)) {
+        console.log('[ai-cm-google-search] diag: xhr', method, url.slice(0, 160));
+      }
+
+      if (isDiagTarget(url) && method !== 'POST') {
+        var xhrDiag = this;
+        this.addEventListener('load', function () {
+          try {
+            var txt = xhrDiag.responseText;
+            if (txt && txt.length > 2000) {
+              console.log('[ai-cm-google-search] diag: большой ответ', url.slice(0, 160), txt.length, diagPreview(txt));
+            }
+          } catch (e) { }
+        });
+      }
 
       var isFolwr = url.indexOf('/folwr') !== -1;
       var isFolif = url.indexOf('/folif') !== -1;
@@ -348,5 +523,14 @@
     };
   }
 
+  // Handshake: адаптер присылает ready после подписки content.js — повторно эмитим полный снимок.
+  window.addEventListener('ai-cm-google-search-ready', function () {
+    if (lastFullSnapshot) {
+      console.log('[ai-cm-google-search] folwr-open: повторный эмит по handshake');
+      emitDetail(lastFullSnapshot);
+    }
+  });
+
   console.log('[ai-cm-google-search] Перехватчик установлен');
+  console.log('[ai-cm-google-search] parser available: ' + typeof window.parseGoogleFolwrOpen);
 })();

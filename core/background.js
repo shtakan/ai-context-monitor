@@ -91,7 +91,7 @@ async function ensureInterceptor() {
       await chrome.scripting.registerContentScripts([{
         id: 'ai-cm-google-search-intercept',
         matches: ['https://www.google.com/*'],
-        js: ['utils/debug.js', 'core/google-search-intercept.js'],
+        js: ['utils/debug.js', 'utils/google-search-folwr-parser.js', 'core/google-search-intercept.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false

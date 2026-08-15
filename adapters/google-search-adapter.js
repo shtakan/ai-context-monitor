@@ -2,7 +2,22 @@ class GoogleSearchAdapter extends BaseAdapter {
   constructor() {
     super();
     this.siteName = 'google_search';
+    this._lastNetworkModel = '';
     console.log('[GoogleSearchAdapter] Инициализирован (v2: AI-режим)');
+
+    if (typeof window !== 'undefined') {
+      var self = this;
+      try {
+        window.addEventListener('ai-cm-full-history', function (ev) {
+          var detail = ev && ev.detail;
+          if (detail && detail.modelSlug) {
+            self._lastNetworkModel = detail.modelSlug;
+          }
+        });
+        // handshake: сигналим перехватчику (MAIN world), что content.js уже подписан на ai-cm-full-history
+        window.dispatchEvent(new CustomEvent('ai-cm-google-search-ready'));
+      } catch (e) {}
+    }
   }
 
   isOnDialogPage() {
@@ -105,6 +120,7 @@ class GoogleSearchAdapter extends BaseAdapter {
   }
 
   detectModel() {
+    if (this._lastNetworkModel) return this._lastNetworkModel;
     return 'gemini-2.5-flash';
   }
 }

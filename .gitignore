@@ -28,3 +28,6 @@ npm-debug.log
 
 # Project-specific
 .clinerules
+
+# Личные данные — не коммитить
+google-folwr-open.txt
