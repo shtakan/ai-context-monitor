@@ -260,6 +260,7 @@
           modelSlug: parsed.modelSlug,
           messageTexts: parsed.pieces,
           messageIds: parsed.ids,
+          messages: parsed.messages || [],
           attachTokens: attachTokens,
           attachBreak: {
             imgTokens: attachBreak.imgTokens,

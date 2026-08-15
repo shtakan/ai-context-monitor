@@ -12,6 +12,9 @@ const apiKeyInput = document.getElementById('api-key');
 const toggleApiKeyBtn = document.getElementById('toggle-api-key');
 const exactCountCheckbox = document.getElementById('exact-count');
 const versionEl = document.querySelector('.version');
+const exportMdBtn = document.getElementById('export-md');
+const exportJsonBtn = document.getElementById('export-json');
+const exportHintEl = document.getElementById('export-hint');
 
 // Цветовые пороги — те же, что в content.js (zoneColor: <50 зелёный, <80 жёлтый, красный)
 function percentColor(p) { if (p < 50) return '#22c55e'; if (p < 80) return '#eab308'; return '#ef4444'; }
@@ -29,7 +32,8 @@ var siteLabels = {
   'aistudio': 'Google AI Studio',
   'google_search': 'Google Search AI',
   'deepseek': 'DeepSeek',
-  'claude': 'Claude'
+  'claude': 'Claude',
+  'perplexity': 'Perplexity'
 };
 
 // Загружаем настройки
@@ -161,5 +165,141 @@ try {
   });
 } catch (e) {}
 
-// Загружаем статистику при открытии
-document.addEventListener('DOMContentLoaded', loadStats);
+// ========== ЭКСПОРТ ИСТОРИИ ==========
+var cachedHistory = null;
+var currentTabHost = '';
+
+function getActiveTabHost(cb) {
+  try {
+    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+      var tab = tabs && tabs[0];
+      var host = '';
+      if (tab && tab.url) {
+        try { host = new URL(tab.url).hostname; } catch (e) { host = ''; }
+      }
+      currentTabHost = host;
+      cb(host);
+    });
+  } catch (e) {
+    cb('');
+  }
+}
+
+function updateExportButtons() {
+  if (!exportMdBtn || !exportJsonBtn) return;
+  var enabled = !!(cachedHistory && cachedHistory.host === currentTabHost);
+  exportMdBtn.disabled = !enabled;
+  exportJsonBtn.disabled = !enabled;
+  if (exportHintEl) {
+    exportHintEl.textContent = enabled ? 'Готово к экспорту' : 'Откройте поддерживаемый сайт';
+  }
+}
+
+function refreshExportState() {
+  getActiveTabHost(function () {
+    chrome.storage.local.get(['aiCmHistory'], function (data) {
+      cachedHistory = data.aiCmHistory || null;
+      updateExportButtons();
+    });
+  });
+}
+
+function pad2(n) { return (n < 10 ? '0' : '') + n; }
+function buildFileName(ext) {
+  var d = new Date();
+  var stamp = d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
+    '-' + pad2(d.getHours()) + '-' + pad2(d.getMinutes());
+  var site = (cachedHistory && cachedHistory.site) || 'chat';
+  var model = (cachedHistory && cachedHistory.model) || 'model';
+  var safeSite = String(site).replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'chat';
+  var safeModel = String(model).replace(/[^a-zA-Z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '') || 'model';
+  return 'ai-context-monitor-' + safeSite + '-' + safeModel + '-' + stamp + '.' + ext;
+}
+
+function downloadBlob(content, fileName, mimeType) {
+  try {
+    var blob = new Blob([content], { type: mimeType });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  } catch (e) {
+    console.warn('[export] не удалось скачать файл:', e);
+  }
+}
+
+function getPlatform() {
+  var site = cachedHistory && cachedHistory.site;
+  return (siteLabels[site] || site || 'AI Chat');
+}
+
+function buildJsonText() {
+  var exportedAt = new Date().toISOString();
+  return JSON.stringify({
+    platform: getPlatform(),
+    model: (cachedHistory && cachedHistory.model) || '',
+    exportedAt: exportedAt,
+    tokens: (cachedHistory && typeof cachedHistory.tokens === 'number') ? cachedHistory.tokens : 0,
+    limit: (cachedHistory && typeof cachedHistory.limit === 'number') ? cachedHistory.limit : 0,
+    percent: (cachedHistory && typeof cachedHistory.percent === 'number') ? cachedHistory.percent : 0,
+    messages: (cachedHistory && Array.isArray(cachedHistory.messages)) ? cachedHistory.messages : []
+  }, null, 2);
+}
+
+function buildMdText() {
+  var h = cachedHistory || {};
+  var lines = [];
+  lines.push('# AI Context Monitor — экспорт истории');
+  lines.push('');
+  lines.push('Платформа: ' + getPlatform());
+  lines.push('Модель: ' + (h.model || '—'));
+  lines.push('Дата экспорта: ' + new Date().toISOString());
+  var tokens = (typeof h.tokens === 'number') ? h.tokens : 0;
+  var limit = (typeof h.limit === 'number') ? h.limit : 0;
+  var percent = (typeof h.percent === 'number') ? h.percent : 0;
+  lines.push('Токены: ' + tokens + ' / ' + limit + ' (' + percent + '%)');
+  lines.push('');
+
+  var messages = Array.isArray(h.messages) ? h.messages : [];
+  for (var i = 0; i < messages.length; i++) {
+    var msg = messages[i] || {};
+    var title = (msg.role === 'user') ? '## Пользователь' : '## Ассистент';
+    lines.push(title);
+    lines.push('');
+    lines.push(msg.text || '');
+    lines.push('');
+  }
+  return lines.join('\n');
+}
+
+exportMdBtn && exportMdBtn.addEventListener('click', function () {
+  if (exportMdBtn.disabled) return;
+  downloadBlob(buildMdText(), buildFileName('md'), 'text/markdown');
+});
+
+exportJsonBtn && exportJsonBtn.addEventListener('click', function () {
+  if (exportJsonBtn.disabled) return;
+  downloadBlob(buildJsonText(), buildFileName('json'), 'application/json');
+});
+
+// Live-обновление доступности кнопок при изменении aiCmHistory
+try {
+  chrome.storage.onChanged.addListener(function (changes, areaName) {
+    if (areaName !== 'local' || !changes.aiCmHistory) return;
+    cachedHistory = changes.aiCmHistory.newValue || null;
+    // host активной вкладки мог не успеть обновиться — перезапрашиваем
+    getActiveTabHost(function () {
+      updateExportButtons();
+    });
+  });
+} catch (e) {}
+
+// Загружаем статистику и состояние экспорта при открытии
+document.addEventListener('DOMContentLoaded', function () {
+  loadStats();
+  refreshExportState();
+});

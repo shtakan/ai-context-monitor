@@ -32,6 +32,27 @@ let baseSkelSet = null;
 let baseAnchors = null;
 const ANCHOR_MIN = 40;
 
+// ========== ЭКСПОРТ ИСТОРИИ (aiCmHistory) ==========
+// Роли сообщений берём из detail.messages перехватчика (если есть);
+// иначе — фолбэк: первое сообщение user, далее чередование user/assistant.
+let lastDetailMessages = null; // [{role,text}] из последнего detail.messages (или null)
+let lastHistoryWroteKey = null; // сигнатура 'baseCount|textLen' последней записи aiCmHistory
+function buildHistoryMessages() {
+  var texts = lastBaseTexts || [];
+  var out = [];
+  if (Array.isArray(lastDetailMessages) && lastDetailMessages.length === texts.length) {
+    for (var i = 0; i < texts.length; i++) {
+      var r = (lastDetailMessages[i] && lastDetailMessages[i].role) || '';
+      out.push({ role: (r === 'user') ? 'user' : 'assistant', text: texts[i] || '' });
+    }
+  } else {
+    for (var j = 0; j < texts.length; j++) {
+      out.push({ role: (j % 2 === 0) ? 'user' : 'assistant', text: texts[j] || '' });
+    }
+  }
+  return out;
+}
+
 // ========== v28: ХРАНИЛИЩЕ ПОЛНОЙ ЛЕНТЫ GEMINI (chrome.storage.local) ==========
 // Интерфейс (асинхронный, на Promise):
 //   load(convId) -> {turns:[{id,text}], meta:{count,effectiveLen,ts,modelSlug}} | null
@@ -223,6 +244,10 @@ function resetConversationState() {
   baseSkelSet = null;
   baseAnchors = null;
   lastTailSig = null;
+  lastBaseIds = [];
+  lastBaseTexts = [];
+  lastDetailMessages = null;
+  lastHistoryWroteKey = null;
   detectedModelSlug = '';
   netAttachTokens = 0;
   netAttachBreak = null;
@@ -379,6 +404,7 @@ window.addEventListener('ai-cm-full-history', function (ev) {
   var ids = Array.isArray(detail.messageIds) ? detail.messageIds : [];
   lastBaseIds = ids;
   lastBaseTexts = texts;
+  lastDetailMessages = Array.isArray(detail.messages) ? detail.messages : null;
   baseIdSet = new Set();
   for (var i = 0; i < ids.length; i++) { var s = String(ids[i]).trim(); if (s) baseIdSet.add(s); }
   baseSkelSet = new Set();
@@ -817,6 +843,25 @@ function processAndSend() {
           updatedAt: Date.now()
         }});
       } catch (e) {}
+    }
+    // Экспорт истории: пишем aiCmHistory только когда история реально изменилась (baseCount или textLen).
+    if (isExtensionValid() && baseSeen && lastBaseTexts.length > 0) {
+      var histKey = baseCount + '|' + (baseText ? baseText.length : 0);
+      if (histKey !== lastHistoryWroteKey) {
+        lastHistoryWroteKey = histKey;
+        try {
+          chrome.storage.local.set({ aiCmHistory: {
+            host: window.location.hostname,
+            site: currentAdapter.siteName,
+            model: ModelConfig.getModel(modelId)?.name || modelId,
+            tokens: maxTokenCount,
+            limit: displayLimit,
+            percent: percentage,
+            updatedAt: Date.now(),
+            messages: buildHistoryMessages()
+          }});
+        } catch (e) {}
+      }
     }
     if (isExtensionValid()) {
       chrome.runtime.sendMessage({

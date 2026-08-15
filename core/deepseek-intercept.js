@@ -121,10 +121,12 @@
       return (turnsMap[a].order || 0) - (turnsMap[b].order || 0);
     });
     var pieces = [];
+    var messages = [];
     var lastModel = '';
     for (var j = 0; j < ids.length; j++) {
       var t = turnsMap[ids[j]];
       pieces.push(t.text);
+      messages.push({ role: (t.role === 'user' || t.role === 'assistant') ? t.role : 'assistant', text: t.text });
       if (t.modelSlug) lastModel = t.modelSlug;
     }
     var text = pieces.join('\n');
@@ -138,6 +140,7 @@
           modelMode: chatMode,
           messageTexts: pieces,
           messageIds: ids,
+          messages: messages,
           attachTokens: attachTokens,
           attachBreak: {
             imgTokens: attachBreak.imgTokens,

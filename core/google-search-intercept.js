@@ -134,15 +134,18 @@
   function buildDetail(turns) {
     var messageTexts = [];
     var messageIds = [];
+    var messages = [];
     for (var i = 0; i < turns.length; i++) {
       var t = turns[i];
       if (t.userText) {
         messageTexts.push(t.userText);
         messageIds.push(t.id + '_user');
+        messages.push({ role: 'user', text: t.userText });
       }
       if (t.assistantText) {
         messageTexts.push(t.assistantText);
         messageIds.push(t.id + '_assistant');
+        messages.push({ role: 'assistant', text: t.assistantText });
       }
     }
     var text = messageTexts.join('\n');
@@ -155,6 +158,7 @@
       modelSlug: detectedModelSlug || '',
       messageTexts: messageTexts,
       messageIds: messageIds,
+      messages: messages,
       attachTokens: 0,
       attachBreak: { imgTokens: 0, docTokens: 0, imgCount: 0, docCount: 0 },
       historyComplete: true

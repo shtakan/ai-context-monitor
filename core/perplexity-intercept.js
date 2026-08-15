@@ -183,6 +183,7 @@
         detail: {
           text: parsed.text, count: parsed.count, lastMessageText: parsed.lastText,
           modelSlug: model, messageTexts: parsed.pieces || [], messageIds: parsed.ids || [],
+          messages: parsed.messages || [],
           attachTokens: 0, attachBreak: { imgTokens: 0, docTokens: 0, imgCount: 0, docCount: 0 },
           historyComplete: true, serverTokens: 0
         }

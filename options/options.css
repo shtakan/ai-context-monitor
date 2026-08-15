@@ -174,3 +174,29 @@ select:focus, input:focus {
 .btn-toggle:hover {
   background: #2a2a4a;
 }
+
+.export-row {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-export {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #2a2a4a;
+  background: #16213e;
+  color: #ffffff;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-export:hover:not(:disabled) {
+  background: #2a2a4a;
+}
+
+.btn-export:disabled {
+  color: #666688;
+  cursor: not-allowed;
+}

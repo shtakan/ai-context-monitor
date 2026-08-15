@@ -277,11 +277,18 @@
       ' сообщений' + (parsed.lastModelSlug ? ', model_slug=' + parsed.lastModelSlug : '') +
       (attachTokens > 0 ? ', картинок=' + attachBreak.imgCount + ' ≈' + attachBreak.imgTokens + ' ток' : '') +
       ' (без скролла)');
+    // Экспорт истории: роли берём из внутреннего разбора (parsed.roles, параллелен parsed.pieces).
+    var messages = [];
+    for (var mi = 0; mi < diagPieces.length; mi++) {
+      var mRole = diagRoles[mi] || '';
+      messages.push({ role: (mRole === 'user') ? 'user' : 'assistant', text: diagPieces[mi] || '' });
+    }
     try {
       window.dispatchEvent(new CustomEvent('ai-cm-full-history', {
         detail: {
           text: parsed.text, count: parsed.count, lastMessageText: parsed.lastText,
           modelSlug: parsed.lastModelSlug, messageTexts: parsed.pieces, messageIds: parsed.ids,
+          messages: messages,
           attachTokens: attachTokens,
           attachBreak: { imgTokens: attachBreak.imgTokens, docTokens: attachBreak.docTokens, imgCount: attachBreak.imgCount, docCount: attachBreak.docCount },
           historyComplete: true,
