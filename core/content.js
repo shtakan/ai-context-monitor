@@ -42,17 +42,22 @@ let staleTimer = null;
 let lastDetailMessages = null; // [{role,text}] из последнего detail.messages (или null)
 let lastHistoryWroteKey = null; // сигнатура 'baseCount|textLen' последней записи aiCmHistory
 let lastThreadId = null; // threadId последнего применённого снимка Google (для сброса при SPA-возврате)
+// v31: страховочная чистка токенов вложений перед записью экспорта истории.
+function stripGeminiAttachmentTokens(s) {
+  if (typeof s !== 'string') return s;
+  return s.replace(/\$AXzLiR[A-Za-z0-9+\/=]+/g, ' ').replace(/[ \t\f\v]+/g, ' ').trim();
+}
 function buildHistoryMessages() {
   var texts = lastBaseTexts || [];
   var out = [];
   if (Array.isArray(lastDetailMessages) && lastDetailMessages.length === texts.length) {
     for (var i = 0; i < texts.length; i++) {
       var r = (lastDetailMessages[i] && lastDetailMessages[i].role) || '';
-      out.push({ role: (r === 'user') ? 'user' : 'assistant', text: texts[i] || '' });
+      out.push({ role: (r === 'user') ? 'user' : 'assistant', text: stripGeminiAttachmentTokens(texts[i]) });
     }
   } else {
     for (var j = 0; j < texts.length; j++) {
-      out.push({ role: (j % 2 === 0) ? 'user' : 'assistant', text: texts[j] || '' });
+      out.push({ role: (j % 2 === 0) ? 'user' : 'assistant', text: stripGeminiAttachmentTokens(texts[j]) });
     }
   }
   return out;
@@ -346,6 +351,15 @@ function nodeIsBase(node, skel) {
   return false;
 }
 
+// Gemini: DOM-хвост собираем через чистый парсер utils/gemini-dom-parser.js,
+// чтобы исключить блоки мышления и включить HTML-таблицы как markdown.
+function shouldUseGeminiDomParser() {
+  try {
+    if (currentAdapter && currentAdapter.siteName === 'gemini') return true;
+  } catch (e) { }
+  return false;
+}
+
 function computeTailFromDom() {
   var found = findMessageNodes();
   var nodes = found.nodes;
@@ -367,7 +381,18 @@ function computeTailFromDom() {
 
   var pieces = [];
   for (var j = 0; j < tailNodes.length; j++) {
-    var txt = (tailNodes[j].innerText || tailNodes[j].textContent || '').trim();
+    var txt = '';
+    if (shouldUseGeminiDomParser()) {
+      try {
+        txt = (typeof GeminiDomParser !== 'undefined' && GeminiDomParser)
+          ? GeminiDomParser.extractGeminiResponse(tailNodes[j]).text
+          : '';
+      } catch (e) {
+        txt = (tailNodes[j].innerText || tailNodes[j].textContent || '').trim();
+      }
+    } else {
+      txt = (tailNodes[j].innerText || tailNodes[j].textContent || '').trim();
+    }
     if (txt) pieces.push(txt);
   }
   return {

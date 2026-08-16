@@ -224,6 +224,15 @@
     }
   }
 
+  // ---- v31: версия парсера (инвалидация кэша базы при смене формата истории) ----
+  function parserVersionKey() { return 'ai-cm-parser-version'; }
+  function loadParserVersion() {
+    try { return localStorage.getItem(parserVersionKey()) || ''; } catch (e) { return ''; }
+  }
+  function saveParserVersion(v) {
+    try { localStorage.setItem(parserVersionKey(), v); } catch (e) { }
+  }
+
   // ================= v17: отслеживание смены чата в SPA =================
   function getConvId() {
     try {
@@ -541,13 +550,34 @@
         var localSeen = new Set(); var items = [];
         collectAttachments(t, localSeen, items);
         ingestAttachments(items);
-        var pieces = []; collectContent(t, pieces);
-        var text = pieces.join('\n').trim();
-        if (doIdmap) { try { logIdmap(t, src, text.length); } catch (e) { } }
         var modelName = extractModelName(t);
         var turnId = extractTurnId(t) || ('idx' + out.total++);
         var turnTs = extractTurnTs(t);
-        if (text) { out.turns.push({ id: turnId, text: text, modelName: modelName, ts: turnTs }); _nonEmpty++; }
+        // v30/v31: текст хода и роли собираем через чистый сетевой парсер
+        // (utils/gemini-batchexecute-parser.js): вычищаем $AXzLiR-токены и сегменты «мышления»,
+        // разделяем вопрос пользователя и ответ модели, сохраняем таблицы.
+        var segs = [];
+        if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser) {
+          try { segs = window.GeminiBatchexecuteParser.splitTurnMessages(t); } catch (e) { segs = []; }
+        }
+        if (!segs || !segs.length) {
+          // fallback: прежний сбор одним текстом (без ролей)
+          var fb = []; collectContent(t, fb);
+          var fbt = fb.join('\n').trim();
+          if (fbt) segs = [{ role: 'assistant', text: fbt }];
+        }
+        var anyNonEmpty = false;
+        for (var s = 0; s < segs.length; s++) {
+          var seg = segs[s];
+          var stxt = (seg && seg.text) ? seg.text.trim() : '';
+          if (!stxt) continue;
+          anyNonEmpty = true;
+          var role = (seg.role === 'user') ? 'user' : 'assistant';
+          var mid = turnId + '_' + role;
+          out.turns.push({ id: mid, text: stxt, modelName: modelName, ts: turnTs, role: role });
+        }
+        if (doIdmap) { try { logIdmap(t, src, (segs && segs.length) ? segs.map(function (x) { return (x && x.text) ? x.text.length : 0; }).reduce(function (a, b) { return a + b; }, 0) : 0); } catch (e) { } }
+        if (anyNonEmpty) { _nonEmpty++; }
         else { _empty++; _skippedIds.push(turnId); }
       }
       debugLog('log', '[gemini-ingest-trace] handleOuter src=' + src + ' ходов_всего=' + turns.length +
@@ -1058,6 +1088,12 @@
       if (t.modelName) lastModelName = t.modelName;
     }
     var text = pieces.join('\n');
+    // v31: сообщения с ролями (user/assistant) для экспорта истории
+    var messages = [];
+    for (var mi = 0; mi < ids.length; mi++) {
+      var tm = turnsMap[ids[mi]];
+      messages.push({ role: (tm.role === 'user') ? 'user' : 'assistant', text: tm.text });
+    }
     var effectiveLen = text.length;
     var floorApplied = false;
     var floorValue = 0;
@@ -1095,6 +1131,7 @@
           modelSlug: lastModelName || '',
           messageTexts: pieces,
           messageIds: ids,
+          messages: messages,
           attachTokens: attachTokens,
           attachBreak: { imgTokens: attachBreak.imgTokens, docTokens: attachBreak.docTokens, imgCount: attachBreak.imgCount, docCount: attachBreak.docCount },
           historyComplete: historyFullByQuiet,
@@ -1116,6 +1153,22 @@
     var src = fromVirtualF5 ? 'vf5' : (fromActivePaginate ? 'pag' : 'passive');
     var wasFull = historyFullByQuiet;
     pendingCursor = null;
+
+    // v31: инвалидация кэша базы при смене версии парсера.
+    var curParserVer = (typeof window !== 'undefined' && window.GeminiBatchexecuteParser)
+      ? window.GeminiBatchexecuteParser.PARSER_VERSION : '';
+    if (fromVirtualF5 && curParserVer) {
+      var savedVer = loadParserVersion();
+      if (savedVer && savedVer !== curParserVer) {
+        debugLog('log', '[gemini-rebuild] причина: смена версии парсера');
+        shouldRebuild = true;
+        wasFull = false;
+        turnsMap = {};
+        orderCounter = 0;
+      }
+      saveParserVersion(curParserVer);
+    }
+
     var parsed;
     try { parsed = parseBatchExecute(raw, src); }
     catch (e) {
@@ -1155,7 +1208,7 @@
     for (var i = 0; i < parsed.length; i++) {
       var p = parsed[i];
       if (!turnsMap[p.id]) {
-        turnsMap[p.id] = { text: p.text, modelName: p.modelName, order: orderCounter++, ts: p.ts || 0 };
+        turnsMap[p.id] = { text: p.text, modelName: p.modelName, order: orderCounter++, ts: p.ts || 0, role: (p.role === 'user') ? 'user' : 'assistant' };
         added++;
       }
     }

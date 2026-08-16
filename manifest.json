@@ -49,6 +49,7 @@
     "adapters/google-search-adapter.js",
     "adapters/claude-adapter.js",
     "adapters/perplexity-adapter.js",
+    "utils/gemini-dom-parser.js",
     "core/content.js"
   ],
   "run_at": "document_idle"

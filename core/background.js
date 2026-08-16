@@ -39,7 +39,7 @@ async function ensureInterceptor() {
       await chrome.scripting.registerContentScripts([{
         id: 'ai-cm-gemini-intercept',
         matches: ['https://gemini.google.com/*', 'https://aistudio.google.com/*'],
-        js: ['utils/debug.js', 'core/gemini-intercept.js'],
+        js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'core/gemini-intercept.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false
