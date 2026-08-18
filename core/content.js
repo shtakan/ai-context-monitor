@@ -42,10 +42,20 @@ let staleTimer = null;
 let lastDetailMessages = null; // [{role,text}] из последнего detail.messages (или null)
 let lastHistoryWroteKey = null; // сигнатура 'baseCount|textLen' последней записи aiCmHistory
 let lastThreadId = null; // threadId последнего применённого снимка Google (для сброса при SPA-возврате)
-// v31: страховочная чистка токенов вложений перед записью экспорта истории.
-function stripGeminiAttachmentTokens(s) {
+// v31: страховочная чистка перед записью экспорта истории.
+// Единая санация вынесена в utils/gemini-batchexecute-parser.js (sanitizeGeminiText):
+//   strip /$AXzLiR[A-Za-z0-9+\/=\s]+/g, точную строку "File attachment was not previously
+//   registered" и /\[cite:\s*\d+\]/g. Здесь — делегирование к парсеру с локальным фолбэком
+//   на случай, если парсер ещё не загрузился.
+function sanitizeGeminiText(s) {
+  if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser && window.GeminiBatchexecuteParser.sanitizeGeminiText) {
+    return window.GeminiBatchexecuteParser.sanitizeGeminiText(s);
+  }
   if (typeof s !== 'string') return s;
-  return s.replace(/\$AXzLiR[A-Za-z0-9+\/=]+/g, ' ').replace(/[ \t\f\v]+/g, ' ').trim();
+  return s
+    .replace(/\$AXzLiR[A-Za-z0-9+\/=\s]+/g, ' ')
+    .replace(/File attachment was not previously registered/g, '')
+    .replace(/\[cite:\s*\d+\]/g, '');
 }
 function buildHistoryMessages() {
   var texts = lastBaseTexts || [];
@@ -53,11 +63,11 @@ function buildHistoryMessages() {
   if (Array.isArray(lastDetailMessages) && lastDetailMessages.length === texts.length) {
     for (var i = 0; i < texts.length; i++) {
       var r = (lastDetailMessages[i] && lastDetailMessages[i].role) || '';
-      out.push({ role: (r === 'user') ? 'user' : 'assistant', text: stripGeminiAttachmentTokens(texts[i]) });
+      out.push({ role: (r === 'user') ? 'user' : 'assistant', text: sanitizeGeminiText(texts[i]) });
     }
   } else {
     for (var j = 0; j < texts.length; j++) {
-      out.push({ role: (j % 2 === 0) ? 'user' : 'assistant', text: stripGeminiAttachmentTokens(texts[j]) });
+      out.push({ role: (j % 2 === 0) ? 'user' : 'assistant', text: sanitizeGeminiText(texts[j]) });
     }
   }
   return out;
@@ -100,19 +110,34 @@ const STORAGE_INDEX_PREFIX = 'ai-cm-gemini-index-';
 const MAX_DIALOGUES = 50;
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 дней
 
+// Версия логики парсинга Gemini (PARSER_VERSION из utils/gemini-batchexecute-parser.js).
+// Ключ ленты включает версию: протухшие записи другой версии не читаются и не мигрируются.
+function geminiParserVersion() {
+  try {
+    if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser && window.GeminiBatchexecuteParser.PARSER_VERSION) {
+      return window.GeminiBatchexecuteParser.PARSER_VERSION;
+    }
+  } catch (e) { }
+  return '';
+}
+function geminiTapeKey(convId) {
+  return STORAGE_PREFIX + geminiParserVersion() + '-' + convId;
+}
+
 var GeminiTapeStore = {
   load: function (convId) {
     if (!isExtensionValid() || !convId) return Promise.resolve(null);
     return new Promise(function (resolve) {
-      chrome.storage.local.get([STORAGE_PREFIX + convId], function (data) {
-        var entry = data[STORAGE_PREFIX + convId];
+      var key = geminiTapeKey(convId);
+      chrome.storage.local.get([key], function (data) {
+        var entry = data[key];
         if (!entry) { resolve(null); return; }
         // обновляем ts при каждом обращении
         entry.meta = entry.meta || {};
         entry.meta.ts = Date.now();
         // пишем обновлённый ts обратно (fire-and-forget)
         var kv = {};
-        kv[STORAGE_PREFIX + convId] = entry;
+        kv[key] = entry;
         chrome.storage.local.set(kv);
         resolve(entry);
       });
@@ -123,9 +148,10 @@ var GeminiTapeStore = {
     if (!isExtensionValid() || !convId || !turns || !turns.length) return Promise.resolve();
     meta = meta || {};
     meta.ts = Date.now();
+    meta.version = geminiParserVersion();
     var record = { turns: turns, meta: meta };
     var kv = {};
-    kv[STORAGE_PREFIX + convId] = record;
+    kv[geminiTapeKey(convId)] = record;
     return new Promise(function (resolve) {
       chrome.storage.local.set(kv, function () {
         GeminiTapeStore._touchIndex(convId).then(resolve);
@@ -501,17 +527,30 @@ window.addEventListener('ai-cm-full-history', function (ev) {
   // v28: сохраняем полную ленту в chrome.storage.local для восстановления после F5/переоткрытия
   // v30: сохраняем ТОЛЬКО если restoreDone === true — не даём первому неполному эмиту
   // после F5 затереть ленту до восстановления.
-  if (restoreDone) {
+  // v33: сохраняем ТОЛЬКО при baseComplete (сеть дала полную историю) — чтобы не записать
+  // в ленту DOM-хвост, из-за которого экспорт после F5 отличался от экспорта после открытия.
+  // v4x: пишем ленту ТОЛЬКО из санированных messages (detail.messages) — они уже
+  // прошли sanitizeFinalMessages и содержат r1/turnId для связного списка порядка.
+  if (restoreDone && baseComplete) {
     var convId = detail.convId || '';
-    if (convId && ids.length > 0 && texts.length > 0) {
+    var msgs = Array.isArray(detail.messages) ? detail.messages : [];
+    if (convId && msgs.length > 0) {
       var turns = [];
-      for (var x = 0; x < ids.length; x++) {
-        turns.push({ id: ids[x], text: texts[x] || '' });
+      for (var x = 0; x < msgs.length; x++) {
+        var mm = msgs[x] || {};
+        turns.push({
+          id: (mm.id != null) ? String(mm.id) : '',
+          text: mm.text || '',
+          role: (mm.role === 'user') ? 'user' : 'assistant',
+          r1: mm.r1 || null,
+          turnId: mm.turnId || null
+        });
       }
       GeminiTapeStore.save(convId, turns, {
         count: detail.count || 0,
         effectiveLen: detail.effectiveLen || 0,
-        modelSlug: detail.modelSlug || ''
+        modelSlug: detail.modelSlug || '',
+        version: geminiParserVersion()
       });
     }
   }
@@ -1021,6 +1060,10 @@ function updateWidget(percentage, tokens, effectiveLimit, contextLimit, displayL
 // ========== СЛУШАТЕЛЬ POPUP ==========
 if (isExtensionValid()) {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'aiCmDiag') {
+      handleAiCmDiag(sendResponse);
+      return true;
+    }
     if (message.type === 'GET_STATS') {
       if (currentAdapter && (isInitialized || (baseSeen && baseComplete))) {
         const messages = currentAdapter.extractMessages();
@@ -1054,6 +1097,68 @@ if (isExtensionValid()) {
     }
     return true;
   });
+}
+
+// ========== ЭКСПОРТ ДИАГНОСТИКИ ==========
+// popup шлёт {type:'aiCmDiag'}. content.js (ISOLATED) дёргает MAIN-перехватчик через
+// window.dispatchEvent('ai-cm-diag-request') и ждёт 'ai-cm-diag-response'.
+function handleAiCmDiag(sendResponse) {
+  var intercepted = null;
+  var timer = null;
+
+  function finishWithResponse() {
+    if (timer) { clearTimeout(timer); timer = null; }
+    // метаданные aiCmHistory из chrome.storage.local (если записаны для этого хоста)
+    try {
+      chrome.storage.local.get(['aiCmHistory'], function (data) {
+        var h = data.aiCmHistory;
+        var sameHost = !!(h && h.host === window.location.hostname);
+        var meta = sameHost ? {
+          host: h.host,
+          model: h.model || '',
+          tokens: (typeof h.tokens === 'number') ? h.tokens : 0,
+          percent: (typeof h.percent === 'number') ? h.percent : 0,
+          count: (Array.isArray(h.messages)) ? h.messages.length : 0
+        } : {
+          host: window.location.hostname,
+          model: '',
+          tokens: 0,
+          percent: 0,
+          count: 0
+        };
+        var historyPreviews = [];
+        if (sameHost && Array.isArray(h.messages)) {
+          for (var i = 0; i < h.messages.length; i++) {
+            var msg = h.messages[i] || {};
+            historyPreviews.push((msg.role || '?') + '|' + String(msg.text || '').slice(0, 60).replace(/\s+/g, ' '));
+          }
+        }
+        var diag = {
+          generatedAt: new Date().toISOString(),
+          url: window.location.href,
+          logsContent: (typeof __aiCmGetLogRing === 'function') ? __aiCmGetLogRing() : [],
+          aiCmHistoryMeta: meta,
+          historyPreviews: historyPreviews,
+          intercept: intercepted || null
+        };
+        sendResponse({ ok: true, diag: diag });
+      });
+    } catch (e) {
+      sendResponse({ ok: true, diag: { generatedAt: new Date().toISOString(), url: window.location.href, logsContent: [], aiCmHistoryMeta: null, historyPreviews: [], intercept: intercepted } });
+    }
+  }
+
+  function onResponse(ev) {
+    try { intercepted = (ev && ev.detail) || null; } catch (e) { intercepted = null; }
+    finishWithResponse();
+  }
+
+  window.addEventListener('ai-cm-diag-response', onResponse);
+
+  // таймаут: если перехватчик (MAIN-мир) не ответил (не Gemini / не установлен) — отдаём без intercept.
+  timer = setTimeout(finishWithResponse, 900);
+
+  try { window.dispatchEvent(new CustomEvent('ai-cm-diag-request')); } catch (e) { }
 }
 // ========== ЗАПУСК ==========
 setTimeout(() => initialize(), 1500);

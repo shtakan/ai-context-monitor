@@ -93,7 +93,9 @@
   var loggedAttach = false;
 
   var turnsMap = {};
+  var lastOrderedIds = []; // последний финальный порядок id из emitBaseSnapshot (для дампа диагностики)
   var orderCounter = 0;
+  var prependCursor = -1; // v33: глобальный указатель отрицательных order для старших страниц
   var loggedOk = false;
   var loggedErr = false;
   var loggedStructure = false;
@@ -176,6 +178,7 @@
   // ---- тихая пагинация (сбрасывается при смене чата) ----
   var quietActive = false;
   var historyFullByQuiet = false;
+  var reachedStart = false; // тихая пагинация дошла до начала (курсора больше нет)
   var quietPaginated = false;
   var quietDecisionMade = false;
   var pendingCursor = null;
@@ -184,6 +187,7 @@
   var lastPaginateOpaqueCandidates = null;
   var lastPaginateOuter = null; // последний outer для дампа в paginateLoop
   var lastAllStrings = []; // дамп всех строк длиной 20..2000 из последнего outer
+  var lastFailedSkeleton = null; // скелет последней непарсящейся страницы (для дампа диагностики)
   // ---- виртуальный F5 для хвоста ----
   var lastHeaders = null;
   var lastAtEncoded = '';
@@ -203,34 +207,22 @@
   var autoScrollBlocked = false;
   var autoScrollUnblockTimer = null;
 
-  // ---- v27: пол (floor) через localStorage (переживает закрытие вкладки/браузера) ----
-  function floorKey(convId) { return 'ai-cm-floor-' + convId; }
+  // ---- v27/vXX: пол (floor) через localStorage с версионированием по PARSER_VERSION ----
+  // Ключ включает версию парсера; при несовпадении версии сохранённый пол игнорируется
+  // и перезаписывается. Реализация вынесена в utils/gemini-intercept-logic.js.
+  var parserVersion = '';
+  try {
+    if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser && window.GeminiBatchexecuteParser.PARSER_VERSION) {
+      parserVersion = window.GeminiBatchexecuteParser.PARSER_VERSION;
+    }
+  } catch (e) { }
   function loadFloor(convId) {
-    try {
-      var raw = localStorage.getItem(floorKey(convId));
-      if (!raw) return null;
-      var f = JSON.parse(raw);
-      if (typeof f.count === 'number' && typeof f.effectiveLen === 'number') return f;
-      return null;
-    } catch (e) { return null; }
+    if (typeof window === 'undefined' || !window.GeminiInterceptLogic) return null;
+    return window.GeminiInterceptLogic.loadFloor(convId, parserVersion, localStorage);
   }
   function saveFloor(convId, count, effectiveLen) {
-    var key = floorKey(convId);
-    var existing = loadFloor(convId);
-    // обновляем только если новый «пол» выше (больше ходов или больше символов при том же числе ходов)
-    if (!existing || count > existing.count || (count === existing.count && effectiveLen > existing.effectiveLen)) {
-      var val = JSON.stringify({ count: count, effectiveLen: effectiveLen, ts: Date.now() });
-      try { localStorage.setItem(key, val); } catch (e) { }
-    }
-  }
-
-  // ---- v31: версия парсера (инвалидация кэша базы при смене формата истории) ----
-  function parserVersionKey() { return 'ai-cm-parser-version'; }
-  function loadParserVersion() {
-    try { return localStorage.getItem(parserVersionKey()) || ''; } catch (e) { return ''; }
-  }
-  function saveParserVersion(v) {
-    try { localStorage.setItem(parserVersionKey(), v); } catch (e) { }
+    if (typeof window === 'undefined' || !window.GeminiInterceptLogic) return;
+    window.GeminiInterceptLogic.saveFloor(convId, parserVersion, count, effectiveLen, localStorage);
   }
 
   // ================= v17: отслеживание смены чата в SPA =================
@@ -248,6 +240,7 @@
     attachTokens = 0;
     attachBreak = { imgTokens: 0, docTokens: 0, imgCount: 0, docCount: 0 };
     orderCounter = 0;
+    prependCursor = -1;
     loggedOk = false;
     loggedErr = false;
     loggedStructure = false;
@@ -255,10 +248,12 @@
     loggedAttach = false;
     loggedMultiCursor = false;
     lastPaginateOpaqueCandidates = null;
+    lastFailedSkeleton = null;
     idmapCalls = 0;
     pendingCursor = null;
     quietActive = false;
     historyFullByQuiet = false;
+    reachedStart = false;
     quietPaginated = false;
     quietDecisionMade = false;
     autoScrollStarted = false;
@@ -479,15 +474,51 @@
     } catch (e) { }
     return 0;
   }
+  // v35: r1 = id соседа НОВЕЕ (t[1][1], подтверждено логами idmap).
+  function extractTurnR1(t) {
+    try {
+      if (Array.isArray(t) && Array.isArray(t[1]) && typeof t[1][1] === 'string') return t[1][1];
+    } catch (e) { }
+    return null;
+  }
+
+  // Скелет непарсящейся страницы: рекурсивно до глубины 6.
+  // массив → {"arr": <len>, "items": [...]}; строка → "s<len>: <до 30 символов>";
+  // число/булевы/null — как есть. items ограничены 8 элементами для компактности.
+  function buildJsonSkeleton(node, depth) {
+    if (node === null || node === undefined) return null;
+    var t = typeof node;
+    if (t === 'string') return 's' + node.length + ': ' + node.slice(0, 30);
+    if (t === 'number' || t === 'boolean') return node;
+    if (Array.isArray(node)) {
+      var items = [];
+      if (depth < 6) {
+        var cap = Math.min(node.length, 8);
+        for (var i = 0; i < cap; i++) {
+          items.push(buildJsonSkeleton(node[i], depth + 1));
+        }
+      }
+      return { arr: node.length, items: items };
+    }
+    return null;
+  }
 
   function handleOuter(outer, out, src) {
     try {
       if (!Array.isArray(outer) || !Array.isArray(outer[0])) return;
       if (outer[0][1] !== 'hNvQHb') return;
       var inner = outer[0][2];
-      if (typeof inner !== 'string') return;
+      if (typeof inner !== 'string') {
+        lastFailedSkeleton = buildJsonSkeleton(outer, 0);
+        debugLog('log', '[gemini-skeleton] сохранён src=' + src + ' (inner не строка)');
+        return;
+      }
       var turns = JSON.parse(inner);
-      if (!Array.isArray(turns)) return;
+      if (!Array.isArray(turns)) {
+        lastFailedSkeleton = buildJsonSkeleton(outer, 0);
+        debugLog('log', '[gemini-skeleton] сохранён src=' + src + ' (turns не массив)');
+        return;
+      }
       if (!loggedRontgen) { loggedRontgen = true; try { rontgenPagination(outer, turns); } catch (e) { } }
       // сохраняем outer для дампа в paginateLoop (диагностика формата курсора)
       lastPaginateOuter = outer;
@@ -544,7 +575,10 @@
       var doIdmap = (idmapCalls < IDMAP_MAX);
       var _nonEmpty = 0, _empty = 0, _skippedIds = [];
       var realTurns = (Array.isArray(turns[0]) && Array.isArray(turns[0][0])) ? turns[0] : turns;
-      for (var i = 0; i < realTurns.length; i++) {
+      // v38: raw внутри страницы идёт «новые→старые». Обходим С КОНЦА, чтобы
+      // по возрастанию order (assignPageOrders) итог был «старые→новые»;
+      // внутри хода user стоит раньше assistant → получает меньший order.
+      for (var i = realTurns.length - 1; i >= 0; i--) {
         var t = realTurns[i];
         if (!Array.isArray(t)) continue;
         var localSeen = new Set(); var items = [];
@@ -553,6 +587,7 @@
         var modelName = extractModelName(t);
         var turnId = extractTurnId(t) || ('idx' + out.total++);
         var turnTs = extractTurnTs(t);
+        var r1 = extractTurnR1(t);
         // v30/v31: текст хода и роли собираем через чистый сетевой парсер
         // (utils/gemini-batchexecute-parser.js): вычищаем $AXzLiR-токены и сегменты «мышления»,
         // разделяем вопрос пользователя и ответ модели, сохраняем таблицы.
@@ -574,12 +609,18 @@
           anyNonEmpty = true;
           var role = (seg.role === 'user') ? 'user' : 'assistant';
           var mid = turnId + '_' + role;
-          out.turns.push({ id: mid, text: stxt, modelName: modelName, ts: turnTs, role: role });
+          out.turns.push({ id: mid, text: stxt, modelName: modelName, ts: turnTs, role: role, turnId: turnId, r1: r1 });
         }
         if (doIdmap) { try { logIdmap(t, src, (segs && segs.length) ? segs.map(function (x) { return (x && x.text) ? x.text.length : 0; }).reduce(function (a, b) { return a + b; }, 0) : 0); } catch (e) { } }
         if (anyNonEmpty) { _nonEmpty++; }
         else { _empty++; _skippedIds.push(turnId); }
       }
+      if (_nonEmpty === 0) {
+        lastFailedSkeleton = buildJsonSkeleton(outer, 0);
+        debugLog('log', '[gemini-skeleton] сохранён src=' + src + ' (0 извлечённых ходов, outer len=' + (Array.isArray(outer) ? outer.length : '?') + ')');
+      }
+      // NOTE: успешные страницы НЕ сбрасывают lastFailedSkeleton — последний скелет
+      // непарсящейся страницы должен дожить до дампа диагностики.
       debugLog('log', '[gemini-ingest-trace] handleOuter src=' + src + ' ходов_всего=' + turns.length +
         ' непустых=' + _nonEmpty + ' пропущено(пустой_text)=' + _empty +
         (_empty > 0 ? ' пропущ_ids=[' + _skippedIds.join(',') + ']' : ''));
@@ -959,7 +1000,13 @@
             paginateLoop(fbbMatch[0], depth + 1);
             return;
           }
-          console.log('[gemini-paginate] шаг ' + depth + ': +ходов=' + added + ' всего=' + totalNow + ', курсора нет → достигнут начало диалога');
+          // v4x: достигли начала ТОЛЬКО если последний шаг добавил ходов и не упёрся в protobuf-страницу.
+          if (typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.effectiveReachedStart) {
+            reachedStart = window.GeminiInterceptLogic.effectiveReachedStart(true, added, lastFailedSkeleton);
+          } else {
+            reachedStart = added > 0;
+          }
+          console.log('[gemini-paginate] шаг ' + depth + ': +ходов=' + added + ' всего=' + totalNow + ', курсора нет → достигнут начало диалога (reachedStart=' + reachedStart + ')');
           debugLog('log', '[paginate-dump] строки оборвавшегося ответа: ' +
             (lastAllStrings.length ? lastAllStrings.join(' | ') : '(нет)'));
           // v27: дополнительный полный рентген для шага, оборвавшего цикл
@@ -1074,26 +1121,161 @@
     }
   }
 
+  // v4x: санация мышления и строгий дедуп финального массива сообщений.
+  function sanitizeMessagesForEmit(messages) {
+    if (typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.sanitizeFinalMessages) {
+      var parser = (typeof window !== 'undefined' && window.GeminiBatchexecuteParser) ? window.GeminiBatchexecuteParser : null;
+      return window.GeminiInterceptLogic.sanitizeFinalMessages(messages, {
+        isThinkingAssistant: (parser && parser.isThinkingAssistant) ? function (s) { return parser.isThinkingAssistant(s); } : null,
+        stripLeadingThinking: (parser && parser.stripLeadingThinking) ? function (s) { return parser.stripLeadingThinking(s); } : null
+      });
+    }
+    return messages;
+  }
+
   // ================= единый эмит снимка базы =================
   function emitBaseSnapshot() {
-    var ids = Object.keys(turnsMap).sort(function (a, b) {
-      var ta = turnsMap[a].ts || 0, tb = turnsMap[b].ts || 0;
-      if (ta !== tb) return ta - tb;
-      return (turnsMap[a].order || 0) - (turnsMap[b].order || 0);
-    });
+    // v35: финальный порядок по связному списку r1 (детерминирован, не зависит от
+    // порядка прибытия страниц). Фолбэк — сортировка по order (прежнее поведение).
+    var orderItems = [];
+    var mapIds = Object.keys(turnsMap);
+    // v36 диагностика head: «ход» = turnId||id (как в orderByR1Chain).
+    var diagR1Targets = {};   // значения r1 (id более новых соседей)
+    var diagTurnSeen = {};    // turnId -> true
+    var diagTurnNull = {};    // turnId -> true, если у хода r1 === null/undefined
+    for (var oi = 0; oi < mapIds.length; oi++) {
+      var oid = mapIds[oi];
+      var ot = turnsMap[oid];
+      orderItems.push({
+        id: oid,
+        turnId: ot.turnId || null,
+        r1: ot.r1 || null,
+        order: ot.order || 0,
+        role: ot.role
+      });
+      var oTk = ot.turnId || oid;
+      if (ot.r1) diagR1Targets[ot.r1] = true;
+      if (!(oTk in diagTurnSeen)) {
+        diagTurnSeen[oTk] = true;
+        diagTurnNull[oTk] = !ot.r1;
+      } else if (ot.r1) {
+        diagTurnNull[oTk] = false;
+      }
+    }
+    var nullR1Count = 0;
+    var headCandidates = [];
+    var diagTurns = Object.keys(diagTurnSeen);
+    for (var dti = 0; dti < diagTurns.length; dti++) {
+      var dTk = diagTurns[dti];
+      if (diagTurnNull[dTk]) nullR1Count++;
+      if (!diagR1Targets[dTk]) headCandidates.push(dTk);
+    }
+    // v4x: финальный порядок — строго по r1-цепочке объединения (голова = r1=null либо
+    // id, на который никто не ссылается как на r1). Несвязанный остаток докладывается
+    // по arrival внутри orderByR1Chain. Приоритет порядка restored-ленты убран полностью.
+    var ids = null;
+    var usedR1 = false;
+    if (typeof window !== 'undefined' && window.GeminiInterceptLogic) {
+      if (window.GeminiInterceptLogic.orderByR1Chain) {
+        var chain = window.GeminiInterceptLogic.orderByR1Chain(orderItems);
+        if (chain.ok) { ids = chain.ids; usedR1 = true; }
+      }
+      if (!ids && window.GeminiInterceptLogic.orderByArrival) {
+        var arr = window.GeminiInterceptLogic.orderByArrival(orderItems);
+        if (arr.ok) ids = arr.ids;
+      }
+    }
+    if (!ids) {
+      if (orderItems.length) {
+        debugLog('log', '[gemini-order] r1-цепочка и порядок прибытия разорваны, фолбэк (сортировка по order)');
+      }
+      ids = mapIds.slice().sort(function (a, b) {
+        return (turnsMap[a].order || 0) - (turnsMap[b].order || 0);
+      });
+    }
+    lastOrderedIds = ids.slice();
+
+    // v39: самопроверка r1-инверсий (r1 = сосед СТАРШЕ, должен идти раньше).
+    var inversions = 0;
+    if (typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.countR1Inversions) {
+      var invItems = [];
+      for (var ivi = 0; ivi < ids.length; ivi++) {
+        var ivRec = turnsMap[ids[ivi]];
+        invItems.push({ id: ids[ivi], turnId: ivRec ? ivRec.turnId : null, r1: ivRec ? ivRec.r1 : null });
+      }
+      inversions = window.GeminiInterceptLogic.countR1Inversions(invItems);
+    }
+    debugLog('log', '[gemini-order-check] inversions=' + inversions);
+
+    // Диагностика порядка/покрытия одним логом (см. ТЗ).
+    var mapTurns = mapIds.length;
+    var chainLen = ids.length;
+    var inChain = {};
+    for (var ci = 0; ci < ids.length; ci++) inChain[ids[ci]] = true;
+    var disconnected = [];
+    for (var di = 0; di < mapIds.length; di++) {
+      if (!inChain[mapIds[di]]) disconnected.push(mapIds[di]);
+    }
+    var disconnectedCount = Math.max(0, mapTurns - chainLen);
+    var firstUser = '';
+    for (var fu = 0; fu < ids.length; fu++) {
+      var fud = turnsMap[ids[fu]];
+      if (fud && fud.role === 'user') { firstUser = (fud.text || '').slice(0, 60); break; }
+    }
+    var lastId = ids.length ? ids[ids.length - 1] : null;
+    var lastText = lastId && turnsMap[lastId] ? (turnsMap[lastId].text || '').slice(-60) : '';
+    var orderLog = '[gemini-order] mode=' + (usedR1 ? 'chain-r1' : 'arrival') +
+      ' mapTurns=' + mapTurns +
+      ' chainLen=' + chainLen +
+      ' disconnected=' + disconnectedCount +
+      ' nullR1Count=' + nullR1Count +
+      ' headCandidates=' + (headCandidates.length ? headCandidates.join(',') : 'нет head') +
+      ' firstUser=' + JSON.stringify(firstUser) +
+      ' lastText=' + JSON.stringify(lastText);
+    if (disconnectedCount > 0 || mapTurns !== chainLen) {
+      var dd = [];
+      for (var dk = 0; dk < disconnected.length && dk < 3; dk++) {
+        var did = disconnected[dk];
+        dd.push(did + '(r1=' + (turnsMap[did] ? String(turnsMap[did].r1 || '') : '') + ')');
+      }
+      if (dd.length) orderLog += ' detached=[' + dd.join(',') + ']';
+    }
+    debugLog('log', orderLog);
+
     var pieces = []; var lastModelName = '';
     for (var j = 0; j < ids.length; j++) {
       var t = turnsMap[ids[j]];
       pieces.push(t.text);
       if (t.modelName) lastModelName = t.modelName;
     }
-    var text = pieces.join('\n');
     // v31: сообщения с ролями (user/assistant) для экспорта истории
     var messages = [];
     for (var mi = 0; mi < ids.length; mi++) {
       var tm = turnsMap[ids[mi]];
-      messages.push({ role: (tm.role === 'user') ? 'user' : 'assistant', text: tm.text });
+      messages.push({ role: (tm.role === 'user') ? 'user' : 'assistant', text: tm.text, id: ids[mi] });
     }
+    // v4x: санация мышления и строгий дедуп ПЕРЕД эмиссией и сохранением.
+    // messageTexts/messageIds пересобираем из санированного messages, чтобы
+    // historyPreviews и экспорт не содержали блоков мышления и дублей.
+    messages = sanitizeMessagesForEmit(messages);
+    // v4x: возвращаем r1/turnId к санированным сообщениям, чтобы лента (tape) сохраняла
+    // связный список порядка и после восстановления мерджилась по r1-цепочке.
+    for (var mr = 0; mr < messages.length; mr++) {
+      var mrid = messages[mr].id;
+      var mrec = turnsMap[mrid];
+      if (mrec) {
+        messages[mr].r1 = mrec.r1 || null;
+        messages[mr].turnId = mrec.turnId || null;
+      }
+    }
+    pieces = [];
+    var cleanIds = [];
+    for (var cj = 0; cj < messages.length; cj++) {
+      pieces.push(messages[cj].text);
+      if (messages[cj].id != null) cleanIds.push(messages[cj].id);
+    }
+    ids = cleanIds;
+    var text = pieces.join('\n');
     var effectiveLen = text.length;
     var floorApplied = false;
     var floorValue = 0;
@@ -1101,23 +1283,28 @@
     // v29: диагностика полноты базы ДО применения пола
     var fid = getConvId();
     var savedFloor = fid ? loadFloor(fid) : null;
+    var baseComplete = historyFullByQuiet;
     debugLog('log', '[gemini-base-diag] count=' + ids.length + ' textLen=' + text.length +
-      ' floorCount=' + (savedFloor ? savedFloor.count : '-'));
+      ' baseComplete=' + baseComplete + ' floorCount=' + (savedFloor ? savedFloor.count : '-'));
 
-    // v27: пол (floor) — сохраняем и применяем при КАЖДОЙ эмита базы,
-    // не только при historyFullByQuiet (чтобы работал и без тихой пагинации)
-    if (fid) {
-      if (savedFloor && savedFloor.count > ids.length) {
-        effectiveLen = Math.max(effectiveLen, savedFloor.effectiveLen);
-        floorApplied = true;
-        floorValue = savedFloor.effectiveLen;
+    // v27/vXX: пол применяем ТОЛЬКО как защиту от просадки при НЕполной загрузке
+    // (baseComplete=false). При baseComplete=true effectiveLen = фактический textLen базы,
+    // пол НЕ применяется. Обновляем пол только когда база полная (baseComplete) и
+    // тихая пагинация дошла до начала (reachedStart).
+    if (fid && typeof window !== 'undefined' && window.GeminiInterceptLogic) {
+      var resolved = window.GeminiInterceptLogic.resolveFloor(text.length, ids.length, savedFloor, baseComplete);
+      effectiveLen = resolved.effectiveLen;
+      floorApplied = resolved.floorApplied;
+      floorValue = resolved.floorValue;
+      if (floorApplied) {
         console.log('[gemini-intercept] пол применён: count=' + ids.length +
           ' (сохранённый=' + savedFloor.count + '), effectiveLen=' + effectiveLen +
           ' (сохранённый=' + savedFloor.effectiveLen + '), floorApplied=true, floorValue=' + floorValue);
       }
-      // сохраняем пол ПОСЛЕ проверки — в saveFloor передаём РЕАЛЬНЫЕ text.length и ids.length,
-      // saveFloor сама решит, обновлять ли сохранённое значение (только если оно «выше»)
-      saveFloor(fid, ids.length, text.length);
+      if (window.GeminiInterceptLogic.shouldSaveFloor(baseComplete, reachedStart)) {
+        // передаём РЕАЛЬНЫЕ text.length и ids.length — saveFloor сама решит, обновлять ли
+        saveFloor(fid, ids.length, text.length);
+      }
     }
 
     try {
@@ -1154,21 +1341,6 @@
     var wasFull = historyFullByQuiet;
     pendingCursor = null;
 
-    // v31: инвалидация кэша базы при смене версии парсера.
-    var curParserVer = (typeof window !== 'undefined' && window.GeminiBatchexecuteParser)
-      ? window.GeminiBatchexecuteParser.PARSER_VERSION : '';
-    if (fromVirtualF5 && curParserVer) {
-      var savedVer = loadParserVersion();
-      if (savedVer && savedVer !== curParserVer) {
-        debugLog('log', '[gemini-rebuild] причина: смена версии парсера');
-        shouldRebuild = true;
-        wasFull = false;
-        turnsMap = {};
-        orderCounter = 0;
-      }
-      saveParserVersion(curParserVer);
-    }
-
     var parsed;
     try { parsed = parseBatchExecute(raw, src); }
     catch (e) {
@@ -1178,6 +1350,25 @@
     if (!parsed.length) {
       if (!loggedErr) { loggedErr = true; debugLog('log', '[gemini-intercept] batchexecute распознан, но ходов не найдено'); }
       return 0;
+    }
+
+    // v32/vXX: полная пересборка vf5 допустима ТОЛЬКО если пейлоад НЕ содержит курсора
+    // продолжения (действительно полная история). При наличии курсора это частичная история —
+    // merge по id без сброса (turnsMap дедуплицирует). Решение принимаем ПОСЛЕ парсинга,
+    // когда pendingCursor (курсор из этого пейлоада) уже известен.
+    var fullRebuildFromVf5 = false;
+    if (typeof window !== 'undefined' && window.GeminiInterceptLogic) {
+      fullRebuildFromVf5 = window.GeminiInterceptLogic.shouldFullRebuild({ fromVirtualF5: fromVirtualF5, wasFull: wasFull, hasCursor: !!pendingCursor });
+    } else {
+      fullRebuildFromVf5 = !!(fromVirtualF5 && wasFull);
+    }
+    if (fullRebuildFromVf5) {
+      turnsMap = {};
+      orderCounter = 0;
+      prependCursor = -1;
+      console.log('[gemini-rebuild] полная пересборка из vf5 (без курсора), ходов: ' + parsed.length);
+    } else if (fromVirtualF5 && wasFull && pendingCursor) {
+      console.log('[gemini-rebuild] vf5 содержит курсор продолжения → merge по id без сброса (turnsMap дедуплицирует)');
     }
     debugLog('log', '[gemini-ingest-trace] src=' + src + ' блоков_ходов=' + parsed.length +
       ' ids=[' + parsed.map(function (x) { return x.id; }).join(',') + ']');
@@ -1204,12 +1395,47 @@
       }
     }
 
+    // v33: глобальный порядок страниц. Страницы пагинации — «старше» (prepend, отрицательный
+    // order), passive/vf5 — «свежие» (append). order хранит глобальную позицию.
+    // v39: внутри страницы порядок строим по r1-цепочке (old→new), иначе — порядок прибытия.
+    var pageSeq = parsed;
+    if (typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.orderPageByR1) {
+      var r1pg = window.GeminiInterceptLogic.orderPageByR1(parsed);
+      if (r1pg && Array.isArray(r1pg.ids) && r1pg.ids.length === parsed.length) {
+        var byIdPage = {};
+        for (var pb = 0; pb < parsed.length; pb++) byIdPage[parsed[pb].id] = parsed[pb];
+        var reorderedPage = [];
+        for (var pr = 0; pr < r1pg.ids.length; pr++) {
+          var prec = byIdPage[r1pg.ids[pr]];
+          if (prec) reorderedPage.push(prec);
+        }
+        if (reorderedPage.length === parsed.length) pageSeq = reorderedPage;
+      }
+    }
+    var pageMode = fromActivePaginate ? 'older' : 'fresh';
+    var orderState = { orderCounter: orderCounter, prependCursor: prependCursor };
+    var pageOrders = [];
+    if (typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.assignPageOrders) {
+      pageOrders = window.GeminiInterceptLogic.assignPageOrders(pageSeq.length, pageMode, orderState);
+    } else {
+      for (var oi = 0; oi < pageSeq.length; oi++) pageOrders.push(orderCounter++);
+    }
+    orderCounter = orderState.orderCounter;
+    prependCursor = orderState.prependCursor;
+
     var added = 0;
-    for (var i = 0; i < parsed.length; i++) {
-      var p = parsed[i];
+    for (var i = 0; i < pageSeq.length; i++) {
+      var p = pageSeq[i];
       if (!turnsMap[p.id]) {
-        turnsMap[p.id] = { text: p.text, modelName: p.modelName, order: orderCounter++, ts: p.ts || 0, role: (p.role === 'user') ? 'user' : 'assistant' };
+        turnsMap[p.id] = { text: p.text, modelName: p.modelName, order: pageOrders[i], pageMode: src, ts: p.ts || 0, role: (p.role === 'user') ? 'user' : 'assistant', turnId: p.turnId || null, r1: p.r1 || null };
         added++;
+      } else if (turnsMap[p.id].pageMode === 'restored') {
+        // v4x: сетевой ход ПЕРЕЗАПИСЫВАЕТ restored-ход того же id (текст и r1).
+        turnsMap[p.id] = { text: p.text, modelName: p.modelName, order: pageOrders[i], pageMode: src, ts: p.ts || 0, role: (p.role === 'user') ? 'user' : 'assistant', turnId: p.turnId || null, r1: p.r1 || null };
+      } else if (!turnsMap[p.id].r1 && p.r1) {
+        if (!turnsMap[p.id].pageMode) turnsMap[p.id].pageMode = src;
+        turnsMap[p.id].r1 = p.r1;
+        if (!turnsMap[p.id].turnId && p.turnId) turnsMap[p.id].turnId = p.turnId;
       }
     }
     var em = null;
@@ -1456,32 +1682,122 @@
       return;
     }
 
-    mergeRestoredTurns(restoredTurns);
-  });
-
-  function mergeRestoredTurns(restoredTurns) {
-    var merged = 0, overwritten = 0;
-    for (var i = 0; i < restoredTurns.length; i++) {
-      var rt = restoredTurns[i];
-      if (!rt || !rt.id) continue;
-
-      if (turnsMap[rt.id]) {
-        // ход уже есть в свежей сетевой базе — сетевой текст перезаписывает сохранённый
-        // (ничего не делаем — turnsMap уже содержит свежие данные)
-        overwritten++;
-      } else {
-        // хода нет в свежей базе — добавляем из сохранённой ленты
-        turnsMap[rt.id] = { text: rt.text, modelName: '', order: orderCounter++, ts: 0 };
-        merged++;
+    // v4x: версия записи ленты должна совпадать с текущей версией парсера,
+    // иначе игнорируем запись без миграции.
+    var restoreMeta = detail.meta || {};
+    var restoreVersion = (typeof restoreMeta.version === 'string') ? restoreMeta.version : '';
+    if (typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.shouldAcceptTape) {
+      if (!window.GeminiInterceptLogic.shouldAcceptTape({ meta: { version: restoreVersion } }, parserVersion)) {
+        debugLog('log', '[gemini-restore] tape ignored: version=' + (restoreVersion || '(none)'));
+        return;
       }
     }
 
-    if (merged > 0 || overwritten > 0) {
-      debugLog('log', '[gemini-restore] слияние: +' + merged + ' ходов из хранилища, ' + overwritten + ' уже были в сети → перезаписаны сетью');
-      // переэмитим базу — контент-скрипт сохранит обновлённую ленту
-      try { emitBaseSnapshot(); } catch (e) { }
+    // v4x: мерджим restored-ленту, пока пагинация НЕ дошла до начала (reachedStart=false),
+    // НЕЗАВИСИМО от baseComplete/historyFullByQuiet.
+    var mergeRestored = true;
+    if (typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.shouldMergeRestoredTurns) {
+      mergeRestored = window.GeminiInterceptLogic.shouldMergeRestoredTurns(reachedStart);
+    } else {
+      mergeRestored = (reachedStart !== true);
     }
+    if (!mergeRestored) {
+      debugLog('log', '[gemini-restore] достигнут начало диалога (reachedStart=true) → восстановление из хранилища пропущено');
+      return;
+    }
+
+    mergeRestoredTurns(restoredTurns);
+  });
+
+  // v4x: при чтении ленты повторно применяем sanitizeFinalMessages к каждому ходу.
+  function sanitizeRestoredTurn(rt) {
+    var arr = [{
+      role: (rt && rt.role === 'user') ? 'user' : 'assistant',
+      text: (rt && rt.text != null) ? String(rt.text) : '',
+      id: (rt && rt.id != null) ? String(rt.id) : null
+    }];
+    var clean = sanitizeMessagesForEmit(arr);
+    if (!clean || !clean.length) return null;
+    var c = clean[0];
+    if (!c || !c.text || !c.text.trim()) return null;
+    return { id: c.id, text: c.text, role: c.role, r1: (rt && rt.r1) || null };
   }
+
+  function mergeRestoredTurns(restoredTurns) {
+    // v4x: сеть авторитетна по id — restored добавляется ТОЛЬКО для недостающих id.
+    // Финальный порядок строит orderByR1Chain по объединению (в emitBaseSnapshot);
+    // приоритет порядка restored-ленты убран полностью, несвязанный остаток — по arrival.
+    var i, rt, m;
+    var missing = [];
+    var maxOrder = 0;
+    var netIds = Object.keys(turnsMap);
+    for (i = 0; i < netIds.length; i++) {
+      var no = turnsMap[netIds[i]].order || 0;
+      if (no > maxOrder) maxOrder = no;
+    }
+    for (i = 0; i < restoredTurns.length; i++) {
+      rt = restoredTurns[i];
+      if (!rt || !rt.id) continue;
+      if (turnsMap[rt.id]) continue; // сеть авторитетна
+      var clean = sanitizeRestoredTurn(rt);
+      if (!clean) continue;
+      var turnId = String(clean.id).replace(/_(user|assistant)$/, '');
+      var rr1 = clean.r1 ? String(clean.r1).replace(/_(user|assistant)$/, '') : null;
+      missing.push({ id: clean.id, text: clean.text, role: clean.role, turnId: turnId, r1: rr1 });
+    }
+    if (!missing.length) {
+      debugLog('log', '[gemini-restore] merged 0 missing ids (version=' + parserVersion + ')');
+      return;
+    }
+    for (i = 0; i < missing.length; i++) {
+      m = missing[i];
+      turnsMap[m.id] = {
+        text: m.text, modelName: '', order: maxOrder + 1 + i,
+        pageMode: 'restored', ts: 0,
+        role: (m.role === 'user') ? 'user' : 'assistant',
+        turnId: m.turnId, r1: m.r1
+      };
+    }
+    debugLog('log', '[gemini-restore] merged ' + missing.length + ' missing ids (version=' + parserVersion + ')');
+    try { emitBaseSnapshot(); } catch (e) { }
+  }
+
+  // ================= ДАМП ДИАГНОСТИКИ =================
+  // content.js (ISOLATED-мир) диспатчит 'ai-cm-diag-request'; перехватчик (MAIN-мир)
+  // отвечает 'ai-cm-diag-response' с полным состоянием порядка/логов.
+  try {
+    window.addEventListener('ai-cm-diag-request', function () {
+      try {
+        var turnDump = [];
+        var mapKeys = Object.keys(turnsMap);
+        for (var di = 0; di < mapKeys.length; di++) {
+          var dk = mapKeys[di];
+          var dRec = turnsMap[dk];
+          turnDump.push({
+            id: dk,
+            order: dRec.order,
+            pageMode: dRec.pageMode || '',
+            r1: dRec.r1 || null,
+            role: dRec.role,
+            preview: String(dRec.text || '').slice(0, 60).replace(/\s+/g, ' ')
+          });
+        }
+        var orderedPreviews = [];
+        for (var op = 0; op < lastOrderedIds.length; op++) {
+          var oid = lastOrderedIds[op];
+          var oRec = turnsMap[oid];
+          orderedPreviews.push((oRec ? (oRec.role + '|') : '?|') + (oRec ? String(oRec.text || '').slice(0, 60).replace(/\s+/g, ' ') : oid));
+        }
+        var response = {
+          logsIntercept: (typeof __aiCmGetLogRing === 'function') ? __aiCmGetLogRing() : [],
+          turns: turnDump,
+          orderedPreviews: orderedPreviews,
+          failedPageSkeleton: lastFailedSkeleton || null
+        };
+        window.dispatchEvent(new CustomEvent('ai-cm-diag-response', { detail: response }));
+      } catch (e) { }
+    });
+  } catch (e) { }
 
   console.log('[gemini-intercept] перехватчик Gemini v28 установлен (структурный сбор вложений v23 + фикс курсора + сброс при смене чата + тихая пагинация из vf5 + гард пассивки по convId (fetch Request-объекты тоже) + защита автоскролла + virtual-f5 + historyComplete в emit + подавление чужих unhandled fetch + пересборка ветки при realtime-vf5 + пол (floor) через localStorage + диагностика opaque-кандидатов + сохранение/восстановление ленты через content.js)');
 })();

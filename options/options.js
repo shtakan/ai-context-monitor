@@ -16,6 +16,7 @@ const exportMdBtn = document.getElementById('export-md');
 const exportJsonBtn = document.getElementById('export-json');
 const exportHintEl = document.getElementById('export-hint');
 const staleWarningEl = document.getElementById('stale-warning');
+const exportDiagBtn = document.getElementById('export-diag');
 
 // Цветовые пороги — те же, что в content.js (zoneColor: <50 зелёный, <80 жёлтый, красный)
 function percentColor(p) { if (p < 50) return '#22c55e'; if (p < 80) return '#eab308'; return '#ef4444'; }
@@ -298,6 +299,46 @@ exportMdBtn && exportMdBtn.addEventListener('click', function () {
 exportJsonBtn && exportJsonBtn.addEventListener('click', function () {
   if (exportJsonBtn.disabled) return;
   downloadBlob(buildJsonText(), buildFileName('json'), 'application/json');
+});
+
+// ========== ЭКСПОРТ ДИАГНОСТИКИ ==========
+function getActiveTab(cb) {
+  try {
+    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+      cb(tabs && tabs[0] ? tabs[0] : null);
+    });
+  } catch (e) {
+    cb(null);
+  }
+}
+
+function buildDiagnosticsFileName() {
+  return 'ai-context-monitor-diagnostics-' + Date.now() + '.json';
+}
+
+exportDiagBtn && exportDiagBtn.addEventListener('click', function () {
+  getActiveTab(function (tab) {
+    if (!tab || !tab.id) {
+      downloadBlob(JSON.stringify({ error: 'нет активной вкладки', at: new Date().toISOString() }, null, 2), buildDiagnosticsFileName(), 'application/json');
+      return;
+    }
+    try {
+      chrome.tabs.sendMessage(tab.id, { type: 'aiCmDiag' }, function (response) {
+        var payload;
+        if (chrome.runtime.lastError) {
+          payload = {
+            error: 'content script не ответил: ' + chrome.runtime.lastError.message,
+            at: new Date().toISOString()
+          };
+        } else {
+          payload = (response && response.diag) ? response.diag : { error: 'пустой ответ', response: response || null };
+        }
+        downloadBlob(JSON.stringify(payload, null, 2), buildDiagnosticsFileName(), 'application/json');
+      });
+    } catch (e) {
+      downloadBlob(JSON.stringify({ error: 'sendMessage error: ' + e.message, at: new Date().toISOString() }, null, 2), buildDiagnosticsFileName(), 'application/json');
+    }
+  });
 });
 
 // Live-обновление доступности кнопок при изменении aiCmHistory

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI Context Monitor",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Мониторинг заполнения контекстного окна AI-моделей в реальном времени",
 
   "permissions": [
@@ -50,6 +50,7 @@
     "adapters/claude-adapter.js",
     "adapters/perplexity-adapter.js",
     "utils/gemini-dom-parser.js",
+    "utils/gemini-batchexecute-parser.js",
     "core/content.js"
   ],
   "run_at": "document_idle"
