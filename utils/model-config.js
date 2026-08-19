@@ -215,7 +215,7 @@ const ModelConfig = {
     'chatgpt': 'gpt-5.5',
     'gemini': 'gemini-2.5-flash',
     'aistudio': 'gemini-2.5-pro',
-    'google_search': 'gemini-2.5-flash',
+    'google_search': 'gemini-1.5-pro',
     'deepseek': 'deepseek-v3',
     'claude': 'claude-sonnet-4-6',
     'perplexity': 'turbo'

@@ -284,6 +284,33 @@ describe('Gemini thinking-run: голые продолжения и систем
     expect(assistant).not.toContain('plain-копия');
   });
 
+  it('чисто английский канонический ответ, начинающийся с "I\'m …", сохраняется', () => {
+    // Канонический сегмент ответа (turn[3][0][0][1]) — чистый английский без кириллицы,
+    // начинающийся с "I'm …". thinking-эвристики НЕ должны его удалить.
+    const md = "I'm now going to walk you through the exact solution step by step.";
+    const innerAnswer = [];
+    innerAnswer[0] = 'rc_abc1234567890';
+    innerAnswer[1] = [md];
+    innerAnswer[9] = 'en';
+
+    const answer = [];
+    answer[0] = [innerAnswer];
+    for (let pad = 1; pad <= 25; pad++) answer[pad] = null;
+
+    const turn = [
+      ['c_conv', 'r_old'],
+      ['c_conv', 'r_new', 'rc_zzz'],
+      [['Вопрос пользователя', null, null, null, null]],
+      answer,
+      [1780000000, 100]
+    ];
+
+    const msgs = splitTurnMessages(turn);
+    const assistants = msgs.filter(m => m.role === 'assistant');
+    expect(assistants.length).toBe(1);
+    expect(assistants[0].text).toBe(md);
+  });
+
   it('при отсутствии markdown-разметки ответ возвращается как есть (фолбэк)', () => {
     // контейнер turn[3][0][0][1] отсутствует или пуст → фолбэк на collectTurnText.
     const turn = makeTurnWithAnswer([

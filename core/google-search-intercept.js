@@ -26,6 +26,11 @@
   var lastFullSnapshot = null;  // detail последнего активного снимка
   var currentThreadId = '';     // threadId активного треда (по DOM)
   var emittedThreadId = '';     // threadId, на котором зафиксирована база
+  var lastFolwrOpenUrl = '';    // полный URL последнего GET /async/folwr (шаблон для активной загрузки)
+  var activeFolwrBusy = false;  // защита от параллельной активной загрузки
+  // v1.5.2: сериализация активных folwr и дедуп пассивных по ключу threadId|authuser.
+  var activeFolwrInFlight = {}; // ключ -> true, пока активная загрузка этого threadId|authuser в полёте
+  var lastPassiveFolwrTs = {};  // ключ -> ts последнего пассивного folwr (для защиты от гонки <3с)
 
   // кэш полных снимков по threadId (порядок вставки сохраняем для вытеснения)
   var threadCache = new Map(); // threadId -> { turns, messages, snapshot }
@@ -116,7 +121,7 @@
   }
 
   // ---- сборка detail снимка ----
-  function buildDetail(turns, messages, threadId) {
+  function buildDetail(turns, messages, threadId, historyComplete) {
     if (!messages) messages = messagesFromTurns(turns);
     var messageTexts = messages.map(function (m) { return m.text; });
     var messageIds = [];
@@ -139,7 +144,7 @@
       messages: messages,
       attachTokens: 0,
       attachBreak: { imgTokens: 0, docTokens: 0, imgCount: 0, docCount: 0 },
-      historyComplete: true
+      historyComplete: historyComplete !== false
     };
   }
 
@@ -386,6 +391,130 @@
     return result;
   }
 
+  // ---- v1.5.2: ключ threadId|authuser, гонки и пагинация курсором ----
+
+  // Изоляция по вкладке/authuser: authuser берём из URL folwr, фолбэк — из location.
+  function authUserFromUrl(rawUrl) {
+    try {
+      var u = new URL(rawUrl, location.href);
+      var a = u.searchParams.get('authuser');
+      if (a != null && a !== '') return a;
+    } catch (e) { }
+    try {
+      return new URL(location.href).searchParams.get('authuser') || '';
+    } catch (e) { return ''; }
+  }
+
+  function threadAuthKey(threadId, rawUrl) {
+    return (threadId || '') + '|' + authUserFromUrl(rawUrl);
+  }
+
+  // Подстановка курсора пагинации mstk в URL folwr.
+  function urlWithMstk(rawUrl, cursor) {
+    if (!cursor) return rawUrl;
+    try {
+      var u = new URL(rawUrl, location.href);
+      u.searchParams.set('mstk', cursor);
+      return u.href;
+    } catch (e) { return rawUrl; }
+  }
+
+  // Применяет готовые turns к базе + эмит (единая точка для folwr-open и пагинации).
+  function applyTurns(turns, tid, historyComplete) {
+    if (!turns || turns.length === 0) return;
+    lastFullTurns = turns.slice();
+    lastFullMessages = messagesFromTurns(lastFullTurns);
+    seenKeys = {};
+    for (var i = 0; i < lastFullTurns.length; i++) {
+      var t = lastFullTurns[i];
+      seenKeys[(t.userText || '') + '||' + (t.assistantText || '')] = true;
+    }
+    lastFullSnapshot = buildDetail(lastFullTurns, lastFullMessages, tid, historyComplete);
+    emittedThreadId = tid || '';
+    if (tid) cacheSet(tid, { turns: lastFullTurns, messages: lastFullMessages, snapshot: lastFullSnapshot });
+    emitDetail(lastFullSnapshot);
+  }
+
+  // Пагинация folwr курсором при открытии: до <10 страниц, merge по id ходов, лог досбор=N.
+  // Первая страница уже применена вызывающим кодом (applyTurns); здесь догружаем хвост по cursor.
+  function followFolwrPagination(startUrl, startTurns, tid, firstCursor) {
+    if (!startUrl || !firstCursor) return;
+    var key = threadAuthKey(tid, startUrl);
+    var merged = Array.isArray(startTurns) ? startTurns.slice() : [];
+    var mergeFn = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.mergeTurnsById) ||
+      function (a, b) { return a.concat(b); };
+    var extractToken = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.extractContinuationToken) ||
+      function () { return null; };
+
+    var added = 0;
+    var pages = 0;
+
+    function step(nextCursor) {
+      if (!nextCursor) {
+        activeFolwrInFlight[key] = false;
+        if (added > 0) {
+          console.log('[ai-cm-google-search] пагинация folwr: досбор=' + added +
+            ' ходов, страниц=' + pages + ', итого=' + lastFullTurns.length);
+        }
+        return;
+      }
+      if (pages >= 9) { // <10 страниц (первая уже применена)
+        activeFolwrInFlight[key] = false;
+        if (added > 0) {
+          console.log('[ai-cm-google-search] пагинация folwr: лимит страниц, досбор=' + added +
+            ', итого=' + lastFullTurns.length);
+        }
+        return;
+      }
+      if (activeFolwrInFlight[key]) return; // не слать параллельно тот же тред
+      activeFolwrInFlight[key] = true;
+      pages++;
+      window.fetch(urlWithMstk(startUrl, nextCursor), { credentials: 'include' })
+        .then(function (resp) {
+          return resp && resp.ok ? resp.text() : '';
+        })
+        .then(function (txt) {
+          activeFolwrInFlight[key] = false;
+          if (!txt || txt.length <= 100000) return;
+          var parsed = parseWithParser(txt);
+          var before = merged.length;
+          merged = mergeFn(merged, parsed.turns);
+          added += (merged.length - before);
+          if (merged.length > before) {
+            applyTurns(merged, tid, false);
+          }
+          var cursor = extractToken(txt);
+          step(cursor);
+        })
+        .catch(function () { activeFolwrInFlight[key] = false; });
+    }
+
+    step(firstCursor);
+  }
+
+  // Активная загрузка истории: пассивный folwr при открытии старого чата в Network не
+  // ловится (фильтр пуст) — расширение пере-запрашивает последний зафиксированный шаблон
+  // GET /async/folwr. Ответ обработается тем же перехваченным обработчиком folwr-open.
+  function activeLoadFolwr(reason) {
+    if (!lastFolwrOpenUrl) return;
+    var tid = readDomThreadId() || currentThreadId || emittedThreadId;
+    var key = threadAuthKey(tid, lastFolwrOpenUrl);
+    // сериализация активных folwr по threadId|authuser: не слать параллельно тот же тред.
+    if (activeFolwrInFlight[key]) return;
+    // гонка: если пассивный folwr того же threadId|authuser пришёл <3с назад — не дёргаем активный.
+    if (Date.now() - (lastPassiveFolwrTs[key] || 0) < 3000) {
+      console.log('[ai-cm-google-search] активная загрузка пропущена: пассивный folwr <3с (' + reason + ')');
+      return;
+    }
+    activeFolwrInFlight[key] = true;
+    console.log('[ai-cm-google-search] активная загрузка истории по шаблону folwr (' + reason + ')');
+    try {
+      window.fetch(lastFolwrOpenUrl, { credentials: 'include' })
+        .catch(function () { })
+        .then(function () { activeFolwrInFlight[key] = false; });
+    } catch (e) { activeFolwrInFlight[key] = false; }
+  }
+
   // ---- применение кэша при смене threadId (SPA-возврат без сети) ----
   function checkThreadSwitch() {
     var tid = readDomThreadId();
@@ -402,13 +531,14 @@
       console.log('[ai-cm-google-search] threadId сменился → эмит кэша (' + tid + ')');
       emitDetail(lastFullSnapshot);
     } else {
-      // нет кэша — сбрасываем базу и ждём сетевой folwr
+      // нет кэша — сбрасываем базу и пытаемся активно догрузить историю
       lastFullTurns = [];
       lastFullMessages = [];
       lastFullSnapshot = null;
       seenKeys = {};
       emittedThreadId = '';
-      console.log('[ai-cm-google-search] threadId сменился → кэша нет, ждём сетевой folwr (' + tid + ')');
+      console.log('[ai-cm-google-search] threadId сменился → кэша нет (' + tid + ')');
+      activeLoadFolwr('thread-switch:' + tid);
     }
     return true;
   }
@@ -440,6 +570,9 @@
       promise.then(function (resp) {
         try {
           if (resp && resp.ok) {
+            // v1.5.2: фиксируем время пассивного folwr/folif (ключ threadId|authuser),
+            // чтобы активная загрузка не дёргалась сразу после него (<3с).
+            lastPassiveFolwrTs[threadAuthKey(currentThreadId || emittedThreadId, url)] = Date.now();
             resp.clone().text().then(function (txt) {
               var model = extractModel(txt);
               if (model) detectedModelSlug = model;
@@ -456,6 +589,7 @@
 
     // GET /async/folwr — полная история
     if (isOpenFolwr && method !== 'POST') {
+      try { lastFolwrOpenUrl = url; } catch (e) { }
       promise.then(function (resp) {
         if (resp && resp.ok) {
           resp.clone().text().then(function (txt) {
@@ -463,15 +597,66 @@
               var model = extractModel(txt);
               if (model) detectedModelSlug = model;
               try {
-                var parsed = parseWithParser(txt);
+                  var parsed = parseWithParser(txt);
                 var tid = parsed.threadId || readDomThreadId();
                 if (tid) currentThreadId = tid;
                 if (parsed && parsed.turns && parsed.turns.length > 0) {
-                  applySnapshot(parsed, tid);
-                  console.log('[ai-cm-google-search] folwr-open: распарсено сообщений:',
-                    lastFullMessages.length, ', text len =', (lastFullSnapshot.text ? lastFullSnapshot.text.length : 0),
-                    ', threadId =', tid);
-                  emitDetail(lastFullSnapshot);
+                  // v1.5.2: полнота folwr vs DOM. Сравниваем счётчик turn-контейнеров
+                  // снимка folwr с числом turn-контейнеров в живом DOM. Если DOM больше —
+                  // folwr обрезан → досбор: merge хвоста/головы из DOM. Критерий «ПОЛНАЯ» —
+                  // только при совпадении счётчиков.
+                  var folwrTurnCount = 0;
+                  if (window.GoogleFolwrUtils && window.GoogleFolwrUtils.countTurnContainers) {
+                    folwrTurnCount = window.GoogleFolwrUtils.countTurnContainers(txt);
+                  }
+                  var domTurnCount = 0;
+                  try { domTurnCount = document.querySelectorAll('[data-scope-id="turn"]').length; } catch (e) { }
+                  var domTurns = [];
+                  if (window.GoogleFolwrUtils && window.GoogleFolwrUtils.extractTurnsFromDocument) {
+                    domTurns = window.GoogleFolwrUtils.extractTurnsFromDocument(document);
+                  }
+                  var baseTurns = parsed.turns;
+                  var mergedTurns = baseTurns;
+                  var dopasbor = 0;
+                  if (domTurnCount > folwrTurnCount && domTurns.length > 0) {
+                    var mergeFn = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.mergeTurnsByKey) || function (a, b) { return a.concat(b); };
+                    mergedTurns = mergeFn(baseTurns, domTurns);
+                    dopasbor = mergedTurns.length - baseTurns.length;
+                  }
+                  // v1.5.2+ «ПОЛНАЯ» только при «курсора нет И folwr>=DOM».
+                  // Курсор — скрытый div data-mstk (старый формат) / srtst-подобный токен.
+                  var folwrCursor = null;
+                  if (window.GoogleFolwrUtils && window.GoogleFolwrUtils.extractContinuationToken) {
+                    folwrCursor = window.GoogleFolwrUtils.extractContinuationToken(txt);
+                  }
+                  var historyComplete = (!folwrCursor) && (domTurnCount <= folwrTurnCount);
+
+                  // v1.5.2: guard от сжатия базы — floor по threadId, union вместо замены.
+                  // Повторный folwr-open того же threadId не должен уменьшать уже
+                  // накопленную базу (например, урезанный ответ активной загрузки).
+                  if (emittedThreadId === tid && lastFullTurns.length > mergedTurns.length) {
+                    var unionFn = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.mergeTurnsById) ||
+                      function (a, b) { return a.concat(b); };
+                    mergedTurns = unionFn(lastFullTurns, mergedTurns);
+                    console.log('[ai-cm-google-search] база сжата — сохранён максимум (' +
+                      mergedTurns.length + ' ходов)');
+                  }
+
+                  applyTurns(mergedTurns, tid, historyComplete);
+
+                  console.log('[ai-cm-google-search] folwr-open: распарсено=' + baseTurns.length +
+                    ', folwr-контейнеров=' + folwrTurnCount +
+                    ', DOM-контейнеров=' + domTurnCount +
+                    ', досбор=' + dopasbor +
+                    ', видимых ходов=' + lastFullTurns.length +
+                    ', курсор=' + (folwrCursor ? folwrCursor.slice(0, 12) : 'нет') +
+                    ', ПОЛНАЯ=' + historyComplete +
+                    ', threadId=' + tid);
+
+                  // v1.5.2: пагинация курсором при открытии (страниц <10, merge по id ходов).
+                  if (folwrCursor) {
+                    followFolwrPagination(url, mergedTurns, tid, folwrCursor);
+                  }
                 }
               } catch (e) {
                 console.log('[ai-cm-google-search] folwr-open: ошибка:', e && e.message);
@@ -517,6 +702,8 @@
         this.addEventListener('load', function () {
           try {
             if (self.status >= 200 && self.status < 300 && self.responseText) {
+              // v1.5.2: фиксируем время пассивного folwr/folif (XHR) для защиты от гонки <3с.
+              lastPassiveFolwrTs[threadAuthKey(currentThreadId || emittedThreadId, url)] = Date.now();
               var txt = self.responseText;
               var modelXhr = extractModel(txt);
               if (modelXhr) detectedModelSlug = modelXhr;
@@ -538,6 +725,8 @@
     if (lastFullSnapshot) {
       console.log('[ai-cm-google-search] folwr-open: повторный эмит по handshake');
       emitDetail(lastFullSnapshot);
+    } else {
+      activeLoadFolwr('handshake');
     }
   });
 

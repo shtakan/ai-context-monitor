@@ -85,6 +85,9 @@
 
   // ============== v11: детектор смены чата в SPA (образец: gemini-intercept.js v17) ==============
   function getConvId() {
+    if (typeof window !== 'undefined' && window.ChatGPTConversationParser && window.ChatGPTConversationParser.getConvIdFromPath) {
+      return window.ChatGPTConversationParser.getConvIdFromPath(location.pathname);
+    }
     try {
       // ChatGPT URL: https://chatgpt.com/c/<conversation-id>
       var m = location.pathname.match(/\/c\/([A-Za-z0-9_-]+)/);
@@ -106,14 +109,20 @@
     loggedAttach = false;
     activeRetryCount = 0;
     debugLog('log', '[ai-cm-intercept] смена чата → состояние перехватчика сброшено (convId=' + (currentConvId || '(не чат)') + ')');
-    try { window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); } catch (e) {}
+    try { window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); } catch (e) { }
     scheduleSwitchRefetch();
     scheduleFallback(currentConvId, 2000);
   }
 
   function checkConvChange() {
     var newId = getConvId();
-    if (newId !== currentConvId) {
+    var shouldReset;
+    if (typeof window !== 'undefined' && window.ChatGPTConversationParser && window.ChatGPTConversationParser.shouldResetChatConversation) {
+      shouldReset = window.ChatGPTConversationParser.shouldResetChatConversation(currentConvId, newId);
+    } else {
+      shouldReset = !!newId && newId !== currentConvId;
+    }
+    if (shouldReset) {
       currentConvId = newId;
       resetForNewConversation();
     }
@@ -206,9 +215,33 @@
   // ---- разбор полного снимка (тот же, что при F5) ----
   function parseHistory(data) {
     var mapping = (data && data.mapping) ? data.mapping : {};
+    var nodeCount = 0;
+    try { nodeCount = Object.keys(mapping).length; } catch (e) { nodeCount = 0; }
     var pieces = []; var ids = []; var roles = []; var count = 0; var lastText = ''; var lastModelSlug = ''; var lastRole = '';
     var localImgSeen = {}; var imgCount = 0; var imgTokens = 0;
-    for (var key in mapping) {
+    var strippedMarkers = 0; var firstUserHead = '';
+    // v1.5.2: линеаризуем mapping по parent/children (не по порядку ключей и не по create_time),
+    // чтобы первый user+assistant не терялся и порядок был хронологическим.
+    var orderedKeys = [];
+    if (typeof window !== 'undefined' && window.ChatGPTConversationParser && window.ChatGPTConversationParser.orderChatGPTMapping) {
+      orderedKeys = window.ChatGPTConversationParser.orderChatGPTMapping(mapping);
+    } else {
+      orderedKeys = Object.keys(mapping);
+    }
+    var sanitizeText = (typeof window !== 'undefined' && window.ChatGPTConversationParser && window.ChatGPTConversationParser.sanitizeChatGPTText)
+      ? window.ChatGPTConversationParser.sanitizeChatGPTText
+      : function (s) { return s; };
+    function countMarkers(s) {
+      if (typeof s !== 'string') return 0;
+      var n = 0; var m;
+      m = s.match(/\uE200(?:entity|cite|image_group)\uE202[^\uE200\uE201]*?\uE201/g); if (m) n += m.length; // PUA-токены
+      m = s.match(/\[entity\](?:\[[^\]]*\])+/g); if (m) n += m.length;
+      m = s.match(/\[entity\]/g); if (m) n += m.length;
+      m = s.match(/\[cite:[^\]]*\]/g); if (m) n += m.length;
+      return n;
+    }
+    for (var ki = 0; ki < orderedKeys.length; ki++) {
+      var key = orderedKeys[ki];
       var node = mapping[key]; var msg = node && node.message;
       if (!msg || !msg.content) continue;
       var role = (msg.author && msg.author.role) ? msg.author.role : '';
@@ -218,8 +251,15 @@
       var text = '';
       for (var i = 0; i < parts.length; i++) {
         if (typeof parts[i] === 'string') {
-          text += parts[i] + '\n';
+          strippedMarkers += countMarkers(parts[i]);
+          text += sanitizeText(parts[i]) + '\n';
         } else if (typeof parts[i] === 'object' && parts[i] !== null) {
+          // текст в объектных part (напр. audio_transcription "Привет.") — в цепочку
+          if (typeof parts[i].text === 'string' && parts[i].text) {
+            strippedMarkers += countMarkers(parts[i].text);
+            text += sanitizeText(parts[i].text) + '\n';
+            continue;
+          }
           // изображения: content_type содержит 'image' или есть asset_pointer / attachment
           var isImage = false;
           if (parts[i].content_type && typeof parts[i].content_type === 'string' && parts[i].content_type.indexOf('image') !== -1) isImage = true;
@@ -248,6 +288,7 @@
       var meta = msg.metadata || {};
       var slug = meta.model_slug || meta.model || '';
       if (text) {
+        if (!firstUserHead && role === 'user') firstUserHead = text.slice(0, 40);
         pieces.push(text); ids.push(String(key)); roles.push(role); count++; lastText = text; lastRole = role;
         if (slug) lastModelSlug = slug;
       }
@@ -259,11 +300,12 @@
         ', добавлено токенов: ' + attachBreak.imgTokens +
         ' (по ' + IMAGE_DEFAULT_TOKENS + ' ток/изобр, high-detail оценка OpenAI 1024×1024)');
     }
-    return { text: pieces.join('\n'), count: count, lastText: lastText, lastModelSlug: lastModelSlug, pieces: pieces, ids: ids, roles: roles, lastRole: lastRole, imgCount: imgCount, imgTokens: imgTokens };
+    return { text: pieces.join('\n'), count: count, lastText: lastText, lastModelSlug: lastModelSlug, pieces: pieces, ids: ids, roles: roles, lastRole: lastRole, imgCount: imgCount, imgTokens: imgTokens, strippedMarkers: strippedMarkers, firstUserHead: firstUserHead, nodeCount: nodeCount };
   }
   function emitSnapshot(parsed, when) {
     if (!parsed.text) return;
     lastLoadedConvId = currentConvId;
+    console.log('[ai-cm-intercept] head="' + (parsed.firstUserHead || '') + '" stripped=' + (parsed.strippedMarkers || 0));
     // Диагностика: роли и длины последних 3 сообщений распарсенного JSON (до попадания в базу).
     // Показывает, есть ли ответ ассистента в самом JSON или бэкенд отдал устаревшую версию.
     var diagTail = [];
@@ -277,6 +319,12 @@
       ' сообщений' + (parsed.lastModelSlug ? ', model_slug=' + parsed.lastModelSlug : '') +
       (attachTokens > 0 ? ', картинок=' + attachBreak.imgCount + ' ≈' + attachBreak.imgTokens + ' ток' : '') +
       ' (без скролла)');
+    // ChatGPT-токены: диагностика полноты ветки vs всего mapping + вхождения вложений в итог.
+    console.log('[ai-cm-intercept] ChatGPT-токены: сообщений в ветке=' + parsed.count +
+      ', узлов во всём mapping=' + (parsed.nodeCount || 0) +
+      ', картинок в оценке вложений=' + (attachBreak.imgCount || 0) +
+      ', вложения≈=' + (attachTokens || 0) +
+      '; вложения входят в итог: ' + (attachTokens > 0 ? 'да (tokenEstimate += attachTokens в content.js)' : 'нет (нет вложений)'));
     // Экспорт истории: роли берём из внутреннего разбора (parsed.roles, параллелен parsed.pieces).
     var messages = [];
     for (var mi = 0; mi < diagPieces.length; mi++) {
@@ -333,8 +381,11 @@
         }
         if (!resp || !resp.ok) {
           activeDisabled = true;
-          debugLog('log', '[virtual-f5] не прошёл (статус ' + (resp ? resp.status : 'none') +
-            ') → остаёмся на пассивной ловле + DOM-хвост (поведение как раньше)');
+          // 404 (разговор удалён/не найден) — молча, без спама ошибкой в консоль.
+          if (!(resp && resp.status === 404)) {
+            debugLog('log', '[virtual-f5] не прошёл (статус ' + (resp ? resp.status : 'none') +
+              ') → остаёмся на пассивной ловле + DOM-хвост (поведение как раньше)');
+          }
           return null;
         }
         console.log('[virtual-f5] ✓ работает — realtime теперь по полному снимку без F5 (' + reason + ')');
@@ -401,7 +452,9 @@
     originalFetch(url, init)
       .then(function (resp) {
         if (!resp || !resp.ok) {
-          console.log('[ai-cm-intercept] fallback: статус ' + (resp ? resp.status : 'none') + ' для ' + convId);
+          // 404 (разговор удалён/не найден): молча, без ретраев и без спама ошибкой в консоль.
+          if (resp && resp.status === 404) return null;
+          debugLog('log', '[ai-cm-intercept] fallback: статус ' + (resp ? resp.status : 'none') + ' для ' + convId);
           return null;
         }
         handleSnapshot(resp, 'fallback', convId);

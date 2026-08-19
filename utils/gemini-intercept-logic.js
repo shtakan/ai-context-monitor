@@ -88,6 +88,19 @@
 
   // Применение пола: только как защита от просадки при НЕполной загрузке (baseComplete=false).
   // При baseComplete=true возвращаем фактический textLen — пол НЕ применяется.
+  // Причина отсутствия/нулевого пола (для лога «ожидаемых=0» в expectedTurnsFromStorage).
+  function diagnoseFloorAbsence(convId, parserVersion, storage) {
+    if (!storage) return 'no-storage';
+    if (!convId) return 'no-conv';
+    var raw = null;
+    try { raw = storage.getItem(floorStorageKey(convId, parserVersion)); } catch (e) { raw = null; }
+    if (typeof raw !== 'string' || !raw) return 'no-floor-saved';
+    var f = parseFloor(raw, parserVersion);
+    if (!f) return 'version-mismatch-or-invalid';
+    if (!f.count) return 'floor-count-zero';
+    return 'ok';
+  }
+
   function resolveFloor(textLen, count, savedFloor, baseComplete) {
     if (!savedFloor || baseComplete) {
       return { effectiveLen: textLen, floorApplied: false, floorValue: 0 };
@@ -624,6 +637,48 @@
     return out;
   }
 
+  // ---- v4x: детектор готовности DOM перед автоскроллом ----
+  // Создаёт чистое состояние замера. state.samples — последние (до 3) значения scrollHeight.
+  function newDomReadiness() {
+    return { samples: [], readyByElements: false };
+  }
+
+  // Подаём очередной замер scrollHeight и текущее число элементов истории в DOM.
+  // Возвращает { ready, reason, samples }. ready=true когда:
+  //   - элементов истории > 10 (появление минимального числа элементов), ИЛИ
+  //   - 3 последних замера scrollHeight различаются меньше чем на 100px (стабилизация).
+  function advanceReadiness(state, scrollHeight, elementCount, expected) {
+    state = state || newDomReadiness();
+    if (elementCount > 10 && elementCount === expected) {
+      state.readyByElements = true;
+      return { ready: true, reason: 'elements:' + elementCount, samples: state.samples.slice() };
+    }
+    state.samples.push(scrollHeight);
+    if (state.samples.length > 3) {
+      state.samples = state.samples.slice(state.samples.length - 3);
+    }
+    if (state.samples.length >= 2) {
+      var a = state.samples[state.samples.length - 2];
+      var b = state.samples[state.samples.length - 1];
+      if (Math.abs(b - a) < 100) {
+        var lo = Math.min(a, b);
+        var hi = Math.max(a, b);
+        return { ready: true, reason: 'stable:' + lo + '-' + hi, samples: state.samples.slice() };
+      }
+    }
+    return { ready: false, reason: 'pending', samples: state.samples.slice() };
+  }
+
+  // ---- v4x: retry-логика автоскролла ----
+  // actualTurns — ходов видно после скролла (из DOM или storage/сети);
+  // expectedTurns — ожидаемое число ходов (из сети или прошлого замера/пола);
+  // retryCount/maxRetry — счётчик и лимит ретраев.
+  function shouldRetryAutoscroll(actualTurns, expectedTurns, retryCount, maxRetry) {
+    if (!expectedTurns || expectedTurns <= 0) return false;
+    if (retryCount >= maxRetry) return false;
+    return actualTurns < expectedTurns;
+  }
+
   var api = {
     floorStorageKey: floorStorageKey,
     tapeStorageKey: tapeStorageKey,
@@ -632,6 +687,7 @@
     loadFloor: loadFloor,
     saveFloor: saveFloor,
     resolveFloor: resolveFloor,
+    diagnoseFloorAbsence: diagnoseFloorAbsence,
     shouldSaveFloor: shouldSaveFloor,
     shouldFullRebuild: shouldFullRebuild,
     assignPageOrders: assignPageOrders,
@@ -646,7 +702,10 @@
     isProtobufSkeleton: isProtobufSkeleton,
     effectiveReachedStart: effectiveReachedStart,
     shouldMergeRestoredTurns: shouldMergeRestoredTurns,
-    sanitizeFinalMessages: sanitizeFinalMessages
+    sanitizeFinalMessages: sanitizeFinalMessages,
+    newDomReadiness: newDomReadiness,
+    advanceReadiness: advanceReadiness,
+    shouldRetryAutoscroll: shouldRetryAutoscroll
   };
 
   if (typeof window !== 'undefined') {

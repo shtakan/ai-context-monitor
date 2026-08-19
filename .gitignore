@@ -32,4 +32,7 @@ npm-debug.log
 # Личные данные — не коммитить
 google-folwr-open.txt
 google-folwr-table.txt
+google-folwr-sample.txt
+google-folwr-request.txt
 gemini-network-sample.txt
+chatgpt-conversation-sample.json

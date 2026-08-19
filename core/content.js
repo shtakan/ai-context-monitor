@@ -663,7 +663,18 @@ async function initialize() {
 }
 async function tryInit() {
   if (isInitialized) return;
-  const found = findMessageNodes();
+  let found = findMessageNodes();
+  // Фолбэк для адаптеров без общих [data-message-*] (Google Search AI использует
+  // [data-scope-id="turn"], которого нет в MSG_SELECTORS). Без этого isInitialized
+  // остаётся false, processAndSend не пишет aiCmState → попап «Откройте поддерживаемый сайт».
+  if (found.nodes.length === 0 && currentAdapter && typeof currentAdapter.extractMessages === 'function') {
+    try {
+      const ams = currentAdapter.extractMessages();
+      if (ams && ams.length > 0) {
+        found = { nodes: ams, sel: (currentAdapter.siteName || 'adapter') + '.extractMessages()' };
+      }
+    } catch (e) { }
+  }
   if (found.nodes.length > 0) {
     debugLog('log', 'Диалог найден:', found.nodes.length, 'узлов (' + found.sel + ')');
     isInitialized = true;

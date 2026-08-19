@@ -174,6 +174,13 @@
   var AUTO_HARD_CAP = 250;
   var AUTO_SETTLE_TRIES = 4;
   var AUTO_SETTLE_WAIT = 250;
+  // ---- v4x: готовность DOM перед автоскроллом + retry ----
+  var conversationOpenedAt = Date.now(); // время открытия чата (для диагностики auto-scroll)
+  var DOM_READY_INTERVAL = 500;          // интервал замера стабилизации scrollHeight
+  var DOM_READY_MAX_WAIT = 5000;         // таймаут ожидания готовности DOM
+  var MIN_HISTORY_ELEMENTS = 10;         // порог готовности по числу элементов истории
+  var AUTO_RETRY_MAX = 2;                // максимум повторных скроллов при недоборе
+  var AUTO_RETRY_DELAY = 1500;           // пауза перед retry-скроллом
 
   // ---- тихая пагинация (сбрасывается при смене чата) ----
   var quietActive = false;
@@ -257,6 +264,7 @@
     quietPaginated = false;
     quietDecisionMade = false;
     autoScrollStarted = false;
+    conversationOpenedAt = Date.now();
     lastActiveAt = Date.now();
     loggedActiveStatus = false;
     // v20: блокируем автоскролл до первого валидного снимка нового чата
@@ -794,6 +802,54 @@
       '  ← если ov=hidden у ленты, скролл не нативный (JS) и scrollTop не сработает');
   }
 
+  function countHistoryElements() {
+    try {
+      var sel = 'turn-container, [data-turn], .user-query, [data-role="user"], [data-role="model"], .model-response, .query-text, .response-content';
+      return document.querySelectorAll(sel).length;
+    } catch (e) { return 0; }
+  }
+
+  // Ожидание готовности DOM перед стартом скролла: ждём стабилизации scrollHeight
+  // (3 замера с интервалом, разница < 100px) ИЛИ появления > MIN_HISTORY_ELEMENTS элементов.
+  // Таймаут DOM_READY_MAX_WAIT. Логику стабилизации берём из чистой логики (если доступна).
+  async function waitForDomReady(sc) {
+    var startedAt = Date.now();
+    var state = null;
+    var hasLogic = typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.newDomReadiness && window.GeminiInterceptLogic.advanceReadiness;
+    if (hasLogic) state = window.GeminiInterceptLogic.newDomReadiness();
+    else state = { samples: [] };
+    // Ожидаемое число элементов из пола (localStorage) — критерий elements==expected.
+    var expected = expectedTurnsFromStorage();
+    if (!expected || expected <= 0) {
+      console.log('[gemini-autoscroll] ожидаемых=0 → readiness по элементам отключён (только стабилизация scrollHeight); причина=' +
+        expectedFloorAbsenceReason());
+    } else {
+      console.log('[gemini-autoscroll] readiness: ожидаемых=' + expected + ' (пол из localStorage)');
+    }
+    var lastH = sc ? sc.height() : 0;
+    var lastElems = 0;
+    while (Date.now() - startedAt < DOM_READY_MAX_WAIT) {
+      var h = sc ? sc.height() : (document.scrollingElement ? document.scrollingElement.scrollHeight : 0);
+      var elems = countHistoryElements();
+      lastH = h;
+      lastElems = elems;
+      var ready = false, reason = 'pending';
+      if (hasLogic) {
+        var r = window.GeminiInterceptLogic.advanceReadiness(state, h, elems, expected);
+        ready = r.ready;
+        reason = r.reason;
+      } else {
+        ready = elems > MIN_HISTORY_ELEMENTS;
+        reason = ready ? ('fallback-elements:' + elems) : 'fallback-pending';
+      }
+      if (ready) {
+        return { ok: true, reason: reason, elapsed: Date.now() - startedAt, scrollH: h, elements: elems, expected: expected };
+      }
+      await sleep(DOM_READY_INTERVAL);
+    }
+    return { ok: false, reason: 'timeout', elapsed: Date.now() - startedAt, scrollH: lastH, elements: lastElems, expected: expected };
+  }
+
   function triggerUp(sc) {
     try {
       sc.setTop(0);
@@ -823,6 +879,37 @@
     setTimeout(autoScrollCollect, 1200);
   }
 
+  // v4x: ожидаемое число ходов из прошлых замеров (пол из localStorage, сохранённый при полной сборке).
+  // Возвращает 0, если пола нет — тогда retry не задействуется (не с чем сравнивать).
+  function expectedTurnsFromStorage() {
+    try {
+      var fid = getConvId();
+      var sf = fid ? loadFloor(fid) : null;
+      return (sf && sf.count) ? sf.count : 0;
+    } catch (e) { return 0; }
+  }
+
+  // Причина нулевого пола/ожидаемых — через чистую логику (гв ключа g3 и т.п.).
+  function expectedFloorAbsenceReason() {
+    try {
+      var fid = getConvId();
+      if (typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.diagnoseFloorAbsence) {
+        return window.GeminiInterceptLogic.diagnoseFloorAbsence(fid, parserVersion, localStorage);
+      }
+      return (fid ? 'no-logic' : 'no-conv');
+    } catch (e) { return 'err'; }
+  }
+
+  // v4x: нужен ли повторный скролл. actualTurns/expectedTurns — число ходов (сообщений).
+  function retryNeededAutoscroll(actualTurns, expectedTurns, retryCount) {
+    if (typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.shouldRetryAutoscroll) {
+      return window.GeminiInterceptLogic.shouldRetryAutoscroll(actualTurns, expectedTurns, retryCount, AUTO_RETRY_MAX);
+    }
+    if (!expectedTurns || expectedTurns <= 0) return false;
+    if (retryCount >= AUTO_RETRY_MAX) return false;
+    return actualTurns < expectedTurns;
+  }
+
   async function autoScrollCollect() {
     // v20: двойная страховка — если флаг всё ещё взведён (например, вызвано напрямую)
     if (autoScrollBlocked) {
@@ -841,40 +928,72 @@
         rontgenScroll();
         return;
       }
+
+      // v4x: детектор готовности DOM — ждём стабилизации scrollHeight или появления элементов истории
+      // перед стартом скролла (ленивая подгрузка истории Gemini даёт растущий scrollHeight).
+      var ready = await waitForDomReady(sc);
+      debugLog('log', '[gemini-autoscroll] готовность DOM: ' + (ready.ok ? 'ok' : 'TIMEOUT') +
+        ' reason=' + ready.reason + ' элементы=' + ready.elements + ' scrollH=' + ready.scrollH + ' elapsed=' + ready.elapsed + 'ms');
+
       if (sc.height() <= sc.client() + 50) {
         debugLog('log', '[gemini-autoscroll] история помещается без скролла (' + sc.tag + ' scrollH=' + sc.height() +
           ' ≈ clientH=' + sc.client() + ') → автоскролл не нужен');
         return;
       }
-      var startSize = baseSize();
-      var startH = sc.height();
+
+      var expectedTurns = expectedTurnsFromStorage();
+      var openedMs = Date.now() - conversationOpenedAt;
       var prevSmooth = '';
       if (sc.mode === 'el') { try { prevSmooth = sc.el.style.scrollBehavior; sc.el.style.scrollBehavior = 'auto'; } catch (e) { } }
-      debugLog('log', '[gemini-autoscroll] старт: ' + sc.tag + ' [' + sc.mode + '] scrollH=' + startH +
-        ' clientH=' + sc.client() + ', ходов на старте=' + startSize);
 
-      var emptyStreak = 0;
-      var lastH = startH, lastB = startSize;
-      var stoppedBy = 'hard-cap';
-      var i = 0;
-      for (i = 0; i < AUTO_HARD_CAP; i++) {
-        triggerUp(sc);
-        await sleep(AUTO_STEP_WAIT);
-        var curH = sc.height(), curB = baseSize();
-        var grew = (curH > lastH) || (curB > lastB);
-        if (grew) emptyStreak = 0; else emptyStreak++;
-        if (grew) {
-          debugLog('log', '[gemini-autoscroll] шаг ' + i + ': scrollH ' + lastH + '→' + curH +
-            ', ходов ' + lastB + '→' + curB + ', empty=' + emptyStreak);
+      var startSize = baseSize();
+      var startH = sc.height();
+      var startElems = countHistoryElements();
+      debugLog('log', '[gemini-autoscroll] старт: элементов=' + startElems + ' scrollH=' + startH +
+        ' время_открытия=' + openedMs + 'ms' + ' (ходов_в_базе=' + startSize + ', ожидаемых=' + expectedTurns + ')');
+
+      var retry = 0;
+      var scrollStartAt = Date.now();
+      for (;;) {
+        var emptyStreak = 0;
+        var lastH = sc.height(), lastB = baseSize();
+        var stoppedBy = 'hard-cap';
+        var i = 0;
+        for (i = 0; i < AUTO_HARD_CAP; i++) {
+          triggerUp(sc);
+          await sleep(AUTO_STEP_WAIT);
+          var curH = sc.height(), curB = baseSize();
+          var grew = (curH > lastH) || (curB > lastB);
+          if (grew) emptyStreak = 0; else emptyStreak++;
+          if (grew) {
+            debugLog('log', '[gemini-autoscroll] шаг ' + i + ': scrollH ' + lastH + '→' + curH +
+              ', ходов ' + lastB + '→' + curB + ', empty=' + emptyStreak);
+          }
+          lastH = curH; lastB = curB;
+          if (emptyStreak >= AUTO_EMPTY_NEED) { stoppedBy = 'empty*' + AUTO_EMPTY_NEED; break; }
         }
-        lastH = curH; lastB = curB;
-        if (emptyStreak >= AUTO_EMPTY_NEED) { stoppedBy = 'empty*' + AUTO_EMPTY_NEED; break; }
-      }
 
-      await settleBottom(sc);
-      if (sc.mode === 'el') { try { sc.el.style.scrollBehavior = prevSmooth; } catch (e) { } }
-      debugLog('log', '[gemini-autoscroll] ✓ готово: ходов ' + startSize + ' → ' + baseSize() +
-        ' (итераций=' + (i + 1) + ', стоп=' + stoppedBy + '; вся история из сети без ручного скролла; возврат в низ)');
+        await settleBottom(sc);
+
+        var finalSize = baseSize();
+        var finalH = sc.height();
+        var finalElems = countHistoryElements();
+        var needRetry = retryNeededAutoscroll(finalSize, expectedTurns, retry);
+        if (needRetry) {
+          retry++;
+          debugLog('log', '[gemini-autoscroll] недобор: ходов ' + finalSize + ' < ожидаемых ' + expectedTurns +
+            ' → retry ' + retry + ' через ' + AUTO_RETRY_DELAY + 'ms');
+          await sleep(AUTO_RETRY_DELAY);
+          continue;
+        }
+
+        var scrollMs = Date.now() - scrollStartAt;
+        if (sc.mode === 'el') { try { sc.el.style.scrollBehavior = prevSmooth; } catch (e) { } }
+        debugLog('log', '[gemini-autoscroll] конец: элементов=' + finalElems + ' scrollH=' + finalH +
+          ' время_скролла=' + scrollMs + 'ms retry=' + retry + ' (ходов ' + startSize + '→' + finalSize +
+          ', стоп=' + stoppedBy + '; возврат в низ)');
+        break;
+      }
     } catch (e) {
       debugLog('log', '[gemini-autoscroll] ошибка автоскролла (НЕ критично, ловля работает):', e);
     }
@@ -1121,13 +1240,15 @@
     }
   }
 
-  // v4x: санация мышления и строгий дедуп финального массива сообщений.
+  // v1.5.2: строгий дедуп финального массива сообщений БЕЗ thinking-эвристик.
+  // isThinkingAssistant/stripLeadingThinking уже применены в parser только к
+  // fallback-пути (collectTurnText) — канонический ответ здесь НЕ трогаем, чтобы не
+  // удалить английский ответ, начинающийся с "I'm …".
   function sanitizeMessagesForEmit(messages) {
     if (typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.sanitizeFinalMessages) {
-      var parser = (typeof window !== 'undefined' && window.GeminiBatchexecuteParser) ? window.GeminiBatchexecuteParser : null;
       return window.GeminiInterceptLogic.sanitizeFinalMessages(messages, {
-        isThinkingAssistant: (parser && parser.isThinkingAssistant) ? function (s) { return parser.isThinkingAssistant(s); } : null,
-        stripLeadingThinking: (parser && parser.stripLeadingThinking) ? function (s) { return parser.stripLeadingThinking(s); } : null
+        isThinkingAssistant: function () { return false; },
+        stripLeadingThinking: function (s) { return s; }
       });
     }
     return messages;

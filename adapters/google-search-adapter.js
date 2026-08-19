@@ -120,7 +120,10 @@ class GoogleSearchAdapter extends BaseAdapter {
   }
 
   detectModel() {
+    // Модель берём ТОЛЬКО из сети (активный/пассивный ответ, detail.modelSlug).
+    // Дефект: раньше фолбэк отдавал DOM-догадку gemini-2.5-flash, хотя в сети
+    // ходит 1.5-pro/1.5-flash. Для GSA 2.5-flash не возвращаем никогда.
     if (this._lastNetworkModel) return this._lastNetworkModel;
-    return 'gemini-2.5-flash';
+    return '';
   }
 }

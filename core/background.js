@@ -26,7 +26,7 @@ async function ensureInterceptor() {
       await chrome.scripting.registerContentScripts([{
         id: 'ai-cm-page-intercept',
         matches: ['https://chatgpt.com/*'],
-        js: ['utils/debug.js', 'core/page-intercept.js'],
+        js: ['utils/debug.js', 'utils/chatgpt-conversation-parser.js', 'core/page-intercept.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false

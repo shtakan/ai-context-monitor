@@ -266,8 +266,13 @@
   // Берём сегменты из контейнера turn[3][0][0][1] (не через collectTurnText, т.к. его
   // isFileLike отбрасывает markdown-ответ, содержащий ".docx" в списке файлов) и выбираем
   // первый markdown-сегмент. Фолбэк — прежний run-skip сбор collectTurnText (страховка).
+  // v1.5.2: канонический ответ не трогаем thinking-эвристиками. Возврат
+  // { text, isFallback }: isFallback=true означает, что текст добыт путём
+  // collectTurnText (fallback) — только к нему применяются isThinkingAssistant /
+  // stripLeadingThinking. Канонический markdown-сегмент сохраняется как есть.
   function extractCanonicalAnswer(turn) {
     var cands = [];
+    var isFallback = false;
     try {
       var box = (Array.isArray(turn[3]) && Array.isArray(turn[3][0]) && Array.isArray(turn[3][0][0])) ? turn[3][0][0][1] : null;
       if (Array.isArray(box)) {
@@ -277,6 +282,7 @@
       }
     } catch (e) { }
     if (!cands.length) {
+      isFallback = true;
       try { collectTurnText(turn[3], cands); } catch (e) { }
     }
     var cleaned = [];
@@ -285,24 +291,32 @@
       var s = sanitizeGeminiText(cands[i]).trim();
       if (s) cleaned.push(s);
     }
-    return pickCanonicalAnswer(cleaned);
+    return { text: pickCanonicalAnswer(cleaned), isFallback: isFallback };
   }
 
   // ---- turn → до двух сообщений ----
   function buildTurnMessages(turn) {
     var question = extractUserQuestion(turn);
     // Канон: только markdown-сегмент ответа; thinking-саммари и plain-копию не конкатенируем.
-    var answer = extractCanonicalAnswer(turn).replace(/\n{3,}/g, '\n\n').trim();
+    var canon = extractCanonicalAnswer(turn);
+    var answer = canon.text.replace(/\n{3,}/g, '\n\n').trim();
 
     var msgs = [];
     if (question) msgs.push({ role: 'user', text: question });
     if (answer) {
-      if (isThinkingAssistant(answer)) {
-        // чисто английский thinking-блок assistant — исключаем целиком.
+      if (canon.isFallback) {
+        // thinking-эвристики применяем ТОЛЬКО к fallback-пути (collectTurnText):
+        // чисто английский thinking-блок исключаем, смешанный срезаем до кириллицы.
+        if (isThinkingAssistant(answer)) {
+          // чисто английский thinking-блок assistant — исключаем целиком.
+        } else {
+          var kept = stripLeadingThinking(answer);
+          if (kept) msgs.push({ role: 'assistant', text: kept });
+        }
       } else {
-        // смешанный: срезаем ведущий thinking-фрагмент до кириллицы.
-        var kept = stripLeadingThinking(answer);
-        if (kept) msgs.push({ role: 'assistant', text: kept });
+        // Канонический ответ не трогаем — риск удалить английский ответ,
+        // начинающийся с "I'm …".
+        msgs.push({ role: 'assistant', text: answer });
       }
     }
     return msgs;

@@ -28,7 +28,11 @@ const {
   isProtobufSkeleton,
   effectiveReachedStart,
   shouldMergeRestoredTurns,
-  sanitizeFinalMessages
+  sanitizeFinalMessages,
+  newDomReadiness,
+  advanceReadiness,
+  shouldRetryAutoscroll,
+  diagnoseFloorAbsence
 } = require('../../utils/gemini-intercept-logic');
 
 function makeStorage() {
@@ -481,5 +485,104 @@ describe('Gemini restored-лента: версионирование, автор
     expect(r.ids).toEqual(['r_5341_user', 'r_5341_assistant', 'r_5342_assistant', 'r_5343_assistant']);
     const invItems = r.ids.map(id => merged.items.find(x => x.id === id));
     expect(countR1Inversions(invItems)).toBe(0);
+  });
+});
+
+describe('Gemini детектор готовности DOM перед автоскроллом (advanceReadiness)', () => {
+  it('фикстура «ленивая подгрузка»: scrollHeight растёт → готовность по стабилизации 2 замеров', () => {
+    // elements===expected не выполняется (expected=20, элементов ≤10), поэтому критерий
+    // готовности — стабилизация двух последних замеров scrollHeight (разница < 100).
+    const state = newDomReadiness();
+    expect(state.samples).toEqual([]);
+
+    let r = advanceReadiness(state, 1000, 3, 20);
+    expect(r.ready).toBe(false);
+    expect(r.reason).toBe('pending');
+
+    r = advanceReadiness(state, 1900, 5, 20);
+    expect(r.ready).toBe(false);
+
+    r = advanceReadiness(state, 3100, 7, 20);
+    expect(r.ready).toBe(false);
+
+    // последние 2 = [3100, 3150], разница 50 < 100 → стабильно
+    r = advanceReadiness(state, 3150, 9, 20);
+    expect(r.ready).toBe(true);
+    expect(r.reason).toMatch(/^stable:/);
+  });
+
+  it('стабилизация scrollHeight (2 замера, разница < 100px) → ready=true', () => {
+    const state = newDomReadiness();
+    let r = advanceReadiness(state, 2000, 1, 20);
+    expect(r.ready).toBe(false);
+    r = advanceReadiness(state, 2050, 2, 20); // разница 50 < 100
+    expect(r.ready).toBe(true);
+    expect(r.reason).toBe('stable:2000-2050');
+  });
+
+  it('elements>10 готово ТОЛЬКО когда elements===expected', () => {
+    const state = newDomReadiness();
+    const r = advanceReadiness(state, 1200, 11, 11);
+    expect(r.ready).toBe(true);
+    expect(r.reason).toBe('elements:11');
+  });
+
+  it('elements>10, но elements !== expected → НЕ готов по элементам (жмёт стабилизацию)', () => {
+    const state = newDomReadiness();
+    const r = advanceReadiness(state, 1200, 11, 5);
+    expect(r.ready).toBe(false);
+    expect(r.reason).toBe('pending');
+  });
+
+  it('элементов ≤ 10 и scrollHeight не стабилизировался → ready=false', () => {
+    const state = newDomReadiness();
+    advanceReadiness(state, 1000, 5, 20);
+    advanceReadiness(state, 1600, 8, 20);
+    const r = advanceReadiness(state, 2200, 10, 20);
+    expect(r.ready).toBe(false);
+    expect(r.reason).toBe('pending');
+  });
+
+  it('держит не более 3 последних замеров в samples', () => {
+    const state = newDomReadiness();
+    advanceReadiness(state, 1000, 1, 20);
+    advanceReadiness(state, 1100, 2, 20);
+    advanceReadiness(state, 1200, 3, 20);
+    advanceReadiness(state, 1300, 4, 20);
+    expect(state.samples).toEqual([1100, 1200, 1300]);
+  });
+});
+
+describe('Gemini причина нулевого пола (diagnoseFloorAbsence)', () => {
+  it('диагностирует отсутствие сохранённого пола и неверную версию', () => {
+    const storage = makeStorage();
+    expect(diagnoseFloorAbsence('', 'g3', storage)).toBe('no-conv');
+    expect(diagnoseFloorAbsence('conv_1', 'g3', storage)).toBe('no-floor-saved');
+    // даже под новым ключом вручную запишем другой версии → version-mismatch
+    storage.setItem(floorStorageKey('conv_1', 'g3'), JSON.stringify({ count: 10, effectiveLen: 100, version: 'g2' }));
+    expect(diagnoseFloorAbsence('conv_1', 'g3', storage)).toBe('version-mismatch-or-invalid');
+    storage.setItem(floorStorageKey('conv_1', 'g3'), JSON.stringify({ count: 0, effectiveLen: 0, version: 'g3' }));
+    expect(diagnoseFloorAbsence('conv_1', 'g3', storage)).toBe('floor-count-zero');
+    storage.setItem(floorStorageKey('conv_1', 'g3'), JSON.stringify({ count: 10, effectiveLen: 100, version: 'g3' }));
+    expect(diagnoseFloorAbsence('conv_1', 'g3', storage)).toBe('ok');
+  });
+});
+
+describe('Gemini retry-логика автоскролла (shouldRetryAutoscroll)', () => {
+  it('факт < ожидаемого → нужен retry, пока не исчерпан лимит', () => {
+    expect(shouldRetryAutoscroll(50, 100, 0, 2)).toBe(true);
+    expect(shouldRetryAutoscroll(50, 100, 1, 2)).toBe(true);
+    expect(shouldRetryAutoscroll(50, 100, 2, 2)).toBe(false); // лимит исчерпан
+  });
+
+  it('факт >= ожидаемого → retry не нужен', () => {
+    expect(shouldRetryAutoscroll(100, 100, 0, 2)).toBe(false);
+    expect(shouldRetryAutoscroll(120, 100, 0, 2)).toBe(false);
+  });
+
+  it('нет ожидаемого числа (0 или пусто) → retry не нужен (не с чем сравнивать)', () => {
+    expect(shouldRetryAutoscroll(50, 0, 0, 2)).toBe(false);
+    expect(shouldRetryAutoscroll(50, null, 0, 2)).toBe(false);
+    expect(shouldRetryAutoscroll(50, undefined, 0, 2)).toBe(false);
   });
 });
