@@ -204,6 +204,7 @@
   var activeDisabled = false;
   var activeBusy = false;
   var lastActiveAt = 0;
+  var lastVf5ActivityAt = Date.now(); // v40: последняя активность (DOM-мутации/пассивный batchexecute/смена чата)
   var REFRESH_MIN_MS = 4000;
   var loggedActiveStatus = false;
   var observerStarted = false;
@@ -266,6 +267,7 @@
     autoScrollStarted = false;
     conversationOpenedAt = Date.now();
     lastActiveAt = Date.now();
+    lastVf5ActivityAt = Date.now(); // v40: смена чата — активность
     loggedActiveStatus = false;
     // v20: блокируем автоскролл до первого валидного снимка нового чата
     autoScrollBlocked = true;
@@ -1204,10 +1206,25 @@
       .finally(function () { activeBusy = false; });
   }
 
+  // v40: обёртка над чистой логикой shouldPollVf5 (utils/gemini-intercept-logic.js).
+  // Не планировать следующий vf5, когда история полная (baseComplete) и тихая пагинация
+  // дошла до начала (reachedStart), а активности не было последние 60с.
+  function shouldPollVf5(now) {
+    if (typeof window === 'undefined' || !window.GeminiInterceptLogic || !window.GeminiInterceptLogic.shouldPollVf5) {
+      return true;
+    }
+    return window.GeminiInterceptLogic.shouldPollVf5({
+      baseComplete: historyFullByQuiet,
+      reachedStart: reachedStart,
+      lastActivityAt: lastVf5ActivityAt
+    }, now);
+  }
+
   function startRefreshObserver() {
     if (observerStarted) return;
     observerStarted = true;
     lastActiveAt = Date.now();
+    lastVf5ActivityAt = Date.now();
     try {
       var obs = new MutationObserver(function (mutations) {
         var hasNew = false;
@@ -1225,11 +1242,16 @@
           if (hasNew) break;
         }
         if (!hasNew) return;
+        lastVf5ActivityAt = Date.now(); // v40: DOM-мутация — активность, сброс тишины
         clearTimeout(mutTimer);
         mutTimer = setTimeout(function () {
           if (Date.now() < scrollRecentUntil) return; // мутации от скролла — не rebuild
           var now = Date.now();
           if (now - lastActiveAt < REFRESH_MIN_MS) return;
+          if (!shouldPollVf5(now)) {
+            debugLog('log', '[gemini-virtual-f5] vf5-поллер в тишине — полная история без активности 60с, пропускаю');
+            return;
+          }
           lastActiveAt = now;
           activeRefresh('после мутаций (realtime)', true);
         }, 2500);
@@ -1459,6 +1481,7 @@
     var fromActivePaginate = !!opts.fromActivePaginate;
     var shouldRebuild = !!opts.rebuild;
     var src = fromVirtualF5 ? 'vf5' : (fromActivePaginate ? 'pag' : 'passive');
+    if (src === 'passive') lastVf5ActivityAt = Date.now(); // v40: пассивный batchexecute — активность
     var wasFull = historyFullByQuiet;
     pendingCursor = null;
 

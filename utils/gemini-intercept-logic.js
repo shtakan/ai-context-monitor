@@ -679,6 +679,23 @@
     return actualTurns < expectedTurns;
   }
 
+  // ---- v40: тишина vf5-поллера при полной истории ----
+  // vf5-поллер (MutationObserver → debounce → activeRefresh) не должен планировать
+  // следующий активный запрос, когда история уже полная (baseComplete=true) и тихая
+  // пагинация дошла до начала (reachedStart=true), а активности не было последние 60с.
+  // Активностью считаются: DOM-мутации, пассивный batchexecute-снимок, смена чата.
+  // Любое такое событие обновляет lastActivityAt и немедленно возобновляет поллинг.
+  // state = { baseComplete, reachedStart, lastActivityAt }; nowMs — текущее время (мс).
+  function shouldPollVf5(state, nowMs) {
+    state = state || {};
+    var baseComplete = !!state.baseComplete;
+    var reachedStart = !!state.reachedStart;
+    var lastActivityAt = (typeof state.lastActivityAt === 'number') ? state.lastActivityAt : 0;
+    var idleMs = nowMs - lastActivityAt;
+    if (baseComplete && reachedStart && idleMs >= 60000) return false;
+    return true;
+  }
+
   var api = {
     floorStorageKey: floorStorageKey,
     tapeStorageKey: tapeStorageKey,
@@ -705,7 +722,8 @@
     sanitizeFinalMessages: sanitizeFinalMessages,
     newDomReadiness: newDomReadiness,
     advanceReadiness: advanceReadiness,
-    shouldRetryAutoscroll: shouldRetryAutoscroll
+    shouldRetryAutoscroll: shouldRetryAutoscroll,
+    shouldPollVf5: shouldPollVf5
   };
 
   if (typeof window !== 'undefined') {

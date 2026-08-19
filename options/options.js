@@ -14,6 +14,7 @@ const exactCountCheckbox = document.getElementById('exact-count');
 const versionEl = document.querySelector('.version');
 const exportMdBtn = document.getElementById('export-md');
 const exportJsonBtn = document.getElementById('export-json');
+const exportPdfBtn = document.getElementById('export-pdf');
 const exportHintEl = document.getElementById('export-hint');
 const staleWarningEl = document.getElementById('stale-warning');
 const exportDiagBtn = document.getElementById('export-diag');
@@ -201,10 +202,11 @@ function getActiveTabHost(cb) {
 }
 
 function updateExportButtons() {
-  if (!exportMdBtn || !exportJsonBtn) return;
+  if (!exportMdBtn || !exportJsonBtn || !exportPdfBtn) return;
   var enabled = !!(cachedHistory && cachedHistory.host === currentTabHost);
   exportMdBtn.disabled = !enabled;
   exportJsonBtn.disabled = !enabled;
+  exportPdfBtn.disabled = !enabled;
   if (exportHintEl) {
     exportHintEl.textContent = enabled ? 'Готово к экспорту' : 'Откройте поддерживаемый сайт';
   }
@@ -299,6 +301,23 @@ exportMdBtn && exportMdBtn.addEventListener('click', function () {
 exportJsonBtn && exportJsonBtn.addEventListener('click', function () {
   if (exportJsonBtn.disabled) return;
   downloadBlob(buildJsonText(), buildFileName('json'), 'application/json');
+});
+
+// ========== ЭКСПОРТ PDF: ПЕЧАТНАЯ ФОРМА ==========
+// Кнопка «Сохранить .pdf» открывает print/print.html с id активной вкладки.
+// Страница сама рендерит историю (utils/markdown.js) и вызывает window.print(),
+// а пользователь сохраняет PDF штатным диалогом Chrome («Сохранить как PDF»).
+exportPdfBtn && exportPdfBtn.addEventListener('click', function () {
+  if (exportPdfBtn.disabled) return;
+  getActiveTab(function (tab) {
+    if (!tab || !tab.id) return;
+    var url = chrome.runtime.getURL('print/print.html') + '?tab=' + tab.id;
+    try {
+      chrome.tabs.create({ url: url });
+    } catch (e) {
+      console.warn('[export-pdf] не удалось открыть печатную форму:', e);
+    }
+  });
 });
 
 // ========== ЭКСПОРТ ДИАГНОСТИКИ ==========

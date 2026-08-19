@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI Context Monitor",
-  "version": "1.5.2",
+  "version": "1.6.0",
   "description": "Мониторинг заполнения контекстного окна AI-моделей в реальном времени",
 
   "permissions": [

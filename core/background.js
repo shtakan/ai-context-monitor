@@ -123,6 +123,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'UPDATE_CONTEXT_INFO') {
     console.log('Данные о контексте:', message.data);
   }
+  if (message.type === 'close-print-tab') {
+    if (sender && sender.tab && sender.tab.id != null) {
+      chrome.tabs.remove(sender.tab.id);
+    }
+  }
   if (message.type === 'COUNT_TOKENS') {
     handleCountTokens(message).then(sendResponse).catch(function (err) {
       console.error('COUNT_TOKENS error:', err);

@@ -32,6 +32,7 @@ const {
   newDomReadiness,
   advanceReadiness,
   shouldRetryAutoscroll,
+  shouldPollVf5,
   diagnoseFloorAbsence
 } = require('../../utils/gemini-intercept-logic');
 
@@ -565,6 +566,39 @@ describe('Gemini причина нулевого пола (diagnoseFloorAbsence)
     expect(diagnoseFloorAbsence('conv_1', 'g3', storage)).toBe('floor-count-zero');
     storage.setItem(floorStorageKey('conv_1', 'g3'), JSON.stringify({ count: 10, effectiveLen: 100, version: 'g3' }));
     expect(diagnoseFloorAbsence('conv_1', 'g3', storage)).toBe('ok');
+  });
+});
+
+describe('Gemini тишина vf5-поллера при полной истории (shouldPollVf5)', () => {
+  it('полная история + reachedStart + активности не было 60с → не поллить', () => {
+    const now = 200000;
+    expect(shouldPollVf5({ baseComplete: true, reachedStart: true, lastActivityAt: now - 60000 }, now)).toBe(false);
+    expect(shouldPollVf5({ baseComplete: true, reachedStart: true, lastActivityAt: now - 120000 }, now)).toBe(false);
+  });
+
+  it('полная история + reachedStart, но активность была недавно → поллить', () => {
+    const now = 200000;
+    expect(shouldPollVf5({ baseComplete: true, reachedStart: true, lastActivityAt: now - 59999 }, now)).toBe(true);
+    expect(shouldPollVf5({ baseComplete: true, reachedStart: true, lastActivityAt: now }, now)).toBe(true);
+  });
+
+  it('активность < 60с или ровно 0 → поллить (любое событие снимает тишину)', () => {
+    const now = 200000;
+    expect(shouldPollVf5({ baseComplete: true, reachedStart: true, lastActivityAt: now - 1 }, now)).toBe(true);
+    expect(shouldPollVf5({ baseComplete: true, reachedStart: true, lastActivityAt: now }, now)).toBe(true);
+  });
+
+  it('история НЕ полная или НЕ reachedStart → поллить независимо от простоя', () => {
+    const now = 200000;
+    const stale = now - 60000;
+    expect(shouldPollVf5({ baseComplete: false, reachedStart: true, lastActivityAt: stale }, now)).toBe(true);
+    expect(shouldPollVf5({ baseComplete: true, reachedStart: false, lastActivityAt: stale }, now)).toBe(true);
+    expect(shouldPollVf5({ baseComplete: false, reachedStart: false, lastActivityAt: stale }, now)).toBe(true);
+  });
+
+  it('пустое состояние / отсутствие lastActivityAt → поллить (граничный случай)', () => {
+    expect(shouldPollVf5({}, 200000)).toBe(true);
+    expect(shouldPollVf5(null, 200000)).toBe(true);
   });
 });
 
