@@ -1,0 +1,104 @@
+{
+  "entries ": [
+    {
+      "query_str ": "Синтетический вопрос один?",
+      "display_model ": "turbo",
+      "user_selected_model ": "turbo",
+      "thread_url_slug ": "synthetic-thread-slug-1",
+      "blocks ": [
+        {
+          "intended_usage ": "workflow_root",
+          "workflow_block ": {
+            "steps ": [
+              {
+                "items ": [
+                  {
+                    "type ": "WORKFLOW_ITEM_TEXT",
+                    "payload ": {
+                      "text_payload ": {
+                        "text ": "Синтетический ответ один."
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "intended_usage ": "web_results",
+          "web_result_block ": {
+            "web_results ": [
+              {
+                "name ": "Синтетический источник",
+                "snippet ": "Синтетический сниппет источника.",
+                "url ": "https://example.com/1"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "query_str ": "Синтетический вопрос два?",
+      "display_model ": "turbo",
+      "user_selected_model ": "turbo",
+      "thread_url_slug ": "synthetic-thread-slug-2",
+      "blocks ": [
+        {
+          "intended_usage ": "workflow_root",
+          "workflow_block ": {
+            "steps ": [
+              {
+                "items ": [
+                  {
+                    "type ": "WORKFLOW_ITEM_TEXT",
+                    "payload ": {
+                      "text_payload ": {
+                        "text ": "Синтетический ответ два (часть 1)."
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "items ": [
+                  {
+                    "type ": "WORKFLOW_ITEM_TEXT",
+                    "payload ": {
+                      "text_payload ": {
+                        "text ": "Синтетический ответ два (часть 2)."
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "intended_usage ": "web_results",
+          "web_result_block ": {
+            "web_results ": [
+              {
+                "name ": "Второй источник",
+                "snippet ": "Сниппет второго источника.",
+                "url ": "https://example.com/2"
+              },
+              {
+                "name ": "Третий источник",
+                "snippet ": "Сниппет третьего источника.",
+                "url ": "https://example.com/3"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "thread_metadata ": {
+    "title ": "Синтетический тред"
+  },
+  "status ": "complete",
+  "has_next_page ": false
+}

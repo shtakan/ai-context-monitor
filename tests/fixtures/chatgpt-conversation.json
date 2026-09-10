@@ -1,0 +1,48 @@
+{
+  "_comment": "Синтетический образец ответа ChatGPT /backend-api/conversation/<id> (структура из page-intercept.js).",
+  "data": {
+    "model_slug": "gpt-4o",
+    "mapping": {
+      "msg-root": {
+        "message": {
+          "author": { "role": "system" },
+          "content": { "parts": [""] },
+          "create_time": 1
+        }
+      },
+      "msg-user-1": {
+        "message": {
+          "author": { "role": "user" },
+          "content": { "parts": ["Привет! Сколько будет 2+2?"] },
+          "create_time": 100
+        }
+      },
+      "msg-assistant-1": {
+        "message": {
+          "author": { "role": "assistant" },
+          "content": { "parts": ["2 + 2 = 4. Это базовое арифметическое выражение."] },
+          "create_time": 200
+        }
+      },
+      "msg-user-2": {
+        "message": {
+          "author": { "role": "user" },
+          "content": { "parts": ["А если умножить 2 на 2?"] },
+          "create_time": 300
+        }
+      },
+      "msg-assistant-2": {
+        "message": {
+          "author": { "role": "assistant" },
+          "content": { "parts": ["2 × 2 = 4. Умножение даёт тот же результат в этом случае, но смысл операции другой — это сложение двух двоек."] },
+          "create_time": 400
+        }
+      }
+    }
+  },
+  "expected": {
+    "model": "gpt-4o",
+    "tokens": 0,
+    "messagesCount": 4
+  }
+}

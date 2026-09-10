@@ -1,0 +1,20 @@
+{
+  "_comment": "Синтетический образец ответа DeepSeek API (структура из deepseek-intercept.js).",
+  "data": {
+    "history_messages": [
+      { "id": 1, "parent_id": 0, "role": "user", "content": "Напиши функцию сортировки на JavaScript", "thinking_enabled": false },
+      { "id": 2, "parent_id": 1, "role": "assistant", "content": "Вот пример функции сортировки пузырьком на JavaScript:\n\nfunction bubbleSort(arr) {\n  for (let i = 0; i < arr.length; i++) {\n    for (let j = 0; j < arr.length - i - 1; j++) {\n      if (arr[j] > arr[j + 1]) {\n        [arr[j], arr[j + 1]] = [arr[j + 1], arr[j]];\n      }\n    }\n  }\n  return arr;\n}", "thinking_enabled": false },
+      { "id": 3, "parent_id": 2, "role": "user", "content": "А можешь объяснить, как это работает?", "thinking_enabled": false },
+      { "id": 4, "parent_id": 3, "role": "assistant", "content": "Конечно! Алгоритм пузырьковой сортировки работает так:\n1. Проходит по массиву несколько раз\n2. На каждом проходе сравнивает соседние элементы\n3. Если левый больше правого — меняет их местами\n4. После каждого прохода самый большой элемент «всплывает» в конец\n5. Внутренний цикл укорачивается (arr.length - i - 1), потому что конец уже отсортирован", "thinking_enabled": true },
+      { "id": 5, "parent_id": 4, "role": "user", "content": "Спасибо! А есть более быстрый алгоритм?", "thinking_enabled": false },
+      { "id": 6, "parent_id": 5, "role": "assistant", "content": "Да! Быстрая сортировка (quicksort) работает за O(n log n):\n\nfunction quickSort(arr) {\n  if (arr.length <= 1) return arr;\n  const pivot = arr[Math.floor(arr.length / 2)];\n  const left = arr.filter(x => x < pivot);\n  const right = arr.filter(x => x > pivot);\n  return [...quickSort(left), pivot, ...quickSort(right)];\n}\n\nЭто значительно быстрее пузырьковой сортировки для больших массивов.", "thinking_enabled": true }
+    ],
+    "accumulated_token_usage": 1250,
+    "model_type": "default"
+  },
+  "expected": {
+    "model": "DeepSeek-R1",
+    "tokens": 1250,
+    "messagesCount": 6
+  }
+}

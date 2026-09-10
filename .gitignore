@@ -1,0 +1,72 @@
+﻿# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Archives
+*.zip
+*.crx
+*.pem
+
+# Node
+node_modules/
+package-lock.json
+coverage/
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log
+
+# Environment
+.env
+.env.local
+
+# Project-specific
+.clinerules
+
+# Р›РёС‡РЅС‹Рµ РґР°РЅРЅС‹Рµ вЂ” РЅРµ РєРѕРјРјРёС‚РёС‚СЊ
+google-folwr-open.txt
+google-folwr-table.txt
+google-folwr-sample.txt
+google-folwr-request.txt
+gemini-network-sample.txt
+chatgpt-conversation-sample.json
+
+tools/_out*
+gemini-head-sample.txt
+test2_logs.txt
+tools/
+tools/key.pem
+%TEMPJ%/
+jest_out.txt
+jest_out*.txt
+jest_perp_out.txt
+perplexity_thread_sample.json
+
+# H26 clean: сырые сэмплы и локальные артефакты вне репозитория
+/chatgpt-conversation-sample.json
+/gemini-network-sample.txt
+/google-folwr-*.txt
+/perplexity_thread_sample.json
+/jest_out.txt
+/test2_logs.txt
+/%TEMPJ%/
+/.vscode/
+/.clinerules
+
+# H26 public: процесс-доки и приёмочный леджер остаются локально (список B)
+/RELEASE_CHECKLIST.md
+/RELEASE_PROTOCOL.md
+/INSTRUCTIONS.md
+/DHS_RULES.md
+/CLINE_PROMPT_RULES.md
+/CLINE_TEMPLATE.md
+/docs/CLINE_TEMPLATE.md
+/docs/AUDIT.md
+/docs/QUALITY_AUDIT.md
+/.clineignore

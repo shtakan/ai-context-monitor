@@ -1,0 +1,77 @@
+{
+  "manifest_version": 3,
+  "name": "AI Context Monitor",
+  "version": "1.15.3",
+  "description": "Мониторинг заполнения контекстного окна AI-моделей в реальном времени",
+
+  "permissions": [
+    "scripting",
+    "storage",
+    "notifications"
+  ],
+
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://gemini.google.com/*",
+    "https://chat.deepseek.com/*",
+    "https://aistudio.google.com/*",
+    "https://www.google.com/search*",
+    "https://claude.ai/*",
+    "https://www.perplexity.ai/*",
+    "https://perplexity.ai/*",
+    "https://generativelanguage.googleapis.com/*"
+  ],
+
+  "background": {
+    "service_worker": "core/background.js"
+  },
+
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://gemini.google.com/*",
+        "https://chat.deepseek.com/*",
+        "https://aistudio.google.com/*",
+    "https://www.google.com/search*",
+    "https://claude.ai/*",
+    "https://www.perplexity.ai/*",
+    "https://perplexity.ai/*"
+  ],
+  "js": [
+    "utils/debug.js",
+    "utils/tokenizer.js",
+    "utils/model-config.js",
+    "adapters/base-adapter.js",
+    "adapters/chatgpt-adapter.js",
+    "adapters/gemini-adapter.js",
+    "adapters/deepseek-adapter.js",
+    "adapters/google-search-adapter.js",
+    "adapters/claude-adapter.js",
+    "adapters/perplexity-adapter.js",
+    "utils/gemini-dom-parser.js",
+    "utils/gemini-batchexecute-parser.js",
+    "utils/buildReferenceText.js",
+    "utils/export-text-builders.js",
+    "utils/export-emit-pipeline.js",
+    "core/content.js"
+  ],
+  "run_at": "document_idle"
+    }
+  ],
+
+  "action": {
+    "default_popup": "options/options.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
