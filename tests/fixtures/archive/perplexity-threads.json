@@ -1,0 +1,53 @@
+[
+  {
+    "thread": {
+      "id": "thr-9f1c0d7a",
+      "slug": "kvantovyy-shum",
+      "title": "Квантовый шум",
+      "created_at": "2024-07-01T10:00:00.000Z",
+      "updated_at": "2024-07-01T10:05:00.000Z"
+    },
+    "entries": [
+      {
+        "query_str": "Что такое квантовый шум?",
+        "display_model": "turbo",
+        "thread_url_slug": "e1",
+        "blocks": [
+          {
+            "workflow_block": {
+              "steps": [
+                {
+                  "items": [
+                    {
+                      "type": "WORKFLOW_ITEM_TEXT",
+                      "payload": {
+                        "text_payload": {
+                          "text": "Квантовый шум — это неустранимые флуктуации наблюдаемых величин."
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "thread": {
+      "id": "thr-4b8e21c5",
+      "slug": "dekogerenciya",
+      "title": "REST-форма записи (FINAL-шаг)"
+    },
+    "entries": [
+      {
+        "query_str": "Объясни декогеренцию",
+        "display_model": "sonar",
+        "thread_url_slug": "e1",
+        "text": "[{\"step_type\":\"FINAL\",\"content\":\"{\\\"answer\\\":\\\"{\\\\\\\"answer\\\\\\\":\\\\\\\"Декогеренция — потеря фазовой когерентности при взаимодействии со средой.\\\\\\\"}\\\"}\"}]"
+      }
+    ]
+  }
+]

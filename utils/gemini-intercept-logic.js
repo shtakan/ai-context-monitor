@@ -129,6 +129,76 @@
     return !!(baseComplete && reachedStart);
   }
 
+  // ---- v1.16.5 (T1-fix#5): САМОУНИЖЕНИЕ УСТАРЕВШЕГО ПОЛА (clean-end self-heal) ----
+  // HWM НЕ ТРОНУТ: saveFloor по-прежнему двигает пол только ВВЕРХ, archiveFloorRecord —
+  // только ВВЕРХ. Понижение — ОТДЕЛЬНЫЙ механизм с собственным доказательством
+  // (selfHealFloorVerdict) и единственной точкой записи (writeSelfHealedFloor).
+  //
+  // ЗАЧЕМ. Пол — снимок прошлой ПОЛНОЙ сборки. Если чат с тех пор укорочен на сервере
+  // (или пол был поднят уже удалённым архивом), база остаётся ниже пола НАВСЕГДА:
+  //   • гейт below-floor вечно возвращает oracle=incomplete → baseComplete/reachedStart
+  //     не взводятся → автоэкспорт остаётся в deferred (не блокируется, но и не выходит);
+  //   • completeness-оракул запускает loader-restart по кругу (циклические перезагрузки),
+  //     хотя окно вырасти не может — сервер больше страниц не отдаёт.
+  // Поэтому при ДОКАЗАННОМ чистом конце истории (сеть отдала всё: quietEndedClean,
+  // курсора продолжения нет, тихий цикл не активен, ошибок страницы нет) и
+  // подтверждении повтором (база не растёт ≥5с) устаревший пол понижается до реального
+  // значения базы (msgs). reachedStart при этом может оставаться 0 — именно этот случай
+  // лоадер и не может закрыть сам (физического верха нет).
+  //
+  // ПОЧЕМУ H10 НЕ ОСЛАБЛЕН. Понижение невозможно без доказательства «сервер больше
+  // ничего не отдаёт»: живой курсор, активный тихий цикл, ошибка страницы, незавершённый
+  // прогон лоадера, неподтверждённый живой ярус архива, пустая база, отсутствующий пол,
+  // база >= пола и отсутствие подтверждающего повтора — каждый случай запрещает
+  // понижение со своим reason. Только связка «чистый конец + повтор» его разрешает.
+  //
+  // o = { cleanEnd, pendingCursor, quietActive, pageError, loaderRunning, archivePending,
+  //       baseCount, floorCount, floorLen, provenLen, reachedStart, confirmations }.
+  function selfHealFloorVerdict(opts) {
+    var o = opts || {};
+    var baseCount = (typeof o.baseCount === 'number' && o.baseCount > 0) ? o.baseCount : 0;
+    var floorCount = (typeof o.floorCount === 'number' && o.floorCount > 0) ? o.floorCount : 0;
+    var floorLen = (typeof o.floorLen === 'number' && o.floorLen > 0) ? o.floorLen : 0;
+    var provenLen = (typeof o.provenLen === 'number' && o.provenLen > 0) ? o.provenLen : 0;
+    var confirmations = (typeof o.confirmations === 'number' && o.confirmations > 0) ? o.confirmations : 0;
+    if (o.cleanEnd !== true) return { lower: false, reason: 'no-clean-end' };
+    if (o.pendingCursor) return { lower: false, reason: 'cursor-alive' };
+    if (o.quietActive === true) return { lower: false, reason: 'quiet-active' };
+    if (o.pageError === true) return { lower: false, reason: 'page-error' };
+    if (o.loaderRunning === true) return { lower: false, reason: 'loader-running' };
+    if (o.archivePending === true) return { lower: false, reason: 'archive-pending-live' };
+    if (!baseCount) return { lower: false, reason: 'base-empty' };
+    if (!floorCount) return { lower: false, reason: 'no-floor' };
+    if (baseCount >= floorCount) return { lower: false, reason: 'floor-not-stale' };
+    if (confirmations < 1) return { lower: false, reason: 'unconfirmed' };
+    // effectiveLen понижаем до РЕАЛЬНОЙ длины базы: прежняя (фантомная) длина задирала бы
+    // бейдж/токены (v78-хард-пол). provenLen неизвестен (0) → оставляем прежнюю длину:
+    // count уже равен базе, поэтому пол в resolveFloor/v78 не применяется.
+    return {
+      lower: true, count: baseCount, effectiveLen: (provenLen || floorLen),
+      floorWas: floorCount, source: 'clean-end-self-heal',
+      reachedStart: o.reachedStart === true, reason: 'stale-floor'
+    };
+  }
+
+  // ЕДИНСТВЕННАЯ точка ПОНИЖЕНИЯ пола. Вызывается только по вердикту
+  // selfHealFloorVerdict (или из уже доказанной clean-end ветки лоадера, где повтор
+  // зафиксирован collapse-ретраем) — то есть понижение всегда опирается на доказанный
+  // чистый конец истории. saveFloor этим путём НЕ подменяется и не меняется.
+  function writeSelfHealedFloor(convId, parserVersion, count, effectiveLen, source, storage) {
+    if (!storage || !convId) return null;
+    if (typeof count !== 'number' || !(count > 0)) return null;
+    var len = (typeof effectiveLen === 'number' && effectiveLen > 0) ? effectiveLen : 0;
+    var rec = {
+      count: count, effectiveLen: len, ts: Date.now(), version: parserVersion,
+      source: source || 'clean-end-self-heal'
+    };
+    try {
+      storage.setItem(floorStorageKey(convId, parserVersion), JSON.stringify(rec));
+      return rec;
+    } catch (e) { return null; }
+  }
+
   // Полная пересборка vf5 допустима только для действительно полной истории (без курсора продолжения).
   function shouldFullRebuild(opts) {
     opts = opts || {};
@@ -494,7 +564,44 @@
   //    хронологии; arrival-сравнение лишь повторяло повёрнутый порядок.
   // 2) arrival — ТОЛЬКО фолбэк при отсутствии r1-графа (!r1.ok / не покрывает).
   // 3) сортировка по order (серверный, деградация).
+  // T1-fix#4 (v1.16.4): АРХИВНЫЕ ходы (item.archive === true — метка archiveAdded из
+  // core/gemini-intercept.js) — ВСЕГДА голова файла: архив T1 = СТАРШАЯ история того же
+  // чата, она обязана идти ПЕРЕД живым окном. Раньше признака «это архив» в порядке не
+  // было, и ходы, влитые архивом (order = maxOrder+1+i, САМЫЙ БОЛЬШОЙ в базе), уезжали
+  // в хвост (live-баг: база 114, а последние строки файла — архивные, «Страницы памяти
+  // помечаются read-only»). Порядок ВНУТРИ архива — собственный (order вливания), затем
+  // идёт прежний порядок остальной базы (mode сохраняется: chain-r1/arrival/order-sort).
+  // Чаты без архива: ни одного item.archive → прежний результат байтово.
   function orderExportMessages(orderItems) {
+    try {
+      var archItems = [];
+      var restItems = [];
+      for (var q = 0; q < orderItems.length; q++) {
+        var qi = orderItems[q];
+        if (!qi || !qi.id) continue;
+        if (qi.archive === true) archItems.push(qi);
+        else restItems.push(qi);
+      }
+      var res = orderExportMessagesBase(restItems);
+      if (!archItems.length) return res;
+      archItems.sort(function (a, b) {
+        var ao = (a.order != null) ? a.order : 0;
+        var bo = (b.order != null) ? b.order : 0;
+        if (ao !== bo) return ao - bo;
+        return 0; // при равных order порядок вливания архива сохраняется (stable sort)
+      });
+      var ids = [];
+      for (var am = 0; am < archItems.length; am++) ids.push(archItems[am].id);
+      for (var rm = 0; rm < res.ids.length; rm++) ids.push(res.ids[rm]);
+      return { ids: ids, mode: res.mode };
+    } catch (e) {
+      return { ids: orderItems.filter(function (x) { return x && x.id; }).map(function (x) { return x.id; }), mode: 'order-sort' };
+    }
+  }
+
+  // Прежнее (до T1-fix#4) тело порядка: r1-цепочка → arrival → сортировка по order.
+  // Вынесено без изменений — вызывается ТОЛЬКО из orderExportMessages.
+  function orderExportMessagesBase(orderItems) {
     try {
       var r1 = orderByR1Chain(orderItems);
       if (r1.ok && r1.ids.length) return { ids: r1.ids, mode: 'chain-r1' };
@@ -1507,8 +1614,163 @@
     } catch (eH13) { return null; }
   }
 
+  // ============ T1 (v1.16): ПЕРВЫЙ ЯРУС — АРХИВ (импорт) ============
+  // Архив — независимо полученная (вне сессии/вне сети) полная история чата.
+  // Он даёт: (1) same-conv-union ходов по id/контенту, (2) авторитетный для пола
+  // count, (3) ЛЕГИТИМНЫЙ терминальный источник полноты archive-complete.
+  //
+  // ИНВАРИАНТЫ (H9/H10 НЕ ослабляются):
+  //   - archive-complete НЕ обходит H9-гейты (untrustedTopVerdict / pagStepBroken)
+  //     и H10-гейт пола: они остаются авторитетными для СВОИХ путей. Вердикт
+  //     архива — ДОПОЛНИТЕЛЬНАЯ точка complete со своими гейтами (convId, count,
+  //     пол), а не замена существующих.
+  //   - Пол монотонен вверх: архив поднимает пол, но НИКОГДА не опускает его
+  //     (high-water-mark). Архив меньше сохранённого пола → пол остаётся прежним.
+  //   - Принимается только архив СВОЕГО convId (чужой чат — reason=conv-mismatch).
+
+  // Ключ контента хода: роль + схлопнутый текст. Нужен как вторичный ключ
+  // дедупа (id архива и id живого хода одного и того же сообщения не совпадают).
+  function archiveContentKey(m) {
+    var role = (m && m.role === 'user') ? 'user' : 'assistant';
+    var text = String((m && (m.text != null ? m.text : m.content)) || '').replace(/\s+/g, ' ').trim();
+    return role + '\u0000' + text;
+  }
+
+  // Детерминированный id архивного хода (фолбэк, если архив не дал id).
+  function archiveTurnId(m, index) {
+    if (m && m.id != null && String(m.id)) return String(m.id);
+    var s = archiveContentKey(m);
+    var h = 5381;
+    for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    var hex = (h >>> 0).toString(16);
+    while (hex.length < 6) hex = '0' + hex;
+    return 'a:' + index + ':' + hex.slice(-6);
+  }
+
+  /**
+   * same-conv-union архивных ходов с текущей базой.
+   * Возвращает ТОЛЬКО добавляемые ходы (в формате turnsMap-элементов) с
+   * отрицательным order —所以他们 встают ПЕРЕД хвостовым окном сети (архив =
+   * старшая история). r1=null: порядок пересчитает chain-r1 (как у tape-restore),
+   * повёрнутый порядок архива не наследуется.
+   *
+   * @param {Array} networkItems — текущие элементы базы
+   * @param {Array} archiveMessages — нормализованные архивные ходы ({id,role,text})
+   * @returns {{items:Array, addedCount:number, duplicateCount:number}}
+   */
+  function archiveMergeTurns(networkItems, archiveMessages) {
+    var net = Array.isArray(networkItems) ? networkItems : [];
+    var arch = Array.isArray(archiveMessages) ? archiveMessages : [];
+    var seenIds = {};
+    var seenKeys = {};
+    var i, it;
+    for (i = 0; i < net.length; i++) {
+      it = net[i];
+      if (!it) continue;
+      if (it.id != null) seenIds[String(it.id)] = true;
+      var kNet = archiveContentKey(it);
+      if (kNet !== 'assistant\u0000' && kNet !== 'user\u0000') seenKeys[kNet] = true;
+    }
+    var items = [];
+    var duplicateCount = 0;
+    for (i = 0; i < arch.length; i++) {
+      var m = arch[i];
+      if (!m) continue;
+      var key = archiveContentKey(m);
+      if (key === 'assistant\u0000' || key === 'user\u0000') continue; // пустой текст — не ход
+      var id = archiveTurnId(m, i);
+      if (seenIds[id] || seenKeys[key]) { duplicateCount++; continue; }
+      seenIds[id] = true;
+      seenKeys[key] = true;
+      items.push({
+        id: id,
+        turnId: id,
+        r1: null,                                   // порядок архива не наследуем
+        order: i - (arch.length + 1),               // старший сегмент → в начало экспорта
+        role: (m.role === 'user') ? 'user' : 'assistant',
+        text: String(m.text == null ? '' : m.text)
+      });
+    }
+    return { items: items, addedCount: items.length, duplicateCount: duplicateCount };
+  }
+
+  /**
+   * Архивный count АВТОРИТЕТЕН для пола: пол поднимается до max(прежний, архивный),
+   * понижение запрещено (HWM). Возвращает запись для записи пола или null, когда
+   * менять нечего (архив не выше прежнего пола / оба пусты).
+   */
+  function archiveFloorRecord(existingFloor, archiveCount, archiveTextLen) {
+    var prevCount = (existingFloor && typeof existingFloor.count === 'number' && existingFloor.count > 0) ? existingFloor.count : 0;
+    var prevLen = (existingFloor && typeof existingFloor.effectiveLen === 'number' && existingFloor.effectiveLen > 0) ? existingFloor.effectiveLen : 0;
+    var archCount = (typeof archiveCount === 'number' && archiveCount > 0) ? archiveCount : 0;
+    var archLen = (typeof archiveTextLen === 'number' && archiveTextLen > 0) ? archiveTextLen : 0;
+    var count = Math.max(prevCount, archCount);
+    var len = Math.max(prevLen, archLen);
+    if (!count && !len) return null;
+    if (count <= prevCount && len <= prevLen) return null; // монотонность: понижать нельзя
+    return { count: count, effectiveLen: len, source: 'archive' };
+  }
+
+  /**
+   * Терминальный вердикт первого яруса. complete=true ТОЛЬКО при:
+   *   - архиве ИМЕННО текущего convId,
+   *   - непустом архиве,
+   *   - базе, доросшей до архивного count (архив = независимое доказательство
+   *     полноты; недоросшая база — below-archive-count),
+   *   - базе не ниже пола (H10-инвариант «пол авторитетнее ответа»),
+   *   - T1-fix (v1.16.1, снимок o.live): ЖИВОЙ ярус предъявил доказательства —
+   *     прогон лоадера отработал (loaderDone) либо база подтверждённо выросла
+   *     сверх архива (grewBeyondArchive), И живая загрузка не идёт сейчас
+   *     (loaderRunning / active).
+   *
+   * ПОЧЕМУ ЭТОТ ГЕЙТ НУЖЕН. Архивные ходы вливаются в ТУ ЖЕ базу (same-conv-union),
+   * поэтому baseCount включает вклад самого архива: «база доросла до архивного count»
+   * на пустом ещё живом ярусе выполняется АВТОМАТИЧЕСКИ (baseCount === archiveCount —
+   * это ровно архивные ходы). Полнота в этот момент была бы объявлена по вкладу
+   * архива, а не по догруженной живой истории → автоэкспорт ушёл бы с одной лишь
+   * архивной частью (живой хвост ещё не пришёл). Отсюда: база считается доросшей
+   * ТОЛЬКО на доказательствах живого яруса.
+   *
+   * o.live НЕ передан → вердикт работает в прежнем (T1) режиме — совместимость
+   * вызовов, которые снимок живого яруса не передают.
+   * Иначе — { complete:false, reason } и путь остаётся за существующими гейтами.
+   */
+  function archiveCompleteVerdict(opts) {
+    var o = opts || {};
+    var archConv = String(o.archiveConvId || '');
+    var curConv = String(o.currentConvId || '');
+    var archiveCount = (typeof o.archiveCount === 'number' && o.archiveCount > 0) ? o.archiveCount : 0;
+    var baseCount = (typeof o.baseCount === 'number' && o.baseCount > 0) ? o.baseCount : 0;
+    var floorCount = (typeof o.floorCount === 'number' && o.floorCount > 0) ? o.floorCount : 0;
+    var live = (o.live && typeof o.live === 'object') ? o.live : null;
+    if (!archConv) return { complete: false, reason: 'no-archive' };
+    if (!curConv) return { complete: false, reason: 'no-conv' };
+    if (archConv !== curConv) return { complete: false, reason: 'conv-mismatch' };
+    if (!archiveCount) return { complete: false, reason: 'archive-empty' };
+    // (1) живой лоадер бежит ПРЯМО СЕЙЧАС по этому чату — полноту за него не объявляем.
+    if (live && live.loaderRunning === true) return { complete: false, reason: 'loader-running' };
+    if (baseCount < archiveCount) return { complete: false, reason: 'below-archive-count' };
+    if (live) {
+      // (2) база не выросла сверх архива И прогон лоадера ещё не отработал:
+      //     baseCount === archiveCount здесь — вклад САМОГО архива, а не доказательство
+      //     догруженной живой истории. Ждём loaderDoneMap либо реального роста базы.
+      if (live.loaderDone !== true && live.grewBeyondArchive !== true) {
+        return { complete: false, reason: 'live-loader-pending' };
+      }
+      // (4) живая история ещё догружается (тихий цикл/пагинация) — ждём её конца,
+      //     иначе объявленная полнота оборвала бы живую догрузку на середине.
+      if (live.active === true) return { complete: false, reason: 'live-loading' };
+    }
+    if (floorCount > 0 && baseCount < floorCount) return { complete: false, reason: 'below-floor' };
+    return { complete: true, reason: 'archive-complete' };
+  }
+
   var api = {
     floorStorageKey: floorStorageKey,
+    archiveContentKey: archiveContentKey,
+    archiveMergeTurns: archiveMergeTurns,
+    archiveFloorRecord: archiveFloorRecord,
+    archiveCompleteVerdict: archiveCompleteVerdict,
     PROACTIVE_THRESHOLDS: PROACTIVE_THRESHOLDS,
     normalizeProactiveThresholds: normalizeProactiveThresholds,
     getProactiveThresholds: getProactiveThresholds,
@@ -1521,6 +1783,8 @@
     resolveFloor: resolveFloor,
     diagnoseFloorAbsence: diagnoseFloorAbsence,
     shouldSaveFloor: shouldSaveFloor,
+    selfHealFloorVerdict: selfHealFloorVerdict,
+    writeSelfHealedFloor: writeSelfHealedFloor,
     shouldFullRebuild: shouldFullRebuild,
     shouldDisjointReset: shouldDisjointReset,
     assignPageOrders: assignPageOrders,

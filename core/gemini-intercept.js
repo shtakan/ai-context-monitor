@@ -268,6 +268,19 @@
       try { floorFc = loadFloor(convIdFc); } catch (eFcL) { }
       if (!floorFc || !(floorFc.count > 0)) return;
       if (lastBaseCount < floorFc.count) return;
+      // T1-fix#2 (v1.16.2): пол этого чата поднят АРХИВОМ (его count), поэтому «база не
+      // ниже пола» доказывает ровно вклад архива, а не догруженную живую историю.
+      // Live-прогон: архив 4 хода → floor=4 → через 5.5с тишины confirm → автоэкспорт
+      // уходил с одной архивной частью (живой хвост ещё не успел прийти).
+      // typeof-гард: helper объявлен всегда; в извлечённых sandbox-телах его нет —
+      // поведение прежнее (байтово), как и для чатов без архива.
+      if (typeof aiCmArchiveLiveProven === 'function' && !aiCmArchiveLiveProven(convIdFc)) {
+        debugLog('log', '[AI CM][completeness] oracle=incomplete reason=archive-live-pending(floor-confirm) convId=' + convIdFc +
+          ' msgs=' + lastBaseCount + ' floor=' + floorFc.count +
+          ' archiveMsgs=' + (((aiCmArchiveFor(convIdFc) || {}).count) || 0) +
+          ' liveMsgs=' + aiCmLiveTurnCount());
+        return;
+      }
       var nowFc = Date.now();
       if ((nowFc - lastBaseCountChangeAt) < 5000) return;
       if ((nowFc - lastOlderNonPagAddAt) < 5000) return;
@@ -362,12 +375,24 @@
   // повторного tape-restore в рамках жизни страницы.
   var cacheRestoredMap = new Set();
 
+  // T1 (v1.16): ПЕРВЫЙ ЯРУС — архив. Записи {count, textLen} по convId, полученные
+  // событием ai-cm-archive-restore от content.js (ISOLATED читает chrome.storage.local:
+  // MAIN-мир chrome.* не касается — инвариант мировой изоляции). Архив — независимое
+  // доказательство полноты (archive-complete) и авторитет для пола (монотонно вверх).
+  var archiveTierByConv = {};
+  // convId, для которых архив уже влит в базу в этой сессии страницы (дедуп merge).
+  var archiveMergedMap = new Set();
+
   // v42: состояние лоадера наружу ПО convId. content.js живёт в ISOLATED-мире и не видит
   // MAIN-глобалы, поэтому канал — window-CustomEvent (тот же механизм, что ai-cm-loader-freeze).
   function notifyLoaderState(convId, running) {
     try {
       if (!running) {
         lastCycleEndedHidden = (document.visibilityState !== 'visible'); // v1.13.1
+        // T1-fix (v1.16.1): живой ярус остановился — переоцениваем оракул архива ДО
+        // dispatch ниже, чтобы свежая полнота уехала в том же ai-cm-loader-state
+        // (иначе после стопа лоадера emit может не прийти и экспорт не триггернётся).
+        try { aiCmArchiveTierApply(); } catch (eArcLs) { }
         // v74 (баг A): стабильный loader-stop — независимое подтверждение полноты.
         // pendingCursor нет И счётчик базы не менялся ≥5с И старших добавлений вне
         // пагинации ≥5с → полнота сразу (вместо 60с-задержки и [LOW CONFIDENCE]_).
@@ -395,11 +420,69 @@
                 floorCount78 > 0 &&
                 (typeof pendingCursor === 'undefined' ? true : !pendingCursor));
             } catch (e78q) { cleanEnd78 = false; }
+            // v1.16.5 (T1-fix#5): САМОУНИЖЕНИЕ УСТАРЕВШЕГО ПОЛА. cleanEnd78 — доказательство
+            // того, что сеть отдала всю историю (quietEndedClean, курсора продолжения нет),
+            // а reachedStart при этом может оставаться 0: физического верха лоадер не нашёл.
+            // Если база НИЖЕ пола, пол снят с УЖЕ УКОРОЧЕННОЙ на сервере истории — держать его
+            // нельзя: base < floor вечно уводит оракул в incomplete (loader-max-not-top /
+            // below-floor) → полнота не подтверждается, экспорт остаётся в deferred, а
+            // completeness-оракул гоняет loader-restart по кругу, хотя окно вырасти не может.
+            // Решение — ТОЛЬКО через формальный вердикт (selfHealFloorVerdict), запись — через
+            // единственную точку понижения (selfHealFloor → writeSelfHealedFloor).
+            // HWM saveFloor/archiveFloorRecord и H9/H10-гейты не тронуты: понижение возможно
+            // лишь при доказанном чистом конце + подтверждающем повторе (база стабильна ≥5с),
+            // а при архиве без доказанного живого яруса оно запрещено (archive-pending-live).
+            // Блок стоит ДО ветки lastLoaderDoneReason !== 'top': иначе deadlock-ветка
+            // loader-max-not-top вернулась бы раньше, чем пол успел самоунизиться.
+            if (cleanEnd78 && floorCount78 > 0 && lastBaseCount > 0 && lastBaseCount < floorCount78) {
+              var __shv74 = null;
+              try {
+                if (typeof window !== 'undefined' && window.GeminiInterceptLogic &&
+                    typeof window.GeminiInterceptLogic.selfHealFloorVerdict === 'function') {
+                  __shv74 = window.GeminiInterceptLogic.selfHealFloorVerdict({
+                    cleanEnd: true,
+                    pendingCursor: (typeof pendingCursor === 'undefined') ? null : pendingCursor,
+                    quietActive: (typeof quietActive === 'undefined') ? false : (quietActive === true),
+                    pageError: (typeof lastHnvPageError === 'undefined') ? false : (lastHnvPageError === true),
+                    loaderRunning: (typeof loaderRunningFor === 'undefined') ? false : !!loaderRunningFor,
+                    archivePending: !!(typeof aiCmArchiveFor === 'function' && aiCmArchiveFor(convId) &&
+                      typeof aiCmArchiveLiveProven === 'function' && !aiCmArchiveLiveProven(convId)),
+                    baseCount: lastBaseCount,
+                    floorCount: floorCount78,
+                    floorLen: (sf78 && sf78.effectiveLen) || 0,
+                    provenLen: (typeof lastBaseTextLen === 'undefined') ? 0 : lastBaseTextLen,
+                    reachedStart: reachedStart === true,
+                    confirmations: (lastBaseCountChangeAt && (now74 - lastBaseCountChangeAt) >= 5000) ? 1 : 0
+                  });
+                }
+              } catch (eShv74) { __shv74 = null; }
+              if (__shv74 && __shv74.lower === true) {
+                var __shW74 = null;
+                try { __shW74 = selfHealFloor(convId, __shv74.count, __shv74.effectiveLen, __shv74.source); } catch (eShW74) { __shW74 = null; }
+                floorCount78 = __shv74.count; // ветки ниже читают САМОИЗЛЕЧЕННЫЙ пол
+                debugLog('log', '[AI CM][completeness] floor self-healed (clean-end) convId=' + convId +
+                  ' floorWas=' + __shv74.floorWas + ' floorNow=' + floorCount78 +
+                  ' msgs=' + lastBaseCount + ' reachedStart=' + (reachedStart === true ? '1' : '0') +
+                  ' source=' + __shv74.source + (__shW74 ? '' : ' (write skipped)'));
+              }
+            }
             // v78: loader-stable-stop подтверждает полноту ТОЛЬКО когда скролл-лоадер дошёл до
             // физического верха (done reason=top) И база не ниже пола. Иначе — incomplete,
             // baseComplete остаётся 0 и экспорт остаётся deferred (гейт в content.js).
             // v1.15: исключение — чистый конец сети при базе >= пола (см. cleanEnd78 выше).
             if (lastLoaderDoneReason !== 'top') {
+              // T1-fix#2 (v1.16.2): clean-end-подтверждение опирается на ПОЛ, а пол мог быть
+              // поднят самим архивом (floorCount78 > 0 выполняется его вкладом) — без
+              // доказанного живого роста это доказательство архива, а не живого яруса.
+              // Ветка done reason=top (реальный live-доказательство) НЕ трогается.
+              if (cleanEnd78 && lastBaseCount >= floorCount78 &&
+                  typeof aiCmArchiveLiveProven === 'function' && !aiCmArchiveLiveProven(convId)) {
+                debugLog('log', '[AI CM][completeness] oracle=incomplete reason=archive-live-pending(clean-end) convId=' + convId +
+                  ' msgs=' + lastBaseCount + ' floor=' + floorCount78 +
+                  ' archiveMsgs=' + (((aiCmArchiveFor(convId) || {}).count) || 0) +
+                  ' liveMsgs=' + aiCmLiveTurnCount());
+                return;
+              }
               if (!(cleanEnd78 && lastBaseCount >= floorCount78)) {
                 debugLog('log', '[AI CM][completeness] oracle=incomplete reason=loader-max-not-top convId=' + convId +
                   ' done=' + lastLoaderDoneReason + ' msgs=' + lastBaseCount + ' floor=' + floorCount78 +
@@ -460,6 +543,16 @@
   function saveFloor(convId, count, effectiveLen) {
     if (typeof window === 'undefined' || !window.GeminiInterceptLogic) return;
     window.GeminiInterceptLogic.saveFloor(convId, parserVersion, count, effectiveLen, localStorage);
+  }
+  // v1.16.5 (T1-fix#5): ЕДИНСТВЕННАЯ точка ПОНИЖЕНИЯ пола — отдельная от saveFloor (HWM
+  // «пол двигается только вверх» не тронут). Вызывается только по доказательству чистого
+  // конца истории: вердикт selfHealFloorVerdict (оракул полноты) либо уже доказанная
+  // clean-end ветка collapse-гарда лоадера. Возвращает запись пола или null.
+  function selfHealFloor(convId, count, effectiveLen, source) {
+    if (typeof window === 'undefined' || !window.GeminiInterceptLogic) return null;
+    if (typeof window.GeminiInterceptLogic.writeSelfHealedFloor !== 'function') return null;
+    return window.GeminiInterceptLogic.writeSelfHealedFloor(
+      convId, parserVersion, count, effectiveLen, source, localStorage);
   }
 
   // ================= v17: отслеживание смены чата в SPA =================
@@ -539,6 +632,20 @@
     // лента обязана ре-мержиться (база=тейп∪сеть, голова истинная, пол не ниже сети).
     // Внутри одного непрерывного визита гард остаётся (skip reason=already-restored).
     cacheRestoredMap.clear(); // Set (v77) — как has/add в tape-restore listener, без try/catch
+    // T1 (v1.16): первый ярус — смена чата: снимаем признак «архив влит» (при SPA-возврате
+    // архив обязан ре-мержиться в новую базу), сами данные архива по convId не теряем —
+    // они приходят от content.js и ключуются convId.
+    archiveMergedMap.clear();
+    // T1 (v1.16): база этого чата очищена (turnsMap={}) → признак «архив применён»
+    // снимается, иначе при SPA-возврате архив не сможет повторно взвести
+    // archive-complete (вердикт переоценится в emitBaseSnapshot после ре-мержа).
+    try {
+      var __cidArcReset = getConvId();
+      if (__cidArcReset && archiveTierByConv[__cidArcReset]) {
+        archiveTierByConv[__cidArcReset].completeApplied = false;
+        archiveTierByConv[__cidArcReset].verdictLogged = '';
+      }
+    } catch (eArcReset) { }
     lastLoaderDoneReason = ''; // v78: done-reason прошлого чата не должен открывать stable-stop оракул
     collapseRetries = 0; // v1.14.2 (COLLAPSE-GUARD): смена convId — новый бюджет коллапс-ретраев
     lastPagStepBroken = false; // H9: смена convId — сброс флага «последний шаг тихой пагинации сломан»
@@ -698,6 +805,9 @@
         var turns = aiCmOrderedTurns();
         var fe = aiCmDiagTurnEdge(turns, 'first');
         var le = aiCmDiagTurnEdge(turns, 'last');
+        // T1-fix#3 (v1.16.3): плюс ОБЪЕДИНЁННАЯ база (архив + live) — источник файла
+        // автоэкспорта; content.js берёт её, если последний EMIT отстал от базы.
+        var baseInfo = (typeof aiCmBaseExportInfo === 'function') ? aiCmBaseExportInfo() : null;
         return {
           convId: getConvId(),
           msgs: turns.length,
@@ -708,7 +818,12 @@
           baseComplete: historyFullByQuiet === true,
           reachedStart: reachedStart === true,
           confirmedByScroll: reachedStartByScroll === true,
-          scrollEngaged: loaderState.scrollEngaged === true // v66: скрытый скролл вовлечён?
+          scrollEngaged: loaderState.scrollEngaged === true, // v66: скрытый скролл вовлечён?
+          baseMsgs: baseInfo ? baseInfo.baseMsgs : turns.length,
+          liveCount: baseInfo ? baseInfo.liveCount : null,
+          archiveCount: baseInfo ? baseInfo.archiveCount : 0,
+          liveProven: baseInfo ? baseInfo.liveProven : true,
+          messages: (baseInfo && Array.isArray(baseInfo.messages)) ? baseInfo.messages : []
         };
       };
     }
@@ -2269,12 +2384,44 @@
                   try {
                     if (__floorCg > baseSize() && convId && typeof parserVersion !== 'undefined' && parserVersion &&
                         typeof localStorage !== 'undefined' && typeof lastBaseTextLen !== 'undefined') {
-                      var fkCg = 'ai-cm-gemini-floor-' + parserVersion + '-' + convId;
-                      localStorage.setItem(fkCg, JSON.stringify({ count: baseSize(), effectiveLen: lastBaseTextLen, ts: Date.now(), version: parserVersion }));
+                      // v1.16.5 (T1-fix#5): понижение пола идёт ТОЛЬКО через формальный механизм
+                      // самоунижения (вердикт selfHealFloorVerdict + единственная точка записи
+                      // selfHealFloor → writeSelfHealedFloor). Прямого localStorage.setItem пола
+                      // здесь больше нет: подтверждающий повтор уже состоялся (collapseRetries>=1
+                      // + база не изменилась), поэтому confirmations=1.
+                      // typeof-защита: runTopPoint исполняет фрагмент в песочнице без модульных
+                      // глобалов (selfHealFloor там не объявлен).
+                      if (typeof selfHealFloor === 'function') {
+                        var __shvCg = null;
+                        try {
+                          if (typeof window !== 'undefined' && window.GeminiInterceptLogic &&
+                              typeof window.GeminiInterceptLogic.selfHealFloorVerdict === 'function') {
+                            __shvCg = window.GeminiInterceptLogic.selfHealFloorVerdict({
+                              cleanEnd: true,
+                              pendingCursor: (typeof __pcCg === 'undefined') ? null : __pcCg,
+                              quietActive: (typeof __cqCg === 'undefined') ? false : __cqCg,
+                              pageError: (typeof __heCg === 'undefined') ? false : __heCg,
+                              loaderRunning: (typeof loaderRunningFor === 'undefined') ? false : !!loaderRunningFor,
+                              archivePending: !!(typeof aiCmArchiveFor === 'function' && aiCmArchiveFor(convId) &&
+                                typeof aiCmArchiveLiveProven === 'function' && !aiCmArchiveLiveProven(convId)),
+                              baseCount: baseSize(),
+                              floorCount: __floorCg,
+                              floorLen: (loadFloor(convId) || {}).effectiveLen || 0,
+                              provenLen: lastBaseTextLen,
+                              reachedStart: reachedStart === true,
+                              confirmations: 1
+                            });
+                          }
+                        } catch (eShvCg) { __shvCg = null; }
+                        if (__shvCg && __shvCg.lower === true) {
+                          selfHealFloor(convId, __shvCg.count, __shvCg.effectiveLen, __shvCg.source);
+                        }
+                      }
                     }
                   } catch (eCgF) { }
                   debugLog('log', '[AI CM][Gemini][loader] clean-end top confirmed (устаревший пол самоизлечен) convId=' + convId +
-                    ' msgs=' + baseSize() + ' floorWas=' + __floorCg + ' scrollH=' + sc.height());
+                    ' msgs=' + baseSize() + ' floorWas=' + __floorCg + ' scrollH=' + sc.height() +
+                    ' selfHeal=' + ((__shvCg && __shvCg.source) || 'skipped'));
                   doneReason = 'top'; // v1.15: чистый конец сети + физический верх → stable-stop оракул
                   break;
                 }
@@ -2560,12 +2707,16 @@
       }
       // v46: ждём первый распарсенный history-RPC (сигнал «есть старшая история»),
       // чтобы не решить преждевременно — ответ мог ещё не прийти.
-      if (!olderHistorySeen && baseSize() === 0) {
+      // T1-fix#2 (v1.16.2): «база непустая» ≠ «живой RPC распарсен» — архив вливает свои
+      // ходы в ту же базу ДО прихода живого снапшота. Ждём сигнал по ЖИВЫМ ходам
+      // (для чата без архива aiCmLiveTurnCount() === baseSize() — прежнее поведение).
+      var liveMsgs = aiCmLiveTurnCount();
+      if (!olderHistorySeen && liveMsgs === 0) {
         if (++tries < LOADER_SIGNAL_WAIT_TRIES) {
           // cold-debug: редкие отметки ожидания первого history-RPC (старт мог опередить сеть)
           if (tries === 1 || tries === 10 || tries === 19) {
             debugLog('log', '[AI CM][cold-debug] loader-wait-signal convId=' + convId +
-              ' msgs=0 olderHistorySeen=0 try=' + tries + '/' + LOADER_SIGNAL_WAIT_TRIES +
+              ' msgs=' + baseSize() + ' liveMsgs=' + liveMsgs + ' olderHistorySeen=0 try=' + tries + '/' + LOADER_SIGNAL_WAIT_TRIES +
               ' loaderRunning=' + (loaderRunningFor || 'none'));
           }
           setTimeout(tick, LOADER_SIGNAL_WAIT_MS); return;
@@ -2575,9 +2726,17 @@
       // догружать нечего. Скроллинг лоадера на коротких чатах белил экран (f47e2edd).
       // v1.6 (D15): при единственном ре-ране (oracle-incomplete bypass) гейт пропускается.
       if (!olderHistorySeen && !oracleRerunUsedMap[convId]) {
-        loaderDoneMap[convId] = true;
-        debugLog('log', '[AI CM][Gemini][loader] loader-skipped reason=no-older-history convId=' + convId + ' msgs=' + baseSize());
-        return;
+        if (aiCmArchiveFor(convId) && liveMsgs === 0) {
+          // T1-fix#2 (v1.16.2): «нет старшей истории» здесь выведено из НЕПУСТОЙ базы, а база
+          // непуста ТОЛЬКО вкладом архива (живой RPC ещё не распарсен) — решение недостоверно.
+          // Латч done НЕ ставим: ниже запускаем лоадер, чтобы догрузить живой ярус.
+          debugLog('log', '[AI CM][Gemini][loader] no-older-history отложен: база = только архив convId=' + convId +
+            ' msgs=' + baseSize() + ' liveMsgs=0');
+        } else {
+          loaderDoneMap[convId] = true;
+          debugLog('log', '[AI CM][Gemini][loader] loader-skipped reason=no-older-history convId=' + convId + ' msgs=' + baseSize());
+          return;
+        }
       }
       if (loaderRunningFor === convId) return;
       // cold-debug: фактический старт прогона лоадера — решение и состояние на этот момент
@@ -3178,6 +3337,9 @@
       debugLog('log', '[gemini-paginate] тихий цикл не добавил ходов → фолбэк: запускаю автоскролл');
       scheduleAutoScroll();
     }
+    // T1-fix (v1.16.1): тихий цикл завершился — гейт live-loading снят, переоцениваем
+    // оракул архива ПОСЛЕ собственных решений цикла (порядок веток выше не меняем).
+    try { aiCmArchiveTierApply(); } catch (eArcFq) { }
   }
 
   // ================= v73: контрольный probe полноты (независимый источник (b)) =================
@@ -3558,7 +3720,214 @@
   }
 
   // ================= единый эмит снимка базы =================
+  // ============ T1 (v1.16): ПЕРВЫЙ ЯРУС — АРХИВ (оракул и пол) ============
+  // Метаданные архива по convId кладёт слушатель ai-cm-archive-restore (ниже, рядом
+  // с tape-restore): content.js (ISOLATED) читает chrome.storage.local и передаёт
+  // нормализованные ходы — MAIN-мир chrome.* не касается (инвариант мировой изоляции).
+  //
+  // aiCmArchiveTierApply() вызывается из emitBaseSnapshot, то есть переоценивается на
+  // КАЖДОМ изменении базы. archive-complete объявляется ровно тогда, когда живая база
+  // доросла до архивного count — не в момент импорта. H9-гейты (untrustedTopVerdict /
+  // pagStepBroken) и H10 (пол авторитетнее ответа probe) НЕ ослабляются: архив — это
+  // ДОПОЛНИТЕЛЬНАЯ терминальная точка со своими гейтами (convId, count, пол).
+  // T1-fix (v1.16.1): плюс гейт ЖИВОГО яруса (loaderRunning / loaderDone / active /
+  // grewBeyondArchive) — архивные ходы лежат в той же базе, поэтому «count дорос»
+  // без живых доказательств означал ложную полноту и автоэкспорт одной архивной части.
+  function aiCmArchiveFor(convId) {
+    if (!convId) return null;
+    return archiveTierByConv[convId] || null;
+  }
+
+  // T1-fix#3 (v1.16.3): сообщения ОБЪЕДИНЁННОЙ базы (архив + live) — тем же порядком и с
+  // той же санацией, что уходят в EMIT (порядок строит ТА ЖЕ чистая orderExportMessages —
+  // дубля логики D15 нет). Нужны экспорту: content.js (ISOLATED) не видит turnsMap, а
+  // последний EMIT мог быть снят ДО вливания живой истории (архив читается из storage
+  // первым) — файл уходил одной архивной частью (live-прогон: 4 архивных хода при базе 114).
+  function aiCmBuildBaseMessages() {
+    try {
+      var orderItems = [];
+      var mapIds = Object.keys(turnsMap);
+      for (var i = 0; i < mapIds.length; i++) {
+        var rec = turnsMap[mapIds[i]];
+        if (!rec) continue;
+        orderItems.push({
+          id: mapIds[i], turnId: rec.turnId || null, r1: rec.r1 || null,
+          order: rec.order || 0, role: rec.role, archive: rec.archiveAdded === true
+        });
+      }
+      var ids = null;
+      if (typeof window !== 'undefined' && window.GeminiInterceptLogic &&
+          typeof window.GeminiInterceptLogic.orderExportMessages === 'function') {
+        var exp = window.GeminiInterceptLogic.orderExportMessages(orderItems);
+        if (exp && exp.ids) ids = exp.ids;
+      }
+      if (!ids) {
+        ids = mapIds.slice().sort(function (a, b) {
+          return (turnsMap[a].order || 0) - (turnsMap[b].order || 0);
+        });
+      }
+      var messages = [];
+      for (var j = 0; j < ids.length; j++) {
+        var m = turnsMap[ids[j]];
+        if (!m) continue;
+        messages.push({ role: (m.role === 'user') ? 'user' : 'assistant', text: m.text, id: ids[j] });
+      }
+      return sanitizeMessagesForEmit(messages);
+    } catch (eBbm) { return null; }
+  }
+
+  // T1-fix#3: сводка ОБЪЕДИНЁННОЙ базы для экспорта. Уезжает в ISOLATED синхронным мостом
+  // ai-cm-turns-snap-request/response (движение ONLY через CustomEvent — мировая изоляция):
+  // baseMsgs — сколько ходов в базе, liveCount — сколько из них НЕ влито архивом,
+  // archiveCount — count импортированного архива, messages — сами ходы базы.
+  function aiCmBaseExportInfo() {
+    try {
+      var convId = getConvId();
+      var arch = aiCmArchiveFor(convId);
+      var msgs = aiCmBuildBaseMessages();
+      var info = {
+        convId: convId,
+        baseMsgs: msgs ? msgs.length : baseSize(),
+        liveCount: aiCmLiveTurnCount(arch),
+        archiveCount: (arch && arch.count) || 0,
+        liveProven: aiCmArchiveLiveProven(convId),
+        messages: msgs || []
+      };
+      return info;
+    } catch (eBei) { return null; }
+  }
+
+  // T1-fix#2 (v1.16.2): живые ходы базы — ходы, НЕ влитые архивом (addedIds).
+  // Архив лежит в ТОЙ ЖЕ базе (same-conv-union), поэтому baseSize() сам по себе не
+  // отличает «живой ярус уже что-то дал» от «в базе пока только архив».
+  function aiCmLiveTurnCount(arch) {
+    try {
+      var a = arch || aiCmArchiveFor(getConvId());
+      if (!a || !a.addedIds) return baseSize(); // merge архива не было — вся база живая
+      var ids = Object.keys(turnsMap);
+      var n = 0;
+      for (var i = 0; i < ids.length; i++) { if (a.addedIds[ids[i]] !== true) n++; }
+      return n;
+    } catch (eLtc) { return baseSize(); }
+  }
+
+  // База = ТОЛЬКО архив: ни одного живого хода. В этом состоянии ни латч loaderDoneMap
+  // (его ставят и «скип»-ветки лоадера: no-older-history / cache-complete / data-complete),
+  // ни пол, поднятый самим архивом, не доказывают догруженную живую историю.
+  function aiCmArchiveOnlyBase(convId) {
+    try {
+      var a = aiCmArchiveFor(convId || getConvId());
+      if (!a || !(a.count > 0)) return false;
+      return aiCmLiveTurnCount(a) === 0;
+    } catch (eAob) { return false; }
+  }
+
+  // Доказательство живого яруса для ПОЛ-подтверждений: архив поднимает пол своим count,
+  // поэтому «база не ниже пола» доказывает лишь сам архив, а счётчик базы — его же вклад.
+  // Живым доказательством считается только рост сверх архива со стыком живого окна
+  // (нет пропуска середины: см. aiCmArchiveGrewBeyondArchive). Архива нет → прежние гейты.
+  function aiCmArchiveLiveProven(convId) {
+    try {
+      var a = aiCmArchiveFor(convId || getConvId());
+      if (!a || !(a.count > 0)) return true;
+      if (aiCmLiveTurnCount(a) === 0) return false;
+      return aiCmArchiveGrewBeyondArchive(a);
+    } catch (eAlp) { return false; }
+  }
+
+  // T1-fix (v1.16.1): доказательство «база подтверждённо выросла СВЕРХ архива».
+  // Архивные ходы лежат в ТОЙ ЖЕ базе (same-conv-union), поэтому baseCount > archiveCount
+  // сам по себе ещё не значит, что живая история догружена (пассивный снимок мог дать
+  // только свежее окно). Рост считается подтверждённым ТОЛЬКО когда:
+  //   а) ходов, пришедших НЕ из архива, строго больше, чем весь архив (addedIds), И
+  //   б) живое окно СТЫКУЕТСЯ с архивом — у них есть общий ход (keys по role+text),
+  //      то есть между архивом и живым окном нет пропуска середины.
+  // Иначе вердикт ждёт завершённого прогона лоадера (loaderDoneMap).
+  function aiCmArchiveGrewBeyondArchive(arch) {
+    try {
+      var addedIds = arch && arch.addedIds;
+      var keys = arch && arch.keys;
+      if (!addedIds || !keys) return false; // merge архива ещё не было — роста быть не может
+      var logic = (typeof window !== 'undefined') ? window.GeminiInterceptLogic : null;
+      if (!logic || typeof logic.archiveContentKey !== 'function') return false;
+      var ids = Object.keys(turnsMap);
+      var liveCount = 0;
+      var overlap = false;
+      for (var i = 0; i < ids.length; i++) {
+        if (addedIds[ids[i]] === true) continue; // ход, влитый ИМЕННО архивом
+        liveCount++;
+        if (!overlap) {
+          var k = null;
+          try { k = logic.archiveContentKey(turnsMap[ids[i]]); } catch (eK) { k = null; }
+          if (k && keys[k] === true) overlap = true;
+        }
+      }
+      if (!overlap) return false;
+      return liveCount > arch.count;
+    } catch (eGba) { return false; }
+  }
+
+  function aiCmArchiveTierApply() {
+    try {
+      var convId = getConvId();
+      var arch = aiCmArchiveFor(convId);
+      if (!arch) return;
+      var logic = (typeof window !== 'undefined') ? window.GeminiInterceptLogic : null;
+      if (!logic || typeof logic.archiveCompleteVerdict !== 'function') return;
+      var sf = null;
+      try { sf = loadFloor(convId); } catch (eSf) { }
+      var floorCount = (sf && sf.count) || 0;
+      // T1-fix (v1.16.1): снимок ЖИВОГО яруса — без него «база доросла до архива»
+      // выполняется вкладом самого архива и объявляет ложную полноту (автоэкспорт
+      // уходил с одной архивной частью, живой хвост не успевал догрузиться).
+      // Дорогое доказательство роста считаем только пока лоадер не отработал.
+      var loaderDone = loaderDoneMap[convId] === true;
+      // T1-fix#2 (v1.16.2): база из одного архива доказательств живого яруса не даёт —
+      // латч loaderDoneMap ставят и «скип»-ветки лоадера БЕЗ прогона (архив делает базу
+      // непустой ещё до прихода живого RPC, из-за чего лоадер и пропускался).
+      var archiveOnly = aiCmArchiveOnlyBase(convId);
+      var live = {
+        loaderRunning: loaderRunningFor === convId,
+        loaderDone: loaderDone && !archiveOnly,
+        active: quietActive === true,
+        grewBeyondArchive: (loaderDone || archiveOnly) ? false : aiCmArchiveGrewBeyondArchive(arch)
+      };
+      var verdict = logic.archiveCompleteVerdict({
+        archiveConvId: arch.convId,
+        currentConvId: convId,
+        archiveCount: arch.count,
+        baseCount: baseSize(),
+        floorCount: floorCount,
+        live: live
+      });
+      if (verdict.complete !== true) {
+        if (arch.verdictLogged !== verdict.reason) {
+          arch.verdictLogged = verdict.reason;
+          debugLog('log', '[AI CM][completeness] archive-complete withheld reason=' + verdict.reason +
+            ' convId=' + convId + ' msgs=' + baseSize() + ' archiveMsgs=' + arch.count + ' floor=' + floorCount +
+            ' loaderRunning=' + (live.loaderRunning ? '1' : '0') + ' loaderDone=' + (loaderDone ? '1' : '0') +
+            ' liveActive=' + (live.active ? '1' : '0') + ' grew=' + (live.grewBeyondArchive ? '1' : '0') +
+            ' archiveOnly=' + (archiveOnly ? '1' : '0'));
+        }
+        return;
+      }
+      if (arch.completeApplied === true) return; // одноразовый взвод/лог на чат
+      arch.completeApplied = true;
+      historyFullByQuiet = true;
+      // Архив по построению содержит ГОЛОВУ разговора → начало достигнуто. Это
+      // НЕ отключает H9/H10-гейты на их собственных путях (probe/loader/collapse) —
+      // здесь фиксируется независимо доказанная полнота первого яруса.
+      reachedStart = true;
+      debugLog('log', '[AI CM][completeness] oracle=complete reason=archive-complete convId=' + convId +
+        ' msgs=' + baseSize() + ' archiveMsgs=' + arch.count + ' floor=' + floorCount +
+        ' format=' + (arch.format || '?'));
+    } catch (eArc) { }
+  }
+
   function emitBaseSnapshot() {
+    // T1 (v1.16): первый ярус — архив. Переоценка archive-complete на каждом EMIT:
+    // база могла дорасти до архивного count уже после импорта. Гейты H9/H10 не тронуты.
+    try { aiCmArchiveTierApply(); } catch (eArcEmit) { }
     // v35: финальный порядок по связному списку r1 (детерминирован, не зависит от
     // порядка прибытия страниц). Фолбэк — сортировка по order (прежнее поведение).
     var orderItems = [];
@@ -3575,7 +3944,11 @@
         turnId: ot.turnId || null,
         r1: ot.r1 || null,
         order: ot.order || 0,
-        role: ot.role
+        role: ot.role,
+        // T1-fix#4 (v1.16.4): ход влит архивом → чистая orderExportMessages уведёт его
+        // в ГОЛОВУ файла (архив = старшая история). У чатов без архива поля нет —
+        // порядок байтово прежний.
+        archive: ot.archiveAdded === true
       });
       var oTk = ot.turnId || oid;
       if (ot.r1) diagR1Targets[ot.r1] = true;
@@ -4443,6 +4816,119 @@
         ' action=used cachedMsgs=' + restoredTurns.length +
         ' firstMsgHash=' + fe.hash + ' lastMsgHash=' + le.hash);
     })();
+  });
+
+  // ============ T1 (v1.16): ПЕРВЫЙ ЯРУС — АРХИВ (приём от content.js) ============
+  // content.js (ISOLATED) читает chrome.storage.local (aiCmArchive:<convId>) и передаёт
+  // УЖЕ НОРМАЛИЗОВАННЫЕ ходы архива. Паттерн тот же, что у tape-restore: MAIN-мир
+  // chrome.* не касается. Порядок применения:
+  //   1) same-conv-union — вливаем ТОЛЬКО недостающие архивные ходы (сеть авторитетна);
+  //   2) архивный count авторитетен для пола (монотонно ВВЕРХ — HWM не ломается);
+  //   3) метаданные яруса → оракул archive-complete переоценивается в emitBaseSnapshot.
+  window.addEventListener('ai-cm-archive-restore', function (ev) {
+    var detail = ev && ev.detail;
+    if (!detail || !detail.convId) return;
+    var convId = String(detail.convId);
+    var current = getConvId();
+    if (convId !== current) {
+      debugLog('log', '[AI CM][archive-restore] skip reason=stale convId=' + (current || '(none)') +
+        ' archiveConvId=' + convId);
+      return;
+    }
+    var messages = Array.isArray(detail.messages) ? detail.messages : [];
+    var count = (typeof detail.count === 'number' && detail.count > 0) ? detail.count : messages.length;
+    if (!count || !messages.length) {
+      debugLog('log', '[AI CM][archive-restore] skip reason=empty convId=' + convId);
+      return;
+    }
+    var logic = (typeof window !== 'undefined') ? window.GeminiInterceptLogic : null;
+    var ids = Object.keys(turnsMap);
+    var i;
+
+    // 1) same-conv-union архивных ходов с текущей базой
+    var addedCount = 0;
+    // T1-fix (v1.16.1): доказательства для гейта живого яруса — ключи контента архива
+    // (стык с живым окном) и id ходов, влитых ИМЕННО архивом (иначе вклад архива
+    // неотличим от живых ходов в общей базе).
+    var archKeys = null;
+    var archAddedIds = null;
+    if (!archiveMergedMap.has(convId) && logic && typeof logic.archiveMergeTurns === 'function') {
+      var netItems = [];
+      var maxOrder = 0;
+      for (i = 0; i < ids.length; i++) {
+        var nt = turnsMap[ids[i]];
+        netItems.push({ id: ids[i], role: nt.role, text: nt.text });
+        if ((nt.order || 0) > maxOrder) maxOrder = nt.order || 0;
+      }
+      var merged = logic.archiveMergeTurns(netItems, messages) || { items: [], duplicateCount: 0 };
+      if (typeof logic.archiveContentKey === 'function') {
+        archKeys = {};
+        for (i = 0; i < messages.length; i++) {
+          archKeys[logic.archiveContentKey(messages[i])] = true;
+        }
+      }
+      archAddedIds = {};
+      for (i = 0; i < merged.items.length; i++) {
+        var it = merged.items[i];
+        if (turnsMap[it.id]) continue;
+        // pageMode 'restored' + r1=null — как у tape-restore: порядок пересчитывает
+        // chain-r1, старший сегмент докладывается перед хвостовым окном сети.
+        // T1-fix#4 (v1.16.4): archiveAdded=true — ЕДИНСТВЕННАЯ метка «ход влит архивом T1».
+        // По ней чистая orderExportMessages ставит архив в ГОЛОВУ файла (order не трогаем:
+        // aiCmOrderedTurns → dbFirstHash H9-гейта полноты обязан остаться прежним).
+        turnsMap[it.id] = {
+          text: it.text, modelName: '', order: maxOrder + 1 + i,
+          pageMode: 'restored', ts: 0, archiveAdded: true,
+          role: it.role, turnId: it.turnId, r1: null
+        };
+        archAddedIds[it.id] = true;
+        addedCount++;
+      }
+      archiveMergedMap.add(convId); // Set.add ТОЛЬКО после успешного merge
+      debugLog('log', '[AI CM][archive-restore] convId=' + convId + ' archiveMsgs=' + count +
+        ' added=' + addedCount + ' dup=' + (merged.duplicateCount || 0) +
+        ' baseMsgs=' + baseSize() + ' format=' + (detail.format || '?'));
+    }
+
+    // 2) Архивный count авторитетен для пола (понижение запрещено — HWM)
+    var archFloor = null;
+    try {
+      if (logic && typeof logic.archiveFloorRecord === 'function') {
+        archFloor = logic.archiveFloorRecord(
+          loadFloor(convId),
+          count,
+          (typeof detail.textLen === 'number') ? detail.textLen : 0
+        );
+        if (archFloor) {
+          saveFloor(convId, archFloor.count, archFloor.effectiveLen);
+          noteBaseCountChange();
+          debugLog('log', '[AI CM][archive-restore] floor source=archive convId=' + convId +
+            ' count=' + archFloor.count + ' textLen=' + archFloor.effectiveLen);
+        }
+      }
+    } catch (eAf) { }
+
+    // 3) Метаданные яруса для оракула. Повторный dispatch (storage.onChanged) merge не
+    //    повторяет — доказательства (keys/addedIds) и латчи переносим из прежней записи,
+    //    иначе повторный dispatch обнулял бы гейт живого яруса.
+    var prevTier = archiveTierByConv[convId] || null;
+    archiveTierByConv[convId] = {
+      convId: convId,
+      count: count,
+      textLen: (typeof detail.textLen === 'number') ? detail.textLen : 0,
+      format: detail.format || '',
+      service: detail.service || '',
+      keys: archKeys || (prevTier && prevTier.keys) || null,
+      addedIds: archAddedIds || (prevTier && prevTier.addedIds) || null,
+      completeApplied: !!(prevTier && prevTier.completeApplied),
+      verdictLogged: (prevTier && prevTier.verdictLogged) || ''
+    };
+
+    if (addedCount > 0 || archFloor) {
+      if (addedCount > 0) { try { refreshMinOrderTracking('archive'); } catch (eRo) { } }
+      try { emitBaseSnapshot(); } catch (eEm) { }
+    }
+    try { aiCmArchiveTierApply(); } catch (eAp) { }
   });
 
   // v30.6: content.js после применения кэш-ленты планирует ОДНО уточнение канонического

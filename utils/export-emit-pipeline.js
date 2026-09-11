@@ -3,6 +3,8 @@
  * Чистые функции для 6 адаптеров (chatgpt, gemini, deepseek, google_search, claude, perplexity):
  *   - buildExportFileName(service, convId, reason, isLowConfidence, fmt)
  *   - shouldSkipAutoExport(state) — чистый гейт автоэкспорта
+ *   - resolveExportSource(state) — T1-fix#3: источник файла (объединённая база архив+live /
+ *     локальный снимок EMIT / запрет при базе «только архив»)
  *   - markAutoExportFired / getAutoExportFired / resetAutoExportFired — латч per service+convId
  *   - extractConvIdFromUrl(pathname) — идентификатор диалога из URL (без выдумывания)
  *   - normalizeExportMessages(raw) — нормализация к {role, text}
@@ -74,8 +76,41 @@
   }
 
   /**
+   * T1-fix#3 (v1.16.3): ОТКУДА экспорт берёт сообщения.
+   * Последний EMIT (lastBaseTexts в content.js) может не совпадать с ОБЪЕДИНЁННОЙ базой
+   * (архив + live): архив вливается в turnsMap первым (читается из chrome.storage сразу
+   * при page-load), а живая история приходит позже — файл уходил одной архивной частью
+   * (live-прогон: 4 архивных хода в файле при базе 114).
+   * Решение (чистая функция — вызывается из doAutoExportDownload, единственной точки
+   * записи файла, поэтому покрывает и порог, и триггер base-complete, и pre-trim):
+   *   { action:'block', reason:'archive-only-base' } — в базе ТОЛЬКО архив (живых ходов 0):
+   *       пол/полнота первого яруса права на файл не даёт, латч fired НЕ ставится;
+   *   { action:'union', reason:'stale-local-source' } — объединённая база (архив + live)
+   *       больше локального снимка → источником файла становится она;
+   *   { action:'local', reason } — прежнее поведение 1:1 (не Gemini / моста нет /
+   *       архив не импортирован / объединённая база не больше локального снимка).
+   * state: { isGemini, bridge, archiveCount, liveCount, baseCount, localCount }.
+   * Обратная совместимость: без архива (archiveCount=0) всегда 'local'.
+   */
+  function resolveExportSource(state) {
+    var s = state || {};
+    if (s.isGemini !== true) return { action: 'local', reason: 'non-gemini' };
+    if (s.bridge !== true) return { action: 'local', reason: 'no-bridge' };
+    var arch = (typeof s.archiveCount === 'number' && s.archiveCount > 0) ? s.archiveCount : 0;
+    if (arch <= 0) return { action: 'local', reason: 'no-archive' };
+    var live = (typeof s.liveCount === 'number') ? s.liveCount : null;
+    if (live === 0) return { action: 'block', reason: 'archive-only-base' };
+    var base = (typeof s.baseCount === 'number') ? s.baseCount : 0;
+    var local = (typeof s.localCount === 'number') ? s.localCount : 0;
+    if (live !== null && live > 0 && base > local) return { action: 'union', reason: 'stale-local-source' };
+    return { action: 'local', reason: 'in-sync' };
+  }
+
+  /**
    * Чистый гейт автоэкспорта. state:
-   *   { enabled, percentage, threshold, baseComplete, baseSeen, loaderRunning, fired, isGemini }
+   *   { enabled, percentage, threshold, baseComplete, baseSeen, loaderRunning, fired, isGemini,
+   *     archiveCount, baseCount }
+   * archiveCount/baseCount (T1-fix#2, v1.16.2) опциональны: не переданы — прежнее поведение.
    * Возвращает { skip, reason, resetFired }. Порядок гейтов повторяет
    * существующий maybeAutoExport (v30.5/v42/гистерезис −10 п.п.).
    */
@@ -91,6 +126,16 @@
       ? (s.baseComplete === true)
       : (!s.baseSeen || s.baseComplete === true);
     if (!completeOk) return { skip: true, reason: 'not-complete', resetFired: false };
+    // T1-fix#2 (v1.16.2): пол первого яруса (архив) не даёт права на автоэкспорт, пока
+    // живая история не влилась. Архивные ходы лежат в ТОЙ ЖЕ базе (same-conv-union),
+    // поэтому «count дорос до архива» выполняется вкладом самого архива — база из одного
+    // архива (baseCount <= archiveCount) полнотой живого яруса НЕ является.
+    // Латч fired не ставится (resetFired=false): поздний честный экспорт остаётся возможен.
+    // Гейт включается только при переданных archiveCount/baseCount (обратная совместимость).
+    if (s.isGemini === true && typeof s.archiveCount === 'number' && s.archiveCount > 0 &&
+        typeof s.baseCount === 'number' && s.baseCount <= s.archiveCount) {
+      return { skip: true, reason: 'archive-pending-live', resetFired: false };
+    }
     if (s.isGemini === true && s.loaderRunning) return { skip: true, reason: 'loader-running', resetFired: false };
     // Гистерезис: ниже порога на 10 п.п. — сброс латча ТОЛЬКО по достоверному pct.
     // v82 (D5): для не-Gemini при baseSeen=false pct — транзиентное DOM-окно (виртуализация),
@@ -209,6 +254,7 @@
     shouldSkipAutoExport: shouldSkipAutoExport,
     effectiveAutoExportThreshold: effectiveAutoExportThreshold,
     pickExportSource: pickExportSource,
+    resolveExportSource: resolveExportSource,
     markAutoExportFired: markAutoExportFired,
     getAutoExportFired: getAutoExportFired,
     resetAutoExportFired: resetAutoExportFired,

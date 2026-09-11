@@ -1,0 +1,152 @@
+[
+  {
+    "title": "Декогеренция и квантовый шум",
+    "create_time": 1717400000.0,
+    "update_time": 1717400600.0,
+    "conversation_id": "5f2b8d61-4c7a-4d1e-9b3f-2a6e0c8d7f10",
+    "mapping": {
+      "root-sys": {
+        "id": "root-sys",
+        "parent": null,
+        "children": [
+          "n1"
+        ],
+        "message": {
+          "id": "root-sys",
+          "author": {
+            "role": "system"
+          },
+          "create_time": 1717400000.0,
+          "content": {
+            "content_type": "text",
+            "parts": [
+              "You are ChatGPT."
+            ]
+          }
+        }
+      },
+      "n1": {
+        "id": "n1",
+        "parent": "root-sys",
+        "children": [
+          "n2"
+        ],
+        "message": {
+          "id": "n1",
+          "author": {
+            "role": "user"
+          },
+          "create_time": 1717400010.0,
+          "content": {
+            "content_type": "text",
+            "parts": [
+              "Что такое декогеренция простыми словами?"
+            ]
+          }
+        }
+      },
+      "n2": {
+        "id": "n2",
+        "parent": "n1",
+        "children": [
+          "n3"
+        ],
+        "message": {
+          "id": "n2",
+          "author": {
+            "role": "assistant"
+          },
+          "create_time": 1717400025.0,
+          "content": {
+            "content_type": "text",
+            "parts": [
+              "Декогеренция — это потеря фазовой когерентности.\uE200cite\uE202turn0search0\uE201"
+            ]
+          }
+        }
+      },
+      "n2-tool": {
+        "id": "n2-tool",
+        "parent": "n2",
+        "children": [],
+        "message": {
+          "id": "n2-tool",
+          "author": {
+            "role": "tool"
+          },
+          "create_time": 1717400026.0,
+          "content": {
+            "content_type": "text",
+            "parts": [
+              "{\"ok\":true}"
+            ]
+          }
+        }
+      },
+      "n3": {
+        "id": "n3",
+        "parent": "n2",
+        "children": [],
+        "message": {
+          "id": "n3",
+          "author": {
+            "role": "user"
+          },
+          "create_time": 1717400040.0,
+          "content": {
+            "content_type": "text",
+            "parts": [
+              "А как это связано с шумом?"
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "title": "Сумма двух чисел",
+    "create_time": 1717500000.0,
+    "update_time": 1717500030.0,
+    "conversation_id": "b1d4e7a2-8f36-4c05-a9d8-77e2b41c6f93",
+    "mapping": {
+      "r": {
+        "id": "r",
+        "parent": null,
+        "children": [
+          "a1"
+        ],
+        "message": {
+          "id": "r",
+          "author": {
+            "role": "user"
+          },
+          "create_time": 1717500000.0,
+          "content": {
+            "content_type": "text",
+            "parts": [
+              "Посчитай 2+2"
+            ]
+          }
+        }
+      },
+      "a1": {
+        "id": "a1",
+        "parent": "r",
+        "children": [],
+        "message": {
+          "id": "a1",
+          "author": {
+            "role": "assistant"
+          },
+          "create_time": 1717500008.0,
+          "content": {
+            "content_type": "text",
+            "parts": [
+              "4"
+            ]
+          }
+        }
+      }
+    }
+  }
+]

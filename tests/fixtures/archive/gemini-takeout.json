@@ -1,0 +1,80 @@
+[
+  {
+    "header": "Gemini Apps",
+    "title": "Prompted Объясни разницу между процессом и потоком в Linux",
+    "titleUrl": "https://gemini.google.com/app/7c1f4a9b2e8d3a05",
+    "time": "2024-07-10T08:12:31.000Z",
+    "products": [
+      "Gemini Apps"
+    ],
+    "details": [
+      {
+        "name": "From your device",
+        "value": ""
+      },
+      {
+        "name": "Response",
+        "value": "Процесс — это экземпляр программы с собственным адресным пространством; поток — единица планирования внутри процесса, разделяющая его память."
+      }
+    ]
+  },
+  {
+    "header": "Gemini Apps",
+    "title": "Prompted А что такое copy-on-write при fork?",
+    "titleUrl": "https://gemini.google.com/app/7c1f4a9b2e8d3a05",
+    "time": "2024-07-10T08:18:02.000Z",
+    "products": [
+      "Gemini Apps"
+    ],
+    "details": [
+      {
+        "name": "From your device",
+        "value": ""
+      },
+      {
+        "name": "Response",
+        "value": "Страницы памяти помечаются read-only и копируются только при первой записи — так fork остаётся дешёвым."
+      }
+    ]
+  },
+  {
+    "header": "Gemini Apps",
+    "title": "Prompted Собери мне чек-лист по code review",
+    "titleUrl": "https://gemini.google.com/app/9ab31d77c0f2e614",
+    "time": "2024-07-11T14:02:10.000Z",
+    "products": [
+      "Gemini Apps"
+    ],
+    "details": [
+      {
+        "name": "From your device",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "header": "Gemini Apps",
+    "title": "Prompted Добавь пункт про тесты",
+    "titleUrl": "https://gemini.google.com/app/9ab31d77c0f2e614",
+    "time": "2024-07-11T14:05:44.000Z",
+    "products": [
+      "Gemini Apps"
+    ],
+    "details": [
+      {
+        "name": "From your device",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "header": "Search",
+    "title": "Погода в Перми",
+    "titleUrl": "https://www.google.com/search?q=weather",
+    "time": "2024-07-11T15:00:00.000Z",
+    "products": [
+      "Search"
+    ],
+    "details": []
+  }
+]

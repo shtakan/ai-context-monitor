@@ -230,3 +230,42 @@ select:focus, input:focus {
   line-height: 1.45;
   color: #f0b0c0;
 }
+
+/* T1 (v1.16): секция «Архивы» — первый ярус истории */
+.archive-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #c8c8e0;
+}
+
+.archive-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid #2a2a4a;
+  border-radius: 6px;
+}
+
+.archive-info {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.archive-del {
+  flex: 0 0 auto;
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+.archive-status {
+  display: block;
+  margin-top: 6px;
+}
+

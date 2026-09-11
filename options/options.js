@@ -19,6 +19,8 @@ const exportTxtBtn = document.getElementById('export-txt');
 const exportHintEl = document.getElementById('export-hint');
 const staleWarningEl = document.getElementById('stale-warning');
 const exportDiagBtn = document.getElementById('export-diag');
+// T1 (v1.16): индикатор источника истории (архив — первый ярус / live — второй)
+const sourceEl = document.getElementById('stat-source');
 
 // Цветовые пороги — те же, что в content.js (zoneColor: <50 зелёный, <80 жёлтый, красный)
 function percentColor(p) { if (p < 50) return '#22c55e'; if (p < 80) return '#eab308'; return '#ef4444'; }
@@ -333,6 +335,8 @@ function updateStatsFromState(state, tabHost, tabPath) {
   var p = state.percent || 0;
   percentEl.textContent = p + '%';
   percentEl.style.color = percentColor(p);
+  // T1 (v1.16): источник истории — архив (первый ярус) или live (второй)
+  if (sourceEl) sourceEl.textContent = state.sourceLabel || '—';
   updateStaleWarning(state, tabHost, tabPath);
 }
 
@@ -694,14 +698,249 @@ try {
   });
 } catch (e) {}
 
+// ========== T1 (v1.16): АРХИВЫ — ПЕРВЫЙ ЯРУС ИСТОРИИ ==========
+// Импорт ЛОКАЛЬНЫХ файлов экспорта через FileReader: внешних fetch нет, manifest не
+// меняется. Разбор — utils/archive-import.js (те же парсеры, что в тестах).
+// Запись: aiCmArchive:<convId> (ходы) + aiCmConvSource:<convId> (ярлык источника для
+// попапа/виджета) в chrome.storage.local. Применяет архив к чату content-скрипт
+// (событие ai-cm-archive-restore в MAIN-мир Gemini-перехватчика).
+const archiveFileInput = document.getElementById('archive-file');
+const archiveImportBtn = document.getElementById('archive-import');
+const archiveRefreshBtn = document.getElementById('archive-refresh');
+const archiveStatusEl = document.getElementById('archive-status');
+const archiveListEl = document.getElementById('archive-list');
+
+// Защита от случайного выбора огромной папки: за один импорт не больше N файлов.
+const AI_ARCHIVE_MAX_FILES = 20;
+
+function aiCmArchiveApi() {
+  try {
+    return (typeof window !== 'undefined' && window.AiCmArchiveImport) ? window.AiCmArchiveImport : null;
+  } catch (e) { return null; }
+}
+
+function aiCmSetArchiveStatus(text, isError) {
+  if (!archiveStatusEl) return;
+  archiveStatusEl.textContent = text || '';
+  archiveStatusEl.style.color = isError ? '#ef4444' : '';
+}
+
+// ---- чистая функция: записи архива → патч chrome.storage.local ----
+// Оба ключа T1 пишутся вместе: aiCmArchive:<convId> (данные) и
+// aiCmConvSource:<convId> (ярлык источника; попап/виджет читают только его).
+function buildArchiveStoragePatch(records, fileName) {
+  const API = aiCmArchiveApi();
+  const patch = {};
+  if (!API || !Array.isArray(records)) return patch;
+  records.forEach(function (rec) {
+    if (!rec || !rec.convId) return;
+    patch[API.archiveStorageKey(rec.convId)] = rec;
+    patch[API.convSourceStorageKey(rec.convId)] = API.buildConvSourceRecord(rec, { fileName: fileName });
+  });
+  return patch;
+}
+
+// ---- чтение выбранных файлов FileReader'ом (по одному, последовательно) ----
+// onDone(null, report) | onDone(errorString)
+function aiCmImportArchiveFiles(files, onDone) {
+  const API = aiCmArchiveApi();
+  if (!API) { onDone('модуль импорта не загружен (utils/archive-import.js)'); return; }
+  const list = Array.prototype.slice.call(files || []).filter(function (f) { return !!f; }).slice(0, AI_ARCHIVE_MAX_FILES);
+  if (!list.length) { onDone('файлы не выбраны'); return; }
+
+  const report = {
+    files: 0, conversations: 0, accepted: 0, bytes: 0,
+    skipped: [], errors: [], patch: {}
+  };
+  let idx = 0;
+
+  function step() {
+    if (idx >= list.length) { onDone(null, report); return; }
+    const file = list[idx++];
+    report.files++;
+    let reader;
+    try {
+      reader = new FileReader();
+    } catch (eNew) {
+      report.errors.push({ fileName: file.name, error: 'filereader-unavailable' });
+      step();
+      return;
+    }
+    reader.onerror = function () {
+      report.errors.push({ fileName: file.name, error: 'read-error' });
+      step();
+    };
+    reader.onload = function () {
+      try {
+        const parsed = API.parseArchiveText(String(reader.result == null ? '' : reader.result));
+        if (!parsed.ok) {
+          report.errors.push({ fileName: file.name, error: parsed.error });
+          step();
+          return;
+        }
+        report.conversations += parsed.conversations.length;
+        const plan = API.planArchiveImport(parsed.conversations, { fileName: file.name });
+        (plan.skipped || []).forEach(function (s) {
+          report.skipped.push({ fileName: file.name, convId: s.convId, reason: s.reason });
+        });
+        report.accepted += plan.accepted.length;
+        report.bytes += plan.bytes || 0;
+        Object.assign(report.patch, buildArchiveStoragePatch(plan.accepted, file.name));
+      } catch (eParse) {
+        report.errors.push({ fileName: file.name, error: 'parse-exception' });
+      }
+      step();
+    };
+    try {
+      reader.readAsText(file);
+    } catch (eRead) {
+      report.errors.push({ fileName: file.name, error: 'read-exception' });
+      step();
+    }
+  }
+  step();
+}
+
+// ---- человекочитаемый отчёт об импорте (для строки статуса) ----
+function formatArchiveReport(report) {
+  if (!report) return '';
+  const parts = [];
+  parts.push('файлов: ' + report.files);
+  parts.push('диалогов: ' + report.conversations);
+  parts.push('импортировано: ' + report.accepted);
+  if (report.bytes) parts.push('≈' + Math.round(report.bytes / 1024) + ' КБ');
+  if (report.skipped && report.skipped.length) {
+    const byReason = {};
+    report.skipped.forEach(function (s) { byReason[s.reason] = (byReason[s.reason] || 0) + 1; });
+    parts.push('пропущено: ' + Object.keys(byReason).map(function (r) { return r + '×' + byReason[r]; }).join(', '));
+  }
+  if (report.errors && report.errors.length) {
+    parts.push('ошибки: ' + report.errors.map(function (e) { return e.fileName + ' (' + e.error + ')'; }).join(', '));
+  }
+  return parts.join(' · ');
+}
+
+// ---- список импортированных архивов (по метаданным aiCmConvSource:<convId>) ----
+// Тела архивов (aiCmArchive:<convId>) здесь НЕ читаются: MB-историю в попап не тянем.
+function aiCmListArchiveSourceKeys(cb) {
+  try {
+    if (chrome.storage.local.getKeys) {
+      chrome.storage.local.getKeys(function (keys) {
+        cb((keys || []).filter(function (k) { return k.indexOf('aiCmArchive:') === 0; })
+          .map(function (k) { return k.slice('aiCmArchive:'.length); }));
+      });
+      return;
+    }
+  } catch (eKeys) { }
+  try {
+    chrome.storage.local.get(null, function (all) {
+      cb(Object.keys(all || {}).filter(function (k) { return k.indexOf('aiCmArchive:') === 0; })
+        .map(function (k) { return k.slice('aiCmArchive:'.length); }));
+    });
+  } catch (eAll) { cb([]); }
+}
+
+function aiCmRenderArchiveList() {
+  if (!archiveListEl) return;
+  const API = aiCmArchiveApi();
+  if (!API) { archiveListEl.textContent = ''; return; }
+  aiCmListArchiveSourceKeys(function (convIds) {
+    if (!convIds.length) {
+      archiveListEl.textContent = 'Архивы не импортированы.';
+      return;
+    }
+    const srcKeys = convIds.map(function (cid) { return API.convSourceStorageKey(cid); });
+    chrome.storage.local.get(srcKeys, function (data) {
+      archiveListEl.textContent = '';
+      convIds.forEach(function (cid) {
+        const rec = (data || {})[API.convSourceStorageKey(cid)] || null;
+        const row = document.createElement('div');
+        row.className = 'archive-item';
+        const info = document.createElement('span');
+        info.className = 'archive-info';
+        const label = rec ? (rec.label || API.describeSource(rec)) : 'архив';
+        const when = (rec && rec.importedAt) ? (' · ' + formatTime(rec.importedAt)) : '';
+        const file = (rec && rec.fileName) ? (' · ' + rec.fileName) : '';
+        info.textContent = cid.slice(0, 8) + ' — ' + label + when + file;
+        row.appendChild(info);
+        const del = document.createElement('button');
+        del.className = 'btn-reset archive-del';
+        del.type = 'button';
+        del.textContent = 'Удалить';
+        del.setAttribute('data-conv-id', cid);
+        del.addEventListener('click', function () { aiCmDeleteArchive(cid); });
+        row.appendChild(del);
+        archiveListEl.appendChild(row);
+      });
+    });
+  });
+}
+
+// Удаление архива чата: снимаются ОБА ключа T1 (данные + источник).
+function aiCmDeleteArchive(convId) {
+  const API = aiCmArchiveApi();
+  if (!API || !convId) return;
+  try {
+    chrome.storage.local.remove([API.archiveStorageKey(convId), API.convSourceStorageKey(convId)], function () {
+      aiCmSetArchiveStatus('архив ' + String(convId).slice(0, 8) + ' удалён');
+      aiCmRenderArchiveList();
+    });
+  } catch (eDel) {
+    aiCmSetArchiveStatus('не удалось удалить архив: ' + (eDel && eDel.message || eDel), true);
+  }
+}
+
+function aiCmApplyArchiveImport() {
+  const files = archiveFileInput && archiveFileInput.files;
+  aiCmSetArchiveStatus('чтение файлов…');
+  aiCmImportArchiveFiles(files, function (err, report) {
+    if (err) { aiCmSetArchiveStatus(err, true); return; }
+    const keys = Object.keys(report.patch);
+    if (!keys.length) {
+      aiCmSetArchiveStatus('ничего не импортировано · ' + formatArchiveReport(report), true);
+      aiCmRenderArchiveList();
+      return;
+    }
+    try {
+      chrome.storage.local.set(report.patch, function () {
+        aiCmSetArchiveStatus('готово · ' + formatArchiveReport(report));
+        aiCmRenderArchiveList();
+      });
+    } catch (eSet) {
+      aiCmSetArchiveStatus('ошибка записи в хранилище: ' + (eSet && eSet.message || eSet), true);
+    }
+  });
+}
+
+archiveImportBtn && archiveImportBtn.addEventListener('click', aiCmApplyArchiveImport);
+archiveRefreshBtn && archiveRefreshBtn.addEventListener('click', function () {
+  aiCmSetArchiveStatus('');
+  aiCmRenderArchiveList();
+});
+// Внешние изменения (другое окно/удаление) — обновляем список
+try {
+  chrome.storage.onChanged.addListener(function (changes, areaName) {
+    if (areaName !== 'local') return;
+    for (var k in changes) {
+      if (k.indexOf('aiCmArchive:') === 0) { aiCmRenderArchiveList(); return; }
+    }
+  });
+} catch (eArcCh) { }
+
 // Загружаем статистику и состояние экспорта при открытии
 document.addEventListener('DOMContentLoaded', function () {
   loadStats();
   refreshExportState();
+  aiCmRenderArchiveList();
 });
 
 // Экспорт чистых функций для юнит-тестов (jest). В браузере (MV3, классический
 // скрипт options.html) module не определён — блок не выполняется.
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { isChatHome: isChatHome };
+  module.exports = {
+    isChatHome: isChatHome,
+    buildArchiveStoragePatch: buildArchiveStoragePatch,
+    aiCmImportArchiveFiles: aiCmImportArchiveFiles,
+    formatArchiveReport: formatArchiveReport
+  };
 }

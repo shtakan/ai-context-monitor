@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 ## [1.15.3] — 2026-09-09
 ### Fixed

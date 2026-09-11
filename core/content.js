@@ -194,6 +194,60 @@ function aiCmDumpTurnsSnapshot(tag, cid, msgs) {
 }
 // ==== конец v61diag ====
 
+// T1-fix#3 (v1.16.3): источник сообщений файла автоэкспорта — ОБЪЕДИНЁННАЯ база MAIN
+// (архив + live), а не последний EMIT. Архив вливается в turnsMap ПЕРВЫМ (content.js
+// читает aiCmArchive:<convId> сразу при page-load), поэтому lastBaseTexts на момент
+// экспорта мог нести одну архивную часть (live-прогон: 4 архивных хода в файле при
+// базе 114). Решение принимает ЧИСТАЯ функция пайплайна (resolveExportSource) — здесь
+// только синхронный мост (CustomEvent), сверка convId и нормализация ролей.
+//   null                 — не Gemini / моста нет / чат не совпал / объединённая база не
+//                          больше локального снимка → прежний путь 1:1;
+//   { blocked:true, ... }— в базе ТОЛЬКО архив: файл писать нельзя (латч fired не ставим);
+//   { msgs:[...], ... }  — сообщения объединённой базы (архив + live).
+function aiCmExportBaseSource(convId, localMsgs) {
+  try {
+    var site = (currentAdapter && currentAdapter.siteName) || '';
+    var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+    if (!P || typeof P.resolveExportSource !== 'function') return null;
+    if (site !== 'gemini') return null; // прочие сервисы: архив — только индикатор источника
+    var snap = (typeof aiCmGeminiTurnsSnapshotSync === 'function') ? aiCmGeminiTurnsSnapshotSync() : null;
+    var hasBridge = !!(snap && typeof snap === 'object');
+    // чужая база (SPA-переход между чтением и экспортом) — мост не используем
+    if (hasBridge && snap.convId && convId && String(snap.convId) !== String(convId)) hasBridge = false;
+    var union = (hasBridge && Array.isArray(snap.messages)) ? snap.messages : [];
+    var localN = Array.isArray(localMsgs) ? localMsgs.length : 0;
+    var verdict = P.resolveExportSource({
+      isGemini: true,
+      bridge: hasBridge,
+      archiveCount: (hasBridge && typeof snap.archiveCount === 'number') ? snap.archiveCount : 0,
+      liveCount: (hasBridge && typeof snap.liveCount === 'number') ? snap.liveCount : null,
+      baseCount: (hasBridge && typeof snap.baseMsgs === 'number') ? snap.baseMsgs : 0,
+      localCount: localN
+    });
+    if (!verdict || verdict.action === 'local') return null;
+    if (verdict.action === 'block') {
+      return {
+        blocked: true, reason: verdict.reason,
+        baseCount: (hasBridge && typeof snap.baseMsgs === 'number') ? snap.baseMsgs : 0,
+        liveCount: (hasBridge && typeof snap.liveCount === 'number') ? snap.liveCount : 0,
+        archiveCount: (hasBridge && typeof snap.archiveCount === 'number') ? snap.archiveCount : 0
+      };
+    }
+    var out = [];
+    for (var i = 0; i < union.length; i++) {
+      var m = union[i] || {};
+      if (typeof m.text !== 'string' || !m.text) continue;
+      out.push({ role: (m.role === 'user') ? 'user' : 'assistant', text: m.text });
+    }
+    if (out.length <= localN) return null; // объединённая база не больше снимка EMIT — прежний путь
+    return {
+      blocked: false, msgs: out, baseCount: union.length,
+      liveCount: (typeof snap.liveCount === 'number') ? snap.liveCount : 0,
+      archiveCount: (typeof snap.archiveCount === 'number') ? snap.archiveCount : 0
+    };
+  } catch (eEbs) { return null; }
+}
+
 // Самодиагностика: через 12с после загрузки/смены диалога, если диалог с сообщениями
 // в DOM есть (isInitialized=true и extractMessages()>0), но сетевой снимок не пришёл
 // (baseSeen=false) — взводим stale. На пустых чатах extractMessages()=0 → не взводим.
@@ -526,6 +580,12 @@ function resetConversationState() {
   // остаются — двойной ingest недопустим.
   tapeRestoreSeen = {};         // v77: повторный load/restore для нового входа в чат
   aiCmRestoredDispatched = {};  // v82 (D9-A): повторный dispatch ai-cm-restored-history
+  // T1 (v1.16): первый ярус — тот же принцип, что у ленты (v1.6 D19): SPA-возврат в чат
+  // обязан ПОВТОРНО прочитать архив и влить его в новую (очищенную) базу. Внутри одного
+  // непрерывного визита дедуп сохраняется — повторный dispatch/merge недопустим.
+  aiCmArchiveLoadStarted = {};
+  aiCmArchiveRestoredDispatched = {};
+  aiCmArchiveCountByConv = {}; // T1-fix#2 (v1.16.2): count архива перечитывается на новом входе
   lastEmitConvId = ''; // v35: сброс convId последнего снимка — экспорт старого чата запрещён до нового EMIT
   // v82 (D6): pct прошлого чата не должен стрелять в 0→1 re-check/loader-stop re-check
   // нового чата — гейты autoExportLastPct >= 0 молчат до первого реального pct нового чата.
@@ -1530,6 +1590,122 @@ function loadByokCache() {
   });
 }
 
+// ============ T1 (v1.16): ПЕРВЫЙ ЯРУС — АРХИВ (импорт) ============
+// Единственное место с доступом к chrome.storage.local — здесь (ISOLATED). Архив
+// появляется ТОЛЬКО из локального файла пользователя (options.html + FileReader),
+// внешних fetch нет. Ходы архива передаются в MAIN-мир событием
+// 'ai-cm-archive-restore' (паттерн tape-restore); запись источника
+// (aiCmConvSource:<convId>, ярлык считается на импорте) — для попапа и виджета.
+var AI_ARCHIVE_PREFIX = 'aiCmArchive:';
+var AI_CONV_SOURCE_PREFIX = 'aiCmConvSource:';
+var aiCmConvSourceByConv = {};          // convId → запись источника (для попапа/виджета)
+var aiCmArchiveLoadStarted = {};        // convId → true — чтение архива уже запущено (page-session)
+var aiCmArchiveRestoredDispatched = {}; // convId → true — ai-cm-archive-restore уже диспатчен
+var aiCmArchiveCountByConv = {};        // T1-fix#2 (v1.16.2): convId → count архивных ходов (гейт экспорта)
+var aiCmSourceLabelNow = '';            // ярлык источника для тултипа виджета
+
+// T1-fix#2 (v1.16.2): count архива ЭТОГО чата (0 — архива нет/не прочитан). Нужен гейту
+// автоэкспорта: архивные ходы лежат в той же базе, поэтому baseCount <= archiveMsgs
+// означает «база состоит ТОЛЬКО из архива» — живая история ещё не влилась.
+function aiCmArchiveCountFor(convId) {
+  try { return (convId && aiCmArchiveCountByConv[convId]) || 0; } catch (eAcf) { return 0; }
+}
+
+// Источник для UI: архив (если импортирован для ЭТОГО convId) либо живой ярус.
+// Ярлык архива берётся из aiCmConvSource:<convId> (посчитан при импорте) — логика
+// ярлыка не дублируется в content-скрипте.
+function aiCmSourceInfo() {
+  var cid = getCurrentConvId() || '';
+  var rec = cid ? aiCmConvSourceByConv[cid] : null;
+  if (rec && rec.kind === 'archive') {
+    return { kind: 'archive', label: rec.label || ('архив: ' + (rec.format || '?') + ' · ' + (rec.count || 0) + ' сообщ.') };
+  }
+  if (baseSeen) return { kind: 'live', label: 'live (сеть/DOM)' };
+  return null;
+}
+
+function aiCmLoadArchiveTier(convId, reason) {
+  if (!convId || !isExtensionValid()) return;
+  try {
+    var archKey = AI_ARCHIVE_PREFIX + convId;
+    var srcKey = AI_CONV_SOURCE_PREFIX + convId;
+    chrome.storage.local.get([archKey, srcKey], function (data) {
+      try {
+        if (!isExtensionValid()) return;
+        // SPA-переход за время асинхронного чтения — архив чужого чата не применяем
+        if (getCurrentConvId() !== convId) {
+          debugLog('log', '[AI CM][archive-restore] skip reason=stale convId=' + convId +
+            ' current=' + (getCurrentConvId() || '(none)'));
+          return;
+        }
+        var src = data[srcKey] || null;
+        if (src) aiCmConvSourceByConv[convId] = src;
+        var rec = data[archKey] || null;
+        var hasMsgs = !!(rec && Array.isArray(rec.messages) && rec.messages.length);
+        // T1-fix#2 (v1.16.2): count архива этого чата — вход гейта автоэкспорта
+        if (rec) {
+          var recCount = (typeof rec.count === 'number' && rec.count > 0) ? rec.count
+            : (hasMsgs ? rec.messages.length : 0);
+          if (recCount > 0) aiCmArchiveCountByConv[convId] = recCount;
+        }
+        debugLog('log', '[AI CM][archive-restore] convId=' + convId +
+          ' action=' + (hasMsgs ? 'used' : 'none') +
+          ' cachedMsgs=' + (hasMsgs ? rec.messages.length : 0) +
+          ' count=' + ((rec && rec.count) || 0) +
+          ' format=' + ((rec && rec.format) || '-') +
+          ' reason=' + (reason || ''));
+        if (hasMsgs && !aiCmArchiveRestoredDispatched[convId]) {
+          aiCmArchiveRestoredDispatched[convId] = true;
+          try {
+            window.dispatchEvent(new CustomEvent('ai-cm-archive-restore', {
+              detail: {
+                convId: convId,
+                messages: rec.messages,
+                count: (typeof rec.count === 'number' && rec.count > 0) ? rec.count : rec.messages.length,
+                textLen: (typeof rec.textLen === 'number') ? rec.textLen : 0,
+                format: rec.format || '',
+                service: rec.service || '',
+                title: rec.title || ''
+              }
+            }));
+            debugLog('log', '[AI CM][archive-restore] dispatched convId=' + convId +
+              ' msgs=' + rec.messages.length);
+          } catch (eD) { }
+        }
+        aiCmUpdateSourceIndicator();
+      } catch (eInner) { }
+    });
+  } catch (eL) {
+    debugLog('log', '[AI CM][archive-restore] silent-catch load: ' + (eL && eL.message || eL));
+  }
+}
+
+// Индикатор источника: строка в панели виджета (создаётся динамически — разметка
+// виджета и её тема не меняются) + ярлык для тултипа.
+function aiCmUpdateSourceIndicator() {
+  try {
+    var info = aiCmSourceInfo();
+    aiCmSourceLabelNow = info ? info.label : '';
+    if (!widgetElement) return;
+    var panel = widgetElement.querySelector('.ai-widget-panel');
+    if (!panel) return;
+    var el = panel.querySelector('.ai-cm-source');
+    var want = aiCmSourceLabelNow ? ('Источник: ' + aiCmSourceLabelNow) : '';
+    if (el && el.textContent === want && el.style.display === (want ? 'block' : 'none')) return; // без лишних DOM-записей
+    if (!want) {
+      if (el) { el.textContent = ''; el.style.display = 'none'; }
+      return;
+    }
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'ai-cm-source';
+      panel.appendChild(el);
+    }
+    el.textContent = want;
+    el.style.display = 'block';
+  } catch (eSrc) { }
+}
+
 function processAndSend() {
   if (!currentAdapter) return;
 
@@ -1547,6 +1723,18 @@ function processAndSend() {
         ' histWritePath=' + histWritePathS1);
     }
   } catch (eS1) { }
+
+  // T1 (v1.16): первый ярус — архив. Читаем импортированный архив для ТЕКУЩЕГО convId
+  // (один раз на convId за сессию страницы) и отдаём его в MAIN. Не зависит от
+  // tape/лоадера: архив — независимый источник (для не-Gemini сервисов он пока
+  // только индикатор источника — оракул/пол живут в Gemini-перехватчике).
+  try {
+    var cidArc = getCurrentConvId() || '';
+    if (cidArc && !aiCmArchiveLoadStarted[cidArc]) {
+      aiCmArchiveLoadStarted[cidArc] = true;
+      aiCmLoadArchiveTier(cidArc, 'page-load');
+    }
+  } catch (eArcInit) { }
 
   // v28: однократное восстановление сохранённой ленты Gemini при загрузке чата
   if (!restoredTapeLoaded) {
@@ -1818,7 +2006,10 @@ function processAndSend() {
           limit: displayLimit,
           percent: percentage,
           updatedAt: Date.now(),
-          stale: stale
+          stale: stale,
+          // T1 (v1.16): источник первого/второго яруса для индикатора в попапе
+          sourceKind: (function () { try { var si = aiCmSourceInfo(); return si ? si.kind : ''; } catch (eSi) { return ''; } })(),
+          sourceLabel: (function () { try { var si2 = aiCmSourceInfo(); return si2 ? si2.label : ''; } catch (eSi2) { return ''; } })()
         };
         var statePatch = { aiCmState: stateSnapshot };
         statePatch['aiCmState:' + window.location.hostname] = stateSnapshot;
@@ -1853,6 +2044,9 @@ function processAndSend() {
             updatedAt: Date.now(),
             // v63: low-confidence база (sanity-фолбэк без proof) — options.js ставит префикс [LOW CONFIDENCE]_
             isLowConfidenceBase: aiCmLowConfidenceByConv[emitConvA] === true,
+            // T1 (v1.16): источник истории — архив (первый ярус) или live (сеть/DOM)
+            sourceKind: (function () { try { var si = aiCmSourceInfo(); return si ? si.kind : ''; } catch (eSi) { return ''; } })(),
+            sourceLabel: (function () { try { var si2 = aiCmSourceInfo(); return si2 ? si2.label : ''; } catch (eSi2) { return ''; } })(),
             messages: buildHistoryMessages()
           };
           var histPatch = { aiCmHistory: histSnapshot };
@@ -2343,6 +2537,10 @@ function maybeAutoExport(percentage) {
         baseComplete: baseComplete === true,
         baseSeen: baseSeen === true,
         loaderRunning: !!(cid && aiCmLoaderRunningByConv[cid]),
+        // T1-fix#2 (v1.16.2): база из одного архива (baseCount <= archiveMsgs) полнотой
+        // живого яруса не является — гейт внутри shouldSkipAutoExport (archive-pending-live).
+        archiveCount: aiCmArchiveCountFor(cid),
+        baseCount: baseCount,
         // v1.14.1 (O3): fired = in-memory ИЛИ session-латч (кросс-табовый)
         fired: P.getAutoExportFired(autoExportFired, siteName, cid) ||
                (typeof P.isFiredInSession === 'function' ? P.isFiredInSession(sessionFiredCache, siteName, cid) : false),
@@ -2359,6 +2557,14 @@ function maybeAutoExport(percentage) {
           debugLog('log', '[AI CM][auto-export] skip reason=already-fired convId=' + cid);
         } else if (verdict.reason === 'loader-running') {
           debugLog('log', '[AI CM][auto-export] skip reason=loader-running convId=' + cid + ' pct=' + percentage);
+        } else if (verdict.reason === 'archive-pending-live') {
+          // T1-fix#2 (v1.16.2): латч fired НЕ ставится — поздний честный экспорт после
+          // догрузки живой истории должен состояться. Лог не чаще 1 раза на чат.
+          if (cid && !notCompleteLogged['arch:' + cid]) {
+            notCompleteLogged['arch:' + cid] = 1;
+            debugLog('log', '[AI CM][auto-export] skip reason=archive-pending-live convId=' + cid +
+              ' baseCount=' + baseCount + ' archiveMsgs=' + aiCmArchiveCountFor(cid));
+          }
         } else if (verdict.reason === 'below-threshold') {
           debugLog('log', '[AI CM][auto-export] skip reason=below-threshold convId=' + cid + ' pct=' + percentage);
         } else if (verdict.reason === 'below-threshold-hysteresis') {
@@ -2381,6 +2587,16 @@ function maybeAutoExport(percentage) {
       return;
     }
     // фолбэк (v81): утилита не загружена — прежний inline-гейт без изменений
+    // T1-fix#2 (v1.16.2): плюс тот же архивный гейт, что и в shouldSkipAutoExport —
+    // база из одного архива (baseCount <= archiveMsgs) права на экспорт не даёт.
+    if (isGeminiSvc) {
+      var archMsgsFb = aiCmArchiveCountFor(cid);
+      if (archMsgsFb > 0 && baseCount <= archMsgsFb) {
+        debugLog('log', '[AI CM][auto-export] skip reason=archive-pending-live convId=' + cid +
+          ' baseCount=' + baseCount + ' archiveMsgs=' + archMsgsFb);
+        return;
+      }
+    }
     if (baseComplete !== true) {
       if (cid && !notCompleteLogged[cid]) {
         notCompleteLogged[cid] = 1;
@@ -2459,6 +2675,25 @@ function doAutoExportDownload(cid, percentage, reason) {
       debugLog('log', '[AI CM][auto-export] skip reason=source-mismatch convId=' + cid +
         ' baseSeen=1 networkTexts=0');
       return;
+    }
+    // T1-fix#3 (v1.16.3): источник файла — ОБЪЕДИНЁННАЯ база (архив + live) из MAIN.
+    // Гейт «в базе только архив» стоит ЗДЕСЬ — в единственной точке записи файла, поэтому
+    // покрывает и пороговый путь, и триггер base-complete (v64), и pre-trim (v54), и
+    // поздний re-check: ни один из них не может выгрузить одну архивную часть.
+    var baseSrc = aiCmExportBaseSource(cid, msgs);
+    var srcTag = 'local'; // какой массив реально уходит в файл
+    if (baseSrc && baseSrc.blocked === true) {
+      debugLog('log', '[AI CM][auto-export] skip reason=archive-pending-live convId=' + cid +
+        ' baseMsgs=' + baseSrc.baseCount + ' liveMsgs=' + baseSrc.liveCount +
+        ' archiveMsgs=' + baseSrc.archiveCount + ' source=archive-only-base');
+      return; // латч fired НЕ ставится — поздний честный экспорт после догрузки live состоится
+    }
+    if (baseSrc && Array.isArray(baseSrc.msgs)) {
+      debugLog('log', '[AI CM][auto-export] source=base-union convId=' + cid +
+        ' baseMsgs=' + baseSrc.baseCount + ' localMsgs=' + (Array.isArray(msgs) ? msgs.length : 0) +
+        ' liveMsgs=' + baseSrc.liveCount + ' archiveMsgs=' + baseSrc.archiveCount);
+      msgs = baseSrc.msgs;
+      srcTag = 'base-union';
     }
     if (!Array.isArray(msgs) || msgs.length === 0) {
       debugLog('log', '[AI CM][auto-export] skip reason=empty-history convId=' + cid);
@@ -2642,6 +2877,10 @@ function createWidget() {
 }
 function updateWidget(percentage, tokens, effectiveLimit, contextLimit, displayLimit, modelName, attachBreak) {
   if (!widgetElement) return;
+  // T1 (v1.16): строка источника в панели виджета. Вызов защищён try/catch: updateWidget
+  // исполняется и в изолированных песочницах (collapse-guard/тесты темы), где хелпера нет —
+  // отрисовка виджета не должна от этого падать.
+  try { aiCmUpdateSourceIndicator(); } catch (eSrcW) { }
   aiCmRefreshThemeIfNeeded(); // H25: каждая отрисовка — дешёвая проверка смены темы (гард тихий)
   debugLog('log', '[AI CM][trace] badge-update pct=' + percentage + '% tokens=' + tokens + ' model=' + modelName);
   const circle = widgetElement.querySelector('.ai-widget-fill');
@@ -2669,6 +2908,8 @@ function updateWidget(percentage, tokens, effectiveLimit, contextLimit, displayL
       limLine,
       `Окно модели: ${contextLimit.toLocaleString()}`
     ];
+    // T1 (v1.16): индикатор источника (первый ярус — архив / второй — live)
+    try { if (aiCmSourceLabelNow) lines.push(`Источник: ${esc(aiCmSourceLabelNow)}`); } catch (eSrcL) { }
     if (attachBreak && (attachBreak.imgCount > 0 || attachBreak.docCount > 0)) {
       lines.push(`Вложения ≈ ${(attachBreak.imgTokens + attachBreak.docTokens).toLocaleString()} токенов`);
       if (attachBreak.imgCount > 0) lines.push(`· картинки: ${attachBreak.imgCount} шт ≈ ${attachBreak.imgTokens.toLocaleString()} (по 2 тайла)`);
@@ -2905,6 +3146,19 @@ if (isExtensionValid()) {
       updatePanel();
       if (isInitialized) processAndSend();
     }
+    // T1 (v1.16): архив импортирован/удалён в options — применяем к ОТКРЫТОМУ чату сразу
+    // (импорт в другом окне; собственный onChanged в options.js пишет те же ключи).
+    try {
+      var cidArcCh = getCurrentConvId() || '';
+      if (cidArcCh) {
+        var archKeyCh = AI_ARCHIVE_PREFIX + cidArcCh;
+        var srcKeyCh = AI_CONV_SOURCE_PREFIX + cidArcCh;
+        if (changes[archKeyCh] || changes[srcKeyCh]) {
+          delete aiCmArchiveRestoredDispatched[cidArcCh]; // повторный dispatch с новым архивом
+          aiCmLoadArchiveTier(cidArcCh, 'storage-changed');
+        }
+      }
+    } catch (eArcCh) { }
     // H19: оверрайды попапа изменились (другая вкладка/сам попап) — пересчёт display-цепочки
     if (changes.selectedModel || changes.customLimit) {
       if (changes.selectedModel) popupRawModel = changes.selectedModel.newValue;
