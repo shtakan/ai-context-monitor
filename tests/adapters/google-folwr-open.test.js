@@ -9,7 +9,8 @@ const {
   extractTurnsFromDocument,
   mergeTurnsByKey,
   extractContinuationToken,
-  mergeTurnsById
+  mergeTurnsById,
+  classifyFolwrContinuation
 } = require('../../utils/google-search-folwr-parser');
 const fs = require('fs');
 const path = require('path');
@@ -253,6 +254,117 @@ describe('Google Search AI folwr-open parser', () => {
       expect(merged[0].userText).toBe('Первый вопрос');
       expect(merged[1].userText).toBe('Второй вопрос');
       expect(merged[2].userText).toBe('Третий вопрос');
+    });
+  });
+
+  describe('v1.17: классификация страницы продолжения по содержимому (не по длине)', () => {
+    function turnHtml(id, question, answer) {
+      return '<div class="CKgc1d" data-scope-id="turn" jsuid="' + id + '">' +
+        '<h2 class="iMqumd">Вы сказали: "' + question + '"</h2>' +
+        '</div><div class="n6owBd awi2gc">' + answer + '</div>';
+    }
+
+    it('короткая страница (<100000B) с новым ходом — продолжение, а не «пустая страница»', () => {
+      const cont = turnHtml('t3', 'Третий вопрос', 'Третий ответ') +
+        '<div data-mstk="AUtExfNEW01" style="display:none"></div>';
+      expect(cont.length).toBeLessThan(100000); // прежний гейт 100000 объявлял такое «пустым»
+      const base = [
+        { id: 't1', userText: 'Первый вопрос', assistantText: 'Первый ответ' },
+        { id: 't2', userText: 'Второй вопрос', assistantText: 'Второй ответ' }
+      ];
+      const parsed = parseGoogleFolwrOpen(cont);
+      const merged = mergeTurnsById(base, parsed.turns);
+      const gained = merged.length - base.length;
+      const cls = classifyFolwrContinuation({
+        ok: true, status: 200, bodyLength: cont.length,
+        newTurns: gained, cursor: extractContinuationToken(cont), sentCursor: 'AUtExfOLD01'
+      });
+      expect(gained).toBe(1);
+      expect(cls.kind).toBe('new-turns');
+      expect(cls.complete).toBe(false);
+      expect(cls.canContinue).toBe(true);
+    });
+
+    it('регрессия «ПОЛНАЯ=false»: тот же data-mstk и ноль ходов → история полная', () => {
+      // Живой случай: folwr отдал 77 ходов, DOM 77, курсор AUtExfCQ31Qz, страница продолжения
+      // вернула эхо того же сессионного mstk без ходов → раньше reason=пустая страница,
+      // ПОЛНАЯ=false навсегда. Теперь — cursor-repeat и complete=true.
+      const echo = '<div data-mstk="AUtExfCQ31Qz" style="display:none"></div>';
+      const cls = classifyFolwrContinuation({
+        ok: true, status: 200, bodyLength: echo.length,
+        newTurns: 0, cursor: extractContinuationToken(echo), sentCursor: 'AUtExfCQ31Qz'
+      });
+      expect(cls.kind).toBe('cursor-repeat');
+      expect(cls.cursorRepeated).toBe(true);
+      expect(cls.complete).toBe(true);
+      expect(cls.canContinue).toBe(false);
+    });
+
+    it('страница без ходов и без курсора → no-new-turns и complete=true', () => {
+      const cls = classifyFolwrContinuation({
+        ok: true, status: 200, bodyLength: 4200, newTurns: 0, cursor: null, sentCursor: 'AUtExfCQ31Qz'
+      });
+      expect(cls.kind).toBe('no-new-turns');
+      expect(cls.complete).toBe(true);
+      expect(cls.log).toContain('len=4200B');
+      expect(cls.log).toContain('ходов=+0');
+      expect(cls.log).toContain('курсор=нет');
+    });
+
+    it('пустое тело при ok → empty-body и complete=true (без ретраев)', () => {
+      const cls = classifyFolwrContinuation({ ok: true, status: 200, bodyLength: 0 });
+      expect(cls.kind).toBe('empty-body');
+      expect(cls.complete).toBe(true);
+      expect(cls.canContinue).toBe(false);
+    });
+
+    it('не-ok статус → http-error и complete=false (полноту не подтверждаем)', () => {
+      const cls = classifyFolwrContinuation({
+        ok: false, status: 500, bodyLength: 1200, newTurns: 0, cursor: null, sentCursor: 'C1'
+      });
+      expect(cls.kind).toBe('http-error');
+      expect(cls.complete).toBe(false);
+      expect(cls.canContinue).toBe(false);
+      expect(cls.log).toContain('status=500');
+      expect(cls.log).toContain('ok=0');
+    });
+
+    it('битый/пустой вход не бросает и трактуется как http-error', () => {
+      expect(classifyFolwrContinuation(null).kind).toBe('http-error');
+      expect(classifyFolwrContinuation(undefined).kind).toBe('http-error');
+      expect(classifyFolwrContinuation({}).kind).toBe('http-error');
+    });
+
+    it('лог содержит kind, статус, длину, ходы и признак курсора', () => {
+      const cls = classifyFolwrContinuation({
+        ok: true, status: 200, bodyLength: 1500, newTurns: 2, cursor: 'NEW', sentCursor: 'OLD'
+      });
+      expect(cls.log).toContain('kind=new-turns');
+      expect(cls.log).toContain('status=200');
+      expect(cls.log).toContain('ok=1');
+      expect(cls.log).toContain('len=1500B');
+      expect(cls.log).toContain('ходов=+2');
+      expect(cls.log).toContain('курсор=есть(новый)');
+    });
+  });
+
+  describe('v1.17: пины перехватчика — решение по содержимому, детальный лог страницы', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', '..', 'core', 'google-search-intercept.js'), 'utf8');
+
+    it('гейты по длине 100000 убраны из кода folwr-путей (комментарии не считаются)', () => {
+      expect(src).not.toContain('if (!txt || txt.length <= 100000)');
+      expect(src).not.toContain('if (txt && txt.length > 100000)');
+    });
+
+    it('probe и пагинация используют классификатор и печатают status/len/raw', () => {
+      expect(src).toContain('function describeFolwrPage(');
+      expect(src).toContain('classifyFolwrContinuation');
+      expect(src).toContain("console.log('[ai-cm-google-search] probe шаг ' + steps + ': ' + pageInfo.line);");
+      expect(src).toContain('pageInfo.cls.complete');
+      expect(src).toContain('pageInfo.cls.canContinue');
+      expect(src).toContain('diagPreview(txt)');
+      // тело читается всегда (и при не-ok) — иначе «пустая страница» неотличима от ошибки
+      expect(src).toContain('return resp.text().then(function (t) {');
     });
   });
 });

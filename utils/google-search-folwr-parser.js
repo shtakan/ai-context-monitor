@@ -470,6 +470,62 @@
     return out;
   }
 
+  // ---- v1.17: классификация страницы ПРОДОЛЖЕНИЯ по СОДЕРЖИМОМУ, а не по длине ----
+  // Живой дефект (новый формат Google Search AI): в ответе folwr ВСЕГДА есть data-mstk,
+  // но это сессионный токен продолжения диалога (/async/folif), а НЕ курсор «догрузить
+  // старые ходы». Запрос folwr с этим mstk отдаёт короткое или пустое тело.
+  // Прежний гейт `txt.length <= 100000` объявлял такую страницу «пустой» ДО разбора →
+  // probe завершался с ПОЛНАЯ=false, а content.js навсегда оставался с baseComplete=false.
+  // Теперь решение принимается по факту разбора: сколько НОВЫХ ходов дал ответ и есть ли
+  // НОВЫЙ (отличный от отправленного) курсор.
+  //
+  // input: { ok, status, bodyLength, newTurns, cursor, sentCursor }
+  // Возврат: { kind, complete, canContinue, status, ok, bodyLength, newTurns, cursor,
+  //            cursorRepeated, log }
+  //   kind: 'http-error' | 'empty-body' | 'cursor-repeat' | 'no-new-turns' | 'new-turns'
+  //   complete=true   → истории больше нет, базу можно объявить ПОЛНОЙ;
+  //   canContinue=true → имеет смысл запрашивать следующую страницу (только 'new-turns').
+  function classifyFolwrContinuation(input) {
+    var i = input || {};
+    var ok = i.ok === true;
+    var status = (i.status == null) ? 0 : i.status;
+    var bodyLength = (typeof i.bodyLength === 'number' && i.bodyLength >= 0) ? i.bodyLength : 0;
+    var newTurns = (typeof i.newTurns === 'number' && i.newTurns > 0) ? i.newTurns : 0;
+    var cursor = i.cursor ? String(i.cursor) : null;
+    var sentCursor = i.sentCursor ? String(i.sentCursor) : null;
+    var cursorRepeated = !!(cursor && sentCursor && cursor === sentCursor);
+
+    var kind, complete, canContinue;
+    if (!ok) {
+      kind = 'http-error'; complete = false; canContinue = false;
+    } else if (bodyLength === 0) {
+      // 200 и ноль байт — сервер не дал продолжения; повторов не делаем.
+      kind = 'empty-body'; complete = true; canContinue = false;
+    } else if (cursorRepeated) {
+      // Тот же курсор → следующий запрос вернёт ту же страницу: гасим цикл.
+      kind = 'cursor-repeat'; complete = true; canContinue = false;
+    } else if (newTurns > 0) {
+      kind = 'new-turns'; complete = false; canContinue = true;
+    } else {
+      kind = 'no-new-turns'; complete = true; canContinue = false;
+    }
+
+    return {
+      kind: kind,
+      complete: complete,
+      canContinue: canContinue,
+      status: status,
+      ok: ok,
+      bodyLength: bodyLength,
+      newTurns: newTurns,
+      cursor: cursor,
+      cursorRepeated: cursorRepeated,
+      log: 'kind=' + kind + ' status=' + status + ' ok=' + (ok ? 1 : 0) +
+        ' len=' + bodyLength + 'B ходов=+' + newTurns +
+        ' курсор=' + (cursor ? ('есть(' + (cursorRepeated ? 'повтор' : 'новый') + ')') : 'нет')
+    };
+  }
+
   // Универсальный экспорт: браузер и Node
   if (typeof window !== 'undefined') {
     window.parseGoogleFolwrOpen = parseGoogleFolwrOpen;
@@ -478,7 +534,8 @@
       extractTurnsFromDocument: extractTurnsFromDocument,
       mergeTurnsByKey: mergeTurnsByKey,
       extractContinuationToken: extractContinuationToken,
-      mergeTurnsById: mergeTurnsById
+      mergeTurnsById: mergeTurnsById,
+      classifyFolwrContinuation: classifyFolwrContinuation
     };
   }
   if (typeof module !== 'undefined' && module.exports) {
@@ -488,7 +545,8 @@
       extractTurnsFromDocument: extractTurnsFromDocument,
       mergeTurnsByKey: mergeTurnsByKey,
       extractContinuationToken: extractContinuationToken,
-      mergeTurnsById: mergeTurnsById
+      mergeTurnsById: mergeTurnsById,
+      classifyFolwrContinuation: classifyFolwrContinuation
     };
   }
 })();

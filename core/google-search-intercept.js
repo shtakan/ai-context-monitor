@@ -114,6 +114,45 @@
     return txt.slice(0, 300);
   }
 
+  // v1.17: короткое превью тела для строки лога (схлопываем переводы строк).
+  function rawSnippet(txt, limit) {
+    var n = (typeof limit === 'number' && limit > 0) ? limit : 120;
+    if (!txt) return '';
+    var s = String(txt).replace(/\s+/g, ' ').trim();
+    return s.length > n ? (s.slice(0, n) + '…') : s;
+  }
+
+  // v1.17: единая диагностика страницы ПРОДОЛЖЕНИЯ folwr. Классификация — по содержимому
+  // (utils/google-search-folwr-parser.classifyFolwrContinuation), НЕ по длине тела.
+  // Возврат: { cls, line } — line всегда печатается (status/ok/len/ходы/курсор + raw-превью),
+  // полное raw-превью уходит в ring-буфер через debugLog у вызывающего кода.
+  function describeFolwrPage(resp, txt, newTurns, cursor, sentCursor) {
+    var body = (txt == null) ? '' : String(txt);
+    var cls = null;
+    try {
+      if (window.GoogleFolwrUtils && window.GoogleFolwrUtils.classifyFolwrContinuation) {
+        cls = window.GoogleFolwrUtils.classifyFolwrContinuation({
+          ok: !!(resp && resp.ok),
+          status: (resp && resp.status) || 0,
+          bodyLength: body.length,
+          newTurns: newTurns,
+          cursor: cursor,
+          sentCursor: sentCursor
+        });
+      }
+    } catch (e) { }
+    if (!cls) {
+      cls = {
+        kind: 'no-classifier', complete: false, canContinue: false,
+        log: 'kind=no-classifier status=' + ((resp && resp.status) || 0) +
+          ' ok=' + ((resp && resp.ok) ? 1 : 0) + ' len=' + body.length + 'B ходов=+' + (newTurns || 0)
+      };
+    }
+    var line = cls.log + ' raw="' + rawSnippet(body, 120) + '"' +
+      (resp && resp.url ? ' finalUrl="' + rawSnippet(resp.url, 160) + '"' : '');
+    return { cls: cls, line: line };
+  }
+
   // ---- модель из сетевого ответа ----
   function extractModel(htmlText) {
     try {
@@ -518,29 +557,38 @@
           if (isSorryResponse(resp && resp.status, resp && resp.url)) {
             triggerSorryCooldown();
             activeFolwrInFlight[key] = false;
-            return '';
+            return null;
           }
-          return resp && resp.ok ? resp.text() : '';
+          if (!resp) return { resp: null, txt: '' };
+          // v1.17: тело читаем ВСЕГДА (в т.ч. при не-ok и на коротком ответе) — иначе
+          // «пустая страница» неотличима от ошибки, а фолбэк Вариант Б не запускается.
+          return resp.text().then(function (t) {
+            return { resp: resp, txt: t || '' };
+          }, function () { return { resp: resp, txt: '' }; });
         })
-        .then(function (txt) {
+        .then(function (page) {
           activeFolwrInFlight[key] = false;
-          if (!txt || txt.length <= 100000) return;
+          if (!page) return; // 429//sorry/ → cooldown, цикл уже остановлен
+          var txt = page.txt;
           var parsed = parseWithParser(txt);
           var before = merged.length;
           merged = mergeFn(merged, parsed.turns);
-          added += (merged.length - before);
-          if (merged.length > before) {
-            applyTurns(merged, tid, false);
-          }
+          var gained = merged.length - before;
+          added += gained;
           var cursor = extractToken(txt);
-          // v1.24: вежливость — пауза ≥400ms перед следующим страничным запросом.
-          if (cursor) {
+          var pageInfo = describeFolwrPage(page.resp, txt, gained, cursor, nextCursor);
+          console.log('[ai-cm-google-search] пагинация folwr шаг ' + pages + ': ' + pageInfo.line);
+          debugLog('log', '[ai-cm-google-search] пагинация folwr шаг ' + pages +
+            ' raw(' + txt.length + 'B): ' + diagPreview(txt));
+          if (gained > 0) applyTurns(merged, tid, false);
+          // v1.17: продолжаем, только если страница дала НОВЫЕ ходы и НОВЫЙ курсор.
+          if (pageInfo.cls.canContinue) {
             setTimeout(function () { step(cursor); }, FOLWR_PAGE_DELAY_MS);
           } else {
             finish();
           }
         })
-        .catch(function () { activeFolwrInFlight[key] = false; });
+        .catch(function () { activeFolwrInFlight[key] = false; finish(); });
     }
 
     step(firstCursor);
@@ -629,11 +677,12 @@
     tick();
   }
 
-  // v1.26: probe-полнота. Если распарсено == DOM-контейнеров и курсор есть — один тихий
+  // v1.26: probe-полнота. Если распарсено == DOM-контейнеров и курсор есть — тихий
   // probe-шаг пагинации с курсором (без скролла, по аналогии с тихим циклом Gemini).
-  // +ходов=0 → ПОЛНАЯ=true и baseComplete=true (итог виден в обычной строке folwr-open,
-  // которая печатается всегда); +ходов>0 → продолжать тихий цикл до исчерпания курсора
-  // (кап 10 шагов), в конце baseComplete=true. Детальные логи probe — под debugLog.
+  // v1.17: полнота решается по СОДЕРЖИМОМУ страницы (describeFolwrPage), а не по её длине:
+  // новых ходов нет / тот же курсор / пустое тело при ok → ПОЛНАЯ=true и baseComplete=true
+  // (итог виден в обычной строке folwr-open, которая печатается всегда); +ходов>0 и новый
+  // курсор → продолжать тихий цикл (кап 10 шагов). Детальные логи probe — под debugLog.
   var FOLWR_PROBE_MAX_STEPS = 10;
   var probedTids = {}; // v43: гард «один probe на threadId» (handshake-реэмит / собственный probe-запрос не перезапускают probe)
 
@@ -684,35 +733,44 @@
       if (activeFolwrInFlight[key]) return; // не слать параллельно тот же тред
       activeFolwrInFlight[key] = true;
       steps++;
-      window.fetch(urlWithMstk(startUrl, cursor), { credentials: 'include' })
+      var pageUrl = urlWithMstk(startUrl, cursor);
+      window.fetch(pageUrl, { credentials: 'include' })
         .then(function (resp) {
           if (isSorryResponse(resp && resp.status, resp && resp.url)) {
             triggerSorryCooldown();
             activeFolwrInFlight[key] = false;
             finish('429/sorry', false);
-            return '';
+            return null;
           }
-          return resp && resp.ok ? resp.text() : '';
+          if (!resp) return { resp: null, txt: '' };
+          // v1.17: тело читаем ВСЕГДА — и при не-ok, и на коротком ответе. Прежний гейт
+          // `txt.length <= 100000` объявлял короткую страницу «пустой» до разбора.
+          return resp.text().then(function (t) {
+            return { resp: resp, txt: t || '' };
+          }, function () { return { resp: resp, txt: '' }; });
         })
-        .then(function (txt) {
+        .then(function (page) {
+          if (!page) return; // 429//sorry/ → cooldown, probe уже завершён
           activeFolwrInFlight[key] = false;
-          if (!txt || txt.length <= 100000) { finish('пустая страница', false); return; }
+          var txt = page.txt;
           var parsed = parseWithParser(txt);
           var before = merged.length;
           merged = mergeFn(merged, parsed.turns);
           var added = merged.length - before;
           addedTotal += added;
-          debugLog('log', '[ai-cm-google-search] probe шаг ' + steps + ': +ходов=' + added +
-            ' всего=' + merged.length);
-          // v43: первый шаг дал +ходов=0 → DOM уже полный, СРАЗУ завершаем с ПОЛНАЯ=true.
-          if (steps === 1 && added === 0) { finish('probe-empty', true); return; }
-          if (added > 0) applyTurns(merged, tid, false);
           var next = extractToken(txt);
-          if (next) {
-            setTimeout(function () { step(next); }, FOLWR_PAGE_DELAY_MS);
-          } else {
-            finish('курсор исчерпан', true);
-          }
+          var pageInfo = describeFolwrPage(page.resp, txt, added, next, cursor);
+          // v1.17: детальный лог ответа страницы продолжения: статус, ok, длина, разбор,
+          // число новых ходов, курсор (новый/повтор) и raw-превью тела + finalUrl.
+          console.log('[ai-cm-google-search] probe шаг ' + steps + ': ' + pageInfo.line);
+          debugLog('log', '[ai-cm-google-search] probe шаг ' + steps + ': +ходов=' + added +
+            ' всего=' + merged.length + ' raw(' + txt.length + 'B): ' + diagPreview(txt));
+          if (added > 0) applyTurns(merged, tid, false);
+          // v1.17: полнота по содержимому. Нет новых ходов / тот же курсор / пустое тело при
+          // ok → истории больше нет → ПОЛНАЯ=true. Продолжаем только при новых ходах и НОВОМ курсоре.
+          if (pageInfo.cls.complete) { finish('probe-' + pageInfo.cls.kind, true); return; }
+          if (!pageInfo.cls.canContinue) { finish('probe-' + pageInfo.cls.kind, false); return; }
+          setTimeout(function () { step(next); }, FOLWR_PAGE_DELAY_MS);
         })
         .catch(function () { activeFolwrInFlight[key] = false; finish('ошибка сети', false); });
     }
@@ -842,7 +900,9 @@
       promise.then(function (resp) {
         if (resp && resp.ok) {
           resp.clone().text().then(function (txt) {
-            if (txt && txt.length > 100000) {
+            // v1.17: гейт по длине (было `txt.length > 100000`) убран — короткий ответ folwr
+            // тоже разбирается, иначе «пустая страница» неотличима от «ходов нет».
+            if (txt) {
               var model = extractModel(txt);
               if (model) detectedModelSlug = model;
               try {
@@ -918,6 +978,12 @@
                       followFolwrPagination(url, mergedTurns, tid, folwrCursor);
                     }
                   }
+                } else {
+                  // v1.17: страница без ходов — печатаем фактическое содержимое (статус, длина,
+                  // курсор, raw-превью), чтобы отличать «истории нет» от ошибки/смены формата.
+                  var openPageInfo = describeFolwrPage(resp, txt, 0, null, null);
+                  console.log('[ai-cm-google-search] folwr-open: ходов не распарсено, ' + openPageInfo.line);
+                  debugLog('log', '[ai-cm-google-search] folwr-open raw(' + txt.length + 'B): ' + diagPreview(txt));
                 }
               } catch (e) {
                 console.log('[ai-cm-google-search] folwr-open: ошибка:', e && e.message);
