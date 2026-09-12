@@ -195,6 +195,27 @@ describe('M-9: COUNT_TOKENS — таймаут с отменой, debounce, кэ
     expect(r2.cached).toBe(1);
   });
 
+  // M-8 (вшивка A): пробел M-9 — cache-hit отвечал без строки наблюдаемости, и по логам
+  // попадание кэша нельзя было отличить от сетевого ответа. Пин: ровно одна строка
+  // '[AI CM][countTokens] cache-hit ... cached=1 debounced=0' на пути cache-hit.
+  test('M-8: cache-hit пишет строку наблюдаемости (spy console.log)', async () => {
+    bg = loadBackground({ fetch: fetchMock });
+    const msg = { type: 'COUNT_TOKENS', text: 'cache-hit-наблюдаемость', model: 'gemini-flash-latest' };
+
+    const p1 = bg.send(msg);
+    await advance(800);
+    await p1; // прогрев кэша — сетевой путь (cached=0), в логе ok-строка
+
+    const spy = jest.spyOn(bg.sandbox.console, 'log');
+    const r2 = await bg.send(msg); // попадание: ответ немедленный, сеть не дёргается
+    expect(r2.cached).toBe(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith(
+      '[AI CM][countTokens] cache-hit model=gemini-flash-latest tokens=42 cached=1 debounced=0'
+    );
+    spy.mockRestore();
+  });
+
   test('ёмкость: 201 различный ключ → size Map ≤ 200 (вытеснение FIFO)', async () => {
     bg = loadBackground({ fetch: fetchMock });
     const pending = [];

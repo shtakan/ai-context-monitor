@@ -62,6 +62,14 @@ let staleTimer = null;
 let lastDetailMessages = null; // [{role,text}] из последнего detail.messages (или null)
 let lastHistoryWroteKey = null; // сигнатура 'baseCount|textLen' последней записи aiCmHistory
 let lastThreadId = null; // threadId последнего применённого снимка Google (для сброса при SPA-возврате)
+// M-8: TTL-метка per-host записи истории. Глобальный ключ 'aiCmHistory' пишется прежней
+// формой (сам snapshot, без ts) — его семантика не меняется; поле ts аддитивно только
+// для 'aiCmHistory:<host>'. По ts core/background.js удаляет записи старше 30 дней.
+function aiCmHostHistoryRecord(snapshot) {
+  var rec = Object.assign({}, snapshot);
+  rec.ts = Date.now();
+  return rec;
+}
 // v31: страховочная чистка перед записью экспорта истории.
 // Единая санация вынесена в utils/gemini-batchexecute-parser.js (sanitizeGeminiText):
 //   strip /$AXzLiR[A-Za-z0-9+\/=\s]+/g, точную строку "File attachment was not previously
@@ -2072,7 +2080,7 @@ function processAndSend() {
             messages: buildHistoryMessages()
           };
           var histPatch = { aiCmHistory: histSnapshot };
-          histPatch['aiCmHistory:' + window.location.hostname] = histSnapshot;
+          histPatch['aiCmHistory:' + window.location.hostname] = aiCmHostHistoryRecord(histSnapshot);
           // v52: гейт ручного экспорта — не пишем частичную историю, пока лоадер бежит
           // или база не полная; одноразовый defer с таймаутом 20с (см. schedule/flush ниже).
           // v1.13.1: для Gemini дополнительно требуется ПОДТВЕРЖДЁННАЯ полнота
@@ -2119,7 +2127,7 @@ function processAndSend() {
             messages: msgsS24
           };
           var histPatchS24 = { aiCmHistory: histSnapshotS24 };
-          histPatchS24['aiCmHistory:' + window.location.hostname] = histSnapshotS24;
+          histPatchS24['aiCmHistory:' + window.location.hostname] = aiCmHostHistoryRecord(histSnapshotS24);
           chrome.storage.local.set(histPatchS24);
         }
       }
@@ -2425,7 +2433,7 @@ function aiCmWriteCurrentHistory() {
       messages: buildHistoryMessages()
     };
     var histPatch = { aiCmHistory: histSnapshot };
-    histPatch['aiCmHistory:' + window.location.hostname] = histSnapshot;
+    histPatch['aiCmHistory:' + window.location.hostname] = aiCmHostHistoryRecord(histSnapshot);
     chrome.storage.local.set(histPatch);
   } catch (e) { debugLog('log', '[AI CM][export] silent-catch aiCmWriteCurrentHistory: ' + (e && e.message || e)); }
 }

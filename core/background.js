@@ -159,11 +159,15 @@ chrome.runtime.onInstalled.addListener(() => {
     customLimit: null,
     showPercentage: true
   });
+  aiCmPruneHistory(); // M-8: TTL per-host истории — чистка при установке/обновлении
   ensureInterceptor();
 });
 
 if (chrome.runtime.onStartup) {
-  chrome.runtime.onStartup.addListener(() => { ensureInterceptor(); });
+  chrome.runtime.onStartup.addListener(() => {
+    aiCmPruneHistory(); // M-8: TTL per-host истории — чистка при старте браузера
+    ensureInterceptor();
+  });
 }
 ensureInterceptor();
 
@@ -412,7 +416,10 @@ function handleCountTokens(message, sender) {
   // Кэш проверяем ДО debounce: попадание отвечает немедленно, без сети и без ожидания окна.
   var hit = countTokensCacheGet(model, text);
   if (hit) {
-    console.log('[AI CM][countTokens] cache hit model=' + model + ' tokens=' + hit.tokens);
+    // M-8 (вшивка A): путь cache-hit раньше отвечал без строки наблюдаемости —
+    // несмотря на cached=1/debounced=0 в ответе, по логам нельзя было отличить
+    // попадание кэша от сетевого ответа. Формат строки согласован с ok-строкой ниже.
+    console.log('[AI CM][countTokens] cache-hit model=' + model + ' tokens=' + hit.tokens + ' cached=1 debounced=0');
     return Promise.resolve({
       ok: true,
       totalTokens: hit.tokens,
@@ -506,4 +513,70 @@ async function handleCountTokensRun(run) {
   }
 
   return { error: 'all_models_failed' };
+}
+
+// ========== M-8: TTL per-host истории (chrome.storage.local) ==========
+// Ключи 'aiCmHistory:<host>' (см. core/content.js) писались без срока жизни: за месяцы
+// работы хранилище росло неограниченно — по одной записи на каждый посещённый хост,
+// и старые записи не удалялись никогда. TTL = 30 дней: per-host запись несёт
+// аддитивное поле ts (Date.now() на момент записи), запись с ts старше TTL удаляется.
+// Глобальный ключ 'aiCmHistory' (last-writer-wins между вкладками, тело экспорта его
+// не читает — см. E-1) префикса 'aiCmHistory:' не имеет и НЕ трогается: семантика прежняя.
+var AI_CM_HISTORY_TTL_MS = 2592000000; // 30 суток = 30 * 24 * 60 * 60 * 1000
+
+// Просрочена ли запись. ts отсутствует (запись прежней версии либо чужая форма) —
+// НЕ удаляем: «форма записи сохраняется», оснований считать её просроченной нет.
+// Сравнение строгое: ровно 30 дней — ещё живая запись.
+function aiCmHistoryEntryStale(rec, now) {
+  var ts = (rec && typeof rec.ts === 'number') ? rec.ts : null;
+  if (ts == null) return false;
+  return (now - ts) > AI_CM_HISTORY_TTL_MS;
+}
+
+function aiCmHistoryPruneRemove(stale) {
+  if (!stale.length) { console.log('[AI CM][storage] prune removed=0'); return; }
+  if (!chrome.storage || !chrome.storage.local || typeof chrome.storage.local.remove !== 'function') return;
+  chrome.storage.local.remove(stale, function () {
+    console.log('[AI CM][storage] prune removed=' + stale.length);
+  });
+}
+
+// Перебор ВСЕХ ключей chrome.storage.local (get(null)) с фильтром по префиксу
+// 'aiCmHistory:' — двоеточие само отсекает глобальный ключ 'aiCmHistory'.
+function aiCmPruneHistory() {
+  try {
+    if (!chrome.storage || !chrome.storage.local || typeof chrome.storage.local.get !== 'function') return;
+    chrome.storage.local.get(null, function (all) {
+      try {
+        var now = Date.now();
+        var stale = [];
+        var keys = (all && typeof all === 'object') ? Object.keys(all) : [];
+        for (var i = 0; i < keys.length; i++) {
+          var key = keys[i];
+          if (key.indexOf('aiCmHistory:') !== 0) continue;
+          if (aiCmHistoryEntryStale(all[key], now)) stale.push(key);
+        }
+        aiCmHistoryPruneRemove(stale);
+      } catch (e) {
+        console.warn('[AI CM][storage] prune error:', e);
+      }
+    });
+  } catch (e2) {
+    console.warn('[AI CM][storage] prune error:', e2);
+  }
+}
+
+// Ленивый вызов: content.js пишет 'aiCmHistory:<host>' → storage.onChanged будит SW
+// и дочищает просрочку, не дожидаясь следующего старта браузера. Реагируем только на
+// запись ключа истории в local: прочие ключи и sync-область sweep не запускают.
+if (chrome.storage && chrome.storage.onChanged && chrome.storage.onChanged.addListener) {
+  chrome.storage.onChanged.addListener(function (changes, areaName) {
+    if (areaName !== 'local' || !changes) return;
+    var touched = false;
+    var changedKeys = Object.keys(changes);
+    for (var i = 0; i < changedKeys.length; i++) {
+      if (changedKeys[i].indexOf('aiCmHistory:') === 0) { touched = true; break; }
+    }
+    if (touched) aiCmPruneHistory();
+  });
 }
