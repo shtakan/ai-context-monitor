@@ -83,11 +83,31 @@ select, input {
   background: #16213e;
   color: #ffffff;
   font-size: 13px;
-  outline: none;
 }
 
 select:focus, input:focus {
   border-color: #7c3aed;
+}
+
+/* v1.20 (M-3): видимый фокус для клавиатуры. Прежняя смена border-color на :focus
+   сохранена выше как дополнение; outline больше не подавляется.
+   Кнопки/ссылки получили обводку впервые — раньше у них не было :focus-стилей вовсе. */
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #a78bfa;
+  outline-offset: 2px;
+}
+
+/* v1.20 (M-1): смысловые группы (role="group") — обычные .section-контейнеры:
+   ни рамки, ни собственных отступов, поэтому раскладка остаётся прежней. */
+[role="group"].section {
+  border: none;
+  margin: 0 0 12px 0;
+  padding: 0;
+  min-width: 0;
 }
 
 .hint {

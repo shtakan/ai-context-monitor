@@ -15,7 +15,8 @@
       <h1>AI Context Monitor</h1>
     </div>
 
-    <div class="stats" id="stats">
+    <!-- v1.20 (M-2): регион статистики объявляет изменения вежливо -->
+    <div class="stats" id="stats" aria-live="polite">
       <div class="stat-row">
         <span class="stat-label">Сайт:</span>
         <span class="stat-value" id="stat-site">—</span>
@@ -42,10 +43,12 @@
       </div>
     </div>
 
-    <div class="stale-warning" id="stale-warning" style="display: none;"></div>
+    <!-- v1.20 (M-2): предупреждение об устаревших данных — срочное объявление -->
+    <div class="stale-warning" id="stale-warning" role="alert" style="display: none;"></div>
 
     <div class="section">
-      <label class="label">Модель:</label>
+      <!-- v1.20 (M-1): подпись связана с select через for/id -->
+      <label class="label" for="model-select">Модель:</label>
       <select id="model-select">
         <option value="auto">Автоопределение</option>
         <optgroup label="OpenAI">
@@ -70,7 +73,8 @@
     <div class="section">
       <label class="label">Лимит контекста:</label>
       <div class="input-row">
-        <input type="number" id="custom-limit" placeholder="Авто" min="1" max="100" step="1">
+        <!-- v1.20 (M-1): поле без видимой текстовой подписи получает имя доступности -->
+        <input type="number" id="custom-limit" aria-label="Пользовательский лимит токенов" placeholder="Авто" min="1" max="100" step="1">
         <button id="reset-limit" class="btn-reset">Авто</button>
       </div>
       <span class="hint">Порог в % от Авто-порога: цвета и % считаются от этого порога. 100% = как Авто. Пусто = Авто</span>
@@ -85,8 +89,11 @@
       <label for="debugLogs">Подробные логи</label>
     </div>
 
-    <div class="section" id="auto-export-section">
-      <label class="label">Автоэкспорт чатов (Gemini, Google Search AI)</label>
+    <!-- v1.20 (M-1): смысловая группа «Автоэкспорт чатов».
+         Выбран role="group" + aria-labelledby (вместо fieldset/legend): имя группы
+         даёт существующая видимая подпись .label, а раскладка .section не меняется. -->
+    <div class="section" id="auto-export-section" role="group" aria-labelledby="auto-export-legend">
+      <label class="label" id="auto-export-legend">Автоэкспорт чатов (Gemini, Google Search AI)</label>
       <div class="checkbox-row">
         <input type="checkbox" id="aiCmAutoExport">
         <label for="aiCmAutoExport">Автоэкспорт при пороге</label>
@@ -94,7 +101,7 @@
       <div class="input-row">
         <label class="label" for="aiCmAutoExportPct">Порог, %:</label>
         <input type="number" id="aiCmAutoExportPct" min="1" max="100" step="1" value="90">
-        <select id="aiCmAutoExportFmt">
+        <select id="aiCmAutoExportFmt" aria-label="Формат файла автоэкспорта">
           <option value="txt">txt</option>
           <option value="md">md</option>
           <option value="json">json</option>
@@ -103,8 +110,9 @@
       <span class="hint">Один раз скачивает историю чата при достижении порога</span>
     </div>
 
-    <div class="section" id="proactive-section">
-      <label class="label">Проактивные пороги</label>
+    <!-- v1.20 (M-1): смысловая группа «Проактивные пороги» -->
+    <div class="section" id="proactive-section" role="group" aria-labelledby="proactive-legend">
+      <label class="label" id="proactive-legend">Проактивные пороги</label>
       <div class="checkbox-row">
         <input type="checkbox" id="aiCmProactive" checked>
         <label for="aiCmProactive">Бейдж и уведомления о порогах</label>
@@ -117,9 +125,10 @@
         <label class="label" for="aiCmProactiveLow">Пороги уведомлений и бейджа (1–100, возрастающий порядок):</label>
       </div>
       <div class="input-row">
-        <input type="number" id="aiCmProactiveLow" min="1" max="100" step="1" value="70" title="Низкий порог — зелёный">
-        <input type="number" id="aiCmProactiveMedium" min="1" max="100" step="1" value="85" title="Средний порог — жёлтый">
-        <input type="number" id="aiCmProactiveHigh" min="1" max="100" step="1" value="95" title="Высокий порог — красный">
+        <!-- v1.20 (M-1): у трёх числовых полей порога — собственные имена доступности (title сохранён) -->
+        <input type="number" id="aiCmProactiveLow" aria-label="Низкий порог процентов" min="1" max="100" step="1" value="70" title="Низкий порог — зелёный">
+        <input type="number" id="aiCmProactiveMedium" aria-label="Средний порог процентов" min="1" max="100" step="1" value="85" title="Средний порог — жёлтый">
+        <input type="number" id="aiCmProactiveHigh" aria-label="Высокий порог процентов" min="1" max="100" step="1" value="95" title="Высокий порог — красный">
       </div>
       <span class="hint">Каждый порог срабатывает один раз на разговор; при битом вводе — дефолт 70/85/95</span>
     </div>
@@ -127,7 +136,8 @@
     <div class="section">
       <label class="label">Gemini API — точный подсчёт токенов</label>
       <div class="api-key-row">
-        <input type="password" id="api-key" placeholder="Введите API-ключ Google AI Studio" autocomplete="off">
+        <!-- v1.20 (M-1): у поля ключа было только placeholder-подсказка — даём имя доступности -->
+        <input type="password" id="api-key" aria-label="API-ключ Google AI Studio" placeholder="Введите API-ключ Google AI Studio" autocomplete="off">
         <button id="toggle-api-key" class="btn-toggle" type="button" title="Показать/скрыть ключ">👁</button>
       </div>
       <span class="hint">Ключ хранится локально в вашем браузере</span>
@@ -166,7 +176,8 @@
       <span class="hint">Локальные экспорты: Gemini Takeout (MyActivity.json), ChatGPT conversations.json,
         Claude conversations.json, Perplexity threads. Файлы читаются в браузере (FileReader) и никуда не отправляются.
         Архив — первый ярус: он задаёт авторитетный пол истории и даёт терминальную полноту archive-complete.</span>
-      <div class="hint archive-status" id="archive-status"></div>
+      <!-- v1.20 (M-2): статус архива — вежливый live-region -->
+      <div class="hint archive-status" id="archive-status" role="status"></div>
       <div class="archive-list" id="archive-list"></div>
     </div>
 
