@@ -594,11 +594,18 @@ function resetConversationState() {
   // автоэкспорта для целевого conv (per service+convId); внутри входа повторный
   // fired по-прежнему запрещён (already-fired). На холодном открытии латч пуст —
   // сброс no-op, поведение побайтово.
+  // v1.18 (F2): для GSA сброс НЕ делаем. Перехватчик на SPA-возврате эмитит КЭШ треда
+  // с historyComplete=true, поэтому снятый латч дал бы второй файл того же разговора
+  // («SPA-возврат с уже снятым latch → повторный fired» запрещён). Латч GSA живёт по
+  // site+threadId и переживает уход/возврат в пределах сессии страницы.
   try {
     var cidD14 = getCurrentConvId() || '';
     var P14 = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
     var siteD14 = (currentAdapter && currentAdapter.siteName) || '';
-    if (P14 && typeof P14.resetAutoExportFired === 'function') {
+    if (siteD14 === 'google_search') {
+      debugLog('log', '[AI CM][auto-export] site=google_search latch kept reason=spa-entry convId=' +
+        (cidD14 || '(threadId)'));
+    } else if (P14 && typeof P14.resetAutoExportFired === 'function') {
       P14.resetAutoExportFired(autoExportFired, siteD14, cidD14);
       // v1.14.1 (O3): session-латч целевого conv снимаем синхронно с L1 — семантика
       // D14 «новый вход = один новый fired» сохраняется и для другой вкладки.
@@ -881,6 +888,12 @@ window.addEventListener('ai-cm-full-history', function (ev) {
   }
   // ФИКС: взводим baseComplete из флага перехватчика. При переходе «сеть стала полной» сбрасываем
   //   монотонный максимум, чтобы добить любой пик, накопленный DOM-путём до этого.
+  // v1.18 (F1): ЕДИНСТВЕННАЯ точка вердикта полноты для всех сервисов, включая GSA:
+  //   probe-классификатор страницы продолжения (utils/google-search-folwr-parser.js:
+  //   kind=cursor-repeat|no-new-turns при ok=200 → complete=true)
+  //   → applyTurns(..., true) → buildDetail(historyComplete=true) → это присваивание →
+  //   baseComplete, который читает shouldSkipAutoExport/maybeAutoExport. Дублирующего
+  //   вердикта в content.js нет и быть не должно (классификатор здесь не вызывается).
   const newBaseComplete = !!detail.historyComplete;
   var completeTransition79 = (newBaseComplete && !baseComplete); // v79: фиксируем переход 0→1 ДО перезаписи
   if (newBaseComplete && !baseComplete) {
@@ -2477,7 +2490,9 @@ function loadAutoExportSettings() {
         autoExportSettings.enabled = data && data.aiCmAutoExport === true;
         var p = parseInt(data && data.aiCmAutoExportPct, 10);
         autoExportSettings.pct = (!isNaN(p) && p >= 1 && p <= 100) ? p : 90; // v65: 1–100
-        autoExportSettings.fmt = (data && data.aiCmAutoExportFmt === 'md') ? 'md' : 'txt';
+        // v1.18 (F4): селектор формата общий для всех сайтов — txt | md | json.
+        var fmtRaw = data && data.aiCmAutoExportFmt;
+        autoExportSettings.fmt = (fmtRaw === 'md' || fmtRaw === 'json') ? fmtRaw : 'txt';
       } catch (eParse) {
         console.error('[AI CM][auto-export] parse settings error:', eParse);
       }
@@ -2495,11 +2510,61 @@ function loadAutoExportSettings() {
   }
 }
 
+// ========== v1.18 (F2/F5): GSA — идентификатор разговора и probe-полнота ==========
+// convId автоэкспорта. У GSA надёжного id в URL нет (extractConvIdFromUrl → ''), поэтому
+// идентификатором разговора служит threadId снапшота (detail.threadId → lastThreadId):
+// он попадает и в ключ латча (site+convId), и в диагностику. Прочие сервисы — URL-id 1:1.
+function aiCmAutoExportConvId() {
+  try {
+    var urlCid = getCurrentConvId() || '';
+    var site = (currentAdapter && currentAdapter.siteName) || '';
+    var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+    if (P && typeof P.resolveAutoExportConvId === 'function') {
+      return P.resolveAutoExportConvId(site, urlCid, lastThreadId || '') || '';
+    }
+    return urlCid;
+  } catch (e) { return getCurrentConvId() || ''; }
+}
+// v1.18 (F5): состояние probe-полноты GSA (MAIN → ISOLATED, CustomEvent
+// 'ai-cm-gsa-probe-state'). Нужно ТОЛЬКО для ярлыка причины skip: probe-running,
+// пока вердикта классификатора ещё нет. Сам вердикт полноты — baseComplete (один).
+var aiCmGsaProbeByThread = {};    // threadId -> 1 (probe в полёте)
+var aiCmGsaProbeRunning = false;  // последнее состояние (фолбэк для пустого convId)
+window.addEventListener('ai-cm-gsa-probe-state', function (ev) {
+  try {
+    var d = ev && ev.detail;
+    if (!d) return;
+    aiCmGsaProbeRunning = d.running === true;
+    if (d.threadId) aiCmGsaProbeByThread[d.threadId] = aiCmGsaProbeRunning ? 1 : 0;
+  } catch (eGsaProbe) { }
+});
+function aiCmGsaProbeRunningFor(cid) {
+  try {
+    if (cid && typeof aiCmGsaProbeByThread[cid] !== 'undefined') return aiCmGsaProbeByThread[cid] === 1;
+    return aiCmGsaProbeRunning === true;
+  } catch (e) { return false; }
+}
+// v1.18 (F5): единая tagged-строка логов автоэкспорта GSA. Антиспам — как у
+// not-complete в общем пути: не чаще 1 раза на разговор для причин отсутствия полноты.
+function aiCmGsaAutoExportSkipLog(reason, cid, percentage) {
+  try {
+    if (reason === 'not-complete' || reason === 'probe-running') {
+      var k = 'gsa:' + cid;
+      if (notCompleteLogged[k]) return;
+      notCompleteLogged[k] = 1;
+    }
+    debugLog('log', '[AI CM][auto-export] site=google_search skip reason=' + reason +
+      ' convId=' + cid + ' pct=' + percentage +
+      ' probeRunning=' + (aiCmGsaProbeRunningFor(cid) ? '1' : '0'));
+  } catch (e) { }
+}
+
 function maybeAutoExport(percentage) {
   try {
     var s = autoExportSettings;
     if (!s || s.enabled !== true) return;
-    var cid = getCurrentConvId() || '';
+    // v1.18 (F2): convId автоэкспорта — URL-id, а для GSA threadId (site+convId = ключ латча)
+    var cid = aiCmAutoExportConvId();
     if (cid !== autoExportLastConvId) {
       // гистерезис: смена чата — сброс антиспам-флага not-complete.
       // v44: autoExportFired НЕ стираем — он keyed по convId и переживает SPA-уход/возврат
@@ -2547,6 +2612,28 @@ function maybeAutoExport(percentage) {
         isGemini: isGeminiSvc
       });
       if (verdict && verdict.skip) {
+        // гистерезис −10 п.п.: общая точка сброса латча (для всех сайтов, включая GSA) —
+        // семантика v1.14.1/O3 прежняя, просто вынесена из цепочки логов ниже.
+        if (verdict.reason === 'below-threshold-hysteresis') {
+          P.resetAutoExportFired(autoExportFired, siteName, cid);
+          // v1.14.1 (O3): session-латч снимаем вместе с L1
+          try {
+            if (typeof P.firedSessionKey === 'function' && chrome.storage.session) {
+              chrome.storage.session.remove(P.firedSessionKey(siteName, cid));
+            }
+          } catch (eO3hys) { }
+        }
+        // v1.18 (F5): GSA — tagged-строка лога с причиной fired/skip; причина not-complete
+        // уточняется до probe-running, пока probe-полнота в полёте. Вердикт гейта ОДИН
+        // (shouldSkipAutoExport выше) — здесь только формулировка причины, не новый вердикт.
+        if (siteName === 'google_search') {
+          var gsaReason = verdict.reason;
+          if (verdict.reason === 'not-complete' && P && typeof P.notCompleteReason === 'function') {
+            gsaReason = P.notCompleteReason({ site: siteName, probeRunning: aiCmGsaProbeRunningFor(cid) });
+          }
+          aiCmGsaAutoExportSkipLog(gsaReason, cid, percentage);
+          return;
+        }
         if (verdict.reason === 'not-complete') {
           // v30.5: fired НЕ ставим; лог не чаще 1 раза на convId
           if (cid && !notCompleteLogged[cid]) {
@@ -2568,20 +2655,13 @@ function maybeAutoExport(percentage) {
         } else if (verdict.reason === 'below-threshold') {
           debugLog('log', '[AI CM][auto-export] skip reason=below-threshold convId=' + cid + ' pct=' + percentage);
         } else if (verdict.reason === 'below-threshold-hysteresis') {
-          // гистерезис: ниже порога на 10 п.п. — разрешаем повторный fired после возврата
-          P.resetAutoExportFired(autoExportFired, siteName, cid);
-          // v1.14.1 (O3): session-латч снимаем вместе с L1
-          try {
-            if (typeof P.firedSessionKey === 'function' && chrome.storage.session) {
-              chrome.storage.session.remove(P.firedSessionKey(siteName, cid));
-            }
-          } catch (eO3hys) { }
+          // сброс латча уже выполнен общей точкой выше — здесь только ничего не логируем
         } else if (verdict.reason === 'below-threshold-unreliable') {
           // v82 (D5): транзиентный DOM-pct (baseSeen=false) — латч НЕ трогаем, не логируем
         }
         return;
       }
-      if (cid) delete notCompleteLogged[cid]; // полнота пришла — можно снова логировать в другом чате
+      if (cid) { delete notCompleteLogged[cid]; delete notCompleteLogged['gsa:' + cid]; } // полнота пришла — можно снова логировать в другом чате
       if (!cid) return;
       doAutoExportDownload(cid, percentage, 'threshold');
       return;
@@ -2647,16 +2727,25 @@ function doAutoExportDownload(cid, percentage, reason) {
   try {
     var B = (typeof window !== 'undefined' && window.AiCmExportBuilders) ? window.AiCmExportBuilders : null;
     if (!B) throw new Error('utils/export-text-builders.js не загружен');
-    var fmt = (autoExportSettings.fmt === 'md') ? 'md' : 'txt';
-    // v81 (2.6): имя файла — ТОЛЬКО через buildExportFileName (utils/export-emit-pipeline.js);
+    var fmt = (autoExportSettings.fmt === 'md') ? 'md' : ((autoExportSettings.fmt === 'json') ? 'json' : 'txt');
+    // v81 (2.6): имя файла — ТОЛЬКО через пайплайн (utils/export-emit-pipeline.js);
     // site/модель — из текущего адаптера, не из Gemini-констант.
     var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
     var siteNameD = (currentAdapter && currentAdapter.siteName) || '';
     // v81 (2.5): low-confidence НЕ ставится автоматически для не-Gemini (полный DOM-адаптер);
     // для Gemini — прежний флаг v63 (aiCmLowConfidenceByConv).
-    var lowConfD = (siteNameD === 'gemini') ? (aiCmLowConfidenceByConv[cid] === true) : false;
+    // v1.18 (F4): для GSA — РОВНО baseComplete=0 (префикс [LOW CONFIDENCE]_ в ручном шаблоне).
+    var lowConfD = (siteNameD === 'gemini')
+      ? (aiCmLowConfidenceByConv[cid] === true)
+      : ((siteNameD === 'google_search') ? (baseComplete !== true) : false);
     var file;
-    if (P && typeof P.buildExportFileName === 'function') {
+    if (siteNameD === 'google_search' && P && typeof P.buildGsaExportFileName === 'function') {
+      // v1.18 (F4): GSA — имя файла по шаблону РУЧНОГО экспорта GSA
+      // ([LOW CONFIDENCE]_ai-context-monitor-google_search-<model>-<метка>.<fmt>),
+      // с причиной в диагностике, а не в имени (форматы txt/md/json — из селектора).
+      var gsaModelD = (typeof lastSnapshotModelName === 'string') ? lastSnapshotModelName : '';
+      file = P.buildGsaExportFileName(siteNameD, gsaModelD, lowConfD, fmt);
+    } else if (P && typeof P.buildExportFileName === 'function') {
       file = P.buildExportFileName(siteNameD, cid, reason, lowConfD, fmt);
     } else {
       // фолбэк: прежнее имя файла (v54)
@@ -2711,7 +2800,11 @@ function doAutoExportDownload(cid, percentage, reason) {
     };
     var content = (fmt === 'md')
       ? B.buildMdFromHistory(hist, (currentAdapter && currentAdapter.siteName) || 'AI Chat')
-      : B.buildTxtFromHistory(hist);
+      : ((fmt === 'json')
+        ? ((typeof B.buildJsonFromHistory === 'function')
+          ? B.buildJsonFromHistory(hist, (currentAdapter && currentAdapter.siteName) || 'AI Chat')
+          : '')
+        : B.buildTxtFromHistory(hist));
     if (typeof content !== 'string') content = '';
     var textLen = String(content).replace(/^\uFEFF/, '').replace(/\s+/g, '').length;
     if (textLen <= 0) {
@@ -2739,10 +2832,18 @@ function doAutoExportDownload(cid, percentage, reason) {
       }
     }
     aiCmCancelDeferredHistWrite(cid); // v54: экспорт состоялся — висящий deferred-таймер больше не нужен
-    B.downloadBlob(content, file, fmt === 'md' ? 'text/markdown' : 'text/plain;charset=utf-8');
+    B.downloadBlob(content, file, fmt === 'md' ? 'text/markdown' : (fmt === 'json' ? 'application/json' : 'text/plain;charset=utf-8'));
     debugLog('log', '[AI CM][auto-export] fired convId=' + cid + ' pct=' + percentage + ' file=' + file +
       ' textLen=' + textLen + ' pendingCursor=' + (aiCmCursorLiveByConv[cid] ? '1' : '0') +
       ' baseComplete=' + (baseComplete === true ? '1' : '0'));
+    // v1.18 (F5): GSA — дополнительная tagged-строка fired (общая строка выше сохранена
+    // байтово: на ней стоит пин порядка логов H21).
+    if (siteNameD === 'google_search') {
+      debugLog('log', '[AI CM][auto-export] site=google_search fired convId=' + cid +
+        ' pct=' + percentage + ' file=' + file + ' fmt=' + fmt +
+        ' lowConfidence=' + (lowConfD === true ? '1' : '0') +
+        ' baseComplete=' + (baseComplete === true ? '1' : '0'));
+    }
   } catch (e) {
     console.error('[AI CM][auto-export] error:', e);
   }

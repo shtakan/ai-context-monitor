@@ -48,6 +48,22 @@
     return lines.join('\n');
   }
 
+  // v1.18 (F4): json — та же схема, что у ручной кнопки «Сохранить .json»
+  // (options/options.js buildJsonText): platform/model/exportedAt/tokens/limit/percent/messages.
+  // Добавлен в общий сборщик, чтобы автоэкспорт по порогу умел json-формат селектора.
+  function buildJsonFromHistory(history, platform) {
+    var h = history || {};
+    return JSON.stringify({
+      platform: (platform || 'AI Chat'),
+      model: h.model || '',
+      exportedAt: new Date().toISOString(),
+      tokens: (typeof h.tokens === 'number') ? h.tokens : 0,
+      limit: (typeof h.limit === 'number') ? h.limit : 0,
+      percent: (typeof h.percent === 'number') ? h.percent : 0,
+      messages: Array.isArray(h.messages) ? h.messages : []
+    }, null, 2);
+  }
+
   // Скачивание через blob + временную ссылку (как раньше в options.js)
   function downloadBlob(content, fileName, mimeType) {
     try {
@@ -68,6 +84,7 @@
   var Api = {
     buildTxtFromHistory: buildTxtFromHistory,
     buildMdFromHistory: buildMdFromHistory,
+    buildJsonFromHistory: buildJsonFromHistory,
     downloadBlob: downloadBlob
   };
 

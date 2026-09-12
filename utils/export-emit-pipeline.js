@@ -2,6 +2,11 @@
  * Общий EMIT-пайплайн экспорта (v81, Задача A).
  * Чистые функции для 6 адаптеров (chatgpt, gemini, deepseek, google_search, claude, perplexity):
  *   - buildExportFileName(service, convId, reason, isLowConfidence, fmt)
+ *   - buildGsaExportFileName(site, model, isLowConfidence, fmt) — v1.18 (F4): имя файла
+ *     автоэкспорта GSA по шаблону ручного экспорта (ai-context-monitor-<site>-<model>-<stamp>)
+ *   - resolveAutoExportConvId(site, urlConvId, threadId) — v1.18 (F2): convId автоэкспорта
+ *     (GSA: threadId вместо отсутствующего URL-id)
+ *   - notCompleteReason(state) — v1.18 (F5): ярлык причины skip (probe-running у GSA)
  *   - shouldSkipAutoExport(state) — чистый гейт автоэкспорта
  *   - resolveExportSource(state) — T1-fix#3: источник файла (объединённая база архив+live /
  *     локальный снимок EMIT / запрет при базе «только архив»)
@@ -52,7 +57,8 @@
    * reason: 'threshold' (без суффикса) | 'pre-trim' → -pretrim | 'base-complete' → -base-complete.
    */
   function buildExportFileName(service, convId, reason, isLowConfidence, fmt) {
-    var f = (fmt === 'md') ? 'md' : 'txt';
+    // v1.18 (F4): селектор формата общий для всех сайтов — txt | md | json.
+    var f = (fmt === 'md') ? 'md' : ((fmt === 'json') ? 'json' : 'txt');
     var d = new Date();
     function ap2(n) { return (n < 10 ? '0' : '') + n; }
     var stamp = d.getFullYear() + '-' + ap2(d.getMonth() + 1) + '-' + ap2(d.getDate()) +
@@ -64,6 +70,61 @@
     else if (reason === 'base-complete') suffix = '-base-complete';
     var lowConfPrefix = (isLowConfidence === true) ? '[LOW CONFIDENCE]_' : '';
     return lowConfPrefix + svcSeg + '-' + cidSeg + '-' + stamp + suffix + '.' + f;
+  }
+
+  /**
+   * v1.18 (F4): имя файла автоэкспорта Google Search AI (site=google_search) —
+   * ТОТ ЖЕ шаблон, что у РУЧНОГО экспорта этого сайта (options/options.js buildFileName):
+   *   [LOW CONFIDENCE]_ai-context-monitor-<site>-<model>-<YYYY-MM-DD-HH-MM>.<txt|md|json>
+   * Почему не общий buildExportFileName: у GSA в URL нет convId (threadId живёт только
+   * внутри сессии/перехватчика), поэтому файл, как и при ручном сохранении, именуется
+   * парой сервис+модель+метка времени. Префикс [LOW CONFIDENCE]_ — ТОЛЬКО при
+   * isLowConfidence=true (baseComplete=0), как в ручном пути.
+   * Остальные сервисы (в т.ч. Gemini — байтово) идут прежним buildExportFileName.
+   */
+  function buildGsaExportFileName(site, model, isLowConfidence, fmt) {
+    var ext = (fmt === 'md') ? 'md' : ((fmt === 'json') ? 'json' : 'txt');
+    var d = new Date();
+    function ap2(n) { return (n < 10 ? '0' : '') + n; }
+    // Метка ручного экспорта: YYYY-MM-DD-HH-MM (дефисы, как options.js buildFileName)
+    var stamp = d.getFullYear() + '-' + ap2(d.getMonth() + 1) + '-' + ap2(d.getDate()) +
+      '-' + ap2(d.getHours()) + '-' + ap2(d.getMinutes());
+    var siteSeg = safeSeg(site) || 'google_search';
+    // модель: та же санация, что в options.js (точки в именах моделей сохраняются)
+    var modelSeg = String(model == null ? '' : model)
+      .replace(/[^a-zA-Z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '') || 'model';
+    var lowConfPrefix = (isLowConfidence === true) ? '[LOW CONFIDENCE]_' : '';
+    return lowConfPrefix + 'ai-context-monitor-' + siteSeg + '-' + modelSeg + '-' + stamp + '.' + ext;
+  }
+
+  /**
+   * v1.18 (F2): convId автоэкспорта. Приоритет — идентификатор из URL (5 сервисов);
+   * для google_search надёжного id в URL нет (extractConvIdFromUrl → ''), поэтому
+   * идентификатором разговора служит threadId снапшота (detail.threadId) — тот же id,
+   * что ведёт сетевой перехватчик GSA. Прочие сервисы без URL-id → '' (не выдумываем).
+   * Ключ латча = site + этот convId (см. latchKey), поэтому GSA-разговоры изолированы
+   * друг от друга, а не делят один пустой ключ.
+   */
+  function resolveAutoExportConvId(site, urlConvId, threadId) {
+    var cid = String(urlConvId == null ? '' : urlConvId);
+    if (cid) return cid;
+    if (String(site == null ? '' : site) === 'google_search') {
+      return String(threadId == null ? '' : threadId);
+    }
+    return '';
+  }
+
+  /**
+   * v1.18 (F5): уточнение причины skip=not-complete для логов. Вердикт полноты ОДИН
+   * (shouldSkipAutoExport.baseComplete); здесь только ярлык: у GSA полноту взводит
+   * probe-классификатор страницы продолжения, и пока probe в полёте, полноты нет по
+   * определению — это 'probe-running', а не общий 'not-complete'.
+   * state: { site, probeRunning }.
+   */
+  function notCompleteReason(state) {
+    var s = state || {};
+    if (s.site === 'google_search' && s.probeRunning === true) return 'probe-running';
+    return 'not-complete';
   }
 
   /**
@@ -251,6 +312,9 @@
 
   var Api = {
     buildExportFileName: buildExportFileName,
+    buildGsaExportFileName: buildGsaExportFileName,
+    resolveAutoExportConvId: resolveAutoExportConvId,
+    notCompleteReason: notCompleteReason,
     shouldSkipAutoExport: shouldSkipAutoExport,
     effectiveAutoExportThreshold: effectiveAutoExportThreshold,
     pickExportSource: pickExportSource,

@@ -235,10 +235,16 @@ exactCountCheckbox && exactCountCheckbox.addEventListener('change', function () 
 
 // ========== v1.8: АВТОЭКСПОРТ ПРИ ПОРОГЕ (настройки) ==========
 // aiCmAutoExport (bool, по умолчанию ВЫКЛ), aiCmAutoExportPct (1–100, по умолчанию 90),
-// aiCmAutoExportFmt ('txt'|'md', по умолчанию 'txt') — всё в chrome.storage.local.
+// aiCmAutoExportFmt ('txt'|'md'|'json', по умолчанию 'txt') — всё в chrome.storage.local.
+// v1.18: фича общая для Gemini и Google Search AI (подпись секции), формат — общий селектор.
 const autoExportCheckbox = document.getElementById('aiCmAutoExport');
 const autoExportPctInput = document.getElementById('aiCmAutoExportPct');
 const autoExportFmtSelect = document.getElementById('aiCmAutoExportFmt');
+
+// v1.18: 'txt' | 'md' | 'json' — битое/чужое значение → 'txt' (прежнее поведение 1:1)
+function normalizeAutoExportFmt(v) {
+  return (v === 'md' || v === 'json') ? v : 'txt';
+}
 
 function clampAutoExportPct(v) {
   var n = parseInt(v, 10);
@@ -254,7 +260,7 @@ try {
       if (autoExportCheckbox) autoExportCheckbox.checked = data.aiCmAutoExport === true;
       var pct = clampAutoExportPct(data.aiCmAutoExportPct !== undefined ? data.aiCmAutoExportPct : 90);
       if (autoExportPctInput) autoExportPctInput.value = (pct === null) ? 90 : pct;
-      if (autoExportFmtSelect) autoExportFmtSelect.value = (data.aiCmAutoExportFmt === 'md') ? 'md' : 'txt';
+      if (autoExportFmtSelect) autoExportFmtSelect.value = normalizeAutoExportFmt(data.aiCmAutoExportFmt);
     } catch (eInit) {}
   });
 } catch (eLoad) {}
@@ -273,7 +279,7 @@ function applyAutoExportPct() {
 autoExportPctInput && autoExportPctInput.addEventListener('change', applyAutoExportPct);
 autoExportPctInput && autoExportPctInput.addEventListener('blur', applyAutoExportPct);
 autoExportFmtSelect && autoExportFmtSelect.addEventListener('change', function () {
-  try { chrome.storage.local.set({ aiCmAutoExportFmt: autoExportFmtSelect.value === 'md' ? 'md' : 'txt' }); } catch (eF) {}
+  try { chrome.storage.local.set({ aiCmAutoExportFmt: normalizeAutoExportFmt(autoExportFmtSelect.value) }); } catch (eF) {}
 });
 
 // v31: синхронизация чекбокса «Подробные логи» при внешнем изменении ключа

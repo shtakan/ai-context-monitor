@@ -686,6 +686,18 @@
   var FOLWR_PROBE_MAX_STEPS = 10;
   var probedTids = {}; // v43: гард «один probe на threadId» (handshake-реэмит / собственный probe-запрос не перезапускают probe)
 
+  // v1.18 (F5): состояние probe-полноты наружу (MAIN → ISOLATED через CustomEvent, как
+  // у ai-cm-full-history). Нужен ровно для ярлыка причины skip автоэкспорта: пока probe
+  // в полёте, у GSA нет вердикта полноты → 'probe-running', а не общий 'not-complete'.
+  // Сам вердикт полноты по-прежнему один — historyComplete снимка.
+  function emitProbeState(running, tid) {
+    try {
+      window.dispatchEvent(new CustomEvent('ai-cm-gsa-probe-state', {
+        detail: { running: running === true, threadId: tid || '' }
+      }));
+    } catch (e) { }
+  }
+
   function probeFolwrCompleteness(startUrl, startTurns, tid, firstCursor) {
     if (probedTids[tid]) {
       debugLog('log', '[ai-cm-google-search] probe пропущен: уже выполнялся для threadId=' + tid);
@@ -693,6 +705,7 @@
     }
     probedTids[tid] = true;
     console.log('[ai-cm-google-search] probe запущен: threadId=' + tid);
+    emitProbeState(true, tid); // v1.18: probe в полёте — content.js отличает probe-running от not-complete
     var key = threadAuthKey(tid, startUrl);
     var merged = Array.isArray(startTurns) ? startTurns.slice() : [];
     var mergeFn = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.mergeTurnsById) ||
@@ -712,6 +725,11 @@
       if (complete) {
         applyTurns(merged.length > 0 ? merged : lastFullTurns, tid, true);
       }
+      // v1.18 (F1): вердикт probe-классификатора уходит в content.js ОДНОЙ точкой —
+      // applyTurns(..., true) → buildDetail(historyComplete=true) → событие
+      // ai-cm-full-history → content.js baseComplete=1 (гейт shouldSkipAutoExport).
+      // Отдельного дублирующего вердикта у content.js нет.
+      emitProbeState(false, tid);
       console.log('[ai-cm-google-search] folwr-open: ходов=' + lastFullTurns.length +
         ', DOM-контейнеров=' + document.querySelectorAll('[data-scope-id="turn"]').length +
         ', probe +ходов=' + addedTotal +
