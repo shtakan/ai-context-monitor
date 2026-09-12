@@ -2797,67 +2797,131 @@ function doAutoExportDownload(cid, percentage, reason) {
       msgs = baseSrc.msgs;
       srcTag = 'base-union';
     }
+    // v1.19 (E-1): паспорт in-memory истории стреляющей вкладки. convId — lastEmitConvId
+    // (та же запись EMIT, что питает бейдж и pct); у GSA url-id нет — историю адресует
+    // threadId; прочие сервисы — convId из URL.
+    var histConvIdMem = '';
+    try {
+      if (typeof lastEmitConvId === 'string' && lastEmitConvId) histConvIdMem = lastEmitConvId;
+      else if (siteNameD === 'google_search' && typeof lastThreadId === 'string' && lastThreadId) histConvIdMem = lastThreadId;
+      else if (typeof getCurrentConvId === 'function') histConvIdMem = getCurrentConvId() || '';
+    } catch (eHistCid) { histConvIdMem = ''; }
+    var histSiteMem = siteNameD;
     if (!Array.isArray(msgs) || msgs.length === 0) {
-      debugLog('log', '[AI CM][auto-export] skip reason=empty-history convId=' + cid);
-      return;
-    }
-    // v61diag: дамп turnsMap в момент fired автоэкспорта (md/txt)
-    try { aiCmDumpTurnsSnapshot('snapshot-at-fired', cid, msgs); } catch (eDump) { }
-    var hist = {
-      site: (currentAdapter && currentAdapter.siteName) || '',
-      model: ModelConfig.getModel(lastResolvedModelId || '')?.name || '',
-      tokens: maxTokenCount,
-      limit: 0,
-      percent: percentage,
-      messages: msgs
-    };
-    var content = (fmt === 'md')
-      ? B.buildMdFromHistory(hist, (currentAdapter && currentAdapter.siteName) || 'AI Chat')
-      : ((fmt === 'json')
-        ? ((typeof B.buildJsonFromHistory === 'function')
-          ? B.buildJsonFromHistory(hist, (currentAdapter && currentAdapter.siteName) || 'AI Chat')
-          : '')
-        : B.buildTxtFromHistory(hist));
-    if (typeof content !== 'string') content = '';
-    var textLen = String(content).replace(/^\uFEFF/, '').replace(/\s+/g, '').length;
-    if (textLen <= 0) {
-      debugLog('log', '[AI CM][auto-export] skip reason=empty-text convId=' + cid);
-      return;
-    }
-    if (fmt === 'txt' && content.charAt(0) !== '\uFEFF') content = '\uFEFF' + content;
-    if (reason !== 'pre-trim') {
-      // v81 (2.5): латч «один раз на чат» — per service+convId (изоляция по сервису);
-      // для Gemini ключ по-прежнему уникален на чат — поведение 1:1.
-      var PDl = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
-      if (PDl && typeof PDl.markAutoExportFired === 'function') {
-        PDl.markAutoExportFired(autoExportFired, (currentAdapter && currentAdapter.siteName) || '', cid);
-        // v1.14.1 (O3): кросс-табовый латч — пишем в storage.session и в локальный кэш
-        try {
-          var siteO3 = (currentAdapter && currentAdapter.siteName) || '';
-          if (typeof PDl.sessionFiredPatch === 'function' && chrome.storage.session) {
-            chrome.storage.session.set(PDl.sessionFiredPatch(siteO3, cid));
-            var pkO3 = (typeof PDl.firedSessionKey === 'function') ? PDl.firedSessionKey(siteO3, cid) : null;
-            if (pkO3) sessionFiredCache[pkO3] = 1;
+      // v1.19 (E-1): in-memory истории нет — единственный разрешённый фолбэк: per-host
+      // ключ 'aiCmHistory:<host>' СВОЕЙ вкладки. Глобальный ключ aiCmHistory
+      // (last-writer-wins между вкладками) для тела экспорта НЕ читается никогда.
+      // Тот же provenance-гард: convId/site записи против cid/сайта стреляющей вкладки.
+      var hostFb = '';
+      try { hostFb = (typeof window !== 'undefined' && window.location && window.location.hostname) || ''; } catch (eHostFb) { }
+      var hostKeyFb = hostFb ? ('aiCmHistory:' + hostFb) : '';
+      var readFb = false;
+      var fbDone = false;
+      var onHostHistFb = function (data) {
+        if (fbDone) return;
+        fbDone = true;
+        var rec = (data && typeof data === 'object') ? data[hostKeyFb] : null;
+        if (!rec || !Array.isArray(rec.messages) || rec.messages.length === 0) {
+          debugLog('log', '[AI CM][auto-export] skip reason=empty-history convId=' + cid +
+            ' histSource=storage-host');
+          return;
+        }
+        aiCmWriteAutoExportFile(rec.messages, 'storage-host', rec.convId || '', rec.site || '');
+      };
+      try {
+        if (hostKeyFb && typeof chrome !== 'undefined' && chrome && chrome.storage && chrome.storage.local &&
+            typeof chrome.storage.local.get === 'function') {
+          readFb = true;
+          var maybePromiseFb = chrome.storage.local.get([hostKeyFb], onHostHistFb);
+          if (maybePromiseFb && typeof maybePromiseFb.then === 'function') {
+            maybePromiseFb.then(onHostHistFb, function () { onHostHistFb(null); });
           }
-        } catch (eO3write) { }
-      } else {
-        autoExportFired[cid] = 1;
+        }
+      } catch (eHostRead) { readFb = false; }
+      if (!readFb) {
+        debugLog('log', '[AI CM][auto-export] skip reason=empty-history convId=' + cid);
+      }
+      return;
+    }
+    // v1.19 (E-1): ЕДИНСТВЕННАЯ точка записи файла. Тело собирается ТОЛЬКО из переданного
+    // in-memory массива стреляющей вкладки (тот же массив, что питает бейдж и pct).
+    // Provenance-гард: convId истории сверяется с cid стреляющей вкладки, site истории —
+    // с currentAdapter.siteName; несовпадение → файл НЕ пишется (кросс-табная/кросс-чатная
+    // подмена тела исключена; histSource/histConvId видны в fired-строке).
+    function aiCmWriteAutoExportFile(fileMsgs, histSource, histConvId, histSite) {
+      try {
+        if ((histConvId && cid && String(histConvId) !== String(cid)) ||
+            (histSite && siteNameD && String(histSite) !== String(siteNameD))) {
+          debugLog('log', '[AI CM][auto-export] abort reason=history-source-mismatch histConvId=' +
+            histConvId + ' site=' + histSite);
+          return;
+        }
+        var msgs = fileMsgs;
+        // v61diag: дамп turnsMap в момент fired автоэкспорта (md/txt)
+        try { aiCmDumpTurnsSnapshot('snapshot-at-fired', cid, msgs); } catch (eDump) { }
+        var hist = {
+          site: (currentAdapter && currentAdapter.siteName) || '',
+          model: ModelConfig.getModel(lastResolvedModelId || '')?.name || '',
+          tokens: maxTokenCount,
+          limit: 0,
+          percent: percentage,
+          messages: msgs
+        };
+        var content = (fmt === 'md')
+          ? B.buildMdFromHistory(hist, (currentAdapter && currentAdapter.siteName) || 'AI Chat')
+          : ((fmt === 'json')
+            ? ((typeof B.buildJsonFromHistory === 'function')
+              ? B.buildJsonFromHistory(hist, (currentAdapter && currentAdapter.siteName) || 'AI Chat')
+              : '')
+            : B.buildTxtFromHistory(hist));
+        if (typeof content !== 'string') content = '';
+        var textLen = String(content).replace(/^\uFEFF/, '').replace(/\s+/g, '').length;
+        if (textLen <= 0) {
+          debugLog('log', '[AI CM][auto-export] skip reason=empty-text convId=' + cid);
+          return;
+        }
+        if (fmt === 'txt' && content.charAt(0) !== '\uFEFF') content = '\uFEFF' + content;
+        if (reason !== 'pre-trim') {
+          // v81 (2.5): латч «один раз на чат» — per service+convId (изоляция по сервису);
+          // для Gemini ключ по-прежнему уникален на чат — поведение 1:1.
+          var PDl = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+          if (PDl && typeof PDl.markAutoExportFired === 'function') {
+            PDl.markAutoExportFired(autoExportFired, (currentAdapter && currentAdapter.siteName) || '', cid);
+            // v1.14.1 (O3): кросс-табовый латч — пишем в storage.session и в локальный кэш
+            try {
+              var siteO3 = (currentAdapter && currentAdapter.siteName) || '';
+              if (typeof PDl.sessionFiredPatch === 'function' && chrome.storage.session) {
+                chrome.storage.session.set(PDl.sessionFiredPatch(siteO3, cid));
+                var pkO3 = (typeof PDl.firedSessionKey === 'function') ? PDl.firedSessionKey(siteO3, cid) : null;
+                if (pkO3) sessionFiredCache[pkO3] = 1;
+              }
+            } catch (eO3write) { }
+          } else {
+            autoExportFired[cid] = 1;
+          }
+        }
+        aiCmCancelDeferredHistWrite(cid); // v54: экспорт состоялся — висящий deferred-таймер больше не нужен
+        B.downloadBlob(content, file, fmt === 'md' ? 'text/markdown' : (fmt === 'json' ? 'application/json' : 'text/plain;charset=utf-8'));
+        debugLog('log', '[AI CM][auto-export] fired convId=' + cid + ' pct=' + percentage + ' file=' + file +
+          ' textLen=' + textLen + ' pendingCursor=' + (aiCmCursorLiveByConv[cid] ? '1' : '0') +
+          ' baseComplete=' + (baseComplete === true ? '1' : '0') +
+          ' histSource=' + histSource + ' histConvId=' + histConvId);
+        // v1.18 (F5): GSA — дополнительная tagged-строка fired (общая строка выше сохранена
+        // байтово: на ней стоит пин порядка логов H21).
+        if (siteNameD === 'google_search') {
+          debugLog('log', '[AI CM][auto-export] site=google_search fired convId=' + cid +
+            ' pct=' + percentage + ' file=' + file + ' fmt=' + fmt +
+            ' model=' + (gsaModelD || '') +
+            ' lowConfidence=' + (lowConfD === true ? '1' : '0') +
+            ' baseComplete=' + (baseComplete === true ? '1' : '0') +
+            ' histSource=' + histSource + ' histConvId=' + histConvId);
+        }
+      } catch (eInner) {
+        console.error('[AI CM][auto-export] error:', eInner);
       }
     }
-    aiCmCancelDeferredHistWrite(cid); // v54: экспорт состоялся — висящий deferred-таймер больше не нужен
-    B.downloadBlob(content, file, fmt === 'md' ? 'text/markdown' : (fmt === 'json' ? 'application/json' : 'text/plain;charset=utf-8'));
-    debugLog('log', '[AI CM][auto-export] fired convId=' + cid + ' pct=' + percentage + ' file=' + file +
-      ' textLen=' + textLen + ' pendingCursor=' + (aiCmCursorLiveByConv[cid] ? '1' : '0') +
-      ' baseComplete=' + (baseComplete === true ? '1' : '0'));
-    // v1.18 (F5): GSA — дополнительная tagged-строка fired (общая строка выше сохранена
-    // байтово: на ней стоит пин порядка логов H21).
-    if (siteNameD === 'google_search') {
-      debugLog('log', '[AI CM][auto-export] site=google_search fired convId=' + cid +
-        ' pct=' + percentage + ' file=' + file + ' fmt=' + fmt +
-        ' model=' + (gsaModelD || '') +
-        ' lowConfidence=' + (lowConfD === true ? '1' : '0') +
-        ' baseComplete=' + (baseComplete === true ? '1' : '0'));
-    }
+    // v1.19 (E-1): тело файла — ТОЛЬКО in-memory история этой вкладки (histSource=memory)
+    aiCmWriteAutoExportFile(msgs, 'memory', histConvIdMem, histSiteMem);
   } catch (e) {
     console.error('[AI CM][auto-export] error:', e);
   }
