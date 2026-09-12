@@ -12,7 +12,10 @@
  *   F4 имя файла GSA — по шаблону РУЧНОГО экспорта (ai-context-monitor-<site>-<model>-<stamp>),
  *      [LOW CONFIDENCE]_ только при baseComplete=0;
  *   F5 логи [AI CM][auto-export] site=google_search с причинами fired / skip reason=…
- *      (not-complete | probe-running | below-threshold | already-fired).
+ *      (not-complete | probe-running | below-threshold | already-fired);
+ *   F7 модель снапшота GSA в имени файла (реальная модель: сеть → DOM → дефолт сайта
+ *      «Gemini (Search AI)»), фолбэк 'model' — только при реально пустой модели;
+ *      заполнение lastSnapshotModelName для GSA — ОДНА точка (resolveCurrentModel).
  *
  * НЕ ТРОГАЕТСЯ: resolveExportSource и reason 'non-gemini', T1-архивы и их гейты, H9/H10,
  * saveFloor/selfHealFloor, классификатор GSA и селекторы GSA, путь автоэкспорта Gemini.
@@ -334,6 +337,98 @@ describe('F4/F5: doAutoExportDownload GSA (реальный код)', () => {
     h.api.dl('0362260d', 95, 'threshold');
     expect(h.downloads[0].file).toMatch(/^gemini-0362260d-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.txt$/);
     expect(h.logs.join('\n')).not.toContain('site=google_search');
+  });
+
+  // ——— F7: в имени файла GSA — реальная модель снапшота, а не фолбэк 'model' ———
+  test('F7: модель снапшота GSA в имени файла (Gemini (Search AI) → Gemini-Search-AI)', () => {
+    const h = gsaCtx('txt', { lastSnapshotModelName: 'Gemini (Search AI)' });
+    h.api.dl(TID, 95, 'threshold');
+    expect(h.downloads[0].file)
+      .toMatch(/^ai-context-monitor-google_search-Gemini-Search-AI-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}\.txt$/);
+    expect(h.downloads[0].file).not.toContain('-model-');
+    // tagged-строка fired несёт модель
+    expect(h.logs.join('\n')).toContain(' model=Gemini (Search AI)');
+  });
+
+  test('F7: фолбэк model — только при реально пустой модели снапшота', () => {
+    const h = gsaCtx('txt', { lastSnapshotModelName: '' });
+    h.api.dl(TID, 95, 'threshold');
+    expect(h.downloads[0].file)
+      .toMatch(/^ai-context-monitor-google_search-model-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}\.txt$/);
+    expect(h.logs.join('\n')).toContain(' model= lowConfidence=');
+  });
+
+  test('F7: модель GSA не протекает в Gemini-путь (имя файла байтово прежнее)', () => {
+    const h = gsaCtx('txt', {
+      currentAdapter: { siteName: 'gemini' },
+      lastSnapshotModelName: 'Gemini (Search AI)'
+    });
+    h.api.dl('0362260d', 95, 'threshold');
+    expect(h.downloads[0].file).toMatch(/^gemini-0362260d-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.txt$/);
+  });
+});
+
+// =====================================================================================
+// F7: модель снапшота для site=google_search — ОДНА точка (resolveCurrentModel)
+// =====================================================================================
+describe('F7: заполнение модели снапшота GSA (реальный resolveCurrentModel)', () => {
+  const ModelConfig = require('../utils/model-config.js');
+  const SCOPE = 'with (ctx) { ' + fnDecl(CONTENT, 'resolveCurrentModel') +
+    ' return { run: resolveCurrentModel }; }';
+  const makeResolve = new Function('ctx', SCOPE);
+
+  function modelCtx(over) {
+    const ctx = {
+      ModelConfig: ModelConfig,
+      currentAdapter: { siteName: GSA, detectModel: function () { return ''; } },
+      detectedModelSlug: '',
+      popupModelId: null,
+      popupRawModel: '',
+      geminiUiModelByFamily: {},
+      lastResolvedModelId: null,
+      lastModelSourceSig: '',
+      lastSnapshotModelName: '',
+      debugLog: function () { },
+      console: { log: function () { } },
+      window: { location: { hostname: 'www.google.com' } }
+    };
+    Object.assign(ctx, over || {});
+    return ctx;
+  }
+
+  test('GSA без сетевого slug: модель = дефолт сайта (та же, что у бейджа), не пусто', () => {
+    const ctx = modelCtx({});
+    expect(makeResolve(ctx).run()).toBe('gemini-search-default');
+    expect(ctx.lastSnapshotModelName).toBe('Gemini (Search AI)');
+  });
+
+  test('GSA со сетевым slug: приоритет у сети (поведение v47 сохранено)', () => {
+    const ctx = modelCtx({ detectedModelSlug: 'gemini-2.5-flash' });
+    makeResolve(ctx).run();
+    expect(ctx.lastSnapshotModelName).toBe('Gemini 2.5 Flash');
+  });
+
+  test('GSA + оверрайд попапа: имя модели снапшота совпадает с моделью бейджа', () => {
+    const ctx = modelCtx({ popupModelId: 'gemini-2.5-pro' });
+    expect(makeResolve(ctx).run()).toBe('gemini-2.5-pro');
+    expect(ctx.lastSnapshotModelName).toBe('Gemini 2.5 Pro');
+  });
+
+  test('прочие сайты не заполняются: Gemini-путь байтово прежний (пусто)', () => {
+    const ctx = modelCtx({
+      currentAdapter: { siteName: 'gemini', detectModel: function () { return ''; } }
+    });
+    makeResolve(ctx).run();
+    expect(ctx.lastSnapshotModelName).toBe('');
+  });
+
+  test('заполнение — одна точка: дубля модели в doAutoExportDownload нет', () => {
+    const body = fnDecl(CONTENT, 'resolveCurrentModel');
+    expect(body).toContain("currentAdapter.siteName === 'google_search'");
+    expect(body).toContain('lastSnapshotModelName = ModelConfig.getModel(modelId)?.name || modelId;');
+    // присваиваний ровно три: сброс при смене чата (v47), slug-ветка (v47), GSA-фолбэк (v1.18 F7)
+    expect((CONTENT.match(/^\s*lastSnapshotModelName = /gm) || []).length).toBe(3);
+    expect(fnDecl(CONTENT, 'doAutoExportDownload')).not.toContain('lastSnapshotModelName = ModelConfig');
   });
 });
 

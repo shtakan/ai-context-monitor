@@ -1464,6 +1464,15 @@ function resolveCurrentModel() {
     modelId = ModelConfig.getDefaultModel(currentAdapter.siteName);
     path = raw ? ((rawFromNet ? 'сеть' : 'DOM') + '→дефолт(не распознан)') : 'дефолт';
   }
+  // v1.18 (F7): GSA — сеть может не дать slug вовсе (детектор GSA молчит, если в ответе нет
+  // model:"…"), и имя модели снапшота оставалось пустым → сегмент модели в имени файла
+  // автоэкспорта падал в фолбэк 'model'. Заполняем ОДНОЙ точкой ЗДЕСЬ — ровно той моделью,
+  // что показывает badge-update: ModelConfig.getModel(modelId)?.name, где modelId идёт по
+  // пути попап → сеть → DOM → дефолт сайта ('gemini-search-default' = «Gemini (Search AI)»).
+  // Для прочих сайтов (в т.ч. Gemini) поведение прежнее — присваивание не выполняется.
+  if (!snapModelId && currentAdapter && currentAdapter.siteName === 'google_search') {
+    lastSnapshotModelName = ModelConfig.getModel(modelId)?.name || modelId;
+  }
   const source = popupModelId ? 'popup' : (uiRaw ? 'dom' : 'snapshot');
   if (modelId !== lastResolvedModelId) {
     lastResolvedModelId = modelId;
@@ -2738,12 +2747,16 @@ function doAutoExportDownload(cid, percentage, reason) {
     var lowConfD = (siteNameD === 'gemini')
       ? (aiCmLowConfidenceByConv[cid] === true)
       : ((siteNameD === 'google_search') ? (baseComplete !== true) : false);
+    // v1.18 (F7): модель снапшота для имени файла GSA. lastSnapshotModelName заполняется для
+    // GSA в resolveCurrentModel (реальная модель: сеть → DOM → дефолт сайта, как у бейджа);
+    // фолбэк 'model' в buildGsaExportFileName остаётся ТОЛЬКО при реально пустой модели.
+    var gsaModelD = (siteNameD === 'google_search' && typeof lastSnapshotModelName === 'string')
+      ? lastSnapshotModelName : '';
     var file;
     if (siteNameD === 'google_search' && P && typeof P.buildGsaExportFileName === 'function') {
       // v1.18 (F4): GSA — имя файла по шаблону РУЧНОГО экспорта GSA
       // ([LOW CONFIDENCE]_ai-context-monitor-google_search-<model>-<метка>.<fmt>),
       // с причиной в диагностике, а не в имени (форматы txt/md/json — из селектора).
-      var gsaModelD = (typeof lastSnapshotModelName === 'string') ? lastSnapshotModelName : '';
       file = P.buildGsaExportFileName(siteNameD, gsaModelD, lowConfD, fmt);
     } else if (P && typeof P.buildExportFileName === 'function') {
       file = P.buildExportFileName(siteNameD, cid, reason, lowConfD, fmt);
@@ -2841,6 +2854,7 @@ function doAutoExportDownload(cid, percentage, reason) {
     if (siteNameD === 'google_search') {
       debugLog('log', '[AI CM][auto-export] site=google_search fired convId=' + cid +
         ' pct=' + percentage + ' file=' + file + ' fmt=' + fmt +
+        ' model=' + (gsaModelD || '') +
         ' lowConfidence=' + (lowConfD === true ? '1' : '0') +
         ' baseComplete=' + (baseComplete === true ? '1' : '0'));
     }
