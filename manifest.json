@@ -4,6 +4,8 @@
   "version": "1.16.0",
   "description": "Мониторинг заполнения контекстного окна AI-моделей в реальном времени",
 
+  "homepage_url": "https://github.com/user/ai-context-monitor",
+
   "permissions": [
     "scripting",
     "storage",

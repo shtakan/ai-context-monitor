@@ -126,6 +126,21 @@ select:focus, input:focus {
   color: #666688;
 }
 
+/* v1.18 (P1): ссылка на политику конфиденциальности в футере */
+#privacy-link {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 11px;
+  color: #a78bfa;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+#privacy-link:hover {
+  color: #c4b5fd;
+  text-decoration: underline;
+}
+
 .input-row {
   display: flex;
   gap: 6px;

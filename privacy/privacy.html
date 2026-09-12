@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<!--
+  AI Context Monitor — политика конфиденциальности.
+  Страница самодостаточна: inline CSS, без внешних ресурсов (требование MV3 CSP).
+  Открывается из настроек через chrome.runtime.getURL('privacy/privacy.html').
+-->
+<html lang="ru">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Политика конфиденциальности — AI Context Monitor</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 32px 16px 56px;
+      background: #f7f7fb;
+      color: #1f2233;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.65;
+    }
+
+    .doc {
+      max-width: 720px;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #e3e3ee;
+      border-radius: 10px;
+      padding: 32px;
+    }
+
+    h1 {
+      font-size: 24px;
+      line-height: 1.3;
+      margin: 0 0 8px;
+    }
+
+    h2 {
+      font-size: 18px;
+      line-height: 1.35;
+      margin: 30px 0 10px;
+    }
+
+    p { margin: 10px 0; }
+
+    ul {
+      margin: 10px 0;
+      padding-left: 22px;
+    }
+
+    li { margin: 7px 0; }
+
+    .meta {
+      color: #5b5f78;
+      font-size: 14px;
+      margin: 0 0 22px;
+    }
+
+    .toc {
+      background: #f7f7fb;
+      border: 1px solid #e3e3ee;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 0 0 8px;
+    }
+
+    .toc-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin: 0 0 6px;
+    }
+
+    .toc ol {
+      margin: 0;
+      padding-left: 20px;
+      font-size: 14px;
+    }
+
+    .toc li { margin: 4px 0; }
+
+    code {
+      background: #f1f1f7;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 14px;
+    }
+
+    a { color: #5925c4; }
+    a:hover { text-decoration: underline; }
+
+    .footer {
+      margin-top: 34px;
+      padding-top: 16px;
+      border-top: 1px solid #e3e3ee;
+      color: #5b5f78;
+      font-size: 14px;
+    }
+  </style>
+</head>
+
+<body>
+  <main class="doc">
+    <h1>Политика конфиденциальности — AI Context Monitor</h1>
+    <p class="meta">Дата последней редакции: <strong>2026-09-12 (ред. 2)</strong></p>
+
+    <!-- Оглавление документа -->
+    <nav class="toc">
+      <p class="toc-title">Содержание</p>
+      <ol>
+        <li><a href="#summary">Краткая суть</a></li>
+        <li><a href="#data">Какие данные обрабатываются</a></li>
+        <li><a href="#no-collect">Что НЕ собирается</a></li>
+        <li><a href="#storage">Хранение данных</a></li>
+        <li><a href="#external">Внешние обращения</a></li>
+        <li><a href="#permissions">Разрешения расширения</a></li>
+        <li><a href="#children">Дети</a></li>
+        <li><a href="#changes">Изменения политики</a></li>
+        <li><a href="#contacts">Контакты</a></li>
+      </ol>
+    </nav>
+
+    <!-- Секция 1: Краткая суть -->
+    <h2 id="summary">1. Краткая суть</h2>
+    <p>
+      AI Context Monitor — расширение для браузера, которое показывает в реальном времени, насколько заполнено
+      контекстное окно AI-моделей (ChatGPT, Gemini, DeepSeek, Claude, Perplexity, Google Search AI).
+    </p>
+    <p>
+      Расширение обрабатывает данные <strong>только локально</strong>, на устройстве пользователя. У расширения нет
+      собственных серверов: ничего не отправляется разработчику, не передаётся третьим лицам и не используется для
+      аналитики. Все вычисления — подсчёт токенов, история, экспорт — выполняются в браузере.
+    </p>
+
+    <!-- Секция 2: Какие данные обрабатываются -->
+    <h2 id="data">2. Какие данные обрабатываются</h2>
+    <p>Расширение работает только с данными, необходимыми для его функций:</p>
+    <ul>
+      <li>
+        <strong>Тексты диалогов AI-моделей</strong> (ChatGPT, Gemini, DeepSeek, Claude, Perplexity, Google Search AI) —
+        сохраняются в <code>chrome.storage.local</code> и используются для истории чата, счётчика контекста и
+        автоэкспорта.
+      </li>
+      <li>
+        <strong>Метаданные чатов</strong> (идентификаторы, timestamps, названия моделей) — там же, в
+        <code>chrome.storage.local</code>.
+      </li>
+      <li>
+        <strong>Настройки расширения</strong> (пороги уведомлений, форматы экспорта, лимиты контекста) —
+        <code>chrome.storage.local</code> / <code>chrome.storage.sync</code>.
+      </li>
+      <li>
+        <strong>BYOK-ключ Google AI Studio</strong> (опционально) — вводится самим пользователем, если нужен точный
+        подсчёт токенов. Хранится в <code>chrome.storage.local</code> под ключом <code>ai_cm_gemini_api_key</code> в
+        открытом виде, используется ТОЛЬКО для обращений к <code>generativelanguage.googleapis.com</code> по
+        инициативе пользователя, в логи попадает только как <code>***</code>. Ключ удаляется очисткой поля ключа на
+        странице настроек: значение сохраняется по мере ввода, поэтому пустое поле означает отсутствие ключа в
+        хранилище.
+      </li>
+      <li>
+        <strong>Импортированные архивы</strong> (Gemini Takeout JSON, экспорты ChatGPT / Perplexity / Claude) —
+        хранятся в <code>chrome.storage.local</code> в привязке к конкретному <code>convId</code>; каждый
+        импортированный диалог можно удалить кнопкой «Удалить» в списке архивов на странице настроек.
+      </li>
+    </ul>
+
+    <!-- Секция 3: Что НЕ собирается -->
+    <h2 id="no-collect">3. Что НЕ собирается</h2>
+    <ul>
+      <li>Нет телеметрии, аналитики и crash-репортов.</li>
+      <li>
+        Нет чтения cookies пользователя: cookies, которые уже существуют на сайтах AI-сервисов, используются только
+        самими сайтами.
+      </li>
+      <li>Нет обращений к серверам разработчика — таких серверов у расширения нет.</li>
+      <li>Нет передачи данных третьим лицам.</li>
+    </ul>
+
+    <!-- Секция 4: Хранение данных -->
+    <h2 id="storage">4. Хранение данных</h2>
+    <ul>
+      <li>Все данные хранятся только на устройстве пользователя.</li>
+      <li>
+        Лимиты и автоочистка: в истории хранится не более 50 диалогов; записи старше 30 дней удаляются
+        автоматически. При импорте архивов — не более 20 файлов общим объёмом до 8 МБ и до 5000 сообщений на один
+        чат.
+      </li>
+      <li>
+        Удаление архива: у каждого импортированного диалога в списке архивов на странице настроек есть кнопка
+        «Удалить» — она удаляет и данные архива, и запись об источнике истории.
+      </li>
+      <li>
+        Удаление BYOK-ключа: очистите поле ключа на странице настроек — ключ исчезает из
+        <code>chrome.storage.local</code>, поскольку значение сохраняется по мере ввода.
+      </li>
+      <li>
+        Полное удаление всех данных: удаление самого расширения — браузер (Chrome или Edge) сам очищает
+        <code>chrome.storage</code> расширения. Дополнительно можно очистить данные сайтов средствами браузера.
+      </li>
+    </ul>
+
+    <!-- Секция 5: Внешние обращения -->
+    <h2 id="external">5. Внешние обращения</h2>
+    <p>Сетевые обращения возможны только по инициативе пользователя:</p>
+    <ul>
+      <li>
+        <code>generativelanguage.googleapis.com</code> — только если пользователь включил BYOK-ключ и запросил точный
+        подсчёт токенов; без ключа подсчёт выполняется локальной эвристикой.
+      </li>
+      <li>
+        Сайты AI-сервисов (6 сервисов, перечисленных в разрешениях) — расширение перехватывает их трафик локально,
+        чтобы отобразить счётчик контекста; никаких дополнительных запросов к этим сайтам оно не делает.
+      </li>
+    </ul>
+
+    <!-- Секция 6: Разрешения расширения -->
+    <h2 id="permissions">6. Разрешения расширения</h2>
+    <ul>
+      <li><code>storage</code> — сохранение настроек и истории.</li>
+      <li><code>notifications</code> — опциональные проактивные уведомления о приближении к лимиту контекста.</li>
+      <li><code>scripting</code> — регистрация MAIN-перехватчиков на сайтах AI.</li>
+      <li>
+        9 host_permissions — сайты AI, для которых работает счётчик: chatgpt.com, gemini.google.com,
+        chat.deepseek.com, aistudio.google.com, www.google.com/search*, claude.ai, perplexity.ai,
+        www.perplexity.ai, generativelanguage.googleapis.com.
+      </li>
+    </ul>
+
+    <!-- Секция 7: Дети -->
+    <h2 id="children">7. Дети</h2>
+    <p>
+      Расширение не предназначено для детей младше 13 лет (согласно COPPA). Данные детей сознательно не собираются и
+      не обрабатываются.
+    </p>
+
+    <!-- Секция 8: Изменения политики -->
+    <h2 id="changes">8. Изменения политики</h2>
+    <p>
+      Страница обновляется вместе с релизом расширения. Дата последней редакции указана в начале документа, версия
+      документа — внизу страницы.
+    </p>
+
+    <!-- Секция 9: Контакты -->
+    <h2 id="contacts">9. Контакты</h2>
+    <p>По вопросам обработки данных: <a href="mailto:support@example.com">support@example.com</a>.</p>
+    <!-- TODO: заменить на реальный email перед публикацией -->
+
+    <div class="footer">Версия 1.1 от 2026-09-12</div>
+  </main>
+</body>
+
+</html>

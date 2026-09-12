@@ -31,6 +31,19 @@ try {
   if (versionEl && manifest.version) versionEl.textContent = 'v' + manifest.version;
 } catch (e) {}
 
+// v1.18 (P1): открытие privacy.html во внешней вкладке
+// Страница политики конфиденциальности — самодостаточный HTML внутри расширения,
+// открывается через chrome.runtime.getURL, чтобы не уводить popup-контекст.
+var privacyLink = document.getElementById('privacy-link');
+privacyLink && privacyLink.addEventListener('click', function (e) {
+  e.preventDefault();
+  try {
+    chrome.tabs.create({ url: chrome.runtime.getURL('privacy/privacy.html') });
+  } catch (ePrivacy) {
+    console.warn('[privacy] не удалось открыть политику конфиденциальности:', ePrivacy);
+  }
+});
+
 // Сайт-в-human-readable
 var siteLabels = {
   'chatgpt': 'ChatGPT',
