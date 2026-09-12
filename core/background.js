@@ -160,12 +160,14 @@ chrome.runtime.onInstalled.addListener(() => {
     showPercentage: true
   });
   aiCmPruneHistory(); // M-8: TTL per-host истории — чистка при установке/обновлении
+  aiCmMigrateByokToSession(); // M-7: plaintext-ключ BYOK из local → session (и стирание с диска)
   ensureInterceptor();
 });
 
 if (chrome.runtime.onStartup) {
   chrome.runtime.onStartup.addListener(() => {
     aiCmPruneHistory(); // M-8: TTL per-host истории — чистка при старте браузера
+    aiCmMigrateByokToSession(); // M-7: plaintext-ключ BYOK из local → session (и стирание с диска)
     ensureInterceptor();
   });
 }
@@ -327,6 +329,107 @@ if (chrome.notifications && chrome.notifications.onButtonClicked) {
   });
 }
 
+// ========== M-7: BYOK-ключ — ТОЛЬКО chrome.storage.session ==========
+// Аудит фазы 3: ключ Google AI Studio лежал в chrome.storage.local открытым
+// текстом и оставался на диске. Решение — session-only (chrome.storage.session):
+// ключ живёт в памяти сессии браузера до перезапуска и на диск не пишется.
+// Псевдо-шифрование в local сознательно НЕ применяется.
+var AI_CM_BYOK_SESSION_KEY = 'aiCmApiKeySession';
+// Известные имена plaintext-ключа BYOK прежних версий — их гарантированно
+// стираем из chrome.storage.local (имя из README/настроек прежних версий первое).
+var AI_CM_BYOK_LEGACY_KEYS = [
+  'ai_cm_gemini_api_key',
+  'ai_cm_api_key',
+  'ai_cm_byok_key',
+  'aiCmGeminiApiKey',
+  'aiCmApiKey',
+  'gemini_api_key'
+];
+
+// Первое непустое значение среди известных legacy-имён ключа (иначе '').
+function aiCmFirstLegacyByokKey(data) {
+  for (var i = 0; i < AI_CM_BYOK_LEGACY_KEYS.length; i++) {
+    var v = data ? data[AI_CM_BYOK_LEGACY_KEYS[i]] : null;
+    if (typeof v === 'string' && v) return v;
+  }
+  return '';
+}
+
+// Удаление plaintext-ключей BYOK из chrome.storage.local — по всем известным именам.
+function aiCmPurgeLegacyByokKeys() {
+  try {
+    if (!chrome.storage || !chrome.storage.local || typeof chrome.storage.local.remove !== 'function') return;
+    chrome.storage.local.remove(AI_CM_BYOK_LEGACY_KEYS);
+  } catch (ePurge) { }
+}
+
+// M-7: миграция plaintext→session на onInstalled/onStartup. Ключ найден в local →
+// переносим в session, стираем с диска, пишем лог. Идемпотентно: если в local ключа
+// нет (штатное состояние после первой миграции) — не делаем ничего.
+function aiCmMigrateByokToSession() {
+  try {
+    if (!chrome.storage || !chrome.storage.local || typeof chrome.storage.local.get !== 'function') return;
+    chrome.storage.local.get(AI_CM_BYOK_LEGACY_KEYS, function (data) {
+      var legacy = aiCmFirstLegacyByokKey(data);
+      if (!legacy) return;
+      try {
+        if (chrome.storage.session && typeof chrome.storage.session.set === 'function') {
+          var patch = {};
+          patch[AI_CM_BYOK_SESSION_KEY] = legacy;
+          chrome.storage.session.set(patch);
+        }
+      } catch (eSet) { }
+      aiCmPurgeLegacyByokKeys();
+      console.log('[AI CM][byok] migrated plaintext→session');
+    });
+  } catch (eMig) { }
+}
+
+// Чтение ключа BYOK: штатный источник — chrome.storage.session ('aiCmApiKeySession').
+function aiCmSessionByokGet() {
+  return new Promise(function (resolve) {
+    try {
+      if (!chrome.storage || !chrome.storage.session || typeof chrome.storage.session.get !== 'function') {
+        resolve(''); return;
+      }
+      chrome.storage.session.get([AI_CM_BYOK_SESSION_KEY], function (d) {
+        var v = d ? d[AI_CM_BYOK_SESSION_KEY] : '';
+        resolve((typeof v === 'string') ? v : '');
+      });
+    } catch (eGet) { resolve(''); }
+  });
+}
+
+// M-7: ключ для COUNT_TOKENS. session — первичен; переходный фолбэк на plaintext
+// прежних версий в local нужен только на окно миграции (SW мог обновиться в уже
+// открытом браузере раньше onInstalled): найденный legacy-ключ переносим в session
+// и стираем из local — пользователь не теряет ключ, диск очищается.
+async function aiCmReadByokApiKey() {
+  var key = await aiCmSessionByokGet();
+  if (key) return key;
+
+  var legacy = await new Promise(function (resolve) {
+    try {
+      if (!chrome.storage || !chrome.storage.local || typeof chrome.storage.local.get !== 'function') {
+        resolve(''); return;
+      }
+      chrome.storage.local.get(AI_CM_BYOK_LEGACY_KEYS, function (d) { resolve(aiCmFirstLegacyByokKey(d)); });
+    } catch (eLeg) { resolve(''); }
+  });
+  if (!legacy) return '';
+
+  try {
+    if (chrome.storage.session && typeof chrome.storage.session.set === 'function') {
+      var patch = {};
+      patch[AI_CM_BYOK_SESSION_KEY] = legacy;
+      chrome.storage.session.set(patch);
+    }
+  } catch (eSet) { }
+  aiCmPurgeLegacyByokKeys();
+  console.log('[AI CM][byok] migrated plaintext→session');
+  return legacy;
+}
+
 // ========== M-9: гигиена COUNT_TOKENS (таймаут + debounce + кэш) ==========
 // Протокол COUNT_TOKENS — инвариант: имя сообщения, поля запроса (text/model) и
 // фолбэк content.js при ok:false НЕ меняются. Все поля ниже — ТОЛЬКО добавленные.
@@ -444,12 +547,11 @@ async function handleCountTokensRun(run) {
   var isDebounced = run.debounced ? 1 : 0;
   var logPrefix = '[AI CM][countTokens]';
 
-  // Читаем ключ из chrome.storage.local
-  var data = await new Promise(function (resolve) {
-    chrome.storage.local.get(['ai_cm_gemini_api_key'], resolve);
-  });
-  var apiKey = data.ai_cm_gemini_api_key;
-  if (!apiKey) return { error: 'no_key' };
+  // M-7: ключ читаем из chrome.storage.session ('aiCmApiKeySession') — на диск он
+  // больше не пишется; в local допустим только переходный plaintext-фолбэк, который
+  // тут же переносится в session и стирается (см. aiCmReadByokApiKey).
+  var apiKey = await aiCmReadByokApiKey();
+  if (!apiKey) return { ok: false, reason: 'no-key' };
 
   // Список кандидатов: lastGoodModel, запрошенная модель, фолбэки
   var rawCandidates = [lastGoodModel, model, 'gemini-flash-latest', 'gemini-3.5-flash', 'gemini-2.5-flash'];

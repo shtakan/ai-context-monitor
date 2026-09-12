@@ -437,12 +437,52 @@ let netServerTokens = 0;
 let netEffectiveLen = 0;
 
 // ========== BYOK: точный подсчёт токенов через Gemini countTokens API ==========
+// M-7: ключ Google AI Studio хранится ТОЛЬКО в chrome.storage.session
+// ('aiCmApiKeySession') — в память сессии браузера, на диск не пишется. Доступ
+// контент-скриптам открыт в background.js (chrome.storage.session.setAccessLevel).
 let exactCountEnabled = false;
 let geminiApiKey = '';
 let lastCountTokensText = '';
 let lastCountTokensCache = 0;
 let countTokensTimer = null;
 let countTokensPending = false; // защита от повторного запроса пока предыдущий в полёте
+
+var AI_CM_BYOK_SESSION_KEY = 'aiCmApiKeySession';
+// Известные имена plaintext-ключа BYOK прежних версий (chrome.storage.local).
+var AI_CM_BYOK_LEGACY_KEYS = [
+  'ai_cm_gemini_api_key',
+  'ai_cm_api_key',
+  'ai_cm_byok_key',
+  'aiCmGeminiApiKey',
+  'aiCmApiKey',
+  'gemini_api_key'
+];
+
+// Первое непустое значение среди известных legacy-имён ключа (иначе '').
+function aiCmFirstLegacyByokKey(data) {
+  for (var iLk = 0; iLk < AI_CM_BYOK_LEGACY_KEYS.length; iLk++) {
+    var vLk = data ? data[AI_CM_BYOK_LEGACY_KEYS[iLk]] : null;
+    if (typeof vLk === 'string' && vLk) return vLk;
+  }
+  return '';
+}
+
+// M-7: чтение ключа BYOK. Первичен session; plaintext прежних версий в local —
+// только переходный фолбэк на окно миграции (саму миграцию делает background SW).
+function aiCmReadByokKey(cb) {
+  var finished = false;
+  function finish(v) { if (!finished) { finished = true; cb(v || ''); } }
+  try {
+    if (!chrome.storage || !chrome.storage.session || typeof chrome.storage.session.get !== 'function') { finish(''); return; }
+    chrome.storage.session.get([AI_CM_BYOK_SESSION_KEY], function (d) {
+      var v = d ? d[AI_CM_BYOK_SESSION_KEY] : '';
+      if (typeof v === 'string' && v) { finish(v); return; }
+      try {
+        chrome.storage.local.get(AI_CM_BYOK_LEGACY_KEYS, function (dl) { finish(aiCmFirstLegacyByokKey(dl)); });
+      } catch (eLeg) { finish(''); }
+    });
+  } catch (eKey) { finish(''); }
+}
 
 // ========== БЕЗОПАСНЫЙ ПОРОГ (регулятор; определения целиком, со стрелками) ==========
 let safePct = null;
@@ -1599,10 +1639,13 @@ function requestExactTokens(fullText, modelId) {
 
 function loadByokSettings() {
   if (!isExtensionValid()) return;
-  chrome.storage.local.get(['ai_cm_exact_token_count', 'ai_cm_gemini_api_key'], function (data) {
+  // M-7: флаг точного подсчёта остаётся в chrome.storage.local, ключ — в session.
+  chrome.storage.local.get(['ai_cm_exact_token_count'], function (data) {
     exactCountEnabled = !!data.ai_cm_exact_token_count;
-    geminiApiKey = data.ai_cm_gemini_api_key || '';
-    console.log('[byok] настройки загружены: exactCount=' + exactCountEnabled + ', key=' + (geminiApiKey ? '***' : '(пусто)'));
+    aiCmReadByokKey(function (key) {
+      geminiApiKey = key || '';
+      console.log('[byok] настройки загружены: exactCount=' + exactCountEnabled + ', key=' + (geminiApiKey ? '***' : '(пусто)'));
+    });
   });
 }
 
@@ -3371,8 +3414,10 @@ if (isExtensionValid()) {
         }
       }
     } catch (ePerSite) { }
-    // BYOK: слушаем изменения API-ключа и флага точного подсчёта
-    if (changes.ai_cm_exact_token_count || changes.ai_cm_gemini_api_key) {
+    // BYOK (M-7): ключ живёт в chrome.storage.session ('aiCmApiKeySession');
+    // legacy-имя в local слушаем только на переходный период миграции,
+    // флаг точного подсчёта — по-прежнему в local.
+    if (changes.ai_cm_exact_token_count || changes[AI_CM_BYOK_SESSION_KEY] || changes.ai_cm_gemini_api_key) {
       loadByokSettings();
       // Сбрасываем кэш при смене настроек, чтобы новый ключ/флаг применился сразу
       lastCountTokensText = '';

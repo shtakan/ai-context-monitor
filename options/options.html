@@ -140,7 +140,11 @@
         <input type="password" id="api-key" aria-label="API-ключ Google AI Studio" placeholder="Введите API-ключ Google AI Studio" autocomplete="off">
         <button id="toggle-api-key" class="btn-toggle" type="button" title="Показать/скрыть ключ">👁</button>
       </div>
-      <span class="hint">Ключ хранится локально в вашем браузере</span>
+      <span class="hint">Ключ хранится только до перезапуска браузера (chrome.storage.session). После перезапуска введите заново.</span>
+      <div class="api-key-row">
+        <span class="hint" id="api-key-status" role="status">Ключ: не задан</span>
+        <button id="api-key-remove" class="btn-toggle" type="button">Убрать ключ</button>
+      </div>
     </div>
 
     <div class="section checkbox-row">

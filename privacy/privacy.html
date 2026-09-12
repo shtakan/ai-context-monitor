@@ -92,6 +92,23 @@
     a { color: #5925c4; }
     a:hover { text-decoration: underline; }
 
+    table.revisions {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin: 10px 0;
+    }
+
+    table.revisions th,
+    table.revisions td {
+      border: 1px solid #e3e3ee;
+      padding: 6px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    table.revisions th { background: #f7f7fb; }
+
     .footer {
       margin-top: 34px;
       padding-top: 16px;
@@ -105,7 +122,7 @@
 <body>
   <main class="doc">
     <h1>Политика конфиденциальности — AI Context Monitor</h1>
-    <p class="meta">Дата последней редакции: <strong>2026-09-12 (ред. 2)</strong></p>
+    <p class="meta">Дата последней редакции: <strong>2026-09-12 (ред. 3)</strong>; предыдущая редакция — 2026-09-12 (ред. 2)</p>
 
     <!-- Оглавление документа -->
     <nav class="toc">
@@ -154,11 +171,13 @@
       </li>
       <li>
         <strong>BYOK-ключ Google AI Studio</strong> (опционально) — вводится самим пользователем, если нужен точный
-        подсчёт токенов. Хранится в <code>chrome.storage.local</code> под ключом <code>ai_cm_gemini_api_key</code> в
-        открытом виде, используется ТОЛЬКО для обращений к <code>generativelanguage.googleapis.com</code> по
-        инициативе пользователя, в логи попадает только как <code>***</code>. Ключ удаляется очисткой поля ключа на
-        странице настроек: значение сохраняется по мере ввода, поэтому пустое поле означает отсутствие ключа в
-        хранилище.
+        подсчёт токенов. Ключ хранится только в памяти сессии браузера
+        (<code>chrome.storage.session</code>, ключ <code>aiCmApiKeySession</code>) и не записывается на диск: после
+        перезапуска браузера ключ нужно ввести заново. Используется ТОЛЬКО для обращений к
+        <code>generativelanguage.googleapis.com</code> по инициативе пользователя, в логи попадает только как
+        <code>***</code>. Ключ удаляется очисткой поля ключа или кнопкой «Убрать ключ» на странице настроек. До
+        редакции 3 ключ хранился в <code>chrome.storage.local</code> под ключом <code>ai_cm_gemini_api_key</code> в
+        открытом виде; после обновления такое значение автоматически переносится в память сессии и удаляется с диска.
       </li>
       <li>
         <strong>Импортированные архивы</strong> (Gemini Takeout JSON, экспорты ChatGPT / Perplexity / Claude) —
@@ -193,8 +212,8 @@
         «Удалить» — она удаляет и данные архива, и запись об источнике истории.
       </li>
       <li>
-        Удаление BYOK-ключа: очистите поле ключа на странице настроек — ключ исчезает из
-        <code>chrome.storage.local</code>, поскольку значение сохраняется по мере ввода.
+        Удаление BYOK-ключа: очистите поле ключа или нажмите кнопку «Убрать ключ» на странице настроек — ключ
+        исчезает из памяти сессии (<code>chrome.storage.session</code>); на диск он не записывается.
       </li>
       <li>
         Полное удаление всех данных: удаление самого расширения — браузер (Chrome или Edge) сам очищает
@@ -247,6 +266,33 @@
     <h2 id="contacts">9. Контакты</h2>
     <p>По вопросам обработки данных: <a href="mailto:support@example.com">support@example.com</a>.</p>
     <!-- TODO: заменить на реальный email перед публикацией -->
+
+    <!-- Таблица редакций (M-7): rev. 3 — BYOK-ключ переведён на session-only -->
+    <h2 id="revisions">История редакций</h2>
+    <table class="revisions">
+      <thead>
+        <tr><th>Редакция</th><th>Дата</th><th>Что изменилось</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>rev. 1</td>
+          <td>2026-09-12</td>
+          <td>Первая публичная редакция политики.</td>
+        </tr>
+        <tr>
+          <td>rev. 2</td>
+          <td>2026-09-12</td>
+          <td>Текст приведён в соответствие с фактическим интерфейсом страницы настроек.</td>
+        </tr>
+        <tr>
+          <td>rev. 3</td>
+          <td>2026-09-12</td>
+          <td>BYOK-ключ Google AI Studio переведён на хранение только в памяти сессии браузера
+            (<code>chrome.storage.session</code>): ключ больше не записывается на диск, прежнее значение из
+            <code>chrome.storage.local</code> переносится в память сессии и удаляется.</td>
+        </tr>
+      </tbody>
+    </table>
 
     <div class="footer">Версия 1.1 от 2026-09-12</div>
   </main>
