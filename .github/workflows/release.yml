@@ -23,7 +23,29 @@ jobs:
         run: |
           # v51 (PK1): собираем ТОЛЬКО из трекаемых файлов (git ls-files); исключения —
           # фильтром на стороне git/grep, файлы передаются zip аргументами, -x не используется.
-          git ls-files -z | grep -zvE '(\.github/|\.gitignore|\.clineignore|tools/|tests/|\.kilo/|docs/|coverage/|\.md$|package(-lock)?\.json$)' | xargs -0 zip -q "ai-context-monitor-v${{ steps.version.outputs.VERSION }}.zip"
+          # v1.19 (M-6): docs/ больше НЕ исключается — руководство (docs/index.html) и
+          # скриншоты входят в пакет, чтобы ссылка «Помощь» в настройках работала офлайн.
+          git ls-files -z | grep -zvE '(\.github/|\.gitignore|\.clineignore|tools/|tests/|\.kilo/|coverage/|\.md$|package(-lock)?\.json$)' | xargs -0 zip -q "ai-context-monitor-v${{ steps.version.outputs.VERSION }}.zip"
+
+      - name: Verify ZIP contents
+        run: |
+          # v1.19 (M-6): пост-шаг контроля состава пакета. Печатаем полный листинг ZIP
+          # и падаем, если внутрь просочились служебные пути (tests/, node_modules/,
+          # .git/, package-lock.json). Дополнительно требуем наличие руководства:
+          # без docs/index.html ссылка «Помощь» в options-футере неработоспособна.
+          ZIP="ai-context-monitor-v${{ steps.version.outputs.VERSION }}.zip"
+          unzip -l "$ZIP"
+          echo "--- forbidden paths ---"
+          if unzip -Z1 "$ZIP" | grep -E '(^|/)(tests|node_modules|\.git)/|(^|/)package-lock\.json$'; then
+            echo "::error::ZIP содержит запрещённые пути (tests/, node_modules/, .git/, package-lock.json)"
+            exit 1
+          fi
+          echo "--- required guide ---"
+          if ! unzip -Z1 "$ZIP" | grep -qx 'docs/index.html'; then
+            echo "::error::в ZIP нет docs/index.html — руководство недоступно из расширения"
+            exit 1
+          fi
+          echo "OK: состав пакета $ZIP проверен"
 
       - name: Upload to release
         uses: softprops/action-gh-release@v2

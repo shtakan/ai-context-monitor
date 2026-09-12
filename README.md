@@ -1,6 +1,6 @@
 # AI Context Monitor
 
-A Chrome extension (Manifest V3) that shows in real time how full the AI context window of your conversation is, across six platforms. When a chat grows too long, models start losing details — AI Context Monitor warns you before that happens and can save the whole conversation automatically.
+A Chrome and Microsoft Edge (Chromium) extension (Manifest V3) that shows in real time how full the AI context window of your conversation is, across six platforms. When a chat grows too long, models start losing details — AI Context Monitor warns you before that happens and can save the whole conversation automatically.
 
 ## Features
 
@@ -18,6 +18,19 @@ A Chrome extension (Manifest V3) that shows in real time how full the AI context
 3. Open `chrome://extensions` in Chrome.
 4. Enable **Developer mode** (toggle in the top-right corner).
 5. Click **Load unpacked** and select the unpacked folder.
+
+## Microsoft Edge (Chromium)
+
+The extension targets Manifest V3 and uses only the cross-browser `chrome.*` APIs, so it runs unchanged in Microsoft Edge, which is built on the same Chromium engine. The offline guide (`docs/index.html`) and the screenshots are shipped inside the package, so the **Помощь / Help** link in the settings footer works after installation.
+
+Install as an unpacked extension:
+
+1. Download the ZIP from the [Releases](../../releases) page and unpack it into any folder.
+2. Open `edge://extensions` in Microsoft Edge.
+3. Enable **Developer mode** (toggle in the left-hand sidebar).
+4. Click **Load unpacked** and select the unpacked folder.
+
+Publication in the [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons) store is planned; until then the unpacked install above is the supported Edge path.
 
 ## Quick start
 
@@ -49,15 +62,37 @@ service worker (core/background.js)
 npm test
 ```
 
-Runs Jest: **14 suites / 159 tests**, green in CI. Sanitized fixtures are bundled in `tests/fixtures`. Personal ("live") captured samples are gitignored — tests that require them are skipped automatically when those files are absent.
+Runs Jest — **as of v1.18.0 (2026-09-12): 61 suites / 1037 tests**, green in CI. The counters are a dated snapshot of the v1.18.0 tree and are deliberately not re-pinned on every change; the live numbers are whatever `npm test` prints as its `Tests: ... total` line. Sanitized fixtures are bundled in `tests/fixtures`. Personal ("live") captured samples are gitignored — tests that require them are skipped automatically when those files are absent.
 
 ## Privacy
 
 Everything stays local: no telemetry, no analytics, no data collection. The only outbound requests go to the chat sites themselves and, optionally, to the Gemini API with your own key. Your BYOK key is stored only in `chrome.storage` on your machine.
 
+The full policy ships with the extension and opens offline from the settings footer: [privacy/privacy.html](privacy/privacy.html).
+
 ## Screenshots
 
-(скриншоты изъяты из репозитория по приватности, см. RELEASE_CHECKLIST, запись 09.09.2026)
+Five live captures, one per platform, stored in [`docs/screenshots/`](docs/screenshots/). The same files are bundled into the release ZIP and rendered by the offline guide in `docs/index.html`.
+
+**Gemini — yellow zone (over 50%)**
+
+![Gemini — yellow zone](docs/screenshots/gemini-yellow.png)
+
+**ChatGPT — red zone (over 80%)**
+
+![ChatGPT — red zone](docs/screenshots/chatgpt-red.png)
+
+**Google Search AI popup — badge and extension popup**
+
+![Google Search AI popup](docs/screenshots/google-search-popup.png)
+
+**Claude — context indicator (Sonnet / Opus / Haiku, 200K window)**
+
+![Claude — context indicator](docs/screenshots/claude.png)
+
+**Perplexity — thread and answer-stream interception (Sonar / Sonar Pro)**
+
+![Perplexity — thread interception](docs/screenshots/perplexity.png)
 
 ## Disclaimer
 

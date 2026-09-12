@@ -44,6 +44,19 @@ privacyLink && privacyLink.addEventListener('click', function (e) {
   }
 });
 
+// v1.19 (M-6): открытие руководства (docs/index.html) во внешней вкладке
+// Страница руководства входит в пакет расширения (docs/ больше не исключается из ZIP),
+// поэтому chrome.runtime.getURL('docs/index.html') валиден и в установленном расширении.
+var helpLink = document.getElementById('help-link');
+helpLink && helpLink.addEventListener('click', function (e) {
+  e.preventDefault();
+  try {
+    chrome.tabs.create({ url: chrome.runtime.getURL('docs/index.html') });
+  } catch (eHelp) {
+    console.warn('[help] не удалось открыть руководство:', eHelp);
+  }
+});
+
 // Сайт-в-human-readable
 var siteLabels = {
   'chatgpt': 'ChatGPT',

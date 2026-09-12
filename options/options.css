@@ -141,6 +141,21 @@ select:focus, input:focus {
   text-decoration: underline;
 }
 
+/* v1.19 (M-6): ссылка на руководство в футере — стиль как у #privacy-link */
+#help-link {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 11px;
+  color: #a78bfa;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+#help-link:hover {
+  color: #c4b5fd;
+  text-decoration: underline;
+}
+
 .input-row {
   display: flex;
   gap: 6px;
