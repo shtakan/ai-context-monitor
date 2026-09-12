@@ -179,7 +179,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
   }
   if (message.type === 'COUNT_TOKENS') {
-    handleCountTokens(message).then(sendResponse).catch(function (err) {
+    // M-9: sender нужен для debounce-ключа (tabId); текст/модель — из message, как раньше.
+    handleCountTokens(message, sender).then(sendResponse).catch(function (err) {
       console.error('COUNT_TOKENS error:', err);
       sendResponse({ error: err.message || 'unknown_error' });
     });
@@ -322,10 +323,119 @@ if (chrome.notifications && chrome.notifications.onButtonClicked) {
   });
 }
 
-async function handleCountTokens(message) {
-  var text = message.text;
-  var model = message.model || 'gemini-flash-latest';
+// ========== M-9: гигиена COUNT_TOKENS (таймаут + debounce + кэш) ==========
+// Протокол COUNT_TOKENS — инвариант: имя сообщения, поля запроса (text/model) и
+// фолбэк content.js при ok:false НЕ меняются. Все поля ниже — ТОЛЬКО добавленные.
+
+// Таймаут сети: висящий fetch (зависший сокет, «чёрная дыра» прокси) держал запрос
+// вечно, а content.js показывал «pending» без точного значения. AbortController
+// обрывает попытку кандидата, handleCountTokens сразу уходит в фолбэк.
+var COUNT_TOKENS_TIMEOUT_MS = 10000;
+
+// Debounce: стриминг шлёт COUNT_TOKENS на каждую эмиссию истории → сеть дёргалась
+// на каждый кадр. Ключ = tabId:convId:model; в окне 800 мс выполняется ТОЛЬКО
+// последний запрос окна, ожидающий таймер снимается (clearTimeout).
+var COUNT_TOKENS_DEBOUNCE_MS = 800;
+
+// Кэш Map в SW: ключ = model + ':' + FNV-1a hash(content), значение = число токенов.
+// Ёмкость 200, вытеснение FIFO (самая старая запись). Кэш живёт до перезапуска SW —
+// это приемлемо: MV3 SW не персистентен, промах стоит одного сетевого запроса.
+var COUNT_TOKENS_CACHE_MAX = 200;
+var countTokensCache = new Map();
+
+// FNV-1a 32-бит: дешёвый детерминированный хеш текста. Хранить сам текст в ключе
+// нельзя — кэш из 200 длинных контекстов съел бы память SW; коллизия даёт лишь
+// неверное число токенов, поэтому дополнительно сверяем длину текста.
+function countTokensHash(str) {
+  var h = 0x811c9dc5;
+  for (var i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+  }
+  return h.toString(16);
+}
+
+function countTokensCacheGet(model, text) {
+  var key = model + ':' + countTokensHash(text);
+  var hit = countTokensCache.get(key);
+  if (!hit || hit.len !== text.length) return null;
+  return { key: key, tokens: hit.tokens };
+}
+
+function countTokensCacheSet(model, text, tokens) {
+  var key = model + ':' + countTokensHash(text);
+  if (countTokensCache.has(key)) countTokensCache.delete(key); // FIFO: перезапись = свежая запись
+  countTokensCache.set(key, { tokens: tokens, len: text.length });
+  while (countTokensCache.size > COUNT_TOKENS_CACHE_MAX) {
+    countTokensCache.delete(countTokensCache.keys().next().value); // вытеснение самой старой
+  }
+}
+
+// Отложенные вызовы: строковый ключ debounce → {promise, resolve, timer, payload}.
+// Ключ именно СТРОКА (не объект): Map живёт в песочнице SW, а объектные ключи из
+// разных контекстов не совпадают по идентичности. Повторный COUNT_TOKENS по тому же
+// ключу снимает таймер предшественника и переиспользует его promise: оба sendResponse
+// получат результат последнего (фактически выполненного) запроса окна.
+var countTokensPending = new Map();
+
+function scheduleCountTokens(key, payload, debounced) {
+  var entry = countTokensPending.get(key);
+  if (entry && entry.timer != null) {
+    clearTimeout(entry.timer); // отмена ожидающего запроса окна
+    entry.timer = null;
+    entry.debounced = 1;
+  }
+  if (!entry) {
+    entry = { promise: null, resolve: null, timer: null, debounced: 0 };
+    entry.promise = new Promise(function (resolve) { entry.resolve = resolve; });
+    countTokensPending.set(key, entry);
+  }
+  entry.debounced = debounced || entry.debounced;
+  // payload фиксируется на момент планирования: таймер исполняет именно последний запрос окна.
+  entry.payload = { text: payload.text, model: payload.model, debounced: entry.debounced };
+  if (entry.timer == null) {
+    entry.timer = setTimeout(function () {
+      countTokensPending.delete(key);
+      handleCountTokensRun(entry.payload).then(entry.resolve, function (e) {
+        entry.resolve({ error: e && e.message ? e.message : 'unknown_error' });
+      });
+    }, COUNT_TOKENS_DEBOUNCE_MS);
+  }
+  return entry.promise;
+}
+
+function handleCountTokens(message, sender) {
+  var text = (message && message.text) || '';
+  var model = message.model || 'gemini-flash-latest'; // НЕ менять: пинуется тестом exact-token-count-models
+  if (!text || text.length === 0) return Promise.resolve({ totalTokens: 0 });
+
+  // Кэш проверяем ДО debounce: попадание отвечает немедленно, без сети и без ожидания окна.
+  var hit = countTokensCacheGet(model, text);
+  if (hit) {
+    console.log('[AI CM][countTokens] cache hit model=' + model + ' tokens=' + hit.tokens);
+    return Promise.resolve({
+      ok: true,
+      totalTokens: hit.tokens,
+      tokens: hit.tokens,
+      cached: 1,
+      debounced: 0
+    });
+  }
+
+  // Ключ debounce = tabId + ':' + convId + ':' + model (как в ТЗ).
+  var tabId = (sender && sender.tab && sender.tab.id != null) ? sender.tab.id : '';
+  var convId = (message && message.convId) ? String(message.convId) : '';
+  var key = tabId + ':' + convId + ':' + model;
+  return scheduleCountTokens(key, { text: text, model: model }, 0);
+}
+
+async function handleCountTokensRun(run) {
+  var text = run.text;
+  var model = run.model;
   if (!text || text.length === 0) return { totalTokens: 0 };
+
+  var isDebounced = run.debounced ? 1 : 0;
+  var logPrefix = '[AI CM][countTokens]';
 
   // Читаем ключ из chrome.storage.local
   var data = await new Promise(function (resolve) {
@@ -346,8 +456,15 @@ async function handleCountTokens(message) {
     var cand = candidates[j];
     var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(cand) + ':countTokens';
 
+    var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var abortReason = '';
+    var timeoutId = null;
+    if (controller) {
+      timeoutId = setTimeout(function () { abortReason = 'timeout'; controller.abort(); }, COUNT_TOKENS_TIMEOUT_MS);
+    }
+
     try {
-      var response = await fetch(url, {
+      var fetchOpts = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -356,14 +473,19 @@ async function handleCountTokens(message) {
         body: JSON.stringify({
           contents: [{ parts: [{ text: text }] }]
         })
-      });
+      };
+      if (controller) fetchOpts.signal = controller.signal;
+      var response = await fetch(url, fetchOpts);
 
       if (response.ok) {
         lastGoodModel = cand;
         console.log('[count-tokens] использована модель: ' + cand);
         var json = await response.json();
         var totalTokens = (json && typeof json.totalTokens === 'number') ? json.totalTokens : 0;
-        return { totalTokens: totalTokens };
+        if (totalTokens > 0) countTokensCacheSet(model, text, totalTokens);
+        // M-9: строка результата несёт cached=0|1 и debounced=0|1 (факт отмены предшественника).
+        console.log(logPrefix + ' ok model=' + cand + ' tokens=' + totalTokens + ' cached=0 debounced=' + isDebounced);
+        return { ok: true, totalTokens: totalTokens, tokens: totalTokens, cached: 0, debounced: isDebounced };
       }
 
       // Не ok — логируем и пробуем следующего кандидата
@@ -371,7 +493,15 @@ async function handleCountTokens(message) {
       try { errText = await response.text(); } catch (e) { }
       console.warn('[count-tokens] модель ' + cand + ' вернула ' + response.status + ': ' + errText.slice(0, 120));
     } catch (fetchError) {
+      if (abortReason === 'timeout') {
+        // Таймаут: висящий запрос снят AbortController'ом. Сообщаем причину и выходим —
+        // повторять кандидатов после таймаута смысла нет, content.js уходит в эвристику.
+        console.log(logPrefix + ' abort reason=timeout model=' + cand + ' debounced=' + isDebounced);
+        return { ok: false, error: 'timeout', reason: 'timeout', totalTokens: 0, cached: 0, debounced: isDebounced };
+      }
       console.warn('[count-tokens] модель ' + cand + ' fetch error: ' + fetchError.message);
+    } finally {
+      if (timeoutId != null) clearTimeout(timeoutId);
     }
   }
 
