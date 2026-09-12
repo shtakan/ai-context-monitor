@@ -1,6 +1,6 @@
 {
   "name": "ai-context-monitor-tests",
-  "version": "1.15.3",
+  "version": "1.18.0",
   "private": true,
   "scripts": {
     "test": "jest",
