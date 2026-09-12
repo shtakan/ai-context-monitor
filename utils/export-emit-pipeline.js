@@ -13,6 +13,18 @@
  *   - markAutoExportFired / getAutoExportFired / resetAutoExportFired — латч per service+convId
  *   - extractConvIdFromUrl(pathname) — идентификатор диалога из URL (без выдумывания)
  *   - normalizeExportMessages(raw) — нормализация к {role, text}
+ *   - dedupeMessages(messages) — E-2: схлопывание дублей (роль + нормализованный текст,
+ *     первое вхождение побеждает) для истории Gemini Deep Research
+ *   - dedupeIntraMessage(message) — E-2.1: дедупликация ВНУТРИ одного сообщения
+ *     (отрендеренный текст против сырого markdown-блока '### …' в том же ходе);
+ *     E-2.2: стык копий НЕ обязан быть пустой строкой — separateRawBlocks разводит
+ *     склеенный вариант ('…копированию.### ROLE'), а сырой блок с несколькими секциями
+ *     чистится посекционно (вырезается только копия отрендеренного текста)
+ *     склейки заголовка к непробельному символу, NBSP и пробельные различия (coreText,
+ *     stripMarkerResidue) — форматная разметка НЕ влияет на вердикт дедупа
+ *   - prepareExportMessages(raw, onMessageDedupe) — E-2.1: единая точка подготовки
+ *     нормализация → внутри-сообщенческая → меж-сообщенческая дедупликация
+ *     → cross-raw копии → гигиена остатков разметки
  * Паттерн как у export-text-builders.js: window.AiCmExportEmitPipeline + module.exports.
  * Логика оракула полноты, ленты, пола, виджета и Gemini-гейтов НЕ тронута.
  */
@@ -285,6 +297,658 @@
     return out;
   }
 
+  // =====================================================================================
+  // v1.18 (E-2.3): marker-insensitive «ядро» контента. Форматная разметка НЕ влияет на
+  // работу расширения: ВСЕ сравнения дедупа (внутри- и меж-сообщенческие) ведутся по
+  // coreText — тексту после снятия ЛЮБОЙ markdown/спец-разметки:
+  //   - любое количество '#' (заголовок любого уровня: в начале строки, после маркеров
+  //     списка/цитаты и в СКЛЕЙКЕ с непробельным символом: '…копированию.### ROLE');
+  //   - '*', '_', '`', '~' (выделение/код) и code-fences (``` / ~~~);
+  //   - '>' (цитата) и маркеры списков ('-', '*', '+', '1.', '1)');
+  //   - NBSP и прочие неразрывные пробелы, любые пробельные/переводы строк.
+  // Пороги существенности (INTRA_CORE_MIN_LEN, CROSS_RAW_MIN_LINES/CHARS) СОХРАНЕНЫ:
+  // разные сообщения не схлопываются ложно.
+  // =====================================================================================
+  /** Строка-заголовок ЛЮБОГО уровня: с начала строки, с точностью до ведущих маркеров
+   *  списка/цитаты ('- ### ', '> ## ', '1. # '), за которыми идёт один и более '#'. */
+  var RE_RAW_HEADING_LINE = /^[\s>*+\-\d.)\]]*#{1,}(?=\s|$)/;
+  /** Строка-ОСТАТОК разметки: одни '#' (маркер вырезанного/осиротевшего заголовка). */
+  var RE_MARKER_RESIDUE_LINE = /^[\s>*+\-\d.)\]]*#{1,}[\s]*$/;
+  /** Строка code-fence — служебная разметка (её содержимое остаётся). */
+  var RE_CODE_FENCE_LINE = /^[\s>*+\-\d.)\]]*(`{3,}|~{3,})/;
+  /** Маркер списка: '- ', '* ', '+ ', '1. ', '1) '. */
+  var RE_LIST_MARK = /^(?:[-*+]|\d+[.)])[ \t]+/;
+  var RE_ANY_SPACE = /[\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000\ufeff]/g;
+
+  /** NBSP и прочие неразрывные пробелы → обычный пробел (сравнение по «ядру»). */
+  function deSpaceAny(s) {
+    return String(s == null ? '' : s).replace(RE_ANY_SPACE, ' ');
+  }
+
+  /** Ядро ОДНОЙ строки: снять ведущие маркеры (заголовок/список/цитата) и inline-разметку. */
+  function coreOfLine(line) {
+    try {
+      var s = deSpaceAny(line);
+      if (RE_CODE_FENCE_LINE.test(s)) return '';
+      var prev;
+      do {
+        prev = s;
+        s = s.replace(/^[ \t]+/, '');
+        if (/^>[ \t]?/.test(s)) s = s.replace(/^>[ \t]?/, '');
+        else if (RE_LIST_MARK.test(s)) s = s.replace(RE_LIST_MARK, '');
+        else if (RE_RAW_HEADING_LINE.test(s)) s = s.replace(/^#{1,}[ \t]*/, '');
+      } while (s !== prev);
+      return s.replace(/[*_`~#>]+/g, ' ').replace(/\s+/g, ' ').trim();
+    } catch (e) { return ''; }
+  }
+
+  /** Ядро текста: каждая строка → ядро строки, пустые ядра (маркеры/фенсы) отбрасываются,
+   *  результат схлопывается в один пробел. */
+  function coreText(text) {
+    try {
+      var lines = deSpaceAny(text).split('\n');
+      var kept = [];
+      for (var i = 0; i < lines.length; i++) {
+        var c = coreOfLine(lines[i]);
+        if (c) kept.push(c);
+      }
+      return kept.join(' ');
+    } catch (e) { return ''; }
+  }
+
+  /** E-2.3: убрать из текста строки-остатки разметки (одни '#') — маркер вырезанного
+   *  raw-заголовка удаляется ЦЕЛИКОМ, включая оставшиеся символы решётки. Сообщение без
+   *  таких строк возвращается БАЙТОВО тем же (чужие форматы не трогаем). */
+  function stripMarkerResidue(text) {
+    try {
+      var s = String(text == null ? '' : text);
+      if (s.indexOf('#') === -1) return s;
+      var lines = s.split('\n');
+      var kept = [];
+      var dropped = false;
+      for (var i = 0; i < lines.length; i++) {
+        if (RE_MARKER_RESIDUE_LINE.test(lines[i])) { dropped = true; continue; }
+        kept.push(lines[i]);
+      }
+      return dropped ? kept.join('\n') : s;
+    } catch (e) { return String(text == null ? '' : text); }
+  }
+
+  /**
+   * E-2 (Gemini Deep Research): схлопывание дублей истории.
+   * Один и тот же текст пользователя попадает в собранную историю НЕСКОЛЬКО раз:
+   * пузырь реплики + карточка плана + узлы шагов исследования (разные id/узлы —
+   * подряд идущий строгий дедуп их не видит). Результат: раздутые токены/бейдж,
+   * повтор промпта в .txt/.md/print (live: 4 повтора при одном реальном промпте).
+   * Правило: сообщения с ОДИНАКОВОЙ ролью и идентичным «ядром» текста (E-2.3: coreText —
+   * снята любая форматная разметка, схлопнуты пробелы/NBSP/переводы строк) схлопываются,
+   * остаётся ПЕРВОЕ вхождение. Роли
+   * сравниваются независимо: user-реплика не съедает assistant, даже если текст совпал.
+   * Карточка плана («Вот план исследования…» + цитата цели) — другой текст → остаётся
+   * ОДНИМ assistant-сообщением, её текст не режется.
+   * Чистая функция: возвращает { messages, removed } — без логов и побочных эффектов.
+   */
+  function dedupeMessages(messages) {
+    var out = [];
+    var seen = {};
+    var removed = 0;
+    try {
+      if (!Array.isArray(messages)) return { messages: out, removed: 0 };
+      for (var i = 0; i < messages.length; i++) {
+        var m = messages[i] || {};
+        var role = (m.role === 'user') ? 'user' : 'assistant';
+        var text = (typeof m.text === 'string') ? m.text : '';
+        // E-2.3: ключ — «ядро» контента (без форматной разметки), а не сырой текст:
+        // копии одного промпта с разным количеством '#', '*', '`', '>' и разной
+        // нумерацией схлопываются, а РАЗНЫЙ контент не схлопывается.
+        var key = role + '\u0000' + coreText(text);
+        // hasOwnProperty (а не truthy-проверка): обычный {} наследует Object.prototype,
+        // и текст вида 'toString' ложно считался бы уже виденным.
+        if (Object.prototype.hasOwnProperty.call(seen, key)) { removed++; continue; }
+        seen[key] = true;
+        var keep = { role: role, text: text };
+        // v1.18 (E-2.1): id ходов переносится — иначе набор id базы (baseIdSet) и запись
+        // ленты рвутся после схлопывания. Потребители без id получают прежний {role,text}.
+        if (m.id != null) keep.id = m.id;
+        out.push(keep);
+      }
+    } catch (e) { }
+    return { messages: out, removed: removed };
+  }
+
+  // E-2.1: минимальная длина «ядра» сырого markdown-блока (текст без строк '### …'), при
+  // которой он считается дублем отрендеренного текста. Ниже порога блок из одних
+  // заголовков ('### ROLE') ничьей копией не признаётся — короткие служебные блоки
+  // («Да.», «Готово.») не вырезаются из ответа.
+  var INTRA_CORE_MIN_LEN = 20;
+
+  /** Блок — сырой markdown Gemini (в нём есть строка-заголовок ЛЮБОГО уровня '#'+;
+   *  E-2.3: и одинокая '#'-строка — тоже маркер заголовка, а не контент). */
+  function isRawMarkdownBlock(block) {
+    try {
+      var lines = String(block == null ? '' : block).split('\n');
+      for (var i = 0; i < lines.length; i++) {
+        if (RE_RAW_HEADING_LINE.test(lines[i])) return true;
+      }
+      return false;
+    } catch (e) { return false; }
+  }
+
+  /**
+   * E-2.2: нормализация СТЫКА копий перед разбиением на блоки.
+   * Живой экспорт Gemini (convId 72c88213f2e812e1) клеит отрендеренную копию с сырым
+   * markdown-блоком БЕЗ переноса строки на стыке:
+   *   «…готовы к прямому копированию.### ROLE & OBJECTIVE…»
+   * Разбиение по /\n{2,}/ такой текст блоками не видит (split даёт ОДИН блок), поэтому
+   * внутри-сообщенческий дедуп молча не срабатывал и промпт оставался в экспорте дважды
+   * внутри одного хода. Здесь перед заголовком '### ', приклеенным к непробельному
+   * символу, вставляется пустая строка:
+   *   '…копированию.### ROLE'  → '…копированию.\n\n### ROLE';
+   *   '…копированию. ### ROLE' → '…копированию.\n\n### ROLE'.
+   * Инварианты:
+   *   - заголовок в начале текста не трогается (нечего разделять);
+   *   - заголовок, уже стоящий после пустой строки, не трогается — замена ИДЕМПОТЕНТНА;
+   *   - внутренние пустые строки сырого блока НЕ схлопываются: сырой блок с несколькими
+   *     секциями ('### ROLE…\n### CONSTRAINTS…') остаётся ОДНИМ блоком, а его секции
+   *     чистит pass 2 (E-2.2) — E-2.1 (ядро целиком) не ломается;
+   *   - текст без заголовков '#'+ не меняется БАЙТОВО (обычные ходы всех сервисов);
+   *   - E-2.3: разметка — ЛЮБОЕ количество '#'; одиночный '#' склеивается только после
+   *     знака конца фразы, иначе 'C# и Java' в обычном чате ложно распался бы на блоки.
+   * Одиночный перенос перед заголовком ('…копированию.\n### ROLE') сюда НЕ входит: его
+   * нормализация схлопывала бы пустые строки ВНУТРИ сырого блока и ломала E-2.1, поэтому
+   * такой стык разбирается посекционно (splitRawSections + cutLeadingCopy).
+   */
+  function separateRawBlocks(text) {
+    // Предыдущий символ — НЕ '#' (иначе '### ' распалось бы само на '#' + '## '); пробелы
+    // перед заголовком поглощаются, поэтому замена ИДЕМПОТЕНТНА и для '… . ### ROLE'.
+    return String(text).replace(/([^#\n])[ \t]*(#{1,6})(?=[ \t])/g, function (all, prev, hashes) {
+      if (hashes.length < 2 && !/[.!?;:»")\]]$/.test(prev)) return all;
+      return prev + '\n\n' + hashes;
+    });
+  }
+
+  /**
+   * E-2.2: сырой блок → секции по строкам-заголовкам ('#'+, E-2.3). Каждая секция
+   * начинается своим заголовком; текст до первого заголовка идёт первой секцией без
+   * заголовка. Обычный блок (без '#'-заголовков) даёт РОВНО одну секцию — весь блок.
+   * Нужно, чтобы у сырого блока, где за копией промпта идут ещё секции
+   * ('### CONSTRAINTS' и т.п.), дублирующая копия вырезалась посекционно: раньше
+   * «ядро» считалось по всему блоку, не совпадало с отрендеренным текстом и блок
+   * выживал ЦЕЛИКОМ (копия промпта оставалась в экспорте/бейдже).
+   */
+  function splitRawSections(block) {
+    try {
+      var lines = String(block == null ? '' : block).split('\n');
+      var out = [];
+      var cur = null;
+      for (var i = 0; i < lines.length; i++) {
+        if (RE_RAW_HEADING_LINE.test(lines[i])) {
+          if (cur) out.push(cur.join('\n'));
+          cur = [lines[i]];
+        } else if (cur) {
+          cur.push(lines[i]);
+        } else {
+          cur = [lines[i]];
+        }
+      }
+      if (cur) out.push(cur.join('\n'));
+      return out.length ? out : [String(block == null ? '' : block)];
+    } catch (e) { return [String(block == null ? '' : block)]; }
+  }
+
+  /** Разделитель при пересборке секций сырого блока: сохраняем форму исходного блока
+   *  (пустая строка между секциями, если она там была; иначе — один перевод строки). */
+  function sepForSections(block) {
+    return /\n{2,}/.test(String(block == null ? '' : block)) ? '\n\n' : '\n';
+  }
+
+  /** E-2.2: убрать из сырой секции ведущую копию отрендеренного текста.
+   *  Живой экспорт кладёт копию промпта ПЕРВОЙ строкой секции ('### ROLE & OBJECTIVE' +
+   *  промпт + собственные ограничения), поэтому секция начинается с копии, а не равна ей.
+   *  E-2.3: копия может отличаться от тела только РАЗМЕТКОЙ (уровень заголовков, '*'/'_'/
+   *  '`', '>', NBSP) — тогда граница ищется по «ядрам» (corePrefixCutIndex).
+   *  Возвращает остаток ({ text, trimmed }) или null, если вся секция — копия. */
+  function cutLeadingCopy(section, folded) {
+    var lines = String(section).split('\n');
+    if (lines.length < 2) return { text: String(section), trimmed: false };
+    var head = lines[0];
+    var body = lines.slice(1).join('\n');
+    var bodyNorm = normalizeIntraBlock(body);
+    var copyNorm = normalizeIntraBlock(folded);
+    if (!bodyNorm || !copyNorm) return { text: String(section), trimmed: false };
+    if (bodyNorm === copyNorm) return null;                       // тело целиком — копия
+    if (bodyNorm.indexOf(copyNorm) === 0) {
+      // Тело начинается с копии: границу (конец копии) ищем по её последнему слову.
+      var tail = bodyNorm.slice(copyNorm.length).replace(/^\s+/, '');
+      if (!tail) return null;
+      var lastWord = copyNorm.split(' ').pop();
+      var at = body.lastIndexOf(lastWord);
+      if (at < 0) return null;
+      var rest = body.slice(at + lastWord.length).replace(/^\s+/, '');
+      if (!rest) return null;
+      return { text: head + '\n' + rest, trimmed: true };
+    }
+    // E-2.3: та же копия, но с другой разметкой — границу даёт накопление слов по «ядрам».
+    var cutIdx = corePrefixCutIndex(body, coreText(folded));
+    if (cutIdx < 0) return { text: String(section), trimmed: false };
+    var restCore = body.slice(cutIdx).replace(/^\s+/, '');
+    if (!restCore) return null;
+    return { text: head + '\n' + restCore, trimmed: true };
+  }
+
+  /** E-2.3: индекс конца ведущей копии в теле по «ядрам» (тело может отличаться от копии
+   *  только разметкой). Возвращает длину префикса тела, чей coreText равен copyCore, или -1. */
+  function corePrefixCutIndex(body, copyCore) {
+    try {
+      if (!copyCore) return -1;
+      // Дешёвый предфильтр: ядро тела обязано НАЧИНАТЬСЯ с ядра копии.
+      if (coreText(body).indexOf(copyCore) !== 0) return -1;
+      var re = /(\S+)/g;
+      var m;
+      while ((m = re.exec(body)) !== null) {
+        var end = m.index + m[0].length;
+        var probe = coreText(body.slice(0, end));
+        if (probe === copyCore) return end;
+        if (probe.length > copyCore.length) return -1;
+      }
+      return -1;
+    } catch (e) { return -1; }
+  }
+
+  /** E-2.2: отрендеренная копия, к которой относится сырой блок blocks[i] — ближайший
+   *  НЕсырой блок (как правило непосредственно перед сырым). Возвращает текст копии или
+   *  null, если её нет: тогда сырой блок не пересобираем, чтобы не потерять содержимое. */
+  function renderedBeforeRaw(blocks, i, raw) {
+    for (var b = i - 1; b >= 0; b--) {
+      if (b === i || raw[b]) continue;
+      if (!coreText(blocks[b])) continue;
+      return String(blocks[b]);
+    }
+    return null;
+  }
+
+  /** Нормализация блока для поиска ГРАНИЦЫ копии: trim + схлоп пробелов. Сами сравнения
+   *  дедупа (E-2.3) идут по coreText/coreOfBlock, а здесь сохраняется точное соответствие
+   *  нормализованного текста исходному (по нему находится конец копии в теле секции). */
+  function normalizeIntraBlock(block) {
+    return String(block == null ? '' : block).replace(/\s+/g, ' ').trim();
+  }
+
+  /**
+   * «Ядро» и отрендеренный текст — это одна и та же реплика, если «ядра» совпадают ИЛИ
+   * одно содержится в другом. E-2.3: сравнение идёт по coreText (разметка снята).
+   * Порог длины отсекает короткие служебные блоки.
+   */
+  function intraBlocksSimilar(a, b) {
+    var x = coreText(a);
+    var y = coreText(b);
+    if (!x || !y) return false;
+    if (x === y) return true;
+    var minLen = (x.length < y.length) ? x.length : y.length;
+    if (minLen < INTRA_CORE_MIN_LEN) return false;
+    return (x.length >= y.length) ? (x.indexOf(y) !== -1) : (y.indexOf(x) !== -1);
+  }
+
+  /**
+   * E-2.1 (Gemini Deep Research с вложениями): дедупликация ВНУТРИ одного сообщения.
+   * Deep Research кладёт в ОДИН ход и отрендеренный текст, и сырой markdown-блок
+   * (начинается с '### ROLE& OBJECTIVE' / '### ROLE'), который модель хранит для
+   * внутреннего рендеринга. Меж-сообщенческий dedupeMessages такие повторы не видит —
+   * они внутри одной строки истории, поэтому промпт попадал в .txt дважды.
+   *
+   * Логика:
+   *   - текст режется на блоки по пустым строкам (\n\n);
+   *   - дубликат = нормализованные тексты блоков идентичны (trim + схлоп пробелов),
+   *     ИЛИ сырой markdown-блок (есть '### ' в начале строки) своим «ядром» (текст без
+   *     строк-заголовков) совпадает с отрендеренным блоком — ядро при этом не короче
+   *     INTRA_CORE_MIN_LEN, чтобы не вырезать короткие служебные блоки;
+   *   - побеждает ПЕРВОЕ вхождение (в DOM отрендеренный текст идёт раньше сырого);
+   *   - если отрендеренный дубль идёт ПОСЛЕ сырого блока — выживает всё равно
+   *     отрендеренный (приоритет отрендеренного текста), сырой отбрасывается.
+   * Возвращает { text, removedBlocks } — чистая функция, без логов и побочных эффектов.
+   */
+  function dedupeIntraMessage(message) {
+    var text = (message && typeof message.text === 'string') ? message.text : '';
+    var removedBlocks = 0;
+    try {
+      if (!text) return { text: text, removedBlocks: 0 };
+      // E-2.2: сначала разводим СТЫКИ (glued/scrolled-copy) на канонические блоки, иначе
+      // склеенная копия остаётся одним блоком и дублем не признаётся (см. separateRawBlocks).
+      var seam = separateRawBlocks(text);
+      var blocks = seam.split(/\n{2,}/);
+      if (blocks.length < 2) return { text: text, removedBlocks: 0 };
+      var norm = [];
+      var raw = [];
+      var i;
+      for (i = 0; i < blocks.length; i++) {
+        // E-2.3: «ядро» блока (coreText) — разметка не влияет на сравнение.
+        norm.push(coreText(blocks[i]));
+        raw.push(isRawMarkdownBlock(blocks[i]));
+      }
+      var drop = {};
+      // ВАЖНО: карты «уже видели» без прототипа. Обычный {} наследует Object.prototype,
+      // поэтому блок с текстом 'constructor'/'toString' ложно считался дублем (и наоборот,
+      // ключ терялся) — история портилась.
+      var seen = Object.create(null);
+      // Проход 1: внешне идентичные блоки — побеждает первое вхождение.
+      // Порог длины здесь НЕ применяется: точный повтор блока — это дубль при любой
+      // длине (короткие блоки «Да.» дважды подряд не совпадают случайно).
+      for (i = 0; i < blocks.length; i++) {
+        // Пустой блок (лишние переводы строк) — не дубль и ничьим дублем быть не может:
+        // он вообще не регистрируется в карте «виденных».
+        if (!norm[i]) continue;
+        if (seen[norm[i]]) { drop[i] = true; removedBlocks++; continue; }
+        seen[norm[i]] = true;
+      }
+      // Проход 2: сырой markdown, дублирующий отрендеренный текст (другая разметка —
+      // «ядра» блоков не совпадают, сравнение идёт по coreOfBlock: блок без строк-
+      // заголовков, marker-insensitive). Совпадение = ядро равно отрендеренному блоку,
+      // содержится в нём или содержит его (сырой блок бывает длиннее — UI показывает не
+      // все секции).
+      // Порог INTRA_CORE_MIN_LEN отсекает короткие служебные блоки при сравнении ПО
+      // ВХОЖДЕНИЮ (короткое ядро случайно «содержится» в чужом тексте). Точные совпадения
+      // и посекционная чистка (E-2.2) идут ДО этого порога: там сравниваются ядра целиком,
+      // и короткие секции-копии — такие же дубли.
+      var seenCore = Object.create(null);
+      var cores = [];
+      for (i = 0; i < blocks.length; i++) {
+        cores.push(coreOfBlock(blocks[i]));
+        if (drop[i] || raw[i] || !norm[i]) continue;
+        // Ключом служит ЯДРО блока (E-2.3): маркерная копия отрендеренного текста
+        // ('### ROLE…' + текст) тоже попадает сюда по своему ядру.
+        if (cores[i]) seenCore[cores[i]] = true;
+      }
+      // Ядро сырого блока дублирует отрендеренный текст? Сравнение по ядру с порогом
+      // длины; при minLen=0 порог не применяется (посекционная чистка).
+      function coreDup(core, selfIdx, minLen) {
+        if (!core) return false;
+        if (seenCore[core]) return true;
+        if (core.length < minLen) return false;
+        for (var q = 0; q < blocks.length; q++) {
+          if (q === selfIdx || drop[q] || raw[q] || !norm[q]) continue;
+          if (intraBlocksSimilar(core, blocks[q])) return true;
+        }
+        return false;
+      }
+      for (i = 0; i < blocks.length; i++) {
+        if (drop[i] || !raw[i]) continue;
+        if (coreDup(cores[i], i, INTRA_CORE_MIN_LEN)) { drop[i] = true; removedBlocks++; continue; }
+        // E-2.2: ядро по ВСЕМУ блоку не совпало. В живом экспорте сырой блок склеен из
+        // НЕСКОЛЬКИХ секций ('### ROLE & OBJECTIVE', '### CONSTRAINTS', …), и одна из них
+        // (обычно первая) несёт копию отрендеренного текста, а остальные — собственное
+        // содержимое. Поэтому чистим ПОСЕКЦИОННО: ведущая копия вырезается из тела секции,
+        // остаток секции остаётся со своим заголовком (markdown цел); секция, целиком
+        // состоящая из копии, удаляется. Если копий не нашлось — блок не трогаем.
+        var secs = splitRawSections(blocks[i]);
+        var folded = renderedBeforeRaw(blocks, i, raw);
+        if (folded === null) continue; // отрендеренной копии нет — не пересобираем
+        var cutSecs = 0;
+        var keptSecs = [];
+        for (var s = 0; s < secs.length; s++) {
+          if (coreDup(coreOfBlock(secs[s]), i, 0)) { cutSecs++; continue; }
+          var cut = cutLeadingCopy(secs[s], folded);
+          if (cut === null) { cutSecs++; continue; }   // вся секция — копия промпта
+          if (cut.trimmed) cutSecs++;
+          keptSecs.push(cut.text);
+        }
+        if (cutSecs === 0) continue;
+        removedBlocks += cutSecs;
+        if (keptSecs.length === 0) { drop[i] = true; continue; }
+        // Копия отрендеренного текста остаётся РОВНО ОДНА — та, что уже стоит отдельным
+        // блоком перед сырым; пересобираем блок только из выживших секций.
+        blocks[i] = keptSecs.join(sepForSections(blocks[i])).replace(/^\n+/, '');
+        norm[i] = coreText(blocks[i]);
+        cores[i] = coreOfBlock(blocks[i]);
+        raw[i] = isRawMarkdownBlock(blocks[i]);
+      }
+      // Проход 3: приоритет отрендеренного текста. Если отрендеренный дубль идёт ПОСЛЕ
+      // сырого блока, сырой выживает первым — снимаем его и оставляем отрендеренный ниже.
+      for (i = 0; i < blocks.length; i++) {
+        if (drop[i] || !raw[i]) continue;
+        var coreRaw = cores[i];
+        if (coreRaw.length < INTRA_CORE_MIN_LEN) continue;
+        for (var j = i + 1; j < blocks.length; j++) {
+          if (drop[j] || raw[j]) continue;
+          if (intraBlocksSimilar(coreRaw, blocks[j])) {
+            drop[i] = true;
+            removedBlocks++;
+            break;
+          }
+        }
+      }
+      if (removedBlocks === 0) return { text: text, removedBlocks: 0 };
+      var kept = [];
+      for (i = 0; i < blocks.length; i++) { if (!drop[i]) kept.push(blocks[i]); }
+      return { text: kept.join('\n\n'), removedBlocks: removedBlocks };
+    } catch (e) { }
+    return { text: text, removedBlocks: 0 };
+  }
+
+  /** Ядро блока — текст без строк-заголовков '#'+ (E-2.3: заголовок любого уровня):
+   *  по нему сырой markdown-блок сопоставляется с его отрендеренной копией. */
+  function coreOfBlock(block) {
+    try {
+      var lines = String(block == null ? '' : block).split('\n');
+      var kept = [];
+      for (var i = 0; i < lines.length; i++) {
+        if (RE_RAW_HEADING_LINE.test(lines[i])) continue;
+        kept.push(lines[i]);
+      }
+      return coreText(kept.join('\n'));
+    } catch (e) { return coreText(block); }
+  }
+
+  // ===================== v1.18 (E-2.2): сырые копии промпта МЕЖДУ сообщениями =====================
+  // Живой Deep Research (conv 72c88213f2e812e1) раскладывает ОДИН И ТОТ ЖЕ сырой
+  // markdown-промпт по РАЗНЫМ сообщениям истории: пузырь реплики (user) и карточка плана
+  // (assistant), причём внутри карточки он лежит ещё и вторым блоком. Внутри-сообщенческий
+  // этап (dedupeIntraMessage) такие копии не видит в принципе: он сравнивает «сырой блок
+  // против ОТРЕНДЕРЕННОГО» внутри одного хода, а здесь сырой блок дублирует сырой блок из
+  // ДРУГОГО сообщения — и ВСЕ блоки обоих сообщений сырые (в самом промпте есть '### '),
+  // поэтому ни один его проход (seenCore/coreDup/renderedBeforeRaw/pass 3) не срабатывает.
+  // Правило: сырой markdown-блок, чьи «ядра» строк (E-2.3: coreOfLine — без разметки)
+  // уже целиком встречались в ранее оставленном сыром блоке (равенство, суффикс или
+  // префикс), — копия. Копия вырезается, а собственный остаток блока остаётся: у карточки
+  // плана это её текст («Вот план исследования…»), у промпта — первое вхождение (пузырь).
+  // Пороги не дают случайному совпадению одной короткой строки («Готово.») резать блок:
+  // копия — это минимум 2 непустые строки (заголовок + тело) И не меньше 80 символов.
+  var CROSS_RAW_MIN_LINES = 2;
+  var CROSS_RAW_MIN_CHARS = 80;
+
+  /** E-2.3: строки блока двумя параллельными массивами — «ядра» (сравнение копий НЕ
+   *  зависит от разметки) и ИСХОДНЫЕ строки (именно они попадают в пересобранный блок,
+   *  поэтому markdown выжившего остатка не деградирует). Пустые ядра по краям снимаются.
+   *  NBSP-разделитель абзацев живого экспорта обрабатывает coreOfLine (deSpaceAny). */
+  function blockLinePair(block) {
+    var raw = deSpaceAny(block).split('\n');
+    var core = [];
+    for (var i = 0; i < raw.length; i++) core.push(coreOfLine(raw[i]));
+    return trimPairEdges(raw, core);
+  }
+  function trimPairEdges(raw, core) {
+    var a = 0, b = raw.length;
+    while (a < b && !core[a]) a++;
+    while (b > a && !core[b - 1]) b--;
+    return { raw: raw.slice(a, b), core: core.slice(a, b) };
+  }
+  function cutPairHead(pair, n) {
+    return trimPairEdges(pair.raw.slice(n), pair.core.slice(n));
+  }
+  function cutPairTail(pair, n) {
+    var k = pair.raw.length - n;
+    return trimPairEdges(pair.raw.slice(0, k), pair.core.slice(0, k));
+  }
+  /** Убрать пустые строки по краям (внутренние сохраняются). */
+  function trimEdgeEmpty(lines) {
+    var a = lines.slice();
+    while (a.length && !a[0]) a.shift();
+    while (a.length && !a[a.length - 1]) a.pop();
+    return a;
+  }
+  function seqEqual(a, b) {
+    if (a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) { if (a[i] !== b[i]) return false; }
+    return true;
+  }
+  function seqIsPrefix(shortArr, longArr) {
+    if (!shortArr.length || shortArr.length >= longArr.length) return false;
+    for (var i = 0; i < shortArr.length; i++) { if (shortArr[i] !== longArr[i]) return false; }
+    return true;
+  }
+  function seqIsSuffix(shortArr, longArr) {
+    if (!shortArr.length || shortArr.length >= longArr.length) return false;
+    var off = longArr.length - shortArr.length;
+    for (var i = 0; i < shortArr.length; i++) { if (shortArr[i] !== longArr[off + i]) return false; }
+    return true;
+  }
+  /** Копия «существенна»: минимум CROSS_RAW_MIN_LINES непустых строк И CROSS_RAW_MIN_CHARS
+   *  символов — иначе это случайное совпадение короткой строки, а не размноженный промпт. */
+  function crossCopyIsSubstantial(lines) {
+    var ls = trimEdgeEmpty(lines);
+    var nonEmpty = 0;
+    var chars = 0;
+    for (var i = 0; i < ls.length; i++) {
+      if (!ls[i]) continue;
+      nonEmpty++;
+      chars += ls[i].length;
+    }
+    return nonEmpty >= CROSS_RAW_MIN_LINES && chars >= CROSS_RAW_MIN_CHARS;
+  }
+
+  /**
+   * E-2.2: снять сырые markdown-копии промпта, разложенные по РАЗНЫМ сообщениям истории.
+   * Сообщения не удаляются и порядок не меняется (индексы id у потребителя сохраняются):
+   * режется только текст-копия внутри блока. Блок, из которого вырезана копия, остаётся
+   * своим остатком; блок, целиком состоящий из копии, удаляется.
+   * Чистая функция: возвращает { messages, removed } — без логов и побочных эффектов.
+   */
+  function dedupeCrossRawCopies(messages) {
+    var out = [];
+    var removed = 0;
+    var refs = [];   // нормализованные строки уже оставленных СЫРЫХ блоков (эталоны копий)
+    try {
+      var src = Array.isArray(messages) ? messages : [];
+      for (var i = 0; i < src.length; i++) {
+        var m = src[i] || {};
+        var text = (typeof m.text === 'string') ? m.text : '';
+        if (!text) { out.push(m); continue; }
+        var blocks = separateRawBlocks(text).split(/\n{2,}/);
+        var keptBlocks = [];
+        var touched = false;
+        for (var b = 0; b < blocks.length; b++) {
+          // Кандидат — только СЫРОЙ markdown-блок: обычный текст чатов не трогаем вовсе.
+          if (!isRawMarkdownBlock(blocks[b])) { keptBlocks.push(blocks[b]); continue; }
+          var pair = blockLinePair(blocks[b]);
+          var origJoin = pair.raw.join('\n');
+          var dropped = false;
+          var changed = true;
+          while (changed && !dropped) {
+            changed = false;
+            for (var r = 0; r < refs.length; r++) {
+              var ref = refs[r];
+              if (seqEqual(ref, pair.core)) {
+                // точный повтор блока: копия — только если она «существенна»
+                if (!crossCopyIsSubstantial(ref)) continue;
+                dropped = true;
+                removed++;
+                break;
+              }
+              if (seqIsSuffix(ref, pair.core) && crossCopyIsSubstantial(ref)) {
+                pair = cutPairTail(pair, ref.length);
+                changed = true;
+                break;
+              }
+              if (seqIsPrefix(ref, pair.core) && crossCopyIsSubstantial(ref)) {
+                pair = cutPairHead(pair, ref.length);
+                changed = true;
+                break;
+              }
+            }
+            if (!dropped && !pair.raw.length) { dropped = true; removed++; }
+          }
+          if (dropped || !pair.raw.length) { touched = true; continue; }
+          var rebuilt = pair.raw.join('\n');
+          if (rebuilt !== origJoin) touched = true;
+          keptBlocks.push(rebuilt);
+          if (isRawMarkdownBlock(rebuilt)) refs.push(pair.core);
+        }
+        // Ничего не резали — отдаём ИСХОДНЫЙ текст сообщения байт-в-байт (никакой
+        // нормализации переводов строк и разделителей блоков для чужих путей).
+        var keep = { role: (m.role === 'user') ? 'user' : 'assistant', text: touched ? keptBlocks.join('\n\n') : text };
+        if (m.id != null) keep.id = m.id;
+        out.push(keep);
+      }
+    } catch (e) {
+      return { messages: Array.isArray(messages) ? messages : [], removed: 0 };
+    }
+    return { messages: out, removed: removed };
+  }
+
+  /**
+   * E-2.1: единая точка подготовки массива сообщений к экспорту. Порядок жёсткий:
+   *   1) normalizeExportMessages — нормализация к [{role, text}] (если массив ещё сырой);
+   *   2) dedupeIntraMessage — ВНУТРИ-сообщенческая дедупликация (отрендеренный текст
+   *      против сырого markdown-блока в ОДНОМ сообщении);
+   *   3) dedupeMessages — меж-сообщенческая дедупликация (дубли по разным узлам/ходам);
+   *   4) dedupeCrossRawCopies — E-2.2: сырые markdown-копии промпта, разложенные по РАЗНЫМ
+   *      сообщениям (пузырь реплики + карточка плана), — остаётся первое вхождение, а
+   *      собственный текст блока («Вот план исследования…») сохраняется;
+   *   5) E-2.3: stripMarkerResidue — в выходе не остаётся строк-остатков из одних '#'.
+   * Все сравнения этапов 2–4 идут по «ядру» контента (coreText/coreOfBlock): форматная
+   * разметка (любое количество '#', '*', '_', '`', '>', маркеры списков, code-fences, NBSP)
+   * не влияет на вердикт дедупа.
+   * Логирование вынесено наружу (onMessageDedupe callback): чистая функция остаётся
+   * чистой, а гейт сервиса и антиспам-подпись живут в вызывающем коде (core/content.js).
+   * Возвращает { messages, intraRemoved, removed, crossRemoved }.
+   */
+  function prepareExportMessages(raw, onMessageDedupe) {
+    var intraRemoved = 0;
+    var out = [];
+    try {
+      var src = Array.isArray(raw) ? raw : [];
+      for (var i = 0; i < src.length; i++) {
+        var m = src[i] || {};
+        var role = (m.role === 'user') ? 'user' : 'assistant';
+        var text = (typeof m.text === 'string') ? m.text : '';
+        var res = dedupeIntraMessage({ role: role, text: text });
+        var next = { role: role, text: res.text };
+        if (m.id != null) next.id = m.id;
+        out.push(next);
+        if (res.removedBlocks > 0) {
+          intraRemoved += res.removedBlocks;
+          if (typeof onMessageDedupe === 'function') {
+            try { onMessageDedupe(role, res.removedBlocks); } catch (eCb) { }
+          }
+        }
+      }
+    } catch (e) { out = Array.isArray(raw) ? raw : []; intraRemoved = 0; }
+    var inter = dedupeMessages(out);
+    // E-2.2: третий этап — сырые копии промпта МЕЖДУ сообщениями (пузырь реплики + карточка
+    // плана Deep Research). Счётчик вырезанных копий суммируется в removed: потребитель
+    // (core/content.js: aiCmLogDedupeRemoved) логирует именно его.
+    var cross = dedupeCrossRawCopies(inter.messages);
+    // E-2.3: финальная гигиена ВЫХОДА — в тексте экспорта не должно остаться строк-остатков
+    // разметки (одни '#', '##', '###'): маркер вырезанного raw-заголовка удаляется целиком,
+    // включая оставшиеся символы решётки. Сообщения без таких строк сохраняются БАЙТОВО,
+    // порядок/роли/id и счётчики removed не меняются.
+    var cleaned = [];
+    for (var k = 0; k < cross.messages.length; k++) {
+      var mk = cross.messages[k] || {};
+      var clean = {
+        role: (mk.role === 'user') ? 'user' : 'assistant',
+        text: stripMarkerResidue(typeof mk.text === 'string' ? mk.text : '')
+      };
+      if (mk.id != null) clean.id = mk.id;
+      cleaned.push(clean);
+    }
+    return {
+      messages: cleaned,
+      intraRemoved: intraRemoved,
+      removed: inter.removed + cross.removed,
+      crossRemoved: cross.removed
+    };
+  }
+
   /**
    * v1.6 (D18): объединение ходов тейпа по id — union(existing, incoming) без дублей.
    * tape-save пишет ОБЪЕДИНЕНИЕ существующего тейпа и текущей базы: msgs никогда
@@ -327,6 +991,13 @@
     sessionFiredPatch: sessionFiredPatch,
     extractConvIdFromUrl: extractConvIdFromUrl,
     normalizeExportMessages: normalizeExportMessages,
+    coreText: coreText,
+    stripMarkerResidue: stripMarkerResidue,
+    dedupeMessages: dedupeMessages,
+    dedupeIntraMessage: dedupeIntraMessage,
+    dedupeCrossRawCopies: dedupeCrossRawCopies,
+    separateRawBlocks: separateRawBlocks,
+    prepareExportMessages: prepareExportMessages,
     unionTurnsById: unionTurnsById,
     latchKey: latchKey
   };

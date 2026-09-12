@@ -9,7 +9,9 @@
  *   3) достаём санированный aiCmHistory из chrome.storage.local
  *      (тот же источник, что у индикатора и экспортов .md/.json);
  *   4) фильтруем запись по хосту вкладки и рендерим HTML;
- *   5) вызываем window.print() — пользователь сохраняет PDF штатным диалогом Chrome.
+ *   5) выставляем непустой document.title (имя файла в диалоге «Сохранить как PDF»)
+ *      и вызываем window.print() — ровно ОДИН раз за жизненный цикл страницы;
+ *      пользователь сохраняет PDF штатным диалогом Chrome.
  */
 
 (function () {
@@ -124,6 +126,39 @@
     setTimeout(send, 2000);
   }
 
+  // v1.18 (E-2): гигиена печати.
+  // (A) Диалог сохранения PDF берёт имя файла из document.title: пустой/слетевший title
+  //     даёт пустое имя. Перед print() title выставляем ЯВНО из локали, с непустым фолбэком.
+  // (B) Автопечать разрешена РОВНО ОДИН раз за жизненный цикл страницы: повторные вызовы
+  //     (двойной init/повторная отрисовка) печати не запускают — иначе первый же сохранённый
+  //     PDF оказывается «занят другим приложением» (Chrome перезаписывает файл вторым диалогом).
+  var PRINT_TITLE_FALLBACK = 'AI Context Monitor — печатная форма';
+  var printInvoked = false;
+
+  function ensurePrintTitle() {
+    try {
+      var msg = (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.getMessage === 'function')
+        ? (chrome.i18n.getMessage('print_page_title') || '')
+        : '';
+      document.title = msg || PRINT_TITLE_FALLBACK;
+    } catch (e) {
+      document.title = PRINT_TITLE_FALLBACK;
+    }
+    return document.title;
+  }
+
+  function triggerPrint() {
+    if (printInvoked) {
+      try { console.log('[AI CM][print] duplicate print suppressed'); } catch (e) { }
+      return false;
+    }
+    printInvoked = true;
+    ensurePrintTitle();
+    scheduleClosePrintTab();
+    window.print();
+    return true;
+  }
+
   function init() {
     var tabId = getParam('tab');
     if (!tabId) { showEmpty(); return; }
@@ -155,8 +190,7 @@
           showContent(history);
           // Форма отрисована — диалог печати (пользователь выбирает «Сохранить как PDF»).
           setTimeout(function () {
-            scheduleClosePrintTab();
-            window.print();
+            triggerPrint();
           }, 50);
         });
       });
@@ -168,4 +202,8 @@
   } else {
     waitForRenderer(init);
   }
+
+  // v1.18 (E-2): точка автопечати доступна тестам (регрессионный пин «ровно один print»).
+  // Поведение страницы не меняется — init() вызывает ту же функцию.
+  try { window.__aiCmPrintTrigger = triggerPrint; } catch (e) { }
 })();

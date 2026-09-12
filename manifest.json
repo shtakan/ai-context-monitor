@@ -3,6 +3,7 @@
   "name": "AI Context Monitor",
   "version": "1.18.0",
   "description": "Мониторинг заполнения контекстного окна AI-моделей в реальном времени",
+  "default_locale": "ru",
 
   "homepage_url": "https://github.com/user/ai-context-monitor",
 

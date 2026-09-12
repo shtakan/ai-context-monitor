@@ -129,11 +129,82 @@ function aiCmCollectExportSource() {
   } catch (eA) { }
   return out;
 }
+// v1.18 (E-2.1): ВНУТРИ-сообщенческая дедупликация. Deep Research с вложениями кладёт в
+// ОДИН ход и отрендеренный текст, и сырой markdown-блок ('### ROLE& OBJECTIVE') — чистую
+// функцию dedupeIntraMessage зовёт пайплайн (prepareExportMessages) на КАЖДОЕ сообщение ДО
+// меж-сообщенческого dedupeMessages. Лог ниже — гейт сервиса + антиспам по подписи снимка.
+function aiCmLogIntraDedupe(role, blocks) {
+  if (!(blocks > 0)) return;
+  var sig = 'intra|' + (baseCount || 0) + '|' + (baseText ? baseText.length : 0);
+  if (sig === lastDedupeLogSig) return;
+  lastDedupeLogSig = sig;
+  debugLog('log', '[AI CM][gemini] intra-dedupe removed=' + blocks + ' blocks in message role=' + role);
+}
+// v1.18 (E-2): схлопывание дублей собранного массива сообщений для Gemini/AI Studio.
+// Deep Research отдаёт один и тот же текст пользователя несколько раз (пузырь реплики,
+// карточка плана, узлы шагов) — история, идущая в бейдж/токены/экспорт/print, обязана
+// содержать первое вхождение. Чистые функции — utils/export-emit-pipeline.js
+// (dedupeIntraMessage → dedupeMessages, порядок задан prepareExportMessages); здесь
+// только гейт сервиса (прочие адаптеры не трогаем) и лог внутри-сообщенческих удалений.
+function aiCmDedupeExportSource(messages) {
+  try {
+    var site = (currentAdapter && currentAdapter.siteName) || '';
+    if (site !== 'gemini' && site !== 'aistudio') {
+      var keep = [];
+      for (var p = 0; p < messages.length; p++) {
+        var mp = messages[p] || {};
+        keep.push({ role: (mp.role === 'user') ? 'user' : 'assistant', text: (typeof mp.text === 'string') ? mp.text : '' });
+      }
+      return { messages: keep, removed: 0 };
+    }
+    var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+    if (!P) return { messages: messages, removed: 0 };
+    // E-2.1: внутри-сообщенческая дедупликация идёт ПЕРВОЙ, меж-сообщенческая — второй;
+    // порядок задан prepareExportMessages (единая точка входа пайплайна).
+    if (typeof P.prepareExportMessages === 'function') {
+      var res18 = P.prepareExportMessages(messages, aiCmLogIntraDedupe);
+      return { messages: res18.messages, removed: res18.removed };
+    }
+    if (typeof P.dedupeMessages === 'function') return P.dedupeMessages(messages);
+  } catch (eDed) { }
+  return { messages: messages, removed: 0 };
+}
+// v1.18 (E-2): лог схлопывания печатаем ОДИН раз на снимок базы (сигнатура count|textLen),
+// а не на каждый processAndSend.
+var lastDedupeLogSig = null;
+function aiCmLogDedupeRemoved(removed) {
+  if (!(removed > 0)) return;
+  var sig = baseCount + '|' + (baseText ? baseText.length : 0);
+  if (sig === lastDedupeLogSig) return;
+  lastDedupeLogSig = sig;
+  debugLog('log', '[AI CM][gemini] dedupe removed=' + removed);
+}
 function buildHistoryMessages() {
   // v81: поведение для Gemini побитово прежнее (detail.messages/lastBaseTexts — приоритет);
   // для не-Gemini добавлен источник DOM-адаптера с нормализацией и чередованием.
-  // для не-Gemini добавлен источник DOM-адаптера с нормализацией и чередованием.
-  return aiCmCollectExportSource();
+  // E-2: собранный массив схлопывается от дублей (Gemini/AI Studio) ПЕРЕД потребителями —
+  // ручной экспорт попапа/print/автофайл получают историю без повторов.
+  // v1.18 (E-2.3): это ТА ЖЕ схлопнутая база, что питает метрики (см. aiCmBasePrepared):
+  // источник — те же lastBaseTexts/lastDetailMessages (выход prepareExportMessages), а
+  // повторный прогон чистой подготовки идемпотентен — второго вердикта дедупа нет.
+  return aiCmDedupeExportSource(aiCmCollectExportSource()).messages;
+}
+// v1.18 (E-2.3): ЕДИНЫЙ источник правды для метрик и файла экспорта. Схлопнутая база
+// текущего снимка живёт ОДНИМ массивом — выходом prepareExportMessages (нормализация →
+// intra → inter → cross-raw → гигиена остатков разметки). baseText/baseCount — производные
+// ЭТОГО массива, в файл уходит та же база (lastBaseTexts → aiCmCollectExportSource →
+// buildHistoryMessages). Второй копии базы и второго вердикта дедупа НЕ существует.
+var aiCmBasePrepared = null; // [{role,text,id}] | null — схлопнутая база последнего снимка
+function aiCmPreparedText(messages) {
+  var src = Array.isArray(messages) ? messages : [];
+  var out = [];
+  for (var i = 0; i < src.length; i++) out.push(String((src[i] && src[i].text) || ''));
+  return out.join('\n');
+}
+// Текст метрик (getEffectiveText → pct/токены/бейдж) — РОВНО схлопнутая база, не её копия.
+function aiCmMetricBaseText(fallback) {
+  if (Array.isArray(aiCmBasePrepared) && aiCmBasePrepared.length > 0) return aiCmPreparedText(aiCmBasePrepared);
+  return fallback;
 }
 
 // ================= v61diag: диагностика холодного старта (ТОЛЬКО логи, логика не тронута) =================
@@ -607,6 +678,8 @@ function resetConversationState() {
   lastBaseIds = [];
   lastBaseTexts = [];
   lastDetailMessages = null;
+  // v1.18 (E-2.3): схлопнутая база метрик не перетекает в другой чат
+  aiCmBasePrepared = null;
   lastHistoryWroteKey = null;
   lastThreadId = null;
   detectedModelSlug = '';
@@ -860,7 +933,9 @@ function getEffectiveText() {
   if (baseSeen && baseText) {
     if (baseComplete) {
       lastBounded = true; // источник = сеть, стабилен → монотонный максимум безвреден
-      return baseText;
+      // v1.18 (E-2.3): текст метрик (pct/токены/бейдж) — РОВНО схлопнутая база текущего
+      // снимка (выход prepareExportMessages), тот же массив, что уходит в файл экспорта.
+      return aiCmMetricBaseText(baseText);
     }
     var tail = computeTailFromDom();
     var sig = (tail.sel || '') + '|' + (tail.bounded ? '1' : '0');
@@ -975,13 +1050,68 @@ window.addEventListener('ai-cm-full-history', function (ev) {
   var ids = Array.isArray(detail.messageIds) ? detail.messageIds : [];
   lastBaseIds = ids;
   lastBaseTexts = texts;
-  lastDetailMessages = Array.isArray(detail.messages) ? detail.messages : null;
+  // v1.18 (E-2): Deep Research отдаёт один и тот же текст пользователя несколько раз
+  // (пузырь реплики + карточка плана + узлы шагов). База схлопывается ДО потребителей:
+  // badge/pct считаются по схлопнутой истории, экспорт .txt/.md/.json и print — тоже.
+  // Карточка плана («Вот план исследования…» + цитата цели) — самостоятельный текст,
+  // остаётся ОДНИМ assistant-сообщением и не режется.
+  if (texts.length > 0) {
+    var rawMsgs18 = (Array.isArray(detail.messages) && detail.messages.length === texts.length)
+      ? detail.messages
+      : null;
+    var preDedupe18 = [];
+    for (var d18 = 0; d18 < texts.length; d18++) {
+      var r18 = rawMsgs18 ? ((rawMsgs18[d18] && rawMsgs18[d18].role) || '') : ((d18 % 2 === 0) ? 'user' : 'assistant');
+      preDedupe18.push({
+        role: (r18 === 'user') ? 'user' : 'assistant',
+        text: sanitizeGeminiText(texts[d18]),
+        id: (rawMsgs18 && rawMsgs18[d18] && rawMsgs18[d18].id != null) ? String(rawMsgs18[d18].id) : String(ids[d18])
+      });
+    }
+    var ded18 = aiCmDedupeExportSource(preDedupe18);
+    // v1.18 (E-2.3): ЕДИНЫЙ источник правды — РОВНО выход prepareExportMessages. Этот массив
+    // питает и метрики (baseText/baseCount/getEffectiveText), и файл экспорта (lastBaseTexts →
+    // aiCmCollectExportSource): отдельного второго массива-базы не заводим.
+    var prepared18 = Array.isArray(ded18.messages) ? ded18.messages : [];
+    aiCmBasePrepared = prepared18;
+    var texts18 = [];
+    var ids18 = [];
+    var msgs18 = [];
+    // id берём у ВЫЖИВШЕГО сообщения (prepareExportMessages переносит id): после схлопывания
+    // индексы выхода и входа НЕ совпадают, поэтому фолбэк — id того же входа по индексу.
+    for (var e18 = 0; e18 < prepared18.length; e18++) {
+      var me18 = prepared18[e18] || {};
+      var mid18 = (me18.id != null)
+        ? String(me18.id)
+        : ((preDedupe18[e18] && preDedupe18[e18].id != null) ? String(preDedupe18[e18].id) : '');
+      texts18.push(String(me18.text == null ? '' : me18.text));
+      ids18.push(mid18);
+      msgs18.push({ role: me18.role, text: String(me18.text == null ? '' : me18.text), id: mid18 });
+    }
+    lastBaseTexts = texts18;
+    lastBaseIds = ids18;
+    lastDetailMessages = msgs18;
+    baseCount = texts18.length;
+    // baseText — производное ТОГО ЖЕ массива (texts18 собраны из prepared18), а не вторая база.
+    baseText = texts18.join('\n');
+    // v1.18 (E-2.3): сетевой effectiveLen (пол/длина) описывает ДО-схлопнутый текст. Когда
+    // база схлопнута, масштаб оценки токенов берётся по САМОЙ базе — иначе бейдж/pct считались
+    // бы по второй (несхлопнутой) копии, которую в файл уже не кладут (live: pct 10.7% при
+    // файле ~32 тыс. символов вместо ~40 тыс.). Без схлопывания (removed=0) пол не трогаем.
+    if (ded18.removed > 0 && netEffectiveLen > baseText.length) netEffectiveLen = baseText.length;
+    aiCmLogDedupeRemoved(ded18.removed);
+  } else {
+    // нет сетевых текстов — схлопнутой базы у снимка нет: метрики идут прежним путём
+    // (getEffectiveText → baseText), чужая/прошлая база не подставляется.
+    aiCmBasePrepared = null;
+    lastDetailMessages = Array.isArray(detail.messages) ? detail.messages : null;
+  }
   baseIdSet = new Set();
-  for (var i = 0; i < ids.length; i++) { var s = String(ids[i]).trim(); if (s) baseIdSet.add(s); }
+  for (var i = 0; i < lastBaseIds.length; i++) { var s = String(lastBaseIds[i]).trim(); if (s) baseIdSet.add(s); }
   baseSkelSet = new Set();
   baseAnchors = [];
-  for (var t = 0; t < texts.length; t++) {
-    var sk = normalize(stripMd(texts[t]));
+  for (var t = 0; t < lastBaseTexts.length; t++) {
+    var sk = normalize(stripMd(lastBaseTexts[t]));
     if (sk) { baseSkelSet.add(sk); if (sk.length >= ANCHOR_MIN) baseAnchors.push(sk); }
   }
   lastTailSig = null;

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI Context Monitor — печатная форма</title>
+<title data-i18n="print_page_title">AI Context Monitor — печатная форма</title>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -96,6 +96,11 @@
   .banner { display: none; }
 
   @media print {
+    /* v1.18 (E-2): стандартные шрифты для печати/PDF. Драйвер PDF-принтера строит
+       ToUnicode-таблицы надёжно только для стандартных семейств: без этого текст
+       сохранённого PDF не копировался/не искался (битая кириллица). Экранная
+       раскладка не меняется — правило действует ТОЛЬКО в print-медиа. */
+    body, code, pre, pre code { font-family: Arial, Helvetica, sans-serif; }
     body { background: #ffffff; }
     .print-wrap { max-width: none; padding: 0; }
     .doc-header { break-after: avoid; }
@@ -108,12 +113,13 @@
 </head>
 <body>
   <div class="print-wrap">
-    <div class="banner" id="print-banner">Форма готова — диалог печати будет вызван автоматически.</div>
+    <div class="banner" id="print-banner" data-i18n="print_banner">Форма готова — диалог печати будет вызван автоматически.</div>
     <div id="print-content"></div>
-    <div class="empty-state" id="empty-state" style="display:none;">
+    <div class="empty-state" id="empty-state" style="display:none;" data-i18n="print_empty_state">
       История для этой вкладки не найдена. Откройте чат на поддерживаемой платформе и попробуйте ещё раз.
     </div>
   </div>
+  <script src="../options/i18n-apply.js"></script>
   <script src="../utils/markdown.js"></script>
   <script src="print.js"></script>
 </body>

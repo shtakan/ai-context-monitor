@@ -1,0 +1,167 @@
+{
+  "options_page_title": {
+    "message": "AI Context Monitor"
+  },
+  "options_header_title": {
+    "message": "AI Context Monitor"
+  },
+  "options_stat_site": {
+    "message": "Сайт:"
+  },
+  "options_stat_model": {
+    "message": "Модель:"
+  },
+  "options_stat_tokens": {
+    "message": "Токены:"
+  },
+  "options_stat_limit": {
+    "message": "Лимит:"
+  },
+  "options_stat_fill": {
+    "message": "Заполнение:"
+  },
+  "options_stat_source": {
+    "message": "Источник:"
+  },
+  "options_model_label": {
+    "message": "Модель:"
+  },
+  "options_model_auto": {
+    "message": "Автоопределение"
+  },
+  "options_limit_label": {
+    "message": "Лимит контекста:"
+  },
+  "options_limit_aria": {
+    "message": "Пользовательский лимит токенов"
+  },
+  "options_limit_placeholder": {
+    "message": "Авто"
+  },
+  "options_limit_auto_btn": {
+    "message": "Авто"
+  },
+  "options_limit_hint": {
+    "message": "Порог в % от Авто-порога: цвета и % считаются от этого порога. 100% = как Авто. Пусто = Авто"
+  },
+  "options_show_widget": {
+    "message": "Показывать индикатор на странице"
+  },
+  "options_debug_logs": {
+    "message": "Подробные логи"
+  },
+  "options_autoexport_legend": {
+    "message": "Автоэкспорт чатов (Gemini, Google Search AI)"
+  },
+  "options_autoexport_enable": {
+    "message": "Автоэкспорт при пороге"
+  },
+  "options_autoexport_pct_label": {
+    "message": "Порог, %:"
+  },
+  "options_autoexport_fmt_aria": {
+    "message": "Формат файла автоэкспорта"
+  },
+  "options_autoexport_hint": {
+    "message": "Один раз скачивает историю чата при достижении порога"
+  },
+  "options_proactive_legend": {
+    "message": "Проактивные пороги"
+  },
+  "options_proactive_badge": {
+    "message": "Бейдж и уведомления о порогах"
+  },
+  "options_proactive_notify": {
+    "message": "Chrome-уведомления"
+  },
+  "options_proactive_levels_label": {
+    "message": "Пороги уведомлений и бейджа (1–100, возрастающий порядок):"
+  },
+  "options_proactive_low_aria": {
+    "message": "Низкий порог процентов"
+  },
+  "options_proactive_medium_aria": {
+    "message": "Средний порог процентов"
+  },
+  "options_proactive_high_aria": {
+    "message": "Высокий порог процентов"
+  },
+  "options_proactive_low_title": {
+    "message": "Низкий порог — зелёный"
+  },
+  "options_proactive_medium_title": {
+    "message": "Средний порог — жёлтый"
+  },
+  "options_proactive_high_title": {
+    "message": "Высокий порог — красный"
+  },
+  "options_proactive_hint": {
+    "message": "Каждый порог срабатывает один раз на разговор; при битом вводе — дефолт 70/85/95"
+  },
+  "options_byok_label": {
+    "message": "Gemini API — точный подсчёт токенов"
+  },
+  "options_byok_key_aria": {
+    "message": "API-ключ Google AI Studio"
+  },
+  "options_byok_key_placeholder": {
+    "message": "Введите API-ключ Google AI Studio"
+  },
+  "options_byok_toggle_title": {
+    "message": "Показать/скрыть ключ"
+  },
+  "options_byok_hint": {
+    "message": "Ключ хранится только до перезапуска браузера (chrome.storage.session). После перезапуска введите заново."
+  },
+  "options_byok_status_set": {
+    "message": "Ключ: задан"
+  },
+  "options_byok_status_unset": {
+    "message": "Ключ: не задан"
+  },
+  "options_byok_remove": {
+    "message": "Убрать ключ"
+  },
+  "options_exact_count": {
+    "message": "Точный подсчёт токенов через Gemini API"
+  },
+  "options_export_legend": {
+    "message": "Экспорт истории"
+  },
+  "options_export_md": {
+    "message": "Сохранить .md"
+  },
+  "options_export_json": {
+    "message": "Сохранить .json"
+  },
+  "options_export_pdf": {
+    "message": "Сохранить .pdf"
+  },
+  "options_export_txt": {
+    "message": "Сохранить .txt (эталон)"
+  },
+  "options_export_diag": {
+    "message": "Экспорт диагностики"
+  },
+  "options_archive_legend": {
+    "message": "Архивы (первый ярус истории)"
+  },
+  "options_archive_import": {
+    "message": "Импортировать"
+  },
+  "options_archive_refresh": {
+    "message": "Обновить список"
+  },
+  "options_archive_hint": {
+    "message": "Локальные экспорты: Gemini Takeout (MyActivity.json), ChatGPT conversations.json, Claude conversations.json, Perplexity threads. Файлы читаются в браузере (FileReader) и никуда не отправляются. Архив — первый ярус: он задаёт авторитетный пол истории и даёт терминальную полноту archive-complete."
+  },
+  "print_page_title": {
+    "message": "AI Context Monitor — печатная форма"
+  },
+  "print_banner": {
+    "message": "Форма готова — диалог печати будет вызван автоматически."
+  },
+  "print_empty_state": {
+    "message": "История для этой вкладки не найдена. Откройте чат на поддерживаемой платформе и попробуйте ещё раз."
+  }
+}

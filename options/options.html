@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI Context Monitor</title>
+  <title data-i18n="options_page_title">AI Context Monitor</title>
   <link rel="stylesheet" href="options.css">
 </head>
 
@@ -12,33 +12,33 @@
   <div class="popup">
     <div class="header">
       <span class="logo">📊</span>
-      <h1>AI Context Monitor</h1>
+      <h1 data-i18n="options_header_title">AI Context Monitor</h1>
     </div>
 
     <!-- v1.20 (M-2): регион статистики объявляет изменения вежливо -->
     <div class="stats" id="stats" aria-live="polite">
       <div class="stat-row">
-        <span class="stat-label">Сайт:</span>
+        <span class="stat-label" data-i18n="options_stat_site">Сайт:</span>
         <span class="stat-value" id="stat-site">—</span>
       </div>
       <div class="stat-row">
-        <span class="stat-label">Модель:</span>
+        <span class="stat-label" data-i18n="options_stat_model">Модель:</span>
         <span class="stat-value" id="stat-model">—</span>
       </div>
       <div class="stat-row">
-        <span class="stat-label">Токены:</span>
+        <span class="stat-label" data-i18n="options_stat_tokens">Токены:</span>
         <span class="stat-value" id="stat-tokens">—</span>
       </div>
       <div class="stat-row">
-        <span class="stat-label">Лимит:</span>
+        <span class="stat-label" data-i18n="options_stat_limit">Лимит:</span>
         <span class="stat-value" id="stat-limit">—</span>
       </div>
       <div class="stat-row highlight">
-        <span class="stat-label">Заполнение:</span>
+        <span class="stat-label" data-i18n="options_stat_fill">Заполнение:</span>
         <span class="stat-value" id="stat-percent">—</span>
       </div>
       <div class="stat-row">
-        <span class="stat-label">Источник:</span>
+        <span class="stat-label" data-i18n="options_stat_source">Источник:</span>
         <span class="stat-value" id="stat-source">—</span>
       </div>
     </div>
@@ -48,9 +48,9 @@
 
     <div class="section">
       <!-- v1.20 (M-1): подпись связана с select через for/id -->
-      <label class="label" for="model-select">Модель:</label>
+      <label class="label" for="model-select" data-i18n="options_model_label">Модель:</label>
       <select id="model-select">
-        <option value="auto">Автоопределение</option>
+        <option value="auto" data-i18n="options_model_auto">Автоопределение</option>
         <optgroup label="OpenAI">
           <option value="gpt-4o">GPT-4o (128K)</option>
           <option value="gpt-4o-mini">GPT-4o Mini (128K)</option>
@@ -71,113 +71,113 @@
     </div>
 
     <div class="section">
-      <label class="label">Лимит контекста:</label>
+      <label class="label" data-i18n="options_limit_label">Лимит контекста:</label>
       <div class="input-row">
         <!-- v1.20 (M-1): поле без видимой текстовой подписи получает имя доступности -->
-        <input type="number" id="custom-limit" aria-label="Пользовательский лимит токенов" placeholder="Авто" min="1" max="100" step="1">
-        <button id="reset-limit" class="btn-reset">Авто</button>
+        <input type="number" id="custom-limit" aria-label="Пользовательский лимит токенов" data-i18n-aria-label="options_limit_aria" placeholder="Авто" data-i18n-placeholder="options_limit_placeholder" min="1" max="100" step="1">
+        <button id="reset-limit" class="btn-reset" data-i18n="options_limit_auto_btn">Авто</button>
       </div>
-      <span class="hint">Порог в % от Авто-порога: цвета и % считаются от этого порога. 100% = как Авто. Пусто = Авто</span>
+      <span class="hint" data-i18n="options_limit_hint">Порог в % от Авто-порога: цвета и % считаются от этого порога. 100% = как Авто. Пусто = Авто</span>
     </div>
 
     <div class="section checkbox-row">
       <input type="checkbox" id="show-widget" checked>
-      <label for="show-widget">Показывать индикатор на странице</label>
+      <label for="show-widget" data-i18n="options_show_widget">Показывать индикатор на странице</label>
     </div>
     <div class="section checkbox-row">
       <input type="checkbox" id="debugLogs">
-      <label for="debugLogs">Подробные логи</label>
+      <label for="debugLogs" data-i18n="options_debug_logs">Подробные логи</label>
     </div>
 
     <!-- v1.20 (M-1): смысловая группа «Автоэкспорт чатов».
          Выбран role="group" + aria-labelledby (вместо fieldset/legend): имя группы
          даёт существующая видимая подпись .label, а раскладка .section не меняется. -->
     <div class="section" id="auto-export-section" role="group" aria-labelledby="auto-export-legend">
-      <label class="label" id="auto-export-legend">Автоэкспорт чатов (Gemini, Google Search AI)</label>
+      <label class="label" id="auto-export-legend" data-i18n="options_autoexport_legend">Автоэкспорт чатов (Gemini, Google Search AI)</label>
       <div class="checkbox-row">
         <input type="checkbox" id="aiCmAutoExport">
-        <label for="aiCmAutoExport">Автоэкспорт при пороге</label>
+        <label for="aiCmAutoExport" data-i18n="options_autoexport_enable">Автоэкспорт при пороге</label>
       </div>
       <div class="input-row">
-        <label class="label" for="aiCmAutoExportPct">Порог, %:</label>
+        <label class="label" for="aiCmAutoExportPct" data-i18n="options_autoexport_pct_label">Порог, %:</label>
         <input type="number" id="aiCmAutoExportPct" min="1" max="100" step="1" value="90">
-        <select id="aiCmAutoExportFmt" aria-label="Формат файла автоэкспорта">
+        <select id="aiCmAutoExportFmt" aria-label="Формат файла автоэкспорта" data-i18n-aria-label="options_autoexport_fmt_aria">
           <option value="txt">txt</option>
           <option value="md">md</option>
           <option value="json">json</option>
         </select>
       </div>
-      <span class="hint">Один раз скачивает историю чата при достижении порога</span>
+      <span class="hint" data-i18n="options_autoexport_hint">Один раз скачивает историю чата при достижении порога</span>
     </div>
 
     <!-- v1.20 (M-1): смысловая группа «Проактивные пороги» -->
     <div class="section" id="proactive-section" role="group" aria-labelledby="proactive-legend">
-      <label class="label" id="proactive-legend">Проактивные пороги</label>
+      <label class="label" id="proactive-legend" data-i18n="options_proactive_legend">Проактивные пороги</label>
       <div class="checkbox-row">
         <input type="checkbox" id="aiCmProactive" checked>
-        <label for="aiCmProactive">Бейдж и уведомления о порогах</label>
+        <label for="aiCmProactive" data-i18n="options_proactive_badge">Бейдж и уведомления о порогах</label>
       </div>
       <div class="checkbox-row">
         <input type="checkbox" id="aiCmProactiveNotify">
-        <label for="aiCmProactiveNotify">Chrome-уведомления</label>
+        <label for="aiCmProactiveNotify" data-i18n="options_proactive_notify">Chrome-уведомления</label>
       </div>
       <div class="input-row">
-        <label class="label" for="aiCmProactiveLow">Пороги уведомлений и бейджа (1–100, возрастающий порядок):</label>
+        <label class="label" for="aiCmProactiveLow" data-i18n="options_proactive_levels_label">Пороги уведомлений и бейджа (1–100, возрастающий порядок):</label>
       </div>
       <div class="input-row">
         <!-- v1.20 (M-1): у трёх числовых полей порога — собственные имена доступности (title сохранён) -->
-        <input type="number" id="aiCmProactiveLow" aria-label="Низкий порог процентов" min="1" max="100" step="1" value="70" title="Низкий порог — зелёный">
-        <input type="number" id="aiCmProactiveMedium" aria-label="Средний порог процентов" min="1" max="100" step="1" value="85" title="Средний порог — жёлтый">
-        <input type="number" id="aiCmProactiveHigh" aria-label="Высокий порог процентов" min="1" max="100" step="1" value="95" title="Высокий порог — красный">
+        <input type="number" id="aiCmProactiveLow" aria-label="Низкий порог процентов" data-i18n-aria-label="options_proactive_low_aria" min="1" max="100" step="1" value="70" title="Низкий порог — зелёный" data-i18n-title="options_proactive_low_title">
+        <input type="number" id="aiCmProactiveMedium" aria-label="Средний порог процентов" data-i18n-aria-label="options_proactive_medium_aria" min="1" max="100" step="1" value="85" title="Средний порог — жёлтый" data-i18n-title="options_proactive_medium_title">
+        <input type="number" id="aiCmProactiveHigh" aria-label="Высокий порог процентов" data-i18n-aria-label="options_proactive_high_aria" min="1" max="100" step="1" value="95" title="Высокий порог — красный" data-i18n-title="options_proactive_high_title">
       </div>
-      <span class="hint">Каждый порог срабатывает один раз на разговор; при битом вводе — дефолт 70/85/95</span>
+      <span class="hint" data-i18n="options_proactive_hint">Каждый порог срабатывает один раз на разговор; при битом вводе — дефолт 70/85/95</span>
     </div>
 
     <div class="section">
-      <label class="label">Gemini API — точный подсчёт токенов</label>
+      <label class="label" data-i18n="options_byok_label">Gemini API — точный подсчёт токенов</label>
       <div class="api-key-row">
         <!-- v1.20 (M-1): у поля ключа было только placeholder-подсказка — даём имя доступности -->
-        <input type="password" id="api-key" aria-label="API-ключ Google AI Studio" placeholder="Введите API-ключ Google AI Studio" autocomplete="off">
-        <button id="toggle-api-key" class="btn-toggle" type="button" title="Показать/скрыть ключ">👁</button>
+        <input type="password" id="api-key" aria-label="API-ключ Google AI Studio" data-i18n-aria-label="options_byok_key_aria" placeholder="Введите API-ключ Google AI Studio" data-i18n-placeholder="options_byok_key_placeholder" autocomplete="off">
+        <button id="toggle-api-key" class="btn-toggle" type="button" title="Показать/скрыть ключ" data-i18n-title="options_byok_toggle_title">👁</button>
       </div>
-      <span class="hint">Ключ хранится только до перезапуска браузера (chrome.storage.session). После перезапуска введите заново.</span>
+      <span class="hint" data-i18n="options_byok_hint">Ключ хранится только до перезапуска браузера (chrome.storage.session). После перезапуска введите заново.</span>
       <div class="api-key-row">
         <span class="hint" id="api-key-status" role="status">Ключ: не задан</span>
-        <button id="api-key-remove" class="btn-toggle" type="button">Убрать ключ</button>
+        <button id="api-key-remove" class="btn-toggle" type="button" data-i18n="options_byok_remove">Убрать ключ</button>
       </div>
     </div>
 
     <div class="section checkbox-row">
       <input type="checkbox" id="exact-count">
-      <label for="exact-count">Точный подсчёт токенов через Gemini API</label>
+      <label for="exact-count" data-i18n="options_exact_count">Точный подсчёт токенов через Gemini API</label>
     </div>
 
     <div class="section">
-      <label class="label">Экспорт истории</label>
+      <label class="label" data-i18n="options_export_legend">Экспорт истории</label>
       <div class="export-row">
-        <button id="export-md" class="btn-export" disabled>Сохранить .md</button>
-        <button id="export-json" class="btn-export" disabled>Сохранить .json</button>
-        <button id="export-pdf" class="btn-export" disabled>Сохранить .pdf</button>
+        <button id="export-md" class="btn-export" disabled data-i18n="options_export_md">Сохранить .md</button>
+        <button id="export-json" class="btn-export" disabled data-i18n="options_export_json">Сохранить .json</button>
+        <button id="export-pdf" class="btn-export" disabled data-i18n="options_export_pdf">Сохранить .pdf</button>
       </div>
       <div class="export-row">
-        <button id="export-txt" class="btn-export" disabled>Сохранить .txt (эталон)</button>
+        <button id="export-txt" class="btn-export" disabled data-i18n="options_export_txt">Сохранить .txt (эталон)</button>
       </div>
       <div class="export-row">
-        <button id="export-diag" class="btn-export">Экспорт диагностики</button>
+        <button id="export-diag" class="btn-export" data-i18n="options_export_diag">Экспорт диагностики</button>
       </div>
       <span class="hint" id="export-hint">Откройте поддерживаемый сайт</span>
     </div>
 
     <div class="section" id="archive-section">
-      <label class="label">Архивы (первый ярус истории)</label>
+      <label class="label" data-i18n="options_archive_legend">Архивы (первый ярус истории)</label>
       <div class="input-row">
         <input type="file" id="archive-file" accept=".json,application/json" multiple>
       </div>
       <div class="input-row">
-        <button id="archive-import" class="btn-export" type="button">Импортировать</button>
-        <button id="archive-refresh" class="btn-reset" type="button">Обновить список</button>
+        <button id="archive-import" class="btn-export" type="button" data-i18n="options_archive_import">Импортировать</button>
+        <button id="archive-refresh" class="btn-reset" type="button" data-i18n="options_archive_refresh">Обновить список</button>
       </div>
-      <span class="hint">Локальные экспорты: Gemini Takeout (MyActivity.json), ChatGPT conversations.json,
+      <span class="hint" data-i18n="options_archive_hint">Локальные экспорты: Gemini Takeout (MyActivity.json), ChatGPT conversations.json,
         Claude conversations.json, Perplexity threads. Файлы читаются в браузере (FileReader) и никуда не отправляются.
         Архив — первый ярус: он задаёт авторитетный пол истории и даёт терминальную полноту archive-complete.</span>
       <!-- v1.20 (M-2): статус архива — вежливый live-region -->
@@ -193,6 +193,7 @@
     </div>
   </div>
 </body>
+<script src="i18n-apply.js"></script>
 <script src="../utils/chatgpt-conversation-parser.js"></script>
 <script src="../utils/perplexity-parser.js"></script>
 <script src="../utils/archive-import.js"></script>

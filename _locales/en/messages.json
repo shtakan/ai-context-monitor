@@ -1,0 +1,167 @@
+{
+  "options_page_title": {
+    "message": "AI Context Monitor"
+  },
+  "options_header_title": {
+    "message": "AI Context Monitor"
+  },
+  "options_stat_site": {
+    "message": "Site:"
+  },
+  "options_stat_model": {
+    "message": "Model:"
+  },
+  "options_stat_tokens": {
+    "message": "Tokens:"
+  },
+  "options_stat_limit": {
+    "message": "Limit:"
+  },
+  "options_stat_fill": {
+    "message": "Usage:"
+  },
+  "options_stat_source": {
+    "message": "Source:"
+  },
+  "options_model_label": {
+    "message": "Model:"
+  },
+  "options_model_auto": {
+    "message": "Auto-detect"
+  },
+  "options_limit_label": {
+    "message": "Context limit:"
+  },
+  "options_limit_aria": {
+    "message": "Custom token limit"
+  },
+  "options_limit_placeholder": {
+    "message": "Auto"
+  },
+  "options_limit_auto_btn": {
+    "message": "Auto"
+  },
+  "options_limit_hint": {
+    "message": "Threshold as a % of the Auto limit: colors and % are calculated from this threshold. 100% = same as Auto. Empty = Auto"
+  },
+  "options_show_widget": {
+    "message": "Show the indicator on the page"
+  },
+  "options_debug_logs": {
+    "message": "Verbose logs"
+  },
+  "options_autoexport_legend": {
+    "message": "Chat auto-export (Gemini, Google Search AI)"
+  },
+  "options_autoexport_enable": {
+    "message": "Auto-export at threshold"
+  },
+  "options_autoexport_pct_label": {
+    "message": "Threshold, %:"
+  },
+  "options_autoexport_fmt_aria": {
+    "message": "Auto-export file format"
+  },
+  "options_autoexport_hint": {
+    "message": "Downloads the chat history once when the threshold is reached"
+  },
+  "options_proactive_legend": {
+    "message": "Proactive thresholds"
+  },
+  "options_proactive_badge": {
+    "message": "Badge and threshold notifications"
+  },
+  "options_proactive_notify": {
+    "message": "Chrome notifications"
+  },
+  "options_proactive_levels_label": {
+    "message": "Notification and badge thresholds (1–100, ascending order):"
+  },
+  "options_proactive_low_aria": {
+    "message": "Low threshold percentage"
+  },
+  "options_proactive_medium_aria": {
+    "message": "Medium threshold percentage"
+  },
+  "options_proactive_high_aria": {
+    "message": "High threshold percentage"
+  },
+  "options_proactive_low_title": {
+    "message": "Low threshold — green"
+  },
+  "options_proactive_medium_title": {
+    "message": "Medium threshold — yellow"
+  },
+  "options_proactive_high_title": {
+    "message": "High threshold — red"
+  },
+  "options_proactive_hint": {
+    "message": "Each threshold fires once per conversation; invalid input falls back to the default 70/85/95"
+  },
+  "options_byok_label": {
+    "message": "Gemini API — exact token counting"
+  },
+  "options_byok_key_aria": {
+    "message": "Google AI Studio API key"
+  },
+  "options_byok_key_placeholder": {
+    "message": "Enter your Google AI Studio API key"
+  },
+  "options_byok_toggle_title": {
+    "message": "Show/hide the key"
+  },
+  "options_byok_hint": {
+    "message": "The key is kept only until the browser is restarted (chrome.storage.session). Enter it again after a restart."
+  },
+  "options_byok_status_set": {
+    "message": "Key: set"
+  },
+  "options_byok_status_unset": {
+    "message": "Key: not set"
+  },
+  "options_byok_remove": {
+    "message": "Remove key"
+  },
+  "options_exact_count": {
+    "message": "Exact token counting via the Gemini API"
+  },
+  "options_export_legend": {
+    "message": "Export history"
+  },
+  "options_export_md": {
+    "message": "Save .md"
+  },
+  "options_export_json": {
+    "message": "Save .json"
+  },
+  "options_export_pdf": {
+    "message": "Save .pdf"
+  },
+  "options_export_txt": {
+    "message": "Save .txt (reference)"
+  },
+  "options_export_diag": {
+    "message": "Export diagnostics"
+  },
+  "options_archive_legend": {
+    "message": "Archives (first history tier)"
+  },
+  "options_archive_import": {
+    "message": "Import"
+  },
+  "options_archive_refresh": {
+    "message": "Refresh list"
+  },
+  "options_archive_hint": {
+    "message": "Local exports: Gemini Takeout (MyActivity.json), ChatGPT conversations.json, Claude conversations.json, Perplexity threads. Files are parsed in the browser (FileReader) and are never sent anywhere. The archive is the first tier: it defines the authoritative history floor and provides terminal archive-complete completeness."
+  },
+  "print_page_title": {
+    "message": "AI Context Monitor — printable form"
+  },
+  "print_banner": {
+    "message": "The form is ready — the print dialog will open automatically."
+  },
+  "print_empty_state": {
+    "message": "No history was found for this tab. Open a chat on a supported platform and try again."
+  }
+}

@@ -111,10 +111,27 @@ function aiCmPurgeLegacyByokKeys() {
   } catch (ePurge) { }
 }
 
+// ========== M-4 (фаза 3): i18n — строки статусов из _locales ==========
+// Динамические строки страницы настроек берутся из chrome.i18n.getMessage
+// (ключи options_byok_status_set / options_byok_status_unset есть в ru и en).
+// chrome.i18n недоступен (юнит-тесты, отладочный контекст) → прежний русский
+// фолбэк: внешнее поведение и тексты без расширения байтово прежние.
+function aiCmI18nMessage(key, fallback) {
+  try {
+    if (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.getMessage === 'function') {
+      var message = chrome.i18n.getMessage(key);
+      if (message) return message;
+    }
+  } catch (eMessage) { }
+  return fallback;
+}
+
 // Статус-строка — по фактическому наличию ключа в session.
 function aiCmRenderApiKeyStatus(hasKey) {
   if (!apiKeyStatusEl) return;
-  apiKeyStatusEl.textContent = hasKey ? 'Ключ: задан' : 'Ключ: не задан';
+  apiKeyStatusEl.textContent = hasKey
+    ? aiCmI18nMessage('options_byok_status_set', 'Ключ: задан')
+    : aiCmI18nMessage('options_byok_status_unset', 'Ключ: не задан');
 }
 
 // Сохранение ключа: пишем ТОЛЬКО в session; local очищается от plaintext-имён.
