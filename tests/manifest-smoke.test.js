@@ -33,7 +33,13 @@ const en = JSON.parse(fs.readFileSync(path.join(ROOT, '_locales', 'en', 'message
 const CHROMIUM_MV3_KEYS = [
   'manifest_version', 'name', 'version', 'description', 'default_locale',
   'homepage_url', 'permissions', 'host_permissions', 'background',
-  'content_scripts', 'action', 'icons'
+  'content_scripts', 'action', 'icons',
+  // v2.0 (этап 3/3): in-manifest запись архитектурного решения (ES modules в
+  // content scripts не поддерживаются — см. ARCHITECTURE_STANDARDS.md). Форма
+  // "//"-префикса выбрана как единственная, которую Chrome молча игнорирует:
+  // на неё НЕ появляется warning «Unrecognized manifest key», и она не нарушает
+  // запрет privacy-теста на служебные ключи вида `_comment*` (см. tests/privacy.test.js).
+  '//ESM'
 ];
 
 // Ключи, специфичные для Firefox/Opera/старых сборок MV2 — в Chromium-MV3 пакете

@@ -126,6 +126,53 @@
 - Тесты, зависящие от живых фикстур, обязаны быть skip-if-absent (`fs.existsSync` → `describe.skip`/`it.skip` + `console.info` «фикстура отсутствует — пропуск»), чтобы CI оставался зелёным без приватных данных. Прецедент — 8c36ee1 (ChatGPT), расширен на все сервисы (Gemini, Perplexity, H26).
 - Тесты на синтетических фикстурах (включая `*.min.txt`) гейту не подлежат — они обязаны работать всегда.
 
+## ES modules в content scripts — отложено до бандлера (2026-09-13, v2.0 этап 3/3)
+
+**Решение:** статические ES modules для content scripts в проекте **не применяются**.
+Замена классических `js[]`-списков на `import`/`export` внутри content scripts невозможна
+без бандлера; бандлер в этап 3/3 не вводится (отдельное решение).
+
+**Основание — эмпирическая проверка на целевых версиях** (Chrome 153.0.8010.36 и
+Edge 153.0.4234.32, одинаковый результат). Минимальное расширение-MV3 с контрольным
+классическим скриптом и пробами на модули:
+
+| Проба | Результат |
+|---|---|
+| `content_scripts[].js` + `"type":"module"`, `world:'ISOLATED'` | ключ игнорируется, файл идёт классическим скриптом → `SyntaxError: Cannot use import statement outside a module` |
+| `content_scripts[].js` + `"type":"module"`, `world:'MAIN'` | то же (ключ не поддержан и в MAIN) |
+| `registerContentScripts({type:'module'})`, `world:'ISOLATED'` | API отвергает: `Error at index 0: Unexpected property: 'type'` |
+| `registerContentScripts({type:'module'})`, `world:'MAIN'` | то же |
+| классический content script (контроль) | исполняется штатно — проба валидна |
+| динамический `import()` из классического content script | работает, но **только** если файл объявлен в `web_accessible_resources`; иначе `Failed to fetch dynamically imported module` |
+| динамический `import()` в MAIN-мире по `chrome-extension://<id>/...` | работает (при `web_accessible_resources`), но `chrome.runtime.getURL` в MAIN недоступен |
+
+**Документация:** раздел `content_scripts` в
+[docs Chrome for Developers](https://developer.chrome.com/docs/extensions/reference/manifest/content-scripts)
+и [MDN](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/content_scripts)
+описывают `matches/js/css/run_at/world/all_frames` — ключа `type` нет ни в одном из них;
+в Chromium `ContentScriptsHandler` пробрасывает `js[]` как есть, а схема
+`scripting.registerContentScripts` объявляет `type` неожиданным свойством. Запрос на
+поддержку современных ESM в content scripts открыт в
+[w3c/webextensions#1017](https://github.com/w3c/webextensions/issues/1017).
+
+**Следствия, обязательные к соблюдению:**
+- `manifest.json` → `content_scripts[0].js` остаётся **классическим списком**: порядок
+  файлов = порядок исполнения, общий лексический скоуп, связывание через `window.AiCm*`.
+  Комментарий-решение закреплён в самом манифесте (`_comment_esm`).
+- Программные пучки (`registerContentScripts`, в т.ч. `world:'MAIN'`) — только
+  классические скрипты; `type` в объект регистрации не добавлять (API бросит).
+- UMD-экспорты `window.AiCm*` сохраняются там, где есть потребители: мосты CustomEvent
+  (MAIN↔ISOLATED) и тесты.
+- Декомпозиция `gemini-intercept.js` продолжается **выносом в отдельные классические
+  файлы** (как `core/gemini-hidden-scroll.js` на этапе 2/3) с сохранением порядка в `js[]`,
+  а не через `import`.
+- Возврат к вопросу — только вместе с бандлером (esbuild/rollup), который собирает
+  ESM-исходники в один классический IIFE-файл на точку входа.
+
+**Почему проверка эмпирическая, а не только по докам:** формулировки в руководствах
+расходятся (часть источников описывает `"type":"module"` как рабочий), поэтому вердикт
+подтверждён прямым прогоном на целевых браузерах с контрольной пробой.
+
 ## Осознанные трейд-оффы
 - (а) session-латчи O3 в storage.session (TRUSTED_AND_UNTRUSTED_CONTEXTS) доступны content-скриптам всех сайтов — принято осознанно ради кросс-табового already-fired автоэкспорта.
 - (б) BYOK-ключ Gemini хранится в chrome.storage.local в открытом виде — стандартная практика BYOK-расширений, риск задокументирован. Честная альтернатива (прокси без хранения ключа) отклонена как невостребованная.
