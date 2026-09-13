@@ -200,6 +200,43 @@
     } catch (e) { return ''; }
   }
 
+  // ---- M-14: полный набор query-параметров истории — адрес снимка целиком ----
+  // Дефект M-14 (SPA домашняя→тред, без F5): bootstrap учил ГОЛЫЙ /rest/thread/{slug} и получал
+  // урезанный снимок (textLen 5764, 1.4%); запрос страницы с полным набором параметров отдаёт
+  // textLen 11164, 2.6%. Причина: гейт M-12 отбрасывает чужие снимки ДО выучивания шаблона, а
+  // SPA-клик переиспользует кэш — нового сниффинга с полным адресом нет до F5. Поэтому полный
+  // набор параметров — и константа адреса (REST-fallback bootstrap), и улика для шаблона.
+  var FULL_HISTORY_QUERY = '?with_parent_info=true&supported_block_use_cases=true';
+  var FULL_HISTORY_PARAMS = ['with_parent_info', 'supported_block_use_cases'];
+
+  // URL несёт query-параметры полного набора (with_parent_info / supported_block_use_cases)?
+  function hasFullHistoryParams(urlStr) {
+    var u = String(urlStr || '');
+    var q = u.indexOf('?');
+    if (q === -1) return false;
+    var query = u.slice(q + 1);
+    for (var i = 0; i < FULL_HISTORY_PARAMS.length; i++) {
+      if (query.indexOf(FULL_HISTORY_PARAMS[i]) !== -1) return true;
+    }
+    return false;
+  }
+
+  // M-14: выучить historyUrlTemplate из URL, отклонённого гейтом M-12 (id-сегмент → {slug}).
+  // Это ТОЛЬКО адрес: данные отклонённого снимка не эмитим, состояние (snapshotReceived/
+  // lastHistoryUrl, уже выученный шаблон) не трогаем. Учим лишь URL полного набора — иначе
+  // шаблон закрепил бы урезанный адрес.
+  function learnTemplateFromRejectedUrl(urlStr) {
+    if (historyUrlTemplate) return false;
+    var url = String(urlStr || '');
+    if (!hasFullHistoryParams(url)) return false;
+    var m = url.match(/\/(?:search|thread|rest\/thread|api\/thread)\/([^\/?#]+)/);
+    if (!m) return false;
+    // id-сегмент → {slug}: заменяем ровно совпавший фрагмент пути, хвост URL (query) сохраняем
+    historyUrlTemplate = url.slice(0, m.index) + m[0].slice(0, m[0].length - m[1].length) + '{slug}' + url.slice(m.index + m[0].length);
+    debugLog('log', '[perplexity-intercept] гейт M-12: шаблон выучен из URL отклонённого снимка: ' + historyUrlTemplate);
+    return true;
+  }
+
   function resetForNewConversation() {
     lastHistoryUrl = null;
     lastModel = '';
@@ -263,7 +300,7 @@
               emitSnapshot(data, 'bootstrap');
             } else {
               // фикс: Accept=json на свежем треде стабильно отдаёт HTML/RSC-payload —
-              // REST-fallback /rest/thread/{slug} отдаёт полноценный снимок (entries+thread_metadata)
+              // REST-fallback с полным набором параметров (M-14) отдаёт снимок целиком (entries+thread_metadata)
               bootstrapRestSnapshot();
             }
           } catch (e) { bootstrapRestSnapshot(); }
@@ -271,10 +308,11 @@
     }
   }
 
-  // ---- фикс: REST-fallback bootstrap — GET /rest/thread/{slug} без адреса шаблона ----
+  // ---- bootstrap REST-fallback: адрес с тем же полным набором параметров, что и сниффинг-URL (M-14) ----
+  // Раньше здесь стоял голый /rest/thread/{slug} → урезанный снимок (textLen 5764, 1.4%).
   function bootstrapRestSnapshot() {
     if (!currentConvId) return;
-    var restUrl = location.origin + '/rest/thread/' + currentConvId;
+    var restUrl = location.origin + '/rest/thread/' + currentConvId + FULL_HISTORY_QUERY;
     debugLog('log', '[perplexity-intercept] bootstrap: REST-fallback (' + restUrl + ')');
     originalFetch(restUrl, { credentials: 'include' })
       .then(function (resp) { if (!resp || !resp.ok) return null; return resp.json(); })
@@ -343,16 +381,20 @@
   function processHistoryData(data, url, source) {
     if (!data) return;
     // M-12: гейт «снимок принадлежит текущей странице» — ДО любых мутаций состояния
-    // (bootstrapTimer/snapshotReceived/lastHistoryUrl/шаблон): пропущенный чужой снимок
+    // (bootstrapTimer/snapshotReceived/lastHistoryUrl): пропущенный чужой снимок
     // не должен ни эмититься в бейдж/историю, ни уводить за собой виртуальный F5.
+    // M-14: единственное, что берётся у отклонённого снимка, — АДРЕС полного набора (шаблон),
+    // и только пока шаблон не выучен; данные снимка и состояние не трогаются.
     if (!currentConvId) {
       debugLog('log', '[perplexity-intercept] сниффинг (' + source + '): нет slug страницы — не тред, снимок не эмитим (' + url + ')');
+      learnTemplateFromRejectedUrl(url); // M-14: у отклонённого снимка берём только адрес полного набора
       return;
     }
     var sniffSlug = snapshotSlug(data, url);
     if (sniffSlug !== currentConvId) {
       debugLog('log', '[perplexity-intercept] сниффинг (' + source + '): чужой снимок (slug=' +
         (sniffSlug || '(не определён)') + ' != slug страницы ' + currentConvId + ') — пропуск, URL: ' + url);
+      learnTemplateFromRejectedUrl(url); // M-14: у отклонённого снимка берём только адрес полного набора
       return;
     }
     console.log('[perplexity-intercept] сниффинг: снимок истории пойман (' + source + '), URL: ' + url);

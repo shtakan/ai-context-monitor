@@ -3,7 +3,7 @@
  *
  * Пины source-level (стиль manifest-smoke.test.js / docs-hygiene.test.js) — только чтение:
  *  1) manifest.version === версия ВЕРХНЕЙ записи CHANGELOG.md (парсинг реального файла,
- *     формат Keep a Changelog: «## [x.y.z] - YYYY-MM-DD»); версия — строго литерал 1.19.2,
+ *     формат Keep a Changelog: «## [x.y.z] - YYYY-MM-DD»); версия — строго литерал 1.19.3,
  *     чтобы пин не «съезжал» молча вслед за манифестом;
  *  2) package.json === package-lock.json (root + packages[""]) === manifest.json;
  *  3) все места вывода версии согласованы с манифестом: футер docs/index.html,
@@ -53,10 +53,10 @@ describe('R-1: manifest.version синхронизирован с верхней
     expect(manifest.version).toBe(topEntry.version);
   });
 
-  test('manifest.version === 1.19.2 (литерал: пин не следует за манифестом молча)', () => {
-    expect(manifest.version).toBe('1.19.2');
+  test('manifest.version === 1.19.3 (литерал: пин не следует за манифестом молча)', () => {
+    expect(manifest.version).toBe('1.19.3');
     expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(topEntry.version).toBe('1.19.2');
+    expect(topEntry.version).toBe('1.19.3');
     expect(topEntry.date).toBe('2026-09-13');
   });
 
@@ -71,13 +71,19 @@ describe('R-1: manifest.version синхронизирован с верхней
     expect(greater).toBe(true);
   });
 
-  test('CHANGELOG: записи 1.19.1 и 1.18.0 не переписаны (прежние заголовки на месте)', () => {
+  test('CHANGELOG: прежние записи не переписаны; новая 1.19.3 (M-14) стоит выше 1.19.2', () => {
     const headings = changelog.split(/\r?\n/).filter(function (l) { return l.indexOf('## [') === 0; });
+    expect(headings.filter(function (h) { return h.indexOf('## [1.19.2] - 2026-09-13') === 0; }).length).toBe(1);
     expect(headings.filter(function (h) { return h.indexOf('## [1.19.1] - 2026-09-13') === 0; }).length).toBe(1);
     expect(headings.filter(function (h) { return h.indexOf('## [1.18.0] - 2026-09-12') === 0; }).length).toBe(1);
-    // новая запись 1.19.2 (M-12 + M-13) стоит ВЫШЕ прежней
-    expect(headings.findIndex(function (h) { return h.indexOf('## [1.19.2]') === 0; }))
-      .toBeLessThan(headings.findIndex(function (h) { return h.indexOf('## [1.19.1]') === 0; }));
+    const iNew = headings.findIndex(function (h) { return h.indexOf('## [1.19.3]') === 0; });
+    const iM12 = headings.findIndex(function (h) { return h.indexOf('## [1.19.2]') === 0; });
+    const iPrev = headings.findIndex(function (h) { return h.indexOf('## [1.19.1]') === 0; });
+    expect(iNew).toBeGreaterThanOrEqual(0);                  // запись M-14 на месте
+    expect(iNew).toBeLessThan(iM12);                         // 1.19.3 выше 1.19.2
+    expect(iM12).toBeLessThan(iPrev);                        // прежний порядок не переписан
+    expect(changelog).toContain('M-14');                     // запись называет свой шаг
+    expect(changelog).toContain('with_parent_info');         // и существо фикса (полный набор параметров)
   });
 });
 
@@ -91,10 +97,11 @@ describe('R-1: package.json и package-lock.json — та же версия, ч�
     expect(lock.packages[''].version).toBe(manifest.version);
   });
 
-  test('прежние версии 1.19.1 и 1.18.0 в манифесте/пакете/локе не остались', () => {
+  test('прежние версии 1.19.2, 1.19.1 и 1.18.0 в манифесте/пакете/локе не остались', () => {
     [manifest, pkg, lock].forEach(function (doc) {
       expect(JSON.stringify(doc)).not.toContain('1.18.0');
       expect(JSON.stringify(doc)).not.toContain('1.19.1');
+      expect(JSON.stringify(doc)).not.toContain('1.19.2');
     });
   });
 });
@@ -115,12 +122,14 @@ describe('R-1: единый источник версии — chrome.runtime.get
   test('футер docs/index.html показывает версию манифеста (не прежнюю и не 1.0.0)', () => {
     expect(docsHtml).toContain('Версия</span> ' + manifest.version);
     expect(docsHtml).not.toContain('Версия</span> 1.0.0');
+    expect(docsHtml).not.toContain('Версия</span> 1.19.2');
     expect(docsHtml).not.toContain('Версия</span> 1.19.1');
     expect(docsHtml).not.toContain('Версия</span> 1.18.0');
   });
 
   test('метаданные листинга Edge: версия совпадает с манифестом', () => {
     expect(listing).toContain('Версия расширения: ' + manifest.version + ' (manifest.json)');
+    expect(listing).not.toContain('Версия расширения: 1.19.2');
     expect(listing).not.toContain('Версия расширения: 1.19.1');
     expect(listing).not.toContain('Версия расширения: 1.18.0');
   });

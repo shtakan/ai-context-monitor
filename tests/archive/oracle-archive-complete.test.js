@@ -249,7 +249,7 @@ describe('T1: проводка ISOLATED → MAIN и запрет внешних 
   test('manifest.json НЕ изменён: архив не добавлен в content_scripts/host_permissions', () => {
     expect(MANIFEST).not.toContain('archive');
     const m = JSON.parse(MANIFEST);
-    expect(m.version).toBe('1.19.2');
+    expect(m.version).toBe('1.19.3');
     expect(m.content_scripts[0].js).not.toContain('utils/archive-import.js');
     expect(m.host_permissions.length).toBe(9);
     expect(m.host_permissions).toContain('https://gemini.google.com/*');
