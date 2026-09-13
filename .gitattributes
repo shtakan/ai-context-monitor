@@ -1,0 +1,13 @@
+# Нормализация переводов строк (CI-хотфикс v1.19.3).
+# Без этих правил Windows-чекаут с core.autocrlf=true пишет рабочие копии CRLF,
+# и байтовые пины тестов (gemini-overlay-tape, gemini-floor-confirmed), сравнивающие
+# исходники с '\n'-литералами, падают локально — при зелёном CI на Linux.
+# Правило: блобы и рабочие копии текстовых файлов — всегда LF.
+*.js    text eol=lf
+*.json  text eol=lf
+*.html  text eol=lf
+*.css   text eol=lf
+*.md    text eol=lf
+
+# Бинарные ресурсы: git не должен ни нормализовать, ни диффить их как текст.
+*.png   binary

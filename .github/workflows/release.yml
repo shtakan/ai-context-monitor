@@ -29,7 +29,9 @@ jobs:
           # Магазин Edge Add-ons берёт описание из листинга Partner Center (не из пакета),
           # поэтому README в пакете не нужен; внутренняя документация (ARCHITECTURE_STANDARDS,
           # RELEASE_*) тоже не должна уезжать пользователю. Офлайн-руководство — docs/index.html.
-          git ls-files -z | grep -zvE '(\.github/|\.gitignore|\.clineignore|tools/|tests/|\.kilo/|coverage/|\.md$|package(-lock)?\.json$)' | xargs -0 zip -q "ai-context-monitor-v${{ steps.version.outputs.VERSION }}.zip"
+          # v1.19.3 (CI-хотфикс): \.gitattributes исключён наравне с \.gitignore —
+          # правило нормализации EOL нужно репозиторию, а не пользовательскому пакету.
+          git ls-files -z | grep -zvE '(\.github/|\.gitignore|\.gitattributes|\.clineignore|tools/|tests/|\.kilo/|coverage/|\.md$|package(-lock)?\.json$)' | xargs -0 zip -q "ai-context-monitor-v${{ steps.version.outputs.VERSION }}.zip"
 
       - name: Verify ZIP contents
         run: |

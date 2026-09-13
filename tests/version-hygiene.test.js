@@ -25,9 +25,20 @@ const pkg = JSON.parse(read('package.json'));
 const lock = JSON.parse(read('package-lock.json'));
 const changelog = read('CHANGELOG.md');
 const docsHtml = read('docs/index.html');
-const listing = read('tools/edge-listing-metadata.txt');
 const optionsJs = read('options/options.js');
 const optionsHtml = read('options/options.html');
+
+// CI-хотфикс v1.19.3: tools/ — gitignored-артефакт (см. .gitignore), в чистом чекауте
+// его нет. Пин версии листинга тогда уходит в ЯВНЫЙ skip с причиной в выводе; все прочие
+// проверки файла (манифест/CHANGELOG/пакеты/docs/options.js) остаются строгими.
+const LISTING_PATH = path.join(ROOT, 'tools', 'edge-listing-metadata.txt');
+const HAS_LISTING = fs.existsSync(LISTING_PATH);
+const listing = HAS_LISTING ? fs.readFileSync(LISTING_PATH, 'utf8') : '';
+
+if (!HAS_LISTING) {
+  console.log('[version-hygiene] SKIP: tools/edge-listing-metadata.txt отсутствует ' +
+    '(gitignored, чистый чекаут) — пин версии листинга Edge пропущен');
+}
 
 const HEADING_RE = /^## \[(\d+\.\d+\.\d+)\] - (\d{4}-\d{2}-\d{2})$/;
 const headingOf = function (line) {
@@ -111,6 +122,9 @@ describe('R-1: package.json и package-lock.json — та же версия, ч�
  * ===================================================================================== */
 
 describe('R-1: единый источник версии — chrome.runtime.getManifest().version', () => {
+  // Пин листинга требует gitignored-артефакт tools/: без него — явный skip (см. шапку файла).
+  const testListing = HAS_LISTING ? test : test.skip;
+
   test('options.js берёт версию из манифеста (без хардкода версии)', () => {
     expect(optionsJs).toContain('chrome.runtime.getManifest()');
     expect(optionsJs).toContain("versionEl.textContent = 'v' + manifest.version");
@@ -127,12 +141,18 @@ describe('R-1: единый источник версии — chrome.runtime.get
     expect(docsHtml).not.toContain('Версия</span> 1.18.0');
   });
 
-  test('метаданные листинга Edge: версия совпадает с манифестом', () => {
+  testListing('метаданные листинга Edge: версия совпадает с манифестом', () => {
     expect(listing).toContain('Версия расширения: ' + manifest.version + ' (manifest.json)');
     expect(listing).not.toContain('Версия расширения: 1.19.2');
     expect(listing).not.toContain('Версия расширения: 1.19.1');
     expect(listing).not.toContain('Версия расширения: 1.18.0');
   });
+
+  if (!HAS_LISTING) {
+    // Явная запись пропуска в выводе: «зелёный» не должен читаться как «проверено».
+    test.skip('tools/edge-listing-metadata.txt отсутствует в чистом чекауте ' +
+      '(.gitignore: tools/) — пин версии листинга Edge пропущен, а не пройден', () => {});
+  }
 
   test('числовые литералы версии остаются только в комментариях (не в исполняемом коде)', () => {
     // static HTML (docs/index.html) обязан нести версию текстом и пиноваться выше;
