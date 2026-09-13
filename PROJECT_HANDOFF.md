@@ -2,12 +2,9 @@
 
 ## Состояние проекта
 
-**Версия:** 2.0.0-alpha.1 (рефакторинг в процессе)  
-**Стабильная версия:** 1.19.3 (commit `1f12cbf`, тег `v1.19.3`)  
-**Статус GitHub:** ✅ Опубликован Release v1.19.3 (23 коммита запушены, тег создан, ассет `ai-context-monitor-v1.19.3.zip` собран GitHub Actions)  
-**Статус Edge Add-ons:** готов к подаче после v2.0  
-**Тесты:** 75 suites, 1322 passed, 6 skipped, 0 failed  
-**Платформы:** ChatGPT, Gemini (обычный + Deep Research), DeepSeek, Claude, Perplexity, Google Search AI
+**Версия:** 1.19.3 (commit `1f12cbf`); v2.0 в работе: этап 1/3 = `370a217`, этап 2/3 = `994ae26` (частичный), CI-хотфикс = `322fd7e`  
+**Статус:** Release v1.19.3 опубликован; этапы 1–2/3 и CI-хотфикс приняты; этап 3/3 в работе в DSH (ESM probe Chrome 153)  
+**Тесты:** 75 suites, 1322 passed, 6 skipped, 0 failed   
 
 ## Ключевые достижения
 
@@ -25,6 +22,24 @@
 - **UMD-паттерн** (работает в браузере и Node.js тестах)
 - **MV3-совместимость** (нет eval, нет удалённого кода, минимум permissions)
 - **Traceability** (комментарии с версиями: v81, M-11, E-2, T1-fix#3)
+- **Декомпозиция v2.0 (этап 1/3):**
+  - `content.js` (1897 строк, было 3622) — 5 модулей:
+    - `state.js` (416 строк) — глобальное состояние
+    - `widget.js` (510 строк) — виджет
+    - `base-handler.js` (218 строк) — обработка базы
+    - `hybrid-tail.js` (162 строки) — гибридный хвост DOM
+    - `export-manager.js` (945 строк) — экспорт
+  - 153 элемента перенесены байтово, логика не изменена
+  - Тесты обновлены только в строках резолва (23 файла)
+- **Декомпозиция v2.0 (этап 2/3, частичная):**
+  - `gemini-intercept.js` 5064 → 4800 строк; вынесен `core/gemini-hidden-scroll.js`
+    (356 строк, 13 функций + 10 констант, своя IIFE + UMD `window.AiCmGeminiHiddenScroll`)
+  - Интеграция: `__bind` с геттерами/сеттерами живых переменных (не копии);
+    29 ссылок `D.<имя>` в телах модуля
+  - Кластеры network/parser/pagination/loader НЕотделимы (AST-замыкание 84–95%,
+    218/259 общих имён) — перенос на этап 3/3 (ES modules)
+  - Регистрация перехватчика — программно в `background.js`
+    (`world:'MAIN'`, `runAt:'document_start'`), НЕ через manifest.json  
 
 ## Критические проблемы (требуют рефакторинга)
 
@@ -37,14 +52,14 @@
 
 ### План декомпозиции v2.0
 
-**content.js →** (ЭТАП 1/3, в процессе)
+**content.js →** (ЭТАП 1/3, ЗАВЕРШЁН, commit `370a217`)
 - `state.js` (глобальное состояние: base/baseComplete/baseSeen)
 - `widget.js` (виджет: createWidget/updateWidget/resetWidget)
 - `base-handler.js` (обработка базы из сети)
 - `hybrid-tail.js` (гибридный хвост DOM)
 - `export-manager.js` (авто/ручной экспорт)
 
-**gemini-intercept.js →** (ЭТАП 2/3, планируется)
+**gemini-intercept.js →** (ЭТАП 2/3, ЗАВЕРШЁН ЧАСТИЧНО, commit `994ae26`: только hidden-scroll; network/parser/pagination/loader перенесены на 3/3)
 - `gemini-network.js` (перехват fetch/XHR)
 - `gemini-batchexecute-parser.js` (парсинг protobuf + JSON)
 - `gemini-pagination.js` (cursor, retries)
@@ -71,9 +86,9 @@
 
 ### Коммиты (последние 3)
 ```
-1f12cbf (HEAD -> main, tag: v1.19.3) M-14: bootstrap Perplexity с полным набором параметров (шаблон из отклонённого снимка); версия 1.19.3
-ef95ab0 M-12+M-13: гейт сниффинга по slug страницы и целостность настроек автоэкспорта; версия 1.19.2
-6968849 M-11: автоэкспорт Perplexity — распознан живой URL /search/<id>; версия 1.19.1
+322fd7e (HEAD -> main) CI: зелёный Lint на чистом чекауте — .gitattributes eol=lf + условный skip версионных сьютов
+994ae26 v2.0 (этап 2/3): частичная декомпозиция gemini-intercept.js → gemini-hidden-scroll.js
+f1f6363 docs: обновить PROJECT_HANDOFF.md после этапа 1/3
 ```
 
 ### Структура проекта
@@ -81,9 +96,15 @@ ef95ab0 M-12+M-13: гейт сниффинга по slug страницы и ц�
 ai-context-monitor-clean/
 ├── manifest.json (MV3, 3 permissions, 9 host_permissions)
 ├── core/
-│   ├── content.js (229 KB) ⚠️ god-object (этап 1/3 в процессе)
+│   ├── content.js (1897 строк) ✅ декомпозирован (этап 1/3)
+│   ├── state.js (416 строк) ✅
+│   ├── widget.js (510 строк) ✅
+│   ├── base-handler.js (218 строк) ✅
+│   ├── hybrid-tail.js (162 строки) ✅
+│   ├── export-manager.js (945 строк) ✅
 │   ├── background.js (38 KB)
-│   ├── gemini-intercept.js (330 KB) ⚠️ god-object (этап 2/3)
+│   ├── gemini-intercept.js (4800 строк) — ядро связано (84–95%), остаток на 3/3
+│   ├── gemini-hidden-scroll.js (356 строк) ✅ вынесен (этап 2/3)
 │   ├── claude-intercept.js (88 KB)
 │   ├── deepseek-intercept.js (54 KB)
 │   ├── google-search-intercept.js (54 KB)
@@ -104,7 +125,7 @@ ai-context-monitor-clean/
 │   ├── google-search-folwr-parser.js (27 KB)
 │   └── archive-import.js (36 KB)
 ├── options/options.js (57 KB)
-├── tests/ (75 suites)
+├── tests/ (75 suites; helpers/content-source.js, helpers/gemini-intercept-source.js)
 ├── CHANGELOG.md
 ├── RELEASE_CHECKLIST.md
 └── tools/edge-listing-metadata.txt (для Edge Add-ons)
@@ -121,7 +142,7 @@ ai-context-monitor-clean/
 - **Max** — архитектурные задачи (рефакторинг, декомпозиция, миграции)  
 - **Medium** — мелкие фиксы (O-1, O-7, O-9-подпись, O-11, O-14)  
 - **Low** — косметика (O-14 попап, комментарии)  
-- **Формат:** первая строка промпта после `Режим: act`
+- **Формат:** первая строка промпта, перед `Режим: act`
 
 **Тарификация DSH:** peak/off-peak (пик Пекин 09:00–12:00 и 14:00–18:00 = Екб 06:00–09:00 и 11:00–15:00; тяжёлые прогоны — вне пика)
 
@@ -137,22 +158,47 @@ ai-context-monitor-clean/
 | Версия 1.19.3 во всех точках вывода | ✅ |
 | Публикация на GitHub (тег v1.19.3, Release, ассет 2.55 MB) | ✅ |
 
+## Осознанные границы этапа 1/3
+
+Эти элементы остались в `content.js` и кандидаты на этап 2/3:
+
+1. **`aiCmLastSeenConvId`** — переменная оставлена в `content.js` из-за ReferenceError при инициализаторе (jsdom-прогон реального порядка загрузки выявил баг)
+2. **Слушатель `ai-cm-full-history`** — source-level пин вместе с комментарием H23 (handshake самого `content.js`)
+
+## Осознанные границы этапа 2/3 и решения
+
+1. Chrome не перечитывает `js[]` под тем же `id` регистрации → смена id на
+   `ai-cm-gemini-intercept-v2` + `unregisterContentScripts` старого:
+   **решение B** — одним миграционным коммитом вместе с этапом 3/3.
+2. Тулчейн выноса (build/verify/smoke) лежит в `tools/` (gitignored), воспроизводим.
+3. Красный Lint на main (дефект чистого чекаута: gitignored-артефакты + CRLF)
+   вылечен CI-хотфиксом (`322fd7e`); Lint на main теперь зелёный.
+
+## CI-хотфикс v1.19.3 (commit `322fd7e`)
+
+Проблема: Lint на main красный — 4 failed suites на чистом чекауте:
+- `release-metadata.test.js` и `version-hygiene.test.js` читают gitignored-артефакт `tools/edge-listing-metadata.txt`
+- `gemini-overlay-tape.test.js` и `gemini-floor-confirmed.test.js` — байтовые пины с `'\n'` падают на CRLF-чекауте (Windows + `core.autocrlf=true`)
+
+Решение:
+- `.gitattributes`: `*.js/.json/.html/.css/.md → text eol=lf`, `*.png → binary`
+- `release.yml`: `.gitattributes` исключён из zip (не уезжает пользователю)
+- Тесты: skip-логика точечная (гейт `describeListing` + `test.skip`), ассерты не ослаблены
+
+Результат: workspace 75/1322/0, worktree 74 passed + 1 skipped / 0 failed
+
+
 ## Следующие шаги
 
-### Этап 1/3: декомпозиция content.js (в процессе)
-- **Промпт для DSH:** декомпозиция `content.js` → 5 модулей
-- **Ожидание:** diff + отчёт от DSH
-- **Регресс:** все 75 тестов зелёные
-
-### Этап 2/3: декомпозиция gemini-intercept.js (планируется)
-- **Промпт для DSH:** декомпозиция `gemini-intercept.js` → 5 модулей
-- **Усилие рассуждений:** Max
-- **Регресс:** все 75 тестов зелёные, живой прогон на Gemini
-
-### Этап 3/3: переход на ES modules
-- **Промпт для DSH:** миграция на `"type": "module"`
-- **Усилие рассуждений:** Max
-- **Регресс:** все тесты, живые прогоны на 3 платформах
+1. ✅ Обновление GitHub (Release v1.19.3)
+2. ✅ Этап 1/3: декомпозиция content.js → 5 модулей (`370a217`)
+3. ✅ Этап 2/3: частичная декомпозиция gemini-intercept.js (`994ae26`) + живой прогон
+4. ✅ CI-хотфикс (`322fd7e`) — Lint на main зелёный
+5. ⏳ Этап 3/3: ES modules + смена id регистрации (Max, решение B) — в работе в DSH
+6. ⏳ Релизный коммит: бамп 2.0.0 + миграция 8 версионных сьютов + CHANGELOG/футер/listing
+7. ⏳ Пост-релизная очередь low (O-1, O-7, O-9-подпись, O-11, O-14) → публикация Edge Add-ons
+   
+**История этапов 1/3–3/3** — см. секции «Декомпозиция v2.0» и «Следующие шаги» выше.
 
 ### Пост-релизная очередь low (после v2.0)
 - O-1: DOM-мисдетект ChatGPT (усилие: Medium)
@@ -169,5 +215,5 @@ ai-context-monitor-clean/
 
 ## Контроль длины чата
 
-Резюме актуально на момент завершения публикации v1.19.3 (13 сентября 2026, ~20:00 Екб).  
-При переносе в новый чат — обновить состояние этапа 1/3 после получения результата от DSH.
+Резюме актуально на 14 сентября 2026: этапы 1–2/3 и CI-хотфикс приняты; этап 3/3 в работе в DSH (probe ESM на Chrome 153).  
+Следующая синхронизация — после отчёта DSH по этапу 3/3 (вердикт Шага 0 + результат миграции).
