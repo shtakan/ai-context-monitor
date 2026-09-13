@@ -3,13 +3,17 @@
  *
  * Пины source-level (стиль audit-r3-silent-catch-logs / oracle-archive-complete):
  *  1) privacy/privacy.html существует, является валидным HTML и не тянет внешних ресурсов
- *     (требование MV3 CSP: только inline CSS);
+ *     (требование MV3 CSP: только inline CSS; M-4.4 добавил ровно одно локальное
+ *     подключение — ../options/i18n-apply.js, без inline-кода);
  *  2) в документе есть обязательные разделы (BYOK, хранение, отсутствие телеметрии, 6 AI-сайтов);
  *  3) manifest.json содержит homepage_url (не трогая permissions/host_permissions/CSP) и НЕ содержит
  *     служебных ключей `_comment*` (ред. 2: убран warning «Unrecognized manifest key»);
  *     TODO о замене URL и email живёт в RELEASE_CHECKLIST.md, раздел «Публикация (Edge Add-ons)»;
  *  4) options.html содержит ссылку на privacy.html с target="_blank" и rel="noopener",
  *     а options.js открывает её через chrome.tabs.create + chrome.runtime.getURL.
+ *
+ * M-4.4: текст политики не переписан — он обёрнут ключами privacy_* (data-i18n), строка
+ * редакции обновлена до «2026-09-13 (ред. 4)» и добавлен пункт истории редакций rev. 4.
  *
  * Существующие тесты и существующий код не изменяются.
  */
@@ -59,10 +63,27 @@ describe('P1: privacy/privacy.html — файл и валидность', () => 
     expect(privacyHtml).toContain('margin: 0 auto');
   });
 
-  test('дата редакции и версия документа', () => {
+  test('M-4.4: дата редакции (ред. 4) и версия документа', () => {
     expect(privacyHtml).toContain('Дата последней редакции');
-    expect(privacyHtml).toContain('2026-09-12 (ред. 2)');
+    // M-4.4: редакция обновлена; прежняя редакция осталась в шапке — пин не ослаблен
+    expect(privacyHtml).toContain('2026-09-13 (ред. 4)');
+    expect(privacyHtml).toContain('2026-09-12 (ред. 3)');
     expect(privacyHtml).toContain('Версия 1.1 от 2026-09-12');
+  });
+
+  test('M-4.4: история редакций — rev. 4 «добавлена английская локализация страницы»', () => {
+    const doc = new DOMParser().parseFromString(privacyHtml, 'text/html');
+    const rows = Array.from(doc.querySelectorAll('table.revisions tbody tr'));
+    expect(rows.length).toBe(4);
+    const cells = rows.map(function (row) {
+      return Array.from(row.querySelectorAll('td')).map(function (td) { return td.textContent.trim(); });
+    });
+    expect(cells.map(function (row) { return row[0]; })).toEqual(['rev. 1', 'rev. 2', 'rev. 3', 'rev. 4']);
+    expect(cells[3][1]).toBe('2026-09-13');
+    expect(cells[3][2]).toBe('Добавлена английская локализация страницы.');
+    // прежние редакции не переписаны
+    expect(cells[2][2]).toContain('chrome.storage.session');
+    expect(cells[2][2]).toContain('удаляется.');
   });
 
   test('навигационные комментарии <!-- Секция X: ... --> на месте', () => {
@@ -132,16 +153,29 @@ describe('P1: privacy/privacy.html — обязательные разделы',
 });
 
 describe('P1: privacy/privacy.html — нет внешних ресурсов (MV3 CSP)', () => {
-  test('нет тегов загрузки внешних ресурсов', () => {
+  // M-4.4: страница подключает ТОЛЬКО локальный механизм локализации
+  // (options/i18n-apply.js, относительный путь внутри пакета). Внешних ресурсов и
+  // inline-скриптов по-прежнему нет — требование MV3 CSP не ослаблено.
+  const LOCAL_SCRIPT = '<script src="../options/i18n-apply.js"></script>';
+
+  test('нет тегов загрузки внешних ресурсов; единственный <script> — локальный', () => {
     const lower = privacyHtml.toLowerCase();
-    ['<script', '<link', '<img', '<iframe', '<object', '<embed', '@import', 'url(http'].forEach(function (needle) {
-      expect(lower).not.toContain(needle);
+    ['<link', '<img', '<iframe', '<object', '<embed', '@import', 'url(http'].forEach(function (needle) {
+      expect([needle, lower.indexOf(needle)]).toEqual([needle, -1]);
     });
+    const scripts = privacyHtml.match(/<script[^>]*>[\s\S]*?<\/script>/gi) || [];
+    expect(scripts).toEqual([LOCAL_SCRIPT]);
+    expect(fs.existsSync(path.join(ROOT, 'options', 'i18n-apply.js'))).toBe(true);
   });
 
-  test('DOM-разбор: ни одного подключаемого элемента', () => {
+  test('DOM-разбор: подключаемых элементов нет, кроме локального скрипта локализации', () => {
     const doc = new DOMParser().parseFromString(privacyHtml, 'text/html');
-    expect(doc.querySelectorAll('script,link,img,iframe,object,embed,audio,video,source').length).toBe(0);
+    expect(doc.querySelectorAll('link,img,iframe,object,embed,audio,video,source').length).toBe(0);
+    const scripts = Array.from(doc.querySelectorAll('script'));
+    expect(scripts.length).toBe(1);
+    expect(scripts[0].getAttribute('src')).toBe('../options/i18n-apply.js');
+    // inline-кода нет: CSP MV3 запрещает inline-скрипты
+    expect(scripts[0].textContent.trim()).toBe('');
   });
 
   test('ни один атрибут не содержит абсолютного URL', () => {

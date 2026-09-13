@@ -3,13 +3,15 @@
   AI Context Monitor — политика конфиденциальности.
   Страница самодостаточна: inline CSS, без внешних ресурсов (требование MV3 CSP).
   Открывается из настроек через chrome.runtime.getURL('privacy/privacy.html').
+  M-4.4: статический русский текст остаётся ФОЛБЭКОМ — ключи privacy_* объявлены
+  атрибутами data-i18n* и подставляются общим механизмом options/i18n-apply.js.
 -->
 <html lang="ru">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Политика конфиденциальности — AI Context Monitor</title>
+  <title data-i18n="privacy_page_title">Политика конфиденциальности — AI Context Monitor</title>
   <style>
     * { box-sizing: border-box; }
 
@@ -121,181 +123,175 @@
 
 <body>
   <main class="doc">
-    <h1>Политика конфиденциальности — AI Context Monitor</h1>
-    <p class="meta">Дата последней редакции: <strong>2026-09-12 (ред. 3)</strong>; предыдущая редакция — 2026-09-12 (ред. 2)</p>
+    <h1 data-i18n="privacy_h1">Политика конфиденциальности — AI Context Monitor</h1>
+    <p class="meta"><span data-i18n="privacy_meta_last">Дата последней редакции:</span> <strong data-i18n="privacy_meta_current">2026-09-13 (ред. 4)</strong><span data-i18n="privacy_meta_previous">; предыдущая редакция — 2026-09-12 (ред. 3)</span></p>
 
     <!-- Оглавление документа -->
     <nav class="toc">
-      <p class="toc-title">Содержание</p>
+      <p class="toc-title" data-i18n="privacy_toc_title">Содержание</p>
       <ol>
-        <li><a href="#summary">Краткая суть</a></li>
-        <li><a href="#data">Какие данные обрабатываются</a></li>
-        <li><a href="#no-collect">Что НЕ собирается</a></li>
-        <li><a href="#storage">Хранение данных</a></li>
-        <li><a href="#external">Внешние обращения</a></li>
-        <li><a href="#permissions">Разрешения расширения</a></li>
-        <li><a href="#children">Дети</a></li>
-        <li><a href="#changes">Изменения политики</a></li>
-        <li><a href="#contacts">Контакты</a></li>
+        <li><a href="#summary" data-i18n="privacy_toc_summary">Краткая суть</a></li>
+        <li><a href="#data" data-i18n="privacy_toc_data">Какие данные обрабатываются</a></li>
+        <li><a href="#no-collect" data-i18n="privacy_toc_no_collect">Что НЕ собирается</a></li>
+        <li><a href="#storage" data-i18n="privacy_toc_storage">Хранение данных</a></li>
+        <li><a href="#external" data-i18n="privacy_toc_external">Внешние обращения</a></li>
+        <li><a href="#permissions" data-i18n="privacy_toc_permissions">Разрешения расширения</a></li>
+        <li><a href="#children" data-i18n="privacy_toc_children">Дети</a></li>
+        <li><a href="#changes" data-i18n="privacy_toc_changes">Изменения политики</a></li>
+        <li><a href="#contacts" data-i18n="privacy_toc_contacts">Контакты</a></li>
       </ol>
     </nav>
 
     <!-- Секция 1: Краткая суть -->
-    <h2 id="summary">1. Краткая суть</h2>
-    <p>
+    <h2 id="summary" data-i18n="privacy_h_summary">1. Краткая суть</h2>
+    <p data-i18n="privacy_s1_p1">
       AI Context Monitor — расширение для браузера, которое показывает в реальном времени, насколько заполнено
       контекстное окно AI-моделей (ChatGPT, Gemini, DeepSeek, Claude, Perplexity, Google Search AI).
     </p>
     <p>
-      Расширение обрабатывает данные <strong>только локально</strong>, на устройстве пользователя. У расширения нет
-      собственных серверов: ничего не отправляется разработчику, не передаётся третьим лицам и не используется для
-      аналитики. Все вычисления — подсчёт токенов, история, экспорт — выполняются в браузере.
+      <span data-i18n="privacy_s1_p2_a">Расширение обрабатывает данные</span>
+      <strong data-i18n="privacy_s1_p2_strong">только локально</strong><span data-i18n="privacy_s1_p2_b">, на устройстве пользователя. У расширения нет собственных серверов: ничего не отправляется разработчику, не передаётся третьим лицам и не используется для аналитики. Все вычисления — подсчёт токенов, история, экспорт — выполняются в браузере.</span>
     </p>
 
     <!-- Секция 2: Какие данные обрабатываются -->
-    <h2 id="data">2. Какие данные обрабатываются</h2>
-    <p>Расширение работает только с данными, необходимыми для его функций:</p>
+    <h2 id="data" data-i18n="privacy_h_data">2. Какие данные обрабатываются</h2>
+    <p data-i18n="privacy_s2_intro">Расширение работает только с данными, необходимыми для его функций:</p>
     <ul>
       <li>
-        <strong>Тексты диалогов AI-моделей</strong> (ChatGPT, Gemini, DeepSeek, Claude, Perplexity, Google Search AI) —
-        сохраняются в <code>chrome.storage.local</code> и используются для истории чата, счётчика контекста и
-        автоэкспорта.
+        <strong data-i18n="privacy_s2_li1_strong">Тексты диалогов AI-моделей</strong>
+        <span data-i18n="privacy_s2_li1_mid">(ChatGPT, Gemini, DeepSeek, Claude, Perplexity, Google Search AI) — сохраняются в</span>
+        <code>chrome.storage.local</code>
+        <span data-i18n="privacy_s2_li1_tail">и используются для истории чата, счётчика контекста и автоэкспорта.</span>
       </li>
       <li>
-        <strong>Метаданные чатов</strong> (идентификаторы, timestamps, названия моделей) — там же, в
+        <strong data-i18n="privacy_s2_li2_strong">Метаданные чатов</strong>
+        <span data-i18n="privacy_s2_li2_mid">(идентификаторы, timestamps, названия моделей) — там же, в</span>
         <code>chrome.storage.local</code>.
       </li>
       <li>
-        <strong>Настройки расширения</strong> (пороги уведомлений, форматы экспорта, лимиты контекста) —
+        <strong data-i18n="privacy_s2_li3_strong">Настройки расширения</strong>
+        <span data-i18n="privacy_s2_li3_mid">(пороги уведомлений, форматы экспорта, лимиты контекста) —</span>
         <code>chrome.storage.local</code> / <code>chrome.storage.sync</code>.
       </li>
       <li>
-        <strong>BYOK-ключ Google AI Studio</strong> (опционально) — вводится самим пользователем, если нужен точный
-        подсчёт токенов. Ключ хранится только в памяти сессии браузера
-        (<code>chrome.storage.session</code>, ключ <code>aiCmApiKeySession</code>) и не записывается на диск: после
-        перезапуска браузера ключ нужно ввести заново. Используется ТОЛЬКО для обращений к
-        <code>generativelanguage.googleapis.com</code> по инициативе пользователя, в логи попадает только как
-        <code>***</code>. Ключ удаляется очисткой поля ключа или кнопкой «Убрать ключ» на странице настроек. До
-        редакции 3 ключ хранился в <code>chrome.storage.local</code> под ключом <code>ai_cm_gemini_api_key</code> в
-        открытом виде; после обновления такое значение автоматически переносится в память сессии и удаляется с диска.
+        <strong data-i18n="privacy_s2_li4_strong">BYOK-ключ Google AI Studio</strong>
+        <span data-i18n="privacy_s2_li4_a">(опционально) — вводится самим пользователем, если нужен точный подсчёт токенов. Ключ хранится только в памяти сессии браузера</span>
+        (<code>chrome.storage.session</code><span data-i18n="privacy_s2_li4_b">, ключ</span> <code>aiCmApiKeySession</code><span data-i18n="privacy_s2_li4_c">) и не записывается на диск: после перезапуска браузера ключ нужно ввести заново. Используется ТОЛЬКО для обращений к</span> <code>generativelanguage.googleapis.com</code> <span data-i18n="privacy_s2_li4_d">по инициативе пользователя, в логи попадает только как</span> <code>***</code><span data-i18n="privacy_s2_li4_e">. Ключ удаляется очисткой поля ключа или кнопкой «Убрать ключ» на странице настроек. До редакции 3 ключ хранился в</span> <code>chrome.storage.local</code> <span data-i18n="privacy_s2_li4_f">под ключом</span> <code>ai_cm_gemini_api_key</code> <span data-i18n="privacy_s2_li4_g">в открытом виде; после обновления такое значение автоматически переносится в память сессии и удаляется с диска.</span>
       </li>
       <li>
-        <strong>Импортированные архивы</strong> (Gemini Takeout JSON, экспорты ChatGPT / Perplexity / Claude) —
-        хранятся в <code>chrome.storage.local</code> в привязке к конкретному <code>convId</code>; каждый
-        импортированный диалог можно удалить кнопкой «Удалить» в списке архивов на странице настроек.
+        <strong data-i18n="privacy_s2_li5_strong">Импортированные архивы</strong>
+        <span data-i18n="privacy_s2_li5_a">(Gemini Takeout JSON, экспорты ChatGPT / Perplexity / Claude) — хранятся в</span>
+        <code>chrome.storage.local</code>
+        <span data-i18n="privacy_s2_li5_b">в привязке к конкретному</span> <code>convId</code><span data-i18n="privacy_s2_li5_c">; каждый импортированный диалог можно удалить кнопкой «Удалить» в списке архивов на странице настроек.</span>
       </li>
     </ul>
 
     <!-- Секция 3: Что НЕ собирается -->
-    <h2 id="no-collect">3. Что НЕ собирается</h2>
+    <h2 id="no-collect" data-i18n="privacy_h_no_collect">3. Что НЕ собирается</h2>
     <ul>
-      <li>Нет телеметрии, аналитики и crash-репортов.</li>
-      <li>
-        Нет чтения cookies пользователя: cookies, которые уже существуют на сайтах AI-сервисов, используются только
-        самими сайтами.
-      </li>
-      <li>Нет обращений к серверам разработчика — таких серверов у расширения нет.</li>
-      <li>Нет передачи данных третьим лицам.</li>
+      <li data-i18n="privacy_s3_li1">Нет телеметрии, аналитики и crash-репортов.</li>
+      <li data-i18n="privacy_s3_li2">Нет чтения cookies пользователя: cookies, которые уже существуют на сайтах AI-сервисов, используются только самими сайтами.</li>
+      <li data-i18n="privacy_s3_li3">Нет обращений к серверам разработчика — таких серверов у расширения нет.</li>
+      <li data-i18n="privacy_s3_li4">Нет передачи данных третьим лицам.</li>
     </ul>
 
     <!-- Секция 4: Хранение данных -->
-    <h2 id="storage">4. Хранение данных</h2>
+    <h2 id="storage" data-i18n="privacy_h_storage">4. Хранение данных</h2>
     <ul>
-      <li>Все данные хранятся только на устройстве пользователя.</li>
+      <li data-i18n="privacy_s4_li1">Все данные хранятся только на устройстве пользователя.</li>
+      <li data-i18n="privacy_s4_li2">Лимиты и автоочистка: в истории хранится не более 50 диалогов; записи старше 30 дней удаляются автоматически. При импорте архивов — не более 20 файлов общим объёмом до 8 МБ и до 5000 сообщений на один чат.</li>
       <li>
-        Лимиты и автоочистка: в истории хранится не более 50 диалогов; записи старше 30 дней удаляются
-        автоматически. При импорте архивов — не более 20 файлов общим объёмом до 8 МБ и до 5000 сообщений на один
-        чат.
+        <span data-i18n="privacy_s4_li3_a">Удаление архива: у каждого импортированного диалога в списке архивов на странице настроек есть кнопка</span>
+        <span data-i18n="privacy_s4_li3_quote">«Удалить»</span>
+        <span data-i18n="privacy_s4_li3_b">— она удаляет и данные архива, и запись об источнике истории.</span>
       </li>
       <li>
-        Удаление архива: у каждого импортированного диалога в списке архивов на странице настроек есть кнопка
-        «Удалить» — она удаляет и данные архива, и запись об источнике истории.
+        <span data-i18n="privacy_s4_li4_a">Удаление BYOK-ключа: очистите поле ключа или нажмите кнопку</span>
+        <span data-i18n="privacy_s4_li4_quote">«Убрать ключ»</span>
+        <span data-i18n="privacy_s4_li4_b">на странице настроек — ключ исчезает из памяти сессии</span>
+        (<code>chrome.storage.session</code><span data-i18n="privacy_s4_li4_c">); на диск он не записывается.</span>
       </li>
       <li>
-        Удаление BYOK-ключа: очистите поле ключа или нажмите кнопку «Убрать ключ» на странице настроек — ключ
-        исчезает из памяти сессии (<code>chrome.storage.session</code>); на диск он не записывается.
-      </li>
-      <li>
-        Полное удаление всех данных: удаление самого расширения — браузер (Chrome или Edge) сам очищает
-        <code>chrome.storage</code> расширения. Дополнительно можно очистить данные сайтов средствами браузера.
+        <span data-i18n="privacy_s4_li5_a">Полное удаление всех данных: удаление самого расширения — браузер (Chrome или Edge) сам очищает</span>
+        <code>chrome.storage</code>
+        <span data-i18n="privacy_s4_li5_b">расширения. Дополнительно можно очистить данные сайтов средствами браузера.</span>
       </li>
     </ul>
 
     <!-- Секция 5: Внешние обращения -->
-    <h2 id="external">5. Внешние обращения</h2>
-    <p>Сетевые обращения возможны только по инициативе пользователя:</p>
+    <h2 id="external" data-i18n="privacy_h_external">5. Внешние обращения</h2>
+    <p data-i18n="privacy_s5_intro">Сетевые обращения возможны только по инициативе пользователя:</p>
     <ul>
       <li>
-        <code>generativelanguage.googleapis.com</code> — только если пользователь включил BYOK-ключ и запросил точный
-        подсчёт токенов; без ключа подсчёт выполняется локальной эвристикой.
+        <code>generativelanguage.googleapis.com</code>
+        <span data-i18n="privacy_s5_li1">— только если пользователь включил BYOK-ключ и запросил точный подсчёт токенов; без ключа подсчёт выполняется локальной эвристикой.</span>
       </li>
-      <li>
-        Сайты AI-сервисов (6 сервисов, перечисленных в разрешениях) — расширение перехватывает их трафик локально,
-        чтобы отобразить счётчик контекста; никаких дополнительных запросов к этим сайтам оно не делает.
-      </li>
+      <li data-i18n="privacy_s5_li2">Сайты AI-сервисов (6 сервисов, перечисленных в разрешениях) — расширение перехватывает их трафик локально, чтобы отобразить счётчик контекста; никаких дополнительных запросов к этим сайтам оно не делает.</li>
     </ul>
 
     <!-- Секция 6: Разрешения расширения -->
-    <h2 id="permissions">6. Разрешения расширения</h2>
+    <h2 id="permissions" data-i18n="privacy_h_permissions">6. Разрешения расширения</h2>
     <ul>
-      <li><code>storage</code> — сохранение настроек и истории.</li>
-      <li><code>notifications</code> — опциональные проактивные уведомления о приближении к лимиту контекста.</li>
-      <li><code>scripting</code> — регистрация MAIN-перехватчиков на сайтах AI.</li>
-      <li>
-        9 host_permissions — сайты AI, для которых работает счётчик: chatgpt.com, gemini.google.com,
-        chat.deepseek.com, aistudio.google.com, www.google.com/search*, claude.ai, perplexity.ai,
-        www.perplexity.ai, generativelanguage.googleapis.com.
+      <li><code>storage</code> <span data-i18n="privacy_s6_li1">— сохранение настроек и истории.</span></li>
+      <li><code>notifications</code> <span data-i18n="privacy_s6_li2">— опциональные проактивные уведомления о приближении к лимиту контекста.</span></li>
+      <li><code>scripting</code> <span data-i18n="privacy_s6_li3">— регистрация MAIN-перехватчиков на сайтах AI.</span></li>
+      <li data-i18n="privacy_s6_li4">
+        9 host_permissions — сайты AI, для которых работает счётчик: chatgpt.com, gemini.google.com, chat.deepseek.com, aistudio.google.com, www.google.com/search*, claude.ai, perplexity.ai, www.perplexity.ai, generativelanguage.googleapis.com.
       </li>
     </ul>
 
     <!-- Секция 7: Дети -->
-    <h2 id="children">7. Дети</h2>
-    <p>
+    <h2 id="children" data-i18n="privacy_h_children">7. Дети</h2>
+    <p data-i18n="privacy_s7_p">
       Расширение не предназначено для детей младше 13 лет (согласно COPPA). Данные детей сознательно не собираются и
       не обрабатываются.
     </p>
 
     <!-- Секция 8: Изменения политики -->
-    <h2 id="changes">8. Изменения политики</h2>
-    <p>
+    <h2 id="changes" data-i18n="privacy_h_changes">8. Изменения политики</h2>
+    <p data-i18n="privacy_s8_p">
       Страница обновляется вместе с релизом расширения. Дата последней редакции указана в начале документа, версия
       документа — внизу страницы.
     </p>
 
     <!-- Секция 9: Контакты -->
-    <h2 id="contacts">9. Контакты</h2>
-    <p>По вопросам обработки данных: <a href="mailto:support@example.com">support@example.com</a>.</p>
+    <h2 id="contacts" data-i18n="privacy_h_contacts">9. Контакты</h2>
+    <p><span data-i18n="privacy_s9_p">По вопросам обработки данных:</span> <a href="mailto:support@example.com">support@example.com</a>.</p>
     <!-- TODO: заменить на реальный email перед публикацией -->
 
     <!-- Таблица редакций (M-7): rev. 3 — BYOK-ключ переведён на session-only -->
-    <h2 id="revisions">История редакций</h2>
+    <h2 id="revisions" data-i18n="privacy_h_revisions">История редакций</h2>
     <table class="revisions">
       <thead>
-        <tr><th>Редакция</th><th>Дата</th><th>Что изменилось</th></tr>
+        <tr><th data-i18n="privacy_rev_th_rev">Редакция</th><th data-i18n="privacy_rev_th_date">Дата</th><th data-i18n="privacy_rev_th_changes">Что изменилось</th></tr>
       </thead>
       <tbody>
         <tr>
           <td>rev. 1</td>
           <td>2026-09-12</td>
-          <td>Первая публичная редакция политики.</td>
+          <td data-i18n="privacy_rev1_note">Первая публичная редакция политики.</td>
         </tr>
         <tr>
           <td>rev. 2</td>
           <td>2026-09-12</td>
-          <td>Текст приведён в соответствие с фактическим интерфейсом страницы настроек.</td>
+          <td data-i18n="privacy_rev2_note">Текст приведён в соответствие с фактическим интерфейсом страницы настроек.</td>
         </tr>
         <tr>
           <td>rev. 3</td>
           <td>2026-09-12</td>
-          <td>BYOK-ключ Google AI Studio переведён на хранение только в памяти сессии браузера
-            (<code>chrome.storage.session</code>): ключ больше не записывается на диск, прежнее значение из
-            <code>chrome.storage.local</code> переносится в память сессии и удаляется.</td>
+          <td><span data-i18n="privacy_rev3_a">BYOK-ключ Google AI Studio переведён на хранение только в памяти сессии браузера</span> (<code>chrome.storage.session</code><span data-i18n="privacy_rev3_b">): ключ больше не записывается на диск, прежнее значение из</span> <code>chrome.storage.local</code> <span data-i18n="privacy_rev3_c">переносится в память сессии и удаляется.</span></td>
+        </tr>
+        <tr>
+          <td>rev. 4</td>
+          <td>2026-09-13</td>
+          <td data-i18n="privacy_rev4_note">Добавлена английская локализация страницы.</td>
         </tr>
       </tbody>
     </table>
 
-    <div class="footer">Версия 1.1 от 2026-09-12</div>
+    <div class="footer" data-i18n="privacy_footer_ver">Версия 1.1 от 2026-09-12</div>
   </main>
+  <script src="../options/i18n-apply.js"></script>
 </body>
 
 </html>

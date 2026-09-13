@@ -367,5 +367,371 @@
   },
   "print_role_assistant": {
     "message": "Ассистент"
+  },
+  "privacy_page_title": {
+    "message": "Политика конфиденциальности — AI Context Monitor"
+  },
+  "privacy_h1": {
+    "message": "Политика конфиденциальности — AI Context Monitor"
+  },
+  "privacy_meta_last": {
+    "message": "Дата последней редакции:"
+  },
+  "privacy_meta_current": {
+    "message": "2026-09-13 (ред. 4)"
+  },
+  "privacy_meta_previous": {
+    "message": "; предыдущая редакция — 2026-09-12 (ред. 3)"
+  },
+  "privacy_toc_title": {
+    "message": "Содержание"
+  },
+  "privacy_toc_summary": {
+    "message": "Краткая суть"
+  },
+  "privacy_toc_data": {
+    "message": "Какие данные обрабатываются"
+  },
+  "privacy_toc_no_collect": {
+    "message": "Что НЕ собирается"
+  },
+  "privacy_toc_storage": {
+    "message": "Хранение данных"
+  },
+  "privacy_toc_external": {
+    "message": "Внешние обращения"
+  },
+  "privacy_toc_permissions": {
+    "message": "Разрешения расширения"
+  },
+  "privacy_toc_children": {
+    "message": "Дети"
+  },
+  "privacy_toc_changes": {
+    "message": "Изменения политики"
+  },
+  "privacy_toc_contacts": {
+    "message": "Контакты"
+  },
+  "privacy_h_summary": {
+    "message": "1. Краткая суть"
+  },
+  "privacy_s1_p1": {
+    "message": "AI Context Monitor — расширение для браузера, которое показывает в реальном времени, насколько заполнено контекстное окно AI-моделей (ChatGPT, Gemini, DeepSeek, Claude, Perplexity, Google Search AI)."
+  },
+  "privacy_s1_p2_a": {
+    "message": "Расширение обрабатывает данные"
+  },
+  "privacy_s1_p2_strong": {
+    "message": "только локально"
+  },
+  "privacy_s1_p2_b": {
+    "message": ", на устройстве пользователя. У расширения нет собственных серверов: ничего не отправляется разработчику, не передаётся третьим лицам и не используется для аналитики. Все вычисления — подсчёт токенов, история, экспорт — выполняются в браузере."
+  },
+  "privacy_h_data": {
+    "message": "2. Какие данные обрабатываются"
+  },
+  "privacy_s2_intro": {
+    "message": "Расширение работает только с данными, необходимыми для его функций:"
+  },
+  "privacy_s2_li1_strong": {
+    "message": "Тексты диалогов AI-моделей"
+  },
+  "privacy_s2_li1_mid": {
+    "message": "(ChatGPT, Gemini, DeepSeek, Claude, Perplexity, Google Search AI) — сохраняются в"
+  },
+  "privacy_s2_li1_tail": {
+    "message": "и используются для истории чата, счётчика контекста и автоэкспорта."
+  },
+  "privacy_s2_li2_strong": {
+    "message": "Метаданные чатов"
+  },
+  "privacy_s2_li2_mid": {
+    "message": "(идентификаторы, timestamps, названия моделей) — там же, в"
+  },
+  "privacy_s2_li3_strong": {
+    "message": "Настройки расширения"
+  },
+  "privacy_s2_li3_mid": {
+    "message": "(пороги уведомлений, форматы экспорта, лимиты контекста) —"
+  },
+  "privacy_s2_li4_strong": {
+    "message": "BYOK-ключ Google AI Studio"
+  },
+  "privacy_s2_li4_a": {
+    "message": "(опционально) — вводится самим пользователем, если нужен точный подсчёт токенов. Ключ хранится только в памяти сессии браузера"
+  },
+  "privacy_s2_li4_b": {
+    "message": ", ключ"
+  },
+  "privacy_s2_li4_c": {
+    "message": ") и не записывается на диск: после перезапуска браузера ключ нужно ввести заново. Используется ТОЛЬКО для обращений к"
+  },
+  "privacy_s2_li4_d": {
+    "message": "по инициативе пользователя, в логи попадает только как"
+  },
+  "privacy_s2_li4_e": {
+    "message": ". Ключ удаляется очисткой поля ключа или кнопкой «Убрать ключ» на странице настроек. До редакции 3 ключ хранился в"
+  },
+  "privacy_s2_li4_f": {
+    "message": "под ключом"
+  },
+  "privacy_s2_li4_g": {
+    "message": "в открытом виде; после обновления такое значение автоматически переносится в память сессии и удаляется с диска."
+  },
+  "privacy_s2_li5_strong": {
+    "message": "Импортированные архивы"
+  },
+  "privacy_s2_li5_a": {
+    "message": "(Gemini Takeout JSON, экспорты ChatGPT / Perplexity / Claude) — хранятся в"
+  },
+  "privacy_s2_li5_b": {
+    "message": "в привязке к конкретному"
+  },
+  "privacy_s2_li5_c": {
+    "message": "; каждый импортированный диалог можно удалить кнопкой «Удалить» в списке архивов на странице настроек."
+  },
+  "privacy_h_no_collect": {
+    "message": "3. Что НЕ собирается"
+  },
+  "privacy_s3_li1": {
+    "message": "Нет телеметрии, аналитики и crash-репортов."
+  },
+  "privacy_s3_li2": {
+    "message": "Нет чтения cookies пользователя: cookies, которые уже существуют на сайтах AI-сервисов, используются только самими сайтами."
+  },
+  "privacy_s3_li3": {
+    "message": "Нет обращений к серверам разработчика — таких серверов у расширения нет."
+  },
+  "privacy_s3_li4": {
+    "message": "Нет передачи данных третьим лицам."
+  },
+  "privacy_h_storage": {
+    "message": "4. Хранение данных"
+  },
+  "privacy_s4_li1": {
+    "message": "Все данные хранятся только на устройстве пользователя."
+  },
+  "privacy_s4_li2": {
+    "message": "Лимиты и автоочистка: в истории хранится не более 50 диалогов; записи старше 30 дней удаляются автоматически. При импорте архивов — не более 20 файлов общим объёмом до 8 МБ и до 5000 сообщений на один чат."
+  },
+  "privacy_s4_li3_a": {
+    "message": "Удаление архива: у каждого импортированного диалога в списке архивов на странице настроек есть кнопка"
+  },
+  "privacy_s4_li3_quote": {
+    "message": "«Удалить»"
+  },
+  "privacy_s4_li3_b": {
+    "message": "— она удаляет и данные архива, и запись об источнике истории."
+  },
+  "privacy_s4_li4_a": {
+    "message": "Удаление BYOK-ключа: очистите поле ключа или нажмите кнопку"
+  },
+  "privacy_s4_li4_quote": {
+    "message": "«Убрать ключ»"
+  },
+  "privacy_s4_li4_b": {
+    "message": "на странице настроек — ключ исчезает из памяти сессии"
+  },
+  "privacy_s4_li4_c": {
+    "message": "); на диск он не записывается."
+  },
+  "privacy_s4_li5_a": {
+    "message": "Полное удаление всех данных: удаление самого расширения — браузер (Chrome или Edge) сам очищает"
+  },
+  "privacy_s4_li5_b": {
+    "message": "расширения. Дополнительно можно очистить данные сайтов средствами браузера."
+  },
+  "privacy_h_external": {
+    "message": "5. Внешние обращения"
+  },
+  "privacy_s5_intro": {
+    "message": "Сетевые обращения возможны только по инициативе пользователя:"
+  },
+  "privacy_s5_li1": {
+    "message": "— только если пользователь включил BYOK-ключ и запросил точный подсчёт токенов; без ключа подсчёт выполняется локальной эвристикой."
+  },
+  "privacy_s5_li2": {
+    "message": "Сайты AI-сервисов (6 сервисов, перечисленных в разрешениях) — расширение перехватывает их трафик локально, чтобы отобразить счётчик контекста; никаких дополнительных запросов к этим сайтам оно не делает."
+  },
+  "privacy_h_permissions": {
+    "message": "6. Разрешения расширения"
+  },
+  "privacy_s6_li1": {
+    "message": "— сохранение настроек и истории."
+  },
+  "privacy_s6_li2": {
+    "message": "— опциональные проактивные уведомления о приближении к лимиту контекста."
+  },
+  "privacy_s6_li3": {
+    "message": "— регистрация MAIN-перехватчиков на сайтах AI."
+  },
+  "privacy_s6_li4": {
+    "message": "9 host_permissions — сайты AI, для которых работает счётчик: chatgpt.com, gemini.google.com, chat.deepseek.com, aistudio.google.com, www.google.com/search*, claude.ai, perplexity.ai, www.perplexity.ai, generativelanguage.googleapis.com."
+  },
+  "privacy_h_children": {
+    "message": "7. Дети"
+  },
+  "privacy_s7_p": {
+    "message": "Расширение не предназначено для детей младше 13 лет (согласно COPPA). Данные детей сознательно не собираются и не обрабатываются."
+  },
+  "privacy_h_changes": {
+    "message": "8. Изменения политики"
+  },
+  "privacy_s8_p": {
+    "message": "Страница обновляется вместе с релизом расширения. Дата последней редакции указана в начале документа, версия документа — внизу страницы."
+  },
+  "privacy_h_contacts": {
+    "message": "9. Контакты"
+  },
+  "privacy_s9_p": {
+    "message": "По вопросам обработки данных:"
+  },
+  "privacy_h_revisions": {
+    "message": "История редакций"
+  },
+  "privacy_rev_th_rev": {
+    "message": "Редакция"
+  },
+  "privacy_rev_th_date": {
+    "message": "Дата"
+  },
+  "privacy_rev_th_changes": {
+    "message": "Что изменилось"
+  },
+  "privacy_rev1_note": {
+    "message": "Первая публичная редакция политики."
+  },
+  "privacy_rev2_note": {
+    "message": "Текст приведён в соответствие с фактическим интерфейсом страницы настроек."
+  },
+  "privacy_rev3_a": {
+    "message": "BYOK-ключ Google AI Studio переведён на хранение только в памяти сессии браузера"
+  },
+  "privacy_rev3_b": {
+    "message": "): ключ больше не записывается на диск, прежнее значение из"
+  },
+  "privacy_rev3_c": {
+    "message": "переносится в память сессии и удаляется."
+  },
+  "privacy_rev4_note": {
+    "message": "Добавлена английская локализация страницы."
+  },
+  "privacy_footer_ver": {
+    "message": "Версия 1.1 от 2026-09-12"
+  },
+  "docs_page_title": {
+    "message": "AI Context Monitor — Мониторинг контекстного окна ИИ"
+  },
+  "docs_h1": {
+    "message": "AI Context Monitor"
+  },
+  "docs_subtitle": {
+    "message": "Chrome-расширение для мониторинга заполнения контекстного окна ИИ-моделей"
+  },
+  "docs_btn_download": {
+    "message": "Скачать расширение (ZIP)"
+  },
+  "docs_btn_github": {
+    "message": "Проект на GitHub"
+  },
+  "docs_section_how": {
+    "message": "Как это работает"
+  },
+  "docs_feature_indicator_title": {
+    "message": "Индикатор в углу экрана"
+  },
+  "docs_feature_indicator_text": {
+    "message": "Показывает процент заполнения контекстного окна от лимита в реальном времени."
+  },
+  "docs_feature_history_title": {
+    "message": "Автоматический сбор истории"
+  },
+  "docs_feature_history_text": {
+    "message": "История диалога подтягивается автоматически из сети, без прокрутки чата."
+  },
+  "docs_feature_realtime_title": {
+    "message": "Обновление в реальном времени"
+  },
+  "docs_feature_realtime_text": {
+    "message": "Процент и цвет индикатора обновляются с каждым новым сообщением в диалоге."
+  },
+  "docs_feature_model_title": {
+    "message": "Автоопределение модели"
+  },
+  "docs_feature_model_text": {
+    "message": "Модель определяется автоматически по данным сайта — не нужно настраивать вручную."
+  },
+  "docs_section_install": {
+    "message": "Установка"
+  },
+  "docs_install_step1": {
+    "message": "Скачайте и распакуйте архив с расширением в любую папку на компьютере."
+  },
+  "docs_install_step2_prefix": {
+    "message": "Откройте"
+  },
+  "docs_install_step2_suffix": {
+    "message": "в адресной строке браузера."
+  },
+  "docs_install_step3_prefix": {
+    "message": "Включите"
+  },
+  "docs_install_step3_strong": {
+    "message": "«Режим разработчика»"
+  },
+  "docs_install_step3_suffix": {
+    "message": "(переключатель в правом верхнем углу)."
+  },
+  "docs_install_step4_prefix": {
+    "message": "Нажмите"
+  },
+  "docs_install_step4_strong": {
+    "message": "«Загрузить распакованное расширение»"
+  },
+  "docs_install_step5": {
+    "message": "Выберите распакованную папку с расширением и подтвердите."
+  },
+  "docs_section_screenshots": {
+    "message": "Скриншоты"
+  },
+  "docs_caption_google_search": {
+    "message": "Google AI Search: зелёная зона и окно расширения"
+  },
+  "docs_caption_chatgpt": {
+    "message": "ChatGPT: красная зона (больше 80%)"
+  },
+  "docs_caption_gemini": {
+    "message": "Gemini: жёлтая зона (больше 50%)"
+  },
+  "docs_caption_claude": {
+    "message": "Claude: история подгружается сразу при открытии чата, модель определяется из сети (Sonnet / Opus / Haiku, окно 200 000 токенов)"
+  },
+  "docs_caption_perplexity": {
+    "message": "Perplexity: перехват истории треда и потока ответа, поддержка Sonar / Sonar Pro и сторонних моделей"
+  },
+  "docs_footer_version_label": {
+    "message": "Версия"
+  },
+  "docs_footer_license": {
+    "message": "Лицензия MIT"
+  },
+  "docs_footer_privacy_note": {
+    "message": "Расширение не собирает и не передаёт ваши персональные данные"
+  },
+  "docs_alt_google_search": {
+    "message": "Google AI Search — зелёная зона и окно расширения"
+  },
+  "docs_alt_chatgpt": {
+    "message": "ChatGPT — красная зона"
+  },
+  "docs_alt_gemini": {
+    "message": "Gemini — жёлтая зона"
+  },
+  "docs_alt_claude": {
+    "message": "Claude — индикатор контекста"
+  },
+  "docs_alt_perplexity": {
+    "message": "Perplexity — индикатор контекста"
   }
 }

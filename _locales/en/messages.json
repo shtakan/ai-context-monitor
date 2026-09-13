@@ -367,5 +367,371 @@
   },
   "print_role_assistant": {
     "message": "Assistant"
+  },
+  "privacy_page_title": {
+    "message": "Privacy Policy — AI Context Monitor"
+  },
+  "privacy_h1": {
+    "message": "Privacy Policy — AI Context Monitor"
+  },
+  "privacy_meta_last": {
+    "message": "Last revised:"
+  },
+  "privacy_meta_current": {
+    "message": "2026-09-13 (rev. 4)"
+  },
+  "privacy_meta_previous": {
+    "message": "; previous revision — 2026-09-12 (rev. 3)"
+  },
+  "privacy_toc_title": {
+    "message": "Contents"
+  },
+  "privacy_toc_summary": {
+    "message": "Summary"
+  },
+  "privacy_toc_data": {
+    "message": "What data is processed"
+  },
+  "privacy_toc_no_collect": {
+    "message": "What is NOT collected"
+  },
+  "privacy_toc_storage": {
+    "message": "Data storage"
+  },
+  "privacy_toc_external": {
+    "message": "External requests"
+  },
+  "privacy_toc_permissions": {
+    "message": "Extension permissions"
+  },
+  "privacy_toc_children": {
+    "message": "Children"
+  },
+  "privacy_toc_changes": {
+    "message": "Policy changes"
+  },
+  "privacy_toc_contacts": {
+    "message": "Contacts"
+  },
+  "privacy_h_summary": {
+    "message": "1. Summary"
+  },
+  "privacy_s1_p1": {
+    "message": "AI Context Monitor is a browser extension that shows in real time how full the context window of AI models is (ChatGPT, Gemini, DeepSeek, Claude, Perplexity, Google Search AI)."
+  },
+  "privacy_s1_p2_a": {
+    "message": "The extension processes data"
+  },
+  "privacy_s1_p2_strong": {
+    "message": "locally only"
+  },
+  "privacy_s1_p2_b": {
+    "message": ", on the user's device. The extension has no servers of its own: nothing is sent to the developer, shared with third parties, or used for analytics. All computations — token counting, history, export — run in the browser."
+  },
+  "privacy_h_data": {
+    "message": "2. What data is processed"
+  },
+  "privacy_s2_intro": {
+    "message": "The extension works only with the data required for its features:"
+  },
+  "privacy_s2_li1_strong": {
+    "message": "AI model conversation texts"
+  },
+  "privacy_s2_li1_mid": {
+    "message": "(ChatGPT, Gemini, DeepSeek, Claude, Perplexity, Google Search AI) — stored in"
+  },
+  "privacy_s2_li1_tail": {
+    "message": "and used for chat history, the context counter, and auto-export."
+  },
+  "privacy_s2_li2_strong": {
+    "message": "Chat metadata"
+  },
+  "privacy_s2_li2_mid": {
+    "message": "(identifiers, timestamps, model names) — in the same place, in"
+  },
+  "privacy_s2_li3_strong": {
+    "message": "Extension settings"
+  },
+  "privacy_s2_li3_mid": {
+    "message": "(notification thresholds, export formats, context limits) —"
+  },
+  "privacy_s2_li4_strong": {
+    "message": "Google AI Studio BYOK key"
+  },
+  "privacy_s2_li4_a": {
+    "message": "(optional) — entered by the user when exact token counting is needed. The key is kept only in the browser session memory"
+  },
+  "privacy_s2_li4_b": {
+    "message": ", key"
+  },
+  "privacy_s2_li4_c": {
+    "message": ") and is never written to disk: after a browser restart the key must be entered again. It is used ONLY for requests to"
+  },
+  "privacy_s2_li4_d": {
+    "message": "at the user's initiative; it appears in logs only as"
+  },
+  "privacy_s2_li4_e": {
+    "message": ". The key is removed by clearing the key field or with the «Remove key» button on the settings page. Before revision 3 the key was stored in"
+  },
+  "privacy_s2_li4_f": {
+    "message": "under the key"
+  },
+  "privacy_s2_li4_g": {
+    "message": "in plain text; after the update such a value is automatically moved to session memory and deleted from disk."
+  },
+  "privacy_s2_li5_strong": {
+    "message": "Imported archives"
+  },
+  "privacy_s2_li5_a": {
+    "message": "(Gemini Takeout JSON, ChatGPT / Perplexity / Claude exports) — stored in"
+  },
+  "privacy_s2_li5_b": {
+    "message": "linked to a specific"
+  },
+  "privacy_s2_li5_c": {
+    "message": "; every imported conversation can be deleted with the «Delete» button in the archive list on the settings page."
+  },
+  "privacy_h_no_collect": {
+    "message": "3. What is NOT collected"
+  },
+  "privacy_s3_li1": {
+    "message": "No telemetry, analytics or crash reports."
+  },
+  "privacy_s3_li2": {
+    "message": "No reading of user cookies: cookies that already exist on AI service sites are used only by those sites themselves."
+  },
+  "privacy_s3_li3": {
+    "message": "No requests to developer servers — the extension has no such servers."
+  },
+  "privacy_s3_li4": {
+    "message": "No sharing of data with third parties."
+  },
+  "privacy_h_storage": {
+    "message": "4. Data storage"
+  },
+  "privacy_s4_li1": {
+    "message": "All data is stored only on the user's device."
+  },
+  "privacy_s4_li2": {
+    "message": "Limits and auto-cleanup: history stores at most 50 conversations; entries older than 30 days are deleted automatically. When importing archives — at most 20 files with a total size of up to 8 MB and up to 5000 messages per chat."
+  },
+  "privacy_s4_li3_a": {
+    "message": "Deleting an archive: every imported conversation in the archive list on the settings page has a"
+  },
+  "privacy_s4_li3_quote": {
+    "message": "«Delete» button"
+  },
+  "privacy_s4_li3_b": {
+    "message": "— it deletes both the archive data and the history source record."
+  },
+  "privacy_s4_li4_a": {
+    "message": "Deleting the BYOK key: clear the key field or click the"
+  },
+  "privacy_s4_li4_quote": {
+    "message": "«Remove key» button"
+  },
+  "privacy_s4_li4_b": {
+    "message": "on the settings page — the key disappears from session memory"
+  },
+  "privacy_s4_li4_c": {
+    "message": "); it is never written to disk."
+  },
+  "privacy_s4_li5_a": {
+    "message": "Deleting all data completely: removing the extension itself — the browser (Chrome or Edge) clears the"
+  },
+  "privacy_s4_li5_b": {
+    "message": "data of the extension. Site data can additionally be cleared with the browser's own tools."
+  },
+  "privacy_h_external": {
+    "message": "5. External requests"
+  },
+  "privacy_s5_intro": {
+    "message": "Network requests are possible only at the user's initiative:"
+  },
+  "privacy_s5_li1": {
+    "message": "— only if the user has enabled a BYOK key and requested exact token counting; without a key, counting is done by a local heuristic."
+  },
+  "privacy_s5_li2": {
+    "message": "AI service sites (the 6 services listed in the permissions) — the extension intercepts their traffic locally to display the context counter; it makes no additional requests to these sites."
+  },
+  "privacy_h_permissions": {
+    "message": "6. Extension permissions"
+  },
+  "privacy_s6_li1": {
+    "message": "— storing settings and history."
+  },
+  "privacy_s6_li2": {
+    "message": "— optional proactive notifications when approaching the context limit."
+  },
+  "privacy_s6_li3": {
+    "message": "— registering MAIN-world interceptors on AI sites."
+  },
+  "privacy_s6_li4": {
+    "message": "9 host_permissions — the AI sites for which the counter works: chatgpt.com, gemini.google.com, chat.deepseek.com, aistudio.google.com, www.google.com/search*, claude.ai, perplexity.ai, www.perplexity.ai, generativelanguage.googleapis.com."
+  },
+  "privacy_h_children": {
+    "message": "7. Children"
+  },
+  "privacy_s7_p": {
+    "message": "The extension is not intended for children under 13 (per COPPA). Children's data is not knowingly collected or processed."
+  },
+  "privacy_h_changes": {
+    "message": "8. Policy changes"
+  },
+  "privacy_s8_p": {
+    "message": "The page is updated together with extension releases. The last revision date is shown at the beginning of the document, and the document version at the bottom of the page."
+  },
+  "privacy_h_contacts": {
+    "message": "9. Contacts"
+  },
+  "privacy_s9_p": {
+    "message": "For data processing questions:"
+  },
+  "privacy_h_revisions": {
+    "message": "Revision history"
+  },
+  "privacy_rev_th_rev": {
+    "message": "Revision"
+  },
+  "privacy_rev_th_date": {
+    "message": "Date"
+  },
+  "privacy_rev_th_changes": {
+    "message": "What changed"
+  },
+  "privacy_rev1_note": {
+    "message": "First public revision of the policy."
+  },
+  "privacy_rev2_note": {
+    "message": "The text was aligned with the actual settings page UI."
+  },
+  "privacy_rev3_a": {
+    "message": "The Google AI Studio BYOK key was moved to browser session memory only"
+  },
+  "privacy_rev3_b": {
+    "message": "): the key is no longer written to disk, and the previous value from"
+  },
+  "privacy_rev3_c": {
+    "message": "is moved to session memory and deleted."
+  },
+  "privacy_rev4_note": {
+    "message": "English localization of the page added."
+  },
+  "privacy_footer_ver": {
+    "message": "Version 1.1 of 2026-09-12"
+  },
+  "docs_page_title": {
+    "message": "AI Context Monitor — AI context window monitoring"
+  },
+  "docs_h1": {
+    "message": "AI Context Monitor"
+  },
+  "docs_subtitle": {
+    "message": "Chrome extension for monitoring how full the context window of AI models is"
+  },
+  "docs_btn_download": {
+    "message": "Download the extension (ZIP)"
+  },
+  "docs_btn_github": {
+    "message": "Project on GitHub"
+  },
+  "docs_section_how": {
+    "message": "How it works"
+  },
+  "docs_feature_indicator_title": {
+    "message": "Indicator in the corner of the screen"
+  },
+  "docs_feature_indicator_text": {
+    "message": "Shows in real time what percentage of the context window limit is used."
+  },
+  "docs_feature_history_title": {
+    "message": "Automatic history collection"
+  },
+  "docs_feature_history_text": {
+    "message": "The conversation history is pulled automatically from the network, without scrolling the chat."
+  },
+  "docs_feature_realtime_title": {
+    "message": "Real-time updates"
+  },
+  "docs_feature_realtime_text": {
+    "message": "The percentage and the indicator color update with every new message in the conversation."
+  },
+  "docs_feature_model_title": {
+    "message": "Automatic model detection"
+  },
+  "docs_feature_model_text": {
+    "message": "The model is detected automatically from the site data — no manual setup required."
+  },
+  "docs_section_install": {
+    "message": "Installation"
+  },
+  "docs_install_step1": {
+    "message": "Download and unpack the extension archive into any folder on your computer."
+  },
+  "docs_install_step2_prefix": {
+    "message": "Open"
+  },
+  "docs_install_step2_suffix": {
+    "message": "in the browser address bar."
+  },
+  "docs_install_step3_prefix": {
+    "message": "Enable"
+  },
+  "docs_install_step3_strong": {
+    "message": "«Developer mode»"
+  },
+  "docs_install_step3_suffix": {
+    "message": "(the toggle in the top-right corner)."
+  },
+  "docs_install_step4_prefix": {
+    "message": "Click"
+  },
+  "docs_install_step4_strong": {
+    "message": "«Load unpacked»"
+  },
+  "docs_install_step5": {
+    "message": "Select the unpacked extension folder and confirm."
+  },
+  "docs_section_screenshots": {
+    "message": "Screenshots"
+  },
+  "docs_caption_google_search": {
+    "message": "Google AI Search: green zone and the extension window"
+  },
+  "docs_caption_chatgpt": {
+    "message": "ChatGPT: red zone (over 80%)"
+  },
+  "docs_caption_gemini": {
+    "message": "Gemini: yellow zone (over 50%)"
+  },
+  "docs_caption_claude": {
+    "message": "Claude: the history loads as soon as the chat opens, the model is detected from the network (Sonnet / Opus / Haiku, 200,000-token window)"
+  },
+  "docs_caption_perplexity": {
+    "message": "Perplexity: thread history and response stream interception, support for Sonar / Sonar Pro and third-party models"
+  },
+  "docs_footer_version_label": {
+    "message": "Version"
+  },
+  "docs_footer_license": {
+    "message": "MIT License"
+  },
+  "docs_footer_privacy_note": {
+    "message": "The extension does not collect or transmit your personal data"
+  },
+  "docs_alt_google_search": {
+    "message": "Google AI Search — green zone and the extension window"
+  },
+  "docs_alt_chatgpt": {
+    "message": "ChatGPT — red zone"
+  },
+  "docs_alt_gemini": {
+    "message": "Gemini — yellow zone"
+  },
+  "docs_alt_claude": {
+    "message": "Claude — context indicator"
+  },
+  "docs_alt_perplexity": {
+    "message": "Perplexity — context indicator"
   }
 }

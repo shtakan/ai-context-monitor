@@ -22,6 +22,12 @@
  *      __MSG_ext_description__); в разметке options/print не остаётся пользовательских
  *      ru-литералов без data-i18n (футер, хинты, статус ключа); метка источника в
  *      v31-ветке кэша options.js честная (кэш прошлой беседы ≠ live).
+ *   8) M-4.4: privacy/privacy.html и docs/index.html локализованы тем же механизмом
+ *      (data-i18n* + options/i18n-apply.js): ключи privacy_* / docs_* в обеих локалях,
+ *      ru-значения байтово равны тексту разметки, en — перевод без кириллицы; в обеих
+ *      страницах нет ни одного текстового узла без ключа (кроме брендов/код-вставок);
+ *      без chrome.i18n (GitHub Pages) механизм молча оставляет ru-текст и не бросает
+ *      исключение.
  *
  * Пины прежних сьютов (русские тексты, aria-имена, title, ссылки футера) не
  * ослабляются: разметка хранит русский текст как фолбэк, подстановка затирает
@@ -42,6 +48,11 @@ const contentJs = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8')
 const printJs = fs.readFileSync(path.join(ROOT, 'print', 'print.js'), 'utf8');
 const exportBuildersJs = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.js'), 'utf8');
 const i18nApplySrc = fs.readFileSync(path.join(ROOT, 'options', 'i18n-apply.js'), 'utf8');
+// M-4.4: страницы, локализованные тем же механизмом.
+const privacyHtml = fs.readFileSync(path.join(ROOT, 'privacy', 'privacy.html'), 'utf8');
+const docsHtml = fs.readFileSync(path.join(ROOT, 'docs', 'index.html'), 'utf8');
+// Реальный модуль механики (IIFE экспортирует функции для юнит-тестов при наличии module).
+const i18nModule = require('../options/i18n-apply.js');
 
 const ru = JSON.parse(fs.readFileSync(path.join(ROOT, '_locales', 'ru', 'messages.json'), 'utf8'));
 const en = JSON.parse(fs.readFileSync(path.join(ROOT, '_locales', 'en', 'messages.json'), 'utf8'));
@@ -56,6 +67,8 @@ const DYNAMIC_SOURCES = [
 
 // Атрибуты разметки, которыми объявляются ключи локали (механика i18n-apply.js).
 const I18N_ATTRS = ['data-i18n', 'data-i18n-placeholder', 'data-i18n-title', 'data-i18n-aria-label'];
+// M-4.4: пятый вид подстановки — alt изображений (ключи docs_alt_*).
+const I18N_ATTRS_ALL = I18N_ATTRS.concat(['data-i18n-alt']);
 
 /** Значения атрибута attr во всём HTML (в порядке появления). */
 function valuesOf(html, attr) {
@@ -66,11 +79,11 @@ function valuesOf(html, attr) {
   return out;
 }
 
-/** Все ключи, объявленные разметкой (оба файла, все четыре атрибута). */
+/** Все ключи, объявленные разметкой (options, print, M-4.4: privacy + docs). */
 function declaredKeys() {
   const keys = [];
-  [optionsHtml, printHtml].forEach(function (html) {
-    I18N_ATTRS.forEach(function (attr) {
+  [optionsHtml, printHtml, privacyHtml, docsHtml].forEach(function (html) {
+    I18N_ATTRS_ALL.forEach(function (attr) {
       valuesOf(html, attr).forEach(function (key) { keys.push(key); });
     });
   });
@@ -1081,5 +1094,253 @@ describe('M-4.3: options.js — метка источника не выдаёт 
     expect(optionsJs).toContain('updateStatsFromState(best, tabHost, tabPath);');
     // расчёты/логика виджета не тронуты: процент по-прежнему из состояния
     expect(optionsJs).toContain('var p = state.percent || 0;');
+  });
+});
+
+/* =====================================================================================
+ * 10. M-4.4: privacy/privacy.html и docs/index.html — тот же механизм локализации
+ * ===================================================================================== */
+
+const LOCALIZED_PAGES = [
+  { name: 'privacy/privacy.html', html: privacyHtml, prefix: 'privacy_' },
+  { name: 'docs/index.html', html: docsHtml, prefix: 'docs_' }
+];
+
+// Единственное подключение страниц — общий локальный механизм (MV3 CSP: без inline).
+const LOCAL_SCRIPT_TAG = '<script src="../options/i18n-apply.js"></script>';
+
+// Бренды, названия платформ и технические вставки-контакты: не переводятся.
+const NOT_TRANSLATED_TEXT = [
+  'AI Context Monitor', 'Google Gemini', 'ChatGPT', 'DeepSeek', 'Google AI Search',
+  'Claude', 'Perplexity', 'chrome://extensions', 'support@example.com'
+];
+
+const CYRILLIC_RE = /[\u0400-\u04FF]/;
+const LETTER_RE = /[A-Za-z\u0400-\u04FF]/;
+// «rev. 1» — техническая подпись строки таблицы редакций.
+const TECHNICAL_NODE_RE = /^rev\.\s*\d+$/;
+
+// Селектор всех видов объявления ключа.
+const KEY_SELECTOR = I18N_ATTRS_ALL.map(function (attr) { return '[' + attr + ']'; }).join(',');
+
+function pageDocument(html) {
+  return new DOMParser().parseFromString(html, 'text/html');
+}
+
+function normalizeWs(value) {
+  return String(value).replace(/\s+/g, ' ').trim();
+}
+
+/** Карта «ключ → текст разметки» (для textContent — нормализованный текст узла). */
+function declaredFallbacks(html) {
+  const doc = pageDocument(html);
+  const map = {};
+  I18N_ATTRS_ALL.forEach(function (attr) {
+    doc.querySelectorAll('[' + attr + ']').forEach(function (el) {
+      const key = el.getAttribute(attr);
+      map[key] = (attr === 'data-i18n')
+        ? normalizeWs(el.textContent)
+        : normalizeWs(el.getAttribute(attr.slice('data-i18n-'.length)) || '');
+    });
+  });
+  return map;
+}
+
+/** Текстовые узлы с буквами, не покрытые ключом и не входящие в whitelist. */
+function uncoveredTextNodes(html) {
+  const doc = pageDocument(html);
+  const offenders = [];
+  const walker = doc.createTreeWalker(doc.body, 4 /* NodeFilter.SHOW_TEXT */);
+  let node;
+  while ((node = walker.nextNode()) !== null) {
+    const text = normalizeWs(node.nodeValue);
+    if (!text || !LETTER_RE.test(text)) continue;                  // пунктуация/цифры/эмодзи
+    const parent = node.parentElement;
+    if (!parent) continue;
+    if (parent.closest('code, style, script')) continue;            // код-вставки и стили
+    if (parent.closest(KEY_SELECTOR)) continue;                     // ключ локали
+    if (NOT_TRANSLATED_TEXT.indexOf(text) !== -1) continue;         // бренды/платформы/контакты
+    if (TECHNICAL_NODE_RE.test(text)) continue;                     // «rev. 1»
+    offenders.push(text);
+  }
+  return offenders;
+}
+
+/** Кириллица, оставшаяся в UI-тексте и подставляемых атрибутах после локализации. */
+function remainingCyrillic(doc) {
+  const offenders = [];
+  const walker = doc.createTreeWalker(doc.documentElement, 4);
+  let node;
+  while ((node = walker.nextNode()) !== null) {
+    if (!CYRILLIC_RE.test(node.nodeValue)) continue;
+    const parent = node.parentElement;
+    if (parent && parent.closest('style, script')) continue;        // CSS/JS не UI-текст
+    const text = normalizeWs(node.nodeValue);
+    if (!text) continue;
+    if (NOT_TRANSLATED_TEXT.indexOf(text) !== -1) continue;         // брендовая строка
+    offenders.push(text.slice(0, 60));
+  }
+  I18N_ATTRS_ALL.filter(function (attr) { return attr !== 'data-i18n'; }).forEach(function (attr) {
+    doc.querySelectorAll('[' + attr + ']').forEach(function (el) {
+      const value = el.getAttribute(attr.slice('data-i18n-'.length)) || '';
+      if (CYRILLIC_RE.test(value)) offenders.push(attr + '=' + value.slice(0, 60));
+    });
+  });
+  return offenders;
+}
+
+describe('M-4.4: локализация privacy/privacy.html и docs/index.html', () => {
+  function chromeMock(locale) {
+    return {
+      i18n: {
+        getMessage: function (key) { return locale[key] ? locale[key].message : ''; }
+      }
+    };
+  }
+
+  /**
+   * Реальная разметка страницы + реальный options/i18n-apply.js в ИЗОЛИРОВАННОМ
+   * документе (DOMParser): посторонние DOMContentLoaded-слушатели (options.js)
+   * не участвуют, поэтому проверяется именно механизм локализации.
+   */
+  function bootPage(html, locale) {
+    const doc = pageDocument(html);
+    // eslint-disable-next-line no-new-func
+    const fn = new Function('document', 'chrome', i18nApplySrc);
+    fn(doc, locale ? chromeMock(locale) : undefined);
+    doc.dispatchEvent(new Event('DOMContentLoaded'));
+    return doc;
+  }
+
+  afterEach(function () {
+    document.body.innerHTML = '';
+    delete global.chrome;
+  });
+
+  describe('разметка: ключи, подключение механики, покрытие', () => {
+    test('обе страницы подключают общий options/i18n-apply.js; inline-скриптов нет', () => {
+      LOCALIZED_PAGES.forEach(function (page) {
+        expect([page.name, page.html.indexOf(LOCAL_SCRIPT_TAG) !== -1]).toEqual([page.name, true]);
+        expect([page.name, (page.html.match(/<script/gi) || []).length]).toEqual([page.name, 1]);
+      });
+    });
+
+    test('префиксы ключей соответствуют странице и есть в ОБЕИХ локалях', () => {
+      LOCALIZED_PAGES.forEach(function (page) {
+        const keys = Object.keys(declaredFallbacks(page.html));
+        expect([page.name, keys.length > 30]).toEqual([page.name, true]);
+        keys.forEach(function (key) {
+          expect([page.name, key, key.indexOf(page.prefix)]).toEqual([page.name, key, 0]);
+          expect([page.name, key, Object.prototype.hasOwnProperty.call(ru, key)]).toEqual([page.name, key, true]);
+          expect([page.name, key, Object.prototype.hasOwnProperty.call(en, key)]).toEqual([page.name, key, true]);
+        });
+      });
+      // 122 новых ключа M-4.4: privacy_* — 84, docs_* — 38
+      expect(Object.keys(ru).filter(function (k) { return k.indexOf('privacy_') === 0; }).length).toBe(84);
+      expect(Object.keys(ru).filter(function (k) { return k.indexOf('docs_') === 0; }).length).toBe(38);
+      expect(Object.keys(ru).length).toBe(245);
+      expect(Object.keys(en).length).toBe(245);
+    });
+
+    test('ru-значения M-4.4 байтово равны тексту разметки, en — перевод без кириллицы', () => {
+      LOCALIZED_PAGES.forEach(function (page) {
+        const fallbacks = declaredFallbacks(page.html);
+        const keys = Object.keys(fallbacks);
+        keys.forEach(function (key) {
+          expect([page.name, key, message(ru, key)]).toEqual([page.name, key, fallbacks[key]]);
+          expect([page.name, key, message(en, key).length > 0]).toEqual([page.name, key, true]);
+          expect([page.name, key, CYRILLIC_RE.test(message(en, key))]).toEqual([page.name, key, false]);
+        });
+        // идентичными остаются только брендовые строки
+        const identical = keys.filter(function (key) { return message(ru, key) === message(en, key); });
+        identical.forEach(function (key) { expect(message(ru, key)).toBe('AI Context Monitor'); });
+        expect(keys.length - identical.length).toBeGreaterThan(keys.length * 0.9);
+      });
+    });
+
+    test('(в) data-i18n-покрытие: ни одного текстового узла с буквами без ключа', () => {
+      LOCALIZED_PAGES.forEach(function (page) {
+        expect([page.name, uncoveredTextNodes(page.html)]).toEqual([page.name, []]);
+      });
+    });
+
+    test('скан покрытия не холостой: ловит непокрытый узел, отсекает ключ/бренд/код/стиль', () => {
+      expect(uncoveredTextNodes('<p>Без ключа</p>')).toEqual(['Без ключа']);
+      expect(uncoveredTextNodes('<p data-i18n="privacy_x">С ключом</p>')).toEqual([]);
+      expect(uncoveredTextNodes('<p><code>chrome.storage.local</code></p>')).toEqual([]);
+      expect(uncoveredTextNodes('<p>ChatGPT</p>')).toEqual([]);
+      expect(uncoveredTextNodes('<p>·</p>')).toEqual([]);
+      expect(uncoveredTextNodes('<style>/* кириллица */</style>')).toEqual([]);
+      expect(CYRILLIC_RE.test(privacyHtml)).toBe(true);
+      expect(CYRILLIC_RE.test(docsHtml)).toBe(true);
+    });
+
+    test('пятый вид подстановки (alt) объявлен в механике и покрывает 5 скриншотов docs', () => {
+      const targets = i18nModule.bindings.map(function (b) { return b.key + '→' + b.target; });
+      expect(targets).toContain('data-i18n-alt→alt');
+      expect(valuesOf(docsHtml, 'data-i18n-alt').length).toBe(5);
+    });
+
+    test('guard контекста расширения в механике (M-4.4)', () => {
+      expect(i18nApplySrc)
+        .toContain("typeof chrome !== 'undefined' && !!chrome.i18n && typeof chrome.i18n.getMessage === 'function'");
+      expect(i18nApplySrc).toContain('if (!aiCmI18nAvailable()) return;');
+    });
+  });
+
+  describe('(а) jsdom + мок chrome.i18n: en-локаль затирает русский текст', () => {
+    LOCALIZED_PAGES.forEach(function (page) {
+      test(page.name + ': в текстовых узлах и alt не остаётся кириллицы', () => {
+        const doc = bootPage(page.html, en);
+        expect(remainingCyrillic(doc)).toEqual([]);
+      });
+
+      test(page.name + ': ru-локаль оставляет текст байтово прежним (фолбэк = сообщение)', () => {
+        const doc = bootPage(page.html, ru);
+        const fallback = pageDocument(page.html);
+        expect(normalizeWs(doc.body.textContent)).toBe(normalizeWs(fallback.body.textContent));
+        expect(doc.title).toBe(fallback.title);
+      });
+    });
+  });
+
+  describe('(б) jsdom без chrome (GitHub Pages): механизм деградирует молча', () => {
+    LOCALIZED_PAGES.forEach(function (page) {
+      test(page.name + ': исключения нет, текст остаётся ru', () => {
+        const fallback = pageDocument(page.html);
+        const beforeBody = normalizeWs(fallback.body.textContent);
+        const beforeH1 = normalizeWs(fallback.querySelector('h1').textContent);
+        delete global.chrome;
+
+        let doc = null;
+        expect(function () { doc = bootPage(page.html, null); }).not.toThrow();
+
+        expect(normalizeWs(doc.body.textContent)).toBe(beforeBody);
+        expect(doc.title).toBe(fallback.title);
+        expect(normalizeWs(doc.querySelector('h1').textContent)).toBe(beforeH1);
+        expect(CYRILLIC_RE.test(beforeBody)).toBe(true);            // скан не по пустому тексту
+        // механика честно сообщает, что контекста расширения нет, и ничего не подставляет
+        expect(i18nModule.aiCmI18nAvailable()).toBe(false);
+        expect(function () { i18nModule.aiCmI18nApply(doc); }).not.toThrow();
+        expect(i18nModule.aiCmI18nApply(doc)).toBe(0);
+        expect(i18nModule.aiCmI18nMessage('privacy_h1')).toBe('');
+      });
+    });
+
+    test('все ссылки/alt остаются русскими без chrome (страница не пустеет)', () => {
+      const doc = bootPage(docsHtml, null);
+      const alt = doc.querySelector('.screenshots img').getAttribute('alt');
+      expect(alt).toBe('Google AI Search — зелёная зона и окно расширения');
+      expect(doc.querySelectorAll('.caption').length).toBe(5);
+    });
+  });
+
+  describe('alt-подстановка в jsdom (пятый вид)', () => {
+    test('с chrome.i18n alt заполняется сообщением локали', () => {
+      document.body.innerHTML = '<img id="i18n-alt" alt="ChatGPT — красная зона" data-i18n-alt="docs_alt_chatgpt">';
+      global.chrome = chromeMock(en);
+      expect(i18nModule.aiCmI18nApply(document)).toBeGreaterThan(0);
+      expect(document.getElementById('i18n-alt').getAttribute('alt')).toBe(en.docs_alt_chatgpt.message);
+    });
   });
 });
