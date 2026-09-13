@@ -191,7 +191,9 @@ describe('P1: manifest.json — homepage_url без изменения permissio
 describe('P1: ссылка на политику в UI настроек', () => {
   test('options.html: ссылка в футере с target="_blank" и rel="noopener"', () => {
     expect(optionsHtml).toContain(
-      '<a href="privacy/privacy.html" id="privacy-link" target="_blank" rel="noopener">Политика конфиденциальности</a>'
+      // M-4.3: подпись ссылки вынесена в <span data-i18n="options_footer_privacy">:
+      // сам <a> не изменён (target/_blank, rel/noopener, href), русский фолбэк байтово тот же
+      '<a href="privacy/privacy.html" id="privacy-link" target="_blank" rel="noopener"><span data-i18n="options_footer_privacy">Политика конфиденциальности</span></a>'
     );
     const doc = new DOMParser().parseFromString(optionsHtml, 'text/html');
     const link = doc.querySelector('.footer #privacy-link');

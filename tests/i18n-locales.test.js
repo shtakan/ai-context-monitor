@@ -17,7 +17,11 @@
  *      с русским фолбэком для окружений без chrome.i18n;
  *   6) M-4.2: динамические строки content.js/options.js/print.js/export-text-builders.js
  *      объявлены ключами локали (content_* / options_* / print_* / export_md_*), а
- *      русские литералы в коде — ровно фолбэки локали (пин по литералам + пины jsdom).
+ *      русские литералы в коде — ровно фолбэки локали (пин по литералам + пины jsdom);
+ *   7) M-4.3: манифест собирает name/description из локали (__MSG_ext_name__ /
+ *      __MSG_ext_description__); в разметке options/print не остаётся пользовательских
+ *      ru-литералов без data-i18n (футер, хинты, статус ключа); метка источника в
+ *      v31-ветке кэша options.js честная (кэш прошлой беседы ≠ live).
  *
  * Пины прежних сьютов (русские тексты, aria-имена, title, ссылки футера) не
  * ослабляются: разметка хранит русский текст как фолбэк, подстановка затирает
@@ -29,7 +33,8 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
+const manifestRaw = fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8');
+const manifest = JSON.parse(manifestRaw);
 const optionsHtml = fs.readFileSync(path.join(ROOT, 'options', 'options.html'), 'utf8');
 const printHtml = fs.readFileSync(path.join(ROOT, 'print', 'print.html'), 'utf8');
 const optionsJs = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
@@ -92,6 +97,41 @@ describe('M-4: manifest.json — default_locale ru', () => {
     expect(manifest.host_permissions).toHaveLength(9);
     expect(manifest.background.service_worker).toBe('core/background.js');
     expect(manifest.action.default_popup).toBe('options/options.html');
+  });
+
+  test('M-4.3: name/description — __MSG__-формы, ключи объявлены в обеих локалях', () => {
+    expect(manifest.name).toBe('__MSG_ext_name__');
+    expect(manifest.description).toBe('__MSG_ext_description__');
+    ['ext_name', 'ext_description'].forEach(function (key) {
+      expect([key, message(ru, key) === undefined]).toEqual([key, false]);
+      expect([key, message(en, key) === undefined]).toEqual([key, false]);
+      expect([key, message(ru, key).length > 0]).toEqual([key, true]);
+      expect([key, message(en, key).length > 0]).toEqual([key, true]);
+    });
+    // ru-карточка расширения байтово прежняя; en — перевод, а не копия
+    expect(message(ru, 'ext_name')).toBe('AI Context Monitor');
+    expect(message(ru, 'ext_description'))
+      .toBe('Мониторинг заполнения контекстного окна AI-моделей в реальном времени');
+    expect(message(en, 'ext_description')).not.toBe(message(ru, 'ext_description'));
+  });
+
+  test('M-4.3: пять новых ключей есть в ОБЕИХ локалях (паритет не нарушен)', () => {
+    const added = [
+      'ext_name', 'ext_description',
+      'options_footer_privacy', 'options_footer_help', 'options_source_cache'
+    ];
+    added.forEach(function (key) {
+      expect([key, Object.prototype.hasOwnProperty.call(ru, key)]).toEqual([key, true]);
+      expect([key, Object.prototype.hasOwnProperty.call(en, key)]).toEqual([key, true]);
+    });
+    // ru-тексты = фолбэки, которые остаются в разметке/коде (байтовое совпадение)
+    expect(message(ru, 'options_footer_privacy')).toBe('Политика конфиденциальности');
+    expect(message(ru, 'options_footer_help')).toBe('Помощь');
+    expect(message(ru, 'options_source_cache')).toBe('кэш (прошлая беседа)');
+    // en переводит, а не копирует
+    ['options_footer_privacy', 'options_footer_help', 'options_source_cache'].forEach(function (key) {
+      expect([key, message(en, key) !== message(ru, key)]).toEqual([key, true]);
+    });
   });
 });
 
@@ -176,6 +216,10 @@ describe('M-4: разметка options.html и print.html', () => {
   test('нет мёртвых ключей: каждый ключ локали используется разметкой, options.js или динамикой M-4.2', () => {
     const used = {};
     declaredKeys().forEach(function (key) { used[key] = true; });
+    // M-4.3: ключи манифеста объявлены в самом манифесте формой __MSG_<key>__
+    (manifestRaw.match(/__MSG_[a-z0-9_]+__/g) || []).forEach(function (token) {
+      used[token.slice('__MSG_'.length, -'__'.length)] = true;
+    });
     DYNAMIC_SOURCES.forEach(function (pair) {
       Object.keys(ru).forEach(function (key) {
         // ключи объявлены в исходниках как строковые литералы: aiCmI18nMessage('key', ...) / t('key', ...)
@@ -193,6 +237,96 @@ describe('M-4: разметка options.html и print.html', () => {
 
   test('print.html подключает общий ../options/i18n-apply.js', () => {
     expect(printHtml).toContain('<script src="../options/i18n-apply.js"></script>');
+  });
+});
+
+/* =====================================================================================
+ * 3b. M-4.3: греп-пин — в разметке нет пользовательских ru-литералов без ключа
+ * ===================================================================================== */
+
+// HTML-комментарии, <style> и <script> содержат кириллицу, но не являются
+// пользовательским текстом — из скана исключаются.
+function textOnly(html) {
+  return html
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '');
+}
+
+const CYRILLIC = /[\u0400-\u04FF]/;
+const TAG_RE = /<([a-zA-Z][a-zA-Z0-9]*)((?:"[^"]*"|'[^']*'|[^>"'])*)>/g;
+
+/** Текстовые узлы с кириллицей, у которых в открывающем теге нет data-i18n*. */
+function untaggedText(html) {
+  const clean = textOnly(html);
+  const offenders = [];
+  const re = /<([a-zA-Z][a-zA-Z0-9]*)((?:"[^"]*"|'[^']*'|[^>"'])*)>([^<]*)/g;
+  let m;
+  while ((m = re.exec(clean)) !== null) {
+    if (!CYRILLIC.test(m[3])) continue;
+    if (/\bdata-i18n(-placeholder|-title|-aria-label)?\s*=/.test(m[2])) continue;
+    offenders.push('<' + m[1] + '> ' + m[3].trim());
+  }
+  return offenders;
+}
+
+// Атрибуты, чьё русское значение тоже видит пользователь → нужен парный ключ.
+const ATTR_PAIRS = [
+  ['placeholder', 'data-i18n-placeholder'],
+  ['title', 'data-i18n-title'],
+  ['aria-label', 'data-i18n-aria-label']
+];
+
+/** Русские placeholder/title/aria-label без парного data-i18n-атрибута. */
+function untaggedAttrs(html) {
+  const clean = textOnly(html);
+  const offenders = [];
+  TAG_RE.lastIndex = 0;
+  let m;
+  while ((m = TAG_RE.exec(clean)) !== null) {
+    const tag = m[1];
+    const attrs = m[2];
+    ATTR_PAIRS.forEach(function (pair) {
+      const hit = attrs.match(new RegExp('(?:^|\\s)' + pair[0] + '="([^"]*)"'));
+      if (!hit || !CYRILLIC.test(hit[1])) return;
+      if (new RegExp('(?:^|\\s)' + pair[1] + '\\s*=').test(attrs)) return;
+      offenders.push('<' + tag + ' ' + pair[0] + '="' + hit[1] + '">');
+    });
+  }
+  return offenders;
+}
+
+describe('M-4.3: разметка — ru-текст объявлен ключами (футер, хинты, статусы)', () => {
+  test('options.html и print.html: нет ru-текстовых узлов без data-i18n', () => {
+    expect(untaggedText(optionsHtml)).toEqual([]);
+    expect(untaggedText(printHtml)).toEqual([]);
+  });
+
+  test('options.html и print.html: нет ru-placeholder/title/aria-label без парного ключа', () => {
+    expect(untaggedAttrs(optionsHtml)).toEqual([]);
+    expect(untaggedAttrs(printHtml)).toEqual([]);
+  });
+
+  test('скан не холостой: кириллицу находит, data-i18n и комментарии/стили отсекает', () => {
+    expect(untaggedText(optionsHtml + '<span>Без ключа</span>')).toEqual(['<span> Без ключа']);
+    expect(untaggedText('<span data-i18n="options_x">С ключом</span>')).toEqual([]);
+    expect(untaggedText('<!-- комментарий с кириллицей -->')).toEqual([]);
+    expect(untaggedText('<style>/* кириллица */</style>')).toEqual([]);
+    expect(untaggedAttrs('<input placeholder="Авто">')).toEqual(['<input placeholder="Авто">']);
+    expect(untaggedAttrs('<input placeholder="Авто" data-i18n-placeholder="options_limit_placeholder">')).toEqual([]);
+    expect(untaggedAttrs('<input aria-label="Поле" data-i18n-aria-label="options_limit_aria">')).toEqual([]);
+    // кириллица в разметке вообще есть (скан не по пустому файлу)
+    expect(CYRILLIC.test(optionsHtml)).toBe(true);
+    expect(CYRILLIC.test(printHtml)).toBe(true);
+  });
+
+  test('именно M-4.3-ключи закрывают найденные дыры: футер, хинт экспорта, статус ключа', () => {
+    ['options_footer_privacy', 'options_footer_help', 'options_open_supported_site', 'options_byok_status_unset'].forEach(function (key) {
+      expect([key, optionsHtml.indexOf('data-i18n="' + key + '"') !== -1]).toEqual([key, true]);
+    });
+    // футер: ссылки сохранили свои атрибуты (id/target/rel/href) — менялась только подпись
+    expect(optionsHtml).toContain('<a href="privacy/privacy.html" id="privacy-link" target="_blank" rel="noopener"><span data-i18n="options_footer_privacy">Политика конфиденциальности</span></a>');
+    expect(optionsHtml).toContain('<a href="../docs/index.html" id="help-link" target="_blank" rel="noopener"><span data-i18n="options_footer_help">Помощь</span></a>');
   });
 });
 
@@ -773,5 +907,179 @@ describe('M-4.2: print.js — роли и шапка печатной формы
     expect(html).toContain('<div class="msg-role">Ассистент</div>');
     expect(html).toContain('вопрос');
     expect(html).toContain('ответ');
+  });
+});
+
+/* =====================================================================================
+ * 9. M-4.3: options.js — метка источника честная (свежий снапшот vs кэш прошлой беседы)
+ * ===================================================================================== */
+
+describe('M-4.3: options.js — метка источника не выдаёт кэш за live (jsdom)', () => {
+  const OPTIONS_IDS = [
+    'stat-site', 'stat-model', 'stat-tokens', 'stat-limit', 'stat-percent', 'stat-source',
+    'model-select', 'custom-limit', 'show-widget', 'toggle-api-key',
+    'exact-count', 'debugLogs', 'export-md', 'export-json', 'export-pdf', 'export-txt',
+    'export-hint', 'stale-warning', 'export-diag', 'reset-limit',
+    'aiCmAutoExport', 'aiCmAutoExportPct', 'aiCmAutoExportFmt',
+    'aiCmProactive', 'aiCmProactiveNotify',
+    'aiCmProactiveLow', 'aiCmProactiveMedium', 'aiCmProactiveHigh',
+    'api-key-status', 'api-key-remove',
+    'archive-file', 'archive-import', 'archive-refresh', 'archive-status', 'archive-list'
+  ];
+
+  // Снапшот активной вкладки Gemini: sourceLabel — как его пишет content.js
+  const LIVE_STATE = {
+    host: 'gemini.google.com',
+    site: 'gemini',
+    model: 'Gemini 2.5 Pro',
+    tokens: 120000,
+    limit: 1000000,
+    percent: 12,
+    updatedAt: 1780000000000,
+    stale: false,
+    sourceKind: 'live',
+    sourceLabel: 'live (сеть/DOM)'
+  };
+
+  function setupDom() {
+    document.body.innerHTML = '';
+    OPTIONS_IDS.forEach(function (id) {
+      const el = document.createElement('div');
+      el.id = id;
+      document.body.appendChild(el);
+    });
+    const keyInput = document.createElement('input');
+    keyInput.id = 'api-key';
+    keyInput.type = 'password';
+    document.body.appendChild(keyInput);
+    const versionEl = document.createElement('span');
+    versionEl.className = 'version';
+    document.body.appendChild(versionEl);
+  }
+
+  /** Мок chrome со стором: local.get(keys) отдаёт только реально лежащие ключи. */
+  function chromeStub(locale, store) {
+    return {
+      runtime: {
+        getManifest: function () { return { version: '1.18.0' }; },
+        getURL: function (p) { return p; },
+        lastError: null,
+        sendMessage: function () { }
+      },
+      i18n: locale ? {
+        getMessage: function (key, substitutions) {
+          const entry = locale[key];
+          if (!entry) return '';
+          let text = entry.message;
+          if (substitutions) {
+            const subs = Array.isArray(substitutions) ? substitutions : [substitutions];
+            subs.forEach(function (value, index) {
+              text = text.split('$' + (index + 1)).join(String(value));
+            });
+          }
+          return text;
+        }
+      } : undefined,
+      storage: {
+        sync: { get: function (keys, cb) { cb({}); }, set: function () { } },
+        local: {
+          get: function (keys, cb) {
+            const out = {};
+            (typeof keys === 'string' ? [keys] : (keys || [])).forEach(function (k) {
+              if (Object.prototype.hasOwnProperty.call(store, k)) out[k] = store[k];
+            });
+            if (typeof cb === 'function') cb(out);
+          },
+          getKeys: function (cb) { cb(Object.keys(store)); },
+          set: function (obj, cb) { Object.assign(store, obj); if (cb) cb(); },
+          remove: function (keys, cb) {
+            (typeof keys === 'string' ? [keys] : keys || []).forEach(function (k) { delete store[k]; });
+            if (cb) cb();
+          }
+        },
+        session: {
+          get: function () { return Promise.resolve({}); },
+          set: function () { return Promise.resolve(); },
+          remove: function () { return Promise.resolve(); }
+        },
+        onChanged: { addListener: function () { } }
+      },
+      tabs: {
+        query: function (q, cb) { cb([{ id: 1, url: 'https://gemini.google.com/app/7c1f4a9b2e8d3a05' }]); },
+        get: function (id, cb) { cb({ id: id, url: 'https://gemini.google.com/app/7c1f4a9b2e8d3a05' }); },
+        create: function () { },
+        sendMessage: function (a, b, cb) { if (typeof cb === 'function') cb(undefined); }
+      }
+    };
+  }
+
+  function mount(locale, store) {
+    global.chrome = chromeStub(locale, store);
+    jest.resetModules();
+    require('../options/options.js');
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+  }
+
+  function flush() {
+    return new Promise(function (resolve) { setTimeout(resolve, 0); });
+  }
+
+  /** Первый проход: свежий снапшот в сторе; второй — стор пуст (та же вкладка) → кэш. */
+  function mountThenCache(locale) {
+    const store = { 'aiCmState:gemini.google.com': Object.assign({}, LIVE_STATE) };
+    mount(locale, store);
+    return flush().then(function () {
+      const first = document.getElementById('stat-source').textContent;
+      delete store['aiCmState:gemini.google.com'];
+      document.dispatchEvent(new Event('DOMContentLoaded'));
+      return flush().then(function () {
+        return { first: first, cached: document.getElementById('stat-source').textContent };
+      });
+    });
+  }
+
+  afterEach(function () {
+    document.body.innerHTML = '';
+    delete global.chrome;
+  });
+
+  test('свежий снапшот: метка остаётся sourceLabel состояния (не подменяется)', async () => {
+    setupDom();
+    mount(en, { 'aiCmState:gemini.google.com': Object.assign({}, LIVE_STATE) });
+    await flush();
+    expect(document.getElementById('stat-source').textContent).toBe('live (сеть/DOM)');
+  });
+
+  test('en: данные из кэша прошлой беседы → метка = options_source_cache («cache (previous chat)»)', async () => {
+    setupDom();
+    const res = await mountThenCache(en);
+    expect(res.first).toBe('live (сеть/DOM)');          // свежий проход — прежняя метка
+    expect(res.cached).toBe(en.options_source_cache.message);
+    expect(res.cached).not.toBe('live (сеть/DOM)');     // кэш больше не выдаётся за live
+  });
+
+  test('ru: та же ветка → метка = «кэш (прошлая беседа)»', async () => {
+    setupDom();
+    const res = await mountThenCache(ru);
+    expect(res.first).toBe('live (сеть/DOM)');
+    expect(res.cached).toBe('кэш (прошлая беседа)');
+    expect(ru.options_source_cache.message).toBe('кэш (прошлая беседа)');
+  });
+
+  test('без chrome.i18n: ветка кэша даёт тот же русский фолбэк байтово', async () => {
+    setupDom();
+    const res = await mountThenCache(null);
+    expect(res.first).toBe('live (сеть/DOM)');
+    expect(res.cached).toBe('кэш (прошлая беседа)');
+  });
+
+  test('pin исходника: подмена метки живёт ровно в v31-ветке кэша', () => {
+    expect(optionsJs).toContain("aiCmI18nMessage('options_source_cache', 'кэш (прошлая беседа)')");
+    expect(optionsJs).toContain('updateStatsFromState(cachedState, tabHost, tabPath, true)');
+    // свежие пути (storage-снапшот и onChanged) метку НЕ подменяют
+    expect(optionsJs).toContain('updateStatsFromState(state, tabHost, tabPath);');
+    expect(optionsJs).toContain('updateStatsFromState(best, tabHost, tabPath);');
+    // расчёты/логика виджета не тронуты: процент по-прежнему из состояния
+    expect(optionsJs).toContain('var p = state.percent || 0;');
   });
 });

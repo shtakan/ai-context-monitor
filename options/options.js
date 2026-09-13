@@ -485,7 +485,7 @@ function isChatHome(hostname, pathname) {
   return chatDialogPathBySite[site].test(String(pathname || ''));
 }
 
-function updateStatsFromState(state, tabHost, tabPath) {
+function updateStatsFromState(state, tabHost, tabPath, fromCache) {
   siteEl.textContent = siteLabels[state.site] || state.site || '—';
   modelEl.textContent = state.model || '—';
   tokensEl.textContent = (typeof state.tokens === 'number') ? state.tokens.toLocaleString() : '—';
@@ -494,7 +494,14 @@ function updateStatsFromState(state, tabHost, tabPath) {
   percentEl.textContent = p + '%';
   percentEl.style.color = percentColor(p);
   // T1 (v1.16): источник истории — архив (первый ярус) или live (второй)
-  if (sourceEl) sourceEl.textContent = state.sourceLabel || '—';
+  // M-4.3: показанный из кэша прошлой беседы снапшот не выдаётся за live — метка
+  // источника подменяется честной («кэш (прошлая беседа)»); у свежего снапшота
+  // остаётся его собственная sourceLabel.
+  if (sourceEl) {
+    sourceEl.textContent = fromCache
+      ? aiCmI18nMessage('options_source_cache', 'кэш (прошлая беседа)')
+      : (state.sourceLabel || '—');
+  }
   updateStaleWarning(state, tabHost, tabPath);
 }
 
@@ -570,7 +577,8 @@ function loadStats() {
           updateStatsFromState(state, tabHost, tabPath);
         } else if (cachedState && cachedState.host === tabHost) {
           // v31: свежих данных нет — НЕ сбрасываем экран, показываем последний кэш своего хоста
-          updateStatsFromState(cachedState, tabHost, tabPath);
+          // M-4.3: и честно помечаем его кэшем (fromCache=true) — не «live (сеть/DOM)»
+          updateStatsFromState(cachedState, tabHost, tabPath, true);
           var cachedAt = formatTime(cachedState.updatedAt);
           siteEl.textContent += aiCmI18nMessage('options_data_from', ' · данные от ' + cachedAt, [cachedAt]);
         } else {

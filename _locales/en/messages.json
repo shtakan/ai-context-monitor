@@ -1,4 +1,10 @@
 {
+  "ext_name": {
+    "message": "AI Context Monitor"
+  },
+  "ext_description": {
+    "message": "Real-time monitoring of AI model context window usage"
+  },
   "content_widget_loading": {
     "message": "Loading context..."
   },
@@ -298,6 +304,15 @@
   },
   "options_archive_file_too_large": {
     "message": "file is too large (over $1 MB) — read cancelled"
+  },
+  "options_footer_privacy": {
+    "message": "Privacy Policy"
+  },
+  "options_footer_help": {
+    "message": "Help"
+  },
+  "options_source_cache": {
+    "message": "cache (previous chat)"
   },
   "export_md_title": {
     "message": "# AI Context Monitor — history export"

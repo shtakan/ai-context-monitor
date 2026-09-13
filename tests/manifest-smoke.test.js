@@ -12,7 +12,9 @@
  *   3) permissions: точный список, без "<all_urls>" и без host-паттернов;
  *   4) совместимость: browser_specific_settings/options_ui/page_action/... отсутствуют
  *      (в т.ч. как подстрока в сыром тексте — ловим и вложенные вставки);
- *   5) инварианты аудита: version 1.18.0, default_locale ru, 9 host_permissions.
+ *   5) инварианты аудита: version 1.18.0, default_locale ru, 9 host_permissions;
+ *   6) M-4.3: name/description — локализуемые __MSG__-формы, ключи ext_name /
+ *      ext_description объявлены в ОБЕИХ локалях (ru — байтово прежние строки).
  *
  * Тест НИЧЕГО не меняет: manifest — замороженный инвариант (i18n-набор, E-1
  * гарды, privacy).
@@ -24,6 +26,8 @@ const fs = require('fs');
 const ROOT = path.join(__dirname, '..');
 const RAW = fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8');
 const manifest = JSON.parse(RAW);
+const ru = JSON.parse(fs.readFileSync(path.join(ROOT, '_locales', 'ru', 'messages.json'), 'utf8'));
+const en = JSON.parse(fs.readFileSync(path.join(ROOT, '_locales', 'en', 'messages.json'), 'utf8'));
 
 // Ключи Chromium MV3, которые проект реально использует.
 const CHROMIUM_MV3_KEYS = [
@@ -106,5 +110,27 @@ describe('LOW-2: manifest.json — smoke-тест состава ключей (C
     ['tabs', 'webRequest', 'cookies', 'history', 'identity', 'geolocation', 'clipboardRead'].forEach(function (p) {
       expect([p, manifest.permissions.indexOf(p)]).toEqual([p, -1]);
     });
+  });
+
+  test('M-4.3: name/description — __MSG__-формы, ключи объявлены в ОБЕИХ локалях', () => {
+    // Chrome подставляет строку из _locales ТОЛЬКО для __MSG_<key>__: ru-литерал в
+    // манифесте означал бы русскую карточку расширения даже при en-локали браузера.
+    expect(manifest.name).toBe('__MSG_ext_name__');
+    expect(manifest.description).toBe('__MSG_ext_description__');
+    ['ext_name', 'ext_description'].forEach(function (key) {
+      expect([key, typeof ru[key].message]).toEqual([key, 'string']);
+      expect([key, typeof en[key].message]).toEqual([key, 'string']);
+      expect([key, ru[key].message.length > 0]).toEqual([key, true]);
+      expect([key, en[key].message.length > 0]).toEqual([key, true]);
+    });
+    // ru-строки карточки байтово прежние (внешний вид ru-сборки не меняется)
+    expect(ru.ext_name.message).toBe('AI Context Monitor');
+    expect(ru.ext_description.message).toBe('Мониторинг заполнения контекстного окна AI-моделей в реальном времени');
+    // en — естественный перевод, а не копия ru
+    expect(en.ext_name.message).toBe('AI Context Monitor');
+    expect(en.ext_description.message).not.toBe(ru.ext_description.message);
+    // в самом манифесте ru-текста (и прежней формы name) больше нет
+    expect(RAW).not.toContain('Мониторинг заполнения');
+    expect(RAW).not.toContain('"name": "AI Context Monitor"');
   });
 });

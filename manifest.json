@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "AI Context Monitor",
+  "name": "__MSG_ext_name__",
   "version": "1.18.0",
-  "description": "Мониторинг заполнения контекстного окна AI-моделей в реальном времени",
+  "description": "__MSG_ext_description__",
   "default_locale": "ru",
 
   "homepage_url": "https://github.com/user/ai-context-monitor",
