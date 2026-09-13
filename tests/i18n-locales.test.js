@@ -105,7 +105,7 @@ describe('M-4: manifest.json — default_locale ru', () => {
 
   test('инварианты manifest не тронуты: MV3, версия, permissions, host_permissions', () => {
     expect(manifest.manifest_version).toBe(3);
-    expect(manifest.version).toBe('1.18.0');
+    expect(manifest.version).toBe('1.19.0');
     expect(manifest.permissions).toEqual(['scripting', 'storage', 'notifications']);
     expect(manifest.host_permissions).toHaveLength(9);
     expect(manifest.background.service_worker).toBe('core/background.js');
@@ -455,7 +455,7 @@ describe('M-4: options.js — статус ключа через chrome.i18n.get
   function chromeStub(locale, sessionStore) {
     return {
       runtime: {
-        getManifest: function () { return { version: '1.18.0' }; },
+        getManifest: function () { return { version: '1.19.0' }; },
         getURL: function () { return 'print.html'; },
         lastError: null,
         sendMessage: function () { }
@@ -974,7 +974,7 @@ describe('M-4.3: options.js — метка источника не выдаёт 
   function chromeStub(locale, store) {
     return {
       runtime: {
-        getManifest: function () { return { version: '1.18.0' }; },
+        getManifest: function () { return { version: '1.19.0' }; },
         getURL: function (p) { return p; },
         lastError: null,
         sendMessage: function () { }
@@ -1235,11 +1235,12 @@ describe('M-4.4: локализация privacy/privacy.html и docs/index.html'
           expect([page.name, key, Object.prototype.hasOwnProperty.call(en, key)]).toEqual([page.name, key, true]);
         });
       });
-      // 122 новых ключа M-4.4: privacy_* — 84, docs_* — 38
-      expect(Object.keys(ru).filter(function (k) { return k.indexOf('privacy_') === 0; }).length).toBe(84);
+      // счётчики словаря зафиксированы: M-4.4 (privacy_* — 84, docs_* — 38)
+      // + R-1: ключи privacy_rev5_note и privacy_meta_prev3 (privacy_* — 86)
+      expect(Object.keys(ru).filter(function (k) { return k.indexOf('privacy_') === 0; }).length).toBe(86);
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('docs_') === 0; }).length).toBe(38);
-      expect(Object.keys(ru).length).toBe(245);
-      expect(Object.keys(en).length).toBe(245);
+      expect(Object.keys(ru).length).toBe(247);
+      expect(Object.keys(en).length).toBe(247);
     });
 
     test('ru-значения M-4.4 байтово равны тексту разметки, en — перевод без кириллицы', () => {

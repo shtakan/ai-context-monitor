@@ -91,7 +91,7 @@ function createOptionsChromeMock(initialLocal, initialSession) {
     listeners: changedListeners,
     chrome: {
       runtime: {
-        getManifest: function () { return { version: '1.18.0' }; },
+        getManifest: function () { return { version: '1.19.0' }; },
         getURL: function () { return 'print.html'; },
         lastError: null,
         sendMessage: function () { }
@@ -301,7 +301,7 @@ function loadBackground(opts) {
     importScripts: () => { },
     chrome: {
       runtime: {
-        getManifest: () => ({ version: '1.18.0' }),
+        getManifest: () => ({ version: '1.19.0' }),
         getURL: (p) => 'chrome-extension://test/' + p,
         onMessage: { addListener: (fn) => listeners.message.push(fn) },
         onInstalled: { addListener: (fn) => listeners.installed.push(fn) },

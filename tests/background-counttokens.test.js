@@ -46,7 +46,7 @@ function loadBackground(opts) {
     importScripts: () => { },
     chrome: {
       runtime: {
-        getManifest: () => ({ version: '1.18.0' }),
+        getManifest: () => ({ version: '1.19.0' }),
         getURL: (p) => 'chrome-extension://test/' + p,
         onMessage: { addListener: (fn) => listeners.message.push(fn) },
         onInstalled: { addListener: (fn) => listeners.installed.push(fn) },

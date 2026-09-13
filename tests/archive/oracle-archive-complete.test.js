@@ -249,7 +249,7 @@ describe('T1: проводка ISOLATED → MAIN и запрет внешних 
   test('manifest.json НЕ изменён: архив не добавлен в content_scripts/host_permissions', () => {
     expect(MANIFEST).not.toContain('archive');
     const m = JSON.parse(MANIFEST);
-    expect(m.version).toBe('1.18.0');
+    expect(m.version).toBe('1.19.0');
     expect(m.content_scripts[0].js).not.toContain('utils/archive-import.js');
     expect(m.host_permissions.length).toBe(9);
     expect(m.host_permissions).toContain('https://gemini.google.com/*');
@@ -289,7 +289,7 @@ describe('T1: options.js — импорт архива и индикатор и�
       listeners: listeners,
       chrome: {
         runtime: {
-          getManifest: function () { return { version: '1.18.0' }; },
+          getManifest: function () { return { version: '1.19.0' }; },
           getURL: function () { return 'print.html'; },
           lastError: null,
           sendMessage: function () { }
@@ -449,7 +449,7 @@ describe('LOW-1: потолок MAX_ARCHIVE_SIZE при импорте архи�
 
   function chromeMockLow1() {
     return {
-      runtime: { getManifest: function () { return { version: '1.18.0' }; }, getURL: function () { return 'print.html'; }, lastError: null, sendMessage: function () { } },
+      runtime: { getManifest: function () { return { version: '1.19.0' }; }, getURL: function () { return 'print.html'; }, lastError: null, sendMessage: function () { } },
       storage: {
         sync: { get: function (keys, cb) { cb({}); }, set: function () { } },
         local: {

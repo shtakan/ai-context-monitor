@@ -13,7 +13,8 @@
  *     а options.js открывает её через chrome.tabs.create + chrome.runtime.getURL.
  *
  * M-4.4: текст политики не переписан — он обёрнут ключами privacy_* (data-i18n), строка
- * редакции обновлена до «2026-09-13 (ред. 4)» и добавлен пункт истории редакций rev. 4.
+ * редакции обновлена до «2026-09-13 (ред. 5)» и добавлен пункт истории редакций rev. 5
+ * (R-1, v1.19: содержимое политики не менялось, выровнен только номер редакции).
  *
  * Существующие тесты и существующий код не изменяются.
  */
@@ -63,22 +64,26 @@ describe('P1: privacy/privacy.html — файл и валидность', () => 
     expect(privacyHtml).toContain('margin: 0 auto');
   });
 
-  test('M-4.4: дата редакции (ред. 4) и версия документа', () => {
+  test('R-1: дата редакции (ред. 5) и версия документа; прежние редакции не переписаны', () => {
     expect(privacyHtml).toContain('Дата последней редакции');
-    // M-4.4: редакция обновлена; прежняя редакция осталась в шапке — пин не ослаблен
+    // R-1 (v1.19): номер редакции выровнен с релизом — 4 → 5; текст политики не менялся
+    expect(privacyHtml).toContain('2026-09-13 (ред. 5)');
     expect(privacyHtml).toContain('2026-09-13 (ред. 4)');
     expect(privacyHtml).toContain('2026-09-12 (ред. 3)');
     expect(privacyHtml).toContain('Версия 1.1 от 2026-09-12');
   });
 
-  test('M-4.4: история редакций — rev. 4 «добавлена английская локализация страницы»', () => {
+  test('R-1: история редакций — 5 строк, rev. 5 «выровнен с релизом 1.19.0»', () => {
     const doc = new DOMParser().parseFromString(privacyHtml, 'text/html');
     const rows = Array.from(doc.querySelectorAll('table.revisions tbody tr'));
-    expect(rows.length).toBe(4);
+    expect(rows.length).toBe(5);
     const cells = rows.map(function (row) {
       return Array.from(row.querySelectorAll('td')).map(function (td) { return td.textContent.trim(); });
     });
-    expect(cells.map(function (row) { return row[0]; })).toEqual(['rev. 1', 'rev. 2', 'rev. 3', 'rev. 4']);
+    expect(cells.map(function (row) { return row[0]; })).toEqual(['rev. 1', 'rev. 2', 'rev. 3', 'rev. 4', 'rev. 5']);
+    expect(cells[4][1]).toBe('2026-09-13');
+    expect(cells[4][2]).toContain('1.19.0');
+    // M-4.4: rev. 4 — английская локализация (не переписана)
     expect(cells[3][1]).toBe('2026-09-13');
     expect(cells[3][2]).toBe('Добавлена английская локализация страницы.');
     // прежние редакции не переписаны
