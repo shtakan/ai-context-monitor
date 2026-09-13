@@ -149,6 +149,57 @@
   }
   var currentConvId = getConvId();
 
+  // ---- M-12: привязка сниффинг-снимка к странице (slug снимка vs slug страницы) ----
+  // Дефект 13.09 17:24 (домашняя страница perplexity.ai — URL без slug): гейт «нет slug — не тред»
+  // стоял ТОЛЬКО на bootstrap. Пассивный сниффинг (fetch/XHR) ловил снимки ЧУЖИХ тредов
+  // (e2ffa178, 193399cd, bf464421…) и эмитил их в бейдж/историю — каждый перерисовывал бейдж
+  // (2.7→0.8→0.4→…). Гейт сниффинга: эмитим ТОЛЬКО снимок, чей slug доказуемо совпал со slug
+  // текущей страницы (/search/<id> или /thread/<id>); на странице без slug не эмитим вовсе —
+  // виджет держит «—», история не пишется. bootstrap и виртуальный F5 не тронуты: их адрес
+  // всегда строится от currentConvId.
+
+  // slug из URL ответа: /search/<id>, /thread/<id>, /rest/thread/<id>, /api/thread/<id>
+  function slugFromThreadUrl(urlStr) {
+    try {
+      if (!urlStr) return '';
+      var path = String(urlStr);
+      try { path = new URL(String(urlStr), location.href).pathname; } catch (eU) { path = String(urlStr); }
+      var m = path.match(/\/(?:search|thread|rest\/thread|api\/thread)\/([^\/?#]+)/);
+      if (!m) return '';
+      var raw = m[1];
+      try { raw = decodeURIComponent(raw); } catch (eD) { }
+      return String(raw).trim();
+    } catch (e) { return ''; }
+  }
+
+  // slug снимка: тело (thread_metadata.slug/url_slug/thread_url_slug/thread_id, затем
+  // единогласный entries[*].thread_url_slug) → фолбэк на URL ответа. Пусто = slug не доказан.
+  function snapshotSlug(data, url) {
+    try {
+      var meta = getTrim(data, 'thread_metadata');
+      if (meta && typeof meta === 'object') {
+        var names = ['slug', 'url_slug', 'thread_url_slug', 'thread_id'];
+        for (var i = 0; i < names.length; i++) {
+          var cand = getTrim(meta, names[i]);
+          if (typeof cand === 'string' && cand.trim()) return cand.trim();
+        }
+      }
+      var entries = getTrim(data, 'entries');
+      if (Array.isArray(entries)) {
+        var only = null;
+        for (var j = 0; j < entries.length; j++) {
+          var s = getTrim(entries[j], 'thread_url_slug');
+          if (typeof s !== 'string' || !s.trim()) continue;
+          s = s.trim();
+          if (only === null) only = s;
+          else if (only !== s) { only = null; break; } // разные slug'и записей — тело не улика
+        }
+        if (only) return only;
+      }
+      return slugFromThreadUrl(url);
+    } catch (e) { return ''; }
+  }
+
   function resetForNewConversation() {
     lastHistoryUrl = null;
     lastModel = '';
@@ -291,6 +342,19 @@
 
   function processHistoryData(data, url, source) {
     if (!data) return;
+    // M-12: гейт «снимок принадлежит текущей странице» — ДО любых мутаций состояния
+    // (bootstrapTimer/snapshotReceived/lastHistoryUrl/шаблон): пропущенный чужой снимок
+    // не должен ни эмититься в бейдж/историю, ни уводить за собой виртуальный F5.
+    if (!currentConvId) {
+      debugLog('log', '[perplexity-intercept] сниффинг (' + source + '): нет slug страницы — не тред, снимок не эмитим (' + url + ')');
+      return;
+    }
+    var sniffSlug = snapshotSlug(data, url);
+    if (sniffSlug !== currentConvId) {
+      debugLog('log', '[perplexity-intercept] сниффинг (' + source + '): чужой снимок (slug=' +
+        (sniffSlug || '(не определён)') + ' != slug страницы ' + currentConvId + ') — пропуск, URL: ' + url);
+      return;
+    }
     console.log('[perplexity-intercept] сниффинг: снимок истории пойман (' + source + '), URL: ' + url);
     if (bootstrapTimer) { clearTimeout(bootstrapTimer); bootstrapTimer = null; }
     snapshotReceived = true;

@@ -406,33 +406,50 @@ function clampAutoExportPct(v) {
   return n;
 }
 
+// v1.19.2 (M-13a): ЕДИНСТВЕННАЯ форма записи настроек автоэкспорта — ПОЛНЫЙ объект
+// {enabled, pct, fmt} из текущих значений формы. Частичная запись запрещена: сохранение
+// одного порога теряло флаг enabled в storage (13.09 17:33 — галка нарисована включённой,
+// а content.js читал enabled=false и молчал), после чего автоэкспорт не стрелял вовсе.
+var AI_CM_AUTO_EXPORT_PCT_DEFAULT = 90;
+
+function aiCmAutoExportWriteFull() {
+  try {
+    var pctFull = clampAutoExportPct(autoExportPctInput.value);
+    pctFull = (pctFull === null) ? AI_CM_AUTO_EXPORT_PCT_DEFAULT : pctFull;
+    autoExportPctInput.value = pctFull;
+    chrome.storage.local.set({
+      aiCmAutoExport: autoExportCheckbox.checked === true,
+      aiCmAutoExportPct: pctFull,
+      aiCmAutoExportFmt: normalizeAutoExportFmt(autoExportFmtSelect.value)
+    });
+  } catch (eFull) {}
+}
+
+// v1.19.2 (M-13b): инициализация формы — СТРОГО из chrome.storage (без дефолтов, расходящихся
+// с хранилищем). Если ключа/валидного значения в storage нет, нормализованное значение сразу
+// фиксируется полным объектом — форма и хранилище не расходятся ни в одном поле.
 try {
   chrome.storage.local.get(['aiCmAutoExport', 'aiCmAutoExportPct', 'aiCmAutoExportFmt'], function (data) {
     try {
+      data = data || {};
       if (autoExportCheckbox) autoExportCheckbox.checked = data.aiCmAutoExport === true;
-      var pct = clampAutoExportPct(data.aiCmAutoExportPct !== undefined ? data.aiCmAutoExportPct : 90);
-      if (autoExportPctInput) autoExportPctInput.value = (pct === null) ? 90 : pct;
+      var pctInit = clampAutoExportPct(data.aiCmAutoExportPct);
+      if (autoExportPctInput) autoExportPctInput.value = (pctInit === null) ? AI_CM_AUTO_EXPORT_PCT_DEFAULT : pctInit;
       if (autoExportFmtSelect) autoExportFmtSelect.value = normalizeAutoExportFmt(data.aiCmAutoExportFmt);
+      var needsNormalize = (typeof data.aiCmAutoExport !== 'boolean') ||
+        (pctInit === null) ||
+        (normalizeAutoExportFmt(data.aiCmAutoExportFmt) !== data.aiCmAutoExportFmt);
+      if (needsNormalize) aiCmAutoExportWriteFull();
     } catch (eInit) {}
   });
 } catch (eLoad) {}
 
-autoExportCheckbox && autoExportCheckbox.addEventListener('change', function () {
-  try { chrome.storage.local.set({ aiCmAutoExport: autoExportCheckbox.checked === true }); } catch (eS) {}
-});
-function applyAutoExportPct() {
-  try {
-    var pct = clampAutoExportPct(autoExportPctInput.value);
-    autoExportPctInput.value = (pct === null) ? 90 : pct;
-    chrome.storage.local.set({ aiCmAutoExportPct: (pct === null) ? 90 : pct });
-  } catch (eP) {}
-}
+// v1.19.2 (M-13a): любой из трёх контролов пишет ПОЛНЫЙ объект — enabled не теряется
+autoExportCheckbox && autoExportCheckbox.addEventListener('change', aiCmAutoExportWriteFull);
 // 'change' срабатывает и при ручном вводе (blur/Enter), и при кликах по стрелкам спиннера
-autoExportPctInput && autoExportPctInput.addEventListener('change', applyAutoExportPct);
-autoExportPctInput && autoExportPctInput.addEventListener('blur', applyAutoExportPct);
-autoExportFmtSelect && autoExportFmtSelect.addEventListener('change', function () {
-  try { chrome.storage.local.set({ aiCmAutoExportFmt: normalizeAutoExportFmt(autoExportFmtSelect.value) }); } catch (eF) {}
-});
+autoExportPctInput && autoExportPctInput.addEventListener('change', aiCmAutoExportWriteFull);
+autoExportPctInput && autoExportPctInput.addEventListener('blur', aiCmAutoExportWriteFull);
+autoExportFmtSelect && autoExportFmtSelect.addEventListener('change', aiCmAutoExportWriteFull);
 
 // v31: синхронизация чекбокса «Подробные логи» при внешнем изменении ключа
 try {

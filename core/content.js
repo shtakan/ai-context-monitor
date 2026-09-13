@@ -2414,6 +2414,9 @@ aiCmLoadProactiveFlag();
 // Сборка текста — тем же сборщиком, что использует ручная кнопка выбранного формата
 // (utils/export-text-builders.js). Без флага консоль тихая; ошибки — console.error.
 var autoExportSettings = { enabled: false, pct: 90, fmt: 'txt' };
+// v1.19.2 (M-13c): антиспам строки «флаг enabled отсутствует» — одна строка на эпизод
+// (loadAutoExportSettings вызывается и на старте, и на каждый onChanged этих трёх ключей).
+var aiCmAutoExportFlagMissingLogged = false;
 var autoExportFired = {};        // convId -> 1 (один раз на чат)
 // S2: per-site порог автоэкспорта: ключ 'aiCmAutoExportPct_<siteName>' (например
 // aiCmAutoExportPct_chatgpt) переопределяет глобальный aiCmAutoExportPct для этого
@@ -2711,11 +2714,29 @@ function loadAutoExportSettings() {
     if (!isExtensionValid() || !chrome.storage || !chrome.storage.local) return;
     chrome.storage.local.get(['aiCmAutoExport', 'aiCmAutoExportPct', 'aiCmAutoExportFmt'], function (data) {
       try {
-        autoExportSettings.enabled = data && data.aiCmAutoExport === true;
-        var p = parseInt(data && data.aiCmAutoExportPct, 10);
+        data = data || {};
+        // v1.19.2 (M-13c): НОРМАЛИЗАЦИЯ ФЛАГА — нет БУЛЕВА enabled в загруженном объекте →
+        // enabled=false И обязательная строка в логе. Тихий выход запрещён: дефект 13.09 17:33
+        // (тред /search/5fe65fcb, галка включена, порог 20, baseComplete=true, cid непустой)
+        // выглядел именно так — модуль автоэкспорта не сказал ни слова, потому что флаг потерялся
+        // в storage при сохранении порога из попапа (M-13a), а этот путь молчал.
+        if (typeof data.aiCmAutoExport !== 'boolean') {
+          autoExportSettings.enabled = false;
+          if (!aiCmAutoExportFlagMissingLogged) {
+            aiCmAutoExportFlagMissingLogged = true;
+            // console.log (а не debugLog): строка видна всегда, как «[byok] настройки загружены» —
+            // «Подробные логи» для диагностики потери флага не требуются. Антиспам — одна строка
+            // на эпизод «флага нет» (повторные onChanged-перезагрузки не дублируют её).
+            console.log('[AI CM][auto-export] настройки: флаг enabled отсутствует — автоэкспорт выключен');
+          }
+        } else {
+          aiCmAutoExportFlagMissingLogged = false; // флаг вернулся — следующий эпизод снова виден
+          autoExportSettings.enabled = data.aiCmAutoExport === true;
+        }
+        var p = parseInt(data.aiCmAutoExportPct, 10);
         autoExportSettings.pct = (!isNaN(p) && p >= 1 && p <= 100) ? p : 90; // v65: 1–100
         // v1.18 (F4): селектор формата общий для всех сайтов — txt | md | json.
-        var fmtRaw = data && data.aiCmAutoExportFmt;
+        var fmtRaw = data.aiCmAutoExportFmt;
         autoExportSettings.fmt = (fmtRaw === 'md' || fmtRaw === 'json') ? fmtRaw : 'txt';
       } catch (eParse) {
         console.error('[AI CM][auto-export] parse settings error:', eParse);

@@ -331,6 +331,6 @@ describe('инварианты доступности: цвета, раскла�
     // без изменений в областях вне options
     expect(printHtml).toContain('<style>');
     expect(manifest.manifest_version).toBe(3);
-    expect(manifest.version).toBe('1.19.1');
+    expect(manifest.version).toBe('1.19.2');
   });
 });

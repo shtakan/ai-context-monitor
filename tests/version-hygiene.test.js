@@ -3,7 +3,7 @@
  *
  * Пины source-level (стиль manifest-smoke.test.js / docs-hygiene.test.js) — только чтение:
  *  1) manifest.version === версия ВЕРХНЕЙ записи CHANGELOG.md (парсинг реального файла,
- *     формат Keep a Changelog: «## [x.y.z] - YYYY-MM-DD»); версия — строго литерал 1.19.1,
+ *     формат Keep a Changelog: «## [x.y.z] - YYYY-MM-DD»); версия — строго литерал 1.19.2,
  *     чтобы пин не «съезжал» молча вслед за манифестом;
  *  2) package.json === package-lock.json (root + packages[""]) === manifest.json;
  *  3) все места вывода версии согласованы с манифестом: футер docs/index.html,
@@ -53,10 +53,10 @@ describe('R-1: manifest.version синхронизирован с верхней
     expect(manifest.version).toBe(topEntry.version);
   });
 
-  test('manifest.version === 1.19.1 (литерал: пин не следует за манифестом молча)', () => {
-    expect(manifest.version).toBe('1.19.1');
+  test('manifest.version === 1.19.2 (литерал: пин не следует за манифестом молча)', () => {
+    expect(manifest.version).toBe('1.19.2');
     expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(topEntry.version).toBe('1.19.1');
+    expect(topEntry.version).toBe('1.19.2');
     expect(topEntry.date).toBe('2026-09-13');
   });
 
@@ -71,9 +71,13 @@ describe('R-1: manifest.version синхронизирован с верхней
     expect(greater).toBe(true);
   });
 
-  test('CHANGELOG: запись 1.18.0 не переписана (прежний заголовок на месте)', () => {
+  test('CHANGELOG: записи 1.19.1 и 1.18.0 не переписаны (прежние заголовки на месте)', () => {
     const headings = changelog.split(/\r?\n/).filter(function (l) { return l.indexOf('## [') === 0; });
+    expect(headings.filter(function (h) { return h.indexOf('## [1.19.1] - 2026-09-13') === 0; }).length).toBe(1);
     expect(headings.filter(function (h) { return h.indexOf('## [1.18.0] - 2026-09-12') === 0; }).length).toBe(1);
+    // новая запись 1.19.2 (M-12 + M-13) стоит ВЫШЕ прежней
+    expect(headings.findIndex(function (h) { return h.indexOf('## [1.19.2]') === 0; }))
+      .toBeLessThan(headings.findIndex(function (h) { return h.indexOf('## [1.19.1]') === 0; }));
   });
 });
 
@@ -87,9 +91,10 @@ describe('R-1: package.json и package-lock.json — та же версия, ч�
     expect(lock.packages[''].version).toBe(manifest.version);
   });
 
-  test('прежняя версия 1.18.0 в манифесте/пакете/локе не осталась', () => {
+  test('прежние версии 1.19.1 и 1.18.0 в манифесте/пакете/локе не остались', () => {
     [manifest, pkg, lock].forEach(function (doc) {
       expect(JSON.stringify(doc)).not.toContain('1.18.0');
+      expect(JSON.stringify(doc)).not.toContain('1.19.1');
     });
   });
 });
@@ -110,11 +115,13 @@ describe('R-1: единый источник версии — chrome.runtime.get
   test('футер docs/index.html показывает версию манифеста (не прежнюю и не 1.0.0)', () => {
     expect(docsHtml).toContain('Версия</span> ' + manifest.version);
     expect(docsHtml).not.toContain('Версия</span> 1.0.0');
+    expect(docsHtml).not.toContain('Версия</span> 1.19.1');
     expect(docsHtml).not.toContain('Версия</span> 1.18.0');
   });
 
   test('метаданные листинга Edge: версия совпадает с манифестом', () => {
     expect(listing).toContain('Версия расширения: ' + manifest.version + ' (manifest.json)');
+    expect(listing).not.toContain('Версия расширения: 1.19.1');
     expect(listing).not.toContain('Версия расширения: 1.18.0');
   });
 
