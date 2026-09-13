@@ -546,8 +546,9 @@ describe('F5: логи автоэкспорта GSA', () => {
 // F3: UI — подпись секции и общий селектор формата
 // =====================================================================================
 describe('F3: подпись секции автоэкспорта в options.html', () => {
-  test('подпись секции: «Автоэкспорт чатов (Gemini, Google Search AI)»', () => {
-    expect(OPTIONS_HTML).toContain('Автоэкспорт чатов (Gemini, Google Search AI)');
+  test('подпись секции: «Автоэкспорт чатов (все поддерживаемые платформы)» (M-11 v1.19.1)', () => {
+    expect(OPTIONS_HTML).toContain('Автоэкспорт чатов (все поддерживаемые платформы)');
+    expect(OPTIONS_HTML).not.toContain('Автоэкспорт чатов (Gemini, Google Search AI)');
     expect(OPTIONS_HTML).not.toContain('Автоэкспорт чата Gemini');
   });
 

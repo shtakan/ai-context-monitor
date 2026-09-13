@@ -2,6 +2,7 @@
  * Тесты общего EMIT-пайплайна экспорта (v81, Задача A, Шаг 3).
  * utils/export-emit-pipeline.js — чистые функции: имя файла, гейт автоэкспорта,
  * латч per service+convId, извлечение convId из URL, нормализация сообщений.
+ * v1.19.1 (M-11): Perplexity /search/<id> — живой URL диалога (см. 3.3b).
  */
 const P = require('../utils/export-emit-pipeline.js');
 
@@ -113,6 +114,51 @@ describe('extractConvIdFromUrl', () => {
   test('нечитаемый путь → пустая строка', () => {
     expect(P.extractConvIdFromUrl('')).toBe('');
     expect(P.extractConvIdFromUrl(null)).toBe('');
+  });
+});
+
+// —— 3.3b M-11 (v1.19.1): Perplexity /search/<id> наравне с /thread/<id> ——
+// Регресс: живой диалог Perplexity живёт по /search/<id>, а распознавался только
+// /thread/<slug> → aiCmAutoExportConvId() === '' и maybeAutoExport() молча выходил
+// на «if (!cid) return;» при зелёных гейтах (автоэкспорт не стрелял вовсе).
+describe('M-11: extractConvIdFromUrl — Perplexity /search/<id>', () => {
+  const UUID = '2f2a1b1c-9d3e-4a5b-8c7d-1e2f3a4b5c6d';
+
+  test('perplexity.ai — /search/<uuid> → <uuid> (живой URL диалога)', () => {
+    expect(P.extractConvIdFromUrl('/search/' + UUID)).toBe(UUID);
+    expect(P.extractConvIdFromUrl('/search/abcdefgh1234')).toBe('abcdefgh1234');
+  });
+
+  test('perplexity.ai — /thread/<uuid> → <uuid> (прежняя ветка байтово не изменена)', () => {
+    expect(P.extractConvIdFromUrl('/thread/' + UUID)).toBe(UUID);
+    expect(P.extractConvIdFromUrl('/thread/some-slug-99')).toBe('some-slug-99');
+  });
+
+  test('google.com/search БЕЗ id-сегмента → "" (GSA остаётся пустым, threadId-путь цел)', () => {
+    expect(P.extractConvIdFromUrl('/search')).toBe('');
+    expect(P.extractConvIdFromUrl('/search?q=test')).toBe('');
+    expect(P.extractConvIdFromUrl('/search/abc')).toBe('');       // короткий хвост — не id
+    expect(P.extractConvIdFromUrl('/search/abc/def')).toBe('');   // id-сегмента 8+ нет
+  });
+
+  test('прочие сервисы байтово прежние: gemini /app/<id>, claude /chat/<uuid>', () => {
+    expect(P.extractConvIdFromUrl('/app/xyz789')).toBe('xyz789');
+    expect(P.extractConvIdFromUrl('/app/7c1f4a9b2e8d3a05')).toBe('7c1f4a9b2e8d3a05');
+    expect(P.extractConvIdFromUrl('/chat/' + UUID)).toBe(UUID);
+    expect(P.extractConvIdFromUrl('/project/p1/chat/uuid-claude')).toBe('uuid-claude');
+    expect(P.extractConvIdFromUrl('/c/abc123-def')).toBe('abc123-def');
+    expect(P.extractConvIdFromUrl('/a/chat/s/dsid456')).toBe('dsid456');
+  });
+
+  test('сквозной путь: perplexity — обычный не-GSA сайт, resolveAutoExportConvId = urlConvId', () => {
+    expect(P.resolveAutoExportConvId('perplexity', P.extractConvIdFromUrl('/search/' + UUID), ''))
+      .toBe(UUID);
+    expect(P.resolveAutoExportConvId('perplexity', P.extractConvIdFromUrl('/search/abcdefgh1234'), 'tid-1'))
+      .toBe('abcdefgh1234');
+    // без id — не выдумываем; GSA-ветка (threadId) и gemini не тронуты
+    expect(P.resolveAutoExportConvId('perplexity', '', 'tid-1')).toBe('');
+    expect(P.resolveAutoExportConvId('google_search', '', 'tid-1')).toBe('tid-1');
+    expect(P.resolveAutoExportConvId('gemini', 'url-id', 'tid-1')).toBe('url-id');
   });
 });
 

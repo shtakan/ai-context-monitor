@@ -1318,7 +1318,8 @@ function getCurrentConvId() {
   try {
     // v81: обобщено на 6 сервисов через utils/export-emit-pipeline.js:
     // Gemini /app/<id> и claude /chat/<uuid> сохранены 1:1; добавлены ветки
-    // chatgpt.com /c/<id>, chat.deepseek.com /a/chat/s/<id>, perplexity.ai /thread/<id>;
+    // chatgpt.com /c/<id>, chat.deepseek.com /a/chat/s/<id>,
+    // perplexity.ai /search/<id> (живой диалог, M-11 v1.19.1) или /thread/<id>;
     // google.com (Search AI) — надёжного id в URL нет → '' (не выдумываем).
     var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
     if (P && typeof P.extractConvIdFromUrl === 'function') return P.extractConvIdFromUrl(location.pathname) || '';

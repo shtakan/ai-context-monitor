@@ -123,7 +123,7 @@
     "message": "Verbose logs"
   },
   "options_autoexport_legend": {
-    "message": "Chat auto-export (Gemini, Google Search AI)"
+    "message": "Chat auto-export (all supported platforms)"
   },
   "options_autoexport_enable": {
     "message": "Auto-export at threshold"

@@ -3,7 +3,7 @@
  *
  * Пины source-level (стиль manifest-smoke.test.js / docs-hygiene.test.js) — только чтение:
  *  1) manifest.version === версия ВЕРХНЕЙ записи CHANGELOG.md (парсинг реального файла,
- *     формат Keep a Changelog: «## [x.y.z] - YYYY-MM-DD»); версия — строго литерал 1.19.0,
+ *     формат Keep a Changelog: «## [x.y.z] - YYYY-MM-DD»); версия — строго литерал 1.19.1,
  *     чтобы пин не «съезжал» молча вслед за манифестом;
  *  2) package.json === package-lock.json (root + packages[""]) === manifest.json;
  *  3) все места вывода версии согласованы с манифестом: футер docs/index.html,
@@ -53,10 +53,10 @@ describe('R-1: manifest.version синхронизирован с верхней
     expect(manifest.version).toBe(topEntry.version);
   });
 
-  test('manifest.version === 1.19.0 (литерал: пин не следует за манифестом молча)', () => {
-    expect(manifest.version).toBe('1.19.0');
+  test('manifest.version === 1.19.1 (литерал: пин не следует за манифестом молча)', () => {
+    expect(manifest.version).toBe('1.19.1');
     expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(topEntry.version).toBe('1.19.0');
+    expect(topEntry.version).toBe('1.19.1');
     expect(topEntry.date).toBe('2026-09-13');
   });
 

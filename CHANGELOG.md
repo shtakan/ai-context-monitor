@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.19.1] - 2026-09-13
+### Fixed
+- M-11 (автоэкспорт Perplexity): `utils/export-emit-pipeline.js` — `extractConvIdFromUrl()`
+  распознаёт живой URL диалога `perplexity.ai/search/<id>` наравне с `/thread/<id>`.
+  Прежде ветки `/search/` не было: `aiCmAutoExportConvId()` возвращал '', и `maybeAutoExport()`
+  (core/content.js) молча выходил на `if (!cid) return;` при зелёных гейтах — автоэкспорт
+  на Perplexity не стрелял вовсе (контрольный прогон 13.09 16:31: порог 2%, факт 2.6%,
+  baseComplete=true, fired=false, ни строки модуля автоэкспорта, файла нет).
+  Путь `/search` без id-сегмента (`google.com/search` → GSA) по-прежнему не матчится:
+  у GSA идентификатор даёт threadId снапшота. Гейты, латчи, GSA- и gemini-пути не тронуты.
+### Changed
+- Подпись секции автоэкспорта: «Автоэкспорт чатов (все поддерживаемые платформы)» /
+  «Chat auto-export (all supported platforms)» (ru/en и фолбэк разметки настроек).
+
 ## [1.19.0] - 2026-09-13
 ### Added
 - Полная локализация ru/en: страница настроек (включая футер, подсказки, статусы ключа, метку кэша),

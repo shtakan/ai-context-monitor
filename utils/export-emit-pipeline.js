@@ -11,7 +11,8 @@
  *   - resolveExportSource(state) — T1-fix#3: источник файла (объединённая база архив+live /
  *     локальный снимок EMIT / запрет при базе «только архив»)
  *   - markAutoExportFired / getAutoExportFired / resetAutoExportFired — латч per service+convId
- *   - extractConvIdFromUrl(pathname) — идентификатор диалога из URL (без выдумывания)
+ *   - extractConvIdFromUrl(pathname) — идентификатор диалога из URL (без выдумывания);
+ *     v1.19.1 (M-11): perplexity /search/<id> наравне с /thread/<slug>
  *   - normalizeExportMessages(raw) — нормализация к {role, text}
  *   - dedupeMessages(messages) — E-2: схлопывание дублей (роль + нормализованный текст,
  *     первое вхождение побеждает) для истории Gemini Deep Research
@@ -38,6 +39,12 @@
 
   // Идентификатор диалога из pathname. Возвращает '' если надёжного id нет —
   // идентификаторы НЕ выдумываем.
+  // v1.19.1 (M-11): Perplexity живёт по ДВУМ формам URL — живой диалог /search/<id>
+  // и старые/шаблонные ссылки /thread/<slug> (см. шапку core/perplexity-intercept.js).
+  // Долго была распознана только вторая: на живом /search/<id> convId был '' и
+  // maybeAutoExport() молча выходил на «if (!cid) return;» при зелёных гейтах.
+  // /search матчится ТОЛЬКО с id-сегментом ([A-Za-z0-9_-]{8,}) — путь
+  // google.com/search без id (GSA) остаётся '' (по-прежнему не выдумываем).
   function extractConvIdFromUrl(pathname) {
     try {
       var p = String(pathname || '');
@@ -54,7 +61,11 @@
       // chatgpt.com: /c/<uuid>
       var mC = p.match(/\/c\/([A-Za-z0-9_-]+)/);
       if (mC) return mC[1];
-      // perplexity.ai: /thread/<slug>
+      // perplexity.ai: /search/<id> — живой URL диалога (v1.19.1, M-11). Только
+      // id-подобный сегмент 8+ символов: короткий хвост /search/... не id.
+      var mPs = p.match(/\/search\/([A-Za-z0-9_-]{8,})/);
+      if (mPs) return mPs[1];
+      // perplexity.ai: /thread/<slug> — прежняя ветка (байтово не изменена)
       var mP = p.match(/\/thread\/([A-Za-z0-9_-]+)/);
       if (mP) return mP[1];
       // google.com (Search AI) и прочие — надёжного идентификатора в URL нет
@@ -114,6 +125,9 @@
    * для google_search надёжного id в URL нет (extractConvIdFromUrl → ''), поэтому
    * идентификатором разговора служит threadId снапшота (detail.threadId) — тот же id,
    * что ведёт сетевой перехватчик GSA. Прочие сервисы без URL-id → '' (не выдумываем).
+   * v1.19.1 (M-11): perplexity — обычный не-GSA сайт: отдельной ветки в сайтовом
+   * свитче нет и не требуется, urlConvId (/search/<id> или /thread/<id>) возвращает
+   * первый return. Логика GSA (threadId) и Gemini не тронута.
    * Ключ латча = site + этот convId (см. latchKey), поэтому GSA-разговоры изолированы
    * друг от друга, а не делят один пустой ключ.
    */

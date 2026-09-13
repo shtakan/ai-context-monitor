@@ -123,7 +123,7 @@
     "message": "Подробные логи"
   },
   "options_autoexport_legend": {
-    "message": "Автоэкспорт чатов (Gemini, Google Search AI)"
+    "message": "Автоэкспорт чатов (все поддерживаемые платформы)"
   },
   "options_autoexport_enable": {
     "message": "Автоэкспорт при пороге"

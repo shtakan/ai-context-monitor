@@ -105,7 +105,7 @@ describe('M-4: manifest.json — default_locale ru', () => {
 
   test('инварианты manifest не тронуты: MV3, версия, permissions, host_permissions', () => {
     expect(manifest.manifest_version).toBe(3);
-    expect(manifest.version).toBe('1.19.0');
+    expect(manifest.version).toBe('1.19.1');
     expect(manifest.permissions).toEqual(['scripting', 'storage', 'notifications']);
     expect(manifest.host_permissions).toHaveLength(9);
     expect(manifest.background.service_worker).toBe('core/background.js');
