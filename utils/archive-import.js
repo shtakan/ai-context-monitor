@@ -80,6 +80,13 @@
   var MAX_TOTAL_BYTES = 8 * 1024 * 1024;
   var MAX_MESSAGES_PER_CONVERSATION = 5000;
 
+  // LOW-1 (аудит перед релизом): потолок ЧТЕНИЯ файла архива. Архив читается
+  // FileReader'ом ЦЕЛИКОМ в память, поэтому FileReader.readAsText запрещён для
+  // файлов больше порога: пользователь получает понятную ошибку ДО чтения, а не
+  // подвисание вкладки настроек на многогигабайтном экспорте. Порог — константа
+  // (единственный источник правды; options.js берёт её отсюда, не дублирует).
+  var MAX_ARCHIVE_SIZE = 50 * 1024 * 1024; // 50 МБ
+
   // ---------------------------------------------------------------- ключи ----
   function archiveStorageKey(convId) {
     return ARCHIVE_KEY_PREFIX + String(convId == null ? '' : convId);
@@ -277,6 +284,78 @@
 
   function serviceOfFormat(format) {
     return SERVICE_BY_FORMAT[format] || '';
+  }
+
+  // ------------------------------------------ цикл «пол > msgs» (аномалия) ----
+  // LOW-3 (аудит перед релизом): независимая проверка согласованности архива.
+  // Если в записи диалога есть агрегат `full` (полный текст), он НЕ МОЖЕТ быть
+  // длиннее суммы отдельных сообщений `messages`: агрегат — это те же ходы.
+  // full.length > sum(messages[].text.length) означает, что часть истории есть
+  // только в агрегате (или ходы потеряны при нормализации) — это аномалия, и она
+  // сообщается предупреждением, а не замалчивается. Импорт при этом НЕ падает:
+  // источник правды — messages (что реально попадёт в контекст/пол).
+  function messageTextOf(m) {
+    if (!m || typeof m !== 'object') return '';
+    return normalizeText(m.text != null ? m.text : m.content);
+  }
+
+  /** Отдельные ходы диалога: `messages` (нормализованный) или алиасы экспортов. */
+  function aggregateMessageList(conv) {
+    if (Array.isArray(conv.messages)) return conv.messages;
+    if (Array.isArray(conv.chat_messages)) return conv.chat_messages;   // Claude export
+    if (Array.isArray(conv.entries)) return conv.entries;               // Perplexity export
+    return [];
+  }
+
+  function detectFullTextAnomaly(conv) {
+    if (!conv || typeof conv !== 'object') return null;
+    if (typeof conv.full !== 'string') return null;
+    var fullText = normalizeText(conv.full);
+    if (!fullText) return null;
+    var raw = aggregateMessageList(conv);
+    var msgsLen = 0;
+    for (var i = 0; i < raw.length; i++) msgsLen += messageTextOf(raw[i]).length;
+    if (fullText.length <= msgsLen) return null;
+    return {
+      convId: String(conv.convId || conv.conversation_id || conv.uuid || conv.id || ''),
+      code: 'full-longer-than-messages',
+      fullLen: fullText.length,
+      msgsLen: msgsLen,
+      over: fullText.length - msgsLen,
+      msgCount: raw.length
+    };
+  }
+
+  /** Все аномалии «пол > msgs» в архиве (чистая функция, без логов). */
+  function collectFullTextAnomalies(json) {
+    var items = arrayifyConversations(json);
+    var out = [];
+    for (var i = 0; i < items.length; i++) {
+      var a = detectFullTextAnomaly(items[i]);
+      if (a) out.push(a);
+    }
+    return out;
+  }
+
+  /**
+   * Логирует аномалии «пол > msgs». Возвращает массив аномалий; логирование
+   * инъектируется (deps.warn) — в тестах перехватывается без шума в консоли.
+   */
+  function reportFullTextAnomalies(json, deps) {
+    var d = deps || {};
+    var warn = (typeof d.warn === 'function') ? d.warn
+      : ((typeof console !== 'undefined' && console && typeof console.warn === 'function')
+        ? function (msg) { console.warn(msg); } : null);
+    var anomalies = collectFullTextAnomalies(json);
+    if (warn) {
+      for (var i = 0; i < anomalies.length; i++) {
+        var a = anomalies[i];
+        warn('[AI CM][archive] аномалия full>messages convId=' + (a.convId || '-') +
+          ' full=' + a.fullLen + ' msgs=' + a.msgsLen + ' over=' + a.over +
+          ' msgsCount=' + a.msgCount);
+      }
+    }
+    return anomalies;
   }
 
   function extractConvIdFromUrl(url) {
@@ -508,6 +587,9 @@
    *            conversations:Array, skippedNoConvId:number, skippedEmpty:number}}
    */
   function parseArchive(json, deps) {
+    // LOW-3: аномалия «пол > msgs» логируется на КАЖДОМ разборе архива —
+    // импорт не падает, но расхождение агрегата и ходов не замалчивается.
+    reportFullTextAnomalies(json, deps);
     var format = detectArchiveFormat(json);
     if (!format) {
       return { ok: false, format: null, service: '', error: 'unknown-format', conversations: [], skippedNoConvId: 0, skippedEmpty: 0 };
@@ -680,6 +762,7 @@
     MAX_CONVERSATION_BYTES: MAX_CONVERSATION_BYTES,
     MAX_TOTAL_BYTES: MAX_TOTAL_BYTES,
     MAX_MESSAGES_PER_CONVERSATION: MAX_MESSAGES_PER_CONVERSATION,
+    MAX_ARCHIVE_SIZE: MAX_ARCHIVE_SIZE,
     archiveStorageKey: archiveStorageKey,
     convSourceStorageKey: convSourceStorageKey,
     normalizeText: normalizeText,
@@ -689,6 +772,9 @@
     toMs: toMs,
     detectArchiveFormat: detectArchiveFormat,
     serviceOfFormat: serviceOfFormat,
+    detectFullTextAnomaly: detectFullTextAnomaly,
+    collectFullTextAnomalies: collectFullTextAnomalies,
+    reportFullTextAnomalies: reportFullTextAnomalies,
     extractConvIdFromUrl: extractConvIdFromUrl,
     parseGeminiTakeout: parseGeminiTakeout,
     parseChatGPTArchive: parseChatGPTArchive,

@@ -219,4 +219,18 @@ describe('M-6: release.yml — руководство в ZIP и контроль
     expect(verify).toBeGreaterThan(create);
     expect(upload).toBeGreaterThan(verify);
   });
+
+  // LOW-5 (аудит перед релизом): решение по README.md в ZIP зафиксировано —
+  // вариант Б: README в пакет НЕ входит. Магазин (Edge Add-ons) берёт описание из
+  // листинга Partner Center, а служебные .md (архитектура/протокол/чеклист) в
+  // пользовательском пакете не нужны. Офлайн-руководство — docs/index.html.
+  test('LOW-5 (вариант Б): README.md исключён из ZIP осознанно, решение зафиксировано в release.yml', () => {
+    const line = releaseYml.split(/\r?\n/).filter(function (l) {
+      return l.indexOf('grep -zvE') !== -1;
+    })[0];
+    expect(line).toContain('\\.md$');            // фильтр .md на месте
+    expect(releaseYml).toContain('LOW-5');       // решение в коде, а не только в голове
+    expect(releaseYml).toContain('README.md в ZIP НЕ включается');
+    expect(releaseYml).toContain('docs/index.html');
+  });
 });

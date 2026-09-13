@@ -1,4 +1,4 @@
-﻿/**
+/**
  * T1 (v1.16): оракул archive-complete (легитимный ТЕРМИНАЛЬНЫЙ источник) и пины
  * того, что H9/H10-гейты НЕ ослаблены.
  *
@@ -431,5 +431,127 @@ describe('T1: options.js — импорт архива и индикатор и�
         } catch (e) { reject(e); }
       }, 0);
     });
+  });
+});
+
+// =====================================================================================
+// Е) LOW-1 (аудит перед релизом): потолок размера файла архива.
+// Архив читается FileReader'ом ЦЕЛИКОМ в память, поэтому файл больше
+// MAX_ARCHIVE_SIZE отклоняется ДО readAsText — понятной ошибкой пользователю,
+// а не подвисанием вкладки. Файл в пределах порога читается как раньше.
+// =====================================================================================
+describe('LOW-1: потолок MAX_ARCHIVE_SIZE при импорте архива', () => {
+  const FIXTURE = path.join(ROOT, 'tests', 'fixtures', 'archive', 'claude-conversations.json');
+
+  // Своя (минимальная) обвязка: модуль настроек берётся из ЭТОГО describe —
+  // переменная mod выше блочная и здесь недоступна.
+  let modLow1;
+
+  function chromeMockLow1() {
+    return {
+      runtime: { getManifest: function () { return { version: '1.18.0' }; }, getURL: function () { return 'print.html'; }, lastError: null, sendMessage: function () { } },
+      storage: {
+        sync: { get: function (keys, cb) { cb({}); }, set: function () { } },
+        local: {
+          get: function (keys, cb) { cb({}); },
+          getKeys: function (cb) { cb([]); },
+          set: function (obj, cb) { if (cb) cb(); },
+          remove: function (keys, cb) { if (cb) cb(); }
+        },
+        onChanged: { addListener: function () { } }
+      },
+      tabs: { query: function (q, cb) { cb([]); } }
+    };
+  }
+
+  beforeEach(() => {
+    jest.resetModules();
+    document.body.innerHTML = '';
+    window.AiCmArchiveImport = require('../../utils/archive-import.js');
+    global.chrome = chromeMockLow1();
+    modLow1 = require('../../options/options.js');
+  });
+
+  afterEach(() => {
+    delete global.chrome;
+    delete window.AiCmArchiveImport;
+  });
+
+  test('MAX_ARCHIVE_SIZE — константа 50 МБ в utils/archive-import.js и в API', () => {
+    expect(AI.MAX_ARCHIVE_SIZE).toBe(50 * 1024 * 1024);
+    const src = fs.readFileSync(path.join(ROOT, 'utils', 'archive-import.js'), 'utf8');
+    expect(src).toContain('var MAX_ARCHIVE_SIZE = 50 * 1024 * 1024;');
+  });
+
+  test('файл > порога → ошибка file-too-large с понятным сообщением, файл НЕ читается', (done) => {
+    // Содержимое намеренно валидное: отказ обязан произойти по РАЗМЕРУ, а не по JSON.
+    const text = fs.readFileSync(FIXTURE, 'utf8');
+    const file = new File([text], 'huge-export.json', { type: 'application/json' });
+    Object.defineProperty(file, 'size', { value: AI.MAX_ARCHIVE_SIZE + 1 });
+    const readSpy = jest.spyOn(FileReader.prototype, 'readAsText');
+    modLow1.aiCmImportArchiveFiles([file], function (err, report) {
+      try {
+        expect(err).toBeNull();
+        expect(report.files).toBe(1);
+        expect(report.accepted).toBe(0);
+        expect(Object.keys(report.patch)).toEqual([]);
+        expect(report.errors).toHaveLength(1);
+        expect(report.errors[0].fileName).toBe('huge-export.json');
+        expect(report.errors[0].error).toBe('file-too-large');
+        expect(report.errors[0].limit).toBe(AI.MAX_ARCHIVE_SIZE);
+        expect(report.errors[0].size).toBe(AI.MAX_ARCHIVE_SIZE + 1);
+        expect(report.errors[0].message).toContain('50');
+        expect(readSpy).not.toHaveBeenCalled();
+        readSpy.mockRestore();
+        done();
+      } catch (eAssert) { readSpy.mockRestore(); done(eAssert); }
+    });
+  });
+
+  test('файл < порога читается как раньше (регрессия импорта не допущена)', (done) => {
+    const text = fs.readFileSync(FIXTURE, 'utf8');
+    const file = new File([text], 'claude.json', { type: 'application/json' });
+    expect(file.size).toBeLessThan(AI.MAX_ARCHIVE_SIZE);
+    modLow1.aiCmImportArchiveFiles([file], function (err, report) {
+      try {
+        expect(err).toBeNull();
+        expect(report.errors).toEqual([]);
+        expect(report.conversations).toBe(2);
+        expect(report.accepted).toBe(2);
+        done();
+      } catch (eAssert) { done(eAssert); }
+    });
+  });
+
+  test('граница: ровно MAX_ARCHIVE_SIZE читается (порог — строго больше)', (done) => {
+    const text = fs.readFileSync(FIXTURE, 'utf8');
+    const file = new File([text], 'border.json', { type: 'application/json' });
+    Object.defineProperty(file, 'size', { value: AI.MAX_ARCHIVE_SIZE });
+    modLow1.aiCmImportArchiveFiles([file], function (err, report) {
+      try {
+        expect(err).toBeNull();
+        expect(report.errors).toEqual([]);
+        expect(report.accepted).toBe(2);
+        done();
+      } catch (eAssert) { done(eAssert); }
+    });
+  });
+
+  test('отчёт печатает человекочитаемую причину, а не код', () => {
+    const txt = modLow1.formatArchiveReport({
+      files: 1, conversations: 0, accepted: 0, bytes: 0,
+      skipped: [],
+      errors: [{ fileName: 'huge.json', error: 'file-too-large', message: 'файл слишком большой (больше 50 МБ) — чтение отменено' }]
+    });
+    expect(txt).toContain('файл слишком большой (больше 50 МБ) — чтение отменено');
+  });
+
+  test('гард стоит ДО readAsText (порядок в исходнике options.js)', () => {
+    const guard = OPTIONS_JS.indexOf('file-too-large');
+    const read = OPTIONS_JS.indexOf('reader.readAsText(file)');
+    expect(guard).toBeGreaterThan(-1);
+    expect(read).toBeGreaterThan(guard);
+    expect(OPTIONS_JS).toContain('options_archive_file_too_large');
+    expect(OPTIONS_JS).toContain('API.MAX_ARCHIVE_SIZE');
   });
 });

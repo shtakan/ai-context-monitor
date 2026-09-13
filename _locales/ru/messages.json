@@ -296,6 +296,9 @@
   "options_archive_no_files": {
     "message": "файлы не выбраны"
   },
+  "options_archive_file_too_large": {
+    "message": "файл слишком большой (больше $1 МБ) — чтение отменено"
+  },
   "export_md_title": {
     "message": "# AI Context Monitor — экспорт истории"
   },

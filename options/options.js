@@ -922,6 +922,28 @@ function aiCmImportArchiveFiles(files, onDone) {
     if (idx >= list.length) { onDone(null, report); return; }
     const file = list[idx++];
     report.files++;
+    // LOW-1 (аудит перед релизом): архив читается ЦЕЛИКОМ в память (readAsText),
+    // поэтому файл больше MAX_ARCHIVE_SIZE отклоняется ДО чтения — понятной
+    // ошибкой, а не подвисанием вкладки настроек. Порог — константа модуля
+    // импорта (utils/archive-import.js), здесь не дублируется.
+    const maxArchiveSize = Number(API.MAX_ARCHIVE_SIZE) || 0;
+    const fileSize = Number(file && file.size) || 0;
+    if (maxArchiveSize > 0 && fileSize > maxArchiveSize) {
+      const limitMb = String(Math.round(maxArchiveSize / (1024 * 1024)));
+      report.errors.push({
+        fileName: file.name,
+        error: 'file-too-large',
+        size: fileSize,
+        limit: maxArchiveSize,
+        message: aiCmI18nMessage(
+          'options_archive_file_too_large',
+          'файл слишком большой (больше ' + limitMb + ' МБ) — чтение отменено',
+          [limitMb]
+        )
+      });
+      step();
+      return;
+    }
     let reader;
     try {
       reader = new FileReader();
@@ -986,7 +1008,7 @@ function formatArchiveReport(report) {
     parts.push(aiCmI18nMessage('options_archive_report_skipped', 'пропущено: ' + skippedList, [skippedList]));
   }
   if (report.errors && report.errors.length) {
-    var errorList = report.errors.map(function (e) { return e.fileName + ' (' + e.error + ')'; }).join(', ');
+    var errorList = report.errors.map(function (e) { return e.fileName + ' (' + (e.message || e.error) + ')'; }).join(', ');
     parts.push(aiCmI18nMessage('options_archive_report_errors', 'ошибки: ' + errorList, [errorList]));
   }
   return parts.join(' · ');

@@ -66,6 +66,80 @@ describe('T1: определение формата архива', () => {
   });
 });
 
+// =====================================================================================
+// LOW-3 (аудит перед релизом): цикл «пол > msgs» — агрегат `full` не может быть
+// длиннее суммы отдельных ходов `messages`. Расхождение — аномалия: она обязана
+// логироваться предупреждением, а импорт — отрабатывать КОРРЕКТНО (не падать,
+// источник правды остаётся messages).
+// =====================================================================================
+describe('LOW-3: цикл «пол > msgs» (full длиннее messages)', () => {
+  const ANOMALY_FIXTURE = 'full-longer-than-messages.json';
+
+  test('фикстура распознаётся как архив Claude (аномалия не ломает детекцию)', () => {
+    expect(AI.detectArchiveFormat(loadFixture(ANOMALY_FIXTURE))).toBe(AI.FORMATS.CLAUDE_CONVERSATIONS);
+  });
+
+  test('аномальный диалог детектируется: full.length > sum(messages.text.length), поля честные', () => {
+    const conv = loadFixture(ANOMALY_FIXTURE)[0];
+    const a = AI.detectFullTextAnomaly(conv);
+    expect(a).not.toBeNull();
+    expect(a.code).toBe('full-longer-than-messages');
+    expect(a.convId).toBe('aa11bb22-cc33-4d44-8e55-ff6677889900');
+    expect(a.fullLen).toBe(conv.full.length);
+    expect(a.fullLen).toBeGreaterThan(a.msgsLen);
+    expect(a.over).toBe(a.fullLen - a.msgsLen);
+    expect(a.msgCount).toBe(conv.chat_messages.length);
+  });
+
+  test('нормальный диалог (full == сумма ходов) аномалией НЕ считается', () => {
+    const conv = loadFixture(ANOMALY_FIXTURE)[1];
+    expect(AI.detectFullTextAnomaly(conv)).toBeNull();
+  });
+
+  test('нет поля full / не-строка / пустой full → аномалии нет (тихий no-op)', () => {
+    expect(AI.detectFullTextAnomaly({ messages: [{ role: 'user', text: 'x' }] })).toBeNull();
+    expect(AI.detectFullTextAnomaly({ full: 42, messages: [{ role: 'user', text: 'x' }] })).toBeNull();
+    expect(AI.detectFullTextAnomaly({ full: '   ', messages: [{ role: 'user', text: 'x' }] })).toBeNull();
+    expect(AI.detectFullTextAnomaly(null)).toBeNull();
+  });
+
+  test('collectFullTextAnomalies: в фикстуре ровно один аномальный диалог', () => {
+    const list = AI.collectFullTextAnomalies(loadFixture(ANOMALY_FIXTURE));
+    expect(list).toHaveLength(1);
+    expect(list[0].convId).toBe('aa11bb22-cc33-4d44-8e55-ff6677889900');
+  });
+
+  test('reportFullTextAnomalies: пишет предупреждение (инъекция warn) и возвращает аномалии', () => {
+    const logs = [];
+    const anomalies = AI.reportFullTextAnomalies(loadFixture(ANOMALY_FIXTURE), {
+      warn: function (m) { logs.push(m); }
+    });
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain('аномалия full>messages');
+    expect(logs[0]).toContain('convId=aa11bb22-cc33-4d44-8e55-ff6677889900');
+    expect(anomalies).toHaveLength(1);
+  });
+
+  test('parseArchive: аномалия логируется, но импорт отрабатывает КОРРЕКТНО (messages — источник правды)', () => {
+    const logs = [];
+    const parsed = AI.parseArchive(loadFixture(ANOMALY_FIXTURE), { warn: function (m) { logs.push(m); } });
+    expect(parsed.ok).toBe(true);
+    expect(parsed.format).toBe(AI.FORMATS.CLAUDE_CONVERSATIONS);
+    expect(parsed.conversations).toHaveLength(2);
+    // источник правды — messages; system-ход в архив не попадает
+    expect(parsed.conversations[0].count).toBe(2);
+    expect(parsed.conversations[0].messages.map(function (m) { return m.role; })).toEqual(['user', 'assistant']);
+    expect(logs).toHaveLength(1);
+  });
+
+  test('parseArchive БЕЗ аномалий не пишет в warn (нет ложных срабатываний)', () => {
+    const logs = [];
+    const parsed = AI.parseArchive(loadFixture('claude-conversations.json'), { warn: function (m) { logs.push(m); } });
+    expect(parsed.ok).toBe(true);
+    expect(logs).toEqual([]);
+  });
+});
+
 describe('T1: ключи chrome.storage.local', () => {
   test('aiCmArchive:<convId> и aiCmConvSource:<convId>', () => {
     expect(AI.archiveStorageKey('abc123')).toBe('aiCmArchive:abc123');

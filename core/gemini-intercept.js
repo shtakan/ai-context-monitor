@@ -727,9 +727,14 @@
       };
     }
     window.addEventListener('popstate', function () { try { checkConvChange(); } catch (e) { } });
+    // LOW-4 (аудит перед релизом): passive:true — обработчик только ЗАПИСЫВАЕТ время
+    // скролла (scrollRecentUntil) и никогда не вызывает preventDefault, поэтому браузер
+    // не обязан ждать его завершения перед прокруткой (нет scroll-jank). capture:true
+    // сохранён: скролл контейнера ленты не всплывает до document — фаза захвата
+    // единственная точка, где событие здесь видно.
     document.addEventListener('scroll', function () {
       scrollRecentUntil = Date.now() + 2000;
-    }, true);
+    }, { capture: true, passive: true });
   } catch (e) { }
   // =====================================================================
 

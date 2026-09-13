@@ -296,6 +296,9 @@
   "options_archive_no_files": {
     "message": "no files selected"
   },
+  "options_archive_file_too_large": {
+    "message": "file is too large (over $1 MB) — read cancelled"
+  },
   "export_md_title": {
     "message": "# AI Context Monitor — history export"
   },
