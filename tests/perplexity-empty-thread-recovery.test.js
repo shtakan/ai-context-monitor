@@ -245,7 +245,8 @@ describe('байтово-идентично: непустой тред (сним
 describe('НЕ трогать: маркеры неизменности остальных файлов', () => {
   const root = path.join(__dirname, '..');
   test('gemini-intercept.js: маркер autoscroll-арбитра на месте', () => {
-    const s = fs.readFileSync(path.join(root, 'core', 'gemini-intercept.js'), 'utf8');
+    // v2.0 (этап 2/3): исходник перехватчика — модули + gemini-intercept.js в порядке инъекции
+    const s = require('./helpers/gemini-intercept-source.js').geminiSource;
     expect(s).toContain('[gemini-autoscroll]');
   });
   test('content.js: маркер deferred-flush на месте', () => {

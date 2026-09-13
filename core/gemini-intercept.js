@@ -114,6 +114,46 @@
   var originalXHRSend = OriginalXHR ? OriginalXHR.prototype.send : null;
   var originalSetHeader = OriginalXHR ? OriginalXHR.prototype.setRequestHeader : null;
 
+  // ===== v2.0 (этап 2/3): кластер скрытого скролла вынесен в core/gemini-hidden-scroll.js =====
+  // Модуль подключён в core/background.js ПЕРЕД этим файлом и отдаёт свой API на window.
+  // Состояние ядра передаём геттерами/сеттерами (см. ниже) — модуль и ядро работают с
+  // одними и теми же переменными, а не с копиями. Алиасы сохраняют прежние имена,
+  // поэтому все вызовы внутри ядра (loadFullHistoryInvisibly, finishQuiet, ingest) не тронуты.
+  var aiCmHiddenScroll = (typeof window !== 'undefined' && window.AiCmGeminiHiddenScroll) || null;
+  var findScrollContainer = null;
+  var scheduleAutoScroll = null;
+  if (aiCmHiddenScroll) {
+    aiCmHiddenScroll.__bind({
+      // Функции ядра (декларации хойстятся — значения доступны на момент bind).
+      getConvId: getConvId,
+      loadFloor: loadFloor,
+      sleep: sleep,
+      baseSize: baseSize,
+      aiCmSetScrollOverlay: aiCmSetScrollOverlay,
+      // Живое состояние ядра: геттеры/сеттеры, чтобы чтение и запись модуля
+      // видели ОДНИ И ТЕ ЖЕ переменные IIFE (не копии значений).
+      get autoScrollStarted() { return autoScrollStarted; }, set autoScrollStarted(v) { autoScrollStarted = v; },
+      get autoScrollBlocked() { return autoScrollBlocked; }, set autoScrollBlocked(v) { autoScrollBlocked = v; },
+      get conversationOpenedAt() { return conversationOpenedAt; }, set conversationOpenedAt(v) { conversationOpenedAt = v; },
+      get DOM_READY_MAX_WAIT() { return DOM_READY_MAX_WAIT; },
+      get MIN_HISTORY_ELEMENTS() { return MIN_HISTORY_ELEMENTS; },
+      get pendingCursor() { return pendingCursor; }, set pendingCursor(v) { pendingCursor = v; },
+      get quietActive() { return quietActive; }, set quietActive(v) { quietActive = v; },
+      get parserVersion() { return parserVersion; }, set parserVersion(v) { parserVersion = v; },
+      get cacheRestoredMap() { return cacheRestoredMap; },
+    });
+    findScrollContainer = aiCmHiddenScroll.findScrollContainer;
+    scheduleAutoScroll = aiCmHiddenScroll.scheduleAutoScroll;
+  } else {
+    // Модуль не подключён (например, у уже установленного расширения Chrome не
+    // перечитал содержимое registration с тем же id). Лога не глушим, но и не падаем:
+    // лоадер сам обрабатывает no-scroller, поэтому деградация мягкая.
+    debugLog('log', '[gemini-intercept] core/gemini-hidden-scroll.js не подключён — ' +
+      'скрытый скролл и автостарт лоадера недоступны (проверьте регистрацию content script)');
+    findScrollContainer = function () { return null; };
+    scheduleAutoScroll = function () { };
+  }
+
   // v33: флаг «Подробные логи» транслируется из content.js (ISOLATED) через CustomEvent
   // (в MAIN-мире chrome.storage недоступен — как в остальных перехватчиках)
   try { window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDebugLogs(!!(ev && ev.detail)); }); } catch (e) { }
@@ -201,21 +241,13 @@
   var IDMAP_MAX = 6;
 
   // ---- автоскролл (сбрасывается при смене чата, чтобы собрал историю нового чата) ----
+  // v2.0 (этап 2/3): логика скролла и её константы (AUTO_*, DOM_READY_INTERVAL) переехали
+  // в core/gemini-hidden-scroll.js; здесь остаётся только состояние, общее с ядром.
   var autoScrollStarted = false;
-  var AUTO_STEP_WAIT = 1500;
-  var AUTO_FIND_TRIES = 6;
-  var AUTO_FIND_WAIT = 700;
-  var AUTO_EMPTY_NEED = 3;
-  var AUTO_HARD_CAP = 250;
-  var AUTO_SETTLE_TRIES = 4;
-  var AUTO_SETTLE_WAIT = 250;
   // ---- v4x: готовность DOM перед автоскроллом + retry ----
   var conversationOpenedAt = Date.now(); // время открытия чата (для диагностики auto-scroll)
-  var DOM_READY_INTERVAL = 500;          // интервал замера стабилизации scrollHeight
   var DOM_READY_MAX_WAIT = 5000;         // таймаут ожидания готовности DOM
   var MIN_HISTORY_ELEMENTS = 10;         // порог готовности по числу элементов истории
-  var AUTO_RETRY_MAX = 2;                // максимум повторных скроллов при недоборе
-  var AUTO_RETRY_DELAY = 1500;           // пауза перед retry-скроллом
 
   // ---- тихая пагинация (сбрасывается при смене чата) ----
   var quietActive = false;
@@ -834,12 +866,6 @@
     }
   } catch (e) { }
   // ==== конец v61diag ====
-
-  function tagInfo(el) {
-    var cn = '';
-    try { cn = String(el.className || '').trim().split(/\s+/).slice(0, 2).join('.'); } catch (e) { }
-    return el.tagName.toLowerCase() + (cn ? '.' + cn : '');
-  }
 
   function isHistoryRpc(url) {
     return !!url && url.indexOf('batchexecute') !== -1 && url.indexOf('hNvQHb') !== -1;
@@ -1483,296 +1509,6 @@
     parseByBytes(raw, out, src);
     if (!out.turns.length) parseByLines(raw, out, src);
     return out.turns;
-  }
-
-  // ---- ВИРТУАЛЬНЫЙ СКРОЛЛ: обёртка над контейнером или window ----
-  function makeScroller(el) {
-    if (!el) {
-      var de = document.scrollingElement || document.documentElement;
-      return {
-        mode: 'window', el: de, tag: 'window',
-        top: function () { return de.scrollTop; },
-        setTop: function (v) { de.scrollTop = v; },
-        client: function () { return window.innerHeight; },
-        height: function () { return de.scrollHeight; }
-      };
-    }
-    return {
-      mode: 'el', el: el, tag: tagInfo(el),
-      top: function () { return el.scrollTop; },
-      setTop: function (v) { el.scrollTop = v; },
-      client: function () { return el.clientHeight; },
-      height: function () { return el.scrollHeight; }
-    };
-  }
-
-  function findScrollContainer() {
-    var HINT = /conversation|message|chat-turn|response|scroll|turn-list|infinite|virtual/i;
-    var all = document.querySelectorAll('*');
-    var hinted = null, best = null, bestH = -1;
-    for (var i = 0; i < all.length; i++) {
-      var el = all[i];
-      if (el === document.body || el === document.documentElement) continue;
-      var st = '';
-      try { st = getComputedStyle(el).overflowY; } catch (e) { continue; }
-      if (st !== 'auto' && st !== 'scroll' && st !== 'overlay') continue;
-      var sh = el.scrollHeight, ch = el.clientHeight;
-      if (sh <= ch + 50) continue;
-      var hay = '';
-      try { hay = (el.className || '') + ' ' + (el.id || ''); } catch (e) { }
-      if (HINT.test(hay)) { if (!hinted || sh > hinted.height()) hinted = makeScroller(el); }
-      if (sh > bestH) { bestH = sh; best = makeScroller(el); }
-    }
-    if (hinted) return hinted;
-    if (best) return best;
-    var de = document.scrollingElement || document.documentElement;
-    if (de.scrollHeight > window.innerHeight + 50) return makeScroller(null);
-    return null;
-  }
-
-  function rontgenScroll() {
-    var all = document.querySelectorAll('*');
-    var arr = [];
-    for (var i = 0; i < all.length; i++) {
-      var el = all[i];
-      var sh = el.scrollHeight, ch = el.clientHeight;
-      if (sh > ch + 50) {
-        var st = ''; try { st = getComputedStyle(el).overflowY; } catch (e) { st = '?'; }
-        arr.push({ d: sh - ch, t: tagInfo(el), ov: st });
-      }
-    }
-    arr.sort(function (a, b) { return b.d - a.d; });
-    var top = arr.slice(0, 8).map(function (x) { return x.t + '(ov=' + x.ov + ',+' + x.d + ')'; });
-    var de = document.scrollingElement || document.documentElement;
-    debugLog('log', '[gemini-autoscroll] РЕНТГЕН скролла: windowScrollH=' + de.scrollHeight + ' innerH=' + window.innerHeight +
-      ' | топ переполненных (тег ov=overflow +переполнение): ' + (top.join(' || ') || '(нет)') +
-      '  ← если ov=hidden у ленты, скролл не нативный (JS) и scrollTop не сработает');
-  }
-
-  function countHistoryElements() {
-    try {
-      var sel = 'turn-container, [data-turn], .user-query, [data-role="user"], [data-role="model"], .model-response, .query-text, .response-content';
-      return document.querySelectorAll(sel).length;
-    } catch (e) { return 0; }
-  }
-
-  // Ожидание готовности DOM перед стартом скролла: ждём стабилизации scrollHeight
-  // (3 замера с интервалом, разница < 100px) ИЛИ появления > MIN_HISTORY_ELEMENTS элементов.
-  // Таймаут DOM_READY_MAX_WAIT. Логику стабилизации берём из чистой логики (если доступна).
-  async function waitForDomReady(sc) {
-    var startedAt = Date.now();
-    var state = null;
-    var hasLogic = typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.newDomReadiness && window.GeminiInterceptLogic.advanceReadiness;
-    if (hasLogic) state = window.GeminiInterceptLogic.newDomReadiness();
-    else state = { samples: [] };
-    // Ожидаемое число элементов из пола (localStorage) — критерий elements==expected.
-    var expected = expectedTurnsFromStorage();
-    if (!expected || expected <= 0) {
-      debugLog('log', '[gemini-autoscroll] ожидаемых=0 → readiness по элементам отключён (только стабилизация scrollHeight); причина=' +
-        expectedFloorAbsenceReason());
-    } else {
-      debugLog('log', '[gemini-autoscroll] readiness: ожидаемых=' + expected + ' (пол из localStorage)');
-    }
-    var lastH = sc ? sc.height() : 0;
-    var lastElems = 0;
-    while (Date.now() - startedAt < DOM_READY_MAX_WAIT) {
-      var h = sc ? sc.height() : (document.scrollingElement ? document.scrollingElement.scrollHeight : 0);
-      var elems = countHistoryElements();
-      lastH = h;
-      lastElems = elems;
-      var ready = false, reason = 'pending';
-      if (hasLogic) {
-        var r = window.GeminiInterceptLogic.advanceReadiness(state, h, elems, expected);
-        ready = r.ready;
-        reason = r.reason;
-      } else {
-        ready = elems > MIN_HISTORY_ELEMENTS;
-        reason = ready ? ('fallback-elements:' + elems) : 'fallback-pending';
-      }
-      if (ready) {
-        return { ok: true, reason: reason, elapsed: Date.now() - startedAt, scrollH: h, elements: elems, expected: expected };
-      }
-      await sleep(DOM_READY_INTERVAL);
-    }
-    return { ok: false, reason: 'timeout', elapsed: Date.now() - startedAt, scrollH: lastH, elements: lastElems, expected: expected };
-  }
-
-  function triggerUp(sc) {
-    try {
-      sc.setTop(0);
-      var target = (sc.mode === 'el') ? sc.el : window;
-      try {
-        target.dispatchEvent(new WheelEvent('wheel', { deltaY: -1200, deltaMode: 0, bubbles: true, cancelable: true }));
-      } catch (e) { }
-      try { target.dispatchEvent(new Event('scroll', { bubbles: true })); } catch (e) { }
-    } catch (e) { }
-  }
-
-  async function settleBottom(sc) {
-    for (var i = 0; i < AUTO_SETTLE_TRIES; i++) {
-      try { sc.setTop(sc.height()); } catch (e) { }
-      await sleep(AUTO_SETTLE_WAIT);
-    }
-  }
-
-  function scheduleAutoScroll() {
-    if (autoScrollStarted) return;
-    // v20: блокировка автоскролла до первого валидного снимка нового чата
-    if (autoScrollBlocked) {
-      debugLog('log', '[gemini-autoscroll] заблокирован до первого валидного снимка нового чата');
-      return;
-    }
-    autoScrollStarted = true;
-    setTimeout(autoScrollCollect, 1200);
-  }
-
-  // v4x: ожидаемое число ходов из прошлых замеров (пол из localStorage, сохранённый при полной сборке).
-  // Возвращает 0, если пола нет — тогда retry не задействуется (не с чем сравнивать).
-  function expectedTurnsFromStorage() {
-    try {
-      var fid = getConvId();
-      var sf = fid ? loadFloor(fid) : null;
-      return (sf && sf.count) ? sf.count : 0;
-    } catch (e) { return 0; }
-  }
-
-  // Причина нулевого пола/ожидаемых — через чистую логику (гв ключа g3 и т.п.).
-  function expectedFloorAbsenceReason() {
-    try {
-      var fid = getConvId();
-      if (typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.diagnoseFloorAbsence) {
-        return window.GeminiInterceptLogic.diagnoseFloorAbsence(fid, parserVersion, localStorage);
-      }
-      return (fid ? 'no-logic' : 'no-conv');
-    } catch (e) { return 'err'; }
-  }
-
-  // v4x: нужен ли повторный скролл. actualTurns/expectedTurns — число ходов (сообщений).
-  function retryNeededAutoscroll(actualTurns, expectedTurns, retryCount) {
-    if (typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.shouldRetryAutoscroll) {
-      return window.GeminiInterceptLogic.shouldRetryAutoscroll(actualTurns, expectedTurns, retryCount, AUTO_RETRY_MAX);
-    }
-    if (!expectedTurns || expectedTurns <= 0) return false;
-    if (retryCount >= AUTO_RETRY_MAX) return false;
-    return actualTurns < expectedTurns;
-  }
-
-  async function autoScrollCollect() {
-    // v20: двойная страховка — если флаг всё ещё взведён (например, вызвано напрямую)
-    if (autoScrollBlocked) {
-      debugLog('log', '[gemini-autoscroll] заблокирован (проверка в autoScrollCollect)');
-      return;
-    }
-    // v75 (фаза 2): кэш-лента восстановлена (cache-complete) и новой пагинации нет —
-    // hide и принудительный autoscroll полностью отключены: экран не дёргаем.
-    try {
-      var cid75 = getConvId();
-      if (cid75 && cacheRestoredMap.has(cid75) && !quietActive && !pendingCursor) {
-        debugLog('log', '[gemini-autoscroll] skip reason=cache-hit-no-pagination convId=' + cid75 +
-          ' msgs=' + baseSize() + ' (hide и принудительный скролл отключены, v75)');
-        return;
-      }
-    } catch (eCache75) { }
-    // v33: контейнер, скрытый на время автоскролла (дозагрузка невидима для пользователя)
-    var hiddenEl = null;
-    function __restoreAutoscrollVisibility() {
-      if (hiddenEl) {
-        aiCmSetScrollOverlay(false, 'autoscroll-done'); // v75: DOM не прятали
-        debugLog('log', '[AI CM][visibility] restore reason=autoscroll-done convId=' + (getConvId() || '(none)'));
-        hiddenEl = null;
-      }
-    }
-    try {
-      var sc = null;
-      for (var attempt = 0; attempt < AUTO_FIND_TRIES; attempt++) {
-        sc = findScrollContainer();
-        if (sc) break;
-        await sleep(AUTO_FIND_WAIT);
-      }
-      if (!sc) {
-        debugLog('log', '[gemini-autoscroll] скролл-контейнер не найден за ' + AUTO_FIND_TRIES + ' попыток → автоскролл пропущен (рентген ниже)');
-        rontgenScroll();
-        return;
-      }
-
-      // v4x: детектор готовности DOM — ждём стабилизации scrollHeight или появления элементов истории
-      // перед стартом скролла (ленивая подгрузка истории Gemini даёт растущий scrollHeight).
-      var ready = await waitForDomReady(sc);
-      debugLog('log', '[gemini-autoscroll] готовность DOM: ' + (ready.ok ? 'ok' : 'TIMEOUT') +
-        ' reason=' + ready.reason + ' элементы=' + ready.elements + ' scrollH=' + ready.scrollH + ' elapsed=' + ready.elapsed + 'ms');
-
-      if (sc.height() <= sc.client() + 50) {
-        debugLog('log', '[gemini-autoscroll] история помещается без скролла (' + sc.tag + ' scrollH=' + sc.height() +
-          ' ≈ clientH=' + sc.client() + ') → автоскролл не нужен');
-        return;
-      }
-
-      var expectedTurns = expectedTurnsFromStorage();
-      var openedMs = Date.now() - conversationOpenedAt;
-      var prevSmooth = '';
-      if (sc.mode === 'el') { try { prevSmooth = sc.el.style.scrollBehavior; sc.el.style.scrollBehavior = 'auto'; } catch (e) { } }
-
-      // v33→v75: контейнер НЕ прячем — только прозрачный оверлей (DOM чата не трогается);
-      // восстановление — после цикла и в catch.
-      if (sc.mode === 'el' && sc.el) {
-        hiddenEl = true; // v75: маркер «оверлей применён»
-        aiCmSetScrollOverlay(true, 'autoscroll');
-        debugLog('log', '[AI CM][visibility] hide reason=autoscroll-overlay convId=' + (getConvId() || '(none)'));
-      }
-
-      var startSize = baseSize();
-      var startH = sc.height();
-      var startElems = countHistoryElements();
-      debugLog('log', '[gemini-autoscroll] старт: элементов=' + startElems + ' scrollH=' + startH +
-        ' время_открытия=' + openedMs + 'ms' + ' (ходов_в_базе=' + startSize + ', ожидаемых=' + expectedTurns + ')');
-
-      var retry = 0;
-      var scrollStartAt = Date.now();
-      for (; ;) {
-        var emptyStreak = 0;
-        var lastH = sc.height(), lastB = baseSize();
-        var stoppedBy = 'hard-cap';
-        var i = 0;
-        for (i = 0; i < AUTO_HARD_CAP; i++) {
-          triggerUp(sc);
-          await sleep(AUTO_STEP_WAIT);
-          var curH = sc.height(), curB = baseSize();
-          var grew = (curH > lastH) || (curB > lastB);
-          if (grew) emptyStreak = 0; else emptyStreak++;
-          if (grew) {
-            debugLog('log', '[gemini-autoscroll] шаг ' + i + ': scrollH ' + lastH + '→' + curH +
-              ', ходов ' + lastB + '→' + curB + ', empty=' + emptyStreak);
-          }
-          lastH = curH; lastB = curB;
-          if (emptyStreak >= AUTO_EMPTY_NEED) { stoppedBy = 'empty*' + AUTO_EMPTY_NEED; break; }
-        }
-
-        await settleBottom(sc);
-
-        var finalSize = baseSize();
-        var finalH = sc.height();
-        var finalElems = countHistoryElements();
-        var needRetry = retryNeededAutoscroll(finalSize, expectedTurns, retry);
-        if (needRetry) {
-          retry++;
-          debugLog('log', '[gemini-autoscroll] недобор: ходов ' + finalSize + ' < ожидаемых ' + expectedTurns +
-            ' → retry ' + retry + ' через ' + AUTO_RETRY_DELAY + 'ms');
-          await sleep(AUTO_RETRY_DELAY);
-          continue;
-        }
-
-        var scrollMs = Date.now() - scrollStartAt;
-        if (sc.mode === 'el') { try { sc.el.style.scrollBehavior = prevSmooth; } catch (e) { } }
-        __restoreAutoscrollVisibility();
-        debugLog('log', '[gemini-autoscroll] конец: элементов=' + finalElems + ' scrollH=' + finalH +
-          ' время_скролла=' + scrollMs + 'ms retry=' + retry + ' (ходов ' + startSize + '→' + finalSize +
-          ', стоп=' + stoppedBy + '; возврат в низ)');
-        break;
-      }
-    } catch (e) {
-      __restoreAutoscrollVisibility();
-      debugLog('log', '[gemini-autoscroll] ошибка автоскролла (НЕ критично, ловля работает):', e);
-    }
   }
 
   // ================= v4y: ЛОАДЕР ПОЛНОЙ ИСТОРИИ + АВТОЗАПУСК =================

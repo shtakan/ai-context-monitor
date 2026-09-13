@@ -19,10 +19,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const coreSrc = fs.readFileSync(
-  path.join(__dirname, '..', '..', 'core', 'gemini-intercept.js'),
-  'utf8'
-);
+// v2.0 (этап 2/3): исходник перехватчика — модули + gemini-intercept.js в порядке инъекции
+const coreSrc = require('../helpers/gemini-intercept-source.js').geminiSource;
 
 // --- извлечение гарда (if tapeWasUsedInThisColdStart === true {...} else {...}),
 // внутри которого лежит вызов aiCmSetScrollOverlay(true, '<reason>') ---

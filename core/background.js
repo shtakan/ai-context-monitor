@@ -80,12 +80,13 @@ async function ensureInterceptor() {
       console.log('AI Context Monitor: перехватчик ChatGPT зарегистрирован (мир сайта, document_start)');
     }
 
-    // перехватчик Gemini (новое)
+    // перехватчик Gemini (новое; v2.0, этап 2/3: кластер скрытого скролла вынесен в
+    // core/gemini-hidden-scroll.js — модуль обязан идти ПЕРЕД core/gemini-intercept.js)
     if (ids.indexOf('ai-cm-gemini-intercept') === -1) {
       await registerSafe('ai-cm-gemini-intercept', {
         id: 'ai-cm-gemini-intercept',
         matches: ['https://gemini.google.com/*', 'https://aistudio.google.com/*'],
-        js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-intercept.js'],
+        js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-intercept.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false
