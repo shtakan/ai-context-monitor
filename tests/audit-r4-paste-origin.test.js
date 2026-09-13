@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const contentSrc = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+const contentSrc = require('./helpers/content-source.js').contentSource;
 
 function pasteBlock() {
   const from = contentSrc.indexOf('PASTE-CAPTURE');

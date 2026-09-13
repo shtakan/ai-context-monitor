@@ -15,7 +15,9 @@ const fs = require('fs');
 const path = require('path');
 const ModelConfig = require('../utils/model-config.js');
 
-const CORE = path.join(__dirname, '..', 'core', 'content.js');
+// v2.0 (этап 1/3): исходник контент-скрипта — модули + content.js в порядке manifest.json
+// (tests/helpers/content-source.js). Резолв источника, не ассерты.
+const CORE = require('./helpers/content-source.js').contentSource;
 const OPTIONS_JS = path.join(__dirname, '..', 'options', 'options.js');
 const OPTIONS_HTML = path.join(__dirname, '..', 'options', 'options.html');
 
@@ -146,7 +148,7 @@ describe('H19: интеграция — badge EMIT содержит displayLimit
   });
 
   test('core реально читает оба ключа попапа и делегирует расчёт оверрайду', () => {
-    const src = fs.readFileSync(CORE, 'utf8');
+    const src = CORE;
     expect(src).toContain("chrome.storage.sync.get(['selectedModel', 'customLimit']");
     expect(src).toContain('aiCmLoadPopupOverrides();');
     expect(src).toContain('ModelConfig.computeDisplayLimit(modelId, aiCmActivePct())');
@@ -155,7 +157,7 @@ describe('H19: интеграция — badge EMIT содержит displayLimit
   });
 
   test('контракт badge-EMIT/виджета не изменён (те же литералы)', () => {
-    const src = fs.readFileSync(CORE, 'utf8');
+    const src = CORE;
     expect(src).toContain("'[AI CM][trace] badge-update pct=' + percentage + '% tokens=' + tokens + ' model=' + modelName");
     expect(src).toContain('updateWidget(percentage, maxTokenCount, effectiveLimit, contextLimit, displayLimit, ModelConfig.getModel(modelId)?.name || modelId, netAttachBreak);');
     expect(src).toContain('limit: displayLimit,');
@@ -180,7 +182,7 @@ describe('H19 (г): дефолтный путь байтово идентиче�
   });
 
   test('поле = 100 трактуется как «Авто» и в UI-тексте (aiCmActivePct → null)', () => {
-    const src = fs.readFileSync(CORE, 'utf8');
+    const src = CORE;
     expect(src).toContain('popupLimitPct > 0 && popupLimitPct !== 100');
   });
 
@@ -327,7 +329,7 @@ describe('H19: options — поле «Лимит контекста» = % от �
 
 describe('H19: «НЕ трогать» — гейты/оракулы/виджет-EMIT на месте', () => {
   test('core: автоэкспорт-гейты, deferred-запись истории, tape/floor-обвязка', () => {
-    const src = fs.readFileSync(CORE, 'utf8');
+    const src = CORE;
     expect(src).toContain('function maybeAutoExport(');
     expect(src).toContain('shouldSkipAutoExport');
     expect(src).toContain('function aiCmWriteCurrentHistory()');

@@ -18,7 +18,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const CORE = path.join(__dirname, '..', 'core', 'content.js');
+// v2.0 (этап 1/3): исходник контент-скрипта — модули + content.js в порядке manifest.json
+const CORE = require('./helpers/content-source.js').contentSource;
 const FIXTURE = path.join(__dirname, 'fixtures', 'autoexport-log-order-h21.txt');
 
 const FIRED = '[AI CM][auto-export] fired convId=';
@@ -64,7 +65,7 @@ describe('H21: fixture-сессия логов — fired ДО already-fired', ()
 });
 
 describe('H21: пин порядка в core/content.js', () => {
-  const src = fs.readFileSync(CORE, 'utf8');
+  const src = CORE;
 
   test('латч fired пишется и логируется ДО любого последующего already-fired', () => {
     // (1) в doAutoExportDownload: сначала markAutoExportFired (+ session-патч), затем лог fired

@@ -22,7 +22,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const INTERCEPT = path.join(ROOT, 'core', 'claude-intercept.js');
-const CONTENT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+const CONTENT_SRC = require('./helpers/content-source.js').contentSource;
 const INTERCEPT_SRC = fs.readFileSync(INTERCEPT, 'utf8');
 
 const CONV = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'claude-conversation.json'), 'utf8'));

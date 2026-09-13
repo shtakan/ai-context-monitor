@@ -29,7 +29,7 @@ const Builders = require('../utils/export-text-builders.js');
 const buildReferenceText = require('../utils/buildReferenceText.js');
 
 const ROOT = path.join(__dirname, '..');
-const CONTENT = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+const CONTENT = require('./helpers/content-source.js').contentSource;
 const OPTIONS_JS = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
 const OPTIONS_HTML = fs.readFileSync(path.join(ROOT, 'options', 'options.html'), 'utf8');
 

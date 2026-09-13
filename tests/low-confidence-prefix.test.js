@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const P = require('../utils/export-emit-pipeline.js');
 
-const contentSrc = fs.readFileSync(path.join(__dirname, '..', 'core', 'content.js'), 'utf8');
+const contentSrc = require('./helpers/content-source.js').contentSource;
 
 // ---- б) «НЕ трогать»: путь A автоэкспорта и buildExportFileName без изменений ----
 describe('НЕ трогать: неизменность путей', () => {

@@ -53,7 +53,7 @@ describe('Точный подсчёт токенов: миграция на жи
     expect(BG_SRC).toContain('/v1beta/models/');
     expect(BG_SRC).toContain("'x-goog-api-key': apiKey");
     expect(BG_SRC).toContain("return { error: 'all_models_failed' };");
-    const contentSrc = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+    const contentSrc = require('./helpers/content-source.js').contentSource;
     expect(contentSrc).toMatch(/exactCountEnabled[\s\S]{0,160}baseComplete/);
   });
 

@@ -36,7 +36,7 @@ const GIL = require('../../utils/gemini-intercept-logic.js');
 
 const ROOT = path.join(__dirname, '..', '..');
 const CORE_GEMINI = fs.readFileSync(path.join(ROOT, 'core', 'gemini-intercept.js'), 'utf8');
-const CORE_CONTENT = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+const CORE_CONTENT = require('../helpers/content-source.js').contentSource;
 
 const PARSER_VERSION = 'g-selfheal';
 const CONV_ID = 'conv-selfheal';

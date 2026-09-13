@@ -18,7 +18,7 @@ const ROOT = path.join(__dirname, '..', '..');
 const Logic = require('../../utils/gemini-intercept-logic.js');
 const AI = require('../../utils/archive-import.js');
 
-const CORE_CONTENT = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+const CORE_CONTENT = require('../helpers/content-source.js').contentSource;
 const CORE_GEMINI = fs.readFileSync(path.join(ROOT, 'core', 'gemini-intercept.js'), 'utf8');
 const OPTIONS_JS = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
 const OPTIONS_HTML = fs.readFileSync(path.join(ROOT, 'options', 'options.html'), 'utf8');

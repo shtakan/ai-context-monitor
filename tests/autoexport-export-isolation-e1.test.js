@@ -27,7 +27,7 @@ const P = require('../utils/export-emit-pipeline.js');
 const Builders = require('../utils/export-text-builders.js');
 
 const ROOT = path.join(__dirname, '..');
-const CONTENT = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+const CONTENT = require('./helpers/content-source.js').contentSource;
 
 // Рез по балансу фигурных скобок (как в tests/gsa-autoexport.test.js).
 function fnDecl(src, name) {

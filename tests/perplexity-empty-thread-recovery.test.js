@@ -249,7 +249,7 @@ describe('НЕ трогать: маркеры неизменности оста�
     expect(s).toContain('[gemini-autoscroll]');
   });
   test('content.js: маркер deferred-flush на месте', () => {
-    const s = fs.readFileSync(path.join(root, 'core', 'content.js'), 'utf8');
+    const s = require('./helpers/content-source.js').contentSource;
     expect(s).toContain("aiCmFlushDeferredHistWrite(cid79, 'base-complete')");
   });
   test('claude-intercept.js и perplexity-parser.js на месте', () => {

@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const contentSrc = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+const contentSrc = require('./helpers/content-source.js').contentSource;
 const parserSrc = fs.readFileSync(path.join(ROOT, 'utils', 'gemini-batchexecute-parser.js'), 'utf8');
 const interceptSrc = fs.readFileSync(path.join(ROOT, 'core', 'gemini-intercept.js'), 'utf8');
 

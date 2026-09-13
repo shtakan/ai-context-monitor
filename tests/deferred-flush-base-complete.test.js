@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const contentSrc = fs.readFileSync(path.join(__dirname, '..', 'core', 'content.js'), 'utf8');
+const contentSrc = require('./helpers/content-source.js').contentSource;
 
 function makeFlushTraced() {
   const start = contentSrc.indexOf('function aiCmFlushDeferredHistWrite');

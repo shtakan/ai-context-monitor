@@ -44,7 +44,9 @@ const manifest = JSON.parse(manifestRaw);
 const optionsHtml = fs.readFileSync(path.join(ROOT, 'options', 'options.html'), 'utf8');
 const printHtml = fs.readFileSync(path.join(ROOT, 'print', 'print.html'), 'utf8');
 const optionsJs = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
-const contentJs = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+// v2.0 (этап 1/3): исходники контент-скрипта — модули + content.js в порядке manifest.json
+// (tests/helpers/content-source.js). Резолв источника, не ассерты.
+const contentSourceMap = require('./helpers/content-source.js');
 const printJs = fs.readFileSync(path.join(ROOT, 'print', 'print.js'), 'utf8');
 const exportBuildersJs = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.js'), 'utf8');
 const i18nApplySrc = fs.readFileSync(path.join(ROOT, 'options', 'i18n-apply.js'), 'utf8');
@@ -58,12 +60,15 @@ const ru = JSON.parse(fs.readFileSync(path.join(ROOT, '_locales', 'ru', 'message
 const en = JSON.parse(fs.readFileSync(path.join(ROOT, '_locales', 'en', 'messages.json'), 'utf8'));
 
 // Источники динамических строк M-4.2 (файл → исходник).
-const DYNAMIC_SOURCES = [
-  ['core/content.js', contentJs],
+// v2.0 (этап 1/3): контент-скрипт — это модули + content.js, поэтому динамические
+// строки ищем во ВСЕХ его файлах (иначе ключи, уехавшие в модуль, выглядели бы мёртвыми).
+const DYNAMIC_SOURCES = contentSourceMap.SOURCES.map(function (rel) {
+  return [rel, contentSourceMap.readSource(rel)];
+}).concat([
   ['options/options.js', optionsJs],
   ['print/print.js', printJs],
   ['utils/export-text-builders.js', exportBuildersJs]
-];
+]);
 
 // Атрибуты разметки, которыми объявляются ключи локали (механика i18n-apply.js).
 const I18N_ATTRS = ['data-i18n', 'data-i18n-placeholder', 'data-i18n-title', 'data-i18n-aria-label'];

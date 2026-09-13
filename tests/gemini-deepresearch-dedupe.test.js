@@ -43,7 +43,7 @@ const path = require('path');
 const P = require('../utils/export-emit-pipeline.js');
 
 const ROOT = path.join(__dirname, '..');
-const CONTENT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+const CONTENT_SRC = require('./helpers/content-source.js').contentSource;
 
 const USER_PROMPT =
   'Проведи глубокое исследование: правомерно ли увольнение водителя трамвая по медицинским показаниям';

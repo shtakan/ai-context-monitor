@@ -24,7 +24,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const CONTENT = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+const CONTENT = require('./helpers/content-source.js').contentSource;
 
 // ---------- извлечение РЕАЛЬНЫХ тел функций/констант из исходника ----------
 function extractFn(src, name) {

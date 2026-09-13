@@ -16,7 +16,7 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.js'), 'utf8');
-const CONTENT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+const CONTENT_SRC = require('./helpers/content-source.js').contentSource;
 
 const DAY_MS = 86400000;
 const TTL_MS = 2592000000; // 30 дней — значение пинуется ниже против core/background.js

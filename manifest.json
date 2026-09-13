@@ -57,6 +57,11 @@
     "utils/buildReferenceText.js",
     "utils/export-text-builders.js",
     "utils/export-emit-pipeline.js",
+    "core/state.js",
+    "core/widget.js",
+    "core/base-handler.js",
+    "core/hybrid-tail.js",
+    "core/export-manager.js",
     "core/content.js"
   ],
   "run_at": "document_idle"

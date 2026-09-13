@@ -20,7 +20,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const CONTENT = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+const CONTENT = require('./helpers/content-source.js').contentSource;
 const INTERCEPT = fs.readFileSync(path.join(ROOT, 'core', 'gemini-intercept.js'), 'utf8');
 
 // ---------- извлечение РЕАЛЬНЫХ тел функций/констант из исходников ----------
