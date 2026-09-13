@@ -1,4 +1,70 @@
 {
+  "content_widget_loading": {
+    "message": "Loading context..."
+  },
+  "content_panel_auto_label": {
+    "message": "Auto threshold"
+  },
+  "content_panel_placeholder": {
+    "message": "Auto"
+  },
+  "content_panel_spin_up": {
+    "message": "increase threshold"
+  },
+  "content_panel_spin_down": {
+    "message": "decrease threshold"
+  },
+  "content_panel_pct_auto": {
+    "message": "% of Auto"
+  },
+  "content_panel_snap_btn": {
+    "message": "📌 Current = 100%"
+  },
+  "content_panel_auto_btn": {
+    "message": "↺ Auto"
+  },
+  "content_panel_hint": {
+    "message": "Threshold as a % of the Auto threshold (the estimated point where the model starts to forget). 100% = same as Auto. Lower = stricter: colors and % are calculated from this threshold. Example: a 10% threshold → yellow when Auto≈5%, red at Auto≈8%."
+  },
+  "content_panel_threshold": {
+    "message": "Threshold $1% = $2 tokens"
+  },
+  "content_panel_auto_status": {
+    "message": "Auto threshold: $1 tokens (= 100% in the field)"
+  },
+  "content_tooltip_limit_pct": {
+    "message": "Limit: $1% of Auto = $2 tokens"
+  },
+  "content_tooltip_limit_auto": {
+    "message": "Limit: Auto = $1 tokens"
+  },
+  "content_tooltip_model": {
+    "message": "Model: $1"
+  },
+  "content_tooltip_tokens": {
+    "message": "Tokens: $1"
+  },
+  "content_tooltip_window": {
+    "message": "Model window: $1"
+  },
+  "content_source_label": {
+    "message": "Source: $1"
+  },
+  "content_tooltip_attachments": {
+    "message": "Attachments ≈ $1 tokens"
+  },
+  "content_tooltip_attach_images": {
+    "message": "· images: $1 pcs ≈ $2 (2 tiles each)"
+  },
+  "content_tooltip_attach_files": {
+    "message": "· files: $1 pcs ≈ $2 (estimated)"
+  },
+  "content_source_archive": {
+    "message": "archive: $1 · $2 messages"
+  },
+  "content_source_live": {
+    "message": "live (network/DOM)"
+  },
   "options_page_title": {
     "message": "AI Context Monitor"
   },
@@ -155,6 +221,102 @@
   "options_archive_hint": {
     "message": "Local exports: Gemini Takeout (MyActivity.json), ChatGPT conversations.json, Claude conversations.json, Perplexity threads. Files are parsed in the browser (FileReader) and are never sent anywhere. The archive is the first tier: it defines the authoritative history floor and provides terminal archive-complete completeness."
   },
+  "options_no_data": {
+    "message": "No data"
+  },
+  "options_no_active_tab": {
+    "message": "No active tab"
+  },
+  "options_open_supported_site": {
+    "message": "Open a supported site"
+  },
+  "options_reload_page": {
+    "message": "Reload the page"
+  },
+  "options_data_from": {
+    "message": " · data from $1"
+  },
+  "options_ready_to_export": {
+    "message": "Ready to export · data from $1"
+  },
+  "options_stale_site_fallback": {
+    "message": "the site"
+  },
+  "options_stale_warning": {
+    "message": "The integration with $1 may be outdated: the site is not returning conversation data. Check for an extension update."
+  },
+  "options_archive_empty": {
+    "message": "No archives imported."
+  },
+  "options_archive_fallback": {
+    "message": "archive"
+  },
+  "options_archive_delete": {
+    "message": "Delete"
+  },
+  "options_archive_deleted": {
+    "message": "archive $1 deleted"
+  },
+  "options_archive_delete_error": {
+    "message": "failed to delete the archive: $1"
+  },
+  "options_archive_reading": {
+    "message": "reading files…"
+  },
+  "options_archive_nothing": {
+    "message": "nothing imported · $1"
+  },
+  "options_archive_done": {
+    "message": "done · $1"
+  },
+  "options_archive_set_error": {
+    "message": "storage write error: $1"
+  },
+  "options_archive_report_files": {
+    "message": "files: $1"
+  },
+  "options_archive_report_conversations": {
+    "message": "conversations: $1"
+  },
+  "options_archive_report_imported": {
+    "message": "imported: $1"
+  },
+  "options_archive_report_kb": {
+    "message": "≈$1 KB"
+  },
+  "options_archive_report_skipped": {
+    "message": "skipped: $1"
+  },
+  "options_archive_report_errors": {
+    "message": "errors: $1"
+  },
+  "options_archive_module_missing": {
+    "message": "import module not loaded (utils/archive-import.js)"
+  },
+  "options_archive_no_files": {
+    "message": "no files selected"
+  },
+  "export_md_title": {
+    "message": "# AI Context Monitor — history export"
+  },
+  "export_md_platform": {
+    "message": "Platform: $1"
+  },
+  "export_md_model": {
+    "message": "Model: $1"
+  },
+  "export_md_date": {
+    "message": "Export date: $1"
+  },
+  "export_md_tokens": {
+    "message": "Tokens: $1 / $2 ($3%)"
+  },
+  "export_md_role_user": {
+    "message": "## User"
+  },
+  "export_md_role_assistant": {
+    "message": "## Assistant"
+  },
   "print_page_title": {
     "message": "AI Context Monitor — printable form"
   },
@@ -163,5 +325,29 @@
   },
   "print_empty_state": {
     "message": "No history was found for this tab. Open a chat on a supported platform and try again."
+  },
+  "print_doc_title": {
+    "message": "AI Context Monitor — conversation history"
+  },
+  "print_meta_platform": {
+    "message": "Platform:"
+  },
+  "print_meta_model": {
+    "message": "Model:"
+  },
+  "print_meta_date": {
+    "message": "Date:"
+  },
+  "print_meta_tokens": {
+    "message": "Tokens:"
+  },
+  "print_empty_body": {
+    "message": "The history is empty: no messages for this tab are stored."
+  },
+  "print_role_user": {
+    "message": "User"
+  },
+  "print_role_assistant": {
+    "message": "Assistant"
   }
 }

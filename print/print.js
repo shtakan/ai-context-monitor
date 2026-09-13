@@ -17,6 +17,20 @@
 (function () {
   'use strict';
 
+  // M-4.2: строки печатной формы берутся из _locales через chrome.i18n.getMessage
+  // (ключи print_* есть и в ru, и в en). chrome.i18n недоступен (jsdom-песочница,
+  // отладочный контекст) → возвращается прежний русский литерал: форма без локали
+  // байтово прежняя. $1..$9 в сообщении локали подставляются substitutions.
+  function aiCmI18nMessage(key, fallback, substitutions) {
+    try {
+      if (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.getMessage === 'function') {
+        var message = substitutions ? chrome.i18n.getMessage(key, substitutions) : chrome.i18n.getMessage(key);
+        if (message) return message;
+      }
+    } catch (eMessage) { }
+    return fallback;
+  }
+
   var SITE_LABELS = {
     'chatgpt': 'ChatGPT',
     'gemini': 'Gemini',
@@ -47,12 +61,12 @@
     var platform = SITE_LABELS[h.site] || h.site || 'AI Chat';
 
     var html = '<div class="doc-header">';
-    html += '<h1>AI Context Monitor — история диалога</h1>';
+    html += '<h1>' + escapeText(aiCmI18nMessage('print_doc_title', 'AI Context Monitor — история диалога')) + '</h1>';
     html += '<div class="doc-meta">';
-    html += '<b>Платформа:</b> ' + escapeText(platform) + '<br>';
-    html += '<b>Модель:</b> ' + escapeText(h.model || '—') + '<br>';
-    html += '<b>Дата:</b> ' + escapeText(formatDateTime(h.updatedAt)) + '<br>';
-    html += '<b>Токены:</b> ' + tokens.toLocaleString() + ' / ' + limit.toLocaleString() +
+    html += '<b>' + escapeText(aiCmI18nMessage('print_meta_platform', 'Платформа:')) + '</b> ' + escapeText(platform) + '<br>';
+    html += '<b>' + escapeText(aiCmI18nMessage('print_meta_model', 'Модель:')) + '</b> ' + escapeText(h.model || '—') + '<br>';
+    html += '<b>' + escapeText(aiCmI18nMessage('print_meta_date', 'Дата:')) + '</b> ' + escapeText(formatDateTime(h.updatedAt)) + '<br>';
+    html += '<b>' + escapeText(aiCmI18nMessage('print_meta_tokens', 'Токены:')) + '</b> ' + tokens.toLocaleString() + ' / ' + limit.toLocaleString() +
       ' (' + percent + '%)';
     html += '</div></div>';
     return html;
@@ -65,7 +79,10 @@
       var role = (msg.role === 'user') ? 'user' : 'assistant';
       var text = (typeof msg.text === 'string') ? msg.text : '';
       html += '<div class="msg-block ' + role + '">';
-      html += '<div class="msg-role">' + escapeText(role === 'user' ? 'Пользователь' : 'Ассистент') + '</div>';
+      // M-4.2: роль — ключ print_role_user / print_role_assistant (ru/en), не хардкод
+      html += '<div class="msg-role">' + escapeText(role === 'user'
+        ? aiCmI18nMessage('print_role_user', 'Пользователь')
+        : aiCmI18nMessage('print_role_assistant', 'Ассистент')) + '</div>';
       html += '<div class="msg-body">' + renderMarkdown(text) + '</div>';
       html += '</div>';
     }
@@ -76,7 +93,7 @@
     var messages = (history && Array.isArray(history.messages)) ? history.messages : [];
     var header = buildHeader(history);
     var body = messages.length ? buildMessages(messages) :
-      '<p>История пуста: в хранилище нет сообщений для этой вкладки.</p>';
+      '<p>' + escapeText(aiCmI18nMessage('print_empty_body', 'История пуста: в хранилище нет сообщений для этой вкладки.')) + '</p>';
     return header + body;
   }
 
@@ -132,15 +149,14 @@
   // (B) Автопечать разрешена РОВНО ОДИН раз за жизненный цикл страницы: повторные вызовы
   //     (двойной init/повторная отрисовка) печати не запускают — иначе первый же сохранённый
   //     PDF оказывается «занят другим приложением» (Chrome перезаписывает файл вторым диалогом).
+  // v1.18 (E-2) + M-4.2: title берётся из локали (print_page_title) с непустым
+  // русским фолбэком для окружений без chrome.i18n.
   var PRINT_TITLE_FALLBACK = 'AI Context Monitor — печатная форма';
   var printInvoked = false;
 
   function ensurePrintTitle() {
     try {
-      var msg = (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.getMessage === 'function')
-        ? (chrome.i18n.getMessage('print_page_title') || '')
-        : '';
-      document.title = msg || PRINT_TITLE_FALLBACK;
+      document.title = aiCmI18nMessage('print_page_title', PRINT_TITLE_FALLBACK);
     } catch (e) {
       document.title = PRINT_TITLE_FALLBACK;
     }

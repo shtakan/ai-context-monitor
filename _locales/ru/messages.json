@@ -1,4 +1,70 @@
 {
+  "content_widget_loading": {
+    "message": "Загрузка контекста..."
+  },
+  "content_panel_auto_label": {
+    "message": "Авто-порог"
+  },
+  "content_panel_placeholder": {
+    "message": "Авто"
+  },
+  "content_panel_spin_up": {
+    "message": "увеличить порог"
+  },
+  "content_panel_spin_down": {
+    "message": "уменьшить порог"
+  },
+  "content_panel_pct_auto": {
+    "message": "% от Авто"
+  },
+  "content_panel_snap_btn": {
+    "message": "📌 Текущее = 100%"
+  },
+  "content_panel_auto_btn": {
+    "message": "↺ Авто"
+  },
+  "content_panel_hint": {
+    "message": "Порог в % от Авто-порога (оценённой точки, где модель начинает забывать). 100% = как Авто. Меньше = строже: цвета и % считаются от этого порога. Пример: порог 10% → жёлтый, когда Авто≈5%, красный при Авто≈8%."
+  },
+  "content_panel_threshold": {
+    "message": "Порог $1% = $2 ток"
+  },
+  "content_panel_auto_status": {
+    "message": "Авто-порог: $1 ток (= 100% в поле)"
+  },
+  "content_tooltip_limit_pct": {
+    "message": "Предел: $1% от Авто = $2 ток"
+  },
+  "content_tooltip_limit_auto": {
+    "message": "Предел: Авто = $1 ток"
+  },
+  "content_tooltip_model": {
+    "message": "Модель: $1"
+  },
+  "content_tooltip_tokens": {
+    "message": "Токены: $1"
+  },
+  "content_tooltip_window": {
+    "message": "Окно модели: $1"
+  },
+  "content_source_label": {
+    "message": "Источник: $1"
+  },
+  "content_tooltip_attachments": {
+    "message": "Вложения ≈ $1 токенов"
+  },
+  "content_tooltip_attach_images": {
+    "message": "· картинки: $1 шт ≈ $2 (по 2 тайла)"
+  },
+  "content_tooltip_attach_files": {
+    "message": "· файлы: $1 шт ≈ $2 (оценочно)"
+  },
+  "content_source_archive": {
+    "message": "архив: $1 · $2 сообщ."
+  },
+  "content_source_live": {
+    "message": "live (сеть/DOM)"
+  },
   "options_page_title": {
     "message": "AI Context Monitor"
   },
@@ -155,6 +221,102 @@
   "options_archive_hint": {
     "message": "Локальные экспорты: Gemini Takeout (MyActivity.json), ChatGPT conversations.json, Claude conversations.json, Perplexity threads. Файлы читаются в браузере (FileReader) и никуда не отправляются. Архив — первый ярус: он задаёт авторитетный пол истории и даёт терминальную полноту archive-complete."
   },
+  "options_no_data": {
+    "message": "Нет данных"
+  },
+  "options_no_active_tab": {
+    "message": "Нет активной вкладки"
+  },
+  "options_open_supported_site": {
+    "message": "Откройте поддерживаемый сайт"
+  },
+  "options_reload_page": {
+    "message": "Обновите страницу"
+  },
+  "options_data_from": {
+    "message": " · данные от $1"
+  },
+  "options_ready_to_export": {
+    "message": "Готово к экспорту · данные от $1"
+  },
+  "options_stale_site_fallback": {
+    "message": "сайтом"
+  },
+  "options_stale_warning": {
+    "message": "Интеграция с $1 могла устареть: сайт не отдаёт данные диалога. Проверьте обновление расширения."
+  },
+  "options_archive_empty": {
+    "message": "Архивы не импортированы."
+  },
+  "options_archive_fallback": {
+    "message": "архив"
+  },
+  "options_archive_delete": {
+    "message": "Удалить"
+  },
+  "options_archive_deleted": {
+    "message": "архив $1 удалён"
+  },
+  "options_archive_delete_error": {
+    "message": "не удалось удалить архив: $1"
+  },
+  "options_archive_reading": {
+    "message": "чтение файлов…"
+  },
+  "options_archive_nothing": {
+    "message": "ничего не импортировано · $1"
+  },
+  "options_archive_done": {
+    "message": "готово · $1"
+  },
+  "options_archive_set_error": {
+    "message": "ошибка записи в хранилище: $1"
+  },
+  "options_archive_report_files": {
+    "message": "файлов: $1"
+  },
+  "options_archive_report_conversations": {
+    "message": "диалогов: $1"
+  },
+  "options_archive_report_imported": {
+    "message": "импортировано: $1"
+  },
+  "options_archive_report_kb": {
+    "message": "≈$1 КБ"
+  },
+  "options_archive_report_skipped": {
+    "message": "пропущено: $1"
+  },
+  "options_archive_report_errors": {
+    "message": "ошибки: $1"
+  },
+  "options_archive_module_missing": {
+    "message": "модуль импорта не загружен (utils/archive-import.js)"
+  },
+  "options_archive_no_files": {
+    "message": "файлы не выбраны"
+  },
+  "export_md_title": {
+    "message": "# AI Context Monitor — экспорт истории"
+  },
+  "export_md_platform": {
+    "message": "Платформа: $1"
+  },
+  "export_md_model": {
+    "message": "Модель: $1"
+  },
+  "export_md_date": {
+    "message": "Дата экспорта: $1"
+  },
+  "export_md_tokens": {
+    "message": "Токены: $1 / $2 ($3%)"
+  },
+  "export_md_role_user": {
+    "message": "## Пользователь"
+  },
+  "export_md_role_assistant": {
+    "message": "## Ассистент"
+  },
   "print_page_title": {
     "message": "AI Context Monitor — печатная форма"
   },
@@ -163,5 +325,29 @@
   },
   "print_empty_state": {
     "message": "История для этой вкладки не найдена. Откройте чат на поддерживаемой платформе и попробуйте ещё раз."
+  },
+  "print_doc_title": {
+    "message": "AI Context Monitor — история диалога"
+  },
+  "print_meta_platform": {
+    "message": "Платформа:"
+  },
+  "print_meta_model": {
+    "message": "Модель:"
+  },
+  "print_meta_date": {
+    "message": "Дата:"
+  },
+  "print_meta_tokens": {
+    "message": "Токены:"
+  },
+  "print_empty_body": {
+    "message": "История пуста: в хранилище нет сообщений для этой вкладки."
+  },
+  "print_role_user": {
+    "message": "Пользователь"
+  },
+  "print_role_assistant": {
+    "message": "Ассистент"
   }
 }

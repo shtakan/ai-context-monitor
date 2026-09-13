@@ -111,15 +111,15 @@ function aiCmPurgeLegacyByokKeys() {
   } catch (ePurge) { }
 }
 
-// ========== M-4 (фаза 3): i18n — строки статусов из _locales ==========
+// ========== M-4 (фаза 3) / M-4.2: i18n — строки интерфейса из _locales ==========
 // Динамические строки страницы настроек берутся из chrome.i18n.getMessage
-// (ключи options_byok_status_set / options_byok_status_unset есть в ru и en).
-// chrome.i18n недоступен (юнит-тесты, отладочный контекст) → прежний русский
-// фолбэк: внешнее поведение и тексты без расширения байтово прежние.
-function aiCmI18nMessage(key, fallback) {
+// (ключи options_* есть в ru и en). chrome.i18n недоступен (юнит-тесты, отладочный
+// контекст) → прежний русский фолбэк: внешнее поведение и тексты без расширения
+// байтово прежние. $1..$9 в сообщении локали подставляются substitutions.
+function aiCmI18nMessage(key, fallback, substitutions) {
   try {
     if (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.getMessage === 'function') {
-      var message = chrome.i18n.getMessage(key);
+      var message = substitutions ? chrome.i18n.getMessage(key, substitutions) : chrome.i18n.getMessage(key);
       if (message) return message;
     }
   } catch (eMessage) { }
@@ -223,7 +223,7 @@ customLimit && customLimit.addEventListener('input', function () {
 customLimit && customLimit.addEventListener('change', function () {
   if (!customLimit.value) {
     aiCmCancelCustomLimitWrite(); // H20: пустое поле — мгновенный null, без дебаунса
-    customLimit.placeholder = 'Авто';
+    customLimit.placeholder = aiCmI18nMessage('options_limit_placeholder', 'Авто');
     chrome.storage.sync.set({ customLimit: null });
   }
 });
@@ -452,7 +452,7 @@ try {
 document.getElementById('reset-limit') && document.getElementById('reset-limit').addEventListener('click', function () {
   aiCmCancelCustomLimitWrite(); // H20: гасим висящий дебаунс — сброс мгновенный
   customLimit.value = '';
-  customLimit.placeholder = 'Авто';
+  customLimit.placeholder = aiCmI18nMessage('options_limit_placeholder', 'Авто');
   chrome.storage.sync.set({ customLimit: null });
 });
 
@@ -505,8 +505,9 @@ function updateStaleWarning(state, tabHost, tabPath) {
   // диалог; на home и неизвестных хостах (isChatHome() === false) — display:none.
   var showStale = !!(state && state.stale === true && isChatHome(tabHost, tabPath));
   if (showStale) {
-    var siteLabel = siteLabels[state.site] || state.site || 'сайтом';
-    staleWarningEl.textContent = 'Интеграция с ' + siteLabel + ' могла устареть: сайт не отдаёт данные диалога. Проверьте обновление расширения.';
+    // M-4.2: фолбэк-название сайта и текст предупреждения — ключи options_*
+    var siteLabel = siteLabels[state.site] || state.site || aiCmI18nMessage('options_stale_site_fallback', 'сайтом');
+    staleWarningEl.textContent = aiCmI18nMessage('options_stale_warning', 'Интеграция с ' + siteLabel + ' могла устареть: сайт не отдаёт данные диалога. Проверьте обновление расширения.', [siteLabel]);
     staleWarningEl.style.display = 'block';
   } else {
     staleWarningEl.style.display = 'none';
@@ -515,7 +516,7 @@ function updateStaleWarning(state, tabHost, tabPath) {
 }
 
 function showNoData(message) {
-  siteEl.textContent = message || 'Нет данных';
+  siteEl.textContent = message || aiCmI18nMessage('options_no_data', 'Нет данных');
   modelEl.textContent = '—';
   tokensEl.textContent = '—';
   limitEl.textContent = '—';
@@ -540,13 +541,13 @@ function loadStats() {
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
       var tab = tabs && tabs[0];
       if (!tab || !tab.url) {
-        showNoData('Нет активной вкладки');
+        showNoData(aiCmI18nMessage('options_no_active_tab', 'Нет активной вкладки'));
         return;
       }
 
       // chrome:// и chrome-extension:// — сразу нет
       if (tab.url.indexOf('chrome://') === 0 || tab.url.indexOf('chrome-extension://') === 0) {
-        showNoData('Откройте поддерживаемый сайт');
+        showNoData(aiCmI18nMessage('options_open_supported_site', 'Откройте поддерживаемый сайт'));
         return;
       }
 
@@ -570,14 +571,15 @@ function loadStats() {
         } else if (cachedState && cachedState.host === tabHost) {
           // v31: свежих данных нет — НЕ сбрасываем экран, показываем последний кэш своего хоста
           updateStatsFromState(cachedState, tabHost, tabPath);
-          siteEl.textContent += ' · данные от ' + formatTime(cachedState.updatedAt);
+          var cachedAt = formatTime(cachedState.updatedAt);
+          siteEl.textContent += aiCmI18nMessage('options_data_from', ' · данные от ' + cachedAt, [cachedAt]);
         } else {
-          showNoData('Откройте поддерживаемый сайт');
+          showNoData(aiCmI18nMessage('options_open_supported_site', 'Откройте поддерживаемый сайт'));
         }
       });
     });
   } catch (e) {
-    showNoData('Обновите страницу');
+    showNoData(aiCmI18nMessage('options_reload_page', 'Обновите страницу'));
   }
 }
 
@@ -646,9 +648,13 @@ function updateExportButtons() {
   if (exportTxtBtn) exportTxtBtn.disabled = !enabled;
   if (exportHintEl) {
     // v31: при наличии кэша того же хоста — пометка времени, как в статистике
-    exportHintEl.textContent = enabled
-      ? 'Готово к экспорту · данные от ' + formatTime(cachedHistory.updatedAt)
-      : 'Откройте поддерживаемый сайт';
+    // M-4.2: обе ветки — ключи options_* (фолбэк — прежний русский текст)
+    if (enabled) {
+      var exportAt = formatTime(cachedHistory.updatedAt);
+      exportHintEl.textContent = aiCmI18nMessage('options_ready_to_export', 'Готово к экспорту · данные от ' + exportAt, [exportAt]);
+    } else {
+      exportHintEl.textContent = aiCmI18nMessage('options_open_supported_site', 'Откройте поддерживаемый сайт');
+    }
   }
 }
 
@@ -902,9 +908,9 @@ function buildArchiveStoragePatch(records, fileName) {
 // onDone(null, report) | onDone(errorString)
 function aiCmImportArchiveFiles(files, onDone) {
   const API = aiCmArchiveApi();
-  if (!API) { onDone('модуль импорта не загружен (utils/archive-import.js)'); return; }
+  if (!API) { onDone(aiCmI18nMessage('options_archive_module_missing', 'модуль импорта не загружен (utils/archive-import.js)')); return; }
   const list = Array.prototype.slice.call(files || []).filter(function (f) { return !!f; }).slice(0, AI_ARCHIVE_MAX_FILES);
-  if (!list.length) { onDone('файлы не выбраны'); return; }
+  if (!list.length) { onDone(aiCmI18nMessage('options_archive_no_files', 'файлы не выбраны')); return; }
 
   const report = {
     files: 0, conversations: 0, accepted: 0, bytes: 0,
@@ -963,17 +969,25 @@ function aiCmImportArchiveFiles(files, onDone) {
 function formatArchiveReport(report) {
   if (!report) return '';
   const parts = [];
-  parts.push('файлов: ' + report.files);
-  parts.push('диалогов: ' + report.conversations);
-  parts.push('импортировано: ' + report.accepted);
-  if (report.bytes) parts.push('≈' + Math.round(report.bytes / 1024) + ' КБ');
+  var nFiles = String(report.files);
+  var nConvs = String(report.conversations);
+  var nAccepted = String(report.accepted);
+  parts.push(aiCmI18nMessage('options_archive_report_files', 'файлов: ' + nFiles, [nFiles]));
+  parts.push(aiCmI18nMessage('options_archive_report_conversations', 'диалогов: ' + nConvs, [nConvs]));
+  parts.push(aiCmI18nMessage('options_archive_report_imported', 'импортировано: ' + nAccepted, [nAccepted]));
+  if (report.bytes) {
+    var kb = String(Math.round(report.bytes / 1024));
+    parts.push(aiCmI18nMessage('options_archive_report_kb', '≈' + kb + ' КБ', [kb]));
+  }
   if (report.skipped && report.skipped.length) {
     const byReason = {};
     report.skipped.forEach(function (s) { byReason[s.reason] = (byReason[s.reason] || 0) + 1; });
-    parts.push('пропущено: ' + Object.keys(byReason).map(function (r) { return r + '×' + byReason[r]; }).join(', '));
+    var skippedList = Object.keys(byReason).map(function (r) { return r + '×' + byReason[r]; }).join(', ');
+    parts.push(aiCmI18nMessage('options_archive_report_skipped', 'пропущено: ' + skippedList, [skippedList]));
   }
   if (report.errors && report.errors.length) {
-    parts.push('ошибки: ' + report.errors.map(function (e) { return e.fileName + ' (' + e.error + ')'; }).join(', '));
+    var errorList = report.errors.map(function (e) { return e.fileName + ' (' + e.error + ')'; }).join(', ');
+    parts.push(aiCmI18nMessage('options_archive_report_errors', 'ошибки: ' + errorList, [errorList]));
   }
   return parts.join(' · ');
 }
@@ -1004,7 +1018,7 @@ function aiCmRenderArchiveList() {
   if (!API) { archiveListEl.textContent = ''; return; }
   aiCmListArchiveSourceKeys(function (convIds) {
     if (!convIds.length) {
-      archiveListEl.textContent = 'Архивы не импортированы.';
+      archiveListEl.textContent = aiCmI18nMessage('options_archive_empty', 'Архивы не импортированы.');
       return;
     }
     const srcKeys = convIds.map(function (cid) { return API.convSourceStorageKey(cid); });
@@ -1016,7 +1030,7 @@ function aiCmRenderArchiveList() {
         row.className = 'archive-item';
         const info = document.createElement('span');
         info.className = 'archive-info';
-        const label = rec ? (rec.label || API.describeSource(rec)) : 'архив';
+        const label = rec ? (rec.label || API.describeSource(rec)) : aiCmI18nMessage('options_archive_fallback', 'архив');
         const when = (rec && rec.importedAt) ? (' · ' + formatTime(rec.importedAt)) : '';
         const file = (rec && rec.fileName) ? (' · ' + rec.fileName) : '';
         info.textContent = cid.slice(0, 8) + ' — ' + label + when + file;
@@ -1024,7 +1038,7 @@ function aiCmRenderArchiveList() {
         const del = document.createElement('button');
         del.className = 'btn-reset archive-del';
         del.type = 'button';
-        del.textContent = 'Удалить';
+        del.textContent = aiCmI18nMessage('options_archive_delete', 'Удалить');
         del.setAttribute('data-conv-id', cid);
         del.addEventListener('click', function () { aiCmDeleteArchive(cid); });
         row.appendChild(del);
@@ -1040,32 +1054,37 @@ function aiCmDeleteArchive(convId) {
   if (!API || !convId) return;
   try {
     chrome.storage.local.remove([API.archiveStorageKey(convId), API.convSourceStorageKey(convId)], function () {
-      aiCmSetArchiveStatus('архив ' + String(convId).slice(0, 8) + ' удалён');
+      var shortId = String(convId).slice(0, 8);
+      aiCmSetArchiveStatus(aiCmI18nMessage('options_archive_deleted', 'архив ' + shortId + ' удалён', [shortId]));
       aiCmRenderArchiveList();
     });
   } catch (eDel) {
-    aiCmSetArchiveStatus('не удалось удалить архив: ' + (eDel && eDel.message || eDel), true);
+    var delErr = String(eDel && eDel.message || eDel);
+    aiCmSetArchiveStatus(aiCmI18nMessage('options_archive_delete_error', 'не удалось удалить архив: ' + delErr, [delErr]), true);
   }
 }
 
 function aiCmApplyArchiveImport() {
   const files = archiveFileInput && archiveFileInput.files;
-  aiCmSetArchiveStatus('чтение файлов…');
+  aiCmSetArchiveStatus(aiCmI18nMessage('options_archive_reading', 'чтение файлов…'));
   aiCmImportArchiveFiles(files, function (err, report) {
     if (err) { aiCmSetArchiveStatus(err, true); return; }
     const keys = Object.keys(report.patch);
     if (!keys.length) {
-      aiCmSetArchiveStatus('ничего не импортировано · ' + formatArchiveReport(report), true);
+      var nothingReport = formatArchiveReport(report);
+      aiCmSetArchiveStatus(aiCmI18nMessage('options_archive_nothing', 'ничего не импортировано · ' + nothingReport, [nothingReport]), true);
       aiCmRenderArchiveList();
       return;
     }
     try {
       chrome.storage.local.set(report.patch, function () {
-        aiCmSetArchiveStatus('готово · ' + formatArchiveReport(report));
+        var doneReport = formatArchiveReport(report);
+        aiCmSetArchiveStatus(aiCmI18nMessage('options_archive_done', 'готово · ' + doneReport, [doneReport]));
         aiCmRenderArchiveList();
       });
     } catch (eSet) {
-      aiCmSetArchiveStatus('ошибка записи в хранилище: ' + (eSet && eSet.message || eSet), true);
+      var setErr = String(eSet && eSet.message || eSet);
+      aiCmSetArchiveStatus(aiCmI18nMessage('options_archive_set_error', 'ошибка записи в хранилище: ' + setErr, [setErr]), true);
     }
   });
 }

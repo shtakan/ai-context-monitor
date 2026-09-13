@@ -11,6 +11,27 @@ function isExtensionValid() {
     return false;
   }
 }
+// ========== M-4.2: i18n пользовательских строк контент-скрипта ==========
+// Динамические строки виджета/тултипа/панели берутся из _locales через
+// chrome.i18n.getMessage (ключи content_* есть и в ru, и в en). chrome.i18n недоступен
+// (jsdom-тесты, изолированные песочницы, отладочный контекст) → возвращается прежний
+// русский литерал: внешний вид без локали байтово прежний. $1..$9 в сообщении локали
+// подставляются переданными substitutions (как в chrome.i18n.getMessage(key, [...])).
+function aiCmI18nMessage(key, fallback, substitutions) {
+  try {
+    if (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.getMessage === 'function') {
+      var message = substitutions ? chrome.i18n.getMessage(key, substitutions) : chrome.i18n.getMessage(key);
+      if (message) return message;
+    }
+  } catch (eMessage) { }
+  return fallback;
+}
+
+// ВНИМАНИЕ: функции updateWidget/createWidget/updatePanel/resetConversationState
+// регрессия режет из исходника и исполняет в песочнице без этого хелпера — там каждая
+// берёт локальный резолвер вида `(typeof aiCmI18nMessage === 'function') ? ... : фолбэк`
+// (иначе ReferenceError в песочнице, а не прежняя русская строка).
+
 let currentAdapter = null;
 let observer = null;
 let isInitialized = false;
@@ -604,6 +625,8 @@ function aiCmLoadPopupOverrides() {
 }
 function updatePanel() {
   if (!widgetElement) return;
+  // M-4.2: строки панели — из _locales (content_*); в песочницах без хелпера — фолбэк.
+  const i18n = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key, fallback) { return fallback; };
   const status = widgetElement.querySelector('.ai-cm-limit-text');
   const input = widgetElement.querySelector('.ai-cm-input');
   if (!status) return;
@@ -611,10 +634,10 @@ function updatePanel() {
   const pct = aiCmActivePct();
   if (pct != null) {
     const eff = Math.max(1, Math.round(pct / 100 * effLim));
-    status.textContent = 'Порог ' + pct + '% = ' + eff.toLocaleString() + ' ток';
+    status.textContent = i18n('content_panel_threshold', 'Порог ' + pct + '% = ' + eff.toLocaleString() + ' ток', [String(pct), eff.toLocaleString()]);
     if (input) input.value = pct;
   } else {
-    status.textContent = 'Авто-порог: ' + effLim.toLocaleString() + ' ток (= 100% в поле)';
+    status.textContent = i18n('content_panel_auto_status', 'Авто-порог: ' + effLim.toLocaleString() + ' ток (= 100% в поле)', [effLim.toLocaleString()]);
     if (input) input.value = '';
   }
 }
@@ -752,7 +775,11 @@ function resetConversationState() {
       circle.style.stroke = zoneColor(0);
     }
     if (pt) pt.textContent = '—'; // v1.8.1: «—» вместо ложного 0.0% до первых данных
-    if (tt) tt.innerHTML = 'Загрузка контекста...';
+    if (tt) {
+      // M-4.2: строка загрузки — ключ content_widget_loading (в песочнице без хелпера — фолбэк)
+      const i18n = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key, fallback) { return fallback; };
+      tt.innerHTML = i18n('content_widget_loading', 'Загрузка контекста...');
+    }
   }
   badgeSuppressed = true; // v1.8.1: до первого badge-recv нового convId бейдж не обновляем
   lastWidgetData = null; // v1.8.1: старые данные предыдущего чата более недействительны
@@ -1821,9 +1848,12 @@ function aiCmSourceInfo() {
   var cid = getCurrentConvId() || '';
   var rec = cid ? aiCmConvSourceByConv[cid] : null;
   if (rec && rec.kind === 'archive') {
-    return { kind: 'archive', label: rec.label || ('архив: ' + (rec.format || '?') + ' · ' + (rec.count || 0) + ' сообщ.') };
+    // M-4.2: фолбэк-ярлык архива — ключ content_source_archive (rec.label с импорта не трогаем)
+    var fmt = rec.format || '?';
+    var cnt = String(rec.count || 0);
+    return { kind: 'archive', label: rec.label || aiCmI18nMessage('content_source_archive', 'архив: ' + fmt + ' · ' + cnt + ' сообщ.', [fmt, cnt]) };
   }
-  if (baseSeen) return { kind: 'live', label: 'live (сеть/DOM)' };
+  if (baseSeen) return { kind: 'live', label: aiCmI18nMessage('content_source_live', 'live (сеть/DOM)') };
   return null;
 }
 
@@ -1893,7 +1923,10 @@ function aiCmUpdateSourceIndicator() {
     var panel = widgetElement.querySelector('.ai-widget-panel');
     if (!panel) return;
     var el = panel.querySelector('.ai-cm-source');
-    var want = aiCmSourceLabelNow ? ('Источник: ' + aiCmSourceLabelNow) : '';
+    // M-4.2: строка источника — ключ content_source_label (фолбэк — прежний русский)
+    var want = aiCmSourceLabelNow
+      ? aiCmI18nMessage('content_source_label', 'Источник: ' + aiCmSourceLabelNow, [aiCmSourceLabelNow])
+      : '';
     if (el && el.textContent === want && el.style.display === (want ? 'block' : 'none')) return; // без лишних DOM-записей
     if (!want) {
       if (el) { el.textContent = ''; el.style.display = 'none'; }
@@ -3193,9 +3226,12 @@ window.addEventListener('ai-cm-loader-state', function (ev) {
 // ========== ВИДЖЕТ (со стрелками ▲▼) ==========
 function createWidget() {
   if (document.getElementById('ai-context-widget')) return;
+  // M-4.2: строки разметки виджета — из _locales (ключи content_*); в изолированной
+  // песочнице регрессии хелпера локали нет — остаются прежние русские литералы.
+  const t = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key, fallback) { return fallback; };
   const container = document.createElement('div');
   container.id = 'ai-context-widget';
-  container.innerHTML = `<style> #ai-context-widget { position: fixed; bottom: 24px; right: 24px; z-index: 999999; font-family: var(--w-font); user-select: none; } .ai-widget-circle { width: 64px; height: 64px; position: relative; cursor: pointer; background: var(--w-tooltip-bg); border-radius: 50%; box-shadow: var(--w-shadow); border: var(--w-border); display: flex; align-items: center; justify-content: center; transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1); } .ai-widget-circle:hover { transform: scale(1.06); } .ai-widget-circle svg { width: 88%; height: 88%; transform: rotate(-90deg); } .ai-widget-bg { fill: none; stroke: var(--w-bg-track); stroke-width: 7; } .ai-widget-fill { fill: none; stroke: var(--w-bg-fill); stroke-width: 7; stroke-linecap: round; transition: stroke-dashoffset 0.4s ease; } .ai-widget-text { position: absolute; font-size: 13px; font-weight: 600; color: var(--w-text); letter-spacing: -0.03em; } .ai-widget-tooltip { visibility: hidden; opacity: 0; position: absolute; bottom: 76px; right: 0; background: var(--w-tooltip-bg); color: var(--w-tooltip-text); padding: 8px 12px; border-radius: 8px; font-size: 12px; line-height: 1.4; white-space: nowrap; box-shadow: var(--w-shadow); border: var(--w-border); transition: opacity 0.15s ease, visibility 0.15s ease; } .ai-widget-circle:hover .ai-widget-tooltip { visibility: visible; opacity: 1; } #ai-context-widget.ai-panel-open .ai-widget-tooltip { visibility: hidden !important; opacity: 0 !important; } .ai-widget-panel { display: none; position: absolute; bottom: 76px; right: 0; background: var(--w-tooltip-bg); color: var(--w-tooltip-text); padding: 10px; border-radius: 10px; box-shadow: var(--w-shadow); border: var(--w-border); flex-direction: column; gap: 6px; min-width: 230px; font-size: 12px; line-height: 1.4; z-index: 1000000; white-space: normal; } .ai-widget-panel.open { display: flex; } .ai-cm-limit-text { font-weight: 600; margin-bottom: 2px; } .ai-cm-row { display: flex; align-items: center; gap: 6px; } .ai-cm-input { width: 56px; padding: 4px 6px; border-radius: 6px; border: 1px solid rgba(127,127,127,0.4); background: rgba(127,127,127,0.12); color: inherit; font-family: inherit; font-size: 12px; -webkit-appearance: textfield; -moz-appearance: textfield; appearance: textfield; } .ai-cm-input::-webkit-outer-spin-button, .ai-cm-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; } .ai-cm-spin { display: flex; flex-direction: column; margin-left: -2px; } .ai-cm-spin button { cursor: pointer; border: 1px solid rgba(127,127,127,0.4); background: rgba(127,127,127,0.12); color: inherit; font-size: 8px; line-height: 1; padding: 2px 5px; font-family: inherit; } .ai-cm-spin button:first-child { border-radius: 4px 4px 0 0; border-bottom: none; } .ai-cm-spin button:last-child { border-radius: 0 0 4px 4px; } .ai-cm-spin button:hover { background: rgba(127,127,127,0.32); } .ai-cm-btn { cursor: pointer; border: none; border-radius: 6px; padding: 6px 8px; font-size: 12px; font-family: inherit; background: rgba(127,127,127,0.18); color: inherit; text-align: left; } .ai-cm-btn:hover { background: rgba(127,127,127,0.32); } .ai-cm-hint { opacity: 0.72; font-size: 11px; } </style> <div class="ai-widget-circle"> <svg viewBox="0 0 100 100"> <defs> <linearGradient id="gemini-gradient" x1="0%" y1="0%" x2="100%" y2="100%"> <stop offset="0%" stop-color="#4285F4" /> <stop offset="50%" stop-color="#9B51E0" /> <stop offset="100%" stop-color="#EA4335" /> </linearGradient> </defs> <circle class="ai-widget-bg" cx="50" cy="50" r="43"/> <circle class="ai-widget-fill" cx="50" cy="50" r="43"/> </svg> <div class="ai-widget-text">0.0%</div> <div class="ai-widget-tooltip">Загрузка контекста...</div> </div> <div class="ai-widget-panel"> <div class="ai-cm-limit-text">Авто-порог</div> <div class="ai-cm-row"><input type="number" min="1" max="100" step="1" class="ai-cm-input" placeholder="Авто"><span class="ai-cm-spin"><button type="button" class="ai-cm-spin-up" tabindex="-1" aria-label="увеличить порог">▲</button><button type="button" class="ai-cm-spin-down" tabindex="-1" aria-label="уменьшить порог">▼</button></span><span>% от Авто</span></div> <div class="ai-cm-row"><button class="ai-cm-btn ai-cm-snap">📌 Текущее = 100%</button><button class="ai-cm-btn ai-cm-auto">↺ Авто</button></div> <div class="ai-cm-hint">Порог в % от Авто-порога (оценённой точки, где модель начинает забывать). 100% = как Авто. Меньше = строже: цвета и % считаются от этого порога. Пример: порог 10% → жёлтый, когда Авто≈5%, красный при Авто≈8%.</div> </div>`;
+  container.innerHTML = `<style> #ai-context-widget { position: fixed; bottom: 24px; right: 24px; z-index: 999999; font-family: var(--w-font); user-select: none; } .ai-widget-circle { width: 64px; height: 64px; position: relative; cursor: pointer; background: var(--w-tooltip-bg); border-radius: 50%; box-shadow: var(--w-shadow); border: var(--w-border); display: flex; align-items: center; justify-content: center; transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1); } .ai-widget-circle:hover { transform: scale(1.06); } .ai-widget-circle svg { width: 88%; height: 88%; transform: rotate(-90deg); } .ai-widget-bg { fill: none; stroke: var(--w-bg-track); stroke-width: 7; } .ai-widget-fill { fill: none; stroke: var(--w-bg-fill); stroke-width: 7; stroke-linecap: round; transition: stroke-dashoffset 0.4s ease; } .ai-widget-text { position: absolute; font-size: 13px; font-weight: 600; color: var(--w-text); letter-spacing: -0.03em; } .ai-widget-tooltip { visibility: hidden; opacity: 0; position: absolute; bottom: 76px; right: 0; background: var(--w-tooltip-bg); color: var(--w-tooltip-text); padding: 8px 12px; border-radius: 8px; font-size: 12px; line-height: 1.4; white-space: nowrap; box-shadow: var(--w-shadow); border: var(--w-border); transition: opacity 0.15s ease, visibility 0.15s ease; } .ai-widget-circle:hover .ai-widget-tooltip { visibility: visible; opacity: 1; } #ai-context-widget.ai-panel-open .ai-widget-tooltip { visibility: hidden !important; opacity: 0 !important; } .ai-widget-panel { display: none; position: absolute; bottom: 76px; right: 0; background: var(--w-tooltip-bg); color: var(--w-tooltip-text); padding: 10px; border-radius: 10px; box-shadow: var(--w-shadow); border: var(--w-border); flex-direction: column; gap: 6px; min-width: 230px; font-size: 12px; line-height: 1.4; z-index: 1000000; white-space: normal; } .ai-widget-panel.open { display: flex; } .ai-cm-limit-text { font-weight: 600; margin-bottom: 2px; } .ai-cm-row { display: flex; align-items: center; gap: 6px; } .ai-cm-input { width: 56px; padding: 4px 6px; border-radius: 6px; border: 1px solid rgba(127,127,127,0.4); background: rgba(127,127,127,0.12); color: inherit; font-family: inherit; font-size: 12px; -webkit-appearance: textfield; -moz-appearance: textfield; appearance: textfield; } .ai-cm-input::-webkit-outer-spin-button, .ai-cm-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; } .ai-cm-spin { display: flex; flex-direction: column; margin-left: -2px; } .ai-cm-spin button { cursor: pointer; border: 1px solid rgba(127,127,127,0.4); background: rgba(127,127,127,0.12); color: inherit; font-size: 8px; line-height: 1; padding: 2px 5px; font-family: inherit; } .ai-cm-spin button:first-child { border-radius: 4px 4px 0 0; border-bottom: none; } .ai-cm-spin button:last-child { border-radius: 0 0 4px 4px; } .ai-cm-spin button:hover { background: rgba(127,127,127,0.32); } .ai-cm-btn { cursor: pointer; border: none; border-radius: 6px; padding: 6px 8px; font-size: 12px; font-family: inherit; background: rgba(127,127,127,0.18); color: inherit; text-align: left; } .ai-cm-btn:hover { background: rgba(127,127,127,0.32); } .ai-cm-hint { opacity: 0.72; font-size: 11px; } </style> <div class="ai-widget-circle"> <svg viewBox="0 0 100 100"> <defs> <linearGradient id="gemini-gradient" x1="0%" y1="0%" x2="100%" y2="100%"> <stop offset="0%" stop-color="#4285F4" /> <stop offset="50%" stop-color="#9B51E0" /> <stop offset="100%" stop-color="#EA4335" /> </linearGradient> </defs> <circle class="ai-widget-bg" cx="50" cy="50" r="43"/> <circle class="ai-widget-fill" cx="50" cy="50" r="43"/> </svg> <div class="ai-widget-text">0.0%</div> <div class="ai-widget-tooltip">${t('content_widget_loading', 'Загрузка контекста...')}</div> </div> <div class="ai-widget-panel"> <div class="ai-cm-limit-text">${t('content_panel_auto_label', 'Авто-порог')}</div> <div class="ai-cm-row"><input type="number" min="1" max="100" step="1" class="ai-cm-input" placeholder="${t('content_panel_placeholder', 'Авто')}"><span class="ai-cm-spin"><button type="button" class="ai-cm-spin-up" tabindex="-1" aria-label="${t('content_panel_spin_up', 'увеличить порог')}">▲</button><button type="button" class="ai-cm-spin-down" tabindex="-1" aria-label="${t('content_panel_spin_down', 'уменьшить порог')}">▼</button></span><span>${t('content_panel_pct_auto', '% от Авто')}</span></div> <div class="ai-cm-row"><button class="ai-cm-btn ai-cm-snap">${t('content_panel_snap_btn', '📌 Текущее = 100%')}</button><button class="ai-cm-btn ai-cm-auto">${t('content_panel_auto_btn', '↺ Авто')}</button></div> <div class="ai-cm-hint">${t('content_panel_hint', 'Порог в % от Авто-порога (оценённой точки, где модель начинает забывать). 100% = как Авто. Меньше = строже: цвета и % считаются от этого порога. Пример: порог 10% → жёлтый, когда Авто≈5%, красный при Авто≈8%.')}</div> </div>`;
   document.body.appendChild(container);
   widgetElement = container;
   applyNativeStyles(container);
@@ -3256,24 +3292,28 @@ function updateWidget(percentage, tokens, effectiveLimit, contextLimit, displayL
   circle.style.stroke = zoneColor(percentage);
   percentText.textContent = stale ? '—' : (percentage.toFixed(1) + '%');
   if (tooltip) {
+    // M-4.2: строки тултипа — из _locales (ключи content_tooltip_*/content_source_*);
+    // в изолированной песочнице регрессии хелпера нет — прежние русские литералы.
+    const i18n = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key, fallback) { return fallback; };
     const limPct = aiCmActivePct();
     const limLine = (limPct != null)
-      ? `Предел: ${limPct}% от Авто = ${displayLimit.toLocaleString()} ток`
-      : `Предел: Авто = ${effectiveLimit.toLocaleString()} ток`;
+      ? i18n('content_tooltip_limit_pct', `Предел: ${limPct}% от Авто = ${displayLimit.toLocaleString()} ток`, [String(limPct), displayLimit.toLocaleString()])
+      : i18n('content_tooltip_limit_auto', `Предел: Авто = ${effectiveLimit.toLocaleString()} ток`, [effectiveLimit.toLocaleString()]);
     // v1.10.x: безопасный рендер тултипа (textContent вместо innerHTML)
     const esc = String;
     const lines = [
-      `Модель: ${esc(modelName)}`,
-      `Токены: ${tokens.toLocaleString()}`,
+      i18n('content_tooltip_model', `Модель: ${esc(modelName)}`, [esc(modelName)]),
+      i18n('content_tooltip_tokens', `Токены: ${tokens.toLocaleString()}`, [tokens.toLocaleString()]),
       limLine,
-      `Окно модели: ${contextLimit.toLocaleString()}`
+      i18n('content_tooltip_window', `Окно модели: ${contextLimit.toLocaleString()}`, [contextLimit.toLocaleString()])
     ];
     // T1 (v1.16): индикатор источника (первый ярус — архив / второй — live)
-    try { if (aiCmSourceLabelNow) lines.push(`Источник: ${esc(aiCmSourceLabelNow)}`); } catch (eSrcL) { }
+    try { if (aiCmSourceLabelNow) lines.push(i18n('content_source_label', `Источник: ${esc(aiCmSourceLabelNow)}`, [esc(aiCmSourceLabelNow)])); } catch (eSrcL) { }
     if (attachBreak && (attachBreak.imgCount > 0 || attachBreak.docCount > 0)) {
-      lines.push(`Вложения ≈ ${(attachBreak.imgTokens + attachBreak.docTokens).toLocaleString()} токенов`);
-      if (attachBreak.imgCount > 0) lines.push(`· картинки: ${attachBreak.imgCount} шт ≈ ${attachBreak.imgTokens.toLocaleString()} (по 2 тайла)`);
-      if (attachBreak.docCount > 0) lines.push(`· файлы: ${attachBreak.docCount} шт ≈ ${attachBreak.docTokens.toLocaleString()} (оценочно)`);
+      const attachTotal = (attachBreak.imgTokens + attachBreak.docTokens).toLocaleString();
+      lines.push(i18n('content_tooltip_attachments', `Вложения ≈ ${attachTotal} токенов`, [attachTotal]));
+      if (attachBreak.imgCount > 0) lines.push(i18n('content_tooltip_attach_images', `· картинки: ${attachBreak.imgCount} шт ≈ ${attachBreak.imgTokens.toLocaleString()} (по 2 тайла)`, [String(attachBreak.imgCount), attachBreak.imgTokens.toLocaleString()]));
+      if (attachBreak.docCount > 0) lines.push(i18n('content_tooltip_attach_files', `· файлы: ${attachBreak.docCount} шт ≈ ${attachBreak.docTokens.toLocaleString()} (оценочно)`, [String(attachBreak.docCount), attachBreak.docTokens.toLocaleString()]));
     }
     while (tooltip.firstChild) tooltip.removeChild(tooltip.firstChild);
     lines.forEach((line, i) => {
