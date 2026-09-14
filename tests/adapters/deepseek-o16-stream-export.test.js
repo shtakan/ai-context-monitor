@@ -412,7 +412,7 @@ describe('O-16: source-пины проводки (перехватчик + эк�
     expect(fin).toContain("dispatchStreamState('finalize');");
     expect(fin).not.toContain('resetStreamState()');
     expect(fnDecl(INTERCEPT_SRC, 'beginSseStream')).toContain('resetStreamState();');
-    expect(INTERCEPT_SRC).toContain("console.log('[deepseek-intercept] перехватчик DeepSeek v10 установлен");
+    expect(INTERCEPT_SRC).toContain("console.log('[deepseek-intercept] перехватчик DeepSeek v11 установлен");
   });
 
   test('экспортёр: гейт стоит в единственной точке записи файла (doAutoExportDownload)', () => {

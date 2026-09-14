@@ -1,4 +1,4 @@
-// core/deepseek-intercept.js (v10 = v9 + завершение хода на живом стриме: O-16)
+// core/deepseek-intercept.js (v11 = v10 + полнота базы и turnsMap в SPA-созданном чате: O-17)
 // Перехватчик DeepSeek в МИРЕ САЙТА (world: "MAIN"), document_start. Регистрация — background.js.
 // В этом шаге меняются ТОЛЬКО этот файл и adapters/deepseek-adapter.js (v9: DOM-ветка
 // live-режима — роли ходов и панель reasoning). content.js / page-intercept.js /
@@ -99,6 +99,38 @@
 //   'ai-cm-deepseek-stream-flush' — ISOLATED-мир (core/export-manager.js) по ним
 //   откладывает автоэкспорт на время стрима и флашит буфер для ручного экспорта.
 //   Формат [REASONING]/[ANSWER], токены, парность ходов (O-15) и прочие сервисы не тронуты.
+//
+// v11 (O-17): полнота базы и turnsMap в чате, созданном через SPA (без F5).
+//   СИМПТОМ (живой прогон, чат создан SPA-переходом, страница не перезагружалась):
+//   EMIT идут с baseComplete=false (baseCount=2 → 4, pct=6%), автоэкспорт висит в
+//   deferred до 60s-таймаута и пишет as-is с префиксом [LOW CONFIDENCE]_, ручной экспорт
+//   отдаёт неполную базу. После F5 тот же чат даёт «история ПОЛНАЯ по сети» и полный файл.
+//   ПРИЧИНА 1 (полнота): вердикт полноты выносился ТОЛЬКО по обходу цепочки
+//   (buildActiveChain → reachedRoot) и требовал НЕПУСТОЙ цепочки, дошедшей до корня.
+//   В ветке первичной загрузки страницы (ответ на запрос самой страницы) база непустая —
+//   вердикт есть; в ветке «тихий дозапрос по таймеру» после SPA-смены чата
+//   (scheduleHistoryRefetch → refetchFullHistory → ingestHistory) единственный ответ —
+//   авторитетно ПУСТАЯ база нового чата (is_empty=true, chat_messages=[], current_message_id=null):
+//   ранний `if (!chain.length) return;` оставлял histCompletion.historyComplete=false
+//   НАВСЕГДА, realtime-эмиты наследовали false, гейт O-16 «defer до base-complete» не
+//   разрешался, и файл уходил по аварийному пути. РЕШЕНИЕ: единый критерий полноты для
+//   ОБЕИХ веток — DeepSeek отдаёт историю ОДНИМ ответом без курсора пагинации, поэтому
+//   полнота ставится по САМОМУ ответу (скролл/лоадер/подтверждение начала не нужны):
+//   цепочка дошла до корня ИЛИ база авторитетно пуста (0 ходов = вся история).
+//   MERGE-ответ (пусто при is_empty!==true) полнотой НЕ признаётся — только дозапрос
+//   без cache-параметров (тот же детектор v6, теперь и в ветке дозапроса).
+//   ПРИЧИНА 2 (turnsMap/база): сброс turnsMap стоял ДО проверок снимка, поэтому
+//   пустой/MERGE/усечённый ответ СТИРАЛ уже собранные live-ходы, а следующий realtime-финал
+//   публиковал СХЛОПНУВШУЮСЯ базу (в живом логе: в записи истории msgs=1..2 при 4 ходах в
+//   чате) — авто- и ручной экспорт получали обрезанный состав. РЕШЕНИЕ: turnsMap
+//   сбрасывается ТОЛЬКО для снимка, принятого как авторитетный; пустой/чужой/MERGE-ответ
+//   базу не трогает. Плюс: дозапрос больше не может уйти по URL ПРЕДЫДУЩЕГО чата
+//   (lastHistoryUrl после SPA-перехода) — иначе в базу вливалась чужая история.
+//   ДИАГНОСТИКА: DeepSeek теперь отвечает на мост ai-cm-turns-snap-request/response, поэтому
+//   '[AI CM][turnsMap] snapshot-at-manual msgs=N' показывает РЕАЛЬНОЕ число ходов (раньше
+//   snap=null → msgs=0 firstText="" — выглядело как пустой turnsMap).
+//   Поведение O-15/O-16 сохранено: defer до base-complete остаётся, аварийный путь
+//   deferred-timeout(60s)/as-is с [LOW CONFIDENCE]_ — только для реально неполной базы.
 
 (function () {
   if (window.__aiCmDeepseekInterceptInstalled) return;
@@ -146,7 +178,15 @@
   var historyRefetchDone = false;   // v6: флаг «один дозапрос за загрузку чата»
   // v7: честная полнота базы — проставляется из reachedRoot после ingest (realtime-эмит
   // наследует последнее подтверждённое состояние). Сброс — при смене чата.
-  var histCompletion = { historyComplete: false, reachedRoot: false };
+  // v11 (O-17): baseEmpty — база авторитетно пуста (новый чат создан через SPA): 0 ходов
+  // тоже ПОЛНАЯ история; такие снимки не публикуются (content.js игнорирует пустой text),
+  // но вердикт полноты наследуется следующим непустым эмитом.
+  var histCompletion = { historyComplete: false, reachedRoot: false, baseEmpty: false };
+  // v11 (O-17): параметры последнего эмита — нужны для ре-эмита базы в момент, когда
+  // вердикт полноты меняется 0→1 без изменения текста (пустой ответ дозапроса поверх
+  // уже собранных live-ходов): content.js узнаёт о полноте только из непустого EMIT.
+  var lastBaseServerTokens = 0;
+  var lastBaseChatMode = '';
 
   function resetForNewConversation() {
     turnsMap = {};
@@ -161,6 +201,9 @@
     historyRefetchDone = false;   // v6
     histCompletion.historyComplete = false;  // v7: новая база ещё не подтверждена
     histCompletion.reachedRoot = false;      // v7
+    histCompletion.baseEmpty = false;        // v11 (O-17)
+    lastBaseServerTokens = 0;                // v11 (O-17)
+    lastBaseChatMode = '';                   // v11 (O-17)
     resetStreamState();
     console.log('[deepseek-intercept] смена чата → состояние перехватчика сброшено (convId=' + (currentConvId || '(не чат)') + ')');
     try { window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); } catch (e) { }
@@ -199,6 +242,8 @@
   function emitBaseSnapshot(serverTokens, chatMode) {
     serverTokens = (typeof serverTokens === 'number' && serverTokens > 0) ? serverTokens : 0;
     chatMode = chatMode || '';
+    lastBaseServerTokens = serverTokens;   // v11 (O-17): для ре-эмита при полноте 0→1
+    lastBaseChatMode = chatMode;           // v11 (O-17)
     var ids = Object.keys(turnsMap).sort(function (a, b) {
       return (turnsMap[a].order || 0) - (turnsMap[b].order || 0);
     });
@@ -247,12 +292,51 @@
           },
           historyComplete: histCompletion.historyComplete,   // v7: честно — true только если обход дошёл до корня
           reachedRoot: histCompletion.reachedRoot,           // v7: доказан ли корень (узел без parent_id)
+          baseEmpty: histCompletion.baseEmpty === true,      // v11 (O-17): полнота вынесена по авторитетно пустой базе (наследуется live-эмитами)
           serverTokens: serverTokens
         }
       }));
     } catch (e) { }
     return { count: ids.length, textLen: text.length, lastModel: lastModel, serverTokens: serverTokens, reasoningTurns: reasoningTurns };
   }
+
+  // v11 (O-17): сводка turnsMap для дампов в момент экспорта (aiCmDumpTurnsSnapshot,
+  // core/base-handler.js). DeepSeek раньше на мост не отвечал (мост Gemini), поэтому в живом
+  // логе «snapshot-at-manual msgs=0 firstText=""» читалось как ПУСТОЙ turnsMap, хотя база была
+  // собрана: фолбэк дампа подставляет msgs только когда передан массив, а ручной путь
+  // (content.js) передаёт null. Теперь msgs — реальное число ходов перехватчика.
+  function clipTurnText(t) {
+    try { return String((t && t.text) || '').slice(0, 80).replace(/\s+/g, ' '); } catch (e) { return ''; }
+  }
+  function turnsSnapshot() {
+    var ids = Object.keys(turnsMap).sort(function (a, b) {
+      return (turnsMap[a].order || 0) - (turnsMap[b].order || 0);
+    });
+    var first = ids.length ? turnsMap[ids[0]] : null;
+    var last = ids.length ? turnsMap[ids[ids.length - 1]] : null;
+    return {
+      convId: currentConvId || getConvId() || '',
+      msgs: ids.length,
+      firstText: clipTurnText(first),
+      lastText: clipTurnText(last),
+      baseComplete: histCompletion.historyComplete === true,
+      // v11 (O-17): начало истории на DeepSeek не требует скролла — вердикт полноты тот же,
+      // что и у базы; скролл-подтверждений у сервиса нет вовсе.
+      reachedStart: histCompletion.historyComplete === true,
+      confirmedByScroll: false,
+      scrollEngaged: false,
+      baseMsgs: ids.length,
+      liveCount: ids.length,
+      archiveCount: 0
+    };
+  }
+  try {
+    window.addEventListener('ai-cm-turns-snap-request', function () {
+      try {
+        window.dispatchEvent(new CustomEvent('ai-cm-turns-snap-response', { detail: turnsSnapshot() }));
+      } catch (eTurnsResp) { }
+    });
+  } catch (eTurnsBridge) { }
 
   // ===== СЕКЦИЯ 5: МОДЕЛЬ (походово по thinking_enabled, без DOM) =====
   function getModelSlug(thinkingEnabled) {
@@ -346,11 +430,6 @@
       // Помечаем «ответ для текущего чата обработан» — ДО buildActiveChain и ДО return по пустой цепочке
       lastLoadedConvId = currentConvId;
 
-      // Сначала СБРОС — история = полный авторитетный снимок (условие 3 из рецензии)
-      turnsMap = {};
-      orderCounter = 0;
-      // (attachTokens/attachBreak на 1-м этапе не трогаем — всегда 0)
-
       // Строим Map<message_id, msg>
       var messagesById = {};
       for (var i = 0; i < chatMessages.length; i++) {
@@ -365,22 +444,70 @@
       var chainResult = buildActiveChain(chatSession, messagesById);
       var chain = chainResult.chain;
       var truncated = chainResult.truncated;
-      if (!chain.length) return;
+
+      // v11 (O-17): авторитетно ПУСТАЯ база — сервер явно говорит, что чат пуст
+      // (is_empty=true), либо не отдал ни одного сообщения и не назвал активный узел.
+      // Это ЧАСТЬ протокола (новый чат, созданный SPA-переходом), а не «полнота не доказана»:
+      // вся история такого чата = 0 ходов, курсора пагинации у DeepSeek нет вовсе.
+      var baseEmptyAuthoritative = (chatMessages.length === 0) &&
+        (chatSession.is_empty === true || chatSession.current_message_id == null);
+
+      // v11 (O-17): MERGE/cache-ответ (пустой chat_messages при is_empty!==true) —
+      // снимок НЕ авторитетен. В ветках fetch/XHR этот случай ловит обёртка, но путь тихого
+      // дозапроса после SPA-смены чата (scheduleHistoryRefetch → refetchFullHistory) приходит
+      // сюда напрямую: раньше он стирал turnsMap и молча выходил. Теперь — тот же тихий
+      // дозапрос полной истории без cache_version/cache_reset_at, база не трогается.
+      if (!chain.length && chatMessages.length === 0 && !baseEmptyAuthoritative && !historyRefetchDone) {
+        historyRefetchDone = true;
+        console.log('[deepseek-intercept] пустой кеш (MERGE) без авторитетной пустоты → тихий дозапрос полной истории (без cache_version)');
+        refetchFullHistory(lastHistoryUrl, lastAuthHeaders, currentConvId);
+        return;
+      }
+
+      if (!chain.length) {
+        // v11 (O-17): ЕДИНЫЙ критерий полноты для обеих веток. Пустая цепочка больше не
+        // означает «полнота не доказана»: авторитетно пустая база — полная база (0 ходов).
+        // Вердикт обязателен именно здесь: realtime-эмиты наследуют histCompletion, и без
+        // него на SPA-созданном чате baseComplete не наступал НИКОГДА → гейт O-16 «defer до
+        // base-complete» разрешался только 60s-таймаутом (as-is + [LOW CONFIDENCE]_).
+        if (baseEmptyAuthoritative) {
+          histCompletion.reachedRoot = false;
+          histCompletion.historyComplete = true;
+          histCompletion.baseEmpty = true;
+          console.log('[deepseek-intercept] ✓ база пустая и авторитетная (чат без ходов): история ПОЛНАЯ по сети (0 ходов)');
+          // Поверх уже собранных live-ходов (дозапрос пришёл после первого обмена) полноту
+          // 0→1 надо отдать content.js СРАЗУ: пустой снимок он игнорирует (`!detail.text`),
+          // а следующий непустой EMIT может прийти нескоро — и экспорт ушёл бы по 60s-таймауту.
+          if (Object.keys(turnsMap).length > 0) {
+            emitBaseSnapshot(lastBaseServerTokens, lastBaseChatMode);
+          }
+        }
+        // turnsMap НЕ трогаем: авторитетно пустой ответ не повод стирать live-ходы
+        // (иначе следующий realtime-финал публикует СХЛОПНУВШУЮСЯ базу — живой лог: msgs=1..2
+        // в записи истории при 4 ходах в чате).
+        return;
+      }
 
       // v6: ДЕТЕКТОР УСЕЧЕНИЯ — если цепочка оборвана и дозапрос ещё не делался
       if (truncated && !historyRefetchDone) {
         historyRefetchDone = true;
         // НЕ помечаем loggedHistory = true — лог и диагностический дамп сработают на полной истории
         console.log('[deepseek-intercept] кеш усечён (цепочка оборвана) → тихий дозапрос полной истории (без cache_version)');
-        lastLoadedConvId = currentConvId;
         refetchFullHistory(lastHistoryUrl, lastAuthHeaders, currentConvId);
-        return; // не обрабатываем усечённый ответ — ждём полный
+        return; // не обрабатываем усечённый ответ — ждём полный (собранные live-ходы сохранены)
       }
+
+      // v11 (O-17): снимок ПРИНЯТ как авторитетный — только теперь СБРОС и пересборка
+      // (история = полный авторитетный снимок, условие 3 из рецензии).
+      turnsMap = {};
+      orderCounter = 0;
+      // (attachTokens/attachBreak на 1-м этапе не трогаем — всегда 0)
 
       // v7: честная полнота — true, только если цепочка реально дошла до корня.
       // Дозапрос уже либо выполнен (путь выше), либо не нужен (truncated=false).
       histCompletion.reachedRoot = chainResult.reachedRoot;
       histCompletion.historyComplete = chainResult.reachedRoot && !chainResult.truncated;
+      histCompletion.baseEmpty = false;   // v11 (O-17): база непустая
 
       // chatMode — модель чата (expert/default/null), не влияет на выбор модели
       var chatMode = chatSession.model_type || '';
@@ -1051,11 +1178,33 @@
     }
   }
 
+  // v11 (O-17): КАНОНИЧЕСКИЙ URL полной истории текущего чата (без cache-параметров).
+  // Единственный источник для обоих дозапросов (таймер после SPA-смены чата и детектор
+  // усечения/MERGE) — чужой URL в базу попасть не может по построению.
+  function historyRefetchUrl() {
+    return location.origin + '/api/v0/chat/history_messages?chat_session_id=' + encodeURIComponent(currentConvId);
+  }
+
+  // URL пригоден для дозапроса, только если он про историю И про ЭТОТ чат.
+  // v11 (O-17): после SPA-перехода lastHistoryUrl хранит запрос ПРЕДЫДУЩЕГО чата —
+  // его использование вливало в базу текущего чата чужую историю (ingestHistory идёт
+  // без conv-гарда: гард стоит на вызывающей стороне).
+  function historyUrlForConv(url, convId) {
+    try {
+      if (typeof url !== 'string' || url.indexOf('history_messages') === -1) return '';
+      var urlConv = convIdFromHistoryUrl(url);
+      if (!urlConv) return '';                    // чат в URL не назван — берём канонический
+      if (convId && urlConv !== convId) return '';
+      return stripCacheParams(url);
+    } catch (e) { return ''; }
+  }
+
   // Тихий повторный запрос полной истории БЕЗ cache_version/cache_reset_at
   // Использует originalFetch (нативный fetch ДО нашей обёртки) — рекурсия исключена по построению
   function refetchFullHistory(originalUrl, authHeaders, convId) {
     if (!convId || convId !== currentConvId) { return; }
-    var cleanUrl = stripCacheParams(originalUrl);
+    // v11 (O-17): берём переданный URL ТОЛЬКО если он про этот же чат, иначе — канонический
+    var cleanUrl = historyUrlForConv(originalUrl, convId) || historyRefetchUrl();
     originalFetch(cleanUrl, {
       method: 'GET',
       headers: authHeaders || {}
@@ -1077,9 +1226,8 @@
     historyRefetchTimer = setTimeout(function () {
       try {
         if (currentConvId && currentConvId !== lastLoadedConvId && lastAuthHeaders && (lastAuthHeaders.Authorization || lastAuthHeaders.authorization)) {
-          var url = location.origin + '/api/v0/chat/history_messages?chat_session_id=' + encodeURIComponent(currentConvId);
           console.log('[deepseek-intercept] история не пришла после смены чата → тихий дозапрос по таймеру (convId=' + currentConvId + ')');
-          refetchFullHistory(url, lastAuthHeaders, currentConvId);
+          refetchFullHistory(historyRefetchUrl(), lastAuthHeaders, currentConvId);   // v11 (O-17): канонический URL
         }
       } catch (e) { }
     }, 1000);
@@ -1632,7 +1780,7 @@
   }
 
   // ===== СЕКЦИЯ 14: ФИНАЛ =====
-  console.log('[deepseek-intercept] перехватчик DeepSeek v10 установлен (server-first, walk parent_id, SSE инкрементально И постфактум, USER+ASSISTANT оба хода, ход = user + assistant(reasoning+answer), фрагменты потока как fragments[] истории (без потери контента чанков), терминал хода по BATCH/close/концу тела, historyComplete по reachedRoot, serverTokens из accumulated_token_usage, +self-fetch при MERGE, +per-turn model по thinking_enabled, +modelMode в detail, +timer-refetch on switch, +подавление чужих unhandled fetch, +детектор усечения цепочки с дозапросом, +convId в detail, +unknown-роль без маппинга, +reasoning THINK секциями [REASONING]/[ANSWER], +O-16 живой поток не замораживает ход: повторный финал обогащает текст, probe/flush-мост для экспортёра)');
+  console.log('[deepseek-intercept] перехватчик DeepSeek v11 установлен (server-first, walk parent_id, SSE инкрементально И постфактум, USER+ASSISTANT оба хода, ход = user + assistant(reasoning+answer), фрагменты потока как fragments[] истории (без потери контента чанков), терминал хода по BATCH/close/концу тела, historyComplete по reachedRoot ИЛИ авторитетно пустой базе (O-17: единый критерий для первичной загрузки и тихого дозапроса после SPA-смены чата), turnsMap сбрасывается только принятым снимком (O-17), serverTokens из accumulated_token_usage, +self-fetch при MERGE, +per-turn model по thinking_enabled, +modelMode в detail, +timer-refetch on switch, +подавление чужих unhandled fetch, +детектор усечения цепочки с дозапросом, +convId в detail, +unknown-роль без маппинга, +reasoning THINK секциями [REASONING]/[ANSWER], +O-16 живой поток не замораживает ход: повторный финал обогащает текст, probe/flush-мост для экспортёра, +O-17 мост turnsMap для дампов экспорта)');
 
   // Экспорт для ручного вызова диагностического дампа
   try {
