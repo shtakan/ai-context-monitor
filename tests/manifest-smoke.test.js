@@ -12,7 +12,7 @@
  *   3) permissions: точный список, без "<all_urls>" и без host-паттернов;
  *   4) совместимость: browser_specific_settings/options_ui/page_action/... отсутствуют
  *      (в т.ч. как подстрока в сыром тексте — ловим и вложенные вставки);
- *   5) инварианты аудита: version 1.19.3, default_locale ru, 9 host_permissions;
+ *   5) инварианты аудита: version 2.0.0, default_locale ru, 9 host_permissions;
  *   6) M-4.3: name/description — локализуемые __MSG__-формы, ключи ext_name /
  *      ext_description объявлены в ОБЕИХ локалях (ru — байтово прежние строки).
  *
@@ -33,13 +33,7 @@ const en = JSON.parse(fs.readFileSync(path.join(ROOT, '_locales', 'en', 'message
 const CHROMIUM_MV3_KEYS = [
   'manifest_version', 'name', 'version', 'description', 'default_locale',
   'homepage_url', 'permissions', 'host_permissions', 'background',
-  'content_scripts', 'action', 'icons',
-  // v2.0 (этап 3/3): in-manifest запись архитектурного решения (ES modules в
-  // content scripts не поддерживаются — см. ARCHITECTURE_STANDARDS.md). Форма
-  // "//"-префикса выбрана как единственная, которую Chrome молча игнорирует:
-  // на неё НЕ появляется warning «Unrecognized manifest key», и она не нарушает
-  // запрет privacy-теста на служебные ключи вида `_comment*` (см. tests/privacy.test.js).
-  '//ESM'
+  'content_scripts', 'action', 'icons'
 ];
 
 // Ключи, специфичные для Firefox/Opera/старых сборок MV2 — в Chromium-MV3 пакете
@@ -102,7 +96,7 @@ describe('LOW-2: manifest.json — smoke-тест состава ключей (C
   });
 
   test('инварианты аудита не тронуты: version, default_locale, background, popup, content_scripts', () => {
-    expect(manifest.version).toBe('1.19.3');
+    expect(manifest.version).toBe('2.0.0');
     expect(manifest.default_locale).toBe('ru');
     expect(manifest.background.service_worker).toBe('core/background.js');
     expect(manifest.action.default_popup).toBe('options/options.html');

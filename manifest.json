@@ -1,20 +1,8 @@
 {
   "manifest_version": 3,
 
-  "//ESM": [
-    "РЕШЕНИЕ (v2.0, этап 3/3): статические ES modules для content scripts НЕ используются —",
-    "проверено на Chrome 153.0.8010.36 и Edge 153.0.4234.32. Ключ \"type\":\"module\" в",
-    "content_scripts Chrome игнорирует ('Cannot use import statement outside a module'), а",
-    "chrome.scripting.registerContentScripts отвергает поле 'type' схемой API ('Unexpected",
-    "property: \"type\"') — и в world 'ISOLATED', и в world 'MAIN'. Поэтому content_scripts[0].js",
-    "ниже остаётся классическим списком (порядок = порядок исполнения, единый скоуп через",
-    "window.AiCm*), а реальные import ядра gemini-intercept отложены до введения БАНДЛЕРА",
-    "(отдельное решение; в этом коммите бандлер не вводится).",
-    "Обоснование и пробы — ARCHITECTURE_STANDARDS.md, раздел 'ES modules в content scripts'."
-  ],
-
   "name": "__MSG_ext_name__",
-  "version": "1.19.3",
+  "version": "2.0.0",
   "description": "__MSG_ext_description__",
   "default_locale": "ru",
 

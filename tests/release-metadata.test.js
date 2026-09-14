@@ -27,7 +27,7 @@ const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'u
 const releaseYml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'release.yml'), 'utf8');
 const releaseChecklist = fs.existsSync(CHECKLIST_PATH) ? fs.readFileSync(CHECKLIST_PATH, 'utf8') : '';
 
-// CI-хотфикс v1.19.3: tools/ — gitignored-артефакт (см. .gitignore), в чистом чекауте
+// CI-хотфикс (релиз 1.19.x): tools/ — gitignored-артефакт (см. .gitignore), в чистом чекауте
 // его нет. Тогда весь набор пинов листинга уходит в ЯВНЫЙ skip с причиной в выводе,
 // вместо красного прогона. При наличии файла проверки ниже строгие и не ослаблены.
 const HAS_LISTING = fs.existsSync(METADATA_PATH);

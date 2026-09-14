@@ -1,5 +1,38 @@
 # Changelog
 
+## [2.0.0] - 2026-09-14
+### Changed
+- v2.0, этап 1/3 (commit `370a217`): декомпозиция `core/content.js` (3622 → 1897 строк) на пять
+  модулей — `core/state.js`, `core/widget.js`, `core/base-handler.js`, `core/hybrid-tail.js`,
+  `core/export-manager.js`; 153 элемента перенесены байтово. Логика, сигнатуры и порядок вызовов
+  не изменены, тесты обновлены только в строках резолва источника (23 файла).
+- v2.0, этап 2/3 — частичная декомпозиция (commit `994ae26`): `core/gemini-intercept.js`
+  5064 → 4800 строк, вынесен `core/gemini-hidden-scroll.js` (356 строк: 13 функций + 10 констант,
+  своя IIFE и UMD-экспорт `window.AiCmGeminiHiddenScroll`; живое состояние ядра — через `__bind`
+  с геттерами/сеттерами, не копии). Кластеры network/parser/pagination/loader неотделимы по AST
+  (замыкание 84–95%, 218 общих имён из 259) — оставлены до этапа 3/3.
+- v2.0, этап 3/3 (commit `be1a4a6`): миграция id регистрации перехватчика Gemini —
+  `ai-cm-gemini-intercept` → `ai-cm-gemini-intercept-v2` + `unregisterContentScripts` старого id
+  в `core/background.js` (`world:'MAIN'`, `runAt:'document_start'` сохранены). Там же зафиксировано
+  отложение ES modules для content scripts до введения бандлера: `"type":"module"` Chrome
+  игнорирует («Cannot use import statement outside a module»), а `registerContentScripts`
+  отвергает поле `type` и в `ISOLATED`, и в `MAIN` (пробы Chrome 153.0.8010.36 / Edge 153.0.4234.32).
+  Решение — `ARCHITECTURE_STANDARDS.md`, раздел «ES modules в content scripts».
+- CI-хотфикс (commit `322fd7e`): зелёный Lint на чистом чекауте — `.gitattributes` (`eol=lf`) и
+  условный skip версионных сьютов, зависящих от gitignored `tools/edge-listing-metadata.txt`;
+  ассерты не ослаблены, пропуск печатается явно.
+- Версия 2.0.0 во всех точках вывода: `manifest.json`, `package.json`, `package-lock.json`,
+  футер `docs/index.html`, метаданные листинга Edge; восемь версионных сьютов перепинованы
+  1.19.3 → 2.0.0 (skip-логика CI-хотфикса не тронута).
+
+### Fixed
+- Убран ключ-комментарий `//ESM` из `manifest.json`: Chrome функционально игнорирует неизвестные
+  ключи, но выводит manifest-warning «Unrecognized manifest key '//ESM'» на плитке расширения —
+  для публикации в Edge Add-ons манифест должен быть чистым. Решение по ES modules уже
+  зафиксировано в `ARCHITECTURE_STANDARDS.md` («ES modules в content scripts — отложено
+  до бандлера»). `tests/manifest-smoke.test.js`: `//ESM` удалён из allow-листа — строгость
+  проверки возвращена (верхний уровень манифеста снова содержит только Chromium-MV3 ключи).
+
 ## [1.19.3] - 2026-09-13
 ### Fixed
 - M-14 (Perplexity, SPA домашняя→тред без F5): bootstrap больше не учит голый `/rest/thread/{slug}` —

@@ -1,5 +1,5 @@
 /**
- * M-14 (v1.19.3): SPA домашняя→тред без F5 — bootstrap обязан идти по адресу с ПОЛНЫМ набором
+ * M-14 (регресс-пин релиза 1.19.x): SPA домашняя→тред без F5 — bootstrap обязан идти по адресу с ПОЛНЫМ набором
  * query-параметров (with_parent_info / supported_block_use_cases), а не по голому /rest/thread/{slug}.
  *
  * Дефект: после SPA-перехода домашняя→тред bootstrap учил голый `/rest/thread/{slug}` и получал
