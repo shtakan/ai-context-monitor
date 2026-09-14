@@ -372,6 +372,18 @@ function aiCmStopThemePoll() {
   if (aiCmThemePollTimer) { clearInterval(aiCmThemePollTimer); aiCmThemePollTimer = null; }
 }
 
+// ===== O-1: показ виджета только после первого валидного расчёта =====
+// Пока гейт aiCmBadgeHoldActive() (content.js) держит бейдж, контейнер снят с отрисовки:
+// пользователь не видит ни placeholder «0.0%» из разметки, ни заниженную DOM-оценку.
+// Показ — ровно в updateWidget (первый валидный расчёт уже разложен по circle/text/tooltip)
+// либо по таймауту-страховке из content.js (сеть молчит → прежнее поведение).
+function aiCmRevealWidget() {
+  try {
+    if (!widgetElement) return;
+    if (widgetElement.style.display === 'none') widgetElement.style.display = '';
+  } catch (eRev) { }
+}
+
 // ========== ВИДЖЕТ (со стрелками ▲▼) ==========
 function createWidget() {
   if (document.getElementById('ai-context-widget')) return;
@@ -384,6 +396,11 @@ function createWidget() {
   document.body.appendChild(container);
   widgetElement = container;
   applyNativeStyles(container);
+  // O-1: ChatGPT после F5 — виджет скрыт, пока не пришёл первый валидный расчёт
+  // (гейт aiCmBadgeHoldActive из content.js). Показ делает updateWidget/таймаут-страховка.
+  try {
+    if (typeof aiCmBadgeHoldActive === 'function' && aiCmBadgeHoldActive()) container.style.display = 'none';
+  } catch (eHold) { }
   const circleEl = container.querySelector('.ai-widget-circle');
   const panelEl = container.querySelector('.ai-widget-panel');
   const snapBtn = container.querySelector('.ai-cm-snap');
@@ -470,6 +487,10 @@ function updateWidget(percentage, tokens, effectiveLimit, contextLimit, displayL
       tooltip.appendChild(document.createTextNode(line));
     });
   }
+  // O-1: первый валидный расчёт уже отрисован — показываем виджет. Хелпер живёт в
+  // content.js (загружается ПОСЛЕ widget.js), поэтому гард по typeof — как у гейта
+  // в createWidget: изолированные песочницы тестов виджета остаются рабочими.
+  try { if (typeof aiCmRevealWidget === 'function') aiCmRevealWidget(); } catch (eRevW) { }
 }
 
 // ========== v2.0 (этап 1/3): UMD-экспорт модуля ==========
@@ -504,6 +525,7 @@ function updateWidget(percentage, tokens, effectiveLimit, contextLimit, displayL
   Api.aiCmStartThemePoll = aiCmStartThemePoll;
   Api.aiCmStopThemePoll = aiCmStopThemePoll;
   Api.createWidget = createWidget;
+  Api.aiCmRevealWidget = aiCmRevealWidget;
   Api.updateWidget = updateWidget;
   if (typeof module !== 'undefined' && module.exports) module.exports = Api;
   if (typeof window !== 'undefined') window.AiCmWidget = Api;

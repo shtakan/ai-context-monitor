@@ -1121,6 +1121,53 @@ function aiCmUpdateSourceIndicator() {
   } catch (eSrc) { }
 }
 
+// ===== O-1: бейдж ChatGPT без «моргания» после F5 =====
+// После F5 у ChatGPT первым успевает отработать DOM-путь: в DOM только видимый
+// (виртуализированный) кусок истории → бейдж рисует 0.0% из разметки/заниженный процент,
+// и лишь через ~1 с приходит сетевой снимок (ai-cm-full-history) с верным числом.
+// Гейт: до первого ВАЛИДНОГО расчёта (baseSeen && baseText — снимок сети/архива/ленты)
+// виджет ChatGPT не обновляется и скрыт (createWidget ставит display:none, O-1 в widget.js).
+// Страховка: если сеть/перехватчик молчат, гейт снимается сам через AI_CM_BADGE_HOLD_MS —
+// дальше поведение прежнее (рисунок по DOM-базе), виджет гарантированно возвращается.
+// Скоуп: только chatgpt с convId в URL (/c/<id>); прочие сервисы и пустой чат — байтово прежние.
+var AI_CM_BADGE_HOLD_MS = 2500;
+var aiCmBadgeHoldUntil = 0;
+var aiCmBadgeHoldSpent = false; // гейт уже отработал (валидный расчёт или таймаут) — второй раз не взводим
+var aiCmBadgeHoldTimer = null;
+
+// Истинно, пока бейдж держится: первый валидный расчёт по базе ещё не пришёл.
+function aiCmBadgeHoldActive() {
+  try {
+    if (aiCmBadgeHoldSpent) return false;
+    if (!currentAdapter || currentAdapter.siteName !== 'chatgpt') return false;
+    if (!getCurrentConvId()) return false;                                  // пустой/новый чат — прежнее поведение
+    if (baseSeen && baseText) { aiCmBadgeHoldSpent = true; return false; }  // первый валидный расчёт получен
+    if (!aiCmBadgeHoldUntil) {
+      aiCmBadgeHoldUntil = Date.now() + AI_CM_BADGE_HOLD_MS;
+      debugLog('log', '[content-trace] badge-hold (O-1): ChatGPT — валидного расчёта ещё нет, виджет скрыт t=' + Date.now());
+      aiCmArmBadgeHoldFallback();
+    }
+    return Date.now() < aiCmBadgeHoldUntil;
+  } catch (eHoldO1) { return false; }
+}
+
+// Страховка гейта: сеть молчит → снимаем гейт, возвращаем виджет и перерисовываем по
+// DOM-базе (прежнее поведение). Виджет не может остаться скрытым навсегда.
+function aiCmArmBadgeHoldFallback() {
+  try {
+    if (aiCmBadgeHoldTimer) return;
+    aiCmBadgeHoldTimer = setTimeout(function () {
+      aiCmBadgeHoldTimer = null;
+      if (aiCmBadgeHoldSpent || (baseSeen && baseText)) return; // валидный расчёт уже пришёл
+      aiCmBadgeHoldSpent = true;
+      aiCmBadgeHoldUntil = 0;
+      debugLog('log', '[content-trace] badge-hold (O-1): ' + AI_CM_BADGE_HOLD_MS + 'мс без валидного расчёта — гейт снят, прежнее поведение');
+      try { aiCmRevealWidget(); } catch (eRevO1) { }
+      processAndSend();
+    }, AI_CM_BADGE_HOLD_MS + 100);
+  } catch (eArmO1) { }
+}
+
 function processAndSend() {
   if (!currentAdapter) return;
 
@@ -1391,6 +1438,10 @@ function processAndSend() {
         modelName: ModelConfig.getModel(modelId)?.name || modelId, attachBreak: netAttachBreak
       };
       debugLog('log', '[content-trace] badge-freeze: скрытая загрузка лоадера — значение накоплено, виджет держится');
+    } else if (aiCmBadgeHoldActive()) {
+      // O-1: первый валидный расчёт ChatGPT ещё не пришёл — бейдж держим (виджет скрыт с
+      // создания): не показываем ни placeholder 0.0%, ни заниженную DOM-оценку после F5.
+      // Если сеть молчит, гейт снимет aiCmArmBadgeHoldFallback через AI_CM_BADGE_HOLD_MS.
     } else {
       updateWidget(percentage, maxTokenCount, effectiveLimit, contextLimit, displayLimit, ModelConfig.getModel(modelId)?.name || modelId, netAttachBreak);
       lastWidgetData = {
