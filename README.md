@@ -110,6 +110,11 @@ Five live captures, one per platform, stored in [`docs/screenshots/`](docs/scree
 
 ![Perplexity — thread interception](docs/screenshots/perplexity.png)
 
+## Known limitations
+
+- **Third-party interceptors on the same page.** If another extension on the same tab also monkey-patches `fetch` / `XMLHttpRequest` (for example, DeepSeek++ or All API Hub on chat.deepseek.com), the two interception layers compete for the same network stream. Symptoms vary — missing turns, garbled fragments, role mismatches — and depend on load order, which this extension cannot control. **Workaround**: keep ai-context-monitor as the only network-intercepting extension on the tab you are monitoring, or disable the other interceptors while exporting.
+- **Google Search AI (GSA) server-side history trimming.** GSA can silently trim the server-side thread (observed: 59 → 6 messages). The extension counts exactly what the server returns; it cannot recover messages the server has already dropped.
+
 ## Disclaimer
 
 This project is not affiliated with, endorsed by, or sponsored by Google, OpenAI, Anthropic, DeepSeek, Perplexity, or any other company mentioned. All product names and trademarks are the property of their respective owners.

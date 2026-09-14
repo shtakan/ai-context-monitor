@@ -77,6 +77,7 @@
 | O-1 | DOM-мисдетект ChatGPT ~1 c после F5 | Мгновенный "морг" бейджа; итоговая цифра верная |
 | O-7 | ✅ ЗАКРЫТО: экспорт DeepSeek с reasoning-цепочками (`[REASONING]`/`[ANSWER]`) | API reasoning ОТДАЁТ (фрагменты `THINK`); в v7 их выбрасывал `INCLUDE_THINKING=false` |
 | O-9-подпись | `snapshot-at-manual` печатает `msgs=0` на Perplexity | Косметика диагностики; тело экспорта полное |
+| O-15 | DeepSeek live-экспорт: потеря ходов и усечение 2 символов на границах фрагментов | Воспроизводится в чистом чате (без сторонних расширений); серверная история полная |
 | O-11 | Две маски имён автоэкспорта + коллизия на GSA | Потеря копии за ту же минуту; данные целы |
 | O-14 | Попап держит старый снимок после RESET в пустой чат | Косметика попапа |
 
@@ -84,11 +85,13 @@
 
 ## Технические детали
 
-### Коммиты (последние 3)
+### Коммиты (последние 5)
 ```
-322fd7e (HEAD -> main) CI: зелёный Lint на чистом чекауте — .gitattributes eol=lf + условный skip версионных сьютов
-994ae26 v2.0 (этап 2/3): частичная декомпозиция gemini-intercept.js → gemini-hidden-scroll.js
-f1f6363 docs: обновить PROJECT_HANDOFF.md после этапа 1/3
+2866474 feat(O-7): экспорт DeepSeek с reasoning-цепочками — core/deepseek-intercept.js v8: THINK-фрагменты → [REASONING]/[ANSWER]
+be93f45 v2.0.1: O-1 бейдж ChatGPT без моргания после F5 + миграция 8 версионных сьютов
+1bf630f docs: секция ручной установки (дистрибуция без магазина)
+3191cba (tag: v2.0.0) v2.0.0: релизный коммит — бамп версии + миграция 8 версионных сьютов
+322fd7e CI: зелёный Lint на чистом чекауте — .gitattributes eol=lf + условный skip версионных сьютов
 ```
 
 ### Структура проекта
@@ -197,7 +200,8 @@ ai-context-monitor-clean/
 5. ✅ Этап 3/3: миграция id регистрации `ai-cm-gemini-intercept-v2` (`be1a4a6`); ES modules для content scripts отложены до бандлера (решение — `ARCHITECTURE_STANDARDS.md`)
 6. ✅ Релизный коммит v2.0.0: бамп версии + миграция 8 версионных сьютов + CHANGELOG/футер/listing + убран ключ-комментарий `//ESM`
 7. ✅ O-1 (бейдж ChatGPT без моргания после F5) + ручная установка без магазина (`1bf630f`)
-8. ⏳ Пост-релизная очередь low (O-7, O-9-подпись, O-11, O-14) → публикация Edge Add-ons
+8. ✅ O-7: экспорт DeepSeek с reasoning-цепочками (`2866474`)
+9. ⏳ Пост-релизная очередь low (O-9-подпись, O-11, O-14, O-15) → публикация Edge Add-ons
    
 **История этапов 1/3–3/3** — см. секции «Декомпозиция v2.0» и «Следующие шаги» выше.
 
@@ -205,6 +209,7 @@ ai-context-monitor-clean/
 - O-1: DOM-мисдетект ChatGPT (усилие: Medium)
 - O-7: ✅ экспорт DeepSeek с reasoning (`core/deepseek-intercept.js` v8: фрагменты `THINK` → секции `[REASONING]`/`[ANSWER]`; в detail добавлены `reasoningTexts`/`messages[].reasoning`)
 - O-9-подпись: snapshot-at-manual (усилие: Medium)
+- O-15: DeepSeek live-экспорт — парность ходов + целостность фрагментов reasoning/answer (усилие: Medium; воспроизводится в чистом чате)
 - O-11: унификация масок имён (усилие: Medium)
 - O-14: попап после RESET (усилие: Low)
 
@@ -216,5 +221,5 @@ ai-context-monitor-clean/
 
 ## Контроль длины чата
 
-Резюме актуально на 14 сентября 2026: этапы 1–3/3, CI-хотфикс и релизный коммит v2.0.0 приняты; ES modules для content scripts отложены до бандлера (`ARCHITECTURE_STANDARDS.md`).  
-Следующая синхронизация — после публикации v2.0.1 в Edge Add-ons (листинг: `tools/edge-listing-metadata.txt`).
+Резюме актуально на 14 сентября 2026: этапы 1–3/3, CI-хотфикс, релизный коммит v2.0.0, v2.0.1 (O-1) и O-7 приняты; ES modules для content scripts отложены до бандлера (`ARCHITECTURE_STANDARDS.md`).  
+Следующая синхронизация — после закрытия O-15 и публикации v2.0.2 в Edge Add-ons (листинг: `tools/edge-listing-metadata.txt`).
