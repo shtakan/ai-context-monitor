@@ -189,6 +189,8 @@
   var lastBaseChatMode = '';
 
   function resetForNewConversation() {
+    diagResetForConv('conv-change', lastDiagConvId);   // O-18 (ИЗМЕРЕНИЕ): кольца — на один convId
+    lastDiagConvId = currentConvId;                    // O-18 (ИЗМЕРЕНИЕ)
     turnsMap = {};
     orderCounter = 0;
     attachTokens = 0;
@@ -335,6 +337,10 @@
       try {
         window.dispatchEvent(new CustomEvent('ai-cm-turns-snap-response', { detail: turnsSnapshot() }));
       } catch (eTurnsResp) { }
+      // O-18 (ИЗМЕРЕНИЕ): этот мост экспортёр дёргает в ОБЕИХ точках записи файла
+      // (snapshot-at-fired / snapshot-at-manual) — здесь снимаем per-turn сравнение
+      // live vs network и дамп колец. Только чтение + console.log под флагом aiCmDebug.
+      try { diagExportHook('turns-snap-request'); } catch (eDiagExp) { }
     });
   } catch (eTurnsBridge) { }
 
@@ -427,6 +433,14 @@
       var chatMessages = bizData.chat_messages;
       if (!chatSession || !Array.isArray(chatMessages)) return;
 
+      // O-18 (ИЗМЕРЕНИЕ): вход в ingestHistory + сырьё ответа history_messages (кольцо).
+      diagMark('ingest-enter', {
+        chatMessages: chatMessages.length,
+        is_empty: chatSession.is_empty === true,
+        currentMessageId: chatSession.current_message_id != null
+      });
+      diagHistRecord(jsonBody, 'ingestHistory');
+
       // Помечаем «ответ для текущего чата обработан» — ДО buildActiveChain и ДО return по пустой цепочке
       lastLoadedConvId = currentConvId;
 
@@ -459,12 +473,19 @@
       // дозапрос полной истории без cache_version/cache_reset_at, база не трогается.
       if (!chain.length && chatMessages.length === 0 && !baseEmptyAuthoritative && !historyRefetchDone) {
         historyRefetchDone = true;
+        diagMark('ingest-branch-MERGE-refetch', { chainLen: 0, chatMessages: 0 });   // O-18 (ИЗМЕРЕНИЕ)
         console.log('[deepseek-intercept] пустой кеш (MERGE) без авторитетной пустоты → тихий дозапрос полной истории (без cache_version)');
         refetchFullHistory(lastHistoryUrl, lastAuthHeaders, currentConvId);
         return;
       }
 
       if (!chain.length) {
+        // O-18 (ИЗМЕРЕНИЕ): какая именно ветка пустой цепочки сработала.
+        diagMark(baseEmptyAuthoritative ? 'ingest-branch-EMPTY-AUTH' : 'ingest-branch-EMPTY-NONAUTH', {
+          chatMessages: chatMessages.length,
+          is_empty: chatSession.is_empty === true,
+          currentMessageId: chatSession.current_message_id != null
+        });
         // v11 (O-17): ЕДИНЫЙ критерий полноты для обеих веток. Пустая цепочка больше не
         // означает «полнота не доказана»: авторитетно пустая база — полная база (0 ходов).
         // Вердикт обязателен именно здесь: realtime-эмиты наследуют histCompletion, и без
@@ -491,6 +512,8 @@
       // v6: ДЕТЕКТОР УСЕЧЕНИЯ — если цепочка оборвана и дозапрос ещё не делался
       if (truncated && !historyRefetchDone) {
         historyRefetchDone = true;
+        // O-18 (ИЗМЕРЕНИЕ): ветка «цепочка оборвана → дозапрос».
+        diagMark('ingest-branch-TRUNCATED-refetch', { chainLen: chain.length, chatMessages: chatMessages.length });
         // НЕ помечаем loggedHistory = true — лог и диагностический дамп сработают на полной истории
         console.log('[deepseek-intercept] кеш усечён (цепочка оборвана) → тихий дозапрос полной истории (без cache_version)');
         refetchFullHistory(lastHistoryUrl, lastAuthHeaders, currentConvId);
@@ -575,6 +598,14 @@
         tailTurn.reasoning = (tailTurn.reasoning || '') + pendingReasoning;
         tailTurn.text = composeTurnText(tailTurn.answer || '', tailTurn.reasoning);
       }
+
+      // O-18 (ИЗМЕРЕНИЕ): снимок ПРИНЯТ как авторитетный — фиксируем ветку и per-turn
+      // NETWORK-текст (ровно тот, что сейчас лежит в turnsMap и уйдёт в экспорт).
+      diagMark('ingest-branch-ACCEPT', {
+        chainLen: chain.length, chatMessages: chatMessages.length,
+        reachedRoot: chainResult.reachedRoot === true, truncated: chainResult.truncated === true
+      });
+      diagSnapshotNetTurns('ingestHistory');
 
       // УСЛОВИЕ 1: accumulated_token_usage — максимум по всем сообщениям цепочки (накопительное, монотонно растёт)
       var lastAccumulated = 0;
@@ -672,15 +703,20 @@
     sseThinkingEnabled = keepThinking;
     sseStreamActive = true;
     dispatchStreamState('begin');
+    diagMark('sse-begin', { promptLen: (keepPrompt || '').length });   // O-18 (ИЗМЕРЕНИЕ)
   }
   // v10 (O-16): тело ответа дочитано (или оборвано) — стрима больше нет.
   function endSseStream() {
     if (!sseStreamActive) return;
     sseStreamActive = false;
     dispatchStreamState('end');
+    diagMark('sse-end', { turnFinished: sseTurnFinished === true });   // O-18 (ИЗМЕРЕНИЕ)
   }
 
   function resetStreamState() {
+    // O-18 (ИЗМЕРЕНИЕ): срез буфера ПЕРЕД обнулением — если сброс случится посреди ответа,
+    // здесь видно, какие фрагменты были выброшены (кандидат «потеря середины»).
+    diagMark('stream-reset', {});
     sseStreamActive = false;   // v10 (O-16)
     sseTurnFinished = false;   // v10 (O-16)
     sseLastPath = null;
@@ -750,7 +786,18 @@
     return parts.join('').trim();
   }
 
+  // O-18 (ИЗМЕРЕНИЕ): тонкая обёртка — снимает срез буфера фрагментов ДО и ПОСЛЕ обработки
+  // чанка и кладёт сырьё в diag-кольцо. Тело вынесено в processChunkCore БЕЗ правок: при
+  // выключенном флаге обёртка не делает ничего, кроме кэшированной проверки diagOn(), и
+  // управление/результат обработки — ровно те же (в т.ч. все ранние return).
   function processChunk(path, op, val) {
+    var dOn = diagOn();
+    var dBefore = dOn ? diagFragState() : null;
+    processChunkCore(path, op, val);
+    if (dOn) diagChunkRecord(path, op, val, dBefore, diagFragState());
+  }
+
+  function processChunkCore(path, op, val) {
     // v9 (O-15): сокращённый чанк может прийти и после чанка массива фрагментов. Строка —
     // это либо объявление типа ('THINK'), либо порция КОНТЕНТА последнего фрагмента
     // (иначе текст молча терялся). Различаем по форме: типы — ВЕРХНИЙ_РЕГИСТР.
@@ -819,6 +866,14 @@
     if (!answerText) answerText = streamOtherText();   // аварийный фолбэк (незнакомый тип)
     var sseReasoning = REASONING_ENABLED ? streamFragmentText('THINK') : '';
 
+    // O-18 (ИЗМЕРЕНИЕ): per-turn LIVE-текст (ровно тот, что уйдёт в ход) + ревизия.
+    if (diagOn()) {
+      if (sseRequestMessageId && sseUserPrompt) {
+        diagLiveTurnRecord(String(sseRequestMessageId), 'user', sseUserPrompt, 'finalize');
+      }
+      diagLiveTurnRecord(String(sseResponseMessageId), 'assistant', composeTurnText(answerText, sseReasoning), 'finalize');
+    }
+
     // УСЛОВИЕ 2: добавляем ОБА хода — USER и ASSISTANT
     // USER-ход
     var userId = String(sseRequestMessageId);
@@ -862,6 +917,16 @@
       var nextAnswer = (answerText && answerText.length >= exAnswer.length) ? answerText : exAnswer;
       var nextReasoning = (sseReasoning && sseReasoning.length >= exReasoning.length) ? sseReasoning : exReasoning;
       if (nextAnswer !== exAnswer || nextReasoning !== exReasoning) {
+        // O-18 (ИЗМЕРЕНИЕ): «длиннее побеждает» — фиксируем факт замены текста хода,
+        // её вердикт и шов (кандидат: более длинный, но ДЫРЯВЫЙ текст вытесняет полный).
+        if (diagOn()) {
+          var dEnr = diagVerdict(exAnswer, nextAnswer);
+          diagMark('enrich-replace', {
+            id: String(assistantId).slice(0, 8), prevLen: exAnswer.length, nextLen: nextAnswer.length,
+            prevHash: diagHash6(exAnswer), nextHash: diagHash6(nextAnswer),
+            firstDiff: dEnr.firstDiff, verdict: dEnr.verdict, lost: dEnr.lost, resync: dEnr.resync
+          });
+        }
         ex.answer = nextAnswer;
         ex.reasoning = nextReasoning;
         ex.text = composeTurnText(nextAnswer, nextReasoning);
@@ -1021,6 +1086,7 @@
   // (буфер потока живёт до конца тела ответа), а не отбрасывает более полный текст.
   function finishSseStream() {
     if (sseRequestMessageId && sseResponseMessageId) finalizeRealtimeTurn();
+    diagMark('sse-finish', {});   // O-18 (ИЗМЕРЕНИЕ)
   }
 
   // v10 (O-16): синхронный мост ISOLATED → MAIN (тот же приём, что у Gemini-моста
@@ -1205,6 +1271,7 @@
     if (!convId || convId !== currentConvId) { return; }
     // v11 (O-17): берём переданный URL ТОЛЬКО если он про этот же чат, иначе — канонический
     var cleanUrl = historyUrlForConv(originalUrl, convId) || historyRefetchUrl();
+    diagMark('refetch-full-history', { conv: String(convId).slice(0, 8) });   // O-18 (ИЗМЕРЕНИЕ)
     originalFetch(cleanUrl, {
       method: 'GET',
       headers: authHeaders || {}
@@ -1290,6 +1357,7 @@
                   var cs = bd.chat_session;
                   var emptyMERGE = cs && cs.is_empty !== true && (!Array.isArray(bd.chat_messages) || bd.chat_messages.length === 0);
                   if (emptyMERGE && guardCheck(historyConvId)) {
+                    if (diagOn()) diagHistRecord(json, 'fetch-history:emptyMERGE');   // O-18 (ИЗМЕРЕНИЕ)
                     console.log('[deepseek-intercept] кеш MERGE → тихий дозапрос полной истории (без cache_version)');
                     lastLoadedConvId = currentConvId;
                     refetchFullHistory(url, historyAuthHeaders, historyConvId);
@@ -1404,6 +1472,7 @@
                   var csH = bdH.chat_session;
                   var emptyMERGE = csH && csH.is_empty !== true && (!Array.isArray(bdH.chat_messages) || bdH.chat_messages.length === 0);
                   if (emptyMERGE && guardCheck(info2.historyConvId)) {
+                    if (diagOn()) diagHistRecord(jsonH, 'xhr-history:emptyMERGE');   // O-18 (ИЗМЕРЕНИЕ)
                     console.log('[deepseek-intercept] кеш MERGE → тихий дозапрос полной истории (без cache_version)');
                     lastLoadedConvId = currentConvId;
                     refetchFullHistory(loadUrl, info2.headers || {}, info2.historyConvId);
@@ -1778,6 +1847,407 @@
       console.warn('[ai-cm-debug] DEEPSEEK_STRUCT_DUMP ошибка дампа:', e);
     }
   }
+
+  // ===== СЕКЦИЯ 13B (O-18, ФАЗА 1): ИЗМЕРЕНИЕ live vs network =====
+  // Правило фазы: ПОВЕДЕНИЕ НЕ МЕНЯЕТСЯ. Всё ниже — либо чтение уже существующего
+  // состояния, либо запись в СОБСТВЕННЫЕ буферы и console.log. Включается ТОЛЬКО флагом
+  // sessionStorage aiCmDebug === '1': при выключенном флаге ни один буфер не наполняется и
+  // ни одна строка не логируется, а вызовы в горячих путях сводятся к одному кэшированному
+  // чтению sessionStorage раз в секунду (diagOn). Ни одна diag-функция не пишет в turnsMap,
+  // не трогает гейты/латчи/экспорт/формат файла.
+  //   diagSseRing   — кольцо сырых SSE-чанков (response/fragments*, o=APPEND/SET) + состояние
+  //                   буфера фрагментов ДО и ПОСЛЕ обработки чанка (len/hash по фрагментам);
+  //   diagHistRing  — кольцо ответов history_messages текущего convId (сырьё + состав
+  //                   фрагментов по каждому сообщению: type/len/hash/head);
+  //   diagMarks     — маркеры веток ingestHistory (MERGE/EMPTY-AUTH/EMPTY-NONAUTH/TRUNCATED/
+  //                   ACCEPT/дозапрос) и фаз потока (begin/reset/end/finish);
+  //   diagLiveTurns — per-turn текст, собранный LIVE-путём (SSE), с ревизиями;
+  //   diagNetTurns  — per-turn текст последнего ПРИНЯТОГО снимка history_messages (network);
+  //   diagEnrich    — ревизии live-текста, где вердикт не EQUAL (кандидат «длиннее побеждает»).
+  // Дамп на КАЖДЫЙ экспорт: мост ai-cm-turns-snap-request уже вызывается экспортёром в обеих
+  // точках записи файла (snapshot-at-fired / snapshot-at-manual) — здесь только читаем.
+  var DIAG_SSE_RING_MAX = 400;
+  var DIAG_HIST_RING_MAX = 3;
+  var DIAG_MARK_MAX = 40;
+  var DIAG_ENRICH_MAX = 60;
+  var DIAG_REV_MAX = 8;
+  var DIAG_RAW_CAP = 240;
+  var DIAG_HIST_RAW_CAP = 200000;
+  var DIAG_SEAM_MIN = 48;      // мин. длина «шва» для вердикта MIDDLE-HOLE
+  var diagSeq = 0;
+  var diagOps = { APPEND: 0, SET: 0, other: 0 };
+  var diagSseRing = [];
+  var diagHistRing = [];
+  var diagMarks = [];
+  var diagLiveTurns = {};
+  var diagLiveOrder = [];
+  var diagNetTurns = null;
+  var diagEnrich = [];
+  var diagFlag = { v: false, at: 0 };
+  var diagExports = 0;
+  var lastDiagConvId = currentConvId;   // O-18: кольца живут в пределах одного convId
+
+  function diagOn() {
+    var now = Date.now();
+    if (now - diagFlag.at < 1000) return diagFlag.v;
+    diagFlag.at = now;
+    diagFlag.v = isDebugEnabled();
+    return diagFlag.v;
+  }
+  // FNV-1a 32-bit → 6 hex (тот же отпечаток, что aiCmDiagHash6 в base-handler.js)
+  function diagHash6(s) {
+    try {
+      var str = String(s === null || s === undefined ? '' : s);
+      var h = 0x811c9dc5;
+      for (var i = 0; i < str.length; i++) {
+        h ^= str.charCodeAt(i);
+        h = Math.imul(h, 0x01000193) >>> 0;
+      }
+      return ('000000' + h.toString(16)).slice(-6);
+    } catch (e) { return '000000'; }
+  }
+  function diagClip(s, cap) {
+    try {
+      var str = String(s === null || s === undefined ? '' : s);
+      return str.length > cap ? str.slice(0, cap) : str;
+    } catch (e) { return ''; }
+  }
+  function diagPushRing(arr, item, max) {
+    try {
+      arr.push(item);
+      while (arr.length > max) arr.shift();
+    } catch (e) { }
+  }
+  function diagStat(t) {
+    if (t === null || t === undefined) return '(none)';
+    var s = String(t);
+    return s.length + ':' + diagHash6(s);
+  }
+  function diagFirstDiff(a, b) {
+    try {
+      var A = String(a === null || a === undefined ? '' : a);
+      var B = String(b === null || b === undefined ? '' : b);
+      var n = Math.min(A.length, B.length);
+      for (var i = 0; i < n; i++) { if (A.charAt(i) !== B.charAt(i)) return i; }
+      return A.length === B.length ? -1 : n;
+    } catch (e) { return 0; }
+  }
+  // Вердикт «live-текст против network-текста»: что именно потерял/приобрел live.
+  //   EQUAL / TAIL-CUT (live — префикс net) / MIDDLE-HOLE (live потерял срединный кусок и
+  //   СШИЛСЯ с net дальше — точная сигнатура O-18) / MIDDLE-HOLE-PARTIAL / LIVE-EXTRA / DIFF-OTHER
+  function diagVerdict(lt, nt) {
+    var out = { verdict: 'ONE-SIDE', firstDiff: null, lost: 0, resync: null };
+    try {
+      if (lt === null || lt === undefined || nt === null || nt === undefined) return out;
+      var L = String(lt), N = String(nt);
+      var fd = diagFirstDiff(L, N);
+      out.firstDiff = fd;
+      if (fd === -1) { out.verdict = 'EQUAL'; return out; }
+      if (fd === L.length && L === N.slice(0, L.length)) {
+        out.verdict = 'TAIL-CUT'; out.lost = N.length - L.length; return out;
+      }
+      if (fd < L.length) {
+        var tail = L.slice(fd);
+        var seam = (tail.length >= DIAG_SEAM_MIN) ? N.indexOf(tail, fd + 1) : -1;
+        if (seam > fd) {
+          out.resync = seam;
+          out.lost = seam - fd;
+          out.verdict = (seam + tail.length === N.length) ? 'MIDDLE-HOLE' : 'MIDDLE-HOLE-PARTIAL';
+          return out;
+        }
+      }
+      if (fd === N.length && N === L.slice(0, N.length)) {
+        out.verdict = 'LIVE-EXTRA'; out.lost = L.length - N.length; return out;
+      }
+    } catch (e) { }
+    out.verdict = 'DIFF-OTHER';
+    return out;
+  }
+  // Срез буфера фрагментов потока: состав, длина и отпечаток контента каждого фрагмента.
+  function diagFragState() {
+    var out = [];
+    try {
+      for (var i = 0; i < sseFragments.length; i++) {
+        var f = sseFragments[i] || {};
+        var c = (typeof f.content === 'string') ? f.content : '';
+        out.push({ i: i, type: String(f.type || ''), len: c.length, hash: diagHash6(c) });
+      }
+    } catch (e) { }
+    return out;
+  }
+  function diagMark(kind, data) {
+    try {
+      if (!diagOn()) return;
+      var m = { seq: ++diagSeq, t: Date.now(), kind: String(kind || ''), conv: (currentConvId || '').slice(0, 8) };
+      if (data) {
+        for (var k in data) { if (Object.prototype.hasOwnProperty.call(data, k)) m[k] = data[k]; }
+      }
+      m.ops = { APPEND: diagOps.APPEND, SET: diagOps.SET, other: diagOps.other };
+      m.frags = diagFragState();
+      diagPushRing(diagMarks, m, DIAG_MARK_MAX);
+      console.log('[ai-cm-debug][O18][mark] ' + JSON.stringify(m));
+    } catch (e) { }
+  }
+  // Запись чанка SSE в кольцо + детектор СЖАТИЯ уже собранного контента (прямая улика потери).
+  function diagChunkRecord(path, op, val, before, after) {
+    try {
+      var p = String(path === null || path === undefined ? '' : path);
+      if (p.indexOf('fragments') === -1) { diagOps.other++; return; }
+      if (op === 'APPEND') diagOps.APPEND++;
+      else if (op === 'SET') diagOps.SET++;
+      else diagOps.other++;
+      var entry = {
+        seq: ++diagSeq, t: Date.now(), conv: (currentConvId || '').slice(0, 8),
+        path: p, op: String(op === null || op === undefined ? '' : op), kind: '',
+        types: [], contentLens: [], rawLen: 0, raw: '', rawCut: false,
+        before: before, after: after, changed: false
+      };
+      if (typeof val === 'string') {
+        entry.kind = 'string';
+        entry.rawLen = val.length;
+        entry.raw = diagClip(val, DIAG_RAW_CAP);
+        entry.rawCut = val.length > DIAG_RAW_CAP;
+      } else if (Array.isArray(val)) {
+        entry.kind = 'array';
+        var js = '';
+        try { js = JSON.stringify(val); } catch (eJs) { js = ''; }
+        entry.rawLen = js.length;
+        entry.raw = diagClip(js, DIAG_RAW_CAP);
+        entry.rawCut = js.length > DIAG_RAW_CAP;
+        for (var i = 0; i < val.length; i++) {
+          var it = val[i];
+          if (typeof it === 'string') { entry.types.push(it); entry.contentLens.push(0); }
+          else if (it && typeof it === 'object') {
+            entry.types.push(String(it.type || ''));
+            entry.contentLens.push(typeof it.content === 'string' ? it.content.length : 0);
+          } else { entry.types.push('?'); entry.contentLens.push(0); }
+        }
+      } else if (val !== undefined && val !== null) {
+        entry.kind = typeof val;
+        entry.rawLen = String(val).length;
+        entry.raw = diagClip(String(val), DIAG_RAW_CAP);
+      } else {
+        entry.kind = 'empty';
+      }
+      try { entry.changed = JSON.stringify(before) !== JSON.stringify(after); } catch (eCh) { entry.changed = true; }
+      diagPushRing(diagSseRing, entry, DIAG_SSE_RING_MAX);
+      // Улика: контент уже собранного фрагмента УМЕНЬШИЛСЯ или фрагмент пропал из буфера.
+      var shrink = [];
+      if (before && after) {
+        for (var q = 0; q < before.length && q < after.length; q++) {
+          if (after[q].len < before[q].len) {
+            shrink.push({ i: q, type: before[q].type, from: before[q].len, to: after[q].len, fromHash: before[q].hash, toHash: after[q].hash });
+          }
+        }
+        if (after.length < before.length) shrink.push({ droppedFragments: before.length - after.length });
+      }
+      if (shrink.length) {
+        console.warn('[ai-cm-debug][O18][SHRINK] op=' + entry.op + ' path=' + entry.path +
+          ' types=' + JSON.stringify(entry.types) + ' shrink=' + JSON.stringify(shrink) +
+          ' before=' + JSON.stringify(before) + ' after=' + JSON.stringify(after));
+      }
+    } catch (e) { }
+  }
+  // Сырой ответ history_messages: сводка + состав фрагментов по каждому сообщению.
+  function diagHistRecord(json, src) {
+    try {
+      if (!diagOn()) return;
+      var raw = '';
+      try { raw = JSON.stringify(json); } catch (eR) { raw = ''; }
+      var bd = json && json.data && json.data.biz_data;
+      var cs = bd && bd.chat_session;
+      var cms = (bd && Array.isArray(bd.chat_messages)) ? bd.chat_messages : [];
+      var rec = {
+        seq: ++diagSeq, t: Date.now(), src: String(src || ''),
+        conv: (currentConvId || '').slice(0, 8),
+        url: diagClip(lastHistoryUrl || '', 140),
+        code: (json && json.code),
+        rawLen: raw.length, rawCut: raw.length > DIAG_HIST_RAW_CAP,
+        chatMessages: cms.length,
+        isEmpty: cs ? cs.is_empty : null,
+        currentMessageId: (cs && cs.current_message_id != null) ? String(cs.current_message_id).slice(0, 8) : null,
+        modelType: cs ? cs.model_type : null,
+        fragTotal: 0,
+        messages: []
+      };
+      var cap = Math.min(cms.length, 300);
+      for (var i = 0; i < cap; i++) {
+        var msg = cms[i] || {};
+        var fr = Array.isArray(msg.fragments) ? msg.fragments : [];
+        var frags = [];
+        for (var j = 0; j < fr.length; j++) {
+          var f = fr[j] || {};
+          var c = (typeof f.content === 'string') ? f.content : '';
+          frags.push({ type: String(f.type || ''), len: c.length, hash: diagHash6(c), head: diagClip(c, 80) });
+        }
+        rec.fragTotal += frags.length;
+        rec.messages.push({
+          i: i, id: String(msg.message_id || '').slice(0, 8), role: String(msg.role || ''),
+          parent: msg.parent_id != null ? String(msg.parent_id).slice(0, 8) : null,
+          insertedAt: msg.inserted_at || null,
+          accumulated: (typeof msg.accumulated_token_usage === 'number') ? msg.accumulated_token_usage : null,
+          thinkingEnabled: (typeof msg.thinking_enabled === 'boolean') ? msg.thinking_enabled : null,
+          frags: frags
+        });
+      }
+      rec.raw = diagClip(raw, DIAG_HIST_RAW_CAP);
+      diagPushRing(diagHistRing, rec, DIAG_HIST_RING_MAX);
+      console.log('[ai-cm-debug][O18][history] src=' + rec.src + ' conv=' + rec.conv +
+        ' chatMessages=' + rec.chatMessages + ' is_empty=' + rec.isEmpty +
+        ' current=' + rec.currentMessageId + ' rawLen=' + rec.rawLen + ' frags=' + rec.fragTotal +
+        ' refetchDone=' + (historyRefetchDone === true ? 1 : 0));
+    } catch (e) { }
+  }
+  // Снимок NETWORK-текста по ходам: ровно то, что принятый ingestHistory положил в turnsMap.
+  function diagSnapshotNetTurns(reason) {
+    try {
+      if (!diagOn()) return;
+      var ids = Object.keys(turnsMap).sort(function (a, b) {
+        return (turnsMap[a].order || 0) - (turnsMap[b].order || 0);
+      });
+      var map = {}, order = [], lens = [];
+      for (var i = 0; i < ids.length; i++) {
+        var t = turnsMap[ids[i]] || {};
+        var txt = (typeof t.text === 'string') ? t.text : '';
+        map[ids[i]] = { role: t.role || '', len: txt.length, hash: diagHash6(txt), text: txt };
+        order.push(ids[i]);
+        lens.push(txt.length);
+      }
+      diagNetTurns = { conv: (currentConvId || '').slice(0, 8), t: Date.now(), reason: String(reason || ''), order: order, map: map };
+      console.log('[ai-cm-debug][O18][net] snapshot reason=' + reason + ' turns=' + order.length + ' lens=' + lens.join(','));
+    } catch (e) { }
+  }
+  // Per-turn LIVE-текст (SSE-путь) + ревизии: видно, КАК менялся ход от финала к финалу.
+  function diagLiveTurnRecord(id, role, text, reason) {
+    try {
+      if (!diagOn()) return;
+      var key = String(id);
+      var txt = (typeof text === 'string') ? text : '';
+      var rec = diagLiveTurns[key];
+      if (!rec) {
+        rec = { id: key, role: String(role || ''), len: 0, hash: '', revs: [] };
+        diagLiveTurns[key] = rec;
+        diagLiveOrder.push(key);
+      }
+      var prev = rec.lastText || '';
+      // Первая ревизия хода: сравнивать не с чем (prev пуст) — вердикт не выносим.
+      var v = (prev.length > 0) ? diagVerdict(prev, txt) : { verdict: 'FIRST', firstDiff: null, lost: 0, resync: null };
+      rec.revs.push({
+        seq: ++diagSeq, t: Date.now(), reason: String(reason || ''), len: txt.length, hash: diagHash6(txt),
+        prevLen: prev.length, firstDiff: v.firstDiff, verdict: v.verdict, lost: v.lost, resync: v.resync
+      });
+      while (rec.revs.length > DIAG_REV_MAX) rec.revs.shift();
+      if (v.verdict !== 'EQUAL' && v.verdict !== 'ONE-SIDE') {
+        diagPushRing(diagEnrich, {
+          seq: ++diagSeq, t: Date.now(), id: key, role: String(role || ''), reason: String(reason || ''),
+          prevLen: prev.length, newLen: txt.length, prevHash: diagHash6(prev), newHash: diagHash6(txt),
+          firstDiff: v.firstDiff, verdict: v.verdict, lost: v.lost, resync: v.resync
+        }, DIAG_ENRICH_MAX);
+        console.log('[ai-cm-debug][O18][live-rev] id=' + key.slice(0, 8) + ' role=' + (role || '-') +
+          ' reason=' + reason + ' prevLen=' + prev.length + ' newLen=' + txt.length +
+          ' firstDiff=' + (v.firstDiff === null ? '-' : v.firstDiff) + ' verdict=' + v.verdict +
+          ' lost=' + v.lost + ' resync=' + (v.resync === null ? '-' : v.resync));
+      }
+      rec.role = String(role || rec.role || '');
+      rec.lastText = txt;
+      rec.len = txt.length;
+      rec.hash = diagHash6(txt);
+    } catch (e) { }
+  }
+  function diagDumpRings(trigger) {
+    try {
+      var payload = {
+        o18: 'live-vs-network', trigger: String(trigger || ''), at: Date.now(),
+        conv: (currentConvId || '').slice(0, 8), convFull: currentConvId || '',
+        ops: diagOps, exports: diagExports,
+        flags: {
+          historyComplete: histCompletion.historyComplete, reachedRoot: histCompletion.reachedRoot,
+          baseEmpty: histCompletion.baseEmpty, historyRefetchDone: historyRefetchDone,
+          streamActive: sseStreamActive === true, turnFinished: sseTurnFinished === true,
+          requestMessageId: sseRequestMessageId ? String(sseRequestMessageId).slice(0, 8) : null,
+          responseMessageId: sseResponseMessageId ? String(sseResponseMessageId).slice(0, 8) : null
+        },
+        netSnapshot: diagNetTurns ? { conv: diagNetTurns.conv, t: diagNetTurns.t, reason: diagNetTurns.reason, turns: diagNetTurns.order.length } : null,
+        liveOrder: diagLiveOrder,
+        liveTurns: {},
+        enrich: diagEnrich, marks: diagMarks, sse: diagSseRing, history: diagHistRing
+      };
+      for (var i = 0; i < diagLiveOrder.length; i++) {
+        var id = diagLiveOrder[i], r = diagLiveTurns[id];
+        if (r) payload.liveTurns[id] = { role: r.role, len: r.len, hash: r.hash, revs: r.revs };
+      }
+      console.log('[ai-cm-debug][O18][rings] ' + JSON.stringify(payload));
+    } catch (e) { console.warn('[ai-cm-debug][O18] ошибка дампа колец:', e); }
+  }
+  // Дамп на КАЖДЫЙ экспорт: per-turn сравнение live(SSE) vs network(history_messages) vs
+  // текущий turnsMap (то, что реально уйдёт в файл) + кольца сырья.
+  function diagExportHook(trigger) {
+    try {
+      if (!diagOn()) return;
+      diagExports++;
+      var net = diagNetTurns;
+      var ids = [], seen = {}, i, id;
+      if (net && net.order) {
+        for (i = 0; i < net.order.length; i++) { id = net.order[i]; if (!seen[id]) { seen[id] = 1; ids.push(id); } }
+      }
+      for (i = 0; i < diagLiveOrder.length; i++) { id = diagLiveOrder[i]; if (!seen[id]) { seen[id] = 1; ids.push(id); } }
+      var tally = {};
+      console.log('[ai-cm-debug][O18][export] ==== EXPORT SNAPSHOT #' + diagExports + ' trigger=' + trigger +
+        ' conv=' + (currentConvId || '').slice(0, 8) + ' liveTurns=' + diagLiveOrder.length +
+        ' netTurns=' + (net ? net.order.length : 0) + ' netAgeMs=' + (net ? (Date.now() - net.t) : -1) +
+        ' netReason=' + (net ? net.reason : '-') + ' ====');
+      for (i = 0; i < ids.length; i++) {
+        id = ids[i];
+        var lv = diagLiveTurns[id] || null;
+        var nv = (net && net.map[id]) || null;
+        var cv = turnsMap[id] || null;
+        var curText = (cv && typeof cv.text === 'string') ? cv.text : null;
+        var vLN = diagVerdict(lv ? lv.lastText : null, nv ? nv.text : null);
+        var vCN = diagVerdict(curText, nv ? nv.text : null);
+        tally[vLN.verdict] = (tally[vLN.verdict] || 0) + 1;
+        console.log('[ai-cm-debug][O18][turn] #' + i + ' role=' + ((lv && lv.role) || (nv && nv.role) || (cv && cv.role) || '-') +
+          ' id=' + String(id).slice(0, 8) +
+          ' live=' + diagStat(lv ? lv.lastText : null) +
+          ' net=' + diagStat(nv ? nv.text : null) +
+          ' cur=' + diagStat(curText) +
+          ' live_vs_net[firstDiff=' + (vLN.firstDiff === null ? '-' : vLN.firstDiff) + ' verdict=' + vLN.verdict +
+          ' lost=' + vLN.lost + ' resync=' + (vLN.resync === null ? '-' : vLN.resync) + ']' +
+          ' cur_vs_net[firstDiff=' + (vCN.firstDiff === null ? '-' : vCN.firstDiff) + ' verdict=' + vCN.verdict +
+          ' lost=' + vCN.lost + ' resync=' + (vCN.resync === null ? '-' : vCN.resync) + ']');
+      }
+      console.log('[ai-cm-debug][O18][summary] turns=' + ids.length + ' verdicts=' + JSON.stringify(tally) +
+        ' ops=' + JSON.stringify(diagOps) + ' sseRing=' + diagSseRing.length + ' histRing=' + diagHistRing.length +
+        ' marks=' + diagMarks.length + ' enrich=' + diagEnrich.length);
+      diagDumpRings(trigger);
+    } catch (e) { console.warn('[ai-cm-debug][O18] ошибка сравнения на экспорте:', e); }
+  }
+  // Смена чата: кольца и per-turn базы относятся к ОДНОМУ convId — начинаем заново.
+  function diagResetForConv(reason, prevConv) {
+    try {
+      if (!diagOn()) return;
+      console.log('[ai-cm-debug][O18][reset] reason=' + reason + ' prevConv=' + String(prevConv || '').slice(0, 8) +
+        ' newConv=' + (currentConvId || '').slice(0, 8) + ' dropped: sse=' + diagSseRing.length +
+        ' history=' + diagHistRing.length + ' marks=' + diagMarks.length + ' liveTurns=' + diagLiveOrder.length);
+      diagSseRing = []; diagHistRing = []; diagMarks = [];
+      diagLiveTurns = {}; diagLiveOrder = []; diagNetTurns = null; diagEnrich = [];
+      diagOps = { APPEND: 0, SET: 0, other: 0 };
+    } catch (e) { }
+  }
+  // Ручной дамп из консоли: window.__aiCmDebug.dumpDeepSeekO18('tag')
+  try {
+    if (!window.__aiCmDebug) window.__aiCmDebug = {};
+    window.__aiCmDebug.dumpDeepSeekO18 = function (tag) {
+      if (!isDebugEnabled()) {
+        console.log('[ai-cm-debug][O18] флаг выключен: sessionStorage.aiCmDebug !== "1"');
+        return null;
+      }
+      diagExportHook('manual:' + (tag || 'dump'));
+      return {
+        sse: diagSseRing.length, history: diagHistRing.length, marks: diagMarks.length,
+        liveTurns: diagLiveOrder.length, netTurns: diagNetTurns ? diagNetTurns.order.length : 0
+      };
+    };
+  } catch (e) { }
 
   // ===== СЕКЦИЯ 14: ФИНАЛ =====
   console.log('[deepseek-intercept] перехватчик DeepSeek v11 установлен (server-first, walk parent_id, SSE инкрементально И постфактум, USER+ASSISTANT оба хода, ход = user + assistant(reasoning+answer), фрагменты потока как fragments[] истории (без потери контента чанков), терминал хода по BATCH/close/концу тела, historyComplete по reachedRoot ИЛИ авторитетно пустой базе (O-17: единый критерий для первичной загрузки и тихого дозапроса после SPA-смены чата), turnsMap сбрасывается только принятым снимком (O-17), serverTokens из accumulated_token_usage, +self-fetch при MERGE, +per-turn model по thinking_enabled, +modelMode в detail, +timer-refetch on switch, +подавление чужих unhandled fetch, +детектор усечения цепочки с дозапросом, +convId в detail, +unknown-роль без маппинга, +reasoning THINK секциями [REASONING]/[ANSWER], +O-16 живой поток не замораживает ход: повторный финал обогащает текст, probe/flush-мост для экспортёра, +O-17 мост turnsMap для дампов экспорта)');
