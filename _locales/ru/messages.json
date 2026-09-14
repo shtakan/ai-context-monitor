@@ -698,6 +698,18 @@
   "docs_install_step5": {
     "message": "Выберите распакованную папку с расширением и подтвердите."
   },
+  "docs_install_note_edge_prefix": {
+    "message": "Для Microsoft Edge шаги те же, только откройте"
+  },
+  "docs_install_note_update_prefix": {
+    "message": ". Обновление: скачайте новый ZIP со"
+  },
+  "docs_install_note_releases": {
+    "message": "страницы релизов"
+  },
+  "docs_install_note_update_suffix": {
+    "message": "и повторите шаги 2–5 либо нажмите «Обновить» на плитке расширения."
+  },
   "docs_section_screenshots": {
     "message": "Скриншоты"
   },

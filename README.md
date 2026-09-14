@@ -2,6 +2,21 @@
 
 A Chrome and Microsoft Edge (Chromium) extension (Manifest V3) that shows in real time how full the AI context window of your conversation is, across six platforms. When a chat grows too long, models start losing details — AI Context Monitor warns you before that happens and can save the whole conversation automatically.
 
+## Ручная установка
+
+Расширение распространяется без магазина (публикация в Edge Add-ons отложена). Основной канал — GitHub Releases.
+
+1. Скачайте архив `ai-context-monitor-v2.0.0.zip` со страницы релиза: <https://github.com/shtakan/ai-context-monitor/releases/tag/v2.0.0>
+2. Распакуйте архив в любую папку.
+3. **Microsoft Edge**: откройте `edge://extensions`, включите **«Режим разработчика»**, нажмите **«Загрузить распакованное расширение»** и выберите папку распаковки.
+4. **Google Chrome**: откройте `chrome://extensions` и выполните те же действия.
+
+> **Обновление**: скачайте новый ZIP и повторите шаги 2–4, либо нажмите «Обновить» (Reload) на плитке расширения на странице управления расширениями.
+
+Расширение полностью открыто ([исходный код](../../tree/main)): магазин не обязателен, вы всегда можете собрать и установить его вручную из репозитория.
+
+## Features
+
 ## Features
 
 - **6 supported platforms**: Google Gemini, ChatGPT, DeepSeek, Claude, Perplexity, Google AI Search.

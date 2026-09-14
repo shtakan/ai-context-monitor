@@ -698,6 +698,18 @@
   "docs_install_step5": {
     "message": "Select the unpacked extension folder and confirm."
   },
+  "docs_install_note_edge_prefix": {
+    "message": "For Microsoft Edge the steps are the same, except you open"
+  },
+  "docs_install_note_update_prefix": {
+    "message": ". To update: download a new ZIP from the"
+  },
+  "docs_install_note_releases": {
+    "message": "releases page"
+  },
+  "docs_install_note_update_suffix": {
+    "message": "and repeat steps 2–5, or click \"Update\" on the extension tile."
+  },
   "docs_section_screenshots": {
     "message": "Screenshots"
   },
