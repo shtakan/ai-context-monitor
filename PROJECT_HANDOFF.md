@@ -75,7 +75,7 @@
 | № | Проблема | Влияние |
 |---|---|---|
 | O-1 | DOM-мисдетект ChatGPT ~1 c после F5 | Мгновенный "морг" бейджа; итоговая цифра верная |
-| O-7 | Экспорт DeepSeek без reasoning-цепочек | Процент честный; файл без невидимого текста (продуктовое решение) |
+| O-7 | ✅ ЗАКРЫТО: экспорт DeepSeek с reasoning-цепочками (`[REASONING]`/`[ANSWER]`) | API reasoning ОТДАЁТ (фрагменты `THINK`); в v7 их выбрасывал `INCLUDE_THINKING=false` |
 | O-9-подпись | `snapshot-at-manual` печатает `msgs=0` на Perplexity | Косметика диагностики; тело экспорта полное |
 | O-11 | Две маски имён автоэкспорта + коллизия на GSA | Потеря копии за ту же минуту; данные целы |
 | O-14 | Попап держит старый снимок после RESET в пустой чат | Косметика попапа |
@@ -203,7 +203,7 @@ ai-context-monitor-clean/
 
 ### Пост-релизная очередь low (после v2.0)
 - O-1: DOM-мисдетект ChatGPT (усилие: Medium)
-- O-7: экспорт DeepSeek с reasoning (усилие: Medium)
+- O-7: ✅ экспорт DeepSeek с reasoning (`core/deepseek-intercept.js` v8: фрагменты `THINK` → секции `[REASONING]`/`[ANSWER]`; в detail добавлены `reasoningTexts`/`messages[].reasoning`)
 - O-9-подпись: snapshot-at-manual (усилие: Medium)
 - O-11: унификация масок имён (усилие: Medium)
 - O-14: попап после RESET (усилие: Low)

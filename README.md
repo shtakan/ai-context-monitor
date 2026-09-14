@@ -22,6 +22,7 @@ A Chrome and Microsoft Edge (Chromium) extension (Manifest V3) that shows in rea
 - **6 supported platforms**: Google Gemini, ChatGPT, DeepSeek, Claude, Perplexity, Google AI Search.
 - **Real-time fill badge**: a live widget in the corner of the screen showing context fill (%, tokens / limit, model name), updated as you chat.
 - **Auto-export at threshold**: when the configured fill threshold is reached, the full chat history is downloaded automatically as `txt`/`md` — once per chat, only after the complete history has been loaded.
+- **DeepSeek reasoning in exports**: DeepSeek returns chain-of-thought fragments (`THINK`) alongside the answer, so an exported DeepSeek turn keeps both — `[REASONING] … [ANSWER] …`. Turns without reasoning (and every other platform) keep the previous export format unchanged.
 - **Invisible full-history loader**: fetches the entire conversation in the background — no manual scrolling needed.
 - **100% client-side**: no accounts, no servers, no telemetry. Everything runs locally in your browser.
 - **Optional exact token counting** via the official Gemini `countTokens` API with your own key (BYOK).

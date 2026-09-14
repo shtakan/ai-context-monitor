@@ -1,4 +1,4 @@
-// core/deepseek-intercept.js (v7 = v6 + честная полнота по reachedRoot + convId в detail + unknown-роль без маппинга)
+// core/deepseek-intercept.js (v8 = v7 + reasoning THINK в тексте хода секциями [REASONING]/[ANSWER])
 // Перехватчик DeepSeek в МИРЕ САЙТА (world: "MAIN"), document_start. Регистрация — background.js.
 // В этом шаге меняется ТОЛЬКО этот файл. content.js / page-intercept.js / gemini-intercept.js /
 // background.js / manifest / адаптеры / model-config — НЕ ТРОГАТЬ.
@@ -38,6 +38,16 @@
 //     работает и для DeepSeek.
 //     (4) роль unknown сохраняется как есть (не маппится в assistant), лог только
 //     под debug-флагом.
+//
+// v8 (O-7): reasoning-цепочки (фрагменты type:"THINK") попадают в текст хода.
+//   ФАКТ: DeepSeek ОТДАЁТ reasoning — и в history_messages (fragments[].type === 'THINK'),
+//   и в SSE-потоке completion (тот же тип THINK; порядок фрагментов задаёт, куда идёт
+//   порция content по пути response/fragments/-1/content). Это НЕ ограничение платформы:
+//   в v7 и раньше константа INCLUDE_THINKING=false просто выбрасывала THINK из текста хода.
+//   Решение: ответ (RESPONSE) и рассуждение (THINK) собираются раздельно; текст хода
+//   получает секции [REASONING]…[ANSWER]… (только если reasoning непустой — ходы без
+//   reasoning байтово прежние). В detail добавлены reasoningTexts и messages[].reasoning.
+//   Подсчёт токенов НЕ тронут (числитель для DeepSeek — серверный accumulated_token_usage).
 
 (function () {
   if (window.__aiCmDeepseekInterceptInstalled) return;
@@ -52,7 +62,11 @@
   var originalXHRSend = OriginalXHR ? OriginalXHR.prototype.send : null;
 
   // ===== СЕКЦИЯ 1: КОНСТАНТЫ =====
-  var INCLUDE_THINKING = false;
+  // v8 (O-7): reasoning-фрагменты THINK разбираются отдельно от ответа.
+  //   REASONING_ENABLED=false возвращает поведение v7 (THINK не попадает в текст).
+  var REASONING_ENABLED = true;
+  var REASONING_TAG = '[REASONING]';
+  var ANSWER_TAG = '[ANSWER]';
   var MODEL_WINDOW_DEFAULT = 131072;  // совпадает с model-config deepseek-v3/r1
 
   // ===== СЕКЦИЯ 2: НАКОПИТЕЛИ =====
@@ -139,6 +153,8 @@
     });
     var pieces = [];
     var messages = [];
+    var reasonings = [];              // v8: reasoning по ходам (пустая строка — reasoning нет)
+    var reasoningTurns = 0;           // v8: сколько ходов реально несут reasoning
     var lastModel = '';
     for (var j = 0; j < ids.length; j++) {
       var t = turnsMap[ids[j]];
@@ -146,7 +162,11 @@
       // v7: роль unknown сохраняется КАК ЕСТЬ (не маппится в assistant) — разрешение
       // на уровне отображения (content.js buildHistoryMessages: не-user → assistant).
       // Факт нестандартной роли логируем только под debug-флагом (isDebugEnabled).
-      messages.push({ role: t.role || 'unknown', text: t.text });
+      // v8: reasoning хода едет и в messages[], и отдельным массивом reasoningTexts.
+      var turnReasoning = t.reasoning || '';
+      messages.push({ role: t.role || 'unknown', text: t.text, reasoning: turnReasoning });
+      reasonings.push(turnReasoning);
+      if (turnReasoning) reasoningTurns++;
       if (!(t.role === 'user' || t.role === 'assistant') && isDebugEnabled()) {
         console.log('[deepseek-intercept] роль "' + (t.role || 'unknown') + '" оставлена как есть (не маппится в assistant)');
       }
@@ -165,6 +185,8 @@
           messageTexts: pieces,
           messageIds: ids,
           messages: messages,
+          reasoningTexts: reasonings,        // v8: reasoning по ходам ([REASONING]/[ANSWER] уже в messageTexts)
+          reasoningTurns: reasoningTurns,    // v8: ходов с непустым reasoning
           attachTokens: attachTokens,
           attachBreak: {
             imgTokens: attachBreak.imgTokens,
@@ -178,7 +200,7 @@
         }
       }));
     } catch (e) { }
-    return { count: ids.length, textLen: text.length, lastModel: lastModel, serverTokens: serverTokens };
+    return { count: ids.length, textLen: text.length, lastModel: lastModel, serverTokens: serverTokens, reasoningTurns: reasoningTurns };
   }
 
   // ===== СЕКЦИЯ 5: МОДЕЛЬ (походово по thinking_enabled, без DOM) =====
@@ -223,14 +245,9 @@
   }
 
   // ===== СЕКЦИЯ 7: СБОР ТЕКСТА ХОДА (по type, не по порядку фрагментов) =====
+  // v8: ответ хода — ТОЛЬКО фрагменты RESPONSE; THINK собирается отдельно (collectTurnReasoning).
   function collectTurnText(fragments, role) {
-    var types;
-    if (role === 'USER') {
-      types = ['REQUEST'];
-    } else {
-      types = ['RESPONSE'];
-      if (INCLUDE_THINKING) types.push('THINK');
-    }
+    var types = (role === 'USER') ? ['REQUEST'] : ['RESPONSE'];
     var parts = [];
     for (var i = 0; i < fragments.length; i++) {
       var f = fragments[i];
@@ -240,6 +257,28 @@
       // TIP — всегда игнорируем
     }
     return parts.join('').trim();
+  }
+
+  // v8 (O-7): reasoning хода — фрагменты type === 'THINK' (цепочка рассуждений DeepSeek).
+  // У USER-хода reasoning нет по определению. TIP/TEMPLATE_RESPONSE игнорируем.
+  function collectTurnReasoning(fragments, role) {
+    if (role === 'USER') return '';
+    var parts = [];
+    for (var i = 0; i < fragments.length; i++) {
+      var f = fragments[i];
+      if (f && f.type === 'THINK' && typeof f.content === 'string') {
+        parts.push(f.content);
+      }
+    }
+    return parts.join('').trim();
+  }
+
+  // v8 (O-7): формат экспортного текста хода с reasoning:
+  //   [REASONING]\n<рассуждение>\n\n[ANSWER]\n<ответ>
+  // Нет reasoning (или фича выключена) → текст хода байтово прежний (только ответ).
+  function composeTurnText(answer, reasoning) {
+    if (!REASONING_ENABLED || !reasoning) return answer;
+    return REASONING_TAG + '\n' + reasoning + '\n\n' + ANSWER_TAG + '\n' + answer;
   }
 
   // ===== СЕКЦИЯ 8: ПАРСИНГ history_messages =====
@@ -305,8 +344,11 @@
         if (!text) continue;
         var turnSlug = getModelSlug(ch.thinking_enabled === true);
         var chRole = (!ch.role) ? 'unknown' : (ch.role === 'USER' ? 'user' : (ch.role === 'ASSISTANT' ? 'assistant' : 'unknown'));
+        // v8 (O-7): reasoning хода — фрагменты THINK; в текст уходит секциями [REASONING]/[ANSWER]
+        var chReasoning = REASONING_ENABLED ? collectTurnReasoning(fragments, ch.role) : '';
         turnsMap[chId] = {
-          text: text,
+          text: composeTurnText(text, chReasoning),
+          reasoning: chReasoning,
           modelSlug: turnSlug,
           order: orderCounter++,
           ts: ch.inserted_at || 0,
@@ -330,7 +372,8 @@
           ', символов=' + em.textLen + ', модель=' + (em.lastModel || '?') +
           ', serverTokens=' + lastAccumulated +
           (lastAccumulated > 0 ? ' (' + Math.round(lastAccumulated / MODEL_WINDOW_DEFAULT * 1000) / 10 + '%)' : '') +
-          ', modelMode=' + (chatMode || '(default)'));
+          ', modelMode=' + (chatMode || '(default)') +
+          ', reasoning-ходов=' + em.reasoningTurns);   // v8 (O-7)
 
         // ДИАГНОСТИЧЕСКИЙ ДАМП — только при включённом флаге aiCmDebug
         if (isDebugEnabled()) {
@@ -363,6 +406,11 @@
   var sseUserPrompt = '';
   var sseParentMessageId = null;
   var sseThinkingEnabled = null;
+  // v8 (O-7): reasoning realtime-хода. Типы фрагментов идут ПО ПОРЯДКУ (envelope + APPEND
+  // массива response/fragments), и путь response/fragments/-1/content относится к
+  // ПОСЛЕДНЕМУ фрагменту — его тип решает, reasoning это (THINK) или ответ (RESPONSE).
+  var sseCollectedThinking = '';
+  var sseFragmentTypes = [];
 
   function resetStreamState() {
     sseLastPath = null;
@@ -376,11 +424,27 @@
     sseUserPrompt = '';
     sseParentMessageId = null;
     sseThinkingEnabled = null;
+    sseCollectedThinking = '';   // v8
+    sseFragmentTypes = [];       // v8
   }
 
   function processChunk(path, op, val) {
+    // v8: массив фрагментов — регистрируем ТИПЫ в порядке следования (APPEND добавляет,
+    // SET заменяет массив целиком). Контент этих объектов НЕ собираем: текстовые порции
+    // идут путём -1/content, как и прежде — двойного счёта нет.
+    if (Array.isArray(val) && (path === 'response/fragments' || path === 'fragments')) {
+      if (op === 'SET') sseFragmentTypes = [];
+      if (op === 'APPEND' || op === 'SET') {
+        for (var i = 0; i < val.length; i++) {
+          if (val[i] && typeof val[i].type === 'string') sseFragmentTypes.push(val[i].type);
+        }
+      }
+      return;
+    }
     if (path === 'response/fragments/-1/content' && op === 'APPEND' && typeof val === 'string') {
-      sseCollectedText += val;
+      var lastType = sseFragmentTypes.length ? sseFragmentTypes[sseFragmentTypes.length - 1] : '';
+      if (lastType === 'THINK') sseCollectedThinking += val;   // v8: reasoning
+      else sseCollectedText += val;                            // ответ (поведение прежних версий)
     }
   }
 
@@ -393,6 +457,7 @@
     if (!turnsMap[userId] && sseUserPrompt) {
       turnsMap[userId] = {
         text: sseUserPrompt,
+        reasoning: '',
         modelSlug: '',
         order: orderCounter++,
         ts: Date.now() / 1000,
@@ -404,8 +469,11 @@
     var assistantId = String(sseResponseMessageId);
     if (!turnsMap[assistantId] && sseCollectedText) {
       var slug = getModelSlug(sseThinkingEnabled === true);
+      // v8 (O-7): reasoning хода — в текст секциями [REASONING]/[ANSWER]
+      var sseReasoning = REASONING_ENABLED ? sseCollectedThinking.trim() : '';
       turnsMap[assistantId] = {
-        text: sseCollectedText,
+        text: composeTurnText(sseCollectedText, sseReasoning),
+        reasoning: sseReasoning,
         modelSlug: slug,
         order: orderCounter++,
         ts: Date.now() / 1000,
@@ -426,7 +494,8 @@
         ', serverTokens=' + serverTokens +
         (serverTokens > 0 ? ' (' + Math.round(serverTokens / MODEL_WINDOW_DEFAULT * 1000) / 10 + '%)' : '') +
         ', модель=' + (em.lastModel || '?') +
-        ', modelMode=' + (chatMode || '(default)'));
+        ', modelMode=' + (chatMode || '(default)') +
+        ', reasoning-ходов=' + em.reasoningTurns);   // v8 (O-7)
 
       // ДИАГНОСТИЧЕСКИЙ ДАМП — только при включённом флаге aiCmDebug
       if (isDebugEnabled()) {
@@ -497,14 +566,19 @@
         sseModelType = sseModelType || obj.v.response.model_type || null;
 
         // Извлекаем начальный контент из fragments первого response-объекта
+        // v8 (O-7): регистрируем ПОРЯДОК типов фрагментов (нужен для -1/content) и
+        // раздельно собираем RESPONSE (ответ) и THINK (reasoning).
         var initFrags = obj.v.response.fragments;
         if (Array.isArray(initFrags)) {
+          var registerTypes = (sseFragmentTypes.length === 0);
           for (var fi = 0; fi < initFrags.length; fi++) {
             var ifr = initFrags[fi];
+            if (!ifr) continue;
+            if (registerTypes && typeof ifr.type === 'string') sseFragmentTypes.push(ifr.type);
             if (ifr.type === 'RESPONSE' && typeof ifr.content === 'string') {
               sseCollectedText += ifr.content;
-            } else if (INCLUDE_THINKING && ifr.type === 'THINK' && typeof ifr.content === 'string') {
-              sseCollectedText += ifr.content;
+            } else if (ifr.type === 'THINK' && typeof ifr.content === 'string') {
+              sseCollectedThinking += ifr.content;
             }
           }
         }
@@ -901,11 +975,15 @@
       var msg = chatMessages[i];
       var mid = String(msg.message_id || '');
       var totalLen = 0;
+      var thinkLen = 0;   // v8 (O-7): длина reasoning-фрагментов (type === 'THINK')
       var hasContent = false;
       var frags = Array.isArray(msg.fragments) ? msg.fragments : [];
       for (var fi = 0; fi < frags.length; fi++) {
         if (typeof frags[fi].content === 'string') {
           totalLen += frags[fi].content.length;
+        }
+        if (frags[fi] && frags[fi].type === 'THINK' && typeof frags[fi].content === 'string') {
+          thinkLen += frags[fi].content.length;
         }
       }
       if (totalLen > 0) hasContent = true;
@@ -928,6 +1006,8 @@
         role: normalizeRole(msg.role),
         hasContent: hasContent,
         contentLength: totalLen,
+        reasoningLength: thinkLen,        // v8 (O-7): символов reasoning (THINK) в сообщении
+        hasReasoning: thinkLen > 0,       // v8
         inActiveChain: !!chainIds[mid],
         hasTokenField: typeof msg.accumulated_token_usage === 'number',
         tokenFieldName: 'accumulated_token_usage',
@@ -999,7 +1079,9 @@
         attachmentTokens: null,
         hasThinkingEnabled: null,
         thinkingEnabled: null,
-        modelSlug: ti.modelSlug || null
+        modelSlug: ti.modelSlug || null,
+        hasReasoning: !!ti.reasoning,               // v8 (O-7)
+        reasoningLength: ti.reasoning ? ti.reasoning.length : 0   // v8
       });
     }
 
@@ -1098,6 +1180,8 @@
       var assistantCount = 0;
       var unknownCount = 0;
       var totalContentLength = 0;
+      var reasoningMessages = 0;        // v8 (O-7)
+      var totalReasoningLength = 0;     // v8
       var maxTokenValue = null;
       var lastTokenValue = null;
       for (var mi = 0; mi < messages.length; mi++) {
@@ -1106,6 +1190,7 @@
         else if (m.role === 'assistant') assistantCount++;
         else unknownCount++;
         if (typeof m.contentLength === 'number') totalContentLength += m.contentLength;
+        if (m.hasReasoning) { reasoningMessages++; totalReasoningLength += (m.reasoningLength || 0); }   // v8
         if (typeof m.tokenValue === 'number') {
           lastTokenValue = m.tokenValue;
           if (maxTokenValue === null || m.tokenValue > maxTokenValue) {
@@ -1139,7 +1224,8 @@
           historyComplete: histCompletion.historyComplete,   // v7: честная полнота
           reachedRoot: histCompletion.reachedRoot,           // v7: доказан ли корень
           loggedHistory: loggedHistory,
-          loggedRealtime: loggedRealtime
+          loggedRealtime: loggedRealtime,
+          reasoningEnabled: REASONING_ENABLED    // v8 (O-7)
         },
         serverTokens: {
           used: stUsed,
@@ -1155,6 +1241,8 @@
           assistantMessages: assistantCount,
           unknownMessages: unknownCount,
           totalContentLength: totalContentLength,
+          reasoningMessages: reasoningMessages,           // v8 (O-7): сообщений с непустым reasoning
+          totalReasoningLength: totalReasoningLength,     // v8 (O-7)
           sumTokenFields: null,
           maxTokenValue: maxTokenValue,
           lastTokenValue: lastTokenValue,
@@ -1179,7 +1267,7 @@
   }
 
   // ===== СЕКЦИЯ 14: ФИНАЛ =====
-  console.log('[deepseek-intercept] перехватчик DeepSeek v7 установлен (server-first, walk parent_id, SSE постфактум, USER+ASSISTANT оба хода, historyComplete по reachedRoot, serverTokens из accumulated_token_usage, +self-fetch при MERGE, +per-turn model по thinking_enabled, +modelMode в detail, +timer-refetch on switch, +подавление чужих unhandled fetch, +детектор усечения цепочки с дозапросом, +convId в detail, +unknown-роль без маппинга)');
+  console.log('[deepseek-intercept] перехватчик DeepSeek v8 установлен (server-first, walk parent_id, SSE постфактум, USER+ASSISTANT оба хода, historyComplete по reachedRoot, serverTokens из accumulated_token_usage, +self-fetch при MERGE, +per-turn model по thinking_enabled, +modelMode в detail, +timer-refetch on switch, +подавление чужих unhandled fetch, +детектор усечения цепочки с дозапросом, +convId в detail, +unknown-роль без маппинга, +reasoning THINK секциями [REASONING]/[ANSWER])');
 
   // Экспорт для ручного вызова диагностического дампа
   try {
