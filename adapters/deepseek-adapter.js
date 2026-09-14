@@ -14,27 +14,104 @@ class DeepSeekAdapter extends BaseAdapter {
   // loadFullHistory удалён в v1.1 — скролл-пагинация противоречит архитектуре server-first
   // (основной источник данных — перехват сети). Метод не вызывался ни из одного файла.
 
+  // ===== v2 (O-15): reasoning DeepSeek — ЧАСТЬ assistant-хода, а не отдельное сообщение =====
+  // Панель размышлений в DOM живёт отдельным узлом с классом ds-message* — в живом прогоне
+  // это давало «Извлечено 2 сообщений, роли: assi, assi»: пузыри пользователя отбрасывались
+  // (роль 'unknown'), а reasoning и ответ уходили двумя assistant-сообщениями (пара
+  // user→assistant рвалась, а «.» свёрнутой панели попадала в текст хода как [ANSWER]).
+  // Классы DeepSeek ротируются, поэтому признак — комбинация: маркер reasoning + ОТСУТСТВИЕ
+  // markdown-рендера ответа (.ds-markdown) внутри узла.
+  _thinkSelector() {
+    return '[class*="ds-think"], [class*="think-content"], [class*="ds-reason"], [data-testid*="think"]';
+  }
+  _hasThinkMarker(element) {
+    try {
+      if (!element) return false;
+      const cls = String(element.className || '');
+      if (/ds-think|think-content|ds-reason/i.test(cls)) return true;
+      if (typeof element.querySelector === 'function' && element.querySelector(this._thinkSelector())) return true;
+      const txt = String(element.textContent || '').trim();
+      return /^(?:deepthink|deep\s*think|thought|thinking|размышлен|думаю|思考)/i.test(txt);
+    } catch (e) { return false; }
+  }
+  _answerMarkdown(element) {
+    try {
+      if (!element) return null;
+      if (String(element.className || '').includes('ds-markdown')) return element;
+      const md = (typeof element.querySelector === 'function') ? element.querySelector('.ds-markdown') : null;
+      return md || null;
+    } catch (e) { return null; }
+  }
+  // Узел — ТОЛЬКО панель размышлений (ответа в нём нет): сообщением хода не является.
+  _isReasoningOnly(element) {
+    try {
+      if (!element) return false;
+      if (this._answerMarkdown(element)) return false;
+      return this._hasThinkMarker(element);
+    } catch (e) { return false; }
+  }
+  _isInsideReasoning(element) {
+    try {
+      if (!element) return false;
+      if (/ds-think|think-content|ds-reason/i.test(String(element.className || ''))) return true;
+      return (typeof element.closest === 'function') && !!element.closest(this._thinkSelector());
+    } catch (e) { return false; }
+  }
+  // Текст элемента БЕЗ панелей размышлений и служебных кнопок/иконок.
+  _textWithoutReasoning(element) {
+    try {
+      const clone = element.cloneNode(true);
+      Array.prototype.slice.call(clone.querySelectorAll(this._thinkSelector())).forEach(el => el.remove());
+      clone.querySelectorAll('button, svg, [class*="avatar"], [class*="icon"], [class*="toolbar"]')
+        .forEach(el => el.remove());
+      return clone.textContent.trim();
+    } catch (e) { return ''; }
+  }
+  // Артефакт интерфейса («.» свёрнутой панели) — не сообщение: в сообщении должна быть
+  // хотя бы одна буква или цифра. Формат текста при этом не трогаем.
+  _hasRealContent(text) {
+    return /[0-9A-Za-z\u00C0-\u024F\u0400-\u04FF\u4E00-\u9FFF]/.test(String(text == null ? '' : text));
+  }
+  _firstContentChild(element) {
+    try {
+      const candidates = element.querySelectorAll(
+        'div:not([class*="avatar"]):not([class*="button"]):not([class*="icon"])'
+      );
+      for (let i = 0; i < candidates.length; i++) {
+        if (this._isInsideReasoning(candidates[i])) continue;
+        return candidates[i];
+      }
+    } catch (e) { }
+    return null;
+  }
+
   _detectRole(element) {
     const classes = element.className || '';
     if (classes.includes('d29f3d7d')) return 'user';
-    if (classes.includes('ds-message') && !classes.includes('d29f3d7d')) return 'assistant';
     if (classes.includes('ds-markdown') || classes.includes('ds-assistant-message')) return 'assistant';
-    return 'unknown';
+    try {
+      if (element.querySelector && element.querySelector('.ds-markdown, .ds-markdown-paragraph')) return 'assistant';
+      if (this._isReasoningOnly(element)) return 'assistant';
+    } catch (e) { }
+    // v2 (O-15): хеш-класс пузыря пользователя ротируется (d29f3d7d устарел), а роль
+    // 'unknown' отбрасывалась в extractMessages — реплики пользователя исчезали из
+    // live-экспорта. Не-assistant-подобный пузырь — реплика пользователя.
+    return 'user';
   }
 
   _extractText(element) {
-    if (element.className?.includes('ds-markdown')) {
-      const paragraphs = element.querySelectorAll('.ds-markdown-paragraph, p');
+    // Ответ ассистента — markdown-рендер (абзацы построчно; панель размышлений внутри
+    // того же пузыря в текст не входит).
+    const markdown = this._answerMarkdown(element);
+    if (markdown) {
+      const paragraphs = markdown.querySelectorAll('.ds-markdown-paragraph, p');
       if (paragraphs.length > 0) {
-        return Array.from(paragraphs).map(p => p.textContent.trim()).join('\n');
+        return Array.from(paragraphs).map(p => p.textContent.trim()).filter(Boolean).join('\n');
       }
     }
-    const textChild = element.querySelector('div:not([class*="avatar"]):not([class*="button"]):not([class*="icon"])');
-    if (textChild) return textChild.textContent.trim();
-    const clone = element.cloneNode(true);
-    clone.querySelectorAll('button, svg, [class*="avatar"], [class*="icon"], [class*="toolbar"]')
-      .forEach(el => el.remove());
-    return clone.textContent.trim();
+    const textChild = this._firstContentChild(element);
+    if (textChild) return this._textWithoutReasoning(textChild);
+    return this._textWithoutReasoning(element);
   }
 
   extractMessages() {
@@ -43,9 +120,12 @@ class DeepSeekAdapter extends BaseAdapter {
       const messageElements = document.querySelectorAll('div[class*="ds-message"]');
       messageElements.forEach((element) => {
         if (element.className?.includes('ds-markdown') && element.parentElement?.className?.includes('ds-message')) return;
+        // v2 (O-15): панель reasoning — не сообщение хода (текст reasoning приходит
+        // секцией [REASONING] из сетевого перехватчика вместе с ответом).
+        if (this._isReasoningOnly(element)) return;
         const role = this._detectRole(element);
         const content = this._extractText(element);
-        if (content && content.length > 0 && role !== 'unknown') {
+        if (content && content.length > 0 && role !== 'unknown' && this._hasRealContent(content)) {
           messages.push({ role, content });
         }
       });

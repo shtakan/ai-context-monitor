@@ -1,7 +1,8 @@
-// core/deepseek-intercept.js (v8 = v7 + reasoning THINK в тексте хода секциями [REASONING]/[ANSWER])
+// core/deepseek-intercept.js (v9 = v8 + парность ходов live и целостность фрагментов reasoning/answer)
 // Перехватчик DeepSeek в МИРЕ САЙТА (world: "MAIN"), document_start. Регистрация — background.js.
-// В этом шаге меняется ТОЛЬКО этот файл. content.js / page-intercept.js / gemini-intercept.js /
-// background.js / manifest / адаптеры / model-config — НЕ ТРОГАТЬ.
+// В этом шаге меняются ТОЛЬКО этот файл и adapters/deepseek-adapter.js (v9: DOM-ветка
+// live-режима — роли ходов и панель reasoning). content.js / page-intercept.js /
+// gemini-intercept.js / background.js / manifest / model-config — НЕ ТРОГАТЬ.
 //
 // Источник данных: перехват fetch/XHR в МИРЕ САЙТА (world:"MAIN", document_start).
 // Тихая пагинация: НЕ НУЖНА (вся история в одном ответе history_messages).
@@ -48,6 +49,35 @@
 //   получает секции [REASONING]…[ANSWER]… (только если reasoning непустой — ходы без
 //   reasoning байтово прежние). В detail добавлены reasoningTexts и messages[].reasoning.
 //   Подсчёт токенов НЕ тронут (числитель для DeepSeek — серверный accumulated_token_usage).
+//
+// v9 (O-15): парность ходов live-режима и целостность фрагментов reasoning/answer.
+//   ПРИЧИНА 1 (потеря 2 символов и головы [ANSWER], «точка-паразит»): чанк
+//   {p:"response/fragments", o:"APPEND", v:[{type,content}]} — это не только ОБЪЯВЛЕНИЕ
+//   типа нового фрагмента, но и ПЕРВАЯ ПОРЦИЯ ЕГО КОНТЕНТА. v8 регистрировал только тип
+//   (val[i].type), а content выбрасывал → у каждого нового фрагмента терялось начало:
+//   2 символа ("Ре"→зультаты, "Те"→перь, "По"→хоже) там, где сервер прислал в этом чанке
+//   ровно 2 символа, и вся порция целиком там, где он прислал больше (в т.ч. ведущий "\n\n").
+//   Тот же выброс головы ответа давал [ANSWER], начинающийся с точки (выпал "Итог: берите
+//   модель B", осталось ". Она дешевле").
+//   РЕШЕНИЕ: поток фрагментов собирается как В HISTORY — массив {type, content} в порядке
+//   прихода; APPEND = дельта, SET = замена (без среза с фиксированным смещением: только
+//   проверка префикса indexOf === 0), контент чанков fragments[] больше не выбрасывается.
+//   ПРИЧИНА 2 (потеря ходов live): (а) ход ассистента создавался только при НЕПУСТОМ
+//   sseCollectedText — если ответ пришёл в чанке fragments[], хода не было вовсе
+//   («ответы 1–2 отсутствуют»); (б) терминал хода обрабатывался только на BATCH
+//   quasi_status FINISHED / close, поэтому последний ход сессии не попадал в live-экспорт
+//   (у него не было ни close, ни quasi_status). РЕШЕНИЕ: ход создаётся при непустом ответе
+//   ИЛИ reasoning; поток читается инкрементально (полные строки — сразу в разбор), а конец
+//   тела ответа закрывает ход (finishSseStream) — терминальный чанк больше не обязателен.
+//   ПРИЧИНА 3 (пара assi+assi, «reasoning — отдельное сообщение»): в history_messages
+//   reasoning может прийти ОТДЕЛЬНЫМ assistant-сообщением (только THINK). v8 пропускал
+//   такой узел (`if (!text) continue`) — reasoning терялся. РЕШЕНИЕ: ход = user +
+//   assistant(reasoning+answer): узел-assistant без ответа не становится ходом, его
+//   рассуждение приклеивается к следующему (или предыдущему) assistant-узлу.
+//   ИНВАРИАНТ: для одного чата live-экспорт и экспорт из истории совпадают по составу ходов
+//   и по байтам текста (проверяется tools/_o7-reasoning-verify.js и tests/adapters/
+//   deepseek-o15-pairing.test.js). Формат [REASONING]/[ANSWER], токены и прочие сервисы
+//   не тронуты.
 
 (function () {
   if (window.__aiCmDeepseekInterceptInstalled) return;
@@ -334,26 +364,68 @@
       // chatMode — модель чата (expert/default/null), не влияет на выбор модели
       var chatMode = chatSession.model_type || '';
 
-      // Заполняем turnsMap: модель ПОХОДОВО по thinking_enabled
+      // Заполняем turnsMap: модель ПОХОДОВО по thinking_enabled.
+      // v9 (O-15): ход = user + assistant(reasoning+answer). Узел-assistant БЕЗ ответа
+      // (фрагменты только THINK — «пара assi+assi» из живого лога) отдельным ходом не
+      // становится: его рассуждение приклеивается к следующему assistant-узлу, а если
+      // следующего нет — к предыдущему (у которого ответ уже есть). В v8 такой узел
+      // отбрасывался (`if (!text) continue`) — reasoning терялся, а пара сбивалась.
+      var pendingReasoning = '';
+      var lastAssistantId = null;
       for (var c = 0; c < chain.length; c++) {
         var ch = chain[c];
         var chId = String(ch.message_id);
         if (turnsMap[chId]) continue;          // дедуп
         var fragments = Array.isArray(ch.fragments) ? ch.fragments : [];
         var text = collectTurnText(fragments, ch.role);
-        if (!text) continue;
-        var turnSlug = getModelSlug(ch.thinking_enabled === true);
         var chRole = (!ch.role) ? 'unknown' : (ch.role === 'USER' ? 'user' : (ch.role === 'ASSISTANT' ? 'assistant' : 'unknown'));
         // v8 (O-7): reasoning хода — фрагменты THINK; в текст уходит секциями [REASONING]/[ANSWER]
         var chReasoning = REASONING_ENABLED ? collectTurnReasoning(fragments, ch.role) : '';
+        if (chRole === 'assistant') {
+          if (!text) {
+            // reasoning без ответа: НЕ отдельное сообщение и не потеря
+            if (chReasoning) {
+              if (lastAssistantId && turnsMap[lastAssistantId]) {
+                var prevTurn = turnsMap[lastAssistantId];
+                prevTurn.reasoning = (prevTurn.reasoning || '') + chReasoning;
+                prevTurn.text = composeTurnText(prevTurn.answer || '', prevTurn.reasoning);
+              } else {
+                pendingReasoning += chReasoning;   // ждём ответ следующего assistant-узла
+              }
+            }
+            continue;
+          }
+          var mergedReasoning = pendingReasoning + chReasoning;
+          pendingReasoning = '';
+          turnsMap[chId] = {
+            text: composeTurnText(text, mergedReasoning),
+            answer: text,                        // v9: ответ хода (для пересборки при хвостовом reasoning)
+            reasoning: mergedReasoning,
+            modelSlug: getModelSlug(ch.thinking_enabled === true),
+            order: orderCounter++,
+            ts: ch.inserted_at || 0,
+            role: chRole
+          };
+          lastAssistantId = chId;
+          continue;
+        }
+        if (!text) continue;
         turnsMap[chId] = {
           text: composeTurnText(text, chReasoning),
+          answer: text,
           reasoning: chReasoning,
-          modelSlug: turnSlug,
+          modelSlug: getModelSlug(ch.thinking_enabled === true),
           order: orderCounter++,
           ts: ch.inserted_at || 0,
           role: chRole
         };
+      }
+      // v9 (O-15): «висячий» reasoning в конце цепочки (assistant-узел без ответа и без
+      // последующего ответа) доливаем в последний assistant-ход — отдельного хода нет.
+      if (pendingReasoning && lastAssistantId && turnsMap[lastAssistantId]) {
+        var tailTurn = turnsMap[lastAssistantId];
+        tailTurn.reasoning = (tailTurn.reasoning || '') + pendingReasoning;
+        tailTurn.text = composeTurnText(tailTurn.answer || '', tailTurn.reasoning);
       }
 
       // УСЛОВИЕ 1: accumulated_token_usage — максимум по всем сообщениям цепочки (накопительное, монотонно растёт)
@@ -394,7 +466,7 @@
     }
   }
 
-  // ===== СЕКЦИЯ 9: ПАРСЕР SSE (постфактум, из полного текста, ловушка №2) =====
+  // ===== СЕКЦИЯ 9: ПАРСЕР SSE (постфактум и ИНКРЕМЕНТАЛЬНО, ловушка №2) =====
   var sseLastPath = null;
   var sseLastOp = null;
   var sseRealtimeEntryTokens = 0;
@@ -402,15 +474,20 @@
   var sseRequestMessageId = null;
   var sseResponseMessageId = null;
   var sseModelType = null;
-  var sseCollectedText = '';
   var sseUserPrompt = '';
   var sseParentMessageId = null;
   var sseThinkingEnabled = null;
-  // v8 (O-7): reasoning realtime-хода. Типы фрагментов идут ПО ПОРЯДКУ (envelope + APPEND
-  // массива response/fragments), и путь response/fragments/-1/content относится к
-  // ПОСЛЕДНЕМУ фрагменту — его тип решает, reasoning это (THINK) или ответ (RESPONSE).
-  var sseCollectedThinking = '';
-  var sseFragmentTypes = [];
+  // v9 (O-15): фрагменты потока — ОДИН массив в порядке прихода: { type, content }.
+  // Это ровно та же форма, что fragments[] в history_messages, поэтому live-текст хода
+  // собирается ТЕМИ ЖЕ правилами, что и экспорт из истории: RESPONSE → ответ,
+  // THINK → reasoning (секции [REASONING]/[ANSWER]), прочие типы (TIP/SEARCH/…) в текст
+  // хода не идут — как и в collectTurnText/collectTurnReasoning.
+  // v8 держал только sseFragmentTypes (типы) и выбрасывал content чанков
+  // {p:"response/fragments", o:"APPEND", v:[{type,content}]} — отсюда потеря начала
+  // каждого нового фрагмента (2 символа и «точка-паразит» в начале [ANSWER]).
+  var sseFragments = [];
+  var sseFragmentTypes = [];   // производная (диагностика порядка типов)
+  var sseCurrentEvent = '';    // v9: текущее SSE-событие (разбор по строкам, в т.ч. инкрементальный)
 
   function resetStreamState() {
     sseLastPath = null;
@@ -420,36 +497,134 @@
     sseRequestMessageId = null;
     sseResponseMessageId = null;
     sseModelType = null;
-    sseCollectedText = '';
     sseUserPrompt = '';
     sseParentMessageId = null;
     sseThinkingEnabled = null;
-    sseCollectedThinking = '';   // v8
-    sseFragmentTypes = [];       // v8
+    sseFragments = [];       // v9
+    sseFragmentTypes = [];   // v9
+    sseCurrentEvent = '';    // v9
+  }
+
+  // v9 (O-15): последний фрагмент потока — цель пути response/fragments/-1/content.
+  function streamLastFragment() {
+    return sseFragments.length ? sseFragments[sseFragments.length - 1] : null;
+  }
+  function streamPushFragment(type, content) {
+    if (typeof type !== 'string' || !type) return null;
+    var f = { type: type, content: (typeof content === 'string') ? content : '' };
+    sseFragments.push(f);
+    sseFragmentTypes.push(type);
+    return f;
+  }
+  // v9 (O-15): APPEND — дельта, НО сервер иногда перевыдаёт фрагмент целиком (значение
+  // начинается с уже собранного). Тогда это замена, а не дубль. Среза с фиксированным
+  // смещением НЕТ: только проверка префикса (indexOf === 0) — байты не теряются никогда.
+  function streamAppendContent(f, val) {
+    if (!f || typeof val !== 'string' || !val) return;
+    var cur = f.content || '';
+    if (cur && val.indexOf(cur) === 0) { f.content = val; return; }
+    f.content = cur + val;
+  }
+  // v9 (O-15): SET — замена контента фрагмента. Укорачивать уже собранное нельзя: SET
+  // приходит и как «полный текст на данный момент». Значение-префикс уже собранного — игнор.
+  function streamSetContent(f, val) {
+    if (!f || typeof val !== 'string' || !val) return;
+    var cur = f.content || '';
+    if (!cur) { f.content = val; return; }
+    if (val === cur) return;
+    if (cur.indexOf(val) === 0) return;
+    f.content = val;
+  }
+  // v9 (O-15): текст всех фрагментов одного типа в порядке потока (та же склейка, что в
+  // history_messages: join('') + trim) — live и история дают ОДИН И ТОТ ЖЕ текст.
+  function streamFragmentText(type) {
+    var parts = [];
+    for (var i = 0; i < sseFragments.length; i++) {
+      var f = sseFragments[i];
+      if (f && f.type === type && typeof f.content === 'string') parts.push(f.content);
+    }
+    return parts.join('').trim();
+  }
+  // v9 (O-15): контент фрагментов «прочих» типов (TIP/SEARCH/…) — в текст хода не идёт,
+  // но служит аварийным ответом, если RESPONSE-фрагментов в потоке не было вовсе
+  // (незнакомый протокол): лучше показать текст, чем пустой ход.
+  function streamOtherText() {
+    var parts = [];
+    for (var i = 0; i < sseFragments.length; i++) {
+      var f = sseFragments[i];
+      if (f && f.type !== 'THINK' && f.type !== 'RESPONSE' && typeof f.content === 'string') parts.push(f.content);
+    }
+    return parts.join('').trim();
   }
 
   function processChunk(path, op, val) {
-    // v8: массив фрагментов — регистрируем ТИПЫ в порядке следования (APPEND добавляет,
-    // SET заменяет массив целиком). Контент этих объектов НЕ собираем: текстовые порции
-    // идут путём -1/content, как и прежде — двойного счёта нет.
+    // v9 (O-15): сокращённый чанк может прийти и после чанка массива фрагментов. Строка —
+    // это либо объявление типа ('THINK'), либо порция КОНТЕНТА последнего фрагмента
+    // (иначе текст молча терялся). Различаем по форме: типы — ВЕРХНИЙ_РЕГИСТР.
+    if (typeof val === 'string' && (path === 'response/fragments' || path === 'fragments')) {
+      if (/^[A-Z][A-Z_]{2,}$/.test(val)) { streamPushFragment(val, ''); return; }
+      var fStr = streamLastFragment();
+      if (!fStr) return;
+      if (op === 'SET') streamSetContent(fStr, val); else streamAppendContent(fStr, val);
+      return;
+    }
+    // v9 (O-15): чанк массива фрагментов — это И объявление типа нового фрагмента,
+    // И ПЕРВАЯ ПОРЦИЯ ЕГО КОНТЕНТА. Регистрируем тип и НЕ ТЕРЯЕМ content.
     if (Array.isArray(val) && (path === 'response/fragments' || path === 'fragments')) {
-      if (op === 'SET') sseFragmentTypes = [];
-      if (op === 'APPEND' || op === 'SET') {
-        for (var i = 0; i < val.length; i++) {
-          if (val[i] && typeof val[i].type === 'string') sseFragmentTypes.push(val[i].type);
+      var i, item, itemType;
+      if (op === 'SET') {
+        // SET авторитетен для СОСТАВА массива; контент совпадающих по позиции фрагментов
+        // сливаем (streamSetContent не укорачивает уже собранное).
+        var next = [];
+        for (i = 0; i < val.length; i++) {
+          item = val[i];
+          itemType = (typeof item === 'string') ? item : ((item && typeof item.type === 'string') ? item.type : '');
+          if (!itemType) continue;
+          var prevF = sseFragments[i];
+          var fS = (prevF && prevF.type === itemType) ? prevF : { type: itemType, content: '' };
+          if (item && typeof item === 'object') streamSetContent(fS, item.content);
+          next.push(fS);
         }
+        if (!next.length && sseFragments.length) return;   // пустой SET не стирает собранное
+        sseFragments = next;
+        sseFragmentTypes = [];
+        for (i = 0; i < next.length; i++) sseFragmentTypes.push(next[i].type);
+        return;
+      }
+      // APPEND: строки — только объявление типа (['THINK']), объекты — тип + первая порция
+      for (i = 0; i < val.length; i++) {
+        item = val[i];
+        if (typeof item === 'string') { streamPushFragment(item, ''); continue; }
+        if (!item || typeof item.type !== 'string') continue;
+        // Перевыдача последнего фрагмента целиком (тот же тип + значение начинается с
+        // уже собранного) — это продолжение/замена, а не новый фрагмент: не дублируем.
+        var lastF = streamLastFragment();
+        if (lastF && lastF.type === item.type && typeof item.content === 'string' && item.content &&
+            (lastF.content || '').length > 0 && item.content.indexOf(lastF.content) === 0) {
+          streamAppendContent(lastF, item.content);
+          continue;
+        }
+        streamPushFragment(item.type, item.content);
       }
       return;
     }
-    if (path === 'response/fragments/-1/content' && op === 'APPEND' && typeof val === 'string') {
-      var lastType = sseFragmentTypes.length ? sseFragmentTypes[sseFragmentTypes.length - 1] : '';
-      if (lastType === 'THINK') sseCollectedThinking += val;   // v8: reasoning
-      else sseCollectedText += val;                            // ответ (поведение прежних версий)
+    // Путь к контенту ПОСЛЕДНЕГО фрагмента: APPEND — дельта, SET — замена.
+    if (path === 'response/fragments/-1/content') {
+      var f = streamLastFragment();
+      if (!f) return;
+      if (op === 'APPEND') { streamAppendContent(f, val); return; }
+      if (op === 'SET') { streamSetContent(f, val); return; }
     }
   }
 
   function finalizeRealtimeTurn() {
     if (!sseRequestMessageId || !sseResponseMessageId) return;
+
+    // v9 (O-15): ответ и reasoning — из ОДНОГО массива фрагментов потока, теми же
+    // правилами, что и history_messages.
+    var answerText = streamFragmentText('RESPONSE');
+    if (!answerText) answerText = streamOtherText();   // аварийный фолбэк (незнакомый тип)
+    var sseReasoning = REASONING_ENABLED ? streamFragmentText('THINK') : '';
 
     // УСЛОВИЕ 2: добавляем ОБА хода — USER и ASSISTANT
     // USER-ход
@@ -457,6 +632,7 @@
     if (!turnsMap[userId] && sseUserPrompt) {
       turnsMap[userId] = {
         text: sseUserPrompt,
+        answer: sseUserPrompt,
         reasoning: '',
         modelSlug: '',
         order: orderCounter++,
@@ -465,16 +641,17 @@
       };
     }
 
-    // ASSISTANT-ход: модель по thinking_enabled (sseModelType не влияет на выбор)
+    // ASSISTANT-ход: модель по thinking_enabled (sseModelType не влияет на выбор).
+    // v9 (O-15): ход создаётся при непустом ответе ИЛИ reasoning — v8 требовал ответ и
+    // терял ход целиком, когда ответ приходил внутри чанка fragments[] («ответы 1–2
+    // отсутствуют» в live-экспорте).
     var assistantId = String(sseResponseMessageId);
-    if (!turnsMap[assistantId] && sseCollectedText) {
-      var slug = getModelSlug(sseThinkingEnabled === true);
-      // v8 (O-7): reasoning хода — в текст секциями [REASONING]/[ANSWER]
-      var sseReasoning = REASONING_ENABLED ? sseCollectedThinking.trim() : '';
+    if (!turnsMap[assistantId] && (answerText || sseReasoning)) {
       turnsMap[assistantId] = {
-        text: composeTurnText(sseCollectedText, sseReasoning),
+        text: composeTurnText(answerText, sseReasoning),
+        answer: answerText,
         reasoning: sseReasoning,
-        modelSlug: slug,
+        modelSlug: getModelSlug(sseThinkingEnabled === true),
         order: orderCounter++,
         ts: Date.now() / 1000,
         role: 'assistant'
@@ -512,17 +689,18 @@
     resetStreamState();
   }
 
-  function parseSSE(text) {
-    if (typeof text !== 'string' || !text) return;
-    var lines = text.split('\n');
-    var currentEvent = '';
+  // v9 (O-15): разбор идёт ПО СТРОКАМ — один и тот же код обслуживает полный текст
+  // (XHR/фолбэк: parseSSE) и инкрементальное чтение потока (consumeSseResponse).
+  function parseSSELines(lines) {
+    if (!Array.isArray(lines)) return;
 
     for (var i = 0; i < lines.length; i++) {
       var ln = lines[i];
 
-      // event: ...
+      // event: ... (v9: состояние события живёт в sseCurrentEvent — разбор идёт по строкам,
+      // в т.ч. инкрементально, поэтому локальная переменная не годится)
       if (ln.indexOf('event:') === 0) {
-        currentEvent = ln.slice(6).trim();
+        sseCurrentEvent = ln.slice(6).trim();
         continue;
       }
 
@@ -535,26 +713,26 @@
       try { obj = JSON.parse(jsonStr); } catch (e) { continue; }
 
       // === ready ===
-      if (currentEvent === 'ready' && obj.request_message_id) {
+      if (sseCurrentEvent === 'ready' && obj.request_message_id) {
         sseRequestMessageId = obj.request_message_id;
         sseResponseMessageId = obj.response_message_id;
         sseModelType = obj.model_type || null;
-        currentEvent = '';
+        sseCurrentEvent = '';
         continue;
       }
 
       // === update_session (игнорируем, только updated_at) ===
-      if (currentEvent === 'update_session') {
-        currentEvent = '';
+      if (sseCurrentEvent === 'update_session') {
+        sseCurrentEvent = '';
         continue;
       }
 
       // === close ===
-      if (currentEvent === 'close') {
+      if (sseCurrentEvent === 'close') {
         if (sseRequestMessageId && sseResponseMessageId) {
           finalizeRealtimeTurn();
         }
-        currentEvent = '';
+        sseCurrentEvent = '';
         continue;
       }
 
@@ -565,22 +743,11 @@
         sseRealtimeEntryTokens = obj.v.response.accumulated_token_usage;
         sseModelType = sseModelType || obj.v.response.model_type || null;
 
-        // Извлекаем начальный контент из fragments первого response-объекта
-        // v8 (O-7): регистрируем ПОРЯДОК типов фрагментов (нужен для -1/content) и
-        // раздельно собираем RESPONSE (ответ) и THINK (reasoning).
+        // v9 (O-15): начальные фрагменты разбирает ТОТ ЖЕ код, что и APPEND/SET-чанки
+        // (тип + контент). Первый envelope — SET состава, повторный — APPEND новых.
         var initFrags = obj.v.response.fragments;
         if (Array.isArray(initFrags)) {
-          var registerTypes = (sseFragmentTypes.length === 0);
-          for (var fi = 0; fi < initFrags.length; fi++) {
-            var ifr = initFrags[fi];
-            if (!ifr) continue;
-            if (registerTypes && typeof ifr.type === 'string') sseFragmentTypes.push(ifr.type);
-            if (ifr.type === 'RESPONSE' && typeof ifr.content === 'string') {
-              sseCollectedText += ifr.content;
-            } else if (ifr.type === 'THINK' && typeof ifr.content === 'string') {
-              sseCollectedThinking += ifr.content;
-            }
-          }
+          processChunk('response/fragments', sseFragments.length ? 'APPEND' : 'SET', initFrags);
         }
         continue;
       }
@@ -623,6 +790,75 @@
         continue;
       }
     }
+  }
+
+  // v9 (O-15): конец тела ответа = ход завершён. Раньше терминалом были ТОЛЬКО
+  // BATCH quasi_status FINISHED и event: close; если сервер не прислал ни того, ни другого,
+  // последний ход сессии вообще не попадал в live-экспорт. finalizeRealtimeTurn идемпотентен
+  // (после первого вызова resetStreamState обнуляет id) — повторный вызов безопасен.
+  function finishSseStream() {
+    if (sseRequestMessageId && sseResponseMessageId) finalizeRealtimeTurn();
+  }
+
+  function parseSSE(text) {
+    if (typeof text !== 'string' || !text) return;
+    parseSSELines(text.split('\n'));
+    finishSseStream();
+  }
+
+  // v9 (O-15): инкрементальное чтение потока: полные строки уходят в разбор СРАЗУ, поэтому
+  // терминальный чанк закрывает ход, не дожидаясь конца тела ответа (live-экспорт «сразу
+  // после диалога» видел только предыдущие ходы). Клон tee-ится — чтение страницы не
+  // затрагивается; если body/reader/TextDecoder недоступны (или это XHR-путь) — прежний
+  // фолбэк на clone().text() (полный текст).
+  // Чат может смениться ПОКА поток читается (SPA-переход по сайдбару): ходы старого чата
+  // в новый turnsMap не подмешиваем — тихая проверка convId на каждом шаге чтения.
+  function consumeSseResponse(resp, convId) {
+    var sameConv = function () { return !convId || convId === currentConvId; };
+    var clone = null;
+    try { clone = resp.clone(); } catch (e) { clone = null; }
+    if (!clone) return;
+    var body = clone.body;
+    var Dec = (typeof TextDecoder !== 'undefined') ? TextDecoder : null;
+    if (!body || typeof body.getReader !== 'function' || !Dec) {
+      if (typeof clone.text === 'function') {
+        clone.text().then(function (txt) { if (sameConv()) parseSSE(txt); }).catch(function () { });
+      }
+      return;
+    }
+    var reader = null;
+    var dec = null;
+    try {
+      reader = body.getReader();
+      dec = new Dec('utf-8');
+    } catch (eR) {
+      return;
+    }
+    var buf = '';
+    function pump() {
+      if (!sameConv()) {
+        try { reader.cancel(); } catch (eC) { }
+        return Promise.resolve();
+      }
+      return reader.read().then(function (r) {
+        if (!r || r.done) {
+          if (buf) { parseSSELines([buf.replace(/\r$/, '')]); buf = ''; }
+          if (sameConv()) finishSseStream();
+          return;
+        }
+        var chunk = '';
+        try { chunk = dec.decode(r.value, { stream: true }); } catch (eD) { chunk = ''; }
+        buf += chunk;
+        var idx;
+        while ((idx = buf.indexOf('\n')) !== -1) {
+          var line = buf.slice(0, idx);
+          buf = buf.slice(idx + 1);
+          parseSSELines([line.replace(/\r$/, '')]);
+        }
+        return pump();
+      });
+    }
+    pump().catch(function () { if (sameConv()) finishSseStream(); });
   }
 
   // ===== СЕКЦИЯ 10: ГАРД ПЕРЕКРЁСТА (chat_session_id vs currentConvId) =====
@@ -792,12 +1028,13 @@
         }, function () { /* v5: тихо — не создаём висячий Promise.reject */ });
       }
 
-      // обработка ответа стрима (постфактум, из полного текста)
+      // обработка ответа стрима (v9: инкрементально — терминальный чанк закрывает ход
+      // сразу, не дожидаясь конца тела ответа)
       if (isCompletion) {
         promise.then(function (resp) {
           try {
             if (resp && resp.ok && guardCheck(completionConvId)) {
-              resp.clone().text().then(function (txt) { parseSSE(txt); }).catch(function () { });
+              consumeSseResponse(resp, completionConvId);
             }
           } catch (e) { }
           return resp;
@@ -1267,7 +1504,7 @@
   }
 
   // ===== СЕКЦИЯ 14: ФИНАЛ =====
-  console.log('[deepseek-intercept] перехватчик DeepSeek v8 установлен (server-first, walk parent_id, SSE постфактум, USER+ASSISTANT оба хода, historyComplete по reachedRoot, serverTokens из accumulated_token_usage, +self-fetch при MERGE, +per-turn model по thinking_enabled, +modelMode в detail, +timer-refetch on switch, +подавление чужих unhandled fetch, +детектор усечения цепочки с дозапросом, +convId в detail, +unknown-роль без маппинга, +reasoning THINK секциями [REASONING]/[ANSWER])');
+  console.log('[deepseek-intercept] перехватчик DeepSeek v9 установлен (server-first, walk parent_id, SSE инкрементально И постфактум, USER+ASSISTANT оба хода, ход = user + assistant(reasoning+answer), фрагменты потока как fragments[] истории (без потери контента чанков), терминал хода по BATCH/close/концу тела, historyComplete по reachedRoot, serverTokens из accumulated_token_usage, +self-fetch при MERGE, +per-turn model по thinking_enabled, +modelMode в detail, +timer-refetch on switch, +подавление чужих unhandled fetch, +детектор усечения цепочки с дозапросом, +convId в detail, +unknown-роль без маппинга, +reasoning THINK секциями [REASONING]/[ANSWER])');
 
   // Экспорт для ручного вызова диагностического дампа
   try {
