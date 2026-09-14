@@ -126,6 +126,65 @@ function aiCmGeminiTurnsSnapshotSync() {
     return resp;
   } catch (e) { return null; }
 }
+// ================= O-18 (фаза 2): сетевой дозапрос истории в момент экспорта =================
+// Перед КОМПОЗИЦИЕЙ файла (автоэкспорт и ручной экспорт) DeepSeek-перехватчик в MAIN-мире
+// получает шанс дозапросить history_messages текущего чата. Решение «нужен ли дозапрос» и
+// per-turn выбор текста (EQUAL → live, MIDDLE-HOLE/TAIL-CUT → сеть, ONE-SIDE → live + маркер)
+// принимаются ТАМ: только MAIN-мир знает и live-базу (SSE), и время приёмки сетевого снимка.
+// Здесь — ожидание ответа с жёстким таймаутом: не дождались (сеть/страница/старая версия
+// перехватчика) — экспорт идёт ПРЕЖНИМ live-путём, байты файла не меняются.
+// Мост — те же window-CustomEvent, что у probe/flush O-16 (изоляция миров не нарушена).
+var aiCmNetSyncSeq = 0;
+function aiCmExportNetSyncSite() {
+  try {
+    return (typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName === 'deepseek');
+  } catch (eSite) { return false; }
+}
+function aiCmExportNetSyncThen(convId, cb, timeoutMs) {
+  var cap = (typeof timeoutMs === 'number' && timeoutMs > 0) ? timeoutMs : 3000;
+  var done = false;
+  var timer = null;
+  var handler = null;
+  function finish(info) {
+    if (done) return;
+    done = true;
+    if (timer) { try { clearTimeout(timer); } catch (eT) { } timer = null; }
+    if (handler) { try { window.removeEventListener('ai-cm-deepseek-net-sync-done', handler); } catch (eR) { } handler = null; }
+    try { aiCmLogNetSyncResult(convId, info || {}); } catch (eL) { }
+    try { if (cb) cb(info || {}); } catch (eCb) { }
+  }
+  try {
+    if (!convId) { finish({ ok: false, reason: 'no-conv' }); return; }
+    var reqId = 'netsync-' + Date.now() + '-' + (++aiCmNetSyncSeq);
+    handler = function (ev) {
+      var d = ev && ev.detail;
+      if (!d || String(d.requestId || '') !== reqId) return;
+      finish(d);
+    };
+    window.addEventListener('ai-cm-deepseek-net-sync-done', handler);
+    timer = setTimeout(function () { finish({ ok: false, reason: 'timeout' }); }, cap);
+    window.dispatchEvent(new CustomEvent('ai-cm-deepseek-net-sync', {
+      detail: { requestId: reqId, convId: convId, timeoutMs: cap }
+    }));
+  } catch (eBridge) { finish({ ok: false, reason: 'bridge-error' }); }
+}
+// Маркер в логе: видно КАЖДЫЙ экспорт DeepSeek — был ли дозапрос, чем закончился, какой
+// текст пошёл в файл (verdicts) и сколько ходов пришло из live.
+function aiCmLogNetSyncResult(convId, info) {
+  try {
+    var v = info && info.verdicts ? JSON.stringify(info.verdicts) : '{}';
+    var line = '[AI CM][net-sync] convId=' + String(convId || '').slice(0, 8) +
+      ' ok=' + (info && info.ok === true ? 1 : 0) +
+      ' reason=' + ((info && info.reason) || '-') +
+      ' refetched=' + (info && info.refetched === true ? 1 : 0) +
+      ' netTurns=' + ((info && info.netTurns) || 0) +
+      ' liveTurns=' + ((info && info.liveTurns) || 0) +
+      ' verdicts=' + v;
+    debugLog('log', line);
+  } catch (eLog) { }
+}
+// ================= конец O-18 (фаза 2) =================
+
 // Дамп turnsMap в момент экспорта: авто-fired и ручной (md/txt).
 function aiCmDumpTurnsSnapshot(tag, cid, msgs) {
   try {
@@ -211,6 +270,9 @@ function scheduleStaleCheck() {
   Api.aiCmMetricBaseText = aiCmMetricBaseText;
   Api.aiCmDiagHash6 = aiCmDiagHash6;
   Api.aiCmGeminiTurnsSnapshotSync = aiCmGeminiTurnsSnapshotSync;
+  Api.aiCmExportNetSyncSite = aiCmExportNetSyncSite;      // O-18 (фаза 2)
+  Api.aiCmExportNetSyncThen = aiCmExportNetSyncThen;      // O-18 (фаза 2)
+  Api.aiCmLogNetSyncResult = aiCmLogNetSyncResult;        // O-18 (фаза 2)
   Api.aiCmDumpTurnsSnapshot = aiCmDumpTurnsSnapshot;
   Api.scheduleStaleCheck = scheduleStaleCheck;
   if (typeof module !== 'undefined' && module.exports) module.exports = Api;

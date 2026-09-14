@@ -131,6 +131,32 @@
 //   snap=null → msgs=0 firstText="" — выглядело как пустой turnsMap).
 //   Поведение O-15/O-16 сохранено: defer до base-complete остаётся, аварийный путь
 //   deferred-timeout(60s)/as-is с [LOW CONFIDENCE]_ — только для реально неполной базы.
+//
+// v12 (O-18, фаза 2): ресинхронизация парсера фрагментов + сетевой дозапрос в момент экспорта.
+//   ПЕРВОПРИЧИНА (измерено фазой 1, дамп прогона 19-12): строка-дельта пути response/fragments
+//   классифицировалась по ФОРМЕ (`/^[A-Z][A-Z_]{2,}$/`), а не по белому списку. Любой
+//   контент-чанк, целиком состоящий из заглавных латинских букв и '_' (длина ≥ 3), принимался
+//   за ОБЪЯВЛЕНИЕ ТИПА нового фрагмента: «…|| DEFAULT_SU» | «BSCRIPT» | «ION» → тип «BSCRIPT»
+//   (и «ION»), а весь дальнейший текст ответа уходил в мусорные фрагменты, которые
+//   streamFragmentText('RESPONSE') не читает. Отсюда обрыв файла на «…DEFAULT_SU» при полном
+//   ответе на странице (frags sse-finish: BSCRIPT/ION/OFF/REEN/UMENT/URL/DOM/ARS, live=5942
+//   против полного ответа, verdicts ONE-SIDE×4 — сеть в тот прогон не опрашивалась вовсе).
+//   РЕШЕНИЕ: (1) имя фрагмента принимается ТОЛЬКО из белого списка SSE_FRAGMENT_TYPES
+//   (THINK/RESPONSE/… — типы протокола DeepSeek); (2) типоподобный токен вне белого списка —
+//   признак ДЕСИНХРОНА: он (и всё, что уже ушло за последнюю валидную границу) возвращается
+//   в контент последнего валидного фрагмента пересборкой из СЫРОГО кольца дельт
+//   (sseResyncRing), а не заводится новый «тип»; (3) байты контента никогда не пишутся в
+//   невалидный фрагмент (позиционное переиспользование исключено); (4) имена типов из
+//   массивов response/fragments валидируются тем же белым списком — мусорных фрагментов в
+//   буфере не остаётся вовсе. Кандидаты K4 («длиннее побеждает») и K7 (финал/flush) не тронуты:
+//   дамп не показывает их вины.
+//   СЕТЕВОЙ ДОЗАПРОС: перед композицией файла (авто и ручной экспорт) ISOLATED-мир спрашивает
+//   MAIN по мосту ai-cm-deepseek-net-sync; если сетевого снимка нет или он старше последнего
+//   завершённого хода — history_messages текущего convId запрашивается заново (таймаут 3 с),
+//   per-turn выбирается текст (EQUAL → live, MIDDLE-HOLE/TAIL-CUT → сеть, ONE-SIDE → live +
+//   маркер в логе), затем снимок публикуется обычным EMIT. Сеть недоступна/пуста — файл
+//   собирается прежним live-путём. Латчи/пороги O-16, гейты полноты O-17 и формат
+//   [REASONING]/[ANSWER] не тронуты.
 
 (function () {
   if (window.__aiCmDeepseekInterceptInstalled) return;
@@ -206,6 +232,12 @@
     histCompletion.baseEmpty = false;        // v11 (O-17)
     lastBaseServerTokens = 0;                // v11 (O-17)
     lastBaseChatMode = '';                   // v11 (O-17)
+    // v12 (O-18, фаза 2): live-кэш ходов и состояние сетевого дозапроса — на один чат
+    liveTurns = {};
+    liveTurnOrder = [];
+    netSnapshotAt = 0;
+    netTurnIds = {};
+    lastTurnDoneAt = 0;
     resetStreamState();
     console.log('[deepseek-intercept] смена чата → состояние перехватчика сброшено (convId=' + (currentConvId || '(не чат)') + ')');
     try { window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); } catch (e) { }
@@ -424,7 +456,14 @@
 
   // ===== СЕКЦИЯ 8: ПАРСИНГ history_messages =====
   // v6: детектор усечения активной цепочки + однократный тихий дозапрос полной истории
+  // v12 (O-18, фаза 2): ingestMode === 'export-sync' — приёмка снимка, запрошенного ПЕРЕД
+  // композицией файла: рекурсивные дозапросы не запускаются (таймаут экспорта уже идёт),
+  // а вердикт полноты не понижается. Обычный путь (ingestMode === '') не меняется —
+  // сигнатура функции прежняя, режим передаётся состоянием, а не аргументом.
+  var ingestMode = '';
+  var exportSyncTruncated = false;   // v12 (O-18): снимок экспортного дозапроса оказался усечён
   function ingestHistory(jsonBody) {
+    var exportSync = (ingestMode === 'export-sync');
     try {
       if (jsonBody.code !== 0) return;
       var bizData = jsonBody.data && jsonBody.data.biz_data;
@@ -471,7 +510,7 @@
       // дозапроса после SPA-смены чата (scheduleHistoryRefetch → refetchFullHistory) приходит
       // сюда напрямую: раньше он стирал turnsMap и молча выходил. Теперь — тот же тихий
       // дозапрос полной истории без cache_version/cache_reset_at, база не трогается.
-      if (!chain.length && chatMessages.length === 0 && !baseEmptyAuthoritative && !historyRefetchDone) {
+      if (!chain.length && chatMessages.length === 0 && !baseEmptyAuthoritative && !historyRefetchDone && !exportSync) {
         historyRefetchDone = true;
         diagMark('ingest-branch-MERGE-refetch', { chainLen: 0, chatMessages: 0 });   // O-18 (ИЗМЕРЕНИЕ)
         console.log('[deepseek-intercept] пустой кеш (MERGE) без авторитетной пустоты → тихий дозапрос полной истории (без cache_version)');
@@ -510,7 +549,7 @@
       }
 
       // v6: ДЕТЕКТОР УСЕЧЕНИЯ — если цепочка оборвана и дозапрос ещё не делался
-      if (truncated && !historyRefetchDone) {
+      if (truncated && !historyRefetchDone && !exportSync) {
         historyRefetchDone = true;
         // O-18 (ИЗМЕРЕНИЕ): ветка «цепочка оборвана → дозапрос».
         diagMark('ingest-branch-TRUNCATED-refetch', { chainLen: chain.length, chatMessages: chatMessages.length });
@@ -518,6 +557,15 @@
         console.log('[deepseek-intercept] кеш усечён (цепочка оборвана) → тихий дозапрос полной истории (без cache_version)');
         refetchFullHistory(lastHistoryUrl, lastAuthHeaders, currentConvId);
         return; // не обрабатываем усечённый ответ — ждём полный (собранные live-ходы сохранены)
+      }
+      // v12 (O-18, фаза 2): в режиме экспортного дозапроса усечённый снимок НЕ принимается.
+      // Экспорт не имеет права стать ХУЖЕ live-базы: сброс turnsMap по обрезанной цепочке
+      // потерял бы ранние ходы. Такой ответ — как «сети нет»: база не тронута, live-путь.
+      if (truncated && exportSync) {
+        exportSyncTruncated = true;
+        diagMark('ingest-branch-TRUNCATED-export-sync', { chainLen: chain.length, chatMessages: chatMessages.length });
+        console.log('[deepseek-intercept] экспорт: сетевой снимок усечён (цепочка оборвана) → база не тронута, прежний live-путь');
+        return;
       }
 
       // v11 (O-17): снимок ПРИНЯТ как авторитетный — только теперь СБРОС и пересборка
@@ -606,6 +654,13 @@
         reachedRoot: chainResult.reachedRoot === true, truncated: chainResult.truncated === true
       });
       diagSnapshotNetTurns('ingestHistory');
+      // v12 (O-18, фаза 2): снимок сети ПРИНЯТ — фиксируем его время и состав ходов.
+      // По этим данным экспорт решает, нужен ли дозапрос («снимок старше последнего хода»).
+      netSnapshotAt = Date.now();
+      netTurnIds = {};
+      for (var nk in turnsMap) {
+        if (Object.prototype.hasOwnProperty.call(turnsMap, nk)) netTurnIds[nk] = 1;
+      }
 
       // УСЛОВИЕ 1: accumulated_token_usage — максимум по всем сообщениям цепочки (накопительное, монотонно растёт)
       var lastAccumulated = 0;
@@ -732,14 +787,143 @@
     sseFragments = [];       // v9
     sseFragmentTypes = [];   // v9
     sseCurrentEvent = '';    // v9
+    // v12 (O-18): сырое кольцо ресинка и аварийный бакет неизвестных типов относятся к
+    // ТЕКУЩЕМУ потоку — новый поток/смена чата их не наследует (иначе байты прошлого хода
+    // могли бы попасть в аварийный ответ следующего).
+    sseResyncRing = [];
+    sseResyncChars = 0;
+    sseUnknownParts = [];
+    sseUnknownChars = 0;
   }
 
   // v9 (O-15): последний фрагмент потока — цель пути response/fragments/-1/content.
   function streamLastFragment() {
     return sseFragments.length ? sseFragments[sseFragments.length - 1] : null;
   }
+  // ===== v12 (O-18, фаза 2): БЕЛЫЙ СПИСОК ТИПОВ + РЕСИНХРОН ПАРСЕРА ФРАГМЕНТОВ =====
+  // Имя типа фрагмента — это ВСЕГДА одно из имён протокола DeepSeek. Любая другая строка
+  // (в т.ч. типоподобная «BSCRIPT»/«ION»/«URL»/«DOM» — куски текста ответа) типом НЕ является.
+  // Набор собран по самому протоколу: fragments[].type в history_messages (REQUEST/RESPONSE/
+  // THINK/TIP/SEARCH — см. collectTurnText/collectTurnReasoning) и в SSE-потоке completion
+  // (BEGIN/… не встречаются, но TEMPLATE_RESPONSE упоминается в комментариях v8).
+  var SSE_FRAGMENT_TYPES = {
+    THINK: 1, RESPONSE: 1, REQUEST: 1, TIP: 1, SEARCH: 1, TEMPLATE_RESPONSE: 1
+  };
+  function streamKnownType(t) {
+    return (typeof t === 'string') && SSE_FRAGMENT_TYPES[t] === 1;
+  }
+  // Форма «объявления типа» — тот же признак, по которому парсер до фикса заводил новый тип.
+  function streamTypeShape(v) {
+    return (typeof v === 'string') && /^[A-Z][A-Z_]{2,}$/.test(v);
+  }
+  // Сырое кольцо дельт, ушедших ЗА последнюю валидную границу (в невалидный фрагмент) либо
+  // отвергнутых как мусорный «тип». В здоровом потоке ПУСТО (нулевая цена по памяти и времени);
+  // наполняется только в момент десинхрона — из него контент пересобирается, а не теряется.
+  var SSE_RESYNC_MAX_ENTRIES = 512;
+  var SSE_RESYNC_MAX_CHARS = 65536;
+  var sseResyncRing = [];
+  var sseResyncChars = 0;
+  var sseResyncCount = 0;
+  var sseResyncBytes = 0;
+  var sseUnknownCount = 0;   // отказов «имя типа вне белого списка» (строка или элемент массива)
+  // Контент фрагментов, чьё имя типа вне белого списка (незнакомый протокол): в буфер
+  // фрагментов такой «тип» не попадает, но байты сохраняются для аварийного streamOtherText.
+  var SSE_UNKNOWN_MAX_CHARS = 262144;
+  var sseUnknownParts = [];
+  var sseUnknownChars = 0;
+
+  function streamNoteMisroute(op, val) {
+    try {
+      if (typeof val !== 'string' || !val) return;
+      sseResyncRing.push({ op: (op === 'SET') ? 'SET' : 'APPEND', v: val });
+      sseResyncChars += val.length;
+      while (sseResyncRing.length > SSE_RESYNC_MAX_ENTRIES || sseResyncChars > SSE_RESYNC_MAX_CHARS) {
+        var drop = sseResyncRing.shift();
+        if (!drop) break;
+        sseResyncChars -= (drop.v || '').length;
+      }
+    } catch (e) { }
+  }
+  function streamUnknownPush(type, content) {
+    try {
+      var val = (typeof content === 'string') ? content : '';
+      sseUnknownCount++;
+      console.warn('[deepseek-intercept] имя фрагмента вне белого списка ("' + String(type || '').slice(0, 32) +
+        '") — тип не заводится; контент ' + val.length + ' симв. сохранён аварийным (логу/фолбэку)');
+      if (val) {
+        sseUnknownParts.push(val);
+        sseUnknownChars += val.length;
+        while (sseUnknownChars > SSE_UNKNOWN_MAX_CHARS && sseUnknownParts.length > 1) {
+          var d = sseUnknownParts.shift();
+          sseUnknownChars -= (d || '').length;
+        }
+      }
+      diagMark('frag-unknown-type', { type: String(type || '').slice(0, 32), len: val.length });
+    } catch (e) { }
+    return null;
+  }
+  // Последняя ВАЛИДНАЯ граница — последний фрагмент, чьё имя типа из белого списка.
+  function streamLastValidFragment() {
+    for (var i = sseFragments.length - 1; i >= 0; i--) {
+      if (sseFragments[i] && streamKnownType(sseFragments[i].type)) return sseFragments[i];
+    }
+    return null;
+  }
+  // РЕСИНХРОН: буфер приведён в невалидное состояние (мусорный «тип» или наследство старого
+  // буфера) → выбрасываем невалидные фрагменты и ПЕРЕСОБИРАЕМ содержимое последнего валидного
+  // фрагмента из сырого кольца дельт с последней валидной границы (порядок и op сохранены).
+  function streamResync(reason) {
+    try {
+      var keep = [];
+      for (var i = 0; i < sseFragments.length; i++) {
+        if (sseFragments[i] && streamKnownType(sseFragments[i].type)) keep.push(sseFragments[i]);
+      }
+      sseFragments = keep;
+      var bf = streamLastValidFragment();
+      if (!bf) {
+        // валидной границы не было вовсе (поток начался с мусора): ответ — единственный
+        // осмысленный приёмник байтов, их тип в тексте хода читается.
+        bf = { type: 'RESPONSE', content: '' };
+        sseFragments.push(bf);
+      }
+      sseFragmentTypes = [];
+      for (var k = 0; k < sseFragments.length; k++) sseFragmentTypes.push(sseFragments[k].type);
+      var bytes = 0;
+      for (var r = 0; r < sseResyncRing.length; r++) {
+        var e = sseResyncRing[r];
+        if (!e) continue;
+        if (e.op === 'SET') streamSetContent(bf, e.v); else streamAppendContent(bf, e.v);
+        bytes += (e.v || '').length;
+      }
+      sseResyncRing = [];
+      sseResyncChars = 0;
+      sseResyncCount++;
+      sseResyncBytes += bytes;
+      console.warn('[deepseek-intercept] десинхрон парсера фрагментов (' + reason + ') → ресинк: ' +
+        'восстановлено ' + bytes + ' симв. из сырого кольца, фрагментов=' + sseFragments.length + ', ' +
+        'типы=' + sseFragmentTypes.join(','));
+      diagMark('frag-resync', {
+        reason: String(reason || ''), recovered: bytes, frags: sseFragmentTypes.length,
+        types: sseFragmentTypes.join(',')
+      });
+    } catch (e) { }
+  }
+  // Единая точка «куда положить БАЙТЫ контента»: только в ВАЛИДНЫЙ фрагмент. Байты в
+  // невалидный фрагмент не пишутся никогда — сначала ресинк (это и есть механика K1:
+  // позиционное переиспользование не должно уводить контент в мусорный «тип»).
+  function streamContentInto(op, val) {
+    var f = streamLastFragment();
+    if (!f) return;
+    if (!streamKnownType(f.type)) {
+      streamNoteMisroute(op, val);
+      streamResync('content-into-invalid-fragment');
+      return;
+    }
+    if (op === 'SET') streamSetContent(f, val); else streamAppendContent(f, val);
+  }
   function streamPushFragment(type, content) {
     if (typeof type !== 'string' || !type) return null;
+    if (!streamKnownType(type)) return streamUnknownPush(type, content);   // v12 (O-18): белый список
     var f = { type: type, content: (typeof content === 'string') ? content : '' };
     sseFragments.push(f);
     sseFragmentTypes.push(type);
@@ -777,12 +961,16 @@
   // v9 (O-15): контент фрагментов «прочих» типов (TIP/SEARCH/…) — в текст хода не идёт,
   // но служит аварийным ответом, если RESPONSE-фрагментов в потоке не было вовсе
   // (незнакомый протокол): лучше показать текст, чем пустой ход.
+  // v12 (O-18): сюда же добавлен контент фрагментов, чьё имя типа вне белого списка —
+  // раньше такой «тип» заводился в буфере, теперь байты живут в аварийном бакете (тот же
+  // текст на выходе, но мусорных типов в буфере нет).
   function streamOtherText() {
     var parts = [];
     for (var i = 0; i < sseFragments.length; i++) {
       var f = sseFragments[i];
       if (f && f.type !== 'THINK' && f.type !== 'RESPONSE' && typeof f.content === 'string') parts.push(f.content);
     }
+    for (var u = 0; u < sseUnknownParts.length; u++) parts.push(sseUnknownParts[u]);
     return parts.join('').trim();
   }
 
@@ -801,11 +989,17 @@
     // v9 (O-15): сокращённый чанк может прийти и после чанка массива фрагментов. Строка —
     // это либо объявление типа ('THINK'), либо порция КОНТЕНТА последнего фрагмента
     // (иначе текст молча терялся). Различаем по форме: типы — ВЕРХНИЙ_РЕГИСТР.
+    // v12 (O-18): форма — ТОЛЬКО предварительный признак; имя типа обязано быть в белом
+    // списке. Типоподобный токен вне списка — это БАЙТЫ КОНТЕНТА (десинхрон парсера):
+    // он не заводит новый «тип», а возвращается в последний валидный фрагмент.
     if (typeof val === 'string' && (path === 'response/fragments' || path === 'fragments')) {
-      if (/^[A-Z][A-Z_]{2,}$/.test(val)) { streamPushFragment(val, ''); return; }
-      var fStr = streamLastFragment();
-      if (!fStr) return;
-      if (op === 'SET') streamSetContent(fStr, val); else streamAppendContent(fStr, val);
+      if (streamTypeShape(val)) {
+        if (streamKnownType(val)) { streamPushFragment(val, ''); return; }
+        streamNoteMisroute(op, val);
+        streamResync('type-out-of-whitelist:' + val.slice(0, 24));
+        return;
+      }
+      streamContentInto(op, val);
       return;
     }
     // v9 (O-15): чанк массива фрагментов — это И объявление типа нового фрагмента,
@@ -820,6 +1014,10 @@
           item = val[i];
           itemType = (typeof item === 'string') ? item : ((item && typeof item.type === 'string') ? item.type : '');
           if (!itemType) continue;
+          // v12 (O-18): имя типа из массива — тоже ТОЛЬКО из белого списка. Незнакомое имя
+          // фрагментом не становится (иначе в буфере живёт мусорный «тип», который не читает
+          // ни текст хода, ни диагностика); контент сохраняется аварийным бакетом.
+          if (!streamKnownType(itemType)) { streamUnknownPush(itemType, (item && typeof item === 'object') ? item.content : ''); continue; }
           var prevF = sseFragments[i];
           var fS = (prevF && prevF.type === itemType) ? prevF : { type: itemType, content: '' };
           if (item && typeof item === 'object') streamSetContent(fS, item.content);
@@ -836,6 +1034,7 @@
         item = val[i];
         if (typeof item === 'string') { streamPushFragment(item, ''); continue; }
         if (!item || typeof item.type !== 'string') continue;
+        if (!streamKnownType(item.type)) { streamUnknownPush(item.type, item.content); continue; }   // v12 (O-18)
         // Перевыдача последнего фрагмента целиком (тот же тип + значение начинается с
         // уже собранного) — это продолжение/замена, а не новый фрагмент: не дублируем.
         var lastF = streamLastFragment();
@@ -849,11 +1048,10 @@
       return;
     }
     // Путь к контенту ПОСЛЕДНЕГО фрагмента: APPEND — дельта, SET — замена.
+    // v12 (O-18): пишем только в валидный фрагмент (streamContentInto) — байты контента
+    // в мусорный «тип» не уходят никогда.
     if (path === 'response/fragments/-1/content') {
-      var f = streamLastFragment();
-      if (!f) return;
-      if (op === 'APPEND') { streamAppendContent(f, val); return; }
-      if (op === 'SET') { streamSetContent(f, val); return; }
+      if (op === 'APPEND' || op === 'SET') streamContentInto(op, val);
     }
   }
 
@@ -873,6 +1071,17 @@
       }
       diagLiveTurnRecord(String(sseResponseMessageId), 'assistant', composeTurnText(answerText, sseReasoning), 'finalize');
     }
+
+    // v12 (O-18, фаза 2): LIVE-текст хода — в собственный кэш. Нужен потому, что приёмка
+    // сетевого снимка ПЕРЕСТРАИВАЕТ turnsMap: без кэша ход, которого в сети нет (или её
+    // текст хуже), было бы нечем восстановить при экспортном дозапросе.
+    var liveText = composeTurnText(answerText, sseReasoning);
+    liveTurnRecord(String(sseRequestMessageId), 'user', sseUserPrompt, sseUserPrompt, '', '');
+    if (answerText || sseReasoning) {
+      liveTurnRecord(String(sseResponseMessageId), 'assistant', liveText, answerText, sseReasoning,
+        getModelSlug(sseThinkingEnabled === true));
+    }
+    lastTurnDoneAt = Date.now();
 
     // УСЛОВИЕ 2: добавляем ОБА хода — USER и ASSISTANT
     // USER-ход
@@ -1109,6 +1318,209 @@
       } catch (eFlush) { }
     });
   } catch (eStreamBridge) { }
+
+  // ===== СЕКЦИЯ 9C (O-18, ФАЗА 2): СЕТЕВОЙ ДОЗАПРОС ИСТОРИИ В МОМЕНТ ЭКСПОРТА =====
+  // Мост: ISOLATED (core/base-handler.js: aiCmExportNetSyncThen) →
+  //   'ai-cm-deepseek-net-sync' {requestId, convId, timeoutMs}
+  //   ← 'ai-cm-deepseek-net-sync-done' {requestId, ok, reason, refetched, netTurns, verdicts}
+  // Правило: ПЕРЕД композицией файла (авто и ручной экспорт) история текущего чата
+  // запрашивается по сети, если снимок сети пуст ИЛИ старше последнего завершённого хода.
+  // Таймаут (по умолчанию 3 с) — жёсткий: не дождались/сети нет → прежний live-путь.
+  var NET_SYNC_TIMEOUT_DEFAULT = 3000;
+  var liveTurns = {};          // v12: LIVE-текст ходов (SSE) — переживает приёмку сети
+  var liveTurnOrder = [];
+  var netSnapshotAt = 0;       // время приёмки авторитетного сетевого снимка
+  var netTurnIds = {};         // какие ходы пришли ИЗ СЕТИ (последний принятый снимок)
+  var lastTurnDoneAt = 0;      // время последнего завершённого хода (финализация потока)
+  var netSyncSeq = 0;
+  var netSyncStats = { calls: 0, fetched: 0, ok: 0, fresh: 0, empty: 0, failed: 0, timeout: 0, oneSide: 0 };
+
+  // LIVE-текст хода: пишется на КАЖДОЙ финализации потока (не только под флагом диагностики).
+  // «Длиннее побеждает» — та же монотонность, что у обогащения хода (O-16): усечённая
+  // ревизия не может вытеснить полную.
+  function liveTurnRecord(id, role, text, answer, reasoning, modelSlug) {
+    try {
+      var key = String(id || '');
+      if (!key || !text) return;
+      var prev = liveTurns[key];
+      if (!prev) liveTurnOrder.push(key);
+      if (prev && String(prev.text || '').length > String(text).length) return;
+      liveTurns[key] = {
+        role: role, text: String(text), answer: String(answer || ''), reasoning: String(reasoning || ''),
+        modelSlug: modelSlug || '', ts: Date.now() / 1000
+      };
+    } catch (e) { }
+  }
+  // Нужен ли сетевой дозапрос: сети не было / снимок старше последнего завершённого хода /
+  // снимок не покрывает live-ходы.
+  function netSyncNeeded() {
+    try {
+      if (!liveTurnOrder.length) return false;        // live-ходов нет: база и так сетевая
+      if (!netSnapshotAt) return true;                // сети не было вовсе
+      if (netSnapshotAt < lastTurnDoneAt) return true; // снимок старше последнего хода
+      for (var i = 0; i < liveTurnOrder.length; i++) {
+        if (!netTurnIds[liveTurnOrder[i]]) return true;   // хода нет в снимке сети
+      }
+      return false;
+    } catch (e) { return false; }
+  }
+  // Per-turn выбор текста: EQUAL → live (байт-в-байт то же); MIDDLE-HOLE*/TAIL-CUT → сетевой
+  // (он полнее: live потерял середину/хвост — сигнатура O-18); LIVE-EXTRA/DIFF-OTHER → live
+  // (сеть короче либо различие не классифицировано — молча не заменяем); ONE-SIDE → live.
+  function exportComposeTurns() {
+    var verdicts = {};
+    var bump = function (v) { verdicts[v] = (verdicts[v] || 0) + 1; };
+    try {
+      var ids = Object.keys(turnsMap);
+      var i, id, t, lv, v;
+      for (i = 0; i < ids.length; i++) {
+        id = ids[i]; t = turnsMap[id]; lv = liveTurns[id];
+        if (!t) continue;
+        if (!lv) { bump('ONE-SIDE'); continue; }                    // ход только из сети
+        v = diagVerdict(lv.text, t.text);                            // lt=live, nt=net
+        bump(v.verdict);
+        if (v.verdict === 'MIDDLE-HOLE' || v.verdict === 'MIDDLE-HOLE-PARTIAL' || v.verdict === 'TAIL-CUT') {
+          console.log('[deepseek-intercept] экспорт: ход ' + String(id).slice(0, 8) + ' — сетевой текст полнее live (' +
+            v.verdict + ', live=' + lv.text.length + ' net=' + t.text.length + '), берём сеть');
+          continue;                                                  // остаётся сетевой текст
+        }
+        t.text = lv.text; t.answer = lv.answer; t.reasoning = lv.reasoning;
+        if (lv.modelSlug) t.modelSlug = lv.modelSlug;
+      }
+      // Ходы, которых в сети НЕТ вовсе (ONE-SIDE): доливаем live-текст в конец базы.
+      for (i = 0; i < liveTurnOrder.length; i++) {
+        id = liveTurnOrder[i];
+        if (turnsMap[id]) continue;
+        lv = liveTurns[id];
+        if (!lv) continue;
+        bump('ONE-SIDE'); netSyncStats.oneSide++;
+        turnsMap[id] = {
+          text: lv.text, answer: lv.answer, reasoning: lv.reasoning, modelSlug: lv.modelSlug,
+          order: orderCounter++, ts: lv.ts, role: lv.role
+        };
+        console.log('[deepseek-intercept] экспорт: ход ' + String(id).slice(0, 8) +
+          ' есть только в live-базе (ONE-SIDE, сети нет) — в файл идёт live-текст ' + lv.text.length + ' симв.');
+      }
+    } catch (e) { }
+    return verdicts;
+  }
+  // Приёмка сетевого снимка в режиме экспорта: форсированный ingestHistory + per-turn выбор.
+  function applyExportNetSnapshot(json, convId) {
+    var res = { ok: false, reason: 'rejected', verdicts: {} };
+    try {
+      if (!json || json.code !== 0) return res;
+      var bd = json.data && json.data.biz_data;
+      var cms = bd && Array.isArray(bd.chat_messages) ? bd.chat_messages : null;
+      if (!bd || !bd.chat_session || !cms) return res;
+      diagHistRecord(json, 'export-net-sync');
+      if (!cms.length) {
+        // Сети нет: авторитетно пустая история (SPA-созданный чат) — базу НЕ трогаем,
+        // файл собирается live-путём, как и раньше. Маркер — в лог.
+        netSyncStats.empty++;
+        console.log('[deepseek-intercept] экспорт: history_messages пуста (чат без истории в сети) → ' +
+          'файл из live-базы, ходов live=' + liveTurnOrder.length + ' (ONE-SIDE)');
+        res.ok = false; res.reason = 'empty';
+        res.verdicts = { 'ONE-SIDE': liveTurnOrder.length };
+        return res;
+      }
+      var prevComplete = histCompletion.historyComplete === true;
+      var prevReached = histCompletion.reachedRoot === true;
+      ingestMode = 'export-sync';
+      exportSyncTruncated = false;
+      try { ingestHistory(json); } finally { ingestMode = ''; }
+      if (exportSyncTruncated) {
+        // Усечённый снимок не принят (см. ingestHistory): база осталась live-базой.
+        netSyncStats.failed++;
+        res.ok = false; res.reason = 'truncated';
+        res.verdicts = { 'ONE-SIDE': liveTurnOrder.length };
+        return res;
+      }
+      // Дозапрос в момент экспорта не ПОНИЖАЕТ вердикт полноты (O-17): база уже была
+      // признана полной — сеть здесь лишь уточняет тексты ходов.
+      if (prevComplete && !histCompletion.historyComplete) {
+        histCompletion.historyComplete = true;
+        histCompletion.reachedRoot = prevReached || histCompletion.reachedRoot;
+      }
+      res.verdicts = exportComposeTurns();
+      var turns = Object.keys(turnsMap).length;
+      emitBaseSnapshot(Math.max(lastBaseServerTokens || 0, sseRealtimeFinalTokens || 0), sseModelType || lastBaseChatMode);
+      res.ok = turns > 0; res.reason = 'merged';
+      console.log('[deepseek-intercept] экспорт: сетевой дозапрос применён — ходов в базе=' + turns +
+        ', вердикты=' + JSON.stringify(res.verdicts));
+    } catch (e) {
+      res.ok = false; res.reason = 'error';
+    }
+    return res;
+  }
+  function exportNetSync(requestId, convId, timeoutMs) {
+    var cap = (typeof timeoutMs === 'number' && timeoutMs > 0) ? timeoutMs : NET_SYNC_TIMEOUT_DEFAULT;
+    var done = false;
+    var timer = null;
+    netSyncStats.calls++;
+    diagMark('export-net-sync', {
+      conv: String(convId || '').slice(0, 8), needed: netSyncNeeded(),
+      live: liveTurnOrder.length, netAt: netSnapshotAt
+    });
+    function reply(status) {
+      if (done) return;
+      done = true;
+      try { clearTimeout(timer); } catch (eT) { }
+      try {
+        window.dispatchEvent(new CustomEvent('ai-cm-deepseek-net-sync-done', {
+          detail: {
+            requestId: String(requestId || ''), convId: String(convId || ''),
+            ok: status.ok === true, reason: String(status.reason || ''),
+            refetched: status.refetched === true,
+            netTurns: Object.keys(netTurnIds).length,
+            liveTurns: liveTurnOrder.length,
+            verdicts: status.verdicts || {}
+          }
+        }));
+      } catch (eD) { }
+    }
+    timer = setTimeout(function () { netSyncStats.timeout++; reply({ ok: false, reason: 'timeout' }); }, cap);
+    try {
+      if (!convId || convId !== currentConvId) { reply({ ok: false, reason: 'conv-mismatch' }); return; }
+      if (!netSyncNeeded()) {
+        netSyncStats.fresh++;
+        reply({ ok: true, reason: 'fresh' });      // снимок сети свежий и покрывает live-ходы
+        return;
+      }
+      var url = historyRefetchUrl();
+      netSyncStats.fetched++;
+      console.log('[deepseek-intercept] экспорт: сетевой дозапрос истории (convId=' +
+        String(convId).slice(0, 8) + ', live-ходов=' + liveTurnOrder.length + ', снимок сети=' +
+        (netSnapshotAt ? 'старше хода' : 'отсутствует') + ')');
+      var p;
+      try {
+        p = originalFetch(url, { method: 'GET', headers: lastAuthHeaders || {} });
+      } catch (eF) { netSyncStats.failed++; reply({ ok: false, reason: 'fetch-throw' }); return; }
+      p.then(function (r) { return (r && r.ok) ? r.json() : null; })
+        .then(function (json) {
+          if (done) return;
+          if (!json) { netSyncStats.failed++; reply({ ok: false, reason: 'http' }); return; }
+          var applied = applyExportNetSnapshot(json, convId);
+          if (applied.ok) netSyncStats.ok++;
+          reply({ ok: applied.ok, reason: applied.reason, refetched: true, verdicts: applied.verdicts });
+        })
+        .catch(function () {
+          if (done) return;
+          netSyncStats.failed++;
+          console.warn('[deepseek-intercept] экспорт: сетевой дозапрос не удался → прежний live-путь');
+          reply({ ok: false, reason: 'error' });
+        });
+    } catch (e0) {
+      reply({ ok: false, reason: 'error' });
+    }
+  }
+  try {
+    window.addEventListener('ai-cm-deepseek-net-sync', function (ev) {
+      try {
+        var d = (ev && ev.detail) || {};
+        exportNetSync(d.requestId, d.convId || currentConvId || getConvId() || '', d.timeoutMs);
+      } catch (eNs) { }
+    });
+  } catch (eNetBridge) { }
 
   function parseSSE(text) {
     if (typeof text !== 'string' || !text) return;
@@ -2168,6 +2580,16 @@
           responseMessageId: sseResponseMessageId ? String(sseResponseMessageId).slice(0, 8) : null
         },
         netSnapshot: diagNetTurns ? { conv: diagNetTurns.conv, t: diagNetTurns.t, reason: diagNetTurns.reason, turns: diagNetTurns.order.length } : null,
+        // v12 (O-18, фаза 2): ресинхрон парсера (сколько раз, сколько байт восстановлено)
+        // и состояние экспортного сетевого дозапроса — прямо в дампе приёмки.
+        resync: {
+          count: sseResyncCount, bytes: sseResyncBytes, ring: sseResyncRing.length,
+          unknown: sseUnknownCount, unknownChars: sseUnknownChars, types: Object.keys(SSE_FRAGMENT_TYPES).join(',')
+        },
+        netSync: {
+          stats: netSyncStats, needed: netSyncNeeded(), liveTurns: liveTurnOrder.length,
+          netAt: netSnapshotAt, lastTurnDoneAt: lastTurnDoneAt, netTurnIds: Object.keys(netTurnIds).length
+        },
         liveOrder: diagLiveOrder,
         liveTurns: {},
         enrich: diagEnrich, marks: diagMarks, sse: diagSseRing, history: diagHistRing
@@ -2217,7 +2639,18 @@
       }
       console.log('[ai-cm-debug][O18][summary] turns=' + ids.length + ' verdicts=' + JSON.stringify(tally) +
         ' ops=' + JSON.stringify(diagOps) + ' sseRing=' + diagSseRing.length + ' histRing=' + diagHistRing.length +
-        ' marks=' + diagMarks.length + ' enrich=' + diagEnrich.length);
+        ' marks=' + diagMarks.length + ' enrich=' + diagEnrich.length +
+        ' resync=' + sseResyncCount + '/' + sseResyncBytes + 'b' +
+        ' netSync=' + JSON.stringify(netSyncStats));
+      // v12 (O-18, фаза 2): приёмка «типов вне белого списка в буфере нет» видна прямо здесь.
+      var outside = [];
+      for (i = 0; i < sseFragments.length; i++) {
+        var ft = String((sseFragments[i] || {}).type || '');
+        if (ft && !streamKnownType(ft)) outside.push(ft);
+      }
+      if (outside.length) console.warn('[ai-cm-debug][O18][WHITELIST] типы вне белого списка: ' + JSON.stringify(outside));
+      else console.log('[ai-cm-debug][O18][WHITELIST] frags вне белого списка: нет (типы=' +
+        sseFragmentTypes.join(',') + ')');
       diagDumpRings(trigger);
     } catch (e) { console.warn('[ai-cm-debug][O18] ошибка сравнения на экспорте:', e); }
   }
@@ -2247,10 +2680,29 @@
         liveTurns: diagLiveOrder.length, netTurns: diagNetTurns ? diagNetTurns.order.length : 0
       };
     };
+    // v12 (O-18, фаза 2): воспроизведение состояния буфера СТАРОЙ версии (мусорные «типы»,
+    // в которые ушёл контент) — только под aiCmDebug=1. Нужно регресс-фикстурам: они
+    // проверяют, что буфер лечится ресинком из сырого кольца, а не остаётся обрезанным.
+    // При выключенном флаге функции нет — поведение страницы не меняется.
+    window.__aiCmDebug.seedDeepSeekFragmentsO18 = function (frags) {
+      if (!isDebugEnabled()) {
+        console.log('[ai-cm-debug][O18] флаг выключен: sessionStorage.aiCmDebug !== "1"');
+        return null;
+      }
+      var list = Array.isArray(frags) ? frags : [];
+      sseFragments = [];
+      sseFragmentTypes = [];
+      for (var si = 0; si < list.length; si++) {
+        var it = list[si] || {};
+        sseFragments.push({ type: String(it.type || ''), content: String(it.content || '') });
+        sseFragmentTypes.push(String(it.type || ''));
+      }
+      return { frags: sseFragments.length, types: sseFragmentTypes.join(',') };
+    };
   } catch (e) { }
 
   // ===== СЕКЦИЯ 14: ФИНАЛ =====
-  console.log('[deepseek-intercept] перехватчик DeepSeek v11 установлен (server-first, walk parent_id, SSE инкрементально И постфактум, USER+ASSISTANT оба хода, ход = user + assistant(reasoning+answer), фрагменты потока как fragments[] истории (без потери контента чанков), терминал хода по BATCH/close/концу тела, historyComplete по reachedRoot ИЛИ авторитетно пустой базе (O-17: единый критерий для первичной загрузки и тихого дозапроса после SPA-смены чата), turnsMap сбрасывается только принятым снимком (O-17), serverTokens из accumulated_token_usage, +self-fetch при MERGE, +per-turn model по thinking_enabled, +modelMode в detail, +timer-refetch on switch, +подавление чужих unhandled fetch, +детектор усечения цепочки с дозапросом, +convId в detail, +unknown-роль без маппинга, +reasoning THINK секциями [REASONING]/[ANSWER], +O-16 живой поток не замораживает ход: повторный финал обогащает текст, probe/flush-мост для экспортёра, +O-17 мост turnsMap для дампов экспорта)');
+  console.log('[deepseek-intercept] перехватчик DeepSeek v11 установлен (server-first, walk parent_id, SSE инкрементально И постфактум, USER+ASSISTANT оба хода, ход = user + assistant(reasoning+answer), фрагменты потока как fragments[] истории (без потери контента чанков), терминал хода по BATCH/close/концу тела, historyComplete по reachedRoot ИЛИ авторитетно пустой базе (O-17: единый критерий для первичной загрузки и тихого дозапроса после SPA-смены чата), turnsMap сбрасывается только принятым снимком (O-17), serverTokens из accumulated_token_usage, +self-fetch при MERGE, +per-turn model по thinking_enabled, +modelMode в detail, +timer-refetch on switch, +подавление чужих unhandled fetch, +детектор усечения цепочки с дозапросом, +convId в detail, +unknown-роль без маппинга, +reasoning THINK секциями [REASONING]/[ANSWER], +O-16 живой поток не замораживает ход: повторный финал обогащает текст, probe/flush-мост для экспортёра, +O-17 мост turnsMap для дампов экспорта, +O-18 белый список типов фрагментов с ресинком из сырого кольца (контент больше не становится «типом»), +O-18 сетевой дозапрос history_messages в момент экспорта с per-turn выбором live/сеть)');
 
   // Экспорт для ручного вызова диагностического дампа
   try {

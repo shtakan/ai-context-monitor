@@ -35,6 +35,9 @@ function sanitizeGeminiText(s) {
 // detail.messages (последний EMIT) → lastBaseTexts с ролями → currentAdapter.extractMessages()
 // (нормализация к {role,text}) → фолбэк чередования ролей. Используется в
 // buildHistoryMessages(), aiCmWriteCurrentHistory() и doAutoExportDownload().
+// v12 (O-18, фаза 2): чаты, для которых сетевой дозапрос истории уже выполняется, —
+// защита от параллельных триггеров автоэкспорта (повторный вход после дозапроса).
+var aiCmNetSyncInFlight = {};
 function aiCmCollectExportSource() {
   var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
   var texts = lastBaseTexts || [];
@@ -719,7 +722,11 @@ function maybeAutoExport(percentage) {
 // pre-trim экспортом. reason='threshold' — поведение ровно как раньше; reason='pre-trim'
 // добавляет суффикс -pretrim к имени файла и НЕ ставит латч autoExportFired
 // (это независимый одноразовый экспорт по обрезке истории).
-function doAutoExportDownload(cid, percentage, reason) {
+// v12 (O-18, фаза 2): netSynced=true — повторный вход ПОСЛЕ сетевого дозапроса истории
+// (дозапрос делает перехватчик DeepSeek; здесь только ожидание с таймаутом 3 с).
+// Латч autoExportFired и прочие гейты стоят ПОСЛЕ дозапроса, поэтому повторный вход
+// не может ни задвоить файл, ни потерять латч; при недоступной сети поведение прежнее.
+function doAutoExportDownload(cid, percentage, reason, netSynced) {
   try {
     // O-16: живой SSE-стрим DeepSeek → файл по НЕДОПИСАННОЙ memory-базе не пишем:
     // откладываем (дебаунс) до конца потока. При потолке отложек буфер флашится и
@@ -728,6 +735,28 @@ function doAutoExportDownload(cid, percentage, reason) {
     // поведение остаётся прежним (пишем файл как раньше).
     if (typeof aiCmDeferAutoExportOnLiveStream === 'function' &&
         aiCmDeferAutoExportOnLiveStream(cid, percentage)) return;
+    // v12 (O-18, фаза 2): ПЕРЕД композицией файла — сетевой дозапрос истории (только DeepSeek:
+    // перехватчик MAIN-мира сам решает, нужен ли запрос, и сам выбирает текст по ходам:
+    // EQUAL → live, MIDDLE-HOLE/TAIL-CUT → сеть, ONE-SIDE → live + маркер в логе).
+    if (netSynced !== true && typeof aiCmExportNetSyncThen === 'function' && aiCmExportNetSyncSite()) {
+      if (!aiCmNetSyncInFlight[cid]) {
+        aiCmNetSyncInFlight[cid] = 1;
+        var selfSync = function () {
+          delete aiCmNetSyncInFlight[cid];
+          doAutoExportDownload(cid, percentage, reason, true);
+        };
+        try {
+          aiCmExportNetSyncThen(cid, selfSync);
+        } catch (eSync) {
+          delete aiCmNetSyncInFlight[cid];
+          selfSync();
+        }
+        return;
+      }
+      // дозапрос для этого чата уже идёт (параллельный триггер) — ждём его результат
+      debugLog('log', '[AI CM][auto-export] net-sync уже выполняется convId=' + cid);
+      return;
+    }
     var B = (typeof window !== 'undefined' && window.AiCmExportBuilders) ? window.AiCmExportBuilders : null;
     if (!B) throw new Error('utils/export-text-builders.js не загружен');
     var fmt = (autoExportSettings.fmt === 'md') ? 'md' : ((autoExportSettings.fmt === 'json') ? 'json' : 'txt');

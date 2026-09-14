@@ -1691,20 +1691,32 @@ if (isExtensionValid()) {
       var pctExp = (typeof lastPercentage === 'number' && lastPercentage >= 0) ? lastPercentage : 0;
       // v61diag: дамп turnsMap в момент ручного экспорта (md/txt из options)
       try { aiCmDumpTurnsSnapshot('snapshot-at-manual', curCidExp, null); } catch (eDumpM) { }
-      sendResponse({ data: {
-        host: window.location.hostname,
-        convId: curCidExp,
-        site: (currentAdapter && currentAdapter.siteName) || '',
-        model: lastSnapshotModelName || (lastResolvedModelId || ''),
-        tokens: maxTokenCount,
-        limit: computeEffectiveLimit(lastResolvedModelId),
-        percent: pctExp,
-        updatedAt: Date.now(),
-        // v1.14.1: живой флаг — ручной as-is экспорт при baseComplete=0 получает
-        // префикс [LOW CONFIDENCE]_ (options.js:378), после base-complete — без префикса.
-        isLowConfidenceBase: (baseComplete !== true),
-        messages: buildHistoryMessages()
-      } });
+      // O-18 (фаза 2): ПЕРЕД композицией файла — сетевой дозапрос истории текущего чата
+      // (только DeepSeek; таймаут 3 с внутри aiCmExportNetSyncThen). Перехватчик сам решает,
+      // нужен ли запрос, и сам выбирает текст по ходам (EQUAL → live, MIDDLE-HOLE/TAIL-CUT →
+      // сеть, ONE-SIDE → live + маркер). Не дождались/сети нет → прежний live-путь БЕЗ
+      // изменения байтов файла; isLowConfidenceBase и порядок [REASONING]/[ANSWER] не тронуты.
+      var replyManualExport = function () {
+        sendResponse({ data: {
+          host: window.location.hostname,
+          convId: curCidExp,
+          site: (currentAdapter && currentAdapter.siteName) || '',
+          model: lastSnapshotModelName || (lastResolvedModelId || ''),
+          tokens: maxTokenCount,
+          limit: computeEffectiveLimit(lastResolvedModelId),
+          percent: pctExp,
+          updatedAt: Date.now(),
+          // v1.14.1: живой флаг — ручной as-is экспорт при baseComplete=0 получает
+          // префикс [LOW CONFIDENCE]_ (options.js:378), после base-complete — без префикса.
+          isLowConfidenceBase: (baseComplete !== true),
+          messages: buildHistoryMessages()
+        } });
+      };
+      if (typeof aiCmExportNetSyncThen === 'function' && aiCmExportNetSyncSite()) {
+        aiCmExportNetSyncThen(curCidExp, replyManualExport);
+      } else {
+        replyManualExport();
+      }
       return true;
     }
     if (message.type === 'GET_STATS') {
