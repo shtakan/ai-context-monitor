@@ -6,7 +6,7 @@ A Chrome and Microsoft Edge (Chromium) extension (Manifest V3) that shows in rea
 
 Расширение распространяется без магазина (публикация в Edge Add-ons отложена). Основной канал — GitHub Releases.
 
-1. Скачайте архив `ai-context-monitor-v2.0.1.zip` со страницы релиза: <https://github.com/shtakan/ai-context-monitor/releases/tag/v2.0.1>
+1. Скачайте архив `ai-context-monitor-v2.0.2.zip` со страницы релиза: <https://github.com/shtakan/ai-context-monitor/releases/tag/v2.0.2>
 2. Распакуйте архив в любую папку.
 3. **Microsoft Edge**: откройте `edge://extensions`, включите **«Режим разработчика»**, нажмите **«Загрузить распакованное расширение»** и выберите папку распаковки.
 4. **Google Chrome**: откройте `chrome://extensions` и выполните те же действия.
@@ -78,7 +78,7 @@ service worker (core/background.js)
 npm test
 ```
 
-Runs Jest — **as of v2.0.1 (2026-09-14): 75 suites / 1322 tests**, green in CI. The counters are a dated snapshot of the v2.0.1 tree and are deliberately not re-pinned on every change; the live numbers are whatever `npm test` prints as its `Tests: ... total` line. Sanitized fixtures are bundled in `tests/fixtures`. Personal ("live") captured samples are gitignored — tests that require them are skipped automatically when those files are absent.
+Runs Jest — **as of v2.0.2 (2026-09-14): 80 suites / 1367 tests**, green in CI. The counters are a dated snapshot of the v2.0.2 tree and are deliberately not re-pinned on every change; the live numbers are whatever `npm test` prints as its `Tests: ... total` line. Sanitized fixtures are bundled in `tests/fixtures`. Personal ("live") captured samples are gitignored — tests that require them are skipped automatically when those files are absent.
 
 ## Privacy
 
