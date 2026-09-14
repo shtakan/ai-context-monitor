@@ -471,6 +471,91 @@ function aiCmGsaAutoExportSkipLog(reason, cid, percentage) {
       ' probeRunning=' + (aiCmGsaProbeRunningFor(cid) ? '1' : '0'));
   } catch (e) { }
 }
+// =============================================================================
+// O-16: DeepSeek — защита от записи файла на ЖИВОМ SSE-стриме.
+// Симптом (живой прогон): файл автоэкспорта (histSource=memory) обрывался на полуслове
+// в последнем ответе ассистента, хотя сеть уже отдала полный текст (лог базы 29255
+// символов против усечённого файла).
+// Причина: memory-база ISOLATED-мира (lastBaseTexts) — это последний EMIT
+// ai-cm-full-history. Пока MAIN-перехватчик DeepSeek читает тело ответа completion,
+// последний EMIT может нести ещё НЕ ДОПИСАННЫЙ ход ассистента — запись файла по такой
+// базе фиксирует обрыв. Проверка состояния потока — синхронный мост CustomEvent
+// (тот же приём, что у Gemini-моста turnsMap):
+//   probe 'ai-cm-deepseek-stream-probe' → '...-probe-response' {convId, active, turnFinished};
+//   flush 'ai-cm-deepseek-stream-flush' — принудительный финал незакрытого буфера.
+// Поведение: автоэкспорт ОТКЛАДЫВАЕТСЯ (дебаунс), пока стрим активен, и стреляет по
+// факту завершения потока (EMIT полного хода + повторный гейт); ручной экспорт сначала
+// флашит буфер, чтобы в файл ушло всё принятое. Прочие сервисы не затронуты: мост
+// отвечает только в MAIN-мире chat.deepseek.com.
+var AI_CM_DS_STREAM_DEFER_MS = 800;    // дебаунс отложенного автоэкспорта
+var AI_CM_DS_STREAM_DEFER_MAX = 150;   // ≈2 мин; дальше буфер флашим принудительно
+var aiCmDsStreamDeferByConv = {};      // cid -> число отложек
+var aiCmDsStreamDeferLogged = {};      // cid -> 1 (антиспам строки defer)
+var aiCmDsStreamFlushLogged = {};      // cid -> 1 (антиспам строки stream-flush)
+
+// Синхронный запрос состояния живого SSE-потока DeepSeek (MAIN-мир перехватчика).
+function aiCmDeepseekStreamProbe() {
+  try {
+    var resp = null;
+    var h = function (ev) { resp = ev.detail; };
+    window.addEventListener('ai-cm-deepseek-stream-probe-response', h, { once: true });
+    window.dispatchEvent(new CustomEvent('ai-cm-deepseek-stream-probe'));
+    window.removeEventListener('ai-cm-deepseek-stream-probe-response', h);
+    return resp;
+  } catch (e) { return null; }
+}
+// Активен ли стрим ИМЕННО этого чата. Прочие сервисы/чаты → false (поведение 1:1).
+function aiCmDeepseekStreamActiveFor(cid) {
+  try {
+    if (((currentAdapter && currentAdapter.siteName) || '') !== 'deepseek') return false;
+    var snap = aiCmDeepseekStreamProbe();
+    if (!snap || snap.active !== true) return false;
+    if (snap.convId && cid && String(snap.convId) !== String(cid)) return false;
+    return true;
+  } catch (e) { return false; }
+}
+// Принудительный сброс незакрытого SSE-буфера DeepSeek в memory-базу (ручной экспорт).
+function aiCmFlushLiveStreamForExport(cid) {
+  try {
+    if (!aiCmDeepseekStreamActiveFor(cid)) return false;
+    window.dispatchEvent(new CustomEvent('ai-cm-deepseek-stream-flush'));
+    if (cid && !aiCmDsStreamFlushLogged[cid]) {
+      aiCmDsStreamFlushLogged[cid] = 1;
+      debugLog('log', '[AI CM][auto-export] stream-flush convId=' + cid + ' reason=manual');
+    }
+    return true;
+  } catch (e) { return false; }
+}
+// Гейт автоэкспорта: стрим жив → файл НЕ пишем, откладываем дебаунсом. true = отложено.
+function aiCmDeferAutoExportOnLiveStream(cid, percentage) {
+  try {
+    if (!cid) return false;
+    if (!aiCmDeepseekStreamActiveFor(cid)) return false;
+    var n = (aiCmDsStreamDeferByConv[cid] || 0) + 1;
+    aiCmDsStreamDeferByConv[cid] = n;
+    if (n > AI_CM_DS_STREAM_DEFER_MAX) {
+      // Патологически долгий стрим: не ждём вечно — флашим буфер и пишем то, что пришло.
+      aiCmDsStreamDeferByConv[cid] = 0;
+      aiCmFlushLiveStreamForExport(cid);
+      debugLog('log', '[AI CM][auto-export] stream-flush convId=' + cid +
+        ' reason=defer-cap defers=' + AI_CM_DS_STREAM_DEFER_MAX);
+      return false;
+    }
+    if (!aiCmDsStreamDeferLogged[cid]) {
+      aiCmDsStreamDeferLogged[cid] = 1;
+      debugLog('log', '[AI CM][auto-export] defer reason=stream-active convId=' + cid +
+        ' pct=' + percentage + ' ms=' + AI_CM_DS_STREAM_DEFER_MS + ' histSource=memory');
+    }
+    setTimeout(function () {
+      try {
+        if (!cid || cid !== aiCmAutoExportConvId()) return;  // чат сменился — отложка неактуальна
+        maybeAutoExport(percentage);
+      } catch (eR) { }
+    }, AI_CM_DS_STREAM_DEFER_MS);
+    return true;
+  } catch (e) { return false; }
+}
+
 function maybeAutoExport(percentage) {
   try {
     var s = autoExportSettings;
@@ -636,6 +721,13 @@ function maybeAutoExport(percentage) {
 // (это независимый одноразовый экспорт по обрезке истории).
 function doAutoExportDownload(cid, percentage, reason) {
   try {
+    // O-16: живой SSE-стрим DeepSeek → файл по НЕДОПИСАННОЙ memory-базе не пишем:
+    // откладываем (дебаунс) до конца потока. При потолке отложек буфер флашится и
+    // запись идёт по актуальному состоянию (латч fired ставит обычный путь ниже).
+    // typeof-гард: функция живёт в этом же модуле; в срез-песочницах без неё
+    // поведение остаётся прежним (пишем файл как раньше).
+    if (typeof aiCmDeferAutoExportOnLiveStream === 'function' &&
+        aiCmDeferAutoExportOnLiveStream(cid, percentage)) return;
     var B = (typeof window !== 'undefined' && window.AiCmExportBuilders) ? window.AiCmExportBuilders : null;
     if (!B) throw new Error('utils/export-text-builders.js не загружен');
     var fmt = (autoExportSettings.fmt === 'md') ? 'md' : ((autoExportSettings.fmt === 'json') ? 'json' : 'txt');
@@ -940,6 +1032,12 @@ window.addEventListener('ai-cm-loader-state', function (ev) {
   Api.aiCmGsaAutoExportSkipLog = aiCmGsaAutoExportSkipLog;
   Api.maybeAutoExport = maybeAutoExport;
   Api.doAutoExportDownload = doAutoExportDownload;
+  // O-16: мост «живой SSE-стрим DeepSeek» (для тестов и диагностики)
+  Api.aiCmDeepseekStreamProbe = aiCmDeepseekStreamProbe;
+  Api.aiCmDeepseekStreamActiveFor = aiCmDeepseekStreamActiveFor;
+  Api.aiCmFlushLiveStreamForExport = aiCmFlushLiveStreamForExport;
+  Api.aiCmDeferAutoExportOnLiveStream = aiCmDeferAutoExportOnLiveStream;
+  Api.AI_CM_DS_STREAM_DEFER_MS = AI_CM_DS_STREAM_DEFER_MS;
   if (typeof module !== 'undefined' && module.exports) module.exports = Api;
   if (typeof window !== 'undefined') window.AiCmExportManager = Api;
 })();

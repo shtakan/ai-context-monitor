@@ -1,4 +1,4 @@
-// core/deepseek-intercept.js (v9 = v8 + парность ходов live и целостность фрагментов reasoning/answer)
+// core/deepseek-intercept.js (v10 = v9 + завершение хода на живом стриме: O-16)
 // Перехватчик DeepSeek в МИРЕ САЙТА (world: "MAIN"), document_start. Регистрация — background.js.
 // В этом шаге меняются ТОЛЬКО этот файл и adapters/deepseek-adapter.js (v9: DOM-ветка
 // live-режима — роли ходов и панель reasoning). content.js / page-intercept.js /
@@ -78,6 +78,27 @@
 //   и по байтам текста (проверяется tools/_o7-reasoning-verify.js и tests/adapters/
 //   deepseek-o15-pairing.test.js). Формат [REASONING]/[ANSWER], токены и прочие сервисы
 //   не тронуты.
+//
+// v10 (O-16): ход ассистента больше не «замерзает» усечённым на живом стриме.
+//   СИМПТОМ (живой прогон): файл автоэкспорта (histSource=memory) обрывался на полуслове
+//   в последнем ответе ассистента, хотя в сети полный текст уже был.
+//   ПРИЧИНА: терминальный чанк (quasi_status FINISHED / event: close / конец тела)
+//   может прийти ДО того, как сервер дослал остаток ответа. finalizeRealtimeTurn в этот
+//   момент (а) создавал assistant-ход с ЧАСТИЧНЫМ текстом и (б) вызывал resetStreamState(),
+//   который обнулял sseRequestMessageId/sseResponseMessageId. Досланные после этого
+//   фрагменты копились в новом буфере, но закрыть ход было уже нечем (finishSseStream
+//   требует непустые id) — а гард `!turnsMap[assistantId]` запрещал обогатить уже
+//   созданный ход. Итог: в memory-базе (lastBaseTexts) навсегда оставался усечённый ход,
+//   и автоэкспорт/ручной экспорт писали файл «по полуслово».
+//   РЕШЕНИЕ: (1) полный сброс потока — ТОЛЬКО на старте НОВОГО потока (beginSseStream)
+//   и при смене чата; (2) повторный финал того же потока обогащает существующий ход
+//   более полным текстом (merge «длиннее побеждает», без потери уже собранного);
+//   (3) наружу отдаётся состояние потока: синхронный probe
+//   'ai-cm-deepseek-stream-probe' → 'ai-cm-deepseek-stream-probe-response'
+//   ({convId, active, turnFinished}) и принудительный сброс буфера
+//   'ai-cm-deepseek-stream-flush' — ISOLATED-мир (core/export-manager.js) по ним
+//   откладывает автоэкспорт на время стрима и флашит буфер для ручного экспорта.
+//   Формат [REASONING]/[ANSWER], токены, парность ходов (O-15) и прочие сервисы не тронуты.
 
 (function () {
   if (window.__aiCmDeepseekInterceptInstalled) return;
@@ -488,8 +509,53 @@
   var sseFragments = [];
   var sseFragmentTypes = [];   // производная (диагностика порядка типов)
   var sseCurrentEvent = '';    // v9: текущее SSE-событие (разбор по строкам, в т.ч. инкрементальный)
+  // v10 (O-16): состояние ЖИВОГО потока. active=true от старта чтения тела ответа
+  // completion до его конца; turnFinished=true, если терминальный чанк уже пришёл
+  // (ход зафиксирован), но тело ответа ещё может досылать фрагменты.
+  var sseStreamActive = false;
+  var sseTurnFinished = false;
+
+  // v10 (O-16): снимок состояния потока наружу (ISOLATED-мир). convId — тот же, что в
+  // detail ai-cm-full-history (stale-conv гард экспортёра работает и здесь).
+  function streamStateSnapshot() {
+    return {
+      convId: currentConvId || getConvId() || '',
+      active: sseStreamActive === true,
+      turnFinished: sseTurnFinished === true
+    };
+  }
+  function dispatchStreamState(reason) {
+    try {
+      var snap = streamStateSnapshot();
+      snap.reason = reason || '';
+      window.dispatchEvent(new CustomEvent('ai-cm-deepseek-stream-state', { detail: snap }));
+    } catch (e) { }
+  }
+  // v10 (O-16): НОВЫЙ поток начинается здесь — только тут буфер обнуляется целиком.
+  // Поля ЗАПРОСА (prompt/parent_message_id/thinking_enabled) выставлены обёрткой fetch
+  // ДО старта чтения ответа — их сброс обнулил бы USER-ход каждого live-ответа
+  // (проверено harness'ом: live-экспорт начинался с assistant). Сохраняем и возвращаем.
+  function beginSseStream() {
+    var keepPrompt = sseUserPrompt;
+    var keepParentId = sseParentMessageId;
+    var keepThinking = sseThinkingEnabled;
+    resetStreamState();
+    sseUserPrompt = keepPrompt;
+    sseParentMessageId = keepParentId;
+    sseThinkingEnabled = keepThinking;
+    sseStreamActive = true;
+    dispatchStreamState('begin');
+  }
+  // v10 (O-16): тело ответа дочитано (или оборвано) — стрима больше нет.
+  function endSseStream() {
+    if (!sseStreamActive) return;
+    sseStreamActive = false;
+    dispatchStreamState('end');
+  }
 
   function resetStreamState() {
+    sseStreamActive = false;   // v10 (O-16)
+    sseTurnFinished = false;   // v10 (O-16)
     sseLastPath = null;
     sseLastOp = null;
     sseRealtimeEntryTokens = 0;
@@ -656,6 +722,23 @@
         ts: Date.now() / 1000,
         role: 'assistant'
       };
+    } else if (turnsMap[assistantId]) {
+      // v10 (O-16): ход уже создан РАННИМ (промежуточным) финалом того же потока —
+      // обогащаем его более полным текстом. Прежний гард `!turnsMap[assistantId]`
+      // отбрасывал финальный (полный) текст, и усечённый ход оставался в memory-базе
+      // навсегда — именно это и писал автоэкспорт. Merge безопасен: укорачивание
+      // уже собранного невозможно (streamSetContent/streamAppendContent не укорачивают),
+      // поэтому сравнение по длине монотонно.
+      var ex = turnsMap[assistantId];
+      var exAnswer = ex.answer || '';
+      var exReasoning = ex.reasoning || '';
+      var nextAnswer = (answerText && answerText.length >= exAnswer.length) ? answerText : exAnswer;
+      var nextReasoning = (sseReasoning && sseReasoning.length >= exReasoning.length) ? sseReasoning : exReasoning;
+      if (nextAnswer !== exAnswer || nextReasoning !== exReasoning) {
+        ex.answer = nextAnswer;
+        ex.reasoning = nextReasoning;
+        ex.text = composeTurnText(nextAnswer, nextReasoning);
+      }
     }
 
     // Числитель = финальный accumulated_token_usage из BATCH (фолбэк — entry из первого response)
@@ -686,7 +769,12 @@
       }
     }
 
-    resetStreamState();
+    // v10 (O-16): повторный финал того же потока — норма (терминальный чанк может прийти
+    // до конца тела ответа, а конец тела — ещё раз закрыть ход). Буфер НЕ обнуляем:
+    // досланные фрагменты обязаны долиться в тот же ход. Полный сброс — beginSseStream()
+    // (старт нового потока) и resetForNewConversation() (смена чата).
+    sseTurnFinished = true;
+    dispatchStreamState('finalize');
   }
 
   // v9 (O-15): разбор идёт ПО СТРОКАМ — один и тот же код обслуживает полный текст
@@ -714,6 +802,13 @@
 
       // === ready ===
       if (sseCurrentEvent === 'ready' && obj.request_message_id) {
+        // v10 (O-16): новый ход внутри ТОГО ЖЕ тела ответа (другой response_message_id) —
+        // буфер предыдущего хода уже закрыт финалом, начинаем чистый: иначе фрагменты
+        // двух ходов склеились бы в один. Раньше границей служил reset внутри финала.
+        if (sseResponseMessageId && obj.response_message_id &&
+            String(obj.response_message_id) !== String(sseResponseMessageId)) {
+          beginSseStream();
+        }
         sseRequestMessageId = obj.request_message_id;
         sseResponseMessageId = obj.response_message_id;
         sseModelType = obj.model_type || null;
@@ -794,16 +889,40 @@
 
   // v9 (O-15): конец тела ответа = ход завершён. Раньше терминалом были ТОЛЬКО
   // BATCH quasi_status FINISHED и event: close; если сервер не прислал ни того, ни другого,
-  // последний ход сессии вообще не попадал в live-экспорт. finalizeRealtimeTurn идемпотентен
-  // (после первого вызова resetStreamState обнуляет id) — повторный вызов безопасен.
+  // последний ход сессии вообще не попадал в live-экспорт. v10 (O-16): повторный финал
+  // БЕЗОПАСЕН и не теряет текст — finalizeRealtimeTurn обогащает существующий ход
+  // (буфер потока живёт до конца тела ответа), а не отбрасывает более полный текст.
   function finishSseStream() {
     if (sseRequestMessageId && sseResponseMessageId) finalizeRealtimeTurn();
   }
 
+  // v10 (O-16): синхронный мост ISOLATED → MAIN (тот же приём, что у Gemini-моста
+  // aiCmGeminiTurnsSnapshotSync): экспортёр спрашивает состояние потока перед записью
+  // файла и может принудительно закрыть незавершённый буфер.
+  try {
+    window.addEventListener('ai-cm-deepseek-stream-probe', function () {
+      try {
+        window.dispatchEvent(new CustomEvent('ai-cm-deepseek-stream-probe-response', {
+          detail: streamStateSnapshot()
+        }));
+      } catch (eProbe) { }
+    });
+    window.addEventListener('ai-cm-deepseek-stream-flush', function () {
+      try {
+        if (sseStreamActive === true) {
+          finishSseStream();
+          dispatchStreamState('flush');
+        }
+      } catch (eFlush) { }
+    });
+  } catch (eStreamBridge) { }
+
   function parseSSE(text) {
     if (typeof text !== 'string' || !text) return;
+    beginSseStream();   // v10 (O-16): новый поток (XHR/фолбэк полного текста)
     parseSSELines(text.split('\n'));
     finishSseStream();
+    endSseStream();
   }
 
   // v9 (O-15): инкрементальное чтение потока: полные строки уходят в разбор СРАЗУ, поэтому
@@ -818,11 +937,17 @@
     var clone = null;
     try { clone = resp.clone(); } catch (e) { clone = null; }
     if (!clone) return;
+    // v10 (O-16): старт нового потока — буфер прошлого хода обнуляется ЗДЕСЬ, а не в финале.
+    beginSseStream();
     var body = clone.body;
     var Dec = (typeof TextDecoder !== 'undefined') ? TextDecoder : null;
     if (!body || typeof body.getReader !== 'function' || !Dec) {
       if (typeof clone.text === 'function') {
-        clone.text().then(function (txt) { if (sameConv()) parseSSE(txt); }).catch(function () { });
+        clone.text().then(function (txt) {
+          if (sameConv()) { parseSSE(txt); endSseStream(); }
+        }).catch(function () { if (sameConv()) endSseStream(); });
+      } else {
+        endSseStream();
       }
       return;
     }
@@ -832,18 +957,21 @@
       reader = body.getReader();
       dec = new Dec('utf-8');
     } catch (eR) {
+      endSseStream();
       return;
     }
     var buf = '';
     function pump() {
       if (!sameConv()) {
         try { reader.cancel(); } catch (eC) { }
+        endSseStream();
         return Promise.resolve();
       }
       return reader.read().then(function (r) {
         if (!r || r.done) {
           if (buf) { parseSSELines([buf.replace(/\r$/, '')]); buf = ''; }
           if (sameConv()) finishSseStream();
+          endSseStream();
           return;
         }
         var chunk = '';
@@ -858,7 +986,7 @@
         return pump();
       });
     }
-    pump().catch(function () { if (sameConv()) finishSseStream(); });
+    pump().catch(function () { if (sameConv()) finishSseStream(); endSseStream(); });
   }
 
   // ===== СЕКЦИЯ 10: ГАРД ПЕРЕКРЁСТА (chat_session_id vs currentConvId) =====
@@ -1504,7 +1632,7 @@
   }
 
   // ===== СЕКЦИЯ 14: ФИНАЛ =====
-  console.log('[deepseek-intercept] перехватчик DeepSeek v9 установлен (server-first, walk parent_id, SSE инкрементально И постфактум, USER+ASSISTANT оба хода, ход = user + assistant(reasoning+answer), фрагменты потока как fragments[] истории (без потери контента чанков), терминал хода по BATCH/close/концу тела, historyComplete по reachedRoot, serverTokens из accumulated_token_usage, +self-fetch при MERGE, +per-turn model по thinking_enabled, +modelMode в detail, +timer-refetch on switch, +подавление чужих unhandled fetch, +детектор усечения цепочки с дозапросом, +convId в detail, +unknown-роль без маппинга, +reasoning THINK секциями [REASONING]/[ANSWER])');
+  console.log('[deepseek-intercept] перехватчик DeepSeek v10 установлен (server-first, walk parent_id, SSE инкрементально И постфактум, USER+ASSISTANT оба хода, ход = user + assistant(reasoning+answer), фрагменты потока как fragments[] истории (без потери контента чанков), терминал хода по BATCH/close/концу тела, historyComplete по reachedRoot, serverTokens из accumulated_token_usage, +self-fetch при MERGE, +per-turn model по thinking_enabled, +modelMode в detail, +timer-refetch on switch, +подавление чужих unhandled fetch, +детектор усечения цепочки с дозапросом, +convId в detail, +unknown-роль без маппинга, +reasoning THINK секциями [REASONING]/[ANSWER], +O-16 живой поток не замораживает ход: повторный финал обогащает текст, probe/flush-мост для экспортёра)');
 
   // Экспорт для ручного вызова диагностического дампа
   try {

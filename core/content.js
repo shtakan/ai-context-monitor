@@ -1682,6 +1682,12 @@ if (isExtensionValid()) {
       // После SPA-перехода lastBaseTexts сброшены (resetConversationState) → messages=[]
       // (файл-заглушка); НИКОГДА не отдаём историю предыдущего разговора.
       var curCidExp = getCurrentConvId() || '';
+      // O-16: если у DeepSeek прямо сейчас читается тело ответа (SSE ещё не закрыт),
+      // сначала СИНХРОННО сбрасываем незакрытый буфер потока в memory-базу — иначе в
+      // файл уйдёт ход ассистента, обрезанный на текущем чанке. Мост синхронный:
+      // flush → finalizeRealtimeTurn → EMIT ai-cm-full-history → lastBaseTexts обновлены
+      // ДО buildHistoryMessages() ниже.
+      try { aiCmFlushLiveStreamForExport(curCidExp); } catch (eFlushExp) { }
       var pctExp = (typeof lastPercentage === 'number' && lastPercentage >= 0) ? lastPercentage : 0;
       // v61diag: дамп turnsMap в момент ручного экспорта (md/txt из options)
       try { aiCmDumpTurnsSnapshot('snapshot-at-manual', curCidExp, null); } catch (eDumpM) { }
