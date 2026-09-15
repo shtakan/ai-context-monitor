@@ -693,6 +693,9 @@
             lastAccumulated: lastAccumulated,
             chatMode: chatMode
           });
+          // O-26: однократный вербатим-дамп usage по ходам (точка — загрузка истории).
+          // Ничего не пишет в turnsMap/состояние, на pct/serverTokens/экспорт не влияет.
+          dumpTurnUsageAtHistoryLoad(chain, chatMessages, chatSession);
         }
       }
     } catch (e) {
@@ -2080,6 +2083,79 @@
     }
 
     return { messages: messages, orderSource: orderSource };
+  }
+
+  // ===== СЕКЦИЯ 13D (O-26): ВЕРБАТИМ-ДАМП USAGE ПО ХОДАМ ПРИ ЗАГРУЗКЕ ИСТОРИИ =====
+  // ИЗМЕРЕНИЕ (поведение НЕ меняется). Мотив O-26: на длинном чате бейдж DeepSeek растёт
+  // сверхлинейно (151.3% → 396.3% при +3 коротких ходах). Подозрение — семантика поля
+  // accumulated_token_usage в payload: это не «токены хода», а НАКОПИТЕЛЬ (сумма по ходам),
+  // поэтому походовое чтение даёт квадратичный рост. Проверяется ТОЛЬКО фактами payload:
+  // дамп печатает usage-поля КАЖДОГО сообщения цепочки ровно так, как они пришли —
+  // без суммирования, приведения типов, агрегации и без правок расчёта pct/serverTokens.
+  // Гейт: sessionStorage aiCmDebug === '1' (тот же, что у всей СЕКЦИИ 13); при выключенном
+  // флаге функция выходит ПЕРВОЙ строкой — ни строки лога, ни работы с данными.
+  // Однократность: вызов стоит в блоке `if (!loggedHistory)` ingestHistory — один дамп на
+  // загрузку истории чата (loggedHistory сбрасывается сменой чата).
+  // Ключи usage собираются по имени (token/usage/prompt/completion/cache/credit/cost) —
+  // набор «соседних» ключей заранее неизвестен, поэтому печатается их фактический состав.
+  var USAGE_FIELD_RE = /(token|usage|prompt|completion|cache|credit|cost)/i;
+  function collectUsageFieldsVerbatim(msg) {
+    var out = {};
+    if (!msg || typeof msg !== 'object') return out;
+    for (var k in msg) {
+      if (!Object.prototype.hasOwnProperty.call(msg, k)) continue;
+      if (k === 'fragments') continue;              // контент хода, не usage
+      if (!USAGE_FIELD_RE.test(k)) continue;
+      out[k] = msg[k];                              // значение КАК ЕСТЬ (включая вложенный объект usage)
+    }
+    return out;
+  }
+  function fragContentLength(frags) {
+    var total = 0;
+    for (var i = 0; i < frags.length; i++) {
+      if (typeof frags[i].content === 'string') total += frags[i].content.length;
+    }
+    return total;
+  }
+  function dumpTurnUsageAtHistoryLoad(chain, chatMessages, chatSession) {
+    try {
+      if (!isDebugEnabled()) return;                // без флага — молчание
+      var list = Array.isArray(chain) ? chain : [];
+      var all = Array.isArray(chatMessages) ? chatMessages : [];
+      var usageKeys = [];
+      var seenKeys = {};
+      // Шапка: сколько сообщений в цепочке/снимке и какой состав usage-полей найден.
+      for (var p = 0; p < list.length; p++) {
+        var u0 = collectUsageFieldsVerbatim(list[p]);
+        for (var k0 in u0) {
+          if (!Object.prototype.hasOwnProperty.call(u0, k0)) continue;
+          if (seenKeys[k0]) continue;
+          seenKeys[k0] = 1;
+          usageKeys.push(k0);
+        }
+      }
+      console.log('[ai-cm-debug][O26][usage] turns=' + list.length +
+        ' chatMessages=' + all.length +
+        ' modelType=' + ((chatSession && chatSession.model_type) || '(default)') +
+        ' usageKeys=' + (usageKeys.length ? usageKeys.join(',') : '(none)'));
+      for (var i = 0; i < list.length; i++) {
+        var msg = list[i] || {};
+        var frags = Array.isArray(msg.fragments) ? msg.fragments : [];
+        var rec = {
+          index: i,
+          messageIdPrefix: String(msg.message_id == null ? '' : msg.message_id).slice(0, 8),
+          role: normalizeRole(msg.role),
+          fragments: frags.length,
+          contentLength: fragContentLength(frags),
+          answerLength: collectTurnText(frags, msg.role).length,
+          reasoningLength: collectTurnReasoning(frags, msg.role).length,
+          usage: collectUsageFieldsVerbatim(msg)     // ВЕРБАТИМ: значения как в payload
+        };
+        var line = '';
+        try { line = JSON.stringify(rec); } catch (eSer) { line = '(несериализуемо)'; }
+        console.log('[ai-cm-debug][O26][turn] ' + line);
+      }
+    } catch (e) { }
   }
 
   function dumpHistorySnapshot(state, stateReason, ctx) {

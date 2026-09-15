@@ -1179,9 +1179,20 @@ function processAndSend() {
       // v82 (D2): baseSeen && тексты → network; !baseSeen → adapter; база есть, текстов нет → none
       var histWritePathS1 = (baseSeen && lastBaseTexts.length > 0) ? 'network'
         : (!baseSeen ? 'adapter' : 'none');
+      // O-26 (только диагностика): два счётчика РЯДОМ с msgs — измерение расхождения
+      // «msgs в svc-emit ≠ сетевая база». Поведение эмита не меняется: оба считаются из уже
+      // существующих переменных, новых источников/кэшей/веток нет, печатаются в ту же
+      // debugLog-строку (гейт подробных логов прежний).
+      //   netMsgs — размер СЕТЕВОЙ базы: turnsMap перехватчика, доехавший EMIT-ом
+      //             (lastBaseTexts = texts18 из detail.messageTexts, тот же массив, что у baseCount);
+      //   domMsgs — размер извлечения DOM-адаптера (тот же единственный вызов, что и у msgs).
+      var netMsgsS1 = lastBaseTexts.length;
+      var domMsgsS1 = (typeof currentAdapter.extractMessages === 'function') ? currentAdapter.extractMessages().length : 0;
       debugLog('log', '[AI CM][svc-emit-trace] site=' + siteNameS1 +
         ' convId=' + (getCurrentConvId() || '') +
-        ' msgs=' + ((typeof currentAdapter.extractMessages === 'function') ? currentAdapter.extractMessages().length : 0) +
+        ' msgs=' + domMsgsS1 +
+        ' domMsgs=' + domMsgsS1 +
+        ' netMsgs=' + netMsgsS1 +
         ' histWritePath=' + histWritePathS1);
     }
   } catch (eS1) { }
