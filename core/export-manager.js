@@ -31,6 +31,45 @@ function sanitizeGeminiText(s) {
     .replace(/File attachment was not previously registered/g, '')
     .replace(/\[cite:\s*\d+\]/g, '');
 }
+// ===== O-20: санация инъекций сторонних расширений на выходе экспорта =====
+// DeepSeek++ (соседнее расширение) дописывает в user-промпт memory-преамбулу и тул-схему,
+// а видимый пользователю текст оборачивает парой маркеров видимого промпта
+// (deepseek-pp-visible-user-prompt:start / :end — точные строки в utils/export-emit-pipeline.js).
+// Серверная история отдаёт эти инъекции в локальный снимок, и они уезжали в файл экспорта.
+// Санация ставится в ОДНОЙ точке — на выходе aiCmCollectExportSource(): отсюда сообщения
+// берут ВСЕ четыре формата (md/json/txt из options/автоэкспорта + print-pdf) и запись
+// aiCmHistory. Ветки базы (lastBaseTexts/baseText/aiCmBasePrepared), serverTokens, turnsMap,
+// бейдж и поля tokens/percent/limit НЕ тронуты — серверная правда контекста не пересчитывается.
+// Чистые функции санации — utils/export-emit-pipeline.js (sanitizeEmitMessages).
+var aiCmSanitizeSkipLogged = {};
+function aiCmSanitizeDebugOn() {
+  // Тот же флаг, что у диагностики DeepSeek (core/deepseek-intercept.js, SECTION 13).
+  try { return sessionStorage.getItem('aiCmDebug') === '1'; } catch (e) { return false; }
+}
+// Одна строка на ПРИЧИНУ пропуска за страницу: санация вызывается на каждый снимок/запись
+// истории, без антиспама лог повторялся бы на каждом ходе.
+function aiCmLogSanitizeSkip(reasons) {
+  if (!reasons || !reasons.length) return;
+  if (!aiCmSanitizeDebugOn()) return;
+  for (var i = 0; i < reasons.length; i++) {
+    var r = String(reasons[i] || '');
+    if (!r || aiCmSanitizeSkipLogged[r] === 1) continue;
+    aiCmSanitizeSkipLogged[r] = 1;
+    try { console.log('[AI CM][sanitize] skip reason=' + r); } catch (eL) { }
+  }
+}
+// Санация массива сообщений экспорта: role=user с ровно одной парой маркеров → видимый
+// текст; role=assistant и тексты без ровно одной пары — байтово прежние. Пайплайн не
+// загружен (отладочный контекст) → массив отдаётся как есть, поведение прежнее.
+function aiCmSanitizeEmitUserTexts(messages) {
+  try {
+    var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+    if (!P || typeof P.sanitizeEmitMessages !== 'function') return messages;
+    var res = P.sanitizeEmitMessages(messages);
+    aiCmLogSanitizeSkip(res && res.skipped);
+    return (res && Array.isArray(res.messages)) ? res.messages : messages;
+  } catch (e) { return messages; }
+}
 // v81: единая точка источников сообщений для экспорта — приоритет:
 // detail.messages (последний EMIT) → lastBaseTexts с ролями → currentAdapter.extractMessages()
 // (нормализация к {role,text}) → фолбэк чередования ролей. Используется в
@@ -58,7 +97,7 @@ function aiCmCollectExportSource() {
         out.push({ role: (j % 2 === 0) ? 'user' : 'assistant', text: sanitizeGeminiText(texts[j]) });
       }
     }
-    return out;
+    return aiCmSanitizeEmitUserTexts(out);
   }
   // v82 (D2): ветка DOM-адаптера — ТОЛЬКО при baseSeen=false
   try {
@@ -69,14 +108,14 @@ function aiCmCollectExportSource() {
         if (raw[k] && (raw[k].role === 'user' || raw[k].role === 'assistant')) { hasRoles = true; break; }
       }
       var norm = (P && typeof P.normalizeExportMessages === 'function') ? P.normalizeExportMessages(raw) : [];
-      if (norm.length > 0 && hasRoles) return norm;
+      if (norm.length > 0 && hasRoles) return aiCmSanitizeEmitUserTexts(norm);
       // фолбэк чередования ролей (роль в адаптере отсутствует)
       for (var n2 = 0; n2 < norm.length; n2++) {
         out.push({ role: (n2 % 2 === 0) ? 'user' : 'assistant', text: norm[n2].text });
       }
     }
   } catch (eA) { }
-  return out;
+  return aiCmSanitizeEmitUserTexts(out);
 }
 
 // T1-fix#3 (v1.16.3): источник сообщений файла автоэкспорта — ОБЪЕДИНЁННАЯ база MAIN

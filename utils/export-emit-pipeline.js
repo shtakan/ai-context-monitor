@@ -26,6 +26,10 @@
  *   - prepareExportMessages(raw, onMessageDedupe) — E-2.1: единая точка подготовки
  *     нормализация → внутри-сообщенческая → меж-сообщенческая дедупликация
  *     → cross-raw копии → гигиена остатков разметки
+ *   - sanitizeInjectedUserText(text) — O-20: санация user-текста от инъекций сторонних
+ *     расширений (DeepSeek++): ровно одна пара маркеров видимого промпта → trim текста
+ *     между ними, иначе строка байтово; injectedUserTextSkipReason — причина пропуска;
+ *     sanitizeEmitMessages — то же по массиву (трогается ТОЛЬКО role=user)
  * Паттерн как у export-text-builders.js: window.AiCmExportEmitPipeline + module.exports.
  * Логика оракула полноты, ленты, пола, виджета и Gemini-гейтов НЕ тронута.
  */
@@ -963,6 +967,107 @@
     };
   }
 
+  // =====================================================================================
+  // O-20: САНАЦИЯ ИНЪЕКЦИЙ СТОРОННИХ РАСШИРЕНИЙ В ТЕКСТЕ ЭКСПОРТА (DeepSeek++).
+  // Соседнее расширение DeepSeek++ дописывает в user-промпт memory-преамбулу и тул-схему
+  // («Tool call format reminder:» / «Available tool tag names:»), а ВИДИМЫЙ пользователю
+  // текст оборачивает парой HTML-комментариев:
+  //   <!-- deepseek-pp-visible-user-prompt:start -->
+  //   <видимый текст>
+  //   <!-- deepseek-pp-visible-user-prompt:end -->
+  // Локальный снимок серверной истории тянет эти инъекции в файл экспорта. Санация —
+  // ТОЛЬКО на выходе экспорта: база/метрики (lastBaseTexts, aiCmBasePrepared, baseText),
+  // serverTokens, turnsMap, бейдж и поля tokens/percent/limit НЕ пересчитываются
+  // (серверная правда контекста).
+  // Правило одно и жёсткое: РОВНО ОДНА пара маркеров → trim текста между ними; любое
+  // отклонение (маркеров нет / пар больше одной / пара неполная или перевёрнутая / только
+  // value-форма) → строка возвращается БАЙТОВО без изменений.
+  // =====================================================================================
+  var VISIBLE_USER_PROMPT_START = '<!-- deepseek-pp-visible-user-prompt:start -->';
+  var VISIBLE_USER_PROMPT_END = '<!-- deepseek-pp-visible-user-prompt:end -->';
+  var VISIBLE_USER_PROMPT_VALUE = '<!-- deepseek-pp-visible-user-prompt:value=';
+
+  /** Сколько раз маркер встречается в строке (без регулярок — только чтение). */
+  function countMarker(text, marker) {
+    var n = 0;
+    var at = text.indexOf(marker);
+    while (at !== -1) { n++; at = text.indexOf(marker, at + marker.length); }
+    return n;
+  }
+
+  /**
+   * O-20: причина пропуска санации (в строке НЕ ровно одна пара маркеров) или null,
+   * если санация применима. Причины — для одной диагностической строки вызывающего кода:
+   *   'no-markers'       — маркеров нет вовсе (обычный текст чата);
+   *   'unpaired-markers' — маркер есть, пары нет (start без end, end без start, end раньше start);
+   *   'multiple-pairs'   — пар больше одной (пользователь сам написал маркеры);
+   *   'value-only'       — только value-форма <!-- …:value=… -->, пары start/end нет.
+   * Чистая функция: строку не меняет.
+   */
+  function injectedUserTextSkipReason(text) {
+    var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
+    var starts = countMarker(s, VISIBLE_USER_PROMPT_START);
+    var ends = countMarker(s, VISIBLE_USER_PROMPT_END);
+    if (starts === 0 && ends === 0) {
+      return (s.indexOf(VISIBLE_USER_PROMPT_VALUE) !== -1) ? 'value-only' : 'no-markers';
+    }
+    if (starts === 1 && ends === 1) {
+      return (s.indexOf(VISIBLE_USER_PROMPT_END) < s.indexOf(VISIBLE_USER_PROMPT_START))
+        ? 'unpaired-markers' : null;
+    }
+    if (starts > 1 || ends > 1) return 'multiple-pairs';
+    return 'unpaired-markers';
+  }
+
+  /**
+   * O-20: санация user-текста. РОВНО одна пара маркеров start/end → trim(текст между ними);
+   * иначе — исходная строка БАЙТОВО. Чистая функция: без логов и побочных эффектов.
+   */
+  function sanitizeInjectedUserText(text) {
+    var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
+    if (injectedUserTextSkipReason(s) !== null) return s;
+    var from = s.indexOf(VISIBLE_USER_PROMPT_START) + VISIBLE_USER_PROMPT_START.length;
+    var to = s.indexOf(VISIBLE_USER_PROMPT_END, from);
+    return s.slice(from, to).trim();
+  }
+
+  /**
+   * O-20: санация массива сообщений экспорта. Трогается ТОЛЬКО role=user: assistant и
+   * user-сообщения без ровно одной пары маркеров возвращаются ТЕМИ ЖЕ объектами (байтово,
+   * id и прочие поля сохранены). У изменённого сообщения текст заменён видимым текстом,
+   * остальные поля скопированы.
+   * Возвращает { messages, sanitized, skipped } (skipped — причины пропуска по порядку
+   * сообщений). Логирование вынесено наружу: чистая функция остаётся чистой, а гейт
+   * aiCmDebug и антиспам-подпись живут в вызывающем коде (core/export-manager.js).
+   */
+  function sanitizeEmitMessages(messages) {
+    var out = [];
+    var sanitized = 0;
+    var skipped = [];
+    try {
+      var src = Array.isArray(messages) ? messages : [];
+      for (var i = 0; i < src.length; i++) {
+        var m = src[i];
+        if (!m || typeof m !== 'object') { out.push(m); continue; }
+        if (m.role !== 'user') { out.push(m); continue; }
+        var text = (typeof m.text === 'string') ? m.text : '';
+        var reason = injectedUserTextSkipReason(text);
+        if (reason !== null) { skipped.push(reason); out.push(m); continue; }
+        var keep = {};
+        for (var k in m) {
+          if (Object.prototype.hasOwnProperty.call(m, k)) keep[k] = m[k];
+        }
+        keep.role = 'user';
+        keep.text = sanitizeInjectedUserText(text);
+        out.push(keep);
+        sanitized++;
+      }
+    } catch (e) {
+      return { messages: Array.isArray(messages) ? messages : [], sanitized: 0, skipped: [] };
+    }
+    return { messages: out, sanitized: sanitized, skipped: skipped };
+  }
+
   /**
    * v1.6 (D18): объединение ходов тейпа по id — union(existing, incoming) без дублей.
    * tape-save пишет ОБЪЕДИНЕНИЕ существующего тейпа и текущей базы: msgs никогда
@@ -1012,6 +1117,9 @@
     dedupeCrossRawCopies: dedupeCrossRawCopies,
     separateRawBlocks: separateRawBlocks,
     prepareExportMessages: prepareExportMessages,
+    sanitizeInjectedUserText: sanitizeInjectedUserText,
+    injectedUserTextSkipReason: injectedUserTextSkipReason,
+    sanitizeEmitMessages: sanitizeEmitMessages,
     unionTurnsById: unionTurnsById,
     latchKey: latchKey
   };
