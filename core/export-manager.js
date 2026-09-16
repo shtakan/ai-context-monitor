@@ -507,6 +507,12 @@ function aiCmGsaAutoExportSkipLog(reason, cid, percentage) {
       var k = 'gsa:' + cid;
       if (notCompleteLogged[k]) return;
       notCompleteLogged[k] = 1;
+    } else if (reason === 'not-chat-page' || reason === 'no-messages' || reason === 'empty-base') {
+      // O-27 (b/c): страница без чата / пустая база — причина печатается один раз на
+      // разговор и причину (иначе на сервисной странице строка шла бы каждую секунду).
+      var k27 = 'gsa27:' + reason + ':' + cid;
+      if (notCompleteLogged[k27]) return;
+      notCompleteLogged[k27] = 1;
     }
     debugLog('log', '[AI CM][auto-export] site=google_search skip reason=' + reason +
       ' convId=' + cid + ' pct=' + percentage +
@@ -633,6 +639,22 @@ function maybeAutoExport(percentage) {
     // (utils/export-emit-pipeline.js); для Gemini порядок и смысл гейтов 1:1 прежние
     // (v30.5 полнота сети, v42 лоадер, гистерезис −10 п.п., латч already-fired).
     var isGeminiSvc = siteName === 'gemini';
+    // O-27 (b/c): факты ЧАТ-страницы GSA для гейта — признак чата в DOM (threadId снаффнут
+    // ИЛИ чат-контейнер), число сообщений базы и длина её текста. Считаются ТОЛЬКО для
+    // google_search; не переданное значение (typeof 'undefined') вердикта не меняет, поэтому
+    // песочницы/прочие сайты видят прежнее поведение 1:1.
+    var gsaMsgCount;
+    var gsaBaseTextLen;
+    var gsaChatMarker;
+    if (siteName === 'google_search') {
+      gsaMsgCount = (typeof baseCount === 'number') ? baseCount : undefined;
+      gsaChatMarker = (typeof aiCmGsaChatPageMarker === 'function') ? aiCmGsaChatPageMarker() : undefined;
+      if (typeof baseText === 'string') {
+        gsaBaseTextLen = baseText.length;
+      } else if (typeof lastBaseTexts !== 'undefined' && Array.isArray(lastBaseTexts)) {
+        gsaBaseTextLen = lastBaseTexts.join('\n').length;
+      }
+    }
     if (P && typeof P.shouldSkipAutoExport === 'function') {
       var verdict = P.shouldSkipAutoExport({
         enabled: s.enabled,
@@ -648,7 +670,12 @@ function maybeAutoExport(percentage) {
         // v1.14.1 (O3): fired = in-memory ИЛИ session-латч (кросс-табовый)
         fired: P.getAutoExportFired(autoExportFired, siteName, cid) ||
                (typeof P.isFiredInSession === 'function' ? P.isFiredInSession(sessionFiredCache, siteName, cid) : false),
-        isGemini: isGeminiSvc
+        isGemini: isGeminiSvc,
+        // O-27 (b/c): сайт + факты страницы (см. shouldSkipGsaPageGuard)
+        site: siteName,
+        chatPageMarker: gsaChatMarker,
+        msgCount: gsaMsgCount,
+        baseTextLen: gsaBaseTextLen
       });
       if (verdict && verdict.skip) {
         // гистерезис −10 п.п.: общая точка сброса латча (для всех сайтов, включая GSA) —

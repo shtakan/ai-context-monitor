@@ -11,6 +11,8 @@
  *   - resolveAutoExportConvId(site, urlConvId, threadId) — v1.18 (F2): convId автоэкспорта
  *     (GSA: threadId вместо отсутствующего URL-id)
  *   - notCompleteReason(state) — v1.18 (F5): ярлык причины skip (probe-running у GSA)
+ *   - shouldSkipGsaPageGuard(state) — O-27 (b/c): признак чат-страницы GSA + непустая база
+ *     для гейта (страница captcha/«подозрительный трафик» права на файл не даёт)
  *   - shouldSkipAutoExport(state) — чистый гейт автоэкспорта
  *   - resolveExportSource(state) — T1-fix#3: источник файла (объединённая база архив+live /
  *     локальный снимок EMIT / запрет при базе «только архив»)
@@ -303,10 +305,36 @@
   }
 
   /**
+   * O-27 (b/c): признак ЧАТ-страницы GSA для гейта автоэкспорта. Сервисная страница Google
+   * (captcha / «подозрительный трафик», /sorry) чатом не является: threadId в DOM не
+   * снаффнут и чат-контейнера нет. Если на такой странице осталось состояние ПРОШЛОГО
+   * документа (база/pct), права на файл оно не даёт.
+   * state: { site, chatPageMarker, msgCount, baseTextLen } — поля опциональны:
+   *   - site !== 'google_search' → гейт не применяется (прочие сервисы 1:1);
+   *   - поле не передано (undefined) → вердикта не меняет (обратная совместимость
+   *     с прежними вызовами и песочницами);
+   *   - chatPageMarker === false → страница без чата (threadId НЕ снаффнут и
+   *     чат-контейнера в DOM нет) → 'not-chat-page';
+   *   - msgCount < 1 → 'no-messages' (база пуста: файл писать не из чего);
+   *   - baseTextLen < 1 → 'empty-base' (текст базы пуст).
+   * Возврат: { skip, reason }.
+   */
+  function shouldSkipGsaPageGuard(state) {
+    var s = state || {};
+    if (s.site !== 'google_search') return { skip: false, reason: null };
+    if (s.chatPageMarker === false) return { skip: true, reason: 'not-chat-page' };
+    if (typeof s.msgCount === 'number' && s.msgCount < 1) return { skip: true, reason: 'no-messages' };
+    if (typeof s.baseTextLen === 'number' && s.baseTextLen < 1) return { skip: true, reason: 'empty-base' };
+    return { skip: false, reason: null };
+  }
+
+  /**
    * Чистый гейт автоэкспорта. state:
    *   { enabled, percentage, threshold, baseComplete, baseSeen, loaderRunning, fired, isGemini,
    *     archiveCount, baseCount }
    * archiveCount/baseCount (T1-fix#2, v1.16.2) опциональны: не переданы — прежнее поведение.
+   * O-27 (b/c): site + chatPageMarker/msgCount/baseTextLen — тот же принцип (см.
+   * shouldSkipGsaPageGuard): не переданы — вердикта не меняют.
    * Возвращает { skip, reason, resetFired }. Порядок гейтов повторяет
    * существующий maybeAutoExport (v30.5/v42/гистерезис −10 п.п.).
    */
@@ -314,6 +342,11 @@
     var s = state || {};
     if (s.enabled !== true) return { skip: true, reason: 'not-enabled', resetFired: false };
     if (typeof s.percentage !== 'number' || !(s.percentage >= 0)) return { skip: true, reason: 'no-pct', resetFired: false };
+    // O-27 (b/c): на не-чат странице GSA (captcha/«подозрительный трафик») база/pct прошлого
+    // документа вердикта не дают: файл не пишется и латч fired не ставится (поздний честный
+    // экспорт на настоящей чат-странице остаётся возможен). Прочие сайты — 1:1.
+    var gsaPage = shouldSkipGsaPageGuard(s);
+    if (gsaPage.skip) return { skip: true, reason: gsaPage.reason, resetFired: false };
     var threshold = (typeof s.threshold === 'number' && s.threshold >= 1 && s.threshold <= 100) ? s.threshold : 90;
     // Гейт полноты: для Gemini — только по сети (baseComplete); для не-Gemini
     // неполная сетевая база тоже блокирует, но полный DOM-адаптер (baseSeen=false)
@@ -1206,6 +1239,7 @@
     buildGsaExportFileName: buildGsaExportFileName,
     resolveAutoExportConvId: resolveAutoExportConvId,
     notCompleteReason: notCompleteReason,
+    shouldSkipGsaPageGuard: shouldSkipGsaPageGuard,
     shouldSkipAutoExport: shouldSkipAutoExport,
     effectiveAutoExportThreshold: effectiveAutoExportThreshold,
     pickExportSource: pickExportSource,

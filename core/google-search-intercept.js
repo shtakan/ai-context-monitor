@@ -184,6 +184,41 @@
     return '';
   }
 
+  // ---- O-27 (a): валидация сетевого тела перед записью базы ----
+  // Живой дефект (GSA, прогон 2026-09-16 10:46): Google ответил на запрос folwr
+  // сервисной страницей captcha/«подозрительный трафик»; тело с пустым payload
+  // (`)]}' [""]`) не содержит ни одного хода. Теперь сетевой писатель требует ≥1 НЕПУСТОЙ
+  // ход: ход без userText и без assistantText ходом не считается (контейнер без содержимого,
+  // пустой payload, интерстишиал), а снимок без ходов не строится вовсе — значит и
+  // baseComplete (buildDetail.historyComplete, по умолчанию true) по мусору не взводится.
+  //
+  // Сырое тело Google-ответа (четырёхсимвольный XSSI-префикс, которым Google предваряет
+  // async-ответы) ходом не является: живой мусор captcha-страницы доехал до экспорта ровно
+  // в таком виде. Сравнение — по кодам символов: исходник функции не должен содержать
+  // фигурной скобки в литерале (source-пин-тесты режут функции по балансу скобок).
+  function isRawXssiPayload(s) {
+    if (!s || s.length < 4) return false;
+    return s.charCodeAt(0) === 41 && s.charCodeAt(1) === 93 &&
+      s.charCodeAt(2) === 125 && s.charCodeAt(3) === 39;
+  }
+
+  function isUsableTurn(t) {
+    if (!t) return false;
+    var u = (t.userText == null) ? '' : String(t.userText).trim();
+    var a = (t.assistantText == null) ? '' : String(t.assistantText).trim();
+    if (u && !isRawXssiPayload(u)) return true;
+    if (a && !isRawXssiPayload(a)) return true;
+    return false;
+  }
+
+  function hasUsableTurns(turns) {
+    if (!turns || !turns.length) return false;
+    for (var i = 0; i < turns.length; i++) {
+      if (isUsableTurn(turns[i])) return true;
+    }
+    return false;
+  }
+
   // ---- плоские messages из turns (fallback) ----
   function messagesFromTurns(turns) {
     var msgs = [];
@@ -329,6 +364,13 @@
   // ---- слияние новых ходов ----
   // tidOfResponse — threadId из ТЕЛА ответа (parseWithParser), если он там есть.
   function mergeTurns(newTurns, isFull, tidOfResponse) {
+    // O-27 (a): тело, не распарсившееся в ≥1 НЕПУСТОЙ ход, базой не является — ни запись,
+    // ни эмит, ни baseComplete (снимок не строится вовсе).
+    if (!hasUsableTurns(newTurns)) {
+      debugLog('log', '[ai-cm-google-search] O-27: тело без непустых ходов — база не тронута' +
+        ' (merge, ходов=' + ((newTurns && newTurns.length) || 0) + ')');
+      return;
+    }
     // v1.27 (O-31): разговор ответа — threadId тела, фолбэк — живой DOM. Ответ чужого
     // разговора не дописывается в активную базу (absorbForeignSnapshot).
     var threadId = tidOfResponse || readDomThreadId() || currentThreadId || emittedThreadId;
@@ -564,6 +606,14 @@
   // Применяет готовые turns к базе + эмит (единая точка для folwr-open и пагинации).
   function applyTurns(turns, tid, historyComplete) {
     if (!turns || turns.length === 0) return;
+    // O-27 (a): та же валидация, что у mergeTurns — контейнеры без содержимого (captcha /
+    // «подозрительный трафик» / пустой payload) базой не становятся и baseComplete не
+    // взводят: historyComplete=true здесь означал бы «история ПОЛНАЯ по сети».
+    if (!hasUsableTurns(turns)) {
+      debugLog('log', '[ai-cm-google-search] O-27: тело без непустых ходов — база не тронута' +
+        ' (apply, ходов=' + turns.length + ', complete=' + (historyComplete === true ? 1 : 0) + ')');
+      return;
+    }
     // v1.27 (O-31): поздний ответ чужого разговора (probe/пагинация, стартовавшие до
     // SPA-переключения) в базу текущего не дописывается — только в свой сегмент.
     if (absorbForeignSnapshot(tid, turns, historyComplete)) return;

@@ -54,6 +54,11 @@ function fnDecl(src, name) {
 // =====================================================================================
 const SCOPE_FNS = [
   'messagesFromTurns',
+  // O-27 (a): валидация сетевого тела (≥1 непустой ход) — писатели базы зовут её из
+  // applyTurns/mergeTurns, поэтому в песочнице она должна быть в скоупе.
+  'isRawXssiPayload',
+  'isUsableTurn',
+  'hasUsableTurns',
   'buildDetail',
   'emitDetail',
   'cacheSet',

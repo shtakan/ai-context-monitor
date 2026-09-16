@@ -330,6 +330,40 @@ function aiCmSnapshotIsCurrentThread(emitThreadId, domThreadId) {
   return String(emitThreadId) === String(domThreadId);
 }
 
+// ===== O-27 (b): признак ЧАТ-страницы GSA для гейта автоэкспорта =====
+// Чат-страница Google Search AI определяется ровно двумя признаками: threadId снаффнут
+// в DOM ([data-session-thread-id]) ИЛИ в DOM есть чат-контейнер (turn/aimfl). Сервисная
+// страница Google (captcha / «подозрительный трафик» /sorry) не содержит ни того, ни
+// другого — там база/pct прошлого документа права на файл не дают.
+function aiCmGsaChatPageMarker() {
+  try {
+    if (typeof aiCmDomThreadId === 'function' && aiCmDomThreadId()) return true;
+    if (document.querySelector('[data-scope-id="turn"]')) return true;
+    if (document.querySelector('[data-subtree="aimfl"]')) return true;
+  } catch (e) { }
+  return false;
+}
+
+// ===== O-27 (c): состояние ПРОШЛОГО документа не переживает не-чат документ GSA =====
+// Полная навигация даёт новый экземпляр (состояние и так пусто), но подмена документа
+// сервисной страницей (captcha) в живом SPA/документе оставляла базу, pct и pct-latch
+// прошлого разговора. Здесь они гасятся — до следующего сетевого EMIT базы нет, гейт
+// автоэкспорта молчит. Чат-страница (threadId/контейнер в DOM) не трогается вовсе:
+// байты и маска экспорта чат-страниц прежние.
+function aiCmGsaResetStaleStateOnChatlessDoc() {
+  try {
+    if (!currentAdapter || currentAdapter.siteName !== 'google_search') return false;
+    if (typeof document === 'undefined' || document.readyState !== 'complete') return false;
+    if (aiCmGsaChatPageMarker()) return false;
+    var hasState = (baseSeen === true) || (baseComplete === true) || (baseCount > 0);
+    if (!hasState) return false;
+    resetConversationState();
+    debugLog('log', '[AI CM][auto-export] site=google_search O-27: документ без чата — ' +
+      'база/pct прошлого документа сброшены');
+    return true;
+  } catch (e) { return false; }
+}
+
 window.addEventListener('ai-cm-full-history', function (ev) {
   // v81 Step1: один флаг-лог на сессию страницы — дошло ли событие 'ai-cm-full-history'
   // до content.js для текущего сервиса. Поведение не меняется.
@@ -1203,6 +1237,11 @@ function aiCmArmBadgeHoldFallback() {
 
 function processAndSend() {
   if (!currentAdapter) return;
+
+  // O-27 (c): на не-чат документе GSA (captcha/«подозрительный трафик») база/pct прошлого
+  // документа гасятся ДО расчёта pct и вызова автоэкспорта — прошлое состояние вердикта
+  // не даёт. На чат-странице вызов — no-op (threadId/контейнер в DOM есть).
+  try { aiCmGsaResetStaleStateOnChatlessDoc(); } catch (eO27c) { }
 
   // v81 Step1: диагностический trace для не-Gemini адаптеров (поведение не меняется):
   // факты — у каких сервисов база заполняется через EMIT-канал, у каких история только из адаптера.
