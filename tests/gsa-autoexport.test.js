@@ -57,7 +57,8 @@ const TID = 'SYNTHETIC-THREAD-1';
 describe('F1: probe-полнота GSA доходит до гейта одной точкой', () => {
   test('intercept: probe complete=true → applyTurns(..., true) → historyComplete снимка', () => {
     // единственный путь вердикта: finish(complete=true) применяет базу с historyComplete=true
-    expect(INTERCEPT).toContain('applyTurns(merged.length > 0 ? merged : lastFullTurns, tid, true);');
+    // (O-27 защитный фикс: 4-й аргумент — сырое тело шага probe для проверки формы мусора)
+    expect(INTERCEPT).toContain('applyTurns(merged.length > 0 ? merged : lastFullTurns, tid, true, lastBody);');
     expect(INTERCEPT).toContain('historyComplete: historyComplete !== false');
     // probe-путь не заводит второго вердикта: классификатор вызывается только в describeFolwrPage
     expect(INTERCEPT).toContain('pageInfo.cls.complete');

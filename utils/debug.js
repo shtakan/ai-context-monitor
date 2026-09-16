@@ -184,3 +184,27 @@ function aiCmDiagDownload(trigger, content, fileName, extra) {
     src: aiCmDiagStack(1)
   });
 }
+
+// O-27 (защитный фикс): ЕДИНСТВЕННАЯ точка скачивания ОТКАЗАЛА в выдаче файла.
+// reason=xssi-prefix — первые байты контента начинаются XSSI-префиксом Google (`)]}'`,
+// живой артефакт `f.txt`); reason=empty-name — имя файла пустое/не задано (живой путь
+// автоэкспорта на captcha-странице). Строка — только под гейтом aiCmDebug; reason идёт
+// ПЕРВЫМ полем, поэтому в логе всегда читается `download-blocked reason=<причина>`.
+function aiCmDiagDownloadBlocked(trigger, content, fileName, reason, extra) {
+  if (!aiCmDiagOn()) return false;
+  var e = extra || {};
+  var url = '';
+  try { url = String((typeof location !== 'undefined' && location && location.href) || ''); } catch (eUrlB) { }
+  return aiCmDiagLine('download-blocked', {
+    reason: reason || '(нет)',
+    trigger: trigger || '(нет)',
+    file: (fileName === undefined || fileName === null || String(fileName) === '') ? 'пустое' : String(fileName),
+    bytes100: aiCmDiagHead(content, 100),
+    len: (content === undefined || content === null) ? 0 : String(content).length,
+    mime: e.mime,
+    url: url,
+    threadId: e.threadId,
+    site: e.site,
+    src: aiCmDiagStack(1)
+  });
+}

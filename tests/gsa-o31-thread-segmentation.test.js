@@ -54,11 +54,12 @@ function fnDecl(src, name) {
 // =====================================================================================
 const SCOPE_FNS = [
   'messagesFromTurns',
-  // O-27 (a): валидация сетевого тела (≥1 непустой ход) — писатели базы зовут её из
-  // applyTurns/mergeTurns, поэтому в песочнице она должна быть в скоупе.
+  // O-27 (защитный фикс): валидация сетевого тела (≥1 непустой ход + форма мусора по телу) —
+  // писатели базы зовут её из applyTurns/mergeTurns, поэтому в песочнице она в скоупе.
   'isRawXssiPayload',
   'isUsableTurn',
   'hasUsableTurns',
+  'isGarbageBody',
   'buildDetail',
   'emitDetail',
   'cacheSet',
@@ -323,13 +324,14 @@ describe('O-31 (в): регрессионный контур', () => {
     expect(fnDecl(INTERCEPT, 'applyTurns')).toContain('absorbForeignSnapshot(tid, turns, historyComplete)');
     expect(fnDecl(INTERCEPT, 'mergeTurns')).toContain('absorbForeignSnapshot(threadId, newTurns, false)');
     expect(fnDecl(INTERCEPT, 'checkThreadSwitch')).toContain('activateThread(tid)');
-    // threadId ТЕЛА ответа доезжает до mergeTurns (иначе атрибуция по DOM/активному треду)
-    expect(INTERCEPT).toContain('mergeTurns(parsed.turns, isFull, parsed.threadId);');
-    expect(INTERCEPT).toContain('mergeTurns(parsed.turns, isFullXhr, parsed.threadId);');
+    // threadId ТЕЛА ответа доезжает до mergeTurns (иначе атрибуция по DOM/активному треду);
+    // O-27 (защитный фикс): вместе с ним едет СЫРОЕ тело ответа — вход проверки формы мусора
+    expect(INTERCEPT).toContain('mergeTurns(parsed.turns, isFull, parsed.threadId, txt);');
+    expect(INTERCEPT).toContain('mergeTurns(parsed.turns, isFullXhr, parsed.threadId, txt);');
     // живой DOM — источник правды о текущем разговоре
     expect(fnDecl(INTERCEPT, 'isForeignThread')).toContain('tid !== domTid');
-    // probe-вердикт полноты (F1, O-28) не тронут
-    expect(INTERCEPT).toContain('applyTurns(merged.length > 0 ? merged : lastFullTurns, tid, true);');
+    // probe-вердикт полноты (F1, O-28) не тронут (O-27: 4-й аргумент — тело шага probe)
+    expect(INTERCEPT).toContain('applyTurns(merged.length > 0 ? merged : lastFullTurns, tid, true, lastBody);');
     expect(INTERCEPT).toContain('historyComplete: historyComplete !== false');
   });
 

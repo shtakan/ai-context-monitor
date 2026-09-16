@@ -259,18 +259,23 @@
     return '';
   }
 
-  // ---- O-27 (a): валидация сетевого тела перед записью базы ----
-  // Живой дефект (GSA, прогон 2026-09-16 10:46): Google ответил на запрос folwr
-  // сервисной страницей captcha/«подозрительный трафик»; тело с пустым payload
-  // (`)]}' [""]`) не содержит ни одного хода. Теперь сетевой писатель требует ≥1 НЕПУСТОЙ
-  // ход: ход без userText и без assistantText ходом не считается (контейнер без содержимого,
-  // пустой payload, интерстишиал), а снимок без ходов не строится вовсе — значит и
-  // baseComplete (buildDetail.historyComplete, по умолчанию true) по мусору не взводится.
+  // ---- O-27: валидация сетевого тела перед записью базы (защитный фикс по форме мусора) ----
+  // Живой артефакт (GSA, captcha-страница): файл `f.txt` = `)]}'\n[""]\n` — XSSI-префикс
+  // Google с ПУСТЫМ payload; парсер извлекает из такого тела 0 ходов. Живые логи (прогон
+  // 18:47) доказывают, что на легитимном теле GSA гард не отклоняет НИ ОДНОГО хода ни на
+  // одном пути (open / applyTurns / probe: shape=turns=5 empty=0, validation=hasUsableTurns=true),
+  // поэтому критерий СУЖЕН до точной формы мусора и не зависит от типа документа/страницы:
+  //   (1) ход пригоден, если в нём есть непустой текст (userText ИЛИ assistantText) —
+  //       контейнер без содержимого (пустой payload, интерстишиал) ходом не считается;
+  //   (2) форма мусора решается ТЕЛОМ (а не текстом отдельного хода): тело начинается
+  //       четырёхсимвольным XSSI-префиксом `)]}'` И не распарсилось ни в один непустой ход.
+  // Легитимный ответ, который сам начинается тем же префиксом, но содержит ходы, гардом НЕ
+  // отклоняется: префикс и результат разбора решаются ВМЕСТЕ (isGarbageBody). Снимок без
+  // ходов не строится вовсе — значит и baseComplete (buildDetail.historyComplete, по
+  // умолчанию true) по мусору не взводится.
   //
-  // Сырое тело Google-ответа (четырёхсимвольный XSSI-префикс, которым Google предваряет
-  // async-ответы) ходом не является: живой мусор captcha-страницы доехал до экспорта ровно
-  // в таком виде. Сравнение — по кодам символов: исходник функции не должен содержать
-  // фигурной скобки в литерале (source-пин-тесты режут функции по балансу скобок).
+  // Сравнение префикса — по кодам символов: исходник функции не должен содержать фигурной
+  // скобки в литерале (source-пин-тесты режут функции по балансу скобок).
   function isRawXssiPayload(s) {
     if (!s || s.length < 4) return false;
     return s.charCodeAt(0) === 41 && s.charCodeAt(1) === 93 &&
@@ -281,9 +286,7 @@
     if (!t) return false;
     var u = (t.userText == null) ? '' : String(t.userText).trim();
     var a = (t.assistantText == null) ? '' : String(t.assistantText).trim();
-    if (u && !isRawXssiPayload(u)) return true;
-    if (a && !isRawXssiPayload(a)) return true;
-    return false;
+    return !!(u || a);
   }
 
   function hasUsableTurns(turns) {
@@ -292,6 +295,14 @@
       if (isUsableTurn(turns[i])) return true;
     }
     return false;
+  }
+
+  // Точная форма мусора: тело с XSSI-префиксом и НУЛЁМ непустых ходов. bodyText — сырое
+  // тело ответа; на путях без тела (DOM-добор, кэш, повторный эмит) он undefined → формы
+  // мусора нет, поведение прежнее.
+  function isGarbageBody(bodyText, turns) {
+    if (!isRawXssiPayload(bodyText)) return false;
+    return !hasUsableTurns(turns);
   }
 
   // ---- плоские messages из turns (fallback) ----
@@ -441,8 +452,18 @@
 
   // ---- слияние новых ходов ----
   // tidOfResponse — threadId из ТЕЛА ответа (parseWithParser), если он там есть.
-  function mergeTurns(newTurns, isFull, tidOfResponse) {
-    // O-27 (a): тело, не распарсившееся в ≥1 НЕПУСТОЙ ход, базой не является — ни запись,
+  // bodyText — СЫРОЕ тело ответа (O-27): по нему решается, что тело — форма мусора.
+  function mergeTurns(newTurns, isFull, tidOfResponse, bodyText) {
+    // O-27 (защитный фикс): тело ТОЧНОЙ формы мусора (XSSI-префикс Google + 0 непустых
+    // ходов) базой не является — ни запись, ни эмит, ни baseComplete. Причина видна в
+    // диаг-строке (reason=xssi-prefix); живой путь — captcha-страница GSA (`f.txt`).
+    if (isGarbageBody(bodyText, newTurns)) {
+      if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('mergeTurns', newTurns, 'reject', tidOfResponse, { full: (isFull === true) ? 1 : 0, validation: 'hasUsableTurns=false', reason: 'xssi-prefix' });
+      debugLog('log', '[ai-cm-google-search] O-27: форма мусора (XSSI-префикс без полезного payload) — база не тронута' +
+        ' (merge, ходов=' + ((newTurns && newTurns.length) || 0) + ')');
+      return;
+    }
+    // O-27: тело, не распарсившееся в ≥1 НЕПУСТОЙ ход, базой не является — ни запись,
     // ни эмит, ни baseComplete (снимок не строится вовсе).
     if (!hasUsableTurns(newTurns)) {
       if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('mergeTurns', newTurns, 'reject', tidOfResponse, { full: (isFull === true) ? 1 : 0, validation: 'hasUsableTurns=false' });
@@ -689,14 +710,23 @@
   }
 
   // Применяет готовые turns к базе + эмит (единая точка для folwr-open и пагинации).
-  function applyTurns(turns, tid, historyComplete) {
+  // bodyText — СЫРОЕ тело ответа (O-27): по нему решается, что тело — форма мусора.
+  function applyTurns(turns, tid, historyComplete, bodyText) {
     if (!turns || turns.length === 0) {
       if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('applyTurns', turns, 'reject-empty', tid, { complete: (historyComplete === true) ? 1 : 0 });
       return;
     }
-    // O-27 (a): та же валидация, что у mergeTurns — контейнеры без содержимого (captcha /
-    // «подозрительный трафик» / пустой payload) базой не становятся и baseComplete не
-    // взводят: historyComplete=true здесь означал бы «история ПОЛНАЯ по сети».
+    // O-27 (защитный фикс): та же точная форма мусора, что у mergeTurns — XSSI-префикс
+    // Google без полезного payload. Такое тело базой не становится и baseComplete не
+    // взводит: historyComplete=true здесь означал бы «история ПОЛНАЯ по сети».
+    if (isGarbageBody(bodyText, turns)) {
+      if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('applyTurns', turns, 'reject', tid, { complete: (historyComplete === true) ? 1 : 0, validation: 'hasUsableTurns=false', reason: 'xssi-prefix' });
+      debugLog('log', '[ai-cm-google-search] O-27: форма мусора (XSSI-префикс без полезного payload) — база не тронута' +
+        ' (apply, ходов=' + turns.length + ', complete=' + (historyComplete === true ? 1 : 0) + ')');
+      return;
+    }
+    // O-27: контейнеры без содержимого (captcha / «подозрительный трафик» / пустой payload)
+    // базой не становятся и baseComplete не взводят.
     if (!hasUsableTurns(turns)) {
       if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('applyTurns', turns, 'reject', tid, { complete: (historyComplete === true) ? 1 : 0, validation: 'hasUsableTurns=false' });
       debugLog('log', '[ai-cm-google-search] O-27: тело без непустых ходов — база не тронута' +
@@ -800,7 +830,7 @@
             ' raw(' + txt.length + 'B): ' + diagPreview(txt));
           if (gained > 0) {
             if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('pagination', merged, 'submit', tid, { page: pages, gained: gained, kind: pageInfo.cls.kind, cursor: (cursor ? cursor.slice(0, 12) : 'нет') });
-            applyTurns(merged, tid, false);
+            applyTurns(merged, tid, false, txt);
           } else if (typeof gsaDiagBaseWrite === 'function') {
             gsaDiagBaseWrite('pagination', parsed.turns, 'skip-no-gain', tid, { page: pages, gained: 0, kind: pageInfo.cls.kind, cursor: (cursor ? cursor.slice(0, 12) : 'нет') });
           }
@@ -939,6 +969,9 @@
     var steps = 0;
     var addedTotal = 0;
     var done = false;
+    // O-27 (защитный фикс): тело последнего шага probe — для проверки формы мусора на
+    // финальном applyTurns (в probe этот путь всегда завершает базу вердиктом ПОЛНАЯ).
+    var lastBody = '';
 
     // v43: итоговая строка folwr-open печатается на ВСЕХ выходах.
     // complete=true → applyTurns(..., true) (baseComplete=true); иначе база не трогается.
@@ -948,7 +981,7 @@
       activeFolwrInFlight[key] = false;
       if (complete) {
         if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('probe', merged, 'submit-final', tid, { complete: 1, addedTotal: addedTotal, steps: steps, reason: reason });
-        applyTurns(merged.length > 0 ? merged : lastFullTurns, tid, true);
+        applyTurns(merged.length > 0 ? merged : lastFullTurns, tid, true, lastBody);
       } else if (typeof gsaDiagBaseWrite === 'function') {
         gsaDiagBaseWrite('probe', merged, 'skip-incomplete', tid, { complete: 0, addedTotal: addedTotal, steps: steps, reason: reason });
       }
@@ -998,6 +1031,7 @@
           if (!page) return; // 429//sorry/ → cooldown, probe уже завершён
           activeFolwrInFlight[key] = false;
           var txt = page.txt;
+          lastBody = txt; // O-27: тело шага probe — вход проверки формы мусора
           var parsed = parseWithParser(txt);
           var before = merged.length;
           merged = mergeFn(merged, parsed.turns);
@@ -1012,7 +1046,7 @@
             ' всего=' + merged.length + ' raw(' + txt.length + 'B): ' + diagPreview(txt));
           if (added > 0) {
             if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('probe', merged, 'submit', tid, { step: steps, added: added, kind: pageInfo.cls.kind, cursor: (next ? next.slice(0, 12) : 'нет') });
-            applyTurns(merged, tid, false);
+            applyTurns(merged, tid, false, txt);
           } else if (typeof gsaDiagBaseWrite === 'function') {
             gsaDiagBaseWrite('probe', parsed.turns, 'skip-no-gain', tid, { step: steps, added: 0, kind: pageInfo.cls.kind, cursor: (next ? next.slice(0, 12) : 'нет') });
           }
@@ -1163,7 +1197,7 @@
               if (parsed.turns.length > 0) {
                 // O-27/O-32 (диагностика): путь записи — пассивный folwr (полный) / folif (чанк).
                 if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite(isFull ? 'passive-folwr' : 'passive-folif', parsed.turns, 'submit', parsed.threadId, { url: rawSnippet(url, 80), bodyLen: (txt ? txt.length : 0) });
-                mergeTurns(parsed.turns, isFull, parsed.threadId);
+                mergeTurns(parsed.turns, isFull, parsed.threadId, txt);
               } else if (typeof gsaDiagBaseWrite === 'function') {
                 gsaDiagBaseWrite(isFull ? 'passive-folwr' : 'passive-folif', parsed.turns, 'skip-no-turns', parsed.threadId, { url: rawSnippet(url, 80), bodyLen: (txt ? txt.length : 0) });
               }
@@ -1235,7 +1269,7 @@
                   // O-27/O-32 (диагностика): путь записи — folwr-open (GET /async/folwr):
                   // распарсено, контейнеры folwr/DOM, досбор, курсор, вердикт ПОЛНАЯ.
                   if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('open', mergedTurns, 'submit', tid, { parsed: baseTurns.length, folwrContainers: folwrTurnCount, domContainers: domTurnCount, dopasbor: dopasbor, complete: historyComplete ? 1 : 0, cursor: (folwrCursor ? folwrCursor.slice(0, 12) : 'нет'), bodyLen: (txt ? txt.length : 0) });
-                  applyTurns(mergedTurns, tid, historyComplete);
+                  applyTurns(mergedTurns, tid, historyComplete, txt);
 
                   // v1.5.2: антиспам — печатаем folwr-open только при изменении сигнатуры.
                   var sig = [baseTurns.length, folwrTurnCount, domTurnCount, dopasbor,
@@ -1332,7 +1366,7 @@
               if (parsed.turns.length > 0) {
                 // O-27/O-32 (диагностика): путь записи — XHR (folwr полный / folif чанк).
                 if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('xhr', parsed.turns, 'submit', parsed.threadId, { full: (isFullXhr === true) ? 1 : 0, url: rawSnippet(url, 80), bodyLen: (txt ? txt.length : 0) });
-                mergeTurns(parsed.turns, isFullXhr, parsed.threadId);
+                mergeTurns(parsed.turns, isFullXhr, parsed.threadId, txt);
               } else if (typeof gsaDiagBaseWrite === 'function') {
                 gsaDiagBaseWrite('xhr', parsed.turns, 'skip-no-turns', parsed.threadId, { full: (isFullXhr === true) ? 1 : 0, url: rawSnippet(url, 80), bodyLen: (txt ? txt.length : 0) });
               }

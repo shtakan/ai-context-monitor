@@ -23,7 +23,11 @@
  *
  * Фикс O-27:
  *   (а) сетевой писатель GSA (applyTurns/mergeTurns) отклоняет тела, не распарсившиеся в
- *       ≥1 НЕПУСТОЙ ход: база не пишется, снимок не эмитится, baseComplete не взводится;
+ *       ≥1 НЕПУСТОЙ ход, и ТОЧНУЮ форму мусора (тело начинается XSSI-префиксом `)]}'` И
+ *       разбор дал 0 непустых ходов): база не пишется, снимок не эмитится, baseComplete не
+ *       взводится. Легитимное тело — в т.ч. начинающееся тем же префиксом, но с ходами, —
+ *       пишется байтово прежним путём (защитный фикс O-27: сужение гарда до формы мусора;
+ *       пины — tests/gsa-o27-protective-form-guard.test.js);
  *   (б) гейт автоэкспорта GSA требует msgs≥1, непустой текст базы и признак чат-страницы
  *       (threadId снаффнут ИЛИ чат-контейнер в DOM) — shouldSkipGsaPageGuard;
  *   (в) база/pct прошлого документа на не-чат документе гасятся при load/в DRAW
@@ -49,6 +53,9 @@ const GSA = 'google_search';
 const TID = 'SYNTHETIC-THREAD-1';
 // Живой мусор captcha-страницы: префикс XHR Google + пустой payload (ни одного хода).
 const CAPTCHA_BODY = ')]}\' [""]';
+// Живой артефакт O-27 — файл `f.txt`: XSSI-префикс Google (4 символа) + перевод строки +
+// пустой payload `[""]` + перевод строки (ни одного хода — точная форма мусора).
+const F_TXT = ")]}'\n[\"\"]\n";
 
 // Рез по балансу фигурных скобок (как в tests/gsa-autoexport.test.js / O-31).
 function fnDecl(src, name) {
@@ -73,6 +80,7 @@ const SCOPE_FNS = [
   'isRawXssiPayload',
   'isUsableTurn',
   'hasUsableTurns',
+  'isGarbageBody',
   'buildDetail',
   'emitDetail',
   'cacheSet',
@@ -145,7 +153,7 @@ describe('O-27 (а): сетевой писатель GSA отклоняет те
     const parsed = h.api.parseWithParser(CAPTCHA_BODY);
     expect(parsed.turns).toHaveLength(0);          // сырой префикс XHR с пустым payload
 
-    h.api.applyTurns(parsed.turns, TID, true);      // прод-путь folwr-open с complete=true
+    h.api.applyTurns(parsed.turns, TID, true, CAPTCHA_BODY); // прод-путь folwr-open с complete=true
 
     expect(h.ctx.lastFullTurns).toHaveLength(0);
     expect(h.ctx.lastFullMessages).toHaveLength(0);
@@ -153,12 +161,21 @@ describe('O-27 (а): сетевой писатель GSA отклоняет те
     expect(h.events).toHaveLength(0);               // файра не будет: AI CM не получил базу
     // отдельно: пустой разбор отвергается и внутренним гардом (не только счётчиком turns)
     expect(h.api.hasUsableTurns(parsed.turns)).toBe(false);
-    // тело, доехавшее до хода СЫРЫМ (XSSI-префикс `)]}'` — ровно живой `f.txt`), ходом не
-    // считается: база по нему не пишется и ПОЛНАЯ не взводится
-    expect(h.api.hasUsableTurns([{ id: 'x', userText: CAPTCHA_BODY, assistantText: null }])).toBe(false);
-    h.api.applyTurns([{ id: 'x', userText: CAPTCHA_BODY, assistantText: null }], TID, true);
+    // ТОЧНАЯ форма мусора (защитный фикс O-27): тело начинается XSSI-префиксом `)]}'`
+    // И разбор дал 0 непустых ходов. Писатель с таким телом базу не трогает и ПОЛНУЮ
+    // не взводит — при этом причина в вердикте отдельная (reason=xssi-prefix).
+    expect(h.api.isGarbageBody(F_TXT, [])).toBe(true);
+    expect(h.api.isGarbageBody(F_TXT, [{ id: 'x', userText: '', assistantText: null }])).toBe(true);
+    h.api.mergeTurns([{ id: 'x', userText: '', assistantText: null }], true, TID, F_TXT);
     expect(h.ctx.lastFullSnapshot).toBeNull();
-    expect(h.events).toHaveLength(0);
+    expect(h.ctx.lastFullTurns).toHaveLength(0);
+    expect(h.logs.join('\n')).toContain('O-27: форма мусора');
+    // СУЖЕНИЕ гарда: ход с НЕПУСТЫМ текстом форму мусора не образует (в т.ч. если текстом
+    // хода оказалось сырое тело) — по тексту хода гард больше не отклоняет; остаточный
+    // случай закрыт пост-гардом ЕДИНСТВЕННОЙ точки скачивания (`download-blocked
+    // reason=xssi-prefix`, пины — tests/gsa-o27-protective-form-guard.test.js).
+    expect(h.api.isGarbageBody(F_TXT, [{ id: 'x', userText: CAPTCHA_BODY, assistantText: null }])).toBe(false);
+    expect(h.api.hasUsableTurns([{ id: 'x', userText: CAPTCHA_BODY, assistantText: null }])).toBe(true);
   });
 
   test('контейнер хода БЕЗ содержимого (мусор после парсера) не пишет базу и не ставит ПОЛНАЯ', () => {
@@ -207,7 +224,7 @@ describe('O-27: нормальное folwr-тело → база байтово 
   test('снимок совпадает с до-фиксовым поведением (гард только пропускает)', () => {
     const hFix = interceptCtx({ domTid: TID });
     const p1 = hFix.api.parseWithParser(FOLWR_FIXTURE);
-    hFix.api.applyTurns(p1.turns, TID, true);
+    hFix.api.applyTurns(p1.turns, TID, true, FOLWR_FIXTURE);
     const afterFix = snapshotOf(hFix.ctx);
 
     // до-фиксовое поведение: гард отключён (hasUsableTurns всегда true)
@@ -223,6 +240,19 @@ describe('O-27: нормальное folwr-тело → база байтово 
     // F1 не тронут: probe-вердикт по-прежнему доезжает одной точкой
     expect(hFix.ctx.lastFullSnapshot.historyComplete).toBe(true);
     expect(COUNT(hFix.events[hFix.events.length - 1])).toBe(4);
+  });
+
+  test('легитимное тело С XSSI-префиксом, но с ходами — не форма мусора (сужение гарда)', () => {
+    // Сужение до точной формы мусора: префикс `)]}'` сам по себе тело мусором не делает —
+    // решает РАЗБОР. Тело с префиксом, но с непустыми ходами пишется базой как раньше.
+    const prefixedBody = ")]}'\n" + FOLWR_FIXTURE;
+    const h = interceptCtx({ domTid: TID });
+    expect(h.api.isGarbageBody(prefixedBody, TURNS_A)).toBe(false);
+    expect(h.api.hasUsableTurns(TURNS_A)).toBe(true);
+    h.api.applyTurns(TURNS_A, TID, true, prefixedBody);
+    expect(h.ctx.lastFullSnapshot.count).toBe(8);
+    expect(h.ctx.lastFullSnapshot.historyComplete).toBe(true);
+    expect(h.events).toHaveLength(1);
   });
 
   test('восемь пустых контейнеров в теле — тоже не база (счётчик ходов ≠ содержимое)', () => {
@@ -393,8 +423,12 @@ describe('O-27: source-пины (где живёт гарантия)', () => {
     expect(INTERCEPT).toContain('function isUsableTurn(');
     expect(INTERCEPT).toContain('function hasUsableTurns(');
     expect(INTERCEPT).toContain('function isRawXssiPayload(');
+    expect(INTERCEPT).toContain('function isGarbageBody(');
     expect(fnDecl(INTERCEPT, 'applyTurns')).toContain('if (!hasUsableTurns(turns))');
     expect(fnDecl(INTERCEPT, 'mergeTurns')).toContain('if (!hasUsableTurns(newTurns))');
+    // O-27 (защитный фикс): точная форма мусора проверяется ТЕЛОМ в обоих писателях
+    expect(fnDecl(INTERCEPT, 'applyTurns')).toContain('if (isGarbageBody(bodyText, turns))');
+    expect(fnDecl(INTERCEPT, 'mergeTurns')).toContain('if (isGarbageBody(bodyText, newTurns))');
     // оба выходят ДО записи базы/эмита
     const apply = fnDecl(INTERCEPT, 'applyTurns');
     expect(apply.indexOf('hasUsableTurns')).toBeLessThan(apply.indexOf('lastFullTurns = turns.slice()'));

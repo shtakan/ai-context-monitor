@@ -820,6 +820,11 @@ function aiCmAutoExportStartDownload(content, file, fmt) {
   // (2) синхронный резерв имени ДО старта скачивания
   try { if (used && file) used[file] = 1; } catch (eNameReserve) { }
   // (3) старт скачивания
+  // O-27 (защитный фикс): пост-гард отказа (XSSI-префикс в первых байтах контента | пустое
+  // имя файла) живёт ровно в одной точке — utils/export-text-builders.js:downloadBlob,
+  // поэтому его проходит ЛЮБОЙ триггер (автоэкспорт, options, печать). Порядок и содержимое
+  // O-11 не тронуты: реестр консультируется и имя резервируется синхронно ДО старта, как и
+  // раньше; отказ лишь не выдаёт файл и пишет `[AI CM][diag] download-blocked reason=…`.
   var Bdl = (typeof window !== 'undefined' && window.AiCmExportBuilders) ? window.AiCmExportBuilders : null;
   if (!Bdl || typeof Bdl.downloadBlob !== 'function') throw new Error('utils/export-text-builders.js не загружен');
   Bdl.downloadBlob(content, file, fmt === 'md' ? 'text/markdown' : (fmt === 'json' ? 'application/json' : 'text/plain;charset=utf-8'), 'autoexport');

@@ -15,6 +15,10 @@
  *   4. гейты и валидаторы не тронуты: `maybeAutoExport` по-прежнему зовёт чистый
  *      shouldSkipAutoExport, в export-manager.js ровно один вызов downloadBlob, у GSA
  *      нет собственного скачивания (ни createObjectURL, ни a.download).
+ *   5. O-27 (защитный фикс): в ЕДИНСТВЕННОЙ точке скачивания (downloadBlob) отказ по форме
+ *      мусора/пустому имени — отказ есть поведение (файл не выдаётся), а строка
+ *      `[AI CM][diag] download-blocked reason=…` печатается только под гейтом aiCmDebug
+ *      (канонический хелпер utils/debug.js: aiCmDiagDownloadBlocked).
  */
 
 const fs = require('fs');
@@ -48,6 +52,9 @@ function fnDecl(src, name) {
 
 const DIAG_PREFIX = '[AI CM][diag]';
 const CAPTCHA_BODY = ')]}\' [""]';
+// Живой артефакт O-27: `f.txt` = XSSI-префикс Google (4 символа) + перевод строки +
+// пустой payload `[""]` + перевод строки.
+const F_TXT = ")]}'\n[\"\"]\n";
 
 function turn(id, q, a) {
   return { id: id, userText: q, assistantText: a };
@@ -102,12 +109,12 @@ describe('O-27/O-32: downloadBlob — гейт aiCmDebug, поля строки 
     window.sessionStorage.setItem('aiCmDebug', '1');
     const B = loadBuilders();
     const content = 'x'.repeat(500);
-    B.downloadBlob(content, '', 'text/plain;charset=utf-8', 'options-txt',
+    B.downloadBlob(content, 'chat.txt', 'text/plain;charset=utf-8', 'options-txt',
       { threadId: 'TID-1', site: 'google_search' });
     const lines = diagLines();
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain('download trigger=options-txt');
-    expect(lines[0]).toContain('file=пустое');                    // пустое имя — словом
+    expect(lines[0]).toContain('file=chat.txt');
     expect(lines[0]).toContain('bytes100=' + 'x'.repeat(100) + '…'); // первые 100 символов базы
     expect(lines[0]).toContain('len=500');
     expect(lines[0]).toContain('url=');
@@ -116,6 +123,33 @@ describe('O-27/O-32: downloadBlob — гейт aiCmDebug, поля строки 
     expect(lines[0]).toContain('src=');
     // байты экспорта не изменены даже при включённом гейте
     await expect(blobText(blobs[0])).resolves.toBe(content);
+  });
+
+  test('гейт ВКЛ: отказ точки скачивания логируется как download-blocked с причиной', async () => {
+    window.sessionStorage.setItem('aiCmDebug', '1');
+    const B = loadBuilders();
+    // (1) пустое имя файла — файл не выдаётся, строка с reason=empty-name
+    expect(B.downloadBlob('Вопрос\n\nОтвет', '', 'text/plain;charset=utf-8', 'options-txt')).toBe(false);
+    expect(blobs).toHaveLength(0);
+    let lines = diagLines();
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('[AI CM][diag] download-blocked reason=empty-name');
+    expect(lines[0]).toContain('file=пустое');
+    // (2) XSSI-префикс в первых байтах контента — файл не выдаётся, reason=xssi-prefix
+    expect(B.downloadBlob(F_TXT, 'f.txt', 'text/plain;charset=utf-8', 'autoexport')).toBe(false);
+    expect(blobs).toHaveLength(0);
+    lines = diagLines();
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toContain('[AI CM][diag] download-blocked reason=xssi-prefix');
+    expect(lines[1]).toContain('file=f.txt');
+    expect(lines[1]).toContain('len=' + F_TXT.length);
+    // (3) гейт ВЫКЛ: отказ тот же (файл не выдан), но НИ ОДНОЙ НОВОЙ строки
+    const beforeOff = diagLines().length;
+    window.sessionStorage.removeItem('aiCmDebug');
+    const B2 = loadBuilders();
+    expect(B2.downloadBlob('Вопрос', '', 'text/plain;charset=utf-8', 'options-txt')).toBe(false);
+    expect(blobs).toHaveLength(0);
+    expect(diagLines()).toHaveLength(beforeOff);
   });
 
   test('чекбокс «Подробные логи» (window.__aiCmDebugLogs) — тот же гейт', () => {
@@ -154,6 +188,7 @@ const GSA_FNS = [
   'isRawXssiPayload',
   'isUsableTurn',
   'hasUsableTurns',
+  'isGarbageBody',
   'buildDetail',
   'emitDetail',
   'cacheSet',
@@ -220,21 +255,33 @@ describe('O-27/O-32: точки записи базы GSA — форма ход�
   test('гейт ВКЛ: мусор captcha отвергнут — reject, база не тронута (как в O-27)', () => {
     const sink = [];
     const ctx = gsaCtx(true, sink);
-    makeGsa(ctx).applyTurns([turn('x', CAPTCHA_BODY, null)], 'TID-A', true);
+    // (1) ТОЧНАЯ форма мусора (защитный фикс O-27): тело XSSI-префикса при 0 непустых ходах —
+    // reject с отдельной причиной reason=xssi-prefix; форма хода видна (empty=1).
+    makeGsa(ctx).applyTurns([turn('x', null, null)], 'TID-A', true, F_TXT);
     const joined = sink.filter(function (l) { return l.indexOf(DIAG_PREFIX + ' gsa-base-write') === 0; }).join('\n');
     expect(joined).toContain('verdict=reject');
-    expect(joined).toContain('validation=hasUsableTurns=false');
-    expect(joined).toContain('shape=turns=1');
-    expect(joined).toContain('userLen=' + CAPTCHA_BODY.length); // форма хода: длина текста видна
+    expect(joined).toContain('reason=xssi-prefix');
+    expect(joined).toContain('shape=turns=1 empty=1');
     expect(ctx.lastFullSnapshot).toBeNull();
 
-    // контейнер хода БЕЗ содержимого: форма хода пустая (empty=1), вердикт тот же
+    // (2) сужение гарда: ход с НЕПУСТЫМ текстом по тексту больше не отклоняется (форму
+    // решает ТЕЛО вместе с разбором) — длина текста видна в форме хода
+    const sinkText = [];
+    const ctxText = gsaCtx(true, sinkText);
+    makeGsa(ctxText).applyTurns([turn('x', CAPTCHA_BODY, null)], 'TID-A', false);
+    const textJoined = sinkText.filter(function (l) { return l.indexOf(DIAG_PREFIX + ' gsa-base-write') === 0; }).join('\n');
+    expect(textJoined).toContain('verdict=accept');
+    expect(textJoined).toContain('validation=hasUsableTurns=true');
+    expect(textJoined).toContain('userLen=' + CAPTCHA_BODY.length); // форма хода: длина текста видна
+
+    // (3) контейнер хода БЕЗ содержимого: форма хода пустая (empty=1), вердикт тот же reject
     const sinkEmpty = [];
     const ctxEmpty = gsaCtx(true, sinkEmpty);
     makeGsa(ctxEmpty).applyTurns([turn('e1', null, null)], 'TID-A', true);
     const emptyJoined = sinkEmpty.filter(function (l) { return l.indexOf(DIAG_PREFIX + ' gsa-base-write') === 0; }).join('\n');
     expect(emptyJoined).toContain('shape=turns=1 empty=1');
     expect(emptyJoined).toContain('verdict=reject');
+    expect(emptyJoined).toContain('validation=hasUsableTurns=false');
     expect(ctxEmpty.lastFullSnapshot).toBeNull();
   });
 
@@ -311,6 +358,30 @@ describe('O-27/O-32: source-пины инструментирования', () =
     const dl = fnDecl(BUILDERS_SRC, 'downloadBlob');
     expect(dl).toContain('new Blob([content], { type: mimeType })');
     expect(dl).toContain('a.download = fileName;');
+  });
+
+  test('O-27 (защитный фикс): строка отказа download-blocked живёт в обоих хелперах', () => {
+    // канонический (контент-скрипт): tag 'download-blocked', reason — ПЕРВОЕ поле строки
+    const blocked = fnDecl(DEBUG_SRC, 'aiCmDiagDownloadBlocked');
+    expect(blocked).toContain('aiCmDiagOn()');
+    expect(blocked.indexOf('aiCmDiagOn()')).toBeLessThan(blocked.indexOf('aiCmDiagLine('));
+    expect(blocked).toContain("aiCmDiagLine('download-blocked'");
+    expect(blocked.indexOf('reason:')).toBeLessThan(blocked.indexOf('trigger:'));
+    // popup/options-фолбэк: та же строка через общий DIAG_PREFIX
+    const local = fnDecl(BUILDERS_SRC, 'diagDownloadBlocked');
+    expect(local).toContain('typeof aiCmDiagDownloadBlocked === ');
+    expect(local).toContain('diagOn()');
+    expect(local).toContain("+ ' download-blocked reason='");
+    // причина отказа: контент (xssi-prefix) проверяется первым, затем пустое имя
+    const reason = fnDecl(BUILDERS_SRC, 'downloadBlockReason');
+    expect(reason).toContain("return 'xssi-prefix';");
+    expect(reason).toContain("return 'empty-name';");
+    expect(reason.indexOf('xssi-prefix')).toBeLessThan(reason.indexOf('empty-name'));
+    expect(fnDecl(BUILDERS_SRC, 'startsWithXssiPrefix')).toContain('charCodeAt(0) === 41');
+    // гард стоит в ЕДИНСТВЕННОЙ точке скачивания ДО выдачи файла
+    const dl = fnDecl(BUILDERS_SRC, 'downloadBlob');
+    expect(dl).toContain('downloadBlockReason(content, fileName)');
+    expect(dl.indexOf('downloadBlockReason(content, fileName)')).toBeLessThan(dl.indexOf('new Blob([content]'));
   });
 
   test('четыре точки скачивания: autoexport / Ctrl+Shift+D / options / print-pdf', () => {

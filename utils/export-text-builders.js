@@ -90,6 +90,9 @@
   // та же семантика реализована локально. Гейт выключен → ни одной строки; функция
   // только читает уже собранные content/fileName и НЕ меняет байты экспорта.
   // ===========================================================================
+  // Единый префикс диагностических строк этого файла (ровно одно место — литерал ниже):
+  // и обычная строка скачивания, и строка отказа печатаются через DIAG_PREFIX.
+  var DIAG_PREFIX = '[AI CM][diag]';
   function diagOn() {
     try {
       if (typeof sessionStorage !== 'undefined' && sessionStorage &&
@@ -134,7 +137,7 @@
       var e = extra || {};
       var url = '';
       try { url = String((typeof location !== 'undefined' && location && location.href) || ''); } catch (eUrl) { }
-      console.log('[AI CM][diag] download trigger=' + (trigger || '(нет)') +
+      console.log(DIAG_PREFIX + ' download trigger=' + (trigger || '(нет)') +
         ' file=' + ((fileName === undefined || fileName === null || String(fileName) === '') ? 'пустое' : String(fileName)) +
         ' bytes100=' + (diagHead(content, 100) || 'пусто') +
         ' len=' + ((content === undefined || content === null) ? 0 : String(content).length) +
@@ -148,12 +151,78 @@
     return true;
   }
 
+  // ===========================================================================
+  // O-27 (защитный фикс, пост-гард ЕДИНСТВЕННОЙ точки скачивания): файл НЕ выдаётся,
+  // если контент — форма мусора (первые байты — XSSI-префикс Google `)]}'`; живой артефакт
+  // `f.txt` с captcha-страницы) ИЛИ имя файла пустое/не задано (живой путь: автоэкспорт на
+  // captcha-странице скачал мусор с ПУСТЫМ именем). Отказ — поведение точки (ловится любой
+  // триггер: автоэкспорт, попап/options, печать); сама строка отказа (download-blocked,
+  // reason=xssi-prefix|empty-name) печатается только под гейтом aiCmDebug. Content/fileName
+  // только читаются: байты легитимного экспорта не меняются.
+  // ===========================================================================
+  var XSSI_PREFIX_LEN = 4;
+  // Первые байты контента — четырёхсимвольный XSSI-префикс Google (`)]}'`)? Сравнение по
+  // кодам символов: в литерале нет фигурной скобки (source-пин-тесты режут функции по
+  // балансу скобок).
+  function startsWithXssiPrefix(content) {
+    try {
+      if (content === undefined || content === null) return false;
+      var s = String(content);
+      if (s.length < XSSI_PREFIX_LEN) return false;
+      return s.charCodeAt(0) === 41 && s.charCodeAt(1) === 93 &&
+        s.charCodeAt(2) === 125 && s.charCodeAt(3) === 39;
+    } catch (eXssi) { return false; }
+  }
+  // Причина отказа точки скачивания или null. Контент проверяется ПЕРВЫМ: живой `f.txt`
+  // подходит под оба условия (XSSI-тело + пустое имя), и решающая причина там — форма мусора.
+  function downloadBlockReason(content, fileName) {
+    if (startsWithXssiPrefix(content)) return 'xssi-prefix';
+    if (fileName === undefined || fileName === null || String(fileName).trim() === '') return 'empty-name';
+    return null;
+  }
+  // Строка отказа: `download-blocked reason=<причина> …` с общим префиксом DIAG_PREFIX.
+  // В контент-скрипте приоритет у канонического хелпера utils/debug.js (тот же гейт
+  // aiCmDebug и та же строка).
+  function diagDownloadBlocked(trigger, content, fileName, reason, extra) {
+    try {
+      if (typeof aiCmDiagDownloadBlocked === 'function') {
+        return aiCmDiagDownloadBlocked(trigger, content, fileName, reason, extra);
+      }
+    } catch (eGlobalBlocked) { }
+    if (!diagOn()) return false;
+    try {
+      var e = extra || {};
+      var url = '';
+      try { url = String((typeof location !== 'undefined' && location && location.href) || ''); } catch (eUrlB) { }
+      console.log(DIAG_PREFIX + ' download-blocked reason=' + (reason || '(нет)') +
+        ' trigger=' + (trigger || '(нет)') +
+        ' file=' + ((fileName === undefined || fileName === null || String(fileName) === '') ? 'пустое' : String(fileName)) +
+        ' bytes100=' + (diagHead(content, 100) || 'пусто') +
+        ' len=' + ((content === undefined || content === null) ? 0 : String(content).length) +
+        ' mime=' + (e.mime === undefined ? '(нет)' : e.mime) +
+        ' url=' + url +
+        ' threadId=' + (e.threadId === undefined || e.threadId === '' ? '(нет)' : e.threadId) +
+        ' site=' + (e.site === undefined ? '' : e.site) +
+        ' src=' + diagStack());
+    } catch (eLogBlocked) { }
+    return true;
+  }
+
   // Скачивание через blob + временную ссылку (как раньше в options.js)
   // O-27/O-32: 4-й аргумент trigger и 5-й extra — ТОЛЬКО для диагностической строки;
   // поведение, байты (content), mime и имя файла не меняются.
+  // O-27 (защитный фикс): перед выдачей файла — пост-гард формы мусора/пустого имени.
   function downloadBlob(content, fileName, mimeType, trigger, extra) {
+    var ex = extra || {};
+    var blockReason = downloadBlockReason(content, fileName);
+    if (blockReason) {
+      try {
+        diagDownloadBlocked(trigger || 'builder-download', content, fileName, blockReason,
+          { mime: mimeType, threadId: ex.threadId, site: ex.site });
+      } catch (eDiagBlocked) { }
+      return false; // файл не выдан: форма мусора либо имя не задано
+    }
     try {
-      var ex = extra || {};
       diagDownload(trigger || 'builder-download', content, fileName,
         { mime: mimeType, threadId: ex.threadId, site: ex.site, reason: ex.reason });
     } catch (eDiag) { }
@@ -170,6 +239,7 @@
     } catch (e) {
       console.warn('[export] не удалось скачать файл:', e);
     }
+    return true;
   }
 
   var Api = {
@@ -177,6 +247,10 @@
     buildMdFromHistory: buildMdFromHistory,
     buildJsonFromHistory: buildJsonFromHistory,
     downloadBlob: downloadBlob,
+    // O-27 (защитный фикс): причина отказа точки скачивания (null — выдача разрешена) и
+    // сама точка отказа наружу — для пинов тестов и переиспользования вызывающим кодом.
+    aiCmDownloadBlockReason: downloadBlockReason,
+    aiCmDiagDownloadBlocked: diagDownloadBlocked,
     // O-27/O-32: диагностические хелперы наружу (content.js/export-manager.js зовут их
     // через window.AiCmExportBuilders, если глобальный utils/debug.js не подключён).
     aiCmDiagOn: diagOn,
