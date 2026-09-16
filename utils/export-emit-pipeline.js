@@ -1,9 +1,13 @@
 /**
  * Общий EMIT-пайплайн экспорта (v81, Задача A).
  * Чистые функции для 6 адаптеров (chatgpt, gemini, deepseek, google_search, claude, perplexity):
- *   - buildExportFileName(service, convId, reason, isLowConfidence, fmt)
+ *   - buildAutoExportFileName(spec) — O-11: ЕДИНСТВЕННЫЙ источник имён автоэкспорта
+ *     (маски 'convId' и 'manual') + гард коллизии имён (дисамбигуатор -2, -3, … по
+ *     набору занятых имён spec.taken)
+ *   - buildExportFileName(service, convId, reason, isLowConfidence, fmt) — обёртка O-11
  *   - buildGsaExportFileName(site, model, isLowConfidence, fmt) — v1.18 (F4): имя файла
- *     автоэкспорта GSA по шаблону ручного экспорта (ai-context-monitor-<site>-<model>-<stamp>)
+ *     автоэкспорта GSA по шаблону ручного экспорта (ai-context-monitor-<site>-<model>-<stamp>);
+ *     O-11: обёртка над единственным источником, 5-й аргумент — набор занятых имён
  *   - resolveAutoExportConvId(site, urlConvId, threadId) — v1.18 (F2): convId автоэкспорта
  *     (GSA: threadId вместо отсутствующего URL-id)
  *   - notCompleteReason(state) — v1.18 (F5): ярлык причины skip (probe-running у GSA)
@@ -77,26 +81,129 @@
     } catch (e) { return ''; }
   }
 
+  // =====================================================================================
+  // O-11: ЕДИНСТВЕННЫЙ источник имён автоэкспорта + гард коллизии имён.
+  //
+  // До фикса имя автоэкспорта строили ДВЕ независимые маски (две точки генерации):
+  //   1) buildExportFileName     — <service>-<convId slice 8|noconv>-<YYYY-MM-DD_HH-MM>[-reason].<fmt>;
+  //   2) buildGsaExportFileName  — шаблон РУЧНОГО экспорта GSA:
+  //      ai-context-monitor-<site>-<model>-<YYYY-MM-DD-HH-MM>.<fmt>.
+  // У GSA надёжного convId в URL нет (threadId живёт только внутри сессии/перехватчика),
+  // а маска ручного экспорта имеет МИНУТНУЮ гранулярность: два автоэкспорта в одну минуту
+  // давали ОДНО имя файла — вторая копия терялась (оставался первый файл). Репро до фикса:
+  //   point1(buildExportFileName, convId='') → google_search-noconv-<stamp>.txt
+  //   point2(buildGsaExportFileName) #1 == #2 → ai-context-monitor-google_search-<model>-<stamp>.txt
+  //
+  // Теперь маска РОВНО ОДНА — buildAutoExportFileName(spec); обе прежние функции стали
+  // тонкими обёртками с прежними сигнатурами (.length не изменён). Имена прочих платформ
+  // и шаблон ручного экспорта GSA остаются байтово прежними (пин M-10/F4).
+  //
+  // Гард коллизии: spec.taken — набор уже занятых имён (массив, объект-карта или Set):
+  // имя файла уже выдан расширением (файл существует) или второй экспорт в ту же минуту.
+  // Занятое имя получает дисамбигуатор -2, -3, … перед расширением; первая копия НЕ
+  // переименовывается. Уникальность даёт дисамбигуатор — convId по-прежнему НЕ выдумываем.
+  // =====================================================================================
+
+  /** Формат файла: txt | md | json (неизвестное → txt) — как в обеих прежних масках. */
+  function normExportFmt(fmt) {
+    return (fmt === 'md') ? 'md' : ((fmt === 'json') ? 'json' : 'txt');
+  }
+
+  function exportPad2(n) { return (n < 10 ? '0' : '') + n; }
+
+  /** Метка времени маски convId: YYYY-MM-DD_HH-MM (байтово прежняя). */
+  function convIdStamp(d) {
+    return d.getFullYear() + '-' + exportPad2(d.getMonth() + 1) + '-' + exportPad2(d.getDate()) +
+      '_' + exportPad2(d.getHours()) + '-' + exportPad2(d.getMinutes());
+  }
+
+  /** Метка времени шаблона ручного экспорта: YYYY-MM-DD-HH-MM (как options.js buildFileName). */
+  function manualExportStamp(d) {
+    return d.getFullYear() + '-' + exportPad2(d.getMonth() + 1) + '-' + exportPad2(d.getDate()) +
+      '-' + exportPad2(d.getHours()) + '-' + exportPad2(d.getMinutes());
+  }
+
+  /** Сегмент модели ручного шаблона: та же санация, что в options.js (точки сохраняются). */
+  function safeModelSeg(model) {
+    return String(model == null ? '' : model)
+      .replace(/[^a-zA-Z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '') || 'model';
+  }
+
+  /** Имя занято? taken: массив имён | объект-карта (имя → что угодно) | Set. */
+  function isFileNameTaken(taken, name) {
+    try {
+      if (!taken || !name) return false;
+      if (typeof Set !== 'undefined' && taken instanceof Set) return taken.has(name);
+      if (Array.isArray(taken)) return taken.indexOf(name) !== -1;
+      if (typeof taken === 'object') return Object.prototype.hasOwnProperty.call(taken, name);
+      return false;
+    } catch (e) { return false; }
+  }
+
+  /** O-11: дисамбигуатор -2, -3, … перед расширением, пока имя занято. */
+  function disambiguateFileName(name, taken) {
+    var base = String(name == null ? '' : name);
+    try {
+      if (!isFileNameTaken(taken, base)) return base;
+      var m = base.match(/^(.*)\.([A-Za-z0-9]+)$/);
+      var stem = m ? m[1] : base;
+      var ext = m ? ('.' + m[2]) : '';
+      for (var i = 2; i <= 999; i++) {
+        var cand = stem + '-' + i + ext;
+        if (!isFileNameTaken(taken, cand)) return cand;
+      }
+      return stem + '-' + Date.now() + ext;
+    } catch (e) { return base; }
+  }
+
   /**
-   * Имя файла автоэкспорта:
-   *   [LOW CONFIDENCE]_<service>-<convId slice 0,8 | 'noconv'>-<YYYY-MM-DD_HH-MM>[-pretrim|-base-complete].<fmt>
+   * O-11: ЕДИНСТВЕННАЯ точка генерации имени автоэкспорта (обе прежние маски — здесь).
+   * spec:
+   *   mask: 'convId' (прочие сервисы) | 'manual' (GSA — шаблон ручного экспорта);
+   *   маска 'convId': service, convId, reason, isLowConfidence, fmt;
+   *   маска 'manual': site, model, isLowConfidence, fmt;
+   *   taken: необязательный набор занятых имён — гард коллизии (дисамбигуатор -2, -3, …).
    * Префикс [LOW CONFIDENCE]_ — ТОЛЬКО при isLowConfidence=true (baseComplete=0).
    * reason: 'threshold' (без суффикса) | 'pre-trim' → -pretrim | 'base-complete' → -base-complete.
    */
-  function buildExportFileName(service, convId, reason, isLowConfidence, fmt) {
-    // v1.18 (F4): селектор формата общий для всех сайтов — txt | md | json.
-    var f = (fmt === 'md') ? 'md' : ((fmt === 'json') ? 'json' : 'txt');
+  function buildAutoExportFileName(spec) {
+    var s = spec || {};
+    var lowConfPrefix = (s.isLowConfidence === true) ? '[LOW CONFIDENCE]_' : '';
     var d = new Date();
-    function ap2(n) { return (n < 10 ? '0' : '') + n; }
-    var stamp = d.getFullYear() + '-' + ap2(d.getMonth() + 1) + '-' + ap2(d.getDate()) +
-      '_' + ap2(d.getHours()) + '-' + ap2(d.getMinutes());
-    var cidSeg = safeSeg(String(convId || '').slice(0, 8)) || 'noconv';
-    var svcSeg = safeSeg(service) || 'chat';
-    var suffix = '';
-    if (reason === 'pre-trim') suffix = '-pretrim';
-    else if (reason === 'base-complete') suffix = '-base-complete';
-    var lowConfPrefix = (isLowConfidence === true) ? '[LOW CONFIDENCE]_' : '';
-    return lowConfPrefix + svcSeg + '-' + cidSeg + '-' + stamp + suffix + '.' + f;
+    var base;
+    if (s.mask === 'manual') {
+      // Шаблон ручного экспорта (M-10/F4): ai-context-monitor-<site>-<model>-<YYYY-MM-DD-HH-MM>
+      var siteSeg = safeSeg(s.site) || 'google_search';
+      base = 'ai-context-monitor-' + siteSeg + '-' + safeModelSeg(s.model) + '-' + manualExportStamp(d);
+    } else {
+      var cidSeg = safeSeg(String(s.convId || '').slice(0, 8)) || 'noconv';
+      var svcSeg = safeSeg(s.service) || 'chat';
+      var suffix = '';
+      if (s.reason === 'pre-trim') suffix = '-pretrim';
+      else if (s.reason === 'base-complete') suffix = '-base-complete';
+      base = svcSeg + '-' + cidSeg + '-' + convIdStamp(d) + suffix;
+    }
+    return disambiguateFileName(lowConfPrefix + base + '.' + normExportFmt(s.fmt), s.taken);
+  }
+
+  /**
+   * Имя файла автоэкспорта прочих сервисов (обёртка O-11 над единственным источником):
+   *   [LOW CONFIDENCE]_<service>-<convId slice 0,8 | 'noconv'>-<YYYY-MM-DD_HH-MM>[-pretrim|-base-complete].<fmt>
+   * Префикс [LOW CONFIDENCE]_ — ТОЛЬКО при isLowConfidence=true (baseComplete=0).
+   * reason: 'threshold' (без суффикса) | 'pre-trim' → -pretrim | 'base-complete' → -base-complete.
+   * O-11: необязательный 6-й аргумент (arguments[5]) — набор занятых имён (гард коллизии);
+   * сигнатура .length = 5 сохранена (пин tests/low-confidence-prefix.test.js).
+   */
+  function buildExportFileName(service, convId, reason, isLowConfidence, fmt) {
+    return buildAutoExportFileName({
+      mask: 'convId',
+      service: service,
+      convId: convId,
+      reason: reason,
+      isLowConfidence: isLowConfidence,
+      fmt: fmt,
+      taken: (arguments.length > 5) ? arguments[5] : null
+    });
   }
 
   /**
@@ -108,20 +215,18 @@
    * парой сервис+модель+метка времени. Префикс [LOW CONFIDENCE]_ — ТОЛЬКО при
    * isLowConfidence=true (baseComplete=0), как в ручном пути.
    * Остальные сервисы (в т.ч. Gemini — байтово) идут прежним buildExportFileName.
+   * O-11: необязательный 5-й аргумент (arguments[4]) — набор занятых имён (гард коллизии):
+   * два автоэкспорта GSA в одну минуту больше не дают одно имя (дисамбигуатор -2).
    */
   function buildGsaExportFileName(site, model, isLowConfidence, fmt) {
-    var ext = (fmt === 'md') ? 'md' : ((fmt === 'json') ? 'json' : 'txt');
-    var d = new Date();
-    function ap2(n) { return (n < 10 ? '0' : '') + n; }
-    // Метка ручного экспорта: YYYY-MM-DD-HH-MM (дефисы, как options.js buildFileName)
-    var stamp = d.getFullYear() + '-' + ap2(d.getMonth() + 1) + '-' + ap2(d.getDate()) +
-      '-' + ap2(d.getHours()) + '-' + ap2(d.getMinutes());
-    var siteSeg = safeSeg(site) || 'google_search';
-    // модель: та же санация, что в options.js (точки в именах моделей сохраняются)
-    var modelSeg = String(model == null ? '' : model)
-      .replace(/[^a-zA-Z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '') || 'model';
-    var lowConfPrefix = (isLowConfidence === true) ? '[LOW CONFIDENCE]_' : '';
-    return lowConfPrefix + 'ai-context-monitor-' + siteSeg + '-' + modelSeg + '-' + stamp + '.' + ext;
+    return buildAutoExportFileName({
+      mask: 'manual',
+      site: site,
+      model: model,
+      isLowConfidence: isLowConfidence,
+      fmt: fmt,
+      taken: (arguments.length > 4) ? arguments[4] : null
+    });
   }
 
   /**
@@ -1094,6 +1199,9 @@
   }
 
   var Api = {
+    buildAutoExportFileName: buildAutoExportFileName,
+    disambiguateFileName: disambiguateFileName,
+    isFileNameTaken: isFileNameTaken,
     buildExportFileName: buildExportFileName,
     buildGsaExportFileName: buildGsaExportFileName,
     resolveAutoExportConvId: resolveAutoExportConvId,

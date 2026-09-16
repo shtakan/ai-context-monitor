@@ -16,8 +16,9 @@
  *      СВОЕЙ вкладки, с тем же provenance-гардом;
  *   4. fired-строка несёт histSource=memory|storage-host и histConvId=<id>.
  *
- * НЕ ТРОГАЕТСЯ: latch (site+convId), пороги, имена файлов, resolveExportSource,
- * T1-архивы (archive-only-base), классификаторы GSA.
+ * НЕ ТРОГАЕТСЯ: latch (site+convId), пороги, имена файлов (O-11 добавил в вызов имени
+ * ТОЛЬКО набор занятых имён — гард коллизии), resolveExportSource, T1-архивы
+ * (archive-only-base), классификаторы GSA.
  */
 
 const fs = require('fs');
@@ -266,9 +267,12 @@ describe('E-1: пины исходника (единственная точка 
     expect(body).toContain("aiCmWriteAutoExportFile(msgs, 'memory', histConvIdMem, histSiteMem);");
     expect(body).toContain("aiCmWriteAutoExportFile(rec.messages, 'storage-host', rec.convId || '', rec.site || '');");
     expect(body.indexOf('msgs.length === 0')).toBeLessThan(body.indexOf("'storage-host'"));
-    // имена файлов, латч и T1-гейт не тронуты
-    expect(body).toContain('P.buildGsaExportFileName(siteNameD, gsaModelD, lowConfD, fmt);');
-    expect(body).toContain('P.buildExportFileName(siteNameD, cid, reason, lowConfD, fmt);');
+    // имена файлов, латч и T1-гейт не тронуты (O-11: в вызов имени добавлен ТОЛЬКО
+    // набор занятых имён — гард коллизии; имя вне занятых имён строится байтово прежним
+    // единственным источником buildAutoExportFileName)
+    expect(body).toContain('P.buildGsaExportFileName(siteNameD, gsaModelD, lowConfD, fmt, namesUsedD);');
+    expect(body).toContain('P.buildExportFileName(siteNameD, cid, reason, lowConfD, fmt, namesUsedD);');
+    expect(body).toContain('var namesUsedD = (typeof aiCmAutoExportNamesUsed === \'object\' && aiCmAutoExportNamesUsed)');
     expect(body).toContain('var baseSrc = aiCmExportBaseSource(cid, msgs);');
     expect(body).toContain('source=archive-only-base');
   });

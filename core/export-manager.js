@@ -757,6 +757,14 @@ function maybeAutoExport(percentage) {
     console.error('[AI CM][auto-export] error:', e);
   }
 }
+// O-11: имена файлов автоэкспорта, уже выданные расширением в этой вкладке (файл занят).
+// Гард коллизии живёт в единственном источнике имени (buildAutoExportFileName): занятое
+// имя получает дисамбигуатор -2, -3, … поэтому второй автоэкспорт GSA в ту же минуту
+// (у GSA нет convId в URL, маска ручного экспорта минутная) больше не теряет копию.
+// Ключ — ИТОГОВОЕ имя (с уже учтённым дисамбигуатором); запись только после скачивания.
+// Граница: реестр — изолированный мир вкладки (как и весь ISOLATED-путь); повторный
+// экспорт ТОГО ЖЕ чата из второй вкладки и так блокирует кросс-табовый session-латч O3.
+var aiCmAutoExportNamesUsed = Object.create(null);
 // v54: тело скачивания, вынесенное из maybeAutoExport для переиспользования спасательным
 // pre-trim экспортом. reason='threshold' — поведение ровно как раньше; reason='pre-trim'
 // добавляет суффикс -pretrim к имени файла и НЕ ставит латч autoExportFired
@@ -815,13 +823,18 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
     var gsaModelD = (siteNameD === 'google_search' && typeof lastSnapshotModelName === 'string')
       ? lastSnapshotModelName : '';
     var file;
+    // O-11: набор занятых имён — гард коллизии единственного источника имени. Реестр
+    // модуля (typeof-гард: в срез-песочницах без него поведение прежнее, имена 1:1).
+    var namesUsedD = (typeof aiCmAutoExportNamesUsed === 'object' && aiCmAutoExportNamesUsed)
+      ? aiCmAutoExportNamesUsed : null;
     if (siteNameD === 'google_search' && P && typeof P.buildGsaExportFileName === 'function') {
       // v1.18 (F4): GSA — имя файла по шаблону РУЧНОГО экспорта GSA
       // ([LOW CONFIDENCE]_ai-context-monitor-google_search-<model>-<метка>.<fmt>),
       // с причиной в диагностике, а не в имени (форматы txt/md/json — из селектора).
-      file = P.buildGsaExportFileName(siteNameD, gsaModelD, lowConfD, fmt);
+      // O-11: занятое имя (второй экспорт в ту же минуту) → дисамбигуатор -2, -3, …
+      file = P.buildGsaExportFileName(siteNameD, gsaModelD, lowConfD, fmt, namesUsedD);
     } else if (P && typeof P.buildExportFileName === 'function') {
-      file = P.buildExportFileName(siteNameD, cid, reason, lowConfD, fmt);
+      file = P.buildExportFileName(siteNameD, cid, reason, lowConfD, fmt, namesUsedD);
     } else {
       // фолбэк: прежнее имя файла (v54)
       var dFb = new Date();
@@ -964,6 +977,9 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
         }
         aiCmCancelDeferredHistWrite(cid); // v54: экспорт состоялся — висящий deferred-таймер больше не нужен
         B.downloadBlob(content, file, fmt === 'md' ? 'text/markdown' : (fmt === 'json' ? 'application/json' : 'text/plain;charset=utf-8'));
+        // O-11: имя выданного файла занято — следующий автоэкспорт в ту же минуту
+        // получит дисамбигуатор -2 (копия не теряется). Пишем ТОЛЬКО после скачивания.
+        try { if (namesUsedD) namesUsedD[file] = 1; } catch (eNameMark) { }
         debugLog('log', '[AI CM][auto-export] fired convId=' + cid + ' pct=' + percentage + ' file=' + file +
           ' textLen=' + textLen + ' pendingCursor=' + (aiCmCursorLiveByConv[cid] ? '1' : '0') +
           ' baseComplete=' + (baseComplete === true ? '1' : '0') +

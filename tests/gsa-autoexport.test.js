@@ -265,6 +265,7 @@ describe('F4/F5: doAutoExportDownload GSA (реальный код)', () => {
       maxTokenCount: 1000,
       sessionFiredCache: {},
       autoExportFired: {},
+      aiCmAutoExportNamesUsed: {}, // O-11: гард коллизии имён (свежий реестр на контекст)
       aiCmCursorLiveByConv: {},
       aiCmDumpTurnsSnapshot: function () { },
       aiCmCancelDeferredHistWrite: function () { },
