@@ -1700,8 +1700,14 @@ if (isExtensionValid()) {
       // ДО buildHistoryMessages() ниже.
       try { aiCmFlushLiveStreamForExport(curCidExp); } catch (eFlushExp) { }
       var pctExp = (typeof lastPercentage === 'number' && lastPercentage >= 0) ? lastPercentage : 0;
-      // v61diag: дамп turnsMap в момент ручного экспорта (md/txt из options)
-      try { aiCmDumpTurnsSnapshot('snapshot-at-manual', curCidExp, null); } catch (eDumpM) { }
+      // v61diag: дамп turnsMap в момент ручного экспорта (md/txt из options).
+      // O-9-подпись: источник подписи — КАНОНИЧЕСКАЯ база текущего снимка, ровно тот же
+      // массив, что уходит в файл (buildHistoryMessages() → detail.messages/lastBaseTexts).
+      // Раньше третьим аргументом шёл null, и у сервисов без MAIN-моста turns-snap
+      // (Perplexity: перехватчик на ai-cm-turns-snap-request не отвечает) подпись печатала
+      // msgs=0 firstText="" при живой истории. Приоритет моста не тронут: ответил MAIN
+      // (Gemini/DeepSeek O-17) — печатаются ЕГО числа, фолбэк не подставляется.
+      try { aiCmDumpTurnsSnapshot('snapshot-at-manual', curCidExp, buildHistoryMessages()); } catch (eDumpM) { }
       // O-18 (фаза 2): ПЕРЕД композицией файла — сетевой дозапрос истории текущего чата
       // (только DeepSeek; таймаут 3 с внутри aiCmExportNetSyncThen). Перехватчик сам решает,
       // нужен ли запрос, и сам выбирает текст по ходам (EQUAL → live, MIDDLE-HOLE/TAIL-CUT →
