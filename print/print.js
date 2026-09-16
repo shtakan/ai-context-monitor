@@ -113,11 +113,26 @@
   }
 
   function showEmpty() {
+    // O-27/O-32 (диагностика): пустая форма — печати/файла не будет; имя файла пустое.
+    printDiag('print-pdf-empty', { reason: 'history-not-found' });
     document.getElementById('print-content').innerHTML = '';
     document.getElementById('empty-state').style.display = 'block';
   }
 
   function showContent(history) {
+    // O-27/O-32 (диагностика): база печатной формы (для строки точки печати) — только чтение.
+    try {
+      var msgsDiag = (history && Array.isArray(history.messages)) ? history.messages : [];
+      var partsDiag = [];
+      for (var miDiag = 0; miDiag < msgsDiag.length; miDiag++) {
+        partsDiag.push((msgsDiag[miDiag] && msgsDiag[miDiag].text) || '');
+      }
+      diagBaseHead = partsDiag.join('\n');
+      diagBaseConvId = (history && history.convId) || '';
+      diagBaseSite = (history && history.site) || '';
+      diagBaseMsgs = msgsDiag.length;
+      printDiag('print-render', { reason: 'form-rendered' });
+    } catch (eDiagShow) { }
     document.getElementById('empty-state').style.display = 'none';
     document.getElementById('print-content').innerHTML = render(history);
   }
@@ -154,6 +169,63 @@
   var PRINT_TITLE_FALLBACK = 'AI Context Monitor — печатная форма';
   var printInvoked = false;
 
+  // ===========================================================================
+  // O-27/O-32 (ДИАГНОСТИКА, только измерение): точка печати/сохранения PDF.
+  // Гейт — aiCmDebug: sessionStorage 'aiCmDebug' === '1' ИЛИ чекбокс «Подробные логи»
+  // (window.__aiCmDebugLogs). Имя файла в диалоге «Сохранить как PDF» — это document.title,
+  // поэтому в лог идёт именно он (пустой — словом «пустое»), плюс первые 100 символов
+  // базы, URL документа, convId и источник вызова. Поведение и разметка не меняются.
+  // ===========================================================================
+  var diagBaseHead = '';
+  var diagBaseConvId = '';
+  var diagBaseSite = '';
+  var diagBaseMsgs = 0;
+  function printDiagOn() {
+    try {
+      if (typeof sessionStorage !== 'undefined' && sessionStorage &&
+        sessionStorage.getItem('aiCmDebug') === '1') return true;
+    } catch (eSess) { }
+    try {
+      if (typeof window !== 'undefined' && window && window.__aiCmDebugLogs === true) return true;
+    } catch (eWin) { }
+    return false;
+  }
+  function printDiagStack() {
+    try {
+      var lines = String((new Error()).stack || '').split('\n');
+      var out = [];
+      for (var i = 1; i < lines.length && out.length < 4; i++) {
+        var s = String(lines[i] || '').replace(/\s+/g, ' ').trim();
+        if (!s || s.indexOf('printDiag') !== -1) continue;
+        out.push(s);
+      }
+      return out.join(' <- ');
+    } catch (eStack) { return ''; }
+  }
+  function printDiag(trigger, extra) {
+    if (!printDiagOn()) return false;
+    try {
+      var url = '';
+      try { url = String((typeof location !== 'undefined' && location && location.href) || ''); } catch (eUrl) { }
+      var title = '';
+      try { title = String(document.title || ''); } catch (eTitle) { }
+      var head = String(diagBaseHead || '').replace(/\s+/g, ' ').trim();
+      if (head.length > 100) head = head.slice(0, 100) + '…';
+      console.log('[AI CM][diag] download trigger=' + trigger +
+        ' file=' + (title || 'пустое') +
+        ' bytes100=' + (head || '(пусто)') +
+        ' len=' + String(diagBaseHead || '').length +
+        ' url=' + url +
+        ' threadId=(нет)' +
+        ' convId=' + (diagBaseConvId || '(нет)') +
+        ' site=' + (diagBaseSite || '') +
+        ' msgs=' + diagBaseMsgs +
+        ' reason=' + ((extra && extra.reason) || '') +
+        ' src=' + printDiagStack());
+    } catch (eDiag) { }
+    return true;
+  }
+
   function ensurePrintTitle() {
     try {
       document.title = aiCmI18nMessage('print_page_title', PRINT_TITLE_FALLBACK);
@@ -165,11 +237,15 @@
 
   function triggerPrint() {
     if (printInvoked) {
+      // O-27/O-32 (диагностика): повторный триггер печати подавлен (E-2) — файла не будет.
+      printDiag('print-pdf-suppressed', { reason: 'duplicate print suppressed (E-2)' });
       try { console.log('[AI CM][print] duplicate print suppressed'); } catch (e) { }
       return false;
     }
     printInvoked = true;
     ensurePrintTitle();
+    // O-27/O-32 (диагностика): точка печати/сохранения PDF — имя файла = document.title.
+    printDiag('print-pdf', { reason: 'auto-print (window.print); user saves PDF' });
     scheduleClosePrintTab();
     window.print();
     return true;

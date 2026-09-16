@@ -255,6 +255,11 @@ window.addEventListener('ai-cm-conversation-changed', function () {
       aiCmLastSeenConvId = newCid;
     }
   } catch (eSpa) { }
+  // O-27/O-32 (диагностика): причина сброса — сигнал смены разговора (SPA).
+  aiCmGsaDiagState('conv-changed', 'reset', 'conversation-id-change', {
+    convId: String(getCurrentConvId() || ''),
+    lastSeenConvId: String(aiCmLastSeenConvId || '')
+  });
   resetConversationState();
 });
   // v30.8: сигнал лоадера «скроллер скрыт/восстановлен» — для заморозки бейджа
@@ -350,14 +355,58 @@ function aiCmGsaChatPageMarker() {
 // прошлого разговора. Здесь они гасятся — до следующего сетевого EMIT базы нет, гейт
 // автоэкспорта молчит. Чат-страница (threadId/контейнер в DOM) не трогается вовсе:
 // байты и маска экспорта чат-страниц прежние.
+//
+// O-27/O-32 (диагностика, только измерение): aiCmGsaDiagState печатает тип документа
+// (captcha/чат/поиск) и причину сброса/несброса под гейтом aiCmDebug. Строки «несброс»
+// с антиспамом (одна на комбинацию причин за страницу), «сброс» — всегда (событие редкое).
+// Поведение не меняется: функция только читает уже посчитанное состояние.
+var aiCmGsaDiagNoResetLogged = {};
+function aiCmGsaDiagState(point, verdict, reason, extra) {
+  try {
+    var doc = (typeof aiCmDiagDocKind === 'function') ? aiCmDiagDocKind() : 'unknown';
+    if (verdict === 'no-reset') {
+      var key = String(point) + '|' + String(reason) + '|' + String(doc);
+      if (aiCmGsaDiagNoResetLogged[key] === 1) return false;
+      aiCmGsaDiagNoResetLogged[key] = 1;
+    }
+    var f = {
+      point: point,
+      verdict: verdict,
+      reason: reason,
+      doc: doc,
+      site: (typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName) || '',
+      baseSeen: (typeof baseSeen !== 'undefined' && baseSeen === true) ? 1 : 0,
+      baseComplete: (typeof baseComplete !== 'undefined' && baseComplete === true) ? 1 : 0,
+      baseCount: (typeof baseCount === 'number') ? baseCount : 0,
+      threadId: (typeof aiCmDomThreadId === 'function') ? aiCmDomThreadId() : ''
+    };
+    if (extra) {
+      for (var k in extra) {
+        if (Object.prototype.hasOwnProperty.call(extra, k)) f[k] = extra[k];
+      }
+    }
+    if (typeof aiCmDiagLine === 'function') aiCmDiagLine('gsa-state', f);
+    return true;
+  } catch (eDiagState) { return false; }
+}
 function aiCmGsaResetStaleStateOnChatlessDoc() {
   try {
     if (!currentAdapter || currentAdapter.siteName !== 'google_search') return false;
-    if (typeof document === 'undefined' || document.readyState !== 'complete') return false;
-    if (aiCmGsaChatPageMarker()) return false;
+    if (typeof document === 'undefined' || document.readyState !== 'complete') {
+      aiCmGsaDiagState('reset-stale', 'no-reset', 'doc-not-complete');
+      return false;
+    }
+    if (aiCmGsaChatPageMarker()) {
+      aiCmGsaDiagState('reset-stale', 'no-reset', 'chat-page');
+      return false;
+    }
     var hasState = (baseSeen === true) || (baseComplete === true) || (baseCount > 0);
-    if (!hasState) return false;
+    if (!hasState) {
+      aiCmGsaDiagState('reset-stale', 'no-reset', 'no-stale-state');
+      return false;
+    }
     resetConversationState();
+    aiCmGsaDiagState('reset-stale', 'reset', 'chatless-doc (captcha/search)');
     debugLog('log', '[AI CM][auto-export] site=google_search O-27: документ без чата — ' +
       'база/pct прошлого документа сброшены');
     return true;
@@ -414,6 +463,8 @@ window.addEventListener('ai-cm-full-history', function (ev) {
   // Сброс при смене threadId (Google SPA): сначала чистим состояние виджета, затем применяем базу.
   if (detail.threadId) {
     if (lastThreadId !== null && detail.threadId !== lastThreadId) {
+      // O-27/O-32 (диагностика): причина сброса — смена threadId в самом снимке.
+      aiCmGsaDiagState('emit-thread-switch', 'reset', 'thread-id-change', { from: String(lastThreadId), to: String(detail.threadId) });
       resetConversationState();
     }
     lastThreadId = detail.threadId;
@@ -459,6 +510,22 @@ window.addEventListener('ai-cm-full-history', function (ev) {
   var ids = Array.isArray(detail.messageIds) ? detail.messageIds : [];
   lastBaseIds = ids;
   lastBaseTexts = texts;
+  // O-27/O-32 (диагностика, только измерение): точка ПРИЁМА базы GSA в content.js —
+  // форма (число текстов, длины) и вердикт полноты снимка. Только под гейтом aiCmDebug.
+  try {
+    if ((currentAdapter && currentAdapter.siteName) === 'google_search' && typeof aiCmDiagLine === 'function') {
+      aiCmDiagLine('gsa-base-accept', {
+        point: 'content-emit',
+        verdict: (texts.length > 0) ? 'accept' : 'accept-empty',
+        msgs: texts.length,
+        textLen: (typeof detail.text === 'string') ? detail.text.length : 0,
+        historyComplete: (detail.historyComplete === true) ? 1 : 0,
+        threadId: detail.threadId || '',
+        convId: emitConvId || '',
+        head: (typeof aiCmDiagHead === 'function') ? aiCmDiagHead(detail.text, 100) : ''
+      });
+    }
+  } catch (eDiagAccept) { }
   // v1.18 (E-2): Deep Research отдаёт один и тот же текст пользователя несколько раз
   // (пузырь реплики + карточка плана + узлы шагов). База схлопывается ДО потребителей:
   // badge/pct считаются по схлопнутой истории, экспорт .txt/.md/.json и print — тоже.
@@ -1960,12 +2027,25 @@ document.addEventListener('keydown', function (e) {
       count: lastBaseIds.length,
       turns: turns
     };
+    // O-27/O-32 (диагностика, только измерение): точка скачивания дампа по Ctrl+Shift+D —
+    // триггер, имя файла, первые 100 символов базы, URL, threadId, источник вызова.
+    // Только под гейтом aiCmDebug; содержимое дампа и имя файла не меняются.
+    var dumpFile = 'ai-cm-history-' + Date.now() + '.json';
+    try {
+      var BdiagHot = (typeof window !== 'undefined' && window && window.AiCmExportBuilders) ? window.AiCmExportBuilders : null;
+      if (BdiagHot && typeof BdiagHot.aiCmDiagDownload === 'function') {
+        BdiagHot.aiCmDiagDownload('hotkey-json-dump', JSON.stringify(payload, null, 2), dumpFile, {
+          site: (typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName) || '',
+          threadId: (typeof aiCmDomThreadId === 'function') ? aiCmDomThreadId() : ''
+        });
+      }
+    } catch (eDiagHot) { }
     try {
       var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
-      a.download = 'ai-cm-history-' + Date.now() + '.json';
+      a.download = dumpFile;
       document.body.appendChild(a);
       a.click();
       a.remove();

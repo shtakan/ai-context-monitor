@@ -114,6 +114,20 @@ function stepSafePct(delta) {
 
 // ========== v1.18/v1.22: сброс состояния виджета при смене чата в SPA ==========
 function resetConversationState() {
+  // O-27/O-32 (диагностика, только измерение): тип документа (captcha/чат/поиск) и
+  // источник вызова (кто именно сбросил состояние). Гейт — aiCmDebug (utils/debug.js);
+  // поведение/сброс не меняются.
+  if (typeof aiCmDiagLine === 'function') {
+    aiCmDiagLine('gsa-state', {
+      point: 'resetConversationState',
+      verdict: 'reset',
+      reason: 'caller-see-src',
+      doc: (typeof aiCmDiagDocKind === 'function') ? aiCmDiagDocKind() : 'unknown',
+      site: (typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName) || '',
+      threadId: (typeof aiCmDomThreadId === 'function') ? aiCmDomThreadId() : '',
+      src: (typeof aiCmDiagStack === 'function') ? aiCmDiagStack(1) : ''
+    });
+  }
   debugLog('log', '[content-trace] RESET виджета seq=' + (++window.__aiCmTraceSeq || (window.__aiCmTraceSeq = 1)) + ' t=' + Date.now());
   baseText = '';
   baseCount = 0;

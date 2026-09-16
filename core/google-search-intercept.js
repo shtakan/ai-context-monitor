@@ -126,6 +126,81 @@
     return s.length > n ? (s.slice(0, n) + '…') : s;
   }
 
+  // ---- O-27/O-32 (ДИАГНОСТИКА, только измерение): точки записи базы и сброса состояния ----
+  // Гейт — aiCmDebug: sessionStorage 'aiCmDebug' === '1' или чекбокс «Подробные логи»
+  // (utils/debug.js: aiCmDiagOn/aiCmDiagLine/aiCmDiagDocKind, тот же MAIN-мир).
+  // Функции только ЧИТАЮТ turns/счётчики/threadId и печатают строку: база, эмит,
+  // baseComplete и байты экспорта не меняются. В срез-песочницах тестов этих хелперов
+  // нет — вызовы в пиннутых функциях защищены typeof-гардом.
+  function gsaDiagTurnsShape(turns) {
+    var n = 0, empty = 0, userLen = 0, asstLen = 0, maxLen = 0;
+    try {
+      n = (turns && turns.length) ? turns.length : 0;
+      for (var i = 0; i < n; i++) {
+        var t = turns[i] || {};
+        var u = (t.userText == null) ? '' : String(t.userText).trim();
+        var a = (t.assistantText == null) ? '' : String(t.assistantText).trim();
+        if (!u && !a) empty++;
+        userLen += u.length;
+        asstLen += a.length;
+        if (u.length > maxLen) maxLen = u.length;
+        if (a.length > maxLen) maxLen = a.length;
+      }
+    } catch (eShape) { }
+    return 'turns=' + n + ' empty=' + empty + ' userLen=' + userLen +
+      ' asstLen=' + asstLen + ' maxLen=' + maxLen;
+  }
+
+  // Строка о попытке записи базы: путь (open/чанк/pagination/XHR/probe), форма хода,
+  // результат валидации (isUsableTurn/hasUsableTurns), активный и DOM threadId.
+  function gsaDiagBaseWrite(path, turns, verdict, tid, extra) {
+    try {
+      if (typeof aiCmDiagOn !== 'function' || !aiCmDiagOn()) return false;
+      if (typeof aiCmDiagLine !== 'function') return false;
+      var f = {
+        path: path,
+        verdict: verdict,
+        tid: tid || '(пусто)',
+        doc: (typeof aiCmDiagDocKind === 'function') ? aiCmDiagDocKind() : 'unknown',
+        shape: gsaDiagTurnsShape(turns),
+        activeTid: baseThreadId || '',
+        domTid: readDomThreadId() || '',
+        baseTurns: lastFullTurns.length
+      };
+      if (extra) {
+        for (var k in extra) {
+          if (Object.prototype.hasOwnProperty.call(extra, k)) f[k] = extra[k];
+        }
+      }
+      return aiCmDiagLine('gsa-base-write', f);
+    } catch (eDiagWrite) { return false; }
+  }
+
+  // Строка о сбросе/несбросе состояния: тип документа (captcha/чат/поиск) и причина.
+  function gsaDiagState(point, verdict, reason, extra) {
+    try {
+      if (typeof aiCmDiagOn !== 'function' || !aiCmDiagOn()) return false;
+      if (typeof aiCmDiagLine !== 'function') return false;
+      var f = {
+        point: point,
+        verdict: verdict,
+        reason: reason,
+        doc: (typeof aiCmDiagDocKind === 'function') ? aiCmDiagDocKind() : 'unknown',
+        activeTid: baseThreadId || '',
+        domTid: readDomThreadId() || '',
+        baseTurns: lastFullTurns.length
+      };
+      if (extra) {
+        for (var k in extra) {
+          if (Object.prototype.hasOwnProperty.call(extra, k)) f[k] = extra[k];
+        }
+      }
+      return aiCmDiagLine('gsa-state', f);
+    } catch (eDiagStateG) { return false; }
+  }
+  // Антиспам диагностических строк опроса DOM (checkThreadSwitch зовётся раз в 1с).
+  var lastDiagSwitchSig = '';
+
   // v1.17: единая диагностика страницы ПРОДОЛЖЕНИЯ folwr. Классификация — по содержимому
   // (utils/google-search-folwr-parser.classifyFolwrContinuation), НЕ по длине тела.
   // Возврат: { cls, line } — line всегда печатается (status/ok/len/ходы/курсор + raw-превью),
@@ -291,6 +366,7 @@
   function activateThread(tid) {
     tid = tid || '';
     if (tid === baseThreadId) return false;
+    var prevBaseTid = baseThreadId;
     baseThreadId = tid;
     var seg = tid ? threadCache.get(tid) : null;
     lastFullTurns = (seg && Array.isArray(seg.turns)) ? seg.turns.slice() : [];
@@ -301,6 +377,8 @@
       seenKeys[(lastFullTurns[i].userText || '') + '||' + (lastFullTurns[i].assistantText || '')] = true;
     }
     emittedThreadId = lastFullSnapshot ? tid : '';
+    // O-27/O-32 (диагностика): сброс накопителя при смене активного разговора + тип документа.
+    if (typeof gsaDiagState === 'function') gsaDiagState('activateThread', 'reset', 'active-thread-switch', { from: prevBaseTid || '(пусто)', to: tid || '(пусто)', segTurns: lastFullTurns.length, emitted: emittedThreadId || '(пусто)' });
     debugLog('log', '[ai-cm-google-search] активный разговор → ' + (tid || '(пусто)') +
       ', ходов=' + lastFullTurns.length);
     return true;
@@ -367,6 +445,7 @@
     // O-27 (a): тело, не распарсившееся в ≥1 НЕПУСТОЙ ход, базой не является — ни запись,
     // ни эмит, ни baseComplete (снимок не строится вовсе).
     if (!hasUsableTurns(newTurns)) {
+      if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('mergeTurns', newTurns, 'reject', tidOfResponse, { full: (isFull === true) ? 1 : 0, validation: 'hasUsableTurns=false' });
       debugLog('log', '[ai-cm-google-search] O-27: тело без непустых ходов — база не тронута' +
         ' (merge, ходов=' + ((newTurns && newTurns.length) || 0) + ')');
       return;
@@ -374,7 +453,10 @@
     // v1.27 (O-31): разговор ответа — threadId тела, фолбэк — живой DOM. Ответ чужого
     // разговора не дописывается в активную базу (absorbForeignSnapshot).
     var threadId = tidOfResponse || readDomThreadId() || currentThreadId || emittedThreadId;
-    if (absorbForeignSnapshot(threadId, newTurns, false)) return;
+    if (absorbForeignSnapshot(threadId, newTurns, false)) {
+      if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('mergeTurns', newTurns, 'foreign-not-applied', threadId, { full: (isFull === true) ? 1 : 0 });
+      return;
+    }
     activateThread(threadId);
     if (isFull) {
       if (lastFullTurns.length > 0 && newTurns.length < lastFullTurns.length) {
@@ -403,7 +485,10 @@
       lastFullSnapshot = buildDetail(lastFullTurns, lastFullMessages, threadId);
       emittedThreadId = lastFullSnapshot.threadId || '';
       if (emittedThreadId) cacheSet(emittedThreadId, { turns: lastFullTurns, messages: lastFullMessages, snapshot: lastFullSnapshot });
+      if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('mergeTurns', lastFullTurns, 'accept', threadId, { full: (isFull === true) ? 1 : 0, incoming: (newTurns && newTurns.length) || 0, emitted: emittedThreadId || '' });
       emitDetail(lastFullSnapshot);
+    } else if (typeof gsaDiagBaseWrite === 'function') {
+      gsaDiagBaseWrite('mergeTurns', newTurns, 'accept-empty-base', threadId, { full: (isFull === true) ? 1 : 0, incoming: (newTurns && newTurns.length) || 0 });
     }
   }
 
@@ -605,18 +690,25 @@
 
   // Применяет готовые turns к базе + эмит (единая точка для folwr-open и пагинации).
   function applyTurns(turns, tid, historyComplete) {
-    if (!turns || turns.length === 0) return;
+    if (!turns || turns.length === 0) {
+      if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('applyTurns', turns, 'reject-empty', tid, { complete: (historyComplete === true) ? 1 : 0 });
+      return;
+    }
     // O-27 (a): та же валидация, что у mergeTurns — контейнеры без содержимого (captcha /
     // «подозрительный трафик» / пустой payload) базой не становятся и baseComplete не
     // взводят: historyComplete=true здесь означал бы «история ПОЛНАЯ по сети».
     if (!hasUsableTurns(turns)) {
+      if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('applyTurns', turns, 'reject', tid, { complete: (historyComplete === true) ? 1 : 0, validation: 'hasUsableTurns=false' });
       debugLog('log', '[ai-cm-google-search] O-27: тело без непустых ходов — база не тронута' +
         ' (apply, ходов=' + turns.length + ', complete=' + (historyComplete === true ? 1 : 0) + ')');
       return;
     }
     // v1.27 (O-31): поздний ответ чужого разговора (probe/пагинация, стартовавшие до
     // SPA-переключения) в базу текущего не дописывается — только в свой сегмент.
-    if (absorbForeignSnapshot(tid, turns, historyComplete)) return;
+    if (absorbForeignSnapshot(tid, turns, historyComplete)) {
+      if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('applyTurns', turns, 'foreign-not-applied', tid, { complete: (historyComplete === true) ? 1 : 0 });
+      return;
+    }
     activateThread(tid);
     lastFullTurns = turns.slice();
     lastFullMessages = messagesFromTurns(lastFullTurns);
@@ -628,6 +720,7 @@
     lastFullSnapshot = buildDetail(lastFullTurns, lastFullMessages, tid, historyComplete);
     emittedThreadId = tid || '';
     if (tid) cacheSet(tid, { turns: lastFullTurns, messages: lastFullMessages, snapshot: lastFullSnapshot });
+    if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('applyTurns', lastFullTurns, 'accept', tid, { complete: (historyComplete === true) ? 1 : 0, emitted: emittedThreadId || '', baseComplete: (lastFullSnapshot && lastFullSnapshot.historyComplete === true) ? 1 : 0, validation: 'hasUsableTurns=true' });
     emitDetail(lastFullSnapshot);
   }
 
@@ -705,7 +798,12 @@
           console.log('[ai-cm-google-search] пагинация folwr шаг ' + pages + ': ' + pageInfo.line);
           debugLog('log', '[ai-cm-google-search] пагинация folwr шаг ' + pages +
             ' raw(' + txt.length + 'B): ' + diagPreview(txt));
-          if (gained > 0) applyTurns(merged, tid, false);
+          if (gained > 0) {
+            if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('pagination', merged, 'submit', tid, { page: pages, gained: gained, kind: pageInfo.cls.kind, cursor: (cursor ? cursor.slice(0, 12) : 'нет') });
+            applyTurns(merged, tid, false);
+          } else if (typeof gsaDiagBaseWrite === 'function') {
+            gsaDiagBaseWrite('pagination', parsed.turns, 'skip-no-gain', tid, { page: pages, gained: 0, kind: pageInfo.cls.kind, cursor: (cursor ? cursor.slice(0, 12) : 'нет') });
+          }
           // v1.17: продолжаем, только если страница дала НОВЫЕ ходы и НОВЫЙ курсор.
           if (pageInfo.cls.canContinue) {
             setTimeout(function () { step(cursor); }, FOLWR_PAGE_DELAY_MS);
@@ -780,6 +878,7 @@
             var domTurns = window.GoogleFolwrUtils.extractTurnsFromDocument(document);
             if (domTurns.length > lastFullTurns.length) {
               var mergeFn = window.GoogleFolwrUtils.mergeTurnsByKey || function (a, b) { return a.concat(b); };
+              if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('scroll-backfill', domTurns, 'submit', tid, { iterations: iterations, stalls: stalls, domTurns: domTurns.length, baseTurns: lastFullTurns.length });
               applyTurns(mergeFn(lastFullTurns, domTurns), tid, false);
               stalls = 0;
             } else {
@@ -848,7 +947,10 @@
       done = true;
       activeFolwrInFlight[key] = false;
       if (complete) {
+        if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('probe', merged, 'submit-final', tid, { complete: 1, addedTotal: addedTotal, steps: steps, reason: reason });
         applyTurns(merged.length > 0 ? merged : lastFullTurns, tid, true);
+      } else if (typeof gsaDiagBaseWrite === 'function') {
+        gsaDiagBaseWrite('probe', merged, 'skip-incomplete', tid, { complete: 0, addedTotal: addedTotal, steps: steps, reason: reason });
       }
       // v1.18 (F1): вердикт probe-классификатора уходит в content.js ОДНОЙ точкой —
       // applyTurns(..., true) → buildDetail(historyComplete=true) → событие
@@ -908,7 +1010,12 @@
           console.log('[ai-cm-google-search] probe шаг ' + steps + ': ' + pageInfo.line);
           debugLog('log', '[ai-cm-google-search] probe шаг ' + steps + ': +ходов=' + added +
             ' всего=' + merged.length + ' raw(' + txt.length + 'B): ' + diagPreview(txt));
-          if (added > 0) applyTurns(merged, tid, false);
+          if (added > 0) {
+            if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('probe', merged, 'submit', tid, { step: steps, added: added, kind: pageInfo.cls.kind, cursor: (next ? next.slice(0, 12) : 'нет') });
+            applyTurns(merged, tid, false);
+          } else if (typeof gsaDiagBaseWrite === 'function') {
+            gsaDiagBaseWrite('probe', parsed.turns, 'skip-no-gain', tid, { step: steps, added: 0, kind: pageInfo.cls.kind, cursor: (next ? next.slice(0, 12) : 'нет') });
+          }
           // v1.17: полнота по содержимому. Нет новых ходов / тот же курсор / пустое тело при
           // ok → истории больше нет → ПОЛНАЯ=true. Продолжаем только при новых ходах и НОВОМ курсоре.
           if (pageInfo.cls.complete) { finish('probe-' + pageInfo.cls.kind, true); return; }
@@ -952,13 +1059,32 @@
   // ---- применение кэша при смене threadId (SPA-возврат без сети) ----
   function checkThreadSwitch() {
     var tid = readDomThreadId();
-    if (!tid) return;
+    if (!tid) {
+      // O-27/O-32 (диагностика): несброс — в DOM нет threadId (сервисная страница/поиск).
+      // Антиспам: опрос идёт раз в 1с, строка печатается только на смену сигнатуры.
+      var sigNoDom = 'no-thread-dom|' + (baseThreadId || '');
+      if (typeof lastDiagSwitchSig === 'string' && sigNoDom !== lastDiagSwitchSig) {
+        lastDiagSwitchSig = sigNoDom;
+        if (typeof gsaDiagState === 'function') gsaDiagState('checkThreadSwitch', 'no-reset', 'no-thread-dom', {});
+      }
+      return;
+    }
     // v1.27 (O-31): «без смены» — только когда и активный тред, и принадлежность базы
     // совпадают с DOM. Иначе (база осталась у другого разговора) — ре-синхронизация.
-    if (tid === currentThreadId && tid === baseThreadId) return false;
+    if (tid === currentThreadId && tid === baseThreadId) {
+      var sigSame = 'same|' + tid;
+      if (typeof lastDiagSwitchSig === 'string' && sigSame !== lastDiagSwitchSig) {
+        lastDiagSwitchSig = sigSame;
+        if (typeof gsaDiagState === 'function') gsaDiagState('checkThreadSwitch', 'no-reset', 'same-thread', { from: tid, to: tid });
+      }
+      return false;
+    }
     // threadId сменился
+    var prevSwitchTid = currentThreadId || '';
     currentThreadId = tid;
     probedTids = {}; // v43: сброс гарда «один probe на threadId» при смене треда
+    // O-27/O-32 (диагностика): причина сброса — смена threadId в DOM; cache — был ли сегмент.
+    if (typeof gsaDiagState === 'function') gsaDiagState('checkThreadSwitch', 'switching', 'thread-id-switch', { from: prevSwitchTid || '(пусто)', to: tid, cache: threadCache.has(tid) ? 1 : 0 });
     // v1.27 (O-31): смена разговора → активная база переключается на сегмент нового
     // threadId (или сбрасывается, если сегмента нет). Ходы прежнего разговора в новый
     // не переносятся и в экспорт/pct не попадают.
@@ -1035,7 +1161,11 @@
               if (model) detectedModelSlug = model;
               var parsed = parseWithParser(txt);
               if (parsed.turns.length > 0) {
+                // O-27/O-32 (диагностика): путь записи — пассивный folwr (полный) / folif (чанк).
+                if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite(isFull ? 'passive-folwr' : 'passive-folif', parsed.turns, 'submit', parsed.threadId, { url: rawSnippet(url, 80), bodyLen: (txt ? txt.length : 0) });
                 mergeTurns(parsed.turns, isFull, parsed.threadId);
+              } else if (typeof gsaDiagBaseWrite === 'function') {
+                gsaDiagBaseWrite(isFull ? 'passive-folwr' : 'passive-folif', parsed.turns, 'skip-no-turns', parsed.threadId, { url: rawSnippet(url, 80), bodyLen: (txt ? txt.length : 0) });
               }
             }).catch(function () { });
           }
@@ -1102,6 +1232,9 @@
                       mergedTurns.length + ' ходов)');
                   }
 
+                  // O-27/O-32 (диагностика): путь записи — folwr-open (GET /async/folwr):
+                  // распарсено, контейнеры folwr/DOM, досбор, курсор, вердикт ПОЛНАЯ.
+                  if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('open', mergedTurns, 'submit', tid, { parsed: baseTurns.length, folwrContainers: folwrTurnCount, domContainers: domTurnCount, dopasbor: dopasbor, complete: historyComplete ? 1 : 0, cursor: (folwrCursor ? folwrCursor.slice(0, 12) : 'нет'), bodyLen: (txt ? txt.length : 0) });
                   applyTurns(mergedTurns, tid, historyComplete);
 
                   // v1.5.2: антиспам — печатаем folwr-open только при изменении сигнатуры.
@@ -1135,6 +1268,9 @@
                   var openPageInfo = describeFolwrPage(resp, txt, 0, null, null);
                   console.log('[ai-cm-google-search] folwr-open: ходов не распарсено, ' + openPageInfo.line);
                   debugLog('log', '[ai-cm-google-search] folwr-open raw(' + txt.length + 'B): ' + diagPreview(txt));
+                  // O-27/O-32 (диагностика): тело folwr-open БЕЗ ходов — первый байтовый след
+                  // мусора captcha (`)]}' [""]`): путь, вердикт парсера и первые 100 символов.
+                  if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('open', [], 'no-turns-parsed', tid, { bodyLen: (txt ? txt.length : 0), head: (typeof aiCmDiagHead === 'function') ? aiCmDiagHead(txt, 100) : String(txt || '').slice(0, 100), kind: openPageInfo.cls.kind, status: (resp && resp.status) || 0, ok: (resp && resp.ok) ? 1 : 0 });
                 }
               } catch (e) {
                 console.log('[ai-cm-google-search] folwr-open: ошибка:', e && e.message);
@@ -1194,7 +1330,11 @@
               if (modelXhr) detectedModelSlug = modelXhr;
               var parsed = parseWithParser(txt);
               if (parsed.turns.length > 0) {
+                // O-27/O-32 (диагностика): путь записи — XHR (folwr полный / folif чанк).
+                if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('xhr', parsed.turns, 'submit', parsed.threadId, { full: (isFullXhr === true) ? 1 : 0, url: rawSnippet(url, 80), bodyLen: (txt ? txt.length : 0) });
                 mergeTurns(parsed.turns, isFullXhr, parsed.threadId);
+              } else if (typeof gsaDiagBaseWrite === 'function') {
+                gsaDiagBaseWrite('xhr', parsed.turns, 'skip-no-turns', parsed.threadId, { full: (isFullXhr === true) ? 1 : 0, url: rawSnippet(url, 80), bodyLen: (txt ? txt.length : 0) });
               }
             }
           } catch (e) { }

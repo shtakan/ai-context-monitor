@@ -822,7 +822,7 @@ function aiCmAutoExportStartDownload(content, file, fmt) {
   // (3) старт скачивания
   var Bdl = (typeof window !== 'undefined' && window.AiCmExportBuilders) ? window.AiCmExportBuilders : null;
   if (!Bdl || typeof Bdl.downloadBlob !== 'function') throw new Error('utils/export-text-builders.js не загружен');
-  Bdl.downloadBlob(content, file, fmt === 'md' ? 'text/markdown' : (fmt === 'json' ? 'application/json' : 'text/plain;charset=utf-8'));
+  Bdl.downloadBlob(content, file, fmt === 'md' ? 'text/markdown' : (fmt === 'json' ? 'application/json' : 'text/plain;charset=utf-8'), 'autoexport');
   return file;
 }
 // v54: тело скачивания, вынесенное из maybeAutoExport для переиспользования спасательным
@@ -1041,6 +1041,20 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
         // maybeAutoExport → doAutoExportDownload, в т.ч. порог, base-complete и pre-trim).
         // Точка сама СИНХРОННО консультирует реестр занятых имён и резервирует имя ДО старта
         // скачивания; имя из неё же уходит в fired-строку. Гейты, латч и байты не тронуты.
+        // O-27/O-32 (диагностика, только измерение): точка старта скачивания автоэкспорта —
+        // триггер/reason, имя файла («пустое» — словом), первые 100 символов базы, URL,
+        // threadId и источник вызова. Только под гейтом aiCmDebug; байты и имя не меняются.
+        try {
+          var BdiagDl = (typeof window !== 'undefined' && window && window.AiCmExportBuilders) ? window.AiCmExportBuilders : null;
+          if (BdiagDl && typeof BdiagDl.aiCmDiagDownload === 'function') {
+            BdiagDl.aiCmDiagDownload('autoexport', content, file, {
+              reason: reason,
+              site: (typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName) ? currentAdapter.siteName : '',
+              threadId: (typeof lastThreadId === 'string') ? lastThreadId : '',
+              mime: fmt
+            });
+          }
+        } catch (eDiagDl) { }
         file = aiCmAutoExportStartDownload(content, file, fmt);
         debugLog('log', '[AI CM][auto-export] fired convId=' + cid + ' pct=' + percentage + ' file=' + file +
           ' textLen=' + textLen + ' pendingCursor=' + (aiCmCursorLiveByConv[cid] ? '1' : '0') +

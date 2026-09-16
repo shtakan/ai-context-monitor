@@ -719,10 +719,12 @@ function buildFileName(ext, hist) {
   return lowConfPrefix + 'ai-context-monitor-' + safeSite + '-' + safeModel + '-' + stamp + '.' + ext;
 }
 
-function downloadBlob(content, fileName, mimeType) {
+function downloadBlob(content, fileName, mimeType, trigger) {
   // v1.8: общий downloadBlob из utils/export-text-builders.js
+  // O-27/O-32 (диагностика): trigger доезжает только до диагностической строки точки
+  // скачивания (гейт aiCmDebug); байты, mime и имя файла не меняются.
   if (window.AiCmExportBuilders && window.AiCmExportBuilders.downloadBlob) {
-    window.AiCmExportBuilders.downloadBlob(content, fileName, mimeType);
+    window.AiCmExportBuilders.downloadBlob(content, fileName, mimeType, trigger || 'options');
   }
 }
 
@@ -783,7 +785,7 @@ exportMdBtn && exportMdBtn.addEventListener('click', function () {
   getCurrentConvSnapshot(function (snap) {
     var hist = pickExportHistory(snap);
     if (!hist) return;
-    downloadBlob(buildMdText(hist), buildFileName('md', hist), 'text/markdown');
+    downloadBlob(buildMdText(hist), buildFileName('md', hist), 'text/markdown', 'options-md');
   });
 });
 
@@ -792,7 +794,7 @@ exportJsonBtn && exportJsonBtn.addEventListener('click', function () {
   getCurrentConvSnapshot(function (snap) {
     var hist = pickExportHistory(snap);
     if (!hist) return;
-    downloadBlob(buildJsonText(hist), buildFileName('json', hist), 'application/json');
+    downloadBlob(buildJsonText(hist), buildFileName('json', hist), 'application/json', 'options-json');
   });
 });
 
@@ -805,7 +807,7 @@ exportTxtBtn && exportTxtBtn.addEventListener('click', function () {
     if (!hist) return;
     var txt = buildTxtText(hist);
     try { if (txt.charAt(0) !== '\uFEFF') txt = '\uFEFF' + txt; } catch (eB) {}
-    downloadBlob(txt, buildFileName('txt', hist), 'text/plain;charset=utf-8');
+    downloadBlob(txt, buildFileName('txt', hist), 'text/plain;charset=utf-8', 'options-txt');
   });
 });
 
@@ -844,7 +846,7 @@ function buildDiagnosticsFileName() {
 exportDiagBtn && exportDiagBtn.addEventListener('click', function () {
   getActiveTab(function (tab) {
     if (!tab || !tab.id) {
-      downloadBlob(JSON.stringify({ error: 'нет активной вкладки', at: new Date().toISOString() }, null, 2), buildDiagnosticsFileName(), 'application/json');
+      downloadBlob(JSON.stringify({ error: 'нет активной вкладки', at: new Date().toISOString() }, null, 2), buildDiagnosticsFileName(), 'application/json', 'options-diag');
       return;
     }
     try {
@@ -858,10 +860,10 @@ exportDiagBtn && exportDiagBtn.addEventListener('click', function () {
         } else {
           payload = (response && response.diag) ? response.diag : { error: 'пустой ответ', response: response || null };
         }
-        downloadBlob(JSON.stringify(payload, null, 2), buildDiagnosticsFileName(), 'application/json');
+        downloadBlob(JSON.stringify(payload, null, 2), buildDiagnosticsFileName(), 'application/json', 'options-diag');
       });
     } catch (e) {
-      downloadBlob(JSON.stringify({ error: 'sendMessage error: ' + e.message, at: new Date().toISOString() }, null, 2), buildDiagnosticsFileName(), 'application/json');
+      downloadBlob(JSON.stringify({ error: 'sendMessage error: ' + e.message, at: new Date().toISOString() }, null, 2), buildDiagnosticsFileName(), 'application/json', 'options-diag');
     }
   });
 });

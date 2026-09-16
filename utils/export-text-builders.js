@@ -82,8 +82,81 @@
     }, null, 2);
   }
 
+  // ===========================================================================
+  // O-27/O-32 (ДИАГНОСТИКА, только измерение): лог точки скачивания файла.
+  // Гейт — aiCmDebug: sessionStorage 'aiCmDebug' === '1' ИЛИ чекбокс «Подробные логи»
+  // (window.__aiCmDebugLogs). В контент-скрипте канонические хелперы даёт utils/debug.js
+  // (aiCmDiagDownload); в popup/options этот файл подключён БЕЗ debug.js, поэтому здесь
+  // та же семантика реализована локально. Гейт выключен → ни одной строки; функция
+  // только читает уже собранные content/fileName и НЕ меняет байты экспорта.
+  // ===========================================================================
+  function diagOn() {
+    try {
+      if (typeof sessionStorage !== 'undefined' && sessionStorage &&
+        sessionStorage.getItem('aiCmDebug') === '1') return true;
+    } catch (eSess) { }
+    try {
+      if (typeof window !== 'undefined' && window && window.__aiCmDebugLogs === true) return true;
+    } catch (eWin) { }
+    return false;
+  }
+  function diagHead(v, n) {
+    try {
+      var lim = (typeof n === 'number' && n > 0) ? n : 100;
+      if (v === undefined || v === null) return '';
+      var s = String(v);
+      if (!s) return '';
+      var flat = s.replace(/\s+/g, ' ').trim();
+      if (!flat) return '';
+      return (flat.length > lim) ? (flat.slice(0, lim) + '…') : flat;
+    } catch (eHead) { return ''; }
+  }
+  function diagStack() {
+    try {
+      var lines = String((new Error()).stack || '').split('\n');
+      var out = [];
+      for (var i = 1; i < lines.length && out.length < 4; i++) {
+        var s = String(lines[i] || '').replace(/\s+/g, ' ').trim();
+        if (!s || s.indexOf('diag') !== -1) continue;
+        out.push(s);
+      }
+      return out.join(' <- ');
+    } catch (eStack) { return ''; }
+  }
+  // Единая точка: триггер, имя файла (пустое — словом «пустое»), первые 100 символов
+  // базы, её длина, URL документа, threadId, источник вызова (dev-режим).
+  function diagDownload(trigger, content, fileName, extra) {
+    try {
+      if (typeof aiCmDiagDownload === 'function') return aiCmDiagDownload(trigger, content, fileName, extra);
+    } catch (eGlobal) { }
+    if (!diagOn()) return false;
+    try {
+      var e = extra || {};
+      var url = '';
+      try { url = String((typeof location !== 'undefined' && location && location.href) || ''); } catch (eUrl) { }
+      console.log('[AI CM][diag] download trigger=' + (trigger || '(нет)') +
+        ' file=' + ((fileName === undefined || fileName === null || String(fileName) === '') ? 'пустое' : String(fileName)) +
+        ' bytes100=' + (diagHead(content, 100) || 'пусто') +
+        ' len=' + ((content === undefined || content === null) ? 0 : String(content).length) +
+        ' mime=' + (e.mime === undefined ? '(нет)' : e.mime) +
+        ' url=' + url +
+        ' threadId=' + (e.threadId === undefined || e.threadId === '' ? '(нет)' : e.threadId) +
+        ' site=' + (e.site === undefined ? '' : e.site) +
+        ' reason=' + (e.reason === undefined ? '' : e.reason) +
+        ' src=' + diagStack());
+    } catch (eLog) { }
+    return true;
+  }
+
   // Скачивание через blob + временную ссылку (как раньше в options.js)
-  function downloadBlob(content, fileName, mimeType) {
+  // O-27/O-32: 4-й аргумент trigger и 5-й extra — ТОЛЬКО для диагностической строки;
+  // поведение, байты (content), mime и имя файла не меняются.
+  function downloadBlob(content, fileName, mimeType, trigger, extra) {
+    try {
+      var ex = extra || {};
+      diagDownload(trigger || 'builder-download', content, fileName,
+        { mime: mimeType, threadId: ex.threadId, site: ex.site, reason: ex.reason });
+    } catch (eDiag) { }
     try {
       var blob = new Blob([content], { type: mimeType });
       var url = URL.createObjectURL(blob);
@@ -103,7 +176,12 @@
     buildTxtFromHistory: buildTxtFromHistory,
     buildMdFromHistory: buildMdFromHistory,
     buildJsonFromHistory: buildJsonFromHistory,
-    downloadBlob: downloadBlob
+    downloadBlob: downloadBlob,
+    // O-27/O-32: диагностические хелперы наружу (content.js/export-manager.js зовут их
+    // через window.AiCmExportBuilders, если глобальный utils/debug.js не подключён).
+    aiCmDiagOn: diagOn,
+    aiCmDiagHead: diagHead,
+    aiCmDiagDownload: diagDownload
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Api;
