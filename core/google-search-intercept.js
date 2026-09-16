@@ -11,6 +11,9 @@
 //     При SPA-возврате на уже посещённый тред сайт отдаёт его из памяти без сетевого
 //     folwr — перехватчик эмитит кэшированный снимок по threadId, а content.js
 //     по смене threadId сначала сбрасывает состояние виджета.
+// v1.27 (O-31): сетевая база СЕГМЕНТИРОВАНА по разговору (threadId). Смена треда
+//     сбрасывает накопитель, ответ чужого треда не дописывается в активную базу
+//     (см. activateThread/absorbForeignSnapshot).
 
 (function () {
   if (window.__aiCmGoogleSearchInterceptInstalled) return;
@@ -29,6 +32,7 @@
   var lastFullSnapshot = null;  // detail последнего активного снимка
   var currentThreadId = '';     // threadId активного треда (по DOM)
   var emittedThreadId = '';     // threadId, на котором зафиксирована база
+  var baseThreadId = '';        // v1.27 (O-31): разговор, которому принадлежит активная база
   var lastFolwrOpenUrl = '';    // полный URL последнего GET /async/folwr (шаблон для активной загрузки)
   var activeFolwrBusy = false;  // защита от параллельной активной загрузки
   // v1.5.2: сериализация активных folwr и дедуп пассивных по ключу threadId|authuser.
@@ -225,6 +229,68 @@
     } catch (e) { }
   }
 
+  // ---- v1.27 (O-31): сегментация сетевой базы по разговору (threadId) ----
+  // Живой дефект (GSA, прогон 2026-09-16 12:15): сетевой ответ СТАРОГО разговора,
+  // пришедший после SPA-переключения, дописывался в базу НОВОГО — mergeTurns/applyTurns
+  // брали currentThreadId||emittedThreadId, а threadId самого ответа не сверяли. Итог:
+  // netMsgs рос 8→10→18→20 при domMsgs 8↔2, а файл экспорта B нёс хвост разговора A.
+  // Теперь база принадлежит РОВНО одному разговору: активный сегмент — ходы своего
+  // threadId; снимок чужого треда пишется ТОЛЬКО в свой сегмент (threadCache) и не
+  // трогает lastFull*/seenKeys/baseText/pct/экспорт.
+  function isForeignThread(tid) {
+    if (!tid) return false; // тело без threadId — атрибуцию не выдумываем (прежнее поведение)
+    var domTid = readDomThreadId();
+    if (domTid) return tid !== domTid;       // живой DOM — источник правды о текущем разговоре
+    if (currentThreadId) return tid !== currentThreadId;
+    if (baseThreadId) return tid !== baseThreadId;
+    return false;
+  }
+
+  function segmentTurnsOf(tid) {
+    var seg = tid ? threadCache.get(tid) : null;
+    return (seg && Array.isArray(seg.turns)) ? seg.turns : [];
+  }
+
+  // Активный разговор: база становится сегментом ровно этого threadId (или пустой, если
+  // сегмента нет). Возврат true — активный разговор сменился (накопитель сброшен).
+  function activateThread(tid) {
+    tid = tid || '';
+    if (tid === baseThreadId) return false;
+    baseThreadId = tid;
+    var seg = tid ? threadCache.get(tid) : null;
+    lastFullTurns = (seg && Array.isArray(seg.turns)) ? seg.turns.slice() : [];
+    lastFullMessages = (seg && Array.isArray(seg.messages)) ? seg.messages.slice() : [];
+    lastFullSnapshot = (seg && seg.snapshot) ? seg.snapshot : null;
+    seenKeys = {};
+    for (var i = 0; i < lastFullTurns.length; i++) {
+      seenKeys[(lastFullTurns[i].userText || '') + '||' + (lastFullTurns[i].assistantText || '')] = true;
+    }
+    emittedThreadId = lastFullSnapshot ? tid : '';
+    debugLog('log', '[ai-cm-google-search] активный разговор → ' + (tid || '(пусто)') +
+      ', ходов=' + lastFullTurns.length);
+    return true;
+  }
+
+  // Снимок чужого разговора: пишем ТОЛЬКО в его сегмент (пригодится при возврате в тред),
+  // активную базу/эмит/экспорт не трогаем. Возврат true — снимок поглощён (вызывающий выходит).
+  function absorbForeignSnapshot(tid, turns, complete) {
+    if (!isForeignThread(tid)) return false;
+    if (turns && turns.length > 0) {
+      var mergeFn = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.mergeTurnsById) ||
+        function (a, b) { return a.concat(b); };
+      var segTurns = mergeFn(segmentTurnsOf(tid), turns);
+      var segMsgs = messagesFromTurns(segTurns);
+      cacheSet(tid, {
+        turns: segTurns,
+        messages: segMsgs,
+        snapshot: buildDetail(segTurns, segMsgs, tid, complete === true)
+      });
+    }
+    debugLog('log', '[ai-cm-google-search] снимок чужого разговора не применён: tid=' + tid +
+      ', ходов=' + ((turns && turns.length) || 0) + ', активный=' + (baseThreadId || '(пусто)'));
+    return true;
+  }
+
   // ---- установка активной базы из готового снимка (для сетевого и кэш-эмита) ----
   function applySnapshot(parsed, threadId) {
     if (!parsed || !parsed.turns || parsed.turns.length === 0) return;
@@ -261,8 +327,13 @@
   }
 
   // ---- слияние новых ходов ----
-  function mergeTurns(newTurns, isFull) {
-    var threadId = currentThreadId || emittedThreadId;
+  // tidOfResponse — threadId из ТЕЛА ответа (parseWithParser), если он там есть.
+  function mergeTurns(newTurns, isFull, tidOfResponse) {
+    // v1.27 (O-31): разговор ответа — threadId тела, фолбэк — живой DOM. Ответ чужого
+    // разговора не дописывается в активную базу (absorbForeignSnapshot).
+    var threadId = tidOfResponse || readDomThreadId() || currentThreadId || emittedThreadId;
+    if (absorbForeignSnapshot(threadId, newTurns, false)) return;
+    activateThread(threadId);
     if (isFull) {
       if (lastFullTurns.length > 0 && newTurns.length < lastFullTurns.length) {
         mergeStreamTurns(newTurns, threadId);
@@ -493,6 +564,10 @@
   // Применяет готовые turns к базе + эмит (единая точка для folwr-open и пагинации).
   function applyTurns(turns, tid, historyComplete) {
     if (!turns || turns.length === 0) return;
+    // v1.27 (O-31): поздний ответ чужого разговора (probe/пагинация, стартовавшие до
+    // SPA-переключения) в базу текущего не дописывается — только в свой сегмент.
+    if (absorbForeignSnapshot(tid, turns, historyComplete)) return;
+    activateThread(tid);
     lastFullTurns = turns.slice();
     lastFullMessages = messagesFromTurns(lastFullTurns);
     seenKeys = {};
@@ -828,10 +903,16 @@
   function checkThreadSwitch() {
     var tid = readDomThreadId();
     if (!tid) return;
-    if (tid === currentThreadId) return false; // без смены
+    // v1.27 (O-31): «без смены» — только когда и активный тред, и принадлежность базы
+    // совпадают с DOM. Иначе (база осталась у другого разговора) — ре-синхронизация.
+    if (tid === currentThreadId && tid === baseThreadId) return false;
     // threadId сменился
     currentThreadId = tid;
     probedTids = {}; // v43: сброс гарда «один probe на threadId» при смене треда
+    // v1.27 (O-31): смена разговора → активная база переключается на сегмент нового
+    // threadId (или сбрасывается, если сегмента нет). Ходы прежнего разговора в новый
+    // не переносятся и в экспорт/pct не попадают.
+    activateThread(tid);
     var cached = threadCache.get(tid);
     if (cached && cached.snapshot) {
       lastFullTurns = (cached.turns || []).slice();
@@ -855,6 +936,7 @@
 
   // ---- инициализация/опрос threadId ----
   currentThreadId = readDomThreadId();
+  baseThreadId = currentThreadId; // v1.27 (O-31): база с самого старта привязана к разговору страницы
   // v1.13.1 (R2): guard-поллинг через aiCmCommon.setIntervalVisible — skip при
   // скрытой вкладке; фолбэк на plain setInterval, если window.aiCmCommon недоступен.
   var aiCmPoll = (typeof window !== 'undefined' && window.aiCmCommon && window.aiCmCommon.setIntervalVisible)
@@ -903,7 +985,7 @@
               if (model) detectedModelSlug = model;
               var parsed = parseWithParser(txt);
               if (parsed.turns.length > 0) {
-                mergeTurns(parsed.turns, isFull);
+                mergeTurns(parsed.turns, isFull, parsed.threadId);
               }
             }).catch(function () { });
           }
@@ -926,7 +1008,8 @@
               try {
                 var parsed = parseWithParser(txt);
                 var tid = parsed.threadId || readDomThreadId();
-                if (tid) currentThreadId = tid;
+                // v1.27 (O-31): чужой ответ не подменяет активный разговор даже своим tid
+                if (tid && !isForeignThread(tid)) currentThreadId = tid;
                 if (parsed && parsed.turns && parsed.turns.length > 0) {
                   // v1.5.2: полнота folwr vs DOM. Сравниваем счётчик turn-контейнеров
                   // снимка folwr с числом turn-контейнеров в живом DOM. Если DOM больше —
@@ -1061,7 +1144,7 @@
               if (modelXhr) detectedModelSlug = modelXhr;
               var parsed = parseWithParser(txt);
               if (parsed.turns.length > 0) {
-                mergeTurns(parsed.turns, isFullXhr);
+                mergeTurns(parsed.turns, isFullXhr, parsed.threadId);
               }
             }
           } catch (e) { }

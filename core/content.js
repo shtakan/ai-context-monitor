@@ -309,6 +309,27 @@ window.addEventListener('ai-cm-dom-emit-request', function () {
 
 // ===== v2.0 (этап 1/3): state.js ← lastEmitConvId, lastSnapConvId =====
 
+// ===== O-31: сегментация базы по разговору (Google Search AI) =====
+// threadId живого DOM — «какой разговор открыт сейчас» (атрибут GSA; на прочих сайтах '').
+function aiCmDomThreadId() {
+  try {
+    var el = document.querySelector('[data-session-thread-id]');
+    if (!el) return '';
+    var v = el.getAttribute('data-session-thread-id');
+    return v ? String(v).trim() : '';
+  } catch (e) { return ''; }
+}
+
+// Снимок принадлежит ТЕКУЩЕМУ разговору? Снимок чужого треда (поздний ответ старого
+// разговора после SPA-переключения) в базу не применяется: ни baseCount/baseText (pct),
+// ни lastBaseTexts (экспорт), ни счётчики svc-emit-trace. Нет threadId/нет DOM-атрибута —
+// прежнее поведение.
+function aiCmSnapshotIsCurrentThread(emitThreadId, domThreadId) {
+  if (!emitThreadId) return true;
+  if (!domThreadId) return true;
+  return String(emitThreadId) === String(domThreadId);
+}
+
 window.addEventListener('ai-cm-full-history', function (ev) {
   // v81 Step1: один флаг-лог на сессию страницы — дошло ли событие 'ai-cm-full-history'
   // до content.js для текущего сервиса. Поведение не меняется.
@@ -322,6 +343,18 @@ window.addEventListener('ai-cm-full-history', function (ev) {
   } catch (eEmit1) { }
   const detail = ev && ev.detail;
   if (!detail || !detail.text) return;
+  // O-31: база/pct/экспорт — ТОЛЬКО по ходам текущего разговора (threadId).
+  // Снимок чужого треда отбрасывается ЦЕЛИКОМ: он не сбрасывает и не подменяет базу
+  // текущего разговора. typeof-гард — слушатель исполняется и в source-песочницах
+  // тестов (частичный скоуп без этих хелперов).
+  if (typeof aiCmSnapshotIsCurrentThread === 'function') {
+    var domTid31 = (typeof aiCmDomThreadId === 'function') ? aiCmDomThreadId() : '';
+    if (!aiCmSnapshotIsCurrentThread(detail.threadId, domTid31)) {
+      debugLog('log', '[content] O-31: снимок чужого разговора не применён (emit=' + detail.threadId +
+        ', dom=' + domTid31 + ', msgs=' + (detail.count || 0) + ')');
+      return;
+    }
+  }
   // v38: trace приёма снимка — видно, что сообщение дошло до content.js
   debugLog('log', '[AI CM][trace] badge-recv convId=' + (detail.convId || '-') +
     ' msgs=' + (detail.count || 0) +
