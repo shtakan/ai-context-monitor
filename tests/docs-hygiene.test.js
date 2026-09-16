@@ -33,7 +33,7 @@ const releaseYml = read('.github/workflows/release.yml');
 const manifest = JSON.parse(read('manifest.json'));
 const pkg = JSON.parse(read('package.json'));
 
-// «as of v2.0.3 (2026-09-15): 82 suites / 1394 tests» — формат пина без точных чисел.
+// «as of v2.0.4 (2026-09-16): 83 suites / 1405 tests» — формат пина без точных чисел.
 const SNAPSHOT_RE = /as of v\d+\.\d+\.\d+ \(\d{4}-\d{2}-\d{2}\): \d+ suites \/ \d+ tests/;
 const STALE_COUNTERS = ['14 suites / 159 tests', '14 suites/159 tests'];
 

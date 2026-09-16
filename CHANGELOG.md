@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.0.4] - 2026-09-16
+### Fixed
+- O-9-подпись: `snapshot-at-manual` на Perplexity печатает реальные ходы и тексты из канонической базы (`buildHistoryMessages`); приоритет MAIN-моста (Gemini/DeepSeek O-17) и семантика дефолтов не тронуты.
+
 ## [2.0.3] - 2026-09-15
 ### Fixed
 - O-20: санация маркеров сторонних расширений в экспорте DeepSeek — user-текст обрезается до видимого между парой маркеров `deepseek-pp-visible-user-prompt`; tokens/percent не пересчитываются (f71f7d1).
