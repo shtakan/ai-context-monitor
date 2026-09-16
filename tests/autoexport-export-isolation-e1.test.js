@@ -47,6 +47,7 @@ function fnDecl(src, name) {
 
 const SCOPE = 'with (ctx) { ' +
   fnDecl(CONTENT, 'aiCmExportBaseSource') + '\n' +
+  fnDecl(CONTENT, 'aiCmAutoExportStartDownload') + '\n' +
   fnDecl(CONTENT, 'doAutoExportDownload') + '\n' +
   ' return { dl: doAutoExportDownload }; }';
 const makeContent = new Function('ctx', SCOPE);
@@ -259,7 +260,9 @@ describe('E-1: пины исходника (единственная точка 
     expect(body).toContain("'[AI CM][auto-export] abort reason=history-source-mismatch histConvId='");
     expect(body).toContain("' site=' + histSite");
     const iGuard = body.indexOf('history-source-mismatch');
-    expect(iGuard).toBeLessThan(body.indexOf('B.downloadBlob(content, file'));
+    // O-11 (раунд 2): сам старт скачивания — единственная точка aiCmAutoExportStartDownload
+    // (в её теле синхронный резерв имени + B.downloadBlob; пин точки — в O-11-сьюте).
+    expect(iGuard).toBeLessThan(body.indexOf('aiCmAutoExportStartDownload(content, file, fmt)'));
     expect(iGuard).toBeLessThan(body.indexOf('markAutoExportFired'));
   });
 

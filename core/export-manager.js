@@ -761,10 +761,43 @@ function maybeAutoExport(percentage) {
 // Гард коллизии живёт в единственном источнике имени (buildAutoExportFileName): занятое
 // имя получает дисамбигуатор -2, -3, … поэтому второй автоэкспорт GSA в ту же минуту
 // (у GSA нет convId в URL, маска ручного экспорта минутная) больше не теряет копию.
-// Ключ — ИТОГОВОЕ имя (с уже учтённым дисамбигуатором); запись только после скачивания.
-// Граница: реестр — изолированный мир вкладки (как и весь ISOLATED-путь); повторный
-// экспорт ТОГО ЖЕ чата из второй вкладки и так блокирует кросс-табовый session-латч O3.
+// Ключ — ИТОГОВОЕ имя (с уже учтённым дисамбигуатором).
+// O-11 (раунд 2): реестр консультируется и имя РЕЗЕРВИРУЕТСЯ СИНХРОННО в единственной
+// точке старта скачивания (см. aiCmAutoExportStartDownload) — ДО старта, а не после него.
+// Граница: реестр — изолированный мир страницы (как и весь ISOLATED-путь): полная
+// навигация/перезагрузка страницы и вторая вкладка дают свой реестр; повторный экспорт
+// ТОГО ЖЕ чата из второй вкладки и так блокирует кросс-табовый session-латч O3.
 var aiCmAutoExportNamesUsed = Object.create(null);
+// O-11 (раунд 2): ЕДИНСТВЕННАЯ точка старта скачивания автоэкспорта — для ВСЕХ сайтов
+// (Gemini, ChatGPT, DeepSeek, google_search, Claude, Perplexity): doAutoExportDownload
+// зовёт её ровно один раз, и других стартов скачивания автоэкспорта в расширении нет
+// (ручной Ctrl+Shift+D дамп истории и ручной экспорт options.js — не автоэкспорт).
+// Контракт точки строгий и СИНХРОННЫЙ:
+//   1) реестр занятых имён консультируется ЗДЕСЬ, перед стартом: если имя успело стать
+//      занятым (повторный вход/асинхронный дозапрос O-18), свободное имя выдаёт тот же
+//      дисамбигуатор единственного источника имён (-2, -3, …);
+//   2) имя РЕЗЕРВИРУЕТСЯ в реестре ДО старта скачивания (раньше запись шла ПОСЛЕ
+//      downloadBlob — имя занималось уже после выдачи файла);
+//   3) только после этого стартует скачивание.
+// Байты файла, маска имени, формат и гейты не изменяются: сюда приходит уже собранный
+// content. Возвращает ИТОГОВОЕ имя файла (его печатает fired-строка).
+function aiCmAutoExportStartDownload(content, file, fmt) {
+  var Pdl = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+  var used = (typeof aiCmAutoExportNamesUsed === 'object' && aiCmAutoExportNamesUsed)
+    ? aiCmAutoExportNamesUsed : null;
+  // (1) синхронная консультация реестра имён
+  if (used && file && Pdl && typeof Pdl.isFileNameTaken === 'function' &&
+      Pdl.isFileNameTaken(used, file) && typeof Pdl.disambiguateFileName === 'function') {
+    file = Pdl.disambiguateFileName(file, used);
+  }
+  // (2) синхронный резерв имени ДО старта скачивания
+  try { if (used && file) used[file] = 1; } catch (eNameReserve) { }
+  // (3) старт скачивания
+  var Bdl = (typeof window !== 'undefined' && window.AiCmExportBuilders) ? window.AiCmExportBuilders : null;
+  if (!Bdl || typeof Bdl.downloadBlob !== 'function') throw new Error('utils/export-text-builders.js не загружен');
+  Bdl.downloadBlob(content, file, fmt === 'md' ? 'text/markdown' : (fmt === 'json' ? 'application/json' : 'text/plain;charset=utf-8'));
+  return file;
+}
 // v54: тело скачивания, вынесенное из maybeAutoExport для переиспользования спасательным
 // pre-trim экспортом. reason='threshold' — поведение ровно как раньше; reason='pre-trim'
 // добавляет суффикс -pretrim к имени файла и НЕ ставит латч autoExportFired
@@ -976,10 +1009,12 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
           }
         }
         aiCmCancelDeferredHistWrite(cid); // v54: экспорт состоялся — висящий deferred-таймер больше не нужен
-        B.downloadBlob(content, file, fmt === 'md' ? 'text/markdown' : (fmt === 'json' ? 'application/json' : 'text/plain;charset=utf-8'));
-        // O-11: имя выданного файла занято — следующий автоэкспорт в ту же минуту
-        // получит дисамбигуатор -2 (копия не теряется). Пишем ТОЛЬКО после скачивания.
-        try { if (namesUsedD) namesUsedD[file] = 1; } catch (eNameMark) { }
+        // O-11 (раунд 2): ЕДИНСТВЕННАЯ точка старта скачивания автоэкспорта для ВСЕХ сайтов
+        // (Gemini/ChatGPT/DeepSeek/GSA/Claude/Perplexity приходят сюда одним путём
+        // maybeAutoExport → doAutoExportDownload, в т.ч. порог, base-complete и pre-trim).
+        // Точка сама СИНХРОННО консультирует реестр занятых имён и резервирует имя ДО старта
+        // скачивания; имя из неё же уходит в fired-строку. Гейты, латч и байты не тронуты.
+        file = aiCmAutoExportStartDownload(content, file, fmt);
         debugLog('log', '[AI CM][auto-export] fired convId=' + cid + ' pct=' + percentage + ' file=' + file +
           ' textLen=' + textLen + ' pendingCursor=' + (aiCmCursorLiveByConv[cid] ? '1' : '0') +
           ' baseComplete=' + (baseComplete === true ? '1' : '0') +

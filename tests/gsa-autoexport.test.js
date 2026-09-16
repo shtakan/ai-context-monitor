@@ -241,6 +241,7 @@ describe('F4: имя файла автоэкспорта GSA и форматы t
 describe('F4/F5: doAutoExportDownload GSA (реальный код)', () => {
   const SCOPE = 'with (ctx) { ' +
     fnDecl(CONTENT, 'aiCmExportBaseSource') + '\n' +
+    fnDecl(CONTENT, 'aiCmAutoExportStartDownload') + '\n' +
     fnDecl(CONTENT, 'doAutoExportDownload') + '\n' +
     ' return { dl: doAutoExportDownload }; }';
   const makeContent = new Function('ctx', SCOPE);

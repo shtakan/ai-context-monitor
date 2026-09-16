@@ -193,6 +193,7 @@ function makeExportSandbox(stand, over) {
     fnDecl(EXPORT_MGR_SRC, 'aiCmDeferAutoExportOnLiveStream') + '\n' +
     fnDecl(EXPORT_MGR_SRC, 'aiCmAutoExportConvId') + '\n' +
     fnDecl(EXPORT_MGR_SRC, 'maybeAutoExport') + '\n' +
+    fnDecl(EXPORT_MGR_SRC, 'aiCmAutoExportStartDownload') + '\n' +
     fnDecl(EXPORT_MGR_SRC, 'doAutoExportDownload') + '\n' +
     ' return { run: maybeAutoExport, download: doAutoExportDownload }; }';
   const ctx = {

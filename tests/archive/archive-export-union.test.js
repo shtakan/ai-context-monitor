@@ -391,6 +391,7 @@ describe('T1-fix#3: объединённая база MAIN — поведени�
 describe('T1-fix#3: doAutoExportDownload — файл из объединённой базы (реальный код)', () => {
   const CONTENT_SCOPE = 'with (ctx) { ' +
     fnDecl(CORE_CONTENT, 'aiCmExportBaseSource') + '\n' +
+    fnDecl(CORE_CONTENT, 'aiCmAutoExportStartDownload') + '\n' +
     fnDecl(CORE_CONTENT, 'doAutoExportDownload') + '\n' +
     ' return { src: aiCmExportBaseSource, dl: doAutoExportDownload }; }';
   const makeContent = new Function('ctx', CONTENT_SCOPE);
