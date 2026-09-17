@@ -1259,46 +1259,88 @@ function aiCmUpdateSourceIndicator() {
 // После F5 у ChatGPT первым успевает отработать DOM-путь: в DOM только видимый
 // (виртуализированный) кусок истории → бейдж рисует 0.0% из разметки/заниженный процент,
 // и лишь через ~1 с приходит сетевой снимок (ai-cm-full-history) с верным числом.
-// Гейт: до первого ВАЛИДНОГО расчёта (baseSeen && baseText — снимок сети/архива/ленты)
-// виджет ChatGPT не обновляется и скрыт (createWidget ставит display:none, O-1 в widget.js).
-// Страховка: если сеть/перехватчик молчат, гейт снимается сам через AI_CM_BADGE_HOLD_MS —
+// Щит: до первой ЗАПИСИ БАЗЫ на этом документе (baseSeen — сеть/архив/память) виджет
+// ChatGPT не обновляется и скрыт (createWidget ставит display:none, O-1 в widget.js).
+// Взвод — на СТАРТЕ ДОКУМЕНТА и НЕ зависит от convId: F5#1 (пустой convId в URL) даёт
+// ровно ту же DOM-догадку (2–4 сообщения адаптера, сетевой базы нет), что и F5#2
+// с convId (/c/<id>); причину взвода видно в диагностике (armed / armed-empty-convid).
+// Отпускание — событийное: первая запись базы (released-baseSeen) ИЛИ жёсткий фолбэк
+// AI_CM_BADGE_HOLD_FALLBACK_MS=10 c (released-fallback), если сеть/перехватчик молчат:
 // дальше поведение прежнее (рисунок по DOM-базе), виджет гарантированно возвращается.
-// Скоуп: только chatgpt с convId в URL (/c/<id>); прочие сервисы и пустой чат — байтово прежние.
-var AI_CM_BADGE_HOLD_MS = 2500;
+// Одноразовость на документ (aiCmBadgeHoldSpent) сохранена; SPA-держание — отдельный
+// механизм (badgeSuppressed/resetConversationState) и этим щитом не перевзводится.
+// Скоуп: только chatgpt; прочие сервисы — байтово прежние.
+var AI_CM_BADGE_HOLD_FALLBACK_MS = 10000; // жёсткий фолбэк щита: сеть/перехватчик молчат
 var aiCmBadgeHoldUntil = 0;
-var aiCmBadgeHoldSpent = false; // гейт уже отработал (валидный расчёт или таймаут) — второй раз не взводим
+var aiCmBadgeHoldSpent = false; // щит уже отработал (запись базы или фолбэк) — второй раз не взводим
 var aiCmBadgeHoldTimer = null;
 
-// Истинно, пока бейдж держится: первый валидный расчёт по базе ещё не пришёл.
+// O-1 (диагностика, только измерение): взвод/отпускание щита каноническим хелпером
+// utils/debug.js — под гейтом aiCmDebug. reason=armed|armed-empty-convid|released-baseSeen|
+// released-fallback. Гейт выключен → ни одной новой строки (aiCmDiagLine возвращает false,
+// console не трогается), поведение щита то же. typeof-гард — срез-песочницы тестов.
+function aiCmBadgeHoldDiag(reason) {
+  try {
+    if (typeof aiCmDiagLine !== 'function') return;
+    aiCmDiagLine('badge-hold', {
+      point: 'badge-hold',
+      reason: reason,
+      site: (currentAdapter && currentAdapter.siteName) || '',
+      convId: (typeof getCurrentConvId === 'function' ? getCurrentConvId() : '') || '',
+      baseSeen: (typeof baseSeen !== 'undefined' && baseSeen === true) ? 1 : 0,
+      fallbackMs: AI_CM_BADGE_HOLD_FALLBACK_MS
+    });
+  } catch (eHoldDiag) { }
+}
+
+// ЕДИНСТВЕННАЯ точка отпускания щита (одноразовость на документ): запись базы или фолбэк.
+// reveal=true — снятие по таймеру: виджет надо вернуть и перерисовать (DRAW в этот момент
+// мог не случиться вовсе). При отпускании по записи базы рисовать не нужно: DRAW, который
+// и позвал гейт, сам пойдёт в updateWidget и покажет виджет.
+function aiCmBadgeHoldRelease(reason, reveal) {
+  try {
+    if (aiCmBadgeHoldSpent) return false;
+    aiCmBadgeHoldSpent = true;
+    aiCmBadgeHoldUntil = 0;
+    debugLog('log', '[content-trace] badge-hold (O-1): щит отпущен (' + reason + ') t=' + Date.now());
+    aiCmBadgeHoldDiag(reason);
+    if (reveal) {
+      try { aiCmRevealWidget(); } catch (eRevO1) { }
+      processAndSend();
+    }
+    return true;
+  } catch (eRelO1) { return false; }
+}
+
+// Истинно, пока бейдж держится: первой записи базы на этом документе ещё нет.
 function aiCmBadgeHoldActive() {
   try {
     if (aiCmBadgeHoldSpent) return false;
     if (!currentAdapter || currentAdapter.siteName !== 'chatgpt') return false;
-    if (!getCurrentConvId()) return false;                                  // пустой/новый чат — прежнее поведение
-    if (baseSeen && baseText) { aiCmBadgeHoldSpent = true; return false; }  // первый валидный расчёт получен
+    if (baseSeen) { aiCmBadgeHoldRelease('released-baseSeen', false); return false; } // первая запись базы
     if (!aiCmBadgeHoldUntil) {
-      aiCmBadgeHoldUntil = Date.now() + AI_CM_BADGE_HOLD_MS;
-      debugLog('log', '[content-trace] badge-hold (O-1): ChatGPT — валидного расчёта ещё нет, виджет скрыт t=' + Date.now());
+      // O-1: взвод на старте документа; пустой convId щит НЕ выключает
+      var armReason = getCurrentConvId() ? 'armed' : 'armed-empty-convid';
+      aiCmBadgeHoldUntil = Date.now() + AI_CM_BADGE_HOLD_FALLBACK_MS;
+      debugLog('log', '[content-trace] badge-hold (O-1): ChatGPT — записи базы ещё нет, виджет скрыт (' + armReason + ') t=' + Date.now());
+      aiCmBadgeHoldDiag(armReason);
       aiCmArmBadgeHoldFallback();
     }
-    return Date.now() < aiCmBadgeHoldUntil;
+    if (Date.now() >= aiCmBadgeHoldUntil) { aiCmBadgeHoldRelease('released-fallback', false); return false; }
+    return true;
   } catch (eHoldO1) { return false; }
 }
 
-// Страховка гейта: сеть молчит → снимаем гейт, возвращаем виджет и перерисовываем по
-// DOM-базе (прежнее поведение). Виджет не может остаться скрытым навсегда.
+// Фолбэк щита: сеть/перехватчик молчат → снимаем щит, возвращаем виджет и перерисовываем
+// по DOM-базе (прежнее поведение). Виджет не может остаться скрытым навсегда.
 function aiCmArmBadgeHoldFallback() {
   try {
     if (aiCmBadgeHoldTimer) return;
     aiCmBadgeHoldTimer = setTimeout(function () {
       aiCmBadgeHoldTimer = null;
-      if (aiCmBadgeHoldSpent || (baseSeen && baseText)) return; // валидный расчёт уже пришёл
-      aiCmBadgeHoldSpent = true;
-      aiCmBadgeHoldUntil = 0;
-      debugLog('log', '[content-trace] badge-hold (O-1): ' + AI_CM_BADGE_HOLD_MS + 'мс без валидного расчёта — гейт снят, прежнее поведение');
-      try { aiCmRevealWidget(); } catch (eRevO1) { }
-      processAndSend();
-    }, AI_CM_BADGE_HOLD_MS + 100);
+      if (aiCmBadgeHoldSpent || baseSeen) return; // запись базы уже пришла — щит отпущен ею
+      aiCmBadgeHoldRelease('released-fallback', true);
+    }, AI_CM_BADGE_HOLD_FALLBACK_MS);
   } catch (eArmO1) { }
 }
 
@@ -1589,9 +1631,10 @@ function processAndSend() {
       };
       debugLog('log', '[content-trace] badge-freeze: скрытая загрузка лоадера — значение накоплено, виджет держится');
     } else if (aiCmBadgeHoldActive()) {
-      // O-1: первый валидный расчёт ChatGPT ещё не пришёл — бейдж держим (виджет скрыт с
-      // создания): не показываем ни placeholder 0.0%, ни заниженную DOM-оценку после F5.
-      // Если сеть молчит, гейт снимет aiCmArmBadgeHoldFallback через AI_CM_BADGE_HOLD_MS.
+      // O-1: первой записи базы ChatGPT на этом документе ещё нет — бейдж держим (виджет
+      // скрыт с создания): не показываем ни placeholder «—», ни заниженную DOM-оценку после
+      // F5 (в т.ч. при пустом convId). Отпускание — записью базы ИЛИ фолбэком
+      // AI_CM_BADGE_HOLD_FALLBACK_MS (aiCmArmBadgeHoldFallback).
     } else {
       updateWidget(percentage, maxTokenCount, effectiveLimit, contextLimit, displayLimit, ModelConfig.getModel(modelId)?.name || modelId, netAttachBreak);
       lastWidgetData = {
