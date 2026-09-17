@@ -241,6 +241,28 @@ debugLogsCheckbox && debugLogsCheckbox.addEventListener('change', function () {
   chrome.storage.local.set({ aiCmDebugLogs: debugLogsCheckbox.checked });
 });
 
+// O-7: чекбокс «Включать reasoning и инъекции DeepSeek++ в экспорт»
+// (aiCmIncludeHiddenInExport в chrome.storage.local, по умолчанию ВЫКЛ = текущее поведение
+// экспорта: санация O-20 активна, hidden-блоки не включаются). ON — сырой режим: настройку
+// читает контент-скрипт (единственная точка выхода экспорта), а печатная форма получает уже
+// готовые сообщения — отдельного чтения настройки в print/print.js не требуется.
+const includeHiddenCheckbox = document.getElementById('aiCmIncludeHiddenInExport');
+chrome.storage.local.get(['aiCmIncludeHiddenInExport'], function (data) {
+  if (includeHiddenCheckbox) includeHiddenCheckbox.checked = !!(data && data.aiCmIncludeHiddenInExport === true);
+});
+includeHiddenCheckbox && includeHiddenCheckbox.addEventListener('change', function () {
+  chrome.storage.local.set({ aiCmIncludeHiddenInExport: includeHiddenCheckbox.checked });
+});
+// Синхронизация UI с внешними изменениями (второе окно настроек)
+try {
+  chrome.storage.onChanged.addListener(function (changes, areaName) {
+    if (areaName !== 'local') return;
+    if (changes.aiCmIncludeHiddenInExport && includeHiddenCheckbox) {
+      includeHiddenCheckbox.checked = changes.aiCmIncludeHiddenInExport.newValue === true;
+    }
+  });
+} catch (eHiddenSync) {}
+
 // Фаза B: проактивные пороги (aiCmProactive / aiCmProactiveNotify, chrome.storage.local).
 // Дефолты: aiCmProactive = ON, aiCmProactiveNotify = OFF.
 const proactiveCheckbox = document.getElementById('aiCmProactive');

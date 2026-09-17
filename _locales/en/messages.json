@@ -215,6 +215,12 @@
   "options_export_diag": {
     "message": "Export diagnostics"
   },
+  "options_export_hidden_label": {
+    "message": "Include reasoning and DeepSeek++ injections in exports"
+  },
+  "options_export_hidden_hint": {
+    "message": "Off: exports stay as they are — reasoning is already in the turn text, DeepSeek++ injections are stripped. On: reasoning as a separate [REASONING] block, injections kept as-is."
+  },
   "options_archive_legend": {
     "message": "Archives (first history tier)"
   },

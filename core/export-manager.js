@@ -42,6 +42,13 @@ function sanitizeGeminiText(s) {
 // бейдж и поля tokens/percent/limit НЕ тронуты — серверная правда контекста не пересчитывается.
 // Чистые функции санации — utils/export-emit-pipeline.js (sanitizeEmitMessages).
 var aiCmSanitizeSkipLogged = {};
+// ===== O-7: тумблер «Включать reasoning и инъекции DeepSeek++ в экспорт» =====
+// aiCmIncludeHiddenInExport (chrome.storage.local, default ВЫКЛ). OFF = текущее поведение
+// экспорта байтово прежнее: санация O-20 активна, hidden-блоки не включаются. ON = сырой
+// режим: hidden-reasoning отдельным блоком с пометкой, инъекции DeepSeek++ как есть.
+// Метрики, пороги, бейдж и латчи НЕ зависят от положения тумблера (hidden живёт отдельным
+// полем захвата, а не в тексте). Значение грузит loadExportHiddenSetting().
+var aiCmIncludeHiddenInExport = false;
 function aiCmSanitizeDebugOn() {
   // Тот же флаг, что у диагностики DeepSeek (core/deepseek-intercept.js, SECTION 13).
   try { return sessionStorage.getItem('aiCmDebug') === '1'; } catch (e) { return false; }
@@ -61,10 +68,19 @@ function aiCmLogSanitizeSkip(reasons) {
 // Санация массива сообщений экспорта: role=user с ровно одной парой маркеров → видимый
 // текст; role=assistant и тексты без ровно одной пары — байтово прежние. Пайплайн не
 // загружен (отладочный контекст) → массив отдаётся как есть, поведение прежнее.
+// O-7: это ЕДИНАЯ точка выбора OFF/ON для экспорта (как у O-20 — выход всех четырёх
+// форматов md/json/txt + print-pdf и записи aiCmHistory):
+//   тумблер OFF (default) → прежний путь санации O-20 (байты 1:1, hidden в экспорт не идёт);
+//   тумблер ON            → сырой режим: hidden-reasoning отдельным блоком, инъекции как есть.
 function aiCmSanitizeEmitUserTexts(messages) {
   try {
     var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
     if (!P || typeof P.sanitizeEmitMessages !== 'function') return messages;
+    if (aiCmIncludeHiddenInExport === true) {
+      return (typeof P.includeHiddenExportBlocks === 'function')
+        ? P.includeHiddenExportBlocks(messages)
+        : messages;
+    }
     var res = P.sanitizeEmitMessages(messages);
     aiCmLogSanitizeSkip(res && res.skipped);
     return (res && Array.isArray(res.messages)) ? res.messages : messages;
@@ -463,6 +479,31 @@ function loadAutoExportSettings() {
     } catch (eL) {}
   } catch (e) {
     console.error('[AI CM][auto-export] load settings error:', e);
+  }
+}
+// ===== O-7: загрузка тумблера «Включать reasoning и инъекции DeepSeek++ в экспорт» =====
+// Отдельный ключ chrome.storage.local (aiCmIncludeHiddenInExport) и ОТДЕЛЬНЫЙ загрузчик:
+// чтение настроек автоэкспорта (loadAutoExportSettings) не тронуто ни строкой — его
+// сигнатура, набор ключей и строка нормализации флага запинены (M-13). Default ВЫКЛ:
+// отсутствие ключа/не-булево значение — тот же текущий экспорт, что и раньше.
+function loadExportHiddenSetting() {
+  try {
+    if (!isExtensionValid() || !chrome.storage || !chrome.storage.local) return;
+    chrome.storage.local.get(['aiCmIncludeHiddenInExport'], function (data) {
+      try {
+        aiCmIncludeHiddenInExport = !!(data && data.aiCmIncludeHiddenInExport === true);
+      } catch (eParse7) { }
+    });
+    try {
+      chrome.storage.onChanged.addListener(function (changes, areaName) {
+        if (areaName !== 'local') return;
+        if (changes.aiCmIncludeHiddenInExport) {
+          aiCmIncludeHiddenInExport = (changes.aiCmIncludeHiddenInExport.newValue === true);
+        }
+      });
+    } catch (eL7) {}
+  } catch (e7) {
+    console.error('[AI CM][export] include-hidden setting load error:', e7);
   }
 }
 // ========== v1.18 (F2/F5): GSA — идентификатор разговора и probe-полнота ==========

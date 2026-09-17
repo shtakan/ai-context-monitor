@@ -215,6 +215,12 @@
   "options_export_diag": {
     "message": "Экспорт диагностики"
   },
+  "options_export_hidden_label": {
+    "message": "Включать reasoning и инъекции DeepSeek++ в экспорт"
+  },
+  "options_export_hidden_hint": {
+    "message": "Выключено: экспорт как сейчас — reasoning уже в тексте хода, инъекции DeepSeek++ вырезаются. Включено: reasoning отдельным блоком [REASONING], инъекции как есть."
+  },
   "options_archive_legend": {
     "message": "Архивы (первый ярус истории)"
   },

@@ -36,6 +36,11 @@
  *     расширений (DeepSeek++): ровно одна пара маркеров видимого промпта → trim текста
  *     между ними, иначе строка байтово; injectedUserTextSkipReason — причина пропуска;
  *     sanitizeEmitMessages — то же по массиву (трогается ТОЛЬКО role=user)
+ *   - includeHiddenExportBlocks(messages) — O-7: СЫРОЙ режим экспорта (тумблер ON):
+ *     hidden-reasoning DeepSeek (поле захвата hiddenReasoning, в text НЕ входит) уходит
+ *     в текст сообщения ОТДЕЛЬНЫМ блоком с пометкой [REASONING]…[ANSWER]…; уже
+ *     присутствующий в тексте reasoning не дублируется. stripHiddenFields — снятие
+ *     служебных полей захвата в OFF-пути (в экспорт они не идут)
  * Паттерн как у export-text-builders.js: window.AiCmExportEmitPipeline + module.exports.
  * Логика оракула полноты, ленты, пола, виджета и Gemini-гейтов НЕ тронута.
  */
@@ -461,6 +466,10 @@
    * Нормализация источника сообщений к [{role, text}]:
    *   - роли: raw[i].role ('user' → user, иначе assistant);
    *   - текст: raw[i].text || raw[i].content; пустые отбрасываются.
+   * O-7: hidden-захват DOM-адаптера (hiddenReasoning — панель размышлений DeepSeek,
+   * которую базовый текст НЕ несёт) едет РЯДОМ с текстом и в text НЕ входит: метрики
+   * его не видят, а в экспорт он попадает только при включённом тумблере (см.
+   * includeHiddenExportBlocks). Нет захвата — поле не появляется вовсе (байты прежние).
    */
   function normalizeExportMessages(raw) {
     var out = [];
@@ -470,7 +479,9 @@
         var m = raw[i] || {};
         var text = (typeof m.text === 'string') ? m.text : (typeof m.content === 'string' ? m.content : '');
         if (!text) continue;
-        out.push({ role: (m.role === 'user') ? 'user' : 'assistant', text: text });
+        var norm = { role: (m.role === 'user') ? 'user' : 'assistant', text: text };
+        if (typeof m.hiddenReasoning === 'string' && m.hiddenReasoning) norm.hiddenReasoning = m.hiddenReasoning;
+        out.push(norm);
       }
     } catch (e) { }
     return out;
@@ -1200,6 +1211,8 @@
    * Возвращает { messages, sanitized, skipped } (skipped — причины пропуска по порядку
    * сообщений). Логирование вынесено наружу: чистая функция остаётся чистой, а гейт
    * aiCmDebug и антиспам-подпись живут в вызывающем коде (core/export-manager.js).
+   * O-7 (OFF): служебные поля hidden-захвата снимаются — при выключенном тумблере в
+   * экспорт они не идут (сообщение без таких полей остаётся ТЕМ ЖЕ объектом).
    */
   function sanitizeEmitMessages(messages) {
     var out = [];
@@ -1208,7 +1221,7 @@
     try {
       var src = Array.isArray(messages) ? messages : [];
       for (var i = 0; i < src.length; i++) {
-        var m = src[i];
+        var m = stripHiddenFields(src[i]);
         if (!m || typeof m !== 'object') { out.push(m); continue; }
         if (m.role !== 'user') { out.push(m); continue; }
         var text = (typeof m.text === 'string') ? m.text : '';
@@ -1227,6 +1240,89 @@
       return { messages: Array.isArray(messages) ? messages : [], sanitized: 0, skipped: [] };
     }
     return { messages: out, sanitized: sanitized, skipped: skipped };
+  }
+
+  // =====================================================================================
+  // O-7: HIDDEN-БЛОКИ DEEPSEEK — СЫРОЙ РЕЖИМ ЭКСПОРТА (тумблер aiCmIncludeHiddenInExport).
+  //
+  // Продуктовое решение владельца: по умолчанию экспорт НЕ урезается (OFF = текущее
+  // поведение байтово прежнее), а тумблер «Включать reasoning и инъекции DeepSeek++ в
+  // экспорт» (chrome.storage.local, default OFF) добавляет РОВНО ОДИН сырой режим:
+  //   OFF — санация O-20 активна, hidden-поля захвата снимаются (в экспорт не идут);
+  //   ON  — hidden-reasoning идёт в текст ОТДЕЛЬНЫМ блоком с пометкой [REASONING],
+  //         инъекции DeepSeek++ остаются КАК ЕСТЬ (санация O-20 не применяется).
+  // Метрики (tokens/pct/модель/бейдж) считаются БЕЗ hidden-блоков при ЛЮБОМ положении
+  // тумблера: hidden живёт ОТДЕЛЬНЫМ полем сообщения (hiddenReasoning) и в text не входит —
+  // его не видят ни aiCmBasePrepared, ни aiCmMetricBaseText.
+  // Точка включения — ЕДИНАЯ (выход aiCmCollectExportSource, ровно как у O-20): отсюда
+  // сообщения берут ВСЕ четыре формата (md/json/txt + print-pdf) и запись aiCmHistory.
+  // =====================================================================================
+  var HIDDEN_REASONING_TAG = '[REASONING]';
+  var HIDDEN_ANSWER_TAG = '[ANSWER]';
+
+  /** Есть ли у сообщения служебные поля hidden-захвата (любое, даже пустое). */
+  function hasHiddenFields(message) {
+    try {
+      if (!message || typeof message !== 'object') return false;
+      return Object.prototype.hasOwnProperty.call(message, 'hiddenReasoning') ||
+        Object.prototype.hasOwnProperty.call(message, 'hiddenInjection');
+    } catch (e) { return false; }
+  }
+
+  /** Reasoning скрытого захвата сообщения (поле hiddenReasoning) или '' (нет/не строка). */
+  function hiddenReasoningOf(message) {
+    try {
+      var r = (message && typeof message.hiddenReasoning === 'string') ? message.hiddenReasoning : '';
+      return r.trim();
+    } catch (e) { return ''; }
+  }
+
+  /** Копия собственных полей сообщения БЕЗ служебных hidden-полей захвата. */
+  function withoutHiddenFields(message) {
+    var keep = {};
+    for (var k in message) {
+      if (!Object.prototype.hasOwnProperty.call(message, k)) continue;
+      if (k === 'hiddenReasoning' || k === 'hiddenInjection') continue;
+      keep[k] = message[k];
+    }
+    return keep;
+  }
+
+  /**
+   * O-7 (OFF-путь): тот же объект, если hidden-полей нет; иначе копия без них.
+   * Пины идентичности O-20 (assistant и текст без маркеров — те же объекты) сохранены.
+   */
+  function stripHiddenFields(message) {
+    if (!message || typeof message !== 'object') return message;
+    return hasHiddenFields(message) ? withoutHiddenFields(message) : message;
+  }
+
+  /**
+   * O-7 (тумблер ON): развернуть hidden-захват в ТЕКСТ экспорта.
+   *   - reasoning → ОТДЕЛЬНЫЙ блок с пометкой: '[REASONING]\n…\n\n[ANSWER]\n<текст>';
+   *   - рассуждение, УЖЕ присутствующее в тексте (сетевой путь DeepSeek: секции
+   *     [REASONING]/[ANSWER] собирает сам перехватчик, v8), повторно НЕ дописывается —
+   *     дубля нет;
+   *   - сообщения без hidden-захвата возвращаются ТЕМИ ЖЕ объектами (байтово);
+   *   - служебные поля захвата в результат НЕ переносятся (они уже в тексте).
+   * Чистая функция: без логов, DOM и chrome. Идемпотентна — на своём же выходе
+   * повторный вызов ничего не меняет.
+   */
+  function includeHiddenExportBlocks(messages) {
+    var src = Array.isArray(messages) ? messages : [];
+    var out = [];
+    for (var i = 0; i < src.length; i++) {
+      var m = src[i];
+      if (!m || typeof m !== 'object' || !hasHiddenFields(m)) { out.push(m); continue; }
+      var keep = withoutHiddenFields(m);
+      var reasoning = hiddenReasoningOf(m);
+      var text = (typeof keep.text === 'string') ? keep.text : '';
+      if (reasoning && text.indexOf(reasoning) === -1) {
+        keep.text = HIDDEN_REASONING_TAG + '\n' + reasoning + '\n\n' + HIDDEN_ANSWER_TAG + '\n' + text;
+      }
+      out.push(keep);
+    }
+    return out;
   }
 
   /**
@@ -1285,6 +1381,10 @@
     sanitizeInjectedUserText: sanitizeInjectedUserText,
     injectedUserTextSkipReason: injectedUserTextSkipReason,
     sanitizeEmitMessages: sanitizeEmitMessages,
+    // O-7: hidden-блоки DeepSeek (сырой режим экспорта) — чистые функции наружу.
+    includeHiddenExportBlocks: includeHiddenExportBlocks,
+    stripHiddenFields: stripHiddenFields,
+    hiddenReasoningOf: hiddenReasoningOf,
     unionTurnsById: unionTurnsById,
     latchKey: latchKey
   };

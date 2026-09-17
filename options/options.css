@@ -123,6 +123,12 @@ a:focus-visible,
   gap: 8px;
 }
 
+/* O-7: тумблер сырого режима экспорта — внутри секции «Экспорт истории»,
+   после ряда кнопок; раскладку прочих секций не трогает. */
+.export-hidden-row {
+  margin-top: 8px;
+}
+
 
 .checkbox-row input[type="checkbox"] {
   width: auto;

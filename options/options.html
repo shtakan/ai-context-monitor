@@ -165,6 +165,12 @@
       <div class="export-row">
         <button id="export-diag" class="btn-export" data-i18n="options_export_diag">Экспорт диагностики</button>
       </div>
+      <!-- O-7: единственный тумблер сырого режима экспорта (default OFF = текущее поведение) -->
+      <div class="checkbox-row export-hidden-row">
+        <input type="checkbox" id="aiCmIncludeHiddenInExport">
+        <label for="aiCmIncludeHiddenInExport" data-i18n="options_export_hidden_label">Включать reasoning и инъекции DeepSeek++ в экспорт</label>
+      </div>
+      <span class="hint" data-i18n="options_export_hidden_hint">Выключено: экспорт как сейчас — reasoning уже в тексте хода, инъекции DeepSeek++ вырезаются. Включено: reasoning отдельным блоком [REASONING], инъекции как есть.</span>
       <span class="hint" id="export-hint" data-i18n="options_open_supported_site">Откройте поддерживаемый сайт</span>
     </div>
 

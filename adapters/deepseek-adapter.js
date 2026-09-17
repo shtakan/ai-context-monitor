@@ -67,6 +67,42 @@ class DeepSeekAdapter extends BaseAdapter {
       return clone.textContent.trim();
     } catch (e) { return ''; }
   }
+  // ===== O-7 (hidden-захват): текст панели размышлений ОТДЕЛЬНЫМ полем =====
+  // Базовый текст хода панель reasoning НЕ несёт (_textWithoutReasoning её вырезает,
+  // _isReasoningOnly такие узлы вовсе пропускает) — в DOM-ветке reasoning исторически
+  // терялся на ЗАХВАТЕ. Здесь он сохраняется рядом с текстом (hiddenReasoning) и НЕ
+  // попадает ни в content, ни в метрики/токены: базовый текст байтово прежний, а в
+  // экспорт блок уходит только при включённом тумблере aiCmIncludeHiddenInExport
+  // (сырой режим, utils/export-emit-pipeline.js:includeHiddenExportBlocks).
+  // Служебная шапка свёрнутой панели («DeepThink · 12 с», «Размышления:», «Thought for 3s») —
+  // интерфейс, а не reasoning: снимается ТОЛЬКО в начале текста панели (сам текст остаётся).
+  _stripReasoningHeader(text) {
+    try {
+      const s = String(text == null ? '' : text).trim();
+      return s.replace(
+        /^(?:deepthink|deep\s?think|thought|thinking|размышлен[а-яё]*|思考)\s*(?:[·:•\-–—]\s*\d+\s*(?:с|s|sec|сек|seconds?)?)?\s*[:·]?\s*/i,
+        ''
+      ).trim();
+    } catch (e) { return String(text == null ? '' : text).trim(); }
+  }
+  _reasoningText(element) {
+    try {
+      if (!element) return '';
+      const nodes = [];
+      if (this._isInsideReasoning(element)) {
+        nodes.push(element);
+      } else if (typeof element.querySelectorAll === 'function') {
+        const found = element.querySelectorAll(this._thinkSelector());
+        for (let i = 0; i < found.length; i++) nodes.push(found[i]);
+      }
+      const parts = [];
+      for (let j = 0; j < nodes.length; j++) {
+        const text = this._stripReasoningHeader(nodes[j].textContent);
+        if (text && this._hasRealContent(text)) parts.push(text);
+      }
+      return parts.join('\n\n').trim();
+    } catch (e) { return ''; }
+  }
   // Артефакт интерфейса («.» свёрнутой панели) — не сообщение: в сообщении должна быть
   // хотя бы одна буква или цифра. Формат текста при этом не трогаем.
   _hasRealContent(text) {
@@ -118,17 +154,47 @@ class DeepSeekAdapter extends BaseAdapter {
     try {
       const messages = [];
       const messageElements = document.querySelectorAll('div[class*="ds-message"]');
+      // O-7: «висячий» reasoning отдельного узла (assistant-узел только с THINK) — не
+      // сообщение (v2/O-15), но его текст НЕ теряется: приклеивается к следующему
+      // assistant-ходу, а если следующего нет — к предыдущему. Та же парность, что у
+      // сетевого перехватчика (v9/O-15: pendingReasoning), и только в hiddenReasoning —
+      // базовый текст/роли/состав сообщений не меняются.
+      let pendingReasoning = '';
       messageElements.forEach((element) => {
         if (element.className?.includes('ds-markdown') && element.parentElement?.className?.includes('ds-message')) return;
         // v2 (O-15): панель reasoning — не сообщение хода (текст reasoning приходит
         // секцией [REASONING] из сетевого перехватчика вместе с ответом).
-        if (this._isReasoningOnly(element)) return;
+        if (this._isReasoningOnly(element)) {
+          const orphanReasoning = this._reasoningText(element);
+          if (orphanReasoning) {
+            pendingReasoning = pendingReasoning ? (pendingReasoning + '\n\n' + orphanReasoning) : orphanReasoning;
+          }
+          return;
+        }
         const role = this._detectRole(element);
         const content = this._extractText(element);
         if (content && content.length > 0 && role !== 'unknown' && this._hasRealContent(content)) {
-          messages.push({ role, content });
+          const msg = { role, content };
+          // O-7: hidden-захват reasoning — рядом с текстом, в content НЕ входит.
+          if (role === 'assistant') {
+            const ownReasoning = this._reasoningText(element);
+            const hiddenReasoning = [pendingReasoning, ownReasoning].filter(Boolean).join('\n\n').trim();
+            if (hiddenReasoning) msg.hiddenReasoning = hiddenReasoning;
+            pendingReasoning = '';
+          }
+          messages.push(msg);
         }
       });
+      // Висячий reasoning в конце ленты — к последнему assistant-ходу (отдельного хода нет).
+      if (pendingReasoning) {
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i].role !== 'assistant') continue;
+          messages[i].hiddenReasoning = messages[i].hiddenReasoning
+            ? (messages[i].hiddenReasoning + '\n\n' + pendingReasoning)
+            : pendingReasoning;
+          break;
+        }
+      }
       if (messages.length > 0) {
         debugLog('log', `[DeepSeekAdapter] Извлечено ${messages.length} сообщений, роли: ${messages.map(m => m.role.substring(0, 4)).join(', ')}`);
       }

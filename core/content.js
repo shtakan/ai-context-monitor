@@ -1858,6 +1858,9 @@ aiCmLoadProactiveFlag();
 // ===== v2.0 (этап 1/3): export-manager.js ← doAutoExportDownload =====
 
 loadAutoExportSettings();
+// O-7: тумблер «Включать reasoning и инъекции DeepSeek++ в экспорт» (default ВЫКЛ) —
+// отдельный ключ chrome.storage.local, читается единственной точкой выхода экспорта.
+loadExportHiddenSetting();
 
 // ===== v2.0 (этап 1/3): export-manager.js ← listener ai-cm-loader-state =====
 

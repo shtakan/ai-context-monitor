@@ -294,7 +294,11 @@
       // Факт нестандартной роли логируем только под debug-флагом (isDebugEnabled).
       // v8: reasoning хода едет и в messages[], и отдельным массивом reasoningTexts.
       var turnReasoning = t.reasoning || '';
-      messages.push({ role: t.role || 'unknown', text: t.text, reasoning: turnReasoning });
+      // v13 (O-7): hidden-пометки базы — текст хода не меняется (см. hasInjectedUserPrompt).
+      var turnMsg = { role: t.role || 'unknown', text: t.text, reasoning: turnReasoning };
+      if (turnReasoning) turnMsg.hiddenReasoning = turnReasoning;
+      if (t.role === 'user' && hasInjectedUserPrompt(t.text)) turnMsg.hiddenInjection = true;
+      messages.push(turnMsg);
       reasonings.push(turnReasoning);
       if (turnReasoning) reasoningTurns++;
       if (!(t.role === 'user' || t.role === 'assistant') && isDebugEnabled()) {
@@ -452,6 +456,20 @@
   function composeTurnText(answer, reasoning) {
     if (!REASONING_ENABLED || !reasoning) return answer;
     return REASONING_TAG + '\n' + reasoning + '\n\n' + ANSWER_TAG + '\n' + answer;
+  }
+
+  // v13 (O-7): HIDDEN-ПОМЕТКИ БАЗЫ (текст хода при этом НЕ меняется ни байтом).
+  // reasoning хода уже лежит в тексте секциями [REASONING]/[ANSWER] (v8) — здесь он
+  // ДОПОЛНИТЕЛЬНО помечается полем hiddenReasoning: одно имя поля для ОБОИХ путей захвата
+  // (сеть + DOM-адаптер), которое читает сырой режим экспорта
+  // (utils/export-emit-pipeline.js:includeHiddenExportBlocks) при включённом тумблере
+  // aiCmIncludeHiddenInExport. Метрики/токены hidden-поля не видят: они считаются по
+  // тексту хода (messageTexts), а не по пометкам.
+  // Инъекции DeepSeek++ в user-ходе помечаются флагом hiddenInjection: текст остаётся
+  // КАК ЕСТЬ, а вырезает инъекции санация O-20 на выходе экспорта (при выключенном тумблере).
+  var DS_PP_VISIBLE_MARKER = 'deepseek-pp-visible-user-prompt:start';
+  function hasInjectedUserPrompt(text) {
+    return typeof text === 'string' && text.indexOf(DS_PP_VISIBLE_MARKER) !== -1;
   }
 
   // ===== СЕКЦИЯ 8: ПАРСИНГ history_messages =====

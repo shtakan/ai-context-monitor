@@ -1243,10 +1243,12 @@ describe('M-4.4: локализация privacy/privacy.html и docs/index.html'
       // счётчики словаря зафиксированы: M-4.4 (privacy_* — 84, docs_* — 38)
       // + R-1: ключи privacy_rev5_note и privacy_meta_prev3 (privacy_* — 86)
       // + docs-инструкция ручной установки (docs_* — 42): заметка про Edge/обновление
+      // + O-7: метка и хинт тумблера «Включать reasoning и инъекции DeepSeek++ в экспорт»
+      //   (options_export_hidden_label / options_export_hidden_hint → словарь 253)
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('privacy_') === 0; }).length).toBe(86);
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('docs_') === 0; }).length).toBe(42);
-      expect(Object.keys(ru).length).toBe(251);
-      expect(Object.keys(en).length).toBe(251);
+      expect(Object.keys(ru).length).toBe(253);
+      expect(Object.keys(en).length).toBe(253);
     });
 
     test('ru-значения M-4.4 байтово равны тексту разметки, en — перевод без кириллицы', () => {
