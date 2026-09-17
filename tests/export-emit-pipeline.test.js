@@ -253,7 +253,7 @@ describe('re-check 0→1 видит применённую базу; выбор 
     expect(P.pickExportSource(state.baseSeen, state.lastBaseTexts.length > 0)).toBe('network');
   });
 
-  test('Gemini до присвоений (baseSeen=false, baseComplete=false) — skip not-complete, латч не ставится; для не-Gemini пустая сеть = полный DOM-адаптер (гейт снят, гонка закрыта порядком слушателя D1 + гардом D3)', () => {
+  test('Gemini до присвоений (baseSeen=false, baseComplete=false) — skip not-complete, латч не ставится; O-33: не-Gemini до сетевого снимка — skip base-pending (DOM-база полнотой больше не считается)', () => {
     const gem = P.shouldSkipAutoExport({
       enabled: true, percentage: 95, threshold: 90,
       baseComplete: false, baseSeen: false, loaderRunning: false, fired: false, isGemini: true
@@ -264,7 +264,10 @@ describe('re-check 0→1 видит применённую базу; выбор 
       enabled: true, percentage: 95, threshold: 90,
       baseComplete: false, baseSeen: false, loaderRunning: false, fired: false, isGemini: false
     });
-    expect(nonGem.skip).toBe(false); // полный DOM-адаптер — легитимный источник без сигнала полноты
+    // O-33 (продуктовое решение (a)): DOM-адаптер до сетевого снимка (baseSeen=false)
+    // полнотой больше не считается — файл не пишется, латч fired не ставится и не
+    // сбрасывается (resetFired:false): поздний честный экспорт по сети состоится.
+    expect(nonGem).toEqual({ skip: true, reason: 'base-pending', resetFired: false });
   });
 
   test('источник: baseSeen=true → network; baseSeen=false → adapter', () => {

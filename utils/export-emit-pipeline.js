@@ -335,8 +335,25 @@
    * archiveCount/baseCount (T1-fix#2, v1.16.2) опциональны: не переданы — прежнее поведение.
    * O-27 (b/c): site + chatPageMarker/msgCount/baseTextLen — тот же принцип (см.
    * shouldSkipGsaPageGuard): не переданы — вердикта не меняют.
+   * O-33: не-Gemini без сетевого снимка (baseSeen=false) — причина base-pending
+   * (частичная DOM-база права на файл не даёт); латч fired при ней не ставится и не
+   * сбрасывается (resetFired:false), см. таблицу причин ниже.
    * Возвращает { skip, reason, resetFired }. Порядок гейтов повторяет
    * существующий maybeAutoExport (v30.5/v42/гистерезис −10 п.п.).
+   * Причины (условие → reason):
+   *   enabled !== true                       → not-enabled;
+   *   pct не число / < 0                     → no-pct;
+   *   GSA-страница без чата/базы (O-27)      → not-chat-page | no-messages | empty-base;
+   *   Gemini baseComplete !== true           → not-complete;
+   *   не-Gemini baseComplete !== true И
+   *     baseSeen === true (частичная сеть)   → not-complete;
+   *   не-Gemini baseComplete !== true И
+   *     baseSeen === false (DOM-база)        → base-pending (O-33, ПОСЛЕ пороговых гейтов:
+   *                                            при pct ниже порога причина прежняя);
+   *   pct < threshold − 10 (достоверный pct) → below-threshold-hysteresis (resetFired:true);
+   *   pct < threshold − 10 (DOM-pct)         → below-threshold-unreliable;
+   *   pct < threshold                        → below-threshold;
+   *   fired                                  → already-fired.
    */
   function shouldSkipAutoExport(state) {
     var s = state || {};
@@ -348,13 +365,15 @@
     var gsaPage = shouldSkipGsaPageGuard(s);
     if (gsaPage.skip) return { skip: true, reason: gsaPage.reason, resetFired: false };
     var threshold = (typeof s.threshold === 'number' && s.threshold >= 1 && s.threshold <= 100) ? s.threshold : 90;
-    // Гейт полноты: для Gemini — только по сети (baseComplete); для не-Gemini
-    // неполная сетевая база тоже блокирует, но полный DOM-адаптер (baseSeen=false)
-    // сигнала полноты не требует.
-    var completeOk = (s.isGemini === true)
-      ? (s.baseComplete === true)
-      : (!s.baseSeen || s.baseComplete === true);
-    if (!completeOk) return { skip: true, reason: 'not-complete', resetFired: false };
+    // Гейт полноты: полнота — ТОЛЬКО сетевой признак baseComplete (Gemini — как было).
+    // O-33: дизъюнкт `!baseSeen ||` убран — DOM-база не-Gemini (baseSeen=false) до
+    // сетевого снимка полнотой больше НЕ считается (файл уходил по частичной DOM-оценке).
+    var completeOk = (s.baseComplete === true);
+    // O-33: не-Gemini без сетевого снимка — отдельная причина base-pending. Вердикт
+    // откладывается ДО пороговых гейтов (ниже): при pct ниже порога причина прежняя
+    // (below-threshold / below-threshold-unreliable) — новых строк лога не прибавляется.
+    var basePending = (s.isGemini !== true && s.baseSeen !== true);
+    if (!completeOk && !basePending) return { skip: true, reason: 'not-complete', resetFired: false };
     // T1-fix#2 (v1.16.2): пол первого яруса (архив) не даёт права на автоэкспорт, пока
     // живая история не влилась. Архивные ходы лежат в ТОЙ ЖЕ базе (same-conv-union),
     // поэтому «count дорос до архива» выполняется вкладом самого архива — база из одного
@@ -374,6 +393,10 @@
       return { skip: true, reason: 'below-threshold-unreliable', resetFired: false };
     }
     if (s.percentage < threshold) return { skip: true, reason: 'below-threshold', resetFired: false };
+    // O-33: все прочие гейты пройдены — файла нет ТОЛЬКО из-за DOM-базы до сетевого
+    // снимка (pct — транзиентная DOM-оценка). Латч fired не ставится и не сбрасывается
+    // (resetFired:false): поздний честный экспорт по полной сетевой базе состоится.
+    if (!completeOk && basePending) return { skip: true, reason: 'base-pending', resetFired: false };
     if (s.fired) return { skip: true, reason: 'already-fired', resetFired: false };
     return { skip: false, reason: null, resetFired: false };
   }

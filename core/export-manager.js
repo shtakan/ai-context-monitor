@@ -604,6 +604,30 @@ function aiCmDeferAutoExportOnLiveStream(cid, percentage) {
   } catch (e) { return false; }
 }
 
+// O-33 (Medium): вердикт гейта base-pending = база ещё DOM-оценка (сетевой снимок не пришёл).
+// Лог этой причины — РОВНО ОДНА строка на СМЕНУ состояния (урок O-29: непрерывная серия
+// DRAW с тем же вердиктом не спамит). Трекер — объект состояния content-скриптов; в
+// source-песочницах тестов его нет — доступ только через typeof-гард (поведение 1:1).
+var aiCmAutoExportSkipReasonState = { reason: '' };
+// O-33: печать причины base-pending каноническим aiCmDiagLine под гейтом aiCmDebug
+// (прецедент O-27/O-32, utils/debug.js). Гейт выключен → НИ ОДНОЙ строки; функция только
+// читает уже посчитанные значения и на поведение/байты файла не влияет никогда.
+function aiCmAutoExportBasePendingLog(cid, percentage) {
+  try {
+    if (typeof aiCmDiagLine !== 'function') return;
+    var site = (typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName) || '';
+    aiCmDiagLine('auto-export', {
+      point: 'maybeAutoExport',
+      verdict: 'skip',
+      reason: 'base-pending',
+      site: site,
+      convId: cid,
+      pct: percentage,
+      baseSeen: (typeof baseSeen !== 'undefined' && baseSeen === true) ? 1 : 0,
+      baseComplete: (typeof baseComplete !== 'undefined' && baseComplete === true) ? 1 : 0
+    });
+  } catch (eBp) { }
+}
 function maybeAutoExport(percentage) {
   try {
     var s = autoExportSettings;
@@ -677,7 +701,13 @@ function maybeAutoExport(percentage) {
         msgCount: gsaMsgCount,
         baseTextLen: gsaBaseTextLen
       });
+      // O-33 (урок O-29): причина текущего вердикта — база правила «лог base-pending
+      // только на смене состояния» (previous reason ≠ base-pending). Трекер — общий
+      // объект состояния content-скриптов (typeof-гард: срез-песочницы тестов).
+      var skipReasonState = (typeof aiCmAutoExportSkipReasonState !== 'undefined') ? aiCmAutoExportSkipReasonState : null;
       if (verdict && verdict.skip) {
+        var basePendingChanged = !skipReasonState || skipReasonState.reason !== 'base-pending';
+        if (skipReasonState) skipReasonState.reason = verdict.reason;
         // гистерезис −10 п.п.: общая точка сброса латча (для всех сайтов, включая GSA) —
         // семантика v1.14.1/O3 прежняя, просто вынесена из цепочки логов ниже.
         if (verdict.reason === 'below-threshold-hysteresis') {
@@ -688,6 +718,17 @@ function maybeAutoExport(percentage) {
               chrome.storage.session.remove(P.firedSessionKey(siteName, cid));
             }
           } catch (eO3hys) { }
+        }
+        // O-33: база — транзиентная DOM-оценка до сетевого снимка (не-Gemini, baseSeen=false).
+        // Файла нет; латч fired НЕ ставится и НЕ сбрасывается (resetFired:false) — поздний
+        // честный экспорт по полной сетевой базе состоится. Строка лога — одна на смену
+        // состояния (aiCmDiagLine под гейтом aiCmDebug); иных строк причина не порождает
+        // (в т.ч. GSA-тега: причина общая для всех не-Gemini, вердикт — один).
+        if (verdict.reason === 'base-pending') {
+          if (basePendingChanged && typeof aiCmAutoExportBasePendingLog === 'function') {
+            aiCmAutoExportBasePendingLog(cid, percentage);
+          }
+          return;
         }
         // v1.18 (F5): GSA — tagged-строка лога с причиной fired/skip; причина not-complete
         // уточняется до probe-running, пока probe-полнота в полёте. Вердикт гейта ОДИН
@@ -727,6 +768,9 @@ function maybeAutoExport(percentage) {
         }
         return;
       }
+      // O-33 (урок O-29): вердикт не skip (файл разрешён) — состояние сменилось, поэтому
+      // следующий base-pending в этом состоянии снова даст ровно одну строку.
+      if (skipReasonState) skipReasonState.reason = '';
       if (cid) { delete notCompleteLogged[cid]; delete notCompleteLogged['gsa:' + cid]; } // полнота пришла — можно снова логировать в другом чате
       if (!cid) return;
       doAutoExportDownload(cid, percentage, 'threshold');
