@@ -219,7 +219,7 @@
     "message": "Include reasoning and DeepSeek++ injections in exports"
   },
   "options_export_hidden_hint": {
-    "message": "Off: exports stay as they are — reasoning is already in the turn text, DeepSeek++ injections are stripped. On: reasoning as a separate [REASONING] block, injections kept as-is."
+    "message": "Off: only questions and answers go into the file, without reasoning or injections. On: reasoning and injections go into the export."
   },
   "options_archive_legend": {
     "message": "Archives (first history tier)"

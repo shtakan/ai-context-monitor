@@ -1,21 +1,32 @@
 /**
  * O-7 (Medium): тумблер «Включать reasoning и инъекции DeepSeek++ в экспорт».
  *
- * Продуктовое решение владельца:
- *   default OFF = ТЕКУЩЕЕ поведение экспорта байтово прежнее (санация O-20 активна,
- *                 hidden-блоки не включаются; reasoning сетевого пути, как и раньше,
- *                 лежит в тексте хода секциями [REASONING]/[ANSWER] — v8);
- *   ON          = РОВНО ОДИН сырой режим: hidden-reasoning идёт в текст ОТДЕЛЬНЫМ блоком
- *                 с пометкой [REASONING]…[ANSWER]…, инъекции DeepSeek++ — КАК ЕСТЬ
- *                 (санация O-20 не применяется).
- * Метрики (tokens/pct/limit/модель/бейдж) считаются БЕЗ hidden-блоков при ЛЮБОМ положении
- * тумблера: hidden живёт отдельным полем захвата (hiddenReasoning), а не в тексте.
+ * Продуктовое решение владельца (P1=a, P2=OFF):
+ *   OFF (default) = в файл экспорта попадают ТОЛЬКО вопросы и ответы: секции
+ *                   [REASONING]…[ANSWER]… сетевого пути DeepSeek урезаются до части [ANSWER]
+ *                   (маркеры убираются), инъекции DeepSeek++ вырезаны (санация O-20 активна),
+ *                   hidden-поля захвата (hiddenReasoning) сняты;
+ *   ON            = всё как есть: секции [REASONING]/[ANSWER] остаются в тексте, инъекции
+ *                   DeepSeek++ — как есть (O-20 обойдена), hiddenReasoning идёт ОТДЕЛЬНЫМ
+ *                   блоком [REASONING]…[ANSWER]… (includeHiddenExportBlocks).
+ * БАЗА и метрики (tokens/pct/limit/модель/бейдж) считаются по базовому тексту и от
+ * положения тумблера НЕ зависят: секции остаются в тексте хода (core/deepseek-intercept.js,
+ * v8), hidden живёт отдельным полем захвата; урезание — ТОЛЬКО на выходе экспорта
+ * (utils/export-emit-pipeline.js:stripReasoningSections).
  *
  * Контур сьюта (правило R-D: пины на КАЖДЫЙ путь захвата + на единственную точку выхода):
- *   D1 — тумблер ON → md/txt/json/pdf несут reasoning-блок и инъекции; DOM-путь (панель
+ *   D1 — тумблер ON → md/txt/json/pdf несут reasoning-секции и инъекции; DOM-путь (панель
  *        размышлений, отброшенная на захвате) и сетевой путь (инъекции в user-тексте);
- *   D2 — тумблер OFF → БАЙТЫ экспорта идентичны текущему поведению для всех 6 платформ
- *        (независимый оракул O-20 + буквальный байтовый пин txt);
+ *   D2 — тумблер OFF → только вопросы и ответы: секции урезаны до [ANSWER], инъекций нет,
+ *        hidden-полей нет (независимый оракул + буквальный байтовый пин txt); S3/S4/S5 —
+ *        служебный тул-мусор DeepSeek++ (user-ход из одних [TOOL_RESULTS], XML-вызовы тулов
+ *        в тексте ассистента, пустые после чистки ходы) в файл не едет — фикстура-выдержка
+ *        из живого OFF-артефакта deepseek_test/…-2026-09-17-21-29 с рукописным оракулом
+ *        «минус мусор» (ON тот же вход отдаёт БАЙТОВО как есть);
+ *   D3 — чистая функция stripReasoningSections: байтовые инварианты и идемпотентность;
+ *   S3/S4/S5 — чистые функции тул-мусора (isToolResultsOnlyText / stripToolCallBlocks):
+ *        полный список тегов вызовов, парность/нежадность/атрибуты, байтовые no-op для
+ *        чужих текстов и тегов-РЕЗУЛЬТАТОВ, удаление пустых ходов, идемпотентность;
  *   R1 — санация O-20 при OFF активна (инъекции вырезаны, лог пропуска жив);
  *   R2 — tokens/pct/база не меняются от положения тумблера;
  *   R3 — регресс-наборы O-11/O-31/O-27/O-33/O-15…O-20 и версия не тронуты;
@@ -53,6 +64,9 @@ const SETTING_KEY = 'aiCmIncludeHiddenInExport';
 const HIDDEN_LABEL_KEY = 'options_export_hidden_label';
 const HIDDEN_HINT_KEY = 'options_export_hidden_hint';
 const HIDDEN_LABEL_RU = 'Включать reasoning и инъекции DeepSeek++ в экспорт';
+// O-7: подсказка описывает НОВУЮ семантику тумблера (OFF = вопросы и ответы, ON = всё как есть).
+const HIDDEN_HINT_RU = 'Выключено: в файл попадают только вопросы и ответы, без размышлений и инъекций. ' +
+  'Включено: размышления и инъекции попадают в экспорт.';
 
 // =====================================================================================
 // Фикстуры: инъекции DeepSeek++ (реальные строки O-20) и reasoning-ход DeepSeek
@@ -84,6 +98,125 @@ const NETWORK_ASSISTANT_TEXT = '[REASONING]\n' + REASONING_TEXT + '\n\n[ANSWER]\
 // DOM-путь DeepSeek: текст хода БЕЗ панели размышлений — reasoning захватывается отдельно.
 const DOM_ANSWER_TEXT = 'Тогда важны CPU и быстрый SSD.';
 const DOM_REASONING_TEXT = 'Пользователь спрашивает про монтаж видео.';
+
+// =====================================================================================
+// O-7 (OFF, S3/S4/S5): фикстура «минус мусор» — ВЫДЕРЖКА из живого OFF-артефакта
+// deepseek_test/ai-context-monitor-deepseek-DeepSeek-R1-2026-09-17-21-29.txt
+// (agent-сессия DeepSeek++ с browser-MCP). Байты фрагментов — КАК В АРТЕФАКТЕ, без правок
+// и без переэкранирования: взят ровно один user-ход с результатами тулов (хвост-приглашение
+// на месте) и ровно один ход ассистента с ЧЕТЫРЬМЯ XML-вызовами тулов (browser_type /
+// browser_key / browser_wait_for / browser_evaluate_script) между прозой. Соседний к этому
+// user-ходу ответ ассистента в артефакте — 19 КБ, поэтому выдержка составлена из двух
+// фрагментов одного файла (каждый — байтовая копия).
+// =====================================================================================
+const ARTIFACT_TOOL_RESULTS_USER = [
+  '[TOOL_RESULTS]',
+  '<memory_update_result>',
+  '{"ok":true,"name":"memory_update","provider":{"kind":"local","id":"memory","displayName":"DeepSeek++ Memory","transport":"in_process"},"descriptorId":"local:memory:memory_update","summary":"Updated","detail":"Qwen (chat.qwen.ai) API v2 — спека провайдера"}',
+  '</memory_update_result>',
+  '[/TOOL_RESULTS]',
+  '',
+  'Continue answering based on the tool results above.',
+].join('\n');
+
+const ARTIFACT_ASSISTANT_RAW = [
+  '',
+  '',
+  'Поймал только служебный запрос — это НЕ чат. Разбор первого улова:',
+  '',
+  '',
+  'GET /api/v2/notifications/latest?type=memory   →  200, JSON',
+  'Headers: Version: 0.2.91, bx-v: 2.5.37, source: web, X-Request-Id: <uuid>',
+  '',
+  '',
+  'Что из этого уже ценно для провайдера:',
+  '',
+  'API-префикс подтверждён: https://chat.qwen.ai/api/v2/... — это база, к которой будет обращаться твой адаптер.',
+  'Версия клиента: Version: 0.2.91 — сервер может требовать этот заголовок, иначе 4xx. Обязательно прокидывать.',
+  'source: web + bx-v: 2.5.37 — похоже на обязательную телеметрию Baidu-фронтенда (bx = Baidu X?). Скорее всего тоже нужно.',
+  'X-Request-Id — генерит клиент (uuid v4). Сервер его эхоит в request_id. Твой адаптер должен генерить свой.',
+  'Формат ответа: обёртка { success, request_id, data: {...} } — общая для всего API, не только чата.',
+  '',
+  'Но чтобы получить схему чата, нужен настоящий POST. Условие wait_for сработало от фонового GET (уведомления), а не от отправки сообщения. Значит сообщение ещё не отправлено.',
+  '',
+  'Отправь, пожалуйста, «привет» в поле Qwen (сейчас фокус уже стоит на textarea — я вижу textbox "Спросить Qwen" focused). Как только нажмёшь Enter, я сразу вытащу запрос чата.',
+  '',
+  'Можно и без тебя — попробую сам:',
+  '',
+  '<browser_type>',
+  '{"uid": "e18", "text": "привет"}',
+  '</browser_type>',
+  '',
+  '<browser_key>',
+  '{"key": "Enter"}',
+  '</browser_key>',
+  '',
+  'Теперь ловлю новый трафик. Даю странице 6 секунд на стрим и вычитываю лог — на этот раз отфильтрую всё, что не похоже на чат.',
+  '',
+  '<browser_wait_for>',
+  '{"expression": "(window.qwenLog && window.qwenLog.some(e => e.method === \'POST\'))", "timeoutMs": 30000}',
+  '</browser_wait_for>',
+  '',
+  '<browser_evaluate_script>',
+  '{"script":"(() => {\\n  const log = (window.qwenLog || []).filter(e => e.method === \'POST\' || /completion|chat|conversation|message/i.test(e.url||\'\'));\\n  return {\\n    total: (window.qwenLog||[]).length,\\n    chat: log.map(e => ({\\n      kind: e.kind, method: e.method, url: e.url, status: e.status,\\n      respCt: e.respCt, stream: !!e.stream,\\n      reqHeaders: e.reqHeaders,\\n      reqBody: e.reqBody ? String(e.reqBody).slice(0, 5000) : null,\\n      respBody: e.respBody ? String(e.respBody).slice(0, 2000) : null,\\n      streamBody: e.streamBody ? String(e.streamBody).slice(0, 4000) : null,\\n      err: e.err\\n    }))\\n  };\\n})()"}',
+  '</browser_evaluate_script>',
+  '',
+  '',
+].join('\n');
+
+// РУКОПИСНЫЙ оракул «минус мусор»: тот же ход ассистента, но user-ход с тул-результатами
+// выброшен целиком (S3), четыре XML-вызова вырезаны вместе со своей пробельной отбивкой (S4),
+// а проза — байтово как в артефакте (включая её собственные двойные пустые строки).
+const ARTIFACT_ASSISTANT_ORACLE = [
+  '',
+  '',
+  'Поймал только служебный запрос — это НЕ чат. Разбор первого улова:',
+  '',
+  '',
+  'GET /api/v2/notifications/latest?type=memory   →  200, JSON',
+  'Headers: Version: 0.2.91, bx-v: 2.5.37, source: web, X-Request-Id: <uuid>',
+  '',
+  '',
+  'Что из этого уже ценно для провайдера:',
+  '',
+  'API-префикс подтверждён: https://chat.qwen.ai/api/v2/... — это база, к которой будет обращаться твой адаптер.',
+  'Версия клиента: Version: 0.2.91 — сервер может требовать этот заголовок, иначе 4xx. Обязательно прокидывать.',
+  'source: web + bx-v: 2.5.37 — похоже на обязательную телеметрию Baidu-фронтенда (bx = Baidu X?). Скорее всего тоже нужно.',
+  'X-Request-Id — генерит клиент (uuid v4). Сервер его эхоит в request_id. Твой адаптер должен генерить свой.',
+  'Формат ответа: обёртка { success, request_id, data: {...} } — общая для всего API, не только чата.',
+  '',
+  'Но чтобы получить схему чата, нужен настоящий POST. Условие wait_for сработало от фонового GET (уведомления), а не от отправки сообщения. Значит сообщение ещё не отправлено.',
+  '',
+  'Отправь, пожалуйста, «привет» в поле Qwen (сейчас фокус уже стоит на textarea — я вижу textbox "Спросить Qwen" focused). Как только нажмёшь Enter, я сразу вытащу запрос чата.',
+  '',
+  'Можно и без тебя — попробую сам:',
+  '',
+  'Теперь ловлю новый трафик. Даю странице 6 секунд на стрим и вычитываю лог — на этот раз отфильтрую всё, что не похоже на чат.',
+].join('\n');
+
+/** Сообщения выдержки: user-ход с тул-результатами + ход ассистента с XML-вызовами. */
+function artifactMessages() {
+  return [
+    { role: 'user', text: ARTIFACT_TOOL_RESULTS_USER, id: 'u-tools' },
+    { role: 'assistant', text: ARTIFACT_ASSISTANT_RAW, id: 'a-tools' }
+  ];
+}
+
+// S4: полный список тегов вызовов DeepSeek++ (задача: 18 browser_* + 3 memory_* +
+// web_search/web_fetch) и префиксные семейства shell_/python_/skill_ (любое имя семейства:
+// shell_exec, python_status, skill_draft_create, …).
+const TOOL_CALL_TAG_NAMES = [
+  'browser_navigate', 'browser_go_back', 'browser_go_forward', 'browser_refresh',
+  'browser_list_tabs', 'browser_select_tab', 'browser_close_tab', 'browser_snapshot',
+  'browser_click', 'browser_hover', 'browser_fill', 'browser_fill_form', 'browser_key',
+  'browser_type', 'browser_attach_file', 'browser_wait_for', 'browser_handle_dialog',
+  'browser_evaluate_script', 'memory_save', 'memory_update', 'memory_delete',
+  'web_search', 'web_fetch'
+];
+const TOOL_CALL_FAMILY_EXAMPLES = [
+  'shell_exec', 'shell_status', 'shell_session_begin', 'shell_session_exec', 'shell_session_end',
+  'python_exec', 'python_status', 'skill_draft_create', 'skill_anything_new'
+];
 
 // Токены/лимит/процент — серверная правда контекста; тумблер их НЕ пересчитывает.
 const TOKENS = 4210;
@@ -125,8 +258,9 @@ function historyFrom(fixture, messages) {
 }
 
 // =====================================================================================
-// Оракул «текущего поведения» (НЕЗАВИСИМАЯ реализация O-20 + снятие hidden-полей):
-// так выглядел экспорт ДО фикса O-7. Сравнение с ним и есть байтовый регресс-пин D2.
+// Оракул OFF-пути (НЕЗАВИСИМАЯ реализация правил «только вопросы и ответы» + санации O-20):
+// урезание секций сделано регуляркой, снятие hidden-полей — построением {role,text}.
+// Расхождение продакшна с этим оракулом и есть регресс-пин D2.
 // =====================================================================================
 function countMarker(text, marker) {
   let n = 0;
@@ -135,22 +269,56 @@ function countMarker(text, marker) {
   return n;
 }
 
-function oracleCurrentBehaviour(messages) {
-  return messages.map(function (m) {
-    if (!m || typeof m !== 'object') return m;
-    // hidden-полей захвата в текущем экспорте не существовало вовсе; id точка эмита
-    // сетевого пути не переносит — набор полей ровно {role, text}
-    const base = { role: (m.role === 'user') ? 'user' : 'assistant', text: String(m.text == null ? '' : m.text) };
-    if (m.role !== 'user') return base;
-    const text = base.text;
-    const starts = countMarker(text, START);
-    const ends = countMarker(text, END);
-    if (!(starts === 1 && ends === 1 && text.indexOf(END) > text.indexOf(START))) return base;
-    const from = text.indexOf(START) + START.length;
-    const to = text.indexOf(END, from);
-    base.text = text.slice(from, to).trim();
-    return base;
+// Независимое урезание: каждая пара [REASONING]…[ANSWER] (+ форматный перевод строки) вон.
+const ORACLE_SECTION_RE = /\[REASONING\][\s\S]*?\[ANSWER\](?:\r\n|\n)?/g;
+
+function oracleStripReasoningSections(text) {
+  const s = String(text == null ? '' : text);
+  if (s.indexOf('[REASONING]') === -1 || s.indexOf('[ANSWER]') === -1) return s;
+  const out = s.replace(ORACLE_SECTION_RE, '');
+  return out === s ? s : out;
+}
+
+// S3 (независимо): строка, ЦЕЛИКОМ равная блоку тул-результатов (+ хвост-приглашение).
+const ORACLE_TOOL_RESULTS_ONLY_RE =
+  /^\[TOOL_RESULTS\][\s\S]*?\[\/TOOL_RESULTS\]\s*(?:Continue answering based on the tool results above\.)?\s*$/;
+
+// S4 (независимо): тот же список тегов, но БЕЗ обратной ссылки — имя тега выписано в обеих
+// частях пары (открывающая с необязательными атрибутами / закрывающая), хвост блока + пробелы.
+const ORACLE_TOOL_CALL_RE = new RegExp(
+  '<(?:' + TOOL_CALL_TAG_NAMES.join('|') + '|shell_\\w+|python_\\w+|skill_\\w+)(?:\\s[^>]*)?>' +
+  '[\\s\\S]*?' +
+  '<\\/(?:' + TOOL_CALL_TAG_NAMES.join('|') + '|shell_\\w+|python_\\w+|skill_\\w+)>\\s*', 'g');
+
+function oracleStripToolCalls(text) {
+  const s = String(text == null ? '' : text);
+  const out = s.replace(ORACLE_TOOL_CALL_RE, '');
+  return out === s ? s : out.replace(/\s+$/, '');
+}
+
+function oracleOffExport(messages) {
+  const out = [];
+  messages.forEach(function (m) {
+    if (!m || typeof m !== 'object') { out.push(m); return; }
+    const role = (m.role === 'user') ? 'user' : 'assistant';
+    let text = oracleStripReasoningSections(String(m.text == null ? '' : m.text));
+    // S3: user-ход целиком из результатов тулов — в экспорт не идёт
+    if (role === 'user' && ORACLE_TOOL_RESULTS_ONLY_RE.test(text.trim())) return;
+    // S4: XML-вызовы тулов — только из текста ассистента
+    if (role !== 'user') text = oracleStripToolCalls(text);
+    if (role === 'user') {
+      const starts = countMarker(text, START);
+      const ends = countMarker(text, END);
+      if (starts === 1 && ends === 1 && text.indexOf(END) > text.indexOf(START)) {
+        const from = text.indexOf(START) + START.length;
+        const to = text.indexOf(END, from);
+        text = text.slice(from, to).trim();
+      }
+    }
+    if (text.trim() === '') return;                                     // S5: пустых в файле нет
+    out.push({ role: role, text: text });
   });
+  return out;
 }
 
 // =====================================================================================
@@ -314,6 +482,7 @@ describe('O-7 D1: тумблер ON — reasoning и инъекции DeepSeek++
   test('txt: буквальные байты сырого режима (преамбула, тул-схема, маркеры, reasoning)', () => {
     const txt = Builders.buildTxtFromHistory(historyFrom(ds, emitNetworkOn(ds)));
     expect(typeof txt).toBe('string');
+    expect(txt).toBe(INJECTED_USER_TEXT + '\n\n' + NETWORK_ASSISTANT_TEXT);   // текст КАК ЕСТЬ
     expect(txt).toContain(MEMORY_PREAMBLE);
     expect(txt).toContain('Tool call format reminder:');
     expect(txt).toContain(START);
@@ -381,14 +550,14 @@ describe('O-7 D1: тумблер ON — reasoning и инъекции DeepSeek++
 });
 
 /* =====================================================================================
- * D2: тумблер OFF — БАЙТЫ идентичны текущему поведению для всех 6 платформ
+ * D2: тумблер OFF — экспорт = только вопросы и ответы (секции урезаны, инъекций нет)
  * ===================================================================================== */
-describe('O-7 D2: тумблер OFF — байтовый регресс-пин текущего поведения', () => {
-  test('OFF-выход === независимому оракулу O-20 (6 платформ, JSON.stringify побайтово)', () => {
+describe('O-7 D2: тумблер OFF — только вопросы и ответы', () => {
+  test('OFF-выход === независимому оракулу «только вопросы и ответы» (6 платформ, JSON.stringify побайтово)', () => {
     PLATFORMS.forEach(function (fixture) {
       const input = networkMessages(fixture);
       const off = emitNetworkOff(fixture, input);
-      const oracle = oracleCurrentBehaviour(input);
+      const oracle = oracleOffExport(input);
       expect([fixture.site, JSON.stringify(off)]).toEqual([fixture.site, JSON.stringify(oracle)]);
     });
   });
@@ -401,7 +570,7 @@ describe('O-7 D2: тумблер OFF — байтовый регресс-пин 
       for (const fixture of PLATFORMS) {
         const input = networkMessages(fixture);
         const histOff = historyFrom(fixture, emitNetworkOff(fixture, input));
-        const histRef = historyFrom(fixture, oracleCurrentBehaviour(input));
+        const histRef = historyFrom(fixture, oracleOffExport(input));
         expect([fixture.site, Builders.buildMdFromHistory(histOff, fixture.label)])
           .toEqual([fixture.site, Builders.buildMdFromHistory(histRef, fixture.label)]);
         expect([fixture.site, Builders.buildTxtFromHistory(histOff)])
@@ -417,36 +586,62 @@ describe('O-7 D2: тумблер OFF — байтовый регресс-пин 
     }
   });
 
-  test('OFF: буквальный байтовый пин txt (DeepSeek, сетевой путь) — прежний экспорт', () => {
+  test('OFF: буквальный байтовый пин txt (DeepSeek, сетевой путь) — вопрос и ответ', () => {
     const txt = Builders.buildTxtFromHistory(historyFrom(PLATFORMS[2], emitNetworkOff(PLATFORMS[2])));
-    // видимый текст пользователя + reasoning-секции хода; инъекций DeepSeek++ нет вовсе
-    expect(txt).toBe(VISIBLE_USER_TEXT + '\n\n' + NETWORK_ASSISTANT_TEXT);
-    expect(txt).not.toContain('deepseek-pp');
-    expect(txt).not.toContain('Existing memories:');
-    expect(txt).not.toContain('Tool call format reminder:');
+    // видимый вопрос пользователя + ЧАСТЬ [ANSWER] хода: секций reasoning и инъекций нет
+    expect(txt).toBe(VISIBLE_USER_TEXT + '\n\n' + ANSWER_TEXT);
+    ['[REASONING]', '[ANSWER]', REASONING_TEXT, 'deepseek-pp', 'Existing memories:',
+      'Tool call format reminder:'].forEach(function (needle) {
+      expect([needle, txt.indexOf(needle)]).toEqual([needle, -1]);
+    });
   });
 
-  test('OFF: источник-пин — прежний путь санации O-20 не переписан', () => {
+  test('OFF: секции урезаны ТОЛЬКО в экспорте; вход и БАЗА байтово прежние', () => {
+    const input = networkMessages(PLATFORMS[2]);
+    const snapshot = input.map(function (m) { return m.text; });
+    const e = makeEmitter();
+    e.offline();
+    const msgs = e.run(input);
+    expect(msgs[1].text).toBe(ANSWER_TEXT);                        // выход — только [ANSWER]-часть
+    expect(msgs[1]).not.toBe(input[1]);                            // копия, а не мутация входа
+    expect(input.map(function (m) { return m.text; })).toEqual(snapshot);
+    expect(e.ctx.lastBaseTexts[1]).toBe(NETWORK_ASSISTANT_TEXT);   // БАЗА несёт секции (v8)
+  });
+
+  test('OFF: источник-пин — единая точка выхода держит OFF-путь (урезание + O-20 + hidden)', () => {
     const fn = sliceSource(EXPORT_MGR_SRC, 'function aiCmSanitizeEmitUserTexts(messages)', '// v81: единая точка источников');
     expect(fn).toContain('var res = P.sanitizeEmitMessages(messages);');
     expect(fn).toContain('aiCmLogSanitizeSkip(res && res.skipped);');
     expect(fn).toContain('return (res && Array.isArray(res.messages)) ? res.messages : messages;');
     // тумблер выбирает ВЕТКУ, а не переписывает санацию
     expect(fn).toContain('if (aiCmIncludeHiddenInExport === true) {');
+    // OFF-путь = пайплайн: урезание секций → O-20 → снятие hidden (все три — там же)
+    expect(PIPELINE_SRC).toContain('function stripReasoningSections(text)');
+    expect(PIPELINE_SRC).toContain('var bare = stripReasoningSections(raw);');
     // единая точка выхода экспорта держит РОВНО 3 обращения к ней (пин O-20 жив)
     const collect = sliceSource(EXPORT_MGR_SRC, 'function aiCmCollectExportSource()', 'function aiCmExportBaseSource(');
     expect(collect.match(/aiCmSanitizeEmitUserTexts\(/g).length).toBe(3);
     expect(BASE_HANDLER_SRC).toContain('return aiCmDedupeExportSource(aiCmCollectExportSource()).messages;');
   });
 
-  test('OFF: сообщения без hidden-полей возвращаются ТЕМИ ЖЕ объектами (идентичность)', () => {
+  test('OFF: сообщения без секций и hidden-полей возвращаются ТЕМИ ЖЕ объектами (идентичность)', () => {
     const src = [{ role: 'user', text: 'вопрос' }, { role: 'assistant', text: 'ответ' }];
     const res = P.sanitizeEmitMessages(src);
     expect(res.messages[0]).toBe(src[0]);
     expect(res.messages[1]).toBe(src[1]);
   });
 
-  test('умолчание тумблера — ВЫКЛ (отсутствие ключа = текущее поведение)', () => {
+  test('OFF: прочие 5 платформ байтово прежние и на OFF, и на ON (R-D)', () => {
+    PLATFORMS.filter(function (f) { return f.site !== 'deepseek'; }).forEach(function (fixture) {
+      const input = networkMessages(fixture);
+      [emitNetworkOff(fixture, input), emitNetworkOn(fixture, input)].forEach(function (out) {
+        expect([fixture.site, out[0].text]).toEqual([fixture.site, fixture.user]);
+        expect([fixture.site, out[1].text]).toEqual([fixture.site, fixture.assistant]);
+      });
+    });
+  });
+
+  test('умолчание тумблера — ВЫКЛ (отсутствие ключа = вопросы и ответы)', () => {
     const e = makeEmitter();
     expect(e.hidden()).toBe(false);
     expect(CONTENT_SRC).toContain('var aiCmIncludeHiddenInExport = false;');
@@ -458,12 +653,269 @@ describe('O-7 D2: тумблер OFF — байтовый регресс-пин 
 });
 
 /* =====================================================================================
- * R1: санация O-20 при OFF активна
+ * D3: чистая функция stripReasoningSections — урезание секций [REASONING]…[ANSWER]…
+ * ===================================================================================== */
+describe('O-7 D3: stripReasoningSections — чистое урезание секций reasoning', () => {
+  test('одна пара → только часть после [ANSWER] (маркеры и форматный перевод строки убраны)', () => {
+    expect(P.stripReasoningSections(NETWORK_ASSISTANT_TEXT)).toBe(ANSWER_TEXT);
+    expect(P.stripReasoningSections('[REASONING]\n' + REASONING_TEXT + '\n\n[ANSWER]\n' + ANSWER_TEXT))
+      .toBe(ANSWER_TEXT);
+    expect(P.stripReasoningSections('[REASONING]\r\nр\r\n\r\n[ANSWER]\r\nо')).toBe('о');
+  });
+
+  test('идемпотентность: повторный вызов на своём же выходе ничего не меняет', () => {
+    const once = P.stripReasoningSections(NETWORK_ASSISTANT_TEXT);
+    expect(once).toBe(ANSWER_TEXT);
+    expect(P.stripReasoningSections(once)).toBe(once);
+    const two = P.stripReasoningSections(
+      'x\n[REASONING]\nр1\n\n[ANSWER]\nо1\n[REASONING]\nр2\n\n[ANSWER]\nо2');
+    expect(P.stripReasoningSections(two)).toBe(two);
+  });
+
+  test('тексты без пары маркеров байтово неизменны (6 платформ, разметка, NBSP, пустая строка)', () => {
+    const texts = [
+      'Вопрос ChatGPT', 'Ответ Gemini с **markdown** и `кодом`',
+      '  NBSP\u00a0и хвост  ', '# Заголовок\n\n- список\n- ещё', '', '…', 'C# и Java'
+    ];
+    texts.forEach(function (t) { expect([t, P.stripReasoningSections(t)]).toEqual([t, t]); });
+    PLATFORMS.forEach(function (fixture) {
+      expect([fixture.site, P.stripReasoningSections(fixture.user)]).toEqual([fixture.site, fixture.user]);
+      if (fixture.site !== 'deepseek') {
+        expect([fixture.site, P.stripReasoningSections(fixture.assistant)])
+          .toEqual([fixture.site, fixture.assistant]);
+      }
+    });
+  });
+
+  test('[ANSWER] без предшествующего [REASONING] текст не меняет', () => {
+    ['[ANSWER]\nответ',
+      'вопрос [ANSWER]\nответ [REASONING]\nрассуждение',
+      'ответ [ANSWER] и всё'].forEach(function (t) {
+      expect([t, P.stripReasoningSections(t)]).toEqual([t, t]);
+    });
+  });
+
+  test('несколько пар в одном тексте — обработаны ВСЕ (все ответы остаются)', () => {
+    const text = '[REASONING]\nр1\n\n[ANSWER]\nо1\n\n[REASONING]\nр2\n\n[ANSWER]\nо2';
+    expect(P.stripReasoningSections(text)).toBe('о1\n\nо2');
+    // текст вокруг пары сохраняется байтово
+    expect(P.stripReasoningSections('префикс [REASONING]\nр\n\n[ANSWER]\nо')).toBe('префикс о');
+  });
+
+  test('нестрока/мусор не роняет функцию', () => {
+    expect(P.stripReasoningSections(null)).toBe('');
+    expect(P.stripReasoningSections(undefined)).toBe('');
+    expect(P.stripReasoningSections(42)).toBe('42');
+  });
+});
+
+/* =====================================================================================
+ * S3/S4/S5 (OFF): служебный тул-мусор DeepSeek++ в файл экспорта не едет
+ * ===================================================================================== */
+describe('O-7 S3/S4/S5: OFF-путь убирает [TOOL_RESULTS] и XML-вызовы тулов', () => {
+  const ds = PLATFORMS[2];
+
+  test('D-пин OFF: выдержка артефакта …-21-29 — user-ход с тул-результатами удалён, вызовы ассистента вырезаны', () => {
+    const off = emitNetworkOff(ds, artifactMessages());
+    // S3: машинный user-ход (результаты тулов + хвост) в экспорте отсутствует ЦЕЛИКОМ
+    expect(off.length).toBe(1);
+    expect(off[0].role).toBe('assistant');
+    // S4: рукописный оракул «минус мусор» — проза байтово, вызовов нет
+    expect(off[0].text).toBe(ARTIFACT_ASSISTANT_ORACLE);
+    expect(off[0].text).toContain('Поймал только служебный запрос — это НЕ чат.');
+    expect(off[0].text).toContain('Теперь ловлю новый трафик.');
+    // D-пин: в OFF-экспорте нет НИ тул-результатов, НИ вызовов, НИ хвоста-приглашения,
+    // НИ reasoning-секций, НИ инъекций DeepSeek++
+    const body = JSON.stringify(off);
+    ['[TOOL_RESULTS]', '[/TOOL_RESULTS]', '<browser_', '<memory_', '</browser_', '</memory_',
+      'Continue answering based on the tool results above.', '[REASONING]', '[ANSWER]',
+      'deepseek-pp', 'Existing memories:', 'Tool call format reminder:'
+    ].forEach(function (needle) { expect([needle, body.indexOf(needle)]).toEqual([needle, -1]); });
+    // выдержка == независимому оракулу OFF-пути (регулярочная реализация S3/S4/S5)
+    expect(JSON.stringify(off)).toBe(JSON.stringify(oracleOffExport(artifactMessages())));
+  });
+
+  test('D-пин OFF: тул-мусора нет ни в одном из четырёх форматов (md/txt/json/pdf)', async () => {
+    const hist = historyFrom(ds, emitNetworkOff(ds, artifactMessages()));
+    const md = Builders.buildMdFromHistory(hist, 'DeepSeek');
+    const txt = Builders.buildTxtFromHistory(hist);
+    const json = JSON.parse(Builders.buildJsonFromHistory(hist, 'DeepSeek'));
+    const pdf = await renderPdfForm(hist);
+    expect(json.messages.length).toBe(1);                       // user-ход тул-результатов выброшен
+    expect(json.messages[0].text).toBe(ARTIFACT_ASSISTANT_ORACLE);
+    [md, txt, JSON.stringify(json), pdf].forEach(function (b) {
+      expect(b).not.toContain('[TOOL_RESULTS]');
+      expect(b).not.toContain('Continue answering based on the tool results above.');
+      expect(b).not.toContain('browser_type');
+      expect(b).not.toContain('browser_evaluate_script');
+      expect(b).not.toContain('memory_update_result');
+      expect(b).toContain('Поймал только служебный запрос');
+    });
+  });
+
+  test('D-пин ON: тот же вход в сыром режиме — и тул-результаты, и XML-вызовы на месте (ON не тронут)', () => {
+    const on = emitNetworkOn(ds, artifactMessages());
+    expect(on.length).toBe(2);
+    expect(on[0].text).toBe(ARTIFACT_TOOL_RESULTS_USER);         // user-ход как есть
+    expect(on[1].text).toBe(ARTIFACT_ASSISTANT_RAW);             // вызовы как есть
+    const txt = Builders.buildTxtFromHistory(historyFrom(ds, on));
+    expect(txt).toContain('[TOOL_RESULTS]');
+    expect(txt).toContain('<memory_update_result>');
+    expect(txt).toContain('Continue answering based on the tool results above.');
+    expect(txt).toContain('<browser_type>');
+    expect(txt).toContain('<browser_evaluate_script>');
+    expect(txt).toBe(ARTIFACT_TOOL_RESULTS_USER + '\n\n' + ARTIFACT_ASSISTANT_RAW);
+  });
+
+  test('S3: user-ход из одних тул-результатов (+ необязательный хвост) распознаётся, смешанный — нет', () => {
+    expect(P.isToolResultsOnlyText(ARTIFACT_TOOL_RESULTS_USER)).toBe(true);
+    expect(P.isToolResultsOnlyText('[TOOL_RESULTS]\n<browser_click_result>{}</browser_click_result>\n[/TOOL_RESULTS]')).toBe(true);
+    expect(P.isToolResultsOnlyText('  \n[TOOL_RESULTS]\nx\n[/TOOL_RESULTS]  \n Continue answering based on the tool results above. \n')).toBe(true);
+    // НЕ целиком: текст пользователя рядом, незакрытый блок, склейка двух блоков, чужой хвост
+    expect(P.isToolResultsOnlyText('мой вопрос\n[TOOL_RESULTS]\nx\n[/TOOL_RESULTS]')).toBe(false);
+    expect(P.isToolResultsOnlyText('[TOOL_RESULTS]\nx')).toBe(false);
+    expect(P.isToolResultsOnlyText('[TOOL_RESULTS]\nx\n[/TOOL_RESULTS]\n\n[TOOL_RESULTS]\ny\n[/TOOL_RESULTS]')).toBe(false);
+    expect(P.isToolResultsOnlyText('[TOOL_RESULTS]\nx\n[/TOOL_RESULTS]\n\nПродолжай.')).toBe(false);
+    expect(P.isToolResultsOnlyText('обычный вопрос')).toBe(false);
+    expect(P.isToolResultsOnlyText('')).toBe(false);
+  });
+
+  test('S3: такой user-ход из массива удаляется, счётчик dropped растёт, пропуск O-20 не пишется', () => {
+    const res = P.sanitizeEmitMessages([
+      { role: 'user', text: ARTIFACT_TOOL_RESULTS_USER, id: 'u1' },
+      { role: 'assistant', text: 'Ответ по существу.', id: 'a1' }
+    ]);
+    expect(res.messages.length).toBe(1);
+    expect(res.messages[0].text).toBe('Ответ по существу.');
+    expect(res.dropped).toBe(1);
+    expect(res.skipped).toEqual([]);                 // удаление — не «пропуск санации»
+    expect(res.sanitized).toBe(0);
+  });
+
+  test('S4: вырезаются ВСЕ теги списка (пары, нежадно, тело с чужими тегами внутри)', () => {
+    TOOL_CALL_TAG_NAMES.forEach(function (tag) {
+      const src = 'до\n\n<' + tag + ' attr="1">\n{"x": "<browser_click>", "y": 1}\n</' + tag + '>\n\nпосле';
+      expect([tag, P.stripToolCallBlocks(src)]).toEqual([tag, 'до\n\nпосле']);
+    });
+    // префиксные семейства (задача: shell_\w+, python_\w+, skill_\w+) — любые имена семейства
+    TOOL_CALL_FAMILY_EXAMPLES.forEach(function (tag) {
+      const src = 'до\n\n<' + tag + '>\n{}\n</' + tag + '>\n\nпосле';
+      expect([tag, P.stripToolCallBlocks(src)]).toEqual([tag, 'до\n\nпосле']);
+    });
+    // несколько блоков подряд — обработаны все
+    expect(P.stripToolCallBlocks(
+      'A\n\n<browser_click>{}</browser_click>\n\n<browser_key>{"key":"Enter"}</browser_key>\n\nB'))
+      .toBe('A\n\nB');
+    // атрибуты открывающего тега допускаются
+    expect(P.stripToolCallBlocks('A\n<browser_fill selector="#q" text="привет" delay="50"></browser_fill>\nB'))
+      .toBe('A\nB');
+  });
+
+  test('S4: теги-РЕЗУЛЬТАТЫ и обычные тексты/разметка не тронуты (байтово)', () => {
+    // result-теги не входят в список вызовов: их вырезает S3 вместе с user-ходом
+    ['<browser_click_result>\n{"ok":true}\n</browser_click_result>',
+      '<memory_update_result>{}</memory_update_result>',
+      '<web_search_result>{}</web_search_result>'
+    ].forEach(function (t) { expect([t, P.stripToolCallBlocks(t)]).toEqual([t, t]); });
+    // пары без тела-близнеца, одиночные теги, чужой закрывающий — не трогаем
+    ['<browser_click>{}', 'текст <browser_click> внутри строки',
+      '<browser_click>{}</browser_other>', '<browser>{}<browser>'
+    ].forEach(function (t) { expect([t, P.stripToolCallBlocks(t)]).toEqual([t, t]); });
+    // обычные тексты всех платформ — байтово (быстрый выход по '<')
+    PLATFORMS.forEach(function (fixture) {
+      expect([fixture.site, P.stripToolCallBlocks(fixture.user)]).toEqual([fixture.site, fixture.user]);
+      expect([fixture.site, P.stripToolCallBlocks(fixture.assistant)]).toEqual([fixture.site, fixture.assistant]);
+    });
+    ['', 'C# и Java', 'a < b и c > d', 'код: if (a<b) { }', '**markdown** и `код`'].forEach(function (t) {
+      expect([t, P.stripToolCallBlocks(t)]).toEqual([t, t]);
+    });
+    expect(P.stripToolCallBlocks(null)).toBe('');
+    expect(P.stripToolCallBlocks(42)).toBe('42');
+  });
+
+  test('S4 идемпотентен: повторный вызов на своём же выходе ничего не меняет', () => {
+    const once = P.stripToolCallBlocks(ARTIFACT_ASSISTANT_RAW);
+    expect(once).toBe(ARTIFACT_ASSISTANT_ORACLE);
+    expect(P.stripToolCallBlocks(once)).toBe(once);
+  });
+
+  test('S5: ход ассистента из одних тул-коллов и пустые тексты в экспорт не попадают', () => {
+    const res = P.sanitizeEmitMessages([
+      { role: 'user', text: 'вопрос' },
+      { role: 'assistant', text: '<browser_click>{"selector":"#go"}</browser_click>' },
+      { role: 'assistant', text: '' },
+      { role: 'assistant', text: '   \n  ' },
+      { role: 'assistant', text: 'ответ' }
+    ]);
+    expect(res.messages.map(function (m) { return m.text; })).toEqual(['вопрос', 'ответ']);
+    expect(res.dropped).toBe(3);
+    // сообщение-ход, ставший пустым после урезания reasoning, тоже уходит
+    const onlyReasoning = P.sanitizeEmitMessages([{ role: 'assistant', text: '[REASONING]\nр\n\n[ANSWER]\n' }]);
+    expect(onlyReasoning.messages).toEqual([]);
+    expect(onlyReasoning.dropped).toBe(1);
+  });
+
+  test('R-пин: сообщения без тул-мусора — ТЕ ЖЕ объекты (O-20/вызовы не переписывают вход)', () => {
+    const plain = [{ role: 'user', text: 'вопрос' }, { role: 'assistant', text: 'ответ' }];
+    const res = P.sanitizeEmitMessages(plain);
+    expect(res.messages[0]).toBe(plain[0]);
+    expect(res.messages[1]).toBe(plain[1]);
+    expect(res.dropped).toBe(0);
+    // вход S4/S3 не мутируется: исходный ход ассистента байтово прежний
+    const input = artifactMessages();
+    const snapshot = input.map(function (m) { return m.text; });
+    P.sanitizeEmitMessages(input);
+    expect(input.map(function (m) { return m.text; })).toEqual(snapshot);
+    expect(input[0].text).toBe(ARTIFACT_TOOL_RESULTS_USER);
+    expect(input[1].text).toBe(ARTIFACT_ASSISTANT_RAW);
+  });
+
+  test('R-пин: 5 прочих платформ байтово прежние на обоих путях (тул-мусора там нет)', () => {
+    PLATFORMS.filter(function (f) { return f.site !== 'deepseek'; }).forEach(function (fixture) {
+      const input = networkMessages(fixture);
+      [emitNetworkOff(fixture, input), emitNetworkOn(fixture, input)].forEach(function (out) {
+        expect([fixture.site, out.map(function (m) { return m.text; })])
+          .toEqual([fixture.site, [fixture.user, fixture.assistant]]);
+      });
+    });
+    // чужие тексты, ПОХОЖИЕ на мусор (подстрока, но не целый ход), не вырезаются
+    const lookalike = [
+      { role: 'user', text: 'мой вопрос: [TOOL_RESULTS] — просто упоминание' },
+      { role: 'assistant', text: 'пример из доки: <browser_click>{} — это вызов' }
+    ];
+    const res = P.sanitizeEmitMessages(lookalike);
+    expect(res.messages.map(function (m) { return m.text; }))
+      .toEqual([lookalike[0].text, lookalike[1].text]);
+    expect(res.dropped).toBe(0);
+  });
+
+  test('source-пины: S3/S4/S5 стоят в OFF-пути пайплайна, ON-путь их не вызывает', () => {
+    expect(PIPELINE_SRC).toContain('function isToolResultsOnlyText(text)');
+    expect(PIPELINE_SRC).toContain('function stripToolCallBlocks(text)');
+    expect(PIPELINE_SRC).toContain('function isEmptyExportText(text)');
+    expect(PIPELINE_SRC).toContain('if (m.role === \'user\' && isToolResultsOnlyText(raw)) { dropped++; continue; }');
+    expect(PIPELINE_SRC).toContain('var cut = stripToolCallBlocks(');
+    // полный список тегов — в константе пайплайна
+    TOOL_CALL_TAG_NAMES.forEach(function (tag) {
+      expect([tag, PIPELINE_SRC.indexOf("'" + tag + "'") >= 0]).toEqual([tag, true]);
+    });
+    expect(PIPELINE_SRC).toContain("|shell_\\\\w+|python_\\\\w+|skill_\\\\w+");
+    // ON-путь (сырой режим) S3/S4/S5 не зовёт: вырезает и удаляет ТОЛЬКО OFF
+    const onFn = sliceSource(PIPELINE_SRC, 'function includeHiddenExportBlocks(messages)', 'var Api = {');
+    expect(onFn).not.toContain('stripToolCallBlocks');
+    expect(onFn).not.toContain('isToolResultsOnlyText');
+    expect(onFn).not.toContain('isEmptyExportText');
+    expect(onFn).toContain('HIDDEN_REASONING_TAG');
+  });
+});
+
+/* =====================================================================================
+ * R1: санация O-20 при OFF активна + секции reasoning урезаны на выходе
  * ===================================================================================== */
 describe('O-7 R1: при OFF санация O-20 активна (инъекции вырезаны)', () => {
   const ds = PLATFORMS[2];
 
-  test('md/txt/json OFF: инъекций нет, видимый текст на месте', () => {
+  test('md/txt/json OFF: инъекций нет, секций reasoning нет, ответ на месте', () => {
     const hist = historyFrom(ds, emitNetworkOff(ds));
     const md = Builders.buildMdFromHistory(hist, 'DeepSeek');
     const txt = Builders.buildTxtFromHistory(hist);
@@ -471,11 +923,17 @@ describe('O-7 R1: при OFF санация O-20 активна (инъекци�
     expect(md).toContain(VISIBLE_USER_TEXT);
     expect(txt).toContain(VISIBLE_USER_TEXT);
     expect(json.messages[0].text).toBe(VISIBLE_USER_TEXT);
+    expect(json.messages[1].text).toBe(ANSWER_TEXT);          // OFF: только часть [ANSWER]
+    expect(md).toContain(ANSWER_TEXT);
+    expect(txt).toContain(ANSWER_TEXT);
     [md, txt, JSON.stringify(json)].forEach(function (body) {
       expect(body).not.toContain('deepseek-pp');
       expect(body).not.toContain('Existing memories:');
       expect(body).not.toContain('Tool call format reminder:');
       expect(body).not.toContain('Continue answering based on the tool results above.');
+      expect(body).not.toContain('[REASONING]');
+      expect(body).not.toContain('[ANSWER]');
+      expect(body).not.toContain(REASONING_TEXT);
     });
   });
 
@@ -502,7 +960,7 @@ describe('O-7 R1: при OFF санация O-20 активна (инъекци�
 
   test('OFF: санированный user-текст байтово равен видимому (оракул и продакшн совпали)', () => {
     expect(P.sanitizeInjectedUserText(INJECTED_USER_TEXT)).toBe(VISIBLE_USER_TEXT);
-    expect(oracleCurrentBehaviour([{ role: 'user', text: INJECTED_USER_TEXT }])[0].text).toBe(VISIBLE_USER_TEXT);
+    expect(oracleOffExport([{ role: 'user', text: INJECTED_USER_TEXT }])[0].text).toBe(VISIBLE_USER_TEXT);
   });
 });
 
@@ -541,6 +999,17 @@ describe('O-7 R2: tokens/pct/база не меняются от тумблер�
     expect(input[1].text).toBe(NETWORK_ASSISTANT_TEXT);
   });
 
+  test('OFF не мутирует базу метрик: урезание живёт только на выходе экспорта', () => {
+    const input = networkMessages(ds);
+    const e = makeEmitter();
+    e.offline();
+    const before = input.map(function (m) { return m.text; });
+    const out = e.run(input);
+    expect(e.ctx.lastBaseTexts).toEqual(before);          // база метрик байтово прежняя
+    expect(input[1].text).toBe(NETWORK_ASSISTANT_TEXT);   // вход не мутирован
+    expect(out[1].text).toBe(ANSWER_TEXT);                // урезан только выход
+  });
+
   test('source-пин: текст метрик (aiCmPreparedText/aiCmMetricBaseText) hidden-полей не видит', () => {
     const prepared = sliceSource(CONTENT_SRC, 'function aiCmPreparedText(messages)', 'function aiCmMetricBaseText(fallback)');
     const metric = sliceSource(CONTENT_SRC, 'function aiCmMetricBaseText(fallback)', '// ================= v61diag');
@@ -548,9 +1017,11 @@ describe('O-7 R2: tokens/pct/база не меняются от тумблер�
     expect(prepared).not.toContain('hiddenReasoning');
     expect(metric).not.toContain('hiddenReasoning');
     expect(metric).toContain('return aiCmPreparedText(aiCmBasePrepared);');
-    // metrics-текст строится из СХЛОПНУТОЙ БАЗЫ снимка, а не из выхода точки эмита
+    // metrics-текст строится из СХЛОПНУТОЙ БАЗЫ снимка, а не из выхода точки эмита:
+    // ни O-20, ни hidden-блоки, ни урезание секций метрик не касаются
     expect(metric).not.toContain('aiCmSanitizeEmitUserTexts');
     expect(metric).not.toContain('includeHiddenExportBlocks');
+    expect(metric).not.toContain('stripReasoningSections');
   });
 });
 
@@ -689,6 +1160,14 @@ describe('O-7 R3: регресс-контур O-11/O-31/O-27/O-33/O-15…O-20 н
     expect(PIPELINE_SRC).toContain('function shouldSkipGsaPageGuard(state)');
     expect(PIPELINE_SRC).toContain('function shouldSkipAutoExport(state)');
     expect(PIPELINE_SRC).toContain('function includeHiddenExportBlocks(messages)');
+    expect(PIPELINE_SRC).toContain('function stripReasoningSections(text)');
+    // S3/S4/S5: чистые функции тул-мусора DeepSeek++ (OFF-путь) на месте
+    expect(PIPELINE_SRC).toContain('function isToolResultsOnlyText(text)');
+    expect(PIPELINE_SRC).toContain('function stripToolCallBlocks(text)');
+    expect(PIPELINE_SRC).toContain('function isEmptyExportText(text)');
+    // база секций не тронута: перехватчик по-прежнему собирает [REASONING]/[ANSWER] в текст хода
+    expect(INTERCEPT_SRC).toContain("var REASONING_TAG = '[REASONING]';");
+    expect(INTERCEPT_SRC).toContain("var ANSWER_TAG = '[ANSWER]';");
     expect(EXPORT_MGR_SRC).toContain("reason: 'base-pending',");
     expect(EXPORT_MGR_SRC).toContain('function aiCmAutoExportStartDownload(content, file, fmt)');
     // O-27: пост-гард единственной точки скачивания живёт в сборщиках экспорта
@@ -716,7 +1195,14 @@ describe('O-7 R4: i18n и a11y тумблера «Включать reasoning и 
       expect([key, en[key].message.length > 0]).toEqual([key, true]);
       expect([key, en[key].message === ru[key].message]).toEqual([key, false]);
     });
-    expect(ru[HIDDEN_LABEL_KEY].message).toBe(HIDDEN_LABEL_RU);
+    expect(ru[HIDDEN_LABEL_KEY].message).toBe(HIDDEN_LABEL_RU);      // метку не меняем
+    // O-7: подсказка описывает НОВУЮ семантику (OFF = вопросы и ответы, ON = всё как есть)
+    expect(ru[HIDDEN_HINT_KEY].message).toBe(HIDDEN_HINT_RU);
+    expect(en[HIDDEN_HINT_KEY].message).toMatch(/^Off: /);
+    expect(en[HIDDEN_HINT_KEY].message).toContain('reasoning');
+    expect(en[HIDDEN_HINT_KEY].message).toContain('injections');
+    // i18n-инвариант: fallback разметки байтово равен ru-значению словаря
+    expect(OPTIONS_HTML).toContain('data-i18n="' + HIDDEN_HINT_KEY + '">' + HIDDEN_HINT_RU + '</span>');
   });
 
   test('разметка: RU-метка заявлена ключом, контрол связан с подписью через label[for]', () => {

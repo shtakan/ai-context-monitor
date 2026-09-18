@@ -260,6 +260,10 @@ describe('O-18: экспортный сетевой дозапрос истор�
     expect(body).toContain(NET_ONLY_PHRASE2);
     expect(body).toContain('[REASONING]');
     expect(body).toContain('[ANSWER]');
+    // O-7 (OFF): секции — часть БАЗЫ (стенд собирает файл своим buildHistoryMessages, минуя
+    // единую точку выхода); на реальном выходе экспорта OFF остаётся только часть [ANSWER].
+    expect(stand.last().messageTexts[1]).toContain('[REASONING]');
+    expect(P.stripReasoningSections(stand.last().messageTexts[1])).toBe(FULL_ANSWER);
     expect(stand.logs.join('\n')).toContain('[AI CM][net-sync] convId=' + CID + ' ok=1 reason=merged refetched=1');
     stand.dom.window.close();
   });
@@ -303,6 +307,9 @@ describe('O-18: экспортный сетевой дозапрос истор�
     const body = sb.body();
     expect(body).toContain(LIVE_SEAM);              // прежний live-путь: текст как был
     expect(body).toContain('[ANSWER]');
+    // O-7 (OFF): в БАЗЕ секции на месте (файл стенда идёт из базы), урезание — на выходе.
+    expect(stand.last().messageTexts[1]).toContain('[REASONING]');
+    expect(P.stripReasoningSections(stand.last().messageTexts[1])).toBe(LIVE_ANSWER);
     expect(sb.downloads.length).toBe(1);            // файл ровно один, латч выставлен
     expect(P.getAutoExportFired(sb.ctx.autoExportFired, 'deepseek', CID)).toBe(true);
     expect(stand.logs.join('\n')).toContain('ok=0 reason=error');

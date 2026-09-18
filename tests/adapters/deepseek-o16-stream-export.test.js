@@ -340,6 +340,11 @@ describe('O-16: DeepSeek — экспорт в середине живого SSE
     expect(body).toContain(FULL_ANSWER);                   // обрыва на полуслове нет
     expect(body).toContain('[REASONING]');
     expect(body).toContain('[ANSWER]');
+    // O-7 (OFF): стенд собирает файл из БАЗЫ напрямую (свой buildHistoryMessages, минуя
+    // единую точку выхода aiCmCollectExportSource), поэтому секции в теле остаются — это
+    // БАЗА. На реальном выходе экспорта OFF оставляет только часть [ANSWER].
+    expect(stand.last().messageTexts[1]).toContain('[REASONING]');
+    expect(P.stripReasoningSections(stand.last().messageTexts[1])).toBe(FULL_ANSWER);
 
     sb.run(95);                                            // повторный триггер — файл ровно один
     expect(sb.downloads.length).toBe(1);

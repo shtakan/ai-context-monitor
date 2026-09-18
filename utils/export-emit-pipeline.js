@@ -36,6 +36,17 @@
  *     расширений (DeepSeek++): ровно одна пара маркеров видимого промпта → trim текста
  *     между ними, иначе строка байтово; injectedUserTextSkipReason — причина пропуска;
  *     sanitizeEmitMessages — то же по массиву (трогается ТОЛЬКО role=user)
+ *   - stripReasoningSections(text) — O-7 (OFF): урезание сетевых секций
+ *     [REASONING]…[ANSWER]… до части [ANSWER] (маркеры убираются). Трогает ТОЛЬКО тексты
+ *     с парой маркеров, идемпотентна; в БАЗЕ секции остаются — урезание только на выходе
+ *     экспорта (sanitizeEmitMessages, OFF-путь тумблера aiCmIncludeHiddenInExport)
+ *   - isToolResultsOnlyText(text) / stripToolCallBlocks(text) — O-7 (OFF, S3/S4):
+ *     служебный тул-мусор DeepSeek++ прочь из экспорта. S3: user-ход, ЦЕЛИКОМ состоящий
+ *     из [TOOL_RESULTS]…[/TOOL_RESULTS] (+ необязательный хвост 'Continue answering based
+ *     on the tool results above.'), из массива удаляется; S4: в текстах ассистента
+ *     вырезаются парные XML-блоки вызовов тулов (18 browser_*, 3 memory_*, web_search,
+ *     web_fetch, семейства shell_, python_, skill_; нежадно, с атрибутами); S5: сообщение
+ *     без текста после S3/S4 в экспорт не идёт (см. sanitizeEmitMessages)
  *   - includeHiddenExportBlocks(messages) — O-7: СЫРОЙ режим экспорта (тумблер ON):
  *     hidden-reasoning DeepSeek (поле захвата hiddenReasoning, в text НЕ входит) уходит
  *     в текст сообщения ОТДЕЛЬНЫМ блоком с пометкой [REASONING]…[ANSWER]…; уже
@@ -1203,6 +1214,159 @@
     return s.slice(from, to).trim();
   }
 
+  // =====================================================================================
+  // O-7 (OFF): УРЕЗАНИЕ СЕКЦИЙ REASONING НА ВЫХОДЕ ЭКСПОРТА.
+  //
+  // Решение владельца (P1=a, P2=OFF): при выключенном тумблере aiCmIncludeHiddenInExport
+  // (default) в файл попадают ТОЛЬКО вопросы и ответы. Сетевой путь DeepSeek собирает текст
+  // хода секциями (core/deepseek-intercept.js, v8):
+  //   [REASONING]\n<рассуждение>\n\n[ANSWER]\n<ответ>
+  // В БАЗЕ (lastBaseTexts/turnsMap/baseText) секции остаются КАК ЕСТЬ — менять базу нельзя
+  // (метрики, пороги, бейдж, пины O-15/O-17/O-18). Урезание — ТОЛЬКО на выходе экспорта
+  // (единая точка aiCmCollectExportSource → sanitizeEmitMessages): от текста остаётся часть
+  // после [ANSWER], сами маркеры убираются. Тексты прочих платформ (ChatGPT/Gemini/GSA/
+  // Claude/Perplexity) пары маркеров не несут → байтово прежние. Симметрично ON-путь
+  // (сырой режим, includeHiddenExportBlocks) не урезает ничего.
+  //
+  // Инварианты чистой функции stripReasoningSections:
+  //   - текст без пары [REASONING]/[ANSWER] возвращается ТЕМ ЖЕ значением (байтово);
+  //   - [ANSWER] без ПРЕДШЕСТВУЮЩЕГО [REASONING] текст не меняет;
+  //   - вырезается ровно пара — от [REASONING] до [ANSWER] включительно плюс ОДИН
+  //     форматный перевод строки сразу после [ANSWER] (форма записи '[ANSWER]\n<ответ>');
+  //     текст до пары сохраняется байтово;
+  //   - несколько пар в одном тексте обрабатываются ВСЕ (все ответы остаются);
+  //   - идемпотентна: на своём же выходе повторный вызов ничего не меняет;
+  //   - чистая: без логов, DOM, chrome и побочных эффектов.
+  // =====================================================================================
+  var SECTION_REASONING_TAG = '[REASONING]';
+  var SECTION_ANSWER_TAG = '[ANSWER]';
+
+  function stripReasoningSections(text) {
+    var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
+    // Нет пары — байтово прежний текст (все прочие платформы, обычные ответы).
+    if (s.indexOf(SECTION_REASONING_TAG) === -1 || s.indexOf(SECTION_ANSWER_TAG) === -1) return s;
+    var out = '';
+    var i = 0;
+    var changed = false;
+    while (i < s.length) {
+      var a = s.indexOf(SECTION_ANSWER_TAG, i);
+      if (a === -1) { out += s.slice(i); break; }
+      var r = (a > 0) ? s.lastIndexOf(SECTION_REASONING_TAG, a - 1) : -1;
+      if (r === -1 || r < i) {
+        // [ANSWER] без пары (в т.ч. уже пройденный маркер) — не трогаем.
+        out += s.slice(i, a + SECTION_ANSWER_TAG.length);
+        i = a + SECTION_ANSWER_TAG.length;
+        continue;
+      }
+      out += s.slice(i, r);                       // текст до пары сохраняется байтово
+      i = a + SECTION_ANSWER_TAG.length;
+      // Форматная склейка '[ANSWER]\n<ответ>': перевод строки — часть маркера, не ответа.
+      if (s.charAt(i) === '\r' && s.charAt(i + 1) === '\n') i += 2;
+      else if (s.charAt(i) === '\n') i += 1;
+      changed = true;
+    }
+    return changed ? out : s;
+  }
+
+  // =====================================================================================
+  // O-7 (OFF, S3/S4/S5): СЛУЖЕБНЫЙ ТУЛ-МУСОР DeepSeek++ — ПРОЧЬ ИЗ ЭКСПОРТА.
+  //
+  // В agent-режиме DeepSeek++ гоняет тул-коллы через саму переписку:
+  //   - РЕЗУЛЬТАТЫ тулов приходят ОТДЕЛЬНЫМ user-сообщением, ЦЕЛИКОМ состоящим из блока
+  //     [TOOL_RESULTS]…[/TOOL_RESULTS] с необязательным хвостом-приглашением
+  //     'Continue answering based on the tool results above.' (своего текста пользователя
+  //     в таком сообщении нет — это машинный ход);
+  //   - ВЫЗОВЫ тулов модель пишет XML-блоками прямо в текст хода ассистента:
+  //     <browser_navigate …>…</browser_navigate>, <memory_save>…</memory_save>,
+  //     <shell_exec>…</shell_exec>, <web_search>…</web_search>, <skill_…>…</skill_…> и др.
+  // В файле экспорта этого быть не должно: OFF = ТОЛЬКО вопросы и ответы. Поэтому:
+  //   S3 — user-сообщение, ЦЕЛИКОМ состоящее из блока результатов (+ хвост), из экспорта
+  //        удаляется (роль user, но контента пользователя в нём нет);
+  //   S4 — в текстах АССИСТЕНТА (роль значения не имеет для прочих платформ — там таких
+  //        тегов нет; user-тексты не трогаются) вырезаются ПАРНЫЕ XML-блоки вызовов по
+  //        списку тегов: открывающий с необязательными атрибутами, тело, закрывающий;
+  //        нежадно, с обратной ссылкой на имя тега (чужой закрывающий не подойдёт);
+  //   S5 — сообщение, у которого после S3/S4 не осталось текста ('' или одни пробелы),
+  //        в экспорт не попадает (ход ассистента из одних тул-коллов пуст для читателя).
+  // Тексты, в которых тул-мусора нет, возвращаются БАЙТОВО тем же значением (пины прочих
+  // платформ и обычных ходов DeepSeek целы). Трогается ТОЛЬКО OFF-путь: ON
+  // (includeHiddenExportBlocks) отдаёт всё как есть.
+  // =====================================================================================
+  var TOOL_RESULTS_OPEN = '[TOOL_RESULTS]';
+  var TOOL_RESULTS_CLOSE = '[/TOOL_RESULTS]';
+  var TOOL_RESULTS_TAIL = 'Continue answering based on the tool results above.';
+
+  /**
+   * S3: текст — ЦЕЛИКОМ блок результатов тулов DeepSeek++ (+ необязательный хвост)?
+   * Пустое/чужое/многосоставное (два блока, текст вокруг) → false: удаляем только
+   * машинный ход целиком, ничего пользовательского не выбрасываем.
+   */
+  function isToolResultsOnlyText(text) {
+    try {
+      var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
+      var t = s.trim();
+      if (t.indexOf(TOOL_RESULTS_OPEN) !== 0) return false;
+      var close = t.indexOf(TOOL_RESULTS_CLOSE);
+      if (close === -1) return false;
+      var rest = t.slice(close + TOOL_RESULTS_CLOSE.length).trim();
+      if (rest === TOOL_RESULTS_TAIL) rest = '';
+      return rest === '';
+    } catch (e) { return false; }
+  }
+
+  // S4: список тегов вызовов DeepSeek++ (18 browser_* + 3 memory_* + web_search/web_fetch)
+  // и три префиксных семейства (shell_*, python_*, skill_*). Пары ищутся по имени тега
+  // (обратная ссылка), поэтому 'browser_key' не съедает 'browser_key_result'.
+  var TOOL_CALL_TAG_NAMES = [
+    'browser_navigate', 'browser_go_back', 'browser_go_forward', 'browser_refresh',
+    'browser_list_tabs', 'browser_select_tab', 'browser_close_tab', 'browser_snapshot',
+    'browser_click', 'browser_hover', 'browser_fill', 'browser_fill_form', 'browser_key',
+    'browser_type', 'browser_attach_file', 'browser_wait_for', 'browser_handle_dialog',
+    'browser_evaluate_script', 'memory_save', 'memory_update', 'memory_delete',
+    'web_search', 'web_fetch'
+  ];
+  var TOOL_CALL_TAG_ALT = '(?:' + TOOL_CALL_TAG_NAMES.join('|') + '|shell_\\w+|python_\\w+|skill_\\w+)';
+  var RE_TOOL_CALL_BLOCK = new RegExp(
+    '<(' + TOOL_CALL_TAG_ALT + ')(?:\\s[^>]*)?>[\\s\\S]*?<\\/\\1\\s*>\\s*', 'g');
+
+  /**
+   * S4: вырезать из текста парные XML-блоки вызовов тулов DeepSeek++.
+   *   - тело нежадное: несколько блоков подряд обрабатываются ВСЕ;
+   *   - атрибуты открывающего тега допускаются ('<browser_click selector="…">');
+   *   - вместе с блоком снимается его пробельная отбивка (пробельный хвост сразу за
+   *     закрывающим тегом): на месте вызова не остаётся лишней пустой строки
+   *     ('…текст\n\n<block>\n\nдальше' → '…текст\n\nдальше'); ОСТАЛЬНАЯ разметка хода
+   *     байтово прежняя — двойные пустые строки прозы, отступы и т.п. не трогаются;
+   *   - ход, ЗАКАНЧИВАВШИЙСЯ блоком (в артефакте после последнего вызова идут пустые
+   *     строки), не оставляет хвостовых пустых строк: они снимаются (только если блоки
+   *     реально вырезаны);
+   *   - текст без таких блоков возвращается БАЙТОВО тем же (обычные ходы всех сервисов);
+   *   - чистая: без логов, DOM и chrome. Идемпотентна на своём же выходе.
+   */
+  function stripToolCallBlocks(text) {
+    var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
+    if (s.indexOf('<') === -1) return s;                 // быстрый выход: блоков нет
+    RE_TOOL_CALL_BLOCK.lastIndex = 0;                    // глобальная регулярка — без утечки состояния
+    var out = s.replace(RE_TOOL_CALL_BLOCK, '');
+    if (out === s) return s;                             // ничего не вырезано → байтово прежний
+    return out.replace(/\s+$/, '');
+  }
+
+  /** S5: текст экспорта пуст ('' или одни пробелы) → сообщения в файле нет. */
+  function isEmptyExportText(text) {
+    try { return String(text == null ? '' : text).trim() === ''; } catch (e) { return false; }
+  }
+
+  /** Копия собственных полей сообщения с ЗАМЕНЁННЫМ текстом (вход не мутируется). */
+  function copyMessageWithText(message, text) {
+    var keep = {};
+    for (var k in message) {
+      if (Object.prototype.hasOwnProperty.call(message, k)) keep[k] = message[k];
+    }
+    keep.text = text;
+    return keep;
+  }
+
   /**
    * O-20: санация массива сообщений экспорта. Трогается ТОЛЬКО role=user: assistant и
    * user-сообщения без ровно одной пары маркеров возвращаются ТЕМИ ЖЕ объектами (байтово,
@@ -1211,54 +1375,75 @@
    * Возвращает { messages, sanitized, skipped } (skipped — причины пропуска по порядку
    * сообщений). Логирование вынесено наружу: чистая функция остаётся чистой, а гейт
    * aiCmDebug и антиспам-подпись живут в вызывающем коде (core/export-manager.js).
-   * O-7 (OFF): служебные поля hidden-захвата снимаются — при выключенном тумблере в
-   * экспорт они не идут (сообщение без таких полей остаётся ТЕМ ЖЕ объектом).
+   * O-7 (OFF): служебные поля hidden-захвата снимаются (в экспорт не идут), сетевые
+   * секции [REASONING]…[ANSWER]… урезаются до части [ANSWER] (stripReasoningSections) —
+   * роль значения не имеет: секции несёт ход ассистента. Сообщение, у которого не
+   * изменилось НИ поле захвата, НИ текст, возвращается ТЕМ ЖЕ объектом.
+   * O-7 (OFF, S3/S4/S5): из экспорта уходит служебный тул-мусор DeepSeek++ —
+   * user-ход из одних [TOOL_RESULTS] (S3) и XML-блоки вызовов тулов в тексте ассистента
+   * (S4); сообщение, у которого после этого текста не осталось, не попадает в массив (S5).
+   * Порядок: stripHiddenFields → stripReasoningSections → S3/S4 → S5 → O-20 (user).
+   * skipped — причины НЕприменённой санации O-20 (как было); dropped — счётчик
+   * сообщений, не поехавших в экспорт по S3/S5.
    */
   function sanitizeEmitMessages(messages) {
     var out = [];
     var sanitized = 0;
     var skipped = [];
+    var dropped = 0;
     try {
       var src = Array.isArray(messages) ? messages : [];
       for (var i = 0; i < src.length; i++) {
         var m = stripHiddenFields(src[i]);
         if (!m || typeof m !== 'object') { out.push(m); continue; }
-        if (m.role !== 'user') { out.push(m); continue; }
-        var text = (typeof m.text === 'string') ? m.text : '';
-        var reason = injectedUserTextSkipReason(text);
-        if (reason !== null) { skipped.push(reason); out.push(m); continue; }
-        var keep = {};
-        for (var k in m) {
-          if (Object.prototype.hasOwnProperty.call(m, k)) keep[k] = m[k];
+        var raw = (typeof m.text === 'string') ? m.text : '';
+        // S3: user-ход целиком из результатов тулов (+ необязательный хвост) — машинный
+        // ход, своего текста пользователя в нём нет: в экспорт не идёт вовсе.
+        if (m.role === 'user' && isToolResultsOnlyText(raw)) { dropped++; continue; }
+        // O-7 (OFF): только часть [ANSWER] — урезание ДО санации O-20 (на выходе экспорта).
+        var bare = stripReasoningSections(raw);
+        if (bare !== raw) m = copyMessageWithText(m, bare);
+        if (m.role !== 'user') {
+          // S4: XML-блоки вызовов тулов DeepSeek++ вырезаются из текста ассистента.
+          var cut = stripToolCallBlocks((typeof m.text === 'string') ? m.text : '');
+          if (cut !== m.text) m = copyMessageWithText(m, cut);
+        } else {
+          var text = (typeof m.text === 'string') ? m.text : '';
+          var reason = injectedUserTextSkipReason(text);
+          if (reason !== null) { skipped.push(reason); }
+          else { m = copyMessageWithText(m, sanitizeInjectedUserText(text)); sanitized++; }
         }
-        keep.role = 'user';
-        keep.text = sanitizeInjectedUserText(text);
-        out.push(keep);
-        sanitized++;
+        // S5: после S3/S4 текста не осталось — сообщения в экспорте нет.
+        if (isEmptyExportText((typeof m.text === 'string') ? m.text : '')) { dropped++; continue; }
+        out.push(m);
       }
     } catch (e) {
-      return { messages: Array.isArray(messages) ? messages : [], sanitized: 0, skipped: [] };
+      return { messages: Array.isArray(messages) ? messages : [], sanitized: 0, skipped: [], dropped: 0 };
     }
-    return { messages: out, sanitized: sanitized, skipped: skipped };
+    return { messages: out, sanitized: sanitized, skipped: skipped, dropped: dropped };
   }
 
   // =====================================================================================
   // O-7: HIDDEN-БЛОКИ DEEPSEEK — СЫРОЙ РЕЖИМ ЭКСПОРТА (тумблер aiCmIncludeHiddenInExport).
   //
-  // Продуктовое решение владельца: по умолчанию экспорт НЕ урезается (OFF = текущее
-  // поведение байтово прежнее), а тумблер «Включать reasoning и инъекции DeepSeek++ в
-  // экспорт» (chrome.storage.local, default OFF) добавляет РОВНО ОДИН сырой режим:
-  //   OFF — санация O-20 активна, hidden-поля захвата снимаются (в экспорт не идут);
-  //   ON  — hidden-reasoning идёт в текст ОТДЕЛЬНЫМ блоком с пометкой [REASONING],
-  //         инъекции DeepSeek++ остаются КАК ЕСТЬ (санация O-20 не применяется).
+  // Продуктовое решение владельца (P1=a, P2=OFF): OFF = в файл идут ТОЛЬКО вопросы и
+  // ответы, а тумблер «Включать reasoning и инъекции DeepSeek++ в экспорт»
+  // (chrome.storage.local, default OFF) добавляет РОВНО ОДИН сырой режим:
+  //   OFF — секции [REASONING]…[ANSWER]… сетевого пути урезаются до части [ANSWER]
+  //         (stripReasoningSections), санация O-20 активна, hidden-поля захвата снимаются;
+  //   ON  — текст как есть (секции на месте), hidden-reasoning идёт в текст ОТДЕЛЬНЫМ
+  //         блоком с пометкой [REASONING], инъекции DeepSeek++ остаются КАК ЕСТЬ
+  //         (санация O-20 не применяется).
   // Метрики (tokens/pct/модель/бейдж) считаются БЕЗ hidden-блоков при ЛЮБОМ положении
   // тумблера: hidden живёт ОТДЕЛЬНЫМ полем сообщения (hiddenReasoning) и в text не входит —
   // его не видят ни aiCmBasePrepared, ни aiCmMetricBaseText.
   // Точка включения — ЕДИНАЯ (выход aiCmCollectExportSource, ровно как у O-20): отсюда
   // сообщения берут ВСЕ четыре формата (md/json/txt + print-pdf) и запись aiCmHistory.
   // =====================================================================================
-  var HIDDEN_REASONING_TAG = '[REASONING]';
-  var HIDDEN_ANSWER_TAG = '[ANSWER]';
+  // Маркеры секций — ОДНА пара констант на оба пути O-7: OFF их вырезает вместе с
+  // reasoning (stripReasoningSections), ON — восстанавливает формат '[REASONING]…[ANSWER]…'.
+  var HIDDEN_REASONING_TAG = SECTION_REASONING_TAG;
+  var HIDDEN_ANSWER_TAG = SECTION_ANSWER_TAG;
 
   /** Есть ли у сообщения служебные поля hidden-захвата (любое, даже пустое). */
   function hasHiddenFields(message) {
@@ -1381,6 +1566,11 @@
     sanitizeInjectedUserText: sanitizeInjectedUserText,
     injectedUserTextSkipReason: injectedUserTextSkipReason,
     sanitizeEmitMessages: sanitizeEmitMessages,
+    // O-7 (OFF): урезание секций reasoning на выходе экспорта — чистая функция наружу.
+    stripReasoningSections: stripReasoningSections,
+    // O-7 (OFF, S3/S4): служебный тул-мусор DeepSeek++ — чистые функции наружу.
+    isToolResultsOnlyText: isToolResultsOnlyText,
+    stripToolCallBlocks: stripToolCallBlocks,
     // O-7: hidden-блоки DeepSeek (сырой режим экспорта) — чистые функции наружу.
     includeHiddenExportBlocks: includeHiddenExportBlocks,
     stripHiddenFields: stripHiddenFields,

@@ -43,11 +43,15 @@ function sanitizeGeminiText(s) {
 // Чистые функции санации — utils/export-emit-pipeline.js (sanitizeEmitMessages).
 var aiCmSanitizeSkipLogged = {};
 // ===== O-7: тумблер «Включать reasoning и инъекции DeepSeek++ в экспорт» =====
-// aiCmIncludeHiddenInExport (chrome.storage.local, default ВЫКЛ). OFF = текущее поведение
-// экспорта байтово прежнее: санация O-20 активна, hidden-блоки не включаются. ON = сырой
-// режим: hidden-reasoning отдельным блоком с пометкой, инъекции DeepSeek++ как есть.
-// Метрики, пороги, бейдж и латчи НЕ зависят от положения тумблера (hidden живёт отдельным
-// полем захвата, а не в тексте). Значение грузит loadExportHiddenSetting().
+// aiCmIncludeHiddenInExport (chrome.storage.local, default ВЫКЛ). Решение владельца
+// (P1=a, P2=OFF): OFF = в файл идут ТОЛЬКО вопросы и ответы — секции [REASONING]…[ANSWER]…
+// сетевого пути DeepSeek урезаются до части [ANSWER] (чистая функция пайплайна
+// stripReasoningSections), санация O-20 активна, hidden-поля захвата снимаются. ON = сырой
+// режим: текст как есть (секции на месте), hidden-reasoning отдельным блоком с пометкой,
+// инъекции DeepSeek++ как есть. БАЗА (lastBaseTexts/baseText/turnsMap) и метрики, пороги,
+// бейдж и латчи от положения тумблера НЕ зависят: секции остаются в базе, hidden живёт
+// отдельным полем захвата, урезание — только на выходе экспорта. Значение грузит
+// loadExportHiddenSetting().
 var aiCmIncludeHiddenInExport = false;
 function aiCmSanitizeDebugOn() {
   // Тот же флаг, что у диагностики DeepSeek (core/deepseek-intercept.js, SECTION 13).
@@ -70,8 +74,10 @@ function aiCmLogSanitizeSkip(reasons) {
 // загружен (отладочный контекст) → массив отдаётся как есть, поведение прежнее.
 // O-7: это ЕДИНАЯ точка выбора OFF/ON для экспорта (как у O-20 — выход всех четырёх
 // форматов md/json/txt + print-pdf и записи aiCmHistory):
-//   тумблер OFF (default) → прежний путь санации O-20 (байты 1:1, hidden в экспорт не идёт);
-//   тумблер ON            → сырой режим: hidden-reasoning отдельным блоком, инъекции как есть.
+//   тумблер OFF (default) → вопросы и ответы: секции [REASONING]…[ANSWER]… урезаются до
+//                           части [ANSWER], санация O-20 активна, hidden снят (OFF-путь);
+//   тумблер ON            → сырой режим: текст как есть, hidden-reasoning отдельным блоком,
+//                           инъекции как есть (O-20 обойдена).
 function aiCmSanitizeEmitUserTexts(messages) {
   try {
     var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;

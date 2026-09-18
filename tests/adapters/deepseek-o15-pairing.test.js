@@ -28,6 +28,7 @@ const { JSDOM, VirtualConsole } = require('jsdom');
 
 const INTERCEPT_PATH = path.join(__dirname, '..', '..', 'core', 'deepseek-intercept.js');
 const ADAPTER_DIR = path.join(__dirname, '..', '..', 'adapters');
+const P = require('../../utils/export-emit-pipeline.js');
 
 // ===================== фикстуры =====================
 
@@ -304,6 +305,10 @@ describe('O-15: DeepSeek live-экспорт — парность ходов и 
     const d = await runLive();
     expect(d.messageTexts[5]).toContain('[ANSWER]\nИтог: берите модель B. Она дешевле и тише.');
     for (const t of d.messageTexts) expect(t).not.toMatch(/\[ANSWER\]\n\./);
+    // O-7 (OFF): секции [REASONING]…[ANSWER]… — часть БАЗЫ хода (метрики/пороги/бейдж),
+    // урезаются они ТОЛЬКО на выходе экспорта — до части [ANSWER].
+    expect(d.messageTexts[5]).toContain('[REASONING]');
+    expect(P.stripReasoningSections(d.messageTexts[5])).toBe('Итог: берите модель B. Она дешевле и тише.');
   });
 
   test('пара assi+assi: reasoning — часть assistant-хода, не отдельное сообщение', async () => {

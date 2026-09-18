@@ -25,7 +25,9 @@
  * tests/adapters/deepseek-o16-stream-export.test.js), сервер — подменённый window.fetch,
  * таймер дозапроса — управляемый (jest fake timers, подсаженные в окно стенда).
  * Инварианты: live-база == база после перезагрузки (состав ходов + БАЙТЫ тела файла),
- * ручной экспорт == база того же момента, [LOW CONFIDENCE]_ на здоровом сценарии нет.
+ * ручной экспорт берёт базу того же момента, [LOW CONFIDENCE]_ на здоровом сценарии нет.
+ * O-7 (OFF): секции [REASONING]…[ANSWER]… остаются в БАЗЕ (метрики/пороги не пересчитываются)
+ * и урезаются единой точкой выхода экспорта до части [ANSWER].
  */
 
 const fs = require('fs');
@@ -414,6 +416,13 @@ describe('O-17: DeepSeek — SPA-чат без перезагрузки', () => 
     const manualMsgs = ((live.messages) || []).map((m, i) => ({ role: m.role, text: live.messageTexts[i] }));
     expect(manualMsgs).toEqual(spa.stand.msgs());               // источник — база ТОГО ЖЕ момента
     expect(bodyTxt(manualMsgs)).toBe(bodyTxt(reload.stand.msgs()));
+
+    // O-7 (OFF): БАЗА несёт секции [REASONING]/[ANSWER] (метрики/пороги не пересчитываются),
+    // а единая точка выхода экспорта оставляет от хода ассистента только часть [ANSWER] —
+    // именно её и собирает ручной файл (buildHistoryMessages → aiCmCollectExportSource).
+    expect(manualMsgs[1].text).toBe('[REASONING]\n' + R1 + '\n\n[ANSWER]\n' + A1);
+    const exportMsgs = P.sanitizeEmitMessages(manualMsgs).messages;
+    expect(exportMsgs.map((m) => m.text)).toEqual([Q1, A1, Q2, A2]);
 
     // v1.14.1: isLowConfidenceBase — живой флаг (baseComplete !== true), префикс даёт options.js
     const baseComplete = live.historyComplete === true;         // маппинг content.js: newBaseComplete
