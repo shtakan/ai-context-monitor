@@ -96,7 +96,7 @@ describe('LOW-2: manifest.json — smoke-тест состава ключей (C
   });
 
   test('инварианты аудита не тронуты: version, default_locale, background, popup, content_scripts', () => {
-    expect(manifest.version).toBe('2.0.8');
+    expect(manifest.version).toBe('2.0.9');
     expect(manifest.default_locale).toBe('ru');
     expect(manifest.background.service_worker).toBe('core/background.js');
     expect(manifest.action.default_popup).toBe('options/options.html');
