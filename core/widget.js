@@ -243,6 +243,15 @@ function resetConversationState() {
     aiCmContentReadySent = false;
   } catch (eH23c) { }
   debugLog('log', '[content] смена чата → состояние виджета сброшено');
+  // O-14 (A): RESET не оставляет попапу старый снимок. Снимок живёт в
+  // chrome.storage.local (глобальный aiCmState + per-host aiCmState:<host> — те же
+  // ключи, что пишет content.js при badge-update). Удаляем ровно эти два ключа;
+  // историю (aiCmHistory*), sync-ключи и selectedModel/customLimit НЕ трогаем.
+  try {
+    if (isExtensionValid() && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.remove(['aiCmState', 'aiCmState:' + window.location.hostname]);
+    }
+  } catch (eResetState14) { }
 }
 
 // ========== ДИЗАЙН-КОНФИГУРАЦИЯ ==========

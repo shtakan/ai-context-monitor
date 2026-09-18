@@ -641,7 +641,30 @@ try {
         candidates.push(changes[key].newValue);
       }
     }
-    if (!candidates.length) return;
+    if (!candidates.length) {
+      // O-14 (B): RESET чистит снимок (core/widget.js: resetConversationState удаляет
+      // ровно aiCmState и aiCmState:<host>) — прежний читатель игнорировал removed и
+      // попап держал старый снимок. Ветка removed: кэш и экран активной вкладки
+      // сбрасываются, показываем «нет данных» и гасим stale-предупреждение.
+      // Ветка newValue выше — байтово прежняя.
+      var removedForTab = false;
+      chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+        var tab = tabs && tabs[0];
+        var tabHost = '';
+        try {
+          if (tab && tab.url) tabHost = new URL(tab.url).hostname;
+        } catch (e) {}
+        removedForTab = (!tabHost && (!!changes.aiCmState || !!changes['aiCmState:' + tabHost])) ||
+          (!!tabHost && (!!changes['aiCmState:' + tabHost] ||
+            (!!changes.aiCmState && !!(changes.aiCmState.oldValue &&
+              changes.aiCmState.oldValue.host === tabHost))));
+        if (!removedForTab) return;
+        cachedState = null;
+        showNoData(aiCmI18nMessage('options_open_supported_site', 'Откройте поддерживаемый сайт'));
+        updateStaleWarning(null, tabHost, '');
+      });
+      return;
+    }
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
       var tab = tabs && tabs[0];
       var tabHost = '';
