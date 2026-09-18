@@ -242,6 +242,21 @@ var aiCmLastSeenConvId = getCurrentConvId() || '';
 window.addEventListener('ai-cm-conversation-changed', function () {
   try {
     var newCid = getCurrentConvId() || '';
+    // O-22 (диагностика, только измерение): строка НА КАЖДЫЙ диспатч события;
+    // показывает, что resetConversationState() ниже вызывается БЕЗУСЛОВНО (в т.ч. когда
+    // newCid не изменился) — и какой lastHistoryWroteKey при этом стирается (гипотеза F4-a).
+    try {
+      if (typeof aiCmDiagLine === 'function') {
+        aiCmDiagLine('o22-conv-changed', {
+          ts: Date.now(),
+          convId: newCid || '(none)',
+          prev: aiCmLastSeenConvId || '(none)',
+          changed: (newCid !== aiCmLastSeenConvId) ? 1 : 0,
+          lastHistKey: (typeof lastHistoryWroteKey !== 'undefined') ? lastHistoryWroteKey : undefined,
+          verdict: 'reset-unconditional'
+        });
+      }
+    } catch (eO22a) { }
     if (newCid !== aiCmLastSeenConvId) {
       debugLog('log', '[AI CM][spa] conv-changed old=' + (aiCmLastSeenConvId || '(none)') +
         ' new=' + (newCid || '(none)') + ' (content)');
@@ -424,6 +439,22 @@ window.addEventListener('ai-cm-full-history', function (ev) {
         ' emit-channel=received convId=' + ((P1 && P1.extractConvIdFromUrl(location.pathname)) || ''));
     }
   } catch (eEmit1) { }
+  // O-22 (диагностика, только измерение): строка НА КАЖДЫЙ диспатч ai-cm-full-history
+  // (в т.ч. до гарда на пустой detail): виден тройной эмит за 4–7 мс и histKey НА МОМЕНТ
+  // приёма снимка — ключ ПРЕДЫДУЩЕЙ записи, с которым сравнится дедуп в processAndSend.
+  try {
+    if (typeof aiCmDiagLine === 'function') {
+      aiCmDiagLine('o22-svc-emit', {
+        ts: Date.now(),
+        convId: (ev && ev.detail && ev.detail.convId) || (typeof getCurrentConvId === 'function' ? (getCurrentConvId() || '') : '') || '(none)',
+        histKey: (typeof baseCount === 'number' ? baseCount : 0) + '|' + ((typeof baseText === 'string' && baseText) ? baseText.length : 0),
+        msgs: (ev && ev.detail && ev.detail.count) || 0,
+        textLen: (ev && ev.detail && typeof ev.detail.text === 'string') ? ev.detail.text.length : 0,
+        lastHistKey: (typeof lastHistoryWroteKey !== 'undefined') ? lastHistoryWroteKey : undefined,
+        src: (typeof aiCmDiagStack === 'function') ? aiCmDiagStack(1) : ''
+      });
+    }
+  } catch (eO22b) { }
   const detail = ev && ev.detail;
   if (!detail || !detail.text) return;
   // O-31: база/pct/экспорт — ТОЛЬКО по ходам текущего разговора (threadId).
@@ -442,6 +473,18 @@ window.addEventListener('ai-cm-full-history', function (ev) {
   debugLog('log', '[AI CM][trace] badge-recv convId=' + (detail.convId || '-') +
     ' msgs=' + (detail.count || 0) +
     ' tokens~' + (Math.round((detail.text || '').length / 4) + (detail.attachTokens || 0)));
+  // O-22 (диагностика, только измерение): ts+convId на КАЖДОЕ обновление бейджа —
+  // та же точка, что и строка badge-recv выше (поведение, байты и гейт не меняются).
+  try {
+    if (typeof aiCmDiagLine === 'function') {
+      aiCmDiagLine('o22-badge-recv', {
+        ts: Date.now(),
+        convId: detail.convId || '(none)',
+        msgs: detail.count || 0,
+        lastHistKey: (typeof lastHistoryWroteKey !== 'undefined') ? lastHistoryWroteKey : undefined
+      });
+    }
+  } catch (eO22c) { }
   // v34/v38: гард по convId — снимок устаревшего чата отбрасываем ЦЕЛИКОМ,
   // но ТОЛЬКО пустой (msgs=0): валидный снимок (msgs>0) всегда доходит до UI
   // (от обнуления защищает гард parse-empty в перехватчике).
@@ -1684,6 +1727,23 @@ function processAndSend() {
     if (isExtensionValid() && baseSeen && lastBaseTexts.length > 0 &&
         !(emitConvA && currentConvB && emitConvA !== currentConvB)) {
       var histKey = baseCount + '|' + (baseText ? baseText.length : 0);
+      // O-22 (диагностика, только измерение): КАЖДАЯ проверка дедуп-ключа baseCount|textLen.
+      // verdict=write — ключ новый, запись пойдёт; verdict=dedup-skip — запись пропущена.
+      // Путь export-manager.js:395 эту проверку НЕ проходит — гипотеза F4-b.
+      try {
+        if (typeof aiCmDiagLine === 'function') {
+          aiCmDiagLine('o22-histkey-dedup', {
+            ts: Date.now(),
+            convId: emitConvA || currentConvB || '(none)',
+            histKey: histKey,
+            lastKey: (typeof lastHistoryWroteKey !== 'undefined') ? lastHistoryWroteKey : undefined,
+            verdict: (histKey !== lastHistoryWroteKey) ? 'write' : 'dedup-skip',
+            baseCount: baseCount,
+            textLen: baseText ? baseText.length : 0,
+            src: (typeof aiCmDiagStack === 'function') ? aiCmDiagStack(1) : ''
+          });
+        }
+      } catch (eO22d) { }
       if (histKey !== lastHistoryWroteKey) {
         lastHistoryWroteKey = histKey;
         // v54: trace записи экспорта — источник ВСЕГДА сеть текущего convId

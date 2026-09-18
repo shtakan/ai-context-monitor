@@ -392,6 +392,23 @@ function aiCmFlushDeferredHistWrite(cid, reason) {
     clearTimeout(p.timer);
     aiCmPendingHistWrite = null;
     debugLog('log', '[AI CM][export] deferred flushed reason=' + reason + ' convId=' + p.convId);
+    // O-22 (диагностика, только измерение): каждый флаш отложенной записи — с histKey и
+    // ТЕКУЩИМ lastHistoryWroteKey. Гипотеза F4-b: aiCmWriteCurrentHistory НЕ читает
+    // lastHistoryWroteKey, поэтому запись ниже дедуп-ключ content.js:1686-1688 не проверяет —
+    // в логе это видно как повтор histKey при неизменившемся lastKey.
+    try {
+      if (typeof aiCmDiagLine === 'function') {
+        aiCmDiagLine('o22-deferred-flush', {
+          ts: Date.now(),
+          convId: p.convId || '(none)',
+          histKey: (typeof baseCount === 'number' ? baseCount : 0) + '|' + ((typeof baseText === 'string' && baseText) ? baseText.length : 0),
+          lastKey: (typeof lastHistoryWroteKey !== 'undefined') ? lastHistoryWroteKey : undefined,
+          reason: reason || '(none)',
+          baseSeen: (typeof baseSeen !== 'undefined' && baseSeen === true) ? 1 : 0,
+          'baseComplete': (typeof baseComplete !== 'undefined' && baseComplete === true) ? 1 : 0
+        });
+      }
+    } catch (eO22e) { }
     aiCmWriteCurrentHistory();
   } catch (e) { debugLog('log', '[AI CM][export] silent-catch aiCmFlushDeferredHistWrite: ' + (e && e.message || e)); }
 }

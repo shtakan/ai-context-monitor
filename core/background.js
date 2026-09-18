@@ -680,17 +680,52 @@ function aiCmPruneHistory() {
   }
 }
 
+// O-22 (диагностика, только измерение): счётчик записей aiCmHistory:<host> за окно 100 мс.
+// Тройной вызов svc-emit/badge-recv за 4–7 мс виден как win100ms=2/3… Код только читает
+// changes/Date.now(): ни storage, ни prune, ни форма записи не меняются. Гейт тот же
+// aiCmDebug, но в SW доступен только чекбокс «Подробные логи» (aiCmDebugLogs).
+var aiCmHistWinDebugOn = false;
+var aiCmHistWin = {};
+try {
+  if (chrome.storage && chrome.storage.local && typeof chrome.storage.local.get === 'function') {
+    chrome.storage.local.get(['aiCmDebugLogs'], function (d) {
+      aiCmHistWinDebugOn = !!(d && d.aiCmDebugLogs === true);
+    });
+  }
+} catch (eDarkGate) { }
+function aiCmHistWinCount(changes, keys) {
+  try {
+    if (!aiCmHistWinDebugOn) return;
+    var now = Date.now();
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      if (k.indexOf('aiCmHistory:') !== 0) continue;
+      var w = aiCmHistWin[k];
+      if (!w || (now - w.startTs) > 100) { w = { startTs: now, count: 0 }; }
+      w.count++;
+      aiCmHistWin[k] = w;
+      var nv = (changes[k] && changes[k].newValue) || {};
+      console.log('[AI CM][diag] o22-hist-onchanged key=' + k + ' ts=' + now +
+        ' win100ms=' + w.count + ' convId=' + (nv.convId || '(none)') +
+        ' msgs=' + ((nv.messages && nv.messages.length) || 0) +
+        ' updatedAt=' + (nv.updatedAt || '(нет)'));
+    }
+  } catch (eWinCount) { }
+}
+
 // Ленивый вызов: content.js пишет 'aiCmHistory:<host>' → storage.onChanged будит SW
 // и дочищает просрочку, не дожидаясь следующего старта браузера. Реагируем только на
 // запись ключа истории в local: прочие ключи и sync-область sweep не запускают.
 if (chrome.storage && chrome.storage.onChanged && chrome.storage.onChanged.addListener) {
   chrome.storage.onChanged.addListener(function (changes, areaName) {
     if (areaName !== 'local' || !changes) return;
+    if (changes.aiCmDebugLogs) aiCmHistWinDebugOn = (changes.aiCmDebugLogs.newValue === true);
     var touched = false;
     var changedKeys = Object.keys(changes);
     for (var i = 0; i < changedKeys.length; i++) {
       if (changedKeys[i].indexOf('aiCmHistory:') === 0) { touched = true; break; }
     }
+    if (changedKeys.length) aiCmHistWinCount(changes, changedKeys);
     if (touched) aiCmPruneHistory();
   });
 }
