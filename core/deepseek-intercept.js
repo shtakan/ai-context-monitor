@@ -274,6 +274,19 @@
 
   // ===== СЕКЦИЯ 4: EMIT (контракт как в gemini v21, + serverTokens, + modelMode) =====
   function emitBaseSnapshot(serverTokens, chatMode) {
+    // O-22 (ИЗМЕРЕНИЕ-2): маркер входа в функцию диспатча ai-cm-full-history.
+    // count — из turnsMap (в области видимости), текст на входе тела ещё не собран →
+    // литерал «(вне области)»; convId — из области видимости. Только диагностика под гейтом.
+    try {
+      if (typeof diagMark === 'function' && typeof diagOn === 'function' && diagOn()) {
+        diagMark('o22-dispatch-fn', {
+          ts: Date.now(),
+          count: Object.keys(turnsMap).length,
+          textLen: '(вне области)',
+          convId: (typeof getConvId === 'function') ? (getConvId() || currentConvId || '') : (currentConvId || '')
+        });
+      }
+    } catch (eO22fn) { }
     serverTokens = (typeof serverTokens === 'number' && serverTokens > 0) ? serverTokens : 0;
     chatMode = chatMode || '';
     lastBaseServerTokens = serverTokens;   // v11 (O-17): для ре-эмита при полноте 0→1
@@ -557,6 +570,15 @@
           // 0→1 надо отдать content.js СРАЗУ: пустой снимок он игнорирует (`!detail.text`),
           // а следующий непустой EMIT может прийти нескоро — и экспорт ушёл бы по 60s-таймауту.
           if (Object.keys(turnsMap).length > 0) {
+            // O-22 (ИЗМЕРЕНИЕ-2): маркер ТОЧКИ диспатча ai-cm-full-history (site=S560).
+            try {
+              if (typeof diagMark === 'function' && typeof diagOn === 'function' && diagOn()) {
+                diagMark('o22-dispatch-site', {
+                  site: 'S560', ts: Date.now(),
+                  count: Object.keys(turnsMap).length, textLen: '(вне области)'
+                });
+              }
+            } catch (eO22s560) { }
             emitBaseSnapshot(lastBaseServerTokens, lastBaseChatMode);
           }
         }
@@ -689,6 +711,15 @@
         }
       }
 
+      // O-22 (ИЗМЕРЕНИЕ-2): маркер ТОЧКИ диспатча ai-cm-full-history (site=S692).
+      try {
+        if (typeof diagMark === 'function' && typeof diagOn === 'function' && diagOn()) {
+          diagMark('o22-dispatch-site', {
+            site: 'S692', ts: Date.now(),
+            count: Object.keys(turnsMap).length, textLen: '(вне области)'
+          });
+        }
+      } catch (eO22s692) { }
       var em = emitBaseSnapshot(lastAccumulated, chatMode);
       if (!loggedHistory) {
         loggedHistory = true;
@@ -1169,6 +1200,15 @@
     // chatMode для realtime = sseModelType (expert/default/null)
     var chatMode = sseModelType || '';
 
+    // O-22 (ИЗМЕРЕНИЕ-2): маркер ТОЧКИ диспатча ai-cm-full-history (site=S1172).
+    try {
+      if (typeof diagMark === 'function' && typeof diagOn === 'function' && diagOn()) {
+        diagMark('o22-dispatch-site', {
+          site: 'S1172', ts: Date.now(),
+          count: Object.keys(turnsMap).length, textLen: '(вне области)'
+        });
+      }
+    } catch (eO22s1172) { }
     var em = emitBaseSnapshot(serverTokens, chatMode);
     if (!loggedRealtime) {
       loggedRealtime = true;
@@ -1464,6 +1504,15 @@
       }
       res.verdicts = exportComposeTurns();
       var turns = Object.keys(turnsMap).length;
+      // O-22 (ИЗМЕРЕНИЕ-2): маркер ТОЧКИ диспатча ai-cm-full-history (site=S1467).
+      try {
+        if (typeof diagMark === 'function' && typeof diagOn === 'function' && diagOn()) {
+          diagMark('o22-dispatch-site', {
+            site: 'S1467', ts: Date.now(),
+            count: turns, textLen: '(вне области)'
+          });
+        }
+      } catch (eO22s1467) { }
       emitBaseSnapshot(Math.max(lastBaseServerTokens || 0, sseRealtimeFinalTokens || 0), sseModelType || lastBaseChatMode);
       res.ok = turns > 0; res.reason = 'merged';
       console.log('[deepseek-intercept] экспорт: сетевой дозапрос применён — ходов в базе=' + turns +

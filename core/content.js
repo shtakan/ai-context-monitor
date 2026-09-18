@@ -429,6 +429,13 @@ function aiCmGsaResetStaleStateOnChatlessDoc() {
 }
 
 window.addEventListener('ai-cm-full-history', function (ev) {
+  // O-22 (ИЗМЕРЕНИЕ-2): маркер ПЕРВОЙ строки колбэка слушателя — ДО блока v81 Step1
+  // и ДО вставок O-22 (блоки A–G2). Только диагностика под гейтом aiCmDebug.
+  try {
+    if (typeof aiCmDiagLine === 'function') {
+      aiCmDiagLine('o22-listener-entry', { ts: Date.now() });
+    }
+  } catch (eO22L1) { }
   // v81 Step1: один флаг-лог на сессию страницы — дошло ли событие 'ai-cm-full-history'
   // до content.js для текущего сервиса. Поведение не меняется.
   try {
@@ -722,6 +729,16 @@ window.addEventListener('ai-cm-full-history', function (ev) {
       }
     } catch (e79) { }
   }
+  // O-22 (ИЗМЕРЕНИЕ-2): маркер непосредственно ПЕРЕД финальным processAndSend() этого
+  // слушателя — src=aiCmDiagStack(2) показывает, из какого пути пришёл вызов.
+  try {
+    if (typeof aiCmDiagLine === 'function') {
+      aiCmDiagLine('o22-call725', {
+        ts: Date.now(),
+        src: (typeof aiCmDiagStack === 'function') ? aiCmDiagStack(2) : ''
+      });
+    }
+  } catch (eO22L2) { }
   processAndSend();
 });
 
