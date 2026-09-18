@@ -976,8 +976,11 @@ describe('O-7 R2: tokens/pct/база не меняются от тумблер�
     const tokensLine = 'Токены: ' + TOKENS + ' / ' + LIMIT + ' (' + PERCENT + '%)';
     expect(mdOff).toContain(tokensLine);
     expect(mdOn).toContain(tokensLine);
-    // шапка (до первого сообщения) у OFF и ON совпадает побайтово
-    expect(mdOff.slice(0, mdOff.indexOf('## '))).toBe(mdOn.slice(0, mdOn.indexOf('## ')));
+          // шапка (до первого сообщения) у OFF и ON совпадает по метрикам побайтово;
+      // строку «Дата экспорта:» нормализуем: два последовательных эмита могут пересечь
+      // миллисекундную границу (flake CI Lint #22 на 377aab9: ...36.956Z vs ...36.955Z)
+    const normStamp = (s) => s.replace(/Дата экспорта: [^\n]+/g, 'Дата экспорта: <STAMP>');
+    expect(normStamp(mdOff.slice(0, mdOff.indexOf('## ')))).toBe(normStamp(mdOn.slice(0, mdOn.indexOf('## '))));
   });
 
   test('OFF и ON: tokens/limit/percent в json равны, различается только текст', () => {
