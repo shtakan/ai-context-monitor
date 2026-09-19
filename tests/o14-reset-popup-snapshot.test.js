@@ -220,7 +220,7 @@ function createChromeMock(initialLocal, activeTabUrl) {
   const listeners = [];
   return {
     chrome: {
-      runtime: { getManifest: function () { return { version: '2.0.9' }; }, getURL: function () { return 'print.html'; }, lastError: null, sendMessage: function () { } },
+      runtime: { getManifest: function () { return { version: '2.0.10' }; }, getURL: function () { return 'print.html'; }, lastError: null, sendMessage: function () { } },
       storage: {
         sync: { get: function (keys, cb) { cb({}); }, set: function () { } },
         local: {

@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.0.10] - 2026-09-19
+### Fixed
+- O-14 (попап не держит старый снимок после сброса чата, RESET): `resetConversationState` удаляет `aiCmState` и `aiCmState` с ключом хоста из `chrome.storage.local`, `storage.onChanged` попапа обрабатывает удаление ключей per-host и показывает «Нет данных» до нового снимка.
+- O-22 (DeepSeek): payload-точный гард повторного диспатча `ai-cm-full-history` в `emitBaseSnapshot` — тройной диспатч идентичного снимка больше не даёт тройной эмит и обновление бейджа, запись в storage остаётся одиночной.
+
 ## [2.0.9] - 2026-09-18
 ### Fixed
 - O-7 (зачистка экспорта DeepSeek, OFF-путь, спецификация S1–S5): дефолтный OFF-экспорт DeepSeek теперь содержит только вопросы и ответы — санация инъекций O-20 (`deepseek-pp-visible-user-prompt`) остаётся (S1); секции `[REASONING]…[ANSWER]…` обрезаются до части после `[ANSWER]` (S2); user-ходы, целиком состоящие из `[TOOL_RESULTS]…[/TOOL_RESULTS]` с необязательным хвостом «Continue answering based on the tool results above.», удаляются (S3); в текстах ассистента вырезаются XML-блоки тул-коллов DeepSeek++ (18 browser-call-тегов + memory/web/shell/python/skill) (S4); сообщения, опустевшие после S3/S4, отсеваются (S5). ON-путь байтово прежний; база/метрики/бейдж от тумблера не зависят. 12 пинов O-7 S3/S4/S5 + регресс-контур O-11/O-31/O-27/O-33/O-15…O-20; live-приёмка 2026-09-18 09:37–09:54: txt-файлы OFF — 0 совпадений findstr по 5 маркерам, ON — совпадения есть; md-шапки OFF=ON по tokens/limit/percent (61414/128000 (48%); 149224/128000 (116.6%)).
