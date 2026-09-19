@@ -213,6 +213,10 @@
   // уже собранных live-ходов): content.js узнаёт о полноте только из непустого EMIT.
   var lastBaseServerTokens = 0;
   var lastBaseChatMode = '';
+  // O-22 (ФИКС F4): сигнатура последнего РЕАЛЬНО опубликованного снимка и его возвращаемое
+  // значение (для раннего возврата вызывающим). null — гард пуст, первый диспатч не глушится.
+  var lastDispatchSig = null;
+  var lastDispatchResult = null;
 
   function resetForNewConversation() {
     diagResetForConv('conv-change', lastDiagConvId);   // O-18 (ИЗМЕРЕНИЕ): кольца — на один convId
@@ -244,6 +248,13 @@
     scheduleHistoryRefetch();
   }
 
+  // O-22 (ФИКС F4): сброс последней сигнатуры на событии смены разговора. Событие диспатчит
+  // resetForNewConversation (выше) и ISOLATED-сторона при SPA-переходе: первый диспатч новой
+  // базы не глушится, даже если convId в URL не изменился.
+  try {
+    window.addEventListener('ai-cm-conversation-changed', function () { lastDispatchSig = null; });
+  } catch (eO22rs) { }
+
   function checkConvChange() {
     var newId = getConvId();
     if (newId !== currentConvId) {
@@ -273,6 +284,41 @@
   } catch (e) { }
 
   // ===== СЕКЦИЯ 4: EMIT (контракт как в gemini v21, + serverTokens, + modelMode) =====
+  // O-22 (ФИКС F4): payload-точная сигнатура диспатча. Берутся ВСЕ поля области видимости, из
+  // которых собирается detail события ai-cm-full-history: convId, состав и тексты ходов
+  // (id, order, role, modelSlug, текст и reasoning — длиной и отпечатком FNV-1a), serverTokens,
+  // chatMode, вложения и вердикт полноты (historyComplete/reachedRoot/baseEmpty). Равенство
+  // сигнатур означает побайтово тот же снимок, поэтому второй диспатч не несёт новой информации.
+  // Сбой сборки → null: гард не действует, диспатч идёт как прежде.
+  function buildDispatchSignature(convId, serverTokens, chatMode) {
+    try {
+      var parts = [
+        String(convId || ''),
+        String(Object.keys(turnsMap).length),
+        String(serverTokens || 0),
+        String(chatMode || ''),
+        String(attachTokens || 0),
+        (attachBreak.imgTokens || 0) + ',' + (attachBreak.docTokens || 0) + ',' +
+          (attachBreak.imgCount || 0) + ',' + (attachBreak.docCount || 0),
+        (histCompletion.historyComplete === true ? '1' : '0') +
+          (histCompletion.reachedRoot === true ? '1' : '0') +
+          (histCompletion.baseEmpty === true ? '1' : '0')
+      ];
+      var keys = Object.keys(turnsMap);
+      var turns = [];
+      for (var i = 0; i < keys.length; i++) {
+        var k = String(keys[i]);
+        var t = turnsMap[k] || {};
+        var tx = (typeof t.text === 'string') ? t.text : '';
+        var rs = (typeof t.reasoning === 'string') ? t.reasoning : '';
+        turns.push(k + ':' + (t.order || 0) + ':' + (t.role || '') + ':' + (t.modelSlug || '') + ':' +
+          tx.length + ':' + diagHash6(tx) + ':' + rs.length + ':' + diagHash6(rs));
+      }
+      turns.sort();   // снимок — это состав, а не порядок ключей turnsMap (порядок detail задаёт t.order)
+      parts.push(turns.join(';'));
+      return parts.join('|');
+    } catch (e) { return null; }
+  }
   function emitBaseSnapshot(serverTokens, chatMode) {
     // O-22 (ИЗМЕРЕНИЕ-2): маркер входа в функцию диспатча ai-cm-full-history.
     // count — из turnsMap (в области видимости), текст на входе тела ещё не собран →
@@ -289,6 +335,29 @@
     } catch (eO22fn) { }
     serverTokens = (typeof serverTokens === 'number' && serverTokens > 0) ? serverTokens : 0;
     chatMode = chatMode || '';
+    // O-22 (ФИКС F4): payload-точный гард ПОВТОРНОГО диспатча — единая точка для ВСЕХ сайтов
+    // (S560/S692/S1172/S1467). Живой лог 2026-09-18 21:31:12: один и тот же снимок
+    // (convId 2d0090f5, count=10, ops APPEND:1765/SET:2, frags THINK 5437#809dbd +
+    // RESPONSE 1592#c40b57) ушёл 3 раза за 10 мс. Сигнатура совпала с последней
+    // ОПУБЛИКОВАННОЙ → снимок не изменился, событие ai-cm-full-history не публикуем.
+    // Гард не зависит от aiCmDebug: под гейтом только строка o22-dispatch-skip.
+    var dispatchSig = buildDispatchSignature(
+      (typeof getConvId === 'function') ? (getConvId() || currentConvId) : currentConvId,
+      serverTokens, chatMode);
+    if (dispatchSig !== null && lastDispatchSig !== null && dispatchSig === lastDispatchSig) {
+      try {
+        if (typeof diagMark === 'function' && typeof diagOn === 'function' && diagOn()) {
+          diagMark('o22-dispatch-skip', {
+            site: 'emitBaseSnapshot', ts: Date.now(),
+            count: Object.keys(turnsMap).length, textLen: '(вне области)',
+            convId: (typeof getConvId === 'function') ? (getConvId() || currentConvId || '') : (currentConvId || ''),
+            sig: (typeof diagHash6 === 'function') ? diagHash6(dispatchSig) : '',
+            sigLen: dispatchSig.length
+          });
+        }
+      } catch (eO22skip) { }
+      return lastDispatchResult;
+    }
     lastBaseServerTokens = serverTokens;   // v11 (O-17): для ре-эмита при полноте 0→1
     lastBaseChatMode = chatMode;           // v11 (O-17)
     var ids = Object.keys(turnsMap).sort(function (a, b) {
@@ -348,7 +417,12 @@
         }
       }));
     } catch (e) { }
-    return { count: ids.length, textLen: text.length, lastModel: lastModel, serverTokens: serverTokens, reasoningTurns: reasoningTurns };
+    var result = { count: ids.length, textLen: text.length, lastModel: lastModel, serverTokens: serverTokens, reasoningTurns: reasoningTurns };
+    // O-22 (ФИКС F4): запоминаем ТОЛЬКО реально опубликованный снимок — по этой сигнатуре
+    // следующий диспатч того же снимка будет остановлен до события.
+    lastDispatchSig = dispatchSig;
+    lastDispatchResult = result;
+    return result;
   }
 
   // v11 (O-17): сводка turnsMap для дампов в момент экспорта (aiCmDumpTurnsSnapshot,
