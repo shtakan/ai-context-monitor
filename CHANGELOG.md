@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.0.11] - 2026-09-21
+### Fixed
+- O-39(B): Qwen history reasoning — перехват истории через XHR-хук (помимо fetch), парсинг reasoning из `content_list[].phase='thinking_summary'` (живая приёмка: SPA-переход/F5, `[REASONING]`/`[ANSWER]` на месте)
+- O-40: санация инъекций Better DeepSeek из экспорта DeepSeek (6 форм: F1–F6, F3 расширена на спан внутри сообщения; живая приёмка: 0 совпадений `<BetterDeepSeek>`, файл 268 КБ → 23 КБ)
+- O-42: санация конверта tool-continuation (4 дескриптора: `local_file_read`, prose-continuation, `original_task`, `tool_results`; живая приёмка: `tool_results=0`, `<local_file_read>=0`)
+- Qwen reasoning toggle: OFF-путь очищает поле `msg.reasoning` в `core/export-manager.js` после `prepareReasoning`, чтобы text-builder не вставлял `[REASONING]` секции безусловно (живая приёмка: OFF→0, ON→45 совпадений `[REASONING]`)
+- Claude md: нормализация роли `'human'` → `'user'` в 5 точках (корень: `core/content.js:653` запись сетевой базы; защита: `base-handler.js:54`, `export-manager.js:178/215`, `export-emit-pipeline.js:567`, `export-text-builders.js:300`; живая приёмка: чередование `## Пользователь` / `## Ассистент`)
+- Регресс шести платформ точечно: DeepSeek/Perplexity/ChatGPT/Gemini/GSA — все 4 проверки зелёные
+
+### Changed
+- Подпись тумблера «Включать reasoning и инъекции расширений (DeepSeek++, Better DeepSeek) в экспорт» обновлена в `options/options.html` и `_locales/ru|en/messages.json` (i18n-инвариант ru ↔ fallback)
+
+### Notes
+- Отклонения (приняты владельцем через делегирование senior-рекомендации 2026-09-21):
+  - O-40: спан формы A (`local_file_read`) внутри сообщения не снимается (0 измеренных спанов в артефакте; литеральный паттерн ломает 11 замороженных тестов)
+  - O-42: пустая пара `<original_task>` и пара `<tool_results>` снимаются только внутри распознанного конверта (якорь prose-continuation); иначе F5/F6 после O-40 выпадали бы из экспорта
+  - O-42: подпись тумблера обновлена также в `_locales/ru|en` (i18n-инвариант)
+  - Claude md: 4 точки нормализации (base-handler:54, export-manager:178/215, export-emit-pipeline:567) не были корнем (корень = content.js:653), но оставлены как защита от прямой подачи `'human'` в билдер
+
 ## [2.0.10] - 2026-09-19
 ### Fixed
 - O-14 (попап не держит старый снимок после сброса чата, RESET): `resetConversationState` удаляет `aiCmState` и `aiCmState` с ключом хоста из `chrome.storage.local`, `storage.onChanged` попапа обрабатывает удаление ключей per-host и показывает «Нет данных» до нового снимка.

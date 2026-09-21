@@ -12,7 +12,7 @@
  *   3) permissions: точный список, без "<all_urls>" и без host-паттернов;
  *   4) совместимость: browser_specific_settings/options_ui/page_action/... отсутствуют
  *      (в т.ч. как подстрока в сыром тексте — ловим и вложенные вставки);
- *   5) инварианты аудита: version 2.0.10, default_locale ru, 10 host_permissions
+ *   5) инварианты аудита: version 2.0.11, default_locale ru, 10 host_permissions
  *      (9 прежних + chat.qwen.ai, O-35);
  *   6) M-4.3: name/description — локализуемые __MSG__-формы, ключи ext_name /
  *      ext_description объявлены в ОБЕИХ локалях (ru — байтово прежние строки).
@@ -98,7 +98,7 @@ describe('LOW-2: manifest.json — smoke-тест состава ключей (C
   });
 
   test('инварианты аудита не тронуты: version, default_locale, background, popup, content_scripts', () => {
-    expect(manifest.version).toBe('2.0.10');
+    expect(manifest.version).toBe('2.0.11');
     expect(manifest.default_locale).toBe('ru');
     expect(manifest.background.service_worker).toBe('core/background.js');
     expect(manifest.action.default_popup).toBe('options/options.html');

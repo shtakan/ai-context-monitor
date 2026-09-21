@@ -69,7 +69,7 @@ describe('O-35: manifest.json — Qwen добавлен, прежние серв
   });
 
   test('version/инварианты не тронуты этим коммитом (bump — только в релизном)', function () {
-    expect(manifest.version).toBe('2.0.10');
+    expect(manifest.version).toBe('2.0.11');
     expect(manifest.manifest_version).toBe(3);
     expect(manifest.content_scripts).toHaveLength(1);
   });
