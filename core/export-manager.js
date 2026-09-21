@@ -69,6 +69,25 @@ function aiCmLogSanitizeSkip(reasons) {
     try { console.log('[AI CM][sanitize] skip reason=' + r); } catch (eL) { }
   }
 }
+// O-40 (ДИАГНОСТИКА — только ИЗМЕРЕНИЕ, поведение и байты не меняются): точка входа
+// санации экспорта печатает под гейтом aiCmDebug РОВНО то, что выбрано — прочитанное
+// значение тумблера aiCmIncludeHiddenInExport, ветку (includeHiddenExportBlocks |
+// sanitizeEmitMessages | no-pipeline) и число сообщений на входе/выходе. Строка уходит
+// каноническим хелпером utils/debug.js:aiCmDiagLine (собственного вывода в консоль и
+// собственного формата здесь нет); хелпера нет (Node/срез-песочницы тестов) или гейт
+// выключен → ни одной строки. Читаются только уже посчитанные значения; сам вызов в точке
+// входа защищён typeof-гардом, поэтому песочницы без этого хелпера видят прежнее поведение.
+function aiCmEmitEntryDiag(branch, inMsgs, outMsgs) {
+  try {
+    if (typeof aiCmDiagLine !== 'function') return false;
+    return aiCmDiagLine('o40-emit-entry', {
+      hidden: (aiCmIncludeHiddenInExport === true) ? 'on' : 'off',
+      branch: branch,
+      msgsIn: Array.isArray(inMsgs) ? inMsgs.length : 0,
+      msgsOut: Array.isArray(outMsgs) ? outMsgs.length : 0
+    }) !== false;
+  } catch (eDiagEntry) { return false; }
+}
 // Санация массива сообщений экспорта: role=user с ровно одной парой маркеров → видимый
 // текст; role=assistant и тексты без ровно одной пары — байтово прежние. Пайплайн не
 // загружен (отладочный контекст) → массив отдаётся как есть, поведение прежнее.
@@ -81,14 +100,23 @@ function aiCmLogSanitizeSkip(reasons) {
 function aiCmSanitizeEmitUserTexts(messages) {
   try {
     var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
-    if (!P || typeof P.sanitizeEmitMessages !== 'function') return messages;
+    if (!P || typeof P.sanitizeEmitMessages !== 'function') {
+      // O-40 (диагностика): пайплайна нет — ветка no-pipeline, массив не тронут.
+      if (typeof aiCmEmitEntryDiag === 'function') aiCmEmitEntryDiag('no-pipeline', messages, messages);
+      return messages;
+    }
     if (aiCmIncludeHiddenInExport === true) {
-      return (typeof P.includeHiddenExportBlocks === 'function')
+      var onMsgs = (typeof P.includeHiddenExportBlocks === 'function')
         ? P.includeHiddenExportBlocks(messages)
         : messages;
+      // O-40 (диагностика): ON-ветка (сырой режим — O-40 и O-20 обойдены).
+      if (typeof aiCmEmitEntryDiag === 'function') aiCmEmitEntryDiag('includeHiddenExportBlocks', messages, onMsgs);
+      return onMsgs;
     }
     var res = P.sanitizeEmitMessages(messages);
     aiCmLogSanitizeSkip(res && res.skipped);
+    // O-40 (диагностика): OFF-ветка — санация O-40/O-20 в пайплайне; числа до/после.
+    if (typeof aiCmEmitEntryDiag === 'function') aiCmEmitEntryDiag('sanitizeEmitMessages', messages, res && res.messages);
     return (res && Array.isArray(res.messages)) ? res.messages : messages;
   } catch (e) { return messages; }
 }
@@ -99,9 +127,42 @@ function aiCmSanitizeEmitUserTexts(messages) {
 // v12 (O-18, фаза 2): чаты, для которых сетевой дозапрос истории уже выполняется, —
 // защита от параллельных триггеров автоэкспорта (повторный вход после дозапроса).
 var aiCmNetSyncInFlight = {};
+// ===== O-37 (C): REASONING СЕРВИСА БЕЗ СЕТИ — В РЕНДЕР ЭКСПОРТА =====
+// Живой факт (21:59, chat=4cf29053): стрим дал размышление (qwen-stream-end reasoningFrames=2
+// reasoningLen=214, usage reasoning=68, строка reasoning в попапе есть), а в txt/md секции
+// [REASONING] нет (ASSISTANT-блок = bare-ответ 277 знаков). Корень (инспекция):
+//   (1) сетевая ветка ниже собирает сообщения заново как {role,text} — поле reasoning сетевого
+//       снимка (detail.messages[].reasoning) теряется, а размышление остаётся только СЕКЦИЯМИ
+//       В ТЕКСТЕ хода ([REASONING]…[ANSWER]…, composeTurnText перехватчика);
+//   (2) OFF-путь O-7 (sanitizeEmitMessages → stripReasoningSections) урезает секции до [ANSWER]
+//       на выходе экспорта — то есть ДО рендера;
+//   (3) рендер маркерного пути читает поле reasoning, а DOM-адаптер сервиса без сети кладёт
+//       размышление в СЛУЖЕБНОЕ ПОЛЕ ЗАХВАТА (O-35) — «поле, которое сообщение не заполняет».
+// Правило (узкое, ровно для сервиса, чей DESIGN-источник — DOM-адаптер: qwen): на выходе этой
+// точки размышление нормализуется в ОТДЕЛЬНОЕ поле reasoning — из поля захвата (DOM-база) или
+// разбором пары секций из текста хода (сетевая база). Нормализация — ЧИСТАЯ функция пайплайна
+// (applyReasoningExportFields), идёт ПО МЕСТУ и ДО единственной точки санации; прочие платформы
+// не задеты вовсе: предикат сайта false → массив не трогается (байты прежние 1:1).
+function aiCmReasoningExportSite() {
+  try { return !!(currentAdapter && currentAdapter.siteName === 'qwen'); } catch (eRes) { return false; }
+}
+// Тонкая обёртка точки сбора: флаг сайта + чистый хелпер пайплайна. Хелпера нет (срез-
+// песочница) → массив не тронут; сайт не тот → хелпер возвращается сразу (0 изменений).
+function aiCmPrepareReasoningForExport(messages) {
+  try {
+    var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+    if (!P || typeof P.applyReasoningExportFields !== 'function') return messages;
+    P.applyReasoningExportFields(messages, aiCmReasoningExportSite());
+  } catch (ePrep) { }
+  return messages;
+}
 function aiCmCollectExportSource() {
   var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
   var texts = lastBaseTexts || [];
+  // O-37 (C): хелпер нормализации reasoning берём typeof-гардом ОДИН раз (он объявлен рядом,
+  // в этом же модуле): в срез-песочницах тестов, где вырезана только эта функция, хелпера нет
+  // → null → поведение прежнее 1:1 (ни одной новой ветки не исполняется).
+  var prepareReasoning = (typeof aiCmPrepareReasoningForExport === 'function') ? aiCmPrepareReasoningForExport : null;
   // v82 (D2): выбор источника — чистая функция пайплайна: baseSeen=true → ТОЛЬКО сеть,
   // baseSeen=false → DOM-адаптер (сетевая ветка с пустыми texts даёт [] — потребители skip).
   var source = (P && typeof P.pickExportSource === 'function')
@@ -111,12 +172,43 @@ function aiCmCollectExportSource() {
   if (source === 'network') {
     if (Array.isArray(lastDetailMessages) && lastDetailMessages.length === texts.length && texts.length > 0) {
       for (var i = 0; i < texts.length; i++) {
-        var r = (lastDetailMessages[i] && lastDetailMessages[i].role) || '';
-        out.push({ role: (r === 'user') ? 'user' : 'assistant', text: sanitizeGeminiText(texts[i]) });
+        var dm = lastDetailMessages[i] || {};
+        var r = dm.role || '';
+        // FIX (Claude md): 'human' (парсер Claude) нормализуется в 'user' ровно как 'user'.
+        var msg = { role: (r === 'user' || r === 'human') ? 'user' : 'assistant', text: sanitizeGeminiText(texts[i]) };
+        // Claude md (ДИАГНОСТИКА — только измерение под гейтом aiCmDebug): роль сетевого снимка
+        // и роль после нормализации. Маркер claude-role-* SCOPED по сайту (currentAdapter):
+        // живой замер идёт по Claude-цепочке, чужие сайты строку этого маркера не получают.
+        // Канонический хелпер utils/debug.js:aiCmDiagLine; гейт выключен или хелпера нет →
+        // ни одной строки, байты выхода не меняются.
+        if (typeof aiCmDiagLine === 'function' && typeof currentAdapter !== 'undefined' &&
+          currentAdapter && currentAdapter.siteName === 'claude') {
+          aiCmDiagLine('claude-role-network', { r: r, normalizedRole: msg.role });
+        }
+        // O-39: копируем поле reasoning из сетевого снимка напрямую, чтобы рендер получил
+        // его как ДАННЫЕ (контракт O-35) независимо от того, сохранились ли секции
+        // [REASONING]/[ANSWER] в тексте после санации. Прочие платформы: поле отсутствует
+        // в lastDetailMessages → msg.reasoning не ставится → байты прежние (R1).
+        if (typeof dm.reasoning === 'string' && dm.reasoning) msg.reasoning = dm.reasoning;
+        out.push(msg);
       }
     } else {
       for (var j = 0; j < texts.length; j++) {
         out.push({ role: (j % 2 === 0) ? 'user' : 'assistant', text: sanitizeGeminiText(texts[j]) });
+      }
+    }
+    if (prepareReasoning) prepareReasoning(out);   // O-37 (C): размышление — отдельным полем ДО санации
+    // O-7 (Qwen): OFF-путь очищает поле reasoning, чтобы сборщики txt/md не вставляли
+    // секции [REASONING] безусловно: applyReasoningExportFields переводит размышление хода
+    // в отдельное поле ДО stripReasoningSections, и рендер видит msg.reasoning независимо
+    // от тумблера. Служебные hidden-поля захвата снимает сам OFF-путь санации ниже.
+    // typeof-гарды — конвенция срез-песочниц (fnDecl): там ни переменной тумблера, ни
+    // предиката сайта нет → массив не трогается вовсе, поведение прежнее 1:1.
+    var hiddenExportOn = (typeof aiCmIncludeHiddenInExport !== 'undefined') && aiCmIncludeHiddenInExport === true;
+    var reasoningExportSite = (typeof aiCmReasoningExportSite === 'function') ? aiCmReasoningExportSite : null;
+    if (!hiddenExportOn && reasoningExportSite && reasoningExportSite()) {
+      for (var ri = 0; ri < out.length; ri++) {
+        if (out[ri] && typeof out[ri] === 'object') delete out[ri].reasoning;
       }
     }
     return aiCmSanitizeEmitUserTexts(out);
@@ -126,17 +218,44 @@ function aiCmCollectExportSource() {
     if (currentAdapter && typeof currentAdapter.extractMessages === 'function') {
       var raw = currentAdapter.extractMessages() || [];
       var hasRoles = false;
+      // FIX (Claude md): role='human' (парсер Claude) — тоже «роль есть»: иначе Claude-база
+      // уходила бы фолбэком чередования и теряла настоящие роли ходов.
       for (var k = 0; k < raw.length; k++) {
-        if (raw[k] && (raw[k].role === 'user' || raw[k].role === 'assistant')) { hasRoles = true; break; }
+        if (raw[k] && (raw[k].role === 'user' || raw[k].role === 'assistant' || raw[k].role === 'human')) { hasRoles = true; break; }
       }
       var norm = (P && typeof P.normalizeExportMessages === 'function') ? P.normalizeExportMessages(raw) : [];
+      // Claude md (ДИАГНОСТИКА — только измерение под гейтом aiCmDebug): роль DOM-адаптера ДО
+      // нормализации пайплайна и после неё. rawRole — роль ПЕРВОГО хода с ролью: предикат
+      // hasRoles выше выходит по break, поэтому k указывает ровно на него; при hasRoles=false
+      // индекс k на элемент не указывает и роль не читается (undefined → '(нет)'). Предикат
+      // hasRoles выше байтово не тронут. Маркер SCOPED по сайту — как claude-role-network
+      // выше; гейт выключен → ни одной строки, байты прежние.
+      if (typeof aiCmDiagLine === 'function' && typeof currentAdapter !== 'undefined' &&
+        currentAdapter && currentAdapter.siteName === 'claude') {
+        aiCmDiagLine('claude-role-adapter', {
+          rawRole: hasRoles ? raw[k].role : undefined,
+          normalizedRole: (norm.length > 0) ? norm[0].role : undefined,
+          hasRoles: hasRoles
+        });
+      }
+      if (prepareReasoning) prepareReasoning(norm);   // O-37 (C): то же для DOM-базы (поле захвата)
       if (norm.length > 0 && hasRoles) return aiCmSanitizeEmitUserTexts(norm);
       // фолбэк чередования ролей (роль в адаптере отсутствует)
+      // O-39: копируем ВСЕ дополнительные поля из norm[n2] кроме role и text (уже установлены),
+      // чтобы служебные поля захвата (например, размышление DOM-адаптера O-35) доехали до файла.
+      // Без строкового литерала: обход через for-in с фильтром ключей.
       for (var n2 = 0; n2 < norm.length; n2++) {
-        out.push({ role: (n2 % 2 === 0) ? 'user' : 'assistant', text: norm[n2].text });
+        var fbMsg = { role: (n2 % 2 === 0) ? 'user' : 'assistant', text: norm[n2].text };
+        for (var key in norm[n2]) {
+          if (Object.prototype.hasOwnProperty.call(norm[n2], key) && key !== 'role' && key !== 'text') {
+            fbMsg[key] = norm[n2][key];
+          }
+        }
+        out.push(fbMsg);
       }
     }
   } catch (eA) { }
+  if (prepareReasoning) prepareReasoning(out);   // O-37 (C): фолбэк чередования ролей — то же правило
   return aiCmSanitizeEmitUserTexts(out);
 }
 
@@ -756,9 +875,17 @@ function maybeAutoExport(percentage) {
         archiveCount: aiCmArchiveCountFor(cid),
         baseCount: baseCount,
         // v1.14.1 (O3): fired = in-memory ИЛИ session-латч (кросс-табовый)
+        // O-38: + модульный латч — переживает resetConversationState (SPA-возврат)
         fired: P.getAutoExportFired(autoExportFired, siteName, cid) ||
-               (typeof P.isFiredInSession === 'function' ? P.isFiredInSession(sessionFiredCache, siteName, cid) : false),
+               (typeof P.isFiredInSession === 'function' ? P.isFiredInSession(sessionFiredCache, siteName, cid) : false) ||
+               (typeof aiCmAutoExportFiredOnce === 'object' && aiCmAutoExportFiredOnce && aiCmAutoExportFiredOnce[siteName + '|' + cid] === 1),
         isGemini: isGeminiSvc,
+        // O-37 (A): база сервиса БЕЗ сети (qwen) — доверенная по дизайну O-35 (живой источник —
+        // DOM-адаптер; признак «база адаптера принята» взведён записью source=adapter). Предикат живёт в
+        // content.js (там же, где писатель признака) и вызывается typeof-гардом: в срез-
+        // песочницах без него вердикт прежний, а сам гейт получает только БУЛЕВО (имя признака
+        // в автоэкспорт-контур не проникает — пин v54/G). false → поведение всех платформ 1:1.
+        domBaseTrusted: (typeof aiCmAutoExportTrustedBase === 'function') ? (aiCmAutoExportTrustedBase() === true) : false,
         // O-27 (b/c): сайт + факты страницы (см. shouldSkipGsaPageGuard)
         site: siteName,
         chatPageMarker: gsaChatMarker,
@@ -882,8 +1009,10 @@ function maybeAutoExport(percentage) {
     }
     if (!cid) return;
     // v1.14.1 (O3): fired = in-memory ИЛИ session-латч (кросс-табовый)
+    // O-38: + модульный латч — переживает resetConversationState (SPA-возврат)
     if (autoExportFired[cid] ||
-        (P && typeof P.isFiredInSession === 'function' && P.isFiredInSession(sessionFiredCache, siteName, cid))) {
+        (P && typeof P.isFiredInSession === 'function' && P.isFiredInSession(sessionFiredCache, siteName, cid)) ||
+        (typeof aiCmAutoExportFiredOnce === 'object' && aiCmAutoExportFiredOnce && aiCmAutoExportFiredOnce[siteName + '|' + cid] === 1)) {
       debugLog('log', '[AI CM][auto-export] skip reason=already-fired convId=' + cid);
       return; // уже скачивали в этом чате
     }
@@ -891,6 +1020,26 @@ function maybeAutoExport(percentage) {
   } catch (e) {
     console.error('[AI CM][auto-export] error:', e);
   }
+}
+// O-36 (D3): эффективный порог автоэкспорта для ТЕКУЩЕГО сайта — РОВНО та же ось, что у
+// порогового пути maybeAutoExport: per-site 'aiCmAutoExportPct_<site>' → глобальный → 90
+// (кламп [1,100] делает пайплайн effectiveAutoExportThreshold, S2). Отдельная функция —
+// чтобы ВТОРОЙ триггер автоэкспорта (base-complete от loader-state, v64) проверял тот же
+// порог, что и первый; сам maybeAutoExport и его гейты/порядок НЕ тронуты (запинованы).
+// typeof-гарды: в срез-песочницах тестов части состояния может не быть — фолбэк 90, как у
+// глобального пути 1:1.
+function aiCmEffectiveAutoExportThreshold(siteName) {
+  try {
+    var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+    var s = (typeof autoExportSettings === 'object' && autoExportSettings) ? autoExportSettings : null;
+    var globalPct = (s && typeof s.pct === 'number') ? s.pct : undefined;
+    var perSitePct = (typeof autoExportPctBySite === 'object' && autoExportPctBySite)
+      ? autoExportPctBySite[siteName || ''] : undefined;
+    if (P && typeof P.effectiveAutoExportThreshold === 'function') {
+      return P.effectiveAutoExportThreshold(globalPct, perSitePct);
+    }
+    return (typeof globalPct === 'number' && globalPct >= 1 && globalPct <= 100) ? globalPct : 90;
+  } catch (eThr) { return 90; }
 }
 // O-11: имена файлов автоэкспорта, уже выданные расширением в этой вкладке (файл занят).
 // Гард коллизии живёт в единственном источнике имени (buildAutoExportFileName): занятое
@@ -1135,6 +1284,14 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
           var PDl = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
           if (PDl && typeof PDl.markAutoExportFired === 'function') {
             PDl.markAutoExportFired(autoExportFired, (currentAdapter && currentAdapter.siteName) || '', cid);
+            // O-38: модульный латч — переживает resetConversationState (SPA-возврат в уже
+            // экспортированный чат). Ключ site|convId — тот же, что у shouldSkipAutoExport.
+            try {
+              var siteOnce = (currentAdapter && currentAdapter.siteName) || '';
+              if (typeof aiCmAutoExportFiredOnce === 'object' && aiCmAutoExportFiredOnce) {
+                aiCmAutoExportFiredOnce[siteOnce + '|' + cid] = 1;
+              }
+            } catch (eOnce) { }
             // v1.14.1 (O3): кросс-табовый латч — пишем в storage.session и в локальный кэш
             try {
               var siteO3 = (currentAdapter && currentAdapter.siteName) || '';
@@ -1146,6 +1303,13 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
             } catch (eO3write) { }
           } else {
             autoExportFired[cid] = 1;
+            // O-38: модульный латч — переживает resetConversationState
+            try {
+              var siteOnceFb = (currentAdapter && currentAdapter.siteName) || '';
+              if (typeof aiCmAutoExportFiredOnce === 'object' && aiCmAutoExportFiredOnce) {
+                aiCmAutoExportFiredOnce[siteOnceFb + '|' + cid] = 1;
+              }
+            } catch (eOnceFb) { }
           }
         }
         aiCmCancelDeferredHistWrite(cid); // v54: экспорт состоялся — висящий deferred-таймер больше не нужен
@@ -1173,6 +1337,15 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
           ' textLen=' + textLen + ' pendingCursor=' + (aiCmCursorLiveByConv[cid] ? '1' : '0') +
           ' baseComplete=' + (baseComplete === true ? '1' : '0') +
           ' histSource=' + histSource + ' histConvId=' + histConvId);
+        // O-37 (A, ДИАГНОСТИКА, только измерение): пороговый файр по ДОВЕРЕННОЙ базе
+        // адаптера (сервис без сети). Печать — в content.js (там живёт признак), здесь только
+        // typeof-гард; строка выходит ровно под гейтом aiCmDebug (aiCmDiagLine) и НЕ влияет на
+        // байты файла. Прочие триггеры своим путём — строка та же.
+        try {
+          if (typeof aiCmAutoExportTrustedBaseDiag === 'function') {
+            aiCmAutoExportTrustedBaseDiag(reason, cid, percentage);
+          }
+        } catch (eTrustDiag) { }
         // v1.18 (F5): GSA — дополнительная tagged-строка fired (общая строка выше сохранена
         // байтово: на ней стоит пин порядка логов H21).
         if (siteNameD === 'google_search') {
@@ -1266,9 +1439,27 @@ window.addEventListener('ai-cm-loader-state', function (ev) {
             return autoExportFired[cid] === 1;
           })() && (baseCount || 0) > 0) {
         var pctBc64 = (typeof autoExportLastPct === 'number' && autoExportLastPct >= 0) ? autoExportLastPct : 0;
-        debugLog('log', '[AI CM][auto-export] base-complete trigger convId=' + cid +
-          ' msgs=' + baseCount + ' pendingCursor=0 baseComplete=1 pct=' + pctBc64);
-        doAutoExportDownload(cid, pctBc64, 'base-complete');
+        // O-36 (D3): ФИКС — второй триггер подчиняется порогу автоэкспорта. До фикса
+        // base-complete уходил в doAutoExportDownload МИМО порога: файл писался на каждом
+        // дозавершённом чате, в том числе при значении индикатора много ниже установленного
+        // порога (живой дефект 2026-09-19, сообщение владельца). Порог берётся ТОЙ ЖЕ
+        // функцией, что у порогового пути (per-site → глобальный → 90); вердикт — чистой
+        // функцией пайплайна; строка skip несёт точные значения для диагностики.
+        // Латч fired срезанным триггером НЕ ставится: поздний честный экспорт по порогу
+        // (или рост pct выше порога) остаётся возможен — семантика skip-ов прежняя.
+        var thrBc64 = aiCmEffectiveAutoExportThreshold((typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName) || '');
+        var Pbc64 = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+        var gateBc64 = (Pbc64 && typeof Pbc64.shouldSkipBaseCompleteTrigger === 'function')
+          ? Pbc64.shouldSkipBaseCompleteTrigger({ percentage: pctBc64, threshold: thrBc64 })
+          : { skip: (pctBc64 < thrBc64), reason: 'below-threshold-base-complete', threshold: thrBc64 };
+        if (gateBc64.skip) {
+          debugLog('log', '[AI CM][auto-export] skip reason=' + gateBc64.reason + ' convId=' + cid +
+            ' pct=' + pctBc64 + ' threshold=' + gateBc64.threshold + ' trigger=base-complete');
+        } else {
+          debugLog('log', '[AI CM][auto-export] base-complete trigger convId=' + cid +
+            ' msgs=' + baseCount + ' pendingCursor=0 baseComplete=1 pct=' + pctBc64);
+          doAutoExportDownload(cid, pctBc64, 'base-complete');
+        }
       }
     } catch (eBc64) { console.error('[AI CM][auto-export] base-complete trigger error:', eBc64); }
   } catch (e) {
@@ -1304,6 +1495,7 @@ window.addEventListener('ai-cm-loader-state', function (ev) {
   Api.aiCmGsaProbeRunningFor = aiCmGsaProbeRunningFor;
   Api.aiCmGsaAutoExportSkipLog = aiCmGsaAutoExportSkipLog;
   Api.maybeAutoExport = maybeAutoExport;
+  Api.aiCmEffectiveAutoExportThreshold = aiCmEffectiveAutoExportThreshold; // O-36 (D3)
   Api.doAutoExportDownload = doAutoExportDownload;
   // O-16: мост «живой SSE-стрим DeepSeek» (для тестов и диагностики)
   Api.aiCmDeepseekStreamProbe = aiCmDeepseekStreamProbe;

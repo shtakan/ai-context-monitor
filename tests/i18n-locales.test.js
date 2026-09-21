@@ -112,7 +112,8 @@ describe('M-4: manifest.json — default_locale ru', () => {
     expect(manifest.manifest_version).toBe(3);
     expect(manifest.version).toBe('2.0.10');
     expect(manifest.permissions).toEqual(['scripting', 'storage', 'notifications']);
-    expect(manifest.host_permissions).toHaveLength(9);
+    // 10 — прежние 9 + chat.qwen.ai (O-35); состав хостов проверяется пинами Qwen-проводки
+    expect(manifest.host_permissions).toHaveLength(10);
     expect(manifest.background.service_worker).toBe('core/background.js');
     expect(manifest.action.default_popup).toBe('options/options.html');
   });

@@ -23,16 +23,250 @@
     return fallback;
   }
 
-  // txt «эталон»: тот же buildReferenceText, что использует кнопка «Сохранить .txt»
-  function buildTxtFromHistory(history) {
-    var messages = (history && Array.isArray(history.messages)) ? history.messages : [];
+  // ===========================================================================
+  // O-35: РЕНДЕР REASONING В ЭКСПОРТЕ — контракт DeepSeek, вынесенный в сборщики.
+  //   [REASONING]\n<рассуждение>\n\n[ANSWER]\n<ответ>
+  // Тот же формат, что собирает сетевой перехватчик (core/deepseek-intercept.js:543,
+  // composeTurnText) и что разворачивает сырой режим export-emit-pipeline
+  // (includeHiddenExportBlocks). Зачем здесь: путь РУЧНОГО экспорта (попап/options →
+  // эти сборщики) до сих пор брал reasoning только из уже склеенного текста; при
+  // отдельном поле reasoning (сетевой снимок Qwen: detail.messages[].reasoning +
+  // hiddenReasoning) он терялся.
+  // Байтовый инвариант для шести существующих платформ (R-пины) держится ДВУМЯ гардами:
+  //   1) рассуждения нет вовсе (поля нет / пусто) → возвращается ТОТ ЖЕ текст;
+  //   2) рассуждение УЖЕ в тексте (сетевой путь DeepSeek/Claude: секции собраны
+  //      перехватчиком) → повторно НЕ дописывается, дубля нет.
+  // Функция чистая: не логирует, не читает DOM/chrome, не меняет токены.
+  // ===========================================================================
+  var REASONING_SECTION_TAG = '[REASONING]';
+  var ANSWER_SECTION_TAG = '[ANSWER]';
+  function reasoningOfMessage(msg) {
+    if (!msg || typeof msg !== 'object') return '';
+    var r = msg.reasoning;
+    return (typeof r === 'string') ? r : '';
+  }
+  function withReasoningSections(text, reasoning) {
+    var t = (typeof text === 'string') ? text : '';
+    var r = (typeof reasoning === 'string') ? reasoning : '';
+    if (!r) return t;
+    if (t.indexOf(r) !== -1) return t;                 // уже в тексте — не дублируем
+    return REASONING_SECTION_TAG + '\n' + r + '\n\n' + ANSWER_SECTION_TAG + '\n' + t;
+  }
+  function messageTextWithReasoning(msg) {
+    if (!msg || typeof msg !== 'object') return '';
+    return withReasoningSections(msg.text, reasoningOfMessage(msg));
+  }
+
+  // ===========================================================================
+  // O-37 (C): ИСТОЧНИК РАЗМЫШЛЕНИЯ ДЛЯ РЕНДЕРА СЕРВИСА БЕЗ СЕТИ (qwen).
+  //
+  // Живой факт 21:59 (chat=4cf29053): стрим дал размышление (reasoningLen=214), строка reasoning
+  // есть в попапе, а в txt/md секции [REASONING] нет. Корень: рендер (messageTextWithReasoning
+  // выше) читает ТОЛЬКО поле reasoning, а сообщение сервиса без сети приносит размышление полем
+  // ЗАХВАТА hiddenReasoning (O-35: DOM-адаптер складывает туда панель «Завершено размышление»;
+  // сетевая ветка точки сбора отдаёт то же размышление полем reasoning). Текст сообщения у
+  // сырого объекта адаптера лежит в .content, а не в .text — поэтому композиция маркерного пути
+  // берёт базу через messageTextForMarkers (иначе ответ терялся бы).
+  //
+  // Гейт — тот же маркерный путь (site=qwen): для прочих платформ функция возвращает ровно
+  // прежний «эталон» (только поле reasoning), байты не меняются (R1). Нет размышления — нет
+  // секции (норма): withReasoningSections возвращает текст байтово.
+  // ===========================================================================
+  function reasoningOfMessageForExport(msg, useHidden) {
+    var r = reasoningOfMessage(msg);
+    if (r) return r;
+    if (useHidden !== true || !msg || typeof msg !== 'object') return '';
+    return (typeof msg.hiddenReasoning === 'string') ? msg.hiddenReasoning : '';
+  }
+  /** Текст сообщения для маркерного пути + секции [REASONING]/[ANSWER] (текст — как у рендера). */
+  function markersMessageTextWithReasoning(msg, useHidden) {
+    return withReasoningSections(messageTextForMarkers(msg),
+      reasoningOfMessageForExport(msg, useHidden));
+  }
+
+  // ===========================================================================
+  // O-36 (D2): МАРКЕРЫ РОЛЕЙ В txt ДЛЯ СЕРВИСОВ БЕЗ СЕТИ (qwen).
+  // До фикса .txt — «эталон» без ролей ВООБЩЕ: buildReferenceText склеивает тексты
+  // сообщений пустой строкой. Там, где история приходит из сети, реплики ещё как-то
+  // различимы по разметке самих ответов, а у qwen единственный живой источник —
+  // DOM-адаптер (O-35/D2): в файл уходил сплошной поток текста, и вопрос невозможно
+  // было отличить от ответа (живой артефакт: скрин 5, txt-экспорт qwen).
+  // Формат: перед КАЖДЫМ сообщением строка-маркер роли 'USER:' / 'ASSISTANT:'.
+  // Байтовый инвариант шести прежних платформ (R1) держит гард по history.site:
+  // сайт не из TXT_ROLE_MARKER_SITES → прежний buildReferenceText 1:1 (ни одного
+  // нового байта). Маркеры — формат ДАННЫХ, а не UI-строка (прецедент:
+  // [REASONING]/[ANSWER] ниже), поэтому _locales не трогаются.
+  // ===========================================================================
+  var TXT_ROLE_MARKER_SITES = ['qwen'];
+  /** Роли-маркеры включает РОВНО тот сайт, чей живой источник — DOM-адаптер (qwen). */
+  function isTxtRoleMarkerHistory(history) {
+    try {
+      var site = String((history && history.site) || '').toLowerCase();
+      return TXT_ROLE_MARKER_SITES.indexOf(site) !== -1;
+    } catch (e) { return false; }
+  }
+  /** Метка роли в txt-экспорте: 'USER:' у user, 'ASSISTANT:' у всех прочих (бинарно, как в проекте). */
+  function txtRoleMarker(role) {
+    return (role === 'user') ? 'USER:' : 'ASSISTANT:';
+  }
+  /** O-36 (R2): метка роли в md-экспорте qwen — как в нативном экспорте Qwen Studio
+   *  ('### USER' / '### ASSISTANT'). Формат ДАННЫХ, поэтому вне _locales (прецедент:
+   *  [REASONING]/[ANSWER]). Прочие платформы держат прежние локализованные заголовки 1:1. */
+  function mdRoleMarker(role) {
+    return (role === 'user') ? '### USER' : '### ASSISTANT';
+  }
+
+  // ===========================================================================
+  // O-36 (D2.1, ФИКС по живому артефакту 2026-09-19 20:50): КОНТЕЙНЕР-СКЛЕЙКА.
+  //
+  // Симптом владельца: txt начинается 'ASSISTANT:', дальше — «сплошняком» без разделения
+  // и без 'USER:'. Замер артефакта ai-context-monitor-qwen-Qwen3.8-Max-...-20-50.txt
+  // (275 613 знаков, 75 маркеров ролей): сообщения №1 и №2 — ДВА РАВНЫХ блока по 91 595
+  // знаков, и каждый содержит текст ВСЕХ остальных 73 реплик (cover=0.9999, длина в 11.6
+  // раза больше самой длинной реплики). Это не реплики, а узлы-КОНТЕЙНЕРЫ всего чата:
+  // DOM-адаптер qwen (adapters/qwen-adapter.js: первый непустой набор селекторов-кандидатов)
+  // отдал контейнерные узлы рядом с настоящими сообщениями. Роль у них 'assistant', поэтому
+  // первые 183 КБ файла — «стена» до первого 'USER:'.
+  //
+  // Правило (чистое, без DOM и без знания селекторов): сообщение, в тексте которого целиком
+  // лежат тексты ДВУХ И БОЛЕЕ других сообщений, а сумма этих текстов покрывает почти весь
+  // его объём (>= 0.8) и он вдвое длиннее самого длинного из вложенных, — контейнер, а не
+  // реплика: в файл не идёт. Порог в 2 вложенных (а не 1) и порог покрытия защищают ЖИВУЮ
+  // реплику: ответ, процитировавший один короткий вопрос целиком, контейнером не считается.
+  // Гейт — только сайт с маркерами ролей (qwen): прочие платформы байтово прежние (R1).
+  // ===========================================================================
+  var CONTAINER_MIN_CONTAINED = 2;
+  var CONTAINER_COVER_MIN = 0.8;
+  /** Текст сообщения для маркерного пути: .text, иначе .content (сырой объект адаптера).
+   *  Пустая строка в .text (след reasoning-нормализации) значением не считается: иначе
+   *  реплика из одного .content дала бы пустой блок и висячий маркер. */
+  function messageTextForMarkers(msg) {
+    if (!msg || typeof msg !== 'object') return '';
+    if (typeof msg.text === 'string' && msg.text) return msg.text;
+    if (typeof msg.content === 'string') return msg.content;
+    return (typeof msg.text === 'string') ? msg.text : '';
+  }
+  /** Сообщения без узлов-контейнеров (см. блок выше). Чистая функция: порядок и объекты
+   *  оставшихся сообщений не меняются, поле роли не переписывается. */
+  function dropContainerMessages(list) {
+    var src = Array.isArray(list) ? list : [];
+    var texts = [];
+    for (var t = 0; t < src.length; t++) texts.push(messageTextForMarkers(src[t]));
+    var keep = [];
+    for (var c = 0; c < src.length; c++) {
+      var candidate = texts[c];
+      var contained = 0;
+      var covered = 0;
+      var longest = 0;
+      if (candidate) {
+        for (var j = 0; j < texts.length; j++) {
+          var other = texts[j];
+          if (j === c || !other || other.length >= candidate.length) continue;
+          if (candidate.indexOf(other) === -1) continue;
+          contained++;
+          covered += other.length;
+          if (other.length > longest) longest = other.length;
+        }
+      }
+      var isContainer = (contained >= CONTAINER_MIN_CONTAINED) &&
+        (covered >= CONTAINER_COVER_MIN * candidate.length) &&
+        (candidate.length >= 2 * longest);
+      if (!isContainer) keep.push(src[c]);
+    }
+    return keep;
+  }
+  // O-36 (D2.1, ДИАГНОСТИКА, только измерение): структура массива forTxt на маркерном
+  // пути — под тем же гейтом aiCmDebug, что и точка скачивания (см. блок O-27/O-32 ниже).
+  // Печатается ПЕРВОЕ сообщение (role, тип и длина текста, голова), сколько сообщений
+  // дошло до рендера, сколько было до контейнер-чистки и сколько отброшено. Байты файла
+  // не меняются: функция только читает уже собранный список. Гейт выключен → тишина.
+  function diagTxtRoleStructure(list, totalCount) {
+    if (!diagOn()) return false;
+    try {
+      var kept = Array.isArray(list) ? list.length : -1;
+      var total = (typeof totalCount === 'number') ? totalCount : kept;
+      var first = (Array.isArray(list) && list.length > 0) ? list[0] : null;
+      var text = messageTextForMarkers(first);
+      var kind = 'нет';
+      if (first && typeof first === 'object') {
+        if (typeof first.text === 'string') kind = 'text';
+        else if (typeof first.content === 'string') kind = 'content';
+      }
+      console.log(DIAG_PREFIX + ' txt-roles site=qwen' +
+        ' isArray=' + Array.isArray(list) +
+        ' msgs=' + total +
+        ' kept=' + kept +
+        ' dropped-containers=' + ((kept >= 0 && total >= kept) ? (total - kept) : 0) +
+        ' first.role=' + ((first && first.role !== undefined && first.role !== null) ? String(first.role) : '(нет)') +
+        ' first.kind=' + kind +
+        ' first.len=' + text.length +
+        ' first.head=' + (diagHead(text, 60) || 'пусто'));
+    } catch (eLogRoles) { }
+    return true;
+  }
+  // Рендер «эталона» (окно или Node-модуль). null — рендерер недоступен (отладочный
+  // контекст): вызывающий отдаёт прежний пустой результат.
+  function renderReferenceText(list) {
     if (typeof window !== 'undefined' && typeof window.buildReferenceText === 'function') {
-      return window.buildReferenceText(messages);
+      return window.buildReferenceText(list);
     }
     if (typeof require === 'function') {
-      try { return require('./buildReferenceText.js')(messages); } catch (e) { /* fallthrough */ }
+      try { return require('./buildReferenceText.js')(list); } catch (e) { /* fallthrough */ }
     }
-    return '';
+    return null;
+  }
+  /** O-36 (D2/D2.1): тот же «эталон», но с маркером роли перед КАЖДЫМ сообщением;
+   *  null — рендерер недоступен. Контракт D2.1: маркер — отдельной строкой, между
+   *  блоками ровно одна пустая строка. Вход — только массив (не массив → пустой файл,
+   *  а не мусор из посимвольного обхода строки); текст берётся через messageTextForMarkers,
+   *  поэтому сырой объект адаптера с .content тоже даёт блок, а не висячий маркер. */
+  function renderReferenceTextWithRoleMarkers(list) {
+    var src = Array.isArray(list) ? list : [];
+    var parts = [];
+    for (var i = 0; i < src.length; i++) {
+      var m = src[i] || {};
+      var text = renderReferenceText([{ role: m.role, text: messageTextForMarkers(m) }]);
+      if (text === null) return null;
+      if (!String(text).trim()) continue;   // пустой реплике маркер не положен (висячих нет)
+      parts.push(txtRoleMarker(m.role) + '\n' + text);
+    }
+    return parts.join('\n\n');
+  }
+
+  // txt «эталон»: тот же buildReferenceText, что использует кнопка «Сохранить .txt»
+  // (O-36/D2: для qwen — с маркерами ролей; O-36/D2.1: у qwen дополнительно снимается
+  // контейнер-склейка DOM-адаптера, см. блок выше).
+  function buildTxtFromHistory(history) {
+    var messages = (history && Array.isArray(history.messages)) ? history.messages : [];
+    // O-36 (D2.1): чистка идёт по СЫРЫМ текстам и ДО композиции reasoning — иначе
+    // контейнер (склейка соседей без рассуждений) перестал бы быть надмножеством
+    // реплик, у которых reasoning уже приклеен секциями. Прочие платформы — прежний
+    // массив 1:1: ни одного нового байта (R1).
+    var marked = isTxtRoleMarkerHistory(history);
+    var kept = marked ? dropContainerMessages(messages) : messages;
+    // O-35: reasoning приходит отдельным полем → уходит секциями контракта ДО сборки.
+    // Сообщения без reasoning возвращаются теми же объектами (байтово).
+    // O-37 (C): у маркерного пути (qwen) источник размышления — reasoning, иначе поле захвата
+    // hiddenReasoning, а базой текста служит messageTextForMarkers (.text, иначе .content) —
+    // ровно то, что рендерит renderReferenceTextWithRoleMarkers.
+    var forTxt = kept.map(function (m) {
+      var text = marked ? markersMessageTextWithReasoning(m, true) : messageTextWithReasoning(m);
+      if (!m || typeof m !== 'object' || text === m.text) return m;
+      var copy = {};
+      for (var k in m) {
+        if (Object.prototype.hasOwnProperty.call(m, k)) copy[k] = m[k];
+      }
+      copy.text = text;
+      return copy;
+    });
+    var out;
+    if (marked) {
+      diagTxtRoleStructure(forTxt, messages.length);   // гейт aiCmDebug, только измерение
+      out = renderReferenceTextWithRoleMarkers(forTxt);
+    } else {
+      out = renderReferenceText(forTxt);
+    }
+    return (out === null) ? '' : out;   // рендерер недоступен → прежний пустой файл
   }
 
   // md: та же разметка, что использовала кнопка «Сохранить .md» в попапе
@@ -52,15 +286,34 @@
     lines.push(aiCmI18nMessage('export_md_tokens', 'Токены: ' + tokens + ' / ' + limit + ' (' + percent + '%)', [String(tokens), String(limit), String(percent)]));
     lines.push('');
 
+    // O-36 (R2, D2.1): у qwen роли — маркерами '### USER'/'### ASSISTANT' (формат нативного
+    // экспорта Qwen Studio) и та же контейнер-чистка, что у txt: узлы-контейнеры всего чата
+    // в md давали ту же «стену» (живой артефакт 21:03). Прочие платформы: прежние
+    // локализованные заголовки и прежний массив сообщений 1:1 (R1) — ни одного нового байта.
+    var mdMarked = isTxtRoleMarkerHistory(h);
     var messages = Array.isArray(h.messages) ? h.messages : [];
+    if (mdMarked) messages = dropContainerMessages(messages);
     for (var i = 0; i < messages.length; i++) {
       var msg = messages[i] || {};
-      var title = (msg.role === 'user')
-        ? aiCmI18nMessage('export_md_role_user', '## Пользователь')
-        : aiCmI18nMessage('export_md_role_assistant', '## Ассистент');
+      // Claude md (ДИАГНОСТИКА — только измерение под гейтом aiCmDebug): роль хода и вердикт
+      // маркерного пути ПЕРЕД выбором заголовка (## Пользователь / ## Ассистент / ### USER…).
+      // Канонический хелпер utils/debug.js:aiCmDiagLine; в popup/options его нет, гейт выключен
+      // → ни одной строки. Читаются только msg.role и mdMarked: байты md не меняются.
+      if (typeof aiCmDiagLine === 'function') {
+        aiCmDiagLine('claude-role-builder', { msgRole: msg.role, mdMarked: mdMarked });
+      }
+      var title = mdMarked
+        ? mdRoleMarker(msg.role)
+        : ((msg.role === 'user' || msg.role === 'human')
+          ? aiCmI18nMessage('export_md_role_user', '## Пользователь')
+          : aiCmI18nMessage('export_md_role_assistant', '## Ассистент'));
       lines.push(title);
       lines.push('');
-      lines.push(msg.text || '');
+      // O-35: reasoning отдельным полем → секции [REASONING]/[ANSWER] (контракт DeepSeek).
+      // Нет рассуждения или оно уже в тексте → байты прежние.
+      // O-37 (C): маркерный путь qwen читает ещё и поле захвата hiddenReasoning (см. выше),
+      // а базой текста берёт messageTextForMarkers — как txt-путь.
+      lines.push(mdMarked ? markersMessageTextWithReasoning(msg, true) : messageTextWithReasoning(msg));
       lines.push('');
     }
     return lines.join('\n');
@@ -255,7 +508,29 @@
     // через window.AiCmExportBuilders, если глобальный utils/debug.js не подключён).
     aiCmDiagOn: diagOn,
     aiCmDiagHead: diagHead,
-    aiCmDiagDownload: diagDownload
+    aiCmDiagDownload: diagDownload,
+    // O-35: рендер reasoning контрактом DeepSeek — чистая функция наружу (пины тестов
+    // и переиспользование; на боевом пути вызывается только двумя сборщиками выше).
+    aiCmMessageTextWithReasoning: messageTextWithReasoning,
+    aiCmWithReasoningSections: withReasoningSections,
+    // O-37 (C): источник размышления для маркерного пути (reasoning, иначе поле захвата
+    // hiddenReasoning) и композиция «текст сообщения + секции» — чистые функции наружу;
+    // на боевом пути их зовут только buildTxtFromHistory/buildMdFromHistory выше.
+    aiCmReasoningOfMessageForExport: reasoningOfMessageForExport,
+    aiCmMarkersMessageTextWithReasoning: markersMessageTextWithReasoning,
+    // O-36 (D2): маркеры ролей txt-экспорта — чистые предикаты наружу (пины тестов;
+    // на боевом пути вызываются только сборщиком buildTxtFromHistory выше).
+    aiCmTxtRoleMarker: txtRoleMarker,
+    aiCmIsTxtRoleMarkerHistory: isTxtRoleMarkerHistory,
+    aiCmTxtRoleMarkerSites: TXT_ROLE_MARKER_SITES,
+    // O-36 (D2.1): маркер роли md (Qwen Studio), текст сообщения для маркерного пути
+    // (с фолбэком на .content) и контейнер-чистка — чистые функции наружу для пинов
+    // и переиспользования; на боевом пути их зовут только два сборщика выше.
+    aiCmMdRoleMarker: mdRoleMarker,
+    aiCmMessageTextForMarkers: messageTextForMarkers,
+    aiCmDropContainerMessages: dropContainerMessages,
+    aiCmDiagTxtRoleStructure: diagTxtRoleStructure,
+    aiCmContainerRules: { minContained: CONTAINER_MIN_CONTAINED, coverMin: CONTAINER_COVER_MIN }
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Api;

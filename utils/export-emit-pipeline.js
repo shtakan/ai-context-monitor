@@ -14,6 +14,8 @@
  *   - shouldSkipGsaPageGuard(state) — O-27 (b/c): признак чат-страницы GSA + непустая база
  *     для гейта (страница captcha/«подозрительный трафик» права на файл не даёт)
  *   - shouldSkipAutoExport(state) — чистый гейт автоэкспорта
+ *   - shouldSkipBaseCompleteTrigger(state) — O-36 (D3): порог для ВТОРОГО триггера
+ *     автоэкспорта (base-complete от loader-state) — тот же порог, что у порогового пути
  *   - resolveExportSource(state) — T1-fix#3: источник файла (объединённая база архив+live /
  *     локальный снимок EMIT / запрет при базе «только архив»)
  *   - markAutoExportFired / getAutoExportFired / resetAutoExportFired — латч per service+convId
@@ -36,10 +38,31 @@
  *     расширений (DeepSeek++): ровно одна пара маркеров видимого промпта → trim текста
  *     между ними, иначе строка байтово; injectedUserTextSkipReason — причина пропуска;
  *     sanitizeEmitMessages — то же по массиву (трогается ТОЛЬКО role=user)
+ *   - sanitizeBetterDeepSeekText(text) — O-40: инъекции СОСЕДНЕГО расширения Better
+ *     DeepSeek прочь из экспорта. Таблица измеренных форм (BDS_INJECTION_FORMS: id, опорная
+ *     строка, основание — номера строк артефакта владельца): блок '<BetterDeepSeek>' +
+ *     измеренная опорная строка снимается целиком — до строки '</BetterDeepSeek>' либо (у
+ *     усечённого эха задачи) до маркера '...[truncated]'; обёртка без измеренной формы
+ *     (реальный текст пользователя) теряет ТОЛЬКО строки тегов. Текст без измеренных форм
+ *     возвращается БАЙТОВО; целое сообщение-инжекция после вырезки пусто → снимается S5
+ *   - sanitizeToolContinuationText(text) — O-42: агентный конверт СОСЕДНЕГО расширения
+ *     Better DeepSeek (tool-continuation) прочь из экспорта. Таблица измеренных дескрипторов
+ *     конверта (TC_ENVELOPE_FORMS: id, опорные строки, правило границы, основание — номера
+ *     строк артефакта владельца): запрос тула '<local_file_read>…</local_file_read>'
+ *     (самостоятельный машинный ход), проза-якорь «These are the tool results just executed
+ *     for the tool-continuation task.», эхо '<original_task>…</original_task>' (включая пустую
+ *     пару) и блок '<tool_results>…</tool_results>' — конверт-ход распознаётся по строке-якорю
+ *     и снимается ЦЕЛИКОМ (от якоря до закрывающего тега результатов); конверт-спан внутри
+ *     сообщения теряет только свои строки, окружающий текст — байтово. Текст без измеренных
+ *     форм возвращается БАЙТОВО; целое сообщение-конверт после вырезки пусто → снимается S5
  *   - stripReasoningSections(text) — O-7 (OFF): урезание сетевых секций
  *     [REASONING]…[ANSWER]… до части [ANSWER] (маркеры убираются). Трогает ТОЛЬКО тексты
  *     с парой маркеров, идемпотентна; в БАЗЕ секции остаются — урезание только на выходе
  *     экспорта (sanitizeEmitMessages, OFF-путь тумблера aiCmIncludeHiddenInExport)
+ *   - splitReasoningSections(text) — O-37 (C): ОБРАТНОЕ преобразование той же пары в
+ *     отдельные поля { reasoning, answer } (без пары — { reasoning:'', answer: текст }
+ *     байтово). Нужно точке сбора экспорта: размышление сервиса БЕЗ сети (живой источник —
+ *     DOM-адаптер) уходит рендеру отдельным полем ДО OFF-урезания секций
  *   - isToolResultsOnlyText(text) / stripToolCallBlocks(text) — O-7 (OFF, S3/S4):
  *     служебный тул-мусор DeepSeek++ прочь из экспорта. S3: user-ход, ЦЕЛИКОМ состоящий
  *     из [TOOL_RESULTS]…[/TOOL_RESULTS] (+ необязательный хвост 'Continue answering based
@@ -347,8 +370,14 @@
   /**
    * Чистый гейт автоэкспорта. state:
    *   { enabled, percentage, threshold, baseComplete, baseSeen, loaderRunning, fired, isGemini,
-   *     archiveCount, baseCount }
+   *     archiveCount, baseCount, domBaseTrusted }
    * archiveCount/baseCount (T1-fix#2, v1.16.2) опциональны: не переданы — прежнее поведение.
+   * O-37 (A): domBaseTrusted — база, объявленная ДОСТОВЕРНОЙ своим единственным источником
+   * (сервис без сети: единственный DESIGN-источник — DOM-адаптер, O-35/v54). Поле опционально и
+   * по умолчанию отсутствует: решение «чей это сайт» принимает ВЫЗЫВАЮЩИЙ (content.js-предикат
+   * aiCmAutoExportTrustedBase), поэтому порядок причин и вердикты шести платформ байтово
+   * прежние. domBaseTrusted === true → база считается полной наравне с baseComplete И причиной
+   * base-pending не блокируется (у такого сервиса сетевого снимка не будет никогда).
    * O-27 (b/c): site + chatPageMarker/msgCount/baseTextLen — тот же принцип (см.
    * shouldSkipGsaPageGuard): не переданы — вердикта не меняют.
    * O-33: не-Gemini без сетевого снимка (baseSeen=false) — причина base-pending
@@ -364,8 +393,11 @@
    *   не-Gemini baseComplete !== true И
    *     baseSeen === true (частичная сеть)   → not-complete;
    *   не-Gemini baseComplete !== true И
-   *     baseSeen === false (DOM-база)        → base-pending (O-33, ПОСЛЕ пороговых гейтов:
+   *     baseSeen === false И
+   *     domBaseTrusted !== true (DOM-база)   → base-pending (O-33, ПОСЛЕ пороговых гейтов:
    *                                            при pct ниже порога причина прежняя);
+   *   не-Gemini domBaseTrusted === true      → база готова по дизайну (O-37/A): base-pending
+   *                                            НЕ возвращается, дальше решают порог и латч;
    *   pct < threshold − 10 (достоверный pct) → below-threshold-hysteresis (resetFired:true);
    *   pct < threshold − 10 (DOM-pct)         → below-threshold-unreliable;
    *   pct < threshold                        → below-threshold;
@@ -384,12 +416,19 @@
     // Гейт полноты: полнота — ТОЛЬКО сетевой признак baseComplete (Gemini — как было).
     // O-33: дизъюнкт `!baseSeen ||` убран — DOM-база не-Gemini (baseSeen=false) до
     // сетевого снимка полнотой больше НЕ считается (файл уходил по частичной DOM-оценке).
+    // O-37 (A): у сервиса БЕЗ сети единственный DESIGN-источник — DOM-адаптер (O-35):
+    // база, объявленная достоверной вызывающим (domBaseTrusted), полнотой считается наравне
+    // с сетевым baseComplete. Поле не передано → вердикты шести платформ байтово прежние.
+    var domBaseTrusted = (s.domBaseTrusted === true);
     var completeOk = (s.baseComplete === true);
+    // «База готова» — либо сетевая полнота, либо доверенная база адаптера (O-37/A).
+    var baseReady = completeOk || domBaseTrusted;
     // O-33: не-Gemini без сетевого снимка — отдельная причина base-pending. Вердикт
     // откладывается ДО пороговых гейтов (ниже): при pct ниже порога причина прежняя
     // (below-threshold / below-threshold-unreliable) — новых строк лога не прибавляется.
-    var basePending = (s.isGemini !== true && s.baseSeen !== true);
-    if (!completeOk && !basePending) return { skip: true, reason: 'not-complete', resetFired: false };
+    // O-37 (A): доверенная база адаптера (domBaseTrusted) причиной base-pending не блокируется.
+    var basePending = (s.isGemini !== true && s.baseSeen !== true && !domBaseTrusted);
+    if (!baseReady && !basePending) return { skip: true, reason: 'not-complete', resetFired: false };
     // T1-fix#2 (v1.16.2): пол первого яруса (архив) не даёт права на автоэкспорт, пока
     // живая история не влилась. Архивные ходы лежат в ТОЙ ЖЕ базе (same-conv-union),
     // поэтому «count дорос до архива» выполняется вкладом самого архива — база из одного
@@ -412,9 +451,43 @@
     // O-33: все прочие гейты пройдены — файла нет ТОЛЬКО из-за DOM-базы до сетевого
     // снимка (pct — транзиентная DOM-оценка). Латч fired не ставится и не сбрасывается
     // (resetFired:false): поздний честный экспорт по полной сетевой базе состоится.
-    if (!completeOk && basePending) return { skip: true, reason: 'base-pending', resetFired: false };
+    // O-37 (A): доверенная база адаптера (domBaseTrusted) сюда не доходит — basePending
+    // для неё false, поэтому гейт отдаёт already-fired/файл, а не base-pending.
+    if (!baseReady && basePending) return { skip: true, reason: 'base-pending', resetFired: false };
     if (s.fired) return { skip: true, reason: 'already-fired', resetFired: false };
     return { skip: false, reason: null, resetFired: false };
+  }
+
+  /**
+   * O-36 (D3): порог для ВТОРОГО триггера автоэкспорта — base-complete (loader-state, v64).
+   *
+   * Живой дефект (сообщение владельца 2026-09-19): при включённом автоэкспорте чат
+   * выгружался при значении индикатора НИЖЕ установленного порога. Пороговый путь
+   * (maybeAutoExport → shouldSkipAutoExport) порог проверял всегда, а второй триггер
+   * (loader done + baseComplete=1 + pendingCursor=0 + msgs>0) уходил в
+   * doAutoExportDownload МИМО порога: файл писался на каждом дозавершённом чате, в т.ч.
+   * при pct=5 и пороге 90. Здесь — РОВНО та же ось порога, что у shouldSkipAutoExport
+   * (per-site → глобальный → 90; сам shouldSkipAutoExport не тронут — его порядок причин и
+   * вердикты запинованы), но причина называет срезанный триггер.
+   *
+   * state: { percentage, threshold } — percentage того же происхождения, что уходит в файл
+   * (для второго триггера это последний достоверный pct индикатора). Возврат:
+   * { skip, reason, threshold }:
+   *   percentage не число / < 0 → no-pct (файла нет);
+   *   percentage < threshold   → below-threshold-base-complete;
+   *   иначе                    → skip:false.
+   * Чистая функция: без логов и побочных эффектов, латч fired не ставит и не снимает.
+   */
+  function shouldSkipBaseCompleteTrigger(state) {
+    var s = state || {};
+    var threshold = (typeof s.threshold === 'number' && s.threshold >= 1 && s.threshold <= 100) ? s.threshold : 90;
+    if (typeof s.percentage !== 'number' || !(s.percentage >= 0)) {
+      return { skip: true, reason: 'no-pct', threshold: threshold };
+    }
+    if (s.percentage < threshold) {
+      return { skip: true, reason: 'below-threshold-base-complete', threshold: threshold };
+    }
+    return { skip: false, reason: null, threshold: threshold };
   }
 
   /**
@@ -475,7 +548,7 @@
 
   /**
    * Нормализация источника сообщений к [{role, text}]:
-   *   - роли: raw[i].role ('user' → user, иначе assistant);
+   *   - роли: raw[i].role ('user' | 'human' → user, иначе assistant);
    *   - текст: raw[i].text || raw[i].content; пустые отбрасываются.
    * O-7: hidden-захват DOM-адаптера (hiddenReasoning — панель размышлений DeepSeek,
    * которую базовый текст НЕ несёт) едет РЯДОМ с текстом и в text НЕ входит: метрики
@@ -490,7 +563,14 @@
         var m = raw[i] || {};
         var text = (typeof m.text === 'string') ? m.text : (typeof m.content === 'string' ? m.content : '');
         if (!text) continue;
-        var norm = { role: (m.role === 'user') ? 'user' : 'assistant', text: text };
+        // FIX (Claude md): 'human' (парсер Claude) — та же роль пользователя, что 'user'.
+        var norm = { role: (m.role === 'user' || m.role === 'human') ? 'user' : 'assistant', text: text };
+        // Claude md (ДИАГНОСТИКА — только измерение под гейтом aiCmDebug): роль на входе
+        // нормализации и роль на выходе. Канонический хелпер utils/debug.js:aiCmDiagLine;
+        // хелпера нет (Node/срез-песочницы) или гейт выключен → ни одной строки.
+        if (typeof aiCmDiagLine === 'function') {
+          aiCmDiagLine('claude-role-normalize', { inputRole: m.role, outputRole: norm.role });
+        }
         if (typeof m.hiddenReasoning === 'string' && m.hiddenReasoning) norm.hiddenReasoning = m.hiddenReasoning;
         out.push(norm);
       }
@@ -1215,6 +1295,391 @@
   }
 
   // =====================================================================================
+  // O-40: ИНЖЕКЦИИ СОСЕДНЕГО РАСШИРЕНИЯ BETTER DEEPSEEK — ПРОЧЬ ИЗ ЭКСПОРТА.
+  //
+  // Живой дефект — артефакт владельца deepseek-565a7cd8-2026-09-20_11-40.txt (335 325 байт):
+  // соседнее расширение Better DeepSeek шлёт свой системный промпт и служебные блоки в саму
+  // переписку (user-сообщениями) и оборачивает их парой тегов <BetterDeepSeek>…</BetterDeepSeek>;
+  // локальный снимок серверной истории тянет их в файл экспорта. Санация O-20 знает только
+  // маркеры DeepSeek++ (deepseek-pp-visible-user-prompt) — блоки Better DeepSeek шли насквозь.
+  //
+  // ИЗМЕРЕННЫЕ формы (номера строк артефакта; «целое сообщение» / «спан внутри сообщения»):
+  //   F1 bds-deep-code-prompt   1-257    ЦЕЛОЕ сообщение: <BetterDeepSeek> + '[DEEP_CODE_MODE_ACTIVE]'
+  //      (тот же блок вложен СПАНОМ в эхо задачи: строки 999-1191 и 1223-1415; в эхе он усечён
+  //       маркером '...[truncated]' — закрывающей строки тега там нет);
+  //   F2 bds-tool-system-prompt 259-947  ЦЕЛОЕ сообщение: <BetterDeepSeek> + 'You are Better
+  //      DeepSeek. You have access to specialized tools.' (тул-схема; хвост 'The system prompt
+  //      has ended. User prompt:');
+  //   F3 bds-prompt-wrapper     949-978  СПАН-ОБЁРТКА вокруг РЕАЛЬНОГО текста пользователя
+  //      ('ИНСТРУКЦИЯ ДЛЯ ИИ-АРХИТЕКТОРА…'): снимаются РОВНО две строки тегов, текст
+  //      пользователя между ними — байтово неизменен;
+  //   F4 bds-system-datetime    980-982  ЦЕЛОЕ сообщение: <BetterDeepSeek> + "User's System
+  //      Date & Time: …" (метка времени переменная — опора измерена как литеральный ПРЕФИКС
+  //      строки 981).
+  // Форма '[BDS:…](BDS:…)' (ссылка) в артефакте НЕ встречается — 0 вхождений, паттерн НЕ
+  // заводится (никаких «разумных» обобщений по тегам <BDS:…>: они в артефакте есть ТОЛЬКО
+  // внутри снятых форм F1/F2/F5/F6).
+  //
+  // Правило (одно, табличное): элемент Better DeepSeek = строка '<BetterDeepSeek>' (строка 0
+  // файла — с BOM, артефакт начинается с U+FEFF), СЛЕДУЮЩАЯ строка которой совпадает с
+  // опорной строкой одной из измеренных форм BDS_INJECTION_FORMS; блок снимается целиком — до
+  // первой строки '</BetterDeepSeek>' либо до строки '...[truncated]'. Тег БЕЗ измеренной
+  // формы снимается как ПАРА строк тегов; пара — измеренная форма F3 (обёртка вокруг реального
+  // текста пользователя), и она снимается В ЛЮБОМ месте сообщения: и когда обёртывает целое
+  // сообщение (F3 артефакта 949-978), и когда лежит внутри более длинного сообщения — текст до
+  // открывающего тега (если есть) и хвост после закрывающего (живой симптом: k=1166,
+  // firstLine=0, pair=1195, lastLine=1212) сохраняются БАЙТОВО, снимаются РОВНО две строки
+  // тегов. Ничего не совпало (нет пары вовсе) → текст возвращается ТЕМ ЖЕ значением (байтово);
+  // текст между снятыми строками тегов и вокруг пары — байтово.
+  // Целое сообщение-инжекция после вырезки пусто → в экспорт не идёт по существующему S5
+  // (isEmptyExportText), отдельного правила удаления сообщения не заводится.
+  //
+  // Паритет O-20: та же точка (sanitizeEmitMessages, OFF-путь тумблера aiCmIncludeHiddenInExport;
+  // ON-путь — сырой режим, обходит и O-20, и O-40), новый тумблер НЕ добавляется; база
+  // (lastBaseTexts/baseText/turnsMap), serverTokens, tokens/percent/limit, бейдж и метрики НЕ
+  // пересчитываются. Локализация по сайту: теги Better DeepSeek существуют только на
+  // chat.deepseek.com, а опоры — точные байтовые строки (не регулярки-обобщения), поэтому
+  // прочие пять платформ не задеваются по построению (пин R: их байты прежние).
+  // =====================================================================================
+  var BDS_OPEN_TAG = '<BetterDeepSeek>';
+  var BDS_CLOSE_TAG = '</BetterDeepSeek>';
+  var BDS_TRUNCATION_MARK = '...[truncated]';
+  var BDS_BOM = '\ufeff';
+
+  // -------------------------------------------------------------------------------------
+  // O-40 (ДИАГНОСТИКА — только ИЗМЕРЕНИЕ; поведение и байты не меняются): на живой симптом
+  // «в txt-экспорте пара F3 жива, а модульный прогон на messages[i].text её снимает»
+  // печатаются ровно две строки-наблюдения:
+  //   o40-emit-msg — на КАЖДОЕ сообщение sanitizeEmitMessages: i, len текста на входе O-40,
+  //                  head/tail по 40 символов (JSON-escaped), called (факт вызова
+  //                  sanitizeBetterDeepSeekText) и её removed;
+  //   o40-bds-line — на КАЖДУЮ строку-кандидат с открывающим тегом: k, firstLine, pair,
+  //                  lastLine, распознанная форма и итог removed ЛИБО ТОЧНАЯ причина пропуска
+  //                  (no-boundary | unpaired-tag). Пара тегов без измеренной формы (F3)
+  //                  снимается в любом месте сообщения, поэтому причины пропуска
+  //                  'pair-not-whole-message' у неё больше нет — она распознана как обёртка.
+  // Печать — ТОЛЬКО существующим гейтом: каноническим хелпером utils/debug.js:aiCmDiagLine
+  // (своего вывода в консоль и своего формата здесь нет). Хелпера нет (Node/срез-песочницы
+  // тестов) или гейт aiCmDebug выключен → НИ ОДНОЙ строки; читаются только посчитанные
+  // значения.
+  // -------------------------------------------------------------------------------------
+  function bdsDiagLine(tag, fields) {
+    try {
+      if (typeof aiCmDiagLine !== 'function') return false;
+      return aiCmDiagLine(tag, fields) !== false;
+    } catch (eDiag) { return false; }
+  }
+
+  /** JSON-escaped срез текста: from=0 — head (первые n символов), иначе tail (последние n). */
+  function bdsDiagSlice(text, from, n) {
+    try {
+      var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
+      return JSON.stringify((from === 0) ? s.slice(0, n) : s.slice(Math.max(0, s.length - n)));
+    } catch (eSlice) { return '""'; }
+  }
+
+  // Таблица измеренных форм: id | опорная строка (match: 'exact' — строка целиком,
+  // 'prefix' — литеральный префикс строки с переменным хвостом) | основание из артефакта.
+  var BDS_INJECTION_FORMS = [
+    {
+      id: 'bds-deep-code-prompt',
+      match: 'exact',
+      head: '[DEEP_CODE_MODE_ACTIVE]',
+      basis: 'artifact 1-257 (message), 999-1191 / 1223-1415 (span in <original_task>)'
+    },
+    {
+      id: 'bds-tool-system-prompt',
+      match: 'exact',
+      head: 'You are Better DeepSeek. You have access to specialized tools.',
+      basis: 'artifact 259-947 (message)'
+    },
+    {
+      id: 'bds-system-datetime',
+      match: 'prefix',
+      head: "User's System Date & Time: ",
+      basis: 'artifact 980-982 (message; line 981)'
+    }
+  ];
+  // Обёртка без измеренной формы (реальный текст пользователя внутри) — F3.
+  var BDS_WRAPPER_ID = 'bds-prompt-wrapper';
+
+  /** Строка — ровно строка открывающего тега? (строка 0 артефакта несёт BOM файла). */
+  function isBdsOpenTagLine(line, at) {
+    if (line === BDS_OPEN_TAG) return true;
+    return (at === 0 && line === BDS_BOM + BDS_OPEN_TAG);
+  }
+
+  /** Опорная строка измеренной формы (или null — форма не распознана). */
+  function bdsFormOfHeadLine(line) {
+    var s = (typeof line === 'string') ? line : '';
+    for (var i = 0; i < BDS_INJECTION_FORMS.length; i++) {
+      var f = BDS_INJECTION_FORMS[i];
+      if (f.match === 'prefix') { if (s.slice(0, f.head.length) === f.head) return f; }
+      else if (s === f.head) return f;
+    }
+    return null;
+  }
+
+  /** Индекс первой непустой строки текста (-1 — текста нет). */
+  function bdsFirstContentLine(lines) {
+    for (var i = 0; i < lines.length; i++) { if (String(lines[i]).trim() !== '') return i; }
+    return -1;
+  }
+
+  /** Индекс последней непустой строки текста (-1 — текста нет). */
+  function bdsLastContentLine(lines) {
+    for (var i = lines.length - 1; i >= 0; i--) { if (String(lines[i]).trim() !== '') return i; }
+    return -1;
+  }
+
+  /**
+   * O-40: вырезать из текста измеренные элементы Better DeepSeek.
+   * Возврат { text, removed, forms }: removed — число снятых элементов (измеренный блок — 1,
+   * обёртка F3 — 1), forms — id снятых форм по порядку. Ничего не снято → тот же текст.
+   * Значения не меняются: diag (o40-bds-line) только ЧИТАЕТ уже посчитанные k/firstLine/
+   * pair/lastLine/форму/removed и печатается каноническим хелпером гейта aiCmDebug; без
+   * хелпера или без гейта — ни одной строки. DOM и chrome функция не трогает; идемпотентна.
+   */
+  function sanitizeBetterDeepSeekText(text) {
+    var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
+    if (s.indexOf(BDS_OPEN_TAG) === -1) return { text: s, removed: 0, forms: [] };
+    var lines = s.split('\n');
+    var drop = {};
+    var forms = [];
+    // O-40 (диагностика): строки-кандидаты копятся и печатаются ОДНИМ залпом в конце —
+    // только тогда в каждой строке есть ИТОГ removed. Хелпера гейта нет — массив не ведётся.
+    var diagRows = (typeof aiCmDiagLine === 'function') ? [] : null;
+    var firstLine = bdsFirstContentLine(lines);
+    var lastLine = bdsLastContentLine(lines);
+    for (var k = 0; k < lines.length; k++) {
+      if (!isBdsOpenTagLine(lines[k], k)) continue;
+      var form = (k + 1 < lines.length) ? bdsFormOfHeadLine(lines[k + 1]) : null;
+      if (form) {
+        // Границы блока: первая строка закрывающего тега ЛИБО маркер усечения эха.
+        var end = -1;
+        for (var j = k + 2; j < lines.length; j++) {
+          if (isBdsOpenTagLine(lines[j], j)) break;   // вложенный/чужой открывающий тег — границы нет
+          if (lines[j] === BDS_CLOSE_TAG || lines[j] === BDS_TRUNCATION_MARK) { end = j; break; }
+        }
+        if (end === -1) {                             // границы нет — текст не трогаем (байтово)
+          if (diagRows) diagRows.push({ k: k, first: firstLine, pair: -1, last: lastLine, form: form.id, skip: 'no-boundary' });
+          continue;
+        }
+        if (diagRows) diagRows.push({ k: k, first: firstLine, pair: end, last: lastLine, form: form.id, skip: '(нет)' });
+        for (var d = k; d <= end; d++) drop[d] = true;
+        forms.push(form.id);
+        k = end;
+        continue;
+      }
+      // Тег без измеренной формы: пара «открывающий … закрывающий» без вложенных тегов →
+      // снимаются ТОЛЬКО строки тегов (F3: обёртка вокруг реального текста пользователя).
+      // Паттерн — РОВНО измеренная форма: пара обёртывает текст пользователя. Срабатывает и
+      // когда пара обёртывает ЦЕЛОЕ сообщение, и когда лежит ВНУТРИ более длинного сообщения
+      // (текст до открывающего тега и/или хвост после закрывающего остаются байтово) —
+      // живой симптом O-40: k=1166, firstLine=0, pair=1195, lastLine=1212.
+      var pair = -1;
+      for (var p = k + 1; p < lines.length; p++) {
+        if (isBdsOpenTagLine(lines[p], p)) break;
+        if (lines[p] === BDS_CLOSE_TAG) { pair = p; break; }
+      }
+      if (pair === -1) {                              // непарный тег — текст не трогаем (как O-20)
+        if (diagRows) diagRows.push({ k: k, first: firstLine, pair: -1, last: lastLine, form: '(нет)', skip: 'unpaired-tag' });
+        continue;
+      }
+      // Условия ветки: (а) открывающий тег распознан (условие цикла isBdsOpenTagLine);
+      // (б) форма head-строки НЕ в таблице BDS_INJECTION_FORMS (form === null); (в) пара
+      // найдена (pair !== -1); (г) пара НЕ обёртывает целое сообщение
+      // (k !== firstLine || pair !== lastLine) — либо есть хвост после закрывающего тега,
+      // либо текст до открывающего. Логика одна на оба случая: drop ТОЛЬКО строк тегов;
+      // текст между ними и хвост не трогаются (байтово).
+      if (diagRows) diagRows.push({ k: k, first: firstLine, pair: pair, last: lastLine, form: BDS_WRAPPER_ID, skip: '(нет)' });
+      drop[k] = true;
+      drop[pair] = true;
+      forms.push(BDS_WRAPPER_ID);
+      k = pair;
+    }
+    var removedTotal = forms.length;
+    if (diagRows) {
+      for (var r = 0; r < diagRows.length; r++) {
+        bdsDiagLine('o40-bds-line', {
+          k: diagRows[r].k, firstLine: diagRows[r].first, pair: diagRows[r].pair,
+          lastLine: diagRows[r].last, form: diagRows[r].form, skip: diagRows[r].skip,
+          removed: removedTotal
+        });
+      }
+    }
+    if (!forms.length) return { text: s, removed: 0, forms: [] };
+    var kept = [];
+    for (var m = 0; m < lines.length; m++) { if (!drop[m]) kept.push(lines[m]); }
+    return { text: kept.join('\n'), removed: forms.length, forms: forms };
+  }
+
+  // =====================================================================================
+  // O-42: АГЕНТНЫЙ КОНВЕРТ Better DeepSeek (tool-continuation) — ПРОЧЬ ИЗ ЭКСПОРТА (OFF).
+  //
+  // Живой дефект — артефакт владельца ai-context-monitor-deepseek-DeepSeek-R1-2026-09-21-10-19.json
+  // (per-message границы; тот же конверт в txt-экспорте deepseek-565a7cd8-2026-09-21_15-40.txt:
+  // 5 блоков <local_file_read>, 7 проза-блоков, 7 пар <original_task>, 14 тегов <tool_results> =
+  // 7 пар): соседнее расширение Better DeepSeek гоняет агентный цикл через саму переписку, и в
+  // файл экспорта уезжают МАШИННЫЕ ходы — (1) запрос тула <local_file_read>…</local_file_read>
+  // (целое сообщение ассистента) и (2) ход-продолжение: проза-приглашение + эхо <original_task> +
+  // результаты <tool_results>…</tool_results> (целое user-сообщение).
+  //
+  // ИЗМЕРЕННЫЕ формы (артефакт 10-19; номера строк ВНУТРИ сообщения; все 12 вхождений — ЦЕЛЫЕ
+  // сообщения, спанов внутри сообщения в артефакте 0; усечений нет, незакрытых пар нет):
+  //   A tc-local-file-read      msg 1/3/9/11/13 строки 1-3, role=assistant — 5 вхождений;
+  //   B tc-prose-continuation   msg 2/4/7/8/10/12/14 строки 1-9 — 7 вхождений;
+  //   C tc-original-task        msg 2/4 строки 11-12 (ПУСТАЯ пара), msg 7/8/10/12/14 строки
+  //                             11-17 (эхо задачи) — 7 вхождений;
+  //   D tc-tool-results         msg 2/4 строки 14-26 и 14-35, msg 7/8/10/12/14 строки 19-конец
+  //                             (31/40/49/58/66 сообщения): закрывающий тег '…</tool_results>' —
+  //                             последняя строка сообщения (7/7); незакрытых (конец сообщения без
+  //                             закрывающего тега) — 0. Таблица дескрипторов — TC_ENVELOPE_FORMS.
+  //
+  // Правило (табличное; id | опорные строки | правило границы | основание): конверт-ход
+  // распознаётся по измеренной строке-якорю (B), внутри распознанного хода снимается ЦЕЛЫЙ спан
+  // конверта — от строки-якоря до конца последней распознанной измеренной формы (закрывающий тег
+  // D). Целое сообщение-конверт после вырезки пусто → в экспорт не идёт по существующему S5;
+  // конверт-спан внутри сообщения теряет ТОЛЬКО строки конверта, окружающий текст — БАЙТОВО.
+  // Форма A (запрос тула) — самостоятельный машинный ход: пара снимается, когда она — ЦЕЛОЕ
+  // сообщение (измеренная граница формы, 5/5). Спан пары внутри сообщения НЕ снимается: своего
+  // измерения спана в артефакте нет (0 вхождений), а живые байты такого спана (F3-обёртка +
+  // хвост-запрос в ОДНОМ сообщении) заморожены как сохраняемый текст — tests/deepseek-o40-…:1747
+  // (D-F7), :2008 (R-F7-4, роль assistant) и tests/o40-f3-diag-…:474; по правилу «у формы нет
+  // измеримой границы — не угадывать» спан остаётся байтово (старые ожидания не редактируются).
+  // Незакрытая пара — границы нет: текст не трогаем (не угадываем).
+  // Ничего не совпало → текст возвращается ТЕМ ЖЕ значением (байтово). Своего вывода у O-42 нет
+  // вовсе (ни строки ни под гейтом aiCmDebug, ни без) — пины o40-emit-msg/o40-bds-line не сдвинуты.
+  // Паритет O-20/O-40: та же точка (sanitizeEmitMessages, OFF-путь тумблера
+  // aiCmIncludeHiddenInExport) и тот же OFF-путь; ON-путь (includeHiddenExportBlocks) конверт не
+  // трогает вовсе; база (lastBaseTexts/baseText/turnsMap), serverTokens, tokens/percent/limit,
+  // бейдж и метрики НЕ пересчитываются. Опоры — точные байтовые строки (не регулярки-обобщения),
+  // поэтому прочие пять платформ по построению не задеваются (пин R: их байты прежние).
+  // =====================================================================================
+  var TC_LFR_OPEN = '<local_file_read>';
+  var TC_LFR_CLOSE = '</local_file_read>';
+  var TC_TASK_OPEN = '<original_task>';
+  var TC_TASK_CLOSE = '</original_task>';
+  var TC_RESULTS_OPEN = '<tool_results>';
+  var TC_RESULTS_CLOSE = '</tool_results>';
+  var TC_PROSE_ANCHOR = 'These are the tool results just executed for the tool-continuation task.';
+
+  // Таблица измеренных дескрипторов конверта: id | опорные строки | правило границы | основание.
+  var TC_ENVELOPE_FORMS = [
+    {
+      id: 'tc-local-file-read', rule: 'pair', open: TC_LFR_OPEN, close: TC_LFR_CLOSE,
+      boundary: 'от строки открывающего тега до строки закрывающего; снимается, когда пара — целое сообщение (спан внутри сообщения — байтово: измерения спана в артефакте нет)',
+      scope: 'tool-request',
+      basis: 'artifact 10-19 msg 1/3/9/11/13 lines 1-3 (whole message, role=assistant)'
+    },
+    {
+      id: 'tc-prose-continuation', rule: 'run', openPrefix: TC_PROSE_ANCHOR,
+      boundary: 'от строки-якоря до последней непустой строки прозы (перед пустой строкой)',
+      scope: 'envelope',
+      basis: 'artifact 10-19 msg 2/4/7/8/10/12/14 lines 1-9'
+    },
+    {
+      id: 'tc-original-task', rule: 'pair', open: TC_TASK_OPEN, close: TC_TASK_CLOSE,
+      boundary: 'от <original_task> до </original_task>; пустая пара 11-12 — та же граница',
+      scope: 'envelope',
+      basis: 'artifact 10-19 msg 2/4 lines 11-12 (empty), msg 7/8/10/12/14 lines 11-17'
+    },
+    {
+      id: 'tc-tool-results', rule: 'pair', open: TC_RESULTS_OPEN, close: TC_RESULTS_CLOSE,
+      boundary: 'от <tool_results> до </tool_results>; в артефакте закрывающий тег — последняя строка сообщения (7/7)',
+      scope: 'envelope',
+      basis: 'artifact 10-19 msg 2/4 lines 14-26 / 14-35, msg 7/8/10/12/14 lines 19-66'
+    }
+  ];
+
+  /** Первая пара 'open … close' начиная со строки from; незакрытая пара → null (границы нет). */
+  function tcPairAfter(lines, from, open, close) {
+    for (var i = Math.max(0, from); i < lines.length; i++) {
+      if (lines[i] !== open) continue;
+      for (var j = i + 1; j < lines.length; j++) { if (lines[j] === close) return { open: i, close: j }; }
+      return null;
+    }
+    return null;
+  }
+
+  /** Пара — целое сообщение? (до открывающего и после закрывающего нет непробельных строк) */
+  function tcIsWholeMessagePair(lines, pair) {
+    var i;
+    for (i = 0; i < pair.open; i++) { if (String(lines[i]).trim() !== '') return false; }
+    for (i = pair.close + 1; i < lines.length; i++) { if (String(lines[i]).trim() !== '') return false; }
+    return true;
+  }
+
+  /** Индекс строки-якоря проза-блока конверта (-1 — конверта нет). */
+  function tcProseAnchorLine(lines) {
+    for (var i = 0; i < lines.length; i++) {
+      if (String(lines[i]).slice(0, TC_PROSE_ANCHOR.length) === TC_PROSE_ANCHOR) return i;
+    }
+    return -1;
+  }
+
+  /**
+   * O-42: вырезать из текста измеренные формы агентного конверта Better DeepSeek.
+   * Возврат { text, removed, forms }: removed — число снятых измеренных форм (конверт-ход —
+   * три формы: проза/эхо задачи/результаты — или меньше, если часть форм не распознана;
+   * запрос тула — одна), forms — id снятых форм по порядку. Ничего не снято → тот же текст.
+   * Запрос тула снимается только как ЦЕЛОЕ сообщение (измеренная граница формы); спан пары
+   * внутри сообщения — байтово (см. комментарий ветки (2): измерения спана нет). Чистая
+   * функция: без логов, DOM и chrome; идемпотентна (на своём же выходе повторный вызов
+   * ничего не меняет).
+   */
+  function sanitizeToolContinuationText(text) {
+    var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
+    if (s.indexOf(TC_LFR_OPEN) === -1 && s.indexOf(TC_TASK_OPEN) === -1 &&
+        s.indexOf(TC_RESULTS_OPEN) === -1 && s.indexOf(TC_PROSE_ANCHOR) === -1) {
+      return { text: s, removed: 0, forms: [] };
+    }
+    var lines = s.split('\n');
+    var drop = {};
+    var forms = [];
+    // (1) конверт-ход: распознаётся по измеренной строке-якорю (B); спан — от якоря до конца
+    // последней распознанной формы (D), т.е. до закрывающего тега результатов.
+    var anchor = tcProseAnchorLine(lines);
+    if (anchor !== -1) {
+      var runEnd = anchor;
+      for (var p = anchor + 1; p < lines.length; p++) {
+        if (String(lines[p]).trim() === '') break;
+        runEnd = p;
+      }
+      var spanEnd = runEnd;
+      var afterRun = runEnd + 1;
+      var task = tcPairAfter(lines, afterRun, TC_TASK_OPEN, TC_TASK_CLOSE);
+      if (task) { spanEnd = task.close; afterRun = task.close + 1; }
+      var results = tcPairAfter(lines, afterRun, TC_RESULTS_OPEN, TC_RESULTS_CLOSE);
+      if (results) { spanEnd = results.close; }
+      for (var d = anchor; d <= spanEnd; d++) drop[d] = true;
+      forms.push('tc-prose-continuation');
+      if (task) forms.push('tc-original-task');
+      if (results) forms.push('tc-tool-results');
+    }
+    // (2) запрос тула <local_file_read>…</local_file_read> — самостоятельный машинный ход.
+    // Измеренная граница формы — ЦЕЛОЕ сообщение (артефакт 10-19: 5/5). Спан пары ВНУТРИ
+    // сообщения не снимается: своего измерения спана в артефакте НЕТ (0 вхождений), а живые
+    // байты такого спана (F3-обёртка + хвост-запрос в ОДНОМ сообщении) заморожены как
+    // СОХРАНЯЕМЫЙ текст — tests/deepseek-o40-…:1747, :2008 и tests/o40-f3-diag-…:474
+    // (не закрываются, т.к. закрывать нечего: спан не измерен) → по правилу «нет измеримой
+    // границы — не угадывать» спан не трогаем (байтово).
+    for (var k = 0; k < lines.length; k++) {
+      if (drop[k] || lines[k] !== TC_LFR_OPEN) continue;
+      var lfr = tcPairAfter(lines, k, TC_LFR_OPEN, TC_LFR_CLOSE);
+      if (!lfr) continue;                            // незакрытая пара — границы нет
+      if (!tcIsWholeMessagePair(lines, lfr)) { k = lfr.close; continue; }  // спан — байтово
+      for (var d2 = lfr.open; d2 <= lfr.close; d2++) drop[d2] = true;
+      forms.push('tc-local-file-read');
+      k = lfr.close;
+    }
+    if (!forms.length) return { text: s, removed: 0, forms: [] };
+    var kept = [];
+    for (var m = 0; m < lines.length; m++) { if (!drop[m]) kept.push(lines[m]); }
+    return { text: kept.join('\n'), removed: forms.length, forms: forms };
+  }
+
+  // =====================================================================================
   // O-7 (OFF): УРЕЗАНИЕ СЕКЦИЙ REASONING НА ВЫХОДЕ ЭКСПОРТА.
   //
   // Решение владельца (P1=a, P2=OFF): при выключенном тумблере aiCmIncludeHiddenInExport
@@ -1266,6 +1731,95 @@
       changed = true;
     }
     return changed ? out : s;
+  }
+
+  // =====================================================================================
+  // O-37 (C): РАЗДЕЛЕНИЕ ПАРЫ СЕКЦИЙ [REASONING]/[ANSWER] НА ПОЛЯ.
+  //
+  // Сетевой путь сервиса БЕЗ сети укладывает размышление в текст хода ровно так же, как
+  // DeepSeek (composeTurnText): '[REASONING]\n<рассуждение>\n\n[ANSWER]\n<ответ>'.
+  // OFF-путь O-7 на выходе экспорта урезает такие секции до части [ANSWER] — и размышление
+  // до рендера не доезжает (живой факт 21:59 chat=4cf29053: стрим дал reasoningLen=214,
+  // в txt/md секции [REASONING] нет).
+  // Здесь — чистое ОБРАТНОЕ преобразование той же пары: пара → отдельные поля, чтобы
+  // вызывающий мог отдать размышление рендеру отдельным полем (контракт O-35) ДО урезания.
+  //
+  // Инварианты (симметричны stripReasoningSections):
+  //   - пары нет ([REASONING] без [ANSWER], нет маркеров вовсе) → { reasoning:'', answer: текст }
+  //     БАЙТОВО прежний в answer (текст не меняется);
+  //   - берётся ПЕРВАЯ пара: reasoning — текст между маркерами (без форматного перевода строки
+  //     сразу после [REASONING] и без пробельного хвоста перед [ANSWER]), answer — всё после
+  //     [ANSWER] плюс снятый ОДИН форматный перевод строки (как в stripReasoningSections);
+  //   - round-trip: '[REASONING]\n<r>\n\n[ANSWER]\n<a>' → { reasoning:<r>, answer:<a> };
+  //   - идемпотентна на своём выходе: у answer пары уже нет → answer возвращается как есть;
+  //   - чистая: без логов, DOM и chrome. Маркеры — формат ДАННЫХ (прецедент O-35/O-36).
+  // =====================================================================================
+  function splitReasoningSections(text) {
+    var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
+    var r = s.indexOf(SECTION_REASONING_TAG);
+    if (r === -1) return { reasoning: '', answer: s };
+    var a = s.indexOf(SECTION_ANSWER_TAG, r + SECTION_REASONING_TAG.length);
+    if (a === -1) return { reasoning: '', answer: s };
+    var reasoning = s.slice(r + SECTION_REASONING_TAG.length, a).replace(/^\r?\n/, '').replace(/\s+$/, '');
+    var i = a + SECTION_ANSWER_TAG.length;
+    if (s.charAt(i) === '\r' && s.charAt(i + 1) === '\n') i += 2;
+    else if (s.charAt(i) === '\n') i += 1;
+    return { reasoning: reasoning, answer: s.slice(i) };
+  }
+
+  // =====================================================================================
+  // O-37 (C): НОРМАЛИЗАЦИЯ РАЗМЫШЛЕНИЯ НА ВЫХОДЕ ТОЧКИ СБОРА ЭКСПОРТА.
+  //
+  // Живой факт 21:59 (chat=4cf29053): стрим дал reasoningLen=214, строка reasoning есть в
+  // попапе, а в txt/md секции [REASONING] нет. Корень — ДВА поля и один порядок:
+  //   (1) сообщение сервиса без сети приносит размышление либо полем захвата hiddenReasoning
+  //       (DOM-адаптер, O-35), либо ПАРОЙ СЕКЦИЙ прямо в тексте хода (сетевая база);
+  //   (2) OFF-путь O-7 (sanitizeEmitMessages → stripReasoningSections) урезает секции до части
+  //       [ANSWER] и снимает поле захвата — то есть ДО рендера, который читает поле reasoning.
+  // Здесь — единая нормализация ДО санации: найденное размышление переезжает в отдельное поле
+  // reasoning, текст остаётся без секций (answer), служебное поле захвата снимается. Тогда
+  // OFF/ON-пути обработки hidden-полей ничего не теряют (для них работа уже сделана), а рендер
+  // сборщиков получает размышление как ДАННЫЕ — контракт [REASONING]/[ANSWER] (O-35).
+  //
+  // Гейт — ФЛАГ САЙТА (заполняет вызывающий: сервис, чей DESIGN-источник — DOM-адаптер, то есть
+  // сервис БЕЗ сети): enabled !== true → массив НЕ трогается вовсе, объекты те же, байты шести
+  // платформ прежние. Нормализация идёт ПО МЕСТУ (элементы массива заменяются копиями): у
+  // вызывающего остаётся ровно одна точка санации, в прежнем виде (source-пин O-20).
+  // Нет размышления — сообщение не меняется (нет секции — норма). Чистая: без логов и DOM.
+  // Возврат { changed } — только измерение (пины), на байты не влияет.
+  // =====================================================================================
+  function applyReasoningExportFields(messages, enabled) {
+    var changed = 0;
+    try {
+      if (enabled !== true || !Array.isArray(messages)) return { changed: 0 };
+      for (var i = 0; i < messages.length; i++) {
+        var m = messages[i];
+        if (!m || typeof m !== 'object') continue;
+        var text = (typeof m.text === 'string') ? m.text : '';
+        var reasoning = (typeof m.reasoning === 'string') ? m.reasoning : '';
+        var captured = (typeof m.hiddenReasoning === 'string') ? m.hiddenReasoning : '';
+        if (!reasoning) reasoning = captured;
+        // Разбор пары секций — только у ХОДА АССИСТЕНТА (размышление — часть его ответа):
+        // текст роли user не переупаковываем, его судьбу по-прежнему решает OFF/ON-путь O-7.
+        if (!reasoning && text && m.role !== 'user') {
+          var pair = splitReasoningSections(text);
+          if (pair && pair.reasoning) { reasoning = pair.reasoning; text = pair.answer; }
+        }
+        if (!reasoning) continue;
+        // Нечего менять (reasoning уже полем, поле захвата пусто, текст не резался) — объект прежний.
+        if (!captured && text === m.text) continue;
+        var next = {};
+        for (var k in m) {
+          if (Object.prototype.hasOwnProperty.call(m, k)) next[k] = m[k];
+        }
+        next.text = text;
+        next.reasoning = reasoning;
+        if (next.hiddenReasoning) delete next.hiddenReasoning;
+        messages[i] = next;
+        changed++;
+      }
+    } catch (eApply) { return { changed: changed }; }
+    return { changed: changed };
   }
 
   // =====================================================================================
@@ -1375,6 +1929,9 @@
    * Возвращает { messages, sanitized, skipped } (skipped — причины пропуска по порядку
    * сообщений). Логирование вынесено наружу: чистая функция остаётся чистой, а гейт
    * aiCmDebug и антиспам-подпись живут в вызывающем коде (core/export-manager.js).
+   * Исключение — O-40-диагностика (строки o40-emit-msg): функция только ЧИТАЕТ уже
+   * посчитанные значения и отдаёт их каноническому хелперу гейта aiCmDiagLine; своего
+   * вывода в консоль и своего гейта здесь нет, без хелпера/гейта — ни одной строки.
    * O-7 (OFF): служебные поля hidden-захвата снимаются (в экспорт не идут), сетевые
    * секции [REASONING]…[ANSWER]… урезаются до части [ANSWER] (stripReasoningSections) —
    * роль значения не имеет: секции несёт ход ассистента. Сообщение, у которого не
@@ -1382,27 +1939,76 @@
    * O-7 (OFF, S3/S4/S5): из экспорта уходит служебный тул-мусор DeepSeek++ —
    * user-ход из одних [TOOL_RESULTS] (S3) и XML-блоки вызовов тулов в тексте ассистента
    * (S4); сообщение, у которого после этого текста не осталось, не попадает в массив (S5).
-   * Порядок: stripHiddenFields → stripReasoningSections → S3/S4 → S5 → O-20 (user).
+   * O-40: инъекции соседнего расширения Better DeepSeek (измеренные формы — таблица
+   * BDS_INJECTION_FORMS) снимаются ЗДЕСЬ ЖЕ, до S4/O-20; целое сообщение-инжекция после
+   * вырезки пусто и снимается тем же S5. Роль значения не имеет: правило привязано к точным
+   * байтовым опорам артефакта, а не к роли (в артефакте все инъекции — user-ходы).
+   * O-42: агентный конверт Better DeepSeek (tool-continuation) — измеренные дескрипторы
+   * TC_ENVELOPE_FORMS — снимается ЗДЕСЬ ЖЕ, ПОСЛЕ O-40 и ДО S4/O-20; целое сообщение-конверт
+   * после вырезки пусто и снимается тем же S5; спан-хвост запроса тула внутри user/assistant
+   * сообщения (живой симптом F3) не трогается — измеренная граница формы A только «целое
+   * сообщение». Диагностики у O-42 нет вовсе — строки o40-emit-msg/o40-bds-line не сдвинуты.
+   * Порядок: stripHiddenFields → stripReasoningSections → O-40 → O-42 → S4 → S5 → O-20 (user).
    * skipped — причины НЕприменённой санации O-20 (как было); dropped — счётчик
-   * сообщений, не поехавших в экспорт по S3/S5.
+   * сообщений, не поехавших в экспорт по S3/S5 (в т.ч. опустевших после O-40);
+   * bdsRemoved/bdsForms — измерение O-40 (снятые элементы и их формы), на байты не влияет.
    */
   function sanitizeEmitMessages(messages) {
     var out = [];
     var sanitized = 0;
     var skipped = [];
     var dropped = 0;
+    var bdsRemoved = 0;
+    var bdsForms = [];
+    // O-42: измерение конверта tool-continuation (снятые формы), на байты не влияет.
+    var tcRemoved = 0;
+    var tcForms = [];
     try {
       var src = Array.isArray(messages) ? messages : [];
       for (var i = 0; i < src.length; i++) {
         var m = stripHiddenFields(src[i]);
-        if (!m || typeof m !== 'object') { out.push(m); continue; }
+        if (!m || typeof m !== 'object') {
+          // O-40 (диагностика): сообщение без объекта — O-40 не вызывается.
+          bdsDiagLine('o40-emit-msg', { i: i, len: 0, head: bdsDiagSlice('', 0, 40), tail: bdsDiagSlice('', 1, 40), called: 0, removed: 0 });
+          out.push(m); continue;
+        }
         var raw = (typeof m.text === 'string') ? m.text : '';
+        // O-40 (диагностика): строка на КАЖДОЕ сообщение. Здесь — ветка S3 (user-ход
+        // целиком из [TOOL_RESULTS]): в O-40 он не доходит → called=0, removed=0. Предикат
+        // S3 чистый и переиспользуется ТОЛЬКО под гейтом aiCmDebug (aiCmDiagOn), поэтому
+        // вне диагностики число вызовов прежнее 1:1; сам гейт S3 ниже оставлен байтово.
+        if ((typeof aiCmDiagOn === 'function') && aiCmDiagOn() &&
+            m.role === 'user' && isToolResultsOnlyText(raw)) {
+          bdsDiagLine('o40-emit-msg', { i: i, len: raw.length, head: bdsDiagSlice(raw, 0, 40), tail: bdsDiagSlice(raw, 1, 40), called: 0, removed: 0 });
+        }
         // S3: user-ход целиком из результатов тулов (+ необязательный хвост) — машинный
         // ход, своего текста пользователя в нём нет: в экспорт не идёт вовсе.
         if (m.role === 'user' && isToolResultsOnlyText(raw)) { dropped++; continue; }
         // O-7 (OFF): только часть [ANSWER] — урезание ДО санации O-20 (на выходе экспорта).
         var bare = stripReasoningSections(raw);
         if (bare !== raw) m = copyMessageWithText(m, bare);
+        // O-40: инъекции Better DeepSeek — та же точка и тот же OFF-путь, что у O-20;
+        // текст без измеренных форм возвращается тем же значением (m не копируется).
+        // O-40 (диагностика): bdsIn — РОВНО тот текст, что получает O-40 (после урезания
+        // секций); факт вызова и removed уходят строкой o40-emit-msg.
+        var bdsIn = (typeof m.text === 'string') ? m.text : '';
+        var bds = sanitizeBetterDeepSeekText(bdsIn);
+        bdsDiagLine('o40-emit-msg', { i: i, len: bdsIn.length, head: bdsDiagSlice(bdsIn, 0, 40), tail: bdsDiagSlice(bdsIn, 1, 40), called: 1, removed: bds.removed });
+        if (bds.removed > 0) {
+          m = copyMessageWithText(m, bds.text);
+          bdsRemoved += bds.removed;
+          for (var bf = 0; bf < bds.forms.length; bf++) bdsForms.push(bds.forms[bf]);
+        }
+        // O-42: агентный конверт Better DeepSeek (tool-continuation) — та же точка и тот же
+        // OFF-путь, что у O-40/O-20; текст без измеренных форм возвращается тем же значением
+        // (m не копируется). Идёт ДО S4/S5 — целое сообщение-конверт после вырезки пусто и
+        // снимается существующим S5.
+        var tc = sanitizeToolContinuationText((typeof m.text === 'string') ? m.text : '');
+        if (tc.removed > 0) {
+          m = copyMessageWithText(m, tc.text);
+          tcRemoved += tc.removed;
+          for (var tf = 0; tf < tc.forms.length; tf++) tcForms.push(tc.forms[tf]);
+        }
         if (m.role !== 'user') {
           // S4: XML-блоки вызовов тулов DeepSeek++ вырезаются из текста ассистента.
           var cut = stripToolCallBlocks((typeof m.text === 'string') ? m.text : '');
@@ -1418,9 +2024,17 @@
         out.push(m);
       }
     } catch (e) {
-      return { messages: Array.isArray(messages) ? messages : [], sanitized: 0, skipped: [], dropped: 0 };
+      return {
+        messages: Array.isArray(messages) ? messages : [],
+        sanitized: 0, skipped: [], dropped: 0, bdsRemoved: 0, bdsForms: [],
+        tcRemoved: 0, tcForms: []
+      };
     }
-    return { messages: out, sanitized: sanitized, skipped: skipped, dropped: dropped };
+    return {
+      messages: out, sanitized: sanitized, skipped: skipped, dropped: dropped,
+      bdsRemoved: bdsRemoved, bdsForms: bdsForms,
+      tcRemoved: tcRemoved, tcForms: tcForms
+    };
   }
 
   // =====================================================================================
@@ -1545,6 +2159,7 @@
     notCompleteReason: notCompleteReason,
     shouldSkipGsaPageGuard: shouldSkipGsaPageGuard,
     shouldSkipAutoExport: shouldSkipAutoExport,
+    shouldSkipBaseCompleteTrigger: shouldSkipBaseCompleteTrigger,
     effectiveAutoExportThreshold: effectiveAutoExportThreshold,
     pickExportSource: pickExportSource,
     resolveExportSource: resolveExportSource,
@@ -1566,8 +2181,23 @@
     sanitizeInjectedUserText: sanitizeInjectedUserText,
     injectedUserTextSkipReason: injectedUserTextSkipReason,
     sanitizeEmitMessages: sanitizeEmitMessages,
+    // O-40: инъекции соседнего расширения Better DeepSeek — чистые функции и таблица
+    // измеренных форм наружу (пины D/R нового тест-файла читают формы из таблицы).
+    sanitizeBetterDeepSeekText: sanitizeBetterDeepSeekText,
+    betterDeepSeekForms: BDS_INJECTION_FORMS,
+    bdsWrapperFormId: BDS_WRAPPER_ID,
+    // O-42: агентный конверт Better DeepSeek (tool-continuation) — чистая функция и таблица
+    // измеренных дескрипторов конверта наружу (пины D/R нового тест-файла читают таблицу).
+    sanitizeToolContinuationText: sanitizeToolContinuationText,
+    toolContinuationForms: TC_ENVELOPE_FORMS,
     // O-7 (OFF): урезание секций reasoning на выходе экспорта — чистая функция наружу.
     stripReasoningSections: stripReasoningSections,
+    // O-37 (C): обратное преобразование пары [REASONING]/[ANSWER] в отдельные поля
+    // (reasoning/answer) — чистая функция наружу (переиспользуется точкой сбора экспорта).
+    splitReasoningSections: splitReasoningSections,
+    // O-37 (C): нормализация размышления на выходе точки сбора экспорта (по месту, по флагу
+    // сайта) — чистая функция наружу; на боевом пути её зовёт core/export-manager.js.
+    applyReasoningExportFields: applyReasoningExportFields,
     // O-7 (OFF, S3/S4): служебный тул-мусор DeepSeek++ — чистые функции наружу.
     isToolResultsOnlyText: isToolResultsOnlyText,
     stripToolCallBlocks: stripToolCallBlocks,

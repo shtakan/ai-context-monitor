@@ -63,9 +63,14 @@ const en = JSON.parse(read('_locales/en/messages.json'));
 const SETTING_KEY = 'aiCmIncludeHiddenInExport';
 const HIDDEN_LABEL_KEY = 'options_export_hidden_label';
 const HIDDEN_HINT_KEY = 'options_export_hidden_hint';
-const HIDDEN_LABEL_RU = 'Включать reasoning и инъекции DeepSeek++ в экспорт';
+// O-42: подпись и справка тумблера расширены соседями-инъекциями — формулировка теперь
+// включает ОБА соседних расширения (DeepSeek++ и Better DeepSeek), т.к. OFF-путь снимает
+// и инъекции BDS (O-40), и агентный конверт Better DeepSeek (O-42). Пины держат байты подписи
+// и справки — обновлены РОВНО строкой формулировки с этим основанием (значения словаря
+// _locales/ru и fallback options/options.html байтово совпадают).
+const HIDDEN_LABEL_RU = 'Включать reasoning и инъекции соседних расширений (DeepSeek++, Better DeepSeek) в экспорт';
 // O-7: подсказка описывает НОВУЮ семантику тумблера (OFF = вопросы и ответы, ON = всё как есть).
-const HIDDEN_HINT_RU = 'Выключено: в файл попадают только вопросы и ответы, без размышлений и инъекций. ' +
+const HIDDEN_HINT_RU = 'Выключено: в файл попадают только вопросы и ответы, без размышлений и инъекций соседних расширений (DeepSeek++, Better DeepSeek). ' +
   'Включено: размышления и инъекции попадают в экспорт.';
 
 // =====================================================================================

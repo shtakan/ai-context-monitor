@@ -205,8 +205,13 @@ describe('H23 (d) пины контракта (каналы только CustomE
     expect(CONTENT_SRC).toContain("doAutoExportDownload(cid, percentage, 'threshold');");
     expect(CONTENT_SRC).toContain('function maybeAutoExport(');
     expect(CONTENT_SRC).toContain('shouldSkipAutoExport');
-    // гейт DRAW-ПРОПУСК и гейт полноты базы не тронуты
-    expect(CONTENT_SRC).toContain('if (!isInitialized && !(baseSeen && baseComplete)) {');
+    // гейт DRAW-ПРОПУСК и гейт полноты базы не тронуты. Условие гейта расширено РОВНО одним
+    // пропускным путём — «адаптерная база готова, isInitialized ещё нет» (O-35 B2-терминал,
+    // aiCmQwenTerminalReshoot): для claude он недостижим, т.к. aiCmAdapterBaseCount пишется
+    // только НИЖЕ гейта и только вместе с уже поднятым isInitialized (единственный писатель —
+    // tryInit, после сброса разговора обнуляется вместе с baseSeen/baseCount). Вердикты условия
+    // пинованы в tests/qwen-spa-terminal-o35.test.js (R2).
+    expect(CONTENT_SRC).toContain('if (!isInitialized && !(baseSeen && baseComplete) && !aiCmAdapterBaseSeen()) {');
     expect(CONTENT_SRC).toContain('const newBaseComplete = !!detail.historyComplete;');
     // tape-restore и paste-capture (Claude) на месте
     expect(CONTENT_SRC).toContain("window.dispatchEvent(new CustomEvent('ai-cm-restored-history',");

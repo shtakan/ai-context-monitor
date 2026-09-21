@@ -123,6 +123,11 @@ function makeO1(over) {
     baseSeen: false,
     baseText: '',
     badgeSuppressed: false,
+    // v54: состояние «база принята адаптером» — у chatgpt его взводит только адаптерная
+    // запись истории; в харнессе O-1 (сетевой/адаптерный эмит без записи истории) оно
+    // остаётся false — поведение щита и SPA-держания не меняется. Читается той же ветвью
+    // DRAW, что и badgeSuppressed (порядок ветвей прежний).
+    adapterBaseSeen: false,
     aiCmLoaderFreeze: false,
     widgetElement: el,
     stale: false,
@@ -151,7 +156,7 @@ function makeO1(over) {
 
   function draw() {
     st.draws++;
-    if (ctx.badgeSuppressed && !ctx.baseSeen) return;         // v1.8.1 (SPA): пропуск до снимка
+    if (ctx.badgeSuppressed && !ctx.baseSeen && !ctx.adapterBaseSeen) return; // v1.8.1 (SPA) + v54: база не принята
     if (ctx.aiCmLoaderFreeze) return;                         // v30.9: скрытая загрузка — накопление
     if (api.active()) return;                                 // O-1: щит держит бейдж
     const v = ctx.baseSeen ? BASE_VALUES : DOM_VALUES;        // база, иначе DOM/адаптер
@@ -378,6 +383,7 @@ function runReset() {
     preTrimExportFired: { x: 1 },
     trimRetryByConv: { x: 1 },
     badgeSuppressed: false,
+    adapterBaseSeen: true, // v54: признак прошлого разговора — reset обязан его снять
     lastWidgetData: { pct: 39.8 },
     aiCmContentReadySent: true
   };
@@ -392,6 +398,7 @@ describe('O-1 R2: SPA-держание (conv-changed) не тронуто', () =
     window.sessionStorage.setItem('aiCmDebug', '1');
     const r = runReset();
     expect(r.ctx.badgeSuppressed).toBe(true);                    // до первого badge-recv нового convId
+    expect(r.ctx.adapterBaseSeen).toBe(false);                   // v54: база нового convId ещё не принята
     expect(r.ctx.lastWidgetData).toBeNull();
     expect(r.ctx.baseSeen).toBe(false);
     expect(r.ctx.baseText).toBe('');
@@ -411,9 +418,16 @@ describe('O-1 R2: SPA-держание (conv-changed) не тронуто', () =
     expect(hold).not.toContain('badgeSuppressed');
     expect(hold).not.toContain('resetConversationState');
     expect(fnDecl(WIDGET_SRC, 'resetConversationState')).not.toContain('aiCmBadgeHold');
-    // SPA-гейт в DRAW остался ПЕРВОЙ ветвью и байтово прежним
+    // v54: взвода adapterBaseSeen в reset нет — только сброс (единственный писатель — запись
+    // базы адаптером в content.js); щит O-1 в это состояние не заглядывает вовсе
+    expect(fnDecl(WIDGET_SRC, 'resetConversationState')).toContain('adapterBaseSeen = false;');
+    expect(hold).not.toContain('adapterBaseSeen');
+    // SPA-гейт в DRAW остался ПЕРВОЙ ветвью; v54 (O-35): к baseSeen добавлен только
+    // признак «база принята адаптером» — пока ни сети, ни adapter-записи нет, держание
+    // прежнее (для chatgpt это ровно прежние состояния: щит отпускает запись базы)
     const draw = fnDecl(CONTENT, 'processAndSend');
-    expect(draw).toContain('if (badgeSuppressed && !baseSeen) {');
+    expect(draw).toContain('var badgeSuppressActive = (badgeSuppressed && !baseSeen && !adapterBaseSeen);');
+    expect(draw).toContain('if (badgeSuppressActive) {');
     const drawSrc = WIDGET_SRC;
     expect(drawSrc).toContain('badgeSuppressed = true; // v1.8.1: до первого badge-recv нового convId бейдж не обновляем');
   });
@@ -422,12 +436,14 @@ describe('O-1 R2: SPA-держание (conv-changed) не тронуто', () =
     // именно этот порядок воспроизводит draw() харнесса; менять его нельзя без изменения
     // поведения SPA-держания (badgeSuppressed) и скрытой загрузки (aiCmLoaderFreeze)
     const draw = fnDecl(CONTENT, 'processAndSend');
-    const iSupp = draw.indexOf('if (badgeSuppressed && !baseSeen) {');
+    const iSupp = draw.indexOf('var badgeSuppressActive = (badgeSuppressed && !baseSeen && !adapterBaseSeen);');
+    const iSuppIf = draw.indexOf('if (badgeSuppressActive) {');
     const iFreeze = draw.indexOf('} else if (aiCmLoaderFreeze) {');
     const iHold = draw.indexOf('} else if (aiCmBadgeHoldActive()) {');
     const iUpd = draw.indexOf('updateWidget(percentage, maxTokenCount, effectiveLimit');
     expect(iSupp).toBeGreaterThan(-1);
-    expect(iFreeze).toBeGreaterThan(iSupp);
+    expect(iSuppIf).toBeGreaterThan(iSupp);
+    expect(iFreeze).toBeGreaterThan(iSuppIf);
     expect(iHold).toBeGreaterThan(iFreeze);
     expect(iUpd).toBeGreaterThan(iHold);
   });

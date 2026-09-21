@@ -39,6 +39,17 @@ var aiCmRestoredDispatched = {}; // v82 (D9-A): convId → true — ai-cm-restor
 let baseText = '';
 let baseCount = 0;
 let baseSeen = false;
+// O-35 (v54, фикс badge-suppress): «база принята по convId» для DOM-адаптера — брат-флаг
+// baseSeen (сеть). У qwen после F5/SPA-входа сети нет вовсе: базу снимает DOM-адаптер, и
+// пишет её тот же проход processAndSend (history-write source=adapter). Без этого флага
+// SPA-супрессия бейджа (badgeSuppressed) держалась вечно — при живой базе (156 сообщений в
+// живом логе 16:44) бейдж показывал «—», а baseCount оставался 0 (это счётчик СЕТЕВОЙ базы,
+// адаптерная запись его не трогает). ВЗВОД — ровно ОДНА точка: момент записи базы путём
+// адаптера (core/content.js, history-write source=adapter), синхронно в ISOLATED-мире;
+// никаких таймеров, async-путей и вторых писателей. СБРОС — только вместе с badgeSuppressed
+// в resetConversationState() (сброс не является взводом). Читатели: гейт SPA-супрессии
+// (content.js:processAndSend) и D1 (widget.js:updateWidget — число не подменяется на «—»).
+let adapterBaseSeen = false;
 let baseComplete = false; // сеть дала ПОЛНУЮ историю (тихая пагинация) → индикатор берёт число из базы, не из DOM
 let lastBounded = false;  // последний DOM-хвост нашёл границу (стабильный источник для монотонного максимума)
 let lastTailSig = null;
@@ -58,6 +69,10 @@ let baseSkelSet = null;
 let baseAnchors = null;
 const ANCHOR_MIN = 40;
 // ========== САМОДИАГНОСТИКА: флаг stale (интеграция могла устареть) ==========
+// O-35 (D1, норма): stale = «сетевого снимка нет 12с», а НЕ авария. У qwen после F5/SPA
+// сети нет вовсе (живой источник — DOM-адаптер), поэтому stale там систематичен: число на
+// бейдже при непустой базе адаптера НЕ подменяется на «—» (core/widget.js:498), неполнота
+// источника помечается меткой в тултипе. «—» остаётся ровно там, где базы нет совсем.
 let stale = false;      // сетевого снимка нет 12с, хотя диалог с сообщениями в DOM есть
 let staleTimer = null;
 // ========== ЭКСПОРТ ИСТОРИИ (aiCmHistory) ==========
@@ -78,6 +93,9 @@ let netAttachTokens = 0;
 let netAttachBreak = null;
 // ========== СЕРВЕРНЫЙ ЧИСЛИТЕЛЬ (DeepSeek accumulated_token_usage; для ChatGPT/Gemini = 0) ==========
 let netServerTokens = 0;
+// O-35 (B1): серверный usage Qwen из стрима (detail.qwenUsage: output/reasoning/total) —
+// отдельные строки тултипа бейджа. Поле НЕ участвует в pct/токенах: это только индикация.
+let netQwenUsage = null;
 let netEffectiveLen = 0;
 // ========== BYOK: точный подсчёт токенов через Gemini countTokens API ==========
 // M-7: ключ Google AI Studio хранится ТОЛЬКО в chrome.storage.session
@@ -127,6 +145,11 @@ var autoExportSettings = { enabled: false, pct: 90, fmt: 'txt' };
 // (loadAutoExportSettings вызывается и на старте, и на каждый onChanged этих трёх ключей).
 var aiCmAutoExportFlagMissingLogged = false;
 var autoExportFired = {};        // convId -> 1 (один раз на чат)
+// O-38: модульный латч «один раз на чат» — переживает resetConversationState (SPA-возврат
+// в уже экспортированный чат). В отличие от autoExportFired/sessionFiredCache, этот латч
+// НЕ сбрасывается на смене чата: второй вход в тот же чат в пределах сессии страницы
+// видит fired и не экспортирует повторно. F5/новый instance — пуст (прежнее поведение).
+var aiCmAutoExportFiredOnce = Object.create(null);  // 'site|convId' -> 1
 // S2: per-site порог автоэкспорта: ключ 'aiCmAutoExportPct_<siteName>' (например
 // aiCmAutoExportPct_chatgpt) переопределяет глобальный aiCmAutoExportPct для этого
 // сайта. Кэш заполняется асинхронно (initialize + onChanged); запись отсутствует →
@@ -372,6 +395,10 @@ var TRIM_HEAD_IDS_N = 10;
   Object.defineProperty(Api, 'autoExportFired', { enumerable: true,
     get: function () { return autoExportFired; },
     set: function (value) { autoExportFired = value; } });
+  // O-38: модульный латч — переживает resetConversationState
+  Object.defineProperty(Api, 'aiCmAutoExportFiredOnce', { enumerable: true,
+    get: function () { return aiCmAutoExportFiredOnce; },
+    set: function (value) { aiCmAutoExportFiredOnce = value; } });
   Object.defineProperty(Api, 'autoExportPctBySite', { enumerable: true,
     get: function () { return autoExportPctBySite; },
     set: function (value) { autoExportPctBySite = value; } });

@@ -239,6 +239,10 @@ function aiCmReadByokKey(cb) {
 // v55 (SPA): трекаем convId на content-стороне; при смене — лог, отмена висящего
 // deferred-таймера старого разговора и сброс бейджа таба в SW.
 var aiCmLastSeenConvId = getCurrentConvId() || '';
+// O-35 (ДИАГНОСТИКА, только измерение): метка времени последнего сброса по сигналу смены
+// разговора. Нужна строке qwen-adapter («сколько прошло от сброса до пересъёма базы»).
+// Ничего кроме собственного числа не хранит и ни на что не влияет.
+var aiCmQwenSpaResetAt = 0;
 window.addEventListener('ai-cm-conversation-changed', function () {
   try {
     var newCid = getCurrentConvId() || '';
@@ -257,6 +261,19 @@ window.addEventListener('ai-cm-conversation-changed', function () {
         });
       }
     } catch (eO22a) { }
+    // O-35 (ДИАГНОСТИКА, только измерение): qwen-spa — приём сигнала смены разговора на
+    // ISOLATED-стороне. Именно этой строки НЕ будет на chat.qwen.ai, пока перехватчик не
+    // диспатчит событие (дефект C): у qwen хук смены чата живёт только в MAIN-мире.
+    try {
+      if (typeof aiCmDiagLine === 'function' && currentAdapter && currentAdapter.siteName === 'qwen') {
+        aiCmDiagLine('qwen-spa', {
+          ts: Date.now(), event: 'conv-changed-recv',
+          convId: newCid || '(none)', prev: aiCmLastSeenConvId || '(none)',
+          changed: (newCid !== aiCmLastSeenConvId) ? 1 : 0,
+          url: String((typeof location !== 'undefined' && location && location.href) || '')
+        });
+      }
+    } catch (eQspa) { }
     if (newCid !== aiCmLastSeenConvId) {
       debugLog('log', '[AI CM][spa] conv-changed old=' + (aiCmLastSeenConvId || '(none)') +
         ' new=' + (newCid || '(none)') + ' (content)');
@@ -276,6 +293,41 @@ window.addEventListener('ai-cm-conversation-changed', function () {
     lastSeenConvId: String(aiCmLastSeenConvId || '')
   });
   resetConversationState();
+  // O-35 (B2, фикс): счётчик DOM-адаптерной базы ПОКИНУТОГО чата не перетекает в новый —
+  // метка «Источник» нового разговора до первого пересъёма снова пуста (как и было).
+  aiCmAdapterBaseCount = 0;
+  // O-35 (ДИАГНОСТИКА, только измерение): qwen-spa — ФАКТ сброса состояния виджета этим
+  // сигналом (baseSeen/baseText/baseCount/maxTokenCount/netServerTokens обнулены,
+  // badgeSuppressed=true, снимок попапа удалён). «Пересъём» после сброса виден строками
+  // qwen-adapter (msgs/convId/url на каждой записи истории) и qwen-badge (следующая отрисовка).
+  try {
+    if (typeof aiCmDiagLine === 'function' && currentAdapter && currentAdapter.siteName === 'qwen') {
+      aiCmQwenSpaResetAt = Date.now();
+      aiCmDiagLine('qwen-spa', {
+        ts: aiCmQwenSpaResetAt, event: 'reset-done', reason: 'conversation-id-change',
+        convId: String(getCurrentConvId() || '') || '(none)',
+        url: String((typeof location !== 'undefined' && location && location.href) || ''),
+        baseSeen: (baseSeen === true) ? 1 : 0, baseCount: (typeof baseCount === 'number') ? baseCount : 0
+      });
+    }
+  } catch (eQspaR) { }
+  // O-35 (C, фикс): qwen — SPA-смена разговора обязана ПОДНЯТЬ ISOLATED-контур БЕЗ F5.
+  // До фикса перехватчик не диспатчил это событие (qwen-intercept.js:dispatched=0 → 1),
+  // слушатель не срабатывал, и на SPA-открытом чате попап оставался без данных («—»),
+  // кнопки ручного экспорта — неактивны, база не писалась до перезагрузки. Что делает
+  // реактивация — см. aiCmQwenSpaReshoot(): повторный детект сайта/адаптера + адаптерный
+  // пересъём базы по НОВОМУ convId (аналог bootstrapSnapshot у Claude/Perplexity).
+  try {
+    if (typeof aiCmDiagLine === 'function' && currentAdapter && currentAdapter.siteName === 'qwen') {
+      aiCmDiagLine('qwen-spa', {
+        ts: Date.now(), event: 'reshoot',
+        convId: String(getCurrentConvId() || '') || '(none)',
+        initialized: (isInitialized === true) ? 1 : 0,
+        url: String((typeof location !== 'undefined' && location && location.href) || '')
+      });
+    }
+  } catch (eQspaSh) { }
+  aiCmQwenSpaReshoot();
 });
   // v30.8: сигнал лоадера «скроллер скрыт/восстановлен» — для заморозки бейджа
   window.addEventListener('ai-cm-loader-freeze', function (ev) {
@@ -553,6 +605,10 @@ window.addEventListener('ai-cm-full-history', function (ev) {
   netAttachTokens = detail.attachTokens || 0;
   netAttachBreak = detail.attachBreak || null;
   netServerTokens = detail.serverTokens || 0;
+  // O-35 (B1, фикс): серверный usage Qwen (output/reasoning/total) едет отдельным полем
+  // (core/qwen-intercept.js:482-488) — тултип показывает reasoning и output РАЗДЕЛЬНО
+  // (output ВКЛЮЧАЕТ reasoning). Прочие платформы поля не шлют → null → строк нет.
+  netQwenUsage = (detail.qwenUsage && typeof detail.qwenUsage === 'object') ? detail.qwenUsage : null;
   netEffectiveLen = (typeof detail.effectiveLen === 'number' && detail.effectiveLen > 0) ? detail.effectiveLen : 0;
   baseSeen = true;
   stale = false; // сетевой снимок пришёл — интеграция актуальна
@@ -589,7 +645,12 @@ window.addEventListener('ai-cm-full-history', function (ev) {
     for (var d18 = 0; d18 < texts.length; d18++) {
       var r18 = rawMsgs18 ? ((rawMsgs18[d18] && rawMsgs18[d18].role) || '') : ((d18 % 2 === 0) ? 'user' : 'assistant');
       preDedupe18.push({
-        role: (r18 === 'user') ? 'user' : 'assistant',
+        // FIX (Claude md): ход пользователя парсера Claude приходит в снимок ролью 'human'
+        // (core/claude-intercept.js:parseHistory) — нормализуем её в 'user' ЗДЕСЬ, на записи
+        // сетевой базы: иначе 'human' умирал бы в 'assistant' ДО точек collect/dedupe
+        // (core/base-handler.js:54, core/export-manager.js:178 — те уже знают 'human', но
+        // получали готовый 'assistant') и все ходы Claude шли под '## Ассистент'.
+        role: (r18 === 'user' || r18 === 'human') ? 'user' : 'assistant',
         text: sanitizeGeminiText(texts[d18]),
         id: (rawMsgs18 && rawMsgs18[d18] && rawMsgs18[d18].id != null) ? String(rawMsgs18[d18].id) : String(ids[d18])
       });
@@ -816,7 +877,11 @@ function getCurrentConvId() {
 // ===== v2.0 (этап 1/3): widget.js ← aiCmInAppTheme, isDarkMode, aiCmWidgetAppliedTheme, aiCmThemePollTimer, AI_CM_THEME_POLL_MS, applyNativeStyles, aiCmRefreshThemeIfNeeded, aiCmStartThemePoll, aiCmStopThemePoll =====
 
 // ========== ИНИЦИАЛИЗАЦИЯ ==========
-async function initialize() {
+// O-35 (C, фикс): выбор адаптера по hostname — ОДНА точка для двух путей: штатной
+// инициализации и реактивации ISOLATED-контура по сигналу смены разговора (SPA).
+// Ветки шести прежних платформ и ветка qwen байтово прежние (R-пины и пины проводки
+// Qwen читают эти строки как есть).
+function aiCmAssignAdapterByHost() {
   const hostname = window.location.hostname;
   if (hostname.includes('chatgpt.com')) {
     currentAdapter = new ChatGPTAdapter();
@@ -830,60 +895,249 @@ async function initialize() {
     currentAdapter = new ClaudeAdapter();
   } else if (hostname.includes('perplexity.ai')) {
     currentAdapter = new PerplexityAdapter();
+  } else if (hostname.includes('chat.qwen.ai')) {
+    // O-35: Qwen — живой SSE-перехватчик (core/qwen-intercept.js, MAIN-мир) даёт точные
+    // тексты/токены; адаптер — ФОЛБЭК на случай отсутствия сетевого снимка.
+    currentAdapter = new QwenAdapter();
   }
-  if (!currentAdapter) return;
-  debugLog('log', 'Адаптер:', currentAdapter.siteName);
-  // H23: слушатель ai-cm-full-history зарегистрирован, адаптер готов → handshake MAIN-миру
-  // (ре-эмит потерянного снимка + 3с-фолбэк request-emit). Для прочих сервисов — no-op.
-  aiCmDispatchContentReady();
-  // S2: per-site порог автоэкспорта ('aiCmAutoExportPct_<siteName>') — до первых снапшотов
-  loadAutoExportPerSitePct();
-  loadByokSettings();
-  loadByokCache();
-  aiCmLoadPopupOverrides(); // H19: selectedModel/customLimit попапа → лимит и токенизация
-  if (isExtensionValid()) {
-    chrome.storage.sync.get([safePctKey()], (d) => {
-      const v = d[safePctKey()];
-      safePct = (typeof v === 'number' && v > 0) ? v : null;
-      updatePanel();
-      if (isInitialized) processAndSend();
-    });
-  }
-  if (isExtensionValid()) {
-    chrome.storage.sync.get(['showWidget'], (data) => {
-      if (data.showWidget !== false) {
-        createWidget();
+  return currentAdapter;
+}
+// O-35 (ДИАГНОСТИКА, только измерение): текст исключения одной строкой (имя + сообщение) —
+// для строк qwen-init «throw». Только читает поле уже пойманной ошибки.
+function aiCmQwenInitErrText(e) {
+  try { return String((e && e.name) ? (e.name + ': ' + (e.message || '')) : e); } catch (eQiErr) { return '(read-error)'; }
+}
+// O-35 (ДИАГНОСТИКА, только измерение): qwen-init — ЕДИНАЯ точка строк ИНИЦИАЛИЗАЦИИ контура.
+// Закрывает ровно те дыры, из-за которых живой лог 17:49–17:50 не отвечал, жив ли контур:
+//   1) вход/выход/throw реактивации aiCmQwenSpaReshoot (и КАЖДЫЙ её ретрай с его delay);
+//   2) КАЖДЫЙ вызов tryInit с результатом (найдены узлы / не найдены / фолбэк адаптера) или
+//      исключением — успешный tryInit логировал «Диалог найден» только через debugLog, а
+//      НЕУДАЧНЫЙ не логировал НИЧЕГО: «ретраев не видно» не доказывало, что их не было;
+//   3) вход/выход/throw initialize (в т.ч. пропуск лесенки 2000/4000/6000 при исключении);
+//   4) вердикт DRAW-гарда processAndSend — единственное место, где видно, что проход вернулся
+//      ДО записи базы адаптером и снимка aiCmState.
+// Гейт — общий aiCmDebug (utils/debug.js: aiCmDiagLine → aiCmDiagOn): выключен → НИ ОДНОЙ
+// строки и ни одного лишнего чтения. Ничего не пишет в состояние/storage/DOM и не меняет
+// байты выхода; строки — только для qwen. Вызовы защищены try/catch, поэтому срез-песочницы
+// тестов без этого хелпера видят прежнее поведение 1:1.
+function aiCmQwenInitDiag(event, fields) {
+  try {
+    if (typeof aiCmDiagLine !== 'function') return false;
+    if (typeof currentAdapter === 'undefined' || !currentAdapter) return false;
+    if (currentAdapter.siteName !== 'qwen') return false;
+    var f = {
+      ts: Date.now(),
+      event: event,
+      initialized: (typeof isInitialized !== 'undefined' && isInitialized === true) ? 1 : 0
+    };
+    if (fields) {
+      for (var k in fields) {
+        if (Object.prototype.hasOwnProperty.call(fields, k)) f[k] = fields[k];
       }
-    });
-  } else {
-    createWidget();
+    }
+    return aiCmDiagLine('qwen-init', f);
+  } catch (eQid) { return false; }
+}
+// O-35 (C, фикс): адаптерный пересъём базы по НОВОМУ convId после сигнала смены разговора.
+// Аналог bootstrapSnapshot у Claude (claude-intercept.js:553) / Perplexity (perplexity-
+// intercept.js:270), но на ISOLATED-стороне: у qwen сетевого снимка после F5/SPA нет вовсе,
+// живой источник — adapters/qwen-adapter.js: extractMessages() вызывается ЗАНОВО (кэша/латча
+// в адаптере нет), а не ждёт перезагрузку страницы. Контур «спал» (isInitialized=false, потому
+// что initialize/tryInit отработали на прежнем документе, а DOM нового чата отрисовался позже)
+// → tryInit с ретраями: он находит узлы, ставит isInitialized=true, пишет базу адаптера
+// (content.js:history-write source=adapter) и снимок aiCmState → попап и кнопки ручного
+// экспорта оживают. Контур уже поднят → штатный processAndSend() с той же адаптерной ветвью.
+// Ничего не делает для прочих платформ (их SPA-путь не меняется).
+function aiCmQwenSpaReshoot() {
+  try {
+    if (!currentAdapter || currentAdapter.siteName !== 'qwen') {
+      try { aiCmQwenInitDiag('reshoot-exit', { ret: 0, branch: 'not-qwen' }); } catch (eQi1) { }
+      return false;
+    }
+    aiCmAssignAdapterByHost();                  // повторный детект сайта/адаптера
+    if (!currentAdapter || currentAdapter.siteName !== 'qwen') {
+      try { aiCmQwenInitDiag('reshoot-exit', { ret: 0, branch: 'not-qwen-after-detect' }); } catch (eQi2) { }
+      return false;
+    }
+    try { aiCmQwenInitDiag('reshoot-enter', { branch: isInitialized ? 'awake' : 'asleep', convId: (typeof getCurrentConvId === 'function' ? (getCurrentConvId() || '(none)') : '(none)'), url: String((typeof location !== 'undefined' && location && location.href) || ''), src: (typeof aiCmDiagStack === 'function') ? aiCmDiagStack(1) : '' }); } catch (eQi3) { }
+    if (!isInitialized) {
+      tryInit();                                // синхронный путь: DOM нового чата уже отрисован
+      try { aiCmQwenInitDiag('reshoot-after-sync', { branch: isInitialized ? 'awake' : 'asleep' }); } catch (eQi4) { }
+      if (!isInitialized) {
+        setTimeout(function () { if (!isInitialized) tryInit(); try { aiCmQwenInitDiag('reshoot-retry', { delay: 500 }); } catch (eQi5) { } }, 500);
+        setTimeout(function () { if (!isInitialized) tryInit(); try { aiCmQwenInitDiag('reshoot-retry', { delay: 1500 }); } catch (eQi6) { } }, 1500);
+        setTimeout(function () { if (!isInitialized) tryInit(); try { aiCmQwenInitDiag('reshoot-retry', { delay: 3000 }); } catch (eQi7) { } }, 3000);
+        // O-35 (B2-терминал, ФИКС): ПОСЛЕДНИЙ мост реактивации — после исчерпания лесенки
+        // 500/1500/3000, когда DOM нового чата отрисовался ПОЗЖЕ неё. Живой лог 17:50:32 + 3с
+        // даёт ровно «тишину»: ноль строк qwen-adapter/svc-emit-trace/history-write, попап
+        // «Откройте поддерживаемый сайт», кнопки экспорта неактивны, бейдж «—». Причина, по
+        // которой дальше ждать нечего: своего периодического тика у контура нет, а наблюдателя
+        // нет тем более — startObserving() зовёт только tryInit(), который ни разу не дошёл до
+        // ветки «узлы найдены» (isInitialized так и остался false).
+        // Горизонт 6000 мс равен горизонту штатной лесенки initialize (2000/4000/6000): SPA-путь
+        // получает то же окно, что F5-путь. Ровно ОДИН дополнительный таймер на реактивацию и
+        // ровно один проход (aiCmQwenTerminalReshoot); typeof-гард — как у прочих точек, чтобы
+        // срез-песочницы тестов без этого хелпера видели прежнее поведение 1:1.
+        setTimeout(function () {
+          if (typeof aiCmQwenTerminalReshoot !== 'function') return;
+          aiCmQwenTerminalReshoot();
+        }, 6000);
+      }
+    } else {
+      processAndSend();                         // контур поднят — пересъём базы тем же путём
+      try { aiCmQwenInitDiag('reshoot-awake-send', {}); } catch (eQi8) { }
+    }
+    try { aiCmQwenInitDiag('reshoot-exit', { ret: 1, branch: isInitialized ? 'awake' : 'asleep' }); } catch (eQi9) { }
+    return true;
+  } catch (eQwenReshoot) {
+    // Исключение по-прежнему НЕ выходит наружу (контракт реактивации прежний), но теперь
+    // о нём есть строка: раньше throw до tryInit() молча отменял и вызов, и все ретраи.
+    try { aiCmQwenInitDiag('reshoot-throw', { error: aiCmQwenInitErrText(eQwenReshoot) }); } catch (eQi10) { }
+    return false;
   }
-  await tryInit();
-  if (!isInitialized) {
-    [2000, 4000, 6000].forEach(delay => {
-      setTimeout(async () => { if (!isInitialized) await tryInit(); }, delay);
-    });
+}
+// O-35 (B2-терминал, ФИКС): терминальный шаг реактивации qwen — «DOM отрисовался позже
+// лесенки». Вызывается РОВНО один раз, из последнего таймера aiCmQwenSpaReshoot (6000 мс).
+// Что делает: снимает ТЕКУЩУЮ DOM-базу адаптера тем же вызовом, что и F5-путь
+// (extractMessages(); кэша/латча в адаптере нет — см. adapters/qwen-adapter.js:155-185),
+// фиксирует её размер в aiCmAdapterBaseCount (по нему aiCmAdapterBaseSeen() даёт вердикт
+// «адаптерная база готова»; aiCmAdapterBaseCount заполняется в processAndSend ТОЛЬКО ниже
+// гарда, поэтому без этой фиксации новый пропускной путь гарда был бы недостижим), и делает
+// ОДИН проход processAndSend(): гард (content.js:1887) пропускает путь
+// «адаптерная база готова, isInitialized ещё нет» → база уходит в aiCmHistory
+// (history-write source=adapter, adapterBaseSeen=true отпускает SPA-супрессию бейджа), а
+// снимок — в aiCmState: попап и кнопки ручного экспорта оживают без F5 (дефект «мёртвого
+// попапа»). Мёртвого пути нет: у qwen после SPA сети нет вовсе, поэтому без прохода по
+// адаптерной базе контур не оживает ничем, кроме F5.
+// Чего НЕ делает (границы фикса, чтобы не плодить вторые контуры):
+//   - НЕ трогает isInitialized: единственный писатель остаётся прежним (tryInit, content.js:1122);
+//   - НЕ заводит наблюдателя/ретраев/периодики: ровно один таймер на одну реактивацию;
+//   - НЕ меняет пустой путь: при termMsgs=0 размер базы остаётся 0 → гард возвращает проход
+//     там же, где и раньше (поведение пустого чата прежнее, только строка диагностики).
+// Свой таймер на каждую реактивацию; устаревший (брошенный переходом в другой чат) безвреден:
+// он снимает DOM адаптера и convId ТЕКУЩЕГО документа, а повторная запись истории того же чата
+// отсекается lastHistoryWroteKey (histKey = 'adapter|<msgs>').
+// Диагностика — тот же канал/гейт (aiCmQwenInitDiag → qwen-init), каждый вызов под try/catch.
+function aiCmQwenTerminalReshoot() {
+  if (isInitialized) return false;                  // контур поднят — терминалу нечего делать
+  var termMsgs = -1;                                // -1: фолбэк недоступен; -2: адаптер бросил
+  try {
+    if (currentAdapter && typeof currentAdapter.extractMessages === 'function') {
+      termMsgs = currentAdapter.extractMessages().length;
+    }
+  } catch (eQiTm) {
+    termMsgs = -2;
+    try { aiCmQwenInitDiag('reshoot-terminal-throw', { error: aiCmQwenInitErrText(eQiTm) }); } catch (eQiT1) { }
+  }
+  // Размер адаптерной базы ТЕКУЩЕГО convId фиксируется ДО прохода: гард читает его через
+  // aiCmAdapterBaseSeen(). Пустой DOM оставляет 0 — «адаптерной базы нет» (как и было).
+  if (typeof aiCmAdapterBaseCount !== 'undefined') {
+    aiCmAdapterBaseCount = (termMsgs > 0) ? termMsgs : 0;
+  }
+  try { aiCmQwenInitDiag('reshoot-terminal', { adapterMsgs: termMsgs, ready: (typeof aiCmAdapterBaseSeen === 'function' && aiCmAdapterBaseSeen()) ? 1 : 0 }); } catch (eQiT2) { }
+  processAndSend();                                 // ровно один проход (гард решает, писать ли базу)
+  return true;
+}
+async function initialize() {
+  try {
+    aiCmAssignAdapterByHost();
+    if (!currentAdapter) {
+      try { aiCmQwenInitDiag('initialize-exit', { ret: 0, reason: 'no-adapter' }); } catch (eQi18) { }
+      return;
+    }
+    try { aiCmQwenInitDiag('initialize-enter', { adapter: currentAdapter.siteName, url: String((typeof location !== 'undefined' && location && location.href) || '') }); } catch (eQi19) { }
+    debugLog('log', 'Адаптер:', currentAdapter.siteName);
+    // H23: слушатель ai-cm-full-history зарегистрирован, адаптер готов → handshake MAIN-миру
+    // (ре-эмит потерянного снимка + 3с-фолбэк request-emit). Для прочих сервисов — no-op.
+    aiCmDispatchContentReady();
+    // S2: per-site порог автоэкспорта ('aiCmAutoExportPct_<siteName>') — до первых снапшотов
+    loadAutoExportPerSitePct();
+    loadByokSettings();
+    loadByokCache();
+    aiCmLoadPopupOverrides(); // H19: selectedModel/customLimit попапа → лимит и токенизация
+    if (isExtensionValid()) {
+      chrome.storage.sync.get([safePctKey()], (d) => {
+        const v = d[safePctKey()];
+        safePct = (typeof v === 'number' && v > 0) ? v : null;
+        updatePanel();
+        if (isInitialized) processAndSend();
+      });
+    }
+    if (isExtensionValid()) {
+      chrome.storage.sync.get(['showWidget'], (data) => {
+        if (data.showWidget !== false) {
+          createWidget();
+        }
+      });
+    } else {
+      createWidget();
+    }
+    await tryInit();
+    // O-35 (ДИАГНОСТИКА): результат первого tryInit штатного запуска (и жив ли контур).
+    try { aiCmQwenInitDiag('initialize-after-tryinit', {}); } catch (eQi20) { }
+    if (!isInitialized) {
+      [2000, 4000, 6000].forEach(delay => {
+        setTimeout(async () => { if (!isInitialized) await tryInit(); }, delay);
+      });
+      // O-35 (ДИАГНОСТИКА): лесенка штатного запуска — её абсолютные задержки. Она истекает
+      // за 7.5с от загрузки документа; SPA-вход позже (живой лог 17:50:32 — через 42с) её
+      // уже не застаёт, и единственным мостом остаётся reshoot (500/1500/3000).
+      try { aiCmQwenInitDiag('initialize-ladder', { delays: '2000,4000,6000', scheduled: 3 }); } catch (eQi21) { }
+    }
+    try { aiCmQwenInitDiag('initialize-exit', { ret: 1 }); } catch (eQi22) { }
+  } catch (eInitialize) {
+    // Диагностика исключение НЕ глотает: initialize() по-прежнему отклоняется (вызов из
+    // setTimeout(() => initialize(), 1500) остаётся unhandled rejection) — но теперь видно,
+    // что лесенка 2000/4000/6000 после await tryInit() не была поставлена.
+    try { aiCmQwenInitDiag('initialize-throw', { error: aiCmQwenInitErrText(eInitialize), src: (typeof aiCmDiagStack === 'function') ? aiCmDiagStack(1) : '' }); } catch (eQi23) { }
+    throw eInitialize;
   }
 }
 async function tryInit() {
-  if (isInitialized) return;
-  let found = findMessageNodes();
-  // Фолбэк для адаптеров без общих [data-message-*] (Google Search AI использует
-  // [data-scope-id="turn"], которого нет в MSG_SELECTORS). Без этого isInitialized
-  // остаётся false, processAndSend не пишет aiCmState → попап «Откройте поддерживаемый сайт».
-  if (found.nodes.length === 0 && currentAdapter && typeof currentAdapter.extractMessages === 'function') {
-    try {
-      const ams = currentAdapter.extractMessages();
-      if (ams && ams.length > 0) {
-        found = { nodes: ams, sel: (currentAdapter.siteName || 'adapter') + '.extractMessages()' };
+  try {
+    if (isInitialized) {
+      try { aiCmQwenInitDiag('tryinit-skip', { reason: 'already-initialized' }); } catch (eQi11) { }
+      return;
+    }
+    let found = findMessageNodes();
+    // O-35 (ДИАГНОСТИКА, только измерение): вход КАЖДОГО вызова — сколько узлов дал общий
+    // селектор ДО фолбэка и какой путь позвал (src: initialize / сетевой EMIT / reshoot / лесенка).
+    try { aiCmQwenInitDiag('tryinit-enter', { nodes: found.nodes.length, sel: found.sel, src: (typeof aiCmDiagStack === 'function') ? aiCmDiagStack(1) : '' }); } catch (eQi12) { }
+    var qiAdapterMsgs = -1; // -1: фолбэк не вызывался; -2: фолбэк бросил исключение
+    // Фолбэк для адаптеров без общих [data-message-*] (Google Search AI использует
+    // [data-scope-id="turn"], которого нет в MSG_SELECTORS). Без этого isInitialized
+    // остаётся false, processAndSend не пишет aiCmState → попап «Откройте поддерживаемый сайт».
+    if (found.nodes.length === 0 && currentAdapter && typeof currentAdapter.extractMessages === 'function') {
+      try {
+        const ams = currentAdapter.extractMessages();
+        qiAdapterMsgs = (ams && typeof ams.length === 'number') ? ams.length : 0;
+        if (ams && ams.length > 0) {
+          found = { nodes: ams, sel: (currentAdapter.siteName || 'adapter') + '.extractMessages()' };
+        }
+      } catch (e) {
+        // O-35 (ДИАГНОСТИКА): раньше исключение фолбэка глоталось молча (пустой catch) —
+        // теперь о нём есть строка. Поведение прежнее: узел не найден.
+        qiAdapterMsgs = -2;
+        try { aiCmQwenInitDiag('tryinit-adapter-throw', { error: aiCmQwenInitErrText(e) }); } catch (eQi13) { }
       }
-    } catch (e) { }
-  }
-  if (found.nodes.length > 0) {
-    debugLog('log', 'Диалог найден:', found.nodes.length, 'узлов (' + found.sel + ')');
-    isInitialized = true;
-    processAndSend();
-    startObserving();
+    }
+    if (found.nodes.length > 0) {
+      debugLog('log', 'Диалог найден:', found.nodes.length, 'узлов (' + found.sel + ')');
+      try { aiCmQwenInitDiag('tryinit-nodes', { nodes: found.nodes.length, sel: found.sel, action: 'set-initialized' }); } catch (eQi14) { }
+      isInitialized = true;
+      processAndSend();
+      startObserving();
+      // Строка ПОСЛЕ processAndSend/startObserving: её отсутствие при наличии
+      // tryinit-nodes доказывает, что проход упал именно внутри processAndSend().
+      try { aiCmQwenInitDiag('tryinit-exit', { action: 'initialized', nodes: found.nodes.length, sel: found.sel, observer: (typeof observer !== 'undefined' && observer) ? 1 : 0 }); } catch (eQi15) { }
+    } else {
+      try { aiCmQwenInitDiag('tryinit-exit', { action: 'not-found', nodes: 0, adapterMsgs: qiAdapterMsgs }); } catch (eQi16) { }
+    }
+  } catch (eTryInit) {
+    // Диагностика исключение НЕ глотает: контракт прежний — промис tryInit отклоняется,
+    // а вызывающий (initialize/сетевой слушатель/reshoot) видит тот же отказ, что и раньше.
+    try { aiCmQwenInitDiag('tryinit-throw', { error: aiCmQwenInitErrText(eTryInit), src: (typeof aiCmDiagStack === 'function') ? aiCmDiagStack(1) : '' }); } catch (eQi17) { }
+    throw eTryInit;
   }
 }
 // ========== НАБЛЮДЕНИЕ ==========
@@ -1217,6 +1471,16 @@ function aiCmArchiveCountFor(convId) {
 // Источник для UI: архив (если импортирован для ЭТОГО convId) либо живой ярус.
 // Ярлык архива берётся из aiCmConvSource:<convId> (посчитан при импорте) — логика
 // ярлыка не дублируется в content-скрипте.
+// O-35 (B2, фикс): размер последней DOM-адаптерной базы (пишется в processAndSend из уже
+// посчитанного messageCount — без дополнительного прохода extractMessages()). Нужен, чтобы
+// отличить «живой ярус из адаптера» (baseSeen=false: у qwen после F5/SPA сети нет вовсе)
+// от «данных нет совсем». Сбрасывается сигналом смены разговора.
+var aiCmAdapterBaseCount = 0;
+function aiCmAdapterBaseSeen() {
+  return (!baseSeen) && ((typeof aiCmAdapterBaseCount === 'number' && aiCmAdapterBaseCount > 0) ||
+    (typeof baseCount === 'number' && baseCount > 0) ||
+    (Array.isArray(lastBaseTexts) && lastBaseTexts.length > 0));
+}
 function aiCmSourceInfo() {
   var cid = getCurrentConvId() || '';
   var rec = cid ? aiCmConvSourceByConv[cid] : null;
@@ -1227,6 +1491,13 @@ function aiCmSourceInfo() {
     return { kind: 'archive', label: rec.label || aiCmI18nMessage('content_source_archive', 'архив: ' + fmt + ' · ' + cnt + ' сообщ.', [fmt, cnt]) };
   }
   if (baseSeen) return { kind: 'live', label: aiCmI18nMessage('content_source_live', 'live (сеть/DOM)') };
+  // O-35 (B2, фикс): живой ярус — НЕ только сетевой снимок. На SPA-открытом/F5-чате qwen
+  // сети нет вовсе: базу снимает DOM-адаптер (history-write source=adapter), а числа могут
+  // приходить из серверного usage стрима. Раньше здесь возвращался null → попап показывал
+  // «Источник: —» при живых числах (скрин №3). Существующий ярлык content_source_live
+  // («live (сеть/DOM)») честно покрывает оба пути; метки прочих платформ не меняются
+  // (нет ни сети, ни адаптерной базы → прежний null).
+  if (aiCmAdapterBaseSeen()) return { kind: 'live', label: aiCmI18nMessage('content_source_live', 'live (сеть/DOM)') };
   return null;
 }
 
@@ -1608,23 +1879,46 @@ function processAndSend() {
 
   // Антиспам: DRAW/DRAW-ПРОПУСК печатаем только при изменении сигнатуры состояния.
   var drawSig = [baseComplete ? 1 : 0, baseSeen ? 1 : 0, isInitialized ? 1 : 0, baseCount, (baseText ? baseText.length : 0)].join('|');
-  if (!isInitialized && !(baseSeen && baseComplete)) {
+  // O-35 (B2-терминал, ФИКС): третий ПРОПУСКНОЙ путь гарда — «адаптерная база текущего convId
+  // уже снята, а isInitialized ещё нет». Это ровно путь SPA-реактивации qwen: терминальный шаг
+  // (aiCmQwenTerminalReshoot, 6000 мс) снял DOM-базу нового чата, но tryInit ни разу не дошёл до
+  // ветки «узлы найдены» — наблюдателя/инициализации нет. До фикса проход возвращался ЗДЕСЬ, ВЫШЕ
+  // записи адаптерной базы и снимка aiCmState: попап «Откройте поддерживаемый сайт», кнопки
+  // экспорта неактивны, бейдж «—» (живой лог 17:49-17:50) — до F5.
+  // Для прочих путей условие — no-op: aiCmAdapterBaseCount заполняется ТОЛЬКО НИЖЕ этой строки
+  // (ветка !baseSeen, content.js:1916), а baseCount/lastBaseTexts живут только вместе с
+  // baseSeen=true и обнуляются resetConversationState() (вместе с aiCmAdapterBaseCount) на смене
+  // разговора — утечки «базы прошлого чата» новый путь не даёт.
+  if (!isInitialized && !(baseSeen && baseComplete) && !aiCmAdapterBaseSeen()) {
     if (drawSig !== lastDrawSig) {
       lastDrawSig = drawSig;
       debugLog('log', '[content-trace] DRAW-ПРОПУСК (guard) seq=' + (window.__aiCmTraceSeq || 0) + ' baseComplete=' + baseComplete + ' baseSeen=' + baseSeen + ' isInitialized=' + isInitialized + ' t=' + Date.now());
     }
+    // O-35 (ДИАГНОСТИКА, только измерение): явный вердикт DRAW-гарда — единственная точка,
+    // где видно ФАКТ возврата прохода ДО записи адаптерной базы и снимка aiCmState (попап
+    // «Откройте поддерживаемый сайт», неактивные кнопки экспорта). adapterMsgs — счётчик
+    // ПРЕДЫДУЩЕГО прохода: этот выходит раньше extractMessages(). Строка печатается на
+    // каждый проход (в т.ч. с пустого чата, где проход зовёт createWidget → widget.js:482).
+    try { aiCmQwenInitDiag('draw-guard', { verdict: 'skip', reason: 'not-initialized', baseSeen: (baseSeen === true) ? 1 : 0, baseComplete: (baseComplete === true) ? 1 : 0, baseCount: (typeof baseCount === 'number') ? baseCount : 0, adapterMsgs: (typeof aiCmAdapterBaseCount === 'number') ? aiCmAdapterBaseCount : -1, src: (typeof aiCmDiagStack === 'function') ? aiCmDiagStack(1) : '' }); } catch (eQg1) { }
     return;
   }
   if (drawSig !== lastDrawSig) {
     lastDrawSig = drawSig;
     debugLog('log', '[content-trace] DRAW seq=' + (window.__aiCmTraceSeq || 0) + ' baseComplete=' + baseComplete + ' baseSeen=' + baseSeen + ' isInitialized=' + isInitialized + ' effectiveLen=' + ((function () { var e = getEffectiveText(); return e ? e.length : 0; })()) + ' t=' + Date.now());
   }
+  // O-35 (ДИАГНОСТИКА, только измерение): гард пропустил проход — контур жив (isInitialized)
+  // либо есть полная сетевая база; ниже работают запись базы адаптером и снимок aiCmState.
+  try { aiCmQwenInitDiag('draw-guard', { verdict: 'pass', baseSeen: (baseSeen === true) ? 1 : 0, baseComplete: (baseComplete === true) ? 1 : 0, baseCount: (typeof baseCount === 'number') ? baseCount : 0, src: (typeof aiCmDiagStack === 'function') ? aiCmDiagStack(1) : '' }); } catch (eQg2) { }
   try {
     const svc = getServiceKey();
     const isGeminiLike = (svc === 'gemini' || svc === 'aistudio');
     let messageCount;
     if (!baseSeen) {
       messageCount = isGeminiLike ? 0 : currentAdapter.extractMessages().length;
+      // O-35 (B2, фикс): запоминаем размер DOM-адаптерной базы текущего чата — из него
+      // aiCmSourceInfo() отличает живой ярус адаптера от «данных нет совсем». Число уже
+      // посчитано строкой выше: лишнего прохода extractMessages() не появляется.
+      aiCmAdapterBaseCount = messageCount;
     } else {
       messageCount = baseCount;
     }
@@ -1645,6 +1939,9 @@ function processAndSend() {
       }
     }
     // BYOK: для Gemini-подобных сервисов отправляем запрос на точный подсчёт токенов
+    // O-35: Qwen в этот список НЕ входит — осознанно. У Qwen есть собственный серверный
+    // usage в SSE (input/output/reasoning), и перезапись через countTokens BYOK затрёт
+    // авторитетные числа стрима. Добавление 'qwen' сюда — регресс (пин-тест запрещает).
     const isGeminiSvc = (svc === 'gemini' || svc === 'aistudio' || svc === 'google_search');
     if (isGeminiSvc && exactCountEnabled && geminiApiKey && fullText && baseComplete) {
       requestExactTokens(fullText, modelId);
@@ -1678,7 +1975,12 @@ function processAndSend() {
     const percentage = displayLimit > 0 ? Math.round((maxTokenCount / displayLimit) * 1000) / 10 : 0;
     const hasChanged = percentage !== lastPercentage;
     lastPercentage = percentage;
-    if (badgeSuppressed && !baseSeen) {
+    // O-35 (v54, фикс badge-suppress): супрессия держится ТОЛЬКО пока база нового convId не
+    // принята — сетью (baseSeen) ИЛИ DOM-адаптером (adapterBaseSeen; у qwen после F5/SPA сети
+    // нет вовсе, базу пишет history-write source=adapter). Вердикт считается один раз и уходит
+    // в ту же диагностику qwen-badge (reason=spa-suppress) — гейт и строка не расходятся.
+    var badgeSuppressActive = (badgeSuppressed && !baseSeen && !adapterBaseSeen);
+    if (badgeSuppressActive) {
       // v1.8.1: после RESET до первого badge-recv НЕ эмитим дефолтную модель с нулями
       // (иначе 1–2с показывается ложная «Gemini 2.5 Pro» и 0%); бейдж остаётся «—».
       debugLog('log', '[content-trace] badge-suppress: пропуск updateWidget до первого снимка нового convId');
@@ -1702,6 +2004,29 @@ function processAndSend() {
         modelName: ModelConfig.getModel(modelId)?.name || modelId, attachBreak: netAttachBreak
       };
     }
+    // O-35 (ДИАГНОСТИКА, только измерение): qwen-badge — вердикт ветви отрисовки бейджа.
+    // reason=draw — updateWidget выполнился (процент ушёл в круг/подпись); reason=spa-suppress —
+    // держит SPA-супрессия после сброса; reason=loader-freeze — скрытая загрузка лоадера.
+    // Плейсхолдер «—» вместо числа (ветка stale) печатает core/widget.js своей строкой.
+    try {
+      if (typeof aiCmDiagLine === 'function' && currentAdapter && currentAdapter.siteName === 'qwen') {
+        aiCmDiagLine('qwen-badge', {
+          ts: Date.now(),
+          event: 'badge-update',
+          reason: badgeSuppressActive ? 'spa-suppress' : (aiCmLoaderFreeze ? 'loader-freeze' : 'draw'),
+          pct: percentage, tokens: maxTokenCount, stale: (stale === true) ? 1 : 0,
+          baseSeen: (baseSeen === true) ? 1 : 0, baseComplete: (baseComplete === true) ? 1 : 0,
+          // O-35 (v54): признак «база принята адаптером» — объясняет baseCount=0 в живом
+          // логе: baseCount/netBaseMsgs описывают СЕТЕВУЮ базу, адаптерная живёт здесь.
+          adapterBaseSeen: (adapterBaseSeen === true) ? 1 : 0,
+          netBaseMsgs: lastBaseTexts.length, baseCount: baseCount,
+          netServerTokens: (typeof netServerTokens === 'number') ? netServerTokens : 0,
+          convId: (typeof getCurrentConvId === 'function' ? (getCurrentConvId() || '') : '') || '(none)',
+          url: String((typeof location !== 'undefined' && location && location.href) || ''),
+          source: (typeof aiCmSourceLabelNow === 'string' && aiCmSourceLabelNow) ? aiCmSourceLabelNow : '-'
+        });
+      }
+    } catch (eQbw) { }
     // v30.4: автоэкспорт на ЛЮБОМ пути badge-update с реальным pct (включая кэш-путь и
     // путь снятия супрессии); условие внутри maybeAutoExport — без требования baseComplete.
     maybeAutoExport(percentage);
@@ -1766,6 +2091,18 @@ function processAndSend() {
         // v54: trace записи экспорта — источник ВСЕГДА сеть текущего convId
         debugLog('log', '[AI CM][trace] history-write source=network convId=' + (emitConvA || '-') +
           ' msgs=' + baseCount);
+        // O-35 (ДИАГНОСТИКА, только измерение): qwen-adapter — каждая запись истории
+        // (msgs/convId/URL). sinceSpaResetMs — сколько прошло от сброса по смене разговора
+        // до этого пересъёма (-1 — сброса в этой сессии документа не было).
+        try {
+          if (typeof aiCmDiagLine === 'function' && currentAdapter && currentAdapter.siteName === 'qwen') {
+            aiCmDiagLine('qwen-adapter', {
+              ts: Date.now(), source: 'network', msgs: baseCount, netBaseMsgs: lastBaseTexts.length,
+              convId: (emitConvA || '(none)'), url: String((typeof location !== 'undefined' && location && location.href) || ''),
+              histKey: histKey, sinceSpaResetMs: aiCmQwenSpaResetAt ? (Date.now() - aiCmQwenSpaResetAt) : -1
+            });
+          }
+        } catch (eQadN) { }
         try {
           // v31: дублируем в per-host ключ aiCmHistory:<host> (перезапись, без накопления)
           var histSnapshot = {
@@ -1817,8 +2154,34 @@ function processAndSend() {
         var histKeyS24 = 'adapter|' + msgsS24.length;
         if (msgsS24.length > 0 && histKeyS24 !== lastHistoryWroteKey) {
           lastHistoryWroteKey = histKeyS24;
+          // O-35 (v54, фикс badge-suppress): ЕДИНСТВЕННАЯ точка взвода состояния «база принята
+          // по convId для adapter-пути» — ровно там, где база фактически записана (источник
+          // adapter, независимо от того, что сеть молчит). Синхронно, в ISOLATED-мире, без
+          // таймеров/async и вторых писателей: отсюда SPA-супрессия бейджа (badgeSuppressed)
+          // отпускается по baseSeen ИЛИ adapterBaseSeen, а D1 (widget.js) не подменяет
+          // посчитанное число на «—». Сброс — только resetConversationState().
+          adapterBaseSeen = true;
           debugLog('log', '[AI CM][trace] history-write source=adapter site=' + (currentAdapter.siteName || '') +
             ' convId=' + cidS24 + ' msgs=' + msgsS24.length);
+          // O-35 (ДИАГНОСТИКА, только измерение): qwen-adapter — запись истории путём
+          // DOM-адаптера (именно она дала msgs=156 в консоли 14:48:51.318). convId/url —
+          // привязка числа к РАЗГОВОРУ (вердикт A), roles — разбивка по ролям (признак
+          // овер-экстракции: 78u/78a — легитимный чат, перекос — лишние узлы в счётчике).
+          try {
+            if (typeof aiCmDiagLine === 'function' && currentAdapter && currentAdapter.siteName === 'qwen') {
+              var qUsers = 0;
+              var qAssist = 0;
+              for (var qr = 0; qr < msgsS24.length; qr++) {
+                if (msgsS24[qr] && msgsS24[qr].role === 'user') qUsers++; else qAssist++;
+              }
+              aiCmDiagLine('qwen-adapter', {
+                ts: Date.now(), source: 'adapter', msgs: msgsS24.length, adapterMsgs: msgsS24.length,
+                roles: qUsers + 'u/' + qAssist + 'a', convId: cidS24 || '(none)',
+                url: String((typeof location !== 'undefined' && location && location.href) || ''),
+                histKey: histKeyS24, sinceSpaResetMs: aiCmQwenSpaResetAt ? (Date.now() - aiCmQwenSpaResetAt) : -1
+              });
+            }
+          } catch (eQadA) { }
           var histSnapshotS24 = {
             host: window.location.hostname,
             convId: cidS24,
@@ -1943,6 +2306,79 @@ loadExportHiddenSetting();
 
 // ===== v2.0 (этап 1/3): widget.js ← createWidget, updateWidget =====
 
+// =============================================================================
+// O-36 (D1): достоверность базы для маркировки [LOW CONFIDENCE]_ в РУЧНОМ экспорте.
+//
+// Симптом (живой прогон qwen, 2026-09-19 19:54): файл
+// `[LOW CONFIDENCE]_ai-context-monitor-qwen-Qwen3.8-Max-….txt` при работающей базе
+// (`history-write source=adapter msgs=75`, `adapterBaseSeen=1`).
+// Корень: база qwen приходит НЕ из сети (O-35/D2: живой источник — DOM-адаптер), а
+// `baseComplete` — признак СЕТЕВОЙ полноты (core/state.js:53): у qwen он не взведётся
+// никогда, поэтому живой флаг v1.14.1 (`isLowConfidenceBase: baseComplete !== true`)
+// давал префикс на КАЖДОМ ручном экспорте. Для сервиса без сети маркировка «база не
+// подтверждена» ложна: база подтверждена ЕДИНСТВЕННЫМ доступным источником — записью
+// DOM-адаптера (`history-write source=adapter` → adapterBaseSeen=true, O-35/v54).
+//
+// Правило (узкое, чтобы не тронуть прочие платформы — R1): qwen И база принята
+// адаптером для ТЕКУЩЕГО convId (adapterBaseSeen сбрасывается на смене разговора) →
+// низкая достоверность НЕ ставится. Прочие сервисы и прежняя семантика 1:1.
+// `baseComplete` здесь НЕ подменяется: признак сетевой полноты остаётся своим
+// (гейты лоадера/оракула/бейджа читают его по прежнему смыслу).
+// =============================================================================
+function aiCmQwenExportBaseTrusted() {
+  try {
+    return !!((currentAdapter && currentAdapter.siteName === 'qwen') && adapterBaseSeen === true);
+  } catch (eQbt) { return false; }
+}
+
+// =============================================================================
+// O-37 (A): ДОВЕРИЕ БАЗЕ АДАПТЕРА В ГЕЙТЕ АВТОЭКСПОРТА (сервис без сети — qwen).
+//
+// Симптом (живой лог 21:47:18 / 21:58:03 / 22:03:50 / 22:07:44):
+//   [AI CM][diag] auto-export point=maybeAutoExport verdict=skip reason=base-pending
+//   site=qwen pct=63.7 baseSeen=0 baseComplete=0 — при пороге 30 файла нет вовсе.
+// Корень (ИЗМЕРЕН): гейт O-33 (utils/export-emit-pipeline.js:shouldSkipAutoExport) требовал
+// СЕТЕВОЙ снимок (baseSeen=1), а adapterBaseSeen (единственная точка взвода — запись базы
+// путём DOM-адаптера, v54) гейтом не читался: у qwen сети не будет никогда, поэтому
+// base-pending возвращался на каждом DRAW и автоэкспорт не срабатывал ни разу. Доверие
+// aiCmQwenExportBaseTrusted (O-36/D1) было простёрто только на РУЧНОЙ снимок экспорта.
+//
+// Правило (узкое, чтобы не тронуть шесть платформ — R1): qwen И база принята адаптером для
+// ТЕКУЩЕГО convId (adapterBaseSeen сбрасывается на смене разговора) → база объявляется
+// достоверной (O-35: DESIGN-источник qwen — DOM-адаптер), и гейт получает domBaseTrusted=true:
+// причина base-pending не возвращается, дальше решают порог и латч fired (повторных файров
+// нет). Порядок причин и вердикты прочих сайтов не меняются вовсе (поле в гейт не уходит).
+// =============================================================================
+function aiCmAutoExportTrustedBase() {
+  try {
+    return !!((currentAdapter && currentAdapter.siteName === 'qwen') && adapterBaseSeen === true);
+  } catch (eAtb) { return false; }
+}
+// O-37 (A, ДИАГНОСТИКА, только измерение): строка порогового файра по доверенной базе
+// адаптера. Печатается РОВНО под гейтом aiCmDebug (aiCmDiagLine) и только когда файр реально
+// состоялся на доверенной базе qwen; значения читаются, байты файла не меняются. Гейт
+// выключен → ни одной строки. Вызывается из единственной точки старта скачивания
+// автоэкспорта (core/export-manager.js) через typeof-гард — в срез-песочницах тестов,
+// где хелпера нет, вызова не происходит вовсе (поведение 1:1).
+function aiCmAutoExportTrustedBaseDiag(trigger, cid, percentage) {
+  try {
+    if (typeof aiCmDiagLine !== 'function') return false;
+    if (!aiCmAutoExportTrustedBase()) return false;
+    aiCmDiagLine('auto-export', {
+      point: 'maybeAutoExport',
+      verdict: 'fire',
+      trigger: trigger,
+      site: 'qwen',
+      convId: cid,
+      pct: percentage,
+      baseSeen: (typeof baseSeen !== 'undefined' && baseSeen === true) ? 1 : 0,
+      baseComplete: (typeof baseComplete !== 'undefined' && baseComplete === true) ? 1 : 0,
+      adapterBaseSeen: (typeof adapterBaseSeen !== 'undefined' && adapterBaseSeen === true) ? 1 : 0
+    });
+    return true;
+  } catch (eAtbd) { return false; }
+}
+
 // ========== СЛУШАТЕЛЬ POPUP ==========
 if (isExtensionValid()) {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -1976,7 +2412,7 @@ if (isExtensionValid()) {
       // сеть, ONE-SIDE → live + маркер). Не дождались/сети нет → прежний live-путь БЕЗ
       // изменения байтов файла; isLowConfidenceBase и порядок [REASONING]/[ANSWER] не тронуты.
       var replyManualExport = function () {
-        sendResponse({ data: {
+        var manualSnapshot = {
           host: window.location.hostname,
           convId: curCidExp,
           site: (currentAdapter && currentAdapter.siteName) || '',
@@ -1989,7 +2425,16 @@ if (isExtensionValid()) {
           // префикс [LOW CONFIDENCE]_ (options.js:378), после base-complete — без префикса.
           isLowConfidenceBase: (baseComplete !== true),
           messages: buildHistoryMessages()
-        } });
+        };
+        // O-36 (D1): у сервиса без сети (qwen) база подтверждена записью DOM-адаптера —
+        // префикс низкой достоверности ей не полагается (см. aiCmQwenExportBaseTrusted).
+        // Прочие сайты: флаг остаётся живым значением baseComplete (байтово прежнее имя).
+        // typeof-гард: срез-песочницы тестов ручного экспорта (MANUAL-регион без этого
+        // хелпера) видят прежнее поведение 1:1 — как у прочих точек контура qwen.
+        if (typeof aiCmQwenExportBaseTrusted === 'function' && aiCmQwenExportBaseTrusted()) {
+          manualSnapshot.isLowConfidenceBase = false;
+        }
+        sendResponse({ data: manualSnapshot });
       };
       if (typeof aiCmExportNetSyncThen === 'function' && aiCmExportNetSyncSite()) {
         aiCmExportNetSyncThen(curCidExp, replyManualExport);

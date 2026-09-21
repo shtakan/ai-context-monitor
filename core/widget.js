@@ -224,6 +224,19 @@ function resetConversationState() {
       circle.style.stroke = zoneColor(0);
     }
     if (pt) pt.textContent = '—'; // v1.8.1: «—» вместо ложного 0.0% до первых данных
+    // O-35 (ДИАГНОСТИКА, только измерение): qwen-badge — плейсхолдер «—» ветви RESET
+    // (сброс состояния виджета сигналом смены разговора). На qwen до фикса дефекта C
+    // эта строка не появляется НИКОГДА: событие 'ai-cm-conversation-changed' не приходит.
+    try {
+      if (typeof aiCmDiagLine === 'function' && typeof currentAdapter !== 'undefined' &&
+          currentAdapter && currentAdapter.siteName === 'qwen') {
+        aiCmDiagLine('qwen-badge', {
+          ts: Date.now(), event: 'placeholder', reason: 'reset-conversation',
+          convId: (typeof getCurrentConvId === 'function' ? (getCurrentConvId() || '') : '') || '(none)',
+          url: String((typeof location !== 'undefined' && location && location.href) || '')
+        });
+      }
+    } catch (eQbReset) { }
     if (tt) {
       // M-4.2: строка загрузки — ключ content_widget_loading (в песочнице без хелпера — фолбэк)
       const i18n = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key, fallback) { return fallback; };
@@ -231,6 +244,11 @@ function resetConversationState() {
     }
   }
   badgeSuppressed = true; // v1.8.1: до первого badge-recv нового convId бейдж не обновляем
+  // O-35 (v54): супрессия взведена заново — база НОВОГО convId ещё не принята ни сетью, ни
+  // адаптером. Здесь и только здесь «сброс» признака adapterBaseSeen (его ВЗВОД — ровно одна
+  // точка: запись базы путём адаптера в core/content.js); без этого состояние прошлого
+  // разговора отпускало бы супрессию нового.
+  adapterBaseSeen = false;
   lastWidgetData = null; // v1.8.1: старые данные предыдущего чата более недействительны
   // H23-cosmetic (v1.15.3): 3с-фолбэк request-emit старого чата не должен стрелять в новый —
   // висящий таймер гасим, иначе после SPA-перехода уходит лишний 'ai-cm-request-emit'
@@ -482,7 +500,40 @@ function updateWidget(percentage, tokens, effectiveLimit, contextLimit, displayL
   circle.style.strokeDasharray = circumference;
   circle.style.strokeDashoffset = offset;
   circle.style.stroke = zoneColor(percentage);
-  percentText.textContent = stale ? '—' : (percentage.toFixed(1) + '%');
+  // O-35 (D1, фикс): stale («12с без сетевого снимка») — НЕ повод стирать посчитанное число,
+  // если база адаптера ЕСТЬ: у qwen после F5/SPA сети нет вовсе, базу снимает DOM-адаптер,
+  // и подмена числа на «—» давала картинку «бейдж —, попап 158.8%» (дефект D). Норма stale
+  // зафиксирована комментарием в core/state.js:61 и core/base-handler.js:230: у qwen это
+  // систематическое состояние, а не авария. «—» остаётся ровно там, где базы нет совсем
+  // (ни сетевого снимка, ни DOM-адаптерной базы) — поведение прочих платформ прежнее.
+  // O-35 (v54, фикс badge-suppress): третий вход — «база принята по convId» для adapter-пути
+  // (state.js:adapterBaseSeen, взводится в единственной точке записи базы адаптером). Он
+  // нужен там, где baseCount/lastBaseTexts пусты ПО УСТРОЙСТВУ: они описывают СЕТЕВУЮ базу, а
+  // у qwen её нет вовсе (в живом логе baseCount=0 при записанной adapter-базе msgs=156).
+  var aiCmAdapterBasePresent = ((typeof baseCount === 'number' && baseCount > 0) ||
+    (typeof lastBaseTexts !== 'undefined' && lastBaseTexts && lastBaseTexts.length > 0) ||
+    (typeof adapterBaseSeen !== 'undefined' && adapterBaseSeen === true));
+  var aiCmStalePlaceholder = (stale === true) && !aiCmAdapterBasePresent;
+  percentText.textContent = aiCmStalePlaceholder ? '—' : (percentage.toFixed(1) + '%');
+  // O-35 (ДИАГНОСТИКА, только измерение): qwen-badge — плейсхолдер «—» ВМЕСТО процента.
+  // Единственный путь: stale=true при ОТСУТСТВИИ базы (12с без сетевого снимка при
+  // сообщениях в DOM — core/base-handler.js:scheduleStaleCheck). Строка печатается в ТОЙ
+  // ЖЕ отрисовке, где badge-update (widget.js:473) уже показал число, — это и есть «тире
+  // ПОЗЛЕ badge-update» (дефект D). Числа попапа живут отдельно (снимок aiCmState пишет
+  // content.js). Случай «stale + база адаптера» строку НЕ печатает: число сохранено,
+  // неполнота источника помечена меткой в тултипе (D1).
+  try {
+    if (aiCmStalePlaceholder && typeof aiCmDiagLine === 'function' && typeof currentAdapter !== 'undefined' &&
+        currentAdapter && currentAdapter.siteName === 'qwen') {
+      aiCmDiagLine('qwen-badge', {
+        ts: Date.now(), event: 'placeholder', reason: 'stale',
+        pct: percentage, tokens: tokens,
+        baseSeen: (typeof baseSeen !== 'undefined' && baseSeen === true) ? 1 : 0,
+        adapterBase: aiCmAdapterBasePresent ? 1 : 0,
+        url: String((typeof location !== 'undefined' && location && location.href) || '')
+      });
+    }
+  } catch (eQbStale) { }
   if (tooltip) {
     // M-4.2: строки тултипа — из _locales (ключи content_tooltip_*/content_source_*);
     // в изолированной песочнице регрессии хелпера нет — прежние русские литералы.
@@ -499,8 +550,31 @@ function updateWidget(percentage, tokens, effectiveLimit, contextLimit, displayL
       limLine,
       i18n('content_tooltip_window', `Окно модели: ${contextLimit.toLocaleString()}`, [contextLimit.toLocaleString()])
     ];
-    // T1 (v1.16): индикатор источника (первый ярус — архив / второй — live)
-    try { if (aiCmSourceLabelNow) lines.push(i18n('content_source_label', `Источник: ${esc(aiCmSourceLabelNow)}`, [esc(aiCmSourceLabelNow)])); } catch (eSrcL) { }
+    // O-35 (B1, фикс): серверный usage Qwen — ОТДЕЛЬНЫЕ строки reasoning и output.
+    // Источник — netQwenUsage из общего лексического скоупа контент-скрипта (state.js):
+    // тот же паттерн, что у stale/baseSeen/baseCount (widget.js:498 читает их напрямую),
+    // поэтому подпись и вызовы updateWidget остаются байтово прежними. Диспатч поля —
+    // core/qwen-intercept.js:482-488 → content.js:detail.qwenUsage. output ВКЛЮЧАЕТ
+    // reasoning, поэтому цифры идут раздельно. Ключ/формат локали — существующие
+    // (content_tooltip_tokens), новых ru-литералов нет (страж i18n-locales).
+    // Нет usage (шесть прежних платформ / стрим без кадра usage) → строк нет вовсе.
+    try {
+      if (typeof netQwenUsage !== 'undefined' && netQwenUsage && typeof netQwenUsage === 'object') {
+        const qOut = (typeof netQwenUsage.outputTokens === 'number') ? netQwenUsage.outputTokens : 0;
+        const qRea = (typeof netQwenUsage.reasoningTokens === 'number') ? netQwenUsage.reasoningTokens : 0;
+        if (qOut > 0) lines.push(i18n('content_tooltip_tokens', `Токены: ${qOut.toLocaleString()}`, ['output ' + qOut.toLocaleString()]));
+        if (qRea > 0) lines.push(i18n('content_tooltip_tokens', `Токены: ${qRea.toLocaleString()}`, ['reasoning ' + qRea.toLocaleString()]));
+      }
+    } catch (eQwUsageTt) { }
+    // T1 (v1.16): индикатор источника (первый ярус — архив / второй — live).
+    // O-35 (D1, фикс): когда число СОХРАНЕНО при stale (база адаптера есть), неполнота
+    // источника помечается меткой ' · stale' в ТОЙ ЖЕ строке — метка ASCII, новых
+    // ru-литералов нет. Без stale строка байтово прежняя (подстановка = прежний ярлык).
+    try {
+      const staleMark = (stale === true && aiCmAdapterBasePresent) ? ' · stale' : '';
+      const srcVal = aiCmSourceLabelNow ? (esc(aiCmSourceLabelNow) + staleMark) : (staleMark ? 'stale' : '');
+      if (srcVal) lines.push(i18n('content_source_label', `Источник: ${srcVal}`, [srcVal]));
+    } catch (eSrcL) { }
     if (attachBreak && (attachBreak.imgCount > 0 || attachBreak.docCount > 0)) {
       const attachTotal = (attachBreak.imgTokens + attachBreak.docTokens).toLocaleString();
       lines.push(i18n('content_tooltip_attachments', `Вложения ≈ ${attachTotal} токенов`, [attachTotal]));

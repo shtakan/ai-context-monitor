@@ -159,6 +159,24 @@ async function ensureInterceptor() {
       });
       console.log('AI Context Monitor: перехватчик Google Search AI зарегистрирован (мир сайта, document_start)');
     }
+
+    // O-35: перехватчик Qwen (chat.qwen.ai). Тот же паттерн, что у остальных шести:
+    // MAIN-мир, document_start, отдельный id. utils/stream-frames.js идёт ПЕРЕД
+    // core/qwen-intercept.js (порядок js[] внутри регистрации соблюдается; при этом сам
+    // перехватчик разрешает утилиту лениво — порядок для него не критичен, но так
+    // очевиднее). Своих запросов перехватчик не делает: только обёртка нативного fetch
+    // страницы (антибот bx-ua/bx-umidtoken не воспроизводится).
+    if (ids.indexOf('ai-cm-qwen-intercept') === -1) {
+      await registerSafe('ai-cm-qwen-intercept', {
+        id: 'ai-cm-qwen-intercept',
+        matches: ['https://chat.qwen.ai/*'],
+        js: ['utils/debug.js', 'utils/stream-frames.js', 'core/qwen-intercept.js'],
+        runAt: 'document_start',
+        world: 'MAIN',
+        allFrames: false
+      });
+      console.log('AI Context Monitor: перехватчик Qwen зарегистрирован (мир сайта, document_start)');
+    }
   } catch (err) {
     console.warn('AI Context Monitor: не удалось зарегистрировать перехватчик:', err);
   }

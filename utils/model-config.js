@@ -193,6 +193,16 @@ const ModelConfig = {
       contextLimit: 200000,
       description: 'Perplexity Sonar Deep Research, окно 200K'
     },
+    // ---- Qwen (O-35) ----
+    // HYPOTHESIS: окно 128K взято как рабочая гипотеза (живой лимит из UI Qwen не снимался).
+    // Если живая проверка покажет меньше (например 32K) — откатить contextLimit здесь:
+    // цифра влияет только на лимит/порог бейджа, тексты и токены не трогает.
+    'qwen3.8-max': {
+      name: 'Qwen3.8-Max',
+      provider: 'Qwen',
+      contextLimit: 128000,
+      description: 'Флагманская модель Qwen (chat.qwen.ai), окно 128K — HYPOTHESIS'
+    },
     // ---- Gemini: строковые ключи (на случай, если детектор даст имя с префиксом/капсом) ----
     'Gemini 2.5 Pro': {
       name: 'Gemini 2.5 Pro',
@@ -214,7 +224,8 @@ const ModelConfig = {
     'google_search': 'gemini-search-default',
     'deepseek': 'deepseek-v3',
     'claude': 'claude-sonnet-4-6',
-    'perplexity': 'turbo'
+    'perplexity': 'turbo',
+    'qwen': 'qwen3.8-max'
   },
   // v49: реальные семейные дефолты веб-UI Gemini (кнопка button.input-area-switch
   // не несёт номера версии). Пункт (c) приоритета DOM-сигнала — когда ни кэш меню,

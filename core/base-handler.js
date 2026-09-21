@@ -49,7 +49,23 @@ function aiCmDedupeExportSource(messages) {
       var keep = [];
       for (var p = 0; p < messages.length; p++) {
         var mp = messages[p] || {};
-        keep.push({ role: (mp.role === 'user') ? 'user' : 'assistant', text: (typeof mp.text === 'string') ? mp.text : '' });
+        // FIX (Claude md): ход пользователя парсера Claude приходит ролью 'human' —
+        // нормализуем её в 'user' здесь же, у входа в md (см. buildMdFromHistory).
+        var msg = { role: (mp.role === 'user' || mp.role === 'human') ? 'user' : 'assistant', text: (typeof mp.text === 'string') ? mp.text : '' };
+        // Claude md (ДИАГНОСТИКА — только измерение под гейтом aiCmDebug): роль хода на входе
+        // точки и после нормализации. Маркер claude-role-* SCOPED по сайту: живой замер идёт по
+        // Claude-цепочке, а на прочих сайтах роль хода — не предмет этого маркера (чужие строки
+        // под именем claude-role-* вводили бы в заблуждение). Печать — каноническим хелпером
+        // utils/debug.js:aiCmDiagLine; хелпера нет (Node/срез-песочницы тестов) или гейт выключен
+        // → НИ ОДНОЙ строки. Читаются только уже посчитанные значения: байты не меняются.
+        if (typeof aiCmDiagLine === 'function' && site === 'claude') {
+          aiCmDiagLine('claude-role-dedupe', { site: site, mpRole: mp.role, normalizedRole: msg.role });
+        }
+        // O-39: сохраняем поле reasoning для не-Gemini сайтов, чтобы рендер мог добавить
+        // секции [REASONING]/[ANSWER] контрактом O-35. Без этого поле терялось бы на
+        // выходе buildHistoryMessages и размышление не доезжало до файла экспорта.
+        if (typeof mp.reasoning === 'string' && mp.reasoning) msg.reasoning = mp.reasoning;
+        keep.push(msg);
       }
       return { messages: keep, removed: 0 };
     }
@@ -230,6 +246,11 @@ function aiCmDumpTurnsSnapshot(tag, cid, msgs) {
 // Самодиагностика: через 12с после загрузки/смены диалога, если диалог с сообщениями
 // в DOM есть (isInitialized=true и extractMessages()>0), но сетевой снимок не пришёл
 // (baseSeen=false) — взводим stale. На пустых чатах extractMessages()=0 → не взводим.
+// O-35 (D1, норма): для qwen отсутствие live-источника (сети) после F5/SPA — СИСТЕМАТИЧЕСКОЕ
+// состояние, а не авария: базу снимает DOM-адаптер, и stale здесь ожидаем. Поэтому взведённый
+// stale у qwen не имеет права стирать посчитанное число: подпись бейджа при непустой базе
+// адаптера остаётся числом, а неполнота источника отмечается меткой в тултипе
+// (core/widget.js:498). Здесь поведение самого сторожа не меняется.
 function scheduleStaleCheck() {
   if (!isExtensionValid()) return;
   try { clearTimeout(staleTimer); } catch (e) { }

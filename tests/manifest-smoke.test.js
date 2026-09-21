@@ -12,7 +12,8 @@
  *   3) permissions: точный список, без "<all_urls>" и без host-паттернов;
  *   4) совместимость: browser_specific_settings/options_ui/page_action/... отсутствуют
  *      (в т.ч. как подстрока в сыром тексте — ловим и вложенные вставки);
- *   5) инварианты аудита: version 2.0.8, default_locale ru, 9 host_permissions;
+ *   5) инварианты аудита: version 2.0.10, default_locale ru, 10 host_permissions
+ *      (9 прежних + chat.qwen.ai, O-35);
  *   6) M-4.3: name/description — локализуемые __MSG__-формы, ключи ext_name /
  *      ext_description объявлены в ОБЕИХ локалях (ru — байтово прежние строки).
  *
@@ -87,12 +88,13 @@ describe('LOW-2: manifest.json — smoke-тест состава ключей (C
     expect(RAW).not.toContain('"*://*/*"');
   });
 
-  test('host-доступы — только явные https-паттерны целевых сервисов (9 штук)', () => {
-    expect(manifest.host_permissions).toHaveLength(9);
+  test('host-доступы — только явные https-паттерны целевых сервисов (10 штук: +chat.qwen.ai, O-35)', () => {
+    expect(manifest.host_permissions).toHaveLength(10);
     manifest.host_permissions.forEach(function (hp) {
       expect([hp, /^https:\/\//.test(hp)]).toEqual([hp, true]);
     });
     expect(manifest.host_permissions).toContain('https://gemini.google.com/*');
+    expect(manifest.host_permissions).toContain('https://chat.qwen.ai/*');
   });
 
   test('инварианты аудита не тронуты: version, default_locale, background, popup, content_scripts', () => {

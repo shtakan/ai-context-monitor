@@ -221,7 +221,8 @@ describe('P1: manifest.json — homepage_url без изменения permissio
   test('НЕ трогать: permissions, host_permissions, CSP, MV3', () => {
     expect(manifest.manifest_version).toBe(3);
     expect(manifest.permissions).toEqual(['scripting', 'storage', 'notifications']);
-    expect(manifest.host_permissions.length).toBe(9);
+    // 10 — прежние 9 + chat.qwen.ai (O-35); состав хостов пинуется в qwen-provider-wiring
+    expect(manifest.host_permissions.length).toBe(10);
     expect(manifest).not.toHaveProperty('content_security_policy');
     expect(manifestRaw).not.toContain('privacy/privacy.html');
   });

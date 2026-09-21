@@ -241,11 +241,12 @@ debugLogsCheckbox && debugLogsCheckbox.addEventListener('change', function () {
   chrome.storage.local.set({ aiCmDebugLogs: debugLogsCheckbox.checked });
 });
 
-// O-7: чекбокс «Включать reasoning и инъекции DeepSeek++ в экспорт»
-// (aiCmIncludeHiddenInExport в chrome.storage.local, по умолчанию ВЫКЛ = текущее поведение
-// экспорта: санация O-20 активна, hidden-блоки не включаются). ON — сырой режим: настройку
-// читает контент-скрипт (единственная точка выхода экспорта), а печатная форма получает уже
-// готовые сообщения — отдельного чтения настройки в print/print.js не требуется.
+// O-7: чекбокс «Включать reasoning и инъекции соседних расширений (DeepSeek++, Better DeepSeek)
+// в экспорт» (aiCmIncludeHiddenInExport в chrome.storage.local, по умолчанию ВЫКЛ = текущее
+// поведение экспорта: санация O-20 активна, инъекции соседей O-40/O-42 сняты, hidden-блоки не
+// включаются). ON — сырой режим: настройку читает контент-скрипт (единственная точка выхода
+// экспорта), а печатная форма получает уже готовые сообщения — отдельного чтения настройки в
+// print/print.js не требуется.
 const includeHiddenCheckbox = document.getElementById('aiCmIncludeHiddenInExport');
 chrome.storage.local.get(['aiCmIncludeHiddenInExport'], function (data) {
   if (includeHiddenCheckbox) includeHiddenCheckbox.checked = !!(data && data.aiCmIncludeHiddenInExport === true);
@@ -561,7 +562,38 @@ function updateStaleWarning(state, tabHost, tabPath) {
   }
 }
 
+// O-35 (ДИАГНОСТИКА, только измерение): печать строки попапа под гейтом aiCmDebug.
+// Канон utils/debug.js:aiCmDiagLine, если он подключён (в options.html debug.js нет —
+// та же семантика гейта реализована локально, ровно как в utils/export-text-builders.js:144).
+// Гейт выключен → ни одной строки; на показатели попапа функция не влияет.
+function aiCmPopupDiagLine(tag, fields) {
+  try {
+    if (typeof aiCmDiagLine === 'function') return aiCmDiagLine(tag, fields);
+    var on = false;
+    try { on = !!(typeof sessionStorage !== 'undefined' && sessionStorage && sessionStorage.getItem('aiCmDebug') === '1'); } catch (eSess) { }
+    if (!on) { try { on = window.__aiCmDebugLogs === true; } catch (eWin) { } }
+    if (!on) return false;
+    var parts = [];
+    var f = fields || {};
+    for (var k in f) {
+      if (!Object.prototype.hasOwnProperty.call(f, k)) continue;
+      var v = f[k];
+      parts.push(k + '=' + ((v === undefined || v === null) ? '-' : String(v)));
+    }
+    console.log('[AI CM][diag] ' + tag + ' ' + parts.join(' '));
+    return true;
+  } catch (eDiag) { return false; }
+}
+
 function showNoData(message) {
+  // O-35 (ДИАГНОСТИКА, только измерение): qwen-badge — попап показал «нет данных»
+  // (снимок aiCmState удалён сбросом O-14 либо для вкладки данных нет). Вывод прежний.
+  try {
+    aiCmPopupDiagLine('qwen-badge', {
+      ts: Date.now(), event: 'showNoData', reason: String(message || '-'),
+      url: String((typeof location !== 'undefined' && location && location.href) || '')
+    });
+  } catch (eQnd) { }
   siteEl.textContent = message || aiCmI18nMessage('options_no_data', 'Нет данных');
   modelEl.textContent = '—';
   tokensEl.textContent = '—';
