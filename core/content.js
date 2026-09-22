@@ -480,6 +480,41 @@ function aiCmGsaResetStaleStateOnChatlessDoc() {
   } catch (e) { return false; }
 }
 
+// O-23 (F5, фикс корня 1): tokens~ в трассе badge-recv считался упрощённой эвристикой
+// Math.round(text.length / 4) — для кириллицы это систематическая НЕДООЦЕНКА (реальный
+// коэффициент ≈1.8 симв/токен). Источник истины — Tokenizer.countTokens (языково-зависимый,
+// utils/tokenizer.js); упрощённая эвристика остаётся ТОЛЬКО фолбэком для песочниц без
+// Tokenizer и сама получает языковую ветвь (кириллица ÷1.8, остальное ÷4). Для ASCII-текста
+// фолбэк байтово равен прежнему Math.round(length/4) — регресс-пин R1
+// (tests/o23-tokens-calibration.test.js).
+function aiCmEstimateTokensTilde(text, attachTokens) {
+  var t = (typeof text === 'string') ? text : '';
+  var attach = (typeof attachTokens === 'number' && attachTokens > 0) ? attachTokens : 0;
+  var TK = (typeof Tokenizer !== 'undefined') ? Tokenizer : null;
+  var result;
+  var tkOk = false;
+  if (TK && typeof TK.countTokens === 'function') {
+    try { result = TK.countTokens(t) + attach; tkOk = true; } catch (eTk) { /* ниже — фолбэк */ }
+  }
+  if (!tkOk) {
+    var cyr = (t.match(/[а-яёА-ЯЁ]/g) || []).length;
+    result = Math.ceil(cyr / 1.8) + Math.round((t.length - cyr) / 4) + attach;
+  }
+  // O-23 (измерение): доля кириллицы и итог tokens~ — только под гейтом aiCmDebug.
+  // Значения не влияют на возврат: строка печатается после расчёта и до return.
+  if (typeof aiCmDiagOn === 'function' && aiCmDiagOn()) {
+    try {
+      var cyrDiag = (t.match(/[а-яёА-ЯЁ]/g) || []).length;
+      var cyrillicPct = t.length ? (cyrDiag / t.length * 100).toFixed(1) : '0.0';
+      aiCmDiagLine('o23-cyrillic-share', {
+        textLen: t.length, cyrillicPct: cyrillicPct,
+        attachTokens: attach, tokensTilde: result
+      });
+    } catch (eO23) { }
+  }
+  return result;
+}
+
 window.addEventListener('ai-cm-full-history', function (ev) {
   // O-22 (ИЗМЕРЕНИЕ-2): маркер ПЕРВОЙ строки колбэка слушателя — ДО блока v81 Step1
   // и ДО вставок O-22 (блоки A–G2). Только диагностика под гейтом aiCmDebug.
@@ -528,10 +563,17 @@ window.addEventListener('ai-cm-full-history', function (ev) {
       return;
     }
   }
-  // v38: trace приёма снимка — видно, что сообщение дошло до content.js
+  // v38/O-23: trace приёма снимка — видно, что сообщение дошло до content.js.
+  // tokens~ — языково-зависимая оценка (O-23: раньше здесь была латинская эвристика
+  // length/4, из-за которой кириллический текст систематически недооценивался).
+  // typeof-гард: срез-песочницы тестов (частичный скоуп без этого хелпера) сохраняют
+  // прежнюю формулу и прежние байты строки 1:1.
+  var tokenTilde = (typeof aiCmEstimateTokensTilde === 'function')
+    ? aiCmEstimateTokensTilde(detail.text, detail.attachTokens)
+    : (Math.round((detail.text || '').length / 4) + (detail.attachTokens || 0));
   debugLog('log', '[AI CM][trace] badge-recv convId=' + (detail.convId || '-') +
     ' msgs=' + (detail.count || 0) +
-    ' tokens~' + (Math.round((detail.text || '').length / 4) + (detail.attachTokens || 0)));
+    ' tokens~' + tokenTilde);
   // O-22 (диагностика, только измерение): ts+convId на КАЖДОЕ обновление бейджа —
   // та же точка, что и строка badge-recv выше (поведение, байты и гейт не меняются).
   try {
