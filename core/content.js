@@ -329,6 +329,32 @@ window.addEventListener('ai-cm-conversation-changed', function () {
   } catch (eQspaSh) { }
   aiCmQwenSpaReshoot();
 });
+
+// ===== O-34 (N1): холодный вход на URL БЕЗ разговора =====
+// Второй путь того же дефекта (первый — SPA-переход, см. checkConvChange в page-intercept.js).
+// При прямом открытии URL без /c/<id> (корень чата, новый чат, /gpts) смены истории нет —
+// событие ai-cm-conversation-changed не диспатчится, а per-tab бейдж SW и снимок попапа
+// (chrome.storage.local) живут на уровне вкладки и переживают навигацию в той же вкладке:
+// без явного сброса на экране остаются значения прошлой сессии. Поэтому инициализация на
+// URL без разговора сама приводит виджет/бейдж в состояние «нет данных»: состояние гасит
+// resetConversationState (единственный механизм сброса), бейдж — BADGE_RESET (та же точка,
+// что и на SPA-переходе). Гейт — ТОЛЬКО chatgpt: у него id разговора обязателен в URL
+// (getConvIdFromPath), тогда как у Gemini /app/<id> появляется после редиректа, у GSA и
+// Claude/DeepSeek/Perplexity id в URL не является признаком «разговор есть» — их поведение
+// остаётся байтово прежним (как и щит O-1, скоуп которого тоже chatgpt).
+function aiCmResetStaleStateOnChatlessChatGptUrl() {
+  try {
+    if (!currentAdapter || currentAdapter.siteName !== 'chatgpt') return false;
+    if (getCurrentConvId()) return false; // в URL есть /c/<id> — это разговор, сбрасывать нечего
+    resetConversationState();
+    try { chrome.runtime.sendMessage({ type: 'BADGE_RESET' }).catch(function () { }); } catch (eBr) { }
+    debugLog('log', '[AI CM][spa] O-34: URL без /c/<id> — состояние виджета и бейдж сброшены');
+    return true;
+  } catch (eChatless) {
+    // исключение не выходит за пределы хелпера: инициализация продолжается как прежде
+    return false;
+  }
+}
   // v30.8: сигнал лоадера «скроллер скрыт/восстановлен» — для заморозки бейджа
   window.addEventListener('ai-cm-loader-freeze', function (ev) {
     try {
@@ -1089,6 +1115,14 @@ async function initialize() {
     }
     try { aiCmQwenInitDiag('initialize-enter', { adapter: currentAdapter.siteName, url: String((typeof location !== 'undefined' && location && location.href) || '') }); } catch (eQi19) { }
     debugLog('log', 'Адаптер:', currentAdapter.siteName);
+    // O-34 (N1): холодный вход на URL без разговора (/c/<id> нет) — гасим остаточные значения
+    // прошлой сессии в этом же табе (состояние виджета + per-tab бейдж SW) ДО создания виджета
+    // и до handshake. На валидном чате вызов — no-op; прочие сервисы хелпер не трогает.
+    // typeof-гард — срез-песочницы тестов (конвенция сьюта: частичный скоуп без хелпера
+    // сохраняет прежнее поведение 1:1); в контент-скрипте объявление всегда в скоупе.
+    if (typeof aiCmResetStaleStateOnChatlessChatGptUrl === 'function') {
+      aiCmResetStaleStateOnChatlessChatGptUrl();
+    }
     // H23: слушатель ai-cm-full-history зарегистрирован, адаптер готов → handshake MAIN-миру
     // (ре-эмит потерянного снимка + 3с-фолбэк request-emit). Для прочих сервисов — no-op.
     aiCmDispatchContentReady();

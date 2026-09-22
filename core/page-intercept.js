@@ -24,7 +24,8 @@
 // страницы через history.pushState/replaceState + popstate). По образцу gemini-intercept.js v17:
 // обёртки history API, getConvId из /c/<id>, resetForNewConversation сбрасывает накопители
 // и диспатчит ai-cm-conversation-changed для виджета. Заголовки (lastHeaders) НЕ сбрасываем —
-// они валидны для любого чата. Сброс срабатывает ТОЛЬКО при смене id чата.
+// они валидны для любого чата. Сброс срабатывает при смене контекста разговора:
+// новый id, ДРУГОЙ id и потеря id (O-34: URL без /c/<id> — корень чата/новый чат).
 //
 // v12: фикс гонки GET-запросов. При быстром переключении чатов ответ /backend-api/conversation/<id>
 // от старого чата может прийти с задержкой и лечь в базу нового. Теперь при отправке запоминаем
@@ -120,10 +121,17 @@
   function checkConvChange() {
     var newId = getConvId();
     var shouldReset;
-    if (typeof window !== 'undefined' && window.ChatGPTConversationParser && window.ChatGPTConversationParser.shouldResetChatConversation) {
-      shouldReset = window.ChatGPTConversationParser.shouldResetChatConversation(currentConvId, newId);
+    var P = (typeof window !== 'undefined' && window.ChatGPTConversationParser) ? window.ChatGPTConversationParser : null;
+    if (P && typeof P.shouldResetConversationOnNav === 'function') {
+      // O-34 (N1): сброс и при ПОТЕРЕ convId — уход на URL без /c/<id> (корень чата,
+      // /gpts, новый чат) обязан очистить состояние прошлого разговора: иначе
+      // ai-cm-conversation-changed не диспатчится, а виджет/бейдж держат остаточные
+      // значения (прежний предикат отвечал false на newId=''). Для валидных переходов
+      // (непустой новый id) решение 1:1 прежнему.
+      shouldReset = P.shouldResetConversationOnNav(currentConvId, newId);
     } else {
-      shouldReset = !!newId && newId !== currentConvId;
+      // фолбэк (утилита не загружена): смена контекста, включая потерю id
+      shouldReset = (newId !== currentConvId);
     }
     if (shouldReset) {
       currentConvId = newId;

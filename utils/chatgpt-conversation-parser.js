@@ -3,9 +3,10 @@
  * Работают в браузере (window.ChatGPTConversationParser) и в Node (module.exports).
  *
  * Задачи:
- *  1. Навигация /c/<id>: getConvIdFromPath + shouldResetChatConversation —
- *     определение смены чата в SPA (нужно, чтобы индикатор/экспорт не «перетекали»
- *     из прошлого чата в новый).
+ *  1. Навигация /c/<id>: getConvIdFromPath + shouldResetConversationOnNav (O-34: смена
+ *     контекста, включая ПОТЕРЮ id) — определение смены чата в SPA (нужно, чтобы
+ *     индикатор/экспорт не «перетекали» из прошлого чата в новый). Прежний
+ *     shouldResetChatConversation («только новый непустой id») сохранён 1:1.
  *  2. Потеря первого обмена: orderChatGPTMapping линеаризует mapping по parent/children
  *     (не по порядку ключей объекта и не по create_time), поэтому голова диалога —
  *     первый user-ход — не теряется.
@@ -25,9 +26,23 @@
   }
 
   // Сброс нужен только когда появился НОВЫЙ непустой id чата, отличный от предыдущего.
+  // Контракт сохранён 1:1 (пин tests/adapters/chatgpt-conversation-parser.test.js):
+  // уход на URL без /c/<id> этот предикат НЕ покрывает — для навигации есть решение ниже.
   function shouldResetChatConversation(prevId, newId) {
     if (!newId) return false;
     return prevId !== newId;
+  }
+
+  // O-34 (N1): решение о сбросе на НАВИГАЦИИ — надмножество предиката выше.
+  // Уход с /c/<id> на URL без разговора (корень чата, /gpts, новый чат) — тоже смена
+  // контекста: остаточные значения прошлой сессии (виджет, бейдж, снимок попапа) обязаны
+  // быть сброшены, а не проигнорированы. Возврат: true — контекст разговора изменился
+  // (в т.ч. появление id, смена id, ПОТЕРЯ id); false — тот же контекст (id совпал,
+  // в т.ч. '' → '').
+  function shouldResetConversationOnNav(prevId, newId) {
+    var p = (prevId == null) ? '' : String(prevId);
+    var n = (newId == null) ? '' : String(newId);
+    return p !== n;
   }
 
   // ---- 3. Санация маркеров ----
@@ -204,6 +219,7 @@
   var api = {
     getConvIdFromPath: getConvIdFromPath,
     shouldResetChatConversation: shouldResetChatConversation,
+    shouldResetConversationOnNav: shouldResetConversationOnNav,
     orderChatGPTMapping: orderChatGPTMapping,
     sanitizeChatGPTText: sanitizeChatGPTText,
     parseChatGPTConversation: parseChatGPTConversation
