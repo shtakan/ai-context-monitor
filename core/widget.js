@@ -196,8 +196,23 @@ function resetConversationState() {
     var P14 = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
     var siteD14 = (currentAdapter && currentAdapter.siteName) || '';
     if (siteD14 === 'google_search') {
-      debugLog('log', '[AI CM][auto-export] site=google_search latch kept reason=spa-entry convId=' +
-        (cidD14 || '(threadId)'));
+      // O-29 (Low, лог-спам): строка печатается только на СМЕНУ состояния SPA-входа.
+      // Сигнатура = разговор (URL-id, а у GSA — threadId из DOM) + бит латча O-38 (site|convId):
+      // непрерывные сбросы одного и того же разговора при неизменном латче молчат, а ПЕРВЫЙ
+      // вход после файра (латч взведён) снова виден. Печатаемый текст не изменён. Хелперы живут
+      // в export-manager.js (парсится после widget.js, вызов — на смене чата, т.е. после
+      // загрузки всех модулей) — typeof-гард, как у прочих межмодульных вызовов: срез-песочницы
+      // тестов без них видят прежнее поведение.
+      var logCidD14 = cidD14 ||
+        ((typeof aiCmDomThreadId === 'function') ? (aiCmDomThreadId() || '') : '');
+      var logFiredD14 = (typeof aiCmAutoExportLogFiredBit === 'function')
+        ? aiCmAutoExportLogFiredBit(siteD14, logCidD14) : 0;
+      var logChangedD14 = (typeof aiCmAutoExportLogOnChange !== 'function') ||
+        aiCmAutoExportLogOnChange('spa-entry', siteD14 + '|' + logCidD14 + '|fired=' + logFiredD14);
+      if (logChangedD14) {
+        debugLog('log', '[AI CM][auto-export] site=google_search latch kept reason=spa-entry convId=' +
+          (cidD14 || '(threadId)'));
+      }
     } else if (P14 && typeof P14.resetAutoExportFired === 'function') {
       P14.resetAutoExportFired(autoExportFired, siteD14, cidD14);
       // v1.14.1 (O3): session-латч целевого conv снимаем синхронно с L1 — семантика

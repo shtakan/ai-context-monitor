@@ -154,6 +154,14 @@ var autoExportFired = {};        // convId -> 1 (один раз на чат)
 // НЕ сбрасывается на смене чата: второй вход в тот же чат в пределах сессии страницы
 // видит fired и не экспортирует повторно. F5/новый instance — пуст (прежнее поведение).
 var aiCmAutoExportFiredOnce = Object.create(null);  // 'site|convId' -> 1
+// O-29 (лог-спам автоэкспорта GSA): состояние ПОСЛЕДНЕЙ напечатанной лог-строки автоэкспорта —
+// family (семейство строки: 'spa-entry' витрины GSA / 'gsa-skip' причины skip) → сигнатура
+// состояния (разговор + причина + бит латча O-38). Печать — только на СМЕНУ сигнатуры
+// (урок O-24/O-33: непрерывная серия повторяет вердикт, а лог должен идти на смену состояния).
+// Семейства раздельные намеренно: пара «latch kept reason=spa-entry» / «skip reason=…»
+// печатается в ОДНОМ DRAW-цикле, поэтому один общий ключ на обе строки не гасил бы
+// чередование A/B/A/B — спам остался бы.
+var aiCmAutoExportLastLogState = Object.create(null);  // family -> сигнатура последней печати
 // S2: per-site порог автоэкспорта: ключ 'aiCmAutoExportPct_<siteName>' (например
 // aiCmAutoExportPct_chatgpt) переопределяет глобальный aiCmAutoExportPct для этого
 // сайта. Кэш заполняется асинхронно (initialize + onChanged); запись отсутствует →
@@ -406,6 +414,10 @@ var TRIM_HEAD_IDS_N = 10;
   Object.defineProperty(Api, 'aiCmAutoExportFiredOnce', { enumerable: true,
     get: function () { return aiCmAutoExportFiredOnce; },
     set: function (value) { aiCmAutoExportFiredOnce = value; } });
+  // O-29: состояние последней напечатанной лог-строки автоэкспорта (family → сигнатура)
+  Object.defineProperty(Api, 'aiCmAutoExportLastLogState', { enumerable: true,
+    get: function () { return aiCmAutoExportLastLogState; },
+    set: function (value) { aiCmAutoExportLastLogState = value; } });
   Object.defineProperty(Api, 'autoExportPctBySite', { enumerable: true,
     get: function () { return autoExportPctBySite; },
     set: function (value) { autoExportPctBySite = value; } });

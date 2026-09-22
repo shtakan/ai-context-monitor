@@ -682,8 +682,48 @@ function aiCmGsaProbeRunningFor(cid) {
     return aiCmGsaProbeRunning === true;
   } catch (e) { return false; }
 }
+// ===== O-29 (Low): лог-строки автоэкспорта — печать ТОЛЬКО на смену состояния =====
+// Живой симптом (GSA под гейтом aiCmDebug): пара «latch kept reason=spa-entry» /
+// «skip reason=already-fired|not-complete» печаталась каждую секунду непрерывно — обе строки
+// печатались на КАЖДЫЙ вердикт (повтор той же причины: already-fired/below-threshold вообще
+// без антиспама), а не на смену состояния. Латч — aiCmAutoExportLastLogState (core/state.js,
+// family → сигнатура); здесь — читатель/писатель. Только логи: вердикт гейта, латчи fired,
+// пороги и байты файла не затрагиваются.
+function aiCmAutoExportLogOnChange(family, key) {
+  try {
+    var f = String(family || '');
+    var k = (key === undefined || key === null) ? '' : String(key);
+    var st = (typeof aiCmAutoExportLastLogState === 'object' && aiCmAutoExportLastLogState)
+      ? aiCmAutoExportLastLogState : null;
+    if (!st) {
+      // срез-песочница без общего состояния (core/state.js): латч живёт на самой функции —
+      // без глобалов и без протечки состояния между песочницами.
+      if (!aiCmAutoExportLogOnChange.__state) aiCmAutoExportLogOnChange.__state = Object.create(null);
+      st = aiCmAutoExportLogOnChange.__state;
+    }
+    if (st[f] === k) return false;  // та же сигнатура состояния — молчание (O-29)
+    st[f] = k;
+    return true;
+  } catch (e) { return true; }
+}
+// O-29: бит «латч fired этого разговора взведён» — часть сигнатуры состояния: после файра та
+// же причина печатается снова РОВНО ОДИН раз (первый skip после fired). Функция только ЧИТАЕТ
+// существующие латчи (O-38 once-латч + in-memory autoExportFired по ключу 'site|convId'),
+// ничего не пишет и ни на что не влияет.
+function aiCmAutoExportLogFiredBit(site, cid) {
+  try {
+    var c = (cid === undefined || cid === null) ? '' : String(cid);
+    if (!c) return 0;
+    var k = String(site || '') + '|' + c;
+    if (typeof aiCmAutoExportFiredOnce === 'object' && aiCmAutoExportFiredOnce && aiCmAutoExportFiredOnce[k] === 1) return 1;
+    if (typeof autoExportFired === 'object' && autoExportFired && autoExportFired[k] === 1) return 1;
+    return 0;
+  } catch (e) { return 0; }
+}
 // v1.18 (F5): единая tagged-строка логов автоэкспорта GSA. Антиспам — как у
 // not-complete в общем пути: не чаще 1 раза на разговор для причин отсутствия полноты.
+// O-29: остальные причины (already-fired, below-threshold) — тоже не чаще 1 раза, но по
+// правилу «на смену состояния»: сигнатура = разговор + причина + бит латча fired.
 function aiCmGsaAutoExportSkipLog(reason, cid, percentage) {
   try {
     if (reason === 'not-complete' || reason === 'probe-running') {
@@ -696,6 +736,16 @@ function aiCmGsaAutoExportSkipLog(reason, cid, percentage) {
       var k27 = 'gsa27:' + reason + ':' + cid;
       if (notCompleteLogged[k27]) return;
       notCompleteLogged[k27] = 1;
+    }
+    // O-29: печать — только на смену состояния. Хелперы того же модуля, вызов под
+    // typeof-гардом — конвенция срез-песочниц тестов (O-33); без них поведение прежнее.
+    if (typeof aiCmAutoExportLogOnChange === 'function') {
+      var firedBit = (typeof aiCmAutoExportLogFiredBit === 'function')
+        ? aiCmAutoExportLogFiredBit('google_search', cid) : 0;
+      if (!aiCmAutoExportLogOnChange('gsa-skip',
+          'google_search|' + cid + '|' + reason + '|fired=' + firedBit)) {
+        return;
+      }
     }
     debugLog('log', '[AI CM][auto-export] site=google_search skip reason=' + reason +
       ' convId=' + cid + ' pct=' + percentage +
