@@ -1182,20 +1182,105 @@ async function tryInit() {
     throw eTryInit;
   }
 }
+// ========== O-24 (F6): гарды холостого svc-emit при неизменной базе ==========
+// Дефект (измерение 2026-09-22, read-only): после первого fired автоэкспорта дебаунс
+// MutationObserver (ниже) продолжает звать processAndSend() на КАЖДУЮ внешнюю DOM-мутацию
+// при неизменной базе — дорогие холостые прогоны (токенизация, виджет, SW) с каденсом
+// 1–2 с. Повторного эмита ai-cm-full-history нет (дедуп работает) — избыточность ресурсная.
+// Три корня закрыты здесь: (1) `#ai-context-widget` исключён из hasNewText — виджет сам
+// пишет себе textContent в кадре observer'а (непрерывный самоподхват); (2) сигнатурный
+// гард baseCount|длина эффективного текста гасит повтор при НЕИЗМЕННОЙ базе; (3) гард
+// работает только для чата, у которого латч автоэкспорта уже взведён (aiCmAutoExportFiredOnce,
+// site|convId) — до первого fired поведение прежнее.
+var AI_CM_WIDGET_ELEMENT_ID = 'ai-context-widget';
+
+// Узел принадлежит (или является) виджету расширения. Проверка нужна и для узлов, уже
+// снятых со страницы: вне observer характерData-мутация виджета приходит с target внутри
+// виджета, а addedNodes виджета — с целевым childList-узлом внутри него.
+// ВАЖНО: containment проверяется только «виджет содержит узел» (w.contains(el) / w === el).
+// Обратное (el.contains(w)) означало бы «узел — ПРЕДОК виджета» и ложно относило бы к
+// виджету весь document.body (виджет вставлен прямо в body).
+function aiCmIsWidgetNode(node) {
+  try {
+    if (!node) return false;
+    var el = (node.nodeType === 1) ? node : node.parentElement;
+    if (!el || typeof el.closest !== 'function') return false;
+    if (el.closest('#' + AI_CM_WIDGET_ELEMENT_ID)) return true;
+    // viewport-фолбэк: виджет создан и держит узел, но цепочка предков недоступна
+    var w = document.getElementById(AI_CM_WIDGET_ELEMENT_ID);
+    return !!(w && typeof w.contains === 'function' && (w === el || w.contains(el)));
+  } catch (eW) { return false; }
+}
+
+// Сигнатура «текущего стабильного текста»: число ходов базы + длина эффективного текста.
+// Та же формула, что у канала ai-cm-dom-emit-request (v55) — оба пути делят одну переменную
+// aiCmLastDomEmitSig, поэтому гард не расходится с DOM-догоном. Оба слагаемых — целые
+// числа платформы: '|' обязателен (иначе 12|34 и 1|234 склеятся в одно).
+function aiCmDomTextSig() {
+  var eff = '';
+  if (baseSeen && baseText) {
+    try { eff = getEffectiveText() || ''; } catch (eSig) { eff = ''; }
+  }
+  return (typeof baseCount === 'number' ? baseCount : 0) + '|' + eff.length;
+}
+
+// Латч O-38 для ТЕКУЩЕГО чата: 'site|convId' → 1. Взведён → автоэкспорт этого разговора
+// уже состоялся в этой сессии страницы (или SPA-возврат в него). Пустой convId = «чата нет»
+// (GSA без id в URL) — не латчим: поведение прежнее.
+function aiCmSiteConvFired() {
+  try {
+    if (typeof aiCmAutoExportFiredOnce !== 'object' || !aiCmAutoExportFiredOnce) return false;
+    var cid = (typeof getCurrentConvId === 'function') ? (getCurrentConvId() || '') : '';
+    if (!cid) return false;
+    var site = (typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName) || '';
+    return aiCmAutoExportFiredOnce[site + '|' + cid] === 1;
+  } catch (eFired) { return false; }
+}
+
 // ========== НАБЛЮДЕНИЕ ==========
 function startObserving() {
   if (observer) observer.disconnect();
   let mutationCount = 0;
   observer = new MutationObserver((mutations) => {
     const hasNewText = mutations.some(mutation => {
+      // O-24: мутации внутри виджета расширения — НЕ новый текст чата. Виджет пишет себе
+      // textContent (percentText, тултип, статус) в том же кадре, что и observer, — раньше
+      // каждая такая запись взводила следующий processAndSend (самоподхват).
+      if (aiCmIsWidgetNode(mutation.target)) return false;
       if (mutation.type === 'childList') {
         for (const node of mutation.addedNodes) {
+          if (aiCmIsWidgetNode(node)) continue; // O-24: узлы виджета не считаем текстом чата
           if (node.nodeType === 1 && node.textContent?.trim()?.length > 10) return true;
         }
       }
       return mutation.type === 'characterData';
     });
     if (hasNewText) {
+      // O-24 (F6): сигнатурный гард. Сигнатура кэшируется по чату (site|convId), поэтому
+      // SPA-возврат в тот же разговор видит СВОЮ сигнатуру, а смена модели/порога на том же
+      // тексте проходит (см. ai-cm-dom-emit-request и пути настроек).
+      const sigConvId = (typeof getCurrentConvId === 'function') ? (getCurrentConvId() || '') : '';
+      if (aiCmLastDomEmitConvId !== sigConvId) {
+        aiCmLastDomEmitConvId = sigConvId;
+        aiCmLastDomEmitSig = null;
+      }
+      const sig = aiCmDomTextSig();
+      // База не изменилась С МОМЕНТА последнего прохода И автоэкспорт этого чата уже снят
+      // (already-fired) → холостой прогон не нужен. Новый ход меняет базу → sig меняется →
+      // легитимные эмиты (в т.ч. повторный файл после SPA-возврата/F5) целы.
+      if (sig === aiCmLastDomEmitSig && aiCmSiteConvFired()) {
+        if (typeof aiCmDiagLine === 'function') {
+          aiCmDiagLine('o24-dom-emit-guard', {
+            verdict: 'skip-sig-unchanged',
+            sig: sig,
+            convId: sigConvId || '(none)',
+            ms: mutations.length,
+            t: Date.now()
+          });
+        }
+        return;
+      }
+      aiCmLastDomEmitSig = sig;
       mutationCount++;
       clearTimeout(updateTimer);
       const delay = Math.min(800 + (mutationCount * 300), 3000);

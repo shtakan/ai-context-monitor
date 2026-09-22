@@ -126,6 +126,10 @@ let popupLimitPct = null;  // 1..100; null = Авто (поле пустое)
 // мог бы быть затёрт DOM-оценкой. Дедуп с последующим сетевым снапшотом даёт
 // существующий монотонный максимум (двойного роста быть не должно).
 var aiCmLastDomEmitSig = null;
+// O-24 (F6): чат, которому принадлежит aiCmLastDomEmitSig выше. Сигнатура привязана к
+// разговору: смена convId сбрасывает её, поэтому SPA-возврат в тот же чат видит СВОЮ
+// сигнатуру (как и O-38-латч по site|convId), а переход в другой чат — пустую.
+var aiCmLastDomEmitConvId = null;
 
 let lastEmitConvId = ''; // v34: convId последнего принятого снимка (гард экспорта)
 let lastSnapConvId = ''; // v37: convId последнего снимка для сброса монотонного максимума
@@ -365,6 +369,9 @@ var TRIM_HEAD_IDS_N = 10;
   Object.defineProperty(Api, 'aiCmLastDomEmitSig', { enumerable: true,
     get: function () { return aiCmLastDomEmitSig; },
     set: function (value) { aiCmLastDomEmitSig = value; } });
+  Object.defineProperty(Api, 'aiCmLastDomEmitConvId', { enumerable: true,
+    get: function () { return aiCmLastDomEmitConvId; },
+    set: function (value) { aiCmLastDomEmitConvId = value; } });
   Object.defineProperty(Api, 'lastEmitConvId', { enumerable: true,
     get: function () { return lastEmitConvId; },
     set: function (value) { lastEmitConvId = value; } });
