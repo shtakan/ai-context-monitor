@@ -71,3 +71,7 @@ perplexity_thread_sample.json
 /docs/QUALITY_AUDIT.md
 /.clineignore
 deepseek_test/
+
+# Локальные артефакты сессий (не коммитить)
+o35-state.txt
+test_write.txt
