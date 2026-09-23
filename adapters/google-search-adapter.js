@@ -1,9 +1,65 @@
+// ===== O-45: КОД-БЛОКИ (окна кода python/js) в DOM-пути адаптера =====
+// Единственный источник правды — utils/google-search-folwr-parser.js (renderCodeBlock /
+// answerTextOf / answerDomNodes): сетевой путь, DOM-добор перехватчика и DOM-путь адаптера
+// обязаны давать ОДИН и тот же текст по коду, поэтому собственных правил адаптер не держит
+// (тот же паттерн ленивого резолва общего хелпера, что у Qwen-адаптера в O-37). Хелпер
+// резолвится лениво, на каждом вызове:
+//   1) общий ISOLATED-мир — window.GoogleFolwrUtils (парсер загружен в этот мир);
+//   2) Node-путь (require) — тесты и Node-песочницы;
+//   3) ничего из этого нет → поведение ровно как до O-45: .n6owBd.awi2gc + голый textContent.
+function gsaFolwrUtils() {
+  try {
+    if (typeof window !== 'undefined' && window.GoogleFolwrUtils &&
+        typeof window.GoogleFolwrUtils.answerTextOf === 'function' &&
+        typeof window.GoogleFolwrUtils.answerDomNodes === 'function') {
+      return window.GoogleFolwrUtils;
+    }
+  } catch (e) { }
+  try {
+    if (typeof require === 'function') {
+      var mod = require('../utils/google-search-folwr-parser.js');
+      if (mod && typeof mod.answerTextOf === 'function' && typeof mod.answerDomNodes === 'function') {
+        return mod;
+      }
+    }
+  } catch (e2) { }
+  return null;
+}
+
+// Текст узла ответа общим рендером парсера (код-окна → ```lang … ```); без хелпера — прежний
+// textContent, то есть байты DOM-пути не меняются.
+function gsaAnswerText(el) {
+  var util = gsaFolwrUtils();
+  if (util) {
+    try { return String(util.answerTextOf(el) || ''); } catch (e) { }
+  }
+  try {
+    var clone = el.cloneNode(true);
+    clone.querySelectorAll('script, style, button, svg').forEach(function(n) { n.remove(); });
+    return String(clone.textContent || '');
+  } catch (e2) { return ''; }
+}
+
+// Узлы ответа общим отбором парсера (чанки прозы + САМОСТОЯТЕЛЬНЫЕ код-окна между ними);
+// без хелпера — только чанки .n6owBd.awi2gc, как раньше.
+function gsaAnswerNodes(root) {
+  var util = gsaFolwrUtils();
+  if (util) {
+    try {
+      var nodes = util.answerDomNodes(root);
+      if (nodes) return nodes;
+    } catch (e) { }
+  }
+  try { return root.querySelectorAll('.n6owBd.awi2gc'); } catch (e2) { return []; }
+}
+
 class GoogleSearchAdapter extends BaseAdapter {
   constructor() {
     super();
     this.siteName = 'google_search';
     this._lastNetworkModel = '';
     this._lastExtractedCount = null; // антиспам: последнее N в «Извлечено N сообщений»
+    this._lastCodeBlockSig = null;   // O-45 (ДИАГНОСТИКА): антиспам строки структуры код-блока
     console.log('[GoogleSearchAdapter] Инициализирован (v2: AI-режим)');
 
     if (typeof window !== 'undefined') {
@@ -61,7 +117,11 @@ class GoogleSearchAdapter extends BaseAdapter {
         answerBlocks[ti] = [];
       }
 
-      var blocks = document.querySelectorAll('.n6owBd.awi2gc');
+      // O-45: узлы ответа — чанки прозы + САМОСТОЯТЕЛЬНЫЕ код-окна между ними (общий отбор
+      // парсера answerDomNodes), текст узла — общим рендером answerTextOf: окно кода уезжает
+      // в ```lang\n<код>\n``` целиком. Без доступного хелпера — прежний путь (только
+      // .n6owBd.awi2gc и голый textContent), байты DOM-пути не меняются.
+      var blocks = gsaAnswerNodes(document);
       for (var b = 0; b < blocks.length; b++) {
         var block = blocks[b];
         var assignedIdx = -1;
@@ -73,14 +133,52 @@ class GoogleSearchAdapter extends BaseAdapter {
           }
         }
         if (assignedIdx >= 0 && assignedIdx < turns.length) {
-          var clone = block.cloneNode(true);
-          clone.querySelectorAll('script, style, button, svg').forEach(function(el) { el.remove(); });
-          var blockText = clone.textContent.trim();
+          var blockText = gsaAnswerText(block).trim();
           if (blockText) {
             answerBlocks[assignedIdx].push(blockText);
           }
         }
       }
+
+      // O-45 (ДИАГНОСТИКА, только измерение): структура ПЕРВОГО найденного код-блока Gemini.
+      // Гейт — aiCmDebug (utils/debug.js: aiCmDiagOn/aiCmDiagLine, тот же ISOLATED-мир).
+      // Печатается ОДИН раз на блок (антиспам: extractMessages зовётся в цикле оценки токенов),
+      // только ЧИТАЕТ DOM: извлечение текста, байты экспорта, пороги и латчи не меняются.
+      // В срез-песочницах тестов хелперов гейта нет — вызовы защищены typeof-гардом.
+      try {
+        if (typeof aiCmDiagOn === 'function' && aiCmDiagOn() && typeof aiCmDiagLine === 'function') {
+          var codeSels = ['.n6owBd.awi2gc pre', '.n6owBd.awi2gc code',
+            '[data-subtree="aimfl"] pre', '[data-subtree="aimfl"] code', 'pre', 'code'];
+          var codeEl = null, codeVia = '';
+          for (var cs = 0; cs < codeSels.length && !codeEl; cs++) {
+            codeEl = document.querySelector(codeSels[cs]);
+            if (codeEl) codeVia = codeSels[cs];
+          }
+          var codeSig = codeEl
+            ? (codeVia + '|' + codeEl.tagName + '|' + String(codeEl.className || '') + '|' + codeEl.textContent.length)
+            : 'none';
+          if (codeSig !== this._lastCodeBlockSig) {
+            this._lastCodeBlockSig = codeSig;
+            if (!codeEl) {
+              aiCmDiagLine('gsa-code-block', { found: 0, via: '(нет)', blocks: blocks.length, turns: turns.length });
+            } else {
+              var codeParent = codeEl.parentElement;
+              aiCmDiagLine('gsa-code-block', {
+                found: 1,
+                via: codeVia,
+                tag: codeEl.tagName,
+                cls: String(codeEl.className || '').slice(0, 120),
+                childs: codeEl.childNodes.length,
+                textLen: codeEl.textContent.length,
+                parentTag: (codeParent && codeParent.tagName) || '',
+                parentCls: (codeParent && String(codeParent.className || '').slice(0, 120)) || '',
+                // outerHTML.slice(0,500); переводы строк схлопнуты, чтобы строка лога осталась одной
+                html500: String(codeEl.outerHTML || '').replace(/\s+/g, ' ').slice(0, 500)
+              });
+            }
+          }
+        }
+      } catch (eCodeBlock) { }
 
       // Собираем ответы
       var answers = [];
