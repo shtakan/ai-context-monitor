@@ -45,6 +45,27 @@ function aiCmLogIntraDedupe(role, blocks) {
 function aiCmDedupeExportSource(messages) {
   try {
     var site = (currentAdapter && currentAdapter.siteName) || '';
+    // O-32 (google_search): схлопывание на выходе сбора базы — РАБОЧЕЕ, а не no-op.
+    // Живой дефект (лог 2026-09-23 16:47:48): один и тот же ход треда лежал в базе двумя
+    // формами текста, file/метрики получали 18 сообщений вместо 12 (textLen 24764 против
+    // reference 12255, бейдж 9% против 4.4%). Идентичность ходов чинится в писателях базы
+    // (core/google-search-intercept.js + utils/google-search-folwr-parser.js: canonicalTurnKey),
+    // а здесь — ПОСЛЕДНИЙ рубеж: та же подготовка пайплайна, что у Gemini (intra → inter →
+    // cross-raw → гигиена остатков разметки), поэтому дубль-копия одного хода до потребителей
+    // (метрики/бейдж/pct/экспорт) не доезжает. Для прочих не-Gemini сайтов путь прежний.
+    if (site === 'google_search') {
+      var Pgsa = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+      if (Pgsa && typeof Pgsa.prepareExportMessages === 'function') {
+        var resGsa = Pgsa.prepareExportMessages(messages, aiCmLogIntraDedupe);
+        var outGsa = Array.isArray(resGsa.messages) ? resGsa.messages : messages;
+        if (resGsa.removed > 0 || resGsa.intraRemoved > 0) {
+          debugLog('log', '[AI CM][google_search] dedupe removed=' + resGsa.removed +
+            ' intra=' + resGsa.intraRemoved + ' msgs=' + messages.length + '→' + outGsa.length);
+        }
+        return { messages: outGsa, removed: resGsa.removed };
+      }
+      return { messages: messages, removed: 0 };
+    }
     if (site !== 'gemini' && site !== 'aistudio') {
       var keep = [];
       for (var p = 0; p < messages.length; p++) {

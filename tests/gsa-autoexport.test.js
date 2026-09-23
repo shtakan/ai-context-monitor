@@ -59,7 +59,9 @@ describe('F1: probe-полнота GSA доходит до гейта одной
     // единственный путь вердикта: finish(complete=true) применяет базу с historyComplete=true
     // (O-27 защитный фикс: 4-й аргумент — сырое тело шага probe для проверки формы мусора)
     expect(INTERCEPT).toContain('applyTurns(merged.length > 0 ? merged : lastFullTurns, tid, true, lastBody);');
-    expect(INTERCEPT).toContain('historyComplete: historyComplete !== false');
+    // O-32: полнота — ДОКАЗАННОЕ свойство: buildDetail взводит historyComplete только при
+    // явном вердикте (было `historyComplete !== false` — дефолт полноты для DOM-добора).
+    expect(INTERCEPT).toContain('historyComplete: historyComplete === true');
     // probe-путь не заводит второго вердикта: классификатор вызывается только в describeFolwrPage
     expect(INTERCEPT).toContain('pageInfo.cls.complete');
     expect(INTERCEPT).toContain('classifyFolwrContinuation');

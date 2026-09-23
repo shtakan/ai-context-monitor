@@ -229,8 +229,10 @@ describe('O-43 D2: регрессия вердикта полноты латч �
   });
 
   test('D2: кэш треда на SPA-возврате пере-взводит латч (historyComplete кэша не false)', function () {
-    // единственный путь вердикта полноты — buildDetail: historyComplete: historyComplete !== false
-    expect(fnDecl(INTERCEPT_SRC, 'buildDetail')).toContain('historyComplete: historyComplete !== false');
+    // единственный путь вердикта полноты — buildDetail. O-32: полнота взводится только
+    // ДОКАЗАННЫМ вердиктом (probe-классификатор → applyTurns(..., true)), а не дефолтом
+    // `historyComplete !== false`: без вердикта снимок честно объявляется неполным.
+    expect(fnDecl(INTERCEPT_SRC, 'buildDetail')).toContain('historyComplete: historyComplete === true');
     const h = contentState({});
     h.set(TID); // эмит кэша треда после activateThread → detail.historyComplete=true
     expect(h.is(GSA, TID)).toBe(true);

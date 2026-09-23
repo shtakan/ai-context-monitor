@@ -57,6 +57,7 @@ let lastBaseSig = null;   // антиспам: сигнатура последн
 let lastEmitSig = null;   // антиспам: сигнатура последней печати «[content-trace] EMIT принят»
 let lastDrawSig = null;   // антиспам: сигнатура последней печати «[content-trace] DRAW»
 let lastHybridTailSig = null; // антиспам: последняя напечатанная строка «[hybrid-tail]»
+let lastMetricSig = null;  // O-32: антиспам строки gsa-metric-src (источник/режим значения бейджа) — печать на смену состояния
 // v30.5: антиспам для skip reason=not-complete — печатаем не чаще 1 раза на convId,
 // пока не пришла полная база. Сбрасывается вместе с fired при смене чата.
 let notCompleteLogged = {};
@@ -309,6 +310,9 @@ var TRIM_HEAD_IDS_N = 10;
   Object.defineProperty(Api, 'lastHybridTailSig', { enumerable: true,
     get: function () { return lastHybridTailSig; },
     set: function (value) { lastHybridTailSig = value; } });
+  Object.defineProperty(Api, 'lastMetricSig', { enumerable: true,
+    get: function () { return lastMetricSig; },
+    set: function (value) { lastMetricSig = value; } });
   Object.defineProperty(Api, 'notCompleteLogged', { enumerable: true,
     get: function () { return notCompleteLogged; },
     set: function (value) { notCompleteLogged = value; } });

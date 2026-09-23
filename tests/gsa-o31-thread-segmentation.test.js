@@ -54,6 +54,12 @@ function fnDecl(src, name) {
 // =====================================================================================
 const SCOPE_FNS = [
   'messagesFromTurns',
+  // O-32: канонический ключ хода (gsaTurnKeyOfLocal/gsaTurnKey/seedSeenKeys) — писатели базы
+  // зовут его из activateThread/applySnapshot/mergeTurns/applyTurns, поэтому в песочнице
+  // функции должны быть в скоупе.
+  'gsaTurnKeyOfLocal',
+  'gsaTurnKey',
+  'seedSeenKeys',
   // O-27 (защитный фикс): валидация сетевого тела (≥1 непустой ход + форма мусора по телу) —
   // писатели базы зовут её из applyTurns/mergeTurns, поэтому в песочнице она в скоупе.
   'isRawXssiPayload',
@@ -332,7 +338,8 @@ describe('O-31 (в): регрессионный контур', () => {
     expect(fnDecl(INTERCEPT, 'isForeignThread')).toContain('tid !== domTid');
     // probe-вердикт полноты (F1, O-28) не тронут (O-27: 4-й аргумент — тело шага probe)
     expect(INTERCEPT).toContain('applyTurns(merged.length > 0 ? merged : lastFullTurns, tid, true, lastBody);');
-    expect(INTERCEPT).toContain('historyComplete: historyComplete !== false');
+    // O-32: полнота — только доказанная (явный вердикт probe), не дефолт buildDetail
+    expect(INTERCEPT).toContain('historyComplete: historyComplete === true');
   });
 
   test('O-11: дисамбигуатор «-2» жив (два файра в одну минуту → разные имена)', () => {

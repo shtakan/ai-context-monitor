@@ -75,6 +75,10 @@ const TURNS_A = [
 // =====================================================================================
 const SCOPE_FNS = [
   'messagesFromTurns',
+  // O-32: канонический ключ хода в скоупе песочницы — его зовут все точки записи базы.
+  'gsaTurnKeyOfLocal',
+  'gsaTurnKey',
+  'seedSeenKeys',
   'isRawXssiPayload',
   'isUsableTurn',
   'hasUsableTurns',

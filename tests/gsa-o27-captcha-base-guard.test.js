@@ -77,6 +77,10 @@ function fnDecl(src, name) {
 // =====================================================================================
 const SCOPE_FNS = [
   'messagesFromTurns',
+  // O-32: канонический ключ хода в скоупе песочницы — его зовут все точки записи базы.
+  'gsaTurnKeyOfLocal',
+  'gsaTurnKey',
+  'seedSeenKeys',
   'isRawXssiPayload',
   'isUsableTurn',
   'hasUsableTurns',
@@ -430,8 +434,10 @@ describe('O-27: source-пины (где живёт гарантия)', () => {
     expect(fnDecl(INTERCEPT, 'applyTurns')).toContain('if (isGarbageBody(bodyText, turns))');
     expect(fnDecl(INTERCEPT, 'mergeTurns')).toContain('if (isGarbageBody(bodyText, newTurns))');
     // оба выходят ДО записи базы/эмита
+    // O-32: точка записи applyTurns — монотонное слияние «накопитель ∪ снимок»
+    // (unionFn(lastFullTurns, turns)) вместо прямого `lastFullTurns = turns.slice()`.
     const apply = fnDecl(INTERCEPT, 'applyTurns');
-    expect(apply.indexOf('hasUsableTurns')).toBeLessThan(apply.indexOf('lastFullTurns = turns.slice()'));
+    expect(apply.indexOf('hasUsableTurns')).toBeLessThan(apply.indexOf('lastFullTurns = unionFn(lastFullTurns, turns)'));
     const merge = fnDecl(INTERCEPT, 'mergeTurns');
     expect(merge.indexOf('hasUsableTurns')).toBeLessThan(merge.indexOf('lastFullTurns = newTurns.slice()'));
   });

@@ -2131,7 +2131,41 @@ function processAndSend() {
     const displayLimit = computeEffectiveLimit(modelId);
     // Монотонный максимум удерживается, когда источник стабилен —
     // EITHER сеть дала полную историю (baseComplete) ИЛИ найденная DOM-граница (lastBounded).
-    const useMonotonic = baseComplete || lastBounded;
+    // O-32: при НЕПОЛНОЙ базе источником значения служит каноническая база (core/hybrid-tail.js:
+    // getEffectiveText при baseComplete=false отдаёт пол базы, а не частичную DOM-выборку),
+    // поэтому такой источник тоже стабилен и заслуживает монотонного максимума: осцилляция
+    // DOM-выборки (SPA-возврат, вытеснение старых узлов сервисом) больше не роняет бейдж
+    // 4.4% → 0.6% на том же треде. Раньше: `useMonotonic = baseComplete || lastBounded` —
+    // неполная база без видимой границы перезаписывала максимум на каждом проходе.
+    const useMonotonic = baseComplete || lastBounded || (baseSeen && baseCount > 0);
+    // O-32 (ДИАГНОСТИКА, только измерение): ИСТОЧНИК и РЕЖИМ значения бейджа одним маркером —
+    // видно, каким путём получено число (полная база / канонический пол базы + DOM-хвост /
+    // канонический пол базы / DOM-адаптер) и удерживался ли монотонный максимум. Печать —
+    // каноническим хелпером utils/debug.js под гейтом aiCmDebug и ТОЛЬКО на смену состояния
+    // (сигнатура src|msgs|textLen|tokens|percentage — урок O-29 про лог-спам); читаются только
+    // уже посчитанные значения, байты/пороги/латчи не меняются.
+    try {
+      var metricSrc = baseComplete ? 'base-complete' : (lastBounded ? 'base-floor+dom-tail' : 'base-floor');
+      var metricSig = [metricSrc, baseCount, (fullText ? fullText.length : 0), tokenEstimate, baseSeen ? 1 : 0].join('|');
+      if (typeof aiCmDiagLine === 'function' && metricSig !== lastMetricSig) {
+        lastMetricSig = metricSig;
+        aiCmDiagLine('gsa-metric-src', {
+          site: svc,
+          src: metricSrc,
+          note: (!baseComplete && baseCount > 0) ? 'incomplete-canonical-floor' : '',
+          msgs: baseCount,
+          countForTokens: countForTokens,
+          textLen: fullText ? fullText.length : 0,
+          baseComplete: baseComplete ? 1 : 0,
+          baseSeen: baseSeen ? 1 : 0,
+          lastBounded: lastBounded ? 1 : 0,
+          useMonotonic: useMonotonic ? 1 : 0,
+          tokens: tokenEstimate,
+          baseTextLen: baseText ? baseText.length : 0,
+          threadId: lastThreadId || ''
+        });
+      }
+    } catch (eMetricSrc) { }
     if (netServerTokens > 0) {
       // точное число из countTokens авторитетно — не удерживаем завышенную эвристику
       maxTokenCount = tokenEstimate;

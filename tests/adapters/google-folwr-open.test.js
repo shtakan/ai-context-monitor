@@ -10,6 +10,9 @@ const {
   mergeTurnsByKey,
   extractContinuationToken,
   mergeTurnsById,
+  mergeTurnsMonotone,
+  canonicalTurnKeyOf,
+  canonicalizeTurnForThread,
   classifyFolwrContinuation
 } = require('../../utils/google-search-folwr-parser');
 const fs = require('fs');
@@ -204,8 +207,34 @@ describe('Google Search AI folwr-open parser', () => {
       ];
       const merged = mergeTurnsById(base, extra);
       expect(merged.map(t => t.id)).toEqual(['t1', 't2', 't3']);
-      // дубль по id не перезаписывает первый ход
-      expect(merged.find(t => t.id === 't2').assistantText).toBe('Ответ 2');
+      // O-32: дубль по id не перезаписывает первый ход, НО у того же хода остаётся
+      // богатейшая форма текста («Ответ 2 (дубль)» длиннее «Ответ 2»): форма текста —
+      // не идентичность, а качество представления одного и того же хода.
+      expect(merged.find(t => t.id === 't2').assistantText).toBe('Ответ 2 (дубль)');
+      // короткая (беднейшая) форма богатую НЕ вытесняет — монотонность качества
+      const merged2 = mergeTurnsById(
+        [{ id: 't2', userText: 'Вопрос 2', assistantText: 'Ответ 2 (дубль)' }],
+        [{ id: 't2', userText: 'Вопрос 2', assistantText: 'Ответ 2' }]
+      );
+      expect(merged2).toHaveLength(1);
+      expect(merged2[0].assistantText).toBe('Ответ 2 (дубль)');
+    });
+
+    it('O-32: одна и та же пара в разных формах текста — ОДИН ход (канонический ключ)', () => {
+      const Q = 'Наши Python скрипт для вычисления факториала';
+      const A = 'Готовый код: def fib(n): return n';
+      // форма эмита/добора: вопрос внутри текста ответа (id — индекс DOM)
+      const wrapped = { id: 'idx0', userText: null, assistantText: 'Ответ в режиме ИИ, исходный запрос: "' + Q + '" ' + A };
+      // форма сети: вопрос отдельным ходом (id — jsuid)
+      const network = { id: 'jsuid-1', userText: Q, assistantText: A };
+      expect(canonicalTurnKeyOf(wrapped)).toBe(canonicalTurnKeyOf(network));
+      expect(mergeTurnsById([wrapped], [network])).toHaveLength(1);
+      expect(mergeTurnsMonotone([wrapped], [network])).toHaveLength(1);
+      expect(mergeTurnsByKey([wrapped], [network])).toHaveLength(1);
+      // вопрос из обёртки доступен и как структурный userText (каноническая форма)
+      expect(canonicalizeTurnForThread(wrapped).userText).toBe(Q);
+      // текст при этом не переписывается — reference-байты сохранены
+      expect(mergeTurnsById([wrapped], [network])[0].assistantText).toBe(wrapped.assistantText);
     });
   });
 

@@ -671,19 +671,177 @@
     } catch (e) { return null; }
   }
 
+  // =====================================================================================
+  // O-32: КАНОНИЧЕСКАЯ ИДЕНТИЧНОСТЬ ХОДА (не зависит от формы текста и от пути)
+  // =====================================================================================
+  // Живой дефект (GSA, лог 2026-09-23 16:47:48): один и тот же ход одного и того же треда
+  // приходил в базу ДВУМЯ формами текста, и дедуп по сырой паре (userText||assistantText) их
+  // не видел — ходы складывались, база росла 6 → 12 → 18 сообщений (textLen 12255 → 24764,
+  // бейдж 4.4% → 9%) без единого нового сообщения пользователя:
+  //   форма ДОБОРА (DOM/кэш):  userText=null, assistantText='Ответ в режиме ИИ, исходный
+  //                            запрос: "Q" A' — вопрос ВНУТРИ текста ответа;
+  //   форма СЕТИ (folif/folwr): userText='Q', assistantText='A' — вопрос отдельным ходом.
+  // Идентичность поэтому выводится из СОДЕРЖИМОГО, а не из формы:
+  //   ключ хода = normalized(userText) + '||' + normalized(answerBody),
+  // где answerBody — текст ответа БЕЗ сервисной обёртки-вопроса («Ответ в режиме ИИ,
+  // исходный запрос: "Q"»). Обе формы дают РОВНО один ключ: 'q||a'.
+  //
+  // Функции чистые и детерминированные: одинаковый вход → одинаковый ключ на любом пути
+  // (сеть, DOM-добор, кэш треда, SPA-возврат, F5) — это и есть инвариант §4 отчёта.
+  //
+  // ГРАНИЦЫ: ключ меняет ТОЛЬКО идентичность (дедуп/seed). Сам текст хода остаётся байтово
+  // прежним: reference-значение треда A (12255 знаков / 5658 токенов / 4.4%) не сдвигается.
+  function normalizeTurnKeyPart(s) {
+    return String(s == null ? '' : s)
+      .toLowerCase()
+      .replace(/\u00a0/g, ' ')
+      .replace(/[^a-zа-яё0-9]+/g, '');
+  }
+
+  // Обёртка-вопрос GSA в тексте ответа: «Ответ в режиме ИИ, исходный запрос: "Q" Ответ.»
+  // Разбор префикса — в wrapperPrefix/answerWrapperParts ниже.
+  // Хвост обёртки: закрывающая кавычка + короткий служебный суффикс («в ответе», «далее»),
+  // затем — тело ответа. Тело обязательно: текст, кончающийся на кавычке, обёрткой НЕ
+  // является, иначе вопрос-цитата в прозе принималась бы за обёртку с пустым телом ответа.
+  // Проверка «есть ли тело» — простым сравнением (регулярка с «хвостовым непробелом» ложно
+  // отклоняла тела из одного слова на коротких строках).
+  function isAnswerWrapperTail(tail) {
+    var t = String(tail == null ? '' : tail);
+    // Вызывающий уже снял ЗАКРЫВАЮЩУЮ кавычку обёртки; здесь допускаем её повтор
+    // (двойные кавычки «""») и короткую служебную связку («: », «. », « — ») перед телом.
+    var body = t.replace(/^["»”']{0,2}/, '').replace(/^[\s.,:;-]{0,4}/, '');
+    return body.replace(/\s+/g, '').length > 0;
+  }
+  var QUESTION_ASK_RE = /^(?:в\s+)?(?:ответ(?:е)?(?:\s+на\s+вопрос)?|на\s+вопрос|вопрос)\s*:?\s*/i;
+
+  // Разбор ОБЁРТКИ-вопроса: {question, body} либо null (обёртки нет).
+  // question — текст между кавычками (он же user-реплика хода), body — ответ после обёртки.
+  // Кавычка обёртки ищется по ПРЕФИКСУ текста, а не первой кавычке вообще: прозаический
+  // ответ, начинающийся с цитаты («"Цитата" — так пишут…»), обёрткой не считается, потому
+  // что в префиксе до кавычки нет сервисной связки «…: "Q"» (двоеточия).
+  function wrapperPrefix(text) {
+    var s = String(text == null ? '' : text);
+    var head = s.slice(0, 96);
+    var at = head.indexOf(':');
+    if (at === -1) return null;
+    var after = head.slice(at + 1);
+    var m = /^\s*"/.exec(after);
+    if (!m) return null;
+    return s.slice(0, at + 1 + m[0].length);
+  }
+
+  function answerWrapperParts(text) {
+    var s = String(text == null ? '' : text);
+    var prefix = wrapperPrefix(s);
+    if (!prefix) return null;
+    var rest = s.slice(prefix.length);
+    var close = rest.indexOf('"');
+    if (close === -1) return null;
+    var tail = rest.slice(close + 1);
+    if (!isAnswerWrapperTail(tail)) return null;
+    var question = rest.slice(0, close).trim();
+    if (!question) return null;
+    var body = tail.replace(/^["»”']{0,2}/, '').replace(/^[\s.,:;-]+/, '');
+    if (!body) return null;
+    return { question: question, body: body };
+  }
+
+  // Тело ответа без сервисной обёртки. Обычный текст (обёртки нет) возвращается БАЙТОВО тем
+  // же: функция ничего не схлопывает и не срезает отступы — только снимает обёртку-вопрос.
+  function canonicalAnswerBody(text) {
+    var wrapper = answerWrapperParts(text);
+    if (wrapper) return wrapper.body;
+    var s = String(text == null ? '' : text);
+    try {
+      // Остаточный вопрос-эхо в начале ответа («вопрос: Q A») снимаем один раз.
+      var q = QUESTION_ASK_RE.exec(s);
+      if (q) {
+        var rest2 = s.slice(q[0].length);
+        var close2 = rest2.indexOf('"?');
+        if (close2 !== -1 && close2 < 200) {
+          var body2 = rest2.slice(close2 + 2).replace(/^[\s.,:;-]+/, '');
+          if (body2) s = body2;
+        }
+      }
+    } catch (e) { return String(text == null ? '' : text); }
+    return s;
+  }
+
+  // Канонический ключ хода: CONTENT-key. userText — структурный источник (h2.iMqumd) либо
+  // вопрос, извлечённый из обёртки; answerBody — ответ без обёртки. Обе живые формы дают
+  // РОВНО один ключ: ход сети ('Q' + 'A') и ход добора/сети-эмита (null + 'Ответ в режиме ИИ,
+  // исходный запрос: "Q" A') → 'q||a'.
+  function canonicalTurnKeyOf(turn) {
+    if (!turn) return '';
+    var wrapper = answerWrapperParts(turn.assistantText);
+    var u = normalizeTurnKeyPart(turn.userText);
+    if (!u && wrapper) u = normalizeTurnKeyPart(wrapper.question);
+    var a = normalizeTurnKeyPart(wrapper ? wrapper.body : canonicalAnswerBody(turn.assistantText));
+    return u + '||' + a;
+  }
+
+  // Каноническая ФОРМА хода: вопрос, живущий только внутри обёртки текста ответа, выносится
+  // в userText (структурный источник), сам текст ответа сохраняется БАЙТОВО. Ход уже
+  // канонической формы возвращается как есть — повторный проход идемпотентен.
+  // Формы различаются ТОЛЬКО вопросом: у хода-обёртки его в структуре нет.
+  function canonicalizeTurnForThread(turn) {
+    if (!turn) return turn;
+    var question = (turn.userText == null) ? '' : String(turn.userText).trim();
+    if (!question) {
+      var wrapper = answerWrapperParts(turn.assistantText);
+      if (wrapper) question = wrapper.question;
+    }
+    return {
+      id: turn.id,
+      userText: question || null,
+      assistantText: (turn.assistantText == null) ? null : turn.assistantText
+    };
+  }
+
+  // Предпочтение формы одного и того же хода: богатейшая (полный текст ответа, затем
+  // заполненный вопрос). Форма-обёртка несёт текст ответа целиком, форма сети — только тело;
+  // при слиянии двух форм одного хода остаётся обёртка (reference-байты базы не сдвигаются).
+  function isBetterTurn(candidate, current) {
+    if (!current) return true;
+    var la = String((candidate && candidate.assistantText) || '').length;
+    var lb = String((current && current.assistantText) || '').length;
+    if (la !== lb) return la > lb;
+    return String((candidate && candidate.userText) || '').length >
+      String((current && current.userText) || '').length;
+  }
+  function turnRecord(t, idFallback) {
+    return {
+      id: (t && t.id != null) ? t.id : idFallback,
+      userText: (t && t.userText) || null,
+      assistantText: (t && t.assistantText) || null
+    };
+  }
+
   // Слияние ходов по id (turn.id) — для тихой пагинации чанков folwr, где один и тот же ход
   // может повториться на границе порций. Более новый ход не перезаписывает; дубли по id убираются.
+  // O-32: вторая ось дедупа — КАНОНИЧЕСКИЙ ключ (canonicalTurnKeyOf): один и тот же ход,
+  // пришедший разными формами текста и потому с разными id (id-обёртки DOM/кэша vs id-сети),
+  // больше не входит в базу дважды.
   function mergeTurnsById(baseTurns, extraTurns) {
     baseTurns = Array.isArray(baseTurns) ? baseTurns : [];
     extraTurns = Array.isArray(extraTurns) ? extraTurns : [];
     var byId = {};
+    var byKey = {};
     var out = [];
     function add(t) {
       if (!t) return;
       var id = (t.id != null) ? String(t.id) : ('x' + out.length);
-      if (Object.prototype.hasOwnProperty.call(byId, id)) return;
-      byId[id] = true;
-      out.push({ id: id, userText: t.userText || null, assistantText: t.assistantText || null });
+      var key = canonicalTurnKeyOf(t);
+      var hasId = Object.prototype.hasOwnProperty.call(byId, id);
+      var hasKey = (key !== '||') && Object.prototype.hasOwnProperty.call(byKey, key);
+      if (hasId || hasKey) {
+        var at = hasId ? byId[id] : byKey[key];
+        if (isBetterTurn(t, out[at])) out[at] = turnRecord(t, out[at].id);
+        return;
+      }
+      byId[id] = out.length;
+      if (key !== '||') byKey[key] = out.length;
+      out.push(turnRecord(t, id));
     }
     var i;
     for (i = 0; i < baseTurns.length; i++) add(baseTurns[i]);
@@ -691,7 +849,20 @@
     return out;
   }
 
-  // Досбор: сливает ходы folwr и DOM, дедуплицируя по (userText||) + '||' + (assistantText||).
+  // O-32: МОНОТОННОЕ слияние по каноническому ключу — счётчик ходов не может упасть.
+  // Единая точка для «накопитель ∪ новая база» (activateThread/applyTurns/mergeTurns):
+  // дедуп по id (пагинация) И по каноническому ключу (одна и та же пара в разных формах).
+  // Порядок базы сохраняется; новый ход дописывается в хвост.
+  function mergeTurnsMonotone(baseTurns, extraTurns) {
+    return mergeTurnsById(baseTurns, extraTurns);
+  }
+
+  // Досбор: сливает ходы folwr и DOM по КАНОНИЧЕСКОМУ ключу хода (см. O-32 выше).
+  // Ключ прежней формы (сырая пара userText||assistantText) здесь не годится: сетевой ход
+  // ('Q' + 'A') и ход DOM-добора (null + 'Ответ в режиме ИИ, исходный запрос: "Q" A') давали
+  // РАЗНЫЕ ключи, и один и тот же ход входил в базу дважды (живой дефект 16:47:48:
+  // 6 → 12 ходов, 18 сообщений, textLen 12255 → 24764, бейдж 4.4% → 9%).
+  // При совпадении ключа ход не дублируется: остаётся богатейшая форма (isBetterTurn).
   function mergeTurnsByKey(baseTurns, extraTurns) {
     baseTurns = Array.isArray(baseTurns) ? baseTurns : [];
     extraTurns = Array.isArray(extraTurns) ? extraTurns : [];
@@ -699,10 +870,15 @@
     var out = [];
     function add(t) {
       if (!t) return;
-      var key = (t.userText || '') + '||' + (t.assistantText || '');
-      if (key === '||' || seen[key]) return;
-      seen[key] = true;
-      out.push({ id: (t.id != null) ? t.id : ('x' + out.length), userText: t.userText || null, assistantText: t.assistantText || null });
+      var key = canonicalTurnKeyOf(t);
+      if (key === '||') return;
+      if (seen[key] === undefined) {
+        seen[key] = out.length;
+        out.push(turnRecord(t, 'x' + out.length));
+        return;
+      }
+      var at = seen[key];
+      if (isBetterTurn(t, out[at])) out[at] = turnRecord(t, out[at].id);
     }
     for (var i = 0; i < baseTurns.length; i++) add(baseTurns[i]);
     for (var j = 0; j < extraTurns.length; j++) add(extraTurns[j]);
@@ -774,7 +950,14 @@
       mergeTurnsByKey: mergeTurnsByKey,
       extractContinuationToken: extractContinuationToken,
       mergeTurnsById: mergeTurnsById,
+      mergeTurnsMonotone: mergeTurnsMonotone,
       classifyFolwrContinuation: classifyFolwrContinuation,
+      // O-32: каноническая идентичность/форма хода — ОДИН источник правды для сетевого пути,
+      // DOM-добора перехватчика и DOM-пути адаптера (см. блок «O-32» ниже по файлу).
+      canonicalTurnKeyOf: canonicalTurnKeyOf,
+      canonicalAnswerBody: canonicalAnswerBody,
+      canonicalizeTurnForThread: canonicalizeTurnForThread,
+      normalizeTurnKeyPart: normalizeTurnKeyPart,
       // O-45: общий рендер код-блоков (```lang … ```) и отбор узлов DOM-пути —
       // переиспользуются адаптером (adapters/google-search-adapter.js) и тестами.
       renderCodeBlock: renderCodeBlock,
@@ -791,7 +974,12 @@
       mergeTurnsByKey: mergeTurnsByKey,
       extractContinuationToken: extractContinuationToken,
       mergeTurnsById: mergeTurnsById,
+      mergeTurnsMonotone: mergeTurnsMonotone,
       classifyFolwrContinuation: classifyFolwrContinuation,
+      canonicalTurnKeyOf: canonicalTurnKeyOf,
+      canonicalAnswerBody: canonicalAnswerBody,
+      canonicalizeTurnForThread: canonicalizeTurnForThread,
+      normalizeTurnKeyPart: normalizeTurnKeyPart,
       renderCodeBlock: renderCodeBlock,
       answerTextOf: answerTextOf,
       answerDomNodes: answerDomNodes,

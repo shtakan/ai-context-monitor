@@ -305,6 +305,71 @@
     return !hasUsableTurns(turns);
   }
 
+  // ---- O-32: КАНОНИЧЕСКИЙ КЛЮЧ ХОДА (fallback к единому парсеру) ----
+  // Живой дефект (лог 2026-09-23 16:47:48): один и тот же ход одного и того же треда жил в
+  // базе ДВУМЯ формами текста, и дедуп по сырой паре (userText||assistantText) их не видел —
+  // база росла 6 → 12 ходов (18 сообщений, textLen 12255 → 24764, бейдж 4.4% → 9%) без
+  // единого нового сообщения пользователя:
+  //   форма ДОБОРА/ЭМИТА: userText=null, assistantText='Ответ в режиме ИИ, исходный
+  //                       запрос: "Q" A' — вопрос ВНУТРИ текста ответа;
+  //   форма СЕТИ:         userText='Q', assistantText='A' — вопрос отдельным ходом.
+  // Источник правды — utils/google-search-folwr-parser.js (canonicalTurnKeyOf); здесь тот же
+  // алгоритм продублирован ЛОКАЛЬНО ради срез-песочниц тестов, которые вырезают функции
+  // перехватчика поимённо (обращение к необъявленному хелперу дало бы ReferenceError).
+  // Правило ключа: normalized(userText | вопрос из обёртки) + '||' + normalized(тело ответа).
+  // Текст хода при этом НЕ меняется: reference 12255 знаков / 5658 токенов / 4.4% сохранён.
+  function gsaTurnKeyOfLocal(turn) {
+    if (!turn) return '';
+    function squash(s) {
+      return String(s == null ? '' : s).toLowerCase().replace(/\u00a0/g, ' ').replace(/[^a-zа-яё0-9]+/g, '');
+    }
+    function wrapperOf(text) {
+      var s = String(text == null ? '' : text);
+      var head = s.slice(0, 96);
+      var at = head.indexOf(':');
+      if (at === -1) return null;
+      var m = /^\s*"/.exec(head.slice(at + 1));
+      if (!m) return null;
+      var rest = s.slice(at + 1 + m[0].length);
+      var close = rest.indexOf('"');
+      if (close === -1) return null;
+      var tail = rest.slice(close + 1).replace(/^["»”']{0,2}/, '').replace(/^[\s.,:;-]{0,4}/, '');
+      if (!tail.replace(/\s+/g, '').length) return null;
+      var question = rest.slice(0, close).trim();
+      if (!question) return null;
+      return { question: question, body: tail.replace(/^[\s.,:;-]+/, '') };
+    }
+    var w = wrapperOf(turn.assistantText);
+    var u = squash(turn.userText);
+    if (!u && w) u = squash(w.question);
+    var a = squash(w ? w.body : turn.assistantText);
+    return u + '||' + a;
+  }
+
+  // Канонический ключ через единый парсер (window.GoogleFolwrUtils), фолбэк — локальный
+  // дубль. Возврат — строка ключа; ход без содержимого даёт '||'.
+  function gsaTurnKey(turn) {
+    try {
+      if (window.GoogleFolwrUtils && typeof window.GoogleFolwrUtils.canonicalTurnKeyOf === 'function') {
+        var k = window.GoogleFolwrUtils.canonicalTurnKeyOf(turn);
+        if (typeof k === 'string' && k) return k;
+      }
+    } catch (e) { }
+    return gsaTurnKeyOfLocal(turn);
+  }
+
+  // Сид накопителя ключей ходов: единая точка для activateThread/applySnapshot/mergeTurns/
+  // applyTurns (раньше одна и та же пара строк дублировалась в четырёх местах — и одна из
+  // форм хода в них не учитывалась).
+  function seedSeenKeys(turns) {
+    seenKeys = {};
+    for (var i = 0; i < turns.length; i++) {
+      var key = gsaTurnKey(turns[i]);
+      if (key && key !== '||') seenKeys[key] = true;
+    }
+    return seenKeys;
+  }
+
   // ---- плоские messages из turns (fallback) ----
   function messagesFromTurns(turns) {
     var msgs = [];
@@ -340,7 +405,12 @@
       messages: messages,
       attachTokens: 0,
       attachBreak: { imgTokens: 0, docTokens: 0, imgCount: 0, docCount: 0 },
-      historyComplete: historyComplete !== false
+      // O-32: полнота — ДОКАЗАННОЕ свойство, а не дефолт. Было `historyComplete !== false`:
+      // вызов без третьего аргумента (все DOM-доборы и накопительные merge) помечал снимок
+      // ПОЛНЫМ, и content.js взводил baseComplete=true по неполной базе — гейт автоэкспорта
+      // и метрики работали по недоказанной полноте. Теперь true только при явном вердикте
+      // (probe-классификатор classifyFolwrContinuation → applyTurns(..., true)).
+      historyComplete: historyComplete === true
     };
   }
 
@@ -354,6 +424,12 @@
   // Здесь только чтение уже построенного снимка под гейтом aiCmDebug (aiCmDiagLine,
   // utils/debug.js): detail, база, threadId и байты эмита не меняются; гейт выключен → ни
   // одной строки. Возврат функции прежний (undefined) — контракт emitDetail 1:1.
+  //
+  // O-32 (ДИАГНОСТИКА, только измерение): тот же вызов печатает ОТПЕЧАТОК ТРЕДА —
+  // hash(sorted(канонические ключи ходов)) + count + textLen. Критерий приёмки O-32:
+  // отпечаток одного и того же треда обязан совпасть на холодном старте, F5 и SPA-возврате
+  // (живой дефект 2026-09-23 давал hash(6 ключей) на старте и hash(12 ключей) после
+  // SPA-возврата при count 18 против 6). Локальные функции — ради срез-песочниц тестов.
   function emitDetail(detail) {
     try {
       if (typeof aiCmDiagLine === 'function') {
@@ -369,6 +445,42 @@
         });
       }
     } catch (eNetFin) { }
+    try {
+      if (typeof aiCmDiagLine === 'function') {
+        var fpKeys = [];
+        var fpTurns = (detail && Array.isArray(detail.messageTexts) && Array.isArray(detail.messages))
+          ? detail.messages : [];
+        for (var fpI = 0; fpI < fpTurns.length; fpI++) {
+          var fpM = fpTurns[fpI] || {};
+          if (fpM.role === 'user') {
+            var fpNext = fpTurns[fpI + 1] || {};
+            fpKeys.push(gsaTurnKey({
+              userText: (detail.messageTexts[fpI] == null) ? null : detail.messageTexts[fpI],
+              assistantText: (fpNext.role === 'assistant' && detail.messageTexts[fpI + 1] != null) ? detail.messageTexts[fpI + 1] : null
+            }));
+            if (fpNext.role === 'assistant') fpI++;
+          } else {
+            fpKeys.push(gsaTurnKey({ userText: null, assistantText: (detail.messageTexts[fpI] == null) ? null : detail.messageTexts[fpI] }));
+          }
+        }
+        fpKeys.sort();
+        var fpJoined = fpKeys.join('\u0001');
+        var fpH = 0x811c9dc5;
+        for (var fpC = 0; fpC < fpJoined.length; fpC++) {
+          fpH ^= fpJoined.charCodeAt(fpC);
+          fpH = Math.imul(fpH, 0x01000193) >>> 0;
+        }
+        aiCmDiagLine('gsa-thread-fingerprint', {
+          threadId: (detail && detail.threadId) || '',
+          hash: ('0000000' + fpH.toString(16)).slice(-8),
+          count: (fpKeys.length > 0) ? fpKeys.length : ((detail && detail.count) || 0),
+          msgs: (detail && typeof detail.count === 'number') ? detail.count : 0,
+          textLen: (detail && typeof detail.text === 'string') ? detail.text.length : 0,
+          historyComplete: (detail && detail.historyComplete === true) ? 1 : 0,
+          activeTid: baseThreadId || ''
+        });
+      }
+    } catch (eFp) { }
     try {
       window.dispatchEvent(new CustomEvent('ai-cm-full-history', { detail: detail }));
     } catch (e) { }
@@ -407,10 +519,8 @@
     lastFullTurns = (seg && Array.isArray(seg.turns)) ? seg.turns.slice() : [];
     lastFullMessages = (seg && Array.isArray(seg.messages)) ? seg.messages.slice() : [];
     lastFullSnapshot = (seg && seg.snapshot) ? seg.snapshot : null;
-    seenKeys = {};
-    for (var i = 0; i < lastFullTurns.length; i++) {
-      seenKeys[(lastFullTurns[i].userText || '') + '||' + (lastFullTurns[i].assistantText || '')] = true;
-    }
+    // O-32: сид ключей — канонический (форма хода не важна), единой точкой seedSeenKeys.
+    seedSeenKeys(lastFullTurns);
     emittedThreadId = lastFullSnapshot ? tid : '';
     // O-27/O-32 (диагностика): сброс накопителя при смене активного разговора + тип документа.
     if (typeof gsaDiagState === 'function') gsaDiagState('activateThread', 'reset', 'active-thread-switch', { from: prevBaseTid || '(пусто)', to: tid || '(пусто)', segTurns: lastFullTurns.length, emitted: emittedThreadId || '(пусто)' });
@@ -444,11 +554,8 @@
     if (!parsed || !parsed.turns || parsed.turns.length === 0) return;
     lastFullTurns = parsed.turns.slice();
     lastFullMessages = Array.isArray(parsed.messages) ? parsed.messages.slice() : messagesFromTurns(lastFullTurns);
-    seenKeys = {};
-    for (var si = 0; si < lastFullTurns.length; si++) {
-      var st = lastFullTurns[si];
-      seenKeys[(st.userText || '') + '||' + (st.assistantText || '')] = true;
-    }
+    // O-32: тот же канонический ключ, что у mergeTurns/applyTurns (было — сырая пара).
+    seedSeenKeys(lastFullTurns);
     lastFullSnapshot = buildDetail(lastFullTurns, lastFullMessages, threadId);
     emittedThreadId = threadId || '';
     if (threadId) cacheSet(threadId, { turns: lastFullTurns, messages: lastFullMessages, snapshot: lastFullSnapshot });
@@ -459,7 +566,9 @@
     var merged = [];
     var seen = {};
     function addTurn(t) {
-      var key = (t && t.userText ? t.userText : '') + '||' + (t && t.assistantText ? t.assistantText : '');
+      // O-32: ключ дедупа — канонический (форма текста хода не важна): стрим-ход и ход базы,
+      // описанные разными формами одного и того же ответа, больше не удваивают базу.
+      var key = gsaTurnKey(t);
       if (key !== '||' && seen[key]) return;
       seen[key] = true;
       merged.push({ id: (t && t.id) || ('x' + merged.length), userText: t ? t.userText : null, assistantText: t ? t.assistantText : null });
@@ -508,17 +617,15 @@
         mergeStreamTurns(newTurns, threadId);
         return;
       }
+      // O-32: полный снимок заменяет базу, но ключи — КАНОНИЧЕСКИЕ (seedSeenKeys): иначе
+      // следующий чанк того же хода в другой форме текста считался бы новым и база росла.
       lastFullTurns = newTurns.slice();
-      seenKeys = {};
-      for (var i = 0; i < newTurns.length; i++) {
-        var t = newTurns[i];
-        var key = (t.userText || '') + '||' + (t.assistantText || '');
-        seenKeys[key] = true;
-      }
+      seedSeenKeys(lastFullTurns);
     } else {
       for (var j = 0; j < newTurns.length; j++) {
         var nt = newTurns[j];
-        var key2 = (nt.userText || '') + '||' + (nt.assistantText || '');
+        var key2 = gsaTurnKey(nt);
+        if (key2 === '||') continue;
         if (!seenKeys[key2]) {
           seenKeys[key2] = true;
           lastFullTurns.push(nt);
@@ -764,13 +871,17 @@
       return;
     }
     activateThread(tid);
-    lastFullTurns = turns.slice();
+    // O-32: снимок применяется МОНОТОННО — «накопитель ∪ снимок», а не замена.
+    // Живой дефект (16:47:48): при SPA-возврате снимок нёс ход-обёртку (null + 'Ответ в
+    // режиме ИИ …'), а сегмент кэша — тот же ход формой сети; замена/сырой ключ складывали
+    // обе формы (6 → 12 ходов → 18 сообщений, textLen 24764, бейдж 4.4% → 9%). Слияние по
+    // КАНОНИЧЕСКОМУ ключу (mergeTurnsMonotone = id + canonicalTurnKeyOf) оставляет у хода
+    // ровно одно представление, поэтому повторный снимок того же треда базу не раздувает.
+    var unionFn = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.mergeTurnsMonotone) ||
+      function (a, b) { return a.concat(b); };
+    lastFullTurns = unionFn(lastFullTurns, turns);
     lastFullMessages = messagesFromTurns(lastFullTurns);
-    seenKeys = {};
-    for (var i = 0; i < lastFullTurns.length; i++) {
-      var t = lastFullTurns[i];
-      seenKeys[(t.userText || '') + '||' + (t.assistantText || '')] = true;
-    }
+    seedSeenKeys(lastFullTurns);
     lastFullSnapshot = buildDetail(lastFullTurns, lastFullMessages, tid, historyComplete);
     emittedThreadId = tid || '';
     if (tid) cacheSet(tid, { turns: lastFullTurns, messages: lastFullMessages, snapshot: lastFullSnapshot });
@@ -933,6 +1044,12 @@
             if (domTurns.length > lastFullTurns.length) {
               var mergeFn = window.GoogleFolwrUtils.mergeTurnsByKey || function (a, b) { return a.concat(b); };
               if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('scroll-backfill', domTurns, 'submit', tid, { iterations: iterations, stalls: stalls, domTurns: domTurns.length, baseTurns: lastFullTurns.length });
+              // O-32: DOM-добор НЕ доказывает полноту истории — вердикт полноты выносит
+              // только probe-классификатор (classifyFolwrContinuation → applyTurns(..., true)).
+              // Здесь стоял вызов без третьего аргумента: полнота бралась ДЕФОЛТОМ
+              // (buildDetail: historyComplete !== false), и baseComplete взводился по
+              // добору из DOM — гейт автоэкспорта видел «полную» историю там, где её никто
+              // не подтверждал. Явный false: база растёт, вердикт полноты не выдумывается.
               applyTurns(mergeFn(lastFullTurns, domTurns), tid, false);
               stalls = 0;
             } else {

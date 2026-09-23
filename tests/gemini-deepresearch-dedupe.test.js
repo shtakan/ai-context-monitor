@@ -943,8 +943,12 @@ describe('E-2.3 (а): метрики и экспорт считаются по �
     expect(LISTENER_SRC).toContain('aiCmBasePrepared = prepared18;');
     expect(LISTENER_SRC).toContain("baseText = texts18.join('\\n');");
     expect(CONTENT_SRC).toContain('if (ded18.removed > 0 && netEffectiveLen > baseText.length) netEffectiveLen = baseText.length;');
-    // текст метрик читается из того же подготовленного массива, а не из второй копии базы
-    expect(CONTENT_SRC).toContain('return aiCmMetricBaseText(baseText);');
+    // текст метрик читается из того же подготовленного массива, а не из второй копии базы.
+    // O-32: в core/hybrid-tail.js вызов идёт через typeof-гард aiCmTailMetricBase → тот же
+    // aiCmMetricBaseText(fallback) (пол базы), иначе — сам baseText (срез-песочницы тестов).
+    expect(CONTENT_SRC).toContain('function aiCmTailMetricBase(fallback) {');
+    expect(CONTENT_SRC).toContain('aiCmMetricBaseText(fallback) : fallback;');
+    expect(CONTENT_SRC).toContain('return aiCmTailMetricBase(baseText);');
     expect(CONTENT_SRC).toContain('function aiCmMetricBaseText(fallback) {');
     // база метрик не перетекает в другой чат/снимок без сетевых текстов
     expect(CONTENT_SRC).toContain('// v1.18 (E-2.3): схлопнутая база метрик не перетекает в другой чат');

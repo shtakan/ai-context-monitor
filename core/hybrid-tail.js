@@ -105,13 +105,27 @@ function computeTailFromDom() {
 //   взводящая baseComplete из события, была потеряна при переписывании под сброс чата → виджет всегда считал
 //   по DOM. Теперь при baseComplete=true возвращаем baseText, и скролл вверх число не меняет (сеть от скролла
 //   не зависит). Иначе (база неполная) — прежняя логика: bounded ? база+хвост : только DOM.
+//
+// O-32: неполная база — это КАНОНИЧЕСКИЙ пол базы, а не «сеть победила / DOM победил».
+//   Живой дефект (16:47:48): «частичная» DOM-выборка (bounded=false — границы базы в DOM уже
+//   нет, сервис вытеснил старые сообщения) отдавалась как ВЕСЬ текст метрик, и база в 6
+//   сообщений подменялась куском в 2 сообщения (бейдж 4.4% → 0.6% на том же треде).
+//   Правило: при неполной базе берётся ОБЪЕДИНЕНИЕ (канонический выбор): база ∧ DOM —
+//   граница базы видна → база + хвост; DOM неполон → остаётся БАЗА (пол базы неизменен),
+//   а не более слабый DOM-кусок. Полная база (baseComplete) — по-прежнему ровно база.
+// O-32: канонический текст метрик неполной базы — ровно схлопнутая база (aiCmMetricBaseText,
+// core/base-handler.js). Хелпер объявлен в общем лексическом скоупе контент-скриптов; в
+// срез-песочницах тестов его может не быть — typeof-гард, значение то же (baseText).
+function aiCmTailMetricBase(fallback) {
+  return (typeof aiCmMetricBaseText === 'function') ? aiCmMetricBaseText(fallback) : fallback;
+}
 function getEffectiveText() {
   if (baseSeen && baseText) {
     if (baseComplete) {
       lastBounded = true; // источник = сеть, стабилен → монотонный максимум безвреден
       // v1.18 (E-2.3): текст метрик (pct/токены/бейдж) — РОВНО схлопнутая база текущего
       // снимка (выход prepareExportMessages), тот же массив, что уходит в файл экспорта.
-      return aiCmMetricBaseText(baseText);
+      return aiCmTailMetricBase(baseText);
     }
     var tail = computeTailFromDom();
     var sig = (tail.sel || '') + '|' + (tail.bounded ? '1' : '0');
@@ -124,9 +138,10 @@ function getEffectiveText() {
       }
     }
     lastBounded = tail.bounded;
-    if (!tail.text) return baseText;
-    if (tail.bounded) return baseText + '\n' + tail.text;
-    return tail.text;
+    if (!tail.text) return aiCmTailMetricBase(baseText); // хвоста нет — метрики по канонической базе
+    if (tail.bounded) return aiCmTailMetricBase(baseText) + '\n' + tail.text;
+    // DOM неполон: его видимый кусок НЕ заменяет базу (было `return tail.text`).
+    return aiCmTailMetricBase(baseText);
   }
   return '';
 }
@@ -136,7 +151,7 @@ function getEffectiveCount(fallbackCount) {
     var tail = computeTailFromDom();
     if (!tail.count) return baseCount;
     if (tail.bounded) return baseCount + tail.count;
-    return tail.count;
+    return baseCount; // O-32: неполный DOM не сокращает счётчик канонической базы
   }
   return fallbackCount;
 }
@@ -155,6 +170,7 @@ function getEffectiveCount(fallbackCount) {
   Api.nodeIsBase = nodeIsBase;
   Api.shouldUseGeminiDomParser = shouldUseGeminiDomParser;
   Api.computeTailFromDom = computeTailFromDom;
+  Api.aiCmTailMetricBase = aiCmTailMetricBase;
   Api.getEffectiveText = getEffectiveText;
   Api.getEffectiveCount = getEffectiveCount;
   if (typeof module !== 'undefined' && module.exports) module.exports = Api;
