@@ -525,7 +525,10 @@ describe('O-29 R4: структурные пины точек фикса и за
 
   test('P4: вердикт гейта и порядок причин не тронуты (shouldSkipAutoExport как прежде)', () => {
     const gate = fnDecl(PIPELINE_SRC, 'shouldSkipAutoExport');
-    expect(gate).toContain('var completeOk = (s.baseComplete === true);');
+    // O-43: полнота = прежний baseComplete ИЛИ монотонный латч сетевой полноты GSA (поле
+    // опционально; не передано → прежняя ветка 1:1). Ядро вердикта — тот же baseComplete.
+    expect(gate).toContain('var completeOk = (s.baseComplete === true) || networkCompleteLatch;');
+    expect(gate).toContain('var networkCompleteLatch = (s.gsaNetworkCompleteLatch === true);');
     expect(gate).toContain('? s.threshold : 90');
     expect(P.shouldSkipAutoExport({
       enabled: true, percentage: 95, threshold: 90, baseComplete: true, baseSeen: true,

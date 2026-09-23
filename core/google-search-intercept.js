@@ -344,7 +344,31 @@
     };
   }
 
+  // O-43 (ДИАГНОСТИКА, только измерение): ts+msgs+textLen КАЖДОГО сетевого эмита базы —
+  // опорная точка «network-finalize» для дельты memory→network (живой дефект 21:15:04.533
+  // файл по memory-базе 22 msgs → 21:15:04.795 сетевая база 32 msgs).
+  //
+  // Инструментирование стоит ВНУТРИ emitDetail, а не отдельным хелпером: срез-песочницы
+  // тестов вырезают функции по имени/балансу скобок (tests/diag-o27-o32-instrumentation.test.js
+  // GSA_FNS) и вызов необъявленного хелпера дал бы ReferenceError вместо прежнего поведения.
+  // Здесь только чтение уже построенного снимка под гейтом aiCmDebug (aiCmDiagLine,
+  // utils/debug.js): detail, база, threadId и байты эмита не меняются; гейт выключен → ни
+  // одной строки. Возврат функции прежний (undefined) — контракт emitDetail 1:1.
   function emitDetail(detail) {
+    try {
+      if (typeof aiCmDiagLine === 'function') {
+        aiCmDiagLine('gsa-net-finalize', {
+          ts: Date.now(),
+          path: 'emitDetail',
+          threadId: (detail && detail.threadId) || '',
+          msgs: (detail && typeof detail.count === 'number') ? detail.count : 0,
+          textLen: (detail && typeof detail.text === 'string') ? detail.text.length : 0,
+          historyComplete: (detail && detail.historyComplete === true) ? 1 : 0,
+          activeTid: baseThreadId || '',
+          domTid: readDomThreadId() || ''
+        });
+      }
+    } catch (eNetFin) { }
     try {
       window.dispatchEvent(new CustomEvent('ai-cm-full-history', { detail: detail }));
     } catch (e) { }
