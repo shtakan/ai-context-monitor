@@ -58,6 +58,7 @@
     "adapters/qwen-adapter.js",
     "utils/gemini-dom-parser.js",
     "utils/gemini-batchexecute-parser.js",
+    "utils/google-search-folwr-parser.js",
     "utils/buildReferenceText.js",
     "utils/export-text-builders.js",
     "utils/export-emit-pipeline.js",
