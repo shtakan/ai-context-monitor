@@ -168,6 +168,34 @@ var aiCmAutoExportLastLogState = Object.create(null);  // family -> сигнат
 // в maybeAutoExport фолбэк на глобальный порог.
 var autoExportPctBySite = {};    // siteName -> число 1..100; undefined = фолбэк на глобальный
 
+// ========== O-43: МОНОТОННЫЙ ЛАТЧ СЕТЕВОЙ ПОЛНОТЫ GSA ==========
+// Живой дефект (измерен O-43, GSA под гейтом aiCmDebug): файл автоэкспорта уходил по
+// memory-базе (22 msgs) за 262–504 мс ДО того, как сеть догружала базу (32 msgs). Корень —
+// не отсутствие сети, а РЕГРЕССИЯ вердикта полноты: сетевой эмит с historyComplete=true
+// (probe-классификатор folwr: kind=cursor-repeat|no-new-turns) перекрывается последующими
+// эмитами ТОГО ЖЕ треда с historyComplete=0 (handshake-переэмит и повторный open-путь после
+// probe) — переменная baseComplete (core/content.js) снова становится false, и гейт
+// shouldSkipAutoExport возвращает not-complete/base-pending уже ПОСЛЕ того, как полная база
+// была в руках. Ни delay-N-ms (окно не ограничено сверху: +400 мс на страницу пагинации,
+// FOLWR_PAGE_DELAY_MS), ни гейт «histSource=network» этого не лечат.
+//
+// Латч МОНОТОННЫЙ: взводится в точке ПРИЁМА сетевого снимка с detail.historyComplete===true
+// (core/content.js, слушатель 'ai-cm-full-history' — та же единственная точка вердикта
+// полноты, что питает baseComplete) и НЕ снимается последующими эмитами с historyComplete=0.
+// Сброс — ТОЛЬКО на смене треда (core/widget.js:resetConversationState, по смене threadId
+// [data-session-thread-id]): состояние разговора не перетекает в другой, а возврат в тот же
+// тред пере-взводит латч кэш-эмитом треда (google-search-intercept.js:activateThread →
+// emitDetail(buildDetail(..., threadComplete≠false)) — полнота кэша не false).
+// Ключ — 'site|threadId' (та же форма, что у латчей fired O-38/O-29). Гейт O-38 (fired)
+// этим латчем не затрагивается: SPA-возврат по-прежнему видит fired и не пишет второй файл.
+//
+// Читатель ОДИН — отправка state в чистый гейт (core/export-manager.js:maybeAutoExport →
+// utils/export-emit-pipeline.js:shouldSkipAutoExport, поле gsaNetworkCompleteLatch). Латч
+// взводится/читается ТОЛЬКО в ISOLATED-мире (core/state.js — общий лексический скоуп
+// контент-скриптов); MAIN-мир перехватчика к этому объекту доступа не имеет и иметь не должен.
+var aiCmGsaNetworkCompleteLatch = Object.create(null);  // 'site|threadId' -> 1
+var aiCmGsaNetworkCompleteThreadId = null;              // threadId, для которого латч был сброшен последним
+
 var autoExportLastConvId = '';   // сброс fired при смене чата
 // v42: convId → 1, пока лоадер Gemini (MAIN-мир) бежит по этому чату; канал — ai-cm-loader-state
 var aiCmLoaderRunningByConv = {};
@@ -421,6 +449,13 @@ var TRIM_HEAD_IDS_N = 10;
   Object.defineProperty(Api, 'autoExportPctBySite', { enumerable: true,
     get: function () { return autoExportPctBySite; },
     set: function (value) { autoExportPctBySite = value; } });
+  // O-43: монотонный латч сетевой полноты GSA ('site|threadId' -> 1) + тред последнего сброса
+  Object.defineProperty(Api, 'aiCmGsaNetworkCompleteLatch', { enumerable: true,
+    get: function () { return aiCmGsaNetworkCompleteLatch; },
+    set: function (value) { aiCmGsaNetworkCompleteLatch = value; } });
+  Object.defineProperty(Api, 'aiCmGsaNetworkCompleteThreadId', { enumerable: true,
+    get: function () { return aiCmGsaNetworkCompleteThreadId; },
+    set: function (value) { aiCmGsaNetworkCompleteThreadId = value; } });
   Object.defineProperty(Api, 'autoExportLastConvId', { enumerable: true,
     get: function () { return autoExportLastConvId; },
     set: function (value) { autoExportLastConvId = value; } });

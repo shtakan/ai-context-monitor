@@ -653,6 +653,18 @@ window.addEventListener('ai-cm-full-history', function (ev) {
     maxTokenCount = 0;
   }
   baseComplete = newBaseComplete;
+  // O-43 (корень дефекта): baseComplete — ПЕРЕМЕННАЯ вердикта, и она РЕГРЕССИРУЕТ: тот же тред
+  // после полного снимка (historyComplete=true от probe-классификатора) получает от
+  // перехватчика ещё эмиты с historyComplete=false (handshake-переэмит + повторный open-путь
+  // после probe — измерено O-43: 264–411 мс), и гейт автоэкспорта снова видит неполную базу.
+  // Здесь взводится МОНОТОННЫЙ латч сетевой полноты (core/state.js:aiCmGsaNetworkCompleteLatch,
+  // писатель — core/export-manager.js:aiCmGsaNetworkCompleteSet): полнота, однажды полученная
+  // сетью по этому разговору, не отменяется поздними эмитами. Сброс — только на смене треда
+  // (resetConversationState). Это НЕ второй вердикт полноты (классификатор здесь не зовётся):
+  // взвод — ровно на том же detail.historyComplete, что и baseComplete выше.
+  if (newBaseComplete && typeof aiCmGsaNetworkCompleteSet === 'function') {
+    aiCmGsaNetworkCompleteSet(detail.threadId || '');
+  }
   // v1.13.1: подтверждение полноты — baseComplete при reachedStart=true (Gemini);
   // для не-Gemini перехватчиков detail.reachedStart нет — гейт подтверждения не применяется.
   if (emitConvId) {

@@ -336,9 +336,11 @@ describe('O-37 A: проводка и границы (source-пины)', () => {
   test('export-emit-pipeline.js: гейт читает domBaseTrusted, порядок причин не переписан', () => {
     const gate = fnDecl(PIPELINE_SRC, 'shouldSkipAutoExport');
     expect(gate).toContain('var domBaseTrusted = (s.domBaseTrusted === true);');
-    expect(gate).toContain('var completeOk = (s.baseComplete === true);');
+    // O-43: та же ось полноты + монотонный латч сетевой полноты GSA (для qwen поле не
+    // передаётся → ветка domBaseTrusted прежняя 1:1).
+    expect(gate).toContain('var completeOk = (s.baseComplete === true) || networkCompleteLatch;');
     expect(gate).toContain('var baseReady = completeOk || domBaseTrusted;');
-    expect(gate).toContain('var basePending = (s.isGemini !== true && s.baseSeen !== true && !domBaseTrusted);');
+    expect(gate).toContain('var basePending = (s.isGemini !== true && s.baseSeen !== true && !domBaseTrusted && !networkCompleteLatch);');
     // порядок причин: not-complete → порог → base-pending → already-fired
     const iNotComplete = gate.indexOf("reason: 'not-complete'");
     const iThr = gate.indexOf('if (s.percentage < threshold) return');

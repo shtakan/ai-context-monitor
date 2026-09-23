@@ -133,6 +133,17 @@ function resetConversationState() {
   baseCount = 0;
   baseSeen = false;
   baseComplete = false;
+  // O-43: смена треда — ЕДИНСТВЕННЫЙ сброс монотонного латча сетевой полноты GSA
+  // ('site|threadId' → 1, core/state.js). Внутри одного разговора латч не снимается ничем
+  // (регрессия baseComplete от поздних эмитов с historyComplete=0 его не касается);
+  // на новом треде прежняя полнота права на файл не даёт. Сброс — по ФАКТУ смены threadId
+  // (DOM-атрибут data-session-thread-id), а не на каждый вызов этого сброса: сюда приходят
+  // и «холостые» вызовы (conv-changed без смены id, не-чат документ) — на них латч жив, иначе
+  // один поздний эмит с historyComplete=0 в уже полном разговоре запретил бы честный файл.
+  // Хелпера нет (срез-песочницы тестов) → ничего не сбрасывается, поведение прежнее.
+  if (typeof aiCmGsaNetworkCompleteReset === 'function') {
+    aiCmGsaNetworkCompleteReset((typeof aiCmDomThreadId === 'function') ? (aiCmDomThreadId() || '') : '');
+  }
   // v53: чистка поздних re-check и курсорных флагов при смене чата (не перетекают в другой чат)
   try { aiCmLateCheckByConv = {}; aiCmCursorLiveByConv = {}; } catch (eReset) { }
   // v1.13.1: подтверждение полноты (reachedStart) тоже не перетекает в другой чат

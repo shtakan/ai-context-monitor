@@ -383,6 +383,14 @@
    * O-33: не-Gemini без сетевого снимка (baseSeen=false) — причина base-pending
    * (частичная DOM-база права на файл не даёт); латч fired при ней не ставится и не
    * сбрасывается (resetFired:false), см. таблицу причин ниже.
+   * O-43: gsaNetworkCompleteLatch — МОНОТОННЫЙ латч сетевой полноты GSA (поле опционально,
+   * по умолчанию отсутствует). baseComplete — транзиентная переменная: сетевой эмит с
+   * historyComplete=true (probe-классификатор folwr) перекрывается последующими эмитами
+   * ТОГО ЖЕ треда с historyComplete=0, и файл либо не пишется вовсе, либо (до O-33) уходил по
+   * memory-базе на 262–504 мс раньше сети. Латч взводится приёмом полного снимка и НЕ снимается
+   * регрессией вердикта, поэтому gsaNetworkCompleteLatch === true → база считается полной
+   * наравне с baseComplete. Поле передаёт ВЫЗЫВАЮЩИЙ (export-manager.js — только для
+   * site === 'google_search'); не передано → вердикты шести платформ байтово прежние.
    * Возвращает { skip, reason, resetFired }. Порядок гейтов повторяет
    * существующий maybeAutoExport (v30.5/v42/гистерезис −10 п.п.).
    * Причины (условие → reason):
@@ -420,14 +428,18 @@
     // база, объявленная достоверной вызывающим (domBaseTrusted), полнотой считается наравне
     // с сетевым baseComplete. Поле не передано → вердикты шести платформ байтово прежние.
     var domBaseTrusted = (s.domBaseTrusted === true);
-    var completeOk = (s.baseComplete === true);
-    // «База готова» — либо сетевая полнота, либо доверенная база адаптера (O-37/A).
+    // O-43: монотонный латч сетевой полноты GSA. Поле опционально: отсутствует → false →
+    // baseReady/basePending ровно прежние (вердикты прочих платформ не меняются).
+    var networkCompleteLatch = (s.gsaNetworkCompleteLatch === true);
+    var completeOk = (s.baseComplete === true) || networkCompleteLatch;
+    // «База готова» — либо сетевая полнота (в т.ч. латч O-43), либо доверенная база адаптера (O-37/A).
     var baseReady = completeOk || domBaseTrusted;
     // O-33: не-Gemini без сетевого снимка — отдельная причина base-pending. Вердикт
     // откладывается ДО пороговых гейтов (ниже): при pct ниже порога причина прежняя
     // (below-threshold / below-threshold-unreliable) — новых строк лога не прибавляется.
     // O-37 (A): доверенная база адаптера (domBaseTrusted) причиной base-pending не блокируется.
-    var basePending = (s.isGemini !== true && s.baseSeen !== true && !domBaseTrusted);
+    // O-43: взведённый латч полноты GSA — тоже (сеть по этому разговору базу уже отдала).
+    var basePending = (s.isGemini !== true && s.baseSeen !== true && !domBaseTrusted && !networkCompleteLatch);
     if (!baseReady && !basePending) return { skip: true, reason: 'not-complete', resetFired: false };
     // T1-fix#2 (v1.16.2): пол первого яруса (архив) не даёт права на автоэкспорт, пока
     // живая история не влилась. Архивные ходы лежат в ТОЙ ЖЕ базе (same-conv-union),

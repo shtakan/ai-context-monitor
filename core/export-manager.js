@@ -663,6 +663,56 @@ function aiCmAutoExportConvId() {
     return urlCid;
   } catch (e) { return getCurrentConvId() || ''; }
 }
+// ===== O-43: монотонный латч сетевой полноты GSA — писатель и читатель =====
+// писатель: core/content.js, слушатель 'ai-cm-full-history' — на КАЖДЫЙ сетевой эмит
+// с detail.historyComplete===true (единственная точка вердикта полноты, v1.18/F1).
+// читатель: maybeAutoExport → state.gsaNetworkCompleteLatch.
+// Литерал 'google_search' стоит в каждой функции намеренно (как в content.js-предикатах
+// O-27/O-35): срез-песочницы тестов вырезают функцию по имени (fnDecl) и исполняют её
+// в одиночку, где файловые константы модуля не видны — в браузере контент-скрипты делят
+// общий лексический скоуп, а в node-тесте module-scope модуля не разделяется.
+// Смена треда — единственный сброс (core/widget.js:resetConversationState): карта латча
+// чистится, когда threadId снаффнутого DOM отличается от треда последнего сброса.
+// Смена «пусто → тред» на холодном входе — тоже смена (state.js: прежнее состояние
+// документа права на файл не даёт, ср. O-27/c). Сброс идемпотентен.
+function aiCmGsaNetworkCompleteReset(threadId) {
+  try {
+    var tid = (threadId === undefined || threadId === null) ? '' : String(threadId);
+    var prev = (typeof aiCmGsaNetworkCompleteThreadId === 'string') ? aiCmGsaNetworkCompleteThreadId : null;
+    if (prev !== null && prev === tid) return false; // тред не менялся — латч жив (монотонность)
+    if (typeof aiCmGsaNetworkCompleteLatch === 'object' && aiCmGsaNetworkCompleteLatch) {
+      for (var k in aiCmGsaNetworkCompleteLatch) {
+        if (Object.prototype.hasOwnProperty.call(aiCmGsaNetworkCompleteLatch, k)) delete aiCmGsaNetworkCompleteLatch[k];
+      }
+    }
+    aiCmGsaNetworkCompleteThreadId = tid;
+    return true;
+  } catch (e) { return false; }
+}
+// Взвод: ид — ровно тот же, что у читателя и у латча fired (aiCmAutoExportConvId), чтобы
+// ключ не разъехался при пустом detail.threadId; fallback — threadId снимка.
+function aiCmGsaNetworkCompleteSet(threadId) {
+  try {
+    var site = (currentAdapter && currentAdapter.siteName) || '';
+    if (site !== 'google_search') return false;
+    var tid = (threadId === undefined || threadId === null) ? '' : String(threadId);
+    var cid = aiCmAutoExportConvId() || tid;
+    if (!cid) return false;
+    if (typeof aiCmGsaNetworkCompleteLatch !== 'object' || !aiCmGsaNetworkCompleteLatch) return false;
+    aiCmGsaNetworkCompleteLatch[site + '|' + cid] = 1;
+    return true;
+  } catch (e) { return false; }
+}
+// Чтение: true — по этому разговору сеть ОДНАЖДЫ отдала полную историю (и с тех пор
+// вердикт не регрессировал по-настоящему: последующие эмиты с historyComplete=0 не считаются).
+function aiCmGsaNetworkCompleteIs(site, cid) {
+  try {
+    if (site !== 'google_search') return false; // прочие сервисы латч не читают вовсе
+    if (!cid) return false;
+    if (typeof aiCmGsaNetworkCompleteLatch !== 'object' || !aiCmGsaNetworkCompleteLatch) return false;
+    return aiCmGsaNetworkCompleteLatch[site + '|' + cid] === 1;
+  } catch (e) { return false; }
+}
 // v1.18 (F5): состояние probe-полноты GSA (MAIN → ISOLATED, CustomEvent
 // 'ai-cm-gsa-probe-state'). Нужно ТОЛЬКО для ярлыка причины skip: probe-running,
 // пока вердикта классификатора ещё нет. Сам вердикт полноты — baseComplete (один).
@@ -861,6 +911,73 @@ function aiCmAutoExportBasePendingLog(cid, percentage) {
     });
   } catch (eBp) { }
 }
+// =============================================================================
+// O-43 (ДИАГНОСТИКА, только измерение): точка ПРИНЯТИЯ РЕШЕНИЯ maybeAutoExport —
+// histSource (сеть/память), msgs, textLen, baseComplete и ts ОДНОЙ строкой.
+//
+// Зачем: живой дефект 21:15:04.533 — файл записан по memory-базе (22 msgs, textLen=31541)
+// за 262 мс ДО принятия сетевой базы (32 msgs, textLen=58989, ts принятия 21:15:04.795).
+// Чтобы измерить дельту и увидеть, на каком состоянии базы сработал порог, нужен ts+срез
+// базы РОВНО в точке решения; строка взятого ранее снимка (o22-svc-emit / gsa-base-accept)
+// этого не даёт, если между снимком и решением был ещё DRAW.
+//
+// Контракт инструментирования (поведение не меняется):
+//   - читает ТОЛЬКО уже посчитанные значения (baseSeen/baseCount/baseText/lastBaseTexts);
+//   - histSource — производное, НЕ новое состояние: baseSeen=true (сетевой снимок принят
+//     слушателем ai-cm-full-history) → 'network'; иначе → 'memory' (текст ISOLATED-мира без
+//     сетевого снимка: DOM-адаптер/восстановленная лента). Тот же признак, что у строки
+//     файра (export-manager.js: histSource=memory) и у гейта base-pending (O-33);
+//   - netLatch (O-43) — тот же вердикт монотонного латча сетевой полноты, который получает
+//     гейт (aiCmGsaNetworkCompleteIs): видно, сработал ли порог по латчу после регрессии
+//     baseComplete 1→0;
+//   - печать только под гейтом aiCmDebug (aiCmDiagLine), хелпера нет (срез-песочницы
+//     тестов) → вызова нет вовсе (typeof-гард), поведение 1:1;
+//   - ни одна ветка/порог/латч не тронуты: вызов стоит перед единственным return'ом
+//     «skip» и перед вызовом doAutoExportDownload, ничего не возвращает и не меняет.
+// =============================================================================
+function aiCmAutoExportDecisionDiag(percentage, verdictSkip, reason) {
+  try {
+    if (typeof aiCmDiagLine !== 'function') return false;
+    var site = (typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName) || '';
+    var memMsgs = (typeof lastBaseTexts !== 'undefined' && Array.isArray(lastBaseTexts)) ? lastBaseTexts.length : 0;
+    var memTextLen = (typeof baseText === 'string') ? baseText.length : 0;
+    if (memTextLen === 0 && typeof lastBaseTexts !== 'undefined' && Array.isArray(lastBaseTexts)) {
+      memTextLen = lastBaseTexts.join('\n').length;
+    }
+    var netLatchNow = (typeof aiCmGsaNetworkCompleteIs === 'function')
+      ? (aiCmGsaNetworkCompleteIs(site, aiCmAutoExportConvId() || '') === true) : false;
+    // Источник ТЕЛА файла в этой же точке — РОВНО вердикт пайплайна v82 (D2)
+    // pickExportSource(baseSeen, texts.length>0); хелпера нет (срез-песочницы) → поле не печатаем.
+    var fileSource;
+    try {
+      var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+      if (P && typeof P.pickExportSource === 'function') {
+        fileSource = P.pickExportSource(baseSeen === true, memMsgs > 0);
+      }
+    } catch (eSrc) { fileSource = undefined; }
+    aiCmDiagLine('auto-export-decision', {
+      ts: Date.now(),
+      point: 'maybeAutoExport',
+      site: site,
+      convId: aiCmAutoExportConvId() || '',
+      verdict: (verdictSkip === true) ? 'skip' : 'fire',
+      reason: (verdictSkip === true) ? (reason || '') : 'threshold',
+      pct: percentage,
+      histSource: (typeof baseSeen !== 'undefined' && baseSeen === true) ? 'network' : 'memory',
+      fileSource: fileSource,
+      baseSeen: (typeof baseSeen !== 'undefined' && baseSeen === true) ? 1 : 0,
+      baseComplete: (typeof baseComplete !== 'undefined' && baseComplete === true) ? 1 : 0,
+      // O-43: полнота читается гейтом из монотонного латча (см. aiCmGsaNetworkCompleteIs):
+      // histSource=memory в момент файра — признак ухода файла по памяти, а не по сети.
+      netLatch: netLatchNow,
+      msgs: (typeof baseCount === 'number') ? baseCount : 0,
+      memMsgs: memMsgs,
+      textLen: memTextLen
+    });
+    return true;
+  } catch (eDec) { return false; }
+}
+
 function maybeAutoExport(percentage) {
   try {
     var s = autoExportSettings;
@@ -903,6 +1020,7 @@ function maybeAutoExport(percentage) {
     var gsaMsgCount;
     var gsaBaseTextLen;
     var gsaChatMarker;
+    var gsaNetworkLatch; // O-43: undefined вне GSA → поле не меняет вердикт прочих сервисов
     if (siteName === 'google_search') {
       gsaMsgCount = (typeof baseCount === 'number') ? baseCount : undefined;
       gsaChatMarker = (typeof aiCmGsaChatPageMarker === 'function') ? aiCmGsaChatPageMarker() : undefined;
@@ -911,6 +1029,12 @@ function maybeAutoExport(percentage) {
       } else if (typeof lastBaseTexts !== 'undefined' && Array.isArray(lastBaseTexts)) {
         gsaBaseTextLen = lastBaseTexts.join('\n').length;
       }
+      // O-43: полнота читается НЕ из регрессирующей baseComplete, а из монотонного латча
+      // сетевой полноты (взведён приёмом снимка с historyComplete=true и не снят последующими
+      // эмитами того же треда с historyComplete=0). Хелпера нет (срез-песочницы тестов) →
+      // false → вердикт 1:1 прежний.
+      gsaNetworkLatch = (typeof aiCmGsaNetworkCompleteIs === 'function')
+        ? (aiCmGsaNetworkCompleteIs(siteName, cid) === true) : false;
     }
     if (P && typeof P.shouldSkipAutoExport === 'function') {
       var verdict = P.shouldSkipAutoExport({
@@ -940,7 +1064,10 @@ function maybeAutoExport(percentage) {
         site: siteName,
         chatPageMarker: gsaChatMarker,
         msgCount: gsaMsgCount,
-        baseTextLen: gsaBaseTextLen
+        baseTextLen: gsaBaseTextLen,
+        // O-43: монотонный латч сетевой полноты GSA (только google_search; undefined у прочих —
+        // поле опционально, вердикты шести платформ байтово прежние)
+        gsaNetworkCompleteLatch: gsaNetworkLatch
       });
       // O-33 (урок O-29): причина текущего вердикта — база правила «лог base-pending
       // только на смене состояния» (previous reason ≠ base-pending). Трекер — общий
@@ -1007,6 +1134,10 @@ function maybeAutoExport(percentage) {
         } else if (verdict.reason === 'below-threshold-unreliable') {
           // v82 (D5): транзиентный DOM-pct (baseSeen=false) — латч НЕ трогаем, не логируем
         }
+        // O-43 (ДИАГНОСТИКА, только измерение): срез базы в момент решения «skip» — видно
+        // histSource/msgs/textLen/baseComplete ДО того, как база дозреет сетью. Хелпера нет
+        // (срез-песочницы тестов) → вызова нет; гейт aiCmDebug выключен → ни одной строки.
+        if (typeof aiCmAutoExportDecisionDiag === 'function') aiCmAutoExportDecisionDiag(percentage, true, verdict.reason);
         return;
       }
       // O-33 (урок O-29): вердикт не skip (файл разрешён) — состояние сменилось, поэтому
@@ -1014,6 +1145,11 @@ function maybeAutoExport(percentage) {
       if (skipReasonState) skipReasonState.reason = '';
       if (cid) { delete notCompleteLogged[cid]; delete notCompleteLogged['gsa:' + cid]; } // полнота пришла — можно снова логировать в другом чате
       if (!cid) return;
+      // O-43 (ДИАГНОСТИКА, только измерение): срез базы РОВНО перед стартом скачивания —
+      // ts этой строки и есть момент, к которому применялся критерий приёмки «файл содержит
+      // все сообщения». Сравнение ts с ts принятия сетевой базы (gsa-net-finalize /
+      // gsa-base-accept) даёт дельту memory→network по каждому чату.
+      if (typeof aiCmAutoExportDecisionDiag === 'function') aiCmAutoExportDecisionDiag(percentage, false);
       doAutoExportDownload(cid, percentage, 'threshold');
       return;
     }

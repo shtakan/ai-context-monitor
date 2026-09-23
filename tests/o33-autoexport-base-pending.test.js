@@ -513,7 +513,9 @@ describe('O-33 R5: O-11/O-31/O-27/O-15…O-20/O-28/O-9 — маркеры и б�
 
   test('O-33-гейт: дизъюнкт убран, базовые причины и их порядок зафиксированы', () => {
     const gate = fnDecl(PIPELINE_SRC, 'shouldSkipAutoExport');
-    expect(gate).toContain('var completeOk = (s.baseComplete === true);');
+    // O-43: к baseComplete добавлен (через ||) монотонный латч сетевой полноты GSA;
+    // дизъюнкт по baseSeen (O-33) по-прежнему отсутствует, base-pending — тот же.
+    expect(gate).toContain('var completeOk = (s.baseComplete === true) || networkCompleteLatch;');
     expect(PIPELINE_SRC).not.toContain('!s.baseSeen');
     const iGsa = gate.indexOf('shouldSkipGsaPageGuard(s)');
     const iNotComplete = gate.indexOf("reason: 'not-complete'");
