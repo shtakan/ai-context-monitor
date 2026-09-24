@@ -25,6 +25,13 @@
  *   D4 — точка выхода: рендер отдаёт [REASONING] и [ANSWER] (чистая функция + сборщики);
  *   D5 — сквозной путь файла: collect → dedupe (ровно выражение buildHistoryMessages) →
  *        buildTxtFromHistory/buildMdFromHistory Qwen: секция [REASONING] в файле;
+ *   D6 — СТАДИЯ ФОРМИРОВАНИЯ БАЗЫ (core/content.js:720-760): снимок пересобирается как
+ *        {role,text,id} (поле reasoning на этой стадии теряется — исходный корень дефекта),
+ *        но размышление доезжает до файла ЧЕРЕЗ СЕКЦИИ текста (нормализация
+ *        applyReasoningExportFields на выходе точки сбора). D1/D5 кормят точку сбора
+ *        синтетическим снимком с полем — полный live-путь покрывал только D6;
+ *   D7 — R-D «диагностика только под гейтом aiCmDebug» и «байты выхода при гейте вкл/выкл
+ *        идентичны» на путях ЭТОГО дефекта (реальный utils/debug.js в песочнице);
  *   R1 — DeepSeek (сетевой путь): поля reasoning в снимке нет → ключа нет, txt байтово прежний;
  *   R2 — ChatGPT/Claude/Perplexity/GSA/Gemini/AI Studio: то же (шесть платформ не задеты);
  *   R3 — пустое reasoning ('') → поле НЕ копируется (falsy-check обоих фиксов);
@@ -53,6 +60,9 @@ const ROOT = path.join(__dirname, '..');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 const BASE_HANDLER_SRC = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.js'), 'utf8');
 const BUILDERS_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.js'), 'utf8');
+// D7: РЕАЛЬНЫЙ utils/debug.js (канонический гейт aiCmDebug) — только для пина «диагностика
+// под гейтом»: в прочих пинах он не подключается вовсе (прежнее поведение песочницы 1:1).
+const DEBUG_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'debug.js'), 'utf8');
 
 // Рез по балансу фигурных скобок (конвенция сьюта: tests/qwen-reasoning-export-o37.test.js).
 function fnDecl(src, name) {
@@ -90,20 +100,30 @@ const COLLECT_SRC = MGR_SRC.slice(
  *   collect(texts, detail) — сетевой/DOM путь точки сбора;
  *   dedupe(messages)       — путь схлопывания базы (core/base-handler.js);
  *   history(texts, detail) — ТО ЖЕ выражение, что в buildHistoryMessages (collect → dedupe);
- *   txt(msgs, site) / md(msgs, site) — единая точка выхода (сборщики файла).
+ *   setBase(texts, detail) — прямая запись базы (стадия формирования content.js, пин D6);
+ *   sanitize(s)            — РЕАЛЬНЫЙ sanitizeGeminiText песочницы (стадия формирования D6);
+ *   txt(msgs, site) / md(msgs, site) — единая точка выхода (сборщики файла);
+ *   setGate(v) / diag()    — гейт aiCmDebug и снятые diag-строки (только opts.diag, пин D7).
  */
 function makeBaseWriter(opts) {
   const o = opts || {};
   const site = o.site || 'qwen';
   const adapterMessages = o.adapterMessages || [];
+  // D7: гейт aiCmDebug. Песочница без opts.diag не подключает utils/debug.js вовсе —
+  // для неё aiCmDiagLine не существует (typeof-гард), поведение прежнее 1:1.
+  let gate = (o.gate === true);
+  const logs = [];
   const ctx = {
     window: { AiCmExportEmitPipeline: P },
     sessionStorage: {
-      getItem: function () { return null; },
+      getItem: function (k) { return (gate && k === 'aiCmDebug') ? '1' : null; },
       setItem: function () { },
       removeItem: function () { }
     },
-    console: { log: function () { }, warn: function () { }, error: function () { }, info: function () { }, debug: function () { } },
+    console: {
+      log: function () { logs.push(Array.prototype.slice.call(arguments).join(' ')); },
+      warn: function () { }, error: function () { }, info: function () { }, debug: function () { }
+    },
     lastBaseTexts: [],
     lastDetailMessages: null,
     baseSeen: o.baseSeen === true,
@@ -114,11 +134,12 @@ function makeBaseWriter(opts) {
     // зависимости Gemini-ветки дедупа (для не-Gemini не исполняются)
     aiCmLogIntraDedupe: function () { }
   };
-  const src = COLLECT_SRC + '\n' +
+  const src = (o.diag === true ? DEBUG_SRC + '\n' : '') + COLLECT_SRC + '\n' +
     fnDecl(BASE_HANDLER_SRC, 'aiCmDedupeExportSource') + '\n' +
     'ctx.__collect = aiCmCollectExportSource;\n' +
     'ctx.__dedupe = aiCmDedupeExportSource;\n' +
     'ctx.__history = function () { return aiCmDedupeExportSource(aiCmCollectExportSource()).messages; };\n' +
+    'ctx.__sanitize = sanitizeGeminiText;\n' +
     // O-7 (тумблер): в песочнице переменная локальна — переключатель наружу.
     'ctx.__setHidden = function (v) { aiCmIncludeHiddenInExport = (v === true); };';
   // eslint-disable-next-line no-new-func
@@ -142,11 +163,23 @@ function makeBaseWriter(opts) {
       ctx.lastDetailMessages = detail || null;
       return ctx.__history();
     },
+    /** Прямая запись базы (ровно присваивания стадии формирования core/content.js). */
+    setBase: function (texts, detail) {
+      ctx.lastBaseTexts = texts || [];
+      ctx.lastDetailMessages = detail || null;
+      ctx.baseSeen = true;
+    },
+    /** РЕАЛЬНЫЙ sanitizeGeminiText песочницы (та же функция, что зовёт content.js). */
+    sanitize: function (s) { return ctx.__sanitize(s); },
     txt: function (messages, renderSite) {
       return Builders.buildTxtFromHistory({ site: renderSite || site, messages: messages });
     },
     md: function (messages, renderSite) {
       return Builders.buildMdFromHistory({ site: renderSite || site, messages: messages }, 'Qwen');
+    },
+    setGate: function (v) { gate = (v === true); },
+    diag: function () {
+      return logs.filter(function (s) { return s.indexOf('[AI CM][diag]') === 0; });
     }
   };
 }
@@ -435,5 +468,141 @@ describe('O-39 S: пины проводки', () => {
     expect(fn).toContain('ANSWER_SECTION_TAG');
     expect(fn).not.toContain('hiddenReasoning');
     expect(fnDecl(BUILDERS_SRC, 'reasoningOfMessage')).toContain('msg.reasoning');
+  });
+});
+
+// =====================================================================================
+// D6: СТАДИЯ ФОРМИРОВАНИЯ БАЗЫ (core/content.js:720-760) — ЖИВОЙ ПУТЬ ЦЕЛИКОМ
+// =====================================================================================
+// D1/D5 кормят точку сбора синтетическим снимком, у которого поле reasoning УЖЕ есть.
+// В браузере снимок приходит из detail перехватчика и ПЕРЕСОБИРАЕТСЯ на записи базы:
+//   detail.messages → preDedupe18 {role,text,id} → aiCmDedupeExportSource → texts18/msgs18
+//   → lastBaseTexts/lastDetailMessages (core/content.js:720-760).
+// На этой стадии поле reasoning теряется (в msgs18 попадают только role/text/id) — это и есть
+// «этап формирования» из корня дефекта. Инвариант пина: размышление ВСЁ РАВНО доезжает до
+// файла — через ПАРУ СЕКЦИЙ в тексте хода (нормализация applyReasoningExportFields на выходе
+// точки сбора), то есть живой путь не зависит от того, донёс ли снимок отдельное поле.
+/** detail перехватчика Qwen: тексты несут пару секций (composeTurnText), поля — тоже. */
+function detailWithSections() {
+  return {
+    messageTexts: [QUESTION, SECTIONED],
+    messageIds: ['u:1', 'a:1'],
+    messages: [
+      { role: 'user', text: QUESTION, reasoning: '' },
+      { role: 'assistant', text: SECTIONED, reasoning: REASONING, hiddenReasoning: REASONING }
+    ]
+  };
+}
+
+/** Точная копия стадии формирования core/content.js:720-760 (preDedupe18 → dedupe → msgs18). */
+function formLiveBase(w, detail) {
+  const texts = detail.messageTexts;
+  const ids = detail.messageIds;
+  const rawMsgs18 = (Array.isArray(detail.messages) && detail.messages.length === texts.length)
+    ? detail.messages : null;
+  const preDedupe18 = [];
+  for (let d = 0; d < texts.length; d++) {
+    const r18 = rawMsgs18 ? ((rawMsgs18[d] && rawMsgs18[d].role) || '') : ((d % 2 === 0) ? 'user' : 'assistant');
+    preDedupe18.push({
+      role: (r18 === 'user' || r18 === 'human') ? 'user' : 'assistant',
+      text: w.sanitize(texts[d]),
+      id: (rawMsgs18 && rawMsgs18[d] && rawMsgs18[d].id != null) ? String(rawMsgs18[d].id) : String(ids[d])
+    });
+  }
+  const ded18 = w.dedupe(preDedupe18);
+  const prepared18 = Array.isArray(ded18.messages) ? ded18.messages : [];
+  const texts18 = [];
+  const msgs18 = [];
+  for (let e = 0; e < prepared18.length; e++) {
+    const me = prepared18[e] || {};
+    const mid = (me.id != null) ? String(me.id)
+      : ((preDedupe18[e] && preDedupe18[e].id != null) ? String(preDedupe18[e].id) : '');
+    texts18.push(String(me.text == null ? '' : me.text));
+    msgs18.push({ role: me.role, text: String(me.text == null ? '' : me.text), id: mid });
+  }
+  w.setBase(texts18, msgs18);
+  return { texts: texts18, msgs: msgs18, preDedupe: preDedupe18 };
+}
+
+describe('O-39 D6: стадия формирования базы (content.js) — reasoning доезжает до файла', () => {
+  test('D6 Qwen: msgs18 без поля reasoning → секции [REASONING]/[ANSWER] в txt и md', () => {
+    const w = makeBaseWriter({ site: 'qwen', hidden: true });
+    const formed = formLiveBase(w, detailWithSections());
+    // корень дефекта воспроизведён: стадия формирования пересобирает снимок как {role,text,id}
+    expect(formed.msgs).toHaveLength(2);
+    formed.msgs.forEach(function (m) {
+      expect(Object.prototype.hasOwnProperty.call(m, 'reasoning')).toBe(false);
+      expect(Object.prototype.hasOwnProperty.call(m, 'hiddenReasoning')).toBe(false);
+    });
+    // …но файл собирается по ТЕКСТУ хода (пара секций) — размышление не теряется
+    const msgs = w.history(formed.texts, formed.msgs);
+    expect(msgs[1].reasoning).toBe(REASONING);
+    expect(msgs[1].text).toBe(ANSWER);
+    const txt = w.txt(msgs, 'qwen');
+    expect(txt).toBe('USER:\n' + QUESTION + '\n\nASSISTANT:\n' + SECTIONED);
+    expect((txt.match(/\[REASONING\]/g) || [])).toHaveLength(1);
+    expect((txt.match(/\[ANSWER\]/g) || [])).toHaveLength(1);
+    const md = w.md(msgs, 'qwen');
+    expect(md).toContain('### ASSISTANT\n\n' + SECTIONED);
+    expect((md.match(/\[REASONING\]/g) || [])).toHaveLength(1);
+  });
+
+  test('D6-норма: база без секций и без поля → файл байтово bare-ответ (Qwen)', () => {
+    const w = makeBaseWriter({ site: 'qwen', hidden: true });
+    const formed = formLiveBase(w, {
+      messageTexts: [QUESTION, ANSWER],
+      messageIds: ['u:1', 'a:1'],
+      messages: [{ role: 'user', text: QUESTION, reasoning: '' }, { role: 'assistant', text: ANSWER, reasoning: '' }]
+    });
+    const msgs = w.history(formed.texts, formed.msgs);
+    expect(msgs[1].reasoning).toBeUndefined();
+    const txt = w.txt(msgs, 'qwen');
+    expect(txt).toBe('USER:\n' + QUESTION + '\n\nASSISTANT:\n' + ANSWER);
+    expect(txt).not.toContain('[REASONING]');
+  });
+
+  test('D6-регресс: та же стадия формирования у платформы без reasoning — байты прежние', () => {
+    const w = makeBaseWriter({ site: 'deepseek', hidden: true });
+    const formed = formLiveBase(w, {
+      messageTexts: [QUESTION, ANSWER],
+      messageIds: ['u:1', 'a:1'],
+      messages: [{ role: 'user', text: QUESTION }, { role: 'assistant', text: ANSWER }]
+    });
+    const msgs = w.history(formed.texts, formed.msgs);
+    msgs.forEach(function (m) {
+      expect(Object.prototype.hasOwnProperty.call(m, 'reasoning')).toBe(false);
+    });
+    expect(w.txt(msgs, 'deepseek')).toBe(QUESTION + '\n\n' + ANSWER);
+  });
+});
+
+// =====================================================================================
+// D7: ГЕЙТ aiCmDebug (диагностика только под гейтом; байты от гейта не зависят)
+// =====================================================================================
+describe('O-39 D7: диагностика только под гейтом aiCmDebug, байты выхода от гейта не зависят', () => {
+  test('D7 гейт ВЫКЛ → ни одной diag-строки; ВКЛ → строки есть; txt/md байтово те же', () => {
+    const w = makeBaseWriter({ site: 'qwen', hidden: true, diag: true, gate: false });
+    const formed = formLiveBase(w, detailWithSections());
+    const offMsgs = w.history(formed.texts, formed.msgs);
+    const offTxt = w.txt(offMsgs, 'qwen');
+    const offMd = w.md(offMsgs, 'qwen');
+    expect(w.diag()).toEqual([]);                       // без гейта — ни одной строки
+
+    w.setGate(true);
+    const onMsgs = w.history(formed.texts, formed.msgs);
+    const onTxt = w.txt(onMsgs, 'qwen');
+    const onMd = w.md(onMsgs, 'qwen');
+    expect(onTxt).toBe(offTxt);                         // байты выхода идентичны
+    expect(onMd).toBe(offMd);
+    expect(onMsgs[1].reasoning).toBe(REASONING);        // инвариант дефекта держится при обоих положениях
+    expect(w.diag().length).toBeGreaterThan(0);         // гейт рабочий (строки появляются)
+    // O-39-пути собственной диагностики не вводят: строк qwen-* нет ни под гейтом, ни без
+    expect(w.diag().filter(function (s) { return s.indexOf('qwen-') !== -1; })).toEqual([]);
+  });
+
+  test('S-пин D7: гейт — канонический utils/debug.js (sessionStorage aiCmDebug), не свой', () => {
+    expect(DEBUG_SRC).toContain("sessionStorage.getItem('aiCmDebug') === '1'");
+    expect(DEBUG_SRC).toContain('function aiCmDiagOn()');
+    expect(DEBUG_SRC).toContain('if (!aiCmDiagOn()) return false;');
   });
 });
