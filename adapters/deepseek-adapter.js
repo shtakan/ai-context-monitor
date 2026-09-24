@@ -154,17 +154,60 @@ class DeepSeekAdapter extends BaseAdapter {
     try {
       const messages = [];
       const messageElements = document.querySelectorAll('div[class*="ds-message"]');
+      // ===== O-21 (ДИАГНОСТИКА, только измерение): усечение DOM-экстрактора DeepSeek =====
+      // Живой симптом: под соседним расширением (Better DeepSeek) DOM отдавал msgs=3 при
+      // сетевых msgs=6. Живые артефакты утеряны, механизм — неподтверждённая гипотеза,
+      // поэтому здесь ТОЛЬКО счётчики и сэмплы: ни одна ветка extractMessages не меняется,
+      // messages/роли/hiddenReasoning побайтово прежние. Гейт — канонический
+      // utils/debug.js:aiCmDiagOn (sessionStorage 'aiCmDebug' === '1' ИЛИ чекбокс «Подробные
+      // логи» → window.__aiCmDebugLogs). Гейт выключен → счётчики не считаются вовсе
+      // (нулевой оверхед) и не печатается ни одной строки.
+      // typeof-гарды — конвенция срез-песочниц тестов: адаптер грузится без utils/debug.js,
+      // там хелперов нет → o21Stats === null → поведение прежнее 1:1.
+      const o21DiagOn = (typeof aiCmDiagOn === 'function') ? aiCmDiagOn() : false;
+      const o21Stats = o21DiagOn ? {
+        totalFound: messageElements.length,
+        extracted: 0,
+        skippedNested: 0,
+        skippedReasoningOnly: 0,
+        skippedEmpty: 0,
+        skippedUnknown: 0,
+        skippedNoRealContent: 0,
+        classesSample: [],
+        neighborInjections: []
+      } : null;
+      if (o21Stats) {
+        // Детекция инъекций соседа (Better DeepSeek): только наличие маркеров в первых 50 КБ
+        // HTML документа. В текст/базу/экспорт значение не идёт — это измерение факта.
+        try {
+          const o21Markers = ['BetterDeepSeek', 'BDS:', 'better-deepseek', 'bds-'];
+          const o21Root = (typeof document !== 'undefined') ? (document.documentElement || document.body) : null;
+          const o21Html = o21Root ? String(o21Root.innerHTML || '').slice(0, 50000) : '';
+          for (let m = 0; m < o21Markers.length; m++) {
+            if (o21Html.indexOf(o21Markers[m]) !== -1) o21Stats.neighborInjections.push(o21Markers[m]);
+          }
+        } catch (eO21inj) { }
+      }
       // O-7: «висячий» reasoning отдельного узла (assistant-узел только с THINK) — не
       // сообщение (v2/O-15), но его текст НЕ теряется: приклеивается к следующему
       // assistant-ходу, а если следующего нет — к предыдущему. Та же парность, что у
       // сетевого перехватчика (v9/O-15: pendingReasoning), и только в hiddenReasoning —
       // базовый текст/роли/состав сообщений не меняются.
       let pendingReasoning = '';
-      messageElements.forEach((element) => {
-        if (element.className?.includes('ds-markdown') && element.parentElement?.className?.includes('ds-message')) return;
+      messageElements.forEach((element, idx) => {
+        // O-21: сэмпл классов первых трёх узлов — классы DeepSeek ротируются, сэмпл нужен,
+        // чтобы по живому логу увидеть, что именно попало в выборку. Чтение, без записи.
+        if (o21Stats && idx < 3) {
+          o21Stats.classesSample.push(String(element.className || '').slice(0, 60));
+        }
+        if (element.className?.includes('ds-markdown') && element.parentElement?.className?.includes('ds-message')) {
+          if (o21Stats) o21Stats.skippedNested++;
+          return;
+        }
         // v2 (O-15): панель reasoning — не сообщение хода (текст reasoning приходит
         // секцией [REASONING] из сетевого перехватчика вместе с ответом).
         if (this._isReasoningOnly(element)) {
+          if (o21Stats) o21Stats.skippedReasoningOnly++;
           const orphanReasoning = this._reasoningText(element);
           if (orphanReasoning) {
             pendingReasoning = pendingReasoning ? (pendingReasoning + '\n\n' + orphanReasoning) : orphanReasoning;
@@ -183,6 +226,15 @@ class DeepSeekAdapter extends BaseAdapter {
             pendingReasoning = '';
           }
           messages.push(msg);
+          if (o21Stats) o21Stats.extracted++;
+        } else if (o21Stats) {
+          // O-21: причина пропуска — ПОВТОР предиката, только ради счётчика. Ветка недостижима
+          // при true-предикате и ничего не делает с messages: поток не меняется. Конъюнкт
+          // role !== 'unknown' оставлен зеркалом предиката (сейчас _detectRole 'unknown' не
+          // возвращает — счётчик работает детектором дрейфа предиката).
+          if (!content || content.length === 0) o21Stats.skippedEmpty++;
+          else if (role === 'unknown') o21Stats.skippedUnknown++;
+          else o21Stats.skippedNoRealContent++;
         }
       });
       // Висячий reasoning в конце ленты — к последнему assistant-ходу (отдельного хода нет).
@@ -197,6 +249,25 @@ class DeepSeekAdapter extends BaseAdapter {
       }
       if (messages.length > 0) {
         debugLog('log', `[DeepSeekAdapter] Извлечено ${messages.length} сообщений, роли: ${messages.map(m => m.role.substring(0, 4)).join(', ')}`);
+      }
+      // O-21: печать счётчиков каноническим хелпером utils/debug.js:aiCmDiagLine — тот же
+      // гейт aiCmDebug, та же форма k=v, канон-префикс '[AI CM][diag] o21-dom-extract'.
+      // Хелпера нет (срез-песочница тестов) → ни одной строки, поведение прежнее 1:1.
+      if (o21Stats && typeof aiCmDiagLine === 'function') {
+        try {
+          aiCmDiagLine('o21-dom-extract', {
+            site: this.siteName || 'deepseek',
+            totalFound: o21Stats.totalFound,
+            extracted: o21Stats.extracted,
+            skipNested: o21Stats.skippedNested,
+            skipReasoningOnly: o21Stats.skippedReasoningOnly,
+            skipEmpty: o21Stats.skippedEmpty,
+            skipUnknown: o21Stats.skippedUnknown,
+            skipNoRealContent: o21Stats.skippedNoRealContent,
+            classesSample: o21Stats.classesSample.join(' | ') || '(нет)',
+            neighborInjections: o21Stats.neighborInjections.join(',') || '(нет)'
+          });
+        } catch (eO21line) { }
       }
       return messages;
     } catch (error) {

@@ -508,8 +508,12 @@ describe('O-40 R: гейт, байты, канал печати', () => {
       const entry = seen.filter((c) => c.tag === TAG_ENTRY);
       expect(entry).toHaveLength(1);
       expect(entry[0].fields).toMatchObject({ hidden: 'off', branch: 'sanitizeEmitMessages' });
-      // через канон идут только три маркера инструментирования (своего формата нет)
-      seen.forEach((c) => expect([TAG_ENTRY, TAG_MSG, TAG_LINE]).toContain(c.tag));
+      // через канон идут только маркеры инструментирования этой точки — своего формата нет.
+      // O-21 добавил в aiCmCollectExportSource ЧЕТВЁРТЫЙ маркер (o21-source-select — выбор
+      // источника базы DOM/network), и он печатается ТЕМ ЖЕ каноническим каналом aiCmDiagLine.
+      // Поэтому allow-list расширен ровно на него; инвариант пина не ослаблен: любой иной тег
+      // по-прежнему означает, что у инструментирования появился собственный формат/консоль.
+      seen.forEach((c) => expect([TAG_ENTRY, TAG_MSG, TAG_LINE, 'o21-source-select']).toContain(c.tag));
     } finally {
       global.aiCmDiagLine = canon;
     }

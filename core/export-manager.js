@@ -168,6 +168,33 @@ function aiCmCollectExportSource() {
   var source = (P && typeof P.pickExportSource === 'function')
     ? P.pickExportSource(baseSeen === true, texts.length > 0)
     : ((baseSeen && texts.length > 0) ? 'network' : 'adapter');
+  // O-21 (ДИАГНОСТИКА — только измерение под гейтом aiCmDebug): выбор источника базы
+  // DOM vs network в ЕДИНОЙ точке сбора. Живой симптом O-21: DOM-экстрактор DeepSeek отдавал
+  // меньше ходов, чем сеть (msgs=3 против сетевых msgs=6) — вопрос приёмки в том, какая ветка
+  // победила и почему. Здесь только чтение УЖЕ посчитанных `source`/`texts`; extractMessages()
+  // вызывается ИСКЛЮЧИТЕЛЬНО под включённым гейтом (без гейта — ни вызова, ни строки, ни
+  // оверхеда). Маркер SCOPED по сайту (прецедент claude-role-network/-adapter): чужие сайты
+  // строку не получают. typeof-гарды — конвенция срез-песочниц fnDecl: хелперов/адаптера нет →
+  // поведение прежнее 1:1, ни одной новой ветки не исполняется. На `source` выше не влияет.
+  try {
+    if (typeof aiCmDiagLine === 'function' && typeof aiCmDiagOn === 'function' && aiCmDiagOn() &&
+      typeof currentAdapter !== 'undefined' && currentAdapter &&
+      currentAdapter.siteName === 'deepseek') {
+      var o21DomMsgs = (typeof currentAdapter.extractMessages === 'function')
+        ? currentAdapter.extractMessages().length : 0;
+      // reason — ЗЕРКАЛО ветвления pickExportSource выше, не новая логика выбора.
+      var o21Reason = (baseSeen === true)
+        ? (texts.length > 0 ? 'baseSeen+networkTexts' : 'baseSeen-no-networkTexts')
+        : 'no-baseSeen';
+      aiCmDiagLine('o21-source-select', {
+        site: currentAdapter.siteName,
+        domMsgs: o21DomMsgs,
+        netMsgs: texts.length,
+        sourceSelected: (source === 'network') ? 'network' : 'dom',
+        reason: o21Reason
+      });
+    }
+  } catch (eO21sel) { }
   var out = [];
   if (source === 'network') {
     if (Array.isArray(lastDetailMessages) && lastDetailMessages.length === texts.length && texts.length > 0) {
