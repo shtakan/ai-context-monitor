@@ -2,7 +2,7 @@
 
 ДАЙДЖЕСТ СОСТОЯНИЯ ai-context-monitor (2026-09-24, после живой приёмки инструментирования O-21; O-21 ЗАКРЫТ как expected behaviour 2026-09-24; голова — O-14 (косметика попапа, Low); O-32 ЗАКРЫТ живой приёмкой, O-46 ЗАКРЫТ коммитом d3d0ea0)
 1. Источники истины: manifest.json (версия), вывод npm test, git log, PROJECT_HANDOFF.md (§0 + верхний блок), RELEASE_CHECKLIST.md (локальный, H26).
-2. Опубликован v2.0.11: тег v2.0.11 на 0aaa388 (переставлен при пуше 2026-09-24 через git tag -f + push -f); GitHub Release #14, asset 2.7 MB; Lint #37 зелёный. HEAD=3465d881b402c771d7ea2db2ba7c4ff5dcc5f393 (синхронизирован с origin/main после пуша); база origin/main=0aaa388; ahead of origin/main на 0 коммитов. Цепочка локальных коммитов сессии 2026-09-23 (после origin/main=46ae869): 7d66180 (fix O-32) → d3d0ea0 (chore O-46) → ea99ab1 → 6584004 → 50c02ec → 5aa08f6 → d1af0cc → e1b894f → 0aaa388 (финальный docs-синк ahead-count, пуш выполнен). Рабочая копия чиста. Сьют: 120 suites / 2167 passed / 6 skipped / 0 failed.
+2. Опубликован v2.0.11: тег v2.0.11 на 0aaa388 (переставлен при пуше 2026-09-24 через git tag -f + push -f); GitHub Release #14, asset 2.7 MB; Lint #37 зелёный. HEAD=9ede932 (синхронизирован с origin/main после пуша 2026-09-24); ahead of origin/main на 0 коммитов. Цепочка коммитов сессии 2026-09-24: 491db65 (instrumentation O-21) → 9ede932 (docs-синк O-21 expected behaviour, пуш выполнен 0290d45..9ede932). Рабочая копия чиста. Сьют: 121 suites / 2187 passed / 6 skipped / 0 failed.
 3. Закрыто в цикле 09-19→09-21: O-35, O-36, O-37, O-38, O-39(B), O-40, O-42, Claude md. R1–R6 выполнены 09-21.
 4. Обновление 2026-09-22 (O-23 ЗАКРЫТ как expected behaviour; O-24 ЗАКРЫТ живой приёмкой; O-34 ЗАКРЫТ живой приёмкой):
    - O-23 (F5: tokens~ vs serverTokens) ЗАКРЫТ как expected behaviour (senior-рекомендация): расхождение +128.7% (convId 49846f0e, textLen=424184, cyrillicPct=73.8, tokensTilde=223358, serverTokens=97652) объяснено несовпадением базиса счёта (природа c), а не ошибкой коэффициента языка (a) или отсутствием reasoning (b). Делитель кириллицы 1.8 подтверждён 3 точками и BYOK-эталоном (~1.97); глобальное изменение сломает P1/P3. serverTokens = accumulated_token_usage (накопитель), не эквивалентен полному textLen. Бейдж DeepSeek авторитетен по serverTokens; tokens~ = фолбэк при serverTokens=0 с границей ±10%. Пост-фактор адресного сжатия отклонён как хрупкая калибровка по аномалии. Диффов в аналитическом раунде 09-22 нет; код-правки O-23 — в 924e878 (utils/tokenizer.js, core/content.js; 4 файла, +322/−17). Сьют калибровки 19/19 зелёный (14 + 5).
@@ -56,7 +56,7 @@ O-24 ЗАКРЫТ (2026-09-22, живая приёмка): сигнатурны�
 
 ## Обновление 2026-09-24 (O-21 ЗАКРЫТ как expected behaviour; живая приёмка инструментирования)
 Перекрывает конфликтующие места блоков ниже (включая строки очереди предыдущих обновлений и пункт 24 «Следующих шагов»):
-- HEAD: 491db65 (instrumentation commit) поверх 0290d45 (docs-синк O-46/O-32); ahead of origin/main = 1, рабочая копия чиста после коммита.
+- HEAD: 9ede932 (docs-синк O-21 expected behaviour) поверх 491db65 (instrumentation commit); origin/main = 9ede932 (пуш выполнен 2026-09-24), ahead 0, рабочая копия чиста.
 - O-21 ЗАКРЫТ как expected behaviour (2026-09-24, живая приёмка инструментирования):
   - Инструментирование: коммит 491db65 (adapters/deepseek-adapter.js +75/−4, core/export-manager.js +27, tests/o21-deepseek-dom-instrumentation.test.js +404 / 20 тестов, tests/o40-f3-diag-instrumentation.test.js +8/−4).
   - Гейт: aiCmDiagOn() (sessionStorage aiCmDebug==='1' ИЛИ чекбокс options).
@@ -161,7 +161,7 @@ O-24 ЗАКРЫТ (2026-09-22, живая приёмка): сигнатурны�
 ## Состояние проекта
 
 - **Версия: 2.0.11** (`manifest.json` / `package.json`; релизный бамп — `db5e6e4`)
-- **HEAD: 491db658d3f351fede724d58b715bfd6ffbf8df7** (instrumentation commit `chore(O-21)`, поверх `0290d45`); origin/main = `491db65` (не запушен), ahead 1
+- **HEAD: 9ede932** (docs-синк O-21 expected behaviour, поверх `491db65` instrumentation); origin/main = `9ede932` (синхронизирован после пуша 2026-09-24), ahead 0
 - **Тесты: 121 suites / 2187 passed / 6 skipped / 0 failed** (после instrumentation `491db65`)
 - **Рабочая копия:** чиста
 - **Статус:** последний опубликованный релиз — v2.0.11 (тег `v2.0.11` на `0aaa388`, GitHub Release #14, asset 2.7 MB); живая приёмка 2026-09-24 (O-46+O-32 регресс) пройдена; живая приёмка инструментирования 2026-09-24 10:50–10:53 закрыла O-21 как expected behaviour
