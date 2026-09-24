@@ -75,6 +75,11 @@
  *     в текст сообщения ОТДЕЛЬНЫМ блоком с пометкой [REASONING]…[ANSWER]…; уже
  *     присутствующий в тексте reasoning не дублируется. stripHiddenFields — снятие
  *     служебных полей захвата в OFF-пути (в экспорт они не идут)
+ *   - hasReasoningInSource(messages) / effectiveReasoningToggle(userToggle, sourceHasReasoning)
+ *     — D-O41 (UX): авто-ON тумблера при наличии reasoning в ИСТОЧНИКЕ (непустое поле
+ *     reasoning ИЛИ секция [REASONING] в тексте). OFF пользователя при таком источнике
+ *     игнорируется (эффективный ON = сырой режим O-7), OFF без reasoning в источнике
+ *     работает как force-exclude — прежний OFF-путь (S1–S5, O-20, O-40, O-42)
  * Паттерн как у export-text-builders.js: window.AiCmExportEmitPipeline + module.exports.
  * Логика оракула полноты, ленты, пола, виджета и Gemini-гейтов НЕ тронута.
  */
@@ -2108,6 +2113,50 @@
     return hasHiddenFields(message) ? withoutHiddenFields(message) : message;
   }
 
+  // =====================================================================================
+  // D-O41 (UX): АВТО-ON ТУМБЛЕРА ПРИ НАЛИЧИИ REASONING В ИСТОЧНИКЕ.
+  //
+  // Решение владельца 2026-09-24 (вариант «в» мировых стандартов: WYSIWYG + smart defaults):
+  // если в ИСТОЧНИКЕ экспорта есть размышления, тумблер «Включать reasoning …» ведёт себя как
+  // ВКЛЮЧЁННЫЙ, даже когда пользователь его выключил: размышление — часть источника, и молча
+  // терять его на выключенном тумблере нельзя. Явный OFF остаётся силой ровно там, где
+  // размышлений в источнике нет (force-exclude: прежний OFF-путь O-7 — S1–S5, O-20, O-40, O-42).
+  //
+  // Признак sourceHasReasoning — ДВА измерения (спецификация владельца, дословно):
+  //   (1) ≥1 сообщение с НЕПУСТЫМ полем reasoning (поле данных контракта O-35; строка из одних
+  //       пробелов пустой и не считается — секция из неё читателю ничего не даёт);
+  //   (2) ≥1 секция [REASONING] в тексте сообщения (сетевой путь сервисов-«мыслителей»:
+  //       composeTurnText кладёт размышление секциями, отдельного поля reasoning у таких ходов
+  //       может не быть).
+  // Служебное поле захвата hiddenReasoning НЕ считается НАРОЧНО: это сырой захват DOM-адаптера,
+  // который OFF-путь O-7 снимает по решению владельца (P1=a, P2=OFF); учёт его здесь разворачивал
+  // бы КАЖДЫЙ чат DeepSeek++ в сырой режим и снял бы OFF-зачистку S1–S5 там, где владелец её
+  // пинует (R1: OFF и sourceHasReasoning=false — тул-мусор не возвращается).
+  //
+  // Формула (дословно): effectiveToggle = (userToggle === OFF && sourceHasReasoning === true)
+  // ? ON : userToggle. userToggle нормализуется в boolean (не задан = OFF — как в загрузчике
+  // настроек), результат — всегда boolean. Функции ЧИСТЫЕ: без логов, DOM и chrome.
+  // =====================================================================================
+  /** Есть ли в источнике экспорта (массив сообщений) хотя бы одно размышление (см. блок выше). */
+  function hasReasoningInSource(messages) {
+    var src = Array.isArray(messages) ? messages : [];
+    for (var i = 0; i < src.length; i++) {
+      var m = src[i];
+      if (!m || typeof m !== 'object') continue;
+      var reasoning = (typeof m.reasoning === 'string') ? m.reasoning : '';
+      if (reasoning.trim() !== '') return true;
+      var text = (typeof m.text === 'string') ? m.text : '';
+      if (text.indexOf(SECTION_REASONING_TAG) !== -1) return true;
+    }
+    return false;
+  }
+
+  /** Эффективное значение тумблера: OFF пользователя при reasoning в источнике игнорируется. */
+  function effectiveReasoningToggle(userToggle, sourceHasReasoning) {
+    if (userToggle === true) return true;                 // пользовательский ON — как есть
+    return (sourceHasReasoning === true);                 // OFF: источник решает (авто-ON)
+  }
+
   /**
    * O-7 (тумблер ON): развернуть hidden-захват в ТЕКСТ экспорта.
    *   - reasoning → ОТДЕЛЬНЫЙ блок с пометкой: '[REASONING]\n…\n\n[ANSWER]\n<текст>';
@@ -2217,6 +2266,10 @@
     includeHiddenExportBlocks: includeHiddenExportBlocks,
     stripHiddenFields: stripHiddenFields,
     hiddenReasoningOf: hiddenReasoningOf,
+    // D-O41: авто-ON тумблера при наличии reasoning в источнике — чистые функции наружу
+    // (пины S/D нового тест-файла; на боевом пути их зовёт core/export-manager.js).
+    hasReasoningInSource: hasReasoningInSource,
+    effectiveReasoningToggle: effectiveReasoningToggle,
     unionTurnsById: unionTurnsById,
     latchKey: latchKey
   };

@@ -218,6 +218,9 @@
   "options_export_hidden_label": {
     "message": "Include reasoning and injections of neighboring extensions (DeepSeek++, Better DeepSeek) in exports"
   },
+  "options_export_hidden_title": {
+    "message": "Reasoning auto-included when present in source; toggle forces exclude"
+  },
   "options_export_hidden_hint": {
     "message": "Off: only questions and answers go into the file, without reasoning or injections of neighboring extensions (DeepSeek++, Better DeepSeek). On: reasoning and injections go into the export."
   },

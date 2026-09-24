@@ -218,6 +218,9 @@
   "options_export_hidden_label": {
     "message": "Включать reasoning и инъекции соседних расширений (DeepSeek++, Better DeepSeek) в экспорт"
   },
+  "options_export_hidden_title": {
+    "message": "Reasoning автоматически включается при наличии в источнике; тумблер принудительно исключает"
+  },
   "options_export_hidden_hint": {
     "message": "Выключено: в файл попадают только вопросы и ответы, без размышлений и инъекций соседних расширений (DeepSeek++, Better DeepSeek). Включено: размышления и инъекции попадают в экспорт."
   },

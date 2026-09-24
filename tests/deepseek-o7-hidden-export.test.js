@@ -32,6 +32,13 @@
  *   R3 — регресс-наборы O-11/O-31/O-27/O-33/O-15…O-20 и версия не тронуты;
  *   R4 — i18n/a11y: ключи в ОБЕИХ локалях, разметка с label[for], default OFF в UI;
  *   R5 — version-hygiene/changelog-format: версия 2.0.8, CHANGELOG не тронут (релиз — отдельно).
+ *
+ * D-O41 (2026-09-24, UX): у тумблера появился АВТО-ON — при наличии reasoning в ИСТОЧНИКЕ
+ * (непустое поле reasoning ИЛИ секция [REASONING] в тексте) OFF пользователя игнорируется, и
+ * источник идёт СЫРЫМ путём. Поэтому OFF-пины «только вопросы и ответы» этого сьюта считаются на
+ * парной фикстуре PLATFORMS_OFF (тот же DeepSeek, но ответ без секций): там явный OFF сохраняет
+ * силу (force-exclude) и OFF-путь O-7/S1–S5/O-20 пинится ровно как раньше. Сам авто-ON запинован
+ * отдельно — tests/d-o41-reasoning-auto-on.test.js (D1/D2/R1).
  */
 const fs = require('fs');
 const path = require('path');
@@ -240,6 +247,16 @@ const PLATFORMS = [
   { site: 'claude', label: 'Claude', model: 'Claude 3.5 Sonnet', user: 'Вопрос Claude', assistant: 'Ответ Claude' },
   { site: 'perplexity', label: 'Perplexity', model: 'Sonar', user: 'Вопрос Perplexity', assistant: 'Ответ Perplexity' }
 ];
+
+// D-O41 (2026-09-24): авто-ON тумблера при наличии reasoning в ИСТОЧНИКЕ. Источник DeepSeek
+// сетевого пути несёт размышление СЕКЦИЕЙ [REASONING] в тексте хода, поэтому при OFF он теперь
+// уходит в СЫРОЙ режим (авто-ON), а не в OFF-путь O-7. Сам авто-ON запинован отдельно
+// (tests/d-o41-reasoning-auto-on.test.js); здесь OFF-путь O-7 («только вопросы и ответы»,
+// S1–S5, O-20) пинится на парном фикстуре БЕЗ reasoning — force-exclude, ровно тот случай,
+// в котором явный OFF сохраняет силу по спецификации владельца.
+const PLATFORMS_OFF = PLATFORMS.map(function (f) {
+  return (f.site === 'deepseek') ? Object.assign({}, f, { assistant: ANSWER_TEXT }) : f;
+});
 
 function networkMessages(fixture) {
   return [
@@ -559,7 +576,9 @@ describe('O-7 D1: тумблер ON — reasoning и инъекции DeepSeek++
  * ===================================================================================== */
 describe('O-7 D2: тумблер OFF — только вопросы и ответы', () => {
   test('OFF-выход === независимому оракулу «только вопросы и ответы» (6 платформ, JSON.stringify побайтово)', () => {
-    PLATFORMS.forEach(function (fixture) {
+    // D-O41: OFF-путь пинится на источниках БЕЗ reasoning (PLATFORMS_OFF) — только там явный
+    // OFF сохраняет силу; источник DeepSeek с секциями уходит авто-ON-ом в сырой режим.
+    PLATFORMS_OFF.forEach(function (fixture) {
       const input = networkMessages(fixture);
       const off = emitNetworkOff(fixture, input);
       const oracle = oracleOffExport(input);
@@ -572,7 +591,7 @@ describe('O-7 D2: тумблер OFF — только вопросы и отве
     // чтобы сравнение было именно ПОБАЙТОВЫМ (txt/pdf от текущего времени не зависят вовсе)
     const iso = jest.spyOn(Date.prototype, 'toISOString').mockReturnValue('2026-09-17T12:00:00.000Z');
     try {
-      for (const fixture of PLATFORMS) {
+      for (const fixture of PLATFORMS_OFF) {
         const input = networkMessages(fixture);
         const histOff = historyFrom(fixture, emitNetworkOff(fixture, input));
         const histRef = historyFrom(fixture, oracleOffExport(input));
@@ -591,9 +610,9 @@ describe('O-7 D2: тумблер OFF — только вопросы и отве
     }
   });
 
-  test('OFF: буквальный байтовый пин txt (DeepSeek, сетевой путь) — вопрос и ответ', () => {
-    const txt = Builders.buildTxtFromHistory(historyFrom(PLATFORMS[2], emitNetworkOff(PLATFORMS[2])));
-    // видимый вопрос пользователя + ЧАСТЬ [ANSWER] хода: секций reasoning и инъекций нет
+  test('OFF: буквальный байтовый пин txt (DeepSeek без reasoning, сетевой путь) — вопрос и ответ', () => {
+    const txt = Builders.buildTxtFromHistory(historyFrom(PLATFORMS_OFF[2], emitNetworkOff(PLATFORMS_OFF[2])));
+    // видимый вопрос пользователя + ответ хода: секций reasoning и инъекций нет
     expect(txt).toBe(VISIBLE_USER_TEXT + '\n\n' + ANSWER_TEXT);
     ['[REASONING]', '[ANSWER]', REASONING_TEXT, 'deepseek-pp', 'Existing memories:',
       'Tool call format reminder:'].forEach(function (needle) {
@@ -601,16 +620,16 @@ describe('O-7 D2: тумблер OFF — только вопросы и отве
     });
   });
 
-  test('OFF: секции урезаны ТОЛЬКО в экспорте; вход и БАЗА байтово прежние', () => {
+  test('D-O41: OFF + reasoning в источнике → секции источника сохранены; вход и БАЗА байтово прежние', () => {
     const input = networkMessages(PLATFORMS[2]);
     const snapshot = input.map(function (m) { return m.text; });
     const e = makeEmitter();
     e.offline();
     const msgs = e.run(input);
-    expect(msgs[1].text).toBe(ANSWER_TEXT);                        // выход — только [ANSWER]-часть
-    expect(msgs[1]).not.toBe(input[1]);                            // копия, а не мутация входа
-    expect(input.map(function (m) { return m.text; })).toEqual(snapshot);
-    expect(e.ctx.lastBaseTexts[1]).toBe(NETWORK_ASSISTANT_TEXT);   // БАЗА несёт секции (v8)
+    // авто-ON: источник с секцией [REASONING] идёт сырым путём — OFF пользователя игнорируется
+    expect(msgs[1].text).toBe(NETWORK_ASSISTANT_TEXT);
+    expect(input.map(function (m) { return m.text; })).toEqual(snapshot);   // вход не мутирован
+    expect(e.ctx.lastBaseTexts[1]).toBe(NETWORK_ASSISTANT_TEXT);           // БАЗА несёт секции (v8)
   });
 
   test('OFF: источник-пин — единая точка выхода держит OFF-путь (урезание + O-20 + hidden)', () => {
@@ -916,9 +935,10 @@ describe('O-7 S3/S4/S5: OFF-путь убирает [TOOL_RESULTS] и XML-выз
 
 /* =====================================================================================
  * R1: санация O-20 при OFF активна + секции reasoning урезаны на выходе
+ * (D-O41: OFF-путь пинится на источнике БЕЗ reasoning — там явный OFF сохраняет силу)
  * ===================================================================================== */
 describe('O-7 R1: при OFF санация O-20 активна (инъекции вырезаны)', () => {
-  const ds = PLATFORMS[2];
+  const ds = PLATFORMS_OFF[2];
 
   test('md/txt/json OFF: инъекций нет, секций reasoning нет, ответ на месте', () => {
     const hist = historyFrom(ds, emitNetworkOff(ds));
@@ -928,7 +948,7 @@ describe('O-7 R1: при OFF санация O-20 активна (инъекци�
     expect(md).toContain(VISIBLE_USER_TEXT);
     expect(txt).toContain(VISIBLE_USER_TEXT);
     expect(json.messages[0].text).toBe(VISIBLE_USER_TEXT);
-    expect(json.messages[1].text).toBe(ANSWER_TEXT);          // OFF: только часть [ANSWER]
+    expect(json.messages[1].text).toBe(ANSWER_TEXT);          // OFF (без reasoning): ответ хода
     expect(md).toContain(ANSWER_TEXT);
     expect(txt).toContain(ANSWER_TEXT);
     [md, txt, JSON.stringify(json)].forEach(function (body) {
@@ -989,8 +1009,11 @@ describe('O-7 R2: tokens/pct/база не меняются от тумблер�
   });
 
   test('OFF и ON: tokens/limit/percent в json равны, различается только текст', () => {
-    const jOff = JSON.parse(Builders.buildJsonFromHistory(historyFrom(ds, emitNetworkOff(ds)), 'DeepSeek'));
-    const jOn = JSON.parse(Builders.buildJsonFromHistory(historyFrom(ds, emitNetworkOn(ds)), 'DeepSeek'));
+    // D-O41: различие OFF/ON пинится на источнике БЕЗ reasoning (force-exclude) — у источника
+    // с секцией [REASONING] OFF игнорируется (авто-ON), и байты OFF/ON совпадают.
+    const plain = PLATFORMS_OFF[2];
+    const jOff = JSON.parse(Builders.buildJsonFromHistory(historyFrom(plain, emitNetworkOff(plain)), 'DeepSeek'));
+    const jOn = JSON.parse(Builders.buildJsonFromHistory(historyFrom(plain, emitNetworkOn(plain)), 'DeepSeek'));
     expect([jOn.tokens, jOn.limit, jOn.percent]).toEqual([jOff.tokens, jOff.limit, jOff.percent]);
     expect([jOn.platform, jOn.model]).toEqual([jOff.platform, jOff.model]);
     expect(jOn.messages[0].text).not.toBe(jOff.messages[0].text);
@@ -1007,7 +1030,7 @@ describe('O-7 R2: tokens/pct/база не меняются от тумблер�
     expect(input[1].text).toBe(NETWORK_ASSISTANT_TEXT);
   });
 
-  test('OFF не мутирует базу метрик: урезание живёт только на выходе экспорта', () => {
+  test('OFF не мутирует базу метрик: правка живёт только на выходе экспорта (D-O41: авто-ON)', () => {
     const input = networkMessages(ds);
     const e = makeEmitter();
     e.offline();
@@ -1015,7 +1038,8 @@ describe('O-7 R2: tokens/pct/база не меняются от тумблер�
     const out = e.run(input);
     expect(e.ctx.lastBaseTexts).toEqual(before);          // база метрик байтово прежняя
     expect(input[1].text).toBe(NETWORK_ASSISTANT_TEXT);   // вход не мутирован
-    expect(out[1].text).toBe(ANSWER_TEXT);                // урезан только выход
+    // D-O41: источник с reasoning идёт сырым путём (авто-ON) — секции не урезаны
+    expect(out[1].text).toBe(NETWORK_ASSISTANT_TEXT);
   });
 
   test('source-пин: текст метрик (aiCmPreparedText/aiCmMetricBaseText) hidden-полей не видит', () => {

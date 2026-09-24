@@ -166,8 +166,11 @@
         <button id="export-diag" class="btn-export" data-i18n="options_export_diag">Экспорт диагностики</button>
       </div>
       <!-- O-7: единственный тумблер сырого режима экспорта (default OFF = текущее поведение) -->
+      <!-- D-O41 (UX): подсказка тумблера — reasoning автоматически попадает в экспорт, если он
+           есть в источнике; принудительное исключение (OFF) действует, когда reasoning в
+           источнике нет (force-exclude). Строки — ключ options_export_hidden_title (ru/en). -->
       <div class="checkbox-row export-hidden-row">
-        <input type="checkbox" id="aiCmIncludeHiddenInExport">
+        <input type="checkbox" id="aiCmIncludeHiddenInExport" title="Reasoning автоматически включается при наличии в источнике; тумблер принудительно исключает" data-i18n-title="options_export_hidden_title">
         <label for="aiCmIncludeHiddenInExport" data-i18n="options_export_hidden_label">Включать reasoning и инъекции соседних расширений (DeepSeek++, Better DeepSeek) в экспорт</label>
       </div>
       <span class="hint" data-i18n="options_export_hidden_hint">Выключено: в файл попадают только вопросы и ответы, без размышлений и инъекций соседних расширений (DeepSeek++, Better DeepSeek). Включено: размышления и инъекции попадают в экспорт.</span>

@@ -70,23 +70,48 @@ function aiCmLogSanitizeSkip(reasons) {
   }
 }
 // O-40 (ДИАГНОСТИКА — только ИЗМЕРЕНИЕ, поведение и байты не меняются): точка входа
-// санации экспорта печатает под гейтом aiCmDebug РОВНО то, что выбрано — прочитанное
-// значение тумблера aiCmIncludeHiddenInExport, ветку (includeHiddenExportBlocks |
-// sanitizeEmitMessages | no-pipeline) и число сообщений на входе/выходе. Строка уходит
-// каноническим хелпером utils/debug.js:aiCmDiagLine (собственного вывода в консоль и
-// собственного формата здесь нет); хелпера нет (Node/срез-песочницы тестов) или гейт
-// выключен → ни одной строки. Читаются только уже посчитанные значения; сам вызов в точке
-// входа защищён typeof-гардом, поэтому песочницы без этого хелпера видят прежнее поведение.
-function aiCmEmitEntryDiag(branch, inMsgs, outMsgs) {
+// санации экспорта печатает под гейтом aiCmDebug РОВНО то, что выбрано — значение тумблера
+// aiCmIncludeHiddenInExport (D-O41: ЭФФЕКТИВНОЕ — авто-ON при reasoning в источнике виден
+// как hidden=on), ветку (includeHiddenExportBlocks | sanitizeEmitMessages | no-pipeline) и
+// число сообщений на входе/выходе. Строка уходит каноническим хелпером utils/debug.js:aiCmDiagLine
+// (собственного вывода в консоль и собственного формата здесь нет); хелпера нет
+// (Node/срез-песочницы тестов) или гейт выключен → ни одной строки. Читаются только уже
+// посчитанные значения; сам вызов в точке входа защищён typeof-гардом, поэтому песочницы
+// без этого хелпера видят прежнее поведение.
+function aiCmEmitEntryDiag(branch, inMsgs, outMsgs, effectiveOn) {
   try {
     if (typeof aiCmDiagLine !== 'function') return false;
+    // D-O41: hidden — ЭФФЕКТИВНОЕ значение тумблера (авто-ON при reasoning в источнике виден
+    // в логе как hidden=on). Не передан (прежние вызовы) → ровно пользовательское значение:
+    // байты строки и её смысл для OFF-путей не меняются.
+    var hiddenOn = (effectiveOn === undefined)
+      ? (aiCmIncludeHiddenInExport === true)
+      : (effectiveOn === true);
     return aiCmDiagLine('o40-emit-entry', {
-      hidden: (aiCmIncludeHiddenInExport === true) ? 'on' : 'off',
+      hidden: hiddenOn ? 'on' : 'off',
       branch: branch,
       msgsIn: Array.isArray(inMsgs) ? inMsgs.length : 0,
       msgsOut: Array.isArray(outMsgs) ? outMsgs.length : 0
     }) !== false;
   } catch (eDiagEntry) { return false; }
+}
+// ===== D-O41 (UX): АВТО-ON ТУМБЛЕРА ПРИ НАЛИЧИИ REASONING В ИСТОЧНИКЕ =====
+// ЕДИНСТВЕННАЯ точка чтения тумблера для выбора ветки экспорта. Правило владельца:
+//   effectiveToggle = (userToggle === OFF && sourceHasReasoning === true) ? ON : userToggle
+// (чистая функция пайплайна effectiveReasoningToggle; признак reasoning в источнике —
+// hasReasoningInSource: непустое поле reasoning ИЛИ секция [REASONING] в тексте).
+// OFF без reasoning в источнике работает как force-exclude: прежний OFF-путь O-7
+// (S1–S5, O-20, O-40, O-42) — ни одного нового байта. Пайплайна нет (отладочный контекст,
+// срез-песочницы) → ровно пользовательское значение: поведение прежнее 1:1, ни одной новой
+// ветки не исполняется. Функция только читает: массивы/сообщения не меняются.
+function aiCmHiddenExportEffectiveOn(messages) {
+  var userOn = (typeof aiCmIncludeHiddenInExport !== 'undefined') && aiCmIncludeHiddenInExport === true;
+  try {
+    var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+    if (!P || typeof P.hasReasoningInSource !== 'function' ||
+      typeof P.effectiveReasoningToggle !== 'function') return userOn;
+    return P.effectiveReasoningToggle(userOn, P.hasReasoningInSource(messages) === true) === true;
+  } catch (eEffective) { return userOn; }
 }
 // Санация массива сообщений экспорта: role=user с ровно одной парой маркеров → видимый
 // текст; role=assistant и тексты без ровно одной пары — байтово прежние. Пайплайн не
@@ -97,6 +122,9 @@ function aiCmEmitEntryDiag(branch, inMsgs, outMsgs) {
 //                           части [ANSWER], санация O-20 активна, hidden снят (OFF-путь);
 //   тумблер ON            → сырой режим: текст как есть, hidden-reasoning отдельным блоком,
 //                           инъекции как есть (O-20 обойдена).
+// D-O41 (UX, 2026-09-24): «OFF» здесь — ЭФФЕКТИВНОЕ значение (aiCmHiddenExportEffectiveOn):
+// OFF пользователя при наличии reasoning в источнике = авто-ON (сырой режим), OFF без
+// reasoning = прежний OFF-путь. Выбор ветки по-прежнему ОДИН, санация не переписана.
 function aiCmSanitizeEmitUserTexts(messages) {
   try {
     var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
@@ -105,13 +133,30 @@ function aiCmSanitizeEmitUserTexts(messages) {
       if (typeof aiCmEmitEntryDiag === 'function') aiCmEmitEntryDiag('no-pipeline', messages, messages);
       return messages;
     }
-    if (aiCmIncludeHiddenInExport === true) {
+    // D-O41: эффективное значение тумблера читает ЕДИНАЯ точка aiCmHiddenExportEffectiveOn
+    // (пользовательское значение + наличие reasoning в источнике, см. блок выше). Хелпера нет
+    // (срез-песочница) → ровно пользовательское значение: поведение прежнее 1:1.
+    var hiddenExportEffective = (typeof aiCmHiddenExportEffectiveOn === 'function')
+      ? aiCmHiddenExportEffectiveOn(messages)
+      : (aiCmIncludeHiddenInExport === true);
+    // Сырой режим — ОДНО тело на оба входа (пользовательский ON и авто-ON по D-O41): локальная
+    // функция, чтобы ветки не разъехались; диагностика идёт тем же каноном с ЭФФЕКТИВНЫМ значением.
+    var hiddenRawExport = function () {
       var onMsgs = (typeof P.includeHiddenExportBlocks === 'function')
         ? P.includeHiddenExportBlocks(messages)
         : messages;
       // O-40 (диагностика): ON-ветка (сырой режим — O-40 и O-20 обойдены).
-      if (typeof aiCmEmitEntryDiag === 'function') aiCmEmitEntryDiag('includeHiddenExportBlocks', messages, onMsgs);
+      if (typeof aiCmEmitEntryDiag === 'function') aiCmEmitEntryDiag('includeHiddenExportBlocks', messages, onMsgs, hiddenExportEffective);
       return onMsgs;
+    };
+    if (aiCmIncludeHiddenInExport === true) {
+      return hiddenRawExport();
+    }
+    // D-O41 (UX): OFF пользователя при наличии reasoning в источнике ИГНОРИРУЕТСЯ — источник
+    // уходит в сырой режим (авто-ON). Расположение важно: проверка стоит ДО OFF-пути, поэтому
+    // OFF-зачистка S1–S5 (O-7, ниже) исполняется РОВНО при эффективном OFF без reasoning.
+    if (hiddenExportEffective) {
+      return hiddenRawExport();
     }
     var res = P.sanitizeEmitMessages(messages);
     aiCmLogSanitizeSkip(res && res.skipped);
@@ -232,6 +277,13 @@ function aiCmCollectExportSource() {
     // typeof-гарды — конвенция срез-песочниц (fnDecl): там ни переменной тумблера, ни
     // предиката сайта нет → массив не трогается вовсе, поведение прежнее 1:1.
     var hiddenExportOn = (typeof aiCmIncludeHiddenInExport !== 'undefined') && aiCmIncludeHiddenInExport === true;
+    // D-O41 (UX): переменная ниже читается как ЭФФЕКТИВНОЕ значение (тот же хелпер, что у точки
+    // санации): OFF пользователя при наличии reasoning в источнике не действует — поле reasoning
+    // на источнике с размышлением НЕ снимается (иначе авто-ON потерял бы своё основание).
+    // Хелпера нет (срез-песочница) → значение прежнее (пользовательское), поведение 1:1.
+    if (!hiddenExportOn && typeof aiCmHiddenExportEffectiveOn === 'function') {
+      hiddenExportOn = aiCmHiddenExportEffectiveOn(out);
+    }
     var reasoningExportSite = (typeof aiCmReasoningExportSite === 'function') ? aiCmReasoningExportSite : null;
     if (!hiddenExportOn && reasoningExportSite && reasoningExportSite()) {
       for (var ri = 0; ri < out.length; ri++) {

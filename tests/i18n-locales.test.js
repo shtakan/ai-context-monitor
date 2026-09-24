@@ -1246,10 +1246,11 @@ describe('M-4.4: локализация privacy/privacy.html и docs/index.html'
       // + docs-инструкция ручной установки (docs_* — 42): заметка про Edge/обновление
       // + O-7: метка и хинт тумблера «Включать reasoning и инъекции DeepSeek++ в экспорт»
       //   (options_export_hidden_label / options_export_hidden_hint → словарь 253)
+      // + D-O41: подсказка тумблера options_export_hidden_title (словарь 254)
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('privacy_') === 0; }).length).toBe(86);
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('docs_') === 0; }).length).toBe(42);
-      expect(Object.keys(ru).length).toBe(253);
-      expect(Object.keys(en).length).toBe(253);
+      expect(Object.keys(ru).length).toBe(254);
+      expect(Object.keys(en).length).toBe(254);
     });
 
     test('ru-значения M-4.4 байтово равны тексту разметки, en — перевод без кириллицы', () => {

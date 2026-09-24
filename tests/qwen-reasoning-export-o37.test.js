@@ -214,12 +214,15 @@ describe('O-37 C-R: DeepSeek и пять прочих платформ не за
     expect(Builders.buildTxtFromHistory({ messages: msgs })).toBe('привет\n\n' + ANSWER);
   });
 
-  test('DeepSeek сетевой путь: секции урезаются OFF-путём как раньше (без [REASONING])', () => {
+  test('DeepSeek сетевой путь + OFF: D-O41 — источник с секцией идёт авто-ON-ом (сырой путь)', () => {
+    // D-O41 (2026-09-24): источник с секцией [REASONING] при OFF пользователя уходит в СЫРОЙ
+    // режим (авто-ON) — секции сохранены, поле reasoning точкой сбора не подменяется
+    // (O-37/C нормализует поле только у сервиса с DOM-источником, здесь предикат сайта false).
     const e = makeEmitter({ site: 'deepseek', baseSeen: true, adapter: { siteName: 'deepseek', extractMessages: function () { return []; } } });
     const msgs = e.run(['вопрос', SECTIONED], [{ role: 'user', text: 'вопрос' }, { role: 'assistant', text: SECTIONED }]);
-    expect(msgs[1].text).toBe(ANSWER);
+    expect(msgs[1].text).toBe(SECTIONED);
     expect(msgs[1].reasoning).toBeUndefined();
-    expect(Builders.buildTxtFromHistory({ messages: msgs })).toBe('вопрос\n\n' + ANSWER);
+    expect(Builders.buildTxtFromHistory({ messages: msgs })).toBe('вопрос\n\n' + SECTIONED);
   });
 
   test('сборщики: поле захвата у шести платформ секций не создаёт (R1)', () => {
