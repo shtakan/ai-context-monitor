@@ -4401,12 +4401,49 @@
     // продолжения (действительно полная история). При наличии курсора это частичная история —
     // merge по id без сброса (turnsMap дедуплицирует). Решение принимаем ПОСЛЕ парсинга,
     // когда pendingCursor (курсор из этого пейлоада) уже известен.
+    // O-51 (монотонный union): пересборка запрещена ЕЩЁ и тогда, когда входящий снапшот —
+    // ПОДМНОЖЕСТВО уже собранной базы (все его id известны). Такой снапшот не добавляет ни
+    // одного хода, зато сброс turnsMap уничтожает накопленное — живой прогон 2026-09-25 на
+    // чате 8f1343975188be5d: база 36 → 20 ходов, метрика 39% → 10%. Усечённый
+    // (виртуализированный) vf5-ответ без курсора и «полная история» по форме неразличимы —
+    // решает content-критерий по id (`isSubsetIds`). Следствие запрета — stable merge
+    // (merge-by-id ниже): база сохраняется ЦЕЛИКОМ, ходы снапшота, которых в ней нет,
+    // добавляются из его хвоста.
+    var rebuildExistingIds = [];
+    var rebuildIncomingIds = [];
+    if (fromVirtualF5) {
+      if (baseSize() > 0) rebuildExistingIds = Object.keys(turnsMap);
+      for (var rbi = 0; rbi < parsed.length; rbi++) rebuildIncomingIds.push(parsed[rbi] && parsed[rbi].id);
+    }
+    var incomingIsSubsetOfBase = false;
+    if (rebuildExistingIds.length && rebuildIncomingIds.length) {
+      if (typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.isSubsetIds) {
+        incomingIsSubsetOfBase = window.GeminiInterceptLogic.isSubsetIds(rebuildIncomingIds, rebuildExistingIds);
+      } else {
+        // фолбэк (модуль логики недоступен/стар): тот же критерий по образцу shouldDisjointReset
+        var rebuildSeen = {};
+        for (var rbs = 0; rbs < rebuildExistingIds.length; rbs++) {
+          if (rebuildExistingIds[rbs]) rebuildSeen[rebuildExistingIds[rbs]] = true;
+        }
+        incomingIsSubsetOfBase = true;
+        for (var rbj = 0; rbj < rebuildIncomingIds.length; rbj++) {
+          var rbid = rebuildIncomingIds[rbj];
+          if (!rbid || !rebuildSeen[rbid]) { incomingIsSubsetOfBase = false; break; }
+        }
+      }
+    }
     var fullRebuildFromVf5 = false;
     if (typeof window !== 'undefined' && window.GeminiInterceptLogic) {
-      fullRebuildFromVf5 = window.GeminiInterceptLogic.shouldFullRebuild({ fromVirtualF5: fromVirtualF5, wasFull: wasFull, hasCursor: !!pendingCursor });
+      fullRebuildFromVf5 = window.GeminiInterceptLogic.shouldFullRebuild({
+        fromVirtualF5: fromVirtualF5, wasFull: wasFull, hasCursor: !!pendingCursor,
+        existingIds: rebuildExistingIds, incomingIds: rebuildIncomingIds
+      });
     } else {
       fullRebuildFromVf5 = !!(fromVirtualF5 && wasFull);
     }
+    // O-51: страховка уровня вызова — даже если модуль логики стар и не знает про
+    // подмножество, сброс по снапшоту-подмножеству НЕ выполняется (data-safety важнее формы).
+    if (fullRebuildFromVf5 && incomingIsSubsetOfBase) fullRebuildFromVf5 = false;
     // v75 (D-head): после tape-restore в этом холодном старте полная пересборка vf5 запрещена —
     // сброс turnsMap уничтожил бы восстановленную голову тейпа (restored-ходы с order<0),
     // а повторный tape-restore заблокирован cacheRestoredMap → merge по id без сброса.
@@ -4428,6 +4465,10 @@
       var reason = 'merge-by-id';
       if (diagDisjointReset) { action = 'disjoint-reset'; reason = 'zero-id-overlap'; }
       else if (fullRebuildFromVf5) { action = 'reset'; reason = 'full-rebuild-vf5-no-cursor'; }
+      // O-51: снапшот — подмножество базы, форма при этом «полная история без курсора»:
+      // сброс ЗАПРЕЩЁН, идёт stable merge (причина называется честно, а не «merge-by-id»).
+      else if (incomingIsSubsetOfBase && fromVirtualF5 && wasFull && !pendingCursor &&
+               tapeWasUsedInThisColdStart !== true) { reason = 'vf5-subset-no-reset'; }
       else if (disjointGuardSrc && diagExistingBefore > 0 && diagOverlap === 0 && !!getConvId()) { reason = 'same-conv-union'; } // v64
       else if (fromVirtualF5 && wasFull && pendingCursor) { reason = 'vf5-cursor-continue'; }
       else if (diagExistingBefore === 0) { reason = 'empty-base'; }

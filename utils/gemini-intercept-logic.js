@@ -199,10 +199,38 @@
     } catch (e) { return null; }
   }
 
-  // Полная пересборка vf5 допустима только для действительно полной истории (без курсора продолжения).
+  // ---- O-51: монотонный union — снапшот-ПОДМНОЖЕСТВО не имеет права стирать базу ----
+  // `isSubsetIds(incoming, existing)` = «каждый id входящего снапшота уже есть в базе»
+  // (хотя бы один id обязан быть; пустой вход или пустая база — не подмножество).
+  // Content-критерий, а не счётный: усечённый/виртуализированный vf5-ответ без курсора
+  // (36 → 20 ходов, живой прогон 2026-09-25) и «полная история» неразличимы по форме —
+  // различает только пересечение множеств id. Ход без id подмножеством не подтверждается.
+  function isSubsetIds(incomingIds, existingIds) {
+    var incoming = Array.isArray(incomingIds) ? incomingIds : [];
+    var existing = Array.isArray(existingIds) ? existingIds : [];
+    if (!incoming.length || !existing.length) return false;
+    var seen = {};
+    for (var i = 0; i < existing.length; i++) { if (existing[i]) seen[existing[i]] = true; }
+    var hits = 0;
+    for (var j = 0; j < incoming.length; j++) {
+      var id = incoming[j];
+      if (!id || !seen[id]) return false;
+      hits++;
+    }
+    return hits > 0;
+  }
+
+  // Полная пересборка vf5 допустима только для действительно полной истории (без курсора
+  // продолжения) И только если снапшот приносит хоть что-то новое: пересборка по
+  // подмножеству не добавила бы ни одного хода, зато уничтожила бы накопленные (O-51).
+  // Вызов без existingIds/incomingIds сохраняет прежний контракт (только vf5-критерий).
   function shouldFullRebuild(opts) {
     opts = opts || {};
-    return !!(opts.fromVirtualF5 && opts.wasFull && !opts.hasCursor);
+    if (!(opts.fromVirtualF5 && opts.wasFull && !opts.hasCursor)) return false;
+    if (opts.existingIds || opts.incomingIds) {
+      if (isSubsetIds(opts.incomingIds, opts.existingIds)) return false;
+    }
+    return true;
   }
 
   // ---- v60: disjoint-reset — контентный критерий смены сеанса/аккаунта ----
@@ -1786,6 +1814,7 @@
     selfHealFloorVerdict: selfHealFloorVerdict,
     writeSelfHealedFloor: writeSelfHealedFloor,
     shouldFullRebuild: shouldFullRebuild,
+    isSubsetIds: isSubsetIds,
     shouldDisjointReset: shouldDisjointReset,
     assignPageOrders: assignPageOrders,
     orderPages: orderPages,
