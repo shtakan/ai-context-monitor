@@ -1519,6 +1519,11 @@
     if (typeof raw !== 'string') raw = '';
     var rawLen = raw.length;
     var reEncodedLenMemo = -1;
+    // O-52: safety_margin добивания границы кадра — не больше стольких СИМВОЛОВ за объявленный
+    // конец (declaredN) и никогда дальше конца тела: защита от O-50-регресса и от «убегающего»
+    // скана. Внутри функции, а не на верхнем уровне: песочницы тестов собирают parseByBytes
+    // изолированно (конвенция fnDecl) и верхнеуровневые имена им не видны.
+    var JSON_FRAME_OVERRUN_MAX = 256;
     // Длина строки в байтах UTF-8 — арифметика по кодам символов (без TextEncoder).
     function utf8Len(s) {
       if (typeof s !== 'string' || !s) return 0;
@@ -1586,6 +1591,89 @@
         bytes = utf8Try; hasUtf8 = true; dec = utf8Dec;
       }
     }
+    // ---- O-52: умное добивание границ кадра (символьное пространство) ----
+    // Объявленная длина кадра может НЕ совпасть с концом JSON-значения:
+    //   • перебег — срез `[pos, end)` захватывает trailing-разделители и префикс длины
+    //     СЛЕДУЮЩЕГО кадра → разбор JSON падает «Unexpected non-whitespace character after
+    //     JSON at position …» (живой прогон 2026-09-25, чат 8f1343975188be5d), при этом сам
+    //     JSON в теле ЦЕЛ, а кадр после перебега теряется вместе с префиксом;
+    //   • недобор — значение не закрывается внутри среза → обрыв на ровном месте.
+    // `extractJsonPayload` возвращает РОВНО одно сбалансированное JSON-значение:
+    //   (а) срез как объявлен, если после значения идут только пробелы — БЫСТРЫЙ путь,
+    //       поведение и байты payload'а прежние (O-50 не затронут);
+    //   (б) срез, обрезанный по концу первого сбалансированного значения, — убраны
+    //       trailing-разделители и префикс следующего кадра (номер кадра не теряется:
+    //       цикл продолжается с конца значения и читает длину следующего кадра);
+    //   (в) недобор — граница добирается за `end` в пределах safety_margin
+    //       `maxOverrun` СИМВОЛОВ от объявленной длины кадра и НЕ дальше конца тела;
+    //   (г) значение не закрылось и в доборе (реальный обрыв тела/сети) — возвращается
+    //       исходный срез БЕЗ изменений: диаг-числа O-48 и tolerant-salvage получают
+    //       ровно тот же вход, что и до O-52.
+    // Маркер `hNvQHb` в результате обязателен (иначе кадр отбрасывается по строке ниже, и
+    // настоящий конверт потерялся бы) — при его отсутствии возвращается исходный срез.
+    // Скан структурный (строковая маска экранирования), без разбора JSON: единственная точка
+    // разбора кадра ниже не дублируется.
+    function jsonValueEnd(str, from) {
+      var i = from;
+      while (i < str.length) {
+        var w = str.charCodeAt(i);
+        if (w !== 0x20 && w !== 0x09 && w !== 0x0A && w !== 0x0D) break;
+        i++;
+      }
+      if (i >= str.length) return -1;
+      var open = str.charCodeAt(i);
+      if (open !== 0x5B && open !== 0x7B) return -1; // форма batchexecute: массив/объект
+      var depth = 0;
+      var inStr = false;
+      var esc = false;
+      for (; i < str.length; i++) {
+        var c = str.charCodeAt(i);
+        if (inStr) {
+          if (esc) { esc = false; continue; }
+          if (c === 0x5C) { esc = true; continue; }
+          if (c === 0x22) inStr = false;
+          continue;
+        }
+        if (c === 0x22) { inStr = true; continue; }
+        if (c === 0x5B || c === 0x7B) { depth++; continue; }
+        if (c === 0x5D || c === 0x7D) {
+          depth--;
+          if (depth === 0) return i + 1;
+          if (depth < 0) return -1;
+        }
+      }
+      return -1;
+    }
+    function jsonTailIsBlank(str, from) {
+      for (var i = from; i < str.length; i++) {
+        var c = str.charCodeAt(i);
+        if (c !== 0x20 && c !== 0x09 && c !== 0x0A && c !== 0x0D) return false;
+      }
+      return true;
+    }
+    function extractJsonPayload(slice, rawStr, start, stop, maxOverrun) {
+      var limit = (typeof maxOverrun === 'number' && maxOverrun >= 0) ? maxOverrun : JSON_FRAME_OVERRUN_MAX;
+      var from = start > 0 ? start : 0;
+      var to = stop < rawStr.length ? stop : rawStr.length;
+      if (to < from) to = from;
+      if (typeof slice !== 'string') slice = rawStr.slice(from, to);
+      var res = { text: slice, end: to };
+      var q = jsonValueEnd(slice, 0);
+      if (q > 0) {
+        if (jsonTailIsBlank(slice, q)) return res; // (а) быстрый путь: кадр размечен верно
+        var cut = slice.slice(0, q);               // (б) перебег: режем по концу значения
+        if (cut.indexOf('hNvQHb') !== -1) { res.text = cut; res.end = from + q; }
+        return res;
+      }
+      var hard = to + limit; if (hard > rawStr.length) hard = rawStr.length; // (в) добор границы
+      if (hard > to) {
+        var wide = rawStr.slice(from, hard);
+        var q2 = jsonValueEnd(wide, 0);
+        var wideCut = (q2 > 0) ? wide.slice(0, q2) : '';
+        if (q2 > (to - from) && wideCut.indexOf('hNvQHb') !== -1) { res.text = wideCut; res.end = from + q2; }
+      }
+      return res; // (г) обрыв — исходный срез без изменений (O-48)
+    }
     var pos = 0;
     if (bytes.length >= 4 && bytes[0] === 0x29 && bytes[1] === 0x5D && bytes[2] === 0x7D && bytes[3] === 0x27) pos = 4;
     var guard = 0;
@@ -1600,9 +1688,19 @@
       var clamped = (pos + n) > bytes.length;  // O-48: объявленная длина больше доступного — клэмп
       var end = pos + n; if (end > bytes.length) end = bytes.length;
       // O-50: срез кадра в СИМВОЛЬНОМ пространстве (string.slice) — основной путь;
-      // legacy-разметка в байтах (hasUtf8) берёт срез из UTF-8-вида.
+      // legacy-разметка в байтах (hasUtf8) берёт срез из UTF-8-вида (её разметка байтовая,
+      // добивание границ O-52 к ней не применяется — единица среза там БАЙТ).
       var payloadStr = hasUtf8 ? dec.decode(bytes.subarray(pos, end)) : raw.slice(pos, end);
       pos = end;
+      // O-52: на символьном пути граница кадра доводится до конца JSON-значения —
+      // trailing-разделители/префикс следующего кадра в payload не попадают, недобор
+      // добирается в пределах safety_margin от объявленной длины (быстрый путь (а)
+      // возвращает тот же срез: поведение и байты O-50 не меняются).
+      if (!hasUtf8) {
+        var frame = extractJsonPayload(payloadStr, raw, posPayload, pos, JSON_FRAME_OVERRUN_MAX);
+        payloadStr = frame.text;
+        pos = frame.end;
+      }
       if (pos < bytes.length && bytes[pos] === 0x0A) pos++;
       if (payloadStr.indexOf('hNvQHb') !== -1) {
         try { handleOuter(JSON.parse(payloadStr), out, src); } catch (e) {
