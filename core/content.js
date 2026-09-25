@@ -2666,6 +2666,17 @@ if (isExtensionValid()) {
         if (typeof aiCmQwenExportBaseTrusted === 'function' && aiCmQwenExportBaseTrusted()) {
           manualSnapshot.isLowConfidenceBase = false;
         }
+        // O-49: при низкой достоверности базы (isLowConfidenceBase=true) локальный снимок
+        // EMIT может нести только последние ходы (as-is/таймаут, tolerant-salvage O-48) —
+        // добираем объединённой базой (архив + live) через ту же точку, что и снимок истории
+        // (aiCmUnionFileMessages: гард «строго полнее» внутри, не-Gemini → без изменений).
+        // При baseComplete=1 (обычный чат) вызов не делает ничего — байты снимка прежние (R3).
+        try {
+          if (typeof aiCmUnionFileMessages === 'function') {
+            manualSnapshot.messages = aiCmUnionFileMessages(curCidExp, manualSnapshot.messages,
+              manualSnapshot.isLowConfidenceBase === true);
+          }
+        } catch (eO49m) { debugLog('log', '[AI CM][export] silent-catch replyManualExport(O-49 union): ' + (eO49m && eO49m.message || eO49m)); }
         sendResponse({ data: manualSnapshot });
       };
       if (typeof aiCmExportNetSyncThen === 'function' && aiCmExportNetSyncSite()) {

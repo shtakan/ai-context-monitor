@@ -568,6 +568,51 @@ function aiCmCancelDeferredHistWrite(cid) {
     aiCmPendingHistWrite = null;
   } catch (e) { }
 }
+// =============================================================================
+// O-49: ЕДИНАЯ ТОЧКА СБОРКИ СООБЩЕНИЙ ДЛЯ ЗАПИСИ СНИМКА (ручной/таймаутный экспорт).
+//
+// Живой симптом (Gemini, Deep Research, 2026-09-25): БАЗА содержит 6 сообщений (i=0
+// len=4975 «ROLE & OBJECTIVE», i=1 len=77 план, i=2 len=19 «Начать исследование»,
+// i=3 len=26855 отчёт, i=4/i=5 — последний обмен), а в ФАЙЛЕ — только 2 последних
+// (i=4, i=5). Лог-свидетель: `o40-emit-msg i=0..5 msgsIn=6 msgsOut=6` (единая точка
+// сбора видела все шесть), файл `[LOW CONFIDENCE]_ai-context-monitor-gemini-…txt` — два.
+// Условие дефекта: isLowConfidenceBase=true (baseComplete=0 — 60s-таймаут / ручной as-is).
+//
+// Корень: точка записи снимка (`aiCmWriteCurrentHistory` — она же кормит ручной экспорт
+// через ключ `aiCmHistory[:host]`) собирала массив СВОИМ вызовом, а не через единую точку
+// сбора; при НЕПОЛНОЙ (as-is) базе локальный снимок EMIT может нести лишь последние ходы
+// (tolerant-salvage O-48 отдаёт только завершённые), тогда как полная база ТОГО ЖЕ
+// разговора — объединённая (архив + live) — уже посчитана в MAIN и уходит в файл
+// АВТОэкспорта (aiCmExportBaseSource). Отсюда асимметрия: автоэкспорт — 6 сообщений,
+// ручной/таймаутный снимок — 2.
+//
+// Правило (узкое, здоровые пути не тронуты — R3): массив снимка собирается ТЕМ ЖЕ
+// конвейером, что файл автоэкспорта —
+//   aiCmCollectExportSource()   (единая точка сбора: санация O-20/O-40/O-42 + роли O-39)
+//   → aiCmDedupeExportSource()  (E-2; ровно выражение buildHistoryMessages)
+//   → при isLowConfidenceBase=true добор объединённой базой (архив + live), если она
+//     СТРОГО полнее локального снимка (гард `msgs.length > localMsgs.length` внутри
+//     aiCmExportBaseSource; не-Gemini и отсутствие моста → null → снимок как был).
+// При baseComplete=1 вызов ниже не делает НИЧЕГО: байты снимка прежние (сравнение
+// «до/после» — R3), у прочих платформ поведение 1:1 (объединённая база — только Gemini).
+// =============================================================================
+function aiCmUnionFileMessages(cid, localMsgs, isLowConfidence) {
+  try {
+    if (isLowConfidence !== true) return localMsgs;
+    if (typeof aiCmExportBaseSource !== 'function') return localMsgs;
+    var union = aiCmExportBaseSource(cid, localMsgs);
+    if (union && Array.isArray(union.msgs) && union.msgs.length > localMsgs.length) {
+      debugLog('log', '[AI CM][export] O-49 low-confidence base-union: localMsgs=' + localMsgs.length +
+        ' unionMsgs=' + union.msgs.length + ' baseMsgs=' + union.baseCount +
+        ' liveMsgs=' + union.liveCount + ' archiveMsgs=' + union.archiveCount +
+        ' convId=' + (cid || '-'));
+      return union.msgs;
+    }
+  } catch (eO49u) {
+    debugLog('log', '[AI CM][export] silent-catch aiCmUnionFileMessages: ' + (eO49u && eO49u.message || eO49u));
+  }
+  return localMsgs;
+}
 function aiCmWriteCurrentHistory() {
   try {
     if (!isExtensionValid() || !baseSeen || !baseText) return;
@@ -575,6 +620,19 @@ function aiCmWriteCurrentHistory() {
     var mid = lastResolvedModelId;
     var dispLimit = computeEffectiveLimit(mid);
     var pct = dispLimit > 0 ? Math.round((maxTokenCount / dispLimit) * 1000) / 10 : 0;
+    // O-49: сообщения снимка — ИЗ ЕДИНОЙ ТОЧКИ СБОРА (aiCmCollectExportSource: санация
+    // O-20/O-40/O-42 + нормализация ролей O-39) со схлопкой E-2 — тот же массив, что уходит
+    // в файл автоэкспорта. Прямой buildHistoryMessages остаётся фолбэком ровно для двух
+    // случаев: срез-песочницы (хелперов нет) и пустая база (единой точке нечего отдать) —
+    // там поведение прежнее 1:1.
+    var msgsWrite = (typeof aiCmCollectExportSource === 'function') ? aiCmCollectExportSource() : null;
+    if (Array.isArray(msgsWrite) && msgsWrite.length > 0 && typeof aiCmDedupeExportSource === 'function') {
+      msgsWrite = aiCmDedupeExportSource(msgsWrite).messages;
+    }
+    if (!Array.isArray(msgsWrite) || msgsWrite.length === 0) msgsWrite = buildHistoryMessages();
+    // O-49 (isLowConfidenceBase=true): не терять полную базу того же разговора — добор
+    // объединённой базой (архив + live), той же, что идёт в файл автоэкспорта.
+    msgsWrite = aiCmUnionFileMessages(cid, msgsWrite, (baseComplete !== true));
     var histSnapshot = {
       host: window.location.hostname,
       convId: lastEmitConvId,
@@ -588,7 +646,7 @@ function aiCmWriteCurrentHistory() {
       // baseComplete !== true; после 0→1 липкий aiCmLowConfidenceByConv больше не лепит
       // ложный префикс переписанному снапшоту.
       isLowConfidenceBase: (baseComplete !== true),
-      messages: buildHistoryMessages()
+      messages: msgsWrite
     };
     var histPatch = { aiCmHistory: histSnapshot };
     histPatch['aiCmHistory:' + window.location.hostname] = aiCmHostHistoryRecord(histSnapshot);
@@ -1756,6 +1814,7 @@ window.addEventListener('ai-cm-loader-state', function (ev) {
   Api.sanitizeGeminiText = sanitizeGeminiText;
   Api.aiCmCollectExportSource = aiCmCollectExportSource;
   Api.aiCmExportBaseSource = aiCmExportBaseSource;
+  Api.aiCmUnionFileMessages = aiCmUnionFileMessages;   // O-49: добор объединённой базой при low-confidence
   Api.autoExportPerSiteKey = autoExportPerSiteKey;
   Api.loadAutoExportPerSitePct = loadAutoExportPerSitePct;
   Api.sessionFiredCache = sessionFiredCache;
