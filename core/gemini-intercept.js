@@ -4507,14 +4507,32 @@
     // решает content-критерий по id (`isSubsetIds`). Следствие запрета — stable merge
     // (merge-by-id ниже): база сохраняется ЦЕЛИКОМ, ходы снапшота, которых в ней нет,
     // добавляются из его хвоста.
-    var rebuildExistingIds = [];
-    var rebuildIncomingIds = [];
-    if (fromVirtualF5) {
-      if (baseSize() > 0) rebuildExistingIds = Object.keys(turnsMap);
-      for (var rbi = 0; rbi < parsed.length; rbi++) rebuildIncomingIds.push(parsed[rbi] && parsed[rbi].id);
+    // O-51b: ЕДИНАЯ точка извлечения id. Раньше массивы заполнялись ТОЛЬКО на vf5-ветке
+    // (`if (fromVirtualF5)`), а свидетельство трейса собиралось отдельно (`parsed.map(x => x.id)`)
+    // — решение и его доказательство могли разойтись, и при ПУСТЫХ массивах форма снапшота
+    // («vf5 без курсора = полная история») работала как доказательство полноты: живая приёмка
+    // 16:31:33.906, чат 8f1343975188be5d — снапшот 20 ходов из 36 (все id уже собраны,
+    // overlapCount=20, disjointFlag=false) дал `action=reset reason=full-rebuild-vf5-no-cursor`,
+    // база схлопнулась 36 → 20, метрика 39.1% → 10.8%, pre-trim файл потерял старшие ходы.
+    // Теперь ОДНИ И ТЕ ЖЕ массивы идут и в трейс, и в критерий пересборки.
+    function collectTurnIds(list) {
+      var ids = [];
+      if (!list) return ids;
+      for (var ci = 0; ci < list.length; ci++) ids.push(list[ci] && list[ci].id);
+      return ids;
     }
+    // Свидетельство пригодно, только если с ОБЕИХ сторон есть хотя бы один живой id: пустой
+    // массив — это отсутствие доказательства, а не доказательство полноты (fail-closed).
+    function hasUsableTurnIds(ids) {
+      if (!ids || !ids.length) return false;
+      for (var hi = 0; hi < ids.length; hi++) { if (ids[hi]) return true; }
+      return false;
+    }
+    var rebuildExistingIds = baseSize() > 0 ? Object.keys(turnsMap) : [];
+    var rebuildIncomingIds = collectTurnIds(parsed);
+    var rebuildIdsUsable = hasUsableTurnIds(rebuildExistingIds) && hasUsableTurnIds(rebuildIncomingIds);
     var incomingIsSubsetOfBase = false;
-    if (rebuildExistingIds.length && rebuildIncomingIds.length) {
+    if (rebuildIdsUsable) {
       if (typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.isSubsetIds) {
         incomingIsSubsetOfBase = window.GeminiInterceptLogic.isSubsetIds(rebuildIncomingIds, rebuildExistingIds);
       } else {
@@ -4537,11 +4555,38 @@
         existingIds: rebuildExistingIds, incomingIds: rebuildIncomingIds
       });
     } else {
-      fullRebuildFromVf5 = !!(fromVirtualF5 && wasFull);
+      // O-51b: фолбэк без модуля логики обязан повторять контракт v32 ЦЕЛИКОМ — курсор
+      // продолжения означает НЕПОЛНУЮ историю, пересборка запрещена. Раньше проверка курсора
+      // терялась вместе с модулем, и vf5-снапшот с курсором стирал накопленную базу.
+      fullRebuildFromVf5 = !!(fromVirtualF5 && wasFull && !pendingCursor);
     }
     // O-51: страховка уровня вызова — даже если модуль логики стар и не знает про
     // подмножество, сброс по снапшоту-подмножеству НЕ выполняется (data-safety важнее формы).
     if (fullRebuildFromVf5 && incomingIsSubsetOfBase) fullRebuildFromVf5 = false;
+    // O-51b (fail-closed): база непуста, а id-свидетельства нет (массивы пусты или без id) —
+    // ОДНА форма сброс не разрешает. Фолбэк — на content-критерий O-51 `shouldDisjointReset`:
+    // он требует доказанного НУЛЕВОГО пересечения (чужой сеанс/аккаунт). Доказательства нет →
+    // нет сброса: идёт merge-by-id (данные важнее формы). Пустая база ничего не теряет — там
+    // сброс остаётся разрешённым.
+    var noIdEvidenceNoReset = false;
+    if (fullRebuildFromVf5 && baseSize() > 0 && !rebuildIdsUsable) {
+      var idFallbackDisjoint = false;
+      if (typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.shouldDisjointReset) {
+        idFallbackDisjoint = window.GeminiInterceptLogic.shouldDisjointReset({
+          src: src, existingIds: rebuildExistingIds, incomingIds: rebuildIncomingIds
+        });
+      }
+      // Страховка уровня вызова (конвенция O-51): вердикт disjoint принимается только при ГОДНОМ
+      // id-свидетельстве — модуль логики может быть старой сборкой без O-51b-гарда. Здесь оно по
+      // построению негодно, поэтому сброс запрещён: пустой массив — не «другое» множество, а
+      // отсутствие множества (доказывать нечего).
+      idFallbackDisjoint = idFallbackDisjoint &&
+        hasUsableTurnIds(rebuildExistingIds) && hasUsableTurnIds(rebuildIncomingIds);
+      if (!idFallbackDisjoint) {
+        fullRebuildFromVf5 = false;
+        noIdEvidenceNoReset = true;
+      }
+    }
     // v75 (D-head): после tape-restore в этом холодном старте полная пересборка vf5 запрещена —
     // сброс turnsMap уничтожил бы восстановленную голову тейпа (restored-ходы с order<0),
     // а повторный tape-restore заблокирован cacheRestoredMap → merge по id без сброса.
@@ -4567,6 +4612,9 @@
       // сброс ЗАПРЕЩЁН, идёт stable merge (причина называется честно, а не «merge-by-id»).
       else if (incomingIsSubsetOfBase && fromVirtualF5 && wasFull && !pendingCursor &&
                tapeWasUsedInThisColdStart !== true) { reason = 'vf5-subset-no-reset'; }
+      // O-51b: id-свидетельства не было вовсе (пустые массивы) — сброс по одной форме запрещён,
+      // причина называется честно (иначе дефект «тихого» стирания базы неотличим в логе).
+      else if (noIdEvidenceNoReset) { reason = 'vf5-no-id-evidence-no-reset'; }
       else if (disjointGuardSrc && diagExistingBefore > 0 && diagOverlap === 0 && !!getConvId()) { reason = 'same-conv-union'; } // v64
       else if (fromVirtualF5 && wasFull && pendingCursor) { reason = 'vf5-cursor-continue'; }
       else if (diagExistingBefore === 0) { reason = 'empty-base'; }
@@ -4579,8 +4627,11 @@
         ' overlapCount=' + diagOverlap + ' disjointFlag=' + (diagOverlap === 0 ? 'true' : 'false') +
         ' reason=' + reason + diagWindowDelta);
     })();
+    // O-51b: трейс печатает ТЕ ЖЕ массивы, что ушли в критерий пересборки (`rebuildIncomingIds`),
+    // плюс его пригодность — по логу сразу видно, было ли id-свидетельство (baseIds/idEvidence).
     debugLog('log', '[gemini-ingest-trace] src=' + src + ' блоков_ходов=' + parsed.length +
-      ' ids=[' + parsed.map(function (x) { return x.id; }).join(',') + ']');
+      ' ids=[' + rebuildIncomingIds.join(',') + ']' +
+      ' baseIds=' + rebuildExistingIds.length + ' idEvidence=' + (rebuildIdsUsable ? '1' : '0'));
 
     // v25: пересборка ветки при realtime-vf5 (после действий пользователя).
     // Парсинг уже выполнен — handleOuter установил pendingCursor (или оставил null).
@@ -4636,6 +4687,11 @@
       pageOrders = window.GeminiInterceptLogic.assignPageOrders(pageSeq.length, pageMode, orderState);
     } else {
       for (var oi = 0; oi < pageSeq.length; oi++) pageOrders.push(orderCounter++);
+      // O-51b: фолбэк без модуля логики обязан, как и assignPageOrders, вернуть счётчику
+      // порядка новое значение — иначе строка ниже откатывала его к достраничному (0 после
+      // полной пересборки) и следующие страницы получали бы уже занятые order.
+      orderState.orderCounter = orderCounter;
+      orderState.prependCursor = prependCursor;
     }
     orderCounter = orderState.orderCounter;
     prependCursor = orderState.prependCursor;

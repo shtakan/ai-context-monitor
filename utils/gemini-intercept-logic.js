@@ -251,6 +251,15 @@
     var existing = Array.isArray(opts.existingIds) ? opts.existingIds : [];
     var incoming = Array.isArray(opts.incomingIds) ? opts.incomingIds : [];
     if (!existing.length || !incoming.length) return false;
+    // O-51b: «нулевое пересечение» — это ДОКАЗАТЕЛЬСТВО чужого сеанса, а не отсутствие данных.
+    // Массивы, в которых нет ни одного живого id (все элементы пусты/undefined), доказательством
+    // не являются: иначе пустые id-поля снапшота объявляли бы ЛЮБУЮ базу чужой и стирали её —
+    // fail-open той же природы, что O-51 (пустой вход не должен разрешать разрушение базы).
+    var liveExisting = 0;
+    var liveIncoming = 0;
+    for (var le = 0; le < existing.length; le++) { if (existing[le]) liveExisting++; }
+    for (var li = 0; li < incoming.length; li++) { if (incoming[li]) liveIncoming++; }
+    if (!liveExisting || !liveIncoming) return false;
     var seen = {};
     for (var i = 0; i < existing.length; i++) seen[existing[i]] = true;
     for (var j = 0; j < incoming.length; j++) {
