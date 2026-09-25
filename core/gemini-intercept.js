@@ -362,6 +362,16 @@
   var pagErrorRetries = 0;        // ретраев окна в текущем тихом прогоне (сброс при depth 0)
   var PAGINATE_ERROR_RETRY_CAP = 3;    // максимум повторов одного окна после ошибки
   var PAGINATE_ERROR_BACKOFF_MS = 2000; // база растущей паузы (2000*N мс)
+  // O-48 (Gemini parseByBytes fail на длинных JSON-ответах >900KB): обрыв JSON-кадра
+  // batchexecute перестаёт быть «тихой» телеметрией. Диаг-числа (declaredN/availableBytes/
+  // reEncodedLen/rawLen) доказывают корень — клэмп объявленной длины против сдвига при
+  // TextEncoder-перекодировании. Заполняет parseByBytes/parseByLines; читает СРАЗУ после
+  // своего parseBatchExecute тот, кто его вызвал (ingest/probe/watchdog).
+  var lastFrameParseFail = null;
+  // O-48: последний parse-fail именно ingest-парса (src пассива/vf5/pag/stream). Обрезанный
+  // кадр — НЕ доказательство терминальной страницы: оракул loader-stable-stop не подтверждает
+  // по такой базе полноту (окно 120с — в пределах одного холодного прогона).
+  var lastIngestParseFail = null;
   // v1.16 (1177-BYPASS): серия подряд идущих ошибок-страниц в прогоне (для снижения темпа —
   // 1177 = троттлинг старых окон) и пер-чат флаг «эскалация на нативный скролл выполнена»
   // (защита от вечной петли: на один чат эскалация срабатывает один раз).
@@ -433,6 +443,19 @@
             var now74 = Date.now();
             if (!convId || pendingCursor || historyFullByQuiet) return;
             if (!(lastBaseCount > 0)) return;
+            // O-48: база, в которую НЕ долился оборванный JSON-кадр, полной не объявляется.
+            // «Курсора нет» на обрезанном ответе — не доказательство терминальной страницы;
+            // отдельный reason='parse-fail' в прогрессе лоадера (бюджет полноты не тратится,
+            // рестарта нет) — итог честный: неполная база + [LOW CONFIDENCE].
+            var __pf74 = (typeof lastIngestParseFail === 'undefined') ? null : lastIngestParseFail;
+            if (__pf74 && __pf74.convId === convId && (now74 - (__pf74.ts || 0)) < 120000) {
+              debugLog('log', '[AI CM][completeness] oracle=incomplete reason=parse-fail convId=' + convId +
+                ' src=' + __pf74.src + ' declaredN=' + __pf74.declaredN +
+                ' availableBytes=' + __pf74.availableBytes + ' clamped=' + (__pf74.clamped ? '1' : '0') +
+                ' salvagedTurns=' + __pf74.salvaged + ' msgs=' + lastBaseCount +
+                ' (обрыв кадра: stable-stop НЕ подтверждает полноту)');
+              return;
+            }
             var sf78 = null;
             try { sf78 = loadFloor(convId); } catch (eSf78) { }
             var floorCount78 = (sf78 && sf78.count) || 0;
@@ -1181,6 +1204,9 @@
       // сервер отдал терминальную страницу (страница без курсора = неполная/последняя),
       // старшей истории нет → полнота сразу. Только для пассивных снимков (passive/vf5):
       // pag-страницы и диагностические парсы ('pb'/'sh'/'wd') оракул не минуют.
+      // O-48: блок НЕ переписан (байтовый пин «прежние пути полноты»). На ВОССТАНОВЛЕННОМ
+      // (обрезанном) кадре взведённая здесь полнота откатывается вызывающим —
+      // см. handleSalvagedOuter (отсутствие курсора в обрывке ничего не доказывает, D1).
       if ((src === 'passive' || src === 'vf5') && !pendingCursor && !olderHistorySeen &&
           Array.isArray(turns) && turns.length > 0 && !historyFullByQuiet) {
         historyFullByQuiet = true;
@@ -1473,6 +1499,11 @@
   function parseByBytes(raw, out, src) {
     var bytes;
     try { bytes = new TextEncoder().encode(raw); } catch (e) { return; }
+    // O-48: диаг-числа обрыва. rawLen — длина строки (UTF-16), reEncodedLen — длина ПОСЛЕ
+    // TextEncoder-перекодирования; их расхождение вместе с clamped отделяет сдвиг
+    // перекодирования от честного обрыва тела на границе фрейма.
+    var rawLen = (typeof raw === 'string') ? raw.length : 0;
+    var reEncodedLen = bytes.length;
     var pos = 0;
     if (bytes.length >= 4 && bytes[0] === 0x29 && bytes[1] === 0x5D && bytes[2] === 0x7D && bytes[3] === 0x27) pos = 4;
     var dec = new TextDecoder('utf-8');
@@ -1484,12 +1515,27 @@
       while (pos < bytes.length && bytes[pos] >= 48 && bytes[pos] <= 57) { n = n * 10 + (bytes[pos] - 48); pos++; }
       if (n <= 0) { pos++; continue; }
       if (pos < bytes.length && bytes[pos] === 0x0A) pos++;
+      var availableBytes = bytes.length - pos; // O-48: сколько байт фрейму реально осталось
+      var clamped = (pos + n) > bytes.length;  // O-48: объявленная длина больше доступного → клэмп
       var end = pos + n; if (end > bytes.length) end = bytes.length;
       var payloadStr = dec.decode(bytes.subarray(pos, end));
       pos = end;
       if (pos < bytes.length && bytes[pos] === 0x0A) pos++;
       if (payloadStr.indexOf('hNvQHb') !== -1) {
-        try { handleOuter(JSON.parse(payloadStr), out, src); } catch (e) { debugLog('log', '[gemini-intercept] parse-top fail (parseByBytes): ' + (e && e.message || e)); }
+        try { handleOuter(JSON.parse(payloadStr), out, src); } catch (e) {
+          // O-48: tolerant-salvage — завершённые ходы и курсор из обрезанного текста ДО
+          // JSON.parse failure (штатный handleOuter, только по восстановленному префиксу).
+          var salvaged = 0;
+          if (typeof salvagePartialFrame === 'function') { try { salvaged = salvagePartialFrame(payloadStr, out, src); } catch (eSv) { salvaged = 0; } }
+          lastFrameParseFail = {
+            where: 'parseByBytes', msg: (e && e.message || String(e)),
+            declaredN: n, availableBytes: availableBytes, reEncodedLen: reEncodedLen,
+            rawLen: rawLen, clamped: clamped === true, salvaged: salvaged
+          };
+          debugLog('log', '[gemini-intercept] parse-top fail (parseByBytes): ' + (e && e.message || e) +
+            ' declaredN=' + n + ' availableBytes=' + availableBytes + ' reEncodedLen=' + reEncodedLen +
+            ' rawLen=' + rawLen + ' clamped=' + (clamped ? 1 : 0) + ' salvagedTurns=' + salvaged);
+        }
       }
     }
   }
@@ -1501,14 +1547,171 @@
       var c0 = ln.charAt(0);
       if (c0 !== '[' && c0 !== '{') continue;
       if (ln.indexOf('hNvQHb') === -1) continue;
-      try { handleOuter(JSON.parse(ln), out, src); } catch (e) { debugLog('log', '[gemini-intercept] parse-top fail (parseByLines): ' + (e && e.message || e)); }
+      try { handleOuter(JSON.parse(ln), out, src); } catch (e) {
+        lastFrameParseFail = {
+          where: 'parseByLines', msg: (e && e.message || String(e)),
+          declaredN: ln.length, availableBytes: ln.length, reEncodedLen: 0,
+          rawLen: (typeof raw === 'string') ? raw.length : 0, clamped: false, salvaged: 0
+        };
+        debugLog('log', '[gemini-intercept] parse-top fail (parseByLines): ' + (e && e.message || e));
+      }
     }
   }
   function parseBatchExecute(raw, src) {
     var out = { turns: [], total: 0 };
+    lastFrameParseFail = null; // O-48: обрыв фиксируется НА КАЖДЫЙ парс — читает вызвавший
     parseByBytes(raw, out, src);
     if (!out.turns.length) parseByLines(raw, out, src);
     return out.turns;
+  }
+
+  // ================= O-48: tolerant-salvage обрезанного кадра =================
+  // Кадр, оборванный КЛЭМПОМ объявленной длины (или сетью на середине строки), JSON.parse
+  // не проходит целиком — но завершённые ходы уже лежат в его тексте ДО точки обрыва.
+  // Восстанавливаем максимальный СИНТАКСИЧЕСКИ ЦЕЛЫЙ префикс: незавершённый элемент
+  // отбрасывается ЦЕЛИКОМ, открытые контейнеры закрываются. Гарантия «нет частичных ходов»:
+  // точка отреза — граница последнего ПОЛНОСТЬЮ закрытого элемента СПИСКА ХОДОВ
+  // (turn-like: массив минимум из 3 полей, первое поле — не строка). Завершённых ходов нет —
+  // возвращаем '' (ничего не рвём, поведение прежнее). Лимиты парсера НЕ поднимаются:
+  // кадр обрезан на входе, а не отброшен потолком.
+  // Форма хода Gemini (utils/gemini-batchexecute-parser.js): [null, [ids…], [[вопрос]],
+  // [[[ответ]]], [ts]] — inner-массивы хода этому предикату не удовлетворяют (короче или
+  // начинаются со строки), поэтому список ходов читается однозначно.
+  function isTurnLikeSpan(span) {
+    if (!span || span.kind !== 'arr' || span.closed !== true) return false;
+    if (!(span.count >= 3)) return false;
+    return span.firstIsString !== true;
+  }
+  // Учёт ЗАВЕРШЁННОГО значения на верхушке стека открытых контейнеров.
+  function noteJsonChild(stack, endIdx, child) {
+    var top = stack[stack.length - 1];
+    if (!top) return;
+    top.count++;
+    top.lastEnd = endIdx;
+    if (top.count === 1) top.firstIsString = (child.kind === 'str');
+    if (top.kind === 'arr' && isTurnLikeSpan(child)) top.lastTurnEnd = endIdx;
+  }
+  function closeTruncatedJson(s) {
+    if (typeof s !== 'string' || s.length < 2) return '';
+    var stack = [];
+    var inStr = false, esc = false;
+    for (var i = 0; i < s.length; i++) {
+      var cc = s.charCodeAt(i); // 34 '"', 91 '[', 123 '{', 92 '\\', 93 ']', 125 '}'
+      if (inStr) {
+        if (esc) { esc = false; continue; }
+        if (cc === 92) { esc = true; continue; }
+        if (cc === 34) { inStr = false; noteJsonChild(stack, i, { kind: 'str' }); }
+        continue;
+      }
+      if (cc === 34) { inStr = true; continue; }
+      if (cc === 91 || cc === 123) {
+        stack.push({ kind: (cc === 91 ? 'arr' : 'obj'), at: i, closeCode: (cc === 91 ? 93 : 125),
+          closed: false, count: 0, firstIsString: null, lastEnd: -1, lastTurnEnd: -1 });
+        continue;
+      }
+      if (cc === 93 || cc === 125) {
+        if (!stack.length) return ''; // несогласованная скобка — не чиним
+        var doneSpan = stack.pop();
+        doneSpan.closed = true;
+        doneSpan.end = i;
+        noteJsonChild(stack, i, doneSpan);
+        continue;
+      }
+      if (cc === 58 || cc === 44 || cc === 32 || cc === 9 || cc === 10 || cc === 13) continue; // : , \s
+      // литерал (число/true/false/null): тянем до ближайшего разделителя
+      var j = i;
+      while (j + 1 < s.length && /[0-9A-Za-z+\-.]/.test(s.charAt(j + 1))) j++;
+      if (j + 1 >= s.length) { i = j; break; } // литерал у самого обрыва — НЕ завершён
+      noteJsonChild(stack, j, { kind: 'lit' });
+      i = j;
+    }
+    // Список ходов — самый ВНЕШНИЙ открытый контейнер, у которого есть завершённый ход.
+    var cut = -1, cutDepth = -1;
+    for (var f = 0; f < stack.length; f++) {
+      if (stack[f].kind === 'arr' && stack[f].lastTurnEnd >= 0) { cut = stack[f].lastTurnEnd + 1; cutDepth = f; break; }
+    }
+    if (cut < 0 || cutDepth < 0) return '';
+    var repaired = s.slice(0, cut).replace(/[\s,]+$/, '');
+    for (var k = cutDepth; k >= 0; k--) repaired += String.fromCharCode(stack[k].closeCode);
+    return repaired;
+  }
+  // Терпимый разархиватор JSON-литерала: обрыв внутри \uXXXX или одиночный '\' в хвосте
+  // отбрасываются (не бросаем), кавычка-терминатор не обязательна.
+  function unescapeJsonLiteralPrefix(raw) {
+    var res = '';
+    for (var i = 0; i < raw.length; i++) {
+      var c = raw.charAt(i);
+      if (c !== '\\') { res += c; continue; }
+      if (i + 1 >= raw.length) break;
+      var e = raw.charAt(i + 1); i++;
+      if (e === 'n') res += '\n';
+      else if (e === 't') res += '\t';
+      else if (e === 'r') res += '\r';
+      else if (e === 'b') res += '\b';
+      else if (e === 'f') res += '\f';
+      else if (e === 'u') {
+        if (i + 4 >= raw.length) break;
+        var hex = raw.substr(i + 1, 4);
+        if (!/^[0-9a-fA-F]{4}$/.test(hex)) break;
+        res += String.fromCharCode(parseInt(hex, 16));
+        i += 4;
+      } else res += e; // \" \\ \/ и прочие однобайтовые escape'ы
+    }
+    return res;
+  }
+  // Inner-строка ходов (outer[0][2]) из ЧАСТИЧНОГО кадра: маркер "hNvQHb", затем ровно `,"`
+  // (никаких догадок — при иной форме возвращаем ''), затем до кавычки-терминатора или конца.
+  function extractTruncatedInner(payloadStr) {
+    var marker = payloadStr.indexOf('"hNvQHb"');
+    if (marker === -1) return '';
+    var q = payloadStr.indexOf('"', marker + 8);
+    if (q === -1) return '';
+    if (!/^\s*,\s*$/.test(payloadStr.slice(marker + 8, q))) return '';
+    var raw = '';
+    for (var i = q + 1; i < payloadStr.length; i++) {
+      var c = payloadStr.charAt(i);
+      if (c === '\\') { raw += c; if (i + 1 < payloadStr.length) { raw += payloadStr.charAt(i + 1); i++; } continue; }
+      if (c === '"') break;
+      raw += c;
+    }
+    return unescapeJsonLiteralPrefix(raw);
+  }
+  // Штатный handleOuter на ВОССТАНОВЛЕННОМ кадре + сохранение честности полноты: кадр обрезан,
+  // поэтому флаги полноты откатываются к состоянию до вызова (страховка к v74-гарду выше).
+  // Всё остальное (pendingCursor/olderHistorySeen/cursorEpoch/диагностика) — штатный путь.
+  function handleSalvagedOuter(outer, out, src) {
+    var wasFull = historyFullByQuiet, wasReached = reachedStart;
+    var wasQuiet = quietDecisionMade, wasNoStart = quietIncompleteNoStart;
+    try { handleOuter(outer, out, src); } catch (eSalv) { }
+    // Кадр обрезан → его «нет курсора» и «нет старших» НЕ доказывают терминальную страницу:
+    // откатываем все четыре флага полноты к состоянию до вызова (v74-ветка handleOuter
+    // остаётся байтово нетронутой — гарантия держится на откате, а не на её правке).
+    historyFullByQuiet = wasFull;
+    reachedStart = wasReached;
+    quietDecisionMade = wasQuiet;
+    quietIncompleteNoStart = wasNoStart;
+    debugLog('log', '[AI CM][salvage] обрезанный кадр: handleOuter вызван на восстановленном префиксе' +
+      ' (ходов в out=' + out.turns.length + ', src=' + src + ') — полнота НЕ взводится');
+  }
+  // Возвращает число восстановленных ходов (0 — ничего не восстановлено, поведение прежнее).
+  function salvagePartialFrame(payloadStr, out, src) {
+    if (typeof payloadStr !== 'string' || payloadStr.indexOf('hNvQHb') === -1) return 0;
+    var before = out.turns.length;
+    // (1) обрыв в служебной части кадра (inner цел, оборваны rest/хвост) — чиним сам кадр
+    var outerText = closeTruncatedJson(payloadStr);
+    if (outerText) {
+      var outerVal = null;
+      try { outerVal = JSON.parse(outerText); } catch (eOuter) { outerVal = null; }
+      if (outerVal) handleSalvagedOuter(outerVal, out, src);
+    }
+    // (2) обрыв ВНУТРИ строки ходов — восстанавливаем список завершённых ходов и отдаём
+    //     штатному handleOuter (курсор/ids/r1/model извлекаются тем же путём, что у целого)
+    if (out.turns.length === before) {
+      var innerFixed = closeTruncatedJson(extractTruncatedInner(payloadStr));
+      if (!innerFixed) return 0;
+      handleSalvagedOuter([['wrb.fr', 'hNvQHb', innerFixed]], out, src);
+    }
+    return out.turns.length - before;
   }
 
   // ================= v4y: ЛОАДЕР ПОЛНОЙ ИСТОРИИ + АВТОЗАПУСК =================
@@ -3173,8 +3376,18 @@
         // parseBatchExecute → handleOuter мутирует диагностику/курсор: сохраняем и восстанавливаем
         var savedCursorP = pendingCursor, savedEpochP = cursorEpoch, savedOlderP = olderHistorySeen;
         var pParsed = parseBatchExecute(pTxt, 'pb');
+        var pParseFailed = !!lastFrameParseFail; // O-48: кадр probe-ответа оборван
         var pCursorWide = extractCursorWide(lastPaginateOuter); // outer probe-ответа
         pendingCursor = savedCursorP; cursorEpoch = savedEpochP; olderHistorySeen = savedOlderP;
+        // O-48: обрыв кадра probe — НЕ терминал (0 новых ходов и «нет курсора» на обрезанном
+        // ответе ничего не доказывают) и НЕ повод гнать лоадер по кругу: отдельный reason,
+        // полнота не объявляется (ложная полнота запрещена, [LOW CONFIDENCE] остаётся честным).
+        if (pParseFailed) {
+          debugLog('log', '[AI CM][completeness] oracle=incomplete reason=parse-fail (probe)' +
+            ' firstHash=' + dbFirstHash + ' retries=' + retriesP + ' convId=' + convId +
+            ' (кадр probe оборван — терминал НЕ объявляется, рестарт лоадера не запускается)');
+          return;
+        }
         var newOlder = 0;
         for (var pi = 0; pi < pParsed.length; pi++) {
           var pid = pParsed[pi] && pParsed[pi].id;
@@ -3277,11 +3490,16 @@
         if (isStaleReqTag(reqTagW, 'wd')) { watchdogFiredMap[convId] = false; return; }
         var probeFirstHash = '';
         var probeCursorExhausted = false;
+        var probeParseFailed = false; // O-48: обрыв JSON-кадра probe-страницы
         try {
           // parseBatchExecute вызывает handleOuter (диагностические побочки + pendingCursor),
-          // но НЕ трогает turnsMap — база не мутируется. pendingCursor после него — курсор
-          // probe-страницы (null = курсор исчерпан подтверждён).
+          // но НЕ трогает turnsMap — база не мутируется. Курсор пагинации (D2) не мутируем:
+          // состояние probe читаем локально и возвращаем живой pendingCursor на место.
+          var savedCursorW = pendingCursor;
           var probeParsed = parseBatchExecute(txt, 'wd');
+          probeParseFailed = !!lastFrameParseFail; // O-48: обрыв ≠ «курсора нет»
+          var probeCursorFound = pendingCursor;    // курсор probe-страницы (null = её курсор исчерпан)
+          pendingCursor = savedCursorW;
           var ordered = probeParsed;
           if (typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.orderPageByR1) {
             var r1w = window.GeminiInterceptLogic.orderPageByR1(probeParsed);
@@ -3294,12 +3512,13 @@
             }
           }
           if (ordered.length) probeFirstHash = aiCmDiagHash6(ordered[0].id, ordered[0].text);
-          probeCursorExhausted = !pendingCursor;
+          probeCursorExhausted = !probeCursorFound;
         } catch (e) {
           probeFirstHash = '';
           probeCursorExhausted = false;
+          probeParseFailed = true; // O-48: исключение парса — тот же класс обрыва кадра
         }
-        finishWatchdogDecision(convId, dbFirstHash, probeFirstHash, probeCursorExhausted, retries);
+        finishWatchdogDecision(convId, dbFirstHash, probeFirstHash, probeCursorExhausted, retries, probeParseFailed);
       })
       .catch(function (err) {
         debugLog('log', '[AI CM][completeness] watchdog=error err=' + (err && err.message || err) + ' convId=' + convId);
@@ -3307,11 +3526,22 @@
       });
   }
 
-  function finishWatchdogDecision(convId, dbFirstHash, probeFirstHash, probeCursorExhausted, retries) {
+  function finishWatchdogDecision(convId, dbFirstHash, probeFirstHash, probeCursorExhausted, retries, probeParseFailed) {
     var ok = (probeCursorExhausted === true) && !!dbFirstHash && !!probeFirstHash && dbFirstHash === probeFirstHash;
     if (ok) {
       completenessWatchdogRetries[convId] = 0;
       debugLog('log', '[AI CM][completeness] watchdog=ok firstHash=' + dbFirstHash + ' serverFirstHash=' + probeFirstHash + ' retries=' + retries + ' convId=' + convId);
+      watchdogFiredMap[convId] = false;
+      return;
+    }
+    // O-48 (D3): обрыв JSON-кадра probe-страницы — отдельный reason='parse-fail'. Это НЕ
+    // неполнота базы (на обрезанном ответе «курсора нет» ничего не доказывает) и НЕ повод
+    // гнать лоадер по кругу: бюджет полноты не тратится, рестарт не запускается, полнота
+    // не объявляется — итог честный ([LOW CONFIDENCE] по 60с-таймауту, D1).
+    if (probeParseFailed === true) {
+      debugLog('log', '[AI CM][completeness] watchdog=fail reason=parse-fail firstHash=' + dbFirstHash +
+        ' serverFirstHash=' + probeFirstHash + ' retries=' + (retries || 0) + ' convId=' + convId +
+        ' (кадр probe оборван: ретрай лоадера НЕ запускается, полнота НЕ объявляется)');
       watchdogFiredMap[convId] = false;
       return;
     }
@@ -3944,17 +4174,47 @@
       } catch (eCd1) { }
     }
     var wasFull = historyFullByQuiet;
+    // O-48 (D2): курсор продолжения сохраняется ДО парса. Парс страницы (handleOuter)
+    // перезаписывает pendingCursor ответом; при обрыве JSON-кадра нового курсора нет, а
+    // старый уже уничтожен строкой ниже — цепочка пагинации рвалась, база не дозревала
+    // (60с-таймаут → [LOW CONFIDENCE]). Тот же паттерн, что у shadow-probe/probe-парсов.
+    var savedPendingCursor = pendingCursor;
     if (!preservePagination) pendingCursor = null; // v52: стрим-инжест не трогает курсор пагинации
 
     var parsed;
+    var ingestParseFail = null; // O-48: обрыв JSON-кадра этого парса (читаем сразу после)
     if (preTurns) {
       parsed = preTurns;
     } else {
       try { parsed = parseBatchExecute(raw, src); }
       catch (e) {
         if (!loggedErr) { loggedErr = true; debugLog('log', '[gemini-intercept] ошибка парсинга batchexecute:', e); }
+        if (!preservePagination) pendingCursor = savedPendingCursor; // O-48 (D2)
         return 0;
       }
+      ingestParseFail = lastFrameParseFail;
+    }
+    // O-48 (D2): обрыв кадра или ноль ходов — нового курсора нет, сохранённый жив: возвращаем.
+    if (!preTurns && !preservePagination && (ingestParseFail || !parsed.length)) {
+      pendingCursor = savedPendingCursor;
+    }
+    if (ingestParseFail) {
+      lastIngestParseFail = {
+        convId: getConvId() || '', src: src, ts: Date.now(),
+        where: ingestParseFail.where, declaredN: ingestParseFail.declaredN,
+        availableBytes: ingestParseFail.availableBytes, reEncodedLen: ingestParseFail.reEncodedLen,
+        rawLen: ingestParseFail.rawLen, clamped: ingestParseFail.clamped === true,
+        salvaged: ingestParseFail.salvaged || 0
+      };
+      // O-48 (D3): обрыв — отдельный reason, НЕ маскируется под first-hash-mismatch и не
+      // объявляет полноту. Честный итог неполного кадра — неполная база + LOW CONFIDENCE.
+      debugLog('log', '[AI CM][completeness] oracle=incomplete reason=parse-fail src=' + src +
+        ' convId=' + (getConvId() || '(none)') +
+        ' declaredN=' + ingestParseFail.declaredN + ' availableBytes=' + ingestParseFail.availableBytes +
+        ' reEncodedLen=' + ingestParseFail.reEncodedLen + ' rawLen=' + ingestParseFail.rawLen +
+        ' clamped=' + (ingestParseFail.clamped ? '1' : '0') +
+        ' salvagedTurns=' + (ingestParseFail.salvaged || 0) +
+        ' pendingCursor=' + (pendingCursor ? 'alive' : 'none') + ' (полнота НЕ взводится)');
     }
     if (!parsed.length) {
       // cold-debug: что РЕАЛЬНО вернул сервер на «пустой» hNvQHb-странице (обрыв пагинации)
