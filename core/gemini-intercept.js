@@ -364,8 +364,10 @@
   var PAGINATE_ERROR_BACKOFF_MS = 2000; // база растущей паузы (2000*N мс)
   // O-48 (Gemini parseByBytes fail на длинных JSON-ответах >900KB): обрыв JSON-кадра
   // batchexecute перестаёт быть «тихой» телеметрией. Диаг-числа (declaredN/availableBytes/
-  // reEncodedLen/rawLen) доказывают корень — клэмп объявленной длины против сдвига при
-  // TextEncoder-перекодировании. Заполняет parseByBytes/parseByLines; читает СРАЗУ после
+  // reEncodedLen/rawLen) отделяют клэмп объявленной длины от разъезда единиц среза.
+  // O-50 (2026-09-25, живой лог 15:20:35) уточнил корень: единица среза — СИМВОЛ, а не байт
+  // (declaredN ≈ rawLen минус заголовок при clamped=0), см. parseByBytes ниже.
+  // Заполняет parseByBytes/parseByLines; читает СРАЗУ после
   // своего parseBatchExecute тот, кто его вызвал (ingest/probe/watchdog).
   var lastFrameParseFail = null;
   // O-48: последний parse-fail именно ingest-парса (src пассива/vf5/pag/stream). Обрезанный
@@ -1495,18 +1497,97 @@
     }
   }
 
-  // ---- байтовый парсер (длина в байтах UTF-8) ----
+  // ---- парсер кадров batchexecute (O-50: единица префикса длины — СИМВОЛ декодированной строки) ----
+  // O-50 (лог-свидетель 2026-09-25 15:20:35): префикс длины кадра дан в СИМВОЛАХ payload'а
+  // (`declaredN=1093974` = `rawLen(1094077)` минус заголовок, `clamped=0`), а legacy-код
+  // перекодировал raw в UTF-8-байты (TextEncoder) и резал n БАЙТ: на кириллице n символов не
+  // равно n байт (`reEncodedLen(1258177)` / `rawLen(1094077)` ~ 1.15), срез уезжал ВЛЕВО и
+  // JSON.parse получал обрезанный кадр при clamped=0 («Unterminated string»). Вариант «сеть
+  // отдала обрыв» опровергнут числами. Теперь границы кадров — В СИМВОЛЬНОМ пространстве:
+  // `bytes` ниже на основном пути — вид КОДОВ символов (Uint16Array, длина == raw.length),
+  // payload берётся `raw.slice(pos, end)`; TextEncoder на этом пути не участвует вовсе.
+  // Совместимость: тела, размеченные в БАЙТАХ (legacy-сборки/фикстуры), распознаются
+  // СТРУКТУРНОЙ проверкой разметки (framingStrictScore, без JSON.parse) ДО цикла: если она
+  // подтверждает в байтовом пространстве БОЛЬШЕ кадров, чем в символьном, пространство
+  // переключается на UTF-8-байты (TextEncoder/TextDecoder — только там, только чтение; при
+  // недоступности глобалов остаётся символьное). Иначе — символьное (приоритет O-50: обрыв
+  // последнего кадра и ASCII-тела дают равные счёты, выбор остаётся символьным).
+  // Диаг-числа O-48 (declaredN/availableBytes/reEncodedLen/rawLen/clamped/salvagedTurns)
+  // считаются в БАЙТАХ: availableBytes/reEncodedLen — арифметикой utf8Len (без перекодировки
+  // кадра), поэтому пины O-48 (16) и gemini-partial-frame-parse остаются целыми.
   function parseByBytes(raw, out, src) {
-    var bytes;
-    try { bytes = new TextEncoder().encode(raw); } catch (e) { return; }
-    // O-48: диаг-числа обрыва. rawLen — длина строки (UTF-16), reEncodedLen — длина ПОСЛЕ
-    // TextEncoder-перекодирования; их расхождение вместе с clamped отделяет сдвиг
-    // перекодирования от честного обрыва тела на границе фрейма.
-    var rawLen = (typeof raw === 'string') ? raw.length : 0;
-    var reEncodedLen = bytes.length;
+    if (typeof raw !== 'string') raw = '';
+    var rawLen = raw.length;
+    var reEncodedLenMemo = -1;
+    // Длина строки в байтах UTF-8 — арифметика по кодам символов (без TextEncoder).
+    function utf8Len(s) {
+      if (typeof s !== 'string' || !s) return 0;
+      var total = 0;
+      for (var i = 0; i < s.length; i++) {
+        var c = s.charCodeAt(i);
+        if (c < 0x80) total += 1;
+        else if (c < 0x800) total += 2;
+        else if (c >= 0xD800 && c <= 0xDBFF && (i + 1) < s.length) {
+          var d = s.charCodeAt(i + 1);
+          if (d >= 0xDC00 && d <= 0xDFFF) { total += 4; i++; } else total += 3;
+        } else total += 3;
+      }
+      return total;
+    }
+    function reEncodedLenOfRaw() {
+      if (reEncodedLenMemo < 0) reEncodedLenMemo = utf8Len(raw);
+      return reEncodedLenMemo;
+    }
+    // Вид кодов символов: длина равна числу символов строки (СИМВОЛЬНОЕ пространство среза).
+    function charCodeView(s) {
+      var a = new Uint16Array(s.length);
+      for (var i = 0; i < s.length; i++) a[i] = s.charCodeAt(i);
+      return a;
+    }
+    // Структурная проверка разметки БЕЗ JSON.parse: кадры идут «цифры длины, LF, payload, LF,
+    // ...» и объявленные длины сходятся с границами. Возвращает {score: число подтверждённых
+    // кадров, complete: разметка сошлась до конца тела}; обрыв тела или разъезд единиц
+    // останавливают счёт. По паре этих чисел выбирается пространство среза.
+    function framingStrictScore(seq) {
+      var res = { score: 0, complete: false };
+      if (!seq || !seq.length) return res;
+      var p = 0;
+      if (seq.length >= 4 && seq[0] === 0x29 && seq[1] === 0x5D && seq[2] === 0x7D && seq[3] === 0x27) p = 4;
+      var g = 0;
+      while (p < seq.length && g++ < 200) {
+        while (p < seq.length && (seq[p] < 48 || seq[p] > 57)) p++;
+        if (p >= seq.length) break;
+        var m = 0;
+        while (p < seq.length && seq[p] >= 48 && seq[p] <= 57) { m = m * 10 + (seq[p] - 48); p++; }
+        if (m <= 0) return res;
+        if (p >= seq.length || seq[p] !== 0x0A) return res;
+        p++;
+        if ((p + m) > seq.length) return res;
+        p += m;
+        res.score++;
+        if (p < seq.length) {
+          if (seq[p] !== 0x0A) return res;
+          p++;
+        }
+      }
+      res.complete = (p >= seq.length);
+      return res;
+    }
+    var charCodes = charCodeView(raw);
+    var charFit = framingStrictScore(charCodes);
+    var bytes = charCodes;
+    var hasUtf8 = false;
+    var dec = null;
+    if (!charFit.complete) {
+      var utf8Try = null;
+      var utf8Dec = null;
+      try { utf8Try = new TextEncoder().encode(raw); utf8Dec = new TextDecoder('utf-8'); } catch (eLegacy) { utf8Try = null; utf8Dec = null; }
+      if (utf8Try && utf8Dec && framingStrictScore(utf8Try).score > charFit.score) {
+        bytes = utf8Try; hasUtf8 = true; dec = utf8Dec;
+      }
+    }
     var pos = 0;
     if (bytes.length >= 4 && bytes[0] === 0x29 && bytes[1] === 0x5D && bytes[2] === 0x7D && bytes[3] === 0x27) pos = 4;
-    var dec = new TextDecoder('utf-8');
     var guard = 0;
     while (pos < bytes.length && guard++ < 200) {
       while (pos < bytes.length && (bytes[pos] < 48 || bytes[pos] > 57)) pos++;
@@ -1515,10 +1596,12 @@
       while (pos < bytes.length && bytes[pos] >= 48 && bytes[pos] <= 57) { n = n * 10 + (bytes[pos] - 48); pos++; }
       if (n <= 0) { pos++; continue; }
       if (pos < bytes.length && bytes[pos] === 0x0A) pos++;
-      var availableBytes = bytes.length - pos; // O-48: сколько байт фрейму реально осталось
-      var clamped = (pos + n) > bytes.length;  // O-48: объявленная длина больше доступного → клэмп
+      var posPayload = pos;                    // O-48: начало payload'а (для availableBytes)
+      var clamped = (pos + n) > bytes.length;  // O-48: объявленная длина больше доступного — клэмп
       var end = pos + n; if (end > bytes.length) end = bytes.length;
-      var payloadStr = dec.decode(bytes.subarray(pos, end));
+      // O-50: срез кадра в СИМВОЛЬНОМ пространстве (string.slice) — основной путь;
+      // legacy-разметка в байтах (hasUtf8) берёт срез из UTF-8-вида.
+      var payloadStr = hasUtf8 ? dec.decode(bytes.subarray(pos, end)) : raw.slice(pos, end);
       pos = end;
       if (pos < bytes.length && bytes[pos] === 0x0A) pos++;
       if (payloadStr.indexOf('hNvQHb') !== -1) {
@@ -1527,13 +1610,14 @@
           // JSON.parse failure (штатный handleOuter, только по восстановленному префиксу).
           var salvaged = 0;
           if (typeof salvagePartialFrame === 'function') { try { salvaged = salvagePartialFrame(payloadStr, out, src); } catch (eSv) { salvaged = 0; } }
+          var availBytes = hasUtf8 ? (bytes.length - posPayload) : utf8Len(raw.slice(posPayload));
           lastFrameParseFail = {
             where: 'parseByBytes', msg: (e && e.message || String(e)),
-            declaredN: n, availableBytes: availableBytes, reEncodedLen: reEncodedLen,
+            declaredN: n, availableBytes: availBytes, reEncodedLen: reEncodedLenOfRaw(),
             rawLen: rawLen, clamped: clamped === true, salvaged: salvaged
           };
           debugLog('log', '[gemini-intercept] parse-top fail (parseByBytes): ' + (e && e.message || e) +
-            ' declaredN=' + n + ' availableBytes=' + availableBytes + ' reEncodedLen=' + reEncodedLen +
+            ' declaredN=' + n + ' availableBytes=' + availBytes + ' reEncodedLen=' + reEncodedLenOfRaw() +
             ' rawLen=' + rawLen + ' clamped=' + (clamped ? 1 : 0) + ' salvagedTurns=' + salvaged);
         }
       }

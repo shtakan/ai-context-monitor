@@ -721,6 +721,31 @@ function aiCmScheduleDeferredHistWrite(cid) {
         } catch (eLc64) { debugLog('log', '[AI CM][export] silent-catch aiCmScheduleDeferredHistWrite(fireDeferredTimeout/lowConf): ' + (eLc64 && eLc64.message || eLc64)); }
         debugLog('log', '[AI CM][export] as-is baseComplete=0 → isLowConfidenceBase=true convId=' + cid);
       }
+      // O-50 (ДИАГНОСТИКА — только измерение; гейты, порядок, байты и поведение не меняются):
+      // auto-timeout-путь 60с «как есть». Живой симптом 15:20:35.756–757: строка
+      // `deferred-timeout(60s), exporting as-is` есть, эмит 4 сообщений есть — а `download
+      // trigger` в логе НЕТ и файла `[LOW CONFIDENCE]_...-15-20.txt` нет. Строка фиксирует
+      // ФАКТ: этот путь пишет СНИМОК истории (chrome.storage) и точкой скачивания НЕ является
+      // (автоэкспортное скачивание живёт ровно в `aiCmAutoExportStartDownload`, ручное — в
+      // options.js/print.js). Печать — только под гейтом aiCmDebug (канонический aiCmDiagLine);
+      // хелпера нет (Node/срез-песочницы) → строки нет, поведение прежнее (typeof-гард).
+      // Кандидат в отдельный дефект: «auto-timeout as-is» ожидается владельцем как выдача файла.
+      try {
+        if (typeof aiCmDiagLine === 'function') {
+          aiCmDiagLine('o50-timeout-download', {
+            ts: Date.now(),
+            convId: cid,
+            path: 'deferred-timeout-60s',
+            asIs: (baseComplete !== true) ? 1 : 0,
+            baseComplete: (baseComplete === true) ? 1 : 0,
+            snapshot: 'write-current-history',
+            download: 'absent',
+            reason: 'no-download-point-on-timeout-path',
+            fired: (typeof autoExportFired === 'object' && autoExportFired && autoExportFired[cid] === 1) ? 1 : 0,
+            dlNames: (typeof aiCmAutoExportNamesUsed === 'object' && aiCmAutoExportNamesUsed) ? Object.keys(aiCmAutoExportNamesUsed).length : 0
+          });
+        }
+      } catch (eO50d) { }
       try { aiCmWriteCurrentHistory(); } catch (eW) { debugLog('log', '[AI CM][export] silent-catch aiCmScheduleDeferredHistWrite(fireDeferredTimeout/export): ' + (eW && eW.message || eW)); }
     }
     p.timer = setTimeout(fireDeferredTimeout, 60000);
