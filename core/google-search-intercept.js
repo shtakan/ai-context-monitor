@@ -46,6 +46,14 @@
   var SORRY_COOLDOWN_MS = 10 * 60 * 1000;
   var FOLWR_PAGE_DELAY_MS = 400; // вежливость досбора: пауза между страничными запросами
   var FOLWR_MAX_PAGES = 12;      // не более 12 страниц за одно открытие
+  // Петля GSA (наблюдения владельца, вердикт High): капы FOLWR_MAX_PAGES/FOLWR_PROBE_MAX_STEPS
+  // ограничивали ОДИН прогон, а не тред и не время, а тело folwr на 1.36–1.97 МБ приходило
+  // каденсом 400 мс = FOLWR_PAGE_DELAY_MS. Два порога ниже — границы прогонов НА ТРЕД:
+  //   FOLWR_RUN_MIN_COOLDOWN_MS — «один прогон на тред за окно» (безусловный барьер);
+  //   FOLWR_NO_GAIN_COOLDOWN_MS — тот же тред ПОСЛЕ прогона без прироста базы: cooldown
+  //   держится дольше, снимается досрочно только РЕАЛЬНЫМ приростом (markFolwrRunGain).
+  var FOLWR_RUN_MIN_COOLDOWN_MS = 2000;
+  var FOLWR_NO_GAIN_COOLDOWN_MS = 30000;
   var sorryCooldownUntil = 0;    // timestamp, до которого свои запросы запрещены
 
   function ownRequestsAllowed() {
@@ -200,6 +208,28 @@
   }
   // Антиспам диагностических строк опроса DOM (checkThreadSwitch зовётся раз в 1с).
   var lastDiagSwitchSig = '';
+
+  // Строка гарда виртуального скролла (петля GSA): печатается ТОЛЬКО при срабатывании
+  // гарда — re-entrancy (skip-active) или смена треда внутри скролла (abort).
+  function gsaDiagVs(point, fields) {
+    try {
+      if (typeof aiCmDiagOn !== 'function' || !aiCmDiagOn()) return false;
+      if (typeof aiCmDiagLine !== 'function') return false;
+      var f = {
+        point: point,
+        site: 'google_search',
+        doc: (typeof aiCmDiagDocKind === 'function') ? aiCmDiagDocKind() : 'unknown',
+        activeTid: baseThreadId || '',
+        domTid: readDomThreadId() || ''
+      };
+      if (fields) {
+        for (var k in fields) {
+          if (Object.prototype.hasOwnProperty.call(fields, k)) f[k] = fields[k];
+        }
+      }
+      return aiCmDiagLine(point, f);
+    } catch (eDiagVs) { return false; }
+  }
 
   // v1.17: единая диагностика страницы ПРОДОЛЖЕНИЯ folwr. Классификация — по содержимому
   // (utils/google-search-folwr-parser.classifyFolwrContinuation), НЕ по длине тела.
@@ -840,6 +870,112 @@
     } catch (e) { return rawUrl; }
   }
 
+  // ---- ПЕТЛЯ GSA: гард прогонов на тред (наблюдения владельца, вердикт High) ----
+  // Живой лог 2026-09-23: КАЖДЫЙ перехваченный GET /async/folwr — новый прогон. Капы
+  // FOLWR_MAX_PAGES=12 / FOLWR_PROBE_MAX_STEPS=10 ограничивают ОДИН прогон, а не тред и не
+  // время; гард «один раз на тред» был только у probe (probedTids), у пагинации аналога не
+  // было, а нулевой прирост уходил в virtualScrollBackfill('pagination-empty') без
+  // re-entrancy-гарда. Данные петлёй не страдают (O-31/O-32/v1.27) — шум сетевой/ресурсный.
+  // Теперь приём данных (applyTurns) НЕ гейтится никогда — гард стоит ровно на ДОРОГИХ
+  // прогонах треда (пагинация курсором / probe / невидимый скролл), поэтому потерять ходы
+  // он не может по построению.
+  var folwrRunAtMap = {};       // threadAuthKey (threadId|authuser) -> ts старта последнего прогона
+  var folwrNoGainMap = {};      // threadAuthKey -> ts последнего прогона БЕЗ прироста базы
+  var folwrRunLiveMap = {};     // threadAuthKey -> прогонов уже в полёте (гард «один прогон на тред»)
+  var folwrRunLastVerdict = {}; // threadAuthKey -> причина подавления последнего прогона
+  var folwrGainSeenAtMap = {};  // threadAuthKey -> ts последнего РЕАЛЬНОГО прироста базы
+
+  // Диагностика под гейтом aiCmDebug (utils/debug.js: aiCmDiagOn/aiCmDiagLine, MAIN-мир):
+  // одна строка на попытку прогона — path / threadId / sincePrevRunMs / gained / verdict.
+  // В срез-песочницах тестов хелперов может не быть — typeof-гард: нет хелпера, нет строки.
+  function gsaDiagLoopGuard(path, tid, key, sincePrevRunMs, gained, verdict, reason) {
+    try {
+      if (typeof aiCmDiagOn !== 'function' || !aiCmDiagOn()) return false;
+      if (typeof aiCmDiagLine !== 'function') return false;
+      return aiCmDiagLine('gsa-loop-guard', {
+        path: path,
+        threadId: tid || '(пусто)',
+        key: key || '',
+        sincePrevRunMs: (typeof sincePrevRunMs === 'number') ? sincePrevRunMs : -1,
+        gained: (typeof gained === 'number') ? gained : 0,
+        inFlight: folwrRunLiveMap[key] || 0,
+        noGain: folwrNoGainMap[key] ? 1 : 0,
+        verdict: verdict,
+        reason: reason || ''
+      });
+    } catch (eDiagLoop) { return false; }
+  }
+
+  function folwrRunSince(prev) {
+    var p = parseFloat(prev);
+    if (!(p >= 0)) return -1;
+    return Math.max(0, Math.round(Date.now() - p));
+  }
+
+  // Единая точка решения: permit (прогон стартует) / suppress (подавлен). Счётчики ставит
+  // только beginFolwrRun — «отказ» прогонов не отменяет и в полёте ничего не оставляет.
+  function folwrRunPermit(path, tid, key, opts) {
+    var prev = folwrRunAtMap[key];
+    var elapsed = folwrRunSince(prev);
+    var priorNoGain = !!folwrNoGainMap[key];
+    // Нулевой прирост держит тред до FOLWR_NO_GAIN_COOLDOWN_MS, пока в базу не пришли новые
+    // ходы (markFolwrRunGain). Иначе — безусловный барьер FOLWR_RUN_MIN_COOLDOWN_MS.
+    var cooldown = priorNoGain ? Math.max(FOLWR_NO_GAIN_COOLDOWN_MS, FOLWR_RUN_MIN_COOLDOWN_MS) : FOLWR_RUN_MIN_COOLDOWN_MS;
+    var verdict = 'start';
+    var reason = '';
+    // (1) прогон того же треда уже в полёте — второй не стартует; (2) окно cooldown треда.
+    if (folwrRunLiveMap[key]) { verdict = 'suppress'; reason = 'run-in-flight'; }
+    else if (prev != null && elapsed < cooldown) {
+      verdict = 'suppress';
+      reason = priorNoGain ? 'no-gain-cooldown' : 'cooldown';
+    }
+    // Прирост приоритетнее окна: снимок с НОВЫМИ ходами прогон не теряет никогда.
+    var force = !!(opts && opts.growthPriority && opts.gained > 0);
+    if (force) { verdict = 'start'; reason = 'gain-priority'; }
+    var gained = (typeof (opts && opts.gained) === 'number') ? opts.gained : 0;
+    // Причина уходит в строку ЯВНО (а не через folwrRunLastVerdict): словарь «последнего
+    // вердикта» заполняется ниже и на этой же попытке был бы ещё пуст.
+    gsaDiagLoopGuard(path, tid, key, elapsed, gained, verdict, reason);
+    if (verdict !== 'start') {
+      folwrRunLastVerdict[key] = reason;
+      return { permit: false, elapsed: elapsed, reason: reason, forced: false, key: key, tid: tid };
+    }
+    delete folwrRunLastVerdict[key];
+    // noGain пишет только прогон, который САМ ходил в сеть/скролл (pagination/probe/scroll).
+    // Дубль открытия сетевой попыткой не является — он лишь применяет уже пришедший снимок,
+    // поэтому 30-секундную метку «тред не растёт» он не ставит (иначе один переэмит открытия
+    // замораживал бы честную пагинацию следующего нового хода).
+    if (prev != null && gained <= 0 && !(opts && opts.recordNoGain === false)) folwrNoGainMap[key] = Date.now();
+    return { permit: true, elapsed: elapsed, reason: reason, forced: force, key: key, tid: tid };
+  }
+
+  function beginFolwrRun(path, tid, key, opts) {
+    var d = folwrRunPermit(path, tid, key, opts);
+    if (d.permit) {
+      folwrRunAtMap[key] = Date.now();
+      folwrRunLiveMap[key] = (folwrRunLiveMap[key] || 0) + 1;
+    }
+    return d;
+  }
+
+  // Прогон завершён — в полёте больше нет. Окно треда НЕ снимается: reset(delete) — только
+  // при реальном росте базы (markFolwrRunGain), иначе cooldown держится.
+  function endFolwrRun(key) {
+    if (!key) return;
+    var live = (folwrRunLiveMap[key] || 0) - 1;
+    if (live > 0) folwrRunLiveMap[key] = live; else delete folwrRunLiveMap[key];
+  }
+
+  // РЕАЛЬНЫЙ прирост базы (новые ходы добавлены) — единственное, что снимает окно досрочно.
+  function markFolwrRunGain(key) {
+    if (!key) return false;
+    delete folwrRunAtMap[key];
+    delete folwrNoGainMap[key];
+    delete folwrRunLastVerdict[key];
+    folwrGainSeenAtMap[key] = Date.now();
+    return true;
+  }
+
   // Применяет готовые turns к базе + эмит (единая точка для folwr-open и пагинации).
   // bodyText — СЫРОЕ тело ответа (O-27): по нему решается, что тело — форма мусора.
   function applyTurns(turns, tid, historyComplete, bodyText) {
@@ -891,9 +1027,14 @@
 
   // Пагинация folwr курсором при открытии: ≤12 страниц, merge по id ходов, лог досбор=N.
   // Первая страница уже применена вызывающим кодом (applyTurns); здесь догружаем хвост по cursor.
-  function followFolwrPagination(startUrl, startTurns, tid, firstCursor) {
+  function followFolwrPagination(startUrl, startTurns, tid, firstCursor, gainedIn) {
     if (!startUrl || !firstCursor) return;
     var key = threadAuthKey(tid, startUrl);
+    // Гард прогонов на тред (петля GSA, High): окно считается ОТ ЗАПУСКА прогона, поэтому
+    // собственные шаги пагинации по 400 мс идут как прежде, а повторный перехваченный
+    // /async/folwr того же треда внутри окна прогон не стартует.
+    var gate = beginFolwrRun('pagination', tid, key, { gained: (typeof gainedIn === 'number') ? gainedIn : 0 });
+    if (!gate.permit) return;
     var merged = Array.isArray(startTurns) ? startTurns.slice() : [];
     var mergeFn = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.mergeTurnsById) ||
       function (a, b) { return a.concat(b); };
@@ -902,15 +1043,29 @@
 
     var added = 0;
     var pages = 0;
+    var accounted = 0; // уже зачтённый прирост базы (markFolwrRunGain — ровно на новых ходах)
+
+    // Прирост зачитывается ОДНОЙ точкой (там, где merge реально добавил ходы) — этим же
+    // снимается окно треда: следующий прогон после новых ходов стартует без ожидания.
+    function accountGain() {
+      if (added > accounted) {
+        accounted = added;
+        markFolwrRunGain(key);
+      }
+    }
 
     function finish() {
       activeFolwrInFlight[key] = false;
+      endFolwrRun(key);
       if (added > 0) {
+        accountGain();
         console.log('[ai-cm-google-search] пагинация folwr: досбор=' + added +
           ' ходов, страниц=' + pages + ', итого=' + lastFullTurns.length);
       } else {
         // v1.25: API-пагинация не добавила ходов → фолбэк Вариант Б.
-        virtualScrollBackfill('pagination-empty');
+        // vsDispatch — точка подмены реализации в срез-песочницах тестов; по умолчанию это
+        // сам virtualScrollBackfill (см. объявление рядом с реализацией скролла).
+        vsDispatch('pagination-empty');
       }
     }
 
@@ -920,6 +1075,7 @@
       if (!ownRequestsAllowed()) {
         console.log('[ai-cm-google-search] досбор пропущен: cooldown 429/sorry активен');
         activeFolwrInFlight[key] = false;
+        endFolwrRun(key);
         return; // во время cooldown сетевой фолбэк невозможен
       }
       // v1.24: ≤12 страниц за одно открытие (первая уже применена вызывающим кодом).
@@ -929,6 +1085,7 @@
             ', итого=' + lastFullTurns.length);
         }
         activeFolwrInFlight[key] = false;
+        endFolwrRun(key);
         return;
       }
       if (activeFolwrInFlight[key]) return; // не слать параллельно тот же тред
@@ -940,6 +1097,7 @@
           if (isSorryResponse(resp && resp.status, resp && resp.url)) {
             triggerSorryCooldown();
             activeFolwrInFlight[key] = false;
+            endFolwrRun(key);
             return null;
           }
           if (!resp) return { resp: null, txt: '' };
@@ -966,6 +1124,7 @@
           if (gained > 0) {
             if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('pagination', merged, 'submit', tid, { page: pages, gained: gained, kind: pageInfo.cls.kind, cursor: (cursor ? cursor.slice(0, 12) : 'нет') });
             applyTurns(merged, tid, false, txt);
+            accountGain();
           } else if (typeof gsaDiagBaseWrite === 'function') {
             gsaDiagBaseWrite('pagination', parsed.turns, 'skip-no-gain', tid, { page: pages, gained: 0, kind: pageInfo.cls.kind, cursor: (cursor ? cursor.slice(0, 12) : 'нет') });
           }
@@ -990,6 +1149,14 @@
   var VS_MAX_ITERATIONS = 20;
   var VS_STEP_WAIT_MS = 800;
   var VS_STALL_LIMIT = 3; // итераций без роста scrollHeight = конец истории
+  // Петля GSA (High): re-entrancy треда. Нулевой прогон пагинации уходил в невидимый
+  // скролл (до ~16 с) БЕЗ гарда, и каждый следующий перехваченный /async/folwr запускал
+  // ещё один скролл поверх активного. Флаг — ключ треда активного скролла.
+  var vsActive = null;
+  // Точка подмены Варианта Б для срез-песочниц тестов (в браузере — всегда сам скролл).
+  // Нужна потому, что заглушка с именем virtualScrollBackfill в песочнице перекрыла бы
+  // реальную функцию: bare-идентификатор внутри `with (ctx)` разрешается в пользу ctx.
+  var vsDispatch = function (reason) { return virtualScrollBackfill(reason); };
 
   function findChatScroller() {
     try {
@@ -1005,18 +1172,25 @@
   }
 
   function virtualScrollBackfill(reason) {
+    // Re-entrancy: невидимый скролл уже идёт (в т.ч. по ДРУГОМУ треду) — второй не стартует.
+    if (vsActive) {
+      gsaDiagVs('gsa-vs-reentry', { active: vsActive, verdict: 'skip-active', reason: reason });
+      return false;
+    }
     if (!ownRequestsAllowed()) {
       console.log('[ai-cm-google-search] виртуальный скролл пропущен: cooldown (' + reason + ')');
-      return;
+      return false;
     }
     var scroller = findChatScroller();
     if (!scroller) {
       console.log('[ai-cm-google-search] виртуальный скролл: контейнер не найден (' + reason + ')');
-      return;
+      return false;
     }
     var tid = currentThreadId || emittedThreadId || readDomThreadId();
+    vsActive = tid || '(пусто)';
     var iterations = 0;
     var stalls = 0;
+    var done = false;
     var lastScrollHeight = scroller.scrollHeight;
     var prevOpacity = scroller.style.opacity;
     var prevScrollTop = scroller.scrollTop;
@@ -1028,10 +1202,31 @@
       scroller.scrollTop = prevScrollTop;
     }
 
+    // Терминальные выходы: снять флаг активного скролла (ровно один раз) + вернуть контейнер.
+    function finishVs(logLine) {
+      if (done) return;
+      done = true;
+      vsActive = null;
+      restore();
+      if (logLine) console.log(logLine);
+    }
+
     function tick() {
       if (iterations >= VS_MAX_ITERATIONS) {
-        restore();
-        console.log('[ai-cm-google-search] виртуальный скролл: лимит итераций, итого=' + lastFullTurns.length);
+        finishVs('[ai-cm-google-search] виртуальный скролл: лимит итераций, итого=' + lastFullTurns.length);
+        return;
+      }
+      // Смена треда внутри скролла: scrollTop больше НЕ трогаем (иначе чужой тред уезжает
+      // в начало своей истории), состояние контейнера не восстанавливаем — сайт сам
+      // перестроил вид при смене разговора.
+      var tidNow = currentThreadId || '';
+      if (tidNow !== (tid || '')) {
+        if (done) return;
+        done = true;
+        vsActive = null;
+        gsaDiagVs('gsa-vs-thread-mismatch', { expected: tid || '', actual: tidNow, verdict: 'abort', reason: reason });
+        console.log('[ai-cm-google-search] виртуальный скролл прерван: тред сменился (' +
+          (tid || '(пусто)') + ' → ' + (tidNow || '(пусто)') + ')');
         return;
       }
       iterations++;
@@ -1059,17 +1254,17 @@
             stalls++;
           }
           if (h === lastScrollHeight && stalls >= VS_STALL_LIMIT) {
-            restore();
-            console.log('[ai-cm-google-search] виртуальный скролл завершён: итого=' + lastFullTurns.length + ' ходов');
+            finishVs('[ai-cm-google-search] виртуальный скролл завершён: итого=' + lastFullTurns.length + ' ходов');
             return;
           }
           if (h !== lastScrollHeight) stalls = 0;
           lastScrollHeight = h;
           tick();
-        } catch (e) { restore(); }
+        } catch (e) { finishVs(); }
       }, VS_STEP_WAIT_MS);
     }
     tick();
+    return true;
   }
 
   // v1.26: probe-полнота. Если распарсено == DOM-контейнеров и курсор есть — тихий
@@ -1093,15 +1288,22 @@
     } catch (e) { }
   }
 
-  function probeFolwrCompleteness(startUrl, startTurns, tid, firstCursor) {
+  function probeFolwrCompleteness(startUrl, startTurns, tid, firstCursor, gainedIn) {
+    // Гард прогонов на тред (петля GSA, High): тот же словарь, что и у пагинации/дубля
+    // открытия. Подавлённый прогон НЕ взводит probedTids — «не выполнялся» остаётся правдой,
+    // и probe своего шанса не теряет.
+    var gateKey = threadAuthKey(tid, startUrl);
+    var gate = beginFolwrRun('probe', tid, gateKey, { gained: (typeof gainedIn === 'number') ? gainedIn : 0 });
+    if (!gate.permit) return;
     if (probedTids[tid]) {
+      endFolwrRun(gateKey);
       debugLog('log', '[ai-cm-google-search] probe пропущен: уже выполнялся для threadId=' + tid);
       return;
     }
     probedTids[tid] = true;
     console.log('[ai-cm-google-search] probe запущен: threadId=' + tid);
     emitProbeState(true, tid); // v1.18: probe в полёте — content.js отличает probe-running от not-complete
-    var key = threadAuthKey(tid, startUrl);
+    var key = gateKey;
     var merged = Array.isArray(startTurns) ? startTurns.slice() : [];
     var mergeFn = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.mergeTurnsById) ||
       function (a, b) { return a.concat(b); };
@@ -1109,10 +1311,20 @@
       function () { return null; };
     var steps = 0;
     var addedTotal = 0;
+    var accounted = 0; // уже зачтённый прирост базы (markFolwrRunGain — ровно на новых ходах)
     var done = false;
     // O-27 (защитный фикс): тело последнего шага probe — для проверки формы мусора на
     // финальном applyTurns (в probe этот путь всегда завершает базу вердиктом ПОЛНАЯ).
     var lastBody = '';
+
+    // Прирост зачитывается ОДНОЙ точкой (там, где merge реально добавил ходы): этим же
+    // снимается окно треда — после новых ходов следующий прогон стартует без ожидания.
+    function accountGain() {
+      if (addedTotal > accounted) {
+        accounted = addedTotal;
+        markFolwrRunGain(key);
+      }
+    }
 
     // v43: итоговая строка folwr-open печатается на ВСЕХ выходах.
     // complete=true → applyTurns(..., true) (baseComplete=true); иначе база не трогается.
@@ -1126,6 +1338,8 @@
       } else if (typeof gsaDiagBaseWrite === 'function') {
         gsaDiagBaseWrite('probe', merged, 'skip-incomplete', tid, { complete: 0, addedTotal: addedTotal, steps: steps, reason: reason });
       }
+      accountGain();
+      endFolwrRun(key);
       // v1.18 (F1): вердикт probe-классификатора уходит в content.js ОДНОЙ точкой —
       // applyTurns(..., true) → buildDetail(historyComplete=true) → событие
       // ai-cm-full-history → content.js baseComplete=1 (гейт shouldSkipAutoExport).
@@ -1188,6 +1402,7 @@
           if (added > 0) {
             if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('probe', merged, 'submit', tid, { step: steps, added: added, kind: pageInfo.cls.kind, cursor: (next ? next.slice(0, 12) : 'нет') });
             applyTurns(merged, tid, false, txt);
+            accountGain();
           } else if (typeof gsaDiagBaseWrite === 'function') {
             gsaDiagBaseWrite('probe', parsed.turns, 'skip-no-gain', tid, { step: steps, added: 0, kind: pageInfo.cls.kind, cursor: (next ? next.slice(0, 12) : 'нет') });
           }
@@ -1409,7 +1624,11 @@
 
                   // O-27/O-32 (диагностика): путь записи — folwr-open (GET /async/folwr):
                   // распарсено, контейнеры folwr/DOM, досбор, курсор, вердикт ПОЛНАЯ.
+                  var openKey = threadAuthKey(tid, url);
                   if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('open', mergedTurns, 'submit', tid, { parsed: baseTurns.length, folwrContainers: folwrTurnCount, domContainers: domTurnCount, dopasbor: dopasbor, complete: historyComplete ? 1 : 0, cursor: (folwrCursor ? folwrCursor.slice(0, 12) : 'нет'), bodyLen: (txt ? txt.length : 0) });
+                  // Прирост считается ДО записи: applyTurns присваивает lastFullTurns новый
+                  // массив, поэтому после вызова разницу уже не измерить.
+                  var openGained = mergedTurns.length - lastFullTurns.length;
                   applyTurns(mergedTurns, tid, historyComplete, txt);
 
                   // v1.5.2: антиспам — печатаем folwr-open только при изменении сигнатуры.
@@ -1428,13 +1647,25 @@
                       ', threadId=' + tid);
                   }
 
+                  // Петля GSA (High): дорогой хвост открытия (пагинация курсором / probe)
+                  // стартует только при свободном окне треда. Приём данных выше (applyTurns)
+                  // гардом НЕ гейтится — потерять ходы он не может по построению.
+                  if (openGained > 0) markFolwrRunGain(openKey);
+                  var openGate = (openGained > 0)
+                    ? folwrRunPermit('open', tid, openKey, { gained: openGained, growthPriority: true, recordNoGain: false })
+                    : null;
+                  var openTailAllowed = !(openGate && !openGate.permit);
+                  if (!openTailAllowed) {
+                    debugLog('log', '[ai-cm-google-search] хвост открытия (пагинация/probe) подавлен гардом петли: threadId=' + tid);
+                  }
+
                   // v1.26: если распарсено == DOM-контейнеров и курсор есть — тихий probe
                   // полноты (без скролла). Иначе — прежняя пагинация курсором.
-                  if (folwrCursor) {
+                  if (folwrCursor && openTailAllowed) {
                     if (baseTurns.length === domTurnCount) {
-                      probeFolwrCompleteness(url, mergedTurns, tid, folwrCursor);
+                      probeFolwrCompleteness(url, mergedTurns, tid, folwrCursor, openGained);
                     } else {
-                      followFolwrPagination(url, mergedTurns, tid, folwrCursor);
+                      followFolwrPagination(url, mergedTurns, tid, folwrCursor, openGained);
                     }
                   }
                 } else {
