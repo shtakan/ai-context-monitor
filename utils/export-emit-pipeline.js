@@ -2133,9 +2133,20 @@
   // бы КАЖДЫЙ чат DeepSeek++ в сырой режим и снял бы OFF-зачистку S1–S5 там, где владелец её
   // пинует (R1: OFF и sourceHasReasoning=false — тул-мусор не возвращается).
   //
-  // Формула (дословно): effectiveToggle = (userToggle === OFF && sourceHasReasoning === true)
-  // ? ON : userToggle. userToggle нормализуется в boolean (не задан = OFF — как в загрузчике
-  // настроек), результат — всегда boolean. Функции ЧИСТЫЕ: без логов, DOM и chrome.
+  // Формула (дословно, D-O41 с пересмотром 2026-09-25):
+  //   effectiveToggle = (userToggle === OFF && sourceHasReasoning === true
+  //                      && site !== 'qwen' && site !== 'deepseek') ? ON : userToggle
+  // userToggle нормализуется в boolean (не задан = OFF — как в загрузчике настроек), результат —
+  // всегда boolean. Функции ЧИСТЫЕ: без логов, DOM и chrome.
+  //
+  // ПЕРЕСМОТР 2026-09-25 (Qwen/DeepSeek): у этих двух сервисов размышление лежит в самом
+  // ИСТОЧНИКЕ сетевого пути (секции [REASONING]/[ANSWER] собирает перехватчик), поэтому авто-ON
+  // срабатывал бы ВСЕГДА и делал бы явный OFF недостижимым: пользователь физически не мог бы
+  // выключить reasoning в экспорте. Для них OFF остаётся силой — это force-exclude (прежний
+  // OFF-путь O-7: секции урезаются до [ANSWER], S1–S5/O-20/O-40/O-42 активны), а ON — include
+  // (сырой режим, как прежде). У остальных сервисов (Gemini/Perplexity/ChatGPT/Claude/GSA)
+  // авто-ON работает как в исходном D-O41. Санация OFF-пути не переписана: правило выбирает
+  // РОВНО ветку, как и раньше.
   // =====================================================================================
   /** Есть ли в источнике экспорта (массив сообщений) хотя бы одно размышление (см. блок выше). */
   function hasReasoningInSource(messages) {
@@ -2151,9 +2162,16 @@
     return false;
   }
 
-  /** Эффективное значение тумблера: OFF пользователя при reasoning в источнике игнорируется. */
-  function effectiveReasoningToggle(userToggle, sourceHasReasoning) {
+  /**
+   * Эффективное значение тумблера: OFF пользователя при reasoning в источнике игнорируется
+   * (авто-ON) — КРОМЕ Qwen и DeepSeek, у которых OFF означает принудительное исключение.
+   * site не передан (прежние вызовы/срез-песочницы) → поведение исходного D-O41: авто-ON.
+   */
+  function effectiveReasoningToggle(userToggle, sourceHasReasoning, site) {
     if (userToggle === true) return true;                 // пользовательский ON — как есть
+    // D-O41 (пересмотр 2026-09-25): Qwen/DeepSeek — OFF = force-exclude, авто-ON не срабатывает
+    // (иначе у сервиса, чьё размышление всегда в источнике, выключить reasoning было бы нельзя).
+    if (site === 'qwen' || site === 'deepseek') return false;
     return (sourceHasReasoning === true);                 // OFF: источник решает (авто-ON)
   }
 

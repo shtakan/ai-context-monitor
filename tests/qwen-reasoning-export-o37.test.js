@@ -161,8 +161,8 @@ describe('O-37 C-D: txt/md qwen — [REASONING] с текстом размышл
 // C-D: РЕАЛЬНАЯ точка сбора экспорта (обе ветки) — размышление доезжает до файла
 // =====================================================================================
 describe('O-37 C-D: точка сбора экспорта — размышление нормализуется ДО санации OFF-пути', () => {
-  test('DOM-ветка qwen (baseSeen=false): поле захвата → поле reasoning → txt с секциями', () => {
-    const e = makeEmitter({ site: 'qwen', adapter: { siteName: 'qwen', extractMessages: function () { return ADAPTER_MESSAGES.slice(); } } });
+  test('DOM-ветка qwen (baseSeen=false) + ON: поле захвата → поле reasoning → txt с секциями', () => {
+    const e = makeEmitter({ site: 'qwen', hidden: true, adapter: { siteName: 'qwen', extractMessages: function () { return ADAPTER_MESSAGES.slice(); } } });
     const msgs = e.run([], null);
     expect(msgs).toHaveLength(2);
     expect(msgs[1].text).toBe(ANSWER);                 // текст — bare-ответ
@@ -170,6 +170,22 @@ describe('O-37 C-D: точка сбора экспорта — размышле�
     expect(msgs[1].hiddenReasoning).toBeUndefined();   // служебное поле захвата снято
     const txt = Builders.buildTxtFromHistory({ site: 'qwen', messages: msgs });
     expect(txt).toBe('USER:\nпривет\n\nASSISTANT:\n[REASONING]\n' + REASONING + '\n\n[ANSWER]\n' + ANSWER);
+  });
+
+  test('DOM-ветка qwen + OFF: контракт прежний (O-7 его НЕ трогает: поле reasoning снимается только на сетевом пути)', () => {
+    // ЧЕСТНЫЙ ПИН ГРАНИЦЫ. O-7 (76c2a31) снимает нормализованное поле reasoning в точке сбора
+    // ТОЛЬКО на СЕТЕВОМ пути (блок `delete out[ri].reasoning` под гейтом тумблера и сайта);
+    // DOM-ветка (baseSeen=false) его OFF-контрактом не покрыта — так было и до D-O41, и до
+    // пересмотра 2026-09-25. Здесь пинится ФАКТИЧЕСКОЕ поведение, чтобы расхождение с сетевым
+    // путём было видно, а не забыто (кандидат в отдельный дефект, вне scope O-47/D-O41).
+    const e = makeEmitter({ site: 'qwen', adapter: { siteName: 'qwen', extractMessages: function () { return ADAPTER_MESSAGES.slice(); } } });
+    const msgs = e.run([], null);                      // тумблер OFF (default)
+    expect(msgs[1].text).toBe(ANSWER);
+    expect(msgs[1].hiddenReasoning).toBeUndefined();   // служебное поле снято всегда
+    expect(msgs[1].reasoning).toBe(REASONING);         // DOM-ветка: поле-данные OFF-путём не снимается
+    const txt = Builders.buildTxtFromHistory({ site: 'qwen', messages: msgs });
+    expect(txt).toBe('USER:\nпривет\n\nASSISTANT:\n[REASONING]\n' + REASONING + '\n\n[ANSWER]\n' + ANSWER);
+    // сетевой путь того же снимка OFF-контракт исполняет (пин D1 в tests/qwen-o7-reasoning-toggle)
   });
 
   test('сетевая ветка qwen (живой 21:59): секции текста разбираются, ON-путь их не теряет', () => {
@@ -214,15 +230,17 @@ describe('O-37 C-R: DeepSeek и пять прочих платформ не за
     expect(Builders.buildTxtFromHistory({ messages: msgs })).toBe('привет\n\n' + ANSWER);
   });
 
-  test('DeepSeek сетевой путь + OFF: D-O41 — источник с секцией идёт авто-ON-ом (сырой путь)', () => {
-    // D-O41 (2026-09-24): источник с секцией [REASONING] при OFF пользователя уходит в СЫРОЙ
-    // режим (авто-ON) — секции сохранены, поле reasoning точкой сбора не подменяется
-    // (O-37/C нормализует поле только у сервиса с DOM-источником, здесь предикат сайта false).
+  test('DeepSeek сетевой путь + OFF: D-O41 пересмотр — force-exclude, секции урезаны до [ANSWER]', () => {
+    // D-O41 (пересмотр 2026-09-25): у DeepSeek размышление лежит в САМОМ источнике сетевого
+    // пути, поэтому авто-ON сделал бы явный OFF недостижимым. OFF снова значит force-exclude:
+    // секции урезаются OFF-путём O-7 (sanitizeEmitMessages → stripReasoningSections).
     const e = makeEmitter({ site: 'deepseek', baseSeen: true, adapter: { siteName: 'deepseek', extractMessages: function () { return []; } } });
     const msgs = e.run(['вопрос', SECTIONED], [{ role: 'user', text: 'вопрос' }, { role: 'assistant', text: SECTIONED }]);
-    expect(msgs[1].text).toBe(SECTIONED);
+    expect(msgs[1].text).toBe(ANSWER);                       // секции урезаны до [ANSWER]
     expect(msgs[1].reasoning).toBeUndefined();
-    expect(Builders.buildTxtFromHistory({ messages: msgs })).toBe('вопрос\n\n' + SECTIONED);
+    const txt = Builders.buildTxtFromHistory({ messages: msgs });
+    expect(txt).toBe('вопрос\n\n' + ANSWER);
+    expect(txt).not.toContain('[REASONING]');
   });
 
   test('сборщики: поле захвата у шести платформ секций не создаёт (R1)', () => {
@@ -315,10 +333,16 @@ describe('O-37 C: проводка (source-пины)', () => {
     expect(fn).toContain('if (norm.length > 0 && hasRoles) return aiCmSanitizeEmitUserTexts(norm);');
   });
 
-  test('предикат сайта — в export-manager.js (в пайплайне имён платформ нет)', () => {
+  test('предикат сайта — в export-manager.js (в пайплайне имён платформ почти нет)', () => {
     expect(fnDecl(MGR_SRC, 'aiCmReasoningExportSite')).toContain("currentAdapter.siteName === 'qwen'");
-    expect(PIPELINE_SRC).not.toContain('qwen');
-    expect(PIPELINE_SRC).not.toContain('Qwen');
+    // D-O41 (пересмотр 2026-09-25): единственное ИМЯ платформы в коде пайплайна — пара
+    // force-exclude сервисов в чистой effectiveReasoningToggle (Qwen/DeepSeek). Прочие
+    // предикаты сайта остаются в core/export-manager.js. Комментарии не считаем: пинится код.
+    const code = PIPELINE_SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    expect((code.match(/qwen/g) || []).length).toBe(1);
+    expect(code).not.toContain('Qwen');
+    expect(fnDecl(PIPELINE_SRC, 'effectiveReasoningToggle'))
+      .toContain("if (site === 'qwen' || site === 'deepseek') return false;");
     // флаг сайта — единственный вход нормализации: без него хелпер выходит сразу
     expect(fnDecl(PIPELINE_SRC, 'applyReasoningExportFields')).toContain('if (enabled !== true || !Array.isArray(messages)) return { changed: 0 };');
   });

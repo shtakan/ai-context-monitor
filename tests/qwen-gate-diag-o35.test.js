@@ -11,9 +11,10 @@
  *          слушатель реактивирует контур (адаптерный пересъём базы) БЕЗ F5;
  *      D — «—» рисуется веткой stale ТОЛЬКО при отсутствии базы; при базе адаптера число
  *          сохранено, stale отмечен меткой в тултипе (D1); числа попапа живут снимком aiCmState;
- *      B — цепочка usage → detail.serverTokens → netServerTokens → бейдж; qwenUsage
- *          (reasoning/output) имеет потребителя в тултипе, метка «Источник» честна для
- *          adapter-базы (B1/B2);
+ *      B — цепочка usage → serverTokens (ИЗМЕРЕНИЕ в строках 'emit'/'qwen-sse'); в метрику
+ *          Qwen серверное число не идёт — O-47: badge/pct считаются только tokens~ (полный
+ *          контур — tests/o47-qwen-badge-metric.test.js); qwenUsage (reasoning/output) имеет
+ *          потребителя в тултипе, метка «Источник» честна для adapter-базы (B1/B2);
  *      A — каждая запись истории qwen печатает msgs/convId/URL (артефакт вердикта).
  *
  * ПИНЫ ДЕФЕКТОВ, ФЛИПНУТЫЕ ФИКСАМИ (C: dispatched=1 + реактивация, B: потребитель qwenUsage,
@@ -188,8 +189,11 @@ describe('O-35 G1/G2: строки qwen-sse/spa печатаются тольк�
     expect(em).toContain('serverTokens=1709');
     expect(em).toContain('reasoningTokens=884');
     expect(em).toContain('convId=' + CHAT_ID);
-    // число из строки = число в снимке (usage дошёл до detail без потерь)
-    expect(st.events[0].serverTokens).toBe(1709);
+    // O-47: число из строки больше НЕ публикуется в detail (usage.input у Qwen — кумулятив
+    // API-потребления, badge считает только tokens~): строка остаётся ИЗМЕРЕНИЕМ, а снимок
+    // поля serverTokens не несёт.
+    const d = st.events[0];
+    expect('serverTokens' in d).toBe(false);
   });
 
   test('B: поток БЕЗ usage → hasUsage=0 и serverTokens=0 (оценка токенизатора ниже по цепочке)', async function () {
@@ -214,7 +218,9 @@ describe('O-35 G1/G2: строки qwen-sse/spa печатаются тольк�
     expect(diagLines().length).toBeGreaterThan(0);
     expect(onDetail).toEqual(offDetail);
     expect(onDetail.text).toBe(offDetail.text);
-    expect(onDetail.serverTokens).toBe(offDetail.serverTokens);
+    // O-47: поля serverTokens в снимке нет ни на одной стороне гейта
+    expect(onDetail.serverTokens).toBeUndefined();
+    expect(offDetail.serverTokens).toBeUndefined();
   });
 
   test('канон: строки уходят через utils/debug.js:aiCmDiagLine (MAIN-мир), формат не дублируется', async function () {
@@ -569,26 +575,35 @@ describe('O-35 D: плейсхолдер «—» ставит ветка stale, 
 });
 
 // =====================================================================================
-// B: цепочка usage → detail.serverTokens → netServerTokens → бейдж; qwenUsage без читателя
+// B (O-35 + пересмотр O-47): usage → serverTokens остаётся ИЗМЕРЕНИЕМ, а в метрику Qwen
+// серверное число не идёт (badge/pct — только tokens~). Полный контур O-47 (B1/B2/B3/R1/R2) —
+// tests/o47-qwen-badge-metric.test.js; здесь обновлены пины прежней цепочки.
 // =====================================================================================
-describe('O-35 B: проводка серверного usage до бейджа', function () {
-  test('B: шаг 1 — перехватчик берёт usage.input как serverTokens (без гейта по сервису)', function () {
+describe('O-35 B (после O-47): проводка серверного usage Qwen', function () {
+  test('B: шаг 1 — перехватчик берёт usage.input как serverTokens (измерение), в detail НЕ кладёт', function () {
     expect(INTERCEPT_SRC).toContain("var serverTokens = (typeof usage.input === 'number' && usage.input > 0) ? usage.input : 0;");
-    expect(INTERCEPT_SRC).toContain('serverTokens: serverTokens,');
     expect(INTERCEPT_SRC).toContain("diagTag('qwen-sse', {");
+    // числу остаётся диагностика ('emit' + 'qwen-sse') и сигнатура дедупа снимка…
+    expect(INTERCEPT_SRC).toContain('serverTokens: serverTokens,');
+    // …а в литерале detail его нет вовсе (O-47; комментарии внутри литерала не считаем)
+    const iDetail = INTERCEPT_SRC.indexOf('var detail = {');
+    expect(iDetail).toBeGreaterThan(-1);
+    const iDetailEnd = INTERCEPT_SRC.indexOf('};', iDetail);
+    const detailLit = INTERCEPT_SRC.slice(iDetail, iDetailEnd).replace(/\/\/[^\n]*/g, '');
+    expect(detailLit).not.toContain('serverTokens');
   });
 
-  test('B: шаг 2 — content.js присваивает netServerTokens БЕЗ site-гейта (строка 555-окрестность)', function () {
+  test('B: шаг 2 — content.js принимает снимок, а метрика читает site-гейт (у Qwen 0)', function () {
     expect(CONTENT).toContain('netServerTokens = detail.serverTokens || 0;');
-    // обе точки расчёта pct читают netServerTokens первым приоритетом
-    const hits = CONTENT.match(/let tokenEstimate = netServerTokens > 0 \? netServerTokens : Tokenizer\.estimateDialogTokens\(/g) || [];
+    // O-47: обе точки расчёта pct читают счётчик МЕТРИКИ (aiCmMetricServerTokens), не сырое поле
+    const hits = CONTENT.match(/let tokenEstimate = metricServerTokens > 0 \? metricServerTokens : Tokenizer\.estimateDialogTokens\(/g) || [];
     expect(hits.length).toBe(2);
   });
 
-  test('B: шаг 3 — бейдж: serverTokens авторитетен и сбрасывает монотонный максимум', function () {
-    expect(CONTENT).toContain('if (netServerTokens > 0) {');
+  test('B: шаг 3 — бейдж: серверный счётчик авторитетен (кроме Qwen) и сбрасывает максимум', function () {
+    expect(CONTENT).toContain('if (metricServerTokens > 0) {');
     expect(CONTENT).toContain('maxTokenCount = tokenEstimate;');
-    expect(CONTENT).toContain("(netServerTokens > 0 ? ' · serverTokens' : '')");
+    expect(CONTENT).toContain("(metricServerTokens > 0 ? ' · serverTokens' : '')");
   });
 
   test('B: шаг 4 — Qwen НЕ в isGeminiSvc: countTokens BYOK не перезаписывает usage стрима', function () {

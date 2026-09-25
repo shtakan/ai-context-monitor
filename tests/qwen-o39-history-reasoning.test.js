@@ -31,7 +31,8 @@
  *   D2 — payload → detail: reasoning/hiddenReasoning/messageTexts с секциями/роли/ids;
  *   D3 — payload → ФАЙЛ: реальные aiCmCollectExportSource → aiCmDedupeExportSource →
  *        buildTxtFromHistory/buildMdFromHistory, секция [REASONING] ровно одна;
- *   D4 — usage/response_id истории → serverTokens/qwenUsage/responseId/convId;
+ *   D4 — usage/response_id истории → qwenUsage/responseId/convId (O-47: serverTokens из снимка
+ *        убран — серверное число Qwen в метрику не идёт);
  *   D5 — два хода: оба reasoning в файле, порядок ходов сохранён, usage = последний ход;
  *   D6 — дубли: узел-дубль, дубль thinking_summary, extras+content одного элемента,
  *        «первое вхождение побеждает» + строка qwen-history-duplicate под гейтом;
@@ -516,10 +517,13 @@ describe('O-39 D2/D4: payload истории → detail (reasoning, секции
     expect(d.modelSlug).toBe(MODEL);
   });
 
-  test('D4 usage{input_tokens,output_tokens} истории → serverTokens/qwenUsage/responseId', async () => {
+  test('D4 usage{input_tokens,output_tokens} истории → qwenUsage/responseId (O-47: не serverTokens)', async () => {
     const st = await runHistory({ payload: historyPayload() });
     const d = st.events[0];
-    expect(d.serverTokens).toBe(1709);
+    // O-47: серверное число истории в detail НЕ публикуется (usage.input у Qwen — кумулятив
+    // API-потребления, а не размер контекста); серверный usage остаётся полем qwenUsage для
+    // тултипа, а badge/pct считаются только эвристикой tokens~.
+    expect('serverTokens' in d).toBe(false);
     expect(d.qwenUsage.inputTokens).toBe(1709);
     expect(d.qwenUsage.outputTokens).toBe(884);
     expect(d.qwenUsage.totalTokens).toBe(2593);
@@ -561,7 +565,7 @@ describe('O-39 D3: payload истории → файл экспорта (collect
 });
 
 describe('O-39 D5: два хода истории — оба reasoning в файле, порядок и usage последнего хода', () => {
-  test('D5 файл несёт обе секции [REASONING] в порядке ходов, serverTokens — последний ход', async () => {
+  test('D5 файл несёт обе секции [REASONING] в порядке ходов, usage — последний ход', async () => {
     const st = await runHistory({ payload: historyPayload({ twoTurns: true }) });
     const d = st.events[0];
     expect(d.count).toBe(4);
@@ -571,7 +575,8 @@ describe('O-39 D5: два хода истории — оба reasoning в фай
     expect(d.reasoningTexts[3]).toBe(REASONING_2);
     expect(d.reasoningTurns).toBe(2);
     expect(d.messageIds).toEqual(['u:' + FID, RESPONSE_ID, 'u:' + FID_2, RESPONSE_ID_2]);
-    expect(d.serverTokens).toBe(2000);                 // usage последнего хода (как у стрима)
+    // O-47: серверного числа в снимке нет; usage последнего хода виден полем qwenUsage
+    expect('serverTokens' in d).toBe(false);
     expect(d.qwenUsage.outputTokens).toBe(900);
     expect(d.responseId).toBe(RESPONSE_ID_2);
 
@@ -719,7 +724,7 @@ describe('O-39 R2: живой SSE-путь не изменён перехват�
     expect(merged.text).toBe(liveText);                        // байтовый паритет live-хода
     expect(d.reasoningTexts.filter(function (r) { return r === LIVE_REASONING; })).toHaveLength(1);
     expect((d.text.match(/\[REASONING\]/g) || [])).toHaveLength(2);   // история + стрим
-    expect(d.serverTokens).toBe(1709);
+    expect('serverTokens' in d).toBe(false);                          // O-47: серверное число не в снимке
     expect(d.messageIds[d.messageIds.length - 1]).toBe(LIVE_ID);
   });
 });
@@ -909,7 +914,8 @@ describe('O-39-B X-D1: XHR-путь доводит reasoning до файла', (
     expect(d.messages[1].reasoning).toBe(REASONING);       // НЕПУСТОЙ reasoning из XHR-тела
     expect(d.messages[1].hiddenReasoning).toBe(REASONING);
     expect(d.messageTexts[1]).toBe(SECTIONED);
-    expect(d.serverTokens).toBe(1709);
+    expect('serverTokens' in d).toBe(false);               // O-47: usage в снимок не публикуется
+    expect(d.qwenUsage.inputTokens).toBe(1709);
     expect(d.responseId).toBe(RESPONSE_ID);
     expect(d.chatId).toBe(CHAT_ID);
 
@@ -935,7 +941,8 @@ describe('O-39-B X-D2: responseType=json — тело из xhr.response', () => 
 
     expect(st.events).toHaveLength(1);
     expect(st.events[0].messages[1].reasoning).toBe(REASONING);
-    expect(st.events[0].serverTokens).toBe(1709);
+    expect('serverTokens' in st.events[0]).toBe(false);   // O-47: usage в снимок не публикуется
+    expect(st.events[0].qwenUsage.inputTokens).toBe(1709);
     expect(st.xhr.state.responseTextReads).toBe(0);       // гард: ветка json responseText не трогает
 
     // Сам стенд воспроизводит поведение движка (jsdom/браузер): чтение responseText при

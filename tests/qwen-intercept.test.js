@@ -266,7 +266,6 @@ describe('O-35 (D1–D5): разбор живого SSE-стрима Qwen', func
     const st = installStand({});
     await runTurn();
     const d = st.events[0];
-    expect(d.serverTokens).toBe(1709);                              // из usage.input_tokens
     expect(d.qwenUsage.outputTokens).toBe(884);                     // последний кадр, НЕ 2011
     expect(d.qwenUsage.totalTokens).toBe(2593);
     expect(d.qwenUsage.reasoningTokens).toBe(884);                  // output ВКЛЮЧАЕТ reasoning
@@ -275,9 +274,14 @@ describe('O-35 (D1–D5): разбор живого SSE-стрима Qwen', func
     const sum = CUMULATIVE.reduce(function (a, b) { return a + b; }, 0);
     expect(sum).toBe(2011);
     expect(d.qwenUsage.outputTokens).not.toBe(sum);                 // антипод-пин: не суммируем
-    expect(d.serverTokens).toBe(USAGE_REF.input_tokens);
     expect(d.qwenUsage.outputTokens).toBe(USAGE_REF.output_tokens);
     expect(d.qwenUsage.reasoningTokens).toBe(USAGE_REF.output_tokens_details.reasoning_tokens);
+    // O-47: само серверное число (usage.input) в detail НЕ публикуется. У Qwen это
+    // КУМУЛЯТИВНЫЙ счётчик API-потребления, а не размер текущего контекста: badge/pct
+    // считаются только эвристикой tokens~ (core/content.js:aiCmMetricServerTokens).
+    // Число не потеряно — оно осталось в диагностике перехватчика ('emit'/'qwen-sse').
+    expect(d.serverTokens).toBeUndefined();
+    expect(d.qwenUsage.inputTokens).toBe(USAGE_REF.input_tokens);
   });
 
   test('D5: контракт detail — пары user/assistant, hiddenReasoning, полнота истории', async function () {
@@ -379,6 +383,9 @@ describe('O-35 (G1/G2): диагностика только под гейтом,
 
     expect(onDetail).toEqual(offDetail);
     expect(onDetail.text).toBe(offDetail.text);
-    expect(onDetail.serverTokens).toBe(offDetail.serverTokens);
+    // O-47: серверного числа в detail нет ВООБЩЕ (и при гейте, и без него) — байты снимка
+    // не зависят от диагностики.
+    expect(onDetail.serverTokens).toBeUndefined();
+    expect(offDetail.serverTokens).toBeUndefined();
   });
 });

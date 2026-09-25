@@ -1,41 +1,48 @@
 /**
  * D-O41 (UX): АВТО-ON ТУМБЛЕРА `aiCmIncludeHiddenInExport` ПРИ НАЛИЧИИ REASONING В ИСТОЧНИКЕ.
+ * ПЕРЕСМОТР 2026-09-25: Qwen и DeepSeek ИСКЛЮЧЕНЫ из авто-ON.
  *
- * Спецификация владельца (согласована 2026-09-24, вариант «в» мировых стандартов:
- * WYSIWYG + smart defaults):
- *   1. Правило: effectiveToggle = (userToggle === OFF && sourceHasReasoning === true)
- *      ? ON : userToggle;
+ * Спецификация владельца (D-O41 — 2026-09-24, вариант «в» мировых стандартов: WYSIWYG +
+ * smart defaults; пересмотр — 2026-09-25):
+ *   1. Правило (пересмотр): effectiveToggle = (userToggle === OFF && sourceHasReasoning === true
+ *      && site !== 'qwen' && site !== 'deepseek') ? ON : userToggle;
  *   2. sourceHasReasoning = true, если в источнике экспорта ≥1 сообщение с НЕПУСТЫМ полем
- *      reasoning ИЛИ ≥1 секция [REASONING] в тексте;
- *   3. точка применения — ДО единственной точки выхода рендера (withReasoningSections,
+ *      reasoning ИЛИ ≥1 секция [REASONING] в тексте (служебное hiddenReasoning нарочно НЕ
+ *      считается: иначе OFF-путь O-7 не исполнялся бы ни на одном DeepSeek++-чате);
+ *   3. у Qwen/DeepSeek OFF = force-exclude (как OFF-зачистка O-7/S1–S5 у DeepSeek): их сетевой
+ *      источник ВСЕГДА несёт секции [REASONING], поэтому авто-ON срабатывал бы на каждом их чате
+ *      и делал бы явный OFF физически недостижимым; ON у них — include, как прежде;
+ *   4. у остальных сервисов (Gemini/Perplexity/ChatGPT/Claude/GSA) авто-ON работает как в D-O41;
+ *   5. точка применения — ДО единственной точки выхода рендера (withReasoningSections,
  *      utils/export-text-builders.js:48): OFF-зачистка S1–S5 (O-7) исполняется РОВНО при
- *      эффективном OFF без reasoning в источнике;
- *   4. UI: tooltip тумблера в options + обеих локалях;
- *   5. override: явный OFF при sourceHasReasoning=false — force-exclude (прежний OFF-путь);
- *      при sourceHasReasoning=true — игнорируется (авто-ON всегда).
+ *      эффективном OFF;
+ *   6. UI: tooltip тумблера в options + обеих локалях.
  *
  * Контур пинов:
  *   S1 — чистая точка правила: hasReasoningInSource/effectiveReasoningToggle в пайплайне
- *        (hiddenReasoning НАРОЧНО не считается — иначе OFF-зачистка O-7 ушла бы у каждого
- *        DeepSeek++-чата);
+ *        (формула пересмотра — в одной чистой функции, третьим аргументом site);
  *   S2 — проводка: ЕДИНСТВЕННАЯ точка чтения тумблера aiCmHiddenExportEffectiveOn
- *        (core/export-manager.js), её зовут точка санации и точка сбора; OFF-литералы и
- *        OFF-путь S1–S5 не переписаны;
- *   S3 — таблицы истинности обеих чистых функций;
- *   D1 — источник С reasoning + OFF → файл СОДЕРЖИТ [REASONING] (поле данных и секция текста);
- *   D2 — источник БЕЗ reasoning + OFF → 0 секций [REASONING];
- *   D3 — источник С reasoning + ON → [REASONING] (прежний ON-путь не сломан; байты = D1);
- *   D4 — источник БЕЗ reasoning + ON/OFF → байты файла идентичны (авто-ON не срабатывает);
+ *        (core/export-manager.js) передаёт site из currentAdapter; её зовут точка санации и
+ *        точка сбора; OFF-литералы и OFF-путь S1–S5 не переписаны;
+ *   S3 — таблицы истинности обеих чистых функций (включая ось site);
+ *   Q1 — Qwen + reasoning + OFF → файл БЕЗ [REASONING] (0 секций, только вопрос и ответ);
+ *   Q2 — Qwen + reasoning + ON  → файл С [REASONING] (include-путь прежний);
+ *   Q3 — DeepSeek + reasoning + OFF → файл БЕЗ [REASONING] (регресс O-7 в силе);
+ *   Q4 — Gemini (и прочие сервисы) + reasoning + OFF → файл С [REASONING] (авто-ON D-O41);
+ *   D2 — источник БЕЗ reasoning + OFF → 0 секций у ЛЮБОГО сервиса (force-exclude);
+ *   D3 — источник с reasoning + ON → [REASONING] (сырой режим),
+ *   D4 — источник без reasoning + ON/OFF → байты файла идентичны;
  *   D5 — UI: tooltip тумблера (обе локали + разметка options);
- *   R1 — регресс O-7: DeepSeek-тул-мусор при OFF и sourceHasReasoning=false НЕ возвращается
- *        (S3/S4/S5 живут); отдельно пинится следствие правила 5 — при reasoning в источнике
- *        OFF идёт сырым путём, поэтому S1–S5 не исполняется;
- *   R2 — регресс O-39: история Qwen с 53 размышлениями → [REASONING]/[ANSWER] = 53/53;
+ *   R1 — регресс O-7: DeepSeek-тул-мусор при OFF и sourceHasReasoning=false НЕ возвращается;
+ *        отдельно пинится пересмотр — при reasoning в источнике у DeepSeek OFF ТОЖЕ исполняет
+ *        S1–S5 (раньше авто-ON отменял зачистку, теперь OFF снова «только вопросы и ответы»);
+ *   R2 — регресс O-39: история Qwen с 53 размышлениями → на ON-пути [REASONING]/[ANSWER] = 53/53;
  *   R3 — Gemini/AI Studio: ветка prepareExportMessages не тронута, txt байтово прежний ON/OFF.
  *
  * НЕ ТРОГАЕТСЯ: CHANGELOG/версия (релизный коммит отдельно), сборщики txt/md, OFF-зачистка
  * S1–S5 (O-7) и её чистые функции, база/метрики/бейдж (они по-прежнему считаются по базовому
- * тексту и от тумблера не зависят).
+ * тексту и от тумблера не зависят; граница DOM-ветки точки сбора — вне scope, см.
+ * tests/qwen-reasoning-export-o37.test.js).
  */
 
 const fs = require('fs');
@@ -57,7 +64,7 @@ const en = JSON.parse(read('_locales/en/messages.json'));
 
 const SETTING_KEY = 'aiCmIncludeHiddenInExport';
 const TITLE_KEY = 'options_export_hidden_title';
-// Пункт 4 спецификации — строки дословно.
+// Пункт 6 спецификации — строки дословно.
 const TITLE_RU = 'Reasoning автоматически включается при наличии в источнике; тумблер принудительно исключает';
 const TITLE_EN = 'Reasoning auto-included when present in source; toggle forces exclude';
 
@@ -65,6 +72,12 @@ const QUESTION = 'привет';
 const REASONING = 'Пользователь здоровается. Отвечу приветствием и предложу помощь.';
 const ANSWER = 'Привет! Чем помочь?';
 const SECTIONED = '[REASONING]\n' + REASONING + '\n\n[ANSWER]\n' + ANSWER;
+
+// Сервисы АВТО-ON (пункт 4 спецификации) и сервисы force-exclude (пункт 3).
+const FORCE_EXCLUDE_SITES = ['qwen', 'deepseek'];
+const AUTO_ON_SITES = ['gemini', 'perplexity', 'chatgpt', 'claude', 'google_search'];
+// Эталонный сервис авто-ON для D-пинов (buildTxtFromHistory без ролевых маркеров qwen).
+const AUTO_ON_SITE = 'claude';
 
 /** Тело функции по балансу скобок (конвенция source-пинов проекта). */
 function fnDecl(src, name) {
@@ -93,7 +106,7 @@ function countOccurrences(s, needle) {
 // =====================================================================================
 function makeEmitter(opts) {
   const o = opts || {};
-  const site = o.site || 'qwen';
+  const site = o.site || AUTO_ON_SITE;
   const start = MGR_SRC.indexOf('function sanitizeGeminiText(s)');
   const end = MGR_SRC.indexOf('// T1-fix#3');
   expect(start).toBeGreaterThan(-1);
@@ -126,14 +139,14 @@ function makeEmitter(opts) {
 }
 
 function txtOf(msgs, site) {
-  return Builders.buildTxtFromHistory({ site: site || 'qwen', messages: msgs });
+  return Builders.buildTxtFromHistory({ site: site || AUTO_ON_SITE, messages: msgs });
 }
 
 function mdOf(msgs, site) {
-  return Builders.buildMdFromHistory({ site: site || 'qwen', messages: msgs }, 'X');
+  return Builders.buildMdFromHistory({ site: site || AUTO_ON_SITE, messages: msgs }, 'X');
 }
 
-/** Снимок Qwen сетевого пути: секции в тексте + поле reasoning (живой путь O-39). */
+/** Снимок сетевого пути: секции в тексте + поле reasoning (живой путь O-39/Qwen). */
 function qwenSectioned() {
   return [
     { role: 'user', text: QUESTION, id: 'u1' },
@@ -141,7 +154,7 @@ function qwenSectioned() {
   ];
 }
 
-/** Снимок Qwen сетевого пути: только поле reasoning, текст — bare-ответ. */
+/** Снимок сетевого пути: только поле reasoning, текст — bare-ответ. */
 function qwenFieldOnly() {
   return [
     { role: 'user', text: QUESTION, id: 'u1' },
@@ -189,7 +202,7 @@ function qwenHistory(n) {
 describe('D-O41 S1/S3: чистая точка правила в пайплайне', () => {
   test('S1: функции объявлены и отданы наружу; признак читает ТОЛЬКО поле reasoning и секцию', () => {
     expect(PIPELINE_SRC).toContain('function hasReasoningInSource(messages)');
-    expect(PIPELINE_SRC).toContain('function effectiveReasoningToggle(userToggle, sourceHasReasoning)');
+    expect(PIPELINE_SRC).toContain('function effectiveReasoningToggle(userToggle, sourceHasReasoning, site)');
     expect(PIPELINE_SRC).toContain('hasReasoningInSource: hasReasoningInSource,');
     expect(PIPELINE_SRC).toContain('effectiveReasoningToggle: effectiveReasoningToggle,');
     expect(typeof P.hasReasoningInSource).toBe('function');
@@ -203,7 +216,9 @@ describe('D-O41 S1/S3: чистая точка правила в пайплай�
     // Формула правила — в одной чистой функции, без чтения chrome/DOM.
     const eff = fnDecl(PIPELINE_SRC, 'effectiveReasoningToggle');
     expect(eff).toContain('if (userToggle === true) return true;');
+    expect(eff).toContain("if (site === 'qwen' || site === 'deepseek') return false;");
     expect(eff).not.toContain('hiddenReasoning');
+    expect(eff).not.toContain('chrome');
   });
 
   test('S3: hasReasoningInSource — поле, секция, пустое/пробельное значение, мусор', () => {
@@ -223,18 +238,33 @@ describe('D-O41 S1/S3: чистая точка правила в пайплай�
     expect(P.hasReasoningInSource([null, 'x', 7])).toBe(false);
   });
 
-  test('S3: effectiveReasoningToggle — таблица истинности правила владельца', () => {
-    // ON пользователя — ON при любом источнике
+  test('S3: effectiveReasoningToggle — таблица истинности правила владельца (пересмотр)', () => {
+    // ON пользователя — ON при любом источнике и любом сервисе (include-путь)
+    expect(P.effectiveReasoningToggle(true, false, 'qwen')).toBe(true);
+    expect(P.effectiveReasoningToggle(true, true, 'qwen')).toBe(true);
+    expect(P.effectiveReasoningToggle(true, true, 'gemini')).toBe(true);
     expect(P.effectiveReasoningToggle(true, false)).toBe(true);
-    expect(P.effectiveReasoningToggle(true, true)).toBe(true);
-    // OFF пользователя: источник с reasoning → авто-ON; без reasoning → force-exclude
-    expect(P.effectiveReasoningToggle(false, true)).toBe(true);
-    expect(P.effectiveReasoningToggle(false, false)).toBe(false);
+    // OFF + reasoning: у прочих сервисов авто-ON…
+    AUTO_ON_SITES.forEach(function (site) {
+      expect([site, P.effectiveReasoningToggle(false, true, site)]).toEqual([site, true]);
+    });
+    // …у Qwen/DeepSeek (пункт 3) — force-exclude: авто-ON не срабатывает
+    FORCE_EXCLUDE_SITES.forEach(function (site) {
+      expect([site, P.effectiveReasoningToggle(false, true, site)]).toEqual([site, false]);
+    });
+    // OFF без reasoning — force-exclude у ЛЮБОГО сервиса
+    AUTO_ON_SITES.concat(FORCE_EXCLUDE_SITES).forEach(function (site) {
+      expect([site, P.effectiveReasoningToggle(false, false, site)]).toEqual([site, false]);
+    });
     // не задан тумблер = OFF (как в загрузчике настроек), результат всегда boolean
-    expect(P.effectiveReasoningToggle(undefined, true)).toBe(true);
+    expect(P.effectiveReasoningToggle(undefined, true, 'gemini')).toBe(true);
+    expect(P.effectiveReasoningToggle(undefined, true, 'qwen')).toBe(false);
     expect(P.effectiveReasoningToggle(undefined, false)).toBe(false);
-    expect(P.effectiveReasoningToggle(false, undefined)).toBe(false);
-    expect(P.effectiveReasoningToggle('true', true)).toBe(true);
+    expect(P.effectiveReasoningToggle(false, undefined, 'gemini')).toBe(false);
+    expect(P.effectiveReasoningToggle('true', true, 'gemini')).toBe(true);
+    // site не передан (прежние вызовы/срез-песочницы) → поведение исходного D-O41 (авто-ON)
+    expect(P.effectiveReasoningToggle(false, true)).toBe(true);
+    expect(P.effectiveReasoningToggle(false, true, '')).toBe(true);
   });
 });
 
@@ -246,9 +276,12 @@ describe('D-O41 S2: единственная точка чтения тумбл�
     const helper = fnDecl(MGR_SRC, 'aiCmHiddenExportEffectiveOn');
     expect(helper).toContain('aiCmIncludeHiddenInExport === true');
     expect(helper).toContain('P.hasReasoningInSource(messages)');
-    expect(helper).toContain('P.effectiveReasoningToggle(userOn,');
+    expect(helper).toContain("currentAdapter.siteName");
+    expect(helper).toContain('P.effectiveReasoningToggle(userOn, P.hasReasoningInSource(messages) === true, site)');
     // Хелпера нет (срез-песочница) → пользовательское значение: конвенция typeof-гардов.
     expect(helper).toContain("typeof P.hasReasoningInSource !== 'function'");
+    // адаптера нет → пустой site → правило прочих сервисов (авто-ON), поведение прежнее 1:1
+    expect(helper).toContain('? currentAdapter.siteName : \'\'');
 
     const entry = fnDecl(MGR_SRC, 'aiCmSanitizeEmitUserTexts');
     expect(entry).toContain("typeof aiCmHiddenExportEffectiveOn === 'function'");
@@ -259,7 +292,7 @@ describe('D-O41 S2: единственная точка чтения тумбл�
     expect(entry).toContain('aiCmLogSanitizeSkip(res && res.skipped);');
     expect(entry).toContain('return (res && Array.isArray(res.messages)) ? res.messages : messages;');
     expect(entry).toContain('if (aiCmIncludeHiddenInExport === true) {');
-    // авто-ON проверяется ДО OFF-пути (правило 3: S1–S5 — только при эффективном OFF)
+    // авто-ON проверяется ДО OFF-пути (правило 5: S1–S5 — только при эффективном OFF)
     expect(entry.indexOf('if (hiddenExportEffective) {'))
       .toBeLessThan(entry.indexOf('var res = P.sanitizeEmitMessages(messages);'));
 
@@ -288,53 +321,90 @@ describe('D-O41 S2: единственная точка чтения тумбл�
 });
 
 // =====================================================================================
-// D1: ИСТОЧНИК С REASONING + OFF → [REASONING] В ФАЙЛЕ
+// Q1/Q2: QWEN — OFF = force-exclude, ON = include
 // =====================================================================================
-describe('D-O41 D1: OFF + reasoning в источнике → авто-ON, секции в файле', () => {
-  test('D1 поле reasoning (текст — bare-ответ): рендер собирает ровно одну пару секций', () => {
-    const msgs = makeEmitter({ site: 'qwen' }).run(qwenFieldOnly(), false);   // тумблер OFF
+describe('D-O41 Q1/Q2: Qwen — OFF гасит reasoning, ON его отдаёт', () => {
+  test('Q1 Qwen + reasoning (поле и секции) + OFF → 0 секций [REASONING], только вопрос и ответ', () => {
+    [qwenSectioned(), qwenFieldOnly()].forEach(function (source, i) {
+      const msgs = makeEmitter({ site: 'qwen' }).run(source, false);      // тумблер OFF
+      expect([i, msgs[1].text]).toEqual([i, ANSWER]);                     // секции урезаны, дубля нет
+      expect(msgs[1].reasoning).toBeUndefined();                          // поле-данные снято
+      expect(Object.prototype.hasOwnProperty.call(msgs[1], 'hiddenReasoning')).toBe(false);
+      const txt = txtOf(msgs, 'qwen');
+      expect([i, countOccurrences(txt, '[REASONING]')]).toEqual([i, 0]);
+      expect([i, countOccurrences(txt, '[ANSWER]')]).toEqual([i, 0]);
+      expect(txt).toBe('USER:\n' + QUESTION + '\n\nASSISTANT:\n' + ANSWER);
+      expect(txt).not.toContain(REASONING);
+      expect(countOccurrences(mdOf(msgs, 'qwen'), '[REASONING]')).toBe(0);
+    });
+    // антипин: тот же источник при ON секции несёт (тумблер снова управляет, авто-ON нет)
+    expect(countOccurrences(txtOf(makeEmitter({ site: 'qwen' }).run(qwenSectioned(), true), 'qwen'), '[REASONING]')).toBe(1);
+  });
+
+  test('Q2 Qwen + reasoning + ON → [REASONING] в файле (include-путь прежний)', () => {
+    const msgs = makeEmitter({ site: 'qwen' }).run(qwenFieldOnly(), true);
     expect(msgs[1].reasoning).toBe(REASONING);
-    const txt = txtOf(msgs);
+    const txt = txtOf(msgs, 'qwen');
     expect(txt).toBe('USER:\n' + QUESTION + '\n\nASSISTANT:\n' + SECTIONED);
     expect(countOccurrences(txt, '[REASONING]')).toBe(1);
     expect(countOccurrences(txt, '[ANSWER]')).toBe(1);
-    expect(countOccurrences(mdOf(msgs), '[REASONING]')).toBe(1);
-  });
-
-  test('D1 секция в тексте (сетевой путь): OFF не урезает источник, дубля нет', () => {
-    const msgs = makeEmitter({ site: 'qwen' }).run(qwenSectioned(), false);
-    expect(msgs[1].text).toBe(SECTIONED);                       // источник как есть
-    expect(msgs[1].hiddenReasoning).toBeUndefined();            // служебное поле снято
-    const txt = txtOf(msgs);
-    expect(countOccurrences(txt, '[REASONING]')).toBe(1);
-    expect(countOccurrences(txt, REASONING)).toBe(1);
-  });
-
-  test('D1 DeepSeek (секции источника, поля reasoning нет): OFF → сырой путь, [REASONING] в txt', () => {
-    const msgs = makeEmitter({ site: 'deepseek' }).run([
-      { role: 'user', text: 'вопрос', id: 'u1' },
-      { role: 'assistant', text: SECTIONED, id: 'a1' }
-    ], false);
-    expect(msgs[1].text).toBe(SECTIONED);
-    expect(msgs[1].reasoning).toBeUndefined();                  // O-37/C нормализует только DOM-сервис
-    const txt = txtOf(msgs, 'deepseek');
-    expect(txt).toBe('вопрос\n\n' + SECTIONED);
-    expect(countOccurrences(txt, '[REASONING]')).toBe(1);
+    expect(txt.indexOf('[REASONING]')).toBeLessThan(txt.indexOf('[ANSWER]'));
+    expect(countOccurrences(mdOf(msgs, 'qwen'), '[REASONING]')).toBe(1);
   });
 });
 
 // =====================================================================================
-// D2: ИСТОЧНИК БЕЗ REASONING + OFF → 0 СЕКЦИЙ (force-exclude)
+// Q3/Q4: DEEPSEEK — force-exclude; ПРОЧИЕ СЕРВИСЫ — авто-ON (D-O41 в силе)
+// =====================================================================================
+describe('D-O41 Q3/Q4: DeepSeek — force-exclude; Gemini и прочие — авто-ON', () => {
+  test('Q3 DeepSeek + reasoning + OFF → 0 секций (регресс O-7 в силе, авто-ON не срабатывает)', () => {
+    const source = [
+      { role: 'user', text: QUESTION, id: 'u1' },
+      { role: 'assistant', text: SECTIONED, id: 'a1' }
+    ];
+    const msgs = makeEmitter({ site: 'deepseek' }).run(source, false);
+    expect(msgs[1].text).toBe(ANSWER);                                  // stripReasoningSections OFF-пути
+    expect(msgs[1].reasoning).toBeUndefined();
+    const txt = txtOf(msgs, 'deepseek');
+    expect(txt).toBe(QUESTION + '\n\n' + ANSWER);
+    expect(countOccurrences(txt, '[REASONING]')).toBe(0);
+    expect(txt).not.toContain(REASONING);
+    // ON-путь того же источника (include) — секции на месте
+    const onTxt = txtOf(makeEmitter({ site: 'deepseek' }).run(source, true), 'deepseek');
+    expect(countOccurrences(onTxt, '[REASONING]')).toBe(1);
+  });
+
+  AUTO_ON_SITES.forEach(function (site) {
+    test('Q4 ' + site + ' + reasoning + OFF → авто-ON D-O41: [REASONING] в файле', () => {
+      expect(P.hasReasoningInSource(qwenFieldOnly())).toBe(true);
+      const byField = makeEmitter({ site: site }).run(qwenFieldOnly(), false);
+      expect([site, byField[1].reasoning]).toEqual([site, REASONING]);
+      expect(countOccurrences(txtOf(byField, site), '[REASONING]')).toBe(1);
+      // источник с секциями в тексте: OFF не урезает источник, дубля нет
+      const bySection = makeEmitter({ site: site }).run(qwenSectioned(), false);
+      expect([site, bySection[1].text]).toEqual([site, SECTIONED]);
+      expect([site, bySection[1].hiddenReasoning]).toEqual([site, undefined]);
+      const txt = txtOf(bySection, site);
+      expect([site, countOccurrences(txt, '[REASONING]')]).toEqual([site, 1]);
+      expect([site, countOccurrences(txt, REASONING)]).toEqual([site, 1]);
+      // ON-путь байтово совпадает с авто-ON (пункт 4: OFF и ON дают один и тот же файл)
+      expect(txtOf(makeEmitter({ site: site }).run(qwenSectioned(), true), site)).toBe(txt);
+    });
+  });
+});
+
+// =====================================================================================
+// D2: ИСТОЧНИК БЕЗ REASONING + OFF → 0 СЕКЦИЙ (force-exclude у любого сервиса)
 // =====================================================================================
 describe('D-O41 D2: OFF без reasoning в источнике — секций нет (force-exclude)', () => {
   test('D2 txt/md: 0 секций [REASONING], тексты — как раньше', () => {
-    const msgs = makeEmitter({ site: 'qwen' }).run(plainSource(), false);
+    const msgs = makeEmitter({ site: AUTO_ON_SITE }).run(plainSource(), false);
     msgs.forEach(function (m) {
       expect(Object.prototype.hasOwnProperty.call(m, 'reasoning')).toBe(false);
       expect(Object.prototype.hasOwnProperty.call(m, 'hiddenReasoning')).toBe(false);
     });
     const txt = txtOf(msgs);
-    expect(txt).toBe('USER:\nвопрос без размышления\n\nASSISTANT:\nответ без размышления');
+    expect(txt).toBe('вопрос без размышления\n\nответ без размышления');
     expect(countOccurrences(txt, '[REASONING]')).toBe(0);
     expect(countOccurrences(mdOf(msgs), '[REASONING]')).toBe(0);
   });
@@ -358,19 +428,19 @@ describe('D-O41 D2: OFF без reasoning в источнике — секций 
 // D3/D4: ON-ПУТЬ (регресс) И БАЙТОВОЕ РАВЕНСТВО OFF=ON БЕЗ REASONING
 // =====================================================================================
 describe('D-O41 D3/D4: ON-путь не сломан; без reasoning OFF и ON байтово равны', () => {
-  test('D3 источник с reasoning + ON: файл содержит [REASONING], байты = авто-ON', () => {
-    const on = makeEmitter({ site: 'qwen' }).run(qwenSectioned(), true);
-    const auto = makeEmitter({ site: 'qwen' }).run(qwenSectioned(), false);
+  test('D3 источник с reasoning + ON: файл содержит [REASONING]; авто-ON сервисов = ON', () => {
+    const on = makeEmitter({ site: AUTO_ON_SITE }).run(qwenSectioned(), true);
+    const auto = makeEmitter({ site: AUTO_ON_SITE }).run(qwenSectioned(), false);
     const txtOn = txtOf(on);
     expect(countOccurrences(txtOn, '[REASONING]')).toBe(1);
     expect(countOccurrences(txtOn, '[ANSWER]')).toBe(1);
-    expect(txtOn).toBe(txtOf(auto));                            // D1-путь = ON-путь байтово
+    expect(txtOn).toBe(txtOf(auto));                            // авто-ON-путь = ON-путь байтово
     expect(JSON.stringify(on)).toBe(JSON.stringify(auto));
   });
 
   test('D4 источник без reasoning + ON/OFF: байты файла идентичны (авто-ON не срабатывает)', () => {
-    const off = makeEmitter({ site: 'qwen' }).run(plainSource(), false);
-    const on = makeEmitter({ site: 'qwen' }).run(plainSource(), true);
+    const off = makeEmitter({ site: AUTO_ON_SITE }).run(plainSource(), false);
+    const on = makeEmitter({ site: AUTO_ON_SITE }).run(plainSource(), true);
     // «Дата экспорта»/exportedAt — единственная недетерминированная часть сборщиков
     // (два последовательных вызова могут пересечь миллисекундную границу): нормализуем её,
     // сравнивая именно БАЙТЫ файла по обеим ветками тумблера.
@@ -378,9 +448,9 @@ describe('D-O41 D3/D4: ON-путь не сломан; без reasoning OFF и ON
       .replace(/Дата экспорта: [^\n]*/g, 'Дата экспорта: <STAMP>')
       .replace(/"exportedAt": "[^"]*"/g, '"exportedAt": "<STAMP>"');
     expect(txtOf(on)).toBe(txtOf(off));
-    expect(stamp(mdOf(on, 'qwen'))).toBe(stamp(mdOf(off, 'qwen')));
-    expect(stamp(Builders.buildJsonFromHistory({ site: 'qwen', messages: on })))
-      .toBe(stamp(Builders.buildJsonFromHistory({ site: 'qwen', messages: off })));
+    expect(stamp(mdOf(on))).toBe(stamp(mdOf(off)));
+    expect(stamp(Builders.buildJsonFromHistory({ site: AUTO_ON_SITE, messages: on })))
+      .toBe(stamp(Builders.buildJsonFromHistory({ site: AUTO_ON_SITE, messages: off })));
     expect(countOccurrences(txtOf(off), '[REASONING]')).toBe(0);
     // На чистом источнике обе ветки сообщения не меняют (OFF-санация — no-op, сырой путь — 1:1):
     // точка сбора строит объекты заново, поэтому сравниваем содержимое, а не ссылки.
@@ -409,7 +479,7 @@ describe('D-O41 D5: tooltip тумблера в options и обеих локал
 });
 
 // =====================================================================================
-// R1: РЕГРЕСС O-7 — ТУЛ-МУСОР ПРИ OFF БЕЗ REASONING НЕ ВОЗВРАЩАЕТСЯ
+// R1: РЕГРЕСС O-7 — ТУЛ-МУСОР ПРИ OFF НЕ ВОЗВРАЩАЕТСЯ
 // =====================================================================================
 describe('D-O41 R1: OFF-зачистка O-7 (S1–S5) цела при sourceHasReasoning=false', () => {
   test('R1 тул-результаты (S3) и XML-вызовы (S4) в файл не едут; пустых ходов нет (S5)', () => {
@@ -428,39 +498,45 @@ describe('D-O41 R1: OFF-зачистка O-7 (S1–S5) цела при sourceHas
     expect(txt).toContain(TOOL_PROSE_AFTER);
   });
 
-  test('R1 следствие правила 5: при reasoning в источнике OFF идёт сырым путём (S1–S5 не зовётся)', () => {
-    // Пинится ЧЕСТНО: OFF пользователя при sourceHasReasoning=true игнорируется, поэтому
-    // санация S1–S5 на таком источнике не исполняется — это цена «WYSIWYG + авто-ON».
+  test('R1 пересмотр: при reasoning в источнике OFF у DeepSeek ТОЖЕ исполняет S1–S5', () => {
+    // D-O41 (2026-09-24) игнорировал явный OFF при reasoning в источнике → санация S1–S5 на
+    // таком источнике не исполнялась. ПЕРЕСМОТР (2026-09-25): DeepSeek в паре force-exclude,
+    // поэтому OFF снова = «только вопросы и ответы»: тул-мусор вырезан, секции урезаны.
     const input = toolJunkSource();
     input[1].text = input[1].text + '\n\n' + SECTIONED;           // в источнике появилось размышление
     expect(P.hasReasoningInSource(input)).toBe(true);
     const msgs = makeEmitter({ site: 'deepseek' }).run(input, false);
-    expect(msgs).toHaveLength(2);                                 // сырой путь: ничего не снято
+    expect(msgs).toHaveLength(1);                                 // S3: ход из одних тул-результатов снят
     const txt = txtOf(msgs, 'deepseek');
-    expect(txt).toContain('[TOOL_RESULTS]');
-    expect(txt).toContain('<browser_type>');
-    expect(txt).toContain('[REASONING]');
+    expect(txt).not.toContain('[TOOL_RESULTS]');
+    expect(txt).not.toContain('<browser_type>');
+    expect(txt).not.toContain('[REASONING]');                    // и секции урезаны OFF-путём
+    expect(txt).toContain(TOOL_PROSE_BEFORE);
+    expect(txt).toContain(TOOL_PROSE_AFTER);
   });
 });
 
 // =====================================================================================
-// R2: РЕГРЕСС O-39 — 53/53 НА ИСТОРИИ QWEN
+// R2: РЕГРЕСС O-39 — 53/53 НА ИСТОРИИ QWEN (ON-ПУТЬ)
 // =====================================================================================
-describe('D-O41 R2: история Qwen с 53 размышлениями — 53/53 секций', () => {
-  test('R2 sourceHasReasoning=true: [REASONING]/[ANSWER] = 53/53 (авто-ON и ON совпадают)', () => {
+describe('D-O41 R2: история Qwen с 53 размышлениями — 53/53 секций на ON-пути', () => {
+  test('R2 ON: [REASONING]/[ANSWER] = 53/53 (регресс O-39 не сломан)', () => {
     const history = qwenHistory(53);
-    const auto = makeEmitter({ site: 'qwen' }).run(history, false);   // тумблер OFF → авто-ON
     const on = makeEmitter({ site: 'qwen' }).run(history, true);
-    expect(auto).toHaveLength(106);
-    expect(auto.filter(function (m) { return m.reasoning; })).toHaveLength(53);
-    const txtAuto = txtOf(auto);
-    const txtOn = txtOf(on);
-    expect(countOccurrences(txtAuto, '[REASONING]')).toBe(53);
-    expect(countOccurrences(txtAuto, '[ANSWER]')).toBe(53);
+    expect(on).toHaveLength(106);
+    expect(on.filter(function (m) { return m.reasoning; })).toHaveLength(53);
+    const txtOn = txtOf(on, 'qwen');
     expect(countOccurrences(txtOn, '[REASONING]')).toBe(53);
     expect(countOccurrences(txtOn, '[ANSWER]')).toBe(53);
-    expect(txtAuto).toBe(txtOn);
-    expect(countOccurrences(mdOf(auto), '[REASONING]')).toBe(53);
+    expect(countOccurrences(mdOf(on, 'qwen'), '[REASONING]')).toBe(53);
+  });
+
+  test('R2 честная граница пересмотра: OFF на той же истории даёт 0 секций (force-exclude Qwen)', () => {
+    const off = makeEmitter({ site: 'qwen' }).run(qwenHistory(53), false);
+    expect(off.filter(function (m) { return m.reasoning; })).toHaveLength(0);
+    const txtOff = txtOf(off, 'qwen');
+    expect(countOccurrences(txtOff, '[REASONING]')).toBe(0);
+    expect(countOccurrences(txtOff, '[ANSWER]')).toBe(0);
   });
 });
 
@@ -487,7 +563,7 @@ describe('D-O41 R3: Gemini/AI Studio байтово прежний при ON и 
     expect(dedupe).toContain("if (site !== 'gemini' && site !== 'aistudio') {");
     expect(dedupe).toContain('P.prepareExportMessages(messages, aiCmLogIntraDedupe)');
     expect(PIPELINE_SRC).toContain('function prepareExportMessages(raw, onMessageDedupe)');
-    // D-O41 в подготовку Gemini-ветки не вмешивается
+    // D-O41 (и его пересмотр) в подготовку Gemini-ветки не вмешивается
     const prep = fnDecl(PIPELINE_SRC, 'prepareExportMessages');
     expect(prep).not.toContain('effectiveReasoningToggle');
     expect(prep).not.toContain('hasReasoningInSource');

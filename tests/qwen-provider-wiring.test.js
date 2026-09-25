@@ -29,6 +29,21 @@ const modelConfigRaw = read('utils/model-config.js');
 const ModelConfig = require('../utils/model-config.js');
 const Builders = require('../utils/export-text-builders.js');
 
+// Рез по балансу фигурных скобок (конвенция сьюта): тело функции до парной скобки.
+function fnDecl(src, name) {
+  const start = src.indexOf('function ' + name + '(');
+  expect(start).toBeGreaterThan(-1);
+  let depth = 0;
+  for (let i = src.indexOf('{', start); i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}') {
+      depth--;
+      if (depth === 0) return src.slice(start, i + 1);
+    }
+  }
+  throw new Error('unbalanced declaration: ' + name);
+}
+
 describe('O-35: manifest.json — Qwen добавлен, прежние сервисы не тронуты', function () {
   test('host_permissions: chat.qwen.ai есть, прочие хосты на месте', function () {
     expect(manifest.host_permissions).toContain('https://chat.qwen.ai/*');
@@ -231,9 +246,19 @@ describe('O-35 (G3): R-D на каждый путь записи базы Qwen',
 
   test('R-пин: остальные шесть платформ в content.js/emit-пайплайне не переписаны', function () {
     const pipeline = read('utils/export-emit-pipeline.js');
-    // Qwen в emit-пайплайн не добавлен (кроме общих механизмов), запрет на правки соблюдён
-    expect(pipeline).not.toContain('qwen');
-    expect(pipeline).not.toContain('Qwen');
+    // D-O41 (пересмотр 2026-09-25): единственное знание пайплайна об именах платформ — пара
+    // force-exclude сервисов внутри ЧИСТОЙ функции effectiveReasoningToggle (Qwen/DeepSeek:
+    // OFF у них значит принудительное исключение reasoning, авто-ON не срабатывает).
+    // Комментарии не считаем: пинится КОД.
+    const code = pipeline.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const eff = fnDecl(pipeline, 'effectiveReasoningToggle');
+    expect(eff).toContain("if (site === 'qwen' || site === 'deepseek') return false;");
+    expect((code.match(/qwen/g) || []).length).toBe(1);       // ровно эта ветка
+    expect(code).not.toContain('Qwen');
+    // координаты сравниваем В ОДНОЙ строке (code): имя платформы стоит внутри тела функции
+    expect(code.indexOf('qwen')).toBeGreaterThan(code.indexOf('function effectiveReasoningToggle('));
+    // собственной ветки Qwen в emit-пайплайне экспорта по-прежнему нет
+    expect(code).not.toContain('Qwen3');
   });
 });
 

@@ -929,7 +929,16 @@
       historyComplete: true,
       reachedRoot: true,
       baseEmpty: false,
-      serverTokens: serverTokens,
+      // ===== O-47 (badge-метрика Qwen): serverTokens В detail НЕ УЕЗЖАЕТ =====
+      // Корень дефекта: usage.input из SSE — КУМУЛИРУЕМОЕ сервисом потребление API (input
+      // текущего запроса + накопленный на его стороне контекст), а НЕ размер текущего контекста
+      // диалога: число растёт от хода к ходу и не описывает ни окно, ни базу (в фикстурах O-35 —
+      // 1709 при двух сообщениях). У DeepSeek аналог (accumulated_token_usage) авторитетен по
+      // решению O-23 — у Qwen нет. Поэтому поле не публикуется вовсе: badge/pct Qwen считаются
+      // ТОЛЬКО эвристикой Tokenizer.estimateDialogTokens (tokens~), а content.js дополнительно
+      // гасит серверный счётчик для site=qwen (core/content.js:aiCmMetricServerTokens).
+      // Диагностика числа не теряется: локальная переменная serverTokens уходит в строки
+      // 'emit' (diagLine) и qwen-sse (diagTag) ниже, а также в сигнатуру дедупа снимка.
       // O-35: поля серверного usage Qwen — тултип берёт их как источник истины.
       // output ВКЛЮЧАЕТ reasoning (output_tokens_details.reasoning_tokens), поэтому
       // reasoningTokens идёт отдельной строкой и поясняет состав output.
@@ -950,16 +959,17 @@
       diagLine('emit', {
         conv: String(detail.convId || '').slice(0, 8),
         count: detail.count,
-        serverTokens: detail.serverTokens,
+        serverTokens: serverTokens,
         reasoningTokens: detail.qwenUsage.reasoningTokens,
         responseId: String(detail.responseId || '').slice(0, 8)
       });
       // O-35 (ДИАГНОСТИКА, только измерение): qwen-sse — серверный usage ФАКТИЧЕСКИ ушёл
       // в снимок (это и есть точка «usage дошёл до бейджа», см. дефект B). serverTokens
-      // здесь — ровно detail.serverTokens = usage.input последнего кадра.
+      // здесь — ровно локальное usage.input последнего кадра; O-47: в detail это число больше
+      // не публикуется (badge Qwen считает только tokens~), строка остаётся ИЗМЕРЕНИЕМ.
       diagTag('qwen-sse', {
         ts: Date.now(), event: 'emit', convId: String(detail.convId || ''),
-        url: s.url || diagUrl(), serverTokens: detail.serverTokens,
+        url: s.url || diagUrl(), serverTokens: serverTokens,
         inputTokens: detail.qwenUsage.inputTokens,
         outputTokens: detail.qwenUsage.outputTokens,
         reasoningTokens: detail.qwenUsage.reasoningTokens,

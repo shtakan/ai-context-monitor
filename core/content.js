@@ -1848,6 +1848,23 @@ function aiCmArmBadgeHoldFallback() {
   } catch (eArmO1) { }
 }
 
+// ===== O-47: КАКОЙ серверный счётчик идёт в МЕТРИКУ (badge/pct) =====
+// Корень дефекта: у Qwen netServerTokens — это usage.input из SSE-стрима
+// (core/qwen-intercept.js:emitSnapshot), то есть КУМУЛИРОВАННОЕ сервисом потребление API
+// (input текущего запроса + контекст на его стороне), а НЕ размер текущего контекста диалога.
+// Такое число растёт от хода к ходу и не описывает ни окно, ни базу: живой замер O-47 —
+// 1709 «токенов» на диалоге из двух сообщений. Поэтому для Qwen серверный счётчик в метрике
+// ИГНОРИРУЕТСЯ (эффективно 0): badge/pct считаются ТОЛЬКО эвристикой
+// Tokenizer.estimateDialogTokens (tokens~) — на ОБОИХ путях метрики (processAndSend и GET_STATS),
+// иначе попап и бейдж разошлись бы.
+// Прочие сервисы НЕ тронуты: у DeepSeek serverTokens остаётся авторитетным (O-23), у Gemini —
+// счёт BYOK countTokens (O-35). Функция только ЧИТАЕТ netServerTokens: значение остаётся как
+// было, чтобы диагностическая строка ingest'а («serverTokens=N») не врала.
+function aiCmMetricServerTokens(svc) {
+  if (svc === 'qwen') return 0;
+  return (typeof netServerTokens === 'number' && netServerTokens > 0) ? netServerTokens : 0;
+}
+
 function processAndSend() {
   if (!currentAdapter) return;
 
@@ -2120,9 +2137,13 @@ function processAndSend() {
       requestExactTokens(fullText, modelId);
     }
 
-    let tokenEstimate = netServerTokens > 0 ? netServerTokens : Tokenizer.estimateDialogTokens(fullText, countForTokens);
+    // O-47: серверный счётчик для метрики ЭТОГО сервиса. У Qwen он всегда 0 (usage.input —
+    // кумулятив API-потребления, а не размер контекста; см. aiCmMetricServerTokens), поэтому
+    // pct/badge Qwen считаются ТОЛЬКО эвристикой tokens~. Прочие сервисы — прежний приоритет.
+    const metricServerTokens = aiCmMetricServerTokens(svc);
+    let tokenEstimate = metricServerTokens > 0 ? metricServerTokens : Tokenizer.estimateDialogTokens(fullText, countForTokens);
     // Поднятый полом effectiveLen (Gemini): если сеть дала effectiveLen > длины текста — масштабируем оценку
-    if (netServerTokens === 0 && netEffectiveLen > 0 && fullText && fullText.length > 0 && netEffectiveLen > fullText.length) {
+    if (metricServerTokens === 0 && netEffectiveLen > 0 && fullText && fullText.length > 0 && netEffectiveLen > fullText.length) {
       tokenEstimate = Math.round(tokenEstimate * (netEffectiveLen / fullText.length));
     }
     tokenEstimate += netAttachTokens;
@@ -2166,7 +2187,7 @@ function processAndSend() {
         });
       }
     } catch (eMetricSrc) { }
-    if (netServerTokens > 0) {
+    if (metricServerTokens > 0) {
       // точное число из countTokens авторитетно — не удерживаем завышенную эвристику
       maxTokenCount = tokenEstimate;
     } else if (baseComplete === true) {
@@ -2227,7 +2248,11 @@ function processAndSend() {
           // логе: baseCount/netBaseMsgs описывают СЕТЕВУЮ базу, адаптерная живёт здесь.
           adapterBaseSeen: (adapterBaseSeen === true) ? 1 : 0,
           netBaseMsgs: lastBaseTexts.length, baseCount: baseCount,
+          // O-47: netServerTokens — что ПРИНЯЛИ из снимка (измерение ingest'а), metricServerTokens —
+          // что реально пошло в метрику. У Qwen второе ВСЕГДА 0 (число игнорируется, pct по tokens~):
+          // расхождение этих двух полей в живой строке и есть доказательство работы правила.
           netServerTokens: (typeof netServerTokens === 'number') ? netServerTokens : 0,
+          metricServerTokens: (typeof metricServerTokens === 'number') ? metricServerTokens : 0,
           convId: (typeof getCurrentConvId === 'function' ? (getCurrentConvId() || '') : '') || '(none)',
           url: String((typeof location !== 'undefined' && location && location.href) || ''),
           source: (typeof aiCmSourceLabelNow === 'string' && aiCmSourceLabelNow) ? aiCmSourceLabelNow : '-'
@@ -2242,7 +2267,7 @@ function processAndSend() {
     if (hasChanged) {
       const tagPct = aiCmActivePct();
       const tag = (tagPct != null) ? ('порог ' + tagPct + '% от Авто') : 'Авто';
-      debugLog('log', `📊 ${ModelConfig.getModel(modelId)?.name || modelId}: ${maxTokenCount} / ${displayLimit.toLocaleString()} (${tag}) · окно ${contextLimit.toLocaleString()} · ${percentage}%` + (netAttachTokens > 0 ? ` · вложения≈${netAttachTokens}` : '') + (netServerTokens > 0 ? ' · serverTokens' : '') + (baseComplete ? ' · по базе' : ''));
+      debugLog('log', `📊 ${ModelConfig.getModel(modelId)?.name || modelId}: ${maxTokenCount} / ${displayLimit.toLocaleString()} (${tag}) · окно ${contextLimit.toLocaleString()} · ${percentage}%` + (netAttachTokens > 0 ? ` · вложения≈${netAttachTokens}` : '') + (metricServerTokens > 0 ? ' · serverTokens' : '') + (baseComplete ? ' · по базе' : ''));
     }
 
     // Снапшот для попапа в chrome.storage.local
@@ -2657,8 +2682,11 @@ if (isExtensionValid()) {
         const fullText = effective ? effective : currentAdapter.getFullDialogText();
         const countForTokens = effective ? getEffectiveCount(messages.length) : messages.length;
         const modelId = resolveCurrentModel();
-        let tokenEstimate = netServerTokens > 0 ? netServerTokens : Tokenizer.estimateDialogTokens(fullText, countForTokens);
-        if (netServerTokens === 0 && netEffectiveLen > 0 && fullText && fullText.length > 0 && netEffectiveLen > fullText.length) {
+        // O-47: тот же счётчик, что у бейджа (processAndSend) — попап и круг не расходятся;
+        // у Qwen эффективно 0 → tokens~.
+        const metricServerTokens = aiCmMetricServerTokens(currentAdapter.siteName);
+        let tokenEstimate = metricServerTokens > 0 ? metricServerTokens : Tokenizer.estimateDialogTokens(fullText, countForTokens);
+        if (metricServerTokens === 0 && netEffectiveLen > 0 && fullText && fullText.length > 0 && netEffectiveLen > fullText.length) {
           tokenEstimate = Math.round(tokenEstimate * (netEffectiveLen / fullText.length));
         }
         tokenEstimate += netAttachTokens;

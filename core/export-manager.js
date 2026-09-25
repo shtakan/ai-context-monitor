@@ -96,11 +96,17 @@ function aiCmEmitEntryDiag(branch, inMsgs, outMsgs, effectiveOn) {
   } catch (eDiagEntry) { return false; }
 }
 // ===== D-O41 (UX): АВТО-ON ТУМБЛЕРА ПРИ НАЛИЧИИ REASONING В ИСТОЧНИКЕ =====
-// ЕДИНСТВЕННАЯ точка чтения тумблера для выбора ветки экспорта. Правило владельца:
-//   effectiveToggle = (userToggle === OFF && sourceHasReasoning === true) ? ON : userToggle
+// ЕДИНСТВЕННАЯ точка чтения тумблера для выбора ветки экспорта. Правило владельца (D-O41 с
+// пересмотром 2026-09-25):
+//   effectiveToggle = (userToggle === OFF && sourceHasReasoning === true
+//                      && site !== 'qwen' && site !== 'deepseek') ? ON : userToggle
 // (чистая функция пайплайна effectiveReasoningToggle; признак reasoning в источнике —
 // hasReasoningInSource: непустое поле reasoning ИЛИ секция [REASONING] в тексте).
-// OFF без reasoning в источнике работает как force-exclude: прежний OFF-путь O-7
+// ПЕРЕСМОТР: у Qwen/DeepSeek секции [REASONING] лежат в САМОМ источнике сетевого пути, поэтому
+// авто-ON срабатывал бы на каждом их чате и явный OFF был бы недостижим. Для этих двух сервисов
+// OFF снова значит force-exclude (прежний OFF-путь O-7), ON — include как прежде; сайт передаётся
+// третьим аргументом из currentAdapter.siteName. Для остальных сервисов — авто-ON как в D-O41.
+// OFF без reasoning в источнике работает как force-exclude у ВСЕХ сервисов: прежний OFF-путь O-7
 // (S1–S5, O-20, O-40, O-42) — ни одного нового байта. Пайплайна нет (отладочный контекст,
 // срез-песочницы) → ровно пользовательское значение: поведение прежнее 1:1, ни одной новой
 // ветки не исполняется. Функция только читает: массивы/сообщения не меняются.
@@ -110,7 +116,11 @@ function aiCmHiddenExportEffectiveOn(messages) {
     var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
     if (!P || typeof P.hasReasoningInSource !== 'function' ||
       typeof P.effectiveReasoningToggle !== 'function') return userOn;
-    return P.effectiveReasoningToggle(userOn, P.hasReasoningInSource(messages) === true) === true;
+    // Сайт — из текущего адаптера (та же точка правды, что у остальных site-гейтов этого модуля);
+    // адаптера нет (срез-песочницы) → пустая строка → правило остальных сервисов (авто-ON).
+    var site = (typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName)
+      ? currentAdapter.siteName : '';
+    return P.effectiveReasoningToggle(userOn, P.hasReasoningInSource(messages) === true, site) === true;
   } catch (eEffective) { return userOn; }
 }
 // Санация массива сообщений экспорта: role=user с ровно одной парой маркеров → видимый
@@ -122,9 +132,11 @@ function aiCmHiddenExportEffectiveOn(messages) {
 //                           части [ANSWER], санация O-20 активна, hidden снят (OFF-путь);
 //   тумблер ON            → сырой режим: текст как есть, hidden-reasoning отдельным блоком,
 //                           инъекции как есть (O-20 обойдена).
-// D-O41 (UX, 2026-09-24): «OFF» здесь — ЭФФЕКТИВНОЕ значение (aiCmHiddenExportEffectiveOn):
-// OFF пользователя при наличии reasoning в источнике = авто-ON (сырой режим), OFF без
-// reasoning = прежний OFF-путь. Выбор ветки по-прежнему ОДИН, санация не переписана.
+// D-O41 (UX, 2026-09-24; пересмотр 2026-09-25): «OFF» здесь — ЭФФЕКТИВНОЕ значение
+// (aiCmHiddenExportEffectiveOn): OFF пользователя при наличии reasoning в источнике = авто-ON
+// (сырой режим) у Gemini/Perplexity/ChatGPT/Claude/GSA, но у Qwen/DeepSeek OFF остаётся
+// force-exclude; OFF без reasoning = прежний OFF-путь у всех. Выбор ветки по-прежнему ОДИН,
+// санация не переписана.
 function aiCmSanitizeEmitUserTexts(messages) {
   try {
     var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
@@ -277,10 +289,12 @@ function aiCmCollectExportSource() {
     // typeof-гарды — конвенция срез-песочниц (fnDecl): там ни переменной тумблера, ни
     // предиката сайта нет → массив не трогается вовсе, поведение прежнее 1:1.
     var hiddenExportOn = (typeof aiCmIncludeHiddenInExport !== 'undefined') && aiCmIncludeHiddenInExport === true;
-    // D-O41 (UX): переменная ниже читается как ЭФФЕКТИВНОЕ значение (тот же хелпер, что у точки
-    // санации): OFF пользователя при наличии reasoning в источнике не действует — поле reasoning
-    // на источнике с размышлением НЕ снимается (иначе авто-ON потерял бы своё основание).
-    // Хелпера нет (срез-песочница) → значение прежнее (пользовательское), поведение 1:1.
+    // D-O41 (пересмотр 2026-09-25): переменная ниже читается как ЭФФЕКТИВНОЕ значение (тот же
+    // хелпер, что у точки санации): OFF пользователя при наличии reasoning в источнике не
+    // действует у сервисов авто-ON — поле reasoning на таком источнике НЕ снимается (иначе
+    // авто-ON потерял бы своё основание). У Qwen/DeepSeek эффективное значение OFF (force-exclude)
+    // → поле reasoning снимается, как и требует O-7. Хелпера нет (срез-песочница) → значение
+    // прежнее (пользовательское), поведение 1:1.
     if (!hiddenExportOn && typeof aiCmHiddenExportEffectiveOn === 'function') {
       hiddenExportOn = aiCmHiddenExportEffectiveOn(out);
     }

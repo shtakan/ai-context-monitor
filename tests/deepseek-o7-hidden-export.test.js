@@ -35,10 +35,13 @@
  *
  * D-O41 (2026-09-24, UX): у тумблера появился АВТО-ON — при наличии reasoning в ИСТОЧНИКЕ
  * (непустое поле reasoning ИЛИ секция [REASONING] в тексте) OFF пользователя игнорируется, и
- * источник идёт СЫРЫМ путём. Поэтому OFF-пины «только вопросы и ответы» этого сьюта считаются на
- * парной фикстуре PLATFORMS_OFF (тот же DeepSeek, но ответ без секций): там явный OFF сохраняет
- * силу (force-exclude) и OFF-путь O-7/S1–S5/O-20 пинится ровно как раньше. Сам авто-ON запинован
- * отдельно — tests/d-o41-reasoning-auto-on.test.js (D1/D2/R1).
+ * источник идёт СЫРЫМ путём.
+ * D-O41 ПЕРЕСМОТР (2026-09-25): DeepSeek ИСКЛЮЧЁН из авто-ON (вместе с Qwen) — его сетевой
+ * источник ВСЕГДА несёт секции [REASONING], поэтому авто-ON срабатывал бы на каждом чате
+ * DeepSeek и делал бы явный OFF недостижимым. OFF у DeepSeek снова значит force-exclude, то
+ * есть OFF-пины «только вопросы и ответы» (S1–S5, O-20) этого сьюта считаются КАК РАНЬШЕ —
+ * в том числе на парной фикстуре PLATFORMS_OFF (ответ без секций). Авто-ON у прочих сервисов
+ * и ось site пинится отдельно — tests/d-o41-reasoning-auto-on.test.js (Q1–Q4, R1–R3).
  */
 const fs = require('fs');
 const path = require('path');
@@ -248,12 +251,11 @@ const PLATFORMS = [
   { site: 'perplexity', label: 'Perplexity', model: 'Sonar', user: 'Вопрос Perplexity', assistant: 'Ответ Perplexity' }
 ];
 
-// D-O41 (2026-09-24): авто-ON тумблера при наличии reasoning в ИСТОЧНИКЕ. Источник DeepSeek
-// сетевого пути несёт размышление СЕКЦИЕЙ [REASONING] в тексте хода, поэтому при OFF он теперь
-// уходит в СЫРОЙ режим (авто-ON), а не в OFF-путь O-7. Сам авто-ON запинован отдельно
-// (tests/d-o41-reasoning-auto-on.test.js); здесь OFF-путь O-7 («только вопросы и ответы»,
-// S1–S5, O-20) пинится на парном фикстуре БЕЗ reasoning — force-exclude, ровно тот случай,
-// в котором явный OFF сохраняет силу по спецификации владельца.
+// D-O41 ПЕРЕСМОТР (2026-09-25): DeepSeek — force-exclude, поэтому OFF-пины этого сьюта
+// считаются на ОБЕИХ фикстурах (и с секциями [REASONING], и без них): парная фикстура
+// PLATFORMS_OFF (ответ без секций) сохранена как нижняя граница — источник БЕЗ reasoning
+// обязан идти OFF-путём ровно так же, как источник с reasoning. Авто-ON остался у прочих
+// сервисов и запинован отдельно — tests/d-o41-reasoning-auto-on.test.js (Q4).
 const PLATFORMS_OFF = PLATFORMS.map(function (f) {
   return (f.site === 'deepseek') ? Object.assign({}, f, { assistant: ANSWER_TEXT }) : f;
 });
@@ -576,8 +578,8 @@ describe('O-7 D1: тумблер ON — reasoning и инъекции DeepSeek++
  * ===================================================================================== */
 describe('O-7 D2: тумблер OFF — только вопросы и ответы', () => {
   test('OFF-выход === независимому оракулу «только вопросы и ответы» (6 платформ, JSON.stringify побайтово)', () => {
-    // D-O41: OFF-путь пинится на источниках БЕЗ reasoning (PLATFORMS_OFF) — только там явный
-    // OFF сохраняет силу; источник DeepSeek с секциями уходит авто-ON-ом в сырой режим.
+    // D-O41 пересмотр: OFF-путь пинится и на источниках БЕЗ reasoning (PLATFORMS_OFF), и (ниже)
+    // на фикстуре DeepSeek с секциями — у DeepSeek OFF значит force-exclude в обоих случаях.
     PLATFORMS_OFF.forEach(function (fixture) {
       const input = networkMessages(fixture);
       const off = emitNetworkOff(fixture, input);
@@ -620,16 +622,18 @@ describe('O-7 D2: тумблер OFF — только вопросы и отве
     });
   });
 
-  test('D-O41: OFF + reasoning в источнике → секции источника сохранены; вход и БАЗА байтово прежние', () => {
+  test('D-O41 пересмотр: DeepSeek OFF + reasoning в источнике → force-exclude (OFF-путь O-7), база не тронута', () => {
     const input = networkMessages(PLATFORMS[2]);
     const snapshot = input.map(function (m) { return m.text; });
     const e = makeEmitter();
     e.offline();
     const msgs = e.run(input);
-    // авто-ON: источник с секцией [REASONING] идёт сырым путём — OFF пользователя игнорируется
-    expect(msgs[1].text).toBe(NETWORK_ASSISTANT_TEXT);
+    // D-O41 (пересмотр 2026-09-25): DeepSeek в паре force-exclude с Qwen — OFF снова значит
+    // «только вопросы и ответы»: секции источника урезаны OFF-санацией, а не сырым путём.
+    expect(msgs[1].text).toBe(ANSWER_TEXT);
     expect(input.map(function (m) { return m.text; })).toEqual(snapshot);   // вход не мутирован
     expect(e.ctx.lastBaseTexts[1]).toBe(NETWORK_ASSISTANT_TEXT);           // БАЗА несёт секции (v8)
+    expect(e.ctx.lastBaseTexts).toEqual(snapshot);
   });
 
   test('OFF: источник-пин — единая точка выхода держит OFF-путь (урезание + O-20 + hidden)', () => {
@@ -1009,8 +1013,8 @@ describe('O-7 R2: tokens/pct/база не меняются от тумблер�
   });
 
   test('OFF и ON: tokens/limit/percent в json равны, различается только текст', () => {
-    // D-O41: различие OFF/ON пинится на источнике БЕЗ reasoning (force-exclude) — у источника
-    // с секцией [REASONING] OFF игнорируется (авто-ON), и байты OFF/ON совпадают.
+    // D-O41 пересмотр: у DeepSeek OFF — force-exclude, поэтому различие OFF/ON видно и на
+    // источнике С reasoning (ниже — на парной фикстуре без секций, как нижней границе).
     const plain = PLATFORMS_OFF[2];
     const jOff = JSON.parse(Builders.buildJsonFromHistory(historyFrom(plain, emitNetworkOff(plain)), 'DeepSeek'));
     const jOn = JSON.parse(Builders.buildJsonFromHistory(historyFrom(plain, emitNetworkOn(plain)), 'DeepSeek'));
@@ -1030,7 +1034,7 @@ describe('O-7 R2: tokens/pct/база не меняются от тумблер�
     expect(input[1].text).toBe(NETWORK_ASSISTANT_TEXT);
   });
 
-  test('OFF не мутирует базу метрик: правка живёт только на выходе экспорта (D-O41: авто-ON)', () => {
+  test('OFF не мутирует базу метрик: правка живёт только на выходе экспорта (D-O41 пересмотр: force-exclude)', () => {
     const input = networkMessages(ds);
     const e = makeEmitter();
     e.offline();
@@ -1038,8 +1042,9 @@ describe('O-7 R2: tokens/pct/база не меняются от тумблер�
     const out = e.run(input);
     expect(e.ctx.lastBaseTexts).toEqual(before);          // база метрик байтово прежняя
     expect(input[1].text).toBe(NETWORK_ASSISTANT_TEXT);   // вход не мутирован
-    // D-O41: источник с reasoning идёт сырым путём (авто-ON) — секции не урезаны
-    expect(out[1].text).toBe(NETWORK_ASSISTANT_TEXT);
+    // D-O41 пересмотр: DeepSeek — force-exclude, OFF урезает секции источника на выходе
+    // (текст меняется только в КОПИИ экспорта, база и вход — нет).
+    expect(out[1].text).toBe(ANSWER_TEXT);
   });
 
   test('source-пин: текст метрик (aiCmPreparedText/aiCmMetricBaseText) hidden-полей не видит', () => {

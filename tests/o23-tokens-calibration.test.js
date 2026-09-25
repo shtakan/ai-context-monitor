@@ -231,7 +231,9 @@ describe('O-23 R: регресс байтов tokens~ (serverTokens = 0)', () =>
   });
 
   test('R5: бейдж авторитетен по serverTokens на ОБОИХ путях (updateWidget и GET_STATS)', () => {
-    const ternary = 'netServerTokens > 0 ? netServerTokens : Tokenizer.estimateDialogTokens(';
+    // O-47: оба пути берут счётчик через site-гейт aiCmMetricServerTokens (у Qwen он 0 —
+    // usage.input не размер контекста); для остальных сервисов значение прежнее (serverTokens).
+    const ternary = 'metricServerTokens > 0 ? metricServerTokens : Tokenizer.estimateDialogTokens(';
     const hits = CONTENT_SRC.split(ternary).length - 1;
     expect(hits).toBe(2);
     // т.е. при наличии серверного usage отображаемое значение = serverTokens ровно (0% отклонения)

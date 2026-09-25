@@ -36,10 +36,13 @@
  *
  * D-O41 (2026-09-24, UX): у тумблера появился АВТО-ON — при наличии reasoning в ИСТОЧНИКЕ
  * (непустое поле reasoning ИЛИ секция [REASONING] в тексте) OFF пользователя игнорируется, и
- * источник идёт СЫРЫМ путём. Для Qwen это ровно те снимки, на которых стояли пины D1/D2 ниже:
- * OFF больше НЕ гасит reasoning у источника с размышлением, поэтому здесь они переведены на
- * семантику авто-ON, а сам OFF-путь (force-exclude) пинится на снимке БЕЗ reasoning. Полный
- * контур D-O41 — в tests/d-o41-reasoning-auto-on.test.js (D1–D5, R1–R3, S1–S3).
+ * источник идёт СЫРЫМ путём. Для Qwen это ровно те снимки, на которых стоят пины D1/D2 ниже.
+ *
+ * D-O41 ПЕРЕСМОТР (2026-09-25): авто-ON отменён ДЛЯ QWEN И DEEPSEEK — у обоих размышление
+ * лежит в самом источнике сетевого пути, поэтому авто-ON срабатывал бы на каждом их чате и
+ * делал бы явный OFF физически недостижимым. Для Qwen OFF снова значит force-exclude (ровно
+ * контракт O-7 этого сьюта, пины D1/D2/D3), ON — include (пин R1). Полный контур пересмотра —
+ * tests/d-o41-reasoning-auto-on.test.js (Q1–Q4, R1–R2); авто-ON у прочих сервисов — там же.
  */
 
 const fs = require('fs');
@@ -147,69 +150,64 @@ function qwenSnapshotFieldOnly() {
 }
 
 // =====================================================================================
-// D1/D2 (D-O41): OFF + REASONING В ИСТОЧНИКЕ → авто-ON (сырой путь Qwen)
+// D1/D2 (O-7 + D-O41 пересмотр): OFF + REASONING В ИСТОЧНИКЕ → force-exclude у Qwen
+// (авто-ON не срабатывает: иначе явный OFF был бы недостижим — размышление всегда в источнике)
 // =====================================================================================
-describe('O-7/Qwen D1: OFF-тумблер + reasoning в источнике → D-O41 авто-ON (секции на месте)', () => {
-  test('D1 сетевой снимок с секциями в тексте (живой O-39) → OFF игнорируется, [REASONING] один', () => {
+describe('O-7/Qwen D1: OFF-тумблер гасит [REASONING] даже при reasoning в источнике', () => {
+  test('D1 сетевой снимок с секциями в тексте (живой O-39) → 0 секций, текст хода — bare-ответ', () => {
     const e = makeEmitter({ site: 'qwen' });
     const msgs = e.run(qwenSnapshotSectioned(), false);      // тумблер OFF (default)
 
     expect(msgs).toHaveLength(2);
-    // D-O41: источник с размышлением уходит сырым путём — поле reasoning сохранено,
-    // служебное поле захвата снято (в текст оно уже входит секцией), текст хода как есть.
-    expect(msgs[1].reasoning).toBe(REASONING);
+    // OFF-путь: нормализованное поле reasoning снято точкой сбора, секции текста урезаны
+    // OFF-санацией (stripReasoningSections), служебное поле захвата снято там же.
+    expect(Object.prototype.hasOwnProperty.call(msgs[1], 'reasoning')).toBe(false);
     expect(Object.prototype.hasOwnProperty.call(msgs[1], 'hiddenReasoning')).toBe(false);
-    expect(msgs[1].text).toBe(SECTIONED);
+    expect(msgs[1].text).toBe(ANSWER);
     expect(msgs[0].text).toBe(QUESTION);                     // ход пользователя не тронут
 
     const txt = txtOf(msgs);
-    expect(txt).toBe('USER:\n' + QUESTION + '\n\nASSISTANT:\n' + SECTIONED);
-    expect(countOccurrences(txt, '[REASONING]')).toBe(1);
-    expect(countOccurrences(txt, '[ANSWER]')).toBe(1);
-    expect(txt.indexOf('[REASONING]')).toBeLessThan(txt.indexOf('[ANSWER]'));
+    expect(txt).toBe('USER:\n' + QUESTION + '\n\nASSISTANT:\n' + ANSWER);
+    expect(countOccurrences(txt, '[REASONING]')).toBe(0);
+    expect(countOccurrences(txt, '[ANSWER]')).toBe(0);
+    expect(txt).not.toContain(REASONING);
 
     const md = mdOf(msgs);
-    expect(md).toContain('### ASSISTANT\n\n' + SECTIONED);
-    expect(countOccurrences(md, '[REASONING]')).toBe(1);
-    expect(countOccurrences(md, '[ANSWER]')).toBe(1);
+    expect(countOccurrences(md, '[REASONING]')).toBe(0);
+    expect(countOccurrences(md, '[ANSWER]')).toBe(0);
+    expect(md).not.toContain(REASONING);
   });
 
-  test('D2 снимок с полем reasoning без секций в тексте → секция собирается рендером (один раз)', () => {
+  test('D2 снимок с полем reasoning без секций в тексте → OFF: поля нет, секций нет', () => {
     const e = makeEmitter({ site: 'qwen' });
     const msgs = e.run(qwenSnapshotFieldOnly(), false);
-    expect(msgs[1].reasoning).toBe(REASONING);
-    expect(txtOf(msgs)).toBe('USER:\n' + QUESTION + '\n\nASSISTANT:\n' + SECTIONED);
-    expect(countOccurrences(txtOf(msgs), '[REASONING]')).toBe(1);
-    expect(countOccurrences(mdOf(msgs), '[REASONING]')).toBe(1);
+    expect(Object.prototype.hasOwnProperty.call(msgs[1], 'reasoning')).toBe(false);
+    expect(msgs[1].text).toBe(ANSWER);
+    expect(txtOf(msgs)).toBe('USER:\n' + QUESTION + '\n\nASSISTANT:\n' + ANSWER);
+    expect(countOccurrences(txtOf(msgs), '[REASONING]')).toBe(0);
+    expect(countOccurrences(mdOf(msgs), '[REASONING]')).toBe(0);
   });
 });
 
 // =====================================================================================
-// D3 (D-O41): OFF/ON на одном входе с reasoning — байты совпадают (OFF игнорируется)
+// D3 (O-7 + D-O41 пересмотр): OFF/ON на одном входе РАЗЛИЧАЮТСЯ (тумблер снова управляет)
 // =====================================================================================
-describe('O-7/Qwen D3: OFF и ON на источнике с reasoning дают один и тот же экспорт', () => {
-  test('D3 один и тот же вход: OFF = ON (авто-ON); OFF-путь живёт на снимке БЕЗ reasoning', () => {
+describe('O-7/Qwen D3: OFF и ON на источнике с reasoning дают разные файлы', () => {
+  test('D3 один и тот же вход: OFF — вопросы и ответы, ON — секции; поля и байты расходятся', () => {
     const off = makeEmitter({ site: 'qwen' }).run(qwenSnapshotSectioned(), false);
     const on = makeEmitter({ site: 'qwen' }).run(qwenSnapshotSectioned(), true);
 
-    expect(off[1].reasoning).toBe(REASONING);
-    expect(on[1].reasoning).toBe(REASONING);
+    expect(on[1].reasoning).toBe(REASONING);                 // ON: поле-данные сохранено
     expect(on[1].text).toBe(SECTIONED);                      // ON: текст хода как есть
-    expect(off[1].text).toBe(SECTIONED);                     // OFF: авто-ON — тот же текст
-    expect(JSON.stringify(off)).toBe(JSON.stringify(on));    // байты выхода идентичны
+    expect(off[1].reasoning).toBeUndefined();                // OFF: поля нет
+    expect(off[1].text).toBe(ANSWER);                        // OFF: секции урезаны
+    expect(JSON.stringify(off)).not.toBe(JSON.stringify(on));
+    expect(countOccurrences(txtOf(off), '[REASONING]')).toBe(0);
+    expect(countOccurrences(txtOf(on), '[REASONING]')).toBe(1);
+    expect(countOccurrences(txtOf(on), '[ANSWER]')).toBe(1);
     // Прочие поля снимка (роль/id) обоими путями сохранены.
     expect(off[1].role).toBe('assistant');
     expect(on[1].role).toBe('assistant');
-
-    // force-exclude: снимок БЕЗ reasoning — OFF-путь прежний (вопрос и bare-ответ, 0 секций)
-    const plain = [
-      { role: 'user', text: QUESTION, id: 'u1' },
-      { role: 'assistant', text: ANSWER, id: 'a1' }
-    ];
-    const offPlain = makeEmitter({ site: 'qwen' }).run(plain, false);
-    const txtPlain = txtOf(offPlain);
-    expect(txtPlain).toBe('USER:\n' + QUESTION + '\n\nASSISTANT:\n' + ANSWER);
-    expect(countOccurrences(txtPlain, '[REASONING]')).toBe(0);
   });
 });
 
@@ -262,13 +260,12 @@ describe('O-7/Qwen R2: source-пины OFF-очистки', () => {
 // =====================================================================================
 // R3: DeepSeek — ТУМБЛЕР РАБОТАЕТ КАК РАНЬШЕ
 // =====================================================================================
-describe('O-7/Qwen R3: DeepSeek не задет — OFF/ON прежние', () => {
+describe('O-7/Qwen R3: DeepSeek не задет — OFF/ON прежние (D-O41 пересмотр: тот же force-exclude)', () => {
   const DS_SNAPSHOT = [
     { role: 'user', text: 'вопрос', id: 'u1' },
     { role: 'assistant', text: SECTIONED, id: 'a1', hiddenReasoning: REASONING }
   ];
-  // D-O41: источник БЕЗ reasoning (нет секций в тексте и нет поля reasoning) — ровно тот
-  // случай, где явный OFF сохраняет силу: OFF-путь DeepSeek прежний.
+  // Источник БЕЗ reasoning (нет секций в тексте и нет поля reasoning): OFF-путь и здесь прежний.
   const DS_SNAPSHOT_PLAIN = [
     { role: 'user', text: 'вопрос', id: 'u1' },
     { role: 'assistant', text: ANSWER, id: 'a1', hiddenReasoning: REASONING }
@@ -284,13 +281,17 @@ describe('O-7/Qwen R3: DeepSeek не задет — OFF/ON прежние', () =
     expect(countOccurrences(txt, '[REASONING]')).toBe(0);
   });
 
-  test('R3 DeepSeek OFF + секции источника: D-O41 авто-ON (текст хода как есть)', () => {
+  test('R3 DeepSeek OFF + секции источника: force-exclude — секции урезаны до [ANSWER]', () => {
+    // D-O41 пересмотр (2026-09-25): DeepSeek в паре с Qwen — OFF значит принудительное
+    // исключение reasoning; авто-ON у него не срабатывает.
     const msgs = makeEmitter({ site: 'deepseek' }).run(DS_SNAPSHOT, false);
-    expect(msgs[1].text).toBe(SECTIONED);                    // источник с reasoning — сырой путь
-    expect(msgs[1].hiddenReasoning).toBeUndefined();         // служебное поле снято
+    expect(msgs[1].text).toBe(ANSWER);                        // OFF-санация урезала секции
+    expect(msgs[1].reasoning).toBeUndefined();
+    expect(msgs[1].hiddenReasoning).toBeUndefined();         // служебное поле снято OFF-путём
     const txt = txtOf(msgs, 'deepseek');
-    expect(txt).toBe('вопрос\n\n' + SECTIONED);
-    expect(countOccurrences(txt, '[REASONING]')).toBe(1);
+    expect(txt).toBe('вопрос\n\n' + ANSWER);
+    expect(countOccurrences(txt, '[REASONING]')).toBe(0);
+    expect(txt).not.toContain(REASONING);
   });
 
   test('R3 DeepSeek ON: hidden-блок в тексте → секции прежние (без правок OFF-пути)', () => {
