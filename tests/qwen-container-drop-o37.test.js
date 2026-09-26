@@ -11,10 +11,17 @@
  * Фикс: та же чистка исполняется ВНУТРИ adapters/qwen-adapter.js:extractMessages ОБЩИМ хелпером
  * сборщиков (aiCmDropContainerMessages / aiCmContainerRules) — логика не дублируется, хелпер
  * резолвится лениво (файл сборщиков подключён в manifest.json ПОСЛЕ адаптера). Вторая ступень
- * (чистка в сборщиках) остаётся и идемпотентна; селекторы адаптера (строки 46-66) не тронуты.
+ * (чистка в сборщиках) остаётся и идемпотентна.
  *
  * Исполняется РЕАЛЬНЫЙ adapters/qwen-adapter.js в песочнице jsdom + РЕАЛЬНЫЕ сборщики
  * (utils/export-text-builders.js) и токен-оценка (utils/tokenizer.js).
+ *
+ * Обновление 2026-09-26 (план замены qwen-селекторов, живой DOM-снимок 26.09.26): фикстура
+ * больше НЕ синтетическая `data-message-id`-разметка, а живая форма снимка — реплики это
+ * `.qwen-chat-message.qwen-chat-message-user/assistant` в парах обёрток turn-selection.
+ * Первый кандидат адаптера (точные классы) теперь находит ровно реплики и НЕ приносит
+ * контейнеров; защита O-36.2 (общее правило `aiCmDropContainerMessages`) проверяется
+ * отдельным пином на наборе «стен» живого артефакта 20:50 — правило и пороги не менялись.
  */
 
 const fs = require('fs');
@@ -51,6 +58,8 @@ function loadAdapter(opts) {
 
 // ---------------------------------------------------------------------------------
 // Живая фикстура 20:50: 73 реплики + 2 узла-контейнера (склейка ВСЕХ реплик).
+// Реплики — точные классы снимка 2026-09-26; контейнеры — широкий кандидат (наследие),
+// внутри которого лежат все реплики (как в живом артефакте).
 // ---------------------------------------------------------------------------------
 const REAL = [];
 for (let i = 0; i < 73; i++) {
@@ -62,35 +71,76 @@ for (let i = 0; i < 73; i++) {
 const WALL = REAL.map(function (m) { return m.text; }).join('\n');
 const REAL_TEXTS = REAL.map(function (m) { return m.text; });
 
-function renderFixture() {
-  document.body.innerHTML = '';
-  // контейнеры идут ПЕРВЫМИ (как в живом артефакте: файл начинался «стеной» ASSISTANT:)
-  ['c1', 'c2'].forEach(function (id) {
-    const el = document.createElement('div');
-    el.setAttribute('data-message-id', id);
-    el.setAttribute('data-message-role', 'assistant');
-    el.textContent = WALL;
-    document.body.appendChild(el);
-  });
-  REAL.forEach(function (m, i) {
-    const el = document.createElement('div');
-    el.setAttribute('data-message-id', 'm' + i);
-    el.setAttribute('data-message-role', m.role);
-    el.textContent = m.text;
-    document.body.appendChild(el);
-  });
+/** Разметка одной реплики в форме живой страницы (обёртки turn-selection + точные классы). */
+function htmlMessage(m) {
+  const role = (m.role === 'user') ? 'user' : 'assistant';
+  return '<div class="qwen-chat-message-select-turn">' +
+    '<div class="qwen-chat-message-select-turn-message">' +
+    '<div class="qwen-chat-message qwen-chat-message-' + role + '">' + m.text + '</div>' +
+    '</div></div>';
 }
 
+function htmlReal() {
+  return REAL.map(htmlMessage).join('');
+}
+
+/**
+ * Живая форма снимка 2026-09-26: 73 реплики в ОДНОМ экземпляре (точные классы), каждая в
+ * реальной паре обёрток turn-selection. Именно так адаптер и видит живой чат — 73 узла, ни
+ * одного контейнера на входе.
+ */
+function renderFixture() {
+  document.body.innerHTML = '';
+  const realWrap = document.createElement('div');
+  realWrap.innerHTML = htmlReal();
+  document.body.appendChild(realWrap);
+}
+
+/**
+ * Набор ДО фикса порядка кандидатов (живой артефакт 20:50): широкий кандидат
+ * `[class*="message-bubble"]` шёл первым и приносил «стены» (склейка ВСЕХ реплик) и группу
+ * реплик. Возвращает 3 узла-контейнера — на них проверяется вторая ступень (страховка).
+ */
+function containerNodes() {
+  document.body.innerHTML = '';
+  const nodes = [];
+  ['c1', 'c2'].forEach(function () {
+    const wall = document.createElement('div');
+    wall.className = 'message-bubble';
+    wall.textContent = WALL;
+    document.body.appendChild(wall);
+    nodes.push(wall);
+  });
+  const group = document.createElement('div');
+  group.className = 'message-bubble';
+  group.innerHTML = htmlReal();
+  document.body.appendChild(group);
+  nodes.push(group);
+  return nodes;
+}
+
+/**
+ * ТОТ ЖЕ проход, что делает extractMessages, но по ЯВНО заданному набору узлов: роли/текст
+ * снимаются боевыми методами адаптера, затем массив отдаётся ОБЩЕМУ правилу контейнер-чистки.
+ * Так проверяется вторая ступень (страховка O-36.2) на наборе, где реплики и контейнеры
+ * оказались вместе, — независимо от порядка кандидатов селекторов.
+ */
+function dropOnNodes(adapter, nodes) {
+  const list = nodes.map(function (element) {
+    return { role: adapter._detectRole(element), content: adapter._textWithoutReasoning(element) };
+  });
+  return adapter._containerDrop()(list);
+}
 beforeEach(function () {
   document.body.innerHTML = '';
   FAKE_LOCATION.pathname = '/c/cda86f26-0155-4243-a134-777d909a936b';
 });
 
 // =====================================================================================
-// O36.2-D: фикстура 73 реплики + 2 контейнера
+// O36.2-D: фикстура 73 реплики + 2 узла-контейнера (текст — склейка всех реплик)
 // =====================================================================================
 describe('O-37 O36.2-D: extractMessages отбрасывает узлы-контейнеры (фикстура 73 + 2)', () => {
-  test('75 узлов на входе → 73 реплики на выходе, порядок и роли реплик сохранены', function () {
+  test('точный набор (73 реплики) выигрывает: контейнеры на вход даже не попадают', function () {
     renderFixture();
     const msgs = loadAdapter().extractMessages();
     expect(msgs).toHaveLength(REAL.length);
@@ -98,6 +148,17 @@ describe('O-37 O36.2-D: extractMessages отбрасывает узлы-конт
     expect(msgs.map(function (m) { return m.content; })).toEqual(REAL_TEXTS);
     // контейнерной «стены» в базе нет ни разу
     expect(msgs.some(function (m) { return m.content === WALL; })).toBe(false);
+  });
+
+  test('вторая ступень (страховка): 76 узлов (2 «стены» + группа + 73 реплики) → 73 реплики', function () {
+    renderFixture();
+    const a = loadAdapter();
+    const all = containerNodes().concat(a._messageNodes());
+    expect(all).toHaveLength(REAL.length + 3);           // 76 узлов — форма живого артефакта
+    const kept = dropOnNodes(a, all);
+    expect(kept).toHaveLength(REAL.length);
+    expect(kept.map(function (m) { return m.content; })).toEqual(REAL_TEXTS);
+    expect(kept.some(function (m) { return m.content === WALL; })).toBe(false);
   });
 
   test('текст базы без контейнерных стен: getFullDialogText = склейка ТОЛЬКО реплик', function () {
@@ -110,8 +171,7 @@ describe('O-37 O36.2-D: extractMessages отбрасывает узлы-конт
     expect(a.getFullDialogText().length).toBeLessThan(WALL.length * 2);
   });
 
-  test('токен-оценка падает пропорционально: 73 реплики вместо 75 узлов со «стенами»', function () {
-    renderFixture();
+  test('токен-оценка падает пропорционально: 73 реплики вместо 75 узлов со «стенами»', function () {    renderFixture();
     const filtered = loadAdapter().getFullDialogText();
     const withWalls = WALL + '\n' + WALL + '\n' + REAL_TEXTS.join('\n');
     const tokensFiltered = Tokenizer.estimateDialogTokens(filtered, REAL.length);
@@ -138,12 +198,23 @@ describe('O-37 O36.2-D: extractMessages отбрасывает узлы-конт
     expect(viaRequire.map(function (m) { return m.content; })).toEqual(REAL_TEXTS);
   });
 
-  test('R1: ни окна, ни require → адаптер возвращает узлы КАК ЕСТЬ (правил не дублирует)', function () {
+  test('R1: ни окна, ни require → правило живёт РОВНО в сборщиках (в адаптере его нет)', function () {
     renderFixture();
-    const raw = loadAdapter({ noWindow: true, require: undefined }).extractMessages();
-    expect(raw).toHaveLength(REAL.length + 2);          // поведение 1:1 до фикса
-    expect(raw[0].content).toBe(WALL);
-    expect(raw.filter(function (m) { return m.content === WALL; })).toHaveLength(2);
+    const noHelper = loadAdapter({ noWindow: true, require: undefined });
+    expect(noHelper._containerDrop()).toBe(null);                  // хелпер не резолвится
+    expect(noHelper.extractMessages()).toHaveLength(REAL.length);  // узлы как есть (73 реплики)
+    // набор второй ступени собирается и в этом режиме — правило снимает 3 контейнера
+    expect(containerNodes()).toHaveLength(3);
+  });
+
+  test('R1b: контейнер-узел в массиве снимается ОБЩИМ правилом сборщиков (защита O-36.2)', function () {
+    // защита жива независимо от порядка кандидатов: если узел-склейка всё-таки попал в массив,
+    // его снимает ТО ЖЕ правило сборщиков (пороги не менялись, второй копии правил нет)
+    const withContainers = [{ role: 'assistant', content: WALL }].concat(
+      REAL_TEXTS.map(function (t, i) { return { role: (i % 2 === 0) ? 'user' : 'assistant', content: t }; }));
+    const dropped = Builders.aiCmDropContainerMessages(withContainers);
+    expect(dropped).toHaveLength(REAL.length);
+    expect(dropped.some(function (m) { return m.content === WALL; })).toBe(false);
   });
 });
 
@@ -160,10 +231,9 @@ describe('O-37 O36.2-R: контейнеров нет — байты прежн�
 
   function renderFour() {
     document.body.innerHTML = '';
-    FOUR.forEach(function (m, i) {
+    FOUR.forEach(function (m) {
       const el = document.createElement('div');
-      el.setAttribute('data-message-id', 'n' + i);
-      el.setAttribute('data-message-role', m.role);
+      el.className = 'qwen-chat-message qwen-chat-message-' + ((m.role === 'user') ? 'user' : 'assistant');
       el.textContent = m.text;
       document.body.appendChild(el);
     });
@@ -231,9 +301,16 @@ describe('O-37 O-36.2: границы фикса (source-пины)', () => {
     expect(Builders.aiCmContainerRules).toEqual({ minContained: 2, coverMin: 0.8 });
   });
 
-  test('R-пин: селекторы-кандидаты и композер адаптера не тронуты (HYPOTHESIS, строки 46-66)', function () {
+  test('R-пин: точка правки контейнер-чистки не тронута; селекторы — по снимку 2026-09-26', function () {
+    // кандидаты наследия сохранены (широкий — с явным исключением обёрток turn-selection)
     expect(QWEN_SRC).toContain("'[data-message-id]',");
     expect(QWEN_SRC).toContain("'[class*=\"message-bubble\"]'");
+    expect(QWEN_SRC).toContain("'[class*=\"chat-message\"]:not(.qwen-chat-message-select-turn)'");
+    // живой кандидат — ТОЧНЫЕ классы реплик, и он ПЕРВЫЙ
+    expect(QWEN_SRC).toContain(
+      "'.qwen-chat-message.qwen-chat-message-user, .qwen-chat-message.qwen-chat-message-assistant',");
+    expect(QWEN_SRC.indexOf('.qwen-chat-message.qwen-chat-message-user, .qwen-chat-message.qwen-chat-message-assistant'))
+      .toBeLessThan(QWEN_SRC.indexOf("'[data-message-id]',"));
     expect(QWEN_SRC).toContain("textarea[placeholder*=\"Qwen\"]");
     expect(QWEN_SRC).toContain("this._noiseSelectors = 'button, svg, textarea");
     // диагностическая строка адаптера осталась прежней и печатает ЧИСЛО БАЗЫ (после чистки)

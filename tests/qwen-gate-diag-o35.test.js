@@ -671,7 +671,10 @@ describe('O-35 A: счётчик msgs привязан к convId и URL на к�
     expect(ADAPTER_SRC).toContain('[QwenAdapter] Извлечено ${messages.length} сообщений');
     // один проход по узлам: кандидаты селекторов — первый непустой набор
     expect(ADAPTER_SRC).toContain('_messageNodes()');
-    expect(ADAPTER_SRC).toContain("'[data-message-id]',");
+    // первый кандидат — ТОЧНЫЕ классы живой разметки (снимок 2026-09-26); широкий — последним
+    expect(ADAPTER_SRC).toContain(
+      "'.qwen-chat-message.qwen-chat-message-user, .qwen-chat-message.qwen-chat-message-assistant',");
+    expect(ADAPTER_SRC).toContain("'[class*=\"chat-message\"]:not(.qwen-chat-message-select-turn)'");
     expect(ADAPTER_SRC).toContain("'[class*=\"message-bubble\"]'");
   });
 

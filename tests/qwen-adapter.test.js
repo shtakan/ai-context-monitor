@@ -4,13 +4,20 @@
  * Адаптер включается, когда живой SSE-снимок недоступен (clone() не удался, стрим оборвался,
  * открыт готовый чат): он даёт базу текстов/ходов, чтобы бейдж и экспорт не пустели.
  *
- * Селекторы Qwen — HYPOTHESIS (живой DOM не снимался), поэтому проверяется не «магия
- * конкретного класса», а КОНТРАКТ BaseAdapter + устойчивость к кандидатам:
- *   - isOnDialogPage: композер «Спросить Qwen» / узлы сообщений / путь /c/<id>;
- *   - extractMessages: пары role/content, reasoning («Завершено размышление») — в
- *     hiddenReasoning, а не в content; служебные узлы и «.» свёрнутой панели не сообщения;
- *   - getFullDialogText: склейка content через '\n' (как у BaseAdapter/DeepSeek);
- *   - detectModel: канонический qwen3.8-max по умолчанию.
+ * Селекторы Qwen — больше НЕ гипотеза: живой DOM chat.qwen.ai снят 2026-09-26 (артефакт
+ * tools/qwen-dom-snapshot-26.09.26.json). Пины держат ровно то, что подтвердил снимок:
+ *   - реальные реплики — ТОЧНЫЕ классы `.qwen-chat-message.qwen-chat-message-user/assistant`
+ *     (по 47 узлов), а не широкий `[class*="chat-message"]`;
+ *   - обёртки turn-selection (`.qwen-chat-message-select-turn` — 47 узлов,
+ *     `.qwen-chat-message-select-turn-message` — 94) в базу НЕ попадают: ни через точный
+ *     набор, ни через широкий кандидат (`:not()`), ни через фильтр `_dropTurnOnlyNodes`;
+ *   - роль — только класс-токен: data-* маркеров роли в живом DOM нет (0 совпадений);
+ *   - панель размышлений лежит ВНУТРИ реплики и уходит в hiddenReasoning, а текст карточек
+ *     инструментов (`qwen-chat-thinking-tool-status-card-wraper`) — служебный шум;
+ *   - текст снимается `_readableText`: innerText/структурный фолбэк + нормализация, поэтому
+ *     переводы строк сохраняются (дефект textContent: 1-3 строки вместо 7-85).
+ * Плюс неизменный контракт BaseAdapter: isOnDialogPage / extractMessages / getFullDialogText
+ * / detectModel.
  */
 
 const fs = require('fs');
@@ -43,6 +50,24 @@ function loadAdapter() {
   return new QwenAdapterClass();
 }
 
+// ---------------------------------------------------------------------------------
+// Живая разметка снимка 2026-09-26 (усечённая до двух ходов): обёртки turn-selection
+// вокруг реальных реплик + панель thinking ВНУТРИ реплики ассистента.
+// ---------------------------------------------------------------------------------
+function qwenTurn(role, inner) {
+  return '<div class="qwen-chat-message-select-turn">' +
+    '<div class="qwen-chat-message-select-turn-message">' +
+    '<div class="qwen-chat-message qwen-chat-message-' + role + '">' + inner + '</div>' +
+    '</div></div>';
+}
+const LIVE_DOM = '<div class="chat-messages-container"><div class="chat-messages">' +
+  qwenTurn('user', '<div class="chat-user-message-container">привет</div>') +
+  qwenTurn('assistant',
+    '<div class="qwen-chat-thinking-tool-status-card-wraper ant-flex css-mncuj7">' +
+    '<div class="qwen-chat-thinking">Завершено размышление\nПользователь здоровается.</div></div>' +
+    '<div class="qwen-chat-message-content"><p>Привет!</p><p>Чем помочь?</p></div>') +
+  '</div></div>';
+
 beforeEach(function () {
   document.body.innerHTML = '';
   setUrl('/');
@@ -56,8 +81,8 @@ describe('O-35: QwenAdapter — isOnDialogPage', function () {
     expect(a.isOnDialogPage()).toBe(true);
   });
 
-  test('узлы сообщений без композера — тоже диалог', function () {
-    document.body.innerHTML = '<div data-message-id="m1" data-message-role="user">привет</div>';
+  test('точные классы реплик без композера — тоже диалог', function () {
+    document.body.innerHTML = '<div class="qwen-chat-message qwen-chat-message-user">привет</div>';
     expect(loadAdapter().isOnDialogPage()).toBe(true);
   });
 
@@ -78,47 +103,116 @@ describe('O-35: QwenAdapter — isOnDialogPage', function () {
   });
 });
 
-describe('O-35: QwenAdapter — extractMessages', function () {
-  test('пары user/assistant по data-атрибутам роли', function () {
-    document.body.innerHTML =
-      '<div data-message-id="u1" data-message-role="user">привет</div>' +
-      '<div data-message-id="a1" data-message-role="assistant">Привет! Чем помочь?</div>';
+describe('O-35: QwenAdapter — extractMessages (живая разметка 2026-09-26)', function () {
+  test('Д1: реплики берутся ТОЧНЫМИ классами — роли чередуются user/assistant', function () {
+    document.body.innerHTML = LIVE_DOM;
     const msgs = loadAdapter().extractMessages();
-    expect(msgs.map(function (m) { return [m.role, m.content]; })).toEqual([
-      ['user', 'привет'],
-      ['assistant', 'Привет! Чем помочь?']
-    ]);
+    expect(msgs.map(function (m) { return m.role; })).toEqual(['user', 'assistant']);
+    expect(msgs[0].content).toBe('привет');
+  });
+
+  test('Д2: обёртки turn-selection не становятся сообщениями (дублей-контейнеров нет)', function () {
+    // 7 узлов с «chat-message» в классе: 2 контейнера чата + 1 turn-selection + 1
+    // turn-selection-message + 2 реальные реплики + … — на выходе РОВНО 2 реплики
+    document.body.innerHTML = LIVE_DOM;
+    const wide = document.querySelectorAll('[class*="chat-message"]:not(.qwen-chat-message-select-turn)');
+    expect(wide.length).toBeGreaterThan(2);                     // широкий кандидат их видит
+    const msgs = loadAdapter().extractMessages();
+    expect(msgs).toHaveLength(2);                               // а адаптер — нет
+    expect(msgs.map(function (m) { return m.content; })).toEqual(['привет', 'Привет!\nЧем помочь?']);
+  });
+
+  test('Д3: роль — класс-токен; data-* маркеров роли в разметке НЕТ (снимок: 0 совпадений)', function () {
+    document.body.innerHTML = LIVE_DOM;
+    expect(document.querySelectorAll('[data-message-role], [data-role]')).toHaveLength(0);
+    // узлы-кандидаты наследия (data-*) роли больше не решают: класс-токен первичен
+    document.body.innerHTML = '<div data-message-role="assistant" ' +
+      'class="qwen-chat-message qwen-chat-message-user">вопрос</div>';
+    expect(loadAdapter().extractMessages()[0].role).toBe('user');
+  });
+
+  test('Д4: текст многострочный — переводы строк сохранены (дефект textContent)', function () {
+    document.body.innerHTML = qwenTurn('assistant',
+      '<div class="qwen-chat-message-content">Коротко:' +
+      '<p>первый пункт</p><p>второй пункт</p>' +
+      '<pre>def is_prime(n):\n    return n &gt; 1</pre></div>');
+    const content = loadAdapter().extractMessages()[0].content;
+    // textContent дал бы одну строку: "Коротко:первый пунктвторой пунктdef is_prime(n):..."
+    expect(content.split('\n').length).toBeGreaterThan(3);
+    // блоки разведены переводом строки (textContent склеил бы их без разделителя)
+    expect(content).toContain('\nпервый пункт');
+    expect(content).toContain('первый пункт\nвторой пункт');
+    expect(content).toContain('def is_prime(n):\n    return n > 1');
+  });
+
+  test('Д5: одна длинная реплика ассистента — не склейка: каждый ход ровно один раз', function () {
+    document.body.innerHTML = LIVE_DOM;
+    const msgs = loadAdapter().extractMessages();
+    expect(msgs).toHaveLength(2);
+    // «дублей-контейнеров» нет: текст реплики ассистента в базе РОВНО один раз
+    expect(msgs.filter(function (m) { return m.content === 'Привет!\nЧем помочь?'; })).toHaveLength(1);
+  });
+
+  test('Д7: снятый служебный узел оставляет границу строки (соседний текст не склеивается)', function () {
+    document.body.innerHTML = qwenTurn('assistant',
+      '<div class="qwen-chat-message-content">первая часть<button class="copy">Копировать</button>' +
+      'вторая часть</div>');
+    const content = loadAdapter().extractMessages()[0].content;
+    expect(content).not.toContain('Копировать');   // кнопка — служебный узел
+    expect(content).not.toBe('первая частьвторая часть');
+    expect(content).toContain('первая часть');
+    expect(content).toContain('вторая часть');
+    expect(content.split('\n').length).toBe(2);
   });
 
   test('reasoning-панель уходит в hiddenReasoning, а не в content', function () {
-    document.body.innerHTML =
-      '<div data-message-id="u1" data-message-role="user">привет</div>' +
-      '<div data-message-id="a1" data-message-role="assistant">' +
-      '<div class="thinking">Завершено размышление\nПользователь здоровается.</div>' +
-      '<div class="answer-body">Привет!</div>' +
-      '</div>';
+    document.body.innerHTML = LIVE_DOM;
     const msgs = loadAdapter().extractMessages();
-    expect(msgs).toHaveLength(2);
-    expect(msgs[1].content).toBe('Привет!');
     expect(msgs[1].content).not.toContain('Завершено размышление');
     expect(msgs[1].hiddenReasoning).toBe('Пользователь здоровается.');
   });
 
-  test('служебная шапка панели снимается, но сам текст размышления сохраняется', function () {
-    document.body.innerHTML =
-      '<div data-message-role="assistant"><div class="thinking">Thinking… 3s\nПроверяю варианты.</div>' +
-      '<div>Ответ</div></div>';
+  test('Д6: текст карточки инструмента (tool-status-card) в reasoning НЕ попадает', function () {
+    document.body.innerHTML = qwenTurn('assistant',
+      '<div class="qwen-chat-thinking-tool-status-card-wraper">Ищу в интернете…</div>' +
+      '<div class="qwen-chat-message-content">Ответ</div>');
+    const msgs = loadAdapter().extractMessages();
+    expect(msgs[0].content).toBe('Ответ');
+    expect(msgs[0].hiddenReasoning).toBeUndefined();
+  });
+
+  test('R1: панель ВНУТРИ карточки инструмента по-прежнему находится (guard не режет размышление)', function () {
+    document.body.innerHTML = qwenTurn('assistant',
+      '<div class="qwen-chat-thinking-tool-status-card-wraper">' +
+      '<div class="qwen-chat-thinking">Thinking… 3s\nПроверяю варианты.</div></div>' +
+      '<div class="qwen-chat-message-content">Ответ</div>');
     const msgs = loadAdapter().extractMessages();
     expect(msgs[0].hiddenReasoning).toBe('Проверяю варианты.');
   });
 
+  test('R2: узлы-КОНТЕЙНЕРЫ всего чата (широкий кандидат) в базу не проходят', function () {
+    document.body.innerHTML = LIVE_DOM;
+    const msgs = loadAdapter().extractMessages();
+    // текст всего чата как отдельного сообщения (artefact O-36.2) отсутствует
+    expect(msgs.some(function (m) { return m.content.indexOf('Привет!') !== -1 && m.content.indexOf('привет') !== -1; }))
+      .toBe(false);
+  });
+
   test('служебные узлы (кнопки/иконки) и «.» свёрнутой панели сообщением не становятся', function () {
     document.body.innerHTML =
-      '<div data-message-role="user"><span>привет</span><button class="copy">Копировать</button></div>' +
-      '<div data-message-role="assistant">.</div>';
+      qwenTurn('user', '<span>привет</span><button class="copy">Копировать</button>') +
+      qwenTurn('assistant', '.');
     const msgs = loadAdapter().extractMessages();
     expect(msgs).toHaveLength(1);
     expect(msgs[0].content).toBe('привет');
+  });
+
+  test('R3: наследники старых сборок (data-message-id) читаются, если точных классов нет', function () {
+    document.body.innerHTML =
+      '<div data-message-id="u1" data-message-role="user">привет</div>' +
+      '<div data-message-id="a1" data-message-role="assistant">Привет! Чем помочь?</div>';
+    const msgs = loadAdapter().extractMessages();
+    expect(msgs.map(function (m) { return m.content; })).toEqual(['привет', 'Привет! Чем помочь?']);
   });
 
   test('пустой DOM → пустой массив (адаптер не выдумывает сообщения)', function () {
@@ -127,8 +221,7 @@ describe('O-35: QwenAdapter — extractMessages', function () {
 
   test('getFullDialogText склеивает content через \\n', function () {
     document.body.innerHTML =
-      '<div data-message-role="user">привет</div>' +
-      '<div data-message-role="assistant">Привет!</div>';
+      qwenTurn('user', 'привет') + qwenTurn('assistant', 'Привет!');
     expect(loadAdapter().getFullDialogText()).toBe('привет\nПривет!');
   });
 });
@@ -142,5 +235,48 @@ describe('O-35: QwenAdapter — detectModel', function () {
   test('id из разметки распознаётся', function () {
     document.body.innerHTML = '<div class="model-name">Qwen3.8-Max</div>';
     expect(loadAdapter().detectModel()).toBe('qwen3.8-max');
+  });
+});
+
+describe('O-39-план замены (qwen-селекторы): source-пины точки правки', function () {
+  test('точные классы стоят ПЕРВЫМ кандидатом, широкий — последним и с :not() обёртки', function () {
+    const exact = QWEN_SRC.indexOf(
+      "'.qwen-chat-message.qwen-chat-message-user, .qwen-chat-message.qwen-chat-message-assistant',");
+    const wide = QWEN_SRC.indexOf("'[class*=\"chat-message\"]:not(.qwen-chat-message-select-turn)'");
+    expect(exact).toBeGreaterThan(-1);
+    expect(wide).toBeGreaterThan(exact);
+    // data-* кандидаты наследия сохранены, но идут ПОСЛЕ точного набора
+    expect(QWEN_SRC.indexOf("'[data-message-id]',")).toBeGreaterThan(exact);
+  });
+
+  test('data-* путь определения роли удалён, класс-токен — первым', function () {
+    expect(QWEN_SRC).not.toContain("element.getAttribute('data-message-role')");
+    expect(QWEN_SRC).not.toContain("element.getAttribute('data-role')");
+    const body = QWEN_SRC.slice(QWEN_SRC.indexOf('_detectRole(element)'));
+    expect(body.indexOf("cls.indexOf('qwen-chat-message-user')"))
+      .toBeLessThan(body.indexOf('return \'user\';'));
+    expect(body).toContain("cls.indexOf('qwen-chat-message-assistant')");
+  });
+
+  test('guard карточек инструментов и фильтр обёрток — в точке правки', function () {
+    expect(QWEN_SRC).toContain('[class*="thinking"]:not([class*="tool-status-card"])');
+    expect(QWEN_SRC).toContain('[class*="thought"]:not([class*="tool-status-card"])');
+    // селектор `[class*="reason"]` убран: он матчил `…-card-wraper` (wraper ⊃ raper)
+    expect(QWEN_SRC).not.toContain("'[class*=\"reason\"]");
+    expect(QWEN_SRC).toContain('_isToolStatusCard(node)');
+    // карточки инструментов — служебный шум и в тексте реплики
+    expect(QWEN_SRC).toContain('[class*="tool-status-card"]\'');
+    expect(QWEN_SRC).toContain("cls.indexOf('select-turn') === -1");
+    expect(QWEN_SRC).toContain('_dropTurnOnlyNodes');
+  });
+
+  test('дефект текста: textContent реплики больше не источник, многострочность через _readableText', function () {
+    expect(QWEN_SRC).toContain('_readableText(clone)');
+    expect(QWEN_SRC).toContain('element.innerText');
+    expect(QWEN_SRC).toContain('_innerTextFallback');
+    // снятие служебных узлов оставляет маркер-границу (иначе соседний текст склеивается)
+    expect(QWEN_SRC).toContain('_removeKeepingCut(clone.querySelectorAll(this._noiseSelectors))');
+    expect(QWEN_SRC).toContain('QWEN_CUT_MARKER');
+    expect(QWEN_SRC).not.toContain('clone.textContent');
   });
 });
