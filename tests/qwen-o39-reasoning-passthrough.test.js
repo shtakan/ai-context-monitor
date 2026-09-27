@@ -580,6 +580,18 @@ describe('O-39 D6: стадия формирования базы (content.js) �
 // D7: ГЕЙТ aiCmDebug (диагностика только под гейтом; байты от гейта не зависят)
 // =====================================================================================
 describe('O-39 D7: диагностика только под гейтом aiCmDebug, байты выхода от гейта не зависят', () => {
+  // FLAKE-D7: md-сборщик пишет «Дата экспорта» из new Date().toISOString() в момент сборки
+  // (utils/export-text-builders.js:281). offMd и onMd собираются в РАЗНЫЕ моменты, поэтому на
+  // границе миллисекунды строки расходятся и байтовое сравнение падает (~1 из N прогонов).
+  // Фейковые таймеры фиксируют системное время — сравнение onMd/offMd детерминировано.
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-09-27T12:00:00.000Z'));
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   test('D7 гейт ВЫКЛ → ни одной diag-строки; ВКЛ → строки есть; txt/md байтово те же', () => {
     const w = makeBaseWriter({ site: 'qwen', hidden: true, diag: true, gate: false });
     const formed = formLiveBase(w, detailWithSections());
