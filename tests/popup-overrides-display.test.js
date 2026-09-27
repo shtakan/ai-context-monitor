@@ -115,6 +115,101 @@ describe('H19 (б): computeDisplayLimit — unit-тесты оверрайдов
   });
 });
 
+// =====================================================================================
+// Защитные ветки utils/model-config.js (карта задачи 1.1: branches ≥80%).
+// Поведение существующих ключей не меняется — проверяются фолбэки и границы.
+// =====================================================================================
+describe('model-config — защитные ветки дефолтов и лимитов', () => {
+  test('getDefaultModel: неизвестный сайт → фолбэк gpt-5.5', () => {
+    expect(ModelConfig.getDefaultModel('нет-такого-сайта')).toBe('gpt-5.5');
+    expect(ModelConfig.getDefaultModel(undefined)).toBe('gpt-5.5');
+    expect(ModelConfig.getDefaultModel(null)).toBe('gpt-5.5');
+  });
+
+  test('getContextLimit: неизвестная модель → 128000 (не null и не падение)', () => {
+    expect(ModelConfig.getContextLimit('нет-такой-модели')).toBe(128000);
+    expect(ModelConfig.getContextLimit(null)).toBe(128000);
+  });
+
+  test('getEffectiveLimit: явный effectiveLimit модели приоритетнее contextLimit', () => {
+    const model = ModelConfig.getModel('claude-sonnet-5');
+    expect(typeof model.effectiveLimit).toBe('number');
+    expect(ModelConfig.getEffectiveLimit('claude-sonnet-5')).toBe(model.effectiveLimit);
+    expect(ModelConfig.getEffectiveLimit('claude-sonnet-5')).not.toBe(model.contextLimit);
+  });
+
+  test('getEffectiveLimit: contextLimit меньше порога → берётся contextLimit', () => {
+    // 3.1 Pro переопределён на 128K (веб-UI), порог тоже 128K → min = 128K
+    expect(ModelConfig.getEffectiveLimit('3.1 Pro')).toBe(128000);
+  });
+
+  test('getEffectiveLimit: неизвестная модель → EFFECTIVE_CAP_DEFAULT', () => {
+    expect(ModelConfig.getEffectiveLimit('нет-такой-модели')).toBe(ModelConfig.EFFECTIVE_CAP_DEFAULT);
+  });
+
+  test('resolveModelId: пустые/нечисловые/без совпадений входы → null', () => {
+    expect(ModelConfig.resolveModelId(null)).toBeNull();
+    expect(ModelConfig.resolveModelId(undefined)).toBeNull();
+    expect(ModelConfig.resolveModelId('')).toBeNull();
+    expect(ModelConfig.resolveModelId('   ')).toBeNull();
+    expect(ModelConfig.resolveModelId('...')).toBeNull();
+    expect(ModelConfig.resolveModelId('___')).toBeNull();
+    expect(ModelConfig.resolveModelId(12345)).toBeNull();
+    expect(ModelConfig.resolveModelId('zzz-нет-такого')).toBeNull();
+  });
+
+  test('resolveModelId: нормализация точек/подчёркиваний/регистра', () => {
+    expect(ModelConfig.resolveModelId('GPT-5.5')).toBe('gpt-5.5');
+    expect(ModelConfig.resolveModelId('gpt_5.5')).toBe('gpt-5.5');
+    expect(ModelConfig.resolveModelId('claude-sonnet-4.6')).toBe('claude-sonnet-4-6');
+    expect(ModelConfig.resolveModelId('3.6 Flash')).toBe('3.6 Flash');
+  });
+
+  test('resolvePopupModelId: имя модели (не slug) резолвится в канонический ключ', () => {
+    expect(ModelConfig.resolvePopupModelId('Gemini 2.5 Pro')).toBe('gemini-2.5-pro');
+  });
+});
+
+describe('model-config — семейные дефолты и проценты (краевые ветки)', () => {
+  test('getFamilyDefaultModelId: lite-вариант уводит в группу *-lite', () => {
+    expect(ModelConfig.getFamilyDefaultModelId('flash', '')).toBe('3.6 Flash');
+    expect(ModelConfig.getFamilyDefaultModelId('flash', 'Lite')).toBe('3.5 Flash Lite');
+    expect(ModelConfig.getFamilyDefaultModelId('FLASH', 'LITE')).toBe('3.5 Flash Lite');
+  });
+
+  test('getFamilyDefaultModelId: неизвестная семья/пустые аргументы → null', () => {
+    expect(ModelConfig.getFamilyDefaultModelId('nope', '')).toBeNull();
+    expect(ModelConfig.getFamilyDefaultModelId(null, null)).toBeNull();
+    expect(ModelConfig.getFamilyDefaultModelId(undefined, undefined)).toBeNull();
+    expect(ModelConfig.getFamilyDefaultModelId('pro-lite', '')).toBeNull();
+  });
+
+  test('getFamilyDefaultModelId: вариант «Расширенная/Extended/fast» не уводит в lite', () => {
+    expect(ModelConfig.getFamilyDefaultModelId('flash', 'Расширенная')).toBe('3.6 Flash');
+    expect(ModelConfig.getFamilyDefaultModelId('flash', 'Extended')).toBe('3.6 Flash');
+    expect(ModelConfig.getFamilyDefaultModelId('flash', 'fast')).toBe('3.6 Flash');
+  });
+
+  test('calculatePercentage: нулевой и отрицательный лимит → 0 (без деления на 0)', () => {
+    expect(ModelConfig.calculatePercentage(10, 0)).toBe(0);
+    expect(ModelConfig.calculatePercentage(10, -5)).toBe(0);
+  });
+
+  test('calculatePercentage: округление до десятых и потолок 100', () => {
+    expect(ModelConfig.calculatePercentage(64, 128)).toBe(50);
+    expect(ModelConfig.calculatePercentage(1, 3)).toBe(33.3);
+    expect(ModelConfig.calculatePercentage(999, 100)).toBe(100);
+  });
+
+  test('applyLimitPct: не-число и неположительный pct → лимит как есть', () => {
+    expect(ModelConfig.applyLimitPct(128000, null)).toBe(128000);
+    expect(ModelConfig.applyLimitPct(128000, '50')).toBe(128000);
+    expect(ModelConfig.applyLimitPct(128000, 0)).toBe(128000);
+    expect(ModelConfig.applyLimitPct(128000, -1)).toBe(128000);
+    expect(ModelConfig.applyLimitPct(128000, NaN)).toBe(128000);
+  });
+});
+
 describe('H19: интеграция — badge EMIT содержит displayLimit по оверрайду', () => {
   test('попап: модель Gemini 2.5 Flash + 50% → EMIT {contextLimit, effectiveLimit, displayLimit}', () => {
     const modelId = ModelConfig.resolvePopupModelId('gemini-2.5-flash');

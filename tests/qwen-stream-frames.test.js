@@ -55,6 +55,45 @@ async function collect(fn, res) {
   return out;
 }
 
+// ---- Принудительный ФОЛБЭК-декодер (модуль без TextDecoder вообще) ----
+// jsdom не даёт глобального TextDecoder, поэтому stream-frames.js берёт его из 'util';
+// чтобы исполнить ВСТРОЕННЫЙ потоковый UTF-8 декодер (fallback на урезанных песочницах,
+// где TextDecoder нет ни глобально, ни в util), подменяем ровно util.TextDecoder на время
+// загрузки СВЕЖЕГО экземпляра модуля (jest.resetModules + doMock/dontMock).
+function loadWithoutTextDecoder() {
+  const realUtil = require('util');
+  const savedTextDecoder = realUtil.TextDecoder;
+  jest.resetModules();
+  jest.doMock('util', function () {
+    return Object.assign({}, realUtil, { TextDecoder: undefined });
+  });
+  try {
+    return require('../utils/stream-frames.js');
+  } finally {
+    jest.dontMock('util');
+    realUtil.TextDecoder = savedTextDecoder;
+    jest.resetModules();
+  }
+}
+
+function responseOfChunks(chunks, contentType) {
+  return {
+    headers: { get: function () { return contentType; } },
+    body: {
+      getReader: function () {
+        let i = 0;
+        return {
+          read: function () {
+            return Promise.resolve(i < chunks.length
+              ? { done: false, value: chunks[i++] }
+              : { done: true });
+          }
+        };
+      }
+    }
+  };
+}
+
 describe('O-35: stream-frames.js — совместимость (нет ESM, UMD-обёртка)', () => {
   test('в исходнике нет ESM-синтаксиса (export / import) и нет ЛИТЕРАЛА async-генератора', () => {
     // Литерал = строка КОДА вида: async function* name(   (в строковой константе генератора
@@ -221,5 +260,181 @@ describe('O-35: mergeUsage() — кумулятивный vs аддитивны�
   test('кумулятивный режим перезаписывает, но не трогает отсутствующие поля', () => {
     const u = mergeUsage({ input: 1709, output: 63, total: 100 }, { output: 884 }, true);
     expect(u).toEqual({ input: 1709, output: 884, total: 100 });
+  });
+});
+
+describe('O-35: frames() — fallback UTF-8 декодер (без TextDecoder)', () => {
+  const dec = loadWithoutTextDecoder();
+
+  test('стенд действительно без TextDecoder: фолбэк-ветка декодера выбрана', () => {
+    console.log('DIAG typeof global.TextDecoder =', typeof globalThis.TextDecoder,
+      '| util.TextDecoder =', typeof require('util').TextDecoder,
+      '| dec.frames === SF.frames =', dec.frames === SF.frames,
+      '| dec._nativeAsyncGenerator =', dec._nativeAsyncGenerator);
+    expect(typeof TextDecoder).toBe('undefined');
+    expect(typeof dec._framesManual).toBe('function');
+  });
+
+  test('fallback-декодер: многобайтная UTF-8 последовательность через границу чанка', async () => {
+    const enc = new TextEncoder();
+    // 'Привет' в UTF-8: [0xD0,0x9F, 0xD1,0x80, 0xD0,0xB8, 0xD0,0xB2, 0xD0,0xB5, 0xD1,0x82]
+    const fullBytes = enc.encode('data: {"text":"Привет"}\n\n');
+    // Разрезаем между двумя байтами одного символа
+    const chunk1 = fullBytes.slice(0, 10);
+    const chunk2 = fullBytes.slice(10);
+
+    const out = await collect(dec._framesManual, responseOfChunks([chunk1, chunk2], 'text/event-stream'));
+    expect(out).toHaveLength(1);
+    expect(out[0].data).toBe('{"text":"Привет"}');
+  });
+
+  test('fallback-декодер: символ режется по каждому байту (по одному в чанке)', async () => {
+    const enc = new TextEncoder();
+    const bytes = enc.encode('data: {"t":"Привет"}\n\n');
+    const chunks = [];
+    for (let i = 0; i < bytes.length; i++) chunks.push(bytes.slice(i, i + 1));
+
+    const out = await collect(dec._framesManual, responseOfChunks(chunks, 'text/event-stream'));
+    expect(out).toHaveLength(1);
+    expect(out[0].data).toBe('{"t":"Привет"}');
+  });
+
+  test('fallback-декодер: 4-байтная последовательность (суррогатная пара) не рвётся', async () => {
+    const enc = new TextEncoder();
+    const fullBytes = enc.encode('data: "🙂"\n\n');
+    const cut = fullBytes.indexOf(0xF0) + 2;            // внутри 4-байтного эмодзи
+    const out = await collect(dec._framesManual,
+      responseOfChunks([fullBytes.slice(0, cut), fullBytes.slice(cut)], 'text/event-stream'));
+    expect(out).toHaveLength(1);
+    expect(out[0].data).toBe('"🙂"');
+  });
+
+  test('flush(): незавершённая UTF-8 последовательность в конце потока не теряется', async () => {
+    const enc = new TextEncoder();
+    const bytes = enc.encode('data: {"t":"Привет"}');
+    // Обрезаем многобайтный символ: flush() обязан вернуть остаток байтами
+    const chunk = bytes.slice(0, bytes.length - 1);
+
+    const out = await collect(dec._framesManual, responseOfChunks([chunk], 'text/event-stream'));
+    expect(out).toHaveLength(1);
+    expect(out[0].data).toContain('Приве');
+  });
+
+  test('fallback-декодер: flush() без pending (поток оборвался на границе символа)', async () => {
+    const enc = new TextEncoder();
+    const bytes = enc.encode('data: {"t":"ok"}\n\n');
+    const out = await collect(dec._framesManual, responseOfChunks([bytes], 'text/event-stream'));
+    expect(out).toHaveLength(1);
+    expect(out[0].data).toBe('{"t":"ok"}');
+  });
+
+  test('asBytes: ArrayBuffer конвертируется в Uint8Array', async () => {
+    const enc = new TextEncoder();
+    const encoded = enc.encode('data: {"a":1}\n\n');
+    // Передаём как ArrayBuffer (не Uint8Array)
+    const ab = encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.byteLength);
+
+    const out = await collect(dec._framesManual, responseOfChunks([ab], 'text/event-stream'));
+    expect(out).toHaveLength(1);
+    expect(out[0].data).toBe('{"a":1}');
+  });
+
+  test('asBytes: не-байты (объект без length/byteLength) → String(v) без падения', async () => {
+    const notBytes = { toString: function () { return 'data: {"s":1}\n\n'; } };
+    const out = await collect(dec._framesManual, responseOfChunks([notBytes], 'text/event-stream'));
+    expect(out).toHaveLength(1);
+    expect(out[0].data).toBe('{"s":1}');
+  });
+
+  test('fallback-декодер: не-SSE ветка (склейка {...}{...} и JSON-массив)', async () => {
+    const enc = new TextEncoder();
+    const glued = await collect(dec._framesManual,
+      responseOfChunks([enc.encode('{"a":1}'), enc.encode('{"b":2}')], 'application/json'));
+    expect(glued.map(function (f) { return f.data; })).toEqual(['{"a":1}', '{"b":2}']);
+
+    const arr = await collect(dec._framesManual,
+      responseOfChunks([enc.encode('[{"c":3},{"d":4}]')], 'application/json'));
+    expect(arr.map(function (f) { return f.data; })).toEqual(['{"c":3}', '{"d":4}']);
+  });
+
+  test('fallback-декодер: пустое тело → ни одного кадра', async () => {
+    const out = await collect(dec._framesManual, responseOfChunks([new Uint8Array(0)], 'text/event-stream'));
+    expect(out).toEqual([]);
+  });
+
+  test('паритет нативной и фолбэк-веток декодера на кириллице', async () => {
+    const enc = new TextEncoder();
+    const body = 'data: {"text":"Привет, мир"}\n\ndata: {"text":"ещё"}\n\n';
+    const native = await collect(frames, responseOf(body, 'text/event-stream'));
+    const fallback = await collect(dec._framesManual, responseOfChunks([enc.encode(body)], 'text/event-stream'));
+    expect(fallback).toEqual(native);
+  });
+});
+
+describe('O-35: _framesManual — защитные ветки читателя и очереди', () => {
+  test('res без body.getReader → ни одного кадра, мгновенный done', async () => {
+    const out = await collect(SF._framesManual, { headers: { get: function () { return 'text/event-stream'; } } });
+    expect(out).toEqual([]);
+  });
+
+  test('res = null → ни одного кадра (нет читателя, нет заголовков)', async () => {
+    const out = await collect(SF._framesManual, null);
+    expect(out).toEqual([]);
+  });
+
+  test('headers.get бросает → content-type считается пустым, не-SSE фолбэк работает', async () => {
+    const enc = new TextEncoder();
+    const res = {
+      headers: { get: function () { throw new Error('нет доступа к заголовкам'); } },
+      body: {
+        getReader: function () {
+          let done = false;
+          return {
+            read: function () {
+              if (done) return Promise.resolve({ done: true });
+              done = true;
+              return Promise.resolve({ done: false, value: enc.encode('{"a":1}') });
+            }
+          };
+        }
+      }
+    };
+    const out = await collect(SF._framesManual, res);
+    expect(out.map(function (f) { return f.data; })).toEqual(['{"a":1}']);
+  });
+
+  test('read(): Promise.reject → ошибка чтения доезжает до потребителя (ветка failure)', async () => {
+    const res = {
+      headers: { get: function () { return 'text/event-stream'; } },
+      body: {
+        getReader: function () {
+          return { read: function () { return Promise.reject(new Error('обрыв потока')); } };
+        }
+      }
+    };
+    await expect(collect(SF._framesManual, res)).rejects.toThrow('обрыв потока');
+  });
+
+  test('не-SSE: невалидный JSON-массив целиком → кадров нет (JSON.parse в catch)', async () => {
+    const enc = new TextEncoder();
+    const out = await collect(SF._framesManual,
+      responseOfChunks([enc.encode('[{"a":1}')], 'application/json'));
+    expect(out).toEqual([]);
+  });
+
+  test('не-SSE: пустое тело после trim → кадров нет', async () => {
+    const enc = new TextEncoder();
+    const out = await collect(SF._framesManual, responseOfChunks([enc.encode('   \n  ')], 'application/json'));
+    expect(out).toEqual([]);
+  });
+
+  test('SSE: не-data строки (мусор) игнорируются, хвост без \\n отдаётся последним кадром', async () => {
+    const enc = new TextEncoder();
+    const body = 'event: message\ndata: {"a":1}\n\n: ping\nмусорная строка\ndata: tail';
+    const out = await collect(SF._framesManual, responseOfChunks([enc.encode(body)], 'text/event-stream'));
+    expect(out).toEqual([
+      { event: 'message', data: '{"a":1}' },
+      { event: null, data: 'tail' }
+    ]);
   });
 });

@@ -146,3 +146,43 @@ describe('buildReferenceText — разделители и кодировка', 
     expect(out.charCodeAt(0)).not.toBe(0xFEFF);
   });
 });
+
+describe('buildReferenceText — защитные ветки входа', () => {
+  test('messages не массив → пустая строка (Array.isArray-fallback)', () => {
+    expect(buildReferenceText(null)).toBe('');
+    expect(buildReferenceText(undefined)).toBe('');
+    expect(buildReferenceText('строка')).toBe('');
+    expect(buildReferenceText({ text: 'объект' })).toBe('');
+    expect(buildReferenceText(42)).toBe('');
+  });
+
+  test('пустой массив → пустая строка', () => {
+    expect(buildReferenceText([])).toBe('');
+  });
+
+  test('элемент списка не объект (null/строка/число) → пустой блок, падения нет', () => {
+    const out = buildReferenceText([null, 'строка', 42]);
+    expect(out.trim()).toBe('');
+    expect(out.length).toBeLessThanOrEqual(4);   // только разделители между пустыми блоками
+  });
+
+  test('msg.text === null/undefined → пустой блок (fallback на "")', () => {
+    expect(buildReferenceText([{ role: 'user', text: null }])).toBe('');
+    expect(buildReferenceText([{ role: 'user', text: undefined }])).toBe('');
+    expect(buildReferenceText([{ role: 'user' }])).toBe('');
+  });
+
+  test('числовой text приводится через String', () => {
+    expect(buildReferenceText([{ role: 'user', text: 12345 }])).toBe('12345');
+  });
+
+  test('пустые строки внутри сообщения сохраняются как есть', () => {
+    const out = buildReferenceText([{ role: 'user', text: 'первая\n\nвторая' }]);
+    expect(out).toBe('первая\n\nвторая');
+  });
+
+  test('смешанный список: пустой элемент между непустыми даёт пустой блок', () => {
+    const out = buildReferenceText([{ text: 'a' }, null, { text: 'b' }]);
+    expect(out).toBe('a\n\n\n\nb');
+  });
+});
