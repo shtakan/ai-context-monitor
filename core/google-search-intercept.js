@@ -1542,6 +1542,32 @@
       var isFull = isFolwr;
       promise.then(function (resp) {
         try {
+          // Наблюдение (ii) живой приёмки GSA 2026-09-26 11:27–11:34: fetch folwr упёрся
+          // в CORS/303 consent-редирект Google (гарды O-27/O-31/O-32 целы — мусорного
+          // экспорта и краша нет), но событие было НЕВИДИМО в логах. Строка ниже —
+          // read-only телеметрия ТОЧКИ ОТВЕТА: только поля response, ни одного изменения
+          // базы/экспорта. Печатается под гейтом aiCmDebug (как O-27 captcha, воспроизведение
+          // по требованию невозможно — верификация при следующем естественном срабатывании).
+          // Точка намеренно ПОСЛЕ получения response и ДО чтения тела (resp.clone().text()):
+          // consent-редирект виден даже тогда, когда тело не читается вовсе.
+          if (typeof aiCmDiagLine === 'function' && aiCmDiagOn()) {
+            var fetchRedirected = !!(resp && resp.redirected);
+            var fetchType = (resp && resp.type) || '';
+            var fetchStatus = (resp && resp.status) || 0;
+            var fetchFinalUrl = (resp && resp.url) || url;
+            var fetchFinalHost = '';
+            try { fetchFinalHost = new URL(fetchFinalUrl).host; } catch (eHost) { fetchFinalHost = ''; }
+            aiCmDiagLine('gsa-fetch-telemetry', {
+              point: isFull ? 'folwr' : 'folif',
+              threadId: currentThreadId || emittedThreadId || '',
+              redirected: fetchRedirected,
+              status: fetchStatus,
+              type: fetchType,
+              finalUrlHost: fetchFinalHost,
+              verdict: (fetchRedirected === true || fetchType === 'opaqueredirect' || fetchStatus === 303)
+                ? 'consent-redirect-candidate' : 'normal'
+            });
+          }
           if (resp && resp.ok) {
             // v1.5.2: фиксируем время пассивного folwr/folif (ключ threadId|authuser),
             // чтобы активная загрузка не дёргалась сразу после него (<3с).
