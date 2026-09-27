@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.0.12] - 2026-09-27
+
+### Исправлено
+- Gemini: parseByBytes (O-51/O-51b/O-52) — корректная обработка chunked/fragmented ответов, id-evidence, JSON boundary guard, vf5-subset reset
+- Gemini: parseByBytes pre-req (O-48/O-49) — подготовительные контракты для парсера
+- Gemini: parseByBytes (O-50) — интеграция с state-machine
+- GSA: per-thread guard + re-entrancy virtualScrollBackfill (петля GSA, коммит 1dc6a1e)
+- Qwen: точные классы + контейнер-чистка + class-token роли + многострочный текст (коммит 2301079)
+- Финальный синк residual-упоминаний (e88a6e7 + 655175a)
+
+### Наблюдения (живая приёмка GSA 2026-09-26 11:27–11:34)
+- (i) Дозревание базы GSA на SPA-входе без probe: закрыто как поведение по дизайну (измерение 2026-09-27: baseComplete=0→1 через 2–3 applyTurns, задержка ~2.3 с, гард not-complete штатен)
+- (ii) Телеметрия consent-редирект fetch: диаг-строка gsa-fetch-telemetry под гейтом aiCmDebug (коммит e456c4b, пины D1–D4/R1–R2/S1, граница живой приёмки как у O-27)
+
 ## [2.0.11] - 2026-09-21
 ### Fixed
 - O-39(B): Qwen history reasoning — перехват истории через XHR-хук (помимо fetch), парсинг reasoning из `content_list[].phase='thinking_summary'` (живая приёмка: SPA-переход/F5, `[REASONING]`/`[ANSWER]` на месте)
