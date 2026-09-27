@@ -584,7 +584,7 @@ ai-context-monitor-clean/
     1. ✅ Code coverage ≥80% — utils/ Branches 80.76% (было 74.1%), 134 suites / 2579 passed / 0 failed, коммит `cc5378b` (2026-09-28). Ключевое: debug.js потребовал indirect-eval через istanbul (content-script без IIFE); stream-frames/perplexity-parser/markdown добиты по факту поведения (не по черновику); дополнительно добиты model-config/buildReferenceText/google-search-folwr-parser для достижения порога.
     2. ✅ `npm audit --audit-level=high` = 0 critical/high (js-yaml 3.0.0-3.15.1 fixed через `npm audit fix`; лок обновлён на диске и остаётся untracked по конвенции `.gitignore:16` / PROJECT_HANDOFF.md:176 — коммит закрытия `eed4759` (2026-09-27)
     3. ✅ Permissions минимальны (`manifest.json`: `scripting`/`storage`/`notifications` — все 3 необходимы для MV3 + проактивные уведомления; `host_permissions` 10 доменов: 9 платформ + `generativelanguage.googleapis.com` для BYOK Gemini/AI Studio API; `content_scripts.matches` 9 доменов — соответствует платформам; дублирование `perplexity.ai` с/без `www` — явное указание, не избыточность)
-    4. CSP headers: no unsafe-inline/unsafe-eval в production
+    4. ✅ CSP headers: no unsafe-inline/unsafe-eval в production (manifest.json не содержит content_security_policy — дефолтная MV3 CSP; все HTML используют `<script src="...">` без inline; eval() отсутствует в core/adapters/utils/options)
     5. Memory leak test: Chrome DevTools Memory, heap growth <10MB за 10 мин
     6. A11y audit: Lighthouse Accessibility ≥90 для popup/options
     7. i18n completeness: 0 hardcoded user-facing строк (grep vs _locales/*/messages.json)
