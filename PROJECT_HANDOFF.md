@@ -638,7 +638,7 @@ ai-context-monitor-clean/
     (честно): core/background.js — MV3 SW, несёт СОБСТВЕННУЮ копию debugLog
     (core/background.js:11) без ring-буфера: в SW ошибки печатаются всегда, но в дамп
     диагностики не попадают.
-    10. ✅ Performance baseline: экспорт 100 msgs <5s, парсинг 1MB batchexecute <2s, widget render <100ms — замеры 2026-09-28 (инструментальные стенды C:\Temp\ai-cm-perf-1.10\): экспорт 8.3–10.2 ms (запас ×500), парсинг 8.6 ms (запас ×230), widget render 2.26 ms (запас ×44); оптимизация не требуется, производительность на порядки превышает пороги
+    10. ✅ Performance baseline: экспорт 100 msgs <5s, парсинг 1MB batchexecute <2s, widget render <100ms — замеры 2026-09-28 (инструментальные стенды C:\Temp\ai-cm-perf-1.10\): экспорт 8.3–10.2 ms (запас ×500), парсинг 8.6 ms (запас ×230), widget render 2.26 ms (запас ×44); оптимизация не требуется, производительность на порядки превышает пороги, коммит c6128a0
 
 33. ⏳ **Дизайн/эргономика (мировые стандарты) + видео-стратегия:**
     - Benchmark: 5 топовых расширений Chrome Web Store (Productivity/Developer Tools)
