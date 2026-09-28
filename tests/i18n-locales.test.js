@@ -1262,10 +1262,13 @@ describe('M-4.4: локализация privacy/privacy.html и docs/index.html'
       // + Аудит 1.6 (a11y): доступное имя файлового поля архивов options_archive_file_aria (словарь 255)
       // + Аудит 1.7 (M-4.5): bg_notification_message, bg_notification_button_open_chat,
       //   options_info_separator → словарь 258
+      // + UI-аудит 2026-09-28 (Critical #2, доступность индикатора): content_a11y_circle_initial,
+      //   content_a11y_circle_label, content_a11y_status_ok, content_a11y_status_warning,
+      //   content_a11y_status_critical → словарь 263
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('privacy_') === 0; }).length).toBe(86);
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('docs_') === 0; }).length).toBe(42);
-      expect(Object.keys(ru).length).toBe(258);
-      expect(Object.keys(en).length).toBe(258);
+      expect(Object.keys(ru).length).toBe(263);
+      expect(Object.keys(en).length).toBe(263);
     });
 
     test('ru-значения M-4.4 байтово равны тексту разметки, en — перевод без кириллицы', () => {

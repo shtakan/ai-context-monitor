@@ -8,6 +8,21 @@
   "content_widget_loading": {
     "message": "Loading context..."
   },
+  "content_a11y_circle_initial": {
+    "message": "Open context threshold panel"
+  },
+  "content_a11y_circle_label": {
+    "message": "AI Context Monitor: $1% context used, $2"
+  },
+  "content_a11y_status_ok": {
+    "message": "ok"
+  },
+  "content_a11y_status_warning": {
+    "message": "warning"
+  },
+  "content_a11y_status_critical": {
+    "message": "critical"
+  },
   "content_panel_auto_label": {
     "message": "Auto threshold"
   },

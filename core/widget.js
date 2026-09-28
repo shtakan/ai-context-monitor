@@ -296,6 +296,14 @@ function resetConversationState() {
       chrome.storage.local.remove(['aiCmState', 'aiCmState:' + window.location.hostname]);
     }
   } catch (eResetState14) { }
+
+  // Critical #1 (п.1.6): смена чата/SPA-страницы — сторож коллизий старой страницы гасим
+  // и взводим заново на текущий виджет: в новой вёрстке хост-контролы другие, значение
+  // --acm-safe-bottom пересчитывается сразу. Гард по typeof — resetConversationState
+  // прогоняется и в песочницах тестов виджета (там хелпера нет, поведение прежнее).
+  try {
+    if (typeof aiCmRestartWidgetSafeBottomWatch === 'function') aiCmRestartWidgetSafeBottomWatch();
+  } catch (eSafeBottomReset) { }
 }
 
 // ========== ДИЗАЙН-КОНФИГУРАЦИЯ ==========
@@ -454,6 +462,230 @@ function aiCmRevealWidget() {
   } catch (eRev) { }
 }
 
+// ========== Critical #1 UI-аудита 2026-09-28 (находка #1): collision-safe позиция ==========
+// Индикатор 64×64 в правом нижнем углу перекрывал поле ввода и кнопку отправки на узком
+// окне (WCAG 2.2 AA 1.4.10 Reflow). Индикатор поднимается на высоту ближайшего нижнего
+// хост-контрола через --acm-safe-bottom; форма индикатора не меняется: edge-режим 28×44
+// отклонён (28px < 44px HIG, процент внутри кольца 24.6px нечитаем — это визуальный
+// редизайн с отдельной приёмкой). Потолок min(40vh, 320px) — честная граница: контрол
+// выше потолка остаётся частично перекрыт (known limit, не баг).
+// ВАЖНО (п.1.7): значение пишет ТОЛЬКО эта функция. applyNativeStyles и гард H25
+// («при неизменной теме — ни одной style-записи») не тронуты байтово.
+const AI_CM_SAFE_BOTTOM_DEFAULT = 24;
+const AI_CM_SAFE_BOTTOM_MIN = 12;
+const AI_CM_SAFE_BOTTOM_GAP = 12;
+const AI_CM_SAFE_BOTTOM_MAX_PX = 320;
+const AI_CM_SAFE_BOTTOM_MAX_VH = 0.4;
+const AI_CM_SAFE_BOTTOM_THROTTLE_MS = 150;
+// Кандидаты — точки ввода (п.1.2). Всё внутри нашего виджета исключается отдельно.
+const AI_CM_BOTTOM_CONTROL_SELECTOR = 'textarea, [contenteditable=""], [contenteditable="true"], [role="textbox"], button[type="submit"]';
+const AI_CM_SAFE_BOTTOM_LISTEN_OPTS = { capture: true, passive: true };
+let aiCmSafeBottomWatchContainer = null;
+let aiCmSafeBottomObserver = null;
+let aiCmSafeBottomTimer = null;
+let aiCmSafeBottomRafPending = false;
+let aiCmSafeBottomLastRunAt = 0;
+
+function aiCmWidgetHostEl(container) {
+  if (container) return container;
+  return (typeof document !== 'undefined' && document && document.getElementById) ? document.getElementById('ai-context-widget') : null;
+}
+
+// Чистое вычисление (без записи в DOM) — его же прогоняют D-пины на подменённых rect.
+function aiCmComputeWidgetSafeBottom(container) {
+  const vh = (typeof window !== 'undefined' && typeof window.innerHeight === 'number') ? window.innerHeight : 0;
+  if (!(vh > 0)) return AI_CM_SAFE_BOTTOM_DEFAULT;
+  const host = aiCmWidgetHostEl(container);
+  let minTop = null;
+  if (typeof document !== 'undefined' && document && typeof document.querySelectorAll === 'function') {
+    const controls = document.querySelectorAll(AI_CM_BOTTOM_CONTROL_SELECTOR);
+    for (let i = 0; i < controls.length; i++) {
+      const el = controls[i];
+      if (host && el !== host && host.contains && host.contains(el)) continue; // внутри виджета — не хост-контрол
+      if (!el.offsetParent) continue;                                          // скрыт/снят с отрисовки
+      const rect = (typeof el.getBoundingClientRect === 'function') ? el.getBoundingClientRect() : null;
+      if (!rect || !(rect.width > 0) || !(rect.height > 0)) continue;
+      if (!(rect.bottom > vh * 0.5)) continue; // контрол верхней половины экрана виджету не мешает
+      if (!(rect.top < vh)) continue;          // ниже окна — не в счёте
+      if (minTop === null || rect.top < minTop) minTop = rect.top; // несколько контролов → минимальный top
+    }
+  }
+  const raw = (minTop === null) ? AI_CM_SAFE_BOTTOM_DEFAULT : (vh - minTop + AI_CM_SAFE_BOTTOM_GAP);
+  const capped = Math.min(raw, vh * AI_CM_SAFE_BOTTOM_MAX_VH, AI_CM_SAFE_BOTTOM_MAX_PX);
+  return Math.max(AI_CM_SAFE_BOTTOM_MIN, capped);
+}
+
+function aiCmUpdateWidgetSafeBottom(container) {
+  const px = aiCmComputeWidgetSafeBottom(container);
+  const host = aiCmWidgetHostEl(container);
+  try {
+    if (host && host.style && typeof host.style.setProperty === 'function') host.style.setProperty('--acm-safe-bottom', px + 'px');
+  } catch (eSafeBottomWrite) { }
+  return px;
+}
+
+function aiCmSafeBottomFlush() {
+  aiCmSafeBottomTimer = null;
+  aiCmSafeBottomRafPending = false;
+  const el = aiCmSafeBottomWatchContainer;
+  if (!el) return; // сторож снят (смена SPA-страницы / resetConversationState)
+  // Виджет удалён из DOM (showWidget=false, content.js:2879) — сторож гаснет сам, как
+  // theme-poll H25: иначе MutationObserver по document.body жил бы вечно.
+  if (typeof el.isConnected === 'boolean' && !el.isConnected) { aiCmStopWidgetSafeBottomWatch(); return; }
+  aiCmSafeBottomLastRunAt = Date.now();
+  aiCmUpdateWidgetSafeBottom(el);
+}
+
+// Throttle 150 мс (п.1.6): первый пересчёт после простоя — в кадре отрисовки, частые
+// подряд схлопываются в один отложенный. Отдельный таймер, а не debounce: позиция
+// обновляется и во время непрерывного скролла/набора, а не только после паузы.
+function aiCmSafeBottomSchedule() {
+  if (!aiCmSafeBottomWatchContainer) return;
+  if (aiCmSafeBottomTimer !== null || aiCmSafeBottomRafPending) return;
+  const elapsed = Date.now() - aiCmSafeBottomLastRunAt;
+  if (elapsed < AI_CM_SAFE_BOTTOM_THROTTLE_MS) {
+    aiCmSafeBottomTimer = setTimeout(function () {
+      aiCmSafeBottomTimer = null;
+      aiCmSafeBottomSchedule();
+    }, AI_CM_SAFE_BOTTOM_THROTTLE_MS - elapsed);
+    return;
+  }
+  aiCmSafeBottomRafPending = true;
+  const raf = (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function')
+    ? function (cb) { window.requestAnimationFrame(cb); }
+    : function (cb) { setTimeout(cb, 16); };
+  raf(function () { aiCmSafeBottomFlush(); });
+}
+
+// Идемпотентно (п.1.6): один сторож на документ — повторный createWidget не плодит ни
+// наблюдателя, ни слушателей; контейнер сменился — прежний сторож гасится.
+function aiCmStartWidgetSafeBottomWatch(container) {
+  if (!container || typeof document === 'undefined' || !document.body) return;
+  if (aiCmSafeBottomWatchContainer === container && aiCmSafeBottomObserver) return;
+  aiCmStopWidgetSafeBottomWatch();
+  aiCmSafeBottomWatchContainer = container;
+  try {
+    if (typeof window !== 'undefined' && window && typeof window.addEventListener === 'function') {
+      window.addEventListener('resize', aiCmSafeBottomSchedule, AI_CM_SAFE_BOTTOM_LISTEN_OPTS);
+      window.addEventListener('scroll', aiCmSafeBottomSchedule, AI_CM_SAFE_BOTTOM_LISTEN_OPTS);
+    }
+    if (typeof MutationObserver === 'function') {
+      aiCmSafeBottomObserver = new MutationObserver(aiCmSafeBottomSchedule);
+      aiCmSafeBottomObserver.observe(document.body, { childList: true, subtree: true });
+    }
+  } catch (eSafeBottomWatch) { }
+  // Стартовое значение: без коллизии это 24px — позиция байтово прежняя (R-пин).
+  aiCmSafeBottomLastRunAt = Date.now();
+  aiCmUpdateWidgetSafeBottom(container);
+}
+
+function aiCmStopWidgetSafeBottomWatch() {
+  if (aiCmSafeBottomTimer !== null) { clearTimeout(aiCmSafeBottomTimer); aiCmSafeBottomTimer = null; }
+  aiCmSafeBottomRafPending = false;
+  if (aiCmSafeBottomObserver) {
+    try { aiCmSafeBottomObserver.disconnect(); } catch (eSafeBottomUnobserve) { }
+    aiCmSafeBottomObserver = null;
+  }
+  try {
+    if (typeof window !== 'undefined' && window && typeof window.removeEventListener === 'function') {
+      window.removeEventListener('resize', aiCmSafeBottomSchedule, AI_CM_SAFE_BOTTOM_LISTEN_OPTS);
+      window.removeEventListener('scroll', aiCmSafeBottomSchedule, AI_CM_SAFE_BOTTOM_LISTEN_OPTS);
+    }
+  } catch (eSafeBottomUnbind) { }
+  aiCmSafeBottomWatchContainer = null;
+}
+
+// Смена SPA-страницы/чата (resetConversationState): сторож старой страницы гасим и
+// взводим заново на текущий виджет — в новой вёрстке хост-контролы другие.
+function aiCmRestartWidgetSafeBottomWatch() {
+  aiCmStopWidgetSafeBottomWatch();
+  if (widgetElement) aiCmStartWidgetSafeBottomWatch(widgetElement);
+}
+
+// ========== Critical #2 UI-аудита 2026-09-28 (находка #2): доступность индикатора ==========
+// WCAG 2.2 AA: 2.1.1 (клавиатура), 2.4.7 (видимый фокус), 4.1.2 (имя/роль/состояние);
+// панель связана с индикатором через aria-controls/aria-expanded (пп.2.1-2.7).
+let aiCmWidgetA11yBound = false;
+
+function aiCmWidgetCircleEl() {
+  return (widgetElement && typeof widgetElement.querySelector === 'function') ? widgetElement.querySelector('.ai-widget-circle') : null;
+}
+function aiCmWidgetPanelEl() {
+  return (widgetElement && typeof widgetElement.querySelector === 'function') ? widgetElement.querySelector('.ai-widget-panel') : null;
+}
+
+// Единственный путь открытия/закрытия панели: класс .open и aria-expanded меняются
+// вместе (п.2.4), при открытии фокус уходит в поле панели (п.2.7).
+function aiCmSetWidgetPanelOpen(open, restoreFocus) {
+  const panel = aiCmWidgetPanelEl();
+  const circle = aiCmWidgetCircleEl();
+  if (!panel || !circle) return false;
+  const isOpen = open === true;
+  panel.classList.toggle('open', isOpen);
+  if (widgetElement) widgetElement.classList.toggle('ai-panel-open', isOpen);
+  circle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+  if (isOpen) {
+    updatePanel();
+    const input = (typeof widgetElement.querySelector === 'function') ? widgetElement.querySelector('.ai-cm-input') : null;
+    if (input && typeof input.focus === 'function') { try { input.focus(); } catch (eA11yFocusIn) { } }
+  } else if (restoreFocus === true && typeof circle.focus === 'function') {
+    try { circle.focus(); } catch (eA11yFocusOut) { }
+  }
+  return isOpen;
+}
+
+function aiCmToggleWidgetPanel(restoreFocus) {
+  const panel = aiCmWidgetPanelEl();
+  if (!panel) return;
+  aiCmSetWidgetPanelOpen(!panel.classList.contains('open'), restoreFocus);
+}
+
+function aiCmWidgetA11yKeydown(e) {
+  if (!e || !widgetElement) return;
+  const panel = aiCmWidgetPanelEl();
+  if (!panel || !panel.classList.contains('open')) return;
+  if (e.key !== 'Escape' && e.key !== 'Esc') return;
+  if (typeof e.preventDefault === 'function') e.preventDefault();
+  aiCmSetWidgetPanelOpen(false, true); // п.2.5: закрыть и вернуть фокус на индикатор
+}
+
+function aiCmWidgetA11yDocClick(e) {
+  if (!e || !widgetElement) return;
+  const panel = aiCmWidgetPanelEl();
+  if (!panel || !panel.classList.contains('open')) return;
+  const target = e.target;
+  // Клик внутри виджета (индикатор/панель) — не «вне панели»: переключение делает сам
+  // индикатор, иначе один и тот же клик закрывал бы и тут же открывал панель.
+  if (target && typeof target.closest === 'function' && target.closest('#ai-context-widget')) return;
+  // restoreFocus=false: пользователь уже ушёл курсором в другое место страницы, возврат
+  // фокуса на индикатор украл бы его у элемента под курсором. Клавиатурные закрытия
+  // (Escape, Enter/Space, клик по индикатору) фокус на индикатор возвращают.
+  aiCmSetWidgetPanelOpen(false, false);
+}
+
+function aiCmBindWidgetA11y() {
+  if (aiCmWidgetA11yBound) return;
+  if (typeof document === 'undefined' || !document || typeof document.addEventListener !== 'function') return;
+  aiCmWidgetA11yBound = true;
+  // capture: хост-страницы глушат всплытие (Escape у модалок чата), а панель обязана
+  // закрываться — иначе пользователь с клавиатуры остаётся в «запертой» панели.
+  document.addEventListener('keydown', aiCmWidgetA11yKeydown, true);
+  document.addEventListener('click', aiCmWidgetA11yDocClick, true);
+}
+
+// П.2.3: доступное имя — «{app}: {pct}% контекста использовано, {status}»; статус по тем
+// же границам зон, что у zoneColor (50/80). Строки — только _locales (content_a11y_*).
+function aiCmSetWidgetA11yLabel(circleEl, percentage) {
+  if (!circleEl || typeof circleEl.setAttribute !== 'function') return;
+  const i18n = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key, fallback) { return fallback; };
+  const pct = (typeof percentage === 'number' && isFinite(percentage)) ? percentage : 0;
+  const pctLabel = pct.toFixed(1);
+  const status = (pct < 50) ? i18n('content_a11y_status_ok', 'норма')
+    : ((pct < 80) ? i18n('content_a11y_status_warning', 'внимание')
+      : i18n('content_a11y_status_critical', 'критично'));
+  circleEl.setAttribute('aria-label', i18n('content_a11y_circle_label', 'AI Context Monitor: ' + pctLabel + '% контекста использовано, ' + status, [pctLabel, status]));
+}
+
 // ========== ВИДЖЕТ (со стрелками ▲▼) ==========
 function createWidget() {
   if (document.getElementById('ai-context-widget')) return;
@@ -462,7 +694,7 @@ function createWidget() {
   const t = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key, fallback) { return fallback; };
   const container = document.createElement('div');
   container.id = 'ai-context-widget';
-  container.innerHTML = `<style> #ai-context-widget { position: fixed; bottom: 24px; right: 24px; z-index: 999999; font-family: var(--w-font); user-select: none; } .ai-widget-circle { width: 64px; height: 64px; position: relative; cursor: pointer; background: var(--w-tooltip-bg); border-radius: 50%; box-shadow: var(--w-shadow); border: var(--w-border); display: flex; align-items: center; justify-content: center; transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1); } .ai-widget-circle:hover { transform: scale(1.06); } .ai-widget-circle svg { width: 88%; height: 88%; transform: rotate(-90deg); } .ai-widget-bg { fill: none; stroke: var(--w-bg-track); stroke-width: 7; } .ai-widget-fill { fill: none; stroke: var(--w-bg-fill); stroke-width: 7; stroke-linecap: round; transition: stroke-dashoffset 0.4s ease; } .ai-widget-text { position: absolute; font-size: 13px; font-weight: 600; color: var(--w-text); letter-spacing: -0.03em; } .ai-widget-tooltip { visibility: hidden; opacity: 0; position: absolute; bottom: 76px; right: 0; background: var(--w-tooltip-bg); color: var(--w-tooltip-text); padding: 8px 12px; border-radius: 8px; font-size: 12px; line-height: 1.4; white-space: nowrap; box-shadow: var(--w-shadow); border: var(--w-border); transition: opacity 0.15s ease, visibility 0.15s ease; } .ai-widget-circle:hover .ai-widget-tooltip { visibility: visible; opacity: 1; } #ai-context-widget.ai-panel-open .ai-widget-tooltip { visibility: hidden !important; opacity: 0 !important; } .ai-widget-panel { display: none; position: absolute; bottom: 76px; right: 0; background: var(--w-tooltip-bg); color: var(--w-tooltip-text); padding: 10px; border-radius: 10px; box-shadow: var(--w-shadow); border: var(--w-border); flex-direction: column; gap: 6px; min-width: 230px; font-size: 12px; line-height: 1.4; z-index: 1000000; white-space: normal; } .ai-widget-panel.open { display: flex; } .ai-cm-limit-text { font-weight: 600; margin-bottom: 2px; } .ai-cm-row { display: flex; align-items: center; gap: 6px; } .ai-cm-input { width: 56px; padding: 4px 6px; border-radius: 6px; border: 1px solid rgba(127,127,127,0.4); background: rgba(127,127,127,0.12); color: inherit; font-family: inherit; font-size: 12px; -webkit-appearance: textfield; -moz-appearance: textfield; appearance: textfield; } .ai-cm-input::-webkit-outer-spin-button, .ai-cm-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; } .ai-cm-spin { display: flex; flex-direction: column; margin-left: -2px; } .ai-cm-spin button { cursor: pointer; border: 1px solid rgba(127,127,127,0.4); background: rgba(127,127,127,0.12); color: inherit; font-size: 8px; line-height: 1; padding: 2px 5px; font-family: inherit; } .ai-cm-spin button:first-child { border-radius: 4px 4px 0 0; border-bottom: none; } .ai-cm-spin button:last-child { border-radius: 0 0 4px 4px; } .ai-cm-spin button:hover { background: rgba(127,127,127,0.32); } .ai-cm-btn { cursor: pointer; border: none; border-radius: 6px; padding: 6px 8px; font-size: 12px; font-family: inherit; background: rgba(127,127,127,0.18); color: inherit; text-align: left; } .ai-cm-btn:hover { background: rgba(127,127,127,0.32); } .ai-cm-hint { opacity: 0.72; font-size: 11px; } </style> <div class="ai-widget-circle"> <svg viewBox="0 0 100 100"> <defs> <linearGradient id="gemini-gradient" x1="0%" y1="0%" x2="100%" y2="100%"> <stop offset="0%" stop-color="#4285F4" /> <stop offset="50%" stop-color="#9B51E0" /> <stop offset="100%" stop-color="#EA4335" /> </linearGradient> </defs> <circle class="ai-widget-bg" cx="50" cy="50" r="43"/> <circle class="ai-widget-fill" cx="50" cy="50" r="43"/> </svg> <div class="ai-widget-text">—</div> <div class="ai-widget-tooltip">${t('content_widget_loading', 'Загрузка контекста...')}</div> </div> <div class="ai-widget-panel"> <div class="ai-cm-limit-text">${t('content_panel_auto_label', 'Авто-порог')}</div> <div class="ai-cm-row"><input type="number" min="1" max="100" step="1" class="ai-cm-input" placeholder="${t('content_panel_placeholder', 'Авто')}"><span class="ai-cm-spin"><button type="button" class="ai-cm-spin-up" tabindex="-1" aria-label="${t('content_panel_spin_up', 'увеличить порог')}">▲</button><button type="button" class="ai-cm-spin-down" tabindex="-1" aria-label="${t('content_panel_spin_down', 'уменьшить порог')}">▼</button></span><span>${t('content_panel_pct_auto', '% от Авто')}</span></div> <div class="ai-cm-row"><button class="ai-cm-btn ai-cm-snap">${t('content_panel_snap_btn', '📌 Текущее = 100%')}</button><button class="ai-cm-btn ai-cm-auto">${t('content_panel_auto_btn', '↺ Авто')}</button></div> <div class="ai-cm-hint">${t('content_panel_hint', 'Порог в % от Авто-порога (оценённой точки, где модель начинает забывать). 100% = как Авто. Меньше = строже: цвета и % считаются от этого порога. Пример: порог 10% → жёлтый, когда Авто≈5%, красный при Авто≈8%.')}</div> </div>`;
+  container.innerHTML = `<style> #ai-context-widget { position: fixed; bottom: var(--acm-safe-bottom, 24px); right: 24px; z-index: 999999; font-family: var(--w-font); user-select: none; } .ai-widget-circle { width: 64px; height: 64px; position: relative; cursor: pointer; background: var(--w-tooltip-bg); border-radius: 50%; box-shadow: var(--w-shadow); border: var(--w-border); display: flex; align-items: center; justify-content: center; transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1); } .ai-widget-circle:hover { transform: scale(1.06); } .ai-widget-circle:focus-visible { outline: 2px solid var(--w-text); outline-offset: 2px; } .ai-widget-circle svg { width: 88%; height: 88%; transform: rotate(-90deg); } .ai-widget-bg { fill: none; stroke: var(--w-bg-track); stroke-width: 7; } .ai-widget-fill { fill: none; stroke: var(--w-bg-fill); stroke-width: 7; stroke-linecap: round; transition: stroke-dashoffset 0.4s ease; } .ai-widget-text { position: absolute; font-size: 13px; font-weight: 600; color: var(--w-text); letter-spacing: -0.03em; } .ai-widget-tooltip { visibility: hidden; opacity: 0; position: absolute; bottom: 76px; right: 0; background: var(--w-tooltip-bg); color: var(--w-tooltip-text); padding: 8px 12px; border-radius: 8px; font-size: 12px; line-height: 1.4; white-space: nowrap; box-shadow: var(--w-shadow); border: var(--w-border); transition: opacity 0.15s ease, visibility 0.15s ease; } .ai-widget-circle:hover .ai-widget-tooltip { visibility: visible; opacity: 1; } #ai-context-widget.ai-panel-open .ai-widget-tooltip { visibility: hidden !important; opacity: 0 !important; } .ai-widget-panel { display: none; position: absolute; bottom: 76px; right: 0; background: var(--w-tooltip-bg); color: var(--w-tooltip-text); padding: 10px; border-radius: 10px; box-shadow: var(--w-shadow); border: var(--w-border); flex-direction: column; gap: 6px; min-width: 230px; font-size: 12px; line-height: 1.4; z-index: 1000000; white-space: normal; } .ai-widget-panel.open { display: flex; } .ai-cm-limit-text { font-weight: 600; margin-bottom: 2px; } .ai-cm-row { display: flex; align-items: center; gap: 6px; } .ai-cm-input { width: 56px; padding: 4px 6px; border-radius: 6px; border: 1px solid rgba(127,127,127,0.4); background: rgba(127,127,127,0.12); color: inherit; font-family: inherit; font-size: 12px; -webkit-appearance: textfield; -moz-appearance: textfield; appearance: textfield; } .ai-cm-input::-webkit-outer-spin-button, .ai-cm-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; } .ai-cm-spin { display: flex; flex-direction: column; margin-left: -2px; } .ai-cm-spin button { cursor: pointer; border: 1px solid rgba(127,127,127,0.4); background: rgba(127,127,127,0.12); color: inherit; font-size: 8px; line-height: 1; padding: 2px 5px; font-family: inherit; } .ai-cm-spin button:first-child { border-radius: 4px 4px 0 0; border-bottom: none; } .ai-cm-spin button:last-child { border-radius: 0 0 4px 4px; } .ai-cm-spin button:hover { background: rgba(127,127,127,0.32); } .ai-cm-btn { cursor: pointer; border: none; border-radius: 6px; padding: 6px 8px; font-size: 12px; font-family: inherit; background: rgba(127,127,127,0.18); color: inherit; text-align: left; } .ai-cm-btn:hover { background: rgba(127,127,127,0.32); } .ai-cm-hint { opacity: 0.72; font-size: 11px; } </style> <div class="ai-widget-circle" tabindex="0" role="button" aria-haspopup="dialog" aria-controls="ai-widget-panel" aria-expanded="false" aria-label="${t('content_a11y_circle_initial', 'Открыть панель порога контекста')}"> <svg viewBox="0 0 100 100"> <defs> <linearGradient id="gemini-gradient" x1="0%" y1="0%" x2="100%" y2="100%"> <stop offset="0%" stop-color="#4285F4" /> <stop offset="50%" stop-color="#9B51E0" /> <stop offset="100%" stop-color="#EA4335" /> </linearGradient> </defs> <circle class="ai-widget-bg" cx="50" cy="50" r="43"/> <circle class="ai-widget-fill" cx="50" cy="50" r="43"/> </svg> <div class="ai-widget-text">—</div> <div class="ai-widget-tooltip">${t('content_widget_loading', 'Загрузка контекста...')}</div> </div> <div class="ai-widget-panel" id="ai-widget-panel"> <div class="ai-cm-limit-text">${t('content_panel_auto_label', 'Авто-порог')}</div> <div class="ai-cm-row"><input type="number" min="1" max="100" step="1" class="ai-cm-input" placeholder="${t('content_panel_placeholder', 'Авто')}"><span class="ai-cm-spin"><button type="button" class="ai-cm-spin-up" tabindex="-1" aria-label="${t('content_panel_spin_up', 'увеличить порог')}">▲</button><button type="button" class="ai-cm-spin-down" tabindex="-1" aria-label="${t('content_panel_spin_down', 'уменьшить порог')}">▼</button></span><span>${t('content_panel_pct_auto', '% от Авто')}</span></div> <div class="ai-cm-row"><button class="ai-cm-btn ai-cm-snap">${t('content_panel_snap_btn', '📌 Текущее = 100%')}</button><button class="ai-cm-btn ai-cm-auto">${t('content_panel_auto_btn', '↺ Авто')}</button></div> <div class="ai-cm-hint">${t('content_panel_hint', 'Порог в % от Авто-порога (оценённой точки, где модель начинает забывать). 100% = как Авто. Меньше = строже: цвета и % считаются от этого порога. Пример: порог 10% → жёлтый, когда Авто≈5%, красный при Авто≈8%.')}</div> </div>`;
   document.body.appendChild(container);
   widgetElement = container;
   applyNativeStyles(container);
@@ -479,12 +711,26 @@ function createWidget() {
   const upBtn = container.querySelector('.ai-cm-spin-up');
   const dnBtn = container.querySelector('.ai-cm-spin-down');
   if (circleEl && panelEl) {
-    circleEl.addEventListener('click', () => {
-      panelEl.classList.toggle('open');
-      container.classList.toggle('ai-panel-open');
-      if (panelEl.classList.contains('open')) updatePanel();
+    // Critical #2 (п.2.4): индикатор — кнопка панели; клик, Enter и Space делают одно и
+    // то же и идут одним путём: класс .open и aria-expanded меняются вместе, фокус при
+    // открытии уезжает в .ai-cm-input, при закрытии — обратно на индикатор.
+    circleEl.addEventListener('click', () => aiCmToggleWidgetPanel(true));
+    circleEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault(); // Space на кнопке не должен прокручивать страницу
+        aiCmToggleWidgetPanel(true);
+      }
     });
   }
+  // Critical #1/#2 (пп.1.1-1.6, 2.5): стартовый расчёт --acm-safe-bottom, сторож коллизий
+  // и документные a11y-слушатели. Гарды по typeof — как у aiCmBadgeHoldActive выше:
+  // изолированные песочницы тестов виджета (chatgpt-o1-badge-hold и др.) этих хелперов
+  // не знают (при отсутствии хелпера поведение прежнее).
+  try {
+    if (typeof aiCmUpdateWidgetSafeBottom === 'function') aiCmUpdateWidgetSafeBottom(container);
+    if (typeof aiCmStartWidgetSafeBottomWatch === 'function') aiCmStartWidgetSafeBottomWatch(container);
+    if (typeof aiCmBindWidgetA11y === 'function') aiCmBindWidgetA11y();
+  } catch (eWidgetCritical) { }
   if (snapBtn) snapBtn.addEventListener('click', snapCurrentPct);
   if (autoBtn) autoBtn.addEventListener('click', resetSafePct);
   if (inputEl) inputEl.addEventListener('change', (e) => setSafePctFromInput(e.target.value));
@@ -541,6 +787,10 @@ function updateWidget(percentage, tokens, effectiveLimit, contextLimit, displayL
     (typeof adapterBaseSeen !== 'undefined' && adapterBaseSeen === true));
   var aiCmStalePlaceholder = (stale === true) && !aiCmAdapterBasePresent;
   percentText.textContent = aiCmStalePlaceholder ? '—' : (percentage.toFixed(1) + '%');
+  // Critical #2 (п.2.3): доступное имя индикатора — процент и статус зоны, рядом с
+  // видимым числом. Вызов защищён try/catch по образцу aiCmUpdateSourceIndicator выше:
+  // updateWidget исполняется и в песочницах темы, где a11y-хелпера нет.
+  try { aiCmSetWidgetA11yLabel(widgetElement.querySelector('.ai-widget-circle'), percentage); } catch (eA11yW) { }
   // O-35 (ДИАГНОСТИКА, только измерение): qwen-badge — плейсхолдер «—» ВМЕСТО процента.
   // Единственный путь: stale=true при ОТСУТСТВИИ базы (12с без сетевого снимка при
   // сообщениях в DOM — core/base-handler.js:scheduleStaleCheck). Строка печатается в ТОЙ
@@ -650,6 +900,14 @@ function updateWidget(percentage, tokens, effectiveLimit, contextLimit, displayL
   Api.aiCmRefreshThemeIfNeeded = aiCmRefreshThemeIfNeeded;
   Api.aiCmStartThemePoll = aiCmStartThemePoll;
   Api.aiCmStopThemePoll = aiCmStopThemePoll;
+  Api.aiCmComputeWidgetSafeBottom = aiCmComputeWidgetSafeBottom;
+  Api.aiCmUpdateWidgetSafeBottom = aiCmUpdateWidgetSafeBottom;
+  Api.aiCmStartWidgetSafeBottomWatch = aiCmStartWidgetSafeBottomWatch;
+  Api.aiCmStopWidgetSafeBottomWatch = aiCmStopWidgetSafeBottomWatch;
+  Api.aiCmRestartWidgetSafeBottomWatch = aiCmRestartWidgetSafeBottomWatch;
+  Api.aiCmSetWidgetA11yLabel = aiCmSetWidgetA11yLabel;
+  Api.aiCmSetWidgetPanelOpen = aiCmSetWidgetPanelOpen;
+  Api.aiCmToggleWidgetPanel = aiCmToggleWidgetPanel;
   Api.createWidget = createWidget;
   Api.aiCmRevealWidget = aiCmRevealWidget;
   Api.updateWidget = updateWidget;

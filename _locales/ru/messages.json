@@ -8,6 +8,21 @@
   "content_widget_loading": {
     "message": "Загрузка контекста..."
   },
+  "content_a11y_circle_initial": {
+    "message": "Открыть панель порога контекста"
+  },
+  "content_a11y_circle_label": {
+    "message": "AI Context Monitor: $1% контекста использовано, $2"
+  },
+  "content_a11y_status_ok": {
+    "message": "норма"
+  },
+  "content_a11y_status_warning": {
+    "message": "внимание"
+  },
+  "content_a11y_status_critical": {
+    "message": "критично"
+  },
   "content_panel_auto_label": {
     "message": "Авто-порог"
   },
