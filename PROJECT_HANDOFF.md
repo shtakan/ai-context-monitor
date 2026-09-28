@@ -594,7 +594,16 @@ ai-context-monitor-clean/
     i18n-ключ options_archive_file_aria ru/en 255/255, target-size ≥24px);
     popup и options — один документ (manifest action.default_popup =
     options/options.html); axe-core jsdom: 0 violations; сьют 134/2579/6/0, коммит 1a0880d
-    7. i18n completeness: 0 hardcoded user-facing строк (grep vs _locales/*/messages.json)
+    7. ✅ i18n completeness: 0 hardcoded user-facing строк — 3 ключа добавлены
+    в ru/en (255 → 258): bg_notification_message (с placeholders pct/threshold),
+    bg_notification_button_open_chat, options_info_separator (NBSP+тире+NBSP);
+    core/background.js:328-346 использует aiCmI18nMessage для message и
+    buttons[].title (title: 'AI Context Monitor' — бренд, оставлен);
+    options.js:1162 разделитель заменён; пин M-4.5 (5 тестов): ключи/placeholders/
+    байтовое совпадение/отсутствие ASCII-разделителя; отклонения: опечатка $threshold}%
+    → $threshold$, placeholders-блок (необходим для Chrome i18n), NEUTRAL_IDENTICAL
+    allowlist для разделителя, core/background.js в USED_KEY_SOURCES (иначе лексер
+    нашёл бы диаг-логи); сьют 134/2584/6/0
     8. Contract tests: property-based на реальных payload (не моки) для BaseAdapter interface
     9. Error tracking: structured logging (error/context/timestamp), no bare console.error
     10. Performance baseline: экспорт 100 msgs <5s, парсинг 1MB batchexecute <2s, widget render <100ms
