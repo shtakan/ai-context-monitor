@@ -593,7 +593,7 @@ ai-context-monitor-clean/
     + `aa1a1b7` (2026-09-28: ровно один <main>, aria-label #archive-file через
     i18n-ключ options_archive_file_aria ru/en 255/255, target-size ≥24px);
     popup и options — один документ (manifest action.default_popup =
-    options/options.html); axe-core jsdom: 0 violations; сьют 134/2579/6/0
+    options/options.html); axe-core jsdom: 0 violations; сьют 134/2579/6/0, коммит 1a0880d
     7. i18n completeness: 0 hardcoded user-facing строк (grep vs _locales/*/messages.json)
     8. Contract tests: property-based на реальных payload (не моки) для BaseAdapter interface
     9. Error tracking: structured logging (error/context/timestamp), no bare console.error
