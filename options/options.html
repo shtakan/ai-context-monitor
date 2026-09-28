@@ -10,6 +10,8 @@
 
 <body>
   <div class="popup">
+    <!-- Аудит 1.6 (a11y): весь контент попапа — ровно один main landmark -->
+    <main>
     <div class="header">
       <span class="logo">📊</span>
       <h1 data-i18n="options_header_title">AI Context Monitor</h1>
@@ -180,7 +182,7 @@
     <div class="section" id="archive-section">
       <label class="label" data-i18n="options_archive_legend">Архивы (первый ярус истории)</label>
       <div class="input-row">
-        <input type="file" id="archive-file" accept=".json,application/json" multiple>
+        <input type="file" id="archive-file" accept=".json,application/json" multiple aria-label="Выбрать файлы архивов" data-i18n-aria-label="options_archive_file_aria">
       </div>
       <div class="input-row">
         <button id="archive-import" class="btn-export" type="button" data-i18n="options_archive_import">Импортировать</button>
@@ -200,6 +202,7 @@
       <!-- v1.19 (M-6): ссылка на руководство docs/index.html (входит в пакет расширения) -->
       <a href="../docs/index.html" id="help-link" target="_blank" rel="noopener"><span data-i18n="options_footer_help">Помощь</span></a>
     </div>
+    </main>
   </div>
 </body>
 <script src="i18n-apply.js"></script>

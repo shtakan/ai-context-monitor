@@ -325,3 +325,27 @@ a:focus-visible,
   margin-top: 6px;
 }
 
+/* Аудит 1.6 (a11y, WCAG 2.2 target-size): минимальная область нажатия 24×24 px.
+   Блок только добавляющий: прежние объявления и цвета не изменены, раскладка
+   300-пиксельного попапа не затронута (габариты растут только до минимума). */
+.checkbox-row input[type="checkbox"] {
+  min-width: 24px;
+  min-height: 24px;
+}
+
+.archive-del {
+  min-width: 24px;
+  min-height: 24px;
+}
+
+.btn-reset,
+.btn-toggle,
+.btn-export {
+  min-height: 24px;
+}
+
+#privacy-link,
+#help-link {
+  min-height: 24px;
+  line-height: 24px;
+}

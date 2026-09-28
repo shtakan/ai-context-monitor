@@ -233,6 +233,9 @@
   "options_archive_refresh": {
     "message": "Обновить список"
   },
+  "options_archive_file_aria": {
+    "message": "Выбрать файлы архивов"
+  },
   "options_archive_hint": {
     "message": "Локальные экспорты: Gemini Takeout (MyActivity.json), ChatGPT conversations.json, Claude conversations.json, Perplexity threads. Файлы читаются в браузере (FileReader) и никуда не отправляются. Архив — первый ярус: он задаёт авторитетный пол истории и даёт терминальную полноту archive-complete."
   },

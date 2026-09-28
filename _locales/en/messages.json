@@ -233,6 +233,9 @@
   "options_archive_refresh": {
     "message": "Refresh list"
   },
+  "options_archive_file_aria": {
+    "message": "Choose archive files"
+  },
   "options_archive_hint": {
     "message": "Local exports: Gemini Takeout (MyActivity.json), ChatGPT conversations.json, Claude conversations.json, Perplexity threads. Files are parsed in the browser (FileReader) and are never sent anywhere. The archive is the first tier: it defines the authoritative history floor and provides terminal archive-complete completeness."
   },
