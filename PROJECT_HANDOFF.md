@@ -603,7 +603,7 @@ ai-context-monitor-clean/
     байтовое совпадение/отсутствие ASCII-разделителя; отклонения: опечатка $threshold}%
     → $threshold$, placeholders-блок (необходим для Chrome i18n), NEUTRAL_IDENTICAL
     allowlist для разделителя, core/background.js в USED_KEY_SOURCES (иначе лексер
-    нашёл бы диаг-логи); сьют 134/2584/6/0
+    нашёл бы диаг-логи); сьют 134/2584/6/0, коммит 9b18e86
     8. Contract tests: property-based на реальных payload (не моки) для BaseAdapter interface
     9. Error tracking: structured logging (error/context/timestamp), no bare console.error
     10. Performance baseline: экспорт 100 msgs <5s, парсинг 1MB batchexecute <2s, widget render <100ms
