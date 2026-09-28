@@ -763,5 +763,18 @@
   },
   "docs_alt_perplexity": {
     "message": "Perplexity — context indicator"
+  },
+  "bg_notification_message": {
+    "message": "Context fill $pct$% — threshold $threshold$% reached",
+    "placeholders": {
+      "pct": { "content": "$1" },
+      "threshold": { "content": "$2" }
+    }
+  },
+  "bg_notification_button_open_chat": {
+    "message": "Open chat"
+  },
+  "options_info_separator": {
+    "message": "\u00a0\u2014\u00a0"
   }
 }

@@ -13,6 +13,22 @@ function debugLog(level) {
   if (level === 'error' || level === 'warn') { (console[level] || console.log).apply(console, args); return; }
   if (DEBUG) { (console[level] || console.log).apply(console, args); }
 }
+
+// ========== M-4.5 (аудит 1.7): i18n — строки Chrome-уведомлений из _locales ==========
+// Пользовательские строки уведомления берутся из chrome.i18n.getMessage (ключи
+// bg_notification_* есть в ru и en). chrome.i18n в MV3 SW доступен всегда; фолбэк
+// (юнит-тесты, отладочный контекст) — прежний русский текст, байтово тот же.
+// $1..$9 в сообщении локали подставляются substitutions (placeholders → $1/$2).
+function aiCmI18nMessage(key, fallback, substitutions) {
+  try {
+    if (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.getMessage === 'function') {
+      var message = substitutions ? chrome.i18n.getMessage(key, substitutions) : chrome.i18n.getMessage(key);
+      if (message) return message;
+    }
+  } catch (eMessage) { }
+  return fallback;
+}
+
 console.log('AI Context Monitor: Service Worker запущен');
 
 // v1.15 (COLD-START): маркер реального холодного старта — новый процесс браузера (или
@@ -314,14 +330,20 @@ async function checkThresholds(data, sender) {
     } else {
       var notifId = 'aiCmThr|' + (tabId == null ? '' : String(tabId)) +
         '|' + convId + '|' + T;
+      // M-4.5: текст и подпись кнопки — из _locales (bg_notification_*); title — бренд.
+      var notifPct = String(Math.round(pct * 10) / 10);
+      var notifMessage = aiCmI18nMessage('bg_notification_message',
+        'Заполнение контекста ' + notifPct + '% — достигнут порог ' + T + '%',
+        [notifPct, String(T)]);
+      var notifButtonOpen = aiCmI18nMessage('bg_notification_button_open_chat', 'Открыть чат');
       try {
         chrome.notifications.create(notifId, {
           type: 'basic',
           iconUrl: chrome.runtime.getURL('icons/icon128.png'),
           title: 'AI Context Monitor',
-          message: 'Заполнение контекста ' + Math.round(pct * 10) / 10 + '% — достигнут порог ' + T + '%',
+          message: notifMessage,
           requireInteraction: false,
-          buttons: [{ title: 'Открыть чат' }]
+          buttons: [{ title: notifButtonOpen }]
         }, function () {
           var le = chrome.runtime.lastError;
           if (le) debugLog('log', '[AI CM][thresholds] notify-skip reason=api-error ' + (le.message || ''));

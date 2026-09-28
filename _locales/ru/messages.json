@@ -763,5 +763,18 @@
   },
   "docs_alt_perplexity": {
     "message": "Perplexity — индикатор контекста"
+  },
+  "bg_notification_message": {
+    "message": "Заполнение контекста $pct$% — достигнут порог $threshold$%",
+    "placeholders": {
+      "pct": { "content": "$1" },
+      "threshold": { "content": "$2" }
+    }
+  },
+  "bg_notification_button_open_chat": {
+    "message": "Открыть чат"
+  },
+  "options_info_separator": {
+    "message": " — "
   }
 }

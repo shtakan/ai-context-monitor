@@ -1159,7 +1159,7 @@ function aiCmRenderArchiveList() {
         const label = rec ? (rec.label || API.describeSource(rec)) : aiCmI18nMessage('options_archive_fallback', 'архив');
         const when = (rec && rec.importedAt) ? (' · ' + formatTime(rec.importedAt)) : '';
         const file = (rec && rec.fileName) ? (' · ' + rec.fileName) : '';
-        info.textContent = cid.slice(0, 8) + ' — ' + label + when + file;
+        info.textContent = cid.slice(0, 8) + aiCmI18nMessage('options_info_separator', ' — ') + label + when + file;
         row.appendChild(info);
         const del = document.createElement('button');
         del.className = 'btn-reset archive-del';

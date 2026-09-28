@@ -70,6 +70,12 @@ const DYNAMIC_SOURCES = contentSourceMap.SOURCES.map(function (rel) {
   ['utils/export-text-builders.js', exportBuildersJs]
 ]);
 
+// M-4.5 (аудит 1.7): строки Chrome-уведомлений объявлены в core/background.js. В DYNAMIC_SOURCES
+// файл НЕ входит (лексер §7 нашёл бы там диагностические ru-логи), но скану «мёртвых ключей»
+// и пину M-4.5 исходник SW нужен.
+const BACKGROUND_JS = fs.readFileSync(path.join(ROOT, 'core', 'background.js'), 'utf8');
+const USED_KEY_SOURCES = DYNAMIC_SOURCES.concat([['core/background.js', BACKGROUND_JS]]);
+
 // Атрибуты разметки, которыми объявляются ключи локали (механика i18n-apply.js).
 const I18N_ATTRS = ['data-i18n', 'data-i18n-placeholder', 'data-i18n-title', 'data-i18n-aria-label'];
 // M-4.4: пятый вид подстановки — alt изображений (ключи docs_alt_*).
@@ -185,8 +191,14 @@ describe('M-4: _locales/ru и _locales/en — структура и парите
     });
     const differRatio = (keys.length - identical.length) / keys.length;
     expect(differRatio).toBeGreaterThanOrEqual(0.9);
-    // идентичными остаются только непереводимые брендовые строки
+    // Идентичными остаются непереводимые брендовые строки и языконейтральные разделители:
+    // options_info_separator (M-4.5, аудит 1.7) — NBSP + тире + NBSP, одинаков в ru и en.
+    const NEUTRAL_IDENTICAL = ['options_info_separator'];
     identical.forEach(function (key) {
+      if (NEUTRAL_IDENTICAL.indexOf(key) !== -1) {
+        expect([key, message(ru, key)]).toEqual([key, '\u00a0—\u00a0']);
+        return;
+      }
       expect(message(ru, key)).toBe('AI Context Monitor');
     });
   });
@@ -239,7 +251,7 @@ describe('M-4: разметка options.html и print.html', () => {
     (manifestRaw.match(/__MSG_[a-z0-9_]+__/g) || []).forEach(function (token) {
       used[token.slice('__MSG_'.length, -'__'.length)] = true;
     });
-    DYNAMIC_SOURCES.forEach(function (pair) {
+    USED_KEY_SOURCES.forEach(function (pair) {
       Object.keys(ru).forEach(function (key) {
         // ключи объявлены в исходниках как строковые литералы: aiCmI18nMessage('key', ...) / t('key', ...)
         if (pair[1].indexOf("'" + key + "'") !== -1) used[key] = true;
@@ -1248,10 +1260,12 @@ describe('M-4.4: локализация privacy/privacy.html и docs/index.html'
       //   (options_export_hidden_label / options_export_hidden_hint → словарь 253)
       // + D-O41: подсказка тумблера options_export_hidden_title (словарь 254)
       // + Аудит 1.6 (a11y): доступное имя файлового поля архивов options_archive_file_aria (словарь 255)
+      // + Аудит 1.7 (M-4.5): bg_notification_message, bg_notification_button_open_chat,
+      //   options_info_separator → словарь 258
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('privacy_') === 0; }).length).toBe(86);
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('docs_') === 0; }).length).toBe(42);
-      expect(Object.keys(ru).length).toBe(255);
-      expect(Object.keys(en).length).toBe(255);
+      expect(Object.keys(ru).length).toBe(258);
+      expect(Object.keys(en).length).toBe(258);
     });
 
     test('ru-значения M-4.4 байтово равны тексту разметки, en — перевод без кириллицы', () => {
@@ -1354,5 +1368,81 @@ describe('M-4.4: локализация privacy/privacy.html и docs/index.html'
       expect(i18nModule.aiCmI18nApply(document)).toBeGreaterThan(0);
       expect(document.getElementById('i18n-alt').getAttribute('alt')).toBe(en.docs_alt_chatgpt.message);
     });
+  });
+});
+
+/* =====================================================================================
+ * 11. M-4.5 (аудит 1.7): строки Chrome-уведомлений (core/background.js) и разделитель
+ *     списка архивов (options/options.js) берутся из _locales, а не из литералов кода
+ * ===================================================================================== */
+
+describe('M-4.5: уведомления background.js и разделитель options.js через chrome.i18n', () => {
+  /**
+   * Объект-опции вызова chrome.notifications.create(…): от его `{` до парной `}`.
+   * Границы ищутся по маскированному исходнику (строки/комментарии не путают счётчик).
+   */
+  function notificationOptions(src) {
+    const masked = lexSource(src).masked;
+    const at = src.indexOf('chrome.notifications.create(');
+    expect(at).toBeGreaterThan(-1);
+    const open = src.indexOf('{', at);
+    let depth = 0, k = open;
+    for (; k < src.length; k++) {
+      if (masked[k] === '{') depth++;
+      else if (masked[k] === '}') { depth--; if (depth === 0) break; }
+    }
+    return src.slice(open, k + 1);
+  }
+
+  test('новые ключи M-4.5 есть в ОБЕИХ локалях: значения и placeholders → $1/$2', () => {
+    [['ru', ru], ['en', en]].forEach(function (pair) {
+      ['bg_notification_message', 'bg_notification_button_open_chat', 'options_info_separator']
+        .forEach(function (key) {
+          expect([pair[0], key, Object.prototype.hasOwnProperty.call(pair[1], key)]).toEqual([pair[0], key, true]);
+        });
+    });
+    expect(message(ru, 'bg_notification_message'))
+      .toBe('Заполнение контекста $pct$% — достигнут порог $threshold$%');
+    expect(message(en, 'bg_notification_message'))
+      .toBe('Context fill $pct$% — threshold $threshold$% reached');
+    // именованные плейсхолдеры $pct$/$threshold$ работают только с блоком placeholders
+    expect(ru.bg_notification_message.placeholders).toEqual({ pct: { content: '$1' }, threshold: { content: '$2' } });
+    expect(en.bg_notification_message.placeholders).toEqual({ pct: { content: '$1' }, threshold: { content: '$2' } });
+    expect(message(ru, 'bg_notification_button_open_chat')).toBe('Открыть чат');
+    expect(message(en, 'bg_notification_button_open_chat')).toBe('Open chat');
+    // разделитель языконейтрален: NBSP + тире + NBSP (в т.ч. в en — неразрывные пробелы)
+    expect(message(ru, 'options_info_separator')).toBe('\u00a0—\u00a0');
+    expect(message(en, 'options_info_separator')).toBe('\u00a0—\u00a0');
+    expect(CYRILLIC_RE.test(message(en, 'bg_notification_message'))).toBe(false);
+    expect(CYRILLIC_RE.test(message(en, 'bg_notification_button_open_chat'))).toBe(false);
+  });
+
+  test('chrome.notifications.create: в опциях нет ru-строк, message и кнопка — i18n-переменные', () => {
+    const opts = notificationOptions(BACKGROUND_JS);
+    expect(CYRILLIC_RE.test(opts)).toBe(false);              // ни одного хардкода пользовательской строки
+    expect(opts).toContain("title: 'AI Context Monitor'");   // бренд — не переводится
+    expect(opts).toMatch(/message:\s*notifMessage,/);
+    expect(opts).toMatch(/buttons:\s*\[\{ title: notifButtonOpen \}\]/);
+  });
+
+  test('текст и подпись кнопки собираются aiCmI18nMessage от ключей bg_notification_*', () => {
+    expect(BACKGROUND_JS).toContain("aiCmI18nMessage('bg_notification_message'");
+    expect(BACKGROUND_JS).toContain("aiCmI18nMessage('bg_notification_button_open_chat'");
+    // хелпер SW ходит именно в chrome.i18n.getMessage (как в options.js/print.js)
+    expect(BACKGROUND_JS).toContain('var message = substitutions ? chrome.i18n.getMessage(key, substitutions) : chrome.i18n.getMessage(key);');
+  });
+
+  test('ru-фолбэки SW совпадают с сообщениями локали (кнопка — байтово, текст — по кускам)', () => {
+    expect(BACKGROUND_JS).toContain("aiCmI18nMessage('bg_notification_button_open_chat', 'Открыть чат')");
+    // message — конкатенация (pct/threshold): куски обязаны совпасть с шаблоном локали
+    const tmpl = message(ru, 'bg_notification_message');
+    expect(tmpl.split('$pct$')[0]).toBe('Заполнение контекста ');
+    expect(tmpl.split('$pct$')[1].split('$threshold$')[0]).toBe('% — достигнут порог ');
+    expect(BACKGROUND_JS).toContain("'Заполнение контекста ' + notifPct + '% — достигнут порог ' + T + '%'");
+  });
+
+  test('options.js: разделитель из ключа, ASCII-вариант \' — \' в файле отсутствует', () => {
+    expect(optionsJs).toContain("aiCmI18nMessage('options_info_separator', '\u00a0—\u00a0')");
+    expect(optionsJs.indexOf("' — '")).toBe(-1);
   });
 });
