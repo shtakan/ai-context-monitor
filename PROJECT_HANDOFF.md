@@ -604,7 +604,17 @@ ai-context-monitor-clean/
     → $threshold$, placeholders-блок (необходим для Chrome i18n), NEUTRAL_IDENTICAL
     allowlist для разделителя, core/background.js в USED_KEY_SOURCES (иначе лексер
     нашёл бы диаг-логи); сьют 134/2584/6/0, коммит 9b18e86
-    8. Contract tests: property-based на реальных payload (не моки) для BaseAdapter interface
+    8. ❌ Contract tests: property-based на реальных payload — DoD НЕ ВЫПОЛНЕН
+    (три независимых скана 2026-09-28): 4 из 7 адаптеров не инстанцируются в тестах
+    (grep `new <Name>Adapter` → только `GeminiAdapter` в `core/content.js:969`);
+    ни один тест не выполняет `extractMessages()` на реальном захваченном артефакте;
+    I3 (id уникальны/свидетельствуемы) не запинен нигде; I4 (отброс контейнеров)
+    для chatgpt/claude/gemini/perplexity/GSA запинен только текстом исходников
+    (`tests/qwen-container-drop-o37.test.js:294-299` readFileSync-проверка), не поведением;
+    скрытая подмена payload в `tests/helpers/o18-fixture.js:114-123` (`synthetic:true`);
+    Gemini/GSA хелперы тестируют только weak invariants (I5 `count===4`);
+    backlog: инвентаризация реальных артефактов (экспорты/логи/DOM-снимки) +
+    property-based тесты для каждого из 7 адаптеров на реальных payload
     9. Error tracking: structured logging (error/context/timestamp), no bare console.error
     10. Performance baseline: экспорт 100 msgs <5s, парсинг 1MB batchexecute <2s, widget render <100ms
 
