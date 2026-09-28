@@ -381,7 +381,7 @@ class QwenAdapter extends BaseAdapter {
       }
       return messages;
     } catch (error) {
-      console.error('[QwenAdapter] Ошибка:', error);
+      debugLog('error', '[QwenAdapter] Ошибка:', error);
       return [];
     }
   }

@@ -46,7 +46,7 @@
       if (currentConvId !== retryConvId) { traceLog('vf5 retry skip (чат сменился)'); return; }
       debugLog('log', '[claude-vf5] retry после сбоя (delay=' + activeRetryDelay + 'мс)');
       // v36: таймер вне promise-цепочки — бросок был бы uncaught
-      try { activeRefresh('retry-backoff'); } catch (e) { console.error('[AI CM][Claude][error] vf5 retry timer: ' + e.message); }
+      try { activeRefresh('retry-backoff'); } catch (e) { debugLog('error', '[AI CM][Claude][error] vf5 retry timer: ' + e.message); }
     }, activeRetryDelay);
     activeRetryDelay = Math.min(activeRetryDelay * 2, 120000);
   }
@@ -371,7 +371,7 @@
               }
               traceLog('post-send refresh=triggered');
               activeRefresh('после отправки');
-            } catch (eR) { console.error('[AI CM][Claude][error] post-send refresh: ' + eR.message); }
+            } catch (eR) { debugLog('error', '[AI CM][Claude][error] post-send refresh: ' + eR.message); }
           }, 2000);
         }
       }
@@ -514,10 +514,10 @@
     try { window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); } catch (e) {}
     // v36: колбэк таймера обёрнут — бросок был бы uncaught
     bootstrapTimer = setTimeout(function () {
-      try { bootstrapSnapshot(); } catch (bsErr) { console.error('[AI CM][Claude][error] bootstrap timer (SPA): ' + bsErr.message); }
+      try { bootstrapSnapshot(); } catch (bsErr) { debugLog('error', '[AI CM][Claude][error] bootstrap timer (SPA): ' + bsErr.message); }
     }, 1500);
     } catch (e) {
-      console.error('[AI CM][Claude][error] reset: ' + e.message);
+      debugLog('error', '[AI CM][Claude][error] reset: ' + e.message);
     }
   }
 
@@ -571,7 +571,7 @@
           snapshotReceived = true;
           lastHistoryUrl = url;
           emitSnapshot(parseHistoryWithEffects(data), 'bootstrap');
-          } catch (e) { console.error('[AI CM][Claude][error] bootstrap parse: ' + e.message); }
+          } catch (e) { debugLog('error', '[AI CM][Claude][error] bootstrap parse: ' + e.message); }
         })
         .catch(function (e) { debugLog('log', '[claude-intercept] bootstrap: ошибка fetch: ' + e); });
     }
@@ -639,7 +639,7 @@
         ', добавлено токенов: ' + attachBreak.imgTokens +
         ' (по ' + IMAGE_DEFAULT_TOKENS + ' ток/изобр)');
     }
-    } catch (eCA) { console.error('[AI CM][Claude][error] collectAttachments: ' + eCA.message); }
+    } catch (eCA) { debugLog('error', '[AI CM][Claude][error] collectAttachments: ' + eCA.message); }
   }
 
   // Оценка токенов картинки из files: ceil(w*h/750), фолбэк 1500 без размеров.
@@ -860,7 +860,7 @@
       }
       try {
         emitSnapshot(parseHistoryWithEffects(lastHistoryRaw), 'вложения догружены');
-      } catch (e) { console.error('[AI CM][Claude][error] re-emit вложений: ' + e.message); }
+      } catch (e) { debugLog('error', '[AI CM][Claude][error] re-emit вложений: ' + e.message); }
     }
   }
 
@@ -874,7 +874,7 @@
       reEmitPending = true;
       setTimeout(function () {
         reEmitPending = false;
-        try { reEmitWithFileText(fileName); } catch (eSR) { console.error('[AI CM][Claude][error] scheduleReEmit: ' + eSR.message); }
+        try { reEmitWithFileText(fileName); } catch (eSR) { debugLog('error', '[AI CM][Claude][error] scheduleReEmit: ' + eSR.message); }
       }, 50);
     } catch (eS) {}
   }
@@ -1003,7 +1003,7 @@
         ' (img=' + attachBreak.imgCount + ')');
     }
     return stats;
-    } catch (eAM) { console.error('[AI CM][Claude][error] applyMessageFiles: ' + eAM.message); return stats; }
+    } catch (eAM) { debugLog('error', '[AI CM][Claude][error] applyMessageFiles: ' + eAM.message); return stats; }
   }
 
   // ---- чистый разбор истории (без сайд-эффектов, переиспользуется в тестах) ----
@@ -1219,7 +1219,7 @@
         if (!snapshotReceived && !bootstrapTimer && currentConvId) {
           bootstrapTimer = setTimeout(function () {
             bootstrapTimer = null;
-            try { bootstrapSnapshot(); } catch (bsErr) { console.error('[AI CM][Claude][error] bootstrap retry: ' + bsErr.message); }
+            try { bootstrapSnapshot(); } catch (bsErr) { debugLog('error', '[AI CM][Claude][error] bootstrap retry: ' + bsErr.message); }
           }, 1500);
         }
         return;
@@ -1246,7 +1246,7 @@
       if (bootstrapTimer) { clearTimeout(bootstrapTimer); bootstrapTimer = null; }
       snapshotReceived = true;
       emitSnapshot(parsedHist, when);
-      } catch (e) { console.error('[AI CM][Claude][error] history parse: ' + e.message); }
+      } catch (e) { debugLog('error', '[AI CM][Claude][error] history parse: ' + e.message); }
     }).catch(function (e) {
       debugLog('log', '[claude-intercept] ошибка чтения тела истории: ' + e);
     });
@@ -1308,7 +1308,7 @@
         if (isStaleSnapshotBody(data, 'vf5')) return;
         emitSnapshot(parseHistoryWithEffects(data), 'виртуальный F5');
         dirty = false;
-        } catch (e) { console.error('[AI CM][Claude][error] vf5 parse: ' + e.message); }
+        } catch (e) { debugLog('error', '[AI CM][Claude][error] vf5 parse: ' + e.message); }
       })
       .catch(function (err) {
         if (!loggedActiveStatus) { loggedActiveStatus = true; }
@@ -1327,7 +1327,7 @@
     // v36: колбэк таймера вне promise-цепочки — бросок был бы uncaught
     setTimeout(function () {
       if (currentConvId !== schedConvId) { traceLog('vf5 timer skip (' + reason + ') — чат сменился'); return; }
-      try { activeRefresh(reason); } catch (e) { console.error('[AI CM][Claude][error] vf5 timer (' + reason + '): ' + e.message); }
+      try { activeRefresh(reason); } catch (e) { debugLog('error', '[AI CM][Claude][error] vf5 timer (' + reason + '): ' + e.message); }
     }, delay);
   }
 
@@ -1534,7 +1534,7 @@
         try {
           if (!resp || !resp.ok) return;
           handleHistoryResponse(resp, 'пассив', sentConvId);
-        } catch (e) { console.error('[AI CM][Claude][error] fetch-история колбэк: ' + e.message); }
+        } catch (e) { debugLog('error', '[AI CM][Claude][error] fetch-история колбэк: ' + e.message); }
       }).catch(function () {});
     }
 
@@ -1556,7 +1556,7 @@
                   parsed = parseSSEWithEffects(fullText, m.full);
                   stopDetected = parsed.stopDetected;
                 } catch (parseErr) {
-                  console.error('[AI CM][Claude][error] sse parse: ' + parseErr.message);
+                  debugLog('error', '[AI CM][Claude][error] sse parse: ' + parseErr.message);
                 }
                 if (stopDetected) {
                   scheduleActive('после стрима', 800);
@@ -1565,7 +1565,7 @@
               }
               chunks.push(decoder.decode(result.value, { stream: true }));
               readLoop();
-            } catch (eLoop) { console.error('[AI CM][Claude][error] sse readLoop: ' + eLoop.message); }
+            } catch (eLoop) { debugLog('error', '[AI CM][Claude][error] sse readLoop: ' + eLoop.message); }
           }).catch(function () {
             scheduleActive('после стрима (err)', 1200);
           });
@@ -1652,7 +1652,7 @@
         } catch (e) {}
         return origSend.apply(this, arguments);
       };
-    } catch (e) { console.error('[AI CM][Claude][error] xhr wrap: ' + e.message); }
+    } catch (e) { debugLog('error', '[AI CM][Claude][error] xhr wrap: ' + e.message); }
   })();
 
   // ---- страховка: если стрим прочитан, но stop не поймался ----
@@ -1664,14 +1664,14 @@
   aiCmPoll(function () {
     if (dirty && !refreshBusy) {
       // v36: интервал вне promise-цепочки — бросок был бы uncaught
-      try { activeRefresh('таймер-страховка'); } catch (e) { console.error('[AI CM][Claude][error] vf5 страховка: ' + e.message); }
+      try { activeRefresh('таймер-страховка'); } catch (e) { debugLog('error', '[AI CM][Claude][error] vf5 страховка: ' + e.message); }
     }
   }, 15000);
 
   // ---- bootstrap: активный снимок при старте скрипта ----
   // v36: колбэк таймера обёрнут — бросок был бы uncaught
   bootstrapTimer = setTimeout(function () {
-    try { bootstrapSnapshot(); } catch (e) { console.error('[AI CM][Claude][error] bootstrap timer: ' + e.message); }
+    try { bootstrapSnapshot(); } catch (e) { debugLog('error', '[AI CM][Claude][error] bootstrap timer: ' + e.message); }
   }, 1500);
 
   console.log('[claude-intercept] перехватчик Claude установлен (GET истории + SSE completion → vf5 + bootstrap, MAIN world, document_start)');

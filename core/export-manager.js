@@ -422,7 +422,7 @@ function loadAutoExportPerSitePct() {
           (autoExportPctBySite[site] === undefined ? 'нет (глобальный фолбэк)' : autoExportPctBySite[site]));
       } catch (eParsePs) {}
     });
-  } catch (e) { console.error('[AI CM][auto-export] per-site load error:', e); }
+  } catch (e) { debugLog('error', '[AI CM][auto-export] per-site load error:', e); }
 }
 // v1.14.1 (O3): кросс-табовый латч already-fired. Кэш chrome.storage.session
 // ('aiCmFired:service|convId' -> 1), общий для всех вкладок профиля: вторая вкладка
@@ -557,7 +557,7 @@ function maybeTrimExport(cid) {
     debugLog('log', '[AI CM][auto-export] fired reason=pre-trim convId=' + cid +
       ' msgs=' + (baseCount || 0) + ' lostHead=1.');
   } catch (e) {
-    console.error('[AI CM][auto-export] error:', e);
+    debugLog('error', '[AI CM][auto-export] error:', e);
   }
 }
 function aiCmCancelDeferredHistWrite(cid) {
@@ -784,7 +784,7 @@ function loadAutoExportSettings() {
         var fmtRaw = data.aiCmAutoExportFmt;
         autoExportSettings.fmt = (fmtRaw === 'md' || fmtRaw === 'json') ? fmtRaw : 'txt';
       } catch (eParse) {
-        console.error('[AI CM][auto-export] parse settings error:', eParse);
+        debugLog('error', '[AI CM][auto-export] parse settings error:', eParse);
       }
     });
     try {
@@ -796,7 +796,7 @@ function loadAutoExportSettings() {
       });
     } catch (eL) {}
   } catch (e) {
-    console.error('[AI CM][auto-export] load settings error:', e);
+    debugLog('error', '[AI CM][auto-export] load settings error:', e);
   }
 }
 // ===== O-7: загрузка тумблера «Включать reasoning и инъекции DeepSeek++ в экспорт» =====
@@ -821,7 +821,7 @@ function loadExportHiddenSetting() {
       });
     } catch (eL7) {}
   } catch (e7) {
-    console.error('[AI CM][export] include-hidden setting load error:', e7);
+    debugLog('error', '[AI CM][export] include-hidden setting load error:', e7);
   }
 }
 // ========== v1.18 (F2/F5): GSA — идентификатор разговора и probe-полнота ==========
@@ -1380,7 +1380,7 @@ function maybeAutoExport(percentage) {
     }
     doAutoExportDownload(cid, percentage, 'threshold'); // v54: тело вынесено в хелпер
   } catch (e) {
-    console.error('[AI CM][auto-export] error:', e);
+    debugLog('error', '[AI CM][auto-export] error:', e);
   }
 }
 // O-36 (D3): эффективный порог автоэкспорта для ТЕКУЩЕГО сайта — РОВНО та же ось, что у
@@ -1719,13 +1719,13 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
             ' histSource=' + histSource + ' histConvId=' + histConvId);
         }
       } catch (eInner) {
-        console.error('[AI CM][auto-export] error:', eInner);
+        debugLog('error', '[AI CM][auto-export] error:', eInner);
       }
     }
     // v1.19 (E-1): тело файла — ТОЛЬКО in-memory история этой вкладки (histSource=memory)
     aiCmWriteAutoExportFile(msgs, 'memory', histConvIdMem, histSiteMem);
   } catch (e) {
-    console.error('[AI CM][auto-export] error:', e);
+    debugLog('error', '[AI CM][auto-export] error:', e);
   }
 }
 
@@ -1823,9 +1823,9 @@ window.addEventListener('ai-cm-loader-state', function (ev) {
           doAutoExportDownload(cid, pctBc64, 'base-complete');
         }
       }
-    } catch (eBc64) { console.error('[AI CM][auto-export] base-complete trigger error:', eBc64); }
+    } catch (eBc64) { debugLog('error', '[AI CM][auto-export] base-complete trigger error:', eBc64); }
   } catch (e) {
-    console.error('[AI CM][auto-export] loader-state error:', e);
+    debugLog('error', '[AI CM][auto-export] loader-state error:', e);
   }
 });
 

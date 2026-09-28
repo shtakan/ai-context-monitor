@@ -37,7 +37,7 @@ class PerplexityAdapter extends BaseAdapter {
       debugLog('log', '[PerplexityAdapter] isOnDialogPage: ' + result);
       return result;
     } catch (error) {
-      console.error('[PerplexityAdapter] Ошибка в isOnDialogPage:', error);
+      debugLog('error', '[PerplexityAdapter] Ошибка в isOnDialogPage:', error);
       return false;
     }
   }

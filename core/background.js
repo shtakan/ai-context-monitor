@@ -233,7 +233,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'COUNT_TOKENS') {
     // M-9: sender нужен для debounce-ключа (tabId); текст/модель — из message, как раньше.
     handleCountTokens(message, sender).then(sendResponse).catch(function (err) {
-      console.error('COUNT_TOKENS error:', err);
+      debugLog('error', 'COUNT_TOKENS error:', err);
       sendResponse({ error: err.message || 'unknown_error' });
     });
     return true; // асинхронный ответ
@@ -355,7 +355,7 @@ async function checkThresholds(data, sender) {
     }
     debugLog('log', '[AI CM][thresholds] fired T=' + T + '% pct=' + pct + ' convId=' + convId);
   } catch (err) {
-    console.error('[AI CM][thresholds] checkThresholds error:', err);
+    debugLog('error', '[AI CM][thresholds] checkThresholds error:', err);
   }
 }
 

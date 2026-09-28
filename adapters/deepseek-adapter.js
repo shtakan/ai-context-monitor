@@ -271,7 +271,7 @@ class DeepSeekAdapter extends BaseAdapter {
       }
       return messages;
     } catch (error) {
-      console.error('[DeepSeekAdapter] Ошибка:', error);
+      debugLog('error', '[DeepSeekAdapter] Ошибка:', error);
       return [];
     }
   }
@@ -321,7 +321,7 @@ class DeepSeekAdapter extends BaseAdapter {
 
       return 'deepseek-v3';
     } catch (error) {
-      console.error('[DeepSeekAdapter] Ошибка в detectModel:', error);
+      debugLog('error', '[DeepSeekAdapter] Ошибка в detectModel:', error);
       return 'deepseek-v3';
     }
   }

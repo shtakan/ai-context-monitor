@@ -213,7 +213,7 @@ class GoogleSearchAdapter extends BaseAdapter {
       }
       return messages;
     } catch (error) {
-      console.error('[GoogleSearchAdapter] Ошибка:', error);
+      debugLog('error', '[GoogleSearchAdapter] Ошибка:', error);
       return [];
     }
   }

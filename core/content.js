@@ -2449,7 +2449,7 @@ function processAndSend() {
       }).catch(() => { });
     }
   } catch (error) {
-    console.error('Ошибка:', error);
+    debugLog('error', 'Ошибка:', error);
   }
 }
 // v77: возврат видимости вкладки — форсируем восстановление UI из локальных данных
@@ -2484,7 +2484,7 @@ function aiCmLoadProactiveFlag() {
       });
     } catch (eL) {}
   } catch (e) {
-    console.error('[AI CM][thresholds] load flag error:', e);
+    debugLog('error', '[AI CM][thresholds] load flag error:', e);
   }
 }
 function sendThresholdPct(pct) {
@@ -2498,7 +2498,7 @@ function sendThresholdPct(pct) {
       data: { convId: cid, site: siteName, pct: pct }
     }).catch(function () { });
   } catch (e) {
-    console.error('[AI CM][thresholds] send error:', e);
+    debugLog('error', '[AI CM][thresholds] send error:', e);
   }
 }
 aiCmLoadProactiveFlag();

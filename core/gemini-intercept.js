@@ -2772,7 +2772,7 @@
         __restoreLoader();
       }
     } catch (e) {
-      console.error('[AI CM][Gemini][loader] ошибка лоадера:', e);
+      debugLog('error', '[AI CM][Gemini][loader] ошибка лоадера:', e);
     }
   }
 
@@ -2922,7 +2922,7 @@
         }
       }
     } catch (eVis) {
-      try { console.error('[AI CM][loader] resume-on-visible error:', eVis); } catch (e2) { }
+      try { debugLog('error', '[AI CM][loader] resume-on-visible error:', eVis); } catch (e2) { }
     }
   });
 

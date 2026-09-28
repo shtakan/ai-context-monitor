@@ -14,7 +14,7 @@ class GeminiAdapter extends BaseAdapter {
       debugLog('log', `[GeminiAdapter] isOnDialogPage: ${result}`);
       return result;
     } catch (error) {
-      console.error('[GeminiAdapter] Ошибка в isOnDialogPage:', error);
+      debugLog('error', '[GeminiAdapter] Ошибка в isOnDialogPage:', error);
       return false;
     }
   }
@@ -46,7 +46,7 @@ class GeminiAdapter extends BaseAdapter {
               }
             }
           } catch (turnError) {
-            console.error(`[GeminiAdapter] Ошибка обработки turn #${index}:`, turnError);
+            debugLog('error', `[GeminiAdapter] Ошибка обработки turn #${index}:`, turnError);
           }
         });
       }
@@ -75,7 +75,7 @@ class GeminiAdapter extends BaseAdapter {
       return messages;
 
     } catch (error) {
-      console.error('[GeminiAdapter] Ошибка в extractMessages:', error);
+      debugLog('error', '[GeminiAdapter] Ошибка в extractMessages:', error);
       return [];
     }
   }
@@ -100,7 +100,7 @@ class GeminiAdapter extends BaseAdapter {
       return this.defaultModel;
 
     } catch (error) {
-      console.error('[GeminiAdapter] Ошибка в detectModel:', error);
+      debugLog('error', '[GeminiAdapter] Ошибка в detectModel:', error);
       return this.defaultModel;
     }
   }

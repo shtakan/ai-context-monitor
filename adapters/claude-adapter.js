@@ -36,7 +36,7 @@ class ClaudeAdapter extends BaseAdapter {
       debugLog('log', '[ClaudeAdapter] isOnDialogPage: ' + result);
       return result;
     } catch (error) {
-      console.error('[ClaudeAdapter] Ошибка в isOnDialogPage:', error);
+      debugLog('error', '[ClaudeAdapter] Ошибка в isOnDialogPage:', error);
       return false;
     }
   }
