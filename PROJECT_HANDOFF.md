@@ -624,8 +624,20 @@ ai-context-monitor-clean/
     скрытая подмена payload в `tests/helpers/o18-fixture.js:114-123` (`synthetic:true`);
     Gemini/GSA хелперы тестируют только weak invariants (I5 `count===4`);
     backlog: инвентаризация реальных артефактов (экспорты/логи/DOM-снимки) +
-    property-based тесты для каждого из 7 адаптеров на реальных payload, коммит 5ba8dc0
-    9. Error tracking: structured logging (error/context/timestamp), no bare console.error
+    property-based тесты для каждого из 7 адаптеров на реальных payload, коммит 5ba8dc0;
+    предотвращение рецидива — «Правило контрактных тестов для новых адаптеров (2026-09-28)»
+    (§ сразу после §0, docs-коммит 17db8fa)
+    9. ✅ Error tracking: structured logging (error/context/timestamp), no bare console.error
+    — ЗАКРЫТ коммитом 07e3610 (2026-09-28): 46 вызовов console.error в core/ и adapters/
+    заменены на debugLog('error', ...) с сохранением structured format (префиксы остаются
+    частью сообщения, аргументы не переупаковывались — 1:1 к прежнему выводу); debugLog
+    ('error', ...) выводит в console.error ВСЕГДА (даже при DEBUG=false, utils/debug.js:59)
+    и пишет строку в ring-буфер __aiCmLogRing (utils/debug.js:19, лимит 200, выдаётся
+    __aiCmGetLogRing); residual console.error в core/adapters — только комментарии
+    (core/state.js:147), сам utils/debug.js:6 и тесты (моки console). Известное ограничение
+    (честно): core/background.js — MV3 SW, несёт СОБСТВЕННУЮ копию debugLog
+    (core/background.js:11) без ring-буфера: в SW ошибки печатаются всегда, но в дамп
+    диагностики не попадают.
     10. Performance baseline: экспорт 100 msgs <5s, парсинг 1MB batchexecute <2s, widget render <100ms
 
 33. ⏳ **Дизайн/эргономика (мировые стандарты) + видео-стратегия:**
