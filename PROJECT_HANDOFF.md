@@ -614,7 +614,7 @@ ai-context-monitor-clean/
     скрытая подмена payload в `tests/helpers/o18-fixture.js:114-123` (`synthetic:true`);
     Gemini/GSA хелперы тестируют только weak invariants (I5 `count===4`);
     backlog: инвентаризация реальных артефактов (экспорты/логи/DOM-снимки) +
-    property-based тесты для каждого из 7 адаптеров на реальных payload
+    property-based тесты для каждого из 7 адаптеров на реальных payload, коммит 5ba8dc0
     9. Error tracking: structured logging (error/context/timestamp), no bare console.error
     10. Performance baseline: экспорт 100 msgs <5s, парсинг 1MB batchexecute <2s, widget render <100ms
 
