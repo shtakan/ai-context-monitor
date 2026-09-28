@@ -586,7 +586,14 @@ ai-context-monitor-clean/
     3. ✅ Permissions минимальны (`manifest.json`: `scripting`/`storage`/`notifications` — все 3 необходимы для MV3 + проактивные уведомления; `host_permissions` 10 доменов: 9 платформ + `generativelanguage.googleapis.com` для BYOK Gemini/AI Studio API; `content_scripts.matches` 9 доменов — соответствует платформам; дублирование `perplexity.ai` с/без `www` — явное указание, не избыточность)
     4. ✅ CSP headers: no unsafe-inline/unsafe-eval в production (manifest.json не содержит content_security_policy — дефолтная MV3 CSP; все HTML используют `<script src="...">` без inline; eval() отсутствует в core/adapters/utils/options)
     5. ✅ Memory leak test: Chrome DevTools Memory (длительность ~5 мин: обмен со стримингом + SPA-переход с автоэкспортом + возврат + ручной экспорт; бейдж 1.5%→3.8%); heap growth SW: 916 kB → 1.1 MB (+0.2 MB); страница ChatGPT: 165 MB → 165 MB (0 MB по метке списка) — DoD <10 MB выполнен с запасом, коммит `6c10f46`
-    6. A11y audit: Lighthouse Accessibility ≥90 для popup/options
+    6. ✅ A11y audit: Lighthouse Accessibility ≥90 для popup/options — живая
+    пересъёмка Snapshot 2026-09-28 10:36: 22/22 (зелёный, 0 failing audits,
+    10 manual-check вне скоринга); было 19/22 (2026-09-28, до фикса); фиксы:
+    `1f70632` (2026-09-12: M-1 имена/группы, M-2 live-region, M-3 focus-visible)
+    + `aa1a1b7` (2026-09-28: ровно один <main>, aria-label #archive-file через
+    i18n-ключ options_archive_file_aria ru/en 255/255, target-size ≥24px);
+    popup и options — один документ (manifest action.default_popup =
+    options/options.html); axe-core jsdom: 0 violations; сьют 134/2579/6/0
     7. i18n completeness: 0 hardcoded user-facing строк (grep vs _locales/*/messages.json)
     8. Contract tests: property-based на реальных payload (не моки) для BaseAdapter interface
     9. Error tracking: structured logging (error/context/timestamp), no bare console.error
