@@ -1265,10 +1265,13 @@ describe('M-4.4: локализация privacy/privacy.html и docs/index.html'
       // + UI-аудит 2026-09-28 (Critical #2, доступность индикатора): content_a11y_circle_initial,
       //   content_a11y_circle_label, content_a11y_status_ok, content_a11y_status_warning,
       //   content_a11y_status_critical → словарь 263
+      // + UI-аудит 2026-09-28 (Major, подбатч options #10/#12/#13): options_advanced_summary,
+      //   options_byok_key_label, options_ring_zones_hint (+3); мёртвый options_byok_key_aria
+      //   заменён видимой подписью label[for="api-key"] (−1) → словарь 265
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('privacy_') === 0; }).length).toBe(86);
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('docs_') === 0; }).length).toBe(42);
-      expect(Object.keys(ru).length).toBe(263);
-      expect(Object.keys(en).length).toBe(263);
+      expect(Object.keys(ru).length).toBe(265);
+      expect(Object.keys(en).length).toBe(265);
     });
 
     test('ru-значения M-4.4 байтово равны тексту разметки, en — перевод без кириллицы', () => {

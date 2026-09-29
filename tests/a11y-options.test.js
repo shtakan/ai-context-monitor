@@ -129,6 +129,14 @@ describe('M-1: доступные имена полей options.html', () => {
       const hasLabelledby = !!String(el.getAttribute('aria-labelledby') || '').trim();
       expect([id, labelsFor[id] === true || name.length > 0 || hasLabelledby]).toEqual([id, true]);
     });
+    // Аудит #12: имя поля ключа даёт видимая подпись label[for]; дублирующий aria-label снят.
+    const apiKeyLabel = doc.querySelector('label[for="api-key"]');
+    expect(apiKeyLabel).not.toBeNull();
+    expect(apiKeyLabel.getAttribute('data-i18n')).toBe('options_byok_key_label');
+    expect(apiKeyLabel.textContent.trim().length).toBeGreaterThan(0);
+    expect(doc.getElementById('api-key').getAttribute('aria-label')).toBeNull();
+    // Аудит #12: у кнопки-глаза есть стартовое состояние для screen reader.
+    expect(doc.getElementById('toggle-api-key').getAttribute('aria-pressed')).toBe('false');
     expect(ids.length).toBeGreaterThan(0);
   });
 
@@ -327,7 +335,11 @@ describe('инварианты доступности: цвета, раскла�
     // options.js: логика настроек на месте (aria-правки её не касаются)
     expect(optionsJs).toContain("chrome.storage.sync.get(['selectedModel', 'customLimit', 'showWidget']");
     expect(optionsJs).toContain('chrome.storage.sync.set({ customLimit: value });');
-    expect(optionsJs).not.toMatch(/aria-|focus-visible/);
+    // Аудит #12 (Major, options): из aria- в options.js допустимо РОВНО одно присваивание —
+    // состояние кнопки-глаза #toggle-api-key. Любое другое aria- (и focus-visible) — регрессия.
+    expect(optionsJs.match(/setAttribute\(\s*'aria-[a-z-]*'/g)).toEqual(["setAttribute('aria-pressed'"]);
+    expect((optionsJs.match(/aria-/g) || []).length).toBe(1);
+    expect(optionsJs).not.toMatch(/focus-visible/);
     // без изменений в областях вне options
     expect(printHtml).toContain('<style>');
     expect(manifest.manifest_version).toBe(3);

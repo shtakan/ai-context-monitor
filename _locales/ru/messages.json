@@ -185,10 +185,16 @@
   "options_proactive_hint": {
     "message": "Каждый порог срабатывает один раз на разговор; при битом вводе — дефолт 70/85/95"
   },
+  "options_advanced_summary": {
+    "message": "Дополнительно"
+  },
+  "options_ring_zones_hint": {
+    "message": "Цвет кольца на странице: зоны 50% / 80%. Пороги 70/85/95 — уведомления и автоэкспорт. Это разные настройки."
+  },
   "options_byok_label": {
     "message": "Gemini API — точный подсчёт токенов"
   },
-  "options_byok_key_aria": {
+  "options_byok_key_label": {
     "message": "API-ключ Google AI Studio"
   },
   "options_byok_key_placeholder": {

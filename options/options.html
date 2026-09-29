@@ -86,32 +86,8 @@
       <input type="checkbox" id="show-widget" checked>
       <label for="show-widget" data-i18n="options_show_widget">Показывать индикатор на странице</label>
     </div>
-    <div class="section checkbox-row">
-      <input type="checkbox" id="debugLogs">
-      <label for="debugLogs" data-i18n="options_debug_logs">Подробные логи</label>
-    </div>
-
-    <!-- v1.20 (M-1): смысловая группа «Автоэкспорт чатов».
-         Выбран role="group" + aria-labelledby (вместо fieldset/legend): имя группы
-         даёт существующая видимая подпись .label, а раскладка .section не меняется. -->
-    <div class="section" id="auto-export-section" role="group" aria-labelledby="auto-export-legend">
-      <label class="label" id="auto-export-legend" data-i18n="options_autoexport_legend">Автоэкспорт чатов (все поддерживаемые платформы)</label>
-      <div class="checkbox-row">
-        <input type="checkbox" id="aiCmAutoExport">
-        <label for="aiCmAutoExport" data-i18n="options_autoexport_enable">Автоэкспорт при пороге</label>
-      </div>
-      <div class="input-row">
-        <label class="label" for="aiCmAutoExportPct" data-i18n="options_autoexport_pct_label">Порог, %:</label>
-        <input type="number" id="aiCmAutoExportPct" min="1" max="100" step="1" value="90">
-        <select id="aiCmAutoExportFmt" aria-label="Формат файла автоэкспорта" data-i18n-aria-label="options_autoexport_fmt_aria">
-          <option value="txt">txt</option>
-          <option value="md">md</option>
-          <option value="json">json</option>
-        </select>
-      </div>
-      <span class="hint" data-i18n="options_autoexport_hint">Один раз скачивает историю чата при достижении порога</span>
-    </div>
-
+    <!-- Major-подбатч 1 (аудит #10): проактивные пороги остаются видимыми; редкие
+         настройки (логи, автоэкспорт, API-ключ, экспорт, архивы) свёрнуты в Advanced ниже. -->
     <!-- v1.20 (M-1): смысловая группа «Проактивные пороги» -->
     <div class="section" id="proactive-section" role="group" aria-labelledby="proactive-legend">
       <label class="label" id="proactive-legend" data-i18n="options_proactive_legend">Проактивные пороги</label>
@@ -132,69 +108,104 @@
         <input type="number" id="aiCmProactiveMedium" aria-label="Средний порог процентов" data-i18n-aria-label="options_proactive_medium_aria" min="1" max="100" step="1" value="85" title="Средний порог — жёлтый" data-i18n-title="options_proactive_medium_title">
         <input type="number" id="aiCmProactiveHigh" aria-label="Высокий порог процентов" data-i18n-aria-label="options_proactive_high_aria" min="1" max="100" step="1" value="95" title="Высокий порог — красный" data-i18n-title="options_proactive_high_title">
       </div>
+      <!-- Major-подбатч 1 (аудит #13): поясняем, что цвет кольца и пороги — разные настройки -->
+      <span class="hint" data-i18n="options_ring_zones_hint">Цвет кольца на странице: зоны 50% / 80%. Пороги 70/85/95 — уведомления и автоэкспорт. Это разные настройки.</span>
       <span class="hint" data-i18n="options_proactive_hint">Каждый порог срабатывает один раз на разговор; при битом вводе — дефолт 70/85/95</span>
     </div>
 
-    <div class="section">
-      <label class="label" data-i18n="options_byok_label">Gemini API — точный подсчёт токенов</label>
-      <div class="api-key-row">
-        <!-- v1.20 (M-1): у поля ключа было только placeholder-подсказка — даём имя доступности -->
-        <input type="password" id="api-key" aria-label="API-ключ Google AI Studio" data-i18n-aria-label="options_byok_key_aria" placeholder="Введите API-ключ Google AI Studio" data-i18n-placeholder="options_byok_key_placeholder" autocomplete="off">
-        <button id="toggle-api-key" class="btn-toggle" type="button" title="Показать/скрыть ключ" data-i18n-title="options_byok_toggle_title">👁</button>
-      </div>
-      <span class="hint" data-i18n="options_byok_hint">Ключ хранится только до перезапуска браузера (chrome.storage.session). После перезапуска введите заново.</span>
-      <div class="api-key-row">
-        <span class="hint" id="api-key-status" role="status" data-i18n="options_byok_status_unset">Ключ: не задан</span>
-        <button id="api-key-remove" class="btn-toggle" type="button" data-i18n="options_byok_remove">Убрать ключ</button>
-      </div>
-    </div>
+    <!-- Major-подбатч 1 (аудит #10): один свёрнутый блок для редких настроек.
+         Без атрибута open — по умолчанию закрыт. -->
+    <details class="section" id="advanced-section">
+      <summary data-i18n="options_advanced_summary">Дополнительно</summary>
 
-    <div class="section checkbox-row">
-      <input type="checkbox" id="exact-count">
-      <label for="exact-count" data-i18n="options_exact_count">Точный подсчёт токенов через Gemini API</label>
-    </div>
+      <div class="section checkbox-row">
+        <input type="checkbox" id="debugLogs">
+        <label for="debugLogs" data-i18n="options_debug_logs">Подробные логи</label>
+      </div>
 
-    <div class="section">
-      <label class="label" data-i18n="options_export_legend">Экспорт истории</label>
-      <div class="export-row">
-        <button id="export-md" class="btn-export" disabled data-i18n="options_export_md">Сохранить .md</button>
-        <button id="export-json" class="btn-export" disabled data-i18n="options_export_json">Сохранить .json</button>
-        <button id="export-pdf" class="btn-export" disabled data-i18n="options_export_pdf">Сохранить .pdf</button>
+      <!-- v1.20 (M-1): смысловая группа «Автоэкспорт чатов».
+           Выбран role="group" + aria-labelledby (вместо fieldset/legend): имя группы
+           даёт существующая видимая подпись .label, а раскладка .section не меняется. -->
+      <div class="section" id="auto-export-section" role="group" aria-labelledby="auto-export-legend">
+        <label class="label" id="auto-export-legend" data-i18n="options_autoexport_legend">Автоэкспорт чатов (все поддерживаемые платформы)</label>
+        <div class="checkbox-row">
+          <input type="checkbox" id="aiCmAutoExport">
+          <label for="aiCmAutoExport" data-i18n="options_autoexport_enable">Автоэкспорт при пороге</label>
+        </div>
+        <div class="input-row">
+          <label class="label" for="aiCmAutoExportPct" data-i18n="options_autoexport_pct_label">Порог, %:</label>
+          <input type="number" id="aiCmAutoExportPct" min="1" max="100" step="1" value="90">
+          <select id="aiCmAutoExportFmt" aria-label="Формат файла автоэкспорта" data-i18n-aria-label="options_autoexport_fmt_aria">
+            <option value="txt">txt</option>
+            <option value="md">md</option>
+            <option value="json">json</option>
+          </select>
+        </div>
+        <span class="hint" data-i18n="options_autoexport_hint">Один раз скачивает историю чата при достижении порога</span>
       </div>
-      <div class="export-row">
-        <button id="export-txt" class="btn-export" disabled data-i18n="options_export_txt">Сохранить .txt (эталон)</button>
-      </div>
-      <div class="export-row">
-        <button id="export-diag" class="btn-export" data-i18n="options_export_diag">Экспорт диагностики</button>
-      </div>
-      <!-- O-7: единственный тумблер сырого режима экспорта (default OFF = текущее поведение) -->
-      <!-- D-O41 (UX): подсказка тумблера — reasoning автоматически попадает в экспорт, если он
-           есть в источнике; принудительное исключение (OFF) действует, когда reasoning в
-           источнике нет (force-exclude). Строки — ключ options_export_hidden_title (ru/en). -->
-      <div class="checkbox-row export-hidden-row">
-        <input type="checkbox" id="aiCmIncludeHiddenInExport" title="Reasoning автоматически включается при наличии в источнике; тумблер принудительно исключает" data-i18n-title="options_export_hidden_title">
-        <label for="aiCmIncludeHiddenInExport" data-i18n="options_export_hidden_label">Включать reasoning и инъекции соседних расширений (DeepSeek++, Better DeepSeek) в экспорт</label>
-      </div>
-      <span class="hint" data-i18n="options_export_hidden_hint">Выключено: в файл попадают только вопросы и ответы, без размышлений и инъекций соседних расширений (DeepSeek++, Better DeepSeek). Включено: размышления и инъекции попадают в экспорт.</span>
-      <span class="hint" id="export-hint" data-i18n="options_open_supported_site">Откройте поддерживаемый сайт</span>
-    </div>
 
-    <div class="section" id="archive-section">
-      <label class="label" data-i18n="options_archive_legend">Архивы (первый ярус истории)</label>
-      <div class="input-row">
-        <input type="file" id="archive-file" accept=".json,application/json" multiple aria-label="Выбрать файлы архивов" data-i18n-aria-label="options_archive_file_aria">
+      <div class="section">
+        <label class="label" data-i18n="options_byok_label">Gemini API — точный подсчёт токенов</label>
+        <!-- Major-подбатч 1 (аудит #12): у поля ключа появилась видимая подпись label[for] -->
+        <label class="label" for="api-key" data-i18n="options_byok_key_label">API-ключ Google AI Studio</label>
+        <div class="api-key-row">
+          <input type="password" id="api-key" placeholder="Введите API-ключ Google AI Studio" data-i18n-placeholder="options_byok_key_placeholder" autocomplete="off">
+          <button id="toggle-api-key" class="btn-toggle" type="button" aria-pressed="false" title="Показать/скрыть ключ" data-i18n-title="options_byok_toggle_title">👁</button>
+        </div>
+        <span class="hint" data-i18n="options_byok_hint">Ключ хранится только до перезапуска браузера (chrome.storage.session). После перезапуска введите заново.</span>
+        <div class="api-key-row">
+          <span class="hint" id="api-key-status" role="status" data-i18n="options_byok_status_unset">Ключ: не задан</span>
+          <button id="api-key-remove" class="btn-toggle" type="button" data-i18n="options_byok_remove">Убрать ключ</button>
+        </div>
       </div>
-      <div class="input-row">
-        <button id="archive-import" class="btn-export" type="button" data-i18n="options_archive_import">Импортировать</button>
-        <button id="archive-refresh" class="btn-reset" type="button" data-i18n="options_archive_refresh">Обновить список</button>
+
+      <div class="section checkbox-row">
+        <input type="checkbox" id="exact-count">
+        <label for="exact-count" data-i18n="options_exact_count">Точный подсчёт токенов через Gemini API</label>
       </div>
-      <span class="hint" data-i18n="options_archive_hint">Локальные экспорты: Gemini Takeout (MyActivity.json), ChatGPT conversations.json,
-        Claude conversations.json, Perplexity threads. Файлы читаются в браузере (FileReader) и никуда не отправляются.
-        Архив — первый ярус: он задаёт авторитетный пол истории и даёт терминальную полноту archive-complete.</span>
-      <!-- v1.20 (M-2): статус архива — вежливый live-region -->
-      <div class="hint archive-status" id="archive-status" role="status"></div>
-      <div class="archive-list" id="archive-list"></div>
-    </div>
+
+      <div class="section">
+        <label class="label" data-i18n="options_export_legend">Экспорт истории</label>
+        <div class="export-row">
+          <button id="export-md" class="btn-export" disabled data-i18n="options_export_md">Сохранить .md</button>
+          <button id="export-json" class="btn-export" disabled data-i18n="options_export_json">Сохранить .json</button>
+          <button id="export-pdf" class="btn-export" disabled data-i18n="options_export_pdf">Сохранить .pdf</button>
+        </div>
+        <div class="export-row">
+          <button id="export-txt" class="btn-export" disabled data-i18n="options_export_txt">Сохранить .txt (эталон)</button>
+        </div>
+        <div class="export-row">
+          <button id="export-diag" class="btn-export" data-i18n="options_export_diag">Экспорт диагностики</button>
+        </div>
+        <!-- O-7: единственный тумблер сырого режима экспорта (default OFF = текущее поведение) -->
+        <!-- D-O41 (UX): подсказка тумблера — reasoning автоматически попадает в экспорт, если он
+             есть в источнике; принудительное исключение (OFF) действует, когда reasoning в
+             источнике нет (force-exclude). Строки — ключ options_export_hidden_title (ru/en). -->
+        <div class="checkbox-row export-hidden-row">
+          <input type="checkbox" id="aiCmIncludeHiddenInExport" title="Reasoning автоматически включается при наличии в источнике; тумблер принудительно исключает" data-i18n-title="options_export_hidden_title">
+          <label for="aiCmIncludeHiddenInExport" data-i18n="options_export_hidden_label">Включать reasoning и инъекции соседних расширений (DeepSeek++, Better DeepSeek) в экспорт</label>
+        </div>
+        <span class="hint" data-i18n="options_export_hidden_hint">Выключено: в файл попадают только вопросы и ответы, без размышлений и инъекций соседних расширений (DeepSeek++, Better DeepSeek). Включено: размышления и инъекции попадают в экспорт.</span>
+        <span class="hint" id="export-hint" data-i18n="options_open_supported_site">Откройте поддерживаемый сайт</span>
+      </div>
+
+      <div class="section" id="archive-section">
+        <label class="label" data-i18n="options_archive_legend">Архивы (первый ярус истории)</label>
+        <div class="input-row">
+          <input type="file" id="archive-file" accept=".json,application/json" multiple aria-label="Выбрать файлы архивов" data-i18n-aria-label="options_archive_file_aria">
+        </div>
+        <div class="input-row">
+          <button id="archive-import" class="btn-export" type="button" data-i18n="options_archive_import">Импортировать</button>
+          <button id="archive-refresh" class="btn-reset" type="button" data-i18n="options_archive_refresh">Обновить список</button>
+        </div>
+        <span class="hint" data-i18n="options_archive_hint">Локальные экспорты: Gemini Takeout (MyActivity.json), ChatGPT conversations.json,
+          Claude conversations.json, Perplexity threads. Файлы читаются в браузере (FileReader) и никуда не отправляются.
+          Архив — первый ярус: он задаёт авторитетный пол истории и даёт терминальную полноту archive-complete.</span>
+        <!-- v1.20 (M-2): статус архива — вежливый live-region -->
+        <div class="hint archive-status" id="archive-status" role="status"></div>
+        <div class="archive-list" id="archive-list"></div>
+      </div>
+    </details>
 
     <div class="footer">
       <span class="version"></span>

@@ -1247,10 +1247,12 @@ describe('O-7 R4: i18n и a11y тумблера «Включать reasoning и 
     expect(OPTIONS_HTML).toContain('for="' + SETTING_KEY + '"');
     expect(OPTIONS_HTML).toContain('data-i18n="' + HIDDEN_LABEL_KEY + '">' + HIDDEN_LABEL_RU + '</label>');
     expect(OPTIONS_HTML).toContain('data-i18n="' + HIDDEN_HINT_KEY + '"');
-    // тумблер стоит в секции «Экспорт истории», а не в группах автоэкспорта/порогов
+    // тумблер стоит в секции «Экспорт истории», а не в группе автоэкспорта
     const exportSection = sliceSource(OPTIONS_HTML, 'data-i18n="options_export_legend"', 'id="archive-section"');
     expect(exportSection).toContain('id="' + SETTING_KEY + '"');
-    expect(sliceSource(OPTIONS_HTML, 'id="auto-export-section"', 'id="proactive-section"'))
+    // Major-подбатч 1 (options #10): #proactive-section переехал ВЫШЕ автоэкспорта, поэтому
+    // границу группы задаём по следующей секции Advanced, а не по #proactive-section.
+    expect(sliceSource(OPTIONS_HTML, 'id="auto-export-section"', 'data-i18n="options_byok_label"'))
       .not.toContain(SETTING_KEY);
     // a11y-инвариант файла: у нового поля есть доступное имя (label[for]) и нет висячей подписи
     const tag = /<input[^>]*id="aiCmIncludeHiddenInExport"[^>]*>/.exec(OPTIONS_HTML)[0];
@@ -1263,7 +1265,11 @@ describe('O-7 R4: i18n и a11y тумблера «Включать reasoning и 
     expect(OPTIONS_JS).toContain("getElementById('aiCmIncludeHiddenInExport')");
     // запись одного ключа, а не полного объекта настроек автоэкспорта (пин M-13 цел)
     expect(OPTIONS_JS).not.toContain('chrome.storage.local.set({ aiCmAutoExport:');
-    expect(OPTIONS_JS).not.toMatch(/aria-|focus-visible/);
+    // Major-подбатч 1 (options #12): из aria- в options.js допустимо РОВНО одно присваивание —
+    // состояние кнопки-глаза #toggle-api-key (см. tests/a11y-options.test.js).
+    expect(OPTIONS_JS.match(/setAttribute\(\s*'aria-[a-z-]*'/g)).toEqual(["setAttribute('aria-pressed'"]);
+    expect((OPTIONS_JS.match(/aria-/g) || []).length).toBe(1);
+    expect(OPTIONS_JS).not.toMatch(/focus-visible/);
   });
 
   test('jsdom: реальный options.js — пустой storage → тумблер ВЫКЛ; change пишет true', () => {

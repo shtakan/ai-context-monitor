@@ -349,3 +349,31 @@ a:focus-visible,
   min-height: 24px;
   line-height: 24px;
 }
+
+/* Major-подбатч 1 (аудит #10): свёрнутая секция «Дополнительно» (<details>/<summary>).
+   Блок только добавляющий: ни одно прежнее правило и ни один цвет не изменены. */
+details.section > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: #8b8bad;
+  padding: 4px 0;
+  margin-bottom: 4px;
+  list-style-position: inside;
+}
+
+details.section > summary::marker {
+  color: #a78bfa;
+}
+
+details.section > summary:hover {
+  color: #ffffff;
+}
+
+/* Аудит #10: :focus-visible для summary обязателен — подавлять обводку здесь нельзя
+   (это пинится в tests/a11y-options.test.js). Правило намеренно стоит ПОСЛЕ combined-правила
+   выше: a11y-пин берёт первое :focus-visible-правило файла и проверяет по нему
+   селекторы button/select/input/a/[tabindex]. */
+summary:focus-visible {
+  outline: 2px solid #a78bfa;
+  outline-offset: 2px;
+}

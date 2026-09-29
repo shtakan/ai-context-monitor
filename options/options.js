@@ -401,6 +401,7 @@ toggleApiKeyBtn && toggleApiKeyBtn.addEventListener('click', function () {
     apiKeyInput.type = 'password';
     toggleApiKeyBtn.textContent = '\uD83D\uDC41';
   }
+  toggleApiKeyBtn.setAttribute('aria-pressed', String(apiKeyInput.type === 'text'));
 });
 
 // BYOK: сохранение флага точного подсчёта

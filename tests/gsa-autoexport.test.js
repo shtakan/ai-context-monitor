@@ -558,8 +558,11 @@ describe('F3: подпись секции автоэкспорта в options.ht
   });
 
   test('тумблер, порог и селектор формата — общие (одна секция), форматы txt/md/json', () => {
+    // Major-подбатч 1 (options #10): секция автоэкспорта переехала в <details id="advanced-section">,
+    // а #proactive-section встал ВЫШЕ неё. Границу среза задаём по следующей секции Advanced,
+    // а не по #proactive-section (пин проверяет соседство контролов, а не порядок секций).
     const iStart = OPTIONS_HTML.indexOf('id="auto-export-section"');
-    const iEnd = OPTIONS_HTML.indexOf('id="proactive-section"');
+    const iEnd = OPTIONS_HTML.indexOf('data-i18n="options_byok_label"');
     expect(iStart).toBeGreaterThan(-1);
     expect(iEnd).toBeGreaterThan(iStart);
     const sec = OPTIONS_HTML.slice(iStart, iEnd);
