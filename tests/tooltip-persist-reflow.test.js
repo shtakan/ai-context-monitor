@@ -148,11 +148,12 @@ describe('R-пины подбатча: правило тултипа не осл
     expect(tooltip).toContain('border: var(--w-border)');
   });
 
-  test('R: сборка многострочного тултипа в updateWidget не изменена (createTextNode + createElement(br))', () => {
+  test('R: сборка многострочного тултипа в updateWidget обновлена под #22 (span-обёртка строк)', () => {
     const updateSrc = extractFn(WIDGET_SRC, 'updateWidget');
     expect(updateSrc).toContain('tooltip.appendChild(document.createElement(\'br\'));');
-    expect(updateSrc).toContain('tooltip.appendChild(document.createTextNode(line));');
-    expect(occurrences(updateSrc, 'createTextNode')).toBe(1);
+    expect(updateSrc).toContain('row.textContent = line;');
+    expect(occurrences(updateSrc, 'textContent = line')).toBe(1);
+    expect(occurrences(updateSrc, 'createTextNode')).toBe(0);
   });
 
   test('R: разметка виджета прежняя — текст и тултип подряд', () => {
