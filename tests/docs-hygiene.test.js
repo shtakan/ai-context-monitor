@@ -33,6 +33,12 @@ const releaseYml = read('.github/workflows/release.yml');
 const manifest = JSON.parse(read('manifest.json'));
 const pkg = JSON.parse(read('package.json'));
 
+// O-53: PROJECT_HANDOFF.md — главный документ состояния, который до сих пор не
+// покрывала ни одна проверка (CRLF-предупреждения, BOM и loneLF ловились руками).
+// Здесь только чтение: сам handoff и код продукта не меняются.
+const handoffBuf = fs.readFileSync(abs('PROJECT_HANDOFF.md'));   // Buffer — для BOM и размера
+const handoff = handoffBuf.toString('utf8');
+
 // «as of v2.0.8 (2026-09-17): 90 suites / 1535 tests» — формат пина без точных чисел.
 const SNAPSHOT_RE = /as of v\d+\.\d+\.\d+ \(\d{4}-\d{2}-\d{2}\): \d+ suites \/ \d+ tests/;
 const STALE_COUNTERS = ['14 suites / 159 tests', '14 suites/159 tests'];
@@ -232,5 +238,68 @@ describe('M-6: release.yml — руководство в ZIP и контроль
     expect(releaseYml).toContain('LOW-5');       // решение в коде, а не только в голове
     expect(releaseYml).toContain('README.md в ZIP НЕ включается');
     expect(releaseYml).toContain('docs/index.html');
+  });
+});
+
+describe('O-53: PROJECT_HANDOFF.md — гигиена кодировки и статусных чисел', () => {
+  test('кодировка: без BOM, переводы строк нормализуются без одиночных CR', () => {
+    expect(handoffBuf.length).toBeGreaterThan(100000);   // осмысленный объём, а не заглушка
+    const hasBom = handoffBuf[0] === 0xEF && handoffBuf[1] === 0xBB && handoffBuf[2] === 0xBF;
+    expect(hasBom).toBe(false);
+    // EOL намеренно НЕ пинится жёстко: .gitattributes держит eol=lf, поэтому в рабочей
+    // копии Windows файл честно CRLF, а на Linux/CI — LF. Пин на loneLF/loneCR фиксировал
+    // бы средство (рабочую копию), а не требование, и падал бы на CI при зелёном локально.
+    expect(handoff.replace(/\r\n/g, '\n')).not.toContain('\r');
+  });
+
+  test('статусная строка «- **Тесты:» ровно одна и строго по формату', () => {
+    const statusLines = handoff.split(/\r?\n/).filter(function (l) {
+      return l.indexOf('- **Тесты:') === 0;
+    });
+    expect(statusLines.length).toBe(1);   // уникальность статусной строки
+    const STRICT_STATUS_RE = /- \*\*Тесты:\s*\d+ suites \/ \d+ passed \/ \d+ skipped \/ \d+ failed/g;
+    expect(statusLines[0]).toMatch(STRICT_STATUS_RE);
+    expect(handoff.match(STRICT_STATUS_RE) || []).toHaveLength(1);
+  });
+
+  test('свежесть: текущий счётчик не ниже исторического максимума', () => {
+    // Пол для сравнения — ТОЛЬКО исторические вхождения «N suites / N passed»,
+    // то есть всё, что лежит ВНЕ диапазона самого совпадения статусной строки.
+    // Иначе пин тавтологичен: максимум включал бы текущее значение, и
+    // «текущее >= максимум» было бы истинно всегда. Историческая цепочка
+    // (138/2642, 137/2628, 136/2619) лежит на той же строке, но за концом
+    // совпадения, поэтому входит в пол — это ожидаемо.
+    // Честная граница пина: подмена статусного числа на значение, которое уже
+    // есть в истории (копия предыдущего максимума), неотличима — истинное
+    // число тестов внутри теста неизвестно.
+    const strictRe = /- \*\*Тесты:\s*\d+ suites \/ \d+ passed \/ \d+ skipped \/ \d+ failed/;
+    const strict = strictRe.exec(handoff);
+    expect(strict).not.toBeNull();
+    const strictEnd = strict.index + strict[0].length;
+
+    const current = strict[0].match(/(\d+) suites \/ (\d+) passed \/ (\d+) skipped \/ (\d+) failed/);
+    expect(current).not.toBeNull();
+
+    const history = [];
+    const counterRe = /(\d+) suites \/ (\d+) passed/g;
+    let m;
+    while ((m = counterRe.exec(handoff)) !== null) {
+      if (m.index >= strict.index && m.index < strictEnd) continue;   // текущее — не пол
+      history.push([Number(m[1]), Number(m[2])]);
+    }
+    expect(history.length).toBeGreaterThanOrEqual(20);   // история счётчиков не вычищена
+
+    const maxSuites = Math.max.apply(null, history.map(function (c) { return c[0]; }));
+    const maxPassed = Math.max.apply(null, history.map(function (c) { return c[1]; }));
+    expect(Number(current[1])).toBeGreaterThanOrEqual(maxSuites);
+    expect(Number(current[2])).toBeGreaterThanOrEqual(maxPassed);
+  });
+
+  test('версия: handoff === manifest.json === package.json, упоминание ровно одно', () => {
+    const mentions = handoff.match(/Версия:\s*\d+\.\d+\.\d+/g) || [];
+    expect(mentions).toHaveLength(1);
+    const handoffVersion = mentions[0].match(/Версия:\s*(\d+\.\d+\.\d+)/)[1];
+    expect(handoffVersion).toBe(manifest.version);
+    expect(handoffVersion).toBe(pkg.version);
   });
 });
