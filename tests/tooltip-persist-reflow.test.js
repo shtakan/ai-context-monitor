@@ -9,7 +9,9 @@
  *   #8 tooltip reflow (WCAG 2.2 AA 1.4.10): белый пробел nowrap без max-width/max-height/
  *      overflow уводил тултип за левый край на узком окне → max-width: min(320px,
  *      calc(100vw - 48px)) + max-height: 40vh + overflow-y: auto +
- *      overscroll-behavior: contain + white-space: normal + overflow-wrap: anywhere.
+ *      overscroll-behavior: contain + white-space: normal + overflow-wrap: break-word
+ *      (регресс #26: anywhere обнуляет min-content → тултип схлопывался по ширине;
+ *      break-word переносит токены, не меняя min-content).
  *      Вертикальный flip (как у панели) сознательно НЕ реализуется.
  *
  * Пины читают РЕАЛЬНЫЙ core/widget.js (конвенция H11/H22/H24/H25) и режут правила из
@@ -114,8 +116,8 @@ describe('UI-аудит #8 — тултип не выходит за viewport (R
     expect(tooltip).not.toContain('white-space: nowrap');
   });
 
-  test('D#8: длинные неразрывные токены переносятся (overflow-wrap: anywhere)', () => {
-    expect(tooltip).toContain('overflow-wrap: anywhere');
+  test('D#8: длинные неразрывные токены переносятся (overflow-wrap: break-word)', () => {
+    expect(tooltip).toContain('overflow-wrap: break-word');
   });
 
   test('R#8: white-space: nowrap не встречается в core/widget.js ни разу', () => {
