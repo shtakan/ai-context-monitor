@@ -1,0 +1,1 @@
+docs(handoff): finalize commit hash and remove temp file
