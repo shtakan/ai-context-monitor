@@ -102,15 +102,30 @@
       <div class="input-row">
         <label class="label" for="aiCmProactiveLow" data-i18n="options_proactive_levels_label">Пороги уведомлений и бейджа (1–100, возрастающий порядок):</label>
       </div>
-      <div class="input-row">
+      <div class="input-row thresholds-row">
         <!-- v1.20 (M-1): у трёх числовых полей порога — собственные имена доступности (title сохранён) -->
-        <input type="number" id="aiCmProactiveLow" aria-label="Низкий порог процентов" data-i18n-aria-label="options_proactive_low_aria" min="1" max="100" step="1" value="70" title="Низкий порог — зелёный" data-i18n-title="options_proactive_low_title">
-        <input type="number" id="aiCmProactiveMedium" aria-label="Средний порог процентов" data-i18n-aria-label="options_proactive_medium_aria" min="1" max="100" step="1" value="85" title="Средний порог — жёлтый" data-i18n-title="options_proactive_medium_title">
-        <input type="number" id="aiCmProactiveHigh" aria-label="Высокий порог процентов" data-i18n-aria-label="options_proactive_high_aria" min="1" max="100" step="1" value="95" title="Высокий порог — красный" data-i18n-title="options_proactive_high_title">
+        <!-- Minor-B (#21): суффикс единицы «%», inputmode=numeric и общая подсказка о диапазоне 1–100.
+             «%» — языконейтральный символ-токен (как MD/JSON/PDF/TXT): литерал без data-i18n,
+             т.к. пин tests/i18n-locales.test.js:187-204 требует, чтобы ЛЮБОЕ совпадение ru/en
+             (кроме брендовых строк и options_info_separator) было переведено. -->
+        <span class="threshold-field">
+          <input type="number" id="aiCmProactiveLow" aria-label="Низкий порог процентов" data-i18n-aria-label="options_proactive_low_aria" inputmode="numeric" min="1" max="100" step="1" value="70" title="Низкий порог — зелёный" data-i18n-title="options_proactive_low_title" aria-describedby="proactive-threshold-msg">
+          <span class="threshold-unit">%</span>
+        </span>
+        <span class="threshold-field">
+          <input type="number" id="aiCmProactiveMedium" aria-label="Средний порог процентов" data-i18n-aria-label="options_proactive_medium_aria" inputmode="numeric" min="1" max="100" step="1" value="85" title="Средний порог — жёлтый" data-i18n-title="options_proactive_medium_title" aria-describedby="proactive-threshold-msg">
+          <span class="threshold-unit">%</span>
+        </span>
+        <span class="threshold-field">
+          <input type="number" id="aiCmProactiveHigh" aria-label="Высокий порог процентов" data-i18n-aria-label="options_proactive_high_aria" inputmode="numeric" min="1" max="100" step="1" value="95" title="Высокий порог — красный" data-i18n-title="options_proactive_high_title" aria-describedby="proactive-threshold-msg">
+          <span class="threshold-unit">%</span>
+        </span>
       </div>
       <!-- Major-подбатч 1 (аудит #13): поясняем, что цвет кольца и пороги — разные настройки -->
       <span class="hint" data-i18n="options_ring_zones_hint">Цвет кольца на странице: зоны 50% / 80%. Пороги 70/85/95 — уведомления и автоэкспорт. Это разные настройки.</span>
-      <span class="hint" data-i18n="options_proactive_hint">Каждый порог срабатывает один раз на разговор; при битом вводе — дефолт 70/85/95</span>
+      <!-- Minor-B (#21): статическое сообщение о диапазоне и фактическом поведении,
+           связано с тремя полями порогов через aria-describedby (инвалидация — CSS :invalid) -->
+      <span class="hint" id="proactive-threshold-msg" data-i18n="options_proactive_hint">Допустимо 1–100. Каждый порог срабатывает один раз на разговор; при неверном значении берётся 70/85/95</span>
     </div>
 
     <!-- Major-подбатч 1 (аудит #10): один свёрнутый блок для редких настроек.
@@ -166,13 +181,14 @@
 
       <div class="section">
         <label class="label" data-i18n="options_export_legend">Экспорт истории</label>
-        <div class="export-row">
-          <button id="export-md" class="btn-export" disabled data-i18n="options_export_md">Сохранить .md</button>
-          <button id="export-json" class="btn-export" disabled data-i18n="options_export_json">Сохранить .json</button>
-          <button id="export-pdf" class="btn-export" disabled data-i18n="options_export_pdf">Сохранить .pdf</button>
-        </div>
-        <div class="export-row">
-          <button id="export-txt" class="btn-export" disabled data-i18n="options_export_txt">Сохранить .txt (эталон)</button>
+        <!-- Minor-B (#20): сетка 2×2, короткие визуальные подписи MD/JSON/PDF/TXT, доступное имя у каждой кнопки.
+             Локализованные строки действий («Сохранить .md», «Сохранить .txt (эталон)») переехали в title
+             через data-i18n-title: они остаются переводимыми и не дублируют короткую подпись. -->
+        <div class="export-grid" id="export-history-grid">
+          <button id="export-md" class="btn-export btn-export--primary" disabled title="Сохранить .md" data-i18n-title="options_export_md" aria-label="MD — сохранить историю в формате Markdown" data-i18n-aria-label="options_export_md_aria">MD</button>
+          <button id="export-json" class="btn-export" disabled title="Сохранить .json" data-i18n-title="options_export_json" aria-label="JSON — сохранить историю в формате JSON" data-i18n-aria-label="options_export_json_aria">JSON</button>
+          <button id="export-pdf" class="btn-export" disabled title="Сохранить .pdf" data-i18n-title="options_export_pdf" aria-label="PDF — сохранить историю в формате PDF" data-i18n-aria-label="options_export_pdf_aria">PDF</button>
+          <button id="export-txt" class="btn-export" disabled title="Сохранить .txt (эталон)" data-i18n-title="options_export_txt" aria-label="TXT — сохранить историю в формате TXT (эталон)" data-i18n-aria-label="options_export_txt_aria">TXT</button>
         </div>
         <div class="export-row">
           <button id="export-diag" class="btn-export" data-i18n="options_export_diag">Экспорт диагностики</button>

@@ -183,7 +183,7 @@
     "message": "Высокий порог — красный"
   },
   "options_proactive_hint": {
-    "message": "Каждый порог срабатывает один раз на разговор; при битом вводе — дефолт 70/85/95"
+    "message": "Допустимо 1–100. Каждый порог срабатывает один раз на разговор; при неверном значении берётся 70/85/95"
   },
   "options_advanced_summary": {
     "message": "Дополнительно"
@@ -232,6 +232,18 @@
   },
   "options_export_txt": {
     "message": "Сохранить .txt (эталон)"
+  },
+  "options_export_md_aria": {
+    "message": "MD — сохранить историю в формате Markdown"
+  },
+  "options_export_json_aria": {
+    "message": "JSON — сохранить историю в формате JSON"
+  },
+  "options_export_pdf_aria": {
+    "message": "PDF — сохранить историю в формате PDF"
+  },
+  "options_export_txt_aria": {
+    "message": "TXT — сохранить историю в формате TXT (эталон)"
   },
   "options_export_diag": {
     "message": "Экспорт диагностики"

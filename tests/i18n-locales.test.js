@@ -1268,10 +1268,16 @@ describe('M-4.4: локализация privacy/privacy.html и docs/index.html'
       // + UI-аудит 2026-09-28 (Major, подбатч options #10/#12/#13): options_advanced_summary,
       //   options_byok_key_label, options_ring_zones_hint (+3); мёртвый options_byok_key_aria
       //   заменён видимой подписью label[for="api-key"] (−1) → словарь 265
+      // + UI-аудит 2026-09-28 (Minor-подбатч B, options #19/#20/#21): доступные имена четырёх
+      //   кнопок экспорта истории options_export_md_aria / _json_aria / _pdf_aria / _txt_aria (+4).
+      //   Визуальные подписи MD/JSON/PDF/TXT и суффикс «%» — языконейтральные токены-литералы
+      //   без ключей локали: любой новый ключ с совпадающими ru/en-значениями запрещён пином
+      //   «en — реальный перевод» (:187-204), который допускает совпадение только у брендовых
+      //   строк, options_info_separator и — в этой задаче — не правится. → словарь 269
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('privacy_') === 0; }).length).toBe(86);
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('docs_') === 0; }).length).toBe(42);
-      expect(Object.keys(ru).length).toBe(265);
-      expect(Object.keys(en).length).toBe(265);
+      expect(Object.keys(ru).length).toBe(269);
+      expect(Object.keys(en).length).toBe(269);
     });
 
     test('ru-значения M-4.4 байтово равны тексту разметки, en — перевод без кириллицы', () => {

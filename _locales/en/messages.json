@@ -183,7 +183,7 @@
     "message": "High threshold — red"
   },
   "options_proactive_hint": {
-    "message": "Each threshold fires once per conversation; invalid input falls back to the default 70/85/95"
+    "message": "Allowed range 1–100. Each threshold fires once per conversation; invalid input falls back to 70/85/95"
   },
   "options_advanced_summary": {
     "message": "Advanced"
@@ -232,6 +232,18 @@
   },
   "options_export_txt": {
     "message": "Save .txt (reference)"
+  },
+  "options_export_md_aria": {
+    "message": "MD — save history as Markdown"
+  },
+  "options_export_json_aria": {
+    "message": "JSON — save history as JSON"
+  },
+  "options_export_pdf_aria": {
+    "message": "PDF — save history as PDF"
+  },
+  "options_export_txt_aria": {
+    "message": "TXT — save history as TXT (reference)"
   },
   "options_export_diag": {
     "message": "Export diagnostics"
