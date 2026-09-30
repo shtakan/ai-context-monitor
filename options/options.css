@@ -432,7 +432,9 @@ summary:focus-visible {
 }
 
 /* #21: ряд порогов — суффикс «%» внутри обёртки поля, размер в ch.
-   Число не уходит под стрелки спиннера: спиннер внутри инпута, «%» — снаружи него. */
+   Число не уходит под стрелки спиннера: спиннер внутри инпута, «%» — снаружи него.
+   #21-polish: поля больше не растягиваются на всю ширину ряда — инпут компактный
+   (~8ch ≈ 55px, хватает под «100»), цифры по центру, «%» сразу за числом. */
 .thresholds-row {
   gap: 8px;
   align-items: center;
@@ -442,14 +444,17 @@ summary:focus-visible {
   display: flex;
   align-items: center;
   gap: 2px;
-  flex: 1 1 0;
+  flex: 0 0 auto;
   min-width: 0;
 }
 
 .threshold-field input {
-  flex: 1 1 auto;
+  flex: 0 0 8ch;
   min-width: 0;
-  inline-size: 5ch;
+  inline-size: 8ch;
+  padding: 4px 2px;
+  font-size: 13px;
+  text-align: center;
 }
 
 .threshold-unit {
