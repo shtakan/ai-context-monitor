@@ -2,7 +2,7 @@
  * UI-аудит 2026-09-28 (docs/UI_AUDIT_QWEN_2026-09-28.md), Major-подбатч 2 — панель виджета:
  *   #9 переполнение (WCAG 2.2 AA 1.4.10 Reflow): у .ai-widget-panel не было ни max-width,
  *      ни max-height, ни overflow — на узком/низком окне содержимое панели недостижимо →
- *      width: min(260px, calc(100vw - 48px)) + max-height: calc(100vh - 108px) +
+ *      width: min(290px, calc(100vw - 48px)) + max-height: calc(100vh - 108px) +
  *      overflow-y: auto + overscroll-behavior: contain + box-sizing: border-box;
  *   #11 контраст тёмной темы (WCAG 2.2 AA 1.4.3): .ai-cm-hint имел opacity: 0.72 —
  *      эффективный контраст текста падал ниже 4.5:1 → opacity: 1 + явный
@@ -47,8 +47,8 @@ function extractFn(src, name) {
 describe('UI-аудит #9 — панель виджета не выходит за viewport (Reflow)', () => {
   const panel = ruleBody(WIDGET_SRC, '.ai-widget-panel');
 
-  test('D#9: правило .ai-widget-panel ограничено по ширине через width: min(260px, calc(100vw - 48px))', () => {
-    expect(panel).toContain('width: min(260px, calc(100vw - 48px))');
+  test('D#9: правило .ai-widget-panel ограничено по ширине через width: min(290px, calc(100vw - 48px))', () => {
+    expect(panel).toContain('width: min(290px, calc(100vw - 48px))');
   });
 
   test('D#9: правило .ai-widget-panel ограничено по высоте через max-height: calc(100vh - 108px)', () => {

@@ -160,8 +160,8 @@ describe('Регресс #9 — панель не уходит за верх в�
     expect(panelOffset(panel)).toBe(76);
   });
 
-  test('D#9: ширина панели не изменена (width: min(260px, calc(100vw - 48px))) — проверена живьём', () => {
-    expect(panel).toContain('width: min(260px, calc(100vw - 48px))');
+  test('D#9: ширина панели (width: min(290px, calc(100vw - 48px))) — проверена живьём', () => {
+    expect(panel).toContain('width: min(290px, calc(100vw - 48px))');
   });
 
   test('D#9: прокрутка и containment оверскролла на месте', () => {
