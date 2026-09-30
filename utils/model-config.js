@@ -82,16 +82,17 @@ const ModelConfig = {
       description: 'Google Search AI: slug из сети не определён'
     },
     // ---- DeepSeek ----
+    // 64K (историческое окно V3/R1, API)
     'deepseek-v3': {
       name: 'DeepSeek V3',
       provider: 'DeepSeek',
-      contextLimit: 131072,
+      contextLimit: 65536,
       description: 'Флагманская модель DeepSeek'
     },
     'deepseek-r1': {
       name: 'DeepSeek R1',
       provider: 'DeepSeek',
-      contextLimit: 131072,
+      contextLimit: 65536,
       description: 'Модель с усиленным reasoning'
     },
     // ---- Claude (200K для всех актуальных моделей) ----

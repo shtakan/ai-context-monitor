@@ -1,0 +1,4 @@
+fix(deepseek): correct contextLimit for V3/R1 to 64K, close limits audit
+- Update deepseek-v3/r1 limits in model-config.js (131072 -> 65536)
+- Log accepted deviations for OpenAI/Anthropic/Google/Qwen in QUALITY_AUDIT.md
+- Close contextLimit audit item in PROJECT_HANDOFF.md
