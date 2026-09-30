@@ -75,3 +75,10 @@ deepseek_test/
 # Локальные артефакты сессий (не коммитить)
 o35-state.txt
 test_write.txt
+# Temporary commit message files
+commit-msg*.txt
+
+# Internal protocols and test artifacts
+Протокол Правды.txt
+test_write.txt
+*.log
