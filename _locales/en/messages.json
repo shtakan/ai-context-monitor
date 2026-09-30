@@ -189,7 +189,7 @@
     "message": "Advanced"
   },
   "options_ring_zones_hint": {
-    "message": "Ring color on the page uses 50% / 80% zones. The 70/85/95 thresholds drive notifications and auto-export. These are separate settings."
+    "message": "Ring color on the page follows the same thresholds: green below the low one, amber between low and high, red from the high one. The thresholds also drive notifications and auto-export."
   },
   "options_byok_label": {
     "message": "Gemini API — exact token counting"

@@ -22,7 +22,8 @@ const exportDiagBtn = document.getElementById('export-diag');
 // T1 (v1.16): индикатор источника истории (архив — первый ярус / live — второй)
 const sourceEl = document.getElementById('stat-source');
 
-// Цветовые пороги — те же, что в content.js (zoneColor: <50 зелёный, <80 жёлтый, красный)
+// Цветовая шкала СТРАНИЦЫ НАСТРОЕК (статистика «% использовано»): своя ось, 50/80.
+// Кольцо на странице с v2.0.13 красится по настраиваемым порогам (zoneColor → aiCmRingBounds).
 function percentColor(p) { if (p < 50) return '#22c55e'; if (p < 80) return '#eab308'; return '#ef4444'; }
 
 // Версия из manifest (вместо захардкоженной)

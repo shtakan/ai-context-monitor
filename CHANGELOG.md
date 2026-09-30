@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.0.13] - 2026-09-29
+
+### Исправлено
+- Кольцо индикатора: цвет считается по НАСТРОЕННЫМ порогам (`chrome.storage.local` → `aiCmProactiveThresholds` = [low, medium, high]) вместо жёстких 50/80. `core/widget.js`: `aiCmRingBounds()` возвращает `[low, high]`, `zoneColor(p)` — pct < low зелёный, low ≤ pct < high жёлтый, pct ≥ high красный. Кольцо трёхзонное, поэтому `medium` в нём не участвует (он остаётся порогом уведомлений/автоэкспорта). Пороги не заданы или битые (не три целых 1–100, не строго возрастают) → дефолт [70,85,95] ⇒ границы 70/95 — прежнее поведение «из коробки».
+- Контент читает пороги сам: `aiCmLoadRingThresholds()` (`chrome.storage.local.get(['aiCmProactiveThresholds'])`) + `chrome.storage.onChanged` → `aiCmRepaintRing()` перекрашивает кольцо и пересобирает доступное имя СРАЗУ при смене настроек в options, без перезагрузки страницы. Звать `getProactiveThresholds()` нельзя: `utils/gemini-intercept-logic.js` не подключён в `manifest.json` content_scripts.
+- Доступное имя индикатора (`aiCmSetWidgetA11yLabel`) считается по тем же границам, что и цвет: имя больше не может противоречить видимому цвету.
+- Подсказка `options_ring_zones_hint` (RU+EN, `options/options.html`) переписана: кольцо и пороги больше не «разные настройки».
+
+### Changed
+- **Решение владельца (m00001) против зафиксированного инварианта.** ARCHITECTURE_STANDARDS.md «Оси порогов — разные сущности (не унифицировать)» объявлял widget zoneColor 50/80 и proactive [70,85,95] разными осями. Владелец свёл КОЛЬЦО к настраиваемым порогам; раздел стандарта обновлён. Архивные записи о прежнем решении (docs/UI_AUDIT_QWEN_2026-09-28.md:64, :167-181, PROJECT_HANDOFF.md:654) НЕ переписаны — это исторические факты.
+- Новых ключей storage нет, миграция не требуется (тот же ключ, тот же формат).
+- Не тронуты (do-not-touch): уведомления и цвет бейджа (`core/background.js:aiCmZoneColorFor` + `utils/gemini-intercept-logic.js:PROACTIVE_THRESHOLDS`/`pickProactiveThreshold` — байтово прежние), автоэкспорт pct 1–100, шкала страницы настроек `options/options.js:percentColor` (своя ось 50/80), плавная анимация кольца `transition: stroke 0.18s ease, stroke-dashoffset 0.4s ease`.
+
+### Notes
+- jest: 144 suites / 2769 passed / 6 skipped (2775 total). Новые пины: tests/ring-color-thresholds-v2013.test.js (15 тестов: D20a–d зоны/дефолт/битые пороги, R9a–e живой перекрас из storage без перезагрузки, do-not-touch контур).
+- Обновлены пины, державшие прежние границы: tests/popup-overrides-display.test.js:234/260, tests/widget-collision-a11y-uiaudit.test.js D19/D19b.
+- Живая приёмка (≥2 чата) — см. RELEASE_CHECKLIST.md (раздел v2.0.13).
+
 ## [2.0.12] - 2026-09-27
 
 ### Исправлено

@@ -560,19 +560,19 @@ describe('Critical #2: доступность индикатора (D/R-пины
     expect(s.api.circle().getAttribute('aria-expanded')).toBe('false');
   });
 
-  test('D19: доступное имя — процент и статус зоны (en), границы 50/80 как у zoneColor', () => {
+  test('D19: доступное имя — процент и статус зоны (en), границы 70/95 как у zoneColor', () => {
     const s = widgetSandbox(EN);
     s.api.create();
     const circle = s.api.circle();
     expect(circle.getAttribute('aria-label')).toBe(EN.content_a11y_circle_initial.message);
     s.api.label(circle, 77.5);
     expect(circle.getAttribute('aria-label')).toBe('AI Context Monitor: 77.5% context used, warning');
-    s.api.label(circle, 49.9);
-    expect(circle.getAttribute('aria-label')).toBe('AI Context Monitor: 49.9% context used, ok');
-    s.api.label(circle, 50);
-    expect(circle.getAttribute('aria-label')).toBe('AI Context Monitor: 50.0% context used, warning');
-    s.api.label(circle, 80);
-    expect(circle.getAttribute('aria-label')).toBe('AI Context Monitor: 80.0% context used, critical');
+    s.api.label(circle, 69.9);
+    expect(circle.getAttribute('aria-label')).toBe('AI Context Monitor: 69.9% context used, ok');
+    s.api.label(circle, 70);
+    expect(circle.getAttribute('aria-label')).toBe('AI Context Monitor: 70.0% context used, warning');
+    s.api.label(circle, 95);
+    expect(circle.getAttribute('aria-label')).toBe('AI Context Monitor: 95.0% context used, critical');
   });
 
   test('D19b: доступное имя в ru — своя строка статуса из локали', () => {
@@ -582,8 +582,8 @@ describe('Critical #2: доступность индикатора (D/R-пины
     expect(circle.getAttribute('aria-label')).toBe(RU.content_a11y_circle_initial.message);
     ru.api.label(circle, 77.5);
     expect(circle.getAttribute('aria-label')).toBe('AI Context Monitor: 77.5% контекста использовано, внимание');
-    ru.api.label(circle, 85);
-    expect(circle.getAttribute('aria-label')).toBe('AI Context Monitor: 85.0% контекста использовано, критично');
+    ru.api.label(circle, 96);
+    expect(circle.getAttribute('aria-label')).toBe('AI Context Monitor: 96.0% контекста использовано, критично');
   });
 
   test('R7: без хелпера локали имя собирается из ru-фолбэков байтово как сообщение ru', () => {

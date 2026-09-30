@@ -20,7 +20,31 @@
 // (иначе ReferenceError в песочнице, а не прежняя русская строка).
 
 function safePctKey() { return 'ai_cm_safe_pct_' + getServiceKey(); }
-function zoneColor(p) { if (p < 50) return '#22c55e'; if (p < 80) return '#eab308'; return '#ef4444'; }
+// v2.0.13: границы зон кольца берутся из НАСТРОЕННЫХ порогов (options →
+// chrome.storage.local 'aiCmProactiveThresholds' = [low, medium, high]), а не из жёстких
+// 50/80. Кольцо трёхзонное, поэтому зон ровно две: low (зелёный → жёлтый) и high
+// (жёлтый → красный); medium управляет только уведомлениями/бейджем/автоэкспортом.
+// Пороги не заданы или битые → дефолт [70, 85, 95] ⇒ границы 70/95 (прежнее поведение
+// «из коробки»). Гарды typeof: тела функций регрессия режет из исходника и исполняет в
+// песочнице без соседних хелперов.
+var aiCmRingThresholds = null;
+function aiCmRingBounds() {
+  var raw = (typeof aiCmRingThresholds !== 'undefined') ? aiCmRingThresholds : null;
+  if (raw && typeof raw === 'object' && raw.length === 3) {
+    var a = parseInt(raw[0], 10), b = parseInt(raw[1], 10), c = parseInt(raw[2], 10);
+    // Тот же контракт, что у validProactiveThresholds в options.js и normalizeProactiveThresholds
+    // в utils/gemini-intercept-logic.js: три целых 1–100, строго возрастают.
+    if (isFinite(a) && isFinite(b) && isFinite(c) &&
+      a >= 1 && b >= 1 && c >= 1 && a <= 100 && b <= 100 && c <= 100 && a < b && b < c) return [a, c];
+  }
+  return [70, 95];
+}
+function zoneColor(p) {
+  const bounds = (typeof aiCmRingBounds === 'function') ? aiCmRingBounds() : [70, 95];
+  if (p < bounds[0]) return '#22c55e';
+  if (p < bounds[1]) return '#eab308';
+  return '#ef4444';
+}
 // H19: активный % от Авто. Приоритет: порог виджета (per-service, точнее) →
 // порог попапа (глобальный) → Авто (null). Дефолтный путь (оба null) и поле «100»
 // (по определению = как Авто) — байтово прежние (в т.ч. текст панели/тултипа).
@@ -674,16 +698,58 @@ function aiCmBindWidgetA11y() {
 }
 
 // П.2.3: доступное имя — «{app}: {pct}% контекста использовано, {status}»; статус по тем
-// же границам зон, что у zoneColor (50/80). Строки — только _locales (content_a11y_*).
+// же границам зон, что у zoneColor (v2.0.13: настроенные пороги, дефолт 70/95).
+// Строки — только _locales (content_a11y_*).
 function aiCmSetWidgetA11yLabel(circleEl, percentage) {
   if (!circleEl || typeof circleEl.setAttribute !== 'function') return;
   const i18n = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key, fallback) { return fallback; };
   const pct = (typeof percentage === 'number' && isFinite(percentage)) ? percentage : 0;
   const pctLabel = pct.toFixed(1);
-  const status = (pct < 50) ? i18n('content_a11y_status_ok', 'норма')
-    : ((pct < 80) ? i18n('content_a11y_status_warning', 'внимание')
+  const bounds = (typeof aiCmRingBounds === 'function') ? aiCmRingBounds() : [70, 95];
+  const status = (pct < bounds[0]) ? i18n('content_a11y_status_ok', 'норма')
+    : ((pct < bounds[1]) ? i18n('content_a11y_status_warning', 'внимание')
       : i18n('content_a11y_status_critical', 'критично'));
   circleEl.setAttribute('aria-label', i18n('content_a11y_circle_label', 'AI Context Monitor: ' + pctLabel + '% контекста использовано, ' + status, [pctLabel, status]));
+}
+
+// v2.0.13: чтение настроенных порогов и живой перекрас кольца. Виджет в контент-скрипте
+// НЕ видит utils/gemini-intercept-logic.js (его нет в manifest.json content_scripts),
+// поэтому читает chrome.storage.local сам — та же модель, что у aiCmLoadProactiveFlag в
+// core/content.js. Гарды typeof: в изолированных песочницах регрессии chrome нет вовсе.
+function aiCmRepaintRing() {
+  if (typeof widgetElement === 'undefined' || !widgetElement) return;
+  var data = (typeof lastWidgetData !== 'undefined' && lastWidgetData) ? lastWidgetData : null;
+  if (!data || typeof data.percentage !== 'number' || !isFinite(data.percentage)) return;
+  var fill = widgetElement.querySelector('.ai-widget-fill');
+  if (fill && fill.style) fill.style.stroke = zoneColor(data.percentage);
+  try {
+    if (typeof aiCmSetWidgetA11yLabel === 'function') {
+      aiCmSetWidgetA11yLabel(widgetElement.querySelector('.ai-widget-circle'), data.percentage);
+    }
+  } catch (eRingA11y) { }
+}
+function aiCmLoadRingThresholds() {
+  if (typeof chrome === 'undefined' || !chrome || !chrome.storage || !chrome.storage.local) return;
+  try {
+    chrome.storage.local.get(['aiCmProactiveThresholds'], function (res) {
+      aiCmRingThresholds = (res && res.aiCmProactiveThresholds !== undefined) ? res.aiCmProactiveThresholds : null;
+      aiCmRepaintRing();
+    });
+  } catch (eRingGet) { }
+  try {
+    // Флаг «подписка взведена» живёт на самой функции, а не в модульной переменной: тела
+    // функций регрессия режет из исходника и исполняет в песочнице без соседних объявлений
+    // (модульный флаг там либо ReferenceError, либо протечка между песочницами).
+    if (chrome.storage.onChanged && !aiCmLoadRingThresholds.aiCmBound) {
+      aiCmLoadRingThresholds.aiCmBound = true;
+      chrome.storage.onChanged.addListener(function (changes, areaName) {
+        if (areaName !== 'local' || !changes || !changes.aiCmProactiveThresholds) return;
+        // storage.onChanged кладёт сам массив в newValue: перекрас без перезагрузки страницы.
+        aiCmRingThresholds = changes.aiCmProactiveThresholds.newValue;
+        aiCmRepaintRing();
+      });
+    }
+  } catch (eRingWatch) { }
 }
 
 // ========== ВИДЖЕТ (со стрелками ▲▼) ==========
@@ -730,6 +796,8 @@ function createWidget() {
     if (typeof aiCmUpdateWidgetSafeBottom === 'function') aiCmUpdateWidgetSafeBottom(container);
     if (typeof aiCmStartWidgetSafeBottomWatch === 'function') aiCmStartWidgetSafeBottomWatch(container);
     if (typeof aiCmBindWidgetA11y === 'function') aiCmBindWidgetA11y();
+    // v2.0.13: настроенные пороги кольца — до первой отрисовки, живой подпиской на смену.
+    if (typeof aiCmLoadRingThresholds === 'function') aiCmLoadRingThresholds();
   } catch (eWidgetCritical) { }
   if (snapBtn) snapBtn.addEventListener('click', snapCurrentPct);
   if (autoBtn) autoBtn.addEventListener('click', resetSafePct);
@@ -890,6 +958,10 @@ function updateWidget(percentage, tokens, effectiveLimit, contextLimit, displayL
   var Api = {};
   Api.safePctKey = safePctKey;
   Api.zoneColor = zoneColor;
+  Api.aiCmRingBounds = aiCmRingBounds;
+  Api.aiCmSetRingThresholds = function (raw) { aiCmRingThresholds = (raw === undefined) ? null : raw; };
+  Api.aiCmRepaintRing = aiCmRepaintRing;
+  Api.aiCmLoadRingThresholds = aiCmLoadRingThresholds;
   Api.aiCmActivePct = aiCmActivePct;
   Api.computeEffectiveLimit = computeEffectiveLimit;
   Api.aiCmSetPopupOverrides = aiCmSetPopupOverrides;

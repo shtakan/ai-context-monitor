@@ -231,7 +231,7 @@ describe('H19: интеграция — badge EMIT содержит displayLimit
     const tokens = 25600;
     const percentage = percentageOf(tokens, emit.displayLimit);
     expect(percentage).toBe(40);
-    expect(percentage < 50).toBe(true); // zoneColor → зелёный (content.js:388)
+    expect(percentage < 70).toBe(true); // zoneColor: дефолтные границы 70/95 → зелёный
   });
 
   test('выбор модели попапа виден в EMIT: имя и окно модели', () => {
@@ -257,7 +257,14 @@ describe('H19: интеграция — badge EMIT содержит displayLimit
     expect(src).toContain('updateWidget(percentage, maxTokenCount, effectiveLimit, contextLimit, displayLimit, ModelConfig.getModel(modelId)?.name || modelId, netAttachBreak);');
     expect(src).toContain('limit: displayLimit,');
     expect(src).toContain('const percentage = displayLimit > 0 ? Math.round((maxTokenCount / displayLimit) * 1000) / 10 : 0;');
-    expect(src).toContain("function zoneColor(p) { if (p < 50) return '#22c55e'; if (p < 80) return '#eab308'; return '#ef4444'; }");
+    // v2.0.13: зоны кольца — из настроенных порогов (aiCmProactiveThresholds), дефолт 70/95
+    expect(src).toContain(
+      "function zoneColor(p) {\n" +
+      "  const bounds = (typeof aiCmRingBounds === 'function') ? aiCmRingBounds() : [70, 95];\n" +
+      "  if (p < bounds[0]) return '#22c55e';\n" +
+      "  if (p < bounds[1]) return '#eab308';\n" +
+      "  return '#ef4444';\n" +
+      "}");
   });
 });
 
