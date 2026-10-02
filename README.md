@@ -122,3 +122,11 @@ This project is not affiliated with, endorsed by, or sponsored by Google, OpenAI
 ## License
 
 [MIT](LICENSE)
+
+## 🎥 Demo
+
+Watch the AI Context Monitor in action:
+
+[![AI Context Monitor Demo](docs/videos/ai-context-monitor-demo-v2.0.13.mp4)](docs/videos/ai-context-monitor-demo-v2.0.13.mp4)
+
+*Note: If the video does not play directly on GitHub, you can [download it here](https://github.com/shtakan/ai-context-monitor/raw/main/docs/videos/ai-context-monitor-demo-v2.0.13.mp4).*
