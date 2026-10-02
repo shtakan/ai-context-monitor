@@ -82,3 +82,5 @@ commit-msg*.txt
 Протокол Правды.txt
 test_write.txt
 *.log
+# Handoff backups
+PROJECT_HANDOFF_*.md

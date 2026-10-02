@@ -1,1 +1,0 @@
-chore: remove test artifacts and truth protocol from git tracking
