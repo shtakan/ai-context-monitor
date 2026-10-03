@@ -10,8 +10,16 @@
 // Гард перекрёста: chat_session_id из URL/тела vs currentConvId из location.pathname.
 //
 // ВНИМАНИЕ: ModelConfig НЕ доступен в world:MAIN (инжектится в ISOLATED мире контент-скрипта).
-// Модель определяется ПОХОДОВО по thinking_enabled: true → r1, иначе → v3.
-// model_type (expert/default) не влияет на выбор модели, а передаётся как modelMode в detail.
+// Модель определяется ПОХОДОВО: сначала по сетевым сигналам нового контракта (v13),
+// затем прежним фолбэком по thinking_enabled: true → r1, иначе → v3.
+// model_type (expert/default) передаётся как modelMode в detail и участвует в детекции v13.
+//
+// v13 (2026-10-03): новый сетевой контракт DeepSeek. Имя модели в сети не передаётся
+//   (SSE ready: model_type:"default"; SSE update_session: model:"", conversation_mode:"DEFAULT";
+//   /client/settings: name:"Instant", model_type:"default"). Прежняя эвристика по
+//   thinking_enabled давала устаревший slug (deepseek-r1/v3) и занижала лимит бейджа до
+//   65536/128000 вместо 1 000 000. Теперь сигналы контракта маппятся в 'deepseek-v4.1-flash'
+//   (см. __aiCmDeepseekResolveModelSlug ниже). Числитель (accumulated_token_usage) не тронут.
 //
 // v5: подавление ложной кнопки «Ошибки» на плитке расширения (chrome://extensions).
 //   Причина: обёртка window.fetch подменяет оригинал, поэтому ЛЮБОЙ fetch страницы создаёт
@@ -157,6 +165,52 @@
 //   маркер в логе), затем снимок публикуется обычным EMIT. Сеть недоступна/пуста — файл
 //   собирается прежним live-путём. Латчи/пороги O-16, гейты полноты O-17 и формат
 //   [REASONING]/[ANSWER] не тронуты.
+
+// ===== v13 (2026-10-03): чистый резолвер slug модели по сетевым сигналам =====
+// Определён ВНЕ IIFE: контрактный тест импортирует его через module.exports, не поднимая
+// весь перехватчик (fetch/XHR-обёртки, состояние потока).
+var AI_CM_DEEPSEEK_V4_FLASH_SLUG = 'deepseek-v4.1-flash';
+
+/**
+ * Сетевые сигналы модели DeepSeek (SSE ready/update_session, history chat_session, settings).
+ * @typedef {Object} AiCmDeepSeekModelSignals
+ * @property {string} [model]            значение поля model (в контракте 2026-10-03 — "")
+ * @property {boolean} [modelPresent]    присутствовало ли поле model в payload
+ * @property {string} [modelType]        model_type (default|expert|null)
+ * @property {string} [conversationMode] conversation_mode (DEFAULT|...)
+ * @property {string} [configName]       name активной конфигурации из /client/settings (Instant)
+ */
+
+/**
+ * Slug модели по сетевым сигналам. Приоритет:
+ *   (a) явный непустой model из сети → он же (обратная совместимость);
+ *   (b) сигналы unified Intelligent Mode → 'deepseek-v4.1-flash';
+ *   (c) иначе '' — вызывающий применяет прежний фолбэк по thinking_enabled.
+ * @param {AiCmDeepSeekModelSignals} [signals]
+ * @returns {string}
+ */
+function __aiCmDeepseekResolveModelSlug(signals) {
+  var s = signals || {};
+  var raw = (typeof s.model === 'string') ? s.model.trim() : '';
+  if (raw) return raw;   // (a)
+  var modelType = String(s.modelType || '').toLowerCase();
+  var convMode = String(s.conversationMode || '').toUpperCase();
+  var configName = String(s.configName || '').toLowerCase();
+  var isDefaultType = modelType === 'default';
+  var isDefaultConv = convMode === 'DEFAULT';
+  // model:"" присутствует и разговор в DEFAULT-режиме — та же новая ветка без model_type
+  var emptyModelNewContract = (s.modelPresent === true) && raw === '' && isDefaultConv;
+  // Контракт сети от 2026-10-03: имя модели не передаётся, unified Intelligent Mode = V4.1-Flash (захват координатора, chat.deepseek.com)
+  if ((isDefaultType && isDefaultConv) || emptyModelNewContract ||
+      (isDefaultType && configName === 'instant')) {
+    return AI_CM_DEEPSEEK_V4_FLASH_SLUG;   // (b)
+  }
+  return '';   // (c)
+}
+
+if (typeof window !== 'undefined') {
+  try { window.__aiCmDeepseekResolveModelSlug = __aiCmDeepseekResolveModelSlug; } catch (eWin) { }
+}
 
 (function () {
   if (window.__aiCmDeepseekInterceptInstalled) return;
@@ -467,8 +521,16 @@
     });
   } catch (eTurnsBridge) { }
 
-  // ===== СЕКЦИЯ 5: МОДЕЛЬ (походово по thinking_enabled, без DOM) =====
-  function getModelSlug(thinkingEnabled) {
+  // ===== СЕКЦИЯ 5: МОДЕЛЬ (v13: сетевые сигналы контракта, затем фолбэк по thinking_enabled) =====
+  /**
+   * Slug модели хода: сначала сигналы нового сетевого контракта, затем прежний фолбэк.
+   * @param {boolean} thinkingEnabled
+   * @param {AiCmDeepSeekModelSignals} [signals]
+   * @returns {string}
+   */
+  function getModelSlug(thinkingEnabled, signals) {
+    var networkSlug = __aiCmDeepseekResolveModelSlug(signals);
+    if (networkSlug) return networkSlug;
     return thinkingEnabled === true ? 'deepseek-r1' : 'deepseek-v3';
   }
 
@@ -696,6 +758,15 @@
 
       // chatMode — модель чата (expert/default/null), не влияет на выбор модели
       var chatMode = chatSession.model_type || '';
+      // v13: сигналы нового контракта из chat_session (model/model_type/conversation_mode)
+      // + активная конфигурация из /client/settings (name:"Instant"), если уже захвачена.
+      var chatModelSignals = {
+        modelPresent: Object.prototype.hasOwnProperty.call(chatSession, 'model'),
+        model: chatSession.model,
+        modelType: chatSession.model_type,
+        conversationMode: chatSession.conversation_mode,
+        configName: sseConfigName
+      };
 
       // Заполняем turnsMap: модель ПОХОДОВО по thinking_enabled.
       // v9 (O-15): ход = user + assistant(reasoning+answer). Узел-assistant БЕЗ ответа
@@ -734,7 +805,7 @@
             text: composeTurnText(text, mergedReasoning),
             answer: text,                        // v9: ответ хода (для пересборки при хвостовом reasoning)
             reasoning: mergedReasoning,
-            modelSlug: getModelSlug(ch.thinking_enabled === true),
+            modelSlug: getModelSlug(ch.thinking_enabled === true, chatModelSignals),
             order: orderCounter++,
             ts: ch.inserted_at || 0,
             role: chRole
@@ -747,7 +818,7 @@
           text: composeTurnText(text, chReasoning),
           answer: text,
           reasoning: chReasoning,
-          modelSlug: getModelSlug(ch.thinking_enabled === true),
+          modelSlug: getModelSlug(ch.thinking_enabled === true, chatModelSignals),
           order: orderCounter++,
           ts: ch.inserted_at || 0,
           role: chRole
@@ -834,6 +905,14 @@
   var sseRequestMessageId = null;
   var sseResponseMessageId = null;
   var sseModelType = null;
+  // v13: сигналы нового контракта из SSE. model/modelPresent приходят в update_session
+  // (в контракте 2026-10-03 — model:""), conversation_mode — там же ("DEFAULT").
+  // sseConfigName — сессионный факт из /client/settings (name:"Instant"), НЕ сбрасывается
+  // при смене потока (см. ingestModelSettings).
+  var sseModel = null;
+  var sseModelPresent = false;
+  var sseConversationMode = null;
+  var sseConfigName = null;
   var sseUserPrompt = '';
   var sseParentMessageId = null;
   var sseThinkingEnabled = null;
@@ -854,10 +933,46 @@
   var sseStreamActive = false;
   var sseTurnFinished = false;
 
+  /**
+   * v13: сигналы модели текущего/последнего потока для __aiCmDeepseekResolveModelSlug.
+   * @returns {AiCmDeepSeekModelSignals}
+   */
+  function sseModelSignals() {
+    return {
+      modelPresent: sseModelPresent === true,
+      model: sseModel,
+      modelType: sseModelType,
+      conversationMode: sseConversationMode,
+      configName: sseConfigName
+    };
+  }
+
+  /**
+   * v13: запоминает активную конфигурацию модели из /api/v0/client/settings?scope=model.
+   * Новый контракт: активная запись имеет model_type:"default" и name:"Instant" — имя модели
+   * в сети отсутствует. Резолвер использует её как резервный сигнал (см. configName).
+   * @param {any} json распарсенное тело ответа settings
+   * @returns {void}
+   */
+  function ingestModelSettings(json) {
+    try {
+      var settings = json && json.data && json.data.biz_data && json.data.biz_data.settings;
+      var list = settings && settings.model_configs && settings.model_configs.value;
+      if (!Array.isArray(list)) return;
+      for (var i = 0; i < list.length; i++) {
+        var c = list[i];
+        if (!c || c.enabled === false) continue;
+        if (c.is_default === true || c.model_type === 'default' || i === 0) {
+          if (c.name) sseConfigName = c.name;
+          break;
+        }
+      }
+    } catch (eSettings) { }
+  }
+
   // v10 (O-16): снимок состояния потока наружу (ISOLATED-мир). convId — тот же, что в
   // detail ai-cm-full-history (stale-conv гард экспортёра работает и здесь).
-  function streamStateSnapshot() {
-    return {
+  function streamStateSnapshot() {    return {
       convId: currentConvId || getConvId() || '',
       active: sseStreamActive === true,
       turnFinished: sseTurnFinished === true
@@ -907,6 +1022,9 @@
     sseRequestMessageId = null;
     sseResponseMessageId = null;
     sseModelType = null;
+    sseModel = null;             // v13
+    sseModelPresent = false;     // v13
+    sseConversationMode = null;  // v13
     sseUserPrompt = '';
     sseParentMessageId = null;
     sseThinkingEnabled = null;
@@ -1205,7 +1323,7 @@
     liveTurnRecord(String(sseRequestMessageId), 'user', sseUserPrompt, sseUserPrompt, '', '');
     if (answerText || sseReasoning) {
       liveTurnRecord(String(sseResponseMessageId), 'assistant', liveText, answerText, sseReasoning,
-        getModelSlug(sseThinkingEnabled === true));
+        getModelSlug(sseThinkingEnabled === true, sseModelSignals()));
     }
     lastTurnDoneAt = Date.now();
 
@@ -1234,7 +1352,7 @@
         text: composeTurnText(answerText, sseReasoning),
         answer: answerText,
         reasoning: sseReasoning,
-        modelSlug: getModelSlug(sseThinkingEnabled === true),
+        modelSlug: getModelSlug(sseThinkingEnabled === true, sseModelSignals()),
         order: orderCounter++,
         ts: Date.now() / 1000,
         role: 'assistant'
@@ -1352,8 +1470,17 @@
         continue;
       }
 
-      // === update_session (игнорируем, только updated_at) ===
+      // === update_session (v13: model/conversation_mode нового контракта; updated_at не нужен) ===
       if (sseCurrentEvent === 'update_session') {
+        var usResp = obj && obj.v && obj.v.response;
+        if (usResp) {
+          if (Object.prototype.hasOwnProperty.call(usResp, 'model')) {
+            sseModelPresent = true;
+            if (typeof usResp.model === 'string') sseModel = usResp.model;
+          }
+          if (usResp.conversation_mode) sseConversationMode = usResp.conversation_mode;
+          if (usResp.model_type && !sseModelType) sseModelType = usResp.model_type;
+        }
         sseCurrentEvent = '';
         continue;
       }
@@ -1373,6 +1500,12 @@
       if (obj.v && obj.v.response && typeof obj.v.response.accumulated_token_usage === 'number') {
         sseRealtimeEntryTokens = obj.v.response.accumulated_token_usage;
         sseModelType = sseModelType || obj.v.response.model_type || null;
+        // v13: те же сигналы контракта могут прийти и в первом response-объекте
+        if (Object.prototype.hasOwnProperty.call(obj.v.response, 'model')) {
+          sseModelPresent = true;
+          if (typeof obj.v.response.model === 'string') sseModel = obj.v.response.model;
+        }
+        if (obj.v.response.conversation_mode) sseConversationMode = obj.v.response.conversation_mode;
 
         // v9 (O-15): начальные фрагменты разбирает ТОТ ЖЕ код, что и APPEND/SET-чанки
         // (тип + контент). Первый envelope — SET состава, повторный — APPEND новых.
@@ -1894,6 +2027,9 @@
         } catch (e) { }
       }
 
+      // --- настройки модели: URL содержит "client/settings" (v13, scope=model) ---
+      var isModelSettings = (url.indexOf('client/settings') !== -1);
+
       var promise;
       try { promise = originalFetch.apply(this, arguments); } catch (e) { return Promise.reject(e); }
 
@@ -1939,6 +2075,20 @@
           } catch (e) { }
           return resp;
         }, function () { /* v5: тихо — не создаём висячий Promise.reject */ });
+      }
+
+      // обработка ответа настроек модели (v13): тихий разбор, только чтение
+      if (isModelSettings) {
+        promise.then(function (resp) {
+          try {
+            if (resp && resp.ok) {
+              resp.clone().json().then(function (json) {
+                ingestModelSettings(json);
+              }).catch(function () { });
+            }
+          } catch (e) { }
+          return resp;
+        }, function () { /* тихо */ });
       }
 
       return promise;
@@ -2045,6 +2195,11 @@
             if (guardCheck(info2.completionConvId)) {
               parseSSE(self.responseText);
             }
+          }
+
+          // настройки модели (v13): name активной конфигурации (Instant)
+          if (loadUrl.indexOf('client/settings') !== -1) {
+            try { ingestModelSettings(JSON.parse(self.responseText)); } catch (eSet) { }
           }
         } catch (e) { }
       });
@@ -2940,3 +3095,12 @@
     };
   } catch (e) { }
 })();
+
+// v13: экспорт чистого резолвера для контрактного теста (jest/jsdom). В браузере module нет —
+// блок не выполняется и на страницу не влияет.
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    resolveNetworkModelSlug: __aiCmDeepseekResolveModelSlug,
+    DEEPSEEK_V4_FLASH_SLUG: AI_CM_DEEPSEEK_V4_FLASH_SLUG
+  };
+}

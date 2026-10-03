@@ -102,6 +102,18 @@ const ModelConfig = {
       contextLimit: 1000000,
       description: 'Быстрая модель DeepSeek V4, окно 1M (API)'
     },
+    // v13 (2026-10-03): unified Intelligent Mode веб-версии DeepSeek. Имя модели в сети не
+    // передаётся (model:"", model_type:"default", settings name:"Instant") — см.
+    // core/deepseek-intercept.js resolveNetworkModelSlug(). Бейдж обязан считать от РЕАЛЬНОГО
+    // окна 1M, поэтому ключ помечен capExempt: общий порог EFFECTIVE_CAP_DEFAULT = 128000
+    // к нему не применяется (для остальных ключей поведение неизменно).
+    'deepseek-v4.1-flash': {
+      name: 'DeepSeek V4.1 Flash',
+      provider: 'DeepSeek',
+      contextLimit: 1000000,
+      capExempt: true,
+      description: 'DeepSeek V4.1 Flash (unified Intelligent Mode), окно 1M'
+    },
     'deepseek-v3': {
       name: 'DeepSeek V3',
       provider: 'DeepSeek',
@@ -268,10 +280,19 @@ const ModelConfig = {
     const model = this.getModel(modelId);
     return model ? model.contextLimit : 128000;
   },
+  /**
+   * Действующий порог деградации бейджа для модели.
+   * Приоритет: явный `effectiveLimit` → `capExempt` (реальное окно без общего потолка) →
+   * `min(contextLimit, EFFECTIVE_CAP_DEFAULT)`.
+   * @param {string} modelId
+   * @returns {number}
+   */
   getEffectiveLimit(modelId) {
     const model = this.getModel(modelId);
     if (!model) return this.EFFECTIVE_CAP_DEFAULT;
     if (typeof model.effectiveLimit === 'number') return model.effectiveLimit;
+    // v13: opt-out из общего потолка — только для ключей с реальным окном > EFFECTIVE_CAP_DEFAULT
+    if (model.capExempt === true) return model.contextLimit;
     return Math.min(model.contextLimit, this.EFFECTIVE_CAP_DEFAULT);
   },
   // ---- H19: оверрайды попапа (chrome.storage.sync: selectedModel / customLimit) ----
