@@ -757,3 +757,21 @@ ai-context-monitor-clean/
   4. Вынести DR dedup в `dedup/`.
   5. Собрать через бандлер (Фаза 2).
 * **Оценка:** 2 недели.
+---
+
+## Аппендикс: Завершение шага 1–2 Фазы 1 (TypeScript-фундамент)
+
+**Дата:** 2026-10-03
+**Коммит:** `24e5634` (`chore(types): add TypeScript config skeleton and core type declarations`)
+**Статус:** ✅ Закрыто
+
+| Артефакт | Путь | Назначение |
+| :--- | :--- | :--- |
+| Конфигурация TS | `tsconfig.json` | `strict: false`, `allowJs: true`, `noEmit: true`, `include: types/**` |
+| Тип сообщения | `types/message.d.ts` | `Message`, `MessageRole` (из `export-emit-pipeline.js`) |
+| Тип адаптера | `types/adapter.d.ts` | `Adapter`, `ExtractedMessage` (из `base-adapter.js`) |
+| Тип архива | `types/archive.d.ts` | `ArchiveRecord` (из `storage-ttl.test.js`) |
+
+**Тесты:** 144 suites / 2769 passed / 6 skipped / 0 failed
+**Zero-diff:** подтверждён (4 новых файла, 0 изменённых)
+**Следующий шаг:** Установка `typescript` в devDependencies + перепись `utils/` на TS (шаг 3 Фазы 1)
