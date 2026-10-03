@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "strict": false,
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "types": []
+  },
+  "include": [
+    "types/**/*.d.ts",
+    "types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "tests",
+    "docs",
+    "deepseek_test"
+  ]
+}
