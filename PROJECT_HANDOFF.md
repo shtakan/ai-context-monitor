@@ -775,3 +775,43 @@ ai-context-monitor-clean/
 **Тесты:** 144 suites / 2769 passed / 6 skipped / 0 failed
 **Zero-diff:** подтверждён (4 новых файла, 0 изменённых)
 **Следующий шаг:** Установка `typescript` в devDependencies + перепись `utils/` на TS (шаг 3 Фазы 1)
+
+---
+
+## Аппендикс: Завершение шага 3 Фазы 1 (Проверка типов `utils/` по месту + актуализация лимитов DeepSeek)
+
+**Дата:** 2026-10-03
+**Коммит:** `150f6ad` (`feat(utils): type-check utils/ via JSDoc and fix DeepSeek context limits`)
+**Статус:** ✅ Закрыто
+
+**Отклонение от исходного плана шага (осознанное).** Пункт «перепись `utils/*.js` → `utils/*.ts`» заменён на проверку типов по месту (`allowJs` + `checkJs` + JSDoc), переименование переносится в Фазу 2 (бандлер) — как и предполагал Roadmap. Основание — пробное переименование (временная ветка `probe-ts-all`, коммит `00ce9a8`, удалена) дало 91 упавший suite из 144:
+
+- `232 × Cannot find module '<...>/utils/*.js'`: 100 тестов из 144 требуют модули с явным расширением `.js` (`tests/o23-tokens-calibration.test.js:38`, `tests/export-emit-pipeline.test.js:7`, `tests/archive/merge-tier.test.js:16` и др.), подстановку расширений Jest не делает.
+- 4 теста читают исходники `utils/` как текст по литеральному имени файла (`tests/deepseek-o7-hidden-export.test.js:56`, `tests/d-o41-reasoning-auto-on.test.js:58`, `tests/deepseek-o42-bds-tool-envelope.test.js:35`, `tests/qwen-provider-wiring.test.js`), ещё 3 проверяют литеральные строки (`tests/archive/oracle-archive-complete.test.js:244-246`, `tests/manifest-smoke.test.js:108`, `tests/o34-reset-on-empty-convid.test.js:650-651`), плюс `tests/no-bare-console-error.test.js` обходит `*.js` в `utils/`.
+- Рантайм: 9 ссылок в `manifest.json` (`content_scripts[0].js`) и 24 потребителя (`core/` ×13, `adapters/` ×3, `options/`, `print/`, `tools/` ×5). При `noEmit: true` + `emitDeclarationOnly: true` эмита нет — чистое переименование оставило бы расширение незагружаемым.
+
+Правки `tests/`, `manifest.json` и потребителей — вне scope шага.
+
+| Артефакт | Изменение | Назначение |
+| :--- | :--- | :--- |
+| `tsconfig.json` | `include` += `utils/**/*.js`; `checkJs: true` (при `allowJs: true`) | Проверка типов `utils/` по месту, без переименования файлов |
+| `types/globals.d.ts` | Новый ambient-контракт: `require`, `module 'util'`, `chrome`, 15 глобалов `window.*` | Закрывает `TS2591` / `TS2339` / `TS2551` на кросс-мировых сеам-точках |
+| `utils/archive-import.js` | JSDoc `@returns`: добавлено `bytes: number` | `TS2353` на `return { accepted, skipped, bytes }` |
+| `utils/debug.js` | Исправлен сломанный `@param {...any}` (парсился как тег `последующие`) | `TS8029` |
+| `utils/model-config.js` | + `deepseek-v4-pro`, `deepseek-flash` (`contextLimit: 1000000`); `deepseek-v3`, `deepseek-r1`: `65536` → `128000` | Актуализация реальных лимитов API |
+| `package.json` | + `typescript@^5.6.0` (установлен 5.9.3) | Инфраструктура TS |
+
+### Лимиты DeepSeek: источник и расхождения
+
+- 1M контекста — у текущего поколения: `deepseek-v4-pro` и `deepseek-flash` (CONTEXT LENGTH 1M, MAX OUTPUT 384K) — `https://api-docs.deepseek.com/quick_start/pricing`.
+- `deepseek-v3` / `deepseek-r1`: исторически 64K, после апдейта V3 — 128K (`https://api-docs.deepseek.com/zh-cn/news/news250325/`). Значение `65536` было занижено → `128000`.
+- **Расхождение 1:** `siteDefaults.deepseek` оставлен `'deepseek-v3'` (`utils/model-config.js:226`), а не переведён на V4: `tests/qwen-provider-wiring.test.js:169` пинит `getDefaultModel('deepseek') === 'deepseek-v3'`, а правка теста вне scope.
+- **Расхождение 2:** бейдж-лимит от 1M не меняется — `EFFECTIVE_CAP_DEFAULT = 128000` (`utils/model-config.js:7`), `getEffectiveLimit() = Math.min(contextLimit, EFFECTIVE_CAP_DEFAULT)` (`utils/model-config.js:252-257`). 1M в таблице — справочная величина, порог индикатора остаётся 128K.
+- **Расхождение 3:** в исходной постановке шага лимит «1 000 000 для DeepSeek» был задан без указания модели — ключей `deepseek-chat` / `deepseek-reasoner` в файле нет.
+- **Расхождение 4:** `package-lock.json` в репозитории не отслеживается (`.gitignore:16`), поэтому обновлённый lock-файл коммитом не зафиксирован — политика репозитория выше инструкции шага.
+
+**Тесты:** 144 suites / 2769 passed / 6 skipped / 0 failed (правок в `tests/` — 0)
+**tsc --noEmit:** ✅ exit 0, 0 ошибок (до правок — 49)
+**Покрытие `utils/`:** Branches 80.76% (Statements 88.97 / Functions 94.75 / Lines 93.25) — без регрессии
+**Zero-diff расширений:** ✅ `utils/*.js` остались `.js`; `manifest.json`, `core/`, `adapters/`, `options/`, `print/`, `tools/` не тронуты
+**Следующий шаг:** Покрытие `adapters/` типами (шаг 4 Фазы 1)
