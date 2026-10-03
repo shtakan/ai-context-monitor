@@ -82,18 +82,37 @@ const ModelConfig = {
       description: 'Google Search AI: slug из сети не определён'
     },
     // ---- DeepSeek ----
-    // 64K (историческое окно V3/R1, API)
+    // Источник окон — таблица API https://api-docs.deepseek.com/quick_start/pricing
+    // (колонка CONTEXT LENGTH). Актуальная V4-линейка: 1M токенов.
+    // V3/R1: 128K — V3 подняли с 64K до 128K ещё в ветке V3
+    // (https://api-docs.deepseek.com/zh-cn/news/news250325/), поэтому прежние 65536
+    // были устаревшим полом, а не реальным окном.
+    // Порог деградации при этом НЕ меняется: EFFECTIVE_CAP_DEFAULT = 128000, и
+    // getEffectiveLimit() для V4 вернёт min(1000000, 128000) = 128000. contextLimit
+    // двигает только формальное окно, бейдж по-прежнему считает от порога.
+    'deepseek-v4-pro': {
+      name: 'DeepSeek V4 Pro',
+      provider: 'DeepSeek',
+      contextLimit: 1000000,
+      description: 'Флагман DeepSeek V4, окно 1M (API)'
+    },
+    'deepseek-flash': {
+      name: 'DeepSeek Flash',
+      provider: 'DeepSeek',
+      contextLimit: 1000000,
+      description: 'Быстрая модель DeepSeek V4, окно 1M (API)'
+    },
     'deepseek-v3': {
       name: 'DeepSeek V3',
       provider: 'DeepSeek',
-      contextLimit: 65536,
-      description: 'Флагманская модель DeepSeek'
+      contextLimit: 128000,
+      description: 'DeepSeek V3, окно 128K (API)'
     },
     'deepseek-r1': {
       name: 'DeepSeek R1',
       provider: 'DeepSeek',
-      contextLimit: 65536,
-      description: 'Модель с усиленным reasoning'
+      contextLimit: 128000,
+      description: 'DeepSeek R1, усиленный reasoning, окно 128K (API)'
     },
     // ---- Claude (200K для всех актуальных моделей) ----
     'claude-sonnet-5': {

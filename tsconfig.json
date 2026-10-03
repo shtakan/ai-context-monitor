@@ -7,7 +7,7 @@
     "strict": false,
     "noEmit": true,
     "allowJs": true,
-    "checkJs": false,
+    "checkJs": true,
     "declaration": true,
     "emitDeclarationOnly": true,
     "skipLibCheck": true,
@@ -19,7 +19,8 @@
   },
   "include": [
     "types/**/*.d.ts",
-    "types/**/*.ts"
+    "types/**/*.ts",
+    "utils/**/*.js"
   ],
   "exclude": [
     "node_modules",

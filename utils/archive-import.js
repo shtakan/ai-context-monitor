@@ -711,7 +711,7 @@
   /**
    * Планирует запись импорта: отбрасывает пустые/слишком большие записи и
    * соблюдает суммарный бюджет chrome.storage.local.
-   * @returns {{accepted:Array, skipped:Array<{convId, reason, bytes}>}}
+   * @returns {{accepted:Array, skipped:Array<{convId, reason, bytes}>, bytes:number}}
    */
   function planArchiveImport(conversations, opts) {
     var o = opts || {};
