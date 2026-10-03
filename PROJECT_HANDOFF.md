@@ -815,3 +815,43 @@ ai-context-monitor-clean/
 **Покрытие `utils/`:** Branches 80.76% (Statements 88.97 / Functions 94.75 / Lines 93.25) — без регрессии
 **Zero-diff расширений:** ✅ `utils/*.js` остались `.js`; `manifest.json`, `core/`, `adapters/`, `options/`, `print/`, `tools/` не тронуты
 **Следующий шаг:** Покрытие `adapters/` типами (шаг 4 Фазы 1)
+
+---
+
+## Аппендикс: v13 — детекция DeepSeek V4.1 Flash по контракту сети 2026-10-03
+
+**Дата:** 2026-10-03
+**Коммит кода:** `e33eaab` (`feat(deepseek): detect v4.1-flash from 2026-10-03 network contract`)
+**Статус:** ⏳ Ожидает живой приёмки координатором (скриншот виджета — в подтверждении закрытия)
+
+### Корень
+
+Веб-версия DeepSeek с 2026-10-03 не передаёт имя модели в сети вообще. Захват координатора (chat.deepseek.com, ~21:12): SSE `ready` → `{"request_message_id":9,"response_message_id":10,"model_type":"default"}`; SSE `update_session` → `"model":"","thinking_enabled":true,"accumulated_token_usage":3196,"conversation_mode":"DEFAULT"`; `/api/v0/client/settings` → `{"model_type":"default","name":"Instant","show_model_name_in_session":false,...}`. Прежняя эвристика `getModelSlug(thinkingEnabled)` при пустом `model` давала устаревший `deepseek-r1`/`deepseek-v3`, и знаменатель бейджа уезжал в 128 000 (в логе — 65 536). Числитель (`accumulated_token_usage`) был и остаётся корректным; починен только знаменатель.
+
+### Что сделано
+
+| Артефакт | Изменение | Назначение |
+| :--- | :--- | :--- |
+| `core/deepseek-intercept.js` | Новый чистый резолвер `__aiCmDeepseekResolveModelSlug(signals)` (вне IIFE) + `getModelSlug(thinkingEnabled, signals)`; экспорт в `window.__aiCmDeepseekResolveModelSlug` и `module.exports` | Маппинг сигналов контракта в `'deepseek-v4.1-flash'`; приоритет: (a) явный непустой `model` из сети → он; (b) unified Intelligent Mode → `deepseek-v4.1-flash`; (c) иначе прежний фолбэк `thinking_enabled → r1/v3` |
+| `core/deepseek-intercept.js` | Разбор `update_session` (`model`/`model_present`/`conversation_mode`/`model_type`), те же поля — из первого response-объекта; сигналы `chat_session` в history-пути | Сетевые сигналы контракта перестали быть «проигнорированы» |
+| `core/deepseek-intercept.js` | Тихий перехват `/api/v0/client/settings` (fetch + XHR load) → `ingestModelSettings()` → `sseConfigName` (name конфигурации, в контракте `"Instant"`) | Резервный сигнал (b3) и корректный бейдж ещё до первого сообщения |
+| `core/deepseek-intercept.js` | Комментарий `// Контракт сети от 2026-10-03: имя модели не передаётся, unified Intelligent Mode = V4.1-Flash (захват координатора, chat.deepseek.com)` (L203) + шапка v13 | Трассируемость контракта в коде |
+| `utils/model-config.js` | Новый ключ `'deepseek-v4.1-flash'` (`name: 'DeepSeek V4.1 Flash'`, `contextLimit: 1000000`, `capExempt: true`) | Модель и её реальное окно 1M |
+| `utils/model-config.js` | `getEffectiveLimit()`: ветка `capExempt === true` → `contextLimit` (до общего `Math.min(contextLimit, EFFECTIVE_CAP_DEFAULT)`) | 1 000 000 вместо 128 000 для нового ключа |
+| `tests/deepseek-v4-slug-contract.test.js` | НОВЫЙ контрактный тест (8 кейсов) на реальных захваченных payload | Пин контракта от 2026-10-03 |
+
+### Осознанные отклонения от постановки (с обоснованием)
+
+- **Bare `model_type === "default"` НЕ маппится сам по себе.** `tests/adapters/deepseek-o22-dispatch-dedupe.test.js` содержит байт-точные голдены `GOLDEN_S692_LOAD`/`GOLDEN_S692_SPA` с `"modelSlug":"deepseek-v3"`, у которых `chat_session.model_type = 'default'` (историческая фикстура без `conversation_mode`/`model`). Маппинг голого `model_type` превратил бы 2 P0-голдена в красные, а правка существующих тестов — вне scope. Поэтому новая ветка включается только при подтверждении новым контрактом: `model_type:"default"` **И** `conversation_mode:"DEFAULT"`, либо присутствующее `model:""` **И** `conversation_mode:"DEFAULT"`, либо settings `name:"Instant"` **И** `model_type:"default"`. Живой путь (ready + update_session) даёт `conversation_mode:"DEFAULT"` гарантированно; старые фикстуры — нет.
+- **`capExempt` вместо глобального снятия потолка для всех `contextLimit > 128000`.** Глобальное правило сломало бы `tests/popup-overrides-display.test.js` (`gemini-2.5-flash`/`gemini-1.5-pro` эффективно 128 000, `{contextLimit:1048576, effectiveLimit:128000, displayLimit:64000}`). Послабление сделано точечным ключом.
+- **`siteDefaults.deepseek` не тронут** (`'deepseek-v3'`): детекция перекрывает дефолт в рантайме, а дефолт нужен только когда сети нет; иначе падает `tests/qwen-provider-wiring.test.js:169`.
+- **Разблокировка излишних деталей:** утверждение из предыдущего аппендикса («бейдж-лимит от 1M не меняется… порог остаётся 128K», строка 809) настоящим шагом **отменено** для `deepseek-v4.1-flash` (ключ `capExempt`); для остальных ключей поведение прежнее.
+
+### Проверки
+
+**Тесты:** 145 suites / 2777 passed / 6 skipped / 0 failed (базис был 144 / 2769 / 6 / 0; +1 suite и +8 тестов контракта, падений нет)
+**tsc --noEmit:** ✅ exit 0, 0 ошибок
+**Контрактный тест:** `npx jest tests/deepseek-v4-slug-contract.test.js` → 8 passed (slug, `getEffectiveLimit('deepseek-v4.1-flash') === 1000000`, процент при 3476 токенах ≈ 0.35 ± 0.01, приоритет явного `model`, неприкосновенность старых сигналов)
+**Правок в существующих `tests/`:** 0; `siteDefaults` в `git diff` отсутствует
+**Живая приёмка:** ожидает подтверждения координатора (чек-лист в отчёте)
+**Следующий шаг:** живая приёмка координатором (перезалив unpacked → сообщение на chat.deepseek.com → лог `модель=deepseek-v4.1-flash, modelMode=default` → виджет «DeepSeek V4.1 Flash / 1 000 000 / ≈0.35%» → скриншот), затем push (вручную координатором)
