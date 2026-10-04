@@ -318,7 +318,7 @@ describe('O-9-подпись: source-пины правки', () => {
   });
 
   test('перехватчики не тронуты: мосты Gemini/DeepSeek на месте, у Perplexity моста нет', () => {
-    const gem = readSource('core/gemini-intercept.js');
+    const gem = require('./helpers/gemini-intercept-source.js').geminiSource;
     const ds = readSource('core/deepseek-intercept.js');
     const perp = readSource('core/perplexity-intercept.js');
     expect(gem).toContain("new CustomEvent('ai-cm-turns-snap-response', { detail: diagSnap })");

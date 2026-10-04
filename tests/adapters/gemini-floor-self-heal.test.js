@@ -29,13 +29,10 @@
  * `with` (конвенция gemini-floor-confirmed / gemini-collapse-guard) — гоняется реальный
  * код, а не копия логики.
  */
-const fs = require('fs');
-const path = require('path');
 
 const GIL = require('../../utils/gemini-intercept-logic.js');
 
-const ROOT = path.join(__dirname, '..', '..');
-const CORE_GEMINI = fs.readFileSync(path.join(ROOT, 'core', 'gemini-intercept.js'), 'utf8');
+const CORE_GEMINI = require('../helpers/gemini-intercept-source.js').geminiSource;
 const CORE_CONTENT = require('../helpers/content-source.js').contentSource;
 
 const PARSER_VERSION = 'g-selfheal';

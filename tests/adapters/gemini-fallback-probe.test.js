@@ -13,8 +13,6 @@
  *   в) null/undefined входы → false (без исключений);
  *   г) core реально вызывает хелпер (гард присутствует в исходнике).
  */
-const path = require('path');
-const fs = require('fs');
 
 const GIL = require('../../utils/gemini-intercept-logic.js');
 
@@ -49,10 +47,7 @@ describe('Gemini v1.14.1 FB-PROBE: fallback-top только через серв
   });
 
   test('core/gemini-intercept.js реально гейтит fallback-top через fallbackProbeReady', () => {
-    const src = fs.readFileSync(
-      path.join(__dirname, '..', '..', 'core', 'gemini-intercept.js'),
-      'utf8'
-    );
+    const src = require('../helpers/gemini-intercept-source.js').geminiSource;
     expect(src).toContain('fallbackProbeReady');
     expect(src).toContain('fallback-top wait reason=probe-unavailable');
     // старый безгардовый путь объявления полноты удалён
@@ -61,10 +56,10 @@ describe('Gemini v1.14.1 FB-PROBE: fallback-top только через серв
 
   // ---- H9b: retained last-good (wide-курсор + probe-метаданные) — вход probe, не источник complete ----
   describe('H9b: retained last-good (core держит и подаёт в обе точки probe)', () => {
-    const CORE = path.join(__dirname, '..', '..', 'core', 'gemini-intercept.js');
+    const CORE = require('../helpers/gemini-intercept-source.js').geminiSource;
 
     test('(а) поля lastGoodWideCur/lastGoodProbeMeta существуют рядом с serverFirstHash и обновляются только на здоровом шаге', () => {
-      const src = fs.readFileSync(CORE, 'utf8');
+      const src = CORE;
       expect(src).toContain('var lastGoodWideCur = null');
       expect(src).toContain('var lastGoodProbeMeta = null');
       // обновление через чистую функцию-правило, гейт здорового шага (шаг не сломан + added/курсор)
@@ -80,7 +75,7 @@ describe('Gemini v1.14.1 FB-PROBE: fallback-top только через серв
     });
 
     test('(б) core подаёт retained в probe в ОБЕИХ точках: oracle (b) и fallback-top', () => {
-      const src = fs.readFileSync(CORE, 'utf8');
+      const src = CORE;
       expect(src).toContain('retained-wide-cur fed reason=oracle-b');
       expect(src).toContain('retained-wide-cur fed reason=fallback-top');
       expect(src).toContain('retained-meta fed reason=fallback-top');

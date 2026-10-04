@@ -24,15 +24,12 @@
  * core/gemini-intercept.js (конвенция fnDecl + песочница `with`), — не копию логики.
  * НЕ ТРОГАЕТСЯ: saveFloor (HWM), H9/H10-гейты, resetForNewConversation.
  */
-const fs = require('fs');
-const path = require('path');
 // jsdom (jest-окружение проекта) не даёт TextEncoder/TextDecoder — в браузере это нативные
 // глобалы, поэтому в песочницу они подаются явно (иначе реальный parseByBytes выходит
 // на первом же try и тест проверял бы пустоту вместо парса).
 const { TextEncoder, TextDecoder } = require('util');
 
-const ROOT = path.join(__dirname, '..', '..');
-const CORE_GEMINI = fs.readFileSync(path.join(ROOT, 'core', 'gemini-intercept.js'), 'utf8');
+const CORE_GEMINI = require('../helpers/gemini-intercept-source.js').geminiSource;
 
 function fnDecl(src, name) {
   const start = src.indexOf('function ' + name + '(');

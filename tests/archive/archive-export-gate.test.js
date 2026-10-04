@@ -26,7 +26,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..', '..');
 const Logic = require('../../utils/gemini-intercept-logic.js');
 const Pipeline = require('../../utils/export-emit-pipeline.js');
-const CORE_GEMINI = fs.readFileSync(path.join(ROOT, 'core', 'gemini-intercept.js'), 'utf8');
+const CORE_GEMINI = require('../helpers/gemini-intercept-source.js').geminiSource;
 const CORE_CONTENT = require('../helpers/content-source.js').contentSource;
 const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
 

@@ -37,7 +37,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
-const CORE = fs.readFileSync(path.join(ROOT, 'core', 'gemini-intercept.js'), 'utf8');
+const CORE = require('../helpers/gemini-intercept-source.js').geminiSource;
 const LOGIC_PATH = path.join(ROOT, 'utils', 'gemini-intercept-logic.js');
 const LOGIC_SRC = fs.readFileSync(LOGIC_PATH, 'utf8');
 const LOGIC = require(LOGIC_PATH);

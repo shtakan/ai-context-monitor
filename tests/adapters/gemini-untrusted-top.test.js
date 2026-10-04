@@ -11,15 +11,10 @@
  * Пины (реальный core/gemini-intercept.js): лоадер вызывает untrustedTopVerdict ПЕРЕД
  * присвоением doneReason='top'; scroll-top-proof-ветка (a) в paginateLoop отсутствует.
  */
-const fs = require('fs');
-const path = require('path');
 
 const GIL = require('../../utils/gemini-intercept-logic.js');
 
-const coreSrc = fs.readFileSync(
-  path.join(__dirname, '..', '..', 'core', 'gemini-intercept.js'),
-  'utf8'
-);
+const coreSrc = require('../helpers/gemini-intercept-source.js').geminiSource;
 
 describe('H9 untrustedTopVerdict (чистый хелпер)', () => {
   test('(а) floor=0 + hadCursor + no-growth + низкая высота → untrusted (no-floor-no-growth)', () => {

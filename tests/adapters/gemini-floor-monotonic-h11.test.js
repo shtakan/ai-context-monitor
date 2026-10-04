@@ -24,15 +24,10 @@
  * (конвенция gemini-collapse-guard / floor-confirmed) — гоняем исходный код,
  * а не копию логики.
  */
-const fs = require('fs');
-const path = require('path');
 
 const GIL = require('../../utils/gemini-intercept-logic.js');
 
-const coreSrc = fs.readFileSync(
-  path.join(__dirname, '..', '..', 'core', 'gemini-intercept.js'),
-  'utf8'
-);
+const coreSrc = require('../helpers/gemini-intercept-source.js').geminiSource;
 
 const PARSER_VERSION = 'g-h11';
 const CONV_ID = 'conv-h11';

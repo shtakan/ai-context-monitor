@@ -1161,8 +1161,7 @@ describe('H12 (A5b): scrollProofAllowsComplete отсутствует в экс�
   });
 
   test('(б2) core/gemini-intercept.js не вызывает хелпер и не объявляет complete по scroll-top-proof', () => {
-    const coreSrc = require('fs').readFileSync(
-      require('path').join(__dirname, '..', '..', 'core', 'gemini-intercept.js'), 'utf8');
+    const coreSrc = require('../helpers/gemini-intercept-source.js').geminiSource;
     expect(coreSrc).not.toContain('scrollProofAllowsComplete');
     expect(coreSrc).not.toContain('oracle=complete reason=scroll-top-proof');
     expect(coreSrc).not.toContain('oracle=incomplete reason=below-floor scroll-top-proof');
@@ -1350,8 +1349,8 @@ describe('H10 probeTerminalGate (below-floor / pb-error)', () => {
 });
 
 describe('H10 пины в core/gemini-intercept.js (probe-terminal floor/error gate)', () => {
-  const CORE = require('path').join(__dirname, '..', '..', 'core', 'gemini-intercept.js');
-  const coreSrc = require('fs').readFileSync(CORE, 'utf8');
+  const CORE = require('../helpers/gemini-intercept-source.js').geminiSource;
+  const coreSrc = CORE;
 
   test('строки reason живут в core (литералы гейта и его inline-дубля)', () => {
     expect(coreSrc).toContain('below-floor-probe-terminal');

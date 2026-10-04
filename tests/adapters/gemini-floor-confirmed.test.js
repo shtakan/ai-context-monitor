@@ -20,13 +20,8 @@
  *   д) изменение count младше 5с → НЕ взводит;
  *   е) прежние пути no-older-history и loader-stable-stop — байтово как прежде.
  */
-const fs = require('fs');
-const path = require('path');
 
-const coreSrc = fs.readFileSync(
-  path.join(__dirname, '..', '..', 'core', 'gemini-intercept.js'),
-  'utf8'
-);
+const coreSrc = require('../helpers/gemini-intercept-source.js').geminiSource;
 
 // --- извлечение ТЕЛА функции (между внешними { }) из реального исходника ---
 function extractBody(name) {

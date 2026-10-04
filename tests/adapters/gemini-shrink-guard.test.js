@@ -16,8 +16,6 @@
  *   д) null/пустые тексты → без исключений;
  *   е) core реально вызывает хелпер.
  */
-const path = require('path');
-const fs = require('fs');
 
 const GIL = require('../../utils/gemini-intercept-logic.js');
 
@@ -70,10 +68,7 @@ describe('Gemini v1.14.1 SHRINK-GUARD: decideRestoredMerge не даёт сжа�
   });
 
   test('core/gemini-intercept.js реально гейтит restored-merge через decideRestoredMerge', () => {
-    const src = fs.readFileSync(
-      path.join(__dirname, '..', '..', 'core', 'gemini-intercept.js'),
-      'utf8'
-    );
+    const src = require('../helpers/gemini-intercept-source.js').geminiSource;
     expect(src).toContain('decideRestoredMerge');
     expect(src).toContain('shrink-guard kept-restored');
   });

@@ -12,13 +12,8 @@
  *   б) tapeWasUsedInThisColdStart=false + то же условие → прежний reset (turnsMap={});
  *   в) «НЕ трогать»: merge-by-id (есть курсор) и disjoint-reset ведут себя как раньше.
  */
-const fs = require('fs');
-const path = require('path');
 
-const coreSrc = fs.readFileSync(
-  path.join(__dirname, '..', '..', 'core', 'gemini-intercept.js'),
-  'utf8'
-);
+const coreSrc = require('../helpers/gemini-intercept-source.js').geminiSource;
 
 // --- извлечение блока из реального исходника ---
 function extractBlock() {

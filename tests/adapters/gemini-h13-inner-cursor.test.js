@@ -34,10 +34,7 @@ const fs = require('fs');
 const path = require('path');
 
 const GIL = require('../../utils/gemini-intercept-logic.js');
-const coreSrc = fs.readFileSync(
-  path.join(__dirname, '..', '..', 'core', 'gemini-intercept.js'),
-  'utf8'
-);
+const coreSrc = require('../helpers/gemini-intercept-source.js').geminiSource;
 
 // ---- фикстуры e292: токены в форме реальных континуационных токенов tC…Ag== ----
 function b64Tok(len, seed) {

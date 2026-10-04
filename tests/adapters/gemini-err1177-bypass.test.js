@@ -19,16 +19,13 @@
  *      порога (reason=1177-bypass); счётчики серии/флаги сбрасываются при смене чата.
  */
 
-const fs = require('fs');
-const path = require('path');
 
 const {
   paginateErrorEscalation,
   paginatePaceDelayMs,
 } = require('../../utils/gemini-intercept-logic');
 
-const ROOT = path.join(__dirname, '..', '..');
-const coreSrc = fs.readFileSync(path.join(ROOT, 'core', 'gemini-intercept.js'), 'utf8');
+const coreSrc = require('../helpers/gemini-intercept-source.js').geminiSource;
 
 describe('paginateErrorEscalation (v1.16: 1177 → нативный скрытый скролл)', () => {
   test('ретраи исчерпаны (retries>=cap), ошибка-страница, ходов/курсора нет → escalate',

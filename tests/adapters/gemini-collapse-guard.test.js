@@ -16,15 +16,10 @@
  * в песочнице с `with` (конвенция floor-confirmed / tape-protect) — тесты гоняют
  * исходный код, а не копию логики.
  */
-const fs = require('fs');
-const path = require('path');
 
 const GIL = require('../../utils/gemini-intercept-logic.js');
 
-const coreSrc = fs.readFileSync(
-  path.join(__dirname, '..', '..', 'core', 'gemini-intercept.js'),
-  'utf8'
-);
+const coreSrc = require('../helpers/gemini-intercept-source.js').geminiSource;
 
 // --- извлечение ТЕЛА collapse-гарда (между внешними { } if (__cvCollapsed)) из реального исходника ---
 function extractCollapseBody() {

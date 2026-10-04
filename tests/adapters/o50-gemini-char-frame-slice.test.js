@@ -38,7 +38,7 @@ const path = require('path');
 const { TextEncoder, TextDecoder } = require('util');
 
 const ROOT = path.join(__dirname, '..', '..');
-const SRC = fs.readFileSync(path.join(ROOT, 'core', 'gemini-intercept.js'), 'utf8');
+const SRC = require('../helpers/gemini-intercept-source.js').geminiSource;
 const EXPORT_MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 
 function fnDecl(src, name) {

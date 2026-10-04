@@ -35,7 +35,7 @@ const EXPORT_MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.j
 const BASE_HANDLER_SRC = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.js'), 'utf8');
 const CONTENT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
 const OPTIONS_SRC = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
-const GEMINI_SRC = fs.readFileSync(path.join(ROOT, 'core', 'gemini-intercept.js'), 'utf8');
+const GEMINI_SRC = require('../helpers/gemini-intercept-source.js').geminiSource;
 
 // ---------------------------------------------------------------------------------
 // Утилиты среза исходника (конвенция сьютов проекта)

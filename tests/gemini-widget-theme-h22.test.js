@@ -16,12 +16,9 @@
  *      gate по хосту Gemini, токены dark/light/matchMedia как были);
  *   г) пересчёт палитры при смене темы: MutationObserver на class/style/data-theme + matchMedia change.
  */
-const fs = require('fs');
-const path = require('path');
 
-const ROOT = path.join(__dirname, '..');
 const CONTENT = require('./helpers/content-source.js').contentSource;
-const INTERCEPT = fs.readFileSync(path.join(ROOT, 'core', 'gemini-intercept.js'), 'utf8');
+const INTERCEPT = require('./helpers/gemini-intercept-source.js').geminiSource;
 
 // ---------- извлечение РЕАЛЬНЫХ тел функций/констант из исходников ----------
 function extractFn(src, name) {

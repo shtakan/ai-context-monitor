@@ -25,7 +25,7 @@ const path = require('path');
 const { TextEncoder, TextDecoder } = require('util');
 
 const ROOT = path.join(__dirname, '..', '..');
-const SRC = fs.readFileSync(path.join(ROOT, 'core', 'gemini-intercept.js'), 'utf8');
+const SRC = require('../helpers/gemini-intercept-source.js').geminiSource;
 
 function fnDecl(src, name) {
   const start = src.indexOf('function ' + name + '(');
