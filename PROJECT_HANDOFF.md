@@ -1148,3 +1148,43 @@ ai-context-monitor-clean/
 
 **Рекомендация (требует утверждения владельца):** шаг 5 ограничить модулями `core/`, а `gemini-intercept.js` и остальные интерсепторы оставить до Фазы 3 (декомпозиция монолита). Обоснование: типизировать 5 226 строк ДО бандлера и разбиения — работа, которую Фаза 3 перепишет; наоборот, `core/content.js`, `widget.js`, `state.js` переживут разбиение без переписывания и дадут тот же типовой фундамент.
 **Push:** `git push origin main` — по необходимости, после коммита этого аппендикса.
+## Аппендикс v18: Завершение шага 5 Фазы 1 (JSDoc-типизация стабильных модулей core/)
+
+**Дата:** 2026-10-04
+**Коммит:** 3c59f6b (chore(core): add JSDoc type annotations for stable core modules (phase 1 step 5))
+**Статус:** ✅ Закрыто
+
+### Что сделано
+
+| Артефакт | Изменение | Назначение |
+| :--- | :--- | :--- |
+| 	sconfig.json | include += 8 файлов core/ ЯВНО по именам (content, widget, state, base-handler, hybrid-tail, export-manager, background, page-intercept) | НЕ glob — интерсепторы (6 файлов) остаются вне checkJs до Фазы 3 |
+| 	ypes/core-globals.d.ts (новый, ~470 строк) | Ambient-швы общего лексического скоупа content-скриптов | TS компилирует файлы изолированно; общий скоуп манифеста (state-переменные, кросс-модульные функции, ModelConfig/Tokenizer, importScripts, Window-поля) невидим → ~1200 TS2304 |
+| core/*.js (6 файлов изменены) | JSDoc @param/@returns/@type публичных функций + точечные касты DOM/Event | Типобезопасность без переименования в .ts (рантайм MV3 не резолвит .ts без бандлера) |
+
+Диф: 8 файлов, **+554/−56**. Интерсепторы НЕ тронуты (git diff --name-only без gemini/deepseek/claude/google-search/perplexity/qwen-intercept.js). ase-handler.js и hybrid-tail.js в коде НЕ менялись (их cross-file чтения закрыты ambient), но входят в include tsconfig.
+
+### Инженерные решения (швы между мирами)
+
+1. **Root cause ~1267 ошибок tsc:** классические content-скрипты делят ОДИН лексический скоуп (state.js объявляет let, widget/base-handler/hybrid-tail/export-manager/content читают соседей по имени), а TS при llowJs видит каждый файл изолированно. Лечение — 	ypes/core-globals.d.ts (declare let/const/function), НЕ изменение рантайма.
+2. **Уроки ambient-деклараций:** (а) НЕ дублировать self-declared имена (aiCmAdapterBaseCount/aiCmAdapterBaseSeen/countTokensPending/aiCmSourceLabelNow объявлены В своих файлах — дубль даёт TS2451/TS2630); (б) declare global { interface Window {...} } в НЕ-module .d.ts НЕ работает — interface Window объявлять напрямую (прецедент 	ypes/globals.d.ts); (в) JSDoc-каст ВНУТРИ сигнатуры функции (unction f(/** @type {string} */ x) {) содержит {string} и ЛОМАЕТ срез-песочницы тестов (fnDecl-хелпер tests/o29 балансирует фигурные скобки) → типы функций — только в хвостовых комментариях.
+3. **countTokensPending (кросс-мир гомоним):** state.js:110 oolean, content.js присваивает boolean, background.js:541 Map (SW). TS в общем скоупе побеждает типом var-объявления background → content TS2322. Фикс: ar /** @type {any} */ countTokensPending = new Map(); в background (any-шов, cheapest) + @type {boolean|Map<unknown, unknown>} в state/content.
+4. **state.js:71 const ANCHOR_MIN = 40 → ar** — UMD-сеттер (state.js:339) присваивает const (TS2588); сеттер никто не вызывает, риск 0.
+5. **fn.aiCmBound / fn.__state** (латчи на самой функции — конвенция срез-песочниц): JSDoc-касты /** @type {any} */ (fn) в widget.js:739-744 и export-manager.js:925-934.
+
+### Честные границы шага
+
+- ackground.js:541 — единственный @type {any} (шов между мирами state/content/SW); TODO Фаза 3.
+- Слушатели DOM-событий в widget/content/export-manager/page-intercept — касты CustomEvent/KeyboardEvent/HTMLElement/SVGElement в listener-колбэках; типизация форм событий — кандидат в Фазу 3.
+- Интерсепторы (6 файлов, ~13 700 строк) вне checkJs — Фаза 3 (декомпозиция монолита).
+
+### Итог прогона
+
+**Тесты:** 145 suites / 2777 passed / 6 skipped / 0 failed (базис 327ac06 — тот же 145/2777/6/0; правок в 	ests/ — 0)
+**tsc --noEmit:** ✅ exit 0, 0 ошибок
+**Инварианты O-53 после аппендикса:** размер >100 000 байт; статусная строка - **Тесты: — ровно 1; пол счётчиков 145/2777; BOM нет.
+
+### Следующий шаг (вне Фазы 1)
+
+Патч cordis.patch.yml — инфраструктурная задача: автоматизация живой приёмки через browser-инструменты в Chrome (не Edge).
+**Push:** git push origin main — по необходимости, после коммита этого аппендикса.
