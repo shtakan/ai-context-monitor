@@ -73,6 +73,62 @@ jobs:
           # гарантированно не получили префикс 'dist/' и совпали с legacy-именами.
           ( cd dist && find . -type f ) | sed 's|^\./||' | xargs zip -q "$ZIP"
 
+      # Phase 3 step 2: инвариант состава JS в пакете. Шаг ниже ручается за то, что
+      # ЗАПРЕЩЁННЫХ путей нет; этот — за то, что все .js в архиве ИЗВЕСТНЫ. Это две
+      # независимые ошибки: фильтр может вычистить tests/ и всё равно пропустить
+      # случайный корневой скрипт, а оверлей dist/ — не доложить runtime-файл.
+      #
+      # Проверка идёт по фактическому архиву (unzip -Z1), а не по симуляции
+      # исключающего фильтра: симуляция дублировала бы регулярку исключений и
+      # разошлась бы с ней при первой же правке (а тест M-6 требует ровно одну
+      # такую строку), тогда как проверка артефакта ловит и фильтр, и оверлей сразу.
+      #
+      # Алгоритм:
+      #   1) allowlist = источник истины, а не список в коде: все .js из собранного
+      #      dist/ (в архиве они лежат без префикса dist/, поэтому './' снимается
+      #      sed-ом) + легаси-файлы, которые грузятся напрямую из HTML:
+      #      options/i18n-apply.js (privacy/privacy.html, docs/index.html) + любые
+      #      собственные .js в docs/ и privacy/ (сегодня таких нет — правило на
+      #      будущее, чтобы добавление скрипта в руководство не валило релиз);
+      #   2) берём все .js из архива (unzip -Z1) и вычитаем allowlist
+      #      (grep -vxF -f — точное совпадение целой строки, не подстрока);
+      #   3) непустая разность = неожиданный файл → exit 1 с его путём; нулевое
+      #      число .js в архиве — тоже ошибка (сломан фильтр или оверлей dist/).
+      - name: Verify ZIP integrity
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          ZIP="ai-context-monitor-v${VERSION}.zip"
+          ALLOW="$RUNNER_TEMP/js-allowlist.txt"
+
+          echo "--- (1) allowlist ---"
+          ( cd dist && find . -type f -name '*.js' ) | sed 's|^\./||' > "$ALLOW"
+          echo 'options/i18n-apply.js' >> "$ALLOW"
+          find docs privacy -type f -name '*.js' 2>/dev/null >> "$ALLOW" || true
+          sort "$ALLOW"
+
+          echo "--- (2) .js in $ZIP ---"
+          JS_IN_ZIP=$(unzip -Z1 "$ZIP" | grep -E '\.js$' | sort || true)
+          TOTAL=$(printf '%s\n' "$JS_IN_ZIP" | grep -c . || true)
+          printf '%s\n' "$JS_IN_ZIP"
+          echo "total: $TOTAL (allowlist: $(wc -l < "$ALLOW"))"
+
+          if [ "$TOTAL" -eq 0 ]; then
+            echo "::error::в ZIP нет ни одного .js — сломан фильтр исключений или оверлей dist/"
+            exit 1
+          fi
+
+          echo "--- (3) разность: .js в архиве, которых нет в allowlist ---"
+          UNEXPECTED=$(printf '%s\n' "$JS_IN_ZIP" | grep -vxF -f "$ALLOW" || true)
+          if [ -n "$UNEXPECTED" ]; then
+            printf '%s\n' "$UNEXPECTED" | while IFS= read -r f; do
+              echo "::error::Unexpected JS file in package: $f. Add to allowlist or exclude in grep filter."
+            done
+            exit 1
+          fi
+
+          echo "OK: JS integrity — все $TOTAL .js в пакете известны (allowlist: $(wc -l < "$ALLOW") путей)"
+
       - name: Verify ZIP contents
         run: |
           # v1.19 (M-6): пост-шаг контроля состава пакета. Печатаем полный листинг ZIP
