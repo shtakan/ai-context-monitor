@@ -2,7 +2,22 @@
  * Адаптер для Claude (claude.ai).
  * Основной источник данных — сетевой перехватчик (core/claude-intercept.js).
  * DOM-адаптер — запасной (страховка).
+ *
+ * Типизация (шаг 4 Фазы 1): формы — из types/adapter.d.ts. Литеральный `import type`
+ * невозможен (файл — классический скрипт контента плюс склейка исходника в
+ * new Function() песочницами тестов), поэтому типы подключены JSDoc-ссылкой import().
  */
+
+/**
+ * Сообщение в форме адаптера (types/adapter.d.ts).
+ *
+ * Имя с префиксом сайта — НЕ по вкусу, а по необходимости: файлы адаптеров не
+ * являются модулями (обычные скрипты, склеиваемые исходником), поэтому при allowJs
+ * все typedef-имена попадают в одну общую область и одноимённые дают TS2300.
+ * Настоящее имя типа хранится в types/adapter.d.ts, здесь только ссылка на него.
+ * @typedef {import('../types/adapter').ExtractedMessage} ClaudeExtractedMessage
+ */
+
 class ClaudeAdapter extends BaseAdapter {
   constructor() {
     super();
@@ -19,7 +34,11 @@ class ClaudeAdapter extends BaseAdapter {
       var self = this;
       try {
         window.addEventListener('ai-cm-full-history', function (ev) {
-          var detail = ev && ev.detail;
+          // detail есть только у CustomEvent, а addEventListener типизирует аргумент
+          // как Event (TS2339) — сужаем форму через промежуточную переменную, сохраняя
+          // прежнюю null-защиту (событие без detail обязано остаться безопасным).
+          var evt = /** @type {CustomEvent} */ (ev);
+          var detail = evt && evt.detail;
           if (detail && detail.modelSlug && self.siteName === 'claude') {
             self._lastNetworkModel = detail.modelSlug;
           }
@@ -28,6 +47,10 @@ class ClaudeAdapter extends BaseAdapter {
     }
   }
 
+  /**
+   * Находимся ли мы на диалоге claude.ai (хост + префикс пути /chat/).
+   * @returns {boolean}
+   */
   isOnDialogPage() {
     try {
       var host = window.location.hostname;
@@ -41,6 +64,10 @@ class ClaudeAdapter extends BaseAdapter {
     }
   }
 
+  /**
+   * Запасной DOM-парсинг: всегда пустой (основной источник — сеть).
+   * @returns {ClaudeExtractedMessage[]}
+   */
   extractMessages() {
     // Запасной DOM-парсинг. Селекторы claude.ai нестабильны (React, нет data-testid).
     // Основной источник — сеть (core/claude-intercept.js).
@@ -48,6 +75,10 @@ class ClaudeAdapter extends BaseAdapter {
     return [];
   }
 
+  /**
+   * Модель: сначала последняя из сети (точнее), иначе this.defaultModel.
+   * @returns {string}
+   */
   detectModel() {
     try {
       // Модель из последнего сетевого ответа (наиболее точный источник)
@@ -63,6 +94,11 @@ class ClaudeAdapter extends BaseAdapter {
     return this.defaultModel;
   }
 
+  /**
+   * Нормализация текста хода (схлопывание пробелов и пустых строк).
+   * @param {string} text
+   * @returns {string}
+   */
   _cleanText(text) {
     if (!text) return '';
     return text

@@ -1,4 +1,22 @@
 // ===== O-45: КОД-БЛОКИ (окна кода python/js) в DOM-пути адаптера =====
+// Типизация (шаг 4 Фазы 1): формы — из types/adapter.d.ts. Литеральный `import type`
+// невозможен (файл — классический скрипт контента плюс склейка исходника в
+// new Function()/eval песочницами тестов), поэтому типы подключены JSDoc-ссылкой import().
+
+/**
+ * Сообщение в форме адаптера (types/adapter.d.ts).
+ *
+ * Имя с префиксом — по необходимости: файлы адаптеров не являются модулями, поэтому
+ * при allowJs все typedef-имена попадают в одну общую область (одноимённые → TS2300).
+ * @typedef {import('../types/adapter').ExtractedMessage} GoogleSearchExtractedMessage
+ */
+
+/**
+ * Узлы ответа, которые вернёт парсер: ровно то, что later-код умеет обходить
+ * (for по длине + gsaAnswerText от Element).
+ * @typedef {NodeList|Element[]} GsaAnswerNodes
+ */
+
 // Единственный источник правды — utils/google-search-folwr-parser.js (renderCodeBlock /
 // answerTextOf / answerDomNodes): сетевой путь, DOM-добор перехватчика и DOM-путь адаптера
 // обязаны давать ОДИН и тот же текст по коду, поэтому собственных правил адаптер не держит
@@ -7,6 +25,23 @@
 //   1) общий ISOLATED-мир — window.GoogleFolwrUtils (парсер загружен в этот мир);
 //   2) Node-путь (require) — тесты и Node-песочницы;
 //   3) ничего из этого нет → поведение ровно как до O-45: .n6owBd.awi2gc + голый textContent.
+
+/**
+ * Используемая поверхность общего хелпера рендера ответов AI-режима
+ * (в бою — window.GoogleFolwrUtils; см. строки проверок выше).
+ * @typedef {object} GsaFolwrUtils
+ * @property {function(Element): string} answerTextOf текст узла ответа общим рендером
+ * @property {function(Document|Element): GsaAnswerNodes} answerDomNodes узлы ответа
+ */
+
+/**
+ * Ленивый резолв общего хелпера рендера ответов AI-режима: общий мир, затем
+ * Node-путь (require), иначе null.
+ *
+ * TODO: уточнить тип в шаге 5 (форма window.GoogleFolwrUtils без @types: сейчас
+ * она any в types/globals.d.ts — здесь сузили до используемой поверхности).
+ * @returns {GsaFolwrUtils|null}
+ */
 function gsaFolwrUtils() {
   try {
     if (typeof window !== 'undefined' && window.GoogleFolwrUtils &&
@@ -28,20 +63,30 @@ function gsaFolwrUtils() {
 
 // Текст узла ответа общим рендером парсера (код-окна → ```lang … ```); без хелпера — прежний
 // textContent, то есть байты DOM-пути не меняются.
+/**
+ * Текст узла ответа общим рендером парсера (код-окна → ```lang … ```); без хелпера —
+ * прежний textContent клона без script/style/button/svg.
+ * @param {Element} el
+ * @returns {string}
+ */
 function gsaAnswerText(el) {
   var util = gsaFolwrUtils();
   if (util) {
     try { return String(util.answerTextOf(el) || ''); } catch (e) { }
   }
   try {
-    var clone = el.cloneNode(true);
+    var clone = /** @type {Element} */ (el.cloneNode(true));
     clone.querySelectorAll('script, style, button, svg').forEach(function(n) { n.remove(); });
     return String(clone.textContent || '');
   } catch (e2) { return ''; }
 }
 
-// Узлы ответа общим отбором парсера (чанки прозы + САМОСТОЯТЕЛЬНЫЕ код-окна между ними);
-// без хелпера — только чанки .n6owBd.awi2gc, как раньше.
+/**
+ * Узлы ответа общим отбором парсера (чанки прозы + самостоятельные код-окна между
+ * ними); без хелпера — только чанки .n6owBd.awi2gc, как раньше.
+ * @param {Document|Element} root
+ * @returns {GsaAnswerNodes}
+ */
 function gsaAnswerNodes(root) {
   var util = gsaFolwrUtils();
   if (util) {
@@ -66,7 +111,11 @@ class GoogleSearchAdapter extends BaseAdapter {
       var self = this;
       try {
         window.addEventListener('ai-cm-full-history', function (ev) {
-          var detail = ev && ev.detail;
+          // detail есть только у CustomEvent, а addEventListener типизирует аргумент
+          // как Event (TS2339) — сужаем форму через промежуточную переменную, сохраняя
+          // прежнюю null-защиту (событие без detail обязано остаться безопасным).
+          var evt = /** @type {CustomEvent} */ (ev);
+          var detail = evt && evt.detail;
           if (detail && detail.modelSlug) {
             self._lastNetworkModel = detail.modelSlug;
           }
@@ -77,6 +126,11 @@ class GoogleSearchAdapter extends BaseAdapter {
     }
   }
 
+  /**
+   * Находимся ли мы на странице диалога AI-режима: есть turn-контейнеры,
+   * блок ответа aimfl или поле ввода.
+   * @returns {boolean}
+   */
   isOnDialogPage() {
     var hasTurns = document.querySelector('[data-scope-id="turn"]') !== null;
     var hasAimfl = document.querySelector('[data-subtree="aimfl"]') !== null;
@@ -86,6 +140,11 @@ class GoogleSearchAdapter extends BaseAdapter {
     return result;
   }
 
+  /**
+   * Ходы диалога: вопрос из заголовка turn'а, ответ — блоки ответа, отнесённые к
+   * тому же turn'у. Пустые вопросы/ответы пропускаются; при ошибке — пустой массив.
+   * @returns {GoogleSearchExtractedMessage[]}
+   */
   extractMessages() {
     try {
       var turns = document.querySelectorAll('[data-scope-id="turn"]');
@@ -95,6 +154,7 @@ class GoogleSearchAdapter extends BaseAdapter {
       }
 
       // Собираем вопросы из h2.iMqumd внутри turn'ов
+      /** @type {(string|null)[]} */
       var questions = [];
       for (var i = 0; i < turns.length; i++) {
         var h2 = turns[i].querySelector('h2.iMqumd');
@@ -112,6 +172,7 @@ class GoogleSearchAdapter extends BaseAdapter {
       }
 
       // Распределяем блоки .n6owBd.awi2gc по turn'ам
+      /** @type {string[][]} */
       var answerBlocks = [];
       for (var ti = 0; ti < turns.length; ti++) {
         answerBlocks[ti] = [];
@@ -133,7 +194,8 @@ class GoogleSearchAdapter extends BaseAdapter {
           }
         }
         if (assignedIdx >= 0 && assignedIdx < turns.length) {
-          var blockText = gsaAnswerText(block).trim();
+          // gsaAnswerNodes отдаёт NodeList|Element[] — узлы ответа всегда элементы.
+          var blockText = gsaAnswerText(/** @type {Element} */ (/** @type {unknown} */ (block))).trim();
           if (blockText) {
             answerBlocks[assignedIdx].push(blockText);
           }
@@ -181,6 +243,7 @@ class GoogleSearchAdapter extends BaseAdapter {
       } catch (eCodeBlock) { }
 
       // Собираем ответы
+      /** @type {(string|null)[]} */
       var answers = [];
       for (var ti3 = 0; ti3 < turns.length; ti3++) {
         var joined = answerBlocks[ti3].length > 0 ? answerBlocks[ti3].join('\n\n') : null;
@@ -196,6 +259,7 @@ class GoogleSearchAdapter extends BaseAdapter {
       }
 
       // Формируем сообщения: user → assistant, по порядку
+      /** @type {GoogleSearchExtractedMessage[]} */
       var messages = [];
       for (var k = 0; k < Math.min(questions.length, answers.length); k++) {
         if (questions[k]) {
@@ -218,10 +282,19 @@ class GoogleSearchAdapter extends BaseAdapter {
     }
   }
 
+  /**
+   * Полный текст диалога: содержимое ходов, склеенное переводом строки.
+   * @returns {string}
+   */
   getFullDialogText() {
     return this.extractMessages().map(function(msg) { return msg.content; }).join('\n');
   }
 
+  /**
+   * Модель: ТОЛЬКО из сети (активный/пассивный ответ, detail.modelSlug), иначе ''.
+   * DOM-догадка сознательно не возвращается — см. комментарий в теле метода.
+   * @returns {string}
+   */
   detectModel() {
     // Модель берём ТОЛЬКО из сети (активный/пассивный ответ, detail.modelSlug).
     // Дефект: раньше фолбэк отдавал DOM-догадку gemini-2.5-flash, хотя в сети

@@ -4,7 +4,37 @@
  * 
  * Паттерн: Strategy (Стратегия)
  * Каждый адаптер — это стратегия извлечения диалогов из DOM конкретного сайта.
+ *
+ * Типизация (шаг 4 Фазы 1): формы берутся из types/adapter.d.ts. Литеральный
+ * `import type` здесь невозможен — файл грузится как классический скрипт контента
+ * (manifest.json) и склеивается исходником в new Function() песочницами тестов,
+ * поэтому типы подключаются JSDoc-ссылкой import() (комментарии, рантайм не меняется).
  */
+
+/**
+ * Сообщение в форме адаптера — контракт Adapter.extractMessages()
+ * (types/adapter.d.ts). НЕ путать с Message из types/message.d.ts: там поле text.
+ *
+ * Имя с префиксом — НЕ по вкусу, а по необходимости: файлы адаптеров не являются
+ * модулями (обычные скрипты, склеиваемые исходником), поэтому при allowJs все
+ * typedef-имена попадают в одну общую область и одноимённые дают TS2300. Поэтому
+ * каждый адаптер заводит свой алиас на ОДНО и то же имя типа из types/adapter.d.ts.
+ * @typedef {import('../types/adapter').ExtractedMessage} BaseExtractedMessage
+ */
+
+/**
+ * Контракт адаптера, который реализует BaseAdapter (types/adapter.d.ts).
+ * @typedef {import('../types/adapter').Adapter} BaseAdapterContract
+ */
+
+/**
+ * Родитель для поиска: Document (весь документ) либо Element (поддерево).
+ * Изначально аннотировали как Element — tsc ругался, что у Document нет
+ * attributes/classList/className и ещё 116 свойств (TS2740).
+ * @typedef {Document|Element} ParentNode
+ */
+
+/** BaseAdapter — реализация контракта BaseAdapterContract (types/adapter.d.ts). */
 class BaseAdapter {
   constructor() {
     // Название сайта (будет переопределено в наследниках)
@@ -28,7 +58,7 @@ class BaseAdapter {
 
   /**
    * Извлекает все сообщения из диалога.
-   * @returns {Array<{role: string, content: string}>}
+   * @returns {BaseExtractedMessage[]}
    */
   extractMessages() {
     throw new Error('Метод extractMessages() должен быть переопределён');
@@ -71,7 +101,7 @@ class BaseAdapter {
   /**
    * Безопасный querySelector с проверкой.
    * @param {string} selector
-   * @param {Element} parent
+   * @param {ParentNode} [parent] - Document по умолчанию
    * @returns {Element|null}
    */
   _safeQuerySelector(selector, parent = document) {
@@ -85,9 +115,12 @@ class BaseAdapter {
 
   /**
    * Безопасный querySelectorAll с проверкой.
+   * Ветка ошибки возвращает пустой массив, а не NodeList: у NodeList есть .item(),
+   * у массива нет (TS2741). Потребители берут только .length и срез в массив
+   * (Array.prototype.slice.call в qwen-adapter.js:143), поэтому обе формы годятся.
    * @param {string} selector
-   * @param {Element} parent
-   * @returns {NodeList}
+   * @param {ParentNode} [parent] - Document по умолчанию
+   * @returns {NodeList|Element[]}
    */
   _safeQuerySelectorAll(selector, parent = document) {
     try {

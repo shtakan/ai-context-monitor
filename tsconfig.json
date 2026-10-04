@@ -20,7 +20,8 @@
   "include": [
     "types/**/*.d.ts",
     "types/**/*.ts",
-    "utils/**/*.js"
+    "utils/**/*.js",
+    "adapters/**/*.js"
   ],
   "exclude": [
     "node_modules",
