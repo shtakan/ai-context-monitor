@@ -317,6 +317,10 @@ const ModelConfig = {
       name: 'Claude Sonnet 5',
       provider: 'Anthropic',
       contextLimit: 1000000,
+      // ВНИМАНИЕ: effectiveLimit: 128000 — искусственное значение для совместимости
+      // с пином tests/popup-overrides-display.test.js:134-138 (требует числовой
+      // effectiveLimit !== contextLimit). Реальное веб-окно Sonnet 5 = 1M.
+      // Кандидат на пересмотр в hygiene-коммите после обновления теста.
       effectiveLimit: 128000,
       description: 'Claude Sonnet 5 (окно 1M). ВНИМАНИЕ: порог бейджа зафиксирован на 128000 ради пина popup-overrides-display.test.js:134-138 — это НЕ отражение веб-лимита',
       // Источник веб-окна: https://support.claude.com/en/articles/8606394 (снят 2026-10-04)

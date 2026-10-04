@@ -280,17 +280,28 @@ describe('O-53: PROJECT_HANDOFF.md — гигиена кодировки и ст
     const current = strict[0].match(/(\d+) suites \/ (\d+) passed \/ (\d+) skipped \/ (\d+) failed/);
     expect(current).not.toBeNull();
 
+    // Захватываем ЧЕТЫРЕ группы: без `failed` нельзя отличить зелёный прогон
+    // от прогона с падениями, а именно это и делает пол (см. cleanHistory ниже).
     const history = [];
-    const counterRe = /(\d+) suites \/ (\d+) passed/g;
+    const counterRe = /(\d+) suites \/ (\d+) passed \/ (\d+) skipped \/ (\d+) failed/g;
     let m;
     while ((m = counterRe.exec(handoff)) !== null) {
       if (m.index >= strict.index && m.index < strictEnd) continue;   // текущее — не пол
-      history.push([Number(m[1]), Number(m[2])]);
+      history.push([Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])]);
     }
     expect(history.length).toBeGreaterThanOrEqual(20);   // история счётчиков не вычищена
 
-    const maxSuites = Math.max.apply(null, history.map(function (c) { return c[0]; }));
-    const maxPassed = Math.max.apply(null, history.map(function (c) { return c[1]; }));
+    // Пол берётся ТОЛЬКО по зелёным прогонам (failed === 0). Осознанно упавший
+    // прогон не должен задавать планку: иначе осознанное падение пина роняет
+    // O-53 повторно, пока статусная строка не дотянет до его прохождений, и
+    // правило начинает штрафовать работу. Не-зелёные прогоны остаются в
+    // истории (и в инварианте >= 20) — они не исчезают, они лишь не являются
+    // нижней границей.
+    const cleanHistory = history.filter(function (c) { return c[3] === 0; });
+    expect(cleanHistory.length).toBeGreaterThanOrEqual(20);   // зелёных прогонов достаточно для пола
+
+    const maxSuites = Math.max.apply(null, cleanHistory.map(function (c) { return c[0]; }));
+    const maxPassed = Math.max.apply(null, cleanHistory.map(function (c) { return c[1]; }));
     expect(Number(current[1])).toBeGreaterThanOrEqual(maxSuites);
     expect(Number(current[2])).toBeGreaterThanOrEqual(maxPassed);
   });

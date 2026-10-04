@@ -149,18 +149,20 @@ describe('O-35: core/content.js — ветка Qwen и запрет на countTo
 });
 
 describe('O-35: utils/model-config.js — модель Qwen', function () {
-  test('qwen3.8-max: 128K (HYPOTHESIS) и провайдер Qwen', function () {
+  test('qwen3.8-max: 1M (live-verified 2026-10-04) и провайдер Qwen', function () {
     const rec = ModelConfig.models['qwen3.8-max'];
     expect(rec).toBeTruthy();
-    expect(rec.contextLimit).toBe(128000);
+    expect(rec.contextLimit).toBe(1000000);
     expect(rec.provider).toBe('Qwen');
-    // гипотеза помечена в исходнике — при живой проверке лимит уточняется/откатывается
-    expect(modelConfigRaw).toContain('HYPOTHESIS');
+    // Гипотеза 128K опровергнута живой проверкой /api/models 2026-10-04 → 1M.
+    // Пин на конфиг-ключ, а не на слово 'HYPOTHESIS': наличие маркера в исходнике
+    // проверяло словарь, а не контракт, и проходило случайно.
+    expect(modelConfigRaw).toContain('qwen3.8-max');
   });
 
   test('дефолт сайта qwen ведёт на ту же модель', function () {
     expect(ModelConfig.getDefaultModel('qwen')).toBe('qwen3.8-max');
-    expect(ModelConfig.getContextLimit('qwen3.8-max')).toBe(128000);
+    expect(ModelConfig.getContextLimit('qwen3.8-max')).toBe(1000000);
   });
 
   test('прежние дефолты сайтов не тронуты', function () {
