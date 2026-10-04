@@ -19,8 +19,26 @@ jobs:
         id: version
         run: echo "VERSION=$(node -p "require('./manifest.json').version")" >> "$GITHUB_OUTPUT"
 
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
+
+      # Phase 2 step 2: пакет собирается из бандлов (esbuild, 3 entry point).
+      # Сборка обязана пройти ДО упаковки: build.mjs сам верифицирует результат
+      # (verify + verifyDist) и падает, если dist/ неполон или остался legacy-вход.
+      # build:prod (--minify, без sourcemap) — релизный артефакт: пакет без карт
+      # исходников и вдвое меньше dev-сборки.
+      - name: Build bundles
+        run: npm run build:prod
+
       - name: Create ZIP
         run: |
+          ZIP="ai-context-monitor-v${{ steps.version.outputs.VERSION }}.zip"
           # v51 (PK1): собираем ТОЛЬКО из трекаемых файлов (git ls-files); исключения —
           # фильтром на стороне git/grep, файлы передаются zip аргументами, -x не используется.
           # v1.19 (M-6): docs/ больше НЕ исключается — руководство (docs/index.html) и
@@ -31,7 +49,20 @@ jobs:
           # RELEASE_*) тоже не должна уезжать пользователю. Офлайн-руководство — docs/index.html.
           # v1.19.3 (CI-хотфикс): \.gitattributes исключён наравне с \.gitignore —
           # правило нормализации EOL нужно репозиторию, а не пользовательскому пакету.
-          git ls-files -z | grep -zvE '(\.github/|\.gitignore|\.gitattributes|\.clineignore|tools/|tests/|\.kilo/|coverage/|\.md$|package(-lock)?\.json$)' | xargs -0 zip -q "ai-context-monitor-v${{ steps.version.outputs.VERSION }}.zip"
+          # v2.0.14 (Phase 2 step 2): из пакета убраны build-артефакты репозитория —
+          # сборщик (\.mjs$) и конфиг tsc (tsconfig\.json$) нужны репозиторию, а не
+          # пользователю, и в рантайме расширения не участвуют.
+          git ls-files -z | grep -zvE '(\.github/|\.gitignore|\.gitattributes|\.clineignore|tools/|tests/|\.kilo/|coverage/|\.mjs$|tsconfig\.json$|\.md$|package(-lock)?\.json$)' | xargs -0 zip -q "$ZIP"
+          # v2.0.14 (Phase 2 step 2): поверх legacy-дерева кладём собранные бандлы.
+          # Пути передаются так же — относительно корня репозитория, поэтому
+          # одноимённые записи (manifest.json, options/options.html) ЗАМЕНЯЮТ
+          # legacy-копии, а бандлы (background.js, content.js, options.js) и
+          # _locales/ появляются в корне пакета. Именно rewired-копии manifest.json
+          # и options/options.html определяют, что запускает Chrome: 3 бандла
+          # + 16 MAIN-world файлов, которые service worker регистрирует сам.
+          # Файлы перечисляются find-ом (а не 'zip -r dist'), чтобы записи в архиве
+          # гарантированно не получили префикс 'dist/' и совпали с legacy-именами.
+          ( cd dist && find . -type f ) | sed 's|^\./||' | xargs zip -q "$ZIP"
 
       - name: Verify ZIP contents
         run: |
