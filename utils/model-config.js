@@ -258,8 +258,6 @@ const ModelConfig = {
     // иначе (500K — меньше 500K+? нет: 500K = 500 000, но порог бейджа 128000) —
     // у 500K-моделей веб-окно заявлено, значит capExempt:true; у 200K — потолок EFFECTIVE_CAP_DEFAULT.
     // РЕШЕНИЕ: capExempt:true у всех моделей с веб-окном > 128000 — веб-версия не режет.
-    // Исключение — claude-sonnet-5: ради пина popup-overrides-display.test.js:134-138
-    // (явный effectiveLimit, отличный от contextLimit) порог оставлен 128000; см. запись ниже.
     'claude-sonnet-5-5': {
       name: 'Claude Sonnet 5.5',
       provider: 'Anthropic',
@@ -317,12 +315,9 @@ const ModelConfig = {
       name: 'Claude Sonnet 5',
       provider: 'Anthropic',
       contextLimit: 1000000,
-      // ВНИМАНИЕ: effectiveLimit: 128000 — искусственное значение для совместимости
-      // с пином tests/popup-overrides-display.test.js:134-138 (требует числовой
-      // effectiveLimit !== contextLimit). Реальное веб-окно Sonnet 5 = 1M.
-      // Кандидат на пересмотр в hygiene-коммите после обновления теста.
-      effectiveLimit: 128000,
-      description: 'Claude Sonnet 5 (окно 1M). ВНИМАНИЕ: порог бейджа зафиксирован на 128000 ради пина popup-overrides-display.test.js:134-138 — это НЕ отражение веб-лимита',
+      capExempt: true,
+      description: 'Claude Sonnet 5 (окно 1M в API и в веб-чате)',
+      // Источник: https://platform.claude.com/docs/en/models/overview (снят 2026-10-04)
       // Источник веб-окна: https://support.claude.com/en/articles/8606394 (снят 2026-10-04)
     },
     'claude-sonnet-4-6': {
@@ -496,15 +491,17 @@ const ModelConfig = {
   },
   /**
    * Действующий порог деградации бейджа для модели.
-   * Приоритет: явный `effectiveLimit` → `capExempt` (реальное окно без общего потолка) →
+   * Приоритет: `capExempt` (реальное окно без общего потолка) →
    * `min(contextLimit, EFFECTIVE_CAP_DEFAULT)`.
+   * Ветка явного `model.effectiveLimit` удалена в v20: поле было публичным, но не
+   * носило ни одного ключа модели, ни одного теста, ни одного конфига и не могло
+   * прийти извне (см. аппендикс v20 — инвентаризация).
    * @param {string} modelId
    * @returns {number}
    */
   getEffectiveLimit(modelId) {
     const model = this.getModel(modelId);
     if (!model) return this.EFFECTIVE_CAP_DEFAULT;
-    if (typeof model.effectiveLimit === 'number') return model.effectiveLimit;
     // v13: opt-out из общего потолка — только для ключей с реальным окном > EFFECTIVE_CAP_DEFAULT
     if (model.capExempt === true) return model.contextLimit;
     return Math.min(model.contextLimit, this.EFFECTIVE_CAP_DEFAULT);

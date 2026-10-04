@@ -194,7 +194,7 @@ O-24 ЗАКРЫТ (2026-09-22, живая приёмка): сигнатурны�
 
 - **Версия: 2.0.13** (`manifest.json` / `package.json`; бамп этого коммита — фикс кольца индикатора (цвет по настроенным порогам), §5 DHS_RULES.md; предыдущий релиз — v2.0.12 (2026-09-27), бамп `af56dfb`; перед ним — v2.0.11 (2026-09-21), бамп `db5e6e4`)
 - **HEAD:** предыдущий HEAD — `ae7392e` (docs: синк Minor-подбатча B UI-аудита, код `24c51ed`); HEAD этого коммита — `0ab04e9` (плейсхолдер: самореферентный SHA разрешается двухшаговым паттерном); истина = `git log -1`; **состояние относительно origin** проверять командой `git rev-list --count origin/main..HEAD` (на момент последнего доксинка было 22 → после docs-доксинка и push: ahead = 0; HEAD = `e19864d`; push origin main выполнен 2026-09-29, origin/main = `e19864d`); последний содержательный HEAD — `24c51ed` (Minor-подбатч B UI-аудита — options #19/#20/#21, коммит владельца 2026-09-29), перед ним `8939339` (Minor-подбатч A UI-аудита — widget #17/#18/#22/#23, коммит владельца 2026-09-29), перед ним `ee2b572` (O-53 — пины гигиены docs), `a0574e6` (docs: аномалия `--acm-safe-bottom` закрыта как by design), `d3d41ce` (docs), `6e51838` (подбатч 3 — tooltip #4/#8), `269806d` (Major-подбатч 2 UI-аудита — panel #9/#11, коммит владельца 2026-09-29), перед ним содержательный `9a33ea9` (Major-подбатч 1 — options), ещё раньше `deab423` (Critical-батч UI-аудита), далее docs-синки (`67d4e90`, `34549d5`, `a9d6bac`), после подбатчей — `d70eb67`, `58d384b`, `dfc01b7`, `b848693`; последний содержательный HEAD — `6e51838` (подбатч 3 UI-аудита — tooltip #4/#8 + доксинк живой приёмки с регрессом #9, коммит владельца 2026-09-29), перед ним `b848693` (docs: sync SHA dfc01b7); предыдущий HEAD-коммит (docs: sync SHA FLAKE-D7 + финальный docs-синк релиза v2.0.12; предыдущий HEAD: `17a47c7` — docs: sync SHA релиза v2.0.12 + amend с фактическим SHA; версия 2.0.12 в manifest/package/docs-футере, CHANGELOG [2.0.12]); предыдущий содержательный HEAD: `2301079` (fix(Qwen-селекторы): замены по живому DOM-снимку 26.09.26 — точные классы реплик `.qwen-chat-message.qwen-chat-message-user/assistant`, контейнер-чистка turn-selection, guard карточек инструментов, класс-токен роли, многострочный текст `_readableText`; ✅ **Живая приёмка пройдена 2026-09-26 14:20–14:26**); предыдущий содержательный HEAD: `1dc6a1e` (feat(GSA-петля): per-thread guard прогонов + re-entrancy `virtualScrollBackfill` — петля чужого треда GSA, диаг-вердикт High, закрыта; ✅ **Живая приёмка пройдена 2026-09-26 11:27–11:34**); предыдущий содержательный HEAD: `b14d829` (feat(O-51b): id-свидетельство vf5-ингеста — трейс `[gemini-ingest-trace] ids=[…]` и критерий пересборки базы питаются ОДНИМИ массивами, fail-closed `reason=vf5-no-id-evidence-no-reset` при пустом свидетельстве, `shouldDisjointReset` не считает пустые id нулевым пересечением, фолбэк без модуля логики снова учитывает курсор продолжения; закрытие переоткрытия O-51, найденного живой приёмкой 16:31:33.906 — см. строку O-51b ниже; предыдущие содержательные HEAD: `efc9c1b` (feat(O-52): Gemini parseByBytes — умное добивание границ JSON-кадра, `extractJsonPayload`: срез ровно до конца сбалансированного значения, добор недобора в пределах safety_margin 256 СИМВОЛОВ от declaredN, обрыв тела — исходный срез (семантика O-48 цела)) и `82d3495` (feat(O-51): монотонный union — снапшот-подмножество vf5 больше НЕ сбрасывает базу (`isSubsetIds` + stable merge, `reason=vf5-subset-no-reset`)); состояние относительно origin — командой `git rev-list --count origin/main..HEAD` (на момент последнего доксинка было 22 → после доксинка и push: ahead = 0; push origin main выполнен 2026-09-29, origin/main = `e19864d`); последний содержательный HEAD — `9a33ea9` (Major-подбатч 1 UI-аудита — options, коммит владельца 2026-09-29), перед ним содержательный `deab423` (Critical-батч UI-аудита)
-- **Тесты: 145 suites / 2777 passed / 6 skipped / 0 failed (гигиенический коммит после актуализации лимитов: +2 passed, 0 failed — 2 пина Qwen переведены на живой лимит 1M и убран пин на слово 'HYPOTHESIS'; правило O-53 сужено до зелёных прогонов, пол не изменился). Ранее, после фикса кольца индикатора v2.0.13: +1 сьют, +15 тестов — новый `tests/ring-color-thresholds-v2013.test.js`; обновлены версионные пины (2.0.12 → 2.0.13: манифест/пакет/лок/футер docs + пины version-hygiene/a11y-options/i18n-locales/manifest-smoke/qwen-provider-wiring/deepseek-o7/oracle-archive) и пины границ зон `zoneColor`/`aiCmSetWidgetA11yLabel` (70/95 вместо 50/80); историческая цепочка 136/2619 → 137/2628 → 138/2642 → 139/2661 → 141/2696 → 142/2728 → 143/2754 → 144/2769). Ранее, после Minor-подбатча B UI-аудита — options #19/#20/#21: +1 сьют, +26 тестов; новый `tests/options-minor-polish.test.js` — 26 тестов: D#19/#20/#21 + R-инварианты; читает реальные `options/options.html`, `options/options.css`, `options/options.js` из диска, режет CSS-правила по точному селектору через `bodyOf`; диф рабочего дерева перед коммитом: 6 файлов, +516/−18, `options/options.js` не изменён; историческая цепочка 136/2619 → 137/2628 → 138/2642 → 139/2661 → 141/2696 → 142/2728 → 143/2754). Ранее, после Minor-подбатча A UI-аудита — #17/#18/#22/#23: +1 сьют, +28 тестов; новый `tests/widget-minor-polish.test.js` — 28 тестов: D#23/#17/#18/#22/#15 + R-инварианты (12 `addEventListener(`, 3 `setTimeout/setInterval(`, 1 запись `--acm-safe-bottom`, 0 `--w-panel`, 0 `pointer-events`, 8 токенов `--w-` в `applyNativeStyles`); существующий `tests/tooltip-persist-reflow.test.js` переведён на новую форму сборки тултипа (#22, `span`-обёртка строк, `textContent` вместо `createTextNode`) — требование безопасной сборки сохранено; читает реальный `core/widget.js` через `helpers/content-source.js`, режет правила по селектору. Ранее, после регресс-фиксов #9 и #26: +2 сьюта, +35 тестов; новые `tests/panel-lowviewport-regress.test.js` (кламп `max-height` панели с `--acm-safe-bottom`) и `tests/tooltip-shrink-regress.test.js` (13 тестов: `width: max-content` + `box-sizing: border-box` + `overflow-wrap: break-word`); историческая цепочка 136/2619 → 137/2628 → 138/2642 → 139/2661 → 141/2696 → 142/2728. Ранее, после Major-подбатча 3 UI-аудита — tooltip #4/#8: +1 сьют, +19 тестов; новый `tests/tooltip-persist-reflow.test.js` — пины на задержку скрытия `visibility 0s linear 0.3s`, ограничение `max-width: min(320px, calc(100vw - 48px))` / `max-height: 40vh` / `overflow-y: auto`, перенос `white-space: normal` + `overflow-wrap: anywhere` и на `transition: none` в правиле гашения при открытой панели — регресс #25 «tooltip и panel не видны одновременно»; читает реальный `core/widget.js` через `helpers/content-source.js`). Историческая сводка после Major-подбатча 2 (panel #9/#11): 138 suites / 2642 passed / 6 skipped / 0 failed (+1 сьют, +14 тестов; новый `tests/panel-overflow-contrast.test.js` — 6 D + 8 R, читает реальный `core/widget.js` через `helpers/content-source.js`, режет правила по селектору и проверяет H25-инвариант на извлечённом теле `applyNativeStyles`). Историческая сводка после Major-подбатча 1 (options #10/#12/#13): 137 suites / 2628 passed / 6 skipped / 0 failed (+1 сьют, +9 тестов; новый `tests/options-advanced-section.test.js`; словарь ru/en 263 → 265). Историческая сводка после Critical-батча UI-аудита `deab423`: 136 suites / 2619 passed / 6 skipped / 0 failed (+4 сьюта, +258 тестов; новый `tests/widget-collision-a11y-uiaudit.test.js` — 20 D + 8 R). Историческая сводка до батча: 132 suites / 2361 passed / 6 skipped / 0 failed (FLAKE-D7 ЗАКРЫТ коммитом f3bfde9 2026-09-27 — фикс ms-флейка D7 через jest.useFakeTimers в tests/qwen-o39-reasoning-passthrough.test.js, пины на детерминизм 100 прогонов, low priority)** (+7 сьютов за 2026-09-25: O-48 `tests/adapters/o48-gemini-parse-fail-salvage.test.js` (16 пинов), O-49 `tests/adapters/o49-gemini-deepresearch-lowconfidence.test.js` (15 пинов), O-50 `tests/adapters/o50-gemini-char-frame-slice.test.js` (10 пинов), O-51 `tests/adapters/o51-gemini-vf5-subset-merge.test.js` (11 пинов), O-52 `tests/adapters/o52-gemini-json-boundary.test.js` (12 пинов), O-51b `tests/adapters/o51b-gemini-vf5-id-evidence.test.js` (12 пинов) и петля GSA `tests/adapters/gsa-loop-guard.test.js` (16 пинов: D1–D4/R1/R2/S1–S3; песочница — `tests/adapters/helpers/gsa-loop-sandbox.js`, реальные функции перехватчика на реальном парсере); пересмотр D-O41 — те же 20 пинов `tests/d-o41-reasoning-auto-on.test.js` переведены на ось `site` + Q1–Q4; единственный fail — известный ms-флейк теста D7-«Дата экспорта» (закрыт задачей FLAKE-D7 коммитом f3bfde9) в `tests/qwen-o39-reasoning-passthrough.test.js`: падает и на коде ДО задач O-51/O-52 (проверено `git stash`), зависит от попадания в границу миллисекунды)
+- **Тесты: 145 suites / 2777 passed / 6 skipped / 0 failed (гигиенический коммит v19: снят искусственный `effectiveLimit: 128000` у `claude-sonnet-5` — `capExempt: true` + `contextLimit: 1000000`, порог бейджа стал живым 1M; пин `tests/popup-overrides-display.test.js` переписан на `getEffectiveLimit('claude-sonnet-5') === 1000000`, 1 тест заменён 1 тестом, пол не изменился; `tsc --noEmit` exit 0). Ранее, после фикса кольца индикатора v2.0.13: +1 сьют, +15 тестов — новый `tests/ring-color-thresholds-v2013.test.js`; обновлены версионные пины (2.0.12 → 2.0.13: манифест/пакет/лок/футер docs + пины version-hygiene/a11y-options/i18n-locales/manifest-smoke/qwen-provider-wiring/deepseek-o7/oracle-archive) и пины границ зон `zoneColor`/`aiCmSetWidgetA11yLabel` (70/95 вместо 50/80); историческая цепочка 136/2619 → 137/2628 → 138/2642 → 139/2661 → 141/2696 → 142/2728 → 143/2754 → 144/2769). Ранее, после Minor-подбатча B UI-аудита — options #19/#20/#21: +1 сьют, +26 тестов; новый `tests/options-minor-polish.test.js` — 26 тестов: D#19/#20/#21 + R-инварианты; читает реальные `options/options.html`, `options/options.css`, `options/options.js` из диска, режет CSS-правила по точному селектору через `bodyOf`; диф рабочего дерева перед коммитом: 6 файлов, +516/−18, `options/options.js` не изменён; историческая цепочка 136/2619 → 137/2628 → 138/2642 → 139/2661 → 141/2696 → 142/2728 → 143/2754). Ранее, после Minor-подбатча A UI-аудита — #17/#18/#22/#23: +1 сьют, +28 тестов; новый `tests/widget-minor-polish.test.js` — 28 тестов: D#23/#17/#18/#22/#15 + R-инварианты (12 `addEventListener(`, 3 `setTimeout/setInterval(`, 1 запись `--acm-safe-bottom`, 0 `--w-panel`, 0 `pointer-events`, 8 токенов `--w-` в `applyNativeStyles`); существующий `tests/tooltip-persist-reflow.test.js` переведён на новую форму сборки тултипа (#22, `span`-обёртка строк, `textContent` вместо `createTextNode`) — требование безопасной сборки сохранено; читает реальный `core/widget.js` через `helpers/content-source.js`, режет правила по селектору. Ранее, после регресс-фиксов #9 и #26: +2 сьюта, +35 тестов; новые `tests/panel-lowviewport-regress.test.js` (кламп `max-height` панели с `--acm-safe-bottom`) и `tests/tooltip-shrink-regress.test.js` (13 тестов: `width: max-content` + `box-sizing: border-box` + `overflow-wrap: break-word`); историческая цепочка 136/2619 → 137/2628 → 138/2642 → 139/2661 → 141/2696 → 142/2728. Ранее, после Major-подбатча 3 UI-аудита — tooltip #4/#8: +1 сьют, +19 тестов; новый `tests/tooltip-persist-reflow.test.js` — пины на задержку скрытия `visibility 0s linear 0.3s`, ограничение `max-width: min(320px, calc(100vw - 48px))` / `max-height: 40vh` / `overflow-y: auto`, перенос `white-space: normal` + `overflow-wrap: anywhere` и на `transition: none` в правиле гашения при открытой панели — регресс #25 «tooltip и panel не видны одновременно»; читает реальный `core/widget.js` через `helpers/content-source.js`). Историческая сводка после Major-подбатча 2 (panel #9/#11): 138 suites / 2642 passed / 6 skipped / 0 failed (+1 сьют, +14 тестов; новый `tests/panel-overflow-contrast.test.js` — 6 D + 8 R, читает реальный `core/widget.js` через `helpers/content-source.js`, режет правила по селектору и проверяет H25-инвариант на извлечённом теле `applyNativeStyles`). Историческая сводка после Major-подбатча 1 (options #10/#12/#13): 137 suites / 2628 passed / 6 skipped / 0 failed (+1 сьют, +9 тестов; новый `tests/options-advanced-section.test.js`; словарь ru/en 263 → 265). Историческая сводка после Critical-батча UI-аудита `deab423`: 136 suites / 2619 passed / 6 skipped / 0 failed (+4 сьюта, +258 тестов; новый `tests/widget-collision-a11y-uiaudit.test.js` — 20 D + 8 R). Историческая сводка до батча: 132 suites / 2361 passed / 6 skipped / 0 failed (FLAKE-D7 ЗАКРЫТ коммитом f3bfde9 2026-09-27 — фикс ms-флейка D7 через jest.useFakeTimers в tests/qwen-o39-reasoning-passthrough.test.js, пины на детерминизм 100 прогонов, low priority)** (+7 сьютов за 2026-09-25: O-48 `tests/adapters/o48-gemini-parse-fail-salvage.test.js` (16 пинов), O-49 `tests/adapters/o49-gemini-deepresearch-lowconfidence.test.js` (15 пинов), O-50 `tests/adapters/o50-gemini-char-frame-slice.test.js` (10 пинов), O-51 `tests/adapters/o51-gemini-vf5-subset-merge.test.js` (11 пинов), O-52 `tests/adapters/o52-gemini-json-boundary.test.js` (12 пинов), O-51b `tests/adapters/o51b-gemini-vf5-id-evidence.test.js` (12 пинов) и петля GSA `tests/adapters/gsa-loop-guard.test.js` (16 пинов: D1–D4/R1/R2/S1–S3; песочница — `tests/adapters/helpers/gsa-loop-sandbox.js`, реальные функции перехватчика на реальном парсере); пересмотр D-O41 — те же 20 пинов `tests/d-o41-reasoning-auto-on.test.js` переведены на ось `site` + Q1–Q4; единственный fail — известный ms-флейк теста D7-«Дата экспорта» (закрыт задачей FLAKE-D7 коммитом f3bfde9) в `tests/qwen-o39-reasoning-passthrough.test.js`: падает и на коде ДО задач O-51/O-52 (проверено `git stash`), зависит от попадания в границу миллисекунды)
 - **Рабочая копия:** чиста
 - **Статус:** релиз v2.0.12 опубликован 2026-09-27 (GitHub Release #15, asset ai-context-monitor-v2.0.12.zip 611 KB, sha256=be2464ac8b6b59623f4798495dd48..., URL https://github.com/shtakan/ai-context-monitor/releases/tag/v2.0.12); push origin main + push тега выполнены (push origin main — 2026-09-28, origin/main = HEAD, ahead = 0); последний опубликованный релиз — v2.0.11 (2026-09-21, тег `v2.0.11` на `0aaa388`, GitHub Release #14, asset 2.7 MB); живая приёмка 2026-09-24 (O-46+O-32 регресс) пройдена; живая приёмка инструментирования 2026-09-24 10:50–10:53 закрыла O-21 как expected behaviour; **текущее состояние 2026-09-29: локально ahead 5 (HEAD `24c51ed`, origin/main `e19864d`); unpushed — `d3d41ce`, `a0574e6`, `ee2b572`, `8939339`, `24c51ed` (push одной операцией после закрытия docs-хвоста); push origin main от 2026-09-29 поднял origin/main до `e19864d` (docs-доксинк батча UI-аудита)**
 - **O-32/O-43/O-45/O-46 ЗАКРЫТЫ** живой приёмкой 2026-09-23/24; O-21 ЗАКРЫТ как expected behaviour 2026-09-24 (DOM-усечение DeepSeek подтверждено измерением и компенсировано архитектурой выбора network-источника); O-23 ЗАКРЫТ как expected behaviour 2026-09-22; O-24/O-34 ЗАКРЫТЫ живой приёмкой 2026-09-22
@@ -1187,4 +1187,139 @@ ai-context-monitor-clean/
 ### Следующий шаг (вне Фазы 1)
 
 Патч cordis.patch.yml — инфраструктурная задача: автоматизация живой приёмки через browser-инструменты в Chrome (не Edge).
+**Push:** git push origin main — по необходимости, после коммита этого аппендикса.
+
+---
+
+## Аппендикс v19: Снятие искусственного `effectiveLimit` у `claude-sonnet-5` — долг v16 закрыт
+
+**Дата:** 2026-10-04
+**Коммит:** плейсхолдер `HEAD` (самореферентный SHA разрешается двухшаговым паттерном, см. §HEAD)
+**Статус:** ✅ Закрыто
+
+### Исходная точка
+
+Аппендикс v16 (коммит `327ac06`) оставил два связанных артефакта: `effectiveLimit: 128000` у ключа `'claude-sonnet-5'` в `utils/model-config.js` и JSDoc, прямо называвший это значение искусственным ради пина `tests/popup-overrides-display.test.js:134-138`. Сам пин требовал `typeof model.effectiveLimit === 'number'` и `getEffectiveLimit(...) !== model.contextLimit` — то есть закреплял расхождение с реальным веб-окном 1M.
+
+### Что сделано
+
+| Файл | Изменение | Обоснование |
+| :--- | :--- | :--- |
+| `utils/model-config.js` (ключ `'claude-sonnet-5'`) | Удалён `effectiveLimit: 128000`; добавлен `capExempt: true` | Реальное веб-окно Sonnet 5 = 1M (`https://support.claude.com/en/articles/8606394`, снято 2026-10-04) → `getEffectiveLimit` возвращает `contextLimit` = 1000000 через ветку `capExempt` |
+| `utils/model-config.js` | `description` → `'Claude Sonnet 5 (окно 1M в API и в веб-чате)'`; предупреждение про «порог бейджа зафиксирован на 128000» удалено | Описание больше не лжёт о пороге |
+| `utils/model-config.js:261-262` | Удалён блок «Исключение — claude-sonnet-5: ради пина… порог оставлен 128000» | Исключение из правила `capExempt:true у всех моделей с веб-окном > 128000` больше не существует |
+| `tests/popup-overrides-display.test.js:134-139` | Пин переписан: `expect(model.effectiveLimit).toBeUndefined()`, `capExempt === true`, `contextLimit === 1000000`, `getEffectiveLimit('claude-sonnet-5') === 1000000` | Проверяет живое поведение вместо искусственного расхождения |
+
+### Честная граница правки
+
+Тест на приоритет явного `effectiveLimit` в `getEffectiveLimit` (`utils/model-config.js:502`) **остался без прямого покрытия**: после снятия последнего носителя этого поля (`grep 'effectiveLimit:'` по `utils/model-config.js` — 0 совпадений) в конфиге не осталось ключа с `effectiveLimit`, на который можно было бы опереться. Ветка сохранена как публичная часть приоритета (JSDoc `:494` описывает порядок `effectiveLimit → capExempt → min(contextLimit, EFFECTIVE_CAP_DEFAULT)`), но пин на неё в этой задаче не восстанавливался — это был бы выход за постановку. Покрытие `capExempt` и `min(contextLimit, EFFECTIVE_CAP_DEFAULT)` (`3.1 Pro` → 128000, неизвестная модель → `EFFECTIVE_CAP_DEFAULT`) в том же describe-блоке осталось.
+
+### Итог прогона
+
+**Тесты:** 145 suites / 2777 passed / 6 skipped / 0 failed (базис 3c59f6b — тот же 145/2777/6/0; 1 тест заменён 1 тестом, +0/−0)
+**tsc --noEmit:** ✅ exit 0, 0 ошибок
+**Инварианты O-53:** статусная строка `- **Тесты:` — ровно 1, значение 145 suites / 2777 passed / 6 skipped / 0 failed; пол не изменился (145/2777 — тот же исторический максимум); `tsconfig.json` не тронут, правок в `core/`, `adapters/`, `manifest.json` — 0.
+
+**Push:** git push origin main — по необходимости, после коммита этого аппендикса.
+
+---
+
+## Аппендикс v20: `effectiveLimit` — решение по ветке (fork б) и runbook живой приёмки (cordis + bsk + Chrome)
+
+**Дата:** 2026-10-04
+**Коммит:** плейсхолдер `HEAD` (самореферентный SHA разрешается двухшаговым паттерном, см. §HEAD)
+**Статус:** ✅ Закрыто (v20 закрывает долг v19 «ветка без покрытия» и инфраструктурный хвост приёмки из v18)
+
+### Часть 1. `effectiveLimit` в `getEffectiveLimit`: инвентаризация и решение (fork б — ветка удалена)
+
+#### 1.1 Инвентаризация (read-only, до правки: grep по репозиторию + чтение файлов)
+
+| Срез | Что искали | Результат |
+| :--- | :--- | :--- |
+| Поле-носитель в таблице моделей | `effectiveLimit:` в `utils/model-config.js` | Единственное совпадение — сама ветка `utils/model-config.js:502` (`if (typeof model.effectiveLimit === 'number') return model.effectiveLimit;`). Ни один ключ модели значения не несёт: после v19 у `claude-sonnet-5` поле снято (осталось `capExempt: true`, `contextLimit: 1000000`) |
+| Тесты | `effectiveLimit` в `tests/**` | 1 вхождение, и оно — пин ОТСУТСТВИЯ: `tests/popup-overrides-display.test.js:137` (`expect(model.effectiveLimit).toBeUndefined()`). Ни один тест не задаёт поле и не требует его приоритета |
+| JSDoc | описание приоритета | `utils/model-config.js:494-498` — единственное место, где поле названо частью публичного приоритета (текст обновлён этим аппендиксом) |
+| Внешние входы | `chrome.storage`, конфиги | Запись модели целиком не пишется ниоткуда: в `chrome.storage.sync` живут только `selectedModel` и `customLimit`. `cordis.patch.yml` (вне репозитория) конфигурирует плагины DSH, а не модельную таблицу расширения |
+| Другой `effectiveLimit` (омоним) | 40+ остальных вхождений | Это ДРУГОЙ контракт — ЧИСЛО, возвращаемое `getEffectiveLimit` (параметр `updateWidget`, поле `lastWidgetData.effectiveLimit`): `core/content.js:1490/2153/2709`, `core/widget.js`, `types/core-globals.d.ts:64/142`, строковые пины тестов. Не тронут |
+
+Вызывающие `getEffectiveLimit`: `core/content.js:1490`, `core/content.js:2153`, `core/content.js:2709` + тесты.
+
+#### 1.2 Решение: ветка удалена (fork б)
+
+Условие (б) постановки выполнено буквально: поле нигде не используется → ветка удалена, JSDoc-приоритет приведён к `capExempt → min(contextLimit, EFFECTIVE_CAP_DEFAULT)`.
+
+| Файл | Изменение |
+| :--- | :--- |
+| `utils/model-config.js:502` | Удалена строка `if (typeof model.effectiveLimit === 'number') return model.effectiveLimit;` (−1 строка) |
+| `utils/model-config.js:494-498` | JSDoc: приоритет переписан на `capExempt → min(contextLimit, EFFECTIVE_CAP_DEFAULT)` + зафиксировано, что ветка явного `effectiveLimit` удалена в v20, потому что поле было публичным, но не несло ни одного ключа, ни одного теста, ни одного конфига и не могло прийти извне |
+
+Новых тестов не добавлено (для ветки (б) постановка их не требует), существующих тестов не удалено, `tests/popup-overrides-display.test.js` в этой части не менялся.
+
+**Честная граница инвентаризации:** grep ловит статические вхождения; динамический доступ (`model['effective' + 'Limit']`) неотличим от отсутствия. Оценка полноты — средняя. Зазор закрыт вторым аргументом: таблица `ModelConfig` статична и целиком лежит в репозитории, а внешнего источника, который мог бы добавить полю носителя, нет (строка «Внешние входы») — динамический доступ не мог бы получить значение, которого в объекте нет.
+
+**Что v20 переопределяет в v19:** параграф аппендикса v19 «Честная граница правки» (где ветка названа сохранённой как публичная часть приоритета) устарел. Текст v19 не переписывался — правило «не трогать аппендиксы выше v20» соблюдено; переопределение фиксируется здесь. Пин на приоритет явного `effectiveLimit` снят вместе с веткой: он проверял поведение, которого больше нет.
+
+### Часть 2. cordis + bsk: почему падали browser-инструменты и runbook демона
+
+Проверено чтением установленных копий (не по памяти). Копии плагина: desktop-профиль `C:\Users\oleg\.dsh\profiles\desktop\node_modules\@wxg-prc-cpg\browser-skill-dsh-plugin\lib\index.mjs` (5520 строк) и web-профиль `C:\Users\oleg\.dsh\profiles\web\node_modules\@wxg-prc-cpg\browser-skill-dsh-plugin\lib\index.mjs`.
+
+#### 2.1 Root cause: `lazyTools: true → false`
+
+Ключ и точка ветвления (desktop-копия):
+
+- `lib/index.mjs:5455` — `lazyTools: Schema.boolean().default(true).description("Reveal the browser_* tools only after the browser-skill skill is invoked (default true); false registers the full suite at load.")`; та же схема в web-копии — `lib/index.mjs:4501`;
+- `lib/index.mjs:5466` — `lazyTools: config.lazyTools ?? true` (значение попадает в `resolved`);
+- `lib/index.mjs:5496-5497` — единственная точка ветвления: `const registerSuite = () => registerBrowserTools(deps);` и `const removeSuite = resolved.lazyTools ? armLazyTools(ctx, registerSuite) : registerSuite();`
+- гейт `armLazyTools` — `lib/index.mjs:4858`; раскрытие набора по успешному вызову скилла: `lib/index.mjs:4876-4880` (`if (exec.name !== "skill") return;` → `if (skillNameOf(exec.arguments) === "browser-skill") ensureSuite();`), плюс скан истории сессии `lib/index.mjs:4899-4901` (`if (revealPending || stateFor(session)?.successful) ensureSuite();`);
+- `registerBrowserTools` — `lib/index.mjs:4771-4777`: `BROWSER_TOOL_SPECS.map((spec) => deps.ctx.tools.register(defineBrowserTool(spec, definitions)))`.
+
+Механика: при `false` правая ветвь `lib/index.mjs:5497` вызывает `registerSuite()` в момент загрузки плагина — весь набор `browser_*` регистрируется сразу через `ctx.tools.register(...)`, минуя гейт `armLazyTools`, который привязан к успешному вызову скилла `browser-skill` (`lib/index.mjs:4879`). Дефолт `true` — штатный путь: сначала успешный `skill(name="browser-skill")`, затем регистрация набора. Симптом живой сессии (зафиксирован, повторно не воспроизводился): browser-инструменты переставали работать; возврат к дефолтному `true` восстанавливал штатный путь skill → tools.
+
+Где живёт переопределение — `C:\Users\oleg\.dsh\profiles\desktop\cordis.patch.yml:181-185`:
+
+```yaml
+- id: browserskill
+  name: "@wxg-prc-cpg/browser-skill-dsh-plugin"
+  disabled: false
+  config:
+    lazyTools: false
+```
+
+Состояние файла на момент этого аппендикса: `lazyTools: false` (LastWriteTime 2026-10-04 16:30:02). **Действие перед приёмкой:** вернуть `true` (или удалить ключ — дефолт и есть `true`). В web-профиле переопределения нет.
+
+#### 2.2 Runbook демона bsk (Windows, os error 5)
+
+Факты окружения: CLI — `C:\Users\oleg\.local\bin\bsk.exe`, версия `0.3.2` (`C:\Users\oleg\.bsk\daemon.json`); активный сокет `\\.\pipe\bsk-daemon-781482405c909d02`, ws `127.0.0.1:52800`, `host_managed: true`.
+
+Точный текст отказа (`C:\Users\oleg\.bsk\daemon-start.err:6`, продублирован в `C:\Users\oleg\.bsk\daemon.log.2026-10-04:15,31`):
+
+> `error: cannot start an independent Windows daemon; the host may prohibit Job Object breakaway; use 'bsk daemon start --foreground' in a persistent host task or start from an independent terminal: Отказано в доступе. (os error 5)`
+
+`os error 5` = `Access denied` при создании процесса ВНЕ Job Object хоста. Отсюда порядок:
+
+1. Демон НЕ поднимается detached-стартом из команд агента: попытка из per-command Job падает с os error 5 и предупреждением «Replaced the executable but failed to restart the daemon» (видно в `daemon-start.err`).
+2. Поднимать только как foreground в persistent-задаче хоста: background-задача `bsk daemon start --foreground` (в сессии приёмки — задача `pwsh-31`). Лог старта подтверждает режим: `Windows daemon process started pid=… background=false in_job=Ok(true)`, далее `daemon lock acquired`, `ws server listening`, `ipc named-pipe server listening`, `daemon ready`.
+3. **Время жизни демона = время жизни задачи.** Задача умирает — умирает демон (он внутри Job Object), browser-инструменты уходят в недоступность до перезапуска задачи.
+4. Клиентские команды агента — с `BSK_AUTO_START=0` (иначе каждая команда снова пробует detached-автостарт и снова ловит os error 5). Готовность проверять отдельным вызовом `bsk status` / `bsk status --json`.
+5. **Перед стартом приёмки — `bsk doctor`** (диагностика + подсказки ремонта; команда есть в CLI).
+
+#### 2.3 Граница песочницы: `chrome://extensions` — restricted tab
+
+Страницы `chrome://*` для browser-инструментов недоступны: bsk отказывает по restricted-URL (в живой сессии код ошибки — `restricted_tab_url`). Честная граница проверки: строки `restricted_tab_url` в бинаре `bsk.exe` нет (проверено поиском по 16 МБ бинаря, 0 совпадений); ближайшая проверяемая — сообщение `restricted URL` в таблице ошибок рядом с `about:blank`, поэтому код приводится как наблюдённый в сессии, а не как константа бинаря. Практическое следствие: кнопка **Reload** расширения на `chrome://extensions` **остаётся ручным шагом координатора** — bsk её не нажмёт, и «перезагрузить расширение» нельзя записывать в автоматический сценарий приёмки.
+
+Родственное ограничение из бинаря (тот же класс): «a web page can contain a restricted extension frame; disable the conflicting extension and reload, or use `bsk navigate <url>` to leave this page; reconnecting BrowserSkill alone does not remove the restriction».
+
+#### 2.4 Почему Chrome 154, а не Edge
+
+- Ключа выбора браузера в конфиге плагина нет: схема (`lib/index.mjs:5447-5456`) содержит ровно `bskPath`, `sessionStateDirectory`, `defaultTimeoutMs`, `maxSessions`, `observationEnabled`, `thumbnailIntervalMs`, `idleIntervalMs`, `lazyTools`. Ключа вида `browser`/`backend`/`edge` в ней нет — переключать браузер из `cordis.patch.yml` нечем.
+- Браузер выбирается на стороне браузера (подключением расширения к демону, `browser connected id=… name=chrome`), а не конфигом плагина.
+- Фактическое окружение приёмки: Chrome `154.0.8037.95` (`C:\Program Files\Google\Chrome\Application\chrome.exe`). Раздел README про Edge (`edge://extensions`) остаётся пользовательской инструкцией, а не сценарием агента.
+
+### Итог прогона
+
+**Тесты:** 145 suites / 2777 passed / 6 skipped / 0 failed (базис — v19/`3c59f6b`, тот же 145/2777/6/0; счётчики не изменились, поэтому статусная строка гигиены не трогалась)
+**tsc --noEmit:** ✅ exit 0, 0 ошибок
+**Инварианты O-53:** статусная строка гигиены — ровно 1, значение прежнее (145/2777/6/0), пол не изменился; BOM нет; упоминание версии в handoff — ровно одно и совпадает с `manifest.json`/`package.json` (версия расширения не менялась)
+**Не тронуто:** 6 интерсепторов `core/*-intercept.js`, `adapters/`, `manifest.json`, `package.json`, `tsconfig.json`, `cordis.patch.yml` (вне репозитория), аппендиксы v17/v18/v19 и весь текст выше этого аппендикса
+
 **Push:** git push origin main — по необходимости, после коммита этого аппендикса.

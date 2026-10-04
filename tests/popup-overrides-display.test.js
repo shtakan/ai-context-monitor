@@ -131,11 +131,13 @@ describe('model-config — защитные ветки дефолтов и ли�
     expect(ModelConfig.getContextLimit(null)).toBe(128000);
   });
 
-  test('getEffectiveLimit: явный effectiveLimit модели приоритетнее contextLimit', () => {
+  test('getEffectiveLimit: capExempt-модель отдаёт реальное окно (1M), не общий потолок', () => {
+    // v19: искусственный effectiveLimit у 'claude-sonnet-5' снят — реальное веб-окно = 1M.
     const model = ModelConfig.getModel('claude-sonnet-5');
-    expect(typeof model.effectiveLimit).toBe('number');
-    expect(ModelConfig.getEffectiveLimit('claude-sonnet-5')).toBe(model.effectiveLimit);
-    expect(ModelConfig.getEffectiveLimit('claude-sonnet-5')).not.toBe(model.contextLimit);
+    expect(model.effectiveLimit).toBeUndefined();
+    expect(model.capExempt).toBe(true);
+    expect(model.contextLimit).toBe(1000000);
+    expect(ModelConfig.getEffectiveLimit('claude-sonnet-5')).toBe(1000000);
   });
 
   test('getEffectiveLimit: contextLimit меньше порога → берётся contextLimit', () => {
