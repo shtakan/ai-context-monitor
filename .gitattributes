@@ -4,6 +4,7 @@
 # исходники с '\n'-литералами, падают локально — при зелёном CI на Linux.
 # Правило: блобы и рабочие копии текстовых файлов — всегда LF.
 *.js    text eol=lf
+*.mjs   text eol=lf
 *.json  text eol=lf
 *.html  text eol=lf
 *.css   text eol=lf

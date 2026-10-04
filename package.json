@@ -4,17 +4,27 @@
   "private": true,
   "scripts": {
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "build": "node build.mjs",
+    "build:prod": "node build.mjs --minify",
+    "build:watch": "node build.mjs --watch",
+    "clean": "node build.mjs --clean"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
     "typescript": "^5.6.0"
   },
   "jest": {
     "testEnvironment": "jsdom",
-    "testMatch": ["**/tests/**/*.test.js"],
-    "testPathIgnorePatterns": ["/node_modules/", "/\\.kilo/"],
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/\\.kilo/"
+    ],
     "collectCoverage": false,
     "verbose": true
   }

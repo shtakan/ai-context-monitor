@@ -32,5 +32,12 @@ jobs:
         run: |
           if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
 
+      # esbuild only transpiles — type-checking stays on tsc (Phase 1 contract).
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Build extension bundles
+        run: npm run build
+
       - name: Run tests
         run: npm test
