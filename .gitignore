@@ -84,3 +84,9 @@ test_write.txt
 *.log
 # Handoff backups
 PROJECT_HANDOFF_*.md
+
+# research drafts (2026-10-04) — одноразовые дампы сессии исследования Qwen; файлы на диске не удалять
+ctx.py
+aimode.html
+jsall/
+tsc_out*.txt
