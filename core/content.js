@@ -356,7 +356,7 @@ function aiCmResetStaleStateOnChatlessChatGptUrl() {
   }
 }
   // v30.8: сигнал лоадера «скроллер скрыт/восстановлен» — для заморозки бейджа
-  window.addEventListener('ai-cm-loader-freeze', function (ev) {
+  window.addEventListener('ai-cm-loader-freeze', function (/** @type {CustomEvent} */ ev) {
     try {
       aiCmLoaderFreeze = !!(ev.detail && ev.detail.on);
       // v30.9: на разморозке рисуем накопленное значение сразу — новый badge-update может не прийти
@@ -541,7 +541,7 @@ function aiCmEstimateTokensTilde(text, attachTokens) {
   return result;
 }
 
-window.addEventListener('ai-cm-full-history', function (ev) {
+window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} */ ev) {
   // O-22 (ИЗМЕРЕНИЕ-2): маркер ПЕРВОЙ строки колбэка слушателя — ДО блока v81 Step1
   // и ДО вставок O-22 (блоки A–G2). Только диагностика под гейтом aiCmDebug.
   try {
@@ -1200,7 +1200,9 @@ async function tryInit() {
         const ams = currentAdapter.extractMessages();
         qiAdapterMsgs = (ams && typeof ams.length === 'number') ? ams.length : 0;
         if (ams && ams.length > 0) {
-          found = { nodes: ams, sel: (currentAdapter.siteName || 'adapter') + '.extractMessages()' };
+          // Каст: ExtractedMessage[] адаптера используется как узлы DOM-хвоста (runtime-объекты
+          // того же вида); тип уточняется в Фазе 3 (адаптерный fallback Qwen).
+          found = { nodes: /** @type {Element[]} */ (/** @type {unknown} */ (ams)), sel: (currentAdapter.siteName || 'adapter') + '.extractMessages()' };
         }
       } catch (e) {
         // O-35 (ДИАГНОСТИКА): раньше исключение фолбэка глоталось молча (пустой catch) —
@@ -1555,7 +1557,7 @@ function requestExactTokens(fullText, modelId) {
   // Защита от дублирования: если запрос уже в полёте — не отправляем повторно
   if (countTokensPending) return;
 
-  countTokensPending = true;
+  countTokensPending = /** @type {boolean|Map<unknown, unknown>} */ (true);
   var apiModelId = ModelConfig.getGeminiApiModelId(modelId);
 
   logTextProbe('pre-send', fullText);
@@ -1565,7 +1567,7 @@ function requestExactTokens(fullText, modelId) {
     text: fullText,
     model: apiModelId
   }, function (response) {
-    countTokensPending = false;
+    countTokensPending = /** @type {boolean|Map<unknown, unknown>} */ (false);
     if (response && typeof response.totalTokens === 'number') {
       lastCountTokensText = fullText;
       lastCountTokensCache = response.totalTokens;
@@ -1739,7 +1741,7 @@ function aiCmUpdateSourceIndicator() {
     if (!widgetElement) return;
     var panel = widgetElement.querySelector('.ai-widget-panel');
     if (!panel) return;
-    var el = panel.querySelector('.ai-cm-source');
+    var /** @type {HTMLElement|null} */ el = /** @type {HTMLElement|null} */ (panel.querySelector('.ai-cm-source'));
     // M-4.2: строка источника — ключ content_source_label (фолбэк — прежний русский)
     var want = aiCmSourceLabelNow
       ? aiCmI18nMessage('content_source_label', 'Источник: ' + aiCmSourceLabelNow, [aiCmSourceLabelNow])
@@ -2644,20 +2646,21 @@ if (isExtensionValid()) {
       // сеть, ONE-SIDE → live + маркер). Не дождались/сети нет → прежний live-путь БЕЗ
       // изменения байтов файла; isLowConfidenceBase и порядок [REASONING]/[ANSWER] не тронуты.
       var replyManualExport = function () {
-        var manualSnapshot = {
-          host: window.location.hostname,
-          convId: curCidExp,
-          site: (currentAdapter && currentAdapter.siteName) || '',
-          model: lastSnapshotModelName || (lastResolvedModelId || ''),
-          tokens: maxTokenCount,
-          limit: computeEffectiveLimit(lastResolvedModelId),
-          percent: pctExp,
-          updatedAt: Date.now(),
-          // v1.14.1: живой флаг — ручной as-is экспорт при baseComplete=0 получает
-          // префикс [LOW CONFIDENCE]_ (options.js:378), после base-complete — без префикса.
-          isLowConfidenceBase: (baseComplete !== true),
-          messages: buildHistoryMessages()
-        };
+        var manualSnapshot = /** @type {{host: string, convId: string, site: string, model: string, tokens: number, limit: number, percent: number, updatedAt: number, isLowConfidenceBase: boolean, messages: Array<{role?: string, text?: string}>}} */
+          ({
+            host: window.location.hostname,
+            convId: curCidExp,
+            site: (currentAdapter && currentAdapter.siteName) || '',
+            model: lastSnapshotModelName || (lastResolvedModelId || ''),
+            tokens: maxTokenCount,
+            limit: computeEffectiveLimit(lastResolvedModelId),
+            percent: pctExp,
+            updatedAt: Date.now(),
+            // v1.14.1: живой флаг — ручной as-is экспорт при baseComplete=0 получает
+            // префикс [LOW CONFIDENCE]_ (options.js:378), после base-complete — без префикса.
+            isLowConfidenceBase: (baseComplete !== true),
+            messages: buildHistoryMessages()
+          });
         // O-36 (D1): у сервиса без сети (qwen) база подтверждена записью DOM-адаптера —
         // префикс низкой достоверности ей не полагается (см. aiCmQwenExportBaseTrusted).
         // Прочие сайты: флаг остаётся живым значением baseComplete (байтово прежнее имя).

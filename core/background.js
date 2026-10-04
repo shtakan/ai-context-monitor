@@ -535,7 +535,10 @@ function countTokensCacheSet(model, text, tokens) {
 // разных контекстов не совпадают по идентичности. Повторный COUNT_TOKENS по тому же
 // ключу снимает таймер предшественника и переиспользует его promise: оба sendResponse
 // получат результат последнего (фактически выполненного) запроса окна.
-var countTokensPending = new Map();
+// JSDoc: name в SW отличается от одноимённого boolean-счётчика в core/state.js:110
+// (общее имя, разные миры) — SW-версия это всегда Map, поэтому boolean недопустим;
+// при тайпинге используется any (самый дешёвый шов между двумя мирами).
+var /** @type {any} */ countTokensPending = new Map();
 
 function scheduleCountTokens(key, payload, debounced) {
   var entry = countTokensPending.get(key);

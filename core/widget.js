@@ -88,14 +88,14 @@ function updatePanel() {
   // M-4.2: строки панели — из _locales (content_*); в песочницах без хелпера — фолбэк.
   const i18n = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key, fallback) { return fallback; };
   const status = widgetElement.querySelector('.ai-cm-limit-text');
-  const input = widgetElement.querySelector('.ai-cm-input');
+  const /** @type {HTMLInputElement} */ input = widgetElement.querySelector('.ai-cm-input');
   if (!status) return;
   const effLim = lastWidgetData ? lastWidgetData.effectiveLimit : 0;
   const pct = aiCmActivePct();
   if (pct != null) {
     const eff = Math.max(1, Math.round(pct / 100 * effLim));
     status.textContent = i18n('content_panel_threshold', 'Порог ' + pct + '% = ' + eff.toLocaleString() + ' ток', [String(pct), eff.toLocaleString()]);
-    if (input) input.value = pct;
+    if (input) input.value = String(pct);
   } else {
     status.textContent = i18n('content_panel_auto_status', 'Авто-порог: ' + effLim.toLocaleString() + ' ток (= 100% в поле)', [effLim.toLocaleString()]);
     if (input) input.value = '';
@@ -126,7 +126,7 @@ function resetSafePct() {
 }
 function stepSafePct(delta) {
   if (!widgetElement) return;
-  const input = widgetElement.querySelector('.ai-cm-input');
+  const /** @type {HTMLInputElement} */ input = widgetElement.querySelector('.ai-cm-input');
   if (!input) return;
   let cur = parseFloat(input.value);
   if (isNaN(cur)) cur = 100;
@@ -264,13 +264,13 @@ function resetConversationState() {
   stale = false; // сбрасываем флаг устаревшей интеграции
   scheduleStaleCheck(); // фиксируем момент смены диалога для 12с-проверки
   if (widgetElement) {
-    const circle = widgetElement.querySelector('.ai-widget-fill');
+    const /** @type {SVGElement|null} */ circle = widgetElement.querySelector('.ai-widget-fill');
     const pt = widgetElement.querySelector('.ai-widget-text');
     const tt = widgetElement.querySelector('.ai-widget-tooltip');
     if (circle) {
       const C = 2 * Math.PI * 43;
-      circle.style.strokeDasharray = C;
-      circle.style.strokeDashoffset = C;
+      circle.style.strokeDasharray = String(C);
+      circle.style.strokeDashoffset = String(C);
       circle.style.stroke = zoneColor(0);
     }
     if (pt) pt.textContent = '—'; // v1.8.1: «—» вместо ложного 0.0% до первых данных
@@ -524,7 +524,7 @@ function aiCmComputeWidgetSafeBottom(container) {
   if (typeof document !== 'undefined' && document && typeof document.querySelectorAll === 'function') {
     const controls = document.querySelectorAll(AI_CM_BOTTOM_CONTROL_SELECTOR);
     for (let i = 0; i < controls.length; i++) {
-      const el = controls[i];
+      const /** @type {HTMLElement} */ el = /** @type {HTMLElement} */ (controls[i]);
       if (host && el !== host && host.contains && host.contains(el)) continue; // внутри виджета — не хост-контрол
       if (!el.offsetParent) continue;                                          // скрыт/снят с отрисовки
       const rect = (typeof el.getBoundingClientRect === 'function') ? el.getBoundingClientRect() : null;
@@ -650,10 +650,10 @@ function aiCmSetWidgetPanelOpen(open, restoreFocus) {
   circle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
   if (isOpen) {
     updatePanel();
-    const input = (typeof widgetElement.querySelector === 'function') ? widgetElement.querySelector('.ai-cm-input') : null;
+    const /** @type {HTMLInputElement|null} */ input = (typeof widgetElement.querySelector === 'function') ? /** @type {HTMLInputElement} */ (widgetElement.querySelector('.ai-cm-input')) : null;
     if (input && typeof input.focus === 'function') { try { input.focus(); } catch (eA11yFocusIn) { } }
-  } else if (restoreFocus === true && typeof circle.focus === 'function') {
-    try { circle.focus(); } catch (eA11yFocusOut) { }
+  } else if (restoreFocus === true && typeof /** @type {HTMLElement} */ (circle).focus === 'function') {
+    try { /** @type {HTMLElement} */ (circle).focus(); } catch (eA11yFocusOut) { }
   }
   return isOpen;
 }
@@ -720,7 +720,7 @@ function aiCmRepaintRing() {
   if (typeof widgetElement === 'undefined' || !widgetElement) return;
   var data = (typeof lastWidgetData !== 'undefined' && lastWidgetData) ? lastWidgetData : null;
   if (!data || typeof data.percentage !== 'number' || !isFinite(data.percentage)) return;
-  var fill = widgetElement.querySelector('.ai-widget-fill');
+  var /** @type {SVGElement|null} */ fill = widgetElement.querySelector('.ai-widget-fill');
   if (fill && fill.style) fill.style.stroke = zoneColor(data.percentage);
   try {
     if (typeof aiCmSetWidgetA11yLabel === 'function') {
@@ -740,8 +740,9 @@ function aiCmLoadRingThresholds() {
     // Флаг «подписка взведена» живёт на самой функции, а не в модульной переменной: тела
     // функций регрессия режет из исходника и исполняет в песочнице без соседних объявлений
     // (модульный флаг там либо ReferenceError, либо протечка между песочницами).
-    if (chrome.storage.onChanged && !aiCmLoadRingThresholds.aiCmBound) {
-      aiCmLoadRingThresholds.aiCmBound = true;
+    var /** @type {any} */ selfRing = aiCmLoadRingThresholds;
+    if (chrome.storage.onChanged && !selfRing.aiCmBound) {
+      selfRing.aiCmBound = true;
       chrome.storage.onChanged.addListener(function (changes, areaName) {
         if (areaName !== 'local' || !changes || !changes.aiCmProactiveThresholds) return;
         // storage.onChanged кладёт сам массив в newValue: перекрас без перезагрузки страницы.
@@ -781,7 +782,7 @@ function createWidget() {
     // то же и идут одним путём: класс .open и aria-expanded меняются вместе, фокус при
     // открытии уезжает в .ai-cm-input, при закрытии — обратно на индикатор.
     circleEl.addEventListener('click', () => aiCmToggleWidgetPanel(true));
-    circleEl.addEventListener('keydown', (e) => {
+    circleEl.addEventListener('keydown', (/** @type {KeyboardEvent} */ e) => {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
         e.preventDefault(); // Space на кнопке не должен прокручивать страницу
         aiCmToggleWidgetPanel(true);
@@ -801,7 +802,7 @@ function createWidget() {
   } catch (eWidgetCritical) { }
   if (snapBtn) snapBtn.addEventListener('click', snapCurrentPct);
   if (autoBtn) autoBtn.addEventListener('click', resetSafePct);
-  if (inputEl) inputEl.addEventListener('change', (e) => setSafePctFromInput(e.target.value));
+  if (inputEl) inputEl.addEventListener('change', (/** @type {Event} */ e) => setSafePctFromInput((/** @type {HTMLInputElement} */ (e.target)).value));
   if (upBtn) upBtn.addEventListener('click', () => stepSafePct(+1));
   if (dnBtn) dnBtn.addEventListener('click', () => stepSafePct(-1));
   updatePanel();
@@ -829,7 +830,7 @@ function updateWidget(percentage, tokens, effectiveLimit, contextLimit, displayL
   try { aiCmUpdateSourceIndicator(); } catch (eSrcW) { }
   aiCmRefreshThemeIfNeeded(); // H25: каждая отрисовка — дешёвая проверка смены темы (гард тихий)
   debugLog('log', '[AI CM][trace] badge-update pct=' + percentage + '% tokens=' + tokens + ' model=' + modelName);
-  const circle = widgetElement.querySelector('.ai-widget-fill');
+  const /** @type {SVGElement} */ circle = /** @type {SVGElement} */ (widgetElement.querySelector('.ai-widget-fill'));
   const percentText = widgetElement.querySelector('.ai-widget-text');
   const tooltip = widgetElement.querySelector('.ai-widget-tooltip');
   if (!circle || !percentText) return;
@@ -837,8 +838,8 @@ function updateWidget(percentage, tokens, effectiveLimit, contextLimit, displayL
   const circumference = 2 * Math.PI * radius;
   const pDraw = Math.min(100, Math.max(0, percentage));
   const offset = circumference - (pDraw / 100) * circumference;
-  circle.style.strokeDasharray = circumference;
-  circle.style.strokeDashoffset = offset;
+  circle.style.strokeDasharray = String(circumference);
+  circle.style.strokeDashoffset = String(offset);
   circle.style.stroke = zoneColor(percentage);
   // O-35 (D1, фикс): stale («12с без сетевого снимка») — НЕ повод стирать посчитанное число,
   // если база адаптера ЕСТЬ: у qwen после F5/SPA сети нет вовсе, базу снимает DOM-адаптер,

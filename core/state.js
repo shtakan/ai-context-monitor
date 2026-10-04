@@ -68,7 +68,7 @@ var lastBaseIds = [];
 var lastBaseTexts = [];
 let baseSkelSet = null;
 let baseAnchors = null;
-const ANCHOR_MIN = 40;
+var ANCHOR_MIN = 40; // let-семантика (было const): UMD-сеттер ниже присваивает это имя; читатели — только число
 // ========== САМОДИАГНОСТИКА: флаг stale (интеграция могла устареть) ==========
 // O-35 (D1, норма): stale = «сетевого снимка нет 12с», а НЕ авария. У qwen после F5/SPA
 // сети нет вовсе (живой источник — DOM-адаптер), поэтому stale там систематичен: число на
@@ -107,7 +107,7 @@ let geminiApiKey = '';
 let lastCountTokensText = '';
 let lastCountTokensCache = 0;
 let countTokensTimer = null;
-let countTokensPending = false; // защита от повторного запроса пока предыдущий в полёте
+let /** @type {boolean|Map<unknown, unknown>} */ countTokensPending = false; // защита от повторного запроса пока предыдущий в полёте; JSDoc: имя перекрывается картой Map в core/background.js:538 (разные миры)
 
 // ========== БЕЗОПАСНЫЙ ПОРОГ (регулятор; определения целиком, со стрелками) ==========
 let safePct = null;

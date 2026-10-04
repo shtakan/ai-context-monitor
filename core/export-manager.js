@@ -368,7 +368,8 @@ function aiCmExportBaseSource(convId, localMsgs) {
     var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
     if (!P || typeof P.resolveExportSource !== 'function') return null;
     if (site !== 'gemini') return null; // прочие сервисы: архив — только индикатор источника
-    var snap = (typeof aiCmGeminiTurnsSnapshotSync === 'function') ? aiCmGeminiTurnsSnapshotSync() : null;
+    var snap = /** @type {{convId?: string, messages?: Array<{role?: string, text?: string}>|null, archiveCount?: number, liveCount?: number, baseMsgs?: number}|null} */
+      ((typeof aiCmGeminiTurnsSnapshotSync === 'function') ? aiCmGeminiTurnsSnapshotSync() : null);
     var hasBridge = !!(snap && typeof snap === 'object');
     // чужая база (SPA-переход между чтением и экспортом) — мост не используем
     if (hasBridge && snap.convId && convId && String(snap.convId) !== String(convId)) hasBridge = false;
@@ -465,7 +466,10 @@ function aiCmTryLateAutoExport(cid) {
 // Утилита на Gemini грузится только в MAIN-мире (background.js), а content.js живёт в
 // ISOLATED и window.GeminiInterceptLogic не видит. Копия синхронизирована с утилитой;
 // при наличии window.GeminiInterceptLogic.detectTrimState приоритет у канонической.
-function detectTrimStateFallback(prevProbe, snapshot) {
+function detectTrimStateFallback(
+  /** @type {{maxCount?: number, firstIds?: string[], suspectPending?: number}|null} */ prevProbe,
+  /** @type {{messageIds?: string[], count?: number, historyComplete?: boolean}|null} */ snapshot
+) {
   var res = { suspect: false, confirmed: false, lostHead: false };
   try {
     if (!snapshot || !Array.isArray(snapshot.messageIds)) return res;
@@ -490,7 +494,9 @@ function detectTrimStateFallback(prevProbe, snapshot) {
 // v54: детектор обрезки истории в Gemini — вызывается из слушателя ai-cm-full-history.
 // trimProbe обновляется ТОЛЬКО по полному снимку (historyComplete===true); confirmed
 // требует двух последовательных сокращений подряд (suspect → confirmed).
-function geminiDetectTrim(detail) {
+function geminiDetectTrim(
+  /** @type {{convId?: string, count?: number, messageIds?: string[], historyComplete?: boolean}|null} */ detail
+) {
   try {
     if (!detail || !Array.isArray(detail.messageIds)) return;
     var site = (currentAdapter && currentAdapter.siteName) || '';
@@ -500,7 +506,7 @@ function geminiDetectTrim(detail) {
     if (detail.historyComplete !== true) return; // частичная загрузка — это пагинация, НЕ обрезка
     var G = window.GeminiInterceptLogic;
     var fn = (G && typeof G.detectTrimState === 'function') ? G.detectTrimState : detectTrimStateFallback;
-    var prev = trimProbe[cid] || null;
+    var prev = /** @type {{maxCount?: number, firstIds?: string[], suspectPending?: number}|null} */ (trimProbe[cid] || null);
     var cnt = (typeof detail.count === 'number' && detail.count >= 0)
       ? detail.count : detail.messageIds.length;
     var st = fn(prev, { count: cnt, messageIds: detail.messageIds, historyComplete: true });
@@ -892,9 +898,9 @@ function aiCmGsaNetworkCompleteIs(site, cid) {
 // v1.18 (F5): состояние probe-полноты GSA (MAIN → ISOLATED, CustomEvent
 // 'ai-cm-gsa-probe-state'). Нужно ТОЛЬКО для ярлыка причины skip: probe-running,
 // пока вердикта классификатора ещё нет. Сам вердикт полноты — baseComplete (один).
-var aiCmGsaProbeByThread = {};    // threadId -> 1 (probe в полёте)
+var /** @type {Record<string, number>} */ aiCmGsaProbeByThread = {};    // threadId -> 1 (probe в полёте)
 var aiCmGsaProbeRunning = false;  // последнее состояние (фолбэк для пустого convId)
-window.addEventListener('ai-cm-gsa-probe-state', function (ev) {
+window.addEventListener('ai-cm-gsa-probe-state', function (/** @type {CustomEvent} */ ev) {
   try {
     var d = ev && ev.detail;
     if (!d) return;
@@ -915,7 +921,8 @@ function aiCmGsaProbeRunningFor(cid) {
 // без антиспама), а не на смену состояния. Латч — aiCmAutoExportLastLogState (core/state.js,
 // family → сигнатура); здесь — читатель/писатель. Только логи: вердикт гейта, латчи fired,
 // пороги и байты файла не затрагиваются.
-function aiCmAutoExportLogOnChange(family, key) {
+function aiCmAutoExportLogOnChange(family, key) { // family/key: string (JSDoc-типы вне сигнатуры: fnDecl-хелпер тестов балансирует скобки и {…} в сигнатуре ломает срез)
+  var self = /** @type {any} */ (aiCmAutoExportLogOnChange);
   try {
     var f = String(family || '');
     var k = (key === undefined || key === null) ? '' : String(key);
@@ -924,8 +931,8 @@ function aiCmAutoExportLogOnChange(family, key) {
     if (!st) {
       // срез-песочница без общего состояния (core/state.js): латч живёт на самой функции —
       // без глобалов и без протечки состояния между песочницами.
-      if (!aiCmAutoExportLogOnChange.__state) aiCmAutoExportLogOnChange.__state = Object.create(null);
-      st = aiCmAutoExportLogOnChange.__state;
+      if (!self.__state) self.__state = Object.create(null);
+      st = self.__state;
     }
     if (st[f] === k) return false;  // та же сигнатура состояния — молчание (O-29)
     st[f] = k;
@@ -1732,7 +1739,7 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
 // v42: состояние лоадера Gemini наружу ПО convId (MAIN → ISOLATED через window-CustomEvent).
 // На running=false по текущему чату — re-check гейта экспорта: badge-update к этому моменту
 // может уже не прийти, а раньше стрельнуть помешал skip reason=loader-running.
-window.addEventListener('ai-cm-loader-state', function (ev) {
+window.addEventListener('ai-cm-loader-state', function (/** @type {CustomEvent} */ ev) {
   try {
     var d = ev && ev.detail;
     if (!d || !d.convId) return;

@@ -21,7 +21,15 @@
     "types/**/*.d.ts",
     "types/**/*.ts",
     "utils/**/*.js",
-    "adapters/**/*.js"
+    "adapters/**/*.js",
+    "core/content.js",
+    "core/widget.js",
+    "core/state.js",
+    "core/base-handler.js",
+    "core/hybrid-tail.js",
+    "core/export-manager.js",
+    "core/background.js",
+    "core/page-intercept.js"
   ],
   "exclude": [
     "node_modules",

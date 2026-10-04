@@ -58,7 +58,7 @@
   window.__aiCmInterceptInstalled = true;
 
   // v31: флаг «Подробные логи» транслируется из content.js (ISOLATED) через CustomEvent
-  try { window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDebugLogs(!!(ev && ev.detail)); }); } catch (e) {}
+  try { window.addEventListener('ai-cm-debug-logs', function (/** @type {CustomEvent} */ ev) { __aiCmSetDebugLogs(!!(ev && ev.detail)); }); } catch (e) {}
 
   var originalFetch = window.fetch;
   if (typeof originalFetch !== 'function') return;
@@ -379,7 +379,7 @@
     // v12: запоминаем convId на момент отправки для проверки гонки
     var sentConvId = currentConvId;
     refreshBusy = true;
-    var headers = {};
+    var /** @type {Record<string, string>} */ headers = {};
     for (var k in lastHeaders) headers[k] = lastHeaders[k]; // воспроизводим свежий набор сайта
     // помечаем URL, чтобы наша обёртка не словила свой же запрос как входящий снимок
     var sep = baseUrl.indexOf('?') === -1 ? '?' : '&';
@@ -454,9 +454,9 @@
     }
     console.log('[ai-cm-intercept] fallback: активный снимок');
     var url = location.origin + '/backend-api/conversation/' + convId;
-    var init = { method: 'GET', credentials: 'include' };
+    var /** @type {RequestInit} */ init = { method: 'GET', credentials: 'include' };
     if (lastHeaders && hasAuth(lastHeaders)) {
-      var fh = {};
+      var /** @type {Record<string, string>} */ fh = {};
       for (var fk in lastHeaders) fh[fk] = lastHeaders[fk];
       init.headers = fh;
     }
