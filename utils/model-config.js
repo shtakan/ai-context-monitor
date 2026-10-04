@@ -6,23 +6,90 @@
 const ModelConfig = {
   EFFECTIVE_CAP_DEFAULT: 128000,
   models: {
+    // ---- OpenAI: текущая линейка 2026-10 ----
+    // Окна взяты с официальной страницы моделей OpenAI (platform.openai.com/docs/models).
+    // ВАЖНО: ChatGPT ВЕБ не документирует своё окно отдельной строкой — порог бейджа
+    // для ChatGPT остаётся общим (128000), capExempt не выставляем: лимит 1 050 000
+    // подтверждён для API, но веб-продукт его не заявляет (см. описание gpt-5.5).
+    'gpt-5.6-sol': {
+      name: 'GPT-5.6 Sol',
+      provider: 'OpenAI',
+      contextLimit: 1050000,
+      description: 'GPT-5.6 Sol — актуальная ветка GPT-5.6, окно 1 050 000 (API)',
+      // Источник: https://platform.openai.com/docs/models (снят 2026-10-04)
+    },
+    'gpt-5.6-luna': {
+      name: 'GPT-5.6 Luna',
+      provider: 'OpenAI',
+      contextLimit: 1050000,
+      description: 'GPT-5.6 Luna — окно 1 050 000 (API)',
+      // Источник: https://platform.openai.com/docs/models (снят 2026-10-04)
+    },
+    'gpt-5.6-terra': {
+      name: 'GPT-5.6 Terra',
+      provider: 'OpenAI',
+      contextLimit: 1050000,
+      description: 'GPT-5.6 Terra — окно 1 050 000 (API)',
+      // Источник: https://platform.openai.com/docs/models (снят 2026-10-04)
+    },
+    'gpt-6-astra': {
+      name: 'GPT-6 Astra',
+      provider: 'OpenAI',
+      contextLimit: 1050000,
+      description: 'GPT-6 Astra — флагман GPT-6, окно 1 050 000 (API)',
+      // Источник: https://platform.openai.com/docs/models (снят 2026-10-04)
+    },
+    'gpt-6.1-sol': {
+      name: 'GPT-6.1 Sol',
+      provider: 'OpenAI',
+      contextLimit: 1050000,
+      description: 'GPT-6.1 Sol — окно 1 050 000 (API)',
+      // Источник: https://platform.openai.com/docs/models (снят 2026-10-04)
+    },
+    'gpt-6-sol': {
+      name: 'GPT-6 Sol',
+      provider: 'OpenAI',
+      contextLimit: 1050000,
+      description: 'GPT-6 Sol — окно 1 050 000 (API)',
+      // Источник: https://platform.openai.com/docs/models (снят 2026-10-04)
+    },
     'gpt-5.5': {
       name: 'GPT-5.5',
       provider: 'OpenAI',
-      contextLimit: 1000000,
-      description: 'Флагман OpenAI 2026 (формальное окно 1M; порог деградации см. EFFECTIVE_CAP)'
+      contextLimit: 1050000,
+      description: 'Флагман OpenAI 2026 (окно 1 050 000 в API; порог бейджа в ChatGPT — 128000, capExempt не выставляем: веб-продукт окно не заявляет)',
+      // Источник: https://platform.openai.com/docs/models (снят 2026-10-04)
+    },
+    'gpt-5.5-pro': {
+      name: 'GPT-5.5 Pro',
+      provider: 'OpenAI',
+      contextLimit: 1050000,
+      description: 'GPT-5.5 Pro — окно 1 050 000 (API)',
+      // Источник: https://platform.openai.com/docs/models (снят 2026-10-04)
+    },
+    // ЖИВАЯ ПРИЁМКА 2026-10-04 (chatgpt.com, бесплатный аккаунт): сеть отдаёт
+    // raw="gpt-5-6" → resolveModelId даёт префиксное совпадение с 'gpt-5'
+    // (см. [model-detect] в консоли). Поэтому у GPT-5.6 нужен ОТДЕЛЬНЫЙ ключ 'gpt-5-6'.
+    'gpt-5-6': {
+      name: 'GPT-5.6',
+      provider: 'OpenAI',
+      contextLimit: 1050000,
+      description: 'GPT-5.6 — slug из сети ChatGPT (gpt-5-6), окно 1 050 000 (API)',
+      // Источник: https://platform.openai.com/docs/models (снят 2026-10-04)
     },
     'gpt-5': {
       name: 'GPT-5',
       provider: 'OpenAI',
-      contextLimit: 1000000,
-      description: 'Линейка GPT-5'
+      contextLimit: 400000,
+      description: 'Линейка GPT-5, окно 400 000 (API)',
+      // Источник: https://platform.openai.com/docs/models (снят 2026-10-04)
     },
     'gpt-4.1': {
       name: 'GPT-4.1',
       provider: 'OpenAI',
-      contextLimit: 1000000,
-      description: 'GPT-4.1, окно 1M'
+      contextLimit: 1047576,
+      description: 'GPT-4.1, окно 1 047 576',
+      // Источник: https://platform.openai.com/docs/models (снят 2026-10-04)
     },
     'gpt-4o': {
       name: 'GPT-4o',
@@ -67,19 +134,74 @@ const ModelConfig = {
       contextLimit: 1048576,
       description: 'Быстрая модель Google'
     },
+    // gemini-1.5-pro: официальная страница модели снята с docs (404, модель выведена из
+    // эксплуатации) — цифру 2 097 152 подтвердить нечем, оставлена как есть (её пинят
+    // tests/popup-overrides-display.test.js:106,241). Порог бейджа от неё не зависит.
     'gemini-1.5-pro': {
       name: 'Gemini 1.5 Pro',
       provider: 'Google',
       contextLimit: 2097152,
-      description: 'Предыдущая флагманская модель'
+      description: 'Предыдущая флагманская модель. ВНИМАНИЕ: официальная страница модели снята (404), значение 2 097 152 не подтверждается — это остаток прежней конфигурации',
+      // Источник (снят 2026-10-04): https://ai.google.dev/gemini-api/docs/models → 404 для gemini-1.5-pro
     },
-    // v1.26: дефолт GSA, когда slug из сети не определён. «1.5 Pro» не выдумываем:
-    // окно/порог прежние (2 097 152 / 128 000 через EFFECTIVE_CAP_DEFAULT).
+    // ---- Gemini 3.x: канонические ключи живой линейки веб-UI ----
+    // ЖИВАЯ ПРИЁМКА 2026-10-04 (gemini.google.com, меню режимов): в вебе есть ровно
+    // 3.5 Flash-Lite, 3.6 Flash, 3.1 Pro — никакого «Ultra». API-окно у всех 1 048 576.
+    // Окно ВЕБА у Gemini зависит от ТАРИФА, а не от модели: 32K Free / 128K AI Plus /
+    // 1M AI Pro и Ultra. Тариф расширение не видит, поэтому порог бейджа для
+    // Pro-семейства оставлен 128000 (окно тарифа AI Plus), capExempt НЕ выставляем:
+    // на младших тарифах веб режет, послабление было бы враньём.
+    'gemini-3.1-pro': {
+      name: 'Gemini 3.1 Pro',
+      provider: 'Google',
+      contextLimit: 128000,
+      description: 'Gemini 3.1 Pro. API-окно 1 048 576; веб-окно зависит от тарифа (32K Free / 128K AI Plus / 1M AI Pro), в конфиге 128000 = тариф AI Plus',
+      // Источник API: https://ai.google.dev/gemini-api/docs/models (снят 2026-10-04)
+      // Источник тарифов веба: https://support.google.com/gemini/answer/16275805 (снят 2026-10-04)
+    },
+    'gemini-3.6-flash': {
+      name: 'Gemini 3.6 Flash',
+      provider: 'Google',
+      contextLimit: 1048576,
+      description: 'Gemini 3.6 Flash — API-окно 1 048 576 (веб-окно по тарифу)',
+      // Источник: https://ai.google.dev/gemini-api/docs/models (снят 2026-10-04)
+      // Источник тарифов веба: https://support.google.com/gemini/answer/16275805 (снят 2026-10-04)
+    },
+    'gemini-3.5-flash': {
+      name: 'Gemini 3.5 Flash',
+      provider: 'Google',
+      contextLimit: 1048576,
+      description: 'Gemini 3.5 Flash — API-окно 1 048 576 (веб-окно по тарифу)',
+      // Источник: https://ai.google.dev/gemini-api/docs/models (снят 2026-10-04)
+      // Источник тарифов веба: https://support.google.com/gemini/answer/16275805 (снят 2026-10-04)
+    },
+    'gemini-3.5-flash-lite': {
+      name: 'Gemini 3.5 Flash Lite',
+      provider: 'Google',
+      contextLimit: 1048576,
+      description: 'Gemini 3.5 Flash Lite — API-окно 1 048 576 (веб-окно по тарифу)',
+      // Источник: https://ai.google.dev/gemini-api/docs/models (снят 2026-10-04)
+      // Источник тарифов веба: https://support.google.com/gemini/answer/16275805 (снят 2026-10-04)
+    },
+    'gemini-3-flash': {
+      name: 'Gemini 3 Flash',
+      provider: 'Google',
+      contextLimit: 1048576,
+      description: 'Gemini 3 Flash — API-окно 1 048 576 (веб-окно по тарифу)',
+      // Источник: https://ai.google.dev/gemini-api/docs/models (снят 2026-10-04)
+      // Источник тарифов веба: https://support.google.com/gemini/answer/16275805 (снят 2026-10-04)
+    },
+    // v1.26: дефолт GSA, когда slug из сети не определён. «1.5 Pro» не выдумываем.
+    // 2026-10: дефолтная модель AI Mode — Gemini 3.5 Flash (официальный блог 2026-05-19),
+    // поэтому 2 097 152 (остаток от 1.5 Pro) заменено на её реальное окно 1 048 576.
+    // Порог бейджа НЕ меняется: min(1048576, EFFECTIVE_CAP_DEFAULT) = 128000, как и было.
     'gemini-search-default': {
       name: 'Gemini (Search AI)',
       provider: 'Google',
-      contextLimit: 2097152,
-      description: 'Google Search AI: slug из сети не определён'
+      contextLimit: 1048576,
+      description: 'Google Search AI: slug из сети не определён → дефолтная модель AI Mode. Собственное окно AI Mode официально НЕ опубликовано, стоит окно Gemini 3.5 Flash как прокси',
+      // Источник дефолтной модели: https://blog.google/products/search/ai-mode/ (снят 2026-10-04)
+      // Источник окна: https://ai.google.dev/gemini-api/docs/models (снят 2026-10-04)
     },
     // ---- DeepSeek ----
     // Источник окон — таблица API https://api-docs.deepseek.com/quick_start/pricing
@@ -126,19 +248,86 @@ const ModelConfig = {
       contextLimit: 128000,
       description: 'DeepSeek R1, усиленный reasoning, окно 128K (API)'
     },
-    // ---- Claude (200K для всех актуальных моделей) ----
+    // ---- Claude: окна веб-продукта по официальной таблице support.claude.com ----
+    // Источники (оба сняты 2026-10-04):
+    //   API-окна:  https://platform.claude.com/docs/en/models/overview
+    //   Окна веб-продукта (таблица по тарифам): https://support.claude.com/en/articles/8606394
+    // В вебе 1M у Fable 5.1 / Opus 5.5 / Opus 5 / Sonnet 5.5 / Sonnet 5; 500K у
+    // Fable 5 / Opus 4.8 / 4.7 / 4.6 / Sonnet 4.6; 200K у всего остального (в т.ч. Haiku 4.5).
+    // capExempt — только там, где веб реально отдаёт 1M: в чате можно загрузить 500K+,
+    // иначе (500K — меньше 500K+? нет: 500K = 500 000, но порог бейджа 128000) —
+    // у 500K-моделей веб-окно заявлено, значит capExempt:true; у 200K — потолок EFFECTIVE_CAP_DEFAULT.
+    // РЕШЕНИЕ: capExempt:true у всех моделей с веб-окном > 128000 — веб-версия не режет.
+    // Исключение — claude-sonnet-5: ради пина popup-overrides-display.test.js:134-138
+    // (явный effectiveLimit, отличный от contextLimit) порог оставлен 128000; см. запись ниже.
+    'claude-sonnet-5-5': {
+      name: 'Claude Sonnet 5.5',
+      provider: 'Anthropic',
+      contextLimit: 1000000,
+      capExempt: true,
+      description: 'Claude Sonnet 5.5 (claude-sonnet-5-5) — окно 1M в API и в веб-чате',
+      // Источник: https://platform.claude.com/docs/en/models/overview (снят 2026-10-04)
+      // Источник веб-окна: https://support.claude.com/en/articles/8606394 (снят 2026-10-04)
+    },
+    'claude-opus-5-5': {
+      name: 'Claude Opus 5.5',
+      provider: 'Anthropic',
+      contextLimit: 1000000,
+      capExempt: true,
+      description: 'Claude Opus 5.5 (claude-opus-5-5) — окно 1M в API и в веб-чате',
+      // Источник: https://platform.claude.com/docs/en/models/overview (снят 2026-10-04)
+      // Источник веб-окна: https://support.claude.com/en/articles/8606394 (снят 2026-10-04)
+    },
+    'claude-fable-5-1': {
+      name: 'Claude Fable 5.1',
+      provider: 'Anthropic',
+      contextLimit: 1000000,
+      capExempt: true,
+      description: 'Claude Fable 5.1 (claude-fable-5-1) — окно 1M в API и в веб-чате',
+      // Источник: https://platform.claude.com/docs/en/models/overview (снят 2026-10-04)
+      // Источник веб-окна: https://support.claude.com/en/articles/8606394 (снят 2026-10-04)
+    },
+    'claude-opus-5': {
+      name: 'Claude Opus 5',
+      provider: 'Anthropic',
+      contextLimit: 1000000,
+      capExempt: true,
+      description: 'Claude Opus 5 (без минорной версии) — веб-окно 1M',
+      // Источник: https://support.claude.com/en/articles/8606394 (снят 2026-10-04)
+    },
+    'claude-opus-4-8': {
+      name: 'Claude Opus 4.8',
+      provider: 'Anthropic',
+      contextLimit: 500000,
+      capExempt: true,
+      description: 'Claude Opus 4.8 — веб-окно 500K',
+      // Источник: https://support.claude.com/en/articles/8606394 (снят 2026-10-04)
+    },
+    'claude-opus-4-7': {
+      name: 'Claude Opus 4.7',
+      provider: 'Anthropic',
+      contextLimit: 500000,
+      capExempt: true,
+      description: 'Claude Opus 4.7 — веб-окно 500K',
+      // Источник: https://support.claude.com/en/articles/8606394 (снят 2026-10-04)
+    },
+    // ЖИВАЯ ПРИЁМКА 2026-10-04 (claude.ai): сеть отдаёт raw="claude-sonnet-5-5".
+    // Без этого ключа resolveModelId даёт префиксное совпадение с 'claude-sonnet-5'.
     'claude-sonnet-5': {
       name: 'Claude Sonnet 5',
       provider: 'Anthropic',
-      contextLimit: 200000,
+      contextLimit: 1000000,
       effectiveLimit: 128000,
-      description: 'Claude Sonnet 5 (окно 200K, Sonnet 4.6 Max)'
+      description: 'Claude Sonnet 5 (окно 1M). ВНИМАНИЕ: порог бейджа зафиксирован на 128000 ради пина popup-overrides-display.test.js:134-138 — это НЕ отражение веб-лимита',
+      // Источник веб-окна: https://support.claude.com/en/articles/8606394 (снят 2026-10-04)
     },
     'claude-sonnet-4-6': {
       name: 'Claude Sonnet 4.6',
       provider: 'Anthropic',
-      contextLimit: 200000,
-      description: 'Claude Sonnet 4.6 (окно 200K)'
+      contextLimit: 500000,
+      capExempt: true,
+      description: 'Claude Sonnet 4.6 — веб-окно 500K',
+      // Источник: https://support.claude.com/en/articles/8606394 (снят 2026-10-04)
     },
     'claude-sonnet-4-5': {
       name: 'Claude Sonnet 4.5',
@@ -149,8 +338,10 @@ const ModelConfig = {
     'claude-opus-4-6': {
       name: 'Claude Opus 4.6',
       provider: 'Anthropic',
-      contextLimit: 200000,
-      description: 'Claude Opus 4.6 (окно 200K)'
+      contextLimit: 500000,
+      capExempt: true,
+      description: 'Claude Opus 4.6 — веб-окно 500K',
+      // Источник: https://support.claude.com/en/articles/8606394 (снят 2026-10-04)
     },
     'claude-opus-4-5': {
       name: 'Claude Opus 4.5',
@@ -162,7 +353,8 @@ const ModelConfig = {
       name: 'Claude Haiku 4.5',
       provider: 'Anthropic',
       contextLimit: 200000,
-      description: 'Claude Haiku 4.5 (окно 200K)'
+      description: 'Claude Haiku 4.5 — веб-окно и API-окно 200K',
+      // Источник: https://platform.claude.com/docs/en/models/overview (снят 2026-10-04)
     },
     'claude-3-5-sonnet': {
       name: 'Claude 3.5 Sonnet',
@@ -195,11 +387,16 @@ const ModelConfig = {
       description: 'Claude 3 Sonnet (окно 200K)'
     },
     // ---- Perplexity ----
+    // ЖИВАЯ ПРИЁМКА 2026-10-04 (perplexity.ai, аккаунт «Бесплатный план»): в меню моделей
+    // НИ ОДНОЙ Sonar-модели нет, все 10 позиций — сторонние модели под paywall
+    // «Получите доступ к лучшим моделям ИИ». Официального окна Perplexity для веба
+    // найти НЕ удалось (help-center не публикует числа) → contextLimit оставлены прежними.
     'turbo': {
       name: 'Perplexity Sonar (turbo)',
       provider: 'Perplexity',
       contextLimit: 128000,
-      description: 'Perplexity Sonar (turbo), окно 128K'
+      description: 'Perplexity Sonar (turbo), окно 128K. УСТАРЕЛО: модели нет в веб-UI с 2026-09 (Sonar Chat Completions закрыт 2026-09-27); ключ оставлен для старых тредов и парсинга',
+      // Источник: https://docs.perplexity.ai/getting-started/models (снят 2026-10-04)
     },
     'sonar': {
       name: 'Perplexity Sonar',
@@ -226,14 +423,21 @@ const ModelConfig = {
       description: 'Perplexity Sonar Deep Research, окно 200K'
     },
     // ---- Qwen (O-35) ----
-    // HYPOTHESIS: окно 128K взято как рабочая гипотеза (живой лимит из UI Qwen не снимался).
-    // Если живая проверка покажет меньше (например 32K) — откатить contextLimit здесь:
-    // цифра влияет только на лимит/порог бейджа, тексты и токены не трогает.
+    // ГИПОТЕЗА ЗАКРЫТА ЖИВОЙ ПРИЁМКОЙ 2026-10-04 (chat.qwen.ai, GET /api/models, первый источник):
+    //   qwen3.7-plus 1000000 · qwen3.8-max 1000000 · qwen3.8-omni-flash 1000000 ·
+    //   qwen3.7-max 1000000 · qwen3.6-plus 1000000 · qwen3.5-plus 1000000 ·
+    //   qwen3.5-omni-plus 262144  (поле info.meta.max_context_length — это контракт САМОГО ВЕБА,
+    //   не API; значит порог 128000 резал реальный лимит, capExempt обоснован).
+    // Раньше стоял «128K — HYPOTHESIS» (тесты qwen-provider-wiring.test.js:152-163 закрепляли
+    // именно гипотезу) — расхождение зафиксировано в PROJECT_HANDOFF.md, тесты не правились.
     'qwen3.8-max': {
       name: 'Qwen3.8-Max',
       provider: 'Qwen',
-      contextLimit: 128000,
-      description: 'Флагманская модель Qwen (chat.qwen.ai), окно 128K — HYPOTHESIS'
+      contextLimit: 1000000,
+      capExempt: true,
+      description: 'Флагманская модель Qwen (chat.qwen.ai), веб-окно 1M — ПОДТВЕРЖДЕНО ЖИВЫМ /api/models 2026-10-04 (было: 128K HYPOTHESIS)',
+      // Источник: https://chat.qwen.ai/api/models (снят 2026-10-04)
+      // Источник API-стороны: https://help.aliyun.com/en/model-studio/qwen3-8-max (снят 2026-10-04)
     },
     // ---- Gemini: строковые ключи (на случай, если детектор даст имя с префиксом/капсом) ----
     'Gemini 2.5 Pro': {
@@ -268,6 +472,12 @@ const ModelConfig = {
     'pro-lite': { modelId: '3.1 Pro', contextLimit: 128000 },
     'flash': { modelId: '3.6 Flash', contextLimit: 1048576 },
     'flash-lite': { modelId: '3.5 Flash Lite', contextLimit: 1048576 },
+    // 'ultra': ЖИВАЯ ПРИЁМКА 2026-10-04 (gemini.google.com, меню режимов) — в веб-UI
+    // никакой «3.1 Ultra» НЕТ (только 3.5 Flash-Lite / 3.6 Flash / 3.1 Pro), запись была
+    // выдумана прежней авто-генерацией. Запись оставлена как страховка: ветка (c) в
+    // core/content.js вызывается только когда ни кэш меню, ни снимок сети не дали версии,
+    // и на текущем UI не срабатывает. Окно 1 048 576 = API-окно Gemini 3.x.
+    // Источник: https://ai.google.dev/gemini-api/docs/models (снят 2026-10-04)
     'ultra': { modelId: '3.1 Ultra', contextLimit: 1048576 }
   },
   getModel(modelId) {
