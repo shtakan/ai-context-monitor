@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * build.mjs — Phase 2 step 1: esbuild bundler with three entry points.
+ * build.mjs — Phase 2 step 1: esbuild bundler with four entry points.
  *
  * Why the entry points are *derived* instead of hardcoded:
  * this repository has no `src/` directory. The extension sources are plain
- * global-scope scripts wired together by two source-of-truth files:
+ * global-scope scripts wired together by three source-of-truth files:
  *   - manifest.json            -> background.service_worker
  *                              -> content_scripts[0].js (order-sensitive)
  *   - options/options.html     -> <script src> order (order-sensitive)
+ *   - print/print.html         -> <script src> order (order-sensitive)
  * The bundler reads those SSOTs, concatenates each entry group into a single
  * module (one shared scope, which is what the legacy sources expect: every
  * cross-file reference is a bare identifier, not window.X) and lets esbuild
@@ -15,9 +16,19 @@
  * drift from the manifest / HTML script order.
  *
  * Outputs (dist/):
- *   background.js, content.js, options.js   (IIFE, no import/export)
- *   manifest.json, icons/**, options/options.html, options/options.css
+ *   background.js, content.js, options.js, print.js   (IIFE, no import/export)
+ *   manifest.json, icons/**, options/options.html, options/options.css,
+ *   print/print.html
  *   _locales/**, plus the files Chrome resolves itself at runtime (see step 2c)
+ *
+ * Phase 3 step 1 (print): print/print.html is the last legacy page that pulled
+ * global scripts from the source tree (options/i18n-apply.js, utils/markdown.js,
+ * print/print.js), which forced the whole legacy tree into the release ZIP. It
+ * is now a fourth entry point. Two layout notes, both deliberate:
+ *   - the page stays at dist/print/print.html, because the popup opens exactly
+ *     chrome.runtime.getURL('print/print.html') (options/options.js:901);
+ *   - the bundle lands at the dist ROOT (dist/print.js), like the other three,
+ *     so the page loads it as ../print.js — the same shape as options.html.
  *
  * Phase 2 step 2 (rewiring): dist/ is a *complete extension root*, so that
  * "Load unpacked -> dist/" works. Two things follow from that:
@@ -107,9 +118,8 @@ function contentEntry(manifest) {
   return js;
 }
 
-/** options entry — <script src> order in options/options.html */
-function optionsEntry() {
-  const htmlPath = 'options/options.html';
+/** Entry derived from the <script src> order of a legacy HTML page (order-sensitive). */
+function htmlScriptEntry(htmlPath) {
   const html = fs.readFileSync(abs(htmlPath), 'utf8');
   const dir = path.dirname(abs(htmlPath));
   const re = /<script\b([^>]*)\bsrc\s*=\s*["']([^"']+)["']([^>]*)>/gi;
@@ -121,7 +131,7 @@ function optionsEntry() {
     if (/\btype\s*=\s*["']module["']/i.test(attrs)) {
       fail(
         `${htmlPath}: <script src="${src}" type="module"> — module scripts cannot be ` +
-          'concatenated into the classic-scope bundle. The options bundle expects classic scripts.'
+          'concatenated into the classic-scope bundle. The bundles expect classic scripts.'
       );
     }
     out.push(rel(path.resolve(dir, src)));
@@ -130,11 +140,25 @@ function optionsEntry() {
   return out;
 }
 
+/** options entry — <script src> order in options/options.html */
+function optionsEntry() {
+  return htmlScriptEntry('options/options.html');
+}
+
+/**
+ * print entry — <script src> order in print/print.html. Phase 3 step 1: the
+ * print page was the last consumer of source-tree globals, so its three legacy
+ * scripts become one bundle and the page stops referencing the source layout.
+ */
+function printEntry() {
+  return htmlScriptEntry('print/print.html');
+}
+
 /* ------------------------------------------------------------------ *
  * 2. Asset copy (mirrors the repo layout under dist/)
  * ------------------------------------------------------------------ */
 
-const ASSET_FILES = ['manifest.json', 'options/options.html', 'options/options.css'];
+const ASSET_FILES = ['manifest.json', 'options/options.html', 'options/options.css', 'print/print.html'];
 const ASSET_DIRS = ['icons'];
 // manifest.json declares `default_locale`, so Chrome refuses to load the
 // extension unless _locales/<locale>/messages.json exists next to it.
@@ -179,6 +203,7 @@ function runtimeRegisteredFiles() {
 const REWIRED_SERVICE_WORKER = 'background.js';
 const REWIRED_CONTENT_SCRIPTS = ['content.js'];
 const REWIRED_OPTIONS_SCRIPT = '../options.js';
+const REWIRED_PRINT_SCRIPT = '../print.js';
 // A local (non-URL) classic <script src="...">...</script> tag, with its indent
 // and to end of line, so removing the legacy tags leaves no blank lines behind.
 const LOCAL_SCRIPT_TAG =
@@ -206,24 +231,38 @@ function rewireManifestText(text) {
   return JSON.stringify(out, null, 2) + '\n';
 }
 
-function rewireOptionsHtmlText(text) {
+/**
+ * Replace the FIRST local <script src> tag with the bundle tag and drop the
+ * remaining local tags (the bundle already contains all of them, in order).
+ */
+function rewireHtmlText(text, scriptSrc, label) {
   let inserted = false;
   const out = text.replace(LOCAL_SCRIPT_TAG, (tag) => {
     if (inserted) return '';
     inserted = true;
     const indent = (tag.match(/^[ \t]*/) || [''])[0];
-    return `${indent}<script src="${REWIRED_OPTIONS_SCRIPT}"></script>\n`;
+    return `${indent}<script src="${scriptSrc}"></script>\n`;
   });
-  if (!inserted) fail('dist/options/options.html: no local <script src> tag to replace');
+  if (!inserted) fail(`${label}: no local <script src> tag to replace`);
   return out;
+}
+
+function rewireOptionsHtmlText(text) {
+  return rewireHtmlText(text, REWIRED_OPTIONS_SCRIPT, 'dist/options/options.html');
+}
+
+function rewirePrintHtmlText(text) {
+  return rewireHtmlText(text, REWIRED_PRINT_SCRIPT, 'dist/print/print.html');
 }
 
 async function rewireDist() {
   const manifestPath = path.join(DIST, 'manifest.json');
-  const htmlPath = path.join(DIST, 'options', 'options.html');
+  const optionsPath = path.join(DIST, 'options', 'options.html');
+  const printPath = path.join(DIST, 'print', 'print.html');
   await fsp.writeFile(manifestPath, rewireManifestText(await fsp.readFile(manifestPath, 'utf8')));
-  await fsp.writeFile(htmlPath, rewireOptionsHtmlText(await fsp.readFile(htmlPath, 'utf8')));
-  return ['manifest.json (rewired)', 'options/options.html (rewired)'];
+  await fsp.writeFile(optionsPath, rewireOptionsHtmlText(await fsp.readFile(optionsPath, 'utf8')));
+  await fsp.writeFile(printPath, rewirePrintHtmlText(await fsp.readFile(printPath, 'utf8')));
+  return ['manifest.json (rewired)', 'options/options.html (rewired)', 'print/print.html (rewired)'];
 }
 
 /* ------------------------------------------------------------------ *
@@ -252,6 +291,7 @@ function collectEntries() {
     background: backgroundEntry(manifest),
     content: contentEntry(manifest),
     options: optionsEntry(),
+    print: printEntry(),
   };
 }
 
@@ -347,16 +387,40 @@ async function verify(outputs) {
  * 4b. Dist verification (Phase 2 step 2): what Chrome will load
  * ------------------------------------------------------------------ */
 
+/** The entry-point bundles: everything else in dist/ is copied verbatim. */
+const BUNDLES = ['background.js', 'content.js', 'options.js', 'print.js'];
+
 const REQUIRED_DIST_FILES = [
   'manifest.json',
   'options/options.html',
   'options/options.css',
+  'print/print.html',
   'icons/icon16.png',
   'icons/icon48.png',
   'icons/icon128.png',
   '_locales/ru/messages.json',
   '_locales/en/messages.json',
 ];
+
+/**
+ * Phase 3 step 1: the same rewire contract applies to every bundled HTML page.
+ * Exactly one local <script src> (the bundle) and no legacy source path left.
+ */
+function verifyHtmlRewire(relPath, expectedScript, staleTokens, problems) {
+  return fsp.readFile(path.join(DIST, relPath), 'utf8').then((html) => {
+    const localTags = [...html.matchAll(LOCAL_SCRIPT_TAG)];
+    if (localTags.length !== 1) {
+      problems.push(`dist/${relPath}: expected exactly 1 local <script src>, found ${localTags.length}`);
+    } else if (!localTags[0][0].includes(`<script src="${expectedScript}"></script>`)) {
+      problems.push(`dist/${relPath}: local script tag is not <script src="${expectedScript}">`);
+    }
+    for (const stale of staleTokens) {
+      if (html.includes(stale)) {
+        problems.push(`dist/${relPath}: still references the legacy source path "${stale}"`);
+      }
+    }
+  });
+}
 
 async function collectDistJs(dir = DIST, relDir = '') {
   const found = [];
@@ -389,22 +453,22 @@ async function verifyDist() {
     );
   }
 
-  const html = await fsp.readFile(path.join(DIST, 'options', 'options.html'), 'utf8');
-  const localTags = [...html.matchAll(LOCAL_SCRIPT_TAG)];
-  if (localTags.length !== 1) {
-    problems.push(`dist/options/options.html: expected exactly 1 local <script src>, found ${localTags.length}`);
-  } else if (!localTags[0][0].includes(`<script src="${REWIRED_OPTIONS_SCRIPT}"></script>`)) {
-    problems.push(`dist/options/options.html: local script tag is not <script src="${REWIRED_OPTIONS_SCRIPT}">`);
-  }
-  for (const stale of ['../utils/', '../adapters/', '../core/', 'i18n-apply.js']) {
-    if (html.includes(stale)) {
-      problems.push(`dist/options/options.html: still references the legacy source path "${stale}"`);
-    }
-  }
+  await verifyHtmlRewire(
+    'options/options.html',
+    REWIRED_OPTIONS_SCRIPT,
+    ['../utils/', '../adapters/', '../core/', 'i18n-apply.js'],
+    problems
+  );
+  await verifyHtmlRewire(
+    'print/print.html',
+    REWIRED_PRINT_SCRIPT,
+    ['../options/', '../utils/', 'i18n-apply.js', 'markdown.js'],
+    problems
+  );
 
-  // dist/ must not carry legacy entry files: only the three bundles, plus the
+  // dist/ must not carry legacy entry files: only the bundles, plus the
   // files Chrome resolves by path at runtime (see runtimeRegisteredFiles).
-  const expected = new Set(['background.js', 'content.js', 'options.js', ...runtimeRegisteredFiles()]);
+  const expected = new Set([...BUNDLES, ...runtimeRegisteredFiles()]);
   const actual = new Set(await collectDistJs());
   for (const f of actual) {
     if (!expected.has(f)) problems.push(`dist/${f}: legacy .js file left in the bundle output`);
@@ -419,7 +483,8 @@ async function verifyDist() {
 
   if (problems.length) fail(problems.join('\n  '));
   console.log(
-    `  ✓ dist/ verified: ${actual.size} .js files (3 bundles + ${actual.size - 3} runtime-registered)`
+    `  ✓ dist/ verified: ${actual.size} .js files (${BUNDLES.length} bundles + ` +
+      `${actual.size - BUNDLES.length} runtime-registered)`
   );
 }
 

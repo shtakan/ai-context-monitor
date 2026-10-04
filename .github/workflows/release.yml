@@ -28,7 +28,7 @@ jobs:
         run: |
           if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
 
-      # Phase 2 step 2: пакет собирается из бандлов (esbuild, 3 entry point).
+      # Phase 2 step 2: пакет собирается из бандлов (esbuild, 4 entry point).
       # Сборка обязана пройти ДО упаковки: build.mjs сам верифицирует результат
       # (verify + verifyDist) и падает, если dist/ неполон или остался legacy-вход.
       # build:prod (--minify, без sourcemap) — релизный артефакт: пакет без карт
@@ -52,14 +52,23 @@ jobs:
           # v2.0.14 (Phase 2 step 2): из пакета убраны build-артефакты репозитория —
           # сборщик (\.mjs$) и конфиг tsc (tsconfig\.json$) нужны репозиторию, а не
           # пользователю, и в рантайме расширения не участвуют.
-          git ls-files -z | grep -zvE '(\.github/|\.gitignore|\.gitattributes|\.clineignore|tools/|tests/|\.kilo/|coverage/|\.mjs$|tsconfig\.json$|\.md$|package(-lock)?\.json$)' | xargs -0 zip -q "$ZIP"
+          # Phase 3 step 1: dist/ стал самодостаточным, поэтому legacy-дерево исходников
+          # уходит из пакета. ^core/ и ^utils/ безопасны: все их файлы либо склеены в
+          # бандлы, либо перечислены в runtimeRegisteredFiles() и попадают в ZIP оверлеем
+          # dist/ (16 MAIN-world файлов, которые service worker регистрирует сам).
+          # options/options\.js$ исключён как единственный бандлируемый файл под options/;
+          # options/i18n-apply.js ОСТАЁТСЯ — его грузят напрямую privacy/privacy.html и
+          # docs/index.html. print/print\.js$ исключён: оверлей кладёт бандл в корень (print.js),
+          # а print/print.html остаётся и подменяется rewired-копией из dist/.
+          git ls-files -z | grep -zvE '(\.github/|\.gitignore|\.gitattributes|\.clineignore|tools/|tests/|^core/|^utils/|^adapters/|^options/options\.js$|^print/print\.js$|\.kilo/|coverage/|\.mjs$|tsconfig\.json$|\.md$|package(-lock)?\.json$)' | xargs -0 zip -q "$ZIP"
           # v2.0.14 (Phase 2 step 2): поверх legacy-дерева кладём собранные бандлы.
           # Пути передаются так же — относительно корня репозитория, поэтому
-          # одноимённые записи (manifest.json, options/options.html) ЗАМЕНЯЮТ
-          # legacy-копии, а бандлы (background.js, content.js, options.js) и
-          # _locales/ появляются в корне пакета. Именно rewired-копии manifest.json
-          # и options/options.html определяют, что запускает Chrome: 3 бандла
-          # + 16 MAIN-world файлов, которые service worker регистрирует сам.
+          # одноимённые записи (manifest.json, options/options.html, print/print.html)
+          # ЗАМЕНЯЮТ legacy-копии, а бандлы (background.js, content.js, options.js,
+          # print.js) и _locales/ появляются в корне пакета. Именно rewired-копии
+          # manifest.json, options/options.html и print/print.html определяют, что
+          # запускает Chrome: 4 бандла + 16 MAIN-world файлов, которые service worker
+          # регистрирует сам.
           # Файлы перечисляются find-ом (а не 'zip -r dist'), чтобы записи в архиве
           # гарантированно не получили префикс 'dist/' и совпали с legacy-именами.
           ( cd dist && find . -type f ) | sed 's|^\./||' | xargs zip -q "$ZIP"

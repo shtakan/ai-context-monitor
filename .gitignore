@@ -1,4 +1,4 @@
-﻿# IDE
+# IDE
 .vscode/
 .idea/
 
@@ -113,7 +113,12 @@ PROJECT_HANDOFF_30.09.26
 jsall/
 chatjs/
 deepseek_test/
-print/
+# v22 fix (Phase 3 step 1): здесь был bare `print/` — он ошибочно накрывал
+# ТРЕКАЕМУЮ директорию расширения print/ (print.html + print.js: печатная форма
+# PDF, открывается по chrome.runtime.getURL('print/print.html')). Уже отслеживаемые
+# файлы паттерн не ломал, но любой НОВЫЙ файл в print/ молча не попадал в git
+# (git check-ignore -v --no-index print/x.txt → .gitignore:116). Для дампов сессии
+# такого имени в репозитории нет — паттерн удалён, а не переименован.
 
 # === v22: стандартные ===
 node_modules/
