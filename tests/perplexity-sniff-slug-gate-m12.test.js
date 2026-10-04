@@ -316,7 +316,12 @@ describe('M-12 (д): bootstrap и виртуальный F5 не тронуты'
 
 // ---- «НЕ трогать»: прочие перехватчики не изменены ----
 describe('M-12: аудит прочих интерцепторов — паттерн найден только у Perplexity', () => {
-  const at = function (rel) { return fs.readFileSync(path.join(__dirname, '..', rel), 'utf8'); };
+  const at = function (rel) {
+    // Phase 3: ядро читается через concat-хелпер, прочие перехватчики — с диска
+    return rel === 'core/gemini-intercept.js'
+      ? require('./helpers/gemini-intercept-source.js').geminiSource
+      : fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
+  };
   test('ChatGPT/Claude/DeepSeek/Gemini: у пассивной ловли снимка есть гард по convId', () => {
     expect(at('core/page-intercept.js')).toContain('if (expectedConvId && expectedConvId !== currentConvId) {');
     expect(at('core/claude-intercept.js')).toContain('if (isStaleSnapshotBody(data, String(when || \'passive\'))) return;');

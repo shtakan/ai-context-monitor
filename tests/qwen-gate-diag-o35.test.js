@@ -285,7 +285,10 @@ describe('O-35 C: qwen-spa — событие смены разговора до
   test('C: у шести существующих перехватчиков dispatch на месте (R-пин регресс-поверхности)', function () {
     ['core/page-intercept.js', 'core/gemini-intercept.js', 'core/deepseek-intercept.js',
       'core/claude-intercept.js', 'core/perplexity-intercept.js'].forEach(function (rel) {
-      const src = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+      // Phase 3: ядро читается через concat-хелпер, прочие перехватчики — с диска
+      const src = rel === 'core/gemini-intercept.js'
+        ? require('./helpers/gemini-intercept-source.js').geminiSource
+        : fs.readFileSync(path.join(ROOT, rel), 'utf8');
       expect(src).toContain("window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'))");
     });
   });

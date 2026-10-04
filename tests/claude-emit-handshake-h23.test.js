@@ -190,7 +190,10 @@ describe('H23 (d) пины контракта (каналы только CustomE
       'adapters/chatgpt-adapter.js', 'adapters/deepseek-adapter.js', 'adapters/perplexity-adapter.js',
       'adapters/google-search-adapter.js', 'adapters/claude-adapter.js'];
     others.forEach(function (rel) {
-      const src = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+      // Phase 3: ядро читается через concat-хелпер, прочие перехватчики/адаптеры — с диска
+      const src = rel === 'core/gemini-intercept.js'
+        ? require('./helpers/gemini-intercept-source.js').geminiSource
+        : fs.readFileSync(path.join(ROOT, rel), 'utf8');
       expect(src).not.toContain('ai-cm-content-ready');
       expect(src).not.toContain('ai-cm-request-emit');
     });

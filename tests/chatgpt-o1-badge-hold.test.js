@@ -476,7 +476,10 @@ describe('O-1 R3: автоэкспорт не тронут', () => {
     ['core/claude-intercept.js', 'core/deepseek-intercept.js',
       'core/google-search-intercept.js', 'core/gemini-intercept.js'
     ].forEach(function (rel) {
-      const src = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+      // Phase 3: ядро читается через concat-хелпер, прочие перехватчики — с диска
+      const src = rel === 'core/gemini-intercept.js'
+        ? require('./helpers/gemini-intercept-source.js').geminiSource
+        : fs.readFileSync(path.join(ROOT, rel), 'utf8');
       expect(src).not.toContain('aiCmBadgeHold');
       expect(src).not.toContain('AI_CM_BADGE_HOLD');
     });
