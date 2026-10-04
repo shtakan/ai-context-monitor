@@ -103,26 +103,30 @@ async function ensureInterceptor() {
     // core/gemini-diag.js, он идёт ПЕРЕД ядром (после hidden-scroll). Ядро умеет жить без
     // него (мягкая деградация + лог), поэтому у профилей с уже установленным id -v2
     // диагностика просто выключится до миграции id — функциональные пути не задеты.
+    // Phase 3 step 5 (rpc): опознание RPC + метаданные запроса (buildActive*/rememberSiteMeta/
+    // captureHeadersFromInit и родственные) вынесены в core/gemini-rpc.js, он идёт ПЕРЕД ядром
+    // (после diag). Ядро тоже умеет жить без него (мягкая деградация + безопасные заглушки).
     // Почему id сменён, а не переиспользован: MV3 registerContentScripts НЕ перечитывает
     // js[] под уже существующим id, унаследованным от прежней версии расширения —
     // без смены id core/gemini-hidden-scroll.js не доехал бы до обновившихся
     // пользователей (прецедент — DeepSeek, id 'ai-cm-deepseek-intercept-v2' ниже).
-    if (ids.indexOf('ai-cm-gemini-intercept-v2') === -1) {
-      // Снимаем регистрацию прежнего id: она осталась в профиле после обновления и
-      // несла бы старый js[] (без hidden-scroll) параллельно с новым пучком. Старого
-      // id может не быть (чистая установка) — поэтому тихий catch без диагностики.
+    // Шаг 5 использует ровно тот же приём: id -v3, а прежние -v2 и legacy снимаются ниже.
+    if (ids.indexOf('ai-cm-gemini-intercept-v3') === -1) {
+      // Снимаем регистрации прежних id: они остались в профиле после обновления и
+      // несли бы старый js[] (без hidden-scroll/diag/rpc) параллельно с новым пучком.
+      // Прежних id может не быть (чистая установка) — поэтому тихий catch без диагностики.
       try {
-        await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-gemini-intercept'] });
+        await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-gemini-intercept', 'ai-cm-gemini-intercept-v2'] });
       } catch (eUnregGemini) { }
-      await registerSafe('ai-cm-gemini-intercept-v2', {
-        id: 'ai-cm-gemini-intercept-v2',
+      await registerSafe('ai-cm-gemini-intercept-v3', {
+        id: 'ai-cm-gemini-intercept-v3',
         matches: ['https://gemini.google.com/*', 'https://aistudio.google.com/*'],
-        js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-intercept.js'],
+        js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-intercept.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false
       });
-      console.log('AI Context Monitor: перехватчик Gemini (v2) зарегистрирован (мир сайта, document_start)');
+      console.log('AI Context Monitor: перехватчик Gemini (v3) зарегистрирован (мир сайта, document_start)');
     }
 
     // перехватчик DeepSeek (v2: новый id, чтобы Chrome гарантированно перезагрузил

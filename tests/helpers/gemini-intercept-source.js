@@ -37,7 +37,8 @@ const ROOT = path.join(__dirname, '..', '..');
 // utils/* сюда НЕ входят: они не декомпозировались (как и в content-source.js).
 const MODULES = [
   'core/gemini-hidden-scroll.js',
-  'core/gemini-diag.js'
+  'core/gemini-diag.js',
+  'core/gemini-rpc.js'
 ];
 const INTERCEPT_JS = 'core/gemini-intercept.js';
 
