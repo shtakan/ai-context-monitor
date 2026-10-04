@@ -1437,3 +1437,31 @@ Rewired-копия живёт **только в `dist/`** — корневые `
 **Живая runtime-валидация (владелец, Chrome):** ✅ пройдена — service worker активен без ошибок в консоли SW; content script инжектируется без `ReferenceError`; options-страница открывается и работает
 **Не тронуто:** код `core/`, `adapters/`, `utils/`, `options/`, `print/`; корневые `manifest.json`, `package.json`, `tsconfig.json`; `tests/`; `CHANGELOG.md`, версия, теги; аппендиксы v17–v21 и весь текст выше v22
 **Push:** в этом прогоне не выполнялся (шаг владельца после отчёта; на момент записи ahead origin/main = 3: `0c5e8ce`, `d800db3`, docs-коммит этого аппендикса)
+
+## Аппендикс v23 — Phase 3 (self-contained dist & packaging safety)
+
+**Коммиты:** `ddae930` (print bundle), `e756276` (ZIP integrity invariant).
+
+### 1. Self-contained print bundle (`ddae930`)
+- `print/print.html` переведён на бандл `dist/print.js` (9 489 B prod).
+- Зависимости: `options/i18n-apply.js`, `utils/markdown.js`, `print.js` → склеены в IIFE.
+- `options/i18n-apply.js` **оставлен** в ZIP (allowlist): используется `privacy/privacy.html:300` и `docs/index.html:370`.
+- `.gitignore`: паттерн `print/` удалён (блокировал tracked-файлы).
+- Legacy `core/`, `utils/`, `adapters/` исключены из ZIP через `grep -zvE`.
+- `verifyDist()` расширен: ожидает 4 бандла + print.html.
+
+### 2. Инвариант безопасности упаковки (`e756276`)
+- Новый шаг `Verify ZIP integrity` в `release.yml` (после `Create ZIP`, перед `Upload`).
+- Алгоритм: allowlist = `find dist/*.js` + явный список (`options/i18n-apply.js`, `docs/`, `privacy/`). Проверка: каждый `.js` в архиве ∈ allowlist.
+- Детектирует утечки (тест `test_leak.js` → exit 1) и пустые по `.js` архивы.
+- Не трогает regex-фильтр `Create ZIP` (пин `docs-hygiene.test.js:192-195`).
+- Senior-замечание: allowlist не доказывает полноту пакета — это зона `verifyDist()`. Гарантия: `dist/` не подменяется между `build:prod` и `Upload`.
+
+### 3. Итоговые метрики
+- Тесты: **145 suites / 2777 passed / 6 skipped / 0 failed**.
+- `tsc --noEmit`: exit 0.
+- Runtime-валидация: SW ✅, Content ✅, Options ✅, Print ✅.
+- ZIP: 45 записей, legacy-утечки = 0 (кроме allowlist).
+
+### 4. Технический долг
+- `privacy/privacy.html` и `docs/index.html` всё ещё зависят от `options/i18n-apply.js` (legacy). Следующий этап: их бандлинг или рефакторинг зависимостей.
