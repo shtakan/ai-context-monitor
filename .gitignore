@@ -90,3 +90,35 @@ ctx.py
 aimode.html
 jsall/
 tsc_out*.txt
+
+# === v22: артефакты исследовательских сессий ===
+aimode
+aimode.html
+ctx
+ctx.py
+tsc_out
+tsc_out2
+tsc_out3
+tsc_out4
+tsc_names.txt
+tsc_plain.txt
+tmp_*.txt
+strip.py
+qwen_blog38
+qwen_*.html
+qwen_*.json
+blog_io2026.*
+gem16275805.*
+PROJECT_HANDOFF_30.09.26
+jsall/
+chatjs/
+deepseek_test/
+print/
+
+# === v22: стандартные ===
+node_modules/
+coverage/
+dist/
+build/
+.DS_Store
+Thumbs.db
