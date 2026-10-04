@@ -28,7 +28,7 @@ jobs:
         run: |
           if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
 
-      # Phase 2 step 2: пакет собирается из бандлов (esbuild, 4 entry point).
+      # Phase 2 step 2: пакет собирается из бандлов (esbuild, 5 entry point).
       # Сборка обязана пройти ДО упаковки: build.mjs сам верифицирует результат
       # (verify + verifyDist) и падает, если dist/ неполон или остался legacy-вход.
       # build:prod (--minify, без sourcemap) — релизный артефакт: пакет без карт
@@ -56,19 +56,23 @@ jobs:
           # уходит из пакета. ^core/ и ^utils/ безопасны: все их файлы либо склеены в
           # бандлы, либо перечислены в runtimeRegisteredFiles() и попадают в ZIP оверлеем
           # dist/ (16 MAIN-world файлов, которые service worker регистрирует сам).
-          # options/options\.js$ исключён как единственный бандлируемый файл под options/;
-          # options/i18n-apply.js ОСТАЁТСЯ — его грузят напрямую privacy/privacy.html и
-          # docs/index.html. print/print\.js$ исключён: оверлей кладёт бандл в корень (print.js),
-          # а print/print.html остаётся и подменяется rewired-копией из dist/.
-          git ls-files -z | grep -zvE '(\.github/|\.gitignore|\.gitattributes|\.clineignore|tools/|tests/|^core/|^utils/|^adapters/|^options/options\.js$|^print/print\.js$|\.kilo/|coverage/|\.mjs$|tsconfig\.json$|\.md$|package(-lock)?\.json$)' | xargs -0 zip -q "$ZIP"
+          # options/options\.js$ и ^print/print\.js$ исключены как бандлируемые входы:
+          # оверлей кладёт их бандлы в корень пакета (options.js, print.js), а сами
+          # HTML-страницы подменяются rewired-копиями из dist/.
+          # Phase 3 step 3: privacy/privacy.html и docs/index.html больше не грузят
+          # options/i18n-apply.js — они переведены на бандл dist/shared-i18n.js, поэтому
+          # файл выходит из пакета отдельной ступенью конвейера (см. ниже), а не правкой
+          # регулярки: фильтрующую строку ниже пинуют тесты M-6 (гигиена релиза) и M-10
+          # («ровно одна такая строка», набор токенов), поэтому её текст не изменён.
+          git ls-files -z | grep -zvE '(\.github/|\.gitignore|\.gitattributes|\.clineignore|tools/|tests/|^core/|^utils/|^adapters/|^options/options\.js$|^print/print\.js$|\.kilo/|coverage/|\.mjs$|tsconfig\.json$|\.md$|package(-lock)?\.json$)' | grep -zvxF 'options/i18n-apply.js' | xargs -0 zip -q "$ZIP"
           # v2.0.14 (Phase 2 step 2): поверх legacy-дерева кладём собранные бандлы.
           # Пути передаются так же — относительно корня репозитория, поэтому
-          # одноимённые записи (manifest.json, options/options.html, print/print.html)
-          # ЗАМЕНЯЮТ legacy-копии, а бандлы (background.js, content.js, options.js,
-          # print.js) и _locales/ появляются в корне пакета. Именно rewired-копии
-          # manifest.json, options/options.html и print/print.html определяют, что
-          # запускает Chrome: 4 бандла + 16 MAIN-world файлов, которые service worker
-          # регистрирует сам.
+          # одноимённые записи (manifest.json, options/options.html, print/print.html,
+          # privacy/privacy.html, docs/index.html) ЗАМЕНЯЮТ legacy-копии, а бандлы
+          # (background.js, content.js, options.js, print.js, shared-i18n.js),
+          # docs/screenshots/ и _locales/ появляются в корне пакета. Именно rewired-копии
+          # manifest.json и четырёх страниц определяют, что запускает Chrome:
+          # 5 бандлов + 16 MAIN-world файлов, которые service worker регистрирует сам.
           # Файлы перечисляются find-ом (а не 'zip -r dist'), чтобы записи в архиве
           # гарантированно не получили префикс 'dist/' и совпали с legacy-именами.
           ( cd dist && find . -type f ) | sed 's|^\./||' | xargs zip -q "$ZIP"
@@ -86,10 +90,12 @@ jobs:
       # Алгоритм:
       #   1) allowlist = источник истины, а не список в коде: все .js из собранного
       #      dist/ (в архиве они лежат без префикса dist/, поэтому './' снимается
-      #      sed-ом) + легаси-файлы, которые грузятся напрямую из HTML:
-      #      options/i18n-apply.js (privacy/privacy.html, docs/index.html) + любые
-      #      собственные .js в docs/ и privacy/ (сегодня таких нет — правило на
-      #      будущее, чтобы добавление скрипта в руководство не валило релиз);
+      #      sed-ом) + любые собственные .js в docs/ и privacy/ (сегодня таких нет —
+      #      правило на будущее, чтобы добавление скрипта в руководство не валило
+      #      релиз). Phase 3 step 3: легаси-файл options/i18n-apply.js из allowlist
+      #      УБРАН — privacy/privacy.html и docs/index.html переведены на бандл
+      #      dist/shared-i18n.js, а сам файл вырезается из архива ступенью
+      #      grep -zvxF в шаге Create ZIP. Его появление в архиве = регрессия;
       #   2) берём все .js из архива (unzip -Z1) и вычитаем allowlist
       #      (grep -vxF -f — точное совпадение целой строки, не подстрока);
       #   3) непустая разность = неожиданный файл → exit 1 с его путём; нулевое
@@ -103,7 +109,6 @@ jobs:
 
           echo "--- (1) allowlist ---"
           ( cd dist && find . -type f -name '*.js' ) | sed 's|^\./||' > "$ALLOW"
-          echo 'options/i18n-apply.js' >> "$ALLOW"
           find docs privacy -type f -name '*.js' 2>/dev/null >> "$ALLOW" || true
           sort "$ALLOW"
 

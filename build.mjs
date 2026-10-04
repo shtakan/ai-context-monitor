@@ -16,9 +16,10 @@
  * drift from the manifest / HTML script order.
  *
  * Outputs (dist/):
- *   background.js, content.js, options.js, print.js   (IIFE, no import/export)
+ *   background.js, content.js, options.js, print.js, shared-i18n.js
+ *                                                     (IIFE, no import/export)
  *   manifest.json, icons/**, options/options.html, options/options.css,
- *   print/print.html
+ *   print/print.html, privacy/privacy.html, docs/index.html + docs/screenshots/**
  *   _locales/**, plus the files Chrome resolves itself at runtime (see step 2c)
  *
  * Phase 3 step 1 (print): print/print.html is the last legacy page that pulled
@@ -29,6 +30,22 @@
  *     chrome.runtime.getURL('print/print.html') (options/options.js:901);
  *   - the bundle lands at the dist ROOT (dist/print.js), like the other three,
  *     so the page loads it as ../print.js — the same shape as options.html.
+ *
+ * Phase 3 step 3 (privacy + docs): privacy/privacy.html and docs/index.html were
+ * the last two pages pulling a legacy source script (options/i18n-apply.js)
+ * directly. Their dependency lists are identical (one file), so they share ONE
+ * bundle — dist/shared-i18n.js at the dist root, loaded by both pages as
+ * ../shared-i18n.js. Two consequences worth naming:
+ *   - dist/ now carries rewired copies of BOTH pages, so «Помощь» and
+ *     «Приватность» also work from an unpacked dist/ (until now those two trees
+ *     existed only inside the release ZIP);
+ *   - with that, no page in the package references the legacy source tree any
+ *     more, and options/i18n-apply.js stops being shipped (see release.yml).
+ * docs/screenshots/** is copied along because docs/index.html shows them with
+ * page-relative paths; in the ZIP they override identical legacy entries, so the
+ * archive content does not change. The root pages stay legacy on purpose — their
+ * script tag is pinned by tests/privacy.test.js:173-181 and
+ * tests/i18n-locales.test.js:264-270.
  *
  * Phase 2 step 2 (rewiring): dist/ is a *complete extension root*, so that
  * "Load unpacked -> dist/" works. Two things follow from that:
@@ -154,15 +171,47 @@ function printEntry() {
   return htmlScriptEntry('print/print.html');
 }
 
+/**
+ * shared-i18n entry — Phase 3 step 3: privacy/privacy.html and docs/index.html
+ * are the last two pages that load a legacy source script directly. Both load
+ * exactly the same one, so they are served by ONE bundle. The shared bundle is
+ * only valid while the two lists are identical, so a divergence is a hard error
+ * rather than a silent loss of code on one of the pages.
+ */
+function sharedI18nEntry() {
+  const pages = ['privacy/privacy.html', 'docs/index.html'];
+  const base = { page: pages[0], list: htmlScriptEntry(pages[0]) };
+  for (const page of pages.slice(1)) {
+    const list = htmlScriptEntry(page);
+    if (JSON.stringify(list) !== JSON.stringify(base.list)) {
+      fail(
+        `${page}: loads [${list.join(', ')}] but ${base.page} loads [${base.list.join(', ')}]. ` +
+          'One shared bundle requires identical dependencies — give the pages separate entry points.'
+      );
+    }
+  }
+  return base.list;
+}
+
 /* ------------------------------------------------------------------ *
  * 2. Asset copy (mirrors the repo layout under dist/)
  * ------------------------------------------------------------------ */
 
-const ASSET_FILES = ['manifest.json', 'options/options.html', 'options/options.css', 'print/print.html'];
+const ASSET_FILES = [
+  'manifest.json',
+  'options/options.html',
+  'options/options.css',
+  'print/print.html',
+  // Phase 3 step 3: bundled pages — copied, then rewired in dist/ (see 2c).
+  'privacy/privacy.html',
+  'docs/index.html',
+];
 const ASSET_DIRS = ['icons'];
 // manifest.json declares `default_locale`, so Chrome refuses to load the
 // extension unless _locales/<locale>/messages.json exists next to it.
-const ASSET_TREES = ['_locales'];
+// docs/screenshots is here because dist/docs/index.html references the images
+// with page-relative paths (screenshots/*.png).
+const ASSET_TREES = ['_locales', 'docs/screenshots'];
 
 /* ------------------------------------------------------------------ *
  * 2b. Runtime-resolved files (Phase 2 step 2)
@@ -204,6 +253,10 @@ const REWIRED_SERVICE_WORKER = 'background.js';
 const REWIRED_CONTENT_SCRIPTS = ['content.js'];
 const REWIRED_OPTIONS_SCRIPT = '../options.js';
 const REWIRED_PRINT_SCRIPT = '../print.js';
+// Phase 3 step 3: privacy/privacy.html and docs/index.html both live one level
+// below the dist root, like options/ and print/, so both reach the bundle the
+// same way. One file, one bundle, one path.
+const REWIRED_SHARED_I18N_SCRIPT = '../shared-i18n.js';
 // A local (non-URL) classic <script src="...">...</script> tag, with its indent
 // and to end of line, so removing the legacy tags leaves no blank lines behind.
 const LOCAL_SCRIPT_TAG =
@@ -259,10 +312,30 @@ async function rewireDist() {
   const manifestPath = path.join(DIST, 'manifest.json');
   const optionsPath = path.join(DIST, 'options', 'options.html');
   const printPath = path.join(DIST, 'print', 'print.html');
+  const docsPath = path.join(DIST, 'docs', 'index.html');
+  const privacyPath = path.join(DIST, 'privacy', 'privacy.html');
   await fsp.writeFile(manifestPath, rewireManifestText(await fsp.readFile(manifestPath, 'utf8')));
   await fsp.writeFile(optionsPath, rewireOptionsHtmlText(await fsp.readFile(optionsPath, 'utf8')));
   await fsp.writeFile(printPath, rewirePrintHtmlText(await fsp.readFile(printPath, 'utf8')));
-  return ['manifest.json (rewired)', 'options/options.html (rewired)', 'print/print.html (rewired)'];
+  await fsp.writeFile(
+    docsPath,
+    rewireHtmlText(await fsp.readFile(docsPath, 'utf8'), REWIRED_SHARED_I18N_SCRIPT, 'dist/docs/index.html')
+  );
+  await fsp.writeFile(
+    privacyPath,
+    rewireHtmlText(
+      await fsp.readFile(privacyPath, 'utf8'),
+      REWIRED_SHARED_I18N_SCRIPT,
+      'dist/privacy/privacy.html'
+    )
+  );
+  return [
+    'manifest.json (rewired)',
+    'options/options.html (rewired)',
+    'print/print.html (rewired)',
+    'docs/index.html (rewired)',
+    'privacy/privacy.html (rewired)',
+  ];
 }
 
 /* ------------------------------------------------------------------ *
@@ -292,6 +365,7 @@ function collectEntries() {
     content: contentEntry(manifest),
     options: optionsEntry(),
     print: printEntry(),
+    'shared-i18n': sharedI18nEntry(),
   };
 }
 
@@ -388,13 +462,17 @@ async function verify(outputs) {
  * ------------------------------------------------------------------ */
 
 /** The entry-point bundles: everything else in dist/ is copied verbatim. */
-const BUNDLES = ['background.js', 'content.js', 'options.js', 'print.js'];
+const BUNDLES = ['background.js', 'content.js', 'options.js', 'print.js', 'shared-i18n.js'];
 
 const REQUIRED_DIST_FILES = [
   'manifest.json',
   'options/options.html',
   'options/options.css',
   'print/print.html',
+  // Phase 3 step 3: both bundled pages must survive into dist/ — in the release
+  // ZIP their rewired copies are what replaces the legacy originals.
+  'privacy/privacy.html',
+  'docs/index.html',
   'icons/icon16.png',
   'icons/icon48.png',
   'icons/icon128.png',
@@ -465,16 +543,34 @@ async function verifyDist() {
     ['../options/', '../utils/', 'i18n-apply.js', 'markdown.js'],
     problems
   );
+  // Phase 3 step 3: privacy + docs are bundled pages now — same contract as the
+  // pages above: exactly one local <script src>, pointing at the shared bundle,
+  // with no trace of the legacy source layout left in the markup. The stale
+  // tokens are path-shaped (../options/) on purpose: privacy.html *mentions*
+  // options/i18n-apply.js in its header comment as prose, and that description of
+  // the shared mechanism must stay.
+  for (const page of ['docs/index.html', 'privacy/privacy.html']) {
+    await verifyHtmlRewire(page, REWIRED_SHARED_I18N_SCRIPT, ['../options/', '../utils/', '../core/'], problems);
+  }
 
   // dist/ must not carry legacy entry files: only the bundles, plus the
   // files Chrome resolves by path at runtime (see runtimeRegisteredFiles).
   const expected = new Set([...BUNDLES, ...runtimeRegisteredFiles()]);
-  const actual = new Set(await collectDistJs());
+  const actual = await collectDistJs();
+  // Phase 3 step 3: a .js under options/ in dist/ is always a leftover of the
+  // legacy tree — the only script that ever lived there (i18n-apply.js) is inside
+  // shared-i18n.js now. Reported with its own message, because "extra file" would
+  // not tell the reader which phase removed it and where the code lives instead.
+  const legacyOptionsJs = actual.filter((f) => f.startsWith('options/'));
+  for (const f of legacyOptionsJs) {
+    problems.push(`dist/${f}: legacy script under options/ left in the bundle output (must live in shared-i18n.js)`);
+  }
   for (const f of actual) {
+    if (legacyOptionsJs.includes(f)) continue;
     if (!expected.has(f)) problems.push(`dist/${f}: legacy .js file left in the bundle output`);
   }
   for (const f of expected) {
-    if (!actual.has(f)) problems.push(`dist/${f}: missing (referenced by Chrome at runtime)`);
+    if (!actual.includes(f)) problems.push(`dist/${f}: missing (referenced by Chrome at runtime)`);
   }
 
   for (const r of REQUIRED_DIST_FILES) {
@@ -483,8 +579,8 @@ async function verifyDist() {
 
   if (problems.length) fail(problems.join('\n  '));
   console.log(
-    `  ✓ dist/ verified: ${actual.size} .js files (${BUNDLES.length} bundles + ` +
-      `${actual.size - BUNDLES.length} runtime-registered)`
+    `  ✓ dist/ verified: ${actual.length} .js files (${BUNDLES.length} bundles + ` +
+      `${actual.length - BUNDLES.length} runtime-registered)`
   );
 }
 
@@ -558,9 +654,10 @@ function startWatcher() {
     for (const list of Object.values(collectEntries())) for (const r of list) watchFile(r);
     // runtime-registered files are copied verbatim, so a change must rebuild too
     for (const r of runtimeRegisteredFiles()) watchFile(r);
-    // whole icons/ and _locales/ directories: a newly added file should rebuild
+    // whole trees copied verbatim (icons/, _locales/, docs/screenshots/): a
+    // newly added or renamed file inside one of them should rebuild as well
     targets.set(abs('icons'), { names: new Set(), all: true });
-    targets.set(abs('_locales'), { names: new Set(), all: true });
+    for (const r of ASSET_TREES) targets.set(abs(r), { names: new Set(), all: true });
   };
 
   refreshTargets();
