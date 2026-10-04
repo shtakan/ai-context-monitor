@@ -153,6 +153,47 @@
     findScrollContainer = function () { return null; };
     scheduleAutoScroll = function () { };
   }
+  // ===== v2.0 (Phase 3 step 1): кластер диагностики вынесен в core/gemini-diag.js =====
+  // Модуль подключён в core/background.js ПЕРЕД этим файлом и отдаёт свой API на window.
+  // Уехали ТОЛЬКО диагностические функции (DIAG_TOKENS-сканер и логи холодного старта):
+  // отпечатки ходов (aiCmDiagHash6/aiCmDiagTurnEdge/aiCmOrderedTurns) остались здесь — они
+  // питают H9-гейт полноты (serverFirstHash/dbFirstHash), а не только логи. Инжектируем три
+  // функции ядра и ЧТЕНИЕ convEpoch; записей в состояние ядра у модуля нет. Алиасы сохраняют
+  // прежние имена, поэтому вызовы внутри ядра (fetch/XHR-хуки, ingest, tape-путь) не тронуты.
+  var aiCmGeminiDiag = (typeof window !== 'undefined' && window.AiCmGeminiDiag) || null;
+  var diagCanScan = null;
+  var diagIsStream = null;
+  var diagScanResponse = null;
+  var aiCmEnsureColdWindow = null;
+  var aiCmColdStartIngestLog = null;
+  if (aiCmGeminiDiag) {
+    aiCmGeminiDiag.__bind({
+      // Функции ядра (декларации хойстятся — значения доступны на момент bind).
+      getConvId: getConvId,
+      aiCmOrderedTurns: aiCmOrderedTurns,
+      aiCmDiagTurnEdge: aiCmDiagTurnEdge,
+      // Живое состояние ядра: геттеры/сеттеры, чтобы чтение и запись модуля
+      // видели ОДНИ И ТЕ ЖЕ переменные IIFE (не копии значений).
+      get convEpoch() { return convEpoch; },
+    });
+    diagCanScan = aiCmGeminiDiag.diagCanScan;
+    diagIsStream = aiCmGeminiDiag.diagIsStream;
+    diagScanResponse = aiCmGeminiDiag.diagScanResponse;
+    aiCmEnsureColdWindow = aiCmGeminiDiag.aiCmEnsureColdWindow;
+    aiCmColdStartIngestLog = aiCmGeminiDiag.aiCmColdStartIngestLog;
+  } else {
+    // Модуль не подключён (у уже установленного расширения Chrome остался прежний
+    // registration с тем же id: MV3 не перечитывает js[] под существующим id).
+    // Деградация мягкая: диагностика выключается, функциональные пути не задеты —
+    // отпечатки ходов и счётчики сканирования считаются в ядре.
+    debugLog('log', '[gemini-intercept] core/gemini-diag.js не подключён — ' +
+      'диагностика токенов и логи холодного старта недоступны (проверьте регистрацию content script)');
+    diagCanScan = function () { return false; };
+    diagIsStream = function () { return false; };
+    diagScanResponse = function () { };
+    aiCmEnsureColdWindow = function () { };
+    aiCmColdStartIngestLog = function () { };
+  }
 
   // v33: флаг «Подробные логи» транслируется из content.js (ISOLATED) через CustomEvent
   // (в MAIN-мире chrome.storage недоступен — как в остальных перехватчиках)
@@ -177,64 +218,11 @@
   var DEBUG_STRUCTURE = false;
   var loggedRontgen = false;
 
-  // ---- v28: DIAG_TOKENS — диагностический поиск счётчиков токенов в ответах Gemini ----
-  var DIAG_TOKENS = true;
-  var diagMatchCounts = {};
+  // v2.0 (Phase 3 step 1): счётчик и лимит сканирования остаются в ядре — их читают и пишут
+  // сетевые хуки fetch/XHR. Сама диагностика (diagCanScan/diagIsStream/diagScanResponse и
+  // их константы) уехала в core/gemini-diag.js и приходит сюда через bind-алиасы выше.
   var diagScannedCount = 0;
   var DIAG_MAX_SCANNED = 200;
-  var DIAG_MAX_PER_KEYWORD = 10;
-  var DIAG_MAX_BODY = 2 * 1024 * 1024;
-  var DIAG_KEYWORDS = [
-    "usage_metadata", "usageMetadata", "promptTokenCount",
-    "candidatesTokenCount", "totalTokenCount", "thoughtsTokenCount",
-    "cachedContentTokenCount", "tokenCount", "totalTokens"
-  ];
-  function diagCanScan(url, contentType) {
-    try {
-      if (!url) return false;
-      var urlLower = url.toLowerCase();
-      var ctLower = (contentType || '').toLowerCase();
-      if (ctLower.indexOf('json') !== -1 || ctLower.indexOf('text/') !== -1) return true;
-      if (urlLower.indexOf('/api/') !== -1 || urlLower.indexOf('batchexecute') !== -1 || urlLower.indexOf('stream') !== -1) return true;
-      return false;
-    } catch (e) { return false; }
-  }
-  function diagIsStream(url, contentType) {
-    try {
-      var ctLower = (contentType || '').toLowerCase();
-      if (ctLower.indexOf('text/event-stream') !== -1) return true;
-      if (ctLower.indexOf('application/x-ndjson') !== -1) return true;
-      var urlLower = (url || '').toLowerCase();
-      if (urlLower.indexOf('stream') !== -1 && urlLower.indexOf('batchexecute') === -1) return true;
-      return false;
-    } catch (e) { return false; }
-  }
-  function diagScanResponse(txt, url, isStream) {
-    if (!DIAG_TOKENS) return;
-    try {
-      if (typeof txt !== 'string' || !txt) return;
-      var scanLen = txt.length < DIAG_MAX_BODY ? txt.length : DIAG_MAX_BODY;
-      var scanText = txt.substring(0, scanLen);
-      for (var k = 0; k < DIAG_KEYWORDS.length; k++) {
-        var kw = DIAG_KEYWORDS[k];
-        if (!diagMatchCounts[kw]) diagMatchCounts[kw] = 0;
-        if (diagMatchCounts[kw] >= DIAG_MAX_PER_KEYWORD) continue;
-        var idx = 0;
-        while (diagMatchCounts[kw] < DIAG_MAX_PER_KEYWORD) {
-          var pos = scanText.indexOf(kw, idx);
-          if (pos === -1) break;
-          var start = Math.max(0, pos - 40);
-          var end = Math.min(scanText.length, pos + kw.length + 40);
-          var near = scanText.substring(start, end);
-          near = near.replace(/\n/g, '\\n').replace(/\r/g, '\\r');
-          debugLog('log', '[gemini-token-diag] url=' + url + ' size=' + txt.length + ' stream=' + (isStream ? 'true' : 'false') +
-            ' found="' + kw + '" near=' + JSON.stringify(near));
-          diagMatchCounts[kw]++;
-          idx = pos + kw.length;
-        }
-      }
-    } catch (e) { }
-  }
 
   // ---- v16: приватный рентген id хода ----
   var idmapCalls = 0;
@@ -825,39 +813,12 @@
     ids.sort(function (a, b) { return (turnsMap[a].order || 0) - (turnsMap[b].order || 0); });
     return ids.map(function (id) { return { id: id, text: turnsMap[id].text || '' }; });
   }
-  // Окно холодного старта: первый ingest любого src после инициализации контент-скрипта
-  // или после роста convEpoch (SPA-переход на новый convId). Длительность наблюдения — 60 секунд.
-  var coldStartWindowStart = 0;
-  var coldStartEpoch = -1;
-  var coldStartConvId = '';
-  var coldStartSourcesSeen = [];
-  var coldStartEndTimer = null;
-  function aiCmEnsureColdWindow() {
-    if (coldStartEpoch === convEpoch) return;
-    coldStartEpoch = convEpoch;
-    coldStartWindowStart = Date.now();
-    coldStartConvId = getConvId();
-    coldStartSourcesSeen = [];
-    if (coldStartEndTimer) { try { clearTimeout(coldStartEndTimer); } catch (e) { } coldStartEndTimer = null; }
-    coldStartEndTimer = setTimeout(function () {
-      var turns = aiCmOrderedTurns();
-      var fe = aiCmDiagTurnEdge(turns, 'first');
-      var le = aiCmDiagTurnEdge(turns, 'last');
-      debugLog('log', '[AI CM][cold-start] window-end convId=' + (coldStartConvId || '(none)') +
-        ' sourcesSeen=[' + coldStartSourcesSeen.join(',') + '] totalMsgs=' + turns.length +
-        ' firstMsgHash=' + fe.hash + ' lastMsgHash=' + le.hash);
-    }, 60000);
-  }
-  function aiCmColdStartIngestLog(src, snapshotTurns, msgsAdded, cacheHit) {
-    if (!coldStartWindowStart || (Date.now() - coldStartWindowStart) > 60000) return;
-    if (coldStartSourcesSeen.indexOf(src) === -1) coldStartSourcesSeen.push(src);
-    var fe = aiCmDiagTurnEdge(snapshotTurns, 'first');
-    var le = aiCmDiagTurnEdge(snapshotTurns, 'last');
-    debugLog('log', '[AI CM][cold-start] src=' + src + ' convId=' + (getConvId() || '(none)') +
-      ' msgsAdded=' + msgsAdded + ' firstMsgHash=' + fe.hash + ' lastMsgHash=' + le.hash +
-      ' firstText="' + fe.text + '" lastText="' + le.text + '"' +
-      ' cacheHit=' + (cacheHit ? 'true' : 'false') + ' ageMs=' + (Date.now() - coldStartWindowStart));
-  }
+
+  // v2.0 (Phase 3 step 1): логи холодного старта (aiCmEnsureColdWindow / aiCmColdStartIngestLog
+  // и состояние coldStart*) переехали в core/gemini-diag.js. Мост ниже пинован тестами
+  // и по-прежнему опирается на ЛОКАЛЬНЫЕ хелперы aiCmOrderedTurns / aiCmDiagTurnEdge /
+  // aiCmDiagHash6 — они осознанно НЕ вынесены: их отпечатки питают H9-гейт полноты
+  // (serverFirstHash / dbFirstHash), а не только диагностические логи.
   // Сводка по turnsMap для дампов в момент экспорта; content.js (ISOLATED) получает её
   // синхронно через CustomEvent-мост ai-cm-turns-snap-request/response. Также доступна
   // из консоли MAIN-мира: window.__aiCmGeminiTurnsSnapshot().

@@ -6,6 +6,11 @@
  * core/background.js (registerSafe 'ai-cm-gemini-intercept', document_start,
  * world 'MAIN'): модули идут ПЕРЕД core/gemini-intercept.js.
  *
+ * v2.0 (Phase 3 step 1): кластер диагностики (DIAG_TOKENS-сканер и логи холодного старта) вынесен
+ * в core/gemini-diag.js и добавлен в MODULES тем же порядком, что и в js[] core/background.js
+ * (hidden-scroll -> diag -> ядро). Ядро при отсутствии модуля деградирует мягко, но в браузере
+ * он подключён всегда, поэтому конкатенация ниже по-прежнему равна единому скоупу страницы.
+ *
  * Скрипты одного registerContentScripts-пакета исполняются в одном мировом
  * глобальном лексическом скоупе: объявления модуля видны gemini-intercept.js
  * (и наоборот) по прежним именам, без импортов и префиксов. Поэтому
@@ -31,7 +36,8 @@ const ROOT = path.join(__dirname, '..', '..');
 // Порядок = порядок js[] в core/background.js для 'ai-cm-gemini-intercept'.
 // utils/* сюда НЕ входят: они не декомпозировались (как и в content-source.js).
 const MODULES = [
-  'core/gemini-hidden-scroll.js'
+  'core/gemini-hidden-scroll.js',
+  'core/gemini-diag.js'
 ];
 const INTERCEPT_JS = 'core/gemini-intercept.js';
 

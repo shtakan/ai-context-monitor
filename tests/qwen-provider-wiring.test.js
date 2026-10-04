@@ -115,7 +115,10 @@ describe('O-35: core/background.js — регистрация перехватч
     });
     // набор js[] каждого из шести не изменился
     expect(background).toContain("js: ['utils/debug.js', 'utils/chatgpt-conversation-parser.js', 'utils/intercept-common.js', 'core/page-intercept.js']");
-    expect(background).toContain("js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-intercept.js']");
+    // Gemini: набор пинован как есть; на шаге «диагностика» (Phase 3 step 1) в него ДОБАВЛЕН модуль
+    // core/gemini-diag.js (перед ядром) — пин обновлён на актуальный литерал целиком,
+    // а не ослаблен, чтобы следующая правка регистрации снова требовала ревью.
+    expect(background).toContain("js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'core/deepseek-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'utils/intercept-common.js', 'core/claude-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'utils/perplexity-parser.js', 'utils/intercept-common.js', 'core/perplexity-intercept.js']");

@@ -55,7 +55,7 @@ jobs:
           # Phase 3 step 1: dist/ стал самодостаточным, поэтому legacy-дерево исходников
           # уходит из пакета. ^core/ и ^utils/ безопасны: все их файлы либо склеены в
           # бандлы, либо перечислены в runtimeRegisteredFiles() и попадают в ZIP оверлеем
-          # dist/ (16 MAIN-world файлов, которые service worker регистрирует сам).
+          # dist/ (17 MAIN-world файлов, которые service worker регистрирует сам).
           # options/options\.js$ и ^print/print\.js$ исключены как бандлируемые входы:
           # оверлей кладёт их бандлы в корень пакета (options.js, print.js), а сами
           # HTML-страницы подменяются rewired-копиями из dist/.

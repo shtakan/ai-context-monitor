@@ -99,6 +99,10 @@ async function ensureInterceptor() {
     // перехватчик Gemini (v2.0, этап 3/3: id сменён на -v2 по решению B; сам кластер
     // скрытого скролла вынесен на этапе 2/3 в core/gemini-hidden-scroll.js — модуль
     // обязан идти ПЕРЕД core/gemini-intercept.js).
+    // Phase 3 step 1 (диагностика): кластер DIAG_TOKENS + логи холодного старта вынесены в
+    // core/gemini-diag.js, он идёт ПЕРЕД ядром (после hidden-scroll). Ядро умеет жить без
+    // него (мягкая деградация + лог), поэтому у профилей с уже установленным id -v2
+    // диагностика просто выключится до миграции id — функциональные пути не задеты.
     // Почему id сменён, а не переиспользован: MV3 registerContentScripts НЕ перечитывает
     // js[] под уже существующим id, унаследованным от прежней версии расширения —
     // без смены id core/gemini-hidden-scroll.js не доехал бы до обновившихся
@@ -113,7 +117,7 @@ async function ensureInterceptor() {
       await registerSafe('ai-cm-gemini-intercept-v2', {
         id: 'ai-cm-gemini-intercept-v2',
         matches: ['https://gemini.google.com/*', 'https://aistudio.google.com/*'],
-        js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-intercept.js'],
+        js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-intercept.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false
