@@ -252,9 +252,13 @@ function resetConversationState() {
       P14.resetAutoExportFired(autoExportFired, siteD14, cidD14);
       // v1.14.1 (O3): session-латч целевого conv снимаем синхронно с L1 — семантика
       // D14 «новый вход = один новый fired» сохраняется и для другой вкладки.
+      // Шаг A.1 (security): снятие идёт через SW-канал aiCmLatchRemove (прямой
+      // chrome.storage.session из контент-скрипта убран), кэш вкладки правим сразу.
       try {
-        if (P14.firedSessionKey && chrome.storage.session) {
-          chrome.storage.session.remove(P14.firedSessionKey(siteD14, cidD14));
+        if (P14.firedSessionKey) {
+          aiCmLatchRemove(siteD14, cidD14);
+          var pkD14 = P14.firedSessionKey(siteD14, cidD14);
+          if (pkD14 && typeof sessionFiredCache === 'object' && sessionFiredCache) delete sessionFiredCache[pkD14];
         }
       } catch (eO3D14) { }
     } else if (cidD14) {

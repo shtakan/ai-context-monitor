@@ -46,14 +46,45 @@ try {
   }
 } catch (eCsBoot) { }
 
-// v1.14.1 (O3): по умолчанию chrome.storage.session недоступен контент-скриптам.
-// Открываем доступ, чтобы кросс-табовый латч already-fired (см. content.js)
-// читался/писался прямо из вкладок — без EXTRA сообщений через SW.
+// Шаг A.1 (security): chrome.storage.session сжат до доверенных контекстов.
+// v1.14.1 (O3) открывал его ВСЕМ контент-скриптам (TRUSTED_AND_UNTRUSTED_CONTEXTS),
+// из-за чего BYOK-ключ ('aiCmApiKeySession') был читаем кодом любого сайта в общей
+// куче контент-скриптов. Теперь доступ есть только у SW и extension-страниц
+// (options/options.js — trusted-контекст, его BYOK-путь не меняется); контент-скрипты
+// получают ключ и трогают O3-латч ТОЛЬКО сообщениями к SW (см. обработчики
+// 'aiCm-get-byok-key' и 'aiCm-latch-*' ниже).
 try {
   if (chrome.storage.session && chrome.storage.session.setAccessLevel) {
-    chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' });
+    chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS_ONLY' });
   }
 } catch (eO3Access) { }
+
+// Шаг A.1 (R6): ключ BYOK пишет options-страница напрямую в chrome.storage.session —
+// вкладкам этот onChanged (area='session') больше не виден (доступ сжат выше), поэтому
+// SW транслирует факт смены ключа сообщением 'aiCm-byok-key-changed'; контент
+// перечитывает ключ через 'aiCm-get-byok-key' (иначе считал бы токены старым ключом).
+try {
+  if (chrome.storage && chrome.storage.onChanged && typeof chrome.storage.onChanged.addListener === 'function') {
+    chrome.storage.onChanged.addListener(function (changes, area) {
+      try {
+        if (area !== 'session' || !changes || !changes[AI_CM_BYOK_SESSION_KEY]) return;
+        chrome.tabs.query({}, function (tabs) {
+          try {
+            for (var iT = 0; iT < (tabs || []).length; iT++) {
+              if (tabs[iT] && tabs[iT].id != null && chrome.tabs && typeof chrome.tabs.sendMessage === 'function') {
+                chrome.tabs.sendMessage(tabs[iT].id, { type: 'aiCm-byok-key-changed' }, function () {
+                  // Канал к вкладке мог закрыться (навигация/закрытие) — lastError гасим,
+                  // иначе Chrome пишет «Unchecked runtime.lastError» в консоль SW.
+                  try { void chrome.runtime.lastError; } catch (eLe) { }
+                });
+              }
+            }
+          } catch (eBs) { }
+        });
+      } catch (eCh) { }
+    });
+  }
+} catch (eByokWatch) { }
 
 // Фаза B: чистая логика проактивных порогов из utils/gemini-intercept-logic.js
 // (UMD-файл экспортирует api в self в SW; window/module отсутствуют).
@@ -289,6 +320,71 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       } catch (eR) { }
     }
   }
+  // Шаг A.1 (security, P5): ЕДИНСТВЕННАЯ точка выхода BYOK-ключа из SW.
+  // Ключ теперь недоступен контент-скриптам через chrome.storage.session (см.
+  // setAccessLevel выше), поэтому они просят его сообщением. Отправителя проверяем
+  // (свой origin расширения + таб), наружу уходит только сам ключ, без обёрток,
+  // чтобы не логировать его случайно: '***' в логах — как и раньше.
+  if (message.type === 'aiCm-get-byok-key') {
+    if (!aiCmTrustedSender(sender)) { sendResponse({ key: '' }); return true; }
+    // Единственный потребитель ключа — aiCmReadByokApiKey() (он же нужен COUNT_TOKENS):
+    // отдельная ветка чтения здесь была бы вторым путём выхода ключа из SW (P5).
+    aiCmGetByokKeyForContent().then(function (key) {
+      debugLog('log', '[AI CM][byok] get-key → ' + (key ? '***' : '(пусто)'));
+      sendResponse({ key: key || '' });
+    }).catch(function (errK) {
+      debugLog('error', 'aiCm-get-byok-key error:', errK);
+      sendResponse({ key: '' });
+    });
+    return true; // асинхронный ответ
+  }
+  // Шаг A.1 (security): O3-латч already-fired переведён на SW-канал. Раньше контент-скрипты
+  // читали/писали chrome.storage.session напрямую (это и открывало им доступ ко всему
+  // session-хранилищу, включая BYOK-ключ). Теперь единственный владелец хранилища — SW,
+  // семантика латча прежняя: ключ 'aiCmFired:service|convId' → 1, общий на профиль,
+  // живёт в пределах сессии браузера.
+  if (message.type === 'aiCm-latch-get') {
+    if (!aiCmTrustedSender(sender)) { sendResponse({ fired: false }); return true; }
+    aiCmLatchRead(message.service, message.convId).then(function (fired) {
+      sendResponse({ fired: fired });
+    }).catch(function (errLg) {
+      debugLog('error', 'aiCm-latch-get error:', errLg);
+      sendResponse({ fired: false });
+    });
+    return true; // асинхронный ответ
+  }
+  if (message.type === 'aiCm-latch-set') {
+    if (!aiCmTrustedSender(sender)) { sendResponse({ ok: false }); return true; }
+    aiCmLatchWrite(message.service, message.convId, true).then(function (ok) {
+      sendResponse({ ok: ok });
+    }).catch(function (errLs) {
+      debugLog('error', 'aiCm-latch-set error:', errLs);
+      sendResponse({ ok: false });
+    });
+    return true; // асинхронный ответ
+  }
+  if (message.type === 'aiCm-latch-remove') {
+    if (!aiCmTrustedSender(sender)) { sendResponse({ ok: false }); return true; }
+    aiCmLatchWrite(message.service, message.convId, false).then(function (ok) {
+      sendResponse({ ok: ok });
+    }).catch(function (errLr) {
+      debugLog('error', 'aiCm-latch-remove error:', errLr);
+      sendResponse({ ok: false });
+    });
+    return true; // асинхронный ответ
+  }
+  if (message.type === 'aiCm-latch-get-all') {
+    if (!aiCmTrustedSender(sender)) { sendResponse({ map: {} }); return true; }
+    // Гидратация локального кэша вкладки на старте: второе окно с тем же чатом видит
+    // латч первой вкладки и не экспортирует повторно (v1.14.1/O3 — семантика прежняя).
+    aiCmLatchAllFired().then(function (map) {
+      sendResponse({ map: map });
+    }).catch(function (errLa) {
+      debugLog('error', 'aiCm-latch-get-all error:', errLa);
+      sendResponse({ map: {} });
+    });
+    return true; // асинхронный ответ
+  }
   return true;
 });
 
@@ -517,6 +613,91 @@ async function aiCmReadByokApiKey() {
   aiCmPurgeLegacyByokKeys();
   console.log('[AI CM][byok] migrated plaintext→session');
   return legacy;
+}
+
+// Шаг A.1 (P5): единственный потребитель ключа BYOK для контент-скрипта. Тонкая
+// обёртка над aiCmReadByokApiKey() (тот же хелпер, что и у COUNT_TOKENS) — чтобы
+// «единственная точка выхода ключа» была буквально одной функцией: второй ветки
+// чтения session здесь нет.
+async function aiCmGetByokKeyForContent() {
+  return await aiCmReadByokApiKey();
+}
+
+// ========== Шаг A.1 (security): O3-латч already-fired за SW ==========
+// Ключ 'aiCmFired:service|convId' → 1, ОБЩИЙ на профиль в chrome.storage.session.
+// Дублирует построение ключа из utils/export-emit-pipeline.js:551-564 (там он для
+// sessionMap контент-стороны): санация safeSeg для имён сервисов расширения — тождество
+// (все siteName: gemini/chatgpt/deepseek/google_search/claude/perplexity/qwen — из
+// [a-zA-Z0-9_-]), поэтому ключи SW и контента совпадают; совпадение пинуется тестом.
+var AI_CM_FIRED_SESSION_PREFIX = 'aiCmFired:';
+function aiCmLatchKey(service, convId) {
+  return AI_CM_FIRED_SESSION_PREFIX + String(service == null ? '' : service) + '|' + String(convId == null ? '' : convId);
+}
+
+// Единственный владелец session-хранилища после Шага A.1: контент-скрипты ходят сюда
+// сообщениями 'aiCm-latch-*'. Проверка отправителя — defense-in-depth: свой extension-id
+// и живой таб; внешние/расширения-соседи ответа не получают.
+function aiCmTrustedSender(sender) {
+  try {
+    if (!sender) return false;
+    if (sender.id && chrome.runtime && chrome.runtime.id && sender.id !== chrome.runtime.id) return false;
+    return !!(sender.tab && sender.tab.id != null);
+  } catch (eSnd) { return false; }
+}
+
+function aiCmLatchRead(service, convId) {
+  return new Promise(function (resolve) {
+    try {
+      if (!service || !convId) { resolve(false); return; }
+      if (!chrome.storage || !chrome.storage.session || typeof chrome.storage.session.get !== 'function') { resolve(false); return; }
+      var k = aiCmLatchKey(service, convId);
+      chrome.storage.session.get([k], function (d) {
+        // null/undefined (ключа нет) и любое иное значение, кроме 1, — «не взведён»:
+        // семантика isFiredInSession прежняя (=== 1).
+        resolve(!!d && d[k] === 1);
+      });
+    } catch (eRead) { resolve(false); }
+  });
+}
+
+function aiCmLatchWrite(service, convId, fired) {
+  return new Promise(function (resolve) {
+    try {
+      if (!service || !convId) { resolve(false); return; }
+      if (!chrome.storage || !chrome.storage.session) { resolve(false); return; }
+      var k = aiCmLatchKey(service, convId);
+      var done = false;
+      function finish(ok) { if (!done) { done = true; resolve(ok); } }
+      if (fired) {
+        if (typeof chrome.storage.session.set !== 'function') { resolve(false); return; }
+        var patch = {};
+        patch[k] = 1; // значение ровно 1 — инвариант isFiredInSession (=== 1)
+        chrome.storage.session.set(patch, function () { finish(true); });
+      } else {
+        if (typeof chrome.storage.session.remove !== 'function') { resolve(false); return; }
+        chrome.storage.session.remove([k], function () { finish(true); });
+      }
+    } catch (eWrite) { resolve(false); }
+  });
+}
+
+// Гидратация кэша вкладки (sessionFiredCache в core/export-manager.js): контент больше
+// не читает storage.session целиком, поэтому карту отдаёт SW (только префикс латча).
+function aiCmLatchAllFired() {
+  return new Promise(function (resolve) {
+    try {
+      if (!chrome.storage || !chrome.storage.session || typeof chrome.storage.session.get !== 'function') { resolve({}); return; }
+      chrome.storage.session.get(null, function (all) {
+        var out = {};
+        try {
+          for (var k in (all || {})) {
+            if (k.indexOf(AI_CM_FIRED_SESSION_PREFIX) === 0) out[k] = all[k];
+          }
+        } catch (eCopy) { }
+        resolve(out);
+      });
+    } catch (eAll) { resolve({}); }
+  });
 }
 
 // ========== M-9: гигиена COUNT_TOKENS (таймаут + debounce + кэш) ==========

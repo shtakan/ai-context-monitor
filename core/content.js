@@ -213,20 +213,22 @@ function aiCmFirstLegacyByokKey(data) {
   return '';
 }
 
-// M-7: чтение ключа BYOK. Первичен session; plaintext прежних версий в local —
-// только переходный фолбэк на окно миграции (саму миграцию делает background SW).
+// Шаг A.1 (security, P5): ключ BYOK приходит из SW ('aiCm-get-byok-key') —
+// chrome.storage.session контент-скриптам больше не доступен (accessLevel сжат до
+// TRUSTED_CONTEXTS_ONLY в background.js), читать его из вкладки нельзя. Legacy-фолбэк
+// на local (окно миграции plaintext→session) остался: ключ, который SW ещё не успел
+// перенести, контент по-прежнему подхватывает, а саму миграцию делает SW (M-7).
 function aiCmReadByokKey(cb) {
   var finished = false;
   function finish(v) { if (!finished) { finished = true; cb(v || ''); } }
   try {
-    if (!chrome.storage || !chrome.storage.session || typeof chrome.storage.session.get !== 'function') { finish(''); return; }
-    chrome.storage.session.get([AI_CM_BYOK_SESSION_KEY], function (d) {
-      var v = d ? d[AI_CM_BYOK_SESSION_KEY] : '';
-      if (typeof v === 'string' && v) { finish(v); return; }
+    aiCmSwAsk({ type: 'aiCm-get-byok-key' }).then(function (resp) {
+      var v = (resp && typeof resp.key === 'string') ? resp.key : '';
+      if (v) { finish(v); return; }
       try {
         chrome.storage.local.get(AI_CM_BYOK_LEGACY_KEYS, function (dl) { finish(aiCmFirstLegacyByokKey(dl)); });
       } catch (eLeg) { finish(''); }
-    });
+    }).catch(function () { finish(''); });
   } catch (eKey) { finish(''); }
 }
 
@@ -1141,6 +1143,15 @@ async function initialize() {
     // S2: per-site порог автоэкспорта ('aiCmAutoExportPct_<siteName>') — до первых снапшотов
     loadAutoExportPerSitePct();
     loadByokSettings();
+    // Шаг A.1 (R4): ключ BYOK теперь приходит от SW асинхронно — ждём его ДО tryInit(),
+    // чтобы первый COUNT_TOKENS не ушёл без ключа (и не породил лишний фолбэк/сеть).
+    // typeof-гард — конвенция сьюта для initialize-стендов с частичным скоупом
+    // (tests/qwen-gate-diag-o35.test.js, tests/o34-reset-on-empty-convid.test.js).
+    if (typeof loadByokSettingsAsync === 'function') { await loadByokSettingsAsync(); }
+    // Шаг A.1 (R1): кэш кросс-табового O3-латча гидрируется из SW тоже асинхронно —
+    // без ожидания первый maybeAutoExport (синхронный) прошёл бы по пустому кэшу и
+    // вторая вкладка экспортировала бы чат повторно.
+    if (typeof aiCmLatchCacheReady === 'function') { await aiCmLatchCacheReady(); }
     loadByokCache();
     aiCmLoadPopupOverrides(); // H19: selectedModel/customLimit попапа → лимит и токенизация
     if (isExtensionValid()) {
@@ -1601,7 +1612,7 @@ function requestExactTokens(fullText, modelId) {
 
 function loadByokSettings() {
   if (!isExtensionValid()) return;
-  // M-7: флаг точного подсчёта остаётся в chrome.storage.local, ключ — в session.
+  // M-7: флаг точного подсчёта остаётся в chrome.storage.local, ключ — в session за SW.
   chrome.storage.local.get(['ai_cm_exact_token_count'], function (data) {
     exactCountEnabled = !!data.ai_cm_exact_token_count;
     aiCmReadByokKey(function (key) {
@@ -1609,6 +1620,47 @@ function loadByokSettings() {
       console.log('[byok] настройки загружены: exactCount=' + exactCountEnabled + ', key=' + (geminiApiKey ? '***' : '(пусто)'));
     });
   });
+}
+
+// Шаг A.1 (R4): ключ спрашиваем у SW асинхронно, а initialize() раньше вызывал
+// loadByokSettings() без ожидания — первый расчёт с exactCount=true мог уйти в
+// COUNT_TOKENS без ключа (лишний сетевой путь/фолбэк). Держим модульный промис
+// загрузки ключа и ДОЖИДАЕМСЯ его в initialize() до tryInit(); повторные вызовы
+// внутри одной загрузки переиспользуют готовый промис.
+var aiCmByokKeyPromise = null;
+function loadByokSettingsAsync() {
+  if (aiCmByokKeyPromise) return aiCmByokKeyPromise;
+  aiCmByokKeyPromise = new Promise(function (resolve) {
+    try {
+      if (!isExtensionValid()) { resolve(''); return; }
+      aiCmReadByokKey(function (key) {
+        var v = key || '';
+        geminiApiKey = v;
+        console.log('[byok] ключ получен от SW: ' + (v ? '***' : '(пусто)'));
+        resolve(v);
+      });
+    } catch (eByokP) { resolve(''); }
+  });
+  return aiCmByokKeyPromise;
+}
+
+// Шаг A.1 (security, R6): смена ключа приходит из SW/options сообщением
+// 'aiCm-byok-key-changed' — session-хранилище из вкладки больше не наблюдается
+// (storage.onChanged по session недоступен), а кэш ключа надо перечитать,
+// иначе страница будет считать токены стёртым/старым ключом до перезагрузки.
+function aiCmByokKeyInvalidate() {
+  aiCmByokKeyPromise = null;
+  try {
+    if (!isExtensionValid()) return;
+    aiCmReadByokKey(function (key) {
+      geminiApiKey = key || '';
+      lastCountTokensText = '';
+      lastCountTokensCache = 0;
+      netServerTokens = 0; // при отключении BYOK сразу эвристика
+      console.log('[byok] ключ обновлён сообщением SW: ' + (geminiApiKey ? '***' : '(пусто)'));
+      if (isInitialized) processAndSend();
+    });
+  } catch (eByokInv) { }
 }
 
 function loadByokCache() {
@@ -2620,6 +2672,12 @@ if (isExtensionValid()) {
       handleAiCmDiag(sendResponse);
       return true;
     }
+    // Шаг A.1 (R6): SW сообщает о смене BYOK-ключа (ключ вне вкладки → onChanged по
+    // session недоступен). Перечитываем только ключ, кэш подсчёта сбрасывается внутри.
+    if (message.type === 'aiCm-byok-key-changed') {
+      aiCmByokKeyInvalidate();
+      return true;
+    }
     if (message.type === 'aiCmExportCurrent') {
       // v1.13.1: ручной/принудительный экспорт — снимок ТОЛЬКО текущего convId.
       // После SPA-перехода lastBaseTexts сброшены (resetConversationState) → messages=[]
@@ -2936,10 +2994,12 @@ if (isExtensionValid()) {
         }
       }
     } catch (ePerSite) { }
-    // BYOK (M-7): ключ живёт в chrome.storage.session ('aiCmApiKeySession');
-    // legacy-имя в local слушаем только на переходный период миграции,
-    // флаг точного подсчёта — по-прежнему в local.
-    if (changes.ai_cm_exact_token_count || changes[AI_CM_BYOK_SESSION_KEY] || changes.ai_cm_gemini_api_key) {
+    // BYOK (M-7 + Шаг A.1/R6): ключ живёт в chrome.storage.session, но доступен только
+    // SW — из вкладки session не читается и НЕ наблюдается (storage.onChanged по session
+    // контент-скриптам больше не приходит). Смену ключа сообщает SW сообщением
+    // 'aiCm-byok-key-changed' (см. aiCmByokKeyInvalidate); здесь — только local:
+    // флаг точного подсчёта и legacy-имя ключа на переходный период миграции.
+    if (changes.ai_cm_exact_token_count || changes.ai_cm_gemini_api_key) {
       loadByokSettings();
       // Сбрасываем кэш при смене настроек, чтобы новый ключ/флаг применился сразу
       lastCountTokensText = '';

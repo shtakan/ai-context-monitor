@@ -228,6 +228,55 @@ var trimRetryByConv = {};        // v54: cid -> счётчик ретраев и
 // N первых id снимка для сравнения голов детектором обрезки (синхронно с util).
 var TRIM_HEAD_IDS_N = 10;
 
+// ========== Шаг A.1 (security): обёртки SW-каналов ==========
+// Lite-IPC поверх chrome.runtime.sendMessage (SW — единственный владелец
+// chrome.storage.session: доступ сжат до доверенных контекстов, P1; контент
+// получает ключ BYOK сообщением 'aiCm-get-byok-key' — единственная точка выхода, P5).
+// Объявлены ЗДЕСЬ, а не в content.js: core/export-manager.js грузится РАНЬШЕ
+// content.js и его IIFE гидратации латча вызывает aiCmLatchGetAll() при загрузке.
+// Без extension-контекста (срезы-песочницы тестов) промис резолвится нейтрально,
+// исключений наружу не летит — конвенция сьюта «частичный скоуп сохраняет
+// прежнее поведение 1:1».
+let aiCmSwAlive = function () {
+  try { return typeof chrome !== 'undefined' && !!chrome.runtime && typeof chrome.runtime.sendMessage === 'function'; } catch (eAlive) { return false; }
+};
+
+// Запрос к SW с ожиданием ОТВЕТА (sendResponse-канал). Никогда не reject-ит:
+// ошибка/недоступный SW → null (вызывающие трактуют как «данных нет»).
+function aiCmSwAsk(payload) {
+  return new Promise(function (resolve) {
+    try {
+      if (!aiCmSwAlive()) { resolve(null); return; }
+      chrome.runtime.sendMessage(payload, function (resp) {
+        var err = null;
+        try { err = chrome.runtime.lastError; } catch (eLe) { err = null; }
+        resolve(err ? null : (resp || null));
+      });
+    } catch (eAsk) { resolve(null); }
+  });
+}
+
+// Гидратация локальной карты session-латча (sessionFiredCache): отдаёт SW, только
+// ключи префикса 'aiCmFired:' → {ключ: 1}. Эквивалент прежнего storage.session.get(null).
+function aiCmLatchGetAll() {
+  return aiCmSwAsk({ type: 'aiCm-latch-get-all' }).then(function (resp) {
+    return (resp && typeof resp === 'object' && resp.map) ? resp.map : {};
+  }).catch(function () { return {}; });
+}
+
+// Запись/снятие латча в session-хранилище (владелец — SW). Контракт прежний:
+// value = 1 у взведённого ключа; remove снимает ключ (delete autoExportFired-семантика).
+function aiCmLatchSet(service, convId) {
+  return aiCmSwAsk({ type: 'aiCm-latch-set', service: String(service || ''), convId: String(convId || '') })
+    .then(function (resp) { return !!(resp && resp.ok); })
+    .catch(function () { return false; });
+}
+function aiCmLatchRemove(service, convId) {
+  return aiCmSwAsk({ type: 'aiCm-latch-remove', service: String(service || ''), convId: String(convId || '') })
+    .then(function (resp) { return !!(resp && resp.ok); })
+    .catch(function () { return false; });
+}
+
 // ========== v2.0 (этап 1/3): UMD-экспорт модуля ==========
 // Паттерн как у utils/export-emit-pipeline.js: window.<Api> + module.exports.
 // Рабочий путь ничего не импортирует: content-скрипты манифеста делят один

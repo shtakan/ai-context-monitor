@@ -425,24 +425,35 @@ function loadAutoExportPerSitePct() {
     });
   } catch (e) { debugLog('error', '[AI CM][auto-export] per-site load error:', e); }
 }
-// v1.14.1 (O3): кросс-табовый латч already-fired. Кэш chrome.storage.session
+// v1.14.1 (O3): кросс-табовый латч already-fired. Кэш session-хранилища SW
 // ('aiCmFired:service|convId' -> 1), общий для всех вкладок профиля: вторая вкладка
-// с тем же чатом видит fired первой и не экспортирует повторно. Доступ к
-// storage.session из контент-скриптов открыт в background.js (setAccessLevel).
+// с тем же чатом видит fired первой и не экспортирует повторно.
+// Шаг A.1 (security, R1): прямые чтение/запись chrome.storage.session из контент-скрипта
+// убраны (доступ сжат до TRUSTED_CONTEXTS_ONLY в background.js) — карту отдаёт SW
+// сообщением 'aiCm-latch-get-all' через aiCmLatchGetAll() (core/state.js), а запись/снятие
+// идут через aiCmLatchSet/aiCmLatchRemove. Гидратация асинхронная, поэтому
+// aiCmLatchCacheReady() дожидается её в initialize() ДО tryInit() — иначе первая проверка
+// вердикта (maybeAutoExport не async и синхронна) успела бы пройти по пустому кэшу.
 var sessionFiredCache = {};
-(function initSessionFiredCache() {
-  try {
-    if (!chrome.storage.session) return;
-    chrome.storage.session.get(null).then(function (m) { sessionFiredCache = m || {}; }).catch(function () { });
-    chrome.storage.onChanged.addListener(function (changes, area) {
-      if (area !== 'session') return;
-      for (var k in changes) {
-        if (changes[k].newValue == null) delete sessionFiredCache[k];
-        else sessionFiredCache[k] = changes[k].newValue;
-      }
-    });
-  } catch (eO3init) { }
-})();
+var aiCmLatchReadyPromise = null;
+function aiCmLatchCacheReady() {
+  if (aiCmLatchReadyPromise) return aiCmLatchReadyPromise;
+  aiCmLatchReadyPromise = Promise.resolve()
+    .then(function () { return aiCmLatchGetAll(); })
+    .then(function (map) {
+      try {
+        // Мутируем ТОТ ЖЕ объект: Api.sessionFiredCache (UMD-экспорт ниже) держит ссылку.
+        for (var k in sessionFiredCache) delete sessionFiredCache[k];
+        for (var k2 in (map || {})) sessionFiredCache[k2] = map[k2];
+      } catch (eHydr) { }
+      return sessionFiredCache;
+    })
+    .catch(function () { return sessionFiredCache; });
+  return aiCmLatchReadyPromise;
+}
+// Гидратация на старте (не await: первый прогон может стартовать раньше initialize,
+// повторный вызов из initialize() дожидается уже начатого промиса).
+try { aiCmLatchCacheReady(); } catch (eO3init) { }
 
 // v53: одноразовый поздний re-check автоэкспорта после loader-stop с неполной базой/
 // живым курсором. Стреляем только когда база полная И курсор ушёл И лоадер остановлен.
@@ -1263,10 +1274,14 @@ function maybeAutoExport(percentage) {
         // семантика v1.14.1/O3 прежняя, просто вынесена из цепочки логов ниже.
         if (verdict.reason === 'below-threshold-hysteresis') {
           P.resetAutoExportFired(autoExportFired, siteName, cid);
-          // v1.14.1 (O3): session-латч снимаем вместе с L1
+          // v1.14.1 (O3): session-латч снимаем вместе с L1; Шаг A.1 (security): снятие
+          // идёт через SW-канал aiCmLatchRemove (прямой storage.session из вкладки убран),
+          // локальный кэш правим сразу — чтобы вердикт того же хода уже видел снятый латч.
           try {
-            if (typeof P.firedSessionKey === 'function' && chrome.storage.session) {
-              chrome.storage.session.remove(P.firedSessionKey(siteName, cid));
+            if (typeof P.firedSessionKey === 'function') {
+              aiCmLatchRemove(siteName, cid);
+              var pkHys = P.firedSessionKey(siteName, cid);
+              if (pkHys) delete sessionFiredCache[pkHys];
             }
           } catch (eO3hys) { }
         }
@@ -1363,10 +1378,13 @@ function maybeAutoExport(percentage) {
       // v82 (D5): сброс латча только по достоверному сетевому pct
       if (baseSeen === true && cid) {
         delete autoExportFired[cid];
-        // v1.14.1 (O3): session-латч снимаем вместе с L1
+        // v1.14.1 (O3): session-латч снимаем вместе с L1; Шаг A.1 (security): снятие —
+        // через SW-канал aiCmLatchRemove, кэш вкладки правим синхронно.
         try {
-          if (P && typeof P.firedSessionKey === 'function' && chrome.storage.session) {
-            chrome.storage.session.remove(P.firedSessionKey(siteName, cid));
+          if (P && typeof P.firedSessionKey === 'function') {
+            aiCmLatchRemove(siteName, cid);
+            var pkHys2 = P.firedSessionKey(siteName, cid);
+            if (pkHys2) delete sessionFiredCache[pkHys2];
           }
         } catch (eO3hys2) { }
       }
@@ -1661,13 +1679,14 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
                 aiCmAutoExportFiredOnce[siteOnce + '|' + cid] = 1;
               }
             } catch (eOnce) { }
-            // v1.14.1 (O3): кросс-табовый латч — пишем в storage.session и в локальный кэш
+            // v1.14.1 (O3): кросс-табовый латч — пишем через SW-канал (Шаг A.1: прямой
+            // storage.session из вкладки убран) и сразу в локальный кэш этой вкладки.
             try {
               var siteO3 = (currentAdapter && currentAdapter.siteName) || '';
-              if (typeof PDl.sessionFiredPatch === 'function' && chrome.storage.session) {
-                chrome.storage.session.set(PDl.sessionFiredPatch(siteO3, cid));
-                var pkO3 = (typeof PDl.firedSessionKey === 'function') ? PDl.firedSessionKey(siteO3, cid) : null;
-                if (pkO3) sessionFiredCache[pkO3] = 1;
+              var pkO3 = (typeof PDl.firedSessionKey === 'function') ? PDl.firedSessionKey(siteO3, cid) : null;
+              if (pkO3) {
+                aiCmLatchSet(siteO3, cid);
+                sessionFiredCache[pkO3] = 1;
               }
             } catch (eO3write) { }
           } else {
