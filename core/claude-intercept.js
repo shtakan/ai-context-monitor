@@ -736,7 +736,13 @@
     try {
       window.addEventListener('message', function (ev) {
         try {
-          var d = ev && ev.data;
+          // v53-A2: origin-контракт paste-канала. paste-capture шлёт same-window
+          // postMessage, поэтому принимаем ТОЛЬКО ev.source === window и
+          // ev.origin === location.origin — иначе сторонний фрейм/страница может
+          // подбросить текст в pasteQueue и подменить pasted-вложение (R8-R10).
+          if (!ev || ev.source !== window) return;
+          if (ev.origin !== location.origin) return;
+          var d = ev.data;
           if (!d || d.source !== 'ai-cm-paste' || typeof d.text !== 'string' || !d.text) return;
           pasteQueue.push({ text: d.text, ts: Date.now() });
           while (pasteQueue.length > 5) pasteQueue.shift(); // cap 5, вытеснение старшего

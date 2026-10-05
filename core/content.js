@@ -2869,11 +2869,21 @@ if (isExtensionValid()) {
 (function () {
   try {
     if (!window.location.hostname.includes('claude.ai')) return;
+    // v53-A2: targetOrigin канала ISOLATED→MAIN. Легаси-алиас origin на window в
+    // non-HTTP/opaque-контекстах (sandbox, about:blank, file://) даёт undefined,
+    // а location.origin — пустую строку или 'null'; postMessage с таким
+    // targetOrigin бросает SyntaxError и paste теряется. Берём location.origin
+    // с гардом пустого/'null' значения: fallback '/' = same-origin (валиден всегда).
+    var pasteOrigin = '/';
+    try {
+      var oOrig = window.location.origin;
+      if (typeof oOrig === 'string' && oOrig && oOrig !== 'null') pasteOrigin = oOrig;
+    } catch (eO) { pasteOrigin = '/'; }
     document.addEventListener('paste', function (e) {
       try {
         var t = e.clipboardData && e.clipboardData.getData('text');
         if (t && String(t).trim()) {
-          window.postMessage({ source: 'ai-cm-paste', text: String(t).slice(0, 500000) }, window.origin);
+          window.postMessage({ source: 'ai-cm-paste', text: String(t).slice(0, 500000) }, pasteOrigin);
           debugLog('log', '[AI CM][Claude][pasted] paste-capture len=' + t.length);
           // v46-2: диагностика канала ISOLATED→MAIN — отправка
           debugLog('log', '[AI CM][Claude][pasted] paste-send len=' + t.length);

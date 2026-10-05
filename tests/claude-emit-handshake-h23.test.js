@@ -218,7 +218,7 @@ describe('H23 (d) пины контракта (каналы только CustomE
     expect(CONTENT_SRC).toContain('const newBaseComplete = !!detail.historyComplete;');
     // tape-restore и paste-capture (Claude) на месте
     expect(CONTENT_SRC).toContain("window.dispatchEvent(new CustomEvent('ai-cm-restored-history',");
-    expect(CONTENT_SRC).toContain("window.postMessage({ source: 'ai-cm-paste', text: String(t).slice(0, 500000) }, window.origin);");
+    expect(CONTENT_SRC).toContain("window.postMessage({ source: 'ai-cm-paste', text: String(t).slice(0, 500000) }, pasteOrigin);");
     // ре-эмит не перепарсит снимок: emitSnapshot вызывается только из 4 прежних точек
     const calls = INTERCEPT_SRC.match(/emitSnapshot\(/g) || [];
     expect(calls.length).toBe(5); // 4 вызова + 1 объявление функции
