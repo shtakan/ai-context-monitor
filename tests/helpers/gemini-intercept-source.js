@@ -66,6 +66,7 @@ const ROOT = path.join(__dirname, '..', '..');
 
 // Порядок = порядок js[] в core/background.js для 'ai-cm-gemini-intercept'.
 // utils/* сюда НЕ входят: они не декомпозировались (как и в content-source.js).
+// Phase 3 step 12: core/gemini-ingest.js идёт после loader-scroll и перед ядром — как в js[].
 const MODULES = [
   'core/gemini-hidden-scroll.js',
   'core/gemini-diag.js',
@@ -73,7 +74,8 @@ const MODULES = [
   'core/gemini-parse.js',
   'core/gemini-sse.js',
   'core/pagination/pagination.js',
-  'core/gemini-loader-scroll.js'
+  'core/gemini-loader-scroll.js',
+  'core/gemini-ingest.js'
 ];
 const INTERCEPT_JS = 'core/gemini-intercept.js';
 

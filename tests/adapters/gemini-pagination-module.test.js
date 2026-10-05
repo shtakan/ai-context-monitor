@@ -79,7 +79,7 @@ describe('Phase 3 шаг 10: D-пины маршрутов записи базы
     // во всём кластере ровно ОДИН вызов ingest: пагинация не завела второй конвейер записи
     expect(MOD.match(/ingest\(/g)).toHaveLength(1);
     // ingest различает источники по src — пагинация обязана остаться src='pag'
-    expect(CORE).toContain("var src = srcOverride || (fromVirtualF5 ? 'vf5' : (fromActivePaginate ? 'pag' : 'passive'));");
+    expect(CONC).toContain("var src = srcOverride || (fromVirtualF5 ? 'vf5' : (fromActivePaginate ? 'pag' : 'passive'));");
   });
 
   test('D2: shadow-probe НЕ мутирует состояние пагинации (save/restore на месте)', () => {
@@ -115,10 +115,11 @@ describe('Phase 3 шаг 10: D-пины маршрутов записи базы
     expect(MOD.match(/emitBaseSnapshot\(\)/g)).toHaveLength(2);
     expect(fnSource(MOD, 'finishQuiet')).toContain('if (success) { try { emitBaseSnapshot(); } catch (e) { } }');
     expect(fnSource(MOD, 'runCompletenessProbe')).toContain('try { emitBaseSnapshot(); } catch (eE) { }');
-    // СУММА по конкатенации равна значению ДО выноса (проверено против git-версии ядра):
-    // вынос не добавил и не убрал ни одной записи базы — 8 = 6 в ядре + 2 в кластере.
-    expect(CORE.match(/emitBaseSnapshot\(\)/g)).toHaveLength(6);
-    expect(CONC.match(/emitBaseSnapshot\(\)/g)).toHaveLength(8);
+    // Phase 3 step 12: три вызова (747, 988, 3157) уехали из ядра в core/gemini-ingest.js,
+    // поэтому в ядре 4 = 3 вызова + 1 форвардер aiCmEmitBaseSnapshotFwd (шаг 12, TDZ),
+    // а в конкатенации 9 = 4 (ядро) + 2 (пагинация) + 3 (ingest: декларация + 2 вызова).
+    expect(CORE.match(/emitBaseSnapshot\(\)/g)).toHaveLength(4);
+    expect(CONC.match(/emitBaseSnapshot\(\)/g)).toHaveLength(9);
   });
 
   test('D5: контроль полноты разрывает deadlock — сброс loaderDoneMap, снятие полноты, ≤3 ретрая', () => {
@@ -149,11 +150,11 @@ describe('Phase 3 шаг 10: D-пины маршрутов записи базы
 });
 
 describe('Phase 3 шаг 10: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v7 (шаг 11), модуль перед ядром, -v6 в unregister', () => {
+  test('S1: регистрация в core/background.js — id -v8 (шаг 12), модуль перед ядром, -v7 в unregister', () => {
     const bg = readFile('core/background.js');
     expect(bg).toContain("'ai-cm-gemini-intercept-v6'");
     expect(bg).toContain("'core/pagination/pagination.js'");
-    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-intercept.js'");
+    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-intercept.js'");
     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при загрузке
     expect(bg.indexOf("'core/pagination/pagination.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
     // MV3 не перечитывает js[] под существующим id — прежний id обязан быть снят

@@ -1650,3 +1650,22 @@ Rewired-копия живёт **только в `dist/`** — корневые `
 **Решение:** Замена `tools/` на `tools/*` + негации для `!tools/pagination-bind-contract.js` и `!tools/ingest-bind-contract.js`. Добавлен игнор `tests/tools/` (всплыл после смены паттерна).
 **Результат:** Run #102 — green. S2 в CI исполняется полностью (защита bind-контракта сохранена, skip не использован).
 **Влияние на Step 12:** Рабочее дерево экстракции ingest не затронуто. Закрытие Step 12 нумеруется следующим аппендиксом (v32).
+
+## Аппендикс v32: Завершение Phase 3 Step 12 (декомпозиция ingest-кластера)
+**Дата:** 2026-10-05
+**Коммит:** `<SHA коммита>` (feat(core): extract ingest cluster to gemini-ingest.js)
+**Статус:** ✅ ЗАКРЫТ живой приёмкой
+
+**Результаты:**
+- Кластер `ingest` (1145 строк, 24 объявления) успешно вынесен в `core/gemini-ingest.js`.
+- Применён паттерн скриптовой экстракции (`tools/apply-ingest-extraction.js`) с доказательством обратимости.
+- Стиль переноса: `with (D)` (прецедент шага 10), ноль `D.`-префиксов, ноль правок в 4 песочницах.
+- Контракт: 72 имени (13 fn, 11 alias, 41 rw, 7 ro); 3 форвардера (ingest, handleOuter, emitBaseSnapshot).
+- ID регистрации обновлён: `ai-cm-gemini-intercept-v7` → `ai-cm-gemini-intercept-v8`.
+- Исправлен CI-дефект (runs #100/#101): контракт-файлы трекированы через негацию `.gitignore` (аппендикс v31).
+- Создан пин-сьют `tests/adapters/gemini-ingest-module.test.js` (8 тестов) + smoke `tools/smoke-gemini-ingest-binding.js` (41 проверка).
+- Тесты: 147 suites / 2799 passed / 6 skipped / 0 failed.
+- Живая приёмка F5: пройдена (база восстанавливается, логи ingest из нового модуля, бейдж 43.3%, DeepSeek/Qwen без регрессов).
+
+**Итог Фазы 3:**
+Ядро `core/gemini-intercept.js` сокращено с 5226 до 2309 строк (-56%). Вынесены: diag, rpc, parse, sse, pagination, loader-scroll, ingest.
