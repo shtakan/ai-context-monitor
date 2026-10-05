@@ -108,7 +108,7 @@ describe('O-35: core/background.js — регистрация перехватч
   });
 
   test('R-пин: шесть существующих регистраций не тронуты', function () {
-    ['ai-cm-page-intercept', 'ai-cm-gemini-intercept-v6', 'ai-cm-deepseek-intercept-v2',
+    ['ai-cm-page-intercept', 'ai-cm-gemini-intercept-v7', 'ai-cm-deepseek-intercept-v2',
       'ai-cm-claude-intercept', 'ai-cm-perplexity-intercept',
       'ai-cm-google-search-intercept'].forEach(function (id) {
       expect(background).toContain("ids.indexOf('" + id + "') === -1");
@@ -128,7 +128,10 @@ describe('O-35: core/background.js — регистрация перехватч
     // На шаге 10 (Phase 3) в js[] ДОБАВЛЕН core/pagination/pagination.js (перед ядром) и id
     // сменён -v5 → -v6: без модуля ядро ставит no-op на paginateLoop/finishQuiet/
     // runCompletenessProbe — тихая пагинация и независимый контроль полноты выключены.
-    expect(background).toContain("js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-parse.js', 'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-intercept.js']");
+    // На шаге 11 (Phase 3) в js[] ДОБАВЛЕН core/gemini-loader-scroll.js (перед ядром) и id
+    // сменён -v6 → -v7: без модуля ядро ставит no-op на автозапуск лоадера, и скрытый
+    // доскролл полной истории (включая ручной запуск из консоли) выключается целиком.
+    expect(background).toContain("js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-parse.js', 'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'core/deepseek-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'utils/intercept-common.js', 'core/claude-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'utils/perplexity-parser.js', 'utils/intercept-common.js', 'core/perplexity-intercept.js']");

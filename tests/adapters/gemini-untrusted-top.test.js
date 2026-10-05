@@ -144,7 +144,7 @@ describe('H9 пины в core/gemini-intercept.js', () => {
     expect(verdictIdx).toBeGreaterThan(-1);
     expect(topIdx).toBeGreaterThan(-1);
     expect(verdictIdx).toBeLessThan(topIdx);
-    expect(coreSrc).toContain('var cursorEpochAtRunStart = cursorEpoch;');
+    expect(coreSrc).toContain('var cursorEpochAtRunStart = D.cursorEpoch;');
   });
 
   test('untrusted-top уходит в collapse с ретрай-путём collapse-guard (≤2)', () => {

@@ -63,6 +63,9 @@ function baseCtx(overrides) {
     clearTimeout: function () { },
     window: { GeminiInterceptLogic: GIL }
   };
+  // v2.0 (Phase 3 step 11): тело вырезано из core/gemini-loader-scroll.js и читает
+  // зависимости модуля как D.<имя> (D — биндинг модуля, см. tests/helpers/gemini-intercept-source.js).
+  ctx.D = ctx;
   return Object.assign(ctx, overrides || {});
 }
 
@@ -239,7 +242,7 @@ describe('Gemini v1.14.2 COLLAPSE-GUARD: сбросы бюджета и гейт
   });
 
   test('сброс collapseRetries при base>=floor (maybeStartLoader)', () => {
-    expect(coreSrc).toContain('if (baseSize() >= __floorMs) collapseRetries = 0;');
+    expect(coreSrc).toContain('if (D.baseSize() >= __floorMs) D.collapseRetries = 0;');
   });
 
   test('stableCheck74 открывает полноту ТОЛЬКО при lastLoaderDoneReason===\'top\' (байтово)', () => {
@@ -263,6 +266,6 @@ describe('Gemini v1.14.2 COLLAPSE-GUARD: (c) v65 top-not-reached байтово 
   test('v65-лог и сброс счётчиков — байт в байт', () => {
     expect(coreSrc).toContain("debugLog('log', '[AI CM][Gemini][loader] v65 top-not-reached scrollTop=' + sc.top() +");
     expect(coreSrc).toContain("' (height-stable среди истории — не конец, продолжаю скролл) convId=' + convId);");
-    expect(coreSrc).toContain('loaderState.topReached = loaderState.scrollEngaged && sc.top() <= 8;');
+    expect(coreSrc).toContain('D.loaderState.topReached = D.loaderState.scrollEngaged && sc.top() <= 8;');
   });
 });

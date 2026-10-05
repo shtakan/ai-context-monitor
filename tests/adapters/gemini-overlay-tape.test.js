@@ -28,8 +28,19 @@ function extractGuardFor(reason) {
   const call = "aiCmSetScrollOverlay(true, '" + reason + "');";
   const ci = coreSrc.indexOf(call);
   expect(ci).toBeGreaterThan(-1); // вызов найден
-  const guardMarker = 'if (tapeWasUsedInThisColdStart === true) {';
-  const gi = coreSrc.lastIndexOf(guardMarker, ci);
+  // v2.0 (Phase 3 step 11): гард встречается в двух формах — с биндингом модуля
+  // (`if (D.tapeWasUsedInThisColdStart === true) {` в core/gemini-loader-scroll.js) и без
+  // него (`if (tapeWasUsedInThisColdStart === true) {` в core/pagination/pagination.js).
+  // Берём ближайшее совпадение к вызову.
+  const guardMarkers = [
+    'if (D.tapeWasUsedInThisColdStart === true) {',
+    'if (tapeWasUsedInThisColdStart === true) {'
+  ];
+  let gi = -1;
+  guardMarkers.forEach(function (m) {
+    const k = coreSrc.lastIndexOf(m, ci);
+    if (k > gi) gi = k;
+  });
   expect(gi).toBeGreaterThan(-1); // гард найден
   expect(ci - gi).toBeLessThan(900); // гард действительно рядом с вызовом
   // баланс скобок if/else-if/else: `}` перед `else` НЕ завершает гард
@@ -64,7 +75,7 @@ function runGuard(snippet, ctx) {
 }
 
 function baseCtx(overrides) {
-  return Object.assign({
+  const ctx = Object.assign({
     logs: [],
     calls: [],
     tapeWasUsedInThisColdStart: false,
@@ -72,6 +83,10 @@ function baseCtx(overrides) {
     sc: { height: function () { return 9000; } },
     aiCmScrollOverlay: null // loader-fallback: оверлей не поднят
   }, overrides || {});
+  // v2.0 (Phase 3 step 11): гард исполняется из core/gemini-loader-scroll.js и читает
+  // зависимости модуля как D.<имя>.
+  ctx.D = ctx;
+  return ctx;
 }
 
 
@@ -126,10 +141,10 @@ describe('v81 O1 white-screen: tape present suppresses loader overlays', () => {
   describe('в) «НЕ трогать»: overlay-off/restore и visibilitychange-снятие без изменений', () => {
     it('loader-done (снятие после ДВУХ rAF + seq-гвард) байтово-идентично исходнику', () => {
       const removal = '' +
-        '        var seqAtEnd80 = aiCmOverlaySeq;\n' +
+        '        var seqAtEnd80 = D.aiCmOverlaySeq;\n' +
         '        var __overlayOff80 = function () {\n' +
-        "          aiCmSetScrollOverlay(false, 'loader-done', seqAtEnd80);\n" +
-        "          debugLog('log', '[AI CM][visibility] restore reason=loader-done convId=' + (getConvId() || '(none)'));\n" +
+        "          D.aiCmSetScrollOverlay(false, 'loader-done', seqAtEnd80);\n" +
+        "          debugLog('log', '[AI CM][visibility] restore reason=loader-done convId=' + (D.getConvId() || '(none)'));\n" +
         '        };\n' +
         '        try {\n' +
         '          requestAnimationFrame(function () { requestAnimationFrame(__overlayOff80); });\n' +

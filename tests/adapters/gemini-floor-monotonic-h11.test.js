@@ -49,7 +49,7 @@ function makeStorage() {
 // на exhausted clean-end if (line ~2184). Скобочный скан с else-поддержкой:
 // `} else {` не является концом стейтмента.
 function extractExhaustedCleanEndStatement() {
-  const marker = 'if (__cleanEndCg && typeof lastCleanEndBaseCount !== \'undefined\' && baseSize() === lastCleanEndBaseCount) {';
+  const marker = 'if (__cleanEndCg && typeof D.lastCleanEndBaseCount !== \'undefined\' && D.baseSize() === D.lastCleanEndBaseCount) {';
   const i = coreSrc.indexOf(marker);
   expect(i).toBeGreaterThan(-1); // exhausted clean-end if найден в core
   let depth = 0;
@@ -99,6 +99,9 @@ function baseCtx(overrides) {
     __floorCg: FLOOR_COUNT,
     _storage: storage
   };
+  // v2.0 (Phase 3 step 11): стейтмент вырезан из core/gemini-loader-scroll.js —
+  // зависимости модуля читаются как D.<имя>.
+  ctx.D = ctx;
   return Object.assign(ctx, overrides || {});
 }
 
@@ -136,10 +139,10 @@ describe('Gemini H11: collapse-guard exhausted clean-end пишет пол че�
   test('(2a-байт) в exhausted clean-end блоке больше НЕТ прямого localStorage.setItem пола', () => {
     expect(exhaustedStatement).not.toContain("var fkCg2 = 'ai-cm-gemini-floor-'");
     expect(exhaustedStatement).not.toContain('localStorage.setItem(fkCg2,');
-    expect(exhaustedStatement).toContain('saveFloor(convId, baseSize(), lastBaseTextLen);');
+    expect(exhaustedStatement).toContain('D.saveFloor(convId, D.baseSize(), D.lastBaseTextLen);');
     // typeof-гарды входа в блок сохранены
-    expect(exhaustedStatement).toContain("__floorCg > baseSize() && convId && typeof parserVersion !== 'undefined' && parserVersion");
-    expect(exhaustedStatement).toContain("typeof localStorage !== 'undefined' && typeof lastBaseTextLen !== 'undefined'");
+    expect(exhaustedStatement).toContain("__floorCg > D.baseSize() && convId && typeof D.parserVersion !== 'undefined' && D.parserVersion");
+    expect(exhaustedStatement).toContain("typeof localStorage !== 'undefined' && typeof D.lastBaseTextLen !== 'undefined'");
   });
 
   test('(2a-ветка else) НЕ clean-end → «ретраи исчерпаны 2/2 — incomplete as-is», пол не тронут', () => {

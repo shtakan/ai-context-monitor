@@ -194,9 +194,9 @@ describe('T1-fix#2: проводка гейтов (source-level)', () => {
 
   test('лоадер не пропускает догрузку из-за архива (живой сигнал по живым ходам)', () => {
     const body = fnDecl(CORE_GEMINI, 'maybeStartLoader');
-    expect(body).toContain('var liveMsgs = aiCmLiveTurnCount();');
-    expect(body).toContain('if (!olderHistorySeen && liveMsgs === 0) {');
-    const branch = body.indexOf('if (aiCmArchiveFor(convId) && liveMsgs === 0) {');
+    expect(body).toContain('var liveMsgs = D.aiCmLiveTurnCount();');
+    expect(body).toContain('if (!D.olderHistorySeen && liveMsgs === 0) {');
+    const branch = body.indexOf('if (D.aiCmArchiveFor(convId) && liveMsgs === 0) {');
     expect(branch).toBeGreaterThan(-1);
     const deferred = body.slice(branch, body.indexOf('} else {', branch));
     expect(deferred).toContain('no-older-history отложен: база = только архив');
@@ -204,7 +204,7 @@ describe('T1-fix#2: проводка гейтов (source-level)', () => {
     expect(deferred).not.toContain('loaderDoneMap[convId] = true;');
     // ...а прежняя (безархивная) ветка сохраняет прежний скип с латчем
     const elseBranch = body.slice(body.indexOf('} else {', branch), body.indexOf('loader-skipped reason=no-older-history'));
-    expect(elseBranch).toContain('loaderDoneMap[convId] = true;');
+    expect(elseBranch).toContain('D.loaderDoneMap[convId] = true;');
   });
 
   test('помощники живого яруса объявлены в MAIN', () => {

@@ -425,7 +425,7 @@
       aiCmDiagTurnEdge: aiCmDiagTurnEdge,
       aiCmOrderedTurns: aiCmOrderedTurns,
       aiCmSetScrollOverlay: aiCmSetScrollOverlay,
-      maybeStartLoader: maybeStartLoader,
+      maybeStartLoader: aiCmMaybeStartLoaderFwd,
       activeRefresh: activeRefresh,
       aiCmArchiveTierApply: aiCmArchiveTierApply,
       emitBaseSnapshot: emitBaseSnapshot,
@@ -517,6 +517,115 @@
     runCompletenessProbe = function () { };
     runCompletenessWatchdog = function () { };
     finishWatchdogDecision = function () { };
+  }
+
+  // ===== v2.0 (Phase 3 step 11): кластер лоадера подключён из core/gemini-loader-scroll.js =====
+  // Модуль идёт в js[] core/background.js ПОСЛЕ core/pagination/pagination.js и ПЕРЕД этим
+  // файлом. Блок стоит ЗДЕСЬ, а не рядом с алиасами скрытого скролла (строка ~120): часть
+  // зависимостей — это не объявления, а значения, которые заполняют чужие __bind-блоки.
+  // findScrollContainer (var, строка 123), extractCursorWide (403), paginateLoop (405) и
+  // runCompletenessProbe (407) объявлены как `var ... = null;` и получают значение в блоках
+  // скрытого скролла и пагинации — выше строки 520 четыре зависимости уехали бы в модуль как
+  // null. Функции (kind=fn) передаются значениями: их объявления хойстятся и к моменту
+  // __bind уже существуют. Состояние передаётся ЖИВЫМИ геттерами/сеттерами: прогон лоадера
+  // читается и пишется и здесь (stable-stop оракул, сброс бюджета коллапс-ретраев при смене
+  // чата, активный vf5-путь), и копия разошлась бы с оригиналом там, где ошибается полнота.
+  // Состояние прогона (loaderState, lastLoaderDoneReason, collapseRetries,
+  // loaderRetryUsedMap) объявлено НИЖЕ и остаётся здесь — см. указатель на месте баннера.
+  // Автозапуск отдаётся пагинации ФОРВАРДЕРОМ: её __bind выполняется раньше (строка 411),
+  // поэтому прямое `maybeStartLoader: maybeStartLoader` зафиксировало бы null.
+  var aiCmGeminiLoaderScroll = (typeof window !== 'undefined' && window.AiCmGeminiLoaderScroll) || null;
+  var maybeStartLoader = null;
+  var loadFullHistoryInvisibly = null; // ядро его не вызывает: консольный хэндл ставит сам модуль
+  function aiCmMaybeStartLoaderFwd() { return maybeStartLoader ? maybeStartLoader() : undefined; }
+  if (aiCmGeminiLoaderScroll) {
+    aiCmGeminiLoaderScroll.__bind({
+      // Функции ядра.
+      aiCmArchiveFor: aiCmArchiveFor,
+      aiCmArchiveLiveProven: aiCmArchiveLiveProven,
+      aiCmDiagTurnEdge: aiCmDiagTurnEdge,
+      aiCmLiveTurnCount: aiCmLiveTurnCount,
+      aiCmOrderedTurns: aiCmOrderedTurns,
+      aiCmSetScrollOverlay: aiCmSetScrollOverlay,
+      baseSize: baseSize,
+      extractCursorWide: extractCursorWide,
+      findScrollContainer: findScrollContainer,
+      getConvId: getConvId,
+      loadFloor: loadFloor,
+      notifyLoaderState: notifyLoaderState,
+      paginateLoop: paginateLoop,
+      runCompletenessProbe: runCompletenessProbe,
+      saveFloor: saveFloor,
+      selfHealFloor: selfHealFloor,
+      sleep: sleep,
+      // Живое состояние: геттеры/сеттеры.
+      get aiCmOverlaySeq() { return aiCmOverlaySeq; },
+      set aiCmOverlaySeq(v) { aiCmOverlaySeq = v; },
+      get aiCmScrollOverlay() { return aiCmScrollOverlay; },
+      set aiCmScrollOverlay(v) { aiCmScrollOverlay = v; },
+      get collapseRetries() { return collapseRetries; },
+      set collapseRetries(v) { collapseRetries = v; },
+      get historyFullByQuiet() { return historyFullByQuiet; },
+      set historyFullByQuiet(v) { historyFullByQuiet = v; },
+      get isLowConfidenceBase() { return isLowConfidenceBase; },
+      set isLowConfidenceBase(v) { isLowConfidenceBase = v; },
+      get lastCleanEndBaseCount() { return lastCleanEndBaseCount; },
+      set lastCleanEndBaseCount(v) { lastCleanEndBaseCount = v; },
+      get lastCycleEndedHidden() { return lastCycleEndedHidden; },
+      set lastCycleEndedHidden(v) { lastCycleEndedHidden = v; },
+      get lastLoaderDoneReason() { return lastLoaderDoneReason; },
+      set lastLoaderDoneReason(v) { lastLoaderDoneReason = v; },
+      get loaderRetryUsedMap() { return loaderRetryUsedMap; },
+      set loaderRetryUsedMap(v) { loaderRetryUsedMap = v; },
+      get loaderRunningFor() { return loaderRunningFor; },
+      set loaderRunningFor(v) { loaderRunningFor = v; },
+      get loaderState() { return loaderState; },
+      set loaderState(v) { loaderState = v; },
+      get pendingCursor() { return pendingCursor; },
+      set pendingCursor(v) { pendingCursor = v; },
+      get quietActive() { return quietActive; },
+      set quietActive(v) { quietActive = v; },
+      get quietDecisionMade() { return quietDecisionMade; },
+      set quietDecisionMade(v) { quietDecisionMade = v; },
+      get quietIncompleteNoStart() { return quietIncompleteNoStart; },
+      set quietIncompleteNoStart(v) { quietIncompleteNoStart = v; },
+      get reachedStart() { return reachedStart; },
+      set reachedStart(v) { reachedStart = v; },
+      get vf5OverlapSinceLoaderStart() { return vf5OverlapSinceLoaderStart; },
+      set vf5OverlapSinceLoaderStart(v) { vf5OverlapSinceLoaderStart = v; },
+      // Только чтение: кластер эти имена не присваивает (ro) — сеттер не нужен.
+      get cacheRestoredMap() { return cacheRestoredMap; },
+      get cursorEpoch() { return cursorEpoch; },
+      get lastAtEncoded() { return lastAtEncoded; },
+      get lastBaseCountChangeAt() { return lastBaseCountChangeAt; },
+      get lastBaseTextLen() { return lastBaseTextLen; },
+      get lastBaseUrl() { return lastBaseUrl; },
+      get lastGoodProbeMeta() { return lastGoodProbeMeta; },
+      get lastGoodWideCur() { return lastGoodWideCur; },
+      get lastHeaders() { return lastHeaders; },
+      get lastHnvPageError() { return lastHnvPageError; },
+      get lastOlderNonPagAddAt() { return lastOlderNonPagAddAt; },
+      get lastPaginateOuter() { return lastPaginateOuter; },
+      get loaderDoneMap() { return loaderDoneMap; },
+      get nativeEscalationFor() { return nativeEscalationFor; },
+      get olderHistorySeen() { return olderHistorySeen; },
+      get oracleIncompleteSeen() { return oracleIncompleteSeen; },
+      get oracleRerunUsedMap() { return oracleRerunUsedMap; },
+      get parserVersion() { return parserVersion; },
+      get quietEndedClean() { return quietEndedClean; },
+      get serverFirstHash() { return serverFirstHash; },
+      get tapeWasUsedInThisColdStart() { return tapeWasUsedInThisColdStart; },
+    });
+    maybeStartLoader = aiCmGeminiLoaderScroll.maybeStartLoader;
+    loadFullHistoryInvisibly = aiCmGeminiLoaderScroll.loadFullHistoryInvisibly;
+  } else {
+    // Модуль не подключён (у уже установленного расширения Chrome остался прежний
+    // registration с прежним id: MV3 не перечитывает js[] под существующим id). Деградация
+    // заметная: скрытый доскролл полной истории и его автозапуск выключены — база
+    // собирается активными путями (vf5 / тихая пагинация) без докрутки до начала чата.
+    debugLog('log', '[gemini-intercept] core/gemini-loader-scroll.js не подключён — ' +
+      'скрытый доскролл полной истории и его автозапуск недоступны (проверьте регистрацию content script)');
+    maybeStartLoader = function () { };
   }
 
 
@@ -1608,36 +1717,14 @@
   // core/background.js ПЕРЕД этим файлом, связка (__bind + алиасы) — в блоке выше (сразу после
   // блока core/gemini-rpc.js). Логика сюда НЕ возвращается: правки парсеров — в модуле.
 
-  // ================= v4y: ЛОАДЕР ПОЛНОЙ ИСТОРИИ + АВТОЗАПУСК =================
-  // Тело повторяет рабочий консольный сниппет loadFullHistoryInvisibly:
-  // невидимый скролл вверх (scrollTop=0) до стабилизации scrollHeight,
-  // шаг 800мс, максимум 30 итераций, восстановление сохранённой позиции
-  // (v80: видимость обеспечивает overlay на body, DOM чата не скрывается).
-  // Логи — под флагом «Подробные логи» (debugLog); ошибки — всегда в консоль.
-  var LOADER_MAX_ITER = 30;
-  var LOADER_STEP_MS = 1200;    // v4z: окно пагинации медленное — 800мс давало ложную стабилизацию
-  var LOADER_FIND_TRIES = 20;   // poll появления скроллера до 10с
-  var LOADER_FIND_WAIT = 500;
-  var LOADER_STABLE_NEED = 3;   // v30.7: три негро-стящих чтения до контрольного замера
-  var LOADER_RECHECK_MS = 2000; // v4z: контрольный перемер после «стабилизации»
-  var LOADER_RESUME_DELTA = 200; // v4z: вырос больше — возобновить цикл
-  // v53: кап ретраев скролла при живом continuation-курсоре (h не растёт, курсор есть).
-  // Холодный старт (простой >12ч) медленный — поднят до 90 (шаг ~1с → до ~90с).
-  // Исчерпание капа → done reason=timeout. Раньше (30) лоадер стопился преждевременно
-  // при ещё живой истории (логи 0362260d: pct=56.2 терялись до ручного скролла).
-  var LOADER_STALL_CAP = 90;
-  var LOADER_HIDE_MIN_H = 8000;
-  // v66: доказательство вовлечения скрытого скролла. scrollEngaged=true при ЛЮБОМ из:
-  //   1) hide-applied (скроллер прятался — значит лента реально прокручивалась);
-  //   2) scrollH вырос за прогон на >= MIN_SCROLL_H_FOR_ENGAGEMENT пикселей;
-  //   3) scrollTop менялся (были не у верха / положение сдвигалось).
-  // data-complete / reachedStart / topReached доверять ТОЛЬКО при scrollEngaged:
-  // холодный старт с невовлечённым скроллом (iter h=864 без роста, scrollTop=0)
-  // давал ложный data-complete и high-confidence фрагмент (лог 15:40).
-  // v67: порог роста scrollH за прогон для признания скрытого скролла вовлечённым —
-  // отсеивает фоновые сдвиги верстки Gemini при холодной загрузке (мелкие перерисовки
-  // дают сдвиги в десятки px; реальная подгрузка старших окон истории — в тысячи px).
-  var MIN_SCROLL_H_FOR_ENGAGEMENT = 2000;
+  // ================= v4y: ЛОАДЕР ПОЛНОЙ ИСТОРИИ (ВЫНЕСЕН В gemini-loader-scroll.js) =================
+  // Тело кластера — баннер-описание, константы окна скролла и капа ретраев, пороги
+  // вовлечения/скрытия/паузы, loadFullHistoryInvisibly со всеми вложенными помощниками,
+  // ожидание сигнала «старшая история», автозапуск по открытию чата, слушатель возврата
+  // видимости и консольный хэндл ручного запуска — живёт в модуле, подключение ниже.
+  // Логика сюда НЕ возвращается: любые правки лоадера делаются в core/gemini-loader-scroll.js.
+  // Ниже остаётся только сводное состояние прогона (loaderState и т.д.): его читают и пишут
+  // само ядро и пагинация, поэтому модуль получает его живыми геттерами/сеттерами.
   // v67: сводное состояние текущего/последнего прогона лоадера (нужно snapshot-at-fired;
   // лоадер одиночный — loaderRunningFor, поэтому мутируем один модульный объект).
   var loaderState = {
@@ -1651,12 +1738,6 @@
   var lastLoaderDoneReason = ''; // v78: done-reason последнего прогона лоадера — гейт stable-stop оракула
   var collapseRetries = 0; // v1.14.2 (COLLAPSE-GUARD): бюджет перезапусков лоадера при коллапсе скроллера (макс 2); сброс при смене convId и при base>=floor
   var loaderRetryUsedMap = {}; // v66: convId → true — единственный повторный прогон лоадера уже израсходован
-  // v45: минимальный число известных ходов по текущему convId для скрытия скроллера.
-  // Обоснование: порог 50 ходов надёжно отделяет «короткий, но высокий» чат (мало msgs,
-  // большая scrollHeight — пример f47e2edd h=11893) от реально длинной истории; у длинных
-  // чатов после частичной подгрузки msgs обычно уже >50, поэтому скрытие не блокируется.
-  var LOADER_HIDE_MIN_MSGS = 50;
-  var SCROLL_PAUSE_HIDDEN_MS = 800; // v30.9: пауза между итерациями ПОСЛЕ скрытия скроллера // v30.7: скрытие ТОЛЬКО при scrollHeight>8000 — короткие чаты не прячем
 
   // ================= v75/v80: видимость БЕЗ скрытия DOM чата (фикс O1) =================
   // Грубое скрытие контейнера (opacity/display/visibility) ломало виртуализацию Gemini.
@@ -1814,832 +1895,9 @@
     document.addEventListener('visibilitychange', function () { forceRestoreVisibility('visibilitychange'); });
   } catch (eVc80) { }
 
-  async function loadFullHistoryInvisibly() {
-    var convId = getConvId();
-    vf5OverlapSinceLoaderStart = false; // v62: vf5-overlap отсчитывается от старта лоадера
-    isLowConfidenceBase = false; // v63: low-confidence отсчитывается от старта лоадера
-    try {
-      var sc = null;
-      for (var t = 0; t < LOADER_FIND_TRIES; t++) {
-        sc = findScrollContainer();
-        if (sc) break;
-        await sleep(LOADER_FIND_WAIT);
-      }
-      if (!sc) {
-        debugLog('log', '[AI CM][Gemini][loader] skip reason=no-scroller convId=' + (convId || '(none)'));
-        return;
-      }
 
-      debugLog('log', '[AI CM][Gemini][loader] start convId=' + convId + ' scrollH=' + sc.height());
-      var prevSmooth = '';
-      if (sc.mode === 'el') { try { prevSmooth = sc.el.style.scrollBehavior; sc.el.style.scrollBehavior = 'auto'; } catch (e) { } }
-      var hiddenEl = null;
-      var savedTop = sc.top();
-      // v80 (O1): расстояние-до-низа ВЬЮПОРТА на момент ПЕРВОГО скролла (захват в
-      // __applyHide, атомарно с height/client/top): префикс-догрузка истории растит
-      // scrollHeight сверху, абсолютный scrollTop после неё указал бы в середину.
-      // Якорь «прокрутка от низа» устойчив к дрейфу clientH при раннем hide (раскладка
-      // ещё не устоялась): позиция «внизу» (0) восстанавливается ровно в 0.
-      // -1 = скролла не было.
-      var distBottom80 = -1;
-      // v66/v67: сброс сводного состояния прогона (трекинг вовлечения скрытого скролла)
-      loaderState.scrollEngaged = false;
-      loaderState.hideApplied = false;
-      loaderState.topReached = false;
-      loaderState.startH = sc.height();
-      loaderState.maxHSeen = loaderState.startH;
-      loaderState.prevTopRead = -1;
 
-      // v30.4: скрытие НЕ выставляем заранее — только по решению в цикле (__applyHide).
-      // v80: DOM контейнера НЕ трогаем — непрозрачный оверлей на body (см. шапку v75/v80).
-      function __applyHide() {
-        if (hiddenEl || sc.mode !== 'el' || !sc.el) return;
-        hiddenEl = true; // v75: маркер «оверлей применён» (скрытия DOM больше нет)
-        // v80 (O1): атомарный захват позиции ДО первого скролла (прокрутка от низа вьюпорта)
-        try { distBottom80 = Math.max(0, sc.height() - sc.client() - sc.top()); } catch (eD80) { distBottom80 = 0; }
-        // v81 (O1 white-screen, вариант A): в этом холодном старте восстановлена лента
-        // (tapeWasUsedInThisColdStart=true) — оверлей НЕ показываем: тейп уже отрисовал
-        // полную историю, непрозрачный экран поверх ленты давал «белый экран».
-        if (tapeWasUsedInThisColdStart === true) {
-          debugLog('log', '[AI CM][visibility] overlay-suppressed reason=tape-present convId=' + (getConvId() || '(none)'));
-        } else {
-          aiCmSetScrollOverlay(true, 'loader');
-          debugLog('log', '[AI CM][visibility] hide reason=loader-overlay h=' + (sc.height ? sc.height() : '?') + ' convId=' + (getConvId() || '(none)'));
-        }
-        // v66: hide-applied — доказательство вовлечения скрытого скролла
-        loaderState.scrollEngaged = true;
-        loaderState.hideApplied = true;
-        // v30.8: сообщаем content.js — бейдж замораживается на время скрытой загрузки
-        try { window.dispatchEvent(new CustomEvent('ai-cm-loader-freeze', { detail: { on: true } })); } catch (e2) { }
-      }
-      function __restoreLoader() {
-        // v30.8: разморозка бейджа при любом выходе из лоадера (включая finally)
-        try { window.dispatchEvent(new CustomEvent('ai-cm-loader-freeze', { detail: { on: false } })); } catch (eF) { }
-        // v80 (O1): позиция сохраняется как «прокрутка от низа вьюпорта», захваченная в
-        // __applyHide (перед первым скроллом). Для холодного открытия/F5/SPA-входа
-        // (старт в низу) восстановление = ровно низ чата, независимо от дрейфа clientH;
-        // если скролла не было — тоже низ (как в v79).
-        var distBottomRest80 = (distBottom80 >= 0) ? distBottom80 : 0;
-        function applyRestoreTop80() {
-          try {
-            var sn = (sc && sc.height() > 0) ? sc : findScrollContainer();
-            if (sn && sn.height() > 0) sn.setTop(Math.max(0, sn.height() - sn.client() - distBottomRest80));
-          } catch (eR80) { }
-        }
-        if (hiddenEl) {
-          // v79/v80: возврат позиции ДО снятия оверлея — убирает «мгновение начала чата».
-          applyRestoreTop80();
-        }
-        // v80 (O1-B): оверлей снимаем строго после ДВУХ rAF — кадр с восстановленной
-        // позицией уже отрисован. seq-гвард: не снимаем оверлей более нового прогона.
-        // Снимаем ВСЕГДА (не только при hiddenEl): оверлей мог быть pre-applied
-        // (loader-restart) без hide — иначе протечка непрозрачного экрана.
-        var seqAtEnd80 = aiCmOverlaySeq;
-        var __overlayOff80 = function () {
-          aiCmSetScrollOverlay(false, 'loader-done', seqAtEnd80);
-          debugLog('log', '[AI CM][visibility] restore reason=loader-done convId=' + (getConvId() || '(none)'));
-        };
-        try {
-          requestAnimationFrame(function () { requestAnimationFrame(__overlayOff80); });
-        } catch (eRaf80) { __overlayOff80(); }
-        if (sc.mode === 'el') { try { sc.el.style.scrollBehavior = prevSmooth; } catch (e) { } }
-        // v30.4: возврат позиции на свеже-запрошенном скроллере; повтор через 250мс —
-        // после пере-якорения списка Gemini. v80: к сохранённой позиции, не жёстко в низ.
-        function kickBack() {
-          applyRestoreTop80();
-        }
-        try {
-          requestAnimationFrame(function () {
-            setTimeout(function () { kickBack(); setTimeout(kickBack, 250); }, 250);
-          });
-        } catch (e) { kickBack(); }
-      }
 
-      try {
-        var lastH = -1;
-        var noGrowth = 0;
-        var anyGrowth = false;
-        var doneReason = 'max';
-        var stallRetry = 0; // v52: ретраи скролла при неполном снимке
-        var usedFallbackScroll = false; // v1.6 (D14): в прогоне был v78 fallback-real-scroll
-        var notHiddenWait = 0; // v71: итераций ожидания hide (видимый скролл запрещён)
-        var lastEpoch = -1;  // v53: последнее виденное поколение курсора
-        var iter = 0;
-        var maxScrollHSeen = sc.height(); // v1.14.2 (COLLAPSE-GUARD): пер-ран максимум scrollHeight — сброс в старте прогона
-        // H9 (untrusted-top): снапшот поколения курсора на старте прогона. Если за время
-        // прогона пришёл history-write с continuation-курсором (cursorEpoch вырос), значит
-        // старшая история существует и есть (hadCursor=true). При floor=0 и no-growth такой
-        // «вершок» на схлопнутом скроллере недостоверен (см. untrustedTopVerdict ниже).
-        var cursorEpochAtRunStart = cursorEpoch;
-        while (true) {
-          iter++;
-          // v53: любой history-write с continuation-курсором сбрасывает счётчики
-          // стабилизации и столла — «новое поколение» курсора оживляет цикл.
-          if (cursorEpoch !== lastEpoch) {
-            lastEpoch = cursorEpoch;
-            noGrowth = 0;
-            stallRetry = 0;
-            anyGrowth = false;
-            lastH = -1;
-            debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' cursor-epoch=' + lastEpoch + ' → счётчики сброшены (курсор жив) convId=' + convId);
-          }
-          // v30.7 / v52/v53: data-complete ТОЛЬКО при реальной полноте снимка (нет курсора
-          // продолжения); при живом курсоре путь ЗАПРЕЩЁН (инвариант — только stall-retry).
-          // v1.13.1: полнота подтверждена ТОЛЬКО при reachedStart=true — baseComplete от
-          // тихой пагинации без начала (курсор пропал на скрытой вкладке) недостоверен.
-          // v68: полнота — ТОЛЬКО по серверному курсору (старших страниц больше нет),
-          // НЕ по DOM-скроллу: data-complete независимо от scrollEngaged/скрытого скроллера.
-          if (historyFullByQuiet === true && reachedStart === true && !pendingCursor) {
-            doneReason = 'data-complete';
-            break;
-          }
-          // v30: SPA может заменить scroller между итерациями — старая ссылка мертва,
-          // height() читается как 0. Перезапрашиваем элемент КАЖДУЮ итерацию; если
-          // элемент null или scrollHeight=0 — итерация не засчитывается (lastH/noGrowth
-          // не трогаем), ждём появления в рамках общего лимита итераций.
-          var scNow = findScrollContainer();
-          if (!scNow || !(scNow.height() > 0)) {
-            debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' скроллер недоступен (null/scrollH=0) — ожидание в рамках лимита');
-            await sleep(LOADER_STEP_MS);
-            continue;
-          }
-          sc = scNow;
-          // v1.14.2 (COLLAPSE-GUARD): per-run максимум scrollHeight (сброс — в старте
-          // прогона, на каждой итерации max) — эталон высоты для детекта коллапса
-          // скроллера: текущая высота стала значительно ниже виденного максимума.
-          var __hCg0 = sc.height();
-          if (__hCg0 > maxScrollHSeen) maxScrollHSeen = __hCg0;
-          // v66/v67: трекинг вовлечения скрытого скролла (рост высоты / смена scrollTop)
-          var __hNow0 = sc.height();
-          if (__hNow0 > loaderState.maxHSeen) {
-            loaderState.maxHSeen = __hNow0;
-            if (!loaderState.scrollEngaged && (loaderState.maxHSeen - loaderState.startH) >= MIN_SCROLL_H_FOR_ENGAGEMENT) {
-              loaderState.scrollEngaged = true;
-            }
-          }
-          var __tNow66 = sc.top();
-          if (!loaderState.scrollEngaged && (__tNow66 > 8 || (loaderState.prevTopRead !== -1 && __tNow66 !== loaderState.prevTopRead))) {
-            loaderState.scrollEngaged = true; // были не у верха / scrollTop сдвинулся — скроллер реально прокручивается
-          }
-          loaderState.prevTopRead = __tNow66;
-          // v30.7: скрытие ТОЛЬКО при h>8000 (длинный чат); короткие не прячем и не прыгаем
-          // v45: И msgs>=LOADER_HIDE_MIN_MSGS — «короткие, но высокие» чаты (f47e2edd h=11893,
-          // мало ходов) не прячем → нет белого мгновения при быстрой загрузке.
-          // v1.6 (D16): bootstrap короткого контейнера — при старшей истории (olderHistorySeen)
-          // + оракул incomplete + начало не достигнуто (reachedStart=false) скрываем/скроллим
-          // НЕЗАВИСИМО от порога 8000 (оверлей уже маскирует UI). Без этого hide не включается
-          // при scrollH=1140 → not-hidden-wait-cap → база неполная (80), старший сегмент остаётся
-          // на сервере, oracle=incomplete, deferred as-is [LOW CONFIDENCE]_. Порог 8000 остаётся
-          // для коротких чатов БЕЗ признаков старшей истории (все ходы в экране — лоадер не нужен).
-          var __hNow = sc.height();
-          var __msgsNow = baseSize(); // тот же источник, что кормит badge/history-write
-          // v1.6 (D16): hide-bootstrap — чистая функция; короткий контейнер (h<=8000) скрываем
-          // при старшей истории + oracle incomplete + начало не достигнуто (см. shouldHideScroller).
-          var hideVerdict = { hide: false, bootstrapShort: false };
-          if (typeof window !== 'undefined' && window.GeminiInterceptLogic &&
-              typeof window.GeminiInterceptLogic.shouldHideScroller === 'function') {
-            hideVerdict = window.GeminiInterceptLogic.shouldHideScroller({
-              scrollH: __hNow,
-              minHideH: LOADER_HIDE_MIN_H,
-              olderHistorySeen: !!olderHistorySeen,
-              reachedStart: reachedStart === true,
-              oracleIncomplete: !!oracleIncompleteSeen[convId]
-            });
-          } else {
-            hideVerdict = { hide: __hNow > LOADER_HIDE_MIN_H, bootstrapShort: false };
-          }
-          if (!hiddenEl && hideVerdict.hide) {
-            // v1.16 (1177-BYPASS): лоадер по эскалации (nativeEscalationFor===convId) скрывает
-            // и скроллит ДАЖЕ при msgs < LOADER_HIDE_MIN_MSGS — это обход 1177, тихий цикл
-            // уже не может продолжать, и старшие окна доберёт только нативный скролл сайта.
-            var escRun116 = !!(convId && nativeEscalationFor === convId);
-            // v1.16 (OLDER-UNSTARTED): «короткая по числу ходов, но высокая» история (msgs<порог,
-            // scrollH>8000) с подтверждённой старшей историей и недостигнутым началом — скрываем
-            // и скроллим тоже (иначе not-hidden-wait-cap ~60с пустого ожидания, см. de4b9f5f:
-            // 22 хода, h=26384, quiet-clean-end, hide-skipped few-msgs навсегда).
-            var olderUnstarted116 = !!(hideVerdict.hide && olderHistorySeen === true && reachedStart !== true);
-            if (__msgsNow >= LOADER_HIDE_MIN_MSGS || hideVerdict.bootstrapShort || escRun116 || olderUnstarted116) {
-              __applyHide();
-              debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' hide-applied h=' + __hNow + ' msgs=' + __msgsNow +
-                (hideVerdict.bootstrapShort ? ' reason=bootstrap-short' : (escRun116 ? ' reason=1177-bypass' : (olderUnstarted116 ? ' reason=older-unstarted' : ''))));
-            } else {
-              debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' hide-skipped reason=few-msgs h=' + __hNow + ' msgs=' + __msgsNow);
-            }
-          }
-          // v71: скролл (setTop(0) + синтетический scroll) выполняем ТОЛЬКО если контейнер
-          // скрыт (hiddenEl). Видимый скролл вверх — источник дёргания/беления чата при
-          // холодном открытии (hide-skipped reason=few-msgs h=14938 msgs=20): ждём, пока
-          // база доберёт LOADER_HIDE_MIN_MSGS и hide применится; кап ожидания — LOADER_MAX_ITER.
-          if (!hiddenEl) {
-            notHiddenWait++;
-            // v1.16 (CLEAN-END-UNSCROLLABLE): hide так и не применился (msgs<порога при
-            // коротком контейнере, скролл видимым запрещён), но тихая пагинация завершилась
-            // ЧИСТО (quietEndedClean: серверный курсор исчерпан без ошибок-страниц) и база не
-            // ниже пола — догонять нечего, окно не вырастет. Завершаем прогон сразу, чтобы
-            // оракул clean-end-stable подтвердил полноту на стопе, а не крутить LOADER_MAX_ITER
-            // итераций «visible-scroll-skipped» (~60с пустого ожидания + [LOW CONFIDENCE]_).
-            // Инвариант 3в: ТОЛЬКО при floor>0 (класс первого визита floor=0 НЕ подтверждается —
-            // ранний стоп без физического верха был бы ложной полнотой на первом визите).
-            var __nhClean = false;
-            var __floorNh = 0;
-            try {
-              try { __floorNh = (loadFloor(convId) || {}).count || 0; } catch (eNhF) { }
-              var __qcNh = (typeof quietEndedClean === 'undefined') ? false : (quietEndedClean === true);
-              var __pcNh = (typeof pendingCursor === 'undefined') ? null : pendingCursor;
-              __nhClean = __qcNh && !__pcNh && !reachedStart && __floorNh > 0 && baseSize() > 0 && baseSize() >= __floorNh;
-            } catch (eNh) { __nhClean = false; }
-            if (__nhClean) {
-              doneReason = 'clean-end-unscrollable'; // ≠ 'top' → стабильный стоп подтвердит clean-end-stable
-              debugLog('log', '[AI CM][Gemini][loader] early-stop reason=clean-end-unscrollable convId=' + convId +
-                ' msgs=' + baseSize() + ' floor=' + __floorNh + ' wait=' + notHiddenWait + '/' + LOADER_MAX_ITER);
-              break;
-            }
-            if (notHiddenWait >= LOADER_MAX_ITER) {
-              doneReason = 'not-hidden-wait-cap';
-              break;
-            }
-            debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' visible-scroll-skipped reason=not-hidden' +
-              ' h=' + __hNow + ' msgs=' + __msgsNow + ' wait=' + notHiddenWait + '/' + LOADER_MAX_ITER + ' convId=' + convId);
-            await sleep(LOADER_STEP_MS);
-            continue;
-          }
-          // v75: программный скролл БЕЗ изменения CSS-видимости: в одном кадре (rAF)
-          // scrollTop=0 → синтетический scroll → мгновенный возврат вниз. Пользователь
-          // скачка не видит (промежуточное состояние не отрисовывается), DOM-видимость
-          // контейнера не трогается — виртуализация Gemini продолжает рендерить.
-          // v78: rAF-возврат в том же кадре НЕ триггерил пагинацию Gemini → лоадер доходил
-          // до max, не собрав историю. Теперь rAF-режим ТОЛЬКО когда база уже полная;
-          // иначе — страховочный реальный скрытый скролл (v80: БЕЗ opacity на скроллере,
-          // экран закрыт непрозрачным overlay): scrollTop=0 + dispatch('scroll') + пауза —
-          // старшие окна реально рендерятся, пагинация Gemini срабатывает.
-          if (historyFullByQuiet === true) {
-            (function (el75) {
-              try {
-                requestAnimationFrame(function () {
-                  try { el75.scrollTop = 0; } catch (eS1) { }
-                  // v4z: синтетический scroll — подталкиваем IntersectionObserver-пагинацию
-                  try { el75.dispatchEvent(new Event('scroll')); } catch (eS2) { }
-                  try { el75.scrollTop = el75.scrollHeight; } catch (eS3) { } // возврат вниз ДО отрисовки кадра
-                });
-              } catch (eRaf) { }
-            })(sc.el);
-            await sleep(SCROLL_PAUSE_HIDDEN_MS);
-          } else {
-            // v78→v80: страховочный лоадер (фолбэк после loader-restart / неполная база):
-            // реальный скрытый скролл к верху. v80 (O1-A): САМ СКРОЛЛЕР НЕ СКРЫВАЕМ
-            // (opacity/pointerEvents удалены — они и давали чисто-белый экран и «начало
-            // чата» на unhide); экран закрыт непрозрачным overlay на body, виртуализация
-            // списка продолжает рендерить старшие окна.
-            usedFallbackScroll = true; // v1.6 (D14): прогон использовал страховочный скролл
-            // v80: оверлей мог быть снят force-restore (visibilitychange/conv-switch) —
-            // возвращаем, пока страховочный скролл активен. v81 (O1 white-screen A):
-            // при восстановленной ленте оверлей НЕ поднимаем (тейп уже виден).
-            if (tapeWasUsedInThisColdStart === true) {
-              if (!aiCmScrollOverlay) {
-                debugLog('log', '[AI CM][visibility] overlay-suppressed reason=tape-present convId=' + (getConvId() || '(none)'));
-              }
-            } else if (!aiCmScrollOverlay) {
-              aiCmSetScrollOverlay(true, 'loader-fallback');
-            }
-            debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' fallback-real-scroll (база неполная, rAF-возврат не триггерит пагинацию) convId=' + convId);
-            try { sc.setTop(0); } catch (eSt1) { }
-            try { sc.el.dispatchEvent(new Event('scroll')); } catch (eSt2) { }
-            await sleep(SCROLL_PAUSE_HIDDEN_MS);
-          }
-          var h = sc.height();
-          if (!(h > 0)) continue; // v30.7: нулевое чтение не засчитываем
-          debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' h=' + h +
-            ' scrollEngaged=' + (loaderState.scrollEngaged ? '1' : '0') +
-            ' hide=' + (loaderState.hideApplied ? 'applied' : 'not-applied') +
-            ' latch=' + (loaderDoneMap[convId] ? 'done' : 'reset') + (loaderRetryUsedMap[convId] ? '-retry-used' : ''));
-          if (lastH !== -1 && !(h > lastH + LOADER_RESUME_DELTA)) {
-            noGrowth++;
-            if (noGrowth >= LOADER_STABLE_NEED) {
-              // v4z: контрольный перемер через 2с — две no-growth могли попасть в летящий запрос
-              await sleep(LOADER_RECHECK_MS);
-              // v53: за время перемера мог прийти новый history-write с курсором — сброс счётчиков
-              if (cursorEpoch !== lastEpoch) {
-                lastEpoch = cursorEpoch;
-                noGrowth = 0;
-                stallRetry = 0;
-                anyGrowth = false;
-                lastH = -1;
-                await sleep(LOADER_STEP_MS);
-                continue;
-              }
-              // v1.13.1: требуем reachedStart=true — baseComplete без подтверждённого
-              // начала (тихая пагинация оборвалась на скрытой вкладке) недостоверен.
-              // v68: полнота — ТОЛЬКО по серверному курсору, не по DOM-скроллу
-              if (historyFullByQuiet === true && reachedStart === true && !pendingCursor) {
-                doneReason = 'data-complete';
-                break;
-              }
-              var hc = sc.height();
-              if (hc > lastH + LOADER_RESUME_DELTA) {
-                debugLog('log', '[AI CM][Gemini][loader] reason=resume h=' + lastH + '→' + hc);
-                noGrowth = 0;
-                lastH = hc;
-                anyGrowth = true;
-                continue;
-              }
-              // v53: ИНВАРИАНТ — пока в последнем history-ответе есть continuation-курсор,
-              // ЗАПРЕЩЕНО завершаться по stable / no-growth / data-complete. Только stall-retry
-              // (скролл к верху, шаг ~1с) до LOADER_STALL_CAP; исчерпание капа → done reason=timeout.
-              if (pendingCursor) {
-                stallRetry++;
-                if (stallRetry < LOADER_STALL_CAP) {
-                  debugLog('log', '[AI CM][Gemini][loader] stall-retry ' + stallRetry + '/' + LOADER_STALL_CAP +
-                    ' (курсор жив — продолжаю скроллить) convId=' + convId +
-                    ' pendingCursor=1 baseComplete=' + (historyFullByQuiet === true ? '1' : '0'));
-                  noGrowth = 0;
-                  await sleep(LOADER_STEP_MS);
-                  continue;
-                }
-                doneReason = 'timeout';
-                break;
-              }
-              // v65: «железное условие» физического верха. Стабильность высоты среди
-              // истории (height-stable + pendingCursor=0) НЕ признак конца: старшие окна
-              // истории могли ещё не отрендериться. Остановка раньше max-iter допустима
-              // ТОЛЬКО при topReached (scrollTop <= 8px). Пока не наверху — продолжаем
-              // скролл и сбрасываем счётчики no-growth.
-              // v66: topReached доверяем ТОЛЬКО при scrollEngaged — на невовлечённом
-              // скроллере scrollTop=0 тривиален (ложный «верх» на холодном старте).
-              loaderState.topReached = loaderState.scrollEngaged && sc.top() <= 8;
-              if (!loaderState.topReached) {
-                debugLog('log', '[AI CM][Gemini][loader] v65 top-not-reached scrollTop=' + sc.top() +
-                  ' (height-stable среди истории — не конец, продолжаю скролл) convId=' + convId);
-                noGrowth = 0;
-                lastH = -1;
-                anyGrowth = false;
-                await sleep(LOADER_STEP_MS);
-                continue;
-              }
-              // v1.14.2 (COLLAPSE-GUARD): collapse ≠ top. Если Gemini схлопнул скроллер
-              // во время скрытого прогона (03.09 11:35: 100933→744), scrollTop≤8px
-              // тривиален — физического верха НЕТ. doneReason='top' присваиваем только
-              // когда высота не коллапсировала: h < max(3000, 0.5*maxScrollHSeen)
-              // при базе ниже сохранённого пола → doneReason='collapse' + перезапуск.
-              var __floorCg = 0;
-              try { __floorCg = (loadFloor(convId) || {}).count || 0; } catch (eCg0) { }
-              var __cvCollapsed = false;
-              if (typeof window !== 'undefined' && window.GeminiInterceptLogic &&
-                  typeof window.GeminiInterceptLogic.collapseGuardVerdict === 'function') {
-                __cvCollapsed = window.GeminiInterceptLogic.collapseGuardVerdict({
-                  scrollH: sc.height(),
-                  maxScrollHSeen: maxScrollHSeen,
-                  baseCount: baseSize(),
-                  floorCount: __floorCg
-                }).collapsed;
-              } else {
-                __cvCollapsed = (sc.height() < Math.max(3000, maxScrollHSeen * 0.5) && baseSize() < __floorCg);
-              }
-              if (__cvCollapsed) {
-                // v1.15 (BUG «холодное открытие без полной истории»): если тихая пагинация
-                // ЗАВЕРШИЛАСЬ ЧИСТО (сеть: «старших страниц больше нет», ошибки не было),
-                // а скроллер схлопнут на физическом верхе — это НЕ «collapsed, ждём больше»,
-                // а устаревший пол (чат ужат/укорочен на сервере с прошлой полной сборки).
-                // Крутить collapse-ретраи против пола бессмысленно: окно не вырастет. Один
-                // подтверждающий повтор (8с, вдруг подъедет поздний нативный fetch) — и если
-                // база не выросла, подтверждаем верх как done reason=top и переписываем пол.
-                // typeof-защита: collapse-guard runTopPoint исполняет фрагмент в песочнице
-                // без модульных глобалов v1.15 (quietEndedClean/pendingCursor/quietActive/...).
-                var __cleanEndCg = false;
-                try {
-                  if (typeof quietEndedClean !== 'undefined' && quietEndedClean === true) {
-                    var __pcCg = (typeof pendingCursor === 'undefined') ? null : pendingCursor;
-                    var __cqCg = (typeof quietActive === 'undefined') ? false : !!quietActive;
-                    var __heCg = (typeof lastHnvPageError === 'undefined') ? false : !!lastHnvPageError;
-                    // v1.16: чистое завершение сети само по себе не лечит «устаревший пол» на
-                    // первом визите (floor=0): самоизлечение пола осмысленно только когда есть
-                    // пол от прошлой полной сборки (инвариант 3в, класс первого визита).
-                    var __floorOkCg = (typeof __floorCg === 'number' && __floorCg > 0);
-                    if (!__pcCg && !__cqCg && !__heCg && __floorOkCg && baseSize() > 0) __cleanEndCg = true;
-                  }
-                } catch (eCgClean) { __cleanEndCg = false; }
-                if (__cleanEndCg && collapseRetries >= 1 &&
-                    typeof lastCleanEndBaseCount !== 'undefined' && baseSize() === lastCleanEndBaseCount) {
-                  try {
-                    if (__floorCg > baseSize() && convId && typeof parserVersion !== 'undefined' && parserVersion &&
-                        typeof localStorage !== 'undefined' && typeof lastBaseTextLen !== 'undefined') {
-                      // v1.16.5 (T1-fix#5): понижение пола идёт ТОЛЬКО через формальный механизм
-                      // самоунижения (вердикт selfHealFloorVerdict + единственная точка записи
-                      // selfHealFloor → writeSelfHealedFloor). Прямого localStorage.setItem пола
-                      // здесь больше нет: подтверждающий повтор уже состоялся (collapseRetries>=1
-                      // + база не изменилась), поэтому confirmations=1.
-                      // typeof-защита: runTopPoint исполняет фрагмент в песочнице без модульных
-                      // глобалов (selfHealFloor там не объявлен).
-                      if (typeof selfHealFloor === 'function') {
-                        var __shvCg = null;
-                        try {
-                          if (typeof window !== 'undefined' && window.GeminiInterceptLogic &&
-                              typeof window.GeminiInterceptLogic.selfHealFloorVerdict === 'function') {
-                            __shvCg = window.GeminiInterceptLogic.selfHealFloorVerdict({
-                              cleanEnd: true,
-                              pendingCursor: (typeof __pcCg === 'undefined') ? null : __pcCg,
-                              quietActive: (typeof __cqCg === 'undefined') ? false : __cqCg,
-                              pageError: (typeof __heCg === 'undefined') ? false : __heCg,
-                              loaderRunning: (typeof loaderRunningFor === 'undefined') ? false : !!loaderRunningFor,
-                              archivePending: !!(typeof aiCmArchiveFor === 'function' && aiCmArchiveFor(convId) &&
-                                typeof aiCmArchiveLiveProven === 'function' && !aiCmArchiveLiveProven(convId)),
-                              baseCount: baseSize(),
-                              floorCount: __floorCg,
-                              floorLen: (loadFloor(convId) || {}).effectiveLen || 0,
-                              provenLen: lastBaseTextLen,
-                              reachedStart: reachedStart === true,
-                              confirmations: 1
-                            });
-                          }
-                        } catch (eShvCg) { __shvCg = null; }
-                        if (__shvCg && __shvCg.lower === true) {
-                          selfHealFloor(convId, __shvCg.count, __shvCg.effectiveLen, __shvCg.source);
-                        }
-                      }
-                    }
-                  } catch (eCgF) { }
-                  debugLog('log', '[AI CM][Gemini][loader] clean-end top confirmed (устаревший пол самоизлечен) convId=' + convId +
-                    ' msgs=' + baseSize() + ' floorWas=' + __floorCg + ' scrollH=' + sc.height() +
-                    ' selfHeal=' + ((__shvCg && __shvCg.source) || 'skipped'));
-                  doneReason = 'top'; // v1.15: чистый конец сети + физический верх → stable-stop оракул
-                  break;
-                }
-                if (__cleanEndCg && collapseRetries === 0) {
-                  if (typeof lastCleanEndBaseCount !== 'undefined') lastCleanEndBaseCount = baseSize();
-                  debugLog('log', '[AI CM][Gemini][loader] clean-end collapse candidate convId=' + convId +
-                    ' msgs=' + baseSize() + ' floor=' + __floorCg + ' — подтверждающий повтор через 8с');
-                }
-                doneReason = 'collapse'; // v1.14.2: НЕ 'top' — stable-stop оракул и fallback-top остаются закрытыми
-                if (collapseRetries < 2) {
-                  collapseRetries++;
-                  debugLog('log', '[AI CM][Gemini][loader] collapse-guard: скроллер схлопнут scrollH=' + sc.height() +
-                    ' maxSeen=' + maxScrollHSeen + ' msgs=' + baseSize() + ' floor=' + __floorCg +
-                    ' — перезапуск лоадера через 8с retry=' + collapseRetries + '/2 convId=' + convId);
-                  var __convIdAtCollapse = convId;
-                  setTimeout(function () {
-                    try {
-                      if (getConvId() !== __convIdAtCollapse) return; // смена чата — ретрай не нужен
-                      loaderDoneMap[__convIdAtCollapse] = false; // снятие латча — разрешаем перезапуск
-                      maybeStartLoader();
-                    } catch (eCg1) { }
-                  }, 8000);
-                } else {
-                  if (__cleanEndCg && typeof lastCleanEndBaseCount !== 'undefined' && baseSize() === lastCleanEndBaseCount) {
-                    try {
-                      if (__floorCg > baseSize() && convId && typeof parserVersion !== 'undefined' && parserVersion &&
-                          typeof localStorage !== 'undefined' && typeof lastBaseTextLen !== 'undefined') {
-                        debugLog('log', '[AI CM][Gemini][loader] clean-end floor-write via saveFloor (H11) convId=' + convId + ' proposed=' + baseSize() + ' floorWas=' + __floorCg);
-                        saveFloor(convId, baseSize(), lastBaseTextLen);
-                      }
-                    } catch (eCgF2) { }
-                    debugLog('log', '[AI CM][Gemini][loader] clean-end top confirmed (exhausted retries) convId=' + convId +
-                      ' msgs=' + baseSize() + ' floorWas=' + __floorCg);
-                    doneReason = 'top';
-                  } else {
-                    debugLog('log', '[AI CM][Gemini][loader] collapse-guard: ретраи исчерпаны 2/2 — incomplete as-is convId=' + convId);
-                  }
-                }
-                break;
-              }
-              // H9 (untrusted-top): первый визит floor=0 — collapse-guard при floor=0 молчит
-              // (baseCount < 0 никогда), но тихая пагинация оборвалась и курсор в истории был
-              // (hadCursor), а скроллер за прогон НЕ вырос (no-growth, схлопнутая высота).
-              // Такой doneReason='top' ложный (физического верха нет). → 'collapse' тем же
-              // ретрай-путём (≤2), иначе incomplete as-is (stable-stop/fallback-top закрыты).
-              // typeof-защита: collapse-guard runTopPoint исполняет этот фрагмент в песочнице
-              // без модульных глобалов (serverFirstHash/olderHistorySeen/cursorEpoch).
-              var __hadCursorH9 = false;
-              try {
-                __hadCursorH9 = !!((typeof serverFirstHash !== 'undefined' && serverFirstHash) ||
-                  (typeof olderHistorySeen !== 'undefined' && olderHistorySeen) ||
-                  (typeof cursorEpoch !== 'undefined' && typeof cursorEpochAtRunStart !== 'undefined' &&
-                   cursorEpoch !== cursorEpochAtRunStart));
-              } catch (eH90) { __hadCursorH9 = false; }
-              var __anyGrowthH9 = false;
-              try { __anyGrowthH9 = (typeof anyGrowth !== 'undefined') ? !!anyGrowth : false; } catch (eH9g) { __anyGrowthH9 = false; }
-              var __untTop = null;
-              if (typeof window !== 'undefined' && window.GeminiInterceptLogic &&
-                  typeof window.GeminiInterceptLogic.untrustedTopVerdict === 'function') {
-                __untTop = window.GeminiInterceptLogic.untrustedTopVerdict({
-                  floorCount: __floorCg,
-                  hadCursor: __hadCursorH9,
-                  anyGrowth: __anyGrowthH9,
-                  maxScrollHSeen: maxScrollHSeen,
-                  viewportH: (typeof sc !== 'undefined' && sc && typeof sc.client === 'function') ? sc.client() : 0
-                });
-              }
-              if (__untTop && __untTop.untrusted === true) {
-                doneReason = 'collapse'; // H9: НЕ 'top'
-                if (collapseRetries < 2) {
-                  collapseRetries++;
-                  debugLog('log', '[AI CM][Gemini][loader] untrusted-top ' + (__untTop.reason || '') +
-                    ' scrollH=' + (sc && sc.height ? sc.height() : '?') + ' maxSeen=' + maxScrollHSeen + ' msgs=' + baseSize() +
-                    ' floor=' + __floorCg + ' hadCursor=' + (__hadCursorH9 ? '1' : '0') +
-                    ' — перезапуск лоадера через 8с retry=' + collapseRetries + '/2 convId=' + convId);
-                  var __convIdAtUntrust = convId;
-                  setTimeout(function () {
-                    try {
-                      if (getConvId() !== __convIdAtUntrust) return; // смена чата — ретрай не нужен
-                      loaderDoneMap[__convIdAtUntrust] = false; // снятие латча — разрешаем перезапуск
-                      maybeStartLoader();
-                    } catch (eH91) { }
-                  }, 8000);
-                } else {
-                  debugLog('log', '[AI CM][Gemini][loader] untrusted-top: ретраи исчерпаны 2/2 — incomplete as-is convId=' + convId);
-                }
-                break;
-              }
-              doneReason = 'top'; // v78: физический верх подтверждён (topReached+scrollEngaged) — единственный done-reason, который взводит stable-stop оракул
-              break;
-            }
-          } else {
-            noGrowth = 0;
-            if (lastH !== -1) anyGrowth = true;
-          }
-          lastH = h;
-          // v53: лимит итераций НЕ прерывает активный курсор-скролл на холодном старте —
-          // иначе лоадер стопнулся бы раньше, чем сервер отдал полный снапшот.
-          if (iter >= LOADER_MAX_ITER && !pendingCursor) {
-            doneReason = 'max';
-            break;
-          }
-        }
-        // v68: полнота определяется ТОЛЬКО серверной пагинацией (paginateLoop по курсору);
-        // DOM-скролл больше НЕ взводит и НЕ сбрасывает baseComplete/reachedStart.
-        lastLoaderDoneReason = doneReason; // v78: гейт stable-stop оракула
-        // v1.6 (D14): SPA-вход в известный чат — страховочный v78-скролл дошёл до верха
-        // (topReached при empty*3). Выставляем состояния, которые stableCheck74 ждёт от
-        // main-loader done reason=top: reachedStart=true; historyFullByQuiet=true при
-        // base>=floor; диспатч ai-cm-loader-state с baseComplete=true — deferred-экспорт
-        // (content.js) не висит бесконечно, латч автоэкспорта стреляет один раз.
-        // v1.6 (D15): гейт — baseComplete через fallback-top ТОЛЬКО при pendingCursor==null
-        // И лоадер не в итерациях (loaderRunningFor===null) И база стабильна ≥5с.
-        // Иначе ждём: повторная проверка через 5с. fired не может произойти, пока
-        // лоадер продолжает итерации (вторая проходка догружает историю до 124).
-        if (doneReason === 'top' && usedFallbackScroll) { // v1.14.2: 'collapse' сюда не попадает — fallback-top объявляет полноту только при настоящем верхе
-          function applyFallbackComplete() {
-            try {
-              var baseNowD14 = baseSize();
-              var floorD14b = loadFloor(convId);
-              var floorCountD14b = (floorD14b && floorD14b.count) || 0;
-              // v1.6 (D15-C): гейт below-floor применяется и к done=top фолбэка —
-              // base < сохранённого пола НЕ даёт loader-stable-stop (ложный верх).
-              if (baseNowD14 < floorCountD14b) {
-                debugLog('log', '[AI CM][completeness] fallback-top skip reason=below-floor convId=' + convId +
-                  ' msgs=' + baseNowD14 + ' floor=' + floorCountD14b);
-                return;
-              }
-              // v1.14.1 (FB-PROBE): base>=floor — круговая проверка (floor мог быть сохранён
-              // из такой же ложной полноты), поэтому fallback-top объявляет полноту ТОЛЬКО
-              // после серверного подтверждения (v73-probe: 0 новых старших ходов, курсор
-              // исчерпан). Без метаданных сети/курсора полнота НЕ объявляется — экспорт
-              // не стреляет по усечённой базе; состояние бейджа не трогаем (v78-пол
-              // по-прежнему защищает от просадки).
-              var fbHash = '';
-              try { fbHash = aiCmDiagTurnEdge(aiCmOrderedTurns(), 'first').hash; } catch (eFbH) { }
-              var fbWideCur = null;
-              try { fbWideCur = extractCursorWide(lastPaginateOuter); } catch (eFbC) { }
-              // H9b (retain-last-good): живой wide-курсор пуст (оборванный шаг перезаписал
-              // lastPaginateOuter) → retained last-good того же convId (вход probe, не complete).
-              if (!fbWideCur && lastGoodWideCur && lastGoodWideCur.conv &&
-                  lastGoodWideCur.conv === (getConvId() || '')) {
-                fbWideCur = lastGoodWideCur.cur;
-                debugLog('log', '[AI CM][completeness] retained-wide-cur fed reason=fallback-top' +
-                  ' convId=' + (getConvId() || '(none)') + ' msgs=' + baseNowD14);
-              }
-              var fbMeta = { atEncoded: lastAtEncoded, baseUrl: lastBaseUrl, headers: lastHeaders };
-              // H9b: живой слот метаданных пуст — добираем из retained (same-convId); гарды
-              // isStaleReqTag по ответу probe остаются — чужой conv ответ не примет.
-              if ((!fbMeta.atEncoded || !fbMeta.baseUrl || !fbMeta.headers) &&
-                  lastGoodProbeMeta && lastGoodProbeMeta.conv &&
-                  lastGoodProbeMeta.conv === (getConvId() || '')) {
-                if (!fbMeta.atEncoded) fbMeta.atEncoded = lastGoodProbeMeta.atEncoded;
-                if (!fbMeta.baseUrl) fbMeta.baseUrl = lastGoodProbeMeta.baseUrl;
-                if (!fbMeta.headers) fbMeta.headers = lastGoodProbeMeta.headers;
-                debugLog('log', '[AI CM][completeness] retained-meta fed reason=fallback-top' +
-                  ' convId=' + (getConvId() || '(none)') + ' msgs=' + baseNowD14);
-              }
-              var fbProbeReady = true;
-              if (typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.fallbackProbeReady) {
-                fbProbeReady = window.GeminiInterceptLogic.fallbackProbeReady(fbMeta, fbWideCur);
-              } else {
-                fbProbeReady = Boolean(fbMeta.atEncoded && fbMeta.baseUrl && fbMeta.headers && fbWideCur);
-              }
-              if (!fbProbeReady) {
-                debugLog('log', '[AI CM][completeness] fallback-top wait reason=probe-unavailable' +
-                  ' meta=' + ((lastAtEncoded && lastBaseUrl && lastHeaders) ? 'yes' : 'no') +
-                  ' wideCursor=' + (fbWideCur ? 'yes' : 'no') +
-                  ' convId=' + convId + ' msgs=' + baseNowD14 + ' floor=' + floorCountD14b);
-                return;
-              }
-              debugLog('log', '[AI CM][completeness] fallback-top probe-start' +
-                ' convId=' + convId + ' msgs=' + baseNowD14 + ' floor=' + floorCountD14b);
-              runCompletenessProbe(fbHash, fbWideCur, { onTerminal: function () {
-                try { delete oracleIncompleteSeen[convId]; } catch (eFbO) { }
-                try {
-                  window.dispatchEvent(new CustomEvent('ai-cm-loader-state', { detail: {
-                    convId: convId,
-                    running: false,
-                    pendingCursor: false,
-                    baseComplete: true,
-                    reachedStart: true
-                  } }));
-                } catch (eFbD) { }
-              } });
-            } catch (eD14x) { }
-          }
-          function fallbackStableNow() {
-            var nowD15 = Date.now();
-            if (pendingCursor) return false; // живой pag-курсор — история ещё не вся
-            if (loaderRunningFor) return false; // активный прогон лоадера — не в итерациях нельзя судить
-            if (lastBaseCountChangeAt && (nowD15 - lastBaseCountChangeAt) < 5000) return false; // база менялась <5с
-            if (lastOlderNonPagAddAt && (nowD15 - lastOlderNonPagAddAt) < 5000) return false;
-            return true;
-          }
-          try {
-            if (fallbackStableNow()) {
-              applyFallbackComplete();
-            } else {
-              debugLog('log', '[AI CM][completeness] fallback-top wait reason=' +
-                (pendingCursor ? 'pending-cursor' : (loaderRunningFor ? 'loader-running' : 'base-unstable')) +
-                ' convId=' + convId + ' msgs=' + baseSize());
-              setTimeout(function () {
-                try {
-                  if (getConvId() !== convId) return;
-                  if (!fallbackStableNow()) return; // всё ещё ждём — stableCheck74/повторы решат
-                  applyFallbackComplete();
-                } catch (eD15t) { }
-              }, 5000);
-            }
-          } catch (eD14y) { }
-        }
-        debugLog('log', '[AI CM][Gemini][loader] done reason=' + doneReason +
-          ' scrollH=' + sc.height() + ' convId=' + convId +
-          ' baseComplete=' + (historyFullByQuiet === true ? '1' : '0') +
-          ' pendingCursor=' + (pendingCursor ? '1' : '0') +
-          ' msgs=' + baseSize() +
-          ' scrollEngaged=' + (loaderState.scrollEngaged ? '1' : '0') +
-          ' latch=' + (loaderDoneMap[getConvId() || convId] ? 'done' : 'reset') +
-          (loaderRetryUsedMap[getConvId() || convId] ? '-retry-used' : ''));
-      } finally {
-        __restoreLoader();
-      }
-    } catch (e) {
-      debugLog('error', '[AI CM][Gemini][loader] ошибка лоадера:', e);
-    }
-  }
-
-  // Точка автозапуска: каждое открытие чата (холодный F5 и SPA-переход на /app/<id>),
-  // после появления скроллера. Один раз на convId за сессию; холодное открытие
-  // (флага в loaderDoneMap нет) — всегда.
-  // v30.6: единственные читаемые флаги полноты — cacheRestoredMap[convId] (принята кэш-лента)
-  // и historyFullByQuiet (сеть дала полную историю): при них лоадер пропускается целиком.
-  // v46: ожидание сигнала «старшая история» до решения о старте.
-  var LOADER_SIGNAL_WAIT_TRIES = 20; // v46: до 20 попыток по 1с — дождаться первого history-RPC
-  var LOADER_SIGNAL_WAIT_MS = 1000;
-  function maybeStartLoader() {
-    var tries = 0;
-    function tick() {
-      var convId = getConvId();
-      if (!convId) {
-        if (++tries < 10) { setTimeout(tick, 1000); }
-        return;
-      }
-      if (loaderDoneMap[convId]) {
-        debugLog('log', '[AI CM][Gemini][loader] skip reason=already-done convId=' + convId +
-          (loaderRetryUsedMap[convId] ? ' retry-used=1' : ' retry-used=0')); // v66: состояние латча
-        return;
-      }
-      // v1.14.2 (COLLAPSE-GUARD): база добрала сохранённый пол — бюджет коллапс-ретраев больше не нужен
-      var __floorMs = 0;
-      try { __floorMs = (loadFloor(convId) || {}).count || 0; } catch (eCg2) { }
-      if (baseSize() >= __floorMs) collapseRetries = 0;
-      // v30.6: история уже полная — лоадер не нужен (иначе прячет скроллер на 8–10с).
-      // v1.6 (D15): при oracle=incomplete (восстановленная лента + неполная сеть) обходим
-      // cache-complete РОВНО ОДИН раз на вход — страховочный v78-скролл доведёт базу до
-      // done=top+base>=floor → baseComplete=true (D14-fallback) → авто-fired без [LOW CONFIDENCE]_.
-      if (cacheRestoredMap.has(convId)) {
-        var bypassD15 = false;
-        if (typeof window !== 'undefined' && window.GeminiInterceptLogic &&
-            typeof window.GeminiInterceptLogic.shouldBypassCacheComplete === 'function') {
-          bypassD15 = window.GeminiInterceptLogic.shouldBypassCacheComplete(oracleIncompleteSeen, oracleRerunUsedMap, convId);
-        }
-        if (bypassD15) {
-          try { delete oracleIncompleteSeen[convId]; } catch (eB1) { } // флаг снят — повторных обходов нет
-          try { oracleRerunUsedMap[convId] = true; } catch (eB2) { }   // маркер «один ре-ран использован»
-          debugLog('log', '[AI CM][Gemini][loader] cache-complete bypass reason=oracle-incomplete convId=' + convId);
-          // продолжаем к запуску лоадера ниже (не return)
-        } else {
-          loaderDoneMap[convId] = true;
-          debugLog('log', '[AI CM][Gemini][loader] skip reason=cache-complete convId=' + convId);
-          return;
-        }
-      }
-      // v52: skip data-complete только при реальной полноте (курсора продолжения нет) —
-      // иначе лоадер должен доскроллить историю (холодный открытие, частичный снимок).
-      // v1.13.1: требуется reachedStart=true — baseComplete без начала недостоверен
-      // (тихая пагинация могла оборваться при блокировке экрана).
-      if (historyFullByQuiet === true && reachedStart === true && !pendingCursor) {
-        loaderDoneMap[convId] = true;
-        debugLog('log', '[AI CM][Gemini][loader] skip reason=data-complete convId=' + convId);
-        return;
-      }
-      // v46: ждём первый распарсенный history-RPC (сигнал «есть старшая история»),
-      // чтобы не решить преждевременно — ответ мог ещё не прийти.
-      // T1-fix#2 (v1.16.2): «база непустая» ≠ «живой RPC распарсен» — архив вливает свои
-      // ходы в ту же базу ДО прихода живого снапшота. Ждём сигнал по ЖИВЫМ ходам
-      // (для чата без архива aiCmLiveTurnCount() === baseSize() — прежнее поведение).
-      var liveMsgs = aiCmLiveTurnCount();
-      if (!olderHistorySeen && liveMsgs === 0) {
-        if (++tries < LOADER_SIGNAL_WAIT_TRIES) {
-          // cold-debug: редкие отметки ожидания первого history-RPC (старт мог опередить сеть)
-          if (tries === 1 || tries === 10 || tries === 19) {
-            debugLog('log', '[AI CM][cold-debug] loader-wait-signal convId=' + convId +
-              ' msgs=' + baseSize() + ' liveMsgs=' + liveMsgs + ' olderHistorySeen=0 try=' + tries + '/' + LOADER_SIGNAL_WAIT_TRIES +
-              ' loaderRunning=' + (loaderRunningFor || 'none'));
-          }
-          setTimeout(tick, LOADER_SIGNAL_WAIT_MS); return;
-        }
-      }
-      // v46: курсора продолжения в начальном ответе нет → старшей истории нет,
-      // догружать нечего. Скроллинг лоадера на коротких чатах белил экран (f47e2edd).
-      // v1.6 (D15): при единственном ре-ране (oracle-incomplete bypass) гейт пропускается.
-      if (!olderHistorySeen && !oracleRerunUsedMap[convId]) {
-        if (aiCmArchiveFor(convId) && liveMsgs === 0) {
-          // T1-fix#2 (v1.16.2): «нет старшей истории» здесь выведено из НЕПУСТОЙ базы, а база
-          // непуста ТОЛЬКО вкладом архива (живой RPC ещё не распарсен) — решение недостоверно.
-          // Латч done НЕ ставим: ниже запускаем лоадер, чтобы догрузить живой ярус.
-          debugLog('log', '[AI CM][Gemini][loader] no-older-history отложен: база = только архив convId=' + convId +
-            ' msgs=' + baseSize() + ' liveMsgs=0');
-        } else {
-          loaderDoneMap[convId] = true;
-          debugLog('log', '[AI CM][Gemini][loader] loader-skipped reason=no-older-history convId=' + convId + ' msgs=' + baseSize());
-          return;
-        }
-      }
-      if (loaderRunningFor === convId) return;
-      // cold-debug: фактический старт прогона лоадера — решение и состояние на этот момент
-      try {
-        debugLog('log', '[AI CM][cold-debug] loader-run-start convId=' + convId +
-          ' msgs=' + baseSize() +
-          ' olderHistorySeen=' + (olderHistorySeen ? '1' : '0') +
-          ' historyFullByQuiet=' + (historyFullByQuiet ? '1' : '0') +
-          ' reachedStart=' + (reachedStart ? '1' : '0') +
-          ' pendingCursor=' + (pendingCursor ? '1' : '0') +
-          ' cacheRestored=' + (cacheRestoredMap.has(convId) ? '1' : '0') +
-          ' floor=' + __floorMs + ' tries=' + tries);
-      } catch (eRs) { }
-      loaderDoneMap[convId] = true;
-      loaderRunningFor = convId;
-      notifyLoaderState(convId, true); // v42: наружу «лоадер бежит по convId»
-      loadFullHistoryInvisibly().then(function () {
-        if (loaderRunningFor === convId) loaderRunningFor = null;
-        notifyLoaderState(convId, false); // v42: наружу «лоадер остановлен» — триггер re-check экспорта
-      }).catch(function (e) {
-        // v43: reject внешнего промиса — финализируем флаг, чтобы не завис «бегущий» лоадер;
-        // внутренние ошибки лоадер уже залогировал сам — тихо и без дублей.
-        if (loaderRunningFor === convId) loaderRunningFor = null;
-        notifyLoaderState(convId, false);
-        try { debugLog('log', '[AI CM][Gemini][loader] promise rejected convId=' + convId + ' err=' + (e && e.message || e)); } catch (eL) { }
-      });
-    }
-    tick();
-  }
-
-  // v1.13.1: возврат видимости вкладки (Win+L → разблокировка). Если база была помечена
-  // полной без подтверждённого начала (reachedStart=false) ИЛИ последний цикл
-  // пагинации/лоадера завершился во время hidden — сбрасываем доверие к baseComplete
-  // и перезапускаем тихую пагинацию/лоадер, чтобы докрутить остаток до реального начала.
-  document.addEventListener('visibilitychange', function () {
-    try {
-      if (document.visibilityState !== 'visible') return;
-      var convIdVis = getConvId();
-      if (!convIdVis) return;
-      var distrust = (historyFullByQuiet === true && reachedStart !== true) ||
-        quietIncompleteNoStart || lastCycleEndedHidden;
-      if (!distrust) return;
-      historyFullByQuiet = false;      // сброс доверия к baseComplete
-      quietIncompleteNoStart = false;
-      lastCycleEndedHidden = false;
-      quietDecisionMade = false;       // разрешаем повторное решение о старте тихого цикла
-      delete loaderDoneMap[convIdVis]; // лоадер обязан перезапуститься
-      console.log('[AI CM][loader] resume-on-visible convId=' + convIdVis +
-        ' msgs=' + baseSize() + ' pendingCursor=' + (pendingCursor ? '1' : '0'));
-      if (!quietActive) {
-        if (pendingCursor) {
-          quietActive = true;
-          quietDecisionMade = true;
-          paginateLoop(pendingCursor, 0);
-        } else {
-          maybeStartLoader();
-        }
-      }
-    } catch (eVis) {
-      try { debugLog('error', '[AI CM][loader] resume-on-visible error:', eVis); } catch (e2) { }
-    }
-  });
-
-  // Ручной запуск из консоли — тот же код, что и автозапуск.
-  try { window.__aiCmGeminiLoadFullHistory = loadFullHistoryInvisibly; } catch (e) { }
 
 
 

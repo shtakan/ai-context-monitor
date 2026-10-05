@@ -125,7 +125,7 @@ describe('v1.16 пины в core/gemini-intercept.js (1177-BYPASS)', () => {
   });
 
   test('лоадер по эскалации скрывает и скроллит даже при msgs ниже порога (reason=1177-bypass)', () => {
-    const escRunIdx = coreSrc.indexOf('var escRun116 = !!(convId && nativeEscalationFor === convId);');
+    const escRunIdx = coreSrc.indexOf('var escRun116 = !!(convId && D.nativeEscalationFor === convId);');
     const hideGateIdx = coreSrc.indexOf('__msgsNow >= LOADER_HIDE_MIN_MSGS || hideVerdict.bootstrapShort || escRun116');
     expect(escRunIdx).toBeGreaterThan(-1);
     expect(hideGateIdx).toBeGreaterThan(-1);
@@ -149,7 +149,7 @@ describe('v1.16 пины в core/gemini-intercept.js (1177-BYPASS)', () => {
   });
 
   test('hide-гейт лоадера покрывает «короткие по ходам, но высокие» чаты (reason=older-unstarted)', () => {
-    const gateIdx = coreSrc.indexOf('var olderUnstarted116 = !!(hideVerdict.hide && olderHistorySeen === true && reachedStart !== true);');
+    const gateIdx = coreSrc.indexOf('var olderUnstarted116 = !!(hideVerdict.hide && D.olderHistorySeen === true && D.reachedStart !== true);');
     expect(gateIdx).toBeGreaterThan(-1);
     expect(coreSrc).toContain("' reason=older-unstarted'");
   });
@@ -157,6 +157,6 @@ describe('v1.16 пины в core/gemini-intercept.js (1177-BYPASS)', () => {
   test('недостижимый скрытый скролл + чистый конец сети → early-stop (clean-end-unscrollable)', () => {
     expect(coreSrc).toContain("doneReason = 'clean-end-unscrollable';");
     expect(coreSrc).toContain('[AI CM][Gemini][loader] early-stop reason=clean-end-unscrollable');
-    expect(coreSrc).toContain('__nhClean = __qcNh && !__pcNh && !reachedStart && __floorNh > 0 && baseSize() > 0 && baseSize() >= __floorNh;');
+    expect(coreSrc).toContain('__nhClean = __qcNh && !__pcNh && !D.reachedStart && __floorNh > 0 && D.baseSize() > 0 && D.baseSize() >= __floorNh;');
   });
 });

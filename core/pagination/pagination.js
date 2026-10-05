@@ -193,7 +193,8 @@
     var reqTagPag = captureReqTag();
     var headers = {};
     for (var k in lastHeaders) headers[k] = lastHeaders[k];
-    originalFetch(buildActiveUrl(), {
+    // FIX-PAGINATION-FETCH-BINDING: explicit window binding for MV3 module scope
+    originalFetch.call(globalThis, buildActiveUrl(), {
       method: 'POST',
       headers: headers,
       body: buildActiveBodyWith(token),
@@ -476,7 +477,8 @@
               var reqTagSh = captureReqTag();
               var shHeaders = {};
               for (var sk in lastHeaders) shHeaders[sk] = lastHeaders[sk];
-              originalFetch(buildActiveUrl(), {
+              // FIX-PAGINATION-FETCH-BINDING: explicit window binding for MV3 module scope
+              originalFetch.call(globalThis, buildActiveUrl(), {
                 method: 'POST', headers: shHeaders, body: buildActiveBodyWith(shadowCur), credentials: 'include'
               }).then(function (shResp) {
                 if (!shResp || !shResp.ok) {
@@ -663,7 +665,8 @@
     var reqTagP = captureReqTag();
     var pHeaders = {};
     for (var k in lastHeaders) pHeaders[k] = lastHeaders[k];
-    var pFetchPromH9b = originalFetch(buildActiveUrl(), {
+    // FIX-PAGINATION-FETCH-BINDING: explicit window binding for MV3 module scope
+    var pFetchPromH9b = originalFetch.call(globalThis, buildActiveUrl(), {
       method: 'POST', headers: pHeaders, body: buildActiveBodyWith(wideCur), credentials: 'include'
     });
     // H9b: запрос уже сформирован (url/body/headers собраны синхронно) — восстанавливаем
@@ -781,7 +784,8 @@
     var reqTagW = captureReqTag();
     var headers = {};
     for (var k in lastHeaders) headers[k] = lastHeaders[k];
-    originalFetch(buildActiveUrl(), {
+    // FIX-PAGINATION-FETCH-BINDING: explicit window binding for MV3 module scope
+    originalFetch.call(globalThis, buildActiveUrl(), {
       method: 'POST',
       headers: headers,
       body: buildActiveBodyWith(lastHeadToken),

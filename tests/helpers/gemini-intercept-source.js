@@ -34,6 +34,14 @@
  * исполняют вырезанные тела (`with (ctx)`, без ключа D), поэтому ассерты не менялись ни
  * в одном сьюте.
  *
+ * v2.0 (Phase 3 step 11): кластер лоадера полной истории (LOADER_*, MIN_SCROLL_H_FOR_ENGAGEMENT,
+ * SCROLL_PAUSE_HIDDEN_MS, loadFullHistoryInvisibly со вложенными помощниками,
+ * LOADER_SIGNAL_WAIT_*, maybeStartLoader, слушатель visibilitychange, консольный хэндл ручного
+ * запуска) вынесен в core/gemini-loader-scroll.js и добавлен в MODULES тем же порядком, что и в
+ * js[] core/background.js (pagination -> loader-scroll -> ядро). В отличие от шага 10, тела
+ * перенесены с префиксом `D.` (объявления лежат в IIFE-каркасе модуля, а не в `with (D)`),
+ * поэтому песочницы, исполняющие вырезанные тела, обязаны получить ключ `D: ctx` (см. выше).
+ *
  * Скрипты одного registerContentScripts-пакета исполняются в одном мировом
  * глобальном лексическом скоупе: объявления модуля видны gemini-intercept.js
  * (и наоборот) по прежним именам, без импортов и префиксов. Поэтому
@@ -64,7 +72,8 @@ const MODULES = [
   'core/gemini-rpc.js',
   'core/gemini-parse.js',
   'core/gemini-sse.js',
-  'core/pagination/pagination.js'
+  'core/pagination/pagination.js',
+  'core/gemini-loader-scroll.js'
 ];
 const INTERCEPT_JS = 'core/gemini-intercept.js';
 
