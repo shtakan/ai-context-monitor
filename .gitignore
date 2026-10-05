@@ -40,8 +40,18 @@ chatgpt-conversation-sample.json
 tools/_out*
 gemini-head-sample.txt
 test2_logs.txt
-tools/
+# tools/ остаётся служебным и игнорируется, но два САМОДОСТАТОЧНЫХ контракт-файла
+# трекаются: S-пины в CI (чистый клон) требуют tools/pagination-bind-contract.js (S2)
+# и tools/ingest-bind-contract.js (шаг 12). Негация работает ТОЛЬКО при маске
+# содержимого `tools/*`: исключение каталога целиком (`tools/`) её отменяет.
+tools/*
+!tools/pagination-bind-contract.js
+!tools/ingest-bind-contract.js
 tools/key.pem
+# Прежний шаблон `tools/` (без внутреннего слэша) ловил каталог tools на ЛЮБОЙ
+# глубине; root-anchored `tools/*` этого не делает, поэтому вложенный служебный
+# каталог сохраняем явно — иначе он всплывает в `git status` как untracked.
+tests/tools/
 %TEMPJ%/
 jest_out.txt
 jest_out*.txt
