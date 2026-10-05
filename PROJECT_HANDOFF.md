@@ -1664,7 +1664,7 @@ Rewired-копия живёт **только в `dist/`** — корневые `
 - ID регистрации обновлён: `ai-cm-gemini-intercept-v7` → `ai-cm-gemini-intercept-v8`.
 - Исправлен CI-дефект (runs #100/#101): контракт-файлы трекированы через негацию `.gitignore` (аппендикс v31).
 - Создан пин-сьют `tests/adapters/gemini-ingest-module.test.js` (8 тестов) + smoke `tools/smoke-gemini-ingest-binding.js` (41 проверка).
-- Тесты: 147 suites / 2799 passed / 6 skipped / 0 failed.
+- Тесты: 146 suites / 2791 passed / 6 skipped / 0 failed.
 - Живая приёмка F5: пройдена (база восстанавливается, логи ingest из нового модуля, бейдж 43.3%, DeepSeek/Qwen без регрессов).
 
 **Итог Фазы 3:**
