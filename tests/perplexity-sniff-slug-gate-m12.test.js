@@ -326,6 +326,9 @@ describe('M-12: аудит прочих интерцепторов — патт�
     expect(at('core/page-intercept.js')).toContain('if (expectedConvId && expectedConvId !== currentConvId) {');
     expect(at('core/claude-intercept.js')).toContain('if (isStaleSnapshotBody(data, String(when || \'passive\'))) return;');
     expect(at('core/deepseek-intercept.js')).toContain('if (resp && resp.ok && guardCheck(historyConvId)) {');
-    expect(at('core/gemini-intercept.js')).toContain('var staleShot = (reqConvId && reqConvId !== currentConvId) ||');
+    // Phase 3 step 9: тело враппера fetch уехало в core/gemini-sse.js и читает состояние ядра
+    // через биндинг D.<имя>, поэтому литерал пина обновлён на D.currentConvId (ассерт не ослаблен:
+    // сам гард по convId на месте, читается он теперь оттуда же, откуда и раньше — из ядра).
+    expect(at('core/gemini-intercept.js')).toContain('var staleShot = (reqConvId && reqConvId !== D.currentConvId) ||');
   });
 });

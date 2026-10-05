@@ -330,6 +330,61 @@
     salvagePartialFrame = function () { return 0; };
   }
 
+  // ===== v2.0 (Phase 3 step 9): SSE-кластер (перехват сети) вынесен в core/gemini-sse.js =====
+  // Модуль подключён в core/background.js ПЕРЕД этим файлом и отдаёт свой API на window.
+  // Уехала ТОЛЬКО установка врапперов: подмена window.fetch (batchexecute: метаданные запроса,
+  // гард stale-conv на ответе, stream-ingest, DIAG_TOKENS-скан, тихий catch) и подмена
+  // OriginalXHR.prototype.open/setRequestHeader/send. Ингест, оркестрация пагинации,
+  // диагностика и опознание RPC остались в ядре и своих модулях: функции приходят в модуль
+  // значениями, а ЖИВОЕ состояние — геттерами/сеттерами (currentConvId/convEpoch/
+  // autoScrollBlocked/autoScrollUnblockTimer/diagScannedCount), потому что его читает и пишет
+  // не только кластер (pushState-сброс, лоадер, ingest) — копия значения разошлась бы с
+  // оригиналом. Алиас installNetworkHooks сохраняет прежнее МЕСТО установки врапперов.
+  var aiCmGeminiSse = (typeof window !== 'undefined' && window.AiCmGeminiSse) || null;
+  var installNetworkHooks = null;
+  if (aiCmGeminiSse) {
+    aiCmGeminiSse.__bind({
+      // Функции ядра (декларации хойстятся — значения доступны на момент bind).
+      ingest: ingest,
+      getConvId: getConvId,
+      // Алиасы соседних модулей (rpc/diag): к этому моменту уже назначены выше.
+      isHistoryRpc: isHistoryRpc,
+      isIngestRpc: isIngestRpc,
+      convIdFromBody: convIdFromBody,
+      captureHeadersFromInit: captureHeadersFromInit,
+      rememberSiteMeta: rememberSiteMeta,
+      isStreamIngestRpc: isStreamIngestRpc,
+      streamRpcidOf: streamRpcidOf,
+      provisionalStreamIngest: provisionalStreamIngest,
+      diagCanScan: diagCanScan,
+      diagIsStream: diagIsStream,
+      diagScanResponse: diagScanResponse,
+      // Оригиналы сети, снятые ядром в начале его IIFE: модуль патчит ими прототипы.
+      originalFetch: originalFetch,
+      OriginalXHR: OriginalXHR,
+      originalXHROpen: originalXHROpen,
+      originalXHRSend: originalXHRSend,
+      originalSetHeader: originalSetHeader,
+      // Живое состояние ядра: геттеры/сеттеры, чтобы чтение и запись модуля
+      // видели ОДНИ И ТЕ ЖЕ переменные IIFE (не копии значений).
+      get currentConvId() { return currentConvId; },
+      get convEpoch() { return convEpoch; },
+      get autoScrollBlocked() { return autoScrollBlocked; }, set autoScrollBlocked(v) { autoScrollBlocked = v; },
+      get autoScrollUnblockTimer() { return autoScrollUnblockTimer; }, set autoScrollUnblockTimer(v) { autoScrollUnblockTimer = v; },
+      get diagScannedCount() { return diagScannedCount; }, set diagScannedCount(v) { diagScannedCount = v; },
+      get DIAG_MAX_SCANNED() { return DIAG_MAX_SCANNED; },
+    });
+    installNetworkHooks = aiCmGeminiSse.installNetworkHooks;
+  } else {
+    // Модуль не подключён (у уже установленного расширения Chrome остался прежний
+    // registration с прежним id: MV3 не перечитывает js[] под существующим id).
+    // Деградация мягкая: страница работает как обычно, но пассивные снимки (fetch/XHR)
+    // в ingest не попадают — история собирается активными путями (vf5/пагинация/лоадер).
+    debugLog('log', '[gemini-intercept] core/gemini-sse.js не подключён — ' +
+      'перехват сети (fetch/XHR) недоступен, пассивные снимки не ингестятся (проверьте регистрацию content script)');
+    installNetworkHooks = function () { };
+  }
+
 
   // v33: флаг «Подробные логи» транслируется из content.js (ISOLATED) через CustomEvent
   // (в MAIN-мире chrome.storage недоступен — как в остальных перехватчиках)
@@ -4305,227 +4360,15 @@
     return added;
   }
 
-  // ---- подмена fetch (v24: тихий catch на промисе originalFetch + устранение висячего Promise.reject) ----
-  if (typeof originalFetch === 'function') {
-    window.fetch = function (input, init) {
-      var url = '';
-      try { url = (typeof input === 'string') ? input : (input && input.url) || ''; } catch (e) { }
-
-      // v21: диагностические метки для лога «гард слеп»
-      var diagInputType = (typeof input === 'string') ? 'url-string' : ((typeof Request !== 'undefined' && input instanceof Request) ? 'Request' : 'other');
-      var diagInitBody = (init && init.body) ? (typeof init.body === 'string' ? 'string' : 'other') : 'absent';
-
-      if (isHistoryRpc(url)) {
-        var hdrs = captureHeadersFromInit(input, init);
-        var bodyStr = '';
-        try {
-          if (typeof Request !== 'undefined' && input instanceof Request) {
-            input.clone().text().then(function (t) { rememberSiteMeta(url, hdrs, t); }).catch(function () { });
-          } else if (init && typeof init.body === 'string') { bodyStr = init.body; }
-        } catch (e) { }
-        rememberSiteMeta(url, hdrs, bodyStr);
-      }
-
-      // v21: строим reqConvIdPromise — всегда резолвится строкой, никогда не реджектится
-      var reqConvIdPromise = Promise.resolve('');
-      // v44: convId чата В МОМЕНТ ОТПРАВКИ запроса — синхронная привязка ответа к чату,
-      // не зависящая от парсинга тела (закрывает дыру «гард слеп» на SPA-навигации).
-      // v50: применяем и к инкрементальному фиду (isIngestRpc), а не только к истории.
-      var issuedAtConvId = '';
-      var issuedAtEpoch = -1; // v59: эпоха на момент отправки
-      if (isIngestRpc(url)) {
-        issuedAtConvId = getConvId();
-        issuedAtEpoch = convEpoch; // v59
-        if (init && typeof init.body === 'string') {
-          // строковое тело — синхронно
-          reqConvIdPromise = Promise.resolve(convIdFromBody(init.body));
-        } else if (typeof Request !== 'undefined' && input instanceof Request) {
-          // Request-объект — клонируем и читаем тело параллельно originalFetch
-          try {
-            var cloned = input.clone();
-            reqConvIdPromise = cloned.text().then(function (t) {
-              return convIdFromBody(t);
-            }).catch(function () { return ''; });
-          } catch (e) {
-            reqConvIdPromise = Promise.resolve('');
-          }
-        }
-      }
-
-      var promise;
-      try { promise = originalFetch.apply(this, arguments); } catch (e) { return Promise.reject(e); }
-
-      // v24: тихий catch — снимает ложный unhandled rejection для чужих прерванных запросов
-      // (Failed to fetch при навигации/переключении/обрыве стрима), не меняя поведения страницы
-      promise.catch(function () { /* тихо: снимаем ложный unhandled для чужих прерванных запросов */ });
-
-      // v52: stream-ingest — ветка ДО isIngestRpc: ответы генерации (I4z33b/Bsxleb), clone, не мешаем странице
-      if (isStreamIngestRpc(url)) {
-        promise.then(function (resp) {
-          try {
-            if (resp && resp.ok) {
-              resp.clone().text().then(function (t) {
-                provisionalStreamIngest(t, streamRpcidOf(url));
-              }).catch(function () { });
-            }
-          } catch (e) { }
-          return resp;
-        }, function () { /* тихо */ });
-      }
-      if (isIngestRpc(url)) {
-        promise.then(function (resp) {
-          try {
-            if (resp && resp.ok) {
-              resp.clone().text().then(function (txt) {
-                // v21: гард ждёт reqConvIdPromise (обычно уже разрешён)
-                reqConvIdPromise.then(function (reqConvId) {
-                  // v44/v59: чужой снимок — convId запроса ≠ текущий, ИЛИ «гард слеп» (reqConvId
-                  // пуст), но запрос уходил для другого чата/эпохи (SPA-навигация до прибытия ответа).
-                  var staleShot = (reqConvId && reqConvId !== currentConvId) ||
-                    (!reqConvId && issuedAtConvId !== '' && issuedAtConvId !== currentConvId) ||
-                    (!reqConvId && issuedAtEpoch !== convEpoch); // v59
-                  if (staleShot) {
-                    debugLog('log', '[AI CM][ingest] drop stale-conv reqConv=' + (reqConvId || issuedAtConvId || '(none)') + ' curConv=' + (currentConvId || '(none)') + ' src=passive');
-                    return;
-                  }
-                  if (!reqConvId) {
-                    // v21: точный диагностический лог при слепоте
-                    debugLog('log', '[gemini-intercept] гард слеп (reqConvId пуст) путь=fetch input=' + diagInputType +
-                      ' init.body=' + diagInitBody + ' — пропускаем только чужие (выпуск для ' + issuedAtConvId + ')');
-                  }
-                  // первый валидный ответ нового чата снимает блокировку автоскролла
-                  if (autoScrollBlocked) {
-                    autoScrollBlocked = false;
-                    if (autoScrollUnblockTimer) { clearTimeout(autoScrollUnblockTimer); autoScrollUnblockTimer = null; }
-                    debugLog('log', '[gemini-intercept] автоскролл разблокирован — получен первый валидный снимок чата ' + currentConvId);
-                  }
-                  ingest(txt, {});
-                });
-              }).catch(function () { });
-            }
-          } catch (e) { }
-          return resp;
-        }, function () { /* v24: тихо — не создаём висячий Promise.reject */ });
-      }
-      // v28: DIAG_TOKENS — диагностический перехват ВСЕХ ответов Gemini (не только history RPC)
-      promise.then(function (resp) {
-        try {
-          if (!resp || !resp.ok) return;
-          var ct = '';
-          try { ct = resp.headers.get('content-type') || ''; } catch (e) { }
-          if (!diagCanScan(url, ct)) return;
-          if (diagScannedCount < DIAG_MAX_SCANNED) {
-            diagScannedCount++;
-            debugLog('log', '[gemini-token-diag-scan] url=' + url +
-              ' ct=' + ct + ' stream=' + (diagIsStream(url, ct) ? 'true' : 'false'));
-          }
-          var isStream = diagIsStream(url, ct);
-          resp.clone().text().then(function (txt) {
-            diagScanResponse(txt, url, isStream);
-          }).catch(function () { });
-        } catch (e) { }
-        return resp;
-      }, function () { });
-      return promise;
-    };
-  }
-
-  // ---- подмена XHR (v21: гард по convId, без изменений относительно v20) ----
-  if (originalXHROpen && originalXHRSend) {
-    OriginalXHR.prototype.open = function (method, url) {
-      try { this.__aiCm = { method: String(method).toUpperCase(), url: String(url), headers: {} }; } catch (e) { }
-      return originalXHROpen.apply(this, arguments);
-    };
-    if (originalSetHeader) {
-      OriginalXHR.prototype.setRequestHeader = function (k, v) {
-        try { if (this.__aiCm) this.__aiCm.headers[k] = v; } catch (e) { }
-        return originalSetHeader.apply(this, arguments);
-      };
-    }
-    OriginalXHR.prototype.send = function (body) {
-      var info = this.__aiCm || {}; var url = info.url || '';
-      if (isHistoryRpc(url)) {
-        rememberSiteMeta(url, info.headers || {}, typeof body === 'string' ? body : '');
-      }
-      // v20: сохраняем reqConvId в this.__aiCm для использования в load-обработчике
-      if (isIngestRpc(url) && typeof body === 'string') {
-        info.reqConvId = convIdFromBody(body);
-      }
-      // v44: convId чата В МОМЕНТ ОТПРАВКИ — фолбэк атрибуции, когда тело не распарсилось
-      if (isIngestRpc(url)) {
-        info.issuedAtConvId = getConvId();
-        info.issuedAtEpoch = convEpoch; // v59: эпоха на момент отправки
-      }
-      // v52: stream-ingest (XHR) — ветка ДО isIngestRpc: ответы генерации (I4z33b/Bsxleb)
-      if (isStreamIngestRpc(url)) {
-        var selfStream = this;
-        this.addEventListener('load', function () {
-          try {
-            if (selfStream.status >= 200 && selfStream.status < 300 && selfStream.responseText) {
-              provisionalStreamIngest(selfStream.responseText, streamRpcidOf(url));
-            }
-          } catch (e) { }
-        });
-      }
-      if (isIngestRpc(url)) {
-        var self = this;
-        this.addEventListener('load', function () {
-          try {
-            if (self.status >= 200 && self.status < 300 && self.responseText) {
-              // v20: гард — ответ от старого чата игнорируем
-              var rcv = self.__aiCm && self.__aiCm.reqConvId;
-              var icv = self.__aiCm && self.__aiCm.issuedAtConvId; // v44: выпуск запроса (фолбэк атрибуции)
-              var iep = (self.__aiCm && typeof self.__aiCm.issuedAtEpoch === 'number') ? self.__aiCm.issuedAtEpoch : -1; // v59
-              // v44/v59: чужой снимок — convId запроса ≠ текущий, ИЛИ «гард слеп», но запрос
-              // уходил для другого чата/эпохи (SPA-навигация до прибытия ответа).
-              var staleShot = (rcv && rcv !== currentConvId) ||
-                (!rcv && icv && icv !== currentConvId) ||
-                (!rcv && iep !== convEpoch); // v59
-              if (staleShot) {
-                debugLog('log', '[AI CM][ingest] drop stale-conv reqConv=' + (rcv || icv || '(none)') + ' curConv=' + (currentConvId || '(none)') + ' src=passive');
-                return;
-              }
-              if (!rcv) {
-                // v21: точный диагностический лог при слепоте (XHR)
-                debugLog('log', '[gemini-intercept] гард слеп (reqConvId пуст) путь=xhr input=send body=' +
-                  (typeof body === 'string' ? 'string len=' + body.length : (body ? typeof body : 'absent')) +
-                  ' — пропускаем только чужие (выпуск для ' + icv + ')');
-              }
-              // первый валидный ответ нового чата снимает блокировку автоскролла
-              if (autoScrollBlocked) {
-                autoScrollBlocked = false;
-                if (autoScrollUnblockTimer) { clearTimeout(autoScrollUnblockTimer); autoScrollUnblockTimer = null; }
-                debugLog('log', '[gemini-intercept] автоскролл разблокирован — получен первый валидный XHR-снимок чата ' + currentConvId);
-              }
-              ingest(self.responseText, {});
-            }
-          } catch (e) { }
-        });
-      }
-      // v28: DIAG_TOKENS — диагностический перехват ВСЕХ XHR-ответов (не только history RPC)
-      try {
-        var self2 = this;
-        this.addEventListener('load', function () {
-          try {
-            if (self2.status >= 200 && self2.status < 300 && self2.responseText) {
-              var ct2 = '';
-              try { ct2 = self2.getResponseHeader('content-type') || ''; } catch (e) { }
-              if (diagCanScan(url, ct2)) {
-                if (diagScannedCount < DIAG_MAX_SCANNED) {
-                  diagScannedCount++;
-                  debugLog('log', '[gemini-token-diag-scan] url=' + url +
-                    ' ct=' + ct2 + ' stream=' + (diagIsStream(url, ct2) ? 'true' : 'false'));
-                }
-                var isStream2 = diagIsStream(url, ct2);
-                diagScanResponse(self2.responseText, url, isStream2);
-              }
-            }
-          } catch (e) { }
-        });
-      } catch (e) { }
-      return originalXHRSend.apply(this, arguments);
-    };
-  }
+  // ===== v2.0 (Phase 3 step 9): SSE-кластер (перехват сети) вынесен в core/gemini-sse.js =====
+  // Здесь были подмена window.fetch (batchexecute: rememberSiteMeta на запросе, гард stale-conv
+  // по convId/эпохе на ответе, stream-ingest, DIAG_TOKENS-скан, тихий catch) и подмена
+  // OriginalXHR.prototype.open/setRequestHeader/send (тот же набор ветвей). Модуль подключён
+  // ПЕРЕД этим файлом, связка (__bind + алиас) — в блоке выше, сразу после блока
+  // core/gemini-parse.js. Вызов ниже сохраняет прежнее МЕСТО установки врапперов, поэтому и
+  // момент установки, и порядок патчей относительно остальных слушателей ядра не менялись.
+  // Логика сюда НЕ возвращается: правки перехвата сети — в модуле.
+  installNetworkHooks();
 
   // ---- v28: слияние сохранённой ленты (из content.js) со свежей сетевой ----
   // Контент-скрипт (content.js) восстанавливает ленту из chrome.storage.local

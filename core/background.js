@@ -121,22 +121,26 @@ async function ensureInterceptor() {
     // парсинг кадров молча деградировал до заглушки. Новый id гарантирует доставку модуля;
     // -v3 снимается ниже вместе с -v2 и legacy, чтобы старый пучок (без parse) не жил
     // параллельно с новым.
-    if (ids.indexOf('ai-cm-gemini-intercept-v4') === -1) {
+    // Phase 3 step 9: бамп -v4 → -v5 по той же причине — core/gemini-sse.js (SSE-кластер:
+    // перехват fetch/XHR) не доехал бы до профилей, где -v4 зарегистрирован раньше. Здесь
+    // цена ошибки выше, чем у parse: без модуля ядро ставит no-op вместо installNetworkHooks,
+    // то есть перехват сети Gemini выключается ЦЕЛИКОМ (пассивные снимки в ingest не попадают).
+    if (ids.indexOf('ai-cm-gemini-intercept-v5') === -1) {
       // Снимаем регистрации прежних id: они остались в профиле после обновления и
-      // несли бы старый js[] (без hidden-scroll/diag/rpc/parse) параллельно с новым пучком.
+      // несли бы старый js[] (без hidden-scroll/diag/rpc/parse/sse) параллельно с новым пучком.
       // Прежних id может не быть (чистая установка) — поэтому тихий catch без диагностики.
       try {
-        await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-gemini-intercept', 'ai-cm-gemini-intercept-v2', 'ai-cm-gemini-intercept-v3'] });
+        await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-gemini-intercept', 'ai-cm-gemini-intercept-v2', 'ai-cm-gemini-intercept-v3', 'ai-cm-gemini-intercept-v4'] });
       } catch (eUnregGemini) { }
-      await registerSafe('ai-cm-gemini-intercept-v4', {
-        id: 'ai-cm-gemini-intercept-v4',
+      await registerSafe('ai-cm-gemini-intercept-v5', {
+        id: 'ai-cm-gemini-intercept-v5',
         matches: ['https://gemini.google.com/*', 'https://aistudio.google.com/*'],
-        js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-parse.js', 'core/gemini-intercept.js'],
+        js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-parse.js', 'core/gemini-sse.js', 'core/gemini-intercept.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false
       });
-      console.log('AI Context Monitor: перехватчик Gemini (v4) зарегистрирован (мир сайта, document_start)');
+      console.log('AI Context Monitor: перехватчик Gemini (v5) зарегистрирован (мир сайта, document_start)');
     }
 
     // перехватчик DeepSeek (v2: новый id, чтобы Chrome гарантированно перезагрузил

@@ -18,6 +18,12 @@
  * блок связки (__bind + алиасы) и handleOuter, который модуль получает инжекцией.
  * Песочницы тестов передают модулю его зависимости как ctx.D = ctx (D.<имя> — биндинг).
  *
+ * v2.0 (Phase 3 step 9): SSE-кластер (перехват сети — врапперы fetch и XMLHttpRequest) вынесен
+ * в core/gemini-sse.js и добавлен в MODULES тем же порядком, что и в js[] core/background.js
+ * (parse -> sse -> ядро). Модуль не объявляет врапперы на верхнем уровне: ядро получает
+ * installNetworkHooks() и зовёт его из прежнего места установки, поэтому конкатенация ниже
+ * по-прежнему ставит сетевые патчи ровно один раз и в исходном порядке.
+ *
  * Скрипты одного registerContentScripts-пакета исполняются в одном мировом
  * глобальном лексическом скоупе: объявления модуля видны gemini-intercept.js
  * (и наоборот) по прежним именам, без импортов и префиксов. Поэтому
@@ -46,7 +52,8 @@ const MODULES = [
   'core/gemini-hidden-scroll.js',
   'core/gemini-diag.js',
   'core/gemini-rpc.js',
-  'core/gemini-parse.js'
+  'core/gemini-parse.js',
+  'core/gemini-sse.js'
 ];
 const INTERCEPT_JS = 'core/gemini-intercept.js';
 
