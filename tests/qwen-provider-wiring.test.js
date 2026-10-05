@@ -108,7 +108,7 @@ describe('O-35: core/background.js — регистрация перехватч
   });
 
   test('R-пин: шесть существующих регистраций не тронуты', function () {
-    ['ai-cm-page-intercept', 'ai-cm-gemini-intercept-v3', 'ai-cm-deepseek-intercept-v2',
+    ['ai-cm-page-intercept', 'ai-cm-gemini-intercept-v4', 'ai-cm-deepseek-intercept-v2',
       'ai-cm-claude-intercept', 'ai-cm-perplexity-intercept',
       'ai-cm-google-search-intercept'].forEach(function (id) {
       expect(background).toContain("ids.indexOf('" + id + "') === -1");
@@ -120,6 +120,8 @@ describe('O-35: core/background.js — регистрация перехватч
     // вместе с id -v2 → -v3), на шаге «парсеры» (Phase 3 step 6) — core/gemini-parse.js
     // (id при этом сознательно НЕ менялся) — пин обновлён на актуальный литерал целиком,
     // а не ослаблен, чтобы следующая правка регистрации снова требовала ревью.
+    // На шаге 7 (Phase 3) id всё же сменён -v3 → -v4: модуль шага 6 не доезжал до профилей,
+    // где -v3 зарегистрирован раньше (Chrome не перечитывает js[]); сам набор js[] не изменён.
     expect(background).toContain("js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-parse.js', 'core/gemini-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'core/deepseek-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'utils/intercept-common.js', 'core/claude-intercept.js']");
