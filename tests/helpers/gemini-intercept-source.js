@@ -24,6 +24,16 @@
  * installNetworkHooks() и зовёт его из прежнего места установки, поэтому конкатенация ниже
  * по-прежнему ставит сетевые патчи ровно один раз и в исходном порядке.
  *
+ * v2.0 (Phase 3 step 10): кластер пагинации и контроля полноты (extractCursor/
+ * classifyOpaque(+Wide)/findCursors/edges8/refreshMinOrderTracking, paginateLoop, finishQuiet,
+ * runCompletenessProbe, runCompletenessWatchdog, finishWatchdogDecision) вынесен в
+ * core/pagination/pagination.js и добавлен в MODULES тем же порядком, что и в js[]
+ * core/background.js (sse -> pagination -> ядро). Тела функций перенесены БАЙТОВЫМИ, без
+ * префикса `D.`: объявления лежат внутри `with (D) { … }`, поэтому свободное имя
+ * резолвится в with-объект. Именно этим механизмом — и только им — существующие пины
+ * исполняют вырезанные тела (`with (ctx)`, без ключа D), поэтому ассерты не менялись ни
+ * в одном сьюте.
+ *
  * Скрипты одного registerContentScripts-пакета исполняются в одном мировом
  * глобальном лексическом скоупе: объявления модуля видны gemini-intercept.js
  * (и наоборот) по прежним именам, без импортов и префиксов. Поэтому
@@ -53,7 +63,8 @@ const MODULES = [
   'core/gemini-diag.js',
   'core/gemini-rpc.js',
   'core/gemini-parse.js',
-  'core/gemini-sse.js'
+  'core/gemini-sse.js',
+  'core/pagination/pagination.js'
 ];
 const INTERCEPT_JS = 'core/gemini-intercept.js';
 

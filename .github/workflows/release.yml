@@ -55,12 +55,15 @@ jobs:
           # Phase 3 step 1: dist/ стал самодостаточным, поэтому legacy-дерево исходников
           # уходит из пакета. ^core/ и ^utils/ безопасны: все их файлы либо склеены в
           # бандлы, либо перечислены в runtimeRegisteredFiles() и попадают в ZIP оверлеем
-          # dist/ (20 MAIN-world файлов, которые service worker регистрирует сам).
+          # dist/ (21 MAIN-world файлов, которые service worker регистрирует сам).
           # Phase 3 step 6: кластер парсеров кадра вынесен в core/gemini-parse.js,
           # поэтому runtime-файлов стало на один больше (было 18, стало 19) —
           # сам исключающий фильтр ниже не менялся, файл приходит оверлеем dist/.
           # Phase 3 step 9: SSE-кластер вынесен в core/gemini-sse.js — снова +1
           # (было 19, стало 20); фильтр и здесь не тронут.
+          # Phase 3 step 10: кластер пагинации вынесен в core/pagination/pagination.js —
+          # ещё +1 (было 20, стало 21); фильтр по-прежнему не тронут, модуль приходит
+          # оверлеем dist/ (build.mjs выводит runtime-файлы из js[] регистрации).
           # options/options\.js$ и ^print/print\.js$ исключены как бандлируемые входы:
           # оверлей кладёт их бандлы в корень пакета (options.js, print.js), а сами
           # HTML-страницы подменяются rewired-копиями из dist/.
@@ -77,7 +80,7 @@ jobs:
           # (background.js, content.js, options.js, print.js, shared-i18n.js),
           # docs/screenshots/ и _locales/ появляются в корне пакета. Именно rewired-копии
           # manifest.json и четырёх страниц определяют, что запускает Chrome:
-          # 5 бандлов + 18 MAIN-world файлов, которые service worker регистрирует сам.
+          # 5 бандлов + 19 MAIN-world файлов, которые service worker регистрирует сам.
           # Файлы перечисляются find-ом (а не 'zip -r dist'), чтобы записи в архиве
           # гарантированно не получили префикс 'dist/' и совпали с legacy-именами.
           ( cd dist && find . -type f ) | sed 's|^\./||' | xargs zip -q "$ZIP"
