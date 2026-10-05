@@ -11,6 +11,13 @@
  * (hidden-scroll -> diag -> ядро). Ядро при отсутствии модуля деградирует мягко, но в браузере
  * он подключён всегда, поэтому конкатенация ниже по-прежнему равна единому скоупу страницы.
  *
+ * v2.0 (Phase 3 step 6): кластер парсеров кадра batchexecute (parseByBytes / parseByLines /
+ * parseBatchExecute + tolerant-salvage обрезанного кадра) вынесен в core/gemini-parse.js и
+ * добавлен в MODULES тем же порядком, что и в js[] core/background.js (rpc -> parse -> ядро).
+ * Парсеры живут в модуле, поэтому fnDecl(...) режет их ОТТУДА; в ядре остались только
+ * блок связки (__bind + алиасы) и handleOuter, который модуль получает инжекцией.
+ * Песочницы тестов передают модулю его зависимости как ctx.D = ctx (D.<имя> — биндинг).
+ *
  * Скрипты одного registerContentScripts-пакета исполняются в одном мировом
  * глобальном лексическом скоупе: объявления модуля видны gemini-intercept.js
  * (и наоборот) по прежним именам, без импортов и префиксов. Поэтому
@@ -38,7 +45,8 @@ const ROOT = path.join(__dirname, '..', '..');
 const MODULES = [
   'core/gemini-hidden-scroll.js',
   'core/gemini-diag.js',
-  'core/gemini-rpc.js'
+  'core/gemini-rpc.js',
+  'core/gemini-parse.js'
 ];
 const INTERCEPT_JS = 'core/gemini-intercept.js';
 

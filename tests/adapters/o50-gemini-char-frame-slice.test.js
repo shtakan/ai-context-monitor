@@ -73,6 +73,9 @@ function makeParserSandbox() {
       out.total++;
     }
   };
+  // v2.0 (Phase 3 step 6): тела парсеров живут в core/gemini-parse.js и обращаются к
+  // инжектированным зависимостям как D.<имя>; песочница подставляет сам ctx (аналог __bind).
+  ctx.D = ctx;
   const decls = [
     'classifyOpaque', 'edges8', 'findCursors', 'extractCursor',
     'isTurnLikeSpan', 'noteJsonChild', 'closeTruncatedJson', 'unescapeJsonLiteralPrefix',

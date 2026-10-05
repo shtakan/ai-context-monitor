@@ -21,7 +21,8 @@
  *      дедуплицируется по id в turnsMap — «пропуск» разовый, не потеря.
  *
  * Тест исполняет РЕАЛЬНЫЕ тела parseByBytes/parseByLines/parseBatchExecute, извлечённые из
- * core/gemini-intercept.js (конвенция fnDecl + песочница `with`), — не копию логики.
+ * core/gemini-parse.js (через tests/helpers/gemini-intercept-source.js: модуль идёт в
+ * конкатенации ПЕРЕД ядром, конвенция fnDecl + песочница `with`) — не копию логики.
  * НЕ ТРОГАЕТСЯ: saveFloor (HWM), H9/H10-гейты, resetForNewConversation.
  */
 // jsdom (jest-окружение проекта) не даёт TextEncoder/TextDecoder — в браузере это нативные
@@ -70,6 +71,7 @@ function runParseByBytes(raw) {
     out.turns.push({ id: 'idx' + out.total, outer: outer, src: src });
     out.total++;
   };
+  ctx.D = ctx; // v2.0 (Phase 3 step 6): парсер из core/gemini-parse.js читает зависимости как D.<имя>
   const body = fnDecl(CORE_GEMINI, 'parseByBytes') +
     '\n parseByBytes(' + JSON.stringify(raw) + ', out, "passive"); return out;';
   const fn = new Function('ctx', 'with (ctx) { var out = { turns: [], total: 0 };' + body + ' }');
@@ -85,6 +87,7 @@ function runParseBatchExecute(raw) {
     ctx.calls.push(outer);
     out.turns.push({ id: String(outer[2]), outer: outer, src: src });
   };
+  ctx.D = ctx; // v2.0 (Phase 3 step 6): парсер из core/gemini-parse.js читает зависимости как D.<имя>
   const body = fnDecl(CORE_GEMINI, 'parseByBytes') + '\n' +
     fnDecl(CORE_GEMINI, 'parseByLines') + '\n' +
     fnDecl(CORE_GEMINI, 'parseBatchExecute') +

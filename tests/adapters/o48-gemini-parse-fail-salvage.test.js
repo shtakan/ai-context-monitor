@@ -82,6 +82,10 @@ function makeParserSandbox() {
       ctx.quietDecisionMade = true;
     }
   };
+  // v2.0 (Phase 3 step 6): тела парсеров живут в core/gemini-parse.js и читают/пишут
+  // инжектированные ядром зависимости как D.<имя>. Песочница подставляет сам ctx — ровно то,
+  // что делает __bind в браузере (D.lastFrameParseFail = … попадает в ctx.lastFrameParseFail).
+  ctx.D = ctx;
   const decls = [
     'classifyOpaque', 'edges8', 'findCursors', 'extractCursor',
     'isTurnLikeSpan', 'noteJsonChild', 'closeTruncatedJson', 'unescapeJsonLiteralPrefix',

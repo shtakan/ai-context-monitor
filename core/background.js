@@ -111,6 +111,11 @@ async function ensureInterceptor() {
     // без смены id core/gemini-hidden-scroll.js не доехал бы до обновившихся
     // пользователей (прецедент — DeepSeek, id 'ai-cm-deepseek-intercept-v2' ниже).
     // Шаг 5 использует ровно тот же приём: id -v3, а прежние -v2 и legacy снимаются ниже.
+    // Шаг 6 (кластер парсеров кадра, core/gemini-parse.js) id НЕ меняет: файл добавлен в js[]
+    // уже зарегистрированного -v3. Для профиля, где -v3 зарегистрирован РАНЬШЕ (например,
+    // после шага 5), Chrome список js[] не перечитает → модуль не подключится, и ядро
+    // деградирует мягко: parseBatchExecute отдаёт пустой список ходов (парсинг выключен
+    // целиком, не только salvage). Лечится перезагрузкой расширения или бампом id.
     if (ids.indexOf('ai-cm-gemini-intercept-v3') === -1) {
       // Снимаем регистрации прежних id: они остались в профиле после обновления и
       // несли бы старый js[] (без hidden-scroll/diag/rpc) параллельно с новым пучком.
@@ -121,7 +126,7 @@ async function ensureInterceptor() {
       await registerSafe('ai-cm-gemini-intercept-v3', {
         id: 'ai-cm-gemini-intercept-v3',
         matches: ['https://gemini.google.com/*', 'https://aistudio.google.com/*'],
-        js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-intercept.js'],
+        js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-parse.js', 'core/gemini-intercept.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false
