@@ -169,6 +169,32 @@ describe('O-35: utils/model-config.js — модель Qwen', function () {
     expect(ModelConfig.getContextLimit('qwen3.8-max')).toBe(1000000);
   });
 
+  // ТЕХДОЛГ: в таблице был РОВНО ОДИН ключ Qwen, поэтому слаг актуальной веб-модели
+  // (qwen3.7-plus — первая строка живого /api/models 2026-10-04) не резолвился: точного
+  // совпадения нет, префиксного быть не может → resolveCurrentModel падал в siteDefaults.qwen
+  // и виджет показывал чужое имя. Пин держит ОБА сигнала (сеть → slug, DOM → ярлык) и то,
+  // что дефолт сайта при этом не подменён.
+  test('qwen3.7-plus: точный слаг-ключ (сеть/DOM) → своё имя, своё окно 1M', function () {
+    const rec = ModelConfig.models['qwen3.7-plus'];
+    expect(rec).toBeTruthy();
+    expect(rec.name).toBe('Qwen3.7-Plus');
+    expect(rec.provider).toBe('Qwen');
+    expect(rec.contextLimit).toBe(1000000);
+    expect(rec.capExempt).toBe(true);
+    expect(modelConfigRaw).toContain("'qwen3.7-plus'");
+    // сигнал сети (model из тела /api/v2/chat/completions) и ярлык из DOM резолвятся
+    // именно в свой ключ, а НЕ в дефолт сайта qwen3.8-max
+    expect(ModelConfig.resolveModelId('qwen3.7-plus')).toBe('qwen3.7-plus');
+    expect(ModelConfig.resolveModelId('qwen3.7_plus')).toBe('qwen3.7-plus');
+    expect(ModelConfig.resolveModelId('Qwen3.7-Plus')).toBe('qwen3.7-plus');
+    // имя для виджета и порог = реальное окно (capExempt), а не общий потолок 128000
+    expect(ModelConfig.getModel(ModelConfig.resolveModelId('qwen3.7-plus')).name).toBe('Qwen3.7-Plus');
+    expect(ModelConfig.getContextLimit('qwen3.7-plus')).toBe(1000000);
+    expect(ModelConfig.getEffectiveLimit('qwen3.7-plus')).toBe(1000000);
+    // дефолт сайта не тронут: он нужен только когда ни сети, ни DOM нет
+    expect(ModelConfig.getDefaultModel('qwen')).toBe('qwen3.8-max');
+  });
+
   test('прежние дефолты сайтов не тронуты', function () {
     expect(ModelConfig.getDefaultModel('chatgpt')).toBe('gpt-5.5');
     expect(ModelConfig.getDefaultModel('gemini')).toBe('gemini-2.5-flash');

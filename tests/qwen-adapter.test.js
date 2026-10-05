@@ -236,6 +236,26 @@ describe('O-35: QwenAdapter — detectModel', function () {
     document.body.innerHTML = '<div class="model-name">Qwen3.8-Max</div>';
     expect(loadAdapter().detectModel()).toBe('qwen3.8-max');
   });
+
+  // DOM-половина резолвер-цепочки: ярлык актуальной веб-модели обязан отдавать ТОЧНЫЙ слаг
+  // ('qwen3.7-plus'), который есть ключом в utils/model-config.js — иначе core/content.js
+  // (resolveCurrentModel) не распознаёт сигнал и подставляет дефолт сайта.
+  // ВАЖНО (честность пина): разметка ниже подобрана под ЖИВОЙ набор селекторов detectModel
+  // (первый — '[class*="model"] [class*="name"]'). Пин держит ЛОГИКУ «ярлык → слаг», а НЕ
+  // живую разметку chat.qwen.ai: в снятом снепшоте tools/qwen-dom-snapshot-26.09.26.json
+  // НИ ОДНОГО класса со словом model нет (0 совпадений), т.е. селекторы — по-прежнему
+  // гипотеза, а живой прогон (PROJECT_HANDOFF.md, таблица приёмки O-35) дал путь=DOM с
+  // raw="qwen3.8-max" — значением ФОЛБЭКА, а не ярлыком из DOM.
+  test('актуальный ярлык Qwen3.7-Plus из разметки → точный слаг qwen3.7-plus', function () {
+    document.body.innerHTML = '<div class="model-picker"><span class="model-name-text">Qwen3.7-Plus</span></div>';
+    const slug = loadAdapter().detectModel();
+    expect(slug).toBe('qwen3.7-plus');
+    const ModelConfig = require(path.join(ROOT, 'utils', 'model-config.js'));
+    const id = ModelConfig.resolveModelId(slug);
+    expect(id).toBe('qwen3.7-plus');
+    expect(ModelConfig.getModel(id).name).toBe('Qwen3.7-Plus');
+    expect(ModelConfig.getEffectiveLimit(id)).toBe(1000000);
+  });
 });
 
 describe('O-39-план замены (qwen-селекторы): source-пины точки правки', function () {
