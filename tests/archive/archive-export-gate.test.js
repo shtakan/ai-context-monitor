@@ -274,13 +274,21 @@ describe('T1-fix#2: живой ярус — поведение (извлечён
     return map;
   }
   function env(turnsMap, arch) {
-    return {
+    // Phase 3 step 13.2: тела кластера уехали в core/gemini-archive.js и берут имена ядра
+    // через объект связи D (в браузере его заполняет __bind из ядра). Здесь D — тот же ctx:
+    // в песочнице `with (ctx)` имена ядра и так видны свободно, поэтому self-ref воспроизводит
+    // контракт, не подменяя логику. Вызовы ВНУТРИ кластера (aiCmLiveTurnCount,
+    // aiCmArchiveGrewBeyondArchive, aiCmArchiveOnlyBase) префикса НЕ получили — они
+    // резолвятся объявлениями самого sandbox-блока.
+    var ctx = {
       turnsMap: turnsMap,
       baseSize: () => Object.keys(turnsMap).length,
       getConvId: () => 'c1',
       aiCmArchiveFor: () => arch,
       window: { GeminiInterceptLogic: Logic }
     };
+    ctx.D = ctx;
+    return ctx;
   }
   function apiFor(turnsMap, arch) { return make(env(turnsMap, arch)); }
 

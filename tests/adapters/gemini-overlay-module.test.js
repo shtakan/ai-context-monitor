@@ -19,8 +19,8 @@
  *     gemini-widget-theme-h22:331-336) режут их из конкатенации и исполняют в песочнице.
  *
  *   S (проводка) — модуль реально подключён и связан с ядром:
- *     S1  регистрация в core/background.js: id -v9, модуль в js[] ПЕРЕД ядром,
- *         -v8 в unregister (MV3 не перечитывает js[] под уже зарегистрированным id);
+ *     S1  регистрация в core/background.js: id -v10 (шаг 13.2), модуль в js[] ПЕРЕД
+ *         ядром, -v9 в unregister (MV3 не перечитывает js[] под уже зарегистрированным id);
  *     S2  bind-контракт полон: все 3 имени контракта переданы ядром и все 3 используются
  *         модулем (регрессия = молчаливый no-op, которого не видит ни один старый пин);
  *     S3  деградация без модуля: внятный лог и undefined вместо падения;
@@ -316,12 +316,12 @@ describe('Phase 3 шаг 13.1: D-пины — API, гигиена, деград�
 });
 
 describe('Phase 3 шаг 13.1: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v9, модуль перед ядром, -v8 снят', () => {
+  test('S1: регистрация в core/background.js — id -v10, модуль перед ядром, -v9 снят', () => {
     const bg = readFile('core/background.js');
-    expect(bg).toContain("'ai-cm-gemini-intercept-v9'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v10'");
     expect(bg).toContain("'core/gemini-overlay.js'");
     // js[] собран ровно в этом порядке: … loader-scroll → ingest → overlay → ядро
-    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-intercept.js'");
+    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-intercept.js'");
     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при своей загрузке
     expect(bg.indexOf("'core/gemini-ingest.js'")).toBeLessThan(bg.indexOf("'core/gemini-overlay.js'"));
     expect(bg.indexOf("'core/gemini-overlay.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
@@ -329,8 +329,8 @@ describe('Phase 3 шаг 13.1: S-пины проводки модуля', () => 
     expect(bg).toContain("'ai-cm-gemini-intercept-v8'");
     expect(bg).toContain("'ai-cm-gemini-intercept-v7'");
     // лог регистрации бампнут вместе с id
-    expect(bg).toContain('(v9) зарегистрирован');
-    expect(bg).not.toContain('(v8) зарегистрирован');
+    expect(bg).toContain('(v10) зарегистрирован');
+    expect(bg).not.toContain('(v9) зарегистрирован');
   });
 
   test('S2: bind-контракт полон — ни одна зависимость кластера не потеряна', () => {

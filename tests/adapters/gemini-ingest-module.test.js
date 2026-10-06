@@ -17,8 +17,9 @@
  *     №2  после __bind в API ровно 17 ключей = 16 функций + __bind;
  *     №3  форвардеры ядра aiCmIngestFwd / aiCmHandleOuterFwd / aiCmEmitBaseSnapshotFwd
  *         объявлены и подставлены в те же точки, а прямой проводки мимо них нет;
- *     №4  счётчик emitBaseSnapshot(): ядро 4 (3 вызова + 1 форвардер),
- *         конкатенация 9 = 4 (ядро) + 2 (пагинация) + 3 (ingest: декларация + 2 вызова);
+ *     №4  счётчик emitBaseSnapshot(): ядро 3 (2 вызова + 1 форвардер),
+ *         конкатенация 9 = 3 (ядро) + 2 (пагинация) + 3 (ingest: декларация + 2 вызова)
+ *         + 1 (archive: вызов в слушателе ai-cm-archive-restore);
  *     №5  порядок модулей в tests/helpers/gemini-intercept-source.js: ingest строго
  *         после gemini-loader-scroll.js и перед ядром — иначе в модуль уедет null
  *         (alias-зависимости дозаполняет блок __bind loader-scroll, см. шапку контракта);
@@ -51,6 +52,7 @@ const readFile = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const CONC = require(path.join(ROOT, 'tests/helpers/gemini-intercept-source.js')).geminiSource;
 const CORE = readFile('core/gemini-intercept.js');
 const MOD = readFile('core/gemini-ingest.js');
+const ARCH = readFile('core/gemini-archive.js');
 const PAG = readFile('core/pagination/pagination.js');
 
 /** 16 экспортов модуля — в порядке `Fn.<имя> = <имя>;` (core/gemini-ingest.js:1231-1246). */
@@ -151,10 +153,16 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
     expect(CORE).toContain('mergeRestoredTurns = aiCmGeminiIngest.mergeRestoredTurns;');
     expect(CORE.indexOf('ingest: aiCmIngestFwd,')).toBeLessThan(CORE.indexOf('aiCmGeminiIngest.__bind'));
 
-    // прямой проводки мимо форвардера нет: иначе поздняя связка отдала бы null
+    // прямой проводки мимо форвардера нет: иначе поздняя связка отдала бы null.
+    // Phase 3 step 13.2: пин emitBaseSnapshot СУЖЕН до блока ingest. Блок архива
+    // стоит НИЖЕ заполнения алиасов (770-771) и вправе отдать alias ЗНАЧЕНИЕМ — там он уже
+    // не null; этот случай закрыт отдельным пином в tests/adapters/gemini-archive-module.test.js.
     expect(CORE).not.toContain('ingest: ingest,');
     expect(CORE).not.toContain('handleOuter: handleOuter,');
-    expect(CORE).not.toContain('emitBaseSnapshot: emitBaseSnapshot,');
+    const ingestBindAt = CORE.indexOf('aiCmGeminiIngest.__bind(');
+    expect(ingestBindAt).toBeGreaterThan(-1);
+    const ingestBind = CORE.slice(ingestBindAt, CORE.indexOf('});', ingestBindAt));
+    expect(ingestBind).not.toContain('emitBaseSnapshot: emitBaseSnapshot,');
 
     // хвостовая точка выхода vf5 — ровно один вызов, ровно с этими опциями
     expect(CORE.match(new RegExp(VF5_TAIL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))).toHaveLength(1);
@@ -166,17 +174,21 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
     expect(linesOf(CORE, VF5_TAIL)).toEqual([1680]);
   });
 
-  test('R-D №4: счётчик emitBaseSnapshot() — ядро 4, конкатенация 9', () => {
-    // ядро: 3 вызова (finishQuiet-ветка, probe-terminal, emit-хвост) + 1 форвардер
-    expect(CORE.match(/emitBaseSnapshot\(\)/g)).toHaveLength(4);
-    expect(CORE.match(/try \{ emitBaseSnapshot\(\); \}/g)).toHaveLength(3);
+  test('R-D №4: счётчик emitBaseSnapshot() — ядро 3, конкатенация 9', () => {
+    // ядро: 2 вызова (floor-confirm, self-heal) + 1 форвардер. Третий вызов (слушатель
+    // ai-cm-archive-restore) на шаге 13.2 уехал в core/gemini-archive.js — там он и
+    // считается отдельной строкой ниже.
+    expect(CORE.match(/emitBaseSnapshot\(\)/g)).toHaveLength(3);
+    expect(CORE.match(/try \{ emitBaseSnapshot\(\); \}/g)).toHaveLength(2);
+    // архив: 1 вызов (пере-эмит после вливания ходов архива)
+    expect(ARCH.match(/emitBaseSnapshot\(\)/g)).toHaveLength(1);
     // пагинация отдаёт свои 2 вызова (finishQuiet / runCompletenessProbe)
     expect(PAG.match(/emitBaseSnapshot\(\)/g)).toHaveLength(2);
     // ingest: 1 декларация `function emitBaseSnapshot()` + 2 вызова (ingest и mergeRestoredTurns)
     expect(MOD.match(/emitBaseSnapshot\(\)/g)).toHaveLength(3);
     expect(linesOf(MOD, 'function emitBaseSnapshot()')).toEqual([459]);
     expect(fnSource(MOD, 'mergeRestoredTurns')).toContain('try { emitBaseSnapshot(); } catch (e) { }');
-    // арифметика конкатенации: 4 + 2 + 3 = 9
+    // арифметика конкатенации: 3 (ядро) + 2 (пагинация) + 3 (ingest) + 1 (архив) = 9
     expect(CONC.match(/emitBaseSnapshot\(\)/g)).toHaveLength(9);
   });
 
@@ -207,12 +219,12 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
 });
 
 describe('Phase 3 шаг 12: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v9 (шаг 13.1), ingest и overlay перед ядром, -v8 снят', () => {
+  test('S1: регистрация в core/background.js — id -v10 (шаг 13.2), ingest, overlay и archive перед ядром, -v9 снят', () => {
     const bg = readFile('core/background.js');
-    expect(bg).toContain("'ai-cm-gemini-intercept-v9'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v10'");
     expect(bg).toContain("'core/gemini-ingest.js'");
     // js[] собран ровно в этом порядке: sse → pagination → loader-scroll → ingest → ядро
-    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-intercept.js'");
+    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-intercept.js'");
     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при загрузке
     expect(bg.indexOf("'core/gemini-loader-scroll.js'")).toBeLessThan(bg.indexOf("'core/gemini-ingest.js'"));
     expect(bg.indexOf("'core/gemini-ingest.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));

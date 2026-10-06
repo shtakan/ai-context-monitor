@@ -70,6 +70,9 @@ const ROOT = path.join(__dirname, '..', '..');
 // Phase 3 step 13.1: core/gemini-overlay.js идёт после ingest и перед ядром — как в js[].
 // Тела оверлея перенесены с префиксом D (IIFE-каркас, а не `with (D)`): песочницы, которые
 // исполняют вырезанные тела, обязаны получить объект связи D (см. gemini-widget-theme-h22).
+// Phase 3 step 13.2: core/gemini-archive.js идёт после overlay и перед ядром — как в js[].
+// Тела архива тоже перенесены с префиксом D, поэтому песочницы archive-export-gate и
+// archive-export-union получают объект связи D рядом с прежними свободными именами.
 const MODULES = [
   'core/gemini-hidden-scroll.js',
   'core/gemini-diag.js',
@@ -79,7 +82,8 @@ const MODULES = [
   'core/pagination/pagination.js',
   'core/gemini-loader-scroll.js',
   'core/gemini-ingest.js',
-  'core/gemini-overlay.js'
+  'core/gemini-overlay.js',
+  'core/gemini-archive.js'
 ];
 const INTERCEPT_JS = 'core/gemini-intercept.js';
 

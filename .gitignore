@@ -46,6 +46,8 @@ test2_logs.txt
 tools/*
 !tools/pagination-bind-contract.js
 !tools/ingest-bind-contract.js
+!tools/overlay-bind-contract.js
+!tools/archive-bind-contract.js
 tools/key.pem
 # Прежний шаблон `tools/` (без внутреннего слэша) ловил каталог tools на ЛЮБОЙ
 # глубине; root-anchored `tools/*` этого не делает, поэтому вложенный служебный

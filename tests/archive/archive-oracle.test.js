@@ -187,10 +187,10 @@ describe('T1-fix: проводка гейта живого яруса', () => {
   test('aiCmArchiveTierApply передаёт снимок live (loaderRunning/loaderDone/active/grew)', () => {
     const body = fnSource(CORE_GEMINI, 'aiCmArchiveTierApply');
     expect(body).toContain('live: live');
-    expect(body).toContain('loaderRunning: loaderRunningFor === convId');
-    expect(body).toContain('var loaderDone = loaderDoneMap[convId] === true;');
+    expect(body).toContain('loaderRunning: D.loaderRunningFor === convId');
+    expect(body).toContain('var loaderDone = D.loaderDoneMap[convId] === true;');
     expect(body).toContain('loaderDone: loaderDone');
-    expect(body).toContain('active: quietActive === true');
+    expect(body).toContain('active: D.quietActive === true');
     expect(body).toContain('aiCmArchiveGrewBeyondArchive(arch)');
   });
 
@@ -259,7 +259,12 @@ describe('T1-fix: grewBeyondArchive — поведение (извлечённо
     return map;
   }
   function run(turnsMap, arch) {
-    return make({ turnsMap: turnsMap, window: { GeminiInterceptLogic: Logic } })(arch);
+    // Phase 3 step 13.2: тело уехало в core/gemini-archive.js и берёт базу через объект
+    // связи D (в браузере его заполняет __bind из ядра). Инлайновый литерал здесь больше
+    // не годится — self-ref `ctx.D = ctx` требует имени, поэтому ctx вынесен в переменную.
+    var ctx = { turnsMap: turnsMap, window: { GeminiInterceptLogic: Logic } };
+    ctx.D = ctx;
+    return make(ctx)(arch);
   }
 
   test('живое окно не стыкуется с архивом → рост НЕ подтверждён (нет ложной полноты)', () => {

@@ -177,22 +177,28 @@ async function ensureInterceptor() {
     // установленного расширения Chrome останется прежний registration, js[] не перечитается,
     // и ядро будет работать без кластера: оверлей загрузки истории выключается целиком,
     // а форвардеры aiCmSetScrollOverlay/forceRestoreVisibility возвращают undefined.
-    if (ids.indexOf('ai-cm-gemini-intercept-v9') === -1) {
+    // Phase 3 step 13.2: бамп -v9 → -v10 по той же причине — добавлен core/gemini-archive.js
+    // (кластер архива вынесен из ядра: приём ходов архива и ленты кэша, оракул archive-complete,
+    // пол архива и сводка объединённой базы для экспорта). Без бампа id у уже установленного
+    // расширения Chrome останется прежний registration, js[] не перечитается, и ядро будет
+    // работать без кластера: архивный ярус выключается целиком, а форвардеры возвращают
+    // null/true/baseSize() — гейты полноты молча теряют T1-архив.
+    if (ids.indexOf('ai-cm-gemini-intercept-v10') === -1) {
       // Снимаем регистрации прежних id: они остались в профиле после обновления и
       // несли бы старый js[] (без hidden-scroll/diag/rpc/parse/sse) параллельно с новым пучком.
       // Прежних id может не быть (чистая установка) — поэтому тихий catch без диагностики.
       try {
-        await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-gemini-intercept', 'ai-cm-gemini-intercept-v2', 'ai-cm-gemini-intercept-v3', 'ai-cm-gemini-intercept-v4', 'ai-cm-gemini-intercept-v5', 'ai-cm-gemini-intercept-v6', 'ai-cm-gemini-intercept-v7', 'ai-cm-gemini-intercept-v8'] });
+        await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-gemini-intercept', 'ai-cm-gemini-intercept-v2', 'ai-cm-gemini-intercept-v3', 'ai-cm-gemini-intercept-v4', 'ai-cm-gemini-intercept-v5', 'ai-cm-gemini-intercept-v6', 'ai-cm-gemini-intercept-v7', 'ai-cm-gemini-intercept-v8', 'ai-cm-gemini-intercept-v9'] });
       } catch (eUnregGemini) { }
-      await registerSafe('ai-cm-gemini-intercept-v9', {
-        id: 'ai-cm-gemini-intercept-v9',
+      await registerSafe('ai-cm-gemini-intercept-v10', {
+        id: 'ai-cm-gemini-intercept-v10',
         matches: ['https://gemini.google.com/*', 'https://aistudio.google.com/*'],
-        js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-parse.js', 'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-intercept.js'],
+        js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-parse.js', 'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-intercept.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false
       });
-      console.log('AI Context Monitor: перехватчик Gemini (v9) зарегистрирован (мир сайта, document_start)');
+      console.log('AI Context Monitor: перехватчик Gemini (v10) зарегистрирован (мир сайта, document_start)');
     }
 
     // перехватчик DeepSeek (v2: новый id, чтобы Chrome гарантированно перезагрузил

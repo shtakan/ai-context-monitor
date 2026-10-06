@@ -288,7 +288,13 @@ describe('T1-fix#3: объединённая база MAIN — поведени�
   const UNION_MSGS = unionMessages();
 
   function env(turnsMap, arch) {
-    return {
+    // Phase 3 step 13.2: тела кластера уехали в core/gemini-archive.js и берут имена ядра
+    // через объект связи D (в браузере его заполняет __bind из ядра). Здесь D — тот же ctx:
+    // в песочнице `with (ctx)` имена ядра и так видны свободно, поэтому self-ref воспроизводит
+    // контракт, не подменяя логику. Вызовы ВНУТРИ кластера (aiCmLiveTurnCount,
+    // aiCmArchiveGrewBeyondArchive, aiCmArchiveOnlyBase) префикса НЕ получили — они
+    // резолвятся объявлениями самого sandbox-блока.
+    var ctx = {
       turnsMap: turnsMap,
       baseSize: () => Object.keys(turnsMap).length,
       getConvId: () => 'c1',
@@ -296,6 +302,8 @@ describe('T1-fix#3: объединённая база MAIN — поведени�
       sanitizeMessagesForEmit: (m) => m,
       window: { GeminiInterceptLogic: Logic }
     };
+    ctx.D = ctx;
+    return ctx;
   }
   function archiveTier() {
     const keys = {};
@@ -635,12 +643,16 @@ describe('T1-fix#4: порядок объединённой базы (архив
   const LOGIC_SRC4 = fs.readFileSync(path.join(ROOT, 'utils', 'gemini-intercept-logic.js'), 'utf8');
 
   function env4(map) {
-    return {
+    // Phase 3 step 13.2: то же, что в env выше — тела уехали в core/gemini-archive.js,
+    // поэтому песочница отдаёт объект связи D (self-ref на ctx).
+    var ctx = {
       turnsMap: map,
       baseSize: () => Object.keys(map).length,
       sanitizeMessagesForEmit: (m) => m,
       window: { GeminiInterceptLogic: Logic }
     };
+    ctx.D = ctx;
+    return ctx;
   }
 
   test('4 архивных (archiveAdded) + 110 живых → порядок [a1,a2,a3,a4, live...], а не наоборот', () => {
