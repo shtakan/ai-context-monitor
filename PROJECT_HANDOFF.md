@@ -1736,5 +1736,5 @@ Rewired-копия живёт **только в `dist/`** — корневые `
 **Результаты:**
 - **A.1:** BYOK-ключ и O3-латч переведены на SW-канал (`chrome.runtime.sendMessage`). `setAccessLevel` = `TRUSTED_CONTEXTS_ONLY`. Кросс-табовый латч работает через SW (повторный экспорт запрещён).
 - **A.2:** Paste-capture канал защищён: `location.origin` вместо `window.origin`, проверка `ev.origin === location.origin` в приёмнике. Ручной/автоэкспорт без регрессов.
-- Тесты: 147 suites / 2796 passed / 6 skipped / 0 failed.
+- **Тесты:** 146 suites / 2795 passed / 6 skipped / 0 failed.
 - **Живая приёмка:** BYOK автоэкспорт (Gemini) — ОК; кросс-табовость — ОК; paste в Claude — ОК; экспорт 4 форматов — ОК.
