@@ -30,7 +30,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
+          npm ci
 
       # esbuild only transpiles — type-checking stays on tsc (Phase 1 contract).
       - name: Type-check

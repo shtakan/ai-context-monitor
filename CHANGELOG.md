@@ -14,7 +14,7 @@
 - Не тронуты (do-not-touch): уведомления и цвет бейджа (`core/background.js:aiCmZoneColorFor` + `utils/gemini-intercept-logic.js:PROACTIVE_THRESHOLDS`/`pickProactiveThreshold` — байтово прежние), автоэкспорт pct 1–100, шкала страницы настроек `options/options.js:percentColor` (своя ось 50/80), плавная анимация кольца `transition: stroke 0.18s ease, stroke-dashoffset 0.4s ease`.
 
 ### Notes
-- jest: 144 suites / 2769 passed / 6 skipped (2775 total). Новые пины: tests/ring-color-thresholds-v2013.test.js (15 тестов: D20a–d зоны/дефолт/битые пороги, R9a–e живой перекрас из storage без перезагрузки, do-not-touch контур).
+- jest: 144 suites / 2769 passed / 6 skipped (2775 total). Новые пины: tests/ring-color-thresholds-current.test.js (15 тестов: D20a–d зоны/дефолт/битые пороги, R9a–e живой перекрас из storage без перезагрузки, do-not-touch контур).
 - Обновлены пины, державшие прежние границы: tests/popup-overrides-display.test.js:234/260, tests/widget-collision-a11y-uiaudit.test.js D19/D19b.
 - Живая приёмка (≥2 чата) — см. RELEASE_CHECKLIST.md (раздел v2.0.13).
 

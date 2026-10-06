@@ -201,7 +201,7 @@ describe('P1: privacy/privacy.html — нет внешних ресурсов (M
 
 describe('P1: manifest.json — homepage_url без изменения permissions/CSP', () => {
   test('homepage_url добавлен', () => {
-    expect(manifest.homepage_url).toBe('https://github.com/user/ai-context-monitor');
+    expect(manifest.homepage_url).toBe('https://github.com/shtakan/ai-context-monitor');
   });
 
   test('в manifest.json НЕТ служебных ключей вида _comment* (ред. 2: убран warning)', () => {

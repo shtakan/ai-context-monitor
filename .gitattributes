@@ -9,6 +9,8 @@
 *.html  text eol=lf
 *.css   text eol=lf
 *.md    text eol=lf
+*.ts    text eol=lf
+*.d.ts  text eol=lf
 
 # Бинарные ресурсы: git не должен ни нормализовать, ни диффить их как текст.
 *.png   binary
