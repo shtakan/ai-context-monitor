@@ -316,6 +316,19 @@ declare let ANCHOR_MIN: number;
 /** N первых id снимка для сравнения голов трим-детектора (state.js). */
 declare let TRIM_HEAD_IDS_N: number;
 
+// --- core/state.js: Шаг A.1 (security) — обёртки SW-каналов --------------------
+// Кросс-файловые чтения: aiCmLatchGetAll вызывается из IIFE гидратации
+// core/export-manager.js, aiCmSwAsk — из core/content.js. state.js их объявляет
+// у себя (общий лексический скоуп), здесь — только швы для изолированной проверки.
+/** Запрос к SW с ожиданием ответа (sendResponse-канал); null при недоступном канале. */
+declare function aiCmSwAsk(payload: unknown): Promise<any>;
+/** Карта session-латча от SW ('aiCm-latch-get-all') → {ключ: 1}; {} при ошибке. */
+declare function aiCmLatchGetAll(): Promise<Record<string, number>>;
+/** Взведение латча в session-хранилище (владелец — SW) → ok. */
+declare function aiCmLatchSet(service: string, convId: string): Promise<boolean>;
+/** Снятие латча в session-хранилище (владелец — SW) → ok. */
+declare function aiCmLatchRemove(service: string, convId: string): Promise<boolean>;
+
 // --- Швы между core-модулями: остальные кросс-файловые имена ------------------
 // base-handler.js (используется content.js/export-manager.js)
 declare function aiCmHostHistoryRecord(snapshot: unknown): unknown;
@@ -410,6 +423,10 @@ declare function aiCmAutoExportDecisionDiag(...args: unknown[]): void;
 declare function aiCmEffectiveAutoExportThreshold(siteName: string): number;
 declare function aiCmAutoExportStartDownload(content: string, file: string, fmt: string): void;
 declare function doAutoExportDownload(cid: string, percentage: number, reason: string): void;
+/** Шаг A.1 (security): карта session-латча ('aiCmFired:service|convId' → 1); читается из widget.js. */
+declare let sessionFiredCache: Record<string, number>;
+/** Шаг A.1 (security): дожидается гидратации sessionFiredCache из SW; читается из content.js. */
+declare function aiCmLatchCacheReady(): Promise<Record<string, number>>;
 
 // content.js (используется widget.js/export-manager.js/base-handler.js)
 declare function aiCmI18nMessage(key: string, fallback: string, substitutions?: unknown[]): string;

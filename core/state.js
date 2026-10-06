@@ -545,6 +545,16 @@ function aiCmLatchRemove(service, convId) {
   Object.defineProperty(Api, 'TRIM_HEAD_IDS_N', { enumerable: true,
     get: function () { return TRIM_HEAD_IDS_N; },
     set: function (value) { TRIM_HEAD_IDS_N = value; } });
+  // Шаг A.1 (security): зеркало обёрток SW-каналов (объявлены в начале файла).
+  // Только get: объявления-функции не переприсваиваются (TS2630).
+  Object.defineProperty(Api, 'aiCmSwAsk', { enumerable: true,
+    get: function () { return aiCmSwAsk; } });
+  Object.defineProperty(Api, 'aiCmLatchGetAll', { enumerable: true,
+    get: function () { return aiCmLatchGetAll; } });
+  Object.defineProperty(Api, 'aiCmLatchSet', { enumerable: true,
+    get: function () { return aiCmLatchSet; } });
+  Object.defineProperty(Api, 'aiCmLatchRemove', { enumerable: true,
+    get: function () { return aiCmLatchRemove; } });
   if (typeof module !== 'undefined' && module.exports) module.exports = Api;
   if (typeof window !== 'undefined') window.AiCmState = Api;
 })();
