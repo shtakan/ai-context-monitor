@@ -1735,5 +1735,54 @@ Rewired-копия живёт **только в `dist/`** — корневые `
 **Результаты:**
 - **A.1:** BYOK-ключ и O3-латч переведены на SW-канал (`chrome.runtime.sendMessage`). `setAccessLevel` = `TRUSTED_CONTEXTS_ONLY`. Кросс-табовый латч работает через SW (повторный экспорт запрещён).
 - **A.2:** Paste-capture канал защищён: `location.origin` вместо `window.origin`, проверка `ev.origin === location.origin` в приёмнике. Ручной/автоэкспорт без регрессов.
-- **Тесты: 146 suites / 2791 passed / 6 skipped / 0 failed.
+- **Тесты: 149 suites / 2837 passed / 6 skipped / 0 failed.
 - **Живая приёмка:** BYOK автоэкспорт (Gemini) — ОК; кросс-табовость — ОК; paste в Claude — ОК; экспорт 4 форматов — ОК.
+
+## Аппендикс v36: Завершение Phase 3 Step 13.1 (Overlay extraction)
+**Дата:** 2026-10-06
+**Коммит:** `61457ac feat(core): extract overlay cluster to gemini-overlay.js (Phase 3 Step 13.1)`
+**Статус:** ✅ ЗАКРЫТ живой приёмкой
+
+**Результаты:**
+- **Декомпозиция:** Кластер Overlay вынесен из `core/gemini-intercept.js` в `core/gemini-overlay.js`. Ядро сокращено на ~143 строки тел функций.
+- **Архитектура:** Состояние (`aiCmScrollOverlay`, `aiCmOverlaySeq`) осталось в ядре; модуль получает его через live-аксессоры в `__bind`. Публичные функции заменены на hoisted-форвардеры для сохранения байтовой идентичности контрактов.
+- **Регистрация:** ID бампнут `-v8 → -v9`; модуль добавлен в `js[]` строго перед ядром; `-v8` снят при unregister.
+- Тесты: +1 новый сьют `gemini-overlay-module.test.js` (S1/S2 пины); общий итог: 148 suites / 2815 passed / 6 skipped / 0 failed.
+- **Сборка:** 29 .js файлов (5 bundles + 24 runtime-registered); `tsc --noEmit` exit 0.
+- **Живая приёмка:** Регистрация v9 подтверждена логами; оверлей отображается при загрузке истории; тема синхронизируется (H22); консоль чиста от ошибок TDZ/D-null; регрессов в бейдже/виджете/автоэкспорте нет.
+
+## Аппендикс v37: Завершение Phase 3 Step 13.2 (Archive extraction)
+**Дата:** 2026-10-06
+**Коммит:** `1c4c8cf feat(core): extract archive cluster to gemini-archive.js (Phase 3 Step 13.2)`
+**Статус:** ✅ ЗАКРЫТ живой приёмкой
+
+**Результаты:**
+- **Декомпозиция:** Кластер Archive (первый ярус полноты T1) вынесен из `core/gemini-intercept.js` в `core/gemini-archive.js`: 8 функций (`aiCmArchiveFor`, `aiCmBuildBaseMessages`, `aiCmBaseExportInfo`, `aiCmLiveTurnCount`, `aiCmArchiveOnlyBase`, `aiCmArchiveLiveProven`, `aiCmArchiveGrewBeyondArchive`, `aiCmArchiveTierApply`) и 3 слушателя (`ai-cm-restored-history`, `ai-cm-archive-restore`, `ai-cm-cache-refresh`). Ядро сокращено на 339 строк (2205 → 1866).
+- **Архитектура:** Состояние (`turnsMap`, `archiveTierByConv`, `archiveMergedMap`, `cacheRestoredMap`, `loaderDoneMap`, `loaderRunningFor`, `parserVersion`, `quietActive`, `historyFullByQuiet`, `reachedStart`, `tapeWasUsedInThisColdStart`) осталось в ядре — модуль получает его через live-аксессоры в `__bind` (11 fn + 8 ro + 3 rw = 22 имени). `sanitizeMessagesForEmit` тоже остался в ядре (горячий путь ingest). Публичные функции заменены на 5 hoisted-форвардеров; блок подключения стоит на строке 1742 (>782), ниже поздних алиасов.
+- **Регистрация:** ID бампнут `-v9 → -v10`; модуль добавлен в `js[]` после `gemini-overlay.js` и перед ядром; `-v9` снят при unregister.
+- **Байтовая идентичность:** Доказана дважды — скриптом выноса (обратный ход) и независимой пост-проверкой против `git show HEAD:core/gemini-intercept.js` диапазонов A (203 строки) и B (211 строк).
+- **Добавлено:** новый сьют `gemini-archive-module.test.js` (22 пина A/B/C/D/S); общий итог прогона: **149 suites / 2837 passed / 6 skipped / 0 failed**.
+- **Сборка:** 30 .js файлов (5 bundles + 25 runtime-registered); `tsc --noEmit` exit 0.
+- **Живая приёмка:** Регистрация v10 подтверждена логами; автоэкспорт срабатывает; файлы корректны; бейдж/виджет обновляются штатно; консоль чиста от ошибок `aiCmArchiveTierApply is not defined` и `D is null`.
+- **Выявленный баг:** Повторный автоэкспорт при F5 на Gemini (латч не удерживается между перезагрузками вкладки) — зафиксирован в Аппендиксе v38.
+
+## Аппендикс v38: Технический долг — повторный автоэкспорт Gemini при F5
+**Дата:** 2026-10-06
+**Статус:** ⏳ ДИАГНОСТИКА ЗАВЕРШЕНА (Step 13.3 Plan Mode); фикс — отдельным хотфиксом после Step 13.3
+
+**Симптом:** При нажатии F5 на длинном чате Gemini автоэкспорт срабатывает повторно, создавая второй файл с суффиксом `-base-complete` (например, `gemini-<convId>-2026-10-06_18-14.txt` → `gemini-<convId>-2026-10-06_18-16-base-complete.txt`).
+
+**Корень (диагностика Step 13.3 Plan Mode):**
+- **НЕ гонка гидратации**: async-гейт `content.js:1154` уже ждёт `aiCmLatchCacheReady()` до первого DRAW (§7.3).
+- **Реальная причина**: триггер `base-complete` (`export-manager.js:1819-1828`) проверяет **только** in-memory `autoExportFired` (`:1825`), тогда как пороговые гейты (`:1247-1249`, `:1400-1402`) проверяют три латча (in-memory + session + `aiCmAutoExportFiredOnce`).
+- **Session-латч переживает F5** (`chrome.storage.session` живёт до перезагрузки расширения), но v64-гейт его не спрашивает.
+- **Дефект узаконен с 09.09.2026** (`RELEASE_CHECKLIST.md:276,282-283` — «H21 pin-only, не лечится»). A.1 (2026-10-06) лишь проявила его, сделав session-латч единственным переживающим F5.
+- **Живой артефакт**: `tests/fixtures/autoexport-log-order-h21.txt:7-10` — лог дубля с противоречащей подписью «файл один».
+- **Приёмка 13.2 ложно заявила** «повторный экспорт запрещён» (`step-13.2-artifacts.md:103`, `PROJECT_HANDOFF.md:1736`) — помечено как falsified.
+
+**Решение (вариант A, синхронный, вне объёма 13.3):**
+В гейте `export-manager.js:1821-1827` добавить дизъюнкцию трёх латчей (тождественную пороговому пути):
+```js
+return Pbc.getAutoExportFired(autoExportFired, site, cid)
+    || (Pbc.isFiredInSession && Pbc.isFiredInSession(sessionFiredCache, site, cid))
+    || (aiCmAutoExportFiredOnce && aiCmAutoExportFiredOnce[site + '|' + cid] === 1);
