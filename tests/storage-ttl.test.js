@@ -64,7 +64,13 @@ function makeStorage(initial) {
     listeners: changedListeners,
     getCalls: function () { return getCalls; },
     onChanged: { addListener: function (fn) { changedListeners.push(fn); } },
-    local: local
+    local: local,
+    // Ленивый prune — цепочка области 'local'; область 'session' тесты не трогают.
+    localListeners: function () {
+      return changedListeners.filter(function (fn) {
+        return String(fn).indexOf("areaName !== 'local'") !== -1;
+      });
+    }
   };
 }
 
@@ -230,10 +236,10 @@ describe('M-8: prune TTL истории — core/background.js', () => {
     const storage = makeStorage(historyFixture(now));
     const bg = loadBackground(storage);
 
-    expect(storage.listeners.length).toBe(1);
+    expect(storage.localListeners().length).toBe(1);
     const before = storage.getCalls();
 
-    storage.listeners[0]({ 'aiCmHistory:fresh.example': { newValue: { ts: now } } }, 'local');
+    storage.localListeners()[0]({ 'aiCmHistory:fresh.example': { newValue: { ts: now } } }, 'local');
 
     expect(storage.getCalls()).toBeGreaterThan(before); // sweep пошёл
     expect(storage.removed).toEqual(['aiCmHistory:old.example']);
@@ -246,9 +252,9 @@ describe('M-8: prune TTL истории — core/background.js', () => {
     const bg = loadBackground(storage);
     const before = storage.getCalls();
 
-    storage.listeners[0]({ 'aiCmState:old.example': { newValue: { percent: 1 } } }, 'local');
-    storage.listeners[0]({ 'aiCmHistory:old.example': { newValue: { ts: now } } }, 'sync');
-    storage.listeners[0](null, 'local');
+    storage.localListeners()[0]({ 'aiCmState:old.example': { newValue: { percent: 1 } } }, 'local');
+    storage.localListeners()[0]({ 'aiCmHistory:old.example': { newValue: { ts: now } } }, 'sync');
+    storage.localListeners()[0](null, 'local');
 
     expect(storage.getCalls()).toBe(before);
     expect(storage.removed).toEqual([]);
