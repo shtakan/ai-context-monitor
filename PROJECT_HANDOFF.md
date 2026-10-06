@@ -1669,3 +1669,72 @@ Rewired-копия живёт **только в `dist/`** — корневые `
 
 **Итог Фазы 3:**
 Ядро `core/gemini-intercept.js` сокращено с 5226 до 2309 строк (-56%). Вынесены: diag, rpc, parse, sse, pagination, loader-scroll, ingest.
+
+## Аппендикс v33: Roadmap post-Phase-3 и начало Шага A (security-хотфикс)
+**Дата:** 2026-10-05
+**HEAD:** `ed9450c` (docs-sync suite count)
+**Статус:** 🟡 ПЛАНИРОВАНИЕ Шага A (security-хотфикс). Декомпозиция проекта НЕ завершена: остаток `core/gemini-intercept.js` 2309 строк, `core/deepseek-intercept.js` 3105 строк, `core/content.js` 2952 строки, `core/export-emit-pipeline.js` 2297 строк — всё ещё нарушают цель Roadmap «модули < 50 КБ».
+
+### 1. Источник задач
+Отчёт Qwen Coder (веб-версия Qwen Studio, 2026-10-05) — 10 пунктов, сгруппированных по приоритету. Сверка фактов с текущим HEAD: часть цифр устарела (gemini-intercept.js был 3287, теперь 2309; тестов было 92, теперь 146 suites / 2783 passed). Направление и номера строк правдоподобны, верификация перед правкой обязательна.
+
+### 2. Полная очередь работ (приоритет → шаг)
+| Шаг | Задачи (№ из отчёта Qwen + старые долги) | Тип |
+|---|---|---|
+| **A** | 🔴 П.1 (BYOK ключ в `chrome.storage.session`), 🔴 П.2 (`postMessage` `window.origin` → `location.origin` + `ev.origin`) | security-хотфикс |
+| **B** | 🔴 П.3 (manifest `homepage_url`, README версия), 🟠 П.7 (`package-lock.json` + `npm ci`), 🟡 П.9 (имя теста `v2013`), 🟡 П.10 (README EN/RU) | hygiene-микро |
+| **C** | 🟠 П.4 (часть): Step 13 — остаток ядра gemini (oracle/archive/overlay) | декомпозиция |
+| **D** | 🟠 П.4 (часть): декомпозиция `core/deepseek-intercept.js` | декомпозиция |
+| **E** | 🟠 П.5 (CI-gate пустых `catch(e){}` + `swallow(e, tag)` хелпер), 🟠 П.6 (ESLint warn-режим + узкий набор правил) | CI-инфраструктура |
+| **F** | 🟡 П.8 (coverageThreshold `utils/*`, архивация `PROJECT_HANDOFF.md`) | процесс |
+| **G** | Старый долг: шаг 4 Фазы 1 (JSDoc-типизация `adapters/`) — не начат | типизация |
+| **H** | Старый долг: `cordis.patch.yml` (автоматизация живой приёмки через browser-инструменты Chrome) | инфраструктура |
+| **I** | Старый долг: Qwen model detection (аппендикс v24, step 7) | модель-конфиг |
+
+### 3. Шаг A — Security-хотфикс (детально)
+
+**Задача A.1 (BYOK ключ в SW):**
+- Текущее состояние: `core/background.js:53` `setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' })`; ключ `aiCmApiKeySession` читается из content-скриптов (`core/content.js:223`).
+- Риск: любой content-скрипт (включая динамически внедряемый на страницах с широкими `host_permissions`) имеет доступ к API-ключу Gemini.
+- Решение: вернуть `TRUSTED_CONTEXTS_ONLY`; чтение ключа и латч `already-fired` вынести через `chrome.runtime.sendMessage` в SW (обработчик сообщений в `background.js` уже есть). Ключ не должен покидать SW.
+- Живая приёмка: BYOK-флоу (автоэкспорт Qwen/DeepSeek через Google AI Studio) должен работать без регресса.
+
+**Задача A.2 (`postMessage` + origin-контракт):**
+- Текущее состояние: `core/content.js:2818` — `postMessage(..., window.origin)`; приёмник `core/claude-intercept.js:735` проверяет только `ev.source === window` и `source: 'ai-cm-paste'`, но не `ev.origin`.
+- Уточнение к отчёту Qwen: `window.origin` существует в современных браузерах (WHATWG `Window.origin`), передача `undefined` дала бы `SyntaxError`, а не рассылку в `*`. Но сам паттерн небезопасен: `source: 'ai-cm-paste'` может послать любой скрипт на странице.
+- Решение: `location.origin` + приёмник проверяет `ev.origin === location.origin`.
+- Живая приёмка: ручной экспорт в 4 форматах + буфер обмена — без регресса.
+
+**Метод:**
+1. Plan mode (DSH новая сессия, effort High): grep по текущему HEAD для верификации номеров строк, составление точного списка правок, оценка TDZ-риска message-passing.
+2. Act mode (DSH новая сессия, effort Medium): атомарные правки + новый тест `tests/security/byok-isolation.test.js` (R-D пин: `setAccessLevel` вызывается только с `TRUSTED_CONTEXTS_ONLY`; `ev.origin === location.origin` проверяется в `claude-intercept.js`).
+3. Живая приёмка (4 шага): SW чист, BYOK автоэкспорт работает, ручной экспорт работает, регрессов нет.
+
+**Ожидаемый результат:**
+- `chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS_ONLY' })` в `background.js`.
+- `location.origin` вместо `window.origin` в `content.js`.
+- `ev.origin === location.origin` в `claude-intercept.js`.
+- 1 новый тест-пин (R-D) + зелёный сьют (146 suites / ≥2783 passed / 6 skipped / 0 failed).
+- Аппендикс v34 с закрытием Шага A.
+
+### 4. Риски Шага A
+- **R1:** Изменение `setAccessLevel` может сломать существующий message passing из untrusted content-скриптов, не только BYOK. Нужен grep всех `chrome.storage.session.get`/`set` вызовов до plan mode.
+- **R2:** Проверка `ev.origin` в `claude-intercept.js` может сломать буфер обмена в iframe (если iframe другого origin). Нужна живая приёмка на странице с iframe.
+- **R3:** Смешивание security-правок с декомпозицией в одном коммите запрещено — каждый шаг = один коммит.
+
+### 5. Правила процесса для Шага A
+- Каждый подшаг (A.1, A.2) — отдельный коммит с отдельной живой приёмкой.
+- Секция в `docs/ACCEPTANCE-TEMPLATE.md` заполняется ДО реализации.
+- Промпт для DSH содержит РОЛЬ, принцип качества §0, явный список «НЕ трогать», тесты на регресс.
+- После закрытия Шага A — обновление дайджеста состояния в начале `PROJECT_HANDOFF.md` и переход к Шагу B.
+
+## Аппендикс v35: Завершение Шага A (Security-хотфикс BYOK + Origin)
+**Дата:** 2026-10-05
+**Коммиты:** `6e604e1` (A.1), `5e0bd7b` (A.2)
+**Статус:** ✅ ЗАКРЫТ живой приёмкой
+
+**Результаты:**
+- **A.1:** BYOK-ключ и O3-латч переведены на SW-канал (`chrome.runtime.sendMessage`). `setAccessLevel` = `TRUSTED_CONTEXTS_ONLY`. Кросс-табовый латч работает через SW (повторный экспорт запрещён).
+- **A.2:** Paste-capture канал защищён: `location.origin` вместо `window.origin`, проверка `ev.origin === location.origin` в приёмнике. Ручной/автоэкспорт без регрессов.
+- Тесты: 147 suites / 2796 passed / 6 skipped / 0 failed.
+- **Живая приёмка:** BYOK автоэкспорт (Gemini) — ОК; кросс-табовость — ОК; paste в Claude — ОК; экспорт 4 форматов — ОК.
