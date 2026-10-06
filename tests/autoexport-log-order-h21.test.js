@@ -68,9 +68,11 @@ describe('H21: пин порядка в core/content.js', () => {
   const src = CORE;
 
   test('латч fired пишется и логируется ДО любого последующего already-fired', () => {
-    // (1) в doAutoExportDownload: сначала markAutoExportFired (+ session-патч), затем лог fired
+    // (1) в doAutoExportDownload: сначала markAutoExportFired (+ session-латч), затем лог fired
+    // Шаг A.1 (security): запись session-латча ушла из вкладки в SW — пин смотрит на
+    // SW-канал aiCmLatchSet (прямой chrome.storage.session из контент-скрипта убран).
     const iMark = src.indexOf('PDl.markAutoExportFired(autoExportFired,');
-    const iSessionPatch = src.indexOf('chrome.storage.session.set(PDl.sessionFiredPatch(siteO3, cid));');
+    const iSessionPatch = src.indexOf('aiCmLatchSet(siteO3, cid);');
     const iFiredLog = src.indexOf("'[AI CM][auto-export] fired convId='");
     expect(iMark).toBeGreaterThanOrEqual(0);
     expect(iSessionPatch).toBeGreaterThan(iMark);
