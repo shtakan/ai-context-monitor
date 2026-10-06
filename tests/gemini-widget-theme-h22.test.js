@@ -94,10 +94,22 @@ function contentSandbox(hostname, prefersDark) {
 
 // ---------- песочница оверлея: aiCmIsGeminiHost + aiCmOverlayTheme + apply/watch ----------
 function overlaySandbox(hostname, prefersDark) {
+  // Phase 3 step 13.1: тела оверлея уехали в core/gemini-overlay.js и обращаются к состоянию
+  // ядра через объект связи D (внутренняя переменная каркаса модуля). В браузере его
+  // заполняет __bind из ядра; здесь изображаем ТОТ ЖЕ контракт — живыми геттерами и
+  // сеттерами, — поэтому пины продолжают исполнять реальные тела модуля, а не копию логики.
+  const live = { overlay: null, seq: 0 };
   const ctx = {
     location: { hostname: hostname },
     window: { matchMedia: () => makeMq(prefersDark) },
     getComputedStyle: (el) => window.getComputedStyle(el),
+    D: {
+      getConvId: () => null,
+      get aiCmScrollOverlay() { return live.overlay; },
+      set aiCmScrollOverlay(v) { live.overlay = v; },
+      get aiCmOverlaySeq() { return live.seq; },
+      set aiCmOverlaySeq(v) { live.seq = v; }
+    },
     __api: null
   };
   const src = [
@@ -107,7 +119,7 @@ function overlaySandbox(hostname, prefersDark) {
     extractFn(INTERCEPT, 'aiCmOverlayTheme'),
     extractFn(INTERCEPT, 'aiCmApplyOverlayTheme'),
     extractFn(INTERCEPT, 'aiCmWatchOverlayTheme'),
-    'ctx.__api = { aiCmIsGeminiHost: aiCmIsGeminiHost, aiCmOverlayTheme: aiCmOverlayTheme, aiCmApplyOverlayTheme: aiCmApplyOverlayTheme, aiCmWatchOverlayTheme: aiCmWatchOverlayTheme, getWatcher: function () { return aiCmOverlayThemeWatcher; }, setOverlay: function (el) { aiCmScrollOverlay = el; } };'
+    'ctx.__api = { aiCmIsGeminiHost: aiCmIsGeminiHost, aiCmOverlayTheme: aiCmOverlayTheme, aiCmApplyOverlayTheme: aiCmApplyOverlayTheme, aiCmWatchOverlayTheme: aiCmWatchOverlayTheme, getWatcher: function () { return aiCmOverlayThemeWatcher; }, setOverlay: function (el) { D.aiCmScrollOverlay = el; }, getOverlay: function () { return D.aiCmScrollOverlay; } };'
   ].join('\n');
   new Function('ctx', 'with (ctx) {\n' + src + '\n}')(ctx);
   return ctx.__api;
@@ -332,8 +344,8 @@ describe('H22: оверлей следует in-app теме Gemini (core/gemini
       expect(INTERCEPT).toContain('aiCmWatchOverlayTheme(true); // H22');
       expect(INTERCEPT).toContain('aiCmWatchOverlayTheme(false); // H22');
       // лог overlay-on остался байтово прежним
-      expect(INTERCEPT).toContain("debugLog('log', '[AI CM][visibility] overlay-on reason=' + reason + ' theme=' + th.name + ' convId=' + (getConvId() || '(none)'));");
-      expect(INTERCEPT).toContain("debugLog('log', '[AI CM][visibility] overlay-off reason=' + reason + ' convId=' + (getConvId() || '(none)'));");
+      expect(INTERCEPT).toContain("debugLog('log', '[AI CM][visibility] overlay-on reason=' + reason + ' theme=' + th.name + ' convId=' + (D.getConvId() || '(none)'));");
+      expect(INTERCEPT).toContain("debugLog('log', '[AI CM][visibility] overlay-off reason=' + reason + ' convId=' + (D.getConvId() || '(none)'));");
     });
   });
 });

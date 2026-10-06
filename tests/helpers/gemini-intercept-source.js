@@ -67,6 +67,9 @@ const ROOT = path.join(__dirname, '..', '..');
 // Порядок = порядок js[] в core/background.js для 'ai-cm-gemini-intercept'.
 // utils/* сюда НЕ входят: они не декомпозировались (как и в content-source.js).
 // Phase 3 step 12: core/gemini-ingest.js идёт после loader-scroll и перед ядром — как в js[].
+// Phase 3 step 13.1: core/gemini-overlay.js идёт после ingest и перед ядром — как в js[].
+// Тела оверлея перенесены с префиксом D (IIFE-каркас, а не `with (D)`): песочницы, которые
+// исполняют вырезанные тела, обязаны получить объект связи D (см. gemini-widget-theme-h22).
 const MODULES = [
   'core/gemini-hidden-scroll.js',
   'core/gemini-diag.js',
@@ -75,7 +78,8 @@ const MODULES = [
   'core/gemini-sse.js',
   'core/pagination/pagination.js',
   'core/gemini-loader-scroll.js',
-  'core/gemini-ingest.js'
+  'core/gemini-ingest.js',
+  'core/gemini-overlay.js'
 ];
 const INTERCEPT_JS = 'core/gemini-intercept.js';
 

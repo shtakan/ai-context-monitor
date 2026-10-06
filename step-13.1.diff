@@ -1,0 +1,1075 @@
+diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+index c508a4c..0318cd3 100644
+--- a/.github/workflows/release.yml
++++ b/.github/workflows/release.yml
+@@ -55,7 +55,7 @@ jobs:
+           # Phase 3 step 1: dist/ стал самодостаточным, поэтому legacy-дерево исходников
+           # уходит из пакета. ^core/ и ^utils/ безопасны: все их файлы либо склеены в
+           # бандлы, либо перечислены в runtimeRegisteredFiles() и попадают в ZIP оверлеем
+-          # dist/ (23 MAIN-world файлов, которые service worker регистрирует сам).
++          # dist/ (24 MAIN-world файлов, которые service worker регистрирует сам).
+           # Phase 3 step 6: кластер парсеров кадра вынесен в core/gemini-parse.js,
+           # поэтому runtime-файлов стало на один больше (было 18, стало 19) —
+           # сам исключающий фильтр ниже не менялся, файл приходит оверлеем dist/.
+@@ -68,6 +68,8 @@ jobs:
+           # снова +1 (было 21, стало 22); фильтр не тронут.
+           # Phase 3 step 12: ingest-кластер вынесен в core/gemini-ingest.js — ещё +1
+           # (было 22, стало 23); фильтр не тронут, модуль приходит оверлеем dist/.
++          # Phase 3 step 13.1: кластер оверлея вынесен в core/gemini-overlay.js — снова +1
++          # (было 23, стало 24); фильтр не тронут, модуль приходит оверлеем dist/.
+           # options/options\.js$ и ^print/print\.js$ исключены как бандлируемые входы:
+           # оверлей кладёт их бандлы в корень пакета (options.js, print.js), а сами
+           # HTML-страницы подменяются rewired-копиями из dist/.
+@@ -84,7 +86,7 @@ jobs:
+           # (background.js, content.js, options.js, print.js, shared-i18n.js),
+           # docs/screenshots/ и _locales/ появляются в корне пакета. Именно rewired-копии
+           # manifest.json и четырёх страниц определяют, что запускает Chrome:
+-          # 5 бандлов + 23 MAIN-world файлов, которые service worker регистрирует сам.
++          # 5 бандлов + 24 MAIN-world файлов, которые service worker регистрирует сам.
+           # Файлы перечисляются find-ом (а не 'zip -r dist'), чтобы записи в архиве
+           # гарантированно не получили префикс 'dist/' и совпали с legacy-именами.
+           ( cd dist && find . -type f ) | sed 's|^\./||' | xargs zip -q "$ZIP"
+diff --git a/.gitignore b/.gitignore
+index 76a687c..da768cb 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -46,6 +46,7 @@ test2_logs.txt
+ tools/*
+ !tools/pagination-bind-contract.js
+ !tools/ingest-bind-contract.js
++!tools/overlay-bind-contract.js
+ tools/key.pem
+ # Прежний шаблон `tools/` (без внутреннего слэша) ловил каталог tools на ЛЮБОЙ
+ # глубине; root-anchored `tools/*` этого не делает, поэтому вложенный служебный
+diff --git a/core/background.js b/core/background.js
+index 57efb4c..d4300df 100644
+--- a/core/background.js
++++ b/core/background.js
+@@ -171,22 +171,28 @@ async function ensureInterceptor() {
+     // (ingest-кластер вынесен из ядра: приём снимков базы, выход снимка, разбор кадра).
+     // Без бампа id у уже установленного расширения Chrome останется прежний registration,
+     // js[] не перечитается, и ядро будет работать без кластера: база молча останется неполной.
+-    if (ids.indexOf('ai-cm-gemini-intercept-v8') === -1) {
++    // Phase 3 step 13.1: бамп -v8 → -v9 по той же причине — добавлен core/gemini-overlay.js
++    // (кластер оверлея вынесен из ядра: палитра под in-app тему сервиса, наблюдатель темы,
++    // постановка и seq-гвардированное снятие оверлея, страховка видимости). Без бампа id у уже
++    // установленного расширения Chrome останется прежний registration, js[] не перечитается,
++    // и ядро будет работать без кластера: оверлей загрузки истории выключается целиком,
++    // а форвардеры aiCmSetScrollOverlay/forceRestoreVisibility возвращают undefined.
++    if (ids.indexOf('ai-cm-gemini-intercept-v9') === -1) {
+       // Снимаем регистрации прежних id: они остались в профиле после обновления и
+       // несли бы старый js[] (без hidden-scroll/diag/rpc/parse/sse) параллельно с новым пучком.
+       // Прежних id может не быть (чистая установка) — поэтому тихий catch без диагностики.
+       try {
+-        await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-gemini-intercept', 'ai-cm-gemini-intercept-v2', 'ai-cm-gemini-intercept-v3', 'ai-cm-gemini-intercept-v4', 'ai-cm-gemini-intercept-v5', 'ai-cm-gemini-intercept-v6', 'ai-cm-gemini-intercept-v7'] });
++        await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-gemini-intercept', 'ai-cm-gemini-intercept-v2', 'ai-cm-gemini-intercept-v3', 'ai-cm-gemini-intercept-v4', 'ai-cm-gemini-intercept-v5', 'ai-cm-gemini-intercept-v6', 'ai-cm-gemini-intercept-v7', 'ai-cm-gemini-intercept-v8'] });
+       } catch (eUnregGemini) { }
+-      await registerSafe('ai-cm-gemini-intercept-v8', {
+-        id: 'ai-cm-gemini-intercept-v8',
++      await registerSafe('ai-cm-gemini-intercept-v9', {
++        id: 'ai-cm-gemini-intercept-v9',
+         matches: ['https://gemini.google.com/*', 'https://aistudio.google.com/*'],
+-        js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-parse.js', 'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-intercept.js'],
++        js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-parse.js', 'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-intercept.js'],
+         runAt: 'document_start',
+         world: 'MAIN',
+         allFrames: false
+       });
+-      console.log('AI Context Monitor: перехватчик Gemini (v8) зарегистрирован (мир сайта, document_start)');
++      console.log('AI Context Monitor: перехватчик Gemini (v9) зарегистрирован (мир сайта, document_start)');
+     }
+ 
+     // перехватчик DeepSeek (v2: новый id, чтобы Chrome гарантированно перезагрузил
+diff --git a/core/gemini-intercept.js b/core/gemini-intercept.js
+index 26c7f68..1b3c841 100644
+--- a/core/gemini-intercept.js
++++ b/core/gemini-intercept.js
+@@ -1594,149 +1594,45 @@
+   var aiCmScrollOverlay = null;
+   var aiCmOverlaySeq = 0;        // v80: поколение оверлея — seq-гвард от чужого снятия
+   var aiCmRerunOverlayTimer = null; // v80: разоружение pre-applied оверлея, если ре-ран не стартовал
+-  // H22: тема оверлея следует in-app теме Gemini («Настройки → Тема»), а не только
+-  // prefers-color-scheme. Признак 1 — класс-токены theme-host.dark-theme / .light-theme на
+-  // html/body (CSS страницы: gemini-dom-sample.html:75 `:where(.theme-host):where(.dark-theme)`);
+-  // признак 2 — computed-яркость НЕПРОЗРАЧНОГО фона (lum<100 → dark). Хосты кроме Gemini и
+-  // светлый фон сохраняют прежнюю цепочку байтово (светлый фон не понижает до light).
+-  function aiCmIsGeminiHost() {
+-    try { return /(^|\.)gemini\.google\.com$/i.test(location.hostname); } catch (eH0) { return false; }
+-  }
+-  function aiCmOverlayTheme() {
+-    var dark = null;
+-    if (aiCmIsGeminiHost()) {
+-      try {
+-        var cls = ((document.documentElement && document.documentElement.className) || '') + ' ' +
+-                  ((document.body && document.body.className) || '');
+-        if (/(^|\s)dark-theme(\s|$)/.test(cls)) dark = true;
+-        else if (/(^|\s)light-theme(\s|$)/.test(cls)) dark = false;
+-      } catch (eTh0) { }
+-      if (dark === null) {
+-        try {
+-          var hostElG = document.querySelector('.theme-host.dark-theme, .theme-host.light-theme');
+-          if (hostElG) dark = hostElG.classList.contains('dark-theme');
+-        } catch (eTh0b) { }
+-      }
+-      if (dark === null) {
+-        try {
+-          var probes = [document.body, document.documentElement];
+-          for (var pi = 0; pi < probes.length; pi++) {
+-            var probeG = probes[pi];
+-            var cG = probeG ? (getComputedStyle(probeG).backgroundColor || '') : '';
+-            var mG = cG.match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s]+([\d.]+))?/);
+-            if (!mG) continue;
+-            var isTransparentG = (mG[4] !== undefined && parseFloat(mG[4]) === 0);
+-            if (!isTransparentG && (0.2126 * (+mG[1]) + 0.7152 * (+mG[2]) + 0.0722 * (+mG[3])) < 100) { dark = true; break; }
+-          }
+-        } catch (eTh1) { }
+-      }
+-    } else {
+-      try {
+-        var probe = document.documentElement || document.body;
+-        var c = probe ? (getComputedStyle(probe).backgroundColor || '') : '';
+-        var m = c.match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s]+([\d.]+))?/);
+-        if (m) {
+-          var isTransparent = (m[4] !== undefined && parseFloat(m[4]) === 0);
+-          if (!isTransparent) dark = (0.2126 * (+m[1]) + 0.7152 * (+m[2]) + 0.0722 * (+m[3])) < 100;
+-        }
+-      } catch (eTh1b) { }
+-    }
+-    if (dark === null) {
+-      try { dark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); } catch (eTh2) { dark = false; }
+-    }
+-    return dark ? { name: 'dark', bg: '#1e1f20', fg: '#e3e3e3', ring: '#37393b' }
+-                : { name: 'light', bg: '#f0f4f9', fg: '#1f1f1f', ring: '#c4c7c5' };
+-  }
+-  // H22: живой пересчёт палитры поднятого оверлея при смене темы (класс/style/data-theme на
+-  // html/body ИЛИ prefers-color-scheme). Наблюдатель живёт только пока оверлей поднят.
+-  var aiCmOverlayThemeWatcher = null;
+-  function aiCmApplyOverlayTheme() {
+-    if (!aiCmScrollOverlay) return;
+-    try {
+-      var th = aiCmOverlayTheme();
+-      aiCmScrollOverlay.style.background = th.bg;
+-      var sp = aiCmScrollOverlay.querySelector('.ai-cm-loader-spinner');
+-      if (sp) { sp.style.borderColor = th.ring; sp.style.borderTopColor = th.fg; }
+-      var lb = aiCmScrollOverlay.querySelector('.ai-cm-loader-label');
+-      if (lb) lb.style.color = th.fg;
+-    } catch (eAt) { }
+-  }
+-  function aiCmWatchOverlayTheme(on) {
+-    try {
+-      if (on) {
+-        if (aiCmOverlayThemeWatcher) return;
+-        var reapply = function () { aiCmApplyOverlayTheme(); };
+-        var obs = new MutationObserver(reapply);
+-        obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
+-        if (document.body) obs.observe(document.body, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
+-        // H22: тема сервиса может жить на элементе-хосте .theme-host — следим и за ним
+-        var hostElW = null;
+-        try { hostElW = document.querySelector('.theme-host'); } catch (eQw) { }
+-        if (hostElW && hostElW !== document.documentElement && hostElW !== document.body) {
+-          obs.observe(hostElW, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
+-        }
+-        var mql = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+-        if (mql && mql.addEventListener) mql.addEventListener('change', reapply);
+-        aiCmOverlayThemeWatcher = { obs: obs, mql: mql, reapply: reapply };
+-      } else if (aiCmOverlayThemeWatcher) {
+-        aiCmOverlayThemeWatcher.obs.disconnect();
+-        if (aiCmOverlayThemeWatcher.mql && aiCmOverlayThemeWatcher.mql.removeEventListener) {
+-          aiCmOverlayThemeWatcher.mql.removeEventListener('change', aiCmOverlayThemeWatcher.reapply);
+-        }
+-        aiCmOverlayThemeWatcher = null;
+-      }
+-    } catch (eWt) { }
+-  }
++  // ===== v2.0 (Phase 3 step 13.1): ОВЕРЛЕЙ (ВЫНЕСЕН В core/gemini-overlay.js) =====
++  // Тела кластера — определение хоста, палитра под тему сервиса, наблюдатель темы,
++  // постановка/снятие оверлея, страховка видимости и слушатели pagehide/visibilitychange —
++  // живут в модуле, подключение ниже. Логика сюда НЕ возвращается: правки оверлея
++  // делаются в core/gemini-overlay.js.
++  // Состояние (aiCmScrollOverlay/aiCmOverlaySeq/aiCmRerunOverlayTimer) остаётся ЗДЕСЬ:
++  // его читают и пишут пагинация, лоадер и скрытый скролл, поэтому модуль получает два
++  // нужных ему имени ЖИВЫМИ геттерами/сеттерами, а не копиями значений. Третье имя
++  // (aiCmRerunOverlayTimer) модулю не нужно вовсе — им распоряжается пагинация.
++  var aiCmGeminiOverlay = (typeof window !== 'undefined' && window.AiCmGeminiOverlay) || null;
++
++  // Форвардеры — ИМЕННО function declaration: объявления хойстятся, поэтому все прежние
++  // вызовы aiCmSetScrollOverlay/forceRestoreVisibility в ядре и в чужих __bind-блоках
++  // (пагинация, лоадер, скрытый скролл) не тронуты — к моменту любого из них имя уже
++  // существует. Без модуля оба возвращают undefined и ни один вызов не бросает.
+   function aiCmSetScrollOverlay(on, reason, expectSeq) {
+-    try {
+-      if (on) {
+-        if (!aiCmScrollOverlay && typeof document !== 'undefined' && document.body) {
+-          var th = aiCmOverlayTheme();
+-          aiCmScrollOverlay = document.createElement('div');
+-          aiCmScrollOverlay.id = 'ai-cm-scroll-overlay';
+-          aiCmScrollOverlay.className = 'ai-cm-loader-overlay';
+-          aiCmScrollOverlay.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;z-index:2147483647;background:' + th.bg + ';display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;';
+-          var sp = document.createElement('div');
+-          sp.className = 'ai-cm-loader-spinner';
+-          sp.style.cssText = 'width:36px;height:36px;border-radius:50%;border:3px solid ' + th.ring + ';border-top-color:' + th.fg + ';animation:aiCmOverlaySpin 0.9s linear infinite;';
+-          var lb = document.createElement('div');
+-          lb.className = 'ai-cm-loader-label';
+-          lb.style.cssText = 'font:400 14px "Google Sans",Roboto,Arial,sans-serif;color:' + th.fg + ';user-select:none;';
+-          lb.textContent = 'Загрузка истории…';
+-          var st = document.createElement('style');
+-          st.className = 'ai-cm-loader-style';
+-          st.textContent = '@keyframes aiCmOverlaySpin{to{transform:rotate(360deg)}}';
+-          aiCmScrollOverlay.appendChild(st);
+-          aiCmScrollOverlay.appendChild(sp);
+-          aiCmScrollOverlay.appendChild(lb);
+-          document.body.appendChild(aiCmScrollOverlay);
+-          aiCmOverlaySeq++;
+-          debugLog('log', '[AI CM][visibility] overlay-on reason=' + reason + ' theme=' + th.name + ' convId=' + (getConvId() || '(none)'));
+-          aiCmWatchOverlayTheme(true); // H22: следить за сменой темы, пока оверлей поднят
+-        }
+-      } else if (aiCmScrollOverlay) {
+-        // v80: seq-гвард — не снимаем оверлей, если его уже пересоздал более новый прогон
+-        if (typeof expectSeq === 'number' && expectSeq !== aiCmOverlaySeq) return;
+-        if (aiCmScrollOverlay.parentNode) aiCmScrollOverlay.parentNode.removeChild(aiCmScrollOverlay);
+-        aiCmScrollOverlay = null;
+-        aiCmWatchOverlayTheme(false); // H22: наблюдатель темы больше не нужен
+-        debugLog('log', '[AI CM][visibility] overlay-off reason=' + reason + ' convId=' + (getConvId() || '(none)'));
+-      }
+-    } catch (e) { }
++    return aiCmGeminiOverlay ? aiCmGeminiOverlay.aiCmSetScrollOverlay(on, reason, expectSeq) : undefined;
+   }
+-  // v70-совместимость: страховка видимости теперь только снимает оверлей
+-  // (SPA conv-switch, pagehide, visibilitychange). Скрытия DOM больше нет — таймер не нужен.
+   function forceRestoreVisibility(reason) {
+-    aiCmSetScrollOverlay(false, 'force-' + reason);
++    return aiCmGeminiOverlay ? aiCmGeminiOverlay.forceRestoreVisibility(reason) : undefined;
++  }
++
++  if (aiCmGeminiOverlay) {
++    aiCmGeminiOverlay.__bind({
++      // Функции ядра (декларации хойстятся — значения доступны на момент bind).
++      getConvId: getConvId,
++      // Живое состояние ядра: геттеры/сеттеры, чтобы чтение и запись модуля
++      // видели ОДНИ И ТЕ ЖЕ переменные IIFE (не копии значений).
++      get aiCmScrollOverlay() { return aiCmScrollOverlay; },
++      set aiCmScrollOverlay(v) { aiCmScrollOverlay = v; },
++      get aiCmOverlaySeq() { return aiCmOverlaySeq; },
++      set aiCmOverlaySeq(v) { aiCmOverlaySeq = v; }
++    });
++  } else {
++    // Модуль не подключён (у уже установленного расширения Chrome остался прежний
++    // registration с прежним id: MV3 не перечитывает js[] под существующим id).
++    // Деградация мягкая: оверлея нет, но ядро, лоадер и пагинация работают как обычно.
++    debugLog('log', '[gemini-intercept] core/gemini-overlay.js не подключён — оверлей загрузки истории недоступен');
+   }
+-  try {
+-    window.addEventListener('pagehide', function () { forceRestoreVisibility('pagehide'); });
+-  } catch (ePh) { }
+-  try {
+-    // v80 (O1): безусловное снятие оверлея при любом изменении видимости вкладки —
+-    // оверлей не должен переживать уход со страницы/блокировку экрана.
+-    document.addEventListener('visibilitychange', function () { forceRestoreVisibility('visibilitychange'); });
+-  } catch (eVc80) { }
+ 
+ 
+ 
+diff --git a/core/gemini-overlay.js b/core/gemini-overlay.js
+new file mode 100644
+index 0000000..fdbe548
+--- /dev/null
++++ b/core/gemini-overlay.js
+@@ -0,0 +1,213 @@
++/**
++ * core/gemini-overlay.js — кластер оверлея загрузки истории Gemini (Phase 3 step 13.1).
++ *
++ * ЧТО ЗДЕСЬ. Непрозрачный оверлей «Загрузка истории…» на body и всё, что его окружает:
++ * определение хоста Gemini (aiCmIsGeminiHost), палитра под in-app тему сервиса
++ * (aiCmOverlayTheme) с живым наблюдателем темы (aiCmOverlayThemeWatcher,
++ * aiCmApplyOverlayTheme, aiCmWatchOverlayTheme), постановка и seq-гвардированное снятие
++ * оверлея (aiCmSetScrollOverlay), страховка видимости (forceRestoreVisibility) и её
++ * безусловные триггеры — слушатели pagehide и visibilitychange.
++ *
++ * ПОЧЕМУ ВЫНЕСЕНО. Кластер самодостаточен: из восьми перенесённых функций семь
++ * связаны друг с другом ВНУТРИ модуля, а наружу торчат ровно три имени (getConvId,
++ * aiCmScrollOverlay, aiCmOverlaySeq). Ядро перехватчика разрослось, и оверлей —
++ * естественная граница разреза: им пользуются лоадер, скрытый скролл и пагинация,
++ * но владеет им только этот модуль.
++ *
++ * СВЯЗКА. Ядро зовёт window.AiCmGeminiOverlay.__bind({...}) из core/gemini-intercept.js;
++ * состав объекта связи — tools/overlay-bind-contract.js: 1 функция значением и 2 живых
++ * состояния с геттером и сеттером. Обратно модуль отдаёт 2 функции
++ * (см. Api в конце файла).
++ *
++ * СОСТОЯНИЕ ОСТАЁТСЯ В ЯДРЕ. aiCmScrollOverlay, aiCmOverlaySeq и aiCmRerunOverlayTimer
++ * объявлены в ядре и НЕ перенесены: их читают и пишут вне кластера (лоадер, скрытый
++ * скролл, пагинация — seq-гвард и разоружение pre-applied оверлея). Первые два модуль
++ * получает ЖИВЫМИ геттерами/сеттерами, поэтому запись отсюда видна ядру: снятие оверлея
++ * обнуляет ту же переменную, а не копию. aiCmRerunOverlayTimer модулю не нужен вовсе —
++ * им распоряжается пагинация.
++ *
++ * ПРАВКА ПРИ ПЕРЕНОСЕ. Тела перенесены байт-в-байт; единственное изменение — ссылки на
++ * имена ядра получили префикс D (иначе свободное имя не разрешится: модуль — отдельный
++ * файл, общего лексического скоупа с ядром у него нет). Свойства объектов, ключи
++ * литералов, локальные имена и вызовы ВНУТРИ кластера (aiCmIsGeminiHost,
++ * aiCmOverlayTheme, aiCmApplyOverlayTheme, aiCmWatchOverlayTheme, aiCmSetScrollOverlay,
++ * forceRestoreVisibility) не тронуты — они резолвятся внутри модуля. Именно поэтому пины
++ * снятия оверлея (forceRestoreVisibility и слушатели pagehide/visibilitychange) остались
++ * байтово-идентичными и не потребовали правок; изменились только два литерала логов
++ * overlay-on/overlay-off, где участвует getConvId.
++ *
++ * ПОРЯДОК ПОДКЛЮЧЕНИЯ. utils/debug.js, utils/gemini-batchexecute-parser.js,
++ * utils/gemini-intercept-logic.js, core/gemini-hidden-scroll.js, core/gemini-diag.js,
++ * core/gemini-rpc.js, core/gemini-parse.js, core/gemini-sse.js,
++ * core/pagination/pagination.js, core/gemini-loader-scroll.js, core/gemini-ingest.js,
++ * ЭТОТ ФАЙЛ, core/gemini-intercept.js — см. js[] в core/background.js (id -v9: MV3 не
++ * перечитывает js[] под уже зарегистрированным id, поэтому при добавлении файла id
++ * обязан смениться, иначе модуль не доедет до профилей с прежним id, а без модуля
++ * оверлей загрузки истории недоступен целиком).
++ *
++ * ВНИМАНИЕ. Слушатели pagehide/visibilitychange регистрируются на загрузке модуля, то
++ * есть до вызова __bind из ядра. Это безопасно: до первого реального события ядро уже
++ * загружено (файлы идут одним пакетом content script без разрывов), а тело слушателя
++ * обращается к зависимостям только при срабатывании. Файл намеренно без директивы
++ * строгого режима и без with — как остальные модули MAIN-мира.
++ *
++ * PUBLIC API: window.AiCmGeminiOverlay = { __bind, aiCmSetScrollOverlay, forceRestoreVisibility }.
++ */
++(function () {
++  if (typeof window !== 'undefined' && window.AiCmGeminiOverlay) return;
++  // Зависимости ядра. Заполняется один раз через __bind(...) из core/gemini-intercept.js.
++  var D = null;
++  function __bind(d) { D = d; }
++
++  // H22: тема оверлея следует in-app теме Gemini («Настройки → Тема»), а не только
++  // prefers-color-scheme. Признак 1 — класс-токены theme-host.dark-theme / .light-theme на
++  // html/body (CSS страницы: gemini-dom-sample.html:75 `:where(.theme-host):where(.dark-theme)`);
++  // признак 2 — computed-яркость НЕПРОЗРАЧНОГО фона (lum<100 → dark). Хосты кроме Gemini и
++  // светлый фон сохраняют прежнюю цепочку байтово (светлый фон не понижает до light).
++  function aiCmIsGeminiHost() {
++    try { return /(^|\.)gemini\.google\.com$/i.test(location.hostname); } catch (eH0) { return false; }
++  }
++  function aiCmOverlayTheme() {
++    var dark = null;
++    if (aiCmIsGeminiHost()) {
++      try {
++        var cls = ((document.documentElement && document.documentElement.className) || '') + ' ' +
++                  ((document.body && document.body.className) || '');
++        if (/(^|\s)dark-theme(\s|$)/.test(cls)) dark = true;
++        else if (/(^|\s)light-theme(\s|$)/.test(cls)) dark = false;
++      } catch (eTh0) { }
++      if (dark === null) {
++        try {
++          var hostElG = document.querySelector('.theme-host.dark-theme, .theme-host.light-theme');
++          if (hostElG) dark = hostElG.classList.contains('dark-theme');
++        } catch (eTh0b) { }
++      }
++      if (dark === null) {
++        try {
++          var probes = [document.body, document.documentElement];
++          for (var pi = 0; pi < probes.length; pi++) {
++            var probeG = probes[pi];
++            var cG = probeG ? (getComputedStyle(probeG).backgroundColor || '') : '';
++            var mG = cG.match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s]+([\d.]+))?/);
++            if (!mG) continue;
++            var isTransparentG = (mG[4] !== undefined && parseFloat(mG[4]) === 0);
++            if (!isTransparentG && (0.2126 * (+mG[1]) + 0.7152 * (+mG[2]) + 0.0722 * (+mG[3])) < 100) { dark = true; break; }
++          }
++        } catch (eTh1) { }
++      }
++    } else {
++      try {
++        var probe = document.documentElement || document.body;
++        var c = probe ? (getComputedStyle(probe).backgroundColor || '') : '';
++        var m = c.match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s]+([\d.]+))?/);
++        if (m) {
++          var isTransparent = (m[4] !== undefined && parseFloat(m[4]) === 0);
++          if (!isTransparent) dark = (0.2126 * (+m[1]) + 0.7152 * (+m[2]) + 0.0722 * (+m[3])) < 100;
++        }
++      } catch (eTh1b) { }
++    }
++    if (dark === null) {
++      try { dark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); } catch (eTh2) { dark = false; }
++    }
++    return dark ? { name: 'dark', bg: '#1e1f20', fg: '#e3e3e3', ring: '#37393b' }
++                : { name: 'light', bg: '#f0f4f9', fg: '#1f1f1f', ring: '#c4c7c5' };
++  }
++  // H22: живой пересчёт палитры поднятого оверлея при смене темы (класс/style/data-theme на
++  // html/body ИЛИ prefers-color-scheme). Наблюдатель живёт только пока оверлей поднят.
++  var aiCmOverlayThemeWatcher = null;
++  function aiCmApplyOverlayTheme() {
++    if (!D.aiCmScrollOverlay) return;
++    try {
++      var th = aiCmOverlayTheme();
++      D.aiCmScrollOverlay.style.background = th.bg;
++      var sp = D.aiCmScrollOverlay.querySelector('.ai-cm-loader-spinner');
++      if (sp) { sp.style.borderColor = th.ring; sp.style.borderTopColor = th.fg; }
++      var lb = D.aiCmScrollOverlay.querySelector('.ai-cm-loader-label');
++      if (lb) lb.style.color = th.fg;
++    } catch (eAt) { }
++  }
++  function aiCmWatchOverlayTheme(on) {
++    try {
++      if (on) {
++        if (aiCmOverlayThemeWatcher) return;
++        var reapply = function () { aiCmApplyOverlayTheme(); };
++        var obs = new MutationObserver(reapply);
++        obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
++        if (document.body) obs.observe(document.body, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
++        // H22: тема сервиса может жить на элементе-хосте .theme-host — следим и за ним
++        var hostElW = null;
++        try { hostElW = document.querySelector('.theme-host'); } catch (eQw) { }
++        if (hostElW && hostElW !== document.documentElement && hostElW !== document.body) {
++          obs.observe(hostElW, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
++        }
++        var mql = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
++        if (mql && mql.addEventListener) mql.addEventListener('change', reapply);
++        aiCmOverlayThemeWatcher = { obs: obs, mql: mql, reapply: reapply };
++      } else if (aiCmOverlayThemeWatcher) {
++        aiCmOverlayThemeWatcher.obs.disconnect();
++        if (aiCmOverlayThemeWatcher.mql && aiCmOverlayThemeWatcher.mql.removeEventListener) {
++          aiCmOverlayThemeWatcher.mql.removeEventListener('change', aiCmOverlayThemeWatcher.reapply);
++        }
++        aiCmOverlayThemeWatcher = null;
++      }
++    } catch (eWt) { }
++  }
++  function aiCmSetScrollOverlay(on, reason, expectSeq) {
++    try {
++      if (on) {
++        if (!D.aiCmScrollOverlay && typeof document !== 'undefined' && document.body) {
++          var th = aiCmOverlayTheme();
++          D.aiCmScrollOverlay = document.createElement('div');
++          D.aiCmScrollOverlay.id = 'ai-cm-scroll-overlay';
++          D.aiCmScrollOverlay.className = 'ai-cm-loader-overlay';
++          D.aiCmScrollOverlay.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;z-index:2147483647;background:' + th.bg + ';display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;';
++          var sp = document.createElement('div');
++          sp.className = 'ai-cm-loader-spinner';
++          sp.style.cssText = 'width:36px;height:36px;border-radius:50%;border:3px solid ' + th.ring + ';border-top-color:' + th.fg + ';animation:aiCmOverlaySpin 0.9s linear infinite;';
++          var lb = document.createElement('div');
++          lb.className = 'ai-cm-loader-label';
++          lb.style.cssText = 'font:400 14px "Google Sans",Roboto,Arial,sans-serif;color:' + th.fg + ';user-select:none;';
++          lb.textContent = 'Загрузка истории…';
++          var st = document.createElement('style');
++          st.className = 'ai-cm-loader-style';
++          st.textContent = '@keyframes aiCmOverlaySpin{to{transform:rotate(360deg)}}';
++          D.aiCmScrollOverlay.appendChild(st);
++          D.aiCmScrollOverlay.appendChild(sp);
++          D.aiCmScrollOverlay.appendChild(lb);
++          document.body.appendChild(D.aiCmScrollOverlay);
++          D.aiCmOverlaySeq++;
++          debugLog('log', '[AI CM][visibility] overlay-on reason=' + reason + ' theme=' + th.name + ' convId=' + (D.getConvId() || '(none)'));
++          aiCmWatchOverlayTheme(true); // H22: следить за сменой темы, пока оверлей поднят
++        }
++      } else if (D.aiCmScrollOverlay) {
++        // v80: seq-гвард — не снимаем оверлей, если его уже пересоздал более новый прогон
++        if (typeof expectSeq === 'number' && expectSeq !== D.aiCmOverlaySeq) return;
++        if (D.aiCmScrollOverlay.parentNode) D.aiCmScrollOverlay.parentNode.removeChild(D.aiCmScrollOverlay);
++        D.aiCmScrollOverlay = null;
++        aiCmWatchOverlayTheme(false); // H22: наблюдатель темы больше не нужен
++        debugLog('log', '[AI CM][visibility] overlay-off reason=' + reason + ' convId=' + (D.getConvId() || '(none)'));
++      }
++    } catch (e) { }
++  }
++  // v70-совместимость: страховка видимости теперь только снимает оверлей
++  // (SPA conv-switch, pagehide, visibilitychange). Скрытия DOM больше нет — таймер не нужен.
++  function forceRestoreVisibility(reason) {
++    aiCmSetScrollOverlay(false, 'force-' + reason);
++  }
++  try {
++    window.addEventListener('pagehide', function () { forceRestoreVisibility('pagehide'); });
++  } catch (ePh) { }
++  try {
++    // v80 (O1): безусловное снятие оверлея при любом изменении видимости вкладки —
++    // оверлей не должен переживать уход со страницы/блокировку экрана.
++    document.addEventListener('visibilitychange', function () { forceRestoreVisibility('visibilitychange'); });
++  } catch (eVc80) { }
++
++  var Api = {
++    __bind: __bind,
++    aiCmSetScrollOverlay: aiCmSetScrollOverlay,
++    forceRestoreVisibility: forceRestoreVisibility
++  };
++  if (typeof module !== 'undefined' && module.exports) module.exports = Api;
++  if (typeof window !== 'undefined') window.AiCmGeminiOverlay = Api;
++})();
+diff --git a/tests/adapters/gemini-ingest-module.test.js b/tests/adapters/gemini-ingest-module.test.js
+index ef8c56d..795cfc8 100644
+--- a/tests/adapters/gemini-ingest-module.test.js
++++ b/tests/adapters/gemini-ingest-module.test.js
+@@ -158,9 +158,12 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
+ 
+     // хвостовая точка выхода vf5 — ровно один вызов, ровно с этими опциями
+     expect(CORE.match(new RegExp(VF5_TAIL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))).toHaveLength(1);
+-    // план называет 1941 (до-выносом ядро); после выноса — 1784. Пин держит ФАКТ,
+-    // чтобы «уехавший» вызов был виден, а не молча остался зелёным.
+-    expect(linesOf(CORE, VF5_TAIL)).toEqual([1784]);
++    // план называет 1941 (до-выносом ядро); после выноса ingest — 1784; после выноса
++    // кластера оверлея (Phase 3 step 13.1: −143 строки диапазона 1597-1739 и +39 строк
++    // блока подключения ВЫШЕ этой точки) — 1680. Пин держит ФАКТ, чтобы «уехавший» вызов
++    // был виден, а не молча остался зелёным, и чтобы следующий перенос кода выше по файлу
++    // снова потребовал ревью строки, а не прошёл незамеченным.
++    expect(linesOf(CORE, VF5_TAIL)).toEqual([1680]);
+   });
+ 
+   test('R-D №4: счётчик emitBaseSnapshot() — ядро 4, конкатенация 9', () => {
+@@ -204,17 +207,17 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
+ });
+ 
+ describe('Phase 3 шаг 12: S-пины проводки модуля', () => {
+-  test('S1: регистрация в core/background.js — id -v8, ingest перед ядром, -v7 снят', () => {
++  test('S1: регистрация в core/background.js — id -v9 (шаг 13.1), ingest и overlay перед ядром, -v8 снят', () => {
+     const bg = readFile('core/background.js');
+-    expect(bg).toContain("'ai-cm-gemini-intercept-v8'");
++    expect(bg).toContain("'ai-cm-gemini-intercept-v9'");
+     expect(bg).toContain("'core/gemini-ingest.js'");
+     // js[] собран ровно в этом порядке: sse → pagination → loader-scroll → ingest → ядро
+-    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-intercept.js'");
++    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-intercept.js'");
+     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при загрузке
+     expect(bg.indexOf("'core/gemini-loader-scroll.js'")).toBeLessThan(bg.indexOf("'core/gemini-ingest.js'"));
+     expect(bg.indexOf("'core/gemini-ingest.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
+     // MV3 не перечитывает js[] под существующим id — прежний id обязан быть снят
+-    expect(bg).toContain("'ai-cm-gemini-intercept-v7'");
++    expect(bg).toContain("'ai-cm-gemini-intercept-v8'");
+   });
+ 
+   test('S2: bind-контракт полон — 72 имени переданы ядром и все 72 используются модулем', () => {
+diff --git a/tests/adapters/gemini-overlay-module.test.js b/tests/adapters/gemini-overlay-module.test.js
+new file mode 100644
+index 0000000..7f947f5
+--- /dev/null
++++ b/tests/adapters/gemini-overlay-module.test.js
+@@ -0,0 +1,375 @@
++/**
++ * Phase 3 шаг 13.1 — пины кластера оверлея (core/gemini-overlay.js).
++ *
++ * Контекст. Кластер оверлея загрузки истории вынесен из core/gemini-intercept.js
++ * в core/gemini-overlay.js БЕЗ изменения логики: тела перенесены байт-в-байт, а ссылки
++ * на имена ядра получили префикс D (объект связи заполняет __bind из ядра). Поэтому
++ * пины здесь трёх родов:
++ *
++ *   A (состояние) — aiCmScrollOverlay / aiCmOverlaySeq / aiCmRerunOverlayTimer остаются
++ *     в ЯДРЕ: их читают и пишут лоадер, скрытый скролл и пагинация. Модуль получает
++ *     первые два ЖИВЫМИ геттерами/сеттерами. Регрессия = копия значения, из-за которой
++ *     снятие оверлея перестало бы обнулять переменную ядра (тихий баг).
++ *   B (форвардеры) — aiCmSetScrollOverlay / forceRestoreVisibility в ядре обязаны быть
++ *     hoisted function declaration: их значения раздаются чужим __bind-блокам (пагинация
++ *     410, лоадер 541) и вызываются из ядра (checkConvChange 1319) ДО строки связки.
++ *     var-выражение или const сломало бы это (TDZ/null на момент bind).
++ *   C (байт-идентичность) — тела функций и слушатели pagehide/visibilitychange обязаны
++ *     остаться теми же строками: существующие пины (gemini-overlay-tape:166-173,
++ *     gemini-widget-theme-h22:331-336) режут их из конкатенации и исполняют в песочнице.
++ *
++ *   S (проводка) — модуль реально подключён и связан с ядром:
++ *     S1  регистрация в core/background.js: id -v9, модуль в js[] ПЕРЕД ядром,
++ *         -v8 в unregister (MV3 не перечитывает js[] под уже зарегистрированным id);
++ *     S2  bind-контракт полон: все 3 имени контракта переданы ядром и все 3 используются
++ *         модулем (регрессия = молчаливый no-op, которого не видит ни один старый пин);
++ *     S3  деградация без модуля: внятный лог и undefined вместо падения;
++ *     S4  порядок в helper-конкатенации повторяет порядок js[].
++ *
++ * ВАЖНО: существующие пины Gemini (gemini-overlay-tape, H22, H13, O-48…O-52) НЕ трогались
++ * по существу — тела перенесены байт-в-байт, и это здесь доказано (блок C). Обновлены
++ * только два литерала логов overlay-on/overlay-off (getConvId идёт через объект связи)
++ * и объект связи D в песочнице H22.
++ */
++
++'use strict';
++
++const fs = require('fs');
++const path = require('path');
++const vm = require('vm');
++
++const ROOT = path.join(__dirname, '..', '..');
++const readFile = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
++const SRC = require(path.join(ROOT, 'tests/helpers/gemini-intercept-source.js'));
++const CONC = SRC.geminiSource;
++const CORE = readFile('core/gemini-intercept.js');
++const MOD = readFile('core/gemini-overlay.js');
++
++const EXPORTED = ['aiCmSetScrollOverlay', 'forceRestoreVisibility'];
++/** Тела, уехавшие в модуль (порядок — как в исходном диапазоне ядра). */
++const MOVED = ['aiCmIsGeminiHost', 'aiCmOverlayTheme', 'aiCmApplyOverlayTheme',
++  'aiCmWatchOverlayTheme', 'aiCmSetScrollOverlay', 'forceRestoreVisibility'];
++/** Состояние, которое ОБЯЗАНО было остаться в ядре. */
++const CORE_STATE = [
++  '  var aiCmScrollOverlay = null;',
++  '  var aiCmOverlaySeq = 0;        // v80: поколение оверлея — seq-гвард от чужого снятия',
++  '  var aiCmRerunOverlayTimer = null; // v80: разоружение pre-applied оверлея, если ре-ран не стартовал'
++];
++
++/** Вырезает `function <name>(…) { … }` по балансу скобок. */
++function fnSource(src, name) {
++  const i = src.indexOf('function ' + name + '(');
++  if (i === -1) return null;
++  let depth = 0;
++  for (let k = src.indexOf('{', i); k < src.length; k++) {
++    if (src[k] === '{') depth++;
++    else if (src[k] === '}') { depth--; if (depth === 0) return src.slice(i, k + 1); }
++  }
++  return null;
++}
++
++/** Код без комментариев/строк-прозы: проза шапки упоминает имена как прозу, а не ссылки. */
++function codeOf(src) {
++  return src
++    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
++    .replace(/(^|[^:\\])\/\/[^\n]*/g, (m, p1) => p1 + ' '.repeat(m.length - p1.length));
++}
++const CORE_CODE = codeOf(CORE);
++const MOD_CODE = codeOf(MOD);
++
++/** Все `D.<имя>` кода модуля — уникальные, отсортированные. */
++function dRefsOf(src) {
++  return [...new Set((src.match(/\bD\.([A-Za-z_$][\w$]*)/g) || []).map((m) => m.slice(2)))].sort();
++}
++function bareCount(src, name) {
++  return (src.match(new RegExp('(^|[^\\w$.])' + name + '(?![\\w$])', 'g')) || []).length;
++}
++
++/** Блок `aiCmGeminiOverlay.__bind({...})` ядра — как строка. */
++function bindBlockText() {
++  const at = CORE.indexOf('aiCmGeminiOverlay.__bind(');
++  expect(at).toBeGreaterThan(-1);
++  const end = CORE.indexOf('});', at);
++  expect(end).toBeGreaterThan(at);
++  return CORE.slice(at, end);
++}
++
++/** Исполняет РЕАЛЬНЫЙ форвардер ядра в песочнице с заданным объектом связи. */
++function runForwarder(name, args, overlayApi) {
++  const src = fnSource(CORE, name);
++  expect(src).not.toBeNull();
++  const ctx = vm.createContext({ aiCmGeminiOverlay: overlayApi, args: args, out: 'UNSET' });
++  vm.runInContext('out = (' + src + ').apply(null, args);', ctx);
++  return ctx.out;
++}
++
++describe('Phase 3 шаг 13.1: A-пины — состояние оверлея осталось в ЯДРЕ', () => {
++  test('A1: три переменные состояния объявлены в ядре байт-в-байт и НЕ перенесены в модуль', () => {
++    CORE_STATE.forEach((lit) => expect(CORE).toContain(lit));
++    // строки состояния стоят ОДНИМ блоком сразу перед баннером выноса
++    const at = CORE.indexOf(CORE_STATE[0]);
++    expect(CORE.slice(at, at + CORE_STATE.join('\n').length)).toBe(CORE_STATE.join('\n'));
++    // модуль ни одну из них не объявляет: иначе появилась бы ВТОРАЯ переменная, и ядро
++    // (лоадер/пагинация) читало бы старую — снятие оверлея перестало бы работать
++    ['aiCmScrollOverlay', 'aiCmOverlaySeq', 'aiCmRerunOverlayTimer'].forEach((n) => {
++      expect(MOD_CODE).not.toMatch(new RegExp('\\bvar\\s+' + n + '\\b'));
++      expect(MOD_CODE).not.toMatch(new RegExp('\\blet\\s+' + n + '\\b'));
++      expect(MOD_CODE).not.toMatch(new RegExp('\\bconst\\s+' + n + '\\b'));
++    });
++    // …и вообще не упоминает их без префикса (единственный путь — объект связи)
++    ['aiCmScrollOverlay', 'aiCmOverlaySeq'].forEach((n) => expect(bareCount(MOD_CODE, n)).toBe(0));
++    expect(MOD_CODE).not.toContain('aiCmRerunOverlayTimer');
++  });
++
++  test('A2: блок __bind отдаёт состояние ЖИВЫМИ геттерами/сеттерами, а не копиями', () => {
++    const block = bindBlockText();
++    ['aiCmScrollOverlay', 'aiCmOverlaySeq'].forEach((n) => {
++      expect(block).toContain('get ' + n + '() { return ' + n + '; }');
++      expect(block).toContain('set ' + n + '(v) { ' + n + ' = v; }');
++    });
++    // getConvId — функция ядра значением (объявления хойстятся, значение уже есть)
++    expect(block).toContain('getConvId: getConvId,');
++    // aiCmRerunOverlayTimer модулю не нужен: лишний геттер расширил бы поверхность связи
++    expect(block).not.toContain('aiCmRerunOverlayTimer');
++    // связка идёт ПОСЛЕ объявления состояния: геттеры замкнуты на инициализированные
++    // переменные, а не на undefined-на-момент-hoisting
++    expect(CORE.indexOf('aiCmGeminiOverlay.__bind(')).toBeGreaterThan(CORE.indexOf(CORE_STATE[1]));
++  });
++
++  test('A3: модуль обращается к ядру РОВНО по контракту — ни одного свободного имени', () => {
++    const contract = require(path.join(ROOT, 'tools/overlay-bind-contract.js'));
++    const names = contract.map(([n]) => n).sort();
++    expect(dRefsOf(MOD_CODE)).toEqual(names);
++    names.forEach((n) => expect(bareCount(MOD_CODE, n)).toBe(0));
++  });
++});
++
++describe('Phase 3 шаг 13.1: B-пины — форвардеры ядра (hoisting + делегирование)', () => {
++  test('B1: оба форвардера — function declaration, ровно по одному объявлению', () => {
++    EXPORTED.forEach((n) => {
++      // именно declaration в начале строки с отступом 2: такое объявление хойстится
++      expect(CORE).toMatch(new RegExp('\\n  function ' + n + '\\('));
++      expect((CORE_CODE.match(new RegExp('function\\s+' + n + '\\s*\\(', 'g')) || [])).toHaveLength(1);
++    });
++    // тело перенесённой функции в ядре осталось ровно одно — форвардер (см. блок C)
++    expect(fnSource(CORE, 'forceRestoreVisibility')).toBe(
++      'function forceRestoreVisibility(reason) {\n' +
++      '    return aiCmGeminiOverlay ? aiCmGeminiOverlay.forceRestoreVisibility(reason) : undefined;\n' +
++      '  }'
++    );
++    expect(fnSource(CORE, 'aiCmSetScrollOverlay')).toBe(
++      'function aiCmSetScrollOverlay(on, reason, expectSeq) {\n' +
++      '    return aiCmGeminiOverlay ? aiCmGeminiOverlay.aiCmSetScrollOverlay(on, reason, expectSeq) : undefined;\n' +
++      '  }'
++    );
++  });
++
++  test('B2: форвардер делегирует в модуль и возвращает его результат', () => {
++    const calls = [];
++    const apiObj = {
++      aiCmSetScrollOverlay: (on, reason, seq) => { calls.push(['set', on, reason, seq]); return 'SET-RESULT'; },
++      forceRestoreVisibility: (reason) => { calls.push(['restore', reason]); return 'RESTORE-RESULT'; }
++    };
++    expect(runForwarder('aiCmSetScrollOverlay', [true, 'loader', 7], apiObj)).toBe('SET-RESULT');
++    expect(runForwarder('forceRestoreVisibility', ['pagehide'], apiObj)).toBe('RESTORE-RESULT');
++    expect(calls).toEqual([['set', true, 'loader', 7], ['restore', 'pagehide']]);
++  });
++
++  test('B3: без модуля форвардеры деградируют мягко — undefined и без исключения', () => {
++    expect(runForwarder('aiCmSetScrollOverlay', [true, 'loader'], null)).toBeUndefined();
++    expect(runForwarder('forceRestoreVisibility', ['pagehide'], null)).toBeUndefined();
++    // undefined-объект связи (модуль не подключён вовсе) — тот же мягкий путь
++    expect(runForwarder('aiCmSetScrollOverlay', [true, 'loader'], undefined)).toBeUndefined();
++    expect(runForwarder('forceRestoreVisibility', ['pagehide'], undefined)).toBeUndefined();
++  });
++
++  test('B4: хойстинг реален — значение, взятое ДО связки, зовёт модуль', () => {
++    // Три чужих __bind-блока получают функцию ЗНАЧЕНИЕМ: скрытый скролл (132), пагинация
++    // (427) и лоадер (549). Все три биндуются РАНЬШЕ строки связки оверлея (~1619), поэтому
++    // вызов через них обязан работать уже после связки — это и есть смысл function declaration.
++    expect((CORE_CODE.match(/aiCmSetScrollOverlay: aiCmSetScrollOverlay,/g) || [])).toHaveLength(3);
++    const fwd = fnSource(CORE, 'aiCmSetScrollOverlay');
++    const ctx = vm.createContext({});
++    // Порядок ровно как в ядре: значение берут ДО объявления, связка — ПОСЛЕ.
++    vm.runInContext([
++      'var captured = aiCmSetScrollOverlay;',
++      "var aiCmGeminiOverlay = { aiCmSetScrollOverlay: function () { return 'FROM-MODULE'; } };",
++      fwd,
++      "out = captured(true, 'loader', 1);"
++    ].join('\n'), ctx);
++    expect(ctx.out).toBe('FROM-MODULE');
++    // а до связки тот же захваченный указатель деградирует мягко, не бросая
++    const ctx2 = vm.createContext({});
++    vm.runInContext([
++      'var captured = aiCmSetScrollOverlay;',
++      'var aiCmGeminiOverlay = null;',
++      fwd,
++      "out = captured(true, 'loader', 1);"
++    ].join('\n'), ctx2);
++    expect(ctx2.out).toBeUndefined();
++  });
++});
++
++describe('Phase 3 шаг 13.1: C-пины — тела перенесены байт-в-байт', () => {
++  test('C1: все шесть перенесённых функций живут в модуле и отсутствуют в ядре', () => {
++    MOVED.forEach((n) => {
++      expect(fnSource(MOD, n)).not.toBeNull();
++      if (EXPORTED.indexOf(n) === -1) {
++        expect(CORE_CODE).not.toMatch(new RegExp('function\\s+' + n + '\\s*\\('));
++      }
++    });
++    // наблюдатель темы уехал вместе с кластером
++    expect(MOD).toContain('var aiCmOverlayThemeWatcher = null;');
++    expect(CORE_CODE).not.toMatch(/aiCmOverlayThemeWatcher\s*=/);
++  });
++
++  test('C2: снятие оверлея и слушатели pagehide/visibilitychange байтово прежние', () => {
++    expect(fnSource(MOD, 'forceRestoreVisibility')).toBe(
++      'function forceRestoreVisibility(reason) {\n' +
++      "    aiCmSetScrollOverlay(false, 'force-' + reason);\n" +
++      '  }'
++    );
++    expect(MOD).toContain("window.addEventListener('pagehide', function () { forceRestoreVisibility('pagehide'); });");
++    expect(MOD).toContain("document.addEventListener('visibilitychange', function () { forceRestoreVisibility('visibilitychange'); });");
++    // внутренний вызов идёт к ТЕЛУ модуля, а не через объект связи: иначе снятие зависело бы
++    // от того, успел ли ядро отдать форвардер
++    expect(MOD_CODE).not.toContain('D.aiCmSetScrollOverlay');
++    expect(MOD_CODE).not.toContain('D.forceRestoreVisibility');
++  });
++
++  test('C3: внутренние вызовы кластера не переписаны на объект связи', () => {
++    ['aiCmIsGeminiHost', 'aiCmOverlayTheme', 'aiCmApplyOverlayTheme', 'aiCmWatchOverlayTheme']
++      .forEach((n) => expect(MOD_CODE).not.toContain('D.' + n));
++    // тело aiCmOverlayTheme по-прежнему зовёт aiCmIsGeminiHost свободным именем
++    expect(fnSource(MOD, 'aiCmOverlayTheme')).toContain('if (aiCmIsGeminiHost()) {');
++    // пересчёт палитры зовёт aiCmOverlayTheme свободным именем
++    expect(fnSource(MOD, 'aiCmApplyOverlayTheme')).toContain('var th = aiCmOverlayTheme();');
++    expect(fnSource(MOD, 'aiCmWatchOverlayTheme')).toContain('var reapply = function () { aiCmApplyOverlayTheme(); };');
++  });
++
++  test('C4: единственное изменение литералов — getConvId в двух логах оверлея', () => {
++    // ровно два обращения к функции ядра, оба в логах, оба через объект связи
++    expect((MOD_CODE.match(/D\.getConvId\(\)/g) || [])).toHaveLength(2);
++    expect(MOD).toContain("convId=' + (D.getConvId() || '(none)'));");
++    // остальная часть логов байтово прежняя (пин H22 держит её в конкатенации)
++    expect(MOD).toContain("'[AI CM][visibility] overlay-on reason=' + reason + ' theme=' + th.name + ' convId='");
++    expect(MOD).toContain("'[AI CM][visibility] overlay-off reason=' + reason + ' convId='");
++    // прочие имена ядра — только через объект связи
++    expect((MOD_CODE.match(/D\.aiCmScrollOverlay/g) || []).length).toBeGreaterThan(0);
++    expect((MOD_CODE.match(/D\.aiCmOverlaySeq/g) || [])).toHaveLength(2);
++  });
++
++  test('C5: H22-пины темы на месте (наблюдатель поднимается/снимается вместе с оверлеем)', () => {
++    expect(CONC).toContain('var aiCmOverlayThemeWatcher = null;');
++    expect(CONC).toContain('aiCmWatchOverlayTheme(true); // H22');
++    expect(CONC).toContain('aiCmWatchOverlayTheme(false); // H22');
++    expect(MOD).toContain('aiCmWatchOverlayTheme(true); // H22');
++    expect(MOD).toContain('aiCmWatchOverlayTheme(false); // H22');
++  });
++});
++
++describe('Phase 3 шаг 13.1: D-пины — API, гигиена, деградация', () => {
++  test('D1: модуль отдаёт ровно 3 имени и публикует их на window', () => {
++    expect(MOD).toContain("if (typeof window !== 'undefined' && window.AiCmGeminiOverlay) return;");
++    expect(MOD).toContain('  var D = null;');
++    expect(MOD).toContain('  function __bind(d) { D = d; }');
++    expect(MOD).toContain('    __bind: __bind,');
++    EXPORTED.forEach((n) => expect(MOD).toContain('    ' + n + ': ' + n));
++    expect(MOD).toContain("if (typeof window !== 'undefined') window.AiCmGeminiOverlay = Api;");
++    // в MAIN-мире `module` не определён: голый module.exports бросил бы ReferenceError
++    expect(MOD).toContain("if (typeof module !== 'undefined' && module.exports) module.exports = Api;");
++  });
++
++  test('D2: гигиена модуля — без with, без strict, без innerHTML', () => {
++    expect(MOD_CODE).not.toMatch(/\bwith\s*\(/); // каркас IIFE + префиксы D, with не нужен
++    expect(MOD).not.toMatch(/^\s*'use strict'/m);
++    expect(MOD_CODE).not.toMatch(/innerHTML\s*=/);
++    expect(MOD_CODE).not.toMatch(/console\s*\.\s*error\s*\(/);
++  });
++
++  test('D3: повторная загрузка модуля не перетирает API', () => {
++    const pageWindow = {};
++    const ctx = vm.createContext({
++      window: pageWindow, console, setTimeout, clearTimeout,
++      MutationObserver: function () { this.observe = function () { }; this.disconnect = function () { }; },
++      document: { documentElement: {}, body: null }
++    });
++    vm.runInContext(MOD, ctx, { filename: 'core/gemini-overlay.js' });
++    const api = pageWindow.AiCmGeminiOverlay;
++    expect(api).toBeTruthy();
++    expect(Object.keys(api).sort()).toEqual(['__bind'].concat(EXPORTED).sort());
++    vm.runInContext(MOD, ctx, { filename: 'core/gemini-overlay.js (повторно)' });
++    expect(pageWindow.AiCmGeminiOverlay).toBe(api);
++    // мнемоника: без связки __bind не бросает — функции кластера уже настоящие
++    expect(() => api.__bind({})).not.toThrow();
++  });
++
++  test('D4: без модуля ядро деградирует мягко — внятный лог, а не падение', () => {
++    const at = CORE.indexOf("debugLog('log', '[gemini-intercept] core/gemini-overlay.js не подключён");
++    expect(at).toBeGreaterThan(-1);
++    const elseBranch = CORE.slice(at, CORE.indexOf('\n  }', at));
++    expect(elseBranch).toContain('оверлей загрузки истории недоступен');
++    // ветка ограничена логом: ни throw, ни заглушек-присваиваний (форвардеры уже объявлены)
++    expect(elseBranch).not.toContain('throw');
++    expect(elseBranch).not.toMatch(/function\s/);
++  });
++});
++
++describe('Phase 3 шаг 13.1: S-пины проводки модуля', () => {
++  test('S1: регистрация в core/background.js — id -v9, модуль перед ядром, -v8 снят', () => {
++    const bg = readFile('core/background.js');
++    expect(bg).toContain("'ai-cm-gemini-intercept-v9'");
++    expect(bg).toContain("'core/gemini-overlay.js'");
++    // js[] собран ровно в этом порядке: … loader-scroll → ingest → overlay → ядро
++    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-intercept.js'");
++    // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при своей загрузке
++    expect(bg.indexOf("'core/gemini-ingest.js'")).toBeLessThan(bg.indexOf("'core/gemini-overlay.js'"));
++    expect(bg.indexOf("'core/gemini-overlay.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
++    // MV3 не перечитывает js[] под существующим id — прежний id обязан быть снят
++    expect(bg).toContain("'ai-cm-gemini-intercept-v8'");
++    expect(bg).toContain("'ai-cm-gemini-intercept-v7'");
++    // лог регистрации бампнут вместе с id
++    expect(bg).toContain('(v9) зарегистрирован');
++    expect(bg).not.toContain('(v8) зарегистрирован');
++  });
++
++  test('S2: bind-контракт полон — ни одна зависимость кластера не потеряна', () => {
++    const contract = require(path.join(ROOT, 'tools/overlay-bind-contract.js'));
++    const names = contract.map(([n]) => n);
++    // 3 имени — зафиксированная величина шага; падение = молчаливый no-op в модуле
++    expect(contract).toHaveLength(3);
++    expect(names.sort()).toEqual(['aiCmOverlaySeq', 'aiCmScrollOverlay', 'getConvId']);
++
++    // каждое имя контракта реально используется телом модуля (через объект связи)
++    const unused = names.filter((n) => !new RegExp('D\\.' + n + '\\b').test(MOD_CODE));
++    expect(unused).toEqual([]);
++
++    // …и передаётся ядром в __bind. Проверяем ИМЕННО блок __bind: имя может встречаться
++    // в ядре и вне связки — это не передача.
++    const block = bindBlockText();
++    const notProvided = names.filter((n) => !new RegExp('(?:^|[\\s,{])' + n + '\\s*[:,(]', 'm').test(block));
++    expect(notProvided).toEqual([]);
++
++    // rw-зависимости обязаны быть ЖИВЫМИ (геттер+сеттер), иначе запись модуля потерялась бы
++    const rw = contract.filter(([, kind]) => kind === 'rw').map(([n]) => n);
++    expect(rw.sort()).toEqual(['aiCmOverlaySeq', 'aiCmScrollOverlay']);
++    rw.forEach((n) => {
++      expect(block).toMatch(new RegExp('get\\s+' + n + '\\s*\\(\\)'));
++      expect(block).toMatch(new RegExp('set\\s+' + n + '\\s*\\('));
++    });
++    // fn-зависимости передаются значением и не получают сеттера
++    const fn = contract.filter(([, kind]) => kind === 'fn').map(([n]) => n);
++    expect(fn).toEqual(['getConvId']);
++    fn.forEach((n) => expect(block).not.toMatch(new RegExp('set\\s+' + n + '\\s*\\(')));
++    expect(contract.filter(([, kind]) => kind === 'ro')).toEqual([]);
++  });
++
++  test('S3: порядок в helper-конкатенации повторяет порядок js[]', () => {
++    expect(SRC.MODULES).toContain('core/gemini-overlay.js');
++    expect(SRC.MODULES.indexOf('core/gemini-overlay.js'))
++      .toBeGreaterThan(SRC.MODULES.indexOf('core/gemini-ingest.js'));
++    expect(SRC.SOURCES.indexOf('core/gemini-overlay.js'))
++      .toBeLessThan(SRC.SOURCES.indexOf('core/gemini-intercept.js'));
++    expect(CONC.indexOf(MOD)).toBeLessThan(CONC.indexOf(CORE));
++  });
++});
+diff --git a/tests/adapters/gemini-pagination-module.test.js b/tests/adapters/gemini-pagination-module.test.js
+index a279e28..354aa13 100644
+--- a/tests/adapters/gemini-pagination-module.test.js
++++ b/tests/adapters/gemini-pagination-module.test.js
+@@ -150,11 +150,11 @@ describe('Phase 3 шаг 10: D-пины маршрутов записи базы
+ });
+ 
+ describe('Phase 3 шаг 10: S-пины проводки модуля', () => {
+-  test('S1: регистрация в core/background.js — id -v8 (шаг 12), модуль перед ядром, -v7 в unregister', () => {
++  test('S1: регистрация в core/background.js — id -v9 (шаг 13.1), модуль перед ядром, -v8 в unregister', () => {
+     const bg = readFile('core/background.js');
+     expect(bg).toContain("'ai-cm-gemini-intercept-v6'");
+     expect(bg).toContain("'core/pagination/pagination.js'");
+-    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-intercept.js'");
++    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-intercept.js'");
+     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при загрузке
+     expect(bg.indexOf("'core/pagination/pagination.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
+     // MV3 не перечитывает js[] под существующим id — прежний id обязан быть снят
+diff --git a/tests/gemini-widget-theme-h22.test.js b/tests/gemini-widget-theme-h22.test.js
+index ce91c02..90fe9c0 100644
+--- a/tests/gemini-widget-theme-h22.test.js
++++ b/tests/gemini-widget-theme-h22.test.js
+@@ -94,10 +94,22 @@ function contentSandbox(hostname, prefersDark) {
+ 
+ // ---------- песочница оверлея: aiCmIsGeminiHost + aiCmOverlayTheme + apply/watch ----------
+ function overlaySandbox(hostname, prefersDark) {
++  // Phase 3 step 13.1: тела оверлея уехали в core/gemini-overlay.js и обращаются к состоянию
++  // ядра через объект связи D (внутренняя переменная каркаса модуля). В браузере его
++  // заполняет __bind из ядра; здесь изображаем ТОТ ЖЕ контракт — живыми геттерами и
++  // сеттерами, — поэтому пины продолжают исполнять реальные тела модуля, а не копию логики.
++  const live = { overlay: null, seq: 0 };
+   const ctx = {
+     location: { hostname: hostname },
+     window: { matchMedia: () => makeMq(prefersDark) },
+     getComputedStyle: (el) => window.getComputedStyle(el),
++    D: {
++      getConvId: () => null,
++      get aiCmScrollOverlay() { return live.overlay; },
++      set aiCmScrollOverlay(v) { live.overlay = v; },
++      get aiCmOverlaySeq() { return live.seq; },
++      set aiCmOverlaySeq(v) { live.seq = v; }
++    },
+     __api: null
+   };
+   const src = [
+@@ -107,7 +119,7 @@ function overlaySandbox(hostname, prefersDark) {
+     extractFn(INTERCEPT, 'aiCmOverlayTheme'),
+     extractFn(INTERCEPT, 'aiCmApplyOverlayTheme'),
+     extractFn(INTERCEPT, 'aiCmWatchOverlayTheme'),
+-    'ctx.__api = { aiCmIsGeminiHost: aiCmIsGeminiHost, aiCmOverlayTheme: aiCmOverlayTheme, aiCmApplyOverlayTheme: aiCmApplyOverlayTheme, aiCmWatchOverlayTheme: aiCmWatchOverlayTheme, getWatcher: function () { return aiCmOverlayThemeWatcher; }, setOverlay: function (el) { aiCmScrollOverlay = el; } };'
++    'ctx.__api = { aiCmIsGeminiHost: aiCmIsGeminiHost, aiCmOverlayTheme: aiCmOverlayTheme, aiCmApplyOverlayTheme: aiCmApplyOverlayTheme, aiCmWatchOverlayTheme: aiCmWatchOverlayTheme, getWatcher: function () { return aiCmOverlayThemeWatcher; }, setOverlay: function (el) { D.aiCmScrollOverlay = el; }, getOverlay: function () { return D.aiCmScrollOverlay; } };'
+   ].join('\n');
+   new Function('ctx', 'with (ctx) {\n' + src + '\n}')(ctx);
+   return ctx.__api;
+@@ -332,8 +344,8 @@ describe('H22: оверлей следует in-app теме Gemini (core/gemini
+       expect(INTERCEPT).toContain('aiCmWatchOverlayTheme(true); // H22');
+       expect(INTERCEPT).toContain('aiCmWatchOverlayTheme(false); // H22');
+       // лог overlay-on остался байтово прежним
+-      expect(INTERCEPT).toContain("debugLog('log', '[AI CM][visibility] overlay-on reason=' + reason + ' theme=' + th.name + ' convId=' + (getConvId() || '(none)'));");
+-      expect(INTERCEPT).toContain("debugLog('log', '[AI CM][visibility] overlay-off reason=' + reason + ' convId=' + (getConvId() || '(none)'));");
++      expect(INTERCEPT).toContain("debugLog('log', '[AI CM][visibility] overlay-on reason=' + reason + ' theme=' + th.name + ' convId=' + (D.getConvId() || '(none)'));");
++      expect(INTERCEPT).toContain("debugLog('log', '[AI CM][visibility] overlay-off reason=' + reason + ' convId=' + (D.getConvId() || '(none)'));");
+     });
+   });
+ });
+diff --git a/tests/helpers/gemini-intercept-source.js b/tests/helpers/gemini-intercept-source.js
+index 2c4e3f1..4048402 100644
+--- a/tests/helpers/gemini-intercept-source.js
++++ b/tests/helpers/gemini-intercept-source.js
+@@ -67,6 +67,9 @@ const ROOT = path.join(__dirname, '..', '..');
+ // Порядок = порядок js[] в core/background.js для 'ai-cm-gemini-intercept'.
+ // utils/* сюда НЕ входят: они не декомпозировались (как и в content-source.js).
+ // Phase 3 step 12: core/gemini-ingest.js идёт после loader-scroll и перед ядром — как в js[].
++// Phase 3 step 13.1: core/gemini-overlay.js идёт после ingest и перед ядром — как в js[].
++// Тела оверлея перенесены с префиксом D (IIFE-каркас, а не `with (D)`): песочницы, которые
++// исполняют вырезанные тела, обязаны получить объект связи D (см. gemini-widget-theme-h22).
+ const MODULES = [
+   'core/gemini-hidden-scroll.js',
+   'core/gemini-diag.js',
+@@ -75,7 +78,8 @@ const MODULES = [
+   'core/gemini-sse.js',
+   'core/pagination/pagination.js',
+   'core/gemini-loader-scroll.js',
+-  'core/gemini-ingest.js'
++  'core/gemini-ingest.js',
++  'core/gemini-overlay.js'
+ ];
+ const INTERCEPT_JS = 'core/gemini-intercept.js';
+ 
+diff --git a/tests/qwen-provider-wiring.test.js b/tests/qwen-provider-wiring.test.js
+index 62492b1..ae7345d 100644
+--- a/tests/qwen-provider-wiring.test.js
++++ b/tests/qwen-provider-wiring.test.js
+@@ -108,7 +108,7 @@ describe('O-35: core/background.js — регистрация перехватч
+   });
+ 
+   test('R-пин: шесть существующих регистраций не тронуты', function () {
+-    ['ai-cm-page-intercept', 'ai-cm-gemini-intercept-v8', 'ai-cm-deepseek-intercept-v2',
++    ['ai-cm-page-intercept', 'ai-cm-gemini-intercept-v9', 'ai-cm-deepseek-intercept-v2',
+       'ai-cm-claude-intercept', 'ai-cm-perplexity-intercept',
+       'ai-cm-google-search-intercept'].forEach(function (id) {
+       expect(background).toContain("ids.indexOf('" + id + "') === -1");
+@@ -134,7 +134,10 @@ describe('O-35: core/background.js — регистрация перехватч
+     // На шаге 12 (Phase 3) в js[] ДОБАВЛЕН core/gemini-ingest.js (перед ядром) и id
+     // сменён -v7 → -v8: без модуля ядро ставит no-op на приём снимков базы (handleOuter,
+     // ingest), выход снимка (emitBaseSnapshot) и слияние восстановленных ходов.
+-    expect(background).toContain("js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-parse.js', 'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-intercept.js']");
++    // На шаге 13.1 (Phase 3) в js[] ДОБАВЛЕН core/gemini-overlay.js (перед ядром) и id
++    // сменён -v8 → -v9: без модуля оверлей загрузки истории недоступен целиком — оба
++    // форвардера возвращают undefined (палитра, наблюдатель темы и снятие оверлея выключены).
++    expect(background).toContain("js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-parse.js', 'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-intercept.js']");
+     expect(background).toContain("js: ['utils/debug.js', 'core/deepseek-intercept.js']");
+     expect(background).toContain("js: ['utils/debug.js', 'utils/intercept-common.js', 'core/claude-intercept.js']");
+     expect(background).toContain("js: ['utils/debug.js', 'utils/perplexity-parser.js', 'utils/intercept-common.js', 'core/perplexity-intercept.js']");
+diff --git a/tools/overlay-bind-contract.js b/tools/overlay-bind-contract.js
+new file mode 100644
+index 0000000..4a3050f
+--- /dev/null
++++ b/tools/overlay-bind-contract.js
+@@ -0,0 +1,42 @@
++// Контракт связки core/gemini-overlay.js <-> core/gemini-intercept.js (Phase 3 Step 13.1).
++//
++// ЧТО ЭТО. Список имён ядра, которые перенесённый в core/gemini-overlay.js кластер
++// оверлея читает и/или пишет. Блок `aiCmGeminiOverlay.__bind({...})` в ядре строится
++// ИМЕННО из этого массива, а tools/apply-overlay-extraction.js сверяет блок с массивом
++// в обе стороны. Один источник правды: добавил имя в контракт — оно обязано появиться
++// в блоке __bind, и наоборот.
++//
++// ПОЧЕМУ КОНТРАКТ ТАКОЙ КОРОТКИЙ. Кластер оверлея почти самодостаточен: восемь из
++// девяти перенесённых объявлений (aiCmIsGeminiHost, aiCmOverlayTheme, наблюдатель темы,
++// aiCmApplyOverlayTheme, aiCmWatchOverlayTheme, aiCmSetScrollOverlay,
++// forceRestoreVisibility и слушатели pagehide/visibilitychange) связаны друг с другом
++// ВНУТРИ модуля и вызывают друг друга по прежним именам. Наружу торчат ровно три имени.
++//
++// ВИДЫ СВЯЗИ:
++//   fn — `function имя(...)` в ядре. Передаётся ЗНАЧЕНИЕМ (имя: имя). Объявления в ядре
++//        хойстятся, поэтому к моменту __bind значение уже есть.
++//   rw — живое состояние: get + set. Без set запись из модуля молча теряется
++//        (присваивание в accessor без сеттера не бросает), и ядро остаётся со старым
++//        значением — тихий баг: снятие оверлея перестало бы обнулять aiCmScrollOverlay,
++//        и forceRestoreVisibility/rerun-overlay-disarm не увидели бы, что оверлея нет.
++//   ro — только чтение: get. В этом кластере таких имён нет.
++//
++// ЧЕГО В КОНТРАКТЕ НЕТ И ПОЧЕМУ.
++//   aiCmRerunOverlayTimer (ядро, строка 1596) — состояние ре-рана лоадера; кластер
++//     оверлея его не читает и не пишет (это делает пагинация). Остаётся в ядре, в
++//     контракт не входит: лишний геттер расширил бы поверхность связи без нужды.
++//   aiCmOverlayThemeWatcher — НЕ состояние ядра: объявлен внутри перенесённого
++//     диапазона, уехал в модуль вместе с наблюдателем. Ссылка на него — локальная.
++//   debugLog — свободный глобал MAIN-мира (utils/debug.js), а не имя ядра.
++//
++// ЭТО НЕ ПРОМЫШЛЕННЫЙ КОД, а тулинг сборки: файл трекается (см. .gitignore) только
++// потому, что S2-пин tests/adapters/gemini-overlay-module.test.js обязан читать его
++// в чистом клоне CI. Больше его никто не читает.
++'use strict';
++
++// ['имя', 'вид'] — вид: 'fn' | 'rw' | 'ro'.
++module.exports = [
++  ['getConvId', 'fn'], // @1187: определение чата для логов overlay-on/overlay-off
++  ['aiCmScrollOverlay', 'rw'], // @1594 w:1695,1712,1721 — сам узел оверлея
++  ['aiCmOverlaySeq', 'rw'] // @1595 w:1713 — поколение оверлея (seq-гвард чужого снятия)
++];

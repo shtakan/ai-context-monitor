@@ -150,11 +150,11 @@ describe('Phase 3 шаг 10: D-пины маршрутов записи базы
 });
 
 describe('Phase 3 шаг 10: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v8 (шаг 12), модуль перед ядром, -v7 в unregister', () => {
+  test('S1: регистрация в core/background.js — id -v9 (шаг 13.1), модуль перед ядром, -v8 в unregister', () => {
     const bg = readFile('core/background.js');
     expect(bg).toContain("'ai-cm-gemini-intercept-v6'");
     expect(bg).toContain("'core/pagination/pagination.js'");
-    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-intercept.js'");
+    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-intercept.js'");
     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при загрузке
     expect(bg.indexOf("'core/pagination/pagination.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
     // MV3 не перечитывает js[] под существующим id — прежний id обязан быть снят
