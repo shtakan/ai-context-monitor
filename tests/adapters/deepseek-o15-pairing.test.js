@@ -26,7 +26,9 @@ const fs = require('fs');
 const path = require('path');
 const { JSDOM, VirtualConsole } = require('jsdom');
 
-const INTERCEPT_PATH = path.join(__dirname, '..', '..', 'core', 'deepseek-intercept.js');
+// Step D.1: ядро декомпозировано — диагностика уехала в core/deepseek-diag.js, поэтому
+// стенд грузит КОНКАТЕНАЦИЮ модулей + ядра (как js[] одного registration в браузере).
+const DS = require('../helpers/deepseek-intercept-source.js');
 const ADAPTER_DIR = path.join(__dirname, '..', '..', 'adapters');
 const P = require('../../utils/export-emit-pipeline.js');
 
@@ -207,7 +209,7 @@ function asMessages(d) {
   return ((d && d.messages) || []).map((m, i) => ({ role: m.role, text: d.messageTexts[i] }));
 }
 
-const INTERCEPT_SRC = fs.readFileSync(INTERCEPT_PATH, 'utf8');
+const INTERCEPT_SRC = DS.deepseekSource;
 
 // jsdom-стенд: подменённый fetch играет роль сервера (истории и completion-стрима).
 function makeStand(convId, historyBody) {
@@ -340,7 +342,7 @@ describe('O-15: DeepSeek live-экспорт — парность ходов и 
   });
 
   test('source-pin: склейка фрагментов без среза с фиксированным смещением', () => {
-    const src = fs.readFileSync(INTERCEPT_PATH, 'utf8');
+    const src = DS.deepseekSource;
     // ни одного среза контента с фиксированным смещением в путях склейки фрагментов
     expect(src).not.toMatch(/content\s*\.\s*slice\(\s*\d/);
     expect(src).not.toMatch(/content\s*\.\s*substring\(\s*\d/);

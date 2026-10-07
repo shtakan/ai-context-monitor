@@ -38,8 +38,9 @@ const path = require('path');
 const { JSDOM, VirtualConsole } = require('jsdom');
 
 const ROOT = path.join(__dirname, '..', '..');
-const INTERCEPT_PATH = path.join(ROOT, 'core', 'deepseek-intercept.js');
-const INTERCEPT_SRC = fs.readFileSync(INTERCEPT_PATH, 'utf8');
+// Step D.1: ядро декомпозировано — диагностика уехала в core/deepseek-diag.js, поэтому
+// стенд грузит КОНКАТЕНАЦИЮ модулей + ядра (как js[] одного registration в браузере).
+const INTERCEPT_SRC = require('../helpers/deepseek-intercept-source.js').deepseekSource;
 
 // ---- эталонные payload'ы, снятые ДО фикса (HEAD 27df84a) ----
 const GOLDEN_S692_LOAD = String.raw`{"convId":"convO22a","text":"Вопрос 1\nОтвет 1\nВопрос 2\nОтвет 2","count":4,"lastMessageText":"Ответ 2","modelSlug":"deepseek-v3","modelMode":"default","messageTexts":["Вопрос 1","Ответ 1","Вопрос 2","Ответ 2"],"messageIds":["u1","a1","u2","a2"],"messages":[{"role":"user","text":"Вопрос 1","reasoning":""},{"role":"assistant","text":"Ответ 1","reasoning":""},{"role":"user","text":"Вопрос 2","reasoning":""},{"role":"assistant","text":"Ответ 2","reasoning":""}],"reasoningTexts":["","","",""],"reasoningTurns":0,"attachTokens":0,"attachBreak":{"imgTokens":0,"docTokens":0,"imgCount":0,"docCount":0},"historyComplete":true,"reachedRoot":true,"baseEmpty":false,"serverTokens":1000}`;

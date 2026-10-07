@@ -316,7 +316,11 @@ describe('M-14 (в): REST-fallback bootstrap — та же константа п
 
 // ---- (г) источник: маркеры M-14 + «не трогать» ----
 describe('M-14 (г): маркеры источника и неприкосновенные пути', () => {
-  const read = function (rel) { return fs.readFileSync(path.join(__dirname, '..', rel), 'utf8'); };
+  const read = function (rel) {
+    // Step D.1: ядро DeepSeek читается конкатенацией модулей и ядра (как js[] в браузере)
+    if (rel === 'core/deepseek-intercept.js') return require('./helpers/deepseek-intercept-source.js').deepseekSource;
+    return fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
+  };
 
   test('выучивание шаблона стоит в ОБЕИХ ветках отклонения гейта M-12, до return', () => {
     const calls = SRC.match(/learnTemplateFromRejectedUrl\(url\); \/\/ M-14/g) || [];

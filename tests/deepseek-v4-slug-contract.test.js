@@ -18,7 +18,12 @@
 
 const path = require('path');
 
-const INTERCEPT = require(path.join(__dirname, '..', 'core', 'deepseek-intercept.js'));
+const DS = require('./helpers/deepseek-intercept-source.js');
+// Step D.1: путь к ядру берётся из карты источников (единая точка правды). Сам ядро
+// грузится БЕЗ модуля диагностики осознанно: тест проверяет чистый резолвер K0
+// (module.exports не тронут декомпозицией), а diag-пути в нём не исполняются —
+// связка видит aiCmDeepseekDiag === null и пропускает __bind, форвардеры не зовутся.
+const INTERCEPT = require(path.join(DS.ROOT, DS.INTERCEPT_JS));
 const ModelConfig = require(path.join(__dirname, '..', 'utils', 'model-config.js'));
 
 // ---- РЕАЛЬНЫЕ ЗАХВАЧЕННЫЕ PAYLOAD'Ы (усечены до контрактных полей) ----

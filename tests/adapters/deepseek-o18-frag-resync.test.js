@@ -31,7 +31,9 @@ const path = require('path');
 const { JSDOM, VirtualConsole } = require('jsdom');
 
 const ROOT = path.join(__dirname, '..', '..');
-const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'deepseek-intercept.js'), 'utf8');
+// Step D.1: ядро декомпозировано — диагностика уехала в core/deepseek-diag.js, поэтому
+// стенд грузит КОНКАТЕНАЦИЮ модулей + ядра (как js[] одного registration в браузере).
+const INTERCEPT_SRC = require('../helpers/deepseek-intercept-source.js').deepseekSource;
 // Фикстура: сырьё прогона 19-12 (tools/fixtures, gitignored) либо синтезированный эквивалент
 // той же сигнатуры (чистый checkout) — см. tests/helpers/o18-fixture.js.
 const O18 = require('../helpers/o18-fixture.js');

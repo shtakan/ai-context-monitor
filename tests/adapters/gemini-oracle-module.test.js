@@ -641,10 +641,11 @@ describe('Phase 3 шаг 13.3: S-пины проводки модуля', () => 
     expect(bg).not.toContain('(v10) зарегистрирован');
     expect(bg.indexOf("await registerSafe('ai-cm-gemini-intercept-v11'"))
       .toBeLessThan(bg.indexOf('(v11) зарегистрирован'));
-    // release.yml держит счётчик MAIN-world файлов равным факту (25 → 26)
+    // release.yml держит счётчик MAIN-world файлов равным факту (26 → 27; Step D.1 —
+    // модуль диагностики DeepSeek core/deepseek-diag.js добавлен в js[] DeepSeek-регистрации)
     const yml = readFile('.github/workflows/release.yml');
-    expect((yml.match(/26 MAIN-world/g) || [])).toHaveLength(2);
-    expect(yml).not.toContain('25 MAIN-world');
+    expect((yml.match(/27 MAIN-world/g) || [])).toHaveLength(2);
+    expect(yml).not.toContain('26 MAIN-world');
   });
 
   test('S2: bind-контракт полон — 32 имени (10 fn + 10 rw + 12 ro), ни одной потерянной привязки', () => {

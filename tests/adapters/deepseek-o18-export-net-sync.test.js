@@ -33,7 +33,9 @@ const Builders = require('../../utils/export-text-builders.js');
 const CONTENT = require('../helpers/content-source.js').contentSource;
 
 const ROOT = path.join(__dirname, '..', '..');
-const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'deepseek-intercept.js'), 'utf8');
+// Step D.1: ядро декомпозировано — диагностика уехала в core/deepseek-diag.js, поэтому
+// стенд грузит КОНКАТЕНАЦИЮ модулей + ядра (как js[] одного registration в браузере).
+const INTERCEPT_SRC = require('../helpers/deepseek-intercept-source.js').deepseekSource;
 const BASE_HANDLER_SRC = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.js'), 'utf8');
 const EXPORT_MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 // Фикстура: сырьё прогона 19-12 (tools/fixtures, gitignored) либо синтезированный эквивалент.

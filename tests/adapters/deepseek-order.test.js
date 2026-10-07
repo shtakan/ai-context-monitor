@@ -20,7 +20,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const INTERCEPT_PATH = path.join(__dirname, '..', '..', 'core', 'deepseek-intercept.js');
+// Step D.1: ядро декомпозировано — диагностика уехала в core/deepseek-diag.js, поэтому
+// стенд грузит КОНКАТЕНАЦИЮ модулей + ядра (как js[] одного registration в браузере).
+const DS = require('../helpers/deepseek-intercept-source.js');
+const INTERCEPT_PATH = path.join(DS.ROOT, DS.INTERCEPT_JS);
 
 // ---- jsdom-харнесс: подменённый window.fetch играет роль сервера ----
 let events = [];          // detail'ы событий ai-cm-full-history (в порядке прихода)
@@ -122,6 +125,10 @@ beforeAll(() => {
   window.history.pushState({}, '', '/a/chat/s/convOrder');
   window.fetch = fakeFetch;
   global.fetch = fakeFetch;
+  // Порядок как в js[] браузера: модуль диагностики -> ядро. Модуль грузим через
+  // window.eval, а не require: его тела объявлены внутри `with (D)` (ES3 Annex B), а
+  // jest-трансформ парсит файлы как strict/ESM и падает на парсере `with`.
+  window.eval(DS.moduleSource('deepseek-diag.js'));
   require(INTERCEPT_PATH);
   interceptLoaded = true;
   window.addEventListener('ai-cm-full-history', function (e) { events.push(e.detail); });
@@ -193,7 +200,7 @@ describe('DeepSeek: NaN-компаратор по inserted_at больше не 
   });
 
   it('в buildActiveChain нет sort по inserted_at (source-level пин)', () => {
-    const source = fs.readFileSync(INTERCEPT_PATH, 'utf8');
+    const source = DS.deepseekSource;
     expect(source).not.toContain("(a.inserted_at || 0) - (b.inserted_at || 0)");
     expect(source).not.toMatch(/chain\.sort\s*\(/);
     expect(interceptLoaded).toBe(true); // харнесс реально загрузил файл

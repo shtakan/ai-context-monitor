@@ -59,7 +59,8 @@ const BASE_HANDLER_SRC = read('core/base-handler.js');
 const CONTENT_SRC = require('./helpers/content-source.js').contentSource;
 const ADAPTER_SRC = read('adapters/deepseek-adapter.js');
 const BASE_ADAPTER_SRC = read('adapters/base-adapter.js');
-const INTERCEPT_SRC = read('core/deepseek-intercept.js');
+// Step D.1: source-пины читают конкатенацию модулей + ядра (как js[] в браузере).
+const INTERCEPT_SRC = require('./helpers/deepseek-intercept-source.js').deepseekSource;
 const OPTIONS_JS = read('options/options.js');
 const OPTIONS_HTML = read('options/options.html');
 const PRINT_JS = read('print/print.js');
