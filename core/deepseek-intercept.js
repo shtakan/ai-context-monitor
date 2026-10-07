@@ -355,21 +355,34 @@ if (typeof window !== 'undefined') {
   var ingestMode = '';
   var exportSyncTruncated = false;   // v12 (O-18): снимок экспортного дозапроса оказался усечён
 
-  // ===== СЕКЦИЯ 9: ПАРСЕР SSE (постфактум и ИНКРЕМЕНТАЛЬНО, ловушка №2) =====
-  var sseLastPath = null;
-  var sseLastOp = null;
+  // ===== Step D.9: K6 (SSE) вынесен в core/deepseek-sse.js =====
+  // Здесь была СЕКЦИЯ 9 целиком (ДВЕ области: 358-1046 и 1066-1136 HEAD 6e65e73;
+  // parseSSE/consumeSseResponse стояли НИЖЕ надгробия D.2 — их сдвинула вставка состояния
+  // netsync, 1048-1064): сигналы модели v13, снимок/диспатч состояния живого потока O-16,
+  // beginSseStream/endSseStream/resetStreamState, белый список типов и ресинк парсера из
+  // сырого кольца v12/O-18, processChunk/processChunkCore, parseSSELines (постфактум и
+  // инкрементально), finishSseStream, parseSSE/consumeSseResponse и мост
+  // ai-cm-deepseek-stream-probe/-flush — 760 строк.
+  // Тела живут в модуле (PURE-зона заголовка/module-owned состояния и BIND-зона внутри
+  // `with (D)` — см. шапку core/deepseek-sse.js) и читают состояние ядра через контракт
+  // __bind: 6 fn + 18 rw + 2 ro = 26 имён; связка — в конце этого IIFE, форвардеры (9 штук,
+  // function declaration — хойстятся) раздают тела по прежним именам.
+  // Объявления 19 var состояния ОСТАЛИСЬ в ядре (ниже, а также SSE_FRAGMENT_TYPES/
+  // sseResyncRing/sseResyncCount/sseResyncBytes/sseUnknownCount/sseUnknownChars в блоке v12):
+  // их читают K7 и контракты D.1/D.2/D.7/D.8 живыми аксессорами D.9 — вынос var заставил бы
+  // ядро читать НЕЯВНЫЕ ГЛОБАЛЫ (урок D.5 на lastDispatchSig). sseConfigName тоже осталась:
+  // её читает ro-геттер ingest-связки D.8. Одиннадцать module-owned объявлений (sseLastPath/
+  // sseLastOp/sseModel/sseModelPresent/sseConversationMode/sseCurrentEvent/SSE_RESYNC_MAX_*/
+  // sseResyncChars/sseUnknownParts) уехали вместе с телами — внешних ссылок у них нет.
+  // finalizeRealtimeTurn (K7: turnsMap/orderCounter/emitBaseSnapshot, сайт O-22 S1172)
+  // остался ЗДЕСЬ и получает тела модуля форвардерами. Модуль подключён в core/background.js
+  // строго перед этим файлом (js[] одного registration, id -v11): на момент связки
+  // window.AiCmDeepseekSse уже есть.
   var sseRealtimeEntryTokens = 0;
   var sseRealtimeFinalTokens = 0;
   var sseRequestMessageId = null;
   var sseResponseMessageId = null;
   var sseModelType = null;
-  // v13: сигналы нового контракта из SSE. model/modelPresent приходят в update_session
-  // (в контракте 2026-10-03 — model:""), conversation_mode — там же ("DEFAULT").
-  // sseConfigName — сессионный факт из /client/settings (name:"Instant"), НЕ сбрасывается
-  // при смене потока (см. ingestModelSettings).
-  var sseModel = null;
-  var sseModelPresent = false;
-  var sseConversationMode = null;
   var sseConfigName = null;
   var sseUserPrompt = '';
   var sseParentMessageId = null;
@@ -384,124 +397,11 @@ if (typeof window !== 'undefined') {
   // каждого нового фрагмента (2 символа и «точка-паразит» в начале [ANSWER]).
   var sseFragments = [];
   var sseFragmentTypes = [];   // производная (диагностика порядка типов)
-  var sseCurrentEvent = '';    // v9: текущее SSE-событие (разбор по строкам, в т.ч. инкрементальный)
   // v10 (O-16): состояние ЖИВОГО потока. active=true от старта чтения тела ответа
   // completion до его конца; turnFinished=true, если терминальный чанк уже пришёл
   // (ход зафиксирован), но тело ответа ещё может досылать фрагменты.
   var sseStreamActive = false;
   var sseTurnFinished = false;
-
-  /**
-   * v13: сигналы модели текущего/последнего потока для __aiCmDeepseekResolveModelSlug.
-   * @returns {AiCmDeepSeekModelSignals}
-   */
-  function sseModelSignals() {
-    return {
-      modelPresent: sseModelPresent === true,
-      model: sseModel,
-      modelType: sseModelType,
-      conversationMode: sseConversationMode,
-      configName: sseConfigName
-    };
-  }
-
-  /**
-   * v13: запоминает активную конфигурацию модели из /api/v0/client/settings?scope=model.
-   * Новый контракт: активная запись имеет model_type:"default" и name:"Instant" — имя модели
-   * в сети отсутствует. Резолвер использует её как резервный сигнал (см. configName).
-   * @param {any} json распарсенное тело ответа settings
-   * @returns {void}
-   */
-  function ingestModelSettings(json) {
-    try {
-      var settings = json && json.data && json.data.biz_data && json.data.biz_data.settings;
-      var list = settings && settings.model_configs && settings.model_configs.value;
-      if (!Array.isArray(list)) return;
-      for (var i = 0; i < list.length; i++) {
-        var c = list[i];
-        if (!c || c.enabled === false) continue;
-        if (c.is_default === true || c.model_type === 'default' || i === 0) {
-          if (c.name) sseConfigName = c.name;
-          break;
-        }
-      }
-    } catch (eSettings) { }
-  }
-
-  // v10 (O-16): снимок состояния потока наружу (ISOLATED-мир). convId — тот же, что в
-  // detail ai-cm-full-history (stale-conv гард экспортёра работает и здесь).
-  function streamStateSnapshot() {    return {
-      convId: currentConvId || getConvId() || '',
-      active: sseStreamActive === true,
-      turnFinished: sseTurnFinished === true
-    };
-  }
-  function dispatchStreamState(reason) {
-    try {
-      var snap = streamStateSnapshot();
-      snap.reason = reason || '';
-      window.dispatchEvent(new CustomEvent('ai-cm-deepseek-stream-state', { detail: snap }));
-    } catch (e) { }
-  }
-  // v10 (O-16): НОВЫЙ поток начинается здесь — только тут буфер обнуляется целиком.
-  // Поля ЗАПРОСА (prompt/parent_message_id/thinking_enabled) выставлены обёрткой fetch
-  // ДО старта чтения ответа — их сброс обнулил бы USER-ход каждого live-ответа
-  // (проверено harness'ом: live-экспорт начинался с assistant). Сохраняем и возвращаем.
-  function beginSseStream() {
-    var keepPrompt = sseUserPrompt;
-    var keepParentId = sseParentMessageId;
-    var keepThinking = sseThinkingEnabled;
-    resetStreamState();
-    sseUserPrompt = keepPrompt;
-    sseParentMessageId = keepParentId;
-    sseThinkingEnabled = keepThinking;
-    sseStreamActive = true;
-    dispatchStreamState('begin');
-    diagMark('sse-begin', { promptLen: (keepPrompt || '').length });   // O-18 (ИЗМЕРЕНИЕ)
-  }
-  // v10 (O-16): тело ответа дочитано (или оборвано) — стрима больше нет.
-  function endSseStream() {
-    if (!sseStreamActive) return;
-    sseStreamActive = false;
-    dispatchStreamState('end');
-    diagMark('sse-end', { turnFinished: sseTurnFinished === true });   // O-18 (ИЗМЕРЕНИЕ)
-  }
-
-  function resetStreamState() {
-    // O-18 (ИЗМЕРЕНИЕ): срез буфера ПЕРЕД обнулением — если сброс случится посреди ответа,
-    // здесь видно, какие фрагменты были выброшены (кандидат «потеря середины»).
-    diagMark('stream-reset', {});
-    sseStreamActive = false;   // v10 (O-16)
-    sseTurnFinished = false;   // v10 (O-16)
-    sseLastPath = null;
-    sseLastOp = null;
-    sseRealtimeEntryTokens = 0;
-    sseRealtimeFinalTokens = 0;
-    sseRequestMessageId = null;
-    sseResponseMessageId = null;
-    sseModelType = null;
-    sseModel = null;             // v13
-    sseModelPresent = false;     // v13
-    sseConversationMode = null;  // v13
-    sseUserPrompt = '';
-    sseParentMessageId = null;
-    sseThinkingEnabled = null;
-    sseFragments = [];       // v9
-    sseFragmentTypes = [];   // v9
-    sseCurrentEvent = '';    // v9
-    // v12 (O-18): сырое кольцо ресинка и аварийный бакет неизвестных типов относятся к
-    // ТЕКУЩЕМУ потоку — новый поток/смена чата их не наследует (иначе байты прошлого хода
-    // могли бы попасть в аварийный ответ следующего).
-    sseResyncRing = [];
-    sseResyncChars = 0;
-    sseUnknownParts = [];
-    sseUnknownChars = 0;
-  }
-
-  // v9 (O-15): последний фрагмент потока — цель пути response/fragments/-1/content.
-  function streamLastFragment() {
-    return sseFragments.length ? sseFragments[sseFragments.length - 1] : null;
-  }
   // ===== v12 (O-18, фаза 2): БЕЛЫЙ СПИСОК ТИПОВ + РЕСИНХРОН ПАРСЕРА ФРАГМЕНТОВ =====
   // Имя типа фрагмента — это ВСЕГДА одно из имён протокола DeepSeek. Любая другая строка
   // (в т.ч. типоподобная «BSCRIPT»/«ION»/«URL»/«DOM» — куски текста ответа) типом НЕ является.
@@ -511,251 +411,11 @@ if (typeof window !== 'undefined') {
   var SSE_FRAGMENT_TYPES = {
     THINK: 1, RESPONSE: 1, REQUEST: 1, TIP: 1, SEARCH: 1, TEMPLATE_RESPONSE: 1
   };
-  function streamKnownType(t) {
-    return (typeof t === 'string') && SSE_FRAGMENT_TYPES[t] === 1;
-  }
-  // Форма «объявления типа» — тот же признак, по которому парсер до фикса заводил новый тип.
-  function streamTypeShape(v) {
-    return (typeof v === 'string') && /^[A-Z][A-Z_]{2,}$/.test(v);
-  }
-  // Сырое кольцо дельт, ушедших ЗА последнюю валидную границу (в невалидный фрагмент) либо
-  // отвергнутых как мусорный «тип». В здоровом потоке ПУСТО (нулевая цена по памяти и времени);
-  // наполняется только в момент десинхрона — из него контент пересобирается, а не теряется.
-  var SSE_RESYNC_MAX_ENTRIES = 512;
-  var SSE_RESYNC_MAX_CHARS = 65536;
   var sseResyncRing = [];
-  var sseResyncChars = 0;
   var sseResyncCount = 0;
   var sseResyncBytes = 0;
   var sseUnknownCount = 0;   // отказов «имя типа вне белого списка» (строка или элемент массива)
-  // Контент фрагментов, чьё имя типа вне белого списка (незнакомый протокол): в буфер
-  // фрагментов такой «тип» не попадает, но байты сохраняются для аварийного streamOtherText.
-  var SSE_UNKNOWN_MAX_CHARS = 262144;
-  var sseUnknownParts = [];
   var sseUnknownChars = 0;
-
-  function streamNoteMisroute(op, val) {
-    try {
-      if (typeof val !== 'string' || !val) return;
-      sseResyncRing.push({ op: (op === 'SET') ? 'SET' : 'APPEND', v: val });
-      sseResyncChars += val.length;
-      while (sseResyncRing.length > SSE_RESYNC_MAX_ENTRIES || sseResyncChars > SSE_RESYNC_MAX_CHARS) {
-        var drop = sseResyncRing.shift();
-        if (!drop) break;
-        sseResyncChars -= (drop.v || '').length;
-      }
-    } catch (e) { }
-  }
-  function streamUnknownPush(type, content) {
-    try {
-      var val = (typeof content === 'string') ? content : '';
-      sseUnknownCount++;
-      console.warn('[deepseek-intercept] имя фрагмента вне белого списка ("' + String(type || '').slice(0, 32) +
-        '") — тип не заводится; контент ' + val.length + ' симв. сохранён аварийным (логу/фолбэку)');
-      if (val) {
-        sseUnknownParts.push(val);
-        sseUnknownChars += val.length;
-        while (sseUnknownChars > SSE_UNKNOWN_MAX_CHARS && sseUnknownParts.length > 1) {
-          var d = sseUnknownParts.shift();
-          sseUnknownChars -= (d || '').length;
-        }
-      }
-      diagMark('frag-unknown-type', { type: String(type || '').slice(0, 32), len: val.length });
-    } catch (e) { }
-    return null;
-  }
-  // Последняя ВАЛИДНАЯ граница — последний фрагмент, чьё имя типа из белого списка.
-  function streamLastValidFragment() {
-    for (var i = sseFragments.length - 1; i >= 0; i--) {
-      if (sseFragments[i] && streamKnownType(sseFragments[i].type)) return sseFragments[i];
-    }
-    return null;
-  }
-  // РЕСИНХРОН: буфер приведён в невалидное состояние (мусорный «тип» или наследство старого
-  // буфера) → выбрасываем невалидные фрагменты и ПЕРЕСОБИРАЕМ содержимое последнего валидного
-  // фрагмента из сырого кольца дельт с последней валидной границы (порядок и op сохранены).
-  function streamResync(reason) {
-    try {
-      var keep = [];
-      for (var i = 0; i < sseFragments.length; i++) {
-        if (sseFragments[i] && streamKnownType(sseFragments[i].type)) keep.push(sseFragments[i]);
-      }
-      sseFragments = keep;
-      var bf = streamLastValidFragment();
-      if (!bf) {
-        // валидной границы не было вовсе (поток начался с мусора): ответ — единственный
-        // осмысленный приёмник байтов, их тип в тексте хода читается.
-        bf = { type: 'RESPONSE', content: '' };
-        sseFragments.push(bf);
-      }
-      sseFragmentTypes = [];
-      for (var k = 0; k < sseFragments.length; k++) sseFragmentTypes.push(sseFragments[k].type);
-      var bytes = 0;
-      for (var r = 0; r < sseResyncRing.length; r++) {
-        var e = sseResyncRing[r];
-        if (!e) continue;
-        if (e.op === 'SET') streamSetContent(bf, e.v); else streamAppendContent(bf, e.v);
-        bytes += (e.v || '').length;
-      }
-      sseResyncRing = [];
-      sseResyncChars = 0;
-      sseResyncCount++;
-      sseResyncBytes += bytes;
-      console.warn('[deepseek-intercept] десинхрон парсера фрагментов (' + reason + ') → ресинк: ' +
-        'восстановлено ' + bytes + ' симв. из сырого кольца, фрагментов=' + sseFragments.length + ', ' +
-        'типы=' + sseFragmentTypes.join(','));
-      diagMark('frag-resync', {
-        reason: String(reason || ''), recovered: bytes, frags: sseFragmentTypes.length,
-        types: sseFragmentTypes.join(',')
-      });
-    } catch (e) { }
-  }
-  // Единая точка «куда положить БАЙТЫ контента»: только в ВАЛИДНЫЙ фрагмент. Байты в
-  // невалидный фрагмент не пишутся никогда — сначала ресинк (это и есть механика K1:
-  // позиционное переиспользование не должно уводить контент в мусорный «тип»).
-  function streamContentInto(op, val) {
-    var f = streamLastFragment();
-    if (!f) return;
-    if (!streamKnownType(f.type)) {
-      streamNoteMisroute(op, val);
-      streamResync('content-into-invalid-fragment');
-      return;
-    }
-    if (op === 'SET') streamSetContent(f, val); else streamAppendContent(f, val);
-  }
-  function streamPushFragment(type, content) {
-    if (typeof type !== 'string' || !type) return null;
-    if (!streamKnownType(type)) return streamUnknownPush(type, content);   // v12 (O-18): белый список
-    var f = { type: type, content: (typeof content === 'string') ? content : '' };
-    sseFragments.push(f);
-    sseFragmentTypes.push(type);
-    return f;
-  }
-  // v9 (O-15): APPEND — дельта, НО сервер иногда перевыдаёт фрагмент целиком (значение
-  // начинается с уже собранного). Тогда это замена, а не дубль. Среза с фиксированным
-  // смещением НЕТ: только проверка префикса (indexOf === 0) — байты не теряются никогда.
-  function streamAppendContent(f, val) {
-    if (!f || typeof val !== 'string' || !val) return;
-    var cur = f.content || '';
-    if (cur && val.indexOf(cur) === 0) { f.content = val; return; }
-    f.content = cur + val;
-  }
-  // v9 (O-15): SET — замена контента фрагмента. Укорачивать уже собранное нельзя: SET
-  // приходит и как «полный текст на данный момент». Значение-префикс уже собранного — игнор.
-  function streamSetContent(f, val) {
-    if (!f || typeof val !== 'string' || !val) return;
-    var cur = f.content || '';
-    if (!cur) { f.content = val; return; }
-    if (val === cur) return;
-    if (cur.indexOf(val) === 0) return;
-    f.content = val;
-  }
-  // v9 (O-15): текст всех фрагментов одного типа в порядке потока (та же склейка, что в
-  // history_messages: join('') + trim) — live и история дают ОДИН И ТОТ ЖЕ текст.
-  function streamFragmentText(type) {
-    var parts = [];
-    for (var i = 0; i < sseFragments.length; i++) {
-      var f = sseFragments[i];
-      if (f && f.type === type && typeof f.content === 'string') parts.push(f.content);
-    }
-    return parts.join('').trim();
-  }
-  // v9 (O-15): контент фрагментов «прочих» типов (TIP/SEARCH/…) — в текст хода не идёт,
-  // но служит аварийным ответом, если RESPONSE-фрагментов в потоке не было вовсе
-  // (незнакомый протокол): лучше показать текст, чем пустой ход.
-  // v12 (O-18): сюда же добавлен контент фрагментов, чьё имя типа вне белого списка —
-  // раньше такой «тип» заводился в буфере, теперь байты живут в аварийном бакете (тот же
-  // текст на выходе, но мусорных типов в буфере нет).
-  function streamOtherText() {
-    var parts = [];
-    for (var i = 0; i < sseFragments.length; i++) {
-      var f = sseFragments[i];
-      if (f && f.type !== 'THINK' && f.type !== 'RESPONSE' && typeof f.content === 'string') parts.push(f.content);
-    }
-    for (var u = 0; u < sseUnknownParts.length; u++) parts.push(sseUnknownParts[u]);
-    return parts.join('').trim();
-  }
-
-  // O-18 (ИЗМЕРЕНИЕ): тонкая обёртка — снимает срез буфера фрагментов ДО и ПОСЛЕ обработки
-  // чанка и кладёт сырьё в diag-кольцо. Тело вынесено в processChunkCore БЕЗ правок: при
-  // выключенном флаге обёртка не делает ничего, кроме кэшированной проверки diagOn(), и
-  // управление/результат обработки — ровно те же (в т.ч. все ранние return).
-  function processChunk(path, op, val) {
-    var dOn = diagOn();
-    var dBefore = dOn ? diagFragState() : null;
-    processChunkCore(path, op, val);
-    if (dOn) diagChunkRecord(path, op, val, dBefore, diagFragState());
-  }
-
-  function processChunkCore(path, op, val) {
-    // v9 (O-15): сокращённый чанк может прийти и после чанка массива фрагментов. Строка —
-    // это либо объявление типа ('THINK'), либо порция КОНТЕНТА последнего фрагмента
-    // (иначе текст молча терялся). Различаем по форме: типы — ВЕРХНИЙ_РЕГИСТР.
-    // v12 (O-18): форма — ТОЛЬКО предварительный признак; имя типа обязано быть в белом
-    // списке. Типоподобный токен вне списка — это БАЙТЫ КОНТЕНТА (десинхрон парсера):
-    // он не заводит новый «тип», а возвращается в последний валидный фрагмент.
-    if (typeof val === 'string' && (path === 'response/fragments' || path === 'fragments')) {
-      if (streamTypeShape(val)) {
-        if (streamKnownType(val)) { streamPushFragment(val, ''); return; }
-        streamNoteMisroute(op, val);
-        streamResync('type-out-of-whitelist:' + val.slice(0, 24));
-        return;
-      }
-      streamContentInto(op, val);
-      return;
-    }
-    // v9 (O-15): чанк массива фрагментов — это И объявление типа нового фрагмента,
-    // И ПЕРВАЯ ПОРЦИЯ ЕГО КОНТЕНТА. Регистрируем тип и НЕ ТЕРЯЕМ content.
-    if (Array.isArray(val) && (path === 'response/fragments' || path === 'fragments')) {
-      var i, item, itemType;
-      if (op === 'SET') {
-        // SET авторитетен для СОСТАВА массива; контент совпадающих по позиции фрагментов
-        // сливаем (streamSetContent не укорачивает уже собранное).
-        var next = [];
-        for (i = 0; i < val.length; i++) {
-          item = val[i];
-          itemType = (typeof item === 'string') ? item : ((item && typeof item.type === 'string') ? item.type : '');
-          if (!itemType) continue;
-          // v12 (O-18): имя типа из массива — тоже ТОЛЬКО из белого списка. Незнакомое имя
-          // фрагментом не становится (иначе в буфере живёт мусорный «тип», который не читает
-          // ни текст хода, ни диагностика); контент сохраняется аварийным бакетом.
-          if (!streamKnownType(itemType)) { streamUnknownPush(itemType, (item && typeof item === 'object') ? item.content : ''); continue; }
-          var prevF = sseFragments[i];
-          var fS = (prevF && prevF.type === itemType) ? prevF : { type: itemType, content: '' };
-          if (item && typeof item === 'object') streamSetContent(fS, item.content);
-          next.push(fS);
-        }
-        if (!next.length && sseFragments.length) return;   // пустой SET не стирает собранное
-        sseFragments = next;
-        sseFragmentTypes = [];
-        for (i = 0; i < next.length; i++) sseFragmentTypes.push(next[i].type);
-        return;
-      }
-      // APPEND: строки — только объявление типа (['THINK']), объекты — тип + первая порция
-      for (i = 0; i < val.length; i++) {
-        item = val[i];
-        if (typeof item === 'string') { streamPushFragment(item, ''); continue; }
-        if (!item || typeof item.type !== 'string') continue;
-        if (!streamKnownType(item.type)) { streamUnknownPush(item.type, item.content); continue; }   // v12 (O-18)
-        // Перевыдача последнего фрагмента целиком (тот же тип + значение начинается с
-        // уже собранного) — это продолжение/замена, а не новый фрагмент: не дублируем.
-        var lastF = streamLastFragment();
-        if (lastF && lastF.type === item.type && typeof item.content === 'string' && item.content &&
-            (lastF.content || '').length > 0 && item.content.indexOf(lastF.content) === 0) {
-          streamAppendContent(lastF, item.content);
-          continue;
-        }
-        streamPushFragment(item.type, item.content);
-      }
-      return;
-    }
-    // Путь к контенту ПОСЛЕДНЕГО фрагмента: APPEND — дельта, SET — замена.
-    // v12 (O-18): пишем только в валидный фрагмент (streamContentInto) — байты контента
-    // в мусорный «тип» не уходят никогда.
-    if (path === 'response/fragments/-1/content') {
-      if (op === 'APPEND' || op === 'SET') streamContentInto(op, val);
-    }
-  }
 
   function finalizeRealtimeTurn() {
     if (!sseRequestMessageId || !sseResponseMessageId) return;
@@ -889,162 +549,6 @@ if (typeof window !== 'undefined') {
     dispatchStreamState('finalize');
   }
 
-  // v9 (O-15): разбор идёт ПО СТРОКАМ — один и тот же код обслуживает полный текст
-  // (XHR/фолбэк: parseSSE) и инкрементальное чтение потока (consumeSseResponse).
-  function parseSSELines(lines) {
-    if (!Array.isArray(lines)) return;
-
-    for (var i = 0; i < lines.length; i++) {
-      var ln = lines[i];
-
-      // event: ... (v9: состояние события живёт в sseCurrentEvent — разбор идёт по строкам,
-      // в т.ч. инкрементально, поэтому локальная переменная не годится)
-      if (ln.indexOf('event:') === 0) {
-        sseCurrentEvent = ln.slice(6).trim();
-        continue;
-      }
-
-      // data: ...
-      if (ln.indexOf('data:') !== 0) continue;
-      var jsonStr = ln.slice(5).trim();
-      if (!jsonStr || jsonStr === '[DONE]') continue;
-
-      var obj;
-      try { obj = JSON.parse(jsonStr); } catch (e) { continue; }
-
-      // === ready ===
-      if (sseCurrentEvent === 'ready' && obj.request_message_id) {
-        // v10 (O-16): новый ход внутри ТОГО ЖЕ тела ответа (другой response_message_id) —
-        // буфер предыдущего хода уже закрыт финалом, начинаем чистый: иначе фрагменты
-        // двух ходов склеились бы в один. Раньше границей служил reset внутри финала.
-        if (sseResponseMessageId && obj.response_message_id &&
-            String(obj.response_message_id) !== String(sseResponseMessageId)) {
-          beginSseStream();
-        }
-        sseRequestMessageId = obj.request_message_id;
-        sseResponseMessageId = obj.response_message_id;
-        sseModelType = obj.model_type || null;
-        sseCurrentEvent = '';
-        continue;
-      }
-
-      // === update_session (v13: model/conversation_mode нового контракта; updated_at не нужен) ===
-      if (sseCurrentEvent === 'update_session') {
-        var usResp = obj && obj.v && obj.v.response;
-        if (usResp) {
-          if (Object.prototype.hasOwnProperty.call(usResp, 'model')) {
-            sseModelPresent = true;
-            if (typeof usResp.model === 'string') sseModel = usResp.model;
-          }
-          if (usResp.conversation_mode) sseConversationMode = usResp.conversation_mode;
-          if (usResp.model_type && !sseModelType) sseModelType = usResp.model_type;
-        }
-        sseCurrentEvent = '';
-        continue;
-      }
-
-      // === close ===
-      if (sseCurrentEvent === 'close') {
-        if (sseRequestMessageId && sseResponseMessageId) {
-          finalizeRealtimeTurn();
-        }
-        sseCurrentEvent = '';
-        continue;
-      }
-
-      // === первый response-объект: {v:{response:{...}}} ===
-      // Извлекаем accumulated_token_usage, model_type И начальный контент из fragments
-      // (первый символ ответа приходит здесь, а не в APPEND-чанках — без этого теряется символ)
-      if (obj.v && obj.v.response && typeof obj.v.response.accumulated_token_usage === 'number') {
-        sseRealtimeEntryTokens = obj.v.response.accumulated_token_usage;
-        sseModelType = sseModelType || obj.v.response.model_type || null;
-        // v13: те же сигналы контракта могут прийти и в первом response-объекте
-        if (Object.prototype.hasOwnProperty.call(obj.v.response, 'model')) {
-          sseModelPresent = true;
-          if (typeof obj.v.response.model === 'string') sseModel = obj.v.response.model;
-        }
-        if (obj.v.response.conversation_mode) sseConversationMode = obj.v.response.conversation_mode;
-
-        // v9 (O-15): начальные фрагменты разбирает ТОТ ЖЕ код, что и APPEND/SET-чанки
-        // (тип + контент). Первый envelope — SET состава, повторный — APPEND новых.
-        var initFrags = obj.v.response.fragments;
-        if (Array.isArray(initFrags)) {
-          processChunk('response/fragments', sseFragments.length ? 'APPEND' : 'SET', initFrags);
-        }
-        continue;
-      }
-
-      // === финальный BATCH: {p:"response", o:"BATCH", v:[...]} ===
-      if (obj.p === 'response' && obj.o === 'BATCH' && Array.isArray(obj.v)) {
-        for (var b = 0; b < obj.v.length; b++) {
-          var batchItem = obj.v[b];
-          if (batchItem.p === 'accumulated_token_usage' && typeof batchItem.v === 'number') {
-            sseRealtimeFinalTokens = batchItem.v;
-          }
-          if (batchItem.p === 'quasi_status' && batchItem.v === 'FINISHED') {
-            if (sseRequestMessageId && sseResponseMessageId) {
-              finalizeRealtimeTurn();
-            }
-          }
-        }
-        continue;
-      }
-
-      // === status FINISHED (страховка, если BATCH не сработал) ===
-      if (obj.p === 'response/status' && obj.o === 'SET' && obj.v === 'FINISHED') {
-        if (!sseRealtimeFinalTokens && sseRequestMessageId && sseResponseMessageId) {
-          finalizeRealtimeTurn();
-        }
-        continue;
-      }
-
-      // === чанк с путём (запоминаем lastPath/lastOp для сокращённых чанков — ловушка №2) ===
-      if (obj.p && obj.o) {
-        sseLastPath = obj.p;
-        sseLastOp = obj.o;
-        processChunk(obj.p, obj.o, obj.v);
-        continue;
-      }
-
-      // === сокращённый чанк (только v, без p и o) — используем запомненный путь ===
-      if (obj.v !== undefined && sseLastPath && sseLastOp) {
-        processChunk(sseLastPath, sseLastOp, obj.v);
-        continue;
-      }
-    }
-  }
-
-  // v9 (O-15): конец тела ответа = ход завершён. Раньше терминалом были ТОЛЬКО
-  // BATCH quasi_status FINISHED и event: close; если сервер не прислал ни того, ни другого,
-  // последний ход сессии вообще не попадал в live-экспорт. v10 (O-16): повторный финал
-  // БЕЗОПАСЕН и не теряет текст — finalizeRealtimeTurn обогащает существующий ход
-  // (буфер потока живёт до конца тела ответа), а не отбрасывает более полный текст.
-  function finishSseStream() {
-    if (sseRequestMessageId && sseResponseMessageId) finalizeRealtimeTurn();
-    diagMark('sse-finish', {});   // O-18 (ИЗМЕРЕНИЕ)
-  }
-
-  // v10 (O-16): синхронный мост ISOLATED → MAIN (тот же приём, что у Gemini-моста
-  // aiCmGeminiTurnsSnapshotSync): экспортёр спрашивает состояние потока перед записью
-  // файла и может принудительно закрыть незавершённый буфер.
-  try {
-    window.addEventListener('ai-cm-deepseek-stream-probe', function () {
-      try {
-        window.dispatchEvent(new CustomEvent('ai-cm-deepseek-stream-probe-response', {
-          detail: streamStateSnapshot()
-        }));
-      } catch (eProbe) { }
-    });
-    window.addEventListener('ai-cm-deepseek-stream-flush', function () {
-      try {
-        if (sseStreamActive === true) {
-          finishSseStream();
-          dispatchStreamState('flush');
-        }
-      } catch (eFlush) { }
-    });
-  } catch (eStreamBridge) { }
-
   // ===== Step D.2: сетевой дозапрос истории вынесен в core/deepseek-netsync.js =====
   // Здесь была СЕКЦИЯ 9C (O-18, фаза 2): liveTurnRecord, netSyncNeeded, exportComposeTurns,
   // applyExportNetSnapshot, exportNetSync и мост window 'ai-cm-deepseek-net-sync'. Тела
@@ -1062,78 +566,6 @@ if (typeof window !== 'undefined') {
   var netTurnIds = {};         // какие ходы пришли ИЗ СЕТИ (последний принятый снимок)
   var lastTurnDoneAt = 0;      // время последнего завершённого хода (финализация потока)
   var netSyncStats = { calls: 0, fetched: 0, ok: 0, fresh: 0, empty: 0, failed: 0, timeout: 0, oneSide: 0 };
-
-  function parseSSE(text) {
-    if (typeof text !== 'string' || !text) return;
-    beginSseStream();   // v10 (O-16): новый поток (XHR/фолбэк полного текста)
-    parseSSELines(text.split('\n'));
-    finishSseStream();
-    endSseStream();
-  }
-
-  // v9 (O-15): инкрементальное чтение потока: полные строки уходят в разбор СРАЗУ, поэтому
-  // терминальный чанк закрывает ход, не дожидаясь конца тела ответа (live-экспорт «сразу
-  // после диалога» видел только предыдущие ходы). Клон tee-ится — чтение страницы не
-  // затрагивается; если body/reader/TextDecoder недоступны (или это XHR-путь) — прежний
-  // фолбэк на clone().text() (полный текст).
-  // Чат может смениться ПОКА поток читается (SPA-переход по сайдбару): ходы старого чата
-  // в новый turnsMap не подмешиваем — тихая проверка convId на каждом шаге чтения.
-  function consumeSseResponse(resp, convId) {
-    var sameConv = function () { return !convId || convId === currentConvId; };
-    var clone = null;
-    try { clone = resp.clone(); } catch (e) { clone = null; }
-    if (!clone) return;
-    // v10 (O-16): старт нового потока — буфер прошлого хода обнуляется ЗДЕСЬ, а не в финале.
-    beginSseStream();
-    var body = clone.body;
-    var Dec = (typeof TextDecoder !== 'undefined') ? TextDecoder : null;
-    if (!body || typeof body.getReader !== 'function' || !Dec) {
-      if (typeof clone.text === 'function') {
-        clone.text().then(function (txt) {
-          if (sameConv()) { parseSSE(txt); endSseStream(); }
-        }).catch(function () { if (sameConv()) endSseStream(); });
-      } else {
-        endSseStream();
-      }
-      return;
-    }
-    var reader = null;
-    var dec = null;
-    try {
-      reader = body.getReader();
-      dec = new Dec('utf-8');
-    } catch (eR) {
-      endSseStream();
-      return;
-    }
-    var buf = '';
-    function pump() {
-      if (!sameConv()) {
-        try { reader.cancel(); } catch (eC) { }
-        endSseStream();
-        return Promise.resolve();
-      }
-      return reader.read().then(function (r) {
-        if (!r || r.done) {
-          if (buf) { parseSSELines([buf.replace(/\r$/, '')]); buf = ''; }
-          if (sameConv()) finishSseStream();
-          endSseStream();
-          return;
-        }
-        var chunk = '';
-        try { chunk = dec.decode(r.value, { stream: true }); } catch (eD) { chunk = ''; }
-        buf += chunk;
-        var idx;
-        while ((idx = buf.indexOf('\n')) !== -1) {
-          var line = buf.slice(0, idx);
-          buf = buf.slice(idx + 1);
-          parseSSELines([line.replace(/\r$/, '')]);
-        }
-        return pump();
-      });
-    }
-    pump().catch(function () { if (sameConv()) finishSseStream(); endSseStream(); });
-  }
 
   // ===== Step D.3: K8 (REFETCH/URL-гигиена) вынесен в core/deepseek-refetch.js =====
   // Здесь были СЕКЦИЯ 10 (гард перекрёста chat_session_id vs currentConvId:
@@ -1645,6 +1077,86 @@ if (typeof window !== 'undefined') {
   // намеренно: js[] регистрируется атомарно, а песочницы тестов получают конкатенацию
   // через tests/helpers/deepseek-intercept-source.js.
   function ingestHistory(jsonBody) { if (aiCmDeepseekIngest) return aiCmDeepseekIngest.ingestHistory(jsonBody); }
+
+  // ===== Step D.9: связка модуля SSE (core/deepseek-sse.js) =====
+  // Контракт: 6 fn (функции ядра, которые зовут тела модуля — передаются значением:
+  // форвардеры D.1 diagOn/diagMark/diagFragState/diagChunkRecord, форвардер D.5 getConvId
+  // и тело K7 finalizeRealtimeTurn — оно ОСТАЛОСЬ в ядре, пишет turnsMap и зовёт
+  // emitBaseSnapshot), 18 rw (состояние потока, которое тела K6 ПЕРЕЗАПИСЫВАЮТ: без
+  // сеттера запись в sloppy-режиме молча терялась бы — буфер фрагментов не наполнялся бы,
+  // сброс потока не чистил бы копилки, а USER-ход live-ответа терялся бы на старте
+  // следующего потока) и 2 ro (SSE_FRAGMENT_TYPES и currentConvId: тела только читают).
+  // Итого 26 имён. Живое состояние отдаётся аксессорами, поэтому модуль и ядро работают с
+  // ОДНИМИ И ТЕМИ ЖЕ переменными IIFE, а не с копиями значений.
+  var aiCmDeepseekSse = (typeof window !== 'undefined' && window.AiCmDeepseekSse) || null;
+  if (aiCmDeepseekSse) {
+    aiCmDeepseekSse.__bind({
+      // fn: функции ядра, которые зовут тела модуля — передаются значением.
+      diagOn: diagOn,
+      diagMark: diagMark,
+      diagFragState: diagFragState,
+      diagChunkRecord: diagChunkRecord,
+      getConvId: getConvId,
+      finalizeRealtimeTurn: finalizeRealtimeTurn,
+      get sseRealtimeEntryTokens() { return sseRealtimeEntryTokens; },
+      set sseRealtimeEntryTokens(v) { sseRealtimeEntryTokens = v; },
+      get sseRealtimeFinalTokens() { return sseRealtimeFinalTokens; },
+      set sseRealtimeFinalTokens(v) { sseRealtimeFinalTokens = v; },
+      get sseRequestMessageId() { return sseRequestMessageId; },
+      set sseRequestMessageId(v) { sseRequestMessageId = v; },
+      get sseResponseMessageId() { return sseResponseMessageId; },
+      set sseResponseMessageId(v) { sseResponseMessageId = v; },
+      get sseModelType() { return sseModelType; },
+      set sseModelType(v) { sseModelType = v; },
+      get sseConfigName() { return sseConfigName; },
+      set sseConfigName(v) { sseConfigName = v; },
+      get sseUserPrompt() { return sseUserPrompt; },
+      set sseUserPrompt(v) { sseUserPrompt = v; },
+      get sseParentMessageId() { return sseParentMessageId; },
+      set sseParentMessageId(v) { sseParentMessageId = v; },
+      get sseThinkingEnabled() { return sseThinkingEnabled; },
+      set sseThinkingEnabled(v) { sseThinkingEnabled = v; },
+      get sseFragments() { return sseFragments; },
+      set sseFragments(v) { sseFragments = v; },
+      get sseFragmentTypes() { return sseFragmentTypes; },
+      set sseFragmentTypes(v) { sseFragmentTypes = v; },
+      get sseStreamActive() { return sseStreamActive; },
+      set sseStreamActive(v) { sseStreamActive = v; },
+      get sseTurnFinished() { return sseTurnFinished; },
+      set sseTurnFinished(v) { sseTurnFinished = v; },
+      get sseResyncRing() { return sseResyncRing; },
+      set sseResyncRing(v) { sseResyncRing = v; },
+      get sseResyncCount() { return sseResyncCount; },
+      set sseResyncCount(v) { sseResyncCount = v; },
+      get sseResyncBytes() { return sseResyncBytes; },
+      set sseResyncBytes(v) { sseResyncBytes = v; },
+      get sseUnknownCount() { return sseUnknownCount; },
+      set sseUnknownCount(v) { sseUnknownCount = v; },
+      get sseUnknownChars() { return sseUnknownChars; },
+      set sseUnknownChars(v) { sseUnknownChars = v; },
+      get SSE_FRAGMENT_TYPES() { return SSE_FRAGMENT_TYPES; },
+      // ro: только чтение — тела K6 это имя не перезаписывают.
+      get currentConvId() { return currentConvId; }
+    });
+  }
+  // Ядро продолжает звать K6 по ПРЕЖНИМ именам: sseModelSignals/streamFragmentText/
+  // streamOtherText/dispatchStreamState — из K7 (finalizeRealtimeTurn) и обработчика смены
+  // чата; resetStreamState/streamKnownType/parseSSE/consumeSseResponse/ingestModelSettings —
+  // ЗНАЧЕНИЕМ в контракты D.5/D.1/D.7 (их связки стоят ВЫШЕ по файлу, поэтому форвардеры —
+  // ИМЕННО function declaration: хойстятся, и fn-передачи видят значение на момент связки).
+  // Гард `if (aiCmDeepseekSse)` — требование стандарта: ядро грузится и БЕЗ модуля
+  // (контрактные тесты K0/слагов, одиночный require), и обёртка не имеет права бросать.
+  // Заглушек нет намеренно: js[] регистрируется атомарно, а песочницы тестов получают
+  // конкатенацию через tests/helpers/deepseek-intercept-source.js.
+  function sseModelSignals() { if (aiCmDeepseekSse) return aiCmDeepseekSse.sseModelSignals(); }
+  function ingestModelSettings(json) { if (aiCmDeepseekSse) return aiCmDeepseekSse.ingestModelSettings(json); }
+  function dispatchStreamState(reason) { if (aiCmDeepseekSse) return aiCmDeepseekSse.dispatchStreamState(reason); }
+  function resetStreamState() { if (aiCmDeepseekSse) return aiCmDeepseekSse.resetStreamState(); }
+  function streamKnownType(t) { if (aiCmDeepseekSse) return aiCmDeepseekSse.streamKnownType(t); }
+  function streamFragmentText(type) { if (aiCmDeepseekSse) return aiCmDeepseekSse.streamFragmentText(type); }
+  function streamOtherText() { if (aiCmDeepseekSse) return aiCmDeepseekSse.streamOtherText(); }
+  function parseSSE(text) { if (aiCmDeepseekSse) return aiCmDeepseekSse.parseSSE(text); }
+  function consumeSseResponse(resp, convId) { if (aiCmDeepseekSse) return aiCmDeepseekSse.consumeSseResponse(resp, convId); }
 })();
 
 // v13: экспорт чистого резолвера для контрактного теста (jest/jsdom). В браузере module нет —

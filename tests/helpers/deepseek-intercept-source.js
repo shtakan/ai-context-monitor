@@ -1,5 +1,5 @@
 /**
- * v1.7 (Step D.8): карта исходников MAIN-перехватчика DeepSeek.
+ * v1.8 (Step D.9): карта исходников MAIN-перехватчика DeepSeek.
  *
  * core/deepseek-intercept.js декомпозирован: кластер диагностики (СЕКЦИЯ 13/13D/13B —
  * диагностический дампа, вербатим usage по ходам, измерение live vs network) вынесен
@@ -23,7 +23,7 @@
  * ходам, детектор усечения цепочки с тихим дозапросом, режимы MERGE/export-sync) —
  * в core/deepseek-ingest.js (шаг D.8).
  * Порядок в MODULES — ровно порядок инъекции в core/background.js (registerSafe
- * 'ai-cm-deepseek-intercept-v10', document_start, world 'MAIN'): модули идут ПЕРЕД
+ * 'ai-cm-deepseek-intercept-v11', document_start, world 'MAIN'): модули идут ПЕРЕД
  * core/deepseek-intercept.js.
  *
  * Скрипты одного registerContentScripts-пакета исполняются в одном мировом глобальном
@@ -49,7 +49,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
 
-// Порядок = порядок js[] в core/background.js для 'ai-cm-deepseek-intercept-v10'.
+// Порядок = порядок js[] в core/background.js для 'ai-cm-deepseek-intercept-v11'.
 // utils/debug.js сюда НЕ входит: он не декомпозировался (как и в content-source.js).
 const MODULES = [
   'core/deepseek-diag.js',
@@ -59,7 +59,8 @@ const MODULES = [
   'core/deepseek-conv.js',
   'core/deepseek-emit.js',
   'core/deepseek-net.js',
-  'core/deepseek-ingest.js'
+  'core/deepseek-ingest.js',
+  'core/deepseek-sse.js'
 ];
 const INTERCEPT_JS = 'core/deepseek-intercept.js';
 

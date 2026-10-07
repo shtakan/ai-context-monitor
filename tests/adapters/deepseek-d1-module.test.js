@@ -271,7 +271,6 @@ describe('Step D.1: core/deepseek-diag.js — контракт модуля ди
     // (как строки K9 в сьюте D.3); остальные пины — по-прежнему в ядре.
     const inKernel = [
       'function ingestHistory(jsonBody) {',
-      'function finishSseStream() {',
       'var SSE_FRAGMENT_TYPES = {',
       "if (typeof diagMark === 'function' && typeof diagOn === 'function' && diagOn()) {",
       "console.log('[deepseek-intercept] перехватчик DeepSeek v11 установлен",
@@ -280,6 +279,8 @@ describe('Step D.1: core/deepseek-diag.js — контракт модуля ди
     ];
     inKernel.forEach(function (l) { expect(KERNEL_SRC).toContain(l); });
     expect(DS.deepseekSource).toContain("diagMark('ingest-enter', {");
+    // Step D.9: тело K6 (finishSseStream и весь SSE-кластер) уехало в core/deepseek-sse.js
+    expect(DS.deepseekSource).toContain('function finishSseStream() {');
     // K10-тел в ядре больше нет (иначе пины-дубли), а тела модуля — без префиксов D.
     expect(KERNEL_SRC).not.toContain('// ===== СЕКЦИЯ 13: ДИАГНОСТИЧЕСКИЙ ДАМП');
     // объявлений состояния колец в ядре нет (упоминания в шапке-комментарии — не в счёт)
@@ -294,7 +295,7 @@ describe('Step D.1: core/deepseek-diag.js — контракт модуля ди
     // Step D.4 — core/deepseek-parse.js, Step D.5 — core/deepseek-conv.js,
     // Step D.6 — core/deepseek-emit.js, Step D.7 — core/deepseek-net.js,
     // Step D.8 — core/deepseek-ingest.js; порядок = порядок js[])
-    expect(DS.MODULES).toEqual(['core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-ingest.js']);
+    expect(DS.MODULES).toEqual(['core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-ingest.js', 'core/deepseek-sse.js']);
     expect(DS.SOURCES.indexOf('core/deepseek-diag.js'))
       .toBeLessThan(DS.SOURCES.indexOf('core/deepseek-intercept.js'));
   });

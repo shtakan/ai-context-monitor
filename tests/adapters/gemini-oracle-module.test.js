@@ -650,8 +650,8 @@ describe('Phase 3 шаг 13.3: S-пины проводки модуля', () => 
     // 32 → 33 — Step D.7, кластер NETWORK core/deepseek-net.js;
     // 33 → 34 — Step D.8, кластер INGEST core/deepseek-ingest.js)
     const yml = readFile('.github/workflows/release.yml');
-    expect((yml.match(/34 MAIN-world/g) || [])).toHaveLength(2);
-    expect(yml).not.toContain('33 MAIN-world');
+    expect((yml.match(/35 MAIN-world/g) || [])).toHaveLength(2);
+    expect(yml).not.toContain('34 MAIN-world');
   });
 
   test('S2: bind-контракт полон — 32 имени (10 fn + 10 rw + 12 ro), ни одной потерянной привязки', () => {

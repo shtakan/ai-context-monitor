@@ -526,7 +526,10 @@ describe('Step D.8: core/deepseek-ingest.js — контракт модуля IN
     expect(KERNEL_SRC).not.toContain('// ===== СЕКЦИЯ 8: ПАРСИНГ history_messages =====');
     // K5 вырезан из ядра непрерывно: соседи (K2-надгробие D.6 и СЕКЦИЯ 9) не тронуты
     expect(KERNEL_SRC).toContain('// ===== Step D.6: K2 (EMIT) вынесен в core/deepseek-emit.js =====');
-    expect(KERNEL_SRC).toContain('// ===== СЕКЦИЯ 9: ПАРСЕР SSE');
+    // Step D.9: заголовок СЕКЦИИ 9 уехал в core/deepseek-sse.js вместе с телами K6
+    // (байт-в-байт), в ядре осталось надгробие — пин перецеплен на конкатенацию.
+    expect(KERNEL_SRC).not.toContain('// ===== СЕКЦИЯ 9: ПАРСЕР SSE');
+    expect(DS.moduleSource('deepseek-sse.js')).toContain('// ===== СЕКЦИЯ 9: ПАРСЕР SSE');
     // объявления состояния ОСТАЛИСЬ в ядре (иначе ядро читало бы НЕЯВНЫЕ ГЛОБАЛЫ)
     KERNEL_KEPT.forEach(function (line) {
       expect(KERNEL_SRC).toContain(line);
@@ -705,27 +708,27 @@ describe('Step D.8: core/deepseek-ingest.js — контракт модуля IN
     expect(probe.calls.emitBaseSnapshot).toBe(0);
   });
 
-  test('S5: проводка — js[] после net и перед ядром, id -v10 + unregister -v9, helper', function () {
+  test('S5: проводка — js[] после net и перед ядром, id -v11 + unregister -v10, helper', function () {
     // модуль строго перед ядром и строго после net
     expect(DS.SOURCES.indexOf('core/deepseek-ingest.js'))
       .toBeLessThan(DS.SOURCES.indexOf('core/deepseek-intercept.js'));
     expect(DS.SOURCES.indexOf('core/deepseek-net.js'))
       .toBeLessThan(DS.SOURCES.indexOf('core/deepseek-ingest.js'));
     expect(DS.MODULES).toContain('core/deepseek-ingest.js');
-    // регистрация ядра: id -v10, снятие -v9, js[] с модулем, лог (v10)
+    // регистрация ядра: id -v11, снятие -v10, js[] с модулем, лог (v11)
     expect(KERNEL_SRC).toContain('aiCmDeepseekIngest');
     const bg = DS.readSource('core/background.js');
-    expect(bg).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-ingest.js', 'core/deepseek-intercept.js']");
-    expect(bg).toContain("ids.indexOf('ai-cm-deepseek-intercept-v10') === -1");
-    expect(bg).toContain("unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v9'] })");
+    expect(bg).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-ingest.js', 'core/deepseek-sse.js', 'core/deepseek-intercept.js']");
+    expect(bg).toContain("ids.indexOf('ai-cm-deepseek-intercept-v11') === -1");
+    expect(bg).toContain("unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v10'] })");
     // лог регистрации бампнут, но БЕЗ «(vN)»-формы: её глобально запрещают Gemini-пины
     // (сдвиг их id -v10 → -v11), а не DeepSeek — версия в логе сохранена
-    expect(bg).toContain('перехватчик DeepSeek v10 зарегистрирован');
+    expect(bg).toContain('перехватчик DeepSeek v11 зарегистрирован');
     expect(bg).not.toContain('(v10) зарегистрирован');
-    // release.yml: счётчик MAIN-world файлов равен факту (34 = 5 бандлов + 29 модулей/ядер)
+    // release.yml: счётчик MAIN-world файлов равен факту (35 = 5 бандлов + 30 модулей/ядер)
     const yml = DS.readSource('.github/workflows/release.yml');
-    expect((yml.match(/34 MAIN-world/g) || [])).toHaveLength(2);
-    expect(yml).not.toContain('33 MAIN-world');
+    expect((yml.match(/35 MAIN-world/g) || [])).toHaveLength(2);
+    expect(yml).not.toContain('34 MAIN-world');
     // модуль: UTF-8 без BOM, LF, хвостовой \n; каркас
     const buf = fs.readFileSync(path.join(DS.ROOT, 'core/deepseek-ingest.js'));
     expect(buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF).toBe(false);
