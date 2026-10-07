@@ -238,7 +238,7 @@
         (netSnapshotAt ? 'старше хода' : 'отсутствует') + ')');
       var p;
       try {
-        p = originalFetch(url, { method: 'GET', headers: lastAuthHeaders || {} });
+        p = originalFetch.call(window, url, { method: 'GET', headers: lastAuthHeaders || {} });
       } catch (eF) { netSyncStats.failed++; reply({ ok: false, reason: 'fetch-throw' }); return; }
       p.then(function (r) { return (r && r.ok) ? r.json() : null; })
         .then(function (json) {

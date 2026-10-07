@@ -28,6 +28,15 @@
  *   S4. rw-семантика: orderCounter/ingestMode/exportSyncTruncated пишутся в ЯДРО через
  *       сеттеры (без них `orderCounter++` молча терялся бы — sloppy), а объекты
  *       состояния (liveTurns/liveTurnOrder/netSyncStats) — те же, что у ядра.
+ *   S5. Байнд fetch-контекста (FIX-NETSYNC-FETCH-BINDING): единственная точка вызова
+ *       дозапроса зовёт originalFetch с this === window. Мок window.fetch ставится
+ *       Object.defineProperty и объявлен STRICT — вызов с чужим this (в K7 это with-объект
+ *       D, в ядре — вообще undefined) бросает Illegal invocation ровно как встроенный
+ *       fetch браузера, поэтому пин ловит регресс без живого браузера. Путь ОСОБО
+ *       коварен: вызов обёрнут в try/catch, поэтому дефект не бросает наружу, а молча
+ *       уходит в фолбэк reason='fetch-throw' (сетевой дозапрос не уходит никогда,
+ *       netSyncStats.failed растёт) — пин проверяет не «нет исключения», а факт дохода
+ *       вызова с правильным this.
  */
 
 const vm = require('vm');
@@ -83,6 +92,9 @@ const FORWARDERS = ['liveTurnRecord', 'netSyncNeeded'];
 // git-историю (CI клонирует shallow), поэтому байтовая идентичность против базы
 // доказывается двумя независимыми способами — этими пинами (текущий модуль) и
 // tools/verify-deepseek-netsync.js (дословное сравнение с git show, локально).
+// FIX-NETSYNC-FETCH-BINDING: у блока exportNetSync пин обновлён под хотфикс
+// (`originalFetch.call(window, …`) — это ЕДИНСТВЕННОЕ расхождение с 1e306c0, см. запись
+// блока ниже; остальные 7 пинов по-прежнему равны базовым.
 // Блоки вырезаются из модуля по якорям: комментарий-заголовок + тело функции.
 const MOVED_BLOCKS = [
   // {name, mode: 'range'|'line'|'func', start, end|sig, sha}
@@ -116,9 +128,15 @@ const MOVED_BLOCKS = [
     sha: 'c043516337f911a62bc6b16d75e2ffe9423f50dc40fa4e1f1511c431a2bc3552'
   },
   {
+    // FIX-NETSYNC-FETCH-BINDING (хотфикс после D.8): SHA отличается от эталона 1e306c0
+    // РОВНО на одну точку — вызов дозапроса стал `originalFetch.call(window, url, {`
+    // вместо `originalFetch(url, {` (встроенный window.fetch требует this === window,
+    // иначе TypeError: Illegal invocation — тот же класс, что FIX-REFETCH-FETCH-BINDING
+    // в K8, аппендикс v49, и FIX-PAGINATION-FETCH-BINDING, аппендикс v26).
+    // Остальные 7 блоков K7 — байт-в-байт с 1e306c0; тело функции не менялось.
     name: 'exportNetSync', mode: 'func', start: '  function exportNetSync(requestId, convId, timeoutMs) {',
     sig: '  function exportNetSync(requestId, convId, timeoutMs) {',
-    sha: '3150480a13280b03b9ca0920c1365166941074c59f8aef1bafe409df5a1f79be'
+    sha: '3cd4e856d09674abcd21d1d7ee698d90c7535d1b25d91268423377d8b30ad1f8'
   },
   {
     name: 'bridge', mode: 'range', start: "  try {\n    window.addEventListener('ai-cm-deepseek-net-sync'",
@@ -275,6 +293,9 @@ function makeProbe(over) {
 
 const KINDS = kernelBindKinds();
 
+/** Дренаж микротасков: exportNetSync завершает приёмку сетевого снимка в .then(). */
+function flush() { return new Promise(function (resolve) { setTimeout(resolve, 0); }); }
+
 describe('Step D.2: core/deepseek-netsync.js — контракт модуля сетевого дозапроса', () => {
   test('S1: литерал __bind в ядре содержит ровно 26 имён (8 fn + 9 rw + 9 ro)', () => {
     // полное совпадение состава и видов — ни одного потерянного/лишнего имени
@@ -419,5 +440,75 @@ describe('Step D.2: core/deepseek-netsync.js — контракт модуля �
     expect(res2.ok).toBe(false);
     expect(res2.reason).toBe('truncated');
     expect(probe.reads['exportSyncTruncated']).toBeGreaterThan(0);
+  });
+
+  // FIX-NETSYNC-FETCH-BINDING (тот же класс, что FIX-REFETCH-FETCH-BINDING, аппендикс v49,
+  // и FIX-PAGINATION-FETCH-BINDING, аппендикс v26): встроенный window.fetch — функция со
+  // [[ThisMode]] = strict, поэтому вызов «голым» именем (originalFetch(url, opts)) уходит
+  // с ЧУЖИМ this (внутри with (D) спецификация даёт this = with-объект D, в ядре — вообще
+  // undefined) → TypeError «Failed to execute 'fetch' on 'Window': Illegal invocation»;
+  // sloppy-подстановки globalThis у нативных функций НЕТ. Особенность K7: вызов обёрнут в
+  // try/catch, поэтому исключение НЕ выходит наружу, а молча превращается в фолбэк
+  // reason='fetch-throw' — сетевой дозапрос истории в момент экспорта (O-18, фаза 2) не
+  // уходит никогда, а netSyncStats.failed растёт. Поэтому пин проверяет не отсутствие
+  // исключения, а сам факт дохода вызова до window.fetch.
+  test('S5: FIX-NETSYNC-FETCH-BINDING — originalFetch зовётся с this === window', async () => {
+    const box = makeSandbox();
+    const seen = [];
+    const snapshot = {
+      code: 0,
+      data: {
+        biz_data: {
+          chat_session: { current_message_id: 'a1' },
+          chat_messages: [{ message_id: 'a1', parent_id: null, role: 'ASSISTANT', fragments: [{ type: 'RESPONSE', content: 'ответ сети' }] }]
+        }
+      }
+    };
+    // Мок window.fetch ставится через Object.defineProperty и объявлен STRICT (строгость
+    // лексическая: функция, созданная в strict-коде, strict). Он бросает ровно тот же
+    // TypeError, что браузер, если this !== window, и записывает фактический this.
+    box.sandbox.REC = seen;
+    box.sandbox.SNAP = JSON.stringify(snapshot);
+    const fetchMock = vm.runInContext(
+      '(function () { "use strict"; return function (url, opts) {' +
+      '  REC.push({ self: this, isWindow: this === window });' +
+      '  if (this !== window) throw new TypeError("Failed to execute \'fetch\' on \'Window\': Illegal invocation");' +
+      '  return Promise.resolve({ ok: true, json: function () { return Promise.resolve(JSON.parse(SNAP)); } });' +
+      '}; }())', box.sandbox, { filename: 'window.fetch (strict mock)' });
+    Object.defineProperty(box.sandbox, 'fetch', { value: fetchMock, writable: true, configurable: true });
+
+    loadModule(box);
+    const Fn = box.sandbox.AiCmDeepseekNetsync;
+    const probe = makeProbe();
+    probe.st.originalFetch = box.sandbox.fetch;   // как ядро: ро-геттер отдаёт снимок window.fetch
+    Fn.__bind(probe.D);
+
+    // предусловие дозапроса: live-ход есть, авторитетного снимка сети нет
+    Fn.liveTurnRecord('u1', 'user', 'вопрос', 'вопрос', '', '');
+    expect(Fn.netSyncNeeded()).toBe(true);
+
+    Fn.exportNetSync('req1', probe.st.currentConvId);
+
+    expect(seen).toHaveLength(1);                       // вызов дошёл до window.fetch
+    // this === window проверяется ВНУТРИ реалма песочницы: снаружи contextified-глобал
+    // отдаётся прокси, и строгое сравнение с объектом-песочницей дало бы ложный минус.
+    const innerWindow = vm.runInContext('window', box.sandbox);
+    expect(seen[0].isWindow).toBe(true);                // this === window там, где идёт вызов
+    expect(seen[0].self).toBe(innerWindow);             // тот же глобальный объект
+    expect(seen[0].self).not.toBeUndefined();           // не bare-вызов (this не потерян)
+    expect(probe.st.netSyncStats.failed).toBe(0);       // и не фолбэк reason='fetch-throw'
+    expect(box.logs.join('\n')).not.toContain('не удался');   // ветка .catch дозапроса не сработала
+    await flush();
+    expect(probe.calls.ingest).toBe(1);                 // снимок доехал до ingestHistory ядра
+    expect(probe.st.netSyncStats.ok).toBe(1);
+    expect(probe.st.netSnapshotAt).toBeGreaterThan(0);  // снимок сети принят
+
+    // source-пин: единственная точка вызова дозапроса — с явным window-контекстом
+    expect(MODULE_SRC).toContain('originalFetch.call(window, url, {');
+    expect(MODULE_SRC).not.toContain('originalFetch(url');
+    // в модуле ровно одна точка вызова originalFetch (комментарии её не дают: regex
+    // требует точку или скобку сразу после имени, поэтому bare-вызов не вернулся бы
+    // незамеченным)
+    expect(MODULE_SRC.match(/originalFetch[.(]/g)).toHaveLength(1);
   });
 });
