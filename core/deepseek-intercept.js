@@ -228,8 +228,8 @@ if (typeof window !== 'undefined') {
   // v8 (O-7): reasoning-фрагменты THINK разбираются отдельно от ответа.
   //   REASONING_ENABLED=false возвращает поведение v7 (THINK не попадает в текст).
   var REASONING_ENABLED = true;
-  var REASONING_TAG = '[REASONING]';
-  var ANSWER_TAG = '[ANSWER]';
+  // REASONING_TAG/ANSWER_TAG переехали в core/deepseek-parse.js (Step D.4): их читает
+  // только composeTurnText, тело которого живёт в модуле.
   var MODEL_WINDOW_DEFAULT = 131072;  // совпадает с model-config deepseek-v3/r1
 
   // ===== СЕКЦИЯ 2: НАКОПИТЕЛИ =====
@@ -521,105 +521,18 @@ if (typeof window !== 'undefined') {
     });
   } catch (eTurnsBridge) { }
 
-  // ===== СЕКЦИЯ 5: МОДЕЛЬ (v13: сетевые сигналы контракта, затем фолбэк по thinking_enabled) =====
-  /**
-   * Slug модели хода: сначала сигналы нового сетевого контракта, затем прежний фолбэк.
-   * @param {boolean} thinkingEnabled
-   * @param {AiCmDeepSeekModelSignals} [signals]
-   * @returns {string}
-   */
-  function getModelSlug(thinkingEnabled, signals) {
-    var networkSlug = __aiCmDeepseekResolveModelSlug(signals);
-    if (networkSlug) return networkSlug;
-    return thinkingEnabled === true ? 'deepseek-r1' : 'deepseek-v3';
-  }
-
-  // ===== СЕКЦИЯ 6: АКТИВНАЯ ЦЕПОЧКА (walk по parent_id, ловушка №1) =====
-  // v6: возвращает { chain, truncated }
-  //   - truncated = false: дошли до корня (parent_id === null/undefined) — норма
-  //   - truncated = true: walk остановился, потому что следующий parent_id не null,
-  //     но сообщения с таким id нет в messagesById — цепочка оборвана (усечение)
-  function buildActiveChain(chatSession, messagesById) {
-    var chain = [];
-    var currentId = chatSession.current_message_id;
-    var visited = {};
-    var truncated = false;
-    // v7: reachedRoot — true, когда обход довёл цепочку до корня (узел без parent_id),
-    // т.е. цикл завершился по исчерпанию parent_id, а не по обрыву/циклу/пустой цепочке
-    var reachedRoot = false;
-    while (currentId != null && currentId !== undefined) {
-      var msg = messagesById[currentId];
-      if (!msg) {
-        // parent_id не null, но сообщение отсутствует в полученном chat_messages → усечение
-        truncated = true;
-        break;
-      }
-      if (visited[currentId]) break;   // защита от циклов
-      visited[currentId] = true;
-      chain.push(msg);
-      currentId = msg.parent_id;
-    }
-    reachedRoot = !truncated && chain.length > 0 && (currentId == null || currentId === undefined);
-    chain.reverse();
-    // v7: sort по inserted_at УБРАН. WHY:
-    //  (1) inserted_at — ISO-строка ('2026-08-29T..Z'), вычитание строк даёт NaN →
-    //      компаратор недетерминирован, порядок зависит от реализации sort;
-    //  (2) внутри пары (user,assistant одного хода) серверный inserted_at ставит
-    //      assistant РАНЬШЕ user → сортировка ИНВЕРТИРУЕТ пару (a,u,a,u вместо u,a,u,a).
-    //  Единственный источник хронологии — обход parent_id + chain.reverse() выше.
-    return { chain: chain, truncated: truncated, reachedRoot: reachedRoot };
-  }
-
-  // ===== СЕКЦИЯ 7: СБОР ТЕКСТА ХОДА (по type, не по порядку фрагментов) =====
-  // v8: ответ хода — ТОЛЬКО фрагменты RESPONSE; THINK собирается отдельно (collectTurnReasoning).
-  function collectTurnText(fragments, role) {
-    var types = (role === 'USER') ? ['REQUEST'] : ['RESPONSE'];
-    var parts = [];
-    for (var i = 0; i < fragments.length; i++) {
-      var f = fragments[i];
-      if (types.indexOf(f.type) !== -1 && typeof f.content === 'string') {
-        parts.push(f.content);
-      }
-      // TIP — всегда игнорируем
-    }
-    return parts.join('').trim();
-  }
-
-  // v8 (O-7): reasoning хода — фрагменты type === 'THINK' (цепочка рассуждений DeepSeek).
-  // У USER-хода reasoning нет по определению. TIP/TEMPLATE_RESPONSE игнорируем.
-  function collectTurnReasoning(fragments, role) {
-    if (role === 'USER') return '';
-    var parts = [];
-    for (var i = 0; i < fragments.length; i++) {
-      var f = fragments[i];
-      if (f && f.type === 'THINK' && typeof f.content === 'string') {
-        parts.push(f.content);
-      }
-    }
-    return parts.join('').trim();
-  }
-
-  // v8 (O-7): формат экспортного текста хода с reasoning:
-  //   [REASONING]\n<рассуждение>\n\n[ANSWER]\n<ответ>
-  // Нет reasoning (или фича выключена) → текст хода байтово прежний (только ответ).
-  function composeTurnText(answer, reasoning) {
-    if (!REASONING_ENABLED || !reasoning) return answer;
-    return REASONING_TAG + '\n' + reasoning + '\n\n' + ANSWER_TAG + '\n' + answer;
-  }
-
-  // v13 (O-7): HIDDEN-ПОМЕТКИ БАЗЫ (текст хода при этом НЕ меняется ни байтом).
-  // reasoning хода уже лежит в тексте секциями [REASONING]/[ANSWER] (v8) — здесь он
-  // ДОПОЛНИТЕЛЬНО помечается полем hiddenReasoning: одно имя поля для ОБОИХ путей захвата
-  // (сеть + DOM-адаптер), которое читает сырой режим экспорта
-  // (utils/export-emit-pipeline.js:includeHiddenExportBlocks) при включённом тумблере
-  // aiCmIncludeHiddenInExport. Метрики/токены hidden-поля не видят: они считаются по
-  // тексту хода (messageTexts), а не по пометкам.
-  // Инъекции DeepSeek++ в user-ходе помечаются флагом hiddenInjection: текст остаётся
-  // КАК ЕСТЬ, а вырезает инъекции санация O-20 на выходе экспорта (при выключенном тумблере).
-  var DS_PP_VISIBLE_MARKER = 'deepseek-pp-visible-user-prompt:start';
-  function hasInjectedUserPrompt(text) {
-    return typeof text === 'string' && text.indexOf(DS_PP_VISIBLE_MARKER) !== -1;
-  }
+  // ===== Step D.4: K3+K4 (MODEL-хелпер, цепочка, текст хода) вынесены в core/deepseek-parse.js =====
+  // Здесь были СЕКЦИЯ 5 (getModelSlug — slug модели хода: сетевые сигналы K0, затем
+  // фолбэк по thinking_enabled), СЕКЦИЯ 6 (buildActiveChain — walk по parent_id, ловушка
+  // №1), СЕКЦИЯ 7 (collectTurnText/collectTurnReasoning/composeTurnText — сборка текста
+  // хода по type фрагментов) и hidden-пометки базы (DS_PP_VISIBLE_MARKER +
+  // hasInjectedUserPrompt, v13/O-7). Тела живут в модуле (PURE-зона и BIND-зона внутри
+  // `with (D)` — см. шапку core/deepseek-parse.js) и читают ядро через контракт __bind;
+  // связка — в конце этого IIFE. Модуль подключён в core/background.js строго перед этим
+  // файлом (js[] одного registration, id -v6): на момент связки window.AiCmDeepseekParse
+  // уже есть. Константы REASONING_TAG/ANSWER_TAG уехали вместе с composeTurnText (СЕКЦИЯ 1
+  // выше), REASONING_ENABLED ОСТАЛСЯ: его читают K5/K7 и контракт диагностики D.1.
+  // Форвардеры ядра (хойстятся, вызовы выше по файлу не тронуты) — в конце этого IIFE.
 
   // ===== СЕКЦИЯ 8: ПАРСИНГ history_messages =====
   // v6: детектор усечения активной цепочки + однократный тихий дозапрос полной истории
@@ -2118,6 +2031,36 @@ if (typeof window !== 'undefined') {
   function historyRefetchUrl() { return aiCmDeepseekRefetch.historyRefetchUrl(); }
   function refetchFullHistory(originalUrl, authHeaders, convId) { return aiCmDeepseekRefetch.refetchFullHistory(originalUrl, authHeaders, convId); }
   function scheduleHistoryRefetch() { return aiCmDeepseekRefetch.scheduleHistoryRefetch(); }
+
+  // ===== Step D.4: связка модуля цепочки/текста хода (core/deepseek-parse.js) =====
+  // Контракт: 2 ro-геттера — имена ядра, которые читают тела модуля
+  // (REASONING_ENABLED — гейт v8 (O-7) в composeTurnText; __aiCmDeepseekResolveModelSlug —
+  // K0, чистый резолвер slug по сетевым сигналам, объявлен ВНЕ этого IIFE). fn-передач и
+  // rw-пар нет: состояние кластера модуль не ведёт вовсе (K3/K4 — чистые функции), а
+  // REASONING_TAG/ANSWER_TAG/DS_PP_VISIBLE_MARKER уехали в модуль вместе с телами.
+  // Живые имена отдаются геттерами, поэтому модуль и ядро работают с ОДНИМИ И ТЕМИ ЖЕ
+  // переменными IIFE, а не с копиями значений.
+  var aiCmDeepseekParse = (typeof window !== 'undefined' && window.AiCmDeepseekParse) || null;
+  if (aiCmDeepseekParse) {
+    aiCmDeepseekParse.__bind({
+      // ro: только чтение — модуль эти имена не перезаписывает.
+      get REASONING_ENABLED() { return REASONING_ENABLED; },
+      get __aiCmDeepseekResolveModelSlug() { return __aiCmDeepseekResolveModelSlug; }
+    });
+  }
+  // Ядро продолжает звать K3/K4 по ПРЕЖНИМ именам (hidden-пометки базы и композиция
+  // ходов в ingestHistory, сборка текста хода в SSE-финализации, slug модели хода).
+  // Форвардеры — ИМЕННО function declaration: хойстятся, поэтому вызовы в любом месте
+  // ядра выше по файлу видят имя, а тело живёт в модуле. Контракт — все 6 тел кластера;
+  // константы тегов ядру больше не нужны. Заглушек нет намеренно: js[] регистрируется
+  // атомарно, а песочницы тестов получают конкатенацию через
+  // tests/helpers/deepseek-intercept-source.js.
+  function buildActiveChain(chatSession, messagesById) { return aiCmDeepseekParse.buildActiveChain(chatSession, messagesById); }
+  function collectTurnText(fragments, role) { return aiCmDeepseekParse.collectTurnText(fragments, role); }
+  function collectTurnReasoning(fragments, role) { return aiCmDeepseekParse.collectTurnReasoning(fragments, role); }
+  function composeTurnText(answer, reasoning) { return aiCmDeepseekParse.composeTurnText(answer, reasoning); }
+  function hasInjectedUserPrompt(text) { return aiCmDeepseekParse.hasInjectedUserPrompt(text); }
+  function getModelSlug(thinkingEnabled, signals) { return aiCmDeepseekParse.getModelSlug(thinkingEnabled, signals); }
 })();
 
 // v13: экспорт чистого резолвера для контрактного теста (jest/jsdom). В браузере module нет —

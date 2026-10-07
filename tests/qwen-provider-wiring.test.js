@@ -108,7 +108,7 @@ describe('O-35: core/background.js — регистрация перехватч
   });
 
   test('R-пин: шесть существующих регистраций не тронуты', function () {
-    ['ai-cm-page-intercept', 'ai-cm-gemini-intercept-v11', 'ai-cm-deepseek-intercept-v5',
+    ['ai-cm-page-intercept', 'ai-cm-gemini-intercept-v11', 'ai-cm-deepseek-intercept-v6',
       'ai-cm-claude-intercept', 'ai-cm-perplexity-intercept',
       'ai-cm-google-search-intercept'].forEach(function (id) {
       expect(background).toContain("ids.indexOf('" + id + "') === -1");
@@ -154,7 +154,13 @@ describe('O-35: core/background.js — регистрация перехватч
     // СЕКЦИЯ 10 — гард перекрёста convId, СЕКЦИЯ 10B — хелперы MERGE-дозапроса) и id
     // сменён -v4 → -v5: без модуля форвардеры ядра (guardCheck/collectHeaders/convId*/
     // historyRefetchUrl/refetchFullHistory/scheduleHistoryRefetch) бьют в null.
-    expect(background).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-intercept.js']");
+    // Step D.4: добавлен core/deepseek-parse.js (кластер цепочки/текста хода: СЕКЦИЯ 5 —
+    // MODEL-хелпер getModelSlug, СЕКЦИЯ 6 — buildActiveChain, СЕКЦИЯ 7 — collectTurnText/
+    // collectTurnReasoning/composeTurnText + hidden-пометки базы) и id сменён -v5 → -v6:
+    // без модуля форвардеры ядра (buildActiveChain/collectTurn*/composeTurnText/
+    // hasInjectedUserPrompt/getModelSlug) бьют в null — разбор базы и композиция ходов
+    // выключены целиком.
+    expect(background).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'utils/intercept-common.js', 'core/claude-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'utils/perplexity-parser.js', 'utils/intercept-common.js', 'core/perplexity-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'utils/google-search-folwr-parser.js', 'utils/intercept-common.js', 'core/google-search-intercept.js']");
