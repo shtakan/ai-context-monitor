@@ -39,15 +39,18 @@ chatgpt-conversation-sample.json
 tools/_out*
 gemini-head-sample.txt
 test2_logs.txt
-# tools/ остаётся служебным и игнорируется, но два САМОДОСТАТОЧНЫХ контракт-файла
-# трекаются: S-пины в CI (чистый клон) требуют tools/pagination-bind-contract.js (S2)
-# и tools/ingest-bind-contract.js (шаг 12). Негация работает ТОЛЬКО при маске
-# содержимого `tools/*`: исключение каталога целиком (`tools/`) её отменяет.
+# tools/ остаётся служебным и игнорируется, но САМОДОСТАТОЧНЫЕ контракт-файлы
+# трекаются: S-пины в CI (чистый клон) требуют tools/pagination-bind-contract.js (S2),
+# tools/ingest-bind-contract.js (шаг 12), tools/overlay-bind-contract.js (13.1),
+# tools/archive-bind-contract.js (13.2) и tools/oracle-bind-contract.js (13.3).
+# Негация работает ТОЛЬКО при маске содержимого `tools/*`: исключение каталога целиком
+# (`tools/`) её отменяет.
 tools/*
 !tools/pagination-bind-contract.js
 !tools/ingest-bind-contract.js
 !tools/overlay-bind-contract.js
 !tools/archive-bind-contract.js
+!tools/oracle-bind-contract.js
 tools/key.pem
 # Прежний шаблон `tools/` (без внутреннего слэша) ловил каталог tools на ЛЮБОЙ
 # глубине; root-anchored `tools/*` этого не делает, поэтому вложенный служебный
