@@ -4,7 +4,12 @@
 [AI CM][auto-export] re-check после стопа лоадера convId=e292103e4b521dae pct=91.2
 [AI CM][auto-export] fired convId=e292103e4b521dae pct=91.2 file=chat-e292103e_gemini-2026-09-09_15-40.txt textLen=18432 pendingCursor=0 baseComplete=1
 [AI CM][auto-export] skip reason=already-fired convId=e292103e4b521dae
-# --- case=session-latched: session-латч из прошлой вкладки/перезагрузки (H21: порядок инвертирован, файл один) ---
+# --- case=session-latched: session-латч из прошлой вкладки/перезагрузки (H21: порядок инвертирован; хотфикс F5 (v38) — дубля нет, файр один) ---
+# Хотфикс F5 (v38, core/export-manager.js:1822-1829): base-complete гейт спрашивает те же три
+# латча, что и пороговый путь (in-memory + session + once). Session-латч жив → второй файр
+# срезан: строка «base-complete trigger»/«fired» от триггера НЕ появляется, дубль файла с
+# суффиксом -base-complete (дефект Аппендикса v38) больше не пишется.
 [AI CM][auto-export] skip reason=already-fired convId=e292103e4b521dae
-[AI CM][auto-export] base-complete trigger convId=e292103e4b521dae msgs=42 pendingCursor=0 baseComplete=1 pct=91.2
-[AI CM][auto-export] fired convId=e292103e4b521dae pct=91.2 file=chat-e292103e_gemini-2026-09-09_15-40-base-complete.txt textLen=18432 pendingCursor=0 baseComplete=1
+# до хотфикса F5 здесь были (фиксация дефекта, Аппендикс v38; больше не воспроизводится):
+# [AI CM][auto-export] base-complete trigger convId=e292103e4b521dae msgs=42 pendingCursor=0 baseComplete=1 pct=91.2
+# [AI CM][auto-export] fired convId=e292103e4b521dae pct=91.2 file=chat-e292103e_gemini-2026-09-09_15-40-base-complete.txt textLen=18432 pendingCursor=0 baseComplete=1

@@ -233,7 +233,7 @@ describe('O-36 D3 (живой харнесс): loader-stop не выгружае
     expect(skip[0]).toContain('threshold=90');
     expect(skip[0]).toContain('trigger=base-complete');
     expect(h.logs.join('\n')).not.toContain('base-complete trigger');
-    expect(h.logs.join('\n')).not.toContain('fired convId=');
+    expect(h.logs.join('\n')).not.toContain('[AI CM][auto-export] fired convId='); // анкер с префиксом: «already-fired» содержит «fired convId=»
   });
 
   test('pct=89.9 ниже порога 90 → файла нет (граница), pct=90 → файл ровно один', function () {
@@ -273,18 +273,19 @@ describe('O-36 D3 (живой харнесс): loader-stop не выгружае
     expect(perSitePass.downloads).toHaveLength(1);
   });
 
-  test('R-пин: второй триггер ЖИВ — при pct выше порога он по-прежнему выгружает (H21-сценарий)', function () {
-    // session-латч прошлой вкладки (только он): пороговый re-check даёт already-fired
-    // (in-memory латч пуст), поэтому именно v64-триггер пишет файл — как в fixture H21
+  test('R-пин (хотфикс F5, v38): session-латч срезает второй триггер — файла НЕТ (H21-сценарий)', function () {
+    // session-латч прошлой вкладки (только он): пороговый re-check даёт already-fired,
+    // а v64-триггер после хотфикса F5 спрашивает те же три латча (in-memory + session +
+    // once) → молчит. До хотфикса гейт читал ТОЛЬКО in-memory латч и при F5 давал дубль
+    // файла «-base-complete» (дефект Аппендикса v38; приёмка 13.2 ложно заявила
+    // «повторный экспорт запрещён» — falsified).
     const h = loadManager({ ctx: { autoExportLastPct: 91.2 } });
     h.ctx.sessionFiredCache[P.firedSessionKey('gemini', CID)] = 1;
     h.fire(loaderStop({}));
-    expect(h.downloads).toHaveLength(1);                              // РОВНО один файл
+    expect(h.downloads).toEqual([]);                                  // дубля файла НЕТ
     expect(h.logs.join('\n')).toContain('skip reason=already-fired convId=' + CID);
-    expect(h.logs.join('\n')).toContain('base-complete trigger convId=' + CID +
-      ' msgs=42 pendingCursor=0 baseComplete=1 pct=91.2');
-    expect(h.logs.join('\n')).toContain('fired convId=' + CID + ' pct=91.2');
-    expect(h.downloads[0].file).toMatch(/-base-complete\.txt$/);      // имя прежнее (O-11)
+    expect(h.logs.join('\n')).not.toContain('base-complete trigger');
+    expect(h.logs.join('\n')).not.toContain('[AI CM][auto-export] fired convId='); // анкер с префиксом: «already-fired» содержит «fired convId=»
   });
 
   test('курсор продолжения жив → второй триггер молчит (прежний гейт не ослаблен)', function () {

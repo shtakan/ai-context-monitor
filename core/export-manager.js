@@ -1819,12 +1819,14 @@ window.addEventListener('ai-cm-loader-state', function (/** @type {CustomEvent} 
       if (cid && cid === d.convId && autoExportSettings.enabled === true &&
           baseComplete === true && !aiCmCursorLiveByConv[cid] &&
           !(function () {
-            // v81 (2.5): латч per service+convId
+            // F5 (v38): base-complete триггер — дизъюнкция трёх латчей, тождественная пороговому пути :1247-1249.
+            // in-memory autoExportFired сбрасывается при F5; session-латч (isFiredInSession) и once-латч
+            // (aiCmAutoExportFiredOnce) переживают F5/SPA — без них повторный автоэкспорт при F5.
+            var siteBc = (currentAdapter && currentAdapter.siteName) || '';
             var Pbc = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
-            if (Pbc && typeof Pbc.getAutoExportFired === 'function') {
-              return Pbc.getAutoExportFired(autoExportFired, (currentAdapter && currentAdapter.siteName) || '', cid);
-            }
-            return autoExportFired[cid] === 1;
+            return Pbc.getAutoExportFired(autoExportFired, siteBc, cid) ||
+                   (typeof Pbc.isFiredInSession === 'function' ? Pbc.isFiredInSession(sessionFiredCache, siteBc, cid) : false) ||
+                   (typeof aiCmAutoExportFiredOnce === 'object' && aiCmAutoExportFiredOnce && aiCmAutoExportFiredOnce[siteBc + '|' + cid] === 1);
           })() && (baseCount || 0) > 0) {
         var pctBc64 = (typeof autoExportLastPct === 'number' && autoExportLastPct >= 0) ? autoExportLastPct : 0;
         // O-36 (D3): ФИКС — второй триггер подчиняется порогу автоэкспорта. До фикса

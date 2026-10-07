@@ -1,18 +1,28 @@
 /**
- * H21: порядок логов автоэкспорта — «fired» ДО «skip reason=already-fired».
+ * H21: исторический пин порядка логов автоэкспорта — «fired» ДО «skip reason=already-fired»;
+ * дубль файла при F5 устранён хотфиксом F5 (Аппендикс v38).
  *
  * Живое наблюдение (2026-09-09): в логе «skip reason=already-fired» стоял РАНЬШЕ
  * «base-complete trigger» и «fired», хотя fired в этом событии ещё не было.
  * Разбор: в одном loader-stop событии сначала идёт re-check после стопа лоадера
  * (content.js ~2442), чей пороговый гейт видит КРОСС-ТАБОВЫЙ session-латч
  * (isFiredInSession, chrome.storage.session) и пишет already-fired; затем блок
- * base-complete trigger (~2462), чей гейт читает ТОЛЬКО in-memory autoExportFired
- * и потому всё равно стреляет → «base-complete trigger» + «fired». Итог корректен
- * (ровно один файл), инверсия — только в порядке строк лога.
+ * base-complete trigger (~2462), чей гейт читал ТОЛЬКО in-memory autoExportFired
+ * и потому всё равно стрелял → «base-complete trigger» + «fired». Порядок строк
+ * лога при этом инвертирован — это и пинится как исторический факт.
  *
- * Поэтому фикс — фиксация инварианта (гейты/порядок триггеров не меняются):
+ * Функционал (дубль при F5) был НЕКОРРЕКТЕН: in-memory латч сбрасывается F5,
+ * session-латч жив, но гейт base-complete триггера его не спрашивал → второй файл
+ * с суффиксом «-base-complete» (дефект Аппендикса v38, узаконенный 09.09.2026).
+ * Хотфикс F5 (v38, core/export-manager.js:1822-1829): гейт триггера спрашивает те
+ * же ТРИ латча (in-memory + session + once), что и пороговый путь — дубля нет.
+ * Поэтому в session-latched кейсе фикстуры «base-complete trigger»/«fired» от
+ * триггера больше не появляются: файр один, порядок H21 сохранён.
+ *
+ * Поэтому фикс — фиксация инварианта (порядок триггеров/логов не меняется):
  *   (а) каноническая сессия (свежий чат): fired стоит ДО already-fired;
- *   (б) session-latched сессия: инверсия задокументирована, fired по-прежнему один.
+ *   (б) session-latched сессия: инверсия задокументирована, дубль устранён F5 —
+ *       триггер не стреляет (skip reason=already-fired без последующего fired).
  */
 
 const fs = require('fs');
@@ -56,11 +66,22 @@ describe('H21: fixture-сессия логов — fired ДО already-fired', ()
     expect(log).not.toContain(TRIGGER);
   });
 
-  test('session-latched сессия: инверсия задокументирована, файл всё равно один', () => {
+  test('session-latched сессия: инверсия задокументирована; хотфикс F5 — дубля нет, триггер не стреляет', () => {
     const log = sections['session-latched'].join('\n');
-    expect(log.indexOf(ALREADY)).toBeLessThan(log.indexOf(FIRED)); // наблюдаемая аномалия
-    expect(log).toContain(TRIGGER);
-    expect(sections['session-latched'].filter(function (l) { return l.indexOf(FIRED) === 0; })).toHaveLength(1);
+    const iFired = log.indexOf(FIRED);
+    const iAlready = log.indexOf(ALREADY);
+    const iTrigger = log.indexOf(TRIGGER);
+    // исторический пин H21: пороговый гейт (session-латч) логируется РАНЬШЕ блока триггера
+    expect(iAlready).toBeGreaterThanOrEqual(0);
+    // хотфикс F5 (v38): при живом session-латче base-complete trigger НЕ срабатывает —
+    // строки «base-complete trigger» и «fired» от триггера в логе отсутствуют вовсе
+    expect(iTrigger).toBe(-1);
+    expect(iFired).toBe(-1);
+    expect(iTrigger).toBeLessThan(iAlready);        // порядок H21 сохранён (исторический факт)
+    // дубля файла с суффиксом -base-complete больше нет (дефект Аппендикса v38 устранён)
+    expect(log).not.toContain('-base-complete');
+    expect(sections['session-latched'].filter(function (l) { return l.indexOf(FIRED) === 0; })).toHaveLength(0);
+    expect(sections['session-latched'].filter(function (l) { return l.indexOf(ALREADY) === 0; })).toHaveLength(1);
   });
 });
 
@@ -93,8 +114,15 @@ describe('H21: пин порядка в core/content.js', () => {
     expect(src).toContain('Пин порядка логов: tests/autoexport-log-order-h21.test.js.');
     // пороговый путь: in-memory ИЛИ session-латч
     expect(src).toContain('P.isFiredInSession(sessionFiredCache, siteName, cid)');
-    // base-complete гейт: только in-memory (это и есть причина инверсии)
-    expect(src).toContain('return Pbc.getAutoExportFired(autoExportFired, (currentAdapter && currentAdapter.siteName) || \'\', cid);');
+    // хотфикс F5 (v38): base-complete гейт — дизъюнкция ТРЁХ латчей, тождественная пороговому
+    // пути (in-memory ИЛИ session ИЛИ once). До хотфикса гейт читал ТОЛЬКО in-memory латч —
+    // при F5 in-memory сброшен, но session-латч жив → дубль «-base-complete» (falsified
+    // приёмка 13.2: step-13.2-artifacts.md:103 ложно заявила «повторный экспорт запрещён» —
+    // дубль происходил; после хотфикса F5 — устранён).
+    expect(src).toContain('F5 (v38): base-complete триггер — дизъюнкция трёх латчей, тождественная пороговому пути');
+    expect(src).toContain('return Pbc.getAutoExportFired(autoExportFired, siteBc, cid) ||');
+    expect(src).toContain('Pbc.isFiredInSession(sessionFiredCache, siteBc, cid)');
+    expect(src).toContain('aiCmAutoExportFiredOnce[siteBc + \'|\' + cid] === 1');
     // автоэкспорт-гейты и триггеры не изменены
     expect(src).toContain('function maybeAutoExport(');
     expect(src).toContain('shouldSkipAutoExport');
