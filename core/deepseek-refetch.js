@@ -159,7 +159,7 @@
     // v11 (O-17): берём переданный URL ТОЛЬКО если он про этот же чат, иначе — канонический
     var cleanUrl = historyUrlForConv(originalUrl, convId) || historyRefetchUrl();
     diagMark('refetch-full-history', { conv: String(convId).slice(0, 8) });   // O-18 (ИЗМЕРЕНИЕ)
-    originalFetch(cleanUrl, {
+    originalFetch.call(window, cleanUrl, {
       method: 'GET',
       headers: authHeaders || {}
     }).then(function (r) {

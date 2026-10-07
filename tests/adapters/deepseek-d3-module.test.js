@@ -35,6 +35,11 @@
  *       lastAuthHeaders) и refetchFullHistory (cross-conv гард + ingest принятого снимка).
  *       Плюс rw-семантика: чтение состояния идёт из ЖИВЫХ переменных ядра (запись K9
  *       видна модулю), а не из копий, снятых на момент связки.
+ *   S6. Байнд fetch-контекста (FIX-REFETCH-FETCH-BINDING): единственная точка вызова
+ *       дозапроса зовёт originalFetch с this === window. Мок window.fetch ставится
+ *       Object.defineProperty и объявлен STRICT — bare-вызов даёт this === undefined и
+ *       падает с Illegal invocation ровно как встроенный fetch браузера, поэтому пин
+ *       ловит регресс без живого браузера.
  */
 
 const vm = require('vm');
@@ -71,6 +76,9 @@ const FORWARDERS = ['convIdFromHistoryUrl', 'convIdFromCompletionBody', 'guardCh
 // ---- блоки K8, перенесённые в модуль дословно (S3) ----------------------------------
 // Эталон — SHA-256 блока в core/deepseek-intercept.js на 2fb6ffe (HEAD момента D.3),
 // строки 1680-1796 (пустые строки-разделители между блоками в модуль не уезжают).
+// FIX-REFETCH-FETCH-BINDING: у блока refetchFullHistory пин обновлён под хотфикс
+// (`originalFetch.call(window, …`) — это ЕДИНСТВЕННОЕ расхождение с 2fb6ffe, см. запись
+// блока ниже; остальные 7 пинов по-прежнему равны базовым.
 // Хэши сняты с git-блоба и ЗАФИКСИРОВАНЫ здесь: сьют не читает git-историю (CI клонирует
 // shallow), поэтому байтовая идентичность против базы доказывается двумя независимыми
 // способами — этими пинами (текущий модуль) и tools/verify-deepseek-refetch.js
@@ -108,9 +116,14 @@ const MOVED_BLOCKS = [
     sha: '04012249c4b42d341f8451121c92d134b1990b03c3745a6a2816cd3177b8f658'
   },
   {
+    // FIX-REFETCH-FETCH-BINDING (хотфикс после D.8): SHA отличается от эталона 2fb6ffe
+    // РОВНО на одну точку — вызов дозапроса стал `originalFetch.call(window, cleanUrl, {`
+    // вместо `originalFetch(cleanUrl, {` (встроенный window.fetch требует this === window,
+    // иначе TypeError: Illegal invocation — прецедент FIX-PAGINATION-FETCH-BINDING, v26).
+    // Остальные 7 блоков — байт-в-байт с 2fb6ffe; тело функции не менялось.
     name: 'refetchFullHistory', start: '  // Тихий повторный запрос полной истории БЕЗ cache_version/cache_reset_at',
     sigs: ['  function refetchFullHistory(originalUrl, authHeaders, convId) {'],
-    sha: 'a130ce174b206f9f14839c350de5f47ea614f6053aef417dfd7bd71e01ddaf8f'
+    sha: '7ebae8e08cd120bb522c19e83c2ca2eea79f769598d48342c1ec4b721e6bbeea'
   },
   {
     name: 'scheduleHistoryRefetch', start: '  // Таймер-дозапрос после смены чата (если сайт не прислал историю сам)',
@@ -515,5 +528,55 @@ describe('Step D.3: core/deepseek-refetch.js — контракт модуля R
     expect(probe.st.lastHistoryUrl).toContain('chat_session_id=conv12345678');
     expect(probe.st.historyRefetchDone).toBe(true);
     expect(probe.reads['lastAuthHeaders']).toBeGreaterThan(0);   // чтение живой переменной, не копии
+  });
+
+  // FIX-REFETCH-FETCH-BINDING (прецедент FIX-PAGINATION-FETCH-BINDING, аппендикс v26):
+  // встроенный window.fetch — функция со [[ThisMode]] = strict, поэтому вызов «голым»
+  // именем (originalFetch(url, opts)) даёт this === undefined и TypeError
+  // «Failed to execute 'fetch' on 'Window': Illegal invocation»; sloppy-подстановки
+  // globalThis у нативных функций НЕТ. Живой симптом: при SPA-переходе на чате DeepSeek
+  // дозапрос истории не уходил → экспорт неполный. Пин падает на bare-вызове.
+  test('S6: FIX-REFETCH-FETCH-BINDING — originalFetch зовётся с this === window', async () => {
+    const box = makeSandbox();
+    // Мок window.fetch ставится через Object.defineProperty и объявлен STRICT (строгость
+    // лексическая: функция, созданная в strict-коде, strict). Он бросает ровно тот же
+    // TypeError, что браузер, если this !== window, и записывает фактический this.
+    const seen = [];
+    box.sandbox.REC = seen;
+    box.sandbox.SNAP = JSON.stringify(SNAPSHOT);
+    const fetchMock = vm.runInContext(
+      '(function () { "use strict"; return function (url, opts) {' +
+      '  REC.push({ self: this, isWindow: this === window });' +
+      '  if (this !== window) throw new TypeError("Failed to execute \'fetch\' on \'Window\': Illegal invocation");' +
+      '  return Promise.resolve({ ok: true, json: function () { return Promise.resolve(JSON.parse(SNAP)); } });' +
+      '}; }())', box.sandbox, { filename: 'window.fetch (strict mock)' });
+    Object.defineProperty(box.sandbox, 'fetch', { value: fetchMock, writable: true, configurable: true });
+
+    loadModule(box);
+    const Fn = box.sandbox.AiCmDeepseekRefetch;
+    const probe = makeProbe();
+    probe.st.originalFetch = box.sandbox.fetch;   // как ядро: ро-геттер отдаёт снимок window.fetch
+    Fn.__bind(probe.D);
+
+    Fn.refetchFullHistory('https://chat.deepseek.com/api/v0/chat/history_messages?chat_session_id=conv12345678',
+      { Authorization: 'Bearer x' }, probe.st.currentConvId);
+
+    expect(seen).toHaveLength(1);                       // вызов дошёл до window.fetch
+    // this === window проверяется ВНУТРИ реалма песочницы: снаружи contextified-глобал
+    // отдаётся прокси, и строгое сравнение с объектом-песочницей дало бы ложный минус.
+    const innerWindow = vm.runInContext('window', box.sandbox);
+    expect(seen[0].isWindow).toBe(true);                // this === window там, где идёт вызов
+    expect(seen[0].self).toBe(innerWindow);             // тот же глобальный объект
+    expect(seen[0].self).not.toBeUndefined();           // не bare-вызов (this не потерян)
+    expect(box.logs.join('\n')).not.toContain('WARN');  // ни Illegal invocation, ни ошибки дозапроса
+    await flush();
+    expect(probe.calls.ingest).toBe(1);                 // снимок доехал до ingestHistory ядра
+
+    // source-пин: единственная точка вызова дозапроса — с явным window-контекстом
+    expect(MODULE_SRC).toContain('originalFetch.call(window, cleanUrl, {');
+    expect(MODULE_SRC).not.toContain('originalFetch(cleanUrl');
+    // в модуле ровно одна точка вызова originalFetch (комментарий строки 156 — с пробелом,
+    // поэтому его regex не ловит: bare-вызов `originalFetch(` не вернулся бы незамеченным)
+    expect(MODULE_SRC.match(/originalFetch[.(]/g)).toHaveLength(1);
   });
 });
