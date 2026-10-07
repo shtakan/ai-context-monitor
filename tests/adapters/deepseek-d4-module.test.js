@@ -139,13 +139,21 @@ const KERNEL_KEPT = [
 ];
 
 // ---- вызовы в ядре, которые обязаны остаться на месте (S3) --------------------------
+// Step D.8: шесть из семи строк — вызовы K3/K4 внутри тела K5 (СЕКЦИЯ 8), которое уехало
+// в core/deepseek-ingest.js БАЙТ-В-БАЙТ; поэтому они проверяются по конкатенации
+// модулей и ядра (INGEST_CALLS), а не по ядру. Резолв имён не изменился: ядро раздаёт
+// те же шесть форвардеров D.4 контрактом __bind модуля INGEST.
 const KERNEL_CALLS = [
+  "var sseReasoning = REASONING_ENABLED ? streamFragmentText('THINK') : '';"
+];
+
+// Вызовы K3/K4 внутри вынесенного тела K5 — ищутся в конкатенации (ядро + модули).
+const INGEST_CALLS = [
   'var chainResult = buildActiveChain(chatSession, messagesById);',
   'var text = collectTurnText(fragments, ch.role);',
   "var chReasoning = REASONING_ENABLED ? collectTurnReasoning(fragments, ch.role) : '';",
   'text: composeTurnText(text, mergedReasoning),',
   "tailTurn.text = composeTurnText(tailTurn.answer || '', tailTurn.reasoning);",
-  "var sseReasoning = REASONING_ENABLED ? streamFragmentText('THINK') : '';",
   'modelSlug: getModelSlug(ch.thinking_enabled === true, chatModelSignals),'
 ];
 
@@ -345,6 +353,8 @@ describe('Step D.4: core/deepseek-parse.js — контракт модуля ц�
     expect(fwdCount).toBe(6);
     // вызовы в ядре не сдвинуты: склейка базы, композиция ходов, SSE-финализация, slug модели
     KERNEL_CALLS.forEach(function (l) { expect(KERNEL_SRC).toContain(l); });
+    // вызовы K3/K4 внутри вынесенного тела K5 (Step D.8) — по конкатенации модулей+ядра
+    INGEST_CALLS.forEach(function (l) { expect(DS.deepseekSource).toContain(l); });
     // hidden-пометка базы — в модуле EMIT с D.6 (тело уехало байт-в-байт): ищем в конкатенации
     MODULE_CALLS.forEach(function (l) { expect(DS.deepseekSource).toContain(l); });
     // контракт D.1 не сломан: диагностика получает те же имена (теперь — форвардеры D.4)

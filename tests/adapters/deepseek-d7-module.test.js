@@ -45,7 +45,7 @@
  *   S4. Живая семантика K9: fetch-хук (история → guard/ingest, MERGE-путь → refetch,
  *       completion → параметры потока, settings → ingestModelSettings) и XHR-хук (зеркало
  *       fetch + setRequestHeader-копилка, load → ingest/parseSSE/settings).
- *   S5. Проводка: js[] строго после deepseek-emit.js и перед ядром, id -v9 + unregister -v8,
+ *   S5. Проводка: js[] строго после deepseek-emit.js и перед ядром, id -v10 + unregister -v9,
  *       helper MODULES, счётчик release.yml, размеры ядра/модуля, K0 не тронут.
  */
 
@@ -593,24 +593,24 @@ describe('Step D.7: core/deepseek-net.js — контракт модуля NETWO
     expect(JSON.stringify(probe.writes)).toBe(writesBefore);
   });
 
-  test('S5: проводка — js[] после emit и перед ядром, id -v9 + unregister -v8, helper', function () {
+  test('S5: проводка — js[] после emit и перед ядром, id -v10 + unregister -v9, helper', function () {
     // модуль строго перед ядром и строго после emit
     expect(DS.SOURCES.indexOf('core/deepseek-net.js'))
       .toBeLessThan(DS.SOURCES.indexOf('core/deepseek-intercept.js'));
     expect(DS.SOURCES.indexOf('core/deepseek-emit.js'))
       .toBeLessThan(DS.SOURCES.indexOf('core/deepseek-net.js'));
     expect(DS.MODULES).toContain('core/deepseek-net.js');
-    // регистрация ядра: id -v9, снятие -v8, js[] с модулем, лог (v9)
+    // регистрация ядра: id -v10, снятие -v8, js[] с модулем, лог (v9)
     expect(KERNEL_SRC).toContain('aiCmDeepseekNet');
     const bg = DS.readSource('core/background.js');
-    expect(bg).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-intercept.js']");
-    expect(bg).toContain("ids.indexOf('ai-cm-deepseek-intercept-v9') === -1");
-    expect(bg).toContain("unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v8'] })");
-    expect(bg).toContain('(v9) зарегистрирован');
+    expect(bg).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-ingest.js', 'core/deepseek-intercept.js']");
+    expect(bg).toContain("ids.indexOf('ai-cm-deepseek-intercept-v10') === -1");
+    expect(bg).toContain("unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v9'] })");
+    expect(bg).toContain('перехватчик DeepSeek v10 зарегистрирован');
     // release.yml: счётчик MAIN-world файлов равен факту (33 = 5 бандлов + 28 модулей/ядер)
     const yml = DS.readSource('.github/workflows/release.yml');
-    expect((yml.match(/33 MAIN-world/g) || [])).toHaveLength(2);
-    expect(yml).not.toContain('32 MAIN-world');
+    expect((yml.match(/34 MAIN-world/g) || [])).toHaveLength(2);
+    expect(yml).not.toContain('33 MAIN-world');
     // модуль: UTF-8 без BOM, LF, хвостовой \n; каркас
     const buf = require('fs').readFileSync(require('path').join(DS.ROOT, 'core/deepseek-net.js'));
     expect(buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF).toBe(false);

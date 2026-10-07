@@ -265,18 +265,21 @@ describe('Step D.1: core/deepseek-diag.js — контракт модуля ди
       '// ===== СЕКЦИЯ 13: ДИАГНОСТИЧЕСКИЙ ДАМП'
     ];
     inModule.forEach(function (l) { expect(MODULE_SRC).toContain(l); });
-    // вызовы и функциональные секции остались в ядре — их пины не тронуты
+    // вызовы и функциональные секции остались в ядре — их пины не тронуты.
+    // Step D.8: `diagMark('ingest-enter', {` уехал вместе с телом K5 в
+    // core/deepseek-ingest.js, поэтому строка ищется в конкатенации модулей+ядра
+    // (как строки K9 в сьюте D.3); остальные пины — по-прежнему в ядре.
     const inKernel = [
       'function ingestHistory(jsonBody) {',
       'function finishSseStream() {',
       'var SSE_FRAGMENT_TYPES = {',
       "if (typeof diagMark === 'function' && typeof diagOn === 'function' && diagOn()) {",
-      "diagMark('ingest-enter', {",
       "console.log('[deepseek-intercept] перехватчик DeepSeek v11 установлен",
       'function diagMark(kind, data) { aiCmDeepseekDiag.diagMark(kind, data); }',
       'function diagOn() { return aiCmDeepseekDiag.diagOn(); }'
     ];
     inKernel.forEach(function (l) { expect(KERNEL_SRC).toContain(l); });
+    expect(DS.deepseekSource).toContain("diagMark('ingest-enter', {");
     // K10-тел в ядре больше нет (иначе пины-дубли), а тела модуля — без префиксов D.
     expect(KERNEL_SRC).not.toContain('// ===== СЕКЦИЯ 13: ДИАГНОСТИЧЕСКИЙ ДАМП');
     // объявлений состояния колец в ядре нет (упоминания в шапке-комментарии — не в счёт)
@@ -289,9 +292,9 @@ describe('Step D.1: core/deepseek-diag.js — контракт модуля ди
     // порядок в js[]: модули строго перед ядром (пин дублируется wiring-сьютом;
     // Step D.2 добавил в карту core/deepseek-netsync.js, Step D.3 — core/deepseek-refetch.js,
     // Step D.4 — core/deepseek-parse.js, Step D.5 — core/deepseek-conv.js,
-    // Step D.6 — core/deepseek-emit.js, Step D.7 — core/deepseek-net.js;
-    // порядок = порядок js[])
-    expect(DS.MODULES).toEqual(['core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js']);
+    // Step D.6 — core/deepseek-emit.js, Step D.7 — core/deepseek-net.js,
+    // Step D.8 — core/deepseek-ingest.js; порядок = порядок js[])
+    expect(DS.MODULES).toEqual(['core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-ingest.js']);
     expect(DS.SOURCES.indexOf('core/deepseek-diag.js'))
       .toBeLessThan(DS.SOURCES.indexOf('core/deepseek-intercept.js'));
   });

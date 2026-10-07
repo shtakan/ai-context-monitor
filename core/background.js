@@ -140,7 +140,7 @@ async function ensureInterceptor() {
     // Почему id сменён, а не переиспользован: MV3 registerContentScripts НЕ перечитывает
     // js[] под уже существующим id, унаследованным от прежней версии расширения —
     // без смены id core/gemini-hidden-scroll.js не доехал бы до обновившихся
-    // пользователей (прецедент — DeepSeek, id 'ai-cm-deepseek-intercept-v9' ниже).
+    // пользователей (прецедент — DeepSeek, id 'ai-cm-deepseek-intercept-v10' ниже).
     // Шаг 5 использует ровно тот же приём: id -v3, а прежние -v2 и legacy снимаются ниже.
     // Шаг 6 (кластер парсеров кадра, core/gemini-parse.js) id НЕ меняет: файл добавлен в js[]
     // уже зарегистрированного -v3. Для профиля, где -v3 зарегистрирован РАНЬШЕ (например,
@@ -226,7 +226,10 @@ async function ensureInterceptor() {
     // turnsSnapshot и мост ai-cm-turns-snap-request). Step D.7: бамп -v8 → -v9 —
     // добавлен core/deepseek-net.js (кластер NETWORK: СЕКЦИИ 11/12 — обёртка window.fetch
     // и обёртки XMLHttpRequest.prototype.open/send/setRequestHeader + копилки
-    // lastAuthHeaders/lastHistoryUrl). Порядок в js[] для D.5-D.7 не
+    // lastAuthHeaders/lastHistoryUrl). Step D.8: бамп -v9 → -v10 — добавлен
+    // core/deepseek-ingest.js (кластер INGEST: СЕКЦИЯ 8 — приёмка авторитетного сетевого
+    // снимка history_messages, сборка turnsMap по ходам, детектор усечения цепочки с
+    // тихим дозапросом и режим экспортного дозапроса). Порядок в js[] для D.5-D.8 не
     // критичен (у модулей нет нижестоящих зависимостей), но модули поставлены ПОСЛЕ
     // parse/conv и ПЕРЕД ядром — как D.4; порядок зафиксирован пинами
     // qwen-provider-wiring и deepseek-order. Для D.7 существенно, что связка модуля
@@ -235,22 +238,27 @@ async function ensureInterceptor() {
     // Без бампа id у уже установленного расширения Chrome остался бы прежний
     // registration, js[] не перечитался бы, и ядро работало бы без модуля: связка
     // заполнила бы форвардеры немыми заглушками — диагностика, сетевой дозапрос,
-    // URL-гигиена, разбор базы, детектор смены чата, EMIT и перехват сетевого слоя
-    // (fetch/XHR) выключились бы целиком до миграции.
-    // Прежний -v8 снимается ниже (тихий catch: чистая установка его не имеет).
-    if (ids.indexOf('ai-cm-deepseek-intercept-v9') === -1) {
+    // URL-гигиена, разбор базы, детектор смены чата, EMIT, перехват сетевого слоя
+    // (fetch/XHR) и приёмка истории (turnsMap/полнота базы) выключились бы целиком
+    // до миграции.
+    // Прежний -v9 снимается ниже (тихий catch: чистая установка его не имеет).
+    if (ids.indexOf('ai-cm-deepseek-intercept-v10') === -1) {
       try {
-        await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v8'] });
+        await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v9'] });
       } catch (eUnregDeepseek) { }
-      await registerSafe('ai-cm-deepseek-intercept-v9', {
-        id: 'ai-cm-deepseek-intercept-v9',
+      await registerSafe('ai-cm-deepseek-intercept-v10', {
+        id: 'ai-cm-deepseek-intercept-v10',
         matches: ['https://chat.deepseek.com/*'],
-        js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-intercept.js'],
+        js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-ingest.js', 'core/deepseek-intercept.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false
       });
-      console.log('AI Context Monitor: перехватчик DeepSeek (v9) зарегистрирован (мир сайта, document_start)');
+      // Версия в логе — БЕЗ «(vN)»-формы намеренно: пины Gemini
+      // (gemini-oracle/overlay/archive-module) глобально проверяют отсутствие в этом файле
+      // их ПРЕЖНЕГО лога (скобочная форма с номером -v10) — это их собственный сдвиг id
+      // -v10 → -v11, а не признак отката DeepSeek. Версия DeepSeek в логе сохранена.
+      console.log('AI Context Monitor: перехватчик DeepSeek v10 зарегистрирован (мир сайта, document_start)');
     }
 
     // перехватчик Claude

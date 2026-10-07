@@ -337,281 +337,23 @@ if (typeof window !== 'undefined') {
   // выше), REASONING_ENABLED ОСТАЛСЯ: его читают K5/K7 и контракт диагностики D.1.
   // Форвардеры ядра (хойстятся, вызовы выше по файлу не тронуты) — в конце этого IIFE.
 
-  // ===== СЕКЦИЯ 8: ПАРСИНГ history_messages =====
-  // v6: детектор усечения активной цепочки + однократный тихий дозапрос полной истории
-  // v12 (O-18, фаза 2): ingestMode === 'export-sync' — приёмка снимка, запрошенного ПЕРЕД
-  // композицией файла: рекурсивные дозапросы не запускаются (таймаут экспорта уже идёт),
-  // а вердикт полноты не понижается. Обычный путь (ingestMode === '') не меняется —
-  // сигнатура функции прежняя, режим передаётся состоянием, а не аргументом.
+  // ===== Step D.8: K5 (INGEST) вынесен в core/deepseek-ingest.js =====
+  // Здесь были СЕКЦИЯ 8 целиком: ingestHistory — приёмка авторитетного сетевого снимка
+  // history_messages (v6-детектор усечения цепочки с однократным тихим дозапросом,
+  // v11/O-17 авторитетно пустая база и MERGE-ветка пустого кеша, v12/O-18 режим
+  // экспортного дозапроса, сборка turnsMap по ходам, снимок сети и вердикт полноты) —
+  // 275 строк (340-614). Тело живёт в модуле (PURE-зона заголовка и BIND-зона внутри
+  // `with (D)` — см. шапку core/deepseek-ingest.js) и читает состояние ядра через
+  // контракт __bind: 15 fn + 10 rw + 8 ro = 33 имени; связка — в конце этого IIFE,
+  // форвардер ingestHistory (function declaration — хойстится) раздаёт тело по прежнему
+  // имени. Прямых вызовов K5 в ядре не осталось вовсе: значением форвардера пользуются
+  // контракты D.2 (приёмка экспортного снимка), D.3 (приёмка ответа тихого дозапроса
+  // в refetchFullHistory) и D.7 (копилка XHR: история → ingest). Объявления
+  // ingestMode/exportSyncTruncated — НИЖЕ: их ставит и снимает applyExportNetSnapshot
+  // модуля D.2, а читает тело K5 (rw-пары D.2/D.8); при выносе var в модуль ядро
+  // читало бы НЕЯВНЫЕ ГЛОБАЛЫ (урок D.5 на lastDispatchSig).
   var ingestMode = '';
   var exportSyncTruncated = false;   // v12 (O-18): снимок экспортного дозапроса оказался усечён
-  function ingestHistory(jsonBody) {
-    var exportSync = (ingestMode === 'export-sync');
-    try {
-      if (jsonBody.code !== 0) return;
-      var bizData = jsonBody.data && jsonBody.data.biz_data;
-      if (!bizData) return;
-      var chatSession = bizData.chat_session;
-      var chatMessages = bizData.chat_messages;
-      if (!chatSession || !Array.isArray(chatMessages)) return;
-
-      // O-18 (ИЗМЕРЕНИЕ): вход в ingestHistory + сырьё ответа history_messages (кольцо).
-      diagMark('ingest-enter', {
-        chatMessages: chatMessages.length,
-        is_empty: chatSession.is_empty === true,
-        currentMessageId: chatSession.current_message_id != null
-      });
-      diagHistRecord(jsonBody, 'ingestHistory');
-
-      // Помечаем «ответ для текущего чата обработан» — ДО buildActiveChain и ДО return по пустой цепочке
-      lastLoadedConvId = currentConvId;
-
-      // Строим Map<message_id, msg>
-      var messagesById = {};
-      for (var i = 0; i < chatMessages.length; i++) {
-        var msg = chatMessages[i];
-        if (msg && msg.message_id != null) {
-          messagesById[msg.message_id] = msg;
-        }
-      }
-
-      // Восстанавливаем активную цепочку (ловушка №1)
-      // v6: получаем { chain, truncated } вместо просто массива
-      var chainResult = buildActiveChain(chatSession, messagesById);
-      var chain = chainResult.chain;
-      var truncated = chainResult.truncated;
-
-      // v11 (O-17): авторитетно ПУСТАЯ база — сервер явно говорит, что чат пуст
-      // (is_empty=true), либо не отдал ни одного сообщения и не назвал активный узел.
-      // Это ЧАСТЬ протокола (новый чат, созданный SPA-переходом), а не «полнота не доказана»:
-      // вся история такого чата = 0 ходов, курсора пагинации у DeepSeek нет вовсе.
-      var baseEmptyAuthoritative = (chatMessages.length === 0) &&
-        (chatSession.is_empty === true || chatSession.current_message_id == null);
-
-      // v11 (O-17): MERGE/cache-ответ (пустой chat_messages при is_empty!==true) —
-      // снимок НЕ авторитетен. В ветках fetch/XHR этот случай ловит обёртка, но путь тихого
-      // дозапроса после SPA-смены чата (scheduleHistoryRefetch → refetchFullHistory) приходит
-      // сюда напрямую: раньше он стирал turnsMap и молча выходил. Теперь — тот же тихий
-      // дозапрос полной истории без cache_version/cache_reset_at, база не трогается.
-      if (!chain.length && chatMessages.length === 0 && !baseEmptyAuthoritative && !historyRefetchDone && !exportSync) {
-        historyRefetchDone = true;
-        diagMark('ingest-branch-MERGE-refetch', { chainLen: 0, chatMessages: 0 });   // O-18 (ИЗМЕРЕНИЕ)
-        console.log('[deepseek-intercept] пустой кеш (MERGE) без авторитетной пустоты → тихий дозапрос полной истории (без cache_version)');
-        refetchFullHistory(lastHistoryUrl, lastAuthHeaders, currentConvId);
-        return;
-      }
-
-      if (!chain.length) {
-        // O-18 (ИЗМЕРЕНИЕ): какая именно ветка пустой цепочки сработала.
-        diagMark(baseEmptyAuthoritative ? 'ingest-branch-EMPTY-AUTH' : 'ingest-branch-EMPTY-NONAUTH', {
-          chatMessages: chatMessages.length,
-          is_empty: chatSession.is_empty === true,
-          currentMessageId: chatSession.current_message_id != null
-        });
-        // v11 (O-17): ЕДИНЫЙ критерий полноты для обеих веток. Пустая цепочка больше не
-        // означает «полнота не доказана»: авторитетно пустая база — полная база (0 ходов).
-        // Вердикт обязателен именно здесь: realtime-эмиты наследуют histCompletion, и без
-        // него на SPA-созданном чате baseComplete не наступал НИКОГДА → гейт O-16 «defer до
-        // base-complete» разрешался только 60s-таймаутом (as-is + [LOW CONFIDENCE]_).
-        if (baseEmptyAuthoritative) {
-          histCompletion.reachedRoot = false;
-          histCompletion.historyComplete = true;
-          histCompletion.baseEmpty = true;
-          console.log('[deepseek-intercept] ✓ база пустая и авторитетная (чат без ходов): история ПОЛНАЯ по сети (0 ходов)');
-          // Поверх уже собранных live-ходов (дозапрос пришёл после первого обмена) полноту
-          // 0→1 надо отдать content.js СРАЗУ: пустой снимок он игнорирует (`!detail.text`),
-          // а следующий непустой EMIT может прийти нескоро — и экспорт ушёл бы по 60s-таймауту.
-          if (Object.keys(turnsMap).length > 0) {
-            // O-22 (ИЗМЕРЕНИЕ-2): маркер ТОЧКИ диспатча ai-cm-full-history (site=S560).
-            try {
-              if (typeof diagMark === 'function' && typeof diagOn === 'function' && diagOn()) {
-                diagMark('o22-dispatch-site', {
-                  site: 'S560', ts: Date.now(),
-                  count: Object.keys(turnsMap).length, textLen: '(вне области)'
-                });
-              }
-            } catch (eO22s560) { }
-            emitBaseSnapshot(lastBaseServerTokens, lastBaseChatMode);
-          }
-        }
-        // turnsMap НЕ трогаем: авторитетно пустой ответ не повод стирать live-ходы
-        // (иначе следующий realtime-финал публикует СХЛОПНУВШУЮСЯ базу — живой лог: msgs=1..2
-        // в записи истории при 4 ходах в чате).
-        return;
-      }
-
-      // v6: ДЕТЕКТОР УСЕЧЕНИЯ — если цепочка оборвана и дозапрос ещё не делался
-      if (truncated && !historyRefetchDone && !exportSync) {
-        historyRefetchDone = true;
-        // O-18 (ИЗМЕРЕНИЕ): ветка «цепочка оборвана → дозапрос».
-        diagMark('ingest-branch-TRUNCATED-refetch', { chainLen: chain.length, chatMessages: chatMessages.length });
-        // НЕ помечаем loggedHistory = true — лог и диагностический дамп сработают на полной истории
-        console.log('[deepseek-intercept] кеш усечён (цепочка оборвана) → тихий дозапрос полной истории (без cache_version)');
-        refetchFullHistory(lastHistoryUrl, lastAuthHeaders, currentConvId);
-        return; // не обрабатываем усечённый ответ — ждём полный (собранные live-ходы сохранены)
-      }
-      // v12 (O-18, фаза 2): в режиме экспортного дозапроса усечённый снимок НЕ принимается.
-      // Экспорт не имеет права стать ХУЖЕ live-базы: сброс turnsMap по обрезанной цепочке
-      // потерял бы ранние ходы. Такой ответ — как «сети нет»: база не тронута, live-путь.
-      if (truncated && exportSync) {
-        exportSyncTruncated = true;
-        diagMark('ingest-branch-TRUNCATED-export-sync', { chainLen: chain.length, chatMessages: chatMessages.length });
-        console.log('[deepseek-intercept] экспорт: сетевой снимок усечён (цепочка оборвана) → база не тронута, прежний live-путь');
-        return;
-      }
-
-      // v11 (O-17): снимок ПРИНЯТ как авторитетный — только теперь СБРОС и пересборка
-      // (история = полный авторитетный снимок, условие 3 из рецензии).
-      turnsMap = {};
-      orderCounter = 0;
-      // (attachTokens/attachBreak на 1-м этапе не трогаем — всегда 0)
-
-      // v7: честная полнота — true, только если цепочка реально дошла до корня.
-      // Дозапрос уже либо выполнен (путь выше), либо не нужен (truncated=false).
-      histCompletion.reachedRoot = chainResult.reachedRoot;
-      histCompletion.historyComplete = chainResult.reachedRoot && !chainResult.truncated;
-      histCompletion.baseEmpty = false;   // v11 (O-17): база непустая
-
-      // chatMode — модель чата (expert/default/null), не влияет на выбор модели
-      var chatMode = chatSession.model_type || '';
-      // v13: сигналы нового контракта из chat_session (model/model_type/conversation_mode)
-      // + активная конфигурация из /client/settings (name:"Instant"), если уже захвачена.
-      var chatModelSignals = {
-        modelPresent: Object.prototype.hasOwnProperty.call(chatSession, 'model'),
-        model: chatSession.model,
-        modelType: chatSession.model_type,
-        conversationMode: chatSession.conversation_mode,
-        configName: sseConfigName
-      };
-
-      // Заполняем turnsMap: модель ПОХОДОВО по thinking_enabled.
-      // v9 (O-15): ход = user + assistant(reasoning+answer). Узел-assistant БЕЗ ответа
-      // (фрагменты только THINK — «пара assi+assi» из живого лога) отдельным ходом не
-      // становится: его рассуждение приклеивается к следующему assistant-узлу, а если
-      // следующего нет — к предыдущему (у которого ответ уже есть). В v8 такой узел
-      // отбрасывался (`if (!text) continue`) — reasoning терялся, а пара сбивалась.
-      var pendingReasoning = '';
-      var lastAssistantId = null;
-      for (var c = 0; c < chain.length; c++) {
-        var ch = chain[c];
-        var chId = String(ch.message_id);
-        if (turnsMap[chId]) continue;          // дедуп
-        var fragments = Array.isArray(ch.fragments) ? ch.fragments : [];
-        var text = collectTurnText(fragments, ch.role);
-        var chRole = (!ch.role) ? 'unknown' : (ch.role === 'USER' ? 'user' : (ch.role === 'ASSISTANT' ? 'assistant' : 'unknown'));
-        // v8 (O-7): reasoning хода — фрагменты THINK; в текст уходит секциями [REASONING]/[ANSWER]
-        var chReasoning = REASONING_ENABLED ? collectTurnReasoning(fragments, ch.role) : '';
-        if (chRole === 'assistant') {
-          if (!text) {
-            // reasoning без ответа: НЕ отдельное сообщение и не потеря
-            if (chReasoning) {
-              if (lastAssistantId && turnsMap[lastAssistantId]) {
-                var prevTurn = turnsMap[lastAssistantId];
-                prevTurn.reasoning = (prevTurn.reasoning || '') + chReasoning;
-                prevTurn.text = composeTurnText(prevTurn.answer || '', prevTurn.reasoning);
-              } else {
-                pendingReasoning += chReasoning;   // ждём ответ следующего assistant-узла
-              }
-            }
-            continue;
-          }
-          var mergedReasoning = pendingReasoning + chReasoning;
-          pendingReasoning = '';
-          turnsMap[chId] = {
-            text: composeTurnText(text, mergedReasoning),
-            answer: text,                        // v9: ответ хода (для пересборки при хвостовом reasoning)
-            reasoning: mergedReasoning,
-            modelSlug: getModelSlug(ch.thinking_enabled === true, chatModelSignals),
-            order: orderCounter++,
-            ts: ch.inserted_at || 0,
-            role: chRole
-          };
-          lastAssistantId = chId;
-          continue;
-        }
-        if (!text) continue;
-        turnsMap[chId] = {
-          text: composeTurnText(text, chReasoning),
-          answer: text,
-          reasoning: chReasoning,
-          modelSlug: getModelSlug(ch.thinking_enabled === true, chatModelSignals),
-          order: orderCounter++,
-          ts: ch.inserted_at || 0,
-          role: chRole
-        };
-      }
-      // v9 (O-15): «висячий» reasoning в конце цепочки (assistant-узел без ответа и без
-      // последующего ответа) доливаем в последний assistant-ход — отдельного хода нет.
-      if (pendingReasoning && lastAssistantId && turnsMap[lastAssistantId]) {
-        var tailTurn = turnsMap[lastAssistantId];
-        tailTurn.reasoning = (tailTurn.reasoning || '') + pendingReasoning;
-        tailTurn.text = composeTurnText(tailTurn.answer || '', tailTurn.reasoning);
-      }
-
-      // O-18 (ИЗМЕРЕНИЕ): снимок ПРИНЯТ как авторитетный — фиксируем ветку и per-turn
-      // NETWORK-текст (ровно тот, что сейчас лежит в turnsMap и уйдёт в экспорт).
-      diagMark('ingest-branch-ACCEPT', {
-        chainLen: chain.length, chatMessages: chatMessages.length,
-        reachedRoot: chainResult.reachedRoot === true, truncated: chainResult.truncated === true
-      });
-      diagSnapshotNetTurns('ingestHistory');
-      // v12 (O-18, фаза 2): снимок сети ПРИНЯТ — фиксируем его время и состав ходов.
-      // По этим данным экспорт решает, нужен ли дозапрос («снимок старше последнего хода»).
-      netSnapshotAt = Date.now();
-      netTurnIds = {};
-      for (var nk in turnsMap) {
-        if (Object.prototype.hasOwnProperty.call(turnsMap, nk)) netTurnIds[nk] = 1;
-      }
-
-      // УСЛОВИЕ 1: accumulated_token_usage — максимум по всем сообщениям цепочки (накопительное, монотонно растёт)
-      var lastAccumulated = 0;
-      for (var ci = 0; ci < chain.length; ci++) {
-        var at = chain[ci].accumulated_token_usage;
-        if (typeof at === 'number' && at > lastAccumulated) {
-          lastAccumulated = at;
-        }
-      }
-
-      // O-22 (ИЗМЕРЕНИЕ-2): маркер ТОЧКИ диспатча ai-cm-full-history (site=S692).
-      try {
-        if (typeof diagMark === 'function' && typeof diagOn === 'function' && diagOn()) {
-          diagMark('o22-dispatch-site', {
-            site: 'S692', ts: Date.now(),
-            count: Object.keys(turnsMap).length, textLen: '(вне области)'
-          });
-        }
-      } catch (eO22s692) { }
-      var em = emitBaseSnapshot(lastAccumulated, chatMode);
-      if (!loggedHistory) {
-        loggedHistory = true;
-        console.log('[deepseek-intercept] ✓ история загружена: ходов=' + em.count +
-          ', символов=' + em.textLen + ', модель=' + (em.lastModel || '?') +
-          ', serverTokens=' + lastAccumulated +
-          (lastAccumulated > 0 ? ' (' + Math.round(lastAccumulated / MODEL_WINDOW_DEFAULT * 1000) / 10 + '%)' : '') +
-          ', modelMode=' + (chatMode || '(default)') +
-          ', reasoning-ходов=' + em.reasoningTurns);   // v8 (O-7)
-
-        // ДИАГНОСТИЧЕСКИЙ ДАМП — только при включённом флаге aiCmDebug
-        if (isDebugEnabled()) {
-          var diagState = determineState();
-          dumpHistorySnapshot(diagState.state, diagState.reason, {
-            capturePoint: 'ingestHistory',
-            navType: diagState.navType,
-            chatMessages: chatMessages,
-            chatSession: chatSession,
-            chain: chain,
-            lastAccumulated: lastAccumulated,
-            chatMode: chatMode
-          });
-          // O-26: однократный вербатим-дамп usage по ходам (точка — загрузка истории).
-          // Ничего не пишет в turnsMap/состояние, на pct/serverTokens/экспорт не влияет.
-          dumpTurnUsageAtHistoryLoad(chain, chatMessages, chatSession);
-        }
-      }
-    } catch (e) {
-      console.warn('[deepseek-intercept] ошибка парсинга history_messages:', e);
-    }
-  }
 
   // ===== СЕКЦИЯ 9: ПАРСЕР SSE (постфактум и ИНКРЕМЕНТАЛЬНО, ловушка №2) =====
   var sseLastPath = null;
@@ -1825,6 +1567,84 @@ if (typeof window !== 'undefined') {
       get currentConvId() { return currentConvId; }
     });
   }
+
+  // ===== Step D.8: связка модуля INGEST (core/deepseek-ingest.js) =====
+  // Контракт: 15 fn (функции ядра, которые зовёт тело модуля — передаются значением:
+  // форвардеры D.1 diagOn/diagMark/diagHistRecord/diagSnapshotNetTurns/isDebugEnabled/
+  // determineState/dumpHistorySnapshot/dumpTurnUsageAtHistoryLoad, форвардер D.3
+  // refetchFullHistory, форвардеры D.4 buildActiveChain/collectTurnText/
+  // collectTurnReasoning/composeTurnText/getModelSlug и форвардер D.6 emitBaseSnapshot;
+  // все — function declaration, хойстятся), 10 rw (состояние кластера, которое тело
+  // ПЕРЕЗАПИСЫВАЕТ: turnsMap/orderCounter/histCompletion/netSnapshotAt/netTurnIds/
+  // loggedHistory/lastLoadedConvId/historyRefetchDone, плюс режим экспортного ingest
+  // ingestMode/exportSyncTruncated, которым владеет ещё и контракт D.2; без сеттера
+  // запись в sloppy-режиме молча терялась бы — база не пересобиралась бы, вердикт
+  // полноты не поднимался бы, а экспорт принял бы усечённый снимок за авторитетный)
+  // и 8 ro (currentConvId/lastHistoryUrl/lastAuthHeaders/sseConfigName/REASONING_ENABLED/
+  // MODEL_WINDOW_DEFAULT/lastBaseServerTokens/lastBaseChatMode: тело их только читает,
+  // мутации объектов turnsMap/netTurnIds/histCompletion идут по ссылке). Итого 33 имени.
+  var aiCmDeepseekIngest = (typeof window !== 'undefined' && window.AiCmDeepseekIngest) || null;
+  if (aiCmDeepseekIngest) {
+    aiCmDeepseekIngest.__bind({
+      // fn: функции ядра, которые зовёт тело модуля — передаются значением.
+      diagOn: diagOn,
+      diagMark: diagMark,
+      diagHistRecord: diagHistRecord,
+      diagSnapshotNetTurns: diagSnapshotNetTurns,
+      isDebugEnabled: isDebugEnabled,
+      determineState: determineState,
+      dumpHistorySnapshot: dumpHistorySnapshot,
+      dumpTurnUsageAtHistoryLoad: dumpTurnUsageAtHistoryLoad,
+      refetchFullHistory: refetchFullHistory,
+      buildActiveChain: buildActiveChain,
+      collectTurnText: collectTurnText,
+      collectTurnReasoning: collectTurnReasoning,
+      composeTurnText: composeTurnText,
+      getModelSlug: getModelSlug,
+      emitBaseSnapshot: emitBaseSnapshot,
+      // rw: живое состояние кластера, которое тело ПЕРЕЗАПИСЫВАЕТ (get + set).
+      get turnsMap() { return turnsMap; },
+      set turnsMap(v) { turnsMap = v; },
+      get orderCounter() { return orderCounter; },
+      set orderCounter(v) { orderCounter = v; },
+      get histCompletion() { return histCompletion; },
+      set histCompletion(v) { histCompletion = v; },
+      get netSnapshotAt() { return netSnapshotAt; },
+      set netSnapshotAt(v) { netSnapshotAt = v; },
+      get netTurnIds() { return netTurnIds; },
+      set netTurnIds(v) { netTurnIds = v; },
+      get loggedHistory() { return loggedHistory; },
+      set loggedHistory(v) { loggedHistory = v; },
+      get lastLoadedConvId() { return lastLoadedConvId; },
+      set lastLoadedConvId(v) { lastLoadedConvId = v; },
+      get historyRefetchDone() { return historyRefetchDone; },
+      set historyRefetchDone(v) { historyRefetchDone = v; },
+      get ingestMode() { return ingestMode; },
+      set ingestMode(v) { ingestMode = v; },
+      get exportSyncTruncated() { return exportSyncTruncated; },
+      set exportSyncTruncated(v) { exportSyncTruncated = v; },
+      // ro: только чтение — тело K5 эти имена не перезаписывает.
+      get currentConvId() { return currentConvId; },
+      get lastHistoryUrl() { return lastHistoryUrl; },
+      get lastAuthHeaders() { return lastAuthHeaders; },
+      get sseConfigName() { return sseConfigName; },
+      get REASONING_ENABLED() { return REASONING_ENABLED; },
+      get MODEL_WINDOW_DEFAULT() { return MODEL_WINDOW_DEFAULT; },
+      get lastBaseServerTokens() { return lastBaseServerTokens; },
+      get lastBaseChatMode() { return lastBaseChatMode; }
+    });
+  }
+  // Ядро продолжает звать K5 по ПРЕЖНЕМУ имени: форвардер раздаёт тело контрактам D.2
+  // (приёмка сетевого снимка в момент экспорта), D.3 (приёмка ответа тихого дозапроса
+  // в refetchFullHistory) и D.7 (копилка XHR: история → ingest). Форвардер — ИМЕННО
+  // function declaration: хойстится, поэтому fn-передачи ВЫШЕ по файлу (D.2/D.3/D.7)
+  // видят значение. Гард `if (aiCmDeepseekIngest)` — не заглушка, а требование
+  // стандарта: ядро грузится и БЕЗ модуля (контрактные тесты K0/слагов, одиночный
+  // require), и обёртка не имеет права бросать на загрузке; невалидный ответ и отсутствие
+  // модуля дают undefined одинаково (все выходы тела — голый `return;`). Заглушек нет
+  // намеренно: js[] регистрируется атомарно, а песочницы тестов получают конкатенацию
+  // через tests/helpers/deepseek-intercept-source.js.
+  function ingestHistory(jsonBody) { if (aiCmDeepseekIngest) return aiCmDeepseekIngest.ingestHistory(jsonBody); }
 })();
 
 // v13: экспорт чистого резолвера для контрактного теста (jest/jsdom). В браузере module нет —

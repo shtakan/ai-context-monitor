@@ -356,6 +356,9 @@ describe('Step D.3: core/deepseek-refetch.js — контракт модуля R
     // Step D.7: fetch-хук и XHR-копилка (K9) уехали в core/deepseek-net.js, поэтому три
     // строки перехватчиков ищутся в конкатенации модулей+ядра (как у gemini/D.5),
     // остальные — по-прежнему в ядре.
+    // Step D.8: тела K5 в ядре больше нет, поэтому вызов дозапроса
+    // `refetchFullHistory(lastHistoryUrl, lastAuthHeaders, currentConvId)` (две ветки
+    // детектора усечения — MERGE и оборванная цепочка) тоже ищется в конкатенации.
     ['var allH = collectHeaders(input, init);',
       'if (resp && resp.ok && guardCheck(historyConvId)) {',
       'info.completionConvId = convIdFromCompletionBody(bodyStr);',
@@ -363,7 +366,8 @@ describe('Step D.3: core/deepseek-refetch.js — контракт модуля R
       'scheduleHistoryRefetch();',
       'historyRefetchUrl: historyRefetchUrl,'].forEach(function (l) {
       const src = (l.indexOf('collectHeaders(input') !== -1 || l.indexOf('guardCheck(historyConvId)') !== -1 ||
-        l.indexOf('convIdFromCompletionBody') !== -1) ? DS.deepseekSource : KERNEL_SRC;
+        l.indexOf('convIdFromCompletionBody') !== -1 || l.indexOf('refetchFullHistory(lastHistoryUrl') !== -1)
+        ? DS.deepseekSource : KERNEL_SRC;
       expect(src).toContain(l);
     });
     // префиксов D. в телах модуля нет (with (D), ES3 Annex B)

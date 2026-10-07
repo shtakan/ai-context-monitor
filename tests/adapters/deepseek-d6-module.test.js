@@ -49,7 +49,7 @@
  *       сводки + фолбэк convId через getConvId), мост turns-snap (ответ + diagExportHook).
  *   S5. Проводка: js[] строго после deepseek-conv.js и перед ядром, helper MODULES,
  *       размеры ядра/модуля, K0 не тронут. Счётчик/лог регистрации с Step D.7 —
- *       -v9 + unregister -v8 (актуальный пин — в deepseek-d7-module.test.js).
+ *       -v9 + unregister -v9 (актуальный пин — в deepseek-d7-module.test.js).
  */
 
 const vm = require('vm');
@@ -135,11 +135,18 @@ const BODY_MARKERS = [
 ];
 
 // ---- вызовы в ядре, которые обязаны остаться на месте (S2/S3) -----------------------
+// Step D.8: два первых сайта вызова (ре-эмит полноты 0→1 и приёмка снимка) жили внутри
+// тела K5 (СЕКЦИЯ 8) и уехали в core/deepseek-ingest.js БАЙТ-В-БАЙТ — они проверяются по
+// конкатенации (INGEST_CALLS). Резолв не изменился: ядро раздаёт тот же форвардер
+// emitBaseSnapshot контрактом __bind модуля INGEST.
 const KERNEL_CALLS = [
-  '            emitBaseSnapshot(lastBaseServerTokens, lastBaseChatMode);',
-  '      var em = emitBaseSnapshot(lastAccumulated, chatMode);',
   '    var em = emitBaseSnapshot(serverTokens, chatMode);',
   '      emitBaseSnapshot: emitBaseSnapshot,'
+];
+
+const INGEST_CALLS = [
+  '            emitBaseSnapshot(lastBaseServerTokens, lastBaseChatMode);',
+  '      var em = emitBaseSnapshot(lastAccumulated, chatMode);'
 ];
 
 function sha256(s) { return crypto.createHash('sha256').update(s, 'utf8').digest('hex'); }
@@ -424,6 +431,8 @@ describe('Step D.6: core/deepseek-emit.js — контракт модуля EMIT
     expect(MODULE_SRC).not.toMatch(/\bD\.[A-Za-z_$]/);
     // вызовы в ядре не сдвинуты
     KERNEL_CALLS.forEach(function (l) { expect(KERNEL_SRC).toContain(l); });
+    // два сайта вызова внутри вынесенного тела K5 (Step D.8) — по конкатенации
+    INGEST_CALLS.forEach(function (l) { expect(DS.deepseekSource).toContain(l); });
     // размеры: K2 уехал целиком (ядро ушло ниже 2000 строк, модуль — за 250)
     expect(KERNEL_SRC.split('\n').length).toBeLessThan(2000);
     expect(MODULE_SRC.split('\n').length).toBeGreaterThan(250);
@@ -519,7 +528,7 @@ describe('Step D.6: core/deepseek-emit.js — контракт модуля EMIT
     expect(probe.st.__exportHooks).toEqual(['turns-snap-request']);
   });
 
-  test('S5: проводка — js[] после conv и перед ядром, id -v9 + unregister -v8, helper', function () {
+  test('S5: проводка — js[] после conv и перед ядром, id -v10 + unregister -v9, helper', function () {
     // модуль строго перед ядром и строго после conv
     expect(DS.SOURCES.indexOf('core/deepseek-emit.js'))
       .toBeLessThan(DS.SOURCES.indexOf('core/deepseek-intercept.js'));
@@ -532,10 +541,10 @@ describe('Step D.6: core/deepseek-emit.js — контракт модуля EMIT
     // остался в js[] и ядро его читает.
     expect(KERNEL_SRC).toContain('aiCmDeepseekEmit');
     const bg = DS.readSource('core/background.js');
-    expect(bg).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-intercept.js']");
-    expect(bg).toContain("ids.indexOf('ai-cm-deepseek-intercept-v9') === -1");
-    expect(bg).toContain("unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v8'] })");
-    expect(bg).toContain('(v9) зарегистрирован');
+    expect(bg).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-ingest.js', 'core/deepseek-intercept.js']");
+    expect(bg).toContain("ids.indexOf('ai-cm-deepseek-intercept-v10') === -1");
+    expect(bg).toContain("unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v9'] })");
+    expect(bg).toContain('перехватчик DeepSeek v10 зарегистрирован');
     // модуль: UTF-8 без BOM, LF, хвостовой \n; каркас
     const buf = require('fs').readFileSync(require('path').join(DS.ROOT, 'core/deepseek-emit.js'));
     expect(buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF).toBe(false);

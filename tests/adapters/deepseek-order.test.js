@@ -142,6 +142,12 @@ beforeAll(() => {
   // не ставит обёртки вовсе (форвардеров у D.7 нет), и подменённый window.fetch
   // остался бы необёрнутым — стенд не увидел бы ни одного ingest-события.
   window.eval(DS.moduleSource('deepseek-net.js'));
+  // Step D.8: INGEST-кластер (СЕКЦИЯ 8 — ingestHistory: приёмка снимка history_messages,
+  // сборка turnsMap, детектор усечения) уехал в core/deepseek-ingest.js. Он ОБЯЗАН
+  // грузиться перед ядром: тело кластера живёт в модуле, а ядро лишь раздаёт его
+  // форвардером — без модуля обёрнутый fetch доходил бы до ingestHistory, и стенд не
+  // увидел бы ни одного события ai-cm-full-history.
+  window.eval(DS.moduleSource('deepseek-ingest.js'));
   require(INTERCEPT_PATH);
   interceptLoaded = true;
   window.addEventListener('ai-cm-full-history', function (e) { events.push(e.detail); });
