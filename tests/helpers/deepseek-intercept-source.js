@@ -1,20 +1,24 @@
 /**
- * v1.1 (Step D.2): карта исходников MAIN-перехватчика DeepSeek.
+ * v1.2 (Step D.3): карта исходников MAIN-перехватчика DeepSeek.
  *
  * core/deepseek-intercept.js декомпозирован: кластер диагностики (СЕКЦИЯ 13/13D/13B —
  * диагностический дампа, вербатим usage по ходам, измерение live vs network) вынесен
  * в core/deepseek-diag.js (шаг D.1), кластер сетевого дозапроса истории в момент
- * экспорта (СЕКЦИЯ 9C, O-18 фаза 2) — в core/deepseek-netsync.js (шаг D.2). Порядок
- * в MODULES — ровно порядок инъекции в core/background.js (registerSafe
- * 'ai-cm-deepseek-intercept-v4', document_start, world 'MAIN'): модули идут ПЕРЕД
+ * экспорта (СЕКЦИЯ 9C, O-18 фаза 2) — в core/deepseek-netsync.js (шаг D.2), кластер
+ * REFETCH/URL-гигиены (СЕКЦИЯ 10 — гард перекрёста convId, СЕКЦИЯ 10B — хелперы
+ * MERGE-дозапроса: collectHeaders/stripCacheParams/historyRefetchUrl/historyUrlForConv/
+ * refetchFullHistory/scheduleHistoryRefetch) — в core/deepseek-refetch.js (шаг D.3).
+ * Порядок в MODULES — ровно порядок инъекции в core/background.js (registerSafe
+ * 'ai-cm-deepseek-intercept-v5', document_start, world 'MAIN'): модули идут ПЕРЕД
  * core/deepseek-intercept.js.
  *
  * Скрипты одного registerContentScripts-пакета исполняются в одном мировом глобальном
- * лексическом скоупе: до связки на window.AiCmDeepseekDiag / window.AiCmDeepseekNetsync
- * лежит только __bind, после связки ядро раздаёт значения функций модулей по прежним
- * именам (alias-блоки в ядре).
+ * лексическом скоупе: до связки на window.AiCmDeepseekDiag / window.AiCmDeepseekNetsync /
+ * window.AiCmDeepseekRefetch лежит только __bind, после связки ядро раздаёт значения
+ * функций модулей по прежним именам (alias-блоки в ядре).
  * Тела модулей объявлены ВНУТРИ `with (D) { … }` и НЕ имеют префиксов `D.` — свободные
  * имена резолвятся в with-объект (ES3 Annex B), как в gemini-oracle.js / pagination.js.
+ * Часть тел живёт в PURE-зонах модулей (вне with) — им ядро не нужно.
  *
  * ВАЖНО: перенос кода обязан быть БАЙТОВЫМ, включая ведущие отступы, и рабочие файлы
  * обязаны остаться в LF (.gitattributes: *.js text eol=lf). Часть пин-тестов ищет
@@ -29,11 +33,12 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
 
-// Порядок = порядок js[] в core/background.js для 'ai-cm-deepseek-intercept-v4'.
+// Порядок = порядок js[] в core/background.js для 'ai-cm-deepseek-intercept-v5'.
 // utils/debug.js сюда НЕ входит: он не декомпозировался (как и в content-source.js).
 const MODULES = [
   'core/deepseek-diag.js',
-  'core/deepseek-netsync.js'
+  'core/deepseek-netsync.js',
+  'core/deepseek-refetch.js'
 ];
 const INTERCEPT_JS = 'core/deepseek-intercept.js';
 

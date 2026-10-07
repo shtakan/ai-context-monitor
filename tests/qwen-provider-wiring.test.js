@@ -108,7 +108,7 @@ describe('O-35: core/background.js — регистрация перехватч
   });
 
   test('R-пин: шесть существующих регистраций не тронуты', function () {
-    ['ai-cm-page-intercept', 'ai-cm-gemini-intercept-v11', 'ai-cm-deepseek-intercept-v4',
+    ['ai-cm-page-intercept', 'ai-cm-gemini-intercept-v11', 'ai-cm-deepseek-intercept-v5',
       'ai-cm-claude-intercept', 'ai-cm-perplexity-intercept',
       'ai-cm-google-search-intercept'].forEach(function (id) {
       expect(background).toContain("ids.indexOf('" + id + "') === -1");
@@ -150,7 +150,11 @@ describe('O-35: core/background.js — регистрация перехватч
     // связка заполнила бы diag-форвардеры немыми заглушками (диагностика выключена).
     // Step D.2: тем же приёмом добавлен core/deepseek-netsync.js (кластер сетевого
     // дозапроса, СЕКЦИЯ 9C) и id сменён -v3 → -v4 ровно по той же причине.
-    expect(background).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-intercept.js']");
+    // Step D.3: добавлен core/deepseek-refetch.js (кластер REFETCH/URL-гигиены:
+    // СЕКЦИЯ 10 — гард перекрёста convId, СЕКЦИЯ 10B — хелперы MERGE-дозапроса) и id
+    // сменён -v4 → -v5: без модуля форвардеры ядра (guardCheck/collectHeaders/convId*/
+    // historyRefetchUrl/refetchFullHistory/scheduleHistoryRefetch) бьют в null.
+    expect(background).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'utils/intercept-common.js', 'core/claude-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'utils/perplexity-parser.js', 'utils/intercept-common.js', 'core/perplexity-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'utils/google-search-folwr-parser.js', 'utils/intercept-common.js', 'core/google-search-intercept.js']");

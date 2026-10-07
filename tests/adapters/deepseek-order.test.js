@@ -20,8 +20,9 @@
 const fs = require('fs');
 const path = require('path');
 
-// Step D.1/D.2: ядро декомпозировано — диагностика уехала в core/deepseek-diag.js,
-// сетевой дозапрос (СЕКЦИЯ 9C) — в core/deepseek-netsync.js, поэтому стенд грузит
+// Step D.1/D.2/D.3: ядро декомпозировано — диагностика уехала в core/deepseek-diag.js,
+// сетевой дозапрос (СЕКЦИЯ 9C) — в core/deepseek-netsync.js, REFETCH/URL-гигиена
+// (СЕКЦИИ 10/10B) — в core/deepseek-refetch.js, поэтому стенд грузит
 // КОНКАТЕНАЦИЮ модулей + ядра (как js[] одного registration в браузере).
 const DS = require('../helpers/deepseek-intercept-source.js');
 const INTERCEPT_PATH = path.join(DS.ROOT, DS.INTERCEPT_JS);
@@ -131,6 +132,7 @@ beforeAll(() => {
   // jest-трансформ парсит файлы как strict/ESM и падает на парсере `with`.
   window.eval(DS.moduleSource('deepseek-diag.js'));
   window.eval(DS.moduleSource('deepseek-netsync.js'));
+  window.eval(DS.moduleSource('deepseek-refetch.js'));
   require(INTERCEPT_PATH);
   interceptLoaded = true;
   window.addEventListener('ai-cm-full-history', function (e) { events.push(e.detail); });

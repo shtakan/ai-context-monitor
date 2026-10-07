@@ -253,7 +253,7 @@ if (typeof window !== 'undefined') {
   var currentConvId = getConvId();
   var lastAuthHeaders = {};
   var lastLoadedConvId = '';
-  var historyRefetchTimer = null;
+  // historyRefetchTimer (таймер дозапроса) переехал в core/deepseek-refetch.js (Step D.3)
   var lastHistoryUrl = '';          // v6: URL последнего history-запроса для дозапроса при усечении
   var historyRefetchDone = false;   // v6: флаг «один дозапрос за загрузку чата»
   // v7: честная полнота базы — проставляется из reachedRoot после ingest (realtime-эмит
@@ -1677,123 +1677,20 @@ if (typeof window !== 'undefined') {
     pump().catch(function () { if (sameConv()) finishSseStream(); endSseStream(); });
   }
 
-  // ===== СЕКЦИЯ 10: ГАРД ПЕРЕКРЁСТА (chat_session_id vs currentConvId) =====
-  function convIdFromHistoryUrl(url) {
-    try {
-      var m = url.match(/[?&]chat_session_id=([A-Za-z0-9_-]+)/);
-      return m ? m[1] : '';
-    } catch (e) { return ''; }
-  }
-
-  function convIdFromCompletionBody(bodyStr) {
-    try {
-      if (typeof bodyStr !== 'string' || !bodyStr) return '';
-      var obj = JSON.parse(bodyStr);
-      return obj.chat_session_id || '';
-    } catch (e) { return ''; }
-  }
-
-  function guardCheck(reqConvId) {
-    if (!reqConvId) return true;   // не удалось извлечь — пропускаем (не блокируем)
-    if (reqConvId !== currentConvId) {
-      console.log('[deepseek-intercept] пропущен ответ (convId запроса ' + reqConvId + ' != текущий ' + currentConvId + ')');
-      return false;
-    }
-    return true;
-  }
-
-  // ===== СЕКЦИЯ 10B: ХЕЛПЕРЫ ДЛЯ MERGE-ДОЗАПРОСА =====
-
-  // Сбор заголовков из fetch-запроса в plain object (поддержка Headers, Array, Object)
-  function collectHeaders(input, init) {
-    var h = {};
-    try {
-      var src = (init && init.headers) || (input && input.headers ? input.headers : null);
-      if (!src) return h;
-      // Headers-объект (forEach существует)
-      if (typeof src.forEach === 'function') {
-        src.forEach(function (v, k) { h[k] = v; });
-      } else if (Array.isArray(src)) {
-        for (var i = 0; i < src.length; i++) {
-          if (Array.isArray(src[i]) && src[i].length >= 2) h[src[i][0]] = src[i][1];
-        }
-      } else if (typeof src === 'object') {
-        var keys = Object.keys(src);
-        for (var i = 0; i < keys.length; i++) {
-          h[keys[i]] = src[keys[i]];
-        }
-      }
-    } catch (e) { }
-    return h;
-  }
-
-  // Удаление cache_version и cache_reset_at из URL (оставляем chat_session_id и всё остальное)
-  function stripCacheParams(url) {
-    try {
-      var u = new URL(url, location.origin);
-      u.searchParams.delete('cache_version');
-      u.searchParams.delete('cache_reset_at');
-      return u.toString();
-    } catch (e) {
-      return url.replace(/[?&]cache_(version|reset_at)=[^&]*/g, '').replace(/\?$/, '');
-    }
-  }
-
-  // v11 (O-17): КАНОНИЧЕСКИЙ URL полной истории текущего чата (без cache-параметров).
-  // Единственный источник для обоих дозапросов (таймер после SPA-смены чата и детектор
-  // усечения/MERGE) — чужой URL в базу попасть не может по построению.
-  function historyRefetchUrl() {
-    return location.origin + '/api/v0/chat/history_messages?chat_session_id=' + encodeURIComponent(currentConvId);
-  }
-
-  // URL пригоден для дозапроса, только если он про историю И про ЭТОТ чат.
-  // v11 (O-17): после SPA-перехода lastHistoryUrl хранит запрос ПРЕДЫДУЩЕГО чата —
-  // его использование вливало в базу текущего чата чужую историю (ingestHistory идёт
-  // без conv-гарда: гард стоит на вызывающей стороне).
-  function historyUrlForConv(url, convId) {
-    try {
-      if (typeof url !== 'string' || url.indexOf('history_messages') === -1) return '';
-      var urlConv = convIdFromHistoryUrl(url);
-      if (!urlConv) return '';                    // чат в URL не назван — берём канонический
-      if (convId && urlConv !== convId) return '';
-      return stripCacheParams(url);
-    } catch (e) { return ''; }
-  }
-
-  // Тихий повторный запрос полной истории БЕЗ cache_version/cache_reset_at
-  // Использует originalFetch (нативный fetch ДО нашей обёртки) — рекурсия исключена по построению
-  function refetchFullHistory(originalUrl, authHeaders, convId) {
-    if (!convId || convId !== currentConvId) { return; }
-    // v11 (O-17): берём переданный URL ТОЛЬКО если он про этот же чат, иначе — канонический
-    var cleanUrl = historyUrlForConv(originalUrl, convId) || historyRefetchUrl();
-    diagMark('refetch-full-history', { conv: String(convId).slice(0, 8) });   // O-18 (ИЗМЕРЕНИЕ)
-    originalFetch(cleanUrl, {
-      method: 'GET',
-      headers: authHeaders || {}
-    }).then(function (r) {
-      if (r && r.ok) return r.json();
-      return null;
-    }).then(function (json) {
-      if (json && convId === currentConvId) {
-        ingestHistory(json);
-      }
-    }).catch(function (e) {
-      console.warn('[deepseek-intercept] refetchFullHistory ошибка:', e);
-    });
-  }
-
-  // Таймер-дозапрос после смены чата (если сайт не прислал историю сам)
-  function scheduleHistoryRefetch() {
-    try { clearTimeout(historyRefetchTimer); } catch (e) { }
-    historyRefetchTimer = setTimeout(function () {
-      try {
-        if (currentConvId && currentConvId !== lastLoadedConvId && lastAuthHeaders && (lastAuthHeaders.Authorization || lastAuthHeaders.authorization)) {
-          console.log('[deepseek-intercept] история не пришла после смены чата → тихий дозапрос по таймеру (convId=' + currentConvId + ')');
-          refetchFullHistory(historyRefetchUrl(), lastAuthHeaders, currentConvId);   // v11 (O-17): канонический URL
-        }
-      } catch (e) { }
-    }, 1000);
-  }
+  // ===== Step D.3: K8 (REFETCH/URL-гигиена) вынесен в core/deepseek-refetch.js =====
+  // Здесь были СЕКЦИЯ 10 (гард перекрёста chat_session_id vs currentConvId:
+  // convIdFromHistoryUrl, convIdFromCompletionBody, guardCheck) и СЕКЦИЯ 10B (хелперы
+  // MERGE-дозапроса: collectHeaders, stripCacheParams, historyRefetchUrl,
+  // historyUrlForConv, refetchFullHistory, scheduleHistoryRefetch). Тела живут в модуле
+  // (PURE-зона и BIND-зона внутри `with (D)` — см. шапку core/deepseek-refetch.js) и
+  // обращаются к состоянию ядра через контракт __bind; связка — в конце этого IIFE.
+  // Модуль подключён в core/background.js строго перед этим файлом (js[] одного
+  // registration, id -v5): на момент связки window.AiCmDeepseekRefetch уже есть.
+  // Состояние refetch-гигиены ОСТАЛОСЬ ЗДЕСЬ: lastAuthHeaders/lastHistoryUrl пишут
+  // fetch-хук (K11) и XHR-копилка (K9), historyRefetchDone — детекторы усечения (K5),
+  // lastLoadedConvId — приём снимка истории; модуль получает эти переменные rw/ro-парами
+  // контракта и видит ТЕ ЖЕ переменные, а не копии. historyRefetchTimer переехал в модуль.
+  // Форвардеры ядра (хойстятся, вызовы выше по файлу не тронуты) — в конце этого IIFE.
 
   // ===== СЕКЦИЯ 11: ПЕРЕХВАТ FETCH (v5: тихий catch + устранение висячих Promise.reject) =====
   if (typeof originalFetch === 'function') {
@@ -2180,6 +2077,47 @@ if (typeof window !== 'undefined') {
   // атомарно, а песочницы тестов получают конкатенацию через хелпер deepseek-source.
   function liveTurnRecord(id, role, text, answer, reasoning, modelSlug) { return aiCmDeepseekNetsync.liveTurnRecord(id, role, text, answer, reasoning, modelSlug); }
   function netSyncNeeded() { return aiCmDeepseekNetsync.netSyncNeeded(); }
+
+  // ===== Step D.3: связка модуля REFETCH/URL-гигиены (core/deepseek-refetch.js) =====
+  // Контракт: 2 fn (функции ядра, которые зовут тела модуля — значением), 3 rw
+  // (состояние refetch-гигиены: его пишут и ядро, и модуль — get+set обязателен) и
+  // 3 ro. Живое состояние отдаётся аксессорами, поэтому модуль и ядро работают с
+  // ОДНИМИ И ТЕМИ ЖЕ переменными IIFE, а не с копиями значений.
+  var aiCmDeepseekRefetch = (typeof window !== 'undefined' && window.AiCmDeepseekRefetch) || null;
+  if (aiCmDeepseekRefetch) {
+    aiCmDeepseekRefetch.__bind({
+      // fn: функции ядра, которые зовут тела модуля — передаются значением.
+      diagMark: diagMark,
+      ingestHistory: ingestHistory,
+      // rw: состояние refetch-гигиены. lastAuthHeaders пишут fetch-хук (K11) и XHR-копилка
+      // (K9); lastHistoryUrl — fetch-хук (K11), XHR-копилка (K9) и сброс чата (K5);
+      // historyRefetchDone — сброс чата и детекторы усечения (K5). Сеттеры обязательны:
+      // владелец семантики — модуль.
+      get lastAuthHeaders() { return lastAuthHeaders; },
+      set lastAuthHeaders(v) { lastAuthHeaders = v; },
+      get lastHistoryUrl() { return lastHistoryUrl; },
+      set lastHistoryUrl(v) { lastHistoryUrl = v; },
+      get historyRefetchDone() { return historyRefetchDone; },
+      set historyRefetchDone(v) { historyRefetchDone = v; },
+      // ro: только чтение — модуль эти имена не перезаписывает.
+      get currentConvId() { return currentConvId; },
+      get lastLoadedConvId() { return lastLoadedConvId; },
+      get originalFetch() { return originalFetch; }
+    });
+  }
+  // Ядро продолжает звать REFETCH-хелперы по ПРЕЖНИМ именам (перехватчики fetch/XHR —
+  // K9/K11, ingestHistory, resetForNewConversation). Форвардеры — ИМЕННО function
+  // declaration: хойстятся, поэтому вызовы выше по файлу видят имя. Контракт — 7 из 9
+  // тел: stripCacheParams и historyUrlForConv ядру не нужны (их зовут только тела
+  // модуля). Заглушек нет намеренно: js[] регистрируется атомарно, а песочницы тестов
+  // получают конкатенацию через tests/helpers/deepseek-intercept-source.js.
+  function convIdFromHistoryUrl(url) { return aiCmDeepseekRefetch.convIdFromHistoryUrl(url); }
+  function convIdFromCompletionBody(bodyStr) { return aiCmDeepseekRefetch.convIdFromCompletionBody(bodyStr); }
+  function guardCheck(reqConvId) { return aiCmDeepseekRefetch.guardCheck(reqConvId); }
+  function collectHeaders(input, init) { return aiCmDeepseekRefetch.collectHeaders(input, init); }
+  function historyRefetchUrl() { return aiCmDeepseekRefetch.historyRefetchUrl(); }
+  function refetchFullHistory(originalUrl, authHeaders, convId) { return aiCmDeepseekRefetch.refetchFullHistory(originalUrl, authHeaders, convId); }
+  function scheduleHistoryRefetch() { return aiCmDeepseekRefetch.scheduleHistoryRefetch(); }
 })();
 
 // v13: экспорт чистого резолвера для контрактного теста (jest/jsdom). В браузере module нет —
