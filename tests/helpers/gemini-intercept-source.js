@@ -73,6 +73,11 @@ const ROOT = path.join(__dirname, '..', '..');
 // Phase 3 step 13.2: core/gemini-archive.js идёт после overlay и перед ядром — как в js[].
 // Тела архива тоже перенесены с префиксом D, поэтому песочницы archive-export-gate и
 // archive-export-union получают объект связи D рядом с прежними свободными именами.
+// Phase 3 step 13.3: core/gemini-oracle.js идёт после archive и перед ядром — как в js[].
+// Тела оракула перенесены БЕЗ префикса D (объявления лежат внутри `with (D) { … }`, как в
+// pagination и ingest), поэтому песочницы gemini-floor-confirmed / gemini-floor-self-heal /
+// gemini-collapse-guard / o48-gemini-parse-fail-salvage режут тела ОТСЮДА и исполняют их
+// в `with (ctx)` без ключа D — ни один ассерт этих пинов не менялся.
 const MODULES = [
   'core/gemini-hidden-scroll.js',
   'core/gemini-diag.js',
@@ -83,7 +88,8 @@ const MODULES = [
   'core/gemini-loader-scroll.js',
   'core/gemini-ingest.js',
   'core/gemini-overlay.js',
-  'core/gemini-archive.js'
+  'core/gemini-archive.js',
+  'core/gemini-oracle.js'
 ];
 const INTERCEPT_JS = 'core/gemini-intercept.js';
 

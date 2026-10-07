@@ -168,27 +168,33 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
     expect(CORE.match(new RegExp(VF5_TAIL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))).toHaveLength(1);
     // план называет 1941 (до-выносом ядро); после выноса ingest — 1784; после выноса
     // кластера оверлея (Phase 3 step 13.1: −143 строки диапазона 1597-1739 и +39 строк
-    // блока подключения ВЫШЕ этой точки) — 1680. Пин держит ФАКТ, чтобы «уехавший» вызов
-    // был виден, а не молча остался зелёным, и чтобы следующий перенос кода выше по файлу
-    // снова потребовал ревью строки, а не прошёл незамеченным.
-    expect(linesOf(CORE, VF5_TAIL)).toEqual([1680]);
+    // блока подключения ВЫШЕ этой точки) — 1680; после выноса оракула (Phase 3 step 13.3:
+    // −266 строк диапазонов 866-909, 1001-1155, 1372-1436 и +32 строки секции форвардеров
+    // ВЫШЕ этой точки) — 1446. Пин держит ФАКТ, чтобы «уехавший» вызов был виден, а не молча
+    // остался зелёным, и чтобы следующий перенос кода выше по файлу снова потребовал ревью
+    // строки, а не прошёл незамеченным.
+    expect(linesOf(CORE, VF5_TAIL)).toEqual([1446]);
   });
 
-  test('R-D №4: счётчик emitBaseSnapshot() — ядро 3, конкатенация 9', () => {
-    // ядро: 2 вызова (floor-confirm, self-heal) + 1 форвардер. Третий вызов (слушатель
-    // ai-cm-archive-restore) на шаге 13.2 уехал в core/gemini-archive.js — там он и
-    // считается отдельной строкой ниже.
-    expect(CORE.match(/emitBaseSnapshot\(\)/g)).toHaveLength(3);
-    expect(CORE.match(/try \{ emitBaseSnapshot\(\); \}/g)).toHaveLength(2);
+  test('R-D №4: счётчик emitBaseSnapshot() — ядро 1, конкатенация 9', () => {
+    // ядро: 1 форвардер aiCmEmitBaseSnapshotFwd. Третий вызов (слушатель ai-cm-archive-restore)
+    // на шаге 13.2 уехал в core/gemini-archive.js, а два ядерных вызова (floor-confirm и
+    // self-heal) на шаге 13.3 уехали в core/gemini-oracle.js — там они и считаются ниже.
+    expect(CORE.match(/emitBaseSnapshot\(\)/g)).toHaveLength(1);
+    expect(CORE.match(/try \{ emitBaseSnapshot\(\); \}/g) || []).toHaveLength(0);
     // архив: 1 вызов (пере-эмит после вливания ходов архива)
     expect(ARCH.match(/emitBaseSnapshot\(\)/g)).toHaveLength(1);
+    // оракул: 2 вызова (floor-confirmed и loader-stable-stop), оба под try
+    const ORACLE = readFile('core/gemini-oracle.js');
+    expect(ORACLE.match(/emitBaseSnapshot\(\)/g)).toHaveLength(2);
+    expect(ORACLE.match(/try \{ emitBaseSnapshot\(\); \}/g)).toHaveLength(2);
     // пагинация отдаёт свои 2 вызова (finishQuiet / runCompletenessProbe)
     expect(PAG.match(/emitBaseSnapshot\(\)/g)).toHaveLength(2);
     // ingest: 1 декларация `function emitBaseSnapshot()` + 2 вызова (ingest и mergeRestoredTurns)
     expect(MOD.match(/emitBaseSnapshot\(\)/g)).toHaveLength(3);
     expect(linesOf(MOD, 'function emitBaseSnapshot()')).toEqual([459]);
     expect(fnSource(MOD, 'mergeRestoredTurns')).toContain('try { emitBaseSnapshot(); } catch (e) { }');
-    // арифметика конкатенации: 3 (ядро) + 2 (пагинация) + 3 (ingest) + 1 (архив) = 9
+    // арифметика конкатенации: 1 (ядро-форвардер) + 2 (пагинация) + 3 (ingest) + 1 (архив) + 2 (оракул) = 9
     expect(CONC.match(/emitBaseSnapshot\(\)/g)).toHaveLength(9);
   });
 
@@ -219,17 +225,17 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
 });
 
 describe('Phase 3 шаг 12: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v10 (шаг 13.2), ingest, overlay и archive перед ядром, -v9 снят', () => {
+  test('S1: регистрация в core/background.js — id -v11 (шаг 13.3), ingest, overlay, archive и oracle перед ядром, -v10 снят', () => {
     const bg = readFile('core/background.js');
-    expect(bg).toContain("'ai-cm-gemini-intercept-v10'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v11'");
     expect(bg).toContain("'core/gemini-ingest.js'");
     // js[] собран ровно в этом порядке: sse → pagination → loader-scroll → ingest → ядро
-    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-intercept.js'");
+    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-intercept.js'");
     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при загрузке
     expect(bg.indexOf("'core/gemini-loader-scroll.js'")).toBeLessThan(bg.indexOf("'core/gemini-ingest.js'"));
     expect(bg.indexOf("'core/gemini-ingest.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
     // MV3 не перечитывает js[] под существующим id — прежний id обязан быть снят
-    expect(bg).toContain("'ai-cm-gemini-intercept-v8'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v10'");
   });
 
   test('S2: bind-контракт полон — 72 имени переданы ядром и все 72 используются модулем', () => {

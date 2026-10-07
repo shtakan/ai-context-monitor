@@ -108,7 +108,7 @@ describe('O-35: core/background.js — регистрация перехватч
   });
 
   test('R-пин: шесть существующих регистраций не тронуты', function () {
-    ['ai-cm-page-intercept', 'ai-cm-gemini-intercept-v10', 'ai-cm-deepseek-intercept-v2',
+    ['ai-cm-page-intercept', 'ai-cm-gemini-intercept-v11', 'ai-cm-deepseek-intercept-v2',
       'ai-cm-claude-intercept', 'ai-cm-perplexity-intercept',
       'ai-cm-google-search-intercept'].forEach(function (id) {
       expect(background).toContain("ids.indexOf('" + id + "') === -1");
@@ -140,7 +140,10 @@ describe('O-35: core/background.js — регистрация перехватч
     // На шаге 13.2 (Phase 3) в js[] ДОБАВЛЕН core/gemini-archive.js (перед ядром) и id
     // сменён -v9 → -v10: без модуля архивный ярус (T1) недоступен целиком — форвардеры
     // возвращают null/true/baseSize(), то есть гейты полноты молча теряют архив.
-    expect(background).toContain("js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-parse.js', 'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-intercept.js']");
+    // На шаге 13.3 (Phase 3) в js[] ДОБАВЛЕН core/gemini-oracle.js (перед ядром) и id
+    // сменён -v10 → -v11: без модуля оракул полноты недоступен целиком — floor-confirmed и
+    // loader-stable-stop не взводятся, снапшот ходов пуст, а форвардеры возвращают undefined.
+    expect(background).toContain("js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-parse.js', 'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'core/deepseek-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'utils/intercept-common.js', 'core/claude-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'utils/perplexity-parser.js', 'utils/intercept-common.js', 'core/perplexity-intercept.js']");

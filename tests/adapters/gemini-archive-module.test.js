@@ -24,8 +24,8 @@
  *     API полон, модуль гигиеничен и повторная загрузка не перетирает Api.
  *
  *   S (проводка) — модуль реально подключён и связан с ядром:
- *     S1  регистрация в core/background.js: id -v10, модуль в js[] строго между overlay
- *         и ядром, -v9 в unregister (MV3 не перечитывает js[] под уже зарегистрированным id);
+ *     S1  регистрация в core/background.js: id -v11 (шаг 13.3), модуль в js[] строго между overlay
+ *         и ядром, -v10 в unregister (MV3 не перечитывает js[] под уже зарегистрированным id);
  *     S2  bind-контракт полон: все 22 имени контракта переданы ядром и все 22 используются
  *         модулем (регрессия = молчаливый no-op, которого не видит ни один старый пин);
  *     S3  порядок в helper-конкатенации повторяет порядок js[];
@@ -301,13 +301,28 @@ describe('Phase 3 шаг 13.2: B-пины — форвардеры ядра (hoi
   });
 
   test('B4: хойстинг реален — значение, взятое ДО связки, зовёт модуль', () => {
-    // Три чужих __bind-блока получают форвардеры ЗНАЧЕНИЕМ: пагинация (aiCmArchiveTierApply),
-    // лоадер (aiCmArchiveFor/aiCmArchiveLiveProven/aiCmLiveTurnCount) и ingest
-    // (aiCmArchiveTierApply). Все они биндуются РАНЬШЕ строки связки архива.
-    expect((CORE_CODE.match(/aiCmArchiveTierApply: aiCmArchiveTierApply,/g) || [])).toHaveLength(2);
-    expect((CORE_CODE.match(/aiCmArchiveFor: aiCmArchiveFor,/g) || [])).toHaveLength(1);
-    expect((CORE_CODE.match(/aiCmArchiveLiveProven: aiCmArchiveLiveProven,/g) || [])).toHaveLength(1);
-    expect((CORE_CODE.match(/aiCmLiveTurnCount: aiCmLiveTurnCount,/g) || [])).toHaveLength(1);
+    // Четыре чужих __bind-блока получают форвардеры ЗНАЧЕНИЕМ: пагинация (aiCmArchiveTierApply),
+    // лоадер (aiCmArchiveFor/aiCmArchiveLiveProven/aiCmLiveTurnCount), ingest
+    // (aiCmArchiveTierApply) и оракул полноты — блок шага 13.3 (все пять имён сразу).
+    // Три из них биндуются РАНЬШЕ строки связки архива — именно это и доказывает хойстинг;
+    // блок оракула стоит НИЖЕ неё (оракул переоценивает ярус архива на стопе лоадера).
+    expect((CORE_CODE.match(/aiCmArchiveTierApply: aiCmArchiveTierApply,/g) || [])).toHaveLength(3);
+    expect((CORE_CODE.match(/aiCmArchiveFor: aiCmArchiveFor,/g) || [])).toHaveLength(2);
+    expect((CORE_CODE.match(/aiCmArchiveLiveProven: aiCmArchiveLiveProven,/g) || [])).toHaveLength(2);
+    expect((CORE_CODE.match(/aiCmLiveTurnCount: aiCmLiveTurnCount,/g) || [])).toHaveLength(2);
+    const archiveBindAt = CORE_CODE.indexOf('aiCmGeminiArchive.__bind(');
+    expect(archiveBindAt).toBeGreaterThan(-1);
+    const hits = (re) => {
+      const out = [];
+      let m;
+      const rx = new RegExp(re.source, 'g');
+      while ((m = rx.exec(CORE_CODE)) !== null) out.push(m.index);
+      return out;
+    };
+    expect(hits(/aiCmArchiveTierApply: aiCmArchiveTierApply,/).filter((i) => i < archiveBindAt)).toHaveLength(2);
+    expect(hits(/aiCmArchiveTierApply: aiCmArchiveTierApply,/).filter((i) => i > archiveBindAt)).toHaveLength(1);
+    expect(hits(/aiCmArchiveFor: aiCmArchiveFor,/).filter((i) => i < archiveBindAt)).toHaveLength(1);
+    expect(hits(/aiCmArchiveFor: aiCmArchiveFor,/).filter((i) => i > archiveBindAt)).toHaveLength(1);
     const fwd = fnSource(CORE, 'aiCmArchiveTierApply');
     // Порядок ровно как в ядре: значение берут ДО объявления, связка — ПОСЛЕ.
     const ctx = vm.createContext({});
@@ -491,9 +506,14 @@ describe('Phase 3 шаг 13.2: D-пины — API, размещение связ
       expect(bindLine).toBeGreaterThan(at);
     });
     // S4: поэтому поздний алиас отдан архиву ЗНАЧЕНИЕМ — и это законно (ср. суженный пин
-    // в tests/adapters/gemini-ingest-module.test.js: блок ingest обязан отдавать форвардер)
+    // в tests/adapters/gemini-ingest-module.test.js: блок ingest обязан отдавать форвардер).
+    // Шаг 13.3 добавил ВТОРОЙ такой блок — оракул полноты: он тоже стоит ниже заполнения
+    // алиасов и потому вправе получить emitBaseSnapshot значением. Больше таких блоков нет.
     expect(bindBlockText()).toContain('emitBaseSnapshot: emitBaseSnapshot,');
-    expect(CORE_CODE.match(/emitBaseSnapshot: emitBaseSnapshot,/g)).toHaveLength(1);
+    expect(CORE_CODE.match(/emitBaseSnapshot: emitBaseSnapshot,/g)).toHaveLength(2);
+    const oracleBindAt = CORE_CODE.indexOf('aiCmGeminiOracle.__bind({');
+    expect(oracleBindAt).toBeGreaterThan(CORE_CODE.indexOf('aiCmGeminiArchive.__bind('));
+    expect(CORE_CODE.slice(oracleBindAt).match(/emitBaseSnapshot: emitBaseSnapshot,/g)).toHaveLength(1);
     // баннер-указатель на месте бывшего диапазона слушателей
     expect(CORE).toContain('// ===== v2.0 (Phase 3 step 13.2): АРХИВ (ВЫНЕСЕН В core/gemini-archive.js) =====');
     expect((CORE.match(/Phase 3 step 13\.2\): АРХИВ \(ВЫНЕСЕН/g) || [])).toHaveLength(2);
@@ -510,24 +530,25 @@ describe('Phase 3 шаг 13.2: D-пины — API, размещение связ
 });
 
 describe('Phase 3 шаг 13.2: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v10, модуль между overlay и ядром, -v9 снят', () => {
+  test('S1: регистрация в core/background.js — id -v11, модуль между overlay и ядром, -v10 снят', () => {
     const bg = readFile('core/background.js');
-    expect(bg).toContain("'ai-cm-gemini-intercept-v10'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v11'");
     expect(bg).toContain("'core/gemini-archive.js'");
-    // js[] собран ровно в этом порядке: … loader-scroll → ingest → overlay → archive → ядро
-    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-intercept.js'");
+    // js[] собран ровно в этом порядке: … loader-scroll → ingest → overlay → archive → oracle → ядро
+    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-intercept.js'");
     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при своей загрузке
     expect(bg.indexOf("'core/gemini-overlay.js'")).toBeLessThan(bg.indexOf("'core/gemini-archive.js'"));
     expect(bg.indexOf("'core/gemini-archive.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
     // MV3 не перечитывает js[] под существующим id — прежний id обязан быть снят
+    expect(bg).toContain("'ai-cm-gemini-intercept-v10'");
     expect(bg).toContain("'ai-cm-gemini-intercept-v9'");
     expect(bg).toContain("'ai-cm-gemini-intercept-v8'");
     // лог регистрации бампнут вместе с id
-    expect(bg).toContain('(v10) зарегистрирован');
-    expect(bg).not.toContain('(v9) зарегистрирован');
+    expect(bg).toContain('(v11) зарегистрирован');
+    expect(bg).not.toContain('(v10) зарегистрирован');
     // лог обязан стоять РЯДОМ со своей регистрацией, а не быть унаследованным текстом
-    expect(bg.indexOf("await registerSafe('ai-cm-gemini-intercept-v10'"))
-      .toBeLessThan(bg.indexOf('(v10) зарегистрирован'));
+    expect(bg.indexOf("await registerSafe('ai-cm-gemini-intercept-v11'"))
+      .toBeLessThan(bg.indexOf('(v11) зарегистрирован'));
   });
 
   test('S2: bind-контракт полон — ни одна зависимость кластера не потеряна', () => {
@@ -578,11 +599,12 @@ describe('Phase 3 шаг 13.2: S-пины проводки модуля', () => 
   });
 
   test('S4: пин строки vf5 не сдвинулся — оба диапазона лежат НИЖЕ него', () => {
-    // шаг 13.2 правит только строки > 1712, поэтому точка выхода vf5 осталась на 1680;
-    // если следующий перенос заедет выше неё, этот пин обязан покраснеть
+    // шаг 13.2 правил только строки > 1712, но шаг 13.3 вынес оракул (диапазоны 866-909,
+    // 1001-1155, 1372-1436) — точка выхода vf5 поднялась 1680 → 1446. Пин держит ФАКТ:
+    // следующий перенос кода выше этой точки снова потребует ревью строки, а не пройдёт молча.
     const VF5_TAIL = 'aiCmIngestFwd(txt, { emitOnlyIfAdded: true, fromVirtualF5: true, rebuild: rebuild });';
     const hits = CORE.split('\n').reduce((acc, l, i) => (l.indexOf(VF5_TAIL) !== -1 ? acc.concat(i + 1) : acc), []);
-    expect(hits).toEqual([1680]);
-    expect(lineOf(CORE, 'aiCmGeminiArchive.__bind(')).toBeGreaterThan(1680);
+    expect(hits).toEqual([1446]);
+    expect(lineOf(CORE, 'aiCmGeminiArchive.__bind(')).toBeGreaterThan(1446);
   });
 });

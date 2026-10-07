@@ -21,7 +21,7 @@
  *
  *   S (проводка) — модуль реально подключён и связан с ядром:
  *     S1  регистрация в core/background.js: id -v10, js[] 14 файлов, модуль ПЕРЕД ядром,
- *         -v9 в unregister (MV3 не перечитывает js[] под уже зарегистрированным id);
+ *         -v10 в unregister (MV3 не перечитывает js[] под уже зарегистрированным id);
  *     S2  bind-контракт полон: 71 зависимость передана и все 71 используются
  *         (регрессия = молчаливый no-op, который ни один старый пин не видит);
  *     S3  проза модуля не затеняет литералы существующих пинов (иначе пин меряет шапку);
@@ -118,10 +118,12 @@ describe('Phase 3 шаг 10: D-пины маршрутов записи базы
     // Phase 3 step 12: три вызова (747, 988, 3157) уехали из ядра в core/gemini-ingest.js,
     // поэтому в ядре стало 4 = 3 вызова + 1 форвардер aiCmEmitBaseSnapshotFwd (шаг 12, TDZ).
     // Phase 3 step 13.2: четвёртый ядерный вызов (слушатель ai-cm-archive-restore) уехал
-    // в core/gemini-archive.js, поэтому в ядре 3 = 2 вызова + 1 форвардер, а в конкатенации
-    // по-прежнему 9 = 3 (ядро) + 2 (пагинация) + 3 (ingest: декларация + 2 вызова)
-    // + 1 (archive: вызов в слушателе ai-cm-archive-restore).
-    expect(CORE.match(/emitBaseSnapshot\(\)/g)).toHaveLength(3);
+    // в core/gemini-archive.js, поэтому в ядре 3 = 2 вызова + 1 форвардер.
+    // Phase 3 step 13.3: оба оставшихся ядерных вызова (floor-confirmed и
+    // loader-stable-stop) уехали в core/gemini-oracle.js, поэтому в ядре 1 = 0 вызовов
+    // + 1 форвардер, а в конкатенации по-прежнему 9 = 1 (ядро) + 2 (пагинация)
+    // + 3 (ingest: декларация + 2 вызова) + 1 (archive) + 2 (oracle).
+    expect(CORE.match(/emitBaseSnapshot\(\)/g)).toHaveLength(1);
     expect(CONC.match(/emitBaseSnapshot\(\)/g)).toHaveLength(9);
   });
 
@@ -153,16 +155,17 @@ describe('Phase 3 шаг 10: D-пины маршрутов записи базы
 });
 
 describe('Phase 3 шаг 10: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v10 (шаг 13.2), модуль перед ядром, -v9 в unregister', () => {
+  test('S1: регистрация в core/background.js — id -v11 (шаг 13.3), модуль перед ядром, -v10 в unregister', () => {
     const bg = readFile('core/background.js');
     expect(bg).toContain("'ai-cm-gemini-intercept-v6'");
-    expect(bg).toContain("'ai-cm-gemini-intercept-v10'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v11'");
     expect(bg).toContain("'core/pagination/pagination.js'");
-    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-intercept.js'");
+    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-intercept.js'");
     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при загрузке
     expect(bg.indexOf("'core/pagination/pagination.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
     // MV3 не перечитывает js[] под существующим id — прежний id обязан быть снят
     expect(bg).toContain("'ai-cm-gemini-intercept-v5'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v10'");
   });
 
   test('S2: bind-контракт полон — ни одна зависимость кластера не потеряна', () => {
