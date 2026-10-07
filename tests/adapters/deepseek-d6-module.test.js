@@ -47,8 +47,9 @@
  *   S4. Живая семантика K2: состав сигнатуры (порядок ключей turnsMap не влияет,
  *       тексты/роли/модель/reasoning влияют), clipTurnText, turnsSnapshot (поля
  *       сводки + фолбэк convId через getConvId), мост turns-snap (ответ + diagExportHook).
- *   S5. Проводка: js[] строго после deepseek-conv.js и перед ядром, id -v8 + unregister -v7,
- *       helper MODULES, размеры ядра/модуля, K0 не тронут.
+ *   S5. Проводка: js[] строго после deepseek-conv.js и перед ядром, helper MODULES,
+ *       размеры ядра/модуля, K0 не тронут. Счётчик/лог регистрации с Step D.7 —
+ *       -v9 + unregister -v8 (актуальный пин — в deepseek-d7-module.test.js).
  */
 
 const vm = require('vm');
@@ -518,20 +519,23 @@ describe('Step D.6: core/deepseek-emit.js — контракт модуля EMIT
     expect(probe.st.__exportHooks).toEqual(['turns-snap-request']);
   });
 
-  test('S5: проводка — js[] после conv и перед ядром, id -v8 + unregister -v7, helper', function () {
+  test('S5: проводка — js[] после conv и перед ядром, id -v9 + unregister -v8, helper', function () {
     // модуль строго перед ядром и строго после conv
     expect(DS.SOURCES.indexOf('core/deepseek-emit.js'))
       .toBeLessThan(DS.SOURCES.indexOf('core/deepseek-intercept.js'));
     expect(DS.SOURCES.indexOf('core/deepseek-conv.js'))
       .toBeLessThan(DS.SOURCES.indexOf('core/deepseek-emit.js'));
     expect(DS.MODULES).toContain('core/deepseek-emit.js');
-    // регистрация ядра: id -v8, снятие -v7, js[] с модулем, лог (v8)
+    // регистрация ядра: js[] с модулем. Step D.7 сдвинул регистрацию дальше
+    // (-v9 + снятие -v8, добавлен core/deepseek-net.js) — актуальные значения
+    // пинованы в deepseek-d7-module.test.js; здесь проверяется, что модуль D.6
+    // остался в js[] и ядро его читает.
     expect(KERNEL_SRC).toContain('aiCmDeepseekEmit');
     const bg = DS.readSource('core/background.js');
-    expect(bg).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-intercept.js']");
-    expect(bg).toContain("ids.indexOf('ai-cm-deepseek-intercept-v8') === -1");
-    expect(bg).toContain("unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v7'] })");
-    expect(bg).toContain('(v8) зарегистрирован');
+    expect(bg).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-intercept.js']");
+    expect(bg).toContain("ids.indexOf('ai-cm-deepseek-intercept-v9') === -1");
+    expect(bg).toContain("unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v8'] })");
+    expect(bg).toContain('(v9) зарегистрирован');
     // модуль: UTF-8 без BOM, LF, хвостовой \n; каркас
     const buf = require('fs').readFileSync(require('path').join(DS.ROOT, 'core/deepseek-emit.js'));
     expect(buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF).toBe(false);

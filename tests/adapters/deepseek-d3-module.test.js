@@ -352,14 +352,19 @@ describe('Step D.3: core/deepseek-refetch.js — контракт модуля R
       expect(KERNEL_SRC).not.toContain('aiCmDeepseekRefetch.' + n + '(');
       expect(MODULE_SRC).toContain('Fn.' + n + ' = ' + n + ';');
     });
-    // вызовы в ядре не сдвинуты: fetch/XHR-перехватчики, ingestHistory, сброс чата
+    // вызовы в ядре не сдвинуты: fetch/XHR-перехватчики, ingestHistory, сброс чата.
+    // Step D.7: fetch-хук и XHR-копилка (K9) уехали в core/deepseek-net.js, поэтому три
+    // строки перехватчиков ищутся в конкатенации модулей+ядра (как у gemini/D.5),
+    // остальные — по-прежнему в ядре.
     ['var allH = collectHeaders(input, init);',
       'if (resp && resp.ok && guardCheck(historyConvId)) {',
       'info.completionConvId = convIdFromCompletionBody(bodyStr);',
       'refetchFullHistory(lastHistoryUrl, lastAuthHeaders, currentConvId);',
       'scheduleHistoryRefetch();',
       'historyRefetchUrl: historyRefetchUrl,'].forEach(function (l) {
-      expect(KERNEL_SRC).toContain(l);
+      const src = (l.indexOf('collectHeaders(input') !== -1 || l.indexOf('guardCheck(historyConvId)') !== -1 ||
+        l.indexOf('convIdFromCompletionBody') !== -1) ? DS.deepseekSource : KERNEL_SRC;
+      expect(src).toContain(l);
     });
     // префиксов D. в телах модуля нет (with (D), ES3 Annex B)
     expect(MODULE_SRC).not.toMatch(/\bD\.[A-Za-z_$]/);

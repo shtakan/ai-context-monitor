@@ -137,6 +137,11 @@ beforeAll(() => {
   window.eval(DS.moduleSource('deepseek-parse.js'));
   window.eval(DS.moduleSource('deepseek-conv.js'));
   window.eval(DS.moduleSource('deepseek-emit.js'));
+  // Step D.7: NETWORK-кластер (СЕКЦИИ 11/12 — обёртки window.fetch и XMLHttpRequest)
+  // уехал в core/deepseek-net.js. Он ОБЯЗАН грузиться перед ядром: без модуля ядро
+  // не ставит обёртки вовсе (форвардеров у D.7 нет), и подменённый window.fetch
+  // остался бы необёрнутым — стенд не увидел бы ни одного ingest-события.
+  window.eval(DS.moduleSource('deepseek-net.js'));
   require(INTERCEPT_PATH);
   interceptLoaded = true;
   window.addEventListener('ai-cm-full-history', function (e) { events.push(e.detail); });

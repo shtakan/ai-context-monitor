@@ -108,7 +108,7 @@ describe('O-35: core/background.js — регистрация перехватч
   });
 
   test('R-пин: шесть существующих регистраций не тронуты', function () {
-    ['ai-cm-page-intercept', 'ai-cm-gemini-intercept-v11', 'ai-cm-deepseek-intercept-v8',
+    ['ai-cm-page-intercept', 'ai-cm-gemini-intercept-v11', 'ai-cm-deepseek-intercept-v9',
       'ai-cm-claude-intercept', 'ai-cm-perplexity-intercept',
       'ai-cm-google-search-intercept'].forEach(function (id) {
       expect(background).toContain("ids.indexOf('" + id + "') === -1");
@@ -170,7 +170,12 @@ describe('O-35: core/background.js — регистрация перехватч
     // -v7 → -v8: без модуля форвардер emitBaseSnapshot бьёт в null — публикация снимка базы
     // (событие ai-cm-full-history) и мост turnsMap выключаются целиком, то есть бейдж,
     // автоэкспорт и ручной экспорт DeepSeek не получают базу вовсе.
-    expect(background).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-intercept.js']");
+    // Step D.7: добавлен core/deepseek-net.js (кластер NETWORK: СЕКЦИИ 11/12 — обёртка
+    // window.fetch и обёртки XMLHttpRequest.prototype.open/send/setRequestHeader + копилки
+    // lastAuthHeaders/lastHistoryUrl) и id сменён -v8 → -v9: без модуля обёртки сети не
+    // ставятся вовсе (форвардеров у D.7 нет) — перехват fetch/XHR DeepSeek выключается
+    // целиком, то есть ни истории, ни стрима, ни настроек модели перехватчик не видит.
+    expect(background).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'utils/intercept-common.js', 'core/claude-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'utils/perplexity-parser.js', 'utils/intercept-common.js', 'core/perplexity-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'utils/google-search-folwr-parser.js', 'utils/intercept-common.js', 'core/google-search-intercept.js']");

@@ -1408,224 +1408,22 @@ if (typeof window !== 'undefined') {
   // контракта и видит ТЕ ЖЕ переменные, а не копии. historyRefetchTimer переехал в модуль.
   // Форвардеры ядра (хойстятся, вызовы выше по файлу не тронуты) — в конце этого IIFE.
 
-  // ===== СЕКЦИЯ 11: ПЕРЕХВАТ FETCH (v5: тихий catch + устранение висячих Promise.reject) =====
-  if (typeof originalFetch === 'function') {
-    window.fetch = function (input, init) {
-      var url = '';
-      try { url = (typeof input === 'string') ? input : (input && input.url) || ''; } catch (e) { }
-      var method = (init && init.method) ? String(init.method).toUpperCase() : 'GET';
-
-      // Сбор заголовков ВСЕХ запросов (для сохранения auth)
-      var allH = collectHeaders(input, init);
-      if (allH.Authorization || allH.authorization) lastAuthHeaders = allH;
-
-      // --- история: URL содержит "history_messages" ---
-      var isHistory = (url.indexOf('history_messages') !== -1);
-      var historyConvId = '';
-      var historyAuthHeaders = null;
-      if (isHistory) {
-        historyConvId = convIdFromHistoryUrl(url);
-        historyAuthHeaders = allH;
-        lastHistoryUrl = url;   // v6: сохраняем URL для возможного дозапроса при усечении
-      }
-
-      // --- отправка: URL содержит "completion", метод POST ---
-      var isCompletion = (url.indexOf('completion') !== -1 && method === 'POST');
-      var completionConvId = '';
-      if (isCompletion) {
-        var bodyStr = '';
-        try {
-          if (init && typeof init.body === 'string') {
-            bodyStr = init.body;
-            var payload = JSON.parse(bodyStr);
-            sseUserPrompt = payload.prompt || '';
-            sseParentMessageId = payload.parent_message_id || null;
-            sseThinkingEnabled = payload.thinking_enabled;        // сохраняем для getModelSlug
-            completionConvId = payload.chat_session_id || '';
-          }
-        } catch (e) { }
-      }
-
-      // --- настройки модели: URL содержит "client/settings" (v13, scope=model) ---
-      var isModelSettings = (url.indexOf('client/settings') !== -1);
-
-      var promise;
-      try { promise = originalFetch.apply(this, arguments); } catch (e) { return Promise.reject(e); }
-
-      // v5: тихий catch — снимает ложный unhandled rejection для чужих прерванных запросов
-      // (Failed to fetch при навигации/переключении/обрыве стрима), не меняя поведения страницы
-      promise.catch(function () { /* тихо: снимаем ложный unhandled для чужих прерванных запросов */ });
-
-      // обработка ответа истории
-      if (isHistory) {
-        promise.then(function (resp) {
-          try {
-            if (resp && resp.ok && guardCheck(historyConvId)) {
-              resp.clone().json().then(function (json) {
-                // Проверка «пусто+MERGE»: сервер вернул пустой chat_messages при is_empty!==true
-                var bd = json && json.data && json.data.biz_data;
-                if (bd) {
-                  var cs = bd.chat_session;
-                  var emptyMERGE = cs && cs.is_empty !== true && (!Array.isArray(bd.chat_messages) || bd.chat_messages.length === 0);
-                  if (emptyMERGE && guardCheck(historyConvId)) {
-                    if (diagOn()) diagHistRecord(json, 'fetch-history:emptyMERGE');   // O-18 (ИЗМЕРЕНИЕ)
-                    console.log('[deepseek-intercept] кеш MERGE → тихий дозапрос полной истории (без cache_version)');
-                    lastLoadedConvId = currentConvId;
-                    refetchFullHistory(url, historyAuthHeaders, historyConvId);
-                    return;
-                  }
-                }
-                ingestHistory(json);
-              }).catch(function () { });
-            }
-          } catch (e) { }
-          return resp;
-        }, function () { /* v5: тихо — не создаём висячий Promise.reject */ });
-      }
-
-      // обработка ответа стрима (v9: инкрементально — терминальный чанк закрывает ход
-      // сразу, не дожидаясь конца тела ответа)
-      if (isCompletion) {
-        promise.then(function (resp) {
-          try {
-            if (resp && resp.ok && guardCheck(completionConvId)) {
-              consumeSseResponse(resp, completionConvId);
-            }
-          } catch (e) { }
-          return resp;
-        }, function () { /* v5: тихо — не создаём висячий Promise.reject */ });
-      }
-
-      // обработка ответа настроек модели (v13): тихий разбор, только чтение
-      if (isModelSettings) {
-        promise.then(function (resp) {
-          try {
-            if (resp && resp.ok) {
-              resp.clone().json().then(function (json) {
-                ingestModelSettings(json);
-              }).catch(function () { });
-            }
-          } catch (e) { }
-          return resp;
-        }, function () { /* тихо */ });
-      }
-
-      return promise;
-    };
-  }
-
-  // ===== СЕКЦИЯ 12: ПЕРЕХВАТ XHR (зеркалит fetch, +setRequestHeader-копилка) =====
-  if (originalXHROpen && originalXHRSend) {
-    // Обёртка setRequestHeader — копим заголовки для повторного запроса при MERGE
-    var originalSetRequestHeader = OriginalXHR.prototype.setRequestHeader;
-    if (originalSetRequestHeader) {
-      OriginalXHR.prototype.setRequestHeader = function (name, value) {
-        try {
-          if (this.__aiCmDs && this.__aiCmDs.headers) {
-            this.__aiCmDs.headers[name] = value;
-          }
-        } catch (e) { }
-        return originalSetRequestHeader.apply(this, arguments);
-      };
-    }
-
-    OriginalXHR.prototype.open = function (method, url) {
-      try {
-        this.__aiCmDs = {
-          method: String(method).toUpperCase(),
-          url: String(url),
-          completionBody: null,
-          completionConvId: '',
-          historyConvId: '',
-          headers: {}
-        };
-      } catch (e) { }
-      return originalXHROpen.apply(this, arguments);
-    };
-
-    OriginalXHR.prototype.send = function (body) {
-      var info = this.__aiCmDs;
-      if (!info) return originalXHRSend.apply(this, arguments);
-
-      // Сохраняем auth-заголовки при наличии Authorization
-      if (info.headers && (info.headers.Authorization || info.headers.authorization)) lastAuthHeaders = info.headers;
-
-      var url = info.url || '';
-      var method = info.method || 'GET';
-
-      // --- история ---
-      if (url.indexOf('history_messages') !== -1) {
-        info.historyConvId = convIdFromHistoryUrl(url);
-        lastHistoryUrl = url;   // v6: сохраняем URL для возможного дозапроса при усечении
-      }
-
-      // --- отправка ---
-      if (url.indexOf('completion') !== -1 && method === 'POST') {
-        var bodyStr = (typeof body === 'string') ? body : '';
-        info.completionBody = bodyStr;
-        info.completionConvId = convIdFromCompletionBody(bodyStr);
-        try {
-          if (bodyStr) {
-            var payload = JSON.parse(bodyStr);
-            sseUserPrompt = payload.prompt || '';
-            sseParentMessageId = payload.parent_message_id || null;
-            sseThinkingEnabled = payload.thinking_enabled;
-          }
-        } catch (e) { }
-      }
-
-      var self = this;
-
-      // обработка ответа (load)
-      this.addEventListener('load', function () {
-        var info2 = self.__aiCmDs;
-        if (!info2) return;
-        try {
-          if (self.status < 200 || self.status >= 300) return;
-          if (!self.responseText) return;
-
-          var loadUrl = info2.url || '';
-
-          // история
-          if (loadUrl.indexOf('history_messages') !== -1) {
-            if (guardCheck(info2.historyConvId)) {
-              try {
-                var jsonH = JSON.parse(self.responseText);
-                // Проверка «пусто+MERGE»: сервер вернул пустой chat_messages при is_empty!==true
-                var bdH = jsonH && jsonH.data && jsonH.data.biz_data;
-                if (bdH) {
-                  var csH = bdH.chat_session;
-                  var emptyMERGE = csH && csH.is_empty !== true && (!Array.isArray(bdH.chat_messages) || bdH.chat_messages.length === 0);
-                  if (emptyMERGE && guardCheck(info2.historyConvId)) {
-                    if (diagOn()) diagHistRecord(jsonH, 'xhr-history:emptyMERGE');   // O-18 (ИЗМЕРЕНИЕ)
-                    console.log('[deepseek-intercept] кеш MERGE → тихий дозапрос полной истории (без cache_version)');
-                    lastLoadedConvId = currentConvId;
-                    refetchFullHistory(loadUrl, info2.headers || {}, info2.historyConvId);
-                    return;
-                  }
-                }
-                ingestHistory(jsonH);
-              } catch (e) { }
-            }
-          }
-
-          // стрим
-          if (loadUrl.indexOf('completion') !== -1 && info2.method === 'POST') {
-            if (guardCheck(info2.completionConvId)) {
-              parseSSE(self.responseText);
-            }
-          }
-
-          // настройки модели (v13): name активной конфигурации (Instant)
-          if (loadUrl.indexOf('client/settings') !== -1) {
-            try { ingestModelSettings(JSON.parse(self.responseText)); } catch (eSet) { }
-          }
-        } catch (e) { }
-      });
-
-      return originalXHRSend.apply(this, arguments);
-    };
-  }
+  // ===== Step D.7: K9 (NETWORK) вынесен в core/deepseek-net.js =====
+  // Здесь были СЕКЦИЯ 11 (перехват fetch: v5-тихий catch, копилка auth-заголовков,
+  // история + MERGE-дозапрос, разбор тела completion, настройки модели) и СЕКЦИЯ 12
+  // (перехват XHR: зеркало fetch + setRequestHeader-копилка) — 218 строк.
+  // Тела живут в модуле (PURE-зона и BIND-зона внутри `with (D)` — см. шапку
+  // core/deepseek-net.js) и обращаются к состоянию ядра через контракт __bind:
+  // 11 fn + 6 rw + 5 ro = 22 имени; связка — в конце этого IIFE. Форвардеров нет:
+  // модуль не отдаёт ядру ни одного тела — он публикует себя САЙТУ (window.fetch и
+  // OriginalXHR.prototype.open/send/setRequestHeader), а ядро лишь снабжает его
+  // зависимостями. Объявления originalFetch/OriginalXHR/originalXHROpen/
+  // originalXHRSend (строки 222-225) и состояние копилок (lastAuthHeaders/
+  // lastHistoryUrl/lastLoadedConvId/sseUserPrompt/sseParentMessageId/
+  // sseThinkingEnabled) ОСТАЛИСЬ: их читают K6/K8 и контракты D.2/D.3. Модуль
+  // подключён в core/background.js строго перед этим файлом (js[] одного
+  // registration, id -v9), а связка стоит ПОСЛЕ захвата originalFetch — иначе
+  // обёртка fetch замкнулась бы сама на себя.
 
 
   // ===== СЕКЦИЯ 14: ФИНАЛ =====
@@ -1977,6 +1775,56 @@ if (typeof window !== 'undefined') {
   // намеренно: js[] регистрируется атомарно, а песочницы тестов получают конкатенацию
   // через tests/helpers/deepseek-intercept-source.js.
   function emitBaseSnapshot(serverTokens, chatMode) { return aiCmDeepseekEmit.emitBaseSnapshot(serverTokens, chatMode); }
+
+  // ===== Step D.7: связка модуля NETWORK (core/deepseek-net.js) =====
+  // Контракт: 11 fn (функции ядра, которые зовут тела модуля — передаются значением:
+  // форвардеры D.1 diagOn/diagHistRecord, форвардеры D.3 collectHeaders/
+  // convIdFromHistoryUrl/convIdFromCompletionBody/guardCheck/refetchFullHistory и тела
+  // ядра ingestHistory (K5), parseSSE/consumeSseResponse/ingestModelSettings (K6, СЕКЦИЯ 9);
+  // все — function declaration, хойстятся), 6 rw (копилки и параметры потока, которые
+  // тела K9 ПЕРЕЗАПИСЫВАЮТ: без сеттера запись в sloppy-режиме молча терялась бы, и
+  // копилка авторизации/URL, признак «ответ текущего чата обработан» и параметры
+  // нового потока остались бы прежними) и 5 ro (originalFetch/OriginalXHR/
+  // originalXHROpen/originalXHRSend/currentConvId: модуль их только читает, мутация
+  // прототипа XHR идёт по ссылке). Итого 22 имени контракта: 11 fn + 6 rw + 5 ro.
+  // Связка — ПОСЛЕДНЯЯ и стоит после захвата originalFetch (строка 222): иначе обёртка
+  // fetch замкнулась бы сама на себя. Форвардеров у D.7 нет: ядро тела кластера не зовёт.
+  var aiCmDeepseekNet = (typeof window !== 'undefined' && window.AiCmDeepseekNet) || null;
+  if (aiCmDeepseekNet) {
+    aiCmDeepseekNet.__bind({
+      // fn: функции ядра, которые зовут тела модуля — передаются значением.
+      collectHeaders: collectHeaders,
+      convIdFromHistoryUrl: convIdFromHistoryUrl,
+      convIdFromCompletionBody: convIdFromCompletionBody,
+      guardCheck: guardCheck,
+      refetchFullHistory: refetchFullHistory,
+      diagOn: diagOn,
+      diagHistRecord: diagHistRecord,
+      ingestHistory: ingestHistory,
+      parseSSE: parseSSE,
+      consumeSseResponse: consumeSseResponse,
+      ingestModelSettings: ingestModelSettings,
+      // rw: живое состояние копилок и потока, которое модуль ПЕРЕЗАПИСЫВАЕТ (get + set).
+      get lastAuthHeaders() { return lastAuthHeaders; },
+      set lastAuthHeaders(v) { lastAuthHeaders = v; },
+      get lastHistoryUrl() { return lastHistoryUrl; },
+      set lastHistoryUrl(v) { lastHistoryUrl = v; },
+      get lastLoadedConvId() { return lastLoadedConvId; },
+      set lastLoadedConvId(v) { lastLoadedConvId = v; },
+      get sseUserPrompt() { return sseUserPrompt; },
+      set sseUserPrompt(v) { sseUserPrompt = v; },
+      get sseParentMessageId() { return sseParentMessageId; },
+      set sseParentMessageId(v) { sseParentMessageId = v; },
+      get sseThinkingEnabled() { return sseThinkingEnabled; },
+      set sseThinkingEnabled(v) { sseThinkingEnabled = v; },
+      // ro: только чтение — модуль эти имена не перезаписывает.
+      get originalFetch() { return originalFetch; },
+      get OriginalXHR() { return OriginalXHR; },
+      get originalXHROpen() { return originalXHROpen; },
+      get originalXHRSend() { return originalXHRSend; },
+      get currentConvId() { return currentConvId; }
+    });
+  }
 })();
 
 // v13: экспорт чистого резолвера для контрактного теста (jest/jsdom). В браузере module нет —

@@ -464,22 +464,22 @@ describe('Step D.5: core/deepseek-conv.js — контракт модуля CONV
     })).toBe(true);
   });
 
-  test('S5: проводка — js[] после parse и перед ядром, id -v7 + unregister -v6, helper', function () {
+  test('S5: проводка — js[] после parse и перед ядром, id -v9 + unregister -v8, helper', function () {
     // модуль строго перед ядром и строго после parse
     expect(DS.SOURCES.indexOf('core/deepseek-conv.js'))
       .toBeLessThan(DS.SOURCES.indexOf('core/deepseek-intercept.js'));
     expect(DS.SOURCES.indexOf('core/deepseek-parse.js'))
       .toBeLessThan(DS.SOURCES.indexOf('core/deepseek-conv.js'));
     expect(DS.MODULES).toContain('core/deepseek-conv.js');
-    // регистрация ядра: js[] с модулем. Step D.6 сдвинул регистрацию дальше
-    // (-v8 + снятие -v7) — актуальные значения пинованы в deepseek-d6-module.test.js,
+    // регистрация ядра: js[] с модулем. Step D.6/D.7 сдвинули регистрацию дальше
+    // (-v9 + снятие -v8) — актуальные значения пинованы в deepseek-d7-module.test.js,
     // здесь проверяется, что модуль D.5 остался в js[] и ядро его читает.
     expect(KERNEL_SRC).toContain('aiCmDeepseekConv');
     const bg = DS.readSource('core/background.js');
-    expect(bg).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-intercept.js']");
-    expect(bg).toContain("ids.indexOf('ai-cm-deepseek-intercept-v8') === -1");
-    expect(bg).toContain("unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v7'] })");
-    expect(bg).toContain('(v8) зарегистрирован');
+    expect(bg).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-intercept.js']");
+    expect(bg).toContain("ids.indexOf('ai-cm-deepseek-intercept-v9') === -1");
+    expect(bg).toContain("unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v8'] })");
+    expect(bg).toContain('(v9) зарегистрирован');
     // модуль: UTF-8 без BOM, LF, хвостовой \n; каркас
     const buf = require('fs').readFileSync(require('path').join(DS.ROOT, 'core/deepseek-conv.js'));
     expect(buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF).toBe(false);

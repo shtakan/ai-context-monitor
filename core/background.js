@@ -140,7 +140,7 @@ async function ensureInterceptor() {
     // Почему id сменён, а не переиспользован: MV3 registerContentScripts НЕ перечитывает
     // js[] под уже существующим id, унаследованным от прежней версии расширения —
     // без смены id core/gemini-hidden-scroll.js не доехал бы до обновившихся
-    // пользователей (прецедент — DeepSeek, id 'ai-cm-deepseek-intercept-v8' ниже).
+    // пользователей (прецедент — DeepSeek, id 'ai-cm-deepseek-intercept-v9' ниже).
     // Шаг 5 использует ровно тот же приём: id -v3, а прежние -v2 и legacy снимаются ниже.
     // Шаг 6 (кластер парсеров кадра, core/gemini-parse.js) id НЕ меняет: файл добавлен в js[]
     // уже зарегистрированного -v3. Для профиля, где -v3 зарегистрирован РАНЬШЕ (например,
@@ -223,29 +223,34 @@ async function ensureInterceptor() {
     // getConvId, resetForNewConversation, checkConvChange и патчи history.pushState/
     // replaceState/popstate). Step D.6: бамп -v7 → -v8 — добавлен core/deepseek-emit.js
     // (кластер EMIT: СЕКЦИЯ 4 — buildDispatchSignature, emitBaseSnapshot, clipTurnText/
-    // turnsSnapshot и мост ai-cm-turns-snap-request). Порядок в js[] для D.5/D.6 не
+    // turnsSnapshot и мост ai-cm-turns-snap-request). Step D.7: бамп -v8 → -v9 —
+    // добавлен core/deepseek-net.js (кластер NETWORK: СЕКЦИИ 11/12 — обёртка window.fetch
+    // и обёртки XMLHttpRequest.prototype.open/send/setRequestHeader + копилки
+    // lastAuthHeaders/lastHistoryUrl). Порядок в js[] для D.5-D.7 не
     // критичен (у модулей нет нижестоящих зависимостей), но модули поставлены ПОСЛЕ
     // parse/conv и ПЕРЕД ядром — как D.4; порядок зафиксирован пинами
-    // qwen-provider-wiring и deepseek-order.
+    // qwen-provider-wiring и deepseek-order. Для D.7 существенно, что связка модуля
+    // вызывается в КОНЦЕ IIFE ядра: обёртка fetch берёт originalFetch из ядра и не
+    // замыкается сама на себя.
     // Без бампа id у уже установленного расширения Chrome остался бы прежний
     // registration, js[] не перечитался бы, и ядро работало бы без модуля: связка
     // заполнила бы форвардеры немыми заглушками — диагностика, сетевой дозапрос,
-    // URL-гигиена, разбор базы, детектор смены чата и EMIT выключились бы целиком
-    // до миграции.
-    // Прежний -v7 снимается ниже (тихий catch: чистая установка его не имеет).
-    if (ids.indexOf('ai-cm-deepseek-intercept-v8') === -1) {
+    // URL-гигиена, разбор базы, детектор смены чата, EMIT и перехват сетевого слоя
+    // (fetch/XHR) выключились бы целиком до миграции.
+    // Прежний -v8 снимается ниже (тихий catch: чистая установка его не имеет).
+    if (ids.indexOf('ai-cm-deepseek-intercept-v9') === -1) {
       try {
-        await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v7'] });
+        await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v8'] });
       } catch (eUnregDeepseek) { }
-      await registerSafe('ai-cm-deepseek-intercept-v8', {
-        id: 'ai-cm-deepseek-intercept-v8',
+      await registerSafe('ai-cm-deepseek-intercept-v9', {
+        id: 'ai-cm-deepseek-intercept-v9',
         matches: ['https://chat.deepseek.com/*'],
-        js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-intercept.js'],
+        js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-intercept.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false
       });
-      console.log('AI Context Monitor: перехватчик DeepSeek (v8) зарегистрирован (мир сайта, document_start)');
+      console.log('AI Context Monitor: перехватчик DeepSeek (v9) зарегистрирован (мир сайта, document_start)');
     }
 
     // перехватчик Claude

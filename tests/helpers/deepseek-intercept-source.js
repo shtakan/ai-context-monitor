@@ -1,5 +1,5 @@
 /**
- * v1.5 (Step D.6): карта исходников MAIN-перехватчика DeepSeek.
+ * v1.6 (Step D.7): карта исходников MAIN-перехватчика DeepSeek.
  *
  * core/deepseek-intercept.js декомпозирован: кластер диагностики (СЕКЦИЯ 13/13D/13B —
  * диагностический дампа, вербатим usage по ходам, измерение live vs network) вынесен
@@ -16,15 +16,17 @@
  * history.pushState/replaceState/popstate) — в core/deepseek-conv.js (шаг D.5),
  * кластер EMIT (СЕКЦИЯ 4 — buildDispatchSignature, emitBaseSnapshot, clipTurnText/
  * turnsSnapshot и мост ai-cm-turns-snap-request/response) — в core/deepseek-emit.js
- * (шаг D.6).
+ * (шаг D.6), кластер NETWORK (СЕКЦИИ 11/12 — обёртка window.fetch и обёртки
+ * XMLHttpRequest.prototype.open/send/setRequestHeader + копилки lastAuthHeaders/
+ * lastHistoryUrl) — в core/deepseek-net.js (шаг D.7).
  * Порядок в MODULES — ровно порядок инъекции в core/background.js (registerSafe
- * 'ai-cm-deepseek-intercept-v8', document_start, world 'MAIN'): модули идут ПЕРЕД
+ * 'ai-cm-deepseek-intercept-v9', document_start, world 'MAIN'): модули идут ПЕРЕД
  * core/deepseek-intercept.js.
  *
  * Скрипты одного registerContentScripts-пакета исполняются в одном мировом глобальном
  * лексическом скоупе: до связки на window.AiCmDeepseekDiag / window.AiCmDeepseekNetsync /
  * window.AiCmDeepseekRefetch / window.AiCmDeepseekParse / window.AiCmDeepseekConv /
- * window.AiCmDeepseekEmit лежит
+ * window.AiCmDeepseekEmit / window.AiCmDeepseekNet лежит
  * только __bind, после связки ядро раздаёт значения функций модулей по прежним именам
  * (alias-блоки в ядре).
  * Тела модулей объявлены ВНУТРИ `with (D) { … }` и НЕ имеют префиксов `D.` — свободные
@@ -44,7 +46,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
 
-// Порядок = порядок js[] в core/background.js для 'ai-cm-deepseek-intercept-v8'.
+// Порядок = порядок js[] в core/background.js для 'ai-cm-deepseek-intercept-v9'.
 // utils/debug.js сюда НЕ входит: он не декомпозировался (как и в content-source.js).
 const MODULES = [
   'core/deepseek-diag.js',
@@ -52,7 +54,8 @@ const MODULES = [
   'core/deepseek-refetch.js',
   'core/deepseek-parse.js',
   'core/deepseek-conv.js',
-  'core/deepseek-emit.js'
+  'core/deepseek-emit.js',
+  'core/deepseek-net.js'
 ];
 const INTERCEPT_JS = 'core/deepseek-intercept.js';
 
