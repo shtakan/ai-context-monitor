@@ -1,5 +1,5 @@
 /**
- * v1.3 (Step D.4): карта исходников MAIN-перехватчика DeepSeek.
+ * v1.4 (Step D.5): карта исходников MAIN-перехватчика DeepSeek.
  *
  * core/deepseek-intercept.js декомпозирован: кластер диагностики (СЕКЦИЯ 13/13D/13B —
  * диагностический дампа, вербатим usage по ходам, измерение live vs network) вынесен
@@ -11,15 +11,18 @@
  * кластер цепочки/текста хода (СЕКЦИЯ 5 — MODEL-хелпер getModelSlug, СЕКЦИЯ 6 —
  * buildActiveChain, СЕКЦИЯ 7 — collectTurnText/collectTurnReasoning/composeTurnText +
  * hidden-пометки базы DS_PP_VISIBLE_MARKER/hasInjectedUserPrompt) — в
- * core/deepseek-parse.js (шаг D.4).
+ * core/deepseek-parse.js (шаг D.4), кластер CONV ID + детектора смены чата
+ * (СЕКЦИЯ 3 — getConvId, resetForNewConversation, checkConvChange и патчи
+ * history.pushState/replaceState/popstate) — в core/deepseek-conv.js (шаг D.5).
  * Порядок в MODULES — ровно порядок инъекции в core/background.js (registerSafe
- * 'ai-cm-deepseek-intercept-v6', document_start, world 'MAIN'): модули идут ПЕРЕД
+ * 'ai-cm-deepseek-intercept-v7', document_start, world 'MAIN'): модули идут ПЕРЕД
  * core/deepseek-intercept.js.
  *
  * Скрипты одного registerContentScripts-пакета исполняются в одном мировом глобальном
  * лексическом скоупе: до связки на window.AiCmDeepseekDiag / window.AiCmDeepseekNetsync /
- * window.AiCmDeepseekRefetch / window.AiCmDeepseekParse лежит только __bind, после связки
- * ядро раздаёт значения функций модулей по прежним именам (alias-блоки в ядре).
+ * window.AiCmDeepseekRefetch / window.AiCmDeepseekParse / window.AiCmDeepseekConv лежит
+ * только __bind, после связки ядро раздаёт значения функций модулей по прежним именам
+ * (alias-блоки в ядре).
  * Тела модулей объявлены ВНУТРИ `with (D) { … }` и НЕ имеют префиксов `D.` — свободные
  * имена резолвятся в with-объект (ES3 Annex B), как в gemini-oracle.js / pagination.js.
  * Часть тел живёт в PURE-зонах модулей (вне with) — им ядро не нужно.
@@ -37,13 +40,14 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
 
-// Порядок = порядок js[] в core/background.js для 'ai-cm-deepseek-intercept-v6'.
+// Порядок = порядок js[] в core/background.js для 'ai-cm-deepseek-intercept-v7'.
 // utils/debug.js сюда НЕ входит: он не декомпозировался (как и в content-source.js).
 const MODULES = [
   'core/deepseek-diag.js',
   'core/deepseek-netsync.js',
   'core/deepseek-refetch.js',
-  'core/deepseek-parse.js'
+  'core/deepseek-parse.js',
+  'core/deepseek-conv.js'
 ];
 const INTERCEPT_JS = 'core/deepseek-intercept.js';
 

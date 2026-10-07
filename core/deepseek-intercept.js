@@ -241,16 +241,40 @@ if (typeof window !== 'undefined') {
   var loggedHistory = false;
   var loggedRealtime = false;
 
-  // ===== СЕКЦИЯ 3: CONV ID + ДЕТЕКТОР СМЕНЫ ЧАТА (образец: gemini v17 + page-intercept v11) =====
-  function getConvId() {
-    try {
-      var m = location.pathname.match(/\/a\/chat\/s\/([A-Za-z0-9_-]+)/);
-      if (m) return m[1];
-      m = location.pathname.match(/\/a\/chat\/([A-Za-z0-9_-]+)/);
-      return m ? m[1] : '';
-    } catch (e) { return ''; }
-  }
-  var currentConvId = getConvId();
+  // ===== Step D.5: K1 (CONV ID + ДЕТЕКТОР СМЕНЫ ЧАТА) вынесен в core/deepseek-conv.js =====
+  // Здесь были getConvId (парсер convId из location.pathname), resetForNewConversation
+  // (полный сброс состояния на смену разговора), checkConvChange и патчи
+  // history.pushState / history.replaceState / window.popstate, которые взводят детектор.
+  // Тела живут в модуле (PURE-зона и BIND-зона внутри `with (D)` — см. шапку
+  // core/deepseek-conv.js) и обращаются к состоянию ядра через контракт __bind; связка —
+  // в конце этого IIFE, форвардеры (getConvId, resetForNewConversation) хойстятся.
+  // Модуль подключён в core/background.js строго перед этим файлом (js[] одного
+  // registration, id -v7) и ИСПОЛНЯЕТСЯ раньше ядра: патчи pushState/replaceState ставятся
+  // на загрузке модуля — иначе первый SPA-переход страницы не сбросил бы состояние.
+  // Объявления ниже и O-22-слушатель ОСТАЛИСЬ ЗДЕСЬ: их читают/пишут оставшиеся секции
+  // (fetch-хук K11, XHR-копилка K9, приём снимка K5, emit-гард O-22) — вынос означал бы
+  // правку K3-K11. currentConvId тоже остался: его читают те же секции и контракты D.1/D.2,
+  // а модуль получает переменную rw-парой и видит ТУ ЖЕ переменную (иначе перезапись при
+  // смене чата молча терялась бы в sloppy-режиме).
+  var aiCmDeepseekConv = (typeof window !== 'undefined' && window.AiCmDeepseekConv) || null;
+  // РАННЯЯ связка модуля (пустые зависимости). Почему она нужна: Fn.getConvId/Fn.checkConvChange
+  // появляются на объекте модуля ТОЛЬКО в __bind, а строка ниже ЧИТАЕТ НАЧАЛЬНЫЙ convId
+  // НА ЗАГРУЗКЕ ядра — без ранней связки это был бы TypeError. Ранней связки достаточно ровно
+  // потому, что getConvId не читает НИ ОДНОГО имени из D (смотрит в location), а
+  // checkConvChange зовётся позже, уже после ПОЛНОЙ связки в конце этого IIFE (там же, где
+  // связки D.1-D.4: к её моменту все переменные ядра объявлены). Тело resetForNewConversation
+  // (оно читает состояние) дополнительно защищено guard-строкой полноты связки в модуле.
+  if (aiCmDeepseekConv) aiCmDeepseekConv.__bind({});
+  // Начальный convId: читаем модуль напрямую, а не через форвардер — Fn.getConvId пуст до связки.
+  var currentConvId = aiCmDeepseekConv ? aiCmDeepseekConv.getConvId() : '';
+  // O-22 (ФИКС F4): сигнатура последнего РЕАЛЬНО опубликованного снимка и его возвращаемое
+  // значение (для раннего возврата вызывающим). null — гард пуст, первый диспатч не глушится.
+  // ВАЖНО (Step D.5): lastBaseServerTokens/lastBaseChatMode/lastDispatchSig/lastDispatchResult
+  // жили в СЕКЦИИ 3 среди объявлений вынесенного кластера. Объявления перенесены СЮДА, в ядро:
+  // их читают emit-гард O-22 (последние два — ещё и слушатель смены разговора ниже) и
+  // emitBaseSnapshot выше по файлу. Если оставить их в модуле, ядро читало бы НЕЯВНЫЕ глобалы —
+  // в браузере (window) это работало бы, но в стендах с изолированным vm/jsdom-скоупом дало бы
+  // ReferenceError (поймано сьютом D.5 на lastDispatchSig).
   var lastAuthHeaders = {};
   var lastLoadedConvId = '';
   // historyRefetchTimer (таймер дозапроса) переехал в core/deepseek-refetch.js (Step D.3)
@@ -272,36 +296,6 @@ if (typeof window !== 'undefined') {
   var lastDispatchSig = null;
   var lastDispatchResult = null;
 
-  function resetForNewConversation() {
-    diagResetForConv('conv-change', lastDiagConvId);   // O-18 (ИЗМЕРЕНИЕ): кольца — на один convId
-    lastDiagConvId = currentConvId;                    // O-18 (ИЗМЕРЕНИЕ)
-    turnsMap = {};
-    orderCounter = 0;
-    attachTokens = 0;
-    attachBreak = { imgTokens: 0, docTokens: 0, imgCount: 0, docCount: 0 };
-    loggedOk = false;
-    loggedHistory = false;
-    loggedRealtime = false;
-    lastLoadedConvId = '';
-    lastHistoryUrl = '';          // v6
-    historyRefetchDone = false;   // v6
-    histCompletion.historyComplete = false;  // v7: новая база ещё не подтверждена
-    histCompletion.reachedRoot = false;      // v7
-    histCompletion.baseEmpty = false;        // v11 (O-17)
-    lastBaseServerTokens = 0;                // v11 (O-17)
-    lastBaseChatMode = '';                   // v11 (O-17)
-    // v12 (O-18, фаза 2): live-кэш ходов и состояние сетевого дозапроса — на один чат
-    liveTurns = {};
-    liveTurnOrder = [];
-    netSnapshotAt = 0;
-    netTurnIds = {};
-    lastTurnDoneAt = 0;
-    resetStreamState();
-    console.log('[deepseek-intercept] смена чата → состояние перехватчика сброшено (convId=' + (currentConvId || '(не чат)') + ')');
-    try { window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); } catch (e) { }
-    scheduleHistoryRefetch();
-  }
-
   // O-22 (ФИКС F4): сброс последней сигнатуры на событии смены разговора. Событие диспатчит
   // resetForNewConversation (выше) и ISOLATED-сторона при SPA-переходе: первый диспатч новой
   // базы не глушится, даже если convId в URL не изменился.
@@ -309,33 +303,6 @@ if (typeof window !== 'undefined') {
     window.addEventListener('ai-cm-conversation-changed', function () { lastDispatchSig = null; });
   } catch (eO22rs) { }
 
-  function checkConvChange() {
-    var newId = getConvId();
-    if (newId !== currentConvId) {
-      currentConvId = newId;
-      resetForNewConversation();
-    }
-  }
-
-  try {
-    var origPush = history.pushState;
-    if (origPush) {
-      history.pushState = function () {
-        var r = origPush.apply(this, arguments);
-        try { checkConvChange(); } catch (e) { }
-        return r;
-      };
-    }
-    var origReplace = history.replaceState;
-    if (origReplace) {
-      history.replaceState = function () {
-        var r = origReplace.apply(this, arguments);
-        try { checkConvChange(); } catch (e) { }
-        return r;
-      };
-    }
-    window.addEventListener('popstate', function () { try { checkConvChange(); } catch (e) { } });
-  } catch (e) { }
 
   // ===== СЕКЦИЯ 4: EMIT (контракт как в gemini v21, + serverTokens, + modelMode) =====
   // O-22 (ФИКС F4): payload-точная сигнатура диспатча. Берутся ВСЕ поля области видимости, из
@@ -2061,6 +2028,72 @@ if (typeof window !== 'undefined') {
   function composeTurnText(answer, reasoning) { return aiCmDeepseekParse.composeTurnText(answer, reasoning); }
   function hasInjectedUserPrompt(text) { return aiCmDeepseekParse.hasInjectedUserPrompt(text); }
   function getModelSlug(thinkingEnabled, signals) { return aiCmDeepseekParse.getModelSlug(thinkingEnabled, signals); }
+
+  // ===== Step D.5: связка модуля CONV ID (core/deepseek-conv.js) =====
+  // Контракт: 3 fn (diagResetForConv, resetStreamState, scheduleHistoryRefetch) + 19 rw
+  // (состояние, которое тело сброса ПЕРЕЗАПИСЫВАЕТ: без сеттера запись в sloppy-
+  // режиме молча терялась бы, и сброс на смену чата перестал бы работать) + 1 ro
+  // (histCompletion: тело мутирует ПОЛЯ объекта, а не переприсваивает имя — мутация
+  // по ссылке видна ядру без сеттера). Итого 23 имени контракта: 3 fn + 19 rw + 1 ro.
+  if (aiCmDeepseekConv) {
+    aiCmDeepseekConv.__bind({
+      // fn: функции ядра, которые зовут тела модуля — передаются значением.
+      diagResetForConv: diagResetForConv,
+      resetStreamState: resetStreamState,
+      scheduleHistoryRefetch: scheduleHistoryRefetch,
+      // rw: живое состояние, которое модуль ПЕРЕЗАПИСЫВАЕТ (get + set).
+      get currentConvId() { return currentConvId; },
+      set currentConvId(v) { currentConvId = v; },
+      get lastDiagConvId() { return lastDiagConvId; },
+      set lastDiagConvId(v) { lastDiagConvId = v; },
+      get turnsMap() { return turnsMap; },
+      set turnsMap(v) { turnsMap = v; },
+      get orderCounter() { return orderCounter; },
+      set orderCounter(v) { orderCounter = v; },
+      get attachTokens() { return attachTokens; },
+      set attachTokens(v) { attachTokens = v; },
+      get attachBreak() { return attachBreak; },
+      set attachBreak(v) { attachBreak = v; },
+      get loggedOk() { return loggedOk; },
+      set loggedOk(v) { loggedOk = v; },
+      get loggedHistory() { return loggedHistory; },
+      set loggedHistory(v) { loggedHistory = v; },
+      get loggedRealtime() { return loggedRealtime; },
+      set loggedRealtime(v) { loggedRealtime = v; },
+      get lastLoadedConvId() { return lastLoadedConvId; },
+      set lastLoadedConvId(v) { lastLoadedConvId = v; },
+      get lastHistoryUrl() { return lastHistoryUrl; },
+      set lastHistoryUrl(v) { lastHistoryUrl = v; },
+      get historyRefetchDone() { return historyRefetchDone; },
+      set historyRefetchDone(v) { historyRefetchDone = v; },
+      get lastBaseServerTokens() { return lastBaseServerTokens; },
+      set lastBaseServerTokens(v) { lastBaseServerTokens = v; },
+      get lastBaseChatMode() { return lastBaseChatMode; },
+      set lastBaseChatMode(v) { lastBaseChatMode = v; },
+      get liveTurns() { return liveTurns; },
+      set liveTurns(v) { liveTurns = v; },
+      get liveTurnOrder() { return liveTurnOrder; },
+      set liveTurnOrder(v) { liveTurnOrder = v; },
+      get netSnapshotAt() { return netSnapshotAt; },
+      set netSnapshotAt(v) { netSnapshotAt = v; },
+      get netTurnIds() { return netTurnIds; },
+      set netTurnIds(v) { netTurnIds = v; },
+      get lastTurnDoneAt() { return lastTurnDoneAt; },
+      set lastTurnDoneAt(v) { lastTurnDoneAt = v; },
+      // ro: только чтение — модуль эти имена не перезаписывает.
+      get histCompletion() { return histCompletion; }
+    });
+  }
+  // Ядро продолжает звать K1 по ПРЕЖНИМ именам (emit-композиция, guard-хуки K9/K11,
+  // сброс чата из ingestHistory). Форвардеры — ИМЕННО function declaration: хойстятся,
+  // поэтому вызовы в любом месте ядра выше по файлу видят имя, а тело живёт в модуле.
+  // checkConvChange наружу не выдаётся: его зовут только патчи pushState/replaceState и
+  // popstate-слушатель самого модуля. Гард `aiCmDeepseekConv &&` — не заглушка, а требование
+  // стандарта: ядро грузится и БЕЗ модуля (контрактные тесты K0/слагов, одиночный require),
+  // и обёртка не имеет права бросать на загрузке. В браузере js[] регистрируется атомарно,
+  // и песочницы тестов получают конкатенацию через tests/helpers/deepseek-intercept-source.js.
+  function getConvId() { return (aiCmDeepseekConv && aiCmDeepseekConv.getConvId()) || ''; }
+  function resetForNewConversation() { if (aiCmDeepseekConv) return aiCmDeepseekConv.resetForNewConversation(); }
 })();
 
 // v13: экспорт чистого резолвера для контрактного теста (jest/jsdom). В браузере module нет —

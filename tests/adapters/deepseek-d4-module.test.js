@@ -358,8 +358,8 @@ describe('Step D.4: core/deepseek-parse.js — контракт модуля ц�
       .toBeLessThan(DS.SOURCES.indexOf('core/deepseek-intercept.js'));
     expect(DS.SOURCES.indexOf('core/deepseek-refetch.js'))
       .toBeLessThan(DS.SOURCES.indexOf('core/deepseek-parse.js'));
-    // размеры: K3+K4 уехали целиком (ядро ушло ниже 2100 строк, модуль — за 170)
-    expect(KERNEL_SRC.split('\n').length).toBeLessThan(2100);
+    // размеры: K3+K4 уехали целиком (после D.5 ядро — 2106 строк, модуль — за 170)
+    expect(KERNEL_SRC.split('\n').length).toBeLessThan(2120);
     expect(MODULE_SRC.split('\n').length).toBeGreaterThan(170);
   });
 

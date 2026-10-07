@@ -135,6 +135,7 @@ beforeAll(() => {
   window.eval(DS.moduleSource('deepseek-netsync.js'));
   window.eval(DS.moduleSource('deepseek-refetch.js'));
   window.eval(DS.moduleSource('deepseek-parse.js'));
+  window.eval(DS.moduleSource('deepseek-conv.js'));
   require(INTERCEPT_PATH);
   interceptLoaded = true;
   window.addEventListener('ai-cm-full-history', function (e) { events.push(e.detail); });
