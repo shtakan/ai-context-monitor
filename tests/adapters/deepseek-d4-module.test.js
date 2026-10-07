@@ -146,8 +146,14 @@ const KERNEL_CALLS = [
   'text: composeTurnText(text, mergedReasoning),',
   "tailTurn.text = composeTurnText(tailTurn.answer || '', tailTurn.reasoning);",
   "var sseReasoning = REASONING_ENABLED ? streamFragmentText('THINK') : '';",
-  'if (t.role === \'user\' && hasInjectedUserPrompt(t.text)) turnMsg.hiddenInjection = true;',
   'modelSlug: getModelSlug(ch.thinking_enabled === true, chatModelSignals),'
+];
+
+// С шага D.6 hidden-пометка базы живёт в core/deepseek-emit.js: тело emitBaseSnapshot
+// уехало туда БАЙТ-В-БАЙТ (Step D.6), поэтому строка проверяется по конкатенации
+// модулей и ядра — резолв hasInjectedUserPrompt (форвардер D.4) не изменился.
+const MODULE_CALLS = [
+  'if (t.role === \'user\' && hasInjectedUserPrompt(t.text)) turnMsg.hiddenInjection = true;'
 ];
 
 // Контракт D.1 (диагностика) получает K4-функции ЗНАЧЕНИЕМ — теперь это форвардеры D.4:
@@ -337,8 +343,10 @@ describe('Step D.4: core/deepseek-parse.js — контракт модуля ц�
     // ни одно тело кластера наружу не спрятано: контракт = все 6 тел
     const fwdCount = (KERNEL_SRC.match(/^ {2}function (?:buildActiveChain|collectTurnText|collectTurnReasoning|composeTurnText|hasInjectedUserPrompt|getModelSlug)\(/gm) || []).length;
     expect(fwdCount).toBe(6);
-    // вызовы в ядре не сдвинуты: склейка базы, композиция ходов, SSE-финализация, hidden-пометка
+    // вызовы в ядре не сдвинуты: склейка базы, композиция ходов, SSE-финализация, slug модели
     KERNEL_CALLS.forEach(function (l) { expect(KERNEL_SRC).toContain(l); });
+    // hidden-пометка базы — в модуле EMIT с D.6 (тело уехало байт-в-байт): ищем в конкатенации
+    MODULE_CALLS.forEach(function (l) { expect(DS.deepseekSource).toContain(l); });
     // контракт D.1 не сломан: диагностика получает те же имена (теперь — форвардеры D.4)
     DIAG_BIND_PASSES.forEach(function (l) { expect(KERNEL_SRC).toContain(l); });
     // префиксов D. в телах модуля нет (with (D), ES3 Annex B)

@@ -116,6 +116,9 @@ const BODY_MARKERS = [
 ];
 
 // ---- вызовы в ядре, которые обязаны остаться на месте (S2/S3) -----------------------
+// Третья строка — detail.convId внутри emitBaseSnapshot: с шага D.6 это тело живёт
+// в core/deepseek-emit.js, поэтому строка проверяется по конкатенации модулей и ядра
+// (байты те же: тело уехало байт-в-байт, а getConvId резолвится через bind ядра).
 const KERNEL_CALLS = [
   "var currentConvId = aiCmDeepseekConv ? aiCmDeepseekConv.getConvId() : '';",
   "convId: (typeof getConvId === 'function') ? (getConvId() || currentConvId || '') : (currentConvId || '')",
@@ -352,8 +355,12 @@ describe('Step D.5: core/deepseek-conv.js — контракт модуля CONV
     expect(MODULE_SRC).toContain('    if (!D || Object.keys(D).length === 0) { return; }   // ранняя связка: ядро ещё не отдало состояние');
     // префиксов D. в телах модуля нет (with (D), ES3 Annex B)
     expect(MODULE_SRC).not.toMatch(/\bD\.[A-Za-z_$]/);
-    // вызовы в ядре не сдвинуты
-    KERNEL_CALLS.forEach(function (l) { expect(KERNEL_SRC).toContain(l); });
+    // вызовы не сдвинуты: строка detail.convId с D.6 живёт в модуле EMIT — ищем её
+    // в конкатенации; две ядровые строки — строго в ядре
+    KERNEL_CALLS.forEach(function (l) {
+      const src = (l.indexOf('convId: (typeof getConvId') === 0) ? DS.deepseekSource : KERNEL_SRC;
+      expect(src).toContain(l);
+    });
     // размеры: K1 уехал целиком (ядро ушло ниже 2120 строк, модуль — за 150)
     expect(KERNEL_SRC.split('\n').length).toBeLessThan(2120);
     expect(MODULE_SRC.split('\n').length).toBeGreaterThan(150);
@@ -464,13 +471,15 @@ describe('Step D.5: core/deepseek-conv.js — контракт модуля CONV
     expect(DS.SOURCES.indexOf('core/deepseek-parse.js'))
       .toBeLessThan(DS.SOURCES.indexOf('core/deepseek-conv.js'));
     expect(DS.MODULES).toContain('core/deepseek-conv.js');
-    // регистрация ядра: id -v7, снятие -v6, js[] с модулем, лог (v7)
+    // регистрация ядра: js[] с модулем. Step D.6 сдвинул регистрацию дальше
+    // (-v8 + снятие -v7) — актуальные значения пинованы в deepseek-d6-module.test.js,
+    // здесь проверяется, что модуль D.5 остался в js[] и ядро его читает.
     expect(KERNEL_SRC).toContain('aiCmDeepseekConv');
     const bg = DS.readSource('core/background.js');
-    expect(bg).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-intercept.js']");
-    expect(bg).toContain("ids.indexOf('ai-cm-deepseek-intercept-v7') === -1");
-    expect(bg).toContain("unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v6'] })");
-    expect(bg).toContain('(v7) зарегистрирован');
+    expect(bg).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-intercept.js']");
+    expect(bg).toContain("ids.indexOf('ai-cm-deepseek-intercept-v8') === -1");
+    expect(bg).toContain("unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v7'] })");
+    expect(bg).toContain('(v8) зарегистрирован');
     // модуль: UTF-8 без BOM, LF, хвостовой \n; каркас
     const buf = require('fs').readFileSync(require('path').join(DS.ROOT, 'core/deepseek-conv.js'));
     expect(buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF).toBe(false);

@@ -339,8 +339,11 @@ describe('O-22 (F4): source-пины единой точки и сохранно
   });
 
   test('маркеры измерения-2 и точки диспатча всех сайтов на месте', () => {
-    // 1 объявление + 4 сайта вызова (S560/S692/S1172/S1467) — единая точка не расщеплена
-    expect(INTERCEPT_SRC.split('emitBaseSnapshot(').length - 1).toBe(5);
+    // Единая точка не расщеплена: счётчик по конкатенации модулей и ядра = 7 —
+    // 1 объявление тела (Step D.6: тело уехало в core/deepseek-emit.js) + 2 в форвардере
+    // ядра (объявление + собственно вызов модуля) + 3 сайта вызова в ядре (S560/S692/S1172)
+    // + 1 вызов из модуля D.2 (netsync, сайт S1467 — fn-передача emitBaseSnapshot).
+    expect(INTERCEPT_SRC.split('emitBaseSnapshot(').length - 1).toBe(7);
     expect(INTERCEPT_SRC.split("diagMark('o22-dispatch-site'").length - 1).toBe(4);
     ['S560', 'S692', 'S1172', 'S1467'].forEach((site) => {
       expect(INTERCEPT_SRC).toContain("site: '" + site + "'");

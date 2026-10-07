@@ -272,7 +272,8 @@ if (typeof window !== 'undefined') {
   // ВАЖНО (Step D.5): lastBaseServerTokens/lastBaseChatMode/lastDispatchSig/lastDispatchResult
   // жили в СЕКЦИИ 3 среди объявлений вынесенного кластера. Объявления перенесены СЮДА, в ядро:
   // их читают emit-гард O-22 (последние два — ещё и слушатель смены разговора ниже) и
-  // emitBaseSnapshot выше по файлу. Если оставить их в модуле, ядро читало бы НЕЯВНЫЕ глобалы —
+  // emitBaseSnapshot (с D.6 живёт в core/deepseek-emit.js, читает их rw-парой). Если
+  // оставить их в модуле, ядро читало бы НЕЯВНЫЕ глобалы —
   // в браузере (window) это работало бы, но в стендах с изолированным vm/jsdom-скоупом дало бы
   // ReferenceError (поймано сьютом D.5 на lastDispatchSig).
   var lastAuthHeaders = {};
@@ -304,189 +305,24 @@ if (typeof window !== 'undefined') {
   } catch (eO22rs) { }
 
 
-  // ===== СЕКЦИЯ 4: EMIT (контракт как в gemini v21, + serverTokens, + modelMode) =====
-  // O-22 (ФИКС F4): payload-точная сигнатура диспатча. Берутся ВСЕ поля области видимости, из
-  // которых собирается detail события ai-cm-full-history: convId, состав и тексты ходов
-  // (id, order, role, modelSlug, текст и reasoning — длиной и отпечатком FNV-1a), serverTokens,
-  // chatMode, вложения и вердикт полноты (historyComplete/reachedRoot/baseEmpty). Равенство
-  // сигнатур означает побайтово тот же снимок, поэтому второй диспатч не несёт новой информации.
-  // Сбой сборки → null: гард не действует, диспатч идёт как прежде.
-  function buildDispatchSignature(convId, serverTokens, chatMode) {
-    try {
-      var parts = [
-        String(convId || ''),
-        String(Object.keys(turnsMap).length),
-        String(serverTokens || 0),
-        String(chatMode || ''),
-        String(attachTokens || 0),
-        (attachBreak.imgTokens || 0) + ',' + (attachBreak.docTokens || 0) + ',' +
-          (attachBreak.imgCount || 0) + ',' + (attachBreak.docCount || 0),
-        (histCompletion.historyComplete === true ? '1' : '0') +
-          (histCompletion.reachedRoot === true ? '1' : '0') +
-          (histCompletion.baseEmpty === true ? '1' : '0')
-      ];
-      var keys = Object.keys(turnsMap);
-      var turns = [];
-      for (var i = 0; i < keys.length; i++) {
-        var k = String(keys[i]);
-        var t = turnsMap[k] || {};
-        var tx = (typeof t.text === 'string') ? t.text : '';
-        var rs = (typeof t.reasoning === 'string') ? t.reasoning : '';
-        turns.push(k + ':' + (t.order || 0) + ':' + (t.role || '') + ':' + (t.modelSlug || '') + ':' +
-          tx.length + ':' + diagHash6(tx) + ':' + rs.length + ':' + diagHash6(rs));
-      }
-      turns.sort();   // снимок — это состав, а не порядок ключей turnsMap (порядок detail задаёт t.order)
-      parts.push(turns.join(';'));
-      return parts.join('|');
-    } catch (e) { return null; }
-  }
-  function emitBaseSnapshot(serverTokens, chatMode) {
-    // O-22 (ИЗМЕРЕНИЕ-2): маркер входа в функцию диспатча ai-cm-full-history.
-    // count — из turnsMap (в области видимости), текст на входе тела ещё не собран →
-    // литерал «(вне области)»; convId — из области видимости. Только диагностика под гейтом.
-    try {
-      if (typeof diagMark === 'function' && typeof diagOn === 'function' && diagOn()) {
-        diagMark('o22-dispatch-fn', {
-          ts: Date.now(),
-          count: Object.keys(turnsMap).length,
-          textLen: '(вне области)',
-          convId: (typeof getConvId === 'function') ? (getConvId() || currentConvId || '') : (currentConvId || '')
-        });
-      }
-    } catch (eO22fn) { }
-    serverTokens = (typeof serverTokens === 'number' && serverTokens > 0) ? serverTokens : 0;
-    chatMode = chatMode || '';
-    // O-22 (ФИКС F4): payload-точный гард ПОВТОРНОГО диспатча — единая точка для ВСЕХ сайтов
-    // (S560/S692/S1172/S1467). Живой лог 2026-09-18 21:31:12: один и тот же снимок
-    // (convId 2d0090f5, count=10, ops APPEND:1765/SET:2, frags THINK 5437#809dbd +
-    // RESPONSE 1592#c40b57) ушёл 3 раза за 10 мс. Сигнатура совпала с последней
-    // ОПУБЛИКОВАННОЙ → снимок не изменился, событие ai-cm-full-history не публикуем.
-    // Гард не зависит от aiCmDebug: под гейтом только строка o22-dispatch-skip.
-    var dispatchSig = buildDispatchSignature(
-      (typeof getConvId === 'function') ? (getConvId() || currentConvId) : currentConvId,
-      serverTokens, chatMode);
-    if (dispatchSig !== null && lastDispatchSig !== null && dispatchSig === lastDispatchSig) {
-      try {
-        if (typeof diagMark === 'function' && typeof diagOn === 'function' && diagOn()) {
-          diagMark('o22-dispatch-skip', {
-            site: 'emitBaseSnapshot', ts: Date.now(),
-            count: Object.keys(turnsMap).length, textLen: '(вне области)',
-            convId: (typeof getConvId === 'function') ? (getConvId() || currentConvId || '') : (currentConvId || ''),
-            sig: (typeof diagHash6 === 'function') ? diagHash6(dispatchSig) : '',
-            sigLen: dispatchSig.length
-          });
-        }
-      } catch (eO22skip) { }
-      return lastDispatchResult;
-    }
-    lastBaseServerTokens = serverTokens;   // v11 (O-17): для ре-эмита при полноте 0→1
-    lastBaseChatMode = chatMode;           // v11 (O-17)
-    var ids = Object.keys(turnsMap).sort(function (a, b) {
-      return (turnsMap[a].order || 0) - (turnsMap[b].order || 0);
-    });
-    var pieces = [];
-    var messages = [];
-    var reasonings = [];              // v8: reasoning по ходам (пустая строка — reasoning нет)
-    var reasoningTurns = 0;           // v8: сколько ходов реально несут reasoning
-    var lastModel = '';
-    for (var j = 0; j < ids.length; j++) {
-      var t = turnsMap[ids[j]];
-      pieces.push(t.text);
-      // v7: роль unknown сохраняется КАК ЕСТЬ (не маппится в assistant) — разрешение
-      // на уровне отображения (content.js buildHistoryMessages: не-user → assistant).
-      // Факт нестандартной роли логируем только под debug-флагом (isDebugEnabled).
-      // v8: reasoning хода едет и в messages[], и отдельным массивом reasoningTexts.
-      var turnReasoning = t.reasoning || '';
-      // v13 (O-7): hidden-пометки базы — текст хода не меняется (см. hasInjectedUserPrompt).
-      var turnMsg = { role: t.role || 'unknown', text: t.text, reasoning: turnReasoning };
-      if (turnReasoning) turnMsg.hiddenReasoning = turnReasoning;
-      if (t.role === 'user' && hasInjectedUserPrompt(t.text)) turnMsg.hiddenInjection = true;
-      messages.push(turnMsg);
-      reasonings.push(turnReasoning);
-      if (turnReasoning) reasoningTurns++;
-      if (!(t.role === 'user' || t.role === 'assistant') && isDebugEnabled()) {
-        console.log('[deepseek-intercept] роль "' + (t.role || 'unknown') + '" оставлена как есть (не маппится в assistant)');
-      }
-      if (t.modelSlug) lastModel = t.modelSlug;
-    }
-    var text = pieces.join('\n');
-    try {
-      window.dispatchEvent(new CustomEvent('ai-cm-full-history', {
-        detail: {
-          convId: getConvId() || currentConvId,   // v7: зеркально gemini — stale-conv гард в content.js работает и для DeepSeek
-          text: text,
-          count: ids.length,
-          lastMessageText: pieces.length ? pieces[pieces.length - 1] : '',
-          modelSlug: lastModel || '',
-          modelMode: chatMode,
-          messageTexts: pieces,
-          messageIds: ids,
-          messages: messages,
-          reasoningTexts: reasonings,        // v8: reasoning по ходам ([REASONING]/[ANSWER] уже в messageTexts)
-          reasoningTurns: reasoningTurns,    // v8: ходов с непустым reasoning
-          attachTokens: attachTokens,
-          attachBreak: {
-            imgTokens: attachBreak.imgTokens,
-            docTokens: attachBreak.docTokens,
-            imgCount: attachBreak.imgCount,
-            docCount: attachBreak.docCount
-          },
-          historyComplete: histCompletion.historyComplete,   // v7: честно — true только если обход дошёл до корня
-          reachedRoot: histCompletion.reachedRoot,           // v7: доказан ли корень (узел без parent_id)
-          baseEmpty: histCompletion.baseEmpty === true,      // v11 (O-17): полнота вынесена по авторитетно пустой базе (наследуется live-эмитами)
-          serverTokens: serverTokens
-        }
-      }));
-    } catch (e) { }
-    var result = { count: ids.length, textLen: text.length, lastModel: lastModel, serverTokens: serverTokens, reasoningTurns: reasoningTurns };
-    // O-22 (ФИКС F4): запоминаем ТОЛЬКО реально опубликованный снимок — по этой сигнатуре
-    // следующий диспатч того же снимка будет остановлен до события.
-    lastDispatchSig = dispatchSig;
-    lastDispatchResult = result;
-    return result;
-  }
-
-  // v11 (O-17): сводка turnsMap для дампов в момент экспорта (aiCmDumpTurnsSnapshot,
-  // core/base-handler.js). DeepSeek раньше на мост не отвечал (мост Gemini), поэтому в живом
-  // логе «snapshot-at-manual msgs=0 firstText=""» читалось как ПУСТОЙ turnsMap, хотя база была
-  // собрана: фолбэк дампа подставляет msgs только когда передан массив, а ручной путь
-  // (content.js) передаёт null. Теперь msgs — реальное число ходов перехватчика.
-  function clipTurnText(t) {
-    try { return String((t && t.text) || '').slice(0, 80).replace(/\s+/g, ' '); } catch (e) { return ''; }
-  }
-  function turnsSnapshot() {
-    var ids = Object.keys(turnsMap).sort(function (a, b) {
-      return (turnsMap[a].order || 0) - (turnsMap[b].order || 0);
-    });
-    var first = ids.length ? turnsMap[ids[0]] : null;
-    var last = ids.length ? turnsMap[ids[ids.length - 1]] : null;
-    return {
-      convId: currentConvId || getConvId() || '',
-      msgs: ids.length,
-      firstText: clipTurnText(first),
-      lastText: clipTurnText(last),
-      baseComplete: histCompletion.historyComplete === true,
-      // v11 (O-17): начало истории на DeepSeek не требует скролла — вердикт полноты тот же,
-      // что и у базы; скролл-подтверждений у сервиса нет вовсе.
-      reachedStart: histCompletion.historyComplete === true,
-      confirmedByScroll: false,
-      scrollEngaged: false,
-      baseMsgs: ids.length,
-      liveCount: ids.length,
-      archiveCount: 0
-    };
-  }
-  try {
-    window.addEventListener('ai-cm-turns-snap-request', function () {
-      try {
-        window.dispatchEvent(new CustomEvent('ai-cm-turns-snap-response', { detail: turnsSnapshot() }));
-      } catch (eTurnsResp) { }
-      // O-18 (ИЗМЕРЕНИЕ): этот мост экспортёр дёргает в ОБЕИХ точках записи файла
-      // (snapshot-at-fired / snapshot-at-manual) — здесь снимаем per-turn сравнение
-      // live vs network и дамп колец. Только чтение + console.log под флагом aiCmDebug.
-      try { diagExportHook('turns-snap-request'); } catch (eDiagExp) { }
-    });
-  } catch (eTurnsBridge) { }
+  // ===== Step D.6: K2 (EMIT) вынесен в core/deepseek-emit.js =====
+  // Здесь были СЕКЦИЯ 4 целиком: buildDispatchSignature (payload-точная сигнатура
+  // снимка, O-22/ФИКС F4), emitBaseSnapshot (единая точка публикации события
+  // ai-cm-full-history + гард повторного диспатча; 3 сайта вызова остались в ядре —
+  // приём снимка истории и два realtime-финала, плюс ре-эмит полноты 0→1),
+  // clipTurnText и turnsSnapshot (сводка turnsMap для дампов экспорта, v11/O-17)
+  // и мост ai-cm-turns-snap-request → ai-cm-turns-snap-response.
+  // Тела живут в модуле (PURE-зона и BIND-зона внутри `with (D)` — см. шапку
+  // core/deepseek-emit.js) и обращаются к состоянию ядра через контракт __bind:
+  // 7 fn + 4 rw + 5 ro = 16 имён; связка — в конце этого IIFE, форвардер
+  // emitBaseSnapshot (function declaration — хойстится) в блоке связки D.6.
+  // Объявления lastBaseServerTokens/lastBaseChatMode/lastDispatchSig/lastDispatchResult
+  // (строки 292-297 выше) и O-22-слушатель (299-304) ОСТАЛИСЬ: их читают ре-эмит
+  // полноты 0→1 в ingestHistory и слушатель смены разговора; turnsMap/attachTokens/
+  // attachBreak/histCompletion/currentConvId ведут K5/K6/K9/K11 — модуль получает их
+  // ro-геттерами. Модуль подключён в core/background.js строго перед этим файлом
+  // (js[] одного registration, id -v8): к связке в конце этого IIFE
+  // window.AiCmDeepseekEmit уже есть.
 
   // ===== Step D.4: K3+K4 (MODEL-хелпер, цепочка, текст хода) вынесены в core/deepseek-parse.js =====
   // Здесь были СЕКЦИЯ 5 (getModelSlug — slug модели хода: сетевые сигналы K0, затем
@@ -2094,6 +1930,53 @@ if (typeof window !== 'undefined') {
   // и песочницы тестов получают конкатенацию через tests/helpers/deepseek-intercept-source.js.
   function getConvId() { return (aiCmDeepseekConv && aiCmDeepseekConv.getConvId()) || ''; }
   function resetForNewConversation() { if (aiCmDeepseekConv) return aiCmDeepseekConv.resetForNewConversation(); }
+
+  // ===== Step D.6: связка модуля EMIT (core/deepseek-emit.js) =====
+  // Контракт: 7 fn (функции ядра, которые зовут тела модуля — передаются значением:
+  // форвардеры D.1 diagHash6/diagMark/diagOn/diagExportHook/isDebugEnabled, форвардер
+  // D.5 getConvId и форвардер D.4 hasInjectedUserPrompt; все — function declaration,
+  // хойстятся), 4 rw (состояние emit-гарда O-22: его ПЕРЕЗАПИСЫВАЕТ тело
+  // emitBaseSnapshot — без сеттера запись в sloppy-режиме молча терялась бы, и гард
+  // повторного диспатча перестал бы глушить одинаковые снимки) и 5 ro (turnsMap/
+  // attachTokens/attachBreak/histCompletion/currentConvId: модуль их только читает,
+  // а поля histCompletion и записи turnsMap мутируются по ссылке). Итого 16 имён
+  // контракта: 7 fn + 4 rw + 5 ro.
+  var aiCmDeepseekEmit = (typeof window !== 'undefined' && window.AiCmDeepseekEmit) || null;
+  if (aiCmDeepseekEmit) {
+    aiCmDeepseekEmit.__bind({
+      // fn: функции ядра, которые зовут тела модуля — передаются значением.
+      diagHash6: diagHash6,
+      diagMark: diagMark,
+      diagOn: diagOn,
+      diagExportHook: diagExportHook,
+      isDebugEnabled: isDebugEnabled,
+      getConvId: getConvId,
+      hasInjectedUserPrompt: hasInjectedUserPrompt,
+      // rw: живое состояние emit-гарда, которое модуль ПЕРЕЗАПИСЫВАЕТ (get + set).
+      get lastBaseServerTokens() { return lastBaseServerTokens; },
+      set lastBaseServerTokens(v) { lastBaseServerTokens = v; },
+      get lastBaseChatMode() { return lastBaseChatMode; },
+      set lastBaseChatMode(v) { lastBaseChatMode = v; },
+      get lastDispatchSig() { return lastDispatchSig; },
+      set lastDispatchSig(v) { lastDispatchSig = v; },
+      get lastDispatchResult() { return lastDispatchResult; },
+      set lastDispatchResult(v) { lastDispatchResult = v; },
+      // ro: только чтение — модуль эти имена не перезаписывает.
+      get turnsMap() { return turnsMap; },
+      get attachTokens() { return attachTokens; },
+      get attachBreak() { return attachBreak; },
+      get histCompletion() { return histCompletion; },
+      get currentConvId() { return currentConvId; }
+    });
+  }
+  // Ядро продолжает звать EMIT по ПРЕЖНЕМУ имени (K5 ingest при ре-эмите полноты 0→1,
+  // realtime-финалы K6/K7 и fn-передача в контракт D.2). Форвардер — ИМЕННО function
+  // declaration: хойстится, поэтому вызовы выше по файлу видят имя, а тело живёт
+  // в модуле. Остальные три тела кластера (buildDispatchSignature/clipTurnText/
+  // turnsSnapshot) наружу не выдаются: их зовут только тела модуля. Заглушек нет
+  // намеренно: js[] регистрируется атомарно, а песочницы тестов получают конкатенацию
+  // через tests/helpers/deepseek-intercept-source.js.
+  function emitBaseSnapshot(serverTokens, chatMode) { return aiCmDeepseekEmit.emitBaseSnapshot(serverTokens, chatMode); }
 })();
 
 // v13: экспорт чистого резолвера для контрактного теста (jest/jsdom). В браузере module нет —

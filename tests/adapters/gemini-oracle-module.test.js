@@ -645,10 +645,11 @@ describe('Phase 3 шаг 13.3: S-пины проводки модуля', () => 
     // модуль сетевого дозапроса DeepSeek core/deepseek-netsync.js добавлен в js[];
     // 28 → 29 — Step D.3, кластер REFETCH/URL-гигиены core/deepseek-refetch.js;
     // 29 → 30 — Step D.4, кластер цепочки/текста хода core/deepseek-parse.js;
-    // 30 → 31 — Step D.5, кластер CONV ID + детектора смены чата core/deepseek-conv.js)
+    // 30 → 31 — Step D.5, кластер CONV ID + детектора смены чата core/deepseek-conv.js;
+    // 31 → 32 — Step D.6, кластер EMIT core/deepseek-emit.js)
     const yml = readFile('.github/workflows/release.yml');
-    expect((yml.match(/31 MAIN-world/g) || [])).toHaveLength(2);
-    expect(yml).not.toContain('30 MAIN-world');
+    expect((yml.match(/32 MAIN-world/g) || [])).toHaveLength(2);
+    expect(yml).not.toContain('31 MAIN-world');
   });
 
   test('S2: bind-контракт полон — 32 имени (10 fn + 10 rw + 12 ro), ни одной потерянной привязки', () => {
