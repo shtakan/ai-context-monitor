@@ -1,16 +1,19 @@
 /**
- * v1.0 (Step D.0): карта исходников MAIN-перехватчика DeepSeek.
+ * v1.1 (Step D.2): карта исходников MAIN-перехватчика DeepSeek.
  *
  * core/deepseek-intercept.js декомпозирован: кластер диагностики (СЕКЦИЯ 13/13D/13B —
  * диагностический дампа, вербатим usage по ходам, измерение live vs network) вынесен
- * в core/deepseek-diag.js. Порядок в MODULES — ровно порядок инъекции в core/background.js
- * (registerSafe 'ai-cm-deepseek-intercept-v3', document_start, world 'MAIN'):
- * модуль идёт ПЕРЕД core/deepseek-intercept.js.
+ * в core/deepseek-diag.js (шаг D.1), кластер сетевого дозапроса истории в момент
+ * экспорта (СЕКЦИЯ 9C, O-18 фаза 2) — в core/deepseek-netsync.js (шаг D.2). Порядок
+ * в MODULES — ровно порядок инъекции в core/background.js (registerSafe
+ * 'ai-cm-deepseek-intercept-v4', document_start, world 'MAIN'): модули идут ПЕРЕД
+ * core/deepseek-intercept.js.
  *
  * Скрипты одного registerContentScripts-пакета исполняются в одном мировом глобальном
- * лексическом скоупе: до связки на window.AiCmDeepseekDiag лежит только __bind, после
- * связки ядро раздаёт значения функций модуля по прежним именам (alias-блок в ядре).
- * Тела модуля объявлены ВНУТРИ `with (D) { … }` и НЕ имеют префиксов `D.` — свободные
+ * лексическом скоупе: до связки на window.AiCmDeepseekDiag / window.AiCmDeepseekNetsync
+ * лежит только __bind, после связки ядро раздаёт значения функций модулей по прежним
+ * именам (alias-блоки в ядре).
+ * Тела модулей объявлены ВНУТРИ `with (D) { … }` и НЕ имеют префиксов `D.` — свободные
  * имена резолвятся в with-объект (ES3 Annex B), как в gemini-oracle.js / pagination.js.
  *
  * ВАЖНО: перенос кода обязан быть БАЙТОВЫМ, включая ведущие отступы, и рабочие файлы
@@ -26,10 +29,11 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
 
-// Порядок = порядок js[] в core/background.js для 'ai-cm-deepseek-intercept-v3'.
+// Порядок = порядок js[] в core/background.js для 'ai-cm-deepseek-intercept-v4'.
 // utils/debug.js сюда НЕ входит: он не декомпозировался (как и в content-source.js).
 const MODULES = [
-  'core/deepseek-diag.js'
+  'core/deepseek-diag.js',
+  'core/deepseek-netsync.js'
 ];
 const INTERCEPT_JS = 'core/deepseek-intercept.js';
 

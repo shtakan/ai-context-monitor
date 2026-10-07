@@ -55,7 +55,7 @@ jobs:
           # Phase 3 step 1: dist/ стал самодостаточным, поэтому legacy-дерево исходников
           # уходит из пакета. ^core/ и ^utils/ безопасны: все их файлы либо склеены в
           # бандлы, либо перечислены в runtimeRegisteredFiles() и попадают в ZIP оверлеем
-          # dist/ (27 MAIN-world файлов, которые service worker регистрирует сам).
+          # dist/ (28 MAIN-world файлов, которые service worker регистрирует сам).
           # Phase 3 step 6: кластер парсеров кадра вынесен в core/gemini-parse.js,
           # поэтому runtime-файлов стало на один больше (было 18, стало 19) —
           # сам исключающий фильтр ниже не менялся, файл приходит оверлеем dist/.
@@ -76,6 +76,9 @@ jobs:
           # (было 25, стало 26); фильтр не тронут, модуль приходит оверлеем dist/.
           # Step D.1: кластер диагностики DeepSeek вынесен в core/deepseek-diag.js — снова +1
           # (было 26, стало 27); фильтр не тронут, модуль приходит оверлеем dist/.
+          # Step D.2: кластер сетевого дозапроса DeepSeek (СЕКЦИЯ 9C) вынесен в
+          # core/deepseek-netsync.js — снова +1 (было 27, стало 28); фильтр не тронут,
+          # модуль приходит оверлеем dist/ (build.mjs выводит runtime-файлы из js[]).
           # options/options\.js$ и ^print/print\.js$ исключены как бандлируемые входы:
           # оверлей кладёт их бандлы в корень пакета (options.js, print.js), а сами
           # HTML-страницы подменяются rewired-копиями из dist/.
@@ -92,7 +95,7 @@ jobs:
           # (background.js, content.js, options.js, print.js, shared-i18n.js),
           # docs/screenshots/ и _locales/ появляются в корне пакета. Именно rewired-копии
           # manifest.json и четырёх страниц определяют, что запускает Chrome:
-          # 5 бандлов + 27 MAIN-world файлов, которые service worker регистрирует сам.
+          # 5 бандлов + 28 MAIN-world файлов, которые service worker регистрирует сам.
           # Файлы перечисляются find-ом (а не 'zip -r dist'), чтобы записи в архиве
           # гарантированно не получили префикс 'dist/' и совпали с legacy-именами.
           ( cd dist && find . -type f ) | sed 's|^\./||' | xargs zip -q "$ZIP"

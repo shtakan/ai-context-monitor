@@ -20,8 +20,9 @@
 const fs = require('fs');
 const path = require('path');
 
-// Step D.1: ядро декомпозировано — диагностика уехала в core/deepseek-diag.js, поэтому
-// стенд грузит КОНКАТЕНАЦИЮ модулей + ядра (как js[] одного registration в браузере).
+// Step D.1/D.2: ядро декомпозировано — диагностика уехала в core/deepseek-diag.js,
+// сетевой дозапрос (СЕКЦИЯ 9C) — в core/deepseek-netsync.js, поэтому стенд грузит
+// КОНКАТЕНАЦИЮ модулей + ядра (как js[] одного registration в браузере).
 const DS = require('../helpers/deepseek-intercept-source.js');
 const INTERCEPT_PATH = path.join(DS.ROOT, DS.INTERCEPT_JS);
 
@@ -125,10 +126,11 @@ beforeAll(() => {
   window.history.pushState({}, '', '/a/chat/s/convOrder');
   window.fetch = fakeFetch;
   global.fetch = fakeFetch;
-  // Порядок как в js[] браузера: модуль диагностики -> ядро. Модуль грузим через
-  // window.eval, а не require: его тела объявлены внутри `with (D)` (ES3 Annex B), а
+  // Порядок как в js[] браузера: модули -> ядро. Модули грузим через
+  // window.eval, а не require: их тела объявлены внутри `with (D)` (ES3 Annex B), а
   // jest-трансформ парсит файлы как strict/ESM и падает на парсере `with`.
   window.eval(DS.moduleSource('deepseek-diag.js'));
+  window.eval(DS.moduleSource('deepseek-netsync.js'));
   require(INTERCEPT_PATH);
   interceptLoaded = true;
   window.addEventListener('ai-cm-full-history', function (e) { events.push(e.detail); });

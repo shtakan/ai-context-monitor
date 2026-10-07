@@ -1587,217 +1587,23 @@ if (typeof window !== 'undefined') {
     });
   } catch (eStreamBridge) { }
 
-  // ===== СЕКЦИЯ 9C (O-18, ФАЗА 2): СЕТЕВОЙ ДОЗАПРОС ИСТОРИИ В МОМЕНТ ЭКСПОРТА =====
-  // Мост: ISOLATED (core/base-handler.js: aiCmExportNetSyncThen) →
-  //   'ai-cm-deepseek-net-sync' {requestId, convId, timeoutMs}
-  //   ← 'ai-cm-deepseek-net-sync-done' {requestId, ok, reason, refetched, netTurns, verdicts}
-  // Правило: ПЕРЕД композицией файла (авто и ручной экспорт) история текущего чата
-  // запрашивается по сети, если снимок сети пуст ИЛИ старше последнего завершённого хода.
-  // Таймаут (по умолчанию 3 с) — жёсткий: не дождались/сети нет → прежний live-путь.
-  var NET_SYNC_TIMEOUT_DEFAULT = 3000;
+  // ===== Step D.2: сетевой дозапрос истории вынесен в core/deepseek-netsync.js =====
+  // Здесь была СЕКЦИЯ 9C (O-18, фаза 2): liveTurnRecord, netSyncNeeded, exportComposeTurns,
+  // applyExportNetSnapshot, exportNetSync и мост window 'ai-cm-deepseek-net-sync'. Тела
+  // живут в модуле (BIND-зона внутри `with (D)`, см. шапку core/deepseek-netsync.js) и
+  // обращаются к состоянию ядра через контракт __bind; связка — в конце этого IIFE.
+  // Модуль подключён в core/background.js строго перед этим файлом (js[] одного
+  // registration, id -v4): на момент связки window.AiCmDeepseekNetsync уже есть.
+  // Состояние дозапроса ОСТАЛОСЬ ЗДЕСЬ: его читают и пишут оставшиеся секции
+  // (resetForNewConversation — сброс на смену чата, ingestHistory — приёмка сетевого
+  // снимка, finishSseStream — lastTurnDoneAt), а модуль получает ТЕ ЖЕ переменные
+  // rw-парами контракта, поэтому объекты общие, а не копии.
   var liveTurns = {};          // v12: LIVE-текст ходов (SSE) — переживает приёмку сети
   var liveTurnOrder = [];
   var netSnapshotAt = 0;       // время приёмки авторитетного сетевого снимка
   var netTurnIds = {};         // какие ходы пришли ИЗ СЕТИ (последний принятый снимок)
   var lastTurnDoneAt = 0;      // время последнего завершённого хода (финализация потока)
-  var netSyncSeq = 0;
   var netSyncStats = { calls: 0, fetched: 0, ok: 0, fresh: 0, empty: 0, failed: 0, timeout: 0, oneSide: 0 };
-
-  // LIVE-текст хода: пишется на КАЖДОЙ финализации потока (не только под флагом диагностики).
-  // «Длиннее побеждает» — та же монотонность, что у обогащения хода (O-16): усечённая
-  // ревизия не может вытеснить полную.
-  function liveTurnRecord(id, role, text, answer, reasoning, modelSlug) {
-    try {
-      var key = String(id || '');
-      if (!key || !text) return;
-      var prev = liveTurns[key];
-      if (!prev) liveTurnOrder.push(key);
-      if (prev && String(prev.text || '').length > String(text).length) return;
-      liveTurns[key] = {
-        role: role, text: String(text), answer: String(answer || ''), reasoning: String(reasoning || ''),
-        modelSlug: modelSlug || '', ts: Date.now() / 1000
-      };
-    } catch (e) { }
-  }
-  // Нужен ли сетевой дозапрос: сети не было / снимок старше последнего завершённого хода /
-  // снимок не покрывает live-ходы.
-  function netSyncNeeded() {
-    try {
-      if (!liveTurnOrder.length) return false;        // live-ходов нет: база и так сетевая
-      if (!netSnapshotAt) return true;                // сети не было вовсе
-      if (netSnapshotAt < lastTurnDoneAt) return true; // снимок старше последнего хода
-      for (var i = 0; i < liveTurnOrder.length; i++) {
-        if (!netTurnIds[liveTurnOrder[i]]) return true;   // хода нет в снимке сети
-      }
-      return false;
-    } catch (e) { return false; }
-  }
-  // Per-turn выбор текста: EQUAL → live (байт-в-байт то же); MIDDLE-HOLE*/TAIL-CUT → сетевой
-  // (он полнее: live потерял середину/хвост — сигнатура O-18); LIVE-EXTRA/DIFF-OTHER → live
-  // (сеть короче либо различие не классифицировано — молча не заменяем); ONE-SIDE → live.
-  function exportComposeTurns() {
-    var verdicts = {};
-    var bump = function (v) { verdicts[v] = (verdicts[v] || 0) + 1; };
-    try {
-      var ids = Object.keys(turnsMap);
-      var i, id, t, lv, v;
-      for (i = 0; i < ids.length; i++) {
-        id = ids[i]; t = turnsMap[id]; lv = liveTurns[id];
-        if (!t) continue;
-        if (!lv) { bump('ONE-SIDE'); continue; }                    // ход только из сети
-        v = diagVerdict(lv.text, t.text);                            // lt=live, nt=net
-        bump(v.verdict);
-        if (v.verdict === 'MIDDLE-HOLE' || v.verdict === 'MIDDLE-HOLE-PARTIAL' || v.verdict === 'TAIL-CUT') {
-          console.log('[deepseek-intercept] экспорт: ход ' + String(id).slice(0, 8) + ' — сетевой текст полнее live (' +
-            v.verdict + ', live=' + lv.text.length + ' net=' + t.text.length + '), берём сеть');
-          continue;                                                  // остаётся сетевой текст
-        }
-        t.text = lv.text; t.answer = lv.answer; t.reasoning = lv.reasoning;
-        if (lv.modelSlug) t.modelSlug = lv.modelSlug;
-      }
-      // Ходы, которых в сети НЕТ вовсе (ONE-SIDE): доливаем live-текст в конец базы.
-      for (i = 0; i < liveTurnOrder.length; i++) {
-        id = liveTurnOrder[i];
-        if (turnsMap[id]) continue;
-        lv = liveTurns[id];
-        if (!lv) continue;
-        bump('ONE-SIDE'); netSyncStats.oneSide++;
-        turnsMap[id] = {
-          text: lv.text, answer: lv.answer, reasoning: lv.reasoning, modelSlug: lv.modelSlug,
-          order: orderCounter++, ts: lv.ts, role: lv.role
-        };
-        console.log('[deepseek-intercept] экспорт: ход ' + String(id).slice(0, 8) +
-          ' есть только в live-базе (ONE-SIDE, сети нет) — в файл идёт live-текст ' + lv.text.length + ' симв.');
-      }
-    } catch (e) { }
-    return verdicts;
-  }
-  // Приёмка сетевого снимка в режиме экспорта: форсированный ingestHistory + per-turn выбор.
-  function applyExportNetSnapshot(json, convId) {
-    var res = { ok: false, reason: 'rejected', verdicts: {} };
-    try {
-      if (!json || json.code !== 0) return res;
-      var bd = json.data && json.data.biz_data;
-      var cms = bd && Array.isArray(bd.chat_messages) ? bd.chat_messages : null;
-      if (!bd || !bd.chat_session || !cms) return res;
-      diagHistRecord(json, 'export-net-sync');
-      if (!cms.length) {
-        // Сети нет: авторитетно пустая история (SPA-созданный чат) — базу НЕ трогаем,
-        // файл собирается live-путём, как и раньше. Маркер — в лог.
-        netSyncStats.empty++;
-        console.log('[deepseek-intercept] экспорт: history_messages пуста (чат без истории в сети) → ' +
-          'файл из live-базы, ходов live=' + liveTurnOrder.length + ' (ONE-SIDE)');
-        res.ok = false; res.reason = 'empty';
-        res.verdicts = { 'ONE-SIDE': liveTurnOrder.length };
-        return res;
-      }
-      var prevComplete = histCompletion.historyComplete === true;
-      var prevReached = histCompletion.reachedRoot === true;
-      ingestMode = 'export-sync';
-      exportSyncTruncated = false;
-      try { ingestHistory(json); } finally { ingestMode = ''; }
-      if (exportSyncTruncated) {
-        // Усечённый снимок не принят (см. ingestHistory): база осталась live-базой.
-        netSyncStats.failed++;
-        res.ok = false; res.reason = 'truncated';
-        res.verdicts = { 'ONE-SIDE': liveTurnOrder.length };
-        return res;
-      }
-      // Дозапрос в момент экспорта не ПОНИЖАЕТ вердикт полноты (O-17): база уже была
-      // признана полной — сеть здесь лишь уточняет тексты ходов.
-      if (prevComplete && !histCompletion.historyComplete) {
-        histCompletion.historyComplete = true;
-        histCompletion.reachedRoot = prevReached || histCompletion.reachedRoot;
-      }
-      res.verdicts = exportComposeTurns();
-      var turns = Object.keys(turnsMap).length;
-      // O-22 (ИЗМЕРЕНИЕ-2): маркер ТОЧКИ диспатча ai-cm-full-history (site=S1467).
-      try {
-        if (typeof diagMark === 'function' && typeof diagOn === 'function' && diagOn()) {
-          diagMark('o22-dispatch-site', {
-            site: 'S1467', ts: Date.now(),
-            count: turns, textLen: '(вне области)'
-          });
-        }
-      } catch (eO22s1467) { }
-      emitBaseSnapshot(Math.max(lastBaseServerTokens || 0, sseRealtimeFinalTokens || 0), sseModelType || lastBaseChatMode);
-      res.ok = turns > 0; res.reason = 'merged';
-      console.log('[deepseek-intercept] экспорт: сетевой дозапрос применён — ходов в базе=' + turns +
-        ', вердикты=' + JSON.stringify(res.verdicts));
-    } catch (e) {
-      res.ok = false; res.reason = 'error';
-    }
-    return res;
-  }
-  function exportNetSync(requestId, convId, timeoutMs) {
-    var cap = (typeof timeoutMs === 'number' && timeoutMs > 0) ? timeoutMs : NET_SYNC_TIMEOUT_DEFAULT;
-    var done = false;
-    var timer = null;
-    netSyncStats.calls++;
-    diagMark('export-net-sync', {
-      conv: String(convId || '').slice(0, 8), needed: netSyncNeeded(),
-      live: liveTurnOrder.length, netAt: netSnapshotAt
-    });
-    function reply(status) {
-      if (done) return;
-      done = true;
-      try { clearTimeout(timer); } catch (eT) { }
-      try {
-        window.dispatchEvent(new CustomEvent('ai-cm-deepseek-net-sync-done', {
-          detail: {
-            requestId: String(requestId || ''), convId: String(convId || ''),
-            ok: status.ok === true, reason: String(status.reason || ''),
-            refetched: status.refetched === true,
-            netTurns: Object.keys(netTurnIds).length,
-            liveTurns: liveTurnOrder.length,
-            verdicts: status.verdicts || {}
-          }
-        }));
-      } catch (eD) { }
-    }
-    timer = setTimeout(function () { netSyncStats.timeout++; reply({ ok: false, reason: 'timeout' }); }, cap);
-    try {
-      if (!convId || convId !== currentConvId) { reply({ ok: false, reason: 'conv-mismatch' }); return; }
-      if (!netSyncNeeded()) {
-        netSyncStats.fresh++;
-        reply({ ok: true, reason: 'fresh' });      // снимок сети свежий и покрывает live-ходы
-        return;
-      }
-      var url = historyRefetchUrl();
-      netSyncStats.fetched++;
-      console.log('[deepseek-intercept] экспорт: сетевой дозапрос истории (convId=' +
-        String(convId).slice(0, 8) + ', live-ходов=' + liveTurnOrder.length + ', снимок сети=' +
-        (netSnapshotAt ? 'старше хода' : 'отсутствует') + ')');
-      var p;
-      try {
-        p = originalFetch(url, { method: 'GET', headers: lastAuthHeaders || {} });
-      } catch (eF) { netSyncStats.failed++; reply({ ok: false, reason: 'fetch-throw' }); return; }
-      p.then(function (r) { return (r && r.ok) ? r.json() : null; })
-        .then(function (json) {
-          if (done) return;
-          if (!json) { netSyncStats.failed++; reply({ ok: false, reason: 'http' }); return; }
-          var applied = applyExportNetSnapshot(json, convId);
-          if (applied.ok) netSyncStats.ok++;
-          reply({ ok: applied.ok, reason: applied.reason, refetched: true, verdicts: applied.verdicts });
-        })
-        .catch(function () {
-          if (done) return;
-          netSyncStats.failed++;
-          console.warn('[deepseek-intercept] экспорт: сетевой дозапрос не удался → прежний live-путь');
-          reply({ ok: false, reason: 'error' });
-        });
-    } catch (e0) {
-      reply({ ok: false, reason: 'error' });
-    }
-  }
-  try {
-    window.addEventListener('ai-cm-deepseek-net-sync', function (ev) {
-      try {
-        var d = (ev && ev.detail) || {};
-        exportNetSync(d.requestId, d.convId || currentConvId || getConvId() || '', d.timeoutMs);
-      } catch (eNs) { }
-    });
-  } catch (eNetBridge) { }
 
   function parseSSE(text) {
     if (typeof text !== 'string' || !text) return;
@@ -2312,6 +2118,68 @@ if (typeof window !== 'undefined') {
   function diagExportHook(trigger) { aiCmDeepseekDiag.diagExportHook(trigger); }
   function diagResetForConv(reason, prevConv) { aiCmDeepseekDiag.diagResetForConv(reason, prevConv); }
 
+  // ===== Step D.2: связка модуля сетевого дозапроса (core/deepseek-netsync.js) =====
+  // Контракт: 8 fn (форвардеры диагностики D.1 и функции ядра — значением), 9 rw
+  // (состояние дозапроса + orderCounter/ingestMode/exportSyncTruncated — тела их
+  // перезаписывают) и 9 ro. Живое состояние отдаётся аксессорами, поэтому модуль и
+  // ядро работают с ОДНИМИ И ТЕМИ ЖЕ переменными IIFE, а не с копиями значений.
+  var aiCmDeepseekNetsync = (typeof window !== 'undefined' && window.AiCmDeepseekNetsync) || null;
+  if (aiCmDeepseekNetsync) {
+    aiCmDeepseekNetsync.__bind({
+      // fn: функции ядра, которые зовут тела модуля — передаются значением.
+      diagMark: diagMark,
+      diagOn: diagOn,
+      diagHistRecord: diagHistRecord,
+      diagVerdict: diagVerdict,
+      emitBaseSnapshot: emitBaseSnapshot,
+      ingestHistory: ingestHistory,
+      historyRefetchUrl: historyRefetchUrl,
+      getConvId: getConvId,
+      // rw: живое состояние сетевого дозапроса. liveTurns/liveTurnOrder/netSnapshotAt/
+      // netTurnIds/lastTurnDoneAt/netSyncStats пишут и оставшиеся секции ядра
+      // (resetForNewConversation, ingestHistory, finishSseStream) — модуль обязан
+      // видеть ТЕ ЖЕ объекты. orderCounter — порядок хода в файле (`orderCounter++`
+      // в exportComposeTurns); ingestMode/exportSyncTruncated — режим экспортного
+      // ingest, который ставит и снимает applyExportNetSnapshot. Без сеттеров эти
+      // три записи молча терялись бы (sloppy): порядок ходов в файле замер бы.
+      get liveTurns() { return liveTurns; },
+      set liveTurns(v) { liveTurns = v; },
+      get liveTurnOrder() { return liveTurnOrder; },
+      set liveTurnOrder(v) { liveTurnOrder = v; },
+      get netSnapshotAt() { return netSnapshotAt; },
+      set netSnapshotAt(v) { netSnapshotAt = v; },
+      get netTurnIds() { return netTurnIds; },
+      set netTurnIds(v) { netTurnIds = v; },
+      get lastTurnDoneAt() { return lastTurnDoneAt; },
+      set lastTurnDoneAt(v) { lastTurnDoneAt = v; },
+      get netSyncStats() { return netSyncStats; },
+      set netSyncStats(v) { netSyncStats = v; },
+      get orderCounter() { return orderCounter; },
+      set orderCounter(v) { orderCounter = v; },
+      get ingestMode() { return ingestMode; },
+      set ingestMode(v) { ingestMode = v; },
+      get exportSyncTruncated() { return exportSyncTruncated; },
+      set exportSyncTruncated(v) { exportSyncTruncated = v; },
+      // ro: только чтение — модуль эти имена не перезаписывает (мутации объектов по
+      // ссылке — turnsMap, histCompletion, lastAuthHeaders — видны ядру и без сеттера).
+      get currentConvId() { return currentConvId; },
+      get turnsMap() { return turnsMap; },
+      get histCompletion() { return histCompletion; },
+      get lastAuthHeaders() { return lastAuthHeaders; },
+      get lastBaseServerTokens() { return lastBaseServerTokens; },
+      get sseRealtimeFinalTokens() { return sseRealtimeFinalTokens; },
+      get sseModelType() { return sseModelType; },
+      get lastBaseChatMode() { return lastBaseChatMode; },
+      get originalFetch() { return originalFetch; }
+    });
+  }
+  // Ядро продолжает звать сетевой дозапрос по ПРЕЖНИМ именам: liveTurnRecord — на
+  // каждой финализации потока (finishSseStream), netSyncNeeded — из связки
+  // диагностики выше. Форвардеры — ИМЕННО function declaration: хойстятся, поэтому
+  // вызовы выше по файлу видят имя. Заглушек нет намеренно: js[] регистрируется
+  // атомарно, а песочницы тестов получают конкатенацию через хелпер deepseek-source.
+  function liveTurnRecord(id, role, text, answer, reasoning, modelSlug) { return aiCmDeepseekNetsync.liveTurnRecord(id, role, text, answer, reasoning, modelSlug); }
+  function netSyncNeeded() { return aiCmDeepseekNetsync.netSyncNeeded(); }
 })();
 
 // v13: экспорт чистого резолвера для контрактного теста (jest/jsdom). В браузере module нет —

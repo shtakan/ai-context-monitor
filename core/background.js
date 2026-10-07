@@ -140,7 +140,7 @@ async function ensureInterceptor() {
     // Почему id сменён, а не переиспользован: MV3 registerContentScripts НЕ перечитывает
     // js[] под уже существующим id, унаследованным от прежней версии расширения —
     // без смены id core/gemini-hidden-scroll.js не доехал бы до обновившихся
-    // пользователей (прецедент — DeepSeek, id 'ai-cm-deepseek-intercept-v3' ниже).
+    // пользователей (прецедент — DeepSeek, id 'ai-cm-deepseek-intercept-v4' ниже).
     // Шаг 5 использует ровно тот же приём: id -v3, а прежние -v2 и legacy снимаются ниже.
     // Шаг 6 (кластер парсеров кадра, core/gemini-parse.js) id НЕ меняет: файл добавлен в js[]
     // уже зарегистрированного -v3. Для профиля, где -v3 зарегистрирован РАНЬШЕ (например,
@@ -212,24 +212,26 @@ async function ensureInterceptor() {
     // одинаковом id из прежней версии расширения, из-за чего на chat.deepseek.com
     // перехватчик молчал и попап показывал «Откройте поддерживаемый сайт»).
     // Step D.1: бамп -v2 → -v3 — добавлен core/deepseek-diag.js (кластер диагностики
-    // вынесен из ядра: СЕКЦИИ 13/13D/13B). Без бампа id у уже установленного расширения
-    // Chrome остался бы прежний registration, js[] не перечитался бы, и ядро работало бы
-    // без модуля: связка заполнила бы diag-форвардеры немыми заглушками — диагностика
-    // выключилась бы целиком до миграции. Прежний -v2 снимается ниже (тихий catch:
+    // вынесен из ядра: СЕКЦИИ 13/13D/13B). Step D.2: бамп -v3 → -v4 — добавлен
+    // core/deepseek-netsync.js (кластер сетевого дозапроса: СЕКЦИЯ 9C, O-18 фаза 2).
+    // Без бампа id у уже установленного расширения Chrome остался бы прежний
+    // registration, js[] не перечитался бы, и ядро работало бы без модуля: связка
+    // заполнила бы форвардеры немыми заглушками — диагностика и сетевой дозапрос
+    // выключились бы целиком до миграции. Прежний -v3 снимается ниже (тихий catch:
     // чистая установка его не имеет).
-    if (ids.indexOf('ai-cm-deepseek-intercept-v3') === -1) {
+    if (ids.indexOf('ai-cm-deepseek-intercept-v4') === -1) {
       try {
-        await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v2'] });
+        await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v3'] });
       } catch (eUnregDeepseek) { }
-      await registerSafe('ai-cm-deepseek-intercept-v3', {
-        id: 'ai-cm-deepseek-intercept-v3',
+      await registerSafe('ai-cm-deepseek-intercept-v4', {
+        id: 'ai-cm-deepseek-intercept-v4',
         matches: ['https://chat.deepseek.com/*'],
-        js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-intercept.js'],
+        js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-intercept.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false
       });
-      console.log('AI Context Monitor: перехватчик DeepSeek (v3) зарегистрирован (мир сайта, document_start)');
+      console.log('AI Context Monitor: перехватчик DeepSeek (v4) зарегистрирован (мир сайта, document_start)');
     }
 
     // перехватчик Claude

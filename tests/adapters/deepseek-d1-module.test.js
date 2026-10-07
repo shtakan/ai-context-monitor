@@ -286,8 +286,9 @@ describe('Step D.1: core/deepseek-diag.js — контракт модуля ди
     // размеры: кластер уехал целиком (ядро ушло ниже 2400 строк, модуль — за 900)
     expect(KERNEL_SRC.split('\n').length).toBeLessThan(2400);
     expect(MODULE_SRC.split('\n').length).toBeGreaterThan(900);
-    // порядок в js[]: модуль строго перед ядром (пин дублируется wiring-сьютом)
-    expect(DS.MODULES).toEqual(['core/deepseek-diag.js']);
+    // порядок в js[]: модули строго перед ядром (пин дублируется wiring-сьютом;
+    // Step D.2 добавил в карту core/deepseek-netsync.js — порядок = порядок js[])
+    expect(DS.MODULES).toEqual(['core/deepseek-diag.js', 'core/deepseek-netsync.js']);
     expect(DS.SOURCES.indexOf('core/deepseek-diag.js'))
       .toBeLessThan(DS.SOURCES.indexOf('core/deepseek-intercept.js'));
   });

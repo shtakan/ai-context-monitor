@@ -33,8 +33,9 @@
 // O-18 подменяет буфер фрагментов) и lastDiagConvId (кольца O-18 живут в пределах одного
 // convId; переменная осталась в ядре — её читает и пишет resetForNewConversation).
 //
-// Порядок подключения (core/background.js, registerSafe 'ai-cm-deepseek-intercept-v3',
-// document_start, world MAIN): utils/debug.js -> ЭТОТ ФАЙЛ -> core/deepseek-intercept.js.
+// Порядок подключения (core/background.js, registerSafe 'ai-cm-deepseek-intercept-v4',
+// document_start, world MAIN): utils/debug.js -> ЭТОТ ФАЙЛ -> core/deepseek-netsync.js
+// (Step D.2) -> core/deepseek-intercept.js.
 // До связки на window.AiCmDeepseekDiag лежит только __bind; после связки Fn заполнен
 // значениями 26 диагностических функций, а ядро раздаёт их 16 форвардерами по прежним
 // именам. Экспорт: window.AiCmDeepseekDiag + module.exports.
