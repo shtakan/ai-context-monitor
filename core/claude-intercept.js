@@ -88,7 +88,7 @@
         var oldest = fileTextCacheOrder.shift();
         delete fileTextCache[oldest];
       }
-    } catch (e) { }
+    } catch (e) { swallow(e, 'claude:fileTextCacheInsert'); }
   }
   var lastHistoryRaw = null; // сырые данные последней истории для пере-эмита после догрузки файлов
   var lastHistoryRawConvId = ''; // v48: чат, которому принадлежит lastHistoryRaw (stale-защита)
@@ -117,7 +117,7 @@
       return;
     }
     var id = '';
-    try { id = (typeof val.file_uuid === 'string' && val.file_uuid) || (typeof val.uuid === 'string' && val.uuid) || ''; } catch (e) {}
+    try { id = (typeof val.file_uuid === 'string' && val.file_uuid) || (typeof val.uuid === 'string' && val.uuid) || ''; } catch (e) { swallow(e, 'claude:find-pasted-id'); }
     if (id) {
       // п.10: лог ключей объектов с file_uuid/uuid И file_kind (только ключи, без текста)
       if (val.file_kind) {
@@ -127,7 +127,7 @@
       }
       for (var fi = 0; fi < PASTED_TEXT_FIELDS.length; fi++) {
         var fv = null;
-        try { fv = val[PASTED_TEXT_FIELDS[fi]]; } catch (e) {}
+        try { fv = val[PASTED_TEXT_FIELDS[fi]]; } catch (e) { swallow(e, 'claude:find-pasted-field'); }
         if (typeof fv === 'string' && fv.trim()) { found.push({ uuid: id, key: PASTED_TEXT_FIELDS[fi], text: fv }); break; }
       }
     }
@@ -135,10 +135,10 @@
       var ks = Object.keys(val);
       for (var ki = 0; ki < ks.length; ki++) {
         var child = null;
-        try { child = val[ks[ki]]; } catch (e) {}
+        try { child = val[ks[ki]]; } catch (e) { swallow(e, 'claude:find-pasted-child'); }
         if (child && typeof child === 'object') findPastedInValue(child, depth + 1, found);
       }
-    } catch (e) {}
+    } catch (e) { swallow(e, 'claude:find-pasted-keys'); }
   }
   function applyFoundPasted(found) {
     if (!found || !found.length) return false;
@@ -310,7 +310,7 @@
             v = decodeURIComponent(v.replace(/\+/g, ' '));
           } catch (e2) {}
           if (v.charAt(0) === '{' || v.charAt(0) === '[') {
-            try { roots.push(JSON.parse(v)); } catch (e3) {}
+            try { roots.push(JSON.parse(v)); } catch (e3) { swallow(e3, 'claude:processPostBody-json-parse'); }
           }
         }
       }
@@ -318,7 +318,7 @@
       var found = [];
       for (var ri = 0; ri < roots.length; ri++) findPastedInValue(roots[ri], 1, found);
       if (applyFoundPasted(found)) scheduleReEmit('req-body');
-    } catch (e) {}
+    } catch (e) { swallow(e, 'claude:processPostBody'); }
     return jsonOk;
   }
   // v39: скан тел ТОЛЬКО безопасных типов — строка / FormData / URLSearchParams.
@@ -352,7 +352,7 @@
         try {
           var mSend = String(url).match(/\/chat_conversations\/([0-9a-fA-F-]{8,})/);
           if (mSend) sendConvId = mSend[1];
-        } catch (eM3) {}
+        } catch (eM3) { swallow(eM3, 'claude:capturePostBody-convid'); }
         traceLog('post-send state convIdUrl=' + String(sendConvId || '-').slice(0, 8) +
           ' lastHistoryConvId=' + String(currentConvId || '-').slice(0, 8));
         if (sendConvId && !postSendTimer) {
@@ -398,7 +398,7 @@
         kind = 'formdata';
       } else if (body && typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams) {
         kind = 'urlsp';
-        try { scanText = body.toString(); len = scanText.length; } catch (eU) {}
+        try { scanText = body.toString(); len = scanText.length; } catch (eU) { swallow(eU, 'claude:capturePostBody-urlsp'); }
       } else if (body && typeof body.getReader === 'function') {
         kind = 'stream';
       } else if (!hasInitBody && inputIsRequest) {
@@ -413,7 +413,7 @@
       var jsonOk = 0;
       if (kind === 'formdata') {
         var parts = [];
-        try { body.forEach(function (v, k) { if (typeof v === 'string') parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(v)); }); } catch (eF) {}
+        try { body.forEach(function (v, k) { if (typeof v === 'string') parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(v)); }); } catch (eF) { swallow(eF, 'claude:capturePostBody-formdata'); }
         jsonOk = processPostBody(url, parts.join('&'));
       } else if (scanText != null) {
         jsonOk = processPostBody(url, scanText);
@@ -456,7 +456,7 @@
       }
       traceLog('body-scan ' + method + ' ' + String(url).slice(0, 160) +
         ' bodyKind=' + kind + ' len=' + len + ' jsonOk=' + jsonOk + diag);
-    } catch (e) {}
+    } catch (e) { swallow(e, 'claude:capturePostBody'); }
   }
 
   // ---- SPA: детектор смены чата (по образцу page-intercept.js v11) ----
@@ -661,7 +661,7 @@
       try {
         var v = f[fields[i]];
         if (typeof v === 'string' && v.trim()) return v;
-      } catch (e) {}
+      } catch (e) { swallow(e, 'claude:extractPastedText'); }
     }
     return '';
   }
@@ -727,7 +727,7 @@
       }
       debugLog('log', '[AI CM][Claude][pasted] paste-match uuid=' + String(uuid).slice(0, 8) +
         ' miss (reason=' + (pasteQueue.length ? 'size-mismatch' : 'empty-queue') + ')');
-    } catch (eQ) {}
+    } catch (eQ) { swallow(eQ, 'claude:takePastedFromQueue'); }
     return '';
   }
   // v47-1: listener регистрируется СТРОГО один раз (дубли paste-recv = двойная регистрация)
@@ -748,7 +748,7 @@
           while (pasteQueue.length > 5) pasteQueue.shift(); // cap 5, вытеснение старшего
           // v46-2/v47-1: диагностика канала ISOLATED→MAIN (без дублей)
           debugLog('log', '[AI CM][Claude][pasted] paste-recv len=' + d.text.length + ' queueSize=' + pasteQueue.length);
-        } catch (e2) {}
+        } catch (e2) { swallow(e2, 'claude:paste-message-listener'); }
       });
     } catch (eM) {}
   }
@@ -1371,7 +1371,7 @@
         if (data.type === 'message_stop') {
           stopDetected = true;
         }
-      } catch (e) {}
+      } catch (e) { swallow(e, 'claude:parseSSEStream'); }
     }
     return { model: model, stopDetected: stopDetected, text: textParts.join(''), rateLimit5h: rateLimit5h };
   }
@@ -1465,7 +1465,7 @@
     } catch (e) {}
 
     // v34-C: тела POST на /api/ сканируем на pasted-текст (оригинал не потребляем)
-    try { capturePostBody(input, init); } catch (e) {}
+    try { capturePostBody(input, init); } catch (e) { swallow(e, 'claude:fetch-capture-entry'); }
 
     // Извлекаем orgId из ЛЮБОГО URL, содержащего /api/organizations/
     if (!orgId) {
@@ -1475,12 +1475,12 @@
           orgId = orgMatch[1];
           debugLog('log', '[claude-intercept] orgId перехвачен из URL: ' + orgId);
         }
-      } catch (e) {}
+      } catch (e) { swallow(e, 'claude:fetch-orgid'); }
     }
 
     // v36: trace url-match (метод + url≤80) — только при флаг «Подробные логи»
     var _mth = 'GET';
-    try { _mth = String((init && init.method) || (input && input.method) || 'GET').toUpperCase(); } catch (e0) {}
+    try { _mth = String((init && init.method) || (input && input.method) || 'GET').toUpperCase(); } catch (e0) { swallow(e0, 'claude:fetch-method'); }
     var isHistory = m.isHistory && !m.hasGuard;
     var isCompletion = m.isCompletion;
 
@@ -1515,7 +1515,7 @@
     if (isHistory) {
       try {
         lastHistoryUrl = typeof input === 'string' ? input : (input && input.url ? input.url : '');
-      } catch (e) {}
+      } catch (e) { swallow(e, 'claude:fetch-history-url'); }
       if (lastHistoryUrl.indexOf(guardToken) !== -1) {
         lastHistoryUrl = lastHistoryUrl.replace(/[?&]__aicm_claude__=1/, '').replace(/\?$/, '');
       }
@@ -1528,7 +1528,7 @@
       try {
         var mOrg = String(lastHistoryUrl).match(/\/api\/organizations\/[0-9a-fA-F-]+\/chat_conversations\//);
         if (mOrg) lastOrgPrefix = mOrg[0];
-      } catch (eOrg) {}
+      } catch (eOrg) { swallow(eOrg, 'claude:fetch-org-prefix'); }
     }
 
     var fetchPromise = originalFetch.call(this, input, init);
@@ -1595,7 +1595,7 @@
       var origOpen = OrigXHR.prototype.open;
       var origSend = OrigXHR.prototype.send;
       OrigXHR.prototype.open = function (method, url) {
-        try { this.__aicm_method = method; this.__aicm_url = url; } catch (e) {}
+        try { this.__aicm_method = method; this.__aicm_url = url; } catch (e) { swallow(e, 'claude:xhr-open-hook'); }
         return origOpen.apply(this, arguments);
       };
       OrigXHR.prototype.send = function (bodyValue) {
@@ -1614,7 +1614,7 @@
               kind = 'formdata';
             } else if (bodyValue && typeof URLSearchParams !== 'undefined' && bodyValue instanceof URLSearchParams) {
               kind = 'urlsp';
-              try { scanText = bodyValue.toString(); len = scanText.length; } catch (eU) {}
+              try { scanText = bodyValue.toString(); len = scanText.length; } catch (eU) { swallow(eU, 'claude:xhr-send-urlsp'); }
             }
             if (kind === 'string' && scanText != null) {
               jsonOk = processPostBody(url, scanText);
@@ -1622,7 +1622,7 @@
             }
             else if (kind === 'formdata') {
               var parts = [];
-              try { bodyValue.forEach(function (v, k) { if (typeof v === 'string') parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(v)); }); } catch (e2) {}
+              try { bodyValue.forEach(function (v, k) { if (typeof v === 'string') parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(v)); }); } catch (e2) { swallow(e2, 'claude:xhr-send-formdata'); }
               jsonOk = processPostBody(url, parts.join('&'));
             }
             var diagX = '';
@@ -1655,7 +1655,7 @@
               });
             }
           }
-        } catch (e) {}
+        } catch (e) { swallow(e, 'claude:xhr-send'); }
         return origSend.apply(this, arguments);
       };
     } catch (e) { debugLog('error', '[AI CM][Claude][error] xhr wrap: ' + e.message); }

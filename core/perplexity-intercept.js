@@ -112,7 +112,7 @@
   }
 
   function getMethod(input, init) {
-    try { if (init && init.method) return String(init.method).toUpperCase(); if (input && input.method) return String(input.method).toUpperCase(); } catch (e) { }
+    try { if (init && init.method) return String(init.method).toUpperCase(); if (input && input.method) return String(input.method).toUpperCase(); } catch (e) { swallow(e, 'perplexity:getMethod'); }
     return 'GET';
   }
 
@@ -459,7 +459,7 @@
           else { var he = getTrim(data, 'entries'); if (he !== undefined) debugLog('log', '[perplexity-intercept] JSON с entries но нет thread_metadata'); }
         } catch (e) { console.log('[perplexity-intercept] ошибка emitSnapshot:', e && e.message); }
       }).catch(function () {});
-    } catch (e) {}
+    } catch (e) { swallow(e, 'perplexity:sniffResponseText'); }
   }
 
   // ---- XHR-патч ----

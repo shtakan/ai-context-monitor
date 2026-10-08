@@ -295,7 +295,7 @@
     if (!raw) return;
     if (raw === '[DONE]') { endStream('done-marker'); return; }
     var obj = null;
-    try { obj = JSON.parse(raw); } catch (eParse) { return; }
+    try { obj = JSON.parse(raw); } catch (eParse) { swallow(eParse, 'qwen:feed-frame-parse'); return; }
     if (!obj || typeof obj !== 'object') return;
     sse.frames++;
     applyMeta(obj);
@@ -1037,7 +1037,7 @@
               }
             }
           }
-        } catch (eBody) { }
+        } catch (eBody) { swallow(eBody, 'qwen:fetch-body-parse'); }
         if (!meta.userKey) {
           meta.userKey = meta.parentId ? ('p:' + meta.parentId) : ('l:' + turnSeq);
         }
@@ -1152,14 +1152,14 @@
           if (xMeta) {
             var xSelf = this;
             xSelf.addEventListener('loadend', function () {
-              try { consumeHistoryXhr(xSelf, xMeta); } catch (eXLoad) { }
+              try { consumeHistoryXhr(xSelf, xMeta); } catch (eXLoad) { swallow(eXLoad, 'qwen:xhr-loadend-history'); }
             });
           }
         } catch (eXSend) { }
         return origXHRSend.apply(this, arguments);
       };
     }
-  } catch (eXhrHook) { }
+  } catch (eXhrHook) { swallow(eXhrHook, 'qwen:install-network-hooks'); }
 
   // ===== SPA: смена чата по pathname =====
   function checkChatChange() {
@@ -1194,7 +1194,7 @@
         to: String(next || '').slice(0, 8), convId: String(next || ''),
         url: diagUrl(), reset: 1, dispatched: dispatched
       });
-    } catch (eCh) { }
+    } catch (eCh) { swallow(eCh, 'qwen:checkChatChange'); }
   }
   try {
     var origPushState = history.pushState;
