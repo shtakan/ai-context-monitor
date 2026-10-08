@@ -93,8 +93,10 @@ const FORWARDERS = ['liveTurnRecord', 'netSyncNeeded'];
 // доказывается двумя независимыми способами — этими пинами (текущий модуль) и
 // tools/verify-deepseek-netsync.js (дословное сравнение с git show, локально).
 // FIX-NETSYNC-FETCH-BINDING: у блока exportNetSync пин обновлён под хотфикс
-// (`originalFetch.call(window, …`) — это ЕДИНСТВЕННОЕ расхождение с 1e306c0, см. запись
-// блока ниже; остальные 7 пинов по-прежнему равны базовым.
+// (`originalFetch.call(window, …`); Step E.2a.1 (swallow): пины liveTurnRecord,
+// exportComposeTurns, exportNetSync и bridge обновлены под инструментирование молчаливых
+// catch — 4 расхождения с 1e306c0, каждое ровно в одной строке `catch` (см. записи блоков
+// ниже); остальные 4 пина по-прежнему байт-в-байт равны базовым.
 // Блоки вырезаются из модуля по якорям: комментарий-заголовок + тело функции.
 const MOVED_BLOCKS = [
   // {name, mode: 'range'|'line'|'func', start, end|sig, sha}
@@ -108,9 +110,12 @@ const MOVED_BLOCKS = [
     sha: 'dbea81badef23defe8909ecf0569031b48e95a6c3644e825a574b100e84008e1'
   },
   {
+    // Step E.2a.1 (swallow): молчаливый catch записи live-текста хода (строка 88) стал
+    // диагностируемым — `swallow(e, 'deepseek:liveTurnRecord')`. Расхождение с 1e306c0 ровно
+    // в этой одной строке, тело функции и порядок веток не менялись.
     name: 'liveTurnRecord', mode: 'func', start: '  // LIVE-текст хода:',
     sig: '  function liveTurnRecord(id, role, text, answer, reasoning, modelSlug) {',
-    sha: '0317aed0ee64935dbc4951e7195e04cd7beaf5b47e6c895727869681b0a42d8e'
+    sha: 'ad12ecb2091b1fd440325de2b740e4c177f6a49b45340a4d53a077bf66e08850'
   },
   {
     name: 'netSyncNeeded', mode: 'func', start: '  // Нужен ли сетевой дозапрос:',
@@ -118,9 +123,12 @@ const MOVED_BLOCKS = [
     sha: 'b34ceb65de2712e7516a79374a98e6f40b5d0e12270d23a4b72ee4b0a78f6ea9'
   },
   {
+    // Step E.2a.1 (swallow): молчаливый catch композиции ходов (строка 140) стал
+    // диагностируемым — `swallow(e, 'deepseek:exportComposeTurns')`; расхождение с 1e306c0
+    // ровно в этой одной строке, порядок вердиктов и веток не менялся.
     name: 'exportComposeTurns', mode: 'func', start: '  // Per-turn выбор текста:',
     sig: '  function exportComposeTurns() {',
-    sha: '86f2b0f20228165df6d7f7ffd3460e7157336db9a22789e8d62d27e513d21dc1'
+    sha: 'c0e8d19dbec8e9aed747b095279e9e27b657e568791b48bb2efa9fc0e8ff2f1e'
   },
   {
     name: 'applyExportNetSnapshot', mode: 'func', start: '  // Приёмка сетевого снимка в режиме экспорта:',
@@ -128,20 +136,24 @@ const MOVED_BLOCKS = [
     sha: 'c043516337f911a62bc6b16d75e2ffe9423f50dc40fa4e1f1511c431a2bc3552'
   },
   {
-    // FIX-NETSYNC-FETCH-BINDING (хотфикс после D.8): SHA отличается от эталона 1e306c0
-    // РОВНО на одну точку — вызов дозапроса стал `originalFetch.call(window, url, {`
-    // вместо `originalFetch(url, {` (встроенный window.fetch требует this === window,
-    // иначе TypeError: Illegal invocation — тот же класс, что FIX-REFETCH-FETCH-BINDING
-    // в K8, аппендикс v49, и FIX-PAGINATION-FETCH-BINDING, аппендикс v26).
-    // Остальные 7 блоков K7 — байт-в-байт с 1e306c0; тело функции не менялось.
+    // FIX-NETSYNC-FETCH-BINDING (хотфикс после D.8): вызов дозапроса стал
+    // `originalFetch.call(window, url, {` вместо `originalFetch(url, {` (встроенный
+    // window.fetch требует this === window, иначе TypeError: Illegal invocation — тот же
+    // класс, что FIX-REFETCH-FETCH-BINDING в K8, аппендикс v49, и
+    // FIX-PAGINATION-FETCH-BINDING, аппендикс v26).
+    // Step E.2a.1 (swallow): плюс молчаливый catch ответа моста (строка 224) стал
+    // диагностируемым — `swallow(eD, 'deepseek:exportNetSync-reply')`.
     name: 'exportNetSync', mode: 'func', start: '  function exportNetSync(requestId, convId, timeoutMs) {',
     sig: '  function exportNetSync(requestId, convId, timeoutMs) {',
-    sha: '3cd4e856d09674abcd21d1d7ee698d90c7535d1b25d91268423377d8b30ad1f8'
+    sha: 'e77781ccf0db225c5636a96c26ef1b06fa3a9f9ecf5e493771f776bb9a6c4303'
   },
   {
+    // Step E.2a.1 (swallow): молчаливый catch тела слушателя моста (строка 266) стал
+    // диагностируемым — `swallow(eNs, 'deepseek:netSyncBridge')`; сам мост, порядок
+    // слушателей и таймаут не менялись.
     name: 'bridge', mode: 'range', start: "  try {\n    window.addEventListener('ai-cm-deepseek-net-sync'",
     end: '  } catch (eNetBridge) { }',
-    sha: 'ef41f0285f5a8b49b832db97fdbad1ee1b571a93594901388b9763638f7be9bf'
+    sha: 'aa0cae309fcdaef74f06b4861356141313d8c16c25bb6d76ba1e950aad9f9de4'
   }
 ];
 

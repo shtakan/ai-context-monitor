@@ -87,10 +87,12 @@ const MOVED_BLOCKS = [
     sha: '6f901efe1d3d73a113c1dba1e83f60cf60b2b47d973364352b02cf8ec79370fd'
   },
   {
+    // Step E.2a.1 (swallow): пять молчаливых catch fetch-хука (строки 85, 116, 151, 164, 178)
+    // стали диагностируемыми (`swallow(e, 'deepseek:fetch-*')`); прочие строки блока — байт-в-байт.
     name: 'fetch-хук', zone: 'bind',
     start: '  if (typeof originalFetch === \'function\') {',
     end: '  if (originalXHROpen && originalXHRSend) {',
-    sha: '8d51f18fb97c02b0c3d5d28e1a9362df4a71d4c9ad3139e0808e65d0e1151615'
+    sha: '74f419a71c6c94b4be91aa5b3cf490ca00b5d0e858b5770084d0db88c86b3361'
   },
   {
     name: 'СЕКЦИЯ 12 (заголовок)', zone: 'pure',
@@ -99,10 +101,12 @@ const MOVED_BLOCKS = [
     sha: 'c47550a7587b228d9722b6fe09deacbadd65814c38a6a0f9e10f614287dd25c3'
   },
   {
+    // Step E.2a.1 (swallow): пять молчаливых catch XHR-хука (строки 211, 243, 277, 290, 292)
+    // стали диагностируемыми (`swallow(e, 'deepseek:xhr-*')`); прочие строки блока — байт-в-байт.
     name: 'XHR-хук', zone: 'bind',
     start: '  if (originalXHROpen && originalXHRSend) {',
     end: '    }\n  }\n  Fn.__bind = __bind;',
-    sha: '5eb484ea4cdb22d81874cd7a4e697e8d503f2ad06dd7f156135d8938ea537349'
+    sha: 'ec491bd94fc007c57c2d206355300b27b38e110768e6637a0d24f5d54dceed5b'
   }
 ];
 

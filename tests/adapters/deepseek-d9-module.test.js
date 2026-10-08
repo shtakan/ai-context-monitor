@@ -129,10 +129,12 @@ const MOVED_BLOCKS = [
     sha: '9f348f7d4b955ad710a176a38a6b8bd072e4fd4021355b88a6de8460c906808f'
   },
   {
+    // Step E.2a.1 (swallow): молчаливый catch ingestModelSettings (строка 147) стал
+    // диагностируемым — `swallow(eSettings, 'deepseek:ingestModelSettings')`.
     name: 'спан 4 (393-504) sseModelSignals … streamLastFragment', zone: 'bind',
     start: '  function sseModelSignals() {',
     end: '  function streamKnownType(t) {',
-    sha: '7375f5175cdd244171fd097bf66dd5819e89778c29f2f1f264759b2a9d07954f'
+    sha: '212411907aaa265d322925a0f16d3027ac7cef5aaa1ba65fa590ef5bb07174d8'
   },
   {
     name: 'спан 5 BIND-часть (514-520) streamKnownType/streamTypeShape', zone: 'bind',
@@ -141,16 +143,21 @@ const MOVED_BLOCKS = [
     sha: '004a62998bdedb83dacb924090ac1dd6331f6da99aa29ee75a53c8de2f6ab837'
   },
   {
+    // Step E.2a.1 (swallow): молчаливый catch ресинка (строка 308) стал диагностируемым —
+    // `swallow(e, 'deepseek:streamResync')`; механика ресинка не менялась.
     name: 'спан 8 (536-758) streamNoteMisroute … processChunkCore', zone: 'bind',
     start: '  function streamNoteMisroute(op, val) {',
     end: '  function parseSSELines(lines) {',
-    sha: '8bb4ed6b39312ee8a1b640307d8e1c24b2e5001821075a0bda3b3b81ce3b0442'
+    sha: '430041bf1da7024337beeee1756434e7cdc8c0cabdd73a4f9e5c38862870b121'
   },
   {
+    // Step E.2a.1 (swallow): два молчаливых catch стали диагностируемыми — JSON.parse
+    // строки SSE (строка 479, `continue` сохранён) и тело flush-моста (строка 610):
+    // `swallow(e, 'deepseek:parseSSELines')` / `swallow(eFlush, 'deepseek:streamFlushBridge')`.
     name: 'спан 9 (891-1046) parseSSELines … мост probe/flush', zone: 'bind',
     start: '  function parseSSELines(lines) {',
     end: '  function parseSSE(text) {',
-    sha: '7f828681045a344cb46bee66f8390a3cf75e286c21c8aae1accf3fda3e9e8a6c'
+    sha: 'ca8d40c943fc9800064e42357fb25a3571348fb755d02d99d0b72b9d74dcf40d'
   },
   {
     name: 'спан 10 (1065-1136) parseSSE + consumeSseResponse', zone: 'bind',

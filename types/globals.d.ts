@@ -54,6 +54,8 @@ interface Window {
   aiCmStreamFrames?: any;
   /** utils/debug.js — гейт диагностики (включается одноимённой настройкой) */
   __aiCmDebugLogs?: boolean;
+  /** utils/debug.js — хелпер swallow(error, tag): молчаливый catch → диагностируемый (Step E.2a) */
+  __aiCmSwallow?: any;
   /** utils/archive-import.js */
   AiCmArchiveImport?: any;
   /** utils/export-text-builders.js */

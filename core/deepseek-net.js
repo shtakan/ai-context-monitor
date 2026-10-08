@@ -82,7 +82,7 @@
   if (typeof originalFetch === 'function') {
     window.fetch = function (input, init) {
       var url = '';
-      try { url = (typeof input === 'string') ? input : (input && input.url) || ''; } catch (e) { }
+      try { url = (typeof input === 'string') ? input : (input && input.url) || ''; } catch (e) { swallow(e, 'deepseek:fetch-url'); }
       var method = (init && init.method) ? String(init.method).toUpperCase() : 'GET';
 
       // Сбор заголовков ВСЕХ запросов (для сохранения auth)
@@ -113,7 +113,7 @@
             sseThinkingEnabled = payload.thinking_enabled;        // сохраняем для getModelSlug
             completionConvId = payload.chat_session_id || '';
           }
-        } catch (e) { }
+        } catch (e) { swallow(e, 'deepseek:fetch-completion-body'); }
       }
 
       // --- настройки модели: URL содержит "client/settings" (v13, scope=model) ---
@@ -148,7 +148,7 @@
                 ingestHistory(json);
               }).catch(function () { });
             }
-          } catch (e) { }
+          } catch (e) { swallow(e, 'deepseek:fetch-history'); }
           return resp;
         }, function () { /* v5: тихо — не создаём висячий Promise.reject */ });
       }
@@ -161,7 +161,7 @@
             if (resp && resp.ok && guardCheck(completionConvId)) {
               consumeSseResponse(resp, completionConvId);
             }
-          } catch (e) { }
+          } catch (e) { swallow(e, 'deepseek:fetch-completion'); }
           return resp;
         }, function () { /* v5: тихо — не создаём висячий Promise.reject */ });
       }
@@ -175,7 +175,7 @@
                 ingestModelSettings(json);
               }).catch(function () { });
             }
-          } catch (e) { }
+          } catch (e) { swallow(e, 'deepseek:fetch-settings'); }
           return resp;
         }, function () { /* тихо */ });
       }
@@ -208,7 +208,7 @@
           historyConvId: '',
           headers: {}
         };
-      } catch (e) { }
+      } catch (e) { swallow(e, 'deepseek:xhr-open'); }
       return originalXHROpen.apply(this, arguments);
     };
 
@@ -240,7 +240,7 @@
             sseParentMessageId = payload.parent_message_id || null;
             sseThinkingEnabled = payload.thinking_enabled;
           }
-        } catch (e) { }
+        } catch (e) { swallow(e, 'deepseek:xhr-send'); }
       }
 
       var self = this;
@@ -274,7 +274,7 @@
                   }
                 }
                 ingestHistory(jsonH);
-              } catch (e) { }
+              } catch (e) { swallow(e, 'deepseek:xhr-load-history'); }
             }
           }
 
@@ -287,9 +287,9 @@
 
           // настройки модели (v13): name активной конфигурации (Instant)
           if (loadUrl.indexOf('client/settings') !== -1) {
-            try { ingestModelSettings(JSON.parse(self.responseText)); } catch (eSet) { }
+            try { ingestModelSettings(JSON.parse(self.responseText)); } catch (eSet) { swallow(eSet, 'deepseek:xhr-load-settings'); }
           }
-        } catch (e) { }
+        } catch (e) { swallow(e, 'deepseek:xhr-load'); }
       });
 
       return originalXHRSend.apply(this, arguments);

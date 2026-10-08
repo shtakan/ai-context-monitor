@@ -70,6 +70,25 @@ function debugLog(level) {
   }
 }
 
+/**
+ * ЕДИНАЯ точка молчаливого catch → диагностируемого (Step E.2a, П.5/П.6).
+ * Тонкая обёртка над debugLog('error', …): строка идёт в ring ≤200 И в console.error —
+ * ВСЕГДА, как любой 'error' (utils/debug.js:61-64). Поток управления НЕ меняется:
+ * возврат undefined, исключение не пробрасывается, catch остаётся заглушкой.
+ * Дедуп/счётчики/троттлинг здесь НЕ живут (отложено на E.2c).
+ * typeof-гард обязателен: срез-песочницы тестов грузят исходники БЕЗ utils/debug.js,
+ * и прямой вызов debugLog там бросил бы ReferenceError — т.е. убил бы исходный catch.
+ * @param {any} error пойманное исключение
+ * @param {string} tag контекст точки вида '<domain>:<function>' ('deepseek:parseSSELines')
+ * @returns {void}
+ */
+function swallow(error, tag) {
+  try {
+    if (typeof debugLog !== 'function') return;   // песочница без utils/debug.js: тихо и без броска
+    debugLog('error', '[swallow][' + (tag || 'unlabeled') + ']', error);
+  } catch (eSwallow) { /* сам логгер не должен бросать: swallow безопасен всегда */ }
+}
+
 // =============================================================================
 // O-27/O-32 (ДИАГНОСТИКА, только измерение): единый гейт инструментирования и печать
 // строк «точки скачивания / точки записи базы / точки сброса состояния».
@@ -210,3 +229,8 @@ function aiCmDiagDownloadBlocked(trigger, content, fileName, reason, extra) {
     src: aiCmDiagStack(1)
   });
 }
+
+// Step E.2a: window-зеркало хелпера — по прецеденту прочих __aiCm*-хуков файла
+// (window.__aiCmDebugLogs:13) и выносов D.1-D.9 (window.__aiCmDeepseek*). try/catch —
+// потому что window может отсутствовать (unit-песочница, print/options-мир).
+try { if (typeof window !== 'undefined') window.__aiCmSwallow = swallow; } catch (eSwallowExport) { }

@@ -14,6 +14,19 @@ function debugLog(level) {
   if (DEBUG) { (console[level] || console.log).apply(console, args); }
 }
 
+// Step E.2a: ЛОКАЛЬНЫЙ дубль хелпера swallow (utils/debug.js:85) для SW — importScripts
+// в MV3 non-module SW невозможен, как и для debugLog выше. Контракт тот же: молчаливый
+// catch → диагностируемый (ring у SW нет, 'error' идёт в console.error всегда через
+// debugLog), поток управления не меняется, возврат undefined. typeof-гард обязателен:
+// срезы-песочницы тестов грузят background.js без debugLog. Своего console.error здесь
+// быть НЕ должно — core/ сканируется tests/no-bare-console-error.test.js.
+function swallow(error, tag) {
+  try {
+    if (typeof debugLog !== 'function') return;
+    debugLog('error', '[swallow][' + (tag || 'unlabeled') + ']', error);
+  } catch (eSwallow) { /* сам логгер не должен бросать: swallow безопасен всегда */ }
+}
+
 // ========== M-4.5 (аудит 1.7): i18n — строки Chrome-уведомлений из _locales ==========
 // Пользовательские строки уведомления берутся из chrome.i18n.getMessage (ключи
 // bg_notification_* есть в ru и en). chrome.i18n в MV3 SW доступен всегда; фолбэк

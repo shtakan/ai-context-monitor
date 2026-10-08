@@ -91,10 +91,13 @@ const MOVED_BLOCKS = [
     sha: '99dbef0585eb154fd3a8103417795ed0be4bd5cc7bd1d10e140d3b58579bf0bd'
   },
   {
+    // Step E.2a.1 (swallow): молчаливый catch публикации снимка (строка 216) стал
+    // диагностируемым — `swallow(e, 'deepseek:emitBaseSnapshot')`; расхождение с d6a74c2
+    // ровно в этой одной строке, порядок диспатча/сигнатуры не менялся.
     name: 'emitBaseSnapshot', zone: 'bind',
     start: '  function emitBaseSnapshot(serverTokens, chatMode) {',
     end: '  // v11 (O-17): сводка turnsMap',
-    sha: '18aa304b8aa1e47fbb355ee227d24a970f4d6040fb7c6ed4190d87886c59076a'
+    sha: '5b5bdfaedec715c6d56eae27a3a5f1a8cfe21fea276875befbd9a96b67e093dd'
   },
   {
     name: 'clipTurnText + turnsSnapshot', zone: 'bind',

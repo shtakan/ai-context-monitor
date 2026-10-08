@@ -126,9 +126,12 @@ const MOVED_BLOCKS = [
     sha: '7ebae8e08cd120bb522c19e83c2ca2eea79f769598d48342c1ec4b721e6bbeea'
   },
   {
+    // Step E.2a.1 (swallow): молчаливый catch таймер-дозапроса (строка 186) стал
+    // диагностируемым — `swallow(e, 'deepseek:scheduleHistoryRefetch')`; расхождение с
+    // 2fb6ffe ровно в этой одной строке, интервал 1000 мс и условия дозапроса не менялись.
     name: 'scheduleHistoryRefetch', start: '  // Таймер-дозапрос после смены чата (если сайт не прислал историю сам)',
     sigs: ['  function scheduleHistoryRefetch() {'],
-    sha: '6e101a8d4fb8374ff445bf59024da6c68bcd04715e304126b415516fea45b77b'
+    sha: '566950d60bff5cb64f5b4f89279e9a4e9dc8748d8fb4f13fccf0408eba965299'
   }
 ];
 

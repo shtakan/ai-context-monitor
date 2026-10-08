@@ -43,6 +43,7 @@ const EXPORT_TAIL = `
   pushLogRing: __aiCmPushLogRing,
   getLogRing: __aiCmGetLogRing,
   debugLog: debugLog,
+  swallow: swallow,
   diagOn: aiCmDiagOn,
   diagDocKind: aiCmDiagDocKind,
   diagHead: aiCmDiagHead,
@@ -801,5 +802,83 @@ describe('utils/debug.js: aiCmDiagDownloadBlocked', () => {
     setLocation({ get href() { throw new Error('no location'); } });
     expect(Api.diagDownloadBlocked('autoexport', 'база', 'f.txt', 'empty-name', {})).toBe(true);
     expect(consoleLog.mock.calls[0][0]).toContain('url= ');
+  });
+});
+
+// =====================================================================================
+// swallow(error, tag) — Step E.2a: молчаливый catch → диагностируемый, поток не меняется
+// =====================================================================================
+describe('utils/debug.js: swallow — тонкая обёртка над debugLog(error)', () => {
+  test('пишет строку с тегом в ring и в console.error ВСЕГДА (DEBUG выключен)', () => {
+    Api.setDebugLogs(false);
+    expect(Api.swallow(new Error('boom'), 'deepseek:parseSSELines')).toBeUndefined();
+
+    expect(consoleError).toHaveBeenCalledTimes(1);
+    const args = consoleError.mock.calls[0];
+    expect(args[0]).toBe('[swallow][deepseek:parseSSELines]');
+    expect(args[1]).toBeInstanceOf(Error);
+
+    const ring = Api.getLogRing();
+    expect(ring[ring.length - 1]).toContain('[swallow][deepseek:parseSSELines]');
+    // Error в ring даёт '{}' — существующая семантика __aiCmStringifyArg (JSON.stringify);
+    // в console.error объект уходит как есть (стек сохраняется). E.2a это не меняет.
+    expect(ring[ring.length - 1]).toBe('[swallow][deepseek:parseSSELines] {}');
+  });
+
+  test('тег не задан → unlabeled; возврат undefined и без броска', () => {
+    expect(Api.swallow(new Error('x'))).toBeUndefined();
+    expect(consoleError.mock.calls[0][0]).toBe('[swallow][unlabeled]');
+  });
+
+  test('typeof-гард: без debugLog (срез-песочница) вызов тихий, без ReferenceError', () => {
+    const saved = globalThis.debugLog;
+    try {
+      delete globalThis.debugLog;
+      expect(typeof globalThis.debugLog).toBe('undefined');
+      expect(Api.swallow(new Error('silent'), 'deepseek:xhr-load')).toBeUndefined();
+    } finally {
+      globalThis.debugLog = saved;
+    }
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  test('битый логгер не пробрасывает исключение в исходный catch', () => {
+    const saved = globalThis.debugLog;
+    try {
+      globalThis.debugLog = function () { throw new Error('logger broken'); };
+      expect(() => Api.swallow(new Error('e'), 'deepseek:fetch-url')).not.toThrow();
+    } finally {
+      globalThis.debugLog = saved;
+    }
+  });
+
+  test('window-зеркало __aiCmSwallow указывает на тот же хелпер', () => {
+    expect(typeof window.__aiCmSwallow).toBe('function');
+    expect(window.__aiCmSwallow).toBe(Api.swallow);
+  });
+});
+
+// =====================================================================================
+// Локальный дубль в SW (Step E.2a): importScripts в MV3 non-module SW невозможен,
+// поэтому core/background.js несёт свою копию хелпера — контракт тот же, но БЕЗ
+// console.error: core/ сканируется tests/no-bare-console-error.test.js.
+// =====================================================================================
+describe('core/background.js: локальный дубль swallow для Service Worker', () => {
+  const BG_PATH = path.join(__dirname, '..', 'core', 'background.js');
+  const BG_SRC = fs.readFileSync(BG_PATH, 'utf8');
+  const declAt = BG_SRC.indexOf('function swallow(');
+  const SW_BODY = declAt > -1 ? BG_SRC.slice(declAt, BG_SRC.indexOf('\n}', declAt)) : '';
+
+  test('объявлен сразу после локального debugLog и повторяет контракт контент-версии', () => {
+    const dlAt = BG_SRC.indexOf('function debugLog(level)');
+    expect(dlAt).toBeGreaterThan(-1);
+    expect(declAt).toBeGreaterThan(dlAt);
+    expect(SW_BODY).toContain("typeof debugLog !== 'function'");
+    expect(SW_BODY).toContain("'[swallow][' + (tag || 'unlabeled') + ']'");
+    expect(SW_BODY).toContain("debugLog('error'");
+  });
+
+  test('в SW-дубле нет bare console.error (иначе падает no-bare-console-error)', () => {
+    expect(SW_BODY).not.toMatch(/console\s*\.\s*error/);
   });
 });

@@ -183,7 +183,7 @@
           console.log('[deepseek-intercept] история не пришла после смены чата → тихий дозапрос по таймеру (convId=' + currentConvId + ')');
           refetchFullHistory(historyRefetchUrl(), lastAuthHeaders, currentConvId);   // v11 (O-17): канонический URL
         }
-      } catch (e) { }
+      } catch (e) { swallow(e, 'deepseek:scheduleHistoryRefetch'); }
     }, 1000);
   }
 
