@@ -562,6 +562,7 @@ function makeListenerCtx(overrides) {
     maybeAutoExport: function () { },
     notifyCounterMode: function () { },
     debugLog: function (kind, msg) { ctx.logs.push(String(msg)); },
+    swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.js (его нет в песочнице)
     processAndSendCalls: 0,
     effectiveTextAtSend: null,
     effectiveCountAtSend: null

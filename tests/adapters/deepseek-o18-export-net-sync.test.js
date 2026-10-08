@@ -221,6 +221,7 @@ function makeExportSandbox(stand, over) {
     aiCmNetSyncInFlight: {},
     ModelConfig: { getModel: function () { return { name: 'DeepSeek-R1' }; } },
     debugLog: function (lvl, msg) { logs.push(String(msg)); },
+    swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.js (его нет в песочнице)
     chrome: { storage: { session: { remove: function () { }, set: function () { } }, local: { get: function () { } } } }
   };
   Object.assign(ctx, over || {});

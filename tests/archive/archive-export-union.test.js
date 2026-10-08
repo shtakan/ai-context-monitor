@@ -425,6 +425,7 @@ describe('T1-fix#3: doAutoExportDownload — файл из объединённ�
       aiCmDumpTurnsSnapshot: function () { },
       aiCmCancelDeferredHistWrite: function () { },
       debugLog: function (lvl, msg) { logs.push(String(msg)); },
+      swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.js (его нет в песочнице)
       console: { error: function () { } },
       ModelConfig: { getModel: function () { return { name: 'Gemini 2.0 Flash' }; } },
       chrome: { storage: { session: { set: function () { }, remove: function () { } } } },

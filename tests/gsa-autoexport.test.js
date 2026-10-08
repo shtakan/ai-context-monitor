@@ -274,6 +274,7 @@ describe('F4/F5: doAutoExportDownload GSA (реальный код)', () => {
       aiCmDumpTurnsSnapshot: function () { },
       aiCmCancelDeferredHistWrite: function () { },
       debugLog: function (lvl, msg) { logs.push(String(msg)); },
+      swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.js (его нет в песочнице)
       console: { error: function () { } },
       ModelConfig: { getModel: function () { return { name: 'Gemini 2.5 Flash' }; } },
       chrome: { storage: { session: { set: function () { }, remove: function () { } } } },
@@ -394,6 +395,7 @@ describe('F7: заполнение модели снапшота GSA (реаль
       lastModelSourceSig: '',
       lastSnapshotModelName: '',
       debugLog: function () { },
+      swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.js (его нет в песочнице)
       console: { log: function () { } },
       window: { location: { hostname: 'www.google.com' } }
     };
@@ -472,6 +474,7 @@ describe('F2/F5/F6: реальный maybeAutoExport GSA (тихий вызов 
       currentAdapter: { siteName: GSA },
       getCurrentConvId: function () { return ''; }, // у GSA URL-id нет
       debugLog: function (lvl, msg) { logs.push(String(msg)); },
+      swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.js (его нет в песочнице)
       // 1:1 с реальной единственной точкой записи файла: латч site+convId
       doAutoExportDownload: function (cid, pct, reason) {
         fired.push({ cid: cid, pct: pct, reason: reason });

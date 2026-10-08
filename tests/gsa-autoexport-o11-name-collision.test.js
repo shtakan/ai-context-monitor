@@ -207,6 +207,7 @@ describe('O-11: два автоэкспорта GSA в одну минуту —
       aiCmDumpTurnsSnapshot: function () { },
       aiCmCancelDeferredHistWrite: function () { },
       debugLog: function (lvl, msg) { logs.push(String(msg)); },
+      swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.js (его нет в песочнице)
       console: { error: function () { } },
       ModelConfig: { getModel: function () { return { name: MODEL }; } },
       chrome: { storage: { session: { set: function () { }, remove: function () { } } } },
@@ -370,6 +371,7 @@ describe('O-11-2: два файра разных чатов в одну мину
       aiCmDumpTurnsSnapshot: function () { },
       aiCmCancelDeferredHistWrite: function () { },
       debugLog: function (lvl, msg) { logs.push(String(msg)); },
+      swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.js (его нет в песочнице)
       console: { error: function () { } },
       ModelConfig: { getModel: function () { return { name: MODEL }; } },
       chrome: { storage: { session: { set: function () { }, remove: function () { } } } },
