@@ -12,7 +12,9 @@
  *                          — O3-латч already-fired (семантика v1.14.1 сохранена).
  *
  * Пины этого файла:
- *   P1 — setAccessLevel вызывается ТОЛЬКО с 'TRUSTED_CONTEXTS_ONLY';
+ *   P1 — setAccessLevel вызывается ТОЛЬКО с 'TRUSTED_CONTEXTS' (валидное значение
+ *        Chrome — было несуществующее 'TRUSTED_CONTEXTS_ONLY', см. аппендикс v54),
+ *        плюс R-пин: значение принадлежит allow-list'у Chrome;
  *   P2 — ноль обращений к chrome.storage.session в контент-скриптах;
  *   P3 — ключ BYOK приходит в контент из SW (aiCmReadByokKey → 'aiCm-get-byok-key');
  *   P4 — O3-латч читается/пишется/снимается через SW-канал (поведенческий прогон SW);
@@ -35,7 +37,12 @@ const MANIFEST = JSON.parse(read('manifest.json'));
 const SESSION_KEY = 'aiCmApiKeySession';
 const FIRED_PREFIX = 'aiCmFired:';
 const UNTRUSTED_LEVEL = 'TRUSTED_AND_UNTRUSTED_CONTEXTS';
-const TRUSTED_LEVEL = 'TRUSTED_CONTEXTS_ONLY';
+// FIX-SETACCESSLEVEL (аппендикс v54): было TRUSTED_CONTEXTS_ONLY — Chrome отклоняет;
+// текст ошибки: "Value must be one of TRUSTED_AND_UNTRUSTED_CONTEXTS, TRUSTED_CONTEXTS".
+// Allow-list ниже — единственные валидные значения accessLevel; TRUSTED_LEVEL (намерение
+// Шага A.1 — сжать session до доверенных контекстов) обязан ему принадлежать.
+const VALID_ACCESS_LEVELS = ['TRUSTED_CONTEXTS', 'TRUSTED_AND_UNTRUSTED_CONTEXTS'];
+const TRUSTED_LEVEL = 'TRUSTED_CONTEXTS';
 
 // Обращение к session-API (после 'session' идёт точка/скобка), а не упоминание в
 // комментарии-пояснении Шага A.1: пины P2/P4 обязаны видеть именно ВЫЗОВ.
@@ -191,7 +198,7 @@ function loadBackground(opts) {
  * ===================================================================================== */
 
 describe('Шаг A.1 / P1: chrome.storage.session доступен только доверенным контекстам', () => {
-  test('setAccessLevel вызван ровно с TRUSTED_CONTEXTS_ONLY, недоверенный уровень в SW отсутствует', () => {
+  test('setAccessLevel вызван ровно с TRUSTED_CONTEXTS, недоверенный уровень в SW отсутствует', () => {
     const bg = loadBackground();
 
     expect(bg.storage.accessLevelCalls).toHaveLength(1);
@@ -202,6 +209,23 @@ describe('Шаг A.1 / P1: chrome.storage.session доступен только 
     const bgCode = BG_SRC.split('\n').filter((l) => l.trim().indexOf('//') !== 0).join('\n');
     expect(bgCode).not.toContain("'" + UNTRUSTED_LEVEL + "'");
     expect(bgCode).toContain("'" + TRUSTED_LEVEL + "'");
+  });
+
+  // R-пин (FIX-SETACCESSLEVEL-INVALID-VALUE, аппендикс v54): значение, реально ушедшее
+  // в chrome.storage.session.setAccessLevel (реальный core/background.js в vm-песочнице),
+  // обязано принадлежать allow-list'у Chrome. Пин выше держит «именно TRUSTED_CONTEXTS»
+  // по намерению A.1; этот ловит любое значение-мусор, которое Chrome отклоняет
+  // TypeError'ом на параметре accessOptions (так и прожил незамеченным TRUSTED_CONTEXTS_ONLY).
+  test('значение accessLevel принадлежит allow-list Chrome (TRUSTED_CONTEXTS | TRUSTED_AND_UNTRUSTED_CONTEXTS)', () => {
+    const bg = loadBackground();
+
+    expect(bg.storage.accessLevelCalls).toHaveLength(1);
+    const passed = bg.storage.accessLevelCalls[0] && bg.storage.accessLevelCalls[0].accessLevel;
+    if (VALID_ACCESS_LEVELS.indexOf(passed) === -1) {
+      throw new Error('invalid accessLevel value: ' + JSON.stringify(passed) +
+        ' — Chrome: "Value must be one of ' + VALID_ACCESS_LEVELS.join(', ') + '"');
+    }
+    expect(VALID_ACCESS_LEVELS).toContain(passed);
   });
 });
 

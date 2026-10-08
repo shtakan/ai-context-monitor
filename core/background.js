@@ -68,7 +68,7 @@ try {
 // 'aiCm-get-byok-key' и 'aiCm-latch-*' ниже).
 try {
   if (chrome.storage.session && chrome.storage.session.setAccessLevel) {
-    chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS_ONLY' });
+    chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' }); // FIX-SETACCESSLEVEL (аппендикс v54): было TRUSTED_CONTEXTS_ONLY — Chrome отклоняет его TypeError'ом на accessOptions; держит allow-list-пин tests/security/byok-isolation.test.js (P1/R). Инлайн — чтобы не сдвигать номера строк (whitelist catch-hygiene).
   }
 } catch (eO3Access) { swallow(eO3Access, 'background:setAccessLevel'); }
 
