@@ -1517,9 +1517,9 @@
 
   window.fetch = function (input, init) {
     var url = '';
-    try { url = (typeof input === 'string') ? input : (input && input.url) || ''; } catch (e) { }
+    try { url = (typeof input === 'string') ? input : (input && input.url) || ''; } catch (e) { swallow(e, 'gsa:fetch-url-read'); }
     var method = '';
-    try { method = (init && init.method) ? String(init.method).toUpperCase() : 'GET'; } catch (e) { }
+    try { method = (init && init.method) ? String(init.method).toUpperCase() : 'GET'; } catch (e) { swallow(e, 'gsa:fetch-method-read'); }
 
     var isFolwr = url.indexOf('/folwr') !== -1;
     var isFolif = url.indexOf('/folif') !== -1;
@@ -1534,9 +1534,9 @@
       promise.then(function (resp) {
         try {
           if (isSorryResponse(resp && resp.status, resp && resp.url)) triggerSorryCooldown();
-        } catch (e) { }
+        } catch (e) { swallow(e, 'gsa:sorry-detect-fetch'); }
       }, function () { });
-    } catch (e) { }
+    } catch (e) { swallow(e, 'gsa:fetch-then-hook'); }
 
     if ((isFolwr || isFolif) && !isOpenFolwr) {
       var isFull = isFolwr;
@@ -1616,7 +1616,7 @@
                     folwrTurnCount = window.GoogleFolwrUtils.countTurnContainers(txt);
                   }
                   var domTurnCount = 0;
-                  try { domTurnCount = document.querySelectorAll('[data-scope-id="turn"]').length; } catch (e) { }
+                  try { domTurnCount = document.querySelectorAll('[data-scope-id="turn"]').length; } catch (e) { swallow(e, 'gsa:dom-turn-count'); }
                   var domTurns = [];
                   if (window.GoogleFolwrUtils && window.GoogleFolwrUtils.extractTurnsFromDocument) {
                     domTurns = window.GoogleFolwrUtils.extractTurnsFromDocument(document);
@@ -1735,9 +1735,9 @@
 
     OrigXHR.prototype.send = function (body) {
       var url = '';
-      try { url = this.__aiCmUrl || ''; } catch (e) { }
+      try { url = this.__aiCmUrl || ''; } catch (e) { swallow(e, 'gsa:xhr-state-read'); }
       var method = '';
-      try { method = (this.__aiCmMethod || 'GET').toUpperCase(); } catch (e) { }
+      try { method = (this.__aiCmMethod || 'GET').toUpperCase(); } catch (e) { swallow(e, 'gsa:xhr-method-read'); }
 
       var isFolwr = url.indexOf('/folwr') !== -1;
       var isFolif = url.indexOf('/folif') !== -1;
@@ -1746,7 +1746,7 @@
       this.addEventListener('load', function () {
         try {
           if (isSorryResponse(this.status, this.responseURL)) triggerSorryCooldown();
-        } catch (e) { }
+        } catch (e) { swallow(e, 'gsa:sorry-detect-xhr'); }
       });
 
       if (isFolwr || isFolif) {
@@ -1769,7 +1769,7 @@
                 gsaDiagBaseWrite('xhr', parsed.turns, 'skip-no-turns', parsed.threadId, { full: (isFullXhr === true) ? 1 : 0, url: rawSnippet(url, 80), bodyLen: (txt ? txt.length : 0) });
               }
             }
-          } catch (e) { }
+          } catch (e) { swallow(e, 'gsa:passive-xhr-parse'); }
         });
       }
 
