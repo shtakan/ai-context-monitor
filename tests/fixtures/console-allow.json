@@ -1,0 +1,27 @@
+{
+  "schema": "ai-cm/console-allow@1",
+  "generatedFrom": "cfcfa188f258e8c62ee9074998e74beb8267f500",
+  "scope": ["core", "adapters", "utils/debug.js"],
+  "definition": "Step E.2c-A (канал B). Allow-list стража tests/no-bare-console-warn.test.js: строки, которым разрешено трогать console.* напрямую. Запись = { file, category, lines[], reason }; каждая строка обязана указывать на РЕАЛЬНЫЙ сайт (мёртвая запись валит страж). Единственная легальная категория на этом шаге — logger-definition: сам модуль-обёртка utils/debug.js (в SCAN_DIRS не входит, но сканируется явно) и SW-дубль debugLog в core/background.js. Все прочие bare console.warn в core/ и adapters/ НАМЕРЕННО не внесены: это канал B, они мигрируют на aiCmDiagWarn в шаге B2c, а до тех пор страж обязан быть КРАСНЫМ — по одной падающей проверке на каждый сайт. Внесение такого сайта в allow-list без миграции = сокрытие регресса.",
+  "totalEntries": 5,
+  "groups": [
+    {
+      "file": "utils/debug.js",
+      "category": "logger-definition",
+      "lines": [62, 69],
+      "reason": "debugLog: computed-доступ (console[level] || console.log).apply — единственная точка вывода канала A; 'warn'/'error' печатаются всегда по контракту (utils/debug.js:61-64), 'log'/'info'/'debug' — под флагом DEBUG. Замена на console.warn сломала бы канал A."
+    },
+    {
+      "file": "utils/debug.js",
+      "category": "logger-definition",
+      "lines": [299],
+      "reason": "aiCmDiagWarn (Step E.2c-A): целевой console.warn канала B — достижим только под гейтом aiCmDiagOn() (utils/debug.js:298), вне гейта в консоль не пишется ничего."
+    },
+    {
+      "file": "core/background.js",
+      "category": "logger-definition",
+      "lines": [13, 14],
+      "reason": "SW-дубль debugLog: computed-доступ (console[level] || console.log).apply; в MV3 non-module SW importScripts utils/debug.js невозможен, поэтому это вторая легальная точка владения console.* в дереве."
+    }
+  ]
+}

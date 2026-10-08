@@ -56,6 +56,8 @@ interface Window {
   __aiCmDebugLogs?: boolean;
   /** utils/debug.js — хелпер swallow(error, tag): молчаливый catch → диагностируемый (Step E.2a) */
   __aiCmSwallow?: any;
+  /** utils/debug.js — хелпер swallowSoft(error, tag): канал B, console.error не вызывает (Step E.2c-A) */
+  __aiCmSwallowSoft?: any;
   /** utils/archive-import.js */
   AiCmArchiveImport?: any;
   /** utils/export-text-builders.js */

@@ -1059,3 +1059,38 @@ if (chrome.storage && chrome.storage.onChanged && chrome.storage.onChanged.addLi
     if (touched) aiCmPruneHistory();
   });
 }
+
+// =============================================================================
+// Step E.2c-A: SW-зеркало канала B (swallowSoft / aiCmDiagWarn).
+//
+// importScripts/import в MV3 non-module SW невозможен (см. core/background.js:5),
+// поэтому контракт канала B повторяется здесь локально, с двумя отличиями SW:
+//   - ring-буфера в SW нет (нет и __aiCmPushLogRing) — «всегда в ring» неприменимо,
+//     поэтому шаг (а) в SW ОТСУТСТВУЕТ, а не подменён другим логом;
+//   - гейт — не aiCmDiagOn() (sessionStorage в SW недоступен), а приватный латч SW
+//     aiCmHistWinDebugOn (:1017, обновляется из chrome.storage на :1052). Три источника
+//     флага (DEBUG, window.__aiCmDebugLogs, chrome.storage aiCmDebugLogs) намеренно
+//     НЕ сливаются — plan §3.3.
+// Вне гейта — тихо, ничего не пишется; console.error не вызывается нигде.
+//
+// Размещение в ХВОСТЕ файла — как и в utils/debug.js: вставка выше сдвинула бы номера
+// строк catch, запинутые в tests/fixtures/catch-whitelist.json (в шаге E.2c-A этот файл
+// не обновляется, а tests/catch-hygiene.test.js сверяет дерево запись-в-запись). Плюс
+// не сдвигаются строки 13/14, на которые ссылается allow-list стража
+// tests/no-bare-console-warn.test.js.
+// =============================================================================
+function swallowSoft(error, tag) {
+  try {
+    if (typeof debugLog !== 'function') return;   // срез-песочница без дубля debugLog
+    if (!aiCmHistWinDebugOn) return;              // вне гейта SW — тихо
+    debugLog('warn', '[swallow-soft][' + (tag || 'unlabeled') + ']', error);
+  } catch (eSoftSw) { return undefined; }
+}
+
+function aiCmDiagWarn(tag, message, detail) {
+  try {
+    if (typeof debugLog !== 'function') return;
+    if (!aiCmHistWinDebugOn) return;
+    debugLog('warn', '[AI CM][warn][' + (tag || 'unlabeled') + '] ' + message, detail);
+  } catch (eWarnSw) { return undefined; }
+}

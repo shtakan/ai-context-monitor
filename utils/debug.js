@@ -234,3 +234,74 @@ function aiCmDiagDownloadBlocked(trigger, content, fileName, reason, extra) {
 // (window.__aiCmDebugLogs:13) и выносов D.1-D.9 (window.__aiCmDeepseek*). try/catch —
 // потому что window может отсутствовать (unit-песочница, print/options-мир).
 try { if (typeof window !== 'undefined') window.__aiCmSwallow = swallow; } catch (eSwallowExport) { }
+
+// =============================================================================
+// Step E.2c-A: канал B — «мягкие» события (swallowSoft / aiCmDiagWarn).
+//
+// Почему хелперы в ХВОСТЕ файла, а не рядом с swallow (utils/debug.js:85): любая
+// вставка выше сдвинула бы номера строк catch, запинутые построчно в
+// tests/fixtures/catch-whitelist.json (13, 36, 60, 67, 89, 110, 113, 121, 122, 129,
+// 137, 184, 194, 218, 236). Страж tests/catch-hygiene.test.js сверяет дерево с этим
+// whitelist ЗАПИСЬ-В-ЗАПИСЬ, а сам whitelist в шаге E.2c-A не обновляется — значит
+// номера строк всех существующих catch обязаны остаться прежними. Побочный плюс:
+// не сдвигаются и строки 62/69, на которые ссылается allow-list стража
+// tests/no-bare-console-warn.test.js. Для core/background.js действует то же правило.
+// =============================================================================
+
+/**
+ * Мягкий перехват (Step E.2c-A, канал B): ошибка, которую НЕ эскалируем.
+ * Отличие от swallow (utils/debug.js:85): console.error не вызывается НИКОГДА.
+ *   - ring-буфер: строка пишется ВСЕГДА (единственный безусловный канал);
+ *   - консоль: только под гейтом aiCmDiagOn(), через aiCmDiagLine('swallow-soft', …).
+ * Поток управления не меняется: возврат undefined, исключение не пробрасывается.
+ * typeof-гард обязателен — срез-песочницы тестов грузят исходники БЕЗ utils/debug.js,
+ * и прямой вызов хелперов там бросил бы ReferenceError, т.е. убил бы исходный catch.
+ * Дедуп/счётчики/троттлинг здесь НЕ живут (отложено на E.2d).
+ * @param {any} error пойманное исключение
+ * @param {string} tag контекст точки вида '<domain>:<function>' ('deepseek:parseSSELines')
+ * @returns {void}
+ */
+function swallowSoft(error, tag) {
+  var label = tag || 'unlabeled';
+  var msg = '';
+  try { msg = (error && error.message) ? String(error.message) : String(error); } catch (eSoftMsg) { msg = '(нечитаемая ошибка)'; }
+  try {
+    if (typeof __aiCmPushLogRing === 'function') __aiCmPushLogRing('[swallow-soft][' + label + '] ' + msg);
+  } catch (eSoftRing) { return undefined; }
+  try {
+    if (typeof aiCmDiagLine !== 'function') return;   // песочница без utils/debug.js: тихо и без броска
+    aiCmDiagLine('swallow-soft', { tag: label, err: error });
+  } catch (eSoftDiag) { return undefined; }
+}
+
+/**
+ * Warn-уровень канала B (Step E.2c-A): сохраняет уровень warn для отладочной сессии,
+ * но НЕ эскалирует его в chrome://extensions/errors вне гейта — в отличие от
+ * debugLog('warn', …), который печатается всегда (utils/debug.js:61-64).
+ *   - ring-буфер: строка пишется ВСЕГДА;
+ *   - консоль: ровно один console.warn под гейтом aiCmDiagOn(); вне гейта — ничего.
+ * Возврат undefined, исключение не пробрасывается, typeof-гард как у swallowSoft.
+ * @param {string} tag контекст точки
+ * @param {string} message короткое сообщение
+ * @param {any} [detail] необязательная деталь (уходит вторым аргументом console.warn)
+ * @returns {void}
+ */
+function aiCmDiagWarn(tag, message, detail) {
+  var label = tag || 'unlabeled';
+  var text = (message === undefined || message === null) ? '' : String(message);
+  try {
+    var tail = '';
+    if (detail !== undefined) tail = ' ' + ((typeof __aiCmStringifyArg === 'function') ? __aiCmStringifyArg(detail) : String(detail));
+    if (typeof __aiCmPushLogRing === 'function') __aiCmPushLogRing('[ai-cm-warn][' + label + '] ' + text + tail);
+  } catch (eWarnRing) { return undefined; }
+  try {
+    if (typeof aiCmDiagOn !== 'function' || !aiCmDiagOn()) return;
+    console.warn('[AI CM][warn][' + label + '] ' + text, detail);
+  } catch (eWarnPrint) { return undefined; }
+}
+
+// Step E.2c-A: window-зеркало swallowSoft — прецедент window.__aiCmSwallow:236.
+// Тело catch НЕ пустое намеренно: новый молчаливый catch сделал бы красным страж
+// tests/catch-hygiene.test.js (его whitelist в этом шаге не обновляется), поэтому сбой
+// экспорта фиксируется в ring — правило канала B: не бросаем и не эскалируем.
+try { if (typeof window !== 'undefined') window.__aiCmSwallowSoft = swallowSoft; } catch (eSoftExport) { __aiCmPushLogRing('[swallow-soft-export] ' + eSoftExport); }
