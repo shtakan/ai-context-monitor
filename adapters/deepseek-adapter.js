@@ -185,7 +185,7 @@ isOnDialogPage() {
         if (this._isInsideReasoning(candidates[i])) continue;
         return candidates[i];
       }
-    } catch (e) { }
+    } catch (e) { swallow(e, 'adapter:deepseek:firstContentChild'); }
     return null;
   }
 
@@ -209,7 +209,7 @@ isOnDialogPage() {
     try {
       if (element.querySelector && element.querySelector('.ds-markdown, .ds-markdown-paragraph')) return 'assistant';
       if (this._isReasoningOnly(element)) return 'assistant';
-    } catch (e) { }
+    } catch (e) { swallow(e, 'adapter:deepseek:detectRole'); }
     // v2 (O-15): хеш-класс пузыря пользователя ротируется (d29f3d7d устарел), а роль
     // 'unknown' отбрасывалась в extractMessages — реплики пользователя исчезали из
     // live-экспорта. Не-assistant-подобный пузырь — реплика пользователя.

@@ -142,7 +142,7 @@ try {
       if (m2) { found = m2[1]; break; }
     }
   }
-} catch (e) { /* никогда не ломаем сайт */ }
+} catch (e) { swallow(e, 'adapter:chatgpt:detectModel'); /* никогда не ломаем сайт */ }
 if (!this._modelDetectLogged) {
   this._modelDetectLogged = true;
   debugLog('log', '[model-detect][DOM] ' + (found ? ('найдено в шапке: "' + found + '"') : 'имя модели в шапке не найдено (шапка показывает бренд — модель возьмётся из сети/дефолта)'));

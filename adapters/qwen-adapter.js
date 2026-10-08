@@ -382,7 +382,7 @@ class QwenAdapter extends BaseAdapter {
       if (/assistant|model|bot|answer/.test(cls)) return 'assistant';
       if (element.querySelector && element.querySelector(this.modelMessageSelector)) return 'assistant';
       if (element.querySelector && element.querySelector('[class*="markdown"], [class*="prose"]')) return 'assistant';
-    } catch (e) { }
+    } catch (e) { swallow(e, 'adapter:qwen:detectRole'); }
     return 'user';
   }
 
@@ -406,7 +406,7 @@ class QwenAdapter extends BaseAdapter {
       // проверяет сам _dropContainerNodes по сигнатуре.
       var drop = /** @type {QwenContainerDrop<unknown>|null} */ (this._containerDrop());
       if (typeof drop === 'function') return /** @type {(QwenExtractedMessage & {hiddenReasoning?: string})[]} */ (/** @type {unknown} */ (drop(messages)));
-    } catch (eDrop) { }
+    } catch (eDrop) { swallow(eDrop, 'adapter:qwen:dropContainerNodes'); }
     return messages;
   }
 
@@ -518,7 +518,7 @@ class QwenAdapter extends BaseAdapter {
         const m = /qwen[0-9.]*-[a-z]+/i.exec(text);
         if (m) return m[0].toLowerCase();
       }
-    } catch (e) { }
+    } catch (e) { swallow(e, 'adapter:qwen:detectModel'); }
     return 'qwen3.8-max';
   }
 }
