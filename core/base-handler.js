@@ -99,7 +99,7 @@ function aiCmDedupeExportSource(messages) {
       return { messages: res18.messages, removed: res18.removed };
     }
     if (typeof P.dedupeMessages === 'function') return P.dedupeMessages(messages);
-  } catch (eDed) { swallowSoft(eDed, 'base-handler:dedupeExportSource'); }
+  } catch (eDed) { swallow(eDed, 'base-handler:dedupeExportSource'); }
   return { messages: messages, removed: 0 };
 }
 // v1.18 (E-2): лог схлопывания печатаем ОДИН раз на снимок базы (сигнатура count|textLen),

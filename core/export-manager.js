@@ -210,7 +210,7 @@ function aiCmPrepareReasoningForExport(messages) {
     var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
     if (!P || typeof P.applyReasoningExportFields !== 'function') return messages;
     P.applyReasoningExportFields(messages, aiCmReasoningExportSite());
-  } catch (ePrep) { swallow(ePrep, 'export:aiCmPrepareReasoningForExport'); }
+  } catch (ePrep) { swallowSoft(ePrep, 'export:aiCmPrepareReasoningForExport'); }
   return messages;
 }
 function aiCmCollectExportSource() {
@@ -421,7 +421,7 @@ function loadAutoExportPerSitePct() {
         autoExportPctBySite[site] = (!isNaN(n) && n >= 1 && n <= 100) ? n : undefined;
         debugLog('log', '[AI CM][auto-export] per-site load ' + key + '=' +
           (autoExportPctBySite[site] === undefined ? 'нет (глобальный фолбэк)' : autoExportPctBySite[site]));
-      } catch (eParsePs) { swallow(eParsePs, 'export:loadAutoExportPerSitePct'); }
+      } catch (eParsePs) { swallowSoft(eParsePs, 'export:loadAutoExportPerSitePct'); }
     });
   } catch (e) { debugLog('error', '[AI CM][auto-export] per-site load error:', e); }
 }
@@ -471,7 +471,7 @@ function aiCmTryLateAutoExport(cid) {
         ' pct=' + autoExportLastPct + ' pendingCursor=0 baseComplete=1');
       maybeAutoExport(autoExportLastPct);
     }
-  } catch (e) { swallow(e, 'export:aiCmTryLateAutoExport'); }
+  } catch (e) { swallowSoft(e, 'export:aiCmTryLateAutoExport'); }
 }
 // v54: локальный фолбэк чистой функции detectTrimState (utils/gemini-intercept-logic.js).
 // Утилита на Gemini грузится только в MAIN-мире (background.js), а content.js живёт в
@@ -1075,7 +1075,7 @@ function aiCmDeferAutoExportOnLiveStream(cid, percentage) {
       try {
         if (!cid || cid !== aiCmAutoExportConvId()) return;  // чат сменился — отложка неактуальна
         maybeAutoExport(percentage);
-      } catch (eR) { swallow(eR, 'export:aiCmDeferAutoExportOnLiveStream-timer'); }
+      } catch (eR) { swallowSoft(eR, 'export:aiCmDeferAutoExportOnLiveStream-timer'); }
     }, AI_CM_DS_STREAM_DEFER_MS);
     return true;
   } catch (e) { return false; }
@@ -1283,7 +1283,7 @@ function maybeAutoExport(percentage) {
               var pkHys = P.firedSessionKey(siteName, cid);
               if (pkHys) delete sessionFiredCache[pkHys];
             }
-          } catch (eO3hys) { swallow(eO3hys, 'export:maybeAutoExport-latch-hysteresis'); }
+          } catch (eO3hys) { swallowSoft(eO3hys, 'export:maybeAutoExport-latch-hysteresis'); }
         }
         // O-33: база — транзиентная DOM-оценка до сетевого снимка (не-Gemini, baseSeen=false).
         // Файла нет; латч fired НЕ ставится и НЕ сбрасывается (resetFired:false) — поздний
@@ -1386,7 +1386,7 @@ function maybeAutoExport(percentage) {
             var pkHys2 = P.firedSessionKey(siteName, cid);
             if (pkHys2) delete sessionFiredCache[pkHys2];
           }
-        } catch (eO3hys2) { swallow(eO3hys2, 'export:maybeAutoExport-latch-below-threshold'); }
+        } catch (eO3hys2) { swallowSoft(eO3hys2, 'export:maybeAutoExport-latch-below-threshold'); }
       }
       return;
     }
@@ -1678,7 +1678,7 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
               if (typeof aiCmAutoExportFiredOnce === 'object' && aiCmAutoExportFiredOnce) {
                 aiCmAutoExportFiredOnce[siteOnce + '|' + cid] = 1;
               }
-            } catch (eOnce) { swallow(eOnce, 'export:aiCmWriteAutoExportFile-once'); }
+            } catch (eOnce) { swallowSoft(eOnce, 'export:aiCmWriteAutoExportFile-once'); }
             // v1.14.1 (O3): кросс-табовый латч — пишем через SW-канал (Шаг A.1: прямой
             // storage.session из вкладки убран) и сразу в локальный кэш этой вкладки.
             try {
@@ -1688,7 +1688,7 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
                 aiCmLatchSet(siteO3, cid);
                 sessionFiredCache[pkO3] = 1;
               }
-            } catch (eO3write) { swallow(eO3write, 'export:aiCmWriteAutoExportFile-fired-latch'); }
+            } catch (eO3write) { swallowSoft(eO3write, 'export:aiCmWriteAutoExportFile-fired-latch'); }
           } else {
             autoExportFired[cid] = 1;
             // O-38: модульный латч — переживает resetConversationState
@@ -1697,7 +1697,7 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
               if (typeof aiCmAutoExportFiredOnce === 'object' && aiCmAutoExportFiredOnce) {
                 aiCmAutoExportFiredOnce[siteOnceFb + '|' + cid] = 1;
               }
-            } catch (eOnceFb) { swallow(eOnceFb, 'export:aiCmWriteAutoExportFile-once-fallback'); }
+            } catch (eOnceFb) { swallowSoft(eOnceFb, 'export:aiCmWriteAutoExportFile-once-fallback'); }
           }
         }
         aiCmCancelDeferredHistWrite(cid); // v54: экспорт состоялся — висящий deferred-таймер больше не нужен

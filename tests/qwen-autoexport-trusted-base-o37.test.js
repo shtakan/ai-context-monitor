@@ -125,6 +125,7 @@ function stand(over) {
     ModelConfig: { getModel: function () { return { name: 'Qwen3.8-Max' }; } },
     debugLog: function (lvl, msg) { logs.push(String(msg)); },
     swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.js (его нет в песочнице)
+    swallowSoft: function () { },   // Step E.2c-B2b-3c (swallowSoft): канал B — тот же хелпер utils/debug.js, вне песочницы.
     console: { log: function (m) { diag.push(String(m)); }, error: function () { } },
     chrome: { storage: { session: { set: function () { }, remove: function () { } } } },
     window: {

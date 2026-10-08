@@ -518,7 +518,7 @@
                         }
                       }
                     }
-                  } catch (eCgF) { swallowSoft(eCgF, 'gemini:loader-floor-self-heal'); }
+                  } catch (eCgF) { swallow(eCgF, 'gemini:loader-floor-self-heal'); }
                   debugLog('log', '[AI CM][Gemini][loader] clean-end top confirmed (устаревший пол самоизлечен) convId=' + convId +
                     ' msgs=' + D.baseSize() + ' floorWas=' + __floorCg + ' scrollH=' + sc.height() +
                     ' selfHeal=' + ((__shvCg && __shvCg.source) || 'skipped'));
@@ -552,7 +552,7 @@
                         debugLog('log', '[AI CM][Gemini][loader] clean-end floor-write via saveFloor (H11) convId=' + convId + ' proposed=' + D.baseSize() + ' floorWas=' + __floorCg);
                         D.saveFloor(convId, D.baseSize(), D.lastBaseTextLen);
                       }
-                    } catch (eCgF2) { swallowSoft(eCgF2, 'gemini:loader-h11-floor-write'); }
+                    } catch (eCgF2) { swallow(eCgF2, 'gemini:loader-h11-floor-write'); }
                     debugLog('log', '[AI CM][Gemini][loader] clean-end top confirmed (exhausted retries) convId=' + convId +
                       ' msgs=' + D.baseSize() + ' floorWas=' + __floorCg);
                     doneReason = 'top';
@@ -707,7 +707,7 @@
                   } }));
                 } catch (eFbD) { }
               } });
-            } catch (eD14x) { swallowSoft(eD14x, 'gemini:loader-fallback-complete'); }
+            } catch (eD14x) { swallow(eD14x, 'gemini:loader-fallback-complete'); }
           }
           function fallbackStableNow() {
             var nowD15 = Date.now();

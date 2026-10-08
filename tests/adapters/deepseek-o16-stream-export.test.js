@@ -237,6 +237,7 @@ function makeExportSandbox(stand, over) {
     ModelConfig: { getModel: function () { return { name: 'DeepSeek-R1' }; } },
     debugLog: function (lvl, msg) { logs.push(String(msg)); },
     swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.js (его нет в песочнице)
+    swallowSoft: function () { },   // Step E.2c-B2b-3c (swallowSoft): канал B — тот же хелпер utils/debug.js, вне песочницы.
     chrome: { storage: { session: { remove: function () { }, set: function () { } }, local: { get: function () { } } } }
   };
   Object.assign(ctx, over || {});
