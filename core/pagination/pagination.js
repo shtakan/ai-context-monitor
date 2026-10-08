@@ -322,7 +322,7 @@
               if (getConvId() !== __pagLoopConv) return;   // чат сменился — отложенный ретрай не нужен
               if (!quietActive || historyFullByQuiet === true) return; // цикл остановлен/полнота уже есть
               paginateLoop(token, depth + 1);
-            } catch (eErT) { swallow(eErT, 'gemini:paginateLoop-retry-timer'); }
+            } catch (eErT) { swallowSoft(eErT, 'gemini:paginateLoop-retry-timer'); }
           }, __retryDelay);
           return;
         }
@@ -363,7 +363,7 @@
           // лоадер обязан перезапуститься, минуя латчи already-done / cache-complete
           try { delete loaderDoneMap[__escConv]; } catch (eEscL) { }
           try { oracleIncompleteSeen[__escConv] = true; } catch (eEscO) { }
-          try { maybeStartLoader(); } catch (eEscS) { swallow(eEscS, 'gemini:paginateLoop-native-escalation-loader'); }
+          try { maybeStartLoader(); } catch (eEscS) { swallowSoft(eEscS, 'gemini:paginateLoop-native-escalation-loader'); }
           return;
         }
         // v68: сервер-авторитетное решение о следующем шаге. Полнота — ТОЛЬКО по курсору
@@ -422,7 +422,7 @@
                 if (getConvId() !== __paceConv1177) return; // чат сменился — шаг не нужен
                 if (!quietActive || historyFullByQuiet === true) return;
                 paginateLoop(next, depth + 1);
-              } catch (ePaceT) { swallow(ePaceT, 'gemini:paginateLoop-pace-retry'); }
+              } catch (ePaceT) { swallowSoft(ePaceT, 'gemini:paginateLoop-pace-retry'); }
             }, __paceMs1177);
           } else {
             paginateLoop(next, depth + 1);
@@ -567,14 +567,14 @@
       }
       // v69: watchdog — явный probe первой страницы после data-complete; несовпадение
       // firstMsgHash → дозапуск лоадера (≤3 ретраев).
-      try { runCompletenessWatchdog(getConvId()); } catch (eW) { swallow(eW, 'gemini:finishQuiet-watchdog'); }
+      try { runCompletenessWatchdog(getConvId()); } catch (eW) { swallowSoft(eW, 'gemini:finishQuiet-watchdog'); }
     }
     debugLog('log', '[gemini-paginate] тихий цикл завершён: success=' + success + ' reason=' + reason +
       ' quietPaginated=' + quietPaginated + ' ходов в базе=' + baseSize() +
       (success ? ' (ПОЛНАЯ история собрана СЕТЬЮ, без скролла)' : ''));
-    if (success) { try { emitBaseSnapshot(); } catch (e) { swallow(e, 'gemini:finishQuiet-emit'); } }
+    if (success) { try { emitBaseSnapshot(); } catch (e) { swallowSoft(e, 'gemini:finishQuiet-emit'); } }
     if (success && quietPaginated) {
-      try { activeRefresh('досбор хвоста после тихой пагинации'); } catch (e) { swallow(e, 'gemini:finishQuiet-tail-refresh'); }
+      try { activeRefresh('досбор хвоста после тихой пагинации'); } catch (e) { swallowSoft(e, 'gemini:finishQuiet-tail-refresh'); }
     }
     // v41: при baseComplete=true (голова собрана сетью, цепочка непрерывна) автоскролл
     // НЕ запускаем — он даёт белый экран на скрытом контейнере и крутится до empty*3
@@ -585,7 +585,7 @@
         try {
           var fk = 'ai-cm-gemini-floor-' + parserVersion + '-' + fqId;
           localStorage.setItem(fk, JSON.stringify({ count: baseSize(), effectiveLen: lastBaseTextLen, ts: Date.now(), version: parserVersion }));
-        } catch (e) { swallow(e, 'gemini:finishQuiet-floor-write'); }
+        } catch (e) { swallowSoft(e, 'gemini:finishQuiet-floor-write'); }
       }
       debugLog('log', '[gemini-paginate] фолбэк пропущен: история полная по сети (baseComplete=true)');
     } else if (!quietPaginated) {
@@ -594,7 +594,7 @@
     }
     // T1-fix (v1.16.1): тихий цикл завершился — гейт live-loading снят, переоцениваем
     // оракул архива ПОСЛЕ собственных решений цикла (порядок веток выше не меняем).
-    try { aiCmArchiveTierApply(); } catch (eArcFq) { swallow(eArcFq, 'gemini:finishQuiet-archive-reapply'); }
+    try { aiCmArchiveTierApply(); } catch (eArcFq) { swallowSoft(eArcFq, 'gemini:finishQuiet-archive-reapply'); }
   }
 
       // ---- completeness-probe: runCompletenessProbe — независимая проверка полноты: курсор ИИР в probe-ответе, непрочитанная строка НЕ означает more-историю ----
@@ -635,7 +635,7 @@
           }, 4000);
         }
       } catch (eO80) { }
-      try { maybeStartLoader(); } catch (eR) { swallow(eR, 'gemini:probeIncomplete-loader-restart'); } // латч loaderDoneMap гейтирует повторный прогон
+      try { maybeStartLoader(); } catch (eR) { swallowSoft(eR, 'gemini:probeIncomplete-loader-restart'); } // латч loaderDoneMap гейтирует повторный прогон
     }
     // H9b (retain-last-good): retained — ТОЛЬКО вход запроса probe (complete решается
     // исключительно по ответу: probe-terminal). Оборванный финальный шаг пагинации
@@ -714,7 +714,7 @@
           // probeIncomplete(reason) → loader-restart (утренний путь докрутки до начала).
           var __ptGate = null;
           var __ptFloor = 0;
-          try { __ptFloor = (loadFloor(convId) || {}).count || 0; } catch (ePtF) { swallow(ePtF, 'gemini:runCompletenessProbe-floor-read'); }
+          try { __ptFloor = (loadFloor(convId) || {}).count || 0; } catch (ePtF) { swallowSoft(ePtF, 'gemini:runCompletenessProbe-floor-read'); }
           try {
             if (typeof window !== 'undefined' && window.GeminiInterceptLogic &&
                 typeof window.GeminiInterceptLogic.probeTerminalGate === 'function') {
@@ -745,7 +745,7 @@
           lastCycleEndedHidden = (typeof document !== 'undefined' && document.visibilityState !== 'visible');
           debugLog('log', '[AI CM][completeness] oracle=complete reason=probe-terminal' +
             ' firstHash=' + dbFirstHash + ' newOlder=0 cursorFound=no retries=' + retriesP + ' convId=' + convId);
-          try { emitBaseSnapshot(); } catch (eE) { swallow(eE, 'gemini:runCompletenessProbe-emit'); }
+          try { emitBaseSnapshot(); } catch (eE) { swallowSoft(eE, 'gemini:runCompletenessProbe-emit'); }
           // H9b: терминальный ответ — retained last-good отработал (был входом запроса);
           // сброс, чтобы не перетекать в следующий цикл/чат (прочие сбросы — смена чата).
           lastGoodWideCur = null;
@@ -872,7 +872,7 @@
     quietDecisionMade = false;
     delete loaderDoneMap[convId];
     if (completenessWatchdogRetries[convId] <= 3) {
-      try { maybeStartLoader(); } catch (eR) { swallow(eR, 'gemini:finishWatchdogDecision-loader-restart'); }
+      try { maybeStartLoader(); } catch (eR) { swallowSoft(eR, 'gemini:finishWatchdogDecision-loader-restart'); }
     }
     watchdogFiredMap[convId] = false;
   }

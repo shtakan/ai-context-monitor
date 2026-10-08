@@ -305,7 +305,7 @@
             var __nhClean = false;
             var __floorNh = 0;
             try {
-              try { __floorNh = (D.loadFloor(convId) || {}).count || 0; } catch (eNhF) { swallow(eNhF, 'gemini:loader-clean-end-floor-read'); }
+              try { __floorNh = (D.loadFloor(convId) || {}).count || 0; } catch (eNhF) { swallowSoft(eNhF, 'gemini:loader-clean-end-floor-read'); }
               var __qcNh = (typeof D.quietEndedClean === 'undefined') ? false : (D.quietEndedClean === true);
               var __pcNh = (typeof D.pendingCursor === 'undefined') ? null : D.pendingCursor;
               __nhClean = __qcNh && !__pcNh && !D.reachedStart && __floorNh > 0 && D.baseSize() > 0 && D.baseSize() >= __floorNh;
@@ -443,7 +443,7 @@
               // когда высота не коллапсировала: h < max(3000, 0.5*maxScrollHSeen)
               // при базе ниже сохранённого пола → doneReason='collapse' + перезапуск.
               var __floorCg = 0;
-              try { __floorCg = (D.loadFloor(convId) || {}).count || 0; } catch (eCg0) { swallow(eCg0, 'gemini:loader-collapse-guard-floor-read'); }
+              try { __floorCg = (D.loadFloor(convId) || {}).count || 0; } catch (eCg0) { swallowSoft(eCg0, 'gemini:loader-collapse-guard-floor-read'); }
               var __cvCollapsed = false;
               if (typeof window !== 'undefined' && window.GeminiInterceptLogic &&
                   typeof window.GeminiInterceptLogic.collapseGuardVerdict === 'function') {
@@ -518,7 +518,7 @@
                         }
                       }
                     }
-                  } catch (eCgF) { swallow(eCgF, 'gemini:loader-floor-self-heal'); }
+                  } catch (eCgF) { swallowSoft(eCgF, 'gemini:loader-floor-self-heal'); }
                   debugLog('log', '[AI CM][Gemini][loader] clean-end top confirmed (устаревший пол самоизлечен) convId=' + convId +
                     ' msgs=' + D.baseSize() + ' floorWas=' + __floorCg + ' scrollH=' + sc.height() +
                     ' selfHeal=' + ((__shvCg && __shvCg.source) || 'skipped'));
@@ -542,7 +542,7 @@
                       if (D.getConvId() !== __convIdAtCollapse) return; // смена чата — ретрай не нужен
                       D.loaderDoneMap[__convIdAtCollapse] = false; // снятие латча — разрешаем перезапуск
                       maybeStartLoader();
-                    } catch (eCg1) { swallow(eCg1, 'gemini:loader-collapse-retry'); }
+                    } catch (eCg1) { swallowSoft(eCg1, 'gemini:loader-collapse-retry'); }
                   }, 8000);
                 } else {
                   if (__cleanEndCg && typeof D.lastCleanEndBaseCount !== 'undefined' && D.baseSize() === D.lastCleanEndBaseCount) {
@@ -552,7 +552,7 @@
                         debugLog('log', '[AI CM][Gemini][loader] clean-end floor-write via saveFloor (H11) convId=' + convId + ' proposed=' + D.baseSize() + ' floorWas=' + __floorCg);
                         D.saveFloor(convId, D.baseSize(), D.lastBaseTextLen);
                       }
-                    } catch (eCgF2) { swallow(eCgF2, 'gemini:loader-h11-floor-write'); }
+                    } catch (eCgF2) { swallowSoft(eCgF2, 'gemini:loader-h11-floor-write'); }
                     debugLog('log', '[AI CM][Gemini][loader] clean-end top confirmed (exhausted retries) convId=' + convId +
                       ' msgs=' + D.baseSize() + ' floorWas=' + __floorCg);
                     doneReason = 'top';
@@ -603,7 +603,7 @@
                       if (D.getConvId() !== __convIdAtUntrust) return; // смена чата — ретрай не нужен
                       D.loaderDoneMap[__convIdAtUntrust] = false; // снятие латча — разрешаем перезапуск
                       maybeStartLoader();
-                    } catch (eH91) { swallow(eH91, 'gemini:loader-untrusted-top-retry'); }
+                    } catch (eH91) { swallowSoft(eH91, 'gemini:loader-untrusted-top-retry'); }
                   }, 8000);
                 } else {
                   debugLog('log', '[AI CM][Gemini][loader] untrusted-top: ретраи исчерпаны 2/2 — incomplete as-is convId=' + convId);
@@ -657,9 +657,9 @@
               // не стреляет по усечённой базе; состояние бейджа не трогаем (v78-пол
               // по-прежнему защищает от просадки).
               var fbHash = '';
-              try { fbHash = D.aiCmDiagTurnEdge(D.aiCmOrderedTurns(), 'first').hash; } catch (eFbH) { swallow(eFbH, 'gemini:loader-fallback-probe-hash'); }
+              try { fbHash = D.aiCmDiagTurnEdge(D.aiCmOrderedTurns(), 'first').hash; } catch (eFbH) { swallowSoft(eFbH, 'gemini:loader-fallback-probe-hash'); }
               var fbWideCur = null;
-              try { fbWideCur = D.extractCursorWide(D.lastPaginateOuter); } catch (eFbC) { swallow(eFbC, 'gemini:loader-fallback-wide-cursor'); }
+              try { fbWideCur = D.extractCursorWide(D.lastPaginateOuter); } catch (eFbC) { swallowSoft(eFbC, 'gemini:loader-fallback-wide-cursor'); }
               // H9b (retain-last-good): живой wide-курсор пуст (оборванный шаг перезаписал
               // lastPaginateOuter) → retained last-good того же convId (вход probe, не complete).
               if (!fbWideCur && D.lastGoodWideCur && D.lastGoodWideCur.conv &&
@@ -707,7 +707,7 @@
                   } }));
                 } catch (eFbD) { }
               } });
-            } catch (eD14x) { swallow(eD14x, 'gemini:loader-fallback-complete'); }
+            } catch (eD14x) { swallowSoft(eD14x, 'gemini:loader-fallback-complete'); }
           }
           function fallbackStableNow() {
             var nowD15 = Date.now();
@@ -729,10 +729,10 @@
                   if (D.getConvId() !== convId) return;
                   if (!fallbackStableNow()) return; // всё ещё ждём — stableCheck74/повторы решат
                   applyFallbackComplete();
-                } catch (eD15t) { swallow(eD15t, 'gemini:loader-fallback-retry'); }
+                } catch (eD15t) { swallowSoft(eD15t, 'gemini:loader-fallback-retry'); }
               }, 5000);
             }
-          } catch (eD14y) { swallow(eD14y, 'gemini:loader-fallback-schedule'); }
+          } catch (eD14y) { swallowSoft(eD14y, 'gemini:loader-fallback-schedule'); }
         }
         debugLog('log', '[AI CM][Gemini][loader] done reason=' + doneReason +
           ' scrollH=' + sc.height() + ' convId=' + convId +
@@ -774,7 +774,7 @@
       }
       // v1.14.2 (COLLAPSE-GUARD): база добрала сохранённый пол — бюджет коллапс-ретраев больше не нужен
       var __floorMs = 0;
-      try { __floorMs = (D.loadFloor(convId) || {}).count || 0; } catch (eCg2) { swallow(eCg2, 'gemini:maybeStartLoader-collapse-budget'); }
+      try { __floorMs = (D.loadFloor(convId) || {}).count || 0; } catch (eCg2) { swallowSoft(eCg2, 'gemini:maybeStartLoader-collapse-budget'); }
       if (D.baseSize() >= __floorMs) D.collapseRetries = 0;
       // v30.6: история уже полная — лоадер не нужен (иначе прячет скроллер на 8–10с).
       // v1.6 (D15): при oracle=incomplete (восстановленная лента + неполная сеть) обходим

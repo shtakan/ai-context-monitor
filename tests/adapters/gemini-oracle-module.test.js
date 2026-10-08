@@ -461,7 +461,9 @@ describe('Phase 3 шаг 13.3: C-пины — тела и слушатель п�
       '            if (lastBaseCountChangeAt && (now74 - lastBaseCountChangeAt) < 5000) return;',
       // E.2a.2a: тело catch инструментировано swallow (LOG-точка P0). Расхождение с
       // до-E.2a.2a эталоном — ровно эта одна строка; отступы, вызов и try сохранены.
-      '            try { emitBaseSnapshot(); } catch (eEs74) { swallow(eEs74, \'gemini:stableCheck74-emit\'); }',
+      // Step E.2c-B2b-3a (swallowSoft): тот же catch переведён на канал B —
+      // `swallowSoft(eEs74, 'gemini:stableCheck74-emit')`; отступы, вызов и try сохранены.
+      '            try { emitBaseSnapshot(); } catch (eEs74) { swallowSoft(eEs74, \'gemini:stableCheck74-emit\'); }',
       '        stableCheck74();',
       '          scrollEngaged: loaderState.scrollEngaged === true, // v66: скрытый скролл вовлечён?'
     ];

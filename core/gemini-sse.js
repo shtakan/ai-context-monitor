@@ -208,7 +208,7 @@
               if (selfStream.status >= 200 && selfStream.status < 300 && selfStream.responseText) {
                 D.provisionalStreamIngest(selfStream.responseText, D.streamRpcidOf(url));
               }
-            } catch (e) { swallow(e, 'gemini:xhr-load-listener-stream'); }
+            } catch (e) { swallowSoft(e, 'gemini:xhr-load-listener-stream'); }
           });
         }
         if (D.isIngestRpc(url)) {
@@ -243,7 +243,7 @@
                 }
                 D.ingest(self.responseText, {});
               }
-            } catch (e) { swallow(e, 'gemini:xhr-load-listener-ingest'); }
+            } catch (e) { swallowSoft(e, 'gemini:xhr-load-listener-ingest'); }
           });
         }
         // v28: DIAG_TOKENS — диагностический перехват ВСЕХ XHR-ответов (не только history RPC)

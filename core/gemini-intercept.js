@@ -1100,7 +1100,7 @@
         archiveTierByConv[__cidArcReset].completeApplied = false;
         archiveTierByConv[__cidArcReset].verdictLogged = '';
       }
-    } catch (eArcReset) { swallow(eArcReset, 'gemini:resetForNewConversation-archive-latch'); }
+    } catch (eArcReset) { swallowSoft(eArcReset, 'gemini:resetForNewConversation-archive-latch'); }
     lastLoaderDoneReason = ''; // v78: done-reason прошлого чата не должен открывать stable-stop оракул
     collapseRetries = 0; // v1.14.2 (COLLAPSE-GUARD): смена convId — новый бюджет коллапс-ретраев
     lastPagStepBroken = false; // H9: смена convId — сброс флага «последний шаг тихой пагинации сломан»
@@ -1143,14 +1143,14 @@
     if (newId !== currentConvId) {
       var oldId = currentConvId;
       currentConvId = newId;
-      try { forceRestoreVisibility('conv-switch'); } catch (eVis70) { swallow(eVis70, 'gemini:checkConvChange-visibility-restore'); } // v70: SPA-переход не оставляет скрытый контейнер
+      try { forceRestoreVisibility('conv-switch'); } catch (eVis70) { swallowSoft(eVis70, 'gemini:checkConvChange-visibility-restore'); } // v70: SPA-переход не оставляет скрытый контейнер
       resetForNewConversation();
       // v4z: инвалидация done-флага покинутого чата — при возврате лоадер обязан
       // перезапуститься (DOM уничтожен, «already-done» переживать навигацию не должен)
       try { delete loaderDoneMap[oldId]; } catch (e) { }
       if (loaderRunningFor === oldId) { loaderRunningFor = null; notifyLoaderState(oldId, false); }
       // v4z: SPA-переход на /app/<id> → автозапуск лоадера полной истории нового чата
-      try { maybeStartLoader(); } catch (e) { swallow(e, 'gemini:checkConvChange-loader-start'); }
+      try { maybeStartLoader(); } catch (e) { swallowSoft(e, 'gemini:checkConvChange-loader-start'); }
       // v4z: фолбэк бейджа — если история за 3с не пришла (badge-recv после возврата
       // отсутствует), форсируем существующий virtual-F5/activeRefresh
       if (loaderBadgeTimer) { clearTimeout(loaderBadgeTimer); loaderBadgeTimer = null; }
@@ -1159,7 +1159,7 @@
         if (getConvId() !== newId || !newId) return;
         if (baseSize() > 0) return;
         debugLog('log', '[AI CM][Gemini][loader] fallback-refresh convId=' + newId);
-        try { activeRefresh('фолбэк бейджа после смены чата', false); } catch (e) { swallow(e, 'gemini:checkConvChange-badge-refresh'); }
+        try { activeRefresh('фолбэк бейджа после смены чата', false); } catch (e) { swallowSoft(e, 'gemini:checkConvChange-badge-refresh'); }
       }, 3000);
     }
   }

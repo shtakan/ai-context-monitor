@@ -400,7 +400,7 @@
   function handleSalvagedOuter(outer, out, src) {
     var wasFull = D.historyFullByQuiet, wasReached = D.reachedStart;
     var wasQuiet = D.quietDecisionMade, wasNoStart = D.quietIncompleteNoStart;
-    try { D.handleOuter(outer, out, src); } catch (eSalv) { swallow(eSalv, 'gemini:handleSalvagedOuter'); }
+    try { D.handleOuter(outer, out, src); } catch (eSalv) { swallowSoft(eSalv, 'gemini:handleSalvagedOuter'); }
     // Кадр обрезан → его «нет курсора» и «нет старших» НЕ доказывают терминальную страницу:
     // откатываем все четыре флага полноты к состоянию до вызова (v74-ветка handleOuter
     // остаётся байтово нетронутой — гарантия держится на откате, а не на её правке).

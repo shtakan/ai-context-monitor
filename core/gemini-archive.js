@@ -214,7 +214,7 @@
       var logic = (typeof window !== 'undefined') ? window.GeminiInterceptLogic : null;
       if (!logic || typeof logic.archiveCompleteVerdict !== 'function') return;
       var sf = null;
-      try { sf = D.loadFloor(convId); } catch (eSf) { swallow(eSf, 'gemini:archive-tier-floor-read'); }
+      try { sf = D.loadFloor(convId); } catch (eSf) { swallowSoft(eSf, 'gemini:archive-tier-floor-read'); }
       var floorCount = (sf && sf.count) || 0;
       // T1-fix (v1.16.1): снимок ЖИВОГО яруса — без него «база доросла до архива»
       // выполняется вкладом самого архива и объявляет ложную полноту (автоэкспорт
@@ -260,7 +260,7 @@
       debugLog('log', '[AI CM][completeness] oracle=complete reason=archive-complete convId=' + convId +
         ' msgs=' + D.baseSize() + ' archiveMsgs=' + arch.count + ' floor=' + floorCount +
         ' format=' + (arch.format || '?'));
-    } catch (eArc) { swallow(eArc, 'gemini:aiCmArchiveTierApply'); }
+    } catch (eArc) { swallowSoft(eArc, 'gemini:aiCmArchiveTierApply'); }
   }
 
   // ---- v28: слияние сохранённой ленты (из content.js) со свежей сетевой ----
@@ -435,7 +435,7 @@
             ' count=' + archFloor.count + ' textLen=' + archFloor.effectiveLen);
         }
       }
-    } catch (eAf) { swallow(eAf, 'gemini:archive-restore-listener'); }
+    } catch (eAf) { swallowSoft(eAf, 'gemini:archive-restore-listener'); }
 
     // 3) Метаданные яруса для оракула. Повторный dispatch (storage.onChanged) merge не
     //    повторяет — доказательства (keys/addedIds) и латчи переносим из прежней записи,
@@ -454,10 +454,10 @@
     };
 
     if (addedCount > 0 || archFloor) {
-      if (addedCount > 0) { try { D.refreshMinOrderTracking('archive'); } catch (eRo) { swallow(eRo, 'gemini:archive-restore-min-order'); } }
-      try { D.emitBaseSnapshot(); } catch (eEm) { swallow(eEm, 'gemini:archive-restore-emit'); }
+      if (addedCount > 0) { try { D.refreshMinOrderTracking('archive'); } catch (eRo) { swallowSoft(eRo, 'gemini:archive-restore-min-order'); } }
+      try { D.emitBaseSnapshot(); } catch (eEm) { swallowSoft(eEm, 'gemini:archive-restore-emit'); }
     }
-    try { aiCmArchiveTierApply(); } catch (eAp) { swallow(eAp, 'gemini:archive-restore-tier-reapply'); }
+    try { aiCmArchiveTierApply(); } catch (eAp) { swallowSoft(eAp, 'gemini:archive-restore-tier-reapply'); }
   });
 
   // v30.6: content.js после применения кэш-ленты планирует ОДНО уточнение канонического

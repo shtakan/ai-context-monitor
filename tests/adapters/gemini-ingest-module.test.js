@@ -196,7 +196,9 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
     // E.2a.2a: тело catch инструментировано swallow (LOG-точка P0). Расхождение с
     // до-E.2a.2a эталоном — ровно эта одна строка; сам вызов emitBaseSnapshot() и
     // его try-обёртка не менялись, поэтому R-D маршрут записи базы прежний.
-    expect(fnSource(MOD, 'mergeRestoredTurns')).toContain('try { emitBaseSnapshot(); } catch (e) { swallow(e, \'gemini:mergeRestoredTurns-emit\'); }');
+    // Step E.2c-B2b-3a (swallowSoft): тот же catch переведён на канал B —
+    // `swallowSoft(e, 'gemini:mergeRestoredTurns-emit')`.
+    expect(fnSource(MOD, 'mergeRestoredTurns')).toContain('try { emitBaseSnapshot(); } catch (e) { swallowSoft(e, \'gemini:mergeRestoredTurns-emit\'); }');
     // арифметика конкатенации: 1 (ядро-форвардер) + 2 (пагинация) + 3 (ingest) + 1 (архив) + 2 (оракул) = 9
     expect(CONC.match(/emitBaseSnapshot\(\)/g)).toHaveLength(9);
   });

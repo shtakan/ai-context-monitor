@@ -85,7 +85,7 @@
       if (!convIdFc || historyFullByQuiet || loaderRunningFor || quietActive) return;
       if (!(lastBaseCount > 0)) return;
       var floorFc = null;
-      try { floorFc = loadFloor(convIdFc); } catch (eFcL) { swallow(eFcL, 'gemini:stableFloorConfirm-floor-read'); }
+      try { floorFc = loadFloor(convIdFc); } catch (eFcL) { swallowSoft(eFcL, 'gemini:stableFloorConfirm-floor-read'); }
       if (!floorFc || !(floorFc.count > 0)) return;
       if (lastBaseCount < floorFc.count) return;
       // T1-fix#2 (v1.16.2): пол этого чата поднят АРХИВОМ (его count), поэтому «база не
@@ -110,8 +110,8 @@
       try { delete oracleIncompleteSeen[convIdFc]; } catch (eFcO) { }
       debugLog('log', '[AI CM][completeness] oracle=complete reason=floor-confirmed convId=' + convIdFc +
         ' msgs=' + lastBaseCount + ' floor=' + floorFc.count);
-      try { emitBaseSnapshot(); } catch (eFcE) { swallow(eFcE, 'gemini:stableFloorConfirm-emit'); }
-    } catch (eFcX) { swallow(eFcX, 'gemini:stableFloorConfirm'); }
+      try { emitBaseSnapshot(); } catch (eFcE) { swallowSoft(eFcE, 'gemini:stableFloorConfirm-emit'); }
+    } catch (eFcX) { swallowSoft(eFcX, 'gemini:stableFloorConfirm'); }
   }
   function noteBaseCountChange() {
     var n74 = baseSize();
@@ -134,7 +134,7 @@
         // T1-fix (v1.16.1): живой ярус остановился — переоцениваем оракул архива ДО
         // dispatch ниже, чтобы свежая полнота уехала в том же ai-cm-loader-state
         // (иначе после стопа лоадера emit может не прийти и экспорт не триггернётся).
-        try { aiCmArchiveTierApply(); } catch (eArcLs) { swallow(eArcLs, 'gemini:notifyLoaderState-archive-reapply'); }
+        try { aiCmArchiveTierApply(); } catch (eArcLs) { swallowSoft(eArcLs, 'gemini:notifyLoaderState-archive-reapply'); }
         // v74 (баг A): стабильный loader-stop — независимое подтверждение полноты.
         // pendingCursor нет И счётчик базы не менялся ≥5с И старших добавлений вне
         // пагинации ≥5с → полнота сразу (вместо 60с-задержки и [LOW CONFIDENCE]_).
@@ -157,7 +157,7 @@
               return;
             }
             var sf78 = null;
-            try { sf78 = loadFloor(convId); } catch (eSf78) { swallow(eSf78, 'gemini:stableCheck74-floor-read'); }
+            try { sf78 = loadFloor(convId); } catch (eSf78) { swallowSoft(eSf78, 'gemini:stableCheck74-floor-read'); }
             var floorCount78 = (sf78 && sf78.count) || 0;
             // v1.15 (BUG «холодное открытие без полной истории»): сеть ЧИСТО завершила
             // пагинацию (quietEndedClean: без ошибки-страницы и без живого курсора), но
@@ -261,8 +261,8 @@
             try { delete oracleIncompleteSeen[convId]; } catch (eD15s) { } // v1.6 (D15): успешный stable-stop — флаг снят
             debugLog('log', '[AI CM][completeness] oracle=complete reason=loader-stable-stop convId=' + convId +
               ' msgs=' + lastBaseCount + ' floor=' + floorCount78);
-            try { emitBaseSnapshot(); } catch (eEs74) { swallow(eEs74, 'gemini:stableCheck74-emit'); }
-          } catch (e74b) { swallow(e74b, 'gemini:stableCheck74'); }
+            try { emitBaseSnapshot(); } catch (eEs74) { swallowSoft(eEs74, 'gemini:stableCheck74-emit'); }
+          } catch (e74b) { swallowSoft(e74b, 'gemini:stableCheck74'); }
         };
         stableCheck74();
         setTimeout(stableCheck74, 5000); // повторная проверка через 5с тишины
@@ -278,7 +278,7 @@
         baseComplete: historyFullByQuiet === true,
         reachedStart: reachedStart === true
       } }));
-    } catch (e) { swallow(e, 'gemini:notifyLoaderState'); }
+    } catch (e) { swallowSoft(e, 'gemini:notifyLoaderState'); }
   }
 
       // ---- v61diag: отпечатки краёв базы ----
