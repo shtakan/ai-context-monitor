@@ -445,7 +445,7 @@ function aiCmLatchCacheReady() {
         // Мутируем ТОТ ЖЕ объект: Api.sessionFiredCache (UMD-экспорт ниже) держит ссылку.
         for (var k in sessionFiredCache) delete sessionFiredCache[k];
         for (var k2 in (map || {})) sessionFiredCache[k2] = map[k2];
-      } catch (eHydr) { swallow(eHydr, 'export:aiCmLatchCacheReady'); }
+      } catch (eHydr) { }
       return sessionFiredCache;
     })
     .catch(function () { return sessionFiredCache; });
@@ -827,7 +827,7 @@ function loadExportHiddenSetting() {
     chrome.storage.local.get(['aiCmIncludeHiddenInExport'], function (data) {
       try {
         aiCmIncludeHiddenInExport = !!(data && data.aiCmIncludeHiddenInExport === true);
-      } catch (eParse7) { swallow(eParse7, 'export:loadExportHiddenSetting'); }
+      } catch (eParse7) { }
     });
     try {
       chrome.storage.onChanged.addListener(function (changes, areaName) {
@@ -1462,7 +1462,7 @@ function aiCmAutoExportStartDownload(content, file, fmt) {
     file = Pdl.disambiguateFileName(file, used);
   }
   // (2) синхронный резерв имени ДО старта скачивания
-  try { if (used && file) used[file] = 1; } catch (eNameReserve) { swallow(eNameReserve, 'export:aiCmAutoExportStartDownload-name-reserve'); }
+  try { if (used && file) used[file] = 1; } catch (eNameReserve) { }
   // (3) старт скачивания
   // O-27 (защитный фикс): пост-гард отказа (XSSI-префикс в первых байтах контента | пустое
   // имя файла) живёт ровно в одной точке — utils/export-text-builders.js:downloadBlob,

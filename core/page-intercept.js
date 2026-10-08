@@ -170,11 +170,11 @@
   }
 
   function urlOf(input) {
-    try { if (typeof input === 'string') return input; if (input && input.url) return input.url; } catch (e) { swallow(e, 'page-intercept:urlOf'); }
+    try { if (typeof input === 'string') return input; if (input && input.url) return input.url; } catch (e) { }
     return '';
   }
   function methodOf(input, init) {
-    try { if (init && init.method) return String(init.method).toUpperCase(); if (input && input.method) return String(input.method).toUpperCase(); } catch (e) { swallow(e, 'page-intercept:methodOf'); }
+    try { if (init && init.method) return String(init.method).toUpperCase(); if (input && input.method) return String(input.method).toUpperCase(); } catch (e) { }
     return 'GET';
   }
   function tail(url) {

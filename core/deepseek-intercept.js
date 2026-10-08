@@ -613,7 +613,7 @@ if (typeof window !== 'undefined') {
         state = ds.state;
         var reason = 'manual:' + state + ' (nav=' + (ds.navType || 'unknown') + ', convId=' + (currentConvId || '').slice(0, 8) + ')';
       } else {
-        var reason = 'manual:' + state;
+        reason = 'manual:' + state;
       }
       dumpHistorySnapshot(state, reason, {
         capturePoint: 'manual_call',

@@ -553,7 +553,6 @@ function makeListenerCtx(overrides) {
     // прочие зависимости слушателя, не относящиеся к E-2 (поведение не проверяется)
     isInitialized: true,
     aiCmLoaderFreeze: false,
-    aiCmLateAutoExportDone: {},
     aiCmHostHistoryRecord: function (snap) { return snap; },
     aiCmWriteCurrentHistory: function () { },
     aiCmScheduleDeferredHistWrite: function () { },

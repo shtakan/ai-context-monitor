@@ -682,7 +682,6 @@
   var fetchAttempted = {}; // v33.2: защита от повторных fetch по uuid
 
   // v44-B4: очередь pasted-текстов из content.js (paste-capture через postMessage), ≤5, FIFO
-  var pasteQueue = [];
   // v47: очередь pasted-текстов — элементы живут ДО совпадения (TTL 10 мин),
   // cap 5 с вытеснением старшего; miss очередь НЕ дренирует; успех — удаляет элемент.
   function fileSizeOf(f) {
@@ -1385,7 +1384,6 @@
 
   // v39: диагностика upload-кандидатов (поиск реального эндпоинта pasted-текста).
   // Только наблюдение: статус/длину берём из Response.headers, тело НЕ читаем.
-  var UPLOAD_URL_RE = /upload|file|attachment|pasted/i;
   // v40: шумовые эндпоинты тел — не сканируем и не логируем
   var NOISE_URL_RE = /datadoghq|event_logging|\/rum/i;
   // v42: upload-кандидаты — расширенный набор

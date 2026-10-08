@@ -1477,7 +1477,7 @@
           }
           if (metaS.indexOf('type.googleapis.com') !== -1 ||
               metaS.indexOf('BardErrorInfo') !== -1) return true;
-        } catch (e) { swallow(e, 'gemini-utils:isBardErrorPage-meta'); }
+        } catch (e) { }
         return false;
       }
       // inner не строка (null/объект/число): wrb вернул не-данные. Считаем ошибкой-страницей

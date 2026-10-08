@@ -7,7 +7,7 @@
     "adapters"
   ],
   "definition": "Молчаливый catch = тело после вырезания комментариев содержит только пробелы, ИЛИ ровно один no-op (void 0; / return; / continue; / break;). Комментарий-только тело тоже молчаливое (комментарии маскируются в пробелы).",
-  "totalEntries": 452,
+  "totalEntries": 458,
   "groups": [
     {
       "file": "adapters/claude-adapter.js",
@@ -190,8 +190,8 @@
       "lines": [
         439,
         652,
-        703,
-        1434
+        702,
+        1432
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: hdrs.forEach(function (hv, hk) { var hkl = String(hk).toLowerCase(); if"
     },
@@ -214,9 +214,9 @@
         22,
         126,
         249,
-        753,
-        791,
-        885
+        752,
+        790,
+        884
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (window.__aiCmDebugLogs) console.info('[AI CM][Claude][trace] ' + msg"
     },
@@ -228,13 +228,13 @@
         204,
         228,
         448,
-        819,
-        1063,
-        1105,
-        1210,
-        1431,
-        1631,
-        1651
+        818,
+        1062,
+        1104,
+        1209,
+        1429,
+        1629,
+        1649
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: st = response.status;"
     },
@@ -244,10 +244,10 @@
       "lines": [
         514,
         550,
-        1176,
-        1197,
-        1201,
-        1204
+        1175,
+        1196,
+        1200,
+        1203
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
     },
@@ -255,7 +255,7 @@
       "file": "core/claude-intercept.js",
       "category": "feature-detect",
       "lines": [
-        1654
+        1652
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var blen = -1; try { blen = (typeof xhr.responseText === 'string') ? xhr"
     },
@@ -263,9 +263,9 @@
       "file": "core/claude-intercept.js",
       "category": "guard-clause",
       "lines": [
-        1406,
-        1438,
-        1465
+        1404,
+        1436,
+        1463
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (m.full && internalFetchUrls[m.full]) { return originalFetch.call(thi"
     },
@@ -684,6 +684,7 @@
       "file": "core/export-manager.js",
       "category": "cleanup-guard",
       "lines": [
+        448,
         586
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: if (!aiCmPendingHistWrite) return; if (cid && aiCmPendingHistWrite.convI"
@@ -702,6 +703,8 @@
       "file": "core/export-manager.js",
       "category": "defensive-assignment",
       "lines": [
+        830,
+        1465,
         1600
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: hostFb = (typeof window !== 'undefined' && window.location && window.loc"
@@ -1221,6 +1224,8 @@
       "file": "core/page-intercept.js",
       "category": "guard-clause",
       "lines": [
+        173,
+        177,
         280
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (parts[i].content_type && typeof parts[i].content_type === 'string')"
@@ -1709,7 +1714,8 @@
       "file": "utils/gemini-intercept-logic.js",
       "category": "parse-guard",
       "lines": [
-        1476
+        1476,
+        1480
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: metaS += JSON.stringify(a0m[mi]);"
     },

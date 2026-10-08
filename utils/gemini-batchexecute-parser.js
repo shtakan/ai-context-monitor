@@ -306,7 +306,7 @@
       try { collectTurnText(turn[3], cands); } catch (e) { swallow(e, 'gemini-utils:extractCanonicalAnswer-fallback'); }
     }
     var cleaned = [];
-    for (var i = 0; i < cands.length; i++) {
+    for (i = 0; i < cands.length; i++) {
       if (typeof cands[i] !== 'string') continue;
       var s = sanitizeGeminiText(cands[i]).trim();
       if (s) cleaned.push(s);
