@@ -459,7 +459,9 @@ describe('Phase 3 шаг 13.3: C-пины — тела и слушатель п�
       '        lastCycleEndedHidden = (document.visibilityState !== \'visible\'); // v1.13.1',
       '            if (lastLoaderDoneReason !== \'top\') {',
       '            if (lastBaseCountChangeAt && (now74 - lastBaseCountChangeAt) < 5000) return;',
-      '            try { emitBaseSnapshot(); } catch (eEs74) { }',
+      // E.2a.2a: тело catch инструментировано swallow (LOG-точка P0). Расхождение с
+      // до-E.2a.2a эталоном — ровно эта одна строка; отступы, вызов и try сохранены.
+      '            try { emitBaseSnapshot(); } catch (eEs74) { swallow(eEs74, \'gemini:stableCheck74-emit\'); }',
       '        stableCheck74();',
       '          scrollEngaged: loaderState.scrollEngaged === true, // v66: скрытый скролл вовлечён?'
     ];

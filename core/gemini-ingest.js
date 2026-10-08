@@ -140,14 +140,14 @@
   function extractTurnTs(t) {
     try {
       if (Array.isArray(t) && Array.isArray(t[1]) && typeof t[1][0] === 'number' && t[1][0] > 1000000000) return t[1][0];
-    } catch (e) { }
+    } catch (e) { swallow(e, 'gemini:extractTurnTs'); }
     return 0;
   }
   // v35: r1 = id соседа НОВЕЕ (t[1][1], подтверждено логами idmap).
   function extractTurnR1(t) {
     try {
       if (Array.isArray(t) && Array.isArray(t[1]) && typeof t[1][1] === 'string') return t[1][1];
-    } catch (e) { }
+    } catch (e) { swallow(e, 'gemini:extractTurnR1'); }
     return null;
   }
 
@@ -459,7 +459,7 @@
   function emitBaseSnapshot() {
     // T1 (v1.16): первый ярус — архив. Переоценка archive-complete на каждом EMIT:
     // база могла дорасти до архивного count уже после импорта. Гейты H9/H10 не тронуты.
-    try { aiCmArchiveTierApply(); } catch (eArcEmit) { }
+    try { aiCmArchiveTierApply(); } catch (eArcEmit) { swallow(eArcEmit, 'gemini:emitBaseSnapshot-archive-reapply'); }
     // v35: финальный порядок по связному списку r1 (детерминирован, не зависит от
     // порядка прибытия страниц). Фолбэк — сортировка по order (прежнее поведение).
     var orderItems = [];
@@ -667,7 +667,7 @@
           floorValue: floorValue
         }
       }));
-    } catch (e) { }
+    } catch (e) { swallow(e, 'gemini:emitBaseSnapshot-dispatch'); }
     return { count: ids.length, textLen: text.length, effectiveLen: effectiveLen, lastModelName: lastModelName, floorApplied: floorApplied, floorValue: floorValue };
   }
 
@@ -698,7 +698,7 @@
           debugLog('log', '[AI CM][stream-alias] ' + candKey.slice(0, 24) + ' → ' + p.id.slice(0, 24) + ' convId=' + (getConvId() || '(none)') + ' turnId=' + (p.turnId || '-'));
         }
       }
-    } catch (e) { }
+    } catch (e) { swallow(e, 'gemini:applyStreamAliases'); }
   }
 
       // ---- ingest: приём текста базы целиком (ingest) — ядро кластера ----
@@ -815,7 +815,7 @@
         delete loaderDoneMap[curConvLatch66];
         debugLog('log', '[AI CM][loader] v66 latch-reset reason=new-disjoint-data src=' + src +
           ' convId=' + curConvLatch66 + ' overlap=0 (ровно один повторный прогон)');
-        setTimeout(function () { try { maybeStartLoader(); } catch (eL66) { } }, 2000);
+        setTimeout(function () { try { maybeStartLoader(); } catch (eL66) { swallow(eL66, 'gemini:ingest-loader-restart'); } }, 2000);
       }
     }
     if (disjointGuardSrc && baseSize() > 0) {
@@ -1225,7 +1225,7 @@
     debugLog('log', '[gemini-restore] merged ' + missing.length + ' missing ids (version=' + parserVersion + ')');
     // v61diag: tape-мердж учитывается в окне холодного старта как src=tape
     try { aiCmEnsureColdWindow(); aiCmColdStartIngestLog('tape', missing, missing.length, false); } catch (e) { }
-    try { emitBaseSnapshot(); } catch (e) { }
+    try { emitBaseSnapshot(); } catch (e) { swallow(e, 'gemini:mergeRestoredTurns-emit'); }
   }
 
       Fn.firstRc = firstRc;

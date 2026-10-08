@@ -113,8 +113,10 @@ describe('Phase 3 шаг 10: D-пины маршрутов записи базы
 
   test('D4: точка выхода снимка базы — emitBaseSnapshot, ровно два вызова, оба в кластере', () => {
     expect(MOD.match(/emitBaseSnapshot\(\)/g)).toHaveLength(2);
-    expect(fnSource(MOD, 'finishQuiet')).toContain('if (success) { try { emitBaseSnapshot(); } catch (e) { } }');
-    expect(fnSource(MOD, 'runCompletenessProbe')).toContain('try { emitBaseSnapshot(); } catch (eE) { }');
+    // E.2a.2a: тела catch инструментированы swallow (4 LOG-точки P0/P1). Расхождение с
+    // до-E.2a.2a эталоном — ровно эти строки catch; вызовы, try-обёртки и D-маршруты прежние.
+    expect(fnSource(MOD, 'finishQuiet')).toContain('if (success) { try { emitBaseSnapshot(); } catch (e) { swallow(e, \'gemini:finishQuiet-emit\'); } }');
+    expect(fnSource(MOD, 'runCompletenessProbe')).toContain('try { emitBaseSnapshot(); } catch (eE) { swallow(eE, \'gemini:runCompletenessProbe-emit\'); }');
     // Phase 3 step 12: три вызова (747, 988, 3157) уехали из ядра в core/gemini-ingest.js,
     // поэтому в ядре стало 4 = 3 вызова + 1 форвардер aiCmEmitBaseSnapshotFwd (шаг 12, TDZ).
     // Phase 3 step 13.2: четвёртый ядерный вызов (слушатель ai-cm-archive-restore) уехал
@@ -129,13 +131,13 @@ describe('Phase 3 шаг 10: D-пины маршрутов записи базы
 
   test('D5: контроль полноты разрывает deadlock — сброс loaderDoneMap, снятие полноты, ≤3 ретрая', () => {
     const quiet = fnSource(MOD, 'finishQuiet');
-    expect(quiet).toContain('try { runCompletenessWatchdog(getConvId()); } catch (eW) { }');
+    expect(quiet).toContain('try { runCompletenessWatchdog(getConvId()); } catch (eW) { swallow(eW, \'gemini:finishQuiet-watchdog\'); }');
     // решение по итогам сверки — в finishWatchdogDecision (единая точка, а не три копии)
     const wd = fnSource(MOD, 'runCompletenessWatchdog');
     const dec = fnSource(MOD, 'finishWatchdogDecision');
     expect(dec).toContain('delete loaderDoneMap[convId];');
     expect(dec).toContain('if (completenessWatchdogRetries[convId] <= 3) {');
-    expect(dec).toContain('try { maybeStartLoader(); } catch (eR) { }');
+    expect(dec).toContain('try { maybeStartLoader(); } catch (eR) { swallow(eR, \'gemini:finishWatchdogDecision-loader-restart\'); }');
     // watchdog-fail снимает полноту — иначе «полная» база осталась бы на усечённой
     expect(dec).toContain('historyFullByQuiet = false;');
     expect(dec).toContain('reachedStart = false;');
