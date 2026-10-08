@@ -8,6 +8,10 @@ const interceptCommon = require('../utils/intercept-common.js');
 
 const { setIntervalVisible } = interceptCommon;
 
+// E.2a.2b.4cd: хелпер swallow из utils/debug.js (его нет в Node-require; в
+// MAIN-инжекте debug.js идёт первым — core/background.js:135/282/295/308).
+global.swallow = function () { };
+
 function setVisibility(state) {
   Object.defineProperty(document, 'visibilityState', {
     configurable: true,
