@@ -1,0 +1,1760 @@
+{
+  "schema": "ai-cm/catch-whitelist@1",
+  "generatedFrom": "0d08038",
+  "scope": [
+    "core",
+    "utils",
+    "adapters"
+  ],
+  "definition": "Молчаливый catch = тело после вырезания комментариев содержит только пробелы, ИЛИ ровно один no-op (void 0; / return; / continue; / break;). Комментарий-только тело тоже молчаливое (комментарии маскируются в пробелы).",
+  "totalEntries": 452,
+  "groups": [
+    {
+      "file": "adapters/claude-adapter.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        92
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (this._lastNetworkModel) { if (!this._modelLogSent) { this._modelLogS"
+    },
+    {
+      "file": "adapters/claude-adapter.js",
+      "category": "event-guard",
+      "lines": [
+        46
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.addEventListener('ai-cm-full-history', function (ev) { var evt ="
+    },
+    {
+      "file": "adapters/deepseek-adapter.js",
+      "category": "feature-detect",
+      "lines": [
+        290
+      ],
+      "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: const o21Markers = ['BetterDeepSeek', 'BDS:', 'better-deepseek', 'bds-']"
+    },
+    {
+      "file": "adapters/deepseek-adapter.js",
+      "category": "local-helper-guard",
+      "lines": [
+        371
+      ],
+      "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmDiagLine('o21-dom-extract', { site: this.siteName || 'deepseek', tot"
+    },
+    {
+      "file": "adapters/google-search-adapter.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        243
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof aiCmDiagOn === 'function' && aiCmDiagOn() && typeof aiCmDiagL"
+    },
+    {
+      "file": "adapters/google-search-adapter.js",
+      "category": "event-guard",
+      "lines": [
+        125
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.addEventListener('ai-cm-full-history', function (ev) { var evt ="
+    },
+    {
+      "file": "adapters/google-search-adapter.js",
+      "category": "guard-clause",
+      "lines": [
+        52,
+        60
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GoogleFolwrUtils && typeof w"
+    },
+    {
+      "file": "adapters/perplexity-adapter.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        92
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (this._lastNetworkModel) { if (!this._modelLogSent) { this._modelLogS"
+    },
+    {
+      "file": "adapters/perplexity-adapter.js",
+      "category": "event-guard",
+      "lines": [
+        46
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.addEventListener('ai-cm-full-history', function (ev) { var evt ="
+    },
+    {
+      "file": "adapters/qwen-adapter.js",
+      "category": "container-drop",
+      "lines": [
+        283
+      ],
+      "reason": "container-drop: контейнер уже откреплён от DOM (SPA-навигация) — снимать нечего; пример: if (el.parentNode) el.parentNode.insertBefore(document.createComment(QWE"
+    },
+    {
+      "file": "adapters/qwen-adapter.js",
+      "category": "feature-detect",
+      "lines": [
+        434
+      ],
+      "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var hasNodeModule = (typeof module !== 'undefined') && !!module && (type"
+    },
+    {
+      "file": "adapters/qwen-adapter.js",
+      "category": "guard-clause",
+      "lines": [
+        425
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window && window.AiCmExportBuilders"
+    },
+    {
+      "file": "core/background.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        389,
+        1025,
+        1043
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: chrome.action.setBadgeText({ text: '', tabId: tabIdR }); debugLog('log',"
+    },
+    {
+      "file": "core/background.js",
+      "category": "defensive-assignment",
+      "lines": [
+        944
+      ],
+      "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: errText = await response.text();"
+    },
+    {
+      "file": "core/background.js",
+      "category": "guard-clause",
+      "lines": [
+        765
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: for (var k in (all || {})) { if (k.indexOf(AI_CM_FIRED_SESSION_PREFIX) ="
+    },
+    {
+      "file": "core/background.js",
+      "category": "host-api-guard",
+      "lines": [
+        41,
+        91,
+        95,
+        97,
+        100,
+        211,
+        261,
+        506,
+        580,
+        582
+      ],
+      "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: void chrome.runtime.lastError;"
+    },
+    {
+      "file": "core/background.js",
+      "category": "swallow-helper-internals",
+      "lines": [
+        27
+      ],
+      "reason": "swallow-helper-internals: внутренность хелпера swallow: его собственный guard на недоступность debugLog; пример: if (typeof debugLog !== 'function') return; debugLog('error', '[swallow]"
+    },
+    {
+      "file": "core/base-handler.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        221,
+        263
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var v = info && info.verdicts ? JSON.stringify(info.verdicts) : '{}'; va"
+    },
+    {
+      "file": "core/base-handler.js",
+      "category": "logging-guard",
+      "lines": [
+        190
+      ],
+      "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: aiCmLogNetSyncResult(convId, info || {});"
+    },
+    {
+      "file": "core/base-handler.js",
+      "category": "timing-guard",
+      "lines": [
+        188,
+        189,
+        277
+      ],
+      "reason": "timing-guard: отмена таймера/подписки: обработчик мог быть снят хостом или гонкой; пример: clearTimeout(timer);"
+    },
+    {
+      "file": "core/claude-intercept.js",
+      "category": "best-effort-guard",
+      "lines": [
+        439,
+        652,
+        703,
+        1434
+      ],
+      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: hdrs.forEach(function (hv, hk) { var hkl = String(hk).toLowerCase(); if"
+    },
+    {
+      "file": "core/claude-intercept.js",
+      "category": "cleanup-guard",
+      "lines": [
+        109,
+        195,
+        289,
+        444
+      ],
+      "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete internalFetchUrls[u];"
+    },
+    {
+      "file": "core/claude-intercept.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        18,
+        22,
+        126,
+        249,
+        753,
+        791,
+        885
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (window.__aiCmDebugLogs) console.info('[AI CM][Claude][trace] ' + msg"
+    },
+    {
+      "file": "core/claude-intercept.js",
+      "category": "defensive-assignment",
+      "lines": [
+        202,
+        204,
+        228,
+        448,
+        819,
+        1063,
+        1105,
+        1210,
+        1431,
+        1631,
+        1651
+      ],
+      "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: st = response.status;"
+    },
+    {
+      "file": "core/claude-intercept.js",
+      "category": "event-guard",
+      "lines": [
+        514,
+        550,
+        1176,
+        1197,
+        1201,
+        1204
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
+    },
+    {
+      "file": "core/claude-intercept.js",
+      "category": "feature-detect",
+      "lines": [
+        1654
+      ],
+      "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var blen = -1; try { blen = (typeof xhr.responseText === 'string') ? xhr"
+    },
+    {
+      "file": "core/claude-intercept.js",
+      "category": "guard-clause",
+      "lines": [
+        1406,
+        1438,
+        1465
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (m.full && internalFetchUrls[m.full]) { return originalFetch.call(thi"
+    },
+    {
+      "file": "core/claude-intercept.js",
+      "category": "local-helper-guard",
+      "lines": [
+        537,
+        545,
+        549
+      ],
+      "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkConvChange();"
+    },
+    {
+      "file": "core/claude-intercept.js",
+      "category": "noop-guard",
+      "lines": [
+        181,
+        275
+      ],
+      "reason": "noop-guard: единственный no-op — штатный выход из цикла/функции без восстановления; пример: v = data[k];"
+    },
+    {
+      "file": "core/claude-intercept.js",
+      "category": "parse-guard",
+      "lines": [
+        311
+      ],
+      "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: v = decodeURIComponent(v.replace(/\\+/g, ' '));"
+    },
+    {
+      "file": "core/content.js",
+      "category": "best-effort-guard",
+      "lines": [
+        541,
+        1977,
+        2111,
+        2981
+      ],
+      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var m = location.pathname.match(/\\/app\\/([A-Za-z0-9_-]+)/); convId = m ?"
+    },
+    {
+      "file": "core/content.js",
+      "category": "cleanup-guard",
+      "lines": [
+        1902
+      ],
+      "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: if (aiCmBadgeHoldTimer) return; aiCmBadgeHoldTimer = setTimeout(function"
+    },
+    {
+      "file": "core/content.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        563,
+        935,
+        1036,
+        1041,
+        1044,
+        1047,
+        1049,
+        1050,
+        1051,
+        1070,
+        1072,
+        1077,
+        1112,
+        1119,
+        1127,
+        1130,
+        1176,
+        1184,
+        1186,
+        1191,
+        1198,
+        1204,
+        1222,
+        1227,
+        1233,
+        1235,
+        1240,
+        1777,
+        1954,
+        2122,
+        2146,
+        2155,
+        2865,
+        2891,
+        2893
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
+    },
+    {
+      "file": "core/content.js",
+      "category": "defensive-assignment",
+      "lines": [
+        675
+      ],
+      "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: aiCmLowConfidenceByConv[emitConvId] = (detail.isLowConfidenceBase === tr"
+    },
+    {
+      "file": "core/content.js",
+      "category": "dom-read-guard",
+      "lines": [
+        1813
+      ],
+      "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: var info = aiCmSourceInfo(); aiCmSourceLabelNow = info ? info.label : ''"
+    },
+    {
+      "file": "core/content.js",
+      "category": "event-guard",
+      "lines": [
+        923,
+        932,
+        2068,
+        2089,
+        2847,
+        2853
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
+    },
+    {
+      "file": "core/content.js",
+      "category": "feature-detect",
+      "lines": [
+        2243
+      ],
+      "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var metricSrc = baseComplete ? 'base-complete' : (lastBounded ? 'base-fl"
+    },
+    {
+      "file": "core/content.js",
+      "category": "guard-clause",
+      "lines": [
+        67,
+        265,
+        278,
+        315,
+        331,
+        553,
+        579,
+        616,
+        716,
+        884,
+        1851,
+        2315,
+        2374,
+        2391,
+        2470
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
+    },
+    {
+      "file": "core/content.js",
+      "category": "host-api-guard",
+      "lines": [
+        26,
+        288,
+        352,
+        2539
+      ],
+      "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.runtime.sendMessage({ type: 'BADGE_RESET' }).catch(function () {"
+    },
+    {
+      "file": "core/content.js",
+      "category": "local-helper-guard",
+      "lines": [
+        285,
+        2700
+      ],
+      "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmCancelDeferredHistWrite('');"
+    },
+    {
+      "file": "core/content.js",
+      "category": "parse-guard",
+      "lines": [
+        2927
+      ],
+      "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof window !== 'undefined' && window && window.AiCmEx"
+    },
+    {
+      "file": "core/deepseek-conv.js",
+      "category": "event-guard",
+      "lines": [
+        122,
+        152
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
+    },
+    {
+      "file": "core/deepseek-conv.js",
+      "category": "local-helper-guard",
+      "lines": [
+        139,
+        147,
+        151
+      ],
+      "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkConvChange();"
+    },
+    {
+      "file": "core/deepseek-diag.js",
+      "category": "best-effort-guard",
+      "lines": [
+        66,
+        238
+      ],
+      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: arr.push(item); while (arr.length > max) arr.shift();"
+    },
+    {
+      "file": "core/deepseek-diag.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        320,
+        656,
+        766,
+        785,
+        885,
+        920
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (!diagOn()) return; var key = String(id); var txt = (typeof text ==="
+    },
+    {
+      "file": "core/deepseek-diag.js",
+      "category": "defensive-assignment",
+      "lines": [
+        331,
+        461
+      ],
+      "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: convPrefix = (currentConvId || '').slice(0, 8);"
+    },
+    {
+      "file": "core/deepseek-diag.js",
+      "category": "dom-read-guard",
+      "lines": [
+        477
+      ],
+      "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: var widgetEl = document.querySelector('.ai-widget-text'); if (widgetEl)"
+    },
+    {
+      "file": "core/deepseek-diag.js",
+      "category": "guard-clause",
+      "lines": [
+        281,
+        642
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (lt === null || lt === undefined || nt === null || nt === undefined)"
+    },
+    {
+      "file": "core/deepseek-diag.js",
+      "category": "host-api-guard",
+      "lines": [
+        336,
+        346
+      ],
+      "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: sessionStorage.setItem(visitedKey, '1');"
+    },
+    {
+      "file": "core/deepseek-diag.js",
+      "category": "logging-guard",
+      "lines": [
+        452,
+        716
+      ],
+      "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: if (!isDebugEnabled()) return; var list = Array.isArray(chain) ? chain :"
+    },
+    {
+      "file": "core/deepseek-emit.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        132,
+        155
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof diagMark === 'function' && typeof diagOn === 'function' && di"
+    },
+    {
+      "file": "core/deepseek-emit.js",
+      "category": "event-guard",
+      "lines": [
+        259
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-turns-snap-response', { deta"
+    },
+    {
+      "file": "core/deepseek-emit.js",
+      "category": "local-helper-guard",
+      "lines": [
+        263
+      ],
+      "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: diagExportHook('turns-snap-request');"
+    },
+    {
+      "file": "core/deepseek-emit.js",
+      "category": "logging-guard",
+      "lines": [
+        265
+      ],
+      "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: window.addEventListener('ai-cm-turns-snap-request', function () { try {"
+    },
+    {
+      "file": "core/deepseek-ingest.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        197,
+        347
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof diagMark === 'function' && typeof diagOn === 'function' && di"
+    },
+    {
+      "file": "core/deepseek-intercept.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        212,
+        220,
+        521,
+        623
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.__aiCmDeepseekResolveModelSlug = __aiCmDeepseekResolveModelSlug;"
+    },
+    {
+      "file": "core/deepseek-intercept.js",
+      "category": "event-guard",
+      "lines": [
+        305
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.addEventListener('ai-cm-conversation-changed', function () { last"
+    },
+    {
+      "file": "core/deepseek-net.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        196
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (this.__aiCmDs && this.__aiCmDs.headers) { this.__aiCmDs.headers[name"
+    },
+    {
+      "file": "core/deepseek-netsync.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        190
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof diagMark === 'function' && typeof diagOn === 'function' && di"
+    },
+    {
+      "file": "core/deepseek-netsync.js",
+      "category": "event-guard",
+      "lines": [
+        268
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.addEventListener('ai-cm-deepseek-net-sync', function (ev) { try {"
+    },
+    {
+      "file": "core/deepseek-netsync.js",
+      "category": "timing-guard",
+      "lines": [
+        212
+      ],
+      "reason": "timing-guard: отмена таймера/подписки: обработчик мог быть снят хостом или гонкой; пример: clearTimeout(timer);"
+    },
+    {
+      "file": "core/deepseek-refetch.js",
+      "category": "feature-detect",
+      "lines": [
+        99
+      ],
+      "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var src = (init && init.headers) || (input && input.headers ? input.head"
+    },
+    {
+      "file": "core/deepseek-refetch.js",
+      "category": "timing-guard",
+      "lines": [
+        179
+      ],
+      "reason": "timing-guard: отмена таймера/подписки: обработчик мог быть снят хостом или гонкой; пример: clearTimeout(historyRefetchTimer);"
+    },
+    {
+      "file": "core/deepseek-sse.js",
+      "category": "best-effort-guard",
+      "lines": [
+        661
+      ],
+      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: reader.cancel();"
+    },
+    {
+      "file": "core/deepseek-sse.js",
+      "category": "event-guard",
+      "lines": [
+        163,
+        602,
+        612
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: var snap = streamStateSnapshot(); snap.reason = reason || ''; window.dis"
+    },
+    {
+      "file": "core/deepseek-sse.js",
+      "category": "guard-clause",
+      "lines": [
+        244
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof val !== 'string' || !val) return; sseResyncRing.push({ op: (o"
+    },
+    {
+      "file": "core/deepseek-sse.js",
+      "category": "logging-guard",
+      "lines": [
+        261
+      ],
+      "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: var val = (typeof content === 'string') ? content : ''; sseUnknownCount+"
+    },
+    {
+      "file": "core/export-manager.js",
+      "category": "best-effort-guard",
+      "lines": [
+        920
+      ],
+      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var d = ev && ev.detail; if (!d) return; aiCmGsaProbeRunning = d.running"
+    },
+    {
+      "file": "core/export-manager.js",
+      "category": "cleanup-guard",
+      "lines": [
+        586
+      ],
+      "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: if (!aiCmPendingHistWrite) return; if (cid && aiCmPendingHistWrite.convI"
+    },
+    {
+      "file": "core/export-manager.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        254,
+        997,
+        1736
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof aiCmDiagLine === 'function' && typeof aiCmDiagOn === 'functio"
+    },
+    {
+      "file": "core/export-manager.js",
+      "category": "defensive-assignment",
+      "lines": [
+        1600
+      ],
+      "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: hostFb = (typeof window !== 'undefined' && window.location && window.loc"
+    },
+    {
+      "file": "core/export-manager.js",
+      "category": "feature-detect",
+      "lines": [
+        1722
+      ],
+      "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var BdiagDl = (typeof window !== 'undefined' && window && window.AiCmExp"
+    },
+    {
+      "file": "core/export-manager.js",
+      "category": "guard-clause",
+      "lines": [
+        698,
+        765,
+        1106
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof aiCmDiagLine === 'function') { aiCmDiagLine('o22-deferred-flu"
+    },
+    {
+      "file": "core/export-manager.js",
+      "category": "host-api-guard",
+      "lines": [
+        814,
+        839
+      ],
+      "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.storage.onChanged.addListener(function (changes, areaName) { if ("
+    },
+    {
+      "file": "core/export-manager.js",
+      "category": "local-helper-guard",
+      "lines": [
+        456,
+        1645
+      ],
+      "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmLatchCacheReady();"
+    },
+    {
+      "file": "core/export-manager.js",
+      "category": "logging-guard",
+      "lines": [
+        69
+      ],
+      "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: console.log('[AI CM][sanitize] skip reason=' + r);"
+    },
+    {
+      "file": "core/gemini-archive.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        479
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.addEventListener('ai-cm-cache-refresh', function (ev) { if (!D) {"
+    },
+    {
+      "file": "core/gemini-diag.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        97
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof txt !== 'string' || !txt) return; var scanLen = txt.length <"
+    },
+    {
+      "file": "core/gemini-diag.js",
+      "category": "timing-guard",
+      "lines": [
+        106
+      ],
+      "reason": "timing-guard: отмена таймера/подписки: обработчик мог быть снят хостом или гонкой; пример: clearTimeout(coldStartEndTimer);"
+    },
+    {
+      "file": "core/gemini-hidden-scroll.js",
+      "category": "best-effort-guard",
+      "lines": [
+        172
+      ],
+      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: sc.setTop(sc.height());"
+    },
+    {
+      "file": "core/gemini-hidden-scroll.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        234
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var cid75 = D.getConvId(); if (cid75 && D.cacheRestoredMap.has(cid75) &&"
+    },
+    {
+      "file": "core/gemini-hidden-scroll.js",
+      "category": "defensive-assignment",
+      "lines": [
+        43,
+        81
+      ],
+      "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: hay = (el.className || '') + ' ' + (el.id || '');"
+    },
+    {
+      "file": "core/gemini-hidden-scroll.js",
+      "category": "event-guard",
+      "lines": [
+        165,
+        166,
+        167
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: target.dispatchEvent(new Event('scroll', { bubbles: true }));"
+    },
+    {
+      "file": "core/gemini-hidden-scroll.js",
+      "category": "noop-guard",
+      "lines": [
+        76
+      ],
+      "reason": "noop-guard: единственный no-op — штатный выход из цикла/функции без восстановления; пример: st = getComputedStyle(el).overflowY;"
+    },
+    {
+      "file": "core/gemini-hidden-scroll.js",
+      "category": "overlay-guard",
+      "lines": [
+        272,
+        324
+      ],
+      "reason": "overlay-guard: оверлей/стили: узел мог быть уничтожен хостом между чтением и записью; пример: sc.el.style.scrollBehavior = prevSmooth;"
+    },
+    {
+      "file": "core/gemini-ingest.js",
+      "category": "best-effort-guard",
+      "lines": [
+        343
+      ],
+      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var previewTxt = ''; for (var pv = 0; pv < segs.length; pv++) { if (segs"
+    },
+    {
+      "file": "core/gemini-ingest.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        280,
+        734,
+        786
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var restDiag = arr0.slice(3); for (var rdi = 0; rdi < restDiag.length; r"
+    },
+    {
+      "file": "core/gemini-ingest.js",
+      "category": "dom-read-guard",
+      "lines": [
+        413
+      ],
+      "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: if (tgt && tgt.closest && tgt.closest('#ai-context-widget')) continue;"
+    },
+    {
+      "file": "core/gemini-ingest.js",
+      "category": "event-guard",
+      "lines": [
+        441
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-dom-emit-request'));"
+    },
+    {
+      "file": "core/gemini-ingest.js",
+      "category": "guard-clause",
+      "lines": [
+        83
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (Array.isArray(t) && Array.isArray(t[1]) && typeof t[1][0] === 'numbe"
+    },
+    {
+      "file": "core/gemini-ingest.js",
+      "category": "local-helper-guard",
+      "lines": [
+        190,
+        718,
+        1123,
+        1227
+      ],
+      "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmEnsureColdWindow();"
+    },
+    {
+      "file": "core/gemini-intercept.js",
+      "category": "cleanup-guard",
+      "lines": [
+        1150
+      ],
+      "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete loaderDoneMap[oldId];"
+    },
+    {
+      "file": "core/gemini-intercept.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        785,
+        1686,
+        1688
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDeb"
+    },
+    {
+      "file": "core/gemini-intercept.js",
+      "category": "event-guard",
+      "lines": [
+        1138,
+        1193
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
+    },
+    {
+      "file": "core/gemini-intercept.js",
+      "category": "guard-clause",
+      "lines": [
+        993
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
+    },
+    {
+      "file": "core/gemini-intercept.js",
+      "category": "local-helper-guard",
+      "lines": [
+        1172,
+        1180,
+        1184,
+        1698
+      ],
+      "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkConvChange();"
+    },
+    {
+      "file": "core/gemini-loader-scroll.js",
+      "category": "best-effort-guard",
+      "lines": [
+        149,
+        367
+      ],
+      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: sc.setTop(0);"
+    },
+    {
+      "file": "core/gemini-loader-scroll.js",
+      "category": "cleanup-guard",
+      "lines": [
+        699,
+        790
+      ],
+      "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete D.oracleIncompleteSeen[convId];"
+    },
+    {
+      "file": "core/gemini-loader-scroll.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        853,
+        865,
+        901,
+        907
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.__aiCmGeminiLoadFullHistory = loadFullHistoryInvisibly;"
+    },
+    {
+      "file": "core/gemini-loader-scroll.js",
+      "category": "defensive-assignment",
+      "lines": [
+        791
+      ],
+      "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: D.oracleRerunUsedMap[convId] = true;"
+    },
+    {
+      "file": "core/gemini-loader-scroll.js",
+      "category": "event-guard",
+      "lines": [
+        135,
+        139,
+        343,
+        346,
+        368,
+        708
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: el75.dispatchEvent(new Event('scroll'));"
+    },
+    {
+      "file": "core/gemini-loader-scroll.js",
+      "category": "overlay-guard",
+      "lines": [
+        97,
+        167,
+        341,
+        344
+      ],
+      "reason": "overlay-guard: оверлей/стили: узел мог быть уничтожен хостом между чтением и записью; пример: el75.scrollTop = 0;"
+    },
+    {
+      "file": "core/gemini-oracle.js",
+      "category": "cleanup-guard",
+      "lines": [
+        110,
+        124,
+        261
+      ],
+      "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete oracleIncompleteSeen[convId];"
+    },
+    {
+      "file": "core/gemini-oracle.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        347,
+        358,
+        360
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (!window.__aiCmGeminiTurnsSnapshot) { window.__aiCmGeminiTurnsSnapsho"
+    },
+    {
+      "file": "core/gemini-overlay.js",
+      "category": "best-effort-guard",
+      "lines": [
+        78
+      ],
+      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cls = ((document.documentElement && document.documentElement.classNa"
+    },
+    {
+      "file": "core/gemini-overlay.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        190
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (on) { if (!D.aiCmScrollOverlay && typeof document !== 'undefined' &&"
+    },
+    {
+      "file": "core/gemini-overlay.js",
+      "category": "dom-read-guard",
+      "lines": [
+        83,
+        127,
+        139
+      ],
+      "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: hostElW = document.querySelector('.theme-host');"
+    },
+    {
+      "file": "core/gemini-overlay.js",
+      "category": "event-guard",
+      "lines": [
+        153,
+        199,
+        204
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.addEventListener('pagehide', function () { forceRestoreVisibility"
+    },
+    {
+      "file": "core/gemini-overlay.js",
+      "category": "overlay-guard",
+      "lines": [
+        96,
+        107
+      ],
+      "reason": "overlay-guard: оверлей/стили: узел мог быть уничтожен хостом между чтением и записью; пример: var probes = [document.body, document.documentElement]; for (var pi = 0;"
+    },
+    {
+      "file": "core/gemini-rpc.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        191
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof bodyStr !== 'string' || !bodyStr) return; var params = new UR"
+    },
+    {
+      "file": "core/gemini-rpc.js",
+      "category": "guard-clause",
+      "lines": [
+        89,
+        127,
+        135
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiInterceptLogic && wind"
+    },
+    {
+      "file": "core/gemini-rpc.js",
+      "category": "parse-guard",
+      "lines": [
+        53,
+        68
+      ],
+      "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: u = decodeURIComponent(url);"
+    },
+    {
+      "file": "core/gemini-sse.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        150,
+        170,
+        180,
+        185,
+        267,
+        269
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (this.__aiCm) this.__aiCm.headers[k] = v;"
+    },
+    {
+      "file": "core/gemini-sse.js",
+      "category": "defensive-assignment",
+      "lines": [
+        56,
+        159,
+        256
+      ],
+      "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: ct = resp.headers.get('content-type') || '';"
+    },
+    {
+      "file": "core/gemini-sse.js",
+      "category": "guard-clause",
+      "lines": [
+        69,
+        115
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof Request !== 'undefined' && input instanceof Request) { input."
+    },
+    {
+      "file": "core/google-search-intercept.js",
+      "category": "cleanup-guard",
+      "lines": [
+        788,
+        839
+      ],
+      "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: var tgReB = /<!--TgQPHd\\|[\\s\\S]*?-->/g; var tgMatchB; while ((tgMatchB ="
+    },
+    {
+      "file": "core/google-search-intercept.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        23,
+        1588
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDeb"
+    },
+    {
+      "file": "core/google-search-intercept.js",
+      "category": "defensive-assignment",
+      "lines": [
+        157,
+        1595
+      ],
+      "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: lastFolwrOpenUrl = url;"
+    },
+    {
+      "file": "core/google-search-intercept.js",
+      "category": "dom-read-guard",
+      "lines": [
+        288,
+        1170
+      ],
+      "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: var el = document.querySelector('[data-session-thread-id]'); if (el) { v"
+    },
+    {
+      "file": "core/google-search-intercept.js",
+      "category": "event-guard",
+      "lines": [
+        516,
+        1288
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-full-history', { detail: det"
+    },
+    {
+      "file": "core/google-search-intercept.js",
+      "category": "guard-clause",
+      "lines": [
+        252,
+        387,
+        477,
+        513,
+        686
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (window.GoogleFolwrUtils && window.GoogleFolwrUtils.classifyFolwrCont"
+    },
+    {
+      "file": "core/google-search-intercept.js",
+      "category": "parse-guard",
+      "lines": [
+        853
+      ],
+      "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var u = new URL(rawUrl, location.href); var a = u.searchParams.get('auth"
+    },
+    {
+      "file": "core/hybrid-tail.js",
+      "category": "defensive-assignment",
+      "lines": [
+        37
+      ],
+      "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: id = (node.getAttribute && node.getAttribute('data-message-id')) || '';"
+    },
+    {
+      "file": "core/hybrid-tail.js",
+      "category": "guard-clause",
+      "lines": [
+        54
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (currentAdapter && currentAdapter.siteName === 'gemini') return true;"
+    },
+    {
+      "file": "core/page-intercept.js",
+      "category": "best-effort-guard",
+      "lines": [
+        524
+      ],
+      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var h = captureHeaders(input, init); if (hasAuth(h)) lastHeaders = h;"
+    },
+    {
+      "file": "core/page-intercept.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        61
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.addEventListener('ai-cm-debug-logs', function ( ev) { __aiCmSetDe"
+    },
+    {
+      "file": "core/page-intercept.js",
+      "category": "event-guard",
+      "lines": [
+        116,
+        160,
+        357
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
+    },
+    {
+      "file": "core/page-intercept.js",
+      "category": "guard-clause",
+      "lines": [
+        280
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (parts[i].content_type && typeof parts[i].content_type === 'string')"
+    },
+    {
+      "file": "core/page-intercept.js",
+      "category": "local-helper-guard",
+      "lines": [
+        147,
+        155,
+        159
+      ],
+      "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkConvChange();"
+    },
+    {
+      "file": "core/page-intercept.js",
+      "category": "timing-guard",
+      "lines": [
+        478,
+        487
+      ],
+      "reason": "timing-guard: отмена таймера/подписки: обработчик мог быть снят хостом или гонкой; пример: clearTimeout(fallbackTimer);"
+    },
+    {
+      "file": "core/pagination/pagination.js",
+      "category": "best-effort-guard",
+      "lines": [
+        753
+      ],
+      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: optsP.onTerminal();"
+    },
+    {
+      "file": "core/pagination/pagination.js",
+      "category": "cleanup-guard",
+      "lines": [
+        281,
+        364,
+        615
+      ],
+      "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete loaderDoneMap[convId];"
+    },
+    {
+      "file": "core/pagination/pagination.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        637,
+        662
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (getConvId() === convId) { if (tapeWasUsedInThisColdStart === true) {"
+    },
+    {
+      "file": "core/pagination/pagination.js",
+      "category": "defensive-assignment",
+      "lines": [
+        356,
+        357,
+        358,
+        365,
+        616,
+        679
+      ],
+      "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: quietIncompleteNoStart = false;"
+    },
+    {
+      "file": "core/pagination/pagination.js",
+      "category": "guard-clause",
+      "lines": [
+        289
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiInterceptLogic && type"
+    },
+    {
+      "file": "core/perplexity-intercept.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        20
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDeb"
+    },
+    {
+      "file": "core/perplexity-intercept.js",
+      "category": "event-guard",
+      "lines": [
+        252,
+        267
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
+    },
+    {
+      "file": "core/perplexity-intercept.js",
+      "category": "local-helper-guard",
+      "lines": [
+        263,
+        265,
+        266
+      ],
+      "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkConvChange();"
+    },
+    {
+      "file": "core/perplexity-intercept.js",
+      "category": "parse-guard",
+      "lines": [
+        109,
+        170,
+        479
+      ],
+      "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: raw = decodeURIComponent(raw);"
+    },
+    {
+      "file": "core/qwen-intercept.js",
+      "category": "best-effort-guard",
+      "lines": [
+        109,
+        198,
+        364
+      ],
+      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: iterator.return();"
+    },
+    {
+      "file": "core/qwen-intercept.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        67,
+        70,
+        133,
+        1146,
+        1158
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: for (var i = 0; i < diagRing.length; i++) printDiag(diagRing[i][0], diag"
+    },
+    {
+      "file": "core/qwen-intercept.js",
+      "category": "event-guard",
+      "lines": [
+        1187,
+        1217
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); dis"
+    },
+    {
+      "file": "core/qwen-intercept.js",
+      "category": "guard-clause",
+      "lines": [
+        146,
+        153
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof input === 'string') return input; if (input && typeof input.u"
+    },
+    {
+      "file": "core/qwen-intercept.js",
+      "category": "host-api-guard",
+      "lines": [
+        91
+      ],
+      "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: if (typeof sessionStorage !== 'undefined' && sessionStorage && sessionSt"
+    },
+    {
+      "file": "core/qwen-intercept.js",
+      "category": "local-helper-guard",
+      "lines": [
+        1204,
+        1212,
+        1216
+      ],
+      "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkChatChange();"
+    },
+    {
+      "file": "core/qwen-intercept.js",
+      "category": "logging-guard",
+      "lines": [
+        127
+      ],
+      "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: var f = fields || {}; diagLineCount++; if (typeof aiCmDiagLine === 'func"
+    },
+    {
+      "file": "core/qwen-intercept.js",
+      "category": "parse-guard",
+      "lines": [
+        183,
+        191
+      ],
+      "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var m = /[?&]chat_id=([^&]+)/.exec(url); if (m) return decodeURIComponen"
+    },
+    {
+      "file": "core/widget.js",
+      "category": "best-effort-guard",
+      "lines": [
+        658,
+        660,
+        926
+      ],
+      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: input.focus();"
+    },
+    {
+      "file": "core/widget.js",
+      "category": "cleanup-guard",
+      "lines": [
+        316
+      ],
+      "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: if (aiCmRequestEmitTimer) clearTimeout(aiCmRequestEmitTimer); aiCmReques"
+    },
+    {
+      "file": "core/widget.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        267
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var cidD14 = getCurrentConvId() || ''; var P14 = (typeof window !== 'und"
+    },
+    {
+      "file": "core/widget.js",
+      "category": "defensive-assignment",
+      "lines": [
+        172,
+        174,
+        176,
+        178
+      ],
+      "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: aiCmBaseConfirmedByConv = {};"
+    },
+    {
+      "file": "core/widget.js",
+      "category": "dom-read-guard",
+      "lines": [
+        733,
+        866
+      ],
+      "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: aiCmSetWidgetA11yLabel(widgetElement.querySelector('.ai-widget-circle'),"
+    },
+    {
+      "file": "core/widget.js",
+      "category": "event-guard",
+      "lines": [
+        604,
+        825
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: if (typeof window !== 'undefined' && window && typeof window.addEventLis"
+    },
+    {
+      "file": "core/widget.js",
+      "category": "guard-clause",
+      "lines": [
+        263,
+        293,
+        334,
+        806,
+        885,
+        917,
+        954
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof aiCmRevealWidget === 'function') aiCmRevealWidget();"
+    },
+    {
+      "file": "core/widget.js",
+      "category": "host-api-guard",
+      "lines": [
+        757
+      ],
+      "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: var selfRing = aiCmLoadRingThresholds; if (chrome.storage.onChanged && !"
+    },
+    {
+      "file": "core/widget.js",
+      "category": "local-helper-guard",
+      "lines": [
+        834
+      ],
+      "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmUpdateSourceIndicator();"
+    },
+    {
+      "file": "core/widget.js",
+      "category": "overlay-guard",
+      "lines": [
+        490,
+        551,
+        776
+      ],
+      "reason": "overlay-guard: оверлей/стили: узел мог быть уничтожен хостом между чтением и записью; пример: if (!widgetElement) return; if (widgetElement.style.display === 'none')"
+    },
+    {
+      "file": "core/widget.js",
+      "category": "timing-guard",
+      "lines": [
+        614,
+        622
+      ],
+      "reason": "timing-guard: отмена таймера/подписки: обработчик мог быть снят хостом или гонкой; пример: aiCmSafeBottomObserver.disconnect();"
+    },
+    {
+      "file": "utils/archive-import.js",
+      "category": "guard-clause",
+      "lines": [
+        164,
+        170,
+        181,
+        187,
+        198,
+        203
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof require === 'function') { var m = require('./chatgpt-conversa"
+    },
+    {
+      "file": "utils/chatgpt-conversation-parser.js",
+      "category": "best-effort-guard",
+      "lines": [
+        68
+      ],
+      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var mt = String(payload).match(/\"([^\"]+)\"/g); if (mt && mt.length > 1) {"
+    },
+    {
+      "file": "utils/debug.js",
+      "category": "helper-self-logging",
+      "lines": [
+        13,
+        36,
+        60,
+        67,
+        89,
+        110,
+        113,
+        121,
+        122,
+        129,
+        137,
+        184,
+        194,
+        218,
+        236
+      ],
+      "reason": "helper-self-logging: диагностика самого хелпера: debugLog не может логировать собственную недоступность; пример: if (typeof window !== 'undefined') window.__aiCmDebugLogs = !!v;"
+    },
+    {
+      "file": "utils/export-emit-pipeline.js",
+      "category": "best-effort-guard",
+      "lines": [
+        538,
+        562
+      ],
+      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: store[latchKey(service, convId)] = 1;"
+    },
+    {
+      "file": "utils/export-emit-pipeline.js",
+      "category": "cleanup-guard",
+      "lines": [
+        544
+      ],
+      "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete store[latchKey(service, convId)];"
+    },
+    {
+      "file": "utils/export-emit-pipeline.js",
+      "category": "local-helper-guard",
+      "lines": [
+        1218
+      ],
+      "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: onMessageDedupe(role, res.removedBlocks);"
+    },
+    {
+      "file": "utils/export-text-builders.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        356
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof window !== 'undefined' && window && window.__aiCmDebugLogs =="
+    },
+    {
+      "file": "utils/export-text-builders.js",
+      "category": "defensive-assignment",
+      "lines": [
+        392,
+        449
+      ],
+      "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: url = String((typeof location !== 'undefined' && location && location.hr"
+    },
+    {
+      "file": "utils/export-text-builders.js",
+      "category": "guard-clause",
+      "lines": [
+        214,
+        387,
+        444
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: return require('./buildReferenceText.js')(list);"
+    },
+    {
+      "file": "utils/export-text-builders.js",
+      "category": "host-api-guard",
+      "lines": [
+        22,
+        353
+      ],
+      "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: if (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.g"
+    },
+    {
+      "file": "utils/export-text-builders.js",
+      "category": "local-helper-guard",
+      "lines": [
+        475,
+        481
+      ],
+      "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: diagDownloadBlocked(trigger || 'builder-download', content, fileName, bl"
+    },
+    {
+      "file": "utils/export-text-builders.js",
+      "category": "logging-guard",
+      "lines": [
+        204,
+        403,
+        460
+      ],
+      "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: var kept = Array.isArray(list) ? list.length : -1; var total = (typeof t"
+    },
+    {
+      "file": "utils/gemini-batchexecute-parser.js",
+      "category": "defensive-assignment",
+      "lines": [
+        375,
+        437
+      ],
+      "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: lastDrTexts = extractDrTexts(realTurns);"
+    },
+    {
+      "file": "utils/gemini-batchexecute-parser.js",
+      "category": "feature-detect",
+      "lines": [
+        303
+      ],
+      "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var box = (Array.isArray(turn[3]) && Array.isArray(turn[3][0]) && Array."
+    },
+    {
+      "file": "utils/gemini-batchexecute-parser.js",
+      "category": "guard-clause",
+      "lines": [
+        212,
+        218
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (Array.isArray(t) && Array.isArray(t[1]) && typeof t[1][1] === 'strin"
+    },
+    {
+      "file": "utils/gemini-batchexecute-parser.js",
+      "category": "logging-guard",
+      "lines": [
+        30
+      ],
+      "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: console.log('[AI CM][batchexecute] segment parse fail ' + where + ': ' +"
+    },
+    {
+      "file": "utils/gemini-batchexecute-parser.js",
+      "category": "noop-guard",
+      "lines": [
+        468
+      ],
+      "reason": "noop-guard: единственный no-op — штатный выход из цикла/функции без восстановления; пример: bytes = new TextEncoder().encode(raw);"
+    },
+    {
+      "file": "utils/gemini-dom-parser.js",
+      "category": "best-effort-guard",
+      "lines": [
+        42
+      ],
+      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var v = el.getAttribute ? el.getAttribute(names[i]) : null; if (v) out +"
+    },
+    {
+      "file": "utils/gemini-dom-parser.js",
+      "category": "container-drop",
+      "lines": [
+        102
+      ],
+      "reason": "container-drop: контейнер уже откреплён от DOM (SPA-навигация) — снимать нечего; пример: clone.querySelectorAll('script, style, button, svg').forEach(function (x"
+    },
+    {
+      "file": "utils/gemini-dom-parser.js",
+      "category": "dom-read-guard",
+      "lines": [
+        66
+      ],
+      "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: label += ' ' + (el.textContent || '');"
+    },
+    {
+      "file": "utils/gemini-intercept-logic.js",
+      "category": "logging-guard",
+      "lines": [
+        1183
+      ],
+      "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: console.warn('[AI CM][thresholds] битые aiCmProactiveThresholds → дефолт"
+    },
+    {
+      "file": "utils/gemini-intercept-logic.js",
+      "category": "parse-guard",
+      "lines": [
+        1476
+      ],
+      "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: metaS += JSON.stringify(a0m[mi]);"
+    },
+    {
+      "file": "utils/google-search-folwr-parser.js",
+      "category": "container-drop",
+      "lines": [
+        174,
+        301
+      ],
+      "reason": "container-drop: контейнер уже откреплён от DOM (SPA-навигация) — снимать нечего; пример: var junk = clone.querySelectorAll('script, style, button, svg'); for (va"
+    },
+    {
+      "file": "utils/google-search-folwr-parser.js",
+      "category": "dom-read-guard",
+      "lines": [
+        206,
+        458
+      ],
+      "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: var inner = el.querySelectorAll ? el.querySelectorAll('pre, code') : nul"
+    },
+    {
+      "file": "utils/google-search-folwr-parser.js",
+      "category": "guard-clause",
+      "lines": [
+        222
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: for (var a = 0; a < attrNames.length; a++) { var v = (el && el.getAttrib"
+    },
+    {
+      "file": "utils/stream-frames.js",
+      "category": "guard-clause",
+      "lines": [
+        107
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof v === 'string') return null; if (v && typeof v.length === 'nu"
+    },
+    {
+      "file": "utils/stream-frames.js",
+      "category": "parse-guard",
+      "lines": [
+        72,
+        78
+      ],
+      "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: if (typeof TextDecoder !== 'undefined') return TextDecoder;"
+    }
+  ]
+}
