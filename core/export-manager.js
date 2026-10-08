@@ -210,7 +210,7 @@ function aiCmPrepareReasoningForExport(messages) {
     var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
     if (!P || typeof P.applyReasoningExportFields !== 'function') return messages;
     P.applyReasoningExportFields(messages, aiCmReasoningExportSite());
-  } catch (ePrep) { }
+  } catch (ePrep) { swallow(ePrep, 'export:aiCmPrepareReasoningForExport'); }
   return messages;
 }
 function aiCmCollectExportSource() {
@@ -347,7 +347,7 @@ function aiCmCollectExportSource() {
         out.push(fbMsg);
       }
     }
-  } catch (eA) { }
+  } catch (eA) { swallow(eA, 'export:aiCmCollectExportSource-dom-adapter'); }
   if (prepareReasoning) prepareReasoning(out);   // O-37 (C): фолбэк чередования ролей — то же правило
   return aiCmSanitizeEmitUserTexts(out);
 }
@@ -421,7 +421,7 @@ function loadAutoExportPerSitePct() {
         autoExportPctBySite[site] = (!isNaN(n) && n >= 1 && n <= 100) ? n : undefined;
         debugLog('log', '[AI CM][auto-export] per-site load ' + key + '=' +
           (autoExportPctBySite[site] === undefined ? 'нет (глобальный фолбэк)' : autoExportPctBySite[site]));
-      } catch (eParsePs) {}
+      } catch (eParsePs) { swallow(eParsePs, 'export:loadAutoExportPerSitePct'); }
     });
   } catch (e) { debugLog('error', '[AI CM][auto-export] per-site load error:', e); }
 }
@@ -445,7 +445,7 @@ function aiCmLatchCacheReady() {
         // Мутируем ТОТ ЖЕ объект: Api.sessionFiredCache (UMD-экспорт ниже) держит ссылку.
         for (var k in sessionFiredCache) delete sessionFiredCache[k];
         for (var k2 in (map || {})) sessionFiredCache[k2] = map[k2];
-      } catch (eHydr) { }
+      } catch (eHydr) { swallow(eHydr, 'export:aiCmLatchCacheReady'); }
       return sessionFiredCache;
     })
     .catch(function () { return sessionFiredCache; });
@@ -471,7 +471,7 @@ function aiCmTryLateAutoExport(cid) {
         ' pct=' + autoExportLastPct + ' pendingCursor=0 baseComplete=1');
       maybeAutoExport(autoExportLastPct);
     }
-  } catch (e) { }
+  } catch (e) { swallow(e, 'export:aiCmTryLateAutoExport'); }
 }
 // v54: локальный фолбэк чистой функции detectTrimState (utils/gemini-intercept-logic.js).
 // Утилита на Gemini грузится только в MAIN-мире (background.js), а content.js живёт в
@@ -499,7 +499,7 @@ function detectTrimStateFallback(
     res.lostHead = true;
     res.suspect = true;
     res.confirmed = !!prevProbe.suspectPending;
-  } catch (e) { }
+  } catch (e) { swallow(e, 'export:detectTrimStateFallback'); }
   return res;
 }
 // v54: детектор обрезки истории в Gemini — вызывается из слушателя ai-cm-full-history.
@@ -539,7 +539,7 @@ function geminiDetectTrim(
         ' cnt=' + cnt + ' maxCount=' + maxCount);
       maybeTrimExport(cid);
     }
-  } catch (e) { }
+  } catch (e) { swallow(e, 'export:geminiDetectTrim'); }
 }
 // v54: одноразовый спасательный экспорт ДО потери головы (обрезка истории в Gemini).
 // Латч preTrimExportFired ставится сразу (одна попытка-цепочка на чат); инварианты
@@ -564,7 +564,7 @@ function maybeTrimExport(cid) {
         try {
           preTrimExportFired[cid] = 0; // отдаём латч повторной попытке своей же цепочки
           maybeTrimExport(cid);
-        } catch (eRetry) { }
+        } catch (eRetry) { swallow(eRetry, 'export:maybeTrimExport-retry'); }
       }, 2000);
       return;
     }
@@ -827,7 +827,7 @@ function loadExportHiddenSetting() {
     chrome.storage.local.get(['aiCmIncludeHiddenInExport'], function (data) {
       try {
         aiCmIncludeHiddenInExport = !!(data && data.aiCmIncludeHiddenInExport === true);
-      } catch (eParse7) { }
+      } catch (eParse7) { swallow(eParse7, 'export:loadExportHiddenSetting'); }
     });
     try {
       chrome.storage.onChanged.addListener(function (changes, areaName) {
@@ -1075,7 +1075,7 @@ function aiCmDeferAutoExportOnLiveStream(cid, percentage) {
       try {
         if (!cid || cid !== aiCmAutoExportConvId()) return;  // чат сменился — отложка неактуальна
         maybeAutoExport(percentage);
-      } catch (eR) { }
+      } catch (eR) { swallow(eR, 'export:aiCmDeferAutoExportOnLiveStream-timer'); }
     }, AI_CM_DS_STREAM_DEFER_MS);
     return true;
   } catch (e) { return false; }
@@ -1283,7 +1283,7 @@ function maybeAutoExport(percentage) {
               var pkHys = P.firedSessionKey(siteName, cid);
               if (pkHys) delete sessionFiredCache[pkHys];
             }
-          } catch (eO3hys) { }
+          } catch (eO3hys) { swallow(eO3hys, 'export:maybeAutoExport-latch-hysteresis'); }
         }
         // O-33: база — транзиентная DOM-оценка до сетевого снимка (не-Gemini, baseSeen=false).
         // Файла нет; латч fired НЕ ставится и НЕ сбрасывается (resetFired:false) — поздний
@@ -1386,7 +1386,7 @@ function maybeAutoExport(percentage) {
             var pkHys2 = P.firedSessionKey(siteName, cid);
             if (pkHys2) delete sessionFiredCache[pkHys2];
           }
-        } catch (eO3hys2) { }
+        } catch (eO3hys2) { swallow(eO3hys2, 'export:maybeAutoExport-latch-below-threshold'); }
       }
       return;
     }
@@ -1462,7 +1462,7 @@ function aiCmAutoExportStartDownload(content, file, fmt) {
     file = Pdl.disambiguateFileName(file, used);
   }
   // (2) синхронный резерв имени ДО старта скачивания
-  try { if (used && file) used[file] = 1; } catch (eNameReserve) { }
+  try { if (used && file) used[file] = 1; } catch (eNameReserve) { swallow(eNameReserve, 'export:aiCmAutoExportStartDownload-name-reserve'); }
   // (3) старт скачивания
   // O-27 (защитный фикс): пост-гард отказа (XSSI-префикс в первых байтах контента | пустое
   // имя файла) живёт ровно в одной точке — utils/export-text-builders.js:downloadBlob,
@@ -1678,7 +1678,7 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
               if (typeof aiCmAutoExportFiredOnce === 'object' && aiCmAutoExportFiredOnce) {
                 aiCmAutoExportFiredOnce[siteOnce + '|' + cid] = 1;
               }
-            } catch (eOnce) { }
+            } catch (eOnce) { swallow(eOnce, 'export:aiCmWriteAutoExportFile-once'); }
             // v1.14.1 (O3): кросс-табовый латч — пишем через SW-канал (Шаг A.1: прямой
             // storage.session из вкладки убран) и сразу в локальный кэш этой вкладки.
             try {
@@ -1688,7 +1688,7 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
                 aiCmLatchSet(siteO3, cid);
                 sessionFiredCache[pkO3] = 1;
               }
-            } catch (eO3write) { }
+            } catch (eO3write) { swallow(eO3write, 'export:aiCmWriteAutoExportFile-fired-latch'); }
           } else {
             autoExportFired[cid] = 1;
             // O-38: модульный латч — переживает resetConversationState
@@ -1697,7 +1697,7 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
               if (typeof aiCmAutoExportFiredOnce === 'object' && aiCmAutoExportFiredOnce) {
                 aiCmAutoExportFiredOnce[siteOnceFb + '|' + cid] = 1;
               }
-            } catch (eOnceFb) { }
+            } catch (eOnceFb) { swallow(eOnceFb, 'export:aiCmWriteAutoExportFile-once-fallback'); }
           }
         }
         aiCmCancelDeferredHistWrite(cid); // v54: экспорт состоялся — висящий deferred-таймер больше не нужен

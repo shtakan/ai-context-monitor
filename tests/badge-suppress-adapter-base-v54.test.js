@@ -93,7 +93,10 @@ const suppressVerdict = new Function('ctx', 'with (ctx) { ' + SUPPRESS_DECL + '\
 const ADAPTER_BRANCH = (function () {
   const i = CONTENT_ONLY.indexOf('var cidS24 = getCurrentConvId()');
   expect(i).toBeGreaterThan(-1);
-  const j = CONTENT_ONLY.indexOf('} catch (eS24) { }', i);
+  // E.2a.2b.3: якорь укорочен до стабильного префикса '} catch (eS24) {' — тело catch
+  // теперь swallow(eS24, …). Индекс начала тот же, поэтому срез ADAPTER_BRANCH
+  // байт-идентичен прежнему: пин по-прежнему покрывает всю ветку до catch.
+  const j = CONTENT_ONLY.indexOf('} catch (eS24) {', i);
   expect(j).toBeGreaterThan(i);
   return CONTENT_ONLY.slice(i, j);
 })();

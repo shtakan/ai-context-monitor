@@ -288,7 +288,7 @@ window.addEventListener('ai-cm-conversation-changed', function () {
       try { chrome.runtime.sendMessage({ type: 'BADGE_RESET' }).catch(function () { }); } catch (eBr) { }
       aiCmLastSeenConvId = newCid;
     }
-  } catch (eSpa) { }
+  } catch (eSpa) { swallow(eSpa, 'content:conversation-changed-outer'); }
   // O-27/O-32 (диагностика): причина сброса — сигнал смены разговора (SPA).
   aiCmGsaDiagState('conv-changed', 'reset', 'conversation-id-change', {
     convId: String(getCurrentConvId() || ''),
@@ -367,7 +367,7 @@ function aiCmResetStaleStateOnChatlessChatGptUrl() {
         updateWidget(d.percentage, d.tokenEstimate, d.effectiveLimit, d.contextLimit, d.displayLimit, d.modelName, d.attachBreak);
         debugLog('log', '[content-trace] badge-unfreeze: виджет обновлён pct=' + d.percentage);
       }
-    } catch (e) { }
+    } catch (e) { swallow(e, 'content:loader-freeze'); }
   });
 
 // ===== v2.0 (этап 1/3): state.js ← aiCmLastDomEmitSig =====
@@ -388,7 +388,7 @@ window.addEventListener('ai-cm-dom-emit-request', function () {
     aiCmLastDomEmitSig = sig;
     processAndSend();
     debugLog('log', '[AI CM][realtime] dom-emit pct=' + lastPercentage + ' tokens=' + maxTokenCount);
-  } catch (eDe) { }
+  } catch (eDe) { swallow(eDe, 'content:dom-emit-request'); }
 });
 
 // =============================================================================
@@ -440,7 +440,7 @@ function aiCmGsaChatPageMarker() {
     if (typeof aiCmDomThreadId === 'function' && aiCmDomThreadId()) return true;
     if (document.querySelector('[data-scope-id="turn"]')) return true;
     if (document.querySelector('[data-subtree="aimfl"]')) return true;
-  } catch (e) { }
+  } catch (e) { swallow(e, 'content:aiCmGsaChatPageMarker'); }
   return false;
 }
 
@@ -522,7 +522,7 @@ function aiCmEstimateTokensTilde(text, attachTokens) {
   var result;
   var tkOk = false;
   if (TK && typeof TK.countTokens === 'function') {
-    try { result = TK.countTokens(t) + attach; tkOk = true; } catch (eTk) { /* ниже — фолбэк */ }
+    try { result = TK.countTokens(t) + attach; tkOk = true; } catch (eTk) { swallow(eTk, 'content:aiCmEstimateTokensTilde'); /* ниже — фолбэк */ }
   }
   if (!tkOk) {
     var cyr = (t.match(/[а-яёА-ЯЁ]/g) || []).length;
@@ -802,7 +802,7 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
 
   // v54: детектор обрезки истории в Gemini (спасательный pre-trim экспорт; гейты
   // автоэкспорта v51–v53 не задействованы — у спасательного экспорта свои инварианты).
-  try { geminiDetectTrim(detail); } catch (eTrim) { }
+  try { geminiDetectTrim(detail); } catch (eTrim) { swallow(eTrim, 'content:full-history-trim'); }
 
   // ФИКС: сеть дала базу, но DOM-инициализация ещё не случилась (SPA-переход по сайдбару без F5 —
   //   ретраи initialize уже отработали вхолостую, а bootFetch пропущен). Запускаем инициализацию
@@ -868,9 +868,9 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
         // v83: если deferred-запись aiCmHistory ещё висит (loader-stop был при
         // base-unconfirmed) — флашим сразу при подтверждении полноты 0→1, не ждём 60s.
         // Гарды внутри flush сами требуют baseComplete && !loaderRunning.
-        try { aiCmFlushDeferredHistWrite(cid79, 'base-complete'); } catch (eF79) { }
+        try { aiCmFlushDeferredHistWrite(cid79, 'base-complete'); } catch (eF79) { swallow(eF79, 'content:full-history-flush-deferred'); }
       }
-    } catch (e79) { }
+    } catch (e79) { swallow(e79, 'content:full-history-complete-transition'); }
   }
   // O-22 (ИЗМЕРЕНИЕ-2): маркер непосредственно ПЕРЕД финальным processAndSend() этого
   // слушателя — src=aiCmDiagStack(2) показывает, из какого пути пришёл вызов.
@@ -1593,7 +1593,7 @@ function requestExactTokens(fullText, modelId) {
             'ai-cm-byok-cache': { convId: convId, text: fullText, count: response.totalTokens, ts: Date.now() }
           });
           console.log('[byok-cache] точное значение сохранено в хранилище: ' + response.totalTokens);
-        } catch (e) { }
+        } catch (e) { swallow(e, 'content:requestExactTokens'); }
       }
       // Пересчитываем виджет с точным числом (кэш lastCountTokensText не даст повторному вызову уйти в API)
       processAndSend();
@@ -1660,7 +1660,7 @@ function aiCmByokKeyInvalidate() {
       console.log('[byok] ключ обновлён сообщением SW: ' + (geminiApiKey ? '***' : '(пусто)'));
       if (isInitialized) processAndSend();
     });
-  } catch (eByokInv) { }
+  } catch (eByokInv) { swallow(eByokInv, 'content:aiCmByokKeyInvalidate'); }
 }
 
 function loadByokCache() {
@@ -1777,7 +1777,7 @@ function aiCmLoadArchiveTier(convId, reason) {
           } catch (eD) { }
         }
         aiCmUpdateSourceIndicator();
-      } catch (eInner) { }
+      } catch (eInner) { swallow(eInner, 'content:aiCmLoadArchiveTier'); }
     });
   } catch (eL) {
     debugLog('log', '[AI CM][archive-restore] silent-catch load: ' + (eL && eL.message || eL));
@@ -1863,7 +1863,7 @@ function aiCmBadgeHoldRelease(reason, reveal) {
     debugLog('log', '[content-trace] badge-hold (O-1): щит отпущен (' + reason + ') t=' + Date.now());
     aiCmBadgeHoldDiag(reason);
     if (reveal) {
-      try { aiCmRevealWidget(); } catch (eRevO1) { }
+      try { aiCmRevealWidget(); } catch (eRevO1) { swallow(eRevO1, 'content:aiCmBadgeHoldRelease'); }
       processAndSend();
     }
     return true;
@@ -1925,7 +1925,7 @@ function processAndSend() {
   // O-27 (c): на не-чат документе GSA (captcha/«подозрительный трафик») база/pct прошлого
   // документа гасятся ДО расчёта pct и вызова автоэкспорта — прошлое состояние вердикта
   // не даёт. На чат-странице вызов — no-op (threadId/контейнер в DOM есть).
-  try { aiCmGsaResetStaleStateOnChatlessDoc(); } catch (eO27c) { }
+  try { aiCmGsaResetStaleStateOnChatlessDoc(); } catch (eO27c) { swallow(eO27c, 'content:processAndSend-gsa-stale-reset'); }
 
   // v81 Step1: диагностический trace для не-Gemini адаптеров (поведение не меняется):
   // факты — у каких сервисов база заполняется через EMIT-канал, у каких история только из адаптера.
@@ -1963,7 +1963,7 @@ function processAndSend() {
       aiCmArchiveLoadStarted[cidArc] = true;
       aiCmLoadArchiveTier(cidArc, 'page-load');
     }
-  } catch (eArcInit) { }
+  } catch (eArcInit) { swallow(eArcInit, 'content:processAndSend-archive-init'); }
 
   // v28: однократное восстановление сохранённой ленты Gemini при загрузке чата
   if (!restoredTapeLoaded) {
@@ -2076,7 +2076,7 @@ function processAndSend() {
               debugLog('log', '[AI CM][auto-export] tape-restore applied → check convId=' + tapeCheckCid79 + ' pct=' + autoExportLastPct);
               maybeAutoExport(autoExportLastPct);
             }
-          } catch (eT79) { }
+          } catch (eT79) { swallow(eT79, 'content:processAndSend-tape-restore'); }
           // v30.6: кэш-лента применена — сеть может прийти не сразу; планируем ОДНО
           // уточнение канонического значения активным снимком через 2с.
           // Гарды: convId не сменился (проверка перед диспатчем), один раз на convId за сессию.
@@ -2344,7 +2344,7 @@ function processAndSend() {
         var statePatch = { aiCmState: stateSnapshot };
         statePatch['aiCmState:' + window.location.hostname] = stateSnapshot;
         chrome.storage.local.set(statePatch);
-      } catch (e) { }
+      } catch (e) { swallow(e, 'content:processAndSend-state-write'); }
     }
     // Экспорт истории: пишем aiCmHistory только когда история реально изменилась (baseCount или textLen).
     // v34/v35: защита от гонки при смене треда. Адаптер-независимое условие:
@@ -2423,7 +2423,7 @@ function processAndSend() {
             aiCmCancelDeferredHistWrite(cidForGate || '');
             chrome.storage.local.set(histPatch);
           }
-        } catch (e) { }
+        } catch (e) { swallow(e, 'content:processAndSend-history-write'); }
       }
     }
     // v81 (2.4): параллельная ветка записи истории для не-Gemini сервисов — когда сети нет
@@ -2486,7 +2486,7 @@ function processAndSend() {
           chrome.storage.local.set(histPatchS24);
         }
       }
-    } catch (eS24) { }
+    } catch (eS24) { swallow(eS24, 'content:processAndSend-history-write-adapter'); }
     if (isExtensionValid()) {
       chrome.runtime.sendMessage({
         type: 'CONTEXT_UPDATE',
@@ -2516,7 +2516,7 @@ document.addEventListener('visibilitychange', function () {
     if (baseSeen || lastWidgetData) {
       processAndSend(); // пере-отрисовка бейджа/виджета/POPUP-снапшота из локальной базы
     }
-  } catch (eVis77) { }
+  } catch (eVis77) { swallow(eVis77, 'content:visibilitychange-refresh'); }
 });
 // ========== Фаза B: ПРОАКТИВНЫЕ ПОРОГИ 70/85/95 ==========
 // Отправка текущего pct в Service Worker (THRESHOLD_PCT): там бейдж по вкладке и
@@ -2688,7 +2688,7 @@ if (isExtensionValid()) {
       // файл уйдёт ход ассистента, обрезанный на текущем чанке. Мост синхронный:
       // flush → finalizeRealtimeTurn → EMIT ai-cm-full-history → lastBaseTexts обновлены
       // ДО buildHistoryMessages() ниже.
-      try { aiCmFlushLiveStreamForExport(curCidExp); } catch (eFlushExp) { }
+      try { aiCmFlushLiveStreamForExport(curCidExp); } catch (eFlushExp) { swallow(eFlushExp, 'content:aiCmAutoExportTrustedBaseDiag-flush'); }
       var pctExp = (typeof lastPercentage === 'number' && lastPercentage >= 0) ? lastPercentage : 0;
       // v61diag: дамп turnsMap в момент ручного экспорта (md/txt из options).
       // O-9-подпись: источник подписи — КАНОНИЧЕСКАЯ база текущего снимка, ровно тот же
@@ -3003,7 +3003,7 @@ if (isExtensionValid()) {
           maybeAutoExport(autoExportLastPct);
         }
       }
-    } catch (ePerSite) { }
+    } catch (ePerSite) { swallow(ePerSite, 'content:storage-onchanged-per-site'); }
     // BYOK (M-7 + Шаг A.1/R6): ключ живёт в chrome.storage.session, но доступен только
     // SW — из вкладки session не читается и НЕ наблюдается (storage.onChanged по session
     // контент-скриптам больше не приходит). Смену ключа сообщает SW сообщением
