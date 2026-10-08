@@ -591,7 +591,7 @@
         if (typeof m.hiddenReasoning === 'string' && m.hiddenReasoning) norm.hiddenReasoning = m.hiddenReasoning;
         out.push(norm);
       }
-    } catch (e) { }
+    } catch (e) { swallow(e, 'export-utils:normalizeExportMessages'); }
     return out;
   }
 
@@ -710,7 +710,7 @@
         if (m.id != null) keep.id = m.id;
         out.push(keep);
       }
-    } catch (e) { }
+    } catch (e) { swallow(e, 'export-utils:dedupeMessages'); }
     return { messages: out, removed: removed };
   }
 
@@ -1018,7 +1018,7 @@
       var kept = [];
       for (i = 0; i < blocks.length; i++) { if (!drop[i]) kept.push(blocks[i]); }
       return { text: kept.join('\n\n'), removedBlocks: removedBlocks };
-    } catch (e) { }
+    } catch (e) { swallow(e, 'export-utils:dedupeIntraMessage'); }
     return { text: text, removedBlocks: 0 };
   }
 

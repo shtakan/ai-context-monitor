@@ -57,7 +57,7 @@
         try {
           var arr = JSON.parse(payload);
           if (Array.isArray(arr) && arr.length > 1 && typeof arr[1] === 'string' && arr[1]) return arr[1];
-        } catch (e) { }
+        } catch (e) { swallow(e, 'chatgpt-utils:sanitizeChatGPTText-entity'); }
         // фолбэк: второй quoted-фрагмент, если payload не валидный JSON-массив
         try {
           var mt = String(payload).match(/"([^"]+)"/g);
@@ -209,6 +209,7 @@
         }
       }
     } catch (e) {
+      swallow(e, 'chatgpt-utils:parseChatGPTConversation');
       // пустой результат при ошибке
     }
 
