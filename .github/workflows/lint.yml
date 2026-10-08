@@ -32,6 +32,19 @@ jobs:
         run: |
           npm ci
 
+      # Step E.2b.2: ESLint v9 (flat config, eslint.config.mjs) — warn-only, узкий набор.
+      # Позиция: сразу после `npm ci`, т.е. на самом раннем шаге, где бинарь eslint уже
+      # существует. Контур `node --check` выше намеренно идёт ДО установки зависимостей
+      # (чистое дерево, без node_modules), поэтому физически встать «сразу за ним» нельзя.
+      # Non-blocking by design: все правила в 'warn' → exit 0 при любом числе замечаний.
+      # `continue-on-error: false` выставлен явно, чтобы поведение не зависело от дефолта:
+      # шаг остаётся зелёным ровно потому, что warn-only не даёт ошибок. Baseline
+      # (578 warnings) НЕ является гейтом на этом шаге — см. step-E2b2-report.md.
+      # Parse error (severity 2) уронил бы шаг — это отдельный предмет, вне E.2b.2.
+      - name: ESLint (warn-only, non-blocking)
+        continue-on-error: false
+        run: npm run lint
+
       # esbuild only transpiles — type-checking stays on tsc (Phase 1 contract).
       - name: Type-check
         run: npx tsc --noEmit
