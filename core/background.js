@@ -57,7 +57,7 @@ try {
   if (chrome.storage && chrome.storage.local) {
     chrome.storage.local.set({ aiCmLastSwStart: 'COLD_START@' + aiCmSwBootTs });
   }
-} catch (eCsBoot) { }
+} catch (eCsBoot) { swallow(eCsBoot, 'background:coldStartMarker'); }
 
 // Шаг A.1 (security): chrome.storage.session сжат до доверенных контекстов.
 // v1.14.1 (O3) открывал его ВСЕМ контент-скриптам (TRUSTED_AND_UNTRUSTED_CONTEXTS),
@@ -70,7 +70,7 @@ try {
   if (chrome.storage.session && chrome.storage.session.setAccessLevel) {
     chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS_ONLY' });
   }
-} catch (eO3Access) { }
+} catch (eO3Access) { swallow(eO3Access, 'background:setAccessLevel'); }
 
 // Шаг A.1 (R6): ключ BYOK пишет options-страница напрямую в chrome.storage.session —
 // вкладкам этот onChanged (area='session') больше не виден (доступ сжат выше), поэтому
@@ -614,7 +614,7 @@ function aiCmPurgeLegacyByokKeys() {
   try {
     if (!chrome.storage || !chrome.storage.local || typeof chrome.storage.local.remove !== 'function') return;
     chrome.storage.local.remove(AI_CM_BYOK_LEGACY_KEYS);
-  } catch (ePurge) { }
+  } catch (ePurge) { swallow(ePurge, 'background:purgeLegacyByokKeys'); }
 }
 
 // M-7: миграция plaintext→session на onInstalled/onStartup. Ключ найден в local →
@@ -632,11 +632,11 @@ function aiCmMigrateByokToSession() {
           patch[AI_CM_BYOK_SESSION_KEY] = legacy;
           chrome.storage.session.set(patch);
         }
-      } catch (eSet) { }
+      } catch (eSet) { swallow(eSet, 'background:migrateByok-sessionWrite'); }
       aiCmPurgeLegacyByokKeys();
       console.log('[AI CM][byok] migrated plaintext→session');
     });
-  } catch (eMig) { }
+  } catch (eMig) { swallow(eMig, 'background:migrateByok-sessionRead'); }
 }
 
 // Чтение ключа BYOK: штатный источник — chrome.storage.session ('aiCmApiKeySession').
@@ -678,7 +678,7 @@ async function aiCmReadByokApiKey() {
       patch[AI_CM_BYOK_SESSION_KEY] = legacy;
       chrome.storage.session.set(patch);
     }
-  } catch (eSet) { }
+  } catch (eSet) { swallow(eSet, 'background:readByokApiKey-sessionWrite'); }
   aiCmPurgeLegacyByokKeys();
   console.log('[AI CM][byok] migrated plaintext→session');
   return legacy;

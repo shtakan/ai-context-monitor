@@ -79,7 +79,7 @@ function aiCmLoadPopupOverrides() {
   try {
     if (!isExtensionValid() || !chrome.storage || !chrome.storage.sync) return;
     chrome.storage.sync.get(['selectedModel', 'customLimit'], function (d) {
-      try { aiCmSetPopupOverrides(d && d.selectedModel, d && d.customLimit); } catch (eA) { }
+      try { aiCmSetPopupOverrides(d && d.selectedModel, d && d.customLimit); } catch (eA) { swallow(eA, 'widget:loadPopupOverrides-callback'); }
     });
   } catch (e) { debugLog('log', '[model-detect] H19 popup-override load error: ' + (e && e.message || e)); }
 }
@@ -106,7 +106,7 @@ function snapCurrentPct() {
   const t = lastWidgetData ? lastWidgetData.tokenEstimate : 0;
   if (!eff || !t || t <= 0) return;
   safePct = Math.max(1, Math.round(t / eff * 1000) / 10);
-  if (isExtensionValid()) { try { chrome.storage.sync.set({ [safePctKey()]: safePct }); } catch (e) { } }
+  if (isExtensionValid()) { try { chrome.storage.sync.set({ [safePctKey()]: safePct }); } catch (e) { swallow(e, 'widget:snapCurrentPct'); } }
   updatePanel();
   processAndSend();
 }
@@ -114,13 +114,13 @@ function setSafePctFromInput(v) {
   const n = parseFloat(v);
   if (isNaN(n) || n <= 0) { resetSafePct(); return; }
   safePct = Math.round(n * 10) / 10;
-  if (isExtensionValid()) { try { chrome.storage.sync.set({ [safePctKey()]: safePct }); } catch (e) { } }
+  if (isExtensionValid()) { try { chrome.storage.sync.set({ [safePctKey()]: safePct }); } catch (e) { swallow(e, 'widget:setSafePctFromInput'); } }
   updatePanel();
   processAndSend();
 }
 function resetSafePct() {
   safePct = null;
-  if (isExtensionValid()) { try { chrome.storage.sync.set({ [safePctKey()]: null }); } catch (e) { } }
+  if (isExtensionValid()) { try { chrome.storage.sync.set({ [safePctKey()]: null }); } catch (e) { swallow(e, 'widget:resetSafePct'); } }
   updatePanel();
   processAndSend();
 }
@@ -323,7 +323,7 @@ function resetConversationState() {
     if (isExtensionValid() && chrome.storage && chrome.storage.local) {
       chrome.storage.local.remove(['aiCmState', 'aiCmState:' + window.location.hostname]);
     }
-  } catch (eResetState14) { }
+  } catch (eResetState14) { swallow(eResetState14, 'widget:resetConversationState-localRemove'); }
 
   // Critical #1 (п.1.6): смена чата/SPA-страницы — сторож коллизий старой страницы гасим
   // и взводим заново на текущий виджет: в новой вёрстке хост-контролы другие, значение
@@ -739,7 +739,7 @@ function aiCmLoadRingThresholds() {
       aiCmRingThresholds = (res && res.aiCmProactiveThresholds !== undefined) ? res.aiCmProactiveThresholds : null;
       aiCmRepaintRing();
     });
-  } catch (eRingGet) { }
+  } catch (eRingGet) { swallow(eRingGet, 'widget:loadRingThresholds'); }
   try {
     // Флаг «подписка взведена» живёт на самой функции, а не в модульной переменной: тела
     // функций регрессия режет из исходника и исполняет в песочнице без соседних объявлений

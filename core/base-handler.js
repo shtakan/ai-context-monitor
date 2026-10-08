@@ -99,7 +99,7 @@ function aiCmDedupeExportSource(messages) {
       return { messages: res18.messages, removed: res18.removed };
     }
     if (typeof P.dedupeMessages === 'function') return P.dedupeMessages(messages);
-  } catch (eDed) { }
+  } catch (eDed) { swallow(eDed, 'base-handler:dedupeExportSource'); }
   return { messages: messages, removed: 0 };
 }
 // v1.18 (E-2): лог схлопывания печатаем ОДИН раз на снимок базы (сигнатура count|textLen),
@@ -188,7 +188,7 @@ function aiCmExportNetSyncThen(convId, cb, timeoutMs) {
     if (timer) { try { clearTimeout(timer); } catch (eT) { } timer = null; }
     if (handler) { try { window.removeEventListener('ai-cm-deepseek-net-sync-done', handler); } catch (eR) { } handler = null; }
     try { aiCmLogNetSyncResult(convId, info || {}); } catch (eL) { }
-    try { if (cb) cb(info || {}); } catch (eCb) { }
+    try { if (cb) cb(info || {}); } catch (eCb) { swallow(eCb, 'base-handler:netSync-finish-callback'); }
   }
   try {
     if (!convId) { finish({ ok: false, reason: 'no-conv' }); return; }

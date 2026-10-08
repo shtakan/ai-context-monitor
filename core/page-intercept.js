@@ -170,11 +170,11 @@
   }
 
   function urlOf(input) {
-    try { if (typeof input === 'string') return input; if (input && input.url) return input.url; } catch (e) { }
+    try { if (typeof input === 'string') return input; if (input && input.url) return input.url; } catch (e) { swallow(e, 'page-intercept:urlOf'); }
     return '';
   }
   function methodOf(input, init) {
-    try { if (init && init.method) return String(init.method).toUpperCase(); if (input && input.method) return String(input.method).toUpperCase(); } catch (e) { }
+    try { if (init && init.method) return String(init.method).toUpperCase(); if (input && input.method) return String(input.method).toUpperCase(); } catch (e) { swallow(e, 'page-intercept:methodOf'); }
     return 'GET';
   }
   function tail(url) {
@@ -206,7 +206,7 @@
       if (typeof Request !== 'undefined' && input instanceof Request && input.headers && typeof input.headers.forEach === 'function') {
         input.headers.forEach(function (v, k) { h[k] = v; });
       }
-    } catch (e) { }
+    } catch (e) { swallow(e, 'page-intercept:captureHeaders-request'); }
     try {
       if (init && init.headers) {
         var hh = init.headers;
@@ -214,7 +214,7 @@
         else if (Array.isArray(hh)) { for (var i = 0; i < hh.length; i++) if (hh[i] && hh[i][0]) h[hh[i][0]] = hh[i][1]; }
         else if (typeof hh === 'object') { for (var k in hh) h[k] = hh[k]; }
       }
-    } catch (e) { }
+    } catch (e) { swallow(e, 'page-intercept:captureHeaders-init'); }
     return h;
   }
   function hasAuth(h) {
@@ -490,7 +490,7 @@
         if (currentConvId && currentConvId !== lastLoadedConvId && lastHeaders && hasAuth(lastHeaders)) {
           activeRefresh('переключение чата (сайт не сходил в сеть)');
         }
-      } catch (e) { }
+      } catch (e) { swallow(e, 'page-intercept:switchRefetch-timer'); }
     }, 1200);
   }
 
@@ -547,7 +547,7 @@
             dirty = false;                  // свежий снимок — хвост/активный не нужны
             handleSnapshot(resp, (document.readyState === 'complete') ? 'после ответа/обновления' : 'при загрузке', snapshotConvId);
           }
-        } catch (e) { }
+        } catch (e) { swallow(e, 'page-intercept:poll-passive-snapshot'); }
         if (isPassiveForCurrent) passiveGetInFlight = false;
         return resp;
       }, function () {
