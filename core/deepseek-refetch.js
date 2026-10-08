@@ -92,7 +92,7 @@
         }
       } else if (typeof src === 'object') {
         var keys = Object.keys(src);
-        for (var i = 0; i < keys.length; i++) {
+        for (i = 0; i < keys.length; i++) {
           h[keys[i]] = src[keys[i]];
         }
       }

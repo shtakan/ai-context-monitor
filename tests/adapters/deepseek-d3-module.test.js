@@ -96,9 +96,15 @@ const MOVED_BLOCKS = [
     sha: '6b8fd7d2315d9ea37063a8555a20b57d911dd53be5a009fe654718ee96b2e75d'
   },
   {
+    // Step E.2b.3-fix (no-redeclare): в collectHeaders `var i` объявлялся дважды в одном
+    // function-scope (первый — в ветке Array, строка 90; второй — цикл по keys, строка 95).
+    // Оба `var` хойстятся в один scope, поэтому у второго удалён сам `var`:
+    // `for (i = 0; i < keys.length; i++) {` вместо `for (var i = 0; ...`. Расхождение с
+    // 2fb6ffe ровно в этой одной удалённой var-строке; логика и поведение не менялись
+    // (i всё равно переинициализируется в 0). Прецедент переснятия пина: 5159d21 / 7fde37a.
     name: 'collectHeaders+stripCacheParams', start: '  // ===== СЕКЦИЯ 10B: ХЕЛПЕРЫ ДЛЯ MERGE-ДОЗАПРОСА =====',
     sigs: ['  function collectHeaders(input, init) {', '  function stripCacheParams(url) {'],
-    sha: 'b0614cf9ebbae6b6ba0500c37dfec5286736f2af2d45805aacb8f8e8382c941c'
+    sha: '75c322a1b848fc5da7a67e9fd474bd30936e001fb427b6e561da0d951ca975a7'
   },
   {
     name: 'historyUrlForConv', start: '  // URL пригоден для дозапроса, только если он про историю И про ЭТОТ чат.',
