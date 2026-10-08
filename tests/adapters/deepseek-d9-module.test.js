@@ -134,7 +134,9 @@ const MOVED_BLOCKS = [
     name: 'спан 4 (393-504) sseModelSignals … streamLastFragment', zone: 'bind',
     start: '  function sseModelSignals() {',
     end: '  function streamKnownType(t) {',
-    sha: '212411907aaa265d322925a0f16d3027ac7cef5aaa1ba65fa590ef5bb07174d8'
+    // Step E.2c-B2b-2 (swallowSoft): тот же catch переведён на канал B —
+    // `swallowSoft(eSettings, 'deepseek:ingestModelSettings')`; pin пересчитан по новой версии.
+    sha: 'ade80925ba90cec648dd551a3531a179880f98f0a7fcbd6497b5433576477ed3'
   },
   {
     name: 'спан 5 BIND-часть (514-520) streamKnownType/streamTypeShape', zone: 'bind',
@@ -148,7 +150,9 @@ const MOVED_BLOCKS = [
     name: 'спан 8 (536-758) streamNoteMisroute … processChunkCore', zone: 'bind',
     start: '  function streamNoteMisroute(op, val) {',
     end: '  function parseSSELines(lines) {',
-    sha: '430041bf1da7024337beeee1756434e7cdc8c0cabdd73a4f9e5c38862870b121'
+    // Step E.2c-B2b-2 (swallowSoft): тот же catch переведён на канал B —
+    // `swallowSoft(e, 'deepseek:streamResync')`; pin пересчитан по новой версии.
+    sha: '96da0517fac0ca29eb4cde7c220e7c85da5bf1f8c39608045dc13137067c3a06'
   },
   {
     // Step E.2a.1 (swallow): два молчаливых catch стали диагностируемыми — JSON.parse
@@ -157,7 +161,10 @@ const MOVED_BLOCKS = [
     name: 'спан 9 (891-1046) parseSSELines … мост probe/flush', zone: 'bind',
     start: '  function parseSSELines(lines) {',
     end: '  function parseSSE(text) {',
-    sha: 'ca8d40c943fc9800064e42357fb25a3571348fb755d02d99d0b72b9d74dcf40d'
+    // Step E.2c-B2b-2 (swallowSoft): те же два catch переведены на канал B —
+    // `swallowSoft(e, 'deepseek:parseSSELines')` / `swallowSoft(eFlush, 'deepseek:streamFlushBridge')`;
+    // pin пересчитан по новой версии.
+    sha: 'fd85f5377696679011986218ac88ee86ecfe0a5aa1f6dbbd4b1623b5c32c6bdb'
   },
   {
     name: 'спан 10 (1065-1136) parseSSE + consumeSseResponse', zone: 'bind',

@@ -115,7 +115,9 @@ const MOVED_BLOCKS = [
     // в этой одной строке, тело функции и порядок веток не менялись.
     name: 'liveTurnRecord', mode: 'func', start: '  // LIVE-текст хода:',
     sig: '  function liveTurnRecord(id, role, text, answer, reasoning, modelSlug) {',
-    sha: 'ad12ecb2091b1fd440325de2b740e4c177f6a49b45340a4d53a077bf66e08850'
+    // Step E.2c-B2b-2 (swallowSoft): тот же catch переведён на канал B —
+    // `swallowSoft(e, 'deepseek:liveTurnRecord')`; pin пересчитан по новой версии.
+    sha: '2304850a4a0ebc240acca816cab8ad5367ede17317feb0469d48b2cca70e1fd3'
   },
   {
     name: 'netSyncNeeded', mode: 'func', start: '  // Нужен ли сетевой дозапрос:',
@@ -128,7 +130,9 @@ const MOVED_BLOCKS = [
     // ровно в этой одной строке, порядок вердиктов и веток не менялся.
     name: 'exportComposeTurns', mode: 'func', start: '  // Per-turn выбор текста:',
     sig: '  function exportComposeTurns() {',
-    sha: 'c0e8d19dbec8e9aed747b095279e9e27b657e568791b48bb2efa9fc0e8ff2f1e'
+    // Step E.2c-B2b-2 (swallowSoft): тот же catch переведён на канал B —
+    // `swallowSoft(e, 'deepseek:exportComposeTurns')`; pin пересчитан по новой версии.
+    sha: '68761c0fcdae4a10bba8036d65b98f6322a28f8770bc708eff466d23f8a6142f'
   },
   {
     name: 'applyExportNetSnapshot', mode: 'func', start: '  // Приёмка сетевого снимка в режиме экспорта:',
@@ -145,7 +149,9 @@ const MOVED_BLOCKS = [
     // диагностируемым — `swallow(eD, 'deepseek:exportNetSync-reply')`.
     name: 'exportNetSync', mode: 'func', start: '  function exportNetSync(requestId, convId, timeoutMs) {',
     sig: '  function exportNetSync(requestId, convId, timeoutMs) {',
-    sha: 'e77781ccf0db225c5636a96c26ef1b06fa3a9f9ecf5e493771f776bb9a6c4303'
+    // Step E.2c-B2b-2 (swallowSoft): тот же catch переведён на канал B —
+    // `swallowSoft(eD, 'deepseek:exportNetSync-reply')`; pin пересчитан по новой версии.
+    sha: '7abace3e341a70601560bb4509994b511211cb34223861c103552788c675de18'
   },
   {
     // Step E.2a.1 (swallow): молчаливый catch тела слушателя моста (строка 266) стал
@@ -153,7 +159,9 @@ const MOVED_BLOCKS = [
     // слушателей и таймаут не менялись.
     name: 'bridge', mode: 'range', start: "  try {\n    window.addEventListener('ai-cm-deepseek-net-sync'",
     end: '  } catch (eNetBridge) { }',
-    sha: 'aa0cae309fcdaef74f06b4861356141313d8c16c25bb6d76ba1e950aad9f9de4'
+    // Step E.2c-B2b-2 (swallowSoft): тот же catch переведён на канал B —
+    // `swallowSoft(eNs, 'deepseek:netSyncBridge')`; pin пересчитан по новой версии.
+    sha: '719c52bc31e26388e128fdd788c958c06c762a76709a932599049f51327e088b'
   }
 ];
 

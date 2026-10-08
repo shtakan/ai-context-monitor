@@ -137,7 +137,9 @@ const MOVED_BLOCKS = [
     // 2fb6ffe ровно в этой одной строке, интервал 1000 мс и условия дозапроса не менялись.
     name: 'scheduleHistoryRefetch', start: '  // Таймер-дозапрос после смены чата (если сайт не прислал историю сам)',
     sigs: ['  function scheduleHistoryRefetch() {'],
-    sha: '566950d60bff5cb64f5b4f89279e9a4e9dc8748d8fb4f13fccf0408eba965299'
+    // Step E.2c-B2b-2 (swallowSoft): тот же catch переведён на канал B —
+    // `swallowSoft(e, 'deepseek:scheduleHistoryRefetch')`; pin пересчитан по новой версии.
+    sha: 'eb14f21ec06057a2262e49703b3866e203c1889e43e38548456bd87ceee76398'
   }
 ];
 

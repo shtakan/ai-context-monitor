@@ -144,7 +144,7 @@
           break;
         }
       }
-    } catch (eSettings) { swallow(eSettings, 'deepseek:ingestModelSettings'); }
+    } catch (eSettings) { swallowSoft(eSettings, 'deepseek:ingestModelSettings'); }
   }
 
   // v10 (O-16): снимок состояния потока наружу (ISOLATED-мир). convId — тот же, что в
@@ -305,7 +305,7 @@
         reason: String(reason || ''), recovered: bytes, frags: sseFragmentTypes.length,
         types: sseFragmentTypes.join(',')
       });
-    } catch (e) { swallow(e, 'deepseek:streamResync'); }
+    } catch (e) { swallowSoft(e, 'deepseek:streamResync'); }
   }
   // Единая точка «куда положить БАЙТЫ контента»: только в ВАЛИДНЫЙ фрагмент. Байты в
   // невалидный фрагмент не пишутся никогда — сначала ресинк (это и есть механика K1:
@@ -476,7 +476,7 @@
       if (!jsonStr || jsonStr === '[DONE]') continue;
 
       var obj;
-      try { obj = JSON.parse(jsonStr); } catch (e) { swallow(e, 'deepseek:parseSSELines'); continue; }
+      try { obj = JSON.parse(jsonStr); } catch (e) { swallowSoft(e, 'deepseek:parseSSELines'); continue; }
 
       // === ready ===
       if (sseCurrentEvent === 'ready' && obj.request_message_id) {
@@ -607,7 +607,7 @@
           finishSseStream();
           dispatchStreamState('flush');
         }
-      } catch (eFlush) { swallow(eFlush, 'deepseek:streamFlushBridge'); }
+      } catch (eFlush) { swallowSoft(eFlush, 'deepseek:streamFlushBridge'); }
     });
   } catch (eStreamBridge) { }
 

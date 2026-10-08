@@ -85,7 +85,7 @@
         role: role, text: String(text), answer: String(answer || ''), reasoning: String(reasoning || ''),
         modelSlug: modelSlug || '', ts: Date.now() / 1000
       };
-    } catch (e) { swallow(e, 'deepseek:liveTurnRecord'); }
+    } catch (e) { swallowSoft(e, 'deepseek:liveTurnRecord'); }
   }
   // Нужен ли сетевой дозапрос: сети не было / снимок старше последнего завершённого хода /
   // снимок не покрывает live-ходы.
@@ -137,7 +137,7 @@
         console.log('[deepseek-intercept] экспорт: ход ' + String(id).slice(0, 8) +
           ' есть только в live-базе (ONE-SIDE, сети нет) — в файл идёт live-текст ' + lv.text.length + ' симв.');
       }
-    } catch (e) { swallow(e, 'deepseek:exportComposeTurns'); }
+    } catch (e) { swallowSoft(e, 'deepseek:exportComposeTurns'); }
     return verdicts;
   }
   // Приёмка сетевого снимка в режиме экспорта: форсированный ingestHistory + per-turn выбор.
@@ -221,7 +221,7 @@
             verdicts: status.verdicts || {}
           }
         }));
-      } catch (eD) { swallow(eD, 'deepseek:exportNetSync-reply'); }
+      } catch (eD) { swallowSoft(eD, 'deepseek:exportNetSync-reply'); }
     }
     timer = setTimeout(function () { netSyncStats.timeout++; reply({ ok: false, reason: 'timeout' }); }, cap);
     try {
@@ -263,7 +263,7 @@
       try {
         var d = (ev && ev.detail) || {};
         exportNetSync(d.requestId, d.convId || currentConvId || getConvId() || '', d.timeoutMs);
-      } catch (eNs) { swallow(eNs, 'deepseek:netSyncBridge'); }
+      } catch (eNs) { swallowSoft(eNs, 'deepseek:netSyncBridge'); }
     });
   } catch (eNetBridge) { }
 

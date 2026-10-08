@@ -97,7 +97,9 @@ const MOVED_BLOCKS = [
     name: 'emitBaseSnapshot', zone: 'bind',
     start: '  function emitBaseSnapshot(serverTokens, chatMode) {',
     end: '  // v11 (O-17): сводка turnsMap',
-    sha: '5b5bdfaedec715c6d56eae27a3a5f1a8cfe21fea276875befbd9a96b67e093dd'
+    // Step E.2c-B2b-2 (swallowSoft): тот же catch переведён на канал B —
+    // `swallowSoft(e, 'deepseek:emitBaseSnapshot')`; pin пересчитан по новой версии.
+    sha: 'e7db6c82baf331be14ee150c50545602399bab9f06e090b3a5ebf654847788a0'
   },
   {
     name: 'clipTurnText + turnsSnapshot', zone: 'bind',

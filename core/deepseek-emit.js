@@ -213,7 +213,7 @@
           serverTokens: serverTokens
         }
       }));
-    } catch (e) { swallow(e, 'deepseek:emitBaseSnapshot'); }
+    } catch (e) { swallowSoft(e, 'deepseek:emitBaseSnapshot'); }
     var result = { count: ids.length, textLen: text.length, lastModel: lastModel, serverTokens: serverTokens, reasoningTurns: reasoningTurns };
     // O-22 (ФИКС F4): запоминаем ТОЛЬКО реально опубликованный снимок — по этой сигнатуре
     // следующий диспатч того же снимка будет остановлен до события.
