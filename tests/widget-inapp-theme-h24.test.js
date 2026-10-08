@@ -29,6 +29,8 @@ const CONTENT = require('./helpers/content-source.js').contentSource;
 // E.2a.2b.4b: хелпер swallow из utils/debug.js (его нет в eval-песочнице: срез
 // исполняется через new Function/eval; в MAIN-инжекте debug.js идёт первым).
 global.swallow = function () { };
+// Step E.2c-B2b-3b (swallowSoft): канал B из utils/debug.js — вне eval-песочницы так же, как swallow.
+global.swallowSoft = function () { };
 
 // ---------- извлечение РЕАЛЬНЫХ тел функций/констант из исходника ----------
 function extractFn(src, name) {

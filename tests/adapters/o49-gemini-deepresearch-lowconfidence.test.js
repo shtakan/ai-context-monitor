@@ -37,6 +37,8 @@ const BASE_HANDLER_SRC = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.j
 // E.2a.2b.4b: хелпер swallow из utils/debug.js (его нет в eval-песочнице: срез
 // исполняется через new Function/eval; в MAIN-инжекте debug.js идёт первым).
 global.swallow = function () { };
+// Step E.2c-B2b-3b (swallowSoft): канал B из utils/debug.js — вне eval-песочницы так же, как swallow.
+global.swallowSoft = function () { };
 const CONTENT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
 const OPTIONS_SRC = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
 const GEMINI_SRC = require('../helpers/gemini-intercept-source.js').geminiSource;
