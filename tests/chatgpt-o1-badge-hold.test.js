@@ -41,6 +41,10 @@ const ROOT = path.join(__dirname, '..');
 const H = require('./helpers/content-source.js');
 const CONTENT = H.contentSource;
 const WIDGET_SRC = H.moduleSource('core/widget.js');
+
+// E.2a.2b.4b: хелпер swallow из utils/debug.js (его нет в eval-песочнице: срез
+// исполняется через new Function/eval; в MAIN-инжекте debug.js идёт первым).
+global.swallow = function () { };
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
 const BUILDERS_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.js'), 'utf8');

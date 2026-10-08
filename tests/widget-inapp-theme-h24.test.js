@@ -26,6 +26,10 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const CONTENT = require('./helpers/content-source.js').contentSource;
 
+// E.2a.2b.4b: хелпер swallow из utils/debug.js (его нет в eval-песочнице: срез
+// исполняется через new Function/eval; в MAIN-инжекте debug.js идёт первым).
+global.swallow = function () { };
+
 // ---------- извлечение РЕАЛЬНЫХ тел функций/констант из исходника ----------
 function extractFn(src, name) {
   const marker = 'function ' + name + '(';
