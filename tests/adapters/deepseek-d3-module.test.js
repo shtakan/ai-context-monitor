@@ -129,7 +129,10 @@ const MOVED_BLOCKS = [
     // Остальные 7 блоков — байт-в-байт с 2fb6ffe; тело функции не менялось.
     name: 'refetchFullHistory', start: '  // Тихий повторный запрос полной истории БЕЗ cache_version/cache_reset_at',
     sigs: ['  function refetchFullHistory(originalUrl, authHeaders, convId) {'],
-    sha: '7ebae8e08cd120bb522c19e83c2ca2eea79f769598d48342c1ec4b721e6bbeea'
+    // Step E.2c-B2c-1 (aiCmDiagWarn): catch дозапроса переведён на канал B —
+    // `aiCmDiagWarn('deepseek:refetchFullHistory', '[deepseek-intercept] refetchFullHistory ошибка:', e)`;
+    // расхождение с 2fb6ffe (и с хотфиксом FIX-REFETCH-FETCH-BINDING) ровно в этой одной строке.
+    sha: '8bd7e6b778664d798ecfbb1ed0717ff3d25325a16c98171416916374b615d76e'
   },
   {
     // Step E.2a.1 (swallow): молчаливый catch таймер-дозапроса (строка 186) стал

@@ -152,7 +152,9 @@ const MOVED_BLOCKS = [
     end: '  function parseSSELines(lines) {',
     // Step E.2c-B2b-2 (swallowSoft): тот же catch переведён на канал B —
     // `swallowSoft(e, 'deepseek:streamResync')`; pin пересчитан по новой версии.
-    sha: '96da0517fac0ca29eb4cde7c220e7c85da5bf1f8c39608045dc13137067c3a06'
+    // Step E.2c-B2c-1 (aiCmDiagWarn): внутри спана ещё один канал-B сайт переведён на
+    // `aiCmDiagWarn('deepseek:streamResync', …)` (ресинк, строка 301); pin пересчитан.
+    sha: '345fd59016234385206e21effd41a8534e77136343d081be0e59f7d6e224f68a'
   },
   {
     // Step E.2a.1 (swallow): два молчаливых catch стали диагностируемыми — JSON.parse
@@ -260,6 +262,10 @@ function makeSandbox() {
     CustomEvent: CustomEvent,
     setTimeout: function (fn) { return 0; }, clearTimeout: function () { }
   };
+  // Step E.2c-B2c-1 (aiCmDiagWarn): канал B из utils/debug.js — вне песочницы так же,
+  // как swallowSoft (B2b-2) и swallow (E.2a.1): модуль зовёт их, объявлений здесь нет.
+  sandbox.aiCmDiagWarn = function () { };
+  sandbox.swallowSoft = function () { };
   // window — ОТДЕЛЬНЫЙ объект: модуль зовёт window.dispatchEvent/addEventListener,
   // а песочница остаётся без DOM (K6 его не трогает).
   sandbox.window = win;

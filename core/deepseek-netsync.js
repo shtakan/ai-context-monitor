@@ -251,7 +251,7 @@
         .catch(function () {
           if (done) return;
           netSyncStats.failed++;
-          console.warn('[deepseek-intercept] экспорт: сетевой дозапрос не удался → прежний live-путь');
+          aiCmDiagWarn('deepseek:exportNetSync', '[deepseek-intercept] экспорт: сетевой дозапрос не удался → прежний live-путь');
           reply({ ok: false, reason: 'error' });
         });
     } catch (e0) {

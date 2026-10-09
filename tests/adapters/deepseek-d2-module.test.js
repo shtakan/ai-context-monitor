@@ -151,7 +151,9 @@ const MOVED_BLOCKS = [
     sig: '  function exportNetSync(requestId, convId, timeoutMs) {',
     // Step E.2c-B2b-2 (swallowSoft): тот же catch переведён на канал B —
     // `swallowSoft(eD, 'deepseek:exportNetSync-reply')`; pin пересчитан по новой версии.
-    sha: '7abace3e341a70601560bb4509994b511211cb34223861c103552788c675de18'
+    // Step E.2c-B2c-1 (aiCmDiagWarn): сетевой дозапрос не удался (строка 254) переведён на
+    // `aiCmDiagWarn('deepseek:exportNetSync', …)`; pin пересчитан по новой версии.
+    sha: '3eecfec8bc9d284810b6fa0ec3034bd8699bbda201c04f80884380bde1b82ecb'
   },
   {
     // Step E.2a.1 (swallow): молчаливый catch тела слушателя моста (строка 266) стал

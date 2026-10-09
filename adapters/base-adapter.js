@@ -108,7 +108,7 @@ class BaseAdapter {
     try {
       return parent.querySelector(selector);
     } catch (e) {
-      console.warn(`Ошибка селектора "${selector}":`, e);
+      aiCmDiagWarn('adapter:base:safeQuerySelector', `Ошибка селектора "${selector}":`, e);
       return null;
     }
   }
@@ -126,7 +126,7 @@ class BaseAdapter {
     try {
       return parent.querySelectorAll(selector);
     } catch (e) {
-      console.warn(`Ошибка селектора "${selector}":`, e);
+      aiCmDiagWarn('adapter:base:safeQuerySelectorAll', `Ошибка селектора "${selector}":`, e);
       return [];
     }
   }

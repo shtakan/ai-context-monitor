@@ -112,6 +112,12 @@ function makeStand(over) {
   window.sessionStorage.setItem('aiCmDebug', '1');
   window.currentAdapter = { siteName: 'deepseek' };
   window.debugLog = (lvl, msg) => { logs.push(String(msg)); };
+  // Step E.2c-B2c-1 (aiCmDiagWarn): канал B из utils/debug.js — вне песочницы (как swallowSoft в B2b-3c).
+  // Гейт повторён по контракту хелпера, строка под гейтом доезжает до logs как раньше.
+  window.aiCmDiagWarn = (tag, message, detail) => {
+    if (window.sessionStorage.getItem('aiCmDebug') !== '1' && window.__aiCmDebugLogs !== true) return;
+    logs.push('[AI CM][warn][' + tag + '] ' + message + (detail === undefined ? '' : ' ' + String(detail)));
+  };
   const streams = [];
   const netCalls = [];
   let netPlan = o.netPlan || (() => FIX.netHistoryFull);

@@ -942,7 +942,7 @@ async function handleCountTokensRun(run) {
       // Не ok — логируем и пробуем следующего кандидата
       var errText = '';
       try { errText = await response.text(); } catch (e) { }
-      console.warn('[count-tokens] модель ' + cand + ' вернула ' + response.status + ': ' + errText.slice(0, 120));
+      aiCmDiagWarn('background:handleCountTokensRun', '[count-tokens] модель ' + cand + ' вернула ' + response.status + ': ' + errText.slice(0, 120));
     } catch (fetchError) {
       if (abortReason === 'timeout') {
         // Таймаут: висящий запрос снят AbortController'ом. Сообщаем причину и выходим —
@@ -950,7 +950,7 @@ async function handleCountTokensRun(run) {
         console.log(logPrefix + ' abort reason=timeout model=' + cand + ' debounced=' + isDebounced);
         return { ok: false, error: 'timeout', reason: 'timeout', totalTokens: 0, cached: 0, debounced: isDebounced };
       }
-      console.warn('[count-tokens] модель ' + cand + ' fetch error: ' + fetchError.message);
+      aiCmDiagWarn('background:handleCountTokensRun', '[count-tokens] модель ' + cand + ' fetch error: ' + fetchError.message);
     } finally {
       if (timeoutId != null) clearTimeout(timeoutId);
     }
@@ -1002,11 +1002,11 @@ function aiCmPruneHistory() {
         }
         aiCmHistoryPruneRemove(stale);
       } catch (e) {
-        console.warn('[AI CM][storage] prune error:', e);
+        aiCmDiagWarn('background:pruneHistory', '[AI CM][storage] prune error:', e);
       }
     });
   } catch (e2) {
-    console.warn('[AI CM][storage] prune error:', e2);
+    aiCmDiagWarn('background:pruneHistory', '[AI CM][storage] prune error:', e2);
   }
 }
 

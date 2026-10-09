@@ -734,11 +734,14 @@ function lineOfIndex(src, idx) {
   return c;
 }
 
-/** Номера строк, занятые вызовами логов (debugLog/console.*), с балансировкой скобок. */
+/** Номера строк, занятые вызовами логов (debugLog, aiCmDiagWarn, console), с балансировкой скобок. */
 function logCallLines(src) {
   const masked = lexSource(src).masked;
   const lines = {};
-  const re = /(?:debugLog|\bconsole\s*\.\s*(?:log|warn|error|info|debug))\s*\(/g;
+  // aiCmDiagWarn — тот же логовый канал B (utils/debug.js), что и console.*: сообщение уходит
+  // в ring и (под гейтом) в console.warn, поэтому ru-литералы внутри него — не UI-строки
+  // (Step E.2c-B2c-1: миграция content.js на aiCmDiagWarn).
+  const re = /(?:debugLog|aiCmDiagWarn|\bconsole\s*\.\s*(?:log|warn|error|info|debug))\s*\(/g;
   let m;
   while ((m = re.exec(masked)) !== null) {
     const open = m.index + m[0].length - 1;

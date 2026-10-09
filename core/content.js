@@ -1599,7 +1599,7 @@ function requestExactTokens(fullText, modelId) {
       processAndSend();
     } else {
       var err = (response && response.error) ? response.error : 'unknown';
-      console.warn('[exact-tokens] ошибка countTokens: ' + err + ' — фолбэк на эвристику');
+      aiCmDiagWarn('content:requestExactTokens', '[exact-tokens] ошибка countTokens: ' + err + ' — фолбэк на эвристику');
       // Если для этого же текста уже есть точное значение — не затираем его
       if (fullText === lastCountTokensText && lastCountTokensCache > 0) {
         netServerTokens = lastCountTokensCache;
@@ -2937,7 +2937,7 @@ document.addEventListener('keydown', function (e) {
       setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
       console.log('[byok-dump] дамп истории скачан: ' + payload.count + ' ходов');
     } catch (err) {
-      console.warn('[byok-dump] не удалось скачать дамп:', err);
+      aiCmDiagWarn('content:byok-dump', '[byok-dump] не удалось скачать дамп:', err);
     }
   }
 });

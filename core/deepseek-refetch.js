@@ -170,7 +170,7 @@
         ingestHistory(json);
       }
     }).catch(function (e) {
-      console.warn('[deepseek-intercept] refetchFullHistory ошибка:', e);
+      aiCmDiagWarn('deepseek:refetchFullHistory', '[deepseek-intercept] refetchFullHistory ошибка:', e);
     });
   }
 

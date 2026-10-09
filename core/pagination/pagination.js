@@ -430,7 +430,7 @@
           return;
         }
         if (step.action === 'cap') {
-          console.warn('[AI CM][paginate] ' + (step.warn || ('потолок достигнут reason=' + step.reason)) +
+          aiCmDiagWarn('gemini:paginateLoop-cap', '[AI CM][paginate] ' + (step.warn || ('потолок достигнут reason=' + step.reason)) +
             ' pages=' + paginationRun.pageCount +
             ' elapsed=' + (paginationRun.startTs ? (Date.now() - paginationRun.startTs) : 0) + 'ms' +
             ' msgs=' + totalNow + ' курсор=' + (next ? '1' : '0'));

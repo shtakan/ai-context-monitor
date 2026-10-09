@@ -247,7 +247,7 @@
     try {
       var val = (typeof content === 'string') ? content : '';
       sseUnknownCount++;
-      console.warn('[deepseek-intercept] имя фрагмента вне белого списка ("' + String(type || '').slice(0, 32) +
+      aiCmDiagWarn('deepseek:streamUnknownPush', '[deepseek-intercept] имя фрагмента вне белого списка ("' + String(type || '').slice(0, 32) +
         '") — тип не заводится; контент ' + val.length + ' симв. сохранён аварийным (логу/фолбэку)');
       if (val) {
         sseUnknownParts.push(val);
@@ -298,7 +298,7 @@
       sseResyncChars = 0;
       sseResyncCount++;
       sseResyncBytes += bytes;
-      console.warn('[deepseek-intercept] десинхрон парсера фрагментов (' + reason + ') → ресинк: ' +
+      aiCmDiagWarn('deepseek:streamResync', '[deepseek-intercept] десинхрон парсера фрагментов (' + reason + ') → ресинк: ' +
         'восстановлено ' + bytes + ' симв. из сырого кольца, фрагментов=' + sseFragments.length + ', ' +
         'типы=' + sseFragmentTypes.join(','));
       diagMark('frag-resync', {

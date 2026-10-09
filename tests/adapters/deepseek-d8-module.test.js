@@ -111,7 +111,10 @@ const MOVED_BLOCKS = [
     name: 'ingestHistory (тело)', zone: 'bind',
     start: '  function ingestHistory(jsonBody) {',
     end: '      Fn.ingestHistory = ingestHistory;',
-    sha: '6c4110824a0e522f76f163eb2c22964ec7b56caab27547e9bfdd7e298e6381f6'
+    // Step E.2c-B2c-1 (aiCmDiagWarn): catch парсинга history_messages переведён на канал B —
+    // `aiCmDiagWarn('deepseek:ingestHistory', '[deepseek-intercept] ошибка парсинга history_messages:', e)`;
+    // расхождение с эталоном 2623b3a ровно в этой одной строке, pin пересчитан по новой версии.
+    sha: '93022e50cc57f719de4267090639287c885a1967c5484da0de2106a2d12e1543'
   }
 ];
 

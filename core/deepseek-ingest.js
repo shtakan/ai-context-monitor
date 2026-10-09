@@ -373,7 +373,7 @@
         }
       }
     } catch (e) {
-      console.warn('[deepseek-intercept] ошибка парсинга history_messages:', e);
+      aiCmDiagWarn('deepseek:ingestHistory', '[deepseek-intercept] ошибка парсинга history_messages:', e);
     }
   }
 
