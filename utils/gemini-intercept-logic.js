@@ -91,7 +91,7 @@
     // при несовпадении версии existing = null → запись перезаписывается.
     if (!existing || count > existing.count || (count === existing.count && effectiveLen > existing.effectiveLen)) {
       var val = JSON.stringify({ count: count, effectiveLen: effectiveLen, ts: Date.now(), version: parserVersion });
-      try { storage.setItem(key, val); } catch (e) { swallow(e, 'gemini-utils:saveFloor'); }
+      try { storage.setItem(key, val); } catch (e) { swallowSoft(e, 'gemini-utils:saveFloor'); }
     }
   }
 
@@ -1222,7 +1222,7 @@
         var ln = lines[i];
         if (!ln || ln.charAt(0) !== '[') continue;
         var parsedLine;
-        try { parsedLine = JSON.parse(ln); } catch (e) { swallow(e, 'gemini-utils:streamParseFrames-line'); continue; }
+        try { parsedLine = JSON.parse(ln); } catch (e) { swallowSoft(e, 'gemini-utils:streamParseFrames-line'); continue; }
         if (!Array.isArray(parsedLine)) continue;
         for (var j = 0; j < parsedLine.length; j++) {
           var fr = parsedLine[j];
@@ -1237,7 +1237,7 @@
           frames.push({ rpcid: rpcid, obj: obj });
         }
       }
-    } catch (e) { swallow(e, 'gemini-utils:streamParseFrames-outer'); }
+    } catch (e) { swallowSoft(e, 'gemini-utils:streamParseFrames-outer'); }
     return frames;
   }
 

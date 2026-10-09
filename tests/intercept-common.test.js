@@ -11,6 +11,8 @@ const { setIntervalVisible } = interceptCommon;
 // E.2a.2b.4cd: хелпер swallow из utils/debug.js (его нет в Node-require; в
 // MAIN-инжекте debug.js идёт первым — core/background.js:135/282/295/308).
 global.swallow = function () { };
+// Step E.2c-B2b-3d (swallowSoft): канал B из utils/debug.js — вне Node-require так же, как swallow.
+global.swallowSoft = function () { };
 
 function setVisibility(state) {
   Object.defineProperty(document, 'visibilityState', {

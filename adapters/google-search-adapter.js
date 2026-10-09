@@ -72,7 +72,7 @@ function gsaFolwrUtils() {
 function gsaAnswerText(el) {
   var util = gsaFolwrUtils();
   if (util) {
-    try { return String(util.answerTextOf(el) || ''); } catch (e) { swallow(e, 'adapter:google-search:answerText'); }
+    try { return String(util.answerTextOf(el) || ''); } catch (e) { swallowSoft(e, 'adapter:google-search:answerText'); }
   }
   try {
     var clone = /** @type {Element} */ (el.cloneNode(true));
@@ -93,7 +93,7 @@ function gsaAnswerNodes(root) {
     try {
       var nodes = util.answerDomNodes(root);
       if (nodes) return nodes;
-    } catch (e) { swallow(e, 'adapter:google-search:answerNodes'); }
+    } catch (e) { swallowSoft(e, 'adapter:google-search:answerNodes'); }
   }
   try { return root.querySelectorAll('.n6owBd.awi2gc'); } catch (e2) { return []; }
 }

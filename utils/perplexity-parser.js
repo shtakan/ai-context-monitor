@@ -184,7 +184,7 @@
         }
       }
     } catch (e) {
-      swallow(e, 'perplexity-utils:parsePerplexityThread');
+      swallowSoft(e, 'perplexity-utils:parsePerplexityThread');
       // возвращаем пустой результат при ошибке
     }
 

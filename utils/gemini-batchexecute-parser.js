@@ -303,7 +303,7 @@
     } catch (e) { }
     if (!cands.length) {
       isFallback = true;
-      try { collectTurnText(turn[3], cands); } catch (e) { swallow(e, 'gemini-utils:extractCanonicalAnswer-fallback'); }
+      try { collectTurnText(turn[3], cands); } catch (e) { swallowSoft(e, 'gemini-utils:extractCanonicalAnswer-fallback'); }
     }
     var cleaned = [];
     for (i = 0; i < cands.length; i++) {
@@ -334,7 +334,7 @@
       if (Array.isArray(node) && depth < 40) {
         for (var i = 0; i < node.length; i++) collectDrStrings(node[i], out, minLen, depth + 1);
       }
-    } catch (e) { swallow(e, 'gemini-utils:collectDrStrings'); }
+    } catch (e) { swallowSoft(e, 'gemini-utils:collectDrStrings'); }
   }
   function ctText(s) { return sanitizeGeminiText(s).trim(); }
   // extractDrTexts(raw)(realTurns) → { planText, reportText }
@@ -367,7 +367,7 @@
         if (!pbest || ps.length > pbest.length) pbest = ps;
       }
       if (pbest) res.planText = ctText(pbest);
-    } catch (e) { swallow(e, 'gemini-utils:extractDrTexts'); }
+    } catch (e) { swallowSoft(e, 'gemini-utils:extractDrTexts'); }
     return res;
   }
 

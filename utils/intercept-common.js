@@ -24,7 +24,7 @@
           fn();
         }
       } catch (e) {
-        swallow(e, 'intercept-common:setIntervalVisible-tick');
+        swallowSoft(e, 'intercept-common:setIntervalVisible-tick');
         // тихий сброс: бросок тика не должен ломать интервал / страницу
       }
     }, ms);

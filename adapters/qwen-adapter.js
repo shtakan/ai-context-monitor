@@ -518,7 +518,7 @@ class QwenAdapter extends BaseAdapter {
         const m = /qwen[0-9.]*-[a-z]+/i.exec(text);
         if (m) return m[0].toLowerCase();
       }
-    } catch (e) { swallow(e, 'adapter:qwen:detectModel'); }
+    } catch (e) { swallowSoft(e, 'adapter:qwen:detectModel'); }
     return 'qwen3.8-max';
   }
 }

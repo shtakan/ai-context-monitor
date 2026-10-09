@@ -501,7 +501,7 @@
         }
         tgQuestions.push(found);
       }
-    } catch (e) { swallow(e, 'gsa-utils:parseGoogleFolwrOpen-tgqphd'); /* тихо */ }
+    } catch (e) { swallowSoft(e, 'gsa-utils:parseGoogleFolwrOpen-tgqphd'); /* тихо */ }
 
     // Глобальный список контент-узлов ответа (в document-порядке), включая списки и вложенные блоки.
     // Вопросы h2.iMqumd исключаем; вложенные узлы дедуплицируем, чтобы не дублировать текст.
@@ -651,7 +651,7 @@
           assistantText: joined || null
         });
       }
-    } catch (e) { swallow(e, 'gsa-utils:extractTurnsFromDocument'); }
+    } catch (e) { swallowSoft(e, 'gsa-utils:extractTurnsFromDocument'); }
     return turns;
   }
 

@@ -185,7 +185,7 @@ isOnDialogPage() {
         if (this._isInsideReasoning(candidates[i])) continue;
         return candidates[i];
       }
-    } catch (e) { swallow(e, 'adapter:deepseek:firstContentChild'); }
+    } catch (e) { swallowSoft(e, 'adapter:deepseek:firstContentChild'); }
     return null;
   }
 
