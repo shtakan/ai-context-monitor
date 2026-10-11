@@ -356,7 +356,7 @@
         traceLog('post-send state convIdUrl=' + String(sendConvId || '-').slice(0, 8) +
           ' lastHistoryConvId=' + String(currentConvId || '-').slice(0, 8));
         if (sendConvId && !postSendTimer) {
-          var urlConvAtSched = sendConvId;
+          var urlConvAtSched = sendConvId; settle_target_uuid = ''; // v61: цель settle — только из тела ЭТОГО POST
           postSendTimer = setTimeout(function () {
             postSendTimer = null;
             try {
@@ -370,7 +370,7 @@
                 return;
               }
               traceLog('post-send refresh=triggered');
-              activeRefresh('после отправки');
+              settleSchedule(urlConvAtSched); // v61: settle-цикл вместо одноразового +2s-снимка
             } catch (eR) { debugLog('error', '[AI CM][Claude][error] post-send refresh: ' + eR.message); }
           }, 2000);
         }
@@ -417,7 +417,7 @@
         jsonOk = processPostBody(url, parts.join('&'));
       } else if (scanText != null) {
         jsonOk = processPostBody(url, scanText);
-        if (kind === 'string' && jsonOk === 1) traceBodyStruct(url, scanText); // v41: структура чат-POST
+        if (kind === 'string' && jsonOk === 1) { traceBodyStruct(url, scanText); captureSettleTarget(url, scanText); } // v41/v61: структура чат-POST + цель settle
       }
       // v43: заголовки запроса (content-type / content-encoding, ≤60 символов)
       try {
@@ -525,7 +525,7 @@
     var newId = getConvId();
     if (newId !== currentConvId) {
       currentConvId = newId;
-      resetForNewConversation();
+      settleReset('смена чата'); resetForNewConversation();
     }
   }
 
@@ -1311,7 +1311,7 @@
         }
         // v54: жёсткая проверка по телу ответа — тело могло оказаться от другого чата
         if (isStaleSnapshotBody(data, 'vf5')) return;
-        emitSnapshot(parseHistoryWithEffects(data), 'виртуальный F5');
+        var parsedVf5 = parseHistoryWithEffects(data); emitSnapshot(parsedVf5, 'виртуальный F5'); settleCheckSnapshot(parsedVf5); // v61: settle-цикл — сверка хвоста снимка
         dirty = false;
         } catch (e) { debugLog('error', '[AI CM][Claude][error] vf5 parse: ' + e.message); }
       })
@@ -1671,6 +1671,104 @@
       try { activeRefresh('таймер-страховка'); } catch (e) { debugLog('error', '[AI CM][Claude][error] vf5 страховка: ' + e.message); }
     }
   }, 15000);
+
+  // ---- v61: settle-цикл эмита после отправки completion ----
+  // Живой прогон 2026-10-11 (chat claude.ai-1791724274631.log): POST /completion 18:10:11.778 →
+  // ОДИН снимок на +2с (msgs=126, последний ход — user) → бейдж 17.1% и тишина до сайтового
+  // GET на +47с. UUID будущего ответа приходит в теле ЗАПРОСА
+  // (turn_message_uuids.assistant_message_uuid), поэтому снимок повторяем по расписанию, пока
+  // последний ход снимка не станет assistant с этим uuid. Тело POST-ОТВЕТА по-прежнему не
+  // читается (v40): источник цели — только request-body.
+  var SETTLE_DELAYS = [2000, 5000, 10000, 15000, 30000]; // абс. расписание от POST, ≤5 попыток
+  var settle_target_uuid = '';
+  var settle_attempt = 0; // 0 = цикл не активен
+  var settle_timer = null;
+  var settle_conv_id = '';
+
+  function settleShort(s) { return String(s || '-').slice(0, 8); }
+
+  function captureSettleTarget(url, rawText) {
+    try {
+      if (String(url).indexOf('/completion') === -1) return;
+      var obj = JSON.parse(rawText);
+      var tm = (obj && typeof obj === 'object') ? obj.turn_message_uuids : null;
+      settle_target_uuid = (tm && typeof tm.assistant_message_uuid === 'string') ? tm.assistant_message_uuid : '';
+      traceLog('settle target=' + settleShort(settle_target_uuid) + ' source=POST /completion');
+    } catch (eT) {
+      settle_target_uuid = '';
+      debugLog('log', '[claude-settle] цель settle не извлечена (тело без turn_message_uuids): ' + eT.message);
+    }
+  }
+
+  function settleStop(reason) {
+    if (settle_timer) { clearTimeout(settle_timer); settle_timer = null; }
+    if (settle_attempt) traceLog('settle stop attempt=' + settle_attempt + ' reason=' + reason);
+    settle_attempt = 0;
+    settle_conv_id = '';
+    dirty = false;
+  }
+
+  function settleReset(reason) {
+    if (!settle_timer && settle_attempt < 1) return;
+    settleStop(reason);
+    traceLog('settle reset (' + reason + ') — таймер отменён, чужой снимок не эмитится');
+  }
+
+  function settleCheckSnapshot(parsed) {
+    if (settle_attempt < 1) return; // цикл не активен
+    var ids = (parsed && parsed.ids) || [];
+    var msgs = (parsed && parsed.messages) || [];
+    var lastMsg = msgs.length ? msgs[msgs.length - 1] : null;
+    var lastId = ids.length ? String(ids[ids.length - 1]) : '';
+    var snapConv = String((parsed && parsed.convId) || '');
+    if (settle_conv_id && snapConv !== settle_conv_id) {
+      traceLog('settle check skip — чужой снимок (' + settleShort(snapConv) + ' != ' + settleShort(settle_conv_id) + ')');
+      return;
+    }
+    var isAssistant = !!(lastMsg && lastMsg.role === 'assistant');
+    // цель из тела POST есть → сверяем uuid хвоста; цели нет (клиент сменил формат) →
+    // фолбэк «последний ход снимка assistant» (дефект = последний ход user)
+    var settled = isAssistant && (!settle_target_uuid || lastId === settle_target_uuid);
+    traceLog('settle check attempt=' + settle_attempt + ' msgs=' + msgs.length +
+      ' lastRole=' + (lastMsg ? lastMsg.role : '-') + ' lastId=' + settleShort(lastId) +
+      ' target=' + settleShort(settle_target_uuid) + ' settled=' + (settled ? 1 : 0));
+    if (settled) settleStop('settled');
+  }
+
+  function settleAttemptNow(att) {
+    try {
+      if (settle_attempt !== att) return; // цикл перезапущен или остановлен
+      if (!currentConvId || getConvId() !== settle_conv_id || currentConvId !== settle_conv_id) {
+        settleReset('convId-changed');
+        return;
+      }
+      traceLog('settle attempt=' + att + '/' + SETTLE_DELAYS.length + ' at=+' + SETTLE_DELAYS[att - 1] +
+        ' target=' + settleShort(settle_target_uuid) + ' convId=' + settleShort(settle_conv_id));
+      if (refreshBusy || !lastHistoryUrl) {
+        traceLog('settle attempt=' + att + ' refresh=skipped reason=' + (refreshBusy ? 'busy' : 'no-url'));
+      } else {
+        activeRefresh('settle-' + att);
+      }
+      settle_attempt = att + 1;
+      if (settle_attempt > SETTLE_DELAYS.length) { settleStop('exhausted'); return; } // не зацикливаемся
+      var delay = Math.max(0, SETTLE_DELAYS[settle_attempt - 1] - SETTLE_DELAYS[att - 1]);
+      var next = settle_attempt;
+      settle_timer = setTimeout(function () {
+        settle_timer = null;
+        settleAttemptNow(next);
+      }, delay);
+    } catch (eS) { debugLog('error', '[AI CM][Claude][error] settle attempt: ' + eS.message); }
+  }
+
+  function settleSchedule(convId) {
+    settleStop('restart');
+    settle_conv_id = String(convId || '') || currentConvId;
+    settle_attempt = 1;
+    traceLog('settle schedule start convId=' + settleShort(settle_conv_id) +
+      ' target=' + settleShort(settle_target_uuid) + ' tries=' + SETTLE_DELAYS.length);
+    // +2с уже отработал post-send таймер — это и есть первая попытка расписания
+    settleAttemptNow(1);
+  }
 
   // ---- bootstrap: активный снимок при старте скрипта ----
   // v36: колбэк таймера обёрнут — бросок был бы uncaught
