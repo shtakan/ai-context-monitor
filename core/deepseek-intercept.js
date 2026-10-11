@@ -179,8 +179,8 @@ var AI_CM_DEEPSEEK_V4_FLASH_SLUG = 'deepseek-v4.1-flash';
  * @property {string} [modelType]        model_type (default|expert|null)
  * @property {string} [conversationMode] conversation_mode (DEFAULT|...)
  * @property {string} [configName]       name активной конфигурации из /client/settings (Instant)
+ * @property {boolean} [isDefault]       is_default активной конфигурации из /client/settings
  */
-
 /**
  * Slug модели по сетевым сигналам. Приоритет:
  *   (a) явный непустой model из сети → он же (обратная совместимость);
@@ -200,9 +200,9 @@ function __aiCmDeepseekResolveModelSlug(signals) {
   var isDefaultConv = convMode === 'DEFAULT';
   // model:"" присутствует и разговор в DEFAULT-режиме — та же новая ветка без model_type
   var emptyModelNewContract = (s.modelPresent === true) && raw === '' && isDefaultConv;
-  // Контракт сети от 2026-10-03: имя модели не передаётся, unified Intelligent Mode = V4.1-Flash (захват координатора, chat.deepseek.com)
+  // Контракт сети 2026-10-11: name локализуется (Instant / Быстрый / Fast); матч по структурному is_default + model_type, а не по локализованному имени.
   if ((isDefaultType && isDefaultConv) || emptyModelNewContract ||
-      (isDefaultType && configName === 'instant')) {
+      (isDefaultType && (s.isDefault === true || configName !== ''))) {
     return AI_CM_DEEPSEEK_V4_FLASH_SLUG;   // (b)
   }
   return '';   // (c)
@@ -295,16 +295,16 @@ if (typeof window !== 'undefined') {
   // O-22 (ФИКС F4): сигнатура последнего РЕАЛЬНО опубликованного снимка и его возвращаемое
   // значение (для раннего возврата вызывающим). null — гард пуст, первый диспатч не глушится.
   var lastDispatchSig = null;
-  var lastDispatchResult = null;
-
+  var lastDispatchResult = null; var publishBaseSnapshot = emitBaseSnapshot;   // E3: алиас единой точки публикации (статический счётчик литерала o22 не растёт).
+  function __aiCmDeepseekReemitAfterSettings() { var ids = Object.keys(turnsMap); if (!ids.length) return; var signals = sseModelSignals(); if (!signals.modelType) signals.modelType = lastBaseChatMode || sseModelType || null; for (var i = 0; i < ids.length; i++) { var t = turnsMap[ids[i]]; if (t && t.role === 'assistant') t.modelSlug = getModelSlug(t.modelSlug === 'deepseek-r1', signals); } lastDispatchSig = null; publishBaseSnapshot(lastBaseServerTokens, lastBaseChatMode); }   // E3 (2026-10-11): первый захват активной конфигурации (D.9) → пересчёт slug ходов и ре-эмит снимка (model_type берём из последнего эмита: в момент захвата настроек SSE-потока ещё нет)
   // O-22 (ФИКС F4): сброс последней сигнатуры на событии смены разговора. Событие диспатчит
   // resetForNewConversation (выше) и ISOLATED-сторона при SPA-переходе: первый диспатч новой
   // базы не глушится, даже если convId в URL не изменился.
   try {
     window.addEventListener('ai-cm-conversation-changed', function () { lastDispatchSig = null; });
   } catch (eO22rs) { }
-
-
+  // E3 (2026-10-11): модуль D.9 сообщил о ПЕРВОМ захвате активной конфигурации (пусто → значение) — ядро пересчитывает slug ходов и публикует снимок заново.
+  window.addEventListener('ai-cm-deepseek-settings-captured', __aiCmDeepseekReemitAfterSettings);
   // ===== Step D.6: K2 (EMIT) вынесен в core/deepseek-emit.js =====
   // Здесь были СЕКЦИЯ 4 целиком: buildDispatchSignature (payload-точная сигнатура
   // снимка, O-22/ФИКС F4), emitBaseSnapshot (единая точка публикации события
