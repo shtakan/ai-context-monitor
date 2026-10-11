@@ -1735,7 +1735,7 @@ Rewired-копия живёт **только в `dist/`** — корневые `
 **Результаты:**
 - **A.1:** BYOK-ключ и O3-латч переведены на SW-канал (`chrome.runtime.sendMessage`). `setAccessLevel` = `TRUSTED_CONTEXTS_ONLY`. Кросс-табовый латч работает через SW (повторный экспорт запрещён). ⚠️ FALSIFIED: приёмка 13.2 ложно заявила; фактически дубль автоэкспорта при F5 происходил до хотфикса F5 (Аппендикс v38).
 - **A.2:** Paste-capture канал защищён: `location.origin` вместо `window.origin`, проверка `ev.origin === location.origin` в приёмнике. Ручной/автоэкспорт без регрессов.
-- **Тесты: 164 suites / 2964 passed / 6 skipped / 0 failed**
+- **Тесты: 165 suites / 2991 passed / 6 skipped / 0 failed**
 - **Живая приёмка:** BYOK автоэкспорт (Gemini) — ОК; кросс-табовость — ОК; paste в Claude — ОК; экспорт 4 форматов — ОК.
 
 ## Аппендикс v36: Завершение Phase 3 Step 13.1 (Overlay extraction)
@@ -2666,3 +2666,35 @@ K0 + `module.exports` + СЕКЦИЯ 14 остаются в ядре ПОСТО�
 - **Верхний блок дайджеста:** `HEAD → <SHA v61>, origin/main = 90f03dc, ahead = 2`.
 
 **Инварианты O-53 после аппендикса:** размер > 100 000 байт; статусная строка `- **Тесты:` — ровно 1 (значение `164 suites / 2964 passed / 6 skipped / 0 failed`); исторических вхождений полной формы ≥ 20; упоминаний `Версия:` — ровно 1, значение 2.0.13 = `manifest.json` = `package.json`; BOM нет; одиночных CR нет. Тест `tests/docs-hygiene.test.js` — exit 0.
+
+## Аппендикс v62 (2026-10-11): getServiceKey('claude') закрыт — per-service изоляция safePct
+
+**Дата:** 2026-10-11
+**Код-коммит:** `8137cb3aa8c0f729f9a568ee0266cc75ce31e474` — `fix(widget): getServiceKey knows claude.ai + THEME_CONFIGS guard (getServiceKey-claude)`, 2 файла, +454/−2 (`M core/widget.js` +2/−2, `A tests/widget-servicekey-claude.test.js` +452).
+**Коммит docs-синка:** плейсхолдер `<SHA v62>` (самореферентный SHA — второй коммит двухшаговым паттерном).
+**Статус:** ✅ ЗАКРЫТ кодом + ✅ живая приёмка пройдена (полная, без границ).
+
+### Секция 1. Что сделано.
+
+Корень (аппендикс v61, Секция 4 п.1): `getServiceKey('claude')` не знал claude.ai и падал в `return 'chatgpt'` (`core/widget.js:365`). Следствие: `safePctKey()` давал `ai_cm_safe_pct_chatgpt` → per-service порог Claude читался и писался по чужому ключу ChatGPT.
+
+Правка A′ из plan-отчёта сессии «Plan-getServiceKey-claude» — ровно 2 строки в `core/widget.js`, замена 1-в-1 (номера строк ниже не сдвигаются):
+
+- `:366` — `return 'chatgpt';` → `return host.includes('claude.ai') ? 'claude' : 'chatgpt';`
+- `:435` — `const config = THEME_CONFIGS[serviceKey];` → `const config = THEME_CONFIGS[serviceKey] || THEME_CONFIGS.chatgpt;`
+
+Гард `||` на `:435` обязателен: в `THEME_CONFIGS` нет ключа `'claude'` (`core/widget.js:339-359`), без него `config.dark` даст `TypeError` на claude.ai. Значения `THEME_CONFIGS` не менялись.
+
+Проверено (без регресса):
+- catch-whitelist: все 27 catch-строк `core/widget.js` вне диапазона 360–436 (`tests/fixtures/catch-whitelist.json`), сдвиг не создан. `tests/catch-hygiene.test.js` — 10 passed.
+- `tests/widget-inapp-theme-h24.test.js` — 29 passed без правок.
+- Полный `npx jest` — 165 suites / 2991 passed / 6 skipped / 0 failed (+1 сьют, +27 пинов).
+- `tsc --noEmit` = 0; `node --check core/widget.js` = 0; `npm run build:prod` = 40 .js; обе правки присутствуют в бандле `dist/content.js`.
+
+Новый сьют `tests/widget-servicekey-claude.test.js` (27 пинов): P1 формат ключа, P2 путь записи, P3 путь чтения, P4 инвариант изоляции claude ≠ chatgpt, P5 non-regression палитры, P6 гард отсутствующего ключа, P7 диагностика `gsa-metric-src`.
+
+### Секция 2. Живая приёмка — ✅ ПРОЙДЕНА (2026-10-11).
+
+**Сценарий владельца:** Chrome, claude.ai, чат `6228de8a-9fc1-4486-878d-1f1a6986247b`, расширение v2.0.13 (после правки, Reload).
+
+**Пункт 1 — диагностика `site` (главный критерий).** Лог консоли:
