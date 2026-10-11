@@ -161,9 +161,9 @@ describe('Step E.2c-A: swallowSoft — канал B', () => {
     expect(Api.getLogRing()).toEqual(['[ai-cm-warn][deepseek:emit] фрагмент вне белого списка {"type":"x"}']);
     gateOn();
     Api.aiCmDiagWarn('deepseek:emit', 'фрагмент вне белого списка', { type: 'x' });
-    expect(consoleWarn).toHaveBeenCalledTimes(1);
-    expect(consoleWarn.mock.calls[0][0]).toBe('[AI CM][warn][deepseek:emit] фрагмент вне белого списка');
-    expect(consoleWarn.mock.calls[0][1]).toEqual({ type: 'x' });
+    expect(consoleLog).toHaveBeenCalledTimes(1);
+    expect(consoleLog.mock.calls[0][0]).toBe('[AI CM][warn][deepseek:emit] фрагмент вне белого списка');
+    expect(consoleLog.mock.calls[0][1]).toEqual({ type: 'x' });
     expect(consoleError).toHaveBeenCalledTimes(0);
     expect(Api.getLogRing()).toHaveLength(2);
   });
@@ -171,8 +171,8 @@ describe('Step E.2c-A: swallowSoft — канал B', () => {
   test('D5b: aiCmDiagWarn без detail — один аргумент и короткая ring-строка', () => {
     gateOn();
     Api.aiCmDiagWarn('pagination', 'потолок достигнут');
-    expect(consoleWarn).toHaveBeenCalledTimes(1);
-    expect(consoleWarn.mock.calls[0]).toEqual(['[AI CM][warn][pagination] потолок достигнут']);
+    expect(consoleLog).toHaveBeenCalledTimes(1);
+    expect(consoleLog.mock.calls[0]).toEqual(['[AI CM][warn][pagination] потолок достигнут']);
     expect(Api.getLogRing()).toEqual(['[ai-cm-warn][pagination] потолок достигнут']);
   });
 

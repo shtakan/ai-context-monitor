@@ -296,7 +296,7 @@ function aiCmDiagWarn(tag, message, detail) {
   } catch (eWarnRing) { return undefined; }
   try {
     if (typeof aiCmDiagOn !== 'function' || !aiCmDiagOn()) return;
-    console.warn('[AI CM][warn][' + label + '] ' + text, detail);
+    console.log('[AI CM][warn][' + label + '] ' + text, detail);
   } catch (eWarnPrint) { return undefined; }
 }
 
