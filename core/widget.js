@@ -363,7 +363,7 @@ function getServiceKey() {
   if (host.includes('deepseek.com')) return 'deepseek';
   if (host.includes('gemini.google.com')) return 'gemini';
   if (host.includes('google.com')) return 'google_search';
-  return 'chatgpt';
+  return host.includes('claude.ai') ? 'claude' : 'chatgpt';
 }
 
 // H22/H24: in-app тема СЕРВИСА (Gemini «Настройки → Тема», Claude «Тема: тёмная») приоритетнее
@@ -432,7 +432,7 @@ const AI_CM_THEME_POLL_MS = 5000;
 function applyNativeStyles(container) {
   const serviceKey = getServiceKey();
   const isDark = isDarkMode();
-  const config = THEME_CONFIGS[serviceKey];
+  const config = THEME_CONFIGS[serviceKey] || THEME_CONFIGS.chatgpt;
   const styles = isDark ? config.dark : config.light;
   container.style.setProperty('--w-font', config.font);
   container.style.setProperty('--w-bg-track', styles.bgTrack);
