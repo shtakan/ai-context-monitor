@@ -102,7 +102,12 @@ jobs:
           # файл выходит из пакета отдельной ступенью конвейера (см. ниже), а не правкой
           # регулярки: фильтрующую строку ниже пинуют тесты M-6 (гигиена релиза) и M-10
           # («ровно одна такая строка», набор токенов), поэтому её текст не изменён.
-          git ls-files -z | grep -zvE '(\.github/|\.gitignore|\.gitattributes|\.clineignore|tools/|tests/|^core/|^utils/|^adapters/|^options/options\.js$|^print/print\.js$|\.kilo/|coverage/|\.mjs$|tsconfig\.json$|\.md$|package(-lock)?\.json$)' | grep -zvxF 'options/i18n-apply.js' | xargs -0 zip -q "$ZIP"
+          # PK1 (аудит 2026-08-26): добавлены ^step-.*\.diff$, ^tsc_err\.txt$ и ^docs\/videos/ —
+          # черновики .diff/.txt и demo-видео не должны попадать в релизный ZIP. '\/' вместо '/'
+          # в POSIX ERE (GNU grep) эквивалентен литеральному слэшу, но не образует здесь
+          # подстроку "docs/", которую запрещает пин M-6 (tests/docs-hygiene.test.js): иначе он
+          # не отличит узкое docs/videos/ от исключения всей docs/ (руководство обязано ехать).
+          git ls-files -z | grep -zvE '(\.github/|\.gitignore|\.gitattributes|\.clineignore|tools/|tests/|^core/|^utils/|^adapters/|^options/options\.js$|^print/print\.js$|\.kilo/|coverage/|\.mjs$|tsconfig\.json$|\.md$|package(-lock)?\.json$|^step-.*\.diff$|^tsc_err\.txt$|^docs\/videos/)' | grep -zvxF 'options/i18n-apply.js' | xargs -0 zip -q "$ZIP"
           # v2.0.14 (Phase 2 step 2): поверх legacy-дерева кладём собранные бандлы.
           # Пути передаются так же — относительно корня репозитория, поэтому
           # одноимённые записи (manifest.json, options/options.html, print/print.html,
@@ -171,6 +176,20 @@ jobs:
           fi
 
           echo "OK: JS integrity — все $TOTAL .js в пакете известны (allowlist: $(wc -l < "$ALLOW") путей)"
+
+          # PK1 (аудит 2026-08-26): контроль не-JS служебных артефактов — тот же принцип, что
+          # и у проверки состава в шаге Verify ZIP contents: ручаемся по фактическому архиву,
+          # а не по симуляции фильтра. Запрещены черновики .diff, любые .txt (LICENSE.txt
+          # допускается, если появится) и demo-видео из docs/videos/.
+          echo "--- (4) служебные артефакты: .diff / .txt / docs/videos/ ---"
+          ARTIFACTS=$(unzip -Z1 "$ZIP" | grep -E '\.diff$|\.txt$|^docs/videos/' | grep -vx 'LICENSE\.txt' || true)
+          if [ -n "$ARTIFACTS" ]; then
+            printf '%s\n' "$ARTIFACTS" | while IFS= read -r f; do
+              echo "::error::Служебный артефакт в пакете: $f. Черновики .diff/.txt и demo-видео docs/videos/ в релиз не включаются."
+            done
+            exit 1
+          fi
+          echo "OK: служебных артефактов (.diff/.txt/docs/videos/) в пакете нет"
 
       - name: Verify ZIP contents
         run: |
