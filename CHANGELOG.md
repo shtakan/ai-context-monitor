@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.0.14] - 2026-10-12
+
+### Добавлено
+- §п.8-A: property-based контрактные тесты на реальных payload — новый harness `tests/helpers/adapter-harness.js` + loader `tests/helpers/contract-fixture-loader.js`; 21 пин на 3 из 7 адаптеров (qwen/gemini-net/deepseek) + 2 C-zero-пина (claude/perplexity). Закрыт пункт 8 аудита 2026-09-28 (полный аудит — 10/10). Адаптерные инварианты переформулированы `I1–I5 → C1–C5` (неймспейс от сервисных `I-1…I-8`).
+- E.2c: каналы логирования A/B/C разведены — 132 `swallow → swallowSoft` (канал B: ring-буфер всегда, console только под гейтом `aiCmDiagOn`), 14 `console.warn → aiCmDiagWarn`, gate `no-bare-console-warn` зелёный. Новые хелперы `swallowSoft` (utils/debug.js:264) и `aiCmDiagWarn` (utils/debug.js:289).
+
+### Изменено
+- `getServiceKey()` знает claude.ai (core/widget.js:366): per-service ключ порога `ai_cm_safe_pct_claude`, изоляция от `ai_cm_safe_pct_chatgpt`; гард `THEME_CONFIGS[serviceKey] || THEME_CONFIGS.chatgpt` (core/widget.js:435) против TypeError на claude.ai.
+- E.2d: `aiCmDiagWarn` — `console.warn` → `console.log` (utils/debug.js:299) — диагностика под гейтом `aiCmDebug` больше не эскалируется Chrome в `chrome://extensions/errors`.
+- FIX-SETACCESSLEVEL-INVALID-VALUE: `'TRUSTED_CONTEXTS_ONLY'` → `'TRUSTED_CONTEXTS'` (core/background.js:71) — действительное значение Chrome API.
+
+### Исправлено
+- E.4 (Medium): индикатор на Claude не обновлялся после ответа ассистента до следующего GET страницы. Детерминированный settle-цикл по `assistant_message_uuid` из тела POST-запроса `/completion`: расписание `[2000, 5000, 10000, 15000, 30000]` мс, ≤5 попыток, сверка `lastMsg.id === assistant_message_uuid`; фолбэк без ключа — последний ход assistant.
+
+### Notes
+- jest: 170 suites / 3012 passed / 6 skipped / 0 failed.
+- Новые пины: `tests/adapters/contract-{qwen,gemini-net,deepseek,claude,perplexity}.test.js` (21).
+- Контрактные инварианты адаптеров: `C1–C5` (см. PROJECT_HANDOFF.md аппендикс v63 §Секция 3).
+- Живые приёмки: E.4 (claude.ai-1791725392333.log), getServiceKey (логи 20:12:27 / 20:13:09, site=claude), §п.8-A (5/21/0 локально; CI Lint #131 зелёный).
+
 ## [2.0.13] - 2026-09-29
 
 ### Исправлено
