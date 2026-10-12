@@ -2953,7 +2953,7 @@ markdown
 - `300a4641bd9fdb48f0e8f90896d548098749b0c2` — `fix(widget): getServiceKey knows perplexity.ai and chat.qwen.ai`, 2 файла, +154/−8.
 - `816d4c34ecf2e8a31b9784f662a68473c3b4b417` — `fix(qwen): CI-guard for P5 snapshot test (skip when tools/ absent)`, 1 файл, +14/−2.
 **Sync верхнего блока:** `510f429373fe182c26afb373d4a6e7f94c52d0d5` — `docs(handoff): sync top block HEAD to 816d4c3, ahead = 0 (session closure)`.
-**Коммит docs-синка:** плейсхолдер `<SHA v65>` (самореферентный SHA — второй коммит двухшаговым паттерном).
+**Коммит docs-синка:** `6af28954825a569997dd5f942e0e01aa4afb303e` (самореферентный SHA — второй коммит двухшаговым паттерном).
 **Статус:** ✅ 4 фикса закрыто + ✅ №5/№6/№7 закрыто (без коммитов) + ✅ CI Lint #138/#139 зелёные.
 
 ### Секция 1. Fix-claude-gzip-settle (`a41c6b6`).
