@@ -276,8 +276,20 @@ describe('O-35: QwenAdapter — detectModel', function () {
   // назвать модель, и «Qwen3.8-Max» в виджете приходил ТОЛЬКО из фолбэка-фабрикации
   // (adapters/qwen-adapter.js detectModel). Отсюда вывод: правка-алиас в resolveModelId
   // (вариант A) этот симптом НЕ лечит — чинить надо источник подстановки.
-  test('снимок живого DOM: 0 классов с "model" и 0 упоминаний слага/ярлыка', function () {
-    const raw = fs.readFileSync(path.join(ROOT, 'tools', 'qwen-dom-snapshot-26.09.26.json'), 'utf8');
+  //
+  // §п.8-A (Fix-qwen-p5-ci-guard): в CI каталог tools/ gitignored → снимка нет, и слепой
+  // readFileSync валил ВЕСЬ сьют ENOENT'ом вместо skip. Guard по образцу
+  // tests/adapters/contract-qwen.test.js:46-53: без артефакта пин объявляется через
+  // test.skip; локально файл есть (fs.existsSync → true) — и пин обязан ИСПОЛНИТЬСЯ.
+  const P5_SNAPSHOT = path.join(ROOT, 'tools', 'qwen-dom-snapshot-26.09.26.json');
+  const p5Skipped = !fs.existsSync(P5_SNAPSHOT);
+  if (p5Skipped) {
+    // eslint-disable-next-line no-console
+    console.warn('[§п.8-A] qwen P5: артефакт отсутствует в CI (реальный снимок доступен ' +
+      'локально) — tools/qwen-dom-snapshot-26.09.26.json');
+  }
+  (p5Skipped ? test.skip : test)('снимок живого DOM: 0 классов с "model" и 0 упоминаний слага/ярлыка', function () {
+    const raw = fs.readFileSync(P5_SNAPSHOT, 'utf8');
     expect(raw).toContain('qwen-dom-sniff');
     expect((raw.match(/class="[^"]*model[^"]*"/gi) || []).length).toBe(0);
     expect((raw.match(/qwen3\.8-max/gi) || []).length).toBe(0);
