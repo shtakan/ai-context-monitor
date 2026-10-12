@@ -5,6 +5,8 @@
  * v1.19.1 (M-11): Perplexity /search/<id> — живой URL диалога (см. 3.3b).
  */
 const P = require('../utils/export-emit-pipeline.js');
+const fs = require('fs');
+const path = require('path');
 
 // —— 3.1 Имя файла: префикс сервиса, срез convId, метка времени, суффикс причины,
 //        [LOW CONFIDENCE]_ только при baseComplete=0 ——
@@ -159,6 +161,81 @@ describe('M-11: extractConvIdFromUrl — Perplexity /search/<id>', () => {
     expect(P.resolveAutoExportConvId('perplexity', '', 'tid-1')).toBe('');
     expect(P.resolveAutoExportConvId('google_search', '', 'tid-1')).toBe('tid-1');
     expect(P.resolveAutoExportConvId('gemini', 'url-id', 'tid-1')).toBe('url-id');
+  });
+});
+
+// —— convId-ловушка: /app/<литерал пути> — НЕ идентификатор диалога ——
+// Диагностика (Plan-aistudio-servicekey, ШАГ 2): первая ветка extractConvIdFromUrl
+// `/\/app\/([A-Za-z0-9_-]+)/` на AI Studio `/app/prompts/abc123` возвращала ЛИТЕРАЛ
+// сегмента 'prompts' — convId выдумывался из имени раздела. Разделы prompts/apikey —
+// не диалоги: надёжного id нет → '' (контракт модуля — пустая строка, не null).
+describe('convId-ловушка: /app/<литерал пути> → "" (не литерал)', () => {
+  test('P1: /app/prompts/abc123 → "" — литерал сегмента НЕ возвращается', () => {
+    const got = P.extractConvIdFromUrl('/app/prompts/abc123');
+    expect(got).not.toBe('prompts');
+    expect(got).toBe('');
+    // современная форма без /app/ — тот же вердикт (обе формы URL покрыты)
+    expect(P.extractConvIdFromUrl('/prompts/abc123')).toBe('');
+  });
+
+  test('P2: /app/prompts/new → "" (обе формы)', () => {
+    expect(P.extractConvIdFromUrl('/app/prompts/new')).toBe('');
+    expect(P.extractConvIdFromUrl('/prompts/new')).toBe('');
+    expect(P.extractConvIdFromUrl('/app/prompts')).toBe('');
+  });
+
+  test('P3: /app/apikey → "" (литерал раздела, id в URL нет)', () => {
+    expect(P.extractConvIdFromUrl('/app/apikey')).toBe('');
+    expect(P.extractConvIdFromUrl('/apikey')).toBe('');
+  });
+
+  test('P4: /app/7c1f4a9b2e8d3a05 → id (положительный кейс жив)', () => {
+    expect(P.extractConvIdFromUrl('/app/7c1f4a9b2e8d3a05')).toBe('7c1f4a9b2e8d3a05');
+    expect(P.extractConvIdFromUrl('/u/1/app/7c1f4a9b2e8d3a05')).toBe('7c1f4a9b2e8d3a05');
+  });
+});
+
+// —— R1: convId-фикс не меняет поведение на 5 работающих сервисах ——
+describe('R1: 5 сервисов не сломаны convId-фиксом', () => {
+  test('chatgpt /c/<uuid>, gemini /app/<id>, perplexity /search|/thread, claude /chat/<uuid>, deepseek /a/chat/s/<id>', () => {
+    const UUID = '2f2a1b1c-9d3e-4a5b-8c7d-1e2f3a4b5c6d';
+    const cases = [
+      ['chatgpt', '/c/' + UUID, UUID],
+      ['chatgpt', '/c/abc123-def', 'abc123-def'],
+      ['gemini', '/app/0362260d', '0362260d'],
+      ['gemini', '/app/xyz789', 'xyz789'],
+      ['gemini', '/u/2/app/7c1f4a9b2e8d3a05', '7c1f4a9b2e8d3a05'],
+      ['perplexity', '/search/' + UUID, UUID],
+      ['perplexity', '/thread/some-slug-99', 'some-slug-99'],
+      ['claude', '/chat/' + UUID, UUID],
+      ['claude', '/project/p1/chat/uuid-claude', 'uuid-claude'],
+      ['deepseek', '/a/chat/s/dsid456', 'dsid456']
+    ];
+    for (const [site, pathname, want] of cases) {
+      expect([site, pathname, P.extractConvIdFromUrl(pathname)]).toEqual([site, pathname, want]);
+    }
+    // GSA: надёжного id в URL нет — по-прежнему не выдумываем
+    expect(P.extractConvIdFromUrl('/search?q=test')).toBe('');
+  });
+});
+
+// —— S-1: ВСЕ копии ветки /app/ в core/content.js синхронизированы с каноничной ——
+// Каноничная — utils/export-emit-pipeline.js : extractConvIdFromUrl. Локальные копии
+// (фолбэк getCurrentConvId, tape-restore v28, retry D8, JSON-дамп Ctrl+Shift+D) обязаны
+// нести тот же lookahead: иначе одна из них снова вернёт 'prompts'.
+describe('S-1: копии ветки /app/ в core/content.js синхронизированы', () => {
+  const CANON = '/\\/app\\/(?!prompts(?:\\/|$)|new(?:\\/|$)|apikey(?:\\/|$))([A-Za-z0-9_-]+)/';
+  const LEGACY = '/\\/app\\/([A-Za-z0-9_-]+)/';
+
+  test('каноничная ветка в utils/export-emit-pipeline.js несёт lookahead-отсев литералов', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'utils', 'export-emit-pipeline.js'), 'utf8');
+    expect(src).toContain(CANON);
+  });
+
+  test('ни одной голой копии в core/content.js; ровно 4 синхронизированные', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'core', 'content.js'), 'utf8');
+    expect(src).not.toContain(LEGACY);
+    expect(src.split(CANON).length - 1).toBe(4);
   });
 });
 
@@ -393,7 +470,7 @@ describe('tape-restore retry (D8)', () => {  // имитация state-маши�
     const acct = (p) => (p.match(/\/u\/(\d+)\//) || [])[1] || '0';
     const key = (p) => 'ai-cm-gemini-tape-g3-u' + acct(p) + '-0362260d';
     for (const p of pathnameSeq) {
-      const cid = (p.match(/\/app\/([A-Za-z0-9_-]+)/) || [])[1];
+      const cid = (p.match(/\/app\/(?!prompts(?:\/|$)|new(?:\/|$)|apikey(?:\/|$))([A-Za-z0-9_-]+)/) || [])[1];
       if (!cid) continue;
       if (!state.restoredTapeLoaded) {
         state.restoredTapeLoaded = true;

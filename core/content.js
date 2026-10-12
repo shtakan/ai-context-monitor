@@ -946,8 +946,8 @@ function getCurrentConvId() {
     // google.com (Search AI) — надёжного id в URL нет → '' (не выдумываем).
     var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
     if (P && typeof P.extractConvIdFromUrl === 'function') return P.extractConvIdFromUrl(location.pathname) || '';
-    // фолбэк (утилита не загружена): прежняя логика v38
-    var m = location.pathname.match(/\/app\/([A-Za-z0-9_-]+)/);
+    // фолбэк (утилита не загружена): логика v38 + convId-фикс (литералы /app/prompts|new|apikey)
+    var m = location.pathname.match(/\/app\/(?!prompts(?:\/|$)|new(?:\/|$)|apikey(?:\/|$))([A-Za-z0-9_-]+)/);
     if (m) return m[1];
     var parts = location.pathname.split('/');
     var chatIdx = parts.indexOf('chat');
@@ -1972,7 +1972,7 @@ function processAndSend() {
     if (svc0 === 'gemini' || svc0 === 'aistudio') {
       var convId = '';
       try {
-        var m = location.pathname.match(/\/app\/([A-Za-z0-9_-]+)/);
+        var m = location.pathname.match(/\/app\/(?!prompts(?:\/|$)|new(?:\/|$)|apikey(?:\/|$))([A-Za-z0-9_-]+)/);
         convId = m ? m[1] : '';
       } catch (e) { }
       if (convId) {
@@ -2106,7 +2106,7 @@ function processAndSend() {
     if (svcD8 === 'gemini' || svcD8 === 'aistudio') {
       var cidD8 = '';
       try {
-        var mD8 = location.pathname.match(/\/app\/([A-Za-z0-9_-]+)/);
+        var mD8 = location.pathname.match(/\/app\/(?!prompts(?:\/|$)|new(?:\/|$)|apikey(?:\/|$))([A-Za-z0-9_-]+)/);
         cidD8 = mD8 ? mD8[1] : '';
       } catch (eD8) { }
       if (cidD8 && restoredTapeLoaded &&
@@ -2908,7 +2908,7 @@ document.addEventListener('keydown', function (e) {
       });
     }
     var payload = {
-      convId: (location.pathname.match(/\/app\/([A-Za-z0-9_-]+)/) || [])[1] || '',
+      convId: (location.pathname.match(/\/app\/(?!prompts(?:\/|$)|new(?:\/|$)|apikey(?:\/|$))([A-Za-z0-9_-]+)/) || [])[1] || '',
       count: lastBaseIds.length,
       turns: turns
     };

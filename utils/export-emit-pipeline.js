@@ -102,8 +102,8 @@
   function extractConvIdFromUrl(pathname) {
     try {
       var p = String(pathname || '');
-      // Gemini (и AI Studio): /app/<id>
-      var mApp = p.match(/\/app\/([A-Za-z0-9_-]+)/);
+      // Gemini (и AI Studio): /app/<id>. Ловушка convId (aistudio): литералы пути prompts / new / apikey — не id; lookahead отсекает литерал, id-сегмент не тронут.
+      var mApp = p.match(/\/app\/(?!prompts(?:\/|$)|new(?:\/|$)|apikey(?:\/|$))([A-Za-z0-9_-]+)/);
       if (mApp) return mApp[1];
       // chat.deepseek.com: /a/chat/s/<id> — ДО общего /chat/ (иначе вернётся 's')
       var mDs = p.match(/\/a\/chat\/s\/([A-Za-z0-9_-]+)/);
