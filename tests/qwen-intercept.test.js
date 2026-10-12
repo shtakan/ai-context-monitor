@@ -389,3 +389,39 @@ describe('O-35 (G1/G2): диагностика только под гейтом,
     expect(offDetail.serverTokens).toBeUndefined();
   });
 });
+
+// РЕГРЕСС 2026-10-12: перехватчик подставлял 'qwen3.8-max' (MODEL_DEFAULT) как слаг модели,
+// когда поля model в теле запроса не было. Этот выдуманный слаг доезжал до content.js
+// (detectedModelSlug) и до виджета — «Qwen3.8-Max» вместо актуальной модели. Теперь при
+// отсутствии сигнала слаг ПУСТОЙ, и решение принимает нижележащий резолвер (siteDefaults.qwen).
+describe('O-35 (анти-фабрикация): слаг модели не выдумывается', function () {
+  test('в теле запроса нет model → modelSlug пустой, а не qwen3.8-max', async function () {
+    const st = installStand({});
+    const body = JSON.stringify({
+      stream: true, version: '2.1', incremental_output: true,
+      chatId: CHAT_ID, chat_id: CHAT_ID, parentId: '', parent_id: null,
+      chat_mode: 'normal',
+      messages: [{
+        id: null, fid: FID, parentId: null, childrenIds: [], role: 'user', content: PROMPT,
+        user_action: 'chat', files: [], timestamp: 1789638251,
+        chat_type: 't2t', sub_chat_type: 't2t', parent_id: null
+      }],
+      timestamp: 1789638252
+    });
+    const resp = window.fetch(URL_QWEN, { method: 'POST', headers: { 'content-type': 'application/json' }, body: body });
+    await resp;
+    await settle(8);
+
+    expect(st.events).toHaveLength(1);
+    expect(st.events[0].modelSlug).toBe('');
+    expect(st.events[0].modelSlug).not.toBe('qwen3.8-max');
+  });
+
+  test('SOURCE: фабрикация удалена — ни MODEL_DEFAULT, ни подстановки в modelSlug', function () {
+    expect(INTERCEPT_SRC).not.toContain('MODEL_DEFAULT');
+    expect(INTERCEPT_SRC).toContain("modelSlug: lastModel || ''");
+    expect(INTERCEPT_SRC).toContain("var model = s.model || '';");
+    // антипод: старая форма подстановки обязана отсутствовать
+    expect(INTERCEPT_SRC).not.toContain("s.model || MODEL_DEFAULT");
+  });
+});

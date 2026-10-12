@@ -227,14 +227,27 @@ describe('O-35: QwenAdapter — extractMessages (живая разметка 202
 });
 
 describe('O-35: QwenAdapter — detectModel', function () {
-  test('нет модели в разметке → канонический qwen3.8-max (не выдуманный ярлык)', function () {
+  test('нет модели в разметке → null (адаптер НЕ выдумывает слаг)', function () {
     document.body.innerHTML = '<textarea placeholder="Спросить Qwen"></textarea>';
-    expect(loadAdapter().detectModel()).toBe('qwen3.8-max');
+    expect(loadAdapter().detectModel()).toBeNull();
   });
 
-  test('id из разметки распознаётся', function () {
+  // АНТИ-ФАБРИКАЦИЯ (регресс 2026-10-12): пин выше раньше ждал 'qwen3.8-max' и был ЛОЖНЫМ —
+  // он проходил не потому, что адаптер распознал разметку, а потому что фолбэк возвращал ровно
+  // то же значение. Одиночный class="model-name" не матчится НИ ОДНИМ селектором detectModel
+  // (нужен вложенный '[class*="model"] [class*="name"]'), поэтому честный ответ — null.
+  test('одиночный class="model-name" селекторами не матчится → null', function () {
     document.body.innerHTML = '<div class="model-name">Qwen3.8-Max</div>';
-    expect(loadAdapter().detectModel()).toBe('qwen3.8-max');
+    expect(loadAdapter().detectModel()).toBeNull();
+  });
+
+  // S-ПИН (одна точка правки): в detectModel не осталось ни одного захардкоженного слага —
+  // фолбэк возвращает null, а имя модели приходит из таблицы utils/model-config.js.
+  test('SOURCE: detectModel не возвращает захардкоженный слаг', function () {
+    const m = /detectModel\(\)\s*\{([\s\S]*?)\n  \}/.exec(QWEN_SRC);
+    expect(m).not.toBeNull();
+    expect(m[1]).toContain('return null;');
+    expect(m[1]).not.toMatch(/return\s+'qwen[0-9.]*-[a-z]+'/i);
   });
 
   // DOM-половина резолвер-цепочки: ярлык актуальной веб-модели обязан отдавать ТОЧНЫЙ слаг
@@ -255,6 +268,21 @@ describe('O-35: QwenAdapter — detectModel', function () {
     expect(id).toBe('qwen3.7-plus');
     expect(ModelConfig.getModel(id).name).toBe('Qwen3.7-Plus');
     expect(ModelConfig.getEffectiveLimit(id)).toBe(1000000);
+  });
+
+  // ДОКАЗАТЕЛЬСТВО КОРНЯ (снимок живого DOM 26.09.26 — tools/qwen-dom-snapshot-26.09.26.json,
+  // 504 763 байта, 239 просканированных узлов): в реальной разметке НЕТ ни одного класса со
+  // словом 'model' и НЕТ ни слага, ни человеческого ярлыка. Значит DOM-путь физически не мог
+  // назвать модель, и «Qwen3.8-Max» в виджете приходил ТОЛЬКО из фолбэка-фабрикации
+  // (adapters/qwen-adapter.js detectModel). Отсюда вывод: правка-алиас в resolveModelId
+  // (вариант A) этот симптом НЕ лечит — чинить надо источник подстановки.
+  test('снимок живого DOM: 0 классов с "model" и 0 упоминаний слага/ярлыка', function () {
+    const raw = fs.readFileSync(path.join(ROOT, 'tools', 'qwen-dom-snapshot-26.09.26.json'), 'utf8');
+    expect(raw).toContain('qwen-dom-sniff');
+    expect((raw.match(/class="[^"]*model[^"]*"/gi) || []).length).toBe(0);
+    expect((raw.match(/qwen3\.8-max/gi) || []).length).toBe(0);
+    expect((raw.match(/qwen3\.7-plus/gi) || []).length).toBe(0);
+    expect((raw.match(/Qwen3\.7-Plus/gi) || []).length).toBe(0);
   });
 });
 

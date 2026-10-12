@@ -74,7 +74,7 @@
   // ---- константы протокола ----
   var REASONING_TAG = '[REASONING]';
   var ANSWER_TAG = '[ANSWER]';
-  var MODEL_DEFAULT = 'qwen3.8-max';           // id подтверждён в теле /chats/new (живой сниффер)
+  // Прежний дефолт модели удалён: 'qwen3.8-max' из тела /chats/new нельзя подставлять как id модели.
   var PHASE_THINKING = 'thinking_summary';
   var PHASE_ANSWER = 'answer';
 
@@ -426,7 +426,7 @@
     for (var i = 0; i < turns.length; i++) {
       if (turns[i].key === key) { existing = turns[i]; break; }
     }
-    var model = s.model || MODEL_DEFAULT;
+    var model = s.model || '';
     if (existing) {
       existing.answer = s.answer;
       existing.reasoning = s.reasoning;
@@ -916,7 +916,7 @@
       text: text,
       count: pieces.length,
       lastMessageText: pieces.length ? pieces[pieces.length - 1] : '',
-      modelSlug: lastModel || MODEL_DEFAULT,
+      modelSlug: lastModel || '',
       messageTexts: pieces,
       messageIds: ids,
       messages: messages,
@@ -1240,7 +1240,7 @@
     }
   };
 
-  diagLine('installed', { chat: String(currentChatId || '').slice(0, 8), model: MODEL_DEFAULT });
+  diagLine('installed', { chat: String(currentChatId || '').slice(0, 8) });
   console.log('[qwen-intercept] перехватчик Qwen установлен (только нативные запросы страницы, ' +
     'SSE через utils/stream-frames.js, usage кумулятивный → последний кадр, ' +
     'фазы thinking_summary(REPLACE)/answer(APPEND), фолбэк — DOM-адаптер, ' +

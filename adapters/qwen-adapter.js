@@ -503,9 +503,9 @@ class QwenAdapter extends BaseAdapter {
   }
 
   /**
-   * Модель из UI. HYPOTHESIS: живой id — qwen3.8-max (подтверждён в теле /chats/new).
-   * Если в разметке модели нет — возвращаем канонический id, а не выдуманный ярлык.
-   * @returns {string}
+   * Модель из UI. Живой id /chats/new — qwen3.8-max, но это НЕ дефолт: если в разметке
+   * модели нет — возвращаем null («не определена»), как base-adapter.js:88-90.
+   * @returns {string|null}
    */
   detectModel() {
     try {
@@ -519,7 +519,7 @@ class QwenAdapter extends BaseAdapter {
         if (m) return m[0].toLowerCase();
       }
     } catch (e) { swallowSoft(e, 'adapter:qwen:detectModel'); }
-    return 'qwen3.8-max';
+    return null;
   }
 }
 

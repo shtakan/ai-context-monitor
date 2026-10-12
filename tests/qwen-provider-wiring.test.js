@@ -8,7 +8,7 @@
  *      перехватчика в MAIN-мире в core/background.js);
  *   3) core/content.js: ветка Qwen + КРИТИЧНЫЙ запрет «Qwen НЕ в isGeminiSvc»
  *      (иначе стримовый usage Qwen перезаписывался бы countTokens BYOK);
- *   4) utils/model-config.js: qwen3.8-max (128K — HYPOTHESIS) + дефолт сайта qwen;
+ *   4) utils/model-config.js: qwen3.8-max + qwen3.7-plus (1M) + дефолт сайта qwen;
  *   5) utils/export-text-builders.js: [REASONING]/[ANSWER] из отдельного поля reasoning,
  *      байтовый инвариант для платформ без reasoning.
  *
@@ -225,16 +225,19 @@ describe('O-35: utils/model-config.js — модель Qwen', function () {
     expect(modelConfigRaw).toContain('qwen3.8-max');
   });
 
-  test('дефолт сайта qwen ведёт на ту же модель', function () {
-    expect(ModelConfig.getDefaultModel('qwen')).toBe('qwen3.8-max');
-    expect(ModelConfig.getContextLimit('qwen3.8-max')).toBe(1000000);
+  test('дефолт сайта qwen ведёт на АКТУАЛЬНУЮ модель (не на старый qwen3.8-max)', function () {
+    expect(ModelConfig.getDefaultModel('qwen')).toBe('qwen3.7-plus');
+    expect(ModelConfig.getContextLimit('qwen3.7-plus')).toBe(1000000);
+    // имя для виджета без «Max» — критерий приёмки задачи
+    expect(ModelConfig.getModel(ModelConfig.getDefaultModel('qwen')).name).toBe('Qwen3.7-Plus');
   });
 
-  // ТЕХДОЛГ: в таблице был РОВНО ОДИН ключ Qwen, поэтому слаг актуальной веб-модели
+  // ЗАКРЫТО (2026-10-12): в таблице был РОВНО ОДИН ключ Qwen, поэтому слаг актуальной веб-модели
   // (qwen3.7-plus — первая строка живого /api/models 2026-10-04) не резолвился: точного
-  // совпадения нет, префиксного быть не может → resolveCurrentModel падал в siteDefaults.qwen
-  // и виджет показывал чужое имя. Пин держит ОБА сигнала (сеть → slug, DOM → ярлык) и то,
-  // что дефолт сайта при этом не подменён.
+  // совпадения нет, префиксного быть не может → resolveCurrentModel падал в siteDefaults.qwen.
+  // Дополнительно сама siteDefaults.qwen указывала на старый qwen3.8-max, а адаптер выдумывал
+  // этот слаг, когда модели в DOM нет вовсе (снимок 26.09.26: 0 классов со словом 'model').
+  // Пин держит ОБА сигнала (сеть → slug, DOM → ярлык) и АКТУАЛЬНОСТЬ дефолта сайта.
   test('qwen3.7-plus: точный слаг-ключ (сеть/DOM) → своё имя, своё окно 1M', function () {
     const rec = ModelConfig.models['qwen3.7-plus'];
     expect(rec).toBeTruthy();
@@ -252,8 +255,8 @@ describe('O-35: utils/model-config.js — модель Qwen', function () {
     expect(ModelConfig.getModel(ModelConfig.resolveModelId('qwen3.7-plus')).name).toBe('Qwen3.7-Plus');
     expect(ModelConfig.getContextLimit('qwen3.7-plus')).toBe(1000000);
     expect(ModelConfig.getEffectiveLimit('qwen3.7-plus')).toBe(1000000);
-    // дефолт сайта не тронут: он нужен только когда ни сети, ни DOM нет
-    expect(ModelConfig.getDefaultModel('qwen')).toBe('qwen3.8-max');
+    // дефолт сайта — тоже актуальная модель: срабатывает, когда нет ни сети, ни DOM
+    expect(ModelConfig.getDefaultModel('qwen')).toBe('qwen3.7-plus');
   });
 
   test('прежние дефолты сайтов не тронуты', function () {
@@ -275,8 +278,8 @@ describe('O-35: КРИТЕРИЙ ЖИВОЙ ПРИЁМКИ Qwen (эталон т
   //      884+884 — эталон из файла экспорта чата 2026-09-18 (input 1709 / output 884 /
   //      total 2593), спека «Токены — usage.input_tokens / .output_tokens /
   //      .output_tokens_details.reasoning_tokens».
-  //   2) провайдер в стейте — 'qwen': попап/бейдж показывают модель Qwen3.8-Max
-  //      (ModelConfig.getDefaultModel('qwen') === 'qwen3.8-max').
+  //   2) провайдер в стейте — 'qwen': попап/бейдж показывают модель Qwen3.7-Plus
+  //      (ModelConfig.getDefaultModel('qwen') === 'qwen3.7-plus').
   //   3) тултип бейджа показывает output_tokens_details.reasoning_tokens ОТДЕЛЬНОЙ строкой
   //      (reasoning ≠ 0 при thinking), а не растворяет её в output.
   //   4) серверный usage НЕ перезаписывается countTokens BYOK: Qwen отсутствует в isGeminiSvc.
@@ -303,7 +306,7 @@ describe('O-35: КРИТЕРИЙ ЖИВОЙ ПРИЁМКИ Qwen (эталон т
     expect(intercept).toContain('inputTokens: (typeof usage.input === \'number\') ? usage.input : 0');
     // provider в detail/модели стейта
     expect(ModelConfig.models['qwen3.8-max'].provider).toBe('Qwen');
-    expect(ModelConfig.getDefaultModel('qwen')).toBe('qwen3.8-max');
+    expect(ModelConfig.getDefaultModel('qwen')).toBe('qwen3.7-plus');
   });
 
   test('tokenizer.js не тронут (BYOK-путь считает только Gemini-сервисы)', function () {

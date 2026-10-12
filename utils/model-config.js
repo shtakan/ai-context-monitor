@@ -479,7 +479,7 @@ const ModelConfig = {
     'deepseek': 'deepseek-v3',
     'claude': 'claude-sonnet-4-6',
     'perplexity': 'turbo',
-    'qwen': 'qwen3.8-max'
+    'qwen': 'qwen3.7-plus'
   },
   // v49: реальные семейные дефолты веб-UI Gemini (кнопка button.input-area-switch
   // не несёт номера версии). Пункт (c) приоритета DOM-сигнала — когда ни кэш меню,
