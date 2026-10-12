@@ -25,6 +25,27 @@
  *   P5 non-regression палитры: claude.ai даёт палитру THEME_CONFIGS.chatgpt байтово
  *   P6 гард отсутствующего ключа: host вне THEME_CONFIGS → палитра chatgpt, без TypeError
  *   P7 диагностика: 'gsa-metric-src' site питается getServiceKey() → claude.ai = 'claude'
+ *
+ * --- v63 (Fix-getServiceKey-expand): расширение на perplexity.ai и chat.qwen.ai ---
+ * Правка A′ (1 строка, замена 1-в-1 на ТОЙ ЖЕ строке core/widget.js:366, номера не сдвигаются):
+ *   хвост стал цепочкой
+ *   `return host.includes('perplexity.ai') ? 'perplexity' : host.includes('chat.qwen.ai') ? 'qwen'
+ *    : host.includes('claude.ai') ? 'claude' : 'chatgpt';`
+ * ⇒ safePctKey() даёт 'ai_cm_safe_pct_perplexity' / 'ai_cm_safe_pct_qwen' (прежде — чужой ключ ChatGPT).
+ * aistudio.google.com СОЗНАТЕЛЬНО НЕ добавлен (решение ШАГ 3, обоснование ШАГ 2/4):
+ *   его перехватывает ветка host.includes('google.com') → 'google_search'; ключа 'aistudio' нет в
+ *   THEME_CONFIGS, поэтому ключ 'aistudio' переключил бы палитру виджета aistudio через гард
+ *   core/widget.js:435 на chatgpt-зелёную (#10a37f) и сделал бы достижимыми 4 ветки `=== 'aistudio'`
+ *   в core/content.js (:1972/:2106/:2158/:2435 — сегодня НЕДОСТИЖИМЫ) ⇒ отдельная задача с живой
+ *   приёмкой. Сегодня 'google_search' на aistudio безвреден: core/content.js:2189 isGeminiSvc уже
+ *   включает 'google_search' (BYOK жив), адаптер GeminiAdapter — core/content.js:970.
+ * ШАГ 2 (qwen, read-only — сцепления НЕТ): qwen-intercept не публикует serverTokens (O-47,
+ *   core/qwen-intercept.js:932-941), поэтому netServerTokens на chat.qwen.ai = 0 и
+ *   aiCmMetricServerTokens (core/content.js:1917-1920) возвращает 0 и ДО, и ПОСЛЕ правки;
+ *   прочие гейты content.js сравнивают currentAdapter.siteName, а не getServiceKey().
+ *   core/content.js и core/qwen-intercept.js НЕ тронуты.
+ * Новые пины v63: P8 (perplexity/qwen/aistudio), R1–R3 (non-regression + изоляция), S-1/S-2 (структура).
+ * THEME_CONFIGS не тронут (по-прежнему ровно 4 ключа) — S-2/P6.
  */
 const CONTENT = require('./helpers/content-source.js').contentSource;
 const WIDGET = require('./helpers/content-source.js').moduleSource('core/widget.js');
@@ -224,9 +245,16 @@ describe('P1 (формат ключа): claude.ai → serviceKey claude и per-s
     expect(pctSandbox('www.google.com').api.safePctKey()).toBe('ai_cm_safe_pct_google_search');
   });
 
-  test('вне списка сервисов (perplexity.ai/qwen) фолбэк "chatgpt" сохранён (вне scope)', () => {
-    expect(pctSandbox('perplexity.ai').api.getServiceKey()).toBe('chatgpt');
-    expect(pctSandbox('chat.qwen.ai').api.getServiceKey()).toBe('chatgpt');
+  test('R1: четыре прежних сервиса — getServiceKey байтово прежний (non-regression веток)', () => {
+    expect(pctSandbox('chatgpt.com').api.getServiceKey()).toBe('chatgpt');
+    expect(pctSandbox('chat.deepseek.com').api.getServiceKey()).toBe('deepseek');
+    expect(pctSandbox('gemini.google.com').api.getServiceKey()).toBe('gemini');
+    expect(pctSandbox('www.google.com').api.getServiceKey()).toBe('google_search');
+  });
+
+  test('хост вне списка сервисов (example.com) → фолбэк "chatgpt" сохранён', () => {
+    expect(pctSandbox('example.com').api.getServiceKey()).toBe('chatgpt');
+    expect(pctSandbox('example.com').api.safePctKey()).toBe('ai_cm_safe_pct_chatgpt');
   });
 });
 
@@ -421,8 +449,124 @@ describe('P7 (диагностика): site в gsa-metric-src питается g
     expect(line.site).toBe('claude');
   });
 
-  test('host вне списка → site "chatgpt" (фолбэк сохранён)', () => {
-    expect(({ site: pctSandbox('perplexity.ai').api.getServiceKey() }).site).toBe('chatgpt');
+  test('host вне списка сервисов (example.com) → site "chatgpt" (фолбэк сохранён)', () => {
+    expect(({ site: pctSandbox('example.com').api.getServiceKey() }).site).toBe('chatgpt');
+  });
+
+  test('v63: perplexity.ai → site "perplexity", chat.qwen.ai → site "qwen" (прежде — "chatgpt")', () => {
+    expect(({ site: pctSandbox('perplexity.ai').api.getServiceKey() }).site).toBe('perplexity');
+    expect(({ site: pctSandbox('chat.qwen.ai').api.getServiceKey() }).site).toBe('qwen');
+    expect(({ site: pctSandbox('aistudio.google.com').api.getServiceKey() }).site).toBe('google_search');
+  });
+});
+
+// =====================================================================================
+// P8 — расширение v63 (источник: m00001 ШАГ 3-5; образец ветки claude.ai v62)
+// =====================================================================================
+describe('P8 (v63: perplexity.ai / chat.qwen.ai): per-service serviceKey и ключ порога', () => {
+  test('P-perplexity-1: perplexity.ai → "perplexity"; safePctKey "ai_cm_safe_pct_perplexity" ≠ chatgpt', () => {
+    const s = pctSandbox('perplexity.ai');
+    expect(s.api.getServiceKey()).toBe('perplexity');
+    expect(s.api.safePctKey()).toBe('ai_cm_safe_pct_perplexity');
+    expect(s.api.safePctKey()).not.toBe('ai_cm_safe_pct_chatgpt');
+  });
+
+  test('P-perplexity-1b: поддомен www.perplexity.ai → "perplexity"', () => {
+    expect(pctSandbox('www.perplexity.ai').api.getServiceKey()).toBe('perplexity');
+  });
+
+  test('P-qwen-1: chat.qwen.ai → "qwen"; safePctKey "ai_cm_safe_pct_qwen" ≠ chatgpt', () => {
+    const s = pctSandbox('chat.qwen.ai');
+    expect(s.api.getServiceKey()).toBe('qwen');
+    expect(s.api.safePctKey()).toBe('ai_cm_safe_pct_qwen');
+    expect(s.api.safePctKey()).not.toBe('ai_cm_safe_pct_chatgpt');
+  });
+
+  test('P-qwen-1b: ветка — только chat.qwen.ai; qwen.ai → фолбэк "chatgpt"', () => {
+    expect(pctSandbox('qwen.ai').api.getServiceKey()).toBe('chatgpt');
+  });
+
+  test('P-aistudio-1: aistudio.google.com → "google_search" (ветка aistudio СОЗНАТЕЛЬНО не добавлена)', () => {
+    const s = pctSandbox('aistudio.google.com');
+    expect(s.api.getServiceKey()).toBe('google_search');
+    expect(s.api.safePctKey()).toBe('ai_cm_safe_pct_google_search');
+    // контрфакт решения ШАГ 3: ключа 'aistudio' нет в THEME_CONFIGS ⇒ ветка 'aistudio' дала бы
+    // chatgpt-палитру через гард core/widget.js:435 и разбудила бы 4 ветки === 'aistudio' в content.js
+    const THEME = new Function('return ' + extractConstObject(WIDGET, 'THEME_CONFIGS'))();
+    expect(THEME.aistudio).toBeUndefined();
+    expect(WIDGET).not.toContain("host.includes('aistudio.google.com')");
+  });
+
+  test('P-aistudio-1b: палитра aistudio.google.com — google_search (#f1f3f4/#1a73e8), НЕ chatgpt-зелёная', () => {
+    const p = paletteFor('aistudio.google.com', false, { bodyBg: 'rgb(255, 255, 255)' });
+    expect(p.isDark).toBe(false);
+    expect(p.bgTrack).toBe('#f1f3f4');
+    expect(p.bgFill).toBe('#1a73e8');
+    expect(p.bgFill).not.toBe('#10a37f');
+  });
+});
+
+// =====================================================================================
+// R3 — изоляция v63 (источник: ШАГ 5 R3; инвариант пер-сервисного ключа)
+// =====================================================================================
+describe('R3 (изоляция v63): perplexity / qwen / chatgpt не делят порог', () => {
+  test('запись на perplexity.ai не создаёт и не меняет chatgpt- и qwen-ключи', () => {
+    const s = pctSandbox('perplexity.ai', { ai_cm_safe_pct_chatgpt: 70, ai_cm_safe_pct_qwen: 30 });
+    s.api.setSafePctFromInput('50');
+    expect(s.store.state.ai_cm_safe_pct_perplexity).toBe(50);
+    expect(s.store.state.ai_cm_safe_pct_chatgpt).toBe(70);
+    expect(s.store.state.ai_cm_safe_pct_qwen).toBe(30);
+    expect(Object.keys(s.store.writes[0])).toEqual(['ai_cm_safe_pct_perplexity']);
+  });
+
+  test('запись на chat.qwen.ai не создаёт и не меняет perplexity- и chatgpt-ключи', () => {
+    const s = pctSandbox('chat.qwen.ai', { ai_cm_safe_pct_chatgpt: 70, ai_cm_safe_pct_perplexity: 20 });
+    s.api.setSafePctFromInput('60');
+    expect(s.store.writes[0]).toEqual({ ai_cm_safe_pct_qwen: 60 });
+    expect(s.store.state.ai_cm_safe_pct_chatgpt).toBe(70);
+    expect(s.store.state.ai_cm_safe_pct_perplexity).toBe(20);
+  });
+
+  test('чтение qwen: sync-стаб по своему ключу применяется, чужой onChanged — нет', () => {
+    const s = pctSandbox('chat.qwen.ai', { ai_cm_safe_pct_qwen: 40 });
+    const key = s.api.safePctKey();
+    expect(key).toBe('ai_cm_safe_pct_qwen');
+    let v;
+    s.syncGet([key], (d) => { v = d[key]; }); // core/content.js:1158 — sync.get([safePctKey()])
+    s.api.setSafePct((typeof v === 'number' && v > 0) ? v : null);
+    expect(s.api.getSafePct()).toBe(40);
+    const sk = s.api.safePctKey();
+    const foreign = { ai_cm_safe_pct_chatgpt: { newValue: 99 }, ai_cm_safe_pct_perplexity: { newValue: 88 } };
+    if (foreign[sk]) s.api.setSafePct(foreign[sk].newValue);
+    expect(s.api.getSafePct()).toBe(40); // чужой порог не применён
+    const own = { ai_cm_safe_pct_qwen: { newValue: 55 } };
+    if (own[sk]) s.api.setSafePct(own[sk].newValue);
+    expect(s.api.getSafePct()).toBe(55); // свой канал жив
+  });
+});
+
+// =====================================================================================
+// S — структурные пины v63 (одна точка правки; THEME_CONFIGS не тронут)
+// =====================================================================================
+describe('S (структура v63): правка в одной точке, THEME_CONFIGS не тронут', () => {
+  test('S-1: правка ровно в одной строке getServiceKey — 7 host.includes, тело из 8 строк', () => {
+    const fnSrc = extractFn(WIDGET, 'getServiceKey');
+    ['perplexity.ai', 'chat.qwen.ai'].forEach((h) => expect(fnSrc).toContain("host.includes('" + h + "')"));
+    expect((fnSrc.match(/host\.includes\(/g) || []).length).toBe(7); // 4 прежних if + 3 в хвосте
+    expect(fnSrc.split('\n').length).toBe(8); // сигнатура, const host, 4 if, хвост-return, '}'
+    expect(fnSrc.match(/^\s{2}return /gm).length).toBe(1); // ровно один return-строка в хвосте (1-в-1)
+  });
+
+  test('S-2: THEME_CONFIGS — те же 4 ключа; нет perplexity/qwen/aistudio/claude', () => {
+    const THEME = new Function('return ' + extractConstObject(WIDGET, 'THEME_CONFIGS'))();
+    expect(Object.keys(THEME).sort()).toEqual(['chatgpt', 'deepseek', 'gemini', 'google_search']);
+    ['perplexity', 'qwen', 'aistudio', 'claude'].forEach((k) => expect(THEME[k]).toBeUndefined());
+    expect(WIDGET).not.toMatch(/THEME_CONFIGS\.(perplexity|qwen|aistudio|claude)\s*=/);
+  });
+
+  test('S-2b: палитры 4 прежних сервисов не переписаны (снимок ключевых значений)', () => {
+    expect(WIDGET).toContain("light: { bgTrack: '#f1f3f4', bgFill: '#1a73e8'"); // google_search
+    expect(WIDGET).toContain("light: { bgTrack: '#f0f0f0', bgFill: '#10a37f'"); // chatgpt
   });
 });
 
@@ -430,9 +574,11 @@ describe('P7 (диагностика): site в gsa-metric-src питается g
 // Структурные пины самой правки A′ (ровно 2 строки, 1-в-1)
 // =====================================================================================
 describe("Правка A′: ровно две строки core/widget.js, прочие ветки байтово не тронуты", () => {
-  test('getServiceKey: новый хвост и отсутствие прежнего голого фолбэка', () => {
+  test('getServiceKey: хвост v63 (perplexity → qwen → claude → chatgpt) и отсутствие голого фолбэка', () => {
     const fnSrc = extractFn(WIDGET, 'getServiceKey');
-    expect(fnSrc).toContain("return host.includes('claude.ai') ? 'claude' : 'chatgpt';");
+    expect(fnSrc).toContain("return host.includes('perplexity.ai') ? 'perplexity' : host.includes('chat.qwen.ai') ? 'qwen' : host.includes('claude.ai') ? 'claude' : 'chatgpt';");
+    expect(fnSrc).toContain("'claude' : 'chatgpt';"); // пин v62 внутри хвоста не ослаблен
+    expect(fnSrc).not.toContain("return host.includes('claude.ai') ? 'claude' : 'chatgpt';"); // прежний хвост v62 заменён
     expect(fnSrc).not.toMatch(/^\s*return 'chatgpt';\s*$/m);
   });
 

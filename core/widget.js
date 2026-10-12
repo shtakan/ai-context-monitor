@@ -363,7 +363,7 @@ function getServiceKey() {
   if (host.includes('deepseek.com')) return 'deepseek';
   if (host.includes('gemini.google.com')) return 'gemini';
   if (host.includes('google.com')) return 'google_search';
-  return host.includes('claude.ai') ? 'claude' : 'chatgpt';
+  return host.includes('perplexity.ai') ? 'perplexity' : host.includes('chat.qwen.ai') ? 'qwen' : host.includes('claude.ai') ? 'claude' : 'chatgpt';
 }
 
 // H22/H24: in-app тема СЕРВИСА (Gemini «Настройки → Тема», Claude «Тема: тёмная») приоритетнее
