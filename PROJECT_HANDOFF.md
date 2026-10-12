@@ -2802,7 +2802,7 @@ K0 + `module.exports` + СЕКЦИЯ 14 остаются в ядре ПОСТО�
 **Fix-коммит PK1:** `b4b0c981a5605bd824bb5b0a5266ccbd1a6e78cd` — `fix(release): exclude diff/txt drafts and videos from release ZIP (PK1)`, 6 файлов, +29/−2248.
 **Отозванный коммит:** `2a929df0a29892cb5231049512ea392f4cc1728c` — `release: v2.0.14` (тег `v2.0.14` снесён, Release удалён).
 **GitHub Release:** https://github.com/shtakan/ai-context-monitor/releases/tag/v2.0.15 (tag `v2.0.15`, asset `ai-context-monitor-v2.0.15.zip` 2.6 MB, sha256=8279bb547b53170377...).
-**Коммит docs-синка:** плейсхолдер `<SHA v64>` (самореферентный SHA — второй коммит двухшаговым паттерном).
+**Коммит docs-синка:** `cee79f6f9a8b53edc5f9d790725c7ef1420a9010` (самореферентный SHA — второй коммит двухшаговым паттерном).
 **Статус:** ✅ Релиз v2.0.15 опубликован; ✅ Регресс PK1 закрыт; ✅ Отозванный v2.0.14 утилизирован.
 
 ### Секция 1. Что произошло (хронология 2026-10-12).
