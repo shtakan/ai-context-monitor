@@ -1735,7 +1735,7 @@ Rewired-копия живёт **только в `dist/`** — корневые `
 **Результаты:**
 - **A.1:** BYOK-ключ и O3-латч переведены на SW-канал (`chrome.runtime.sendMessage`). `setAccessLevel` = `TRUSTED_CONTEXTS_ONLY`. Кросс-табовый латч работает через SW (повторный экспорт запрещён). ⚠️ FALSIFIED: приёмка 13.2 ложно заявила; фактически дубль автоэкспорта при F5 происходил до хотфикса F5 (Аппендикс v38).
 - **A.2:** Paste-capture канал защищён: `location.origin` вместо `window.origin`, проверка `ev.origin === location.origin` в приёмнике. Ручной/автоэкспорт без регрессов.
-- **Тесты: 170 suites / 3012 passed / 6 skipped / 0 failed**
+- **Тесты: 170 suites / 3036 passed / 6 skipped / 0 failed**
 - **Живая приёмка:** BYOK автоэкспорт (Gemini) — ОК; кросс-табовость — ОК; paste в Claude — ОК; экспорт 4 форматов — ОК.
 
 ## Аппендикс v36: Завершение Phase 3 Step 13.1 (Overlay extraction)
@@ -2942,3 +2942,134 @@ text
 - **Аудит:** 10/10 + PK1 закрыт.
 
 **Инварианты O-53 после аппендикса:** статусная строка `- **Тесты:` — ровно 1 (значение `170 suites / 3012 passed / 6 skipped / 0 failed`); упоминаний `Версия:` — ровно 1, значение 2.0.15 = `manifest.json` = `package.json`; BOM нет; одиночных CR нет. Тест `tests/docs-hygiene.test.js` — exit 0.
+
+markdown
+## Аппендикс v65 (2026-10-12): закрытие 4 фиксов + №5/№6/№7; residual v65
+
+**Дата:** 2026-10-12
+**Код-коммиты (4):**
+- `a41c6b69590469847155ece41199779b6c3a86eb` — `fix(claude): capture settle target from decompressed POST body (gzip/deflate)`, 2 файла, +208/−1.
+- `d36183ac4efd7977a6a9777fcdc71c561c0700d3` — `fix(qwen): remove fabricated model fallback; siteDefaults.qwen → qwen3.7-plus`, 6 файлов, +93/−26.
+- `300a4641bd9fdb48f0e8f90896d548098749b0c2` — `fix(widget): getServiceKey knows perplexity.ai and chat.qwen.ai`, 2 файла, +154/−8.
+- `816d4c34ecf2e8a31b9784f662a68473c3b4b417` — `fix(qwen): CI-guard for P5 snapshot test (skip when tools/ absent)`, 1 файл, +14/−2.
+**Sync верхнего блока:** `510f429373fe182c26afb373d4a6e7f94c52d0d5` — `docs(handoff): sync top block HEAD to 816d4c3, ahead = 0 (session closure)`.
+**Коммит docs-синка:** плейсхолдер `<SHA v65>` (самореферентный SHA — второй коммит двухшаговым паттерном).
+**Статус:** ✅ 4 фикса закрыто + ✅ №5/№6/№7 закрыто (без коммитов) + ✅ CI Lint #138/#139 зелёные.
+
+### Секция 1. Fix-claude-gzip-settle (`a41c6b6`).
+
+**Проблема (known gap аппендикса v61 §4 п.2):** `captureSettleTarget` вызывался только на строковой ветке тела POST `/completion`. При gzip/deflate-теле UUID не захватывался, settle-цикл уходил в фолбэк «последний ход assistant» (дефект закрывался, но UUID-сверка терялась).
+
+**Фикс:** 1 строка, вложена в существующую строку 232 `core/claude-intercept.js` — `traceDecompStruct(text); captureSettleTarget(url, text);` — на декодированной ветке (после `new Response(srcStream).text()`). Line-count-нейтральность сохранена: `tests/catch-hygiene.test.js` пинит абсолютные номера строк молчаливых `catch` через `catch-whitelist.json`; вставка 2 строк сдвинула бы 30 записей и уронила R1/PC1 — вызов вложен в существующую строку (прецедент E.4).
+
+**Пины:** P-gzip-1/2/3, P-deflate-1, R-1, S-1 (+7 прежних E.4). Фальсифицируемость проверена: с отключённым вызовом падают ровно P-gzip-1/P-deflate-1, P-gzip-2 (расписание) и P-gzip-3 (фолбэк) остаются зелёными. `tests/claude-badge-settle.test.js` 13/13.
+
+**Граница живой приёмки:** не выполнялась. Реальный путь Claude в текущей сборке — строковое тело POST, gzip-ветка не срабатывает вживую; юнит-пины + полный сьют + фальсифицируемость — достаточное покрытие (прецедент FIX-NETSYNC-FETCH-BINDING, v51).
+
+### Секция 2. Fix-qwen-fallback-name (`d36183a`).
+
+**Корень — опровергнут диагноз аппендикса v24 §4 п.3.** Аппендикс утверждал: «резолвер не распознаёт живой UI-слаг». Диагностика опровергла: в DOM-снимке `tools/qwen-dom-snapshot-26.09.26.json` **0 классов со словом `model`** и **0 упоминаний слага/ярлыка**. Значит `detectModel` не может совпасть, и виджет получает **выдуманное** `'qwen3.8-max'` из двух фолбэков:
+- `adapters/qwen-adapter.js:522` — `return 'qwen3.8-max'` (фолбэк detectModel)
+- `core/qwen-intercept.js:77/429/919` — `MODEL_DEFAULT = 'qwen3.8-max'`
+
+**Побочно вскрыт ложный пин:** `tests/qwen-adapter.test.js:235-238` («id из разметки распознаётся») проходил **не из-за разметки**, а потому что фолбэк возвращал ровно ожидаемую строку. Это класс дефекта: пин на «правильное поведение» совпал с «фабрикованным дефолтом».
+
+**Фикс (C — единственный, устраняющий причину):**
+- `adapters/qwen-adapter.js:522` — `return 'qwen3.8-max'` → `return null` (как `base-adapter.js:88-90`), JSDoc `@returns {string}` → `{string|null}`.
+- `core/qwen-intercept.js:77` — `MODEL_DEFAULT = 'qwen3.8-max'` **удалён** (замена комментарием; line-count-нейтрально).
+- `core/qwen-intercept.js:429` — `var model = s.model || MODEL_DEFAULT` → `s.model || ''`.
+- `core/qwen-intercept.js:919` — `modelSlug: lastModel || MODEL_DEFAULT` → `lastModel || ''`.
+- `core/qwen-intercept.js:1243` — выдуманный `diag-факт` в `model: MODEL_DEFAULT` убран.
+- `utils/model-config.js:482` — `siteDefaults.qwen` → `'qwen3.7-plus'`.
+
+**Расширение объёма задания:** правка `:919` **инертна** без `:429` (`:910 if (t.model) lastModel = t.model;` уже получал фабрикат из `:429`). Источник подстановки — на `:429`, обязателен. Объём принят.
+
+**Пины (+9, 27→41 в tests/widget-servicekey-claude.test.js):** P1 — нет разметки → `detectModel() === null`; P2 — одиночный `.model-name` не матчится → `null`; P3 — SOURCE: `detectModel` не возвращает захардкоженный слаг; P4 — S-1: правка в одной точке; P5 — снимок живого DOM: 0 классов с `model`, 0 слагов/ярлыков; P6 — нет `model` в теле запроса → `modelSlug === ''`; P7 — SOURCE: ни `MODEL_DEFAULT`, ни подстановки; P8 — `siteDefaults.qwen → 'qwen3.7-plus'` + имя виджета `'Qwen3.7-Plus'`; P9 — R1: DeepSeek/Gemini/Claude/Perplexity/GSA дефолты не тронуты.
+
+**Граница живой приёмки:** в текущем UI chat.qwen.ai **вообще нет разметки модели** — проверка «тултип = Qwen3.7-Plus» редуцируется к цепочке `siteDefaults` → закрыто unit-пином P8. Зафиксировано как «граница: слаг/ярлык недоступны в текущем UI».
+
+**Residual (не в scope):** устаревшая ссылка `core/content.js:1443` в комментарии `utils/model-config.js:435` (`resolveCurrentModel` сейчас на `:1454`) — не менялась ради минимальности. Кандидат в hygiene-фикс.
+
+### Секция 3. Fix-getServiceKey-expand (`300a464`).
+
+**Проблема (аппендикс v62 §4 п.1):** после закрытия `getServiceKey('claude')` сервисы `perplexity.ai`, `chat.qwen.ai`, `aistudio.google.com` продолжали падать в `'chatgpt'`/`'google_search'` — per-service ключ `safePct` схлопывался с чужого ключа.
+
+**Фикс (1 строка, замена 1-в-1 на строке 366 `core/widget.js`):** расширен хвостовой тернарник:
+return host.includes('perplexity.ai') ? 'perplexity'
+: host.includes('chat.qwen.ai') ? 'qwen'
+: host.includes('claude.ai') ? 'claude'
+: 'chatgpt';
+
+text
+
+**Диагностика перед правкой (по требованию промпта):**
+- В `adapters/`, `utils/`, `options/`, `print/` — **0 call sites** `getServiceKey`. Единственное getServiceKey-зависимое сравнение с `'qwen'` — `aiCmMetricServerTokens` (`core/content.js:1917-1920`).
+- **Вердикт по qwen: безопасно, не сцеплено.** `aiCmMetricServerTokens` питается `netServerTokens`, а qwen-intercept **сознательно не публикует `serverTokens`** (O-47, `core/qwen-intercept.js:932-941`). На `chat.qwen.ai` `netServerTokens === 0` и `aiCmMetricServerTokens` возвращает `0` **и до, и после** правки. Все прочие гейты `content.js` сравнивают `currentAdapter.siteName`, не `getServiceKey()`. Дельты только: свой ключ `ai_cm_safe_pct_qwen` + `site` в диагностике `gsa-metric-src`.
+
+**Aistudio — ветка НЕ добавлена, обоснованно отклонено:**
+- `aistudio.google.com` перехватывается веткой `host.includes('google.com')` → `'google_search'`.
+- Ключа `'aistudio'` в `THEME_CONFIGS` нет; новый ключ переключил бы палитру через гард `widget.js:435` на `chatgpt`-зелёный `#10a37f` — **видимый регресс**.
+- Сделал бы достижимыми 4 ветки `=== 'aistudio'` в `core/content.js` (`:1972`, `:2106`, `:2158`, `:2435`) — сегодня недостижимы; одна из них — `convId` по `/\/app\/([A-Za-z0-9_-]+)/` ловит `/app/prompts/...` → неверный ID.
+- Без живой приёмки — риск.
+- **Отдельная задача** (оставлено в residual v65 §6).
+
+**Пины (+14, 27→41 в tests/widget-servicekey-claude.test.js):** P-perplexity-1/-1b, P-qwen-1/-1b, P-aistudio-1/-1b (значение `google_search` + палитра `#f1f3f4/#1a73e8` ≠ `#10a37f`), R1 (4 прежних сервиса + фолбэк `example.com`), R3 (изоляция perplexity/qwen/chatgpt), S-1/S-2/S-2b.
+
+### Секция 4. Fix-qwen-p5-ci-guard (`816d4c3`).
+
+**Инцидент:** Lint **#137** на `300a464` — красный. Причина: пин P5 (добавлен в `d36183a`, §Секция 2) читает `tools/qwen-dom-snapshot-26.09.26.json` **напрямую** (`fs.readFileSync`, `tests/qwen-adapter.test.js:280`) без `fs.existsSync`. В CI `tools/` — gitignored → `ENOENT` → `Test suite failed to run` (не skip).
+
+**Прецедент класса:** второй случай в сессии. Первый — `Fix-p8-A-ci-qwen-loadorder` (Lint #129 → #130), аппендикс v63. Тогда `contract-qwen.test.js` вызывал `loadFixture` на верхнем уровне без guard'а. **Правило** (уже действующее, но не закодированное): любой пин, читающий `tools/`, обязан иметь `fs.existsSync`-guard с `test.skip`/`describe.skip` в CI.
+
+**Фикс:** вариант **B-lite** (`(p5Skipped ? test.skip : test)` по образцу `tests/adapters/contract-qwen.test.js:46-53`). Вариант A (`it.skip` + `return`) отвергнут: `return` на уровне тела `describe` оборвал бы регистрацию **всех** остальных пинов `detectModel`, которые в CI зелёные. Правка — 15/3 вокруг P5, пины P1-P4/P6-P9 не тронуты.
+
+**Проверки:** локально 28/28 (P5 исполняется); симуляция CI (move+restore) — 27 passed + 1 skipped / 0 failed; полный сьют 170/3036/6/0. Lint **#138** — зелёный.
+
+**Класс дефекта — residual v65 §7:** прецедент зафиксирован; в backlog — аудит остальных пинов на `tools/`-прямое чтение.
+
+### Секция 5. №7 + №6 закрыты без коммитов.
+
+**№7 — `docs/QUALITY_AUDIT.md`:**
+- `git check-ignore -v` → `.gitignore:85:/docs/QUALITY_AUDIT.md`.
+- Файл **gitignored** (H26), правка «Post-release audit 2026-10-12» (внесена локально в аппендиксе v64 §6) **не коммитится** — H26-дух соблюдён, force-add не делаем.
+- Аппендикс v64 §6 корректен.
+
+**№6 — `.gitattributes` / `core.autocrlf`:**
+- `.gitattributes` существует (`Test-Path` → True).
+- Содержит правила LF для всех текстовых расширений: `*.js`, `*.mjs`, `*.json`, `*.html`, `*.css`, `*.md`, `*.ts`, `*.d.ts` — `text eol=lf`; `*.png` — `binary`.
+- `core.autocrlf=true` (Windows), но `.gitattributes` приоритетнее.
+- CRLF-warning при коммите `b4b0c98` (`.github/workflows/release.yml`, `.gitignore`) — косметическое предупреждение, реального риска нет (YAML и gitignore читаются по блобам, а не по worktree). **Правок не требуется.**
+
+### Секция 6. №5 закрыт (п.7 аппендикса v33).
+
+**Аппендикс v33 §B п.7:** `package-lock.json` в трекинг + `npm ci` в CI.
+- **`package-lock.json` tracked** — установлено в v64.
+- **`npm ci` в 3 точках CI:** `lint.yml:33`, `lint.yml:36` (комментарий), `release.yml:29`. Ни один `npm install` не остался.
+- **П.7 закрыт без правок.**
+
+**Остаётся (backlog):** README EN/RU — **отдельная задача DSH** (перевод). Не в scope текущей сессии.
+
+### Секция 7. Residual v65.
+
+1. **§п.8-B (Low, задача владельца):** 4 DOM-снимка для chatgpt/claude/perplexity/google-search (по образцу `tools/qwen-dom-snapshot-26.09.26.json`). Без снимков DSH не может написать 4 контракт-теста. Аудит 10/10 уже достигнут; §п.8-B — «+4 покрытия из 7», не блокер.
+2. **Aistudio-ветка getServiceKey (Low, отдельная задача):** обоснованно отклонена в §Секция 3. Требует: добавить ключ `'aistudio'` в `THEME_CONFIGS` (палитра), проверить 4 недостижимые `=== 'aistudio'` ветки в `core/content.js`, разобраться с `/app/prompts/` convId-ловушкой. Живая приёмка нужна.
+3. **README EN/RU (Low, DSH-перевод):** отдельная задача backlog.
+4. **Хвост Roadmap (Medium):** `core/content.js` (~2952 строк), `core/export-emit-pipeline.js` (~2297 строк) — целевой «< 50 КБ», требует plan-режима + многошаговой декомпозиции. Отдельный чат.
+5. **Аудит пинов на `tools/`-прямое чтение (Low, §Секция 4):** проверить остальные тесты на предмет `fs.readFileSync(path.join(ROOT, 'tools', ...))` без guard'а. Класс регресса зафиксирован в §Секция 4.
+6. **Устаревшая ссылка `core/content.js:1443` в `utils/model-config.js:435` (Low):** `resolveCurrentModel` сейчас на `:1454`. Не критично.
+
+### Секция 8. Lint-история сессии.
+
+`#128` зелёный · `#129` красный (Fix-p8-A-ci-qwen-loadorder) · `#130` зелёный · `#131` зелёный · `#132` зелёный · `#133` зелёный · `#134` зелёный (релиз v2.0.15) · `#135` зелёный · `#136` зелёный · `#137` красный (Fix-qwen-p5-ci-guard) · `#138` зелёный · `#139` зелёный.
+
+**Вывод:** красные Lint в сессии — два (оба класса «пин читает tools/ без guard'а»). Оба исправлены в том же цикле (Fix-p8-A-ci-qwen-loadorder → #130; Fix-qwen-p5-ci-guard → #138).
+
+### Секция 9. Состояние.
+
+- **origin/main = `510f429`**, `ahead = 0`, Lint #139 зелёный.
+- **Сьют:** 170 suites / 3036 passed / 6 skipped / 0 failed.
+- **4 фикса за сессию продолжения:** `a41c6b6` (Claude gzip settle), `d36183a` (Qwen fallback name), `300a464` (getServiceKey expand), `816d4c3` (P5 CI-guard).
+- **№5/№6/№7 — закрыто** без коммитов.
+- **Верхний блок — синхронизирован** (`510f429`).
+
+**Инварианты O-53 после аппендикса:** статусная строка `- **Тесты:` — ровно 1 (значение `170 suites / 3036 passed / 6 skipped / 0 failed`); упоминаний `Версия:` — ровно 1, значение 2.0.15 = `manifest.json` = `package.json`; BOM нет; одиночных CR нет. Тест `tests/docs-hygiene.test.js` — exit 0.
