@@ -12,15 +12,21 @@
  * текста в снимке не получают текста и здесь.
  */
 
+const fs = require('fs');
+const path = require('path');
 const { loadAdapter } = require('../helpers/adapter-harness');
 const { loadFixture } = require('../helpers/contract-fixture-loader');
 
 const SNAPSHOT_PATH = 'tools/qwen-dom-snapshot-26.09.26.json';
 // При AI_CM_CONTRACT_SYNTH=1 артефакт НЕ читается: контракт требует реального снимка, а
 // синтетика сделала бы property-пины вакуумными (сьюта в этом режиме пропускается).
-const SNAPSHOT = String(process.env.AI_CM_CONTRACT_SYNTH || '') === '1'
-  ? { json: null, synthetic: true, existed: false, source: SNAPSHOT_PATH }
-  : loadFixture(SNAPSHOT_PATH, null, { parseJson: true });
+// В CI (tools/ в .gitignore) артефакта нет — loadFixture() вызывается ТОЛЬКО когда файл
+// реально присутствует, поэтому верхний уровень не бросает, а сьют уходит в skip.
+const snapSynthForced = String(process.env.AI_CM_CONTRACT_SYNTH || '') === '1';
+const artifactsAvailable = !snapSynthForced && fs.existsSync(path.join(__dirname, '..', '..', SNAPSHOT_PATH));
+const SNAPSHOT = artifactsAvailable
+  ? loadFixture(SNAPSHOT_PATH, null, { parseJson: true })
+  : { json: null, synthetic: snapSynthForced, existed: false, source: SNAPSHOT_PATH };
 const S = SNAPSHOT.json || null;
 
 const ROLE_USER = 'qwen-chat-message qwen-chat-message-user';
@@ -43,6 +49,7 @@ if (suiteSkipped) {
     ? 'AI_CM_CONTRACT_SYNTH=1 — принудительный синтез, контракт требует реального снимка'
     : 'артефакт отсутствует в CI (реальный payload доступен локально)') + ' — ' + SNAPSHOT_PATH);
 }
+const suite = suiteSkipped ? describe.skip : describe;
 const qtest = suiteSkipped ? test.skip : test;
 
 /** Классы всех 239 узлов-кандидатов снимка, как они есть. */
@@ -123,7 +130,7 @@ function qwen() {
   return loadAdapter('adapters/qwen-adapter.js', { document: document, location: loc, exportExpr: 'QwenAdapter' });
 }
 
-describe('§п.8-A: QwenAdapter — контракт на живом DOM-снимке 2026-09-26', function () {
+suite('§п.8-A: QwenAdapter — контракт на живом DOM-снимке 2026-09-26', function () {
   beforeEach(function () { document.body.innerHTML = ''; });
 
   qtest('Q1 (C5): число реплик ≤ meta.scannedNodes (239) и координата «узлов-кандидатов» честная', function () {
