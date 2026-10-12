@@ -229,7 +229,7 @@
                 if (prev) {
                   traceLog('body-decomp url=' + String(url).slice(0, 160) +
                     ' format=' + fmt + ' ok=1 outLen=' + text.length + ' preview=' + prev);
-                  traceDecompStruct(text); // v51: где Claude хранит pasted-контент
+                  traceDecompStruct(text); captureSettleTarget(url, text); // v51/v65: структура тела + цель settle (СЖАТАЯ ветка POST, v61 §4 п.2)
                   // v52-3: attachments с extracted_content → в кэш (источник для hist-attach)
                   try {
                     var dj = JSON.parse(text);

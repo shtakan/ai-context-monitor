@@ -16,6 +16,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 
 const ROOT = path.join(__dirname, '..');
 const INTERCEPT = path.join(ROOT, 'core', 'claude-intercept.js');
@@ -141,6 +142,60 @@ function liveBody() {
   return { prompt: 'вопрос', turn_message_uuids: { human_message_uuid: HUMAN_UUID, assistant_message_uuid: ANSWER_UUID } };
 }
 
+// ---- v65: СЖАТАЯ ветка тела POST /completion (gzip/deflate) ----------------
+// jsdom не реализует fetch-примитивы (DecompressionStream/Response/TextDecoder),
+// поэтому РЕАЛЬНЫЙ decompressProbe в тестах не доходит до декодирования. Даём
+// минимальные фейки поверх node:zlib — проверяется настоящий код интерцептора.
+function installDecompressionGlobals() {
+  function decode(raw, format) {
+    if (format === 'gzip') return zlib.gunzipSync(raw);
+    if (format === 'deflate') return zlib.inflateSync(raw);
+    if (format === 'deflate-raw') return zlib.inflateRawSync(raw);
+    throw new Error('unsupported format ' + format);
+  }
+  function FakeDecompressionStream(format) { this.format = format; }
+  function FakeResponse(input) {
+    if (input && input.__aicmPiped) { // new Response(stream).text()
+      this.__piped = input.__aicmPiped;
+      this.body = null;
+      return;
+    }
+    const bytes = Buffer.from(input); // new Response(u8).body.pipeThrough(ds)
+    this.body = {
+      pipeThrough: function (ds) { return { __aicmPiped: { bytes: bytes, format: ds.format } }; }
+    };
+  }
+  FakeResponse.prototype.text = function () {
+    if (this.__piped) {
+      return Promise.resolve(decode(this.__piped.bytes, this.__piped.format).toString('utf8'));
+    }
+    return Promise.resolve('');
+  };
+  global.DecompressionStream = FakeDecompressionStream;
+  global.Response = FakeResponse;
+  window.DecompressionStream = FakeDecompressionStream;
+  window.Response = FakeResponse;
+}
+
+/** сжатое тело POST: живой JSON → gzip|deflate (≥64 байт — порог decompressProbe) */
+function compressedBody(obj, format) {
+  const raw = Buffer.from(JSON.stringify(obj), 'utf8');
+  const packed = format === 'deflate' ? zlib.deflateSync(raw) : zlib.gzipSync(raw);
+  return new Uint8Array(packed);
+}
+
+function postCompletionCompressed(obj, format) {
+  return window.fetch(POST_URL, { method: 'POST', body: compressedBody(obj, format) });
+}
+
+/** прокрутить 0мс-переходы decompressProbe между пробуемыми форматами (gzip→deflate) */
+async function decompTick() {
+  for (let i = 0; i < 6; i++) {
+    jest.advanceTimersByTime(0);
+    await flush();
+  }
+}
+
 beforeAll(async () => {
   jest.useFakeTimers();
   window.history.pushState({}, '', CHAT_URL);
@@ -152,6 +207,7 @@ beforeAll(async () => {
   window.addEventListener('ai-cm-full-history', emitSpy);
   snapshotFor[CONV_ID] = snap(4, 'assistant', SEED_TAIL_UUID);
   snapshotFor[OTHER_CONV_ID] = snap(4, 'assistant', OTHER_TAIL_UUID, OTHER_CONV_ID);
+  installDecompressionGlobals(); // v65: сжатая ветка тела POST достижима в jsdom
   require(INTERCEPT);
   jest.advanceTimersByTime(1600); // bootstrap-снимок (1500мс)
   await flush();
@@ -374,5 +430,156 @@ describe('v61: settle-цикл эмита после POST /completion', () => {
     // source-пин обёртки guards сброса (сами guards не изменены)
     expect(INTERCEPT_SRC).toContain("settleReset('смена чата'); resetForNewConversation();");
     expect(INTERCEPT_SRC).toContain('var newId = getConvId();');
+  });
+});
+
+// ===========================================================================
+// v65 — known gap аппендикса v61 §4 п.2: цель settle захватывалась ТОЛЬКО на
+// строковой ветке тела POST /completion. При gzip/deflate-теле UUID не
+// захватывался и settle-цикл уходил в фолбэк «последний ход assistant»
+// (дефект закрывался, UUID-сверка терялась). Фикс: тот же захват на сжатой
+// ветке (decompressProbe). Расписание/фолбэк/точка сверки НЕ тронуты.
+// ===========================================================================
+describe('v65: settle-цель из СЖАТОГО тела POST /completion (gzip/deflate)', () => {
+  beforeEach(async () => {
+    window.history.pushState({}, '', CHAT_URL); // предыдущий тест мог увести в другой тред
+    jest.advanceTimersByTime(2000); // bootstrap чата
+    await flush();
+    snapshotFor[CONV_ID] = snap(4, 'assistant', SEED_TAIL_UUID);
+  });
+
+  test('P-gzip-1 (дефект): gzip-тело POST → settle по assistant_message_uuid из сжатого JSON', async () => {
+    const base = historyCount(CONV_ID);
+    snapshotFor[CONV_ID] = snap(126, 'human', HUMAN_UUID + '-q');
+
+    await postCompletionCompressed(liveBody(), 'gzip');
+    await decompTick(); // сжатая ветка декодирована ДО +2с
+    jest.advanceTimersByTime(2000); // +2с — первая попытка, ответа ещё нет
+    await flush();
+    expect(historyCount(CONV_ID)).toBe(base + 1);
+    expect(lastDetail().count).toBe(126);
+
+    // ход assistant, но НЕ uuid из сжатого тела → settle не наступает (uuid захвачен)
+    snapshotFor[CONV_ID] = snap(127, 'assistant', 'msg-00000000-0000-4000-a000-0000000000ef');
+    jest.advanceTimersByTime(3000); // +5с
+    await flush();
+    expect(historyCount(CONV_ID)).toBe(base + 2);
+    expect(lastDetail().count).toBe(127);
+
+    snapshotFor[CONV_ID] = snap(128, 'assistant', ANSWER_UUID); // тот самый uuid ответа
+    jest.advanceTimersByTime(5000); // +10с
+    await flush();
+    const d = lastDetail();
+    expect(d.count).toBe(128);
+    expect(d.messageIds[d.messageIds.length - 1]).toBe(ANSWER_UUID);
+    expect(d.messageIds[d.messageIds.length - 2]).toBe(HUMAN_UUID);
+
+    jest.advanceTimersByTime(60000); // settle → слоты +15/+30 не срабатывают
+    await flush();
+    expect(historyCount(CONV_ID)).toBe(base + 3);
+  });
+
+  test('P-gzip-2 (дефект): сжатое тело — то же расписание +2/+5/+10/+15/+30, ровно ≤5 попыток', async () => {
+    const base = historyCount(CONV_ID);
+    snapshotFor[CONV_ID] = snap(126, 'human', HUMAN_UUID + '-q'); // ответ так и не появится
+
+    await postCompletionCompressed(liveBody(), 'gzip');
+    await decompTick();
+    const steps = [2000, 3000, 5000, 5000, 15000]; // абс. слоты +2/+5/+10/+15/+30
+    for (let i = 0; i < steps.length; i++) {
+      jest.advanceTimersByTime(steps[i]);
+      await flush();
+      expect(historyCount(CONV_ID)).toBe(base + i + 1);
+    }
+    expect(lastDetail().count).toBe(126);
+
+    jest.advanceTimersByTime(300000); // дальше — тишина: цикл не зацикливается
+    await flush();
+    expect(historyCount(CONV_ID)).toBe(base + 5);
+  });
+
+  test('P-gzip-3 (дефект): сжатое тело без turn_message_uuids → фолбэк «последний ход assistant» сохранён', async () => {
+    const base = historyCount(CONV_ID);
+    snapshotFor[CONV_ID] = snap(126, 'human', HUMAN_UUID + '-q');
+
+    await postCompletionCompressed({ prompt: 'сжатое тело без turn_message_uuids' }, 'gzip');
+    await decompTick();
+    jest.advanceTimersByTime(2000); // +2с — ход user, не settle
+    await flush();
+    expect(historyCount(CONV_ID)).toBe(base + 1);
+    expect(lastDetail().count).toBe(126);
+
+    snapshotFor[CONV_ID] = snap(128, 'assistant', 'msg-00000000-0000-4000-a000-0000000000dd');
+    jest.advanceTimersByTime(3000); // +5с — ход assistant → settle по роли
+    await flush();
+    expect(historyCount(CONV_ID)).toBe(base + 2);
+    expect(lastDetail().count).toBe(128);
+    expect(lastDetail().messages[lastDetail().messages.length - 1].role).toBe('assistant');
+
+    jest.advanceTimersByTime(60000);
+    await flush();
+    expect(historyCount(CONV_ID)).toBe(base + 2);
+  });
+
+  test('P-deflate-1 (дефект): deflate-тело POST → симметричный захват цели settle', async () => {
+    const base = historyCount(CONV_ID);
+    snapshotFor[CONV_ID] = snap(126, 'human', HUMAN_UUID + '-q');
+
+    await postCompletionCompressed(liveBody(), 'deflate');
+    await decompTick(); // gzip-проба падает → deflate (0мс-переходы)
+    jest.advanceTimersByTime(2000); // +2с
+    await flush();
+    expect(historyCount(CONV_ID)).toBe(base + 1);
+    expect(lastDetail().count).toBe(126);
+
+    snapshotFor[CONV_ID] = snap(127, 'assistant', 'msg-00000000-0000-4000-a000-0000000000f1');
+    jest.advanceTimersByTime(3000); // +5с — чужой assistant-uuid, не settle
+    await flush();
+    expect(historyCount(CONV_ID)).toBe(base + 2);
+
+    snapshotFor[CONV_ID] = snap(128, 'assistant', ANSWER_UUID);
+    jest.advanceTimersByTime(5000); // +10с — uuid из deflate-тела → settle
+    await flush();
+    expect(lastDetail().count).toBe(128);
+    expect(lastDetail().messageIds[lastDetail().messageIds.length - 1]).toBe(ANSWER_UUID);
+
+    jest.advanceTimersByTime(60000);
+    await flush();
+    expect(historyCount(CONV_ID)).toBe(base + 3);
+  });
+
+  test('R-1 (регрессия): строковая ветка — байтово прежняя, второго вызова в ней нет', () => {
+    const stringBranch = "      } else if (scanText != null) {\n"
+      + '        jsonOk = processPostBody(url, scanText);\n'
+      + "        if (kind === 'string' && jsonOk === 1) { traceBodyStruct(url, scanText); captureSettleTarget(url, scanText); } // v41/v61: структура чат-POST + цель settle\n"
+      + '      }';
+    expect(INTERCEPT_SRC).toContain(stringBranch); // E.4-пины: строка не изменена
+    // в самом capturePostBody второй захват не появился (сжатый — в decompressProbe)
+    const captureBody = INTERCEPT_SRC.slice(
+      INTERCEPT_SRC.indexOf('function capturePostBody('),
+      INTERCEPT_SRC.indexOf('function asUint8View(')
+    );
+    expect((captureBody.match(/captureSettleTarget\(/g) || []).length).toBe(1);
+    expect(captureBody).not.toContain('captureSettleTarget(url, text);');
+  });
+
+  test('S-1 (source-пин): captureSettleTarget вызывается из сжатой И строковой ветвей', () => {
+    const all = INTERCEPT_SRC.match(/captureSettleTarget/g) || [];
+    expect(all.length).toBe(3); // объявление + 2 вызова (строковый + сжатый)
+    expect(INTERCEPT_SRC).toContain('captureSettleTarget(url, scanText);'); // строковая
+    expect(INTERCEPT_SRC).toContain('captureSettleTarget(url, text);'); // сжатая
+    const probe = INTERCEPT_SRC.slice(
+      INTERCEPT_SRC.indexOf('function decompressProbe('),
+      INTERCEPT_SRC.indexOf('function processPostBody(')
+    );
+    expect(probe).toContain('traceDecompStruct(text);');
+    expect(probe).toContain('captureSettleTarget(url, text);'); // внутри сжатой ветки
+    // вызов — живая строка кода, а не закомментированный текст
+    const liveLine = probe.split('\n').filter(function (l) { return l.indexOf('captureSettleTarget(url, text);') !== -1; });
+    expect(liveLine.length).toBe(1);
+    expect(liveLine[0].trim().indexOf('//')).not.toBe(0);
+    // неизменность расписания, фолбэка и точки сверки (:1314)
+    expect(INTERCEPT_SRC).toContain('var SETTLE_DELAYS = [2000, 5000, 10000, 15000, 30000];');
+    expect(INTERCEPT_SRC).toContain('var settled = isAssistant && (!settle_target_uuid || lastId === settle_target_uuid);');
   });
 });
