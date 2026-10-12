@@ -2794,3 +2794,151 @@ K0 + `module.exports` + СЕКЦИЯ 14 остаются в ядре ПОСТО�
 - Верхний блок — sync после push (per §«Гигиена верхнего блока handoff»).
 
 **Инварианты O-53 после аппендикса:** статусная строка `- **Тесты:` — ровно 1 (значение `170 suites / 3012 passed / 6 skipped / 0 failed`); упоминаний `Версия:` — ровно 1, значение 2.0.13 = `manifest.json` = `package.json`; BOM нет; одиночных CR нет. Тест `tests/docs-hygiene.test.js` — exit 0.
+
+## Аппендикс v64 (2026-10-12): релиз v2.0.15 опубликован; регресс PK1 закрыт; отозванный v2.0.14
+
+**Дата:** 2026-10-12
+**Релизный коммит:** `c95cc57a2a8a0c5868359b7d51d3341726ab5aa2` — `release: v2.0.15`, 13 файлов, +45/−32.
+**Fix-коммит PK1:** `b4b0c981a5605bd824bb5b0a5266ccbd1a6e78cd` — `fix(release): exclude diff/txt drafts and videos from release ZIP (PK1)`, 6 файлов, +29/−2248.
+**Отозванный коммит:** `2a929df0a29892cb5231049512ea392f4cc1728c` — `release: v2.0.14` (тег `v2.0.14` снесён, Release удалён).
+**GitHub Release:** https://github.com/shtakan/ai-context-monitor/releases/tag/v2.0.15 (tag `v2.0.15`, asset `ai-context-monitor-v2.0.15.zip` 2.6 MB, sha256=8279bb547b53170377...).
+**Коммит docs-синка:** плейсхолдер `<SHA v64>` (самореферентный SHA — второй коммит двухшаговым паттерном).
+**Статус:** ✅ Релиз v2.0.15 опубликован; ✅ Регресс PK1 закрыт; ✅ Отозванный v2.0.14 утилизирован.
+
+### Секция 1. Что произошло (хронология 2026-10-12).
+
+**14:20** — релизный коммит `2a929df` «release: v2.0.14», тег `v2.0.14`, GitHub Release опубликован.
+**14:35** — контрольная инспекция asset: размер **32.9 MB** (аномалия против нормы v2.0.12 = 611 KB); в корне ZIP обнаружены `step-13.1.diff` (77 824 B), `step-A1.diff` (61 052 B), `step-A2.diff` (10 060 B), `tsc_err.txt` (1 018 B), `docs/videos/ai-context-monitor-demo-v2.0.13.mp4` (31 MB).
+**14:40** — диагноз: регресс PK1 (аудит 2026-08-26, P1): фильтр `release.yml:105` `grep -zvE '(...)'` не покрывал `.diff`, `.txt`, `docs/videos/`. Все 5 файлов **tracked** в git.
+**14:50** — решение: не переставлять тег (прецедент v2.0.11), а **снести** его и выпустить v2.0.15. Дополнительно исправить фильтр.
+**15:00** — fix-коммит `b4b0c98`: фильтр `release.yml` расширен `^step-.*\.diff$`, `^tsc_err\.txt$`, `^docs\/videos/` (экранированный слэш — согласовано для совместимости с пином M-6 `docs-hygiene.test.js:197`), `Verify ZIP integrity` дополнен проверкой (4) `.diff$`/`.txt$`/`docs/videos/`, `.gitignore` дополнен 3 правилами, `git rm --cached` 4 файлов (сохранены на диске).
+**15:15** — tag `v2.0.14` снесён локально и в origin; Release v2.0.14 удалён.
+**15:30** — релизный коммит `c95cc57` «release: v2.0.15», tag `v2.0.15`, GitHub Release v2.0.15 опубликован.
+**15:35** — asset `ai-context-monitor-v2.0.15.zip` = **2.6 MB** (4 428 905 байт исходных данных). Инспекция 7-Zip: **9 папок + LICENSE + manifest.json**, служебных файлов нет.
+
+### Секция 2. Регресс PK1 — root cause и фикс.
+
+**Root cause.** Строка 105 `release.yml`:
+git ls-files -z | grep -zvE '(.github/|.gitignore|…|.md
+∣
+p
+a
+c
+k
+a
+g
+e
+(
+−
+l
+o
+c
+k
+)
+?
+j
+˙
+s
+o
+n
+∣package(−lock)? 
+j
+˙
+​
+ son)'
+
+text
+Фильтр исключал `.md`, `package*.json`, служебные папки — но **не** `.diff`, `.txt`, `docs/videos/`. Соответствующие файлы были в трекинге (найдены `git ls-files`), попадали в артефакт.
+
+**Почему существующий `Verify ZIP integrity` не поймал.** Проверка в шаге (строки 184-189 в v2.0.14) валила ZIP только при наличии `tests/|node_modules/|.git/|package-lock` — а `step-*.diff` и `.txt` не входят ни в одну из этих категорий.
+
+**Фикс (коммит `b4b0c98`):**
+- `release.yml:110` — расширение фильтра тремя токенами `|^step-.*\.diff$|^tsc_err\.txt$|^docs\/videos/`.
+- `Verify ZIP integrity` — новая проверка (4): любой `.diff$`, `.txt$` (кроме `LICENSE.txt`), `^docs/videos/` → `exit 1`.
+- `.gitignore:149-151` — `step-*.diff`, `tsc_err.txt`, `docs/videos/*.mp4`.
+- `git rm --cached step-13.1.diff step-A1.diff step-A2.diff tsc_err.txt` — убраны из трекинга (на диске сохранены).
+
+**Отклонение от ТЗ (согласовано координатором).** Литеральный `^docs/videos/` содержит подстроку `docs/`, которую запрещает пин `tests/docs-hygiene.test.js:197` (`expect(line).not.toContain('docs/')`, регресс аппендикса v23). Применён эквивалент `^docs\/videos/` — GNU grep 3.0 трактует `\/` как `/` (семантика идентична), но подстрока `docs/` не образуется. M-6 остаётся зелёным. Тест не правился.
+
+### Секция 3. Отозванный релиз v2.0.14 — прецедент.
+
+**Факты:**
+- Коммит `2a929df`, tag `v2.0.14` (изначально аннотированный в origin, `refs/tags/v2.0.14`), GitHub Release v2.0.14 — все три сущности удалены.
+- Время жизни публичного Release: ~15 минут.
+- Asset `ai-context-monitor-v2.0.14.zip` (32.9 MB) был доступен скачиванию.
+
+**Правило (зафиксировано):** при обнаружении дефекта **уже опубликованного** релиза снос тега + перевыпуск с новым номером **предпочтительнее** перестановки тега (`git tag -f` + `push -f`). Обоснование: переставленный тег оставляет divergence для всех, кто успел получить исходный коммит; снос — убирает его из публичной истории, дальнейший номер становится чистой точкой.
+
+**Прецедент:** это второй случай сноса публичного тега — первый был v2.0.11 (2026-09-24, переставлен с `0892033` на `0aaa388`). На v2.0.11 выбрали перестановку; на v2.0.14 — снос. Правило уточняет: снос — дефолт для дефекта, перестановка — только для docs-only правок (тег на верный коммит, содержимое не менялось).
+
+### Секция 4. Расхождение handoff vs факт: `package-lock.json` и `RELEASE_CHECKLIST.md` tracked.
+
+**Аппендикс v16, строка ~613:** «package-lock.json НЕ отслеживается git (`git ls-files` пуст; строка в `.gitignore`)». **Факт на 2026-10-12:** `package-lock.json` — tracked (`git status` показывает ` M`, `git check-ignore` exit 1). Ошибка в handoff.
+
+**Аппендикс v54, Секция 1:** «RELEASE_CHECKLIST.md (локальный, H26)». **Факт на 2026-10-12:** `RELEASE_CHECKLIST.md` — tracked (`M RELEASE_CHECKLIST.md` в status). Ошибка в handoff.
+
+**Следствие для релизного процесса (принято решение, введено коммитами `2a929df` и `c95cc57`):**
+- `package-lock.json` **включается** в релизный коммит (часть артефакта; синхронизируется через `npm install --package-lock-only`).
+- `RELEASE_CHECKLIST.md` **исключается** из релизного коммита (процессный документ, а не артефакт) — остаётся как `M` в worktree, коммитится отдельно при гигиенических заходах.
+- Оба правила подтверждены в релизных коммитах `2a929df` (13 файлов) и `c95cc57` (13 файлов).
+
+**Что нужно поправить в handoff:** тексты v16 и v54 не редактируются (правило «аппендиксы выше не редактируются»); переопределение — настоящим аппендиксом v64 (прецеденты v50/v51/v53/v61/v62/v63).
+
+### Секция 5. Состояние аудита 2026-09-28.
+
+**10/10 ✅** (закрыт в v63; в v64 изменений нет).
+
+Дополнительно закрыт P1 из аудита 2026-08-26 (PK1) — регресс релизного ZIP.
+
+### Секция 6. Обновление `docs/QUALITY_AUDIT.md` (Post-release audit 2026-10-12).
+
+Перед релизом v2.0.14 проверка §4.4 RELEASE_CHECKLIST («нет открытых P0/P1») показала 7 P1 из аудита 2026-08-26. Произведён пересмотр:
+- **A1** (`activeTab`) — закрыт (удалено из `manifest.json`).
+- **A2** (`www.google.com/*`) — закрыт (сужено до `/search*`).
+- **R1** (fetch-преамбула вне try/catch) — закрыт (`page-intercept.js:505` — `// v51 (R1): преамбула в try/catch`).
+- **S1** (`console.log('Данные о контексте:', message.data)`) — закрыт (`background.js:13-14`, DEBUG-гейт).
+- **PK1** (ZIP с личными образцами) — закрыт коммитом `b4b0c98` (см. Секцию 2).
+- **T2** (`resolveModelId`/`getEffectiveLimit` без тестов) — закрыт (тесты в `popup-overrides-display.test.js`, `qwen-provider-wiring.test.js`, `qwen-adapter.test.js`, `deepseek-v4-slug-contract.test.js`).
+- **T1** (v47-v50 DOM-детектор модели Gemini без тестов) — **понижен P1 → P2** (принято осознанно владельцем 2026-10-12): ветка DOM — fallback, основной путь — сетевой sniff; выделение в `utils/gemini-ui-model.js` + тесты — backlog Medium.
+
+Итог: открытых P0/P1 на 2026-10-12 — **нет**. §4.4 RELEASE_CHECKLIST разблокирован.
+
+**Файл gitignored (H26)?** Уточнить. Факт: правка внесена локально в `docs/QUALITY_AUDIT.md`, коммит не создан (файл может быть tracked или untracked — проверяется `git ls-files docs/QUALITY_AUDIT.md`; в handoff ранее не зафиксировано).
+
+### Секция 7. Minor: CRLF-warning при коммите.
+
+При коммите `b4b0c98` git выдал:
+warning: in the working copy of '.github/workflows/release.yml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+
+text
+Это `core.autocrlf=true` на Windows — не блокер, но несоответствие политике «только LF» (в handoff §«Кодировки»). **Кандидат в отдельную гигиеническую задачу** (проверка `.gitattributes` + `core.autocrlf`).
+
+### Секция 8. Размер релизного asset v2.0.15 — 2.6 MB.
+
+После фикса PK1 размер 2.6 MB (норма v2.0.12 — 611 KB). Разница объяснена: `docs/screenshots/*.png` (5 файлов: `gemini-yellow.png` 632 KB, `perplexity.png` 605 KB, `chatgpt-red.png` 564 KB, `claude.png` 560 KB, `google-search-popup.png` 344 KB) — итого ~2.7 MB. Эти скриншоты добавлены UI-аудитом 2026-09-28 и используются README. **Легитимны в релизе как документация.** Не дефект.
+
+### Секция 9. Состояние очереди.
+
+- **Релиз v2.0.15:** ✅ опубликован.
+- **Следующие кандидаты** (без приоритетного отбора):
+  - §п.8-B (сбор 4 DOM-снимков chatgpt/claude/perplexity/google-search);
+  - gzip-ветка settle Claude (Low, аппендикс v61 §4 п.2);
+  - Qwen fallback-имя (Low, аппендиксы v23/v24);
+  - расширение `getServiceKey` на perplexity/qwen/aistudio (Low, аппендикс v62 §4 п.1);
+  - hygiene-микро B остаток (README EN/RU);
+  - хвост Roadmap (`core/content.js` ~2952 строк, `core/export-emit-pipeline.js` ~2297 строк);
+  - **новое:** `.gitattributes`/`core.autocrlf` — проверка LF/CRLF-политики (Low, Секция 7);
+  - **новое:** уточнить git-статус `docs/QUALITY_AUDIT.md` (tracked / untracked — Секция 6).
+- **Верхний блок:** sync после push (per §«Гигиена верхнего блока handoff»).
+
+### Секция 10. Сводка.
+
+- **Релиз v2.0.15:** коммит `c95cc57`, tag, GitHub Release, asset 2.6 MB.
+- **Fix PK1:** коммит `b4b0c98`, 6 файлов, +29/−2248.
+- **Отозван v2.0.14:** коммит `2a929df`, tag снесён, Release удалён.
+- **Сьют:** 170 suites / 3012 passed / 6 skipped / 0 failed (не изменился).
+- **CI:** Lint #133 (`b4b0c98`) зелёный; Lint #134 (`c95cc57`) зелёный; Release ZIP #18 (`v2.0.15`) зелёный.
+- **Аудит:** 10/10 + PK1 закрыт.
+
+**Инварианты O-53 после аппендикса:** статусная строка `- **Тесты:` — ровно 1 (значение `170 suites / 3012 passed / 6 skipped / 0 failed`); упоминаний `Версия:` — ровно 1, значение 2.0.15 = `manifest.json` = `package.json`; BOM нет; одиночных CR нет. Тест `tests/docs-hygiene.test.js` — exit 0.
