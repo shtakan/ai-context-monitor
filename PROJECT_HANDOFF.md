@@ -1735,7 +1735,7 @@ Rewired-копия живёт **только в `dist/`** — корневые `
 **Результаты:**
 - **A.1:** BYOK-ключ и O3-латч переведены на SW-канал (`chrome.runtime.sendMessage`). `setAccessLevel` = `TRUSTED_CONTEXTS_ONLY`. Кросс-табовый латч работает через SW (повторный экспорт запрещён). ⚠️ FALSIFIED: приёмка 13.2 ложно заявила; фактически дубль автоэкспорта при F5 происходил до хотфикса F5 (Аппендикс v38).
 - **A.2:** Paste-capture канал защищён: `location.origin` вместо `window.origin`, проверка `ev.origin === location.origin` в приёмнике. Ручной/автоэкспорт без регрессов.
-- **Тесты: 171 suites / 3061 passed / 6 skipped / 0 failed**
+- **Тесты: 171 suites / 3067 passed / 6 skipped / 0 failed**
 - **Живая приёмка:** BYOK автоэкспорт (Gemini) — ОК; кросс-табовость — ОК; paste в Claude — ОК; экспорт 4 форматов — ОК.
 
 ## Аппендикс v36: Завершение Phase 3 Step 13.1 (Overlay extraction)
@@ -3247,3 +3247,41 @@ text
 - **Верхний блок — не трогается** (правило §«Гигиена верхнего блока handoff»).
 
 **Инварианты O-53 после аппендикса:** статусная строка `- **Тесты:` — ровно 1 (значение не меняется); упоминаний `Версия:` — ровно 1, значение 2.0.15 = `manifest.json` = `package.json`; BOM нет. Тест `tests/docs-hygiene.test.js` — exit 0.
+## Аппендикс v68 (2026-10-13): двуязычный README закрыт; статусная строка синхронизирована с фактом
+
+**Дата:** 2026-10-13
+**Код-коммит:** `fa966705a05955ae91fd09e77e342e0e0c942e7b` — `docs(readme): bilingual README — RU (README.md) + EN (README.en.md); sync version drift`, 3 файла, +337/−59.
+**Статус:** ЗАКРЫТ.
+
+### Секция 1. Двуязычный README.
+
+- `README.md` — RU-версия, 131 строка, переключатель на `README.en.md` в строке 2.
+- `README.en.md` — EN-версия, 131 строка, переключатель на `README.md` в строке 2.
+- Разделы синхронны: Manual install, Features, Install, Microsoft Edge, Quick start, Architecture, Tests, Privacy, Screenshots, Known limitations, Disclaimer, License, Demo.
+- Ссылка на релизный ZIP `ai-context-monitor-v2.0.15.zip` (README.md:9, README.en.md:9) совпадает с manifest.json:5 (`version: 2.0.15`).
+- Исторические упоминания v2.0.13 (6 вхождений: по 3 в каждом файле — датированный снимок тестов :79 и ссылки на demo mp4 :129/:131) оставлены как есть: пиннуты байт-в-байт, не подлежат правке (см. карантин Пакета миграции §4).
+- Живая приёмка: обе версии рендерятся на GitHub, переключатели работают.
+
+### Секция 2. Статусная строка O-53 — синхронизирована.
+
+- Строка 1738 (внутри аппендикса v35): `3061 passed` -> `3067 passed`. Причина: фактический прогон `npm test` на `fa96670` = `171 suites / 3067 passed / 6 skipped / 0 failed`. Прежнее значение 3061 устарело после добавления passed-пинов коммитами v66/v67 без синхронизации. Исторический максимум зелёных прогонов = 3067 — совпадает.
+
+### Секция 3. Residual v68 (Low, без правок).
+
+1. `default_locale: "ru"` (manifest.json:6) — англоязычный UI не отдаётся Chrome по умолчанию для en-US пользователей при полном `_locales/en`.
+2. `docs/index.html` EN на GitHub Pages (docs/index.html:1 `<html lang="ru">`) — RU-фолбэк; EN работает только внутри расширения (через `options/i18n-apply.js`).
+3. DRIFT-WARN: `.gitattributes` покрывает `*.js|*.mjs|*.json|*.html|*.css|*.md|*.ts|*.d.ts`, но не `*.yml`/`.gitignore`; git печатает `CRLF will be replaced by LF` при коммитах.
+4. §п.8-B.1 GSA: контракт-тест для `GoogleSearchAdapter.extractMessages()` не написан (аппендикс v67 §Секция 3).
+5. Aistudio-ветка `getServiceKey` (аппендикс v65 §Секция 3): обоснованно отклонена, требует отдельной палитры THEME_CONFIGS и разбора convId-ловушки `/app/prompts/`.
+6. Виртуализация ChatGPT: последний активный turn вне `[data-turn-key]`; structural fallback реализован (P5-3), живой приёмки не было (аппендикс v66 §10 п.3).
+7. Голые регексы `/\/app\/([A-Za-z0-9_-]+)/` без lookahead в `utils/archive-import.js:362` и `core/gemini-intercept.js:1016` (аппендикс v66 §10 п.4).
+8. Хвост Roadmap (Medium): `core/content.js` (~2952 строк), `core/export-emit-pipeline.js` (~2297 строк) — цель «< 50 КБ».
+9. README EN/RU остаток: задача закрыта коммитом fa96670; остались только исторические упоминания v2.0.13 (Секция 1) — не трогаются.
+
+### Секция 4. Сводка.
+
+- Сьют: 171 suites / 3067 passed / 6 skipped / 0 failed.
+- `tsc --noEmit`: exit 0 (кода в этом шаге нет).
+- Верхний блок (строка 5) в этом коммите НЕ трогается: обновление до `HEAD -> fa96670, origin/main = fa96670, ahead = 0` — отдельным третьим docs-коммитом после push (правило CLINE_PROMPT_RULES.md §«Гигиена верхнего блока handoff» п.2–3).
+
+**SHA v68:** плейсхолдер `<SHA v68>` (двухшаговый паттерн — второй коммит проставит фактический SHA).
