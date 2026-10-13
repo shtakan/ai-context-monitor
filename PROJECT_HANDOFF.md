@@ -1735,7 +1735,7 @@ Rewired-копия живёт **только в `dist/`** — корневые `
 **Результаты:**
 - **A.1:** BYOK-ключ и O3-латч переведены на SW-канал (`chrome.runtime.sendMessage`). `setAccessLevel` = `TRUSTED_CONTEXTS_ONLY`. Кросс-табовый латч работает через SW (повторный экспорт запрещён). ⚠️ FALSIFIED: приёмка 13.2 ложно заявила; фактически дубль автоэкспорта при F5 происходил до хотфикса F5 (Аппендикс v38).
 - **A.2:** Paste-capture канал защищён: `location.origin` вместо `window.origin`, проверка `ev.origin === location.origin` в приёмнике. Ручной/автоэкспорт без регрессов.
-- **Тесты: 170 suites / 3036 passed / 6 skipped / 0 failed**
+- **Тесты: 171 suites / 3061 passed / 6 skipped / 0 failed**
 - **Живая приёмка:** BYOK автоэкспорт (Gemini) — ОК; кросс-табовость — ОК; paste в Claude — ОК; экспорт 4 форматов — ОК.
 
 ## Аппендикс v36: Завершение Phase 3 Step 13.1 (Overlay extraction)
@@ -3073,3 +3073,134 @@ text
 - **Верхний блок — синхронизирован** (`510f429`).
 
 **Инварианты O-53 после аппендикса:** статусная строка `- **Тесты:` — ровно 1 (значение `170 suites / 3036 passed / 6 skipped / 0 failed`); упоминаний `Версия:` — ровно 1, значение 2.0.15 = `manifest.json` = `package.json`; BOM нет; одиночных CR нет. Тест `tests/docs-hygiene.test.js` — exit 0.
+
+## Аппендикс v66 (2026-10-13): ChatGPT DOM-адаптер оживлён; 6 фиксов сессии + §п.8-B переработка
+
+**Дата:** 2026-10-13
+**Код-коммиты сессии (после v65):**
+- `a41c6b6` — `fix(claude): capture settle target from decompressed POST body (gzip/deflate)` (2 файла, +208/−1).
+- `d36183a` — `fix(qwen): remove fabricated model fallback; siteDefaults.qwen → qwen3.7-plus` (6 файлов, +93/−26).
+- `300a464` — `fix(widget): getServiceKey knows perplexity.ai and chat.qwen.ai` (2 файла, +154/−8).
+- `816d4c3` — `fix(qwen): CI-guard for P5 snapshot test (skip when tools/ absent)` (1 файл, +14/−2).
+- `6531802` — `fix(export): close convId trap /app/prompts/* → prompts (aistudio)` (3 файла, +85/−8).
+- `3a1f656` — `docs(model-config): fix stale ref content.js:1443 → 1454` (1 файл, +1/−1).
+- `fd64838` — `fix(chatgpt): revive DOM adapter — turn-based (data-turn-key) + remove unknown→user` (2 файла, +871/−127).
+**Sync верхнего блока:** не выполнялся (по правилу `CLINE_PROMPT_RULES.md` §«Гигиена верхнего блока handoff» — верхний блок отражает последний продуктовый HEAD, docs-синки в нём не отражаются).
+**Коммит docs-синка:** плейсхолдер `<SHA v66>` (самореферентный SHA — второй коммит двухшаговым паттерном).
+**Статус:** ✅ 6 фиксов закрыто + ✅ ChatGPT DOM-адаптер живой + ✅ Lint #143 зелёный.
+
+### Секция 1. Fix-claude-gzip-settle (`a41c6b6`) — закрытие v61 §4 п.2.
+
+См. аппендикс v65 §Секция 1 (полностью закрыто, включая пины P-gzip/P-deflate).
+
+### Секция 2. Fix-qwen-fallback-name (`d36183a`) — опровержение диагноза v24 §4 п.3.
+
+См. аппендикс v65 §Секция 2. Корень: **не резолвер** (он корректен), а **фабрикация `'qwen3.8-max'`** в `core/qwen-intercept.js:429/919` + `adapters/qwen-adapter.js:522`. Нормализация `unknown → user` — **тоже класс дефекта**, устранена в ChatGPT.
+
+### Секция 3. Fix-getServiceKey-expand (`300a464`).
+
+См. аппендикс v65 §Секция 3. Aistudio-ветка **обоснованно отклонена** (палитра, `convId`-ловушка, недостижимость `=== 'aistudio'`).
+
+### Секция 4. Fix-qwen-p5-ci-guard (`816d4c3`).
+
+См. аппендикс v65 §Секция 4. Класс дефекта: **пин читает `tools/` напрямую без `fs.existsSync`-guard'а**.
+
+### Секция 5. Fix convId-ловушки aistudio (`6531802`) — новый дефект.
+
+**Корень:** regex `/\/app\/([A-Za-z0-9_-]+)/` в `utils/export-emit-pipeline.js:106` (и 4 копиях в `core/content.js:950, :1975, :2109, :2911`) ловил **литерал сегмента пути**, а не id: `/app/prompts/abc123` → `'prompts'` вместо `abc123`. Через `getCurrentConvId` (`core/content.js:940-948`) ложный `'prompts'` уходил в tape-store, archive-tier, `aiCmHistory` под чужим ключом — все `/app`-страницы aistudio **сталкивались на одном ключе** `geminiTapeKey('prompts')`.
+
+**Фикс:** негативный lookahead `(?!prompts(?:\/|$)|new(?:\/|$)|apikey(?:\/|$))` в 5 точках (канон + 4 копии). Экранированный слэш не требуется — правка в `content.js`, не в `release.yml` (M-6 пин не задет).
+
+**Пины:** +7 тестов (25 ассертов) в `tests/export-emit-pipeline.test.js`, включая P1-P4 (ловушка → пусто), R1 (5 работающих сервисов), S-1 (0 голых копий в `content.js`, 4 синхронизированные).
+
+**Расширение:** найдено DSH через grep — **4-я копия** в `core/content.js:2911` (JSON-дамп Ctrl+Shift+D) и копия в тест-симуляторе D8. Синхронизированы.
+
+**Residual (см. §Секция 10):** `utils/archive-import.js:362`, `core/gemini-intercept.js:1016` — те же голые регексы, вне разрешённого объёма правки.
+
+### Секция 6. Fix-stale-ref (`3a1f656`) — residual v65 §7 п.6.
+
+Комментарий `utils/model-config.js:435`: `core/content.js:1443` → `core/content.js:1454` (`function resolveCurrentModel` — единственное совпадение). 1-в-1, без сдвига.
+
+### Секция 7. Fix-ChatGPT-адаптера (`fd64838`) — крупная задача сессии.
+
+**Проблема (выявлена в §п.8-B):** ChatGPT DOM-адаптер возвращал `[]` на текущем DOM. Селектор `.markdown` (0 совпадений) и `user-message-bubble-color` (0 совпадений) — устарели. Метрика работала через сеть; DOM-адаптер был мёртв.
+
+**Диагностика (3 раунда сниппетов на chatgpt.com, длинный чат с 6 парами):**
+
+**Раунд 1:** `[data-message-author-role]`, `article[data-testid]`, `main article` = 0. `[class*="bg-user-message"]` = 6, но без ассистента.
+
+**Раунд 2:** Все известные ассистентские маркеры (`markdown`, `assistant-message`, `model-response`, `data-*`) = 0. Структурный обход `turnRoot → nextBlock` — **неверен**: `nextBlock(user-root)` захватывал следующий **user**-turn, а не ответ ChatGPT (все пары — `mixed`).
+
+**Раунд 3 (финальный сниппет, 5 пар подтверждено):**
+- **`[data-turn-key]`** = 5 стабильных UUID-атрибутов (не хеш Tailwind) — **основной turn-контейнер**.
+- Внутри каждого turn: `[class*="bg-user-message"]` = user (5/5).
+- Внутри каждого turn: `[class*="block-"]` (конкретно `block-BQZwFn`) = assistant (5/5, длины 2213/1372/1022/756/487).
+- **6-я пара** (последний активный обмен) — **не в DOM** (`turns=5` стабильно; виртуализация ChatGPT держит активный turn вне общего списка). **Граница архитектуры**, не дефект.
+
+**Корень дефекта в коде (закрыт):** `adapters/chatgpt-adapter.js:82` — `role === 'unknown' ? 'user' : role` — **нормализация `unknown → user` записывала ассистента как user**. Даже при попадании ассистентского узла в выборку он классифицировался как user. Это **фундаментальный дефект логики**, не только селекторов.
+
+**Фикс — turn-based архитектура:**
+- `_turnSelectors = ['[data-turn-key]']` — 4 уровня приоритета.
+- `_userSelectors = ['[class*="bg-user-message"]', '[class*="text-user-message"]']` — первый непустой внутри turn.
+- `_assistantSelectors = ['[class*="block-"]', '[class*="content-"]']` — НЕ содержащий user-маркер.
+- Приоритет 3 (виртуализация): `bg-user-message` без `[data-turn-key]` → структурный fallback.
+- Приоритет 4 (легаси): `.whitespace-pre-wrap, .markdown` — последним.
+- **Нормализация `unknown → user` УДАЛЕНА полностью** (`:220`, `:247-249`, `:324`). Роль `unknown` → `skip` + диаграф-счётчик `skippedUnknown`.
+- Диагностика под гейтом `aiCmDiagOn()`: `chatgpt-adapter-turn turns=N users=N assistants=N msgs=N loose=N skippedUnknown=N`, `chatgpt-roles-miss` при несовпадении.
+- `block-BQZwFn` **НЕ запинен буквально** — только в комментариях с прямой оговоркой «сменится при пересборке».
+
+**Пины (18 в `tests/adapters/chatgpt-adapter-revive.test.js`):** P1 (5 ходов → 10), P2 (роли 5+5), P3 (content непуст), P4 (10 уникальных), P5-1..P5-4 (приоритеты 1-4), C-1/C-2/C-3 (корень дефекта), S-1 (селекторы + дата + счётчики), R-1 (`_extractText` многострочный), R-2 (`detectModel`), D-1/D-2/D-3 (гейт диаг-логов), G-1 (контракт BaseAdapter).
+
+**Живая приёмка (chatgpt.com/c/6ab9e92f-...):**
+- **До F5 (старая сборка):** `chatgpt-adapter-turn turns=0 users=0 assistants=0 msgs=0 skippedUnknown=2-3` — адаптер мёртв.
+- **После F5 (новая сборка, гейт открыт):** стабильно `turns=5 users=5 assistants=5 msgs=10 loose=0 skippedUnknown=0` — **десятки одинаковых строк** за 10+ секунд.
+- `chatgpt-roles-miss` — **пусто** (нет ложных срабатываний).
+- Гейт закрыт в конце (`sessionStorage.removeItem('aiCmDebug')`) — тихая консоль восстановлена.
+
+**Verdict:** дефект устранён полностью. До фикса — `[]`, после — 10 сообщений, роли чередуются, нулевые `unknown`.
+
+### Секция 8. §п.8-B — переработка постановки.
+
+**Исходная постановка** (§п.8-A, аудит 2026-09-28): property-based contract tests для 7 адаптеров.
+**Переработка (§п.8-B, 2026-10-13):**
+
+**Причина переработки.** Из 7 адаптеров:
+- **qwen / gemini-net / deepseek** — §п.8-A (коммит `8a35377`, аппендикс v63).
+- **claude / perplexity** — `extractMessages() === []` by design, C-zero-пины закрыты в §п.8-A.
+- **chatgpt / google-search** — оставшиеся 2. §п.8-B переработка:
+  - **ChatGPT** — DOM-адаптер был мёртв, сначала оживлён (`fd64838`). Теперь §п.8-B реализуем: снимок из `adapters/chatgpt-adapter-revive.test.js` (фикстура уже есть) + 4 контракт-пина.
+  - **GSA** — DOM-селекторы **работают** (`[data-scope-id="turn"]` = 8, `h2.iMqumd` = 8, `.n6owBd.awi2gc` = 41, `[data-subtree="aimfl"]` = 8). Формат снимка = **вывод `extractMessages()`** (не сырой DOM). Требуется снять + контракт-тест.
+
+**Статус:** §п.8-B **не закрыт**, но переформулирован. Отдельная задача DSH Act.
+
+### Секция 9. №5 + №6 + №7 (закрыты).
+
+**№5 (аппендикс v33 §B п.7):** `package-lock.json` tracked (v64); `npm ci` в 3 точках CI (`lint.yml:33`, `release.yml:29`). **Закрыт без правок** (аппендикс v65 §Секция 6).
+
+**№6 (`.gitattributes` / `core.autocrlf`):** `.gitattributes` существует, покрывает `*.js|.mjs|.json|.html|.css|.md|.ts|.d.ts` → `eol=lf`; `*.png binary`. **Закрыт без правок** (аппендикс v65 §Секция 5).
+
+**№7 (`docs/QUALITY_AUDIT.md`):** gitignored (`.gitignore:85`). Правка «Post-release audit 2026-10-12» — локальная, в коммит не входит. **Закрыт** (аппендикс v65 §Секция 5).
+
+### Секция 10. Residual v66.
+
+1. **§п.8-B (Low, DSH Act):** 2 контракт-теста (ChatGPT + GSA) на существующих фикстурах/снимках.
+2. **Aistudio-ветка getServiceKey (Low):** обоснованно отклонена (аппендикс v65 §Секция 3 + §Секция 7 п.2). Требует живой приёмки + отдельной палитры + разбора 4 недостижимых веток в `content.js`.
+3. **Vиртуализация ChatGPT (Low, наблюдение):** последний активный turn — **вне `[data-turn-key]`**. Структурный fallback реализован (`P5-3`), но **живая приёмка не покрыла** (в тестируемом чате активного turn не было). Верификация — при следующей живой сессии.
+4. **Устаревшая ссылка в `core/gemini-intercept.js:1016`, `utils/archive-import.js:362`** — голые регексы `/\/app\/([A-Za-z0-9_-]+)/` без lookahead. Вне scope `6531802`. Кандидат в отдельный hygiene-фикс.
+5. **README EN/RU (Low, DSH-перевод):** отдельная задача backlog.
+6. **Хвост Roadmap (Medium):** `core/content.js` (~2952 строк), `core/export-emit-pipeline.js` (~2297 строк). Целевой «< 50 КБ». Требует Plan-режима + многошаговой декомпозиции.
+
+### Секция 11. Lint-история сессии.
+
+`#135` зелёный · `#136` зелёный · `#137` красный (P5 CI-guard) · `#138` зелёный · `#139` зелёный · `#140` зелёный · `#141` зелёный · `#142` зелёный · `#143` зелёный.
+
+Красный #137 — класс «пин читает `tools/` без guard'а» (исправлен `816d4c3`).
+
+### Секция 12. Состояние.
+
+- **origin/main = `fd64838`**, `ahead = 0`, Lint #143 зелёный.
+- **Сьют:** 171 suites / 3061 passed / 6 skipped / 0 failed.
+- **6 фиксов** + 1 hygiene-фикс закрыто. ChatGPT DOM-адаптер жив (5/5/5/10, 0 unknown).
+- **Верхний блок** — остаётся на последнем продуктовом HEAD (по правилу §«Гигиена»).
+
+**Инварианты O-53 после аппендикса:** статусная строка `- **Тесты:` — ровно 1 (значение `171 suites / 3061 passed / 6 skipped / 0 failed`); упоминаний `Версия:` — ровно 1, значение 2.0.15 = `manifest.json` = `package.json`; BOM нет; одиночных CR нет. Тест `tests/docs-hygiene.test.js` — exit 0.
