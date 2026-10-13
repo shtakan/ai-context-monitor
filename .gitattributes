@@ -11,6 +11,10 @@
 *.md    text eol=lf
 *.ts    text eol=lf
 *.d.ts  text eol=lf
+*.yml text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+LICENSE text eol=lf
 
 # Бинарные ресурсы: git не должен ни нормализовать, ни диффить их как текст.
 *.png   binary
