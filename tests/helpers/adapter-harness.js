@@ -62,6 +62,55 @@ function stripCjsTail(src) {
   return out.join('\n');
 }
 
+/**
+ * Срезает комментарии (строчные — до конца строки, и блочные) из исходника, НЕ трогая
+ * содержимое строковых литералов. Нужен замку №2 (см. ниже): он ищет ВЫЗОВЫ
+ * `aiCm*(` текстово, и упоминание имени в комментарии — не вызов. Живой случай:
+ * adapters/google-search-adapter.js:206 — фраза «Гейт — aiCm…» внутри комментария,
+ * из-за которой адаптер отказывался грузиться (Plan §«google-search»).
+ *
+ * Посимвольный проход, а не regex: наивный `replace(/\/\/.*$/gm, …)` режет строки со
+ * слешами (`'https://…'`, `'a//b'`) и может съесть реальный вызов на той же строке —
+ * тогда замок ослепнет (ложноотрицательный результат вместо ложноположительного).
+ * Переносы строк в блочном комментарии сохраняются, чтобы номера строк не съезжали.
+ */
+function stripComments(src) {
+  const s = String(src);
+  let out = '';
+  let i = 0;
+  let quote = '';
+  let inLine = false;
+  let inBlock = false;
+  while (i < s.length) {
+    const c = s.charAt(i);
+    const c2 = s.charAt(i + 1);
+    if (inLine) {
+      if (c === '\n') { inLine = false; out += c; }
+      i++;
+      continue;
+    }
+    if (inBlock) {
+      if (c === '*' && c2 === '/') { inBlock = false; i += 2; continue; }
+      if (c === '\n') out += c;
+      i++;
+      continue;
+    }
+    if (quote) {
+      out += c;
+      if (c === '\\') { out += c2; i += 2; continue; }
+      if (c === quote) quote = '';
+      i++;
+      continue;
+    }
+    if (c === '/' && c2 === '/') { inLine = true; i += 2; continue; }
+    if (c === '/' && c2 === '*') { inBlock = true; i += 2; continue; }
+    if (c === '"' || c === "'" || c === '`') quote = c;
+    out += c;
+    i++;
+  }
+  return out;
+}
+
 /** Все aiCm*-имена, которые где-то ВЫЗЫВАЮТ (для замка №2). */
 function aiCmNamesIn(src) {
   const found = new Set();
@@ -218,7 +267,9 @@ function loadSource(files, options) {
   const called = new Set();
   const defined = new Set();
   loaded.forEach(function (f) {
-    const src = fs.readFileSync(path.join(REPO_ROOT, f), 'utf8');
+    // Комментарии срезаем ДО скана: упоминание aiCm*-имени в комментарии — не вызов
+    // (иначе адаптер с таким упоминанием не грузится вовсе — см. stripComments).
+    const src = stripComments(fs.readFileSync(path.join(REPO_ROOT, f), 'utf8'));
     aiCmNamesIn(src).forEach(function (n) { called.add(n); });
     aiCmNamesDeclared(src).forEach(function (n) { defined.add(n); });
   });
