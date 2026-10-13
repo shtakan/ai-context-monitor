@@ -1,12 +1,13 @@
 # AI Context Monitor
+**Русский** | [English](README.en.md)
 
-A Chrome and Microsoft Edge (Chromium) extension (Manifest V3) that shows in real time how full the AI context window of your conversation is, across six platforms. When a chat grows too long, models start losing details — AI Context Monitor warns you before that happens and can save the whole conversation automatically.
+Расширение для Chrome и Microsoft Edge (Chromium) (Manifest V3), которое в реальном времени показывает, насколько заполнено контекстное окно AI в вашем диалоге, — на шести платформах. Когда чат становится слишком длинным, модели начинают терять детали — AI Context Monitor предупреждает об этом заранее и может автоматически сохранить весь диалог.
 
 ## Ручная установка
 
 Расширение распространяется без магазина (публикация в Edge Add-ons отложена). Основной канал — GitHub Releases.
 
-1. Скачайте архив `ai-context-monitor-v2.0.13.zip` со страницы релиза: <https://github.com/shtakan/ai-context-monitor/releases/tag/v2.0.13>
+1. Скачайте архив `ai-context-monitor-v2.0.15.zip` со страницы релиза: <https://github.com/shtakan/ai-context-monitor/releases/tag/v2.0.15>
 2. Распакуйте архив в любую папку.
 3. **Microsoft Edge**: откройте `edge://extensions`, включите **«Режим разработчика»**, нажмите **«Загрузить распакованное расширение»** и выберите папку распаковки.
 4. **Google Chrome**: откройте `chrome://extensions` и выполните те же действия.
@@ -15,47 +16,47 @@ A Chrome and Microsoft Edge (Chromium) extension (Manifest V3) that shows in rea
 
 Расширение полностью открыто ([исходный код](../../tree/main)): магазин не обязателен, вы всегда можете собрать и установить его вручную из репозитория.
 
-## Features
+## Возможности
 
-- **6 supported platforms**: Google Gemini, ChatGPT, DeepSeek, Claude, Perplexity, Google AI Search.
-- **Real-time fill badge**: a live widget in the corner of the screen showing context fill (%, tokens / limit, model name), updated as you chat.
-- **Auto-export at threshold**: when the configured fill threshold is reached, the full chat history is downloaded automatically as `txt`/`md` — once per chat, only after the complete history has been loaded.
-- **DeepSeek reasoning in exports**: DeepSeek returns chain-of-thought fragments (`THINK`) alongside the answer, so an exported DeepSeek turn keeps both — `[REASONING] … [ANSWER] …`. Turns without reasoning (and every other platform) keep the previous export format unchanged.
-- **Invisible full-history loader**: fetches the entire conversation in the background — no manual scrolling needed.
-- **100% client-side**: no accounts, no servers, no telemetry. Everything runs locally in your browser.
-- **Optional exact token counting** via the official Gemini `countTokens` API with your own key (BYOK).
+- **6 поддерживаемых платформ**: Google Gemini, ChatGPT, DeepSeek, Claude, Perplexity, Google AI Search.
+- **Бейдж заполнения в реальном времени**: живой виджет в углу экрана показывает заполнение контекста (%, токены / лимит, имя модели) и обновляется по ходу переписки.
+- **Автоэкспорт при достижении порога**: когда заполнение доходит до заданного порога, вся история чата автоматически скачивается в формате `txt`/`md` — один раз на чат и только после загрузки полной истории.
+- **Reasoning DeepSeek в экспорте**: DeepSeek возвращает фрагменты цепочки рассуждений (`THINK`) вместе с ответом, поэтому экспортированный ход DeepSeek сохраняет и то и другое — `[REASONING] … [ANSWER] …`. Ходы без reasoning (и все остальные платформы) сохраняют прежний формат экспорта без изменений.
+- **Невидимый загрузчик полной истории**: подгружает весь диалог в фоне — прокручивать вручную не нужно.
+- **100% на стороне клиента**: без аккаунтов, без серверов, без телеметрии. Всё работает локально в вашем браузере.
+- **Опциональный точный подсчёт токенов** через официальный API Gemini `countTokens` с вашим собственным ключом (BYOK).
 
-## Install
+## Установка
 
-1. Download the ZIP from the [Releases](../../releases) page.
-2. Unpack it into any folder.
-3. Open `chrome://extensions` in Chrome.
-4. Enable **Developer mode** (toggle in the top-right corner).
-5. Click **Load unpacked** and select the unpacked folder.
+1. Скачайте ZIP со страницы [релизов](../../releases).
+2. Распакуйте его в любую папку.
+3. Откройте `chrome://extensions` в Chrome.
+4. Включите **режим разработчика** (переключатель в правом верхнем углу).
+5. Нажмите **«Загрузить распакованное расширение»** и выберите папку распаковки.
 
 ## Microsoft Edge (Chromium)
 
-The extension targets Manifest V3 and uses only the cross-browser `chrome.*` APIs, so it runs unchanged in Microsoft Edge, which is built on the same Chromium engine. The offline guide (`docs/index.html`) and the screenshots are shipped inside the package, so the **Помощь / Help** link in the settings footer works after installation.
+Расширение рассчитано на Manifest V3 и использует только кроссбраузерные API `chrome.*`, поэтому работает без изменений в Microsoft Edge, построенном на том же движке Chromium. Офлайн-руководство (`docs/index.html`) и скриншоты входят в пакет, поэтому ссылка **Помощь / Help** в подвале настроек работает сразу после установки.
 
-Install as an unpacked extension:
+Установка как распакованного расширения:
 
-1. Download the ZIP from the [Releases](../../releases) page and unpack it into any folder.
-2. Open `edge://extensions` in Microsoft Edge.
-3. Enable **Developer mode** (toggle in the left-hand sidebar).
-4. Click **Load unpacked** and select the unpacked folder.
+1. Скачайте ZIP со страницы [релизов](../../releases) и распакуйте его в любую папку.
+2. Откройте `edge://extensions` в Microsoft Edge.
+3. Включите **режим разработчика** (переключатель в левой боковой панели).
+4. Нажмите **«Загрузить распакованное расширение»** и выберите папку распаковки.
 
-Publication in the [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons) store is planned; until then the unpacked install above is the supported Edge path.
+Публикация в магазине [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons) запланирована; до этого момента поддерживаемый путь для Edge — установка распакованного расширения, описанная выше.
 
-## Quick start
+## Быстрый старт
 
-1. Click the extension icon to open the popup.
-2. Set the **auto-export threshold** (50–99% of the context window) and the export format (`txt` or `md`).
-3. Toggle **Detailed logs** if you need verbose console output for troubleshooting.
-4. *(Optional)* Paste your **Gemini API key** (BYOK) to switch from local estimation to exact token counting via `countTokens`.
+1. Нажмите на иконку расширения, чтобы открыть попап.
+2. Задайте **порог автоэкспорта** (50–99% контекстного окна) и формат экспорта (`txt` или `md`).
+3. Включите **подробные логи**, если для диагностики нужен детальный вывод в консоль.
+4. *(Опционально)* Вставьте свой **API-ключ Gemini** (BYOK), чтобы переключиться с локальной оценки на точный подсчёт токенов через `countTokens`.
 
-## Architecture
+## Архитектура
 
-Hybrid capture pipeline:
+Гибридный конвейер сбора данных:
 
 ```
 MAIN world interceptors (fetch/XHR)
@@ -67,64 +68,64 @@ ISOLATED content script  -->  badge / auto-export / invisible loader
 service worker (core/background.js)
 ```
 
-- Platform adapters (`adapters/*`) intercept network responses in the MAIN world and forward full network snapshots via CustomEvents to the ISOLATED content script (`core/content.js`), which maintains state, renders the badge, triggers auto-export and runs the invisible history loader; the service worker handles background tasks.
-- Export text assembly lives in `utils/export-text-builders.js`; reference/context text building in `utils/buildReferenceText.js`.
+- Адаптеры платформ (`adapters/*`) перехватывают сетевые ответы в MAIN-мире и передают полные сетевые снимки через CustomEvents в контент-скрипт ISOLATED (`core/content.js`), который хранит состояние, отрисовывает бейдж, запускает автоэкспорт и выполняет невидимый загрузчик истории; фоновые задачи обрабатывает service worker.
+- Сборка текста экспорта находится в `utils/export-text-builders.js`; построение справочного/контекстного текста — в `utils/buildReferenceText.js`.
 
-## Tests
+## Тесты
 
 ```bash
 npm test
 ```
 
-Runs Jest — **as of v2.0.13 (2026-09-29): 90 suites / 1535 tests**, green in CI. The counters are a dated snapshot of the v2.0.13 tree and are deliberately not re-pinned on every change; the live numbers are whatever `npm test` prints as its `Tests: ... total` line. Sanitized fixtures are bundled in `tests/fixtures`. Personal ("live") captured samples are gitignored — tests that require them are skipped automatically when those files are absent.
+Запускает Jest — **as of v2.0.13 (2026-09-29): 90 suites / 1535 tests**, зелёный в CI. Счётчики — это датированный снимок дерева v2.0.13, и они сознательно не перепиниваются при каждом изменении; актуальные числа — те, что печатает `npm test` в строке `Tests: ... total`. Обезличенные фикстуры лежат в `tests/fixtures`. Личные («живые») снятые сэмплы исключены через gitignore — тесты, которым они нужны, автоматически пропускаются, если этих файлов нет.
 
-## Privacy
+## Приватность
 
-Everything stays local: no telemetry, no analytics, no data collection. The only outbound requests go to the chat sites themselves and, optionally, to the Gemini API with your own key. Your BYOK key is stored only in `chrome.storage` on your machine.
+Всё остаётся локально: без телеметрии, без аналитики, без сбора данных. Единственные исходящие запросы идут к самим чат-сайтам и, опционально, к API Gemini с вашим собственным ключом. Ваш BYOK-ключ хранится только в `chrome.storage` на вашей машине.
 
-The full policy ships with the extension and opens offline from the settings footer: [privacy/privacy.html](privacy/privacy.html).
+Полная политика входит в пакет расширения и открывается офлайн из подвала настроек: [privacy/privacy.html](privacy/privacy.html).
 
-## Screenshots
+## Скриншоты
 
-Five live captures, one per platform, stored in [`docs/screenshots/`](docs/screenshots/). The same files are bundled into the release ZIP and rendered by the offline guide in `docs/index.html`.
+Пять живых снимков, по одному на платформу, лежат в [`docs/screenshots/`](docs/screenshots/). Те же файлы входят в релизный ZIP и отображаются офлайн-руководством в `docs/index.html`.
 
-**Gemini — yellow zone (over 50%)**
+**Gemini — жёлтая зона (более 50%)**
 
-![Gemini — yellow zone](docs/screenshots/gemini-yellow.png)
+![Gemini — жёлтая зона](docs/screenshots/gemini-yellow.png)
 
-**ChatGPT — red zone (over 80%)**
+**ChatGPT — красная зона (более 80%)**
 
-![ChatGPT — red zone](docs/screenshots/chatgpt-red.png)
+![ChatGPT — красная зона](docs/screenshots/chatgpt-red.png)
 
-**Google Search AI popup — badge and extension popup**
+**Попап Google Search AI — бейдж и попап расширения**
 
-![Google Search AI popup](docs/screenshots/google-search-popup.png)
+![Попап Google Search AI](docs/screenshots/google-search-popup.png)
 
-**Claude — context indicator (Sonnet / Opus / Haiku, 200K window)**
+**Claude — индикатор контекста (Sonnet / Opus / Haiku, окно 200K)**
 
-![Claude — context indicator](docs/screenshots/claude.png)
+![Claude — индикатор контекста](docs/screenshots/claude.png)
 
-**Perplexity — thread and answer-stream interception (Sonar / Sonar Pro)**
+**Perplexity — перехват треда и потока ответов (Sonar / Sonar Pro)**
 
-![Perplexity — thread interception](docs/screenshots/perplexity.png)
+![Perplexity — перехват треда](docs/screenshots/perplexity.png)
 
-## Known limitations
+## Известные ограничения
 
-- **Third-party interceptors on the same page.** If another extension on the same tab also monkey-patches `fetch` / `XMLHttpRequest` (for example, DeepSeek++ or All API Hub on chat.deepseek.com), the two interception layers compete for the same network stream. Symptoms vary — missing turns, garbled fragments, role mismatches — and depend on load order, which this extension cannot control. **Workaround**: keep ai-context-monitor as the only network-intercepting extension on the tab you are monitoring, or disable the other interceptors while exporting.
-- **Google Search AI (GSA) server-side history trimming.** GSA can silently trim the server-side thread (observed: 59 → 6 messages). The extension counts exactly what the server returns; it cannot recover messages the server has already dropped.
+- **Сторонние перехватчики на той же странице.** Если другое расширение на той же вкладке тоже подменяет `fetch` / `XMLHttpRequest` (например, DeepSeek++ или All API Hub на chat.deepseek.com), два слоя перехвата конкурируют за один и тот же сетевой поток. Симптомы различаются — пропущенные ходы, искажённые фрагменты, несовпадение ролей — и зависят от порядка загрузки, которым это расширение не управляет. **Обходной путь**: оставьте ai-context-monitor единственным расширением, перехватывающим сеть, на отслеживаемой вкладке — либо отключите другие перехватчики на время экспорта.
+- **Обрезка истории на стороне сервера в Google Search AI (GSA).** GSA может незаметно обрезать тред на сервере (наблюдалось: 59 → 6 сообщений). Расширение считает ровно то, что возвращает сервер; восстановить уже отброшенные сервером сообщения оно не может.
 
-## Disclaimer
+## Отказ от ответственности
 
-This project is not affiliated with, endorsed by, or sponsored by Google, OpenAI, Anthropic, DeepSeek, Perplexity, or any other company mentioned. All product names and trademarks are the property of their respective owners.
+Проект не связан с Google, OpenAI, Anthropic, DeepSeek, Perplexity или любой другой упомянутой компанией, не одобрен и не спонсируется ими. Все названия продуктов и товарные знаки принадлежат их соответствующим владельцам.
 
-## License
+## Лицензия
 
 [MIT](LICENSE)
 
-## 🎥 Demo
+## 🎥 Демо
 
-Watch the AI Context Monitor in action:
+Посмотрите AI Context Monitor в действии:
 
 [![AI Context Monitor Demo](docs/videos/ai-context-monitor-demo-v2.0.13.mp4)](docs/videos/ai-context-monitor-demo-v2.0.13.mp4)
 
-*Note: If the video does not play directly on GitHub, you can [download it here](https://github.com/shtakan/ai-context-monitor/raw/main/docs/videos/ai-context-monitor-demo-v2.0.13.mp4).*
+*Примечание: если видео не воспроизводится прямо на GitHub, его можно [скачать здесь](https://github.com/shtakan/ai-context-monitor/raw/main/docs/videos/ai-context-monitor-demo-v2.0.13.mp4).*

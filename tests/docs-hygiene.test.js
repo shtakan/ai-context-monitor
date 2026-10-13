@@ -4,6 +4,8 @@
  * Пины source-level (стиль privacy.test.js / audit-r3-silent-catch-logs):
  *  1) README.md — датированный снимок тестов, 5 живых превью из docs/screenshots/,
  *     раздел «Microsoft Edge (Chromium)», ссылка на privacy/privacy.html;
+ *  1a) README.en.md — полная английская версия README и взаимные ссылки в шапке
+ *     (A-1, вариант A: два файла в корне) — блок пинов в конце файла;
  *  2) docs/TESTS.md — тот же датированный снимок, что в README (без старых 14/159);
  *  3) docs/index.html — футер с версией из manifest.json (без «1.0.0»), все 5 <img>
  *     указывают на реально существующие файлы по относительным путям;
@@ -24,6 +26,7 @@ const abs = function (rel) { return path.join(ROOT, rel); };
 const read = function (rel) { return fs.readFileSync(abs(rel), 'utf8'); };
 
 const readme = read('README.md');
+const readmeEn = read('README.en.md');   // A-1 (вариант A): EN-версия в корне
 const testsDoc = read('docs/TESTS.md');
 const indexHtml = read('docs/index.html');
 const optionsHtml = read('options/options.html');
@@ -91,7 +94,9 @@ describe('C-8: README.md — актуальная документация', () 
   });
 
   test('секция Privacy ссылается на privacy/privacy.html', () => {
-    expect(readme).toMatch(/## Privacy/);
+    // A-1: README.md — русский основной файл, поэтому заголовок секции локализован.
+    // Пин не ослаблен: секция и ссылка на политику обязательны в любом из двух языков.
+    expect(readme).toMatch(/## (Privacy|Приватность)/);
     expect(readme).toContain('(privacy/privacy.html)');
     expect(fs.existsSync(abs('privacy/privacy.html'))).toBe(true);
   });
@@ -312,5 +317,146 @@ describe('O-53: PROJECT_HANDOFF.md — гигиена кодировки и ст
     const handoffVersion = mentions[0].match(/Версия:\s*(\d+\.\d+\.\d+)/)[1];
     expect(handoffVersion).toBe(manifest.version);
     expect(handoffVersion).toBe(pkg.version);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A-1 (v-README-i18n): двуязычный README — ЗАФИКСИРОВАННЫЙ ВАРИАНТ A.
+//
+// Пины ниже закрывают решение, принятое явно и осознанно: в корне лежат ДВА
+// файла — README.md (русский, основной: GitHub рендерит именно его) и
+// README.en.md (полная английская версия), со взаимными ссылками в шапке.
+// Альтернативы отклонены: вариант Б (один файл с языковым переключателем на
+// docs/index.html) отправляет англоязычного читателя в HTML-фолбэк, а вариант В
+// (перевод всего в _locales) не покрывает corpus README на GitHub.
+//
+// Источник данных — только ROOT-относительные пути: read()/abs() из шапки файла
+// (fs.readFileSync(__dirname/..)), никаких абсолютных URL, сети и загрузок.
+// Скриншоты/видео проверяются на существование по тем же относительным путям,
+// поэтому пин самодостаточен и одинаково работает в офлайне на Linux и Windows.
+// ---------------------------------------------------------------------------
+describe('A-1: README.md + README.en.md — вариант A (два файла в корне)', () => {
+  const FENCED_RE = /^```[\s\S]*?^```/gm;
+  const INLINE_RE = /`([^`\n]+)`/g;
+
+  const fencedBlocks = function (text) { return text.match(FENCED_RE) || []; };
+  const inlineSpans = function (text) {
+    const out = [];
+    let m;
+    INLINE_RE.lastIndex = 0;
+    while ((m = INLINE_RE.exec(text)) !== null) out.push(m[1]);
+    return Array.from(new Set(out)).sort();
+  };
+  const relativeAssetLinks = function (text) {
+    return (text.match(/\]\(([^)#]+)\)/g) || [])
+      .map(function (s) { return s.slice(2, -1); })
+      .filter(function (s) { return /^(docs|privacy|LICENSE|\.\.\/)/.test(s); })
+      .sort();
+  };
+
+  test('P1/P2: взаимные ссылки в шапке каждого файла, ровно по одной', () => {
+    const head = function (text) { return text.split(/\r?\n/).slice(0, 4).join('\n'); };
+    expect(readme).toContain('](README.en.md)');
+    expect(head(readme)).toContain('**Русский**');
+    expect(readmeEn).toContain('](README.md)');
+    expect(head(readmeEn)).toContain('**English**');
+    expect(countOccurrences(readme, '](README.en.md)')).toBe(1);
+    expect(countOccurrences(readmeEn, '](README.md)')).toBe(1);
+  });
+
+  test('P3: критичные секции есть в обоих файлах (RU либо EN)', () => {
+    const SECTIONS = [
+      /^##\s+(Install|Установка|Manual install)\s*$/m,
+      /^##\s+(Privacy|Приватность)\s*$/m,
+      /^##\s+(License|Лицензия)\s*$/m
+    ];
+    [readme, readmeEn].forEach(function (text) {
+      SECTIONS.forEach(function (re) { expect(text).toMatch(re); });
+    });
+  });
+
+  test('P3: docs/screenshots/ — по 5 ссылок в каждом файле, все 5 файлов существуют', () => {
+    const PREVIEWS = [
+      'docs/screenshots/gemini-yellow.png',
+      'docs/screenshots/chatgpt-red.png',
+      'docs/screenshots/google-search-popup.png',
+      'docs/screenshots/claude.png',
+      'docs/screenshots/perplexity.png'
+    ];
+    [readme, readmeEn].forEach(function (text) {
+      expect(countOccurrences(text, 'docs/screenshots/')).toBeGreaterThanOrEqual(5);
+      const images = [];
+      const re = /!\[[^\]]*\]\(([^)]+)\)/g;
+      let m;
+      while ((m = re.exec(text)) !== null) {
+        if (m[1].indexOf('docs/screenshots/') === 0) images.push(m[1].trim());
+      }
+      PREVIEWS.forEach(function (rel) { expect(images).toContain(rel); });
+      expect(images.filter(function (src) { return /^(https?:)?\/\//i.test(src); })).toEqual([]);
+    });
+    PREVIEWS.forEach(function (rel) {
+      expect(fs.existsSync(abs(rel))).toBe(true);
+      expect(fs.statSync(abs(rel)).size).toBeGreaterThan(10000);
+    });
+  });
+
+  test('P4: fenced-блоки, архитектурная диаграмма и inline-команды байт-идентичны', () => {
+    // код-блоки — в том же порядке и посимвольно одинаковы в RU и EN
+    expect(fencedBlocks(readme).length).toBe(2);            // bash + диаграмма
+    expect(fencedBlocks(readmeEn)).toEqual(fencedBlocks(readme));
+
+    // архитектурная диаграмма совпадает байт-в-байт с прежним текстом
+    const pick = function (text) {
+      return fencedBlocks(text).filter(function (b) {
+        return b.indexOf('MAIN world interceptors') !== -1;
+      });
+    };
+    expect(pick(readme)).toHaveLength(1);
+    expect(pick(readme)).toEqual(pick(readmeEn));
+    expect(pick(readme)[0]).toContain('MAIN world interceptors (fetch/XHR)');
+    expect(pick(readme)[0]).toContain('ISOLATED content script  -->  badge / auto-export / invisible loader');
+    expect(pick(readme)[0]).toContain('service worker (core/background.js)');
+    expect(pick(readme)[0]).not.toContain('\r');            // LF-блок, переносы не разъехались
+
+    // inline-команды и пути в бэктиках — один и тот же набор
+    expect(inlineSpans(readmeEn)).toEqual(inlineSpans(readme));
+    expect(inlineSpans(readme)).toContain('chrome://extensions');
+    expect(inlineSpans(readme)).toContain('edge://extensions');
+    expect(inlineSpans(readme)).toContain('npm test');
+
+    // относительные ссылки на ассеты/документы — те же пути
+    expect(relativeAssetLinks(readmeEn)).toEqual(relativeAssetLinks(readme));
+  });
+
+  test('P6: README.en.md без кириллицы, кроме шапки-переключателя и «Помощь / Help»', () => {
+    // Конвенция docs/TESTS.md:56-61: англоязычным считается файл, в котором
+    // кириллица встречается только в интерфейсных подписях, а не в прозе.
+    // Шапка исключена намеренно: это языковой переключатель, метка «Русский»
+    // в нём — ссылка на RU-версию, а не русскоязычный текст документа.
+    const body = readmeEn.split(/\r?\n/).slice(4).join('\n');
+    const uiLabels = /Помощь \/ Help/g;   // подпись ссылки в подвале настроек (UI продукта)
+    expect(body.replace(uiLabels, '').match(/[\u0400-\u04FF]/g) || []).toEqual([]);
+  });
+
+  test('S-1: живая версия совпадает с manifest.json, датированный снимок — история', () => {
+    // Живая ссылка на релиз (канал распространения) обязана совпадать с манифестом.
+    expect(readme.match(/ai-context-monitor-v\d+\.\d+\.\d+\.zip/g))
+      .toEqual(['ai-context-monitor-v' + manifest.version + '.zip']);
+    expect(readme.match(/releases\/tag\/v\d+\.\d+\.\d+/g))
+      .toEqual(['releases/tag/v' + manifest.version]);
+    expect(readmeEn.match(/releases\/tag\/v\d+\.\d+\.\d+/g))
+      .toEqual(['releases/tag/v' + manifest.version]);
+
+    // Датированный снимок тестов синхронизирован НЕ с манифестом, а с docs/TESTS.md
+    // (он описывает прошлое дерево и перепинивается отдельно — см. C-11).
+    const snapshot = readme.match(SNAPSHOT_RE);
+    expect(snapshot).not.toBeNull();
+    expect(testsDoc).toContain(snapshot[0]);
+    expect(readmeEn).toContain(snapshot[0]);
+
+    // Демо-видео: ссылка ведёт на реально существующий файл, а не на выдуманный путь.
+    const video = readme.match(/docs\/videos\/[a-z0-9.-]+\.mp4/);
+    expect(video).not.toBeNull();
+    expect(fs.existsSync(abs(video[0]))).toBe(true);
   });
 });
