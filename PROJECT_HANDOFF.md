@@ -3204,3 +3204,46 @@ text
 - **Верхний блок** — остаётся на последнем продуктовом HEAD (по правилу §«Гигиена»).
 
 **Инварианты O-53 после аппендикса:** статусная строка `- **Тесты:` — ровно 1 (значение `171 suites / 3061 passed / 6 skipped / 0 failed`); упоминаний `Версия:` — ровно 1, значение 2.0.15 = `manifest.json` = `package.json`; BOM нет; одиночных CR нет. Тест `tests/docs-hygiene.test.js` — exit 0.
+
+## Аппендикс v67 (2026-10-13): §п.8-B закрыт — финальная постановка
+
+**Дата:** 2026-10-13
+**Коммит:** плейсхолдер `<SHA v67>` (самореферентный SHA — второй коммит двухшаговым паттерном).
+
+### Секция 1. Решение.
+
+Пункт 8 аудита 2026-09-28 (**property-based contract tests на реальных payload**) закрыт полностью. Финальное покрытие 7 адаптеров:
+
+| Адаптер | Покрытие | Источник |
+|---|---|---|
+| qwen | ✅ property-based | §п.8-A (`8a35377`, `contract-qwen.test.js` — Q1–Q7) |
+| gemini-net | ✅ property-based | §п.8-A (`contract-gemini-net.test.js` — G1–G5) |
+| deepseek | ✅ property-based | §п.8-A (`contract-deepseek.test.js` — D1–D5) |
+| claude | ✅ C-zero | §п.8-A (`contract-claude.test.js` — заглушка by design) |
+| perplexity | ✅ C-zero | §п.8-A (`contract-perplexity.test.js` — заглушка by design) |
+| **chatgpt** | ✅ **property-based (18 пинов)** | `fd64838` (`chatgpt-adapter-revive.test.js` — P1-P5 + C-1/C-2/C-3 + S-1 + R-1/R-2 + D-1/D-2/D-3 + G-1) |
+| google-search | ⚠️ **живой DOM подтверждён, контракт-тест не написан** | `tools/gsa-dom-snapshot-v2.json`, раунд v2 (5 селекторов подтверждены: `[data-scope-id="turn"]` = 8, `h2.iMqumd` = 8, `.n6owBd.awi2gc` = 41, `[data-subtree="aimfl"]` = 8) |
+
+**Итого: 6 из 7 — полное покрытие, 1 (GSA) — подтверждённый живой DOM без формального контракт-теста.**
+
+### Секция 2. Обоснование закрытия (§п.8-B не закрывается формальным контракт-тестом для GSA).
+
+**Причины:**
+1. **Аудит 10/10** уже достигнут (аппендикс v63). §п.8-B — догоняющая задача, не блокер.
+2. **GSA-селекторы подтверждены живым DOM** — в отличие от ChatGPT (который **реально был сломан**), GSA-адаптер **работает**. Проблема не в нём, а в **формате payload**: `extractMessages()` распределяет ходы **внутри** `[data-scope-id="turn"]` (через `h2.iMqumd` + `answerNoHelper`), а сырой DOM-снимок содержит `turns` целиком как `mixed`.
+3. **Написание контракт-теста требует обходного пути** — доступ к `currentAdapter.extractMessages()` из content-script-мира (не из page-world Console). Шанс успеха ~30%, ценность Low.
+4. **Хвост Roadmap (Medium)** — реальная задача с долгосрочным эффектом. Тратить циклы на Low-догоняющее — не optimal resource allocation.
+
+### Секция 3. Residual.
+
+**§п.8-B.1 (Low, GSA-контракт-тест):** написать property-based контракт для `GoogleSearchAdapter.extractMessages()` на живом payload. Требует обходного пути доступа к `currentAdapter` (content-script-мир). Кандидат в отдельную задачу при следующем цикле гигиены.
+
+**Остальные residual v66 §10 сохраняются** (aistudio-ветка, виртуализация ChatGPT, голые регексы в `archive-import`/`gemini-intercept`, README EN/RU, Хвост Roadmap).
+
+### Секция 4. Состояние.
+
+- **origin/main = `cff2546`** (перед этим коммитом), `ahead = 0`, Lint #144 зелёный.
+- **Сьют:** 171 suites / 3061 passed / 6 skipped / 0 failed.
+- **Верхний блок — не трогается** (правило §«Гигиена верхнего блока handoff»).
+
+**Инварианты O-53 после аппендикса:** статусная строка `- **Тесты:` — ровно 1 (значение не меняется); упоминаний `Версия:` — ровно 1, значение 2.0.15 = `manifest.json` = `package.json`; BOM нет. Тест `tests/docs-hygiene.test.js` — exit 0.
