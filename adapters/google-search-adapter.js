@@ -160,13 +160,13 @@ class GoogleSearchAdapter extends BaseAdapter {
         var h2 = turns[i].querySelector('h2.iMqumd');
         var qText = null;
         if (h2) {
+          // Подпись локализована: ru/en — в кавычках, de — без них (de-DE-снимок: 6/6).
           var raw = h2.textContent.trim();
-          var match = raw.match(/^Вы сказали:\s*"([\s\S]*)"$/);
+          var match = raw.match(/^(?:Вы сказали|You said|You asked):\s*"([\s\S]*)"$/) ||
+            raw.match(/^Du hast Folgendes (?:gesagt|gesendet):\s*([\s\S]*)$/);
           if (match) {
             qText = match[1].trim();
-          } else {
-            qText = raw;
-          }
+          } else { qText = raw; }
         }
         questions.push(qText);
       }

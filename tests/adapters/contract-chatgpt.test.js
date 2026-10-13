@@ -22,11 +22,14 @@
  * (ход 0 — ответ ассистента). Это прямая проверка фикса fd64838: адаптер НЕ подделывает
  * user там, где узла нет, и НЕ нормализует 'unknown' → 'user' (см. пин CH7).
  *
- * Не пин, а ОСТАТОК для аппендикса v74: в content ассистента утекает видимая подпись
- * «ChatGPT сказал:\n» (9 из 9 assistant-реплик начинаются с неё). Причина — метка лежит
- * текстовым узлом внутри блока ответа, а `_extractText` срезает только button/svg
- * (adapters/chatgpt-adapter.js:301-303), не скрытые label-узлы. Это НЕ контракт: починка
- * метки сделает пин ложным, поэтому здесь она только задокументирована.
+ * Подпись ассистента «ChatGPT сказал:» лежит СКРЫТЫМ (sr-only) <h4> внутри блока ответа:
+ * визуально её нет, но textContent её видит, и до фикса она утекала в начало ВСЕХ пяти
+ * assistant-реплик. Теперь она срезается в extractMessages (CHATGPT_ANSWER_PREFIX_RE) —
+ * это держит пин CH9, причём CH9 отдельно проверяет, что подпись в снимке ЕСТЬ, иначе
+ * он стал бы вакуумным.
+ *
+ * РЕ-БАЗА CH2: срез убрал 5 × 16 = 80 символов (подпись + перевод строки),
+ * поэтому TOTAL_CONTENT_LEN = 8 997 − 80 = 8 917. Число многострочных реплик не изменилось.
  */
 
 const fs = require('fs');
@@ -50,7 +53,8 @@ const USER_NODES = 4;
 const ASSISTANT_NODES = 5;
 const MESSAGES = 9;
 const MESSAGES_WITH_NL = 6;
-const TOTAL_CONTENT_LEN = 8997;
+// Ре-база после среза подписи «ChatGPT сказал:»: 8997 − 5 × 16 = 8917 (см. шапку файла).
+const TOTAL_CONTENT_LEN = 8917;
 
 // При AI_CM_CONTRACT_SYNTH=1 артефакт НЕ читается: контракт требует реального снимка, а
 // синтетика сделала бы property-пины вакуумными (сьюта в этом режиме пропускается).
@@ -262,5 +266,28 @@ suite('§п.8-B: ChatGPTAdapter — контракт на живом DOM-сни�
     // гейт спрашивали, но он молчал: диагностика не подменяет контракт
     expect(res.sandbox.called.aiCmDiagOn).toBeGreaterThanOrEqual(1);
     expect(res.sandbox.called.aiCmDiagLine).toBeUndefined();
+  });
+
+  ctest('CH9 (locale-prefix): скрытая подпись «ChatGPT сказал:» не утекает ни в одну реплику', function () {
+    const msgs = chatgpt().Adapter.extractMessages();
+    const PREFIX_RE = /^\s*(?:ChatGPT сказал|ChatGPT said|ChatGPT sagte)/;
+
+    // НЕВАКУУМНОСТЬ: подпись в снимке реально есть — ровно по одной на каждый блок ответа.
+    // Без этой проверки пин ниже проходил бы и на снимке, где подписи нет вовсе.
+    const labelHits = String(S.bodyOuterHTML).split('ChatGPT сказал:').length - 1;
+    expect(labelHits).toBe(ASSISTANT_NODES);
+
+    // и при этом ни одна реплика с подписи не начинается — срез работает
+    msgs.forEach(function (m) {
+      expect(m.content).not.toMatch(PREFIX_RE);
+    });
+
+    // отдельно по ассистенту: подпись лежит именно в его блоке (user-реплики её не несут,
+    // в снимке «Вы сказали:» есть только как sr-only заголовок ВНЕ узла реплики)
+    const assistants = msgs.filter(function (m) { return m.role === 'assistant'; });
+    expect(assistants).toHaveLength(ASSISTANT_NODES);
+    assistants.forEach(function (m) { expect(m.content).not.toMatch(PREFIX_RE); });
+    expect(msgs.filter(function (m) { return m.role === 'user'; }))
+      .toHaveLength(USER_NODES);
   });
 });

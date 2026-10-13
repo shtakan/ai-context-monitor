@@ -14,6 +14,15 @@
  * @typedef {import('../types/adapter').ExtractedMessage} ChatGPTExtractedMessage
  */
 
+/**
+ * Локализованная подпись ассистента. ChatGPT рендерит её СКРЫТЫМ заголовком
+ * `<h4 class="sr-only …">` внутри блока ответа: визуально его нет, но textContent его
+ * видит, и подпись утекает в начало content (ru «ChatGPT сказал:», en «ChatGPT said:»,
+ * de «ChatGPT sagte:»). Срезается ТОЛЬКО в начале строки — иначе подпись внутри ответа
+ * была бы испорчена. Проверено на снимке 2026-10-13: 5 из 5 assistant-реплик.
+ */
+const CHATGPT_ANSWER_PREFIX_RE = /^\s*(?:ChatGPT сказал|ChatGPT said|ChatGPT sagte):\s*/;
+
 class ChatGPTAdapter extends BaseAdapter {
   constructor() {
     super();
@@ -317,7 +326,10 @@ class ChatGPTAdapter extends BaseAdapter {
     const messages = [];
     for (let i = 0; i < elements.length; i++) {
       const role = elements[i].role;
-      const content = this._extractText(elements[i].element);
+      // Срез подписи — ЗДЕСЬ, а не в _extractText: тот же _extractText зовётся при ОТБОРЕ
+      // узла по длине (см. _longestTextNode и _assistantInTurn), и срез сместил бы выбор
+      // самого длинного узла, то есть подменил бы разметку, а не только текст.
+      const content = this._extractText(elements[i].element).replace(CHATGPT_ANSWER_PREFIX_RE, '');
       if (!content || content.length === 0) continue;
       // Зеркало предиката _findMessageElements — детектор дрейфа разметки: сейчас 'unknown'
       // сюда не доходит (узел отсечён в легаси-слое), но конъюнкт не должен «умереть».

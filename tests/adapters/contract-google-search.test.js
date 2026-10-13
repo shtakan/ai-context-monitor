@@ -24,12 +24,15 @@
  * САМ АДАПТЕР (6 ходов / 12 реплик), и пин GS1 фиксирует это расхождение явно: если
  * коллектор когда-нибудь научится считать ходы, пин вскроет подмену артефакта.
  *
- * Не пин, а ОСТАТОК для аппендикса v74: в content ВСЕХ 6 user-реплик утекает немецкий
- * префикс UI — «Du hast Folgendes gesagt:/gesendet: …» (проверено: 6 из 6; «Вы сказали»
- * не встречается ни разу). Причина — adapters/google-search-adapter.js:164 знает только
- * русскую форму `^Вы сказали:\s*"…"$`, поэтому для немецкой локали match не срабатывает и
- * в qText уходит raw-текст заголовка. Это НЕ контракт: починка регекспа сделает пин
- * ложным, поэтому здесь префикс только задокументирован.
+ * Подпись вопроса в AI-режиме ЛОКАЛИЗОВАНА, и формы различаются обёрткой: ru/en оборачивают
+ * тело вопроса в кавычки, de идёт без них. Снимок снят на de-DE-UI, поэтому до фикса во ВСЕ
+ * шесть user-реплик утекала немецкая форма «Du hast Folgendes gesagt:/gesendet: …» (русский
+ * regex raw-заголовок не матчил, и в qText уходил текст целиком — «Вы сказали» в снимке нет
+ * ни разу). Теперь срез покрывает ru/en/de — это держит пин GS7, причём GS7 отдельно
+ * проверяет, что подписи в h2.iMqumd реально есть, иначе он стал бы вакуумным.
+ *
+ * РЕ-БАЗА GS5: срез убрал 162 символа (3 × 26 для «gesagt: » + 3 × 28 для «gesendet: »),
+ * поэтому TOTAL_CONTENT_LEN = 6 757 − 162 = 6 595.
  */
 
 const fs = require('fs');
@@ -53,7 +56,10 @@ const QUESTION_HEADERS = 6;
 const MESSAGES = 12;
 const USER_MESSAGES = 6;
 const ASSISTANT_MESSAGES = 6;
-const TOTAL_CONTENT_LEN = 6757;
+// Ре-база после среза немецкой подписи вопроса: 6757 − 162 = 6595 (см. шапку файла).
+const TOTAL_CONTENT_LEN = 6595;
+/** Локализованные подписи вопроса: ru/en — в кавычках, de — без них (проверяет пин GS7). */
+const QUESTION_PREFIX_RE = /^\s*(?:Вы сказали|You said|You asked|Du hast Folgendes gesagt|Du hast Folgendes gesendet)/;
 
 // При AI_CM_CONTRACT_SYNTH=1 артефакт НЕ читается: контракт требует реального снимка, а
 // синтетика сделала бы property-пины вакуумными (сьюта в этом режиме пропускается).
@@ -256,5 +262,37 @@ suite('§п.8-B: GoogleSearchAdapter — контракт на живом DOM-с
     // гейт спрашивали, но он молчал: диагностика не подменяет контракт
     expect(res.sandbox.called.aiCmDiagOn).toBeGreaterThanOrEqual(1);
     expect(res.sandbox.called.aiCmDiagLine).toBeUndefined();
+  });
+
+  gtest('GS7 (locale-prefix): немецкая подпись вопроса не утекает ни в одну user-реплику', function () {
+    const msgs = gsa().Adapter.extractMessages();
+
+    // НЕВАКУУМНОСТЬ: подписи в снимке реально есть — по одной на каждый ход AI-режима.
+    // Без этой проверки пин ниже проходил бы и на снимке, где подписей нет вовсе.
+    const headers = Array.prototype.slice.call(document.querySelectorAll(QUESTION_SEL));
+    const labeled = headers.filter(function (h) {
+      return QUESTION_PREFIX_RE.test(String(h.textContent || '').trim());
+    });
+    expect(headers).toHaveLength(QUESTION_HEADERS);
+    expect(labeled).toHaveLength(USER_MESSAGES);
+
+    // и при этом ни одна реплика с подписи не начинается — срез работает
+    msgs.forEach(function (m) {
+      expect(m.content).not.toMatch(QUESTION_PREFIX_RE);
+    });
+
+    const users = msgs.filter(function (m) { return m.role === 'user'; });
+    expect(users).toHaveLength(USER_MESSAGES);
+    users.forEach(function (m) { expect(m.content).not.toMatch(QUESTION_PREFIX_RE); });
+  });
+
+  gtest('GS8 (locale-prefix): после среза пустых реплик нет — ни один ход не потерян', function () {
+    const msgs = gsa().Adapter.extractMessages();
+
+    // если бы срез съедал тело целиком, реплика отсеялась бы в extractMessages
+    // (там пустой content не пушится) — и состав сообщений поехал бы
+    expect(msgs).toHaveLength(MESSAGES);
+    expect(msgs.filter(function (m) { return m.content.trim().length === 0; })).toHaveLength(0);
+    msgs.forEach(function (m) { expect(m.content.trim().length).toBeGreaterThan(0); });
   });
 });
