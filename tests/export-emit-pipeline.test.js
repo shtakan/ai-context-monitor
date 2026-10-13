@@ -239,6 +239,25 @@ describe('S-1: копии ветки /app/ в core/content.js синхрониз
   });
 });
 
+// —— P-sync: оставшиеся две голые ветки /app/ закрыты каноничной формой ——
+// hygiene-фикс после 6531802: та же ловушка литералов prompts/new/apikey, что и в S-1.
+describe('P-sync: голые ветки /app/ в archive-import и gemini-intercept отсутствуют', () => {
+  const CANON = '/\\/app\\/(?!prompts(?:\\/|$)|new(?:\\/|$)|apikey(?:\\/|$))([A-Za-z0-9_-]+)/';
+  const LEGACY = '/\\/app\\/([A-Za-z0-9_-]+)/';
+
+  test('P-sync-1: utils/archive-import.js несёт каноничную форму, голой нет', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'utils', 'archive-import.js'), 'utf8');
+    expect(src).toContain(CANON);
+    expect(src).not.toContain(LEGACY);
+  });
+
+  test('P-sync-2: core/gemini-intercept.js несёт каноничную форму, голой нет', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'core', 'gemini-intercept.js'), 'utf8');
+    expect(src).toContain(CANON);
+    expect(src).not.toContain(LEGACY);
+  });
+});
+
 // —— 3.4 Источник сообщений: нормализация из адаптера; чередование ролей ——
 describe('normalizeExportMessages', () => {
   test('нормализация из адаптера: content → text, роли сохраняются', () => {

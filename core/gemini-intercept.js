@@ -1013,7 +1013,7 @@
   // ================= v17: отслеживание смены чата в SPA =================
   function getConvId() {
     try {
-      var m = location.pathname.match(/\/app\/([A-Za-z0-9_-]+)/);
+      var m = location.pathname.match(/\/app\/(?!prompts(?:\/|$)|new(?:\/|$)|apikey(?:\/|$))([A-Za-z0-9_-]+)/);
       return m ? m[1] : '';
     } catch (e) { return ''; }
   }

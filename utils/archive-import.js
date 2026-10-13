@@ -359,7 +359,7 @@
   }
 
   function extractConvIdFromUrl(url) {
-    var m = String(url == null ? '' : url).match(/\/app\/([A-Za-z0-9_-]+)/);
+    var m = String(url == null ? '' : url).match(/\/app\/(?!prompts(?:\/|$)|new(?:\/|$)|apikey(?:\/|$))([A-Za-z0-9_-]+)/);
     return m ? m[1] : '';
   }
 
