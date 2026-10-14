@@ -107,7 +107,7 @@ jobs:
           # в POSIX ERE (GNU grep) эквивалентен литеральному слэшу, но не образует здесь
           # подстроку "docs/", которую запрещает пин M-6 (tests/docs-hygiene.test.js): иначе он
           # не отличит узкое docs/videos/ от исключения всей docs/ (руководство обязано ехать).
-          git ls-files -z | grep -zvE '(\.github/|\.gitignore|\.gitattributes|\.clineignore|tools/|tests/|^core/|^utils/|^adapters/|^options/options\.js$|^print/print\.js$|\.kilo/|coverage/|\.mjs$|tsconfig\.json$|\.md$|package(-lock)?\.json$|^step-.*\.diff$|^tsc_err\.txt$|^docs\/videos/)' | grep -zvxF 'options/i18n-apply.js' | xargs -0 zip -q "$ZIP"
+          git ls-files -z | grep -zvE '(\.github/|\.gitignore|\.gitattributes|\.clineignore|tools/|tests/|^core/|^utils/|^adapters/|^options/options\.js$|^print/print\.js$|^types/|\.kilo/|coverage/|\.mjs$|tsconfig\.json$|\.md$|package(-lock)?\.json$|^step-.*\.diff$|^tsc_err\.txt$|^docs\/videos/)' | grep -zvxF 'options/i18n-apply.js' | xargs -0 zip -q "$ZIP"
           # v2.0.14 (Phase 2 step 2): поверх legacy-дерева кладём собранные бандлы.
           # Пути передаются так же — относительно корня репозитория, поэтому
           # одноимённые записи (manifest.json, options/options.html, print/print.html,

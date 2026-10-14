@@ -147,5 +147,6 @@ Thumbs.db
 # быть кандидатами на коммит, а в архив их не пускает фильтр release.yml (шаг Create ZIP).
 # tsc_err.txt: отчёт tsc; step-*.diff: пошаговые диффы спринта.
 step-*.diff
+step-*.md
 tsc_err.txt
 docs/videos/*.mp4
