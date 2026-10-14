@@ -6,8 +6,8 @@
  *     формат Keep a Changelog: «## [x.y.z] - YYYY-MM-DD»); версия — строго литерал 2.0.15,
  *     чтобы пин не «съезжал» молча вслед за манифестом;
  *  2) package.json === package-lock.json (root + packages[""]) === manifest.json;
- *  3) все места вывода версии согласованы с манифестом: футер docs/index.html,
- *     tools/edge-listing-metadata.txt (и никакого хардкода прежних версий в них);
+ *  3) место вывода версии согласовано с манифестом: футер docs/index.html
+ *     (и никакого хардкода прежних версий в нём);
  *  4) jsdom-пин: реальный options/options.js при загрузке рендерит футер «v<версия>»,
  *     взятую из chrome.runtime.getManifest() (сентинел, отличный от версии манифеста, —
  *     хардкод в коде футера такой пин провалит).
@@ -28,17 +28,7 @@ const docsHtml = read('docs/index.html');
 const optionsJs = read('options/options.js');
 const optionsHtml = read('options/options.html');
 
-// CI-хотфикс (релиз 1.19.x): tools/ — gitignored-артефакт (см. .gitignore), в чистом чекауте
-// его нет. Пин версии листинга тогда уходит в ЯВНЫЙ skip с причиной в выводе; все прочие
-// проверки файла (манифест/CHANGELOG/пакеты/docs/options.js) остаются строгими.
-const LISTING_PATH = path.join(ROOT, 'tools', 'edge-listing-metadata.txt');
-const HAS_LISTING = fs.existsSync(LISTING_PATH);
-const listing = HAS_LISTING ? fs.readFileSync(LISTING_PATH, 'utf8') : '';
-
-if (!HAS_LISTING) {
-  console.log('[version-hygiene] SKIP: tools/edge-listing-metadata.txt отсутствует ' +
-    '(gitignored, чистый чекаут) — пин версии листинга Edge пропущен');
-}
+// v78: файл метаданных листинга Edge удалён (Edge Add-ons отложены бессрочно, аппендикс v64 §6)
 
 const HEADING_RE = /^## \[(\d+\.\d+\.\d+)\] - (\d{4}-\d{2}-\d{2})$/;
 const headingOf = function (line) {
@@ -188,9 +178,6 @@ describe('R-1: package.json и package-lock.json — та же версия, ч�
  * ===================================================================================== */
 
 describe('R-1: единый источник версии — chrome.runtime.getManifest().version', () => {
-  // Пин листинга требует gitignored-артефакт tools/: без него — явный skip (см. шапку файла).
-  const testListing = HAS_LISTING ? test : test.skip;
-
   test('options.js берёт версию из манифеста (без хардкода версии)', () => {
     expect(optionsJs).toContain('chrome.runtime.getManifest()');
     expect(optionsJs).toContain("versionEl.textContent = 'v' + manifest.version");
@@ -216,29 +203,6 @@ describe('R-1: единый источник версии — chrome.runtime.get
     expect(docsHtml).not.toContain('Версия</span> 1.19.1');
     expect(docsHtml).not.toContain('Версия</span> 1.18.0');
   });
-
-  testListing('метаданные листинга Edge: версия совпадает с манифестом', () => {
-    expect(listing).toContain('Версия расширения: ' + manifest.version + ' (manifest.json)');
-    expect(listing).not.toContain('Версия расширения: 2.0.8');
-    expect(listing).not.toContain('Версия расширения: 2.0.7');
-    expect(listing).not.toContain('Версия расширения: 2.0.6');
-    expect(listing).not.toContain('Версия расширения: 2.0.5');
-    expect(listing).not.toContain('Версия расширения: 2.0.4');
-    expect(listing).not.toContain('Версия расширения: 2.0.3');
-    expect(listing).not.toContain('Версия расширения: 2.0.2');
-    // граница версии: «Версия расширения: 2.0.15» не должно ловиться как «2.0.1»
-    expect(listing).not.toMatch(/Версия расширения: 2\.0\.1(?!\d)/);
-    expect(listing).not.toContain('Версия расширения: 1.19.3');
-    expect(listing).not.toContain('Версия расширения: 1.19.2');
-    expect(listing).not.toContain('Версия расширения: 1.19.1');
-    expect(listing).not.toContain('Версия расширения: 1.18.0');
-  });
-
-  if (!HAS_LISTING) {
-    // Явная запись пропуска в выводе: «зелёный» не должен читаться как «проверено».
-    test.skip('tools/edge-listing-metadata.txt отсутствует в чистом чекауте ' +
-      '(.gitignore: tools/) — пин версии листинга Edge пропущен, а не пройден', () => {});
-  }
 
   test('числовые литералы версии остаются только в комментариях (не в исполняемом коде)', () => {
     // static HTML (docs/index.html) обязан нести версию текстом и пиноваться выше;
