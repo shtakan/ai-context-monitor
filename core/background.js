@@ -389,21 +389,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       } catch (eR) { }
     }
   }
-  // Шаг A.1 (security, P5): ЕДИНСТВЕННАЯ точка выхода BYOK-ключа из SW.
-  // Ключ теперь недоступен контент-скриптам через chrome.storage.session (см.
-  // setAccessLevel выше), поэтому они просят его сообщением. Отправителя проверяем
-  // (свой origin расширения + таб), наружу уходит только сам ключ, без обёрток,
-  // чтобы не логировать его случайно: '***' в логах — как и раньше.
+  // Шаг A.1 (security, P5) + residual-security (отчёт Qwen Coder 2026-10-14, «Высокий
+  // приоритет 1»): ключ недоступен контент-скриптам через chrome.storage.session, поэтому
+  // они ходят в SW сообщением. Контент-скрипту для ветки COUNT_TOKENS нужен только ФАКТ
+  // наличия ключа (boolean), а не значение: наружу уходит строго { hasKey }, значение
+  // ключа не покидает SW. Отправителя проверяем (свой origin расширения + таб). Ключ
+  // читает единственный читатель (aiCmGetByokKeyForContent → aiCmReadByokApiKey, он же
+  // нужен COUNT_TOKENS); миграцию legacy plaintext→session (M-7) делает он же.
   if (message.type === 'aiCm-get-byok-key') {
-    if (!aiCmTrustedSender(sender)) { sendResponse({ key: '' }); return true; }
-    // Единственный потребитель ключа — aiCmReadByokApiKey() (он же нужен COUNT_TOKENS):
-    // отдельная ветка чтения здесь была бы вторым путём выхода ключа из SW (P5).
+    if (!aiCmTrustedSender(sender)) { sendResponse({ hasKey: false }); return true; }
     aiCmGetByokKeyForContent().then(function (key) {
       debugLog('log', '[AI CM][byok] get-key → ' + (key ? '***' : '(пусто)'));
-      sendResponse({ key: key || '' });
+      sendResponse({ hasKey: !!key });
     }).catch(function (errK) {
       debugLog('error', 'aiCm-get-byok-key error:', errK);
-      sendResponse({ key: '' });
+      sendResponse({ hasKey: false });
     });
     return true; // асинхронный ответ
   }

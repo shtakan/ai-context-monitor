@@ -7,7 +7,8 @@
  * контент-скриптов, а кросс-табовый латч O3 читался/писался вкладками напрямую.
  * После Шага A.1 session-хранилище доступно только доверенным контекстам (SW и
  * extension-страницы), а контент-скрипты ходят в SW сообщениями:
- *   'aiCm-get-byok-key'   — единственная точка выхода ключа из SW (P5);
+ *   'aiCm-get-byok-key'   — контент спрашивает только НАЛИЧИЕ ключа, ответ { hasKey };
+ *                          значение ключа из SW не выходит вообще (P3/P5);
  *   'aiCm-latch-get' | 'aiCm-latch-set' | 'aiCm-latch-remove' | 'aiCm-latch-get-all'
  *                          — O3-латч already-fired (семантика v1.14.1 сохранена).
  *
@@ -16,9 +17,10 @@
  *        Chrome — было несуществующее 'TRUSTED_CONTEXTS_ONLY', см. аппендикс v54),
  *        плюс R-пин: значение принадлежит allow-list'у Chrome;
  *   P2 — ноль обращений к chrome.storage.session в контент-скриптах;
- *   P3 — ключ BYOK приходит в контент из SW (aiCmReadByokKey → 'aiCm-get-byok-key');
+ *   P3 — контент узнаёт у SW только НАЛИЧИЕ ключа BYOK ('aiCm-get-byok-key' → { hasKey });
  *   P4 — O3-латч читается/пишется/снимается через SW-канал (поведенческий прогон SW);
- *   P5 — 'aiCm-get-byok-key' — единственный обработчик, отдающий значение ключа.
+ *   P5 — 'aiCm-get-byok-key' — единственная ветка, читающая ключ из session; наружу
+ *        уходит только { hasKey }, но не значение.
  *
  * Тест НЕ трогает A.2 (postMessage/origin) и не проверяет его: это отдельный подшаг.
  */
@@ -273,21 +275,31 @@ describe('Шаг A.1 / P2: контент-скрипты не ходят в chro
 });
 
 /* =====================================================================================
- * P3 — ключ BYOK приходит в контент из SW
+ * P3 — контент узнаёт у SW только НАЛИЧИЕ ключа BYOK (значение не читает)
  * ===================================================================================== */
 
-describe('Шаг A.1 / P3: контент получает ключ BYOK у SW, а не из хранилища', () => {
-  test('aiCmReadByokKey спрашивает SW и берёт ключ из ответа aiCm-get-byok-key', () => {
-    // Контент: единственный путь чтения ключа — сообщение SW.
+describe('Шаг A.1 / P3: контент получает из SW только boolean-флаг наличия ключа BYOK', () => {
+  test('content.js не читает ключ: нет aiCmReadByokKey, legacy-констант и обращения к session', () => {
+    const contentJs = read('core/content.js');
+    // Residual-security (Qwen Coder 2026-10-14, «Высокий приоритет 1»): прежний
+    // aiCmReadByokKey вытягивал ЗНАЧЕНИЕ ключа ответом { key } и имел legacy-фолбэк на
+    // plaintext в local — удалён целиком вместе с AI_CM_BYOK_LEGACY_KEYS.
+    expect(contentJs).not.toContain('aiCmReadByokKey');
+    expect(contentJs).not.toContain('AI_CM_BYOK_LEGACY_KEYS');
+    expect(contentJs).not.toContain('aiCmApiKeySession');
+    expect(contentJs).not.toContain("chrome.storage.session.get(['aiCmApiKeySession'])");
+    // Контент ходит в SW ровно за флагом: транспорт chrome.runtime.sendMessage (state.js)
+    // плюс вызов-обёртка с типом сообщения (имя типа — по прецеденту файла).
+    expect(CONTENT_SRC).toContain('chrome.runtime.sendMessage(');
+    expect(CONTENT_SRC).toContain('function aiCmSwByokHasKey(');
     expect(CONTENT_SRC).toContain("aiCmSwAsk({ type: 'aiCm-get-byok-key' })");
-    expect(CONTENT_SRC).toContain('function aiCmReadByokKey(');
-    // key из ответа SW; local остаётся только переходным фолбэком окна миграции M-7.
-    expect(CONTENT_SRC).toContain("var v = (resp && typeof resp.key === 'string') ? resp.key : '';");
-    // R4: ключ ждут ДО tryInit (иначе первый COUNT_TOKENS уходит без ключа).
+    expect(CONTENT_SRC).toContain('return !!(resp && resp.hasKey);');
+  });
+
+  test('ключ по-прежнему ждут ДО tryInit и ДО гидратации кэша латча (R4/R1)', () => {
     expect(CONTENT_SRC).toContain('await loadByokSettingsAsync();');
     expect(CONTENT_SRC).toContain('function loadByokSettingsAsync() {');
     expect(CONTENT_SRC).toContain('var aiCmByokKeyPromise = null;');
-    // Вызов ключа — ДО tryInit и ДО гидратации кэша латча (порядок R4/R1).
     const contentNow = CONTENT_SRC;
     const iKey = contentNow.indexOf('await loadByokSettingsAsync();');
     const iLatch = contentNow.indexOf('await aiCmLatchCacheReady();');
@@ -297,16 +309,18 @@ describe('Шаг A.1 / P3: контент получает ключ BYOK у SW, 
     expect(iTryInit).toBeGreaterThan(iLatch);
   });
 
-  test('SW отдаёт ключ контент-скрипту (обработчик aiCm-get-byok-key)', async () => {
-    const bg = loadBackground({ session: { [SESSION_KEY]: 'AIza-session-key' } });
-    const resp = await bg.send({ type: 'aiCm-get-byok-key' });
-    expect(resp).toEqual({ key: 'AIza-session-key' });
-  });
+  test('SW отвечает на aiCm-get-byok-key только { hasKey }: значение ключа с ответом не уходит', async () => {
+    const SECRET = 'AIza-session-key';
+    const withKey = loadBackground({ session: { [SESSION_KEY]: SECRET } });
+    const respKey = await withKey.send({ type: 'aiCm-get-byok-key' });
+    expect(respKey).toEqual({ hasKey: true });
+    // Residual-security: само значение ключа не должно появиться в ответе ни в каком виде.
+    expect(JSON.stringify(respKey)).not.toContain(SECRET);
 
-  test('SW отдаёт пустую строку без ключа (без legacy в local) — фолбэк контента остаётся прежним', async () => {
-    const bg = loadBackground({ session: {} });
-    const resp = await bg.send({ type: 'aiCm-get-byok-key' });
-    expect(resp).toEqual({ key: '' });
+    const noKey = loadBackground({ session: {} });
+    const respNo = await noKey.send({ type: 'aiCm-get-byok-key' });
+    expect(respNo).toEqual({ hasKey: false });
+    expect(JSON.stringify(respNo)).not.toContain(SECRET);
   });
 });
 
@@ -370,11 +384,12 @@ describe('Шаг A.1 / P4: O3-латч читается/пишется/сним�
 });
 
 /* =====================================================================================
- * P5 — 'aiCm-get-byok-key' единственная точка выхода ключа из SW
+ * P5 — 'aiCm-get-byok-key' единственная ветка, читающая ключ из session;
+ *      значение ключа наружу не уходит (только { hasKey })
  * ===================================================================================== */
 
-describe('Шаг A.1 / P5: ключ выходит из SW только через aiCm-get-byok-key', () => {
-  test('в SW ровно один читатель session и одно сообщение с ключом в ответе', () => {
+describe('Шаг A.1 / P5: значение ключа не покидает SW', () => {
+  test('в SW ровно один читатель session и одно сообщение, читающее ключ', () => {
     const byokSessionReads = BG_SRC.split('chrome.storage.session.get([AI_CM_BYOK_SESSION_KEY]').length - 1;
     expect(byokSessionReads).toBe(1); // aiCmSessionByokGet — единственный читатель ключа
     // Оба потребителя ключа (COUNT_TOKENS для сети и сообщение для контента) зовут
@@ -383,13 +398,15 @@ describe('Шаг A.1 / P5: ключ выходит из SW только чере
     const bgCodeLines = BG_SRC.split('\n').filter((l) => l.trim().indexOf('//') !== 0);
     const readCalls = bgCodeLines.filter((l) => /(^|\W)await aiCmReadByokApiKey\(\);/.test(l));
     expect(readCalls).toHaveLength(2);
-    // Обёртка объявлена ровно один раз (единственная точка выхода ключа контенту)…
+    // Обёртка объявлена ровно один раз (единственное чтение ключа для контента)…
     expect(BG_SRC.split('async function aiCmGetByokKeyForContent()').length - 1).toBe(1);
     // …и зовётся ровно из одной ветки onMessage — aiCm-get-byok-key.
     expect(bgCodeLines.filter((l) => l.indexOf('aiCmGetByokKeyForContent()') !== -1)).toHaveLength(2);
     // Сообщение объявлено ровно один раз — как контракт канала.
     expect(BG_SRC.split("message.type === 'aiCm-get-byok-key'").length - 1).toBe(1);
-    // Наружу уходит только сам ключ: ни в одном ответе SW нет обёртки с именем ключа.
+    // Residual-security: наружу уходит только boolean-флаг — значение ключа в ответе
+    // этого канала больше не появляется (ни 'key:', ни обёрток с именем ключа).
+    expect(BG_SRC).not.toContain('sendResponse({ key:');
     expect(BG_SRC).not.toContain('apiKey:');
     expect(BG_SRC).not.toContain('geminiApiKey');
   });

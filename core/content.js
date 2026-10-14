@@ -193,44 +193,44 @@ var GeminiTapeStore = {
 
 // ===== v2.0 (этап 1/3): state.js ← exactCountEnabled, geminiApiKey, lastCountTokensText, lastCountTokensCache, countTokensTimer, countTokensPending =====
 
-var AI_CM_BYOK_SESSION_KEY = 'aiCmApiKeySession';
-// Известные имена plaintext-ключа BYOK прежних версий (chrome.storage.local).
-var AI_CM_BYOK_LEGACY_KEYS = [
-  'ai_cm_gemini_api_key',
-  'ai_cm_api_key',
-  'ai_cm_byok_key',
-  'aiCmGeminiApiKey',
-  'aiCmApiKey',
-  'gemini_api_key'
-];
-
-// Первое непустое значение среди известных legacy-имён ключа (иначе '').
-function aiCmFirstLegacyByokKey(data) {
-  for (var iLk = 0; iLk < AI_CM_BYOK_LEGACY_KEYS.length; iLk++) {
-    var vLk = data ? data[AI_CM_BYOK_LEGACY_KEYS[iLk]] : null;
-    if (typeof vLk === 'string' && vLk) return vLk;
-  }
-  return '';
+// Residual-security (отчёт Qwen Coder 2026-10-14, «Высокий приоритет 1»): контент-скрипту
+// нужен только ФАКТ наличия BYOK-ключа (boolean), а не его значение. Ключ остаётся
+// в chrome.storage.session за SW (setAccessLevel: TRUSTED_CONTEXTS), сюда приходит ровно
+// { hasKey } — значение ключа во вкладку не уходит. Прежний хелпер тянул значение ключа
+// ответом { key } того же типа 'aiCm-get-byok-key' и имел legacy-фолбэк на plaintext в
+// local — удалён вместе с константами имён; SW теперь отвечает на этот тип только флагом.
+// Контракт `geminiApiKey` ниже прежний: страховка перед COUNT_TOKENS (сам ключ для сети
+// читает SW); хранит не значение, а сентинел наличия '1'/'' (см. aiCmByokFlag).
+function aiCmSwByokHasKey() {
+  return aiCmSwAsk({ type: 'aiCm-get-byok-key' }).then(function (resp) {
+    return !!(resp && resp.hasKey);
+  }).catch(function () { return false; });
 }
 
-// Шаг A.1 (security, P5): ключ BYOK приходит из SW ('aiCm-get-byok-key') —
-// chrome.storage.session контент-скриптам больше не доступен (accessLevel сжат до
-// TRUSTED_CONTEXTS_ONLY в background.js), читать его из вкладки нельзя. Legacy-фолбэк
-// на local (окно миграции plaintext→session) остался: ключ, который SW ещё не успел
-// перенести, контент по-прежнему подхватывает, а саму миграцию делает SW (M-7).
-function aiCmReadByokKey(cb) {
-  var finished = false;
-  function finish(v) { if (!finished) { finished = true; cb(v || ''); } }
-  try {
-    aiCmSwAsk({ type: 'aiCm-get-byok-key' }).then(function (resp) {
-      var v = (resp && typeof resp.key === 'string') ? resp.key : '';
-      if (v) { finish(v); return; }
-      try {
-        chrome.storage.local.get(AI_CM_BYOK_LEGACY_KEYS, function (dl) { finish(aiCmFirstLegacyByokKey(dl)); });
-      } catch (eLeg) { finish(''); }
-    }).catch(function () { finish(''); });
-  } catch (eKey) { finish(''); }
+// `geminiApiKey` объявлен в core/state.js как string (по ограничениям задачи state.js не
+// трогаем), а теперь хранит только ФАКТ наличия ключа. Пишем сентинел-строку: все
+// использования `geminiApiKey` — исключительно проверки истинности (`!geminiApiKey`,
+// `geminiApiKey && ...`), поэтому '1' | '' ведёт себя ровно как true | false, сохраняет
+// типизацию tsc и не меняет логику использования.
+function aiCmByokFlag(hasKey) {
+  return hasKey ? '1' : '';
 }
+
+// Контракт BYOK после residual-security (отчёт Qwen Coder 2026-10-14):
+//   * владелец ключа — только SW (chrome.storage.session, accessLevel TRUSTED_CONTEXTS);
+//   * контент-скрипт знает лишь ФАКТ наличия ключа (aiCmSwByokHasKey → {hasKey});
+//   * значение ключа в вкладку не приходит ни полем, ни строкой, ни в лог ('***');
+//   * сама сеть к Gemini уходит из SW (COUNT_TOKENS), не из content.js;
+//   * миграция legacy plaintext из chrome.storage.local осталась в SW (окно M-7) —
+//     прежние имена ключей знает aiCmReadByokApiKey/aiCmFirstLegacyByokKey там же:
+//       'ai_cm_gemini_api_key', 'ai_cm_api_key', 'ai_cm_byok_key',
+//       'aiCmGeminiApiKey', 'aiCmApiKey', 'gemini_api_key';
+//   * контент этих имён больше не знает и в local за ними не ходит;
+//   * смена ключа приходит событием 'aiCm-byok-key-changed' → aiCmByokKeyInvalidate().
+// Пины контракта: tests/security/byok-isolation.test.js (P2 — нет session-API в контенте;
+// P3 — только boolean-флаг; P5 — значение ключа не покидает SW).
+//
+// Примечание: блок держит ту же длину, что удалённый legacy-код, чтобы номера строк core/content.js не сдвинулись — их построчно пинует tests/fixtures/catch-whitelist.json.
 
 // ===== v2.0 (этап 1/3): state.js, widget.js ← safePct, popupRawModel, popupRawPct, popupModelId, popupLimitPct, safePctKey, zoneColor, aiCmActivePct, computeEffectiveLimit, aiCmSetPopupOverrides, aiCmRefreshPopupOverrides, aiCmLoadPopupOverrides, updatePanel, snapCurrentPct, setSafePctFromInput, resetSafePct, stepSafePct =====
 
@@ -1615,8 +1615,9 @@ function loadByokSettings() {
   // M-7: флаг точного подсчёта остаётся в chrome.storage.local, ключ — в session за SW.
   chrome.storage.local.get(['ai_cm_exact_token_count'], function (data) {
     exactCountEnabled = !!data.ai_cm_exact_token_count;
-    aiCmReadByokKey(function (key) {
-      geminiApiKey = key || '';
+    // Residual-security: у SW спрашиваем только НАЛИЧИЕ ключа (boolean), не значение.
+    aiCmSwByokHasKey().then(function (hasKey) {
+      geminiApiKey = aiCmByokFlag(hasKey);
       console.log('[byok] настройки загружены: exactCount=' + exactCountEnabled + ', key=' + (geminiApiKey ? '***' : '(пусто)'));
     });
   });
@@ -1632,14 +1633,13 @@ function loadByokSettingsAsync() {
   if (aiCmByokKeyPromise) return aiCmByokKeyPromise;
   aiCmByokKeyPromise = new Promise(function (resolve) {
     try {
-      if (!isExtensionValid()) { resolve(''); return; }
-      aiCmReadByokKey(function (key) {
-        var v = key || '';
-        geminiApiKey = v;
-        console.log('[byok] ключ получен от SW: ' + (v ? '***' : '(пусто)'));
-        resolve(v);
+      if (!isExtensionValid()) { resolve(false); return; }
+      aiCmSwByokHasKey().then(function (hasKey) {
+        geminiApiKey = aiCmByokFlag(hasKey);
+        console.log('[byok] ключ получен от SW: ' + (hasKey ? '***' : '(пусто)'));
+        resolve(hasKey);
       });
-    } catch (eByokP) { resolve(''); }
+    } catch (eByokP) { resolve(false); }
   });
   return aiCmByokKeyPromise;
 }
@@ -1652,8 +1652,8 @@ function aiCmByokKeyInvalidate() {
   aiCmByokKeyPromise = null;
   try {
     if (!isExtensionValid()) return;
-    aiCmReadByokKey(function (key) {
-      geminiApiKey = key || '';
+    aiCmSwByokHasKey().then(function (hasKey) {
+      geminiApiKey = aiCmByokFlag(hasKey);
       lastCountTokensText = '';
       lastCountTokensCache = 0;
       netServerTokens = 0; // при отключении BYOK сразу эвристика
