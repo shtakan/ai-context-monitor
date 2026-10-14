@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.0.16] - 2026-10-14
+
+### Fixed
+- Claude: индикатор не обновлялся после ответа ассистента — добавлен settle-цикл по UUID ассистентского сообщения (E.4)
+- Claude: захват settle-target из gzip/deflate-тела POST `/completion` (E.4-follow)
+- Qwen: устранена фабрикация слаг-имени `qwen3.8-max` в фолбэке `detectModel`/`MODEL_DEFAULT`; `siteDefaults.qwen → qwen3.7-plus`
+- Qwen: P5-контракт-тест защищён от отсутствия `tools/` в CI (skip)
+- Виджет: `getServiceKey` теперь знает `perplexity.ai` и `chat.qwen.ai` (изоляция per-service `safePct`)
+- Экспорт: закрыта convId-ловушка `/app/prompts/*`, `/app/new/*`, `/app/apikey/*` (aistudio, 5 точек + 2 остаточных)
+- ChatGPT: DOM-адаптер восстановлен — turn-based (`[data-turn-key]`), удалена нормализация `unknown → user`
+- Адаптеры: локале-агностичный срез префиксов вопросов/ответов — GSA de-DE (`Du hast Folgendes gesagt/gesendet`), ChatGPT (`ChatGPT сказал`)
+
+### Added
+- Property-based контракт-тесты для ChatGPT и Google Search AI на живых DOM-снимках (§п.8-B)
+- Harness: comment-aware scan замка `aiCm*` — устранено ложное срабатывание на комментарий в `google-search-adapter.js:206`
+
+### Changed
+- README (RU/EN): датированный снимок тестов синхронизирован с релизом v2.0.16 (пересмотр аппендикса v58 §3)
+
 ## [2.0.15] - 2026-10-12
 
 ### Исправлено
