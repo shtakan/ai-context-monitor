@@ -102,7 +102,10 @@
       window.MarkdownRenderer : null;
     if (md && md.escapeHtml) return md.escapeHtml(s);
     return String(s == null ? '' : s)
-      .replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>');
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
   function renderMarkdown(text) {

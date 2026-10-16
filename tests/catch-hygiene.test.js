@@ -17,9 +17,9 @@
  *
  * ФОРМАТ WHITELIST: tests/fixtures/catch-whitelist.json — сгруппирован по
  *   (file, category): { file, category, lines: [...], reason }. Группировка
- *   выбрана вместо плоского списка из 452 записей, потому что reason у соседних
+ *   выбрана вместо плоского списка из 458 записей, потому что reason у соседних
  *   строк одного класса совпадает дословно; reviewer читает ~185 групп вместо
- *   452 почти одинаковых строк, а ключ (file, line) восстанавливается
+ *   458 почти одинаковых строк, а ключ (file, line) восстанавливается
  *   расширением groups[].lines[]. reason НЕ пустой и содержит категорию,
  *   обоснование и пример тела try.
  *
@@ -448,5 +448,78 @@ describe('Step E.2b.1: страж молчаливых catch — позитив�
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
+  });
+});
+
+// ================= baseline-pin: пустые catch ВНЕ области whitelist ==========
+// НЕЗАВИСИМЫЙ от лексера `maskNonCode` наивный сканер: ищет ЛЮБЫЕ catch-блоки
+// с пустым (после нормализации пробелов, переводов строк и комментариев) телом
+// в каталогах, которые страж E.2b.1 не сканирует: options/**, print/** и
+// utils/i18n-apply.js. Исторический путь utils/i18n-apply.js в дереве
+// отсутствует (реальный файл — options/i18n-apply.js, он уже покрыт options/**),
+// поэтому несуществующие цели просто пропускаются и вклада не дают.
+// Пиним ТОЛЬКО счётчик: 38 точек уже существуют и вне scope этой правки, задача
+// стража — не дать появиться НОВЫМ. Логика whitelist-стража выше не затронута.
+const OUTSIDE_WHITELIST_BASELINE = 38;
+const OUTSIDE_WHITELIST_TARGETS = ['options', 'print', 'utils/i18n-apply.js'];
+
+/** Рекурсивный список *.js под целью (файл или каталог); нет пути → []. */
+function listJsUnder(abs) {
+  if (!fs.existsSync(abs)) return [];
+  if (fs.statSync(abs).isFile()) return abs.endsWith('.js') ? [abs] : [];
+  const out = [];
+  for (const entry of fs.readdirSync(abs, { withFileTypes: true })) {
+    if (entry.name === 'node_modules') continue;
+    const full = path.join(abs, entry.name);
+    if (entry.isDirectory()) out.push(...listJsUnder(full));
+    else if (entry.isFile() && entry.name.endsWith('.js')) out.push(full);
+  }
+  return out;
+}
+
+/** Наивный скан: `catch` [ (param) ] `{` со сбалансированными скобками и пустым телом. */
+function scanEmptyCatches(rel, raw) {
+  const found = [];
+  const re = /\bcatch\b\s*(?:\([^)]*\))?\s*\{/g;
+  let m;
+  while ((m = re.exec(raw)) !== null) {
+    const start = re.lastIndex;
+    let depth = 1;
+    let j = start;
+    while (j < raw.length && depth > 0) {
+      if (raw[j] === '{') depth++;
+      else if (raw[j] === '}') { depth--; if (depth === 0) break; }
+      j++;
+    }
+    const body = raw.slice(start, j)
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/[^\n]*/g, '');
+    if (body.replace(/\s+/g, '') === '') {
+      found.push({ file: rel, line: raw.slice(0, m.index).split('\n').length });
+    }
+    re.lastIndex = j + 1;
+  }
+  return found;
+}
+
+function collectEmptyCatchesOutsideWhitelist() {
+  const found = [];
+  for (const target of OUTSIDE_WHITELIST_TARGETS) {
+    for (const f of listJsUnder(path.join(ROOT, target))) {
+      const rel = path.relative(ROOT, f).split(path.sep).join('/');
+      found.push(...scanEmptyCatches(rel, fs.readFileSync(f, 'utf8')));
+    }
+  }
+  return found;
+}
+
+describe('Step E.2b.1: baseline-pin пустых catch вне области whitelist', () => {
+  test('N1: пустых catch в options/, print/ и utils/i18n-apply.js не больше baseline', () => {
+    const found = collectEmptyCatchesOutsideWhitelist();
+    const listing = found.map(f => f.file + ':' + f.line).join('\n  ');
+    expect(found.length > OUTSIDE_WHITELIST_BASELINE
+      ? 'НАЙДЕНО ' + found.length + ' (> baseline ' + OUTSIDE_WHITELIST_BASELINE + '), точки:\n  ' + listing
+      : '').toBe('');
+    expect(found.length).toBeLessThanOrEqual(OUTSIDE_WHITELIST_BASELINE);
   });
 });
