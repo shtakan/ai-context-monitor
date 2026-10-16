@@ -4190,4 +4190,4 @@ Residual §п.5 (аппендикс v66 §7 + §10 п.3): structural fallback п
 - Верхний блок (строка 5) — не трогается; синхронизация — отдельным коммитом после push.
 - Коммит A — 2 файла (1 new: `docs/COORDINATION-RULES.md`; 1 modified: `PROJECT_HANDOFF.md`); `CLINE_PROMPT_RULES.md` в git не входит (gitignored, список B H26).
 
-**SHA v83:** плейсхолдер `<SHA v83>` (двухшаговый паттерн).
+**SHA v83:** ce071d7 (тело аппендикса v83, шаг 1 двухшагового паттерна).
