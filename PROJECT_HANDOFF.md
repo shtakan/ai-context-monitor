@@ -195,7 +195,7 @@ O-24 ЗАКРЫТ (2026-09-22, живая приёмка): сигнатурны�
 ## Состояние проекта
 
 - **Версия: 2.0.17** (`manifest.json` / `package.json`; бамп этого коммита — фикс кольца индикатора (цвет по настроенным порогам), §5 DHS_RULES.md; предыдущий релиз — v2.0.12 (2026-09-27), бамп `af56dfb`; перед ним — v2.0.11 (2026-09-21), бамп `db5e6e4`)
-- **Тесты: 172 suites / 3064 passed / 6 skipped / 0 failed**
+- **Тесты: 172 suites / 3065 passed / 6 skipped / 0 failed**
 - **HEAD:** предыдущий HEAD — `ae7392e` (docs: синк Minor-подбатча B UI-аудита, код `24c51ed`); HEAD этого коммита — `0ab04e9` (плейсхолдер: самореферентный SHA разрешается двухшаговым паттерном); истина = `git log -1`; **состояние относительно origin** проверять командой `git rev-list --count origin/main..HEAD` (на момент последнего доксинка было 22 → после docs-доксинка и push: ahead = 0; HEAD = `e19864d`; push origin main выполнен 2026-09-29, origin/main = `e19864d`); последний содержательный HEAD — `24c51ed` (Minor-подбатч B UI-аудита — options #19/#20/#21, коммит владельца 2026-09-29), перед ним `8939339` (Minor-подбатч A UI-аудита — widget #17/#18/#22/#23, коммит владельца 2026-09-29), перед ним `ee2b572` (O-53 — пины гигиены docs), `a0574e6` (docs: аномалия `--acm-safe-bottom` закрыта как by design), `d3d41ce` (docs), `6e51838` (подбатч 3 — tooltip #4/#8), `269806d` (Major-подбатч 2 UI-аудита — panel #9/#11, коммит владельца 2026-09-29), перед ним содержательный `9a33ea9` (Major-подбатч 1 — options), ещё раньше `deab423` (Critical-батч UI-аудита), далее docs-синки (`67d4e90`, `34549d5`, `a9d6bac`), после подбатчей — `d70eb67`, `58d384b`, `dfc01b7`, `b848693`; последний содержательный HEAD — `6e51838` (подбатч 3 UI-аудита — tooltip #4/#8 + доксинк живой приёмки с регрессом #9, коммит владельца 2026-09-29), перед ним `b848693` (docs: sync SHA dfc01b7); предыдущий HEAD-коммит (docs: sync SHA FLAKE-D7 + финальный docs-синк релиза v2.0.12; предыдущий HEAD: `17a47c7` — docs: sync SHA релиза v2.0.12 + amend с фактическим SHA; версия 2.0.12 в manifest/package/docs-футере, CHANGELOG [2.0.12]); предыдущий содержательный HEAD: `2301079` (fix(Qwen-селекторы): замены по живому DOM-снимку 26.09.26 — точные классы реплик `.qwen-chat-message.qwen-chat-message-user/assistant`, контейнер-чистка turn-selection, guard карточек инструментов, класс-токен роли, многострочный текст `_readableText`; ✅ **Живая приёмка пройдена 2026-09-26 14:20–14:26**); предыдущий содержательный HEAD: `1dc6a1e` (feat(GSA-петля): per-thread guard прогонов + re-entrancy `virtualScrollBackfill` — петля чужого треда GSA, диаг-вердикт High, закрыта; ✅ **Живая приёмка пройдена 2026-09-26 11:27–11:34**); предыдущий содержательный HEAD: `b14d829` (feat(O-51b): id-свидетельство vf5-ингеста — трейс `[gemini-ingest-trace] ids=[…]` и критерий пересборки базы питаются ОДНИМИ массивами, fail-closed `reason=vf5-no-id-evidence-no-reset` при пустом свидетельстве, `shouldDisjointReset` не считает пустые id нулевым пересечением, фолбэк без модуля логики снова учитывает курсор продолжения; закрытие переоткрытия O-51, найденного живой приёмкой 16:31:33.906 — см. строку O-51b ниже; предыдущие содержательные HEAD: `efc9c1b` (feat(O-52): Gemini parseByBytes — умное добивание границ JSON-кадра, `extractJsonPayload`: срез ровно до конца сбалансированного значения, добор недобора в пределах safety_margin 256 СИМВОЛОВ от declaredN, обрыв тела — исходный срез (семантика O-48 цела)) и `82d3495` (feat(O-51): монотонный union — снапшот-подмножество vf5 больше НЕ сбрасывает базу (`isSubsetIds` + stable merge, `reason=vf5-subset-no-reset`)); состояние относительно origin — командой `git rev-list --count origin/main..HEAD` (на момент последнего доксинка было 22 → после доксинка и push: ahead = 0; push origin main выполнен 2026-09-29, origin/main = `e19864d`); последний содержательный HEAD — `9a33ea9` (Major-подбатч 1 UI-аудита — options, коммит владельца 2026-09-29), перед ним содержательный `deab423` (Critical-батч UI-аудита)
 - **Рабочая копия:** чиста
 - **Статус:** релиз v2.0.12 опубликован 2026-09-27 (GitHub Release #15, asset ai-context-monitor-v2.0.12.zip 611 KB, sha256=be2464ac8b6b59623f4798495dd48..., URL https://github.com/shtakan/ai-context-monitor/releases/tag/v2.0.12); push origin main + push тега выполнены (push origin main — 2026-09-28, origin/main = HEAD, ahead = 0); последний опубликованный релиз — v2.0.11 (2026-09-21, тег `v2.0.11` на `0aaa388`, GitHub Release #14, asset 2.7 MB); живая приёмка 2026-09-24 (O-46+O-32 регресс) пройдена; живая приёмка инструментирования 2026-09-24 10:50–10:53 закрыла O-21 как expected behaviour; **текущее состояние 2026-09-29: локально ahead 5 (HEAD `24c51ed`, origin/main `e19864d`); unpushed — `d3d41ce`, `a0574e6`, `ee2b572`, `8939339`, `24c51ed` (push одной операцией после закрытия docs-хвоста); push origin main от 2026-09-29 поднял origin/main до `e19864d` (docs-доксинк батча UI-аудита)**
@@ -4252,3 +4252,194 @@ Backlog-Low п.1 (аппендикс v79 §Секция 4 п.1; аппендик
 - Верхний блок (строка 5) — не трогается; синхронизация — отдельным коммитом после push.
 
 **SHA v84:** 4439f1f (тело аппендикса v84, шаг 1 двухшагового паттерна).
+## Аппендикс v85 (2026-10-16): qwen-claims закрыты кодом — реальный HTML-escape в print-фолбэке + baseline-pin пустых catch вне whitelist
+
+**Дата:** 2026-10-16
+**Код-коммит:** `7f1c9d4` — `fix(print): real HTML escape in fallback; catch-hygiene doc drift + baseline pin (qwen-claims)`, 2 файла, +80/−4 (`print/print.js` +6/−1, `tests/catch-hygiene.test.js` +74/−3).
+**Plan-отчёт:** «qwen-claims» (DSH на HEAD `3263be4`).
+**Статус:** ЗАКРЫТ.
+
+### Секция 1. Что сделано.
+
+**Fix 1 — `print/print.js:104-108` (fail-closed hardening недостижимой ветки fallback).** Identity-цепочка `.replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>')` заменена на 4 реальные HTML-сущности `&amp;` / `&lt;` / `&gt;` / `&quot;`. Rationale: нормальный путь выходит раньше — `print/print.js:103` `if (md && md.escapeHtml) return md.escapeHtml(s);` — поэтому ветка достижима только при несостоявшейся загрузке `utils/markdown.js`; тем не менее молчаливый identity-replace оставался дефектом fail-open и закрыт.
+
+**Fix 2 — `tests/catch-hygiene.test.js:21` (doc drift).** Комментарий формата whitelist: плоский список `452` → `458` записей (2 строки: сам счётчик и «почти одинаковых строк»).
+
+**Fix 3 — `tests/catch-hygiene.test.js` (новый baseline-pin).** Новый `describe('Step E.2b.1: baseline-pin пустых catch вне области whitelist')` — независимый от лексера `maskNonCode` наивный сканер по `OUTSIDE_WHITELIST_TARGETS = ['options', 'print', 'utils/i18n-apply.js']`; baseline `OUTSIDE_WHITELIST_BASELINE = 38` (`options/i18n-apply.js` = 1 + `options/options.js` = 27 + `print/print.js` = 10). Цель — не дать появиться НОВЫМ пустым catch вне whitelist. Лексер whitelist-стража выше (Step E.2b.1) не затронут.
+
+**Диффы (`git show 7f1c9d4`, вербатим).**
+
+```diff
+diff --git a/print/print.js b/print/print.js
+index 30d932a..b40135c 100644
+--- a/print/print.js
++++ b/print/print.js
+@@ -102,7 +102,10 @@
+       window.MarkdownRenderer : null;
+     if (md && md.escapeHtml) return md.escapeHtml(s);
+     return String(s == null ? '' : s)
+-      .replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>');
++      .replace(/&/g, '&amp;')
++      .replace(/</g, '&lt;')
++      .replace(/>/g, '&gt;')
++      .replace(/"/g, '&quot;');
+   }
+ 
+   function renderMarkdown(text) {
+@@ -298,4 +301,4 @@
+   // v1.18 (E-2): точка автопечати доступна тестам (регрессионный пин «ровно один print»).
+   // Поведение страницы не меняется — init() вызывает ту же функцию.
+   try { window.__aiCmPrintTrigger = triggerPrint; } catch (e) { }
+-})();
+\ No newline at end of file
++})();
+```
+
+```diff
+diff --git a/tests/catch-hygiene.test.js b/tests/catch-hygiene.test.js
+index 0f81ab1..6b7c432 100644
+--- a/tests/catch-hygiene.test.js
++++ b/tests/catch-hygiene.test.js
+@@ -17,9 +17,9 @@
+  *
+  * ФОРМАТ WHITELIST: tests/fixtures/catch-whitelist.json — сгруппирован по
+  *   (file, category): { file, category, lines: [...], reason }. Группировка
+- *   выбрана вместо плоского списка из 452 записей, потому что reason у соседних
++ *   выбрана вместо плоского списка из 458 записей, потому что reason у соседних
+  *   строк одного класса совпадает дословно; reviewer читает ~185 групп вместо
+- *   452 почти одинаковых строк, а ключ (file, line) восстанавливается
++ *   458 почти одинаковых строк, а ключ (file, line) восстанавливается
+  *   расширением groups[].lines[]. reason НЕ пустой и содержит категорию,
+  *   обоснование и пример тела try.
+  *
+@@ -450,3 +450,76 @@ describe('Step E.2b.1: страж молчаливых catch — позитив
+     }
+   });
+ });
++
++// ================= baseline-pin: пустые catch ВНЕ области whitelist ==========
++// НЕЗАВИСИМЫЙ от лексера `maskNonCode` наивный сканер: ищет ЛЮБЫЕ catch-блоки
++// с пустым (после нормализации пробелов, переводов строк и комментариев) телом
++// в каталогах, которые страж E.2b.1 не сканирует: options/**, print/** и
++// utils/i18n-apply.js. Исторический путь utils/i18n-apply.js в дереве
++// отсутствует (реальный файл — options/i18n-apply.js, он уже покрыт options/**),
++// поэтому несуществующие цели просто пропускаются и вклада не дают.
++// Пиним ТОЛЬКО счётчик: 38 точек уже существуют и вне scope этой правки, задача
++// стража — не дать появиться НОВЫМ. Логика whitelist-стража выше не затронута.
++const OUTSIDE_WHITELIST_BASELINE = 38;
++const OUTSIDE_WHITELIST_TARGETS = ['options', 'print', 'utils/i18n-apply.js'];
++
++/** Рекурсивный список *.js под целью (файл или каталог); нет пути → []. */
++function listJsUnder(abs) {
++  if (!fs.existsSync(abs)) return [];
++  if (fs.statSync(abs).isFile()) return abs.endsWith('.js') ? [abs] : [];
++  const out = [];
++  for (const entry of fs.readdirSync(abs, { withFileTypes: true })) {
++    if (entry.name === 'node_modules') continue;
++    const full = path.join(abs, entry.name);
++    if (entry.isDirectory()) out.push(...listJsUnder(full));
++    else if (entry.isFile() && entry.name.endsWith('.js')) out.push(full);
++  }
++  return out;
++}
++
++/** Наивный скан: `catch` [ (param) ] `{` со сбалансированными скобками и пустым телом. */
++function scanEmptyCatches(rel, raw) {
++  const found = [];
++  const re = /\bcatch\b\s*(?:\([^)]*\))?\s*\{/g;
++  let m;
++  while ((m = re.exec(raw)) !== null) {
++    const start = re.lastIndex;
++    let depth = 1;
++    let j = start;
++    while (j < raw.length && depth > 0) {
++      if (raw[j] === '{') depth++;
++      else if (raw[j] === '}') { depth--; if (depth === 0) break; }
++      j++;
++    }
++    const body = raw.slice(start, j)
++      .replace(/\/\*[\s\S]*?\*\//g, '')
++      .replace(/\/\/[^\n]*/g, '');
++    if (body.replace(/\s+/g, '') === '') {
++      found.push({ file: rel, line: raw.slice(0, m.index).split('\n').length });
++    }
++    re.lastIndex = j + 1;
++  }
++  return found;
++}
++
++function collectEmptyCatchesOutsideWhitelist() {
++  const found = [];
++  for (const target of OUTSIDE_WHITELIST_TARGETS) {
++    for (const f of listJsUnder(path.join(ROOT, target))) {
++      const rel = path.relative(ROOT, f).split(path.sep).join('/');
++      found.push(...scanEmptyCatches(rel, fs.readFileSync(f, 'utf8')));
++    }
++  }
++  return found;
++}
++
++describe('Step E.2b.1: baseline-pin пустых catch вне области whitelist', () => {
++  test('N1: пустых catch в options/, print/ и utils/i18n-apply.js не больше baseline', () => {
++    const found = collectEmptyCatchesOutsideWhitelist();
++    const listing = found.map(f => f.file + ':' + f.line).join('\n  ');
++    expect(found.length > OUTSIDE_WHITELIST_BASELINE
++      ? 'НАЙДЕНО ' + found.length + ' (> baseline ' + OUTSIDE_WHITELIST_BASELINE + '), точки:\n  ' + listing
++      : '').toBe('');
++    expect(found.length).toBeLessThanOrEqual(OUTSIDE_WHITELIST_BASELINE);
++  });
++});
+```
+
+### Секция 2. Свидетели/факты.
+
+- `print/print.js:104-108` до/после — хунк 1 диффа выше (вербатим).
+- 4 сьюта, читающих и исполняющих `print/print.js` (`new Function(..., PRINT_JS)`): `tests/deepseek-o7-hidden-export.test.js:451` (61 тест), `tests/export-sanitize.test.js:359` (19), `tests/i18n-locales.test.js:900` (64), `tests/print/print-hygiene-e2.test.js:103` (7) — **151/151 passed**.
+- `tests/catch-hygiene.test.js` — **11 passed / 0 failed** (было 10; +1 тест N1 от fix 3).
+- `npx tsc --noEmit` — exit 0; `node --check print/print.js` — exit 0.
+- `git status --short` (tracked) — пусто после коммита `7f1c9d4`.
+- Полный сьют на HEAD `7f1c9d4`: 172 suites; 3065 passed; 6 skipped; 0 failed (код-коммит добавил +1 тест к прежним 3064).
+- Построчных пинов `print/print.js:NNN` в `tests/**/*.js` — 0 (grep).
+
+### Секция 3. Отклонения от промпта (приняты).
+
+1. **Путь `utils/i18n-apply.js` vs `options/i18n-apply.js`.** В промпте цель сканера названа `utils/i18n-apply.js`; реальный файл лежит в `options/i18n-apply.js` (уже покрыт маской `options/**`), путь `utils/i18n-apply.js` в дереве отсутствует. Сканер пропускает несуществующий путь (`fs.existsSync` → `[]`) → вклад 0. Причина расхождения — исторический путь из Пакета миграции; список целей оставлен ровно как задан в промпте.
+2. **Уточнение атрибуции вместо буквальной ссылки.** Формулировка промпта «Пакет миграции §5 (аппендикс v83 §Секция 1 указал „доделать всё одним Act-коммитом“)» текстом handoff не подтверждается: аппендикс v83 §Секция 1 (L4165–L4174) описывает создание `docs/COORDINATION-RULES.md`, а не Пакет миграции; словосочетание «Пакет миграции» встречается в handoff только в цикле E.2c (L2408, L2640, L3263). Источник требования — Plan-отчёт «qwen-claims» (DSH на HEAD `3263be4`); поэтому в Секции 5 ссылка дана на отчёт, а не на v83 §1.
+3. **Хвостовой `\n` в `print/print.js`.** Его не было; добавлен хунком 2 диффа (нормализация UTF-8/LF, маркер `\ No newline at end of file`). Line-neutrality зоны 100–110 сохранена: сдвиг +3 создан только ниже строки 103 (early return), построчных пинов `print/print.js:NNN` в `tests/**/*.js` нет (Секция 2).
+
+### Секция 4. Новые residual (Low).
+
+- **R1.** Защитный пин «в `print/print.js` нет identity-replace цепочек вида `.replace(/X/g,'X')`» — снимет остаточную неуверенность 0.15 → 0.05 в fail-closed fix 1. Кандидат в следующий hygiene-коммит; обоснование — рекомендация координатора 2026-10-16 (принята).
+- **R2.** Живая приёмка fix 1 не выполнялась. Классификация — «пройдена с границей» (`docs/ACCEPTANCE-TEMPLATE.md` §6): изменённая ветка недостижима на нормальном пути, верификация — сьюты print + `tsc` + `node --check`. Естественный сценарий верификации — сбой загрузки `utils/markdown.js`; воспроизведение по требованию невозможно (прецедент O-27 captcha, аппендикс v27 §Секция 2). Regression-проверка «печать PDF из попапа → страница открывается, markdown рендерится» — на ближайшем релизе v2.0.18.
+- **R3.** 38 пустых catch вне whitelist (`options/` 27 + `print/` 10 + `options/i18n-apply.js` 1) — осознанный долг, пинный baseline `OUTSIDE_WHITELIST_BASELINE = 38`. Не задача; решение — при следующем касании этих файлов.
+
+### Секция 5. Переопределение residual-точек (тексты аппендиксов выше не редактируются).
+
+- **Аппендикс v83 §Секция 3** (протокол 4-го прохода Qwen Coder, L4180–L4184) — **закрыт настоящим аппендиксом v85**: 4/6 пунктов закрыты ранее; 3 проверены Plan-отчётом «qwen-claims» (DSH на HEAD `3263be4`); 2 закрыты этим код-коммитом (fix 1 — реальный HTML-escape; fix 2 — doc drift 452 → 458); 1 принят как осознанный долг (fix 3 — baseline-pin 38, Секция 4 R3).
+- **Пакет миграции §5** — требование «доделать всё одним Act-коммитом» (источник — Plan-отчёт «qwen-claims», DSH на HEAD `3263be4`; об атрибуции см. Секцию 3 п.2) — **выполнено** код-коммитом `7f1c9d4`.
+- **Grep-инвентаризация ШАГа 1 (3 шаблона) — полный список residual-точек:**
+  - `qwen.claims|qwen-claims|qwen_claims` — **0 вхождений** в теле handoff на HEAD `7f1c9d4` (до настоящего аппендикса; проверено также case-insensitive `claims` — 0; вне handoff, по дереву — тоже 0). Residual-точек нет.
+  - `Qwen Coder` — **4 вхождения**:
+    - **L1679** (аппендикс v33 §1 «Источник задач» — отчёт Qwen Coder 2026-10-05, 10 пунктов) — **историческая, T-HIST, не пересматривается**.
+    - **L4006** (аппендикс v80 §Секция 2 — отчёт Qwen Coder 2026-10-14, п. «Высокий приоритет 1», фикс `931542f`) — **историческая, T-HIST, не пересматривается** (закрыт документально аппендиксом v80).
+    - **L4020** (аппендикс v80 §Секция 2 — «Статус по Qwen Coder п.1 (проверено): закрыт документально») — **историческая, T-HIST, не пересматривается**.
+    - **L4034** (аппендикс v80 §Секция 3 — примечание, что отчёт 2026-10-14 введён Секцией 2) — **историческая, T-HIST, не пересматривается**.
+  - `print/print\.js` как литерал — **0 вхождений** в теле handoff на HEAD `7f1c9d4` (до настоящего аппендикса); `print\.js` — **2 вхождения**:
+    - **L1446** (аппендикс v22 §1 — бандл `dist/print.js`, коммит `ddae930`) — **историческая, T-HIST, не пересматривается**.
+    - **L1447** (аппендикс v22 §1 — список зависимостей бандла: `options/i18n-apply.js`, `utils/markdown.js`, `print.js`) — **историческая, T-HIST, не пересматривается**.
+  - Токен `print/print\.js` внутри alternation фильтра ZIP (**L3800**, `.github/workflows/release.yml:110`, аппендикс v77 §3.1) — **историческая, T-HIST, не пересматривается** (шаблон ШАГа 1 его не матчит: точка экранирована).
+  - **Итого residual-точек из шага 1: 7** (0 + 4 + 2 + 1). Ни одна из них не закрывается настоящим аппендиксом напрямую — единственная residual-точка, закрываемая v85, это **Аппендикс v83 §Секция 3** (первый пункт этой секции).
+
+### Секция 6. Сводка.
+
+- Сьют (HEAD `7f1c9d4`): 172 suites; 3065 passed; 6 skipped; 0 failed.
+- `npx tsc --noEmit` — exit 0; `node --check print/print.js` — exit 0.
+- `npx jest tests/docs-hygiene.test.js` — инварианты O-53 зелёные (ровно по одной защищённой строке версии / текущего прогона / рекорда, объём handoff > 100 КБ, ≥ 20 исторических полных форм).
+- Структурная строка текущего прогона (L198) обновлена `3064` → `3065` отдельной правкой в этом же коммите A; полная форма защищённой строки в теле аппендикса не приводится (пин O-53, `tests/docs-hygiene.test.js:272-286`).
+- Репозиторий: рабочая копия чиста — и по отслеживаемым, и по untracked; дозадачного ` M RELEASE_CHECKLIST.md` (аппендикс v64 §4) в worktree нет (прогон `git status --short` пуст).
+- Верхний блок (строка 5) — не трогается (правило `CLINE_PROMPT_RULES.md` §«Гигиена верхнего блока handoff» п.1: в двухшаговом паттерне docs-синка top block не трогается ни в A, ни в B).
+- Ветка: ahead относительно `origin/main` (`3263be4`) = 1 (код-коммит `7f1c9d4`); push не выполнялся — шаг владельца.
+
+### Секция 7. Плейсхолдер.
+
+**SHA v85:** <SHA v85-A> (тело аппендикса v85, шаг 1 двухшагового паттерна).
