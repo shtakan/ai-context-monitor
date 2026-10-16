@@ -23,7 +23,7 @@
 4.1 npm test зелёный, node --check всех файлов
 4.2 manifest: content_scripts/host_permissions соответствуют всем шести сервисам
 4.3 version bump + CHANGELOG
-4.4 §0: в docs/QUALITY_AUDIT.md нет открытых находок P0/P1; соответствие принципу проверено в рецензии релиза
+4.4 §0: в docs/QUALITY_AUDIT.md нет открытых находок P0/P1; соответствие принципу проверено в рецензии релиза. На 2026-10-12 пересмотр аудита 2026-08-26: все P0/P1 закрыты или понижены (см. «Post-release audit 2026-10-12»)
 
 ## Публикация (Edge Add-ons)
 5.1 **TODO:** заменить `homepage_url` в `manifest.json` (`https://github.com/user/ai-context-monitor`) на реальный URL репозитория; заменить `support@example.com` в `privacy/privacy.html` на реальный email поддержки.
