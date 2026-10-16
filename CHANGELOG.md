@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.17] - 2026-10-16
+
+### Fixed
+- BYOK: content-script больше не читает `chrome.storage.session` — запрашивает у service worker только boolean-флаг `hasKey` (security hardening)
+
+### Changed
+- README (RU/EN) + docs/TESTS.md: датированный снимок тестов синхронизирован с релизом v2.0.17
+
 ## [2.0.16] - 2026-10-14
 
 ### Fixed
