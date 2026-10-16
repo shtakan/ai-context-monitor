@@ -42,6 +42,18 @@ const pkg = JSON.parse(read('package.json'));
 const handoffBuf = fs.readFileSync(abs('PROJECT_HANDOFF.md'));   // Buffer — для BOM и размера
 const handoff = handoffBuf.toString('utf8');
 
+// O-53 (вариант б1): две независимые сущности счётчиков handoff —
+//   «текущий прогон» (обновляется синхронно с фактом) и
+//   «исторический максимум» (рекорд зелёных прогонов, не падает при удалении тестов).
+// Исторический максимум НЕ обязан быть ≤ текущего: удаление тестов снижает текущее
+// число и регрессом не является — прежнее сравнение current >= max снято осознанно.
+// TESTS_RE/HIST_MAX_RE — без флага `g` (извлечение единственного совпадения);
+// *_G-копии — только для подсчёта вхождений.
+const TESTS_RE = /- \*\*Тесты:\s*(\d+) suites \/ (\d+) passed \/ (\d+) skipped \/ (\d+) failed\*\*/;
+const HIST_MAX_RE = /- \*\*Исторический максимум:\s*(\d+) suites \/ (\d+) passed \/ (\d+) skipped \/ (\d+) failed\*\*/;
+const TESTS_RE_G = new RegExp(TESTS_RE.source, 'g');
+const HIST_MAX_RE_G = new RegExp(HIST_MAX_RE.source, 'g');
+
 // «as of v2.0.8 (2026-09-17): 90 suites / 1535 tests» — формат пина без точных чисел.
 const SNAPSHOT_RE = /as of v\d+\.\d+\.\d+ \(\d{4}-\d{2}-\d{2}\): \d+ suites \/ \d+ tests/;
 const STALE_COUNTERS = ['14 suites / 159 tests', '14 suites/159 tests'];
@@ -257,58 +269,65 @@ describe('O-53: PROJECT_HANDOFF.md — гигиена кодировки и ст
     expect(handoff.replace(/\r\n/g, '\n')).not.toContain('\r');
   });
 
-  test('статусная строка «- **Тесты:» ровно одна и строго по формату', () => {
-    const statusLines = handoff.split(/\r?\n/).filter(function (l) {
+  test('статусные строки «- **Тесты:» и «- **Исторический максимум:» — ровно по одной', () => {
+    const currentLines = handoff.split(/\r?\n/).filter(function (l) {
       return l.indexOf('- **Тесты:') === 0;
     });
-    expect(statusLines.length).toBe(1);   // уникальность статусной строки
-    const STRICT_STATUS_RE = /- \*\*Тесты:\s*\d+ suites \/ \d+ passed \/ \d+ skipped \/ \d+ failed/g;
-    expect(statusLines[0]).toMatch(STRICT_STATUS_RE);
-    expect(handoff.match(STRICT_STATUS_RE) || []).toHaveLength(1);
+    const histMaxLines = handoff.split(/\r?\n/).filter(function (l) {
+      return l.indexOf('- **Исторический максимум:') === 0;
+    });
+    expect(currentLines).toHaveLength(1);   // текущий прогон ровно один
+    expect(histMaxLines).toHaveLength(1);   // исторический максимум ровно один
+    expect(currentLines[0]).toMatch(TESTS_RE);
+    expect(histMaxLines[0]).toMatch(HIST_MAX_RE);
+    // и нигде больше полной формы этих двух строк нет (одна — текущая, одна — рекорд)
+    expect(handoff.match(TESTS_RE_G) || []).toHaveLength(1);
+    expect(handoff.match(HIST_MAX_RE_G) || []).toHaveLength(1);
   });
 
-  test('свежесть: текущий счётчик не ниже исторического максимума', () => {
-    // Пол для сравнения — ТОЛЬКО исторические вхождения «N suites / N passed»,
-    // то есть всё, что лежит ВНЕ диапазона самого совпадения статусной строки.
-    // Иначе пин тавтологичен: максимум включал бы текущее значение, и
-    // «текущее >= максимум» было бы истинно всегда. Историческая цепочка
-    // (138/2642, 137/2628, 136/2619) лежит на той же строке, но за концом
-    // совпадения, поэтому входит в пол — это ожидаемо.
-    // Честная граница пина: подмена статусного числа на значение, которое уже
-    // есть в истории (копия предыдущего максимума), неотличима — истинное
-    // число тестов внутри теста неизвестно.
-    const strictRe = /- \*\*Тесты:\s*\d+ suites \/ \d+ passed \/ \d+ skipped \/ \d+ failed/;
-    const strict = strictRe.exec(handoff);
-    expect(strict).not.toBeNull();
-    const strictEnd = strict.index + strict[0].length;
+  test('семантика: «текущий прогон» и «исторический максимум» — независимые сущности (O-53)', () => {
+    // б1: текущий счётчик синхронен факту, исторический максимум — рекорд зелёных
+    // прогонов. Рекорд НЕ является полом для текущего: удаление тестов снижает
+    // текущее число, и это не регресс (прежнее сравнение current >= max штрафовало
+    // работу). Здесь проверяются формат, валидность чисел и непустота истории.
+    const currentMatch = TESTS_RE.exec(handoff);
+    expect(currentMatch).not.toBeNull();
+    const histMaxMatch = HIST_MAX_RE.exec(handoff);
+    expect(histMaxMatch).not.toBeNull();
 
-    const current = strict[0].match(/(\d+) suites \/ (\d+) passed \/ (\d+) skipped \/ (\d+) failed/);
-    expect(current).not.toBeNull();
+    const current = currentMatch.slice(1).map(Number);
+    const histMax = histMaxMatch.slice(1).map(Number);
+    expect(current).toHaveLength(4);
+    expect(histMax).toHaveLength(4);
+    current.concat(histMax).forEach(function (n) {
+      expect(Number.isInteger(n)).toBe(true);
+      expect(n).toBeGreaterThanOrEqual(0);   // валидное неотрицательное число
+    });
 
+    // История для пола — все прочие полные формы счётчиков по телу handoff,
+    // КРОМЕ обеих исключённых строк: текущей «- **Тесты:» (обновляемой) и
+    // рекорда «- **Исторический максимум:». Обе строки уникальны.
+    const excluded = [
+      [currentMatch.index, currentMatch.index + currentMatch[0].length],
+      [histMaxMatch.index, histMaxMatch.index + histMaxMatch[0].length]
+    ];
     // Захватываем ЧЕТЫРЕ группы: без `failed` нельзя отличить зелёный прогон
-    // от прогона с падениями, а именно это и делает пол (см. cleanHistory ниже).
+    // от прогона с падениями, а именно это и отделяет cleanHistory ниже.
     const history = [];
     const counterRe = /(\d+) suites \/ (\d+) passed \/ (\d+) skipped \/ (\d+) failed/g;
     let m;
     while ((m = counterRe.exec(handoff)) !== null) {
-      if (m.index >= strict.index && m.index < strictEnd) continue;   // текущее — не пол
+      const inExcluded = excluded.some(function (r) { return m.index >= r[0] && m.index < r[1]; });
+      if (inExcluded) continue;   // текущее и рекорд — не история
       history.push([Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])]);
     }
     expect(history.length).toBeGreaterThanOrEqual(20);   // история счётчиков не вычищена
 
     // Пол берётся ТОЛЬКО по зелёным прогонам (failed === 0). Осознанно упавший
     // прогон не должен задавать планку: иначе осознанное падение пина роняет
-    // O-53 повторно, пока статусная строка не дотянет до его прохождений, и
-    // правило начинает штрафовать работу. Не-зелёные прогоны остаются в
-    // истории (и в инварианте >= 20) — они не исчезают, они лишь не являются
-    // нижней границей.
+    // O-53 повторно. Не-зелёные прогоны остаются в истории (и в инварианте >= 20).
     const cleanHistory = history.filter(function (c) { return c[3] === 0; });
     expect(cleanHistory.length).toBeGreaterThanOrEqual(20);   // зелёных прогонов достаточно для пола
-
-    const maxSuites = Math.max.apply(null, cleanHistory.map(function (c) { return c[0]; }));
-    const maxPassed = Math.max.apply(null, cleanHistory.map(function (c) { return c[1]; }));
-    expect(Number(current[1])).toBeGreaterThanOrEqual(maxSuites);
-    expect(Number(current[2])).toBeGreaterThanOrEqual(maxPassed);
   });
 
   test('версия: handoff === manifest.json === package.json, упоминание ровно одно', () => {
