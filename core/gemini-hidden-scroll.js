@@ -66,13 +66,13 @@
   }
 
   function findScrollContainer() {
+    var root = document.querySelector('main'); // v1.17: структурный обход — только поддерево main
+    if (!root) { debugLog('log', '[AI CM][scroll] findScrollContainer: main отсутствует — null'); return null; }
     var HINT = /conversation|message|chat-turn|response|scroll|turn-list|infinite|virtual/i;
-    var all = document.querySelectorAll('*');
+    var all = root.querySelectorAll('*');
     var hinted = null, best = null, bestH = -1;
     for (var i = 0; i < all.length; i++) {
-      var el = all[i];
-      if (el === document.body || el === document.documentElement) continue;
-      var st = '';
+      var el = all[i], st = ''; if (el === document.body || el === document.documentElement) continue;
       try { st = getComputedStyle(el).overflowY; } catch (e) { continue; }
       if (st !== 'auto' && st !== 'scroll' && st !== 'overlay') continue;
       var sh = el.scrollHeight, ch = el.clientHeight;
@@ -84,13 +84,13 @@
     }
     if (hinted) return hinted;
     if (best) return best;
-    var de = document.scrollingElement || document.documentElement;
-    if (de.scrollHeight > window.innerHeight + 50) return makeScroller(null);
+    // v1.17: document-фолбэка нет намеренно: main без скроллера = «скроллить нечего»,
+    // глобальный обход цеплял сайдбар/панели (best-fallback ломал позицию чата).
     return null;
   }
 
   function rontgenScroll() {
-    var all = document.querySelectorAll('*');
+    var root = document.querySelector('main'); var all = root ? root.querySelectorAll('*') : [];
     var arr = [];
     for (var i = 0; i < all.length; i++) {
       var el = all[i];

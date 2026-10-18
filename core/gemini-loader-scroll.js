@@ -49,11 +49,11 @@
   var LOADER_STABLE_NEED = 3;   // v30.7: три негро-стящих чтения до контрольного замера
   var LOADER_RECHECK_MS = 2000; // v4z: контрольный перемер после «стабилизации»
   var LOADER_RESUME_DELTA = 200; // v4z: вырос больше — возобновить цикл
-  // v53: кап ретраев скролла при живом continuation-курсоре (h не растёт, курсор есть).
-  // Холодный старт (простой >12ч) медленный — поднят до 90 (шаг ~1с → до ~90с).
-  // Исчерпание капа → done reason=timeout. Раньше (30) лоадер стопился преждевременно
-  // при ещё живой истории (логи 0362260d: pct=56.2 терялись до ручного скролла).
-  var LOADER_STALL_CAP = 90;
+  // v53: кап ретраев скролла при живом continuation-курсоре (h не растёт, курсор есть). Раньше 30 —
+  // лоадер стопился преждевременно при живой истории (логи 0362260d: pct=56.2 терялись до ручного скролла).
+  // v1.17 (wall-clock): жёсткий предел одного прогона — fail-safe, не зависящий от LOADER_MAX_ITER/pendingCursor.
+  var LOADER_STALL_CAP = 20; // v1.17: 90×1.2с = 108с блокировки оверлея (лог 2026-10-18); 60+ итераций прироста не дают — 20 достаточно, дальше timeout
+  var LOADER_RUN_WALL_CLOCK_MS = 90000;
   var LOADER_HIDE_MIN_H = 8000;
   // v66: доказательство вовлечения скрытого скролла. scrollEngaged=true при ЛЮБОМ из:
   //   1) hide-applied (скроллер прятался — значит лента реально прокручивалась);
@@ -188,12 +188,12 @@
         var lastEpoch = -1;  // v53: последнее виденное поколение курсора
         var iter = 0;
         var maxScrollHSeen = sc.height(); // v1.14.2 (COLLAPSE-GUARD): пер-ран максимум scrollHeight — сброс в старте прогона
-        // H9 (untrusted-top): снапшот поколения курсора на старте прогона. Если за время
-        // прогона пришёл history-write с continuation-курсором (cursorEpoch вырос), значит
-        // старшая история существует и есть (hadCursor=true). При floor=0 и no-growth такой
-        // «вершок» на схлопнутом скроллере недостоверен (см. untrustedTopVerdict ниже).
+        // H9 (untrusted-top): снапшот поколения курсора на старте прогона (hadCursor — по росту cursorEpoch;
+        // при floor=0 и no-growth «вершок» на схлопнутом скроллере недостоверен — см. untrustedTopVerdict).
         var cursorEpochAtRunStart = D.cursorEpoch;
+        var runStartAt = Date.now(); // v1.17 (wall-clock): отсчёт жёсткого предела прогона (проверка — первая строка цикла)
         while (true) {
+          if (Date.now() - runStartAt > LOADER_RUN_WALL_CLOCK_MS) { doneReason = 'wall-clock-timeout'; break; } // fail-safe: срабатывает и при живом pendingCursor
           iter++;
           // v53: любой history-write с continuation-курсором сбрасывает счётчики
           // стабилизации и столла — «новое поколение» курсора оживляет цикл.
