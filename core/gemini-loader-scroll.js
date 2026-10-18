@@ -759,6 +759,13 @@
   // v46: ожидание сигнала «старшая история» до решения о старте.
   var LOADER_SIGNAL_WAIT_TRIES = 20; // v46: до 20 попыток по 1с — дождаться первого history-RPC
   var LOADER_SIGNAL_WAIT_MS = 1000;
+  // loader-reentry (v2.0.17): карта convId → Date.now() последнего РЕАЛЬНОГО старта
+  // maybeStartLoader. Только диагностика (sinceLastRunMs в строке auto-start-reentry):
+  // гарды, латчи doneMap/runningFor и ветки cache-complete/data-complete её не читают.
+  // Сброса при смене чата нет намеренно — карта ключуется convId, поэтому повторный вход
+  // в тот же чат измеряется честно (сколько прошло с прошлого прогона), а рост ограничен
+  // числом посещённых за сессию чатов. Латчи живут в ядре, карта — рядом с их потребителем.
+  var loaderRunAtMap = {};
   function maybeStartLoader() {
     var tries = 0;
     function tick() {
@@ -767,6 +774,14 @@
         if (++tries < 10) { setTimeout(tick, 1000); }
         return;
       }
+      // loader-reentry (v2.0.17): точка входа автозапуска. Печатается ДО проверки латча —
+      // видно и повторный вход (sinceLastRunMs >= 0), и вход, который латч сейчас скипнет.
+      // Гейт тот же, что у соседних строк файла: debugLog('log', …) — 'log' молчит, пока
+      // aiCmDebugLogs/DEBUG не включён (utils/debug.js:55-71).
+      debugLog('log', '[AI CM][Gemini][loader] auto-start-reentry convId=' +
+        String(convId || 'null') +
+        ' sinceLastRunMs=' + String(typeof loaderRunAtMap[convId] === 'number' ? (Date.now() - loaderRunAtMap[convId]) : -1) +
+        ' src=spa');
       if (D.loaderDoneMap[convId]) {
         debugLog('log', '[AI CM][Gemini][loader] skip reason=already-done convId=' + convId +
           (D.loaderRetryUsedMap[convId] ? ' retry-used=1' : ' retry-used=0')); // v66: состояние латча
@@ -852,6 +867,7 @@
           ' floor=' + __floorMs + ' tries=' + tries);
       } catch (eRs) { }
       D.loaderDoneMap[convId] = true;
+      loaderRunAtMap[convId] = Date.now(); // loader-reentry (v2.0.17): время последнего реального старта
       D.loaderRunningFor = convId;
       D.notifyLoaderState(convId, true); // v42: наружу «лоадер бежит по convId»
       loadFullHistoryInvisibly().then(function () {

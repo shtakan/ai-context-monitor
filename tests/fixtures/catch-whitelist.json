@@ -942,7 +942,7 @@
       "category": "cleanup-guard",
       "lines": [
         699,
-        790
+        805
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete D.oracleIncompleteSeen[convId];"
     },
@@ -950,10 +950,10 @@
       "file": "core/gemini-loader-scroll.js",
       "category": "debug-instrumentation",
       "lines": [
-        853,
-        865,
-        901,
-        907
+        868,
+        881,
+        917,
+        923
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.__aiCmGeminiLoadFullHistory = loadFullHistoryInvisibly;"
     },
@@ -961,7 +961,7 @@
       "file": "core/gemini-loader-scroll.js",
       "category": "defensive-assignment",
       "lines": [
-        791
+        806
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: D.oracleRerunUsedMap[convId] = true;"
     },
