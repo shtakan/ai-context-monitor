@@ -1,5 +1,5 @@
 /**
- * v1.17 (hot-path: stall + scroll) — пины трёх правок одного коммита.
+ * v1.17 (hot-path: stall + scroll) — пины правок коммита; v1.17a — откат капа до 90.
  *
  * ПРЕДМЕТ. Живой снимок DOM от 2026-10-18 показал: `<main class="chat-app">` есть, но сам
  * НЕ скроллится (scrollHeight == clientHeight, overflow-y: visible), единственный реальный
@@ -14,9 +14,17 @@
  *      ПЕРВАЯ строка тела while, поэтому срабатывает и при живом pendingCursor;
  *   3) findScrollContainer() — структурный обход только поддерева main, без document-фолбэка.
  *
+ * ОТКАТ (v1.17a, 2026-10-18). Пункт 1 откатан: кап снова 90 и исторический комментарий v53
+ * восстановлен дословно — истинный холодный старт (простой >12ч) на капе 20 не проверялся,
+ * а приёмка показала живой курсор при ещё недогруженной истории (лог 0362260d: pct=56.2).
+ * Вместо сокращения капа добавлен отдельный UI-таймаут 30с: он снимает только оверлей,
+ * а фоновый цикл продолжается до wall-clock (90с) или doneReason — пины в
+ * `gemini-overlay-ui-timeout.test.js`. Пункты 2 и 3 сохранены без изменений.
+ *
  * ПИНЫ.
- *   D1  источник: `LOADER_STALL_CAP = 20` ровно один раз, `= 90` — ноль, инлайн-комментарий
- *       с цифрами блокировки на месте (обоснование не потеряется при будущем подъёме капа).
+ *   D1  источник: `LOADER_STALL_CAP = 90` ровно один раз, `= 20` — ноль; исторический
+ *       комментарий v53 (0362260d / pct=56.2) и комментарий про wall-clock на месте —
+ *       обоснование не потеряется при будущих подъёмах/снижениях капа.
  *   D2  источник: константа 90000 объявлена один раз; `doneReason = 'wall-clock-timeout'`
  *       ровно один раз; guard — первая строка тела while; `runStartAt` объявлен ДО цикла
  *       ровно один раз (никто не сбрасывает отсчёт внутри итерации); строка guard'а не
@@ -41,6 +49,12 @@
  * постинно: новые строки вставлены только за счёт сжатия соседних комментариев, поэтому
  * ни один whitelisted catch не сдвинулся и сам whitelist не правился.
  *
+ * ПОСЛЕ ОТКАТА (v1.17a) линейная нейтральность в loader-scroll НАМЕРЕННО нарушена:
+ * восстановлен 4-строчный комментарий v53 и добавлены UI-таймаут с латчем (+5/+6 строк),
+ * поэтому номера catch'ей в `catch-whitelist.json` для `core/gemini-loader-scroll.js`
+ * пересчитаны и записаны заново. Ни один catch не добавлен/удалён — изменились только
+ * их номера; `tests/catch-hygiene.test.js` (R1) подтверждает совпадение записей.
+ *
  * Логика waitImPossibility, _wasVis, seq-гарда оверлея и intercept не затрагивалась —
  * это подтверждают соседние пин-сьюты (R1), остающиеся зелёными без правок.
  */
@@ -62,7 +76,12 @@ const HIDDEN_REL = 'core/gemini-hidden-scroll.js';
 const LOADER = readFile(LOADER_REL);
 const HIDDEN = readFile(HIDDEN_REL);
 
-const STALL_COMMENT = '90×1.2с = 108с блокировки оверлея (лог 2026-10-18); 60+ итераций прироста не дают — 20 достаточно, дальше timeout';
+const V53_COMMENT_LINES = [
+  '// v53: кап ретраев скролла при живом continuation-курсоре (h не растёт, курсор есть).',
+  '// Холодный старт (простой >12ч) медленный — поднят до 90 (шаг ~1с → до ~90с).',
+  '// Исчерпание капа → done reason=timeout. Раньше (30) лоадер стопился преждевременно',
+  '// при ещё живой истории (логи 0362260d: pct=56.2 терялись до ручного скролла).'
+];
 
 /**
  * Загрузка core/gemini-hidden-scroll.js в отдельный vm-контекст — как это делает реальный
@@ -103,16 +122,26 @@ function docWithMain(children) {
 }
 
 describe('gemini-scroll-stall-fix (v1.17)', () => {
-  describe('D1: кап сталла снижен до 20', () => {
-    test('LOADER_STALL_CAP = 20 ровно один раз, = 90 отсутствует', () => {
-      expect(countOf(LOADER, 'LOADER_STALL_CAP = 20')).toBe(1);
-      expect(countOf(LOADER, 'LOADER_STALL_CAP = 90')).toBe(0);
+  describe('D1: кап сталла 90 (историческое значение v53, откат v1.17a)', () => {
+    test('LOADER_STALL_CAP = 90 ровно один раз, = 20 отсутствует', () => {
+      expect(countOf(LOADER, 'LOADER_STALL_CAP = 90')).toBe(1);
+      expect(countOf(LOADER, 'LOADER_STALL_CAP = 20')).toBe(0);
     });
 
-    test('инлайн-комментарий с причиной сохранён рядом с константой', () => {
-      const line = LOADER.split('\n').find((l) => l.includes('LOADER_STALL_CAP = 20'));
-      expect(line).toContain('//');
-      expect(line).toContain(STALL_COMMENT);
+    test('исторический комментарий v53 восстановлен дословно и стоит перед константой', () => {
+      for (const l of V53_COMMENT_LINES) expect(countOf(LOADER, l)).toBe(1);
+      const lines = LOADER.split('\n');
+      const capIdx = lines.findIndex((l) => l.includes('LOADER_STALL_CAP = 90'));
+      expect(capIdx).toBeGreaterThan(V53_COMMENT_LINES.length);
+      V53_COMMENT_LINES.forEach((c, i) => {
+        expect(lines[capIdx - V53_COMMENT_LINES.length - 1 + i].trim()).toBe(c);
+      });
+    });
+
+    test('комментарий про wall-clock сохранён между v53 и константой', () => {
+      const lines = LOADER.split('\n');
+      const capIdx = lines.findIndex((l) => l.includes('LOADER_STALL_CAP = 90'));
+      expect(lines[capIdx - 1]).toContain('// v1.17 (wall-clock)');
     });
   });
 
@@ -129,7 +158,9 @@ describe('gemini-scroll-stall-fix (v1.17)', () => {
 
     test('runStartAt объявлен до цикла, один раз (нет сброса внутри итерации)', () => {
       expect(countOf(LOADER, 'var runStartAt = Date.now();')).toBe(1);
-      expect(LOADER).toMatch(/var runStartAt = Date\.now\(\);[^\n]*\n\s*while \(true\) \{/);
+      // между отсчётом и циклом стоит только сброс UI-латча (v1.17a) — сам отсчёт не сбрасывается
+      expect(LOADER).toMatch(/var runStartAt = Date\.now\(\);[^\n]*\n\s*D\.aiCmUiOverlayTimedOut = false;[^\n]*\n\s*while \(true\) \{/);
+      expect(countOf(LOADER, 'runStartAt = Date.now()')).toBe(1);
     });
 
     test('guard — ПЕРВАЯ строка тела while (срабатывает до любой курсорной логики)', () => {

@@ -49,10 +49,12 @@
   var LOADER_STABLE_NEED = 3;   // v30.7: три негро-стящих чтения до контрольного замера
   var LOADER_RECHECK_MS = 2000; // v4z: контрольный перемер после «стабилизации»
   var LOADER_RESUME_DELTA = 200; // v4z: вырос больше — возобновить цикл
-  // v53: кап ретраев скролла при живом continuation-курсоре (h не растёт, курсор есть). Раньше 30 —
-  // лоадер стопился преждевременно при живой истории (логи 0362260d: pct=56.2 терялись до ручного скролла).
+  // v53: кап ретраев скролла при живом continuation-курсоре (h не растёт, курсор есть).
+  // Холодный старт (простой >12ч) медленный — поднят до 90 (шаг ~1с → до ~90с).
+  // Исчерпание капа → done reason=timeout. Раньше (30) лоадер стопился преждевременно
+  // при ещё живой истории (логи 0362260d: pct=56.2 терялись до ручного скролла).
   // v1.17 (wall-clock): жёсткий предел одного прогона — fail-safe, не зависящий от LOADER_MAX_ITER/pendingCursor.
-  var LOADER_STALL_CAP = 20; // v1.17: 90×1.2с = 108с блокировки оверлея (лог 2026-10-18); 60+ итераций прироста не дают — 20 достаточно, дальше timeout
+  var LOADER_STALL_CAP = 90;
   var LOADER_RUN_WALL_CLOCK_MS = 90000;
   var LOADER_HIDE_MIN_H = 8000;
   // v66: доказательство вовлечения скрытого скролла. scrollEngaged=true при ЛЮБОМ из:
@@ -192,9 +194,12 @@
         // при floor=0 и no-growth «вершок» на схлопнутом скроллере недостоверен — см. untrustedTopVerdict).
         var cursorEpochAtRunStart = D.cursorEpoch;
         var runStartAt = Date.now(); // v1.17 (wall-clock): отсчёт жёсткого предела прогона (проверка — первая строка цикла)
+        D.aiCmUiOverlayTimedOut = false; // v1.17 (UI-таймаут): латч «оверлей уже снят по 30с» — в D, чтобы фолбэк-ветка (в т.ч. в песочницах) его видела
         while (true) {
           if (Date.now() - runStartAt > LOADER_RUN_WALL_CLOCK_MS) { doneReason = 'wall-clock-timeout'; break; } // fail-safe: срабатывает и при живом pendingCursor
           iter++;
+          // v1.17 (UI-таймаут): через 30с оверлей снимаем — пользователь видит чат, цикл живёт дальше (до 90с/doneReason).
+          if (Date.now() - runStartAt > 30000 && D.aiCmScrollOverlay) { D.aiCmSetScrollOverlay(false, 'ui-timeout'); D.aiCmUiOverlayTimedOut = true; }
           // v53: любой history-write с continuation-курсором сбрасывает счётчики
           // стабилизации и столла — «новое поколение» курсора оживляет цикл.
           if (D.cursorEpoch !== lastEpoch) {
@@ -356,11 +361,12 @@
             // v80: оверлей мог быть снят force-restore (visibilitychange/conv-switch) —
             // возвращаем, пока страховочный скролл активен. v81 (O1 white-screen A):
             // при восстановленной ленте оверлей НЕ поднимаем (тейп уже виден).
+            // v1.17: после UI-таймаута (30с) тоже не поднимаем — пользователь уже видит чат.
             if (D.tapeWasUsedInThisColdStart === true) {
               if (!D.aiCmScrollOverlay) {
                 debugLog('log', '[AI CM][visibility] overlay-suppressed reason=tape-present convId=' + (D.getConvId() || '(none)'));
               }
-            } else if (!D.aiCmScrollOverlay) {
+            } else if (!D.aiCmScrollOverlay && !D.aiCmUiOverlayTimedOut) {
               D.aiCmSetScrollOverlay(true, 'loader-fallback');
             }
             debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' fallback-real-scroll (база неполная, rAF-возврат не триггерит пагинацию) convId=' + convId);
