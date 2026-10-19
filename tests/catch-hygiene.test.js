@@ -523,3 +523,116 @@ describe('Step E.2b.1: baseline-pin пустых catch вне области whi
     expect(found.length).toBeLessThanOrEqual(OUTSIDE_WHITELIST_BASELINE);
   });
 });
+
+// ================= R1: пин против identity-replace в print/print.js ===========
+// Регресс-защита фикса v85 (§4 R1): в print/print.js не должно появляться
+// `.replace(/X/g, 'X')` — вызов, который возвращает вход без изменений.
+// История: до v85 HTML-escape в fail-open fallback был identity-цепочкой
+// `.replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>')`, т.е. не экранировал
+// ничего. Сейчас там реальные сущности `&amp;` / `&lt;` / `&gt;` / `&quot;`;
+// пин фиксирует, что цепочка не деградирует обратно.
+//
+// Детектор намеренно ШИРЕ примера из постановки: помимо `.replace(/X/g, "X")`
+// он ловит любой string-заменитель, чьё значение после раскрытия JS-escape
+// совпадает с ЛИТЕРАЛЬНЫМ текстом шаблона (`.replace(/\./g, '.')` тоже identity).
+// Шаблон с регексп-метасимволами (`\s`, `\d`, `+`, `[]`, `\b` и т.п.) литералом
+// не считается: `.replace(/a+/g, 'a+')` и `.replace(/\s+/g, ' ')` — не identity.
+const PRINT_JS_PATH = path.join(ROOT, 'print', 'print.js');
+
+const REPLACE_CALL_RE = /\.replace\(\s*\/((?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\n])+)\/([gimsuy]*)\s*,\s*(['"])((?:\\.|(?!\3)[^\\\n])*)\3\s*\)/g;
+
+const JS_ESCAPES = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', v: '\v', 0: '\0' };
+const REGEX_CONTROL_ESCAPES = { n: '\n', r: '\r', t: '\t', f: '\f', v: '\v', 0: '\0' };
+const REGEX_META = '^$.*+?()[]{}|';
+
+/** Раскрывает escape-последовательности строкового литерала (без кавычек). */
+function decodeJsString(s) {
+  return s.replace(/\\(u\{[0-9a-fA-F]+\}|u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|.)/g, (m, e) => {
+    if (e[0] === 'u') {
+      const hex = e[1] === '{' ? e.slice(2, -1) : e.slice(1);
+      return String.fromCodePoint(parseInt(hex, 16));
+    }
+    if (e[0] === 'x') return String.fromCharCode(parseInt(e.slice(1), 16));
+    return Object.prototype.hasOwnProperty.call(JS_ESCAPES, e) ? JS_ESCAPES[e] : e;
+  });
+}
+
+/**
+ * Литеральный текст regex-шаблона или null, если шаблон содержит метасимволы
+ * (класс, якорь, квантификатор, группа, backreference). Только литеральный
+ * шаблон, совпавший с заменителем, действительно возвращает вход как есть.
+ */
+function literalRegexText(src) {
+  let out = '';
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (c === '\\') {
+      const e = src[++i];
+      if (e === undefined) return null;
+      if (e === 'u' || e === 'x') {
+        const width = e === 'u' ? 4 : 2;
+        const hex = src.slice(i + 1, i + 1 + width);
+        if (!new RegExp('^[0-9a-fA-F]{' + width + '}$').test(hex)) return null;
+        out += String.fromCodePoint(parseInt(hex, 16));
+        i += width;
+      } else if (Object.prototype.hasOwnProperty.call(REGEX_CONTROL_ESCAPES, e)) {
+        out += REGEX_CONTROL_ESCAPES[e];
+      } else if (REGEX_META.indexOf(e) !== -1 || e === '\\' || e === '/' || e === '-') {
+        out += e;
+      } else {
+        return null; // \s, \d, \w, \b, \1 и прочие не-литералы
+      }
+    } else if (REGEX_META.indexOf(c) !== -1) {
+      return null;
+    } else {
+      out += c;
+    }
+  }
+  return out;
+}
+
+/** Все identity-replace в исходнике: { line, expr }. */
+function findIdentityReplaces(src) {
+  const found = [];
+  REPLACE_CALL_RE.lastIndex = 0;
+  let m;
+  while ((m = REPLACE_CALL_RE.exec(src)) !== null) {
+    const pattern = literalRegexText(m[1]);
+    const replacement = decodeJsString(m[4]);
+    if (pattern !== null && pattern === replacement) {
+      found.push({ line: src.slice(0, m.index).split('\n').length, expr: m[0] });
+    }
+  }
+  return found;
+}
+
+describe('R1 (v85): в print/print.js нет identity-replace цепочек', () => {
+  test('identity-replace `.replace(/X/g, \'X\')` — 0 совпадений', () => {
+    const src = fs.readFileSync(PRINT_JS_PATH, 'utf8');
+    const found = findIdentityReplaces(src);
+    const listing = found.map(f => 'print/print.js:' + f.line + ' — ' + f.expr).join('\n  ');
+    expect(found.length
+      ? 'НАЙДЕНО ' + found.length + ' identity-replace, точки:\n  ' + listing
+      : '').toBe('');
+    expect(found).toEqual([]);
+  });
+
+  test('R1b: детектор ловит identity и не трогает реальный escape', () => {
+    expect(findIdentityReplaces("var s = x.replace(/&/g, '&');").map(f => f.line)).toEqual([1]);
+    expect(findIdentityReplaces('var s = x.replace(/</g, "<");').length).toBe(1);
+    expect(findIdentityReplaces("x.replace(/\\./g, '.');").length).toBe(1);
+    // не identity: реальные сущности, пробельная нормализация, нестроковый заменитель
+    expect(findIdentityReplaces("x.replace(/&/g, '&amp;');")).toEqual([]);
+    expect(findIdentityReplaces("x.replace(/</g, '&lt;');")).toEqual([]);
+    expect(findIdentityReplaces("x.replace(/\\s+/g, ' ');")).toEqual([]);
+    expect(findIdentityReplaces("x.replace(/a+/g, 'a+');")).toEqual([]);
+    expect(findIdentityReplaces("x.replace(/\\b/g, 'b');")).toEqual([]);
+    expect(findIdentityReplaces('x.replace(/a/g, repl);')).toEqual([]);
+    // положительный контроль на живой цепочке v85: 4 реальные сущности
+    const fixed = "s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;')";
+    expect(findIdentityReplaces(fixed)).toEqual([]);
+    // и та же цепочка в исторически дефектном виде детектируется целиком
+    const broken = "s.replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>')";
+    expect(findIdentityReplaces(broken).length).toBe(3);
+  });
+});
