@@ -4443,3 +4443,92 @@ index 0f81ab1..6b7c432 100644
 ### Секция 7. Плейсхолдер.
 
 **SHA v85:** 6d32e66 (тело аппендикса v85, шаг 1 двухшагового паттерна).
+
+## Аппендикс v86 (2026-10-19): холодный старт Gemini — скролл-фиксы закрыты (столл-кап 90 + UI-таймаут 30 с + гейт оверлея автоскролла)
+
+**Дата:** 2026-10-19
+**Код-коммиты:** `d1ca7e4` — `fix(scroll): stall cap 20 + wall-clock run guard; findScrollContainer only under main (v1.17)`, 3 файла, +267/−16; `8ced33d` — `fix(loader): revert stall cap to 90 + 30s UI-overlay timeout (v1.17a)`, 4 файла, +412/−36; `29fb7f7` — `fix(autoscroll): gate full-screen overlay by collected data + 3s hold window (v86)`, 6 файлов, +453/−30; `338b527` — `feat(diag): gemini loader auto-start reentry instrumentation (loader-reentry)` (инструментация, на которой собраны свидетели Секции 2; поведение v86 не меняет).
+**Статус:** ЗАКРЫТ.
+
+### Секция 1. Что сделано.
+
+**Коммит 1 — `d1ca7e4` (структурный обход + wall-clock).** В `core/gemini-hidden-scroll.js:68-71` `findScrollContainer()` переведён с `document.querySelectorAll('*')` на поддерево `main`:
+
+```js
+var root = document.querySelector('main'); // v1.17: структурный обход — только поддерево main
+if (!root) { debugLog('log', '[AI CM][scroll] findScrollContainer: main отсутствует — null'); return null; }
+```
+
+document-фолбэк (`document.scrollingElement` при `scrollHeight > innerHeight + 50`) удалён намеренно: глобальный best-fallback цеплял сайдбар и ломал позицию чата. `rontgenScroll()` переведён на то же поддерево (`var root = document.querySelector('main'); var all = root ? root.querySelectorAll('*') : [];`), иначе глобальный обход вернулся бы через диагностику. В `core/gemini-loader-scroll.js`: `LOADER_STALL_CAP` 90 → 20 и новый `var LOADER_RUN_WALL_CLOCK_MS = 90000;`; проверка стоит первой строкой тела `while`:
+
+```js
+if (Date.now() - runStartAt > LOADER_RUN_WALL_CLOCK_MS) { doneReason = 'wall-clock-timeout'; break; }
+```
+
+Fail-safe не зависит от `LOADER_MAX_ITER`/`pendingCursor` и срабатывает при живом курсоре. Пины: `tests/adapters/gemini-scroll-stall-fix.test.js` (+251; D1–D5, R2).
+
+**Коммит 2 — `8ced33d` (откат капа).** `LOADER_STALL_CAP` возвращён 20 → 90 с дословным комментарием v53: истинный холодный старт (>12 ч) на 20 не проверен, приёмка показала живой курсор при недогруженной истории. Вместо сокращения капа — независимый UI-таймаут: через 30 с от старта прогона оверлей снимается, фоновый цикл живёт до wall-clock 90 с / `doneReason`:
+
+```js
+D.aiCmUiOverlayTimedOut = false;
+...
+if (Date.now() - runStartAt > 30000 && D.aiCmScrollOverlay) { D.aiCmSetScrollOverlay(false, 'ui-timeout'); D.aiCmUiOverlayTimedOut = true; }
+```
+
+Латч хранится в `D`, а не в модульной переменной (фрагменты цикла исполняются в песочницах), и не даёт фолбэк-ветке поднять оверлей обратно в том же тике: `else if (!D.aiCmScrollOverlay && !D.aiCmUiOverlayTimedOut)`. Пины: `tests/adapters/gemini-overlay-ui-timeout.test.js` (+339; D1–D3, R1, R2); `tests/fixtures/catch-whitelist.json` — пересчёт номеров молчаливых catch (19 записей в группе `gemini-loader-scroll.js`; сами catch не добавлялись и не удалялись).
+
+**Коммит 3 — `29fb7f7` (гейт оверлея автоскролла).** Оверлей в конвейере данных не участвует — сбор идёт через `triggerUp`/`settleBottom`, — поэтому непрозрачный экран имеет смысл только пока база пуста.
+
+- `expectedTurnsFromStorage()` получил числовой пол: `var n = sf ? Number(sf.count) : 0; return (isFinite(n) && n > 0) ? n : 0;` (undefined/мусор → 0).
+- Новый `autoscrollDataPresent()` — три признака: `D.historyFullByQuiet === true`, `D.reachedStart === true`, либо `expected > 0 && D.baseSize() >= expected`.
+- Оверлей поднимается только `if (!autoscrollDataPresent())`; иначе — debug `overlay-suppressed reason=autoscroll-data-present`. `__ovShownAt` фиксирует момент подъёма.
+- В цикле после `settleBottom(sc)` оверлей снимается по данным ИЛИ по возрасту 3 с: `if (hiddenEl && (autoscrollDataPresent() || (Date.now() - __ovShownAt > 3000))) { __restoreAutoscrollVisibility(); }`.
+- `core/gemini-intercept.js` отдаёт в контракт hidden-scroll ro-геттеры `historyFullByQuiet` и `reachedStart` (модуль их только читает); `autoscrollDataPresent` экспортирован.
+- Пины: `tests/adapters/gemini-overlay-gate.test.js` (+382; D1–D4, R1); правки `tests/adapters/gemini-archive-module.test.js`, `tests/adapters/gemini-ingest-module.test.js`, `catch-whitelist.json` (абсолютные номера чужих групп).
+
+### Секция 2. Свидетели/факты.
+
+- Холодный старт 2026-10-19: другая ОС, чистый профиль без соседних расширений.
+- Чат 1 — 118 msgs за 3.5 с, оверлей не поднимался (`overlay-suppressed reason=autoscroll-data-present`).
+- Чат 2 — 133 msgs, оверлей не поднимался.
+- Чат 3 — 58 msgs, оверлей поднят и снят через 3 с (окно удержания), дальше сбор шёл без непрозрачного экрана.
+- `scrollEngaged=true` во всех трёх прогонах; автоэкспорт сработал (fired).
+- Полный сьют на HEAD `29fb7f7`: 176 suites; 3130 passed; 6 skipped; 0 failed. `npx tsc --noEmit` — exit 0.
+- `npx jest tests/docs-hygiene.test.js` — exit 0 (инварианты O-53 зелёные).
+
+### Секция 3. Отклонения от промпта (приняты).
+
+1. **`rontgenScroll` под `main` — расширение scope.** Промпт называл только `findScrollContainer`. Диагностический обход оставлен глобальным — он вернул бы глобальный поиск в горячий путь через `rontgenScroll`, поэтому переведён на то же поддерево. Поведение диагностики не меняется, кроме сужения области.
+2. **`d1ca7e4` и `8ced33d` уходят вместе.** Промежуточное состояние cap=20 не пушится отдельно: финальный cap = 90, UI-таймаут 30 с — независимый слой. В истории коммитов это два шага (фикс и его откат), в приёмке — одно состояние.
+
+### Секция 4. Новые residual (Low).
+
+- **R1.** Пин «в `print/print.js` нет identity-replace цепочек» (из v85 §4 R1) — не сделан, переносится дальше; кандидат в следующий hygiene-коммит.
+- **R2.** Приёмка выполнена в чистом профиле без соседних расширений; взаимодействие с блокировщиками и другими content-script'ами не проверялось. Классификация — «пройдена с границей».
+
+### Секция 5. Переопределение residual-точек (тексты аппендиксов выше не редактируются).
+
+Grep-инвентаризация ШАГа 1 (case-insensitive, 5 шаблонов) на HEAD `29fb7f7` до настоящего аппендикса:
+
+- `stall-retry` — **0 вхождений**;
+- `LOADER_STALL_CAP` — **0**;
+- `findScrollContainer` — **0**;
+- `overlay-gate` — **0**;
+- `autoscroll` — **2 вхождения**:
+  - **L711** (старая заметка про `autoScrollBlocked` с таймаутом 5 с, `:731-738`) — **историческая, T-HIST, не пересматривается**;
+  - **L1603** (Step 11 plan — вынос кластера `loader-scroll`: `maybeStartLoader`, `scheduleAutoScroll`, `loadFullHistoryInvisibly`) — **историческая, T-HIST, не пересматривается**.
+- **Итого residual-точек из шага 1: 0.** Оба вхождения — исторические записи, ни одно не является открытым residual; переопределять нечего. Маркеры `LOADER_STALL_CAP`/`findScrollContainer` в handoff отсутствуют — они живут только в коде (`core/gemini-loader-scroll.js`, `core/gemini-hidden-scroll.js`).
+
+### Секция 6. Сводка.
+
+- Сьют (HEAD `29fb7f7`): 176 suites; 3130 passed; 6 skipped; 0 failed.
+- `npx tsc --noEmit` — exit 0; `node --check` изменённых файлов — exit 0.
+- `npx jest tests/docs-hygiene.test.js` — exit 0 (O-53 зелёные).
+- HEAD `29fb7f7`; ahead относительно `origin/main` = 4 (`338b527`, `d1ca7e4`, `8ced33d`, `29fb7f7`); push не выполнялся — шаг владельца.
+- Рабочая копия после коммита B чиста (`git status --short` пуст).
+- Верхний блок (строка 5) не трогался ни в A, ни в B.
+- Защищённые строки (текущий прогон / рекорд / версия) в теле аппендикса полными формами не приводятся — пин O-53 (`tests/docs-hygiene.test.js:272-286`).
+
+### Секция 7. Плейсхолдер.
+
+**SHA v86:** <SHA v86-A> (тело аппендикса v86, шаг 1 двухшагового паттерна).
