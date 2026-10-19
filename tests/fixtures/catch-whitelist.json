@@ -789,7 +789,7 @@
       "file": "core/gemini-hidden-scroll.js",
       "category": "debug-instrumentation",
       "lines": [
-        234
+        251
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var cid75 = D.getConvId(); if (cid75 && D.cacheRestoredMap.has(cid75) &&"
     },
@@ -824,8 +824,8 @@
       "file": "core/gemini-hidden-scroll.js",
       "category": "overlay-guard",
       "lines": [
-        272,
-        324
+        290,
+        356
       ],
       "reason": "overlay-guard: оверлей/стили: узел мог быть уничтожен хостом между чтением и записью; пример: sc.el.style.scrollBehavior = prevSmooth;"
     },
@@ -886,7 +886,7 @@
       "file": "core/gemini-intercept.js",
       "category": "cleanup-guard",
       "lines": [
-        1150
+        1154
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete loaderDoneMap[oldId];"
     },
@@ -894,9 +894,9 @@
       "file": "core/gemini-intercept.js",
       "category": "debug-instrumentation",
       "lines": [
-        785,
-        1686,
-        1688
+        789,
+        1690,
+        1692
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDeb"
     },
@@ -904,8 +904,8 @@
       "file": "core/gemini-intercept.js",
       "category": "event-guard",
       "lines": [
-        1138,
-        1193
+        1142,
+        1197
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
     },
@@ -913,7 +913,7 @@
       "file": "core/gemini-intercept.js",
       "category": "guard-clause",
       "lines": [
-        993
+        997
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -921,10 +921,10 @@
       "file": "core/gemini-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        1172,
-        1180,
+        1176,
         1184,
-        1698
+        1188,
+        1702
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkConvChange();"
     },

@@ -141,6 +141,10 @@
       get quietActive() { return quietActive; }, set quietActive(v) { quietActive = v; },
       get parserVersion() { return parserVersion; }, set parserVersion(v) { parserVersion = v; },
       get cacheRestoredMap() { return cacheRestoredMap; },
+      // v86 (ro): состояние полноты базы для гейта подавления оверлея автоскролла.
+      // Только чтение — модуль их не пишет, источник правды остаётся в ядре.
+      get historyFullByQuiet() { return historyFullByQuiet; },
+      get reachedStart() { return reachedStart; },
     });
     findScrollContainer = aiCmHiddenScroll.findScrollContainer;
     scheduleAutoScroll = aiCmHiddenScroll.scheduleAutoScroll;

@@ -191,8 +191,25 @@
     try {
       var fid = D.getConvId();
       var sf = fid ? D.loadFloor(fid) : null;
-      return (sf && sf.count) ? sf.count : 0;
+      var n = sf ? Number(sf.count) : 0; // v86: пол обязан быть ЧИСЛОМ (undefined/мусор → 0)
+      return (isFinite(n) && n > 0) ? n : 0;
     } catch (e) { return 0; }
+  }
+
+  // v86: «данные уже в базе» — гейт подавления оверлея при автоскролле. Оверлей в
+  // конвейере данных НЕ участвует (сбор идёт через triggerUp/settleBottom ниже),
+  // поэтому непрозрачный экран имеет смысл только пока база пуста. Три признака:
+  //   1) тихая пагинация дошла до начала — база полная (historyFullByQuiet);
+  //   2) начало истории уже подтверждено (reachedStart);
+  //   3) пол из localStorage покрыт текущим размером базы (baseSize >= expected).
+  // Окно удержания оверлея (3с) живёт не здесь, а в цикле — см. проверку после
+  // settleBottom: оверлей, который уже поднят, снимается по данным ИЛИ по возрасту.
+  function autoscrollDataPresent() {
+    if (D.historyFullByQuiet === true) return true;
+    if (D.reachedStart === true) return true;
+    var expected = expectedTurnsFromStorage();
+    if (expected > 0 && D.baseSize() >= expected) return true;
+    return false;
   }
 
   // Причина нулевого пола/ожидаемых — через чистую логику (гв ключа g3 и т.п.).
@@ -234,6 +251,7 @@
     } catch (eCache75) { }
     // v33: контейнер, скрытый на время автоскролла (дозагрузка невидима для пользователя)
     var hiddenEl = null;
+    var __ovShownAt = 0; // v86: момент подъёма оверлея (0 = не поднимали) — окно удержания 3с
     function __restoreAutoscrollVisibility() {
       if (hiddenEl) {
         D.aiCmSetScrollOverlay(false, 'autoscroll-done'); // v75: DOM не прятали
@@ -273,10 +291,18 @@
 
       // v33→v75: контейнер НЕ прячем — только прозрачный оверлей (DOM чата не трогается);
       // восстановление — после цикла и в catch.
+      // v86: гейт «данные уже в базе» — оверлей не поднимаем, если история уже собрана
+      // (тихая пагинация дошла до начала / пол покрыт). Конвейер данных не затрагивается:
+      // triggerUp/settleBottom работают как прежде.
       if (sc.mode === 'el' && sc.el) {
-        hiddenEl = true; // v75: маркер «оверлей применён»
-        D.aiCmSetScrollOverlay(true, 'autoscroll');
-        debugLog('log', '[AI CM][visibility] hide reason=autoscroll-overlay convId=' + (D.getConvId() || '(none)'));
+        if (!autoscrollDataPresent()) {
+          hiddenEl = true; // v75: маркер «оверлей применён»
+          __ovShownAt = Date.now(); // v86: отсчёт окна удержания оверлея (3с)
+          D.aiCmSetScrollOverlay(true, 'autoscroll');
+          debugLog('log', '[AI CM][visibility] hide reason=autoscroll-overlay convId=' + (D.getConvId() || '(none)'));
+        } else {
+          debugLog('log', '[AI CM][visibility] overlay-suppressed reason=autoscroll-data-present convId=' + (D.getConvId() || '(none)'));
+        }
       }
 
       var startSize = D.baseSize();
@@ -307,6 +333,12 @@
         }
 
         await settleBottom(sc);
+
+        // v86: оверлей не держим дольше 3с и снимаем сразу, как только база собрана —
+        // иначе он висит поверх уже видимого чата до конца прогона (включая retry-паузы).
+        if (hiddenEl && (autoscrollDataPresent() || (Date.now() - __ovShownAt > 3000))) {
+          __restoreAutoscrollVisibility();
+        }
 
         var finalSize = D.baseSize();
         var finalH = sc.height();
@@ -347,6 +379,7 @@
     settleBottom: settleBottom,
     scheduleAutoScroll: scheduleAutoScroll,
     expectedTurnsFromStorage: expectedTurnsFromStorage,
+    autoscrollDataPresent: autoscrollDataPresent,
     expectedFloorAbsenceReason: expectedFloorAbsenceReason,
     retryNeededAutoscroll: retryNeededAutoscroll,
     autoScrollCollect: autoScrollCollect,
