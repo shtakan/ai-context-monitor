@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.18] - 2026-10-19
+
+### Fixed
+- Gemini: устранено зависание белого экрана (`ui-timeout` 30с, `stall-cap`, `autoscroll gate`)
+- Gemini: исправлен скролл сайдбара (`findScrollContainer` привязан к `<main>`)
+- Tests: защитный пин против identity-replace в `print.js` (R1)
+
 ## [2.0.17] - 2026-10-16
 
 ### Fixed
