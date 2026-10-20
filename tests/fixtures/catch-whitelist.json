@@ -933,7 +933,7 @@
       "category": "best-effort-guard",
       "lines": [
         151,
-        373
+        389
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: sc.setTop(0);"
     },
@@ -941,8 +941,8 @@
       "file": "core/gemini-loader-scroll.js",
       "category": "cleanup-guard",
       "lines": [
-        705,
-        811
+        721,
+        827
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete D.oracleIncompleteSeen[convId];"
     },
@@ -950,10 +950,10 @@
       "file": "core/gemini-loader-scroll.js",
       "category": "debug-instrumentation",
       "lines": [
-        874,
-        887,
-        923,
-        929
+        890,
+        903,
+        939,
+        945
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.__aiCmGeminiLoadFullHistory = loadFullHistoryInvisibly;"
     },
@@ -961,7 +961,7 @@
       "file": "core/gemini-loader-scroll.js",
       "category": "defensive-assignment",
       "lines": [
-        812
+        828
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: D.oracleRerunUsedMap[convId] = true;"
     },
@@ -971,10 +971,10 @@
       "lines": [
         137,
         141,
-        348,
-        351,
-        374,
-        714
+        364,
+        367,
+        390,
+        730
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: el75.dispatchEvent(new Event('scroll'));"
     },
@@ -984,8 +984,8 @@
       "lines": [
         99,
         169,
-        346,
-        349
+        362,
+        365
       ],
       "reason": "overlay-guard: оверлей/стили: узел мог быть уничтожен хостом между чтением и записью; пример: el75.scrollTop = 0;"
     },

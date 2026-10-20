@@ -353,10 +353,11 @@ describe('v86: D4 поведение — окно 3с и снятие по да�
 // R1: соседние контракты не сдвинуты
 // =====================================================================================
 describe('v86: R1 соседние контракты целы', () => {
-  test('R1: 30-секундный UI-таймаут лоадера на месте (gemini-overlay-ui-timeout)', () => {
+  test('R1: 5-секундный UI-таймаут лоадера на месте (gemini-overlay-ui-timeout)', () => {
     const loader = readFile('core/gemini-loader-scroll.js');
     expect(countOf(loader, "D.aiCmSetScrollOverlay(false, 'ui-timeout')")).toBe(1);
-    expect(loader).toContain('Date.now() - runStartAt > 30000');
+    // v87.1: предел снижен 30с→5с (живая приёмка 2026-10-20: оверлей висел 34с)
+    expect(loader).toContain('Date.now() - runStartAt > 5000');
     expect(countOf(loader, 'LOADER_STALL_CAP = 90')).toBe(1);
   });
 

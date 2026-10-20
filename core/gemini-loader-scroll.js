@@ -194,12 +194,28 @@
         // при floor=0 и no-growth «вершок» на схлопнутом скроллере недостоверен — см. untrustedTopVerdict).
         var cursorEpochAtRunStart = D.cursorEpoch;
         var runStartAt = Date.now(); // v1.17 (wall-clock): отсчёт жёсткого предела прогона (проверка — первая строка цикла)
-        D.aiCmUiOverlayTimedOut = false; // v1.17 (UI-таймаут): латч «оверлей уже снят по 30с» — в D, чтобы фолбэк-ветка (в т.ч. в песочницах) его видела
+        D.aiCmUiOverlayTimedOut = false; // v1.17/v87.1 (UI-таймаут): латч «оверлей уже снят» (по 5с-пределу или при base-complete) — в D, чтобы фолбэк-ветка (в т.ч. в песочницах) его видела
         while (true) {
           if (Date.now() - runStartAt > LOADER_RUN_WALL_CLOCK_MS) { doneReason = 'wall-clock-timeout'; break; } // fail-safe: срабатывает и при живом pendingCursor
           iter++;
-          // v1.17 (UI-таймаут): через 30с оверлей снимаем — пользователь видит чат, цикл живёт дальше (до 90с/doneReason).
-          if (Date.now() - runStartAt > 30000 && D.aiCmScrollOverlay) { D.aiCmSetScrollOverlay(false, 'ui-timeout'); D.aiCmUiOverlayTimedOut = true; }
+          // v1.17 (UI-таймаут): через 5с оверлей снимаем — пользователь видит чат, цикл живёт дальше (до 90с/doneReason).
+          // v87.1: предел снижен 30с→5с (живая приёмка 2026-10-20: оверлей висел 34с при уже полной базе).
+          if (Date.now() - runStartAt > 5000 && D.aiCmScrollOverlay) { D.aiCmSetScrollOverlay(false, 'ui-timeout'); D.aiCmUiOverlayTimedOut = true; }
+          // v87.1 (base-complete-early): база объявлена полной — оверлей снимаем НЕМЕДЛЕННО, не
+          // дожидаясь UI-предела: живой continuation-курсор держит цикл в stall-retry (лог
+          // 2026-10-20: baseComplete=1 через 9с, экран оставался закрытым до 34с).
+          // «D.baseComplete» в терминах лога — это D.historyFullByQuiet (им же печатается
+          // baseComplete=1 в строке stall-retry); алиас D.baseComplete читается на случай,
+          // если депс начнёт отдавать его напрямую. reachedStart НЕ требуется: снятие оверлея —
+          // видимость UI, а не вердикт полноты; полноту по-прежнему объявляет ТОЛЬКО ветка
+          // data-complete ниже (её гейты base/начало/курсор не тронуты).
+          // Латч D.aiCmUiOverlayTimedOut гасит подъём оверлея в ветке фолбэка — restore не
+          // работает вхолостую (иначе снятие и повторный подъём случились бы в одном тике).
+          var __baseCompleteNow87 = (D.historyFullByQuiet === true) || (D.baseComplete === true);
+          if (__baseCompleteNow87 && D.aiCmScrollOverlay) {
+            D.aiCmSetScrollOverlay(false, 'base-complete-early');
+            D.aiCmUiOverlayTimedOut = true;
+          }
           // v53: любой history-write с continuation-курсором сбрасывает счётчики
           // стабилизации и столла — «новое поколение» курсора оживляет цикл.
           if (D.cursorEpoch !== lastEpoch) {
@@ -361,7 +377,7 @@
             // v80: оверлей мог быть снят force-restore (visibilitychange/conv-switch) —
             // возвращаем, пока страховочный скролл активен. v81 (O1 white-screen A):
             // при восстановленной ленте оверлей НЕ поднимаем (тейп уже виден).
-            // v1.17: после UI-таймаута (30с) тоже не поднимаем — пользователь уже видит чат.
+            // v1.17/v87.1: после UI-таймаута (5с) и после base-complete-early тоже не поднимаем — пользователь уже видит чат.
             if (D.tapeWasUsedInThisColdStart === true) {
               if (!D.aiCmScrollOverlay) {
                 debugLog('log', '[AI CM][visibility] overlay-suppressed reason=tape-present convId=' + (D.getConvId() || '(none)'));
