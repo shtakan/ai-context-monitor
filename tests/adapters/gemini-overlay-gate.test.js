@@ -98,11 +98,13 @@ function makeHarness(opts) {
   let topVal = 0;
   const el = {
     tagName: 'INFINITE-SCROLLER',
-    className: 'infinite-scroller chat-history',
+    className: 'chat-history',
     id: '',
     clientHeight: 900,
     overflowY: 'auto',
     style: {},
+    // v88: findScrollContainer требует структурный якорь chat-history
+    closest() { return { tagName: 'INFINITE-SCROLLER', className: 'chat-history' }; },
     dispatchEvent() { return true; },
     // высота либо стабильна (быстрый выход по empty*3), либо растёт на каждом шаге
     get scrollHeight() { return o.growHeight ? 5000 + tops.length * 100 : 5000; },
@@ -365,6 +367,9 @@ describe('v86: R1 соседние контракты целы', () => {
     expect(countOf(HIDDEN, "document.querySelectorAll('*')")).toBe(0);
     expect(HIDDEN).toContain("var root = document.querySelector('main');");
     expect(countOf(HIDDEN, 'makeScroller(null)')).toBe(0);
+    // v88: кандидат обязан быть видимым и лежать под якорем chat-history
+    expect(countOf(HIDDEN, 'if (!(ch > 0)) continue;')).toBe(1);
+    expect(countOf(HIDDEN, "el.closest('infinite-scroller.chat-history, [class*=\"chat-history\"]')")).toBe(1);
   });
 
   test('R1: публичные экспорты модуля не переименованы', () => {

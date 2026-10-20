@@ -36,8 +36,13 @@
  *   D4  поведение: модуль грузится в vm (как в gemini-overlay-module.test.js). Мок document
  *       отдаёт main с двумя дочерними скроллерами: hinted (`chat-history`, МЕНЬШИЙ по высоте)
  *       и без hint (больший). findScrollContainer() обязан вернуть именно hinted-узел, т.е.
- *       HINT важнее max scrollHeight. Контроль: если hint нет ни у кого — побеждает max sh.
- *   D5  поведение: мок document без main; findScrollContainer() возвращает null, не бросает,
+ *       HINT важнее max scrollHeight. Контроль (v88): если HINT нет ни у кого, generic
+ *       `best` удалён — findScrollContainer() возвращает null, а не самый высокий узел.
+ *   D5  поведение (v88): main содержит скелет-обёртку (`DIV`, className '', sh=884, ch=0)
+ *       и реальную ленту (`INFINITE-SCROLLER`, className `chat-history`, ch=900).
+ *       findScrollContainer() обязан вернуть ленту, а не скелет; скелет с ch=0 отсекается
+ *       даже когда он ВЫШЕ ленты по scrollHeight (сильнейший случай холодного старта).
+ *   D6  поведение: мок document без main; findScrollContainer() возвращает null, не бросает,
  *       и НЕ обходит document — мок querySelectorAll('*') кидает исключение, поэтому любой
  *       глобальный обход уронил бы тест.
  *   R2  модуль грузится в vm без бросаний; публичные экспорты triggerUp / settleBottom /
@@ -57,6 +62,15 @@
  *
  * Логика waitImPossibility, _wasVis, seq-гарда оверлея и intercept не затрагивалась —
  * это подтверждают соседние пин-сьюты (R1), остающиеся зелёными без правок.
+ *
+ * ОБНОВЛЕНИЕ v88 (2026-10-20, PLAN-отчёт). Холодный старт: best-fallback выбирал обёртку
+ * `sh=884, ch=0` (она проходит фильтр `sh > ch+50`), пока реальный
+ * `infinite-scroller.chat-history` ещё не набрал высоту. Правки в источнике:
+ *   1) `if (!(ch > 0)) continue;` — невидимые скелеты (clientHeight=0) отсекаются;
+ *   2) структурный якорь `el.closest('infinite-scroller.chat-history, [class*="chat-history"]')`;
+ *   3) в HINT-хай добавлен `el.tagName` (тег `INFINITE-SCROLLER` матчит HINT, класс — нет);
+ *   4) generic `best`-фолбэк удалён: без hinted-кандидата возвращается null.
+ * Правки линейно-нейтральны: catch'и 76/81 не сдвинулись, whitelist не менялся.
  */
 
 'use strict';
@@ -101,11 +115,15 @@ function loadHidden(doc, log) {
   return pageWindow.AiCmGeminiHiddenScroll;
 }
 
-/** Фейковый узел-скроллер: ровно те поля, которые читает findScrollContainer/makeScroller. */
-function makeEl(tagName, className, scrollHeight, clientHeight) {
+/**
+ * Фейковый узел-скроллер: ровно те поля, которые читает findScrollContainer/makeScroller.
+ * `anchored` (v88) — узел лежит под `infinite-scroller.chat-history`; false — сайдбар/панель.
+ */
+function makeEl(tagName, className, scrollHeight, clientHeight, anchored = true) {
   return {
     tagName, className, id: '', scrollTop: 0,
     scrollHeight, clientHeight, overflowY: 'auto', style: {},
+    closest() { return anchored ? { tagName: 'INFINITE-SCROLLER', className: 'chat-history' } : null; },
     dispatchEvent() { }
   };
 }
@@ -208,18 +226,23 @@ describe('gemini-scroll-stall-fix (v1.17)', () => {
       expect(countOf(HIDDEN, 'makeScroller(null)')).toBe(0);
     });
 
-    test('HINT и фильтры сохранены дословно', () => {
+    test('HINT и фильтры сохранены; добавлены v88-якорь и clientHeight>0', () => {
       expect(HIDDEN).toContain('var HINT = /conversation|message|chat-turn|response|scroll|turn-list|infinite|virtual/i;');
       expect(HIDDEN).toContain("if (st !== 'auto' && st !== 'scroll' && st !== 'overlay') continue;");
       expect(HIDDEN).toContain('if (sh <= ch + 50) continue;');
-      expect(HIDDEN).toContain("try { hay = (el.className || '') + ' ' + (el.id || ''); } catch (e) { }");
+      expect(HIDDEN).toContain('if (!(ch > 0)) continue;');
+      expect(HIDDEN).toContain("el.closest('infinite-scroller.chat-history, [class*=\"chat-history\"]')");
+      expect(HIDDEN).toContain("try { hay = el.tagName + ' ' + el.className + ' ' + el.id; } catch (e) { }");
+      // v88: generic best-fallback удалён, а не просто переставлен
+      expect(HIDDEN).not.toContain('bestH');
+      expect(HIDDEN).not.toContain('if (best) return best;');
     });
   });
 
   describe('D4: поведение — hint важнее максимальной высоты', () => {
     test('findScrollContainer() возвращает hinted узел, хотя он НИЖЕ второго', () => {
-      const hintedEl = makeEl('INFINITE-SCROLLER', 'infinite-scroller chat-history', 5000, 900);
-      const plainEl = makeEl('DIV', 'side-panel', 20000, 900);
+      const hintedEl = makeEl('INFINITE-SCROLLER', 'chat-history', 5000, 900);
+      const plainEl = makeEl('DIV', 'side-panel', 20000, 900, false);
       const log = [];
       const api = loadHidden(docWithMain([plainEl, hintedEl]), log);
 
@@ -228,17 +251,18 @@ describe('gemini-scroll-stall-fix (v1.17)', () => {
       expect(sc.mode).toBe('el');
       expect(sc.el).toBe(hintedEl);
       expect(sc.height()).toBe(5000);
-      expect(sc.tag).toBe('infinite-scroller.infinite-scroller.chat-history');
+      expect(sc.tag).toBe('infinite-scroller.chat-history');
       expect(log.filter((l) => l.level === 'error')).toHaveLength(0);
     });
 
-    test('если hint нет ни у кого — побеждает max scrollHeight (прежний tie-breaker)', () => {
-      const big = makeEl('DIV', 'side-panel', 20000, 900);
+    test('без HINT под якорем generic best удалён → null (скроллить нечего)', () => {
+      const big = makeEl('DIV', 'side-panel', 20000, 900, false);
       const small = makeEl('DIV', 'chat-body', 5000, 900);
       const log = [];
       const api = loadHidden(docWithMain([small, big]), log);
 
-      expect(api.findScrollContainer().el).toBe(big);
+      expect(api.findScrollContainer()).toBeNull();
+      expect(log.filter((l) => l.level === 'error')).toHaveLength(0);
     });
 
     test('main без скроллеров → null (скроллить нечего)', () => {
@@ -247,7 +271,30 @@ describe('gemini-scroll-stall-fix (v1.17)', () => {
     });
   });
 
-  describe('D5: поведение — main отсутствует', () => {
+  describe('D5 (v88): скелет-обёртка не побеждает реальную ленту', () => {
+    test('sh=884/ch=0 проходит фильтр 50px, но отсекается clientHeight>0', () => {
+      const skeleton = makeEl('DIV', '', 884, 0);
+      const real = makeEl('INFINITE-SCROLLER', 'chat-history', 5000, 900);
+      const log = [];
+      const api = loadHidden(docWithMain([skeleton, real]), log);
+
+      const sc = api.findScrollContainer();
+      expect(sc).toBeTruthy();
+      expect(sc.el).toBe(real);
+      expect(sc.tag).toBe('infinite-scroller.chat-history');
+      expect(log.filter((l) => l.level === 'error')).toHaveLength(0);
+    });
+
+    test('скелет под якорем и с HINT, но ch=0 и ВЫШЕ ленты — всё равно отсечён', () => {
+      const skeleton = makeEl('DIV', 'infinite-scroller chat-history', 9000, 0);
+      const real = makeEl('INFINITE-SCROLLER', 'chat-history', 5000, 900);
+      const api = loadHidden(docWithMain([skeleton, real]), []);
+
+      expect(api.findScrollContainer().el).toBe(real);
+    });
+  });
+
+  describe('D6: поведение — main отсутствует', () => {
     test('возвращает null, не бросает и не обходит document', () => {
       const log = [];
       const doc = {

@@ -70,22 +70,22 @@
     if (!root) { debugLog('log', '[AI CM][scroll] findScrollContainer: main отсутствует — null'); return null; }
     var HINT = /conversation|message|chat-turn|response|scroll|turn-list|infinite|virtual/i;
     var all = root.querySelectorAll('*');
-    var hinted = null, best = null, bestH = -1;
+    var hinted = null;
     for (var i = 0; i < all.length; i++) {
       var el = all[i], st = ''; if (el === document.body || el === document.documentElement) continue;
       try { st = getComputedStyle(el).overflowY; } catch (e) { continue; }
       if (st !== 'auto' && st !== 'scroll' && st !== 'overlay') continue;
-      var sh = el.scrollHeight, ch = el.clientHeight;
-      if (sh <= ch + 50) continue;
-      var hay = '';
-      try { hay = (el.className || '') + ' ' + (el.id || ''); } catch (e) { }
+      var sh = el.scrollHeight, ch = el.clientHeight, hay = '';
+      if (!(ch > 0)) continue; // v88: скелет-обёртка (ch=0) — не скролл-контейнер
+      if (sh <= ch + 50) continue; if (!el.closest('infinite-scroller.chat-history, [class*="chat-history"]')) continue;
+      try { hay = el.tagName + ' ' + el.className + ' ' + el.id; } catch (e) { }
       if (HINT.test(hay)) { if (!hinted || sh > hinted.height()) hinted = makeScroller(el); }
-      if (sh > bestH) { bestH = sh; best = makeScroller(el); }
     }
     if (hinted) return hinted;
-    if (best) return best;
-    // v1.17: document-фолбэка нет намеренно: main без скроллера = «скроллить нечего»,
-    // глобальный обход цеплял сайдбар/панели (best-fallback ломал позицию чата).
+    // v88: generic best-fallback удалён — на холодном старте он выбирал скелет-обёртку
+    // (sh=884, ch=0) впереди ещё не набравшей высоту ленты. Кандидат теперь обязан быть
+    // видимым (clientHeight > 0) и лежать под структурным якорем chat-history; иначе
+    // возвращается null — «скроллить нечего» (document-фолбэка нет намеренно, v1.17).
     return null;
   }
 
