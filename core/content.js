@@ -2704,7 +2704,7 @@ if (isExtensionValid()) {
       // сеть, ONE-SIDE → live + маркер). Не дождались/сети нет → прежний live-путь БЕЗ
       // изменения байтов файла; isLowConfidenceBase и порядок [REASONING]/[ANSWER] не тронуты.
       var replyManualExport = function () {
-        var manualSnapshot = /** @type {{host: string, convId: string, site: string, model: string, tokens: number, limit: number, percent: number, updatedAt: number, isLowConfidenceBase: boolean, messages: Array<{role?: string, text?: string}>}} */
+        var manualSnapshot = /** @type {{host: string, convId: string, site: string, model: string, tokens: number, limit: number, percent: number, updatedAt: number, isLowConfidenceBase: boolean, sourceTier?: string, messages: Array<{role?: string, text?: string}>}} */
           ({
             host: window.location.hostname,
             convId: curCidExp,
@@ -2717,6 +2717,10 @@ if (isExtensionValid()) {
             // v1.14.1: живой флаг — ручной as-is экспорт при baseComplete=0 получает
             // префикс [LOW CONFIDENCE]_ (options.js:378), после base-complete — без префикса.
             isLowConfidenceBase: (baseComplete !== true),
+            // Two-Tier (v89): метка достоверности источника — рядом с прочими метаданными
+            // снимка. undefined у прочих сервисов/без моста → в storage ключ не появляется,
+            // файл и ручной экспорт байтово прежние.
+            sourceTier: (typeof aiCmGetSourceTier === 'function') ? aiCmGetSourceTier() : undefined,
             messages: buildHistoryMessages()
           });
         // O-36 (D1): у сервиса без сети (qwen) база подтверждена записью DOM-адаптера —

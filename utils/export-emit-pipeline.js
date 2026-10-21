@@ -349,6 +349,27 @@
   }
 
   /**
+   * Two-Tier (v89): метка достоверности ИСТОЧНИКА файла — какой ярус базы его наполнил.
+   * Счётчики ярусов уже посчитаны выше по контуру (архив — импортированный первый ярус,
+   * live — ходы базы, НЕ влитые архивом); здесь только чистая классификация, без чтения
+   * состояния и без побочных эффектов:
+   *   архив > 0 И live > 0 → '[MERGED: ARCHIVE+LIVE]' — в файле оба яруса;
+   *   архив > 0, live = 0  → '[ARCHIVE]'            — в файле только первый ярус;
+   *   иначе                → '[BEST-EFFORT: LIVE CAPTURE]' — архива нет, только живой захват.
+   * Латиница без локализации — прецедент [REASONING]/[ANSWER]; подача метки в файл — за
+   * сборщиками (utils/export-text-builders.js), гейт по site === 'gemini'.
+   * state: { archiveCount, liveCount }.
+   */
+  function sourceTierOf(state) {
+    var s = state || {};
+    var arch = (typeof s.archiveCount === 'number' && s.archiveCount > 0) ? s.archiveCount : 0;
+    var live = (typeof s.liveCount === 'number' && s.liveCount > 0) ? s.liveCount : 0;
+    if (arch > 0 && live > 0) return '[MERGED: ARCHIVE+LIVE]';
+    if (arch > 0) return '[ARCHIVE]';
+    return '[BEST-EFFORT: LIVE CAPTURE]';
+  }
+
+  /**
    * O-27 (b/c): признак ЧАТ-страницы GSA для гейта автоэкспорта. Сервисная страница Google
    * (captcha / «подозрительный трафик», /sorry) чатом не является: threadId в DOM не
    * снаффнут и чат-контейнера нет. Если на такой странице осталось состояние ПРОШЛОГО
@@ -2242,6 +2263,9 @@
     effectiveAutoExportThreshold: effectiveAutoExportThreshold,
     pickExportSource: pickExportSource,
     resolveExportSource: resolveExportSource,
+    // Two-Tier (v89): метка достоверности источника файла — чистая функция наружу
+    // (её зовёт core/export-manager.js:aiCmGetSourceTier).
+    sourceTierOf: sourceTierOf,
     markAutoExportFired: markAutoExportFired,
     getAutoExportFired: getAutoExportFired,
     resetAutoExportFired: resetAutoExportFired,

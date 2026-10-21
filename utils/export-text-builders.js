@@ -237,6 +237,8 @@
   // (O-36/D2: для qwen — с маркерами ролей; O-36/D2.1: у qwen дополнительно снимается
   // контейнер-склейка DOM-адаптера, см. блок выше).
   function buildTxtFromHistory(history) {
+    var hist = history || {};
+    var site = (typeof hist.site === 'string') ? hist.site : '';
     var messages = (history && Array.isArray(history.messages)) ? history.messages : [];
     // O-36 (D2.1): чистка идёт по СЫРЫМ текстам и ДО композиции reasoning — иначе
     // контейнер (склейка соседей без рассуждений) перестал бы быть надмножеством
@@ -266,6 +268,12 @@
     } else {
       out = renderReferenceText(forTxt);
     }
+    // Two-Tier (v89): метка достоверности источника — ПЕРВОЙ строкой файла, только Gemini и
+    // только когда метка есть в истории (её считает core/export-manager.js:aiCmGetSourceTier).
+    // Прочие платформы и undefined-метка → ни одного нового байта (гейт по site). Пустое тело
+    // (null-рендерер или нуль сообщений) метка НЕ оживляет: файла нет, как и прежде — иначе
+    // файл из одной метки обошёл бы гейт empty-text автоэкспорта.
+    if (site === 'gemini' && hist.sourceTier && out) out = hist.sourceTier + '\n\n' + out;
     return (out === null) ? '' : out;   // рендерер недоступен → прежний пустой файл
   }
 
@@ -273,6 +281,7 @@
   // (M-4.2: шапка и роли — из _locales, ключи export_md_*)
   function buildMdFromHistory(history, platform) {
     var h = history || {};
+    var site = (typeof h.site === 'string') ? h.site : '';
     var lines = [];
     lines.push(aiCmI18nMessage('export_md_title', '# AI Context Monitor — экспорт истории'));
     lines.push('');
@@ -285,6 +294,10 @@
     var percent = (typeof h.percent === 'number') ? h.percent : 0;
     lines.push(aiCmI18nMessage('export_md_tokens', 'Токены: ' + tokens + ' / ' + limit + ' (' + percent + '%)', [String(tokens), String(limit), String(percent)]));
     lines.push('');
+    // Two-Tier (v89): метка достоверности источника — отдельным блоком сразу после шапки,
+    // только Gemini и только когда метка есть в истории (см. aiCmGetSourceTier).
+    // Прочие платформы и undefined-метка → байты прежние (гейт по site).
+    if (site === 'gemini' && h.sourceTier) { lines.push(h.sourceTier, ''); }
 
     // O-36 (R2, D2.1): у qwen роли — маркерами '### USER'/'### ASSISTANT' (формат нативного
     // экспорта Qwen Studio) и та же контейнер-чистка, что у txt: узлы-контейнеры всего чата
@@ -331,6 +344,9 @@
       tokens: (typeof h.tokens === 'number') ? h.tokens : 0,
       limit: (typeof h.limit === 'number') ? h.limit : 0,
       percent: (typeof h.percent === 'number') ? h.percent : 0,
+      // Two-Tier (v89): аддитивное поле метаданных. undefined → JSON.stringify ключ НЕ
+      // добавляет, поэтому у прочих платформ и у Gemini без метки байты прежние.
+      sourceTier: h.sourceTier,
       messages: Array.isArray(h.messages) ? h.messages : []
     }, null, 2);
   }

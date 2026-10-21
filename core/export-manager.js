@@ -407,6 +407,27 @@ function aiCmExportBaseSource(convId, localMsgs) {
   } catch (eEbs) { return null; }
 }
 
+// Two-Tier (v89): метка достоверности источника для сборщиков TXT/MD (utils/export-text-builders.js)
+// и снимков истории (aiCmWriteCurrentHistory / ручной экспорт). Счётчики ярусов считает MAIN-мир
+// (сводка объединённой базы, тот же синхронный мост, что у aiCmExportBaseSource); здесь — только
+// классификация чистой функцией пайплайна (sourceTierOf): архив+live / только архив / только live.
+// undefined — не Gemini (метка Gemini-ярусов у прочих сервисов смысла не имеет, а лишний байт в их
+// файлах запрещён), моста нет или MAIN не ответил: сборщики тогда не добавляют ни одного байта.
+function aiCmGetSourceTier() {
+  try {
+    if (!(currentAdapter && currentAdapter.siteName === 'gemini')) return undefined;
+    if (typeof aiCmGeminiTurnsSnapshotSync !== 'function') return undefined;
+    var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+    if (!P || typeof P.sourceTierOf !== 'function') return undefined;
+    var snap = /** @type {{archiveCount?: number, liveCount?: number}|null} */ (aiCmGeminiTurnsSnapshotSync());
+    if (!snap || typeof snap !== 'object') return undefined;
+    return P.sourceTierOf({
+      archiveCount: (typeof snap.archiveCount === 'number') ? snap.archiveCount : 0,
+      liveCount: (typeof snap.liveCount === 'number') ? snap.liveCount : 0
+    });
+  } catch (eTier) { swallow(eTier, 'export:aiCmGetSourceTier'); }
+}
+
 function autoExportPerSiteKey(siteName) { return 'aiCmAutoExportPct_' + (siteName || ''); }
 function loadAutoExportPerSitePct() {
   try {
@@ -663,6 +684,11 @@ function aiCmWriteCurrentHistory() {
       // baseComplete !== true; после 0→1 липкий aiCmLowConfidenceByConv больше не лепит
       // ложный префикс переписанному снапшоту.
       isLowConfidenceBase: (baseComplete !== true),
+      // Two-Tier (v89): метка достоверности источника (только Gemini; у прочих — undefined,
+      // ключ не попадает ни в файл, ни в storage-снимок: аддитивность без изменения байтов).
+      // typeof-гард — прецедент срез-песочниц тестов (как у aiCmUnionFileMessages): там, где
+      // хелпер не включён в срез, метка просто отсутствует — байты прежние.
+      sourceTier: (typeof aiCmGetSourceTier === 'function') ? aiCmGetSourceTier() : undefined,
       messages: msgsWrite
     };
     var histPatch = { aiCmHistory: histSnapshot };
@@ -1678,6 +1704,10 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
           tokens: maxTokenCount,
           limit: 0,
           percent: percentage,
+          // Two-Tier (v89): метка источника — из ОБЪЕДИНЁННОЙ базы в момент сборки файла;
+          // сборщики TXT/MD ставят её первой строкой/блоком только для Gemini.
+          // typeof-гард — как у снимка истории выше (срез-песочницы тестов).
+          sourceTier: (typeof aiCmGetSourceTier === 'function') ? aiCmGetSourceTier() : undefined,
           messages: msgs
         };
         var content = (fmt === 'md')
@@ -1909,6 +1939,7 @@ window.addEventListener('ai-cm-loader-state', function (/** @type {CustomEvent} 
   Api.sanitizeGeminiText = sanitizeGeminiText;
   Api.aiCmCollectExportSource = aiCmCollectExportSource;
   Api.aiCmExportBaseSource = aiCmExportBaseSource;
+  Api.aiCmGetSourceTier = aiCmGetSourceTier;   // Two-Tier (v89): метка достоверности источника
   Api.aiCmUnionFileMessages = aiCmUnionFileMessages;   // O-49: добор объединённой базой при low-confidence
   Api.autoExportPerSiteKey = autoExportPerSiteKey;
   Api.loadAutoExportPerSitePct = loadAutoExportPerSitePct;

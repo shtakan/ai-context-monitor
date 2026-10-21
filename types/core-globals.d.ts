@@ -113,6 +113,13 @@ declare function sanitizeGeminiText(s: string): string;
 /** export-manager.js: снимок Gemini-тёрнов для экспортной базы (convId/messages/...). */
 declare function aiCmGeminiTurnsSnapshotSync(): unknown | null;
 
+/**
+ * export-manager.js: Two-Tier (v89) — метка достоверности источника файла по сводке
+ * объединённой базы ('[MERGED: ARCHIVE+LIVE]' / '[ARCHIVE]' / '[BEST-EFFORT: LIVE CAPTURE]').
+ * undefined — не Gemini, моста нет или MAIN не ответил; typeof-гард у читателей.
+ */
+declare function aiCmGetSourceTier(): string | undefined;
+
 /** export-manager.js: сетевая синхронизация перед экспортом — сайт или null. */
 declare function aiCmExportNetSyncSite(): string | null;
 
