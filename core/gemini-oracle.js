@@ -83,6 +83,16 @@
     try {
       var convIdFc = getConvId();
       if (!convIdFc || historyFullByQuiet || loaderRunningFor || quietActive) return;
+      // v88.1 (инвариант fired): живой continuation-курсор — история ещё НЕ вся, полноту
+      // объявлять нельзя. Ниже по файлу у stableCheck74 этот гейт есть с самого начала
+      // (:144 `if (!convId || pendingCursor || historyFullByQuiet) return;`), у floor-confirm
+      // его не было: debounce (5.5с тишины по базе) срабатывал на паузе между страницами
+      // пагинации → historyFullByQuiet=true при pendingCursor=1 → автоэкспорт усечённой базы
+      // (аппендикс v88 §2: baseComplete=1 на 9-й секунде при живом курсоре). Латчи/пол не
+      // трогаются: курсор ушёл → следующий debounce подтвердит полноту как раньше.
+      // typeof-гард: тело исполняется и в песочницах без модульных глобалов
+      // (tests/adapters/gemini-floor-confirmed.test.js runBody) — там гейт молчит, как прежде.
+      if (typeof pendingCursor !== 'undefined' && pendingCursor) return;
       if (!(lastBaseCount > 0)) return;
       var floorFc = null;
       try { floorFc = loadFloor(convIdFc); } catch (eFcL) { swallowSoft(eFcL, 'gemini:stableFloorConfirm-floor-read'); }

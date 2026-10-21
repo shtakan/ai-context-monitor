@@ -1343,6 +1343,25 @@ function maybeAutoExport(percentage) {
       if (skipReasonState) skipReasonState.reason = '';
       if (cid) { delete notCompleteLogged[cid]; delete notCompleteLogged['gsa:' + cid]; } // полнота пришла — можно снова логировать в другом чате
       if (!cid) return;
+      // v88.1 (инвариант fired): гейт курсора на пороговом входе — ДО диагностики и старта
+      // скачивания (пайплайн-ветка). Латч aiCmCursorLiveByConv[cid] — зеркало «pendingCursor
+      // ещё жив» из MAIN-мира (пишет слушатель ai-cm-loader-state, :1767/:1773). До v88.1 он
+      // проверялся в трёх местах (late re-check :467, trim-экспорт :553, base-complete :1820),
+      // но НЕ здесь: при baseComplete=1 и живом continuation-курсуре maybeAutoExport отдавал
+      // усечённый файл и взводил три латча (autoExportFired / sessionFiredCache /
+      // aiCmAutoExportFiredOnce), после чего поздний честный экспорт блокировался как
+      // already-fired до конца сессии страницы (аппендикс v88 §2: лог fired печатал
+      // pendingCursor=1 рядом с baseComplete=1). Латч fired НЕ ставится и НЕ снимается: как
+      // только курсор ушёл, тот же вызов проходит гейт (контроль — R3 в tests/
+      // export-manager-invariants.test.js). Строка skip — одна на чат (приём 'arch:').
+      if (aiCmCursorLiveByConv[cid]) {
+        if (!notCompleteLogged['cur:' + cid]) {
+          notCompleteLogged['cur:' + cid] = 1;
+          debugLog('log', '[AI CM][auto-export] skip reason=cursor-live convId=' + cid +
+            ' pct=' + percentage + ' pendingCursor=1 baseComplete=' + (baseComplete === true ? '1' : '0'));
+        }
+        return;
+      }
       // O-43 (ДИАГНОСТИКА, только измерение): срез базы РОВНО перед стартом скачивания —
       // ts этой строки и есть момент, к которому применялся критерий приёмки «файл содержит
       // все сообщения». Сравнение ts с ts принятия сетевой базы (gsa-net-finalize /
@@ -1402,6 +1421,16 @@ function maybeAutoExport(percentage) {
         (typeof aiCmAutoExportFiredOnce === 'object' && aiCmAutoExportFiredOnce && aiCmAutoExportFiredOnce[siteName + '|' + cid] === 1)) {
       debugLog('log', '[AI CM][auto-export] skip reason=already-fired convId=' + cid);
       return; // уже скачивали в этом чате
+    }
+    // v88.1: тот же гейт курсора на пороговом входе в фолбэк-ветке (без пайплайна): пока
+    // continuation-курсор жив, файла нет и латч fired не взводится.
+    if (aiCmCursorLiveByConv[cid]) {
+      if (!notCompleteLogged['cur:' + cid]) {
+        notCompleteLogged['cur:' + cid] = 1;
+        debugLog('log', '[AI CM][auto-export] skip reason=cursor-live convId=' + cid +
+          ' pct=' + percentage + ' pendingCursor=1 baseComplete=' + (baseComplete === true ? '1' : '0'));
+      }
+      return;
     }
     doAutoExportDownload(cid, percentage, 'threshold'); // v54: тело вынесено в хелпер
   } catch (e) {
@@ -1725,6 +1754,19 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
           ' textLen=' + textLen + ' pendingCursor=' + (aiCmCursorLiveByConv[cid] ? '1' : '0') +
           ' baseComplete=' + (baseComplete === true ? '1' : '0') +
           ' histSource=' + histSource + ' histConvId=' + histConvId);
+        // v88.1 (D2/D3): fired этого чата — наружу, в MAIN-мир. Загрузчик истории
+        // (core/gemini-loader-scroll.js) НЕ видит ISOLATED-латч aiCmAutoExportFiredOnce
+        // (core/state.js:157) — миры разные. Канал — тот же window-CustomEvent-мост
+        // content→MAIN, что у ai-cm-debug-logs / ai-cm-cache-refresh (core/content.js:2088 →
+        // core/gemini-archive.js:467). По нему загрузчик выходит из цикла скролла причиной
+        // done reason=export-done и не планирует collapse-retry: файл уже записан, догрузка
+        // старших окон его не исправит. Сбой нотификации на fired не влияет (файл и все латчи
+        // к этому моменту состоялись) — поэтому catch только логирует.
+        try {
+          window.dispatchEvent(new CustomEvent('ai-cm-auto-export-fired', { detail: {
+            convId: cid, site: siteNameD || '', reason: reason || ''
+          } }));
+        } catch (eFiredEvt) { swallowSoft(eFiredEvt, 'export:auto-export-fired-event'); }
         // O-37 (A, ДИАГНОСТИКА, только измерение): пороговый файр по ДОВЕРЕННОЙ базе
         // адаптера (сервис без сети). Печать — в content.js (там живёт признак), здесь только
         // typeof-гард; строка выходит ровно под гейтом aiCmDebug (aiCmDiagLine) и НЕ влияет на

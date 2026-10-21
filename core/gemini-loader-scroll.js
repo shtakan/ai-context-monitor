@@ -197,6 +197,18 @@
         D.aiCmUiOverlayTimedOut = false; // v1.17/v87.1 (UI-таймаут): латч «оверлей уже снят» (по 5с-пределу или при base-complete) — в D, чтобы фолбэк-ветка (в т.ч. в песочницах) его видела
         while (true) {
           if (Date.now() - runStartAt > LOADER_RUN_WALL_CLOCK_MS) { doneReason = 'wall-clock-timeout'; break; } // fail-safe: срабатывает и при живом pendingCursor
+          // v88.1 (D2: ранний выход по fired). Автоэкспорт этого чата уже сработал (латч
+          // content-скрипта через window-событие ai-cm-auto-export-fired, см. E0) — файл
+          // записан, догрузка старших окон его не исправит. Проверка стоит ПЕРВОЙ после
+          // wall-clock: ни одной итерации скролла/hide/stall-retry, ни ожидания
+          // LOADER_MAX_ITER, ни закрытого оверлея. Причина 'export-done' собственной ветки
+          // полноты НЕ открывает: stableCheck74 требует done=top (core/gemini-oracle.js:228).
+          // typeof-гард: тела цикла исполняются и в песочницах без модульных замыканий
+          // (tests/adapters/gemini-collapse-guard.test.js, runTopPoint).
+          if (typeof aiCmFiredByConv !== 'undefined' && aiCmFiredByConv[convId]) {
+            doneReason = 'export-done';
+            break;
+          }
           iter++;
           // v1.17 (UI-таймаут): через 5с оверлей снимаем — пользователь видит чат, цикл живёт дальше (до 90с/doneReason).
           // v87.1: предел снижен 30с→5с (живая приёмка 2026-10-20: оверлей висел 34с при уже полной базе).
@@ -553,6 +565,18 @@
                     ' msgs=' + D.baseSize() + ' floor=' + __floorCg + ' — подтверждающий повтор через 8с');
                 }
                 doneReason = 'collapse'; // v1.14.2: НЕ 'top' — stable-stop оракул и fallback-top остаются закрытыми
+                // v88.1 (D3): fired уже состоялся — 8с-перезапуск не планируем. Ретрай после
+                // схлопывания нужен ровно для того, чтобы добрать историю до полной базы;
+                // файл по полной базе уже записан, а повторный прогон вернулся бы сюда же
+                // (loop-head гасит его на первой итерации) — только сжёг бы бюджет
+                // collapseRetries и подержал оверлей. Тихая пагинация, идущая независимо,
+                // этим не глушится: латч export-fired её не читает.
+                if (typeof aiCmFiredByConv !== 'undefined' && aiCmFiredByConv[convId]) {
+                  debugLog('log', '[AI CM][Gemini][loader] collapse-retry suppressed reason=export-done convId=' + convId +
+                    ' msgs=' + D.baseSize() + ' scrollH=' + sc.height() + ' retry=' + D.collapseRetries + '/2');
+                  doneReason = 'export-done';
+                  break;
+                }
                 if (D.collapseRetries < 2) {
                   D.collapseRetries++;
                   debugLog('log', '[AI CM][Gemini][loader] collapse-guard: скроллер схлопнут scrollH=' + sc.height() +
@@ -904,6 +928,32 @@
       });
     }
     tick();
+  }
+
+  // ---------- E0: латч «автоэкспорт этого чата уже сработал» (v88.1) ----------
+  // ПОЧЕМУ НЕ aiCmAutoExportFiredOnce: этот модуль исполняется в MAIN-мире, а латч O-38
+  // живёт в ISOLATED-состоянии контент-скрипта (core/state.js:157) — из страницы он не
+  // виден. Канал — тот же window-CustomEvent-мост content→MAIN, что у ai-cm-debug-logs и
+  // ai-cm-cache-refresh (core/content.js:2088 → core/gemini-archive.js:467); отправляет его
+  // core/export-manager.js из единственной точки fired (aiCmWriteAutoExportFile).
+  // Зачем латч загрузчику: после fired файл уже записан по базе, признанной полной
+  // (инвариант fired⟹pendingCursor=0 держит пороговый гейт export-manager). Догрузка старших
+  // окон этот файл не исправит, поэтому цикл скролла выходит рано (reason=export-done), а
+  // collapse-guard не планирует 8с-перезапуск. Слушатель регистрируется на загрузке модуля,
+  // как visibilitychange ниже: до __bind он не срабатывает, а до реального fired — тем более.
+  var aiCmFiredByConv = Object.create(null);
+  try {
+    window.addEventListener('ai-cm-auto-export-fired', function (ev) {
+      var dFired = (ev && ev.detail) || null;
+      var cidFired = (dFired && dFired.convId) ? String(dFired.convId) : '';
+      if (!cidFired) return; // без convId латч не привязать к чату — не взводим
+      aiCmFiredByConv[cidFired] = 1;
+      debugLog('log', '[AI CM][Gemini][loader] export-fired latch convId=' + cidFired +
+        ' src=' + ((dFired && dFired.reason) || 'threshold'));
+    });
+  } catch (eFiredAdd) {
+    // до связки ядра swallowSoft ещё в D=null: шум приёмника не влияет на fired (файл записан)
+    if (D && typeof D.swallowSoft === 'function') D.swallowSoft(eFiredAdd, 'gemini:loader-fired-listener');
   }
 
   // ---------- E: слушатель 'visibilitychange' (resume-on-visible) ----------

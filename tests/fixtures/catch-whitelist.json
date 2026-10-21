@@ -695,7 +695,7 @@
       "lines": [
         254,
         997,
-        1736
+        1778
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof aiCmDiagLine === 'function' && typeof aiCmDiagOn === 'functio"
     },
@@ -704,8 +704,8 @@
       "category": "defensive-assignment",
       "lines": [
         830,
-        1465,
-        1600
+        1494,
+        1629
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: hostFb = (typeof window !== 'undefined' && window.location && window.loc"
     },
@@ -713,7 +713,7 @@
       "file": "core/export-manager.js",
       "category": "feature-detect",
       "lines": [
-        1722
+        1751
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var BdiagDl = (typeof window !== 'undefined' && window && window.AiCmExp"
     },
@@ -741,7 +741,7 @@
       "category": "local-helper-guard",
       "lines": [
         456,
-        1645
+        1674
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmLatchCacheReady();"
     },
@@ -933,7 +933,7 @@
       "category": "best-effort-guard",
       "lines": [
         151,
-        389
+        401
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: sc.setTop(0);"
     },
@@ -941,8 +941,8 @@
       "file": "core/gemini-loader-scroll.js",
       "category": "cleanup-guard",
       "lines": [
-        721,
-        827
+        745,
+        851
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete D.oracleIncompleteSeen[convId];"
     },
@@ -950,10 +950,10 @@
       "file": "core/gemini-loader-scroll.js",
       "category": "debug-instrumentation",
       "lines": [
-        890,
-        903,
-        939,
-        945
+        914,
+        927,
+        989,
+        995
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.__aiCmGeminiLoadFullHistory = loadFullHistoryInvisibly;"
     },
@@ -961,7 +961,7 @@
       "file": "core/gemini-loader-scroll.js",
       "category": "defensive-assignment",
       "lines": [
-        828
+        852
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: D.oracleRerunUsedMap[convId] = true;"
     },
@@ -971,10 +971,10 @@
       "lines": [
         137,
         141,
-        364,
-        367,
-        390,
-        730
+        376,
+        379,
+        402,
+        754
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: el75.dispatchEvent(new Event('scroll'));"
     },
@@ -984,8 +984,8 @@
       "lines": [
         99,
         169,
-        362,
-        365
+        374,
+        377
       ],
       "reason": "overlay-guard: оверлей/стили: узел мог быть уничтожен хостом между чтением и записью; пример: el75.scrollTop = 0;"
     },
@@ -993,9 +993,9 @@
       "file": "core/gemini-oracle.js",
       "category": "cleanup-guard",
       "lines": [
-        110,
-        124,
-        261
+        120,
+        134,
+        271
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete oracleIncompleteSeen[convId];"
     },
@@ -1003,9 +1003,9 @@
       "file": "core/gemini-oracle.js",
       "category": "debug-instrumentation",
       "lines": [
-        347,
-        358,
-        360
+        357,
+        368,
+        370
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (!window.__aiCmGeminiTurnsSnapshot) { window.__aiCmGeminiTurnsSnapsho"
     },
