@@ -303,7 +303,7 @@
         541,
         1977,
         2111,
-        2981
+        2985
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var m = location.pathname.match(/\\/app\\/([A-Za-z0-9_-]+)/); convId = m ?"
     },
@@ -351,9 +351,9 @@
         2122,
         2146,
         2155,
-        2865,
-        2891,
-        2893
+        2869,
+        2895,
+        2897
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
     },
@@ -381,8 +381,8 @@
         932,
         2068,
         2089,
-        2847,
-        2853
+        2851,
+        2857
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
     },
@@ -440,7 +440,7 @@
       "file": "core/content.js",
       "category": "parse-guard",
       "lines": [
-        2927
+        2931
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof window !== 'undefined' && window && window.AiCmEx"
     },
@@ -676,7 +676,7 @@
       "file": "core/export-manager.js",
       "category": "best-effort-guard",
       "lines": [
-        920
+        946
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var d = ev && ev.detail; if (!d) return; aiCmGsaProbeRunning = d.running"
     },
@@ -684,8 +684,8 @@
       "file": "core/export-manager.js",
       "category": "cleanup-guard",
       "lines": [
-        448,
-        586
+        469,
+        607
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: if (!aiCmPendingHistWrite) return; if (cid && aiCmPendingHistWrite.convI"
     },
@@ -694,8 +694,8 @@
       "category": "debug-instrumentation",
       "lines": [
         254,
-        997,
-        1778
+        1023,
+        1808
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof aiCmDiagLine === 'function' && typeof aiCmDiagOn === 'functio"
     },
@@ -703,9 +703,9 @@
       "file": "core/export-manager.js",
       "category": "defensive-assignment",
       "lines": [
-        830,
-        1494,
-        1629
+        856,
+        1520,
+        1655
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: hostFb = (typeof window !== 'undefined' && window.location && window.loc"
     },
@@ -713,7 +713,7 @@
       "file": "core/export-manager.js",
       "category": "feature-detect",
       "lines": [
-        1751
+        1781
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var BdiagDl = (typeof window !== 'undefined' && window && window.AiCmExp"
     },
@@ -721,9 +721,9 @@
       "file": "core/export-manager.js",
       "category": "guard-clause",
       "lines": [
-        698,
-        765,
-        1106
+        724,
+        791,
+        1132
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof aiCmDiagLine === 'function') { aiCmDiagLine('o22-deferred-flu"
     },
@@ -731,8 +731,8 @@
       "file": "core/export-manager.js",
       "category": "host-api-guard",
       "lines": [
-        814,
-        839
+        840,
+        865
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.storage.onChanged.addListener(function (changes, areaName) { if ("
     },
@@ -740,8 +740,8 @@
       "file": "core/export-manager.js",
       "category": "local-helper-guard",
       "lines": [
-        456,
-        1674
+        477,
+        1700
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmLatchCacheReady();"
     },
@@ -1560,8 +1560,8 @@
       "file": "utils/export-emit-pipeline.js",
       "category": "best-effort-guard",
       "lines": [
-        538,
-        562
+        559,
+        583
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: store[latchKey(service, convId)] = 1;"
     },
@@ -1569,7 +1569,7 @@
       "file": "utils/export-emit-pipeline.js",
       "category": "cleanup-guard",
       "lines": [
-        544
+        565
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete store[latchKey(service, convId)];"
     },
@@ -1577,7 +1577,7 @@
       "file": "utils/export-emit-pipeline.js",
       "category": "local-helper-guard",
       "lines": [
-        1218
+        1239
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: onMessageDedupe(role, res.removedBlocks);"
     },
@@ -1585,7 +1585,7 @@
       "file": "utils/export-text-builders.js",
       "category": "debug-instrumentation",
       "lines": [
-        356
+        372
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof window !== 'undefined' && window && window.__aiCmDebugLogs =="
     },
@@ -1593,8 +1593,8 @@
       "file": "utils/export-text-builders.js",
       "category": "defensive-assignment",
       "lines": [
-        392,
-        449
+        408,
+        465
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: url = String((typeof location !== 'undefined' && location && location.hr"
     },
@@ -1603,8 +1603,8 @@
       "category": "guard-clause",
       "lines": [
         214,
-        387,
-        444
+        403,
+        460
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: return require('./buildReferenceText.js')(list);"
     },
@@ -1613,7 +1613,7 @@
       "category": "host-api-guard",
       "lines": [
         22,
-        353
+        369
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: if (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.g"
     },
@@ -1621,8 +1621,8 @@
       "file": "utils/export-text-builders.js",
       "category": "local-helper-guard",
       "lines": [
-        475,
-        481
+        491,
+        497
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: diagDownloadBlocked(trigger || 'builder-download', content, fileName, bl"
     },
@@ -1631,8 +1631,8 @@
       "category": "logging-guard",
       "lines": [
         204,
-        403,
-        460
+        419,
+        476
       ],
       "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: var kept = Array.isArray(list) ? list.length : -1; var total = (typeof t"
     },
