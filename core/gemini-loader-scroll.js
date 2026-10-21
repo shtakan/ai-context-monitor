@@ -77,6 +77,21 @@
   var LOADER_HIDE_MIN_MSGS = 50;
   var SCROLL_PAUSE_HIDDEN_MS = 800; // v30.9: пауза между итерациями ПОСЛЕ скрытия скроллера // v30.7: скрытие ТОЛЬКО при scrollHeight>8000 — короткие чаты не прячем
 
+  // ---------- B2: прерываемый сон лоадера (v88.2) ----------
+  // Длинные паузы цикла (800–2000 мс) режутся на окна по 150 мс: перед каждым окном
+  // читается fired-латч, поэтому путь до break reason='export-done' не длиннее 150 мс.
+  // Раньше цикл досыпал весь D.sleep() и визуальные эффекты (hide/скролл/оверлей)
+  // продолжались до 2 с после автоэкспорта. Гейт loop-head не тронут — здесь только
+  // сокращение окна ожидания. typeof-гард: латч объявлен ниже в этом же IIFE (var поднят),
+  // но вырезанные тела цикла исполняются и в песочницах без модульных замыканий.
+  async function sleepUntilFired(ms, convId) {
+    var start = Date.now();
+    while (Date.now() - start < ms) {
+      if (typeof aiCmFiredByConv !== 'undefined' && aiCmFiredByConv[convId]) return;
+      await D.sleep(Math.min(150, ms - (Date.now() - start)));
+    }
+  }
+
   // ---------- C: loadFullHistoryInvisibly и все вложенные помощники ----------
   async function loadFullHistoryInvisibly() {
     var convId = D.getConvId();
@@ -255,7 +270,7 @@
           var scNow = D.findScrollContainer();
           if (!scNow || !(scNow.height() > 0)) {
             debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' скроллер недоступен (null/scrollH=0) — ожидание в рамках лимита');
-            await D.sleep(LOADER_STEP_MS);
+            await sleepUntilFired(LOADER_STEP_MS, convId);
             continue;
           }
           sc = scNow;
@@ -355,7 +370,7 @@
             }
             debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' visible-scroll-skipped reason=not-hidden' +
               ' h=' + __hNow + ' msgs=' + __msgsNow + ' wait=' + notHiddenWait + '/' + LOADER_MAX_ITER + ' convId=' + convId);
-            await D.sleep(LOADER_STEP_MS);
+            await sleepUntilFired(LOADER_STEP_MS, convId);
             continue;
           }
           // v75: программный скролл БЕЗ изменения CSS-видимости: в одном кадре (rAF)
@@ -378,7 +393,7 @@
                 });
               } catch (eRaf) { }
             })(sc.el);
-            await D.sleep(SCROLL_PAUSE_HIDDEN_MS);
+            await sleepUntilFired(SCROLL_PAUSE_HIDDEN_MS, convId);
           } else {
             // v78→v80: страховочный лоадер (фолбэк после loader-restart / неполная база):
             // реальный скрытый скролл к верху. v80 (O1-A): САМ СКРОЛЛЕР НЕ СКРЫВАЕМ
@@ -400,7 +415,7 @@
             debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' fallback-real-scroll (база неполная, rAF-возврат не триггерит пагинацию) convId=' + convId);
             try { sc.setTop(0); } catch (eSt1) { }
             try { sc.el.dispatchEvent(new Event('scroll')); } catch (eSt2) { }
-            await D.sleep(SCROLL_PAUSE_HIDDEN_MS);
+            await sleepUntilFired(SCROLL_PAUSE_HIDDEN_MS, convId);
           }
           var h = sc.height();
           if (!(h > 0)) continue; // v30.7: нулевое чтение не засчитываем
@@ -412,7 +427,7 @@
             noGrowth++;
             if (noGrowth >= LOADER_STABLE_NEED) {
               // v4z: контрольный перемер через 2с — две no-growth могли попасть в летящий запрос
-              await D.sleep(LOADER_RECHECK_MS);
+              await sleepUntilFired(LOADER_RECHECK_MS, convId);
               // v53: за время перемера мог прийти новый history-write с курсором — сброс счётчиков
               if (D.cursorEpoch !== lastEpoch) {
                 lastEpoch = D.cursorEpoch;
@@ -420,7 +435,7 @@
                 stallRetry = 0;
                 anyGrowth = false;
                 lastH = -1;
-                await D.sleep(LOADER_STEP_MS);
+                await sleepUntilFired(LOADER_STEP_MS, convId);
                 continue;
               }
               // v1.13.1: требуем reachedStart=true — baseComplete без подтверждённого
@@ -448,7 +463,7 @@
                     ' (курсор жив — продолжаю скроллить) convId=' + convId +
                     ' pendingCursor=1 baseComplete=' + (D.historyFullByQuiet === true ? '1' : '0'));
                   noGrowth = 0;
-                  await D.sleep(LOADER_STEP_MS);
+                  await sleepUntilFired(LOADER_STEP_MS, convId);
                   continue;
                 }
                 doneReason = 'timeout';
@@ -468,7 +483,7 @@
                 noGrowth = 0;
                 lastH = -1;
                 anyGrowth = false;
-                await D.sleep(LOADER_STEP_MS);
+                await sleepUntilFired(LOADER_STEP_MS, convId);
                 continue;
               }
               // v1.14.2 (COLLAPSE-GUARD): collapse ≠ top. Если Gemini схлопнул скроллер

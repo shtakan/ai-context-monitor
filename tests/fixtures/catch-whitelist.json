@@ -932,8 +932,8 @@
       "file": "core/gemini-loader-scroll.js",
       "category": "best-effort-guard",
       "lines": [
-        151,
-        401
+        166,
+        416
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: sc.setTop(0);"
     },
@@ -941,8 +941,8 @@
       "file": "core/gemini-loader-scroll.js",
       "category": "cleanup-guard",
       "lines": [
-        745,
-        851
+        760,
+        866
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete D.oracleIncompleteSeen[convId];"
     },
@@ -950,10 +950,10 @@
       "file": "core/gemini-loader-scroll.js",
       "category": "debug-instrumentation",
       "lines": [
-        914,
-        927,
-        989,
-        995
+        929,
+        942,
+        1004,
+        1010
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.__aiCmGeminiLoadFullHistory = loadFullHistoryInvisibly;"
     },
@@ -961,7 +961,7 @@
       "file": "core/gemini-loader-scroll.js",
       "category": "defensive-assignment",
       "lines": [
-        852
+        867
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: D.oracleRerunUsedMap[convId] = true;"
     },
@@ -969,12 +969,12 @@
       "file": "core/gemini-loader-scroll.js",
       "category": "event-guard",
       "lines": [
-        137,
-        141,
-        376,
-        379,
-        402,
-        754
+        152,
+        156,
+        391,
+        394,
+        417,
+        769
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: el75.dispatchEvent(new Event('scroll'));"
     },
@@ -982,10 +982,10 @@
       "file": "core/gemini-loader-scroll.js",
       "category": "overlay-guard",
       "lines": [
-        99,
-        169,
-        374,
-        377
+        114,
+        184,
+        389,
+        392
       ],
       "reason": "overlay-guard: оверлей/стили: узел мог быть уничтожен хостом между чтением и записью; пример: el75.scrollTop = 0;"
     },

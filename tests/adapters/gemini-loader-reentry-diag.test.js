@@ -261,3 +261,41 @@ describe('loader-reentry: R2 без гейта строка не печатае�
     expect(env.calls.filter((c) => c.line.indexOf(DIAG_MARK) !== -1)).toHaveLength(1);
   });
 });
+
+// =====================================================================================
+// v88.2 (SLEEP-UNTIL-FIRED): реальные часы — латч через 200 мс обрывает паузу 1000 мс
+// =====================================================================================
+// Пин шага 3: хелпер исполняется на РЕАЛЬНЫХ часах и реальном setTimeout (не фейковых),
+// поэтому проверяется именно то, что видит пользователь: пауза 1000 мс не досыпается,
+// а обрывается на ближайшем окне после взвода латча. Нарезка 150 мс ⇒ ожидаемое
+// разрешение ~300 мс (два окна: 0–150 и 150–300, латч взведён на 200-й мс).
+describe('v88.2 sleepUntilFired: D1 латч через 200 мс обрывает паузу 1000 мс', () => {
+  /** Тело хелпера из реального исходника (объявление + закрывающая скобка на отступе 2). */
+  const HELPER = (() => {
+    const start = TARGET.indexOf('  async function sleepUntilFired(');
+    expect(start).toBeGreaterThan(-1);
+    const end = TARGET.indexOf('\n  }\n', start);
+    expect(end).toBeGreaterThan(start);
+    return TARGET.slice(start, end + 4);
+  })();
+
+  test('D1: промис разрешается за ~200–400 мс (окно 150), а не за 1000 мс', async () => {
+    const factory = new Function('D', 'aiCmFiredByConv', 'Date', 'return (' + HELPER + ');');
+    const latch = Object.create(null);
+    const D = { sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)) };
+    const fn = factory(D, latch, Date);
+
+    const t0 = Date.now();
+    const timer = setTimeout(() => { latch.test = 1; }, 200);
+    try {
+      await fn(1000, 'test');
+    } finally {
+      clearTimeout(timer);
+    }
+    const elapsed = Date.now() - t0;
+
+    expect(elapsed).toBeGreaterThanOrEqual(200); // раньше взвода латча выйти не мог
+    expect(elapsed).toBeLessThan(1000);          // ключевое: пауза НЕ досыпается целиком
+    expect(elapsed).toBeLessThanOrEqual(400);    // ровно одно окно 150 после латча + запас
+  });
+});
