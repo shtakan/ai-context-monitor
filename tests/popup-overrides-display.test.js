@@ -249,7 +249,9 @@ describe('H19: интеграция — badge EMIT содержит displayLimit
     expect(src).toContain("chrome.storage.sync.get(['selectedModel', 'customLimit']");
     expect(src).toContain('aiCmLoadPopupOverrides();');
     expect(src).toContain('ModelConfig.computeDisplayLimit(modelId, aiCmActivePct())');
-    expect(src).toContain('const raw = popupModelId || uiRaw || rawSnapshot');
+    // v2.0.20: сеть (rawSnapshot: слаг из тела + адаптер) важнее DOM и попапа — дропдаун
+    // часто без номера версии, а попап остаётся явным оверрайдом только когда сеть молчит.
+    expect(src).toContain('const raw = rawSnapshot || uiRaw || popupModelId');
     expect(src).toContain('if (changes.selectedModel || changes.customLimit)');
   });
 

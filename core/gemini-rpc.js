@@ -209,6 +209,19 @@
     } catch (e) { return null; }
   }
 
+  // v2.0.20: слаг модели Gemini из тела сетевого запроса/ответа (batchexecute, SSE-кадры).
+  // Извлечение ЧИСТОЕ (без побочных эффектов): куда писать слаг, решает вызывающий — ядро
+  // (core/gemini-intercept.js:captureModelSlugFromBody) кладёт его в detectedModelSlug.
+  // До этого модель приходила только из DOM («Flash»/«Pro» без номера версии) и из истории;
+  // точный сетевой слаг (gemini-3.5-flash-lite) на этих путях терялся.
+  // Семейства: flash / pro / ultra, вариант -lite (gemini-3.5-flash-lite).
+  var MODEL_SLUG_RE = /gemini-[\d.]+-(?:flash|pro|ultra)(?:-lite)?/i;
+  function captureModelSlugFromBody(str) {
+    if (typeof str !== 'string' || !str) return '';
+    var m = MODEL_SLUG_RE.exec(str);
+    return m ? m[0].toLowerCase() : '';
+  }
+
   function rememberSiteMeta(url, headers, bodyStr) {
     if (!isHistoryRpc(url)) return;
     diagCursorFromBody(bodyStr); // v72diag: курсор тела запроса (только лог)
@@ -258,6 +271,7 @@
     convIdFromBody: convIdFromBody,
     diagCursorFromBody: diagCursorFromBody,
     shadowCursorFromRest: shadowCursorFromRest,
+    captureModelSlugFromBody: captureModelSlugFromBody,
     rememberSiteMeta: rememberSiteMeta,
     buildActiveBodyWith: buildActiveBodyWith,
     buildActiveBody: buildActiveBody,

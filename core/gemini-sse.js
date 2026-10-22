@@ -70,6 +70,10 @@
           D.rememberSiteMeta(url, hdrs, bodyStr);
         }
 
+        // v2.0.20: слаг модели из тела ЗАПРОСА (модель выбирается отдельным RPC, тело строкой).
+        // Читаем синхронно: тело init уже доступно, доп. клонирования не нужно.
+        if (init && typeof init.body === 'string') D.captureModelSlugFromBody(init.body);
+
         // v21: строим reqConvIdPromise — всегда резолвится строкой, никогда не реджектится
         var reqConvIdPromise = Promise.resolve('');
         // v44: convId чата В МОМЕНТ ОТПРАВКИ запроса — синхронная привязка ответа к чату,
@@ -88,6 +92,8 @@
             try {
               var cloned = input.clone();
               reqConvIdPromise = cloned.text().then(function (t) {
+                // v2.0.20: тело ingest-запроса — второй источник слаг-а модели
+                D.captureModelSlugFromBody(t);
                 return D.convIdFromBody(t);
               }).catch(function () { return ''; });
             } catch (e) {
@@ -109,6 +115,8 @@
             try {
               if (resp && resp.ok) {
                 resp.clone().text().then(function (t) {
+                  // v2.0.20: слаг модели из тела ОТВЕТА (SSE-кадры генерации)
+                  D.captureModelSlugFromBody(t);
                   D.provisionalStreamIngest(t, D.streamRpcidOf(url));
                 }).catch(function () { });
               }
@@ -121,6 +129,9 @@
             try {
               if (resp && resp.ok) {
                 resp.clone().text().then(function (txt) {
+                  // v2.0.20: слаг модели из тела ответа — ДО гарда по чату: модель принадлежит
+                  // приложению, а не разговору, поэтому пишем даже для «чужого» снимка.
+                  D.captureModelSlugFromBody(txt);
                   // v21: гард ждёт reqConvIdPromise (обычно уже разрешён)
                   reqConvIdPromise.then(function (reqConvId) {
                     // v44/v59: чужой снимок — convId запроса ≠ текущий, ИЛИ «гард слеп» (reqConvId
@@ -188,6 +199,8 @@
       }
       D.OriginalXHR.prototype.send = function (body) {
         var info = this.__aiCm || {}; var url = info.url || '';
+        // v2.0.20: слаг модели из тела запроса (строковое тело XHR — batchexecute-полезная нагрузка)
+        if (typeof body === 'string') D.captureModelSlugFromBody(body);
         if (D.isHistoryRpc(url)) {
           D.rememberSiteMeta(url, info.headers || {}, typeof body === 'string' ? body : '');
         }
@@ -206,6 +219,8 @@
           this.addEventListener('load', function () {
             try {
               if (selfStream.status >= 200 && selfStream.status < 300 && selfStream.responseText) {
+                // v2.0.20: слаг модели из тела ОТВЕТА (SSE-кадры генерации, XHR-путь)
+                D.captureModelSlugFromBody(selfStream.responseText);
                 D.provisionalStreamIngest(selfStream.responseText, D.streamRpcidOf(url));
               }
             } catch (e) { swallowSoft(e, 'gemini:xhr-load-listener-stream'); }
@@ -216,6 +231,8 @@
           this.addEventListener('load', function () {
             try {
               if (self.status >= 200 && self.status < 300 && self.responseText) {
+                // v2.0.20: слаг модели — до гарда по чату (модель принадлежит приложению)
+                D.captureModelSlugFromBody(self.responseText);
                 // v20: гард — ответ от старого чата игнорируем
                 var rcv = self.__aiCm && self.__aiCm.reqConvId;
                 var icv = self.__aiCm && self.__aiCm.issuedAtConvId; // v44: выпуск запроса (фолбэк атрибуции)

@@ -579,6 +579,36 @@ const ModelConfig = {
     const nRaw = norm(raw);
     if (!nRaw) return null;
     const keys = Object.keys(this.models);
+    // 0) v2.0.20: авто-регистрация нового слаг-а Gemini (пришёл из сети — тело ответа/запроса).
+    //    Словарь не должен отставать от релизов: gemini-<версия>-<семейство>[-lite].
+    //    Запись создаётся ТОЛЬКО если словарь этот слаг ещё не покрывает (точное/префиксное/
+    //    подстрочное совпадение шагов 1-3 ниже) — иначе прежний путь решает как раньше и
+    //    канонический ключ не подменяется. Окна по семействам: Pro — 128 000 (веб-окно
+    //    Gemini Pro), Flash и Flash Lite — 1 048 576 (API-окно линейки Flash).
+    const slugM = /^gemini-([\d.]+)-(flash|pro|ultra)(-lite)?$/i.exec(String(raw).trim());
+    const slugLite = !!(slugM && slugM[3]);
+    if (slugM && !keys.some(function (k) {
+      const nk = norm(k);
+      if (!nk || nRaw.indexOf(nk) === -1) return false;
+      // Вариант -lite не должен схлопываться в запись без -lite (flash ≠ flash-lite):
+      // иначе gemini-3.6-flash-lite матчился бы на «3.6 Flash» и терял вариант.
+      return slugLite ? /-lite$/.test(nk) : !/-lite$/.test(nk);
+    })) {
+      const ver = slugM[1];
+      const fam = slugM[2].toLowerCase();
+      const lite = !!slugM[3];
+      const family = fam.charAt(0).toUpperCase() + fam.slice(1) + (lite ? ' Lite' : '');
+      const key = 'gemini-' + ver + '-' + fam + (lite ? '-lite' : '');
+      const contextLimit = (fam === 'pro') ? 128000 : 1048576;
+      this.models[key] = {
+        name: 'Gemini ' + ver + ' ' + family,
+        provider: 'Google',
+        contextLimit: contextLimit,
+        description: 'Gemini ' + ver + ' ' + family + ' — авто-регистрация сетевого слаг-а (окно ' +
+          contextLimit + ')',
+      };
+      return key;
+    }
     // 1) точное по нормализованному
     for (let i = 0; i < keys.length; i++) {
       if (norm(keys[i]) === nRaw) return keys[i];

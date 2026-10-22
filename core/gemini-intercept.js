@@ -224,6 +224,7 @@
   var diagCursorFromBody = null;
   var shadowCursorFromRest = null;
   var rememberSiteMeta = null;
+  var captureModelSlugFromBody = null;
   var buildActiveBodyWith = null;
   var buildActiveBody = null;
   var buildActiveUrl = null;
@@ -281,9 +282,24 @@
     diagCursorFromBody = function () { };
     shadowCursorFromRest = function () { return null; };
     rememberSiteMeta = function () { };
+    captureModelSlugFromBody = function () { return ''; };
     buildActiveBodyWith = function () { return ''; };
     buildActiveBody = function () { return ''; };
     buildActiveUrl = function () { return ''; };
+  }
+  // v2.0.20: слаг модели из тела сети → content.js. Этот файл исполняется в MAIN world
+  // (core/background.js: world:'MAIN'), а detectedModelSlug — переменная ИЗОЛИРОВАННОГО мира
+  // (core/state.js:87, пишется core/content.js:686 и core/widget.js:192): напрямую из MAIN world
+  // она недоступна, поэтому мост — событие на window, ровно как ai-cm-full-history.
+  // Чистое извлечение — core/gemini-rpc.js:captureModelSlugFromBody (без зависимостей).
+  if (aiCmGeminiRpc) {
+    captureModelSlugFromBody = function (str) {
+      var slug = aiCmGeminiRpc.captureModelSlugFromBody(str);
+      if (slug) {
+        try { window.dispatchEvent(new CustomEvent('ai-cm-model-slug', { detail: { slug: slug } })); } catch (e) { }
+      }
+      return slug;
+    };
   }
   // ===== v2.0 (Phase 3 step 6): кластер парсеров кадра вынесен в core/gemini-parse.js =====
   // Модуль подключён в core/background.js ПЕРЕД этим файлом и отдаёт свой API на window.
@@ -357,6 +373,7 @@
       convIdFromBody: convIdFromBody,
       captureHeadersFromInit: captureHeadersFromInit,
       rememberSiteMeta: rememberSiteMeta,
+      captureModelSlugFromBody: captureModelSlugFromBody,
       isStreamIngestRpc: isStreamIngestRpc,
       streamRpcidOf: streamRpcidOf,
       provisionalStreamIngest: provisionalStreamIngest,

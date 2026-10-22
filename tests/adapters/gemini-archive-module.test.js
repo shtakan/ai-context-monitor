@@ -601,11 +601,13 @@ describe('Phase 3 шаг 13.2: S-пины проводки модуля', () => 
   test('S4: пин строки vf5 не сдвинулся — оба диапазона лежат НИЖЕ него', () => {
     // шаг 13.2 правил только строки > 1712, но шаг 13.3 вынес оракул (диапазоны 866-909,
     // 1001-1155, 1372-1436) — точка выхода vf5 поднялась 1680 → 1446, а v86 (+4 строки
-    // ro-геттеров контракта hidden-scroll выше неё) сдвинул её до 1450. Пин держит ФАКТ:
+    // ro-геттеров контракта hidden-scroll выше неё) сдвинул её до 1450; v2.0.20 добавил выше
+    // 17 строк моста слаг-а модели (core/gemini-intercept.js:captureModelSlugFromBody) — 1467.
+    // Пин держит ФАКТ:
     // следующий перенос кода выше этой точки снова потребует ревью строки, а не пройдёт молча.
     const VF5_TAIL = 'aiCmIngestFwd(txt, { emitOnlyIfAdded: true, fromVirtualF5: true, rebuild: rebuild });';
     const hits = CORE.split('\n').reduce((acc, l, i) => (l.indexOf(VF5_TAIL) !== -1 ? acc.concat(i + 1) : acc), []);
-    expect(hits).toEqual([1450]);
-    expect(lineOf(CORE, 'aiCmGeminiArchive.__bind(')).toBeGreaterThan(1450);
+    expect(hits).toEqual([1467]);
+    expect(lineOf(CORE, 'aiCmGeminiArchive.__bind(')).toBeGreaterThan(1467);
   });
 });

@@ -543,6 +543,14 @@ function aiCmEstimateTokensTilde(text, attachTokens) {
   return result;
 }
 
+// v2.0.20: слаг модели из сети. Мост из MAIN world (core/gemini-intercept.js:captureModelSlugFromBody
+// → window.dispatchEvent) в переменную этого мира (core/state.js:87). Несёт то же значение, что
+// detail.modelSlug в ai-cm-full-history, но приходит на КАЖДЫЙ сетевой ответ и раньше снимка.
+// Приоритет сети над DOM реализован ниже, в resolveCurrentModel (rawSnapshot перед uiRaw).
+window.addEventListener('ai-cm-model-slug', function (/** @type {CustomEvent} */ ev) {
+  var md = ev && ev.detail;
+  if (md && typeof md.slug === 'string' && md.slug) detectedModelSlug = md.slug;
+});
 window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} */ ev) {
   // O-22 (ИЗМЕРЕНИЕ-2): маркер ПЕРВОЙ строки колбэка слушателя — ДО блока v81 Step1
   // и ДО вставок O-22 (блоки A–G2). Только диагностика под гейтом aiCmDebug.
@@ -1475,12 +1483,16 @@ function resolveCurrentModel() {
   }
 
   // H19: явный выбор модели в дропдауне попапа авторитетен для лимита и токенизации.
-  // «Автоопределение» (popupModelId === null) → прежний путь: сетевой slug → DOM → дефолт.
-  const raw = popupModelId || uiRaw || rawSnapshot || '';
+  // v2.0.20: сеть важнее DOM — снимок (слаг из тела ответа + адаптер) стоит ПЕРЕД текстом
+  // дропдауна: он часто без номера версии («Flash»/«Pro»), а сеть уже назвала модель полно
+  // (gemini-3.5-flash-lite). Попап сохранён последним: он решает, когда сеть и DOM молчат.
+  const raw = rawSnapshot || uiRaw || popupModelId || '';
+  // Источник raw для path/source: та же лестница приоритетов (без повторов).
+  const rawSrc = rawSnapshot ? (rawFromNet ? 'сеть' : 'DOM') : (uiRaw ? 'dom' : (popupModelId ? 'попап' : ''));
   let modelId = raw ? ModelConfig.resolveModelId(raw) : null;
   let path;
   if (modelId) {
-    path = popupModelId ? 'попап' : (uiRaw ? 'dom' : (rawFromNet ? 'сеть' : 'DOM'));
+    path = rawSrc || 'дефолт';
   } else {
     modelId = ModelConfig.getDefaultModel(currentAdapter.siteName);
     path = raw ? ((rawFromNet ? 'сеть' : 'DOM') + '→дефолт(не распознан)') : 'дефолт';
@@ -1494,7 +1506,7 @@ function resolveCurrentModel() {
   if (!snapModelId && currentAdapter && currentAdapter.siteName === 'google_search') {
     lastSnapshotModelName = ModelConfig.getModel(modelId)?.name || modelId;
   }
-  const source = popupModelId ? 'popup' : (uiRaw ? 'dom' : 'snapshot');
+  const source = rawSrc === 'попап' ? 'popup' : (rawSrc === 'dom' ? 'dom' : 'snapshot');
   if (modelId !== lastResolvedModelId) {
     lastResolvedModelId = modelId;
     const ctx = ModelConfig.getContextLimit(modelId);
