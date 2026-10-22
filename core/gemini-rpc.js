@@ -215,11 +215,63 @@
   // До этого модель приходила только из DOM («Flash»/«Pro» без номера версии) и из истории;
   // точный сетевой слаг (gemini-3.5-flash-lite) на этих путях терялся.
   // Семейства: flash / pro / ultra, вариант -lite (gemini-3.5-flash-lite).
-  var MODEL_SLUG_RE = /gemini-[\d.]+-(?:flash|pro|ultra)(?:-lite)?/i;
+  // v2.0.21: в одном теле слаг-ов обычно НЕСКОЛЬКО — в ответе перечислен массив моделей,
+  // например ['gemini-3-flash', 'gemini-3.6-flash', 'gemini-2.5-flash-lite'], где первым
+  // идёт не текущая модель, а запасная. Поэтому берём самую свежую: 1) старше версия
+  // (посегментно — у значения бывает больше одной точки: 3.10 > 3.9, а не parseFloat);
+  // 2) при равной версии — семейство pro > ultra > flash; 3) внутри семейства — вариант
+  // без -lite; 4) иначе первое вхождение (выбор стабилен и не зависит от порядка кода).
+  var MODEL_SLUG_RE = /gemini-[\d.]+-(?:flash|pro|ultra)(?:-lite)?/gi;
+  var MODEL_FAMILY_RANK = { pro: 3, ultra: 2, flash: 1 };
+
+  function modelVersionParts(slug) {
+    var m = /^gemini-([\d.]+)-/.exec(slug);
+    if (!m) return [0];
+    var raw = m[1].split('.');
+    var out = [];
+    for (var i = 0; i < raw.length; i++) {
+      var n = parseInt(raw[i], 10);
+      out.push(isNaN(n) ? 0 : n);
+    }
+    return out;
+  }
+
+  function compareModelVersions(a, b) {
+    var len = a.length > b.length ? a.length : b.length;
+    for (var i = 0; i < len; i++) {
+      var d = (i < a.length ? a[i] : 0) - (i < b.length ? b[i] : 0);
+      if (d) return d;
+    }
+    return 0;
+  }
+
+  // pro=3, ultra=2, flash=1; вариант без -lite всегда важнее lite того же семейства.
+  function modelSlugRank(slug) {
+    var fam = /^gemini-[\d.]+-(flash|pro|ultra)/.exec(slug);
+    var rank = (fam && MODEL_FAMILY_RANK[fam[1]]) || 0;
+    return rank * 2 + (/-lite$/.test(slug) ? 0 : 1);
+  }
+
   function captureModelSlugFromBody(str) {
     if (typeof str !== 'string' || !str) return '';
-    var m = MODEL_SLUG_RE.exec(str);
-    return m ? m[0].toLowerCase() : '';
+    // match с /g отдаёт ВСЕ слаг-и и не оставляет state в lastIndex (exec в цикле — оставил бы)
+    var all = str.match(MODEL_SLUG_RE);
+    if (!all || !all.length) return '';
+    var best = all[0].toLowerCase();
+    var bestVer = modelVersionParts(best);
+    var bestRank = modelSlugRank(best);
+    for (var i = 1; i < all.length; i++) {
+      var slug = all[i].toLowerCase();
+      var ver = modelVersionParts(slug);
+      var rank = modelSlugRank(slug);
+      var cmp = compareModelVersions(ver, bestVer);
+      if (cmp > 0 || (cmp === 0 && rank > bestRank)) {
+        best = slug;
+        bestVer = ver;
+        bestRank = rank;
+      }
+    }
+    return best;
   }
 
   function rememberSiteMeta(url, headers, bodyStr) {

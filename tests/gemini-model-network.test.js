@@ -12,6 +12,10 @@
  *   D4 мост между мирами: core/gemini-intercept.js (MAIN world) шлёт событие
  *      ai-cm-model-slug, core/content.js (изолированный мир) пишет detectedModelSlug —
  *      прямая запись переменной из MAIN world не видна (см. регрессионный запрет в D4).
+ *   D5 (v2.0.21) выбор модели из МАССИВА слаг-ов: в теле ответа перечислены несколько
+ *      моделей (['gemini-3-flash','gemini-3.6-flash','gemini-2.5-flash-lite']) и первой
+ *      идёт не текущая; берётся самая свежая версия (pro > ultra > flash при равенстве,
+ *      внутри семейства — без -lite), а не первое совпадение.
  */
 
 const fs = require('fs');
@@ -54,6 +58,42 @@ describe('D1: captureModelSlugFromBody — слаг модели из тела �
   test('посторонний слаг (не gemini) не подхватывается', () => {
     expect(Rpc.captureModelSlugFromBody('"qwen3.7-plus"')).toBe('');
     expect(Rpc.captureModelSlugFromBody('"gpt-5.5"')).toBe('');
+  });
+});
+
+describe('D5: из массива слаг-ов выбирается самая свежая модель', () => {
+  // Полевой случай 2026-10-22: тело ответа — массив ['gemini-3-flash','gemini-3.6-flash',
+  // 'gemini-2.5-flash-lite'], первым лежит не текущая модель; виджет показывал самую свежую
+  // (gemini-3.6-flash), а первое совпадение дало бы gemini-3-flash.
+  test('массив из ответа → gemini-3.6-flash, а не первое совпадение', () => {
+    const body = ')]}\'\n\n[["wrb.fr",null,"[\\"gemini-3-flash\\",\\"gemini-3.6-flash\\",\\"gemini-2.5-flash-lite\\"]"]]';
+    expect(Rpc.captureModelSlugFromBody(body)).toBe('gemini-3.6-flash');
+  });
+
+  test('порядок в массиве не важен: [gemini-3-flash, gemini-3.6-flash] и обратный', () => {
+    expect(Rpc.captureModelSlugFromBody('["gemini-3-flash","gemini-3.6-flash"]')).toBe('gemini-3.6-flash');
+    expect(Rpc.captureModelSlugFromBody('["gemini-3.6-flash","gemini-3-flash"]')).toBe('gemini-3.6-flash');
+  });
+
+  test('версия сравнивается посегментно: 3.10 старше 3.9', () => {
+    expect(Rpc.captureModelSlugFromBody('["gemini-3.9-flash","gemini-3.10-flash"]')).toBe('gemini-3.10-flash');
+    expect(Rpc.captureModelSlugFromBody('["gemini-4-flash","gemini-3.99-pro"]')).toBe('gemini-4-flash');
+  });
+
+  test('равная версия → pro > ultra > flash', () => {
+    expect(Rpc.captureModelSlugFromBody('["gemini-3.6-flash","gemini-3.6-pro"]')).toBe('gemini-3.6-pro');
+    expect(Rpc.captureModelSlugFromBody('["gemini-3.6-flash","gemini-3.6-ultra"]')).toBe('gemini-3.6-ultra');
+    expect(Rpc.captureModelSlugFromBody('["gemini-3.6-flash","gemini-3.6-pro","gemini-3.6-ultra"]')).toBe('gemini-3.6-pro');
+  });
+
+  test('равная версия и семейство → вариант без -lite важнее', () => {
+    expect(Rpc.captureModelSlugFromBody('["gemini-3.6-flash-lite","gemini-3.6-flash"]')).toBe('gemini-3.6-flash');
+    expect(Rpc.captureModelSlugFromBody('["gemini-3.6-flash","gemini-3.6-flash-lite"]')).toBe('gemini-3.6-flash');
+  });
+
+  test('выбор стабилен при повторе одного и того же слаг-а (SSE-кадры)', () => {
+    const sse = 'data: {"model":"gemini-3.6-flash"}\n\ndata: {"model":"gemini-3.6-flash"}\n\n';
+    expect(Rpc.captureModelSlugFromBody(sse)).toBe('gemini-3.6-flash');
   });
 });
 
