@@ -123,9 +123,18 @@ describe('Two-Tier D7: md Gemini — метка отдельным блоком 
   });
 
   test('D7b: qwen md с меткой → метки нет, байты как без метки', function () {
-    const withTier = Builders.buildMdFromHistory({ site: 'qwen', sourceTier: LIVE, messages: MESSAGES });
-    const without = Builders.buildMdFromHistory({ site: 'qwen', messages: MESSAGES });
-    expect(withTier).toBe(without);
+    // Флейк: шапка md несёт `new Date().toISOString()` (utils/export-text-builders.js:290),
+    // а тест сравнивает ДВА независимых вызова. Переход через границу миллисекунды/секунды
+    // между ними менял строку даты → падение «раз в N прогонов». Время фиксируем.
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-10-22T12:00:00Z'));
+    try {
+      const withTier = Builders.buildMdFromHistory({ site: 'qwen', sourceTier: LIVE, messages: MESSAGES });
+      const without = Builders.buildMdFromHistory({ site: 'qwen', messages: MESSAGES });
+      expect(withTier).toBe(without);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test('D7c: Gemini md без метки → метки нет', function () {

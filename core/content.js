@@ -546,7 +546,7 @@ function aiCmEstimateTokensTilde(text, attachTokens) {
 // v2.0.20: слаг модели из сети. Мост из MAIN world (core/gemini-intercept.js:captureModelSlugFromBody
 // → window.dispatchEvent) в переменную этого мира (core/state.js:87). Несёт то же значение, что
 // detail.modelSlug в ai-cm-full-history, но приходит на КАЖДЫЙ сетевой ответ и раньше снимка.
-// Приоритет сети над DOM реализован ниже, в resolveCurrentModel (rawSnapshot перед uiRaw).
+// Место в лестнице resolveCurrentModel (popupModelId → rawSnapshot → uiRaw): ниже попапа, выше DOM.
 window.addEventListener('ai-cm-model-slug', function (/** @type {CustomEvent} */ ev) {
   var md = ev && ev.detail;
   if (md && typeof md.slug === 'string' && md.slug) detectedModelSlug = md.slug;
@@ -1483,12 +1483,12 @@ function resolveCurrentModel() {
   }
 
   // H19: явный выбор модели в дропдауне попапа авторитетен для лимита и токенизации.
-  // v2.0.20: сеть важнее DOM — снимок (слаг из тела ответа + адаптер) стоит ПЕРЕД текстом
-  // дропдауна: он часто без номера версии («Flash»/«Pro»), а сеть уже назвала модель полно
-  // (gemini-3.5-flash-lite). Попап сохранён последним: он решает, когда сеть и DOM молчат.
-  const raw = rawSnapshot || uiRaw || popupModelId || '';
+  // Лестница: попап → сеть → DOM. «Автоопределение» (popupModelId === null/'') уступает
+  // снимку, поэтому v2.0.20 работает как задумано, а ручной выбор пользователя не
+  // перебивается сетью (иначе дропдаун молча расходится с бейджем и лимитом).
+  const raw = popupModelId || rawSnapshot || uiRaw || '';
   // Источник raw для path/source: та же лестница приоритетов (без повторов).
-  const rawSrc = rawSnapshot ? (rawFromNet ? 'сеть' : 'DOM') : (uiRaw ? 'dom' : (popupModelId ? 'попап' : ''));
+  const rawSrc = popupModelId ? 'попап' : (rawSnapshot ? (rawFromNet ? 'сеть' : 'DOM') : (uiRaw ? 'dom' : ''));
   let modelId = raw ? ModelConfig.resolveModelId(raw) : null;
   let path;
   if (modelId) {

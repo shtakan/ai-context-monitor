@@ -5,8 +5,10 @@
  *   D2 utils/model-config.js:resolveModelId — авто-регистрация НОВОГО слаг-а: запись
  *      создаётся, когда словарь слаг ещё не покрывает (Pro → 128 000, Flash/Flash Lite →
  *      1 048 576), существующие ключи не подменяются.
- *   D3 core/content.js:resolveCurrentModel — сеть (rawSnapshot) стоит перед DOM (uiRaw)
- *      и попапом: дропдаун часто без номера версии, а сеть называет модель полностью.
+ *   D3 core/content.js:resolveCurrentModel — лестница попап → сеть (rawSnapshot) → DOM
+ *      (uiRaw): ручной выбор пользователя не перебивается сетью (H19), но при
+ *      «Автоопределении» сеть по-прежнему впереди DOM — дропдаун часто без номера
+ *      версии, а сеть называет модель полностью.
  *   D4 мост между мирами: core/gemini-intercept.js (MAIN world) шлёт событие
  *      ai-cm-model-slug, core/content.js (изолированный мир) пишет detectedModelSlug —
  *      прямая запись переменной из MAIN world не видна (см. регрессионный запрет в D4).
@@ -127,20 +129,32 @@ describe('D4: мост MAIN world → content.js (событие ai-cm-model-slu
   });
 });
 
-describe('D3: приоритет сети над DOM в content.js', () => {
-  test('raw = rawSnapshot → uiRaw → popupModelId (сеть первая)', () => {
-    expect(CONTENT).toContain("const raw = rawSnapshot || uiRaw || popupModelId || '';");
+describe('D3: лестница приоритета модели в content.js — попап → сеть → DOM', () => {
+  test('raw = popupModelId → rawSnapshot → uiRaw (H19: ручной выбор первый)', () => {
+    expect(CONTENT).toContain("const raw = popupModelId || rawSnapshot || uiRaw || '';");
     const fn = CONTENT.slice(CONTENT.indexOf('function resolveCurrentModel()'));
     const line = fn.slice(fn.indexOf("const raw = "), fn.indexOf('let modelId'));
+    const iPopup = line.indexOf('popupModelId');
     const iSnap = line.indexOf('rawSnapshot');
     const iUi = line.indexOf('uiRaw');
-    const iPopup = line.indexOf('popupModelId');
-    expect(iSnap).toBeGreaterThan(-1);
+    expect(iPopup).toBeGreaterThan(-1);
+    expect(iSnap).toBeGreaterThan(iPopup);
     expect(iUi).toBeGreaterThan(iSnap);
-    expect(iPopup).toBeGreaterThan(iUi);
   });
 
-  test('порядок прежнего пути не остался в живом коде', () => {
-    expect(CONTENT).not.toContain('const raw = popupModelId || uiRaw || rawSnapshot');
+  test('источник raw идёт той же лестницей: попап → сеть → DOM', () => {
+    // rawSrc обязан совпадать с raw, иначе бейдж/снимок получат модель одного источника,
+    // а path/source назовут другой (H19: попап авторитетен для лимита и токенизации).
+    expect(CONTENT).toContain("const rawSrc = popupModelId ? 'попап' : (rawSnapshot ? (rawFromNet ? 'сеть' : 'DOM') : (uiRaw ? 'dom' : ''));");
+  });
+
+  test('порядок сети над DOM сохранён (смысл v2.0.20)', () => {
+    const fn = CONTENT.slice(CONTENT.indexOf('function resolveCurrentModel()'));
+    const line = fn.slice(fn.indexOf("const raw = "), fn.indexOf('let modelId'));
+    expect(line.indexOf('rawSnapshot')).toBeLessThan(line.indexOf('uiRaw'));
+  });
+
+  test('прежний порядок «сеть первой» не остался в живом коде', () => {
+    expect(CONTENT).not.toContain("const raw = rawSnapshot || uiRaw || popupModelId || '';");
   });
 });
