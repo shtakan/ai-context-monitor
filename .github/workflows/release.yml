@@ -118,7 +118,12 @@ jobs:
           # 5 бандлов + 35 MAIN-world файлов, которые service worker регистрирует сам.
           # Файлы перечисляются find-ом (а не 'zip -r dist'), чтобы записи в архиве
           # гарантированно не получили префикс 'dist/' и совпали с legacy-именами.
-          ( cd dist && find . -type f ) | sed 's|^\./||' | xargs zip -q "$ZIP"
+          # v2.0.21 (hotfix): find/sed/xargs/zip обязаны идти В ОДНОЙ подоболочке с
+          # cwd=dist. В v2.0.20 zip исполнялся в корне репозитория, где dist-относительных
+          # имён не существует, — zip молча пропускал их, и пакет уезжал без бандлов
+          # (background.js, content.js, options.js, print.js, shared-i18n.js). Архив
+          # адресуется абсолютным путём, потому что cwd подоболочки — dist/.
+          ( cd dist && find . -type f | sed 's|^\./||' | xargs zip -q "$GITHUB_WORKSPACE/$ZIP" )
 
       # Phase 3 step 2: инвариант состава JS в пакете. Шаг ниже ручается за то, что
       # ЗАПРЕЩЁННЫХ путей нет; этот — за то, что все .js в архиве ИЗВЕСТНЫ. Это две
@@ -142,7 +147,14 @@ jobs:
       #   2) берём все .js из архива (unzip -Z1) и вычитаем allowlist
       #      (grep -vxF -f — точное совпадение целой строки, не подстрока);
       #   3) непустая разность = неожиданный файл → exit 1 с его путём; нулевое
-      #      число .js в архиве — тоже ошибка (сломан фильтр или оверлей dist/).
+      #      число .js в архиве — тоже ошибка (сломан фильтр или оверлей dist/);
+      #   4) v2.0.21: ОБРАТНАЯ разность — каждый .js из allowlist обязан найтись в
+      #      архиве. До этого шаг проверял только «в архиве нет лишнего» и промолчал
+      #      бы, если оверлей dist/ потерял файл: именно так v2.0.20 уехал без
+      #      бандлов (find шёл в dist/, а zip — в корне репозитория);
+      #   5) v2.0.21: rewired-манифест — статический пин строки
+      #      "service_worker": "background.js". Legacy-манифест ссылается на core/*.js,
+      #      которых в пакете нет, поэтому подмена manifest.json обязательна.
       - name: Verify ZIP integrity
         env:
           VERSION: ${{ steps.version.outputs.VERSION }}
@@ -177,11 +189,39 @@ jobs:
 
           echo "OK: JS integrity — все $TOTAL .js в пакете известны (allowlist: $(wc -l < "$ALLOW") путей)"
 
+          # v2.0.21: проверка ДВУСТОРОННЯЯ. Секция (3) ловит лишнее в архиве, эта — пропажу:
+          # каждый .js, который собрался в dist/, обязан лежать в архиве. Без неё релиз
+          # v2.0.20 уехал без пяти бандлов при зелёном CI.
+          echo "--- (4) обратная разность: каждый .js из allowlist обязан быть в архиве ---"
+          if [ ! -s "$ALLOW" ]; then
+            echo "::error::allowlist пуст — в dist/ не нашлось ни одного .js (сломан Build bundles)"
+            exit 1
+          fi
+          printf '%s\n' "$JS_IN_ZIP" > "$RUNNER_TEMP/js-in-zip.txt"
+          MISSING=$(grep -vxF -f "$RUNNER_TEMP/js-in-zip.txt" "$ALLOW" || true)
+          if [ -n "$MISSING" ]; then
+            printf '%s\n' "$MISSING" | while IFS= read -r f; do
+              echo "::error::Missing JS file in package: $f. Пакет собран не из dist/: zip исполнялся не в каталоге dist/ (см. v2.0.21 в шаге Create ZIP)."
+            done
+            exit 1
+          fi
+          echo "OK: JS integrity — все $(wc -l < "$ALLOW") .js из allowlist есть в архиве"
+
+          # v2.0.21: манифест в пакете обязан быть rewired-копией из dist/, а не legacy.
+          # Legacy manifest.json ссылается на core/background.js и core/content.js, которых
+          # в архиве нет: расширение ставится, но service worker не стартует.
+          echo "--- (5) rewired-манифест: service_worker ---"
+          if ! unzip -p "$ZIP" manifest.json | grep -q '"service_worker": "background.js"'; then
+            echo "::error::в ZIP legacy manifest.json — нет \"service_worker\": \"background.js\" (rewired-копия из dist/ не подменила legacy)"
+            exit 1
+          fi
+          echo "OK: manifest.json в пакете — rewired (service_worker: background.js)"
+
           # PK1 (аудит 2026-08-26): контроль не-JS служебных артефактов — тот же принцип, что
           # и у проверки состава в шаге Verify ZIP contents: ручаемся по фактическому архиву,
           # а не по симуляции фильтра. Запрещены черновики .diff, любые .txt (LICENSE.txt
           # допускается, если появится) и demo-видео из docs/videos/.
-          echo "--- (4) служебные артефакты: .diff / .txt / docs/videos/ ---"
+          echo "--- (6) служебные артефакты: .diff / .txt / docs/videos/ ---"
           ARTIFACTS=$(unzip -Z1 "$ZIP" | grep -E '\.diff$|\.txt$|^docs/videos/' | grep -vx 'LICENSE\.txt' || true)
           if [ -n "$ARTIFACTS" ]; then
             printf '%s\n' "$ARTIFACTS" | while IFS= read -r f; do
