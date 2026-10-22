@@ -196,14 +196,13 @@
     } catch (e) { return 0; }
   }
 
-  // v86: «данные уже в базе» — гейт подавления оверлея при автоскролле. Оверлей в
-  // конвейере данных НЕ участвует (сбор идёт через triggerUp/settleBottom ниже),
-  // поэтому непрозрачный экран имеет смысл только пока база пуста. Три признака:
+  // v86: «данные уже в базе» — гейт подавления оверлея при автоскролле. Оверлей в данных
+  // НЕ участвует (сбор идёт через triggerUp/settleBottom ниже), поэтому непрозрачный экран
+  // имеет смысл только пока база пуста. Три признака:
   //   1) тихая пагинация дошла до начала — база полная (historyFullByQuiet);
   //   2) начало истории уже подтверждено (reachedStart);
   //   3) пол из localStorage покрыт текущим размером базы (baseSize >= expected).
-  // Окно удержания оверлея (3с) живёт не здесь, а в цикле — см. проверку после
-  // settleBottom: оверлей, который уже поднят, снимается по данным ИЛИ по возрасту.
+  // Окно удержания оверлея (3с) и снятие по данным/возрасту — в цикле, после settleBottom.
   function autoscrollDataPresent() {
     if (D.historyFullByQuiet === true) return true;
     if (D.reachedStart === true) return true;
@@ -234,13 +233,14 @@
   }
 
   async function autoScrollCollect() {
+    // v2.0.21: export-fired → скролл не нужен (PLAN: 17.8 с перерисовки скелетонов после fired).
+    if (typeof aiCmFiredByConv !== 'undefined' && aiCmFiredByConv[D.getConvId() || '']) { debugLog('log', '[AI CM][autoscroll] skip reason=export-fired'); return; }
     // v20: двойная страховка — если флаг всё ещё взведён (например, вызвано напрямую)
     if (D.autoScrollBlocked) {
       debugLog('log', '[gemini-autoscroll] заблокирован (проверка в autoScrollCollect)');
       return;
     }
-    // v75 (фаза 2): кэш-лента восстановлена (cache-complete) и новой пагинации нет —
-    // hide и принудительный autoscroll полностью отключены: экран не дёргаем.
+    // v75: кэш-лента восстановлена (cache-complete), новой пагинации нет — hide и автоскролл отключены.
     try {
       var cid75 = D.getConvId();
       if (cid75 && D.cacheRestoredMap.has(cid75) && !D.quietActive && !D.pendingCursor) {
@@ -319,6 +319,7 @@
         var stoppedBy = 'hard-cap';
         var i = 0;
         for (i = 0; i < AUTO_HARD_CAP; i++) {
+          if (typeof aiCmFiredByConv !== 'undefined' && aiCmFiredByConv[D.getConvId() || '']) { stoppedBy = 'export-fired'; break; }
           triggerUp(sc);
           await D.sleep(AUTO_STEP_WAIT);
           var curH = sc.height(), curB = D.baseSize();
@@ -332,10 +333,9 @@
           if (emptyStreak >= AUTO_EMPTY_NEED) { stoppedBy = 'empty*' + AUTO_EMPTY_NEED; break; }
         }
 
-        await settleBottom(sc);
+        if (stoppedBy !== 'export-fired') await settleBottom(sc);
 
-        // v86: оверлей не держим дольше 3с и снимаем сразу, как только база собрана —
-        // иначе он висит поверх уже видимого чата до конца прогона (включая retry-паузы).
+        // v86: оверлей не держим дольше 3с и снимаем, как только база собрана (иначе висит до конца).
         if (hiddenEl && (autoscrollDataPresent() || (Date.now() - __ovShownAt > 3000))) {
           __restoreAutoscrollVisibility();
         }
@@ -343,7 +343,7 @@
         var finalSize = D.baseSize();
         var finalH = sc.height();
         var finalElems = countHistoryElements();
-        var needRetry = retryNeededAutoscroll(finalSize, expectedTurns, retry);
+        var needRetry = stoppedBy !== 'export-fired' && retryNeededAutoscroll(finalSize, expectedTurns, retry);
         if (needRetry) {
           retry++;
           debugLog('log', '[gemini-autoscroll] недобор: ходов ' + finalSize + ' < ожидаемых ' + expectedTurns +
@@ -364,6 +364,25 @@
       __restoreAutoscrollVisibility();
       debugLog('log', '[gemini-autoscroll] ошибка автоскролла (НЕ критично, ловля работает):', e);
     }
+  }
+
+  // ---- v2.0.21: латч «автоэкспорт уже выстрелил» (гейт export-fired в autoScrollCollect) ----
+  // У лоадера (core/gemini-loader-scroll.js) СВОЙ aiCmFiredByConv в собственном IIFE, и его
+  // переменная этому модулю не видна. Поэтому здесь свой латч на том же window-событии
+  // (detail.convId), как в core/export-manager.js:1796. Регистрация идёт на загрузке модуля,
+  // до реального fired событие не приходит; var поднят, поэтому гейты в autoScrollCollect
+  // видят его и до объявления (typeof-guard). Имя латча намеренно совпадает с лоадерным:
+  // source-пины и grep-приёмка ищут один и тот же идентификатор.
+  var aiCmFiredByConv = Object.create(null);
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('ai-cm-auto-export-fired', function (ev) {
+      var dFired = (ev && ev.detail) || null;
+      var cidFired = (dFired && dFired.convId) ? String(dFired.convId) : '';
+      if (!cidFired) return; // без convId латч не привязать к чату — не взводим
+      aiCmFiredByConv[cidFired] = 1;
+      debugLog('log', '[AI CM][autoscroll] export-fired latch convId=' + cidFired +
+        ' src=' + ((dFired && dFired.reason) || 'threshold'));
+    });
   }
 
   // ---- экспорт (UMD-паттерн: браузер + Node для тестов) ----
