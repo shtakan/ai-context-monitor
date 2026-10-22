@@ -25,7 +25,7 @@
  * Живая форма состояния (не синтетика): аппендикс v88 §2 — «baseComplete=1 приходил на
  * 9-й секунде, но живой continuation-курсор (pendingCursor=1) держал цикл в stall-retry
  * до 34 с»; собственный лог fired в export-manager.js:1725 печатает pendingCursor=1
- * рядом с baseComplete=1. Тот же факт печатает stall-retry в gemini-loader-scroll.js:437.
+ * рядом с baseComplete=1. Тот же факт печатает stall-retry в gemini-loader-scroll.js:487.
  */
 
 const fs = require('fs');
@@ -242,6 +242,9 @@ describe('Инвариант автоэкспорта: fired ⟹ pendingCursor=0
 // (конвенция runTopPoint: исполняется вырезанное тело, а не копия логики):
 //   D2 — loop-head выход reason='export-done', проверка ПЕРВОЙ после wall-clock;
 //   D3 — collapse-guard не планирует 8с-перезапуск при fired.
+// v90.1 (FIRED-AFTER-AWAIT) добавил ещё восемь потребителей того же латча: по гейту сразу
+// после каждого await цикла (см. tests/adapters/gemini-loader-fired-after-await.test.js).
+// Блочных гейтов осталось два; они и проверяются ниже.
 const GATE_OPEN = "if (typeof aiCmFiredByConv !== 'undefined' && aiCmFiredByConv[convId]) {";
 const COLLAPSE_FROM = '// v1.14.2 (COLLAPSE-GUARD): collapse ≠ top';
 const COLLAPSE_TO = "doneReason = 'top'; // v78";
@@ -302,8 +305,9 @@ describe('Ранний выход из цикла скролла по fired (v88
   test('D2: fired-латч → doneReason=export-done на первой итерации, до iter++/скролла', function () {
     const first = LOADER_SRC.indexOf(GATE_OPEN);
     expect(first).toBeGreaterThan(-1);
-    // ровно два потребителя латча: loop-head (D2) и collapse-guard (D3)
-    expect(LOADER_SRC.split(GATE_OPEN).length - 1).toBe(2);
+    // ровно два БЛОЧНЫХ потребителя латча: loop-head (D2) и collapse-guard (D3);
+    // 8 пост-await гейтов v90.1 считаются отдельным пином (fired-after-await: S2)
+    expect(LOADER_SRC.split(GATE_OPEN).length - 1).toBe(10);
 
     // порядок в теле while (true): wall-clock → гейт fired → iter++ → первый гейт полноты
     const wall = LOADER_SRC.indexOf('if (Date.now() - runStartAt > LOADER_RUN_WALL_CLOCK_MS)');

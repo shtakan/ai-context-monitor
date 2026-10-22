@@ -20,8 +20,10 @@
  *   R1 — E2E: fired приходит window-событием посреди реальной паузы цикла → прогон
  *        завершается reason='export-done' не позже чем через 150 мс фейковых часов,
  *        ни одно окно D.sleep в прогоне не длиннее 150 мс;
- *   R2 — соседний контракт не сдвинут: loop-head гейт по-прежнему единственный (брас-less
- *        чтение внутри хелпера не считается вторым гейтом цикла).
+ *   R2 — соседний контракт не сдвинут: блочных гейтов цикла по-прежнему два (loop-head +
+ *        collapse-guard; брас-less чтение внутри хелпера гейтом не считается). v90.1 добавил
+ *        восемь пост-await гейтов того же текста — их счёт и позиции пинит
+ *        tests/adapters/gemini-loader-fired-after-await.test.js.
  *
  * Часы подменены (модуль читает время только через Date.now()), D.sleep двигает фейковые
  * часы на ЗАПРОШЕННУЮ длительность — именно так проверяется нарезка на окна (в отличие от
@@ -109,7 +111,8 @@ describe('v88.2 sleepUntilFired: D2 все паузы цикла перевед�
     for (const tail of calls) expect(tail).toContain(', convId);');
 
     // все восемь окон лежат ВНУТРИ цикла (между while (true) и пост-цикловым стопом):
-    // после окна управление всегда доходит до continue/loop-head, где fired-гейт и срабатывает
+    // с v90.1 после каждого окна стоит собственный fired-гейт (см.
+    // tests/adapters/gemini-loader-fired-after-await.test.js), loop-head остаётся первым
     const loopStart = LOADER.indexOf('while (true) {');
     const loopEnd = LOADER.indexOf('D.lastLoaderDoneReason = doneReason;');
     expect(loopStart).toBeGreaterThan(-1);
@@ -327,13 +330,17 @@ describe('v88.2 sleepUntilFired: R1 E2E выход по export-done ≤150 мс'
 });
 
 // =====================================================================================
-// R2: loop-head гейт остался тем же (брас-less чтение в хелпере — не второй гейт)
+// R2: блочные гейты цикла не сдвинуты (брас-less чтение в хелпере — не гейт)
 // =====================================================================================
 describe('v88.2 sleepUntilFired: R2 соседний контракт не сдвинут', () => {
   const GATE_OPEN = "if (typeof aiCmFiredByConv !== 'undefined' && aiCmFiredByConv[convId]) {";
 
-  test('R2: гейтов цикла по-прежнему два (loop-head + collapse-guard), третий не появился', () => {
-    expect(countOf(LOADER, GATE_OPEN)).toBe(2);
+  test('R2: 10 гейтов = 2 блочных (loop-head + collapse-guard) + 8 пост-await (v90.1)', () => {
+    // v90.1 (FIRED-AFTER-AWAIT) добавил по гейту после каждого из восьми await — тот же текст,
+    // та же причина 'export-done', тот же break. Адресность (гейт первым стейтментом после
+    // каждого await; loop-head первым, collapse-guard последним) и поведение —
+    // tests/adapters/gemini-loader-fired-after-await.test.js (S1/S2, R3–R5).
+    expect(countOf(LOADER, GATE_OPEN)).toBe(10);
     // хелпер читает латч брас-less — в счёт гейтов цикла он не попадает
     expect(countOf(LOADER, 'aiCmFiredByConv[convId]) return;')).toBe(1);
   });

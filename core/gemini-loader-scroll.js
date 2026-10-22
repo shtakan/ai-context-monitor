@@ -208,6 +208,18 @@
         // H9 (untrusted-top): снапшот поколения курсора на старте прогона (hadCursor — по росту cursorEpoch;
         // при floor=0 и no-growth «вершок» на схлопнутом скроллере недостоверен — см. untrustedTopVerdict).
         var cursorEpochAtRunStart = D.cursorEpoch;
+        // v90.1 (FIRED-AFTER-AWAIT): инвариант цикла «после точки приостановки — сперва латч».
+        // sleepUntilFired (v88.2) обрывает только САМ СОН; если между await и следующей
+        // логикой есть работа (чтение h, hide/скролл, stall-retry, перезапуск лоадера),
+        // она выполняется уже после автоэкспорта. План-отчёт 2026-10-21: цикл мог
+        // простоять в сетевом await ~4с, и визуальные эффекты (полоски/оверлей) жили
+        // ещё 5с. Поэтому после КАЖДОГО await в теле цикла стоит гейт export-fired и
+        // читается ДО следующей логики — это гарантирует причину 'export-done' и
+        // не даёт веткам 'top'/'data-complete' открыть полноту оракула (stableCheck74
+        // требует done=top, core/gemini-oracle.js:228). Гейты стоят и там, где дальше
+        // идёт голый continue: инвариант машино-проверяем и защищён от будущей вставки
+        // логики между await и continue. Итого 2 блочных гейта (loop-head, collapse-guard)
+        // + 8 пост-await = 10 вхождений GATE_OPEN.
         var runStartAt = Date.now(); // v1.17 (wall-clock): отсчёт жёсткого предела прогона (проверка — первая строка цикла)
         D.aiCmUiOverlayTimedOut = false; // v1.17/v87.1 (UI-таймаут): латч «оверлей уже снят» (по 5с-пределу или при base-complete) — в D, чтобы фолбэк-ветка (в т.ч. в песочницах) его видела
         while (true) {
@@ -271,6 +283,8 @@
           if (!scNow || !(scNow.height() > 0)) {
             debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' скроллер недоступен (null/scrollH=0) — ожидание в рамках лимита');
             await sleepUntilFired(LOADER_STEP_MS, convId);
+            // v90.1 (fired-after-await): fired взведён — выходим, не доходя до следующей логики.
+            if (typeof aiCmFiredByConv !== 'undefined' && aiCmFiredByConv[convId]) { doneReason = 'export-done'; break; }
             continue;
           }
           sc = scNow;
@@ -371,6 +385,8 @@
             debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' visible-scroll-skipped reason=not-hidden' +
               ' h=' + __hNow + ' msgs=' + __msgsNow + ' wait=' + notHiddenWait + '/' + LOADER_MAX_ITER + ' convId=' + convId);
             await sleepUntilFired(LOADER_STEP_MS, convId);
+            // v90.1 (fired-after-await): fired взведён — выходим, не доходя до следующей логики.
+            if (typeof aiCmFiredByConv !== 'undefined' && aiCmFiredByConv[convId]) { doneReason = 'export-done'; break; }
             continue;
           }
           // v75: программный скролл БЕЗ изменения CSS-видимости: в одном кадре (rAF)
@@ -394,6 +410,8 @@
               } catch (eRaf) { }
             })(sc.el);
             await sleepUntilFired(SCROLL_PAUSE_HIDDEN_MS, convId);
+            // v90.1 (fired-after-await): fired взведён — выходим, не доходя до чтения h/no-growth.
+            if (typeof aiCmFiredByConv !== 'undefined' && aiCmFiredByConv[convId]) { doneReason = 'export-done'; break; }
           } else {
             // v78→v80: страховочный лоадер (фолбэк после loader-restart / неполная база):
             // реальный скрытый скролл к верху. v80 (O1-A): САМ СКРОЛЛЕР НЕ СКРЫВАЕМ
@@ -416,6 +434,8 @@
             try { sc.setTop(0); } catch (eSt1) { }
             try { sc.el.dispatchEvent(new Event('scroll')); } catch (eSt2) { }
             await sleepUntilFired(SCROLL_PAUSE_HIDDEN_MS, convId);
+            // v90.1 (fired-after-await): fired взведён — выходим, не доходя до чтения h/no-growth.
+            if (typeof aiCmFiredByConv !== 'undefined' && aiCmFiredByConv[convId]) { doneReason = 'export-done'; break; }
           }
           var h = sc.height();
           if (!(h > 0)) continue; // v30.7: нулевое чтение не засчитываем
@@ -428,6 +448,9 @@
             if (noGrowth >= LOADER_STABLE_NEED) {
               // v4z: контрольный перемер через 2с — две no-growth могли попасть в летящий запрос
               await sleepUntilFired(LOADER_RECHECK_MS, convId);
+              // v90.1 (fired-after-await): контрольный перемер заканчивается сразу — латч читается
+              // ДО сброса счётчиков/веток data-complete/top (иначе fired превратился бы в 'top').
+              if (typeof aiCmFiredByConv !== 'undefined' && aiCmFiredByConv[convId]) { doneReason = 'export-done'; break; }
               // v53: за время перемера мог прийти новый history-write с курсором — сброс счётчиков
               if (D.cursorEpoch !== lastEpoch) {
                 lastEpoch = D.cursorEpoch;
@@ -436,6 +459,8 @@
                 anyGrowth = false;
                 lastH = -1;
                 await sleepUntilFired(LOADER_STEP_MS, convId);
+                // v90.1 (fired-after-await): fired взведён — выходим, не доходя до следующей логики.
+                if (typeof aiCmFiredByConv !== 'undefined' && aiCmFiredByConv[convId]) { doneReason = 'export-done'; break; }
                 continue;
               }
               // v1.13.1: требуем reachedStart=true — baseComplete без подтверждённого
@@ -464,6 +489,8 @@
                     ' pendingCursor=1 baseComplete=' + (D.historyFullByQuiet === true ? '1' : '0'));
                   noGrowth = 0;
                   await sleepUntilFired(LOADER_STEP_MS, convId);
+                  // v90.1 (fired-after-await): fired взведён — выходим, не доходя до следующей логики.
+                  if (typeof aiCmFiredByConv !== 'undefined' && aiCmFiredByConv[convId]) { doneReason = 'export-done'; break; }
                   continue;
                 }
                 doneReason = 'timeout';
@@ -484,6 +511,8 @@
                 lastH = -1;
                 anyGrowth = false;
                 await sleepUntilFired(LOADER_STEP_MS, convId);
+                // v90.1 (fired-after-await): fired взведён — выходим, не доходя до следующей логики.
+                if (typeof aiCmFiredByConv !== 'undefined' && aiCmFiredByConv[convId]) { doneReason = 'export-done'; break; }
                 continue;
               }
               // v1.14.2 (COLLAPSE-GUARD): collapse ≠ top. Если Gemini схлопнул скроллер
