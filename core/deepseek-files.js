@@ -4,7 +4,7 @@
  *
  * Зачем: фрагмент типа FILE в history_messages/completion несёт только МЕТАДАННЫЕ файла
  * (file_id/имя), а тело лежит на ОТДЕЛЬНОМ файловом хосте:
- *   GET https://files.deepseeksvc.com + signed_path (`/file?...`) + `&ty=r`
+ *   GET https://files.deepseeksvc.com/file?file_id=<id>[&state=<signed_path>]
  * Без текста вложения ход в экспорте состоит из одной метки, то есть файл (PDF/док)
  * теряет содержимое.
  *
@@ -64,8 +64,9 @@
   var FILES_EMIT_DEBOUNCE_MS = 250;   // ре-эмит базы после прихода текста
   var FILES_DRAIN_TIMEOUT_MS = 2000;  // A-лайт: ожидание опустошения очереди у экспорта
   // Файловый хост DeepSeek (проверено по бандлу сайта и трафику): тело вложения отдаёт
-  // files.deepseeksvc.com, а не chat.deepseek.com. ty=r — текст/документ, ty=p — превью
-  // картинки (его не качаем). Путь — `/file`, БЕЗ префикса `/api` (живой 404 при `/api/...`).
+  // files.deepseeksvc.com, а не chat.deepseek.com. Параметр файла — `file_id` (не `id`),
+  // `ty=r` не передаём; ty=p — превью картинки (его не качаем, см. extractFileRefs).
+  // Путь — `/file`, БЕЗ префикса `/api` (живой 404 при `/api/...`).
   var FILES_HOST = 'https://files.deepseeksvc.com';
   var FILES_FILE_URL = 'https://files.deepseeksvc.com/file';
 
@@ -222,14 +223,16 @@
     return { ok: true, text: text, name: name || '', truncated: truncated };
   }
 
-  // URL тела файла: signed_path — уже подписанный сайтом путь `/file?...`, поэтому склеиваем
-  // его с хостом БАЙТ-В-БАЙТ (URL-кодировать нельзя — сломает подпись) и добиваем `ty=r`.
+  // URL тела файла: параметр называется `file_id` (не `id`) — так его ждёт файловый хост.
+  // Готовый signed_path — уже подписанный сайтом путь `/file?file_id=...`: склеиваем его с
+  // хостом БАЙТ-В-БАЙТ (URL-кодировать нельзя — сломает подпись) и НЕ дописываем ничего:
+  // `ty=r` сайт не требует, а его добавление ломало запрос.
   function resolveFileUrl(fileId, signedPath) {
     var id = (fileId === undefined || fileId === null) ? '' : String(fileId);
     var signed = fileStr(signedPath);
-    if (signed.indexOf('/file?') === 0) return FILES_HOST + signed + '&ty=r';
-    if (signed) return FILES_FILE_URL + '?file_id=' + encodeURIComponent(id) + '&state=' + signed + '&ty=r';
-    return FILES_FILE_URL + '?id=' + encodeURIComponent(id.replace(/^file-/, '')) + '&ty=r';
+    if (signed.indexOf('/file?') === 0) return FILES_HOST + signed;
+    if (signed) return FILES_FILE_URL + '?file_id=' + encodeURIComponent(id) + '&state=' + signed;
+    return FILES_FILE_URL + '?file_id=' + encodeURIComponent(id.replace(/^file-/, ''));
   }
 
   // Секция вложения в тексте хода. Метка файла видна в экспорте (заголовок [FILE: имя]).
