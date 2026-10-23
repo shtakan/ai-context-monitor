@@ -2,9 +2,10 @@
  * tests/adapters/deepseek-files-module.test.js — Step D.10 (Вариант B + A-лайт).
  *
  * Контракт core/deepseek-files.js: FIFO-очередь текста вложений (concurrency 2, дедуп
- * `convId|fileId`), fetch тела через originalFetch (same-origin, lastAuthHeaders, таймаут
- * 10 с, кап 500 000 символов), карта `fileTextsByMsg`, пересборка хода и дебаунс-ре-эмит
- * базы (250 мс), протокол A-лайт (state-request/response, drain/done с таймаутом 2000 мс).
+ * `convId|fileId`), fetch тела через originalFetch на files.deepseeksvc.com (подпись в state,
+ * без заголовков и кук, таймаут 10 с, кап 500 000 символов), карта `fileTextsByMsg`,
+ * пересборка хода и дебаунс-ре-эмит базы (250 мс), протокол A-лайт (state-request/response,
+ * drain/done с таймаутом 2000 мс) и диагностика под aiCmDebug.
  *
  * Плюс source-пины связки: ingest вызывает enqueueChainFiles/applyPendingFileTexts ДО
  * emitBaseSnapshot; ядро форвардит их в модуль; background регистрирует файл между ingest
@@ -88,7 +89,8 @@ function makeHarness(over) {
     clearTimeout: fakeClearTimeout,
     CustomEvent: TestCustomEvent,
     AbortController: AbortController,
-    aiCmDiagWarn: jest.fn()
+    aiCmDiagWarn: jest.fn(),
+    aiCmDiagLine: jest.fn()
   };
   const ctx = vm.createContext(sandbox);
   vm.runInContext(MODULE_SRC, ctx, { filename: 'core/deepseek-files.js' });
@@ -195,32 +197,76 @@ describe('Step D.10: core/deepseek-files.js — контракт модуля FI
     expect(h.Fn.extractFileRefs(null)).toEqual([]);
     expect(h.Fn.extractFileRefs({ message_id: 'x', fragments: [{ type: 'RESPONSE', content: 'только текст' }] })).toEqual([]);
   });
+
+  test('S4: картинки (is_image:true или ty=p) пропускаются — в очередь идёт только текст', () => {
+    const h = makeHarness();
+    const m = msg('m1', 'USER', [fileFrag('txt1', 'a.txt')], {
+      files: [
+        { id: 'img1', is_image: true, signed_path: 'sig-img1' },
+        { id: 'img2', is_image: false, signed_path: 'https://files.deepseeksvc.com/api/file?file_id=img2&ty=p' },
+        { id: 'doc2', is_image: false, signed_path: 'sig-doc2' }
+      ]
+    });
+    expect(h.Fn.extractFileRefs(m).map(function (r) { return r.fileId; })).toEqual(['txt1', 'doc2']);
+    expect(h.Fn.enqueueChainFiles([m], {})).toBe(2);
+    expect(h.fetchCalls).toHaveLength(2);
+    expect(h.fetchCalls[0].url).toContain('file_id=txt1');
+    expect(h.fetchCalls[1].url).toContain('file_id=doc2');
+    expect(h.fetchCalls.every(function (c) { return c.url.indexOf('ty=r') !== -1; })).toBe(true);
+
+    // сообщение из одних картинок не заводит даже ход-заглушку
+    const h2 = makeHarness();
+    const onlyImages = msg('m2', 'USER', [{ type: 'FILE', files: [{ id: 'img3', is_image: true }] }]);
+    expect(h2.Fn.enqueueChainFiles([onlyImages], {})).toBe(0);
+    expect(h2.deps.turnsMap).toEqual({});
+    expect(h2.fetchCalls).toHaveLength(0);
+  });
 });
 
 // ===== S2: fetch тела вложения ========================================================
-describe('Step D.10: fetchFileContent — same-origin, заголовки, таймаут, кап', () => {
-  test('S1: запрос идёт через originalFetch в /api/v0/file/<id> с заголовками ядра', async () => {
+describe('Step D.10: fetchFileContent — сетевой контракт файлового хоста, таймаут, кап', () => {
+  test('S1: запрос идёт через originalFetch на files.deepseeksvc.com, ty=r, без заголовков', async () => {
     const h = makeHarness();
-    const p = h.Fn.fetchFileContent('file_123', '');
+    const p = h.Fn.fetchFileContent('file_123', 'signed/abc');
     expect(h.fetchCalls).toHaveLength(1);
-    expect(h.fetchCalls[0].url).toBe('https://chat.deepseek.com/api/v0/file/file_123');
-    expect(h.fetchCalls[0].opts.headers.Authorization).toBe('Bearer tok');
-    expect(h.fetchCalls[0].opts.credentials).toBe('include');
+    expect(h.fetchCalls[0].url).toBe(
+      'https://files.deepseeksvc.com/api/file?file_id=file_123&state=signed/abc&ty=r'
+    );
+    expect(h.fetchCalls[0].opts.headers).toBeUndefined();
+    expect(h.fetchCalls[0].opts.credentials).toBe('omit');
     h.fetchCalls[0].resolve(resp(JSON.stringify({ code: 0, data: { content: 'ТЕКСТ ФАЙЛА', file_name: 'a.txt' } })));
     await expect(p).resolves.toEqual({ ok: true, text: 'ТЕКСТ ФАЙЛА', name: 'a.txt', truncated: false });
   });
 
-  test('S2: подписанный путь приоритетнее (абсолютный и relative /api/... сохраняют origin)', async () => {
+  test('S2: signed_path уходит в state байт-в-байт (не в path и без повторного URL-кодирования)', () => {
     const h = makeHarness();
-    h.Fn.fetchFileContent('f1', '/api/v0/file/f1?sig=abc');
-    expect(h.fetchCalls[0].url).toBe('https://chat.deepseek.com/api/v0/file/f1?sig=abc');
-    h.Fn.fetchFileContent('f2', 'signed/route');
-    expect(h.fetchCalls[1].url).toBe('https://chat.deepseek.com/api/v0/file/signed/route');
+    h.Fn.fetchFileContent('f1', 'abc.def_ghi-jkl~123');
+    expect(h.fetchCalls[0].url).toBe(
+      'https://files.deepseeksvc.com/api/file?file_id=f1&state=abc.def_ghi-jkl~123&ty=r'
+    );
+    // уже закодированная подпись не кодируется повторно: state=a%2Fb+c=, а не state=a%252Fb%2Bc%3D
+    h.Fn.fetchFileContent('f2', 'a%2Fb+c=');
+    expect(h.fetchCalls[1].url).toBe(
+      'https://files.deepseeksvc.com/api/file?file_id=f2&state=a%2Fb+c=&ty=r'
+    );
+    // даже абсолютный signed_path остаётся значением state, а не подменяет хост
     h.Fn.fetchFileContent('f3', 'https://cdn.example.com/x');
-    expect(h.fetchCalls[2].url).toBe('https://cdn.example.com/x');
+    expect(h.fetchCalls[2].url).toBe(
+      'https://files.deepseeksvc.com/api/file?file_id=f3&state=https://cdn.example.com/x&ty=r'
+    );
   });
 
-  test('S3: HTTP-ошибка и таймаут 10 с возвращают ok:false с причиной', async () => {
+  test('S3: в запросе нет Authorization/Content-Type и нет кук (simple CORS, credentials omit)', () => {
+    const h = makeHarness();
+    h.Fn.fetchFileContent('f1', 'signed/abc');
+    const opts = h.fetchCalls[0].opts;
+    expect(opts.headers).toBeUndefined();
+    expect(JSON.stringify(opts)).not.toContain('Authorization');
+    expect(JSON.stringify(opts)).not.toContain('Content-Type');
+    expect(opts.credentials).toBe('omit');
+  });
+
+  test('S4: HTTP-ошибка и таймаут 10 с возвращают ok:false с причиной', async () => {
     const h = makeHarness();
     const p1 = h.Fn.fetchFileContent('f1', '');
     h.fetchCalls[0].resolve(resp('', 500, false));
@@ -231,7 +277,7 @@ describe('Step D.10: fetchFileContent — same-origin, заголовки, та�
     await expect(p2).resolves.toEqual({ ok: false, reason: 'timeout', text: '' });
   });
 
-  test('S4: кап 500 000 символов — текст обрезан и помечен truncated', async () => {
+  test('S5: кап 500 000 символов — текст обрезан и помечен truncated', async () => {
     const h = makeHarness();
     const big = 'x'.repeat(500001);
     const p = h.Fn.fetchFileContent('f1', '');
@@ -259,7 +305,7 @@ describe('Step D.10: очередь вложений — FIFO, concurrency 2, д
     h.fetchCalls[0].resolve(resp('A'));
     await flush();
     expect(h.fetchCalls).toHaveLength(3);
-    expect(h.fetchCalls[2].url).toContain('/file/f3');
+    expect(h.fetchCalls[2].url).toContain('file_id=f3');
   });
 
   test('S2: один файл у двух ходов качается один раз, текст доезжает до обоих', async () => {
@@ -347,6 +393,36 @@ describe('Step D.10: fileTextsByMsg, пересборка хода и дебау
     expect(h.deps.turnsMap.m1.text).toBe('[REASONING]\nr\n\n[ANSWER]\na\n\n[FILE: a.txt]\nCACHED');
     h.tick(250);
     expect(h.deps.emitBaseSnapshot).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ===== S4b: диагностика под aiCmDebug ===============================================
+describe('Step D.10: диагностика догрузки — aiCmDiagLine под гейтом aiCmDebug', () => {
+  test('S1: успешная догрузка даёт enqueue/fetch-start/fetch-done/apply', async () => {
+    const h = makeHarness();
+    h.deps.turnsMap.m1 = { text: '', answer: '', reasoning: '', order: 0, role: 'user' };
+    function tags() {
+      return h.sandbox.aiCmDiagLine.mock.calls.map(function (c) { return c[0]; });
+    }
+    h.Fn.enqueueChainFiles([msg('m1', 'USER', [fileFrag('f1', 'a.txt')])], {});
+    expect(tags()).toContain('deepseek-files-enqueue');
+    expect(tags()).toContain('deepseek-files-fetch-start');
+    h.fetchCalls[0].resolve(resp('FILE BODY'));
+    await flush();
+    expect(tags()).toContain('deepseek-files-fetch-done');
+    expect(tags()).toContain('deepseek-files-apply');
+    const done = h.sandbox.aiCmDiagLine.mock.calls.filter(function (c) { return c[0] === 'deepseek-files-fetch-done'; })[0];
+    expect(done[1]).toMatchObject({ fileId: 'f1', chars: 9, truncated: false, applied: 1 });
+  });
+
+  test('S2: провал запроса даёт deepseek-files-error с причиной', async () => {
+    const h = makeHarness();
+    h.Fn.enqueueChainFiles([msg('m1', 'USER', [fileFrag('f1')])], {});
+    h.fetchCalls[0].resolve(resp('', 403, false));
+    await flush();
+    const err = h.sandbox.aiCmDiagLine.mock.calls.filter(function (c) { return c[0] === 'deepseek-files-error'; });
+    expect(err).toHaveLength(1);
+    expect(err[0][1]).toMatchObject({ fileId: 'f1', reason: 'http-403' });
   });
 });
 
@@ -455,6 +531,9 @@ describe('Step D.10: source-пины связки (ingest -> files -> kernel -> 
     expect(MODULE_SRC).toContain('var FILES_FETCH_TIMEOUT_MS = 10000;');
     expect(MODULE_SRC).toContain('var FILES_EMIT_DEBOUNCE_MS = 250;');
     expect(MODULE_SRC).toContain('var FILES_DRAIN_TIMEOUT_MS = 2000;');
-    expect(MODULE_SRC).toContain('var FILES_URL_PREFIX = \'/api/v0/file/\';');
+    expect(MODULE_SRC).toContain("var FILES_HOST = 'https://files.deepseeksvc.com';");
+    expect(MODULE_SRC).toContain("var FILES_API_PATH = '/api/file';");
+    expect(MODULE_SRC).toContain("'?file_id=' + encodeURIComponent(id) + '&state=' + state + '&ty=r'");
+    expect(MODULE_SRC).not.toContain('/api/v0/file/');
   });
 });

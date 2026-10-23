@@ -3,8 +3,10 @@
  * вложений DeepSeek в MAIN-мире.
  *
  * Зачем: фрагмент типа FILE в history_messages/completion несёт только МЕТАДАННЫЕ файла
- * (file_id/имя), а тело лежит за отдельным запросом /api/v0/file/<id>. Без текста вложения
- * ход в экспорте состоит из одной метки, то есть файл (PDF/док) теряет содержимое.
+ * (file_id/имя), а тело лежит на ОТДЕЛЬНОМ файловом хосте:
+ *   GET https://files.deepseeksvc.com/api/file?file_id=<id>&state=<signed_path>&ty=r
+ * Без текста вложения ход в экспорте состоит из одной метки, то есть файл (PDF/док)
+ * теряет содержимое.
  *
  * Что делает модуль (Вариант B — асинхронная догрузка):
  *   • при ПРИЁМКЕ авторитетного снимка (D.8, ветка ACCEPT) ядро отдаёт цепочку ходов сюда —
@@ -13,8 +15,10 @@
  *     заводится ход-заглушка, если сообщение состоит ТОЛЬКО из вложений;
  *   • файлы ставятся в FIFO-очередь (concurrency 2, дедуп по `convId|fileId`: один файл,
  *     приложенный к нескольким ходам, качается ОДИН раз);
- *   • fetchFileContent(fileId, signedPath) идёт ЧЕРЕЗ originalFetch (снят ядром до хука D.7),
- *     same-origin, с заголовками lastAuthHeaders, таймаутом 10 с и капом 500 000 символов;
+ *   • fetchFileContent(fileId, signedPath) идёт ЧЕРЕЗ originalFetch (снят ядром до хука D.7)
+ *     на files.deepseeksvc.com, БЕЗ заголовков и БЕЗ кук (credentials:'omit': файловый хост
+ *     авторизует запрос подписью в state, а credentialed CORS-запрос ломает ответ), таймаут
+ *     10 с и кап 500 000 символов;
  *   • при получении текста обновляется fileTextsByMsg (msgId → текст) и ПЕРЕСОБИРАЕТСЯ текст
  *     хода: composeTurnText(answer, reasoning) + секция
  *     «\n\n[FILE: <имя>]\n<текст>»; затем с дебаунсом 250 мс вызывается emitBaseSnapshot —
@@ -28,9 +32,9 @@
  *           composeTurnText/getModelSlug — форвардеры D.4 (пересборка текста хода).
  *   rw (2): turnsMap/orderCounter — тело ДОБАВЛЯЕТ ход-заглушку для вложений без текста
  *           и перезаписывает text уже собранного хода (set — чтобы запись не терялась).
- *   ro (5): currentConvId (ключ дедупа), originalFetch (запрос тела), lastAuthHeaders
- *           (авторизация), lastBaseServerTokens/lastBaseChatMode (аргументы ре-эмита).
- *   Итого 10 имён (3 fn + 2 rw + 5 ro).
+ *   ro (4): currentConvId (ключ дедупа), originalFetch (запрос тела),
+ *           lastBaseServerTokens/lastBaseChatMode (аргументы ре-эмита).
+ *   Итого 9 имён (3 fn + 2 rw + 4 ro).
  *   модуль -> ядро: enqueueChainFiles / applyPendingFileTexts (форвардеры ядра).
  *
  * Метрики serverTokens/tokens~ НЕ ТРОГАЮТСЯ: модуль не считает токены, он лишь дописывает
@@ -59,7 +63,11 @@
   var FILES_FETCH_TIMEOUT_MS = 10000; // запрос тела файла
   var FILES_EMIT_DEBOUNCE_MS = 250;   // ре-эмит базы после прихода текста
   var FILES_DRAIN_TIMEOUT_MS = 2000;  // A-лайт: ожидание опустошения очереди у экспорта
-  var FILES_URL_PREFIX = '/api/v0/file/';
+  // Файловый хост DeepSeek (проверено по бандлу сайта и трафику): тело вложения отдаёт
+  // files.deepseeksvc.com, а не chat.deepseek.com. ty=r — текст/документ, ty=p — превью
+  // картинки (его не качаем: у изображения нет текстового тела).
+  var FILES_HOST = 'https://files.deepseeksvc.com';
+  var FILES_API_PATH = '/api/file';
 
   // Очередь: FIFO-массив элементов + карта дедупа по `convId|fileId` + счётчик активных.
   // Элемент: { key, convId, fileId, signedPath, name, msgIds:{}, status, startedAt, doneAt }.
@@ -84,6 +92,12 @@
 
   function fileStr(v) {
     return (typeof v === 'string') ? v : '';
+  }
+
+  // Строка диагностики под гейтом aiCmDebug (utils/debug.js сам решает, печатать ли).
+  // В срез-песочницах без хелпера молчим: диагностика не имеет права ломать догрузку.
+  function filesDiag(tag, fields) {
+    if (typeof aiCmDiagLine === 'function') aiCmDiagLine(tag, fields);
   }
 
   // Тело ответа может прийти JSON-ом, JSON-строкой или сырым текстом — пробуем оба слоя.
@@ -116,6 +130,8 @@
   }
 
   // Ссылка на файл из объекта метаданных (fragment/files/attachments): id + подписанный путь.
+  // Картинки (is_image:true или ty=p в готовом URL) в очередь ТЕКСТА не попадают: у них нет
+  // текстового содержимого, а ty=p отдаёт превью, а не тело документа.
   function fileRefFromObject(o) {
     if (!o || typeof o !== 'object') return null;
     var id = o.file_id || o.fileId || o.id || o.fid || '';
@@ -124,10 +140,16 @@
     if (!id) return null;
     var signed = fileFirstText(o, ['signed_path', 'signedPath', 'path', 'url', 'download_url', 'file_path']);
     var name = fileFirstText(o, ['file_name', 'filename', 'name', 'title']);
+    var ty = fileStr(o.ty).toLowerCase();
+    if (!ty && signed) {
+      var mTy = /[?&]ty=([a-z])/i.exec(signed);
+      if (mTy) ty = mTy[1].toLowerCase();
+    }
     return {
       fileId: id,
       signedPath: signed || '',
-      name: name || ''
+      name: name || '',
+      isImage: (o.is_image === true || o.isImage === true || ty === 'p')
     };
   }
 
@@ -140,11 +162,11 @@
     if (obj && typeof obj === 'object') return fileRefFromObject(obj);
     var m = s.match(/(?:file[_-]?id|fileId)["'\s:=]+([A-Za-z0-9_-]{6,})/);
     if (!m) return null;
-    return { fileId: m[1], signedPath: '', name: '' };
+    return { fileId: m[1], signedPath: '', name: '', isImage: false };
   }
 
   function filesPushRef(out, seen, ref) {
-    if (!ref || !ref.fileId || seen[ref.fileId]) return;
+    if (!ref || !ref.fileId || seen[ref.fileId] || ref.isImage) return;
     seen[ref.fileId] = 1;
     out.push(ref);
   }
@@ -181,7 +203,7 @@
     return out;
   }
 
-  // Текст файла из ответа /api/v0/file/<id>: {ok, reason, text, name, truncated}.
+  // Текст файла из ответа files.deepseeksvc.com: {ok, reason, text, name, truncated}.
   function filesTextFromPayload(payload) {
     if (!payload || typeof payload !== 'object') return null;
     if (typeof payload.code === 'number' && payload.code !== 0) {
@@ -200,18 +222,14 @@
     return { ok: true, text: text, name: name || '', truncated: truncated };
   }
 
-  // URL тела файла: подписанный путь приоритетнее (там auth-параметры), иначе штатный
-  // /api/v0/file/<id>. Всё — relative: same-origin, куки и заголовки ядра на месте.
+  // URL тела файла: отдельный файловый хост + подпись в query. `state` уходит в URL
+  // БАЙТ-В-БАЙТ: это подписанное значение, и повторное URL-кодирование сломало бы подпись.
+  // `file_id` кодируем (он всегда машинный id), `ty=r` — запрос именно ТЕКСТА.
   function resolveFileUrl(fileId, signedPath) {
-    var p = fileStr(signedPath);
-    var origin = (typeof location !== 'undefined' && location && location.origin) ? location.origin : '';
-    if (p) {
-      if (/^https?:\/\//i.test(p)) return p;
-      if (p.charAt(0) !== '/') p = '/' + p;
-      if (p.indexOf('/api/') === 0) return origin + p;
-      return origin + FILES_URL_PREFIX + p.replace(/^\/+/, '');
-    }
-    return origin + FILES_URL_PREFIX + encodeURIComponent(String(fileId || ''));
+    var id = (fileId === undefined || fileId === null) ? '' : String(fileId);
+    var state = fileStr(signedPath);
+    return FILES_HOST + FILES_API_PATH +
+      '?file_id=' + encodeURIComponent(id) + '&state=' + state + '&ty=r';
   }
 
   // Секция вложения в тексте хода. Метка файла видна в экспорте (заголовок [FILE: имя]).
@@ -391,6 +409,14 @@
           filesEnsureTurn(msg, modelSignals);
           added += enqueueMessageFiles(currentConvId, msg);
         }
+        if (added) {
+          filesDiag('deepseek-files-enqueue', {
+            convId: currentConvId,
+            files: added,
+            queued: fileQueue.length,
+            active: fileQueueActive
+          });
+        }
         return added;
       }
 
@@ -407,6 +433,11 @@
           if (fileQueueActive < 0) fileQueueActive = 0;
           item.status = 'failed';
           if (fileQueueByKey[item.key] === item) delete fileQueueByKey[item.key];
+          filesDiag('deepseek-files-error', {
+            fileId: item.fileId,
+            reason: 'reject',
+            error: (eFetch && eFetch.message) ? eFetch.message : String(eFetch)
+          });
           filesWarn('deepseek:files:fetch', '[deepseek-intercept] вложение ' + item.fileId + ' не догружено:', eFetch);
           filesDrainKick('drained');
           pumpFileQueue();
@@ -426,18 +457,21 @@
 
       // Запрос тела файла. originalFetch — НАТИВНЫЙ fetch, снятый ядром до хука D.7:
       // иначе собственный перехватчик перехватил бы свой же запрос вложения.
+      // Ни заголовков, ни кук: файловый хост авторизует запрос подписью в state, а
+      // auth-заголовки чата/credentials:'include' превратили бы simple CORS-запрос в
+      // credentialed и ответ без Access-Control-Allow-Credentials не прошёл бы вовсе.
       function fetchFileContent(fileId, signedPath) {
         var url = resolveFileUrl(fileId, signedPath);
-        var headers = {};
-        if (lastAuthHeaders && typeof lastAuthHeaders === 'object') {
-          var hk = Object.keys(lastAuthHeaders);
-          for (var i = 0; i < hk.length; i++) headers[hk[i]] = lastAuthHeaders[hk[i]];
-        }
         var fetchImpl = (typeof originalFetch === 'function') ? originalFetch
           : ((typeof window !== 'undefined' && typeof window.fetch === 'function') ? window.fetch : null);
         if (!fetchImpl) return Promise.resolve({ ok: false, reason: 'no-fetch', text: '' });
+        filesDiag('deepseek-files-fetch-start', {
+          fileId: fileId,
+          url: url,
+          timeoutMs: FILES_FETCH_TIMEOUT_MS
+        });
         var ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
-        var opts = { method: 'GET', headers: headers, credentials: 'include' };
+        var opts = { method: 'GET', credentials: 'omit' };
         if (ctrl && ctrl.signal) opts.signal = ctrl.signal;
         return new Promise(function (resolve) {
           var settled = false;
@@ -500,6 +534,12 @@
         t.fileText = rec.text;
         t.fileName = rec.name || '';
         t.text = core + filesSection(rec);
+        filesDiag('deepseek-files-apply', {
+          msgId: msgId,
+          fileId: rec.fileId,
+          chars: rec.text.length,
+          name: rec.name || ''
+        });
         return true;
       }
 
@@ -546,6 +586,11 @@
           item.status = 'failed';
           // Провал не должен «залипать» в дедупе: следующий ingest обязан попробовать снова.
           if (fileQueueByKey[item.key] === item) delete fileQueueByKey[item.key];
+          filesDiag('deepseek-files-error', {
+            fileId: item.fileId,
+            reason: (res && res.reason) || 'empty',
+            ms: item.doneAt - item.startedAt
+          });
           filesWarn('deepseek:files:fetch', '[deepseek-intercept] текст вложения не получен: fileId=' +
             item.fileId + ' reason=' + ((res && res.reason) || '-'));
           return;
@@ -564,6 +609,14 @@
           fileTextsByMsg[ids[i]] = rec;
           if (applyFileTextToTurn(ids[i], rec)) applied++;
         }
+        filesDiag('deepseek-files-fetch-done', {
+          fileId: item.fileId,
+          chars: res.text.length,
+          truncated: rec.truncated,
+          ms: item.doneAt - item.startedAt,
+          turns: ids.length,
+          applied: applied
+        });
         console.log('[deepseek-intercept] ✓ текст вложения: fileId=' + item.fileId +
           ', символов=' + res.text.length + (rec.truncated ? ' (обрезан)' : '') +
           ', ходов=' + ids.length + ', применено=' + applied);

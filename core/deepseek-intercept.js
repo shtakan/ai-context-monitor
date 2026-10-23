@@ -1171,10 +1171,11 @@ if (typeof window !== 'undefined') {
   // форвардер D.6 emitBaseSnapshot — ре-эмит базы после прихода текста), 2 rw (turnsMap/
   // orderCounter: тело заводит ход-заглушку для сообщения из одних вложений и перезаписывает
   // text уже собранного хода; без сеттера запись в sloppy-режиме молча терялась бы — тот же
-  // довод, что у D.8) и 5 ro (currentConvId — ключ дедупа convId|fileId, originalFetch —
-  // НАТИВНЫЙ fetch, снятый ядром до хука D.7, lastAuthHeaders — авторизация запроса тела
-  // файла, lastBaseServerTokens/lastBaseChatMode — аргументы ре-эмита без пересчёта токенов).
-  // Итого 10 имён. Живое состояние отдаётся аксессорами, поэтому модуль и ядро работают с
+  // довод, что у D.8) и 4 ro (currentConvId — ключ дедупа convId|fileId, originalFetch —
+  // НАТИВНЫЙ fetch, снятый ядром до хука D.7, lastBaseServerTokens/lastBaseChatMode —
+  // аргументы ре-эмита без пересчёта токенов). Заголовки чата телу файла НЕ нужны:
+  // файловый хост авторизует подпись в URL (core/deepseek-files.js, resolveFileUrl).
+  // Итого 9 имён. Живое состояние отдаётся аксессорами, поэтому модуль и ядро работают с
   // ОДНИМИ И ТЕМИ ЖЕ переменными IIFE, а не с копиями значений.
   var aiCmDeepseekFiles = (typeof window !== 'undefined' && window.AiCmDeepseekFiles) || null;
   if (aiCmDeepseekFiles) {
@@ -1191,7 +1192,6 @@ if (typeof window !== 'undefined') {
       // ro: только чтение — тело D.10 эти имена не перезаписывает.
       get currentConvId() { return currentConvId; },
       get originalFetch() { return originalFetch; },
-      get lastAuthHeaders() { return lastAuthHeaders; },
       get lastBaseServerTokens() { return lastBaseServerTokens; },
       get lastBaseChatMode() { return lastBaseChatMode; }
     });
