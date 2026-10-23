@@ -210,9 +210,11 @@ describe('Step D.10: core/deepseek-files.js — контракт модуля FI
     expect(h.Fn.extractFileRefs(m).map(function (r) { return r.fileId; })).toEqual(['txt1', 'doc2']);
     expect(h.Fn.enqueueChainFiles([m], {})).toBe(2);
     expect(h.fetchCalls).toHaveLength(2);
-    expect(h.fetchCalls[0].url).toBe('https://files.deepseeksvc.com/file?file_id=txt1');
+    expect(h.fetchCalls[0].url).toBe('https://files.deepseeksvc.com/file?file_id=txt1&ty=t');
     expect(h.fetchCalls[1].url).toContain('file_id=doc2');
-    expect(h.fetchCalls.every(function (c) { return c.url.indexOf('ty=') === -1; })).toBe(true);
+    // превью картинки (ty=p) не качаем, а у текстовых запросов появляется нативный ty=t
+    expect(h.fetchCalls.some(function (c) { return c.url.indexOf('file_id=img2') !== -1; })).toBe(false);
+    expect(h.fetchCalls.every(function (c) { return c.url.indexOf('&ty=t') !== -1; })).toBe(true);
 
     // сообщение из одних картинок не заводит даже ход-заглушку
     const h2 = makeHarness();
@@ -230,7 +232,7 @@ describe('Step D.10: fetchFileContent — сетевой контракт фай
     const p = h.Fn.fetchFileContent('file_123', 'signed/abc');
     expect(h.fetchCalls).toHaveLength(1);
     expect(h.fetchCalls[0].url).toBe(
-      'https://files.deepseeksvc.com/file?file_id=file_123&state=signed/abc'
+      'https://files.deepseeksvc.com/file?file_id=file_123&state=signed/abc&ty=t'
     );
     expect(h.fetchCalls[0].opts.headers).toBeUndefined();
     expect(h.fetchCalls[0].opts.credentials).toBe('omit');
@@ -242,46 +244,59 @@ describe('Step D.10: fetchFileContent — сетевой контракт фай
     const h = makeHarness();
     h.Fn.fetchFileContent('f1', 'abc.def_ghi-jkl~123');
     expect(h.fetchCalls[0].url).toBe(
-      'https://files.deepseeksvc.com/file?file_id=f1&state=abc.def_ghi-jkl~123'
+      'https://files.deepseeksvc.com/file?file_id=f1&state=abc.def_ghi-jkl~123&ty=t'
     );
     // уже закодированная подпись не кодируется повторно: state=a%2Fb+c=, а не state=a%252Fb%2Bc%3D
     h.Fn.fetchFileContent('f2', 'a%2Fb+c=');
     expect(h.fetchCalls[1].url).toBe(
-      'https://files.deepseeksvc.com/file?file_id=f2&state=a%2Fb+c='
+      'https://files.deepseeksvc.com/file?file_id=f2&state=a%2Fb+c=&ty=t'
     );
     // даже абсолютный signed_path остаётся значением state, а не подменяет хост
     h.Fn.fetchFileContent('f3', 'https://cdn.example.com/x');
     expect(h.fetchCalls[2].url).toBe(
-      'https://files.deepseeksvc.com/file?file_id=f3&state=https://cdn.example.com/x'
+      'https://files.deepseeksvc.com/file?file_id=f3&state=https://cdn.example.com/x&ty=t'
     );
   });
 
-  test('S2b: готовый signed_path `/file?file_id=...` идёт как есть; пустой — /file?file_id=<id> без префикса file-', () => {
+  test('S2b: подписанный путь снимает префикс версии API и уходит на /file?...&ty=t; пустой — /file?file_id=<id>', () => {
     const h = makeHarness();
-    // сайт отдаёт в signed_path уже подписанный путь: добавляем только хост, ничего не дописывая
-    h.Fn.fetchFileContent('abc', '/file?file_id=abc&sign=deadbeef&timestamp=1700000000');
+    // нативный запрос идёт путём с префиксом `/api`, а файловому хосту нужен тот же путь без него
+    h.Fn.fetchFileContent('abc', '/api/file?file_id=abc&sign=deadbeef&timestamp=1700000000');
     expect(h.fetchCalls[0].url).toBe(
-      'https://files.deepseeksvc.com/file?file_id=abc&sign=deadbeef&timestamp=1700000000'
+      'https://files.deepseeksvc.com/file?file_id=abc&sign=deadbeef&timestamp=1700000000&ty=t'
+    );
+    // обратная совместимость: подписанный путь без префикса склеивается с хостом как есть
+    h.Fn.fetchFileContent('abc2', '/file?file_id=abc2&sign=cafe');
+    expect(h.fetchCalls[1].url).toBe(
+      'https://files.deepseeksvc.com/file?file_id=abc2&sign=cafe&ty=t'
     );
     // подписи нет вовсе — фолбэк /file?file_id=<id>, префикс `file-` из fileId снимаем
     h.Fn.fetchFileContent('file-55a1b2', '');
-    expect(h.fetchCalls[1].url).toBe('https://files.deepseeksvc.com/file?file_id=55a1b2');
+    expect(h.fetchCalls[2].url).toBe('https://files.deepseeksvc.com/file?file_id=55a1b2&ty=t');
     // без префикса id уходит как есть
     h.Fn.fetchFileContent('plain_id', null);
-    expect(h.fetchCalls[2].url).toBe('https://files.deepseeksvc.com/file?file_id=plain_id');
+    expect(h.fetchCalls[3].url).toBe('https://files.deepseeksvc.com/file?file_id=plain_id&ty=t');
   });
 
   test('S2c: старый параметр `id=` внутри signed_path нормализуется в `file_id=`', () => {
     const h = makeHarness();
     // сайт подписывает путь со старым именем параметра: `?id=` → `?file_id=`
-    h.Fn.fetchFileContent('123', '/file?id=123');
-    expect(h.fetchCalls[0].url).toBe('https://files.deepseeksvc.com/file?file_id=123');
+    h.Fn.fetchFileContent('123', '/api/file?id=123');
+    expect(h.fetchCalls[0].url).toBe('https://files.deepseeksvc.com/file?file_id=123&ty=t');
     // имя параметра после `&` тоже нормализуется, остальные параметры и подпись не тронуты
-    h.Fn.fetchFileContent('123', '/file?sign=deadbeef&id=123');
-    expect(h.fetchCalls[1].url).toBe('https://files.deepseeksvc.com/file?sign=deadbeef&file_id=123');
+    h.Fn.fetchFileContent('123', '/api/file?sign=deadbeef&id=123');
+    expect(h.fetchCalls[1].url).toBe('https://files.deepseeksvc.com/file?sign=deadbeef&file_id=123&ty=t');
     // уже правильное имя не переписывается повторно: `file_id=` не содержит отдельного `id=`
     h.Fn.fetchFileContent('123', '/file?file_id=123');
-    expect(h.fetchCalls[2].url).toBe('https://files.deepseeksvc.com/file?file_id=123');
+    expect(h.fetchCalls[2].url).toBe('https://files.deepseeksvc.com/file?file_id=123&ty=t');
+  });
+
+  test('S2d: ty=t не дублируется и не перебивает тип из подписи (ty=p)', () => {
+    const h = makeHarness();
+    h.Fn.fetchFileContent('img', '/api/file?file_id=img&ty=p&sign=aa');
+    expect(h.fetchCalls[0].url).toBe('https://files.deepseeksvc.com/file?file_id=img&ty=p&sign=aa');
+    h.Fn.fetchFileContent('doc', '/file?file_id=doc&ty=t');
+    expect(h.fetchCalls[1].url).toBe('https://files.deepseeksvc.com/file?file_id=doc&ty=t');
   });
 
   test('S3: в запросе нет Authorization/Content-Type и нет кук (simple CORS, credentials omit)', () => {
@@ -333,7 +348,7 @@ describe('Step D.10: очередь вложений — FIFO, concurrency 2, д
     h.fetchCalls[0].resolve(resp('A'));
     await flush();
     expect(h.fetchCalls).toHaveLength(3);
-    expect(h.fetchCalls[2].url).toBe('https://files.deepseeksvc.com/file?file_id=f3');
+    expect(h.fetchCalls[2].url).toBe('https://files.deepseeksvc.com/file?file_id=f3&ty=t');
   });
 
   test('S2: один файл у двух ходов качается один раз, текст доезжает до обоих', async () => {
@@ -562,6 +577,8 @@ describe('Step D.10: source-пины связки (ingest -> files -> kernel -> 
     expect(MODULE_SRC).toContain("var FILES_HOST = 'https://files.deepseeksvc.com';");
     expect(MODULE_SRC).toContain("var FILES_FILE_URL = 'https://files.deepseeksvc.com/file';");
     expect(MODULE_SRC).toContain("'?file_id=' + encodeURIComponent(id) + '&state=' + signed");
+    expect(MODULE_SRC).toContain("url + '&ty=t'");
+    expect(MODULE_SRC).toContain("FILES_API_PREFIX + '/file?'");
     expect(MODULE_SRC).not.toContain('&ty=r');
     expect(MODULE_SRC).not.toContain("'?id='");
     expect(MODULE_SRC).not.toContain('/api/file');

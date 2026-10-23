@@ -224,18 +224,28 @@
   }
 
   // URL тела файла: параметр называется `file_id` (не `id`) — так его ждёт файловый хост.
-  // Готовый signed_path — уже подписанный сайтом путь `/file?...`: склеиваем его с хостом
-  // БАЙТ-В-БАЙТ (остальное URL-кодировать нельзя — сломает подпись) и НЕ дописываем ничего:
-  // `ty=r` сайт не требует, а его добавление ломало запрос.
+  // Готовый signed_path — уже подписанный сайтом путь: нативный запрос идёт путём с префиксом
+  // версии API, а файловый хост принимает тот же путь БЕЗ этого префикса — снимаем его.
+  // Склейка с хостом — БАЙТ-В-БАЙТ (остальное URL-кодировать нельзя: сломает подпись).
+  // `ty=t` — тип «текст» в нативном запросе; дописываем, если типа в URL ещё нет
+  // (`ty=p` — превью картинки, его не качаем).
   // Сайт подписывает путь со старым именем параметра (`id=`), поэтому нормализуем ТОЛЬКО имя
   // первого параметра: `id=` в начале строки параметров либо сразу после `&` → `file_id=`;
   // прочие вхождения (значения, `file_id=`, `&xid=`) не трогаем.
+  var FILES_API_PREFIX = '/api';
+  function fileUrlWithTy(url) {
+    return (/[?&]ty=/i).test(url) ? url : url + '&ty=t';
+  }
   function resolveFileUrl(fileId, signedPath) {
     var id = (fileId === undefined || fileId === null) ? '' : String(fileId);
     var signed = fileStr(signedPath);
-    if (signed.indexOf('/file?') === 0) return FILES_HOST + signed.replace(/([?&])id=/, '$1file_id=');
-    if (signed) return FILES_FILE_URL + '?file_id=' + encodeURIComponent(id) + '&state=' + signed;
-    return FILES_FILE_URL + '?file_id=' + encodeURIComponent(id.replace(/^file-/, ''));
+    var apiFilePath = FILES_API_PREFIX + '/file?';
+    if (signed.indexOf(apiFilePath) === 0 || signed.indexOf('/file?') === 0) {
+      var path = signed.replace(apiFilePath, '/file?').replace(/([?&])id=/, '$1file_id=');
+      return fileUrlWithTy(FILES_HOST + path);
+    }
+    if (signed) return fileUrlWithTy(FILES_FILE_URL + '?file_id=' + encodeURIComponent(id) + '&state=' + signed);
+    return fileUrlWithTy(FILES_FILE_URL + '?file_id=' + encodeURIComponent(id.replace(/^file-/, '')));
   }
 
   // Секция вложения в тексте хода. Метка файла видна в экспорте (заголовок [FILE: имя]).
