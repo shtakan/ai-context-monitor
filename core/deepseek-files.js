@@ -4,7 +4,7 @@
  *
  * Зачем: фрагмент типа FILE в history_messages/completion несёт только МЕТАДАННЫЕ файла
  * (file_id/имя), а тело лежит на ОТДЕЛЬНОМ файловом хосте:
- *   GET https://files.deepseeksvc.com/file?file_id=<id>[&state=<signed_path>]
+ *   GET https://files.deepseeksvc.com/api/file?file_id=<id>[&state=<signed_path>]
  * Без текста вложения ход в экспорте состоит из одной метки, то есть файл (PDF/док)
  * теряет содержимое.
  *
@@ -66,9 +66,10 @@
   // Файловый хост DeepSeek (проверено по бандлу сайта и трафику): тело вложения отдаёт
   // files.deepseeksvc.com, а не chat.deepseek.com. Параметр файла — `file_id` (не `id`),
   // `ty=r` не передаём; ty=p — превью картинки (его не качаем, см. extractFileRefs).
-  // Путь — `/file`, БЕЗ префикса `/api` (живой 404 при `/api/...`).
+  // Путь — `/api/file`: префикс версии API `/api` ОБЯЗАТЕЛЕН (без него тело не отдаётся;
+  // живой трафик сайта идёт на `files.deepseeksvc.com/api/file?file_id=…`, см. docs).
   var FILES_HOST = 'https://files.deepseeksvc.com';
-  var FILES_FILE_URL = 'https://files.deepseeksvc.com/file';
+  var FILES_FILE_URL = 'https://files.deepseeksvc.com/api/file';
 
   // Очередь: FIFO-массив элементов + карта дедупа по `convId|fileId` + счётчик активных.
   // Элемент: { key, convId, fileId, signedPath, name, msgIds:{}, status, startedAt, doneAt }.
@@ -224,8 +225,11 @@
   }
 
   // URL тела файла: параметр называется `file_id` (не `id`) — так его ждёт файловый хост.
-  // Готовый signed_path — уже подписанный сайтом путь: нативный запрос идёт путём с префиксом
-  // версии API, а файловый хост принимает тот же путь БЕЗ этого префикса — снимаем его.
+  // Префикс версии API `/api` — обязательная часть пути: тело отдаётся только по
+  // `/api/file?...`, без префикса — 404. Готовый signed_path уже подписан сайтом:
+  //   `/api/file?...` — уходит как есть (нормализуем только имя параметра `id=`);
+  //   `/file?...`     — префикс `/api` дописываем принудительно;
+  //   пусто/иное      — фолбэк `/api/file?file_id=<id>[&state=<подпись>]`.
   // Склейка с хостом — БАЙТ-В-БАЙТ (остальное URL-кодировать нельзя: сломает подпись).
   // `ty=t` — тип «текст» в нативном запросе; дописываем, если типа в URL ещё нет
   // (`ty=p` — превью картинки, его не качаем).
@@ -240,9 +244,11 @@
     var id = (fileId === undefined || fileId === null) ? '' : String(fileId);
     var signed = fileStr(signedPath);
     var apiFilePath = FILES_API_PREFIX + '/file?';
-    if (signed.indexOf(apiFilePath) === 0 || signed.indexOf('/file?') === 0) {
-      var path = signed.replace(apiFilePath, '/file?').replace(/([?&])id=/, '$1file_id=');
-      return fileUrlWithTy(FILES_HOST + path);
+    if (signed.indexOf(apiFilePath) === 0) {
+      return fileUrlWithTy(FILES_HOST + signed.replace(/([?&])id=/, '$1file_id='));
+    }
+    if (signed.indexOf('/file?') === 0) {
+      return fileUrlWithTy(FILES_HOST + FILES_API_PREFIX + signed.replace(/([?&])id=/, '$1file_id='));
     }
     if (signed) return fileUrlWithTy(FILES_FILE_URL + '?file_id=' + encodeURIComponent(id) + '&state=' + signed);
     return fileUrlWithTy(FILES_FILE_URL + '?file_id=' + encodeURIComponent(id.replace(/^file-/, '')));
