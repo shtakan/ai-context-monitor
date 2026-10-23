@@ -424,11 +424,13 @@ describe('ui-timeout: R2 поведение в vm', () => {
 
 // =====================================================================================
 // R3 (v87.1): baseComplete при ЖИВОМ курсоре — оверлей снят раньше UI-предела
+// v94: хвост сценария изменён — при полной базе и замершей высоте цикл больше НЕ крутится
+// в stall-retry до 90с, а выходит по 'base-complete-stall' (курсор признан застоявшимся).
 // =====================================================================================
 describe('base-complete-early: R3 поведение в vm', () => {
   test('R3: база полная + pendingCursor жив → снятие до 5с, ui-timeout не звонится', async () => {
     // Сценарий лога 2026-10-20: база объявлена полной на 3-м поиске скроллера, высота
-    // после этого стабильна (stall-retry), курсор продолжения продолжает жить.
+    // после этого стабильна, курсор продолжения продолжает жить.
     const h = makeHarness({ stepMs: 800, completeAtFind: 3, holdCursor: true, freezeHeightAfterFind: 3 });
 
     await h.api.loadFullHistoryInvisibly();
@@ -451,16 +453,16 @@ describe('base-complete-early: R3 поведение в vm', () => {
     expect(h.deps.aiCmScrollOverlay).toBeNull();
     expect(h.deps.aiCmUiOverlayTimedOut).toBe(true);
 
-    // цикл при этом НЕ остановлен: stall-retry с живым курсором продолжился после снятия
-    const stalls = h.calls.filter((c) => c.line.indexOf('stall-retry') !== -1);
-    expect(stalls.length).toBeGreaterThanOrEqual(1);
-    expect(stalls[0].line).toContain('baseComplete=1');
-    expect(stalls[0].at).toBeGreaterThanOrEqual(early[0].at);
+    // v94: цикл при этом ОСТАНОВЛЕН сразу — сервер подтвердил полноту, высота замерла,
+    // значит курсор застоявшийся (ложная эвристика classifyOpaque). Ни одного stall-retry
+    // и никакого 90-секундного прокрута «вхолостую».
+    expect(h.calls.filter((c) => c.line.indexOf('stall-retry') !== -1)).toEqual([]);
 
-    // и жёсткий предел прогона цел: дошли до wall-clock (90с), а не до аварии
+    // и жёсткий предел прогона цел: до wall-clock (90с) не дошло, аварийного лога нет
     const done = h.calls.filter((c) => c.line.indexOf('[AI CM][Gemini][loader] done reason=') !== -1);
     expect(done).toHaveLength(1);
-    expect(done[0].line).toContain('done reason=wall-clock-timeout');
+    expect(done[0].line).toContain('done reason=base-complete-stall');
+    expect(done[0].at - h.clockStart).toBeLessThan(90000);
     expect(h.calls.filter((c) => c.line.indexOf('ошибка лоадера') !== -1)).toHaveLength(0);
   });
 

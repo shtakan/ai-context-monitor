@@ -481,6 +481,16 @@
               // v53: ИНВАРИАНТ — пока в последнем history-ответе есть continuation-курсор,
               // ЗАПРЕЩЕНО завершаться по stable / no-growth / data-complete. Только stall-retry
               // (скролл к верху, шаг ~1с) до LOADER_STALL_CAP; исчерпание капа → done reason=timeout.
+              // v94 (stale cursor): исключение из инварианта — сервер УЖЕ подтвердил полноту
+              // (historyFullByQuiet+reachedStart), высота не росла LOADER_STABLE_NEED итераций и
+              // контрольный перемер выше (:473) её не поднял. Значит pendingCursor — ложная эвристика
+              // classifyOpaque (b64-строка внутри уже полного снапшота), и stall-retry гонял бы цикл
+              // все 90 итераций / ~108с вхолостую. Проверка стоит ДО ветки D.pendingCursor, а рост h
+              // обрабатывается выше (resume) — пагинация не ломается.
+              if (D.historyFullByQuiet === true && D.reachedStart === true) {
+                doneReason = 'base-complete-stall';
+                break;
+              }
               if (D.pendingCursor) {
                 stallRetry++;
                 if (stallRetry < LOADER_STALL_CAP) {
