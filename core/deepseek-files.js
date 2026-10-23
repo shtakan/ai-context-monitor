@@ -4,7 +4,7 @@
  *
  * Зачем: фрагмент типа FILE в history_messages/completion несёт только МЕТАДАННЫЕ файла
  * (file_id/имя), а тело лежит на ОТДЕЛЬНОМ файловом хосте:
- *   GET https://files.deepseeksvc.com/api/file?file_id=<id>&state=<signed_path>&ty=r
+ *   GET https://files.deepseeksvc.com + signed_path (`/file?...`) + `&ty=r`
  * Без текста вложения ход в экспорте состоит из одной метки, то есть файл (PDF/док)
  * теряет содержимое.
  *
@@ -17,7 +17,7 @@
  *     приложенный к нескольким ходам, качается ОДИН раз);
  *   • fetchFileContent(fileId, signedPath) идёт ЧЕРЕЗ originalFetch (снят ядром до хука D.7)
  *     на files.deepseeksvc.com, БЕЗ заголовков и БЕЗ кук (credentials:'omit': файловый хост
- *     авторизует запрос подписью в state, а credentialed CORS-запрос ломает ответ), таймаут
+ *     авторизует запрос подписью в signed_path, а credentialed CORS-запрос ломает ответ), таймаут
  *     10 с и кап 500 000 символов;
  *   • при получении текста обновляется fileTextsByMsg (msgId → текст) и ПЕРЕСОБИРАЕТСЯ текст
  *     хода: composeTurnText(answer, reasoning) + секция
@@ -65,9 +65,9 @@
   var FILES_DRAIN_TIMEOUT_MS = 2000;  // A-лайт: ожидание опустошения очереди у экспорта
   // Файловый хост DeepSeek (проверено по бандлу сайта и трафику): тело вложения отдаёт
   // files.deepseeksvc.com, а не chat.deepseek.com. ty=r — текст/документ, ty=p — превью
-  // картинки (его не качаем: у изображения нет текстового тела).
+  // картинки (его не качаем). Путь — `/file`, БЕЗ префикса `/api` (живой 404 при `/api/...`).
   var FILES_HOST = 'https://files.deepseeksvc.com';
-  var FILES_API_PATH = '/api/file';
+  var FILES_FILE_URL = 'https://files.deepseeksvc.com/file';
 
   // Очередь: FIFO-массив элементов + карта дедупа по `convId|fileId` + счётчик активных.
   // Элемент: { key, convId, fileId, signedPath, name, msgIds:{}, status, startedAt, doneAt }.
@@ -222,14 +222,14 @@
     return { ok: true, text: text, name: name || '', truncated: truncated };
   }
 
-  // URL тела файла: отдельный файловый хост + подпись в query. `state` уходит в URL
-  // БАЙТ-В-БАЙТ: это подписанное значение, и повторное URL-кодирование сломало бы подпись.
-  // `file_id` кодируем (он всегда машинный id), `ty=r` — запрос именно ТЕКСТА.
+  // URL тела файла: signed_path — уже подписанный сайтом путь `/file?...`, поэтому склеиваем
+  // его с хостом БАЙТ-В-БАЙТ (URL-кодировать нельзя — сломает подпись) и добиваем `ty=r`.
   function resolveFileUrl(fileId, signedPath) {
     var id = (fileId === undefined || fileId === null) ? '' : String(fileId);
-    var state = fileStr(signedPath);
-    return FILES_HOST + FILES_API_PATH +
-      '?file_id=' + encodeURIComponent(id) + '&state=' + state + '&ty=r';
+    var signed = fileStr(signedPath);
+    if (signed.indexOf('/file?') === 0) return FILES_HOST + signed + '&ty=r';
+    if (signed) return FILES_FILE_URL + '?file_id=' + encodeURIComponent(id) + '&state=' + signed + '&ty=r';
+    return FILES_FILE_URL + '?id=' + encodeURIComponent(id.replace(/^file-/, '')) + '&ty=r';
   }
 
   // Секция вложения в тексте хода. Метка файла видна в экспорте (заголовок [FILE: имя]).
@@ -457,7 +457,7 @@
 
       // Запрос тела файла. originalFetch — НАТИВНЫЙ fetch, снятый ядром до хука D.7:
       // иначе собственный перехватчик перехватил бы свой же запрос вложения.
-      // Ни заголовков, ни кук: файловый хост авторизует запрос подписью в state, а
+      // Ни заголовков, ни кук: файловый хост авторизует запрос подписью в signed_path, а
       // auth-заголовки чата/credentials:'include' превратили бы simple CORS-запрос в
       // credentialed и ответ без Access-Control-Allow-Credentials не прошёл бы вовсе.
       function fetchFileContent(fileId, signedPath) {
