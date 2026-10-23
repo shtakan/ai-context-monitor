@@ -95,8 +95,17 @@ describe('DeepSeek v4.1-flash: контракт детекции модели о
     expect(INTERCEPT.resolveNetworkModelSlug({ modelType: 'expert' })).toBe('');
     expect(INTERCEPT.resolveNetworkModelSlug({})).toBe('');
     expect(INTERCEPT.resolveNetworkModelSlug(undefined)).toBe('');
-    // history chat_session без model/conversation_mode (старые фикстуры) — не трогаем
-    expect(INTERCEPT.resolveNetworkModelSlug({ modelType: 'default' })).toBe('');
+  });
+
+  test('(v94) model_type=default без conversation_mode (старый чат) → deepseek-v4.1-flash, не фолбэк V3', () => {
+    // Живой дефект: в старых чатах поля conversation_mode в chat_session/update_session НЕТ вовсе,
+    // поэтому матч (isDefaultType && isDefaultConv) не срабатывал и снимок уходил с фолбэком
+    // deepseek-v3 (128K) вместо unified-модели (1M). Отсутствие режима при model_type:"default"
+    // трактуется как DEFAULT-режим (см. isUnifiedDefault в резолвере).
+    expect(INTERCEPT.resolveNetworkModelSlug({ modelType: 'default' })).toBe('deepseek-v4.1-flash');
+    expect(INTERCEPT.resolveNetworkModelSlug({ modelType: 'default', conversationMode: '' })).toBe('deepseek-v4.1-flash');
+    // expert по-прежнему не маппится — пины новых чатов не тронуты
+    expect(INTERCEPT.resolveNetworkModelSlug({ modelType: 'expert', conversationMode: '' })).toBe('');
   });
 
   test('ModelConfig: ключ есть, окно 1M, послабление потолка только у нового ключа', () => {

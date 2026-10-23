@@ -50,9 +50,14 @@ describe('E3: резолвер — структурный матч активн�
     expect(resolve({ modelType: 'default', configName: 'Instant' })).toBe(V4_FLASH);
   });
 
-  test('R1 (регрессия): {model_type:"default"} без захваченной конфигурации → "" (голдены O-22 целы)', () => {
-    expect(resolve({ modelType: 'default' })).toBe('');
-    expect(resolve({ modelType: 'default', configName: null })).toBe('');
+  test('R1 (v94): {model_type:"default"} без захваченной конфигурации — это unified default, а не ""', () => {
+    // Было "" (фолбэк deepseek-v3/128K): у старых чатов нет conversation_mode, и структурный
+    // матч по паре (default, DEFAULT) не срабатывал. Теперь пустой режим при model_type:"default"
+    // = unified-модель (1M), поэтому конфигурация для матча не требуется.
+    expect(resolve({ modelType: 'default' })).toBe(V4_FLASH);
+    expect(resolve({ modelType: 'default', configName: null, conversationMode: '' })).toBe(V4_FLASH);
+    // непустой не-DEFAULT режим по-прежнему не маппится: пины новых чатов целы
+    expect(resolve({ modelType: 'default', conversationMode: 'EXPERT' })).toBe('');
   });
 
   test('R2 (регрессия): пустые сигналы → "" → фолбэк (c) по thinking_enabled', () => {
@@ -164,7 +169,7 @@ const settle = async (t) => {
 };
 
 describe('E3: ре-эмит снимка при ПЕРВОМ захвате активной конфигурации', () => {
-  test('S1: история (V3) → настройки name:"Быстрый"/is_default:true → РОВНО +1 публикация и flash в payload', async () => {
+  test('S1: история (unified default) → настройки name:"Быстрый"/is_default:true → РОВНО +1 публикация и flash в payload', async () => {
     const stand = makeStand('convE3a');
     stand.setHistory(histFixture());
     await stand.window.fetch(historyUrl('convE3a'));
@@ -172,7 +177,9 @@ describe('E3: ре-эмит снимка при ПЕРВОМ захвате ак
 
     const base = stand.emits.length;                 // базовое число публикаций
     expect(base).toBe(1);
-    expect(stand.slugs()).toEqual(['deepseek-v3']);   // до захвата настроек — прежний фолбэк
+    // v94: chat_session.model_type:"default" БЕЗ conversation_mode — уже unified-модель,
+    // поэтому базовый снимок несёт flash, а не прежний фолбэк deepseek-v3.
+    expect(stand.slugs()).toEqual([V4_FLASH]);
 
     stand.setSettings(settingsFixture('Быстрый', true));
     await stand.window.fetch(SETTINGS_URL);

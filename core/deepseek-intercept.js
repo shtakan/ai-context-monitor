@@ -200,9 +200,9 @@ function __aiCmDeepseekResolveModelSlug(signals) {
   var isDefaultConv = convMode === 'DEFAULT';
   // model:"" присутствует и разговор в DEFAULT-режиме — та же новая ветка без model_type
   var emptyModelNewContract = (s.modelPresent === true) && raw === '' && isDefaultConv;
-  // Контракт сети 2026-10-11: name локализуется (Instant / Быстрый / Fast); матч по структурному is_default + model_type, а не по локализованному имени.
-  if ((isDefaultType && isDefaultConv) || emptyModelNewContract ||
-      (isDefaultType && (s.isDefault === true || configName !== ''))) {
+  // v94 (2026-10-23): у СТАРЫХ чатов conversation_mode в ответе НЕТ вовсе ('' после нормализации); пустой режим при model_type:"default" трактуем как DEFAULT — "default" в контракте DeepSeek единственная unified-запись (1M), а не фолбэк deepseek-v3 (128K). Контракт сети 2026-10-11: name локализуется (Instant / Быстрый / Fast); матч по структурному is_default + model_type, а не по локализованному имени.
+  var isUnifiedDefault = isDefaultType && (isDefaultConv || convMode === '');
+  if (isUnifiedDefault || emptyModelNewContract || (isDefaultType && (s.isDefault === true || configName !== ''))) {
     return AI_CM_DEEPSEEK_V4_FLASH_SLUG;   // (b)
   }
   return '';   // (c)
