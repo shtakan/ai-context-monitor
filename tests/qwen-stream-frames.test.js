@@ -4,9 +4,9 @@
  * ai-context-monitor-deepseek-DeepSeek-R1-2026-09-18-17-53.txt («stream-analyzer.js»).
  *
  * Пины:
- *   1) НЕТ ESM-синтаксиса и нет литерала async-generator внутри исходника — файл обязан
- *      грузиться как КЛАССИЧЕСКИЙ скрипт MV3 (это и был блокер O-35); нативный
- *      async-generator допустим только как рантайм-конструкция, и рядом есть ES5-ветка;
+ *   1) НЕТ ESM-синтаксиса: файл обязан грузиться как КЛАССИЧЕСКИЙ скрипт MV3 (это и был
+ *      блокер O-35). Нативный async-generator — ЛИТЕРАЛ в коде (ES2018, не ESM), Function-
+ *      конструктор не используется; ручная ES5-ветка остаётся эталоном паритета;
  *   2) frames(): SSE-кадры ({event,data}, ':'-комментарии, пустая строка как граница
  *      события, хвост без \n, CRLF), не-SSE фолбэк (склейка {...}{...} и JSON-массив);
  *   3) normUsage(): имена полей Qwen/OpenAI/Anthropic/Gemini → единая форма;
@@ -95,9 +95,9 @@ function responseOfChunks(chunks, contentType) {
 }
 
 describe('O-35: stream-frames.js — совместимость (нет ESM, UMD-обёртка)', () => {
-  test('в исходнике нет ESM-синтаксиса (export / import) и нет ЛИТЕРАЛА async-генератора', () => {
-    // Литерал = строка КОДА вида: async function* name(   (в строковой константе генератора
-    // он выглядит иначе — там после 'async function* ' идёт '__GENERATOR__' в кавычках).
+  test('в исходнике нет ESM-синтаксиса (export / import) и РОВНО ОДИН литерал async-генератора', () => {
+    // Литерал = строка КОДА вида: async function* name(...). Прежняя строковая константа
+    // генератора удалена вместе с фабрикой: нативная реализация теперь единственная.
     const codeLines = SRC.split(/\r?\n/).filter(function (l) {
       const t = l.trim();
       return t.indexOf('//') !== 0 && t.indexOf('*') !== 0 && t.indexOf('/*') !== 0;
@@ -105,18 +105,19 @@ describe('O-35: stream-frames.js — совместимость (нет ESM, UMD
     const code = codeLines.join('\n');
     expect(code).not.toMatch(/\bexport\s+(default|const|function|\{)/);
     expect(code).not.toMatch(/^\s*import\s/m);
-    // ни одна СТРОКА КОДА не начинается с литерала async-генератора
-    codeLines.forEach(function (l) {
+    // ровно ОДНА строка кода начинается с литерала async-генератора — сама framesNative
+    const asyncGenLiterals = codeLines.filter(function (l) {
       const t = l.trim();
-      const isCodeLiteral = /^async\s+function\s*\*/.test(t) && t.indexOf("'") !== 0 && t.indexOf('"') !== 0;
-      expect([l, isCodeLiteral]).toEqual([l, false]);
+      return /^async\s+function\s*\*/.test(t) && t.indexOf("'") !== 0 && t.indexOf('"') !== 0;
     });
+    expect(asyncGenLiterals).toHaveLength(1);
+    expect(asyncGenLiterals[0]).toContain('async function* framesNative');
   });
 
-  test('нативный async-generator создаётся рантайм-конструктором, есть ES5-ветка', () => {
-    expect(SRC).toContain('new Function');
-    expect(SRC).toContain('async function* __GENERATOR__');   // как СТРОКА генератора, не литерал кода
-    expect(typeof SF._framesManual).toBe('function');          // ручной pull-итератор на месте
+  test('нативный async-generator объявлен литералом, Function-конструктор не нужен (CSP)', () => {
+    expect(SRC).not.toContain('new Function');
+    expect(SRC).toContain('async function* framesNative');     // единственный литерал генератора в коде
+    expect(typeof SF._framesManual).toBe('function');          // ручной pull-итератор — эталон паритета
   });
 
   test('UMD-обёртка: module.exports + window/self-имена (образец intercept-common.js)', () => {

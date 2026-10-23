@@ -16,12 +16,14 @@
  *   Поэтому исходный файл в проект НЕ копировался: порт — только каркас.
  *
  * Совместимость (ключевое требование O-35):
- *   - НИКАКОГО ESM-синтаксиса: нет export/import, нет литерала async-генератора в коде.
- *     Нативный async-generator создаётся РАНТАЙМ-конструктором (Function) и только если
- *     рантайм его поддерживает; иначе работает ручной pull-итератор на Promise. Это снимает
- *     блокер «ESM-синтаксис не грузится как классический скрипт MV3»: файл подключается и как
- *     классический content-script (MAIN-мир, registerContentScripts), и как importScripts в SW,
- *     и как require() в Node/jest.
+ *   - НИКАКОГО ESM-синтаксиса: нет export/import. Нативная async-функция-генератор объявлена
+ *     прямо в файле — это языковая конструкция ES2018, а не ESM:
+ *     классический content-script MV3 её принимает. Function-конструктора и eval в файле НЕТ,
+ *     поэтому CSP-блокер снят, а ручная ветка больше не нужна как рантайм-фолбэк.
+ *     Файл по-прежнему подключается как content-script (MAIN-мир, registerContentScripts),
+ *     как importScripts в SW и как require() в Node/jest.
+ *   - ручной pull-итератор framesManual сохранён как ES5-ЭТАЛОН ПАРИТЕТА (не рантайм-фолбэк):
+ *     на нём держатся пины равенства кадров двух реализаций.
  *   - Именованная обёртка по образцу utils/intercept-common.js: window.aiCmStreamFrames /
  *     self.aiCmStreamFrames / module.exports.
  *
@@ -54,17 +56,6 @@
     }
     return out;
   }
-
-  function hasAsyncGenerators() {
-    try {
-      // Проверка РАНТАЙМА, а не парсера: async-генератор создаётся только там, где он реально
-      // поддержан (Node 10+ / Chromium 63+). Это рантайм-конструкция, а не ESM-синтаксис файла.
-      new Function('return async function*(){}');
-      return true;
-    } catch (e) { return false; }
-  }
-
-  var NATIVE_ASYNC_GEN = hasAsyncGenerators();
 
   // Декодер тела: глобальный TextDecoder (браузер, worker, Node 18+) либо, если глобального
   // нет (jsdom-стенды jest, урезанные песочницы), — из встроенного модуля 'util'.
@@ -157,74 +148,66 @@
     };
   }
 
-  // Нативный async-generator — ТОЛЬКО как рантайм-конструкция, создаваемая Function-конструктором
-  // (в исходнике файла нет ни export, ни литерала async-генератора). Фабрика ниже получает ПОТОК
-  // инструкций (объявление генератора) вместо '__SRC__' и возвращает обёртку frames — обычную
-  // функцию (ES5-совместимую снаружи), возвращающую async-итератор. Ошибка компиляции (CSP,
-  // урезанный рантайм) → тихий переход на ручной pull-итератор ниже.
+  // Нативный async-generator объявлен ЛИТЕРАЛОМ прямо в файле (ES2018). Это не ESM-синтаксис,
+  // поэтому файл по-прежнему грузится как классический content-script MV3, как importScripts в
+  // SW и как require() в Node/jest. Function-конструктор/eval не используются вовсе — CSP-блокер,
+  // ради которого раньше существовала строковая фабрика, снят. Тело перенесено из прежней
+  // строковой константы ДОСЛОВНО (та же логика кадров и тот же порядок yield'ов).
   //
-  // Резак склейки и декодер потока приходят в фабрику АРГУМЕНТАМИ из замыкания модуля: у
-  // сгенерированного кода своя область видимости, и ни резак, ни TextDecoder ему не видны.
-  var ASYNC_GEN_FACTORY_BODY = "(function (splitJsonObjects, dec) {\n" +
-    "  'use strict';\n" +
-    '  __SRC__\n' +
-    '  return function frames(res) { return __GENERATOR__(res); };\n' +
-    '})';
-
-  var ASYNC_GEN_SOURCE = [
-    'async function* __GENERATOR__(res) {',
-    "  var ct = '';",
-    "  try { if (res && res.headers && typeof res.headers.get === 'function') ct = String(res.headers.get('content-type') || '').toLowerCase(); } catch (eCt) { ct = ''; }",
-    "  var isSSE = ct.indexOf('event-stream') !== -1;",
-    "  var reader = (res && res.body && typeof res.body.getReader === 'function') ? res.body.getReader() : null;",
-    "  if (!reader) return;",
-    "  var buf = '';",
-    "  if (!isSSE) {",
-    "    var all = '';",
-    "    while (true) {",
-    "      var r0 = await reader.read();",
-    "      if (!r0 || r0.done) break;",
-    "      all += dec.text(r0.value, true);",
-    "    }",
-    "    all += dec.flush();",
-    "    var trimmed = all.trim();",
-    "    if (!trimmed) return;",
-    "    if (trimmed.charAt(0) === '[') {",
-    "      var arr = null;",
-    "      try { arr = JSON.parse(trimmed); } catch (eArr) { arr = null; }",
-    "      if (arr && typeof arr.length === 'number') {",
-    "        for (var ai = 0; ai < arr.length; ai++) yield { data: JSON.stringify(arr[ai]) };",
-    "      }",
-    "    } else {",
-    "      var glued = splitJsonObjects(trimmed);",
-    "      for (var gi = 0; gi < glued.length; gi++) yield { data: glued[gi] };",
-    "    }",
-    "    return;",
-    "  }",
-    "  var pendingEvent = null;",
-    "  while (true) {",
-    "    var r1 = await reader.read();",
-    "    if (!r1 || r1.done) break;",
-    "    buf += dec.text(r1.value, true);",
-    "    var idx;",
-    "    while ((idx = buf.indexOf('\\n')) >= 0) {",
-    "      var line = buf.slice(0, idx);",
-    "      if (line.charAt(line.length - 1) === '\\r') line = line.slice(0, -1);",
-    "      buf = buf.slice(idx + 1);",
-    "      if (!line) { pendingEvent = null; continue; }",
-    "      if (line.charAt(0) === ':') continue;",
-    "      var ev = /^event:\\s?(.*)$/.exec(line);",
-    "      if (ev) { pendingEvent = ev[1]; continue; }",
-    "      var d = /^data:\\s?(.*)$/.exec(line);",
-    "      if (d) yield { event: pendingEvent, data: d[1] };",
-    "    }",
-    "  }",
-    "  var tail = buf;",
-    "  if (tail.charAt(tail.length - 1) === '\\r') tail = tail.slice(0, -1);",
-    "  var dt = /^data:\\s?(.*)$/.exec(tail);",
-    "  if (dt) yield { event: pendingEvent, data: dt[1] };",
-    "}"
-  ].join('\n');
+  // Резак склейки берётся из замыкания модуля, декодер потока приходит АРГУМЕНТОМ (это ровно
+  // те две вещи, которые прежняя фабрика передавала сгенерированному коду параметрами).
+  async function* framesNative(res, dec) {
+    var ct = '';
+    try { if (res && res.headers && typeof res.headers.get === 'function') ct = String(res.headers.get('content-type') || '').toLowerCase(); } catch (eCt) { ct = ''; }
+    var isSSE = ct.indexOf('event-stream') !== -1;
+    var reader = (res && res.body && typeof res.body.getReader === 'function') ? res.body.getReader() : null;
+    if (!reader) return;
+    var buf = '';
+    if (!isSSE) {
+      var all = '';
+      while (true) {
+        var r0 = await reader.read();
+        if (!r0 || r0.done) break;
+        all += dec.text(r0.value, true);
+      }
+      all += dec.flush();
+      var trimmed = all.trim();
+      if (!trimmed) return;
+      if (trimmed.charAt(0) === '[') {
+        var arr = null;
+        try { arr = JSON.parse(trimmed); } catch (eArr) { arr = null; }
+        if (arr && typeof arr.length === 'number') {
+          for (var ai = 0; ai < arr.length; ai++) yield { data: JSON.stringify(arr[ai]) };
+        }
+      } else {
+        var glued = splitJsonObjects(trimmed);
+        for (var gi = 0; gi < glued.length; gi++) yield { data: glued[gi] };
+      }
+      return;
+    }
+    var pendingEvent = null;
+    while (true) {
+      var r1 = await reader.read();
+      if (!r1 || r1.done) break;
+      buf += dec.text(r1.value, true);
+      var idx;
+      while ((idx = buf.indexOf('\n')) >= 0) {
+        var line = buf.slice(0, idx);
+        if (line.charAt(line.length - 1) === '\r') line = line.slice(0, -1);
+        buf = buf.slice(idx + 1);
+        if (!line) { pendingEvent = null; continue; }
+        if (line.charAt(0) === ':') continue;
+        var ev = /^event:\s?(.*)$/.exec(line);
+        if (ev) { pendingEvent = ev[1]; continue; }
+        var d = /^data:\s?(.*)$/.exec(line);
+        if (d) yield { event: pendingEvent, data: d[1] };
+      }
+    }
+    var tail = buf;
+    if (tail.charAt(tail.length - 1) === '\r') tail = tail.slice(0, -1);
+    var dt = /^data:\s?(.*)$/.exec(tail);
+    if (dt) yield { event: pendingEvent, data: dt[1] };
+  }
 
   // Ручной pull-итератор на Promise (рантайм без нативных async-генераторов либо запрет
   // Function/eval): семантика кадров 1:1 с нативной веткой выше. Поток читается ОДНИМ проходом,
@@ -341,18 +324,11 @@
     return it;
   }
 
-  var frames = framesManual;
-  if (NATIVE_ASYNC_GEN) {
-    try {
-      // Тонкость Function-конструктора: new Function(BODY) даёт функцию-ОБЁРТКУ, телом которой
-      // является BODY; вызов обёртки возвращает объявленную в BODY фабрику (ловилось пробой).
-      var factory = new Function(ASYNC_GEN_FACTORY_BODY.replace('__SRC__', ASYNC_GEN_SOURCE))();
-      frames = factory(splitJsonObjects, makeDecodeStream());
-      if (typeof frames !== 'function' || frames === factory) frames = framesManual;
-    } catch (eNative) {
-      frames = framesManual;
-    }
-  }
+  // Декодер создаётся ОДИН раз при инициализации модуля — ровно как в прежней фабрике, которой
+  // он передавался аргументом, и не создаётся заново на каждый вызов frames(). Семантика
+  // сохранена 1:1 (один экземпляр на модуль); ручная ветка по-прежнему делает свой декодер в run().
+  var framesDecodeStream = makeDecodeStream();
+  function frames(res) { return framesNative(res, framesDecodeStream); }
 
   // ─────────────── Нормализация usage ───────────────
   // Первое ЧИСЛОВОЕ значение из кандидатов (0 — валидное число, undefined/null/строки — нет).
@@ -418,9 +394,9 @@
     frames: frames,
     normUsage: normalizeUsage,
     mergeUsage: mergeUsage,
-    // Пины/диагностика: доступна ли нативная ветка async-генератора в этом рантайме и ТА ЖЕ
-    // функция кадров в ручной ветке (пин паритета обеих веток). Побочных эффектов нет.
-    _nativeAsyncGenerator: NATIVE_ASYNC_GEN,
+    // Пины/диагностика: нативный async-генератор объявлен литералом в ЭТОМ файле, поэтому его
+    // поддержка гарантирована уже тем, что файл загрузился; _framesManual — эталон паритета.
+    _nativeAsyncGenerator: true,
     _framesManual: framesManual,
     _splitJsonObjects: splitJsonObjects
   };

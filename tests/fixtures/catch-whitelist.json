@@ -1750,7 +1750,7 @@
       "file": "utils/stream-frames.js",
       "category": "guard-clause",
       "lines": [
-        107
+        98
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof v === 'string') return null; if (v && typeof v.length === 'nu"
     },
@@ -1758,8 +1758,8 @@
       "file": "utils/stream-frames.js",
       "category": "parse-guard",
       "lines": [
-        72,
-        78
+        63,
+        69
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: if (typeof TextDecoder !== 'undefined') return TextDecoder;"
     }
