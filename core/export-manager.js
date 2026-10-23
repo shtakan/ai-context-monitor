@@ -1549,7 +1549,7 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
     // v12 (O-18, фаза 2): ПЕРЕД композицией файла — сетевой дозапрос истории (только DeepSeek:
     // перехватчик MAIN-мира сам решает, нужен ли запрос, и сам выбирает текст по ходам:
     // EQUAL → live, MIDDLE-HOLE/TAIL-CUT → сеть, ONE-SIDE → live + маркер в логе).
-    if (netSynced !== true && typeof aiCmExportNetSyncThen === 'function' && aiCmExportNetSyncSite()) {
+    if (netSynced !== true && (typeof aiCmExportFilesThenNetSync === 'function' || typeof aiCmExportNetSyncThen === 'function') && aiCmExportNetSyncSite()) {
       if (!aiCmNetSyncInFlight[cid]) {
         aiCmNetSyncInFlight[cid] = 1;
         var selfSync = function () {
@@ -1557,7 +1557,7 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
           doAutoExportDownload(cid, percentage, reason, true);
         };
         try {
-          aiCmExportNetSyncThen(cid, selfSync);
+          if (typeof aiCmExportFilesThenNetSync === 'function') aiCmExportFilesThenNetSync(cid, selfSync); else aiCmExportNetSyncThen(cid, selfSync);
         } catch (eSync) {
           delete aiCmNetSyncInFlight[cid];
           selfSync();

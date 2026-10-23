@@ -23,7 +23,7 @@
  * ходам, детектор усечения цепочки с тихим дозапросом, режимы MERGE/export-sync) —
  * в core/deepseek-ingest.js (шаг D.8).
  * Порядок в MODULES — ровно порядок инъекции в core/background.js (registerSafe
- * 'ai-cm-deepseek-intercept-v11', document_start, world 'MAIN'): модули идут ПЕРЕД
+ * 'ai-cm-deepseek-intercept-v12', document_start, world 'MAIN'): модули идут ПЕРЕД
  * core/deepseek-intercept.js.
  *
  * Скрипты одного registerContentScripts-пакета исполняются в одном мировом глобальном
@@ -60,6 +60,7 @@ const MODULES = [
   'core/deepseek-emit.js',
   'core/deepseek-net.js',
   'core/deepseek-ingest.js',
+  'core/deepseek-files.js',
   'core/deepseek-sse.js'
 ];
 const INTERCEPT_JS = 'core/deepseek-intercept.js';

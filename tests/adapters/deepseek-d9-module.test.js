@@ -711,7 +711,7 @@ describe('Step D.9: core/deepseek-sse.js — контракт модуля SSE (
     }());
   });
 
-  test('S5: проводка — js[] перед ядром, id -v11 + unregister -v10, размеры и K7 в ядре', function () {
+  test('S5: проводка — js[] перед ядром, id -v12 + unregister -v10/-v11, размеры и K7 в ядре', function () {
     // порядок: модуль строго ПЕРЕД ядром (контракт __bind нужен на момент связки)
     expect(DS.SOURCES.indexOf('core/deepseek-sse.js'))
       .toBeLessThan(DS.SOURCES.indexOf('core/deepseek-intercept.js'));
@@ -719,29 +719,31 @@ describe('Step D.9: core/deepseek-sse.js — контракт модуля SSE (
       .toBeLessThan(DS.SOURCES.indexOf('core/deepseek-sse.js'));
     expect(DS.MODULES).toContain('core/deepseek-sse.js');
     expect(DS.MODULES[DS.MODULES.length - 1]).toBe('core/deepseek-sse.js');
-    expect(DS.MODULES.length).toBe(9);
+    expect(DS.MODULES.length).toBe(10);
     expect(KERNEL_SRC).toContain('aiCmDeepseekSse');
 
     const bg = DS.readSource('core/background.js');
-    expect(bg).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-ingest.js', 'core/deepseek-sse.js', 'core/deepseek-intercept.js']");
-    expect(bg).toContain("ids.indexOf('ai-cm-deepseek-intercept-v11') === -1");
-    expect(bg).toContain("await registerSafe('ai-cm-deepseek-intercept-v11'");
-    expect(bg).toContain("id: 'ai-cm-deepseek-intercept-v11'");
-    expect(bg).toContain("unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v10'] })");
-    // id -v11 встречается ровно 4 раза (шапка + guard + registerSafe + id), -v10 — только в unregister
-    expect((bg.match(/ai-cm-deepseek-intercept-v11/g) || [])).toHaveLength(4);
+    expect(bg).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-ingest.js', 'core/deepseek-files.js', 'core/deepseek-sse.js', 'core/deepseek-intercept.js']");
+    expect(bg).toContain("ids.indexOf('ai-cm-deepseek-intercept-v12') === -1");
+    expect(bg).toContain("await registerSafe('ai-cm-deepseek-intercept-v12'");
+    expect(bg).toContain("id: 'ai-cm-deepseek-intercept-v12'");
+    expect(bg).toContain("unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v10', 'ai-cm-deepseek-intercept-v11'] })");
+    // id -v12 встречается ровно 4 раза (шапка + guard + registerSafe + id),
+    // -v11 — в шапке-ссылке и в unregister, -v10 — только в unregister
+    expect((bg.match(/ai-cm-deepseek-intercept-v12/g) || [])).toHaveLength(4);
+    expect((bg.match(/ai-cm-deepseek-intercept-v11/g) || [])).toHaveLength(1);
     expect((bg.match(/ai-cm-deepseek-intercept-v10/g) || [])).toHaveLength(1);
     // лог DeepSeek без «(vN)»-формы: скобочную форму глобально запрещают Gemini-пины
-    expect(bg).toContain('перехватчик DeepSeek v11 зарегистрирован');
-    expect(bg).not.toContain('перехватчик DeepSeek (v11) зарегистрирован');
+    expect(bg).toContain('перехватчик DeepSeek v12 зарегистрирован');
+    expect(bg).not.toContain('перехватчик DeepSeek (v12) зарегистрирован');
 
-    // release.yml: счётчик MAIN-world файлов равен факту (35 = 5 бандлов + 30 модулей/ядер)
+    // release.yml: счётчик MAIN-world файлов равен факту (36 = 5 бандлов + 31 модулей/ядер)
     const yml = DS.readSource('.github/workflows/release.yml');
-    expect((yml.match(/35 MAIN-world/g) || [])).toHaveLength(2);
-    expect(yml).not.toContain('34 MAIN-world');
+    expect((yml.match(/36 MAIN-world/g) || [])).toHaveLength(2);
+    expect(yml).not.toContain('35 MAIN-world');
 
-    // размеры: ядро 1657 → 1169, модуль 702 (пины D.7/D.8/D.9)
-    expect(KERNEL_SRC.split('\n').length).toBe(1169);
+    // размеры: ядро 1657 → 1208, модуль 702 (пины D.7/D.8/D.9; D.10 добавил 39 строк)
+    expect(KERNEL_SRC.split('\n').length).toBe(1208);
     expect(KERNEL_SRC.split('\n').length).toBeLessThan(1700);
     expect(MODULE_SRC.trimEnd().split('\n').length).toBe(702);
     expect(MODULE_SRC.trimEnd().split('\n').length).toBeGreaterThan(600);

@@ -2756,8 +2756,8 @@ if (isExtensionValid()) {
         } catch (eO49m) { debugLog('log', '[AI CM][export] silent-catch replyManualExport(O-49 union): ' + (eO49m && eO49m.message || eO49m)); }
         sendResponse({ data: manualSnapshot });
       };
-      if (typeof aiCmExportNetSyncThen === 'function' && aiCmExportNetSyncSite()) {
-        aiCmExportNetSyncThen(curCidExp, replyManualExport);
+      if ((typeof aiCmExportFilesThenNetSync === 'function' || typeof aiCmExportNetSyncThen === 'function') && aiCmExportNetSyncSite()) {
+        if (typeof aiCmExportFilesThenNetSync === 'function') aiCmExportFilesThenNetSync(curCidExp, replyManualExport); else aiCmExportNetSyncThen(curCidExp, replyManualExport);
       } else {
         replyManualExport();
       }

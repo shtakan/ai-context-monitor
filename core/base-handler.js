@@ -294,6 +294,108 @@ function scheduleStaleCheck() {
   }, 12000);
 }
 
+// ================= Step D.10 (Вариант B + A-лайт): очередь вложений DeepSeek =================
+// Текст вложения догружается асинхронно в MAIN-мире (core/deepseek-files.js). Здесь — только
+// ожидание опустошения очереди ПЕРЕД композицией файла: очередь пуста (или модуля нет) —
+// экспорт идёт НЕМЕДЛЕННО прежним путём; не пуста — ждём до 2000 мс, затем пишем файл и
+// фиксируем в логе reason=file-queue-timeout. Ожидание лишь даёт догрузке шанс доехать до
+// turnsMap: состав/байты уже снятой базы от него не меняются, а «дождались» и «не дождались»
+// различимы в логе. Мост — те же window-CustomEvent, что у probe/flush O-16 и net-sync O-18.
+var aiCmFilesDrainSeq = 0;
+function aiCmFilesQueuePending() {
+  var pending = -1;
+  var handler = null;
+  try {
+    if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return 0;
+    handler = function (ev) {
+      var d = ev && ev.detail;
+      if (d && typeof d.pending === 'number') pending = d.pending;
+    };
+    window.addEventListener('ai-cm-deepseek-files-state-response', handler);
+    window.dispatchEvent(new CustomEvent('ai-cm-deepseek-files-state-request'));
+  } catch (eState) {
+    debugLog('log', '[AI CM][file-queue] state bridge: ' + ((eState && eState.message) || eState));
+  } finally {
+    try {
+      if (handler) window.removeEventListener('ai-cm-deepseek-files-state-response', handler);
+    } catch (eOff) {
+      debugLog('log', '[AI CM][file-queue] state listener off: ' + ((eOff && eOff.message) || eOff));
+    }
+  }
+  return pending;
+}
+// Маркер в логе: видно КАЖДЫЙ экспорт DeepSeek — ждали ли очередь, чем закончилось ожидание
+// и сколько файлов осталось в полёте к моменту записи файла.
+function aiCmLogFilesDrain(convId, info) {
+  try {
+    var line = '[AI CM][file-queue] convId=' + String(convId || '').slice(0, 8) +
+      ' ok=' + (info && info.ok === true ? 1 : 0) +
+      ' reason=' + ((info && info.reason) || '-') +
+      ' drained=' + (info && info.drained === true ? 1 : 0) +
+      ' pending=' + ((info && typeof info.pending === 'number') ? info.pending : 0) +
+      ' waitedMs=' + ((info && info.waitedMs) || 0);
+    debugLog('log', line);
+  } catch (eLog) {
+    debugLog('log', '[AI CM][file-queue] log failed: ' + ((eLog && eLog.message) || eLog));
+  }
+}
+function aiCmExportFilesDrainThen(convId, cb, timeoutMs) {
+  var cap = (typeof timeoutMs === 'number' && timeoutMs > 0) ? timeoutMs : 2000;
+  var pending = aiCmFilesQueuePending();
+  if (pending <= 0) {
+    // Очередь пуста либо модуль не загружен (старая версия перехватчика) — не тормозим.
+    try { if (cb) cb({ ok: true, drained: true, reason: 'idle-or-absent', pending: 0, waitedMs: 0 }); } catch (eCb0) { swallowSoft(eCb0, 'base-handler:filesDrain-idle-cb'); }
+    return;
+  }
+  var done = false;
+  var timer = null;
+  var handler = null;
+  var startedAt = Date.now();
+  function finish(info) {
+    if (done) return;
+    done = true;
+    if (timer) { try { clearTimeout(timer); } catch (eT) { debugLog('log', '[AI CM][file-queue] timer off: ' + ((eT && eT.message) || eT)); } timer = null; }
+    if (handler) { try { window.removeEventListener('ai-cm-deepseek-files-drain-done', handler); } catch (eR) { debugLog('log', '[AI CM][file-queue] listener off: ' + ((eR && eR.message) || eR)); } handler = null; }
+    aiCmLogFilesDrain(convId, info || {});
+    try { if (cb) cb(info || {}); } catch (eCb) { swallowSoft(eCb, 'base-handler:filesDrain-finish-callback'); }
+  }
+  try {
+    var reqId = 'files-' + Date.now() + '-' + (++aiCmFilesDrainSeq);
+    handler = function (ev) {
+      var d = ev && ev.detail;
+      if (!d || String(d.requestId || '') !== reqId) return;
+      finish(d);
+    };
+    window.addEventListener('ai-cm-deepseek-files-drain-done', handler);
+    // Страховка сверх таймаута модуля: он отвечает сам, но если ответ потерян — экспорт не
+    // имеет права висеть. reason тот же, чтобы лог не различал источник таймаута.
+    timer = setTimeout(function () {
+      finish({ ok: false, drained: false, reason: 'file-queue-timeout', pending: aiCmFilesQueuePending(), waitedMs: Date.now() - startedAt });
+    }, cap + 250);
+    window.dispatchEvent(new CustomEvent('ai-cm-deepseek-files-drain', {
+      detail: { requestId: reqId, timeoutMs: cap }
+    }));
+  } catch (eBridge) {
+    finish({ ok: false, drained: false, reason: 'bridge-error', pending: pending, waitedMs: Date.now() - startedAt });
+  }
+}
+// Полная цепочка экспорта DeepSeek: дождаться текста вложений (A-лайт) → сетевой дозапрос
+// истории (O-18) → композиция файла. Старый порядок «сеть → файл» сохранён, ожидание
+// вложений добавлено ПЕРЕД ним: текст вложения нужен той же базе, что уйдёт в файл.
+function aiCmExportFilesThenNetSync(convId, cb, netTimeoutMs) {
+  var next = function () {
+    try { if (cb) cb(); } catch (eCb) { swallowSoft(eCb, 'base-handler:filesThenNet-callback'); }
+  };
+  aiCmExportFilesDrainThen(convId, function () {
+    if (typeof aiCmExportNetSyncThen === 'function' && aiCmExportNetSyncSite()) {
+      aiCmExportNetSyncThen(convId, next, netTimeoutMs);
+      return;
+    }
+    next();
+  }, 2000);
+}
+// ================= конец Step D.10 =================
+
 // ========== v2.0 (этап 1/3): UMD-экспорт модуля ==========
 // Паттерн как у utils/export-emit-pipeline.js: window.<Api> + module.exports.
 // Рабочий путь ничего не импортирует: content-скрипты манифеста делят один
@@ -315,6 +417,10 @@ function scheduleStaleCheck() {
   Api.aiCmExportNetSyncSite = aiCmExportNetSyncSite;      // O-18 (фаза 2)
   Api.aiCmExportNetSyncThen = aiCmExportNetSyncThen;      // O-18 (фаза 2)
   Api.aiCmLogNetSyncResult = aiCmLogNetSyncResult;        // O-18 (фаза 2)
+  Api.aiCmFilesQueuePending = aiCmFilesQueuePending;      // Step D.10 (A-лайт)
+  Api.aiCmLogFilesDrain = aiCmLogFilesDrain;              // Step D.10 (A-лайт)
+  Api.aiCmExportFilesDrainThen = aiCmExportFilesDrainThen;    // Step D.10 (A-лайт)
+  Api.aiCmExportFilesThenNetSync = aiCmExportFilesThenNetSync; // Step D.10 (A-лайт)
   Api.aiCmDumpTurnsSnapshot = aiCmDumpTurnsSnapshot;
   Api.scheduleStaleCheck = scheduleStaleCheck;
   if (typeof module !== 'undefined' && module.exports) module.exports = Api;

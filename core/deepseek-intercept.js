@@ -344,7 +344,7 @@ if (typeof window !== 'undefined') {
   // экспортного дозапроса, сборка turnsMap по ходам, снимок сети и вердикт полноты) —
   // 275 строк (340-614). Тело живёт в модуле (PURE-зона заголовка и BIND-зона внутри
   // `with (D)` — см. шапку core/deepseek-ingest.js) и читает состояние ядра через
-  // контракт __bind: 15 fn + 10 rw + 8 ro = 33 имени; связка — в конце этого IIFE,
+  // контракт __bind: 17 fn + 10 rw + 8 ro = 35 имён; связка — в конце этого IIFE,
   // форвардер ingestHistory (function declaration — хойстится) раздаёт тело по прежнему
   // имени. Прямых вызовов K5 в ядре не осталось вовсе: значением форвардера пользуются
   // контракты D.2 (приёмка экспортного снимка), D.3 (приёмка ответа тихого дозапроса
@@ -409,7 +409,7 @@ if (typeof window !== 'undefined') {
   // THINK/TIP/SEARCH — см. collectTurnText/collectTurnReasoning) и в SSE-потоке completion
   // (BEGIN/… не встречаются, но TEMPLATE_RESPONSE упоминается в комментариях v8).
   var SSE_FRAGMENT_TYPES = {
-    THINK: 1, RESPONSE: 1, REQUEST: 1, TIP: 1, SEARCH: 1, TEMPLATE_RESPONSE: 1
+    THINK: 1, RESPONSE: 1, REQUEST: 1, TIP: 1, SEARCH: 1, TEMPLATE_RESPONSE: 1, FILE: 1
   };
   var sseResyncRing = [];
   var sseResyncCount = 0;
@@ -601,7 +601,7 @@ if (typeof window !== 'undefined') {
 
 
   // ===== СЕКЦИЯ 14: ФИНАЛ =====
-  console.log('[deepseek-intercept] перехватчик DeepSeek v11 установлен (server-first, walk parent_id, SSE инкрементально И постфактум, USER+ASSISTANT оба хода, ход = user + assistant(reasoning+answer), фрагменты потока как fragments[] истории (без потери контента чанков), терминал хода по BATCH/close/концу тела, historyComplete по reachedRoot ИЛИ авторитетно пустой базе (O-17: единый критерий для первичной загрузки и тихого дозапроса после SPA-смены чата), turnsMap сбрасывается только принятым снимком (O-17), serverTokens из accumulated_token_usage, +self-fetch при MERGE, +per-turn model по thinking_enabled, +modelMode в detail, +timer-refetch on switch, +подавление чужих unhandled fetch, +детектор усечения цепочки с дозапросом, +convId в detail, +unknown-роль без маппинга, +reasoning THINK секциями [REASONING]/[ANSWER], +O-16 живой поток не замораживает ход: повторный финал обогащает текст, probe/flush-мост для экспортёра, +O-17 мост turnsMap для дампов экспорта, +O-18 белый список типов фрагментов с ресинком из сырого кольца (контент больше не становится «типом»), +O-18 сетевой дозапрос history_messages в момент экспорта с per-turn выбором live/сеть)');
+  console.log('[deepseek-intercept] перехватчик DeepSeek v12 установлен (server-first, walk parent_id, SSE инкрементально И постфактум, USER+ASSISTANT оба хода, ход = user + assistant(reasoning+answer), фрагменты потока как fragments[] истории (без потери контента чанков), терминал хода по BATCH/close/концу тела, historyComplete по reachedRoot ИЛИ авторитетно пустой базе (O-17: единый критерий для первичной загрузки и тихого дозапроса после SPA-смены чата), turnsMap сбрасывается только принятым снимком (O-17), serverTokens из accumulated_token_usage, +self-fetch при MERGE, +per-turn model по thinking_enabled, +modelMode в detail, +timer-refetch on switch, +подавление чужих unhandled fetch, +детектор усечения цепочки с дозапросом, +convId в detail, +unknown-роль без маппинга, +reasoning THINK секциями [REASONING]/[ANSWER], +O-16 живой поток не замораживает ход: повторный финал обогащает текст, probe/flush-мост для экспортёра, +O-17 мост turnsMap для дампов экспорта, +O-18 белый список типов фрагментов с ресинком из сырого кольца (контент больше не становится «типом»), +O-18 сетевой дозапрос history_messages в момент экспорта с per-turn выбором live/сеть)');
 
   // Экспорт для ручного вызова диагностического дампа
   try {
@@ -1001,11 +1001,11 @@ if (typeof window !== 'undefined') {
   }
 
   // ===== Step D.8: связка модуля INGEST (core/deepseek-ingest.js) =====
-  // Контракт: 15 fn (функции ядра, которые зовёт тело модуля — передаются значением:
+  // Контракт: 17 fn (функции ядра, которые зовёт тело модуля — передаются значением:
   // форвардеры D.1 diagOn/diagMark/diagHistRecord/diagSnapshotNetTurns/isDebugEnabled/
   // determineState/dumpHistorySnapshot/dumpTurnUsageAtHistoryLoad, форвардер D.3
   // refetchFullHistory, форвардеры D.4 buildActiveChain/collectTurnText/
-  // collectTurnReasoning/composeTurnText/getModelSlug и форвардер D.6 emitBaseSnapshot;
+  // collectTurnReasoning/composeTurnText/getModelSlug, форвардер D.6 emitBaseSnapshot и форвардеры D.10 enqueueChainFiles/applyPendingFileTexts;
   // все — function declaration, хойстятся), 10 rw (состояние кластера, которое тело
   // ПЕРЕЗАПИСЫВАЕТ: turnsMap/orderCounter/histCompletion/netSnapshotAt/netTurnIds/
   // loggedHistory/lastLoadedConvId/historyRefetchDone, плюс режим экспортного ingest
@@ -1014,7 +1014,7 @@ if (typeof window !== 'undefined') {
   // полноты не поднимался бы, а экспорт принял бы усечённый снимок за авторитетный)
   // и 8 ro (currentConvId/lastHistoryUrl/lastAuthHeaders/sseConfigName/REASONING_ENABLED/
   // MODEL_WINDOW_DEFAULT/lastBaseServerTokens/lastBaseChatMode: тело их только читает,
-  // мутации объектов turnsMap/netTurnIds/histCompletion идут по ссылке). Итого 33 имени.
+  // мутации объектов turnsMap/netTurnIds/histCompletion идут по ссылке). Итого 35 имён.
   var aiCmDeepseekIngest = (typeof window !== 'undefined' && window.AiCmDeepseekIngest) || null;
   if (aiCmDeepseekIngest) {
     aiCmDeepseekIngest.__bind({
@@ -1034,6 +1034,8 @@ if (typeof window !== 'undefined') {
       composeTurnText: composeTurnText,
       getModelSlug: getModelSlug,
       emitBaseSnapshot: emitBaseSnapshot,
+      enqueueChainFiles: enqueueChainFiles,
+      applyPendingFileTexts: applyPendingFileTexts,
       // rw: живое состояние кластера, которое тело ПЕРЕЗАПИСЫВАЕТ (get + set).
       get turnsMap() { return turnsMap; },
       set turnsMap(v) { turnsMap = v; },
@@ -1077,6 +1079,12 @@ if (typeof window !== 'undefined') {
   // намеренно: js[] регистрируется атомарно, а песочницы тестов получают конкатенацию
   // через tests/helpers/deepseek-intercept-source.js.
   function ingestHistory(jsonBody) { if (aiCmDeepseekIngest) return aiCmDeepseekIngest.ingestHistory(jsonBody); }
+  // Step D.10: форвардеры файлового модуля — ИМЕННО function declaration (хойстятся):
+  // D.8-связка стоит ВЫШЕ по файлу и передаёт их телу ingestHistory ЗНАЧЕНИЕМ, поэтому на
+  // момент вызова (приёмка истории) aiCmDeepseekFiles уже связан в конце IIFE. Гард — как у
+  // остальных: ядро грузится и без модуля, обёртка не имеет права бросать.
+  function enqueueChainFiles(chain, modelSignals) { if (aiCmDeepseekFiles) return aiCmDeepseekFiles.enqueueChainFiles(chain, modelSignals); }
+  function applyPendingFileTexts() { if (aiCmDeepseekFiles) return aiCmDeepseekFiles.applyPendingFileTexts(); }
 
   // ===== Step D.9: связка модуля SSE (core/deepseek-sse.js) =====
   // Контракт: 6 fn (функции ядра, которые зовут тела модуля — передаются значением:
@@ -1157,6 +1165,37 @@ if (typeof window !== 'undefined') {
   function streamOtherText() { if (aiCmDeepseekSse) return aiCmDeepseekSse.streamOtherText(); }
   function parseSSE(text) { if (aiCmDeepseekSse) return aiCmDeepseekSse.parseSSE(text); }
   function consumeSseResponse(resp, convId) { if (aiCmDeepseekSse) return aiCmDeepseekSse.consumeSseResponse(resp, convId); }
+
+  // ===== Step D.10: связка модуля FILES (core/deepseek-files.js) =====
+  // Контракт: 3 fn (форвардеры D.4 composeTurnText/getModelSlug — пересборка текста хода, и
+  // форвардер D.6 emitBaseSnapshot — ре-эмит базы после прихода текста), 2 rw (turnsMap/
+  // orderCounter: тело заводит ход-заглушку для сообщения из одних вложений и перезаписывает
+  // text уже собранного хода; без сеттера запись в sloppy-режиме молча терялась бы — тот же
+  // довод, что у D.8) и 5 ro (currentConvId — ключ дедупа convId|fileId, originalFetch —
+  // НАТИВНЫЙ fetch, снятый ядром до хука D.7, lastAuthHeaders — авторизация запроса тела
+  // файла, lastBaseServerTokens/lastBaseChatMode — аргументы ре-эмита без пересчёта токенов).
+  // Итого 10 имён. Живое состояние отдаётся аксессорами, поэтому модуль и ядро работают с
+  // ОДНИМИ И ТЕМИ ЖЕ переменными IIFE, а не с копиями значений.
+  var aiCmDeepseekFiles = (typeof window !== 'undefined' && window.AiCmDeepseekFiles) || null;
+  if (aiCmDeepseekFiles) {
+    aiCmDeepseekFiles.__bind({
+      // fn: форвардеры ядра, которые зовёт тело модуля — передаются значением.
+      composeTurnText: composeTurnText,
+      getModelSlug: getModelSlug,
+      emitBaseSnapshot: emitBaseSnapshot,
+      // rw: живое состояние кластера, которое тело ПЕРЕЗАПИСЫВАЕТ (get + set).
+      get turnsMap() { return turnsMap; },
+      set turnsMap(v) { turnsMap = v; },
+      get orderCounter() { return orderCounter; },
+      set orderCounter(v) { orderCounter = v; },
+      // ro: только чтение — тело D.10 эти имена не перезаписывает.
+      get currentConvId() { return currentConvId; },
+      get originalFetch() { return originalFetch; },
+      get lastAuthHeaders() { return lastAuthHeaders; },
+      get lastBaseServerTokens() { return lastBaseServerTokens; },
+      get lastBaseChatMode() { return lastBaseChatMode; }
+    });
+  }
 })();
 
 // v13: экспорт чистого резолвера для контрактного теста (jest/jsdom). В браузере module нет —

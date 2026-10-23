@@ -345,6 +345,17 @@
           });
         }
       } catch (eO22s692) { }
+      // Step D.10 (Вариант B): ПРИНЯТУЮ цепочку отдаём файловому модулю — он заводит
+      // ходы-заглушки для сообщений из одних вложений, ставит файлы в FIFO-очередь и
+      // возвращает уже скачанные тексты в ТОЛЬКО ЧТО пересобранный turnsMap (повторный
+      // ingest не качает файл заново — дедуп convId|fileId и карта fileTextsByMsg живут
+      // дольше одного снимка). Ошибка связки не имеет права сорвать приёмку истории.
+      try {
+        if (typeof enqueueChainFiles === 'function') enqueueChainFiles(chain, chatModelSignals);
+        if (typeof applyPendingFileTexts === 'function') applyPendingFileTexts();
+      } catch (eFilesD10) {
+        if (typeof aiCmDiagWarn === 'function') aiCmDiagWarn('deepseek:ingestHistory', '[deepseek-intercept] связка файлов не сработала:', eFilesD10);
+      }
       var em = emitBaseSnapshot(lastAccumulated, chatMode);
       if (!loggedHistory) {
         loggedHistory = true;

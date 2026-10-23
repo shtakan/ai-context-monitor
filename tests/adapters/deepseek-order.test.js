@@ -148,6 +148,10 @@ beforeAll(() => {
   // форвардером — без модуля обёрнутый fetch доходил бы до ingestHistory, и стенд не
   // увидел бы ни одного события ai-cm-full-history.
   window.eval(DS.moduleSource('deepseek-ingest.js'));
+  // Step D.10: FILES-кластер (очередь текста вложений) — до ядра, после ingest:
+  // без модуля форвардеры enqueueChainFiles/applyPendingFileTexts молчат, и текст
+  // вложения не доезжает до базы.
+  window.eval(DS.moduleSource('deepseek-files.js'));
   // Step D.9: SSE-кластер (СЕКЦИЯ 9 — парсер потока) уехал в core/deepseek-sse.js. Модуль
   // ОБЯЗАН грузиться перед ядром: без него форвардеры parseSSE/consumeSseResponse молчат и
   // стенд не увидел бы ни одного live-хода.

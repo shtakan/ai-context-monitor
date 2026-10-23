@@ -153,7 +153,7 @@ async function ensureInterceptor() {
     // Почему id сменён, а не переиспользован: MV3 registerContentScripts НЕ перечитывает
     // js[] под уже существующим id, унаследованным от прежней версии расширения —
     // без смены id core/gemini-hidden-scroll.js не доехал бы до обновившихся
-    // пользователей (прецедент — DeepSeek, id 'ai-cm-deepseek-intercept-v11' ниже).
+    // пользователей (прецедент — DeepSeek, id 'ai-cm-deepseek-intercept-v12' ниже).
     // Шаг 5 использует ровно тот же приём: id -v3, а прежние -v2 и legacy снимаются ниже.
     // Шаг 6 (кластер парсеров кадра, core/gemini-parse.js) id НЕ меняет: файл добавлен в js[]
     // уже зарегистрированного -v3. Для профиля, где -v3 зарегистрирован РАНЬШЕ (например,
@@ -253,16 +253,16 @@ async function ensureInterceptor() {
     // заполнила бы форвардеры немыми заглушками — диагностика, сетевой дозапрос,
     // URL-гигиена, разбор базы, детектор смены чата, EMIT, перехват сетевого слоя
     // (fetch/XHR) и приёмка истории (turnsMap/полнота базы) выключились бы целиком
-    // до миграции.
+    // до миграции. Step D.10: бамп -v11 → -v12 — добавлен core/deepseek-files.js (кластер FILES: FIFO-очередь вложений, дедуп convId|fileId, fetch через originalFetch, дебаунс-ре-эмит базы); без модуля текст вложения не догружается и файл в экспорте остаётся одной меткой.
     // Прежний -v9 снимается ниже (тихий catch: чистая установка его не имеет).
-    if (ids.indexOf('ai-cm-deepseek-intercept-v11') === -1) {
+    if (ids.indexOf('ai-cm-deepseek-intercept-v12') === -1) {
       try {
-        await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v10'] });
+        await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v10', 'ai-cm-deepseek-intercept-v11'] });
       } catch (eUnregDeepseek) { }
-      await registerSafe('ai-cm-deepseek-intercept-v11', {
-        id: 'ai-cm-deepseek-intercept-v11',
+      await registerSafe('ai-cm-deepseek-intercept-v12', {
+        id: 'ai-cm-deepseek-intercept-v12',
         matches: ['https://chat.deepseek.com/*'],
-        js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-ingest.js', 'core/deepseek-sse.js', 'core/deepseek-intercept.js'],
+        js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-ingest.js', 'core/deepseek-files.js', 'core/deepseek-sse.js', 'core/deepseek-intercept.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false
@@ -271,7 +271,7 @@ async function ensureInterceptor() {
       // (gemini-oracle/overlay/archive-module) глобально проверяют отсутствие в этом файле
       // их ПРЕЖНЕГО лога (скобочная форма с номером -v10) — это их собственный сдвиг id
       // -v10 → -v11, а не признак отката DeepSeek. Версия DeepSeek в логе сохранена.
-      console.log('AI Context Monitor: перехватчик DeepSeek v11 зарегистрирован (мир сайта, document_start)');
+      console.log('AI Context Monitor: перехватчик DeepSeek v12 зарегистрирован (мир сайта, document_start)');
     }
 
     // перехватчик Claude

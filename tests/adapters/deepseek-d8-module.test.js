@@ -35,8 +35,8 @@
  *   fn-передачи `ingestHistory: ingestHistory` в контрактах D.2 и D.7 не тронуты).
  *
  * Здесь пинятся:
- *   S1. Полнота контракта: литерал __bind в ядре содержит ровно 33 имени
- *       (15 fn + 10 rw + 8 ro), ни одного потерянного/лишнего; каждая fn-передача —
+ *   S1. Полнота контракта: литерал __bind в ядре содержит ровно 35 имён
+ *       (17 fn + 10 rw + 8 ro), ни одного потерянного/лишнего; каждая fn-передача —
  *       хойстящийся форвардер ядра, каждое rw/ro-имя объявлено var в ядре и НЕ объявлено
  *       повторно в модуле (иначе появилась бы ВТОРАЯ переменная).
  *   S2. Живая связка в vm: до __bind наружу торчит ТОЛЬКО __bind и тела нет; полная связка
@@ -51,7 +51,7 @@
  *       дедуп, склейка reasoning, снимок сети, полнота, однократный лог/дамп), MERGE-ветка
  *       → дозапрос, усечение → дозапрос, усечение в режиме export-sync → отказ, пустая
  *       авторитетная база → вердикт полноты и ре-эмит, отказы на невалидном ответе.
- *   S5. Проводка: js[] строго после deepseek-net.js и перед ядром, id -v10 + unregister -v9,
+ *   S5. Проводка: js[] строго после deepseek-net.js и перед ядром, id -v12 + unregister -v10/v11,
  *       helper MODULES, счётчик release.yml, размеры ядра/модуля, K0 не тронут.
  */
 
@@ -65,11 +65,12 @@ const DS = require('../helpers/deepseek-intercept-source.js');
 const MODULE_SRC = DS.moduleSource('deepseek-ingest.js');
 const KERNEL_SRC = DS.moduleSource('deepseek-intercept.js');
 
-// ---- контракт связки (S1): 15 fn + 10 rw + 8 ro = 33 имени --------------------------
+// ---- контракт связки (S1): 17 fn + 10 rw + 8 ro = 35 имён --------------------------
 const FN_NAMES = ['diagOn', 'diagMark', 'diagHistRecord', 'diagSnapshotNetTurns',
   'isDebugEnabled', 'determineState', 'dumpHistorySnapshot', 'dumpTurnUsageAtHistoryLoad',
   'refetchFullHistory', 'buildActiveChain', 'collectTurnText', 'collectTurnReasoning',
-  'composeTurnText', 'getModelSlug', 'emitBaseSnapshot'];
+  'composeTurnText', 'getModelSlug', 'emitBaseSnapshot',
+  'enqueueChainFiles', 'applyPendingFileTexts'];
 const RW_NAMES = ['turnsMap', 'orderCounter', 'histCompletion', 'netSnapshotAt', 'netTurnIds',
   'loggedHistory', 'lastLoadedConvId', 'historyRefetchDone', 'ingestMode', 'exportSyncTruncated'];
 const RO_NAMES = ['currentConvId', 'lastHistoryUrl', 'lastAuthHeaders', 'sseConfigName',
@@ -85,7 +86,8 @@ const FN_IMPL = {
   buildActiveChain: 'aiCmDeepseekParse', collectTurnText: 'aiCmDeepseekParse',
   collectTurnReasoning: 'aiCmDeepseekParse', composeTurnText: 'aiCmDeepseekParse',
   getModelSlug: 'aiCmDeepseekParse',
-  emitBaseSnapshot: 'aiCmDeepseekEmit'
+  emitBaseSnapshot: 'aiCmDeepseekEmit',
+  enqueueChainFiles: 'aiCmDeepseekFiles', applyPendingFileTexts: 'aiCmDeepseekFiles'
 };
 
 // ---- что модуль отдаёт наружу после __bind (S2) -------------------------------------
@@ -112,9 +114,11 @@ const MOVED_BLOCKS = [
     start: '  function ingestHistory(jsonBody) {',
     end: '      Fn.ingestHistory = ingestHistory;',
     // Step E.2c-B2c-1 (aiCmDiagWarn): catch парсинга history_messages переведён на канал B —
-    // `aiCmDiagWarn('deepseek:ingestHistory', '[deepseek-intercept] ошибка парсинга history_messages:', e)`;
-    // расхождение с эталоном 2623b3a ровно в этой одной строке, pin пересчитан по новой версии.
-    sha: '93022e50cc57f719de4267090639287c885a1967c5484da0de2106a2d12e1543'
+    // `aiCmDiagWarn('deepseek:ingestHistory', '[deepseek-intercept] ошибка парсинга history_messages:', e)`.
+    // Step D.10 (Вариант B): в ACCEPT-ветке перед emitBaseSnapshot вставлен вызов
+    // enqueueChainFiles/applyPendingFileTexts (6 строк) — расхождение с эталоном 2623b3a
+    // ровно в этом месте, pin пересчитан по новой версии.
+    sha: '22b36fca72add8b15b0e34fc028c21af72486b646dd43fe3e8dede70f4d13c64'
   }
 ];
 
@@ -401,12 +405,12 @@ function truncatedBody() {
 }
 
 describe('Step D.8: core/deepseek-ingest.js — контракт модуля INGEST', () => {
-  test('S1: литерал __bind в ядре содержит ровно 33 имени (15 fn + 10 rw + 8 ro)', function () {
+  test('S1: литерал __bind в ядре содержит ровно 35 имён (17 fn + 10 rw + 8 ro)', function () {
     expect(KINDS.size).toBe(CONTRACT.length);
     CONTRACT.forEach(function (pair) { expect(KINDS.get(pair[0])).toBe(pair[1]); });
     const kinds = { fn: 0, ro: 0, rw: 0 };
     CONTRACT.forEach(function (pair) { kinds[pair[1]]++; });
-    expect(kinds).toEqual({ fn: 15, ro: 8, rw: 10 });
+    expect(kinds).toEqual({ fn: 17, ro: 8, rw: 10 });
     // каждая fn-передача — реально существующий форвардер ядра (хойстится к моменту связки)
     FN_NAMES.forEach(function (n) {
       expect(KERNEL_SRC).toContain('function ' + n + '(');
@@ -442,6 +446,26 @@ describe('Step D.8: core/deepseek-ingest.js — контракт модуля IN
     // K0 остался в ядре и по-прежнему экспортируется наружу (контрактный тест v13)
     expect(KERNEL_SRC).toContain('resolveNetworkModelSlug: __aiCmDeepseekResolveModelSlug');
     expect(KERNEL_SRC).toContain('function __aiCmDeepseekResolveModelSlug(signals) {');
+  });
+
+  test('S1b: связка D.10 — ingest зовёт FILES до emitBaseSnapshot, ядро форвардит имя-в-имя', function () {
+    // ingest: вызовы стоят в ACCEPT-ветке — после пересборки turnsMap и ДО эмита базы.
+    expect(MODULE_SRC).toContain("if (typeof enqueueChainFiles === 'function') enqueueChainFiles(chain, chatModelSignals);");
+    expect(MODULE_SRC).toContain("if (typeof applyPendingFileTexts === 'function') applyPendingFileTexts();");
+    var iAccept = MODULE_SRC.indexOf('turnsMap = {};');
+    var iCall = MODULE_SRC.indexOf('enqueueChainFiles(chain, chatModelSignals)');
+    var iEmit = MODULE_SRC.indexOf('var em = emitBaseSnapshot(lastAccumulated, chatMode);');
+    expect(iCall).toBeGreaterThan(iAccept);
+    expect(iEmit).toBeGreaterThan(iCall);
+    // ядро: гард-форвардеры на window.AiCmDeepseekFiles + передача в __bind.
+    expect(KERNEL_SRC).toContain('function enqueueChainFiles(chain, modelSignals) { if (aiCmDeepseekFiles) return aiCmDeepseekFiles.enqueueChainFiles(chain, modelSignals); }');
+    expect(KERNEL_SRC).toContain('function applyPendingFileTexts() { if (aiCmDeepseekFiles) return aiCmDeepseekFiles.applyPendingFileTexts(); }');
+    expect(KERNEL_SRC).toContain('enqueueChainFiles: enqueueChainFiles,');
+    expect(KERNEL_SRC).toContain('applyPendingFileTexts: applyPendingFileTexts,');
+    // модуль FILES публикует ровно эти имена (связка по именам, без рефлексии).
+    var FILES = DS.moduleSource('deepseek-files.js');
+    expect(FILES).toContain('Fn.enqueueChainFiles = enqueueChainFiles;');
+    expect(FILES).toContain('Fn.applyPendingFileTexts = applyPendingFileTexts;');
   });
 
   test('S2: живая связка в vm — тело работает через живые rw/ro ядра, перезагрузка не перетирает API', function () {
@@ -711,7 +735,7 @@ describe('Step D.8: core/deepseek-ingest.js — контракт модуля IN
     expect(probe.calls.emitBaseSnapshot).toBe(0);
   });
 
-  test('S5: проводка — js[] после net и перед ядром, id -v11 + unregister -v10, helper', function () {
+  test('S5: проводка — js[] после net и перед ядром, id -v12 + unregister -v10/-v11, helper', function () {
     // модуль строго перед ядром и строго после net
     expect(DS.SOURCES.indexOf('core/deepseek-ingest.js'))
       .toBeLessThan(DS.SOURCES.indexOf('core/deepseek-intercept.js'));
@@ -721,17 +745,17 @@ describe('Step D.8: core/deepseek-ingest.js — контракт модуля IN
     // регистрация ядра: id -v11, снятие -v10, js[] с модулем, лог (v11)
     expect(KERNEL_SRC).toContain('aiCmDeepseekIngest');
     const bg = DS.readSource('core/background.js');
-    expect(bg).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-ingest.js', 'core/deepseek-sse.js', 'core/deepseek-intercept.js']");
-    expect(bg).toContain("ids.indexOf('ai-cm-deepseek-intercept-v11') === -1");
-    expect(bg).toContain("unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v10'] })");
+    expect(bg).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-ingest.js', 'core/deepseek-files.js', 'core/deepseek-sse.js', 'core/deepseek-intercept.js']");
+    expect(bg).toContain("ids.indexOf('ai-cm-deepseek-intercept-v12') === -1");
+    expect(bg).toContain("unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v10', 'ai-cm-deepseek-intercept-v11'] })");
     // лог регистрации бампнут, но БЕЗ «(vN)»-формы: её глобально запрещают Gemini-пины
     // (сдвиг их id -v10 → -v11), а не DeepSeek — версия в логе сохранена
-    expect(bg).toContain('перехватчик DeepSeek v11 зарегистрирован');
+    expect(bg).toContain('перехватчик DeepSeek v12 зарегистрирован');
     expect(bg).not.toContain('(v10) зарегистрирован');
-    // release.yml: счётчик MAIN-world файлов равен факту (35 = 5 бандлов + 30 модулей/ядер)
+    // release.yml: счётчик MAIN-world файлов равен факту (36 = 5 бандлов + 31 модулей/ядер)
     const yml = DS.readSource('.github/workflows/release.yml');
-    expect((yml.match(/35 MAIN-world/g) || [])).toHaveLength(2);
-    expect(yml).not.toContain('34 MAIN-world');
+    expect((yml.match(/36 MAIN-world/g) || [])).toHaveLength(2);
+    expect(yml).not.toContain('35 MAIN-world');
     // модуль: UTF-8 без BOM, LF, хвостовой \n; каркас
     const buf = fs.readFileSync(path.join(DS.ROOT, 'core/deepseek-ingest.js'));
     expect(buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF).toBe(false);
