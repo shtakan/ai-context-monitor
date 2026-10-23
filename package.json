@@ -10,7 +10,8 @@
     "build:watch": "node build.mjs --watch",
     "clean": "node build.mjs --clean",
     "lint": "eslint .",
-    "lint:quiet": "eslint . --quiet"
+    "lint:quiet": "eslint . --quiet",
+    "lint:baseline": "eslint . --max-warnings 556"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

@@ -50,7 +50,7 @@ const artifactsAvailable = !synthForced &&
   ARTIFACTS.every(function (p) { return fs.existsSync(path.join(__dirname, '..', '..', p)); });
 const suite = artifactsAvailable ? describe : describe.skip;
 if (!artifactsAvailable) {
-  // eslint-disable-next-line no-console
+
   console.warn('[§п.8-A] deepseek: ' + (synthForced
     ? 'AI_CM_CONTRACT_SYNTH=1 — принудительный синтез, контракт требует реальных артефактов'
     : 'артефакты отсутствуют в CI (реальный payload доступен локально)') + ' — ' + ARTIFACTS.join(', '));

@@ -110,7 +110,7 @@ function makeEmitter(opts) {
     baseSeen: o.baseSeen !== false,
     currentAdapter: o.adapter || { siteName: site, extractMessages: function () { return []; } }
   };
-  // eslint-disable-next-line no-new-func
+
   const fn = new Function('ctx', 'with (ctx) { (function () {\n' + src + '\n})(); }');
   fn(ctx);
   return {

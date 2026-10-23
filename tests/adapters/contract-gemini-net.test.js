@@ -34,7 +34,7 @@ const drExists = fs.existsSync(path.join(__dirname, '..', '..', DR));
 const synthForced = String(process.env.AI_CM_CONTRACT_SYNTH || '') === '1';
 const suiteSkipped = !drExists || synthForced;
 if (suiteSkipped) {
-  // eslint-disable-next-line no-console
+
   console.warn('[§п.8-A] gemini: ' + (synthForced
     ? 'AI_CM_CONTRACT_SYNTH=1 — принудительный синтез, контракт требует реального payload'
     : 'артефакт отсутствует в CI (реальный payload доступен локально)') + ' — ' + DR);

@@ -603,7 +603,7 @@ function runListener(ctx, detail) {
   ctx.window.dispatchEvent = function (ev) { if (ctx.handler) ctx.handler(ev); };
   ctx.CustomEvent = function (type, init) { this.type = type; this.detail = (init || {}).detail; };
   injectIntoGlobalWindow(ctx);
-  // eslint-disable-next-line no-new-func
+
   const fn = new Function('ctx', 'with (ctx) { (function () {\n' + src + '\n})(); }');
   fn(ctx);
   return ctx;

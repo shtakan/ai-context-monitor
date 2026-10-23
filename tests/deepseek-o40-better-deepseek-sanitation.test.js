@@ -2048,7 +2048,7 @@ function makeEmitter(opts) {
     EXPORT_MGR_SRC.indexOf('function sanitizeGeminiText(s)'),
     EXPORT_MGR_SRC.indexOf('// T1-fix#3')
   ) + '\nctx.__emit = aiCmCollectExportSource;';
-  // eslint-disable-next-line no-new-func
+
   const fn = new Function('ctx', 'with (ctx) { (function () {\n' + src + '\n})(); }');
   fn(ctx);
   return { ctx: ctx, logs: logs };

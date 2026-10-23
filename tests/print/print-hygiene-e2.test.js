@@ -99,7 +99,7 @@ function loadPrintScript(chrome, consoleImpl) {
   // URLSearchParams подменяем на стаб: печатная форма всегда открывается как
   // print.html?tab=<id> (chrome.tabs.create), а jsdom-URL теста параметра не несёт.
   const params = { get: function (name) { return (name === 'tab') ? '4242' : null; } };
-  // eslint-disable-next-line no-new-func
+
   const fn = new Function('window', 'document', 'chrome', 'console', 'setTimeout', 'clearTimeout', 'URLSearchParams', PRINT_JS);
   fn(window, document, chrome, consoleImpl || console, function (cb, ms) { return setTimeout(cb, ms); }, function (id) { return clearTimeout(id); }, function () { return params; });
 }

@@ -896,7 +896,7 @@ describe('M-4.2: print.js — роли и шапка печатной формы
     };
     window.print = function () { };
     const params = { get: function (name) { return (name === 'tab') ? '7' : null; } };
-    // eslint-disable-next-line no-new-func
+
     const fn = new Function('window', 'document', 'chrome', 'console', 'setTimeout', 'clearTimeout', 'URLSearchParams', printJs);
     try {
       fn(window, document, chromeMock(locale), console,
@@ -1226,7 +1226,7 @@ describe('M-4.4: локализация privacy/privacy.html и docs/index.html'
    */
   function bootPage(html, locale) {
     const doc = pageDocument(html);
-    // eslint-disable-next-line no-new-func
+
     const fn = new Function('document', 'chrome', i18nApplySrc);
     fn(doc, locale ? chromeMock(locale) : undefined);
     doc.dispatchEvent(new Event('DOMContentLoaded'));

@@ -284,7 +284,7 @@ describe('O-35: QwenAdapter — detectModel', function () {
   const P5_SNAPSHOT = path.join(ROOT, 'tools', 'qwen-dom-snapshot-26.09.26.json');
   const p5Skipped = !fs.existsSync(P5_SNAPSHOT);
   if (p5Skipped) {
-    // eslint-disable-next-line no-console
+
     console.warn('[§п.8-A] qwen P5: артефакт отсутствует в CI (реальный снимок доступен ' +
       'локально) — tools/qwen-dom-snapshot-26.09.26.json');
   }

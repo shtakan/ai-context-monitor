@@ -117,7 +117,7 @@ function makeEmitter(opts) {
   };
   const src = sliceSource(EXPORT_MGR_SRC, 'function sanitizeGeminiText(s)', '// T1-fix#3') +
     '\nctx.__emit = aiCmCollectExportSource;';
-  // eslint-disable-next-line no-new-func
+
   const fn = new Function('ctx', 'with (ctx) { (function () {\n' + src + '\n})(); }');
   fn(ctx);
   return {
@@ -355,7 +355,7 @@ async function renderPdfForm(history) {
     const params = { get: function (name) { return (name === 'tab') ? '4242' : null; } };
     window.print = function () { };
     const consoleStub = { log: function () { }, warn: function () { }, error: function () { } };
-    // eslint-disable-next-line no-new-func
+
     const fn = new Function('window', 'document', 'chrome', 'console', 'setTimeout', 'clearTimeout', 'URLSearchParams', PRINT_JS);
     fn(window, document, chromeMock, consoleStub,
       function (cb, ms) { return setTimeout(cb, ms); },

@@ -382,7 +382,7 @@ function makeEmitter(opts) {
     '\nctx.__emit = aiCmCollectExportSource;' +
     '\nctx.__setHidden = function (v) { aiCmIncludeHiddenInExport = (v === true); };' +
     '\nctx.__hidden = function () { return aiCmIncludeHiddenInExport; };';
-  // eslint-disable-next-line no-new-func
+
   const fn = new Function('ctx', 'with (ctx) { (function () {\n' + src + '\n})(); }');
   fn(ctx);
   return {
@@ -447,7 +447,7 @@ async function renderPdfForm(history) {
     const params = { get: function (name) { return (name === 'tab') ? '4242' : null; } };
     window.print = function () { };
     const consoleStub = { log: function () { }, warn: function () { }, error: function () { } };
-    // eslint-disable-next-line no-new-func
+
     const fn = new Function('window', 'document', 'chrome', 'console', 'setTimeout', 'clearTimeout', 'URLSearchParams', PRINT_JS);
     fn(window, document, chromeMock, consoleStub,
       function (cb, ms) { return setTimeout(cb, ms); },
@@ -465,7 +465,7 @@ async function renderPdfForm(history) {
 // Реальный DOM-адаптер DeepSeek (панель размышлений) в текущем jsdom-документе
 // =====================================================================================
 function bootDeepSeekAdapter() {
-  // eslint-disable-next-line no-new-func
+
   const factory = new Function('debugLog', BASE_ADAPTER_SRC + '\n' + ADAPTER_SRC +
     '\nreturn DeepSeekAdapter;');
   return new (factory(function () { }))();

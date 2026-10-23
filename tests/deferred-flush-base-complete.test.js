@@ -23,7 +23,7 @@ function makeFlushTraced() {
   sandbox.clearTimeout = () => { sandbox.cleared++; };
   sandbox.debugLog = () => {};
   sandbox.aiCmWriteCurrentHistory = () => { sandbox.wrote++; };
-  // eslint-disable-next-line no-new-func
+
   const fn = new Function(
     'clearTimeout', 'debugLog', 'aiCmWriteCurrentHistory', 'S', 'cid', 'reason',
     fnSrc + '; aiCmFlushDeferredHistWrite(cid, reason);'

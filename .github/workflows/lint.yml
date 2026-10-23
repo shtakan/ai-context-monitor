@@ -45,6 +45,15 @@ jobs:
         continue-on-error: false
         run: npm run lint
 
+      # П.5: baseline-гейт. В отличие от warn-only шага выше порог `--max-warnings`
+      # делает шаг блокирующим: превышение baseline валит CI (exit 1), т.е. новый
+      # дефект класса ESLint больше не может проехать незамеченным.
+      # Измерено после П.5: 34 неиспользуемые директивы убраны (590 → 556),
+      # no-func-assign в core/deepseek-sse.js погашен inline-директивой (556 → 555).
+      # Пин 556 оставлен по плану: один warning запаса, регрессия с +2 уже красная.
+      - name: ESLint baseline (blocking)
+        run: npm run lint:baseline
+
       # esbuild only transpiles — type-checking stays on tsc (Phase 1 contract).
       - name: Type-check
         run: npx tsc --noEmit

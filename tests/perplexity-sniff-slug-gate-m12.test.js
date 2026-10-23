@@ -111,7 +111,7 @@ function installIntercept(pathname, handler, xhr) {
   };
   window.addEventListener('ai-cm-full-history', onHist);
   delete window.__aiCmPerplexityInterceptInstalled;
-  // eslint-disable-next-line no-eval
+
   eval(SRC);
   return {
     fetchMock: fetchMock,

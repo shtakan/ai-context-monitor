@@ -268,7 +268,7 @@ describe('O-32 (2): каноническая база треда не разду
       'f5          ' + fpLine(f5Fp),
       'spa-return  ' + fpLine(spaFp)
     ];
-    // eslint-disable-next-line no-console
+
     console.log('[O-32 fingerprint]\n' + lines.join('\n'));
 
     expect(coldFp.hash).toBe(target.hash);              // форма пути не меняет идентичность треда
@@ -327,7 +327,7 @@ describe('O-32 (2): каноническая база треда не разду
     const coldFp = fingerprintOf(cold.events[cold.events.length - 1]);
     const f5Fp = fingerprintOf(f5.events[f5.events.length - 1]);
     const spaFp = fingerprintOf(spa.events[spa.events.length - 1]);
-    // eslint-disable-next-line no-console
+
     console.log('[O-32 fingerprint · live path]\n' +
       ['cold-start  ' + fpLine(coldFp), 'f5          ' + fpLine(f5Fp), 'spa-return  ' + fpLine(spaFp)].join('\n'));
     expect(f5Fp).toEqual(coldFp);

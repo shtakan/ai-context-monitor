@@ -169,7 +169,7 @@ function makeWriteSandbox(opts) {
     // `var aiCmIncludeHiddenInExport = false;` объявлен ВНУТРИ среза единой точки сбора,
     // поэтому тумблер включается ровно так же, как в сьютах O-7/O-39/D-O41 (сеттер в скоупе).
     'ctx.__setHidden = function (v) { aiCmIncludeHiddenInExport = (v === true); };';
-  // eslint-disable-next-line no-new-func
+
   new Function('ctx', 'with (ctx) { (function () {\n' + code + '\n})(); }')(ctx);
   return {
     ctx: ctx,

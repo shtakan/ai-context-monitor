@@ -110,7 +110,7 @@
   // ---- BIND-зона: 26 тел K6 + мост probe/flush; свободные имена резолвятся в with (D) ----
 
   // E3 (2026-10-11): первый захват активной конфигурации (пусто → значение) будит ядро: оно пересчитает slug ходов и опубликует снимок заново (имя локализуется — матч в ядре структурный).
-  var e3IngestSettings = ingestModelSettings;
+  var e3IngestSettings = ingestModelSettings; // eslint-disable-next-line no-func-assign -- E3 wrapper of hoisted name
   ingestModelSettings = function (json) { var e3HadConfig = !!sseConfigName; e3IngestSettings(json);
     if (!e3HadConfig && sseConfigName) { try { window.dispatchEvent(new CustomEvent('ai-cm-deepseek-settings-captured')); } catch (eE3) { diagMark('e3-settings-event-skip', {}); } } };
   /** v13: сигналы модели текущего/последнего потока для __aiCmDeepseekResolveModelSlug. @returns {AiCmDeepSeekModelSignals} */

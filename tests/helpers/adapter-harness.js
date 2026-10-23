@@ -254,7 +254,7 @@ function loadSource(files, options) {
   let value;
   let ctor = null;
   try {
-    // eslint-disable-next-line no-new-func
+
     if (process.env.AI_CM_HARNESS_DUMP) require('fs').writeFileSync(process.env.AI_CM_HARNESS_DUMP, body);
     ctor = Function.apply(null, args.concat([body]));
     value = ctor.apply(null, argValues);

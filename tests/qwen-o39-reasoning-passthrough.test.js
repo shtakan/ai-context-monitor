@@ -142,7 +142,7 @@ function makeBaseWriter(opts) {
     'ctx.__sanitize = sanitizeGeminiText;\n' +
     // O-7 (тумблер): в песочнице переменная локальна — переключатель наружу.
     'ctx.__setHidden = function (v) { aiCmIncludeHiddenInExport = (v === true); };';
-  // eslint-disable-next-line no-new-func
+
   const fn = new Function('ctx', 'with (ctx) { (function () {\n' + src + '\n})(); }');
   fn(ctx);
   // hidden: true — песочница в режиме ON (тумблер «Включать reasoning…» ВКЛ). Пины, чей

@@ -84,7 +84,7 @@ function makeEmitter(opts) {
     baseSeen: o.baseSeen === true,
     currentAdapter: o.adapter || { siteName: o.site || 'qwen', extractMessages: function () { return []; } }
   };
-  // eslint-disable-next-line no-new-func
+
   const fn = new Function('ctx', 'with (ctx) { (function () {\n' + src + '\n})(); }');
   fn(ctx);
   // hidden: true — песочница в режиме ON. Пины, чей инвариант «размышление доезжает до файла,

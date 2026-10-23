@@ -122,7 +122,7 @@ function installIntercept(pathname, handler) {
   const onHist = function (ev) { events.push(ev.detail); };
   window.addEventListener('ai-cm-full-history', onHist);
   delete window.__aiCmPerplexityInterceptInstalled;
-  // eslint-disable-next-line no-eval
+
   eval(SRC);
   return { fetchMock: fetchMock, events: events, cleanup: function () { window.removeEventListener('ai-cm-full-history', onHist); } };
 }

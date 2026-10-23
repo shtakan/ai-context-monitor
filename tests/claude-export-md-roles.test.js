@@ -317,7 +317,7 @@ function makeHistoryChain(opts) {
     fnDecl(BASE_HANDLER_SRC, 'aiCmDedupeExportSource') + '\n' +
     fnDecl(BASE_HANDLER_SRC, 'buildHistoryMessages') + '\n' +
     'ctx.__history = buildHistoryMessages;';
-  // eslint-disable-next-line no-new-func
+
   const fn = new Function('ctx', 'with (ctx) { (function () {\n' + src + '\n})(); }');
   fn(ctx);
   return ctx.__history();
@@ -839,7 +839,7 @@ function snapshotFromRaw(raw) {
     'var __parsed = parseHistory(__raw);\n' +
     'ctx.__parsed = __parsed;\n' +
     'emitSnapshot(__parsed, "raw-test");';
-  // eslint-disable-next-line no-new-func
+
   const fn = new Function('ctx', '__raw', 'with (ctx) { (function () {\n' + src + '\n})(); }');
   fn(ctx, raw);
   return { parsed: ctx.__parsed, detail: ctx.__detail };
@@ -880,7 +880,7 @@ function chainFromSnapshot(detail, opts) {
     '__baseWrite(__snapshot.messageTexts, __snapshot.messageIds, __snapshot);\n' +
     'ctx.__base = { texts: lastBaseTexts, msgs: lastDetailMessages, prepared: aiCmBasePrepared, count: baseCount, text: baseText };\n' +
     'ctx.__rows = buildHistoryMessages();';
-  // eslint-disable-next-line no-new-func
+
   const fn = new Function('ctx', 'with (ctx) { (function () {\n' + src + '\n})(); }');
   fn(ctx);
   return { base: ctx.__base, rows: ctx.__rows };
