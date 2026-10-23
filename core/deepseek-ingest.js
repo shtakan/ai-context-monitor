@@ -350,6 +350,19 @@
       // возвращает уже скачанные тексты в ТОЛЬКО ЧТО пересобранный turnsMap (повторный
       // ingest не качает файл заново — дедуп convId|fileId и карта fileTextsByMsg живут
       // дольше одного снимка). Ошибка связки не имеет права сорвать приёмку истории.
+      // TEMP-DIAG (ВРЕМЕННО, убрать после диагностики): сырые fragments каждого сообщения
+      // ACCEPT-цепочки — ровно то, из чего extractFileRefs вынимает file_id/имя файла.
+      try {
+        for (var tdi = 0; tdi < chain.length; tdi++) {
+          var tdm = chain[tdi];
+          console.log('deepseek-ingest-chain-fragments', tdi,
+            JSON.stringify(tdm && tdm.fragments));
+        }
+      } catch (eTempDiagChain) {
+        if (typeof aiCmDiagWarn === 'function') {
+          aiCmDiagWarn('deepseek:ingestHistory', '[deepseek-intercept] temp-diag fragments dump упал:', eTempDiagChain);
+        }
+      }
       try {
         if (typeof enqueueChainFiles === 'function') enqueueChainFiles(chain, chatModelSignals);
         if (typeof applyPendingFileTexts === 'function') applyPendingFileTexts();

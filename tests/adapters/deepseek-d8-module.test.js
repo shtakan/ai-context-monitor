@@ -118,7 +118,10 @@ const MOVED_BLOCKS = [
     // Step D.10 (Вариант B): в ACCEPT-ветке перед emitBaseSnapshot вставлен вызов
     // enqueueChainFiles/applyPendingFileTexts (6 строк) — расхождение с эталоном 2623b3a
     // ровно в этом месте, pin пересчитан по новой версии.
-    sha: '22b36fca72add8b15b0e34fc028c21af72486b646dd43fe3e8dede70f4d13c64'
+    // TEMP-DIAG: там же перед связкой файлов добавлен временный дамп
+    // `console.log('deepseek-ingest-chain-fragments', ...)` по chain (диагностика вложений);
+    // pin вновь пересчитан по фактическим байтам, блок остаётся неизменным ориентиром.
+    sha: 'd0759a54ca3a378c6d2abc9d54bc49d56e921b9209c00e2519f516d8f1e574cc'
   }
 ];
 

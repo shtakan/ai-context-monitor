@@ -271,6 +271,19 @@ describe('Step D.10: fetchFileContent — сетевой контракт фай
     expect(h.fetchCalls[2].url).toBe('https://files.deepseeksvc.com/file?file_id=plain_id');
   });
 
+  test('S2c: старый параметр `id=` внутри signed_path нормализуется в `file_id=`', () => {
+    const h = makeHarness();
+    // сайт подписывает путь со старым именем параметра: `?id=` → `?file_id=`
+    h.Fn.fetchFileContent('123', '/file?id=123');
+    expect(h.fetchCalls[0].url).toBe('https://files.deepseeksvc.com/file?file_id=123');
+    // имя параметра после `&` тоже нормализуется, остальные параметры и подпись не тронуты
+    h.Fn.fetchFileContent('123', '/file?sign=deadbeef&id=123');
+    expect(h.fetchCalls[1].url).toBe('https://files.deepseeksvc.com/file?sign=deadbeef&file_id=123');
+    // уже правильное имя не переписывается повторно: `file_id=` не содержит отдельного `id=`
+    h.Fn.fetchFileContent('123', '/file?file_id=123');
+    expect(h.fetchCalls[2].url).toBe('https://files.deepseeksvc.com/file?file_id=123');
+  });
+
   test('S3: в запросе нет Authorization/Content-Type и нет кук (simple CORS, credentials omit)', () => {
     const h = makeHarness();
     h.Fn.fetchFileContent('f1', 'signed/abc');

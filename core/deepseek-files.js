@@ -224,13 +224,16 @@
   }
 
   // URL тела файла: параметр называется `file_id` (не `id`) — так его ждёт файловый хост.
-  // Готовый signed_path — уже подписанный сайтом путь `/file?file_id=...`: склеиваем его с
-  // хостом БАЙТ-В-БАЙТ (URL-кодировать нельзя — сломает подпись) и НЕ дописываем ничего:
+  // Готовый signed_path — уже подписанный сайтом путь `/file?...`: склеиваем его с хостом
+  // БАЙТ-В-БАЙТ (остальное URL-кодировать нельзя — сломает подпись) и НЕ дописываем ничего:
   // `ty=r` сайт не требует, а его добавление ломало запрос.
+  // Сайт подписывает путь со старым именем параметра (`id=`), поэтому нормализуем ТОЛЬКО имя
+  // первого параметра: `id=` в начале строки параметров либо сразу после `&` → `file_id=`;
+  // прочие вхождения (значения, `file_id=`, `&xid=`) не трогаем.
   function resolveFileUrl(fileId, signedPath) {
     var id = (fileId === undefined || fileId === null) ? '' : String(fileId);
     var signed = fileStr(signedPath);
-    if (signed.indexOf('/file?') === 0) return FILES_HOST + signed;
+    if (signed.indexOf('/file?') === 0) return FILES_HOST + signed.replace(/([?&])id=/, '$1file_id=');
     if (signed) return FILES_FILE_URL + '?file_id=' + encodeURIComponent(id) + '&state=' + signed;
     return FILES_FILE_URL + '?file_id=' + encodeURIComponent(id.replace(/^file-/, ''));
   }
@@ -372,6 +375,9 @@
         var cid = fileStr(convId);
         if (!cid && typeof currentConvId === 'string') cid = currentConvId;
         var msgId = (msg && msg.message_id != null) ? String(msg.message_id) : '';
+        // TEMP-DIAG (ВРЕМЕННО, убрать после диагностики): сколько ссылок на файлы реально
+        // вынули из сообщения — 0 здесь означает, что FILE-фрагмент не распознан.
+        console.log('deepseek-files-enqueue', { convId: cid, msgId: msgId, refsCount: refs.length });
         var added = 0;
         for (var i = 0; i < refs.length; i++) {
           var ref = refs[i];
@@ -468,6 +474,11 @@
         var fetchImpl = (typeof originalFetch === 'function') ? originalFetch
           : ((typeof window !== 'undefined' && typeof window.fetch === 'function') ? window.fetch : null);
         if (!fetchImpl) return Promise.resolve({ ok: false, reason: 'no-fetch', text: '' });
+        // TEMP-DIAG (ВРЕМЕННО, убрать после диагностики): реальный URL запроса тела файла
+        // и признак того, что подпись state дошла до места запроса.
+        console.log('deepseek-files-fetch-start', {
+          fileId: fileId, url: url, hasSigned: !!signedPath
+        });
         filesDiag('deepseek-files-fetch-start', {
           fileId: fileId,
           url: url,
