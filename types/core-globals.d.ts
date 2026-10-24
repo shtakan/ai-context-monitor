@@ -82,6 +82,19 @@ declare function aiCmMetricBaseText(fallback: string): string;
 /** base-handler.js: история из последнего принятого снимка сети ([{role,text}]). */
 declare function buildHistoryMessages(): Array<{ role: string; text: string; [k: string]: unknown }>;
 
+/**
+ * base-handler.js (Step D.10, A-лайт): полная цепочка перед композицией файла —
+ * дождаться текста вложений (до 2000 мс) → сетевой дозапрос истории (O-18) → колбэк.
+ * Старый порядок «сеть → файл» сохранён: ожидание вложений добавлено ПЕРЕД ним.
+ * typeof-гард у читателей (content.js/export-manager.js) — в срез-песочницах без
+ * этой функции вызов деградирует до aiCmExportNetSyncThen.
+ */
+declare function aiCmExportFilesThenNetSync(
+  convId: string | null,
+  cb: (() => void) | null,
+  netTimeoutMs?: number
+): void;
+
 // --- core/hybrid-tail.js: кросс-модульные функции ----------------------------
 
 /** Нормализация строки для сравнения скелетов (lowercase + сжатие разделителей). */
