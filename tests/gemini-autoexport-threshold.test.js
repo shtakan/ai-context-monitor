@@ -290,11 +290,20 @@ describe('O-36 D3 (живой харнесс): loader-stop не выгружае
     expect(h.logs.join('\n')).not.toContain('[AI CM][auto-export] fired convId='); // анкер с префиксом: «already-fired» содержит «fired convId=»
   });
 
-  test('курсор продолжения жив → второй триггер молчит (прежний гейт не ослаблен)', function () {
+  test('курсор продолжения жив при НЕподтверждённой базе → второй триггер молчит (гейт не ослаблен)', function () {
+    // v95 (FALSE-CURSOR-LIVE): ложный pendingCursor при reachedStart=1 снят — гейт по курсору
+    // применяется только к чатам, где сервер полноту не подтвердил (reachedStart=0)
     const h = loadManager({ ctx: { autoExportLastPct: 95 } });
-    h.fire(loaderStop({ pendingCursor: true }));
+    h.fire(loaderStop({ pendingCursor: true, reachedStart: false }));
     expect(h.downloads).toEqual([]);
     expect(h.logs.join('\n')).not.toContain('base-complete trigger');
+  });
+
+  test('ложный курсор при подтверждённой полноте → файл ЕСТЬ (v95 FALSE-CURSOR-LIVE)', function () {
+    const h = loadManager({ ctx: { autoExportLastPct: 95 } });
+    h.fire(loaderStop({ pendingCursor: true }));
+    expect(h.downloads).toHaveLength(1);
+    expect(h.ctx.aiCmCursorLiveByConv[CID]).toBe(false);
   });
 
   test('другой чат в событии → вердикта нет (прежний convId-гард)', function () {

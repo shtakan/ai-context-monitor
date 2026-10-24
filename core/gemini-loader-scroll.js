@@ -203,6 +203,7 @@
         var usedFallbackScroll = false; // v1.6 (D14): в прогоне был v78 fallback-real-scroll
         var notHiddenWait = 0; // v71: итераций ожидания hide (видимый скролл запрещён)
         var lastEpoch = -1;  // v53: последнее виденное поколение курсора
+        var baseStall95 = 0; // v95: «неподвижные» итерации при УЖЕ подтверждённой полноте (не обнуляется ветками resume/top-not-reached)
         var iter = 0;
         var maxScrollHSeen = sc.height(); // v1.14.2 (COLLAPSE-GUARD): пер-ран максимум scrollHeight — сброс в старте прогона
         // H9 (untrusted-top): снапшот поколения курсора на старте прогона (hadCursor — по росту cursorEpoch;
@@ -257,13 +258,28 @@
           }
           // v53: любой history-write с continuation-курсором сбрасывает счётчики
           // стабилизации и столла — «новое поколение» курсора оживляет цикл.
+          // v95 (EPOCH-NO-RESET-WITHOUT-GROWTH): сброс счётчиков оправдан ТОЛЬКО реальным
+          // ростом скроллера. Живой дефект: курсор-эпоха менялась на каждом history-write,
+          // высота при этом не росла (h стабилен) — noGrowth/stallRetry обнулялись каждый
+          // круг, v94 base-complete-stall и data-complete недостижимы, цикл молотил все
+          // 90 итераций / ~100с (автоскролл «долгих визуальных эффектов»). Теперь эпоха
+          // без роста высоты счётчики НЕ трогает — итерации идут к стабильному выходу.
           if (D.cursorEpoch !== lastEpoch) {
+            var __epochH95 = -1;
+            try { __epochH95 = (sc && typeof sc.height === 'function') ? sc.height() : -1; } catch (eEh95) { __epochH95 = -1; }
+            var __epochGrew95 = (lastH === -1) || (__epochH95 < 0) || (__epochH95 > lastH + LOADER_RESUME_DELTA);
             lastEpoch = D.cursorEpoch;
-            noGrowth = 0;
-            stallRetry = 0;
-            anyGrowth = false;
-            lastH = -1;
-            debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' cursor-epoch=' + lastEpoch + ' → счётчики сброшены (курсор жив) convId=' + convId);
+            if (__epochGrew95) {
+              noGrowth = 0;
+              stallRetry = 0;
+              anyGrowth = false;
+              lastH = -1;
+              debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' cursor-epoch=' + lastEpoch + ' → счётчики сброшены (курсор жив, высота растёт) convId=' + convId);
+            } else {
+              debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' cursor-epoch=' + lastEpoch +
+                ' → счётчики СОХРАНЕНЫ (высота не изменилась h=' + __epochH95 + ', noGrowth=' + noGrowth +
+                ', stallRetry=' + stallRetry + ') convId=' + convId);
+            }
           }
           // v30.7 / v52/v53: data-complete ТОЛЬКО при реальной полноте снимка (нет курсора
           // продолжения); при живом курсоре путь ЗАПРЕЩЁН (инвариант — только stall-retry).
@@ -443,6 +459,34 @@
             ' scrollEngaged=' + (D.loaderState.scrollEngaged ? '1' : '0') +
             ' hide=' + (D.loaderState.hideApplied ? 'applied' : 'not-applied') +
             ' latch=' + (D.loaderDoneMap[convId] ? 'done' : 'reset') + (D.loaderRetryUsedMap[convId] ? '-retry-used' : ''));
+          // v95 (BASE-COMPLETE-EARLY-BREAK): сервер УЖЕ подтвердил полноту (base-complete-early:
+          // historyFullByQuiet + reachedStart), а высота h не растёт — новых старших окон не
+          // будет, скролл/столл-ретраи крутятся вхолостую. Счётчик baseStall95 не обнуляется
+          // ветками resume/top-not-reached ниже (в отличие от noGrowth), поэтому выход
+          // гарантирован и при живом ложном pendingCursor. Перед выходом — контрольный
+          // перемер (симметрия v94): подросшая высота означает настоящую догрузку → продолжаем.
+          if (__baseCompleteNow87 === true && D.reachedStart === true &&
+              lastH !== -1 && !(h > lastH + LOADER_RESUME_DELTA)) {
+            baseStall95++;
+            if (baseStall95 >= LOADER_STABLE_NEED) {
+              await sleepUntilFired(LOADER_RECHECK_MS, convId);
+              if (typeof aiCmFiredByConv !== 'undefined' && aiCmFiredByConv[convId]) { doneReason = 'export-done'; break; }
+              var hBE95 = sc.height();
+              if (!(hBE95 > lastH + LOADER_RESUME_DELTA)) {
+                doneReason = 'base-complete-stall';
+                debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' base-complete-stall-early h=' + h +
+                  ' stable=' + baseStall95 + '/' + LOADER_STABLE_NEED +
+                  ' pendingCursor=' + (D.pendingCursor ? '1' : '0') +
+                  ' (полнота подтверждена сервером, высота не растёт — выхожу) convId=' + convId);
+                break;
+              }
+              baseStall95 = 0;
+              noGrowth = 0;
+              debugLog('log', '[AI CM][Gemini][loader] reason=resume-after-base-stall h=' + lastH + '→' + hBE95 + ' convId=' + convId);
+            }
+          } else {
+            baseStall95 = 0;
+          }
           if (lastH !== -1 && !(h > lastH + LOADER_RESUME_DELTA)) {
             noGrowth++;
             if (noGrowth >= LOADER_STABLE_NEED) {

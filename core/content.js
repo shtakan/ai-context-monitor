@@ -878,6 +878,9 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
         // base-unconfirmed) — флашим сразу при подтверждении полноты 0→1, не ждём 60s.
         // Гарды внутри flush сами требуют baseComplete && !loaderRunning.
         try { aiCmFlushDeferredHistWrite(cid79, 'base-complete'); } catch (eF79) { swallowSoft(eF79, 'content:full-history-flush-deferred'); }
+        // v95 (METRICS-SYNC): флаш записал финальный срез — histKey/pct пересчитываем
+        // по нему же, иначе бейдж/запись остаются на устаревшем снимке (101 вместо 120).
+        try { aiCmResyncMetricsAfterFlush(cid79, 'base-complete'); } catch (eRs79) { swallowSoft(eRs79, 'content:metrics-resync-flush'); }
       }
     } catch (e79) { swallowSoft(e79, 'content:full-history-complete-transition'); }
   }
@@ -2047,6 +2050,65 @@ function aiCmHeuristicHoldForByok(svc, text) {
   var errText = (typeof lastCountTokensErrorText === 'string') ? lastCountTokensErrorText : '';
   if (errText && errText === text) return false;
   return true;
+}
+
+// v95 (METRICS-SYNC): после deferred flush история уже содержит ФИНАЛЬНЫЙ срез базы
+// (объединённая база: архив + live, 120 msgs), а histKey/pct этого скоупа остались на
+// предыдущем снимке (101 msgs) — UI показывал устаревший срез, а следующий
+// processAndSend мог перезаписать свежую историю укороченной.
+// Хелпер считает histKey по ТОМУ ЖЕ массиву, что ушёл в запись (aiCmCurrentBaseSnapshot
+// — единая точка сбора + добор объединённой базой), принудительно принимает финальную
+// базу (только рост: просадка счётчика запрещена) и один раз пересчитывает pct/бейдж.
+function aiCmResyncMetricsAfterFlush(cid, reason) {
+  try {
+    if (baseSeen !== true) return false;
+    if (typeof aiCmCurrentBaseSnapshot !== 'function') return false;
+    var curCid = getCurrentConvId() || '';
+    if (!cid || (curCid && cid !== curCid)) return false;
+    var msgs = aiCmCurrentBaseSnapshot(cid);
+    if (!Array.isArray(msgs) || msgs.length === 0) return false;
+    var prevCount = (typeof baseCount === 'number') ? baseCount : 0;
+    if (msgs.length < prevCount) {
+      // Финальный срез не может быть короче уже принятого — защита от просадки бейджа.
+      debugLog('log', '[AI CM][export] metrics-resync skip reason=shrink convId=' + cid +
+        ' final=' + msgs.length + ' current=' + prevCount);
+      return false;
+    }
+    var texts = [];
+    for (var i = 0; i < msgs.length; i++) {
+      var mi = /** @type {any} */ (msgs[i]);
+      texts.push(String((mi && mi.text) || ''));
+    }
+    var joined = texts.join('\n');
+    // histKey — ТА ЖЕ форма, что у штатной записи истории (content.js: baseCount + '|' + baseText.length),
+    // иначе дедуп ниже сравнивал бы несравнимое и ресинк либо не срабатывал, либо дублировал запись.
+    var newKey = msgs.length + '|' + joined.length;
+    var sameCount = (msgs.length === prevCount);
+    try {
+      if (typeof aiCmDiagLine === 'function') {
+        aiCmDiagLine('o22-metrics-resync', {
+          ts: Date.now(), convId: cid, reason: reason || '(none)',
+          finalMsgs: msgs.length, prevMsgs: prevCount,
+          histKey: newKey, lastKey: (typeof lastHistoryWroteKey !== 'undefined') ? lastHistoryWroteKey : undefined,
+          verdict: (sameCount && newKey === lastHistoryWroteKey) ? 'skip' : 'resync'
+        });
+      }
+    } catch (eRsD) { swallowSoft(eRsD, 'content:metrics-resync-diag'); }
+    if (sameCount && newKey === lastHistoryWroteKey) {
+      debugLog('log', '[AI CM][export] metrics-resync skip reason=same convId=' + cid + ' histKey=' + newKey);
+      return false; // срез уже финальный
+    }
+    baseCount = msgs.length;
+    lastBaseTexts = texts;
+    baseText = joined;
+    // Ключ фиксирует ИМЕННО записанный срез: устаревшая (короткая) база его не сдвинет,
+    // а следующая реальная запись снова сравнит живой histKey с этим ключом.
+    lastHistoryWroteKey = newKey;
+    debugLog('log', '[AI CM][export] metrics-resync reason=' + (reason || '(none)') + ' convId=' + cid +
+      ' msgs=' + prevCount + '->' + msgs.length + ' histKey=' + newKey);
+    processAndSend(); // пересчёт pct по финальной базе + перерисовка бейджа
+    return true;
+  } catch (eRs) { swallowSoft(eRs, 'content:metrics-resync'); return false; }
 }
 
 function processAndSend() {

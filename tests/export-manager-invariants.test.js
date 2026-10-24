@@ -11,8 +11,14 @@
  *   D  — воспроизведение: пороговый путь (maybeAutoExport ← badge-update content.js:2318)
  *        при baseComplete=1 и ЖИВОМ курсоре (aiCmCursorLiveByConv[cid]=1, loaderRunning=0)
  *        не должен выдавать файл.
- *   R1 — loader-stop re-check (export-manager.js:1793) с pendingCursor=1 — не стреляет.
- *   R2 — триггер base-complete (export-manager.js:1820) с живым курсором — не стреляет.
+ *   R1 — v95 (FALSE-CURSOR-LIVE): loader-stop с pendingCursor=1, но сервер УЖЕ подтвердил
+ *        полноту (reachedStart=1 + baseComplete=1) → файл ЕСТЬ: pendingCursor в этом
+ *        состоянии недостоверен (эвристика classifyOpaque), запирать чат нельзя.
+ *   R1b — контроль незавершённого чата: reachedStart=0 + pendingCursor=1 → файла нет,
+ *        лог отказа с pendingCursor=1/baseComplete=1/fullServer=0, поздний re-check стоит
+ *        и планирует возобновляемый ретрай (3 × ~2 с, reason=cursor-live).
+ *   R2 — триггер base-complete (export-manager.js:1965) при подтверждённой полноте тоже
+ *        не глушится ложным курсором; при неподтверждённой (reachedStart=0) — молчит.
  *   R3 — контроль: курсор ушёл, база полная → ровно один файл (гейт не сломан в другую
  *        сторону: инвариант не должен глушить штатный fired).
  *   D2 — fired-латч → цикл скролла завершается reason='export-done' на первой же итерации,
@@ -182,31 +188,82 @@ describe('Инвариант автоэкспорта: fired ⟹ pendingCursor=0
   });
 
   // ===================================================================================
-  // R1: loader-stop re-check — уже закрыто (export-manager.js:1793)
+  // R1 (v95 FALSE-CURSOR-LIVE): полное серверное подтверждение важнее эвристики курсора
   // ===================================================================================
-  test('R1: loader-stop с pendingCursor=1 — файла нет, латч не взведён', function () {
+  test('R1 (v95): loader-stop с pendingCursor=1 при reachedStart=1 — файл есть (ложный курсор)', function () {
     const h = loadManager({ ctx: { autoExportLastPct: 95 } });
     h.fire(loaderStop({ pendingCursor: true }));
 
-    expect(h.downloads).toEqual([]);
-    expect(h.ctx.autoExportFired).toEqual({});
-    // ровно одна строка отказа, с обоими инвариантами в detail-полях
-    const kept = h.line('loader-stop с неполной базой');
-    expect(kept).toHaveLength(1);
-    expect(kept[0]).toContain('pendingCursor=1');
-    expect(kept[0]).toContain('baseComplete=1');
-    // одноразовый поздний re-check спланирован, но не выстреливает при живом курсоре
-    expect(h.ctx.aiCmLateCheckByConv[CID]).toBe(1);
+    expect(h.downloads).toHaveLength(1);
+    expect(h.line('[AI CM][auto-export] fired convId=')).toHaveLength(1);
+    expect(h.ctx.autoExportFired['gemini|' + CID]).toBe(1);
+    // ложный cursor-live не взведён; причина отказа с неполной базой не печатается
+    expect(h.ctx.aiCmCursorLiveByConv[CID]).toBe(false);
+    expect(h.line('loader-stop с неполной базой')).toEqual([]);
+  });
+
+  test('R1b (v95): незавершённый чат (reachedStart=0) — файла нет, ретрай запланирован', function () {
+    jest.useFakeTimers();
+    try {
+      // не-Gemini: гейт «gemini ждёт подтверждённой базы» не отсекает вызов заранее —
+      // проверяется именно cursor-live + возобновляемый ретрай
+      const h = loadManager({
+        ctx: {
+          autoExportLastPct: 95,
+          currentAdapter: { siteName: 'chatgpt' },
+          siteName: 'chatgpt'
+        }
+      });
+      h.fire(loaderStop({ pendingCursor: true, reachedStart: false }));
+
+      expect(h.downloads).toEqual([]);
+      expect(h.ctx.autoExportFired).toEqual({});
+      expect(h.ctx.aiCmCursorLiveByConv[CID]).toBe(true);
+      // ровно одна строка отказа, с обоими инвариантами и fullServer=0
+      const kept = h.line('loader-stop с неполной базой');
+      expect(kept).toHaveLength(1);
+      expect(kept[0]).toContain('pendingCursor=1');
+      expect(kept[0]).toContain('baseComplete=1');
+      expect(kept[0]).toContain('fullServer=0');
+      expect(h.ctx.aiCmLateCheckByConv[CID]).toBe(1);
+      // возобновляемый поздний экспорт: skip reason=cursor-live + ретрай 1/3 на 2000 мс
+      expect(h.line('skip reason=cursor-live')).toHaveLength(1);
+      expect(h.line('late retry 1/3 scheduled in 2000ms')).toHaveLength(1);
+      // 3 ретрая с шагом ~2 с; на четвёртой попытке — exhausted, файла так и нет
+      jest.advanceTimersByTime(2000);
+      expect(h.line('late retry 2/3')).toHaveLength(1);
+      jest.advanceTimersByTime(2000);
+      expect(h.line('late retry 3/3')).toHaveLength(1);
+      jest.advanceTimersByTime(2000);
+      expect(h.line('late retry exhausted')).toHaveLength(1);
+      expect(h.downloads).toEqual([]);
+    } finally {
+      jest.clearAllTimers();
+      jest.useRealTimers();
+    }
   });
 
   // ===================================================================================
-  // R2: триггер base-complete (export-manager.js:1820) — гейт по курсору
+  // R2: триггер base-complete (export-manager.js:1965) — гейт по курсору только для
+  // неподтверждённой полноты
   // ===================================================================================
-  test('R2: триггер base-complete при живом курсоре не стреляет', function () {
+  test('R2 (v95): подтверждённая полнота снимает ложный cursor-live в обоих ветках события', function () {
     const h = loadManager({ ctx: { autoExportLastPct: 95 } });
-    // два события: второе приходит уже с записанным aiCmCursorLiveByConv[cid]=1
+    // два события: второе приходит уже с записанным aiCmCursorLiveByConv[cid]
     h.fire(loaderStop({ running: true, pendingCursor: true }));
+    expect(h.ctx.aiCmCursorLiveByConv[CID]).toBe(false); // running-ветка
     h.fire(loaderStop({ pendingCursor: true }));
+    expect(h.ctx.aiCmCursorLiveByConv[CID]).toBe(false); // stop-ветка
+    expect(h.downloads).toHaveLength(1);
+    // именно на этом гейте стоит base-complete trigger (:1965): латч не взведён → не блокирует
+    expect(h.line('fired convId=').length).toBe(1);
+    expect(h.ctx.autoExportFired['gemini|' + CID]).toBe(1);
+  });
+
+  test('R2b (v95): при reachedStart=0 триггер base-complete молчит (курсор жив)', function () {
+    const h = loadManager({ ctx: { autoExportLastPct: 95 } });
+    h.fire(loaderStop({ running: true, pendingCursor: true, reachedStart: false }));
+    h.fire(loaderStop({ pendingCursor: true, reachedStart: false }));
 
     expect(h.downloads).toEqual([]);
     expect(h.logs.join('\n')).not.toContain('base-complete trigger');
@@ -306,8 +363,9 @@ describe('Ранний выход из цикла скролла по fired (v88
     const first = LOADER_SRC.indexOf(GATE_OPEN);
     expect(first).toBeGreaterThan(-1);
     // ровно два БЛОЧНЫХ потребителя латча: loop-head (D2) и collapse-guard (D3);
-    // 8 пост-await гейтов v90.1 считаются отдельным пином (fired-after-await: S2)
-    expect(LOADER_SRC.split(GATE_OPEN).length - 1).toBe(10);
+    // 9 пост-await гейтов (v90.1: 8 + v95 base-complete-stall-early) считаются отдельным пином
+    // (fired-after-await: S2)
+    expect(LOADER_SRC.split(GATE_OPEN).length - 1).toBe(11);
 
     // порядок в теле while (true): wall-clock → гейт fired → iter++ → первый гейт полноты
     const wall = LOADER_SRC.indexOf('if (Date.now() - runStartAt > LOADER_RUN_WALL_CLOCK_MS)');

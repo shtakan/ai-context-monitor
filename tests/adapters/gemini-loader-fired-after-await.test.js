@@ -60,9 +60,9 @@ const loopBody = () => {
 // S1/S2: источник — гейт после каждого await, счёт и порядок
 // =====================================================================================
 describe('v90.1 fired-after-await: S1 гейт после каждого await цикла', () => {
-  test('S1: после каждого из восьми await первым исполняемым стейтментом идёт гейт export-done', () => {
+  test('S1: после каждого из девяти await первым исполняемым стейтментом идёт гейт export-done', () => {
     const parts = loopBody().split('await sleepUntilFired(');
-    expect(parts).toHaveLength(9); // 8 await → 8 хвостов
+    expect(parts).toHaveLength(10); // 9 await → 9 хвостов (8 v90.1 + 1 v95 base-complete-stall-early)
     parts.slice(1).forEach((tail, i) => {
       const next = tail
         .split('\n')
@@ -74,9 +74,9 @@ describe('v90.1 fired-after-await: S1 гейт после каждого await �
   });
 
   test('S1: каждый гейт завершает итерацию немедленно — break, причина ровно export-done', () => {
-    expect(countOf(LOADER, GATE_LINE)).toBe(8);
-    // 'export-done' присваивается только гейтами (8 пост-await + 2 блочных) — иных источников нет
-    expect(countOf(LOADER, "doneReason = 'export-done';")).toBe(10);
+    expect(countOf(LOADER, GATE_LINE)).toBe(9);
+    // 'export-done' присваивается только гейтами (9 пост-await + 2 блочных) — иных источников нет
+    expect(countOf(LOADER, "doneReason = 'export-done';")).toBe(11);
     // тело цикла после гейта продолжается только собственным break (или закрытием ветки) —
     // ни одного «гейт с последующей логикой» между await и выходом нет
     expect(loopBody()).not.toContain('break; } else');
@@ -84,9 +84,9 @@ describe('v90.1 fired-after-await: S1 гейт после каждого await �
 });
 
 describe('v90.1 fired-after-await: S2 счёт гейтов и их порядок', () => {
-  test('S2: 10 гейтов = 2 блочных (loop-head + collapse-guard) + 8 пост-await, все внутри цикла', () => {
-    expect(countOf(LOADER, GATE_OPEN)).toBe(10);
-    expect(countOf(loopBody(), GATE_OPEN)).toBe(10); // все гейты — в теле while (true)
+  test('S2: 11 гейтов = 2 блочных (loop-head + collapse-guard) + 9 пост-await, все внутри цикла', () => {
+    expect(countOf(LOADER, GATE_OPEN)).toBe(11);
+    expect(countOf(loopBody(), GATE_OPEN)).toBe(11); // все гейты — в теле while (true)
 
     // loop-head гейт остался ПЕРВЫМ и стоит до iter++ (порядок v88.1 не сдвинут)
     const firstGate = LOADER.indexOf(GATE_OPEN);
@@ -105,10 +105,10 @@ describe('v90.1 fired-after-await: S2 счёт гейтов и их порядо
 // S3: контракт v88.2 не сдвинут
 // =====================================================================================
 describe('v90.1 fired-after-await: S3 контракт прерываемого сна не изменён', () => {
-  test('S3: хелпер один, окно 150 мс, восемь await и два прямых D.sleep — как в v88.2', () => {
+  test('S3: хелпер один, окно 150 мс, девять await и два прямых D.sleep — как в v88.2/v95', () => {
     expect(countOf(LOADER, 'async function sleepUntilFired(')).toBe(1);
     expect(LOADER).toContain('Math.min(150, ms - (Date.now() - start))');
-    expect(countOf(LOADER, 'await sleepUntilFired(')).toBe(8);
+    expect(countOf(LOADER, 'await sleepUntilFired(')).toBe(9);
     expect(countOf(LOADER, 'await D.sleep(')).toBe(2);
     // wall-clock fail-safe (v1.17) не тронут: объявление + единственный guard
     expect(countOf(LOADER, 'LOADER_RUN_WALL_CLOCK_MS')).toBe(2);

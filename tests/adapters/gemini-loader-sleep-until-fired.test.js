@@ -92,8 +92,8 @@ describe('v88.2 sleepUntilFired: D1 источник хелпера', () => {
 });
 
 describe('v88.2 sleepUntilFired: D2 все паузы цикла переведены на хелпер', () => {
-  test('D2: восемь мест цикла используют хелпер, второго способа спать в цикле нет', () => {
-    expect(countOf(LOADER, 'await sleepUntilFired(')).toBe(8);
+  test('D2: девять мест цикла используют хелпер, второго способа спать в цикле нет', () => {
+    expect(countOf(LOADER, 'await sleepUntilFired(')).toBe(9);
     // оставшиеся прямые D.sleep — только два законных: преднамеренный предцикловой поллинг
     // скроллера и одно окно внутри самого хелпера; в теле цикла прямых D.sleep нет
     expect(countOf(LOADER, 'await D.sleep(')).toBe(2);
@@ -107,10 +107,10 @@ describe('v88.2 sleepUntilFired: D2 все паузы цикла перевед�
 
   test('D2: каждое окно цикла получает convId (латч привязан к чату)', () => {
     const calls = LOADER.split('await sleepUntilFired(').slice(1);
-    expect(calls).toHaveLength(8);
+    expect(calls).toHaveLength(9);
     for (const tail of calls) expect(tail).toContain(', convId);');
 
-    // все восемь окон лежат ВНУТРИ цикла (между while (true) и пост-цикловым стопом):
+    // все девять окон лежат ВНУТРИ цикла (между while (true) и пост-цикловым стопом):
     // с v90.1 после каждого окна стоит собственный fired-гейт (см.
     // tests/adapters/gemini-loader-fired-after-await.test.js), loop-head остаётся первым
     const loopStart = LOADER.indexOf('while (true) {');
@@ -125,7 +125,7 @@ describe('v88.2 sleepUntilFired: D2 все паузы цикла перевед�
     }
     expect(countOf(LOADER, 'await sleepUntilFired(LOADER_STEP_MS, convId);')).toBe(5);
     expect(countOf(LOADER, 'await sleepUntilFired(SCROLL_PAUSE_HIDDEN_MS, convId);')).toBe(2);
-    expect(countOf(LOADER, 'await sleepUntilFired(LOADER_RECHECK_MS, convId);')).toBe(1);
+    expect(countOf(LOADER, 'await sleepUntilFired(LOADER_RECHECK_MS, convId);')).toBe(2);
   });
 });
 
@@ -335,12 +335,13 @@ describe('v88.2 sleepUntilFired: R1 E2E выход по export-done ≤150 мс'
 describe('v88.2 sleepUntilFired: R2 соседний контракт не сдвинут', () => {
   const GATE_OPEN = "if (typeof aiCmFiredByConv !== 'undefined' && aiCmFiredByConv[convId]) {";
 
-  test('R2: 10 гейтов = 2 блочных (loop-head + collapse-guard) + 8 пост-await (v90.1)', () => {
+  test('R2: 11 гейтов = 2 блочных (loop-head + collapse-guard) + 9 пост-await (v90.1 + v95)', () => {
     // v90.1 (FIRED-AFTER-AWAIT) добавил по гейту после каждого из восьми await — тот же текст,
-    // та же причина 'export-done', тот же break. Адресность (гейт первым стейтментом после
-    // каждого await; loop-head первым, collapse-guard последним) и поведение —
+    // та же причина 'export-done', тот же break. v95 (BASE-COMPLETE-EARLY-BREAK) добавил девятый:
+    // после контрольного перемера в ветке base-complete-stall-early. Адресность (гейт первым
+    // стейтментом после каждого await; loop-head первым, collapse-guard последним) и поведение —
     // tests/adapters/gemini-loader-fired-after-await.test.js (S1/S2, R3–R5).
-    expect(countOf(LOADER, GATE_OPEN)).toBe(10);
+    expect(countOf(LOADER, GATE_OPEN)).toBe(11);
     // хелпер читает латч брас-less — в счёт гейтов цикла он не попадает
     expect(countOf(LOADER, 'aiCmFiredByConv[convId]) return;')).toBe(1);
   });

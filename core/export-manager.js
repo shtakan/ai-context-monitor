@@ -478,6 +478,30 @@ try { aiCmLatchCacheReady(); } catch (eO3init) { }
 
 // v53: одноразовый поздний re-check автоэкспорта после loader-stop с неполной базой/
 // живым курсором. Стреляем только когда база полная И курсор ушёл И лоадер остановлен.
+// v95 (RESUMABLE-LATE): ложный cursor-live (pendingCursor=1 на уже полном снапшоте) больше
+// НЕ теряет поздний экспорт: пропуск reason=cursor-live планирует до 3 ретраев по ~2с —
+// база успевает дозреть, а латч aiCmLateCheckByConv[cid] остаётся взведённым между попытками.
+var AI_CM_LATE_RETRY_MAX = 3;
+var AI_CM_LATE_RETRY_MS = 2000;
+var aiCmLateRetryByConv = {};
+function aiCmScheduleLateAutoExportRetry(cid) {
+  try {
+    if (!cid) return false;
+    var used = aiCmLateRetryByConv[cid] || 0;
+    if (used >= AI_CM_LATE_RETRY_MAX) {
+      debugLog('log', '[AI CM][auto-export] late retry exhausted ' + used + '/' + AI_CM_LATE_RETRY_MAX +
+        ' convId=' + cid + ' reason=cursor-live');
+      return false;
+    }
+    aiCmLateRetryByConv[cid] = used + 1;
+    debugLog('log', '[AI CM][auto-export] late retry ' + (used + 1) + '/' + AI_CM_LATE_RETRY_MAX +
+      ' scheduled in ' + AI_CM_LATE_RETRY_MS + 'ms convId=' + cid + ' reason=cursor-live');
+    setTimeout(function () {
+      try { aiCmTryLateAutoExport(cid); } catch (eTick) { swallowSoft(eTick, 'export:late-retry-tick'); }
+    }, AI_CM_LATE_RETRY_MS);
+    return true;
+  } catch (eSch) { swallowSoft(eSch, 'export:scheduleLateRetry'); return false; }
+}
 function aiCmTryLateAutoExport(cid) {
   try {
     if (!cid || !aiCmLateCheckByConv[cid]) return;
@@ -485,8 +509,14 @@ function aiCmTryLateAutoExport(cid) {
     // v1.13.1: для Gemini требуется подтверждённое начало (reachedStart=true)
     if (currentAdapter && currentAdapter.siteName === 'gemini' && aiCmBaseConfirmedByConv[cid] !== 1) return;
     if (aiCmLoaderRunningByConv[cid]) return;   // лоадер бежит — ждём стоп
-    if (aiCmCursorLiveByConv[cid]) return;      // курсор ещё жив — не стреляем неполное
+    if (aiCmCursorLiveByConv[cid]) {            // курсор ещё жив — не стреляем неполное
+      debugLog('log', '[AI CM][auto-export] skip reason=cursor-live convId=' + cid +
+        ' pct=' + autoExportLastPct + ' baseComplete=' + (baseComplete === true ? '1' : '0') + ' → late-retry');
+      aiCmScheduleLateAutoExportRetry(cid);
+      return;
+    }
     aiCmLateCheckByConv[cid] = 0;
+    aiCmLateRetryByConv[cid] = 0;               // успешный проход — счётчик ретраев свободен
     if (typeof autoExportLastPct === 'number' && autoExportLastPct >= 0) {
       debugLog('log', '[AI CM][auto-export] late re-check base-complete convId=' + cid +
         ' pct=' + autoExportLastPct + ' pendingCursor=0 baseComplete=1');
@@ -651,6 +681,27 @@ function aiCmUnionFileMessages(cid, localMsgs, isLowConfidence) {
   }
   return localMsgs;
 }
+// v95 (METRICS-SYNC): ЕДИНЫЙ снапшот базы «как он пишется в историю» — тот же массив,
+// что уходит в файл/запись: единая точка сбора (aiCmCollectExportSource) → схлопка E-2 →
+// добор объединённой базой (архив + live) при неподтверждённой полноте. Вынесен из
+// aiCmWriteCurrentHistory БЕЗ изменения логики: по нему же считает histKey/pct ресинк
+// метрик (content.js:aiCmResyncMetricsAfterFlush), иначе UI остаётся на устаревшем срезе
+// (101 msgs), пока в историю уже записаны 120.
+function aiCmCurrentBaseSnapshot(cid) {
+  try {
+    var cidSnap = cid || lastEmitConvId || getCurrentConvId() || '';
+    var msgs = (typeof aiCmCollectExportSource === 'function') ? aiCmCollectExportSource() : null;
+    if (Array.isArray(msgs) && msgs.length > 0 && typeof aiCmDedupeExportSource === 'function') {
+      msgs = aiCmDedupeExportSource(msgs).messages;
+    }
+    if (!Array.isArray(msgs) || msgs.length === 0) {
+      msgs = (typeof buildHistoryMessages === 'function') ? buildHistoryMessages() : null;
+    }
+    if (!Array.isArray(msgs)) return null;
+    msgs = aiCmUnionFileMessages(cidSnap, msgs, (baseComplete !== true));
+    return msgs;
+  } catch (eSnap) { swallowSoft(eSnap, 'export:currentBaseSnapshot'); return null; }
+}
 function aiCmWriteCurrentHistory() {
   try {
     if (!isExtensionValid() || !baseSeen || !baseText) return;
@@ -663,14 +714,18 @@ function aiCmWriteCurrentHistory() {
     // в файл автоэкспорта. Прямой buildHistoryMessages остаётся фолбэком ровно для двух
     // случаев: срез-песочницы (хелперов нет) и пустая база (единой точке нечего отдать) —
     // там поведение прежнее 1:1.
-    var msgsWrite = (typeof aiCmCollectExportSource === 'function') ? aiCmCollectExportSource() : null;
-    if (Array.isArray(msgsWrite) && msgsWrite.length > 0 && typeof aiCmDedupeExportSource === 'function') {
-      msgsWrite = aiCmDedupeExportSource(msgsWrite).messages;
+    // v95: сбор вынесен в aiCmCurrentBaseSnapshot (байты те же) — по нему считает
+    // histKey/pct ресинк метрик после deferred flush.
+    var msgsWrite = (typeof aiCmCurrentBaseSnapshot === 'function') ? aiCmCurrentBaseSnapshot(cid) : null;
+    if (!Array.isArray(msgsWrite) || msgsWrite.length === 0) {
+      // O-49 fallback (1:1 прежнее поведение): срез-песочница (хелпера нет) или пустая база.
+      msgsWrite = (typeof aiCmCollectExportSource === 'function') ? aiCmCollectExportSource() : null;
+      if (Array.isArray(msgsWrite) && msgsWrite.length > 0 && typeof aiCmDedupeExportSource === 'function') {
+        msgsWrite = aiCmDedupeExportSource(msgsWrite).messages;
+      }
+      if (!Array.isArray(msgsWrite) || msgsWrite.length === 0) msgsWrite = buildHistoryMessages();
+      msgsWrite = aiCmUnionFileMessages(cid, msgsWrite, (baseComplete !== true));
     }
-    if (!Array.isArray(msgsWrite) || msgsWrite.length === 0) msgsWrite = buildHistoryMessages();
-    // O-49 (isLowConfidenceBase=true): не терять полную базу того же разговора — добор
-    // объединённой базой (архив + live), той же, что идёт в файл автоэкспорта.
-    msgsWrite = aiCmUnionFileMessages(cid, msgsWrite, (baseComplete !== true));
     var histSnapshot = {
       host: window.location.hostname,
       convId: lastEmitConvId,
@@ -1834,21 +1889,35 @@ window.addEventListener('ai-cm-loader-state', function (/** @type {CustomEvent} 
   try {
     var d = ev && ev.detail;
     if (!d || !d.convId) return;
+    // v95 (FALSE-CURSOR-LIVE, зеркало v94): сервер УЖЕ подтвердил полноту снапшота
+    // (reachedStart + historyFullByQuiet/baseComplete) — pendingCursor в этом состоянии
+    // недостоверен (эвристика classifyOpaque по b64-строке внутри полного снапшота).
+    // Взводить по нему cursor-live нельзя: чат навсегда остаётся «недогруженным» для
+    // автоэкспорта. Неполные чаты (reachedStart=0) ведут себя ровно как раньше.
+    // Поля читаются в обоих написаниях: MAIN-диспатч несёт baseComplete (= historyFullByQuiet),
+    // песочницы/будущие отправители могут прислать historyFullByQuiet напрямую.
+    var __fullServer95 = (d.reachedStart === true || d.reachedStart === 1) &&
+      (d.historyFullByQuiet === true || d.historyFullByQuiet === 1 || d.baseComplete === true);
     if (d.running) {
       aiCmLoaderRunningByConv[d.convId] = 1;
-      aiCmCursorLiveByConv[d.convId] = !!d.pendingCursor;
+      aiCmCursorLiveByConv[d.convId] = (__fullServer95 === true) ? false : !!d.pendingCursor;
       // v1.13.1: подтверждение полноты — baseComplete при reachedStart=true
       aiCmBaseConfirmedByConv[d.convId] = (d.baseComplete === true && d.reachedStart === true) ? 1 : 0;
       return;
     }
     delete aiCmLoaderRunningByConv[d.convId];
-    aiCmCursorLiveByConv[d.convId] = !!d.pendingCursor;
+    aiCmCursorLiveByConv[d.convId] = (__fullServer95 === true) ? false : !!d.pendingCursor;
     // v1.13.1: подтверждение полноты базы по стопу лоадера (baseComplete при reachedStart=true)
     aiCmBaseConfirmedByConv[d.convId] = (d.baseComplete === true && d.reachedStart === true) ? 1 : 0;
     // v1.13.1: при неподтверждённой базе deferred НЕ флашится — висит до base-complete
     // (либо видимого таймаута «счётчик стабилен»).
     if (aiCmBaseConfirmedByConv[d.convId] === 1) {
       aiCmFlushDeferredHistWrite(d.convId, 'loader-stop'); // v52: флаш отложенной записи истории
+      // v95 (METRICS-SYNC): после флаша история содержит ФИНАЛЬНЫЙ срез, а histKey/pct
+      // content.js могли остаться на предыдущем (устаревшем) — принудительный пересчёт.
+      if (typeof aiCmResyncMetricsAfterFlush === 'function') {
+        aiCmResyncMetricsAfterFlush(d.convId, 'loader-stop');
+      }
     } else {
       debugLog('log', '[AI CM][export] deferred kept reason=base-unconfirmed convId=' + d.convId +
         ' baseComplete=' + (d.baseComplete === true ? '1' : '0') +
@@ -1862,12 +1931,16 @@ window.addEventListener('ai-cm-loader-state', function (/** @type {CustomEvent} 
       // планируем одноразовый поздний re-check на момент, когда база впервые станет полной
       // (порог превышен → fired + лог). Это закрывает холодный старт (недозагрузка истории).
       // v1.13.1: требуется подтверждённая полнота (reachedStart=true) — иначе ждём.
-      if (baseComplete !== true || aiCmBaseConfirmedByConv[cid] !== 1 || !!d.pendingCursor) {
+      // v95: ложный pendingCursor (сервер уже подтвердил полноту) больше НЕ запирает
+      // чат в вечном ожидании — гейт по курсору применяется только к неподтверждённой базе.
+      if (baseComplete !== true || aiCmBaseConfirmedByConv[cid] !== 1 ||
+          (!!d.pendingCursor && __fullServer95 !== true)) {
         aiCmLateCheckByConv[cid] = 1;
         aiCmTryLateAutoExport(cid);
         debugLog('log', '[AI CM][auto-export] loader-stop с неполной базой → не стреляю, жду base-complete convId=' + cid +
           ' pct=' + autoExportLastPct + ' pendingCursor=' + (!!d.pendingCursor ? '1' : '0') +
-          ' baseComplete=' + (baseComplete === true ? '1' : '0'));
+          ' baseComplete=' + (baseComplete === true ? '1' : '0') +
+          ' fullServer=' + (__fullServer95 === true ? '1' : '0'));
       } else {
         debugLog('log', '[AI CM][auto-export] re-check после стопа лоадера convId=' + cid + ' pct=' + autoExportLastPct);
         maybeAutoExport(autoExportLastPct);
@@ -1945,6 +2018,9 @@ window.addEventListener('ai-cm-loader-state', function (/** @type {CustomEvent} 
   Api.loadAutoExportPerSitePct = loadAutoExportPerSitePct;
   Api.sessionFiredCache = sessionFiredCache;
   Api.aiCmTryLateAutoExport = aiCmTryLateAutoExport;
+  Api.aiCmScheduleLateAutoExportRetry = aiCmScheduleLateAutoExportRetry; // v95: возобновляемый поздний экспорт
+  Api.aiCmLateRetryByConv = aiCmLateRetryByConv;
+  Api.aiCmCurrentBaseSnapshot = aiCmCurrentBaseSnapshot;   // v95: единый снапшот базы (флаш + ресинк метрик)
   Api.detectTrimStateFallback = detectTrimStateFallback;
   Api.geminiDetectTrim = geminiDetectTrim;
   Api.maybeTrimExport = maybeTrimExport;

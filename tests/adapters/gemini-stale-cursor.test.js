@@ -51,8 +51,10 @@ const DATA_COMPLETE = "if (D.historyFullByQuiet === true && D.reachedStart === t
 // D1: источник — место, условие, неприкосновенность соседних контрактов
 // =====================================================================================
 describe('v94 stale-cursor: D1 источник', () => {
-  test('D1: base-complete-stall объявлен ровно один раз, тело — break с этой причиной', () => {
-    expect(countOf(LOADER, STALL_REASON)).toBe(1);
+  test('D1: base-complete-stall объявлен ровно дважды, тело — break с этой причиной', () => {
+    // v94: один (историческая ветка после no-growth); v95: второй (раньше — до no-growth/resume,
+    // чтобы счетчики resume/top-not-reached не продлевали холостые итерации)
+    expect(countOf(LOADER, STALL_REASON)).toBe(2);
     expect(LOADER).toContain(
       "if (D.historyFullByQuiet === true && D.reachedStart === true) {\n" +
         "                doneReason = 'base-complete-stall';\n" +
@@ -61,14 +63,18 @@ describe('v94 stale-cursor: D1 источник', () => {
     );
   });
 
-  test('D1: выход стоит после no-growth/resume и ДО ветки D.pendingCursor', () => {
+  test('D1: исторический выход стоит после no-growth/resume, v95-выход — ДО них, оба до D.pendingCursor', () => {
     const iNoGrowth = LOADER.indexOf('if (noGrowth >= LOADER_STABLE_NEED) {');
     const iResume = LOADER.indexOf('if (hc > lastH + LOADER_RESUME_DELTA) {');
-    const iStall = LOADER.indexOf(STALL_REASON);
+    const iStallEarly = LOADER.indexOf(STALL_REASON); // v95: base-complete-stall-early
+    const iStall = LOADER.indexOf(STALL_REASON, iStallEarly + 1); // v94: исторический
     const iPending = LOADER.indexOf('if (D.pendingCursor) {', iNoGrowth);
 
     expect(iNoGrowth).toBeGreaterThan(-1);
     expect(iResume).toBeGreaterThan(iNoGrowth);
+    // v95: ранний выход срабатывает до веток resume/top-not-reached (иначе они обнуляют счётчики)
+    expect(iStallEarly).toBeGreaterThan(-1);
+    expect(iStallEarly).toBeLessThan(iNoGrowth);
     expect(iStall).toBeGreaterThan(iResume); // рост h обрабатывается раньше → пагинация цела
     expect(iStall).toBeLessThan(iPending); // и раньше stall-retry (иначе 90 итераций)
   });
@@ -85,7 +91,7 @@ describe('v94 stale-cursor: D1 источник', () => {
     expect(countOf(LOADER, "doneReason = 'timeout';")).toBe(1);
     expect(countOf(LOADER, 'LOADER_RUN_WALL_CLOCK_MS')).toBe(2);
     expect(countOf(LOADER, "'wall-clock-timeout'")).toBe(1);
-    expect(countOf(LOADER, 'await sleepUntilFired(')).toBe(8);
+    expect(countOf(LOADER, 'await sleepUntilFired(')).toBe(9);
   });
 });
 
@@ -96,6 +102,8 @@ describe('v94 stale-cursor: D1 источник', () => {
  * opts.grow      — растёт ли scrollHeight на каждом поиске контейнера (иначе копится no-growth);
  * opts.complete  — сервер уже подтвердил полноту (historyFullByQuiet+reachedStart); default true;
  * opts.pending   — false → pendingCursor=null; иначе живой (застоявшийся) курсор 'cur-stale'.
+ * opts.bumpEpoch — v95: на каждом чтении высоты курсор-эпоха растёт (MAIN-мир прислал новый
+ *                  курсор) при НЕИЗМЕННОЙ высоте — проверка, что счётчики не обнуляются даром.
  */
 function makeHarness(opts) {
   opts = opts || {};
@@ -129,7 +137,10 @@ function makeHarness(opts) {
   const container = {
     mode: 'el',
     el: { style: {}, dispatchEvent() { } },
-    height() { return opts.grow ? 20000 + 300 * finds : 20000; },
+    height() {
+      if (opts.bumpEpoch) deps.cursorEpoch++;
+      return opts.grow ? 20000 + 300 * finds : 20000;
+    },
     client() { return 800; },
     top() { return 0; },
     setTop() { }
@@ -228,5 +239,47 @@ describe('v94 stale-cursor: D4 контроль — исторический dat
     expect(done[0].line).not.toContain('base-complete-stall');
     expect(h.deps.lastLoaderDoneReason).toBe('data-complete');
     expect(errorLogs(h)).toHaveLength(0);
+  });
+});
+
+// =====================================================================================
+// v95 (BASE-COMPLETE-EARLY-BREAK / EPOCH-GUARD): холостые итерации не продлеваются
+// =====================================================================================
+describe('v95 base-complete-early: счётчики не обнуляются при неизменной высоте', () => {
+  test('E1: cursor-epoch растёт, h замерла, pendingCursor жив → выход base-complete-stall, не 90 итераций', async () => {
+    const h = makeHarness({ grow: false, bumpEpoch: true });
+    await h.api.loadFullHistoryInvisibly();
+
+    const done = doneLogs(h);
+    expect(done).toHaveLength(1);
+    // полнота подтверждена сервером + высота стабильна → ранний выход, несмотря на живые эпохи
+    expect(done[0].line).toContain('done reason=base-complete-stall');
+    expect(h.deps.lastLoaderDoneReason).toBe('base-complete-stall');
+    // счётчики не обнулялись эпохами: выход за считанные итерации, stall-retry не копится
+    expect(iterLogs(h).length).toBeLessThanOrEqual(6);
+    expect(stallLogs(h)).toEqual([]);
+    expect(errorLogs(h)).toHaveLength(0);
+    // эпоха ДЕЙСТВИТЕЛЬНО приходила, и обработчик её не принял за рост высоты
+    const epochLogs = h.calls.filter((c) => c.line.indexOf('cursor-epoch=') !== -1);
+    expect(epochLogs.length).toBeGreaterThan(0);
+    expect(epochLogs.some((c) => c.line.indexOf('СОХРАНЕНЫ') !== -1)).toBe(true);
+    // сброс допустим только один раз — на самой первой эпохе (lastH ещё -1, сравнить не с чем)
+    const resetLogs = epochLogs.filter((c) => c.line.indexOf('сброшены') !== -1);
+    expect(resetLogs.length).toBeLessThanOrEqual(1);
+  });
+
+  test('E2: источник — ветка сброса счётчиков стоит внутри проверки роста высоты', () => {
+    const iEpoch = LOADER.indexOf('if (D.cursorEpoch !== lastEpoch) {');
+    expect(iEpoch).toBeGreaterThan(-1);
+    const block = LOADER.slice(iEpoch, iEpoch + 2600);
+    const iGrew = block.indexOf('__epochGrew95');
+    const iReset = block.indexOf('noGrowth = 0;');
+    const iKeep = block.indexOf('СОХРАНЕНЫ');
+    expect(iGrew).toBeGreaterThan(-1);
+    expect(iKeep).toBeGreaterThan(-1);
+    expect(iReset).toBeGreaterThan(iGrew); // сброс — только после проверки роста
+    expect(iReset).toBeLessThan(iKeep); // и он в ветке роста, а не в ветке сохранения
+    // сравнение высоты действительно есть (эпоха сама по себе счётчики не трогает)
+    expect(block).toContain('LOADER_RESUME_DELTA');
   });
 });
