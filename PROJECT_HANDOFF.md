@@ -5228,3 +5228,83 @@ Plan-отчёт рассмотрел три варианта (В1 снять г�
 
 **Коммит A:** `caadb4a` (тело аппендикса v99, шаг 1 двухшагового паттерна — плейсхолдер заполняется на шаге B).
 **SHA4:** `fbd3ef2` (коммит C — синк верхнего блока)
+
+## Аппендикс v100 (2026-10-24): фиксы Gemini (ложный cursor-live, автоскролл, метрики) и релиз v2.0.26
+
+**Дата:** 2026-10-24
+**Коммиты:** 2 — `7908f8b` (фикс-пачка, 11 файлов, +603/−141) и `1bb7781` (релиз v2.0.26, 16 файлов, +46/−36); диапазон `7908f8b^..1bb7781` — 27 файлов, +649/−177.
+**Статус:** ЗАКРЫТ (ложный `cursor-live` снят, поздний автоэкспорт возобновляем, автоскролл выходит раньше, метрики пересчитываются по финальному срезу; релиз v2.0.26 с AI Studio в README).
+
+### Секция 1. Что сделано.
+
+1. **`7908f8b` — fix(loader/export): ложный `cursor-live`, возобновляемый поздний экспорт, ранний стоп автоскролла, ресинк метрик.** Пять связанных правок в одном коммите (11 файлов, +603/−141).
+
+   1.1. **FALSE-CURSOR-LIVE (`core/export-manager.js:1899-1900`).** Сервер уже подтвердил полноту снапшота — `pendingCursor` в этом состоянии недостоверен (эвристика `classifyOpaque` по b64-строке внутри полного снапшота). Гейт: `var __fullServer95 = (d.reachedStart === true || d.reachedStart === 1) && (d.historyFullByQuiet === true || d.historyFullByQuiet === 1 || d.baseComplete === true);` → в обеих ветках события (`:1903` — running, `:1909` — stop) `aiCmCursorLiveByConv[d.convId] = (__fullServer95 === true) ? false : !!d.pendingCursor;`. Оба написания поля читаются намеренно: MAIN-диспатч несёт `baseComplete` (= `historyFullByQuiet`), песочницы могут прислать `historyFullByQuiet` напрямую. Неполные чаты (`reachedStart=0`) ведут себя ровно как раньше — гейт `aiCmBaseConfirmedByConv` не ослаблен (зеркало v94).
+
+   1.2. **RESUMABLE-LATE (`core/export-manager.js:484-485`, `:487`).** Пропуск `reason=cursor-live` в `aiCmTryLateAutoExport` больше не теряет экспорт: `var AI_CM_LATE_RETRY_MAX = 3;`, `var AI_CM_LATE_RETRY_MS = 2000;`, пер-чат счётчик `aiCmLateRetryByConv`, функция `aiCmScheduleLateAutoExportRetry(cid)` (`:487`), вызов из ветки пропуска (`:515`). Латч `aiCmLateCheckByConv[cid]` остаётся взведённым между попытками — ранний выход по `!aiCmLateCheckByConv[cid]` не срабатывает. Успешный проход обнуляет счётчик (`:519`), исчерпание пишется честно: `late retry exhausted N/3 … reason=cursor-live`.
+
+   1.3. **EPOCH-NO-RESET-WITHOUT-GROWTH (`core/gemini-loader-scroll.js:270`).** Сброс счётчиков стабилизации оправдан только реальным ростом скроллера: `var __epochGrew95 = (lastH === -1) || (__epochH95 < 0) || (__epochH95 > lastH + LOADER_RESUME_DELTA);` — `noGrowth`/`stallRetry`/`anyGrowth`/`lastH` обнуляются внутри `if (__epochGrew95)`, иначе счётчики сохраняются и в лог идёт `→ счётчики СОХРАНЕНЫ (высота не изменилась h=…)`.
+
+   1.4. **BASE-COMPLETE-EARLY-BREAK (`core/gemini-loader-scroll.js:206`, `:468-481`).** Счётчик `baseStall95` не обнуляется ветками resume/top-not-reached (в отличие от `noGrowth`), поэтому выход гарантирован и при живом ложном `pendingCursor`: при `__baseCompleteNow87 === true && D.reachedStart === true` и неподвижной высоте набирается `LOADER_STABLE_NEED = 3` (`:49`), затем контрольный перемер `sleepUntilFired(LOADER_RECHECK_MS = 2000)` (`:50`) — подросшая высота `> lastH + LOADER_RESUME_DELTA` (`:51`, 200 px) даёт `reason=resume-after-base-stall`, иначе `doneReason = 'base-complete-stall'` + диаг-строка `base-complete-stall-early`.
+
+   1.5. **METRICS-SYNC (`core/export-manager.js:690`, `core/content.js:2062`).** `aiCmCurrentBaseSnapshot(cid)` — единый снапшот «как он пишется в историю» (единая точка сбора `aiCmCollectExportSource` → схлопка E-2 `aiCmDedupeExportSource` → добор объединённой базой `aiCmUnionFileMessages`), вынесен из `aiCmWriteCurrentHistory` без изменения логики (`:719`, фолбэк O-49 сохранён 1:1). `aiCmResyncMetricsAfterFlush(cid, reason)` (`core/content.js:2062`) пересчитывает `baseCount`/`baseText`/`lastBaseTexts` и `histKey` (`msgs.length + '|' + joined.length` — та же форма, что у штатной записи), защищён от просадки (финальный срез короче принятого → `skip reason=shrink`) и от повторной работы (`skip reason=same`), затем один `processAndSend()`. Вызов — сразу после deferred-флаша (`core/content.js:883`, `reason='base-complete'`), диаг-строка `o22-metrics-resync`. Корень по логу: история уже содержала 120 msgs, а `histKey`/`pct` оставались на срезе 101 — следующий `processAndSend` мог перезаписать свежую историю укороченной.
+
+2. **Тесты фикс-пачки.** Новый `tests/metrics-resync-v95.test.js` — 8 тестов (R1–R5 поведение + P1–P3 source-пины порядка «ресинк после флаша»); `tests/export-manager-invariants.test.js` — R1/R1b/R2/R2b (ре-база инвариантов на `reachedStart=0`); `tests/adapters/gemini-stale-cursor.test.js` — E1/E2 (эпоха при неподвижной `h`: выход `base-complete-stall`, а не 90 итераций) + D1; `tests/gemini-autoexport-threshold.test.js` — «ложный курсор при подтверждённой полноте → файл ЕСТЬ»; `tests/fixtures/catch-whitelist.json` — переякорен (459 записей / 217 файлов, чистая замена строк); `types/core-globals.d.ts` +3 (экспорт новых хелперов).
+
+3. **`1bb7781` — релиз v2.0.26 (16 файлов, +46/−36).** `CHANGELOG.md` — секция `## [2.0.26] - 2026-10-24` (Added: Google AI Studio в списке платформ; Fixed: три Gemini-фикса — автоэкспорт больше не блокируется ложным `cursor-live`, сокращены визуальные эффекты автоскролла, принудительный пересчёт метрик после догрузки базы); `README.md:21` / `README.en.md:21` — 7 платформ вместо 6 с `Google AI Studio (aistudio.google.com)`; версия 2.0.26 в `manifest.json:5`, `package.json:3`, `package-lock.json` (две записи), футере `docs/index.html:362`; датированные снимки счётчиков `as of v2.0.26 (2026-10-24)` в `README.md:80`, `README.en.md:80`, `docs/TESTS.md:67`; 7 версионных T-PIN (`version-hygiene`, `deepseek-o7-hidden-export`, `manifest-smoke`, `qwen-provider-wiring`, `a11y-options`, `oracle-archive-complete`, `i18n-locales`); синк верхнего блока handoff (L199/L200). Кода продукта в релизном коммите нет.
+
+### Секция 2. Свидетели/факты.
+
+| # | Место | Что установлено | Источник |
+|---|---|---|---|
+| 1 | `git rev-list --count 7908f8b^..1bb7781` | 2 коммита (расхождений с промптом нет) | git (локально) |
+| 2 | `git diff --shortstat 7908f8b^..1bb7781` | 27 файлов, +649/−177 | git (локально) |
+| 3 | Сьют на HEAD `1bb7781` | 187/3297/6/0 — зелёный | `npx jest` (локально, прогон 2026-10-24) |
+| 4 | `npx tsc --noEmit` | exit 0 | tsc (локально, Node v24.18.0) |
+| 5 | `npx jest tests/docs-hygiene.test.js` | exit 0: одна строка текущих счётчиков, одна строка исторического максимума, единственное вхождение метки в верхнем блоке | локально |
+| 6 | CI Lint #249 | зелёный | отчёт владельца (GitHub Actions) |
+| 7 | CI Release ZIP #29 | зелёный | отчёт владельца (GitHub Actions) |
+| 8 | Лог `gemini.google.com-1792852600392` | долгие визуальные эффекты + сбой автоэкспорта; корень — эпоха курсора без роста `h` и ложный `cursor-live` | отчёт владельца (лог браузера; в репозитории отсутствует — gitignored артефакт) |
+| 9 | `core/export-manager.js:1899-1900`, `:1903`, `:1909` | гейт `__fullServer95` и снятие `cursor-live` в обеих ветках события | код |
+| 10 | `core/export-manager.js:484-485`, `:487`, `:515`, `:519` | 3 ретрая по 2 с, латч держится, счётчик обнуляется на успехе | код |
+| 11 | `core/gemini-loader-scroll.js:270` | сброс счётчиков только при росте `h` на `LOADER_RESUME_DELTA` | код |
+| 12 | `core/gemini-loader-scroll.js:206`, `:468-481` | `baseStall95` и ранний выход `base-complete-stall` | код |
+| 13 | `core/export-manager.js:690`, `:719`; `:2023` | `aiCmCurrentBaseSnapshot` — единая точка среза, экспорт в `Api` | код |
+| 14 | `core/content.js:2062`, `:883` | `aiCmResyncMetricsAfterFlush` и её вызов после deferred-флаша | код |
+| 15 | `tests/metrics-resync-v95.test.js` | 8 тестов (R1–R5, P1–P3), 156 строк | код |
+| 16 | `manifest.json:5`, `package.json:3`, `docs/index.html:362` | версия 2.0.26 в трёх точках | код |
+| 17 | `README.md:21`, `README.en.md:21` | 7 платформ, AI Studio — седьмая | код |
+
+### Секция 3. Отклонения от промпта (приняты).
+
+1. **Метка «v95» в сообщении коммита — не аппендикс v95.** Внутренний тег фикс-пачки совпал с номером аппендикса v95 (глобальный аудит tech debt, 2026-10-23). Сообщение коммита не переписывается (история неизменяема): в тексте аппендикса пачка называется «фикс-пачка v95», нумерация аппендиксов остаётся непрерывной.
+2. **Три ретрая, а не один и не бесконечность.** Одна попытка — наблюдаемый дефект потери экспорта; бесконечный ретрай каждые 2 с молотил бы недогруженный чат вечно. Выбрано 3×2000 мс с сохранённым латчем: база успевает дозреть, а исчерпание пишется в лог (`late retry exhausted`), а не проглатывается. Счётчик свободен после успешного прохода — иначе следующий честный `cursor-live` упёрся бы в лимит прошлого чата.
+3. **`epoch-no-reset` — сброс только при реальном росте `h`.** Живой дефект: курсор-эпоха менялась на каждом history-write, высота не росла — `noGrowth`/`stallRetry` обнулялись каждый круг, `base-complete-stall` (v94) и `data-complete` становились недостижимы, цикл молотил все 90 итераций / ~100 с (визуально — долгий автоскролл). Порог роста взят существующий `LOADER_RESUME_DELTA` (200 px), а не новый: «рост» должен означать то же, что и в логике resume. Ложный `pendingCursor` выход не блокирует — за это отвечает `baseStall95`, который ветки resume/top-not-reached не обнуляют.
+4. **Гейт `__fullServer95` читает оба написания поля.** Только `baseComplete` оставило бы фикс неработающим в песочницах, только `historyFullByQuiet` — в MAIN-диспатче. Дубль условия дешевле молчаливо неработающего фикса.
+5. **Форма счётчиков в §2/§6 — через «/» и «;».** Прецедент v70 §5 / v95 §6 / v96 §6 / v97 §6 / v98 §6 / v99 §6: канонические полные формы защищённых строк в теле аппендикса не дублируются (пин O-53, `tests/docs-hygiene.test.js`), версия в §6 — строчными.
+6. **Свидетели CI и лога — по отчёту владельца.** Номера прогонов Lint #249 / Release ZIP #29 локально непроверяемы (внешние пайплайны), лог `gemini.google.com-1792852600392` — браузерный артефакт владельца, в репозитории его нет (gitignored). В §2 они помечены источником, а не выданы за локальное измерение.
+
+### Секция 4. Новые residual.
+
+Нет. Все дефекты из лога закрыты кодом и пинами, регрессий сьют не показал. Открытым остаётся только residual v99 §4 п. 1 (`detectModel()` — заглушка `'gemini-3.1-pro'` в `adapters/aistudio-adapter.js`, Low) — он вне объёма v100 и не переопределяется.
+
+### Секция 5. Переопределение residual-точек (тексты аппендиксов выше не редактируются).
+
+- **Аппендикс v99 §4 п. 2 «Gemini: долгие визуальные эффекты — нужен разбор лога» — ЗАКРЫТА.** Лог `gemini.google.com-1792852600392` разобран: корень — не «эффекты» сами по себе, а сброс счётчиков стабилизации на каждой смене `cursor-epoch` при неподвижной высоте, из-за чего цикл шёл до 90-й итерации. Закрытие: `EPOCH-NO-RESET-WITHOUT-GROWTH` + `BASE-COMPLETE-EARLY-BREAK` (`core/gemini-loader-scroll.js:270`, `:468-481`). Текст v99 не редактируется.
+- **Сбой автоэкспорта из того же лога (`gemini.google.com-1792852600392`) — ЗАКРЫТА.** Корень двойной: (а) `pendingCursor=1` на уже полном снапшоте взводил `cursor-live` — снят гейтом `__fullServer95`; (б) даже при живом `cursor-live` поздний экспорт терялся навсегда — добавлены ретраи. Оба пути имеют пины (`export-manager-invariants` R1/R1b/R2/R2b, `gemini-autoexport-threshold`).
+- **Рассинхрон метрик из того же лога (срез 101 против записанных 120) — ЗАКРЫТА** `METRICS-SYNC`: `aiCmCurrentBaseSnapshot` + `aiCmResyncMetricsAfterFlush` считают `histKey`/`pct` по тому же массиву, что ушёл в историю.
+- **Аппендикс v99 §1 п. 6 (релиз v2.0.25)** — историческая запись; для v2.0.26 действует отдельный релизный прогон `1bb7781`, строка v99 не редактируется.
+- **Верхний блок handoff** (L199/L200) уже синхронизирован релизным коммитом `1bb7781` — в аппендиксе не дублируется (O-53).
+
+### Секция 6. Сводка.
+
+- Релиз v2.0.26 опубликован; версия 2.0.26 в `manifest.json` = `package.json` = `package-lock.json`, CHANGELOG-секция `[2.0.26]` на месте.
+- Сьют: 187/3297/6/0; форма через «;» (187 suites; 3297 passed; 6 skipped; 0 failed) — прецедент v70 §5 / v95 §6 / v96 §6 / v97 §6 / v98 §6 / v99 §6, пин O-53.
+- `npx tsc --noEmit`: exit 0. `npx jest tests/docs-hygiene.test.js`: exit 0.
+- HEAD на момент работы — `1bb7781`; origin/main = `1bb7781`, ahead = 0 (push выполнен владельцем до настоящего аппендикса).
+- Правок кода в настоящем аппендиксе нет — только документ; полные формы версии, текущего прогона и исторического максимума в теле не приводятся (O-53), верхний блок (строка 5) не тронут.
+- Остаток: новых residual нет (§4); открыт только v99 §4 п. 1 (заглушка `detectModel()`).
+
+### Секция 7. Плейсхолдер.
+
+**Коммит A:** `<SHA v100>` (тело аппендикса v100, шаг 1 двухшагового паттерна — плейсхолдер заполняется на шаге B).
