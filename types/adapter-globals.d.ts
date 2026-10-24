@@ -36,3 +36,25 @@ declare class BaseAdapter {
   /** Внутренний хелпер базы; вне контракта Adapter, но наследники его зовут. */
   _safeQuerySelectorAll(selector: string, parent?: Document | Element): NodeList | Element[];
 }
+
+/**
+ * AI Studio: отдельный адаптер (adapters/aistudio-adapter.js, HEAD 25c4547).
+ *
+ * Почему объявлен здесь, а не виден из самого файла: хвост адаптера
+ * `if (typeof module !== 'undefined' && module.exports) module.exports = AistudioAdapter;`
+ * делает файл МОДУЛЕМ, поэтому его `class AistudioAdapter` имеет модульную область
+ * видимости, а не глобальную. Контент-скрипты же делят один лексический скоуп, и
+ * content.js создаёт адаптер по имени (`new AistudioAdapter()`, core/content.js:982) —
+ * без этой формы tsc даёт TS2304. Ровно та же причина у QwenAdapter
+ * (types/core-globals.d.ts:513, тот же хвост module.exports).
+ *
+ * Форма — класс-наследник BaseAdapter, а не any: адаптер присваивается в
+ * `currentAdapter: BaseAdapter | null`, поэтому читателям достаточно контракта базы;
+ * специфичные для AI Studio хелперы (_readNodeText/_isNestedNode/_isUserChunk) —
+ * внутренние и в контракт не входят (та же политика, что у underscore-хелперов базы).
+ */
+declare class AistudioAdapter extends BaseAdapter {
+  constructor();
+  siteName: string;
+  defaultModel: string;
+}

@@ -1931,9 +1931,46 @@ function aiCmArmBadgeHoldFallback() {
 // Прочие сервисы НЕ тронуты: у DeepSeek serverTokens остаётся авторитетным (O-23), у Gemini —
 // счёт BYOK countTokens (O-35). Функция только ЧИТАЕТ netServerTokens: значение остаётся как
 // было, чтобы диагностическая строка ingest'а («serverTokens=N») не врала.
-function aiCmMetricServerTokens(svc) {
+function aiCmMetricServerTokens(svc, text) {
   if (svc === 'qwen') return 0;
+  // Шаг 3: пока для ТЕКУЩЕГО текста есть ответ API countTokens — он авторитетен и эвристику
+  // в метрику не пускает (см. aiCmExactTokensFor ниже). typeof-гард: функцию исполняют
+  // срез-песочницы тестов через new Function без соседних объявлений контура (пин O-47),
+  // там aiCmExactTokensFor просто отсутствует.
+  var exact = (typeof aiCmExactTokensFor === 'function') ? aiCmExactTokensFor(text) : 0;
+  if (exact > 0) return exact;
   return (typeof netServerTokens === 'number' && netServerTokens > 0) ? netServerTokens : 0;
+}
+
+// ===== Шаг 3: точное значение API (BYOK countTokens) приоритетнее эвристики tokens~ =====
+// Корень дефекта: `netServerTokens` — ОБЩИЙ сетевой счётчик, и приём ЛЮБОГО снимка пишет его
+// безусловно (`netServerTokens = detail.serverTokens || 0;` в ingest). У Gemini/AI Studio
+// серверного поля нет вовсе → ingest обнуляет счётчик, в котором лежало точное число BYOK.
+// Восстанавливает его в том же проходе только requestExactTokens, а он под гейтом
+// `baseComplete` (processAndSend): на НЕПОЛНОМ снимке (пагинация, переэмит
+// historyComplete=false) точное значение уже стёрто, API не спрашивается — и метрика
+// откатывалась на эвристику Tokenizer.estimateDialogTokens, то есть бейдж и попап
+// ПЕРЕЗАПИСЫВАЛИ ответ API оценкой tokens~. Отсюда и «прыжок» числа после верного счёта.
+//
+// Латч: countTokens зависит ТОЛЬКО от текста, значит точное число верно ровно для того
+// текста, для которого получено. Пара lastCountTokensText/lastCountTokensCache (пишется
+// ИСКЛЮЧИТЕЛЬНО успешным ответом API либо восстановлением из chrome.storage.local,
+// чистится сменой чата — core/widget.js:197-198 resetConversationState — и сменой ключа
+// в aiCmByokKeyInvalidate) и есть признак exactCount === true для этого текста.
+//
+// ПРАВИЛО: пока латч совпадает с текущим текстом, эвристика в метрику не попадает вообще
+// (ни в badge, ни в pct попапа). Сменился текст (новый сетевой ход) — латч не совпал,
+// эвристика снова допустима, а точное число придёт следующим ответом countTokens;
+// заполнитель на время запроса — прежний (lastCountTokensCache через netServerTokens в
+// requestExactTokens), поведение не меняется. exactCount выключен / нет ключа — эвристика
+// как раньше.
+//
+// @param {string} [text] — текст, для которого запрошена метрика (processAndSend/GET_STATS).
+// @returns {number} точные токены API для этого текста; 0 — точного значения нет.
+function aiCmExactTokensFor(text) {
+  if (!exactCountEnabled || !geminiApiKey) return 0;
+  if (!text || text !== lastCountTokensText) return 0;
+  return (typeof lastCountTokensCache === 'number' && lastCountTokensCache > 0) ? lastCountTokensCache : 0;
 }
 
 function processAndSend() {
@@ -2211,7 +2248,8 @@ function processAndSend() {
     // O-47: серверный счётчик для метрики ЭТОГО сервиса. У Qwen он всегда 0 (usage.input —
     // кумулятив API-потребления, а не размер контекста; см. aiCmMetricServerTokens), поэтому
     // pct/badge Qwen считаются ТОЛЬКО эвристикой tokens~. Прочие сервисы — прежний приоритет.
-    const metricServerTokens = aiCmMetricServerTokens(svc);
+    // Шаг 3: text передаётся, чтобы точный ответ BYOK для этого текста перебивал эвристику.
+    const metricServerTokens = aiCmMetricServerTokens(svc, fullText);
     let tokenEstimate = metricServerTokens > 0 ? metricServerTokens : Tokenizer.estimateDialogTokens(fullText, countForTokens);
     // Поднятый полом effectiveLen (Gemini): если сеть дала effectiveLen > длины текста — масштабируем оценку
     if (metricServerTokens === 0 && netEffectiveLen > 0 && fullText && fullText.length > 0 && netEffectiveLen > fullText.length) {
@@ -2776,14 +2814,19 @@ if (isExtensionValid()) {
         const countForTokens = effective ? getEffectiveCount(messages.length) : messages.length;
         const modelId = resolveCurrentModel();
         // O-47: тот же счётчик, что у бейджа (processAndSend) — попап и круг не расходятся;
-        // у Qwen эффективно 0 → tokens~.
-        const metricServerTokens = aiCmMetricServerTokens(currentAdapter.siteName);
+        // у Qwen эффективно 0 → tokens~. Шаг 3: text — чтобы точный ответ BYOK был авторитетен.
+        const metricServerTokens = aiCmMetricServerTokens(currentAdapter.siteName, fullText);
         let tokenEstimate = metricServerTokens > 0 ? metricServerTokens : Tokenizer.estimateDialogTokens(fullText, countForTokens);
         if (metricServerTokens === 0 && netEffectiveLen > 0 && fullText && fullText.length > 0 && netEffectiveLen > fullText.length) {
           tokenEstimate = Math.round(tokenEstimate * (netEffectiveLen / fullText.length));
         }
         tokenEstimate += netAttachTokens;
-        const displayTokens = Math.max(tokenEstimate, maxTokenCount);
+        // Шаг 3: точный счётчик (API BYOK / серверный) авторитетен — монотонный max() эвристики
+        // его не поднимает, иначе попап перезаписывал бы ответ API оценкой tokens~ и расходился
+        // с бейджем (тот делает ровно то же: `if (metricServerTokens > 0) maxTokenCount = tokenEstimate`).
+        // max() остаётся только на эвристическом пути (Qwen, сервис без серверных чисел) — прежнее
+        // поведение «не падать при SPA».
+        const displayTokens = metricServerTokens > 0 ? tokenEstimate : Math.max(tokenEstimate, maxTokenCount);
         const contextLimit = ModelConfig.getContextLimit(modelId);
         const effectiveLimit = ModelConfig.getEffectiveLimit(modelId);
         const displayLimit = computeEffectiveLimit(modelId);

@@ -103,7 +103,9 @@ class AistudioAdapter extends GeminiAdapter {
    */
   _readNodeText(node) {
     try {
-      const inner = node.innerText;
+      // innerText объявлен только у HTMLElement, а JSDoc-тип параметра — Element
+      // (node приходит из querySelectorAll по ms-cmark-node): приводим тип, не меняя рантайм.
+      const inner = (/** @type {HTMLElement} */ (node)).innerText;
       if (typeof inner === 'string' && inner.length > 0) return inner;
       return typeof node.textContent === 'string' ? node.textContent : '';
     } catch (error) {
