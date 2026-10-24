@@ -51,6 +51,7 @@
     "adapters/base-adapter.js",
     "adapters/chatgpt-adapter.js",
     "adapters/gemini-adapter.js",
+    "adapters/aistudio-adapter.js",
     "adapters/deepseek-adapter.js",
     "adapters/google-search-adapter.js",
     "adapters/claude-adapter.js",

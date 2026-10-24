@@ -196,7 +196,10 @@ describe('O-35: core/content.js — ветка Qwen и запрет на countTo
 
   test('R-пин: ветки шести существующих сервисов байтово прежние', function () {
     expect(content).toContain("if (hostname.includes('chatgpt.com')) {");
-    expect(content).toContain("} else if (hostname.includes('gemini.google.com') || hostname.includes('aistudio.google.com')) {");
+    // aistudio вынесен в собственный адаптер (adapters/aistudio-adapter.js) — из
+    // gemini-ветки он ушёл; остальной текст веток байтово прежний.
+    expect(content).toContain("} else if (hostname.includes('aistudio.google.com')) {\n    currentAdapter = new AistudioAdapter();");
+    expect(content).toContain("} else if (hostname.includes('gemini.google.com')) {");
     expect(content).toContain("} else if (hostname.includes('chat.deepseek.com')) {");
     expect(content).toContain("} else if (hostname.includes('google.com') && !hostname.includes('aistudio')) {");
     expect(content).toContain("} else if (hostname.includes('claude.ai')) {");

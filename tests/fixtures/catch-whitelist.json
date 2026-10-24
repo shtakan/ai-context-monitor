@@ -301,9 +301,9 @@
       "category": "best-effort-guard",
       "lines": [
         541,
-        1989,
-        2123,
-        2997
+        1994,
+        2128,
+        3002
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cyrDiag = (t.match(/[а-яёА-ЯЁ]/g) || []).length; var cyrillicPct = t"
     },
@@ -311,7 +311,7 @@
       "file": "core/content.js",
       "category": "cleanup-guard",
       "lines": [
-        1914
+        1919
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: if (aiCmBadgeHoldTimer) return; aiCmBadgeHoldTimer = setTimeout(function"
     },
@@ -321,39 +321,39 @@
       "lines": [
         571,
         943,
-        1044,
         1049,
-        1052,
-        1055,
+        1054,
         1057,
-        1058,
-        1059,
-        1078,
-        1080,
+        1060,
+        1062,
+        1063,
+        1064,
+        1083,
         1085,
-        1120,
-        1127,
-        1135,
-        1138,
-        1184,
-        1192,
-        1194,
+        1090,
+        1125,
+        1132,
+        1140,
+        1143,
+        1189,
+        1197,
         1199,
-        1206,
-        1212,
-        1230,
+        1204,
+        1211,
+        1217,
         1235,
-        1241,
-        1243,
+        1240,
+        1246,
         1248,
-        1789,
-        1966,
-        2134,
-        2158,
-        2167,
-        2881,
-        2907,
-        2909
+        1253,
+        1794,
+        1971,
+        2139,
+        2163,
+        2172,
+        2886,
+        2912,
+        2914
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
     },
@@ -369,7 +369,7 @@
       "file": "core/content.js",
       "category": "dom-read-guard",
       "lines": [
-        1825
+        1830
       ],
       "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: var info = aiCmSourceInfo(); aiCmSourceLabelNow = info ? info.label : ''"
     },
@@ -379,10 +379,10 @@
       "lines": [
         931,
         940,
-        2080,
-        2101,
-        2863,
-        2869
+        2085,
+        2106,
+        2868,
+        2874
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
     },
@@ -390,7 +390,7 @@
       "file": "core/content.js",
       "category": "feature-detect",
       "lines": [
-        2255
+        2260
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var metricSrc = baseComplete ? 'base-complete' : (lastBounded ? 'base-fl"
     },
@@ -408,11 +408,11 @@
         624,
         724,
         892,
-        1863,
-        2327,
-        2386,
-        2403,
-        2482
+        1868,
+        2332,
+        2391,
+        2408,
+        2487
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -423,7 +423,7 @@
         26,
         288,
         352,
-        2551
+        2556
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.runtime.sendMessage({ type: 'BADGE_RESET' }).catch(function () {"
     },
@@ -432,7 +432,7 @@
       "category": "local-helper-guard",
       "lines": [
         285,
-        2712
+        2717
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmCancelDeferredHistWrite('');"
     },
@@ -440,7 +440,7 @@
       "file": "core/content.js",
       "category": "parse-guard",
       "lines": [
-        2943
+        2948
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof window !== 'undefined' && window && window.AiCmEx"
     },

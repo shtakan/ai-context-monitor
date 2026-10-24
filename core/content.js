@@ -971,11 +971,16 @@ function getCurrentConvId() {
 // инициализации и реактивации ISOLATED-контура по сигналу смены разговора (SPA).
 // Ветки шести прежних платформ и ветка qwen байтово прежние (R-пины и пины проводки
 // Qwen читают эти строки как есть).
+// aistudio — отдельной веткой ПЕРЕД gemini: разметка реплик у AI Studio иная
+// (ms-cmark-node + user-chunk), GeminiAdapter там находит 0 сообщений
+// (adapters/aistudio-adapter.js наследует его контракт и _cleanText).
 function aiCmAssignAdapterByHost() {
   const hostname = window.location.hostname;
   if (hostname.includes('chatgpt.com')) {
     currentAdapter = new ChatGPTAdapter();
-  } else if (hostname.includes('gemini.google.com') || hostname.includes('aistudio.google.com')) {
+  } else if (hostname.includes('aistudio.google.com')) {
+    currentAdapter = new AistudioAdapter();
+  } else if (hostname.includes('gemini.google.com')) {
     currentAdapter = new GeminiAdapter();
   } else if (hostname.includes('chat.deepseek.com')) {
     currentAdapter = new DeepSeekAdapter();
