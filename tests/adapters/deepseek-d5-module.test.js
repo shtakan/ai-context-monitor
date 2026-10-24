@@ -9,10 +9,12 @@
  * поэтому связь идёт ровно через один контракт:
  *
  *   ядро -> модуль: window.AiCmDeepseekConv.__bind(deps)
- *     fn (3): diagResetForConv — диагностический сброс колец O-18 (function declaration
+ *     fn (4): diagResetForConv — диагностический сброс колец O-18 (function declaration
  *             ядра, хойстится: значение доступно на момент связки);
  *             resetStreamState — K6 (SSE: тела ещё в ядре);
- *             scheduleHistoryRefetch — форвардер модуля D.3.
+ *             scheduleHistoryRefetch — форвардер модуля D.3;
+ *             resetFiles — форвардер D.10 (core/deepseek-files.js): сброс очереди/кэша
+ *             текстов вложений на смену чата (фикс утечки между чатами).
  *     rw (19): состояние сброса, которое тело ПЕРЕЗАПИСЫВАЕТ: без сеттера запись в
  *             sloppy-режиме молча терялась бы (currentConvId, lastDiagConvId, turnsMap,
  *             orderCounter, attachTokens, attachBreak, loggedOk, loggedHistory,
@@ -26,7 +28,7 @@
  *   наружу не выдаётся: его зовут только патчи и popstate-слушатель самого модуля.
  *
  * Здесь пинятся:
- *   S1. Полнота контракта: литерал __bind в ядре содержит ровно 23 имени (3 fn + 19 rw +
+ *   S1. Полнота контракта: литерал __bind в ядре содержит ровно 24 имени (4 fn + 19 rw +
  *       1 ro), ни одного потерянного/лишнего; каждое имя реально существует в ядре.
  *   S2. Живая связка в vm: до __bind наружу торчит ТОЛЬКО __bind; РАННЯЯ связка
  *       __bind({}) даёт 3 функции (нужна: ядро зовёт getConvId на загрузке), но сброс
@@ -52,8 +54,8 @@ const DS = require('../helpers/deepseek-intercept-source.js');
 const MODULE_SRC = DS.moduleSource('deepseek-conv.js');
 const KERNEL_SRC = DS.moduleSource('deepseek-intercept.js');
 
-// ---- контракт связки (S1): 3 fn + 19 rw + 1 ro = 23 имени ---------------------------
-const FN_NAMES = ['diagResetForConv', 'resetStreamState', 'scheduleHistoryRefetch'];
+// ---- контракт связки (S1): 4 fn + 19 rw + 1 ro = 24 имени ---------------------------
+const FN_NAMES = ['diagResetForConv', 'resetStreamState', 'scheduleHistoryRefetch', 'resetFiles'];
 const RW_NAMES = ['currentConvId', 'lastDiagConvId', 'turnsMap', 'orderCounter', 'attachTokens',
   'attachBreak', 'loggedOk', 'loggedHistory', 'loggedRealtime', 'lastLoadedConvId',
   'lastHistoryUrl', 'historyRefetchDone', 'lastBaseServerTokens', 'lastBaseChatMode',
@@ -81,7 +83,9 @@ const MOVED_BLOCKS = [
   {
     name: 'resetForNewConversation', start: '  function resetForNewConversation() {',
     sigs: ['  function resetForNewConversation() {'],
-    sha: '90834ca75c42cda451350600694bcf6246959250ae5e7e299b820f1e497bab57'
+    // D.10-фикс: строка resetStreamState дополнена вызовом resetFiles() (сброс файлового
+    // кэша между чатами) — хэш пересчитан, остальные строки блока байтово прежние.
+    sha: '83d4a9f64c9cdb27a45cebbe534dbd1c74cf1590c748994d316deea0529ef632'
   },
   {
     name: 'checkConvChange', start: '  function checkConvChange() {',
@@ -227,7 +231,8 @@ function makeProbe(over) {
     diagResetForConv: function (reason, prev) { st.__diagCalls.push({ reason: reason, prev: prev }); },
     resetStreamState: function () { st.__streamCalls++; },
     scheduleHistoryRefetch: function () { st.__refetchCalls++; },
-    __diagCalls: [], __streamCalls: 0, __refetchCalls: 0
+    resetFiles: function () { st.__filesCalls++; },
+    __diagCalls: [], __streamCalls: 0, __refetchCalls: 0, __filesCalls: 0
   };
   RW_NAMES.forEach(function (n) {
     if (n === 'turnsMap' || n === 'attachBreak' || n === 'liveTurns' || n === 'netTurnIds' || n === 'liveTurnOrder') st[n] = {};
@@ -239,13 +244,14 @@ function makeProbe(over) {
   st.histCompletion = { historyComplete: true, reachedRoot: true, baseEmpty: false };
   if (over) Object.keys(over).forEach(function (k) { st[k] = over[k]; });
   const writes = {};
-  const calls = { diag: [], stream: 0, refetch: 0 };
+  const calls = { diag: [], stream: 0, refetch: 0, files: 0 };
   const D = {};
   FN_NAMES.forEach(function (n) {
     Object.defineProperty(D, n, {
       get: function () {
         if (n === 'diagResetForConv') return function (reason, prev) { calls.diag.push([reason, prev]); return st.diagResetForConv(reason, prev); };
         if (n === 'resetStreamState') return function () { calls.stream++; };
+        if (n === 'resetFiles') return function () { calls.files++; };
         return function () { calls.refetch++; };
       },
       enumerable: true
@@ -265,12 +271,12 @@ function makeProbe(over) {
 }
 
 describe('Step D.5: core/deepseek-conv.js — контракт модуля CONV ID + детектора смены чата', () => {
-  test('S1: литерал __bind в ядре содержит ровно 23 имени (3 fn + 19 rw + 1 ro)', function () {
+  test('S1: литерал __bind в ядре содержит ровно 24 имени (4 fn + 19 rw + 1 ro)', function () {
     expect(KINDS.size).toBe(CONTRACT.length);
     CONTRACT.forEach(function (pair) { expect(KINDS.get(pair[0])).toBe(pair[1]); });
     const kinds = { fn: 0, ro: 0, rw: 0 };
     CONTRACT.forEach(function (pair) { kinds[pair[1]]++; });
-    expect(kinds).toEqual({ fn: 3, ro: 1, rw: 19 });
+    expect(kinds).toEqual({ fn: 4, ro: 1, rw: 19 });
     // каждая fn-передача — реально существующая в ядре функция (хойстится к моменту связки)
     FN_NAMES.forEach(function (n) { expect(KERNEL_SRC).toContain('function ' + n + '('); });
     // rw-состояние реально объявлено в ядре (иначе сеттер писал бы в никуда)
@@ -304,13 +310,14 @@ describe('Step D.5: core/deepseek-conv.js — контракт модуля CONV
     expect(Fn.resetForNewConversation()).toBeUndefined(); // guard полноты связки: no-op
     expect(probeEarly.calls.stream).toBe(0);              // холостого сброса НЕ было
 
-    // полная связка (в конце IIFE ядра): 23 имени, сброс оживает
+    // полная связка (в конце IIFE ядра): 24 имени, сброс оживает
     const probe = makeProbe();
     Fn.__bind(probe.D);
     probe.st.attachTokens = 777;
     expect(Fn.resetForNewConversation()).toBeUndefined();
     expect(probe.calls.stream).toBe(1);                  // resetStreamState вызван
     expect(probe.calls.refetch).toBe(1);                 // scheduleHistoryRefetch вызван
+    expect(probe.calls.files).toBe(1);                   // resetFiles (файловый кэш) вызван
     expect(probe.st.attachTokens).toBe(0);               // живой rw-аксессор записан
     expect(probe.st.turnsMap).toEqual({});
     // повторная загрузка модуля не перетирает уже связанный API
@@ -425,6 +432,7 @@ describe('Step D.5: core/deepseek-conv.js — контракт модуля CONV
     expect(probe.calls.diag).toEqual([['conv-change', 'convOrder']]);  // prevConv = прошлый convId
     expect(probe.calls.stream).toBe(1);
     expect(probe.calls.refetch).toBe(1);
+    expect(probe.calls.files).toBe(1);                          // файловый кэш сброшен вместе с чатом
 
     // ---- тот же convId повторно → сброса нет (дедупликация) ----
     Fn.checkConvChange();
@@ -460,6 +468,7 @@ describe('Step D.5: core/deepseek-conv.js — контракт модуля CONV
     box2.sandbox.__dispatch('popstate', {});
     expect(probe2.st.currentConvId).toBe('convPopped');
     expect(probe2.calls.stream).toBe(3);
+    expect(probe2.calls.files).toBe(3);                       // каждый сброс чистит и файловый кэш
 
     // ---- событие смены разговора и лог сброса (контракт с emit-гардом O-22) ----
     expect(box2.resets.length).toBeGreaterThan(0);

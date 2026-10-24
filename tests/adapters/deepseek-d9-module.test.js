@@ -742,9 +742,11 @@ describe('Step D.9: core/deepseek-sse.js — контракт модуля SSE (
     expect((yml.match(/36 MAIN-world/g) || [])).toHaveLength(2);
     expect(yml).not.toContain('35 MAIN-world');
 
-    // размеры: ядро 1657 → 1213, модуль 702 (пины D.7/D.8/D.9; D.10 добавил 39 строк,
-    // D.11 — форвардер filesMessageHasRefs, его строка в __bind и правка шапки: +5 строк ядра)
-    expect(KERNEL_SRC.split('\n').length).toBe(1213);
+    // размеры: ядро 1657 → 1218, модуль 702 (пины D.7/D.8/D.9; D.10 добавил 39 строк,
+    // D.11 — форвардер filesMessageHasRefs, его строка в __bind и правка шапки: +5 строк ядра;
+    // фикс утечки файлового кэша между чатами — ещё +5 строк ядра: форвардер resetFiles,
+    // его строка в контракте D.5 и правка шапки)
+    expect(KERNEL_SRC.split('\n').length).toBe(1218);
     expect(KERNEL_SRC.split('\n').length).toBeLessThan(1700);
     expect(MODULE_SRC.trimEnd().split('\n').length).toBe(702);
     expect(MODULE_SRC.trimEnd().split('\n').length).toBeGreaterThan(600);

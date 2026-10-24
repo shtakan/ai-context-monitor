@@ -21,9 +21,10 @@
  *     на files.deepseeksvc.com, БЕЗ заголовков и БЕЗ кук (credentials:'omit': файловый хост
  *     авторизует запрос подписью в signed_path, а credentialed CORS-запрос ломает ответ), таймаут
  *     10 с и кап 2 000 000 символов (файл на 1 МБ не теряет хвост);
- *   • при получении текста обновляется fileTextsByMsg (msgId → СПИСОК файлов сообщения)
- *     и ПЕРЕСОБИРАЕТСЯ текст хода: composeTurnText(answer, reasoning) + по секции на КАЖДЫЙ
- *     файл (порядок — как во вложениях сообщения), формат секции
+ *   • при получении текста обновляется fileTextsByMsg (`<convId>\u0000<msgId>` → СПИСОК файлов
+ *     сообщения: ключ включает разговор, чтобы одинаковый message_id из другого чата не подмешал
+ *     чужой файл); затем текст хода ПЕРЕСОБИРАЕТСЯ: composeTurnText(answer, reasoning) + по секции
+ *     на КАЖДЫЙ файл (порядок — как во вложениях сообщения), формат секции
  *     «\n\n[FILE: <имя>]\n<текст>»; затем с дебаунсом 250 мс вызывается emitBaseSnapshot —
  *     база уезжает в ISOLATED-мир и попадает в history_messages экспорта;
  *   • A-лайт (core/base-handler.js): перед композицией файла проверяется, ПУСТА ли очередь;
@@ -41,6 +42,8 @@
  *   связка: ядро форвардит в модуль enqueueChainFiles/applyPendingFileTexts (форвардеры D.10),
  *   а модуль отдаёт ядру предикат filesMessageHasRefs — его ingest зовёт, чтобы завести ход из
  *   одних вложений на своём месте (D.11).
+ *   Сброс: ядро (resetForNewConversation) зовёт Fn.resetFiles() при смене разговора — очередь,
+ *   карта текстов и ожидания прежнего чата не переезжают в следующий (фикс утечки между чатами).
  *
  * Метрики serverTokens/tokens~ НЕ ТРОГАЮТСЯ: модуль не считает токены, он лишь дописывает
  * текст хода и просит ядро переопубликовать базу тем же emitBaseSnapshot; счётчик токенов
@@ -81,16 +84,44 @@
   var fileQueue = [];
   var fileQueueByKey = {};
   var fileQueueActive = 0;
-  // Результат: msgId -> [ { fileId, name, text, truncated, failed, order, at }, ... ]. СПИСОК, а не
-  // одна запись: в одном сообщении бывает 3–4 вложения (живой кейс 2026-10-24: из четырёх файлов
-  // в экспорт попадал РОВНО ОДИН — последний по времени прихода, остальные затирались). Живёт до
-  // конца жизни страницы:
+  // Результат: `<convId>\u0000<msgId>` -> [ { convId, fileId, name, text, truncated, failed, order, at }, ... ].
+  // СПИСОК, а не одна запись: в одном сообщении бывает 3–4 вложения (живой кейс 2026-10-24: из
+  // четырёх файлов в экспорт попадал РОВНО ОДИН — последний по времени прихода, остальные
+  // затирались). Ключ включает convId: одинаковый message_id в ДВУХ чатах (у DeepSeek он
+  // приходит из history_messages) раньше перетирал чужой текст и подмешивал файл старого чата
+  // в новый. Живёт до конца разговора (или до явного resetFiles при смене чата):
   // ход может пережить несколько ingest'ов (SPA-навигация, дозапрос), и текст должен
   // примениться к ПЕРЕСОБРАННОМУ turnsMap без повторного запроса.
   var fileTextsByMsg = {};
+  // Поколение файлового состояния. resetFiles() инкрементит его: fetch, поставленный ДО
+  // смены чата, не имеет права воскресить запись уже после сброса (его завершение
+  // отбрасывается по epoch, а не пишет в пустую карту нового разговора).
+  var filesEpoch = 0;
   // Отложенный ре-эмит базы (дебаунс 250 мс) и ожидающие A-лайт-запросы экспорта.
   var filesEmitTimer = null;
   var filesDrainWaiters = [];
+
+  // Ключ карты текстов: разговор + сообщение. NUL — разделитель, которого не бывает в
+  // convId/message_id, поэтому склейка однозначна.
+  function fileTextKey(convId, msgId) {
+    return fileStr(convId) + '\u0000' + ((msgId === undefined || msgId === null) ? '' : String(msgId));
+  }
+
+  // Полный сброс файлового состояния на смену разговора. Зовётся ядром через контракт
+  // __bind (resetFiles) из resetForNewConversation (core/deepseek-conv.js): текст и очередь
+  // вложений принадлежат ОДНОМУ чату и не переезжают в следующий. Заодно гасим отложенный
+  // ре-эмит и ожидания экспорта — они относятся к прежнему разговору.
+  function resetFiles() {
+    filesEpoch++;
+    fileTextsByMsg = {};
+    fileQueue = [];
+    fileQueueByKey = {};
+    fileQueueActive = 0;
+    filesDrainWaiters.length = 0;
+    if (filesEmitTimer !== null) { clearTimeout(filesEmitTimer); filesEmitTimer = null; }
+    Fn.fileTextsByMsg = fileTextsByMsg;   // экспорт смотрит на АКТУАЛЬНУЮ карту, а не на старую
+    return true;
+  }
 
   // Канал диагностики: aiCmDiagWarn — глобал utils/debug.js (канал B); в модульных
   // песочницах без него падаем на console.warn, но НИКОГДА не молчим в catch.
@@ -453,8 +484,8 @@
               // вышел, filesOnFetched больше не вызовется — раскладываем сохранённый результат
               // сразу, иначе текст не доедет до нового хода никогда.
               if (known.result && typeof known.result === 'object') {
-                filesPutRec(msgId, filesRecFor(known, msgId));
-                applyFileTextToTurn(msgId);
+                filesPutRec(cid, msgId, filesRecFor(known, msgId));
+                applyFileTextToTurn(cid, msgId);
               }
             }
             continue;
@@ -469,6 +500,7 @@
             orderByMsg: {},
             status: 'queued',
             result: null,
+            epoch: filesEpoch,
             startedAt: 0,
             doneAt: 0
           };
@@ -512,12 +544,16 @@
         fetchFileContent(item.fileId, item.signedPath).then(function (res) {
           fileQueueActive--;
           if (fileQueueActive < 0) fileQueueActive = 0;
+          // Разговор сменился, пока файл был в полёте: результат принадлежит прежнему чату и
+          // после resetFiles() в карту не пишется (иначе сброс «воскресал» бы ответом).
+          if (item.epoch !== filesEpoch) { pumpFileQueue(); return; }
           filesOnFetched(item, res);
           filesDrainKick('drained');
           pumpFileQueue();
         }, function (eFetch) {
           fileQueueActive--;
           if (fileQueueActive < 0) fileQueueActive = 0;
+          if (item.epoch !== filesEpoch) { pumpFileQueue(); return; }
           item.status = 'failed';
           if (fileQueueByKey[item.key] === item) delete fileQueueByKey[item.key];
           filesDiag('deepseek-files-error', {
@@ -613,9 +649,12 @@
       // Пересобрать текст хода: база (answer + reasoning, как в D.8) + секция на КАЖДЫЙ файл
       // сообщения. Раньше запоминались ОДИН fileText/fileName — второе вложение затирало первое,
       // и из четырёх файлов в экспорт попадал только последний пришедший.
-      function applyFileTextToTurn(msgId) {
+      // convId обязателен: текст чужого разговора не применяется даже при совпадении message_id.
+      function applyFileTextToTurn(convId, msgId) {
         if (!turnsMap || !msgId) return false;
-        var recs = fileTextsByMsg[msgId];
+        var cid = fileStr(convId);
+        if (cid !== fileStr(currentConvId)) return false;
+        var recs = fileTextsByMsg[fileTextKey(cid, msgId)];
         if (!recs || !recs.length) return false;
         var t = turnsMap[msgId];
         if (!t) return false;
@@ -639,13 +678,18 @@
       }
 
       // Применить уже скачанные тексты к СВЕЖЕМУ turnsMap (D.8 только что его пересобрал).
+      // Только текущий разговор: ключ карты — `<convId>\u0000<msgId>`, чужие записи не трогаем.
       function applyPendingFileTexts() {
         if (!turnsMap) return 0;
+        var cid = fileStr(currentConvId);
         var ids = Object.keys(fileTextsByMsg);
         var applied = 0;
         for (var i = 0; i < ids.length; i++) {
-          if (!turnsMap[ids[i]]) continue;
-          if (applyFileTextToTurn(ids[i])) applied++;
+          var sep = ids[i].indexOf('\u0000');
+          if (sep === -1 || ids[i].slice(0, sep) !== cid) continue;
+          var msgId = ids[i].slice(sep + 1);
+          if (!turnsMap[msgId]) continue;
+          if (applyFileTextToTurn(cid, msgId)) applied++;
         }
         if (applied) scheduleFilesEmit();
         return applied;
@@ -675,9 +719,11 @@
 
       // Положить запись файла в список сообщения: замена по fileId (повторный ingest) или
       // вставка на позицию order, чтобы секции шли как вложения в чате, а не как пришли ответы.
-      function filesPutRec(msgId, rec) {
-        var recs = fileTextsByMsg[msgId];
-        if (!recs) { recs = []; fileTextsByMsg[msgId] = recs; }
+      // Ключ карты — `<convId>\u0000<msgId>`: одинаковые message_id из разных чатов не смешиваются.
+      function filesPutRec(convId, msgId, rec) {
+        var key = fileTextKey(convId, msgId);
+        var recs = fileTextsByMsg[key];
+        if (!recs) { recs = []; fileTextsByMsg[key] = recs; }
         for (var i = 0; i < recs.length; i++) {
           if (recs[i] && recs[i].fileId === rec.fileId) { recs[i] = rec; return; }
         }
@@ -695,6 +741,7 @@
         var res = item.result || {};
         var ok = res.ok === true && !!res.text;
         return {
+          convId: fileStr(item.convId),
           fileId: item.fileId,
           name: res.name || item.name || '',
           text: ok ? res.text : '',
@@ -723,8 +770,8 @@
         var applied = 0;
         for (var i = 0; i < ids.length; i++) {
           // Метка с причиной и на провале: файл остаётся виден в экспорте, даже если тело не пришло.
-          filesPutRec(ids[i], filesRecFor(item, ids[i]));
-          if (applyFileTextToTurn(ids[i])) applied++;
+          filesPutRec(item.convId, ids[i], filesRecFor(item, ids[i]));
+          if (applyFileTextToTurn(item.convId, ids[i])) applied++;
         }
         if (!ok) {
           filesDiag('deepseek-files-error', {
@@ -769,6 +816,7 @@
       Fn.fetchFileContent = fetchFileContent;
       Fn.fileQueueStats = fileQueueStats;
       Fn.fileTextsByMsg = fileTextsByMsg;
+      Fn.resetFiles = resetFiles;
     }
   }
   Fn.__bind = __bind;

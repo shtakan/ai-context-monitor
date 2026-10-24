@@ -151,9 +151,13 @@ function resp(body, status, ok) {
   return { ok: ok !== false, status: status || 200, text: function () { return Promise.resolve(body); } };
 }
 
+// Ключ карты текстов вложений: `<convId>\u0000<msgId>` — кэш привязан к разговору,
+// поэтому одинаковый message_id из другого чата не читает чужой файл.
+function fileKey(h, msgId) { return (h.deps.currentConvId || '') + '\u0000' + msgId; }
+
 // ===== S1: контракт связки и гард повторной загрузки =================================
 describe('Step D.10: core/deepseek-files.js — контракт модуля FILES', () => {
-  test('S1: до __bind экспортируется только __bind, после — восемь функций и карта текстов', () => {
+  test('S1: до __bind экспортируется только __bind, после — девять функций и карта текстов', () => {
     const h = makeHarness({ bind: false });
     expect(Object.keys(h.Fn)).toEqual(['__bind']);
     expect(typeof h.Fn.__bind).toBe('function');
@@ -167,7 +171,8 @@ describe('Step D.10: core/deepseek-files.js — контракт модуля FI
       'fetchFileContent',
       'fileQueueStats',
       'fileTextsByMsg',
-      'filesMessageHasRefs'
+      'filesMessageHasRefs',
+      'resetFiles'
     ]);
     expect(typeof h.Fn.fileTextsByMsg).toBe('object');
     expect(h.Fn.fileQueueStats()).toEqual({ queued: 0, active: 0, pending: 0, texts: 0, keys: [] });
@@ -429,9 +434,9 @@ describe('Step D.10: очередь вложений — FIFO, concurrency 2, д
     h.fetchCalls[0].resolve(resp('BODY F1'));
     h.fetchCalls[1].resolve(resp('BODY F9'));
     await flush();
-    expect(h.Fn.fileTextsByMsg.m1[0].text).toBe('BODY F1');
-    expect(h.Fn.fileTextsByMsg.m2[0].text).toBe('BODY F1');
-    expect(h.Fn.fileTextsByMsg.m3[0].text).toBe('BODY F9');
+    expect(h.Fn.fileTextsByMsg[fileKey(h, 'm1')][0].text).toBe('BODY F1');
+    expect(h.Fn.fileTextsByMsg[fileKey(h, 'm2')][0].text).toBe('BODY F1');
+    expect(h.Fn.fileTextsByMsg[fileKey(h, 'm3')][0].text).toBe('BODY F9');
     // текст уже разложен, но дебаунс-эмит базы ещё в полёте — очередь «занята» (A-лайт ждёт)
     expect(h.Fn.fileQueueStats().pending).toBe(1);
     h.tick(250);
@@ -457,8 +462,8 @@ describe('Step D.10: очередь вложений — FIFO, concurrency 2, д
     // сбой тоже планирует ре-эмит (метка-заглушка должна доехать до экспорта): гасим дебаунс
     h.tick(300);
     expect(h.Fn.fileQueueStats().pending).toBe(0);
-    expect(h.Fn.fileTextsByMsg.m1[0].failed).toBe(true);
-    expect(h.Fn.fileTextsByMsg.m1[0].reason).toBe('http-500');
+    expect(h.Fn.fileTextsByMsg[fileKey(h, 'm1')][0].failed).toBe(true);
+    expect(h.Fn.fileTextsByMsg[fileKey(h, 'm1')][0].reason).toBe('http-500');
     h.Fn.enqueueChainFiles([msg('m1', 'USER', [fileFrag('f1')])], {});
     expect(h.fetchCalls).toHaveLength(2);
   });
@@ -490,7 +495,7 @@ describe('Step D.10: fileTextsByMsg, пересборка хода и дебау
     h.fetchCalls[0].resolve(resp('FILE BODY'));
     await flush();
     expect(h.deps.turnsMap.m1.text).toBe('ответ\n\n[FILE: a.txt]\nFILE BODY');
-    expect(h.Fn.fileTextsByMsg.m1[0].text).toBe('FILE BODY');
+    expect(h.Fn.fileTextsByMsg[fileKey(h, 'm1')][0].text).toBe('FILE BODY');
     expect(h.deps.emitBaseSnapshot).not.toHaveBeenCalled();
     h.tick(250);
     expect(h.deps.emitBaseSnapshot).toHaveBeenCalledTimes(1);
@@ -555,7 +560,7 @@ describe('Step D.10: несколько вложений одного сообщ
       '\n\n[FILE: 3.txt]\nB3' +
       '\n\n[FILE: 4.txt]\nB4'
     );
-    expect(h.Fn.fileTextsByMsg.m1.map(function (r) { return r.fileId; })).toEqual(['f1', 'f2', 'f3', 'f4']);
+    expect(h.Fn.fileTextsByMsg[fileKey(h, 'm1')].map(function (r) { return r.fileId; })).toEqual(['f1', 'f2', 'f3', 'f4']);
   });
 
   test('S2: провал одного вложения оставляет метку с причиной, соседние секции целы', async () => {
@@ -586,7 +591,65 @@ describe('Step D.10: несколько вложений одного сообщ
     h.deps.turnsMap = { m5: { text: 'a', answer: 'a', reasoning: '', order: 0, role: 'user' } };
     expect(h.Fn.applyPendingFileTexts()).toBe(1);
     expect(h.deps.turnsMap.m5.text).toBe(once);
-    expect(h.Fn.fileTextsByMsg.m5).toHaveLength(2);
+    expect(h.Fn.fileTextsByMsg[fileKey(h, 'm5')]).toHaveLength(2);
+  });
+});
+
+// ===== S4d: сброс на смену чата — кэш файлов не переезжает ==========================
+describe('Step D.10: resetFiles — смена чата сбрасывает кэш вложений (фикс утечки)', () => {
+  test('S1: resetFiles чистит карту, очередь, счётчик и ожидания; экспорт смотрит на новую карту', async () => {
+    const h = makeHarness();
+    h.deps.turnsMap.m1 = { text: '', answer: '', reasoning: '', order: 0, role: 'user' };
+    h.Fn.enqueueChainFiles([msg('m1', 'USER', [fileFrag('f1', 'a.txt')])], {});
+    h.fetchCalls[0].resolve(resp('BODY'));
+    await flush();
+    expect(h.Fn.fileTextsByMsg[fileKey(h, 'm1')]).toHaveLength(1);
+    expect(h.Fn.resetFiles()).toBe(true);
+    expect(h.Fn.fileTextsByMsg).toEqual({});
+    expect(h.Fn.fileQueueStats()).toEqual({ queued: 0, active: 0, pending: 0, texts: 0, keys: [] });
+    // дебаунс-эмит прежнего чата снят: после сброса база не переопубликуется
+    h.tick(300);
+    expect(h.deps.emitBaseSnapshot).toHaveBeenCalledTimes(0);
+  });
+
+  test('S2: запись прежнего чата не применяется в новом даже при совпадении message_id', async () => {
+    const h = makeHarness();
+    h.deps.turnsMap.m1 = { text: 'a', answer: 'a', reasoning: '', order: 0, role: 'assistant' };
+    h.Fn.enqueueChainFiles([msg('m1', 'ASSISTANT', [fileFrag('f1', 'a.txt')])], {});
+    h.fetchCalls[0].resolve(resp('OLD CHAT'));
+    await flush();
+
+    // сменили чат: ядро зовёт resetFiles ДО пересборки turnsMap нового разговора
+    h.deps.currentConvId = 'convB';
+    expect(h.Fn.resetFiles()).toBe(true);
+    h.deps.turnsMap = { m1: { text: 'b', answer: 'b', reasoning: '', order: 0, role: 'assistant' } };
+
+    expect(h.Fn.applyPendingFileTexts()).toBe(0);          // кэш прошлого чата не подмешивается
+    expect(h.deps.turnsMap.m1.text).toBe('b');
+
+    // новый чат качает свой файл и живёт в собственном ключе
+    h.Fn.enqueueChainFiles([msg('m1', 'ASSISTANT', [fileFrag('f1', 'a.txt')])], {});
+    expect(h.fetchCalls).toHaveLength(2);                  // дедуп не переехал вместе с кэшем
+    h.fetchCalls[1].resolve(resp('NEW CHAT'));
+    await flush();
+    expect(h.deps.turnsMap.m1.text).toBe('b\n\n[FILE: a.txt]\nNEW CHAT');
+    expect(h.Fn.fileTextsByMsg[fileKey(h, 'm1')][0].text).toBe('NEW CHAT');
+  });
+
+  test('S3: fetch, начатый ДО смены чата, после resetFiles не воскрешает запись', async () => {
+    const h = makeHarness();
+    h.deps.turnsMap.m1 = { text: '', answer: '', reasoning: '', order: 0, role: 'user' };
+    h.Fn.enqueueChainFiles([msg('m1', 'USER', [fileFrag('f1', 'a.txt')])], {});
+    expect(h.fetchCalls).toHaveLength(1);                  // запрос ещё в полёте
+
+    h.deps.currentConvId = 'convB';
+    h.Fn.resetFiles();
+    h.fetchCalls[0].resolve(resp('LATE BODY'));            // ответ прежнего чата
+    await flush();
+
+    expect(h.Fn.fileTextsByMsg).toEqual({});               // сброс не «воскрес»
+    expect(h.Fn.fileQueueStats().active).toBe(0);
+    expect(h.Fn.fileQueueStats().pending).toBe(0);
   });
 });
 

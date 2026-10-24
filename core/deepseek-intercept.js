@@ -838,17 +838,19 @@ if (typeof window !== 'undefined') {
   function getModelSlug(thinkingEnabled, signals) { return aiCmDeepseekParse.getModelSlug(thinkingEnabled, signals); }
 
   // ===== Step D.5: связка модуля CONV ID (core/deepseek-conv.js) =====
-  // Контракт: 3 fn (diagResetForConv, resetStreamState, scheduleHistoryRefetch) + 19 rw
-  // (состояние, которое тело сброса ПЕРЕЗАПИСЫВАЕТ: без сеттера запись в sloppy-
+  // Контракт: 4 fn (diagResetForConv, resetStreamState, scheduleHistoryRefetch, resetFiles —
+  // сброс файлового кэша вложений живёт в core/deepseek-files.js и вызывается на смену чата) +
+  // 19 rw (состояние, которое тело сброса ПЕРЕЗАПИСЫВАЕТ: без сеттера запись в sloppy-
   // режиме молча терялась бы, и сброс на смену чата перестал бы работать) + 1 ro
   // (histCompletion: тело мутирует ПОЛЯ объекта, а не переприсваивает имя — мутация
-  // по ссылке видна ядру без сеттера). Итого 23 имени контракта: 3 fn + 19 rw + 1 ro.
+  // по ссылке видна ядру без сеттера). Итого 24 имени контракта: 4 fn + 19 rw + 1 ro.
   if (aiCmDeepseekConv) {
     aiCmDeepseekConv.__bind({
       // fn: функции ядра, которые зовут тела модуля — передаются значением.
       diagResetForConv: diagResetForConv,
       resetStreamState: resetStreamState,
       scheduleHistoryRefetch: scheduleHistoryRefetch,
+      resetFiles: resetFiles,
       // rw: живое состояние, которое модуль ПЕРЕЗАПИСЫВАЕТ (get + set).
       get currentConvId() { return currentConvId; },
       set currentConvId(v) { currentConvId = v; },
@@ -1087,6 +1089,9 @@ if (typeof window !== 'undefined') {
   // остальных: ядро грузится и без модуля, обёртка не имеет права бросать.
   function enqueueChainFiles(chain, modelSignals) { if (aiCmDeepseekFiles) return aiCmDeepseekFiles.enqueueChainFiles(chain, modelSignals); }
   function applyPendingFileTexts() { if (aiCmDeepseekFiles) return aiCmDeepseekFiles.applyPendingFileTexts(); }
+  // Сброс файлового состояния на смену чата (фикс утечки кэша между чатами): очередь, карта
+  // текстов и ожидания принадлежат ОДНОМУ разговору. Зовётся из resetForNewConversation (D.5).
+  function resetFiles() { if (aiCmDeepseekFiles) return aiCmDeepseekFiles.resetFiles(); }
   // Предикат «у сообщения есть вложения»: ingest обязан создать ход из ОДНИХ вложений на его
   // месте в цепочке (без него файловый модуль заводил хвостовую заглушку и текст уезжал в конец).
   function filesMessageHasRefs(msg) { if (aiCmDeepseekFiles) return aiCmDeepseekFiles.filesMessageHasRefs(msg); return false; }

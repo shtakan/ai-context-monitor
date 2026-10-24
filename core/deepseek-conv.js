@@ -117,7 +117,7 @@
     netSnapshotAt = 0;
     netTurnIds = {};
     lastTurnDoneAt = 0;
-    resetStreamState();
+    resetStreamState(); if (typeof resetFiles === 'function') resetFiles();   // D.10: файловый кэш вложений (deepseek-files.js) не переезжает в следующий чат
     console.log('[deepseek-intercept] смена чата → состояние перехватчика сброшено (convId=' + (currentConvId || '(не чат)') + ')');
     try { window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); } catch (e) { }
     scheduleHistoryRefetch();
