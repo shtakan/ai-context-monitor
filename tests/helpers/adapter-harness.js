@@ -161,6 +161,35 @@ function collectFiles(file, seen, all) {
   return deps.join('\n') + src;
 }
 
+/**
+ * Патч `innerText` для jsdom (residual v90 §4 п.2 / v101 §4 п.4).
+ *
+ * jsdom не реализует `HTMLElement.prototype.innerText`, поэтому адаптеры идут
+ * структурным фолбэком `_readableText` (adapters/qwen-adapter.js:203-216) — контракт
+ * держится, но проверяется не тот путь, что в браузере. Патч возвращает семантику
+ * «innerText ≈ textContent для плоского текста» и ставится ТОЛЬКО в окно песочницы,
+ * у которого реально есть `HTMLElement`.
+ *
+ * Почему не патчим `document.defaultView` у настоящего jsdom: глобальный
+ * `innerText = textContent` схлопывает переводы строк, на которые опираются пины
+ * многострочности (`tests/adapters/contract-qwen.test.js` Q5, `tests/qwen-adapter.test.js`
+ * Д2/Д4/Д7, где каждая строка — отдельный `<p>`). Тогда `_readableText` перестал бы
+ * проверять структурный фолбэк и покраснел бы на честном же требовании.
+ *
+ * @param {object} win окно песочницы (`sandbox.window`)
+ * @returns {boolean} true — свойство поставлено; false — уже есть или `HTMLElement` нет
+ */
+function patchInnerText(win) {
+  if (!win || !win.HTMLElement || !win.HTMLElement.prototype) return false;
+  const proto = win.HTMLElement.prototype;
+  if ('innerText' in proto) return false;
+  Object.defineProperty(proto, 'innerText', {
+    get: function () { return this.textContent; },
+    configurable: true
+  });
+  return true;
+}
+
 function createSandbox(options) {
   const opts = options || {};
   const errors = [];
@@ -177,6 +206,9 @@ function createSandbox(options) {
   };
   const locationStub = { hostname: 'localhost', pathname: '/', href: 'http://localhost/' };
   const win = { location: opts.location || locationStub };
+  // jsdom-патч innerText: у заглушки `win` класса HTMLElement нет — честный no-op
+  // (см. patchInnerText); при инъекции реального jsdom-окна свойство появится.
+  notes.push({ innerTextPatched: patchInnerText(win) });
 
   const debugLog = function debugLogNoop() { };
 
