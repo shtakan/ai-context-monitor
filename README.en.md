@@ -7,7 +7,7 @@ A Chrome and Microsoft Edge (Chromium) extension (Manifest V3) that shows in rea
 
 The extension is distributed outside any store (publication in Edge Add-ons is postponed). The main channel is GitHub Releases.
 
-1. Download the `ai-context-monitor-v2.0.25.zip` archive from the release page: <https://github.com/shtakan/ai-context-monitor/releases/tag/v2.0.25>
+1. Download the `ai-context-monitor-v2.0.26.zip` archive from the release page: <https://github.com/shtakan/ai-context-monitor/releases/tag/v2.0.26>
 2. Unpack the archive into any folder.
 3. **Microsoft Edge**: open `edge://extensions`, enable **Developer mode**, click **Load unpacked** and select the unpacked folder.
 4. **Google Chrome**: open `chrome://extensions` and do the same.
@@ -18,7 +18,7 @@ The extension is fully open source ([source code](../../tree/main)): no store re
 
 ## Features
 
-- **6 supported platforms**: Google Gemini, ChatGPT, DeepSeek, Claude, Perplexity, Google AI Search.
+- **7 supported platforms**: Google Gemini, ChatGPT, DeepSeek, Claude, Perplexity, Google AI Search, Google AI Studio (aistudio.google.com).
 - **Real-time fill badge**: a live widget in the corner of the screen showing context fill (%, tokens / limit, model name), updated as you chat.
 - **Auto-export at threshold**: when the configured fill threshold is reached, the full chat history is downloaded automatically as `txt`/`md` — once per chat, only after the complete history has been loaded.
 - **DeepSeek reasoning in exports**: DeepSeek returns chain-of-thought fragments (`THINK`) alongside the answer, so an exported DeepSeek turn keeps both — `[REASONING] … [ANSWER] …`. Turns without reasoning (and every other platform) keep the previous export format unchanged.
@@ -77,7 +77,7 @@ service worker (core/background.js)
 npm test
 ```
 
-Runs Jest — **as of v2.0.25 (2026-10-24): 186 suites / 3284 tests**, green in CI. The counters are a dated snapshot of the v2.0.25 tree; the live numbers are whatever `npm test` prints as its `Tests: ... total` line. Sanitized fixtures are bundled in `tests/fixtures`. Personal ("live") captured samples are gitignored — tests that require them are skipped automatically when those files are absent.
+Runs Jest — **as of v2.0.26 (2026-10-24): 187 suites / 3297 tests**, green in CI. The counters are a dated snapshot of the v2.0.26 tree; the live numbers are whatever `npm test` prints as its `Tests: ... total` line. Sanitized fixtures are bundled in `tests/fixtures`. Personal ("live") captured samples are gitignored — tests that require them are skipped automatically when those files are absent.
 
 ## Privacy
 
