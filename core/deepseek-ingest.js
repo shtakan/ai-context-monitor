@@ -293,7 +293,25 @@
           lastAssistantId = chId;
           continue;
         }
-        if (!text) continue;
+        // Сообщение из ОДНИХ вложений: у пользовательского хода нет REQUEST-текста, поэтому
+        // раньше он молча пропускался, а файловый модуль заводил ход-заглушку уже ПОСЛЕ
+        // цикла — с order из хвоста orderCounter, и текст вложения уезжал в конец экспорта.
+        // Заводим ход ЗДЕСЬ: order берётся на своём месте в цепочке, а текст файла допишется
+        // в t.text, когда ответ files.deepseeksvc.com придёт (applyFileTextToTurn).
+        if (!text) {
+          if (chRole === 'user' && typeof filesMessageHasRefs === 'function' && filesMessageHasRefs(ch)) {
+            turnsMap[chId] = {
+              text: '',
+              answer: '',
+              reasoning: '',
+              modelSlug: getModelSlug(ch.thinking_enabled === true, chatModelSignals),
+              order: orderCounter++,
+              ts: ch.inserted_at || 0,
+              role: chRole
+            };
+          }
+          continue;
+        }
         turnsMap[chId] = {
           text: composeTurnText(text, chReasoning),
           answer: text,
@@ -350,19 +368,6 @@
       // возвращает уже скачанные тексты в ТОЛЬКО ЧТО пересобранный turnsMap (повторный
       // ingest не качает файл заново — дедуп convId|fileId и карта fileTextsByMsg живут
       // дольше одного снимка). Ошибка связки не имеет права сорвать приёмку истории.
-      // TEMP-DIAG (ВРЕМЕННО, убрать после диагностики): сырые fragments каждого сообщения
-      // ACCEPT-цепочки — ровно то, из чего extractFileRefs вынимает file_id/имя файла.
-      try {
-        for (var tdi = 0; tdi < chain.length; tdi++) {
-          var tdm = chain[tdi];
-          console.log('deepseek-ingest-chain-fragments', tdi,
-            JSON.stringify(tdm && tdm.fragments));
-        }
-      } catch (eTempDiagChain) {
-        if (typeof aiCmDiagWarn === 'function') {
-          aiCmDiagWarn('deepseek:ingestHistory', '[deepseek-intercept] temp-diag fragments dump упал:', eTempDiagChain);
-        }
-      }
       try {
         if (typeof enqueueChainFiles === 'function') enqueueChainFiles(chain, chatModelSignals);
         if (typeof applyPendingFileTexts === 'function') applyPendingFileTexts();

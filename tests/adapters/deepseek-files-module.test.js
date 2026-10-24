@@ -153,7 +153,7 @@ function resp(body, status, ok) {
 
 // ===== S1: контракт связки и гард повторной загрузки =================================
 describe('Step D.10: core/deepseek-files.js — контракт модуля FILES', () => {
-  test('S1: до __bind экспортируется только __bind, после — шесть функций и карта текстов', () => {
+  test('S1: до __bind экспортируется только __bind, после — восемь функций и карта текстов', () => {
     const h = makeHarness({ bind: false });
     expect(Object.keys(h.Fn)).toEqual(['__bind']);
     expect(typeof h.Fn.__bind).toBe('function');
@@ -166,7 +166,8 @@ describe('Step D.10: core/deepseek-files.js — контракт модуля FI
       'extractFileRefs',
       'fetchFileContent',
       'fileQueueStats',
-      'fileTextsByMsg'
+      'fileTextsByMsg',
+      'filesMessageHasRefs'
     ]);
     expect(typeof h.Fn.fileTextsByMsg).toBe('object');
     expect(h.Fn.fileQueueStats()).toEqual({ queued: 0, active: 0, pending: 0, texts: 0, keys: [] });
@@ -250,6 +251,14 @@ describe('Step D.10: core/deepseek-files.js — контракт модуля FI
     expect(h2.Fn.enqueueChainFiles([onlyImages], {})).toBe(0);
     expect(h2.deps.turnsMap).toEqual({});
     expect(h2.fetchCalls).toHaveLength(0);
+  });
+  test('S3b: filesMessageHasRefs — предикат «у сообщения есть вложения» для ingest (D.11)', () => {
+    const h = makeHarness();
+    expect(h.Fn.filesMessageHasRefs(msg('m1', 'USER', [fileFrag('f1', 'a.pdf')]))).toBe(true);
+    expect(h.Fn.filesMessageHasRefs(msg('m2', 'USER', [{ type: 'REQUEST', content: 'без файлов' }]))).toBe(false);
+    expect(h.Fn.filesMessageHasRefs(msg('m3', 'USER', [], { attachments: [{ file_id: 'f9' }] }))).toBe(true);
+    expect(h.Fn.filesMessageHasRefs(null)).toBe(false);
+    expect(h.Fn.filesMessageHasRefs({})).toBe(false);
   });
 });
 
@@ -358,6 +367,35 @@ describe('Step D.10: fetchFileContent — сетевой контракт фай
     expect(res.truncated).toBe(true);
     expect(res.text.length).toBe(2000000);
   });
+  test('S6: JSON без текстовых полей (дамп API) отдаётся СЫРЫМ телом, а не no-text', async () => {
+    const h = makeHarness();
+    // ровно тот случай, что терялся: deepseek_history.json = дамп ответа history_messages
+    const dump = JSON.stringify({
+      code: 0, msg: '',
+      data: { biz_code: 0, biz_msg: '', biz_data: { chat_session: { id: 's1' }, chat_messages: [] } },
+      cache_control: 'MERGE'
+    });
+    const p = h.Fn.fetchFileContent('f1', '');
+    h.fetchCalls[0].resolve(resp(dump));
+    const res = await p;
+    expect(res.ok).toBe(true);
+    expect(res.text).toBe(dump);        // содержимое = сам файл, байт-в-байт
+    expect(res.truncated).toBe(false);
+  });
+
+  test('S7: ошибка сервера в JSON (code≠0) остаётся провалом api-<code> — тело её не маскирует', async () => {
+    const h = makeHarness();
+    const p = h.Fn.fetchFileContent('f1', '');
+    h.fetchCalls[0].resolve(resp(JSON.stringify({ code: 40003, msg: 'no access' })));
+    await expect(p).resolves.toEqual({ ok: false, reason: 'api-40003', text: '' });
+  });
+
+  test('S8: JSON с текстовым полем по-прежнему даёт ТЕКСТ поля, а не сырой дамп', async () => {
+    const h = makeHarness();
+    const p = h.Fn.fetchFileContent('f1', '');
+    h.fetchCalls[0].resolve(resp(JSON.stringify({ code: 0, data: { content: 'тело файла', file_name: 'a.txt' } })));
+    await expect(p).resolves.toEqual({ ok: true, text: 'тело файла', name: 'a.txt', truncated: false });
+  });
 });
 
 // ===== S3: очередь FIFO / concurrency 2 / дедуп ======================================
@@ -423,6 +461,23 @@ describe('Step D.10: очередь вложений — FIFO, concurrency 2, д
     expect(h.Fn.fileTextsByMsg.m1[0].reason).toBe('http-500');
     h.Fn.enqueueChainFiles([msg('m1', 'USER', [fileFrag('f1')])], {});
     expect(h.fetchCalls).toHaveLength(2);
+  });
+  test('S5: файл в НОВОМ сообщении не качается заново — текст раскладывается из кэша', async () => {
+    const h = makeHarness();
+    h.deps.turnsMap.m1 = { text: '', answer: '', reasoning: '', order: 0, role: 'user' };
+    h.Fn.enqueueChainFiles([msg('m1', 'USER', [fileFrag('f1', 'a.txt')])], {});
+    h.fetchCalls[0].resolve(resp('CACHED'));
+    await flush();
+    h.tick(250);
+    expect(h.fetchCalls).toHaveLength(1);
+
+    // новый снимок (SPA-навигация/дозапрос): тот же файл приложен к ДРУГОМУ сообщению
+    h.deps.turnsMap = {};
+    h.deps.orderCounter = 1;                       // как после ingest первого хода
+    h.Fn.enqueueChainFiles([msg('m2', 'USER', [fileFrag('f1', 'a.txt')])], {});
+    expect(h.fetchCalls).toHaveLength(1);          // тело не качается второй раз
+    expect(h.deps.turnsMap.m2.order).toBe(1);      // ход-заглушка на своём месте
+    expect(h.deps.turnsMap.m2.text).toBe('\n\n[FILE: a.txt]\nCACHED');
   });
 });
 

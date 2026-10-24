@@ -65,12 +65,12 @@ const DS = require('../helpers/deepseek-intercept-source.js');
 const MODULE_SRC = DS.moduleSource('deepseek-ingest.js');
 const KERNEL_SRC = DS.moduleSource('deepseek-intercept.js');
 
-// ---- контракт связки (S1): 17 fn + 10 rw + 8 ro = 35 имён --------------------------
+// ---- контракт связки (S1): 18 fn + 10 rw + 8 ro = 36 имён --------------------------
 const FN_NAMES = ['diagOn', 'diagMark', 'diagHistRecord', 'diagSnapshotNetTurns',
   'isDebugEnabled', 'determineState', 'dumpHistorySnapshot', 'dumpTurnUsageAtHistoryLoad',
   'refetchFullHistory', 'buildActiveChain', 'collectTurnText', 'collectTurnReasoning',
   'composeTurnText', 'getModelSlug', 'emitBaseSnapshot',
-  'enqueueChainFiles', 'applyPendingFileTexts'];
+  'enqueueChainFiles', 'applyPendingFileTexts', 'filesMessageHasRefs'];
 const RW_NAMES = ['turnsMap', 'orderCounter', 'histCompletion', 'netSnapshotAt', 'netTurnIds',
   'loggedHistory', 'lastLoadedConvId', 'historyRefetchDone', 'ingestMode', 'exportSyncTruncated'];
 const RO_NAMES = ['currentConvId', 'lastHistoryUrl', 'lastAuthHeaders', 'sseConfigName',
@@ -87,7 +87,8 @@ const FN_IMPL = {
   collectTurnReasoning: 'aiCmDeepseekParse', composeTurnText: 'aiCmDeepseekParse',
   getModelSlug: 'aiCmDeepseekParse',
   emitBaseSnapshot: 'aiCmDeepseekEmit',
-  enqueueChainFiles: 'aiCmDeepseekFiles', applyPendingFileTexts: 'aiCmDeepseekFiles'
+  enqueueChainFiles: 'aiCmDeepseekFiles', applyPendingFileTexts: 'aiCmDeepseekFiles',
+  filesMessageHasRefs: 'aiCmDeepseekFiles'
 };
 
 // ---- что модуль отдаёт наружу после __bind (S2) -------------------------------------
@@ -118,10 +119,12 @@ const MOVED_BLOCKS = [
     // Step D.10 (Вариант B): в ACCEPT-ветке перед emitBaseSnapshot вставлен вызов
     // enqueueChainFiles/applyPendingFileTexts (6 строк) — расхождение с эталоном 2623b3a
     // ровно в этом месте, pin пересчитан по новой версии.
-    // TEMP-DIAG: там же перед связкой файлов добавлен временный дамп
-    // `console.log('deepseek-ingest-chain-fragments', ...)` по chain (диагностика вложений);
+    // Step D.11: ветка `if (!text) continue` для пользовательского сообщения заменена на
+    // создание хода из ОДНИХ вложений на его месте в цепочке (предикат filesMessageHasRefs):
+    // иначе файловый модуль заводил ход-заглушку уже ПОСЛЕ цикла — с order из хвоста
+    // orderCounter, и текст вложения уезжал в конец экспорта. TEMP-DIAG дамп chain удалён;
     // pin вновь пересчитан по фактическим байтам, блок остаётся неизменным ориентиром.
-    sha: 'd0759a54ca3a378c6d2abc9d54bc49d56e921b9209c00e2519f516d8f1e574cc'
+    sha: '641e050cebef22419bc71a4d20e15b940f06b139eba885d49d26242a5d119a19'
   }
 ];
 
@@ -263,7 +266,7 @@ function makeProbe() {
     diagOn: 0, diagMark: 0, diagHistRecord: 0, diagSnapshotNetTurns: 0, isDebugEnabled: 0,
     determineState: 0, dumpHistorySnapshot: 0, dumpTurnUsageAtHistoryLoad: 0,
     refetchFullHistory: 0, buildActiveChain: 0, collectTurnText: 0, collectTurnReasoning: 0,
-    composeTurnText: 0, getModelSlug: 0, emitBaseSnapshot: 0,
+    composeTurnText: 0, getModelSlug: 0, emitBaseSnapshot: 0, filesMessageHasRefs: 0,
     marks: [], refetchArgs: [], histRecords: [], snapshots: [], emits: [], dumps: [], usage: []
   };
   const D = {};
@@ -314,6 +317,14 @@ function makeProbe() {
     getModelSlug: function (thinkingEnabled) {
       calls.getModelSlug++;
       return thinkingEnabled ? 'deepseek-reasoner' : 'deepseek-v3';
+    },
+    // Предикат файлового модуля: «у сообщения есть вложения» (хост-проверка для D.11).
+    // Реалистичная копия: FILE-фрагмент в fragments[] (как extractFileRefs в deepseek-files.js).
+    filesMessageHasRefs: function (m) {
+      calls.filesMessageHasRefs++;
+      return !!(m && Array.isArray(m.fragments) && m.fragments.some(function (f) {
+        return f && f.type === 'FILE';
+      }));
     },
     emitBaseSnapshot: function (serverTokens, chatMode) {
       calls.emitBaseSnapshot++; calls.emits.push([serverTokens, chatMode]);
@@ -367,6 +378,7 @@ function msg(id, parent, role, text, opts) {
   const o = opts || {};
   const fragments = [];
   if (o.reasoning) fragments.push({ type: 'THINK', content: o.reasoning });
+  if (o.file) fragments.push({ type: 'FILE', file_id: o.file, file_name: o.file + '.txt' });
   if (text) fragments.push({ type: role === 'USER' ? 'REQUEST' : 'RESPONSE', content: text });
   return {
     message_id: id, parent_id: parent, role: role, thinking_enabled: !!o.thinking,
@@ -408,12 +420,12 @@ function truncatedBody() {
 }
 
 describe('Step D.8: core/deepseek-ingest.js — контракт модуля INGEST', () => {
-  test('S1: литерал __bind в ядре содержит ровно 35 имён (17 fn + 10 rw + 8 ro)', function () {
+  test('S1: литерал __bind в ядре содержит ровно 36 имён (18 fn + 10 rw + 8 ro)', function () {
     expect(KINDS.size).toBe(CONTRACT.length);
     CONTRACT.forEach(function (pair) { expect(KINDS.get(pair[0])).toBe(pair[1]); });
     const kinds = { fn: 0, ro: 0, rw: 0 };
     CONTRACT.forEach(function (pair) { kinds[pair[1]]++; });
-    expect(kinds).toEqual({ fn: 17, ro: 8, rw: 10 });
+    expect(kinds).toEqual({ fn: 18, ro: 8, rw: 10 });
     // каждая fn-передача — реально существующий форвардер ядра (хойстится к моменту связки)
     FN_NAMES.forEach(function (n) {
       expect(KERNEL_SRC).toContain('function ' + n + '(');
@@ -439,7 +451,7 @@ describe('Step D.8: core/deepseek-ingest.js — контракт модуля IN
       expect(literal).toContain('get ' + n + '() { return ' + n + '; }');
       expect(literal).toContain('set ' + n + '(v) { ' + n + ' = v; }');
     });
-    // единственный форвардер D.8 — ingestHistory: остальные 14 имён ядро у модуля
+    // единственный форвардер D.8 — ingestHistory: остальные fn-имена ядро у модуля
     // не запрашивает (их читает только тело K5)
     expect(KERNEL_SRC).toContain('function ingestHistory(jsonBody) { if (aiCmDeepseekIngest) return aiCmDeepseekIngest.ingestHistory(jsonBody); }');
     FN_NAMES.forEach(function (n) {
@@ -466,9 +478,13 @@ describe('Step D.8: core/deepseek-ingest.js — контракт модуля IN
     expect(KERNEL_SRC).toContain('enqueueChainFiles: enqueueChainFiles,');
     expect(KERNEL_SRC).toContain('applyPendingFileTexts: applyPendingFileTexts,');
     // модуль FILES публикует ровно эти имена (связка по именам, без рефлексии).
+    // D.11: предикат вложений — тоже имя-в-имя (иначе ingest не узнает про ход из вложений).
+    expect(KERNEL_SRC).toContain('function filesMessageHasRefs(msg) { if (aiCmDeepseekFiles) return aiCmDeepseekFiles.filesMessageHasRefs(msg); return false; }');
+    expect(KERNEL_SRC).toContain('filesMessageHasRefs: filesMessageHasRefs,');
     var FILES = DS.moduleSource('deepseek-files.js');
     expect(FILES).toContain('Fn.enqueueChainFiles = enqueueChainFiles;');
     expect(FILES).toContain('Fn.applyPendingFileTexts = applyPendingFileTexts;');
+    expect(FILES).toContain('Fn.filesMessageHasRefs = messageHasRefs;');
   });
 
   test('S2: живая связка в vm — тело работает через живые rw/ro ядра, перезагрузка не перетирает API', function () {
@@ -736,6 +752,42 @@ describe('Step D.8: core/deepseek-ingest.js — контракт модуля IN
     expect(Object.keys(probe.writes)).toEqual([]);
     expect(probe.calls.buildActiveChain).toBe(0);
     expect(probe.calls.emitBaseSnapshot).toBe(0);
+  });
+
+  test('S4b: сообщение из ОДНИХ вложений — ход рождается на своём месте в цепочке (D.11)', function () {
+    const box = makeSandbox();
+    loadModule(box);
+    const Fn = box.sandbox.AiCmDeepseekIngest;
+    const probe = makeProbe();
+    Fn.__bind(probe.D);
+
+    // Цепочка: вопрос -> ответ -> СООБЩЕНИЕ ИЗ ФАЙЛА (нет REQUEST) -> ответ по файлу.
+    Fn.ingestHistory(historyBody([
+      msg('u1', null, 'USER', 'Вопрос', { acc: 100 }),
+      msg('a1', 'u1', 'ASSISTANT', 'Ответ', { acc: 500 }),
+      msg('uf', 'a1', 'USER', '', { acc: 700, file: 'f1' }),
+      msg('a2', 'uf', 'ASSISTANT', 'Принял файл', { acc: 900 })
+    ], { current_message_id: 'a2', model_type: 'default', is_empty: false }));
+
+    const t = probe.st.turnsMap;
+    expect(Object.keys(t)).toEqual(['u1', 'a1', 'uf', 'a2']);
+    // order взят НА СВОЁМ месте цепочки: файл-ход не уехал хвостовой заглушкой в конец
+    expect([t.u1.order, t.a1.order, t.uf.order, t.a2.order]).toEqual([0, 1, 2, 3]);
+    expect(t.uf.role).toBe('user');
+    expect(t.uf.text).toBe('');            // текст вложения допишет модуль FILES
+    expect(t.uf.answer).toBe('');
+    expect(probe.st.orderCounter).toBe(4);
+    expect(probe.calls.filesMessageHasRefs).toBeGreaterThan(0);
+
+    // без вложений пустое пользовательское сообщение по-прежнему хода не создаёт
+    resetProbe(probe);
+    Fn.ingestHistory(historyBody([
+      msg('u1', null, 'USER', 'Вопрос', { acc: 100 }),
+      msg('u0', 'u1', 'USER', '', { acc: 200 }),
+      msg('a1', 'u0', 'ASSISTANT', 'Ответ', { acc: 300 })
+    ], { current_message_id: 'a1', model_type: 'default', is_empty: false }));
+    expect(Object.keys(probe.st.turnsMap)).toEqual(['u1', 'a1']);
+    expect(probe.st.orderCounter).toBe(2);
   });
 
   test('S5: проводка — js[] после net и перед ядром, id -v12 + unregister -v10/-v11, helper', function () {

@@ -1001,11 +1001,12 @@ if (typeof window !== 'undefined') {
   }
 
   // ===== Step D.8: связка модуля INGEST (core/deepseek-ingest.js) =====
-  // Контракт: 17 fn (функции ядра, которые зовёт тело модуля — передаются значением:
+  // Контракт: 18 fn (функции ядра, которые зовёт тело модуля — передаются значением:
   // форвардеры D.1 diagOn/diagMark/diagHistRecord/diagSnapshotNetTurns/isDebugEnabled/
   // determineState/dumpHistorySnapshot/dumpTurnUsageAtHistoryLoad, форвардер D.3
   // refetchFullHistory, форвардеры D.4 buildActiveChain/collectTurnText/
-  // collectTurnReasoning/composeTurnText/getModelSlug, форвардер D.6 emitBaseSnapshot и форвардеры D.10 enqueueChainFiles/applyPendingFileTexts;
+  // collectTurnReasoning/composeTurnText/getModelSlug, форвардер D.6 emitBaseSnapshot, форвардеры D.10 enqueueChainFiles/applyPendingFileTexts и
+  // предикат D.11 filesMessageHasRefs (ход из одних вложений рождается на своём месте);
   // все — function declaration, хойстятся), 10 rw (состояние кластера, которое тело
   // ПЕРЕЗАПИСЫВАЕТ: turnsMap/orderCounter/histCompletion/netSnapshotAt/netTurnIds/
   // loggedHistory/lastLoadedConvId/historyRefetchDone, плюс режим экспортного ingest
@@ -1014,7 +1015,7 @@ if (typeof window !== 'undefined') {
   // полноты не поднимался бы, а экспорт принял бы усечённый снимок за авторитетный)
   // и 8 ro (currentConvId/lastHistoryUrl/lastAuthHeaders/sseConfigName/REASONING_ENABLED/
   // MODEL_WINDOW_DEFAULT/lastBaseServerTokens/lastBaseChatMode: тело их только читает,
-  // мутации объектов turnsMap/netTurnIds/histCompletion идут по ссылке). Итого 35 имён.
+  // мутации объектов turnsMap/netTurnIds/histCompletion идут по ссылке). Итого 36 имён.
   var aiCmDeepseekIngest = (typeof window !== 'undefined' && window.AiCmDeepseekIngest) || null;
   if (aiCmDeepseekIngest) {
     aiCmDeepseekIngest.__bind({
@@ -1036,6 +1037,7 @@ if (typeof window !== 'undefined') {
       emitBaseSnapshot: emitBaseSnapshot,
       enqueueChainFiles: enqueueChainFiles,
       applyPendingFileTexts: applyPendingFileTexts,
+      filesMessageHasRefs: filesMessageHasRefs,
       // rw: живое состояние кластера, которое тело ПЕРЕЗАПИСЫВАЕТ (get + set).
       get turnsMap() { return turnsMap; },
       set turnsMap(v) { turnsMap = v; },
@@ -1085,6 +1087,9 @@ if (typeof window !== 'undefined') {
   // остальных: ядро грузится и без модуля, обёртка не имеет права бросать.
   function enqueueChainFiles(chain, modelSignals) { if (aiCmDeepseekFiles) return aiCmDeepseekFiles.enqueueChainFiles(chain, modelSignals); }
   function applyPendingFileTexts() { if (aiCmDeepseekFiles) return aiCmDeepseekFiles.applyPendingFileTexts(); }
+  // Предикат «у сообщения есть вложения»: ingest обязан создать ход из ОДНИХ вложений на его
+  // месте в цепочке (без него файловый модуль заводил хвостовую заглушку и текст уезжал в конец).
+  function filesMessageHasRefs(msg) { if (aiCmDeepseekFiles) return aiCmDeepseekFiles.filesMessageHasRefs(msg); return false; }
 
   // ===== Step D.9: связка модуля SSE (core/deepseek-sse.js) =====
   // Контракт: 6 fn (функции ядра, которые зовут тела модуля — передаются значением:

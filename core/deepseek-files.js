@@ -6,13 +6,15 @@
  * (file_id/имя), а тело лежит на ОТДЕЛЬНОМ файловом хосте:
  *   GET https://files.deepseeksvc.com/api/file?file_id=<id>[&state=<signed_path>]
  * Без текста вложения ход в экспорте состоит из одной метки, то есть файл (PDF/док)
- * теряет содержимое.
+ * теряет содержимое. JSON-вложения (дампы вида {"code":0,"data":{…}}) не имеют текстовых
+ * полей — для них содержимым файла считается СЫРОЕ тело ответа.
  *
  * Что делает модуль (Вариант B — асинхронная догрузка):
  *   • при ПРИЁМКЕ авторитетного снимка (D.8, ветка ACCEPT) ядро отдаёт цепочку ходов сюда —
  *     enqueueChainFiles(chain, chatModelSignals): из каждого хода вынимаются ссылки на файлы
- *     (fragment.type === 'FILE', fragment.files[], msg.files[], msg.attachments[]), в turnsMap
- *     заводится ход-заглушка, если сообщение состоит ТОЛЬКО из вложений;
+ *     (fragment.type === 'FILE', fragment.files[], msg.files[], msg.attachments[]). Ход из
+ *     ОДНИХ вложений создаёт сам ingest на его месте в цепочке (предикат messageHasRefs),
+ *     а filesEnsureTurn остаётся страховкой для путей, где turnsMap собран не D.8;
  *   • файлы ставятся в FIFO-очередь (concurrency 2, дедуп по `convId|fileId`: один файл,
  *     приложенный к нескольким ходам, качается ОДИН раз);
  *   • fetchFileContent(fileId, signedPath) идёт ЧЕРЕЗ originalFetch (снят ядром до хука D.7)
@@ -36,7 +38,9 @@
  *   ro (4): currentConvId (ключ дедупа), originalFetch (запрос тела),
  *           lastBaseServerTokens/lastBaseChatMode (аргументы ре-эмита).
  *   Итого 9 имён (3 fn + 2 rw + 4 ro).
- *   модуль -> ядро: enqueueChainFiles / applyPendingFileTexts (форвардеры ядра).
+ *   связка: ядро форвардит в модуль enqueueChainFiles/applyPendingFileTexts (форвардеры D.10),
+ *   а модуль отдаёт ядру предикат filesMessageHasRefs — его ingest зовёт, чтобы завести ход из
+ *   одних вложений на своём месте (D.11).
  *
  * Метрики serverTokens/tokens~ НЕ ТРОГАЮТСЯ: модуль не считает токены, он лишь дописывает
  * текст хода и просит ядро переопубликовать базу тем же emitBaseSnapshot; счётчик токенов
@@ -225,6 +229,13 @@
       for (var n = 0; n < msg.attachments.length; n++) filesPushRef(out, seen, fileRefFromObject(msg.attachments[n]));
     }
     return out;
+  }
+
+  // Есть ли у сообщения хоть одно вложение. Нужно ingest-модулю (D.8): ход из ОДНИХ
+  // вложений (у пользовательского сообщения нет REQUEST-текста) обязан родиться на своём
+  // месте в turnsMap — со своим order, а не хвостовой заглушкой после всего цикла.
+  function messageHasRefs(msg) {
+    return extractFileRefs(msg).length > 0;
   }
 
   // Текст файла из ответа files.deepseeksvc.com: {ok, reason, text, name, truncated}.
@@ -429,17 +440,22 @@
         var cid = fileStr(convId);
         if (!cid && typeof currentConvId === 'string') cid = currentConvId;
         var msgId = (msg && msg.message_id != null) ? String(msg.message_id) : '';
-        // TEMP-DIAG (ВРЕМЕННО, убрать после диагностики): сколько ссылок на файлы реально
-        // вынули из сообщения — 0 здесь означает, что FILE-фрагмент не распознан.
-        console.log('deepseek-files-enqueue', { convId: cid, msgId: msgId, refsCount: refs.length });
         var added = 0;
         for (var i = 0; i < refs.length; i++) {
           var ref = refs[i];
           var key = cid + '|' + ref.fileId;
           if (fileQueueByKey[key]) {
+            var known = fileQueueByKey[key];
             if (msgId) {
-              fileQueueByKey[key].msgIds[msgId] = 1;
-              fileQueueByKey[key].orderByMsg[msgId] = i;
+              known.msgIds[msgId] = 1;
+              known.orderByMsg[msgId] = i;
+              // Ответ уже пришёл (файл приложен к НОВОМУ сообщению): из очереди элемент уже
+              // вышел, filesOnFetched больше не вызовется — раскладываем сохранённый результат
+              // сразу, иначе текст не доедет до нового хода никогда.
+              if (known.result && typeof known.result === 'object') {
+                filesPutRec(msgId, filesRecFor(known, msgId));
+                applyFileTextToTurn(msgId);
+              }
             }
             continue;
           }
@@ -452,6 +468,7 @@
             msgIds: {},
             orderByMsg: {},
             status: 'queued',
+            result: null,
             startedAt: 0,
             doneAt: 0
           };
@@ -535,11 +552,6 @@
         var fetchImpl = (typeof originalFetch === 'function') ? originalFetch
           : ((typeof window !== 'undefined' && typeof window.fetch === 'function') ? window.fetch : null);
         if (!fetchImpl) return Promise.resolve({ ok: false, reason: 'no-fetch', text: '' });
-        // TEMP-DIAG (ВРЕМЕННО, убрать после диагностики): реальный URL запроса тела файла
-        // и признак того, что подпись state дошла до места запроса.
-        console.log('deepseek-files-fetch-start', {
-          fileId: fileId, url: url, hasSigned: !!signedPath
-        });
         filesDiag('deepseek-files-fetch-start', {
           fileId: fileId,
           url: url,
@@ -578,8 +590,10 @@
               if (payload && typeof payload === 'object') {
                 var parsed = filesTextFromPayload(payload);
                 if (parsed) { done(parsed); return; }
-                done({ ok: false, reason: 'no-text', text: '' });
-                return;
+                // JSON разобрался, но текстовых полей в нём нет — это и есть СОДЕРЖИМОЕ
+                // файла (дамп API вида {"code":0,"data":{…}}). Раньше здесь стоял 'no-text',
+                // и JSON-вложения уходили в экспорт пустой меткой; идём в общий фолбэк
+                // ниже и отдаём сырое тело. Ошибку сервера отдал filesTextFromPayload выше.
               }
               var rawText = fileStr(raw);
               if (!rawText) { done({ ok: false, reason: 'empty-body', text: '' }); return; }
@@ -674,67 +688,65 @@
         recs.splice(pos, 0, rec);
       }
 
+      // Запись файла для конкретного хода из уже полученного ответа (item.result). Один и тот
+      // же ответ раскладывается и по msgId первого снимка, и по msgId, который приехал позже
+      // (файл приложен повторно к новому сообщению): тело второй раз не качаем.
+      function filesRecFor(item, msgId) {
+        var res = item.result || {};
+        var ok = res.ok === true && !!res.text;
+        return {
+          fileId: item.fileId,
+          name: res.name || item.name || '',
+          text: ok ? res.text : '',
+          truncated: ok ? (res.truncated === true) : false,
+          failed: !ok,
+          reason: ok ? '' : (res.reason || 'empty'),
+          order: item.orderByMsg[msgId] || 0,
+          at: item.doneAt || Date.now()
+        };
+      }
+
       // Пришёл ответ по файлу: разложить текст по всем msgId элемента, пересобрать ходы,
       // переопубликовать базу. Ошибка — метка-заглушка в тексте хода + лог: очередь идёт дальше.
       function filesOnFetched(item, res) {
         item.doneAt = Date.now();
+        item.result = (res && typeof res === 'object') ? res : { ok: false, reason: 'empty', text: '' };
         var ids = Object.keys(item.msgIds);
-        if (!res || res.ok !== true || !res.text) {
+        var ok = item.result.ok === true && !!item.result.text;
+        if (!ok) {
           item.status = 'failed';
           // Провал не должен «залипать» в дедупе: следующий ingest обязан попробовать снова.
           if (fileQueueByKey[item.key] === item) delete fileQueueByKey[item.key];
-          // Метка с причиной: файл остаётся виден в экспорте, даже если тело не пришло.
-          var failRec = {
-            fileId: item.fileId,
-            name: res && res.name ? res.name : item.name,
-            text: '',
-            truncated: false,
-            failed: true,
-            reason: (res && res.reason) || 'empty',
-            order: 0,
-            at: item.doneAt
-          };
-          for (var f = 0; f < ids.length; f++) {
-            failRec.order = item.orderByMsg[ids[f]] || 0;
-            filesPutRec(ids[f], failRec);
-            applyFileTextToTurn(ids[f]);
-          }
+        } else {
+          item.status = 'done';
+        }
+        var applied = 0;
+        for (var i = 0; i < ids.length; i++) {
+          // Метка с причиной и на провале: файл остаётся виден в экспорте, даже если тело не пришло.
+          filesPutRec(ids[i], filesRecFor(item, ids[i]));
+          if (applyFileTextToTurn(ids[i])) applied++;
+        }
+        if (!ok) {
           filesDiag('deepseek-files-error', {
             fileId: item.fileId,
-            reason: (res && res.reason) || 'empty',
+            reason: item.result.reason || 'empty',
             ms: item.doneAt - item.startedAt
           });
           filesWarn('deepseek:files:fetch', '[deepseek-intercept] текст вложения не получен: fileId=' +
-            item.fileId + ' reason=' + ((res && res.reason) || '-'));
+            item.fileId + ' reason=' + (item.result.reason || '-'));
           scheduleFilesEmit();
           return;
         }
-        item.status = 'done';
-        var applied = 0;
-        for (var i = 0; i < ids.length; i++) {
-          var rec = {
-            fileId: item.fileId,
-            name: res.name || item.name || '',
-            text: res.text,
-            truncated: res.truncated === true,
-            failed: false,
-            reason: '',
-            order: item.orderByMsg[ids[i]] || 0,
-            at: item.doneAt
-          };
-          filesPutRec(ids[i], rec);
-          if (applyFileTextToTurn(ids[i])) applied++;
-        }
         filesDiag('deepseek-files-fetch-done', {
           fileId: item.fileId,
-          chars: res.text.length,
-          truncated: res.truncated === true,
+          chars: item.result.text.length,
+          truncated: item.result.truncated === true,
           ms: item.doneAt - item.startedAt,
           turns: ids.length,
           applied: applied
         });
         console.log('[deepseek-intercept] ✓ текст вложения: fileId=' + item.fileId +
-          ', символов=' + res.text.length + (res.truncated === true ? ' (обрезан)' : '') +
+          ', символов=' + item.result.text.length + (item.result.truncated === true ? ' (обрезан)' : '') +
           ', ходов=' + ids.length + ', применено=' + applied);
         scheduleFilesEmit();
       }
@@ -753,6 +765,7 @@
       Fn.enqueueChainFiles = enqueueChainFiles;
       Fn.applyPendingFileTexts = applyPendingFileTexts;
       Fn.extractFileRefs = extractFileRefs;
+      Fn.filesMessageHasRefs = messageHasRefs;
       Fn.fetchFileContent = fetchFileContent;
       Fn.fileQueueStats = fileQueueStats;
       Fn.fileTextsByMsg = fileTextsByMsg;

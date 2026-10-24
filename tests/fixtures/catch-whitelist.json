@@ -567,7 +567,7 @@
       "category": "debug-instrumentation",
       "lines": [
         197,
-        347
+        365
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof diagMark === 'function' && typeof diagOn === 'function' && di"
     },
