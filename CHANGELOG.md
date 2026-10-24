@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.0.25] - 2026-10-24
+
+### Added
+- Google AI Studio (`aistudio.google.com`): новый `AistudioAdapter`, парсинг `ms-cmark-node`, поддержка ролей.
+
+### Fixed
+- BYOK: приоритет точных токенов (`countTokens`) над эвристикой — устранены скачки процента при ожидании ответа API.
+- Токенизатор: глобальная калибровка для кириллицы (делитель 1.8 → 3.3, отказ от `Math.ceil`).
+- Catch-hygiene: очистка 38 пустых `catch` вне whitelist.
+
 ## [2.0.24] - 2026-10-24
 
 ### Fixed

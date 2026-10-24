@@ -64,7 +64,7 @@ Automated cell = representative test name; `manual (Chrome)` = verified by hand 
 
 ```bash
 npm install
-npm test        # Jest — as of v2.0.24 (2026-10-24): 184 suites / 3261 tests
+npm test        # Jest — as of v2.0.25 (2026-10-24): 186 suites / 3284 tests
 ```
 
 CI (`.github/workflows/lint.yml`) additionally runs `node --check` over all JS files and validates `manifest.json` before executing the test suite.
