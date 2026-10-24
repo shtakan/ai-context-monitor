@@ -18,9 +18,10 @@
  *   • fetchFileContent(fileId, signedPath) идёт ЧЕРЕЗ originalFetch (снят ядром до хука D.7)
  *     на files.deepseeksvc.com, БЕЗ заголовков и БЕЗ кук (credentials:'omit': файловый хост
  *     авторизует запрос подписью в signed_path, а credentialed CORS-запрос ломает ответ), таймаут
- *     10 с и кап 500 000 символов;
- *   • при получении текста обновляется fileTextsByMsg (msgId → текст) и ПЕРЕСОБИРАЕТСЯ текст
- *     хода: composeTurnText(answer, reasoning) + секция
+ *     10 с и кап 2 000 000 символов (файл на 1 МБ не теряет хвост);
+ *   • при получении текста обновляется fileTextsByMsg (msgId → СПИСОК файлов сообщения)
+ *     и ПЕРЕСОБИРАЕТСЯ текст хода: composeTurnText(answer, reasoning) + по секции на КАЖДЫЙ
+ *     файл (порядок — как во вложениях сообщения), формат секции
  *     «\n\n[FILE: <имя>]\n<текст>»; затем с дебаунсом 250 мс вызывается emitBaseSnapshot —
  *     база уезжает в ISOLATED-мир и попадает в history_messages экспорта;
  *   • A-лайт (core/base-handler.js): перед композицией файла проверяется, ПУСТА ли очередь;
@@ -59,7 +60,7 @@
   // Константы протокола догрузки. Кап/таймаут — требование задачи (Вариант B): одно
   // вложение не имеет права ни раздуть память (500k символов), ни подвесить очередь (10 с).
   var FILES_CONCURRENCY = 2;          // одновременно в полёте (FIFO, остальное ждёт)
-  var FILES_TEXT_CAP = 500000;        // символов текста на файл (жёсткий кап)
+  var FILES_TEXT_CAP = 2000000;       // символов текста на файл (жёсткий кап; 1 МБ файла целиком)
   var FILES_FETCH_TIMEOUT_MS = 10000; // запрос тела файла
   var FILES_EMIT_DEBOUNCE_MS = 250;   // ре-эмит базы после прихода текста
   var FILES_DRAIN_TIMEOUT_MS = 2000;  // A-лайт: ожидание опустошения очереди у экспорта
@@ -76,7 +77,10 @@
   var fileQueue = [];
   var fileQueueByKey = {};
   var fileQueueActive = 0;
-  // Результат: msgId -> { fileId, name, text, truncated, at }. Живёт до конца жизни страницы:
+  // Результат: msgId -> [ { fileId, name, text, truncated, failed, order, at }, ... ]. СПИСОК, а не
+  // одна запись: в одном сообщении бывает 3–4 вложения (живой кейс 2026-10-24: из четырёх файлов
+  // в экспорт попадал РОВНО ОДИН — последний по времени прихода, остальные затирались). Живёт до
+  // конца жизни страницы:
   // ход может пережить несколько ingest'ов (SPA-навигация, дозапрос), и текст должен
   // примениться к ПЕРЕСОБРАННОМУ turnsMap без повторного запроса.
   var fileTextsByMsg = {};
@@ -167,8 +171,26 @@
     return { fileId: m[1], signedPath: '', name: '', isImage: false };
   }
 
+  // Настоящий id файла сайт раздаёт как UUID (36 символов) или `file-…`; числовой «id»
+  // вида `1` приезжает из попутных JSON-полей фрагмента и файлом не является: по нему нет
+  // ни подписи, ни имени, сервер отвечает 400 без access-control-allow-origin → в текст
+  // хода уезжала пустая метка `[FILE: 1 — текст не получен: network]` на каждом сообщении.
+  var FILES_JUNK_ID_RE = /^\d{1,7}$/;
+
+  // Ссылка осмысленна, если её можно скачать (есть подпись), либо у неё есть имя —
+  // тогда даже неудача полезна: в экспорте видно, ЧТО не дочиталось.
+  function filesRefUsable(ref) {
+    if (fileStr(ref.signedPath)) return true;
+    if (fileStr(ref.name)) return true;
+    return !FILES_JUNK_ID_RE.test(fileStr(ref.fileId));
+  }
+
   function filesPushRef(out, seen, ref) {
     if (!ref || !ref.fileId || seen[ref.fileId] || ref.isImage) return;
+    if (!filesRefUsable(ref)) {
+      filesDiag('deepseek-files-ref-skip', { fileId: ref.fileId, name: ref.name || '' });
+      return;
+    }
     seen[ref.fileId] = 1;
     out.push(ref);
   }
@@ -258,8 +280,13 @@
   }
 
   // Секция вложения в тексте хода. Метка файла видна в экспорте (заголовок [FILE: имя]).
+  // Провал догрузки НЕ прячет файл: в экспорт едет метка с причиной — иначе по экспорту
+  // нельзя понять, что вложение вообще было (раньше такие файлы исчезали бесследно).
   function filesSection(rec) {
     var name = (rec && rec.name) ? rec.name : ((rec && rec.fileId) ? rec.fileId : 'attachment');
+    if (rec && rec.failed) {
+      return '\n\n[FILE: ' + name + ' — текст не получен' + (rec.reason ? ': ' + rec.reason : '') + ']';
+    }
     var text = (rec && rec.text) ? rec.text : '';
     return '\n\n[FILE: ' + name + ']\n' + text;
   }
@@ -271,7 +298,15 @@
   }
 
   function filesTextCount() {
-    return Object.keys(fileTextsByMsg).length;
+    var ids = Object.keys(fileTextsByMsg);
+    var n = 0;
+    for (var i = 0; i < ids.length; i++) {
+      var recs = fileTextsByMsg[ids[i]] || [];
+      for (var j = 0; j < recs.length; j++) {
+        if (recs[j] && recs[j].text) { n++; break; }
+      }
+    }
+    return n;
   }
 
   // --- протокол A-лайт: синхронный опрос состояния и асинхронное ожидание опустошения ---
@@ -402,7 +437,10 @@
           var ref = refs[i];
           var key = cid + '|' + ref.fileId;
           if (fileQueueByKey[key]) {
-            if (msgId) fileQueueByKey[key].msgIds[msgId] = 1;
+            if (msgId) {
+              fileQueueByKey[key].msgIds[msgId] = 1;
+              fileQueueByKey[key].orderByMsg[msgId] = i;
+            }
             continue;
           }
           var item = {
@@ -412,11 +450,15 @@
             signedPath: ref.signedPath,
             name: ref.name,
             msgIds: {},
+            orderByMsg: {},
             status: 'queued',
             startedAt: 0,
             doneAt: 0
           };
-          if (msgId) item.msgIds[msgId] = 1;
+          if (msgId) {
+            item.msgIds[msgId] = 1;
+            item.orderByMsg[msgId] = i;
+          }
           fileQueueByKey[key] = item;
           fileQueue.push(item);
           added++;
@@ -554,24 +596,30 @@
         });
       }
 
-      // Пересобрать текст хода: база (answer + reasoning, как в D.8) + секция файла.
-      function applyFileTextToTurn(msgId, rec) {
-        if (!turnsMap || !rec || !rec.text) return false;
+      // Пересобрать текст хода: база (answer + reasoning, как в D.8) + секция на КАЖДЫЙ файл
+      // сообщения. Раньше запоминались ОДИН fileText/fileName — второе вложение затирало первое,
+      // и из четырёх файлов в экспорт попадал только последний пришедший.
+      function applyFileTextToTurn(msgId) {
+        if (!turnsMap || !msgId) return false;
+        var recs = fileTextsByMsg[msgId];
+        if (!recs || !recs.length) return false;
         var t = turnsMap[msgId];
         if (!t) return false;
-        if (t.fileText === rec.text && t.fileName === (rec.name || '')) return false;
         var base = (typeof t.answer === 'string') ? t.answer : '';
         var reasoning = (typeof t.reasoning === 'string') ? t.reasoning : '';
         var core = base;
         if (typeof composeTurnText === 'function') core = composeTurnText(base, reasoning);
-        t.fileText = rec.text;
-        t.fileName = rec.name || '';
-        t.text = core + filesSection(rec);
+        var text = core;
+        for (var i = 0; i < recs.length; i++) text += filesSection(recs[i]);
+        if (t.text === text) return false;
+        t.fileTexts = recs;   // ссылка на список — для дампов/диагностики; решение по тексту ниже
+        t.text = text;
         filesDiag('deepseek-files-apply', {
           msgId: msgId,
-          fileId: rec.fileId,
-          chars: rec.text.length,
-          name: rec.name || ''
+          fileId: recs[0].fileId,
+          name: recs[0].name || '',
+          files: recs.length,
+          chars: text.length - core.length
         });
         return true;
       }
@@ -583,7 +631,7 @@
         var applied = 0;
         for (var i = 0; i < ids.length; i++) {
           if (!turnsMap[ids[i]]) continue;
-          if (applyFileTextToTurn(ids[i], fileTextsByMsg[ids[i]])) applied++;
+          if (applyFileTextToTurn(ids[i])) applied++;
         }
         if (applied) scheduleFilesEmit();
         return applied;
@@ -611,14 +659,46 @@
         filesEmitTimer = setTimeout(filesEmitNow, FILES_EMIT_DEBOUNCE_MS);
       }
 
+      // Положить запись файла в список сообщения: замена по fileId (повторный ingest) или
+      // вставка на позицию order, чтобы секции шли как вложения в чате, а не как пришли ответы.
+      function filesPutRec(msgId, rec) {
+        var recs = fileTextsByMsg[msgId];
+        if (!recs) { recs = []; fileTextsByMsg[msgId] = recs; }
+        for (var i = 0; i < recs.length; i++) {
+          if (recs[i] && recs[i].fileId === rec.fileId) { recs[i] = rec; return; }
+        }
+        var pos = recs.length;
+        for (var j = 0; j < recs.length; j++) {
+          if ((recs[j].order || 0) > (rec.order || 0)) { pos = j; break; }
+        }
+        recs.splice(pos, 0, rec);
+      }
+
       // Пришёл ответ по файлу: разложить текст по всем msgId элемента, пересобрать ходы,
-      // переопубликовать базу. Ошибка — только лог: очередь идёт дальше.
+      // переопубликовать базу. Ошибка — метка-заглушка в тексте хода + лог: очередь идёт дальше.
       function filesOnFetched(item, res) {
         item.doneAt = Date.now();
+        var ids = Object.keys(item.msgIds);
         if (!res || res.ok !== true || !res.text) {
           item.status = 'failed';
           // Провал не должен «залипать» в дедупе: следующий ingest обязан попробовать снова.
           if (fileQueueByKey[item.key] === item) delete fileQueueByKey[item.key];
+          // Метка с причиной: файл остаётся виден в экспорте, даже если тело не пришло.
+          var failRec = {
+            fileId: item.fileId,
+            name: res && res.name ? res.name : item.name,
+            text: '',
+            truncated: false,
+            failed: true,
+            reason: (res && res.reason) || 'empty',
+            order: 0,
+            at: item.doneAt
+          };
+          for (var f = 0; f < ids.length; f++) {
+            failRec.order = item.orderByMsg[ids[f]] || 0;
+            filesPutRec(ids[f], failRec);
+            applyFileTextToTurn(ids[f]);
+          }
           filesDiag('deepseek-files-error', {
             fileId: item.fileId,
             reason: (res && res.reason) || 'empty',
@@ -626,32 +706,35 @@
           });
           filesWarn('deepseek:files:fetch', '[deepseek-intercept] текст вложения не получен: fileId=' +
             item.fileId + ' reason=' + ((res && res.reason) || '-'));
+          scheduleFilesEmit();
           return;
         }
         item.status = 'done';
-        var rec = {
-          fileId: item.fileId,
-          name: res.name || item.name || '',
-          text: res.text,
-          truncated: res.truncated === true,
-          at: item.doneAt
-        };
-        var ids = Object.keys(item.msgIds);
         var applied = 0;
         for (var i = 0; i < ids.length; i++) {
-          fileTextsByMsg[ids[i]] = rec;
-          if (applyFileTextToTurn(ids[i], rec)) applied++;
+          var rec = {
+            fileId: item.fileId,
+            name: res.name || item.name || '',
+            text: res.text,
+            truncated: res.truncated === true,
+            failed: false,
+            reason: '',
+            order: item.orderByMsg[ids[i]] || 0,
+            at: item.doneAt
+          };
+          filesPutRec(ids[i], rec);
+          if (applyFileTextToTurn(ids[i])) applied++;
         }
         filesDiag('deepseek-files-fetch-done', {
           fileId: item.fileId,
           chars: res.text.length,
-          truncated: rec.truncated,
+          truncated: res.truncated === true,
           ms: item.doneAt - item.startedAt,
           turns: ids.length,
           applied: applied
         });
         console.log('[deepseek-intercept] ✓ текст вложения: fileId=' + item.fileId +
-          ', символов=' + res.text.length + (rec.truncated ? ' (обрезан)' : '') +
+          ', символов=' + res.text.length + (res.truncated === true ? ' (обрезан)' : '') +
           ', ходов=' + ids.length + ', применено=' + applied);
         scheduleFilesEmit();
       }

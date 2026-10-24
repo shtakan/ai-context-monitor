@@ -3,7 +3,8 @@
  *
  * Контракт core/deepseek-files.js: FIFO-очередь текста вложений (concurrency 2, дедуп
  * `convId|fileId`), fetch тела через originalFetch на files.deepseeksvc.com (подпись в state,
- * без заголовков и кук, таймаут 10 с, кап 500 000 символов), карта `fileTextsByMsg`,
+ * без заголовков и кук, таймаут 10 с, кап 2 000 000 символов), карта `fileTextsByMsg`
+ * (msgId -> СПИСОК файлов сообщения),
  * пересборка хода и дебаунс-ре-эмит базы (250 мс), протокол A-лайт (state-request/response,
  * drain/done с таймаутом 2000 мс) и диагностика под aiCmDebug.
  *
@@ -198,6 +199,33 @@ describe('Step D.10: core/deepseek-files.js — контракт модуля FI
     expect(h.Fn.extractFileRefs({ message_id: 'x', fragments: [{ type: 'RESPONSE', content: 'только текст' }] })).toEqual([]);
   });
 
+  test('S3b: числовой «id» без подписи и имени — не файл: очередь и текст хода его не видят', async () => {
+    const h = makeHarness();
+    // так выглядит мусор из реального чата: id=1, без signed_path и без имени
+    const junk = msg('m1', 'USER', [
+      { type: 'FILE', file_id: 1 },
+      { type: 'FILE', files: [{ id: 1 }, { id: 2 }] }
+    ], { files: [{ id: 7 }] });
+    expect(h.Fn.extractFileRefs(junk)).toEqual([]);
+    expect(h.Fn.enqueueChainFiles([junk], {})).toBe(0);
+    expect(h.fetchCalls).toHaveLength(0);
+
+    // и то же сообщение с настоящим вложением: мусор отброшен, файл в очереди один
+    const mixed = msg('m2', 'USER', [
+      { type: 'FILE', file_id: 1 },
+      fileFrag('7ee300e2-3155-41ae-81d0-0cb90a482c53', 'a.txt')
+    ]);
+    expect(h.Fn.extractFileRefs(mixed).map(function (r) { return r.fileId; }))
+      .toEqual(['7ee300e2-3155-41ae-81d0-0cb90a482c53']);
+
+    // подпись или имя делают ссылку осмысленной даже с коротким/числовым id
+    const signed = msg('m3', 'USER', [{ type: 'FILE', files: [{ id: 1, signed_path: '/api/file?file_id=1&state=s' }] }]);
+    expect(h.Fn.extractFileRefs(signed)).toHaveLength(1);
+    const named = msg('m4', 'USER', [{ type: 'FILE', file_id: 2, file_name: 'отчёт.txt' }]);
+    expect(h.Fn.extractFileRefs(named)).toHaveLength(1);
+    expect(MODULE_SRC).toContain('var FILES_JUNK_ID_RE = /^\\d{1,7}$/;');
+  });
+
   test('S4: картинки (is_image:true или ty=p) пропускаются — в очередь идёт только текст', () => {
     const h = makeHarness();
     const m = msg('m1', 'USER', [fileFrag('txt1', 'a.txt')], {
@@ -320,15 +348,15 @@ describe('Step D.10: fetchFileContent — сетевой контракт фай
     await expect(p2).resolves.toEqual({ ok: false, reason: 'timeout', text: '' });
   });
 
-  test('S5: кап 500 000 символов — текст обрезан и помечен truncated', async () => {
+  test('S5: кап 2 000 000 символов — текст обрезан и помечен truncated', async () => {
     const h = makeHarness();
-    const big = 'x'.repeat(500001);
+    const big = 'x'.repeat(2000001);
     const p = h.Fn.fetchFileContent('f1', '');
     h.fetchCalls[0].resolve(resp(JSON.stringify({ code: 0, data: { content: big } })));
     const res = await p;
     expect(res.ok).toBe(true);
     expect(res.truncated).toBe(true);
-    expect(res.text.length).toBe(500000);
+    expect(res.text.length).toBe(2000000);
   });
 });
 
@@ -363,9 +391,9 @@ describe('Step D.10: очередь вложений — FIFO, concurrency 2, д
     h.fetchCalls[0].resolve(resp('BODY F1'));
     h.fetchCalls[1].resolve(resp('BODY F9'));
     await flush();
-    expect(h.Fn.fileTextsByMsg.m1.text).toBe('BODY F1');
-    expect(h.Fn.fileTextsByMsg.m2.text).toBe('BODY F1');
-    expect(h.Fn.fileTextsByMsg.m3.text).toBe('BODY F9');
+    expect(h.Fn.fileTextsByMsg.m1[0].text).toBe('BODY F1');
+    expect(h.Fn.fileTextsByMsg.m2[0].text).toBe('BODY F1');
+    expect(h.Fn.fileTextsByMsg.m3[0].text).toBe('BODY F9');
     // текст уже разложен, но дебаунс-эмит базы ещё в полёте — очередь «занята» (A-лайт ждёт)
     expect(h.Fn.fileQueueStats().pending).toBe(1);
     h.tick(250);
@@ -388,7 +416,11 @@ describe('Step D.10: очередь вложений — FIFO, concurrency 2, д
     h.Fn.enqueueChainFiles([msg('m1', 'USER', [fileFrag('f1')])], {});
     h.fetchCalls[0].resolve(resp('', 500, false));
     await flush();
+    // сбой тоже планирует ре-эмит (метка-заглушка должна доехать до экспорта): гасим дебаунс
+    h.tick(300);
     expect(h.Fn.fileQueueStats().pending).toBe(0);
+    expect(h.Fn.fileTextsByMsg.m1[0].failed).toBe(true);
+    expect(h.Fn.fileTextsByMsg.m1[0].reason).toBe('http-500');
     h.Fn.enqueueChainFiles([msg('m1', 'USER', [fileFrag('f1')])], {});
     expect(h.fetchCalls).toHaveLength(2);
   });
@@ -403,7 +435,7 @@ describe('Step D.10: fileTextsByMsg, пересборка хода и дебау
     h.fetchCalls[0].resolve(resp('FILE BODY'));
     await flush();
     expect(h.deps.turnsMap.m1.text).toBe('ответ\n\n[FILE: a.txt]\nFILE BODY');
-    expect(h.Fn.fileTextsByMsg.m1.text).toBe('FILE BODY');
+    expect(h.Fn.fileTextsByMsg.m1[0].text).toBe('FILE BODY');
     expect(h.deps.emitBaseSnapshot).not.toHaveBeenCalled();
     h.tick(250);
     expect(h.deps.emitBaseSnapshot).toHaveBeenCalledTimes(1);
@@ -436,6 +468,70 @@ describe('Step D.10: fileTextsByMsg, пересборка хода и дебау
     expect(h.deps.turnsMap.m1.text).toBe('[REASONING]\nr\n\n[ANSWER]\na\n\n[FILE: a.txt]\nCACHED');
     h.tick(250);
     expect(h.deps.emitBaseSnapshot).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ===== S4c: несколько вложений в ОДНОМ сообщении =====================================
+describe('Step D.10: несколько вложений одного сообщения — ни одно не теряется', () => {
+  test('S1: четыре файла — четыре секции в порядке вложений, а не в порядке ответов', async () => {
+    const h = makeHarness();
+    h.deps.turnsMap.m1 = { text: '', answer: '', reasoning: '', order: 0, role: 'user' };
+    const chain = [msg('m1', 'USER', [
+      fileFrag('f1', '1.txt'), fileFrag('f2', '2.txt'),
+      fileFrag('f3', '3.txt'), fileFrag('f4', '4.txt')
+    ])];
+    expect(h.Fn.enqueueChainFiles(chain, {})).toBe(4);
+    expect(h.fetchCalls).toHaveLength(2);          // concurrency 2
+
+    // ответы приходят в ОБРАТНОМ порядке: f2, f1, f4, f3
+    h.fetchCalls[1].resolve(resp('B2'));
+    await flush();
+    h.fetchCalls[0].resolve(resp('B1'));
+    await flush();
+    expect(h.fetchCalls).toHaveLength(4);
+    h.fetchCalls[3].resolve(resp('B4'));
+    await flush();
+    h.fetchCalls[2].resolve(resp('B3'));
+    await flush();
+
+    expect(h.deps.turnsMap.m1.text).toBe(
+      '\n\n[FILE: 1.txt]\nB1' +
+      '\n\n[FILE: 2.txt]\nB2' +
+      '\n\n[FILE: 3.txt]\nB3' +
+      '\n\n[FILE: 4.txt]\nB4'
+    );
+    expect(h.Fn.fileTextsByMsg.m1.map(function (r) { return r.fileId; })).toEqual(['f1', 'f2', 'f3', 'f4']);
+  });
+
+  test('S2: провал одного вложения оставляет метку с причиной, соседние секции целы', async () => {
+    const h = makeHarness();
+    h.deps.turnsMap.m7 = { text: '', answer: '', reasoning: '', order: 0, role: 'user' };
+    h.Fn.enqueueChainFiles([msg('m7', 'USER', [fileFrag('f1', 'ok.txt'), fileFrag('f2', 'bad.pdf')])], {});
+    h.fetchCalls[0].resolve(resp('OK BODY'));
+    await flush();
+    h.fetchCalls[1].resolve(resp('', 500, false));
+    await flush();
+    expect(h.deps.turnsMap.m7.text).toBe(
+      '\n\n[FILE: ok.txt]\nOK BODY' +
+      '\n\n[FILE: bad.pdf — текст не получен: http-500]'
+    );
+  });
+
+  test('S3: повторный ingest не дублирует секции — список файлов сообщения один', async () => {
+    const h = makeHarness();
+    h.deps.turnsMap.m5 = { text: 'a', answer: 'a', reasoning: '', order: 0, role: 'user' };
+    const m = msg('m5', 'USER', [fileFrag('f1', '1.txt'), fileFrag('f2', '2.txt')]);
+    h.Fn.enqueueChainFiles([m], {});
+    h.fetchCalls[0].resolve(resp('A'));
+    h.fetchCalls[1].resolve(resp('B'));
+    await flush();
+    const once = h.deps.turnsMap.m5.text;
+
+    // D.8 пересобрал turnsMap заново (SPA-навигация/дозапрос)
+    h.deps.turnsMap = { m5: { text: 'a', answer: 'a', reasoning: '', order: 0, role: 'user' } };
+    expect(h.Fn.applyPendingFileTexts()).toBe(1);
+    expect(h.deps.turnsMap.m5.text).toBe(once);
+    expect(h.Fn.fileTextsByMsg.m5).toHaveLength(2);
   });
 });
 
@@ -570,7 +666,7 @@ describe('Step D.10: source-пины связки (ingest -> files -> kernel -> 
     expect(raw.indexOf('\r')).toBe(-1);
     expect(raw.endsWith('\n')).toBe(true);
     expect(MODULE_SRC).toContain('var FILES_CONCURRENCY = 2;');
-    expect(MODULE_SRC).toContain('var FILES_TEXT_CAP = 500000;');
+    expect(MODULE_SRC).toContain('var FILES_TEXT_CAP = 2000000;');
     expect(MODULE_SRC).toContain('var FILES_FETCH_TIMEOUT_MS = 10000;');
     expect(MODULE_SRC).toContain('var FILES_EMIT_DEBOUNCE_MS = 250;');
     expect(MODULE_SRC).toContain('var FILES_DRAIN_TIMEOUT_MS = 2000;');
