@@ -53,7 +53,7 @@
       if (aiCmI18nAvailable()) {
         return chrome.i18n.getMessage(key) || '';
       }
-    } catch (eMessage) { }
+    } catch (eMessage) { return ''; }
     return '';
   }
 

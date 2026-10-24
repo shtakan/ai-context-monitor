@@ -458,9 +458,12 @@ describe('Step E.2b.1: страж молчаливых catch — позитив�
 // utils/i18n-apply.js. Исторический путь utils/i18n-apply.js в дереве
 // отсутствует (реальный файл — options/i18n-apply.js, он уже покрыт options/**),
 // поэтому несуществующие цели просто пропускаются и вклада не дают.
-// Пиним ТОЛЬКО счётчик: 38 точек уже существуют и вне scope этой правки, задача
-// стража — не дать появиться НОВЫМ. Логика whitelist-стража выше не затронута.
-const OUTSIDE_WHITELIST_BASELINE = 38;
+// Baseline = 0: все 38 исторических точек закрыты (27 в options/options.js,
+// 10 в print/print.js, 1 в options/i18n-apply.js) — либо диагностикой/фолбэком
+// в теле catch, либо удалением try/catch, который ничего не бросал. Поэтому
+// счётчик пинится строго на нуле: любая НОВАЯ пустая точка — падение, а не
+// «ещё одна сверх baseline». Логика whitelist-стража выше не затронута.
+const OUTSIDE_WHITELIST_BASELINE = 0;
 const OUTSIDE_WHITELIST_TARGETS = ['options', 'print', 'utils/i18n-apply.js'];
 
 /** Рекурсивный список *.js под целью (файл или каталог); нет пути → []. */
@@ -514,12 +517,13 @@ function collectEmptyCatchesOutsideWhitelist() {
 }
 
 describe('Step E.2b.1: baseline-pin пустых catch вне области whitelist', () => {
-  test('N1: пустых catch в options/, print/ и utils/i18n-apply.js не больше baseline', () => {
+  test('N1: в options/, print/ и utils/i18n-apply.js нет ни одного пустого catch (baseline 0)', () => {
     const found = collectEmptyCatchesOutsideWhitelist();
     const listing = found.map(f => f.file + ':' + f.line).join('\n  ');
     expect(found.length > OUTSIDE_WHITELIST_BASELINE
       ? 'НАЙДЕНО ' + found.length + ' (> baseline ' + OUTSIDE_WHITELIST_BASELINE + '), точки:\n  ' + listing
       : '').toBe('');
+    // baseline 0 → пин строгий: пустых catch вне whitelist не должно быть вовсе
     expect(found.length).toBeLessThanOrEqual(OUTSIDE_WHITELIST_BASELINE);
   });
 });

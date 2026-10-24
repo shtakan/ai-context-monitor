@@ -30,7 +30,7 @@ function percentColor(p) { if (p < 50) return '#22c55e'; if (p < 80) return '#ea
 try {
   var manifest = chrome.runtime.getManifest();
   if (versionEl && manifest.version) versionEl.textContent = 'v' + manifest.version;
-} catch (e) {}
+} catch (e) { aiCmPopupDiagLine('manifest-version', { err: String(e) }); }
 
 // v1.18 (P1): открытие privacy.html во внешней вкладке
 // Страница политики конфиденциальности — самодостаточный HTML внутри расширения,
@@ -109,7 +109,7 @@ function aiCmPurgeLegacyByokKeys() {
   try {
     if (!chrome.storage || !chrome.storage.local || typeof chrome.storage.local.remove !== 'function') return;
     chrome.storage.local.remove(AI_CM_BYOK_LEGACY_KEYS);
-  } catch (ePurge) { }
+  } catch (ePurge) { console.warn('[AI CM][catch] aiCmPurgeLegacyByokKeys:', ePurge); }
 }
 
 // ========== M-4 (фаза 3) / M-4.2: i18n — строки интерфейса из _locales ==========
@@ -123,7 +123,7 @@ function aiCmI18nMessage(key, fallback, substitutions) {
       var message = substitutions ? chrome.i18n.getMessage(key, substitutions) : chrome.i18n.getMessage(key);
       if (message) return message;
     }
-  } catch (eMessage) { }
+  } catch (eMessage) { aiCmPopupDiagLine('aiCmI18nMessage', { err: String(eMessage) }); }
   return fallback;
 }
 
@@ -143,7 +143,7 @@ function aiCmSaveByokKey(value) {
       patch[AI_CM_BYOK_SESSION_KEY] = value;
       chrome.storage.session.set(patch);
     }
-  } catch (eSet) { }
+  } catch (eSet) { console.warn('[AI CM][catch] aiCmSaveByokKey:', eSet); }
   aiCmPurgeLegacyByokKeys();
 }
 
@@ -175,7 +175,7 @@ function aiCmLoadByokKey() {
           aiCmRenderApiKeyStatus(true);
           console.log('[AI CM][byok] migrated plaintext→session');
         });
-      } catch (eLeg) { }
+      } catch (eLeg) { aiCmPopupDiagLine('aiCmLoadByokKey', { err: String(eLeg) }); }
     }
     // Chrome отдаёт промис, если колбэк не передан; колбэк-форма — для прежних моков.
     var maybePromise = chrome.storage.session.get([AI_CM_BYOK_SESSION_KEY], onSession);
@@ -263,7 +263,7 @@ try {
       includeHiddenCheckbox.checked = changes.aiCmIncludeHiddenInExport.newValue === true;
     }
   });
-} catch (eHiddenSync) {}
+} catch (eHiddenSync) { aiCmPopupDiagLine('hidden-sync', { err: String(eHiddenSync) }); }
 
 // Фаза B: проактивные пороги (aiCmProactive / aiCmProactiveNotify, chrome.storage.local).
 // Дефолты: aiCmProactive = ON, aiCmProactiveNotify = OFF.
@@ -290,7 +290,7 @@ try {
       proactiveNotifyCheckbox.checked = changes.aiCmProactiveNotify.newValue === true;
     }
   });
-} catch (e) {}
+} catch (e) { aiCmPopupDiagLine('proactive-changed', { err: String(e) }); }
 
 // ========== S2: НАСТРАИВАЕМЫЕ ПРОАКТИВНЫЕ ПОРОГИ ==========
 // 'aiCmProactiveThresholds' = [low, medium, high] (1–100, строго возрастают) —
@@ -339,7 +339,7 @@ function applyProactiveThresholdInputs() {
     }
     fillProactiveThresholdInputs(t);
     chrome.storage.local.set({ aiCmProactiveThresholds: t });
-  } catch (eP) { }
+  } catch (eP) { aiCmPopupDiagLine('applyProactiveThresholdInputs', { err: String(eP) }); }
 }
 
 // Загрузка сохранённых порогов; битое сохранённое значение — дефолт в поля + лог.
@@ -352,9 +352,9 @@ try {
         console.warn('[AI CM][thresholds] битые сохранённые aiCmProactiveThresholds → дефолт [70,85,95]', data.aiCmProactiveThresholds);
       }
       fillProactiveThresholdInputs(t || PROACTIVE_THRESHOLDS_DEFAULT);
-    } catch (eInit) { }
+    } catch (eInit) { aiCmPopupDiagLine('thresholds-init', { err: String(eInit) }); }
   });
-} catch (eLoad) { }
+} catch (eLoad) { aiCmPopupDiagLine('thresholds-load', { err: String(eLoad) }); }
 // 'change' (blur/Enter/спиннер) — как у поля автоэкспорта
 [thrLowInput, thrMedInput, thrHighInput].forEach(function (el) {
   if (!el) return;
@@ -371,7 +371,7 @@ try {
       fillProactiveThresholdInputs(t2);
     }
   });
-} catch (e) { }
+} catch (e) { aiCmPopupDiagLine('thresholds-changed', { err: String(e) }); }
 
 // BYOK (M-7): сохранение API-ключа — ТОЛЬКО chrome.storage.session ('aiCmApiKeySession').
 // chrome.storage.local.set с ключом не вызывается никогда; прежние plaintext-имена
@@ -387,7 +387,7 @@ removeApiKeyBtn && removeApiKeyBtn.addEventListener('click', function () {
     if (chrome.storage && chrome.storage.session && typeof chrome.storage.session.remove === 'function') {
       chrome.storage.session.remove([AI_CM_BYOK_SESSION_KEY]);
     }
-  } catch (eRm) { }
+  } catch (eRm) { console.warn('[AI CM][catch] removeApiKey:', eRm); }
   aiCmPurgeLegacyByokKeys();
   if (apiKeyInput) apiKeyInput.value = '';
   aiCmRenderApiKeyStatus(false);
@@ -447,7 +447,7 @@ function aiCmAutoExportWriteFull() {
       aiCmAutoExportPct: pctFull,
       aiCmAutoExportFmt: normalizeAutoExportFmt(autoExportFmtSelect.value)
     });
-  } catch (eFull) {}
+  } catch (eFull) { aiCmPopupDiagLine('aiCmAutoExportWriteFull', { err: String(eFull) }); }
 }
 
 // v1.19.2 (M-13b): инициализация формы — СТРОГО из chrome.storage (без дефолтов, расходящихся
@@ -465,9 +465,9 @@ try {
         (pctInit === null) ||
         (normalizeAutoExportFmt(data.aiCmAutoExportFmt) !== data.aiCmAutoExportFmt);
       if (needsNormalize) aiCmAutoExportWriteFull();
-    } catch (eInit) {}
+    } catch (eInit) { aiCmPopupDiagLine('autoexport-init', { err: String(eInit) }); }
   });
-} catch (eLoad) {}
+} catch (eLoad) { aiCmPopupDiagLine('autoexport-load', { err: String(eLoad) }); }
 
 // v1.19.2 (M-13a): любой из трёх контролов пишет ПОЛНЫЙ объект — enabled не теряется
 autoExportCheckbox && autoExportCheckbox.addEventListener('change', aiCmAutoExportWriteFull);
@@ -489,7 +489,7 @@ try {
       autoExportPctInput.value = (pct === null) ? 90 : pct;
     }
   });
-} catch (e) {}
+} catch (e) { aiCmPopupDiagLine('autoexport-changed', { err: String(e) }); }
 
 document.getElementById('reset-limit') && document.getElementById('reset-limit').addEventListener('click', function () {
   aiCmCancelCustomLimitWrite(); // H20: гасим висящий дебаунс — сброс мгновенный
@@ -572,8 +572,8 @@ function aiCmPopupDiagLine(tag, fields) {
   try {
     if (typeof aiCmDiagLine === 'function') return aiCmDiagLine(tag, fields);
     var on = false;
-    try { on = !!(typeof sessionStorage !== 'undefined' && sessionStorage && sessionStorage.getItem('aiCmDebug') === '1'); } catch (eSess) { }
-    if (!on) { try { on = window.__aiCmDebugLogs === true; } catch (eWin) { } }
+    try { on = !!(typeof sessionStorage !== 'undefined' && sessionStorage && sessionStorage.getItem('aiCmDebug') === '1'); } catch (eSess) { on = false; }
+    if (!on) { try { on = window.__aiCmDebugLogs === true; } catch (eWin) { return false; } }
     if (!on) return false;
     var parts = [];
     var f = fields || {};
@@ -595,7 +595,7 @@ function showNoData(message) {
       ts: Date.now(), event: 'showNoData', reason: String(message || '-'),
       url: String((typeof location !== 'undefined' && location && location.href) || '')
     });
-  } catch (eQnd) { }
+  } catch (eQnd) { aiCmPopupDiagLine('showNoData', { err: String(eQnd) }); }
   siteEl.textContent = message || aiCmI18nMessage('options_no_data', 'Нет данных');
   modelEl.textContent = '—';
   tokensEl.textContent = '—';
@@ -637,7 +637,7 @@ function loadStats() {
         var activeTabUrl = new URL(tab.url);
         tabHost = activeTabUrl.hostname;
         tabPath = activeTabUrl.pathname;
-      } catch (e) {}
+      } catch (e) { aiCmPopupDiagLine('loadStats-tab-url', { err: String(e) }); }
 
       // v31: per-host ключ приоритетен; глобальный — только если он про этот же хост
       chrome.storage.local.get(['aiCmState', 'aiCmState:' + tabHost], function (data) {
@@ -687,7 +687,7 @@ try {
         var tabHost = '';
         try {
           if (tab && tab.url) tabHost = new URL(tab.url).hostname;
-        } catch (e) {}
+        } catch (e) { aiCmPopupDiagLine('stats-changed-removed', { err: String(e) }); }
         removedForTab = (!tabHost && (!!changes.aiCmState || !!changes['aiCmState:' + tabHost])) ||
           (!!tabHost && (!!changes['aiCmState:' + tabHost] ||
             (!!changes.aiCmState && !!(changes.aiCmState.oldValue &&
@@ -709,7 +709,7 @@ try {
           tabHost = activeTabUrl.hostname;
           tabPath = activeTabUrl.pathname;
         }
-      } catch (e) {}
+      } catch (e) { aiCmPopupDiagLine('stats-changed-live', { err: String(e) }); }
       var best = null;
       for (var i = 0; i < candidates.length; i++) {
         var s = candidates[i];
@@ -721,7 +721,7 @@ try {
       }
     });
   });
-} catch (e) {}
+} catch (e) { aiCmPopupDiagLine('stats-changed', { err: String(e) }); }
 
 // ========== ЭКСПОРТ ИСТОРИИ ==========
 var cachedHistory = null;
@@ -885,7 +885,7 @@ exportTxtBtn && exportTxtBtn.addEventListener('click', function () {
     var hist = pickExportHistory(snap);
     if (!hist) return;
     var txt = buildTxtText(hist);
-    try { if (txt.charAt(0) !== '\uFEFF') txt = '\uFEFF' + txt; } catch (eB) {}
+    if (txt.charAt(0) !== '\uFEFF') txt = '\uFEFF' + txt;
     downloadBlob(txt, buildFileName('txt', hist), 'text/plain;charset=utf-8', 'options-txt');
   });
 });
@@ -966,7 +966,7 @@ try {
       updateExportButtons();
     });
   });
-} catch (e) {}
+} catch (e) { aiCmPopupDiagLine('history-changed', { err: String(e) }); }
 
 // ========== T1 (v1.16): АРХИВЫ — ПЕРВЫЙ ЯРУС ИСТОРИИ ==========
 // Импорт ЛОКАЛЬНЫХ файлов экспорта через FileReader: внешних fetch нет, manifest не
@@ -1131,7 +1131,7 @@ function aiCmListArchiveSourceKeys(cb) {
       });
       return;
     }
-  } catch (eKeys) { }
+  } catch (eKeys) { aiCmPopupDiagLine('aiCmListArchiveSourceKeys', { err: String(eKeys) }); }
   try {
     chrome.storage.local.get(null, function (all) {
       cb(Object.keys(all || {}).filter(function (k) { return k.indexOf('aiCmArchive:') === 0; })
@@ -1230,7 +1230,7 @@ try {
       if (k.indexOf('aiCmArchive:') === 0) { aiCmRenderArchiveList(); return; }
     }
   });
-} catch (eArcCh) { }
+} catch (eArcCh) { aiCmPopupDiagLine('archive-changed', { err: String(eArcCh) }); }
 
 // Загружаем статистику и состояние экспорта при открытии
 document.addEventListener('DOMContentLoaded', function () {

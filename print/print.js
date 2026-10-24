@@ -27,7 +27,7 @@
         var message = substitutions ? chrome.i18n.getMessage(key, substitutions) : chrome.i18n.getMessage(key);
         if (message) return message;
       }
-    } catch (eMessage) { }
+    } catch (eMessage) { return fallback; }
     return fallback;
   }
 
@@ -135,7 +135,7 @@
       diagBaseSite = (history && history.site) || '';
       diagBaseMsgs = msgsDiag.length;
       printDiag('print-render', { reason: 'form-rendered' });
-    } catch (eDiagShow) { }
+    } catch (eDiagShow) { diagBaseHead = ''; diagBaseConvId = ''; diagBaseSite = ''; diagBaseMsgs = 0; }
     document.getElementById('empty-state').style.display = 'none';
     document.getElementById('print-content').innerHTML = render(history);
   }
@@ -155,7 +155,7 @@
     function send() {
       if (sent) return;
       sent = true;
-      try { chrome.runtime.sendMessage({ type: 'close-print-tab' }); } catch (e) { }
+      try { chrome.runtime.sendMessage({ type: 'close-print-tab' }); } catch (e) { printDiag('catch:print', { err: String(e) }); }
     }
     window.addEventListener('afterprint', send);
     setTimeout(send, 2000);
@@ -187,10 +187,10 @@
     try {
       if (typeof sessionStorage !== 'undefined' && sessionStorage &&
         sessionStorage.getItem('aiCmDebug') === '1') return true;
-    } catch (eSess) { }
+    } catch (eSess) { return false; }
     try {
       if (typeof window !== 'undefined' && window && window.__aiCmDebugLogs === true) return true;
-    } catch (eWin) { }
+    } catch (eWin) { return false; }
     return false;
   }
   function printDiagStack() {
@@ -209,9 +209,9 @@
     if (!printDiagOn()) return false;
     try {
       var url = '';
-      try { url = String((typeof location !== 'undefined' && location && location.href) || ''); } catch (eUrl) { }
+      try { url = String((typeof location !== 'undefined' && location && location.href) || ''); } catch (eUrl) { url = ''; }
       var title = '';
-      try { title = String(document.title || ''); } catch (eTitle) { }
+      try { title = String(document.title || ''); } catch (eTitle) { title = ''; }
       var head = String(diagBaseHead || '').replace(/\s+/g, ' ').trim();
       if (head.length > 100) head = head.slice(0, 100) + '…';
       console.log('[AI CM][diag] download trigger=' + trigger +
@@ -225,7 +225,7 @@
         ' msgs=' + diagBaseMsgs +
         ' reason=' + ((extra && extra.reason) || '') +
         ' src=' + printDiagStack());
-    } catch (eDiag) { }
+    } catch (eDiag) { return false; }
     return true;
   }
 
@@ -242,7 +242,7 @@
     if (printInvoked) {
       // O-27/O-32 (диагностика): повторный триггер печати подавлен (E-2) — файла не будет.
       printDiag('print-pdf-suppressed', { reason: 'duplicate print suppressed (E-2)' });
-      try { console.log('[AI CM][print] duplicate print suppressed'); } catch (e) { }
+      console.log('[AI CM][print] duplicate print suppressed');
       return false;
     }
     printInvoked = true;
@@ -300,5 +300,5 @@
 
   // v1.18 (E-2): точка автопечати доступна тестам (регрессионный пин «ровно один print»).
   // Поведение страницы не меняется — init() вызывает ту же функцию.
-  try { window.__aiCmPrintTrigger = triggerPrint; } catch (e) { }
+  try { window.__aiCmPrintTrigger = triggerPrint; } catch (e) { console.warn('[AI CM][catch] print:', e); }
 })();
