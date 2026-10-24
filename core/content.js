@@ -1604,6 +1604,8 @@ function requestExactTokens(fullText, modelId) {
       // Шаг 2: чат, для которого получен точный ответ, — признак авторитета для метрики
       // (aiCmExactTokensFor). Пишется тем же успешным ответом, что и пара text/cache.
       lastCountTokensConvId = getCurrentConvId() || '';
+      // Шаг 4: успешный ответ снимает отметку отказа — держание эвристики для этого текста кончилось.
+      lastCountTokensErrorText = '';
       netServerTokens = response.totalTokens;
       console.log('[exact-tokens] countTokens вернул ' + response.totalTokens + ' токенов для модели ' + apiModelId);
       logTextProbe('post-ok:' + response.totalTokens, fullText);
@@ -1625,6 +1627,10 @@ function requestExactTokens(fullText, modelId) {
       // Шаг 2: API отказал — авторитет прошлого ответа по convId снимаем, иначе бейдж «замёрз»
       // бы на последнем точном числе до смены чата (квота исчерпана, ключ отозван, сеть).
       lastCountTokensConvId = '';
+      // Шаг 4: отказ запоминаем по ТЕКСТУ — держание эвристики (aiCmHeuristicHoldForByok) снимается
+      // для него же, и метрика снова считается эвристикой, вместо «замёрзшего» бейджа. Успешный
+      // ответ ниже/выше по коду отметку стирает, а новый текст её и так не совпадает.
+      lastCountTokensErrorText = fullText;
       // Если для этого же текста уже есть точное значение — не затираем его
       if (fullText === lastCountTokensText && lastCountTokensCache > 0) {
         netServerTokens = lastCountTokensCache;
@@ -1682,6 +1688,7 @@ function aiCmByokKeyInvalidate() {
       lastCountTokensText = '';
       lastCountTokensCache = 0;
       lastCountTokensConvId = ''; // Шаг 2: чужой/отозванный ключ не оставляет авторитета
+      lastCountTokensErrorText = ''; // Шаг 4: отметка отказа прошлого ключа не действует
       netServerTokens = 0; // при отключении BYOK сразу эвристика
       console.log('[byok] ключ обновлён сообщением SW: ' + (geminiApiKey ? '***' : '(пусто)'));
       if (isInitialized) processAndSend();
@@ -2004,6 +2011,44 @@ function aiCmExactTokensFor(text) {
   return convSame ? cached : 0;
 }
 
+// ===== Шаг 4 (фикс «скачка» бейджа при BYOK): эвристика молчит до точного ответа API =====
+// КОРЕНЬ ДЕФЕКТА (живой замер 18:51:40, лог gemini.google.com): ключ и exactCount уже включены,
+// но кэш countTokens для чата ещё НЕ восстановлен (loadByokCache выходит рано при пустом
+// convId), а requestExactTokens только ушёл в сеть. Метрика этого прохода считалась эвристикой
+// Tokenizer.estimateDialogTokens — 33162 токена (25.9%), а через 1.4 с приходил ответ API
+// 29517 (23.1%) и бейдж на глазах «падал». Второй сценарий — новый чат: латч Шага 2 принадлежит
+// ПРОШЛОМУ convId, эвристика рисует завышенное число, точное приходит позже.
+// ПРАВИЛО: если точный счёт включён и ключ есть, а точного числа ДЛЯ ЭТОГО текста нет —
+// эвристика не двигает maxTokenCount/percentage и не зовёт updateWidget: бейдж держит
+// предыдущее значение (на свежей странице это штатный плейсхолдер «—» из createWidget),
+// а точное значение придёт ответом countTokens (requestExactTokens → processAndSend).
+// Эвристика отключается НЕ навсегда — она возвращается, когда:
+//   (а) BYOK выключен или ключа нет  → работа без API-ключа не меняется вовсе;
+//   (б) сервис не спрашивает countTokens (qwen/chatgpt/deepseek/...) — список ровно тот же,
+//       что у вызова requestExactTokens в processAndSend (O-35: qwen исключён осознанно);
+//   (в) точное число для текста уже есть (aiCmExactTokensFor > 0) — его авторитет сильнее;
+//   (г) API отказал именно для этого текста (lastCountTokensErrorText) — иначе при квоте/сети
+//       бейдж «замёрз» бы на держании, что противоречит ветке ошибки requestExactTokens.
+// Внешние имена — typeof-гарды: срез-песочницы тестов (new Function) не содержат соседних
+// объявлений контура (конвенция aiCmExactTokensFor/aiCmMetricServerTokens).
+//
+// @param {string} svc — сервис (getServiceKey/currentAdapter.siteName).
+// @param {string} text — текст, для которого считается метрика (полный текст диалога).
+// @returns {boolean} true — эвристике запрещено писать бейдж в этом проходе.
+function aiCmHeuristicHoldForByok(svc, text) {
+  if (!exactCountEnabled || !geminiApiKey) return false;
+  if (svc !== 'gemini' && svc !== 'aistudio' && svc !== 'google_search') return false;
+  if (!text) return false;
+  // Контекст расширения недействителен (обновление расширения): запрос уйти не сможет,
+  // держать нечего — пусть работает эвристика, как до включения BYOK.
+  if (typeof isExtensionValid === 'function' && !isExtensionValid()) return false;
+  var exact = (typeof aiCmExactTokensFor === 'function') ? aiCmExactTokensFor(text) : 0;
+  if (exact > 0) return false;
+  var errText = (typeof lastCountTokensErrorText === 'string') ? lastCountTokensErrorText : '';
+  if (errText && errText === text) return false;
+  return true;
+}
+
 function processAndSend() {
   if (!currentAdapter) return;
 
@@ -2286,6 +2331,10 @@ function processAndSend() {
     // pct/badge Qwen считаются ТОЛЬКО эвристикой tokens~. Прочие сервисы — прежний приоритет.
     // Шаг 3: text передаётся, чтобы точный ответ BYOK для этого текста перебивал эвристику.
     const metricServerTokens = aiCmMetricServerTokens(svc, fullText);
+    // Шаг 4 (фикс «скачка» 25.9% → 23.1%): точного числа для ЭТОГО текста ещё нет (кэш не
+    // восстановлен / другой чат / ответ API в пути) — эвристике запрещено писать бейдж в этом
+    // проходе. Гейт сервис-узкий и уважает отказ API (см. aiCmHeuristicHoldForByok).
+    const byokHeuristicHold = aiCmHeuristicHoldForByok(svc, fullText);
     let tokenEstimate = metricServerTokens > 0 ? metricServerTokens : Tokenizer.estimateDialogTokens(fullText, countForTokens);
     // Поднятый полом effectiveLen (Gemini): если сеть дала effectiveLen > длины текста — масштабируем оценку
     if (metricServerTokens === 0 && netEffectiveLen > 0 && fullText && fullText.length > 0 && netEffectiveLen > fullText.length) {
@@ -2335,6 +2384,9 @@ function processAndSend() {
     if (metricServerTokens > 0) {
       // точное число из countTokens авторитетно — не удерживаем завышенную эвристику
       maxTokenCount = tokenEstimate;
+    } else if (byokHeuristicHold) {
+      // Шаг 4: точного числа для текста ещё нет — максимум НЕ двигаем (эвристика молчит);
+      // бейдж держит предыдущее значение до ответа countTokens (см. ветвление отрисовки).
     } else if (baseComplete === true) {
       // v1.8-fix: новый ПОЛНЫЙ сетевой снапшот ЗАМЕНЯЕТ значение базы и сбрасывает
       // монотонный максимум — случайная инфляция (двойной учёт вложений и т.п.)
@@ -2370,6 +2422,11 @@ function processAndSend() {
       // скрыт с создания): не показываем ни placeholder «—», ни заниженную DOM-оценку после
       // F5 (в т.ч. при пустом convId). Отпускание — записью базы ИЛИ фолбэком
       // AI_CM_BADGE_HOLD_FALLBACK_MS (aiCmArmBadgeHoldFallback).
+    } else if (byokHeuristicHold) {
+      // Шаг 4: BYOK включён, но точного числа для ЭТОГО текста ещё нет — updateWidget не зовём:
+      // бейдж держит предыдущее значение (на свежей странице — плейсхолдер «—»), а не завышенную
+      // эвристику. Точное значение отрисует ответ countTokens через processAndSend.
+      debugLog('log', '[content-trace] byok-hold: точного числа для текста ещё нет — бейдж держим');
     } else {
       updateWidget(percentage, maxTokenCount, effectiveLimit, contextLimit, displayLimit, ModelConfig.getModel(modelId)?.name || modelId, netAttachBreak);
       lastWidgetData = {
@@ -3116,6 +3173,7 @@ if (isExtensionValid()) {
       lastCountTokensText = '';
       lastCountTokensCache = 0;
       lastCountTokensConvId = ''; // Шаг 2: со сменой настроек авторитет прошлого ключа снят
+      lastCountTokensErrorText = ''; // Шаг 4: отказ API прошлых настроек не держит эвристику
       netServerTokens = 0; // при отключении BYOK сразу эвристика
       if (isInitialized) processAndSend();
     }

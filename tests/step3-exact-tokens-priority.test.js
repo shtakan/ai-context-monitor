@@ -33,6 +33,16 @@
  *   S10 — Шаг 1: гейт baseComplete у вызова requestExactTokens снят (source-пин);
  *   S11 — Шаг 3: подстановки прошлого lastCountTokensCache в общий счётчик больше нет.
  *
+ * ШАГ 4 (фикс «скачка» бейджа при BYOK, живой лог 18:51:40: 25.9% → 23.1%) — пины ниже:
+ *   Корень: кэш countTokens для чата ещё не восстановлен (или это другой чат), ответ API в пути —
+ *   и проход считал метрику эвристикой Tokenizer.estimateDialogTokens (33162), а через 1.4 с
+ *   приходило точное 29517. Правило aiCmHeuristicHoldForByok: BYOK включён + ключ есть + точного
+ *   числа для ЭТОГО текста нет → эвристика не двигает maxTokenCount/percentage и не зовёт
+ *   updateWidget. Без ключа / вне списка сервисов / при отказе API эвристика работает как раньше.
+ *   S12 — правило исполняется реальными байтами (держание on/off по всем веткам);
+ *   S13 — в processAndSend ветка держания стоит ДО эвристики и ничего не пишет в бейдж;
+ *   S14 — успех/отказ countTokens управляют держанием, сброс чата чистит отметку отказа.
+ *
  * КОНСТРУКЦИЯ: правила исполняются РЕАЛЬНЫМИ байтами core/content.js (срез по имени +
  * new Function), а не пересказом.
  */
@@ -189,3 +199,133 @@ describe('Шаг 3: точный ответ API countTokens приоритетн
     expect(req.split('netServerTokens = lastCountTokensCache;').length - 1).toBe(2);
   });
 });
+
+// =====================================================================================
+// Шаг 4: держание бейджа при BYOK — эвристика не пишет, пока нет точного числа
+// =====================================================================================
+
+/**
+ * Исполняет РЕАЛЬНЫЕ aiCmHeuristicHoldForByok + aiCmExactTokensFor (реальный латч, не заглушка)
+ * в песочнице контента. Свободные переменные контура переданы параметрами фабрики — та же
+ * конвенция, что у buildMetric (typeof-гарды в исходнике молчат без соседних объявлений).
+ */
+function buildHold(opts) {
+  const o = opts || {};
+  const src = fnDecl(CONTENT, 'aiCmExactTokensFor') + '\n' + fnDecl(CONTENT, 'aiCmHeuristicHoldForByok');
+  const factory = new Function(
+    'exactCountEnabled', 'geminiApiKey', 'lastCountTokensText', 'lastCountTokensCache',
+    'lastCountTokensConvId', 'lastCountTokensErrorText', 'getCurrentConvId', 'isExtensionValid',
+    src + '\nreturn aiCmHeuristicHoldForByok;'
+  );
+  return factory(
+    o.exactCountEnabled !== undefined ? o.exactCountEnabled : true,
+    o.geminiApiKey !== undefined ? o.geminiApiKey : 'AIza-test-key',
+    o.lastCountTokensText !== undefined ? o.lastCountTokensText : '',
+    o.lastCountTokensCache !== undefined ? o.lastCountTokensCache : 0,
+    o.lastCountTokensConvId !== undefined ? o.lastCountTokensConvId : '',
+    o.lastCountTokensErrorText !== undefined ? o.lastCountTokensErrorText : '',
+    typeof o.getCurrentConvId === 'function' ? o.getCurrentConvId : function () { return ''; },
+    typeof o.isExtensionValid === 'function' ? o.isExtensionValid : function () { return true; }
+  );
+}
+
+/** Тело ветки else-if/if по индексу начала условия (баланс фигурных скобок). */
+function branchBody(src, startIdx) {
+  const open = src.indexOf('{', startIdx);
+  expect(open).toBeGreaterThan(-1);
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}') {
+      depth--;
+      if (depth === 0) return src.slice(open, i + 1);
+    }
+  }
+  throw new Error('unbalanced branch at ' + startIdx);
+}
+
+describe('Шаг 4: при BYOK без точного числа эвристика не пишет бейдж', () => {
+  test('S12: держание включается ровно в дыре «BYOK есть, точного числа нет»', () => {
+    // Главный кейс живого лога: ключ и флаг включены, кэша для чата нет (loadByokCache вышел
+    // рано при пустом convId), ответ countTokens ещё в пути → бейдж держим (было: 25.9%).
+    const hold = buildHold({ lastCountTokensText: '', lastCountTokensCache: 0 });
+    expect(hold('gemini', 'ДИАЛОГ-НОВЫЙ')).toBe(true);
+    expect(hold('aistudio', 'ДИАЛОГ-НОВЫЙ')).toBe(true);
+    expect(hold('google_search', 'ДИАЛОГ-НОВЫЙ')).toBe(true);
+    // Латч есть, но относится к ДРУГОМУ чату/тексту (S8) → точного числа для этого текста нет.
+    expect(buildHold({
+      lastCountTokensText: 'ДИАЛОГ-1', lastCountTokensCache: 1234, lastCountTokensConvId: 'conv-A',
+      getCurrentConvId: function () { return 'conv-B'; }
+    })('gemini', 'ДИАЛОГ-2')).toBe(true);
+  });
+
+  test('S12b: точное число для текста есть → держания нет (точные байты авторитетны)', () => {
+    expect(buildHold({ lastCountTokensText: 'ДИАЛОГ-1', lastCountTokensCache: 1234 })('gemini', 'ДИАЛОГ-1')).toBe(false);
+    // латч того же чата (Шаг 2) — тоже точное значение, держать нечего
+    expect(buildHold({
+      lastCountTokensText: 'ДИАЛОГ-1', lastCountTokensCache: 1234, lastCountTokensConvId: 'conv-A',
+      getCurrentConvId: function () { return 'conv-A'; }
+    })('gemini', 'ДИАЛОГ-2')).toBe(false);
+  });
+
+  test('S12c: без ключа/флага, вне списка сервисов и после отказа API эвристика живёт', () => {
+    expect(buildHold({ exactCountEnabled: false })('gemini', 'ДИАЛОГ-1')).toBe(false);
+    expect(buildHold({ geminiApiKey: '' })('gemini', 'ДИАЛОГ-1')).toBe(false);
+    ['qwen', 'chatgpt', 'deepseek', 'claude', 'perplexity'].forEach(function (site) {
+      expect([site, buildHold({})(site, 'ДИАЛОГ-1')]).toEqual([site, false]);
+    });
+    // пустой текст и недействительный контекст расширения — держать нечего
+    expect(buildHold({})('gemini', '')).toBe(false);
+    expect(buildHold({ isExtensionValid: function () { return false; } })('gemini', 'ДИАЛОГ-1')).toBe(false);
+    // Отказ countTokens для ЭТОГО текста снимает держание (иначе «замёрзший» бейдж при квоте).
+    expect(buildHold({ lastCountTokensErrorText: 'ДИАЛОГ-1' })('gemini', 'ДИАЛОГ-1')).toBe(false);
+    // ...но не распространяется на другой текст: там ждём свой ответ API
+    expect(buildHold({ lastCountTokensErrorText: 'ДИАЛОГ-1' })('gemini', 'ДИАЛОГ-2')).toBe(true);
+  });
+
+  test('S13: ветка держания в processAndSend стоит ДО эвристики и не пишет в бейдж', () => {
+    const draw = fnDecl(CONTENT, 'processAndSend');
+    const GATE = 'const byokHeuristicHold = aiCmHeuristicHoldForByok(svc, fullText);';
+    expect(draw).toContain(GATE);
+    const iGate = draw.indexOf(GATE);
+    // ровно две ветки держания: максимум (метрика) и отрисовка (updateWidget)
+    expect(CONTENT.split('} else if (byokHeuristicHold) {').length - 1).toBe(2);
+    const iMetricHold = draw.indexOf('} else if (byokHeuristicHold) {', iGate);
+    expect(iMetricHold).toBeGreaterThan(iGate);
+    const metricHold = branchBody(draw, iMetricHold);
+    // код ветки без комментариев: иначе считались бы упоминания в пояснении фикса
+    const metricHoldCode = metricHold.split('\n').filter(function (l) { return l.trim().indexOf('//') !== 0; }).join('\n');
+    expect(metricHoldCode).not.toContain('maxTokenCount');       // эвристика максимум не двигает
+    expect(metricHoldCode).not.toContain('tokenEstimate =');
+    // эвристические ветви максимума (baseComplete/useMonotonic/else) остались ПОСЛЕ держания
+    expect(draw.indexOf('} else if (baseComplete === true) {', iMetricHold)).toBeGreaterThan(iMetricHold);
+    expect(draw.indexOf('const percentage = displayLimit', iMetricHold)).toBeGreaterThan(iMetricHold);
+    // ветка отрисовки: после щита O-1 и до updateWidget, без единой записи в виджет
+    const iDrawHold = draw.indexOf('} else if (byokHeuristicHold) {', iMetricHold + 1);
+    expect(iDrawHold).toBeGreaterThan(draw.indexOf('} else if (aiCmBadgeHoldActive()) {'));
+    const drawHold = branchBody(draw, iDrawHold);
+    const drawHoldCode = drawHold.split('\n').filter(function (l) { return l.trim().indexOf('//') !== 0; }).join('\n');
+    expect(drawHoldCode).not.toContain('updateWidget');
+    expect(drawHoldCode).not.toContain('lastWidgetData');
+    expect(draw.indexOf('updateWidget(percentage, maxTokenCount, effectiveLimit')).toBeGreaterThan(iDrawHold);
+    expect(draw.indexOf('maybeAutoExport(percentage);')).toBeGreaterThan(iDrawHold);
+  });
+
+  test('S14: успех/отказ countTokens управляют держанием, сброс чата чистит отметку', () => {
+    const req = fnDecl(CONTENT, 'requestExactTokens');
+    const iErr = req.indexOf("aiCmDiagWarn('content:requestExactTokens'");
+    expect(iErr).toBeGreaterThan(-1);
+    // отказ помечает ИМЕННО этот текст — держание снимается (ветка фолбэка на эвристику)
+    expect(req.indexOf('lastCountTokensErrorText = fullText;', iErr)).toBeGreaterThan(iErr);
+    // успех стирает отметку (выше ветки ошибки) — держание для текста кончилось
+    const iClear = req.indexOf("lastCountTokensErrorText = '';");
+    expect(iClear).toBeGreaterThan(-1);
+    expect(iClear).toBeLessThan(iErr);
+    expect(req.slice(req.indexOf('lastCountTokensCache = response.totalTokens;'), iErr)).toContain("lastCountTokensErrorText = '';");
+    // сброс чата и смена ключа/настроек не оставляют отметку прошлого текста
+    expect(H.moduleSource('widget.js')).toContain("lastCountTokensErrorText = '';");
+    expect(H.moduleSource('state.js')).toContain('let lastCountTokensErrorText');
+    expect(CONTENT.split("lastCountTokensErrorText = '';").length - 1).toBeGreaterThanOrEqual(3);
+  });
+});
+

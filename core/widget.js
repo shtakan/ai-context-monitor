@@ -197,6 +197,7 @@ function resetConversationState() {
   lastCountTokensText = '';
   lastCountTokensCache = 0;
   lastCountTokensConvId = ''; // Шаг 2: авторитет точного числа принадлежит чату — при смене чата снят
+  lastCountTokensErrorText = ''; // Шаг 4: отказ API относился к тексту прошлого чата
   lastPercentage = -1;
   lastResolvedModelId = null;
   lastSnapshotModelName = ''; // v47: модель снимка тоже сбрасывается при смене чата

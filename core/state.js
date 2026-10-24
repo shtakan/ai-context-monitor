@@ -110,6 +110,10 @@ let lastCountTokensCache = 0;
 // привязан к чату (aiCmExactTokensFor, core/content.js): пока ответ API действует для текущего
 // convId, эвристика tokens~ не перезаписывает maxTokenCount/percentage.
 let lastCountTokensConvId = '';
+// Шаг 4 (фикс «скачка» бейджа): текст, для которого countTokens ОТКАЗАЛ (ошибка/таймаут/нет
+// ответа SW). Пока текст тот же, эвристика снова допустима — иначе при исчерпанной квоте,
+// отозванном ключе или сети бейдж «замёрз» бы на держании (aiCmHeuristicHoldForByok).
+let lastCountTokensErrorText = '';
 let countTokensTimer = null;
 let /** @type {boolean|Map<unknown, unknown>} */ countTokensPending = false; // защита от повторного запроса пока предыдущий в полёте; JSDoc: имя перекрывается картой Map в core/background.js:538 (разные миры)
 
@@ -441,6 +445,9 @@ function aiCmLatchRemove(service, convId) {
   Object.defineProperty(Api, 'lastCountTokensConvId', { enumerable: true,
     get: function () { return lastCountTokensConvId; },
     set: function (value) { lastCountTokensConvId = value; } });
+  Object.defineProperty(Api, 'lastCountTokensErrorText', { enumerable: true,
+    get: function () { return lastCountTokensErrorText; },
+    set: function (value) { lastCountTokensErrorText = value; } });
   Object.defineProperty(Api, 'countTokensTimer', { enumerable: true,
     get: function () { return countTokensTimer; },
     set: function (value) { countTokensTimer = value; } });
