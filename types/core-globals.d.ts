@@ -261,6 +261,8 @@ declare let geminiApiKey: string;
 declare let lastCountTokensText: string;
 /** Кэш точного подсчёта (последнее число токенов). */
 declare let lastCountTokensCache: number;
+/** Шаг 2: convId, в котором получен точный ответ countTokens (авторитет точного числа для метрики; '' — авторитета нет). */
+declare let lastCountTokensConvId: string;
 /** Таймер дебаунса точного подсчёта. */
 declare let countTokensTimer: ReturnType<typeof setTimeout> | null;
 /** Safe-percentage (порог виджета; null = Авто). */

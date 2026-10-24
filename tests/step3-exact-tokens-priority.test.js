@@ -12,9 +12,11 @@
  * назад к эвристике.
  *
  * ПРАВИЛО. countTokens зависит только от текста, поэтому точное число верно ровно для
- * того текста, для которого получено. Латч — пара lastCountTokensText/lastCountTokensCache
+ * того текста, для которого получено. Латч — тройка
+ * lastCountTokensText/lastCountTokensCache/lastCountTokensConvId
  * (пишется ТОЛЬКО успешным ответом API либо восстановлением из chrome.storage.local;
- * чистится сменой чата в core/widget.js и сменой ключа в aiCmByokKeyInvalidate).
+ * чистится сменой чата в core/widget.js, сменой ключа в aiCmByokKeyInvalidate и ошибкой
+ * countTokens — иначе бейдж «замёрз» бы на последнем точном числе при исчерпанной квоте).
  *   S1 — латч совпал и ingest обнулил netServerTokens → метрика = точные токены API;
  *   S2 — латч совпал при живом серверном счётчике → всё равно точные токены API;
  *   S3 — текст сменился (новый сетевой ход) → метрики от API нет, эвристика снова допустима;
@@ -22,6 +24,14 @@
  *   S5 — Qwen: site-гейт O-47 главнее, даже при совпавшем латче (правило Qwen не тронуто);
  *   S6 — source-пины: ОБА пути метрики (processAndSend и GET_STATS) передают текст, а
  *        displayTokens попапа уважает точный счётчик (иначе попап расходится с бейджем).
+ *
+ * ШАГИ 1-3 (24-10, гонка «эвристика vs API») — пины ниже:
+ *   S7 — Шаг 2: ответ API получен для ТЕКУЩЕГО convId → другой текст ТОГО ЖЕ чата
+ *        эвристикой не перезаписывается (авторитет = чат, а не строка текста);
+ *   S8 — Шаг 2: авторитет НЕ перетекает в другой чат (чужой convId → эвристика);
+ *   S9 — Шаг 2: ошибка API снимает авторитет (source-пин ветки ошибки);
+ *   S10 — Шаг 1: гейт baseComplete у вызова requestExactTokens снят (source-пин);
+ *   S11 — Шаг 3: подстановки прошлого lastCountTokensCache в общий счётчик больше нет.
  *
  * КОНСТРУКЦИЯ: правила исполняются РЕАЛЬНЫМИ байтами core/content.js (срез по имени +
  * new Function), а не пересказом.
@@ -49,6 +59,8 @@ function fnDecl(src, name) {
 /**
  * Исполняет реальные aiCmMetricServerTokens (и aiCmExactTokensFor, если он есть в срезе)
  * в песочнице контента: свободные переменные — параметры фабрики.
+ * Шаг 2: lastCountTokensConvId + getCurrentConvId добавлены параметрами — иначе typeof-гарды
+ * в aiCmExactTokensFor гасят авторитет (песочница без объявлений контура).
  */
 function buildMetric(opts) {
   const withLatch = opts.withLatch !== false;
@@ -56,6 +68,7 @@ function buildMetric(opts) {
               fnDecl(CONTENT, 'aiCmMetricServerTokens');
   const factory = new Function(
     'exactCountEnabled', 'geminiApiKey', 'lastCountTokensText', 'lastCountTokensCache', 'netServerTokens',
+    'lastCountTokensConvId', 'getCurrentConvId',
     src + '\nreturn aiCmMetricServerTokens;'
   );
   return factory(
@@ -63,7 +76,9 @@ function buildMetric(opts) {
     opts.geminiApiKey !== undefined ? opts.geminiApiKey : 'AIza-test-key',
     opts.lastCountTokensText !== undefined ? opts.lastCountTokensText : 'ДИАЛОГ-1',
     opts.lastCountTokensCache !== undefined ? opts.lastCountTokensCache : 1234,
-    opts.netServerTokens !== undefined ? opts.netServerTokens : 0
+    opts.netServerTokens !== undefined ? opts.netServerTokens : 0,
+    opts.lastCountTokensConvId !== undefined ? opts.lastCountTokensConvId : '',
+    typeof opts.getCurrentConvId === 'function' ? opts.getCurrentConvId : function () { return ''; }
   );
 }
 
@@ -108,5 +123,69 @@ describe('Шаг 3: точный ответ API countTokens приоритетн
     expect(CONTENT).toContain(
       'const displayTokens = metricServerTokens > 0 ? tokenEstimate : Math.max(tokenEstimate, maxTokenCount);'
     );
+  });
+
+  test('S7 (Шаг 2): ответ API для текущего convId не перебивается эвристикой на новом тексте', () => {
+    // Тот же чат: точное число получено для 'ДИАЛОГ-1', а метрика спрашивается уже для
+    // 'ДИАЛОГ-2' (DOM-хвост / неполный снимок). До Шага 2 здесь была эвристика → бейдж
+    // «прыгал» с точного числа на tokens~ на каждом проходе.
+    const metric = buildMetric({
+      netServerTokens: 0,
+      lastCountTokensText: 'ДИАЛОГ-1',
+      lastCountTokensCache: 1234,
+      lastCountTokensConvId: 'conv-A',
+      getCurrentConvId: function () { return 'conv-A'; }
+    });
+    expect(metric('gemini', 'ДИАЛОГ-2')).toBe(1234);
+    expect(metric('aistudio', 'ДИАЛОГ-2 + хвост')).toBe(1234);
+  });
+
+  test('S8 (Шаг 2): авторитет точного числа не перетекает в другой чат', () => {
+    const metric = buildMetric({
+      lastCountTokensText: 'ДИАЛОГ-1',
+      lastCountTokensCache: 1234,
+      lastCountTokensConvId: 'conv-A',
+      getCurrentConvId: function () { return 'conv-B'; }
+    });
+    expect(metric('gemini', 'ДИАЛОГ-2')).toBe(0);
+    // и при пустом convId/снятом латче (ошибка API) эвристика снова допустима
+    expect(buildMetric({ lastCountTokensText: 'ДИАЛОГ-1', lastCountTokensConvId: '' })('gemini', 'ДИАЛОГ-2')).toBe(0);
+  });
+
+  test('S9 (Шаг 2): ошибка countTokens снимает авторитет convId (source-пин ветки ошибки)', () => {
+    const req = fnDecl(CONTENT, 'requestExactTokens');
+    // успех ставит авторитет, ошибка — снимает (иначе число «замёрзло» бы при квоте/сети)
+    expect(req).toContain("lastCountTokensConvId = getCurrentConvId() || '';");
+    expect(req).toContain("lastCountTokensConvId = '';");
+    const errIdx = req.indexOf("aiCmDiagWarn('content:requestExactTokens'");
+    expect(errIdx).toBeGreaterThan(-1);
+    expect(req.indexOf("lastCountTokensConvId = '';", errIdx)).toBeGreaterThan(errIdx);
+    // восстановление из chrome.storage.local тоже ставит авторитет текущего чата
+    expect(CONTENT).toContain('lastCountTokensConvId = currentConvId;');
+  });
+
+  test('S10 (Шаг 1): гейт baseComplete у вызова requestExactTokens снят', () => {
+    expect(CONTENT).toContain('if (isGeminiSvc && exactCountEnabled && geminiApiKey && fullText) {');
+    expect(CONTENT).not.toContain('exactCountEnabled && geminiApiKey && fullText && baseComplete');
+    const call = CONTENT.indexOf('if (isGeminiSvc && exactCountEnabled && geminiApiKey && fullText) {');
+    expect(CONTENT.indexOf('requestExactTokens(fullText, modelId);', call)).toBeGreaterThan(call);
+    // точка входа гейтится только по сервису/настройке/ключу/тексту — baseComplete в гейте нет
+    // (диагностическая строка [byok-src] печатает baseComplete, но ничего не решает)
+    const req = fnDecl(CONTENT, 'requestExactTokens');
+    expect(req).not.toContain('&& baseComplete');
+    expect(req).toContain("[byok-src] baseComplete=' + baseComplete");
+  });
+
+  test('S11 (Шаг 3): прошлое точное значение больше НЕ подставляется в netServerTokens', () => {
+    const reqRaw = fnDecl(CONTENT, 'requestExactTokens');
+    // код без комментариев — иначе считались бы упоминания в пояснении фикса
+    const req = reqRaw.split('\n').filter(function (l) { return l.trim().indexOf('//') !== 0; }).join('\n');
+    // фатальный «заполнитель» прошлого текста/чата удалён
+    expect(req).not.toMatch(/if \(lastCountTokensCache > 0\) \{\s*netServerTokens = lastCountTokensCache;/);
+    expect(reqRaw).not.toContain('показываем последнее точное значение как заполнитель');
+    expect(reqRaw).toContain('Шаг 3 (фикс «заполнителя»)');
+    // подстановка кэша осталась только в ветке «текст не изменился» (корректный латч)
+    // и в ветке ошибки для того же текста — обе про ТЕКУЩИЙ текст, не про прошлый чат
+    expect(req.split('netServerTokens = lastCountTokensCache;').length - 1).toBe(2);
   });
 });

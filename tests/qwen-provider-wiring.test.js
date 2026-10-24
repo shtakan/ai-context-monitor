@@ -211,8 +211,11 @@ describe('O-35: core/content.js — ветка Qwen и запрет на countTo
     expect(m).not.toBeNull();
     expect(m[1]).toBe("svc === 'gemini' || svc === 'aistudio' || svc === 'google_search'");
     expect(m[1]).not.toContain('qwen');
-    // и в решении о запросе countTokens BYOK тоже нет Qwen
-    expect(content).toContain('if (isGeminiSvc && exactCountEnabled && geminiApiKey && fullText && baseComplete) {');
+    // и в решении о запросе countTokens BYOK тоже нет Qwen.
+    // Шаг 1 (фикс гонки «эвристика vs API»): гейт baseComplete снят — точный счёт нужен на
+    // любую смену текста; Qwen в условии по-прежнему отсутствует.
+    expect(content).toContain('if (isGeminiSvc && exactCountEnabled && geminiApiKey && fullText) {');
+    expect(content).not.toContain('exactCountEnabled && geminiApiKey && fullText && baseComplete');
   });
 });
 

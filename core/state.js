@@ -106,6 +106,10 @@ let exactCountEnabled = false;
 let geminiApiKey = '';
 let lastCountTokensText = '';
 let lastCountTokensCache = 0;
+// Шаг 2: convId, в котором получен точный ответ countTokens. Авторитет точного числа для метрики
+// привязан к чату (aiCmExactTokensFor, core/content.js): пока ответ API действует для текущего
+// convId, эвристика tokens~ не перезаписывает maxTokenCount/percentage.
+let lastCountTokensConvId = '';
 let countTokensTimer = null;
 let /** @type {boolean|Map<unknown, unknown>} */ countTokensPending = false; // защита от повторного запроса пока предыдущий в полёте; JSDoc: имя перекрывается картой Map в core/background.js:538 (разные миры)
 
@@ -434,6 +438,9 @@ function aiCmLatchRemove(service, convId) {
   Object.defineProperty(Api, 'lastCountTokensCache', { enumerable: true,
     get: function () { return lastCountTokensCache; },
     set: function (value) { lastCountTokensCache = value; } });
+  Object.defineProperty(Api, 'lastCountTokensConvId', { enumerable: true,
+    get: function () { return lastCountTokensConvId; },
+    set: function (value) { lastCountTokensConvId = value; } });
   Object.defineProperty(Api, 'countTokensTimer', { enumerable: true,
     get: function () { return countTokensTimer; },
     set: function (value) { countTokensTimer = value; } });

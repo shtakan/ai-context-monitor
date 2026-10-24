@@ -509,12 +509,13 @@ function aiCmGsaResetStaleStateOnChatlessDoc() {
 }
 
 // O-23 (F5, фикс корня 1): tokens~ в трассе badge-recv считался упрощённой эвристикой
-// Math.round(text.length / 4) — для кириллицы это систематическая НЕДООЦЕНКА (реальный
-// коэффициент ≈1.8 симв/токен). Источник истины — Tokenizer.countTokens (языково-зависимый,
-// utils/tokenizer.js); упрощённая эвристика остаётся ТОЛЬКО фолбэком для песочниц без
-// Tokenizer и сама получает языковую ветвь (кириллица ÷1.8, остальное ÷4). Для ASCII-текста
-// фолбэк байтово равен прежнему Math.round(length/4) — регресс-пин R1
-// (tests/o23-tokens-calibration.test.js).
+// Math.round(text.length / 4) — для кириллицы это систематическая НЕДООЦЕНКА. Источник истины —
+// Tokenizer.countTokens (языково-зависимый, utils/tokenizer.js); упрощённая эвристика остаётся
+// ТОЛЬКО фолбэком для песочниц без Tokenizer и сама получает языковую ветвь: кириллица ÷3.3
+// (глобальная калибровка O-23 по живым замерам 112854 симв → 29517 ток. и 216881 → 63713 ток.;
+// коэффициент обязан совпадать с Tokenizer.CYRILLIC_CHARS_PER_TOKEN — пин-тест калибровки),
+// остальное ÷4. Для ASCII-текста фолбэк байтово равен прежнему Math.round(length/4) —
+// регресс-пин R1 (tests/o23-tokens-calibration.test.js).
 function aiCmEstimateTokensTilde(text, attachTokens) {
   var t = (typeof text === 'string') ? text : '';
   var attach = (typeof attachTokens === 'number' && attachTokens > 0) ? attachTokens : 0;
@@ -526,7 +527,7 @@ function aiCmEstimateTokensTilde(text, attachTokens) {
   }
   if (!tkOk) {
     var cyr = (t.match(/[а-яёА-ЯЁ]/g) || []).length;
-    result = Math.ceil(cyr / 1.8) + Math.round((t.length - cyr) / 4) + attach;
+    result = Math.ceil(cyr / 3.3) + Math.round((t.length - cyr) / 4) + attach;
   }
   // O-23 (измерение): доля кириллицы и итог tokens~ — только под гейтом aiCmDebug.
   // Значения не влияют на возврат: строка печатается после расчёта и до return.
@@ -1574,10 +1575,11 @@ function requestExactTokens(fullText, modelId) {
     return;
   }
 
-  // Текст изменился — показываем последнее точное значение как заполнитель
-  if (lastCountTokensCache > 0) {
-    netServerTokens = lastCountTokensCache;
-  }
+  // Шаг 3 (фикс «заполнителя»): подстановки прошлого значения в ОБЩИЙ счётчик здесь больше нет.
+  // Прежний блок `if (lastCountTokensCache > 0) netServerTokens = lastCountTokensCache;` отдавал
+  // число ПРЕДЫДУЩЕГО текста (после смены чата — предыдущего чата) как «текущее» на время запроса.
+  // Авторитет последнего ответа API для этого же convId держит латч aiCmExactTokensFor (Шаг 2),
+  // а netServerTokens пишется только реальными ответами (ingest / COUNT_TOKENS).
 
   // Сбрасываем любой pending дебаунс
   clearTimeout(countTokensTimer);
@@ -1599,6 +1601,9 @@ function requestExactTokens(fullText, modelId) {
     if (response && typeof response.totalTokens === 'number') {
       lastCountTokensText = fullText;
       lastCountTokensCache = response.totalTokens;
+      // Шаг 2: чат, для которого получен точный ответ, — признак авторитета для метрики
+      // (aiCmExactTokensFor). Пишется тем же успешным ответом, что и пара text/cache.
+      lastCountTokensConvId = getCurrentConvId() || '';
       netServerTokens = response.totalTokens;
       console.log('[exact-tokens] countTokens вернул ' + response.totalTokens + ' токенов для модели ' + apiModelId);
       logTextProbe('post-ok:' + response.totalTokens, fullText);
@@ -1617,6 +1622,9 @@ function requestExactTokens(fullText, modelId) {
     } else {
       var err = (response && response.error) ? response.error : 'unknown';
       aiCmDiagWarn('content:requestExactTokens', '[exact-tokens] ошибка countTokens: ' + err + ' — фолбэк на эвристику');
+      // Шаг 2: API отказал — авторитет прошлого ответа по convId снимаем, иначе бейдж «замёрз»
+      // бы на последнем точном числе до смены чата (квота исчерпана, ключ отозван, сеть).
+      lastCountTokensConvId = '';
       // Если для этого же текста уже есть точное значение — не затираем его
       if (fullText === lastCountTokensText && lastCountTokensCache > 0) {
         netServerTokens = lastCountTokensCache;
@@ -1673,6 +1681,7 @@ function aiCmByokKeyInvalidate() {
       geminiApiKey = aiCmByokFlag(hasKey);
       lastCountTokensText = '';
       lastCountTokensCache = 0;
+      lastCountTokensConvId = ''; // Шаг 2: чужой/отозванный ключ не оставляет авторитета
       netServerTokens = 0; // при отключении BYOK сразу эвристика
       console.log('[byok] ключ обновлён сообщением SW: ' + (geminiApiKey ? '***' : '(пусто)'));
       if (isInitialized) processAndSend();
@@ -1690,6 +1699,9 @@ function loadByokCache() {
     if (!entry.text || typeof entry.count !== 'number' || entry.count <= 0) return;
     lastCountTokensText = entry.text;
     lastCountTokensCache = entry.count;
+    // Шаг 2: восстановленное значение принадлежит ТЕКУЩЕМУ чату (проверка entry.convId выше) —
+    // без этой строки после перезагрузки страницы эвристика перебивала бы валидный кэш.
+    lastCountTokensConvId = currentConvId;
     console.log('[byok-cache] восстановлено точное значение из хранилища: ' + entry.count + ' токенов');
   });
 }
@@ -1951,26 +1963,45 @@ function aiCmMetricServerTokens(svc, text) {
 // historyComplete=false) точное значение уже стёрто, API не спрашивается — и метрика
 // откатывалась на эвристику Tokenizer.estimateDialogTokens, то есть бейдж и попап
 // ПЕРЕЗАПИСЫВАЛИ ответ API оценкой tokens~. Отсюда и «прыжок» числа после верного счёта.
+// Гейт `baseComplete` снят в Шаге 1 (см. processAndSend) — countTokens спрашивается на любую
+// смену текста, поэтому «дыра» между текстом и ответом API сократилась до дебаунса SW.
 //
-// Латч: countTokens зависит ТОЛЬКО от текста, значит точное число верно ровно для того
-// текста, для которого получено. Пара lastCountTokensText/lastCountTokensCache (пишется
-// ИСКЛЮЧИТЕЛЬНО успешным ответом API либо восстановлением из chrome.storage.local,
-// чистится сменой чата — core/widget.js:197-198 resetConversationState — и сменой ключа
-// в aiCmByokKeyInvalidate) и есть признак exactCount === true для этого текста.
+// Латч (Шаг 2): countTokens зависит ТОЛЬКО от текста, значит точное число верно для того
+// текста, для которого получено; НО авторитет привязан к ЧАТУ: ответ API уже получен для
+// текущего convId → эвристика не имеет права перезаписывать maxTokenCount/percentage, пока
+// не придёт свой ответ для нового текста. Иначе гонка «эвристика vs API» решалась в пользу
+// эвристики на каждом проходе с изменившимся (хвост DOM, неполный снимок) текстом.
 //
-// ПРАВИЛО: пока латч совпадает с текущим текстом, эвристика в метрику не попадает вообще
-// (ни в badge, ни в pct попапа). Сменился текст (новый сетевой ход) — латч не совпал,
-// эвристика снова допустима, а точное число придёт следующим ответом countTokens;
-// заполнитель на время запроса — прежний (lastCountTokensCache через netServerTokens в
-// requestExactTokens), поведение не меняется. exactCount выключен / нет ключа — эвристика
-// как раньше.
+// Тройка состояния пишется ТОЛЬКО успешным ответом API либо восстановлением из
+// chrome.storage.local, чистится сменой чата (core/widget.js resetConversationState) и сменой
+// ключа (aiCmByokKeyInvalidate):
+//   lastCountTokensText   — текст, для которого получено точное число;
+//   lastCountTokensCache  — само число;
+//   lastCountTokensConvId — convId, в котором число получено (Шаг 2). Снимается ошибкой
+//                           countTokens (см. ветку else в requestExactTokens): если API
+//                           отказал (квота/сеть), «замёрзшего» числа быть не должно —
+//                           метрика снова считается эвристикой до следующего успеха.
 //
 // @param {string} [text] — текст, для которого запрошена метрика (processAndSend/GET_STATS).
 // @returns {number} точные токены API для этого текста; 0 — точного значения нет.
 function aiCmExactTokensFor(text) {
   if (!exactCountEnabled || !geminiApiKey) return 0;
-  if (!text || text !== lastCountTokensText) return 0;
-  return (typeof lastCountTokensCache === 'number' && lastCountTokensCache > 0) ? lastCountTokensCache : 0;
+  if (!text) return 0;
+  var cached = (typeof lastCountTokensCache === 'number' && lastCountTokensCache > 0) ? lastCountTokensCache : 0;
+  if (cached <= 0) return 0;
+  // (1) Ответ ровно для ЭТОГО текста — авторитетен всегда.
+  if (text === lastCountTokensText) return cached;
+  // (2) Шаг 2: ответ API получен для ТЕКУЩЕГО convId — эвристика не перезаписывает метрику,
+  // пока для нового текста не пришёл свой ответ (текст меняется на каждом проходе: DOM-хвост,
+  // неполный снимок, переэмит истории). Все внешние имена — typeof-гарды: срез-песочницы
+  // тестов (new Function) не содержат соседних объявлений контура, а getCurrentConvId там
+  // отсутствует вовсе (пины S1-S6).
+  var convSame = false;
+  try {
+    var curConv = (typeof getCurrentConvId === 'function') ? getCurrentConvId() : '';
+    convSame = !!(curConv && typeof lastCountTokensConvId === 'string' && lastCountTokensConvId === curConv);
+  } catch (eConv) { convSame = false; }
+  return convSame ? cached : 0;
 }
 
 function processAndSend() {
@@ -2240,8 +2271,13 @@ function processAndSend() {
     // O-35: Qwen в этот список НЕ входит — осознанно. У Qwen есть собственный серверный
     // usage в SSE (input/output/reasoning), и перезапись через countTokens BYOK затрёт
     // авторитетные числа стрима. Добавление 'qwen' сюда — регресс (пин-тест запрещает).
+    // Шаг 1 (фикс гонки «эвристика vs API»): гейт `baseComplete` СНЯТ — точный счёт нужен на
+    // ЛЮБУЮ смену текста, включая неполный снимок/переэмит (иначе API молчал, а метрика жила
+    // эвристикой). Спама нет по трём причинам: кэш по тексту (lastCountTokensText в
+    // requestExactTokens), флаг countTokensPending и дебаунс в SW — scheduleCountTokens,
+    // COUNT_TOKENS_DEBOUNCE_MS, ключ tabId:convId:model + content-hash кэш core/background.js.
     const isGeminiSvc = (svc === 'gemini' || svc === 'aistudio' || svc === 'google_search');
-    if (isGeminiSvc && exactCountEnabled && geminiApiKey && fullText && baseComplete) {
+    if (isGeminiSvc && exactCountEnabled && geminiApiKey && fullText) {
       requestExactTokens(fullText, modelId);
     }
 
@@ -2814,7 +2850,8 @@ if (isExtensionValid()) {
         const countForTokens = effective ? getEffectiveCount(messages.length) : messages.length;
         const modelId = resolveCurrentModel();
         // O-47: тот же счётчик, что у бейджа (processAndSend) — попап и круг не расходятся;
-        // у Qwen эффективно 0 → tokens~. Шаг 3: text — чтобы точный ответ BYOK был авторитетен.
+        // у Qwen эффективно 0 → tokens~. Шаг 3: text — чтобы точный ответ BYOK был авторитетен;
+        // Шаг 2: aiCmExactTokensFor сам решает по convId — эвристика не перебьёт ответ API.
         const metricServerTokens = aiCmMetricServerTokens(currentAdapter.siteName, fullText);
         let tokenEstimate = metricServerTokens > 0 ? metricServerTokens : Tokenizer.estimateDialogTokens(fullText, countForTokens);
         if (metricServerTokens === 0 && netEffectiveLen > 0 && fullText && fullText.length > 0 && netEffectiveLen > fullText.length) {
@@ -3078,6 +3115,7 @@ if (isExtensionValid()) {
       // Сбрасываем кэш при смене настроек, чтобы новый ключ/флаг применился сразу
       lastCountTokensText = '';
       lastCountTokensCache = 0;
+      lastCountTokensConvId = ''; // Шаг 2: со сменой настроек авторитет прошлого ключа снят
       netServerTokens = 0; // при отключении BYOK сразу эвристика
       if (isInitialized) processAndSend();
     }
