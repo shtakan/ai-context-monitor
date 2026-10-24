@@ -162,32 +162,89 @@ function collectFiles(file, seen, all) {
 }
 
 /**
+ * Блочные теги: на их границах `innerText` ставит перевод строки — как в браузере и как
+ * это делает структурный фолбэк `_innerTextFallback` (adapters/qwen-adapter.js:227-252).
+ * Набор совпадает с `QWEN_BLOCK_TAGS` того же файла: тест обязан проверять ту же
+ * семантику текста, что увидит пользователь, иначе пины многострочности ничего не стоят.
+ */
+const INNER_TEXT_BLOCK_TAGS = {
+  ADDRESS: true, ARTICLE: true, ASIDE: true, BLOCKQUOTE: true, DD: true, DETAILS: true,
+  DIALOG: true, DIV: true, DL: true, DT: true, FIELDSET: true, FIGCAPTION: true,
+  FIGURE: true, FOOTER: true, FORM: true, H1: true, H2: true, H3: true, H4: true,
+  H5: true, H6: true, HEADER: true, HR: true, LI: true, MAIN: true, NAV: true,
+  OL: true, P: true, PRE: true, SECTION: true, TABLE: true, TD: true, TH: true,
+  TR: true, UL: true
+};
+
+/**
+ * Отрисовка текста в семантике браузерного `innerText` (без CSS-видимости и схлопывания
+ * пробелов — они тестам не нужны): текст-узлы как есть, `<br>` → '\n', границы блочных
+ * элементов и комментарии-маркеры снятых узлов (`ai-cm-qwen-cut`,
+ * adapters/qwen-adapter.js: `_removeKeepingCut`) → '\n'. Крайние '\n' срезаются, чтобы
+ * для плоского текста `innerText === textContent` (это и проверяет харнесс-тест).
+ *
+ * ПОЧЕМУ НЕ `return this.textContent`: у реплик Qwen каждая строка ответа — отдельный
+ * `<p>`, и `textContent` склеивает их без переводов строк. Тогда `_readableText` получил бы
+ * схлопнутый текст и покраснели бы честные пины многострочности (contract-qwen Q5,
+ * tests/qwen-adapter.test.js Д2/Д4/Д5/Д7) — то есть тест перестал бы проверять ровно тот
+ * дефект (`textContent` терял строки), ради которого адаптер и написан.
+ *
+ * @param {object} root узел (элемент песочницы или реального jsdom-document)
+ * @returns {string}
+ */
+function renderInnerText(root) {
+  let out = '';
+  function boundary() {
+    if (out.length > 0 && out.charAt(out.length - 1) !== '\n') out += '\n';
+  }
+  function walk(node) {
+    if (!node) return;
+    const type = node.nodeType;
+    if (type === 3) { out += node.nodeValue == null ? '' : String(node.nodeValue); return; }
+    if (type === 8) { boundary(); return; }
+    if (type !== 1) return;
+    const tag = String(node.tagName || '').toUpperCase();
+    if (tag === 'BR') { out += '\n'; return; }
+    const block = INNER_TEXT_BLOCK_TAGS[tag] === true;
+    if (block) boundary();
+    const kids = node.childNodes || [];
+    for (let i = 0; i < kids.length; i++) walk(kids[i]);
+    if (block) boundary();
+  }
+  walk(root);
+  return out.replace(/^\n+/, '').replace(/\n+$/, '');
+}
+
+/** Геттер `innerText` для прототипа: у заглушки детей нет — отдаём её `textContent`. */
+function innerTextGetter() {
+  const kids = this.childNodes;
+  if (!kids || kids.length === 0) {
+    return typeof this.textContent === 'string' ? this.textContent : '';
+  }
+  return renderInnerText(this);
+}
+
+/**
  * Патч `innerText` для jsdom (residual v90 §4 п.2 / v101 §4 п.4).
  *
- * jsdom не реализует `HTMLElement.prototype.innerText`, поэтому адаптеры идут
- * структурным фолбэком `_readableText` (adapters/qwen-adapter.js:203-216) — контракт
- * держится, но проверяется не тот путь, что в браузере. Патч возвращает семантику
- * «innerText ≈ textContent для плоского текста» и ставится ТОЛЬКО в окно песочницы,
- * у которого реально есть `HTMLElement`.
+ * jsdom не реализует `HTMLElement.prototype.innerText` (jsdom идёт без раскладки), поэтому
+ * адаптеры уходят в структурный фолбэк. Патч ставит браузероподобный геттер на прототип
+ * `win.HTMLElement`; если `innerText` уже есть (нативный или поставленный раньше) — не
+ * перетирает его.
  *
- * Почему не патчим `document.defaultView` у настоящего jsdom: глобальный
- * `innerText = textContent` схлопывает переводы строк, на которые опираются пины
- * многострочности (`tests/adapters/contract-qwen.test.js` Q5, `tests/qwen-adapter.test.js`
- * Д2/Д4/Д7, где каждая строка — отдельный `<p>`). Тогда `_readableText` перестал бы
- * проверять структурный фолбэк и покраснел бы на честном же требовании.
- *
- * @param {object} win окно песочницы (`sandbox.window`)
- * @returns {boolean} true — свойство поставлено; false — уже есть или `HTMLElement` нет
+ * @param {object} win окно (`sandbox.window` либо `document.defaultView`)
+ * @returns {boolean} true — `innerText` доступен на прототипе после вызова
  */
 function patchInnerText(win) {
   if (!win || !win.HTMLElement || !win.HTMLElement.prototype) return false;
   const proto = win.HTMLElement.prototype;
-  if ('innerText' in proto) return false;
-  Object.defineProperty(proto, 'innerText', {
-    get: function () { return this.textContent; },
-    configurable: true
-  });
-  return true;
+  if (!('innerText' in proto)) {
+    Object.defineProperty(proto, 'innerText', {
+      get: innerTextGetter,
+      configurable: true
+    });
+  }
+  return 'innerText' in proto;
 }
 
 function createSandbox(options) {
@@ -196,19 +253,24 @@ function createSandbox(options) {
   const called = Object.create(null);
   const notes = [];
 
-  const elementStub = {};
+  /** Класс-заглушка песочницы: даёт `window.HTMLElement`, чтобы `patchInnerText` было на что встать. */
+  function SandboxHTMLElement() { this.textContent = ''; }
+  const elementStub = new SandboxHTMLElement();
   const documentStub = {
     querySelector: function () { return null; },
     querySelectorAll: function () { return []; },
-    createElement: function () { return elementStub; },
+    createElement: function () { return new SandboxHTMLElement(); },
     body: elementStub,
     documentElement: elementStub
   };
   const locationStub = { hostname: 'localhost', pathname: '/', href: 'http://localhost/' };
-  const win = { location: opts.location || locationStub };
-  // jsdom-патч innerText: у заглушки `win` класса HTMLElement нет — честный no-op
-  // (см. patchInnerText); при инъекции реального jsdom-окна свойство появится.
+  const win = { location: opts.location || locationStub, HTMLElement: SandboxHTMLElement };
   notes.push({ innerTextPatched: patchInnerText(win) });
+  // Настоящий jsdom: элементы приходят из ИНЪЕКТИРОВАННОГО `document`, прототип заглушки
+  // им не виден, поэтому патчим окно этого документа (иначе адаптер так и читал бы через
+  // структурный фолбэк, а свойство в песочнице стояло бы мёртвым грузом).
+  const docView = opts.document && /** @type {any} */ (opts.document).defaultView;
+  notes.push({ innerTextViewPatched: docView ? patchInnerText(docView) : false });
 
   const debugLog = function debugLogNoop() { };
 
