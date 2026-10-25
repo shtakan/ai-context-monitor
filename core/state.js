@@ -39,6 +39,13 @@ var aiCmRestoredDispatched = {}; // v82 (D9-A): convId → true — ai-cm-restor
 let baseText = '';
 let baseCount = 0;
 let baseSeen = false;
+// v96 (баг 34.6%, дедуп-заморозка): счётчик СЕТЕВОГО снимка ДО дедупликации (detail.count).
+// Дедуп E-2 схлопывает базу (120 → 101), поэтому baseCount после приёма может снова стать
+// прежним (101), хотя сеть принесла новые ходы: histKey не меняется и метрики замирают.
+// Пара «принятый сырой / учтённый» даёт ресинку (content.js:aiCmResyncMetricsAfterFlush)
+// отличить новый сетевой снимок от повторного.
+let aiCmNetRawCount = 0;      // detail.count последнего принятого снимка (ДО схлопки)
+let aiCmNetRawCountUsed = -1; // detail.count, учтённый последним ресинком метрик
 // O-35 (v54, фикс badge-suppress): «база принята по convId» для DOM-адаптера — брат-флаг
 // baseSeen (сеть). У qwen после F5/SPA-входа сети нет вовсе: базу снимает DOM-адаптер, и
 // пишет её тот же проход processAndSend (history-write source=adapter). Без этого флага
@@ -569,6 +576,13 @@ function aiCmLatchRemove(service, convId) {
     get: function () { return aiCmLatchSet; } });
   Object.defineProperty(Api, 'aiCmLatchRemove', { enumerable: true,
     get: function () { return aiCmLatchRemove; } });
+  // v96 (баг 34.6%): аксессоры к сырому счётчику сети (объявлен выше, рядом с baseSeen).
+  Object.defineProperty(Api, 'aiCmNetRawCount', { enumerable: true,
+    get: function () { return aiCmNetRawCount; },
+    set: function (value) { aiCmNetRawCount = value; } });
+  Object.defineProperty(Api, 'aiCmNetRawCountUsed', { enumerable: true,
+    get: function () { return aiCmNetRawCountUsed; },
+    set: function (value) { aiCmNetRawCountUsed = value; } });
   if (typeof module !== 'undefined' && module.exports) module.exports = Api;
   if (typeof window !== 'undefined') window.AiCmState = Api;
 })();

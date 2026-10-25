@@ -185,6 +185,10 @@ declare let aiCmRestoredDispatched: Record<string, boolean>;
 declare let baseText: string;
 /** Число сообщений базы. */
 declare let baseCount: number;
+/** v96 (баг 34.6%): detail.count последнего принятого снимка — ДО дедупликации. */
+declare let aiCmNetRawCount: number;
+/** v96: detail.count, учтённый последним ресинком метрик (0 = ещё не учтён). */
+declare let aiCmNetRawCountUsed: number;
 /** База хоть раз получена (сеть). */
 declare let baseSeen: boolean;
 /** «База принята по convId» для DOM-адаптера (O-35, брат-флаг baseSeen). */

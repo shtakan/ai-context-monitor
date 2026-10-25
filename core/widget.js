@@ -156,6 +156,9 @@ function resetConversationState() {
   baseText = '';
   baseCount = 0;
   baseSeen = false;
+  // v96 (баг 34.6%): сырой счётчик снимка (detail.count ДО дедупликации) не перетекает в другой чат
+  aiCmNetRawCount = 0;
+  aiCmNetRawCountUsed = -1;
   baseComplete = false;
   // O-43: смена треда — ЕДИНСТВЕННЫЙ сброс монотонного латча сетевой полноты GSA
   // ('site|threadId' → 1, core/state.js). Внутри одного разговора латч не снимается ничем

@@ -6,6 +6,12 @@
  * устаревшие цифры, пока в историю уже записан полный чат. Шаг 4 запроса: принудительный
  * пересчёт по ФИНАЛЬНОМУ состоянию сразу после флаша.
  *
+ * v96 (баг 34.6%): дедупликатор схлопывает базу — сеть отдала 120 сообщений, а финальный срез
+ * снова 101, histKey совпал с прошлым ⇒ ресинк пропускался и метрики замирали навсегда.
+ * Теперь пропуск требует ещё и неизменного счётчика ДО дедупликации (detail.count):
+ * aiCmNetRawCount / aiCmNetRawCountUsed. Изменился сырой счётчик — histKey снимается (null),
+ * чтобы следующий processAndSend не отсеялся дедупом и пересчитал pct.
+ *
  * Здесь исполняется ВЫРЕЗАННЫЙ из core/content.js реальный текст функции (конвенция репозитория:
  * тест гоняет исходник, а не копию логики) — tests/helpers/content-source.js.
  */
@@ -123,6 +129,47 @@ describe('v95 metrics-resync: pct/histKey по финальному срезу',
     expect(unseen.ret).toBe(false);
     expect(unseen.snapshotCalls).toBe(0);
   });
+
+  test('R6: баг 34.6% — сеть 120 схлопнулась дедупом до 101, ключ прежний ⇒ пересчёт ОБЯЗАН сработать', () => {
+    const same = msgs(101);
+    const key = '101|' + same.map((m) => m.text).join('\n').length; // совпадает с прошлой записью
+    const r = runResync({
+      msgs: same,
+      reason: 'base-complete',
+      ctx: { lastHistoryWroteKey: key, aiCmNetRawCount: 120, aiCmNetRawCountUsed: 101 }
+    });
+    expect(r.ret).toBe(true);                        // НЕ skip, хотя histKey не изменился
+    expect(r.ctx.baseCount).toBe(101);               // схлопнутый срез остаётся как есть
+    expect(r.ctx.aiCmNetRawCountUsed).toBe(120);     // сырой счётчик сети учтён
+    expect(r.ctx.lastHistoryWroteKey).toBeNull();    // ключ снят → следующая запись не отсеется
+    expect(r.sent).toHaveLength(1);                  // processAndSend → пересчёт pct/бейджа
+    expect(r.logs.join('\n')).toContain('raw=101->120');
+  });
+
+  test('R7: анти-дребезг — сырой счётчик не менялся ⇒ повторный ресинк по-прежнему пропуск', () => {
+    const same = msgs(101);
+    const key = '101|' + same.map((m) => m.text).join('\n').length;
+    const r = runResync({
+      msgs: same,
+      ctx: { lastHistoryWroteKey: key, aiCmNetRawCount: 120, aiCmNetRawCountUsed: 120 }
+    });
+    expect(r.ret).toBe(false);
+    expect(r.ctx.lastHistoryWroteKey).toBe(key);     // ключ жив, дребезга нет
+    expect(r.sent).toEqual([]);
+    expect(r.logs.join('\n')).toContain('metrics-resync skip reason=same');
+  });
+
+  test('R8: сырой счётчик вырос И срез реально дорос — ключ обновляется, лишней записи нет', () => {
+    const r = runResync({
+      msgs: msgs(120),
+      ctx: { aiCmNetRawCount: 120, aiCmNetRawCountUsed: 101 }
+    });
+    expect(r.ret).toBe(true);
+    expect(r.ctx.baseCount).toBe(120);
+    expect(r.ctx.lastHistoryWroteKey).toBe('120|' + r.ctx.baseText.length); // НЕ null
+    expect(r.ctx.aiCmNetRawCountUsed).toBe(120);
+    expect(r.sent).toHaveLength(1);
+  });
 });
 
 describe('v95 metrics-resync: вызов стоит сразу после deferred-флаша (source-pin)', () => {
@@ -152,5 +199,24 @@ describe('v95 metrics-resync: вызов стоит сразу после deferr
     const iNext = MGR.indexOf('\nfunction ', iWrite + 10);
     const body = MGR.slice(iWrite, iNext);
     expect(body).toContain('aiCmCurrentBaseSnapshot(cid)');
+  });
+
+  test('P4 (v96): detail.count снимается ДО дедупликатора; состояние объявлено и сбрасывается', () => {
+    // сырой счётчик сети фиксируется сразу, пока дедуп не перезаписал baseCount;
+    // только явное число: снимок без count не обнуляет признак «сеть принесла новое»
+    expect(CONTENT).toContain('if (typeof detail.count === \'number\') aiCmNetRawCount = detail.count;');
+    const iRaw = CONTENT.indexOf('aiCmNetRawCount = detail.count;');
+    expect(iRaw).toBeGreaterThan(-1);
+    expect(CONTENT.lastIndexOf('baseCount = detail.count || 0;', iRaw)).toBeGreaterThan(-1);
+    // и строго до схлопывания базы дедупликатором
+    const iDedup = CONTENT.indexOf('baseCount = texts18.length;');
+    expect(iDedup).toBeGreaterThan(iRaw);
+    // объявление + UMD-доступ (конвенция core/state.js) и обнуление при сбросе чата
+    const state = H.readSource('core/state.js');
+    expect(state).toContain('let aiCmNetRawCount = 0;');
+    expect(state).toContain('let aiCmNetRawCountUsed = -1;');
+    expect(state).toContain("Object.defineProperty(Api, 'aiCmNetRawCount',");
+    expect(state).toContain("Object.defineProperty(Api, 'aiCmNetRawCountUsed',");
+    expect(H.readSource('core/widget.js')).toContain('aiCmNetRawCountUsed = -1;');
   });
 });

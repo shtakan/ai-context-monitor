@@ -11,9 +11,11 @@
  * взводил следующий проход собственным обновлением.
  *
  * ФИКС (core/content.js): (1) aiCmIsWidgetNode + фильтр в hasNewText (target и addedNodes);
- * (2) aiCmDomTextSig = baseCount|длина эффективного текста — та же формула, что у канала
- * v55 ai-cm-dom-emit-request (общая переменная aiCmLastDomEmitSig, привязка к convId через
- * aiCmLastDomEmitConvId); (3) гард срабатывает только при взведённом латче O-38
+ * (2) aiCmDomTextSig = длина РЕАЛЬНОГО DOM-текста | длина эффективного текста — та же формула,
+ * что у канала v55 ai-cm-dom-emit-request (общая переменная aiCmLastDomEmitSig, привязка к
+ * convId через aiCmLastDomEmitConvId). v96 (баг 34.6%): первое слагаемое — DOM, а НЕ baseCount
+ * из сети: сетевой счётчик замирает вместе с сетью и глушил легитимный DOM-догон;
+ * (3) гард срабатывает только при взведённом латче O-38
  * (aiCmAutoExportFiredOnce, 'site|convId') — до первого fired поведение прежнее.
  *
  * ПИНЫ (R-D):
@@ -25,7 +27,7 @@
  *   R1 — до первого fired (латч пуст) холостой батч ведёт себя прежним путём (пересчёт);
  *   R2 — латч другого чата/сервиса не запирает текущий; пустой convId не латчится (GSA);
  *   R3 — смена convId сбрасывает сигнатуру (SPA-переход не запирается);
- *   R4 — база ещё не принята (baseSeen=false) → сигнатура по счётчику, поведение прежнее;
+ *   R4 — база ещё не принята (baseSeen=false) → сигнатура по пустому DOM и нулю;
  *   R5 — прежние пороги hasNewText (короткий childList, attributes) не двигаются;
  *   R6/R7/R8 — исходники: точки фикса, единственность писателя sig, байты канала v55,
  *        гейт диагностики, проводка aiCmLastDomEmitConvId в state.js.
@@ -59,8 +61,7 @@ function fnDecl(src, name) {
   throw new Error('unbalanced declaration: ' + name);
 }
 
-/** Колбэк observer'а из РЕАЛЬНОГО startObserving: от `new MutationObserver(` до закрывающей скобки. */
-function observerCallbackSrc(src) {
+/** Колбэк observer'а из РЕАЛЬНОГО startObserving: от `new MutationObserver(` до закрывающей скобки. */function observerCallbackSrc(src) {
   const fn = fnDecl(src, 'startObserving');
   const start = fn.indexOf('new MutationObserver(');
   expect(start).toBeGreaterThan(-1);
@@ -76,16 +77,28 @@ function observerCallbackSrc(src) {
   throw new Error('unbalanced observer callback');
 }
 
+/** Объявление-литерал массива по имени (`var NAME = [...];`) — для MSG_SELECTORS. */
+function arrayDecl(src, name) {
+  const start = src.indexOf('var ' + name + ' = [');
+  expect(start).toBeGreaterThan(-1);
+  const end = src.indexOf('];', start);
+  expect(end).toBeGreaterThan(start);
+  return src.slice(start, end + 2);
+}
+
 /**
- * Стенд observer'а: реальные aiCmIsWidgetNode/aiCmSiteConvFired/aiCmDomTextSig и колбэк
- * startObserving в настоящем jsdom. ctx — внешний лексический контекст (как общий скоуп
+ * Стенд observer'а: реальные aiCmIsWidgetNode/aiCmSiteConvFired/aiCmDomRealTextLen/aiCmDomTextSig
+ * и колбэк startObserving в настоящем jsdom. ctx — внешний лексический контекст (как общий скоуп
  * контент-скриптов манифеста: модули и content.js видят объявления друг друга).
  */
 function makeObserver(ctx) {
   const scope = 'with (ctx) {\n' +
     'var AI_CM_WIDGET_ELEMENT_ID = "ai-context-widget";\n' +
+    arrayDecl(CONTENT, 'MSG_SELECTORS') + '\n' +
+    fnDecl(CONTENT, 'findMessageNodes') + '\n' +
     fnDecl(CONTENT, 'aiCmIsWidgetNode') + '\n' +
     fnDecl(CONTENT, 'aiCmSiteConvFired') + '\n' +
+    fnDecl(CONTENT, 'aiCmDomRealTextLen') + '\n' +
     fnDecl(CONTENT, 'aiCmDomTextSig') + '\n' +
     'var cb = ' + observerCallbackSrc(CONTENT) + ';\n' +
     'return cb;\n}';
@@ -141,9 +154,12 @@ function mut(type, target, addedNodes) {
   return { type: type, target: target, addedNodes: addedNodes || [] };
 }
 
-/** Внешний «шумовой» узел чата (вне виджета) с текстом длиннее 10 символов. */
-function chatNode(text) {
+/** Узел сообщения чата (под MSG_SELECTORS) с РЕАЛЬНЫМ DOM-текстом — источник aiCmDomRealTextLen. */
+function msgNode(text, id) {
   const d = window.document.createElement('div');
+  d.setAttribute('data-message-id', id || ('m' + text.length));
+  d.textContent = text;
+  window.document.body.appendChild(d);
   return d;
 }
 
@@ -174,6 +190,8 @@ afterEach(function () {
   jest.useRealTimers();
   const old = window.document.getElementById('ai-context-widget');
   if (old) old.remove();
+  // сообщения чата не перетекают между тестами (сигнатура считается по РЕАЛЬНОМУ DOM)
+  window.document.querySelectorAll('[data-message-id]').forEach(function (n) { n.remove(); });
 });
 
 // =====================================================================================
@@ -183,13 +201,15 @@ describe('O-24 (F6): D-пины сигнатурного гарда в MutationO
   test('D1: неизменная база + внешняя мутация + already-fired → холостого processAndSend нет', function () {
     const st = chatCtx({});
     st.state.fired['deepseek|' + CHAT_ID] = 1;   // автоэкспорт этого чата уже снят (латч O-38)
+    msgNode(BASE_TEXT);                          // РЕАЛЬНЫЙ текст чата в DOM (36 знаков)
     const obs = makeObserver(st.ctx);
     const noise = [mut('characterData', window.document.createTextNode('внешняя мутация страницы'))];
 
     expect(obs.fire(noise)).toBeNull();
     jest.advanceTimersByTime(3000);
     expect(st.state.calls).toBe(1);              // первый батч после fired — проход как прежде
-    expect(st.ctx.aiCmLastDomEmitSig).toBe('128|' + BASE_TEXT.length);
+    // v96 (баг 34.6%): первое слагаемое — длина DOM-текста, а не baseCount из сети
+    expect(st.ctx.aiCmLastDomEmitSig).toBe(BASE_TEXT.length + '|' + BASE_TEXT.length);
     expect(st.ctx.aiCmLastDomEmitConvId).toBe(CHAT_ID);
 
     // ТОТ ЖЕ батч (база/текст не менялись) — шум страницы/соседа: каденс 1–2 с в живом логе
@@ -204,22 +224,24 @@ describe('O-24 (F6): D-пины сигнатурного гарда в MutationO
   test('D2: новый ход меняет базу → sig меняется → легитимный processAndSend вызван', function () {
     const st = chatCtx({ effective: 'ход 1' });
     st.state.fired['deepseek|' + CHAT_ID] = 1;
+    msgNode(BASE_TEXT);
     const obs = makeObserver(st.ctx);
 
     expect(obs.fire([mut('characterData', window.document.createTextNode('шум'))])).toBeNull();
     jest.advanceTimersByTime(3000);
     expect(st.state.calls).toBe(1);
-    expect(st.ctx.aiCmLastDomEmitSig).toBe('128|5');
+    expect(st.ctx.aiCmLastDomEmitSig).toBe(BASE_TEXT.length + '|5');
 
-    // Новый ход: база выросла (baseCount 128 → 130) и эффективный текст длиннее
+    // Новый ход: в DOM появился новый пузырь, эффективный текст длиннее
+    // v96: сигнатура растёт от РЕАЛЬНОГО DOM-текста, даже если сетевой baseCount замер
     st.state.baseCount = 130;
     st.state.effective = 'ход 1 и новый ответ модели';
-    const long = window.document.createElement('div');
-    long.textContent = 'Новый ответ ассистента';
+    const long = msgNode('Новый ответ ассистента');
+    expect(long.textContent.length).toBe(22);
     expect(obs.fire([mut('childList', window.document.body, [long])])).toBeNull();
     jest.advanceTimersByTime(3000);
     expect(st.state.calls).toBe(2);              // легитимный путь цел
-    expect(st.ctx.aiCmLastDomEmitSig).toBe('130|26');
+    expect(st.ctx.aiCmLastDomEmitSig).toBe((BASE_TEXT.length + 22) + '|26');
 
     // ...и только ПОСЛЕ прохода тот же новый батч снова глушится
     expect(obs.fire([mut('characterData', window.document.createTextNode('шум'))])).toBeNull();
@@ -339,7 +361,7 @@ describe('O-24 (F6): R-пины (поведение до fired и без авт�
     expect(st.state.calls).toBe(2);
   });
 
-  test('R4: база ещё не принята (baseSeen=false) → сигнатура по счётчику, поведение прежнее', function () {
+  test('R4: база ещё не принята (baseSeen=false) → сигнатура по пустому DOM и нулю', function () {
     const st = chatCtx({ baseSeen: false, baseText: '', baseCount: 0, effective: '' });
     st.state.fired['deepseek|' + CHAT_ID] = 1;
     const obs = makeObserver(st.ctx);
@@ -348,7 +370,8 @@ describe('O-24 (F6): R-пины (поведение до fired и без авт�
     obs.fire(noise);
     jest.advanceTimersByTime(3000);
     expect(st.state.calls).toBe(1);
-    expect(st.ctx.aiCmLastDomEmitSig).toBe('0|0');   // базы нет — длина эффективного текста 0
+    // DOM пуст (0 знаков) и эффективного текста нет (0) — baseCount не участвует в сигнатуре
+    expect(st.ctx.aiCmLastDomEmitSig).toBe('0|0');
     obs.fire(noise);
     jest.advanceTimersByTime(3000);
     expect(st.state.calls).toBe(1);                  // пустой хвост без базы — тот же гард
@@ -418,11 +441,18 @@ describe('O-24 (F6): source-пины точек фикса', function () {
   });
 
   test('R8: сигнатура observer\'а = сигнатура канала v55; латч O-38 только читается', function () {
-    // формула гарда
-    expect(fnDecl(CONTENT, 'aiCmDomTextSig'))
-      .toContain("(typeof baseCount === 'number' ? baseCount : 0) + '|' + eff.length;");
-    // формула канала v55 (ai-cm-dom-emit-request) — БАЙТОВО прежняя, не тронута фиксом
-    expect(CONTENT).toContain("var sig = baseCount + '|' + (probe ? probe.length : 0);");
+    // формула гарда — v96: первое слагаемое = РЕАЛЬНАЯ длина DOM-текста
+    const domSig = fnDecl(CONTENT, 'aiCmDomTextSig');
+    expect(domSig).toContain("return aiCmDomRealTextLen() + '|' + eff.length;");
+    // баг 34.6%: сетевой baseCount в сигнатуре DOM-события замирает вместе с сетью
+    expect(domSig).not.toContain('baseCount');
+    // хелпер считает длину текста по DOM (через общие MSG_SELECTORS/findMessageNodes)
+    const domLen = fnDecl(CONTENT, 'aiCmDomRealTextLen');
+    expect(domLen).toContain('findMessageNodes()');
+    expect(domLen).not.toContain('baseCount');
+    // формула канала v55 (ai-cm-dom-emit-request) — та же DOM-длина, что у observer'а:
+    // общая aiCmLastDomEmitSig требует одного источника первого слагаемого
+    expect(CONTENT).toContain("var sig = aiCmDomRealTextLen() + '|' + (probe ? probe.length : 0);");
     expect(CONTENT).toContain('if (sig === aiCmLastDomEmitSig) return;');
     expect(CONTENT).toContain('aiCmLastDomEmitSig = sig;');
     // писателей aiCmLastDomEmitSig в content.js ровно три: канал v55, observer O-24 и его

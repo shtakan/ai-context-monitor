@@ -383,7 +383,9 @@ window.addEventListener('ai-cm-dom-emit-request', function () {
       debugLog('log', '[AI CM][realtime] dom-emit skip: хвост без границы (unbounded) и база неполная');
       return;
     }
-    var sig = baseCount + '|' + (probe ? probe.length : 0);
+    // v96 (баг 34.6%): та же формула, что у observer'а (aiCmDomTextSig): первое слагаемое —
+    // РЕАЛЬНЫЙ DOM-текст, а не baseCount из сети (сеть замерла → DOM-догон не глушим).
+    var sig = aiCmDomRealTextLen() + '|' + (probe ? probe.length : 0);
     if (sig === aiCmLastDomEmitSig) return;    // значение не изменилось — повторный эмит не нужен
     aiCmLastDomEmitSig = sig;
     processAndSend();
@@ -692,6 +694,10 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
   // в конец слушателя — сразу после финального processAndSend().
   baseText = detail.text;
   baseCount = detail.count || 0;
+  // v96 (баг 34.6%): фиксируем счётчик снимка ДО дедупликации (ниже baseCount будет
+  // перезаписан длиной ВЫЖИВШИХ сообщений и может совпасть с прежним — разбор в state.js).
+  // Берём только явно переданное число: снимок без count не должен «обнулять» признак сети.
+  if (typeof detail.count === 'number') aiCmNetRawCount = detail.count;
   detectedModelSlug = detail.modelSlug || '';
   netAttachTokens = detail.attachTokens || 0;
   netAttachBreak = detail.attachBreak || null;
@@ -1288,16 +1294,37 @@ function aiCmIsWidgetNode(node) {
   } catch (eW) { return false; }
 }
 
-// Сигнатура «текущего стабильного текста»: число ходов базы + длина эффективного текста.
-// Та же формула, что у канала ai-cm-dom-emit-request (v55) — оба пути делят одну переменную
-// aiCmLastDomEmitSig, поэтому гард не расходится с DOM-догоном. Оба слагаемых — целые
-// числа платформы: '|' обязателен (иначе 12|34 и 1|234 склеятся в одно).
+// v96 (баг 34.6%): длина РЕАЛЬНОГО DOM-текста чата — источник НЕ из сети. Сеть может
+// «замереть» (baseCount не меняется), а в DOM уже новый пузырь: гард O-24 обязан это
+// увидеть, иначе переотправка блокируется и метрики/экспорт замирают. Узлы берём тем же
+// MSG_SELECTORS, что и hybrid-tail (узлы виджета расширения под них не попадают — O-24 цел).
+function aiCmDomRealTextLen() {
+  try {
+    var found = (typeof findMessageNodes === 'function') ? findMessageNodes() : null;
+    var nodes = (found && found.nodes) ? found.nodes : [];
+    var sum = 0;
+    for (var i = 0; i < nodes.length; i++) {
+      // nodes — Element[] по контракту findMessageNodes; innerText живёт на HTMLElement
+      var el = /** @type {HTMLElement} */ (nodes[i]);
+      var raw = el.innerText || el.textContent || '';
+      sum += String(raw).trim().length;
+    }
+    return sum;
+  } catch (eDomLen) { return 0; }
+}
+
+// Сигнатура «текущего стабильного текста»: длина РЕАЛЬНОГО DOM-текста + длина эффективного
+// текста метрик. Та же формула, что у канала ai-cm-dom-emit-request (v55) — оба пути делят
+// одну переменную aiCmLastDomEmitSig, поэтому гард не расходится с DOM-догоном.
+// v96 (баг 34.6%): первое слагаемое — DOM, а не baseCount из сети: сетевой счётчик замирает
+// вместе с сетью и глушил легитимный DOM-догон. Оба слагаемых — целые числа: '|' обязателен
+// (иначе 12|34 и 1|234 склеятся в одно).
 function aiCmDomTextSig() {
   var eff = '';
   if (baseSeen && baseText) {
     try { eff = getEffectiveText() || ''; } catch (eSig) { eff = ''; }
   }
-  return (typeof baseCount === 'number' ? baseCount : 0) + '|' + eff.length;
+  return aiCmDomRealTextLen() + '|' + eff.length;
 }
 
 // Латч O-38 для ТЕКУЩЕГО чата: 'site|convId' → 1. Взведён → автоэкспорт этого разговора
@@ -2068,6 +2095,15 @@ function aiCmResyncMetricsAfterFlush(cid, reason) {
     var msgs = aiCmCurrentBaseSnapshot(cid);
     if (!Array.isArray(msgs) || msgs.length === 0) return false;
     var prevCount = (typeof baseCount === 'number') ? baseCount : 0;
+    // v96 (баг 34.6%): счётчик СЕТЕВОГО снимка ДО дедупликации. Дедуп E-2 схлопывает базу
+    // (120 → 101): baseCount/histKey после приёма снова те же, что у прошлого среза, и гард
+    // ниже принимал новый снимок за повтор → pct/бейдж замирали. Сырой счётчик — второй
+    // признак «сеть реально принесла новые ходы». В срез-песочницах тестов этих переменных
+    // нет → сырой счётчик считается неизменным (поведение прежнее).
+    var rawKnown = (typeof aiCmNetRawCount === 'number') && (typeof aiCmNetRawCountUsed === 'number');
+    var rawCount = rawKnown ? aiCmNetRawCount : 0;
+    var prevRaw = rawKnown ? aiCmNetRawCountUsed : 0;
+    var rawUnchanged = !rawKnown || (rawCount === prevRaw);
     if (msgs.length < prevCount) {
       // Финальный срез не может быть короче уже принятого — защита от просадки бейджа.
       debugLog('log', '[AI CM][export] metrics-resync skip reason=shrink convId=' + cid +
@@ -2084,17 +2120,20 @@ function aiCmResyncMetricsAfterFlush(cid, reason) {
     // иначе дедуп ниже сравнивал бы несравнимое и ресинк либо не срабатывал, либо дублировал запись.
     var newKey = msgs.length + '|' + joined.length;
     var sameCount = (msgs.length === prevCount);
+    // v96 (баг 34.6%): пропуск — только если не изменились НИ histKey, НИ счётчик ДО дедупликации.
+    var canSkip = sameCount && (newKey === lastHistoryWroteKey) && rawUnchanged;
     try {
       if (typeof aiCmDiagLine === 'function') {
         aiCmDiagLine('o22-metrics-resync', {
           ts: Date.now(), convId: cid, reason: reason || '(none)',
           finalMsgs: msgs.length, prevMsgs: prevCount,
           histKey: newKey, lastKey: (typeof lastHistoryWroteKey !== 'undefined') ? lastHistoryWroteKey : undefined,
-          verdict: (sameCount && newKey === lastHistoryWroteKey) ? 'skip' : 'resync'
+          rawMsgs: rawCount, prevRawMsgs: prevRaw,
+          verdict: canSkip ? 'skip' : (rawUnchanged ? 'resync' : 'resync-raw')
         });
       }
     } catch (eRsD) { swallowSoft(eRsD, 'content:metrics-resync-diag'); }
-    if (sameCount && newKey === lastHistoryWroteKey) {
+    if (canSkip) {
       debugLog('log', '[AI CM][export] metrics-resync skip reason=same convId=' + cid + ' histKey=' + newKey);
       return false; // срез уже финальный
     }
@@ -2103,9 +2142,15 @@ function aiCmResyncMetricsAfterFlush(cid, reason) {
     baseText = joined;
     // Ключ фиксирует ИМЕННО записанный срез: устаревшая (короткая) база его не сдвинет,
     // а следующая реальная запись снова сравнит живой histKey с этим ключом.
-    lastHistoryWroteKey = newKey;
+    // v96 (баг 34.6%): сырой счётчик вырос, а дедуп вернул ПРЕЖНИЙ срез (histKey совпал) —
+    // ключ СНИМАЕМ, чтобы следующий processAndSend не отсеялся дедупом histKey и пересчитал
+    // метрики. Для нормального роста ключ обновляется как раньше (лишней записи истории нет).
+    var keyRepeated = (newKey === lastHistoryWroteKey);
+    lastHistoryWroteKey = (rawUnchanged || !keyRepeated) ? newKey : null;
+    if (rawKnown) aiCmNetRawCountUsed = rawCount;
     debugLog('log', '[AI CM][export] metrics-resync reason=' + (reason || '(none)') + ' convId=' + cid +
-      ' msgs=' + prevCount + '->' + msgs.length + ' histKey=' + newKey);
+      ' msgs=' + prevCount + '->' + msgs.length + ' histKey=' + newKey +
+      (rawKnown ? (' raw=' + prevRaw + '->' + rawCount) : ''));
     processAndSend(); // пересчёт pct по финальной базе + перерисовка бейджа
     return true;
   } catch (eRs) { swallowSoft(eRs, 'content:metrics-resync'); return false; }

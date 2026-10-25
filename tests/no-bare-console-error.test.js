@@ -295,11 +295,12 @@ describe('1.9: пин no-bare-console-error (core/ + adapters/)', () => {
     }
   });
 
-  test('НЕ трогать: комментарий core/state.js:155 не считается вызовом', () => {
+  test('НЕ трогать: комментарий core/state.js:162 не считается вызовом', () => {
     const stateSrc = fs.readFileSync(path.join(ROOT, 'core', 'state.js'), 'utf8');
-    const line155 = stateSrc.split('\n')[154];
-    expect(line155).toContain('console.error');
-    expect(line155.trim().startsWith('//')).toBe(true);
+    // v96: строка сдвинулась на +7 из-за новых счётчиков сети (aiCmNetRawCount/Used)
+    const lineComment = stateSrc.split('\n')[161];
+    expect(lineComment).toContain('console.error');
+    expect(lineComment.trim().startsWith('//')).toBe(true);
     expect(findBareConsoleError(maskNonCode(stateSrc))).toHaveLength(0);
   });
 });

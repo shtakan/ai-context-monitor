@@ -155,7 +155,7 @@ describe('D4: мост MAIN world → content.js (событие ai-cm-model-slu
   const INTERCEPT = fs.readFileSync(path.join(__dirname, '..', 'core', 'gemini-intercept.js'), 'utf8');
   test('ядро MAIN world шлёт событие, а не пишет переменную чужого мира', () => {
     // Перехватчик исполняется в MAIN world (core/background.js: world:'MAIN'), а
-    // detectedModelSlug объявлен в изолированном мире (core/state.js:87) — прямая запись
+    // detectedModelSlug объявлен в изолированном мире (core/state.js:94) — прямая запись
     // оттуда молча не доходит до content.js, поэтому мост обязан быть событием.
     expect(INTERCEPT).toContain("window.dispatchEvent(new CustomEvent('ai-cm-model-slug', { detail: { slug: slug } }))");
     expect(INTERCEPT).not.toContain('if (slug) detectedModelSlug = slug;');
