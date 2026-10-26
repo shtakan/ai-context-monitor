@@ -2443,8 +2443,14 @@ function processAndSend() {
     // проходе. Гейт сервис-узкий и уважает отказ API (см. aiCmHeuristicHoldForByok).
     const byokHeuristicHold = aiCmHeuristicHoldForByok(svc, fullText);
     let tokenEstimate = metricServerTokens > 0 ? metricServerTokens : Tokenizer.estimateDialogTokens(fullText, countForTokens);
-    // Поднятый полом effectiveLen (Gemini): если сеть дала effectiveLen > длины текста — масштабируем оценку
-    if (metricServerTokens === 0 && netEffectiveLen > 0 && fullText && fullText.length > 0 && netEffectiveLen > fullText.length) {
+    // Поднятый полом effectiveLen (Gemini): если сеть дала effectiveLen > длины текста — масштабируем оценку.
+    // v98 (фикс «скачка» бейджа после F5: 35.8% → 35.2%): масштабирование разрешено ТОЛЬКО на
+    // ПОЛНОЙ базе. netEffectiveLen относится к полному сетевому снимку, а fullText при
+    // baseComplete=false — канонический пол базы (core/hybrid-tail.js:getEffectiveText), поэтому
+    // доля netEffectiveLen/fullText.length раздувала эвристику на промежуточном проходе: бейдж
+    // «взлетал» до перезаписи полной базой ниже (`maxTokenCount = tokenEstimate`). Экстраполяция
+    // корректна только тогда, когда длина и текст относятся к ОДНОЙ базе.
+    if (baseComplete === true && metricServerTokens === 0 && netEffectiveLen > 0 && fullText && fullText.length > 0 && netEffectiveLen > fullText.length) {
       tokenEstimate = Math.round(tokenEstimate * (netEffectiveLen / fullText.length));
     }
     tokenEstimate += netAttachTokens;
@@ -3018,7 +3024,7 @@ if (isExtensionValid()) {
         // Шаг 2: aiCmExactTokensFor сам решает по convId — эвристика не перебьёт ответ API.
         const metricServerTokens = aiCmMetricServerTokens(currentAdapter.siteName, fullText);
         let tokenEstimate = metricServerTokens > 0 ? metricServerTokens : Tokenizer.estimateDialogTokens(fullText, countForTokens);
-        if (metricServerTokens === 0 && netEffectiveLen > 0 && fullText && fullText.length > 0 && netEffectiveLen > fullText.length) {
+        if (baseComplete === true && metricServerTokens === 0 && netEffectiveLen > 0 && fullText && fullText.length > 0 && netEffectiveLen > fullText.length) {
           tokenEstimate = Math.round(tokenEstimate * (netEffectiveLen / fullText.length));
         }
         tokenEstimate += netAttachTokens;
