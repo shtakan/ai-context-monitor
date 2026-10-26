@@ -238,9 +238,9 @@
             break;
           }
           iter++;
-          // v1.17 (UI-таймаут): через 5с оверлей снимаем — пользователь видит чат, цикл живёт дальше (до 90с/doneReason).
-          // v87.1: предел снижен 30с→5с (живая приёмка 2026-10-20: оверлей висел 34с при уже полной базе).
-          if (Date.now() - runStartAt > 5000 && D.aiCmScrollOverlay) { D.aiCmSetScrollOverlay(false, 'ui-timeout'); D.aiCmUiOverlayTimedOut = true; }
+          // v1.17 (UI-таймаут): через 5с оверлей снимаем — пользователь видит чат, цикл живёт дальше (до 90с/doneReason); v87.1: предел снижен 30с→5с.
+          // v97 (OVERLAY-HOLD): пока прогон РЕАЛЬНО скроллит (scrollEngaged/usedFallbackScroll) и полнота не объявлена (doneReason='max'), 5с-предел оверлей НЕ снимает — иначе чат открывался посреди скролла, а следующий фолбэк-скролл прыгал страницей. Предел удержания — wall-clock прогона.
+          if (Date.now() - runStartAt > 5000 && D.aiCmScrollOverlay && !((D.loaderState.scrollEngaged === true || usedFallbackScroll === true) && doneReason === 'max')) { D.aiCmSetScrollOverlay(false, 'ui-timeout'); D.aiCmUiOverlayTimedOut = true; }
           // v87.1 (base-complete-early): база объявлена полной — оверлей снимаем НЕМЕДЛЕННО, не
           // дожидаясь UI-предела: живой continuation-курсор держит цикл в stall-retry (лог
           // 2026-10-20: baseComplete=1 через 9с, экран оставался закрытым до 34с).
@@ -366,11 +366,15 @@
               debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' hide-skipped reason=few-msgs h=' + __hNow + ' msgs=' + __msgsNow);
             }
           }
-          // v71: скролл (setTop(0) + синтетический scroll) выполняем ТОЛЬКО если контейнер
-          // скрыт (hiddenEl). Видимый скролл вверх — источник дёргания/беления чата при
-          // холодном открытии (hide-skipped reason=few-msgs h=14938 msgs=20): ждём, пока
-          // база доберёт LOADER_HIDE_MIN_MSGS и hide применится; кап ожидания — LOADER_MAX_ITER.
-          if (!hiddenEl) {
+          // v71: скролл (setTop(0) + синтетический scroll) выполняем ТОЛЬКО при видимой
+          // маскировке ленты: оверлей (D.aiCmScrollOverlay) ИЛИ DOM-маркер скрытия этого
+          // прогона (hiddenEl). Видимый скролл вверх — источник дёргания/беления чата при
+          // холодном открытии (hide-skipped reason=few-msgs): ждём, пока база доберёт
+          // LOADER_HIDE_MIN_MSGS и маска появится; кап ожидания — LOADER_MAX_ITER.
+          // v97 (MASK-GATE): гейт — по ФАКТУ маскировки, а не только по локальному hiddenEl:
+          // оверлей мог быть поднят ЦЕНТРАЛИЗОВАННО (pre-applied loader-restart), и лента под
+          // ним уже не видна — скроллить под ним можно, ожидание hide тут смысла не имеет.
+          if (!hiddenEl && !D.aiCmScrollOverlay) {
             notHiddenWait++;
             // v1.16 (CLEAN-END-UNSCROLLABLE): hide так и не применился (msgs<порога при
             // коротком контейнере, скролл видимым запрещён), но тихая пагинация завершилась
@@ -447,8 +451,30 @@
               D.aiCmSetScrollOverlay(true, 'loader-fallback');
             }
             debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' fallback-real-scroll (база неполная, rAF-возврат не триггерит пагинацию) convId=' + convId);
-            try { sc.setTop(0); } catch (eSt1) { }
-            try { sc.el.dispatchEvent(new Event('scroll')); } catch (eSt2) { }
+            // v97 (VISIBLE-SCROLL-GUARD): скролл «в открытую» запрещён. Если оверлея НЕТ
+            // (снят по UI-пределу / после base-complete-early / подавлен тейпом), реальный
+            // setTop(0) с паузой 800мс показывал пользователю прыжок к началу чата — ровно
+            // то, что оверлей и прятал. Вместо него — приём rAF-ветки (v75): scrollTop=0 +
+            // синтетический scroll + возврат вниз в ОДНОМ кадре, промежуточное состояние не
+            // отрисовывается. Пагинация при этом НЕ гарантирована (v78: rAF-возврат в том же
+            // кадре не триггерит подгрузку Gemini) — осознанный компромисс: лучше не догрузить
+            // старшие окна, чем дёрнуть страницей открытый чат. Гасит прыжок и в тейп-прогоне
+            // (оверлей подавлен reason=tape-present, но чат видим).
+            if (D.aiCmScrollOverlay) {
+              try { sc.setTop(0); } catch (eSt1) { debugLog('log', '[AI CM][Gemini][loader] v97 set-top skip convId=' + convId); }
+              try { sc.el.dispatchEvent(new Event('scroll')); } catch (eSt2) { debugLog('log', '[AI CM][Gemini][loader] v97 scroll-dispatch skip convId=' + convId); }
+            } else {
+              (function (el97) {
+                try {
+                  requestAnimationFrame(function () {
+                    try { el97.scrollTop = 0; } catch (eS97a) { debugLog('log', '[AI CM][Gemini][loader] v97 scroll-top skip convId=' + convId); }
+                    try { el97.dispatchEvent(new Event('scroll')); } catch (eS97b) { debugLog('log', '[AI CM][Gemini][loader] v97 rAF-scroll-dispatch skip convId=' + convId); }
+                    try { el97.scrollTop = el97.scrollHeight; } catch (eS97c) { debugLog('log', '[AI CM][Gemini][loader] v97 scroll-bottom skip convId=' + convId); }
+                  });
+                } catch (eRaf97) { debugLog('log', '[AI CM][Gemini][loader] v97 rAF недоступен — скролл в открытую пропущен convId=' + convId); }
+              })(sc.el);
+              debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' fallback-scroll-invisible reason=no-overlay convId=' + convId);
+            }
             await sleepUntilFired(SCROLL_PAUSE_HIDDEN_MS, convId);
             // v90.1 (fired-after-await): fired взведён — выходим, не доходя до чтения h/no-growth.
             if (typeof aiCmFiredByConv !== 'undefined' && aiCmFiredByConv[convId]) { doneReason = 'export-done'; break; }

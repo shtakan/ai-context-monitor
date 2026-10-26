@@ -7,7 +7,12 @@
  *   2) в цикле while (true), сразу после iter++, добавлен UI-таймаут: по его срабатыванию
  *      оверлей снимается (пользователь видит чат), а фоновый цикл ПРОДОЛЖАЕТСЯ до
  *      LOADER_RUN_WALL_CLOCK_MS (90с) или до штатного doneReason. v87.1: предел снижен
- *      30000→5000 мс — живая приёмка 2026-10-20 показала оверлей, висевший 34с;
+ *      30000→5000 мс — живая приёмка 2026-10-20 показала оверлей, висевший 34с.
+ *      v97 (OVERLAY-HOLD): таймаут больше не единоличный — пока прогон РЕАЛЬНО скроллит
+ *      (scrollEngaged/usedFallbackScroll) и полнота не объявлена, оверлей держится до
+ *      конца прогона (предел — только 90с wall-clock). Иначе чат открывался посреди
+ *      скролла и пользователь видел прыжки страницы; см.
+ *      tests/adapters/gemini-loader-visible-scroll.test.js;
  *   3) v87.1 (base-complete-early): база объявлена полной → оверлей снимается НЕМЕДЛЕННО
  *      (`D.aiCmSetScrollOverlay(false, 'base-complete-early')`), не дожидаясь UI-предела.
  *      В том же логе baseComplete=1 пришёл через 9с, но живой pendingCursor=1 держал цикл
@@ -35,11 +40,11 @@
  *       __applyHide/__restoreLoader и контракт скрытия в core/gemini-overlay.js
  *       (снятие без expectSeq убирает оверлей всегда) — на месте. Соседние сьюты
  *       (gemini-loader-reentry-diag, gemini-scroll-stall-fix) остаются зелёными.
- *   R2  поведение в vm: на макете D с фейковыми часами цикл доходит до UI-предела (5с),
- *       снимает оверлей РОВНО ОДИН РАЗ (reason=ui-timeout), после снятия не поднимает его
- *       заново и продолжает работать (ещё есть sleep/итерации) до штатного done
- *       reason=data-complete; если оверлея не было (лента восстановлена тейпом) —
- *       таймаут не зовётся вовсе.
+ *   R2  поведение в vm: на макете D с фейковыми часами цикл ПЕРЕХОДИТ 5-секундный предел,
+ *       но оверлей при этом НЕ снимается (v97 hold: scrollEngaged=true, полнота не
+ *       объявлена) — снятие случается законным поводом (base-complete-early, затем
+ *       loader-done), прогон доходит до штатного done reason=data-complete; если оверлея
+ *       не было (лента восстановлена тейпом) — таймаут не зовётся вовсе.
  *   R3  v87.1 поведение base-complete-early: при baseComplete=1 и ЖИВОМ pendingCursor
  *       (сценарий лога 2026-10-20) оверлей снимается раньше 5с и вместо таймаута, после
  *       снятия не поднимается, а прогон доходит до своего терминального done — wall-clock
@@ -372,31 +377,37 @@ describe('ui-timeout: R1 main-anchor и контракт скрытия не т�
 // R2: поведение — UI-предел (5с) снимает оверлей один раз, фон живёт дальше
 // =====================================================================================
 describe('ui-timeout: R2 поведение в vm', () => {
-  test('R2: через 5с оверлей снят один раз, фон доходит до штатного done', async () => {
+  test('R2: 5с-предел НЕ снимает оверлей, пока прогон скроллит (v97 hold); снятие — по полноте', async () => {
     const h = makeHarness();
     expect(h.api && typeof h.api.loadFullHistoryInvisibly).toBe('function');
 
     await h.api.loadFullHistoryInvisibly();
 
+    // v97 (OVERLAY-HOLD): в этом сценарии hide применён на первой же итерации
+    // (scrollEngaged=true), полнота не объявлена (doneReason='max') — значит UI-предел
+    // НЕ имеет права открыть чат: иначе следующий же фолбэк-скролл дёргал бы видимую
+    // страницу к началу чата. Вместо этого оверлей держится до реального конца скролла.
+    expect(h.deps.loaderState.scrollEngaged).toBe(true);
     const uiTimeouts = h.overlay.filter((c) => c.reason === 'ui-timeout');
-    expect(uiTimeouts).toHaveLength(1);
-    expect(uiTimeouts[0].on).toBe(false);
-    // без expectSeq — снятие безусловное (не «чужой» прогон)
-    expect(uiTimeouts[0].expectSeq).toBeUndefined();
-    // сработал именно 5-секундный предел (v87.1), а не 90-секундный wall-clock
-    expect(uiTimeouts[0].at - h.clockStart).toBeGreaterThanOrEqual(5000);
-    expect(uiTimeouts[0].at - h.clockStart).toBeLessThan(90000);
+    expect(uiTimeouts).toHaveLength(0);
 
-    // до таймаута оверлей поднимался (иначе проверять нечего)
+    // предел был ПЕРЕЙДЕН по часам, и цикл после этого жил — иначе проверка пустая
+    expect(h.finds.filter((at) => at - h.clockStart > 5000).length).toBeGreaterThanOrEqual(1);
+    expect(h.sleeps.filter((at) => at - h.clockStart > 5000).length).toBeGreaterThanOrEqual(1);
+
+    // оверлей поднимался ровно один раз — штатным hide, и держался весь прогон
     const raises = h.overlay.filter((c) => c.on);
     expect(raises.map((c) => c.reason)).toEqual(['loader']);
 
-    // ключевое: после снятия оверлей НЕ поднимается заново ни в том же тике, ни позже
-    expect(h.overlay.filter((c) => c.on && c.at >= uiTimeouts[0].at)).toHaveLength(0);
-
-    // фон продолжает работать: после снятия прошли ещё сон и итерации цикла
-    expect(h.sleeps.filter((at) => at >= uiTimeouts[0].at).length).toBeGreaterThanOrEqual(1);
-    expect(h.finds.filter((at) => at > uiTimeouts[0].at).length).toBeGreaterThanOrEqual(1);
+    // снятие состоялось — но законным поводом: полнота базы, затем штатный loader-done
+    const early = h.overlay.filter((c) => c.reason === EARLY_REASON);
+    expect(early).toHaveLength(1);
+    expect(early[0].on).toBe(false);
+    expect(early[0].at - h.clockStart).toBeGreaterThanOrEqual(5000); // предел уже наступил — и НЕ сработал
+    expect(early[0].at - h.clockStart).toBeLessThan(90000);          // и не дожили до wall-clock
+    expect(h.overlay.filter((c) => !c.on).map((c) => c.reason)).toEqual([EARLY_REASON, 'loader-done']);
+    // после снятия оверлей НЕ поднимается заново ни в том же тике, ни позже
+    expect(h.overlay.filter((c) => c.on && c.at > 0)).toHaveLength(1);
 
     // и прогон закончился штатно (не wall-clock и не аварийным логом)
     const done = h.calls.filter((c) => c.line.indexOf('[AI CM][Gemini][loader] done reason=') !== -1);

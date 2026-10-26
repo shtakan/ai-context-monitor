@@ -1,13 +1,13 @@
 {
   "schema": "ai-cm/catch-whitelist@1",
-  "generatedFrom": "4ca1c02",
+  "generatedFrom": "77b27b1",
   "scope": [
     "core",
     "utils",
     "adapters"
   ],
   "definition": "Молчаливый catch = тело после вырезания комментариев содержит только пробелы, ИЛИ ровно один no-op (void 0; / return; / continue; / break;). Комментарий-только тело тоже молчаливое (комментарии маскируются в пробелы).",
-  "totalEntries": 459,
+  "totalEntries": 457,
   "groups": [
     {
       "file": "adapters/claude-adapter.js",
@@ -933,17 +933,16 @@
       "file": "core/gemini-loader-scroll.js",
       "category": "best-effort-guard",
       "lines": [
-        166,
-        450
+        166
       ],
-      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: sc.setTop(0);"
+      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var sn = (sc && sc.height() > 0) ? sc : D.findScrollContainer(); if (sn"
     },
     {
       "file": "core/gemini-loader-scroll.js",
       "category": "cleanup-guard",
       "lines": [
-        843,
-        949
+        869,
+        975
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete D.oracleIncompleteSeen[convId];"
     },
@@ -951,10 +950,10 @@
       "file": "core/gemini-loader-scroll.js",
       "category": "debug-instrumentation",
       "lines": [
-        1012,
-        1025,
-        1087,
-        1093
+        1038,
+        1051,
+        1113,
+        1119
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.__aiCmGeminiLoadFullHistory = loadFullHistoryInvisibly;"
     },
@@ -962,7 +961,7 @@
       "file": "core/gemini-loader-scroll.js",
       "category": "defensive-assignment",
       "lines": [
-        950
+        976
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: D.oracleRerunUsedMap[convId] = true;"
     },
@@ -972,10 +971,9 @@
       "lines": [
         152,
         156,
-        423,
-        426,
-        451,
-        852
+        427,
+        430,
+        878
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: el75.dispatchEvent(new Event('scroll'));"
     },
@@ -985,8 +983,8 @@
       "lines": [
         114,
         184,
-        421,
-        424
+        425,
+        428
       ],
       "reason": "overlay-guard: оверлей/стили: узел мог быть уничтожен хостом между чтением и записью; пример: el75.scrollTop = 0;"
     },
