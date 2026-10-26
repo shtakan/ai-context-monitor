@@ -373,10 +373,21 @@
   // до реального fired событие не приходит; var поднят, поэтому гейты в autoScrollCollect
   // видят его и до объявления (typeof-guard). Имя латча намеренно совпадает с лоадерным:
   // source-пины и grep-приёмка ищут один и тот же идентификатор.
+  // v2.0.29 (Xray/Firefox): detail моста ISOLATED→MAIN ('ai-cm-auto-export-fired')
+  // приходит СТРОКОЙ (JSON.stringify в core/export-manager.js). Объект чужого
+  // компартмента Firefox отдаёт MAIN-миру под Xray-обёрткой, и чтение detail.convId
+  // падает «Permission denied to access property». Разбираем строку; объект принимаем
+  // как есть (старые отправители, фикстуры jsdom).
+  function aiCmBridgeDetail(ev) {
+    var raw = (ev && ev.detail !== undefined) ? ev.detail : null;
+    if (typeof raw !== 'string') return raw || null;
+    try { return JSON.parse(raw); } catch (eBd) { return null; }
+  }
+
   var aiCmFiredByConv = Object.create(null);
   if (typeof window !== 'undefined' && window.addEventListener) {
     window.addEventListener('ai-cm-auto-export-fired', function (ev) {
-      var dFired = (ev && ev.detail) || null;
+      var dFired = aiCmBridgeDetail(ev);
       var cidFired = (dFired && dFired.convId) ? String(dFired.convId) : '';
       if (!cidFired) return; // без convId латч не привязать к чату — не взводим
       aiCmFiredByConv[cidFired] = 1;

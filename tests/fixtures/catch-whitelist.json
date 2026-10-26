@@ -161,8 +161,8 @@
       "file": "core/base-handler.js",
       "category": "debug-instrumentation",
       "lines": [
-        221,
-        263
+        225,
+        267
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var v = info && info.verdicts ? JSON.stringify(info.verdicts) : '{}'; va"
     },
@@ -180,7 +180,7 @@
       "lines": [
         188,
         189,
-        277
+        281
       ],
       "reason": "timing-guard: отмена таймера/подписки: обработчик мог быть снят хостом или гонкой; пример: clearTimeout(timer);"
     },
@@ -301,9 +301,9 @@
       "category": "best-effort-guard",
       "lines": [
         544,
-        2214,
-        2348,
-        3252
+        2218,
+        2356,
+        3260
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cyrDiag = (t.match(/[а-яёА-ЯЁ]/g) || []).length; var cyrillicPct = t"
     },
@@ -311,7 +311,7 @@
       "file": "core/content.js",
       "category": "cleanup-guard",
       "lines": [
-        1968
+        1972
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: if (aiCmBadgeHoldTimer) return; aiCmBadgeHoldTimer = setTimeout(function"
     },
@@ -346,14 +346,14 @@
         1256,
         1258,
         1263,
-        1843,
-        2191,
-        2359,
-        2383,
-        2392,
-        3136,
-        3162,
-        3164
+        1847,
+        2195,
+        2367,
+        2391,
+        2400,
+        3144,
+        3170,
+        3172
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
     },
@@ -369,7 +369,7 @@
       "file": "core/content.js",
       "category": "dom-read-guard",
       "lines": [
-        1879
+        1883
       ],
       "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: var info = aiCmSourceInfo(); aiCmSourceLabelNow = info ? info.label : ''"
     },
@@ -379,10 +379,10 @@
       "lines": [
         941,
         950,
-        2305,
-        2326,
-        3118,
-        3124
+        2311,
+        2334,
+        3126,
+        3132
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
     },
@@ -390,7 +390,7 @@
       "file": "core/content.js",
       "category": "feature-detect",
       "lines": [
-        2496
+        2504
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var metricSrc = baseComplete ? 'base-complete' : (lastBounded ? 'base-fl"
     },
@@ -408,11 +408,11 @@
         627,
         731,
         902,
-        1917,
-        2576,
-        2635,
-        2652,
-        2731
+        1921,
+        2584,
+        2643,
+        2660,
+        2739
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -423,7 +423,7 @@
         26,
         288,
         352,
-        2800
+        2808
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.runtime.sendMessage({ type: 'BADGE_RESET' }).catch(function () {"
     },
@@ -432,7 +432,7 @@
       "category": "local-helper-guard",
       "lines": [
         285,
-        2961
+        2969
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmCancelDeferredHistWrite('');"
     },
@@ -440,7 +440,7 @@
       "file": "core/content.js",
       "category": "parse-guard",
       "lines": [
-        3198
+        3206
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof window !== 'undefined' && window && window.AiCmEx"
     },
@@ -602,7 +602,7 @@
       "file": "core/deepseek-netsync.js",
       "category": "debug-instrumentation",
       "lines": [
-        190
+        201
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof diagMark === 'function' && typeof diagOn === 'function' && di"
     },
@@ -610,7 +610,7 @@
       "file": "core/deepseek-netsync.js",
       "category": "event-guard",
       "lines": [
-        268
+        279
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.addEventListener('ai-cm-deepseek-net-sync', function (ev) { try {"
     },
@@ -618,7 +618,7 @@
       "file": "core/deepseek-netsync.js",
       "category": "timing-guard",
       "lines": [
-        212
+        223
       ],
       "reason": "timing-guard: отмена таймера/подписки: обработчик мог быть снят хостом или гонкой; пример: clearTimeout(timer);"
     },
@@ -694,7 +694,7 @@
       "lines": [
         254,
         1078,
-        1863
+        1867
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof aiCmDiagLine === 'function' && typeof aiCmDiagOn === 'functio"
     },
@@ -757,7 +757,7 @@
       "file": "core/gemini-archive.js",
       "category": "debug-instrumentation",
       "lines": [
-        479
+        490
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.addEventListener('ai-cm-cache-refresh', function (ev) { if (!D) {"
     },
@@ -952,8 +952,8 @@
       "lines": [
         1038,
         1051,
-        1113,
-        1119
+        1124,
+        1130
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.__aiCmGeminiLoadFullHistory = loadFullHistoryInvisibly;"
     },

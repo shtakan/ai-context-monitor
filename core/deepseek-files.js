@@ -79,6 +79,16 @@
   var FILES_HOST = 'https://files.deepseeksvc.com';
   var FILES_FILE_URL = 'https://files.deepseeksvc.com/api/file';
 
+  // v2.0.29 (Xray/Firefox): detail моста ISOLATED→MAIN приходит СТРОКОЙ (JSON.stringify в
+  // core/base-handler.js). Объект чужого компартмента Firefox отдаёт MAIN-миру под
+  // Xray-обёрткой, и чтение его полей падает «Permission denied to access property».
+  // Разбираем строку; объект принимаем как есть (старые отправители, фикстуры jsdom).
+  function aiCmBridgeDetail(ev) {
+    var raw = (ev && ev.detail !== undefined) ? ev.detail : null;
+    if (typeof raw !== 'string') return raw || null;
+    try { return JSON.parse(raw); } catch (eBd) { return null; }
+  }
+
   // Очередь: FIFO-массив элементов + карта дедупа по `convId|fileId` + счётчик активных.
   // Элемент: { key, convId, fileId, signedPath, name, msgIds:{}, status, startedAt, doneAt }.
   var fileQueue = [];
@@ -414,7 +424,7 @@
   // СИНХРОННО, потому что CustomEvent в DOM доставляется синхронно в оба мира.
   if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
     window.addEventListener('ai-cm-deepseek-files-state-request', function () { filesStateRespond(); });
-    window.addEventListener('ai-cm-deepseek-files-drain', function (ev) { filesDrainHandle(ev && ev.detail); });
+    window.addEventListener('ai-cm-deepseek-files-drain', function (ev) { filesDrainHandle(aiCmBridgeDetail(ev)); });
   }
 
   // ===== СЕКЦИЯ 15: ТЕЛА, КОТОРЫМ НУЖНО СОСТОЯНИЕ ЯДРА (BIND-зона) =====

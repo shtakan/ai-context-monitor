@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.0.29] - 2026-10-26
+
+### Fixed
+- Firefox: устранены Xray-ошибки (`Permission denied to access property`) на мостах ISOLATED→MAIN. `detail` всех шести `CustomEvent`-мостов теперь передаётся строкой `JSON.stringify` (Primitive через границу компартментов), а MAIN-мир разбирает её хелпером `aiCmBridgeDetail(ev)`: DeepSeek `ai-cm-deepseek-net-sync` / `ai-cm-deepseek-files-drain`, Gemini `ai-cm-archive-restore` / `ai-cm-restored-history` / `ai-cm-cache-refresh`, `ai-cm-auto-export-fired`.
+
 ## [2.0.28] - 2026-10-26
 
 ### Fixed

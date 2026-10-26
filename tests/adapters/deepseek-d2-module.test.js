@@ -163,7 +163,9 @@ const MOVED_BLOCKS = [
     end: '  } catch (eNetBridge) { }',
     // Step E.2c-B2b-2 (swallowSoft): тот же catch переведён на канал B —
     // `swallowSoft(eNs, 'deepseek:netSyncBridge')`; pin пересчитан по новой версии.
-    sha: '719c52bc31e26388e128fdd788c958c06c762a76709a932599049f51327e088b'
+    // v2.0.29 (Xray/Firefox): detail моста ISOLATED→MAIN стал СТРОКОЙ JSON, а MAIN
+    // разбирает его `aiCmBridgeDetail(ev)`; pin пересчитан по новой версии.
+    sha: '9d4fc737db386233800bede3e9715d66818b0479822ca2b259ae9f33237feb17'
   }
 ];
 

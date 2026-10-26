@@ -422,7 +422,9 @@ describe('Ранний выход из цикла скролла по fired (v88
 
     const evs = h.events.filter(function (e) { return e.type === 'ai-cm-auto-export-fired'; });
     expect(evs).toHaveLength(1);
-    expect(evs[0].detail && evs[0].detail.convId).toBe(CID);
+    // v2.0.29 (Xray/Firefox): detail моста — СТРОКА JSON, а не объект (см. aiCmBridgeDetail в MAIN-мирах)
+    expect(typeof evs[0].detail).toBe('string');
+    expect(JSON.parse(evs[0].detail).convId).toBe(CID);
 
     // приёмник в MAIN-мире: то же имя события и латч по detail.convId
     expect(LOADER_SRC).toContain("window.addEventListener('ai-cm-auto-export-fired'");

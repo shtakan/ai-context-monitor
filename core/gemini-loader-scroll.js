@@ -1065,10 +1065,21 @@
   // окон этот файл не исправит, поэтому цикл скролла выходит рано (reason=export-done), а
   // collapse-guard не планирует 8с-перезапуск. Слушатель регистрируется на загрузке модуля,
   // как visibilitychange ниже: до __bind он не срабатывает, а до реального fired — тем более.
+  // v2.0.29 (Xray/Firefox): detail моста ISOLATED→MAIN ('ai-cm-auto-export-fired')
+  // приходит СТРОКОЙ (JSON.stringify в core/export-manager.js). Объект чужого
+  // компартмента Firefox отдаёт MAIN-миру под Xray-обёрткой, и чтение detail.convId
+  // падает «Permission denied to access property». Разбираем строку; объект принимаем
+  // как есть (старые отправители, фикстуры jsdom).
+  function aiCmBridgeDetail(ev) {
+    var raw = (ev && ev.detail !== undefined) ? ev.detail : null;
+    if (typeof raw !== 'string') return raw || null;
+    try { return JSON.parse(raw); } catch (eBd) { return null; }
+  }
+
   var aiCmFiredByConv = Object.create(null);
   try {
     window.addEventListener('ai-cm-auto-export-fired', function (ev) {
-      var dFired = (ev && ev.detail) || null;
+      var dFired = aiCmBridgeDetail(ev);
       var cidFired = (dFired && dFired.convId) ? String(dFired.convId) : '';
       if (!cidFired) return; // без convId латч не привязать к чату — не взводим
       aiCmFiredByConv[cidFired] = 1;

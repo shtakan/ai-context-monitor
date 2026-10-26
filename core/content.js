@@ -1827,8 +1827,12 @@ function aiCmLoadArchiveTier(convId, reason) {
         if (hasMsgs && !aiCmArchiveRestoredDispatched[convId]) {
           aiCmArchiveRestoredDispatched[convId] = true;
           try {
+            // v2.0.29 (Xray/Firefox): detail — СТРОКОЙ JSON. Массив ходов чужих компартментов
+            // Firefox отдаёт MAIN-миру Xray-обёрткой, и чтение полей падает «Permission denied
+            // to access property». Строка примитив — мост доезжает. MAIN разбирает её
+            // aiCmBridgeDetail (core/gemini-archive.js).
             window.dispatchEvent(new CustomEvent('ai-cm-archive-restore', {
-              detail: {
+              detail: JSON.stringify({
                 convId: convId,
                 messages: rec.messages,
                 count: (typeof rec.count === 'number' && rec.count > 0) ? rec.count : rec.messages.length,
@@ -1836,7 +1840,7 @@ function aiCmLoadArchiveTier(convId, reason) {
                 format: rec.format || '',
                 service: rec.service || '',
                 title: rec.title || ''
-              }
+              })
             }));
             debugLog('log', '[AI CM][archive-restore] dispatched convId=' + convId +
               ' msgs=' + rec.messages.length);
@@ -2295,12 +2299,14 @@ function processAndSend() {
           } else {
             aiCmRestoredDispatched[convId] = true;
             try {
+            // v2.0.29 (Xray/Firefox): detail — СТРОКОЙ JSON (см. ai-cm-archive-restore выше);
+            // MAIN разбирает её aiCmBridgeDetail (core/gemini-archive.js).
             window.dispatchEvent(new CustomEvent('ai-cm-restored-history', {
-              detail: {
+              detail: JSON.stringify({
                 convId: convId,
                 turns: entry.turns,
                 meta: entry.meta || {}
-              }
+              })
             }));
           } catch (e) { }
           } // v82 (D9-A): конец else (дедуп dispatch)
@@ -2322,7 +2328,9 @@ function processAndSend() {
             setTimeout(function () {
               if (getCurrentConvId() !== convId) return;
               try {
-                window.dispatchEvent(new CustomEvent('ai-cm-cache-refresh', { detail: { convId: convId } }));
+                // v2.0.29 (Xray/Firefox): detail — СТРОКОЙ JSON; MAIN разбирает её
+                // aiCmBridgeDetail (core/gemini-archive.js).
+                window.dispatchEvent(new CustomEvent('ai-cm-cache-refresh', { detail: JSON.stringify({ convId: convId }) }));
               } catch (e2) { }
             }, 2000);
           }

@@ -1848,9 +1848,13 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
         // старших окон его не исправит. Сбой нотификации на fired не влияет (файл и все латчи
         // к этому моменту состоялись) — поэтому catch только логирует.
         try {
-          window.dispatchEvent(new CustomEvent('ai-cm-auto-export-fired', { detail: {
+          // v2.0.29 (Xray/Firefox): detail — СТРОКОЙ JSON, иначе MAIN-мир получает объект
+          // чужого компартмента под Xray-обёрткой и падает на чтении полей
+          // («Permission denied to access property»). MAIN разбирает её aiCmBridgeDetail
+          // (core/gemini-hidden-scroll.js, core/gemini-loader-scroll.js).
+          window.dispatchEvent(new CustomEvent('ai-cm-auto-export-fired', { detail: JSON.stringify({
             convId: cid, site: siteNameD || '', reason: reason || ''
-          } }));
+          }) }));
         } catch (eFiredEvt) { swallowSoft(eFiredEvt, 'export:auto-export-fired-event'); }
         // O-37 (A, ДИАГНОСТИКА, только измерение): пороговый файр по ДОВЕРЕННОЙ базе
         // адаптера (сервис без сети). Печать — в content.js (там живёт признак), здесь только

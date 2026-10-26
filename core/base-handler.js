@@ -200,8 +200,12 @@ function aiCmExportNetSyncThen(convId, cb, timeoutMs) {
     };
     window.addEventListener('ai-cm-deepseek-net-sync-done', handler);
     timer = setTimeout(function () { finish({ ok: false, reason: 'timeout' }); }, cap);
+    // v2.0.29 (Xray/Firefox): detail — СТРОКОЙ JSON. Объект из ISOLATED-компартмента MAIN-мир
+    // в Firefox видит только через Xray-обёртку, и чтение его полей падает
+    // «Permission denied to access property» → мост терял событие. Строка границу миров
+    // пересекает примитивом; MAIN разбирает её aiCmBridgeDetail (core/deepseek-netsync.js).
     window.dispatchEvent(new CustomEvent('ai-cm-deepseek-net-sync', {
-      detail: { requestId: reqId, convId: convId, timeoutMs: cap }
+      detail: JSON.stringify({ requestId: reqId, convId: convId, timeoutMs: cap })
     }));
   } catch (eBridge) { finish({ ok: false, reason: 'bridge-error' }); }
 }
@@ -372,8 +376,10 @@ function aiCmExportFilesDrainThen(convId, cb, timeoutMs) {
     timer = setTimeout(function () {
       finish({ ok: false, drained: false, reason: 'file-queue-timeout', pending: aiCmFilesQueuePending(), waitedMs: Date.now() - startedAt });
     }, cap + 250);
+    // v2.0.29 (Xray/Firefox): detail — СТРОКОЙ JSON (тот же Xray-барьер, что у net-sync выше);
+    // MAIN разбирает её aiCmBridgeDetail (core/deepseek-files.js).
     window.dispatchEvent(new CustomEvent('ai-cm-deepseek-files-drain', {
-      detail: { requestId: reqId, timeoutMs: cap }
+      detail: JSON.stringify({ requestId: reqId, timeoutMs: cap })
     }));
   } catch (eBridge) {
     finish({ ok: false, drained: false, reason: 'bridge-error', pending: pending, waitedMs: Date.now() - startedAt });

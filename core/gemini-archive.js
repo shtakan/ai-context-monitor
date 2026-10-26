@@ -59,6 +59,17 @@
   var D = null;
   function __bind(d) { D = d; }
 
+  // v2.0.29 (Xray/Firefox): detail трёх мостов ISOLATED→MAIN (archive-restore,
+  // restored-history, cache-refresh) приходит СТРОКОЙ (JSON.stringify в core/content.js).
+  // Объект чужого компартмента Firefox отдаёт MAIN-миру под Xray-обёрткой, и чтение
+  // полей (detail.turns/messages/convId) падает «Permission denied to access property».
+  // Разбираем строку; объект принимаем как есть — для старых отправителей и jsdom-фикстур.
+  function aiCmBridgeDetail(ev) {
+    var raw = (ev && ev.detail !== undefined) ? ev.detail : null;
+    if (typeof raw !== 'string') return raw || null;
+    try { return JSON.parse(raw); } catch (eBd) { return null; }
+  }
+
   // ============ T1 (v1.16): ПЕРВЫЙ ЯРУС — АРХИВ (оракул и пол) ============
   // Метаданные архива по convId кладёт слушатель ai-cm-archive-restore (ниже, рядом
   // с tape-restore): content.js (ISOLATED) читает chrome.storage.local и передаёт
@@ -269,7 +280,7 @@
   // перезаписывают сохранённые по id; сохранённые ходы, которых нет в сети, ДОПОЛНЯЮТ базу.
   window.addEventListener('ai-cm-restored-history', function (ev) {
     if (!D) { debugLog('error', '[gemini-archive] D is null, event ignored'); return; }
-    var detail = ev && ev.detail;
+    var detail = aiCmBridgeDetail(ev);
     if (!detail || !detail.turns) return; // v77: пустую ленту обрабатываем ниже (hwm-protect) с логом
     var restoredTurns = detail.turns;
     var restoredConvId = detail.convId || '';
@@ -355,7 +366,7 @@
   //   3) метаданные яруса → оракул archive-complete переоценивается в emitBaseSnapshot.
   window.addEventListener('ai-cm-archive-restore', function (ev) {
     if (!D) { debugLog('error', '[gemini-archive] D is null, event ignored'); return; }
-    var detail = ev && ev.detail;
+    var detail = aiCmBridgeDetail(ev);
     if (!detail || !detail.convId) return;
     var convId = String(detail.convId);
     var current = D.getConvId();
@@ -466,7 +477,7 @@
   try {
     window.addEventListener('ai-cm-cache-refresh', function (ev) {
       if (!D) { debugLog('error', '[gemini-archive] D is null, event ignored'); return; }
-      var detail = ev && ev.detail;
+      var detail = aiCmBridgeDetail(ev);
       var want = (detail && detail.convId) || '';
       var current = D.getConvId();
       if (want && current && want !== current) {

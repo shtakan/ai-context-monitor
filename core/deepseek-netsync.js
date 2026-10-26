@@ -66,6 +66,17 @@
 
   var netSyncSeq = 0;
 
+  // v2.0.29 (Xray/Firefox): detail моста ISOLATED→MAIN приходит СТРОКОЙ (JSON.stringify в
+  // content-скрипте). Объект чужого компартмента Firefox отдаёт MAIN-миру под Xray-обёрткой,
+  // и чтение его полей падает «Permission denied to access property» — мост терял событие.
+  // Строка — примитив: границу миров пересекает без обёртки. Объект принимаем как есть —
+  // так остаются живыми старые отправители и тестовые фикстуры jsdom.
+  function aiCmBridgeDetail(ev) {
+    var raw = (ev && ev.detail !== undefined) ? ev.detail : null;
+    if (typeof raw !== 'string') return raw || null;
+    try { return JSON.parse(raw); } catch (eBd) { return null; }
+  }
+
   function __bind(d) {
     D = d;
     with (D) {
@@ -261,7 +272,7 @@
   try {
     window.addEventListener('ai-cm-deepseek-net-sync', function (ev) {
       try {
-        var d = (ev && ev.detail) || {};
+        var d = aiCmBridgeDetail(ev) || {};
         exportNetSync(d.requestId, d.convId || currentConvId || getConvId() || '', d.timeoutMs);
       } catch (eNs) { swallowSoft(eNs, 'deepseek:netSyncBridge'); }
     });
