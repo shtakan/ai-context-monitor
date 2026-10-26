@@ -22,6 +22,12 @@
  *   print/print.html, privacy/privacy.html, docs/index.html + docs/screenshots/**
  *   _locales/**, plus the files Chrome resolves itself at runtime (see step 2c)
  *
+ * Plus dist-firefox/ (step 4c): a copy of dist/ whose manifest ALSO declares the
+ * Firefox /background/scripts fallback. MV3 does not support background.scripts
+ * (Chrome's manifest is service-worker only), while Firefox MV3 has no service
+ * workers and AMO requires the scripts fallback — so one output root cannot
+ * serve both engines.
+ *
  * Phase 3 step 1 (print): print/print.html is the last legacy page that pulled
  * global scripts from the source tree (options/i18n-apply.js, utils/markdown.js,
  * print/print.js), which forced the whole legacy tree into the release ZIP. It
@@ -61,10 +67,10 @@
  * and are no longer what Chrome loads.
  *
  * Usage:
- *   node build.mjs              # dev build, sourcemaps on
+ *   node build.mjs              # dev build (dist/ + dist-firefox/), sourcemaps on
  *   node build.mjs --watch      # rebuild on change (own watcher, see note below)
  *   node build.mjs --minify     # production, sourcemaps off
- *   node build.mjs --clean      # remove dist/ and exit
+ *   node build.mjs --clean      # remove dist/ and dist-firefox/, then exit
  *   node build.mjs --no-sourcemap
  *
  * Watch note: because the sources are fed to esbuild through `stdin`, esbuild's
@@ -79,6 +85,10 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.join(ROOT, 'dist');
+// The Firefox package is the same build with one extra manifest key (see 4c):
+// the two engines refuse each other's background shape, so they cannot share
+// one output root.
+const DIST_FIREFOX = path.join(ROOT, 'dist-firefox');
 
 const argv = process.argv.slice(2);
 const flag = (name) => argv.includes(name);
@@ -251,6 +261,9 @@ function runtimeRegisteredFiles() {
 
 const REWIRED_SERVICE_WORKER = 'background.js';
 const REWIRED_CONTENT_SCRIPTS = ['content.js'];
+// Firefox fallback (dist-firefox only): name the bundle, never the legacy source —
+// dist/ does not contain core/background.js.
+const FIREFOX_BACKGROUND_SCRIPTS = [REWIRED_SERVICE_WORKER];
 const REWIRED_OPTIONS_SCRIPT = '../options.js';
 const REWIRED_PRINT_SCRIPT = '../print.js';
 // Phase 3 step 3: privacy/privacy.html and docs/index.html both live one level
@@ -274,14 +287,12 @@ function rewireManifestText(text) {
     fail('dist/manifest.json: background is missing');
   }
   out.background.service_worker = REWIRED_SERVICE_WORKER;
-  // Firefox MV3 has no service workers, so AMO requires /background/scripts next to
-  // /background/service_worker (BACKGROUND_SERVICE_WORKER_NOFALLBACK). Chromium only
-  // refuses MV3 background.scripts when service_worker is ABSENT, so carrying both is
-  // the shape that loads in both engines. The fallback must name the bundle: the
-  // legacy core/background.js does not exist in dist/, the IIFE does.
-  if (Array.isArray(out.background.scripts) && out.background.scripts.length > 0) {
-    out.background.scripts = [REWIRED_SERVICE_WORKER];
-  }
+  // MV3 declares exactly one background entry, and it is the service worker:
+  // background.scripts is an MV2 key (Firefox still uses it, Chrome does not), so
+  // dist/ drops it outright. The Firefox fallback required by AMO
+  // (BACKGROUND_SERVICE_WORKER_NOFALLBACK) is written only into dist-firefox/
+  // (step 4c) — never into the package Chrome loads.
+  delete out.background.scripts;
   // The background bundle is an IIFE, not an ES module: stay classic. No
   // top-level await is needed and classic is simpler for the MV3 worker lifecycle.
   delete out.background.type;
@@ -531,14 +542,13 @@ async function verifyDist() {
   if ('type' in (manifest?.background || {})) {
     problems.push('dist/manifest.json: background.type must stay unset (classic service worker)');
   }
-  // Firefox fallback (see rewireManifestText): when declared it must point at the
-  // bundle, otherwise Firefox would try to load a file dist/ does not contain.
-  const backgroundScripts = manifest?.background?.scripts;
-  if (backgroundScripts !== undefined &&
-      JSON.stringify(backgroundScripts) !== JSON.stringify([REWIRED_SERVICE_WORKER])) {
+  // MV3 keeps a single background entry: dist/ must declare service_worker and
+  // NOTHING else (background.scripts is an MV2 key). The Firefox fallback is
+  // materialised into dist-firefox/ only (see writeFirefoxDist).
+  if ('scripts' in (manifest?.background || {})) {
     problems.push(
-      `dist/manifest.json: background.scripts is ${JSON.stringify(backgroundScripts)}, ` +
-        `expected ${JSON.stringify([REWIRED_SERVICE_WORKER])}`
+      'dist/manifest.json: background.scripts must be absent for Chrome ' +
+        '(the Firefox fallback belongs in dist-firefox/)'
     );
   }
   const js = manifest?.content_scripts?.[0]?.js;
@@ -603,6 +613,56 @@ async function verifyDist() {
 }
 
 /* ------------------------------------------------------------------ *
+ * 4c. Firefox variant (dist-firefox/): same bundles, one manifest key more.
+ *
+ * Firefox MV3 has no service workers, so AMO requires /background/scripts next
+ * to /background/service_worker (BACKGROUND_SERVICE_WORKER_NOFALLBACK), while
+ * Chrome's MV3 manifest keeps the service worker alone. The fallback therefore
+ * never lives in dist/: it is materialised here from the already verified dist/,
+ * keeping both packages identical apart from that single key.
+ * ------------------------------------------------------------------ */
+
+async function writeFirefoxDist() {
+  await fsp.rm(DIST_FIREFOX, { recursive: true, force: true });
+  await fsp.cp(DIST, DIST_FIREFOX, { recursive: true });
+  const manifestPath = path.join(DIST_FIREFOX, 'manifest.json');
+  const manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf8'));
+  if (!manifest.background || typeof manifest.background !== 'object') {
+    fail('dist-firefox/manifest.json: background is missing');
+  }
+  manifest.background.scripts = [...FIREFOX_BACKGROUND_SCRIPTS];
+  await fsp.writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+}
+
+async function verifyFirefoxDist() {
+  const problems = [];
+  const manifest = JSON.parse(await fsp.readFile(path.join(DIST_FIREFOX, 'manifest.json'), 'utf8'));
+  if (manifest?.background?.service_worker !== REWIRED_SERVICE_WORKER) {
+    problems.push(
+      `dist-firefox/manifest.json: background.service_worker is ` +
+        `${JSON.stringify(manifest?.background?.service_worker)}, expected "${REWIRED_SERVICE_WORKER}"`
+    );
+  }
+  if (JSON.stringify(manifest?.background?.scripts) !== JSON.stringify(FIREFOX_BACKGROUND_SCRIPTS)) {
+    problems.push(
+      `dist-firefox/manifest.json: background.scripts is ` +
+        `${JSON.stringify(manifest?.background?.scripts)}, expected ${JSON.stringify(FIREFOX_BACKGROUND_SCRIPTS)}`
+    );
+  }
+  if (JSON.stringify(manifest?.content_scripts?.[0]?.js) !== JSON.stringify(REWIRED_CONTENT_SCRIPTS)) {
+    problems.push(
+      `dist-firefox/manifest.json: content_scripts[0].js is ` +
+        `${JSON.stringify(manifest?.content_scripts?.[0]?.js)}, expected ${JSON.stringify(REWIRED_CONTENT_SCRIPTS)}`
+    );
+  }
+  for (const bundle of BUNDLES) {
+    if (!fs.existsSync(path.join(DIST_FIREFOX, bundle))) problems.push(`dist-firefox/${bundle}: missing`);
+  }
+  if (problems.length) fail(problems.join('\n  '));
+  console.log('  ✓ dist-firefox/ verified: background.scripts fallback for Firefox');
+}
+
+/* ------------------------------------------------------------------ *
  * 5. Build
  * ------------------------------------------------------------------ */
 
@@ -649,6 +709,8 @@ async function buildOnce(entries, { quiet = false } = {}) {
   }
   await verify(outputs);
   await verifyDist();
+  await writeFirefoxDist();
+  await verifyFirefoxDist();
 }
 
 /* ------------------------------------------------------------------ *
@@ -722,7 +784,8 @@ function startWatcher() {
 async function main() {
   if (CLEAN_ONLY) {
     await fsp.rm(DIST, { recursive: true, force: true });
-    console.log('[build] removed dist/');
+    await fsp.rm(DIST_FIREFOX, { recursive: true, force: true });
+    console.log('[build] removed dist/ and dist-firefox/');
     return;
   }
 

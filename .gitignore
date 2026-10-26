@@ -15,6 +15,7 @@ Thumbs.db
 node_modules/
 coverage/
 dist/
+dist-firefox/
 build/
 
 # Logs
@@ -138,6 +139,7 @@ deepseek_test/
 node_modules/
 coverage/
 dist/
+dist-firefox/
 build/
 .DS_Store
 Thumbs.db

@@ -79,11 +79,14 @@ describe('LOW-2: manifest.json — smoke-тест состава ключей (C
     expect(gecko.data_collection_permissions).toEqual({ required: ['none'] });
   });
 
-  test('background: service_worker для Chromium И scripts как Firefox-фолбэк', () => {
-    // Firefox MV3 не умеет service worker: без /background/scripts AMO валится с
-    // BACKGROUND_SERVICE_WORKER_NOFALLBACK. Chromium отвергает scripts только когда
-    // service_worker ОТСУТСТВУЕТ, поэтому оба поля вместе — рабочий кроссбраузерный вид.
-    expect(manifest.background.scripts).toEqual(['core/background.js']);
+  test('background: только service_worker — scripts остаются Firefox-сборке', () => {
+    // MV3 background — один service_worker; background.scripts (MV2) Chrome не
+    // поддерживает и в пакет не кладёт. Firefox-фолбэк /background/scripts
+    // (AMO BACKGROUND_SERVICE_WORKER_NOFALLBACK) живёт только в dist-firefox/ —
+    // его добавляет build.mjs (шаг 4c).
+    expect(manifest.background.service_worker).toBe('core/background.js');
+    expect(Object.keys(manifest.background)).toEqual(['service_worker']);
+    expect('scripts' in manifest.background).toBe(false);
   });
 
   test('Opera/MV2-специфичных полей нет — ни как ключей, ни как подстрок', () => {
