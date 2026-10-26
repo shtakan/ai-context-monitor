@@ -274,6 +274,14 @@ function rewireManifestText(text) {
     fail('dist/manifest.json: background is missing');
   }
   out.background.service_worker = REWIRED_SERVICE_WORKER;
+  // Firefox MV3 has no service workers, so AMO requires /background/scripts next to
+  // /background/service_worker (BACKGROUND_SERVICE_WORKER_NOFALLBACK). Chromium only
+  // refuses MV3 background.scripts when service_worker is ABSENT, so carrying both is
+  // the shape that loads in both engines. The fallback must name the bundle: the
+  // legacy core/background.js does not exist in dist/, the IIFE does.
+  if (Array.isArray(out.background.scripts) && out.background.scripts.length > 0) {
+    out.background.scripts = [REWIRED_SERVICE_WORKER];
+  }
   // The background bundle is an IIFE, not an ES module: stay classic. No
   // top-level await is needed and classic is simpler for the MV3 worker lifecycle.
   delete out.background.type;
@@ -522,6 +530,16 @@ async function verifyDist() {
   }
   if ('type' in (manifest?.background || {})) {
     problems.push('dist/manifest.json: background.type must stay unset (classic service worker)');
+  }
+  // Firefox fallback (see rewireManifestText): when declared it must point at the
+  // bundle, otherwise Firefox would try to load a file dist/ does not contain.
+  const backgroundScripts = manifest?.background?.scripts;
+  if (backgroundScripts !== undefined &&
+      JSON.stringify(backgroundScripts) !== JSON.stringify([REWIRED_SERVICE_WORKER])) {
+    problems.push(
+      `dist/manifest.json: background.scripts is ${JSON.stringify(backgroundScripts)}, ` +
+        `expected ${JSON.stringify([REWIRED_SERVICE_WORKER])}`
+    );
   }
   const js = manifest?.content_scripts?.[0]?.js;
   if (JSON.stringify(js) !== JSON.stringify(REWIRED_CONTENT_SCRIPTS)) {

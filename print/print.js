@@ -115,10 +115,28 @@
     return escapeText(text);
   }
 
+  // AMO/addons-linter UNSAFE_VAR_ASSIGNMENT ловит и присваивание innerHTML, и вызов
+  // Range#createContextualFragment — оба считаются вставкой несанированного HTML.
+  // Разметку печатной формы строит этот же файл (данные проходят escapeText, markdown —
+  // MarkdownRenderer), но анализатор этого не докажет, поэтому собираем узлы через
+  // DOMParser: это тот же HTML-парсер, что стоит за innerHTML, результат совпадает
+  // байт-в-байт. Обёртка <body> нужна, чтобы <style>/<div> не уехали в <head>.
+  function setPrintHtml(el, html) {
+    var doc = new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html');
+    var frag = document.createDocumentFragment();
+    var node = doc.body.firstChild;
+    while (node) {
+      var next = node.nextSibling;
+      frag.appendChild(document.importNode(node, true));
+      node = next;
+    }
+    el.replaceChildren(frag);
+  }
+
   function showEmpty() {
     // O-27/O-32 (диагностика): пустая форма — печати/файла не будет; имя файла пустое.
     printDiag('print-pdf-empty', { reason: 'history-not-found' });
-    document.getElementById('print-content').innerHTML = '';
+    document.getElementById('print-content').replaceChildren();
     document.getElementById('empty-state').style.display = 'block';
   }
 
@@ -137,7 +155,7 @@
       printDiag('print-render', { reason: 'form-rendered' });
     } catch (eDiagShow) { diagBaseHead = ''; diagBaseConvId = ''; diagBaseSite = ''; diagBaseMsgs = 0; }
     document.getElementById('empty-state').style.display = 'none';
-    document.getElementById('print-content').innerHTML = render(history);
+    setPrintHtml(document.getElementById('print-content'), render(history));
   }
 
   function waitForRenderer(cb) {

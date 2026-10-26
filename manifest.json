@@ -8,6 +8,15 @@
 
   "homepage_url": "https://github.com/shtakan/ai-context-monitor",
 
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "ai-context-monitor@shtakan",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  },
+
   "permissions": [
     "scripting",
     "storage",
@@ -28,7 +37,10 @@
   ],
 
   "background": {
-    "service_worker": "core/background.js"
+    "service_worker": "core/background.js",
+    "scripts": [
+      "core/background.js"
+    ]
   },
 
   "content_scripts": [

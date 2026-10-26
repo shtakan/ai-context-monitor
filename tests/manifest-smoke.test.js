@@ -37,11 +37,19 @@ const CHROMIUM_MV3_KEYS = [
   'content_scripts', 'action', 'icons'
 ];
 
-// Ключи, специфичные для Firefox/Opera/старых сборок MV2 — в Chromium-MV3 пакете
-// их быть не должно (browser_specific_settings — Firefox, options_ui — устаревший
-// способ, browser_action/page_action — MV2, developer/update_url — не для стора).
+// Один и тот же manifest.json уходит и в Chrome/Edge, и в Firefox (AMO), поэтому
+// кроме Chromium-ключей разрешён ровно один Firefox-блок. Без него AMO отклоняет
+// сборку (ADDON_ID_REQUIRED, MISSING_DATA_COLLECTION_PERMISSIONS), а STORAGE_SYNC
+// предупреждает про storage.sync. Chromium незнакомые ключи просто игнорирует.
+const FIREFOX_KEYS = ['browser_specific_settings'];
+
+const ALLOWED_KEYS = CHROMIUM_MV3_KEYS.concat(FIREFOX_KEYS);
+
+// Ключи, специфичные для Opera/старых сборок MV2 — ни в Chromium-MV3, ни в Firefox
+// пакете их быть не должно (options_ui — устаревший способ, browser_action/page_action —
+// MV2, developer/update_url — не для стора).
 const NON_CHROMIUM_KEYS = [
-  'browser_specific_settings', 'applications', 'options_ui', 'browser_action',
+  'applications', 'options_ui', 'browser_action',
   'page_action', 'sidebar_action', 'chrome_settings_overrides', 'developer',
   'update_url', 'content_security_policy_string', 'applications'
 ];
@@ -52,19 +60,33 @@ describe('LOW-2: manifest.json — smoke-тест состава ключей (C
     expect(Array.isArray(manifest)).toBe(false);
   });
 
-  test('верхний уровень содержит ТОЛЬКО Chromium-MV3 ключи (нет лишних)', () => {
+  test('верхний уровень содержит ТОЛЬКО Chromium-MV3 ключи + Firefox-блок (нет лишних)', () => {
     const actual = Object.keys(manifest).sort();
-    const unknown = actual.filter(function (k) { return CHROMIUM_MV3_KEYS.indexOf(k) === -1; });
+    const unknown = actual.filter(function (k) { return ALLOWED_KEYS.indexOf(k) === -1; });
     expect(unknown).toEqual([]);
   });
 
   test('все ожидаемые ключи присутствуют (состав не «усох»)', () => {
-    CHROMIUM_MV3_KEYS.forEach(function (key) {
+    ALLOWED_KEYS.forEach(function (key) {
       expect([key, Object.prototype.hasOwnProperty.call(manifest, key)]).toEqual([key, true]);
     });
   });
 
-  test('Firefox/Opera/MV2-специфичных полей нет — ни как ключей, ни как подстрок', () => {
+  test('Firefox-блок: gecko.id и data_collection_permissions (иначе AMO отклоняет)', () => {
+    const gecko = manifest.browser_specific_settings.gecko;
+    expect(gecko.id).toBe('ai-context-monitor@shtakan');
+    expect(gecko.id).toMatch(/^[^@\s]+@[^@\s]+$/);        // формат add-on id, который ждёт AMO
+    expect(gecko.data_collection_permissions).toEqual({ required: ['none'] });
+  });
+
+  test('background: service_worker для Chromium И scripts как Firefox-фолбэк', () => {
+    // Firefox MV3 не умеет service worker: без /background/scripts AMO валится с
+    // BACKGROUND_SERVICE_WORKER_NOFALLBACK. Chromium отвергает scripts только когда
+    // service_worker ОТСУТСТВУЕТ, поэтому оба поля вместе — рабочий кроссбраузерный вид.
+    expect(manifest.background.scripts).toEqual(['core/background.js']);
+  });
+
+  test('Opera/MV2-специфичных полей нет — ни как ключей, ни как подстрок', () => {
     NON_CHROMIUM_KEYS.forEach(function (key) {
       expect([key, Object.keys(manifest).indexOf(key)]).toEqual([key, -1]);
       expect([key, RAW.indexOf(key)]).toEqual([key, -1]);   // вложенные вставки тоже ловим
