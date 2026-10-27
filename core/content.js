@@ -298,6 +298,12 @@ window.addEventListener('ai-cm-conversation-changed', function () {
   // O-35 (B2, фикс): счётчик DOM-адаптерной базы ПОКИНУТОГО чата не перетекает в новый —
   // метка «Источник» нового разговора до первого пересъёма снова пуста (как и было).
   aiCmAdapterBaseCount = 0;
+  // (в, v2.0.30): SPA-возврат на ранее открытый разговор AI Studio — снимок из
+  // sessionStorage снова главнее виртуализированного DOM (A→B→A без новой сети).
+  // Сброс выше уже удалил запись покинутого разговора, эта строка читает новую.
+  // Хелперов нет (срез-песочницы тестов) → поведение прежнее.
+  if (typeof aiCmIsAistudioHost === 'function' && typeof aiCmAistudioHistoryCacheRestore === 'function'
+    && aiCmIsAistudioHost()) aiCmAistudioHistoryCacheRestore();
   // O-35 (ДИАГНОСТИКА, только измерение): qwen-spa — ФАКТ сброса состояния виджета этим
   // сигналом (baseSeen/baseText/baseCount/maxTokenCount/netServerTokens обнулены,
   // badgeSuppressed=true, снимок попапа удалён). «Пересъём» после сброса виден строками
@@ -3378,6 +3384,197 @@ function aiCmIsAistudioHost() {
   }
 }
 
+/* ============================================================================================
+ * AI Studio: кэш разобранной истории в sessionStorage (v2.0.30)
+ *
+ * ПОЧЕМУ. Холодное открытие /prompts/<id> показывает «2 узла»: DOM AI Studio
+ * виртуализирован, а полная история приходит только с ResolveDriveResource /
+ * UpdatePrompt (сеть — сотни миллисекунд). Разобранный снимок уже лежал в
+ * sessionStorage этой вкладки при прошлой загрузке — отдаём его ДО первого DOM-замера
+ * (initialize() стартует через 1.5 с после content.js), а сеть затем перезапишет снимок
+ * свежим через тот же ingest.
+ *
+ * КЛЮЧ. Одна запись на разговор: ai_cm_aistudio_history_<convId> (id из /prompts/<id>),
+ * на прочих страницах AI Studio — ai_cm_aistudio_history_href. Значение — строка JSON
+ * { v, href, msgs, count, serverTokens, ts }.
+ * СБРОС. При смене чата (core/widget.js: resetConversationState) удаляется запись
+ * ПРЕДЫДУЩЕГО разговора; «холостой» reset на том же пути кэш не трогает — иначе
+ * только что восстановленный снимок стирался бы до первого замера.
+ * ============================================================================================ */
+
+var AI_CM_AISTUDIO_CACHE_PREFIX = 'ai_cm_aistudio_history_';
+var AI_CM_AISTUDIO_CACHE_VERSION = 1;
+// Ключ, который записали/восстановили последним: сброс при смене чата удаляет именно его.
+var aiCmAistudioCacheKeyLast = '';
+
+function aiCmAistudioSessionStorage() {
+  try {
+    return (typeof sessionStorage !== 'undefined') ? sessionStorage : null;
+  } catch (eSs) {
+    swallowSoft(eSs, 'content:aistudio-cache-storage');
+    return null;
+  }
+}
+
+/** pathname из абсолютного href (SPA-гард тот же, что у адаптера); иначе — как есть. */
+function aiCmAistudioPathOf(href) {
+  var s = String(href || '');
+  if (!s) return '';
+  try {
+    return (typeof URL === 'function') ? new URL(s).pathname : s;
+  } catch (eUp) {
+    return s;
+  }
+}
+
+/** Ключ кэша текущего (или переданного) разговора. */
+function aiCmAistudioCacheKey(href) {
+  var h = String(href || (window.location && window.location.href) || '');
+  var p = aiCmAistudioPathOf(h);
+  var m = /\/prompts\/([^\/?#]+)/.exec(p);
+  if (m && m[1]) return AI_CM_AISTUDIO_CACHE_PREFIX + m[1];
+  return h ? AI_CM_AISTUDIO_CACHE_PREFIX + 'href' : '';
+}
+
+/** Запись снимка в sessionStorage; ошибки хранилища (quota/private) — не фатальны. */
+function aiCmAistudioHistoryCacheSave() {
+  try {
+    if (!aiCmNetMsgsAistudio || !Array.isArray(aiCmNetMsgsAistudio.msgs)
+      || aiCmNetMsgsAistudio.msgs.length === 0) return false;
+    var ss = aiCmAistudioSessionStorage();
+    if (!ss) return false;
+    var key = aiCmAistudioCacheKey(aiCmNetMsgsAistudio.href);
+    if (!key) return false;
+    ss.setItem(key, JSON.stringify({
+      v: AI_CM_AISTUDIO_CACHE_VERSION,
+      href: aiCmNetMsgsAistudio.href,
+      msgs: aiCmNetMsgsAistudio.msgs,
+      count: aiCmNetMsgsAistudio.count,
+      serverTokens: (typeof aiCmNetCountAistudio === 'number') ? aiCmNetCountAistudio : 0,
+      ts: aiCmNetMsgsAistudio.ts
+    }));
+    aiCmAistudioCacheKeyLast = key;
+    return true;
+  } catch (eSave) {
+    swallowSoft(eSave, 'content:aistudio-cache-save');
+    return false;
+  }
+}
+
+/** Восстановление кэша текущего разговора в тот же ingest, что и живая сеть. */
+function aiCmAistudioHistoryCacheRestore() {
+  try {
+    if (!aiCmIsAistudioHost()) return false;
+    var ss = aiCmAistudioSessionStorage();
+    if (!ss) return false;
+    var key = aiCmAistudioCacheKey();
+    if (!key) return false;
+    // Ключ запоминаем ДО чтения: сброс при смене чата должен знать, что удалять.
+    aiCmAistudioCacheKeyLast = key;
+    var raw = ss.getItem(key);
+    if (!raw) return false;
+    var cached = null;
+    try { cached = JSON.parse(raw); } catch (ePc) { cached = null; }
+    if (!cached || cached.v !== AI_CM_AISTUDIO_CACHE_VERSION) return false;
+    if (!Array.isArray(cached.msgs) || cached.msgs.length === 0) return false;
+    // Кэш другого разговора (SPA-подмена пути) не берём — инвариант адаптера.
+    var here = aiCmAistudioPathOf(window.location && window.location.href);
+    var there = aiCmAistudioPathOf(cached.href);
+    if (here && there && here !== there) return false;
+    return aiCmIngestAistudioNet({
+      kind: 'history',
+      msgs: cached.msgs,
+      count: cached.count,
+      serverTokens: cached.serverTokens,
+      ts: cached.ts,
+      href: cached.href,
+      cached: true
+    });
+  } catch (eRestore) {
+    swallowSoft(eRestore, 'content:aistudio-cache-restore');
+    return false;
+  }
+}
+
+/** Сброс кэша предыдущего разговора при смене чата (вызов из resetConversationState). */
+function aiCmAistudioHistoryCacheClear() {
+  try {
+    if (!aiCmIsAistudioHost()) return false;
+    var prev = aiCmAistudioCacheKeyLast;
+    if (!prev) return false;
+    var now = aiCmAistudioCacheKey();
+    if (prev === now) return false; // тот же разговор: снимать нечего
+    var ss = aiCmAistudioSessionStorage();
+    if (ss) ss.removeItem(prev);
+    aiCmAistudioCacheKeyLast = '';
+    return true;
+  } catch (eClear) {
+    swallowSoft(eClear, 'content:aistudio-cache-clear');
+    return false;
+  }
+}
+
+/**
+ * Единая точка приёма сетевого detail: живое событие моста и восстановление из кэша.
+ * Возвращает true, если счётчик/история реально сменились (нужно для пересчёта бейджа).
+ * @param {object|null} detail
+ * @returns {boolean}
+ */
+function aiCmIngestAistudioNet(detail) {
+  if (!detail) return false;
+  var changed = false;
+  if (detail.kind === 'count') {
+    var serverTokens = (typeof detail.serverTokens === 'number')
+      ? detail.serverTokens
+      : parseInt(detail.serverTokens, 10);
+    if (isFinite(serverTokens) && serverTokens > 0 && serverTokens !== aiCmNetCountAistudio) {
+      aiCmNetCountAistudio = serverTokens;
+      // Та же переменная состояния, что у сетевого снимка (state.js): серверный
+      // счётчик главнее эвристики, пока новая сеть его не перезапишет.
+      netServerTokens = serverTokens;
+      changed = true;
+    }
+  } else if (detail.kind === 'history' && Array.isArray(detail.msgs) && detail.msgs.length > 0) {
+    var msgs = [];
+    for (var i = 0; i < detail.msgs.length; i++) {
+      var m = detail.msgs[i];
+      if (!m || typeof m.text !== 'string' || m.text.length === 0) continue;
+      msgs.push({ role: (m.role === 'assistant' || m.role === 'model') ? 'assistant' : 'user', text: m.text });
+    }
+    if (msgs.length > 0) {
+      var prev = aiCmNetMsgsAistudio;
+      aiCmNetMsgsAistudio = {
+        msgs: msgs,
+        count: msgs.length,
+        ts: (typeof detail.ts === 'number') ? detail.ts : Date.now(),
+        href: String(detail.href || window.location.href || '')
+      };
+      // Общая точка для адаптера: ISOLATED-мир один, отдельного канала не нужно.
+      window.__aiCmNetMsgs = aiCmNetMsgsAistudio;
+      changed = !prev || prev.count !== msgs.length || prev.ts !== aiCmNetMsgsAistudio.ts;
+      // Кэш хранит и точный promptTokenCount: после F5 бейдж считает pct от него,
+      // не дожидаясь нового GenerateContent.
+      var cachedTokens = (typeof detail.serverTokens === 'number')
+        ? detail.serverTokens
+        : parseInt(detail.serverTokens, 10);
+      if (isFinite(cachedTokens) && cachedTokens > 0 && cachedTokens !== aiCmNetCountAistudio) {
+        aiCmNetCountAistudio = cachedTokens;
+        netServerTokens = cachedTokens;
+      }
+    }
+  }
+  if (!changed) return false;
+  debugLog('log', '[AI CM][aistudio-net] kind=' + detail.kind +
+    ' msgs=' + (aiCmNetMsgsAistudio ? aiCmNetMsgsAistudio.count : 0) +
+    ' serverTokens=' + aiCmNetCountAistudio +
+    (detail.cached ? ' source=session-cache' : ''));
+  // Пересчёт бейджа/pct тем же путём, что и приход сетевого снимка у других сервисов.
+  if (typeof isInitialized !== 'undefined' && isInitialized && typeof processAndSend === 'function') {
+    processAndSend();
+  }
+  return true;
+}
+
 window.addEventListener('ai-cm-aistudio-net', function (/** @type {CustomEvent} */ ev) {
   try {
     // Событие шлёт только MAIN-перехватчик aistudio, но проверяем хост: content.js
@@ -3385,47 +3582,14 @@ window.addEventListener('ai-cm-aistudio-net', function (/** @type {CustomEvent} 
     if (!aiCmIsAistudioHost()) return;
     var detail = aiCmBridgeDetail(ev);
     if (!detail) return;
-    var changed = false;
-    if (detail.kind === 'count') {
-      var serverTokens = (typeof detail.serverTokens === 'number')
-        ? detail.serverTokens
-        : parseInt(detail.serverTokens, 10);
-      if (isFinite(serverTokens) && serverTokens > 0 && serverTokens !== aiCmNetCountAistudio) {
-        aiCmNetCountAistudio = serverTokens;
-        // Та же переменная состояния, что у сетевого снимка (state.js): серверный
-        // счётчик главнее эвристики, пока новая сеть его не перезапишет.
-        netServerTokens = serverTokens;
-        changed = true;
-      }
-    } else if (detail.kind === 'history' && Array.isArray(detail.msgs) && detail.msgs.length > 0) {
-      var msgs = [];
-      for (var i = 0; i < detail.msgs.length; i++) {
-        var m = detail.msgs[i];
-        if (!m || typeof m.text !== 'string' || m.text.length === 0) continue;
-        msgs.push({ role: (m.role === 'assistant' || m.role === 'model') ? 'assistant' : 'user', text: m.text });
-      }
-      if (msgs.length > 0) {
-        var prev = aiCmNetMsgsAistudio;
-        aiCmNetMsgsAistudio = {
-          msgs: msgs,
-          count: msgs.length,
-          ts: (typeof detail.ts === 'number') ? detail.ts : Date.now(),
-          href: String(window.location.href || '')
-        };
-        // Общая точка для адаптера: ISOLATED-мир один, отдельного канала не нужно.
-        window.__aiCmNetMsgs = aiCmNetMsgsAistudio;
-        changed = !prev || prev.count !== msgs.length || prev.ts !== aiCmNetMsgsAistudio.ts;
-      }
-    }
-    if (!changed) return;
-    debugLog('log', '[AI CM][aistudio-net] kind=' + detail.kind +
-      ' msgs=' + (aiCmNetMsgsAistudio ? aiCmNetMsgsAistudio.count : 0) +
-      ' serverTokens=' + aiCmNetCountAistudio);
-    // Пересчёт бейджа/pct тем же путём, что и приход сетевого снимка у других сервисов.
-    if (typeof isInitialized !== 'undefined' && isInitialized && typeof processAndSend === 'function') {
-      processAndSend();
-    }
+    var changed = aiCmIngestAistudioNet(detail);
+    // Свежая сеть перезаписывает кэш (он и есть «мгновенная история» после F5).
+    if (changed && detail.kind === 'history') aiCmAistudioHistoryCacheSave();
   } catch (eNet) {
     swallowSoft(eNet, 'content:aistudio-net');
   }
 });
+
+// Восстановление ДО initialize() (setTimeout 1500 выше): первый DOM-замер обязан
+// увидеть полную историю из прошлой загрузки, а не 1-2 виртуализированных узла.
+aiCmAistudioHistoryCacheRestore();

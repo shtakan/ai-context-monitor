@@ -13,9 +13,12 @@
  * ответ и тело запроса это JSON-массив протобуфера. Точные пути взяты из живого
  * захвата (октябрь 2026, чат /prompts/1sLNDy3E1UDKpOyYVg1kcWCk6PvB70rOS, 3 хода):
  *
- *   • UpdatePrompt/CreatePrompt, ОТВЕТ — `data[13][0]`: массив сообщений, где текст
- *     хода лежит в `msg[0]`, роль — в `msg[8]` ('user' / 'model'), а `msg[19] === 1`
- *     помечает «мысль» модели (reasoning). Мысль — не реплика диалога: в захвате
+ *   • UpdatePrompt/CreatePrompt/ResolveDriveResource, ОТВЕТ — `data[13][0]`: массив
+ *     сообщений, где текст хода лежит в `msg[0]`, роль — в `msg[8]` ('user' / 'model'),
+ *     а `msg[19] === 1` помечает «мысль» модели (reasoning). ResolveDriveResource —
+ *     тот же Prompt-ресурс, который AI Studio читает при холодном открытии
+ *     /prompts/<id>; без него после F5 в бейдже было «2 узла» из виртуализированного
+ *     DOM, а полная история появлялась только после первого UpdatePrompt. Мысль — не реплика диалога: в захвате
  *     каждая пара «мысль/ответ» лежит ДВУМЯ соседними сообщениями с ролью 'model'
  *     (9 сообщений на 3 хода), поэтому reasoning отфильтровывается — иначе история
  *     удваивалась бы и в счётчик попадал текст размышлений.
@@ -43,6 +46,13 @@
  * (только строка) и `clone().text()` ответа; у XHR — аргумент `send(body)` и
  * `responseText`/`response` по событию `load`. Тело разбирается терпимо: JSON-массив
  * протобуфера, XSSI-префикс `)]}'`, ответ без массива/SSE — молча пропускаем.
+ *
+ * БИНАРНЫЕ ТЕЛА (v2.0.30). Живой AI Studio отдаёт GenerateContent XHR'ом с
+ * `responseType='arraybuffer'` — строки `responseText` там нет, а прежний код на
+ * arraybuffer/blob просто выходил из обработчика, и usage-токены не доезжали до
+ * бейджа. Теперь байты декодируются TextDecoder (UTF-8) в тот же JSON-протобуфер.
+ * SSE-гард остался только у не-generate URL: стрим GenerateContent — источник usage
+ * (кадры `data:...`), его тело обязано читаться.
  *
  * МОСТ. Наружу (в ISOLATED, core/content.js) уходят два события, detail — СТРОКОЙ
  * JSON (Xray/Firefox, v2.0.29; приём — aiCmBridgeDetail в core/content.js):
@@ -114,14 +124,16 @@
 
   /**
    * История диалога под тем же `$rpc`: UpdatePrompt / CreatePrompt — ответ это
-   * полный снимок `data[13][0]` после смены ходов.
+   * полный снимок `data[13][0]` после смены ходов; ResolveDriveResource — тот же
+   * Prompt-ресурс, который AI Studio читает при холодном открытии /prompts/<id>
+   * (до него в DOM лежат 1-2 виртуализированных узла, и бейдж показывал «2 узла»).
    *   ListPrompts сюда НЕ входит: это библиотека промптов, `data[13]` в её ответе нет
    *   (в живом захвате ответ ListPrompts — список карточек, не диалог).
    *   CountTokens сюда тоже не входит — счётчик берётся из GenerateContent.
    */
   function isHistoryRpc(url) {
     if (!url || url.indexOf(RPC_MARK) === -1) return false;
-    return /updateprompt|createprompt/i.test(url);
+    return /updateprompt|createprompt|resolvedriveresource/i.test(url);
   }
 
   /* ================================================================== *
@@ -257,11 +269,31 @@
    * Обход ограничен (guard/глубина 2): форма с единственным чанком и вариант
    * `[chunk, chunk]` без внешнего массива тоже разбираются, а чужие тела — нет.
    */
-  function parseUsageTokens(text) {
+  /**
+   * Разобранные корни тела ответа: один JSON-массив протобуфера либо кадры
+   * `data:` генеративного стрима (AI Studio отдаёт GenerateContent и так).
+   * Пустой массив — тело не нашего формата.
+   */
+  function jsonRoots(text) {
     var root = parseJsonText(text);
-    if (root === null) return 0;
+    if (root !== null) return [root];
+    if (typeof text !== 'string' || text.length === 0) return [];
+    var out = [];
+    var lines = text.split(/\r?\n/);
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (line.indexOf('data:') !== 0) continue;
+      var payload = parseJsonText(line.slice(5).trim());
+      if (payload !== null) out.push(payload);
+    }
+    return out;
+  }
+
+  function parseUsageTokens(text) {
+    var roots = jsonRoots(text);
+    if (roots.length === 0) return 0;
     var best = 0;
-    var queue = [root];
+    var queue = roots.slice();
     var guard = 0;
     while (queue.length > 0 && guard < 200) {
       var node = queue.shift();
@@ -275,6 +307,60 @@
       }
     }
     return best;
+  }
+
+  /* ================================================================== *
+   * 2b. Бинарные тела ответа (responseType = 'arraybuffer' | 'blob')
+   *
+   * ПОЧЕМУ. GenerateContent в живом AI Studio приходит XHR'ом с
+   * `responseType='arraybuffer'` (в Playwright/Chrome тело лежит байтами, а не
+   * строкой). Прежний код выходил из обработчика load на arraybuffer/blob/document —
+   * usage-токены не доезжали до бейджа вообще. Декодирование в UTF-8 возвращает тот
+   * же JSON-массив протобуфера, который дальше разбирают те же parse* функции.
+   * ================================================================== */
+
+  /** ArrayBuffer / view (Uint8Array, Buffer) → строка UTF-8; иначе '' (молча). */
+  function decodeBinaryBody(raw) {
+    if (!raw) return '';
+    try {
+      if (typeof raw === 'string') return raw;
+      var bytes = null;
+      if (typeof ArrayBuffer !== 'undefined' && raw instanceof ArrayBuffer) {
+        bytes = new Uint8Array(raw);
+      } else if (raw && typeof raw.byteLength === 'number' && typeof ArrayBuffer !== 'undefined'
+        && raw.buffer instanceof ArrayBuffer) {
+        // View с ненулевым смещением (Buffer из пула) — берём ровно свой диапазон.
+        bytes = new Uint8Array(raw.buffer, raw.byteOffset || 0, raw.byteLength);
+      }
+      if (!bytes || bytes.length === 0) return '';
+      if (typeof TextDecoder === 'function') return new TextDecoder('utf-8').decode(bytes);
+      return '';
+    } catch (eDec) {
+      soft(eDec, 'aistudio-intercept:decode-body');
+      return '';
+    }
+  }
+
+  /** Blob → строка: blob.text() (браузер/Node) либо FileReader; иначе молчим. */
+  function decodeBlobBody(blob, cb) {
+    if (!blob || typeof cb !== 'function') return;
+    try {
+      if (typeof blob.text === 'function') {
+        blob.text().then(cb, function () { /* тело недоступно — не ошибка перехватчика */ });
+        return;
+      }
+    } catch (eBt) {
+      soft(eBt, 'aistudio-intercept:blob-text');
+      return;
+    }
+    if (typeof FileReader !== 'function') return;
+    try {
+      var fr = new FileReader();
+      fr.onload = function () { cb(typeof fr.result === 'string' ? fr.result : ''); };
+      fr.readAsText(blob);
+    } catch (eFr) {
+      soft(eFr, 'aistudio-intercept:blob-reader');
+    }
   }
 
   /* ================================================================== *
@@ -381,11 +467,15 @@
       }
 
       // Тело ответа читаем с КЛОНА: оригинальный Response уходит странице нетронутым.
+      // SSE-гард — только для не-generate URL: у UpdatePrompt тело это повтор истории,
+      // который читать незачем, а стрим GenerateContent несёт usage (кадры `data:`)
+      // и обязан доехать до бейджа.
       return p.then(function (resp) {
         try {
           var ct = '';
           try { ct = String((resp.headers && resp.headers.get('content-type')) || ''); } catch (eH) { ct = ''; }
-          if (ct.indexOf('event-stream') === -1 && typeof resp.clone === 'function') {
+          var sse = ct.indexOf('event-stream') !== -1;
+          if ((!sse || isGenerateRpc(url)) && typeof resp.clone === 'function') {
             resp.clone().text().then(function (txt) {
               handleResponse(url, txt);
             }, function () {
@@ -439,13 +529,24 @@
             if (!url || (!isGenerateRpc(url) && !isHistoryRpc(url))) return;
             var ct = '';
             try { ct = String(self.getResponseHeader('content-type') || ''); } catch (eH) { ct = ''; }
-            if (ct.indexOf('event-stream') !== -1) return;
-            var rt = self.responseType;
-            var text;
-            if (rt === 'json') text = JSON.stringify(self.response);
-            else if (rt === 'arraybuffer' || rt === 'blob' || rt === 'document') return;
-            else text = self.responseText;
-            handleResponse(url, text);
+            // Не-generate SSE — повтор истории/служебный стрим: тело не читаем.
+            if (ct.indexOf('event-stream') !== -1 && !isGenerateRpc(url)) return;
+            var rt = self.responseType || '';
+            // GenerateContent в живом AI Studio: байты, а не строка (см. 2b).
+            if (rt === 'arraybuffer') {
+              var fromBuffer = decodeBinaryBody(self.response);
+              if (fromBuffer) handleResponse(url, fromBuffer);
+              return;
+            }
+            if (rt === 'blob') {
+              decodeBlobBody(self.response, function (fromBlob) {
+                if (fromBlob) handleResponse(url, fromBlob);
+              });
+              return;
+            }
+            if (rt === 'document') return;
+            if (rt === 'json') handleResponse(url, JSON.stringify(self.response));
+            else handleResponse(url, self.responseText);
           } catch (eL) {
             soft(eL, 'aistudio-intercept:xhr-load');
           }
@@ -463,9 +564,11 @@
   installXhrHook();
 
   window.AiCmAistudioIntercept = {
-    version: 2,
+    version: 3,
     __handlers: {
       parseJsonText: parseJsonText,
+      jsonRoots: jsonRoots,
+      decodeBinaryBody: decodeBinaryBody,
       msgsFromSnapshot: msgsFromSnapshot,
       msgsFromRequest: msgsFromRequest,
       findMessageArray: findMessageArray,

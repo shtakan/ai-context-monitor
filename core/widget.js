@@ -235,6 +235,10 @@ function resetConversationState() {
   try { aiCmLowConfidenceByConv = {}; } catch (eResetLc63) { }
   // v54: сброс детектора обрезки и pre-trim латчей при смене чата (не перетекают в другой чат)
   try { trimProbe = {}; preTrimExportFired = {}; trimRetryByConv = {}; } catch (eTrimReset) { }
+  // v2.0.30 (AI Studio): кэш разобранной истории в sessionStorage — запись ПРЕДЫДУЩЕГО
+  // разговора не должна переживать смену чата (content.js: aiCmAistudioHistoryCacheClear).
+  // Хелпера нет (срез-песочницы тестов) → поведение прежнее.
+  if (typeof aiCmAistudioHistoryCacheClear === 'function') { aiCmAistudioHistoryCacheClear(); }
   lastBounded = false;
   maxTokenCount = 0;
   baseIdSet = null;

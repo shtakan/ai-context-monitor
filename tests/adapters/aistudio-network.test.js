@@ -87,7 +87,9 @@ function makeSandbox(options) {
       log: function () { logs.push(Array.prototype.join.call(arguments, ' ')); },
       warn: function () { warns.push(Array.prototype.join.call(arguments, ' ')); }
     },
-    swallowSoft: function (e, tag) { errors.push(String(tag || '')); }
+    swallowSoft: function (e, tag) { errors.push(String(tag || '')); },
+    // В jsdom-окружении Jest нет TextDecoder — даём Node-реализацию, как в браузере.
+    TextDecoder: require('util').TextDecoder
   };
 
   const argNames = Object.keys(ctx);
@@ -315,10 +317,12 @@ describe('core/aistudio-intercept.js: классификация $rpc-запро
     expect(h.isGenerateRpc('')).toBe(false);
   });
 
-  test('история: UpdatePrompt / CreatePrompt под $rpc', () => {
+  test('история: UpdatePrompt / CreatePrompt / ResolveDriveResource под $rpc', () => {
     const h = api.__handlers;
     expect(h.isHistoryRpc(UPDATE_URL)).toBe(true);
     expect(h.isHistoryRpc(CREATE_URL)).toBe(true);
+    // Холодное открытие /prompts/<id>: полная история до первого UpdatePrompt
+    expect(h.isHistoryRpc(MAKER_SUITE + 'ResolveDriveResource')).toBe(true);
     expect(h.isHistoryRpc('https://aistudio.google.com/api/UpdatePrompt')).toBe(false);
     // CountTokens не история: счётчик берётся из GenerateContent
     expect(h.isHistoryRpc(MAKER_SUITE + 'CountTokens')).toBe(false);
@@ -331,7 +335,6 @@ describe('core/aistudio-intercept.js: классификация $rpc-запро
     const h = api.__handlers;
     expect(h.isHistoryRpc(MAKER_SUITE + 'ListPrompts')).toBe(false);
     expect(h.isHistoryRpc(MAKER_SUITE + 'ListModels')).toBe(false);
-    expect(h.isHistoryRpc(MAKER_SUITE + 'ResolveDriveResource')).toBe(false);
   });
 });
 
@@ -453,6 +456,15 @@ describe('core/aistudio-intercept.js: токены из ответа GenerateCon
     expect(h.parseUsageTokens(COUNT_TOKENS_BODY)).toBe(0);
     // нестриминговый ответ-промпт (14 полей) токенов не несёт
     expect(h.parseUsageTokens(snapshotBody(HISTORY_MSGS))).toBe(0);
+  });
+
+  test('кадры SSE `data:` дают тот же promptTokenCount', () => {
+    const sse = 'data: ' + JSON.stringify([streamChunk('', chunkUsage(219, 9, 338))]) + '\n\n' +
+      'data: ' + JSON.stringify([streamChunk('', chunkUsage(486, 38, 634))]) + '\n\n';
+    expect(h.parseUsageTokens(sse)).toBe(486);
+    expect(h.parseUsageTokens('data: not-json\n\n')).toBe(0);
+    // одиночный кадр без внешнего массива
+    expect(h.parseUsageTokens('data: ' + JSON.stringify(streamChunk('', chunkUsage(77, 3, 80))))).toBe(77);
   });
 });
 
@@ -589,14 +601,42 @@ describe('core/aistudio-intercept.js: патч fetch', () => {
     expect(sb.events).toHaveLength(0);
   });
 
-  test('SSE-стрим не буферизуется', async () => {
-    const resp = makeResponse('data: {"x":1}\n\n', 'text/event-stream');
+  test('SSE GenerateContent: кадры data: читаются ради usage', async () => {
+    // Живой AI Studio стримит GenerateContent как text/event-stream; usage лежит в
+    // кадрах `data: [...]`. Раньше весь ответ отбрасывался по content-type.
+    const sse = 'data: ' + JSON.stringify([streamChunk('', chunkUsage(219, 9, 338))]) + '\n\n' +
+      'data: ' + JSON.stringify([streamChunk('', chunkUsage(486, 38, 634))]) + '\n\n';
+    const resp = makeResponse(sse, 'text/event-stream');
     const sb = makeSandbox({ fetch: makeFetch(function () { return resp; }) });
 
     await sb.win.fetch(GENERATE_URL, {});
     await flush();
+    expect(resp.state.textReads).toBe(1);
+    expect(sb.events).toHaveLength(1);
+    expect(JSON.parse(sb.events[0].detail).serverTokens).toBe(486);
+  });
+
+  test('SSE не-generate URL по-прежнему не буферизуется', async () => {
+    const resp = makeResponse('data: {"x":1}\n\n', 'text/event-stream');
+    const sb = makeSandbox({ fetch: makeFetch(function () { return resp; }) });
+
+    await sb.win.fetch(UPDATE_URL, {});
+    await flush();
     expect(resp.state.textReads).toBe(0);
     expect(sb.events).toHaveLength(0);
+  });
+});
+
+describe('core/aistudio-intercept.js: бинарные тела ответа (arraybuffer/blob)', () => {
+  const h = makeSandbox().api.__handlers;
+
+  test('decodeBinaryBody: ArrayBuffer и view → строка UTF-8, мусор → пусто', () => {
+    const bytes = Uint8Array.from(Buffer.from('{"a":"тест"}', 'utf8'));
+    expect(h.decodeBinaryBody(bytes.buffer)).toBe('{"a":"тест"}');
+    expect(h.decodeBinaryBody(bytes)).toBe('{"a":"тест"}');
+    expect(h.decodeBinaryBody('строка')).toBe('строка');
+    expect(h.decodeBinaryBody(null)).toBe('');
+    expect(h.decodeBinaryBody({})).toBe('');
   });
 });
 
@@ -683,6 +723,58 @@ describe('core/aistudio-intercept.js: патч XMLHttpRequest', () => {
 
     expect(sb.events).toHaveLength(1);
     expect(JSON.parse(sb.events[0].detail).kind).toBe('history');
+  });
+
+  test('responseType=arraybuffer: байты декодируются, usage не теряется', () => {
+    // Живой AI Studio отдаёт GenerateContent как ArrayBuffer; старый код выходил
+    // на `arraybuffer|blob|document`, и точный promptTokenCount не доезжал.
+    const Xhr = makeXhrClass();
+    const sb = makeSandbox({ XMLHttpRequest: Xhr });
+
+    const xhr = new sb.win.XMLHttpRequest();
+    xhr.open('POST', GENERATE_URL);
+    xhr.send(REQUEST_BODY);
+    const bytes = Uint8Array.from(Buffer.from(TOKENS_BODY, 'utf8'));
+    xhr.responseType = 'arraybuffer';
+    xhr.response = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    xhr._headers['content-type'] = 'application/json+protobuf';
+    xhr.fire('load');
+
+    expect(sb.events).toHaveLength(2);
+    expect(JSON.parse(sb.events[1].detail).kind).toBe('count');
+    expect(JSON.parse(sb.events[1].detail).serverTokens).toBe(486);
+  });
+
+  test('ResolveDriveResource: полная история до первого UpdatePrompt', () => {
+    // Холодное открытие /prompts/<id> — единственный носитель всей истории.
+    const Xhr = makeXhrClass();
+    const sb = makeSandbox({ XMLHttpRequest: Xhr });
+
+    const xhr = new sb.win.XMLHttpRequest();
+    xhr.open('POST', MAKER_SUITE + 'ResolveDriveResource');
+    xhr.send();
+    xhr.responseText = HISTORY_BODY;
+    xhr._headers['content-type'] = 'application/json+protobuf';
+    xhr.fire('load');
+
+    expect(sb.events).toHaveLength(1);
+    expect(JSON.parse(sb.events[0].detail).kind).toBe('history');
+    expect(JSON.parse(sb.events[0].detail).count).toBe(6);
+  });
+
+  test('ResolveDriveResource без data[13][0] не шлёт пустую историю', () => {
+    const Xhr = makeXhrClass();
+    const sb = makeSandbox({ XMLHttpRequest: Xhr });
+
+    const xhr = new sb.win.XMLHttpRequest();
+    xhr.open('POST', MAKER_SUITE + 'ResolveDriveResource');
+    xhr.send();
+    xhr.responseText = JSON.stringify([null, null, null, null, null, null, null, null,
+      null, null, null, null, null, []]);
+    xhr._headers['content-type'] = 'application/json+protobuf';
+    xhr.fire('load');
+
+    expect(sb.events).toHaveLength(0);
   });
 });
 
