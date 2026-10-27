@@ -9,20 +9,40 @@
  * ЗАЧЕМ. Бейдж AI Studio считался по DOM (adapters/aistudio-adapter.js,
  * ms-cmark-node.v3-font-body): длинные ответы виртуализированы, часть реплик в DOM
  * отсутствует, а счётчик токенов был всегда эвристическим. AI Studio грузит историю
- * диалога запросами `$rpc` (UpdatePrompt / CreatePrompt / ListPrompts /
- * GenerateContent) — ответ это JSON-массив протобуфера. Снимок истории из Prompt
- * лежит в `data[13]` кортежами `[[null, "текст"], "role"]`, а живой ответ
- * GenerateContent приходит ВЛОЖЕННЫМ — `[[[[[null, "текст"]], "model"]]]` (текст на
- * 4 уровня глубже кортежа). Поэтому текст и роль ищутся на любой глубине
- * (findTextPart/findRole), а не по фиксированным индексам. Числовые 16-значные ID
- * (идентификаторы промптов/разговоров) за текст хода не принимаются. Отдельные
- * `$rpc`-запросы CountTokens отдают точное число токенов контекста — отдаём его как
- * serverTokens, как это делают перехватчики Gemini/Qwen/Claude.
+ * диалога и токены запросами `$rpc` (UpdatePrompt / CreatePrompt / GenerateContent) —
+ * ответ и тело запроса это JSON-массив протобуфера. Точные пути взяты из живого
+ * захвата (октябрь 2026, чат /prompts/1sLNDy3E1UDKpOyYVg1kcWCk6PvB70rOS, 3 хода):
+ *
+ *   • UpdatePrompt/CreatePrompt, ОТВЕТ — `data[13][0]`: массив сообщений, где текст
+ *     хода лежит в `msg[0]`, роль — в `msg[8]` ('user' / 'model'), а `msg[19] === 1`
+ *     помечает «мысль» модели (reasoning). Мысль — не реплика диалога: в захвате
+ *     каждая пара «мысль/ответ» лежит ДВУМЯ соседними сообщениями с ролью 'model'
+ *     (9 сообщений на 3 хода), поэтому reasoning отфильтровывается — иначе история
+ *     удваивалась бы и в счётчик попадал текст размышлений.
+ *   • GenerateContent, ТЕЛО ЗАПРОСА — `data[1]`: массив ходов вида `[[part, ...],
+ *     role]`, текст каждой части — `turn[0][j][1]`, роль — `turn[1]`. У ответа
+ *     модели первая часть — reasoning (последний элемент части равен 1), остальные
+ *     части — куски одного текста, поэтому склеиваются БЕЗ разделителя: фрагменты
+ *     «Тест 1 пройден успешно! Связь работает отлично» + «. \n\nЧем могу помочь?»
+ *     дают ровно ту же строку, что и сохранённое сообщение в ответе UpdatePrompt.
+ *     Это самый свежий снимок: в теле уже есть только что отправленная реплика.
+ *   • GenerateContent, ОТВЕТ — токены контекста. Тело — `[ [chunk, ...] ]`, каждый
+ *     chunk это `[content, null, usage, null, id]`, а usage = `[promptTokens,
+ *     candidateTokens, totalTokens, ...]`. Число токенов контекста — `chunk[2][0]`;
+ *     значение накапливается по потоку (219 → 486), поэтому берётся максимум —
+ *     это финальный promptTokenCount (486 в захвате; 634 total = 486 + 38 ответа +
+ *     110 «мыслей», в контекст бейджа total не идёт).
+ *
+ * ПОЧЕМУ НЕ CountTokens. `$rpc/.../CountTokens` вызывается на каждый ввод и
+ * возвращает только ВХОД (в захвате 9 или 5632 токена), без ответов модели: для
+ * размера контекста диалога это неверное число. Ветка удалена — серверный счётчик
+ * берётся из GenerateContent (как у Gemini/Qwen/Claude берётся из ответа модели).
  *
  * КАК. Патчим fetch и XMLHttpRequest (как core/gemini-sse.js: снимок оргиналов на
- * старте ДО кода страницы, цепочка вызовов не рвётся) и смотрим ТОЛЬКО тела
- * `$rpc`-ответов. Тело разбирается терпимо: JSON-массив протобуфера, XSSI-префикс
- * `)]}'`, ответ без массива — молча пропускаем.
+ * старте ДО кода страницы, цепочка вызовов не рвётся). У fetch читаем `init.body`
+ * (только строка) и `clone().text()` ответа; у XHR — аргумент `send(body)` и
+ * `responseText`/`response` по событию `load`. Тело разбирается терпимо: JSON-массив
+ * протобуфера, XSSI-префикс `)]}'`, ответ без массива/SSE — молча пропускаем.
  *
  * МОСТ. Наружу (в ISOLATED, core/content.js) уходят два события, detail — СТРОКОЙ
  * JSON (Xray/Firefox, v2.0.29; приём — aiCmBridgeDetail в core/content.js):
@@ -32,7 +52,7 @@
  * включает подробные строки в консоли (разбирается тем же aiCmBridgeDetail).
  *
  * CONTRACT: никаких сетевых запросов отсюда не инициируется, данные не сохраняются —
- * только чтение уже полученных ответов и передача их в ISOLATED.
+ * только чтение уже полученных/отправленных тел и передача их в ISOLATED.
  */
 (function () {
   'use strict';
@@ -43,14 +63,14 @@
 
   var LOG_TAG = '[aistudio-intercept]';
   var RPC_MARK = '$rpc';
-  // Роли протобуфера AI Studio: 'user' у хода пользователя, 'model' у ответа
-  // (встречается и 'assistant' — нормализуем обе формы к контракту адаптеров).
+  // Роли протобуфера AI Studio: 'user' у хода пользователя, 'model' у ответа.
+  // В контракт адаптеров модель уходит как 'assistant'.
   var ROLE_USER = 'user';
   var ROLE_AI = 'assistant';
 
-  var verbose = false;    // 'ai-cm-aistudio-net-settings' { verbose: true }
-  var lastCount = 0;      // последнее CountTokens (дедуп лога)
-  var lastHistorySig = ''; // подпись последнего снимка истории (дедуп лога)
+  var verbose = false;     // 'ai-cm-aistudio-net-settings' { verbose: true }
+  var lastTokens = 0;      // последний promptTokenCount (дедуп лога/события)
+  var lastHistorySig = ''; // подпись последнего снимка истории (дедуп)
 
   /* ================================================================== *
    * 0. Мост detail (Xray/Firefox): тело одинаковое во всех мирах
@@ -84,22 +104,24 @@
    * 1. Классификация URL
    * ================================================================== */
 
-  /** CountTokens: `$rpc/.../CountTokens` — точное число токенов контекста. */
-  function isCountRpc(url) {
-    return !!url && url.indexOf(RPC_MARK) !== -1 && /counttokens/i.test(url);
+  /**
+   * GenerateContent под `$rpc`: тело запроса несёт историю (`data[1]`), ответ —
+   * usage токенов (`[0][last][2][0]`). Оба потока разбираются в hooks.
+   */
+  function isGenerateRpc(url) {
+    return !!url && url.indexOf(RPC_MARK) !== -1 && /generatecontent/i.test(url);
   }
 
   /**
-   * История диалога под тем же `$rpc`:
-   *   UpdatePrompt / CreatePrompt — полный снимок `data[13]` после смены ходов;
-   *   ListPrompts  — история библиотеки промптов (снимок без новых чанков);
-   *   GenerateContent — ответ модели (вложенная форма, см. findTextPart).
-   * `create` покрывает `CreatePrompt` (и `Create*`), отдельно перечислять его не надо.
-   * CountTokens сюда не попадает — у него своя ветка в handleResponse.
+   * История диалога под тем же `$rpc`: UpdatePrompt / CreatePrompt — ответ это
+   * полный снимок `data[13][0]` после смены ходов.
+   *   ListPrompts сюда НЕ входит: это библиотека промптов, `data[13]` в её ответе нет
+   *   (в живом захвате ответ ListPrompts — список карточек, не диалог).
+   *   CountTokens сюда тоже не входит — счётчик берётся из GenerateContent.
    */
   function isHistoryRpc(url) {
     if (!url || url.indexOf(RPC_MARK) === -1) return false;
-    return /updateprompt|create|listprompts|generatecontent/i.test(url);
+    return /updateprompt|createprompt/i.test(url);
   }
 
   /* ================================================================== *
@@ -114,205 +136,145 @@
     var s = text.replace(/^\uFEFF/, '').replace(/^\)\]\}'[^\n]*\n?/, '').trim();
     if (!s) return null;
     var c = s.charAt(0);
-    if (c !== '[' && c !== '{') return null; // SSE-поток GenerateContent и text/plain
+    if (c !== '[' && c !== '{') return null; // SSE-поток и text/plain
     try { return JSON.parse(s); } catch (ePj) { return null; }
   }
 
-  /** Роли ответа модели в протобуфере AI Studio (всё остальное — ход человека). */
-  var ROLES_AI = { model: 1, assistant: 1, ai: 1, system: 1, gemini: 1 };
+  /** Строка — известная роль протобуфера AI Studio (`msg[8]`, `turn[1]`). */
+  function isRoleName(role) {
+    return role === 'user' || role === 'model' || role === 'assistant' || role === 'human';
+  }
 
-  /** Роль хода из кортежа протобуфера → контракт адаптеров. */
+  /** Роль хода протобуфера → контракт адаптеров ('user' | 'assistant'). */
   function normRole(role) {
-    if (typeof role === 'string') {
-      var r = role.toLowerCase();
-      if (r === ROLE_USER || r === 'human') return ROLE_USER;
-      if (ROLES_AI[r]) return ROLE_AI;
-    }
-    // Подавляющее большинство кортежей AI Studio — [[null, "текст"], "user"];
-    // отсутствие роли трактуем как реплику пользователя (первая строка диалога).
-    return ROLE_USER;
-  }
-
-  /** Максимальная глубина спуска при поиске текста/роли в протобуфере. */
-  var MAX_TURN_DEPTH = 12;
-
-  /** Строка — известная роль протобуфера ('user', 'model', 'assistant', ...). */
-  function isRoleString(s) {
-    if (typeof s !== 'string') return false;
-    var r = s.toLowerCase();
-    return r === ROLE_USER || r === 'human' || !!ROLES_AI[r];
+    if (role === 'user' || role === 'human') return ROLE_USER;
+    return ROLE_AI;
   }
 
   /**
-   * Числовой ID вместо текста. AI Studio кладёт в протобуфер 16-значные
-   * идентификаторы промптов/разговоров (такие строки видны в логах `$rpc`), и
-   * наивный обход принимал их за реплику. Число — не текст хода.
+   * Снимок из ОТВЕТА UpdatePrompt/CreatePrompt → сообщения.
+   *
+   * Точный путь: `root[13][0]` — массив сообщений, текст `msg[0]`, роль `msg[8]`,
+   * `msg[19] === 1` — «мысль» модели (reasoning). Сообщения без строкового текста и
+   * без известной роли отбрасываются: в `root[13]` рядом с историей встречаются
+   * служебные кортежи (в запросе GenerateContent `root[13]` — таймзона, а не ходы),
+   * и по индексам без проверки формы они стали бы «репликами».
    */
-  function isNumericId(s) {
-    return typeof s === 'string' && /^\d{16}$/.test(s);
-  }
-
-  /** Строка годится в текст хода: не роль и не числовой ID. */
-  function isUsableText(s) {
-    return typeof s === 'string' && !isRoleString(s) && !isNumericId(s);
-  }
-
-  /**
-   * TextPart протобуфера `[null, "текст"]` (поле 1 — номер части, поле 2 — текст)
-   * на ЛЮБОЙ глубине. Реальный ответ GenerateContent — `[[[[[null, "текст"]],
-   * "model"]]]`: текст лежит на четыре уровня глубже кортежа, поэтому поиск по
-   * фиксированным индексам (item[0][1]) его не находил. Числовые ID пропускаем и
-   * продолжаем поиск — иначе ID из служебного поля стал бы репликой.
-   */
-  function findTextPart(node, depth) {
-    if (depth > MAX_TURN_DEPTH || !Array.isArray(node)) return null;
-    if (node.length >= 2 && node[0] === null && isUsableText(node[1])) return node[1];
-    for (var i = 0; i < node.length; i++) {
-      var t = findTextPart(node[i], depth + 1);
-      if (t !== null) return t;
-    }
-    return null;
-  }
-
-  /**
-   * Роль хода на любой глубине. В разобранной форме GenerateContent роль стоит
-   * рядом с TextPart, но не в item[1] — поэтому ищем её отдельным обходом.
-   */
-  function findRole(node, depth) {
-    if (depth > MAX_TURN_DEPTH) return null;
-    if (typeof node === 'string') return isRoleString(node) ? node : null;
-    if (!Array.isArray(node)) return null;
-    for (var i = 0; i < node.length; i++) {
-      var r = findRole(node[i], depth + 1);
-      if (r !== null) return r;
-    }
-    return null;
-  }
-
-  /** Текст без TextPart-обёртки (`["текст", "user"]`) — только при известной роли. */
-  function findPlainText(node, depth) {
-    if (depth > MAX_TURN_DEPTH) return null;
-    if (typeof node === 'string') return isUsableText(node) ? node : null;
-    if (!Array.isArray(node)) return null;
-    for (var i = 0; i < node.length; i++) {
-      var t = findPlainText(node[i], depth + 1);
-      if (t !== null) return t;
-    }
-    return null;
-  }
-
-  /**
-   * Один ход из элемента массива (вложенность произвольная) → {role, text}.
-   * Голую строку без TextPart принимаем ТОЛЬКО в паре с ролью: иначе обход дерева
-   * собирал бы «сообщения» из названий промптов и служебных полей ListPrompts.
-   */
-  function turnFromItem(item) {
-    if (!Array.isArray(item) || item.length === 0) return null;
-    var role = findRole(item, 0);
-    var text = findTextPart(item, 0);
-    if (text === null && role !== null) text = findPlainText(item, 0);
-    if (text === null) return null;
-    return { role: normRole(role), text: text };
-  }
-
-  /**
-   * Кандидат-массив → сообщения. Формы элемента, которые понимаем:
-   *   [[null, "текст"], "model"]        — кортеж Prompt (data[13]);
-   *   [[[[[null, "текст"]], "model"]]]  — реальный ответ GenerateContent;
-   *   [null, "текст"]                   — одиночный TextPart без роли (→ user);
-   *   [["user", "текст"], "model"]      — терпимый вариант.
-   */
-  function msgsFromCandidate(arr) {
+  function msgsFromSnapshot(root) {
     var out = [];
-    if (!Array.isArray(arr)) return out;
-    for (var i = 0; i < arr.length; i++) {
-      var turn = turnFromItem(arr[i]);
-      if (turn === null) continue;
-      var text = turn.text;
-      var role = turn.role;
-      var t = text.replace(/\r\n?/g, '\n').trim();
-      if (!t) continue;
-      out.push({ role: normRole(role), text: t });
+    if (!Array.isArray(root) || !Array.isArray(root[13]) || !Array.isArray(root[13][0])) return out;
+    var msgs = root[13][0];
+    for (var i = 0; i < msgs.length; i++) {
+      var m = msgs[i];
+      if (!Array.isArray(m)) continue;
+      if (m[19] === 1) continue;                       // reasoning, не реплика
+      if (typeof m[0] !== 'string' || !isRoleName(m[8])) continue;
+      var text = m[0].replace(/\r\n?/g, '\n').trim();
+      if (!text) continue;
+      out.push({ role: normRole(m[8]), text: text });
     }
     return out;
   }
 
   /**
-   * Массив сообщений истории из разобранного ответа. Приоритет — data[13]
-   * (протобуфер Prompt: поле 13 = массив ходов), иначе обход в ширину по всему
-   * дереву с выбором самого длинного валидного кандидата.
+   * Reasoning-часть в теле запроса GenerateContent: у «мысли» последний элемент
+   * части равен 1 (`[null, "**Interpreting…**", null, …, 1]`), у обычного текста
+   * часть короче (`[null, "текст"]`) либо несёт подпись мысли строкой.
+   */
+  function isReasoningPart(part) {
+    return part.length > 2 && part[part.length - 1] === 1;
+  }
+
+  /**
+   * Снимок из ТЕЛА ЗАПРОСА GenerateContent → сообщения.
+   *
+   * Точный путь: `root[1]` — массив ходов `[[part, ...], role]`, текст части
+   * `turn[0][j][1]`, роль `turn[1]`. Части одного хода склеиваются БЕЗ разделителя
+   * (модель стримит ответ кусками, а storage хранит уже склеенную строку), reasoning
+   * пропускается. Снимок самый свежий: в теле запроса уже есть отправленная реплика,
+   * которой ещё нет в сохранённой истории (UpdatePrompt приходит после ответа).
+   */
+  function msgsFromRequest(root) {
+    var out = [];
+    if (!Array.isArray(root) || !Array.isArray(root[1])) return out;
+    var turns = root[1];
+    for (var i = 0; i < turns.length; i++) {
+      var turn = turns[i];
+      if (!Array.isArray(turn) || !Array.isArray(turn[0]) || !isRoleName(turn[1])) continue;
+      var parts = turn[0];
+      var buf = [];
+      for (var j = 0; j < parts.length; j++) {
+        var part = parts[j];
+        if (!Array.isArray(part) || isReasoningPart(part)) continue;
+        if (typeof part[1] !== 'string' || part[1].length === 0) continue;
+        buf.push(part[1]);
+      }
+      var text = buf.join('').replace(/\r\n?/g, '\n').trim();
+      if (!text) continue;
+      out.push({ role: normRole(turn[1]), text: text });
+    }
+    return out;
+  }
+
+  /**
+   * Массив сообщений истории из разобранного JSON. Приоритет — снимок ответа
+   * (`data[13][0]`), затем тело запроса (`data[1]`). Возвращает ещё и путь —
+   * он виден в диагностике/тестах, поэтому расхождение формы сразу заметно.
    */
   function findMessageArray(root) {
-    var direct = (root && root[13]) ? msgsFromCandidate(root[13]) : [];
-    if (direct.length > 0) return { msgs: direct, path: '13' };
+    var snap = msgsFromSnapshot(root);
+    if (snap.length > 0) return { msgs: snap, path: '13[0]' };
+    var req = msgsFromRequest(root);
+    if (req.length > 0) return { msgs: req, path: '1' };
+    return { msgs: [], path: '' };
+  }
 
-    var best = { msgs: [], path: '' };
+  /** История из тела (ответа UpdatePrompt/CreatePrompt либо запроса GenerateContent). */
+  function parseHistory(text) {
+    var root = parseJsonText(text);
+    if (root === null) return [];
+    return findMessageArray(root).msgs;
+  }
+
+  /**
+   * Токены из одного элемента ответа GenerateContent. Чанк потока —
+   * `[content, null, usage, null, id]`, usage — `[prompt, candidates, total, …]`;
+   * в бейдж идёт prompt (размер контекста), не total: total включает ответ и
+   * «мысли», и на следующем ходе он был бы уже про другой контекст.
+   */
+  function tokensFromChunk(chunk) {
+    if (!Array.isArray(chunk) || !Array.isArray(chunk[2])) return 0;
+    var n = chunk[2][0];
+    if (typeof n !== 'number' || !isFinite(n) || n <= 0 || n >= 1e9) return 0;
+    return Math.floor(n);
+  }
+
+  /**
+   * Токены контекста из ответа GenerateContent → promptTokenCount (0 — нет данных).
+   *
+   * Основной путь: `root[0][last][2][0]`. Значение накапливается по потоку
+   * (219 → 486 в захвате), поэтому берётся максимум — это финальный счётчик.
+   * Обход ограничен (guard/глубина 2): форма с единственным чанком и вариант
+   * `[chunk, chunk]` без внешнего массива тоже разбираются, а чужие тела — нет.
+   */
+  function parseUsageTokens(text) {
+    var root = parseJsonText(text);
+    if (root === null) return 0;
+    var best = 0;
     var queue = [root];
     var guard = 0;
-    while (queue.length > 0 && guard < 4000) {
+    while (queue.length > 0 && guard < 200) {
       var node = queue.shift();
       guard++;
-      if (Array.isArray(node)) {
-        var m = msgsFromCandidate(node);
-        if (m.length > best.msgs.length) best = { msgs: m, path: 'scan' };
-        for (var i = 0; i < node.length; i++) {
-          var ch = node[i];
-          if (ch && typeof ch === 'object' && queue.length < 4000) queue.push(ch);
-        }
-      } else if (node && typeof node === 'object') {
-        for (var k in node) {
-          if (!Object.prototype.hasOwnProperty.call(node, k)) continue;
-          var v = node[k];
-          if (v && typeof v === 'object' && queue.length < 4000) queue.push(v);
-        }
+      if (!Array.isArray(node)) continue;
+      var n = tokensFromChunk(node);
+      if (n > best) best = n;
+      for (var i = 0; i < node.length; i++) {
+        var child = node[i];
+        if (Array.isArray(child) && queue.length < 200) queue.push(child);
       }
     }
     return best;
-  }
-
-  /** Число токенов из ответа CountTokens (форма `[5632]`): первое целое > 0. */
-  function findCountNumber(root) {
-    var queue = [root];
-    var guard = 0;
-    var local = [];
-    while (queue.length > 0 && guard < 500) {
-      var node = queue.shift();
-      guard++;
-      if (Array.isArray(node)) {
-        for (var i = 0; i < node.length; i++) {
-          var v = node[i];
-          if (typeof v === 'number') local.push(v);
-          else if (v && typeof v === 'object' && local.length === 0) queue.push(v);
-        }
-      } else if (node && typeof node === 'object') {
-        for (var k in node) {
-          if (!Object.prototype.hasOwnProperty.call(node, k)) continue;
-          var w = node[k];
-          if (typeof w === 'number') local.push(w);
-          else if (w && typeof w === 'object' && local.length === 0) queue.push(w);
-        }
-      }
-      if (local.length > 0) break;
-    }
-    for (var j = 0; j < local.length; j++) {
-      var n = local[j];
-      if (isFinite(n) && n > 0 && n < 1e9 && n === Math.floor(n)) return n;
-    }
-    return 0;
-  }
-
-  /** История из тела ответа → [{role, text}] (пустой массив, если не наш формат). */
-  function parseHistory(text) {
-    var j = parseJsonText(text);
-    if (j === null) return [];
-    return findMessageArray(j).msgs;
-  }
-
-  /** CountTokens из тела ответа → число (0, если не наш формат). */
-  function parseCountTokens(text) {
-    var j = parseJsonText(text);
-    if (j === null) return 0;
-    return findCountNumber(j);
   }
 
   /* ================================================================== *
@@ -331,27 +293,58 @@
     }
   }
 
-  /** Разбор одного ответа: классификация по URL, затем извлечение полезной нагрузки. */
-  function handleResponse(url, text) {
-    if (isCountRpc(url)) {
-      var n = parseCountTokens(text);
-      if (n <= 0 || n === lastCount) return;
-      lastCount = n;
-      if (verbose) console.log(LOG_TAG + ' serverTokens=' + n);
-      emit({ kind: 'count', serverTokens: n, url: url });
-      return;
+  /** djb2: подпись снимка, чтобы не гонять один и тот же массив в ISOLATED. */
+  function hashText(s) {
+    var h = 5381;
+    for (var i = 0; i < s.length; i++) h = (((h << 5) + h) ^ s.charCodeAt(i)) >>> 0;
+    return h.toString(36);
+  }
+
+  function historySig(msgs) {
+    var parts = [];
+    for (var i = 0; i < msgs.length; i++) {
+      parts.push((msgs[i].role === ROLE_AI ? 'a' : 'u') + msgs[i].text.length + ':' + hashText(msgs[i].text));
     }
-    if (!isHistoryRpc(url)) return;
-    var msgs = parseHistory(text);
-    if (msgs.length === 0) return;
-    var lens = [];
-    for (var i = 0; i < msgs.length; i++) lens.push(msgs[i].text.length);
-    var sig = url + '|' + lens.join(',');
+    return parts.join('|');
+  }
+
+  /** Отправка снимка истории в мост с дедупом по содержимому. */
+  function emitHistory(msgs, url) {
+    if (!msgs || msgs.length === 0) return;
+    var sig = String(url || '') + '|' + historySig(msgs);
     if (sig === lastHistorySig) return;
     lastHistorySig = sig;
     // Критерий приёмки задачи: строка видна в консоли страницы при загрузке AI Studio.
     console.log(LOG_TAG + ' history loaded msgs=' + msgs.length);
     emit({ kind: 'history', msgs: msgs, count: msgs.length, url: url });
+  }
+
+  /** Тело ЗАПРОСА: у GenerateContent это свежий снимок диалога (`data[1]`). */
+  function handleRequest(url, text) {
+    if (!isGenerateRpc(url)) return;
+    try {
+      emitHistory(parseHistory(text), url);
+    } catch (eHQ) {
+      soft(eHQ, 'aistudio-intercept:request-parse');
+    }
+  }
+
+  /** Тело ОТВЕТА: GenerateContent — usage токенов, UpdatePrompt/CreatePrompt — история. */
+  function handleResponse(url, text) {
+    try {
+      if (isGenerateRpc(url)) {
+        var tokens = parseUsageTokens(text);
+        if (tokens <= 0 || tokens === lastTokens) return;
+        lastTokens = tokens;
+        if (verbose) console.log(LOG_TAG + ' serverTokens=' + tokens);
+        emit({ kind: 'count', serverTokens: tokens, url: url });
+        return;
+      }
+      if (!isHistoryRpc(url)) return;
+      emitHistory(parseHistory(text), url);
+    } catch (eHR) {
+      soft(eHR, 'aistudio-intercept:response-parse');
+    }
   }
 
   /* ================================================================== *
@@ -375,20 +368,26 @@
 
     var wrapped = function fetch(input, init) {
       var url = urlOfFetchInput(input);
+      var interesting = !!url && (isGenerateRpc(url) || isHistoryRpc(url));
       var p = prevFetch.apply(this, arguments);
-      if (!url || (!isCountRpc(url) && !isHistoryRpc(url))) return p;
-      // Тело читаем с КЛОНА: оригинальный Response уходит странице нетронутым.
+      if (!interesting) return p;
+
+      // Тело запроса доступно только строкой (Request читается асинхронно, а
+      // FormData/Blob/ArrayBuffer нам не нужны): живой ввод AI Studio — строка JSON.
+      try {
+        if (init && typeof init.body === 'string' && init.body) handleRequest(url, init.body);
+      } catch (eQ) {
+        soft(eQ, 'aistudio-intercept:fetch-request');
+      }
+
+      // Тело ответа читаем с КЛОНА: оригинальный Response уходит странице нетронутым.
       return p.then(function (resp) {
         try {
           var ct = '';
           try { ct = String((resp.headers && resp.headers.get('content-type')) || ''); } catch (eH) { ct = ''; }
           if (ct.indexOf('event-stream') === -1 && typeof resp.clone === 'function') {
             resp.clone().text().then(function (txt) {
-              try {
-                handleResponse(url, txt);
-              } catch (eP) {
-                soft(eP, 'aistudio-intercept:fetch-body');
-              }
+              handleResponse(url, txt);
             }, function () {
               // тело уже занято страницей — это не ошибка перехватчика
             });
@@ -421,13 +420,23 @@
       return prevOpen.apply(this, arguments);
     };
 
-    var send = function () {
+    var send = function (body) {
+      // Тело запроса нужно раньше ответа: снимок истории отправляется сразу в send(),
+      // ещё до того как придут чанки (в теле уже есть только что отправленная реплика).
+      try {
+        var urlNow = this.__aiCmAistudioUrl || '';
+        if (typeof body === 'string' && body && urlNow && isGenerateRpc(urlNow)) {
+          handleRequest(urlNow, body);
+        }
+      } catch (eQ) {
+        soft(eQ, 'aistudio-intercept:xhr-request');
+      }
       try {
         var self = this;
         self.addEventListener('load', function () {
           try {
             var url = self.__aiCmAistudioUrl || '';
-            if (!url || (!isCountRpc(url) && !isHistoryRpc(url))) return;
+            if (!url || (!isGenerateRpc(url) && !isHistoryRpc(url))) return;
             var ct = '';
             try { ct = String(self.getResponseHeader('content-type') || ''); } catch (eH) { ct = ''; }
             if (ct.indexOf('event-stream') !== -1) return;
@@ -454,24 +463,25 @@
   installXhrHook();
 
   window.AiCmAistudioIntercept = {
-    version: 1,
+    version: 2,
     __handlers: {
       parseJsonText: parseJsonText,
-      msgsFromCandidate: msgsFromCandidate,
+      msgsFromSnapshot: msgsFromSnapshot,
+      msgsFromRequest: msgsFromRequest,
       findMessageArray: findMessageArray,
-      findCountNumber: findCountNumber,
       parseHistory: parseHistory,
-      parseCountTokens: parseCountTokens,
-      isCountRpc: isCountRpc,
+      parseUsageTokens: parseUsageTokens,
+      isGenerateRpc: isGenerateRpc,
       isHistoryRpc: isHistoryRpc,
+      handleRequest: handleRequest,
       handleResponse: handleResponse
     },
     reset: function () {
-      lastCount = 0;
+      lastTokens = 0;
       lastHistorySig = '';
     },
     stats: function () {
-      return { lastCount: lastCount, lastHistorySig: lastHistorySig, verbose: verbose };
+      return { lastTokens: lastTokens, lastHistorySig: lastHistorySig, verbose: verbose };
     }
   };
 })();

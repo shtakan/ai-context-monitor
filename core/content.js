@@ -3332,9 +3332,10 @@ if (isExtensionValid()) {
 // AI Studio: сетевой канал истории и точного счётчика (v2.0.30)
 //
 // ЧТО ЗДЕСЬ. Приём двух событий из MAIN-мира (core/aistudio-intercept.js — он патчит
-// fetch/XHR на aistudio.google.com): 'history' — массив ходов диалога из ответа
-// $rpc (UpdatePrompt / Create / GenerateContent, тексты протобуфера в data[13]) и
-// 'count' — точное число токенов контекста из $rpc CountTokens.
+// fetch/XHR на aistudio.google.com): 'history' — массив ходов диалога (ответ
+// UpdatePrompt/CreatePrompt, data[13][0]; тело запроса GenerateContent, data[1]) и
+// 'count' — точный размер контекста из usage ответа GenerateContent
+// (data[0][last][2][0], promptTokenCount).
 //
 // ЗАЧЕМ. AI Studio считался ТОЛЬКО по DOM (adapters/aistudio-adapter.js): длинные
 // ответы виртуализированы, часть реплик в разметку не попадает, а токены были
@@ -3365,7 +3366,7 @@ function aiCmBridgeDetail(ev) {
 // Последняя сетевая история AI Studio: { msgs: [{role,text}], count, ts }.
 // Читается adapters/aistudio-adapter.js через window.__aiCmNetMsgs (тот же ISOLATED-мир).
 var aiCmNetMsgsAistudio = null;
-// Последний CountTokens: точное число токенов контекста (0 — ещё не приходил).
+// Последний promptTokenCount AI Studio: точный размер контекста (0 — ещё не приходил).
 var aiCmNetCountAistudio = 0;
 
 function aiCmIsAistudioHost() {

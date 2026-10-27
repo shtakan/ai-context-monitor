@@ -2,15 +2,24 @@
  * tests/adapters/aistudio-network.test.js — сетевой перехват истории AI Studio.
  *
  * ЧТО ПРОВЕРЯЕМ. core/aistudio-intercept.js (MAIN-мир, aistudio.google.com) патчит
- * fetch/XHR, ловит `$rpc`-ответы и передаёт в ISOLATED разобранные данные:
- *   • 'history' — ходы диалога из UpdatePrompt/Create/GenerateContent;
- *   • 'count'   — точное число токенов из CountTokens.
+ * fetch/XHR, читает тела `$rpc`-запросов и ответов и передаёт в ISOLATED разобранные
+ * данные:
+ *   • 'history' — ходы диалога: ответ UpdatePrompt/CreatePrompt (`data[13][0]`) и
+ *                 тело запроса GenerateContent (`data[1]`);
+ *   • 'count'   — точный размер контекста из usage ответа GenerateContent.
  * Плюс adapters/aistudio-adapter.js, который обязан предпочесть сеть DOM-фолбэку.
  *
- * ОТКУДА ФОРМАТЫ. Живой ответ AI Studio — JSON-массив протобуфера, тексты ходов
- * лежат в data[13] кортежами `[[null, "текст"], "role"]`; CountTokens отвечает
- * `[5632]`. Дерево `data` в фикстуре повторяет этот вид: 13 пустых позиций перед
- * массивом ходов (поле протобуфера, а не выдумка теста).
+ * ОТКУДА ФОРМАТЫ. Фикстуры собраны по живому захвату AI Studio (октябрь 2026, чат
+ * /prompts/1sLNDy3E1UDKpOyYVg1kcWCk6PvB70rOS, 3 хода):
+ *   • ответ UpdatePrompt — 14-элементный массив, `data[13][0]` = 9 сообщений по 33
+ *     поля: текст `msg[0]`, роль `msg[8]` ('user'/'model'), «мысль» помечена
+ *     `msg[19] === 1` (на 3 хода приходится 3 мысли → после фильтра остаётся 6 реплик);
+ *   • тело GenerateContent — `data[1]` = 5 ходов `[[part, …], role]`, текст части
+ *     `turn[0][j][1]`, роль `turn[1]`; у ответа модели часть 0 — reasoning (последний
+ *     элемент части 1), части 1..2 — куски ответа, часть 3 — пустой текст с подписью;
+ *   • ответ GenerateContent — `[ [chunk, …] ]`, chunk это `[content, null, usage,
+ *     null, id]`, usage = `[promptTokens, candidateTokens, totalTokens, …]`
+ *     (219 → 486 по потоку; 486 и есть размер контекста).
  *
  * КАК ЗАПУСКАЕМ. Перехватчик — классический скрипт MAIN-мира: грузим его исходник в
  * минимальную песочницу с ОДНИМ общим `window` (как в браузере: патчи fetch/XHR и
@@ -32,6 +41,13 @@ const AISTUDIO_LOC = {
   pathname: '/prompts/abc123',
   href: 'https://aistudio.google.com/prompts/abc123'
 };
+
+/** Настоящие эндпоинты AI Studio (из захвата): MAKER_SUITE + имя метода. */
+const MAKER_SUITE = 'https://alkalimakersuite-pa.clients6.google.com/$rpc/' +
+  'google.internal.alkali.applications.makersuite.v1.MakerSuiteService/';
+const UPDATE_URL = MAKER_SUITE + 'UpdatePrompt';
+const CREATE_URL = MAKER_SUITE + 'CreatePrompt';
+const GENERATE_URL = MAKER_SUITE + 'GenerateContent';
 
 /** Микротаски (клон → text → обработчик) — дожидаемся обработки тела ответа. */
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -111,7 +127,7 @@ function makeResponse(body, contentType) {
   const resp = {
     headers: {
       get: function (name) {
-        return (String(name).toLowerCase() === 'content-type') ? (contentType || 'application/json') : null;
+        return (String(name).toLowerCase() === 'content-type') ? (contentType || 'application/json+protobuf') : null;
       }
     },
     clone: function () {
@@ -139,14 +155,16 @@ function makeXhrClass() {
     this._headers = Object.create(null);
     this.opened = 0;
     this.sent = 0;
+    this.sentBody = undefined;
   }
   FakeXhr.prototype.open = function (method, url) {
     this.method = method;
     this.url = url;
     this.opened++;
   };
-  FakeXhr.prototype.send = function () {
+  FakeXhr.prototype.send = function (body) {
     this.sent++;
+    this.sentBody = body;
   };
   FakeXhr.prototype.addEventListener = function (name, fn) {
     (this._listeners[name] = this._listeners[name] || []).push(fn);
@@ -161,216 +179,287 @@ function makeXhrClass() {
 }
 
 /* ------------------------------------------------------------------ *
- * Фикстуры ответов AI Studio
+ * Фикстуры — точная форма протобуфера из живого захвата
  * ------------------------------------------------------------------ */
 
-/** Кортеж хода: `[[null, "текст"], "role"]` — точная форма протобуфера AI Studio. */
-const turn = (text, role) => [[null, text], role];
-
-/** data[0..12] — прочие поля протобуфера Prompt (индекс 13 — массив ходов). */
-function promptTree(turns) {
-  const data = new Array(13).fill(null);
-  data.push(turns);
-  return data;
+/**
+ * Сообщение снимка UpdatePrompt: 33 поля, текст [0], роль [8], признак «мысли»
+ * `[19] === 1`, счётчик токенов [18], время хода [32].
+ */
+function snapshotMsg(text, role, opts) {
+  const o = opts || {};
+  const m = new Array(33).fill(null);
+  m[0] = text;
+  m[8] = role;
+  if (o.reasoning) m[19] = 1;
+  if (typeof o.tokens === 'number') m[18] = o.tokens;
+  m[32] = ['1793095607', 981000000];
+  return m;
 }
 
-const HISTORY_BODY = JSON.stringify(promptTree([
-  turn('Как посчитать токены в AI Studio?', 'user'),
-  turn('Через $rpc CountTokens: сервер вернёт точное число.', 'model'),
-  turn('Спасибо!', 'user')
-]));
+/**
+ * Ответ UpdatePrompt/CreatePrompt: 14 полей, поле 13 — `[сообщения, ожидающий ход]`.
+ * Поле 13 у протобуфера Prompt действительно массив — пустые поля 1..12 значимы.
+ */
+function snapshotBody(msgs) {
+  const data = new Array(13).fill(null);
+  data[0] = 'prompts/1sLNDy3E1UDKpOyYVg1kcWCk6PvB70rOS';
+  data[12] = [];
+  data.push([msgs, [['', null, null, null, null, null, null, null, 'user']]]);
+  return JSON.stringify(data);
+}
 
-const COUNT_BODY = '[5632]';
+/** Ход, отправленный в редакторе: 9 сообщений, из них 3 — «мысли» модели. */
+const HISTORY_MSGS = [
+  snapshotMsg('Тест 1\n', 'user'),
+  snapshotMsg('**Interpreting the Input**\n\nРазбираю ввод пользователя.', 'model', { reasoning: true, tokens: 162 }),
+  snapshotMsg('Тест 1 пройден успешно! Связь работает отлично. \n\nЧем могу вам помочь?', 'model', { tokens: 20 }),
+  snapshotMsg('Тест 2', 'user'),
+  snapshotMsg('**Initiating Russian Test Flow**\n\nПродолжаю тестовый сценарий.', 'model', { reasoning: true }),
+  snapshotMsg('Тест 2 также пройден успешно! Системы работают в штатном режиме. \n\nГотов к следующему тесту или вашей задаче.', 'model'),
+  snapshotMsg('Тест 3\n', 'user'),
+  snapshotMsg('**Confirming Test Completion**\n\nФиксирую завершение проверки.', 'model', { reasoning: true }),
+  snapshotMsg('Тест 3 принят! Сигнал стабильный, всё работает без сбоев.', 'model')
+];
+
+const HISTORY_BODY = snapshotBody(HISTORY_MSGS);
+
+/** Часть хода в теле запроса: `[null, "текст"]` — поле 2 части это её текст. */
+const reqPart = (text) => [null, text];
+
+/** Reasoning-часть: последний элемент части равен 1 (живой захват: 13 полей). */
+function reqThought(text) {
+  const p = new Array(13).fill(null);
+  p[1] = text;
+  p[12] = 1;
+  return p;
+}
+
+/** Пустая часть с подписью мысли (15 полей, текст пуст) — в захвате есть всегда. */
+function reqSignaturePart() {
+  const p = new Array(15).fill(null);
+  p[1] = '';
+  p[14] = 'EpUHCpIHAWkUfRPHJxNQNTRQhtFEoHP5MLEDY9UO';
+  return p;
+}
+
+/** Ход запроса: `[[part, …], "role"]`. */
+const reqTurn = (parts, role) => [parts, role];
+
+/**
+ * Тело запроса GenerateContent: 14 полей, поле 1 — ходы, поле 13 — таймзона
+ * (`[[null, null, "Asia/Yekaterinburg"]]`). Таймзона — ловушка для парсера:
+ * без проверки формы она выдала бы «сообщение» с ролью из служебного поля.
+ */
+function requestBody(turns) {
+  const data = new Array(14).fill(null);
+  data[0] = 'models/gemini-3.8-flash';
+  data[1] = turns;
+  data[13] = [[null, null, 'Asia/Yekaterinburg']];
+  return JSON.stringify(data);
+}
+
+/** 5 ходов из захвата: ответы модели разбиты на reasoning + два куска текста. */
+const REQUEST_BODY = requestBody([
+  reqTurn([reqPart('Тест 1\n')], 'user'),
+  reqTurn([
+    reqThought('**Interpreting the Input**\n\nРазбираю ввод пользователя.'),
+    reqPart('Тест 1 пройден успешно! Связь работает отлично'),
+    reqPart('. \n\nЧем могу вам помочь?'),
+    reqSignaturePart()
+  ], 'model'),
+  reqTurn([reqPart('Тест 2')], 'user'),
+  reqTurn([
+    reqThought('**Initiating Russian Test Flow**\n\nПродолжаю тестовый сценарий.'),
+    reqPart('Тест 2 также пройден успешно! Системы работают в штатном режиме. \n\n'),
+    reqPart('Готов к следующему тесту или вашей задаче.'),
+    reqSignaturePart()
+  ], 'model'),
+  reqTurn([reqPart('Тест 3\n')], 'user')
+]);
+
+/** usage чанка: `[promptTokens, candidateTokens, totalTokens, null, [[1, prompt]], …]`. */
+function chunkUsage(prompt, candidate, total) {
+  return [prompt, candidate, total, null, [[1, prompt]], null, null, null, null, 110];
+}
+
+/** Чанк потока: `[content, null, usage, null, id]`; content — текст на глубине, роли нет в нём. */
+function streamChunk(text, usage) {
+  return [[[[null, text]], 'model'], null, usage || null, null, 'v1_Chd0ZXN0'];
+}
+
+/**
+ * Ответ GenerateContent: `[ [chunk, …] ]`. promptTokenCount накапливается по
+ * потоку (219 → 486), финальный чанк приходит без usage — терминальная отметка.
+ */
+const TOKENS_BODY = JSON.stringify([[
+  streamChunk('нал', chunkUsage(219, null, 315)),
+  streamChunk(' стабильный,', chunkUsage(219, 9, 338)),
+  streamChunk(' всё работает без сбоев.', chunkUsage(219, 38, 367)),
+  streamChunk('', chunkUsage(486, 38, 634)),
+  streamChunk('', null)
+]]);
+
+/** Ответ CountTokens из захвата: считает только ВХОД — в контекст не годится. */
+const COUNT_TOKENS_BODY = '[5,[],[[[4],1]],null,null,[[1,5]]]';
 
 describe('core/aistudio-intercept.js: классификация $rpc-запросов', () => {
   const api = makeSandbox().api;
 
-  test('CountTokens узнаётся по имени метода и только внутри $rpc', () => {
-    expect(api.__handlers.isCountRpc('https://aistudio.google.com/$rpc/google.ai.v1.CountTokens')).toBe(true);
-    expect(api.__handlers.isCountRpc('https://aistudio.google.com/$rpc/x/countTokens')).toBe(true);
-    expect(api.__handlers.isCountRpc('https://aistudio.google.com/api/CountTokens')).toBe(false);
-    expect(api.__handlers.isCountRpc('')).toBe(false);
+  test('GenerateContent узнаётся по имени метода и только внутри $rpc', () => {
+    const h = api.__handlers;
+    expect(h.isGenerateRpc(GENERATE_URL)).toBe(true);
+    expect(h.isGenerateRpc('https://aistudio.google.com/$rpc/x/GenerateContent')).toBe(true);
+    expect(h.isGenerateRpc('https://aistudio.google.com/api/GenerateContent')).toBe(false);
+    expect(h.isGenerateRpc(MAKER_SUITE + 'CountTokens')).toBe(false);
+    expect(h.isGenerateRpc('')).toBe(false);
   });
 
-  test('история: UpdatePrompt / Create / CreatePrompt / GenerateContent под $rpc', () => {
+  test('история: UpdatePrompt / CreatePrompt под $rpc', () => {
     const h = api.__handlers;
-    expect(h.isHistoryRpc('https://aistudio.google.com/$rpc/x.UpdatePrompt')).toBe(true);
-    expect(h.isHistoryRpc('https://aistudio.google.com/$rpc/x.Create')).toBe(true);
-    expect(h.isHistoryRpc('https://aistudio.google.com/$rpc/x.CreatePrompt')).toBe(true);
-    expect(h.isHistoryRpc('https://aistudio.google.com/$rpc/x.GenerateContent')).toBe(true);
+    expect(h.isHistoryRpc(UPDATE_URL)).toBe(true);
+    expect(h.isHistoryRpc(CREATE_URL)).toBe(true);
     expect(h.isHistoryRpc('https://aistudio.google.com/api/UpdatePrompt')).toBe(false);
-    // CountTokens не должен попасть в историю (порядок проверок в handleResponse)
-    expect(h.isHistoryRpc('https://aistudio.google.com/$rpc/x.CountTokens')).toBe(false);
+    // CountTokens не история: счётчик берётся из GenerateContent
+    expect(h.isHistoryRpc(MAKER_SUITE + 'CountTokens')).toBe(false);
+    expect(h.isHistoryRpc(GENERATE_URL)).toBe(false);
   });
 
-  test('история: ListPrompts даёт снимок библиотеки промптов', () => {
-    // Живой лог AI Studio (страница /prompts/...): ListPrompts вызывается 4 раза,
-    // GenerateContent/CreatePrompt на этой странице не было вовсе. Старая
-    // регулярка `/updateprompt|create|generatecontent/` его не ловила → история
-    // не поднималась, хотя полный снимок уже приходил в ответе.
+  test('ListPrompts — библиотека промптов, не история диалога', () => {
+    // Живой лог: на странице /prompts/... ListPrompts вызывается 4 раза, но его
+    // ответ — карточки промптов, data[13][0] в нём нет (проверено захватом).
     const h = api.__handlers;
-    expect(h.isHistoryRpc('https://aistudio.google.com/$rpc/google.internal.alkali.applications.makersuite.v1.MakerSuiteService/ListPrompts')).toBe(true);
-    expect(h.isHistoryRpc('https://aistudio.google.com/$rpc/x.ListPrompts')).toBe(true);
-    // прочие методы того же сервиса — не история
-    expect(h.isHistoryRpc('https://aistudio.google.com/$rpc/x.ListModels')).toBe(false);
-    expect(h.isHistoryRpc('https://aistudio.google.com/$rpc/x.ResolveDriveResource')).toBe(false);
+    expect(h.isHistoryRpc(MAKER_SUITE + 'ListPrompts')).toBe(false);
+    expect(h.isHistoryRpc(MAKER_SUITE + 'ListModels')).toBe(false);
+    expect(h.isHistoryRpc(MAKER_SUITE + 'ResolveDriveResource')).toBe(false);
   });
 });
 
-describe('core/aistudio-intercept.js: парсер истории (data[13])', () => {
+describe('core/aistudio-intercept.js: снимок UpdatePrompt (data[13][0])', () => {
   const h = makeSandbox().api.__handlers;
 
-  test('кортежи из data[13] → msgs с ролями user/assistant', () => {
-    const msgs = h.parseHistory(HISTORY_BODY);
-    expect(msgs).toHaveLength(3);
-    expect(msgs.map(function (m) { return m.role; })).toEqual(['user', 'assistant', 'user']);
-    expect(msgs[0].text).toBe('Как посчитать токены в AI Studio?');
-    expect(msgs[1].text).toContain('CountTokens');
-    // роль кортежа 'model' нормализована к контракту адаптеров
-    expect(msgs[1].role).not.toBe('model');
+  test('9 сообщений с 3 «мыслями» → 6 реплик, reasoning отфильтрован', () => {
+    const found = h.findMessageArray(JSON.parse(HISTORY_BODY));
+    expect(found.path).toBe('13[0]');
+    const msgs = found.msgs;
+    expect(msgs).toHaveLength(6);
+    expect(msgs.map(function (m) { return m.role; })).toEqual([
+      'user', 'assistant', 'user', 'assistant', 'user', 'assistant'
+    ]);
+    expect(msgs[0].text).toBe('Тест 1');
+    expect(msgs[1].text).toBe('Тест 1 пройден успешно! Связь работает отлично. \n\nЧем могу вам помочь?');
+    // текст «мысли» не попал ни в одну реплику
+    expect(msgs.map(function (m) { return m.text; }).join('\n')).not.toContain('Interpreting the Input');
   });
 
-  test('вложенный текст хода не теряется и не дублируется', () => {
-    const body = JSON.stringify(promptTree([turn('первая строка\nвторая строка', 'user')]));
-    const msgs = h.parseHistory(body);
-    expect(msgs).toHaveLength(1);
-    expect(msgs[0].text).toBe('первая строка\nвторая строка');
-  });
-
-  test('data[13] нет — обход дерева находит массив ходов', () => {
-    const body = JSON.stringify({ prompt: { nested: [turn('вопрос', 'user'), turn('ответ', 'model')] } });
-    const msgs = h.parseHistory(body);
-    expect(msgs).toHaveLength(2);
-    expect(msgs.map(function (m) { return m.role; })).toEqual(['user', 'assistant']);
-  });
-
-  test('пустые ходы и мусор отбрасываются', () => {
-    const body = JSON.stringify(promptTree([
-      turn('', 'user'),
-      turn('   ', 'model'),
-      [null, 'user'],
-      'строка вместо кортежа',
-      turn('живой ход', 'user')
-    ]));
-    const msgs = h.parseHistory(body);
-    expect(msgs).toHaveLength(1);
-    expect(msgs[0].text).toBe('живой ход');
+  test('ожидающий ход data[13][1] в историю не попадает', () => {
+    const root = JSON.parse(HISTORY_BODY);
+    expect(root[13]).toHaveLength(2);
+    expect(h.parseHistory(HISTORY_BODY)).toHaveLength(6);
   });
 
   test('XSSI-префикс )]}\' не мешает разбору', () => {
-    const msgs = h.parseHistory(")]}'\n" + HISTORY_BODY);
-    expect(msgs).toHaveLength(3);
+    expect(h.parseHistory(")]}'\n" + HISTORY_BODY)).toHaveLength(6);
   });
 
-  test('SSE-поток GenerateContent (не JSON) → пусто, без throw', () => {
-    expect(h.parseHistory('data: {"candidates":[]}\n\n')).toEqual([]);
+  test('мусор и сообщения без формы протобуфера отбрасываются', () => {
+    const body = snapshotBody([
+      ['строка вместо массива'],                 // не массив сообщения
+      snapshotMsg('', 'user'),                   // пустой текст
+      snapshotMsg('   ', 'model'),               // только пробелы
+      snapshotMsg('без роли', null),             // роль не строка
+      snapshotMsg('без известной роли', 'narrator'),
+      snapshotMsg('живая реплика', 'user')
+    ]);
+    const msgs = h.parseHistory(body);
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].text).toBe('живая реплика');
+    expect(msgs[0].role).toBe('user');
+  });
+
+  test('CRLF нормализуется в LF', () => {
+    const body = snapshotBody([snapshotMsg('первая\r\nвторая', 'user')]);
+    expect(h.parseHistory(body)[0].text).toBe('первая\nвторая');
+  });
+});
+
+describe('core/aistudio-intercept.js: тело запроса GenerateContent (data[1])', () => {
+  const h = makeSandbox().api.__handlers;
+
+  test('5 ходов → 5 реплик, reasoning пропущен, куски склеены без разделителя', () => {
+    const found = h.findMessageArray(JSON.parse(REQUEST_BODY));
+    expect(found.path).toBe('1');
+    const msgs = found.msgs;
+    expect(msgs).toHaveLength(5);
+    expect(msgs.map(function (m) { return m.role; })).toEqual([
+      'user', 'assistant', 'user', 'assistant', 'user'
+    ]);
+    // склейка частей даёт ровно ту же строку, что и сохранённое сообщение в снимке
+    expect(msgs[1].text).toBe('Тест 1 пройден успешно! Связь работает отлично. \n\nЧем могу вам помочь?');
+    expect(msgs[3].text).toBe('Тест 2 также пройден успешно! Системы работают в штатном режиме. \n\n' +
+      'Готов к следующему тесту или вашей задаче.');
+    expect(msgs[4].text).toBe('Тест 3');
+  });
+
+  test('таймзона в поле 13 не принимается за снимок истории', () => {
+    const root = JSON.parse(REQUEST_BODY);
+    expect(root[13][0][2]).toBe('Asia/Yekaterinburg');
+    expect(h.msgsFromSnapshot(root)).toEqual([]);   // снимка нет
+    expect(h.findMessageArray(root).path).toBe('1');
+  });
+
+  test('пустое тело, мусор и SSE → пустая история, без throw', () => {
     expect(h.parseHistory('')).toEqual([]);
     expect(h.parseHistory(null)).toEqual([]);
+    expect(h.parseHistory('data: {"candidates":[]}\n\n')).toEqual([]);
+    expect(h.parseHistory('ok')).toEqual([]);
+    expect(h.parseHistory('[]')).toEqual([]);
+    expect(h.parseHistory(requestBody([]))).toEqual([]);
+  });
+
+  test('ответ GenerateContent (чанки) историей не считается', () => {
+    // Иначе стриминг давал бы «историю» из кусков одного ответа (3 «сообщения» мусора).
+    expect(h.parseHistory(TOKENS_BODY)).toEqual([]);
   });
 });
 
-describe('core/aistudio-intercept.js: вложенная форма GenerateContent', () => {
+describe('core/aistudio-intercept.js: токены из ответа GenerateContent', () => {
   const h = makeSandbox().api.__handlers;
 
-  /**
-   * Реальный ответ GenerateContent — `[[[[[null,"текст"]], "model"]]]`:
-   * TextPart лежит на четыре уровня глубже кортежа, роль — рядом с ним, а не в
-   * item[1]. Фикстура собирается литералами, чтобы форма была видна глазами.
-   */
-  const nestedTurn = (text, role) => [[[null, text]], role];
-
-  test('текст из [[[[[null,"текст"]], "model"]]] найден, роль → assistant', () => {
-    const body = JSON.stringify([[nestedTurn('Ответ модели из вложенной формы', 'model')]]);
-    const msgs = h.parseHistory(body);
-    expect(msgs).toHaveLength(1);
-    expect(msgs[0].text).toBe('Ответ модели из вложенной формы');
-    expect(msgs[0].role).toBe('assistant');
+  test('финальный promptTokenCount = 486 (путь root[0][last][2][0])', () => {
+    const root = JSON.parse(TOKENS_BODY);
+    expect(root[0][3][2][0]).toBe(486);
+    expect(h.parseUsageTokens(TOKENS_BODY)).toBe(486);
   });
 
-  test('несколько вложенных ходов → все msgs по порядку, без дублей', () => {
-    const body = JSON.stringify([[
-      nestedTurn('вопрос пользователя', 'user'),
-      nestedTurn('ответ модели', 'model')
+  test('usage накапливается: максимум, а не первый чанк', () => {
+    expect(h.parseUsageTokens(TOKENS_BODY)).toBeGreaterThan(parseInt(TOKENS_BODY.match(/\[219/)[0].slice(1), 10));
+    const reversed = JSON.stringify([[
+      streamChunk('', chunkUsage(486, 38, 634)),
+      streamChunk('', chunkUsage(219, 9, 338))
     ]]);
-    const msgs = h.parseHistory(body);
-    expect(msgs).toHaveLength(2);
-    expect(msgs.map(function (m) { return m.role; })).toEqual(['user', 'assistant']);
-    expect(msgs[0].text).toBe('вопрос пользователя');
-    expect(msgs[1].text).toBe('ответ модели');
+    expect(h.parseUsageTokens(reversed)).toBe(486);
   });
 
-  test('глубокая вложенность и мусорные поля вокруг хода не мешают', () => {
-    const body = JSON.stringify([[
-      [null, null, nestedTurn('ход в глубине дерева', 'user')],
-      nestedTurn('ответ в глубине дерева', 'model')
-    ]]);
-    const msgs = h.parseHistory(body);
-    expect(msgs).toHaveLength(2);
-    expect(msgs[0].text).toBe('ход в глубине дерева');
-    expect(msgs[1].text).toBe('ответ в глубине дерева');
-  });
-});
-
-describe('core/aistudio-intercept.js: числовые ID не считаются текстом', () => {
-  const h = makeSandbox().api.__handlers;
-
-  test('16-значный ID вместо текста отбрасывается, соседние ходы живы', () => {
-    const body = JSON.stringify(promptTree([
-      turn('1234567890123456', 'user'),     // ID промпта, а не реплика
-      turn('настоящий вопрос', 'user'),
-      turn('9876543210987654', 'model'),
-      turn('настоящий ответ', 'model')
-    ]));
-    const msgs = h.parseHistory(body);
-    expect(msgs).toHaveLength(2);
-    expect(msgs.map(function (m) { return m.text; })).toEqual(['настоящий вопрос', 'настоящий ответ']);
+  test('XSSI-префикс и одиночный чанк без внешнего массива', () => {
+    const one = JSON.stringify([streamChunk('', chunkUsage(5632, 12, 5660)), streamChunk('', null)]);
+    expect(h.parseUsageTokens(")]}'\n" + one)).toBe(5632);
   });
 
-  test('короткое и длинное число — это текст, а не ID', () => {
-    const body = JSON.stringify(promptTree([
-      turn('42', 'user'),
-      turn('123456789012345', 'model'),      // 15 знаков — ещё текст
-      turn('12345678901234567', 'user')      // 17 знаков — тоже текст
-    ]));
-    const msgs = h.parseHistory(body);
-    expect(msgs.map(function (m) { return m.text; })).toEqual(['42', '123456789012345', '12345678901234567']);
-  });
-
-  test('ID в служебном поле не становится единственной репликой снимка', () => {
-    // ListPrompts: рядом с настоящим ходом лежит служебный 16-значный ID.
-    const body = JSON.stringify(promptTree([
-      ['5555444433332222', turn('живой ход', 'user')]
-    ]));
-    const msgs = h.parseHistory(body);
-    expect(msgs).toHaveLength(1);
-    expect(msgs[0].text).toBe('живой ход');
-  });
-});
-
-describe('core/aistudio-intercept.js: парсер CountTokens', () => {
-  const h = makeSandbox().api.__handlers;
-
-  test('[5632] → 5632 (точное число токенов контекста)', () => {
-    expect(h.parseCountTokens(COUNT_BODY)).toBe(5632);
-  });
-
-  test('объектная форма и XSSI-префикс', () => {
-    expect(h.parseCountTokens('[{"tokenCount": 4096}]')).toBe(4096);
-    expect(h.parseCountTokens(")]}'\n[5632]")).toBe(5632);
-  });
-
-  test('не наш формат / нули / мусор → 0', () => {
-    expect(h.parseCountTokens('')).toBe(0);
-    expect(h.parseCountTokens('ok')).toBe(0);
-    expect(h.parseCountTokens('[0]')).toBe(0);
-    expect(h.parseCountTokens('[null]')).toBe(0);
+  test('нет usage / чужое тело / CountTokens → 0', () => {
+    expect(h.parseUsageTokens('')).toBe(0);
+    expect(h.parseUsageTokens('ok')).toBe(0);
+    expect(h.parseUsageTokens(JSON.stringify([streamChunk('', null)]))).toBe(0);
+    expect(h.parseUsageTokens(COUNT_TOKENS_BODY)).toBe(0);
+    // нестриминговый ответ-промпт (14 полей) токенов не несёт
+    expect(h.parseUsageTokens(snapshotBody(HISTORY_MSGS))).toBe(0);
   });
 });
 
 describe('core/aistudio-intercept.js: мост MAIN → ISOLATED', () => {
-  test('history: detail — строка JSON, есть обязательная строка лога', () => {
+  test('снимок ответа: detail — строка JSON, есть обязательная строка лога', () => {
     const sb = makeSandbox();
-    sb.api.__handlers.handleResponse('https://aistudio.google.com/$rpc/x.UpdatePrompt', HISTORY_BODY);
+    sb.api.__handlers.handleResponse(UPDATE_URL, HISTORY_BODY);
 
     expect(sb.events).toHaveLength(1);
     const detail = sb.events[0].detail;
@@ -378,48 +467,64 @@ describe('core/aistudio-intercept.js: мост MAIN → ISOLATED', () => {
     expect(typeof detail).toBe('string');
     const payload = JSON.parse(detail);
     expect(payload.kind).toBe('history');
-    expect(payload.count).toBe(3);
-    expect(payload.msgs).toHaveLength(3);
     expect(payload.site).toBe('aistudio');
-    expect(sb.logs.join('\n')).toContain('[aistudio-intercept] history loaded msgs=3');
+    expect(payload.count).toBe(6);
+    expect(payload.msgs).toHaveLength(6);
+    expect(typeof payload.ts).toBe('number');
+    expect(sb.logs.join('\n')).toContain('[aistudio-intercept] history loaded msgs=6');
   });
 
-  test('ListPrompts → history в мост (снимок истории без новых чанков)', () => {
+  test('тело запроса GenerateContent → history в мост', () => {
     const sb = makeSandbox();
-    const url = 'https://aistudio.google.com/$rpc/google.internal.alkali.applications.makersuite.v1.MakerSuiteService/ListPrompts';
-    sb.api.__handlers.handleResponse(url, HISTORY_BODY);
+    sb.api.__handlers.handleRequest(GENERATE_URL, REQUEST_BODY);
 
     expect(sb.events).toHaveLength(1);
     const payload = JSON.parse(sb.events[0].detail);
     expect(payload.kind).toBe('history');
-    expect(payload.msgs).toHaveLength(3);
+    expect(payload.count).toBe(5);
+    expect(payload.url).toBe(GENERATE_URL);
   });
 
-  test('count: serverTokens уходит отдельным событием', () => {
+  test('токены: serverTokens уходит отдельным событием, без строки истории', () => {
     const sb = makeSandbox();
-    sb.api.__handlers.handleResponse('https://aistudio.google.com/$rpc/x.CountTokens', COUNT_BODY);
+    sb.api.__handlers.handleResponse(GENERATE_URL, TOKENS_BODY);
 
     expect(sb.events).toHaveLength(1);
     const payload = JSON.parse(sb.events[0].detail);
     expect(payload.kind).toBe('count');
-    expect(payload.serverTokens).toBe(5632);
-    expect(sb.logs.join('\n')).not.toContain('history loaded'); // счётчик — не история
+    expect(payload.serverTokens).toBe(486);
+    expect(sb.logs.join('\n')).not.toContain('history loaded');
   });
 
   test('повторный тот же снимок не дублирует лог и событие', () => {
     const sb = makeSandbox();
-    const url = 'https://aistudio.google.com/$rpc/x.UpdatePrompt';
-    sb.api.__handlers.handleResponse(url, HISTORY_BODY);
-    sb.api.__handlers.handleResponse(url, HISTORY_BODY);
+    sb.api.__handlers.handleResponse(UPDATE_URL, HISTORY_BODY);
+    sb.api.__handlers.handleResponse(UPDATE_URL, HISTORY_BODY);
     expect(sb.events).toHaveLength(1);
     expect(sb.logs.join('\n').match(/history loaded/g)).toHaveLength(1);
   });
 
-  test('чужой запрос и пустое тело игнорируются', () => {
+  test('тот же promptTokenCount второй раз не отправляется', () => {
+    const sb = makeSandbox();
+    sb.api.__handlers.handleResponse(GENERATE_URL, TOKENS_BODY);
+    sb.api.__handlers.handleResponse(GENERATE_URL, TOKENS_BODY);
+    expect(sb.events).toHaveLength(1);
+  });
+
+  test('чужой запрос и пустые тела игнорируются', () => {
     const sb = makeSandbox();
     sb.api.__handlers.handleResponse('https://aistudio.google.com/api/prompts', HISTORY_BODY);
-    sb.api.__handlers.handleResponse('https://aistudio.google.com/$rpc/x.UpdatePrompt', '');
+    sb.api.__handlers.handleResponse(UPDATE_URL, '');
+    sb.api.__handlers.handleRequest(MAKER_SUITE + 'ListPrompts', REQUEST_BODY);
+    sb.api.__handlers.handleResponse(MAKER_SUITE + 'CountTokens', COUNT_TOKENS_BODY);
     expect(sb.events).toHaveLength(0);
+  });
+
+  test('COUNT_TOKENS: тело [5,…] больше не даёт serverTokens', () => {
+    const sb = makeSandbox();
+    sb.api.__handlers.handleResponse(GENERATE_URL, COUNT_TOKENS_BODY);
+    expect(sb.events).toHaveLength(0);
+    expect(sb.api.stats().lastTokens).toBe(0);
   });
 
   test('обратный канал: настройка verbose разбирается aiCmBridgeDetail', () => {
@@ -441,14 +546,37 @@ describe('core/aistudio-intercept.js: патч fetch', () => {
     expect(sb.win.fetch).not.toBe(fetchStub);
     expect(sb.win.fetch.__aiCmAistudioWrapped).toBe(true);
 
-    const got = await sb.win.fetch('https://aistudio.google.com/$rpc/x.UpdatePrompt', { method: 'POST' });
+    const got = await sb.win.fetch(UPDATE_URL, { method: 'POST', body: '["x"]' });
     expect(got).toBe(resp); // страница получила ИСХОДНЫЙ объект
     await flush();
 
     expect(resp.state.textReads).toBe(1); // читали клон, а не оригинал
     expect(sb.events).toHaveLength(1);
-    expect(JSON.parse(sb.events[0].detail).count).toBe(3);
-    expect(sb.logs.join('\n')).toContain('[aistudio-intercept] history loaded msgs=3');
+    expect(JSON.parse(sb.events[0].detail).count).toBe(6);
+    expect(sb.logs.join('\n')).toContain('[aistudio-intercept] history loaded msgs=6');
+  });
+
+  test('GenerateContent: история из тела запроса + токены из ответа', async () => {
+    const resp = makeResponse(TOKENS_BODY);
+    const sb = makeSandbox({ fetch: makeFetch(function () { return resp; }) });
+
+    await sb.win.fetch(GENERATE_URL, { method: 'POST', body: REQUEST_BODY });
+    await flush();
+
+    expect(sb.events).toHaveLength(2);
+    const kinds = sb.events.map(function (ev) { return JSON.parse(ev.detail).kind; });
+    expect(kinds).toEqual(['history', 'count']);
+    expect(JSON.parse(sb.events[0].detail).count).toBe(5);
+    expect(JSON.parse(sb.events[1].detail).serverTokens).toBe(486);
+  });
+
+  test('нестроковое тело запроса не ломает разбор ответа', async () => {
+    const resp = makeResponse(HISTORY_BODY);
+    const sb = makeSandbox({ fetch: makeFetch(function () { return resp; }) });
+
+    await sb.win.fetch(UPDATE_URL, { method: 'POST', body: { not: 'a string' } });
+    await flush();
+    expect(sb.events).toHaveLength(1);
   });
 
   test('посторонний запрос не разбирается и не читает тело', async () => {
@@ -461,20 +589,11 @@ describe('core/aistudio-intercept.js: патч fetch', () => {
     expect(sb.events).toHaveLength(0);
   });
 
-  test('CountTokens через fetch обновляет serverTokens', async () => {
-    const resp = makeResponse(COUNT_BODY);
-    const sb = makeSandbox({ fetch: makeFetch(function () { return resp; }) });
-
-    await sb.win.fetch('https://aistudio.google.com/$rpc/x.CountTokens', {});
-    await flush();
-    expect(JSON.parse(sb.events[0].detail).serverTokens).toBe(5632);
-  });
-
-  test('SSE-стрим GenerateContent не буферизуется', async () => {
+  test('SSE-стрим не буферизуется', async () => {
     const resp = makeResponse('data: {"x":1}\n\n', 'text/event-stream');
     const sb = makeSandbox({ fetch: makeFetch(function () { return resp; }) });
 
-    await sb.win.fetch('https://aistudio.google.com/$rpc/x.GenerateContent', {});
+    await sb.win.fetch(GENERATE_URL, {});
     await flush();
     expect(resp.state.textReads).toBe(0);
     expect(sb.events).toHaveLength(0);
@@ -482,23 +601,44 @@ describe('core/aistudio-intercept.js: патч fetch', () => {
 });
 
 describe('core/aistudio-intercept.js: патч XMLHttpRequest', () => {
-  test('$rpc Create: история из responseText уходит в мост', () => {
+  test('$rpc CreatePrompt: история из responseText уходит в мост', () => {
     const Xhr = makeXhrClass();
     const sb = makeSandbox({ XMLHttpRequest: Xhr });
     expect(Xhr.prototype.send.__aiCmAistudioWrapped).toBe(true);
 
     const xhr = new sb.win.XMLHttpRequest();
-    xhr.open('POST', 'https://aistudio.google.com/$rpc/x.Create');
+    xhr.open('POST', CREATE_URL);
     xhr.send();
     expect(xhr.opened).toBe(1);
     expect(xhr.sent).toBe(1);
 
     xhr.responseText = HISTORY_BODY;
-    xhr._headers['content-type'] = 'application/json';
+    xhr._headers['content-type'] = 'application/json+protobuf';
     xhr.fire('load');
 
     expect(sb.events).toHaveLength(1);
-    expect(JSON.parse(sb.events[0].detail).count).toBe(3);
+    expect(JSON.parse(sb.events[0].detail).count).toBe(6);
+  });
+
+  test('GenerateContent: снимок из send() сразу, токены из load()', () => {
+    const Xhr = makeXhrClass();
+    const sb = makeSandbox({ XMLHttpRequest: Xhr });
+
+    const xhr = new sb.win.XMLHttpRequest();
+    xhr.open('POST', GENERATE_URL);
+    xhr.send(REQUEST_BODY);
+    expect(xhr.sentBody).toBe(REQUEST_BODY);
+
+    // история отправлена синхронно, ещё до ответа
+    expect(sb.events).toHaveLength(1);
+    expect(JSON.parse(sb.events[0].detail).count).toBe(5);
+
+    xhr.responseText = TOKENS_BODY;
+    xhr._headers['content-type'] = 'application/json+protobuf';
+    xhr.fire('load');
+
+    expect(sb.events).toHaveLength(2);
+    expect(JSON.parse(sb.events[1].detail).serverTokens).toBe(486);
   });
 
   test('ответ на посторонний URL не разбирается', () => {
@@ -509,7 +649,7 @@ describe('core/aistudio-intercept.js: патч XMLHttpRequest', () => {
     xhr.open('GET', 'https://aistudio.google.com/api/prompts');
     xhr.send();
     xhr.responseText = HISTORY_BODY;
-    xhr._headers['content-type'] = 'application/json';
+    xhr._headers['content-type'] = 'application/json+protobuf';
     xhr.fire('load');
 
     expect(sb.events).toHaveLength(0);
@@ -520,14 +660,29 @@ describe('core/aistudio-intercept.js: патч XMLHttpRequest', () => {
     const sb = makeSandbox({ XMLHttpRequest: Xhr });
 
     const xhr = new sb.win.XMLHttpRequest();
-    xhr.open('POST', 'https://aistudio.google.com/$rpc/x.CountTokens');
-    xhr.send();
+    xhr.open('POST', GENERATE_URL);
+    xhr.send(REQUEST_BODY);
     xhr.responseType = 'json';
-    xhr.response = [5632];
-    xhr._headers['content-type'] = 'application/json';
+    xhr.response = JSON.parse(TOKENS_BODY);
+    xhr._headers['content-type'] = 'application/json+protobuf';
     xhr.fire('load');
 
-    expect(JSON.parse(sb.events[0].detail).serverTokens).toBe(5632);
+    expect(JSON.parse(sb.events[1].detail).serverTokens).toBe(486);
+  });
+
+  test('нестроковое тело send() не мешает разбору ответа', () => {
+    const Xhr = makeXhrClass();
+    const sb = makeSandbox({ XMLHttpRequest: Xhr });
+
+    const xhr = new sb.win.XMLHttpRequest();
+    xhr.open('POST', UPDATE_URL);
+    xhr.send({ upload: true });
+    xhr.responseText = HISTORY_BODY;
+    xhr._headers['content-type'] = 'application/json+protobuf';
+    xhr.fire('load');
+
+    expect(sb.events).toHaveLength(1);
+    expect(JSON.parse(sb.events[0].detail).kind).toBe('history');
   });
 });
 
