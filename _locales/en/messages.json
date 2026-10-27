@@ -218,6 +218,9 @@
   "options_exact_count": {
     "message": "Exact token counting via the Gemini API"
   },
+  "options_exact_count_nokey": {
+    "message": "API key not found. Re-enter the key to enable exact token counting"
+  },
   "options_export_legend": {
     "message": "Export history"
   },

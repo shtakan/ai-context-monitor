@@ -11,6 +11,8 @@ const showWidget = document.getElementById('show-widget');
 const apiKeyInput = document.getElementById('api-key');
 const toggleApiKeyBtn = document.getElementById('toggle-api-key');
 const exactCountCheckbox = document.getElementById('exact-count');
+// BYOK-sync: подсказка «ключ не найден» под чекбоксом точного подсчёта.
+const exactCountWarningEl = document.getElementById('exact-count-warning');
 const versionEl = document.querySelector('.version');
 const exportMdBtn = document.getElementById('export-md');
 const exportJsonBtn = document.getElementById('export-json');
@@ -147,6 +149,42 @@ function aiCmSaveByokKey(value) {
   aiCmPurgeLegacyByokKeys();
 }
 
+// ========== BYOK-sync: галочка точного подсчёта и наличие ключа ==========
+// Ключ живёт в chrome.storage.session и стирается при перезапуске браузера, а флаг
+// точного подсчёта — в chrome.storage.local и перезапуск переживает. Без ключа расчёт
+// молча уходит в эвристику, поэтому галочка обязана это отражать: снимаем её, пишем
+// false в local и показываем подсказку под чекбоксом.
+// null == «наличие ключа неизвестно» (нет chrome.storage.session в моках/отладке):
+// тогда ничего не трогаем и оставляем прежнее поведение.
+var aiCmByokHasKeyState = null;
+
+function aiCmRenderExactCountWarning(show) {
+  if (!exactCountWarningEl) return;
+  exactCountWarningEl.textContent = show
+    ? aiCmI18nMessage(
+      'options_exact_count_nokey',
+      'Ключ API не найден. Введите ключ заново, чтобы включить точный подсчёт'
+    )
+    : '';
+}
+
+// Вызывается по факту наличия ключа (true/false). Только два этих значения меняют
+// состояние: «неизвестно» (null) не трогает ни флаг, ни текст подсказки.
+// Без ключа включённая галочка гасится здесь же — единственная точка записи false.
+function aiCmSyncExactCountWithByok(hasKey) {
+  if (hasKey !== true && hasKey !== false) return;
+  aiCmByokHasKeyState = hasKey;
+  if (hasKey || !exactCountCheckbox || !exactCountCheckbox.checked) {
+    aiCmRenderExactCountWarning(false);
+    return;
+  }
+  exactCountCheckbox.checked = false;
+  aiCmRenderExactCountWarning(true);
+  try {
+    chrome.storage.local.set({ ai_cm_exact_token_count: false });
+  } catch (eSync) { console.warn('[AI CM][catch] aiCmSyncExactCountWithByok:', eSync); }
+}
+
 // Загрузка ключа: поле и статус — по факту session. Plaintext прежних версий в
 // local — переходный фолбэк: переносим в session и стираем с диска (ключ не теряем).
 function aiCmLoadByokKey() {
@@ -163,9 +201,12 @@ function aiCmLoadByokKey() {
       if (typeof key === 'string' && key) {
         if (apiKeyInput) apiKeyInput.value = key;
         aiCmRenderApiKeyStatus(true);
+        aiCmSyncExactCountWithByok(true);
         return;
       }
       aiCmRenderApiKeyStatus(false);
+      // Ключа в session нет — точный подсчёт недоступен, галочку снимаем до миграции.
+      aiCmSyncExactCountWithByok(false);
       try {
         chrome.storage.local.get(AI_CM_BYOK_LEGACY_KEYS, function (dl) {
           var legacy = aiCmFirstLegacyByokKey(dl);
@@ -173,6 +214,7 @@ function aiCmLoadByokKey() {
           aiCmSaveByokKey(legacy);
           if (apiKeyInput) apiKeyInput.value = legacy;
           aiCmRenderApiKeyStatus(true);
+          aiCmSyncExactCountWithByok(true);
           console.log('[AI CM][byok] migrated plaintext→session');
         });
       } catch (eLeg) { aiCmPopupDiagLine('aiCmLoadByokKey', { err: String(eLeg) }); }
@@ -181,7 +223,11 @@ function aiCmLoadByokKey() {
     var maybePromise = chrome.storage.session.get([AI_CM_BYOK_SESSION_KEY], onSession);
     if (maybePromise && typeof maybePromise.then === 'function') {
       maybePromise.then(onSession, function () {
-        if (!handled) { handled = true; aiCmRenderApiKeyStatus(false); }
+        if (!handled) {
+          handled = true;
+          aiCmRenderApiKeyStatus(false);
+          aiCmSyncExactCountWithByok(false);
+        }
       });
     }
   } catch (eLoad) { aiCmRenderApiKeyStatus(false); }
@@ -189,7 +235,11 @@ function aiCmLoadByokKey() {
 
 // BYOK: флаг точного подсчёта остаётся в chrome.storage.local (ключ — в session, M-7).
 chrome.storage.local.get(['ai_cm_exact_token_count'], function (data) {
-  if (data.ai_cm_exact_token_count !== undefined) exactCountCheckbox.checked = data.ai_cm_exact_token_count;
+  if (data.ai_cm_exact_token_count === undefined) return;
+  exactCountCheckbox.checked = !!data.ai_cm_exact_token_count;
+  // Запрос session мог ответить раньше local: без ключа галочка снимается повторно,
+  // иначе прочитанный из local true снова включил бы «точный» счёт без ключа.
+  if (aiCmByokHasKeyState === false) aiCmSyncExactCountWithByok(false);
 });
 aiCmLoadByokKey();
 
@@ -379,6 +429,8 @@ try {
 apiKeyInput && apiKeyInput.addEventListener('input', function () {
   aiCmSaveByokKey(apiKeyInput.value);
   aiCmRenderApiKeyStatus(!!apiKeyInput.value);
+  // Очищенное поле = ключа нет: галочка точного подсчёта снимается сразу (BYOK-sync).
+  aiCmSyncExactCountWithByok(!!apiKeyInput.value);
 });
 
 // BYOK (M-7): «Убрать ключ» — очищает ключ из памяти сессии (и поле ввода).
@@ -391,6 +443,8 @@ removeApiKeyBtn && removeApiKeyBtn.addEventListener('click', function () {
   aiCmPurgeLegacyByokKeys();
   if (apiKeyInput) apiKeyInput.value = '';
   aiCmRenderApiKeyStatus(false);
+  // Ключ удалён — точный подсчёт недоступен: снимаем галочку и предупреждаем (BYOK-sync).
+  aiCmSyncExactCountWithByok(false);
 });
 
 // BYOK: показать/скрыть ключ
@@ -408,6 +462,13 @@ toggleApiKeyBtn && toggleApiKeyBtn.addEventListener('click', function () {
 // BYOK: сохранение флага точного подсчёта
 exactCountCheckbox && exactCountCheckbox.addEventListener('change', function () {
   chrome.storage.local.set({ ai_cm_exact_token_count: exactCountCheckbox.checked });
+  // Без ключа флаг бесполезен (расчёт всё равно эвристический): включить галочку нельзя,
+  // она сразу гаснет с подсказкой. Наличие ключа неизвестно — поведение прежнее.
+  if (aiCmByokHasKeyState === false && exactCountCheckbox.checked) {
+    aiCmSyncExactCountWithByok(false);
+  } else {
+    aiCmRenderExactCountWarning(false);
+  }
 });
 
 // ========== v1.8: АВТОЭКСПОРТ ПРИ ПОРОГЕ (настройки) ==========

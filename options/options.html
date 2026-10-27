@@ -174,9 +174,14 @@
         </div>
       </div>
 
-      <div class="section checkbox-row">
-        <input type="checkbox" id="exact-count">
-        <label for="exact-count" data-i18n="options_exact_count">Точный подсчёт токенов через Gemini API</label>
+      <div class="section">
+        <div class="checkbox-row">
+          <input type="checkbox" id="exact-count">
+          <label for="exact-count" data-i18n="options_exact_count">Точный подсчёт токенов через Gemini API</label>
+        </div>
+        <!-- BYOK-синхронизация: ключ живёт в session (стирается при перезапуске), флаг — в local.
+             Текст подставляется из локали в options.js; пустой span == предупреждения нет. -->
+        <span class="hint" id="exact-count-warning" role="status"></span>
       </div>
 
       <div class="section">

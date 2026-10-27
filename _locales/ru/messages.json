@@ -218,6 +218,9 @@
   "options_exact_count": {
     "message": "Точный подсчёт токенов через Gemini API"
   },
+  "options_exact_count_nokey": {
+    "message": "Ключ API не найден. Введите ключ заново, чтобы включить точный подсчёт"
+  },
   "options_export_legend": {
     "message": "Экспорт истории"
   },

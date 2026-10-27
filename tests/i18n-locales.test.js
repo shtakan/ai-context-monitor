@@ -1277,10 +1277,12 @@ describe('M-4.4: локализация privacy/privacy.html и docs/index.html'
       //   без ключей локали: любой новый ключ с совпадающими ru/en-значениями запрещён пином
       //   «en — реальный перевод» (:187-204), который допускает совпадение только у брендовых
       //   строк, options_info_separator и — в этой задаче — не правится. → словарь 269
+      // + BYOK-sync: options_exact_count_nokey — подсказка под чекбоксом точного
+      //   подсчёта, когда ключа в session нет (+1) → словарь 270
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('privacy_') === 0; }).length).toBe(86);
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('docs_') === 0; }).length).toBe(42);
-      expect(Object.keys(ru).length).toBe(269);
-      expect(Object.keys(en).length).toBe(269);
+      expect(Object.keys(ru).length).toBe(270);
+      expect(Object.keys(en).length).toBe(270);
     });
 
     test('ru-значения M-4.4 байтово равны тексту разметки, en — перевод без кириллицы', () => {
