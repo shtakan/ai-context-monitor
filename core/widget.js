@@ -136,6 +136,62 @@ function stepSafePct(delta) {
   setSafePctFromInput(String(next));
 }
 
+// ========== Миграция per-service порога виджета на ключ 'aistudio' ==========
+// До появления ключа 'aistudio' aistudio.google.com попадал в ветку `host.includes('google.com')`
+// ⇒ порог виджета читался/писался в 'ai_cm_safe_pct_google_search'. После ввода ключа
+// пользовательский порог иначе «пропал» бы (новый ключ пуст ⇒ Авто). Поэтому при ПЕРВОМ
+// чтении, когда своего ключа в storage ещё НЕТ (undefined, а не null), значение однократно
+// копируется из старого ключа. Старый ключ НЕ удаляется (у Google Search он свой).
+// Явный сброс в «Авто» пишет null — это НЕ пусто: миграция второй раз не срабатывает и
+// снятый порог не воскресает.
+const AI_CM_SAFE_PCT_MIGRATIONS = { aistudio: 'google_search' };
+
+// Пара ключей миграции для текущего сервиса: { own, legacy } либо null (миграции нет).
+function aiCmSafePctMigrationSource() {
+  const svc = getServiceKey();
+  const from = (AI_CM_SAFE_PCT_MIGRATIONS && AI_CM_SAFE_PCT_MIGRATIONS[svc]) || '';
+  if (!from) return null;
+  return { own: 'ai_cm_safe_pct_' + svc, legacy: 'ai_cm_safe_pct_' + from };
+}
+
+// Решение миграции (чистая функция, тестируется без storage): значение для записи в свой
+// ключ либо null — «миграция не нужна». own === undefined ⇒ своего ключа ещё нет.
+function aiCmSafePctMigrationValue(own, legacy) {
+  if (own !== undefined) return null; // ключ уже есть (в т.ч. null = «Авто») — не трогаем
+  if (typeof legacy !== 'number' || !(legacy > 0)) return null;
+  return legacy;
+}
+
+// Чтение пары ключей + однократная запись мигрированного значения.
+// Контракт: false — миграция для этого сервиса НЕ применяется, ни storage-обращений, ни
+// колбэка (вызывающая сторона читает порог сама); true — миграция запущена, и onDone
+// вызовется РОВНО ОДИН РАЗ: с числом (миграция выполнена) либо null (мигрировать нечего).
+function aiCmMigrateSafePct(onDone) {
+  const cb = (typeof onDone === 'function') ? onDone : function () { };
+  let done = false;
+  const finish = function (value) { if (done) return; done = true; cb(value); };
+  try {
+    const pair = aiCmSafePctMigrationSource();
+    if (!pair) return false;
+    if (!isExtensionValid()) return false;
+    chrome.storage.sync.get([pair.own, pair.legacy], function (d) {
+      try {
+        const migrated = aiCmSafePctMigrationValue(d ? d[pair.own] : undefined, d ? d[pair.legacy] : undefined);
+        if (typeof migrated !== 'number') { finish(null); return; }
+        try { chrome.storage.sync.set({ [pair.own]: migrated }); } catch (eMigrateSet) { swallowSoft(eMigrateSet, 'widget:aiCmMigrateSafePct-set'); }
+        finish(migrated);
+      } catch (eMigrateApply) { swallowSoft(eMigrateApply, 'widget:aiCmMigrateSafePct-apply'); finish(null); }
+    });
+    return true;
+  } catch (eMigrate) {
+    swallowSoft(eMigrate, 'widget:aiCmMigrateSafePct');
+    // storage.get сорвался синхронно — колбэк всё равно должен сработать (иначе порог не
+    // прочитается вообще), поэтому сообщаем «мигрировать нечего» и остаёмся в ветке true.
+    finish(null);
+    return true;
+  }
+}
+
 // ========== v1.18/v1.22: сброс состояния виджета при смене чата в SPA ==========
 function resetConversationState() {
   // O-27/O-32 (диагностика, только измерение): тип документа (captcha/чат/поиск) и
@@ -360,13 +416,24 @@ const THEME_CONFIGS = {
     font: '"Google Sans", Roboto, helvetica, arial, sans-serif',
     light: { bgTrack: '#f1f3f4', bgFill: '#1a73e8', text: '#3c4043', tooltipBg: '#ffffff', tooltipText: '#3c4043', shadow: '0 1px 6px rgba(32,33,36,0.28)', border: '1px solid #dadce0' },
     dark: { bgTrack: '#3c4043', bgFill: '#8ab4f8', text: '#e8eaed', tooltipBg: '#303134', tooltipText: '#e8eaed', shadow: '0 1px 6px rgba(0,0,0,0.4)', border: '1px solid #5f6368' }
+  },
+  // AI Studio — палитра Google (байтово та же, что google_search): пока ключа не было,
+  // aistudio.google.com попадал в ветку google.com и получал эту же палитру. Ключ вводится
+  // ради per-service порога (safePctKey), внешний вид виджета на AI Studio не меняется.
+  aistudio: {
+    font: '"Google Sans", Roboto, helvetica, arial, sans-serif',
+    light: { bgTrack: '#f1f3f4', bgFill: '#1a73e8', text: '#3c4043', tooltipBg: '#ffffff', tooltipText: '#3c4043', shadow: '0 1px 6px rgba(32,33,36,0.28)', border: '1px solid #dadce0' },
+    dark: { bgTrack: '#3c4043', bgFill: '#8ab4f8', text: '#e8eaed', tooltipBg: '#303134', tooltipText: '#e8eaed', shadow: '0 1px 6px rgba(0,0,0,0.4)', border: '1px solid #5f6368' }
   }
 };
+// AI Studio — ОТДЕЛЬНОЙ веткой ПЕРЕД `host.includes('google.com')`: иначе aistudio.google.com
+// попадает в google-ветку и делит per-service порог виджета (safePctKey) с Google Search.
 function getServiceKey() {
   const host = window.location.hostname;
   if (host.includes('chatgpt.com')) return 'chatgpt';
   if (host.includes('deepseek.com')) return 'deepseek';
   if (host.includes('gemini.google.com')) return 'gemini';
+  if (host.includes('aistudio.google.com')) return 'aistudio';
   if (host.includes('google.com')) return 'google_search';
   return host.includes('perplexity.ai') ? 'perplexity' : host.includes('chat.qwen.ai') ? 'qwen' : host.includes('claude.ai') ? 'claude' : 'chatgpt';
 }
@@ -982,6 +1049,10 @@ function updateWidget(percentage, tokens, effectiveLimit, contextLimit, displayL
   Api.setSafePctFromInput = setSafePctFromInput;
   Api.resetSafePct = resetSafePct;
   Api.stepSafePct = stepSafePct;
+  Api.AI_CM_SAFE_PCT_MIGRATIONS = AI_CM_SAFE_PCT_MIGRATIONS;
+  Api.aiCmSafePctMigrationSource = aiCmSafePctMigrationSource;
+  Api.aiCmSafePctMigrationValue = aiCmSafePctMigrationValue;
+  Api.aiCmMigrateSafePct = aiCmMigrateSafePct;
   Api.resetConversationState = resetConversationState;
   Api.THEME_CONFIGS = THEME_CONFIGS;
   Api.getServiceKey = getServiceKey;

@@ -1178,12 +1178,26 @@ async function initialize() {
     loadByokCache();
     aiCmLoadPopupOverrides(); // H19: selectedModel/customLimit попапа → лимит и токенизация
     if (isExtensionValid()) {
-      chrome.storage.sync.get([safePctKey()], (d) => {
-        const v = d[safePctKey()];
-        safePct = (typeof v === 'number' && v > 0) ? v : null;
-        updatePanel();
-        if (isInitialized) processAndSend();
-      });
+      // Миграция per-service порога (widget.js: aiCmMigrateSafePct): ключ 'aistudio' появился
+      // позже, чем порог на aistudio.google.com успел лечь в 'ai_cm_safe_pct_google_search'.
+      // Сервис без миграции → функция вернёт false, и порог читается ровно как раньше.
+      const aiCmReadSafePct = () => {
+        chrome.storage.sync.get([safePctKey()], (d) => {
+          const v = d[safePctKey()];
+          safePct = (typeof v === 'number' && v > 0) ? v : null;
+          updatePanel();
+          if (isInitialized) processAndSend();
+        });
+      };
+      // typeof-гард — конвенция сьюта для initialize-стендов с частичным скоупом.
+      const aiCmSafePctMigrating = (typeof aiCmMigrateSafePct === 'function')
+        && aiCmMigrateSafePct((migrated) => {
+          if (typeof migrated !== 'number') { aiCmReadSafePct(); return; }
+          safePct = migrated;
+          updatePanel();
+          if (isInitialized) processAndSend();
+        });
+      if (!aiCmSafePctMigrating) aiCmReadSafePct();
     }
     if (isExtensionValid()) {
       chrome.storage.sync.get(['showWidget'], (data) => {
@@ -2210,7 +2224,12 @@ function processAndSend() {
   if (!restoredTapeLoaded) {
     restoredTapeLoaded = true;
     var svc0 = getServiceKey();
-    if (svc0 === 'gemini' || svc0 === 'aistudio') {
+    // Нейтрализация: ключ 'aistudio' раньше не существовал, и AI Studio попадал сюда как
+    // 'google_search' (т.е. в Gemini-ветку НЕ входил). Теперь ключ есть — оставляем ветку
+    // строго Gemini-only, чтобы поведение AI Studio не изменилось (tape-restore Gemini
+    // работает по /app/<id>, а у AI Studio путь /prompts/<id> — convId всегда пуст).
+    // 'google_search'/'aistudio' сюда по-прежнему не входят: как до появления ключа.
+    if (svc0 === 'gemini') {
       var convId = '';
       try {
         var m = location.pathname.match(/\/app\/(?!prompts(?:\/|$)|new(?:\/|$)|apikey(?:\/|$))([A-Za-z0-9_-]+)/);
@@ -2348,7 +2367,9 @@ function processAndSend() {
   // badge-супрессия, tape-check v79) — экспорт-поведение и ключи не меняются.
   try {
     var svcD8 = getServiceKey();
-    if (svcD8 === 'gemini' || svcD8 === 'aistudio') {
+    // Нейтрализация (см. блок v28 выше): retry считает Gemini-ключ ленты по /app/<id> —
+    // для AI Studio это всегда пустой convId, поэтому ветка остаётся строго Gemini-only.
+    if (svcD8 === 'gemini') {
       var cidD8 = '';
       try {
         var mD8 = location.pathname.match(/\/app\/(?!prompts(?:\/|$)|new(?:\/|$)|apikey(?:\/|$))([A-Za-z0-9_-]+)/);
@@ -2400,7 +2421,10 @@ function processAndSend() {
   try { aiCmQwenInitDiag('draw-guard', { verdict: 'pass', baseSeen: (baseSeen === true) ? 1 : 0, baseComplete: (baseComplete === true) ? 1 : 0, baseCount: (typeof baseCount === 'number') ? baseCount : 0, src: (typeof aiCmDiagStack === 'function') ? aiCmDiagStack(1) : '' }); } catch (eQg2) { }
   try {
     const svc = getServiceKey();
-    const isGeminiLike = (svc === 'gemini' || svc === 'aistudio');
+    // Нейтрализация: 'aistudio' теперь отдельный ключ (был 'google_search' ⇒ сюда НЕ входил),
+    // а при !baseSeen Gemini-like ветка форсит messageCount=0 и fullText='' — бейдж AI Studio
+    // без сетевой базы обнулился бы. Поэтому предикат оставлен строго по 'gemini'.
+    const isGeminiLike = (svc === 'gemini');
     let messageCount;
     if (!baseSeen) {
       messageCount = isGeminiLike ? 0 : currentAdapter.extractMessages().length;
@@ -2701,7 +2725,9 @@ function processAndSend() {
     // только для Gemini, здесь не применяются).
     try {
       var svcS24 = getServiceKey();
-      var isGeminiS24 = (svcS24 === 'gemini' || svcS24 === 'aistudio');
+      // Нейтрализация: 'aistudio' был 'google_search' ⇒ ветка не-Gemini (запись истории из
+      // DOM) для него РАБОТАЛА и является для AI Studio рабочей. Оставляем Gemini-only.
+      var isGeminiS24 = (svcS24 === 'gemini');
       if (!isGeminiS24 && isExtensionValid() && !baseSeen &&
           !(lastEmitConvId && currentConvB && lastEmitConvId !== currentConvB)) {
         var cidS24 = getCurrentConvId() || '';

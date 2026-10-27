@@ -32,20 +32,35 @@
  *   `return host.includes('perplexity.ai') ? 'perplexity' : host.includes('chat.qwen.ai') ? 'qwen'
  *    : host.includes('claude.ai') ? 'claude' : 'chatgpt';`
  * ⇒ safePctKey() даёт 'ai_cm_safe_pct_perplexity' / 'ai_cm_safe_pct_qwen' (прежде — чужой ключ ChatGPT).
- * aistudio.google.com СОЗНАТЕЛЬНО НЕ добавлен (решение ШАГ 3, обоснование ШАГ 2/4):
- *   его перехватывает ветка host.includes('google.com') → 'google_search'; ключа 'aistudio' нет в
- *   THEME_CONFIGS, поэтому ключ 'aistudio' переключил бы палитру виджета aistudio через гард
- *   core/widget.js:435 на chatgpt-зелёную (#10a37f) и сделал бы достижимыми 4 ветки `=== 'aistudio'`
- *   в core/content.js (:1972/:2106/:2158/:2435 — сегодня НЕДОСТИЖИМЫ) ⇒ отдельная задача с живой
- *   приёмкой. Сегодня 'google_search' на aistudio безвреден: core/content.js:2189 isGeminiSvc уже
- *   включает 'google_search' (BYOK жив), адаптер GeminiAdapter — core/content.js:970.
+ * aistudio.google.com СОЗНАТЕЛЬНО НЕ добавлялся в v63 (его перехватывала ветка host.includes('google.com')
+ *   → 'google_search'; ключа 'aistudio' не было в THEME_CONFIGS, поэтому ветка переключила бы палитру
+ *   виджета на chatgpt-зелёную #10a37f через гард core/widget.js:435 и сделала бы достижимыми 4 ветки
+ *   `=== 'aistudio'` в core/content.js) — это была ОТДЕЛЬНАЯ задача с живой приёмкой.
+ * --- v64 (Fix-aistudio-servicekey): эта отдельная задача выполнена (m00001) ---
+ *   (1) core/widget.js, getServiceKey(): Перед `if (host.includes('google.com'))` добавлена ветка
+ *       `if (host.includes('aistudio.google.com')) return 'aistudio';` ⇒ safePctKey() даёт
+ *       'ai_cm_safe_pct_aistudio' (свой ключ, а не google_search).
+ *   (2) core/widget.js, THEME_CONFIGS: добавлен ключ `aistudio` — палитра БАЙТОВО равна google_search
+ *       (light #f1f3f4/#1a73e8/#3c4043, dark #3c4043/#8ab4f8/#e8eaed, font "Google Sans"), т.к. до правки
+ *       AI Studio получал ровно её. Внешний вид не меняется ⇒ P-aistudio-1b прежний.
+ *   (3) Миграция порога: при первом чтении, если 'ai_cm_safe_pct_aistudio' в storage ОТСУТСТВУЕТ
+ *       (undefined), значение однократно копируется из 'ai_cm_safe_pct_google_search' (старый ключ
+ *       НЕ удаляется). Явный «Авто» пишет null — это НЕ пусто, поэтому миграция не воскрешает снятый
+ *       порог. Функции: AI_CM_SAFE_PCT_MIGRATIONS / aiCmSafePctMigrationSource /
+ *       aiCmSafePctMigrationValue (чистая) / aiCmMigrateSafePct; вызов — core/content.js initialize.
+ *   (4) core/content.js: 4 прежние «спящие» ветки `=== 'aistudio'` НЕЙТРАЛИЗОВАНЫ до строгого
+ *       'gemini' (v28 tape-restore, v82 D8.3 retry, isGeminiLike, v81 2.4 isGeminiS24): до появления
+ *       ключа AI Studio ходил туда как 'google_search' и в них не входил, т.е. поведение байтово
+ *       прежнее. isGeminiSvc (BYOK) НЕ тронут — пины qwen-gate-diag-o35/qwen-provider-wiring живы.
+ * Новые пины v63: P8 (perplexity/qwen/aistudio), R1–R3 (non-regression + изоляция), S-1/S-2 (структура).
+ * Новые пины v64: P-aistudio-1/-1b (ключ + палитра), P-aistudio-2 (миграция safePct), S-1/S-2 обновлены
+ *   (5 ключей THEME_CONFIGS, 8 host.includes в getServiceKey).
  * ШАГ 2 (qwen, read-only — сцепления НЕТ): qwen-intercept не публикует serverTokens (O-47,
  *   core/qwen-intercept.js:932-941), поэтому netServerTokens на chat.qwen.ai = 0 и
  *   aiCmMetricServerTokens (core/content.js:1917-1920) возвращает 0 и ДО, и ПОСЛЕ правки;
  *   прочие гейты content.js сравнивают currentAdapter.siteName, а не getServiceKey().
  *   core/content.js и core/qwen-intercept.js НЕ тронуты.
- * Новые пины v63: P8 (perplexity/qwen/aistudio), R1–R3 (non-regression + изоляция), S-1/S-2 (структура).
- * THEME_CONFIGS не тронут (по-прежнему ровно 4 ключа) — S-2/P6.
+ * THEME_CONFIGS в v63 не тронут (было ровно 4 ключа) — S-2/P6; в v64 ключей стало 5 (добавлен 'aistudio').
  */
 const CONTENT = require('./helpers/content-source.js').contentSource;
 const WIDGET = require('./helpers/content-source.js').moduleSource('core/widget.js');
@@ -212,6 +227,37 @@ function paletteFor(hostname, prefersDark, domOpts) {
     bgTrack: el.style.getPropertyValue('--w-bg-track'),
     bgFill: el.style.getPropertyValue('--w-bg-fill')
   };
+}
+
+// =====================================================================================
+// Песочница 3 (v64): миграция per-service порога — реальные тела core/widget.js
+// =====================================================================================
+function migrationSandbox(hostname, initialSync) {
+  const listeners = [];
+  const store = chromeStub(initialSync, listeners);
+  const ctx = {
+    window: { location: { hostname: hostname } },
+    chrome: store.chrome,
+    isExtensionValid: () => true,
+    updatePanel: () => { },
+    processAndSend: () => { },
+    debugLog: () => { },
+    aiCmDiagLine: () => { },
+    __api: null
+  };
+  const src = [
+    'var safePct = null;',
+    'const AI_CM_SAFE_PCT_MIGRATIONS = ' + extractConstObject(WIDGET, 'AI_CM_SAFE_PCT_MIGRATIONS') + ';',
+    extractFn(WIDGET, 'getServiceKey'),
+    extractFn(WIDGET, 'aiCmSafePctMigrationSource'),
+    extractFn(WIDGET, 'aiCmSafePctMigrationValue'),
+    extractFn(WIDGET, 'aiCmMigrateSafePct'),
+    'ctx.__api = { getServiceKey: getServiceKey, migrationSource: aiCmSafePctMigrationSource,' +
+    ' migrationValue: aiCmSafePctMigrationValue, migrate: aiCmMigrateSafePct,' +
+    ' getSafePct: function () { return safePct; } };'
+  ].join('\n');
+  new Function('ctx', 'with (ctx) {\n' + src + '\n}')(ctx);
+  return { api: ctx.__api, store: store, listeners: listeners, chart: ctx.chrome };
 }
 
 afterEach(() => {
@@ -403,7 +449,7 @@ describe('P5 (non-regression палитры): claude.ai даёт палитру 
 describe('P6 (гард отсутствующего ключа): нет TypeError, когда ключа нет в THEME_CONFIGS', () => {
   test('в THEME_CONFIGS ДЕЙСТВИТЕЛЬНО нет ключа claude → гард несущий', () => {
     const THEME = new Function('return ' + extractConstObject(WIDGET, 'THEME_CONFIGS'))();
-    expect(Object.keys(THEME).sort()).toEqual(['chatgpt', 'deepseek', 'gemini', 'google_search']);
+    expect(Object.keys(THEME).sort()).toEqual(['aistudio', 'chatgpt', 'deepseek', 'gemini', 'google_search']);
     expect(THEME.claude).toBeUndefined();
     // контрфакт без гарда: именно эта строка давала бы TypeError на claude.ai
     expect(() => { const c = THEME.claude; return c.dark; }).toThrow(TypeError);
@@ -456,7 +502,8 @@ describe('P7 (диагностика): site в gsa-metric-src питается g
   test('v63: perplexity.ai → site "perplexity", chat.qwen.ai → site "qwen" (прежде — "chatgpt")', () => {
     expect(({ site: pctSandbox('perplexity.ai').api.getServiceKey() }).site).toBe('perplexity');
     expect(({ site: pctSandbox('chat.qwen.ai').api.getServiceKey() }).site).toBe('qwen');
-    expect(({ site: pctSandbox('aistudio.google.com').api.getServiceKey() }).site).toBe('google_search');
+    // v64: aistudio больше НЕ 'google_search' — свой ключ (см. P-aistudio-1)
+    expect(({ site: pctSandbox('aistudio.google.com').api.getServiceKey() }).site).toBe('aistudio');
   });
 });
 
@@ -486,15 +533,20 @@ describe('P8 (v63: perplexity.ai / chat.qwen.ai): per-service serviceKey и кл
     expect(pctSandbox('qwen.ai').api.getServiceKey()).toBe('chatgpt');
   });
 
-  test('P-aistudio-1: aistudio.google.com → "google_search" (ветка aistudio СОЗНАТЕЛЬНО не добавлена)', () => {
+  test('P-aistudio-1: aistudio.google.com → "aistudio"; safePctKey свой; палитра в THEME_CONFIGS', () => {
     const s = pctSandbox('aistudio.google.com');
-    expect(s.api.getServiceKey()).toBe('google_search');
-    expect(s.api.safePctKey()).toBe('ai_cm_safe_pct_google_search');
-    // контрфакт решения ШАГ 3: ключа 'aistudio' нет в THEME_CONFIGS ⇒ ветка 'aistudio' дала бы
-    // chatgpt-палитру через гард core/widget.js:435 и разбудила бы 4 ветки === 'aistudio' в content.js
+    expect(s.api.getServiceKey()).toBe('aistudio');
+    expect(s.api.safePctKey()).toBe('ai_cm_safe_pct_aistudio');
+    expect(s.api.safePctKey()).not.toBe('ai_cm_safe_pct_google_search');
+    // v64: ключ 'aistudio' ЕСТЬ в THEME_CONFIGS — иначе гард core/widget.js:435 дал бы chatgpt-палитру
     const THEME = new Function('return ' + extractConstObject(WIDGET, 'THEME_CONFIGS'))();
-    expect(THEME.aistudio).toBeUndefined();
-    expect(WIDGET).not.toContain("host.includes('aistudio.google.com')");
+    expect(THEME.aistudio).toBeDefined();
+    expect(WIDGET).toContain("host.includes('aistudio.google.com')");
+    // ветка стоит ПЕРЕД google-веткой, иначе aistudio.google.com до неё не дойдёт
+    expect(WIDGET.indexOf("if (host.includes('aistudio.google.com')) return 'aistudio';"))
+      .toBeLessThan(WIDGET.indexOf("if (host.includes('google.com')) return 'google_search';"));
+    // www.google.com остаётся 'google_search' (non-regression per-service ключа GSA)
+    expect(pctSandbox('www.google.com').api.getServiceKey()).toBe('google_search');
   });
 
   test('P-aistudio-1b: палитра aistudio.google.com — google_search (#f1f3f4/#1a73e8), НЕ chatgpt-зелёная', () => {
@@ -503,6 +555,114 @@ describe('P8 (v63: perplexity.ai / chat.qwen.ai): per-service serviceKey и кл
     expect(p.bgTrack).toBe('#f1f3f4');
     expect(p.bgFill).toBe('#1a73e8');
     expect(p.bgFill).not.toBe('#10a37f');
+    // v64: палитра aistudio БАЙТОВО равна google_search и в light, и в dark (вид не изменился)
+    ['light', 'dark'].forEach((mode) => {
+      const dom = mode === 'dark' ? { bodyBg: 'rgb(32, 33, 36)' } : { bodyBg: 'rgb(255, 255, 255)' };
+      expect(paletteFor('aistudio.google.com', false, dom))
+        .toEqual(paletteFor('www.google.com', false, dom));
+    });
+  });
+});
+
+// =====================================================================================
+// P-aistudio-2 (v64) — миграция per-service порога 'google_search' → 'aistudio'
+// Источник: m00001 ШАГ 2. Прежде порог на AI Studio лежал в ai_cm_safe_pct_google_search
+// (aistudio.google.com → 'google_search'); новый ключ иначе «потерял» бы его.
+// =====================================================================================
+describe('P-aistudio-2 (v64): однократная миграция порога в ключ aistudio', () => {
+  test('aiCmSafePctMigrationValue — таблица решений (свой ключ / кривой legacy)', () => {
+    const s = migrationSandbox('aistudio.google.com');
+    const val = s.api.migrationValue;
+    // своего ключа нет, legacy валиден → мигрируем ровно его
+    expect(val(undefined, 40)).toBe(40);
+    expect(val(undefined, 1)).toBe(1);
+    expect(val(undefined, 99.5)).toBe(99.5);
+    // свой ключ уже есть (число или null = «Авто») → НЕ мигрируем (однократность)
+    expect(val(40, 30)).toBe(null);
+    expect(val(null, 40)).toBe(null); // «Авто» не воскресает
+    expect(val(0, 40)).toBe(null); // 0 в свой ключ не пишется, но ключ существует
+    // legacy пуст/кривой → мигрировать нечего
+    expect(val(undefined, undefined)).toBe(null);
+    expect(val(undefined, null)).toBe(null);
+    expect(val(undefined, 0)).toBe(null);
+    expect(val(undefined, -5)).toBe(null);
+    expect(val(undefined, '40')).toBe(null);
+    expect(val(undefined, NaN)).toBe(null);
+  });
+
+  test('aiCmSafePctMigrationSource — пара ключей только для aistudio', () => {
+    expect(migrationSandbox('aistudio.google.com').api.migrationSource())
+      .toEqual({ own: 'ai_cm_safe_pct_aistudio', legacy: 'ai_cm_safe_pct_google_search' });
+    // остальные сервисы миграции не имеют — хранимые ключи байтово прежние
+    ['chatgpt.com', 'www.google.com', 'gemini.google.com', 'claude.ai', 'chat.qwen.ai', 'example.com']
+      .forEach((h) => expect(migrationSandbox(h).api.migrationSource()).toBe(null));
+  });
+
+  test('E2E: legacy 40 → запись ai_cm_safe_pct_aistudio=40, старый ключ не удалён, cb(40)', () => {
+    const s = migrationSandbox('aistudio.google.com', {
+      ai_cm_safe_pct_google_search: 40,
+      ai_cm_safe_pct_aistudio: undefined
+    });
+    let got = 'not-called';
+    expect(s.api.migrate((v) => { got = v; })).toBe(true);
+    expect(got).toBe(40);
+    expect(s.store.writes).toEqual([{ ai_cm_safe_pct_aistudio: 40 }]);
+    expect(s.store.state.ai_cm_safe_pct_aistudio).toBe(40);
+    expect(s.store.state.ai_cm_safe_pct_google_search).toBe(40); // старый ключ НЕ удалён
+  });
+
+  test('однократность: второй вызов со своим ключом ничего не пишет и даёт cb(null)', () => {
+    const s = migrationSandbox('aistudio.google.com', {
+      ai_cm_safe_pct_google_search: 40,
+      ai_cm_safe_pct_aistudio: undefined
+    });
+    expect(s.api.migrate(() => { })).toBe(true);
+    expect(s.store.writes.length).toBe(1);
+    const writesAfterFirst = s.store.writes.length;
+    let second = 'not-called';
+    expect(s.api.migrate((v) => { second = v; })).toBe(true);
+    expect(second).toBe(null);
+    expect(s.store.writes.length).toBe(writesAfterFirst); // ровно одна запись за всю жизнь
+  });
+
+  test('«Авто» (null) не мигрирует: legacy 40 при null в своём ключе игнорируется', () => {
+    const s = migrationSandbox('aistudio.google.com', {
+      ai_cm_safe_pct_google_search: 40,
+      ai_cm_safe_pct_aistudio: null
+    });
+    let got = 'not-called';
+    expect(s.api.migrate((v) => { got = v; })).toBe(true);
+    expect(got).toBe(null);
+    expect(s.store.writes).toEqual([]);
+  });
+
+  test('legacy пуст или кривой → storage не пишется, cb(null)', () => {
+    [{}, { ai_cm_safe_pct_google_search: 0 }, { ai_cm_safe_pct_google_search: -3 }].forEach((init) => {
+      const s = migrationSandbox('aistudio.google.com', init);
+      let got = 'not-called';
+      expect(s.api.migrate((v) => { got = v; })).toBe(true);
+      expect(got).toBe(null);
+      expect(s.store.writes).toEqual([]);
+    });
+  });
+
+  test('сервис без миграции: migrate() → false, колбэк и storage НЕ трогаются', () => {
+    const s = migrationSandbox('chatgpt.com', { ai_cm_safe_pct_chatgpt: 10 });
+    let gets = 0;
+    const rawGet = s.chart.storage.sync.get;
+    s.chart.storage.sync.get = function (keys, cb) { gets++; return rawGet.call(this, keys, cb); };
+    let called = false;
+    expect(s.api.migrate(() => { called = true; })).toBe(false);
+    expect(called).toBe(false);
+    expect(gets).toBe(0); // ни одного storage-обращения — путь чтения не удлиняется
+    expect(s.store.writes).toEqual([]);
+  });
+
+  test('структурный пин: константа миграции и вызов в точке чтения content.js', () => {
+    expect(WIDGET).toContain("const AI_CM_SAFE_PCT_MIGRATIONS = { aistudio: 'google_search' };");
+    // вызов стоит в initialize до чтения порога (typeof-гард — конвенция сьюта)
+    expect(CONTENT).toContain('typeof aiCmMigrateSafePct === \'function\'');
+    expect(CONTENT.indexOf('aiCmMigrateSafePct(')).toBeLessThan(CONTENT.indexOf('chrome.storage.sync.get([safePctKey()], (d) => {'));
   });
 });
 
@@ -549,19 +709,20 @@ describe('R3 (изоляция v63): perplexity / qwen / chatgpt не делят
 // S — структурные пины v63 (одна точка правки; THEME_CONFIGS не тронут)
 // =====================================================================================
 describe('S (структура v63): правка в одной точке, THEME_CONFIGS не тронут', () => {
-  test('S-1: правка ровно в одной строке getServiceKey — 7 host.includes, тело из 8 строк', () => {
+  test('S-1: getServiceKey — 8 host.includes (5 if + 3 в хвосте), тело из 9 строк', () => {
     const fnSrc = extractFn(WIDGET, 'getServiceKey');
-    ['perplexity.ai', 'chat.qwen.ai'].forEach((h) => expect(fnSrc).toContain("host.includes('" + h + "')"));
-    expect((fnSrc.match(/host\.includes\(/g) || []).length).toBe(7); // 4 прежних if + 3 в хвосте
-    expect(fnSrc.split('\n').length).toBe(8); // сигнатура, const host, 4 if, хвост-return, '}'
+    ['perplexity.ai', 'chat.qwen.ai', 'aistudio.google.com'].forEach((h) => expect(fnSrc).toContain("host.includes('" + h + "')"));
+    expect((fnSrc.match(/host\.includes\(/g) || []).length).toBe(8); // 5 прежних if + 3 в хвосте
+    expect(fnSrc.split('\n').length).toBe(9); // сигнатура, const host, 5 if, хвост-return, '}'
     expect(fnSrc.match(/^\s{2}return /gm).length).toBe(1); // ровно один return-строка в хвосте (1-в-1)
   });
 
-  test('S-2: THEME_CONFIGS — те же 4 ключа; нет perplexity/qwen/aistudio/claude', () => {
+  test('S-2: THEME_CONFIGS — 5 ключей (добавлен aistudio); нет perplexity/qwen/claude', () => {
     const THEME = new Function('return ' + extractConstObject(WIDGET, 'THEME_CONFIGS'))();
-    expect(Object.keys(THEME).sort()).toEqual(['chatgpt', 'deepseek', 'gemini', 'google_search']);
-    ['perplexity', 'qwen', 'aistudio', 'claude'].forEach((k) => expect(THEME[k]).toBeUndefined());
-    expect(WIDGET).not.toMatch(/THEME_CONFIGS\.(perplexity|qwen|aistudio|claude)\s*=/);
+    expect(Object.keys(THEME).sort()).toEqual(['aistudio', 'chatgpt', 'deepseek', 'gemini', 'google_search']);
+    ['perplexity', 'qwen', 'claude'].forEach((k) => expect(THEME[k]).toBeUndefined());
+    expect(THEME.aistudio).toEqual(THEME.google_search); // палитра байтово одна
+    expect(WIDGET).not.toMatch(/THEME_CONFIGS\.(perplexity|qwen|claude)\s*=/);
   });
 
   test('S-2b: палитры 4 прежних сервисов не переписаны (снимок ключевых значений)', () => {
