@@ -394,6 +394,12 @@ declare function snapCurrentPct(): void;
 declare function setSafePctFromInput(v: unknown): void;
 declare function resetSafePct(): void;
 declare function stepSafePct(delta: number): void;
+/**
+ * core/widget.js: однократная миграция per-service порога safePct.
+ * false — миграции для текущего сервиса нет (вызывающая сторона читает порог сама);
+ * true — миграция запущена, onDone вызовется ровно один раз (число либо null).
+ */
+declare function aiCmMigrateSafePct(onDone: (value: number | null) => void): boolean;
 declare function aiCmInAppTheme(): 'dark' | 'light' | null;
 declare function isDarkMode(): boolean;
 declare function applyNativeStyles(container: HTMLElement): void;

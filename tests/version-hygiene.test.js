@@ -3,7 +3,7 @@
  *
  * Пины source-level (стиль manifest-smoke.test.js / docs-hygiene.test.js) — только чтение:
  *  1) manifest.version === версия ВЕРХНЕЙ записи CHANGELOG.md (парсинг реального файла,
- *     формат Keep a Changelog: «## [x.y.z] - YYYY-MM-DD»); версия — строго литерал 2.0.15,
+ *     формат Keep a Changelog: «## [x.y.z] - YYYY-MM-DD»); версия — строго литерал 2.0.31,
  *     чтобы пин не «съезжал» молча вслед за манифестом;
  *  2) package.json === package-lock.json (root + packages[""]) === manifest.json;
  *  3) место вывода версии согласовано с манифестом: футер docs/index.html
@@ -54,11 +54,11 @@ describe('R-1: manifest.version синхронизирован с верхней
     expect(manifest.version).toBe(topEntry.version);
   });
 
-  test('manifest.version === 2.0.29 (литерал: пин не следует за манифестом молча)', () => {
-    expect(manifest.version).toBe('2.0.29');
+  test('manifest.version === 2.0.31 (литерал: пин не следует за манифестом молча)', () => {
+    expect(manifest.version).toBe('2.0.31');
     expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(topEntry.version).toBe('2.0.29');
-    expect(topEntry.date).toBe('2026-10-26');
+    expect(topEntry.version).toBe('2.0.31');
+    expect(topEntry.date).toBe('2026-10-27');
   });
 
   test('версия монотонна: старшая компонента не ниже прежней (1.18.0)', () => {
@@ -72,13 +72,14 @@ describe('R-1: manifest.version синхронизирован с верхней
     expect(greater).toBe(true);
   });
 
-  test('CHANGELOG: прежние записи не переписаны; новая 2.0.29 стоит выше 2.0.14, а та — выше 2.0.13, а та — выше 2.0.12, а та — выше 2.0.9, а та — выше 2.0.8, а та — выше 2.0.7, а та — выше 2.0.6, а та — выше 2.0.5, а та — выше 2.0.4, а та — выше 2.0.3, а та — выше 2.0.2, а та — выше 2.0.1, а та — выше 2.0.0, а та — выше 1.19.3 (M-14)', () => {
+  test('CHANGELOG: прежние записи не переписаны; новая 2.0.31 стоит выше 2.0.29, а та — выше 2.0.14, а та — выше 2.0.13, а та — выше 2.0.12, а та — выше 2.0.9, а та — выше 2.0.8, а та — выше 2.0.7, а та — выше 2.0.6, а та — выше 2.0.5, а та — выше 2.0.4, а та — выше 2.0.3, а та — выше 2.0.2, а та — выше 2.0.1, а та — выше 2.0.0, а та — выше 1.19.3 (M-14)', () => {
     const headings = changelog.split(/\r?\n/).filter(function (l) { return l.indexOf('## [') === 0; });
     expect(headings.filter(function (h) { return h.indexOf('## [1.19.3] - 2026-09-13') === 0; }).length).toBe(1);
     expect(headings.filter(function (h) { return h.indexOf('## [1.19.2] - 2026-09-13') === 0; }).length).toBe(1);
     expect(headings.filter(function (h) { return h.indexOf('## [1.19.1] - 2026-09-13') === 0; }).length).toBe(1);
     expect(headings.filter(function (h) { return h.indexOf('## [1.18.0] - 2026-09-12') === 0; }).length).toBe(1);
-    const iNew = headings.findIndex(function (h) { return h.indexOf('## [2.0.29]') === 0; });
+    const iNew = headings.findIndex(function (h) { return h.indexOf('## [2.0.31]') === 0; });
+    const iV2029 = headings.findIndex(function (h) { return h.indexOf('## [2.0.29]') === 0; });
     const iV2014 = headings.findIndex(function (h) { return h.indexOf('## [2.0.14]') === 0; });
     const iV2013 = headings.findIndex(function (h) { return h.indexOf('## [2.0.13]') === 0; });
     const iV2012 = headings.findIndex(function (h) { return h.indexOf('## [2.0.12]') === 0; });
@@ -95,11 +96,13 @@ describe('R-1: manifest.version синхронизирован с верхней
     const iM14 = headings.findIndex(function (h) { return h.indexOf('## [1.19.3]') === 0; });
     const iM12 = headings.findIndex(function (h) { return h.indexOf('## [1.19.2]') === 0; });
     const iPrev = headings.findIndex(function (h) { return h.indexOf('## [1.19.1]') === 0; });
-    expect(iNew).toBeGreaterThanOrEqual(0);                  // запись v2.0.29 на месте
+    expect(iNew).toBeGreaterThanOrEqual(0);                  // запись v2.0.31 на месте
+    expect(iV2029).toBeGreaterThanOrEqual(0);                // запись v2.0.29 не переписана
     expect(iV2014).toBeGreaterThanOrEqual(0);                // запись v2.0.14 не переписана
     expect(iV2013).toBeGreaterThanOrEqual(0);                // запись v2.0.13 не переписана
     expect(iV2012).toBeGreaterThanOrEqual(0);                // запись v2.0.12 не переписана
-    expect(iNew).toBeLessThan(iV2014);                       // 2.0.29 выше 2.0.14
+    expect(iNew).toBeLessThan(iV2029);                       // 2.0.31 выше 2.0.29
+    expect(iV2029).toBeLessThan(iV2014);                     // 2.0.29 выше 2.0.14
     expect(iV2014).toBeLessThan(iV2013);                     // 2.0.14 выше 2.0.13
     expect(iV2013).toBeLessThan(iV2012);                     // 2.0.13 выше 2.0.12
     expect(iV2012).toBeLessThan(iV209);                      // 2.0.12 выше 2.0.9
@@ -146,7 +149,8 @@ describe('R-1: package.json и package-lock.json — та же версия, ч�
       expect(JSON.stringify(doc)).not.toMatch(/2\.0\.1(?!\d)/);
       // граница версии: «2.0.21» не должно ловиться как «2.0.2»
       expect(JSON.stringify(doc)).not.toMatch(/2\.0\.2(?!\d)/);
-      expect(JSON.stringify(doc)).not.toContain('2.0.3');
+      // граница версии: «2.0.31» не должно ловиться как «2.0.3»
+      expect(JSON.stringify(doc)).not.toMatch(/2\.0\.3(?!\d)/);
       expect(JSON.stringify(doc)).not.toContain('2.0.4');
       expect(JSON.stringify(doc)).not.toContain('2.0.5');
       expect(JSON.stringify(doc)).not.toContain('2.0.6');
@@ -195,7 +199,8 @@ describe('R-1: единый источник версии — chrome.runtime.get
     expect(docsHtml).not.toContain('Версия</span> 2.0.6');
     expect(docsHtml).not.toContain('Версия</span> 2.0.5');
     expect(docsHtml).not.toContain('Версия</span> 2.0.4');
-    expect(docsHtml).not.toContain('Версия</span> 2.0.3');
+    // граница версии: «Версия</span> 2.0.31» не должно ловиться как «2.0.3»
+    expect(docsHtml).not.toMatch(/Версия<\/span> 2\.0\.3(?!\d)/);
     // граница версии: «Версия</span> 2.0.21» не должно ловиться как «2.0.2»
     expect(docsHtml).not.toMatch(/Версия<\/span> 2\.0\.2(?!\d)/);
     // граница версии: «Версия</span> 2.0.15» не должно ловиться как «2.0.1»

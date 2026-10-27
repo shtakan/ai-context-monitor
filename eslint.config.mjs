@@ -103,11 +103,16 @@ export default [
   // 1. Игноры. Список из задания шага + `**/*.min.js` (в репозитории таких
   //    файлов вне dist/ сейчас нет, но суффикс — маркер машинной генерации).
   //    `tools/_*` и `tools/_*/**` покрывают рабочие каталоги серии E.2a
-  //    (_e2a2b1-backup, _e2a2b4cd-backup, _baseline, …) — они не исходники.
+  //    (_e2a2b1-backup, _e2a2b4cd-backup, _baseline, …) — они не источники.
+  //    `dist-firefox/**` — артефакт `node build.mjs` (MINIFY=false, code-split
+  //    прогон). В нём esbuild переписывает глобалы через `with`, и eslint в
+  //    strict-режиме падал с 13 `Parsing error: 'with' in strict mode` на
+  //    локальной машине, где dist-firefox уже собран (Lint #266).
   // ---------------------------------------------------------------------------
   {
     ignores: [
       'dist/**',
+      'dist-firefox/**',
       'node_modules/**',
       'coverage/**',
       'tools/_*',

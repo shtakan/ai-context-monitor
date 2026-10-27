@@ -58,6 +58,21 @@ interface Window {
   __aiCmSwallow?: any;
   /** utils/debug.js — хелпер swallowSoft(error, tag): канал B, console.error не вызывает (Step E.2c-A) */
   __aiCmSwallowSoft?: any;
+  /**
+   * core/content.js ← core/aistudio-intercept.js: слаг модели, названный в теле
+   * сетевого запроса AI Studio (models/gemini-…). Читается adapters/aistudio-adapter.js.
+   */
+  __aiCmNetModelSlug?: string;
+  /**
+   * core/content.js: снимок сетевой истории AI Studio для текущего пути
+   * ({ msgs, count, ts, href }). Читается adapters/aistudio-adapter.js.
+   */
+  __aiCmNetMsgs?: {
+    msgs: Array<{ role: string; text: string }>;
+    count: number;
+    ts: number;
+    href: string;
+  } | null;
   /** utils/archive-import.js */
   AiCmArchiveImport?: any;
   /** utils/export-text-builders.js */

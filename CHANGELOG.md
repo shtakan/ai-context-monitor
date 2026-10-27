@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.31] - 2026-10-27
+
+### Added
+- Google AI Studio (`aistudio.google.com`): точный счёт токенов — prompt-токены из заголовка чата (`775d840`), сетевая история из перехвата `$rpc` и разбор `usage`/`DriveResource`, кэш разобранной истории в `sessionStorage` и снимки DOM как резерв (`f5e7c00`, `daa2790`); сервис-ключ AI Studio и палитра виджета с миграцией `safePct` (`2306321`).
+
+### Fixed
+- BYOK: чекбокс точного подсчёта (`exactCount`) автоматически гаснет, когда API-ключ отсутствует, вместо обещания точности без ключа (`8c21e85`).
+- Firefox: Xray-фикс шести мостов ISOLATED→MAIN — `detail` передаётся строкой `JSON.stringify`, MAIN-мир разбирает её хелпером `aiCmBridgeDetail(ev)` (см. `## [2.0.29]`).
+- Метрика: приоритет точных `countTokens` над эвристикой на всех путях расчёта процента.
+- CI: починена сборка Lint #266 — tsc-швы AI Studio-глобалов в `types/` (`aiCmMigrateSafePct`, `__aiCmNetModelSlug`, `__aiCmNetMsgs`) и `dist-firefox/**` в `ignores` eslint. Релиз v2.0.30 не состоялся: номер версии не был поднят, ZIP собрался с именем `ai-context-monitor-v2.0.29.zip`; в v2.0.31 номер исправлен.
+
 ## [2.0.29] - 2026-10-26
 
 ### Fixed
