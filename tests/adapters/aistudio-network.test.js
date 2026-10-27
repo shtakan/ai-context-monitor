@@ -192,14 +192,28 @@ describe('core/aistudio-intercept.js: классификация $rpc-запро
     expect(api.__handlers.isCountRpc('')).toBe(false);
   });
 
-  test('история: UpdatePrompt / Create / GenerateContent под $rpc', () => {
+  test('история: UpdatePrompt / Create / CreatePrompt / GenerateContent под $rpc', () => {
     const h = api.__handlers;
     expect(h.isHistoryRpc('https://aistudio.google.com/$rpc/x.UpdatePrompt')).toBe(true);
     expect(h.isHistoryRpc('https://aistudio.google.com/$rpc/x.Create')).toBe(true);
+    expect(h.isHistoryRpc('https://aistudio.google.com/$rpc/x.CreatePrompt')).toBe(true);
     expect(h.isHistoryRpc('https://aistudio.google.com/$rpc/x.GenerateContent')).toBe(true);
     expect(h.isHistoryRpc('https://aistudio.google.com/api/UpdatePrompt')).toBe(false);
     // CountTokens не должен попасть в историю (порядок проверок в handleResponse)
     expect(h.isHistoryRpc('https://aistudio.google.com/$rpc/x.CountTokens')).toBe(false);
+  });
+
+  test('история: ListPrompts даёт снимок библиотеки промптов', () => {
+    // Живой лог AI Studio (страница /prompts/...): ListPrompts вызывается 4 раза,
+    // GenerateContent/CreatePrompt на этой странице не было вовсе. Старая
+    // регулярка `/updateprompt|create|generatecontent/` его не ловила → история
+    // не поднималась, хотя полный снимок уже приходил в ответе.
+    const h = api.__handlers;
+    expect(h.isHistoryRpc('https://aistudio.google.com/$rpc/google.internal.alkali.applications.makersuite.v1.MakerSuiteService/ListPrompts')).toBe(true);
+    expect(h.isHistoryRpc('https://aistudio.google.com/$rpc/x.ListPrompts')).toBe(true);
+    // прочие методы того же сервиса — не история
+    expect(h.isHistoryRpc('https://aistudio.google.com/$rpc/x.ListModels')).toBe(false);
+    expect(h.isHistoryRpc('https://aistudio.google.com/$rpc/x.ResolveDriveResource')).toBe(false);
   });
 });
 
@@ -255,6 +269,84 @@ describe('core/aistudio-intercept.js: парсер истории (data[13])', (
   });
 });
 
+describe('core/aistudio-intercept.js: вложенная форма GenerateContent', () => {
+  const h = makeSandbox().api.__handlers;
+
+  /**
+   * Реальный ответ GenerateContent — `[[[[[null,"текст"]], "model"]]]`:
+   * TextPart лежит на четыре уровня глубже кортежа, роль — рядом с ним, а не в
+   * item[1]. Фикстура собирается литералами, чтобы форма была видна глазами.
+   */
+  const nestedTurn = (text, role) => [[[null, text]], role];
+
+  test('текст из [[[[[null,"текст"]], "model"]]] найден, роль → assistant', () => {
+    const body = JSON.stringify([[nestedTurn('Ответ модели из вложенной формы', 'model')]]);
+    const msgs = h.parseHistory(body);
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].text).toBe('Ответ модели из вложенной формы');
+    expect(msgs[0].role).toBe('assistant');
+  });
+
+  test('несколько вложенных ходов → все msgs по порядку, без дублей', () => {
+    const body = JSON.stringify([[
+      nestedTurn('вопрос пользователя', 'user'),
+      nestedTurn('ответ модели', 'model')
+    ]]);
+    const msgs = h.parseHistory(body);
+    expect(msgs).toHaveLength(2);
+    expect(msgs.map(function (m) { return m.role; })).toEqual(['user', 'assistant']);
+    expect(msgs[0].text).toBe('вопрос пользователя');
+    expect(msgs[1].text).toBe('ответ модели');
+  });
+
+  test('глубокая вложенность и мусорные поля вокруг хода не мешают', () => {
+    const body = JSON.stringify([[
+      [null, null, nestedTurn('ход в глубине дерева', 'user')],
+      nestedTurn('ответ в глубине дерева', 'model')
+    ]]);
+    const msgs = h.parseHistory(body);
+    expect(msgs).toHaveLength(2);
+    expect(msgs[0].text).toBe('ход в глубине дерева');
+    expect(msgs[1].text).toBe('ответ в глубине дерева');
+  });
+});
+
+describe('core/aistudio-intercept.js: числовые ID не считаются текстом', () => {
+  const h = makeSandbox().api.__handlers;
+
+  test('16-значный ID вместо текста отбрасывается, соседние ходы живы', () => {
+    const body = JSON.stringify(promptTree([
+      turn('1234567890123456', 'user'),     // ID промпта, а не реплика
+      turn('настоящий вопрос', 'user'),
+      turn('9876543210987654', 'model'),
+      turn('настоящий ответ', 'model')
+    ]));
+    const msgs = h.parseHistory(body);
+    expect(msgs).toHaveLength(2);
+    expect(msgs.map(function (m) { return m.text; })).toEqual(['настоящий вопрос', 'настоящий ответ']);
+  });
+
+  test('короткое и длинное число — это текст, а не ID', () => {
+    const body = JSON.stringify(promptTree([
+      turn('42', 'user'),
+      turn('123456789012345', 'model'),      // 15 знаков — ещё текст
+      turn('12345678901234567', 'user')      // 17 знаков — тоже текст
+    ]));
+    const msgs = h.parseHistory(body);
+    expect(msgs.map(function (m) { return m.text; })).toEqual(['42', '123456789012345', '12345678901234567']);
+  });
+
+  test('ID в служебном поле не становится единственной репликой снимка', () => {
+    // ListPrompts: рядом с настоящим ходом лежит служебный 16-значный ID.
+    const body = JSON.stringify(promptTree([
+      ['5555444433332222', turn('живой ход', 'user')]
+    ]));
+    const msgs = h.parseHistory(body);
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].text).toBe('живой ход');
+  });
+});
+
 describe('core/aistudio-intercept.js: парсер CountTokens', () => {
   const h = makeSandbox().api.__handlers;
 
@@ -290,6 +382,17 @@ describe('core/aistudio-intercept.js: мост MAIN → ISOLATED', () => {
     expect(payload.msgs).toHaveLength(3);
     expect(payload.site).toBe('aistudio');
     expect(sb.logs.join('\n')).toContain('[aistudio-intercept] history loaded msgs=3');
+  });
+
+  test('ListPrompts → history в мост (снимок истории без новых чанков)', () => {
+    const sb = makeSandbox();
+    const url = 'https://aistudio.google.com/$rpc/google.internal.alkali.applications.makersuite.v1.MakerSuiteService/ListPrompts';
+    sb.api.__handlers.handleResponse(url, HISTORY_BODY);
+
+    expect(sb.events).toHaveLength(1);
+    const payload = JSON.parse(sb.events[0].detail);
+    expect(payload.kind).toBe('history');
+    expect(payload.msgs).toHaveLength(3);
   });
 
   test('count: serverTokens уходит отдельным событием', () => {

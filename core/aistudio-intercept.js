@@ -9,11 +9,15 @@
  * ЗАЧЕМ. Бейдж AI Studio считался по DOM (adapters/aistudio-adapter.js,
  * ms-cmark-node.v3-font-body): длинные ответы виртуализированы, часть реплик в DOM
  * отсутствует, а счётчик токенов был всегда эвристическим. AI Studio грузит историю
- * диалога запросами `$rpc` (UpdatePrompt / Create / GenerateContent) — ответ это
- * JSON-массив протобуфера, тексты ходов лежат в `data[13]` кортежами
- * `[[null, "текст"], "role"]`. Отдельные `$rpc`-запросы CountTokens отдают точное
- * число токенов контекста — отдаём его как serverTokens, как это делают перехватчики
- * Gemini/Qwen/Claude.
+ * диалога запросами `$rpc` (UpdatePrompt / CreatePrompt / ListPrompts /
+ * GenerateContent) — ответ это JSON-массив протобуфера. Снимок истории из Prompt
+ * лежит в `data[13]` кортежами `[[null, "текст"], "role"]`, а живой ответ
+ * GenerateContent приходит ВЛОЖЕННЫМ — `[[[[[null, "текст"]], "model"]]]` (текст на
+ * 4 уровня глубже кортежа). Поэтому текст и роль ищутся на любой глубине
+ * (findTextPart/findRole), а не по фиксированным индексам. Числовые 16-значные ID
+ * (идентификаторы промптов/разговоров) за текст хода не принимаются. Отдельные
+ * `$rpc`-запросы CountTokens отдают точное число токенов контекста — отдаём его как
+ * serverTokens, как это делают перехватчики Gemini/Qwen/Claude.
  *
  * КАК. Патчим fetch и XMLHttpRequest (как core/gemini-sse.js: снимок оргиналов на
  * старте ДО кода страницы, цепочка вызовов не рвётся) и смотрим ТОЛЬКО тела
@@ -85,10 +89,17 @@
     return !!url && url.indexOf(RPC_MARK) !== -1 && /counttokens/i.test(url);
   }
 
-  /** История диалога: UpdatePrompt / Create / GenerateContent под тем же `$rpc`. */
+  /**
+   * История диалога под тем же `$rpc`:
+   *   UpdatePrompt / CreatePrompt — полный снимок `data[13]` после смены ходов;
+   *   ListPrompts  — история библиотеки промптов (снимок без новых чанков);
+   *   GenerateContent — ответ модели (вложенная форма, см. findTextPart).
+   * `create` покрывает `CreatePrompt` (и `Create*`), отдельно перечислять его не надо.
+   * CountTokens сюда не попадает — у него своя ветка в handleResponse.
+   */
   function isHistoryRpc(url) {
     if (!url || url.indexOf(RPC_MARK) === -1) return false;
-    return /updateprompt|generatecontent|create/i.test(url);
+    return /updateprompt|create|listprompts|generatecontent/i.test(url);
   }
 
   /* ================================================================== *
@@ -122,31 +133,103 @@
     return ROLE_USER;
   }
 
+  /** Максимальная глубина спуска при поиске текста/роли в протобуфере. */
+  var MAX_TURN_DEPTH = 12;
+
+  /** Строка — известная роль протобуфера ('user', 'model', 'assistant', ...). */
+  function isRoleString(s) {
+    if (typeof s !== 'string') return false;
+    var r = s.toLowerCase();
+    return r === ROLE_USER || r === 'human' || !!ROLES_AI[r];
+  }
+
   /**
-   * Кандидат-массив → сообщения. Форма элемента: `[[null, "текст"], "user"`;
-   * терпимые варианты: `[["user", "текст"], "model"]`, `["текст", "user"]`.
+   * Числовой ID вместо текста. AI Studio кладёт в протобуфер 16-значные
+   * идентификаторы промптов/разговоров (такие строки видны в логах `$rpc`), и
+   * наивный обход принимал их за реплику. Число — не текст хода.
+   */
+  function isNumericId(s) {
+    return typeof s === 'string' && /^\d{16}$/.test(s);
+  }
+
+  /** Строка годится в текст хода: не роль и не числовой ID. */
+  function isUsableText(s) {
+    return typeof s === 'string' && !isRoleString(s) && !isNumericId(s);
+  }
+
+  /**
+   * TextPart протобуфера `[null, "текст"]` (поле 1 — номер части, поле 2 — текст)
+   * на ЛЮБОЙ глубине. Реальный ответ GenerateContent — `[[[[[null, "текст"]],
+   * "model"]]]`: текст лежит на четыре уровня глубже кортежа, поэтому поиск по
+   * фиксированным индексам (item[0][1]) его не находил. Числовые ID пропускаем и
+   * продолжаем поиск — иначе ID из служебного поля стал бы репликой.
+   */
+  function findTextPart(node, depth) {
+    if (depth > MAX_TURN_DEPTH || !Array.isArray(node)) return null;
+    if (node.length >= 2 && node[0] === null && isUsableText(node[1])) return node[1];
+    for (var i = 0; i < node.length; i++) {
+      var t = findTextPart(node[i], depth + 1);
+      if (t !== null) return t;
+    }
+    return null;
+  }
+
+  /**
+   * Роль хода на любой глубине. В разобранной форме GenerateContent роль стоит
+   * рядом с TextPart, но не в item[1] — поэтому ищем её отдельным обходом.
+   */
+  function findRole(node, depth) {
+    if (depth > MAX_TURN_DEPTH) return null;
+    if (typeof node === 'string') return isRoleString(node) ? node : null;
+    if (!Array.isArray(node)) return null;
+    for (var i = 0; i < node.length; i++) {
+      var r = findRole(node[i], depth + 1);
+      if (r !== null) return r;
+    }
+    return null;
+  }
+
+  /** Текст без TextPart-обёртки (`["текст", "user"]`) — только при известной роли. */
+  function findPlainText(node, depth) {
+    if (depth > MAX_TURN_DEPTH) return null;
+    if (typeof node === 'string') return isUsableText(node) ? node : null;
+    if (!Array.isArray(node)) return null;
+    for (var i = 0; i < node.length; i++) {
+      var t = findPlainText(node[i], depth + 1);
+      if (t !== null) return t;
+    }
+    return null;
+  }
+
+  /**
+   * Один ход из элемента массива (вложенность произвольная) → {role, text}.
+   * Голую строку без TextPart принимаем ТОЛЬКО в паре с ролью: иначе обход дерева
+   * собирал бы «сообщения» из названий промптов и служебных полей ListPrompts.
+   */
+  function turnFromItem(item) {
+    if (!Array.isArray(item) || item.length === 0) return null;
+    var role = findRole(item, 0);
+    var text = findTextPart(item, 0);
+    if (text === null && role !== null) text = findPlainText(item, 0);
+    if (text === null) return null;
+    return { role: normRole(role), text: text };
+  }
+
+  /**
+   * Кандидат-массив → сообщения. Формы элемента, которые понимаем:
+   *   [[null, "текст"], "model"]        — кортеж Prompt (data[13]);
+   *   [[[[[null, "текст"]], "model"]]]  — реальный ответ GenerateContent;
+   *   [null, "текст"]                   — одиночный TextPart без роли (→ user);
+   *   [["user", "текст"], "model"]      — терпимый вариант.
    */
   function msgsFromCandidate(arr) {
     var out = [];
     if (!Array.isArray(arr)) return out;
     for (var i = 0; i < arr.length; i++) {
-      var item = arr[i];
-      if (!Array.isArray(item) || item.length === 0) continue;
-      var inner = item[0];
-      var text = null;
-      var role = null;
-      if (Array.isArray(inner)) {
-        if (typeof inner[0] === 'string' && (inner[0].toLowerCase() === ROLE_USER || ROLES_AI[inner[0].toLowerCase()])) {
-          role = inner[0];
-          text = (typeof inner[1] === 'string') ? inner[1] : null;
-        } else if (typeof inner[1] === 'string') {
-          text = inner[1];
-        }
-      } else if (typeof inner === 'string') {
-        text = inner;
-      }
-      if (typeof item[1] === 'string') role = item[1]; // роль кортежа главнее внутренней
-      if (typeof text !== 'string') continue;
+      var turn = turnFromItem(arr[i]);
+      if (turn === null) continue;
+      var text = turn.text;
+      var role = turn.role;
       var t = text.replace(/\r\n?/g, '\n').trim();
       if (!t) continue;
       out.push({ role: normRole(role), text: t });
