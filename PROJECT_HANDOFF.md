@@ -5544,7 +5544,7 @@ function aiCmBridgeDetail(ev) {
 ## Аппендикс v103 (2026-10-27): Google AI Studio (prompt-токены из заголовка, сетевая история, кэш), BYOK-синк чекбокса, починка Lint #266 и релиз v2.0.31
 
 **Дата:** 2026-10-27, 17:45–18:20 (Asia/Yekaterinburg).
-**Коммиты:** `2306321` — feat(widget): add aistudio service key, palette, and safePct migration; `8c21e85` — fix(byok): auto-disable exactCount checkbox when API key missing; `f5e7c00` — fix(aistudio): decode arraybuffer for usage, parse DriveResource, add sessionStorage cache; `775d840` — fix(aistudio): take prompt tokens from chat header, read model from request body; релизный бамп и этот аппендикс — коммит `<SHA v103>`.
+**Коммиты:** `2306321` — feat(widget): add aistudio service key, palette, and safePct migration; `8c21e85` — fix(byok): auto-disable exactCount checkbox when API key missing; `f5e7c00` — fix(aistudio): decode arraybuffer for usage, parse DriveResource, add sessionStorage cache; `775d840` — fix(aistudio): take prompt tokens from chat header, read model from request body; релизный бамп и этот аппендикс — коммит `755adc1`.
 **Статус:** закрыт. Сьют: 194/3476/7/0 (локально, `npx jest`, 7.9 с); `npx tsc --noEmit` — exit 0; `npx eslint .` — 0 ошибок (518 warning при базовой линии 556).
 
 ### Секция 1. Что сделано.
@@ -5630,5 +5630,5 @@ function aiCmBridgeDetail(ev) {
 
 ### Секция 7. Плейсхолдер.
 
-**Коммит A (тело аппендикса v103, шаг 1 двухшагового паттерна — этот коммит):** `<SHA v103>` — заполняется на шаге B.
+**Коммит A (тело аппендикса v103, шаг 1 двухшагового паттерна — этот коммит):** `755adc1` — заполняется на шаге B.
 **SHA4:** заполняется в коммите C (синк верхнего блока), если он понадобится.
