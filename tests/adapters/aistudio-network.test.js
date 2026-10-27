@@ -92,6 +92,14 @@ function makeSandbox(options) {
     TextDecoder: require('util').TextDecoder
   };
 
+  // Диагностика (v2.0.31): перехватчик берёт канал B из utils/debug.js, если он подключён
+  // (core/background.js: js: ['utils/debug.js', 'core/aistudio-intercept.js']). В песочнице
+  // его нет — тесты либо подставляют свой aiCmDiagLine, либо проверяют прямой гейт
+  // sessionStorage 'aiCmDebug' === '1'. Ключи добавляются ТОЛЬКО когда заданы: набор
+  // аргументов функции-фабрики выводится из этого объекта.
+  if (opts.aiCmDiagLine) ctx.aiCmDiagLine = opts.aiCmDiagLine;
+  if (opts.sessionStorage) ctx.sessionStorage = opts.sessionStorage;
+
   const argNames = Object.keys(ctx);
   const argValues = argNames.map(function (k) { return ctx[k]; });
   const source = opts.source === undefined ? SOURCE : opts.source;
@@ -305,6 +313,29 @@ const TOKENS_BODY = JSON.stringify([[
 /** Ответ CountTokens из захвата: считает только ВХОД — в контекст не годится. */
 const COUNT_TOKENS_BODY = '[5,[],[[[4],1]],null,null,[[1,5]]]';
 
+/**
+ * REST-ответ `:generateContent` (generativelanguage v1beta): протобуферного чанка нет,
+ * серверный счётчик контекста — `usageMetadata.promptTokenCount`.
+ */
+const REST_GENERATE_URL = 'https://generativelanguage.googleapis.com/v1beta/models/' +
+  'gemini-3.1-pro:generateContent';
+const REST_STREAM_URL = 'https://generativelanguage.googleapis.com/v1beta/models/' +
+  'gemini-3.1-pro:streamGenerateContent?alt=sse';
+
+function restUsageBody(prompt, candidate, total) {
+  return JSON.stringify({
+    candidates: [{ content: { parts: [{ text: 'тест' }], role: 'model' }, finishReason: 'STOP' }],
+    usageMetadata: {
+      promptTokenCount: prompt,
+      candidatesTokenCount: candidate,
+      totalTokenCount: total
+    },
+    modelVersion: 'gemini-3.1-pro'
+  });
+}
+
+const REST_BODY = restUsageBody(486, 38, 634);
+
 describe('core/aistudio-intercept.js: классификация $rpc-запросов', () => {
   const api = makeSandbox().api;
 
@@ -315,6 +346,19 @@ describe('core/aistudio-intercept.js: классификация $rpc-запро
     expect(h.isGenerateRpc('https://aistudio.google.com/api/GenerateContent')).toBe(false);
     expect(h.isGenerateRpc(MAKER_SUITE + 'CountTokens')).toBe(false);
     expect(h.isGenerateRpc('')).toBe(false);
+  });
+
+  test('REST-формы того же метода: :generateContent и :streamGenerateContent', () => {
+    // v2.0.31: прежний признак требовал `$rpc` и отсекал REST — usageMetadata
+    // (единственный носитель promptTokenCount в REST-ответе) не доезжал до бейджа.
+    const h = api.__handlers;
+    expect(h.isGenerateRpc(REST_GENERATE_URL)).toBe(true);
+    expect(h.isGenerateRpc(REST_STREAM_URL)).toBe(true);
+    expect(h.isGenerateRpc(MAKER_SUITE + 'streamGenerateContent')).toBe(true);
+    // счётчик ВХОДА на том же хосте — не размер контекста
+    expect(h.isGenerateRpc('https://generativelanguage.googleapis.com/v1beta/models/m:countTokens')).toBe(false);
+    // REST-хост без метода generate — чужой вызов
+    expect(h.isGenerateRpc('https://generativelanguage.googleapis.com/v1beta/models')).toBe(false);
   });
 
   test('история: UpdatePrompt / CreatePrompt / ResolveDriveResource под $rpc', () => {
@@ -466,6 +510,26 @@ describe('core/aistudio-intercept.js: токены из ответа GenerateCon
     // одиночный кадр без внешнего массива
     expect(h.parseUsageTokens('data: ' + JSON.stringify(streamChunk('', chunkUsage(77, 3, 80))))).toBe(77);
   });
+
+  test('usageMetadata.promptTokenCount — REST-ответ и SSE REST-стрима', () => {
+    // v2.0.31: у generativelanguage протобуферного chunk[2][0] нет — токены в usageMetadata.
+    expect(h.parseUsageTokens(REST_BODY)).toBe(486);
+    // поток накапливается: первый кадр 219, финальный 486 → берётся максимум
+    const sse = 'data: ' + restUsageBody(219, 9, 338) + '\n\n' +
+      'data: ' + restUsageBody(486, 38, 634) + '\n\n';
+    expect(h.parseUsageTokens(sse)).toBe(486);
+    // totalTokenCount (486 + 38 + 110) в контекст не идёт
+    expect(h.parseUsageTokens(restUsageBody(486, 38, 634))).not.toBe(634);
+    // без promptTokenCount / чужие объекты / мусор — 0
+    expect(h.parseUsageTokens(JSON.stringify({ usageMetadata: { totalTokenCount: 634 } }))).toBe(0);
+    expect(h.parseUsageTokens(JSON.stringify({ error: { code: 400, message: 'bad request' } }))).toBe(0);
+    expect(h.parseUsageTokens('data: {"candidates":[]}\n\n')).toBe(0);
+    // строка в promptTokenCount (REST иногда отдаёт число строкой)
+    expect(h.parseUsageTokens(JSON.stringify({ usageMetadata: { promptTokenCount: '5632' } }))).toBe(5632);
+    // вспомогательная функция пинуется отдельно: только объект с usageMetadata
+    expect(h.tokensFromUsageMetadata({ usageMetadata: { promptTokenCount: 77 } })).toBe(77);
+    expect(h.tokensFromUsageMetadata([chunkUsage(77, 1, 78)])).toBe(0);
+  });
 });
 
 describe('core/aistudio-intercept.js: мост MAIN → ISOLATED', () => {
@@ -537,6 +601,24 @@ describe('core/aistudio-intercept.js: мост MAIN → ISOLATED', () => {
     sb.api.__handlers.handleResponse(GENERATE_URL, COUNT_TOKENS_BODY);
     expect(sb.events).toHaveLength(0);
     expect(sb.api.stats().lastTokens).toBe(0);
+  });
+
+  test('REST :generateContent — serverTokens из usageMetadata уходит в мост', () => {
+    // Тот же контракт 'count', только носитель другой: без него REST-вызов молчал.
+    const sb = makeSandbox();
+    sb.api.__handlers.handleResponse(REST_GENERATE_URL, REST_BODY);
+    expect(sb.events).toHaveLength(1);
+    const detail = JSON.parse(sb.events[0].detail);
+    expect(detail.kind).toBe('count');
+    expect(detail.serverTokens).toBe(486);
+    expect(detail.url).toBe(REST_GENERATE_URL);
+    expect(sb.api.stats().lastTokens).toBe(486);
+    // REST-стрим: тот же счётчик из кадра data: и накопление до финального кадра
+    const sb2 = makeSandbox();
+    sb2.api.__handlers.handleResponse(REST_STREAM_URL,
+      'data: ' + restUsageBody(219, 9, 338) + '\n\ndata: ' + restUsageBody(486, 38, 634) + '\n\n');
+    expect(sb2.events).toHaveLength(1);
+    expect(JSON.parse(sb2.events[0].detail).serverTokens).toBe(486);
   });
 
   test('обратный канал: настройка verbose разбирается aiCmBridgeDetail', () => {
@@ -775,6 +857,88 @@ describe('core/aistudio-intercept.js: патч XMLHttpRequest', () => {
     xhr.fire('load');
 
     expect(sb.events).toHaveLength(0);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * Диагностика формы ResolveDriveResource (v2.0.31)
+ *
+ * Пустой разбор истории — единственный класс отказа, который снаружи не виден: события
+ * нет, в консоли пусто. Поэтому при msgs.length === 0 для history-RPC печатается ФОРМА
+ * ответа (rootLen / root[13]Len / форма первого элемента), и второй захват не нужен.
+ * ------------------------------------------------------------------ */
+
+const DRIVE_URL = MAKER_SUITE + 'ResolveDriveResource';
+
+/** Ответ, который в живом приложении не даёт 6 реплик: root[13] — не data[13][0]. */
+const DRIVE_OTHER_SHAPE = JSON.stringify([null, null, null, null, null, null, null, null,
+  null, null, null, null, null, [['история лежит не в data[13][0]', 'user']]]);
+
+describe('core/aistudio-intercept.js: диаг формы пустого разбора истории', () => {
+  test('ResolveDriveResource без сообщений → строка о форме ответа', () => {
+    const lines = [];
+    const api = makeSandbox({
+      aiCmDiagLine: function (tag, fields) { lines.push({ tag: tag, fields: fields }); }
+    }).api;
+
+    expect(api.__handlers.parseHistory(DRIVE_OTHER_SHAPE, DRIVE_URL)).toEqual([]);
+    expect(lines).toHaveLength(1);
+    expect(lines[0].tag).toBe('aistudio-history-empty');
+    expect(lines[0].fields.rpc).toBe('ResolveDriveResource');
+    expect(lines[0].fields.rootKind).toBe('array');
+    expect(lines[0].fields.rootLen).toBe(14);
+    expect(lines[0].fields.root13Len).toBe(1);
+    // форма первого элемента root[13]: два непустых поля (0 и 1) — это НЕ сообщение
+    // снимка (у него 33 поля и роль в [8]) — ровно то, что нужно увидеть в консоли.
+    expect(lines[0].fields.firstItemKeys).toBe('len2[0,1]');
+    expect(lines[0].fields.bodyLen).toBe(DRIVE_OTHER_SHAPE.length);
+  });
+
+  test('не-JSON тело history-RPC тоже даёт форму (rootKind=not-json)', () => {
+    const lines = [];
+    const api = makeSandbox({
+      aiCmDiagLine: function (tag, fields) { lines.push({ tag: tag, fields: fields }); }
+    }).api;
+
+    expect(api.__handlers.parseHistory('data: {"candidates":[]}\n\n', DRIVE_URL)).toEqual([]);
+    expect(lines).toHaveLength(1);
+    expect(lines[0].fields.rootKind).toBe('not-json');
+    expect(lines[0].fields.rootLen).toBe('N/A');
+    expect(lines[0].fields.root13Len).toBe('N/A');
+  });
+
+  test('непустой разбор, generate-URL и вызов без url диаг-строку не печатают', () => {
+    const lines = [];
+    const api = makeSandbox({
+      aiCmDiagLine: function (tag) { lines.push(tag); }
+    }).api;
+
+    expect(api.__handlers.parseHistory(HISTORY_BODY, UPDATE_URL)).toHaveLength(6);
+    expect(api.__handlers.parseHistory(REQUEST_BODY, GENERATE_URL)).toHaveLength(5);
+    // пустой разбор тела GenerateContent — норма (это не история), не диагностируем
+    expect(api.__handlers.parseHistory(TOKENS_BODY, GENERATE_URL)).toEqual([]);
+    // без url диагностики нет: старые вызовы parseHistory(text) молчат
+    expect(api.__handlers.parseHistory(DRIVE_OTHER_SHAPE)).toEqual([]);
+    expect(lines).toEqual([]);
+  });
+
+  test('без utils/debug.js гейт читается из sessionStorage aiCmDebug', () => {
+    const on = makeSandbox({ sessionStorage: { getItem: function (k) { return k === 'aiCmDebug' ? '1' : null; } } });
+    on.api.__handlers.parseHistory(DRIVE_OTHER_SHAPE, DRIVE_URL);
+    expect(on.logs.join('\n')).toContain('aistudio-history-empty');
+
+    // гейт выключен → ни одной строки (диагностика не шумит по умолчанию)
+    const off = makeSandbox({ sessionStorage: { getItem: function () { return null; } } });
+    off.api.__handlers.parseHistory(DRIVE_OTHER_SHAPE, DRIVE_URL);
+    expect(off.logs).toEqual([]);
+  });
+
+  // ПИН НА БУДУЩЕЕ: живую форму ResolveDriveResource снимаем вторым захватом.
+  // Пока в репозитории только форма UpdatePrompt (data[13][0]); кейс фиксирует
+  // ожидание и включается, когда в фикстуру попадёт настоящий ответ DriveResource.
+  test.skip('ЖИВОЙ ResolveDriveResource: data[13][0] = 6 реплик (нужен второй захват)', () => {
+    const h = makeSandbox().api.__handlers;
+    expect(h.parseHistory(HISTORY_BODY, DRIVE_URL)).toHaveLength(6);
   });
 });
 

@@ -2190,6 +2190,7 @@ function processAndSend() {
 
   // v81 Step1: диагностический trace для не-Gemini адаптеров (поведение не меняется):
   // факты — у каких сервисов база заполняется через EMIT-канал, у каких история только из адаптера.
+  var aiCmDomListS1 = null; // v2.0.31: тот же список адаптера, что у msgs (для DOM-пика AI Studio)
   try {
     var siteNameS1 = currentAdapter.siteName || '';
     if (siteNameS1 && siteNameS1 !== 'gemini') {
@@ -2204,7 +2205,8 @@ function processAndSend() {
       //             (lastBaseTexts = texts18 из detail.messageTexts, тот же массив, что у baseCount);
       //   domMsgs — размер извлечения DOM-адаптера (тот же единственный вызов, что и у msgs).
       var netMsgsS1 = lastBaseTexts.length;
-      var domMsgsS1 = (typeof currentAdapter.extractMessages === 'function') ? currentAdapter.extractMessages().length : 0;
+      aiCmDomListS1 = (typeof currentAdapter.extractMessages === 'function') ? currentAdapter.extractMessages() : [];
+      var domMsgsS1 = aiCmDomListS1.length;
       debugLog('log', '[AI CM][svc-emit-trace] site=' + siteNameS1 +
         ' convId=' + (getCurrentConvId() || '') +
         ' msgs=' + domMsgsS1 +
@@ -2213,6 +2215,14 @@ function processAndSend() {
         ' histWritePath=' + histWritePathS1);
     }
   } catch (eS1) { }
+
+  // v2.0.31 (AI Studio): снапшот адаптера в sessionStorage на КАЖДОМ росте msgs.
+  // Пик DOM (в замере — 6 реплик) живёт мгновение: лента схлопывается до 2 узлов, и
+  // без этой записи после F5 бейдж снова видит 2 хода. Список — тот же, что в trace
+  // выше (нового прохода по DOM нет); на прочих сайтах функция выходит по хосту.
+  if (aiCmDomListS1 && aiCmDomListS1.length > 0) {
+    try { aiCmAistudioDomCacheSave(aiCmDomListS1); } catch (eDomS1) { swallowSoft(eDomS1, 'content:processAndSend-aistudio-dom-cache'); }
+  }
 
   // T1 (v1.16): первый ярус — архив. Читаем импортированный архив для ТЕКУЩЕГО convId
   // (один раз на convId за сессию страницы) и отдаём его в MAIN. Не зависит от
@@ -3406,6 +3416,12 @@ var AI_CM_AISTUDIO_CACHE_PREFIX = 'ai_cm_aistudio_history_';
 var AI_CM_AISTUDIO_CACHE_VERSION = 1;
 // Ключ, который записали/восстановили последним: сброс при смене чата удаляет именно его.
 var aiCmAistudioCacheKeyLast = '';
+// High-water mark кэша: ключ + максимальный count, который УЖЕ лежит в sessionStorage.
+// Зачем: кэш хранит ПИК истории. Живой UpdatePrompt после F5 приходит с коллапсированной
+// лентой (2 хода) и без этого отметчика перезаписал бы снимок из 6 ходов — ровно то,
+// из-за чего бейдж и показывал «2 узла».
+var aiCmAistudioPeakKey = '';
+var aiCmAistudioPeakCount = 0;
 
 function aiCmAistudioSessionStorage() {
   try {
@@ -3436,6 +3452,15 @@ function aiCmAistudioCacheKey(href) {
   return h ? AI_CM_AISTUDIO_CACHE_PREFIX + 'href' : '';
 }
 
+/** Пик для ключа: при смене разговора отметка обнуляется (кэш у каждого свой). */
+function aiCmAistudioPeakOf(key) {
+  if (key !== aiCmAistudioPeakKey) {
+    aiCmAistudioPeakKey = key;
+    aiCmAistudioPeakCount = 0;
+  }
+  return aiCmAistudioPeakCount;
+}
+
 /** Запись снимка в sessionStorage; ошибки хранилища (quota/private) — не фатальны. */
 function aiCmAistudioHistoryCacheSave() {
   try {
@@ -3445,6 +3470,8 @@ function aiCmAistudioHistoryCacheSave() {
     if (!ss) return false;
     var key = aiCmAistudioCacheKey(aiCmNetMsgsAistudio.href);
     if (!key) return false;
+    // Сжатие истории (коллапс ленты после F5) кэш-пик не перезаписывает.
+    if (aiCmNetMsgsAistudio.msgs.length < aiCmAistudioPeakOf(key)) return false;
     ss.setItem(key, JSON.stringify({
       v: AI_CM_AISTUDIO_CACHE_VERSION,
       href: aiCmNetMsgsAistudio.href,
@@ -3454,6 +3481,7 @@ function aiCmAistudioHistoryCacheSave() {
       ts: aiCmNetMsgsAistudio.ts
     }));
     aiCmAistudioCacheKeyLast = key;
+    aiCmAistudioPeakCount = aiCmNetMsgsAistudio.msgs.length;
     return true;
   } catch (eSave) {
     swallowSoft(eSave, 'content:aistudio-cache-save');
@@ -3481,6 +3509,8 @@ function aiCmAistudioHistoryCacheRestore() {
     var here = aiCmAistudioPathOf(window.location && window.location.href);
     var there = aiCmAistudioPathOf(cached.href);
     if (here && there && here !== there) return false;
+    aiCmAistudioPeakOf(key);
+    aiCmAistudioPeakCount = cached.msgs.length;
     return aiCmIngestAistudioNet({
       kind: 'history',
       msgs: cached.msgs,
@@ -3507,9 +3537,67 @@ function aiCmAistudioHistoryCacheClear() {
     var ss = aiCmAistudioSessionStorage();
     if (ss) ss.removeItem(prev);
     aiCmAistudioCacheKeyLast = '';
+    aiCmAistudioPeakKey = '';
+    aiCmAistudioPeakCount = 0;
     return true;
   } catch (eClear) {
     swallowSoft(eClear, 'content:aistudio-cache-clear');
+    return false;
+  }
+}
+
+/**
+ * ДОМ-пик: снимок адаптера в sessionStorage на КАЖДОМ росте msgs (v2.0.31).
+ *
+ * ПОЧЕМУ НЕ ХВАТАЛО СЕТЕВОГО СОХРАНЕНИЯ. Сеть приходит не всегда: ResolveDriveResource
+ * на холодном открытии /prompts/<id> отдаёт не ту форму, которую ждёт msgsFromSnapshot
+ * (разбор — 0 сообщений), а UpdatePrompt до первого хода вообще не вызывается. При этом
+ * сам DOM в момент роста отрисовки содержит историю (в замере — 6 реплик), а через
+ * мгновение схлопывается до 2 виртуализированных узлов. Раньше кэш писался только из
+ * сетевого снимка, поэтому этот пик терялся и после F5 бейдж снова видел «2 узла».
+ *
+ * КОГДА. Вызывается из processAndSend() с уже извлечённым списком адаптера (отдельного
+ * прохода по DOM эта функция не добавляет). Пишется только РОСТ: count больше, чем
+ * high-water mark этого разговора (restore и сетевое сохранение его поднимают).
+ * Значение — та же схема { v, href, msgs, count, serverTokens, ts }, что у сетевого
+ * кэша, поэтому читается тем же aiCmAistudioHistoryCacheRestore при следующей загрузке.
+ * @param {Array<{role: string, text?: string, content?: string}>|null} list — extractMessages()
+ * @returns {boolean} true, если снимок записан
+ */
+function aiCmAistudioDomCacheSave(list) {
+  try {
+    if (!aiCmIsAistudioHost()) return false;
+    if (!Array.isArray(list) || list.length === 0) return false;
+    var ss = aiCmAistudioSessionStorage();
+    if (!ss) return false;
+    var href = String((window.location && window.location.href) || '');
+    var key = aiCmAistudioCacheKey(href);
+    if (!key) return false;
+    if (list.length <= aiCmAistudioPeakOf(key)) return false;
+    var msgs = [];
+    for (var i = 0; i < list.length; i++) {
+      var m = list[i];
+      if (!m) continue;
+      var text = (typeof m.text === 'string') ? m.text
+        : ((typeof m.content === 'string') ? m.content : '');
+      if (text.length === 0) continue;
+      msgs.push({ role: (m.role === 'assistant' || m.role === 'model') ? 'assistant' : 'user', text: text });
+    }
+    if (msgs.length === 0) return false;
+    ss.setItem(key, JSON.stringify({
+      v: AI_CM_AISTUDIO_CACHE_VERSION,
+      href: href,
+      msgs: msgs,
+      count: msgs.length,
+      serverTokens: (typeof aiCmNetCountAistudio === 'number') ? aiCmNetCountAistudio : 0,
+      ts: Date.now()
+    }));
+    aiCmAistudioCacheKeyLast = key;
+    aiCmAistudioPeakCount = msgs.length;
+    debugLog('log', '[AI CM][aistudio-cache] dom-peak key=' + key + ' msgs=' + msgs.length);
+    return true;
+  } catch (eDomSave) {
+    swallowSoft(eDomSave, 'content:aistudio-dom-cache-save');
     return false;
   }
 }

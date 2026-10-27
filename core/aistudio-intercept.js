@@ -54,6 +54,15 @@
  * SSE-гард остался только у не-generate URL: стрим GenerateContent — источник usage
  * (кадры `data:...`), его тело обязано читаться.
  *
+ * ГДЕ ЕЩЁ ЖИВЁТ usageMetadata (v2.0.31). Кроме нативного `$rpc`/GenerateContent тот
+ * же вызов приходит REST-формой: `generativelanguage.googleapis.com/v1beta/models/
+ * <model>:generateContent` и `:streamGenerateContent?alt=sse`. У REST-ответа нет
+ * протобуферного `chunk[2][0]` — токены лежат в `usageMetadata.promptTokenCount`
+ * (у SSE — в кадрах `data:`). Прежний `isGenerateRpc` требовал `$rpc` и отсекал
+ * оба варианта: счётчик оставался эвристическим, хотя серверное число приходило.
+ * Теперь признак — метод `:generateContent`/`:streamGenerateContent` в любой из трёх
+ * форм, а `parseUsageTokens` понимает и протобуфер (массивы), и объект `usageMetadata`.
+ *
  * МОСТ. Наружу (в ISOLATED, core/content.js) уходят два события, detail — СТРОКОЙ
  * JSON (Xray/Firefox, v2.0.29; приём — aiCmBridgeDetail в core/content.js):
  *   'ai-cm-aistudio-net' { kind: 'history', msgs: [{role, text}], count, url, ts }
@@ -118,8 +127,24 @@
    * GenerateContent под `$rpc`: тело запроса несёт историю (`data[1]`), ответ —
    * usage токенов (`[0][last][2][0]`). Оба потока разбираются в hooks.
    */
+  /**
+   * GenerateContent — источник токенов контекста. Один серверный метод в трёх формах URL:
+   *   1) нативный веб-вызов AI Studio — `$rpc/…/GenerateContent` (JSON-протобуфер);
+   *   2) REST того же метода — `generativelanguage.googleapis.com/v1beta/models/
+   *      <model>:generateContent` (его зовёт API-плейграунд AI Studio);
+   *   3) REST-стрим — `…:streamGenerateContent?alt=sse` (кадры `data:`).
+   * Прежний признак (`$rpc` + /generatecontent/) отсекал 2 и 3: usageMetadata и
+   * promptTokenCount из REST-тела не доезжали, счётчик оставался эвристикой.
+   * Имя метода проверяется первым, поэтому «GenerateContent» вне $rpc и без REST-хоста
+   * (страничный /api/GenerateContent, CountTokens) по-прежнему не наш вызов.
+   */
   function isGenerateRpc(url) {
-    return !!url && url.indexOf(RPC_MARK) !== -1 && /generatecontent/i.test(url);
+    if (!url) return false;
+    var u = String(url);
+    if (!/generatecontent/i.test(u)) return false;
+    if (u.indexOf(RPC_MARK) !== -1) return true;                      // 1) нативный $rpc
+    if (/streamgeneratecontent/i.test(u)) return true;                // 3) REST-стрим
+    return u.indexOf('generativelanguage.googleapis.com') !== -1;     // 2) REST-хост
   }
 
   /**
@@ -134,6 +159,79 @@
   function isHistoryRpc(url) {
     if (!url || url.indexOf(RPC_MARK) === -1) return false;
     return /updateprompt|createprompt|resolvedriveresource/i.test(url);
+  }
+
+  /* ================================================================== *
+   * 1b. Диагностика формы тела (канал B, гейт aiCmDebug)
+   *
+   * ЗАЧЕМ. Пустой разбор истории на живом ResolveDriveResource — единственный класс
+   * ошибки, который не виден снаружи: событие просто не уходит, в консоли ничего нет,
+   * и приёмка «2 узла вместо 6» повторяется вслепую. Здесь печатается ФОРМА ответа
+   * (какие поля root непусты, что лежит в root[13]), по ней путь данных виден без
+   * повторного захвата DevTools.
+   *
+   * КОНТРАКТ. Только чтение уже полученного текста; ни одного нового события,
+   * ни записи в storage. Строка идёт под гейтом: sessionStorage 'aiCmDebug' === '1'
+   * (utils/debug.js подключён к этому скрипту — core/background.js:343), а в
+   * source-песочницах тестов aiCmDiagLine нет — там гейт читается напрямую.
+   * ================================================================== */
+
+  function diagLine(tag, fields) {
+    try {
+      if (typeof aiCmDiagLine === 'function') { aiCmDiagLine(tag, fields); return; }
+    } catch (eDg) {
+      soft(eDg, 'aistudio-intercept:diag');
+    }
+    var gateOn = false;
+    try {
+      gateOn = (typeof sessionStorage !== 'undefined' && !!sessionStorage
+        && sessionStorage.getItem('aiCmDebug') === '1');
+    } catch (eDs) {
+      soft(eDs, 'aistudio-intercept:diag-gate');
+    }
+    if (!gateOn) return;
+    try {
+      var parts = [];
+      for (var k in fields) {
+        if (!Object.prototype.hasOwnProperty.call(fields, k)) continue;
+        var v = fields[k];
+        parts.push(k + '=' + ((v === undefined || v === null) ? '(нет)' : String(v)));
+      }
+      console.log(LOG_TAG + ' ' + tag + ' ' + parts.join(' '));
+    } catch (eDp) {
+      soft(eDp, 'aistudio-intercept:diag-print');
+    }
+  }
+
+  /**
+   * Форма протобуферного значения одной строкой: длина массива + непустые индексы
+   * (до 12). `len33[0,1,8,18,19,32]` сразу говорит, сообщение это или служебный кортеж.
+   */
+  function shapeOfArray(v) {
+    if (!Array.isArray(v)) return (v === null || v === undefined) ? 'null' : typeof v;
+    var idx = [];
+    for (var i = 0; i < v.length && idx.length < 12; i++) {
+      if (v[i] !== null && v[i] !== undefined) idx.push(i);
+    }
+    return 'len' + v.length + '[' + idx.join(',') + ']';
+  }
+
+  /** История не разобралась: печатаем форму ответа (не текст целиком — размер/голова). */
+  function diagEmptyHistory(url, text, root) {
+    try {
+      var r13 = (Array.isArray(root) && Array.isArray(root[13])) ? root[13] : null;
+      diagLine('aistudio-history-empty', {
+        rpc: String(url || '').replace(/^.*\//, ''),
+        rootKind: Array.isArray(root) ? 'array' : (root === null ? 'not-json' : typeof root),
+        rootLen: Array.isArray(root) ? root.length : 'N/A',
+        root13Len: r13 ? r13.length : 'N/A',
+        firstItemKeys: (r13 && r13.length > 0) ? shapeOfArray(r13[0]) : 'N/A',
+        bodyLen: (typeof text === 'string') ? text.length : 0,
+        bodyHead: (typeof text === 'string') ? text.slice(0, 160).replace(/\s+/g, ' ') : ''
+      });
+    } catch (eDh) {
+      soft(eDh, 'aistudio-intercept:diag-history');
+    }
   }
 
   /* ================================================================== *
@@ -241,11 +339,21 @@
     return { msgs: [], path: '' };
   }
 
-  /** История из тела (ответа UpdatePrompt/CreatePrompt либо запроса GenerateContent). */
-  function parseHistory(text) {
+  /**
+   * История из тела (ответа UpdatePrompt/CreatePrompt/ResolveDriveResource либо запроса
+   * GenerateContent). `url` необязателен: с ним пустой разбор пишет диаг-строку о форме
+   * (только для history-RPC и только под гейтом aiCmDebug), без него — молчание.
+   */
+  function parseHistory(text, url) {
     var root = parseJsonText(text);
-    if (root === null) return [];
-    return findMessageArray(root).msgs;
+    var isHistoryUrl = (typeof url === 'string') && isHistoryRpc(url);
+    if (root === null) {
+      if (isHistoryUrl) diagEmptyHistory(url, text, null);
+      return [];
+    }
+    var found = findMessageArray(root);
+    if (found.msgs.length === 0 && isHistoryUrl) diagEmptyHistory(url, text, root);
+    return found.msgs;
   }
 
   /**
@@ -262,13 +370,22 @@
   }
 
   /**
-   * Токены контекста из ответа GenerateContent → promptTokenCount (0 — нет данных).
-   *
-   * Основной путь: `root[0][last][2][0]`. Значение накапливается по потоку
-   * (219 → 486 в захвате), поэтому берётся максимум — это финальный счётчик.
-   * Обход ограничен (guard/глубина 2): форма с единственным чанком и вариант
-   * `[chunk, chunk]` без внешнего массива тоже разбираются, а чужие тела — нет.
+   * Токены из REST-формы ответа: `usageMetadata.promptTokenCount`.
+   * У `generativelanguage.googleapis.com/v1beta/models/<m>:generateContent` (и у
+   * `:streamGenerateContent?alt=sse`, где объект лежит в кадре `data:`) протобуферного
+   * чанка нет — серверный счётчик приходит только здесь. Берётся promptTokenCount, а не
+   * totalTokenCount: последний включает ответ и «мысли» (486 + 38 + 110 в захвате).
    */
+  function tokensFromUsageMetadata(node) {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return 0;
+    var um = node.usageMetadata;
+    if (!um || typeof um !== 'object') return 0;
+    var n = um.promptTokenCount;
+    if (typeof n === 'string') n = parseInt(n, 10);
+    if (typeof n !== 'number' || !isFinite(n) || n <= 0 || n >= 1e9) return 0;
+    return Math.floor(n);
+  }
+
   /**
    * Разобранные корни тела ответа: один JSON-массив протобуфера либо кадры
    * `data:` генеративного стрима (AI Studio отдаёт GenerateContent и так).
@@ -289,6 +406,16 @@
     return out;
   }
 
+  /**
+   * Токены контекста из ответа GenerateContent → promptTokenCount (0 — нет данных).
+   *
+   * Две формы одного ответа:
+   *   • нативный `$rpc`: массив протобуфера, путь `root[0][last][2][0]` (usage[0] = prompt);
+   *   • REST/SSE: объект с `usageMetadata.promptTokenCount` (кадры `data:` — тоже объекты).
+   * Значение накапливается по потоку (219 → 486 в захвате), поэтому берётся максимум —
+   * это финальный счётчик. Обход ограничен (guard 200): форма с единственным чанком и
+   * вариант без внешнего массива тоже разбираются, а чужие тела — нет.
+   */
   function parseUsageTokens(text) {
     var roots = jsonRoots(text);
     if (roots.length === 0) return 0;
@@ -298,12 +425,24 @@
     while (queue.length > 0 && guard < 200) {
       var node = queue.shift();
       guard++;
-      if (!Array.isArray(node)) continue;
-      var n = tokensFromChunk(node);
-      if (n > best) best = n;
-      for (var i = 0; i < node.length; i++) {
-        var child = node[i];
-        if (Array.isArray(child) && queue.length < 200) queue.push(child);
+      if (!node || typeof node !== 'object') continue;
+      if (Array.isArray(node)) {
+        // Протобуфер нативного $rpc: `[content, null, usage, null, id]`, usage[0] = prompt.
+        var n = tokensFromChunk(node);
+        if (n > best) best = n;
+        for (var i = 0; i < node.length; i++) {
+          var child = node[i];
+          if (child && typeof child === 'object' && queue.length < 200) queue.push(child);
+        }
+        continue;
+      }
+      // REST/SSE форма: `{candidates: [...], usageMetadata: {promptTokenCount: N}}`.
+      var um = tokensFromUsageMetadata(node);
+      if (um > best) best = um;
+      for (var key in node) {
+        if (!Object.prototype.hasOwnProperty.call(node, key)) continue;
+        var val = node[key];
+        if (val && typeof val === 'object' && queue.length < 200) queue.push(val);
       }
     }
     return best;
@@ -409,7 +548,7 @@
   function handleRequest(url, text) {
     if (!isGenerateRpc(url)) return;
     try {
-      emitHistory(parseHistory(text), url);
+      emitHistory(parseHistory(text, url), url);
     } catch (eHQ) {
       soft(eHQ, 'aistudio-intercept:request-parse');
     }
@@ -427,7 +566,7 @@
         return;
       }
       if (!isHistoryRpc(url)) return;
-      emitHistory(parseHistory(text), url);
+      emitHistory(parseHistory(text, url), url);
     } catch (eHR) {
       soft(eHR, 'aistudio-intercept:response-parse');
     }
@@ -564,7 +703,7 @@
   installXhrHook();
 
   window.AiCmAistudioIntercept = {
-    version: 3,
+    version: 4,
     __handlers: {
       parseJsonText: parseJsonText,
       jsonRoots: jsonRoots,
@@ -574,6 +713,9 @@
       findMessageArray: findMessageArray,
       parseHistory: parseHistory,
       parseUsageTokens: parseUsageTokens,
+      tokensFromChunk: tokensFromChunk,
+      tokensFromUsageMetadata: tokensFromUsageMetadata,
+      shapeOfArray: shapeOfArray,
       isGenerateRpc: isGenerateRpc,
       isHistoryRpc: isHistoryRpc,
       handleRequest: handleRequest,

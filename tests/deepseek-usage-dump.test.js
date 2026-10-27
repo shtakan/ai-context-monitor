@@ -294,7 +294,12 @@ describe('O-26 (2): счётчики netMsgs/domMsgs в trace-строке svc-e
     expect(region).toContain("' histWritePath=' + histWritePathS1);");
     // источники счётчиков — уже существующие переменные (новых коллекций/кэшей нет)
     expect(contentSrc).toContain('var netMsgsS1 = lastBaseTexts.length;');
-    expect(contentSrc).toContain("var domMsgsS1 = (typeof currentAdapter.extractMessages === 'function') ? currentAdapter.extractMessages().length : 0;");
+    // v2.0.31: список адаптера берётся ОДНИМ проходом (он же уходит в DOM-пик AI Studio),
+    // счётчик msgs — длина того же списка: второго extractMessages() в блоке нет.
+    expect(contentSrc).toContain(
+      "aiCmDomListS1 = (typeof currentAdapter.extractMessages === 'function') ? currentAdapter.extractMessages() : [];");
+    expect(contentSrc).toContain('var domMsgsS1 = aiCmDomListS1.length;');
+    expect(countOf(region, 'currentAdapter.extractMessages()')).toBe(1);
   });
 
   test('не тронуты: санация O-20, экспортный пайплайн, прочие адаптеры, версия', () => {

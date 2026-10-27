@@ -1,11 +1,18 @@
 'use strict';
 
 /**
- * AI Studio: кэш разобранной истории в sessionStorage (v2.0.30).
+ * AI Studio: кэш разобранной истории в sessionStorage (v2.0.30, DOM-пик — v2.0.31).
  *
  * Зачем: холодное открытие /prompts/<id> показывает «2 узла» — DOM виртуализирован,
  * а полная история приходит только с ResolveDriveResource/UpdatePrompt. Разобранный
  * снимок прошлой загрузки вкладки отдаётся ДО первого DOM-замера.
+ *
+ * ДВА ИСТОЧНИКА СНИМКА (одна схема записи):
+ *   • сеть — ai-cm-aistudio-net { kind: 'history' } (aiCmAistudioHistoryCacheSave);
+ *   • DOM  — список адаптера на КАЖДОМ росте msgs (aiCmAistudioDomCacheSave): лента
+ *     успевает отрисовать полную историю (6 реплик) и тут же схлопывается до 2
+ *     виртуализированных узлов, поэтому пик нельзя взять «когда-нибудь потом».
+ * Кэш хранит ПИК: запись меньшего count не перезаписывает большую (high-water mark).
  *
  * Тестируется вырезанный из core/content.js участок (как и остальные тесты проекта
  * грузят срезы main-перехватчика): от `var aiCmNetMsgsAistudio` до вызова
@@ -55,9 +62,11 @@ function loadCache(win, storage) {
     ' ingest: aiCmIngestAistudioNet,' +
     ' restore: aiCmAistudioHistoryCacheRestore,' +
     ' save: aiCmAistudioHistoryCacheSave,' +
+    ' domSave: aiCmAistudioDomCacheSave,' +
     ' clear: aiCmAistudioHistoryCacheClear,' +
     ' key: aiCmAistudioCacheKey,' +
     ' pathOf: aiCmAistudioPathOf,' +
+    ' peak: function () { return aiCmAistudioPeakCount; },' +
     ' state: function () {' +
     '   return { msgs: aiCmNetMsgsAistudio, count: aiCmNetCountAistudio, net: netServerTokens };' +
     ' }' +
@@ -213,5 +222,119 @@ describe('content.js: кэш истории AI Studio в sessionStorage', () => 
     expect(api.state().net).toBe(1234);
     // повтор того же значения — без лишнего пересчёта
     expect(api.ingest({ kind: 'count', serverTokens: 1234 })).toBe(false);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * DOM-пик (v2.0.31): снимок адаптера на росте msgs
+ * ------------------------------------------------------------------ */
+
+/** Список в контракте адаптера: { role, content } — не { role, text }. */
+function adapterMsgs(n) {
+  const out = [];
+  for (let i = 1; i <= n; i++) {
+    out.push({ role: (i % 2 === 1) ? 'user' : 'assistant', content: 'реплика ' + i });
+  }
+  return out;
+}
+
+function stored(key) {
+  const raw = window.sessionStorage.getItem(key);
+  return raw ? JSON.parse(raw) : null;
+}
+
+describe('content.js: DOM-пик истории AI Studio в sessionStorage', () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+  });
+
+  test('рост DOM пишется (6 реплик), повтор и сжатие ленты — нет', () => {
+    const win = makeWin('/prompts/conv-1');
+    const api = loadCache(win);
+
+    expect(api.domSave(adapterMsgs(6))).toBe(true);
+    const saved = stored(KEY_1);
+    expect(saved.v).toBe(1);
+    expect(saved.href).toBe(URL_1);
+    expect(saved.count).toBe(6);
+    expect(saved.msgs).toHaveLength(6);
+    // контракт адаптера (content) приведён к схеме кэша (text)
+    expect(saved.msgs[1]).toEqual({ role: 'assistant', text: 'реплика 2' });
+
+    // коллапс ленты: 2 виртуализированных узла — это не рост
+    expect(api.domSave(adapterMsgs(2))).toBe(false);
+    expect(stored(KEY_1).count).toBe(6);
+    // повтор того же размера — тоже не рост (нет лишних записей в storage)
+    expect(api.domSave(adapterMsgs(6))).toBe(false);
+    expect(api.peak()).toBe(6);
+  });
+
+  test('пик восстанавливается до initialize (F5 → сразу 6, а не 2)', () => {
+    const first = loadCache(makeWin('/prompts/conv-1'));
+    expect(first.domSave(adapterMsgs(6))).toBe(true);
+
+    const win2 = makeWin('/prompts/conv-1');
+    const second = loadCache(win2);
+    // восстановление сработало на инициализации среза — до первого DOM-замера
+    expect(second.state().msgs.count).toBe(6);
+    expect(second.state().msgs.msgs[0]).toEqual({ role: 'user', text: 'реплика 1' });
+    expect(win2.__aiCmNetMsgs).toBe(second.state().msgs);
+    // и пик нового экземпляра уже знает про 6 — сжатие не перезапишет
+    expect(second.peak()).toBe(6);
+  });
+
+  test('живой UpdatePrompt с меньшим count не затирает пик, с большим — пишет', () => {
+    const win = makeWin('/prompts/conv-1');
+    const api = loadCache(win);
+    expect(api.domSave(adapterMsgs(6))).toBe(true);
+
+    // сеть пришла после коллапса: 2 хода
+    expect(api.ingest({
+      kind: 'history', msgs: MSGS.slice(0, 2), href: win.location.href, ts: 501
+    })).toBe(true);
+    expect(api.save()).toBe(false);
+    expect(stored(KEY_1).count).toBe(6);
+
+    // а рост (7 ходов) кэш обновляет
+    expect(api.ingest({
+      kind: 'history',
+      msgs: MSGS.concat([{ role: 'user', text: 'ещё один ход' }]),
+      href: win.location.href,
+      ts: 502
+    })).toBe(true);
+    expect(api.save()).toBe(true);
+    expect(stored(KEY_1).count).toBe(7);
+  });
+
+  test('смена чата обнуляет пик: у нового разговора своя история', () => {
+    const win = makeWin('/prompts/conv-1');
+    const api = loadCache(win);
+    expect(api.domSave(adapterMsgs(6))).toBe(true);
+
+    goto(win, '/prompts/conv-2');
+    expect(api.clear()).toBe(true);
+    expect(api.peak()).toBe(0);
+    // 2 реплики на новом разговоре — это рост для него, запись создаётся
+    expect(api.domSave(adapterMsgs(2))).toBe(true);
+    expect(stored(KEY_2).count).toBe(2);
+    expect(window.sessionStorage.getItem(KEY_1)).toBeNull();
+  });
+
+  test('не AI Studio и пустые списки не пишутся', () => {
+    const geminiWin = {
+      location: { hostname: 'gemini.google.com', href: 'https://gemini.google.com/app/abc' },
+      addEventListener: function () { },
+      removeEventListener: function () { },
+      dispatchEvent: function () { return true; }
+    };
+    expect(loadCache(geminiWin).domSave(adapterMsgs(6))).toBe(false);
+    expect(window.sessionStorage.length).toBe(0);
+
+    const api = loadCache(makeWin('/prompts/conv-1'));
+    expect(api.domSave(null)).toBe(false);
+    expect(api.domSave([])).toBe(false);
+    // список есть, но текста нет ни в одной реплике — писать нечего
+    expect(api.domSave([{ role: 'user', content: '' }, { role: 'assistant' }])).toBe(false);
+    expect(window.sessionStorage.getItem(KEY_1)).toBeNull();
   });
 });
