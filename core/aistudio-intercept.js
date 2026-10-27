@@ -503,6 +503,60 @@
   }
 
   /* ================================================================== *
+   * 2c. Слаг модели (v2.0.32)
+   *
+   * ПОЧЕМУ. Бейдж показывал «Gemini 3.1 Pro» на ЛЮБОМ чате AI Studio: у адаптера
+   * adapters/aistudio-adapter.js:detectModel() стоит заглушка с константой (комментарий
+   * там же: «в DOM нет стабильного индикатора»), а сетевой слаг до ISOLATED-мира не
+   * доезжал — событие 'ai-cm-model-slug' слал только Gemini-перехватчик. Между тем
+   * ресурс промпта в теле $rpc несёт выбранную модель открытым текстом:
+   * `["prompts/1wke…",null,null,[1,null,"models/gemini-3.8-flash",…]]`
+   * (ResolveDriveResource на открытии чата, UpdatePrompt на каждом ходе).
+   *
+   * ПОЧЕМУ ПОЛЕ РЕСУРСА, А НЕ ЛЮБОЕ ВХОЖДЕНИЕ. В теле бывает ещё перечень доступных
+   * моделей (fallbacks/листинг): «самая свежая» из них — не обязательно выбранная.
+   * Форма `"models/<slug>"` — это ровно поле ресурса, поэтому она главнее; голый
+   * слаг — фолбэк (REST-URL вида /v1beta/models/gemini-3.1-pro:generateContent).
+   * ================================================================== */
+
+  var MODEL_RESOURCE_RE = /"models\/(gemini-[\d.]+-(?:flash|pro|ultra)(?:-lite)?)"/i;
+  var MODEL_ANY_RE = /\bgemini-[\d.]+-(?:flash|pro|ultra)(?:-lite)?\b/i;
+
+  /** Слаг модели из тела ('' — нет данных). Чистое извлечение, без побочных эффектов. */
+  function modelFromBody(text) {
+    if (typeof text !== 'string' || text.length === 0) return '';
+    try {
+      var m = MODEL_RESOURCE_RE.exec(text);
+      if (m && m[1]) return m[1];
+      var any = MODEL_ANY_RE.exec(text);
+      if (any && any[0]) return String(any[0]);
+      return '';
+    } catch (eModel) {
+      soft(eModel, 'aistudio-intercept:model-slug');
+      return '';
+    }
+  }
+
+  var lastModelSlug = '';
+
+  /**
+   * Объявить модель в ISOLATED-мир тем же каналом, что у Gemini
+   * (core/content.js:559 слушатель 'ai-cm-model-slug' → detectedModelSlug).
+   * Повтор того же слага не эмитим: тело ответа приходит на каждый ход.
+   */
+  function announceModel(text) {
+    var slug = modelFromBody(text);
+    if (!slug || slug === lastModelSlug) return;
+    lastModelSlug = slug;
+    if (verbose) console.log(LOG_TAG + ' model=' + slug);
+    try {
+      window.dispatchEvent(new CustomEvent('ai-cm-model-slug', { detail: { slug: slug } }));
+    } catch (eAnn) {
+      soft(eAnn, 'aistudio-intercept:model-emit');
+    }
+  }
+
+  /* ================================================================== *
    * 3. Передача в ISOLATED (detail — строка JSON, Xray/Firefox)
    * ================================================================== */
 
@@ -547,6 +601,9 @@
   /** Тело ЗАПРОСА: у GenerateContent это свежий снимок диалога (`data[1]`). */
   function handleRequest(url, text) {
     if (!isGenerateRpc(url)) return;
+    // Модель — только у СВОИХ RPC: тело GenerateContent подтверждает выбранную модель
+    // текущего чата (листинг моделей/чужие $rpc её не доказывают).
+    announceModel(text);
     try {
       emitHistory(parseHistory(text, url), url);
     } catch (eHQ) {
@@ -557,6 +614,8 @@
   /** Тело ОТВЕТА: GenerateContent — usage токенов, UpdatePrompt/CreatePrompt — история. */
   function handleResponse(url, text) {
     try {
+      // ResolveDriveResource на открытии чата: ресурс промпта с выбранной моделью (v2.0.32).
+      if (isGenerateRpc(url) || isHistoryRpc(url)) announceModel(text);
       if (isGenerateRpc(url)) {
         var tokens = parseUsageTokens(text);
         if (tokens <= 0 || tokens === lastTokens) return;
@@ -703,7 +762,7 @@
   installXhrHook();
 
   window.AiCmAistudioIntercept = {
-    version: 4,
+    version: 5,
     __handlers: {
       parseJsonText: parseJsonText,
       jsonRoots: jsonRoots,
@@ -716,6 +775,7 @@
       tokensFromChunk: tokensFromChunk,
       tokensFromUsageMetadata: tokensFromUsageMetadata,
       shapeOfArray: shapeOfArray,
+      modelFromBody: modelFromBody,
       isGenerateRpc: isGenerateRpc,
       isHistoryRpc: isHistoryRpc,
       handleRequest: handleRequest,
@@ -724,6 +784,7 @@
     reset: function () {
       lastTokens = 0;
       lastHistorySig = '';
+      lastModelSlug = '';
     },
     stats: function () {
       return { lastTokens: lastTokens, lastHistorySig: lastHistorySig, verbose: verbose };

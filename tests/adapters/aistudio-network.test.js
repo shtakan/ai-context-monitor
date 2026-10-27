@@ -121,8 +121,21 @@ function makeSandbox(options) {
   };
 }
 
-/** fetch-заглушка: отвечает на каждый URL заранее заданным Response-подобным объектом. */
-function makeFetch(responder) {
+/**
+ * События «сеть» (история/токены) без события модели.
+ * v2.0.32: перехватчик объявляет модель на теле запроса, поэтому в sb.events событие
+ * 'ai-cm-model-slug' идёт ПЕРЕД 'ai-cm-aistudio-net' — счётчики сети должны его не видеть.
+ */
+function netEvents(sb) {
+  return sb.events.filter(function (ev) { return ev.type === 'ai-cm-aistudio-net'; });
+}
+
+/** События объявления модели (ai-cm-model-slug) — отдельный канал, как у Gemini. */
+function modelEvents(sb) {
+  return sb.events.filter(function (ev) { return ev.type === 'ai-cm-model-slug'; });
+}
+
+/** fetch-заглушка: отвечает на каждый URL заранее заданным Response-подобным объектом. */function makeFetch(responder) {
   const fn = function (input) {
     const url = (typeof input === 'string') ? input : ((input && input.url) || '');
     return Promise.resolve(responder(url));
@@ -537,8 +550,8 @@ describe('core/aistudio-intercept.js: мост MAIN → ISOLATED', () => {
     const sb = makeSandbox();
     sb.api.__handlers.handleResponse(UPDATE_URL, HISTORY_BODY);
 
-    expect(sb.events).toHaveLength(1);
-    const detail = sb.events[0].detail;
+    expect(netEvents(sb)).toHaveLength(1);
+    const detail = netEvents(sb)[0].detail;
     // Xray/Firefox: через границу компартментов идёт примитив, а не объект
     expect(typeof detail).toBe('string');
     const payload = JSON.parse(detail);
@@ -554,8 +567,8 @@ describe('core/aistudio-intercept.js: мост MAIN → ISOLATED', () => {
     const sb = makeSandbox();
     sb.api.__handlers.handleRequest(GENERATE_URL, REQUEST_BODY);
 
-    expect(sb.events).toHaveLength(1);
-    const payload = JSON.parse(sb.events[0].detail);
+    expect(netEvents(sb)).toHaveLength(1);
+    const payload = JSON.parse(netEvents(sb)[0].detail);
     expect(payload.kind).toBe('history');
     expect(payload.count).toBe(5);
     expect(payload.url).toBe(GENERATE_URL);
@@ -565,8 +578,8 @@ describe('core/aistudio-intercept.js: мост MAIN → ISOLATED', () => {
     const sb = makeSandbox();
     sb.api.__handlers.handleResponse(GENERATE_URL, TOKENS_BODY);
 
-    expect(sb.events).toHaveLength(1);
-    const payload = JSON.parse(sb.events[0].detail);
+    expect(netEvents(sb)).toHaveLength(1);
+    const payload = JSON.parse(netEvents(sb)[0].detail);
     expect(payload.kind).toBe('count');
     expect(payload.serverTokens).toBe(486);
     expect(sb.logs.join('\n')).not.toContain('history loaded');
@@ -576,7 +589,7 @@ describe('core/aistudio-intercept.js: мост MAIN → ISOLATED', () => {
     const sb = makeSandbox();
     sb.api.__handlers.handleResponse(UPDATE_URL, HISTORY_BODY);
     sb.api.__handlers.handleResponse(UPDATE_URL, HISTORY_BODY);
-    expect(sb.events).toHaveLength(1);
+    expect(netEvents(sb)).toHaveLength(1);
     expect(sb.logs.join('\n').match(/history loaded/g)).toHaveLength(1);
   });
 
@@ -584,7 +597,7 @@ describe('core/aistudio-intercept.js: мост MAIN → ISOLATED', () => {
     const sb = makeSandbox();
     sb.api.__handlers.handleResponse(GENERATE_URL, TOKENS_BODY);
     sb.api.__handlers.handleResponse(GENERATE_URL, TOKENS_BODY);
-    expect(sb.events).toHaveLength(1);
+    expect(netEvents(sb)).toHaveLength(1);
   });
 
   test('чужой запрос и пустые тела игнорируются', () => {
@@ -593,13 +606,13 @@ describe('core/aistudio-intercept.js: мост MAIN → ISOLATED', () => {
     sb.api.__handlers.handleResponse(UPDATE_URL, '');
     sb.api.__handlers.handleRequest(MAKER_SUITE + 'ListPrompts', REQUEST_BODY);
     sb.api.__handlers.handleResponse(MAKER_SUITE + 'CountTokens', COUNT_TOKENS_BODY);
-    expect(sb.events).toHaveLength(0);
+    expect(netEvents(sb)).toHaveLength(0);
   });
 
   test('COUNT_TOKENS: тело [5,…] больше не даёт serverTokens', () => {
     const sb = makeSandbox();
     sb.api.__handlers.handleResponse(GENERATE_URL, COUNT_TOKENS_BODY);
-    expect(sb.events).toHaveLength(0);
+    expect(netEvents(sb)).toHaveLength(0);
     expect(sb.api.stats().lastTokens).toBe(0);
   });
 
@@ -607,8 +620,8 @@ describe('core/aistudio-intercept.js: мост MAIN → ISOLATED', () => {
     // Тот же контракт 'count', только носитель другой: без него REST-вызов молчал.
     const sb = makeSandbox();
     sb.api.__handlers.handleResponse(REST_GENERATE_URL, REST_BODY);
-    expect(sb.events).toHaveLength(1);
-    const detail = JSON.parse(sb.events[0].detail);
+    expect(netEvents(sb)).toHaveLength(1);
+    const detail = JSON.parse(netEvents(sb)[0].detail);
     expect(detail.kind).toBe('count');
     expect(detail.serverTokens).toBe(486);
     expect(detail.url).toBe(REST_GENERATE_URL);
@@ -617,8 +630,8 @@ describe('core/aistudio-intercept.js: мост MAIN → ISOLATED', () => {
     const sb2 = makeSandbox();
     sb2.api.__handlers.handleResponse(REST_STREAM_URL,
       'data: ' + restUsageBody(219, 9, 338) + '\n\ndata: ' + restUsageBody(486, 38, 634) + '\n\n');
-    expect(sb2.events).toHaveLength(1);
-    expect(JSON.parse(sb2.events[0].detail).serverTokens).toBe(486);
+    expect(netEvents(sb2)).toHaveLength(1);
+    expect(JSON.parse(netEvents(sb2)[0].detail).serverTokens).toBe(486);
   });
 
   test('обратный канал: настройка verbose разбирается aiCmBridgeDetail', () => {
@@ -645,8 +658,8 @@ describe('core/aistudio-intercept.js: патч fetch', () => {
     await flush();
 
     expect(resp.state.textReads).toBe(1); // читали клон, а не оригинал
-    expect(sb.events).toHaveLength(1);
-    expect(JSON.parse(sb.events[0].detail).count).toBe(6);
+    expect(netEvents(sb)).toHaveLength(1);
+    expect(JSON.parse(netEvents(sb)[0].detail).count).toBe(6);
     expect(sb.logs.join('\n')).toContain('[aistudio-intercept] history loaded msgs=6');
   });
 
@@ -657,11 +670,11 @@ describe('core/aistudio-intercept.js: патч fetch', () => {
     await sb.win.fetch(GENERATE_URL, { method: 'POST', body: REQUEST_BODY });
     await flush();
 
-    expect(sb.events).toHaveLength(2);
-    const kinds = sb.events.map(function (ev) { return JSON.parse(ev.detail).kind; });
+    expect(netEvents(sb)).toHaveLength(2);
+    const kinds = netEvents(sb).map(function (ev) { return JSON.parse(ev.detail).kind; });
     expect(kinds).toEqual(['history', 'count']);
-    expect(JSON.parse(sb.events[0].detail).count).toBe(5);
-    expect(JSON.parse(sb.events[1].detail).serverTokens).toBe(486);
+    expect(JSON.parse(netEvents(sb)[0].detail).count).toBe(5);
+    expect(JSON.parse(netEvents(sb)[1].detail).serverTokens).toBe(486);
   });
 
   test('нестроковое тело запроса не ломает разбор ответа', async () => {
@@ -670,7 +683,7 @@ describe('core/aistudio-intercept.js: патч fetch', () => {
 
     await sb.win.fetch(UPDATE_URL, { method: 'POST', body: { not: 'a string' } });
     await flush();
-    expect(sb.events).toHaveLength(1);
+    expect(netEvents(sb)).toHaveLength(1);
   });
 
   test('посторонний запрос не разбирается и не читает тело', async () => {
@@ -680,7 +693,7 @@ describe('core/aistudio-intercept.js: патч fetch', () => {
     await sb.win.fetch('https://aistudio.google.com/api/prompts', {});
     await flush();
     expect(resp.state.textReads).toBe(0);
-    expect(sb.events).toHaveLength(0);
+    expect(netEvents(sb)).toHaveLength(0);
   });
 
   test('SSE GenerateContent: кадры data: читаются ради usage', async () => {
@@ -694,8 +707,8 @@ describe('core/aistudio-intercept.js: патч fetch', () => {
     await sb.win.fetch(GENERATE_URL, {});
     await flush();
     expect(resp.state.textReads).toBe(1);
-    expect(sb.events).toHaveLength(1);
-    expect(JSON.parse(sb.events[0].detail).serverTokens).toBe(486);
+    expect(netEvents(sb)).toHaveLength(1);
+    expect(JSON.parse(netEvents(sb)[0].detail).serverTokens).toBe(486);
   });
 
   test('SSE не-generate URL по-прежнему не буферизуется', async () => {
@@ -705,7 +718,7 @@ describe('core/aistudio-intercept.js: патч fetch', () => {
     await sb.win.fetch(UPDATE_URL, {});
     await flush();
     expect(resp.state.textReads).toBe(0);
-    expect(sb.events).toHaveLength(0);
+    expect(netEvents(sb)).toHaveLength(0);
   });
 });
 
@@ -738,8 +751,8 @@ describe('core/aistudio-intercept.js: патч XMLHttpRequest', () => {
     xhr._headers['content-type'] = 'application/json+protobuf';
     xhr.fire('load');
 
-    expect(sb.events).toHaveLength(1);
-    expect(JSON.parse(sb.events[0].detail).count).toBe(6);
+    expect(netEvents(sb)).toHaveLength(1);
+    expect(JSON.parse(netEvents(sb)[0].detail).count).toBe(6);
   });
 
   test('GenerateContent: снимок из send() сразу, токены из load()', () => {
@@ -752,15 +765,15 @@ describe('core/aistudio-intercept.js: патч XMLHttpRequest', () => {
     expect(xhr.sentBody).toBe(REQUEST_BODY);
 
     // история отправлена синхронно, ещё до ответа
-    expect(sb.events).toHaveLength(1);
-    expect(JSON.parse(sb.events[0].detail).count).toBe(5);
+    expect(netEvents(sb)).toHaveLength(1);
+    expect(JSON.parse(netEvents(sb)[0].detail).count).toBe(5);
 
     xhr.responseText = TOKENS_BODY;
     xhr._headers['content-type'] = 'application/json+protobuf';
     xhr.fire('load');
 
-    expect(sb.events).toHaveLength(2);
-    expect(JSON.parse(sb.events[1].detail).serverTokens).toBe(486);
+    expect(netEvents(sb)).toHaveLength(2);
+    expect(JSON.parse(netEvents(sb)[1].detail).serverTokens).toBe(486);
   });
 
   test('ответ на посторонний URL не разбирается', () => {
@@ -774,7 +787,7 @@ describe('core/aistudio-intercept.js: патч XMLHttpRequest', () => {
     xhr._headers['content-type'] = 'application/json+protobuf';
     xhr.fire('load');
 
-    expect(sb.events).toHaveLength(0);
+    expect(netEvents(sb)).toHaveLength(0);
   });
 
   test('responseType=json: объект превращается в текст и разбирается', () => {
@@ -789,7 +802,7 @@ describe('core/aistudio-intercept.js: патч XMLHttpRequest', () => {
     xhr._headers['content-type'] = 'application/json+protobuf';
     xhr.fire('load');
 
-    expect(JSON.parse(sb.events[1].detail).serverTokens).toBe(486);
+    expect(JSON.parse(netEvents(sb)[1].detail).serverTokens).toBe(486);
   });
 
   test('нестроковое тело send() не мешает разбору ответа', () => {
@@ -803,8 +816,8 @@ describe('core/aistudio-intercept.js: патч XMLHttpRequest', () => {
     xhr._headers['content-type'] = 'application/json+protobuf';
     xhr.fire('load');
 
-    expect(sb.events).toHaveLength(1);
-    expect(JSON.parse(sb.events[0].detail).kind).toBe('history');
+    expect(netEvents(sb)).toHaveLength(1);
+    expect(JSON.parse(netEvents(sb)[0].detail).kind).toBe('history');
   });
 
   test('responseType=arraybuffer: байты декодируются, usage не теряется', () => {
@@ -822,9 +835,9 @@ describe('core/aistudio-intercept.js: патч XMLHttpRequest', () => {
     xhr._headers['content-type'] = 'application/json+protobuf';
     xhr.fire('load');
 
-    expect(sb.events).toHaveLength(2);
-    expect(JSON.parse(sb.events[1].detail).kind).toBe('count');
-    expect(JSON.parse(sb.events[1].detail).serverTokens).toBe(486);
+    expect(netEvents(sb)).toHaveLength(2);
+    expect(JSON.parse(netEvents(sb)[1].detail).kind).toBe('count');
+    expect(JSON.parse(netEvents(sb)[1].detail).serverTokens).toBe(486);
   });
 
   test('ResolveDriveResource: полная история до первого UpdatePrompt', () => {
@@ -839,9 +852,9 @@ describe('core/aistudio-intercept.js: патч XMLHttpRequest', () => {
     xhr._headers['content-type'] = 'application/json+protobuf';
     xhr.fire('load');
 
-    expect(sb.events).toHaveLength(1);
-    expect(JSON.parse(sb.events[0].detail).kind).toBe('history');
-    expect(JSON.parse(sb.events[0].detail).count).toBe(6);
+    expect(netEvents(sb)).toHaveLength(1);
+    expect(JSON.parse(netEvents(sb)[0].detail).kind).toBe('history');
+    expect(JSON.parse(netEvents(sb)[0].detail).count).toBe(6);
   });
 
   test('ResolveDriveResource без data[13][0] не шлёт пустую историю', () => {
@@ -856,7 +869,7 @@ describe('core/aistudio-intercept.js: патч XMLHttpRequest', () => {
     xhr._headers['content-type'] = 'application/json+protobuf';
     xhr.fire('load');
 
-    expect(sb.events).toHaveLength(0);
+    expect(netEvents(sb)).toHaveLength(0);
   });
 });
 
@@ -943,6 +956,84 @@ describe('core/aistudio-intercept.js: диаг формы пустого раз�
 });
 
 /* ------------------------------------------------------------------ *
+ * Модель чата: слаг из тела → мост ai-cm-model-slug (v2.0.32)
+ * ------------------------------------------------------------------ */
+
+describe('core/aistudio-intercept.js: модель чата из тела запроса', () => {
+  const h = makeSandbox().api.__handlers;
+
+  test('поле ресурса «models/<slug>» главнее голого слага', () => {
+    // Живая форма ResolveDriveResource/UpdatePrompt: ресурс промпта несёт выбранную модель.
+    expect(h.modelFromBody('["prompts/1wke…",null,null,[1,null,"models/gemini-3.8-flash",…]]'))
+      .toBe('gemini-3.8-flash');
+    // REST-тело: model — отдельное поле, тоже с префиксом models/
+    expect(h.modelFromBody('{"model":"models/gemini-3.1-pro","contents":[]}')).toBe('gemini-3.1-pro');
+    // Голый слаг (REST-URL/поле без префикса) — фолбэк.
+    expect(h.modelFromBody('gemini-3.8-pro')).toBe('gemini-3.8-pro');
+    expect(h.modelFromBody('{"model":"models/gemini-3.5-flash-lite"}')).toBe('gemini-3.5-flash-lite');
+  });
+
+  test('пустое тело, мусор и чужие имена моделей → пустая строка', () => {
+    expect(h.modelFromBody('')).toBe('');
+    expect(h.modelFromBody(null)).toBe('');
+    expect(h.modelFromBody('ok')).toBe('');
+    expect(h.modelFromBody('{"model":"models/text-embedding-004"}')).toBe('');
+    expect(h.modelFromBody('{"model":"gpt-5"}')).toBe('');
+  });
+
+  test('запрос GenerateContent объявляет модель один раз (дедуп по слагу)', () => {
+    const sb = makeSandbox();
+    sb.api.__handlers.handleRequest(GENERATE_URL, requestBody([reqTurn([reqPart('привет')], 'user')]));
+    const ev1 = modelEvents(sb);
+    expect(ev1).toHaveLength(1);
+    expect(ev1[0].detail.slug).toBe('gemini-3.8-flash');
+
+    // тот же слаг на следующем ходе — повторно не объявляем
+    sb.api.__handlers.handleRequest(GENERATE_URL, requestBody([reqTurn([reqPart('ещё')], 'user')]));
+    expect(modelEvents(sb)).toHaveLength(1);
+    // ...а смена модели в студии — новое событие
+    sb.api.__handlers.handleRequest(
+      GENERATE_URL,
+      JSON.stringify([null, [[[null, 'привет']], 'user'], null, null, null, null, null, null,
+        null, null, null, null, null, null, [null, null, null, null, 'models/gemini-3.1-pro']])
+    );
+    expect(modelEvents(sb)).toHaveLength(2);
+    expect(modelEvents(sb)[1].detail.slug).toBe('gemini-3.1-pro');
+  });
+
+  test('REST-форма :generateContent тоже объявляет модель', () => {
+    const sb = makeSandbox();
+    sb.api.__handlers.handleRequest(REST_GENERATE_URL, '{"model":"models/gemini-3.1-pro"}');
+    const evs = modelEvents(sb);
+    expect(evs).toHaveLength(1);
+    expect(evs[0].detail.slug).toBe('gemini-3.1-pro');
+  });
+
+  test('холодное открытие чата: ResolveDriveResource называет модель до первого хода', () => {
+    const sb = makeSandbox();
+    sb.api.__handlers.handleResponse(
+      DRIVE_URL,
+      JSON.stringify([null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, ['prompts/abc', null, null, [1, null, 'models/gemini-3.8-flash']]])
+    );
+    const evs = modelEvents(sb);
+    expect(evs).toHaveLength(1);
+    expect(evs[0].detail.slug).toBe('gemini-3.8-flash');
+    // это не история и не токены: канал сети молчит
+    expect(netEvents(sb)).toHaveLength(0);
+  });
+
+  test('не-generate RPC (список промптов) модель не объявляет', () => {
+    const sb = makeSandbox();
+    sb.api.__handlers.handleRequest(
+      MAKER_SUITE + 'ListPrompts',
+      '{"model":"models/gemini-3.8-flash"}'
+    );
+    expect(modelEvents(sb)).toHaveLength(0);
+  });
+});
+
+/* ------------------------------------------------------------------ *
  * Адаптер: сеть главнее DOM
  * ------------------------------------------------------------------ */
 
@@ -1020,5 +1111,35 @@ describe('AistudioAdapter: сетевая история из window.__aiCmNetMs
     expect(messages).toHaveLength(2);
     expect(messages[0].content).toContain('дом-вопрос');
     expect(messages[1].content).toContain('дом-ответ');
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * Адаптер: модель чата (v2.0.32)
+ * ------------------------------------------------------------------ */
+
+describe('AistudioAdapter: модель из сети вместо константы', () => {
+  const FALLBACK = 'gemini-3.1-pro';
+
+  test('слаг из window.__aiCmNetModelSlug главнее фолбэка', () => {
+    document.body.innerHTML = '<div></div>';
+    const { adapter, sandbox } = loadAistudio(document, Object.assign({}, AISTUDIO_LOC));
+    sandbox.window.__aiCmNetModelSlug = 'gemini-3.8-flash';
+    expect(adapter.detectModel()).toBe('gemini-3.8-flash');
+  });
+
+  test('сети ещё не было → прежний фолбэк (окно 128k, ключ в словаре)', () => {
+    document.body.innerHTML = '<div></div>';
+    const { adapter } = loadAistudio(document, Object.assign({}, AISTUDIO_LOC));
+    expect(adapter.detectModel()).toBe(FALLBACK);
+  });
+
+  test('не строка / пустая строка в канале не ломают детектор', () => {
+    document.body.innerHTML = '<div></div>';
+    const { adapter, sandbox } = loadAistudio(document, Object.assign({}, AISTUDIO_LOC));
+    sandbox.window.__aiCmNetModelSlug = 42;
+    expect(adapter.detectModel()).toBe(FALLBACK);
+    sandbox.window.__aiCmNetModelSlug = '';
+    expect(adapter.detectModel()).toBe(FALLBACK);
   });
 });

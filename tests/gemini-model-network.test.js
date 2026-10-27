@@ -149,6 +149,18 @@ describe('D2: resolveModelId — авто-регистрация нового с
     expect(ModelConfig.resolveModelId('zzz-нет-такого')).toBeNull();
     expect(ModelConfig.resolveModelId('gemini-без-версии')).toBeNull();
   });
+
+  test('AI Studio 3.8 Flash: слаг из тела чата резолвится, а не падает в дефолт', () => {
+    // v2.0.32: AI Studio присылает модель телом GenerateContent ('models/gemini-3.8-flash').
+    // Если ключ не резолвится, бейдж уходил в дефолт сайта и называл чужую модель.
+    const id = ModelConfig.resolveModelId('gemini-3.8-flash');
+    expect(id).toBe('gemini-3.8-flash');
+    expect(ModelConfig.getModel(id).name).toBe('Gemini 3.8 Flash');
+    expect(ModelConfig.getModel(id).provider).toBe('Google');
+    // API-окно линейки Flash; дисплейный порог бейджа остаётся 128 000 (как у 3.5/3.6 Flash).
+    expect(ModelConfig.getContextLimit(id)).toBe(1048576);
+    expect(ModelConfig.getEffectiveLimit(id)).toBe(128000);
+  });
 });
 
 describe('D4: мост MAIN world → content.js (событие ai-cm-model-slug)', () => {

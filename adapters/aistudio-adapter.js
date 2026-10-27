@@ -103,12 +103,33 @@ class AistudioAdapter extends GeminiAdapter {
   }
 
   /**
-   * Модель AI Studio: в DOM нет стабильного индикатора, распознавание не делаем —
-   * возвращаем фолбэк (ключ есть в utils/model-config.js, окно 128k). Заглушка:
-   * при появлении разметки переключателя модели сюда добавляется разбор DOM.
+   * Модель AI Studio (v2.0.32).
+   *
+   * ДО ЧЕГО БЫЛО: константа 'gemini-3.1-pro'. Бейдж называл её и после того, как студия
+   * переключилась на 'Gemini 3.8 Flash' — расхождение с самой студией читается как дефект.
+   *
+   * ОТКУДА ТЕПЕРЬ. Тело запроса GenerateContent всегда несёт model: models/<slug>, поэтому
+   * перехватчик (core/aistudio-intercept.js:modelFromBody) присылает его мостом
+   * ai-cm-model-slug, а core/content.js кладёт в window.__aiCmNetModelSlug (ISOLATED-мир
+   * один, отдельного канала не нужно) и в кэш истории — значит после F5 фолбэка в константу
+   * уже не будет.
+   *
+   * ПОЧЕМУ НЕ DOM. Индикатор модели в панели Run settings не имеет стабильного класса, а
+   * текстовая догадка по «Gemini <версия> <семейство>» ловила бы упоминания модели в самой
+   * реплике и подписывала чат чужой моделью. Сеть — единственный недвусмысленный источник.
    * @returns {string}
    */
   detectModel() {
+    try {
+      const slug = (typeof window !== 'undefined') ? window.__aiCmNetModelSlug : '';
+      if (typeof slug === 'string' && slug) {
+        debugLog('log', `[AistudioAdapter] Модель из сети: ${slug}`);
+        return slug;
+      }
+    } catch (error) {
+      debugLog('error', '[AistudioAdapter] Ошибка чтения модели из сети:', error);
+    }
+    // Фолбэк прежний (ключ есть в utils/model-config.js, окно 128k): сеть ещё не говорила.
     return 'gemini-3.1-pro';
   }
 

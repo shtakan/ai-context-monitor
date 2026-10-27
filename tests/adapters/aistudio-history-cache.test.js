@@ -58,6 +58,7 @@ function loadCache(win, storage) {
   const store = storage || window.sessionStorage;
   const factory = new Function(
     'window', 'sessionStorage', 'netServerTokens', 'debugLog', 'swallowSoft', 'aiCmBridgeDetail',
+    'detectedModelSlug',
     CACHE_SECTION + '\nreturn {' +
     ' ingest: aiCmIngestAistudioNet,' +
     ' restore: aiCmAistudioHistoryCacheRestore,' +
@@ -67,12 +68,16 @@ function loadCache(win, storage) {
     ' key: aiCmAistudioCacheKey,' +
     ' pathOf: aiCmAistudioPathOf,' +
     ' peak: function () { return aiCmAistudioPeakCount; },' +
+    // v2.0.32: модель чата — состояние среза и то, что реально читают адаптер/резолвер.
+    ' setSlug: function (v) { aiCmNetModelSlugAistudio = v; },' +
+    ' netSlug: function () { return aiCmNetModelSlugAistudio; },' +
+    ' detected: function () { return detectedModelSlug; },' +
     ' state: function () {' +
     '   return { msgs: aiCmNetMsgsAistudio, count: aiCmNetCountAistudio, net: netServerTokens };' +
     ' }' +
     ' };'
   );
-  return factory(win, store, 0, function () { }, function () { }, null);
+  return factory(win, store, 0, function () { }, function () { }, null, '');
 }
 
 const KEY_1 = 'ai_cm_aistudio_history_conv-1';
@@ -336,5 +341,62 @@ describe('content.js: DOM-пик истории AI Studio в sessionStorage', ()
     // список есть, но текста нет ни в одной реплике — писать нечего
     expect(api.domSave([{ role: 'user', content: '' }, { role: 'assistant' }])).toBe(false);
     expect(window.sessionStorage.getItem(KEY_1)).toBeNull();
+  });
+});
+
+describe('content.js: модель чата в кэше истории AI Studio (v2.0.32)', () => {
+  // Зачем: бейдж показывал константу адаптера 'Gemini 3.1 Pro' на чате с 'Gemini 3.8 Flash'.
+  // Слаг приходит только с тела GenerateContent, поэтому кэш обязан его помнить — иначе после
+  // F5 (до первого хода) детектор снова уходил в фолбэк.
+  beforeEach(() => {
+    window.sessionStorage.clear();
+  });
+
+  test('сетевой снимок пишет модель, восстановление её применяет', () => {
+    const win = makeWin('/prompts/conv-1');
+    const api = loadCache(win);
+    api.setSlug('gemini-3.8-flash');
+    expect(api.ingest({ kind: 'history', msgs: MSGS, href: win.location.href, ts: 700 })).toBe(true);
+    expect(api.save()).toBe(true);
+    expect(stored(KEY_1).model).toBe('gemini-3.8-flash');
+
+    // «F5»: новый документ, тот же чат
+    const win2 = makeWin('/prompts/conv-1');
+    const api2 = loadCache(win2);
+    expect(api2.state().msgs.count).toBe(MSGS.length);
+    expect(api2.detected()).toBe('gemini-3.8-flash');
+    expect(api2.netSlug()).toBe('gemini-3.8-flash');
+    expect(win2.__aiCmNetModelSlug).toBe('gemini-3.8-flash');
+  });
+
+  test('DOM-пик тоже помнит модель (после F5 модель видна до первого хода)', () => {
+    const win = makeWin('/prompts/conv-2');
+    const api = loadCache(win);
+    api.setSlug('gemini-3.8-pro');
+    expect(api.domSave(adapterMsgs(4))).toBe(true);
+    expect(stored(KEY_2).model).toBe('gemini-3.8-pro');
+
+    const api2 = loadCache(makeWin('/prompts/conv-2'));
+    expect(api2.detected()).toBe('gemini-3.8-pro');
+  });
+
+  test('смена чата стирает модель ПРЕДЫДУЩЕГО разговора', () => {
+    const win = makeWin('/prompts/conv-1');
+    const api = loadCache(win);
+    api.setSlug('gemini-3.8-flash');
+    expect(api.domSave(adapterMsgs(3))).toBe(true);
+
+    goto(win, '/prompts/conv-2');
+    expect(api.clear()).toBe(true);
+    expect(api.netSlug()).toBe('');
+    expect(win.__aiCmNetModelSlug).toBe('');
+  });
+
+  test('старая запись без model не подставляет чужую модель', () => {
+    seed(window.sessionStorage, KEY_1); // model в записи нет
+    const api = loadCache(makeWin('/prompts/conv-1'));
+    expect(api.state().msgs.count).toBe(MSGS.length);
+    expect(api.detected()).toBe('');
+    expect(api.netSlug()).toBe('');
   });
 });

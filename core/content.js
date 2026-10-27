@@ -558,7 +558,19 @@ function aiCmEstimateTokensTilde(text, attachTokens) {
 // Место в лестнице resolveCurrentModel (popupModelId → rawSnapshot → uiRaw): ниже попапа, выше DOM.
 window.addEventListener('ai-cm-model-slug', function (/** @type {CustomEvent} */ ev) {
   var md = ev && ev.detail;
-  if (md && typeof md.slug === 'string' && md.slug) detectedModelSlug = md.slug;
+  if (md && typeof md.slug === 'string' && md.slug) {
+    detectedModelSlug = md.slug;
+    // v2.0.32: AI Studio называет модель в теле запроса (models/gemini-3.8-flash) —
+    // запоминаем её для этого чата отдельно: адаптер и кэш истории читают отсюда.
+    try {
+      if (aiCmIsAistudioHost()) {
+        aiCmNetModelSlugAistudio = md.slug;
+        window.__aiCmNetModelSlug = md.slug;
+      }
+    } catch (eSlugAis) {
+      swallowSoft(eSlugAis, 'content:aistudio-model-slug');
+    }
+  }
 });
 window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} */ ev) {
   // O-22 (ИЗМЕРЕНИЕ-2): маркер ПЕРВОЙ строки колбэка слушателя — ДО блока v81 Step1
@@ -2006,6 +2018,16 @@ function aiCmArmBadgeHoldFallback() {
 // было, чтобы диагностическая строка ingest'а («serverTokens=N») не врала.
 function aiCmMetricServerTokens(svc, text) {
   if (svc === 'qwen') return 0;
+  // v2.0.32 (AI Studio): студия показывает собственный счётчик промпта в шапке чата, и он
+  // авторитетнее всего остального — включает системные инструкции, схемы инструментов и всю
+  // историю, которых в DOM-репликах нет вовсе (см. aiCmAistudioNativePromptTokens). Возврат
+  // здесь автоматически даёт правильное поведение ОБОИМ путям метрики: бейдж берёт число как
+  // серверное (не удерживает завышенную эвристику и не масштабирует её), попап читает то же
+  // самое. Гейт узкий: другие сервисы строку не исполняют.
+  if (svc === 'aistudio' && typeof aiCmAistudioNativePromptTokens === 'function') {
+    var nativeAis = aiCmAistudioNativePromptTokens();
+    if (nativeAis > 0) return nativeAis;
+  }
   // Шаг 3: пока для ТЕКУЩЕГО текста есть ответ API countTokens — он авторитетен и эвристику
   // в метрику не пускает (см. aiCmExactTokensFor ниже). typeof-гард: функцию исполняют
   // срез-песочницы тестов через new Function без соседних объявлений контура (пин O-47),
@@ -2489,6 +2511,10 @@ function processAndSend() {
     // Шаг 4 (фикс «скачка» 25.9% → 23.1%): точного числа для ЭТОГО текста ещё нет (кэш не
     // восстановлен / другой чат / ответ API в пути) — эвристике запрещено писать бейдж в этом
     // проходе. Гейт сервис-узкий и уважает отказ API (см. aiCmHeuristicHoldForByok).
+    // v2.0.32 (AI Studio): шапка чата главнее и сети, и эвристики — поэтому нативный счётчик
+    // отдаёт сам aiCmMetricServerTokens (строка выше), а здесь остались ПРЕЖНИЕ строки без
+    // изменений: гейт масштабирования и запись максимума срабатывают ровно как при серверном
+    // числе. Остальные сервисы этой ветки не касаются (см. гейт svc === 'aistudio').
     const byokHeuristicHold = aiCmHeuristicHoldForByok(svc, fullText);
     let tokenEstimate = metricServerTokens > 0 ? metricServerTokens : Tokenizer.estimateDialogTokens(fullText, countForTokens);
     // Поднятый полом effectiveLen (Gemini): если сеть дала effectiveLen > длины текста — масштабируем оценку.
@@ -2502,6 +2528,11 @@ function processAndSend() {
       tokenEstimate = Math.round(tokenEstimate * (netEffectiveLen / fullText.length));
     }
     tokenEstimate += netAttachTokens;
+    // v2.0.32: счётчик шапки AI Studio считает промпт целиком, вложения в нём уже есть —
+    // иначе метрика складывала бы их дважды. Другие сервисы строку выше не трогают.
+    if (svc === 'aistudio' && typeof aiCmAistudioNativePromptTokens === 'function' && aiCmAistudioNativePromptTokens() > 0) {
+      tokenEstimate -= netAttachTokens;
+    }
     const contextLimit = ModelConfig.getContextLimit(modelId);
     const effectiveLimit = ModelConfig.getEffectiveLimit(modelId);
     const displayLimit = computeEffectiveLimit(modelId);
@@ -2544,6 +2575,7 @@ function processAndSend() {
     } catch (eMetricSrc) { }
     if (metricServerTokens > 0) {
       // точное число из countTokens авторитетно — не удерживаем завышенную эвристику
+      // (у AI Studio в metricServerTokens приходит счётчик шапки чата — он тоже авторитетен)
       maxTokenCount = tokenEstimate;
     } else if (byokHeuristicHold) {
       // Шаг 4: точного числа для текста ещё нет — максимум НЕ двигаем (эвристика молчит);
@@ -3073,11 +3105,17 @@ if (isExtensionValid()) {
         // у Qwen эффективно 0 → tokens~. Шаг 3: text — чтобы точный ответ BYOK был авторитетен;
         // Шаг 2: aiCmExactTokensFor сам решает по convId — эвристика не перебьёт ответ API.
         const metricServerTokens = aiCmMetricServerTokens(currentAdapter.siteName, fullText);
+        // v2.0.32: у AI Studio нативный счётчик шапки отдаёт сам aiCmMetricServerTokens,
+        // поэтому здесь ПРЕЖНИЕ строки: оба пути метрики (бейдж и попап) видят одно число.
         let tokenEstimate = metricServerTokens > 0 ? metricServerTokens : Tokenizer.estimateDialogTokens(fullText, countForTokens);
         if (baseComplete === true && metricServerTokens === 0 && netEffectiveLen > 0 && fullText && fullText.length > 0 && netEffectiveLen > fullText.length) {
           tokenEstimate = Math.round(tokenEstimate * (netEffectiveLen / fullText.length));
         }
         tokenEstimate += netAttachTokens;
+        // v2.0.32: вложения уже внутри счётчика шапки AI Studio — второй раз не добавляем.
+        if (currentAdapter.siteName === 'aistudio' && typeof aiCmAistudioNativePromptTokens === 'function' && aiCmAistudioNativePromptTokens() > 0) {
+          tokenEstimate -= netAttachTokens;
+        }
         // Шаг 3: точный счётчик (API BYOK / серверный) авторитетен — монотонный max() эвристики
         // его не поднимает, иначе попап перезаписывал бы ответ API оценкой tokens~ и расходился
         // с бейджем (тот делает ровно то же: `if (metricServerTokens > 0) maxTokenCount = tokenEstimate`).
@@ -3384,6 +3422,10 @@ function aiCmBridgeDetail(ev) {
 var aiCmNetMsgsAistudio = null;
 // Последний promptTokenCount AI Studio: точный размер контекста (0 — ещё не приходил).
 var aiCmNetCountAistudio = 0;
+// v2.0.32: слаг модели AI Studio из тела GenerateContent ('' — сеть ещё не называла модель).
+// Зачем отдельная переменная: detectedModelSlug — общий для всех сервисов и сбрасывается
+// чужим сайтом/навигацией, а кэшу истории и адаптеру нужно именно «модель этого чата».
+var aiCmNetModelSlugAistudio = '';
 
 function aiCmIsAistudioHost() {
   try {
@@ -3392,6 +3434,127 @@ function aiCmIsAistudioHost() {
     swallowSoft(eAih, 'content:aistudio-net-host');
     return false;
   }
+}
+
+/* ============================================================================================
+ * AI Studio: нативный счётчик промпта из шапки чата (v2.0.32)
+ *
+ * ПОЧЕМУ СВОЙ СЧЁТ НЕ ГОДИТСЯ. AI Studio рисует рядом с названием чата СВОЁ число токенов
+ * промпта («9,637 tokens» в живом замере). Оно посчитано движком студии и включает то, чего
+ * в DOM реплик НЕТ ВООБЩЕ: системные инструкции/шаблон промпта, схемы включённых инструментов
+ * (Grounding with Google Search, Code execution) и всю историю диалога. Наша эвристика видит
+ * только реплики — в том же чате 2 узла = 5 353 символа → 1 560 токенов, то есть в 6 раз
+ * меньше шапки. Бейдж, который расходится с числом самой студии, читается как дефект, поэтому
+ * при наличии шапки берём ЕЁ значение (гейт ниже — строго svc === 'aistudio').
+ *
+ * КАК ИЩЕМ (без классов Angular — их переименование не должно ломать счётчик).
+ * Якорь — <h1> с названием чата: счётчик живёт в том же блоке заголовка. Поднимаемся от h1 на
+ * 1–3 уровня и в каждом блоке ищем ЛИСТ с текстом-меткой («tokens» / «токенов»), а число
+ * берём у предыдущего соседа (разметка «<span>9,637</span><span>tokens</span>»). Фолбэк —
+ * регулярка по тексту блока целиком: «9,637 tokens» / «9 637 токенов». Ограничители:
+ * блок заголовка короткий (<= 4000 символов, иначе это уже лента — пропускаем) и число
+ * обязано иметь вид целого с разбивкой по три разряда («1.2» — проценты, не токены).
+ * ============================================================================================ */
+
+// Метки счётчика в шапке. Русские метки записаны escape-последовательностями: это НЕ
+// пользовательские строки интерфейса (M-4.2 их справедливо запрещает), а шаблоны распознавания
+// текста, который рисует сам AI Studio в русской локали — они не переводятся и не фолбэкаются.
+var AI_CM_AISTUDIO_TOKENS_LABELS = [
+  'tokens', 'token',
+  '\u0442\u043e\u043a\u0435\u043d\u043e\u0432', // «токенов»
+  '\u0442\u043e\u043a\u0435\u043d\u0430',       // «токена»
+  '\u0442\u043e\u043a\u0435\u043d'              // «токен»
+];
+// Кэш последнего прочитанного значения шапки (троттлинг обхода поддерева заголовка).
+var aiCmAistudioNativeTs = 0;
+var aiCmAistudioNativeValue = 0;
+
+/** «9,637» / «1.234.567» / «9 637» → число; проценты и мусор → 0. */
+function aiCmAistudioParseCount(s) {
+  var raw = String(s == null ? '' : s).replace(/[\u00a0\u202f]/g, ' ').trim();
+  if (!raw) return 0;
+  // Тысячи группируются по три разряда; «1.2»/«0,5» (проценты) под это правило не попадают.
+  if (!/^\d+$/.test(raw) && !/^\d{1,3}(?:[\s.,]\d{3})+$/.test(raw)) return 0;
+  var digits = raw.replace(/[^\d]/g, '');
+  if (!digits) return 0;
+  var v = parseInt(digits, 10);
+  if (!isFinite(v) || v <= 0 || v >= 1e8) return 0;
+  return v;
+}
+
+/** Число токенов внутри блока: пара «метка + соседнее число» либо текст «N tokens». */
+function aiCmAistudioTokensInBox(box) {
+  if (!box || typeof box.querySelectorAll !== 'function') return 0;
+  var nodes = box.querySelectorAll('*');
+  var limit = nodes.length > 400 ? 400 : nodes.length;
+  for (var i = 0; i < limit; i++) {
+    var el = nodes[i];
+    if (el.children && el.children.length > 0) continue; // только листья
+    var raw = String(el.textContent || '').trim();
+    var txt = raw.toLowerCase();
+    // Комбинированный лист «9,637 tokens»: число и метка в одном тексте.
+    var comb = /(?:^|[^\d.,])(\d{1,3}(?:[\s.,]\d{3})+|\d+)\s*(?:tokens?|токен\w*)/i.exec(raw);
+    if (comb && AI_CM_AISTUDIO_TOKENS_LABELS.indexOf(txt) === -1) {
+      var cv = aiCmAistudioParseCount(comb[1]);
+      if (cv > 0) return cv;
+    }
+    if (AI_CM_AISTUDIO_TOKENS_LABELS.indexOf(txt) === -1) continue;
+    var prev = el.previousElementSibling;
+    var v = aiCmAistudioParseCount(prev ? prev.textContent : '');
+    if (v > 0) return v;
+    var pText = String((el.parentElement && el.parentElement.textContent) || '')
+      .replace(/[\u00a0\u202f]/g, ' ');
+    // Число не должно «отрезаться» от десятичной дроби: «1.2 tokens» — это проценты,
+    // поэтому перед числом допускается всё, кроме цифры/точки/запятой.
+    var m = /(?:^|[^\d.,])(\d{1,3}(?:[\s.,]\d{3})+|\d+)\s*(?:tokens?|токен\w*)/i.exec(pText);
+    var pv = m ? aiCmAistudioParseCount(m[1]) : 0;
+    if (pv > 0) return pv;
+  }
+  return 0;
+}
+
+/**
+ * Нативное число токенов промпта из шапки чата AI Studio; 0 — шапки/числа нет
+ * (не AI Studio, библиотека промптов, ещё не отрисовано).
+ * @returns {number}
+ */
+function aiCmAistudioNativePromptTokens() {
+  try {
+    if (!aiCmIsAistudioHost()) return 0;
+    // Троттлинг: processAndSend зовётся на каждую мутацию ленты, а здесь обход поддерева
+    // заголовка. 400 мс — шапка перерисовывается реже, чем идут мутации, значение то же.
+    var nowTs = Date.now();
+    if (nowTs - aiCmAistudioNativeTs < 400) return aiCmAistudioNativeValue;
+    aiCmAistudioNativeTs = nowTs;
+    var found = aiCmAistudioNativeProbe();
+    aiCmAistudioNativeValue = found;
+    return found;
+  } catch (eNat) {
+    swallowSoft(eNat, 'content:aistudio-native-tokens');
+    return 0;
+  }
+}
+
+/** Один проход поиска нативного счётчика (без троттлинга — для тестов и троттлера). */
+function aiCmAistudioNativeProbe() {
+  try {
+    if (!aiCmIsAistudioHost()) return 0;
+    var h1 = document.querySelector('h1');
+    if (!h1) return 0;
+    var box = h1.parentElement;
+    for (var up = 0; up < 3 && box; up++) {
+      var boxLen = String(box.textContent || '').length;
+      // Короткий блок = строка заголовка; длинный — уже лента реплик (там «tokens» в тексте).
+      if (boxLen > 0 && boxLen <= 4000) {
+        var v = aiCmAistudioTokensInBox(box);
+        if (v > 0) return v;
+      }
+      box = box.parentElement;
+    }
+  } catch (eNatProbe) {
+    swallowSoft(eNatProbe, 'content:aistudio-native-probe');
+  }
+  return 0;
 }
 
 /* ============================================================================================
@@ -3478,6 +3641,9 @@ function aiCmAistudioHistoryCacheSave() {
       msgs: aiCmNetMsgsAistudio.msgs,
       count: aiCmNetMsgsAistudio.count,
       serverTokens: (typeof aiCmNetCountAistudio === 'number') ? aiCmNetCountAistudio : 0,
+      // v2.0.32: модель чата — иначе после F5 бейдж показывал дефолт ('Gemini 3.1 Pro')
+      // при живом 'gemini-3.8-flash' (слаг приходит только с тела GenerateContent).
+      model: aiCmNetModelSlugAistudio || '',
       ts: aiCmNetMsgsAistudio.ts
     }));
     aiCmAistudioCacheKeyLast = key;
@@ -3511,6 +3677,13 @@ function aiCmAistudioHistoryCacheRestore() {
     if (here && there && here !== there) return false;
     aiCmAistudioPeakOf(key);
     aiCmAistudioPeakCount = cached.msgs.length;
+    // v2.0.32: модель из прошлой загрузки — до первого GenerateContent адаптер иначе
+    // отдавал дефолт ('gemini-3.1-pro') и бейдж называл не ту модель.
+    if (typeof cached.model === 'string' && cached.model) {
+      aiCmNetModelSlugAistudio = cached.model;
+      window.__aiCmNetModelSlug = cached.model;
+      detectedModelSlug = cached.model;
+    }
     return aiCmIngestAistudioNet({
       kind: 'history',
       msgs: cached.msgs,
@@ -3539,6 +3712,9 @@ function aiCmAistudioHistoryCacheClear() {
     aiCmAistudioCacheKeyLast = '';
     aiCmAistudioPeakKey = '';
     aiCmAistudioPeakCount = 0;
+    // v2.0.32: модель ПРЕДЫДУЩЕГО чата не должна подписывать новый (SPA-подмена пути).
+    aiCmNetModelSlugAistudio = '';
+    window.__aiCmNetModelSlug = '';
     return true;
   } catch (eClear) {
     swallowSoft(eClear, 'content:aistudio-cache-clear');
@@ -3590,6 +3766,7 @@ function aiCmAistudioDomCacheSave(list) {
       msgs: msgs,
       count: msgs.length,
       serverTokens: (typeof aiCmNetCountAistudio === 'number') ? aiCmNetCountAistudio : 0,
+      model: aiCmNetModelSlugAistudio || '',
       ts: Date.now()
     }));
     aiCmAistudioCacheKeyLast = key;
