@@ -330,6 +330,23 @@ async function ensureInterceptor() {
       });
       console.log('AI Context Monitor: перехватчик Qwen зарегистрирован (мир сайта, document_start)');
     }
+
+    // AI Studio: сетевой перехватчик истории ($rpc: UpdatePrompt / Create /
+    // GenerateContent + CountTokens). Отдельный id и свой файл: core/gemini-intercept
+    // на этом хосте уже стоит (счётчик generate_204), но историю диалога не разбирает,
+    // а объединение сломало бы пин на его id. Порядок — ПОСЛЕ gemini-перехватчика:
+    // оба патчат fetch/XHR, каждый зовёт предыдущий (цепочка не рвётся).
+    if (ids.indexOf('ai-cm-aistudio-intercept') === -1) {
+      await registerSafe('ai-cm-aistudio-intercept', {
+        id: 'ai-cm-aistudio-intercept',
+        matches: ['https://aistudio.google.com/*'],
+        js: ['utils/debug.js', 'core/aistudio-intercept.js'],
+        runAt: 'document_start',
+        world: 'MAIN',
+        allFrames: false
+      });
+      console.log('AI Context Monitor: перехватчик AI Studio зарегистрирован (мир сайта, document_start)');
+    }
   } catch (err) {
     console.warn('AI Context Monitor: не удалось зарегистрировать перехватчик:', err);
   }

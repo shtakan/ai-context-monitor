@@ -3327,3 +3327,104 @@ if (isExtensionValid()) {
   });
 }
 
+
+// ============================================================================================
+// AI Studio: сетевой канал истории и точного счётчика (v2.0.30)
+//
+// ЧТО ЗДЕСЬ. Приём двух событий из MAIN-мира (core/aistudio-intercept.js — он патчит
+// fetch/XHR на aistudio.google.com): 'history' — массив ходов диалога из ответа
+// $rpc (UpdatePrompt / Create / GenerateContent, тексты протобуфера в data[13]) и
+// 'count' — точное число токенов контекста из $rpc CountTokens.
+//
+// ЗАЧЕМ. AI Studio считался ТОЛЬКО по DOM (adapters/aistudio-adapter.js): длинные
+// ответы виртуализированы, часть реплик в разметку не попадает, а токены были
+// эвристикой. Сеть даёт (а) полную историю хода и (б) серверный счётчик — ровно те
+// два значения, которыми живут бейдж/pct/экспорт.
+//
+// ПОЧЕМУ НЕ ai-cm-full-history. Тот канал — контракт перехватчиков Gemini/DeepSeek/
+// Claude (полный снимок базы с threadId-гардами и записью истории в storage). У AI
+// Studio история приходит на каждый UpdatePrompt, часто БЕЗ изменений; гнать её через
+// запись базы/истории означало бы переписывать tape на каждый автосейв редактора.
+// Поэтому здесь узкая передача: (1) netServerTokens — сразу в метрику, как его
+// кладёт сетевой снимок для остальных сервисов (см. обработчик ai-cm-full-history
+// выше, строка netServerTokens = detail.serverTokens || 0); (2) история — в
+// window.__aiCmNetMsgs, откуда её берёт extractMessages адаптера (DOM — фолбэк).
+//
+// ФОРМАТ. detail — СТРОКА JSON (Xray/Firefox, v2.0.29): массив сообщений через
+// границу компартментов объектом не проходит. Разбор — aiCmBridgeDetail(ev), та же
+// форма тела, что в MAIN-мирах (tests/firefox-xray-bridge.test.js).
+// ============================================================================================
+
+/** Разбор detail моста: строка JSON → объект, объект → как есть, мусор → null. */
+function aiCmBridgeDetail(ev) {
+  var raw = (ev && ev.detail !== undefined) ? ev.detail : null;
+  if (typeof raw !== 'string') return raw || null;
+  try { return JSON.parse(raw); } catch (eBd) { return null; }
+}
+
+// Последняя сетевая история AI Studio: { msgs: [{role,text}], count, ts }.
+// Читается adapters/aistudio-adapter.js через window.__aiCmNetMsgs (тот же ISOLATED-мир).
+var aiCmNetMsgsAistudio = null;
+// Последний CountTokens: точное число токенов контекста (0 — ещё не приходил).
+var aiCmNetCountAistudio = 0;
+
+function aiCmIsAistudioHost() {
+  try {
+    return String((window.location && window.location.hostname) || '').indexOf('aistudio.google.com') !== -1;
+  } catch (eAih) {
+    swallowSoft(eAih, 'content:aistudio-net-host');
+    return false;
+  }
+}
+
+window.addEventListener('ai-cm-aistudio-net', function (/** @type {CustomEvent} */ ev) {
+  try {
+    // Событие шлёт только MAIN-перехватчик aistudio, но проверяем хост: content.js
+    // исполняется на всех площадках, и чужая страница не должна включать эту ветку.
+    if (!aiCmIsAistudioHost()) return;
+    var detail = aiCmBridgeDetail(ev);
+    if (!detail) return;
+    var changed = false;
+    if (detail.kind === 'count') {
+      var serverTokens = (typeof detail.serverTokens === 'number')
+        ? detail.serverTokens
+        : parseInt(detail.serverTokens, 10);
+      if (isFinite(serverTokens) && serverTokens > 0 && serverTokens !== aiCmNetCountAistudio) {
+        aiCmNetCountAistudio = serverTokens;
+        // Та же переменная состояния, что у сетевого снимка (state.js): серверный
+        // счётчик главнее эвристики, пока новая сеть его не перезапишет.
+        netServerTokens = serverTokens;
+        changed = true;
+      }
+    } else if (detail.kind === 'history' && Array.isArray(detail.msgs) && detail.msgs.length > 0) {
+      var msgs = [];
+      for (var i = 0; i < detail.msgs.length; i++) {
+        var m = detail.msgs[i];
+        if (!m || typeof m.text !== 'string' || m.text.length === 0) continue;
+        msgs.push({ role: (m.role === 'assistant' || m.role === 'model') ? 'assistant' : 'user', text: m.text });
+      }
+      if (msgs.length > 0) {
+        var prev = aiCmNetMsgsAistudio;
+        aiCmNetMsgsAistudio = {
+          msgs: msgs,
+          count: msgs.length,
+          ts: (typeof detail.ts === 'number') ? detail.ts : Date.now(),
+          href: String(window.location.href || '')
+        };
+        // Общая точка для адаптера: ISOLATED-мир один, отдельного канала не нужно.
+        window.__aiCmNetMsgs = aiCmNetMsgsAistudio;
+        changed = !prev || prev.count !== msgs.length || prev.ts !== aiCmNetMsgsAistudio.ts;
+      }
+    }
+    if (!changed) return;
+    debugLog('log', '[AI CM][aistudio-net] kind=' + detail.kind +
+      ' msgs=' + (aiCmNetMsgsAistudio ? aiCmNetMsgsAistudio.count : 0) +
+      ' serverTokens=' + aiCmNetCountAistudio);
+    // Пересчёт бейджа/pct тем же путём, что и приход сетевого снимка у других сервисов.
+    if (typeof isInitialized !== 'undefined' && isInitialized && typeof processAndSend === 'function') {
+      processAndSend();
+    }
+  } catch (eNet) {
+    swallowSoft(eNet, 'content:aistudio-net');
+  }
+});

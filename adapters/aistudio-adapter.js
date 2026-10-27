@@ -38,7 +38,16 @@ class AistudioAdapter extends GeminiAdapter {
     try {
       const hasMessageNodes = document.querySelector('ms-cmark-node') !== null;
       debugLog('log', `[AistudioAdapter] isOnDialogPage: ${hasMessageNodes}`);
-      return hasMessageNodes;
+      if (hasMessageNodes) return true;
+      // Виртуализированная лента: DOM может быть пуст, пока сеть уже отдала историю
+      // ($rpc UpdatePrompt/Create → core/aistudio-intercept.js). Без этой ветки
+      // processAndSend выходил по «не диалог» и бейдж молчал.
+      const netCount = this._netMessages().length;
+      if (netCount > 0) {
+        debugLog('log', `[AistudioAdapter] isOnDialogPage: true (сеть: ${netCount} сообщений)`);
+        return true;
+      }
+      return false;
     } catch (error) {
       debugLog('error', '[AistudioAdapter] Ошибка в isOnDialogPage:', error);
       return false;
@@ -53,6 +62,14 @@ class AistudioAdapter extends GeminiAdapter {
    */
   extractMessages() {
     try {
+      // Сеть главнее DOM: полная история из $rpc (включая виртуализированные ходы).
+      // DOM остаётся фолбэком — как у Claude/Perplexity, где сеть и есть источник.
+      const netMessages = this._netMessages();
+      if (netMessages.length > 0) {
+        debugLog('log', `[AistudioAdapter] История из сети: ${netMessages.length} сообщений (DOM не читаем)`);
+        return netMessages;
+      }
+
       /** @type {AistudioExtractedMessage[]} */
       const messages = [];
 
@@ -93,6 +110,42 @@ class AistudioAdapter extends GeminiAdapter {
    */
   detectModel() {
     return 'gemini-3.1-pro';
+  }
+
+  /**
+   * Сетевая история AI Studio: снимок, который MAIN-перехватчик
+   * (core/aistudio-intercept.js) положил в ISOLATED-мир через core/content.js
+   * (window.__aiCmNetMsgs = { msgs: [{role, text}], count, ts, href }).
+   *
+   * Снимок принимается только для ТЕКУЩЕГО пути (SPA: AI Studio меняет /prompts/<id>
+   * без перезагрузки) — иначе история прошлого разговора питала бы счётчик нового.
+   * Нет снимка/путь не тот → [] и обычный DOM-парсинг.
+   * @returns {AistudioExtractedMessage[]}
+   */
+  _netMessages() {
+    try {
+      const raw = (typeof window !== 'undefined') ? window.__aiCmNetMsgs : null;
+      if (!raw || !Array.isArray(raw.msgs) || raw.msgs.length === 0) return [];
+      const here = String((window.location && window.location.pathname) || '');
+      const there = String(raw.href || '');
+      if (there && typeof URL === 'function') {
+        let therePath = there;
+        try { therePath = new URL(there).pathname; } catch (eUrl) { therePath = there; }
+        if (therePath && here && therePath !== here) return [];
+      }
+      /** @type {AistudioExtractedMessage[]} */
+      const messages = [];
+      Array.prototype.forEach.call(raw.msgs, (m) => {
+        if (!m || typeof m.text !== 'string') return;
+        const content = this._cleanText(m.text);
+        if (content.length === 0) return;
+        messages.push({ role: (m.role === 'assistant' || m.role === 'model') ? 'assistant' : 'user', content });
+      });
+      return messages;
+    } catch (error) {
+      debugLog('error', '[AistudioAdapter] Ошибка чтения сетевой истории:', error);
+      return [];
+    }
   }
 
   /**
