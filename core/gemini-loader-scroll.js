@@ -425,7 +425,7 @@
                   try { el75.scrollTop = 0; } catch (eS1) { }
                   // v4z: синтетический scroll — подталкиваем IntersectionObserver-пагинацию
                   try { el75.dispatchEvent(new Event('scroll')); } catch (eS2) { }
-                  try { el75.scrollTop = el75.scrollHeight; } catch (eS3) { } // возврат вниз ДО отрисовки кадра
+                  try { el75.scrollTop = el75.scrollHeight; debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' quiet-frame-applied h=' + el75.scrollHeight + ' top=' + el75.scrollTop + ' convId=' + convId); } catch (eS3) { } // возврат вниз ДО отрисовки кадра
                 });
               } catch (eRaf) { }
             })(sc.el);
@@ -469,7 +469,7 @@
                   requestAnimationFrame(function () {
                     try { el97.scrollTop = 0; } catch (eS97a) { debugLog('log', '[AI CM][Gemini][loader] v97 scroll-top skip convId=' + convId); }
                     try { el97.dispatchEvent(new Event('scroll')); } catch (eS97b) { debugLog('log', '[AI CM][Gemini][loader] v97 rAF-scroll-dispatch skip convId=' + convId); }
-                    try { el97.scrollTop = el97.scrollHeight; } catch (eS97c) { debugLog('log', '[AI CM][Gemini][loader] v97 scroll-bottom skip convId=' + convId); }
+                    try { el97.scrollTop = el97.scrollHeight; debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' fallback-scroll-applied h=' + el97.scrollHeight + ' top=' + el97.scrollTop + ' convId=' + convId); } catch (eS97c) { debugLog('log', '[AI CM][Gemini][loader] v97 scroll-bottom skip convId=' + convId); }
                   });
                 } catch (eRaf97) { debugLog('log', '[AI CM][Gemini][loader] v97 rAF недоступен — скролл в открытую пропущен convId=' + convId); }
               })(sc.el);
