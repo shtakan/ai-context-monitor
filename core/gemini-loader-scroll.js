@@ -158,21 +158,21 @@
         // __applyHide (перед первым скроллом). Для холодного открытия/F5/SPA-входа
         // (старт в низу) восстановление = ровно низ чата, независимо от дрейфа clientH;
         // если скролла не было — тоже низ (как в v79).
-        var distBottomRest80 = (distBottom80 >= 0) ? distBottom80 : 0;
+        var distBottomRest80 = (distBottom80 >= 0) ? distBottom80 : 0; var restoreOurs80 = hiddenEl === true && D.aiCmScrollOverlay === true && D.aiCmUiOverlayTimedOut !== true;
         function applyRestoreTop80() {
           try {
             var sn = (sc && sc.height() > 0) ? sc : D.findScrollContainer();
-            if (sn && sn.height() > 0) sn.setTop(Math.max(0, sn.height() - sn.client() - distBottomRest80));
+            if (sn && sn.height() > 0 && distBottomRest80 <= sn.height() - sn.client()) sn.setTop(Math.max(0, sn.height() - sn.client() - distBottomRest80));
           } catch (eR80) { }
         }
-        if (hiddenEl) {
-          // v79/v80: возврат позиции ДО снятия оверлея — убирает «мгновение начала чата».
+        // v109: гейт мислокации — restore только если оверлей ещё НАШ (снят извне: UI-предел,
+        // base-complete-early/тейп/force-restore/чужой прогон) — иначе позицию не трогаем.
+        if (hiddenEl && restoreOurs80) {
           applyRestoreTop80();
+        } else if (hiddenEl) {
+          debugLog('log', '[AI CM][Gemini][loader] restore-skip reason=external-unmask convId=' + (D.getConvId() || '(none)'));
         }
-        // v80 (O1-B): оверлей снимаем строго после ДВУХ rAF — кадр с восстановленной
-        // позицией уже отрисован. seq-гвард: не снимаем оверлей более нового прогона.
-        // Снимаем ВСЕГДА (не только при hiddenEl): оверлей мог быть pre-applied
-        // (loader-restart) без hide — иначе протечка непрозрачного экрана.
+        // v80 (O1-B): оверлей снимаем после ДВУХ rAF (кадр с позицией отрисован) + seq-гвард; ВСЕГДА.
         var seqAtEnd80 = D.aiCmOverlaySeq;
         var __overlayOff80 = function () {
           D.aiCmSetScrollOverlay(false, 'loader-done', seqAtEnd80);
@@ -185,7 +185,7 @@
         // v30.4: возврат позиции на свеже-запрошенном скроллере; повтор через 250мс —
         // после пере-якорения списка Gemini. v80: к сохранённой позиции, не жёстко в низ.
         function kickBack() {
-          applyRestoreTop80();
+          if (restoreOurs80) applyRestoreTop80();
         }
         try {
           requestAnimationFrame(function () {
