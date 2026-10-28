@@ -117,13 +117,21 @@ function readJSON(relPath) {
   }
 }
 
-/** background entry — manifest.background.service_worker */
+// Статические зависимости background-бандла, склеиваемые ДО esbuild в одну область
+// видимости. Раньше utils/gemini-intercept-logic.js грузился в рантайме через
+// importScripts() — API только воркера, поэтому Firefox event page его не исполнял,
+// и пороги проактивных предупреждений молча падали на дефолт. Файл — самодостаточный
+// IIFE без top-level объявлений: он публикует self.GeminiInterceptLogic, потребитель
+// в background.js не меняется, коллизий имён нет по построению.
+const BACKGROUND_PRELUDE = ['utils/gemini-intercept-logic.js'];
+
+/** background entry — build-time prelude + manifest.background.service_worker */
 function backgroundEntry(manifest) {
   const src = manifest?.background?.service_worker;
   if (typeof src !== 'string' || src === '') {
     fail('manifest.json: background.service_worker is missing or not a string');
   }
-  return [src];
+  return [...BACKGROUND_PRELUDE, src];
 }
 
 /** content entry — manifest.content_scripts[0].js, order preserved */
@@ -551,6 +559,16 @@ async function verifyDist() {
         '(the Firefox fallback belongs in dist-firefox/)'
     );
   }
+  // Один статический бандл: importScripts() — API воркера, а в Firefox event page его
+  // нет, поэтому рантайм-загрузка в поставке запрещена (utils/gemini-intercept-logic.js
+  // вшит на сборке, BACKGROUND_PRELUDE). Гейт держит инвариант в обоих пакетах.
+  const bgSource = await fsp.readFile(path.join(DIST, REWIRED_SERVICE_WORKER), 'utf8');
+  if (/\bimportScripts\s*\(/.test(bgSource)) {
+    problems.push(
+      `dist/${REWIRED_SERVICE_WORKER}: importScripts() must not be present ` +
+        '(no Worker API in the Firefox event page)'
+    );
+  }
   const js = manifest?.content_scripts?.[0]?.js;
   if (JSON.stringify(js) !== JSON.stringify(REWIRED_CONTENT_SCRIPTS)) {
     problems.push(
@@ -653,6 +671,13 @@ async function verifyFirefoxDist() {
     problems.push(
       `dist-firefox/manifest.json: content_scripts[0].js is ` +
         `${JSON.stringify(manifest?.content_scripts?.[0]?.js)}, expected ${JSON.stringify(REWIRED_CONTENT_SCRIPTS)}`
+    );
+  }
+  const bgSource = await fsp.readFile(path.join(DIST_FIREFOX, REWIRED_SERVICE_WORKER), 'utf8');
+  if (/\bimportScripts\s*\(/.test(bgSource)) {
+    problems.push(
+      `dist-firefox/${REWIRED_SERVICE_WORKER}: importScripts() must not be present ` +
+        '(no Worker API in the Firefox event page)'
     );
   }
   for (const bundle of BUNDLES) {

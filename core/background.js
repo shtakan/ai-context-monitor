@@ -99,11 +99,11 @@ try {
   }
 } catch (eByokWatch) { }
 
-// Фаза B: чистая логика проактивных порогов из utils/gemini-intercept-logic.js
-// (UMD-файл экспортирует api в self в SW; window/module отсутствуют).
-if (typeof importScripts === 'function') {
-  try { importScripts('/utils/gemini-intercept-logic.js'); } catch (e) { console.warn('[AI CM][thresholds] importScripts error:', e); }
-}
+// Фаза B: чистая логика проактивных порогов из utils/gemini-intercept-logic.js.
+// Файл ВШИТ в бандл на этапе сборки (build.mjs: BACKGROUND_PRELUDE): importScripts —
+// API только воркера, в Firefox event page его нет, поэтому динамическая загрузка заменена
+// статической склейкой в один скоуп. Модуль по-прежнему публикует self.GeminiInterceptLogic.
+// Гейт: verifyDist/verifyFirefoxDist валят сборку, если importScripts вернётся в бандл.
 
 // v52: дубликаты регистраций после перезагрузки расширения гасим здесь:
 // при "Duplicate script ID" снимаем старую и регистрируем заново.
