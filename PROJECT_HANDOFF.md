@@ -1809,7 +1809,7 @@ function aiCmBridgeDetail(ev) {
 ## Аппендикс v105 (2026-10-28): detectModel() закрыт без правок кода — сетевая модель AI Studio и residual R1–R4
 
 **Дата:** 2026-10-28 (Asia/Yekaterinburg).
-**Коммит:** `<SHA v105>` — `docs(handoff): appendix v105 — detectModel closure and R1-R4 residuals` (1 файл, вставка только в конец).
+**Коммит:** `77c02f2` — `docs(handoff): appendix v105 — detectModel closure and R1-R4 residuals` (1 файл, вставка только в конец).
 **Статус:** закрыт (code-free). Сьют 194 suites; 3476 passed; 7 skipped; 0 failed; `npx tsc --noEmit` — exit 0; `docs-hygiene` — 27/27.
 
 ### Секция 1. Что сделано.
@@ -1866,4 +1866,4 @@ function aiCmBridgeDetail(ev) {
 
 ### Секция 7. Плейсхолдер.
 
-**Коммит A (тело аппендикса v105):** `<SHA v105>` — заполняется на шаге B.
+**Коммит A (тело аппендикса v105):** `77c02f2` — заполняется на шаге B.
