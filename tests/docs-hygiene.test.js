@@ -42,6 +42,15 @@ const pkg = JSON.parse(read('package.json'));
 const handoffBuf = fs.readFileSync(abs('PROJECT_HANDOFF.md'));   // Buffer — для BOM и размера
 const handoff = handoffBuf.toString('utf8');
 
+// O-53 (split handoff): аппендиксы v1–v89 вынесены в docs/HANDOFF_ARCHIVE.md
+// байт-в-байт. Статусные строки живут в РАЗНЫХ файлах (текущий прогон — активный,
+// исторический максимум — архив), поэтому проверки «ровно одна» считаются по
+// corpus. Склейка handoff + '\n' + archive не создаёт ложных форм счётчиков:
+// каждая строка остаётся целой и обе границы индексов берутся из corpus.
+const archiveBuf = fs.readFileSync(abs('docs/HANDOFF_ARCHIVE.md'));   // Buffer — для BOM и размера
+const archive = archiveBuf.toString('utf8');
+const corpus = handoff + '\n' + archive;
+
 // O-53 (вариант б1): две независимые сущности счётчиков handoff —
 //   «текущий прогон» (обновляется синхронно с фактом) и
 //   «исторический максимум» (рекорд зелёных прогонов, не падает при удалении тестов).
@@ -261,19 +270,23 @@ describe('M-6: release.yml — руководство в ZIP и контроль
 describe('O-53: PROJECT_HANDOFF.md — гигиена кодировки и статусных чисел', () => {
   test('кодировка: без BOM, переводы строк нормализуются без одиночных CR', () => {
     expect(handoffBuf.length).toBeGreaterThan(100000);   // осмысленный объём, а не заглушка
+    expect(archiveBuf.length).toBeGreaterThan(100000);   // архив — тоже содержательный файл
     const hasBom = handoffBuf[0] === 0xEF && handoffBuf[1] === 0xBB && handoffBuf[2] === 0xBF;
     expect(hasBom).toBe(false);
+    const archiveHasBom = archiveBuf[0] === 0xEF && archiveBuf[1] === 0xBB && archiveBuf[2] === 0xBF;
+    expect(archiveHasBom).toBe(false);
     // EOL намеренно НЕ пинится жёстко: .gitattributes держит eol=lf, поэтому в рабочей
     // копии Windows файл честно CRLF, а на Linux/CI — LF. Пин на loneLF/loneCR фиксировал
     // бы средство (рабочую копию), а не требование, и падал бы на CI при зелёном локально.
-    expect(handoff.replace(/\r\n/g, '\n')).not.toContain('\r');
+    // corpus покрывает оба файла: одиночный CR недопустим ни в активном, ни в архиве.
+    expect(corpus.replace(/\r\n/g, '\n')).not.toContain('\r');
   });
 
   test('статусные строки «- **Тесты:» и «- **Исторический максимум:» — ровно по одной', () => {
-    const currentLines = handoff.split(/\r?\n/).filter(function (l) {
+    const currentLines = corpus.split(/\r?\n/).filter(function (l) {
       return l.indexOf('- **Тесты:') === 0;
     });
-    const histMaxLines = handoff.split(/\r?\n/).filter(function (l) {
+    const histMaxLines = corpus.split(/\r?\n/).filter(function (l) {
       return l.indexOf('- **Исторический максимум:') === 0;
     });
     expect(currentLines).toHaveLength(1);   // текущий прогон ровно один
@@ -281,8 +294,8 @@ describe('O-53: PROJECT_HANDOFF.md — гигиена кодировки и ст
     expect(currentLines[0]).toMatch(TESTS_RE);
     expect(histMaxLines[0]).toMatch(HIST_MAX_RE);
     // и нигде больше полной формы этих двух строк нет (одна — текущая, одна — рекорд)
-    expect(handoff.match(TESTS_RE_G) || []).toHaveLength(1);
-    expect(handoff.match(HIST_MAX_RE_G) || []).toHaveLength(1);
+    expect(corpus.match(TESTS_RE_G) || []).toHaveLength(1);
+    expect(corpus.match(HIST_MAX_RE_G) || []).toHaveLength(1);
   });
 
   test('семантика: «текущий прогон» и «исторический максимум» — независимые сущности (O-53)', () => {
@@ -290,9 +303,9 @@ describe('O-53: PROJECT_HANDOFF.md — гигиена кодировки и ст
     // прогонов. Рекорд НЕ является полом для текущего: удаление тестов снижает
     // текущее число, и это не регресс (прежнее сравнение current >= max штрафовало
     // работу). Здесь проверяются формат, валидность чисел и непустота истории.
-    const currentMatch = TESTS_RE.exec(handoff);
+    const currentMatch = TESTS_RE.exec(corpus);
     expect(currentMatch).not.toBeNull();
-    const histMaxMatch = HIST_MAX_RE.exec(handoff);
+    const histMaxMatch = HIST_MAX_RE.exec(corpus);
     expect(histMaxMatch).not.toBeNull();
 
     const current = currentMatch.slice(1).map(Number);
@@ -316,7 +329,7 @@ describe('O-53: PROJECT_HANDOFF.md — гигиена кодировки и ст
     const history = [];
     const counterRe = /(\d+) suites \/ (\d+) passed \/ (\d+) skipped \/ (\d+) failed/g;
     let m;
-    while ((m = counterRe.exec(handoff)) !== null) {
+    while ((m = counterRe.exec(corpus)) !== null) {
       const inExcluded = excluded.some(function (r) { return m.index >= r[0] && m.index < r[1]; });
       if (inExcluded) continue;   // текущее и рекорд — не история
       history.push([Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])]);
