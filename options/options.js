@@ -13,6 +13,9 @@ const toggleApiKeyBtn = document.getElementById('toggle-api-key');
 const exactCountCheckbox = document.getElementById('exact-count');
 // BYOK-sync: подсказка «ключ не найден» под чекбоксом точного подсчёта.
 const exactCountWarningEl = document.getElementById('exact-count-warning');
+// Firefox-сборка (AMO): BYOK выключен в SW (core/background.js), поэтому UI не должен
+// предлагать мёртвую функцию — обе секции скрываются, флаг точного подсчёта сбрасывается.
+var aiCmByokUiDisabled = (typeof browser !== 'undefined');
 const versionEl = document.querySelector('.version');
 const exportMdBtn = document.getElementById('export-md');
 const exportJsonBtn = document.getElementById('export-json');
@@ -235,13 +238,24 @@ function aiCmLoadByokKey() {
 
 // BYOK: флаг точного подсчёта остаётся в chrome.storage.local (ключ — в session, M-7).
 chrome.storage.local.get(['ai_cm_exact_token_count'], function (data) {
+  if (aiCmByokUiDisabled) {
+    // Firefox: секции API-ключа и точного подсчёта недостижимы в SW — прячем их из UI
+    // и гасим флаг, чтобы старый профиль не оставлял включённую мёртвую галочку.
+    // .section в options.css задаёт только margin, но style.display страхует от тем.
+    [apiKeyInput, exactCountCheckbox].forEach(function (el) {
+      var section = el && el.closest ? el.closest('.section') : null;
+      if (section) { section.hidden = true; section.style.display = 'none'; }
+    });
+    if (data.ai_cm_exact_token_count) chrome.storage.local.set({ ai_cm_exact_token_count: false });
+    return;
+  }
   if (data.ai_cm_exact_token_count === undefined) return;
   exactCountCheckbox.checked = !!data.ai_cm_exact_token_count;
   // Запрос session мог ответить раньше local: без ключа галочка снимается повторно,
   // иначе прочитанный из local true снова включил бы «точный» счёт без ключа.
   if (aiCmByokHasKeyState === false) aiCmSyncExactCountWithByok(false);
 });
-aiCmLoadByokKey();
+if (!aiCmByokUiDisabled) aiCmLoadByokKey();
 
 modelSelect && modelSelect.addEventListener('change', function () {
   chrome.storage.sync.set({ selectedModel: modelSelect.value });

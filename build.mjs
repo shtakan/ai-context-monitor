@@ -277,6 +277,10 @@ const FIREFOX_BACKGROUND_SCRIPTS = [REWIRED_SERVICE_WORKER];
 // version below 140' (uBlock Origin #3894). Поле пишется ТОЛЬКО в dist-firefox/:
 // dist/manifest.json (Chrome) остаётся байт-в-байт прежним.
 const FIREFOX_MIN_VERSION = '140.0';
+// BYOK: единственный сетевой хост, торчащий из Firefox-пакета. В Firefox BYOK выключен
+// (гейт в core/background.js), поэтому разрешение снимается из dist-firefox/manifest.json:
+// заявленный data_collection_permissions: none подтверждается отсутствием доступа к Google.
+const BYOK_HOST = 'https://generativelanguage.googleapis.com/*';
 const REWIRED_OPTIONS_SCRIPT = '../options.js';
 const REWIRED_PRINT_SCRIPT = '../print.js';
 // Phase 3 step 3: privacy/privacy.html and docs/index.html both live one level
@@ -658,6 +662,11 @@ async function writeFirefoxDist() {
     fail('dist-firefox/manifest.json: browser_specific_settings.gecko is missing');
   }
   gecko.strict_min_version = FIREFOX_MIN_VERSION;
+  // BYOK в Firefox-пакете недостижим → снимаем и разрешение на Google API. Chrome-манифест
+  // (dist/manifest.json) не фильтруется: там BYOK остался рабочим.
+  if (Array.isArray(manifest.host_permissions)) {
+    manifest.host_permissions = manifest.host_permissions.filter((host) => host !== BYOK_HOST);
+  }
   manifest.background.scripts = [...FIREFOX_BACKGROUND_SCRIPTS];
   await fsp.writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
 }
@@ -682,6 +691,13 @@ async function verifyFirefoxDist() {
     problems.push(
       `dist-firefox/manifest.json: gecko.strict_min_version is ${JSON.stringify(minVer)}, ` +
         `expected "${FIREFOX_MIN_VERSION}"`
+    );
+  }
+  const firefoxHosts = Array.isArray(manifest?.host_permissions) ? manifest.host_permissions : [];
+  if (firefoxHosts.includes(BYOK_HOST)) {
+    problems.push(
+      `dist-firefox/manifest.json: host_permissions must not include ${BYOK_HOST} ` +
+        '(BYOK is disabled in the Firefox build)'
     );
   }
   if (JSON.stringify(manifest?.content_scripts?.[0]?.js) !== JSON.stringify(REWIRED_CONTENT_SCRIPTS)) {

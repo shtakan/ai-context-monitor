@@ -39,6 +39,13 @@ declare module 'util' {
 /** chrome.* доступен из контент-скрипта; без @types/chrome объявлен как any. */
 declare const chrome: any;
 
+/**
+ * browser.* — WebExtension API движка Gecko (Firefox). В Chrome/Safari этого глобала нет,
+ * поэтому код проверяет движок через `typeof browser !== 'undefined'` (BYOK-гейт
+ * Firefox-сборки). Объявлен как any по той же причине, что и chrome: @types/chrome нет.
+ */
+declare const browser: any;
+
 // --- Глобалы проекта, публикуемые utils/*.js на window ----------------------
 // Каждый опциональный: в Node-ветке (module.exports) их на window нет, и код
 // проверяет их наличие через typeof, прежде чем использовать.

@@ -1621,7 +1621,7 @@ function logTextProbe(label, text) {
 
 function requestExactTokens(fullText, modelId) {
   if (!isExtensionValid()) return;
-  if (!exactCountEnabled || !geminiApiKey) { netServerTokens = 0; return; }
+  if (typeof browser !== 'undefined' || !exactCountEnabled || !geminiApiKey) { netServerTokens = 0; return; }
   if (!fullText) { netServerTokens = 0; return; }
 
   console.log('[byok-src] baseComplete=' + baseComplete +

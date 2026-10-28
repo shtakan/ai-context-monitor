@@ -871,6 +871,13 @@ function scheduleCountTokens(key, payload, debounced) {
 }
 
 function handleCountTokens(message, sender) {
+  // Firefox-сборка (AMO): манифест заявляет data_collection_permissions: none, а BYOK
+  // отправляет текст диалога на generativelanguage.googleapis.com. Гейт стоит на
+  // единственном входе в цепочку (сообщение COUNT_TOKENS): до fetch в
+  // handleCountTokensRun дело не доходит. Chrome не затронут — глобали browser там нет.
+  if (typeof browser !== 'undefined') {
+    return Promise.resolve({ ok: false, reason: 'byok-disabled-firefox' });
+  }
   var text = (message && message.text) || '';
   var model = message.model || 'gemini-flash-latest'; // НЕ менять: пинуется тестом exact-token-count-models
   if (!text || text.length === 0) return Promise.resolve({ totalTokens: 0 });
