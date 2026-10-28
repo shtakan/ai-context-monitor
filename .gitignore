@@ -141,6 +141,7 @@ coverage/
 dist/
 dist-firefox/
 build/
+!tests/build/
 .DS_Store
 Thumbs.db
 
