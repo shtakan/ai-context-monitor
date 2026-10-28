@@ -2056,3 +2056,61 @@ function aiCmBridgeDetail(ev) {
 
 **Коммит A (тело аппендикса v108):** `bec4716` — заполняется на шаге B.
 **SHA4:** `657a94f` (коммит C — синк верхнего блока)
+
+## Аппендикс v109 (2026-10-28): residual v101 §4 п.1/п.2 закрыты — логи кадрового приёма и гейт восстановления позиции
+
+**Дата:** 2026-10-28 (Asia/Yekaterinburg).
+**Коммиты:** `82e33ba` — `fix(scroll): positive logs for quiet-frame and fallback-scroll application (v109 p.1)`; `9e6b621` — `fix(scroll): restoreOurs80 gate against applyRestoreTop80 mislocation (v109 p.2)`. Оба — 1 файл, `core/gemini-loader-scroll.js`.
+**Статус:** закрыт (code-only). Сьют 194 suites; 3476 passed; 7 skipped; 0 failed; `npx tsc --noEmit` — exit 0; `docs-hygiene` — 27/27.
+
+### Секция 1. Что сделано.
+
+**1.1. Закрыт residual v101 §4 п.1 — «слепая зона кадровой rAF-ветки».** Коммит `82e33ba` добавляет положительный лог применения кадрового приёма в обе реализации v75, не меняя поведения: MODE-1 (тихий кадр, база полная) — `quiet-frame-applied h=<scrollHeight> top=<scrollTop>` в той же строке, где выполняется последняя запись кадра (`core/gemini-loader-scroll.js:428`); MODE-3 (страховочный фолбэк без оверлея) — `fallback-scroll-applied h=<scrollHeight> top=<scrollTop>` (`core/gemini-loader-scroll.js:472`). Пара «applied / skip» делает исход кадра однозначным, `h` показывает динамику роста базы на каждой итерации, `top` — фактическую позицию после записи: расхождение `top !== h` сигнализирует о клампинге или виртуализации.
+
+**1.2. Закрыт residual v101 §4 п.2 — мислокация `applyRestoreTop80` при снятом извне оверлее.** Коммит `9e6b621` вводит замороженный признак владения оверлеем `restoreOurs80 = hiddenEl === true && D.aiCmScrollOverlay === true && D.aiCmUiOverlayTimedOut !== true` (`core/gemini-loader-scroll.js:161`) и ставит восстановление позиции под него (`:168`); иначе пишется `restore-skip reason=external-unmask` (`:170`). Тот же признак гейтит `kickBack` (`:188`), поэтому повторные возвраты на +250 и +500 мс не дёргают уже открытый пользователю чат. Геометрическая страховка `distBottomRest80 <= sn.height() - sn.client()` (`:165`) превращает «прыжок к началу» при сжавшемся контейнере в no-op.
+
+**1.3. Файл остался линейно-нейтральным.** `core/gemini-loader-scroll.js` — 1139 строк, все правки «на месте»: номера строк `catch` не сместились, `tests/fixtures/catch-whitelist.json` не тронут, `tests/` не менялся.
+
+### Секция 2. Свидетели/факты.
+
+| # | Свидетель | Факт | Источник |
+| --- | --- | --- | --- |
+| 1 | `git show --stat 82e33ba` | p.1: 1 файл, +2/−2 | локально |
+| 2 | `git show --stat 9e6b621` | p.2: 1 файл, +9/−9 | локально |
+| 3 | `grep -c quiet-frame-applied` | 1 | `core/gemini-loader-scroll.js` |
+| 4 | `grep -c fallback-scroll-applied` | 1 | `core/gemini-loader-scroll.js` |
+| 5 | `grep -c 'restore-skip reason=external-unmask'` | 1 | `core/gemini-loader-scroll.js` |
+| 6 | пинованные счётчики | `ui-timeout` = 1; `5000` = 4; `!D.aiCmScrollOverlay && !D.aiCmUiOverlayTimedOut` = 1 | `core/gemini-loader-scroll.js` |
+| 7 | `git diff --name-only 3185f64..9e6b621` | только `core/gemini-loader-scroll.js`; `tests/` — пусто | локально |
+| 8 | `wc -l core/gemini-loader-scroll.js` | 1139 строк | локально |
+| 9 | `npx jest` | 194 suites; 3476 passed; 7 skipped; 0 failed | локальный прогон 2026-10-28 |
+| 10 | `npx tsc --noEmit` | exit 0, диагностик нет | локальный прогон |
+| 11 | `npx jest tests/docs-hygiene.test.js` | 27/27, exit 0 | локальный прогон |
+| 12 | версия продукта | 2.0.32 (`manifest.json` = `package.json`) | чтение файлов |
+
+### Секция 3. Отклонения от промпта.
+
+1. **Кламп на `:165` сделан по фактической переменной `sn`.** Формулировка «`distBottomRest80 <= root.height() - el80`» к файлу неприменима: переменных `root` и `el80` в `core/gemini-loader-scroll.js` нет. Условие записано через живую переменную: `distBottomRest80 <= sn.height() - sn.client()`.
+2. **Комментарий на `:168-169` сформулирован без литерала `ui-timeout`.** Буквальное упоминание сделало бы `countOf('ui-timeout')` равным 2 и уронило два пина `tests/adapters/gemini-overlay-ui-timeout.test.js` (`:270`, `:272`). Вместо литерала — «UI-предел».
+3. **Баланс строк достигнут сжатием комментария O1-B.** Фактически комментарий сжат с 4 строк до 1 (−3), а гейт добавил 3 строки (7 вместо 4) — итог 0. В плане арифметика на единицу неверна: предполагалось сжатие 4→2 и прибавка +2; по факту компенсация обеспечена одним сжатым комментарием.
+
+### Секция 4. Новые residual.
+
+Нет. Условия переоткрытия: (а) `fallback-scroll-applied` есть, `h` не растёт при `done reason=top/max` → кадровый приём не поджигает пагинацию Gemini, компромисс v78 подтверждён, нужен новый residual «реальный скролл под оверлеем»; (б) `external-unmask` совпал по времени с жалобой на позицию → seq-заморозка `hideSeq80` и защита окна 500 мс через `lastRestoreTop80`.
+
+### Секция 5. Переопределение residual-точек.
+
+- **v101 §4 п.1 — ЗАКРЫТ.** Положительный лог `quiet-frame-applied` / `fallback-scroll-applied` с `h` и `top` делает исход кадра наблюдаемым.
+- **v101 §4 п.2 — ЗАКРЫТ.** Гейт `restoreOurs80`, геометрическая страховка и skip-лог убирают восстановление позиции при чужом/снятом оверлее.
+- **Условный v104 §4 п.1 (расширение bridge-карты) остаётся в backlog.** Срабатывает только при появлении новых ссылок v110+ → v1–v89; текущая карта покрывает существующие обратные ссылки active→archive.
+
+### Секция 6. Сводка.
+
+1. Сьют 194 suites; 3476 passed; 7 skipped; 0 failed; `tsc --noEmit` — exit 0; `docs-hygiene` — 27/27.
+2. версия 2.0.32; продукт этим аппендиксом не менялся — код закрыт коммитами `82e33ba` и `9e6b621`, коммит A содержит только `PROJECT_HANDOFF.md`.
+3. HEAD `9e6b621` = origin/main, ahead 0 до docs-синка; push не выполнялся.
+4. Верхний блок, bridge и аппендиксы v1–v108 не трогались — вставка только в конец файла.
+
+### Секция 7. Плейсхолдер.
+
+**Коммит A (тело аппендикса v109):** `<SHA v109>` — заполняется на шаге B.
