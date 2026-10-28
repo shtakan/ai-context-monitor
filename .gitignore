@@ -150,5 +150,6 @@ Thumbs.db
 # tsc_err.txt: отчёт tsc; step-*.diff: пошаговые диффы спринта.
 step-*.diff
 step-*.md
+plan-*.md
 tsc_err.txt
 docs/videos/*.mp4
