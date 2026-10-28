@@ -313,6 +313,12 @@ function rewireManifestText(text) {
   // The background bundle is an IIFE, not an ES module: stay classic. No
   // top-level await is needed and classic is simpler for the MV3 worker lifecycle.
   delete out.background.type;
+  // Chrome не знает browser_specific_settings: AMO-блок (gecko.id +
+  // data_collection_permissions) остаётся только в dist-firefox/ (шаг 4c), где
+  // он обязателен. В Chrome-пакете он выглядит как заявленное расширению
+  // разрешение на сбор данных, хотя это всего лишь AMO-декларация «none» —
+  // поэтому dist/manifest.json его не содержит вовсе.
+  delete out.browser_specific_settings;
   if (!Array.isArray(out.content_scripts) || out.content_scripts.length === 0) {
     fail('dist/manifest.json: content_scripts is missing or empty');
   }
@@ -657,11 +663,15 @@ async function writeFirefoxDist() {
   if (!manifest.background || typeof manifest.background !== 'object') {
     fail('dist-firefox/manifest.json: background is missing');
   }
-  const gecko = manifest?.browser_specific_settings?.gecko;
-  if (!gecko || typeof gecko !== 'object') {
-    fail('dist-firefox/manifest.json: browser_specific_settings.gecko is missing');
+  // dist/manifest.json намеренно не несёт browser_specific_settings (Chrome-пакет,
+  // см. rewireManifestText), поэтому Firefox-блок возвращается из корневого SSOT
+  // manifest.json — единственного места, где он объявлен. Копия диста не источник.
+  const bss = readJSON('manifest.json')?.browser_specific_settings;
+  if (!bss || typeof bss !== 'object' || !bss.gecko || typeof bss.gecko !== 'object') {
+    fail('manifest.json: browser_specific_settings.gecko is missing (required by dist-firefox)');
   }
-  gecko.strict_min_version = FIREFOX_MIN_VERSION;
+  manifest.browser_specific_settings = JSON.parse(JSON.stringify(bss));
+  manifest.browser_specific_settings.gecko.strict_min_version = FIREFOX_MIN_VERSION;
   // BYOK в Firefox-пакете недостижим → снимаем и разрешение на Google API. Chrome-манифест
   // (dist/manifest.json) не фильтруется: там BYOK остался рабочим.
   if (Array.isArray(manifest.host_permissions)) {
