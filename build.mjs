@@ -272,6 +272,11 @@ const REWIRED_CONTENT_SCRIPTS = ['content.js'];
 // Firefox fallback (dist-firefox only): name the bundle, never the legacy source —
 // dist/ does not contain core/background.js.
 const FIREFOX_BACKGROUND_SCRIPTS = [REWIRED_SERVICE_WORKER];
+// data_collection_permissions появился в Firefox 140; без явного минимума валидатор
+// AMO отвечает 'Unexpected property "data_collection_permissions" for any Firefox
+// version below 140' (uBlock Origin #3894). Поле пишется ТОЛЬКО в dist-firefox/:
+// dist/manifest.json (Chrome) остаётся байт-в-байт прежним.
+const FIREFOX_MIN_VERSION = '140.0';
 const REWIRED_OPTIONS_SCRIPT = '../options.js';
 const REWIRED_PRINT_SCRIPT = '../print.js';
 // Phase 3 step 3: privacy/privacy.html and docs/index.html both live one level
@@ -648,6 +653,11 @@ async function writeFirefoxDist() {
   if (!manifest.background || typeof manifest.background !== 'object') {
     fail('dist-firefox/manifest.json: background is missing');
   }
+  const gecko = manifest?.browser_specific_settings?.gecko;
+  if (!gecko || typeof gecko !== 'object') {
+    fail('dist-firefox/manifest.json: browser_specific_settings.gecko is missing');
+  }
+  gecko.strict_min_version = FIREFOX_MIN_VERSION;
   manifest.background.scripts = [...FIREFOX_BACKGROUND_SCRIPTS];
   await fsp.writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
 }
@@ -665,6 +675,13 @@ async function verifyFirefoxDist() {
     problems.push(
       `dist-firefox/manifest.json: background.scripts is ` +
         `${JSON.stringify(manifest?.background?.scripts)}, expected ${JSON.stringify(FIREFOX_BACKGROUND_SCRIPTS)}`
+    );
+  }
+  const minVer = manifest?.browser_specific_settings?.gecko?.strict_min_version;
+  if (minVer !== FIREFOX_MIN_VERSION) {
+    problems.push(
+      `dist-firefox/manifest.json: gecko.strict_min_version is ${JSON.stringify(minVer)}, ` +
+        `expected "${FIREFOX_MIN_VERSION}"`
     );
   }
   if (JSON.stringify(manifest?.content_scripts?.[0]?.js) !== JSON.stringify(REWIRED_CONTENT_SCRIPTS)) {
