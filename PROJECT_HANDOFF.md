@@ -1948,7 +1948,7 @@ function aiCmBridgeDetail(ev) {
 ## Аппендикс v107 (2026-10-28): релиз v2.0.32 опубликован — R2 и N1 закрыты
 
 **Дата:** 2026-10-28 (Asia/Yekaterinburg).
-**Коммит:** `<SHA v107>` — `docs(handoff): appendix v107 — release v2.0.32` (1 файл: вставка в конец).
+**Коммит:** `2311b1b` — `docs(handoff): appendix v107 — release v2.0.32` (1 файл: вставка в конец).
 **Статус:** закрыт (docs-only, code-free). Сьют 194 suites; 3476 passed; 7 skipped; 0 failed; `npx tsc --noEmit` — exit 0; `docs-hygiene` — 27/27.
 
 ### Секция 1. Что сделано.
@@ -1996,4 +1996,4 @@ function aiCmBridgeDetail(ev) {
 
 ### Секция 7. Плейсхолдер.
 
-**Коммит A (тело аппендикса v107):** `<SHA v107>` — заполняется на шаге B.
+**Коммит A (тело аппендикса v107):** `2311b1b` — заполняется на шаге B.
