@@ -1872,7 +1872,7 @@ function aiCmBridgeDetail(ev) {
 ## Аппендикс v106 (2026-10-28): R1 — статус residual v99 §4 п. 1 приведён к факту правкой двух строк
 
 **Дата:** 2026-10-28 (Asia/Yekaterinburg).
-**Коммит:** `<SHA v106>` — `docs(handoff): appendix v106 — R1 closed: fix v99 §4 п.1 and v103 §5 statuses` (1 файл: правка 2 строк выше + вставка в конец).
+**Коммит:** `9055b1d` — `docs(handoff): appendix v106 — R1 closed: fix v99 §4 п.1 and v103 §5 statuses` (1 файл: правка 2 строк выше + вставка в конец).
 **Статус:** закрыт (docs-only, code-free). Сьют 194 suites; 3476 passed; 7 skipped; 0 failed; `npx tsc --noEmit` — exit 0; `docs-hygiene` — 27/27.
 
 ### Секция 1. Что сделано.
@@ -1942,4 +1942,4 @@ function aiCmBridgeDetail(ev) {
 
 ### Секция 7. Плейсхолдер.
 
-**Коммит A (правка двух строк + тело аппендикса v106):** `<SHA v106>` — заполняется на шаге B.
+**Коммит A (правка двух строк + тело аппендикса v106):** `9055b1d` — заполняется на шаге B.
