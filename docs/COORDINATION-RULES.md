@@ -151,7 +151,7 @@ Git: branch main, продолжаем цикл
 **Релизный цикл (прецедент v2.0.16 / v2.0.17):**
 
 1. **Plan-инвентаризация** `2.0.X` — классификация T-VER / T-PIN / T-README / T-HIST.
-2. **Релизный коммит** (Act, 1 коммит): `manifest.json`, `package.json`, `package-lock.json`, `CHANGELOG.md`, `docs/index.html`, `PROJECT_HANDOFF.md` (L197 версия), `README.md`, `README.en.md`, `docs/TESTS.md`, все T-PIN. **16 файлов — по прецеденту.**
+2. **Релизный коммит** (Act, 1 коммит): `manifest.json`, `package.json`, `package-lock.json`, `CHANGELOG.md`, `docs/index.html`, `PROJECT_HANDOFF.md` (L199 версия), `README.md`, `README.en.md`, `docs/TESTS.md`, все T-PIN. **16 файлов — по прецеденту.**
 3. **Push коммита** (владелец, PowerShell).
 4. **Tag + push tag** (владелец): `git tag -a vX -m "vX"` + `git push origin vX`.
 5. **GitHub Release** (владелец, вручную): title + description из CHANGELOG-секции `[X]`.
