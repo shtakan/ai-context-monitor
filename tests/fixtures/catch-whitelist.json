@@ -1,6 +1,6 @@
 {
   "schema": "ai-cm/catch-whitelist@1",
-  "generatedFrom": "daa2790",
+  "generatedFrom": "e6cdeae",
   "scope": [
     "core",
     "utils",
@@ -111,8 +111,8 @@
       "category": "debug-instrumentation",
       "lines": [
         406,
-        1042,
-        1060
+        1049,
+        1067
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: chrome.action.setBadgeText({ text: '', tabId: tabIdR }); debugLog('log',"
     },
@@ -120,7 +120,7 @@
       "file": "core/background.js",
       "category": "defensive-assignment",
       "lines": [
-        961
+        968
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: errText = await response.text();"
     },
@@ -950,6 +950,8 @@
       "file": "core/gemini-loader-scroll.js",
       "category": "debug-instrumentation",
       "lines": [
+        428,
+        430,
         1038,
         1051,
         1124,
@@ -972,7 +974,6 @@
         152,
         156,
         427,
-        430,
         878
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: el75.dispatchEvent(new Event('scroll'));"
@@ -983,8 +984,7 @@
       "lines": [
         114,
         184,
-        425,
-        428
+        425
       ],
       "reason": "overlay-guard: оверлей/стили: узел мог быть уничтожен хостом между чтением и записью; пример: el75.scrollTop = 0;"
     },
