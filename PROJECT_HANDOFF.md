@@ -2173,3 +2173,63 @@ function aiCmBridgeDetail(ev) {
 
 **Коммит A (тело аппендикса v110):** `a65baf3` — заполняется на шаге B.
 **SHA4:** `f76b298` (коммит C — синк верхнего блока)
+
+## Аппендикс v111 (2026-10-29): курсорная пагинация Qwen и гейт автоэкспорта
+
+**Дата:** 2026-10-29 (Asia/Yekaterinburg).
+**Коммиты:** `c22eadb` — `fix(qwen): correct turn ordering and gate auto-export during pagination` (5 файлов: `core/export-manager.js`, `core/qwen-intercept.js`, `tests/fixtures/catch-whitelist.json`, `tests/qwen-pagination.test.js`, `utils/export-emit-pipeline.js`; +241/−22). Основание — `22a273d` — `feat(qwen): O-53 cursor pagination of chat history` (7 файлов, +864/−57; там же появился сам модуль пагинации).
+**Статус:** закрыт. Сьют 196/3525/7/0 (локально, `npx jest`, 7.8 с); `npx tsc --noEmit` — exit 0; `node build.mjs` — exit 0; `docs-hygiene` — 27/27.
+
+### Секция 1. Что сделано.
+
+**1.1. Собственная курсорная пагинация Qwen — дозагрузка старых страниц истории.** Новый чистый модуль `core/qwen-pagination.js` (197 строк, `22a273d`) собирает URL старой страницы, разбирает payload, выбирает курсор, решает шаг и перенумеровывает ходы: `historyPageUrl`, `paginationInfo`, `nextCursorOf`, `oldestMessageId`, `pageStepDecision`, `assignPageOrders`. Источник курсора — `data.chat.history.pagination` (`enabled`, `oldest_id`, `newest_id`, `has_more_older`, …): `oldest_id` — UUID-курсор старшей страницы, `has_more_older` — авторитетный флаг «старше есть»; запрос — `GET /api/v2/chats/{id}?direction=up&limit=10&cursor=<oldest_id>`. Потолки одного прогона: 10 страниц, 30 000 мс, глубина обхода payload 6/8. Модуль подключается отдельным content-script ПЕРЕД `core/qwen-intercept.js` и как CommonJS для тестов — сети и состояния внутри нет.
+
+**1.2. Порядок ходов в `emitSnapshot` исправлен — сортировка по `order`.** Пагинация перенумеровывает старые страницы в отрицательные `order` (`assignPageOrders`), поэтому порядок добавления в `turns` перестал совпадать с хронологией: файл начинался с 10 последних турнов, а старые страницы дописывались в конец. Теперь снимок собирается по `order`: `var sortedTurns = turns.slice().sort(function (a, b) { return a.order - b.order; });` (`core/qwen-intercept.js`). Там же `recordTurn` получает `order = maxOrder + 1` (строго больше максимального уже выданного), а не `turns.length` — иначе после перенумерации живой ход вставал бы в середину, а не в конец.
+
+**1.3. Гейт автоэкспорта: Qwen ждёт завершения пагинации.** Пока сетевой снимок пришёл (`baseSeen`), но полнота не объявлена (`historyComplete=false` → `baseComplete=false`), неполная база проходила как доверенная (`domBaseTrusted`), автоэкспорт писал файл на ~90% сообщений, а сработавший латч затем блокировал честный снимок. Добавлен булев признак `historyIncomplete` в решении автоэкспорта и ранний выход в `utils/export-emit-pipeline.js`: `if (s.historyIncomplete === true) return { skip: true, reason: 'not-complete', resetFired: false };`. Предикат — `aiCmHistoryPaginationIncomplete(site, baseSeen, baseComplete)` в `core/export-manager.js`: `site === 'qwen' && baseSeen === true && baseComplete !== true`. Прочие платформы и старый контракт без поля — вердикт 1:1 прежний.
+
+**1.4. Объём.** Правки — только код расширения и тесты; `manifest.json`/`package.json`, версия и CHANGELOG не менялись. Коммит A содержит только `PROJECT_HANDOFF.md`.
+
+### Секция 2. Свидетели/факты.
+
+| # | Свидетель | Факт | Источник |
+| --- | --- | --- | --- |
+| 1 | `git show --stat c22eadb` | 5 файлов, +241/−22: `core/export-manager.js`, `core/qwen-intercept.js`, `tests/fixtures/catch-whitelist.json`, `tests/qwen-pagination.test.js`, `utils/export-emit-pipeline.js` | локально |
+| 2 | `core/qwen-pagination.js` | 197 строк, чистый модуль (URL, payload, курсор, шаг, перенумерация), без сети и состояния | чтение HEAD |
+| 3 | `tests/qwen-pagination.test.js` | 10 describe-блоков, 45 тестов (8 смысловых блоков в шапке файла); в `c22eadb` добавлено 10 пинов O-54: 4 на порядок (`emitSnapshot`/`recordTurn`), 4 контрактных на гейт, 2 на предикат неполноты | diff `c22eadb` |
+| 4 | живой чат `ab45dc99-cbab-435e-b0d3-f0440f6422df` | бейдж 18.4%, `baseCount=141` — полная база дозагружена пагинацией (до фикса в файл уходило 132 из 141) | живая приёмка владельца |
+| 5 | `npx jest` | 196 suites; 3525 passed; 7 skipped; 0 failed | локальный прогон 2026-10-29 |
+| 6 | `npx tsc --noEmit` | exit 0, диагностик нет | локальный прогон 2026-10-29 |
+| 7 | `node build.mjs` | exit 0; `dist/` — 43 `.js` (5 бандлов + 38 runtime-registered) | локальный прогон 2026-10-29 |
+| 8 | `npx jest tests/docs-hygiene.test.js` | 27/27, exit 0 | локальный прогон 2026-10-29 |
+| 9 | версия продукта | 2.0.32 (`manifest.json` = `package.json`), этим аппендиксом не менялась | чтение файлов |
+| 10 | состояние git | HEAD `c22eadb` = origin/main, ahead 0 | `git rev-list --count origin/main..HEAD` |
+
+### Секция 3. Отклонения от промпта.
+
+1. **Предикат `site === 'qwen'` вынесен в `core/export-manager.js`, а не в emit-пайплайн.** В `utils/export-emit-pipeline.js` попадает только готовый булев `historyIncomplete`; имена платформ границу пайплайна не пересекают — пин O-37 (`describe('O-54: гейт автоэкспорта…')`: «скоуп строго Qwen: без флага вердикты DeepSeek и Gemini прежние»). Вызывающий обёрнут `typeof`-гардом: срез-песочницы тестов грузят только функцию гейта, и вердикт там прежний.
+2. **5 файлов вместо 3.** К ожидавшимся `core/qwen-intercept.js`, `tests/qwen-pagination.test.js`, `utils/export-emit-pipeline.js` добавлены `core/export-manager.js` (предикат, п. 1) и `tests/fixtures/catch-whitelist.json` — в whitelist только сдвиг номеров строк на +12 после вставки кода в `core/export-manager.js`; новых категорий и записей нет.
+3. **Границы §2 промпта уточнены по факту файла.** «4 на порядок, 2 на гейт» — это 4 пина порядка (`emitSnapshot` дважды + `recordTurn` дважды) и 2 пина предиката; сверх них в том же коммите 4 контрактных теста самого гейта, итого 10 новых пинов O-54.
+4. **Прирост сьюта больше, чем даёт один коммит.** От замера v110 (195/3480) сьют вырос до 196/3525: +1 набор (`tests/qwen-pagination.test.js`) и +45 тестов, из них 10 — в `c22eadb`, остальные пришли с `22a273d` (пины самого модуля пагинации, O-53).
+
+### Секция 4. Новые residual.
+
+- **R1 (Medium) — блокировка автоэкспорта при `page-cap`/`time-cap`.** Если пагинация не дошла до конца (потолок 10 страниц или 30 000 мс), `baseComplete` остаётся `false`, `historyIncomplete` — `true`, и автоэкспорт не срабатывает вовсе: чат не выгружается, пока пагинация не завершится честно или пока владелец не сделает ручной экспорт. Осознанный компромисс: лучше неполный файл не писать, чем писать и блокировать латчем честный снимок, — но поведение «нет файла вообще» пользователю не сообщается. Условие переоткрытия: живая приёмка показывает чат, не выгрузившийся после достижения потолка.
+- **R2 (Medium) — вложенные файлы (attachments) не попадают в экспорт.** Обнаружено при живой приёмке: `captured-completion.json`, `deepseek-session.json` отсутствуют в TXT-выгрузке. Пагинация добирает текстовые ходы, но вложения сообщений в тело файла не попадают. Условие переоткрытия: файл с вложением, в TXT которого нет ни имени, ни содержимого вложения.
+
+### Секция 5. Переопределение residual-точек (тексты аппендиксов выше не редактируются).
+
+- **v101 §4 п.1/п.2 остаются ЗАКРЫТЫМИ** (закрыты v109) — v111 их не переоткрывает и не касается.
+- **Открытых Low-residual нет** — статус v110 сохранён; R1/R2 настоящего аппендикса классифицированы как Medium, поэтому утверждение «Low не осталось» не нарушено.
+- **O-53 в трекере (гигиена `PROJECT_HANDOFF.md`) не переоткрывается**: правка только дописывает конец файла, защищённые строки верхнего блока не дублируются.
+
+### Секция 6. Сводка.
+
+1. Сьют 196/3525/7/0 (196 suites; 3525 passed; 7 skipped; 0 failed); `tsc --noEmit` — exit 0; `build.mjs` — exit 0; `docs-hygiene` — 27/27. Форма через «;» — прецедент v70 §5 / v95 §6 / v96 §6 / v97 §6 / v109 §6 / v110 §6, пин O-53.
+2. версия 2.0.32; продукт этим аппендиксом не менялся — манифест, пакет и CHANGELOG не правились, коммит A содержит только `PROJECT_HANDOFF.md`.
+3. HEAD `c22eadb`; origin/main = `c22eadb`, ahead 0 — расхождений с постановкой нет.
+4. Верхний блок, bridge и аппендиксы v1–v110 не трогались — вставка только в конец файла.
+
+### Секция 7. Плейсхолдер.
+
+**Коммит A (тело аппендикса v111):** `<SHA v111>` — заполняется на шаге B.
