@@ -3,7 +3,7 @@
     "message": "AI Context Monitor"
   },
   "ext_description": {
-    "message": "Real-time monitoring of AI model context window usage"
+    "message": "Reads AI chat pages, counts tokens locally, keeps chat history and auto-exports it to a file; data stays on your device."
   },
   "content_widget_loading": {
     "message": "Loading context..."
@@ -426,13 +426,13 @@
     "message": "Last revised:"
   },
   "privacy_meta_current": {
-    "message": "2026-09-13 (rev. 5)"
+    "message": "2026-10-29 (rev. 6)"
   },
   "privacy_meta_previous": {
-    "message": "; previous revision — 2026-09-13 (rev. 4)"
+    "message": "; previous revision — 2026-09-13 (rev. 5)"
   },
   "privacy_meta_prev3": {
-    "message": "; earlier — 2026-09-12 (rev. 3)"
+    "message": "; earlier — 2026-09-13 (rev. 4); before that — 2026-09-12 (rev. 3)"
   },
   "privacy_toc_title": {
     "message": "Contents"
@@ -477,7 +477,7 @@
     "message": "locally only"
   },
   "privacy_s1_p2_b": {
-    "message": ", on the user's device. The extension has no servers of its own: nothing is sent to the developer, shared with third parties, or used for analytics. All computations — token counting, history, export — run in the browser."
+    "message": ", on the user's device. The extension has no servers of its own: nothing is sent to the developer, shared with third parties, or used for analytics. All computations — token counting, history, export — run in the browser. Only one thing leaves the device: settings in chrome.storage.sync, synced by the browser itself (Firefox Sync or Chrome Sync) across the user's own devices, and only if sync is enabled in the browser account."
   },
   "privacy_h_data": {
     "message": "2. What data is processed"
@@ -510,7 +510,7 @@
     "message": "Google AI Studio BYOK key"
   },
   "privacy_s2_li4_a": {
-    "message": "(optional) — entered by the user when exact token counting is needed. The key is kept only in the browser session memory"
+    "message": "(optional; Chrome and Edge builds only — the Firefox build has no BYOK and never calls the Google API) — entered by the user when exact token counting is needed. The key is kept only in the browser session memory"
   },
   "privacy_s2_li4_b": {
     "message": ", key"
@@ -561,7 +561,7 @@
     "message": "4. Data storage"
   },
   "privacy_s4_li1": {
-    "message": "All data is stored only on the user's device."
+    "message": "Chat history and imported archives are stored only on the user's device. Settings (selected model, limits, widget, safe percentage) are additionally kept in chrome.storage.sync and synced by the browser itself (Firefox Sync or Chrome Sync) across the user's own devices — the developer takes no part in that sync."
   },
   "privacy_s4_li2": {
     "message": "Limits and auto-cleanup: history stores at most 50 conversations; entries older than 30 days are deleted automatically. When importing archives — at most 20 files with a total size of up to 8 MB and up to 5000 messages per chat."
@@ -588,22 +588,22 @@
     "message": "); it is never written to disk."
   },
   "privacy_s4_li5_a": {
-    "message": "Deleting all data completely: removing the extension itself — the browser (Chrome or Edge) clears the"
+    "message": "Deleting all data completely: removing the extension itself — the browser (Chrome, Edge or Firefox) clears the"
   },
   "privacy_s4_li5_b": {
-    "message": "data of the extension. Site data can additionally be cleared with the browser's own tools."
+    "message": "extension storage. In Firefox, settings picked up by Firefox Sync may remain in the Mozilla account: remove them in the browser's sync settings. Site data can additionally be cleared with the browser's own tools."
   },
   "privacy_h_external": {
     "message": "5. External requests"
   },
   "privacy_s5_intro": {
-    "message": "Network requests are possible only at the user's initiative:"
+    "message": "Outbound requests come in two kinds: Google API calls at the user's initiative (Chrome and Edge only) and repeat requests to the same AI service sites where a chat is open — they are needed to read further history and attachments:"
   },
   "privacy_s5_li1": {
-    "message": "— only if the user has enabled a BYOK key and requested exact token counting; without a key, counting is done by a local heuristic."
+    "message": "— Chrome and Edge builds only, if the user has enabled a BYOK key and requested exact token counting; in the Firefox build the host is removed from the manifest and the handler is disabled, so counting always uses the local heuristic."
   },
   "privacy_s5_li2": {
-    "message": "AI service sites (the 6 services listed in the permissions) — the extension intercepts their traffic locally to display the context counter; it makes no additional requests to these sites."
+    "message": "AI service sites (the 6 services from the permissions) — the extension reads the open pages and intercepts their network traffic locally to show the context counter. For history, pagination and attachments it re-requests the same sites as the user, with the same cookies and the same endpoints as ordinary chat use: chat.deepseek.com, claude.ai, www.google.com, and DeepSeek attachment bodies from files.deepseeksvc.com. Those requests carry nothing beyond what the site already receives from the user and go to no other hosts."
   },
   "privacy_h_permissions": {
     "message": "6. Extension permissions"
@@ -671,8 +671,11 @@
   "privacy_rev5_note": {
     "message": "The policy text is unchanged: the revision number is aligned with release 1.19.0."
   },
+  "privacy_rev6_note": {
+    "message": "Sections 2, 4 and 5 clarified: repeat requests to AI service sites and DeepSeek attachments; no BYOK in the Firefox build; data deletion and Firefox Sync; current support contact."
+  },
   "privacy_footer_ver": {
-    "message": "Version 1.1 of 2026-09-12"
+    "message": "Version 1.2 of 2026-10-29"
   },
   "docs_page_title": {
     "message": "AI Context Monitor — AI context window monitoring"
