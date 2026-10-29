@@ -77,7 +77,7 @@ service worker (core/background.js)
 npm test
 ```
 
-Runs Jest — **as of v2.0.32 (2026-10-28): 194 suites / 3476 tests**, green in CI. The counters are a dated snapshot of the v2.0.32 tree; the live numbers are whatever `npm test` prints as its `Tests: ... total` line. Sanitized fixtures are bundled in `tests/fixtures`. Personal ("live") captured samples are gitignored — tests that require them are skipped automatically when those files are absent.
+Runs Jest — **as of v2.0.32 (2026-10-28): 195 suites / 3480 tests**, green in CI. The counters are a dated snapshot of the v2.0.32 tree; the live numbers are whatever `npm test` prints as its `Tests: ... total` line. Sanitized fixtures are bundled in `tests/fixtures`. Personal ("live") captured samples are gitignored — tests that require them are skipped automatically when those files are absent.
 
 ## Privacy
 
