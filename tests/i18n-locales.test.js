@@ -136,7 +136,7 @@ describe('M-4: manifest.json — default_locale ru', () => {
     // ru-карточка расширения байтово прежняя; en — перевод, а не копия
     expect(message(ru, 'ext_name')).toBe('AI Context Monitor');
     expect(message(ru, 'ext_description'))
-      .toBe('Мониторинг заполнения контекстного окна AI-моделей в реальном времени');
+      .toBe('Читает страницы AI-чатов, локально считает токены, хранит историю и автоэкспортирует в файл; данные не покидают устройство.');
     expect(message(en, 'ext_description')).not.toBe(message(ru, 'ext_description'));
   });
 
@@ -1133,7 +1133,7 @@ const LOCAL_SCRIPT_TAG = '<script src="../options/i18n-apply.js"></script>';
 // Бренды, названия платформ и технические вставки-контакты: не переводятся.
 const NOT_TRANSLATED_TEXT = [
   'AI Context Monitor', 'Google Gemini', 'ChatGPT', 'DeepSeek', 'Google AI Search',
-  'Claude', 'Perplexity', 'chrome://extensions', 'support@example.com'
+  'Claude', 'Perplexity', 'chrome://extensions', 'shtakanov@gmail.com'
 ];
 
 const CYRILLIC_RE = /[\u0400-\u04FF]/;
@@ -1279,10 +1279,12 @@ describe('M-4.4: локализация privacy/privacy.html и docs/index.html'
       //   строк, options_info_separator и — в этой задаче — не правится. → словарь 269
       // + BYOK-sync: options_exact_count_nokey — подсказка под чекбоксом точного
       //   подсчёта, когда ключа в session нет (+1) → словарь 270
-      expect(Object.keys(ru).filter(function (k) { return k.indexOf('privacy_') === 0; }).length).toBe(86);
+      // + AMO P1 (аудит 2.5): privacy_rev6_note — пункт истории редакций rev. 6
+      //   (privacy_* — 87, словарь 271)
+      expect(Object.keys(ru).filter(function (k) { return k.indexOf('privacy_') === 0; }).length).toBe(87);
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('docs_') === 0; }).length).toBe(42);
-      expect(Object.keys(ru).length).toBe(270);
-      expect(Object.keys(en).length).toBe(270);
+      expect(Object.keys(ru).length).toBe(271);
+      expect(Object.keys(en).length).toBe(271);
     });
 
     test('ru-значения M-4.4 байтово равны тексту разметки, en — перевод без кириллицы', () => {

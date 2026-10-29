@@ -152,7 +152,7 @@ describe('LOW-2: manifest.json — smoke-тест состава ключей (C
     });
     // ru-строки карточки байтово прежние (внешний вид ru-сборки не меняется)
     expect(ru.ext_name.message).toBe('AI Context Monitor');
-    expect(ru.ext_description.message).toBe('Мониторинг заполнения контекстного окна AI-моделей в реальном времени');
+    expect(ru.ext_description.message).toBe('Читает страницы AI-чатов, локально считает токены, хранит историю и автоэкспортирует в файл; данные не покидают устройство.');
     // en — естественный перевод, а не копия ru
     expect(en.ext_name.message).toBe('AI Context Monitor');
     expect(en.ext_description.message).not.toBe(ru.ext_description.message);

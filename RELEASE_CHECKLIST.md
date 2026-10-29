@@ -26,7 +26,7 @@
 4.4 §0: в docs/QUALITY_AUDIT.md нет открытых находок P0/P1; соответствие принципу проверено в рецензии релиза. На 2026-10-12 пересмотр аудита 2026-08-26: все P0/P1 закрыты или понижены (см. «Post-release audit 2026-10-12»)
 
 ## Публикация (Edge Add-ons)
-5.1 **TODO:** заменить `homepage_url` в `manifest.json` (`https://github.com/user/ai-context-monitor`) на реальный URL репозитория; заменить `support@example.com` в `privacy/privacy.html` на реальный email поддержки.
+5.1 **(AMO)** `homepage_url` в `manifest.json` — `https://github.com/user/ai-context-monitor`; email поддержки в `privacy/privacy.html` обновлён на `shtakanov@gmail.com` (заглушка `support@example.com` удалена 2026-10-29, AMO P1). Перед публикацией в Edge/Chrome сверить `homepage_url` с реальным репозиторием.
 
 > Провенанс: хэши записей до 09.09.2026 относятся к архивной линии истории; новая линия начата initial commit v1.15.3 (clean) после privacy-scrub H26.
 

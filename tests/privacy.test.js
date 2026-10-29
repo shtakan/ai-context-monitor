@@ -64,23 +64,24 @@ describe('P1: privacy/privacy.html — файл и валидность', () => 
     expect(privacyHtml).toContain('margin: 0 auto');
   });
 
-  test('R-1: дата редакции (ред. 5) и версия документа; прежние редакции не переписаны', () => {
+  test('AMO P1: дата редакции (ред. 6) и версия документа; прежние редакции не переписаны', () => {
     expect(privacyHtml).toContain('Дата последней редакции');
     // R-1 (v1.19): номер редакции выровнен с релизом — 4 → 5; текст политики не менялся
+    expect(privacyHtml).toContain('2026-10-29 (ред. 6)');
     expect(privacyHtml).toContain('2026-09-13 (ред. 5)');
     expect(privacyHtml).toContain('2026-09-13 (ред. 4)');
     expect(privacyHtml).toContain('2026-09-12 (ред. 3)');
-    expect(privacyHtml).toContain('Версия 1.1 от 2026-09-12');
+    expect(privacyHtml).toContain('Версия 1.2 от 2026-10-29');
   });
 
-  test('R-1: история редакций — 5 строк, rev. 5 «выровнен с релизом 1.19.0»', () => {
+  test('AMO P1: история редакций — 6 строк, rev. 6 — уточнения политики', () => {
     const doc = new DOMParser().parseFromString(privacyHtml, 'text/html');
     const rows = Array.from(doc.querySelectorAll('table.revisions tbody tr'));
-    expect(rows.length).toBe(5);
+    expect(rows.length).toBe(6);
     const cells = rows.map(function (row) {
       return Array.from(row.querySelectorAll('td')).map(function (td) { return td.textContent.trim(); });
     });
-    expect(cells.map(function (row) { return row[0]; })).toEqual(['rev. 1', 'rev. 2', 'rev. 3', 'rev. 4', 'rev. 5']);
+    expect(cells.map(function (row) { return row[0]; })).toEqual(['rev. 1', 'rev. 2', 'rev. 3', 'rev. 4', 'rev. 5', 'rev. 6']);
     expect(cells[4][1]).toBe('2026-09-13');
     expect(cells[4][2]).toContain('1.19.0');
     // M-4.4: rev. 4 — английская локализация (не переписана)
@@ -151,9 +152,11 @@ describe('P1: privacy/privacy.html — обязательные разделы',
     expect(privacyHtml).toContain('13 лет');
   });
 
-  test('контакты — заглушка с TODO-комментарием', () => {
-    expect(privacyHtml).toContain('support@example.com');
-    expect(privacyHtml).toContain('<!-- TODO: заменить на реальный email перед публикацией -->');
+  test('контакты — актуальный адрес поддержки, без заглушек и TODO', () => {
+    expect(privacyHtml).toContain('mailto:shtakanov@gmail.com');
+    expect(privacyHtml).toContain('shtakanov@gmail.com');
+    expect(privacyHtml).not.toContain('support@example.com');
+    expect(privacyHtml).not.toContain('TODO');
   });
 });
 
