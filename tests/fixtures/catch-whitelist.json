@@ -695,7 +695,7 @@
       "lines": [
         254,
         1078,
-        1867
+        1879
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof aiCmDiagLine === 'function' && typeof aiCmDiagOn === 'functio"
     },
@@ -704,7 +704,7 @@
       "category": "defensive-assignment",
       "lines": [
         911,
-        1710
+        1722
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: aiCmIncludeHiddenInExport = !!(data && data.aiCmIncludeHiddenInExport =="
     },
@@ -712,7 +712,7 @@
       "file": "core/export-manager.js",
       "category": "feature-detect",
       "lines": [
-        1836
+        1848
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var BdiagDl = (typeof window !== 'undefined' && window && window.AiCmExp"
     },
@@ -724,7 +724,7 @@
         779,
         846,
         1187,
-        1575
+        1587
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (used && file) used[file] = 1;"
     },
@@ -742,7 +742,7 @@
       "category": "local-helper-guard",
       "lines": [
         477,
-        1755
+        1767
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmLatchCacheReady();"
     },
@@ -1341,7 +1341,7 @@
         109,
         198,
         364,
-        1389
+        1401
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: iterator.return();"
     },
@@ -1352,8 +1352,8 @@
         67,
         70,
         133,
-        1421,
-        1433
+        1433,
+        1445
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: for (var i = 0; i < diagRing.length; i++) printDiag(diagRing[i][0], diag"
     },
@@ -1361,8 +1361,8 @@
       "file": "core/qwen-intercept.js",
       "category": "event-guard",
       "lines": [
-        1464,
-        1494
+        1476,
+        1506
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); dis"
     },
@@ -1387,9 +1387,9 @@
       "file": "core/qwen-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        1481,
-        1489,
-        1493
+        1493,
+        1501,
+        1505
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkChatChange();"
     },
@@ -1561,8 +1561,8 @@
       "file": "utils/export-emit-pipeline.js",
       "category": "best-effort-guard",
       "lines": [
-        559,
-        583
+        567,
+        591
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: store[latchKey(service, convId)] = 1;"
     },
@@ -1570,7 +1570,7 @@
       "file": "utils/export-emit-pipeline.js",
       "category": "cleanup-guard",
       "lines": [
-        565
+        573
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete store[latchKey(service, convId)];"
     },
@@ -1578,7 +1578,7 @@
       "file": "utils/export-emit-pipeline.js",
       "category": "local-helper-guard",
       "lines": [
-        1239
+        1247
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: onMessageDedupe(role, res.removedBlocks);"
     },

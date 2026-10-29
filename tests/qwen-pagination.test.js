@@ -1,18 +1,71 @@
 /**
  * O-53: чистые функции курсорной пагинации Qwen (core/qwen-pagination.js).
  *
- * Здесь ПЯТЬ независимых блоков:
+ * Здесь ВОСЕМЬ независимых блоков:
  *   1) форма модуля и UUID-курсор;
  *   2) historyPageUrl — сборка URL старой страницы;
  *   3) paginationInfo / nextCursorOf — где в payload живёт курсор;
  *   4) oldestMessageId — фолбэк по id при дрейфе схемы;
- *   5) pageStepDecision / assignPageOrders — решение о шаге и порядок ходов.
+ *   5) pageStepDecision / assignPageOrders — решение о шаге и порядок ходов;
+ *   6) emitSnapshot / recordTurn — снимок собирается по order, а не по порядку добавления (O-54);
+ *   7) гейт автоэкспорта держит Qwen до конца пагинации (O-54);
+ *   8) предикат неполноты базы — только Qwen, в core/export-manager.js (O-54).
  *
  * Модуль ЧИСТЫЙ: сети и состояния нет, payload-объекты собраны вручную по замеру probe
  * (data.chat.history.pagination = {enabled, oldest_id, newest_id, has_more_older, ...}).
  */
 
+const fs = require('fs');
+const path = require('path');
+
 const P = require('../core/qwen-pagination.js');
+const Gate = require('../utils/export-emit-pipeline.js');
+
+const INTERCEPT_SRC = fs.readFileSync(path.join(__dirname, '..', 'core', 'qwen-intercept.js'), 'utf8');
+
+// Рез по балансу фигурных скобок (конвенция сьюта: tests/qwen-o39-history-reasoning.test.js).
+function fnDecl(src, name) {
+  const start = src.indexOf('function ' + name + '(');
+  if (start < 0) throw new Error('declaration not found: ' + name);
+  let depth = 0;
+  for (let i = src.indexOf('{', start); i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}') {
+      depth--;
+      if (depth === 0) return src.slice(start, i + 1);
+    }
+  }
+  throw new Error('unbalanced declaration: ' + name);
+}
+
+// O-54: emitSnapshot/recordTurn исполняются ИЗ РЕАЛЬНОГО исходника в песочнице `with (ctx)`:
+// тест ловит именно тот цикл, что собирает снимок, а не переписанную копию логики.
+function makeTurnStore() {
+  const ctx = {
+    turns: [],
+    userTurns: [],
+    turnSeq: 0,
+    dispatchSig: null,
+    lastDispatchResult: false,
+    currentChatId: '',
+    lastReqChatId: '',
+    dispatched: [],
+    buildSignature: function () { return null; },
+    composeTurnText: function (answer) { return answer; },
+    userTextOf: function () { return ''; },
+    diagLine: function () {},
+    diagTag: function () {},
+    diagUrl: function () { return ''; },
+    swallow: function () {},
+    CustomEvent: function (type, init) { this.type = type; this.detail = init && init.detail; }
+  };
+  ctx.window = { dispatchEvent: function (ev) { ctx.dispatched.push(ev); return true; } };
+  const SCOPE = 'with (ctx) { ' + fnDecl(INTERCEPT_SRC, 'recordTurn') + '\n' +
+    fnDecl(INTERCEPT_SRC, 'emitSnapshot') +
+    '\n return { recordTurn: recordTurn, emitSnapshot: emitSnapshot }; }';
+  const api = new Function('ctx', SCOPE)(ctx);
+  return { ctx: ctx, recordTurn: api.recordTurn, emitSnapshot: api.emitSnapshot };
+}
 
 const CHAT = 'ab45dc99-cbab-435e-b0d3-f0440f6422df';
 const CUR = 'dad1e741-f84e-4498-adc4-30de309636bd';
@@ -281,5 +334,139 @@ describe('O-53: assignPageOrders — порядок oldest→newest', function (
     const created = [{ turn: turn('a') }];
     expect(P.assignPageOrders(created, 'oops')).toBe(-1);
     expect(created[0].turn.order).toBe(-1);
+  });
+});
+
+describe('O-54: emitSnapshot — ходы в снимке идут по order (oldest→newest)', function () {
+  test('порядок добавления в turns не равен хронологии — снимок сортирует по order', function () {
+    const store = makeTurnStore();
+    // Так turns выглядит после пагинации: базовая страница добавлена первой, старые страницы —
+    // позже, но их order ОТРИЦАТЕЛЬНЫЙ (assignPageOrders). Без сортировки файл начинался бы
+    // с 10 последних турнов, а старые дописывались бы в конец.
+    store.ctx.turns = [
+      { key: 'p1', order: 0, text: 'P1' },
+      { key: 'p2', order: 1, text: 'P2' },
+      { key: 'old1', order: -4, text: 'OLD1' },
+      { key: 'old2', order: -3, text: 'OLD2' },
+      { key: 'p3', order: 2, text: 'P3' }
+    ];
+    expect(store.emitSnapshot({ complete: true })).toBe(true);
+    const detail = store.ctx.dispatched[0].detail;
+    expect(detail.messageTexts).toEqual(['OLD1', 'OLD2', 'P1', 'P2', 'P3']);
+    expect(detail.messageIds).toEqual(['old1', 'old2', 'p1', 'p2', 'p3']);
+    expect(detail.text).toBe('OLD1\nOLD2\nP1\nP2\nP3');
+    expect(detail.historyComplete).toBe(true);
+  });
+
+  test('неполный снимок тоже хронологичен (historyComplete=false)', function () {
+    const store = makeTurnStore();
+    store.ctx.turns = [
+      { key: 'new', order: 3, text: 'NEW' },
+      { key: 'old', order: -1, text: 'OLD' }
+    ];
+    store.emitSnapshot({ complete: false, partial: { pages: 1, reason: 'in-progress' } });
+    const detail = store.ctx.dispatched[0].detail;
+    expect(detail.messageTexts).toEqual(['OLD', 'NEW']);
+    expect(detail.historyComplete).toBe(false);
+    expect(detail.partial).toEqual({ pages: 1, reason: 'in-progress' });
+  });
+
+  test('recordTurn после перенумерации страницы в отрицательные ставит новый ход в конец (max+1)', function () {
+    const store = makeTurnStore();
+    const r1 = store.recordTurn({ responseId: 'r1', answer: 'R1' });
+    const r2 = store.recordTurn({ responseId: 'r2', answer: 'R2' });
+    expect([r1.turn.order, r2.turn.order]).toEqual([0, 1]);
+
+    // Пагинация: ходы старой страницы уходят в отрицательные order (assignPageOrders(created, 0)).
+    const older = [store.recordTurn({ responseId: 'r0', answer: 'R0' })];
+    P.assignPageOrders(older, 0);
+    expect(older[0].turn.order).toBe(-1);
+
+    const live = store.recordTurn({ responseId: 'r3', answer: 'R3' });
+    expect(live.turn.order).toBe(2);                    // max(1) + 1, а не turns.length (4)
+    expect(live.turn.order).toBeGreaterThan(older[0].turn.order);
+    store.emitSnapshot({ complete: true });
+    expect(store.ctx.dispatched[0].detail.messageTexts).toEqual(['R0', 'R1', 'R2', 'R3']);
+  });
+
+  test('order не зависит от счётчика элементов: разрежённые номера не ломают хвост', function () {
+    const store = makeTurnStore();
+    store.ctx.turns = [
+      { key: 'a', order: -2, text: 'A' },
+      { key: 'b', order: 5, text: 'B' }
+    ];
+    const live = store.recordTurn({ responseId: 'c', answer: 'C' });
+    expect(live.turn.order).toBe(6);                    // turns.length дал бы 2 — меньше уже выданного 5
+    store.emitSnapshot({ complete: true });
+    expect(store.ctx.dispatched[0].detail.messageTexts).toEqual(['A', 'B', 'C']);
+  });
+});
+
+describe('O-54: гейт автоэкспорта — Qwen ждёт конца пагинации', function () {
+  const BASE = {
+    enabled: true,
+    percentage: 95,
+    threshold: 90,
+    loaderRunning: false,
+    fired: false,
+    isGemini: false,
+    domBaseTrusted: true
+  };
+  function qwen(extra) {
+    return Object.assign({}, BASE, {
+      site: 'qwen', baseComplete: false, baseSeen: true, historyIncomplete: true
+    }, extra || {});
+  }
+
+  test('середина пагинации (historyIncomplete=true) — not-complete', function () {
+    expect(Gate.shouldSkipAutoExport(qwen()))
+      .toEqual({ skip: true, reason: 'not-complete', resetFired: false });
+  });
+
+  test('честный конец пагинации (historyIncomplete=false, baseComplete=true) — файл разрешён', function () {
+    expect(Gate.shouldSkipAutoExport(qwen({ baseComplete: true, historyIncomplete: false })))
+      .toEqual({ skip: false, reason: null, resetFired: false });
+  });
+
+  test('DOM-путь Qwen без сети (baseSeen=false) не заблокирован — как O-37', function () {
+    expect(Gate.shouldSkipAutoExport(qwen({ baseSeen: false, historyIncomplete: false })))
+      .toEqual({ skip: false, reason: null, resetFired: false });
+  });
+
+  test('скоуп строго Qwen: без флага вердикты DeepSeek и Gemini прежние', function () {
+    const deepseek = Object.assign({}, BASE, {
+      site: 'deepseek', baseComplete: false, baseSeen: true, historyIncomplete: false
+    });
+    expect(Gate.shouldSkipAutoExport(deepseek)).toEqual({ skip: false, reason: null, resetFired: false });
+
+    const gemini = Object.assign({}, BASE, {
+      site: 'gemini', isGemini: true, baseComplete: true, baseSeen: true, historyIncomplete: false
+    });
+    expect(Gate.shouldSkipAutoExport(gemini)).toEqual({ skip: false, reason: null, resetFired: false });
+  });
+});
+
+describe('O-54: предикат неполноты базы — только Qwen (core/export-manager.js)', function () {
+  const MGR_SRC = fs.readFileSync(path.join(__dirname, '..', 'core', 'export-manager.js'), 'utf8');
+
+  function incomplete(site, baseSeen, baseComplete) {
+    const ctx = {};
+    const fn = new Function('ctx',
+      'with (ctx) { ' + fnDecl(MGR_SRC, 'aiCmHistoryPaginationIncomplete') +
+      '\n return aiCmHistoryPaginationIncomplete; }')(ctx);
+    return fn(site, baseSeen, baseComplete);
+  }
+
+  test('Qwen: сеть без полноты — true; честный конец и отсутствие снимка — false', function () {
+    expect(incomplete('qwen', true, false)).toBe(true);
+    expect(incomplete('qwen', true, true)).toBe(false);
+    expect(incomplete('qwen', false, false)).toBe(false);
+  });
+
+  test('прочие платформы — всегда false, даже при неполном сетевом снимке', function () {
+    ['deepseek', 'gemini', 'chatgpt', 'claude', 'google_search', 'perplexity'].forEach(function (site) {
+      expect(incomplete(site, true, false)).toBe(false);
+    });
+    expect(incomplete('', true, false)).toBe(false);
   });
 });

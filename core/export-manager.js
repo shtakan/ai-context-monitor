@@ -1253,6 +1253,14 @@ function aiCmAutoExportDecisionDiag(percentage, verdictSkip, reason) {
   } catch (eDec) { return false; }
 }
 
+// O-54: неполнота базы в середине курсорной пагинации (O-53). Сетевой снимок уже пришёл
+// (baseSeen), но полноты нет (historyComplete=false → baseComplete=false) — автоэкспорт
+// обязан ждать честного финального снимка. Предикат сайта живёт здесь, рядом с остальными:
+// в emit-пайплайн имена платформ не проникают (пин O-37). Прочие сайты — всегда false.
+function aiCmHistoryPaginationIncomplete(site, baseSeen, baseComplete) {
+  return site === 'qwen' && baseSeen === true && baseComplete !== true;
+}
+
 function maybeAutoExport(percentage) {
   try {
     var s = autoExportSettings;
@@ -1335,6 +1343,10 @@ function maybeAutoExport(percentage) {
         // песочницах без него вердикт прежний, а сам гейт получает только БУЛЕВО (имя признака
         // в автоэкспорт-контур не проникает — пин v54/G). false → поведение всех платформ 1:1.
         domBaseTrusted: (typeof aiCmAutoExportTrustedBase === 'function') ? (aiCmAutoExportTrustedBase() === true) : false,
+        // O-54: Qwen (O-53) — сеть базу отдала, полноты ещё нет → экспорт ждёт конца пагинации.
+        // typeof-гард: срез-песочницы тестов грузят только функцию гейта — вердикт прежний.
+        historyIncomplete: (typeof aiCmHistoryPaginationIncomplete === 'function')
+          ? aiCmHistoryPaginationIncomplete(siteName, baseSeen === true, baseComplete === true) : false,
         // O-27 (b/c): сайт + факты страницы (см. shouldSkipGsaPageGuard)
         site: siteName,
         chatPageMarker: gsaChatMarker,

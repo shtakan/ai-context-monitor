@@ -436,9 +436,16 @@
       existing.userKey = existing.userKey || userKey;
       return { turn: existing, created: false };
     }
+    // O-54: order — строго больше максимального уже выданного. `turns.length` ломается после
+    // перенумерации пагинацией: старые страницы получают отрицательные order, и живой ход,
+    // добавленный следом, обязан встать в конец (max + 1), а не по счётчику элементов.
+    var maxOrder = -1;
+    for (var oi = 0; oi < turns.length; oi++) {
+      if (typeof turns[oi].order === 'number' && turns[oi].order > maxOrder) maxOrder = turns[oi].order;
+    }
     var added = {
       key: key,
-      order: turns.length,
+      order: maxOrder + 1,
       model: model,
       userKey: userKey,
       answer: s.answer,
@@ -920,8 +927,13 @@
     var ids = [];
     var reasoningTurns = 0;
     var lastModel = '';
-    for (var i = 0; i < turns.length; i++) {
-      var t = turns[i];
+    // O-54: пагинация перенумеровывает старые страницы в отрицательные order (assignPageOrders),
+    // поэтому порядок добавления в turns уже НЕ равен хронологии: снимок собираем по order
+    // (старые → новые). Без сортировки файл начинался с 10 последних турнов, а старые
+    // страницы дописывались в конец — ходы в файле шли не по времени.
+    var sortedTurns = turns.slice().sort(function (a, b) { return a.order - b.order; });
+    for (var i = 0; i < sortedTurns.length; i++) {
+      var t = sortedTurns[i];
       var userText = userTextOf(t.userKey);
       if (userText) {
         pieces.push(userText);

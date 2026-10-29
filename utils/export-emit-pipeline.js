@@ -467,6 +467,14 @@
     // O-43: взведённый латч полноты GSA — тоже (сеть по этому разговору базу уже отдала).
     var basePending = (s.isGemini !== true && s.baseSeen !== true && !domBaseTrusted && !networkCompleteLatch);
     if (!baseReady && !basePending) return { skip: true, reason: 'not-complete', resetFired: false };
+    // O-54: история Qwen пагинируется по курсору (O-53). Базовая страница приходит НЕПОЛНОЙ
+    // (historyComplete=false → baseComplete=false), полный снимок объявляется только в конце
+    // прогона. Без этого гейта неполная база проходила как доверенная (domBaseTrusted), и
+    // автоэкспорт писал файл на ~90% сообщений — а латч fired затем блокировал честный снимок.
+    // Предикат сайта живёт в core/export-manager.js (там же, где остальные имена платформ):
+    // вызывающий сворачивает «сеть была, полноты нет» в готовый булев historyIncomplete.
+    // Поля нет (старый контракт/прочие платформы) → вердикт 1:1 прежний.
+    if (s.historyIncomplete === true) return { skip: true, reason: 'not-complete', resetFired: false };
     // T1-fix#2 (v1.16.2): пол первого яруса (архив) не даёт права на автоэкспорт, пока
     // живая история не влилась. Архивные ходы лежат в ТОЙ ЖЕ базе (same-conv-union),
     // поэтому «count дорос до архива» выполняется вкладом самого архива — база из одного
