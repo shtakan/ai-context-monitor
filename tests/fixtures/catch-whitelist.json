@@ -7,7 +7,7 @@
     "adapters"
   ],
   "definition": "Молчаливый catch = тело после вырезания комментариев содержит только пробелы, ИЛИ ровно один no-op (void 0; / return; / continue; / break;). Комментарий-только тело тоже молчаливое (комментарии маскируются в пробелы).",
-  "totalEntries": 457,
+  "totalEntries": 459,
   "groups": [
     {
       "file": "adapters/claude-adapter.js",
@@ -110,9 +110,9 @@
       "file": "core/background.js",
       "category": "debug-instrumentation",
       "lines": [
-        406,
-        1049,
-        1067
+        417,
+        1060,
+        1078
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: chrome.action.setBadgeText({ text: '', tabId: tabIdR }); debugLog('log',"
     },
@@ -120,7 +120,7 @@
       "file": "core/background.js",
       "category": "defensive-assignment",
       "lines": [
-        968
+        979
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: errText = await response.text();"
     },
@@ -128,7 +128,7 @@
       "file": "core/background.js",
       "category": "guard-clause",
       "lines": [
-        782
+        793
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: for (var k in (all || {})) { if (k.indexOf(AI_CM_FIRED_SESSION_PREFIX) ="
     },
@@ -143,9 +143,10 @@
         100,
         211,
         261,
-        523,
-        597,
-        599
+        333,
+        534,
+        608,
+        610
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: void chrome.runtime.lastError;"
     },
@@ -1339,7 +1340,8 @@
       "lines": [
         109,
         198,
-        364
+        364,
+        1389
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: iterator.return();"
     },
@@ -1350,8 +1352,8 @@
         67,
         70,
         133,
-        1146,
-        1158
+        1421,
+        1433
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: for (var i = 0; i < diagRing.length; i++) printDiag(diagRing[i][0], diag"
     },
@@ -1359,8 +1361,8 @@
       "file": "core/qwen-intercept.js",
       "category": "event-guard",
       "lines": [
-        1187,
-        1217
+        1464,
+        1494
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); dis"
     },
@@ -1385,9 +1387,9 @@
       "file": "core/qwen-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        1204,
-        1212,
-        1216
+        1481,
+        1489,
+        1493
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkChatChange();"
     },

@@ -1,32 +1,51 @@
 {
   "schema": "ai-cm/console-allow@1",
   "generatedFrom": "45566f6e849e4a89cce40d52bbc14b4cea628222",
-  "scope": ["core", "adapters", "utils/debug.js"],
+  "scope": [
+    "core",
+    "adapters",
+    "utils/debug.js"
+  ],
   "definition": "Step E.2c-B2c-1 (канал B закрыт). Allow-list стража tests/no-bare-console-warn.test.js: строки, которым разрешено трогать console.* напрямую. Запись = { file, category, lines[], reason }; каждая строка обязана указывать на РЕАЛЬНЫЙ сайт (мёртвая запись валит страж). Легальные категории после B2c-1: (1) logger-definition — сам модуль-обёртка utils/debug.js (в SCAN_DIRS не входит, но сканируется явно) и SW-дубль debugLog в core/background.js; (2) a-class-critical — сайты A-класса (§4.3.4 плана: importScripts/registerContentScripts — гейтирование = потеря единственного сигнала, фолбэка нет); (3) diag-zone-deferred — core/deepseek-diag.js (§4.3.6: 6 сайтов отложены — 3 функции без внутреннего гейта и 2 инверсных пары). Все прочие bare console.warn в core/ и adapters/ — канал B: они мигрированы на aiCmDiagWarn в шаге B2c-1 и в этот список попадать НЕ ДОЛЖНЫ. Внесение мигрированного сайта в allow-list = сокрытие регресса.",
   "totalEntries": 11,
   "groups": [
     {
       "file": "utils/debug.js",
       "category": "logger-definition",
-      "lines": [62, 69],
+      "lines": [
+        62,
+        69
+      ],
       "reason": "debugLog: computed-доступ (console[level] || console.log).apply — единственная точка вывода канала A; 'warn'/'error' печатаются всегда по контракту (utils/debug.js:61-64), 'log'/'info'/'debug' — под флагом DEBUG. Замена на console.warn сломала бы канал A."
     },
     {
       "file": "core/background.js",
       "category": "logger-definition",
-      "lines": [13, 14],
+      "lines": [
+        13,
+        14
+      ],
       "reason": "SW-дубль debugLog: computed-доступ (console[level] || console.log).apply; в MV3 non-module SW importScripts utils/debug.js невозможен, поэтому это вторая легальная точка владения console.* в дереве."
     },
     {
       "file": "core/background.js",
       "category": "a-class-critical",
-      "lines": [351],
+      "lines": [
+        362
+      ],
       "reason": "A-class: registerContentScripts failure is critical; not migrated"
     },
     {
       "file": "core/deepseek-diag.js",
       "category": "diag-zone-deferred",
-      "lines": [626, 629, 712, 820, 869, 873],
+      "lines": [
+        626,
+        629,
+        712,
+        820,
+        869,
+        873
+      ],
       "reason": "diag-zone: migration deferred per §4.3.6 plan (3 funcs without internal gate + 2 inverse)"
     }
   ]
