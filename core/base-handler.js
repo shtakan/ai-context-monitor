@@ -177,6 +177,17 @@ function aiCmExportNetSyncSite() {
     return (typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName === 'deepseek');
   } catch (eSite) { return false; }
 }
+// R2 (Qwen): площадки, у которых в MAIN-мире есть ОЧЕРЕДЬ текста вложений. DeepSeek — свой
+// модуль (Step D.10, core/deepseek-files.js), Qwen — core/qwen-files.js (R2). Протокол
+// ожидания общий: имена событий ai-cm-deepseek-files-* исторические, поэтому различается
+// только сайт — экспорт получает шанс дождаться текста вложения до композиции файла.
+function aiCmFilesDrainSite() {
+  try {
+    if (typeof currentAdapter === 'undefined' || !currentAdapter) return false;
+    var site = currentAdapter.siteName;
+    return site === 'deepseek' || site === 'qwen';
+  } catch (eSiteF) { return false; }
+}
 function aiCmExportNetSyncThen(convId, cb, timeoutMs) {
   var cap = (typeof timeoutMs === 'number' && timeoutMs > 0) ? timeoutMs : 3000;
   var done = false;
@@ -421,6 +432,7 @@ function aiCmExportFilesThenNetSync(convId, cb, netTimeoutMs) {
   Api.aiCmDiagHash6 = aiCmDiagHash6;
   Api.aiCmGeminiTurnsSnapshotSync = aiCmGeminiTurnsSnapshotSync;
   Api.aiCmExportNetSyncSite = aiCmExportNetSyncSite;      // O-18 (фаза 2)
+  Api.aiCmFilesDrainSite = aiCmFilesDrainSite;            // R2 (Qwen)
   Api.aiCmExportNetSyncThen = aiCmExportNetSyncThen;      // O-18 (фаза 2)
   Api.aiCmLogNetSyncResult = aiCmLogNetSyncResult;        // O-18 (фаза 2)
   Api.aiCmFilesQueuePending = aiCmFilesQueuePending;      // Step D.10 (A-лайт)

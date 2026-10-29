@@ -321,25 +321,31 @@ async function ensureInterceptor() {
     // та же, что у Gemini/DeepSeek: MV3 registerContentScripts не перезаписывает js[] у уже
     // зарегистрированного id, и без нового id курсорная пагинация не доехала бы до профилей
     // (база осталась бы «полной» после первой страницы — исходный дефект).
+    // R2: id бампнут -v2 → -v3 — в js[] добавлен core/qwen-files.js (очередь текста вложений).
+    // Модуль идёт ПЕРЕД перехватчиком: он объявляет window.AiCmQwenFiles при загрузке, а
+    // qwen-intercept делает __bind/читает секции уже синхронно. Старый -v2 остаётся в профиле
+    // после обновления и нёс бы прежний js[] (без модуля) параллельно — двойной инжект.
     // Своих запросов перехватчик истории не делает, КРОМЕ цикла пагинации O-53: он
     // реплеит страницы оригинальным fetch С ЗАГОЛОВКАМИ исходного запроса страницы
-    // (включая антибот bx-ua/bx-umidtoken) и credentials:'include'.
-    if (ids.indexOf('ai-cm-qwen-intercept-v2') === -1) {
-      // Снимаем прежнюю регистрацию: она осталась в профиле после обновления и несла бы
-      // старый js[] (без qwen-pagination.js) параллельно с новым пучком — двойной инжект.
-      // Прежнего id может не быть (чистая установка) — поэтому тихий catch без диагностики.
+    // (включая антибот bx-ua/bx-umidtoken) и credentials:'include'. Вложения (R2) качает
+    // core/qwen-files.js тем же MAIN-мирным originalFetch и credentials:'omit': ссылки
+    // files[].url — предподписанные CDN, cookie им не нужны, а ACAO у CDN только на chat.qwen.ai.
+    if (ids.indexOf('ai-cm-qwen-intercept-v3') === -1) {
+      // Снимаем обе прежние регистрации: они остались в профиле после обновления и несли бы
+      // старый js[] (без qwen-files.js) параллельно с новым пучком — двойной инжект.
+      // Прежних id может не быть (чистая установка) — поэтому тихий catch без диагностики.
       try {
-        await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-qwen-intercept'] });
+        await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-qwen-intercept', 'ai-cm-qwen-intercept-v2'] });
       } catch (eUnregQwen) { }
-      await registerSafe('ai-cm-qwen-intercept-v2', {
-        id: 'ai-cm-qwen-intercept-v2',
+      await registerSafe('ai-cm-qwen-intercept-v3', {
+        id: 'ai-cm-qwen-intercept-v3',
         matches: ['https://chat.qwen.ai/*'],
-        js: ['utils/debug.js', 'utils/stream-frames.js', 'core/qwen-pagination.js', 'core/qwen-intercept.js'],
+        js: ['utils/debug.js', 'utils/stream-frames.js', 'core/qwen-pagination.js', 'core/qwen-files.js', 'core/qwen-intercept.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false
       });
-      console.log('AI Context Monitor: перехватчик Qwen (v2, пагинация истории) зарегистрирован (мир сайта, document_start)');
+      console.log('AI Context Monitor: перехватчик Qwen (v3, пагинация истории + вложения) зарегистрирован (мир сайта, document_start)');
     }
 
     // AI Studio: сетевой перехватчик истории ($rpc: UpdatePrompt / Create /

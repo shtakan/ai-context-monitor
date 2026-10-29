@@ -1616,7 +1616,18 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
     // v12 (O-18, фаза 2): ПЕРЕД композицией файла — сетевой дозапрос истории (только DeepSeek:
     // перехватчик MAIN-мира сам решает, нужен ли запрос, и сам выбирает текст по ходам:
     // EQUAL → live, MIDDLE-HOLE/TAIL-CUT → сеть, ONE-SIDE → live + маркер в логе).
-    if (netSynced !== true && (typeof aiCmExportFilesThenNetSync === 'function' || typeof aiCmExportNetSyncThen === 'function') && aiCmExportNetSyncSite()) {
+    // R2: площадки с очередью вложений тоже ждут ПЕРЕД композицией: DeepSeek — дренаж + net-sync
+    // (порядок прежний), Qwen — только дренаж 6000 мс (текст файлов качается в MAIN-мире, без
+    // ожидания он не попадёт в файл). Дренажные хелперы берём с UMD-зеркала base-handler
+    // (window.AiCmBaseHandler), потому что в types/ они не объявлены, а bare-имена дали бы
+    // tsc TS2304. typeof-гарды сохранены: срез-песочницы тестов видят прежнее поведение 1:1.
+    var filesApiD = (typeof window !== 'undefined' && window.AiCmBaseHandler) ? window.AiCmBaseHandler : null;
+    var filesDrainSiteD = (filesApiD && typeof filesApiD.aiCmFilesDrainSite === 'function')
+      ? filesApiD.aiCmFilesDrainSite() === true : false;
+    var netSyncSiteD = (typeof aiCmExportNetSyncSite === 'function') ? aiCmExportNetSyncSite() : false;
+    if (netSynced !== true && (filesDrainSiteD || netSyncSiteD) &&
+        (typeof aiCmExportFilesThenNetSync === 'function' || typeof aiCmExportNetSyncThen === 'function' ||
+         (filesApiD && typeof filesApiD.aiCmExportFilesDrainThen === 'function'))) {
       if (!aiCmNetSyncInFlight[cid]) {
         aiCmNetSyncInFlight[cid] = 1;
         var selfSync = function () {
@@ -1624,14 +1635,22 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
           doAutoExportDownload(cid, percentage, reason, true);
         };
         try {
-          if (typeof aiCmExportFilesThenNetSync === 'function') aiCmExportFilesThenNetSync(cid, selfSync); else aiCmExportNetSyncThen(cid, selfSync);
+          if (netSyncSiteD && typeof aiCmExportFilesThenNetSync === 'function') {
+            aiCmExportFilesThenNetSync(cid, selfSync);
+          } else if (netSyncSiteD && typeof aiCmExportNetSyncThen === 'function') {
+            aiCmExportNetSyncThen(cid, selfSync);
+          } else if (filesApiD && typeof filesApiD.aiCmExportFilesDrainThen === 'function') {
+            filesApiD.aiCmExportFilesDrainThen(cid, selfSync, 6000);
+          } else {
+            selfSync();
+          }
         } catch (eSync) {
           delete aiCmNetSyncInFlight[cid];
           selfSync();
         }
         return;
       }
-      // дозапрос для этого чата уже идёт (параллельный триггер) — ждём его результат
+      // дозапрос/дренаж для этого чата уже идёт (параллельный триггер) — ждём его результат
       debugLog('log', '[AI CM][auto-export] net-sync уже выполняется convId=' + cid);
       return;
     }

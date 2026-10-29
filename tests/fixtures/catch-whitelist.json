@@ -7,7 +7,7 @@
     "adapters"
   ],
   "definition": "Молчаливый catch = тело после вырезания комментариев содержит только пробелы, ИЛИ ровно один no-op (void 0; / return; / continue; / break;). Комментарий-только тело тоже молчаливое (комментарии маскируются в пробелы).",
-  "totalEntries": 459,
+  "totalEntries": 461,
   "groups": [
     {
       "file": "adapters/claude-adapter.js",
@@ -110,9 +110,9 @@
       "file": "core/background.js",
       "category": "debug-instrumentation",
       "lines": [
-        417,
-        1060,
-        1078
+        423,
+        1066,
+        1084
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: chrome.action.setBadgeText({ text: '', tabId: tabIdR }); debugLog('log',"
     },
@@ -120,7 +120,7 @@
       "file": "core/background.js",
       "category": "defensive-assignment",
       "lines": [
-        979
+        985
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: errText = await response.text();"
     },
@@ -128,7 +128,7 @@
       "file": "core/background.js",
       "category": "guard-clause",
       "lines": [
-        793
+        799
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: for (var k in (all || {})) { if (k.indexOf(AI_CM_FIRED_SESSION_PREFIX) ="
     },
@@ -143,10 +143,10 @@
         100,
         211,
         261,
-        333,
-        534,
-        608,
-        610
+        339,
+        540,
+        614,
+        616
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: void chrome.runtime.lastError;"
     },
@@ -162,8 +162,8 @@
       "file": "core/base-handler.js",
       "category": "debug-instrumentation",
       "lines": [
-        225,
-        267
+        236,
+        278
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var v = info && info.verdicts ? JSON.stringify(info.verdicts) : '{}'; va"
     },
@@ -171,7 +171,7 @@
       "file": "core/base-handler.js",
       "category": "logging-guard",
       "lines": [
-        190
+        201
       ],
       "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: aiCmLogNetSyncResult(convId, info || {});"
     },
@@ -179,9 +179,9 @@
       "file": "core/base-handler.js",
       "category": "timing-guard",
       "lines": [
-        188,
-        189,
-        281
+        199,
+        200,
+        292
       ],
       "reason": "timing-guard: отмена таймера/подписки: обработчик мог быть снят хостом или гонкой; пример: clearTimeout(timer);"
     },
@@ -304,7 +304,7 @@
         550,
         2275,
         2415,
-        3340
+        3355
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cyrDiag = (t.match(/[а-яёА-ЯЁ]/g) || []).length; var cyrillicPct = t"
     },
@@ -352,9 +352,9 @@
         2426,
         2450,
         2459,
-        3224,
-        3250,
-        3252
+        3239,
+        3265,
+        3267
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
     },
@@ -382,8 +382,8 @@
         968,
         2368,
         2391,
-        3206,
-        3212
+        3221,
+        3227
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
     },
@@ -441,7 +441,7 @@
       "file": "core/content.js",
       "category": "parse-guard",
       "lines": [
-        3286
+        3301
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof window !== 'undefined' && window && window.AiCmEx"
     },
@@ -695,7 +695,7 @@
       "lines": [
         254,
         1078,
-        1879
+        1898
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof aiCmDiagLine === 'function' && typeof aiCmDiagOn === 'functio"
     },
@@ -704,7 +704,7 @@
       "category": "defensive-assignment",
       "lines": [
         911,
-        1722
+        1741
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: aiCmIncludeHiddenInExport = !!(data && data.aiCmIncludeHiddenInExport =="
     },
@@ -712,7 +712,7 @@
       "file": "core/export-manager.js",
       "category": "feature-detect",
       "lines": [
-        1848
+        1867
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var BdiagDl = (typeof window !== 'undefined' && window && window.AiCmExp"
     },
@@ -742,7 +742,7 @@
       "category": "local-helper-guard",
       "lines": [
         477,
-        1767
+        1786
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmLatchCacheReady();"
     },
@@ -1335,13 +1335,29 @@
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: raw = decodeURIComponent(raw);"
     },
     {
+      "file": "core/qwen-files.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        125
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof aiCmDiagLine === 'function') { aiCmDiagLine('qwen-files-' + tag, fields); return; }"
+    },
+    {
+      "file": "core/qwen-files.js",
+      "category": "feature-detect",
+      "lines": [
+        352
+      ],
+      "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: if (res && res.headers && typeof res.headers.get === 'function') return qfStr(res.headers.get(name));"
+    },
+    {
       "file": "core/qwen-intercept.js",
       "category": "best-effort-guard",
       "lines": [
         109,
         198,
-        364,
-        1401
+        371,
+        1477
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: iterator.return();"
     },
@@ -1352,8 +1368,8 @@
         67,
         70,
         133,
-        1433,
-        1445
+        1509,
+        1521
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: for (var i = 0; i < diagRing.length; i++) printDiag(diagRing[i][0], diag"
     },
@@ -1361,8 +1377,8 @@
       "file": "core/qwen-intercept.js",
       "category": "event-guard",
       "lines": [
-        1476,
-        1506
+        1558,
+        1588
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); dis"
     },
@@ -1387,9 +1403,9 @@
       "file": "core/qwen-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        1493,
-        1501,
-        1505
+        1575,
+        1583,
+        1587
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkChatChange();"
     },

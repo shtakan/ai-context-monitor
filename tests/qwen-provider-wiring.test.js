@@ -83,33 +83,37 @@ describe('O-35: manifest.json — Qwen добавлен, прежние серв
     expect(js).not.toContain('utils/stream-frames.js');
   });
 
-  test('version/инварианты: 2.0.32 (§5 — бамп в этом же коммите), MV3 и один content_script не тронуты', function () {
+  test('version/инварианты: 2.0.32 (бамп — отдельным релизным коммитом), MV3 и один content_script не тронуты', function () {
     expect(manifest.version).toBe('2.0.32');
     expect(manifest.manifest_version).toBe(3);
     expect(manifest.content_scripts).toHaveLength(1);
   });
 });
 
-describe('O-35/O-53: core/background.js — регистрация перехватчика Qwen в MAIN-мире', function () {
+describe('O-35/O-53/R2: core/background.js — регистрация перехватчика Qwen в MAIN-мире', function () {
   test('новый id зарегистрирован с MAIN-миром и document_start', function () {
-    const m = /id: 'ai-cm-qwen-intercept-v2',[\s\S]*?matches: \['https:\/\/chat\.qwen\.ai\/\*'\],[\s\S]*?js: \[([^\]]*)\],[\s\S]*?runAt: 'document_start',[\s\S]*?world: 'MAIN'/.exec(background);
+    const m = /id: 'ai-cm-qwen-intercept-v3',[\s\S]*?matches: \['https:\/\/chat\.qwen\.ai\/\*'\],[\s\S]*?js: \[([^\]]*)\],[\s\S]*?runAt: 'document_start',[\s\S]*?world: 'MAIN'/.exec(background);
     expect(m).not.toBeNull();
     expect(m[1]).toContain('utils/stream-frames.js');
     // O-53: модуль пагинации едет ПЕРЕД перехватчиком (перехватчик читает window.AiCmQwenPagination).
     expect(m[1]).toContain('core/qwen-pagination.js');
+    // R2: модуль вложений — ПЕРЕД перехватчиком: он объявляет window.AiCmQwenFiles при
+    // загрузке, а перехватчик делает __bind и читает секции файлов синхронно при emit.
+    expect(m[1]).toContain('core/qwen-files.js');
     expect(m[1]).toContain('core/qwen-intercept.js');
-    // порядок: утилита кадров и модуль пагинации объявлены ПЕРЕД перехватчиком
+    // порядок: утилита кадров, пагинация, вложения — объявлены ПЕРЕД перехватчиком
     expect(m[1].indexOf('utils/stream-frames.js')).toBeLessThan(m[1].indexOf('core/qwen-pagination.js'));
-    expect(m[1].indexOf('core/qwen-pagination.js')).toBeLessThan(m[1].indexOf('core/qwen-intercept.js'));
+    expect(m[1].indexOf('core/qwen-pagination.js')).toBeLessThan(m[1].indexOf('core/qwen-files.js'));
+    expect(m[1].indexOf('core/qwen-files.js')).toBeLessThan(m[1].indexOf('core/qwen-intercept.js'));
   });
 
-  test('идемпотентность как у остальных: гард по ids.indexOf + registerSafe + снятие старого id', function () {
-    expect(background).toContain("if (ids.indexOf('ai-cm-qwen-intercept-v2') === -1) {");
-    const idx = background.indexOf("if (ids.indexOf('ai-cm-qwen-intercept-v2') === -1) {");
-    const block = background.slice(idx, idx + 1200);
-    expect(block).toContain("await registerSafe('ai-cm-qwen-intercept-v2'");
-    // O-53: двойного инжекта нет — прежний id снимается перед регистрацией нового.
-    expect(block).toContain("unregisterContentScripts({ ids: ['ai-cm-qwen-intercept'] })");
+  test('идемпотентность как у остальных: гард по ids.indexOf + registerSafe + снятие старых id', function () {
+    expect(background).toContain("if (ids.indexOf('ai-cm-qwen-intercept-v3') === -1) {");
+    const idx = background.indexOf("if (ids.indexOf('ai-cm-qwen-intercept-v3') === -1) {");
+    const block = background.slice(idx, idx + 1600);
+    expect(block).toContain("await registerSafe('ai-cm-qwen-intercept-v3'");
+    // O-53/R2: двойного инжекта нет — прежние id снимаются перед регистрацией нового.
+    expect(block).toContain("unregisterContentScripts({ ids: ['ai-cm-qwen-intercept', 'ai-cm-qwen-intercept-v2'] })");
   });
 
   test('R-пин: шесть существующих регистраций не тронуты', function () {

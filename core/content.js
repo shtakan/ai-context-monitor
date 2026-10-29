@@ -3087,8 +3087,23 @@ if (isExtensionValid()) {
         } catch (eO49m) { debugLog('log', '[AI CM][export] silent-catch replyManualExport(O-49 union): ' + (eO49m && eO49m.message || eO49m)); }
         sendResponse({ data: manualSnapshot });
       };
-      if ((typeof aiCmExportFilesThenNetSync === 'function' || typeof aiCmExportNetSyncThen === 'function') && aiCmExportNetSyncSite()) {
-        if (typeof aiCmExportFilesThenNetSync === 'function') aiCmExportFilesThenNetSync(curCidExp, replyManualExport); else aiCmExportNetSyncThen(curCidExp, replyManualExport);
+      // R2: площадки с очередью вложений (DeepSeek — свой модуль, Qwen — core/qwen-files.js)
+      // дожидаются текста файлов ДО композиции: у Qwen это только дренаж (6000 мс: файлы
+      // качаются по одному, конкурентность 2, кап 10 с на файл), у DeepSeek порядок прежний —
+      // дренаж, затем net-sync. Дренажные хелперы берём с UMD-зеркала base-handler
+      // (window.AiCmBaseHandler): в types/ они не объявлены (types/ — запрещённая зона правки),
+      // а bare-имена давали бы tsc TS2304. typeof-гард сохранён: срез-песочницы тестов ручного
+      // экспорта (MANUAL-регион без base-handler) видят прежнее поведение 1:1.
+      const filesApiM = (typeof window !== 'undefined' && window.AiCmBaseHandler) ? window.AiCmBaseHandler : null;
+      const drainSiteM = (filesApiM && typeof filesApiM.aiCmFilesDrainSite === 'function')
+        ? filesApiM.aiCmFilesDrainSite() === true : false;
+      const netSiteM = (typeof aiCmExportNetSyncSite === 'function') ? aiCmExportNetSyncSite() : false;
+      if (netSiteM && typeof aiCmExportFilesThenNetSync === 'function') {
+        aiCmExportFilesThenNetSync(curCidExp, replyManualExport);
+      } else if (netSiteM && typeof aiCmExportNetSyncThen === 'function') {
+        aiCmExportNetSyncThen(curCidExp, replyManualExport);
+      } else if (drainSiteM && filesApiM && typeof filesApiM.aiCmExportFilesDrainThen === 'function') {
+        filesApiM.aiCmExportFilesDrainThen(curCidExp, replyManualExport, 6000);
       } else {
         replyManualExport();
       }

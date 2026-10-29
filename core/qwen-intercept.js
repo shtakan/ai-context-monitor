@@ -202,6 +202,13 @@
   var currentChatId = chrOf();
   var lastReqChatId = '';
 
+  // R2: модуль вложений (core/qwen-files.js грузится ПЕРЕД перехватчиком). null — срезанная
+  // сборка без модуля/старый манифест: каждое касание ниже проверяет наличие и молчит.
+  var aiCmQwenFiles = (typeof window !== 'undefined' && window.AiCmQwenFiles) ? window.AiCmQwenFiles : null;
+  // R2: метаданные ПОСЛЕДНЕГО снимка. Ре-эмит после прихода текста вложения повторяет прежние
+  // serverTokens/complete: токены не пересчитываются, а незавершённая пагинация не «закрывается».
+  var lastEmitMeta = { tokens: 0, complete: true, chatId: '', responseId: '' };
+
   // ===== Состояние разбора одного потока =====
   var sse = null;                 // активный стрим или null
   var turns = [];                 // assistant-ходы: [{key, order, model, answer, reasoning, text, userKey}]
@@ -604,6 +611,32 @@
     return '';
   }
   /**
+   * R2: вложения сообщения истории. Живой протокол Qwen кладёт их в node.files[]
+   * (объект: id/name/url/file_type/size/status/type/file_class); встречается и форма, где
+   * ссылка лежит прямо в content_list элементе с url. Разбор защитный: берём всё, что похоже
+   * на файл, а нормализацию/отсев мусора делает core/qwen-files.js (qfRefFromEntry).
+   * Пустой массив — вложений нет (поле остаётся, чтобы форма сообщения была стабильной).
+   */
+  function historyFilesOf(node) {
+    var out = [];
+    try {
+      if (!node || typeof node !== 'object') return out;
+      var list = Array.isArray(node.files) ? node.files : [];
+      for (var i = 0; i < list.length; i++) {
+        if (list[i] && typeof list[i] === 'object') out.push(list[i]);
+      }
+      if (!out.length) {
+        var cl = contentListOf(node) || [];
+        for (var j = 0; j < cl.length; j++) {
+          var c = cl[j];
+          if (c && typeof c === 'object' && typeof c.url === 'string' && c.url) out.push(c);
+        }
+      }
+    } catch (eFiles) { swallow(eFiles, 'qwen:history-files'); }
+    return out;
+  }
+
+  /**
    * payload истории → { chatId, messages[], nodes, duplicates, thinkingDuplicates, reasoningMessages }.
    * messages[] — ходы role user/assistant в порядке появления; повтор узла с тем же id
    * отбрасывается (первое вхождение побеждает — спека O-39 п.5).
@@ -641,7 +674,9 @@
         usage: historyUsageOf(node),
         model: (typeof node.model === 'string') ? node.model : '',
         parentId: (typeof node.parent_id === 'string') ? node.parent_id
-          : ((typeof node.parentId === 'string') ? node.parentId : '')
+          : ((typeof node.parentId === 'string') ? node.parentId : ''),
+        // R2: вложения хода. Уходят в core/qwen-files.js уже на recordTurn (ниже).
+        files: historyFilesOf(node)
       });
     }
     if (!chatId) chatId = findHistoryChatId(payload, 0, []) || '';
@@ -679,6 +714,9 @@
     }
     var pendingUserKey = '';
     var pendingUserText = '';
+    // R2: вложения ТЕКУЩЕГО вопроса. Очередь вложений ставится после recordTurn: только там
+    // появляется userKey хода, по которому экспорт ищет секции файлов (qfSectionsFor).
+    var pendingUserFiles = [];
     var lastUsage = null;
     var lastResponseId = '';
     var lastModel = '';
@@ -689,6 +727,7 @@
       if (msg.role === 'user') {
         pendingUserKey = msg.key || ('h:u:' + i);
         pendingUserText = msg.text || '';
+        pendingUserFiles = Array.isArray(msg.files) ? msg.files : [];
         continue;
       }
       if (msg.role !== 'assistant') continue;
@@ -716,6 +755,16 @@
         ended: true,
         finished: true
       });
+      // R2: вложения вопроса — в очередь core/qwen-files.js. Ключ — userKey ИМЕННО этого
+      // хода (rec.turn.userKey): emitSnapshot достаёт пользовательский блок через userTextOf.
+      // typeof-гард: срез-песочницы тестов (O-54) исполняют только эти функции, без
+      // объявления aiCmQwenFiles в скоупе — там очередь вложений просто выключена.
+      if (pendingUserFiles.length && rec && rec.turn && rec.turn.userKey &&
+          typeof aiCmQwenFiles !== 'undefined' && aiCmQwenFiles) {
+        try { aiCmQwenFiles.qfEnqueueUserFiles(chatId, rec.turn.userKey, pendingUserFiles); }
+        catch (eQf) { swallow(eQf, 'qwen:files-enqueue'); }
+        pendingUserFiles = [];
+      }
       // O-53: ходы этой страницы — в created (их order перенумеровывает пагинация).
       if (rec && rec.created) created.push(rec);
       applied++;
@@ -897,6 +946,14 @@
         var t = turns[i];
         parts.push(t.key + ':' + t.userKey + ':' + t.order + ':' +
           (t.text || '').length + ':' + (t.reasoning || '').length);
+        // R2: длина секций вложений — часть сигнатуры. Текст файла живёт ВНЕ turns (у
+        // пользовательского блока), поэтому без этого слагаемого приход текста не меняет
+        // подпись, и ре-эмит глушится дедупом same-signature (файл уходил бы без содержимого).
+        // typeof-гард — для срез-песочниц тестов (O-54): без модуля слагаемого просто нет.
+        if (typeof aiCmQwenFiles !== 'undefined' && aiCmQwenFiles && t.userKey) {
+          try { parts.push('f:' + aiCmQwenFiles.qfSectionLength(currentChatId, t.userKey)); }
+          catch (eSigSec) { parts.push('f:0'); }
+        }
       }
       return parts.join('|');
     } catch (eSig) { return null; }
@@ -935,10 +992,19 @@
     for (var i = 0; i < sortedTurns.length; i++) {
       var t = sortedTurns[i];
       var userText = userTextOf(t.userKey);
-      if (userText) {
-        pieces.push(userText);
+      // R2: секции вложений вопроса — ТОЛЬКО в пользовательский блок (не в текст ответа):
+      // в экспорте файл стоит рядом с сообщением, к которому он приложен. Ход из одних
+      // вложений (без текста вопроса) тоже попадает в базу — ради этого файла он и нужен.
+      var fileSec = '';
+      if (typeof aiCmQwenFiles !== 'undefined' && aiCmQwenFiles && t.userKey) {
+        try { fileSec = aiCmQwenFiles.qfSectionsFor(currentChatId, t.userKey) || ''; }
+        catch (eFileSec) { swallow(eFileSec, 'qwen:files-sections'); }
+      }
+      if (userText || fileSec) {
+        var userBlock = userText ? (userText + fileSec) : fileSec.replace(/^\n\n/, '');
+        pieces.push(userBlock);
         ids.push('u:' + t.userKey);
-        messages.push({ role: 'user', text: userText, reasoning: '' });
+        messages.push({ role: 'user', text: userBlock, reasoning: '' });
         reasonings.push('');
       }
       pieces.push(t.text);
@@ -1003,6 +1069,16 @@
       window.dispatchEvent(new CustomEvent('ai-cm-full-history', { detail: detail }));
       dispatchSig = sig;
       lastDispatchResult = true;
+      // R2: запоминаем аргументы снимка — ре-эмит вложений повторит ровно их.
+      // typeof-гард: срез-песочницы тестов (O-54) не объявляют lastEmitMeta.
+      if (typeof lastEmitMeta !== 'undefined') {
+        lastEmitMeta = {
+          tokens: serverTokens,
+          complete: complete,
+          chatId: s.chatId || '',
+          responseId: s.responseId || ''
+        };
+      }
       diagLine('emit', {
         conv: String(detail.convId || '').slice(0, 8),
         count: detail.count,
@@ -1460,6 +1536,12 @@
       userTurns = [];
       turnSeq = 0;
       dispatchSig = null;
+      // R2: файловое состояние принадлежит ОДНОМУ чату — очередь и тексты вложений не
+      // переезжают в следующий разговор (SPA-переход не тащит секции покинутого чата).
+      // typeof-гард — тот же приём, что у остальных точек контура: без модуля сброса нет.
+      if (typeof aiCmQwenFiles !== 'undefined' && aiCmQwenFiles) {
+        try { aiCmQwenFiles.qfReset(next); } catch (eQfReset) { swallow(eQfReset, 'qwen:files-reset'); }
+      }
       // O-53: незавершённый прогон пагинации покинутого чата не продолжается.
       if (pq) pqAbort('chat-changed');
       diagLine('chat-change', { chat: String(next || '').slice(0, 8) });
@@ -1505,6 +1587,23 @@
     window.addEventListener('popstate', function () { try { checkChatChange(); } catch (ePop) { } });
   } catch (eHist) { }
 
+  // ===== R2: связка с модулем вложений (core/qwen-files.js) =====
+  // Ядро отдаёт модулю два форвардера (emitSnapshot/diagLine) и три геттера
+  // (currentChatId/originalFetch/lastEmitMeta). Обратных записей в состояние
+  // перехватчика модуль не делает: секции вложений он отдаёт функциями qfSectionsFor /
+  // qfSectionLength, а очередь наполняется вызовом qfEnqueueUserFiles из applyHistoryPayload.
+  if (aiCmQwenFiles) {
+    try {
+      aiCmQwenFiles.__bind({
+        emitSnapshot: emitSnapshot,
+        diagLine: diagLine,
+        get currentChatId() { return currentChatId; },
+        get originalFetch() { return originalFetch; },
+        get lastEmitMeta() { return lastEmitMeta; }
+      });
+    } catch (eBind) { swallow(eBind, 'qwen:files-bind'); }
+  }
+
   // ===== Мосты для тестов/диагностики (только чтение, побочных эффектов нет) =====
   // Тесты гоняют РЕАЛЬНЫЙ файл и проверяют счётчики/состояние через эти ссылки;
   // боевой путь их не использует.
@@ -1529,6 +1628,8 @@
     },
     startPagination: function (payload, meta) { return startQwenPagination(meta || {}, payload, 0); },
     turns: function () { return turns; },
+    // R2: снимок файлового состояния (очередь/тексты вложений) — только чтение.
+    files: function () { return aiCmQwenFiles ? aiCmQwenFiles.qfStats() : null; },
     usage: function () { return sse ? sse.usage : null; },
     diagLines: function () { return diagLineCount; },
     diagOn: diagOn,
