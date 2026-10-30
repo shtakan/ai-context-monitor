@@ -370,6 +370,10 @@ function resetConversationState() {
   // точка: запись базы путём адаптера в core/content.js); без этого состояние прошлого
   // разговора отпускало бы супрессию нового.
   adapterBaseSeen = false;
+  // v2.0.34 (AI Studio, fix base-pending): признак «сеть отдала полную историю» — тоже
+  // свойство КОНКРЕТНОГО чата: без сброса доверие нового разговора унаследовало бы
+  // historyComplete прошлого. Хелпера нет (срез-песочницы тестов виджета) → поведение 1:1.
+  if (typeof aiCmNetReadyAistudioReset === 'function') { aiCmNetReadyAistudioReset(); }
   lastWidgetData = null; // v1.8.1: старые данные предыдущего чата более недействительны
   // H23-cosmetic (v1.15.3): 3с-фолбэк request-emit старого чата не должен стрелять в новый —
   // висящий таймер гасим, иначе после SPA-перехода уходит лишний 'ai-cm-request-emit'

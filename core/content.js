@@ -2999,7 +2999,18 @@ function aiCmQwenExportBaseTrusted() {
 // =============================================================================
 function aiCmAutoExportTrustedBase() {
   try {
-    return !!((currentAdapter && currentAdapter.siteName === 'qwen') && adapterBaseSeen === true);
+    // Правило qwen (O-37/D1): DOM-адаптер — DESIGN-источник, сети у qwen не будет.
+    if (currentAdapter && currentAdapter.siteName === 'qwen' && adapterBaseSeen === true) return true;
+    // Правило aistudio (v2.0.34, fix base-pending): AI Studio не шлёт ai-cm-full-history,
+    // поэтому baseSeen/baseComplete у него всегда false, и все четыре пути «база готова»
+    // (baseComplete/baseSeen/gsa-латч/domBaseTrusted) для него закрыты. Полноту знает
+    // только сетевой ingest: historyComplete=true. Доверие узкое, как у qwen: база принята
+    // адаптером ТЕКУЩЕГО чата И сеть подтвердила полную историю ЭТОГО чата (aiCmNetReadyKey).
+    if (currentAdapter && currentAdapter.siteName === 'aistudio' && adapterBaseSeen === true) {
+      var cidReady = (typeof aiCmNetReadyKey === 'function') ? (aiCmNetReadyKey() || '') : '';
+      return !!cidReady && aiCmNetReadyAistudio[cidReady] === true;
+    }
+    return false;
   } catch (eAtb) { return false; }
 }
 // O-37 (A, ДИАГНОСТИКА, только измерение): строка порогового файра по доверенной базе
@@ -3012,16 +3023,27 @@ function aiCmAutoExportTrustedBaseDiag(trigger, cid, percentage) {
   try {
     if (typeof aiCmDiagLine !== 'function') return false;
     if (!aiCmAutoExportTrustedBase()) return false;
+    var diagSite = (currentAdapter && currentAdapter.siteName) || '';
+    var diagNetReady = 0;
+    try {
+      var diagKey = (diagSite === 'aistudio' && typeof aiCmNetReadyKey === 'function')
+        ? (aiCmNetReadyKey() || '') : '';
+      diagNetReady = (diagKey && aiCmNetReadyAistudio[diagKey] === true) ? 1 : 0;
+    } catch (eAtbNet) { diagNetReady = 0; }
     aiCmDiagLine('auto-export', {
       point: 'maybeAutoExport',
       verdict: 'fire',
       trigger: trigger,
-      site: 'qwen',
+      site: diagSite || 'qwen',
       convId: cid,
       pct: percentage,
       baseSeen: (typeof baseSeen !== 'undefined' && baseSeen === true) ? 1 : 0,
       baseComplete: (typeof baseComplete !== 'undefined' && baseComplete === true) ? 1 : 0,
-      adapterBaseSeen: (typeof adapterBaseSeen !== 'undefined' && adapterBaseSeen === true) ? 1 : 0
+      adapterBaseSeen: (typeof adapterBaseSeen !== 'undefined' && adapterBaseSeen === true) ? 1 : 0,
+      // v2.0.34: наблюдаемость aistudio-фикса — доверие пришло от флага полноты сети,
+      // а не от baseSeen/baseComplete (у AI Studio они по дизайну остаются 0).
+      domBaseTrusted: 1,
+      netReady: diagNetReady
     });
     return true;
   } catch (eAtbd) { return false; }
@@ -3461,7 +3483,46 @@ var aiCmNetCountAistudio = 0;
 // Зачем отдельная переменная: detectedModelSlug — общий для всех сервисов и сбрасывается
 // чужим сайтом/навигацией, а кэшу истории и адаптеру нужно именно «модель этого чата».
 var aiCmNetModelSlugAistudio = '';
+// v2.0.34 (fix base-pending): признак «сеть отдала ПОЛНУЮ историю этого чата».
+// Карта по ключу чата (см. aiCmNetReadyKey), а не boolean: доверие обязано не перетекать
+// в другой разговор и сбрасываться в resetConversationState. Почему не baseSeen: ось
+// baseSeen/baseComplete — сетевой снимок пяти других платформ (он же пишет aiCmHistory
+// в storage и участвует в бейдже); AI Studio живёт на adapter-записи (adapterBaseSeen),
+// поэтому общую ось не трогаем (R1). Читает ровно один предикат —
+// aiCmAutoExportTrustedBase (ветка aistudio); пишет — aiCmIngestAistudioNet.
+/** @type {Record<string, boolean>} */
+var aiCmNetReadyAistudio = {};
 
+/**
+ * Ключ готовности сети AI Studio: convId текущего чата (в браузере всегда есть),
+ * а в срезах-песочницах без getCurrentConvId — путь '/prompts/<id>'.
+ * @returns {string}
+ */
+function aiCmNetReadyKey() {
+  try {
+    var cid = (typeof getCurrentConvId === 'function') ? (getCurrentConvId() || '') : '';
+    if (cid) return cid;
+    var p = (typeof aiCmAistudioPathOf === 'function')
+      ? aiCmAistudioPathOf(window.location && window.location.href) : '';
+    return p ? ('path:' + p) : '';
+  } catch (eNrk) { return ''; }
+}
+
+/** Сброс признака полноты сети AI Studio (вызов из resetConversationState). */
+function aiCmNetReadyAistudioReset() {
+  try {
+    if (!aiCmNetReadyAistudio || typeof aiCmNetReadyAistudio !== 'object') return false;
+    for (var k in aiCmNetReadyAistudio) {
+      if (Object.prototype.hasOwnProperty.call(aiCmNetReadyAistudio, k)) {
+        delete aiCmNetReadyAistudio[k];
+      }
+    }
+    return true;
+  } catch (eNrReset) {
+    swallowSoft(eNrReset, 'content:aistudio-net-ready-reset');
+    return false;
+  }
+}
 function aiCmIsAistudioHost() {
   try {
     return String((window.location && window.location.hostname) || '').indexOf('aistudio.google.com') !== -1;
@@ -3871,6 +3932,17 @@ function aiCmIngestAistudioNet(detail) {
       };
       // Общая точка для адаптера: ISOLATED-мир один, отдельного канала не нужно.
       window.__aiCmNetMsgs = aiCmNetMsgsAistudio;
+      // v2.0.34 (fix base-pending): взводим доверие к базе ТОЛЬКО на полном снимке
+      // (historyComplete === true, т.е. !shrunk) и только если снимок относится к
+      // текущему пути: поздний ответ чужого чата не должен открыть экспорт этого.
+      if (!shrunk) {
+        var readyKey = (typeof aiCmNetReadyKey === 'function') ? (aiCmNetReadyKey() || '') : '';
+        var herePath = aiCmAistudioPathOf(window.location && window.location.href);
+        var netPath = aiCmAistudioPathOf(href);
+        if (readyKey && (!herePath || !netPath || herePath === netPath)) {
+          aiCmNetReadyAistudio[readyKey] = true;
+        }
+      }
       changed = !prev || prev.count !== msgs.length || prev.ts !== aiCmNetMsgsAistudio.ts;
       // Кэш хранит и точный promptTokenCount: после F5 бейдж считает pct от него,
       // не дожидаясь нового GenerateContent.
