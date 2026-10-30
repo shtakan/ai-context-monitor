@@ -1355,10 +1355,10 @@
       "file": "core/qwen-intercept.js",
       "category": "best-effort-guard",
       "lines": [
-        109,
-        198,
-        371,
-        1492
+        113,
+        202,
+        375,
+        1608
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: iterator.return();"
     },
@@ -1368,9 +1368,9 @@
       "lines": [
         67,
         70,
-        133,
-        1524,
-        1536
+        137,
+        1640,
+        1652
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: for (var i = 0; i < diagRing.length; i++) printDiag(diagRing[i][0], diag"
     },
@@ -1378,8 +1378,8 @@
       "file": "core/qwen-intercept.js",
       "category": "event-guard",
       "lines": [
-        1573,
-        1603
+        1689,
+        1719
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); dis"
     },
@@ -1387,8 +1387,8 @@
       "file": "core/qwen-intercept.js",
       "category": "guard-clause",
       "lines": [
-        146,
-        153
+        150,
+        157
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof input === 'string') return input; if (input && typeof input.u"
     },
@@ -1396,7 +1396,7 @@
       "file": "core/qwen-intercept.js",
       "category": "host-api-guard",
       "lines": [
-        91
+        95
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: if (typeof sessionStorage !== 'undefined' && sessionStorage && sessionSt"
     },
@@ -1404,9 +1404,9 @@
       "file": "core/qwen-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        1590,
-        1598,
-        1602
+        1706,
+        1714,
+        1718
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkChatChange();"
     },
@@ -1414,7 +1414,7 @@
       "file": "core/qwen-intercept.js",
       "category": "logging-guard",
       "lines": [
-        127
+        131
       ],
       "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: var f = fields || {}; diagLineCount++; if (typeof aiCmDiagLine === 'func"
     },
@@ -1422,8 +1422,8 @@
       "file": "core/qwen-intercept.js",
       "category": "parse-guard",
       "lines": [
-        183,
-        191
+        187,
+        195
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var m = /[?&]chat_id=([^&]+)/.exec(url); if (m) return decodeURIComponen"
     },
