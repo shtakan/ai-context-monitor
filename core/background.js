@@ -348,21 +348,21 @@ async function ensureInterceptor() {
       console.log('AI Context Monitor: перехватчик Qwen (v3, пагинация истории + вложения) зарегистрирован (мир сайта, document_start)');
     }
 
-    // AI Studio: сетевой перехватчик истории ($rpc: UpdatePrompt / Create /
-    // GenerateContent + CountTokens). Отдельный id и свой файл: core/gemini-intercept
-    // на этом хосте уже стоит (счётчик generate_204), но историю диалога не разбирает,
-    // а объединение сломало бы пин на его id. Порядок — ПОСЛЕ gemini-перехватчика:
-    // оба патчат fetch/XHR, каждый зовёт предыдущий (цепочка не рвётся).
-    if (ids.indexOf('ai-cm-aistudio-intercept') === -1) {
-      await registerSafe('ai-cm-aistudio-intercept', {
-        id: 'ai-cm-aistudio-intercept',
+    // AI Studio: сетевой перехватчик истории ($rpc) + вложения (Drive API). Отдельный
+    // id: core/gemini-intercept здесь историю не разбирает. Порядок — ПОСЛЕ gemini.
+    // v2: js[] изменился (core/aistudio-files.js); MV3 не перезаписывает js[] под
+    // старым id — поэтому id -v2 и снятие -v1; модуль грузится ПОСЛЕ, bind ленивый (§8).
+    if (ids.indexOf('ai-cm-aistudio-intercept-v2') === -1) {
+      try { await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-aistudio-intercept'] }); } catch (eUnregAistudio) { }
+      await registerSafe('ai-cm-aistudio-intercept-v2', {
+        id: 'ai-cm-aistudio-intercept-v2',
         matches: ['https://aistudio.google.com/*'],
-        js: ['utils/debug.js', 'core/aistudio-intercept.js'],
+        js: ['utils/debug.js', 'core/aistudio-intercept.js', 'core/aistudio-files.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false
       });
-      console.log('AI Context Monitor: перехватчик AI Studio зарегистрирован (мир сайта, document_start)');
+      console.log('AI Context Monitor: перехватчик AI Studio (v2, история + вложения) зарегистрирован (мир сайта, document_start)');
     }
   } catch (err) {
     console.warn('AI Context Monitor: не удалось зарегистрировать перехватчик:', err);

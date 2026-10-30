@@ -39,7 +39,7 @@
       "file": "core/aistudio-intercept.js",
       "category": "triage-diagnostic",
       "lines": [
-        464
+        525
       ],
       "reason": "v2.0.34: промах парсера истории AI Studio — единственный внешне невидимый отказ (события нет). План триажа требует ОДИН компактный console.warn на форму тела (reason/rootLen/root13/arrays, без текста) независимо от гейта aiCmDebug: под гейтом уже печатается aistudio-history-empty, поэтому aiCmDiagWarn не дал бы нового сигнала. Дедуп по отпечатку формы (lastSnapshotWarnSig), вызов защищён try/catch."
     },

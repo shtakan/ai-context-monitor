@@ -95,6 +95,15 @@
   var lastHistoryReason = '';
   var lastSnapshotWarnSig = ''; // дедуп console.warn о промахе формы
 
+  // Вложения (plan-aistudio-files.md): сырой снимок нужен для повторного
+  // emitHistory после догрузки текста; nativeFetch — чтобы модуль вложений
+  // не ходил через собственный патченный fetch.
+  var lastHistoryMsgs = null;
+  var lastHistoryUrl = '';
+  var nativeFetch = null;
+  var filesBound = false;
+  var pendingFileToken = '';
+
   /* ================================================================== *
    * 0. Мост detail (Xray/Firefox): тело одинаковое во всех мирах
    *    (tests/firefox-xray-bridge.test.js: X3) — строка JSON разбирается,
@@ -290,6 +299,54 @@
     return hits > 0;
   }
 
+  /**
+   * Drive file id из поля [3] строки-вложения. В живом чате это массив
+   * строк (`['17NuA9Ex…']`); вложенный массив — защита от формы [0][0].
+   */
+  function fileIdsOfRow(m) {
+    var out = [];
+    var field = (Array.isArray(m) && Array.isArray(m[3])) ? m[3] : null;
+    if (!field) return out;
+    for (var i = 0; i < field.length; i++) {
+      var v = field[i];
+      if (typeof v === 'string' && v) { out.push(v); continue; }
+      if (Array.isArray(v) && typeof v[0] === 'string' && v[0]) out.push(v[0]);
+    }
+    return out;
+  }
+
+  /**
+   * Перенос fileId на СЛЕДУЮЩУЮ user-строку: в UI вложение и текст запроса —
+   * один ход, но в сети это две строки (m[0]=null с m[3], затем текст).
+   * Строка-вложение без текста после слияния удаляется; если следующей
+   * user-строки нет — остаётся самостоятельный user-ход (адаптер покажет
+   * его, когда появится непустая sections).
+   */
+  function mergeFileRows(msgs) {
+    var out = [];
+    var carry = null;
+    for (var i = 0; i < msgs.length; i++) {
+      var m = msgs[i];
+      var files = (m && Array.isArray(m.files) && m.files.length) ? m.files : null;
+      if (files) {
+        carry = carry ? carry.concat(files) : files.slice();
+        if (!m.text) continue;
+      }
+      if (carry) {
+        if (m.role === ROLE_USER) {
+          out.push({ role: ROLE_USER, text: m.text || '', files: carry });
+          carry = null;
+          continue;
+        }
+        out.push({ role: ROLE_USER, text: '', files: carry });
+        carry = null;
+      }
+      out.push(m);
+    }
+    if (carry) out.push({ role: ROLE_USER, text: '', files: carry });
+    return out;
+  }
+
   /** Строки снимка → сообщения (reasoning `m[19] === 1` не реплика). */
   function msgsFromRows(rows) {
     var out = [];
@@ -298,12 +355,16 @@
       var m = rows[i];
       if (!Array.isArray(m)) continue;
       if (m[19] === 1) continue;                       // reasoning, не реплика
-      if (typeof m[0] !== 'string' || !isRoleName(m[8])) continue;
-      var text = m[0].replace(/\r\n?/g, '\n').trim();
-      if (!text) continue;
-      out.push({ role: normRole(m[8]), text: text });
+      if (!isRoleName(m[8])) continue;
+      var text = (typeof m[0] === 'string') ? m[0].replace(/\r\n?/g, '\n').trim() : '';
+      var ids = fileIdsOfRow(m);
+      // Служебные чанки (m[0]=null без m[3]) по-прежнему не реплики.
+      if (ids.length === 0 && !text) continue;
+      var rec = { role: normRole(m[8]), text: text };
+      if (ids.length > 0) rec.files = ids;
+      out.push(rec);
     }
-    return out;
+    return mergeFileRows(out);
   }
 
   /**
@@ -717,9 +778,91 @@
   function historySig(msgs) {
     var parts = [];
     for (var i = 0; i < msgs.length; i++) {
-      parts.push((msgs[i].role === ROLE_AI ? 'a' : 'u') + msgs[i].text.length + ':' + hashText(msgs[i].text));
+      var text = (typeof msgs[i].text === 'string') ? msgs[i].text : '';
+      var sections = (typeof msgs[i].sections === 'string') ? msgs[i].sections : '';
+      var part = (msgs[i].role === ROLE_AI ? 'a' : 'u') + text.length + ':' + hashText(text);
+      // Текст файла догружается асинхронно: без sections в подписи повторный
+      // emitHistory после догрузки был бы проглочен дедупом.
+      if (sections) part += '|s' + sections.length + ':' + hashText(sections);
+      parts.push(part);
     }
     return parts.join('|');
+  }
+
+  function currentChatId() {
+    try {
+      var loc = (typeof window !== 'undefined' && window.location) ? window.location : null;
+      var hit = /\/prompts\/([A-Za-z0-9_-]+)/.exec(String((loc && loc.pathname) || ''));
+      return hit ? hit[1] : '';
+    } catch (eCc) {
+      return '';
+    }
+  }
+
+  /**
+   * Модуль вложений грузится ПОСЛЕ перехватчика (core/background.js: files
+   * после intercept), поэтому __bind — ленивый: первый вызов в рантайме
+   * гарантированно видит window.AiCmAistudioFiles уже определённым.
+   */
+  function filesApi() {
+    var api = (typeof window !== 'undefined') ? window.AiCmAistudioFiles : null;
+    if (!api) return null;
+    if (!filesBound) {
+      try {
+        if (typeof api.__bind === 'function') {
+          api.__bind({
+            emitSnapshot: reemitHistory,
+            diagLine: diagLine,
+            currentChatId: currentChatId,
+            originalFetch: nativeFetch
+          });
+          filesBound = true;
+        }
+      } catch (eFb) {
+        soft(eFb, 'aistudio-intercept:files-bind');
+      }
+    }
+    if (filesBound && pendingFileToken) {
+      var tok = pendingFileToken;
+      pendingFileToken = '';
+      try {
+        if (typeof api.afSetToken === 'function') api.afSetToken(tok);
+      } catch (eFt) {
+        soft(eFt, 'aistudio-intercept:files-token');
+      }
+    }
+    return api;
+  }
+
+  /**
+   * Секции файлов собираются в отдельное поле, а не в text: адаптер вызывает
+   * _cleanText ПОСЛЕ и схлопнул бы переводы строк в телах markdown (§4 плана).
+   */
+  function annotateFileSections(msgs) {
+    var api = filesApi();
+    if (!api || typeof api.afSectionsFor !== 'function') return;
+    var cid = currentChatId();
+    for (var i = 0; i < msgs.length; i++) {
+      var m = msgs[i];
+      if (!m || !Array.isArray(m.files) || m.files.length === 0) continue;
+      var sec = '';
+      try {
+        sec = api.afSectionsFor(m.files, cid) || '';
+      } catch (eSec) {
+        soft(eSec, 'aistudio-intercept:files-sections');
+      }
+      if (sec) m.sections = sec;
+      else if (m.sections) delete m.sections;
+    }
+  }
+
+  function reemitHistory() {
+    if (!lastHistoryMsgs || lastHistoryMsgs.length === 0) return;
+    try {
+      emitHistory(lastHistoryMsgs, lastHistoryUrl);
+    } catch (eRe) {
+      soft(eRe, 'aistudio-intercept:files-reemit');
+    }
   }
 
   /** Отправка снимка истории в мост с дедупом по содержимому. */
@@ -733,6 +876,11 @@
       });
       return;
     }
+    // Спрашиваем секции ДО дедупа: даже повторный снимок должен поставить
+    // недогруженные файлы в очередь (иначе ре-эмит после догрузки не начнётся).
+    annotateFileSections(msgs);
+    lastHistoryMsgs = msgs;
+    lastHistoryUrl = String(url || '');
     var sig = String(url || '') + '|' + historySig(msgs);
     if (sig === lastHistorySig) return;
     lastHistorySig = sig;
@@ -754,9 +902,46 @@
     }
   }
 
+  /** GenerateAccessToken: тело `["ya29.…"]` — OAuth-токен для Drive API вложений. */
+  function isTokenRpc(url) {
+    return /generatetoken|GenerateAccessToken/i.test(String(url || ''));
+  }
+
+  function tokenFromBody(text) {
+    var root = parseJsonText(text);
+    var pick = function (v) {
+      return (typeof v === 'string' && /^ya29\./.test(v)) ? v : '';
+    };
+    if (typeof root === 'string') return pick(root);
+    if (Array.isArray(root)) {
+      for (var i = 0; i < root.length; i++) {
+        var got = pick(root[i]);
+        if (got) return got;
+      }
+    }
+    if (root && typeof root === 'object' && pick(root.token)) return root.token;
+    return '';
+  }
+
   /** Тело ОТВЕТА: GenerateContent — usage токенов, UpdatePrompt/CreatePrompt — история. */
   function handleResponse(url, text) {
     try {
+      if (isTokenRpc(url)) {
+        var tok = tokenFromBody(text);
+        if (tok) {
+          var api = filesApi();
+          if (api && typeof api.afSetToken === 'function') {
+            try { api.afSetToken(tok); } catch (eTk) { soft(eTk, 'aistudio-intercept:files-token'); }
+          } else {
+            // Модуль вложений ещё не загрузился (files после intercept) —
+            // отдадим токен при первой ленивой привязке.
+            pendingFileToken = tok;
+          }
+          // Приватность: в лог идёт только длина токена, никогда сам токен.
+          diagLine('aistudio-auth-token', { len: tok.length });
+        }
+        return;
+      }
       // ResolveDriveResource на открытии чата: ресурс промпта с выбранной моделью (v2.0.32).
       if (isGenerateRpc(url) || isHistoryRpc(url)) announceModel(text);
       if (isGenerateRpc(url)) {
@@ -799,11 +984,14 @@
   function installFetchHook() {
     if (typeof window.fetch !== 'function') return;
     var prevFetch = window.fetch;
+    // Нативный fetch нужен модулю вложений: он не должен проходить через
+    // собственный патч (Drive API не $rpc, но так надёжнее и без лишних копий).
+    if (nativeFetch === null) nativeFetch = prevFetch;
     if (!prevFetch || prevFetch.__aiCmAistudioWrapped) return;
 
     var wrapped = function fetch(input, init) {
       var url = urlOfFetchInput(input);
-      var interesting = !!url && (isGenerateRpc(url) || isHistoryRpc(url));
+      var interesting = !!url && (isGenerateRpc(url) || isHistoryRpc(url) || isTokenRpc(url));
       var p = prevFetch.apply(this, arguments);
       if (!interesting) return p;
 
@@ -875,7 +1063,7 @@
         self.addEventListener('load', function () {
           try {
             var url = self.__aiCmAistudioUrl || '';
-            if (!url || (!isGenerateRpc(url) && !isHistoryRpc(url))) return;
+            if (!url || (!isGenerateRpc(url) && !isHistoryRpc(url) && !isTokenRpc(url))) return;
             var ct = '';
             try { ct = String(self.getResponseHeader('content-type') || ''); } catch (eH) { ct = ''; }
             // Не-generate SSE — повтор истории/служебный стрим: тело не читаем.
@@ -936,6 +1124,11 @@
       modelFromBody: modelFromBody,
       isGenerateRpc: isGenerateRpc,
       isHistoryRpc: isHistoryRpc,
+      isTokenRpc: isTokenRpc,
+      tokenFromBody: tokenFromBody,
+      fileIdsOfRow: fileIdsOfRow,
+      mergeFileRows: mergeFileRows,
+      currentChatId: currentChatId,
       handleRequest: handleRequest,
       handleResponse: handleResponse
     },
@@ -943,6 +1136,14 @@
       lastTokens = 0;
       lastHistorySig = '';
       lastModelSlug = '';
+      lastHistoryMsgs = null;
+      lastHistoryUrl = '';
+      try {
+        var api = (typeof window !== 'undefined') ? window.AiCmAistudioFiles : null;
+        if (api && typeof api.afReset === 'function') api.afReset('');
+      } catch (eRf) {
+        soft(eRf, 'aistudio-intercept:reset-files');
+      }
     },
     stats: function () {
       return { lastTokens: lastTokens, lastHistorySig: lastHistorySig, verbose: verbose };

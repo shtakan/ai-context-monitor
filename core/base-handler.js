@@ -185,7 +185,7 @@ function aiCmFilesDrainSite() {
   try {
     if (typeof currentAdapter === 'undefined' || !currentAdapter) return false;
     var site = currentAdapter.siteName;
-    return site === 'deepseek' || site === 'qwen';
+    return site === 'deepseek' || site === 'qwen' || site === 'aistudio';
   } catch (eSiteF) { return false; }
 }
 function aiCmExportNetSyncThen(convId, cb, timeoutMs) {

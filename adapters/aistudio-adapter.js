@@ -165,10 +165,15 @@ class AistudioAdapter extends GeminiAdapter {
       /** @type {AistudioExtractedMessage[]} */
       const messages = [];
       Array.prototype.forEach.call(raw.msgs, (m) => {
-        if (!m || typeof m.text !== 'string') return;
-        const content = this._cleanText(m.text);
+        // sections/files не входят в ambient-тип __aiCmNetMsgs (types/ не трогаем).
+        const rec = /** @type {any} */ (m);
+        if (!rec || typeof rec.text !== 'string') return;
+        const sections = (typeof rec.sections === 'string') ? rec.sections : '';
+        // Секции дописываются ПОСЛЕ _cleanText: иначе он схлопнет переводы
+        // строк в теле markdown-файла (plan-aistudio-files.md §4).
+        const content = this._cleanText(rec.text) + sections;
         if (content.length === 0) return;
-        messages.push({ role: (m.role === 'assistant' || m.role === 'model') ? 'assistant' : 'user', content });
+        messages.push({ role: (rec.role === 'assistant' || rec.role === 'model') ? 'assistant' : 'user', content });
       });
       return messages;
     } catch (error) {
@@ -207,10 +212,14 @@ class AistudioAdapter extends GeminiAdapter {
       /** @type {AistudioExtractedMessage[]} */
       const messages = [];
       Array.prototype.forEach.call(cached.msgs, (msg) => {
-        if (!msg || typeof msg.text !== 'string') return;
-        const content = this._cleanText(msg.text);
+        // Пик истории — тот же формат, что и сетевой снимок: sections/files
+        // не входят в ambient-тип, поэтому локальный any-каст.
+        const rec = /** @type {any} */ (msg);
+        if (!rec || typeof rec.text !== 'string') return;
+        const sections = (typeof rec.sections === 'string') ? rec.sections : '';
+        const content = this._cleanText(rec.text) + sections;
         if (content.length === 0) return;
-        messages.push({ role: (msg.role === 'assistant' || msg.role === 'model') ? 'assistant' : 'user', content });
+        messages.push({ role: (rec.role === 'assistant' || rec.role === 'model') ? 'assistant' : 'user', content });
       });
       return messages;
     } catch (error) {

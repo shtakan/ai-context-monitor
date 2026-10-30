@@ -3835,11 +3835,20 @@ function aiCmIngestAistudioNet(detail) {
       changed = true;
     }
   } else if (detail.kind === 'history' && Array.isArray(detail.msgs) && detail.msgs.length > 0) {
+    /** @type {any[]} */
     var msgs = [];
     for (var i = 0; i < detail.msgs.length; i++) {
       var m = detail.msgs[i];
-      if (!m || typeof m.text !== 'string' || m.text.length === 0) continue;
-      msgs.push({ role: (m.role === 'assistant' || m.role === 'model') ? 'assistant' : 'user', text: m.text });
+      if (!m || typeof m.text !== 'string') continue;
+      var sections = (typeof m.sections === 'string') ? m.sections : '';
+      // Секции вложений (plan-aistudio-files.md): текст может быть пустым,
+      // если у хода был только файл — пустой USER: без секций недопустим.
+      if (m.text.length === 0 && sections.length === 0) continue;
+      /** @type {any} */
+      var rec = { role: (m.role === 'assistant' || m.role === 'model') ? 'assistant' : 'user', text: m.text };
+      if (sections) rec.sections = sections;
+      if (Array.isArray(m.files) && m.files.length > 0) rec.files = m.files;
+      msgs.push(rec);
     }
     if (msgs.length > 0) {
       var prev = aiCmNetMsgsAistudio;

@@ -7,7 +7,7 @@
     "adapters"
   ],
   "definition": "Молчаливый catch = тело после вырезания комментариев содержит только пробелы, ИЛИ ровно один no-op (void 0; / return; / continue; / break;). Комментарий-только тело тоже молчаливое (комментарии маскируются в пробелы).",
-  "totalEntries": 464,
+  "totalEntries": 466,
   "groups": [
     {
       "file": "adapters/claude-adapter.js",
@@ -107,6 +107,14 @@
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window && window.AiCmExportBuilders"
     },
     {
+      "file": "core/aistudio-files.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        107
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmDiagLine('aistudio-files-' + tag, fields);"
+    },
+    {
       "file": "core/background.js",
       "category": "debug-instrumentation",
       "lines": [
@@ -144,6 +152,7 @@
         211,
         261,
         339,
+        356,
         540,
         614,
         616
