@@ -7,7 +7,7 @@ A Chrome and Microsoft Edge (Chromium) extension (Manifest V3) that shows in rea
 
 The extension is distributed outside any store (publication in Edge Add-ons is postponed). The main channel is GitHub Releases.
 
-1. Download the `ai-context-monitor-v2.0.33.zip` archive from the release page: <https://github.com/shtakan/ai-context-monitor/releases/tag/v2.0.33>
+1. Download the `ai-context-monitor-v2.0.34.zip` archive from the release page: <https://github.com/shtakan/ai-context-monitor/releases/tag/v2.0.34>
 2. Unpack the archive into any folder.
 3. **Microsoft Edge**: open `edge://extensions`, enable **Developer mode**, click **Load unpacked** and select the unpacked folder.
 4. **Google Chrome**: open `chrome://extensions` and do the same.
@@ -77,7 +77,7 @@ service worker (core/background.js)
 npm test
 ```
 
-Runs Jest — **as of v2.0.33 (2026-10-29): 197 suites / 3558 tests**, green in CI. The counters are a dated snapshot of the v2.0.33 tree; the live numbers are whatever `npm test` prints as its `Tests: ... total` line. Sanitized fixtures are bundled in `tests/fixtures`. Personal ("live") captured samples are gitignored — tests that require them are skipped automatically when those files are absent.
+Runs Jest — **as of v2.0.34 (2026-10-30): 202 suites / 3638 tests**, green in CI. The counters are a dated snapshot of the v2.0.34 tree; the live numbers are whatever `npm test` prints as its `Tests: ... total` line. Sanitized fixtures are bundled in `tests/fixtures`. Personal ("live") captured samples are gitignored — tests that require them are skipped automatically when those files are absent.
 
 ## Privacy
 
