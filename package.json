@@ -23,6 +23,9 @@
   },
   "jest": {
     "testEnvironment": "jsdom",
+    "setupFiles": [
+      "<rootDir>/tests/platform-setup.js"
+    ],
     "testMatch": [
       "**/tests/**/*.test.js"
     ],

@@ -19,6 +19,9 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.js'), 'utf8');
+// Сборка кладёт utils/platform.js в общую область SW (BACKGROUND_PRELUDE); в vm-песочнице
+// подкладываем исходник вручную — getURL мока отдаёт chrome-extension://, как в Chrome.
+const PLATFORM_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'platform.js'), 'utf8');
 const OPTIONS_HTML = fs.readFileSync(path.join(ROOT, 'options', 'options.html'), 'utf8');
 const PRIVACY_HTML = fs.readFileSync(path.join(ROOT, 'privacy', 'privacy.html'), 'utf8');
 
@@ -324,7 +327,7 @@ function loadBackground(opts) {
   sandbox.globalThis = sandbox;
   sandbox.navigator = { userAgent: 'jest-sw' };
   vm.createContext(sandbox);
-  vm.runInContext(BG_SRC, sandbox, { filename: 'core/background.js' });
+  vm.runInContext(PLATFORM_SRC + '\n' + BG_SRC, sandbox, { filename: 'core/background.js' });
 
   return {
     sandbox,

@@ -891,8 +891,10 @@ function handleCountTokens(message, sender) {
   // Firefox-сборка (AMO): манифест заявляет data_collection_permissions: none, а BYOK
   // отправляет текст диалога на generativelanguage.googleapis.com. Гейт стоит на
   // единственном входе в цепочку (сообщение COUNT_TOKENS): до fetch в
-  // handleCountTokensRun дело не доходит. Chrome не затронут — глобали browser там нет.
-  if (typeof browser !== 'undefined') {
+  // handleCountTokensRun дело не доходит. Движок определяем по схеме URL расширения
+  // (utils/platform.js): Chrome 148+ тоже выставляет глобал `browser`, поэтому
+  // прежняя typeof-проверка ложно отвечала 'byok-disabled-firefox' на Chrome.
+  if (aiCmIsFirefox()) {
     return Promise.resolve({ ok: false, reason: 'byok-disabled-firefox' });
   }
   var text = (message && message.text) || '';

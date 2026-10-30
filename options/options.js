@@ -15,7 +15,9 @@ const exactCountCheckbox = document.getElementById('exact-count');
 const exactCountWarningEl = document.getElementById('exact-count-warning');
 // Firefox-сборка (AMO): BYOK выключен в SW (core/background.js), поэтому UI не должен
 // предлагать мёртвую функцию — обе секции скрываются, флаг точного подсчёта сбрасывается.
-var aiCmByokUiDisabled = (typeof browser !== 'undefined');
+// Движок определяем по схеме URL расширения (utils/platform.js): Chrome 148+ тоже
+// выставляет глобал `browser`, поэтому typeof-проверка ложно отключала BYOK на Chrome.
+var aiCmByokUiDisabled = aiCmIsFirefox();
 const versionEl = document.querySelector('.version');
 const exportMdBtn = document.getElementById('export-md');
 const exportJsonBtn = document.getElementById('export-json');

@@ -21,6 +21,7 @@
     "types/**/*.d.ts",
     "types/**/*.ts",
     "utils/**/*.js",
+    "utils/platform-globals.d.ts",
     "adapters/**/*.js",
     "core/content.js",
     "core/widget.js",

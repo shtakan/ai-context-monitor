@@ -111,8 +111,8 @@
       "category": "debug-instrumentation",
       "lines": [
         423,
-        1066,
-        1084
+        1068,
+        1086
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: chrome.action.setBadgeText({ text: '', tabId: tabIdR }); debugLog('log',"
     },
@@ -120,7 +120,7 @@
       "file": "core/background.js",
       "category": "defensive-assignment",
       "lines": [
-        985
+        987
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: errText = await response.text();"
     },
@@ -302,9 +302,9 @@
       "category": "best-effort-guard",
       "lines": [
         550,
-        2284,
-        2424,
-        3364
+        2287,
+        2427,
+        3367
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cyrDiag = (t.match(/[а-яёА-ЯЁ]/g) || []).length; var cyrillicPct = t"
     },
@@ -312,7 +312,7 @@
       "file": "core/content.js",
       "category": "cleanup-guard",
       "lines": [
-        2013
+        2016
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: if (aiCmBadgeHoldTimer) return; aiCmBadgeHoldTimer = setTimeout(function"
     },
@@ -347,14 +347,14 @@
         1297,
         1299,
         1304,
-        1888,
-        2248,
-        2435,
-        2459,
-        2468,
-        3248,
-        3274,
-        3276
+        1891,
+        2251,
+        2438,
+        2462,
+        2471,
+        3251,
+        3277,
+        3279
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
     },
@@ -371,7 +371,7 @@
       "file": "core/content.js",
       "category": "dom-read-guard",
       "lines": [
-        1924
+        1927
       ],
       "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: var info = aiCmSourceInfo(); aiCmSourceLabelNow = info ? info.label : ''"
     },
@@ -381,10 +381,10 @@
       "lines": [
         968,
         977,
-        2377,
-        2400,
-        3230,
-        3236
+        2380,
+        2403,
+        3233,
+        3239
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
     },
@@ -392,7 +392,7 @@
       "file": "core/content.js",
       "category": "feature-detect",
       "lines": [
-        2584
+        2587
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var metricSrc = baseComplete ? 'base-complete' : (lastBounded ? 'base-fl"
     },
@@ -410,11 +410,11 @@
         645,
         758,
         929,
-        1962,
-        2665,
-        2724,
-        2741,
-        2822
+        1965,
+        2668,
+        2727,
+        2744,
+        2825
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -425,7 +425,7 @@
         26,
         288,
         358,
-        2891
+        2894
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.runtime.sendMessage({ type: 'BADGE_RESET' }).catch(function () {"
     },
@@ -434,7 +434,7 @@
       "category": "local-helper-guard",
       "lines": [
         285,
-        3052
+        3055
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmCancelDeferredHistWrite('');"
     },
@@ -442,7 +442,7 @@
       "file": "core/content.js",
       "category": "parse-guard",
       "lines": [
-        3310
+        3313
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof window !== 'undefined' && window && window.AiCmEx"
     },

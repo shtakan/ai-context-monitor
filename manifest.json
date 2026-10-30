@@ -54,6 +54,7 @@
     "https://chat.qwen.ai/*"
   ],
   "js": [
+    "utils/platform.js",
     "utils/debug.js",
     "utils/tokenizer.js",
     "utils/model-config.js",

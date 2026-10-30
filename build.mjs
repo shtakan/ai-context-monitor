@@ -123,7 +123,9 @@ function readJSON(relPath) {
 // и пороги проактивных предупреждений молча падали на дефолт. Файл — самодостаточный
 // IIFE без top-level объявлений: он публикует self.GeminiInterceptLogic, потребитель
 // в background.js не меняется, коллизий имён нет по построению.
-const BACKGROUND_PRELUDE = ['utils/gemini-intercept-logic.js'];
+// utils/platform.js — тот же приём: объявляет aiCmIsFirefox() в общей области,
+// им пользуются background.js (гейт BYOK) и options.js (скрытие BYOK-UI).
+const BACKGROUND_PRELUDE = ['utils/platform.js', 'utils/gemini-intercept-logic.js'];
 
 /** background entry — build-time prelude + manifest.background.service_worker */
 function backgroundEntry(manifest) {
