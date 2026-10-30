@@ -7,13 +7,13 @@
     "adapters"
   ],
   "definition": "Молчаливый catch = тело после вырезания комментариев содержит только пробелы, ИЛИ ровно один no-op (void 0; / return; / continue; / break;). Комментарий-только тело тоже молчаливое (комментарии маскируются в пробелы).",
-  "totalEntries": 463,
+  "totalEntries": 464,
   "groups": [
     {
       "file": "adapters/claude-adapter.js",
       "category": "debug-instrumentation",
       "lines": [
-        92
+        103
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (this._lastNetworkModel) { if (!this._modelLogSent) { this._modelLogS"
     },
@@ -21,7 +21,7 @@
       "file": "adapters/claude-adapter.js",
       "category": "event-guard",
       "lines": [
-        46
+        48
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.addEventListener('ai-cm-full-history', function (ev) { var evt ="
     },
@@ -70,7 +70,7 @@
       "file": "adapters/perplexity-adapter.js",
       "category": "debug-instrumentation",
       "lines": [
-        92
+        103
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (this._lastNetworkModel) { if (!this._modelLogSent) { this._modelLogS"
     },
@@ -78,7 +78,7 @@
       "file": "adapters/perplexity-adapter.js",
       "category": "event-guard",
       "lines": [
-        46
+        48
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.addEventListener('ai-cm-full-history', function (ev) { var evt ="
     },
@@ -302,9 +302,9 @@
       "category": "best-effort-guard",
       "lines": [
         550,
-        2287,
-        2427,
-        3367
+        2291,
+        2431,
+        3374
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cyrDiag = (t.match(/[а-яёА-ЯЁ]/g) || []).length; var cyrillicPct = t"
     },
@@ -348,13 +348,13 @@
         1299,
         1304,
         1891,
-        2251,
-        2438,
-        2462,
-        2471,
-        3251,
-        3277,
-        3279
+        2255,
+        2442,
+        2466,
+        2475,
+        3258,
+        3284,
+        3286
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
     },
@@ -381,10 +381,10 @@
       "lines": [
         968,
         977,
-        2380,
-        2403,
-        3233,
-        3239
+        2384,
+        2407,
+        3240,
+        3246
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
     },
@@ -392,7 +392,7 @@
       "file": "core/content.js",
       "category": "feature-detect",
       "lines": [
-        2587
+        2591
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var metricSrc = baseComplete ? 'base-complete' : (lastBounded ? 'base-fl"
     },
@@ -411,10 +411,10 @@
         758,
         929,
         1965,
-        2668,
-        2727,
-        2744,
-        2825
+        2672,
+        2734,
+        2751,
+        2832
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -425,7 +425,7 @@
         26,
         288,
         358,
-        2894
+        2901
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.runtime.sendMessage({ type: 'BADGE_RESET' }).catch(function () {"
     },
@@ -434,7 +434,7 @@
       "category": "local-helper-guard",
       "lines": [
         285,
-        3055
+        3062
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmCancelDeferredHistWrite('');"
     },
@@ -442,7 +442,7 @@
       "file": "core/content.js",
       "category": "parse-guard",
       "lines": [
-        3313
+        3320
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof window !== 'undefined' && window && window.AiCmEx"
     },
@@ -1308,10 +1308,18 @@
     },
     {
       "file": "core/perplexity-intercept.js",
+      "category": "feature-detect",
+      "lines": [
+        233
+      ],
+      "reason": "feature-detect: capability-probe: валидатор урезанного шаблона из utils/perplexity-parser.js может отсутствовать в MAIN-мире — тогда шаблон оставляем как есть"
+    },
+    {
+      "file": "core/perplexity-intercept.js",
       "category": "event-guard",
       "lines": [
-        252,
-        267
+        265,
+        280
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
     },
@@ -1319,9 +1327,9 @@
       "file": "core/perplexity-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        263,
-        265,
-        266
+        276,
+        278,
+        279
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkConvChange();"
     },
@@ -1331,7 +1339,7 @@
       "lines": [
         109,
         170,
-        479
+        492
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: raw = decodeURIComponent(raw);"
     },

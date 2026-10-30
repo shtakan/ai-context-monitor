@@ -15,6 +15,8 @@
 const fs = require('fs');
 const path = require('path');
 const { loadAdapter, REPO_ROOT } = require('../helpers/adapter-harness');
+const { openOptionsExportGate, defaultState } = require('../helpers/options-export-gate');
+const { stripPerplexityHistoryTruncation } = require('../../utils/perplexity-parser.js');
 
 jest.setTimeout(5000);
 
@@ -50,5 +52,62 @@ describe('§п.8-A: PerplexityAdapter — C-zero (DOM пуст по дизайн
     expect(fs.existsSync(intercept)).toBe(true);
     expect(fs.statSync(intercept).size).toBeGreaterThan(10000);
     expect(fs.readFileSync(intercept, 'utf8')).toContain('perplexity');
+  });
+
+  test('v2.0.34: stub-лог extractMessages — debug и один раз на разговор', function () {
+    const res = loadAdapter('adapters/perplexity-adapter.js', {
+      exportExpr: 'PerplexityAdapter',
+      location: { hostname: 'www.perplexity.ai', pathname: '/search/conv-a' }
+    });
+    const adapter = res.Adapter;
+
+    adapter.extractMessages();
+    adapter.extractMessages();
+    adapter.extractMessages();
+
+    const stubLogs = res.sandbox.logs.filter(function (e) {
+      return String(e.args[0] || '').indexOf('extractMessages') !== -1;
+    });
+    expect(stubLogs.length).toBe(1);
+    expect(stubLogs[0].level).toBe('debug');
+    expect(res.sandbox.logs.filter(function (e) { return e.level === 'log'; })).toEqual([]);
+
+    res.sandbox.window.location.pathname = '/search/conv-b';
+    adapter.extractMessages();
+    adapter.extractMessages();
+    expect(res.sandbox.logs.filter(function (e) {
+      return String(e.args[0] || '').indexOf('extractMessages') !== -1;
+    }).length).toBe(2);
+  });
+
+  test('v2.0.34: шаблон истории не закрепляет limit/offset/from_first', function () {
+    const url = 'https://www.perplexity.ai/rest/thread/abc123' +
+      '?with_parent_info=true&supported_block_use_cases=true' +
+      '&limit=20&offset=0&from_first=false';
+    const normalized = stripPerplexityHistoryTruncation(url);
+    expect(normalized).not.toContain('limit=');
+    expect(normalized).not.toContain('offset=');
+    expect(normalized).not.toContain('from_first=');
+    expect(normalized).toContain('with_parent_info=true');
+    expect(normalized).toContain('supported_block_use_cases=true');
+    // Хвост/хэш и порядок прочих параметров не трогаем.
+    expect(stripPerplexityHistoryTruncation('https://x/thread/a?b=1&limit=20#frag'))
+      .toBe('https://x/thread/a?b=1#frag');
+  });
+
+  test('v2.0.34: сетевой снимок включает экспорт даже при пустом DOM', function () {
+    const host = 'www.perplexity.ai';
+    const state = defaultState(host, 'perplexity');
+    const ui = openOptionsExportGate({
+      host: host,
+      tabUrl: 'https://' + host + '/search/conv-a',
+      state: state,
+      history: null
+    });
+    expect(ui.md.disabled).toBe(false);
+    expect(ui.json.disabled).toBe(false);
+    expect(ui.pdf.disabled).toBe(false);
+    expect(ui.txt.disabled).toBe(false);
+    expect(ui.hint.textContent).toContain('Готово к экспорту');
   });
 });

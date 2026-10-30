@@ -15,6 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const { loadAdapter, REPO_ROOT } = require('../helpers/adapter-harness');
+const { openOptionsExportGate } = require('../helpers/options-export-gate');
 
 jest.setTimeout(5000);
 
@@ -50,5 +51,62 @@ describe('§п.8-A: ClaudeAdapter — C-zero (DOM пуст по дизайну, 
     expect(fs.existsSync(intercept)).toBe(true);
     expect(fs.statSync(intercept).size).toBeGreaterThan(10000);
     expect(fs.readFileSync(intercept, 'utf8')).toContain('claude');
+  });
+
+  test('v2.0.34: stub-лог extractMessages — debug и один раз на разговор', function () {
+    const res = loadAdapter('adapters/claude-adapter.js', {
+      exportExpr: 'ClaudeAdapter',
+      location: { hostname: 'claude.ai', pathname: '/chat/conv-a' }
+    });
+    const adapter = res.Adapter;
+
+    adapter.extractMessages();
+    adapter.extractMessages();
+    adapter.extractMessages();
+
+    const stubLogs = res.sandbox.logs.filter(function (e) {
+      return String(e.args[0] || '').indexOf('extractMessages') !== -1;
+    });
+    expect(stubLogs.length).toBe(1);
+    expect(stubLogs[0].level).toBe('debug');
+    // Уровень 'log' у Claude-адаптера больше не используется (анти-спам).
+    expect(res.sandbox.logs.filter(function (e) { return e.level === 'log'; })).toEqual([]);
+
+    // Другой разговор (SPA-переход) — новое пояснение, но тоже одно.
+    res.sandbox.window.location.pathname = '/chat/conv-b';
+    adapter.extractMessages();
+    adapter.extractMessages();
+    expect(res.sandbox.logs.filter(function (e) {
+      return String(e.args[0] || '').indexOf('extractMessages') !== -1;
+    }).length).toBe(2);
+  });
+
+  test('v2.0.34: сетевой снимок включает экспорт даже при пустом DOM', function () {
+    global.URL.createObjectURL = jest.fn(function () { return 'blob:mock'; });
+    global.URL.revokeObjectURL = jest.fn();
+    const ui = openOptionsExportGate({ history: null });
+    expect(ui.md.disabled).toBe(false);
+    expect(ui.json.disabled).toBe(false);
+    expect(ui.pdf.disabled).toBe(false);
+    expect(ui.txt.disabled).toBe(false);
+    expect(ui.hint.textContent).toContain('Готово к экспорту');
+  });
+
+  test('v2.0.34: клик TXT экспортирует сетевой снимок с пустым convId', function () {
+    global.URL.createObjectURL = jest.fn(function () { return 'blob:mock'; });
+    global.URL.revokeObjectURL = jest.fn();
+    const ui = openOptionsExportGate({
+      history: null,
+      snapshot: {
+        host: 'claude.ai',
+        convId: '',
+        site: 'claude',
+        messages: [{ role: 'user', text: 'вопрос из сети' }]
+      }
+    });
+    ui.txt.click();
+    expect(global.URL.createObjectURL).toHaveBeenCalledTimes(1);
+    const blob = global.URL.createObjectURL.mock.calls[0][0];
+    expect(blob).toBeTruthy();
   });
 });

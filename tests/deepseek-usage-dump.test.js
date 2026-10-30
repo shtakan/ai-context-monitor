@@ -238,7 +238,8 @@ describe('O-26 (2): счётчики netMsgs/domMsgs в trace-строке svc-e
   function traceRegion() {
     const start = contentSrc.indexOf("var siteNameS1 = currentAdapter.siteName || '';");
     expect(start).toBeGreaterThan(-1);
-    const marker = contentSrc.indexOf("' histWritePath=' + histWritePathS1);", start);
+    // v2.0.34: после histWritePath печатается флаг adapter=dom|stub — маркер конца блока.
+    const marker = contentSrc.indexOf("' adapter=' + adapterFlagS1);", start);
     expect(marker).toBeGreaterThan(-1);
     const end = contentSrc.indexOf('\n    }', marker) + '\n    }'.length;
     return contentSrc.slice(start, end);
@@ -260,6 +261,8 @@ describe('O-26 (2): счётчики netMsgs/domMsgs в trace-строке svc-e
     expect(logged[0]).toContain(' domMsgs=8');
     expect(logged[0]).toContain(' netMsgs=13');
     expect(logged[0]).toContain('histWritePath=network');
+    // v2.0.34: обычные сайты помечаются adapter=dom (шумят только заглушки).
+    expect(logged[0]).toContain(' adapter=dom');
   });
 
   test('поведение эмита не изменилось: gemini по-прежнему не логирует, adapter-путь виден', () => {
@@ -276,6 +279,20 @@ describe('O-26 (2): счётчики netMsgs/domMsgs в trace-строке svc-e
     expect(logged[0]).toContain(' msgs=0');
     expect(logged[0]).toContain(' netMsgs=0');
     expect(logged[0]).toContain('histWritePath=adapter');
+    expect(logged[0]).toContain(' adapter=dom');
+
+    // v2.0.34: у Claude/Perplexity DOM-адаптер — осознанная заглушка, в trace видно adapter=stub.
+    const stubLogged = [];
+    const runStub = new Function('currentAdapter', 'getCurrentConvId', 'baseSeen', 'lastBaseTexts', 'debugLog',
+      traceRegion());
+    for (const site of ['claude', 'perplexity']) {
+      stubLogged.length = 0;
+      runStub({ siteName: site, extractMessages: () => [] }, () => 'c', true,
+        new Array(4), (lvl, msg) => stubLogged.push(msg));
+      expect(stubLogged).toHaveLength(1);
+      expect(stubLogged[0]).toContain('site=' + site);
+      expect(stubLogged[0]).toContain(' adapter=stub');
+    }
   });
 
   test('source-пин: счётчики живут ТОЛЬКО в log-строке (тело эмита байтово прежнее)', () => {
@@ -291,7 +308,10 @@ describe('O-26 (2): счётчики netMsgs/domMsgs в trace-строке svc-e
     expect(region).toContain("' domMsgs=' + domMsgsS1 +");
     expect(region).toContain("' netMsgs=' + netMsgsS1 +");
     expect(region).toContain("' convId=' + (getCurrentConvId() || '') +");
-    expect(region).toContain("' histWritePath=' + histWritePathS1);");
+    expect(region).toContain("' adapter=' + adapterFlagS1);");
+    // v2.0.34: флаг adapter живёт только в trace-блоке (объявление + печать).
+    expect(countOf(contentSrc, 'adapterFlagS1')).toBe(2);
+    expect(countOf(contentSrc, 'adapterFlagS1')).toBe(countOf(region, 'adapterFlagS1'));
     // источники счётчиков — уже существующие переменные (новых коллекций/кэшей нет)
     expect(contentSrc).toContain('var netMsgsS1 = lastBaseTexts.length;');
     // v2.0.31: список адаптера берётся ОДНИМ проходом (он же уходит в DOM-пик AI Studio),

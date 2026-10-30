@@ -272,7 +272,12 @@ function createSandbox(options) {
   const docView = opts.document && /** @type {any} */ (opts.document).defaultView;
   notes.push({ innerTextViewPatched: docView ? patchInnerText(docView) : false });
 
-  const debugLog = function debugLogNoop() { };
+  // v2.0.34: журнал debugLog для проверки анти-спама (level + аргументы), консоль не шумит.
+  const logs = [];
+  const debugLog = function debugLogRecord(level) {
+    const rest = Array.prototype.slice.call(arguments, 1);
+    logs.push({ level: String(level), args: rest });
+  };
 
   function mark(name) {
     called[name] = (called[name] || 0) + 1;
@@ -310,6 +315,7 @@ function createSandbox(options) {
     globalThis: win,
     errors: errors,
     called: called,
+    logs: logs,
     notes: notes
   };
   return sandbox;

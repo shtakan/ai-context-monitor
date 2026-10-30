@@ -23,11 +23,13 @@ class ClaudeAdapter extends BaseAdapter {
     super();
     this.siteName = 'claude';
     this.defaultModel = 'claude-sonnet-4-6';
-    debugLog('log', '[ClaudeAdapter] Инициализирован');
+    debugLog('debug', '[ClaudeAdapter] Инициализирован');
 
     // Последняя модель из сетевого ответа (заполняется событием из перехватчика)
     this._lastNetworkModel = '';
     this._modelLogSent = false;
+    // v2.0.34: разговор, для которого уже пояснили пустой DOM (анти-спам при emit).
+    this._stubLogConvId = '';
 
     // Слушаем модель из сетевого перехватчика
     if (typeof window !== 'undefined') {
@@ -56,7 +58,7 @@ class ClaudeAdapter extends BaseAdapter {
       var host = window.location.hostname;
       var path = window.location.pathname;
       var result = host === 'claude.ai' && path.indexOf('/chat/') === 0;
-      debugLog('log', '[ClaudeAdapter] isOnDialogPage: ' + result);
+      debugLog('debug', '[ClaudeAdapter] isOnDialogPage: ' + result);
       return result;
     } catch (error) {
       debugLog('error', '[ClaudeAdapter] Ошибка в isOnDialogPage:', error);
@@ -71,7 +73,16 @@ class ClaudeAdapter extends BaseAdapter {
   extractMessages() {
     // Запасной DOM-парсинг. Селекторы claude.ai нестабильны (React, нет data-testid).
     // Основной источник — сеть (core/claude-intercept.js).
-    debugLog('log', '[ClaudeAdapter] extractMessages: возвращаю пустой массив (основной источник — сеть)');
+    // v2.0.34: пустой массив — штатное поведение, поэтому debug и один раз на разговор.
+    var stubConvId = '';
+    try {
+      stubConvId = (typeof getCurrentConvId === 'function' ? getCurrentConvId() : '') ||
+        (window.location && window.location.pathname) || '';
+    } catch (eStub) { stubConvId = ''; }
+    if (stubConvId !== this._stubLogConvId) {
+      this._stubLogConvId = stubConvId;
+      debugLog('debug', '[ClaudeAdapter] extractMessages: возвращаю пустой массив (основной источник — сеть)');
+    }
     return [];
   }
 
@@ -85,7 +96,7 @@ class ClaudeAdapter extends BaseAdapter {
       if (this._lastNetworkModel) {
         if (!this._modelLogSent) {
           this._modelLogSent = true;
-          debugLog('log', '[ClaudeAdapter] модель из сети: ' + this._lastNetworkModel);
+          debugLog('debug', '[ClaudeAdapter] модель из сети: ' + this._lastNetworkModel);
         }
         return this._lastNetworkModel;
       }

@@ -23,11 +23,13 @@ class PerplexityAdapter extends BaseAdapter {
     super();
     this.siteName = 'perplexity';
     this.defaultModel = 'turbo';
-    debugLog('log', '[PerplexityAdapter] Инициализирован');
+    debugLog('debug', '[PerplexityAdapter] Инициализирован');
 
     // Последняя модель из сетевого ответа (заполняется событием из перехватчика)
     this._lastNetworkModel = '';
     this._modelLogSent = false;
+    // v2.0.34: разговор, для которого уже пояснили пустой DOM (анти-спам при emit).
+    this._stubLogConvId = '';
 
     // Слушаем модель из сетевого перехватчика
     if (typeof window !== 'undefined') {
@@ -57,7 +59,7 @@ class PerplexityAdapter extends BaseAdapter {
       var path = window.location.pathname;
       var result = (host === 'www.perplexity.ai' || host === 'perplexity.ai') &&
         (path.indexOf('/search/') === 0 || path.indexOf('/thread/') === 0);
-      debugLog('log', '[PerplexityAdapter] isOnDialogPage: ' + result);
+      debugLog('debug', '[PerplexityAdapter] isOnDialogPage: ' + result);
       return result;
     } catch (error) {
       debugLog('error', '[PerplexityAdapter] Ошибка в isOnDialogPage:', error);
@@ -71,7 +73,16 @@ class PerplexityAdapter extends BaseAdapter {
    */
   extractMessages() {
     // Запасной DOM-парсинг. Основной источник — сеть (core/perplexity-intercept.js).
-    debugLog('log', '[PerplexityAdapter] extractMessages: возвращаю пустой массив (основной источник — сеть)');
+    // v2.0.34: пустой массив — штатное поведение, поэтому debug и один раз на разговор.
+    var stubConvId = '';
+    try {
+      stubConvId = (typeof getCurrentConvId === 'function' ? getCurrentConvId() : '') ||
+        (window.location && window.location.pathname) || '';
+    } catch (eStub) { stubConvId = ''; }
+    if (stubConvId !== this._stubLogConvId) {
+      this._stubLogConvId = stubConvId;
+      debugLog('debug', '[PerplexityAdapter] extractMessages: возвращаю пустой массив (основной источник — сеть)');
+    }
     return [];
   }
 
@@ -85,7 +96,7 @@ class PerplexityAdapter extends BaseAdapter {
       if (this._lastNetworkModel) {
         if (!this._modelLogSent) {
           this._modelLogSent = true;
-          debugLog('log', '[PerplexityAdapter] модель из сети: ' + this._lastNetworkModel);
+          debugLog('debug', '[PerplexityAdapter] модель из сети: ' + this._lastNetworkModel);
         }
         return this._lastNetworkModel;
       }

@@ -200,11 +200,39 @@
     };
   }
 
+  // v2.0.34: Perplexity дописывает в адрес истории limit=20&offset=0&from_first=false —
+  // это урезанный снимок (последние 20 записей). Для шаблона полной истории такие
+  // параметры выкидываем, остальные (with_parent_info и т.п.) и #hash сохраняем.
+  function stripPerplexityHistoryTruncation(urlStr) {
+    var src = String(urlStr || '');
+    if (!src) return src;
+    var hash = '';
+    var h = src.indexOf('#');
+    if (h !== -1) { hash = src.slice(h); src = src.slice(0, h); }
+    var q = src.indexOf('?');
+    if (q === -1) return src + hash;
+    var base = src.slice(0, q);
+    var parts = src.slice(q + 1).split('&');
+    var kept = [];
+    for (var i = 0; i < parts.length; i++) {
+      if (!parts[i]) continue;
+      var name = parts[i].split('=')[0];
+      if (name === 'limit' || name === 'offset' || name === 'from_first') continue;
+      kept.push(parts[i]);
+    }
+    return base + (kept.length ? '?' + kept.join('&') : '') + hash;
+  }
+
   // Универсальный экспорт: браузер и Node
   if (typeof window !== 'undefined') {
     window.parsePerplexityThread = parsePerplexityThread;
+    // v2.0.34: новый хелпер не объявлен в types/globals.d.ts — приводим window к any локально.
+    /** @type {any} */ (window).stripPerplexityHistoryTruncation = stripPerplexityHistoryTruncation;
   }
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { parsePerplexityThread: parsePerplexityThread };
+    module.exports = {
+      parsePerplexityThread: parsePerplexityThread,
+      stripPerplexityHistoryTruncation: stripPerplexityHistoryTruncation
+    };
   }
 })();

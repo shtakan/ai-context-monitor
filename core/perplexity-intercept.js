@@ -221,6 +221,19 @@
     return false;
   }
 
+  // v2.0.34: шаблон истории не должен закреплять урезанный адрес Perplexity
+  // (limit=20&offset=0&from_first=false) — иначе bootstrap тянет лишь последние 20 записей.
+  // Чистая функция живёт в utils/perplexity-parser.js (инжектится раньше этого файла).
+  function normalizeHistoryUrl(urlStr) {
+    var u = String(urlStr || '');
+    try {
+      if (typeof window !== 'undefined' && typeof window.stripPerplexityHistoryTruncation === 'function') {
+        return window.stripPerplexityHistoryTruncation(u);
+      }
+    } catch (eNorm) {}
+    return u;
+  }
+
   // M-14: выучить historyUrlTemplate из URL, отклонённого гейтом M-12 (id-сегмент → {slug}).
   // Это ТОЛЬКО адрес: данные отклонённого снимка не эмитим, состояние (snapshotReceived/
   // lastHistoryUrl, уже выученный шаблон) не трогаем. Учим лишь URL полного набора — иначе
@@ -232,7 +245,7 @@
     var m = url.match(/\/(?:search|thread|rest\/thread|api\/thread)\/([^\/?#]+)/);
     if (!m) return false;
     // id-сегмент → {slug}: заменяем ровно совпавший фрагмент пути, хвост URL (query) сохраняем
-    historyUrlTemplate = url.slice(0, m.index) + m[0].slice(0, m[0].length - m[1].length) + '{slug}' + url.slice(m.index + m[0].length);
+    historyUrlTemplate = normalizeHistoryUrl(url.slice(0, m.index) + m[0].slice(0, m[0].length - m[1].length) + '{slug}' + url.slice(m.index + m[0].length));
     debugLog('log', '[perplexity-intercept] гейт M-12: шаблон выучен из URL отклонённого снимка: ' + historyUrlTemplate);
     return true;
   }
@@ -369,7 +382,7 @@
       else { var enc2 = encodeURIComponent(currentConvId); if (url.indexOf(enc2) !== -1) slugToReplace = enc2; }
     }
     if (slugToReplace) {
-      historyUrlTemplate = url.replace(slugToReplace, '{slug}');
+      historyUrlTemplate = normalizeHistoryUrl(url.replace(slugToReplace, '{slug}'));
       debugLog('log', '[perplexity-intercept] historyUrlTemplate выучен: ' + historyUrlTemplate);
       if (currentConvId && !snapshotReceived) {
         if (bootstrapTimer) { clearTimeout(bootstrapTimer); bootstrapTimer = null; }

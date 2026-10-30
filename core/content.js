@@ -2241,12 +2241,16 @@ function processAndSend() {
       var netMsgsS1 = lastBaseTexts.length;
       aiCmDomListS1 = (typeof currentAdapter.extractMessages === 'function') ? currentAdapter.extractMessages() : [];
       var domMsgsS1 = aiCmDomListS1.length;
+      // v2.0.34: у Claude/Perplexity DOM-адаптер — намеренная заглушка (источник — сеть).
+      // Флаг рядом с msgs=0 объясняет, что это by design, а не сломанный парсер.
+      var adapterFlagS1 = (siteNameS1 === 'claude' || siteNameS1 === 'perplexity') ? 'stub' : 'dom';
       debugLog('log', '[AI CM][svc-emit-trace] site=' + siteNameS1 +
         ' convId=' + (getCurrentConvId() || '') +
         ' msgs=' + domMsgsS1 +
         ' domMsgs=' + domMsgsS1 +
         ' netMsgs=' + netMsgsS1 +
-        ' histWritePath=' + histWritePathS1);
+        ' histWritePath=' + histWritePathS1 +
+        ' adapter=' + adapterFlagS1);
     }
   } catch (eS1) { }
 
@@ -2690,6 +2694,9 @@ function processAndSend() {
           percent: percentage,
           updatedAt: Date.now(),
           stale: stale,
+          // v2.0.34: размер сетевого снимка. Попап включает ручной экспорт и при пустом DOM,
+          // если сеть отдала реплики (Claude/Perplexity: extractMessages() === [] по дизайну).
+          netBaseMsgs: lastBaseTexts.length,
           // T1 (v1.16): источник первого/второго яруса для индикатора в попапе
           sourceKind: (function () { try { var si = aiCmSourceInfo(); return si ? si.kind : ''; } catch (eSi) { return ''; } })(),
           sourceLabel: (function () { try { var si2 = aiCmSourceInfo(); return si2 ? si2.label : ''; } catch (eSi2) { return ''; } })()

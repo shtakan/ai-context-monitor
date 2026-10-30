@@ -725,6 +725,9 @@ function loadStats() {
         if (state) {
           cachedState = state;
           updateStatsFromState(state, tabHost, tabPath);
+          // v2.0.34: state несёт netBaseMsgs — пересчитать доступность экспорта сразу,
+          // не дожидаясь aiCmHistory (сетевой снимок уже есть).
+          updateExportButtons();
         } else if (cachedState && cachedState.host === tabHost) {
           // v31: свежих данных нет — НЕ сбрасываем экран, показываем последний кэш своего хоста
           // M-4.3: и честно помечаем его кэшем (fromCache=true) — не «live (сеть/DOM)»
@@ -773,6 +776,8 @@ try {
         cachedState = null;
         showNoData(aiCmI18nMessage('options_open_supported_site', 'Откройте поддерживаемый сайт'));
         updateStaleWarning(null, tabHost, '');
+        // v2.0.34: снимок сброшен — кнопки снова зависят только от записи aiCmHistory.
+        updateExportButtons();
       });
       return;
     }
@@ -795,6 +800,7 @@ try {
       if (best) {
         cachedState = best;
         updateStatsFromState(best, tabHost, tabPath);
+        updateExportButtons();
       }
     });
   });
@@ -823,6 +829,12 @@ function getActiveTabHost(cb) {
 function updateExportButtons() {
   if (!exportMdBtn || !exportJsonBtn || !exportPdfBtn) return;
   var enabled = !!(cachedHistory && cachedHistory.host === currentTabHost);
+  // v2.0.34: сетевой снимок — полноправный источник экспорта. У Claude/Perplexity DOM-адаптер
+  // по дизайну возвращает 0 реплик, поэтому одних только кнопок по aiCmHistory недоставало:
+  // структура готова, но запись истории могла ещё не доехать. netBaseMsgs > 0 разблокирует.
+  var netMsgs = (cachedState && cachedState.host === currentTabHost &&
+    typeof cachedState.netBaseMsgs === 'number') ? cachedState.netBaseMsgs : 0;
+  if (!enabled && netMsgs > 0) enabled = true;
   exportMdBtn.disabled = !enabled;
   exportJsonBtn.disabled = !enabled;
   exportPdfBtn.disabled = !enabled;
@@ -831,7 +843,10 @@ function updateExportButtons() {
     // v31: при наличии кэша того же хоста — пометка времени, как в статистике
     // M-4.2: обе ветки — ключи options_* (фолбэк — прежний русский текст)
     if (enabled) {
-      var exportAt = formatTime(cachedHistory.updatedAt);
+      var hintAt = (cachedHistory && cachedHistory.host === currentTabHost)
+        ? cachedHistory.updatedAt
+        : (cachedState ? cachedState.updatedAt : 0);
+      var exportAt = formatTime(hintAt);
       exportHintEl.textContent = aiCmI18nMessage('options_ready_to_export', 'Готово к экспорту · данные от ' + exportAt, [exportAt]);
     } else {
       exportHintEl.textContent = aiCmI18nMessage('options_open_supported_site', 'Откройте поддерживаемый сайт');
@@ -932,7 +947,9 @@ function getCurrentConvSnapshot(cb) {
 // v1.13.1: convId известен → экспортируем снимок текущего разговора (даже пустой);
 // convId пуст / content-скрипт недоступен → прежнее host-level поведение (cachedHistory).
 function pickExportHistory(snap) {
-  if (snap && snap.convId) return snap;
+  // v2.0.34: сетевой снимок с репликами валиден и без convId (адаптеры-заглушки):
+  // пустой DOM больше не подменяет свежую сеть старой host-level историей.
+  if (snap && (snap.convId || (Array.isArray(snap.messages) && snap.messages.length > 0))) return snap;
   return cachedHistory;
 }
 
