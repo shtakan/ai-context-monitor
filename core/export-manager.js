@@ -1255,10 +1255,13 @@ function aiCmAutoExportDecisionDiag(percentage, verdictSkip, reason) {
 
 // O-54: неполнота базы в середине курсорной пагинации (O-53). Сетевой снимок уже пришёл
 // (baseSeen), но полноты нет (historyComplete=false → baseComplete=false) — автоэкспорт
-// обязан ждать честного финального снимка. Предикат сайта живёт здесь, рядом с остальными:
+// обязан ждать честного финального снимка. R1: мягкий финал (time-cap/page-cap/no-gain)
+// приходит сюда булевым partialSoft=true — база неполная, но продолжать нечем, экспорт
+// разрешён с [LOW CONFIDENCE]_. Предикат сайта живёт здесь, рядом с остальными:
 // в emit-пайплайн имена платформ не проникают (пин O-37). Прочие сайты — всегда false.
-function aiCmHistoryPaginationIncomplete(site, baseSeen, baseComplete) {
-  return site === 'qwen' && baseSeen === true && baseComplete !== true;
+// 4-й аргумент аддитивен: старый 3-аргументный вызов (partialSoft === undefined) → true.
+function aiCmHistoryPaginationIncomplete(site, baseSeen, baseComplete, partialSoft) {
+  return site === 'qwen' && baseSeen === true && baseComplete !== true && partialSoft !== true;
 }
 
 function maybeAutoExport(percentage) {
@@ -1344,9 +1347,13 @@ function maybeAutoExport(percentage) {
         // в автоэкспорт-контур не проникает — пин v54/G). false → поведение всех платформ 1:1.
         domBaseTrusted: (typeof aiCmAutoExportTrustedBase === 'function') ? (aiCmAutoExportTrustedBase() === true) : false,
         // O-54: Qwen (O-53) — сеть базу отдала, полноты ещё нет → экспорт ждёт конца пагинации.
-        // typeof-гард: срез-песочницы тестов грузят только функцию гейта — вердикт прежний.
+        // R1: soft-final (time-cap/page-cap/no-gain) снимает ожидание; typeof-гард под срез-
+        // песочницы: реестра нет → partialSoft=false → поведение O-54 прежнее.
         historyIncomplete: (typeof aiCmHistoryPaginationIncomplete === 'function')
-          ? aiCmHistoryPaginationIncomplete(siteName, baseSeen === true, baseComplete === true) : false,
+          ? aiCmHistoryPaginationIncomplete(siteName, baseSeen === true, baseComplete === true,
+              (typeof aiCmPartialSoftByConv === 'object' && aiCmPartialSoftByConv)
+                ? aiCmPartialSoftByConv[cid] === true : false)
+          : false,
         // O-27 (b/c): сайт + факты страницы (см. shouldSkipGsaPageGuard)
         site: siteName,
         chatPageMarker: gsaChatMarker,
@@ -1664,9 +1671,14 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
     // v81 (2.5): low-confidence НЕ ставится автоматически для не-Gemini (полный DOM-адаптер);
     // для Gemini — прежний флаг v63 (aiCmLowConfidenceByConv).
     // v1.18 (F4): для GSA — РОВНО baseComplete=0 (префикс [LOW CONFIDENCE]_ в ручном шаблоне).
+    // R1: для Qwen — неполная база + soft-final (time-cap/page-cap/no-gain). Прочие сайты
+    // по-прежнему false (пин O-37: qwen-ветка только здесь, имена платформ не в пайплайне).
     var lowConfD = (siteNameD === 'gemini')
       ? (aiCmLowConfidenceByConv[cid] === true)
-      : ((siteNameD === 'google_search') ? (baseComplete !== true) : false);
+      : ((siteNameD === 'google_search') ? (baseComplete !== true)
+      : ((siteNameD === 'qwen') ? (baseComplete !== true &&
+          typeof aiCmPartialSoftByConv === 'object' && aiCmPartialSoftByConv &&
+          aiCmPartialSoftByConv[cid] === true) : false));
     // v1.18 (F7): модель снапшота для имени файла GSA. lastSnapshotModelName заполняется для
     // GSA в resolveCurrentModel (реальная модель: сеть → DOM → дефолт сайта, как у бейджа);
     // фолбэк 'model' в buildGsaExportFileName остаётся ТОЛЬКО при реально пустой модели.

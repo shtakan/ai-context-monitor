@@ -233,6 +233,8 @@ function resetConversationState() {
   try { aiCmBaseConfirmedByConv = {}; } catch (eReset2) { }
   // v63: low-confidence флаг тоже не перетекает в другой чат
   try { aiCmLowConfidenceByConv = {}; } catch (eResetLc63) { }
+  // R1: soft-final флаг Qwen (time-cap/page-cap/no-gain) — тоже на чат, не перетекает
+  try { aiCmPartialSoftByConv = {}; } catch (eResetPs63) { }
   // v54: сброс детектора обрезки и pre-trim латчей при смене чата (не перетекают в другой чат)
   try { trimProbe = {}; preTrimExportFired = {}; trimRetryByConv = {}; } catch (eTrimReset) { }
   // v2.0.30 (AI Studio): кэш разобранной истории в sessionStorage — запись ПРЕДЫДУЩЕГО

@@ -27,9 +27,20 @@
   var MESSAGE_DEPTH_CAP = 8;
   // Generic-имена курсора — на случай дрейфа схемы (сейчас их в payload нет).
   var CURSOR_NAMES = ['next_cursor', 'nextCursor', 'cursor', 'page_token', 'next_page_token'];
+  // R1 (v111): «мягкий финал» пагинации — база НЕПОЛНАЯ, но продолжать нечем/незачем:
+  //   time-cap / page-cap — исчерпан наш страховочный потолок при живом курсоре;
+  //   no-gain — страница не дала ходов (граница истории при живом курсоре).
+  // Это не фатальная ошибка (error/cursor-loop): автоэкспорт разрешён с [LOW CONFIDENCE]_.
+  // Классификация причин живёт ТОЛЬКО здесь — в пайплайн/export-manager уходит булев.
+  var SOFT_PARTIAL_REASONS = ['time-cap', 'page-cap', 'no-gain'];
 
   function isUuid(v) {
     return typeof v === 'string' && UUID_RE.test(v);
+  }
+
+  // R1: причина финала пагинации относится к «мягким» (см. SOFT_PARTIAL_REASONS).
+  function isSoftPartialReason(reason) {
+    return SOFT_PARTIAL_REASONS.indexOf(String(reason || '')) !== -1;
   }
 
   // Обход JSON в порядке появления ключей; visit(node) === false останавливает обход.
@@ -183,7 +194,9 @@
     PAGE_LIMIT: PAGE_LIMIT,
     DEFAULT_PAGE_CAP: DEFAULT_PAGE_CAP,
     DEFAULT_TIME_CAP_MS: DEFAULT_TIME_CAP_MS,
+    SOFT_PARTIAL_REASONS: SOFT_PARTIAL_REASONS,
     isUuid: isUuid,
+    isSoftPartialReason: isSoftPartialReason,
     historyPageUrl: historyPageUrl,
     paginationInfo: paginationInfo,
     nextCursorOf: nextCursorOf,

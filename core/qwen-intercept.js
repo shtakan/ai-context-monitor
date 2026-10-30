@@ -936,12 +936,16 @@
   }
 
   // ===== EMIT: контракт ai-cm-full-history (как у DeepSeek, только нужные Qwen поля) =====
-  function buildSignature(serverTokens, complete) {
+  function buildSignature(serverTokens, complete, soft) {
     try {
       var parts = [String(currentChatId || ''), String(turns.length), String(serverTokens || 0)];
       // O-53: полнота — часть сигнатуры. Иначе промежуточный (complete=false) и финальный
       // (complete=true) снимки одной базы дедупятся и финальный emit теряется.
       parts.push('c:' + (complete === false ? 0 : 1));
+      // R1: мягкий финал (time-cap/page-cap/no-gain) идёт с тем же complete=false и тем же
+      // набором ходов, что и последний промежуточный эмит, поэтому без этого слагаемого он
+      // дедупился бы как same-signature (R-1 плана) и фикс был бы недетерминирован.
+      parts.push('s:' + (soft === true ? 1 : 0));
       for (var i = 0; i < turns.length; i++) {
         var t = turns[i];
         parts.push(t.key + ':' + t.userKey + ':' + t.order + ':' +
@@ -973,7 +977,7 @@
     // O-53: полнота приходит из источника снимка. Дефолт — true: живой SSE авторитетен
     // (контракт O-35/O-39 не меняется), неполноту объявляет только пагинация истории.
     var complete = (s.complete !== false);
-    var sig = buildSignature(serverTokens, s.complete);
+    var sig = buildSignature(serverTokens, s.complete, (s.partialSoft === true && complete === false));
     if (sig !== null && dispatchSig !== null && sig === dispatchSig) {
       diagLine('emit-skip', { reason: 'same-signature' });
       return lastDispatchResult;
@@ -1041,6 +1045,10 @@
       // partial — диагностика неполной базы для UI/экспорта: сколько страниц добрано и почему
       // остановились (in-progress/error/no-gain/page-cap/time-cap/cursor-loop).
       partial: complete ? null : (s.partial || { pages: 0, reason: 'in-progress' }),
+      // R1: мягкий финал (time-cap/page-cap/no-gain) — база неполная, но продолжать нечем:
+      // автоэкспорт разрешён с префиксом [LOW CONFIDENCE]_. Аддитивное булево: у прочих
+      // сайтов и у честного/промежуточного снимка — false (O-54 не ослабляется).
+      partialSoft: complete ? false : (s.partialSoft === true),
       baseEmpty: false,
       // ===== O-47 (badge-метрика Qwen): serverTokens В detail НЕ УЕЗЖАЕТ =====
       // Корень дефекта: usage.input из SSE — КУМУЛИРУЕМОЕ сервисом потребление API (input
@@ -1300,9 +1308,15 @@
     var st = pq;
     st.running = false;
     st.partialReason = (reason === 'end') ? '' : reason;
+    // R1: классификация «мягкого финала» живёт только в чистом модуле пагинации
+    // (isSoftPartialReason); сюда уходит булев. В срез-песочницах тестов модуля нет —
+    // тогда soft=false (поведение O-54 сохраняется).
+    var pqApi = qwenPaginationApi();
+    var soft = (pqApi && typeof pqApi.isSoftPartialReason === 'function')
+      ? pqApi.isSoftPartialReason(reason) === true : false;
     diagTag('qwen-history', {
       ts: Date.now(), event: 'paginate', chat: String(st.chatId || '').slice(0, 8),
-      pages: st.pages, reason: reason, added: turns.length,
+      pages: st.pages, reason: reason, soft: soft ? 1 : 0, added: turns.length,
       elapsed: Date.now() - st.startTs, cursorSrc: st.cursorSrc
     });
     var honest = (reason === 'end');
@@ -1311,7 +1325,8 @@
         chatId: st.chatId,
         url: st.url,
         complete: honest,
-        partial: honest ? null : { pages: st.pages, reason: reason }
+        partial: honest ? null : { pages: st.pages, reason: reason },
+        partialSoft: (!honest && soft)
       });
     } catch (eFin) { swallow(eFin, 'qwen:paginate-finish'); }
   }

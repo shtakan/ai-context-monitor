@@ -231,6 +231,10 @@ var aiCmBaseConfirmedByConv = {};
 // v63: convId → true — база подтверждена только sanity-фолбэком (low confidence);
 // читается при записи histSnapshot (поле isLowConfidenceBase → префикс имени файла).
 var aiCmLowConfidenceByConv = {};
+// R1: convId → true — база Qwen неполная, но продолжать нечем (soft-final: time-cap/
+// page-cap/no-gain). Автоэкспорт разрешён, имя файла получает префикс [LOW CONFIDENCE]_.
+// Классификация причин живёт в core/qwen-pagination.js; сюда доезжает только булев.
+var aiCmPartialSoftByConv = {};
 // v53: convId → 1 — «ждём поздний re-check, когда база впервые станет полной».
 // Одноразовый: гасится после фактического re-check (см. aiCmTryLateAutoExport).
 var aiCmLateCheckByConv = {};
@@ -551,6 +555,9 @@ function aiCmLatchRemove(service, convId) {
   Object.defineProperty(Api, 'aiCmLowConfidenceByConv', { enumerable: true,
     get: function () { return aiCmLowConfidenceByConv; },
     set: function (value) { aiCmLowConfidenceByConv = value; } });
+  Object.defineProperty(Api, 'aiCmPartialSoftByConv', { enumerable: true,
+    get: function () { return aiCmPartialSoftByConv; },
+    set: function (value) { aiCmPartialSoftByConv = value; } });
   Object.defineProperty(Api, 'aiCmLateCheckByConv', { enumerable: true,
     get: function () { return aiCmLateCheckByConv; },
     set: function (value) { aiCmLateCheckByConv = value; } });

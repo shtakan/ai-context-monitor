@@ -703,6 +703,15 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
     // v63: флаг low-confidence базы (sanity-фолбэк без proof) — попадает в histSnapshot → имя файла
     try { aiCmLowConfidenceByConv[emitConvId] = (detail.isLowConfidenceBase === true); } catch (eLc63) { }
   }
+  // R1: мягкий финал пагинации Qwen (time-cap/page-cap/no-gain) — реестр по разговору,
+  // ВНЕ if (emitConvId): Qwen в снимке отдаёт chatId, но НЕ convId, поэтому emitConvId пуст.
+  // Ключ — chatId (он же id в URL /c/<id> и он же aiCmAutoExportConvId). Тот же emit ниже
+  // доходит до processAndSend → maybeAutoExport, где гейт уже видит флаг.
+  var softKey63 = detail.chatId || emitConvId ||
+                  (typeof getCurrentConvId === 'function' ? (getCurrentConvId() || '') : '');
+  if (softKey63) {
+    try { aiCmPartialSoftByConv[softKey63] = (detail.partialSoft === true); } catch (ePs63) { }
+  }
   // v79: переход baseComplete 0→1 — re-check автоэкспорта. v82 (D1): блок ПЕРЕНЕСЁН
   // в КОНЕЦ слушателя (после присвоений baseText/lastBaseTexts/lastDetailMessages/baseSeen
   // и после финального processAndSend) — раньше вызов стоял ДО применения базы, fired шёл

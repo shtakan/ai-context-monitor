@@ -329,6 +329,8 @@ declare let aiCmCursorLiveByConv: Record<string, boolean | number>;
 declare let aiCmBaseConfirmedByConv: Record<string, number>;
 /** v63: convId → true/1 — база подтверждена (sanity-фолбэк без proof = true; reachedStart = 1). */
 declare let aiCmLowConfidenceByConv: Record<string, boolean | number>;
+/** R1: chatId → true — Qwen-база неполная, но soft-final (time-cap/page-cap/no-gain); префикс [LOW CONFIDENCE]_. */
+declare let aiCmPartialSoftByConv: Record<string, boolean>;
 /** v53: convId → true — ждём поздний re-check (гасится после фактического re-check). */
 declare let aiCmLateCheckByConv: Record<string, number>;
 /** v54: trimProbe[cid] = {maxCount, firstIds, suspectPending} — эталон последнего ПОЛНОГО снимка. */

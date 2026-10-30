@@ -101,7 +101,8 @@ describe('O-53: форма модуля и UUID-курсор', function () {
     expect(P.PAGE_LIMIT).toBe(10);
     expect(P.DEFAULT_PAGE_CAP).toBe(10);
     expect(P.DEFAULT_TIME_CAP_MS).toBe(30000);
-    ['isUuid', 'historyPageUrl', 'paginationInfo', 'nextCursorOf',
+    expect(P.SOFT_PARTIAL_REASONS).toEqual(['time-cap', 'page-cap', 'no-gain']);
+    ['isUuid', 'historyPageUrl', 'paginationInfo', 'nextCursorOf', 'isSoftPartialReason',
       'oldestMessageId', 'pageStepDecision', 'assignPageOrders'].forEach(function (name) {
       expect(typeof P[name]).toBe('function');
     });
@@ -115,6 +116,38 @@ describe('O-53: форма модуля и UUID-курсор', function () {
     expect(P.isUuid('')).toBe(false);
     expect(P.isUuid(null)).toBe(false);
     expect(P.isUuid(42)).toBe(false);
+  });
+});
+
+describe('R1: isSoftPartialReason — мягкий финал пагинации', function () {
+  // Truth table: мягкий финал = исчерпан наш потолок или страница не дала ходов при
+  // живом курсоре. error (состояние неизвестно) и cursor-loop (баг курсора) — жёсткие.
+  const TABLE = [
+    ['time-cap', true],
+    ['page-cap', true],
+    ['no-gain', true],
+    ['end', false],
+    ['error', false],
+    ['cursor-loop', false],
+    ['in-progress', false],
+    ['no-start', false],
+    ['', false]
+  ];
+  test('truth table причин завершения', function () {
+    TABLE.forEach(function (row) {
+      expect(P.isSoftPartialReason(row[0])).toBe(row[1]);
+    });
+  });
+
+  test('не-строки и мусор не становятся мягкой причиной', function () {
+    expect(P.isSoftPartialReason(null)).toBe(false);
+    expect(P.isSoftPartialReason(undefined)).toBe(false);
+    expect(P.isSoftPartialReason(0)).toBe(false);
+    expect(P.isSoftPartialReason({})).toBe(false);
+    expect(P.isSoftPartialReason(true)).toBe(false);
+    expect(P.isSoftPartialReason(' time-cap')).toBe(false);
+    expect(P.isSoftPartialReason('time-cap ')).toBe(false);
+    expect(P.isSoftPartialReason('TIME-CAP')).toBe(false);
   });
 });
 
@@ -428,6 +461,14 @@ describe('O-54: гейт автоэкспорта — Qwen ждёт конца �
       .toEqual({ skip: false, reason: null, resetFired: false });
   });
 
+  test('R1: мягкий финал (historyIncomplete=false при baseComplete=false) — файл разрешён', function () {
+    // time-cap/page-cap/no-gain: база неполная, но продолжать нечем. Гейт получает
+    // historyIncomplete=false (его свернул предикат с partialSoft=true) — экспорт идёт,
+    // а [LOW CONFIDENCE]_ ставит export-manager.
+    expect(Gate.shouldSkipAutoExport(qwen({ baseComplete: false, historyIncomplete: false })))
+      .toEqual({ skip: false, reason: null, resetFired: false });
+  });
+
   test('DOM-путь Qwen без сети (baseSeen=false) не заблокирован — как O-37', function () {
     expect(Gate.shouldSkipAutoExport(qwen({ baseSeen: false, historyIncomplete: false })))
       .toEqual({ skip: false, reason: null, resetFired: false });
@@ -449,18 +490,34 @@ describe('O-54: гейт автоэкспорта — Qwen ждёт конца �
 describe('O-54: предикат неполноты базы — только Qwen (core/export-manager.js)', function () {
   const MGR_SRC = fs.readFileSync(path.join(__dirname, '..', 'core', 'export-manager.js'), 'utf8');
 
-  function incomplete(site, baseSeen, baseComplete) {
+  function incomplete(site, baseSeen, baseComplete, partialSoft) {
     const ctx = {};
     const fn = new Function('ctx',
       'with (ctx) { ' + fnDecl(MGR_SRC, 'aiCmHistoryPaginationIncomplete') +
       '\n return aiCmHistoryPaginationIncomplete; }')(ctx);
-    return fn(site, baseSeen, baseComplete);
+    return fn(site, baseSeen, baseComplete, partialSoft);
   }
 
   test('Qwen: сеть без полноты — true; честный конец и отсутствие снимка — false', function () {
     expect(incomplete('qwen', true, false)).toBe(true);
     expect(incomplete('qwen', true, true)).toBe(false);
     expect(incomplete('qwen', false, false)).toBe(false);
+  });
+
+  test('R1: 4-й аргумент partialSoft снимает блокировку только у qwen', function () {
+    // Мягкий финал: база неполная, но продолжать нечем → гейт не блокирует.
+    expect(incomplete('qwen', true, false, true)).toBe(false);
+    // Не мягкий финал (error/cursor-loop/in-progress) — поведение O-54 прежнее.
+    expect(incomplete('qwen', true, false, false)).toBe(true);
+    // Старый 3-аргументный вызов (partialSoft === undefined) — true, O-54 не ослаблен.
+    expect(incomplete('qwen', true, false)).toBe(true);
+    expect(incomplete('qwen', true, false, undefined)).toBe(true);
+    // Полнота важнее флага: честный конец не становится «неполным» из-за soft.
+    expect(incomplete('qwen', true, true, true)).toBe(false);
+    // Строго qwen-only: флаг у прочих платформ ничего не разрешает.
+    ['deepseek', 'gemini', 'chatgpt', 'claude', 'google_search', 'perplexity'].forEach(function (site) {
+      expect(incomplete(site, true, false, true)).toBe(false);
+    });
   });
 
   test('прочие платформы — всегда false, даже при неполном сетевом снимке', function () {
