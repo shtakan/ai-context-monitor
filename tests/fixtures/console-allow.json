@@ -7,7 +7,7 @@
     "utils/debug.js"
   ],
   "definition": "Step E.2c-B2c-1 (канал B закрыт). Allow-list стража tests/no-bare-console-warn.test.js: строки, которым разрешено трогать console.* напрямую. Запись = { file, category, lines[], reason }; каждая строка обязана указывать на РЕАЛЬНЫЙ сайт (мёртвая запись валит страж). Легальные категории после B2c-1: (1) logger-definition — сам модуль-обёртка utils/debug.js (в SCAN_DIRS не входит, но сканируется явно) и SW-дубль debugLog в core/background.js; (2) a-class-critical — сайты A-класса (§4.3.4 плана: importScripts/registerContentScripts — гейтирование = потеря единственного сигнала, фолбэка нет); (3) diag-zone-deferred — core/deepseek-diag.js (§4.3.6: 6 сайтов отложены — 3 функции без внутреннего гейта и 2 инверсных пары). Все прочие bare console.warn в core/ и adapters/ — канал B: они мигрированы на aiCmDiagWarn в шаге B2c-1 и в этот список попадать НЕ ДОЛЖНЫ. Внесение мигрированного сайта в allow-list = сокрытие регресса.",
-  "totalEntries": 11,
+  "totalEntries": 12,
   "groups": [
     {
       "file": "utils/debug.js",
@@ -34,6 +34,14 @@
         368
       ],
       "reason": "A-class: registerContentScripts failure is critical; not migrated"
+    },
+    {
+      "file": "core/aistudio-intercept.js",
+      "category": "triage-diagnostic",
+      "lines": [
+        464
+      ],
+      "reason": "v2.0.34: промах парсера истории AI Studio — единственный внешне невидимый отказ (события нет). План триажа требует ОДИН компактный console.warn на форму тела (reason/rootLen/root13/arrays, без текста) независимо от гейта aiCmDebug: под гейтом уже печатается aistudio-history-empty, поэтому aiCmDiagWarn не дал бы нового сигнала. Дедуп по отпечатку формы (lastSnapshotWarnSig), вызов защищён try/catch."
     },
     {
       "file": "core/deepseek-diag.js",

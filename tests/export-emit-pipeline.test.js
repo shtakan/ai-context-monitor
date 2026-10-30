@@ -164,29 +164,38 @@ describe('M-11: extractConvIdFromUrl — Perplexity /search/<id>', () => {
   });
 });
 
-// —— convId-ловушка: /app/<литерал пути> — НЕ идентификатор диалога ——
+// —— convId AI Studio: /prompts/<id> — идентификатор диалога (v2.0.34) ——
 // Диагностика (Plan-aistudio-servicekey, ШАГ 2): первая ветка extractConvIdFromUrl
 // `/\/app\/([A-Za-z0-9_-]+)/` на AI Studio `/app/prompts/abc123` возвращала ЛИТЕРАЛ
-// сегмента 'prompts' — convId выдумывался из имени раздела. Разделы prompts/apikey —
-// не диалоги: надёжного id нет → '' (контракт модуля — пустая строка, не null).
-describe('convId-ловушка: /app/<литерал пути> → "" (не литерал)', () => {
-  test('P1: /app/prompts/abc123 → "" — литерал сегмента НЕ возвращается', () => {
+// сегмента 'prompts'. После фикса литералы prompts/new/new_chat/apikey по-прежнему НЕ id,
+// а реальный сегмент после /prompts/ — id (живая форма URL AI Studio).
+describe('convId AI Studio: /prompts/<id> → id; литералы разделов → ""', () => {
+  test('P1: /prompts/<id> и /app/prompts/<id> → id — литерал сегмента НЕ возвращается', () => {
     const got = P.extractConvIdFromUrl('/app/prompts/abc123');
     expect(got).not.toBe('prompts');
-    expect(got).toBe('');
+    expect(got).toBe('abc123');
     // современная форма без /app/ — тот же вердикт (обе формы URL покрыты)
-    expect(P.extractConvIdFromUrl('/prompts/abc123')).toBe('');
+    expect(P.extractConvIdFromUrl('/prompts/abc123')).toBe('abc123');
+    // живой AI Studio id — длинный смешанный регистр, цифры, '-' и '_'
+    const live = '1gHphAbCdEf_123-XyZ';
+    expect(P.extractConvIdFromUrl('/prompts/' + live)).toBe(live);
+    expect(P.extractConvIdFromUrl('/app/prompts/' + live)).toBe(live);
+    expect(P.extractConvIdFromUrl('/prompts/abc123?foo=1#bar')).toBe('abc123');
   });
 
-  test('P2: /app/prompts/new → "" (обе формы)', () => {
+  test('P2: литералы /prompts/new, /prompts/new_chat и /app/prompts → ""', () => {
     expect(P.extractConvIdFromUrl('/app/prompts/new')).toBe('');
     expect(P.extractConvIdFromUrl('/prompts/new')).toBe('');
+    expect(P.extractConvIdFromUrl('/prompts/new_chat')).toBe('');
+    expect(P.extractConvIdFromUrl('/app/prompts/new_chat')).toBe('');
     expect(P.extractConvIdFromUrl('/app/prompts')).toBe('');
+    expect(P.extractConvIdFromUrl('/prompts')).toBe('');
   });
 
-  test('P3: /app/apikey → "" (литерал раздела, id в URL нет)', () => {
+  test('P3: /app/apikey, /apikey и /prompts/apikey → "" (литерал раздела, id в URL нет)', () => {
     expect(P.extractConvIdFromUrl('/app/apikey')).toBe('');
     expect(P.extractConvIdFromUrl('/apikey')).toBe('');
+    expect(P.extractConvIdFromUrl('/prompts/apikey')).toBe('');
   });
 
   test('P4: /app/7c1f4a9b2e8d3a05 → id (положительный кейс жив)', () => {

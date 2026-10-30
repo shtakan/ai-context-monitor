@@ -90,6 +90,10 @@
   var verbose = false;     // 'ai-cm-aistudio-net-settings' { verbose: true }
   var lastTokens = 0;      // последний promptTokenCount (дедуп лога/события)
   var lastHistorySig = ''; // подпись последнего снимка истории (дедуп)
+  // v2.0.34: причина последнего пустого разбора — для строки 'aistudio-history-skip'
+  // (shape-miss | no-array | empty | not-json) и факта ResolveDriveResource.
+  var lastHistoryReason = '';
+  var lastSnapshotWarnSig = ''; // дедуп console.warn о промахе формы
 
   /* ================================================================== *
    * 0. Мост detail (Xray/Firefox): тело одинаковое во всех мирах
@@ -203,6 +207,14 @@
     }
   }
 
+  /** Гейт диагностики: sessionStorage 'aiCmDebug' === '1' (тот же, что у diagLine). */
+  function debugGateOn() {
+    try {
+      return (typeof sessionStorage !== 'undefined' && !!sessionStorage
+        && sessionStorage.getItem('aiCmDebug') === '1');
+    } catch (eG) { return false; }
+  }
+
   /**
    * Форма протобуферного значения одной строкой: длина массива + непустые индексы
    * (до 12). `len33[0,1,8,18,19,32]` сразу говорит, сообщение это или служебный кортеж.
@@ -261,21 +273,29 @@
     return ROLE_AI;
   }
 
-  /**
-   * Снимок из ОТВЕТА UpdatePrompt/CreatePrompt → сообщения.
-   *
-   * Точный путь: `root[13][0]` — массив сообщений, текст `msg[0]`, роль `msg[8]`,
-   * `msg[19] === 1` — «мысль» модели (reasoning). Сообщения без строкового текста и
-   * без известной роли отбрасываются: в `root[13]` рядом с историей встречаются
-   * служебные кортежи (в запросе GenerateContent `root[13]` — таймзона, а не ходы),
-   * и по индексам без проверки формы они стали бы «репликами».
-   */
-  function msgsFromSnapshot(root) {
+  /** Строка похожа на сообщение снимка: текст `m[0]`, роль `m[8]`. */
+  function looksLikeMessageRow(m) {
+    return Array.isArray(m) && typeof m[0] === 'string' && isRoleName(m[8]);
+  }
+
+  /** Массив выглядит как снимок: непустой, все элементы-массивы, есть message-строки. */
+  function isRowsArray(v) {
+    if (!Array.isArray(v) || v.length === 0) return false;
+    var hits = 0;
+    for (var i = 0; i < v.length; i++) {
+      if (v[i] === null || v[i] === undefined) continue;
+      if (!Array.isArray(v[i])) return false;
+      if (looksLikeMessageRow(v[i])) hits++;
+    }
+    return hits > 0;
+  }
+
+  /** Строки снимка → сообщения (reasoning `m[19] === 1` не реплика). */
+  function msgsFromRows(rows) {
     var out = [];
-    if (!Array.isArray(root) || !Array.isArray(root[13]) || !Array.isArray(root[13][0])) return out;
-    var msgs = root[13][0];
-    for (var i = 0; i < msgs.length; i++) {
-      var m = msgs[i];
+    if (!Array.isArray(rows)) return out;
+    for (var i = 0; i < rows.length; i++) {
+      var m = rows[i];
       if (!Array.isArray(m)) continue;
       if (m[19] === 1) continue;                       // reasoning, не реплика
       if (typeof m[0] !== 'string' || !isRoleName(m[8])) continue;
@@ -284,6 +304,75 @@
       out.push({ role: normRole(m[8]), text: text });
     }
     return out;
+  }
+
+  /**
+   * Рекурсивный (BFS) поиск массива-снимка. Лимиты глубины/узлов — форма приватная,
+   * тело большое; в найденный массив сообщений не спускаемся. При равенстве счётчика
+   * побеждает первый (самый неглубокий) кандидат — стабильно и предсказуемо.
+   */
+  function findRowsArray(root) {
+    var best = [];
+    var bestPath = '';
+    var bestCount = 0;
+    var candidates = 0;
+    var queue = [{ v: root, path: '', depth: 0 }];
+    var head = 0;
+    var visited = 0;
+    while (head < queue.length && visited < 4000) {
+      var cur = queue[head++];
+      visited++;
+      var v = cur.v;
+      if (cur.path !== '' && isRowsArray(v)) {
+        candidates++;
+        var msgs = msgsFromRows(v);
+        if (msgs.length > bestCount) {
+          best = msgs;
+          bestPath = cur.path;
+          bestCount = msgs.length;
+        }
+        continue;
+      }
+      if (cur.depth >= 10) continue;
+      for (var i = 0; i < v.length; i++) {
+        if (!Array.isArray(v[i])) continue;
+        queue.push({
+          v: v[i],
+          path: cur.path === '' ? String(i) : cur.path + '[' + i + ']',
+          depth: cur.depth + 1
+        });
+      }
+    }
+    return { msgs: best, path: bestPath, candidates: candidates };
+  }
+
+  /**
+   * Снимок из ОТВЕТА UpdatePrompt/CreatePrompt/ResolveDriveResource → сообщения.
+   *
+   * Известный путь: `root[13][0]` — массив сообщений, текст `msg[0]`, роль `msg[8]`,
+   * `msg[19] === 1` — «мысль» модели (reasoning). Если форма не совпала (живой
+   * ResolveDriveResource на холодном старте кладёт историю иначе), ищется ЛЮБОЙ
+   * вложенный массив той же сигнатуры: элементы-массивы, среди них есть строки с
+   * текстом и известной ролью. Сообщения без строкового текста/роли отбрасываются:
+   * в `root[13]` рядом с историей встречаются служебные кортежи (в запросе
+   * GenerateContent `root[13]` — таймзона, а не ходы).
+   */
+  function findSnapshotMessages(root) {
+    if (!Array.isArray(root)) return { msgs: [], path: '', candidates: 0 };
+    if (Array.isArray(root[13]) && Array.isArray(root[13][0])) {
+      var known = msgsFromRows(root[13][0]);
+      if (known.length > 0) return { msgs: known, path: '13[0]', candidates: 1 };
+    }
+    if (isRowsArray(root)) {
+      var self = msgsFromRows(root);
+      if (self.length > 0) return { msgs: self, path: 'root', candidates: 1 };
+    }
+    var found = findRowsArray(root);
+    return { msgs: found.msgs, path: found.path, candidates: found.candidates };
+  }
+
+  function msgsFromSnapshot(root) {
+    return findSnapshotMessages(root).msgs;
   }
 
   /**
@@ -327,16 +416,56 @@
   }
 
   /**
-   * Массив сообщений истории из разобранного JSON. Приоритет — снимок ответа
-   * (`data[13][0]`), затем тело запроса (`data[1]`). Возвращает ещё и путь —
-   * он виден в диагностике/тестах, поэтому расхождение формы сразу заметно.
+   * Массив сообщений истории из разобранного JSON. Приоритет — известный снимок
+   * (`data[13][0]`), затем рекурсивный поиск по сигнатуре, затем тело запроса
+   * (`data[1]`). Возвращает путь (виден в тестах) и причину промаха для диагностики.
    */
-  function findMessageArray(root) {
-    var snap = msgsFromSnapshot(root);
-    if (snap.length > 0) return { msgs: snap, path: '13[0]' };
+  function findMessageArray(root, url) {
+    var snap = findSnapshotMessages(root);
+    if (snap.msgs.length > 0) return { msgs: snap.msgs, path: snap.path, reason: '' };
     var req = msgsFromRequest(root);
-    if (req.length > 0) return { msgs: req, path: '1' };
-    return { msgs: [], path: '' };
+    if (req.length > 0) return { msgs: req, path: '1', reason: '' };
+    var reason = snapshotMissReason(root, snap);
+    if (typeof url === 'string' && isHistoryRpc(url)) warnSnapshotMiss(root, reason);
+    return { msgs: [], path: '', reason: reason };
+  }
+
+  /** Сколько вложенных массивов в root (с лимитом — тело большое, форма приватная). */
+  function countArrays(root, cap) {
+    if (!Array.isArray(root)) return 0;
+    var n = 1;
+    var stack = [root];
+    while (stack.length > 0 && n < cap) {
+      var v = stack.pop();
+      for (var i = 0; i < v.length && n < cap; i++) {
+        if (Array.isArray(v[i])) { n++; stack.push(v[i]); }
+      }
+    }
+    return n;
+  }
+
+  /** Причина промаха: shape-miss (массивы есть, сигнатуры нет) или no-array. */
+  function snapshotMissReason(root, snap) {
+    if (!Array.isArray(root)) return 'no-array';
+    if (snap.candidates > 0) return 'shape-miss';
+    return countArrays(root, 64) > 1 ? 'shape-miss' : 'no-array';
+  }
+
+  /** Один компактный console.warn на форму (без текста тела), дедуп по отпечатку. */
+  function warnSnapshotMiss(root, reason) {
+    try {
+      var r13 = Array.isArray(root) ? root[13] : undefined;
+      var rootLen = Array.isArray(root) ? root.length : 'N/A';
+      var r13Desc = Array.isArray(r13) ? ('len' + r13.length) : ((r13 === null || r13 === undefined) ? 'null' : typeof r13);
+      var arrays = countArrays(root, 2000);
+      var sig = rootLen + '|' + r13Desc + '|' + arrays;
+      if (sig === lastSnapshotWarnSig) return;
+      lastSnapshotWarnSig = sig;
+      console.warn(LOG_TAG + ' snapshot miss reason=' + reason + ' rootLen=' + rootLen +
+        ' root13=' + r13Desc + ' arrays=' + arrays + ' rootShape=' + shapeOfArray(root));
+    } catch (eW) {
+      soft(eW, 'aistudio-intercept:warn-miss');
+    }
   }
 
   /**
@@ -348,11 +477,17 @@
     var root = parseJsonText(text);
     var isHistoryUrl = (typeof url === 'string') && isHistoryRpc(url);
     if (root === null) {
+      lastHistoryReason = (typeof text === 'string' && text.length > 0) ? 'not-json' : 'empty';
       if (isHistoryUrl) diagEmptyHistory(url, text, null);
       return [];
     }
-    var found = findMessageArray(root);
-    if (found.msgs.length === 0 && isHistoryUrl) diagEmptyHistory(url, text, root);
+    var found = findMessageArray(root, url);
+    if (found.msgs.length > 0) {
+      lastHistoryReason = '';
+      return found.msgs;
+    }
+    lastHistoryReason = found.reason || 'shape-miss';
+    if (isHistoryUrl) diagEmptyHistory(url, text, root);
     return found.msgs;
   }
 
@@ -589,7 +724,15 @@
 
   /** Отправка снимка истории в мост с дедупом по содержимому. */
   function emitHistory(msgs, url) {
-    if (!msgs || msgs.length === 0) return;
+    if (!msgs || msgs.length === 0) {
+      // v2.0.34: раньше выход был молчаливым — «2 узла» в бейдже не оставляли следов.
+      diagLine('aistudio-history-skip', {
+        reason: lastHistoryReason || 'empty',
+        rpc: String(url || '').replace(/^.*\//, ''),
+        msgs: 0
+      });
+      return;
+    }
     var sig = String(url || '') + '|' + historySig(msgs);
     if (sig === lastHistorySig) return;
     lastHistorySig = sig;
@@ -625,7 +768,15 @@
         return;
       }
       if (!isHistoryRpc(url)) return;
-      emitHistory(parseHistory(text, url), url);
+      var historyMsgs = parseHistory(text, url);
+      // v2.0.34: факт холодного ResolveDriveResource виден вместе с итогом разбора.
+      if (/resolvedriveresource/i.test(url)) {
+        diagLine('aistudio-drive-resource', {
+          msgs: historyMsgs.length,
+          reason: historyMsgs.length > 0 ? 'parsed' : (lastHistoryReason || 'shape-miss')
+        });
+      }
+      emitHistory(historyMsgs, url);
     } catch (eHR) {
       soft(eHR, 'aistudio-intercept:response-parse');
     }
@@ -760,6 +911,13 @@
 
   installFetchHook();
   installXhrHook();
+
+  // v2.0.34: без строки установки «нет history loaded» не отличить от «хук не встал».
+  // Гейт тот же, что у канала B: по умолчанию консоль страницы остаётся чистой.
+  if (debugGateOn()) {
+    console.log(LOG_TAG + ' hooks installed fetch=' + (typeof window.fetch === 'function' ? 'wrapped' : 'absent') +
+      ' xhr=' + (typeof window.XMLHttpRequest === 'function' ? 'wrapped' : 'absent'));
+  }
 
   window.AiCmAistudioIntercept = {
     version: 5,

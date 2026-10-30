@@ -94,6 +94,14 @@ class AistudioAdapter extends GeminiAdapter {
       });
 
       debugLog('log', `[AistudioAdapter] Всего извлечено сообщений: ${messages.length}`);
+      // v2.0.34: виртуализированная лента после схлопывания короче уже виденного
+      // пика. Пик пишет core/content.js (dom-peak/сетевой кэш) — берём его, иначе
+      // экспорт теряет начало разговора.
+      const peak = this._domPeakMessages();
+      if (peak.length > messages.length) {
+        debugLog('log', `[AistudioAdapter] DOM короче пика: ${messages.length} < ${peak.length} — берём sessionStorage`);
+        return peak;
+      }
       return messages;
 
     } catch (error) {
@@ -165,6 +173,48 @@ class AistudioAdapter extends GeminiAdapter {
       return messages;
     } catch (error) {
       debugLog('error', '[AistudioAdapter] Ошибка чтения сетевой истории:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Пик истории из sessionStorage (v2.0.34): после схлопывания виртуализированной
+   * ленты DOM короче уже виденного снимка. core/content.js пишет пик в
+   * ai_cm_aistudio_history_<convId> ({ v, href, msgs, count, ... }) — читаем его
+   * только для ТЕКУЩЕГО пути (SPA-гард, как у _netMessages) и только как фолбэк.
+   * @returns {AistudioExtractedMessage[]}
+   */
+  _domPeakMessages() {
+    try {
+      const storage = (typeof sessionStorage !== 'undefined' && sessionStorage)
+        ? sessionStorage
+        : ((typeof window !== 'undefined' && window && window.sessionStorage) ? window.sessionStorage : null);
+      if (!storage) return [];
+      const here = String((window.location && window.location.pathname) || '');
+      const m = /\/prompts\/([^\/?#]+)/.exec(here);
+      if (!m || !m[1]) return [];
+      const raw = storage.getItem('ai_cm_aistudio_history_' + m[1]);
+      if (!raw) return [];
+      const cached = JSON.parse(raw);
+      if (!cached || cached.v !== 1 || !Array.isArray(cached.msgs) || cached.msgs.length === 0) return [];
+      // Запись обязана относиться к текущему пути, а не к прошлому чату (SPA).
+      const there = String(cached.href || '');
+      if (there && typeof URL === 'function') {
+        let therePath = there;
+        try { therePath = new URL(there).pathname; } catch (eUrl) { therePath = there; }
+        if (therePath && here && therePath !== here) return [];
+      }
+      /** @type {AistudioExtractedMessage[]} */
+      const messages = [];
+      Array.prototype.forEach.call(cached.msgs, (msg) => {
+        if (!msg || typeof msg.text !== 'string') return;
+        const content = this._cleanText(msg.text);
+        if (content.length === 0) return;
+        messages.push({ role: (msg.role === 'assistant' || msg.role === 'model') ? 'assistant' : 'user', content });
+      });
+      return messages;
+    } catch (error) {
+      debugLog('error', '[AistudioAdapter] Ошибка чтения пика истории:', error);
       return [];
     }
   }

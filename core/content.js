@@ -3446,6 +3446,7 @@ function aiCmBridgeDetail(ev) {
 
 // Последняя сетевая история AI Studio: { msgs: [{role,text}], count, ts }.
 // Читается adapters/aistudio-adapter.js через window.__aiCmNetMsgs (тот же ISOLATED-мир).
+/** @type {{ msgs: Array<{role: string, text: string}>, count: number, ts: number, href: string, historyComplete?: boolean } | null} */
 var aiCmNetMsgsAistudio = null;
 // Последний promptTokenCount AI Studio: точный размер контекста (0 — ещё не приходил).
 var aiCmNetCountAistudio = 0;
@@ -3835,11 +3836,22 @@ function aiCmIngestAistudioNet(detail) {
     }
     if (msgs.length > 0) {
       var prev = aiCmNetMsgsAistudio;
+      var href = String(detail.href || window.location.href || '');
+      var shrunk = false;
+      // v2.0.34: живой UpdatePrompt после F5 приходит коллапсированной лентой (2 хода).
+      // Снимок того же разговора меньшего размера не затирает уже увиденный полный:
+      // иначе window.__aiCmNetMsgs схлопывался до 2 узлов и адаптер отдавал обрезок.
+      if (prev && Array.isArray(prev.msgs) && prev.msgs.length > msgs.length
+        && aiCmAistudioPathOf(prev.href) === aiCmAistudioPathOf(href)) {
+        msgs = prev.msgs;
+        shrunk = true;
+      }
       aiCmNetMsgsAistudio = {
         msgs: msgs,
         count: msgs.length,
-        ts: (typeof detail.ts === 'number') ? detail.ts : Date.now(),
-        href: String(detail.href || window.location.href || '')
+        ts: shrunk ? prev.ts : ((typeof detail.ts === 'number') ? detail.ts : Date.now()),
+        href: href,
+        historyComplete: !shrunk
       };
       // Общая точка для адаптера: ISOLATED-мир один, отдельного канала не нужно.
       window.__aiCmNetMsgs = aiCmNetMsgsAistudio;

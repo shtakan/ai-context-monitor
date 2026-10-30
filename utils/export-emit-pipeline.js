@@ -103,6 +103,11 @@
     try {
       var p = String(pathname || '');
       // Gemini (и AI Studio): /app/<id>. Ловушка convId (aistudio): литералы пути prompts / new / apikey — не id; lookahead отсекает литерал, id-сегмент не тронут.
+      // AI Studio (v2.0.34): живая форма /prompts/<id> (и /app/prompts/<id>) — ДО общих
+      // правил. Литералы разделов prompts / new / new_chat / apikey — не id; иначе
+      // /app/prompts/abc123 уходил в '' и maybeAutoExport молча выходил на «if (!cid) return;».
+      var mPr = p.match(/\/prompts\/(?!new(?:_chat)?(?:\/|$)|apikey(?:\/|$))([A-Za-z0-9_-]+)/);
+      if (mPr) return mPr[1];
       var mApp = p.match(/\/app\/(?!prompts(?:\/|$)|new(?:\/|$)|apikey(?:\/|$))([A-Za-z0-9_-]+)/);
       if (mApp) return mApp[1];
       // chat.deepseek.com: /a/chat/s/<id> — ДО общего /chat/ (иначе вернётся 's')

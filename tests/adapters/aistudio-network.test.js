@@ -939,6 +939,8 @@ describe('core/aistudio-intercept.js: диаг формы пустого раз�
     const on = makeSandbox({ sessionStorage: { getItem: function (k) { return k === 'aiCmDebug' ? '1' : null; } } });
     on.api.__handlers.parseHistory(DRIVE_OTHER_SHAPE, DRIVE_URL);
     expect(on.logs.join('\n')).toContain('aistudio-history-empty');
+    // v2.0.34: установка хуков тоже видна под тем же гейтом
+    expect(on.logs.join('\n')).toContain('hooks installed');
 
     // гейт выключен → ни одной строки (диагностика не шумит по умолчанию)
     const off = makeSandbox({ sessionStorage: { getItem: function () { return null; } } });
@@ -952,6 +954,54 @@ describe('core/aistudio-intercept.js: диаг формы пустого раз�
   test.skip('ЖИВОЙ ResolveDriveResource: data[13][0] = 6 реплик (нужен второй захват)', () => {
     const h = makeSandbox().api.__handlers;
     expect(h.parseHistory(HISTORY_BODY, DRIVE_URL)).toHaveLength(6);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * Терпимый парсер истории (v2.0.34)
+ *
+ * Живой ResolveDriveResource на холодном старте кладёт историю не в data[13][0].
+ * Парсер обязан найти любой вложенный массив той же сигнатуры (текст msg[0], роль
+ * msg[8]) и при промахе один раз сказать в console.warn, ЧЕМ форма не похожа на
+ * снимок (reason/rootLen/root13/arrays), не печатая тело ответа.
+ * ------------------------------------------------------------------ */
+
+describe('core/aistudio-intercept.js: терпимый парсер истории (v2.0.34)', () => {
+  test('история не на 13[0] → рекурсивный поиск отдаёт те же 6 реплик', () => {
+    const root = JSON.parse(HISTORY_BODY);
+    const msgs = root[13][0];
+    // Ломаем известный путь: вместо сообщений — служебный кортеж таймзоны.
+    root[13] = [[null, null, 'Asia/Yekaterinburg'], msgs];
+    const body = JSON.stringify(root);
+    const h = makeSandbox().api.__handlers;
+
+    expect(h.msgsFromSnapshot(JSON.parse(body))).toHaveLength(6);
+    const found = h.findMessageArray(JSON.parse(body));
+    expect(found.msgs).toHaveLength(6);
+    expect(found.path).toBe('13[1]');
+    expect(h.parseHistory(body, UPDATE_URL)).toHaveLength(6);
+  });
+
+  test('форма без сообщений → один компактный console.warn (reason=shape-miss)', () => {
+    const sb = makeSandbox();
+    expect(sb.api.__handlers.parseHistory(DRIVE_OTHER_SHAPE, DRIVE_URL)).toEqual([]);
+    expect(sb.warns).toHaveLength(1);
+    const line = sb.warns[0];
+    expect(line).toContain('snapshot miss reason=shape-miss');
+    expect(line).toContain('rootLen=14');
+    expect(line).toContain('root13=len1');
+    expect(line).toContain('arrays=');
+    // тело ответа в warn не попадает — только форма
+    expect(line).not.toContain('история лежит');
+  });
+
+  test('найденная история, generate-URL и вызов без url warn не печатают', () => {
+    const sb = makeSandbox();
+    expect(sb.api.__handlers.parseHistory(HISTORY_BODY, UPDATE_URL)).toHaveLength(6);
+    expect(sb.api.__handlers.parseHistory(REQUEST_BODY, GENERATE_URL)).toHaveLength(5);
+    expect(sb.api.__handlers.parseHistory(TOKENS_BODY, GENERATE_URL)).toEqual([]);
+    expect(sb.api.__handlers.parseHistory(DRIVE_OTHER_SHAPE)).toEqual([]);
+    expect(sb.warns).toEqual([]);
   });
 });
 
@@ -1111,6 +1161,39 @@ describe('AistudioAdapter: сетевая история из window.__aiCmNetMs
     expect(messages).toHaveLength(2);
     expect(messages[0].content).toContain('дом-вопрос');
     expect(messages[1].content).toContain('дом-ответ');
+  });
+
+  test('DOM короче пика истории → берём пик из sessionStorage (v2.0.34)', () => {
+    const key = 'ai_cm_aistudio_history_abc123';
+    sessionStorage.clear();
+    sessionStorage.setItem(key, JSON.stringify({
+      v: 1,
+      count: 6,
+      ts: 1700000000000,
+      href: AISTUDIO_LOC.href,
+      msgs: [
+        { role: 'user', text: 'пик 1' },
+        { role: 'model', text: 'пик 2' },
+        { role: 'user', text: 'пик 3' },
+        { role: 'model', text: 'пик 4' },
+        { role: 'user', text: 'пик 5' },
+        { role: 'model', text: 'пик 6' }
+      ]
+    }));
+    document.body.innerHTML =
+      '<ms-cmark-node class="cmark-node v3-font-body user-chunk"><p>дом-вопрос</p></ms-cmark-node>' +
+      '<ms-cmark-node class="cmark-node v3-font-body"><p>дом-ответ</p></ms-cmark-node>';
+    const { adapter } = loadAistudio(document, Object.assign({}, AISTUDIO_LOC));
+
+    try {
+      // виртуализированный DOM схлопнулся до 2 узлов — пик из кэша полнее
+      const messages = adapter.extractMessages();
+      expect(messages).toHaveLength(6);
+      expect(messages[0].content).toContain('пик 1');
+      expect(messages[5].role).toBe('assistant');
+    } finally {
+      sessionStorage.clear();
+    }
   });
 });
 

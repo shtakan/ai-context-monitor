@@ -311,6 +311,34 @@ describe('content.js: DOM-пик истории AI Studio в sessionStorage', ()
     expect(stored(KEY_1).count).toBe(7);
   });
 
+  test('сетевой снимок меньшего размера не схлопывает восстановленный пик (v2.0.34)', () => {
+    const first = loadCache(makeWin('/prompts/conv-1'));
+    expect(first.domSave(adapterMsgs(6))).toBe(true);
+
+    // F5: кэш восстановлен в состояние (6 реплик) — теперь сеть приносит 2 хода
+    const win = makeWin('/prompts/conv-1');
+    const api = loadCache(win);
+    expect(api.state().msgs.count).toBe(6);
+
+    expect(api.ingest({
+      kind: 'history', msgs: MSGS.slice(0, 2), href: win.location.href, ts: 501
+    })).toBe(false); // не смена: массив истории не должен уменьшиться
+    const st = api.state();
+    expect(st.msgs.count).toBe(6);
+    expect(st.msgs.msgs).toHaveLength(6);
+    expect(st.msgs.historyComplete).toBe(false); // видно, что снимок неполный
+    expect(win.__aiCmNetMsgs).toBe(st.msgs);
+    expect(stored(KEY_1).count).toBe(6);
+
+    // настоящий рост по-прежнему принимается и пишется
+    expect(api.ingest({
+      kind: 'history', msgs: MSGS.concat([{ role: 'user', text: 'ещё один ход' }]),
+      href: win.location.href, ts: 502
+    })).toBe(true);
+    expect(api.state().msgs.count).toBe(7);
+    expect(api.state().msgs.historyComplete).toBe(true);
+  });
+
   test('смена чата обнуляет пик: у нового разговора своя история', () => {
     const win = makeWin('/prompts/conv-1');
     const api = loadCache(win);
