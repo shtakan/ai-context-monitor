@@ -83,8 +83,8 @@ describe('O-35: manifest.json — Qwen добавлен, прежние серв
     expect(js).not.toContain('utils/stream-frames.js');
   });
 
-  test('version/инварианты: 2.0.34 (бамп — отдельным релизным коммитом), MV3 и один content_script не тронуты', function () {
-    expect(manifest.version).toBe('2.0.34');
+  test('version/инварианты: 2.0.35 (бамп — отдельным релизным коммитом), MV3 и один content_script не тронуты', function () {
+    expect(manifest.version).toBe('2.0.35');
     expect(manifest.manifest_version).toBe(3);
     expect(manifest.content_scripts).toHaveLength(1);
   });

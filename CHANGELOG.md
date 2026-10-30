@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.35] - 2026-10-30
+
+### Fixed
+- **Google AI Studio: восстановлен автоэкспорт** (`c052f5a`). AI Studio не шлёт `ai-cm-full-history`, поэтому все четыре пути «база готова» (`baseComplete` / `baseSeen` / gsa-латч / `domBaseTrusted`) для него были закрыты и кнопки экспорта оставались мёртвыми. Полноту знает только сетевой ingest: добавлен флаг `aiCmNetReadyAistudio` — карта по ключу чата (`aiCmNetReadyKey()`), взводится ТОЛЬКО на полном снимке (`historyComplete === true`, т.е. `!shrunk`) и только если снимок относится к текущему пути; читает её ровно один предикат `aiCmAutoExportTrustedBase` (`core/content.js`), сброс — `aiCmNetReadyAistudioReset()` из `core/widget.js` при смене разговора (доверие не перетекает в чужой чат). Диагностика: `diagNetReady` в trace.
+
+### Notes
+- Счётчики сьюта: 203 suites / 3652 passed / 7 skipped / 0 failed.
+
 ## [2.0.34] - 2026-10-30
 
 ### Fixed
