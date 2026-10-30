@@ -1,4 +1,4 @@
-# Build instructions — AI Context Monitor 2.0.34
+# Build instructions — AI Context Monitor 2.0.35
 
 Один и тот же исходник собирается в две цели:
 
@@ -82,9 +82,9 @@ $files = git ls-files | Where-Object {
 }
 # список путей пишется с LF: CRLF ломает имена файлов в bsdtar -T
 [System.IO.File]::WriteAllText("$PWD\source-files.txt", (($files -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
-tar -a -c -f source-code-2.0.34.zip -T source-files.txt
+tar -a -c -f source-code-2.0.35.zip -T source-files.txt
 Remove-Item source-files.txt
-tar -tf source-code-2.0.34.zip | Select-String -Pattern 'videos|screenshots|PROJECT_HANDOFF|node_modules|\.zip$'
+tar -tf source-code-2.0.35.zip | Select-String -Pattern 'videos|screenshots|PROJECT_HANDOFF|node_modules|\.zip$'
 ```
 
 Последняя строка должна не напечатать ничего: она проверяет, что в пакет не попали видео,
@@ -97,7 +97,7 @@ tar -tf source-code-2.0.34.zip | Select-String -Pattern 'videos|screenshots|PROJ
 ## Проверки (опционально, но так проверялся пакет)
 
 ```bash
-npx jest                 # 202 suites / 3638 passed / 7 skipped
+npx jest                 # 203 suites / 3652 passed / 7 skipped
 npx tsc --noEmit         # exit 0 (JavaScript под checkJs)
 ```
 
