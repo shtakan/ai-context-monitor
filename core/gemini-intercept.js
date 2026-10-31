@@ -658,6 +658,7 @@
   // Состояние передаётся ЖИВЫМИ геттерами/сеттерами: кластер пишет в эти переменные,
   // и при передаче копией (обычным свойством) ядро читало бы устаревшее значение.
   var aiCmGeminiIngest = (typeof window !== 'undefined' && window.AiCmGeminiIngest) || null;
+  var aiCmGeminiFiles = (typeof window !== 'undefined' && window.AiCmGeminiFiles) || null;
   var ingest = null;
   var handleOuter = null;
   var emitBaseSnapshot = null;
@@ -800,6 +801,25 @@
     handleOuter = function () { };
     emitBaseSnapshot = function () { };
     mergeRestoredTurns = function () { };
+  }
+  // v2.0 (Gemini files): модуль скачивания вложений. Биндим ПОСЛЕ ingest-кластера:
+  // emitSnapshot — форвардер окончательного снимка (модуль зовёт его после текста
+  // файла), originalFetch — нативный fetch MAIN-мира, getConvId — граница чата.
+  if (aiCmGeminiFiles && typeof aiCmGeminiFiles.__bind === 'function') {
+    try {
+      aiCmGeminiFiles.__bind({
+        emitSnapshot: aiCmEmitBaseSnapshotFwd,
+        getConvId: getConvId,
+        originalFetch: originalFetch,
+        diagLine: function (tag, fields) {
+          try {
+            debugLog('log', '[gemini-files] ' + String(tag || '') + ' ' + JSON.stringify(fields || {}));
+          } catch (eDiagGF) { }
+        }
+      });
+    } catch (eBindGF) {
+      debugLog('log', '[gemini-intercept] gemini-files __bind не удался: ' + (eBindGF && eBindGF.message || eBindGF));
+    }
   }
   // v33: флаг «Подробные логи» транслируется из content.js (ISOLATED) через CustomEvent
   // (в MAIN-мире chrome.storage недоступен — как в остальных перехватчиках)
@@ -1077,6 +1097,11 @@
     attachSeen = {};
     attachTokens = 0;
     attachBreak = { imgTokens: 0, docTokens: 0, imgCount: 0, docCount: 0 };
+    // Вложения принадлежат ОДНОМУ разговору: очередь и тексты не переезжают
+    // в следующий чат (epoch модуля отбрасывает ответы, пришедшие после сброса).
+    try {
+      if (aiCmGeminiFiles && typeof aiCmGeminiFiles.gfReset === 'function') aiCmGeminiFiles.gfReset(getConvId());
+    } catch (eResetGF) { }
     orderCounter = 0;
     prependCursor = -1;
     loggedOk = false;
@@ -1258,25 +1283,39 @@
   // ===== v2.0 (Phase 3 step 12): firstRc+logIdmap перенесено в core/gemini-ingest.js =====
   // ================================================================
 
-  // ---- v23: структурный сбор вложений (только по сигнатуре блока, без текстовых эвристик) ----
-  // Сигнатура блока вложения (0-based индексы внутри Array):
-  //   [2]=string имяФайла, [3]=string URL c "googleusercontent",
-  //   [5]=string начинается с "$AVuibg", [11]=string MIME "image/..." или "application/...",
-  //   [15]=Array [width,height,bytes] (вспомогательный маркер, не обязательный).
-  //   Рекурсивно обходим дерево — НЕ привязываемся к жёстким индексам пути.
+  // ---- v2.0: структурный сбор вложений Gemini (сигнатура из снятого payload) ----
+  // Узел: [null, type, name, imgCdn, null, token, null, [thumb, download, upload],
+  //        1, [sec, nanos], null, mime, ...], type: 1=image, 10=docx, 11=pdf.
+  // В отличие от старой эвристики НЕ требуем node[3] и префикс "$AVuibg":
+  // у документов node[3]=null, а opaque-токен теперь "$AfW07I…". MIME — главный
+  // признак; type держим справочно и как допуск для документов без MIME.
+  // Рекурсивно обходим дерево — не привязываемся к жёсткому пути.
+  function collectAttachmentUrls(v, out) {
+    if (typeof v === 'string') { if (v) out.push(v); return; }
+    if (!Array.isArray(v)) return;
+    for (var i = 0; i < v.length; i++) collectAttachmentUrls(v[i], out);
+  }
   function collectAttachments(node, localSeen, items) {
     if (!Array.isArray(node)) return;
+    var name = (typeof node[2] === 'string') ? node[2] : '';
+    var mime = (typeof node[11] === 'string') ? node[11] : '';
+    var type = (typeof node[1] === 'number') ? node[1] : 0;
+    var token = (typeof node[5] === 'string') ? node[5] : '';
+    var img = (typeof node[3] === 'string') ? node[3] : '';
     // проверяем: является ли этот массив блоком вложения?
-    if (typeof node[2] === 'string' && typeof node[3] === 'string' &&
-      typeof node[5] === 'string' && typeof node[11] === 'string' &&
-      node[3].indexOf('googleusercontent') !== -1 &&
-      node[5].indexOf('$AVuibg') === 0 &&
-      /^(image|application|video|audio)\//.test(node[11])) {
-      var name = node[2];
-      var mime = node[11];
-      if (!localSeen.has(name)) {
-        localSeen.add(name);
-        items.push({ name: name, mime: mime });
+    if (name && mime && /^(image|application|video|audio)\//.test(mime) &&
+      (type === 1 || type === 10 || type === 11) &&
+      (!token || /^\$?A[Vf]/.test(token))) {
+      var urls = [];
+      collectAttachmentUrls(node[7], urls);
+      var dl = '';
+      for (var u = 0; u < urls.length; u++) {
+        if (urls[u].indexOf('contribution.usercontent.google.com/download') !== -1) { dl = urls[u]; break; }
+      }
+      var seenKey = token || name;
+      if (!localSeen.has(seenKey)) {
+        localSeen.add(seenKey);
+        items.push({ name: name, mime: mime, type: type, token: token, img: img, dl: dl, urls: urls });
       }
       return; // блок вложения — лист, не идём глубже
     }

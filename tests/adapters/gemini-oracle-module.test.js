@@ -628,23 +628,24 @@ describe('Phase 3 шаг 13.3: D-пины — API, размещение связ
 });
 
 describe('Phase 3 шаг 13.3: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v11, модуль между archive и ядром, -v10 снят', () => {
+  test('S1: регистрация в core/background.js — id -v12, модуль между archive и ядром, -v11 снят', () => {
     const bg = readFile('core/background.js');
-    expect(bg).toContain("'ai-cm-gemini-intercept-v11'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v12'");
     expect(bg).toContain("'core/gemini-oracle.js'");
-    // js[] собран ровно в этом порядке: … overlay → archive → oracle → ядро
-    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-intercept.js'");
+    // js[] собран ровно в этом порядке: … files → overlay → archive → oracle → ядро
+    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-intercept.js'");
     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при своей загрузке
     expect(bg.indexOf("'core/gemini-archive.js'")).toBeLessThan(bg.indexOf("'core/gemini-oracle.js'"));
     expect(bg.indexOf("'core/gemini-oracle.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
     // MV3 не перечитывает js[] под существующим id — прежний id обязан быть снят
+    expect(bg).toContain("'ai-cm-gemini-intercept-v11'");
     expect(bg).toContain("'ai-cm-gemini-intercept-v10'");
     expect(bg).toContain("'ai-cm-gemini-intercept-v9'");
     // лог регистрации бампнут вместе с id и стоит рядом со своей регистрацией
-    expect(bg).toContain('(v11) зарегистрирован');
-    expect(bg).not.toContain('(v10) зарегистрирован');
-    expect(bg.indexOf("await registerSafe('ai-cm-gemini-intercept-v11'"))
-      .toBeLessThan(bg.indexOf('(v11) зарегистрирован'));
+    expect(bg).toContain('(v12) зарегистрирован');
+    expect(bg).not.toContain('(v11) зарегистрирован');
+    expect(bg.indexOf("await registerSafe('ai-cm-gemini-intercept-v12'"))
+      .toBeLessThan(bg.indexOf('(v12) зарегистрирован'));
     // release.yml держит счётчик MAIN-world файлов равным факту (27 → 28; Step D.2 —
     // модуль сетевого дозапроса DeepSeek core/deepseek-netsync.js добавлен в js[];
     // 28 → 29 — Step D.3, кластер REFETCH/URL-гигиены core/deepseek-refetch.js;

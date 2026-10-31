@@ -117,7 +117,7 @@ describe('O-35/O-53/R2: core/background.js — регистрация перех
   });
 
   test('R-пин: шесть существующих регистраций не тронуты', function () {
-    ['ai-cm-page-intercept', 'ai-cm-gemini-intercept-v11', 'ai-cm-deepseek-intercept-v12',
+    ['ai-cm-page-intercept', 'ai-cm-gemini-intercept-v12', 'ai-cm-deepseek-intercept-v12',
       'ai-cm-claude-intercept', 'ai-cm-perplexity-intercept',
       'ai-cm-google-search-intercept'].forEach(function (id) {
       expect(background).toContain("ids.indexOf('" + id + "') === -1");
@@ -152,7 +152,7 @@ describe('O-35/O-53/R2: core/background.js — регистрация перех
     // На шаге 13.3 (Phase 3) в js[] ДОБАВЛЕН core/gemini-oracle.js (перед ядром) и id
     // сменён -v10 → -v11: без модуля оракул полноты недоступен целиком — floor-confirmed и
     // loader-stable-stop не взводятся, снапшот ходов пуст, а форвардеры возвращают undefined.
-    expect(background).toContain("js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-parse.js', 'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-intercept.js']");
+    expect(background).toContain("js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-parse.js', 'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-intercept.js']");
     // Step D.1 (декомпозиция DeepSeek): в js[] ДОБАВЛЕН core/deepseek-diag.js (перед
     // ядром) и id сменён -v2 → -v3: без бампа id у уже установленного расширения Chrome
     // остался бы прежний registration, js[] не перечитался бы, и ядро жило бы без модуля —

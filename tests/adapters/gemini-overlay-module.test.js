@@ -316,22 +316,23 @@ describe('Phase 3 шаг 13.1: D-пины — API, гигиена, деград�
 });
 
 describe('Phase 3 шаг 13.1: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v11, модуль перед ядром, -v10 снят', () => {
+  test('S1: регистрация в core/background.js — id -v12, модуль перед ядром, -v11 снят', () => {
     const bg = readFile('core/background.js');
-    expect(bg).toContain("'ai-cm-gemini-intercept-v11'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v12'");
     expect(bg).toContain("'core/gemini-overlay.js'");
-    // js[] собран ровно в этом порядке: … loader-scroll → ingest → overlay → ядро
-    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-intercept.js'");
+    // js[] собран ровно в этом порядке: … loader-scroll → files → ingest → overlay → ядро
+    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-intercept.js'");
     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при своей загрузке
     expect(bg.indexOf("'core/gemini-ingest.js'")).toBeLessThan(bg.indexOf("'core/gemini-overlay.js'"));
     expect(bg.indexOf("'core/gemini-overlay.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
     // MV3 не перечитывает js[] под существующим id — прежний id обязан быть снят
+    expect(bg).toContain("'ai-cm-gemini-intercept-v11'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v10'");
     expect(bg).toContain("'ai-cm-gemini-intercept-v9'");
     expect(bg).toContain("'ai-cm-gemini-intercept-v8'");
-    expect(bg).toContain("'ai-cm-gemini-intercept-v10'");
     // лог регистрации бампнут вместе с id
-    expect(bg).toContain('(v11) зарегистрирован');
-    expect(bg).not.toContain('(v10) зарегистрирован');
+    expect(bg).toContain('(v12) зарегистрирован');
+    expect(bg).not.toContain('(v11) зарегистрирован');
   });
 
   test('S2: bind-контракт полон — ни одна зависимость кластера не потеряна', () => {

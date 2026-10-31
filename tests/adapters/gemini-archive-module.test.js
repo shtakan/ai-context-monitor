@@ -530,25 +530,26 @@ describe('Phase 3 шаг 13.2: D-пины — API, размещение связ
 });
 
 describe('Phase 3 шаг 13.2: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v11, модуль между overlay и ядром, -v10 снят', () => {
+  test('S1: регистрация в core/background.js — id -v12, модуль между overlay и ядром, -v11 снят', () => {
     const bg = readFile('core/background.js');
-    expect(bg).toContain("'ai-cm-gemini-intercept-v11'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v12'");
     expect(bg).toContain("'core/gemini-archive.js'");
-    // js[] собран ровно в этом порядке: … loader-scroll → ingest → overlay → archive → oracle → ядро
-    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-intercept.js'");
+    // js[] собран ровно в этом порядке: … loader-scroll → files → ingest → overlay → archive → oracle → ядро
+    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-intercept.js'");
     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при своей загрузке
     expect(bg.indexOf("'core/gemini-overlay.js'")).toBeLessThan(bg.indexOf("'core/gemini-archive.js'"));
     expect(bg.indexOf("'core/gemini-archive.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
     // MV3 не перечитывает js[] под существующим id — прежний id обязан быть снят
+    expect(bg).toContain("'ai-cm-gemini-intercept-v11'");
     expect(bg).toContain("'ai-cm-gemini-intercept-v10'");
     expect(bg).toContain("'ai-cm-gemini-intercept-v9'");
     expect(bg).toContain("'ai-cm-gemini-intercept-v8'");
     // лог регистрации бампнут вместе с id
-    expect(bg).toContain('(v11) зарегистрирован');
-    expect(bg).not.toContain('(v10) зарегистрирован');
+    expect(bg).toContain('(v12) зарегистрирован');
+    expect(bg).not.toContain('(v11) зарегистрирован');
     // лог обязан стоять РЯДОМ со своей регистрацией, а не быть унаследованным текстом
-    expect(bg.indexOf("await registerSafe('ai-cm-gemini-intercept-v11'"))
-      .toBeLessThan(bg.indexOf('(v11) зарегистрирован'));
+    expect(bg.indexOf("await registerSafe('ai-cm-gemini-intercept-v12'"))
+      .toBeLessThan(bg.indexOf('(v12) зарегистрирован'));
   });
 
   test('S2: bind-контракт полон — ни одна зависимость кластера не потеряна', () => {
@@ -602,12 +603,13 @@ describe('Phase 3 шаг 13.2: S-пины проводки модуля', () => 
     // шаг 13.2 правил только строки > 1712, но шаг 13.3 вынес оракул (диапазоны 866-909,
     // 1001-1155, 1372-1436) — точка выхода vf5 поднялась 1680 → 1446, а v86 (+4 строки
     // ro-геттеров контракта hidden-scroll выше неё) сдвинул её до 1450; v2.0.20 добавил выше
-    // 17 строк моста слаг-а модели (core/gemini-intercept.js:captureModelSlugFromBody) — 1467.
+    // 17 строк моста слаг-а модели (core/gemini-intercept.js:captureModelSlugFromBody) — 1467;
+    // модуль вложений core/gemini-files.js добавил 39 строк выше — 1506.
     // Пин держит ФАКТ:
     // следующий перенос кода выше этой точки снова потребует ревью строки, а не пройдёт молча.
     const VF5_TAIL = 'aiCmIngestFwd(txt, { emitOnlyIfAdded: true, fromVirtualF5: true, rebuild: rebuild });';
     const hits = CORE.split('\n').reduce((acc, l, i) => (l.indexOf(VF5_TAIL) !== -1 ? acc.concat(i + 1) : acc), []);
-    expect(hits).toEqual([1467]);
-    expect(lineOf(CORE, 'aiCmGeminiArchive.__bind(')).toBeGreaterThan(1467);
+    expect(hits).toEqual([1506]);
+    expect(lineOf(CORE, 'aiCmGeminiArchive.__bind(')).toBeGreaterThan(1506);
   });
 });

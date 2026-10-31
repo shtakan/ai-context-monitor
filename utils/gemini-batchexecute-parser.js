@@ -219,6 +219,56 @@
     return 0;
   }
 
+  // ---- вложения хода: turn[2][0][4][0][4] ----
+  // Форма узла (см. plan-gemini-attachments.md): [null, type, name, imgCdn, null,
+  // token, null, [thumb, download, upload], 1, [sec, nanos], null, mime, ...].
+  // type: 1=image, 10=docx, 11=pdf; у документов imgCdn=null, у изображений urls=null.
+  // Возвращаем нормализованный ref либо null. Функция не бросает.
+  function fileRefFromNode(n) {
+    try {
+      if (!Array.isArray(n)) return null;
+      var name = (typeof n[2] === 'string') ? n[2].trim() : '';
+      if (!name) return null;
+      var mime = (typeof n[11] === 'string') ? n[11] : '';
+      var type = (typeof n[1] === 'number') ? n[1] : 0;
+      var token = (typeof n[5] === 'string') ? n[5] : '';
+      var img = (typeof n[3] === 'string') ? n[3] : '';
+      var dl = '';
+      var urls = [];
+      (function walk(v) {
+        if (typeof v === 'string') {
+          if (v) urls.push(v);
+          if (!dl && v.indexOf('contribution.usercontent.google.com/download') !== -1) dl = v;
+        } else if (Array.isArray(v)) {
+          for (var i = 0; i < v.length; i++) walk(v[i]);
+        }
+      })(n[7]);
+      return {
+        name: name,
+        mime: mime,
+        type: type,
+        token: token,
+        img: img,
+        dl: dl,
+        urls: urls,
+        isImage: (type === 1) || /^image\//i.test(mime)
+      };
+    } catch (e) { return null; }
+  }
+
+  function collectTurnFiles(turn) {
+    var out = [];
+    try {
+      var arr = turn[2][0][4][0][4];
+      if (!Array.isArray(arr)) return out;
+      for (var i = 0; i < arr.length; i++) {
+        var ref = fileRefFromNode(arr[i]);
+        if (ref) out.push(ref);
+      }
+    } catch (e) { }
+    return out;
+  }
+
   // Чисто английский блок-мышление assistant (без кириллицы, начинающийся с герундия /
   // first-person вводной / префиксов "sr "/"Ev "). Смешанные блоки (с кириллицей) не трогаем.
   var THINKING_ASSISTANT_RE = /^([A-Z][a-z]+ing\b|I'm\b|I've\b|My (?:focus|goal)\b|sr |Ev )/;
@@ -539,6 +589,8 @@
     extractDrTexts: extractDrTexts,
     injectDrLinks: injectDrLinks,
     __setDrTexts: __setDrTexts,
+    fileRefFromNode: fileRefFromNode,
+    collectTurnFiles: collectTurnFiles,
     parseGeminiHistory: parseGeminiHistory
   };
 

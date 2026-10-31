@@ -7,7 +7,7 @@
     "adapters"
   ],
   "definition": "Молчаливый catch = тело после вырезания комментариев содержит только пробелы, ИЛИ ровно один no-op (void 0; / return; / continue; / break;). Комментарий-только тело тоже молчаливое (комментарии маскируются в пробелы).",
-  "totalEntries": 466,
+  "totalEntries": 478,
   "groups": [
     {
       "file": "adapters/claude-adapter.js",
@@ -789,6 +789,34 @@
       "reason": "timing-guard: отмена таймера/подписки: обработчик мог быть снят хостом или гонкой; пример: clearTimeout(coldStartEndTimer);"
     },
     {
+      "file": "core/gemini-files.js",
+      "category": "best-effort-guard",
+      "lines": [
+        163
+      ],
+      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var arr = turn[2][0][4][0][4]; if (!Array.isArray(arr)) return out; for"
+    },
+    {
+      "file": "core/gemini-files.js",
+      "category": "guard-clause",
+      "lines": [
+        93,
+        107,
+        373,
+        383,
+        384
+      ],
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (ctrl) ctrl.abort();"
+    },
+    {
+      "file": "core/gemini-files.js",
+      "category": "parse-guard",
+      "lines": [
+        491
+      ],
+      "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: if (typeof TextDecoder === 'function') return new TextDecoder('utf-8').d"
+    },
+    {
       "file": "core/gemini-hidden-scroll.js",
       "category": "best-effort-guard",
       "lines": [
@@ -844,7 +872,7 @@
       "file": "core/gemini-ingest.js",
       "category": "best-effort-guard",
       "lines": [
-        343
+        366
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var previewTxt = ''; for (var pv = 0; pv < segs.length; pv++) { if (segs"
     },
@@ -853,8 +881,8 @@
       "category": "debug-instrumentation",
       "lines": [
         280,
-        734,
-        786
+        783,
+        835
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var restDiag = arr0.slice(3); for (var rdi = 0; rdi < restDiag.length; r"
     },
@@ -862,7 +890,7 @@
       "file": "core/gemini-ingest.js",
       "category": "dom-read-guard",
       "lines": [
-        413
+        436
       ],
       "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: if (tgt && tgt.closest && tgt.closest('#ai-context-widget')) continue;"
     },
@@ -870,7 +898,7 @@
       "file": "core/gemini-ingest.js",
       "category": "event-guard",
       "lines": [
-        441
+        464
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-dom-emit-request'));"
     },
@@ -878,7 +906,9 @@
       "file": "core/gemini-ingest.js",
       "category": "guard-clause",
       "lines": [
-        83
+        83,
+        356,
+        619
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (Array.isArray(t) && Array.isArray(t[1]) && typeof t[1][0] === 'numbe"
     },
@@ -887,9 +917,9 @@
       "category": "local-helper-guard",
       "lines": [
         190,
-        718,
-        1123,
-        1227
+        767,
+        1172,
+        1276
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmEnsureColdWindow();"
     },
@@ -897,7 +927,7 @@
       "file": "core/gemini-intercept.js",
       "category": "cleanup-guard",
       "lines": [
-        1171
+        1196
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete loaderDoneMap[oldId];"
     },
@@ -905,19 +935,20 @@
       "file": "core/gemini-intercept.js",
       "category": "debug-instrumentation",
       "lines": [
-        806,
-        1707,
-        1709
+        817,
+        826,
+        1746,
+        1748
       ],
-      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDeb"
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: debugLog('log', '[gemini-files] ' + String(tag || '') + ' ' + JSON.strin"
     },
     {
       "file": "core/gemini-intercept.js",
       "category": "event-guard",
       "lines": [
         299,
-        1159,
-        1214
+        1184,
+        1239
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
     },
@@ -925,7 +956,8 @@
       "file": "core/gemini-intercept.js",
       "category": "guard-clause",
       "lines": [
-        1014
+        1034,
+        1104
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -933,10 +965,10 @@
       "file": "core/gemini-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        1193,
-        1201,
-        1205,
-        1719
+        1218,
+        1226,
+        1230,
+        1758
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkConvChange();"
     },
@@ -1317,20 +1349,20 @@
     },
     {
       "file": "core/perplexity-intercept.js",
-      "category": "feature-detect",
-      "lines": [
-        233
-      ],
-      "reason": "feature-detect: capability-probe: валидатор урезанного шаблона из utils/perplexity-parser.js может отсутствовать в MAIN-мире — тогда шаблон оставляем как есть"
-    },
-    {
-      "file": "core/perplexity-intercept.js",
       "category": "event-guard",
       "lines": [
         265,
         280
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
+    },
+    {
+      "file": "core/perplexity-intercept.js",
+      "category": "feature-detect",
+      "lines": [
+        233
+      ],
+      "reason": "feature-detect: capability-probe: валидатор урезанного шаблона из utils/perplexity-parser.js может отсутствовать в MAIN-мире — тогда шаблон оставляем как есть"
     },
     {
       "file": "core/perplexity-intercept.js",
@@ -1674,10 +1706,18 @@
     },
     {
       "file": "utils/gemini-batchexecute-parser.js",
+      "category": "best-effort-guard",
+      "lines": [
+        268
+      ],
+      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var arr = turn[2][0][4][0][4]; if (!Array.isArray(arr)) return out; for"
+    },
+    {
+      "file": "utils/gemini-batchexecute-parser.js",
       "category": "defensive-assignment",
       "lines": [
-        375,
-        437
+        425,
+        487
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: lastDrTexts = extractDrTexts(realTurns);"
     },
@@ -1685,7 +1725,7 @@
       "file": "utils/gemini-batchexecute-parser.js",
       "category": "feature-detect",
       "lines": [
-        303
+        353
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var box = (Array.isArray(turn[3]) && Array.isArray(turn[3][0]) && Array."
     },
@@ -1710,7 +1750,7 @@
       "file": "utils/gemini-batchexecute-parser.js",
       "category": "noop-guard",
       "lines": [
-        468
+        518
       ],
       "reason": "noop-guard: единственный no-op — штатный выход из цикла/функции без восстановления; пример: bytes = new TextEncoder().encode(raw);"
     },
