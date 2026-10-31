@@ -3987,3 +3987,165 @@ window.addEventListener('ai-cm-aistudio-net', function (/** @type {CustomEvent} 
 // Восстановление ДО initialize() (setTimeout 1500 выше): первый DOM-замер обязан
 // увидеть полную историю из прошлой загрузки, а не 1-2 виртуализированных узла.
 aiCmAistudioHistoryCacheRestore();
+
+// ===== v2.0.37 (PDF): мост MAIN ai-cm-pdf:* → SW (Port) → pdf.js =====
+// MAIN-хелпер core/pdf-bytes.js скачивает байты originalFetch'ом провайдера и
+// отдаёт их чанками 512 КиБ. Здесь они собираются, кодируются в base64 (Port
+// сериализует JSON — ArrayBuffer через него не проходит) и уходят в SW-брокер
+// core/pdf-parser.js, который поднимает offscreen-документ Chrome либо зовёт
+// AiCmPdfHost в event page Firefox. Обратно приходит {t:'result'}, и мост
+// публикует его CustomEvent'ом 'ai-cm-pdf-result' (JSON-строка в detail, как
+// остальные MAIN↔isolated мосты репозитория).
+var aiCmPdfBridgeStarted = false;
+var aiCmPdfJobs = {};
+var AI_CM_PDF_SRC = 'ai-cm-pdf';
+var AI_CM_PDF_MAX_BYTES = 10 * 1024 * 1024;
+var AI_CM_PDF_MAX_CHUNKS = 64;
+var AI_CM_PDF_CHUNK_MAX = 1024 * 1024;
+
+function aiCmPdfLog(tag, err) {
+  if (typeof debugLog === 'function') debugLog('warn', '[AI CM][pdf] ' + tag, err);
+}
+
+function aiCmPdfDetail(ev) {
+  var raw = (ev && ev.detail !== undefined) ? ev.detail : null;
+  if (typeof raw !== 'string') return (raw && typeof raw === 'object') ? raw : null;
+  try { return JSON.parse(raw); } catch (eParse) { aiCmPdfLog('detail', eParse); return null; }
+}
+
+function aiCmPdfB64(u8) {
+  var bin = '';
+  var step = 0x8000;
+  for (var i = 0; i < u8.length; i += step) {
+    bin += String.fromCharCode.apply(null, u8.subarray(i, i + step));
+  }
+  try { return btoa(bin); } catch (eB64) { aiCmPdfLog('btoa', eB64); return ''; }
+}
+
+function aiCmPdfAnnounceReady() {
+  try {
+    window.dispatchEvent(new CustomEvent('ai-cm-pdf-ready', { detail: JSON.stringify({ enabled: true }) }));
+  } catch (eReady) { aiCmPdfLog('ready', eReady); }
+}
+
+function aiCmPdfDeliver(id, res) {
+  var job = aiCmPdfJobs[id];
+  delete aiCmPdfJobs[id];
+  var out = (res && typeof res === 'object') ? res : {};
+  var payload = {
+    id: id,
+    ok: out.ok === true,
+    text: typeof out.text === 'string' ? out.text : '',
+    pages: typeof out.pages === 'number' ? out.pages : 0,
+    truncated: out.truncated === true,
+    reason: typeof out.reason === 'string' ? out.reason : (out.ok === true ? '' : 'pdf-host-error'),
+    size: typeof out.size === 'number' ? out.size : (job ? job.size : 0),
+    ms: typeof out.ms === 'number' ? out.ms : 0
+  };
+  if (job && job.port) {
+    try { job.port.disconnect(); } catch (eDisc) { aiCmPdfLog('disconnect', eDisc); }
+  }
+  try {
+    window.dispatchEvent(new CustomEvent('ai-cm-pdf-result', { detail: JSON.stringify(payload) }));
+  } catch (eEvent) { aiCmPdfLog('result-event', eEvent); }
+}
+
+function aiCmPdfDispatch(id) {
+  var job = aiCmPdfJobs[id];
+  if (!job || job.sent) return;
+  job.sent = true;
+  if (typeof chrome === 'undefined' || !chrome.runtime || typeof chrome.runtime.connect !== 'function') {
+    aiCmPdfDeliver(id, { ok: false, reason: 'pdf-unavailable' });
+    return;
+  }
+  var port = null;
+  try {
+    port = chrome.runtime.connect({ name: 'ai-cm-pdf:' + id });
+  } catch (ePort) {
+    aiCmPdfLog('connect', ePort);
+    aiCmPdfDeliver(id, { ok: false, reason: 'pdf-unavailable' });
+    return;
+  }
+  job.port = port;
+  port.onMessage.addListener(function (msg) {
+    if (!msg || typeof msg !== 'object') return;
+    if (String(msg.t || '') !== 'result') return;
+    aiCmPdfDeliver(id, msg);
+  });
+  port.onDisconnect.addListener(function () {
+    try { void chrome.runtime.lastError; } catch (eLast) { aiCmPdfLog('lastError', eLast); }
+    if (!aiCmPdfJobs[id]) return;
+    aiCmPdfDeliver(id, { ok: false, reason: 'pdf-aborted' });
+  });
+  port.postMessage({ t: 'begin', id: id, total: job.got, maxChars: job.maxChars || 200000 });
+  for (var i = 0; i < job.parts.length; i++) {
+    if (!job.parts[i]) continue;
+    port.postMessage({ t: 'chunk', id: id, seq: i, b64: aiCmPdfB64(job.parts[i]) });
+  }
+  port.postMessage({ t: 'end', id: id });
+}
+
+function aiCmPdfOnMessage(ev) {
+  if (!ev || ev.source !== window) return;
+  var data = ev.data;
+  if (!data || data.source !== AI_CM_PDF_SRC) return;
+  var id = typeof data.id === 'string' ? data.id : '';
+  if (!id) return;
+  var job = aiCmPdfJobs[id];
+  if (!job) {
+    job = aiCmPdfJobs[id] = { total: 0, parts: [], got: 0, size: 0, port: null, sent: false, maxChars: 0 };
+  }
+  if (typeof data.maxChars === 'number' && data.maxChars > 0) job.maxChars = data.maxChars;
+  var total = typeof data.total === 'number' ? data.total : 0;
+  if (total > 0 && total <= AI_CM_PDF_MAX_CHUNKS) job.total = total;
+  var seq = typeof data.seq === 'number' ? data.seq : -1;
+  var bytes = data.bytes;
+  var len = (bytes && typeof bytes.byteLength === 'number') ? bytes.byteLength : 0;
+  if (seq < 0 || seq >= AI_CM_PDF_MAX_CHUNKS || len <= 0 || len > AI_CM_PDF_CHUNK_MAX) {
+    aiCmPdfDeliver(id, { ok: false, reason: 'pdf-invalid' });
+    return;
+  }
+  if (job.parts[seq]) return;
+  if (job.size + len > AI_CM_PDF_MAX_BYTES) {
+    aiCmPdfDeliver(id, { ok: false, reason: 'pdf-too-large' });
+    return;
+  }
+  job.parts[seq] = new Uint8Array(bytes);
+  job.got++;
+  job.size += len;
+  if (job.total > 0 && job.got >= job.total) aiCmPdfDispatch(id);
+}
+
+function aiCmPdfAbortAll() {
+  var ids = Object.keys(aiCmPdfJobs);
+  for (var i = 0; i < ids.length; i++) {
+    var job = aiCmPdfJobs[ids[i]];
+    delete aiCmPdfJobs[ids[i]];
+    if (job && job.port) {
+      try { job.port.postMessage({ t: 'cancel', id: ids[i] }); } catch (eCancel) { aiCmPdfLog('cancel', eCancel); }
+      try { job.port.disconnect(); } catch (eDisc) { aiCmPdfLog('cancel-disconnect', eDisc); }
+    }
+  }
+}
+
+function aiCmPdfOnCancel(ev) {
+  var detail = aiCmPdfDetail(ev);
+  var id = (detail && typeof detail.id === 'string') ? detail.id : '';
+  if (!id) return;
+  aiCmPdfDeliver(id, { ok: false, reason: 'pdf-aborted' });
+}
+
+function aiCmPdfBridgeStart() {
+  if (aiCmPdfBridgeStarted) return;
+  // Без chrome.runtime в этом контексте моста нет: MAIN не должен получить
+  // 'ready' и обязан остаться на прежней ветке заглушки.
+  if (typeof chrome === 'undefined' || !chrome.runtime || typeof chrome.runtime.connect !== 'function') return;
+  aiCmPdfBridgeStarted = true;
+  window.addEventListener('message', aiCmPdfOnMessage);
+  window.addEventListener('ai-cm-pdf-hello', aiCmPdfAnnounceReady);
+  window.addEventListener('ai-cm-pdf-cancel', aiCmPdfOnCancel);
+  window.addEventListener('pagehide', aiCmPdfAbortAll);
+  aiCmPdfAnnounceReady();
+}
+
+aiCmPdfBridgeStart();

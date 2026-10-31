@@ -38,6 +38,10 @@
   var AF_BODY_MAX = 8 * 1024 * 1024; // не тянем тело больше 8 МБ
   var AF_DRIVE_BASE = 'https://www.googleapis.com/drive/v3/files/';
   var AF_META_FIELDS = 'id,name,mimeType,size';
+  // v2.0.37 (PDF): тело PDF (в пределах 10 МиБ) тянет MAIN-хелпер core/pdf-bytes.js,
+  // текст достаёт pdf.js в offscreen-документе (Chrome) или event page (Firefox).
+  var AF_PDF_MAX = 10 * 1024 * 1024;
+  var AF_PDF_TIMEOUT_MS = 15000;
 
   var AF_TEXT_MIME_RE = /^text\/[a-z0-9.+-]*$/i;
   var AF_TEXT_APP_RE = /^application\/(json|xml|x-yaml)$/i;
@@ -134,6 +138,19 @@
   function afBytes(n) {
     var v = afNum(n);
     return v > 0 ? String(v) + ' Б' : 'размер неизвестен';
+  }
+
+  // v2.0.37: PDF опознаём и по mime, и по расширению (Drive иногда отдаёт
+  // octet-stream). Текст достаёт pdf.js; без хелпера остаётся прежняя заглушка.
+  function afIsPdf(mime, name) {
+    var m = afStr(mime).toLowerCase();
+    if (/application\/pdf/.test(m)) return true;
+    return /\.pdf$/i.test(afStr(name));
+  }
+
+  function afPdfAvailable() {
+    return typeof window !== 'undefined' && !!window.AiCmPdf &&
+      typeof window.AiCmPdf.fromUrl === 'function';
   }
 
   function afNoteText(rec) {
@@ -390,6 +407,38 @@
     });
   }
 
+  // v2.0.37: PDF идёт мимо afFetchRaw — тот читает текст и режет тело по
+  // AF_BODY_MAX. Байты отдаёт pdf-bytes.js (тот же originalFetch + Bearer),
+  // а текст возвращается обычной записью, поэтому afOnFetched не меняется.
+  function afFetchPdf(item, meta) {
+    var pdf = (typeof window !== 'undefined') ? window.AiCmPdf : null;
+    var url = AF_DRIVE_BASE + encodeURIComponent(item.fileId) +
+      '?alt=media&supportsAllDrives=true';
+    return Promise.resolve(pdf.fromUrl(url, {
+      fetch: afFetchImpl(),
+      credentials: 'omit',
+      headers: afAuthHeaders(),
+      name: afStr(meta && meta.name),
+      maxBytes: AF_PDF_MAX,
+      maxChars: AF_TEXT_CAP,
+      timeoutMs: AF_PDF_TIMEOUT_MS
+    })).then(function (r) {
+      var res = r || {};
+      var text = afStr(res.text);
+      return {
+        ok: res.ok === true && text !== '',
+        pdf: true,
+        text: text,
+        truncated: res.truncated === true,
+        reason: afStr(res.reason) || (res.ok === true ? '' : 'pdf-no-text'),
+        meta: meta
+      };
+    }, function (ePdf) {
+      afWarn('pdf', '[aistudio-files] pdf.js не разобрал PDF', ePdf);
+      return { ok: false, note: true, pdf: true, reason: 'pdf-host-error', meta: meta };
+    });
+  }
+
   function afCapText(text, limitChars) {
     var limit = afNum(limitChars) || AF_TEXT_CAP;
     var s = afStr(text);
@@ -407,7 +456,12 @@
       if (!meta || !meta.ok) {
         return { ok: false, reason: (meta && meta.reason) || 'meta-fail', meta: meta || {} };
       }
-      if (!afIsTextual(meta.mime)) return { ok: false, note: true, meta: meta };
+      if (!afIsTextual(meta.mime)) {
+        // v2.0.37: PDF разбираем pdf.js'ом, если MAIN-хелпер жив; иначе прежняя
+        // заметка «имя и mime есть, тело не тянем».
+        if (afIsPdf(meta.mime, meta.name) && afPdfAvailable()) return afFetchPdf(item, meta);
+        return { ok: false, note: true, meta: meta };
+      }
       return afFetchText(item, meta);
     }).then(function (res) {
       if (res && epoch === afEpoch) afOnFetched(item, res);
@@ -451,7 +505,8 @@
         }
       }
     } else if (res && res.note) {
-      // Изображения/PDF/бинарь: имя и mime есть, тело не тянем (§10.4).
+      // Изображения/бинарь: имя и mime есть, тело не тянем (§10.4). PDF попадает
+      // сюда только без живого core/pdf-bytes.js — с ним текст уже в rec.text.
     } else {
       rec.reason = (res && res.reason) || 'fetch-fail';
     }
@@ -663,6 +718,8 @@
   Fn.stats = afStats;
   Fn.sectionOf = afSection;
   Fn.isTextual = afIsTextual;
+  Fn.isPdf = afIsPdf;
+  Fn.fetchPdf = afFetchPdf;
   Fn.constants = {
     concurrency: AF_CONCURRENCY,
     textCap: AF_TEXT_CAP,

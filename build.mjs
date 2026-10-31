@@ -125,7 +125,13 @@ function readJSON(relPath) {
 // в background.js не меняется, коллизий имён нет по построению.
 // utils/platform.js — тот же приём: объявляет aiCmIsFirefox() в общей области,
 // им пользуются background.js (гейт BYOK) и options.js (скрытие BYOK-UI).
-const BACKGROUND_PRELUDE = ['utils/platform.js', 'utils/gemini-intercept-logic.js'];
+const BACKGROUND_PRELUDE = [
+  'utils/platform.js',
+  'utils/gemini-intercept-logic.js',
+  // v2.0.37 (PDF): SW-брокер pdf.js вшивается в бандл статически — по той же
+  // причине, что и gemini-intercept-logic: importScripts в Firefox event page нет.
+  'core/pdf-parser.js',
+];
 
 /** background entry — build-time prelude + manifest.background.service_worker */
 function backgroundEntry(manifest) {
@@ -225,6 +231,12 @@ const ASSET_FILES = [
   // Phase 3 step 3: bundled pages — copied, then rewired in dist/ (see 2c).
   'privacy/privacy.html',
   'docs/index.html',
+  // v2.0.37 (PDF): offscreen-хост Chrome и общие с Firefox обработчики текста.
+  // Копируются как есть: parser/offscreen.html грузит три classic-скрипта по порядку.
+  'parser/offscreen.html',
+  'parser/offscreen.js',
+  'parser/pdf-host.js',
+  'parser/pdf-text.js',
 ];
 const ASSET_DIRS = ['icons'];
 // manifest.json declares `default_locale`, so Chrome refuses to load the
@@ -273,7 +285,14 @@ const REWIRED_SERVICE_WORKER = 'background.js';
 const REWIRED_CONTENT_SCRIPTS = ['content.js'];
 // Firefox fallback (dist-firefox only): name the bundle, never the legacy source —
 // dist/ does not contain core/background.js.
-const FIREFOX_BACKGROUND_SCRIPTS = [REWIRED_SERVICE_WORKER];
+// v2.0.37 (PDF): в Firefox нет offscreen API, поэтому pdf.js-хост грузится прямо
+// в event page как classic-скрипты (Worker там доступен). Chrome исполняет те же
+// файлы в parser/offscreen.html, а они попадают в dist/ как обычные ассеты.
+const FIREFOX_BACKGROUND_SCRIPTS = [
+  REWIRED_SERVICE_WORKER,
+  'parser/pdf-text.js',
+  'parser/pdf-host.js',
+];
 // data_collection_permissions появился в Firefox 140; без явного минимума валидатор
 // AMO отвечает 'Unexpected property "data_collection_permissions" for any Firefox
 // version below 140' (uBlock Origin #3894). Поле пишется ТОЛЬКО в dist-firefox/:
@@ -472,6 +491,40 @@ async function copyAssets() {
 }
 
 /* ------------------------------------------------------------------ *
+ * 3b. pdf.js assets (v2.0.37)
+ *
+ * Версия pdfjs-dist закреплена точно (4.8.69): 3.x снят с поддержки и уязвим
+ * (CVE-2024-4367), а 4.x поставляется только как ESM. Пути не произвольные —
+ * их ждёт рантайм: lib/pdf.min.mjs грузится dynamic import'ом из parser/pdf-host.js,
+ * воркер подключается отдельным ESM-файлом pdf.worker.js.
+ * ------------------------------------------------------------------ */
+
+const PDFJS_MODULE = 'pdfjs-dist';
+const PDFJS_ASSETS = [
+  ['build/pdf.min.mjs', 'lib/pdf.min.mjs'],
+  ['build/pdf.worker.min.mjs', 'pdf.worker.js'],
+  ['LICENSE', 'vendor/pdfjs-LICENSE.txt'],
+];
+// .js-ассеты pdf.js, которые Chrome/Firefox резолвят по пути. Их надо внести в
+// allow-list verifyDist: иначе он примет их за legacy-хвосты прежних сборок.
+const PDFJS_DIST_JS = ['pdf.worker.js', 'parser/offscreen.js', 'parser/pdf-host.js', 'parser/pdf-text.js'];
+
+async function copyPdfjsAssets() {
+  const copied = [];
+  for (const [fromRel, toRel] of PDFJS_ASSETS) {
+    const from = abs(path.join('node_modules', PDFJS_MODULE, fromRel));
+    if (!fs.existsSync(from)) {
+      fail(`pdf.js asset "node_modules/${PDFJS_MODULE}/${fromRel}" is missing (run npm i)`);
+    }
+    const to = path.join(DIST, toRel);
+    await fsp.mkdir(path.dirname(to), { recursive: true });
+    await fsp.copyFile(from, to);
+    copied.push(toRel);
+  }
+  return copied;
+}
+
+/* ------------------------------------------------------------------ *
  * 4. Post-build verification
  * ------------------------------------------------------------------ */
 
@@ -522,6 +575,14 @@ const REQUIRED_DIST_FILES = [
   'icons/icon128.png',
   '_locales/ru/messages.json',
   '_locales/en/messages.json',
+  // v2.0.37 (PDF): pdf.js + хост-страница offscreen + лицензия Apache-2.0.
+  'pdf.worker.js',
+  'lib/pdf.min.mjs',
+  'vendor/pdfjs-LICENSE.txt',
+  'parser/offscreen.html',
+  'parser/offscreen.js',
+  'parser/pdf-host.js',
+  'parser/pdf-text.js',
 ];
 
 /**
@@ -618,7 +679,7 @@ async function verifyDist() {
 
   // dist/ must not carry legacy entry files: only the bundles, plus the
   // files Chrome resolves by path at runtime (see runtimeRegisteredFiles).
-  const expected = new Set([...BUNDLES, ...runtimeRegisteredFiles()]);
+  const expected = new Set([...BUNDLES, ...runtimeRegisteredFiles(), ...PDFJS_DIST_JS]);
   const actual = await collectDistJs();
   // Phase 3 step 3: a .js under options/ in dist/ is always a leftover of the
   // legacy tree — the only script that ever lived there (i18n-apply.js) is inside
@@ -634,6 +695,39 @@ async function verifyDist() {
   }
   for (const f of expected) {
     if (!actual.includes(f)) problems.push(`dist/${f}: missing (referenced by Chrome at runtime)`);
+  }
+
+  // v2.0.37 (PDF): offscreen-документ без разрешения не создаётся, а воркер без
+  // lib/pdf.min.mjs не стартует — оба инварианта проверяем по дисту, не по источнику.
+  const perms = Array.isArray(manifest?.permissions) ? manifest.permissions : [];
+  if (!perms.includes('offscreen')) {
+    problems.push('dist/manifest.json: permissions must include "offscreen" (Chrome pdf.js host)');
+  }
+  const pdfWorkerPath = path.join(DIST, 'pdf.worker.js');
+  const pdfWorkerSize = fs.existsSync(pdfWorkerPath) ? fs.statSync(pdfWorkerPath).size : 0;
+  if (pdfWorkerSize < 1024 * 1024) {
+    problems.push(
+      `dist/pdf.worker.js: unexpected size ${pdfWorkerSize} bytes (the pdf.js worker is expected to be >1 MiB)`
+    );
+  }
+  const pdfLibPath = path.join(DIST, 'lib/pdf.min.mjs');
+  if (fs.existsSync(pdfLibPath)) {
+    const pdfLibText = await fsp.readFile(pdfLibPath, 'utf8');
+    if (!pdfLibText.includes('export{')) {
+      problems.push('dist/lib/pdf.min.mjs: no "export{" — the ESM build of pdf.js did not survive the copy');
+    }
+  }
+  // offscreen-страница грузит три classic-скрипта строго по порядку: текст до хоста,
+  // хост до рантайма (pdf-host.js публикует AiCmPdfHost, offscreen.js его зовёт).
+  const pdfOffscreenPath = path.join(DIST, 'parser/offscreen.html');
+  if (fs.existsSync(pdfOffscreenPath)) {
+    const offscreenHtml = await fsp.readFile(pdfOffscreenPath, 'utf8');
+    const order = ['pdf-text.js', 'pdf-host.js', 'offscreen.js'].map((n) => offscreenHtml.indexOf(n));
+    if (order.some((i) => i < 0) || !(order[0] < order[1] && order[1] < order[2])) {
+      problems.push(
+        'dist/parser/offscreen.html: scripts must load in order pdf-text.js → pdf-host.js → offscreen.js'
+      );
+    }
   }
 
   for (const r of REQUIRED_DIST_FILES) {
@@ -680,6 +774,11 @@ async function writeFirefoxDist() {
     manifest.host_permissions = manifest.host_permissions.filter((host) => host !== BYOK_HOST);
   }
   manifest.background.scripts = [...FIREFOX_BACKGROUND_SCRIPTS];
+  // Firefox не умеет offscreen-документы: pdf.js-хост живёт в event page, а
+  // неиспользуемое разрешение в AMO-пакете только пугает ревью (least privilege).
+  if (Array.isArray(manifest.permissions)) {
+    manifest.permissions = manifest.permissions.filter((p) => p !== 'offscreen');
+  }
   await fsp.writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
 }
 
@@ -710,6 +809,12 @@ async function verifyFirefoxDist() {
     problems.push(
       `dist-firefox/manifest.json: host_permissions must not include ${BYOK_HOST} ` +
         '(BYOK is disabled in the Firefox build)'
+    );
+  }
+  const firefoxPerms = Array.isArray(manifest?.permissions) ? manifest.permissions : [];
+  if (firefoxPerms.includes('offscreen')) {
+    problems.push(
+      'dist-firefox/manifest.json: permissions must not include "offscreen" (no offscreen API in Firefox)'
     );
   }
   if (JSON.stringify(manifest?.content_scripts?.[0]?.js) !== JSON.stringify(REWIRED_CONTENT_SCRIPTS)) {
@@ -772,7 +877,7 @@ async function buildOnce(entries, { quiet = false } = {}) {
     outputs.push({ name, outfile });
   }
 
-  const copied = await copyAssets();
+  const copied = [...(await copyAssets()), ...(await copyPdfjsAssets())];
   if (!quiet) {
     console.log(`[build] mode=${MINIFY ? 'production' : 'development'} sourcemap=${SOURCEMAP}`);
     console.log(`[build] ${copied.length} asset file(s) copied into dist/`);

@@ -20,7 +20,8 @@
   "permissions": [
     "scripting",
     "storage",
-    "notifications"
+    "notifications",
+    "offscreen"
   ],
 
   "host_permissions": [

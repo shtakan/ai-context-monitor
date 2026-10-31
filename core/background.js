@@ -364,6 +364,28 @@ async function ensureInterceptor() {
       });
       console.log('AI Context Monitor: перехватчик AI Studio (v2, история + вложения) зарегистрирован (мир сайта, document_start)');
     }
+
+    // PDF (v2.0.37): хелпер MAIN-мира — единственная точка запуска разбора PDF.
+    // Отдельная регистрация, а не js[] провайдеров: у четырёх существующих id js[]
+    // зафиксирован пинами тестов, а его изменение в MV3 требует нового id и снятия
+    // старых. Здесь свой id и свой набор — js[] провайдеров не трогаем.
+    // pdf-bytes.js самодостаточен и не зависит от intercept-модулей.
+    if (ids.indexOf('ai-cm-pdf-bytes-v1') === -1) {
+      await registerSafe('ai-cm-pdf-bytes-v1', {
+        id: 'ai-cm-pdf-bytes-v1',
+        matches: [
+          'https://gemini.google.com/*',
+          'https://aistudio.google.com/*',
+          'https://chat.qwen.ai/*',
+          'https://chat.deepseek.com/*'
+        ],
+        js: ['core/pdf-bytes.js'],
+        runAt: 'document_start',
+        world: 'MAIN',
+        allFrames: false
+      });
+      console.log('AI Context Monitor: PDF-хелпер (pdf.js, MAIN) зарегистрирован (мир сайта, document_start)');
+    }
   } catch (err) {
     console.warn('AI Context Monitor: не удалось зарегистрировать перехватчик:', err);
   }

@@ -69,6 +69,10 @@
   var FILES_CONCURRENCY = 2;          // одновременно в полёте (FIFO, остальное ждёт)
   var FILES_TEXT_CAP = 2000000;       // символов текста на файл (жёсткий кап; 1 МБ файла целиком)
   var FILES_FETCH_TIMEOUT_MS = 10000; // запрос тела файла
+  // v2.0.37 (PDF): файл-PDF (в пределах 10 МиБ) скачивает и разбирает pdf.js —
+  // байты идут через MAIN-хелпер core/pdf-bytes.js, текст возвращается как текст.
+  var FILES_PDF_MAX = 10 * 1024 * 1024;
+  var FILES_PDF_TIMEOUT_MS = 15000;
   var FILES_EMIT_DEBOUNCE_MS = 250;   // ре-эмит базы после прихода текста
   var FILES_DRAIN_TIMEOUT_MS = 2000;  // A-лайт: ожидание опустошения очереди у экспорта
   // Файловый хост DeepSeek (проверено по бандлу сайта и трафику): тело вложения отдаёт
@@ -196,11 +200,20 @@
       var mTy = /[?&]ty=([a-z])/i.exec(signed);
       if (mTy) ty = mTy[1].toLowerCase();
     }
+    // v2.0.37: тип и размер нужны, чтобы отличить PDF от прочих «нечитаемых» файлов
+    // и уехать в pdf.js-ветку (сайт кладёт тип в file_type/content_type).
+    var mime = fileFirstText(o, ['file_type', 'fileType', 'content_type', 'contentType', 'mime', 'mime_type', 'mimeType']);
+    var sizeRaw = (o.size !== undefined && o.size !== null) ? o.size : ((o.file_size !== undefined) ? o.file_size : o.fileSize);
+    var size = parseInt(sizeRaw, 10);
+    if (!isFinite(size) || size < 0) size = 0;
     return {
       fileId: id,
       signedPath: signed || '',
       name: name || '',
-      isImage: (o.is_image === true || o.isImage === true || ty === 'p')
+      mime: fileStr(mime),
+      size: size,
+      isImage: (o.is_image === true || o.isImage === true || ty === 'p'),
+      isPdf: /application\/pdf/i.test(fileStr(mime)) || /\.pdf$/i.test(name || '')
     };
   }
 
@@ -213,7 +226,7 @@
     if (obj && typeof obj === 'object') return fileRefFromObject(obj);
     var m = s.match(/(?:file[_-]?id|fileId)["'\s:=]+([A-Za-z0-9_-]{6,})/);
     if (!m) return null;
-    return { fileId: m[1], signedPath: '', name: '', isImage: false };
+    return { fileId: m[1], signedPath: '', name: '', mime: '', size: 0, isImage: false, isPdf: false };
   }
 
   // Настоящий id файла сайт раздаёт как UUID (36 символов) или `file-…`; числовой «id»
@@ -551,7 +564,7 @@
 
       function startFileFetch(item) {
         item.startedAt = Date.now();
-        fetchFileContent(item.fileId, item.signedPath).then(function (res) {
+        fetchFileContent(item.fileId, item.signedPath, item).then(function (res) {
           fileQueueActive--;
           if (fileQueueActive < 0) fileQueueActive = 0;
           // Разговор сменился, пока файл был в полёте: результат принадлежит прежнему чату и
@@ -593,11 +606,57 @@
       // Ни заголовков, ни кук: файловый хост авторизует запрос подписью в signed_path, а
       // auth-заголовки чата/credentials:'include' превратили бы simple CORS-запрос в
       // credentialed и ответ без Access-Control-Allow-Credentials не прошёл бы вовсе.
-      function fetchFileContent(fileId, signedPath) {
+      // v2.0.37: PDF опознаём по типу/имени — fileRefFromObject кладёт mime и isPdf.
+      function filesPdfRef(ref) {
+        if (!ref) return false;
+        if (ref.isPdf === true) return true;
+        if (/application\/pdf/i.test(fileStr(ref.mime))) return true;
+        return /\.pdf$/i.test(fileStr(ref.name));
+      }
+
+      function filesPdfAvailable() {
+        return typeof window !== 'undefined' && !!window.AiCmPdf &&
+          typeof window.AiCmPdf.fromUrl === 'function';
+      }
+
+      // Байты тянет pdf-bytes.js тем же нативным fetch (подпись в URL, без кук), разбор —
+      // pdf.js в offscreen-документе/event page. В очередь возвращается обычный {ok,text},
+      // поэтому filesOnFetched/filesSection менять не нужно.
+      function filesFetchPdf(url, ref, fetchImpl) {
+        var pdf = (typeof window !== 'undefined') ? window.AiCmPdf : null;
+        if (!pdf || typeof pdf.fromUrl !== 'function') {
+          return Promise.resolve({ ok: false, reason: 'pdf-unavailable', text: '' });
+        }
+        return Promise.resolve(pdf.fromUrl(url, {
+          fetch: fetchImpl,
+          credentials: 'omit',
+          name: fileStr(ref && ref.name),
+          maxBytes: FILES_PDF_MAX,
+          maxChars: FILES_TEXT_CAP,
+          timeoutMs: FILES_PDF_TIMEOUT_MS
+        })).then(function (r) {
+          var res = r || {};
+          var text = fileStr(res.text);
+          return {
+            ok: res.ok === true && text !== '',
+            pdf: true,
+            text: text,
+            truncated: res.truncated === true,
+            reason: fileStr(res.reason) || (res.ok === true ? '' : 'pdf-no-text')
+          };
+        }, function (ePdf) {
+          filesWarn('deepseek:files:pdf', '[deepseek-intercept] pdf.js не разобрал PDF:', ePdf);
+          return { ok: false, reason: 'pdf-host-error', text: '' };
+        });
+      }
+
+      function fetchFileContent(fileId, signedPath, ref) {
         var url = resolveFileUrl(fileId, signedPath);
         var fetchImpl = (typeof originalFetch === 'function') ? originalFetch
           : ((typeof window !== 'undefined' && typeof window.fetch === 'function') ? window.fetch : null);
         if (!fetchImpl) return Promise.resolve({ ok: false, reason: 'no-fetch', text: '' });
+        // v2.0.37: PDF не читаем как текст — байты и разбор отдаём pdf.js.
+        if (filesPdfRef(ref) && filesPdfAvailable()) return filesFetchPdf(url, ref, fetchImpl);
         filesDiag('deepseek-files-fetch-start', {
           fileId: fileId,
           url: url,

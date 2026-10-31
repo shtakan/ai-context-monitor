@@ -7,7 +7,7 @@
     "utils/debug.js"
   ],
   "definition": "Step E.2c-B2c-1 (канал B закрыт). Allow-list стража tests/no-bare-console-warn.test.js: строки, которым разрешено трогать console.* напрямую. Запись = { file, category, lines[], reason }; каждая строка обязана указывать на РЕАЛЬНЫЙ сайт (мёртвая запись валит страж). Легальные категории после B2c-1: (1) logger-definition — сам модуль-обёртка utils/debug.js (в SCAN_DIRS не входит, но сканируется явно) и SW-дубль debugLog в core/background.js; (2) a-class-critical — сайты A-класса (§4.3.4 плана: importScripts/registerContentScripts — гейтирование = потеря единственного сигнала, фолбэка нет); (3) diag-zone-deferred — core/deepseek-diag.js (§4.3.6: 6 сайтов отложены — 3 функции без внутреннего гейта и 2 инверсных пары). Все прочие bare console.warn в core/ и adapters/ — канал B: они мигрированы на aiCmDiagWarn в шаге B2c-1 и в этот список попадать НЕ ДОЛЖНЫ. Внесение мигрированного сайта в allow-list = сокрытие регресса.",
-  "totalEntries": 12,
+  "totalEntries": 13,
   "groups": [
     {
       "file": "utils/debug.js",
@@ -31,7 +31,7 @@
       "file": "core/background.js",
       "category": "a-class-critical",
       "lines": [
-        368
+        390
       ],
       "reason": "A-class: registerContentScripts failure is critical; not migrated"
     },
@@ -55,6 +55,14 @@
         873
       ],
       "reason": "diag-zone: migration deferred per §4.3.6 plan (3 funcs without internal gate + 2 inverse)"
+    },
+    {
+      "file": "core/pdf-bytes.js",
+      "category": "main-world-logger",
+      "lines": [
+        33
+      ],
+      "reason": "MAIN-мир страницы: core/pdf-bytes.js грузится как content script с world:\"MAIN\", где нет ни debugLog (SW/isolated), ни aiCmDiagWarn — каналы A/B недоступны по определению. Единственный сайт warn — локальный шим aiCmPdfWarn для ошибок хелпера (загрузка байтов, postMessage) при недоступном pdf.js; гейтить нечем, ring-буфера в мире страницы нет."
     }
   ]
 }

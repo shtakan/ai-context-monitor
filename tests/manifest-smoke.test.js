@@ -103,8 +103,8 @@ describe('LOW-2: manifest.json — smoke-тест состава ключей (C
     expect(RAW).not.toContain('background_page');        // MV2
   });
 
-  test('permissions: точный список, без "<all_urls>" и без host-паттернов', () => {
-    expect(manifest.permissions).toEqual(['scripting', 'storage', 'notifications']);
+  test('permissions: точный список, без "<all_urls>" и без host-паттернов (+offscreen для pdf.js)', () => {
+    expect(manifest.permissions).toEqual(['scripting', 'storage', 'notifications', 'offscreen']);
     manifest.permissions.forEach(function (p) {
       expect(['permission ' + p, /[*:/]/.test(p)]).toEqual(['permission ' + p, false]);
     });

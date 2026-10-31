@@ -48,6 +48,10 @@
   var GF_EMIT_DEBOUNCE_MS = 250;
   var GF_DRAIN_TIMEOUT_MS = 6000;
   var GF_BODY_MAX = 200 * 1024;
+  // v2.0.37 (PDF): pdf.js-ветка. Больше 10 МиБ не качаем вовсе — Range-проба уже
+  // знает размер, а вложение такого объёма не стоит своих 15 секунд.
+  var GF_PDF_MAX = 10 * 1024 * 1024;
+  var GF_PDF_TIMEOUT_MS = 15000;
 
   // Карта сообщений: `<convId>\u0000<msgId>` -> { convId, msgId, refs:[], recs:{} }.
   var gfMsgs = {};
@@ -405,6 +409,42 @@
     return { text: s.slice(0, keep) + suffix, truncated: true };
   }
 
+  // v2.0.37: текст PDF достаёт MAIN-хелпер core/pdf-bytes.js (pdf.js в
+  // offscreen-документе). Если хелпера нет (другая сборка, jsdom-тесты) —
+  // ветка PDF остаётся прежней: мета-секция без текста.
+  function gfPdfAvailable() {
+    return typeof window !== 'undefined' && !!window.AiCmPdf &&
+      typeof window.AiCmPdf.fromUrl === 'function';
+  }
+
+  function gfFetchPdfText(item, size) {
+    var pdf = (typeof window !== 'undefined') ? window.AiCmPdf : null;
+    var ref = (item && item.ref) || {};
+    return Promise.resolve(pdf.fromUrl(gfStr(item && item.url), {
+      fetch: gfFetchImpl(),
+      credentials: 'include',
+      name: gfStr(ref.name),
+      maxBytes: GF_PDF_MAX,
+      maxChars: GF_TEXT_CAP,
+      timeoutMs: GF_PDF_TIMEOUT_MS
+    })).then(function (r) {
+      var res = r || {};
+      var text = gfStr(res.text);
+      return {
+        ok: res.ok === true && text !== '',
+        pdf: true,
+        size: gfNum(size) || gfNum(res.size),
+        text: text,
+        pages: gfNum(res.pages),
+        truncated: res.truncated === true,
+        reason: gfStr(res.reason) || (res.ok === true ? '' : 'pdf-no-text')
+      };
+    }, function (ePdf) {
+      gfWarn('gemini:files:pdf', '[gemini-files] pdf.js не разобрал вложение:', ePdf);
+      return { ok: false, pdf: true, size: gfNum(size), reason: 'pdf-host-error', text: '' };
+    });
+  }
+
   function gfFetchFile(item) {
     var fetchImpl = gfFetchImpl();
     if (!fetchImpl) return Promise.resolve({ ok: false, reason: 'no-fetch', text: '' });
@@ -451,6 +491,21 @@
           // у частичного ответа равен 1, а не полному размеру файла.
           if (!pdfSize && (!res || res.status !== 206)) pdfSize = gfNum(gfHeader(res, 'content-length'));
           gfCancelBody(res, ctrl);
+          // v2.0.37: тело Range-ответа больше не нужно — байты тянет pdf-bytes.js
+          // полным GET'ом (тот же originalFetch, те же cookie). Разбираем только
+          // при живом хелпере и в пределах 10 МиБ, иначе — прежняя заглушка.
+          if (gfPdfAvailable() && (!pdfSize || pdfSize <= GF_PDF_MAX)) {
+            // Свой таймер на разбор: скачивание и разбор pdf.js не должны обрывать
+            // друг друга, поэтому прежний снимаем и ставим с запасом в секунду.
+            if (timer !== null) { clearTimeout(timer); }
+            timer = setTimeout(function () {
+              done({ ok: false, pdf: true, size: pdfSize, reason: 'pdf-timeout', text: '' });
+            }, GF_PDF_TIMEOUT_MS + 1000);
+            return gfFetchPdfText(item, pdfSize).then(done, function (ePdf) {
+              gfWarn('gemini:files:pdf', '[gemini-files] pdf.js не разобрал PDF:', ePdf);
+              done({ ok: false, pdf: true, size: pdfSize, reason: 'pdf-host-error', text: '' });
+            });
+          }
           done({ ok: false, pdf: true, size: pdfSize, reason: 'pdf-no-text', text: '' });
           return;
         }
@@ -649,13 +704,29 @@
   function gfRecFromResult(item, res) {
     var r = res || {};
     if (r.pdf === true) {
+      // v2.0.37: pdf.js отдал текст — запись становится обычной успешной.
+      var pdfText = gfStr(r.text);
+      if (r.ok === true && pdfText !== '') {
+        var pdfCap = gfCapText(pdfText);
+        return {
+          name: item.ref.name,
+          isImage: false,
+          ok: true,
+          text: pdfCap.text,
+          note: '',
+          reason: '',
+          truncated: pdfCap.truncated === true || r.truncated === true,
+          chars: pdfCap.text.length,
+          at: item.doneAt || 0
+        };
+      }
       return {
         name: item.ref.name,
         isImage: false,
         ok: false,
         text: '',
         note: gfNote(item.ref, r.size),
-        reason: 'pdf-no-text',
+        reason: gfStr(r.reason) || 'pdf-no-text',
         truncated: false,
         chars: 0,
         at: item.doneAt || 0

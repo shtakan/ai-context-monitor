@@ -65,6 +65,10 @@
   var QF_EMIT_DEBOUNCE_MS = 250;   // ре-эмит базы после прихода текста
   var QF_DRAIN_TIMEOUT_MS = 6000;  // ожидание опустошения очереди у экспорта
   var QF_BODY_MAX = 8 * 1024 * 1024; // body-max (content-length): больше — не читаем
+  // v2.0.37 (PDF): файл PDF (в пределах 10 МиБ) скачивает и разбирает pdf.js —
+  // байты идут через MAIN-хелпер core/pdf-bytes.js, текст возвращается как текст.
+  var QF_PDF_MAX = 10 * 1024 * 1024;
+  var QF_PDF_TIMEOUT_MS = 15000;
 
   // Карта сообщений: `<chatId>\u0000<userKey>` -> { chatId, userKey, refs:[], recs:{} }.
   // Ключ включает chatId: одинаковый userKey из другого чата не подмешивает чужие файлы.
@@ -174,6 +178,17 @@
     if (mime && QF_TEXT_MIME_RE.test(mime)) return true;
     if (mime && QF_TEXT_APP_RE.test(mime)) return true;
     return QF_TEXT_EXT_RE.test(qfStr(ref && ref.name));
+  }
+
+  // v2.0.37: PDF — отдельный источник текста (pdf.js), а не «неизвлекаемое».
+  function qfIsPdf(ref) {
+    if (/application\/pdf/i.test(qfStr(ref && ref.mime))) return true;
+    return /\.pdf$/i.test(qfStr(ref && ref.name));
+  }
+
+  function qfPdfAvailable() {
+    return typeof window !== 'undefined' && !!window.AiCmPdf &&
+      typeof window.AiCmPdf.fromUrl === 'function';
   }
 
   function qfBytes(n) {
@@ -411,12 +426,45 @@
     return { text: s.slice(0, keep) + suffix, truncated: true, cut: cut };
   }
 
+  // v2.0.37: PDF-ветка. Ссылки R2 предподписанные, cookie не нужны — отсюда
+  // credentials:'omit', как и у обычной загрузки вложений Qwen.
+  function qfFetchPdf(item, ref) {
+    var pdf = (typeof window !== 'undefined') ? window.AiCmPdf : null;
+    if (!pdf || typeof pdf.fromUrl !== 'function') {
+      return Promise.resolve({ ok: false, reason: 'pdf-unavailable', text: '' });
+    }
+    return Promise.resolve(pdf.fromUrl(qfStr(item && item.url), {
+      fetch: qfFetchImpl(),
+      credentials: 'omit',
+      name: qfStr(ref && ref.name) || qfStr(item && item.name),
+      maxBytes: QF_PDF_MAX,
+      maxChars: QF_TEXT_CAP,
+      timeoutMs: QF_PDF_TIMEOUT_MS
+    })).then(function (r) {
+      var res = r || {};
+      var text = qfStr(res.text);
+      return {
+        ok: res.ok === true && text !== '',
+        pdf: true,
+        text: text,
+        truncated: res.truncated === true,
+        reason: qfStr(res.reason) || (res.ok === true ? '' : 'pdf-no-text')
+      };
+    }, function (ePdf) {
+      qfWarn('qwen:files:pdf', '[qwen-files] pdf.js не разобрал PDF:', ePdf);
+      return { ok: false, reason: 'pdf-host-error', text: '' };
+    });
+  }
+
   function qfFetchText(item) {
     var fetchImpl = qfFetchImpl();
     if (!fetchImpl) return Promise.resolve({ ok: false, reason: 'no-fetch', text: '' });
     var url = qfStr(item && item.url);
     if (!url) return Promise.resolve({ ok: false, reason: 'no-url', text: '' });
     var ref = { name: qfStr(item.name), mime: qfStr(item.mime) };
+    // v2.0.37: PDF нельзя читать как текст (битый UTF-8 и гигантская строка) —
+    // байты скачивает и разбирает pdf-bytes.js, сюда приходит готовый текст.
+    if (qfIsPdf(ref) && qfPdfAvailable()) return qfFetchPdf(item, ref);
     var ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
     var opts = { method: 'GET', credentials: 'omit' };
     if (ctrl && ctrl.signal) opts.signal = ctrl.signal;
@@ -648,7 +696,7 @@
       for (var j = 0; j < refs.length; j++) {
         var r = refs[j];
         if (oldRecs[r.fileKey]) { m.recs[r.fileKey] = oldRecs[r.fileKey]; continue; }
-        if (r.isImage || !qfIsTextual(r)) {
+        if (r.isImage || (!qfIsTextual(r) && !(qfIsPdf(r) && qfPdfAvailable()))) {
           m.recs[r.fileKey] = { fileKey: r.fileKey, name: r.name, ok: false, text: '', note: qfNote(r), reason: '', truncated: false, chars: 0, at: 0 };
           continue;
         }

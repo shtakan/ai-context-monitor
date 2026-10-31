@@ -62,6 +62,12 @@ describe('build: browser_specific_settings — только в Firefox-паке�
 
   test('dist-firefox/manifest.json: Firefox-блок остался в тексте и background.scripts на месте', () => {
     expect(firefoxRaw).toContain('browser_specific_settings');
-    expect(firefoxManifest.background.scripts).toEqual(['background.js']);
+    // v2.0.37: pdf.js в event page — pdf-text.js и pdf-host.js подключаются до парса,
+    // background.js остаётся первым и объявляет debugLog для SW-дубля.
+    expect(firefoxManifest.background.scripts).toEqual([
+      'background.js',
+      'parser/pdf-text.js',
+      'parser/pdf-host.js'
+    ]);
   });
 });

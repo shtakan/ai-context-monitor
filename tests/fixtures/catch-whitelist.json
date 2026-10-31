@@ -110,7 +110,7 @@
       "file": "core/aistudio-files.js",
       "category": "debug-instrumentation",
       "lines": [
-        107
+        111
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmDiagLine('aistudio-files-' + tag, fields);"
     },
@@ -118,9 +118,9 @@
       "file": "core/background.js",
       "category": "debug-instrumentation",
       "lines": [
-        423,
-        1068,
-        1086
+        445,
+        1090,
+        1108
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: chrome.action.setBadgeText({ text: '', tabId: tabIdR }); debugLog('log',"
     },
@@ -128,7 +128,7 @@
       "file": "core/background.js",
       "category": "defensive-assignment",
       "lines": [
-        987
+        1009
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: errText = await response.text();"
     },
@@ -136,7 +136,7 @@
       "file": "core/background.js",
       "category": "guard-clause",
       "lines": [
-        799
+        821
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: for (var k in (all || {})) { if (k.indexOf(AI_CM_FIRED_SESSION_PREFIX) ="
     },
@@ -153,9 +153,9 @@
         261,
         339,
         356,
-        540,
-        614,
-        616
+        562,
+        636,
+        638
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: void chrome.runtime.lastError;"
     },
@@ -792,7 +792,7 @@
       "file": "core/gemini-files.js",
       "category": "best-effort-guard",
       "lines": [
-        163
+        167
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var arr = turn[2][0][4][0][4]; if (!Array.isArray(arr)) return out; for"
     },
@@ -800,11 +800,11 @@
       "file": "core/gemini-files.js",
       "category": "guard-clause",
       "lines": [
-        93,
-        107,
-        373,
-        394,
-        395
+        97,
+        111,
+        377,
+        398,
+        399
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (ctrl) ctrl.abort();"
     },
@@ -812,7 +812,7 @@
       "file": "core/gemini-files.js",
       "category": "parse-guard",
       "lines": [
-        510
+        565
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: if (typeof TextDecoder === 'function') return new TextDecoder('utf-8').d"
     },
@@ -1388,7 +1388,7 @@
       "file": "core/qwen-files.js",
       "category": "debug-instrumentation",
       "lines": [
-        125
+        129
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof aiCmDiagLine === 'function') { aiCmDiagLine('qwen-files-' + tag, fields); return; }"
     },
@@ -1396,7 +1396,7 @@
       "file": "core/qwen-files.js",
       "category": "feature-detect",
       "lines": [
-        352
+        367
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: if (res && res.headers && typeof res.headers.get === 'function') return qfStr(res.headers.get(name));"
     },
