@@ -1016,13 +1016,16 @@
   // Применяется к messages ПЕРЕД сохранением/эмиссией:
   //   - чистый английский thinking-assistant удаляется целиком (isThinkingAssistant);
   //   - смешанный блок срезается до первого кириллического символа (stripLeadingThinking);
-  //   - строгий дедуп: подряд идущие assistant с одинаковым text (или id) схлопываются.
+  //   - строгий дедуп assistant: подряд идущие с одинаковым text (или id) схлопываются;
+  //   - дедуп user: повтор id хода (та же страница/восстановление) и подряд идущие
+  //     с одинаковым text — второй вопрос того же хода.
   function sanitizeFinalMessages(messages, helpers) {
     helpers = helpers || {};
     var isTA = (typeof helpers.isThinkingAssistant === 'function') ? helpers.isThinkingAssistant : function () { return false; };
     var strip = (typeof helpers.stripLeadingThinking === 'function') ? helpers.stripLeadingThinking : function (s) { return s; };
     var out = [];
     var prev = null;
+    var seenUserIds = {};
     for (var i = 0; i < messages.length; i++) {
       var m = messages[i];
       if (!m) continue;
@@ -1033,6 +1036,15 @@
         if (isTA(text)) { prev = null; continue; } // чистый thinking → удаляем целиком
         text = strip(text);
         if (!text || !text.trim()) { prev = null; continue; }
+      }
+      // дедуп user: id хода уникален (turnId_role), повтор id — та же запись.
+      if (role === 'user') {
+        if (id !== null && seenUserIds[id]) continue;
+        if (prev && prev.role === 'user') {
+          if (id !== null && prev.id !== null && id === prev.id) { seenUserIds[id] = 1; continue; }
+          if (text === prev.text) { if (id !== null) seenUserIds[id] = 1; continue; }
+        }
+        if (id !== null) seenUserIds[id] = 1;
       }
       // строгий дедуп: подряд два assistant с идентичным text или id
       if (prev && prev.role === 'assistant' && role === 'assistant') {

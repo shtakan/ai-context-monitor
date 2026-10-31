@@ -2543,10 +2543,12 @@ function processAndSend() {
     if (baseComplete === true && metricServerTokens === 0 && netEffectiveLen > 0 && fullText && fullText.length > 0 && netEffectiveLen > fullText.length) {
       tokenEstimate = Math.round(tokenEstimate * (netEffectiveLen / fullText.length));
     }
-    tokenEstimate += netAttachTokens;
+    // v2.1: если секции [FILE: …] уже в fullText, legacy-оценка вложений не добавляется
+    // (иначе двойной счёт). Aistudio-компенсация вычитает ровно ту же добавку.
+    if (netAttachTokens > 0 && String(fullText || '').indexOf('[FILE:') === -1) tokenEstimate += netAttachTokens;
     // v2.0.32: счётчик шапки AI Studio считает промпт целиком, вложения в нём уже есть —
     // иначе метрика складывала бы их дважды. Другие сервисы строку выше не трогают.
-    if (svc === 'aistudio' && typeof aiCmAistudioNativePromptTokens === 'function' && aiCmAistudioNativePromptTokens() > 0) {
+    if (svc === 'aistudio' && typeof aiCmAistudioNativePromptTokens === 'function' && aiCmAistudioNativePromptTokens() > 0 && String(fullText || '').indexOf('[FILE:') === -1) {
       tokenEstimate -= netAttachTokens;
     }
     const contextLimit = ModelConfig.getContextLimit(modelId);
@@ -3167,9 +3169,9 @@ if (isExtensionValid()) {
         if (baseComplete === true && metricServerTokens === 0 && netEffectiveLen > 0 && fullText && fullText.length > 0 && netEffectiveLen > fullText.length) {
           tokenEstimate = Math.round(tokenEstimate * (netEffectiveLen / fullText.length));
         }
-        tokenEstimate += netAttachTokens;
+        if (netAttachTokens > 0 && String(fullText || '').indexOf('[FILE:') === -1) tokenEstimate += netAttachTokens;
         // v2.0.32: вложения уже внутри счётчика шапки AI Studio — второй раз не добавляем.
-        if (currentAdapter.siteName === 'aistudio' && typeof aiCmAistudioNativePromptTokens === 'function' && aiCmAistudioNativePromptTokens() > 0) {
+        if (currentAdapter.siteName === 'aistudio' && typeof aiCmAistudioNativePromptTokens === 'function' && aiCmAistudioNativePromptTokens() > 0 && String(fullText || '').indexOf('[FILE:') === -1) {
           tokenEstimate -= netAttachTokens;
         }
         // Шаг 3: точный счётчик (API BYOK / серверный) авторитетен — монотонный max() эвристики

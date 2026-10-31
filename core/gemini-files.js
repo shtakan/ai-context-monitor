@@ -14,8 +14,8 @@
  *     gfEnqueueTurnFiles(convId, msgId, files);
  *   • DOCX распаковывается без внешних зависимостей: zip-локальный заголовок →
  *     DecompressionStream('deflate-raw') → word/document.xml → текст;
- *   • PDF не парсится: скачиваются только заголовки ради content-length,
- *     в экспорт едет мета-секция с mime и размером;
+ *   • PDF не парсится: запрашивается Range: bytes=0-0, из content-range берётся
+ *     полный размер (запасной путь — content-length), в экспорт едет мета-секция;
  *   • изображения не скачиваются (CORS lh3), в экспорт едет [IMAGE: имя] URL;
  *   • FIFO-очередь, concurrency 2, дедуп convId|token|name: один файл,
  *     приложенный к двум ходам, качается один раз, секции получают оба хода;
@@ -374,6 +374,17 @@
     return '';
   }
 
+  // v2.1: полный размер PDF из content-range ответа на Range: bytes=0-0.
+  // Сервер отдаёт «bytes 0-0/12345» (или «bytes */12345»); иначе — 0.
+  function gfSizeFromContentRange(v) {
+    var s = gfStr(v);
+    if (!s) return 0;
+    var m = /(?:^|\s)(?:\d+-\d+|\*)\/(\d+)\s*$/.exec(s);
+    if (!m) return 0;
+    var n = gfNum(m[1]);
+    return (n > 0) ? n : 0;
+  }
+
   function gfCancelBody(res, ctrl) {
     try {
       if (res && res.body && typeof res.body.cancel === 'function') {
@@ -400,7 +411,11 @@
     var url = gfStr(item && item.url);
     if (!url) return Promise.resolve({ ok: false, reason: 'no-url', text: '' });
     var ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
+    var isPdf = gfIsPdf(item && item.ref);
     var opts = { method: 'GET', credentials: 'include' };
+    // v2.1: PDF не тянем целиком — просим первый байт. Сервер отвечает 206 и
+    // content-range с полным размером; Range «bytes=0-0» — safelisted (без preflight).
+    if (isPdf) opts.headers = { 'Range': 'bytes=0-0' };
     if (ctrl && ctrl.signal) opts.signal = ctrl.signal;
     return new Promise(function (resolve) {
       var settled = false;
@@ -427,10 +442,14 @@
           done({ ok: false, reason: 'http-' + ((res && res.status) || '?'), text: '' });
           return;
         }
-        // PDF: текст не извлекаем, но content-length нужен для мета-секции.
-        // Забираем только заголовки и сразу отменяем тело, чтобы не тянуть 9 МБ.
-        if (gfIsPdf(item.ref)) {
-          var pdfSize = gfNum(gfHeader(res, 'content-length'));
+        // PDF: текст не извлекаем, но размер нужен для мета-секции.
+        // Range-ответ даёт полный размер в content-range; content-length — запасной
+        // путь для серверов, игнорирующих Range. Тело сразу отменяем.
+        if (isPdf) {
+          var pdfSize = gfSizeFromContentRange(gfHeader(res, 'content-range'));
+          // 206 без разбираемого content-range — размер неизвестен: content-length
+          // у частичного ответа равен 1, а не полному размеру файла.
+          if (!pdfSize && (!res || res.status !== 206)) pdfSize = gfNum(gfHeader(res, 'content-length'));
           gfCancelBody(res, ctrl);
           done({ ok: false, pdf: true, size: pdfSize, reason: 'pdf-no-text', text: '' });
           return;

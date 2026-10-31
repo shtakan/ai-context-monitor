@@ -307,7 +307,7 @@
         collectAttachments(t, localSeen, items);
         ingestAttachments(items);
         var modelName = extractModelName(t);
-        var turnId = extractTurnId(t) || ('idx' + out.total++);
+        var turnId = extractTurnId(t) || stableTurnFallbackId(t, out);
         var turnTs = extractTurnTs(t);
         var r1 = extractTurnR1(t);
         // v2.0 (Gemini files): ref-ы вложений хода. Парсер не бросает; пустой
@@ -614,7 +614,9 @@
           if (typeof window !== 'undefined' && window.AiCmGeminiFiles &&
               typeof window.AiCmGeminiFiles.gfSectionsFor === 'function') {
             var fileSections = window.AiCmGeminiFiles.gfSectionsFor(fid, ids[mi]);
-            if (fileSections) mtext = mtext + fileSections;
+            // v2.1: снимаем уже сохранённые секции — повторная эмиссия/restore
+            // не должны давать вторую копию.
+            if (fileSections) mtext = stripAttachmentSections(mtext) + fileSections;
           }
         } catch (eSec) { }
       }
@@ -718,6 +720,48 @@
       }));
     } catch (e) { swallowSoft(e, 'gemini:emitBaseSnapshot-dispatch'); }
     return { count: ids.length, textLen: text.length, effectiveLen: effectiveLen, lastModelName: lastModelName, floorApplied: floorApplied, floorValue: floorValue };
+  }
+
+  // ---- v2.1 (dedupe): устойчивый fallback-id хода ----
+  // Раньше id хода без r_… был позиционным (idxN): тот же ход со второй страницы,
+  // после F5 или из ленты получал другой id — turnsMap и секции вложений дублировались.
+  // Теперь id — FNV-1a от (ts, r1, строкового содержимого); idxN остаётся только
+  // для хода вообще без строковых признаков.
+  function stableTurnFallbackId(turn, out) {
+    var ts = extractTurnTs(turn);
+    var r1 = extractTurnR1(turn);
+    var parts = [];
+    (function walk(v) {
+      if (parts.length >= 256) return;
+      if (typeof v === 'string') { if (v) parts.push(v); return; }
+      if (Array.isArray(v)) { for (var i = 0; i < v.length; i++) walk(v[i]); }
+    })(turn);
+    if (!parts.length && !ts && !r1) return 'idx' + out.total++;
+    var basis = String(ts || 0) + '|' + String(r1 || '') + '|' + parts.join('\u0001');
+    var h = 0x811c9dc5;
+    for (var k = 0; k < basis.length; k++) {
+      h ^= basis.charCodeAt(k);
+      h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+    }
+    return 'h' + ('00000000' + h.toString(16)).slice(-8);
+  }
+
+  // ---- v2.1 (dedupe): идемпотентные секции вложений ----
+  // Секции дописываются к тексту только в момент эмиссии, но сохранённый текст
+  // (лента, full-history) их уже содержит. Перед новой вклейкой снимаем прежние
+  // блоки [FILE: …]/[IMAGE: …], иначе F5/restore даёт вторую копию.
+  function stripAttachmentSections(text) {
+    var s = (text == null) ? '' : String(text);
+    var at = s.length;
+    while (at > 0) {
+      var f = s.lastIndexOf('\n\n[FILE: ', at - 1);
+      var im = s.lastIndexOf('\n\n[IMAGE: ', at - 1);
+      var cut = (f > im) ? f : im;
+      if (cut === -1) break;
+      s = s.slice(0, cut);
+      at = cut;
+    }
+    return s;
   }
 
       // ---- applyStreamAliases: алиасы потоковых полей на разобранный ход ----
@@ -1225,7 +1269,7 @@
   function sanitizeRestoredTurn(rt) {
     var arr = [{
       role: (rt && rt.role === 'user') ? 'user' : 'assistant',
-      text: (rt && rt.text != null) ? String(rt.text) : '',
+      text: stripAttachmentSections((rt && rt.text != null) ? String(rt.text) : ''),
       id: (rt && rt.id != null) ? String(rt.id) : null
     }];
     var clean = sanitizeMessagesForEmit(arr);

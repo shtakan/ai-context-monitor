@@ -313,7 +313,7 @@
         550,
         2291,
         2431,
-        3396
+        3398
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cyrDiag = (t.match(/[а-яёА-ЯЁ]/g) || []).length; var cyrillicPct = t"
     },
@@ -361,9 +361,9 @@
         2442,
         2466,
         2475,
-        3280,
-        3306,
-        3308
+        3282,
+        3308,
+        3310
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
     },
@@ -392,8 +392,8 @@
         977,
         2384,
         2407,
-        3262,
-        3268
+        3264,
+        3270
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
     },
@@ -401,7 +401,7 @@
       "file": "core/content.js",
       "category": "feature-detect",
       "lines": [
-        2591
+        2593
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var metricSrc = baseComplete ? 'base-complete' : (lastBounded ? 'base-fl"
     },
@@ -420,10 +420,10 @@
         758,
         929,
         1965,
-        2672,
-        2734,
-        2751,
-        2832
+        2674,
+        2736,
+        2753,
+        2834
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -434,7 +434,7 @@
         26,
         288,
         358,
-        2901
+        2903
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.runtime.sendMessage({ type: 'BADGE_RESET' }).catch(function () {"
     },
@@ -443,7 +443,7 @@
       "category": "local-helper-guard",
       "lines": [
         285,
-        3084
+        3086
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmCancelDeferredHistWrite('');"
     },
@@ -451,7 +451,7 @@
       "file": "core/content.js",
       "category": "parse-guard",
       "lines": [
-        3342
+        3344
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof window !== 'undefined' && window && window.AiCmEx"
     },
@@ -803,8 +803,8 @@
         93,
         107,
         373,
-        383,
-        384
+        394,
+        395
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (ctrl) ctrl.abort();"
     },
@@ -812,7 +812,7 @@
       "file": "core/gemini-files.js",
       "category": "parse-guard",
       "lines": [
-        491
+        510
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: if (typeof TextDecoder === 'function') return new TextDecoder('utf-8').d"
     },
@@ -881,8 +881,8 @@
       "category": "debug-instrumentation",
       "lines": [
         280,
-        783,
-        835
+        827,
+        879
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var restDiag = arr0.slice(3); for (var rdi = 0; rdi < restDiag.length; r"
     },
@@ -908,7 +908,7 @@
       "lines": [
         83,
         356,
-        619
+        621
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (Array.isArray(t) && Array.isArray(t[1]) && typeof t[1][0] === 'numbe"
     },
@@ -917,9 +917,9 @@
       "category": "local-helper-guard",
       "lines": [
         190,
-        767,
-        1172,
-        1276
+        811,
+        1216,
+        1320
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmEnsureColdWindow();"
     },
@@ -1782,7 +1782,7 @@
       "file": "utils/gemini-intercept-logic.js",
       "category": "logging-guard",
       "lines": [
-        1183
+        1195
       ],
       "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: console.warn('[AI CM][thresholds] битые aiCmProactiveThresholds → дефолт"
     },
@@ -1790,8 +1790,8 @@
       "file": "utils/gemini-intercept-logic.js",
       "category": "parse-guard",
       "lines": [
-        1476,
-        1480
+        1488,
+        1492
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: metaS += JSON.stringify(a0m[mi]);"
     },

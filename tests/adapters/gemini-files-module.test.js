@@ -23,6 +23,18 @@ const MODULE_SRC = fs.readFileSync(path.join(ROOT, 'core', 'gemini-files.js'), '
 const PARSER_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'gemini-batchexecute-parser.js'), 'utf8');
 const read = function (rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); };
 
+/** Вырезает `function <name>(…) { … }` по балансу скобок (для чистых хелперов). */
+function fnSource(src, name) {
+  const i = src.indexOf('function ' + name + '(');
+  if (i === -1) return null;
+  let depth = 0;
+  for (let k = src.indexOf('{', i); k < src.length; k++) {
+    if (src[k] === '{') depth++;
+    else if (src[k] === '}') { depth--; if (depth === 0) return src.slice(i, k + 1); }
+  }
+  return null;
+}
+
 const CHAT = 'conv-1';
 const TOKEN_PDF = '$AfW07Ipdf';
 const TOKEN_DOCX = '$AfW07Idocx';
@@ -307,6 +319,36 @@ describe('R2: очередь, дедуп и секции', function () {
     expect(h.fetchCalls[0].opts.credentials).toBe('include');
   });
 
+  test('PDF: Range bytes=0-0 + content-range дают полный размер', async function () {
+    const h = makeHarness();
+    const ref = h.Fn.collectTurnFiles(turnWith([pdfNode('big.pdf')]))[0];
+    h.Fn.gfEnqueueTurnFiles(CHAT, 'u1', [ref]);
+
+    expect(h.fetchCalls).toHaveLength(1);
+    expect(h.fetchCalls[0].opts.headers).toEqual({ 'Range': 'bytes=0-0' });
+
+    h.fetchCalls[0].resolve(makeRes({ status: 206, headers: { 'content-range': 'bytes 0-0/987654' } }));
+    await flush();
+    h.tick(300);
+
+    const section = h.Fn.gfSectionsFor(CHAT, 'u1');
+    expect(section).toContain('[FILE: big.pdf — application/pdf, 987654 Б, текст не получен]');
+    expect(h.Fn.gfPendingCount(CHAT)).toBe(0);
+  });
+
+  test('PDF: 206 без валидного content-range — «размер неизвестен», content-length=1 не берётся', async function () {
+    const h = makeHarness();
+    const ref = h.Fn.collectTurnFiles(turnWith([pdfNode('scan.pdf')]))[0];
+    h.Fn.gfEnqueueTurnFiles(CHAT, 'u1', [ref]);
+
+    h.fetchCalls[0].resolve(makeRes({ status: 206, headers: { 'content-range': 'bytes 0-0/*', 'content-length': '1' } }));
+    await flush();
+    h.tick(300);
+
+    expect(h.Fn.gfSectionsFor(CHAT, 'u1'))
+      .toContain('[FILE: scan.pdf — application/pdf, размер неизвестен, текст не получен]');
+  });
+
   test('дубли в одном ходе и повтор файла в другом — один запрос, без дублей секций', async function () {
     const h = makeHarness();
     const ref = h.Fn.collectTurnFiles(turnWith([pdfNode('same.pdf')]))[0];
@@ -371,6 +413,89 @@ describe('R2: очередь, дедуп и секции', function () {
     const section = h2.Fn.gfSectionsFor(CHAT, 'u2');
     expect(section).toContain('…[обрезано 5]');
     expect(section.indexOf(']' + '\n') > 0).toBe(true);
+  });
+});
+
+describe('v2.1: дедуп ходов/вложений и метрика без двойного счёта', function () {
+  test('один и тот же ход с двух страниц не дублируется (user + assistant)', function () {
+    const Logic = require('../../utils/gemini-intercept-logic');
+    const msgs = [
+      { role: 'user', text: 'Вопрос', id: 'h1_user' },
+      { role: 'assistant', text: 'Ответ', id: 'h1_assistant' },
+      { role: 'user', text: 'Вопрос', id: 'h1_user' },
+      { role: 'assistant', text: 'Ответ', id: 'h1_assistant' },
+      { role: 'user', text: 'Второй', id: 'h2_user' },
+      { role: 'assistant', text: 'Ответ 2', id: 'h2_assistant' }
+    ];
+    const out = Logic.sanitizeFinalMessages(msgs);
+    expect(out.map(function (m) { return m.text; })).toEqual(['Вопрос', 'Ответ', 'Второй', 'Ответ 2']);
+    expect(out.map(function (m) { return m.role; })).toEqual(['user', 'assistant', 'user', 'assistant']);
+
+    // подряд идущие user с одинаковым текстом (разные id) тоже один ход
+    const adj = Logic.sanitizeFinalMessages([
+      { role: 'user', text: 'Повтор', id: 'a_user' },
+      { role: 'user', text: 'Повтор', id: 'b_user' }
+    ]);
+    expect(adj).toHaveLength(1);
+  });
+
+  test('сохранённый текст с секцией + новая секция = ровно одна секция', function () {
+    const ing = read('core/gemini-ingest.js');
+    const strip = new Function('return (' + fnSource(ing, 'stripAttachmentSections') + ');')();
+    const section = '\n\n[FILE: report.pdf — application/pdf, 12345 Б, текст не получен]';
+    const saved = 'Вопрос' + section;
+
+    expect(strip(saved)).toBe('Вопрос');
+    expect((strip(saved) + section).match(/\[FILE: /g)).toHaveLength(1);
+    expect(strip('просто текст')).toBe('просто текст');
+    expect(strip('')).toBe('');
+
+    // эмиссия и восстановление используют один и тот же стрип
+    expect(fnSource(ing, 'emitBaseSnapshot')).toContain('mtext = stripAttachmentSections(mtext) + fileSections;');
+    expect(fnSource(ing, 'sanitizeRestoredTurn')).toContain('stripAttachmentSections(');
+    expect(fnSource(ing, 'handleOuter')).toContain('stableTurnFallbackId(t, out)');
+    expect(fnSource(ing, 'handleOuter')).not.toContain("('idx' + out.total++)");
+  });
+
+  test('fallback-id хода не зависит от порядка обхода', function () {
+    const ing = read('core/gemini-ingest.js');
+    const stable = new Function('extractTurnTs', 'extractTurnR1',
+      'return (' + fnSource(ing, 'stableTurnFallbackId') + ');')(
+      function (t) { return (Array.isArray(t) && Array.isArray(t[1]) && typeof t[1][0] === 'number') ? t[1][0] : 0; },
+      function (t) { return (Array.isArray(t) && Array.isArray(t[1])) ? t[1][1] : null; }
+    );
+    const turn = [null, [1700000000, 'r1abc'], null, null, 'Привет'];
+    const a = stable(turn, { total: 0 });
+    const b = stable(turn, { total: 5 });
+    expect(a).toMatch(/^h[0-9a-f]{8}$/);
+    expect(a).toBe(b);
+
+    const other = [null, [1700000001, 'r1abc'], null, null, 'Привет'];
+    expect(stable(other, { total: 0 })).not.toBe(a);
+
+    // ход без единого признака — крайний случай idxN
+    expect(stable([], { total: 7 })).toBe('idx7');
+  });
+
+  test('метрика: [FILE: …] уже в fullText — legacy attachTokens не добавляются', function () {
+    const content = read('core/content.js');
+    const ADD = "if (netAttachTokens > 0 && String(fullText || '').indexOf('[FILE:') === -1) tokenEstimate += netAttachTokens;";
+    expect(content.split(ADD).length - 1).toBe(2); // бейдж + GET_STATS
+    const runAdd = function (fullText, netAttachTokens) {
+      return new Function('ctx',
+        'with (ctx) { let tokenEstimate = 0; ' + ADD + ' return tokenEstimate; }'
+      )({ fullText: fullText, netAttachTokens: netAttachTokens });
+    };
+    expect(runAdd('Вопрос\n\n[FILE: a.txt]\nтело', 2500)).toBe(0);
+    expect(runAdd('Вопрос\n\n[FILE: report.pdf — application/pdf, размер неизвестен, текст не получен]', 516)).toBe(0);
+    expect(runAdd('Вопрос', 2500)).toBe(2500);
+    expect(runAdd('', 516)).toBe(516);
+    expect(runAdd('Вопрос', 0)).toBe(0);
+
+    // прямой неохраняемой формы нет, aistudio-компенсация тоже под тем же гейтом
+    expect(content).not.toMatch(/(^|\n)\s*tokenEstimate \+= netAttachTokens;/);
+    const SUB = "aiCmAistudioNativePromptTokens() > 0 && String(fullText || '').indexOf('[FILE:') === -1) {";
+    expect(content.split(SUB).length - 1).toBe(2);
   });
 });
 
