@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.36] - 2026-10-31
+
+### Fixed
+- **Gemini: экспорт вложений с текстом** (`672706c`). Новый модуль `core/gemini-files.js` (MAIN-мир, нативный `fetch` через `__bind`, `credentials: 'include'`): документы (PDF/DOCX) качаются по download-URL `contribution.usercontent.google.com`, изображения — по CDN `lh3.googleusercontent.com` как `[IMAGE: имя] URL`; DOCX распаковывается без зависимостей (`DecompressionStream('deflate-raw')` → `word/document.xml` → текст), PDF не парсится — в экспорт едет мета-секция с mime и размером; FIFO-очередь (concurrency 2, дедуп `convId|token|name`), лимиты 200 000 симв./файл, 2 000 000/чат, тело 200 КБ, таймаут 15 с; пока очередь не пуста, база не объявляется полной.
+- **Gemini: устранение дублей вложений и ходов** (`7de77ab`). Повторная эмиссия/F5/restore больше не даёт вторую копию: `stripAttachmentSections` снимает уже сохранённые блоки `[FILE: …]`/`[IMAGE: …]` перед вклейкой; позиционный `idxN` заменён на устойчивый `stableTurnFallbackId` (FNV-1a от `ts|r1|содержимого`), из-за которого `turnsMap` дублировал один и тот же ход со второй страницы ленты.
+- **Gemini: исправлен двойной счёт метрики** (`7de77ab`). Если секции `[FILE: …]` уже входят в `fullText`, legacy-оценка вложений (`netAttachTokens`) больше не добавляется, и aistudio-компенсация `aiCmAistudioNativePromptTokens` вычитает ровно ту же добавку — без двойного счёта и без «минуса».
+- **Gemini: размер PDF через Range** (`7de77ab`). `gfSizeFromContentRange` берёт полный размер из `content-range` ответа на safelisted `Range: bytes=0-0` (без preflight); `content-length` — запасной путь для серверов, игнорирующих Range; тело ответа сразу отменяется.
+
+### Notes
+- Счётчики сьюта: 204 suites / 3671 passed / 7 skipped / 0 failed.
+
 ## [2.0.35] - 2026-10-30
 
 ### Fixed
