@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.0.37] - 2026-11-01
+
+### Added
+- **Универсальный парсер PDF через pdf.js** (`b0481dd`). Один конвейер вложений-PDF для Gemini, AI Studio, Qwen и DeepSeek: MAIN-хелпер `core/pdf-bytes.js` (`AiCmPdf.fromUrl`) тянет байты тем же `originalFetch`, брокер `core/pdf-parser.js` в service worker выбирает хост — offscreen-документ `parser/offscreen.html` в Chrome (`reasons:['WORKERS']`, лениво, один на профиль, закрытие по 120 с простоя) или event page `parser/pdf-host.js` в Firefox, — а разбор делает pdf.js 4.8.69 (`lib/pdf.min.mjs` + `pdf.worker.js`, `isEvalSupported:false`, `disableFontFace:true` — контракт по CVE-2024-4367). Текст страниц собирает `parser/pdf-text.js`: `items` → строки с пробелами и переводами строк по `hasEOL`/геометрии. Лимиты: 10 МиБ байт, 64 чанка, 200 000 символов, 500 страниц, watchdog 20 с.
+- **DOCX: текст вложений** (`672706c` для Gemini). `gfDocxText` распаковывает zip без внешних зависимостей (`DecompressionStream('deflate-raw')` → `word/document.xml`), поэтому DOCX попадает в экспорт обычным текстом; в Google AI Studio DOCX не разбирается — остаётся метка с причиной.
+- **Сканы: PDF без текстового слоя** обрабатываются предсказуемо. Разбор завершается `ok:false` с причиной `pdf-no-text`, в экспорт идёт прежняя метка `[FILE: имя — mime, размер; текст не извлекается: pdf-no-text]`, очередь и экспорт не рвутся. Отдельные причины: `pdf-password`, `pdf-invalid`, `pdf-too-large`, `pdf-aborted`, `pdf-timeout`, `pdf-host-error`, `pdf-unavailable`.
+
+### Fixed
+- **Наблюдаемость pdf-конвейера** (`b6348ae`). Метка «текст не получен / не извлекается» теперь несёт причину (`[FILE: … — note: reason]`) в Gemini, AI Studio, Qwen и DeepSeek; `parser/pdf-host.js` печатает info-лог завершения разбора (страницы, длина текста, код причины), брокер — лог сессии, падение pdf.js больше не тонет в общем `warn`.
+- **Стабильный инжект `AiCmPdf`** (`b6348ae`). `ensurePdfHelper` регистрирует `core/pdf-bytes.js` в MAIN под своим id `ai-cm-pdf-bytes-v1` (четыре сайта, `js[]` только хелпер) до перехватчика ChatGPT и в отдельном `try`; повторная регистрация не делается, самопроверка `hello`/`ready` даёт `helper-missing` без ожидания и `console.warn` с причиной при провале.
+- **Роутинг PDF в Qwen** (`ea7238f`). PDF-вложение уходит в `AiCmPdf`, а не в текстовый загрузчик (тот резал тело по `QF_BODY_MAX` 8 МиБ и читал бинарь как текст); без хелпера в запись пишется `pdf-unavailable`, а не тишина.
+
+### Notes
+- Счётчики сьюта: 208 suites / 3706 passed / 7 skipped / 0 failed.
+
 ## [2.0.36] - 2026-10-31
 
 ### Fixed
