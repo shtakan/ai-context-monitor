@@ -503,7 +503,9 @@ const PDFJS_MODULE = 'pdfjs-dist';
 const PDFJS_ASSETS = [
   ['build/pdf.min.mjs', 'lib/pdf.min.mjs'],
   ['build/pdf.worker.min.mjs', 'pdf.worker.js'],
-  ['LICENSE', 'vendor/pdfjs-LICENSE.txt'],
+  // .md, не .txt: релизный шаг "Verify ZIP integrity" намеренно считает любой
+  // *.txt недопустимым артефактом, поэтому лицензия идёт как Markdown.
+  ['LICENSE', 'vendor/pdfjs-LICENSE.md'],
 ];
 // .js-ассеты pdf.js, которые Chrome/Firefox резолвят по пути. Их надо внести в
 // allow-list verifyDist: иначе он примет их за legacy-хвосты прежних сборок.
@@ -578,7 +580,7 @@ const REQUIRED_DIST_FILES = [
   // v2.0.37 (PDF): pdf.js + хост-страница offscreen + лицензия Apache-2.0.
   'pdf.worker.js',
   'lib/pdf.min.mjs',
-  'vendor/pdfjs-LICENSE.txt',
+  'vendor/pdfjs-LICENSE.md',
   'parser/offscreen.html',
   'parser/offscreen.js',
   'parser/pdf-host.js',
