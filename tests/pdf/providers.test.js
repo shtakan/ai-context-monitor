@@ -157,6 +157,51 @@ describe('pdf.js в провайдерах: Qwen', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  test('PDF из files[] проходит очередь и отдаёт текст pdf.js в секцию экспорта', async () => {
+    const windowObj = loadProvider('core/qwen-files.js');
+    const Fn = windowObj.AiCmQwenFiles;
+    windowObj.AiCmPdf = pdfStub();
+    const fetchMock = jest.fn();
+    Fn.__bind({ originalFetch: fetchMock });
+
+    const queued = Fn.enqueueUserFiles('chat-1', 'u-1', [
+      { id: 'pdf', name: 'spec.pdf', url: 'https://cdn.example/spec.pdf?key=x', file_type: 'application/pdf', size: 5000, status: 'uploaded' }
+    ]);
+    expect(queued).toBe(1);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(windowObj.AiCmPdf.fromUrl).toHaveBeenCalledTimes(1);
+    expect(windowObj.AiCmPdf.fromUrl.mock.calls[0][0]).toBe('https://cdn.example/spec.pdf?key=x');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(Fn.sectionsFor('chat-1', 'u-1')).toContain('[FILE: spec.pdf]\n' + PDF_TEXT);
+    Fn.reset('chat-1');
+  });
+
+  test('без MAIN-хелпера PDF не читается как текст: reason=pdf-unavailable', async () => {
+    const windowObj = loadProvider('core/qwen-files.js');
+    const Fn = windowObj.AiCmQwenFiles;
+    const textSpy = jest.fn(() => Promise.resolve('%PDF-1.4 мусор как utf-8'));
+    const fetchMock = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      text: textSpy
+    }));
+    Fn.__bind({ originalFetch: fetchMock });
+
+    const res = await Fn.fetchText({
+      url: 'https://cdn.example/scan.pdf',
+      name: 'scan.pdf',
+      mime: 'application/pdf'
+    });
+
+    // PDF не имеет права уйти в текстовую ветку: без хелпера — явная причина,
+    // ни одного запроса тела и ни одного res.text().
+    expect(res).toMatchObject({ ok: false, reason: 'pdf-unavailable' });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(textSpy).not.toHaveBeenCalled();
+  });
+
   test('без MAIN-хелпера Qwen пишет pdf-unavailable в запись, а не молчит', () => {
     const windowObj = loadProvider('core/qwen-files.js');
     const Fn = windowObj.AiCmQwenFiles;

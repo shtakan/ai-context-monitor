@@ -468,7 +468,12 @@
     var ref = { name: qfStr(item.name), mime: qfStr(item.mime) };
     // v2.0.37: PDF нельзя читать как текст (битый UTF-8 и гигантская строка) —
     // байты скачивает и разбирает pdf-bytes.js, сюда приходит готовый текст.
-    if (qfIsPdf(ref) && qfPdfAvailable()) return qfFetchPdf(item, ref);
+    // Без хелпера — явная причина, а не мусор из res.text(): текстовая ветка
+    // для PDF не запускается ни при каком раскладе.
+    if (qfIsPdf(ref)) {
+      if (qfPdfAvailable()) return qfFetchPdf(item, ref);
+      return Promise.resolve({ ok: false, reason: 'pdf-unavailable', text: '' });
+    }
     var ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
     var opts = { method: 'GET', credentials: 'omit' };
     if (ctrl && ctrl.signal) opts.signal = ctrl.signal;
