@@ -656,7 +656,15 @@
           : ((typeof window !== 'undefined' && typeof window.fetch === 'function') ? window.fetch : null);
         if (!fetchImpl) return Promise.resolve({ ok: false, reason: 'no-fetch', text: '' });
         // v2.0.37: PDF не читаем как текст — байты и разбор отдаём pdf.js.
-        if (filesPdfRef(ref) && filesPdfAvailable()) return filesFetchPdf(url, ref, fetchImpl);
+        if (filesPdfRef(ref)) {
+          // Фикс A: раньше PDF без хелпера проваливался в текстовую ветку и
+          // превращался в мусор UTF-8 без причины. Теперь причина видна в логе
+          // и в записи (reason: pdf-unavailable).
+          if (filesPdfAvailable()) return filesFetchPdf(url, ref, fetchImpl);
+          filesDiag('deepseek-files-pdf-unavailable', { file: fileStr(ref && ref.name) });
+          filesWarn('deepseek:files:pdf-unavailable', '[deepseek-files] pdf.js-хелпер недоступен, PDF не разобран: ' + fileStr(ref && ref.name));
+          return Promise.resolve({ ok: false, reason: 'pdf-unavailable', text: '' });
+        }
         filesDiag('deepseek-files-fetch-start', {
           fileId: fileId,
           url: url,

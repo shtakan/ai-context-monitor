@@ -118,6 +118,100 @@ async function registerSafe(id, cfg) {
   }
 }
 
+var PDF_HELPER_ID = 'ai-cm-pdf-bytes-v1';
+var PDF_HELPER_MATCHES = [
+  'https://gemini.google.com/*',
+  'https://aistudio.google.com/*',
+  'https://chat.qwen.ai/*',
+  'https://chat.deepseek.com/*'
+];
+
+// Фикс A/B: единственная bare console.warn точка самопроверки PDF-хелпера.
+// Причина видна в консоли SW даже когда регистрация/инжект не удались, а
+// tests/no-bare-console-warn.test.js знает эту строку по allow-list.
+function pdfSelfCheckWarn(reason, detail) {
+  console.warn('AI Context Monitor: PDF-самопроверка не прошла (' + reason + ')', detail || '');
+}
+
+// Регистрация MAIN-хелпера (core/pdf-bytes.js). Отдельный id и js[]: пины
+// тестов фиксируют js[] четырёх провайдерских регистраций.
+async function ensurePdfHelper(ids) {
+  if (ids.indexOf(PDF_HELPER_ID) !== -1) return false;
+  await registerSafe(PDF_HELPER_ID, {
+    id: PDF_HELPER_ID,
+    matches: PDF_HELPER_MATCHES,
+    js: ['core/pdf-bytes.js'],
+    runAt: 'document_start',
+    world: 'MAIN',
+    allFrames: false
+  });
+  console.log('AI Context Monitor: PDF-хелпер (pdf.js, MAIN) зарегистрирован (мир сайта, document_start)');
+  // Фикс B: после свежей регистрации проверяем, что window.AiCmPdf реально жив.
+  await selfCheckPdfHelper();
+  return true;
+}
+
+// Проверка на открытой поддерживаемой вкладке: executeScript в MAIN-мир,
+// ожидание ai-cm-pdf-ready после ai-cm-pdf-hello (контракт content.js ↔
+// pdf-bytes.js). Нет вкладки — проверять нечего, это не ошибка.
+async function selfCheckPdfHelper() {
+  // Firefox: хелпер живёт в event page, а world:'MAIN' в scripting имеет другую
+  // семантику — самопроверку там не запускаем.
+  if (chrome.runtime && typeof chrome.runtime.getBrowserInfo === 'function') return;
+  if (!chrome.tabs || typeof chrome.tabs.query !== 'function') return;
+  if (!chrome.scripting || typeof chrome.scripting.executeScript !== 'function') return;
+  var tabs;
+  try {
+    tabs = await chrome.tabs.query({ url: PDF_HELPER_MATCHES });
+  } catch (eTab) {
+    pdfSelfCheckWarn('tabs.query', eTab);
+    return;
+  }
+  var tab = (tabs && tabs.length) ? tabs[0] : null;
+  if (!tab || tab.id == null) return;
+  var results;
+  try {
+    results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      world: 'MAIN',
+      func: function () {
+        return new Promise(function (resolve) {
+          var settled = false;
+          function finish(ok, reason) {
+            if (settled) return;
+            settled = true;
+            try { clearTimeout(timer); } catch (eT) { }
+            try { window.removeEventListener('ai-cm-pdf-ready', onReady); } catch (eR) { }
+            resolve({ ok: ok, reason: reason || '' });
+          }
+          function onReady() { finish(true, ''); }
+          var timer = setTimeout(function () { finish(false, 'ready-timeout'); }, 1500);
+          var pageWin = /** @type {any} */ (window);
+          if (!pageWin.AiCmPdf || typeof pageWin.AiCmPdf.fromUrl !== 'function') {
+            finish(false, 'helper-missing');
+            return;
+          }
+          window.addEventListener('ai-cm-pdf-ready', onReady);
+          try {
+            window.dispatchEvent(new CustomEvent('ai-cm-pdf-hello', {
+              detail: JSON.stringify({ id: 'sw-self-check' })
+            }));
+          } catch (eHello) {
+            finish(false, 'hello-failed');
+          }
+        });
+      }
+    });
+  } catch (eExec) {
+    pdfSelfCheckWarn('executeScript', eExec);
+    return;
+  }
+  var res = (results && results[0]) ? results[0].result : null;
+  if (!res || res.ok !== true) {
+    pdfSelfCheckWarn('helper not ready: ' + ((res && res.reason) || 'no-result'), tab.url || '');
+  }
+}
+
 async function ensureInterceptor() {
   try {
     if (!chrome.scripting || !chrome.scripting.registerContentScripts) return;
@@ -126,6 +220,15 @@ async function ensureInterceptor() {
       existing = await chrome.scripting.getRegisteredContentScripts();
     } catch (e) { existing = []; }
     var ids = existing.map(function (s) { return s.id; });
+
+    // Фикс B: PDF-хелпер регистрируем ПЕРВЫМ и в отдельном try. Раньше он был
+    // последним в общем try: падение любой регистрации выше оставляло страницы
+    // без window.AiCmPdf, а виден был только общий warn без причины.
+    try {
+      await ensurePdfHelper(ids);
+    } catch (ePdf) {
+      pdfSelfCheckWarn('register', ePdf);
+    }
 
     // перехватчик ChatGPT (как было)
     if (ids.indexOf('ai-cm-page-intercept') === -1) {
@@ -363,28 +466,6 @@ async function ensureInterceptor() {
         allFrames: false
       });
       console.log('AI Context Monitor: перехватчик AI Studio (v2, история + вложения) зарегистрирован (мир сайта, document_start)');
-    }
-
-    // PDF (v2.0.37): хелпер MAIN-мира — единственная точка запуска разбора PDF.
-    // Отдельная регистрация, а не js[] провайдеров: у четырёх существующих id js[]
-    // зафиксирован пинами тестов, а его изменение в MV3 требует нового id и снятия
-    // старых. Здесь свой id и свой набор — js[] провайдеров не трогаем.
-    // pdf-bytes.js самодостаточен и не зависит от intercept-модулей.
-    if (ids.indexOf('ai-cm-pdf-bytes-v1') === -1) {
-      await registerSafe('ai-cm-pdf-bytes-v1', {
-        id: 'ai-cm-pdf-bytes-v1',
-        matches: [
-          'https://gemini.google.com/*',
-          'https://aistudio.google.com/*',
-          'https://chat.qwen.ai/*',
-          'https://chat.deepseek.com/*'
-        ],
-        js: ['core/pdf-bytes.js'],
-        runAt: 'document_start',
-        world: 'MAIN',
-        allFrames: false
-      });
-      console.log('AI Context Monitor: PDF-хелпер (pdf.js, MAIN) зарегистрирован (мир сайта, document_start)');
     }
   } catch (err) {
     console.warn('AI Context Monitor: не удалось зарегистрировать перехватчик:', err);

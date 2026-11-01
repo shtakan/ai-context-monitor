@@ -315,7 +315,7 @@ describe('R2: очередь, дедуп и секции', function () {
     h.tick(300);
 
     const section = h.Fn.gfSectionsFor(CHAT, 'u1');
-    expect(section).toContain('[FILE: report.pdf — application/pdf, 12345 Б, текст не получен]');
+    expect(section).toContain('[FILE: report.pdf — application/pdf, 12345 Б, текст не получен: pdf-no-text]');
     expect(h.fetchCalls[0].opts.credentials).toBe('include');
   });
 
@@ -332,7 +332,7 @@ describe('R2: очередь, дедуп и секции', function () {
     h.tick(300);
 
     const section = h.Fn.gfSectionsFor(CHAT, 'u1');
-    expect(section).toContain('[FILE: big.pdf — application/pdf, 987654 Б, текст не получен]');
+    expect(section).toContain('[FILE: big.pdf — application/pdf, 987654 Б, текст не получен: pdf-no-text]');
     expect(h.Fn.gfPendingCount(CHAT)).toBe(0);
   });
 
@@ -346,7 +346,7 @@ describe('R2: очередь, дедуп и секции', function () {
     h.tick(300);
 
     expect(h.Fn.gfSectionsFor(CHAT, 'u1'))
-      .toContain('[FILE: scan.pdf — application/pdf, размер неизвестен, текст не получен]');
+      .toContain('[FILE: scan.pdf — application/pdf, размер неизвестен, текст не получен: pdf-no-text]');
   });
 
   test('дубли в одном ходе и повтор файла в другом — один запрос, без дублей секций', async function () {

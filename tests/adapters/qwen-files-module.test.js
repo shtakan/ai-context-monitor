@@ -235,7 +235,13 @@ describe('R2: очередь — картинки и нетекстовые не
 
     const sec = h.Fn.sectionsFor(CHAT, 'u-1');
     expect(sec).toContain('[FILE: photo.png — image/png, 202543 Б; изображение не выгружается]');
-    expect(sec).toContain('[FILE: spec.pdf — application/pdf, 5000 Б; текст не извлекается]');
+    // fix A: PDF без pdf.js-хелпера больше не проглатывается молча — в метке
+    // видна причина pdf-unavailable, и она же уходит в диагностику.
+    expect(sec).toContain('[FILE: spec.pdf — application/pdf, 5000 Б; текст не извлекается: pdf-unavailable]');
+    const warned = h.sandbox.aiCmDiagWarn.mock.calls.some(function (c) {
+      return c[0] === 'qwen:files:pdf-unavailable' && /spec\.pdf/.test(String(c[1]));
+    });
+    expect(warned).toBe(true);
     // незавершённый файл в базу НЕ пишется: экспорт ждёт очередь (drain) и только потом снимает
     expect(sec).not.toContain('Протокол.md');
 

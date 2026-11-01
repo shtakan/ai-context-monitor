@@ -156,6 +156,22 @@ describe('pdf.js в провайдерах: Qwen', () => {
     expect(opts).toMatchObject({ credentials: 'omit', name: 'spec.pdf', maxBytes: PDF_MAX, timeoutMs: 15000 });
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  test('без MAIN-хелпера Qwen пишет pdf-unavailable в запись, а не молчит', () => {
+    const windowObj = loadProvider('core/qwen-files.js');
+    const Fn = windowObj.AiCmQwenFiles;
+    Fn.__bind({ originalFetch: jest.fn() });
+
+    const queued = Fn.enqueueUserFiles('chat-1', 'u-1', [
+      { id: 'pdf', name: 'spec.pdf', file_type: 'application/pdf', size: 5000, status: 'uploaded' }
+    ]);
+
+    // fix A: раньше такой PDF молча выпадал из очереди с пустым reason.
+    // Теперь запись несёт pdf-unavailable, и секция экспорта её печатает.
+    expect(queued).toBe(0);
+    expect(Fn.sectionsFor('chat-1', 'u-1'))
+      .toContain('[FILE: spec.pdf — application/pdf, 5000 Б; текст не извлекается: pdf-unavailable]');
+  });
 });
 
 describe('pdf.js в провайдерах: AI Studio', () => {
@@ -194,6 +210,33 @@ describe('pdf.js в провайдерах: DeepSeek', () => {
     expect(res).toMatchObject({ ok: true, pdf: true, text: PDF_TEXT });
     expect(windowObj.AiCmPdf.fromUrl).toHaveBeenCalledTimes(1);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('без MAIN-хелпера DeepSeek не читает PDF как текст: reason=pdf-unavailable', async () => {
+    const windowObj = loadProvider('core/deepseek-files.js');
+    const Fn = windowObj.AiCmDeepseekFiles;
+    const textSpy = jest.fn(() => Promise.resolve('%PDF-1.4 мусор как utf-8'));
+    const fetchMock = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      text: textSpy
+    }));
+    Fn.__bind({ originalFetch: fetchMock, diagLine: jest.fn(), emitSnapshot: jest.fn() });
+
+    const res = await Fn.fetchFileContent('file_pdf', 'signed/pdf', {
+      fileId: 'file_pdf',
+      signedPath: 'signed/pdf',
+      name: 'a.pdf',
+      mime: 'application/pdf',
+      isPdf: true
+    });
+
+    // fix A: раньше PDF без хелпера проваливался в текстовую ветку и давал
+    // мусор UTF-8. Теперь — явная причина и ни одного чтения тела.
+    expect(res).toMatchObject({ ok: false, reason: 'pdf-unavailable' });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(textSpy).not.toHaveBeenCalled();
   });
 
   test('без ref (старый двухаргументный вызов) поведение прежнее', async () => {

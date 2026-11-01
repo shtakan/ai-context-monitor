@@ -45,6 +45,7 @@ describe('pdf-parser: брокер выбора хоста', () => {
     }
     delete window.AiCmPdfHost;
     delete global.chrome;
+    delete global.debugLog;
   });
 
   test('Firefox: байты из чанков уходят в AiCmPdfHost.parsePdf, ответ — в порт вкладки', async () => {
@@ -163,5 +164,42 @@ describe('pdf-parser: брокер выбора хоста', () => {
 
     expect(port.messages[0]).toMatchObject({ t: 'result', ok: false, reason: 'pdf-aborted' });
     expect(window.AiCmPdfHost.parsePdf).not.toHaveBeenCalled();
+  });
+
+  test('info-лог finishSession: успех печатает reason=-, ошибка — свой reason', async () => {
+    const log = jest.fn();
+    global.debugLog = log;
+    window.AiCmPdfHost = {
+      parsePdf: jest.fn()
+        .mockResolvedValueOnce({ ok: true, text: 'Привет', pages: 1, truncated: false, reason: '' })
+        .mockResolvedValueOnce({ ok: false, text: '', pages: 0, truncated: false, reason: 'pdf-no-text' })
+    };
+    const broker = loadBroker();
+
+    const okPort = fakePort('ai-cm-pdf:ok');
+    broker.onConnect(okPort);
+    okPort.emit({ t: 'begin', id: 'ok', total: 1 });
+    okPort.emit({ t: 'chunk', id: 'ok', seq: 0, b64: b64('abc') });
+    okPort.emit({ t: 'end', id: 'ok' });
+    await flush();
+
+    const badPort = fakePort('ai-cm-pdf:bad');
+    broker.onConnect(badPort);
+    badPort.emit({ t: 'begin', id: 'bad', total: 1 });
+    badPort.emit({ t: 'chunk', id: 'bad', seq: 0, b64: b64('abc') });
+    badPort.emit({ t: 'end', id: 'bad' });
+    await flush();
+
+    const lines = log.mock.calls
+      .filter((c) => c[0] === 'log' && /\[ai-cm-pdf\]/.test(String(c[1])))
+      .map((c) => String(c[1]));
+    const okLine = lines.find((s) => s.indexOf('id=ok ') !== -1);
+    const badLine = lines.find((s) => s.indexOf('id=bad ') !== -1);
+    expect(okLine).toContain('ok=1');
+    expect(okLine).toContain('pages=1');
+    expect(okLine).toContain('chars=6');
+    expect(okLine).toContain('reason=-');
+    expect(badLine).toContain('ok=0');
+    expect(badLine).toContain('reason=pdf-no-text');
   });
 });

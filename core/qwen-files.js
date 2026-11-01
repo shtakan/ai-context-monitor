@@ -213,7 +213,11 @@
       return '\n\n[FILE: ' + name + ']\n' + rec.text;
     }
     if (rec && qfStr(rec.note)) {
-      return '\n\n[FILE: ' + name + ' — ' + rec.note + ']';
+      // fix A: у метки «текст не извлекается» тоже должна быть видна причина
+      // (pdf-unavailable и т.п.), иначе экспорт не отличит отсутствие хелпера
+      // от неподдерживаемого формата.
+      var noteReason = qfStr(rec.reason);
+      return '\n\n[FILE: ' + name + ' — ' + rec.note + (noteReason ? ': ' + noteReason : '') + ']';
     }
     var reason = qfStr(rec && rec.reason);
     return '\n\n[FILE: ' + name + ' — текст не получен' + (reason ? ': ' + reason : '') + ']';
@@ -696,8 +700,16 @@
       for (var j = 0; j < refs.length; j++) {
         var r = refs[j];
         if (oldRecs[r.fileKey]) { m.recs[r.fileKey] = oldRecs[r.fileKey]; continue; }
-        if (r.isImage || (!qfIsTextual(r) && !(qfIsPdf(r) && qfPdfAvailable()))) {
-          m.recs[r.fileKey] = { fileKey: r.fileKey, name: r.name, ok: false, text: '', note: qfNote(r), reason: '', truncated: false, chars: 0, at: 0 };
+        var isPdfRef = qfIsPdf(r);
+        if (r.isImage || (!qfIsTextual(r) && !(isPdfRef && qfPdfAvailable()))) {
+          // Фикс A: не глотаем причину. PDF без pdf.js-хелпера получает
+          // pdf-unavailable — иначе в экспорте нет ни текста, ни объяснения.
+          var skipReason = (isPdfRef && !qfPdfAvailable()) ? 'pdf-unavailable' : '';
+          m.recs[r.fileKey] = { fileKey: r.fileKey, name: r.name, ok: false, text: '', note: qfNote(r), reason: skipReason, truncated: false, chars: 0, at: 0 };
+          if (skipReason) {
+            qfDiag('pdf-unavailable', { file: qfStr(r.name), mime: qfStr(r.mime) });
+            qfWarn('qwen:files:pdf-unavailable', '[qwen-files] pdf.js-хелпер недоступен, PDF не разобран: ' + qfStr(r.name));
+          }
           continue;
         }
         if (!r.url) {

@@ -33,6 +33,19 @@
     return (isFinite(n) && n > 0) ? n : 0;
   }
 
+  // Фикс A: info-строка завершения парсинга (pages/длина текста/код причины).
+  // console.log, а не warn: успешный разбор — не предупреждение, и страж
+  // bare-console-warn (core/ и adapters/) этот файл не сканирует.
+  function infoDone(res) {
+    if (typeof console === 'undefined' || typeof console.log !== 'function') return;
+    var r = res || {};
+    var text = (typeof r.text === 'string') ? r.text : '';
+    var line = '[ai-cm-pdf-host] done pages=' + num(r.pages) + ' chars=' + text.length +
+      ' reason=' + (typeof r.reason === 'string' && r.reason ? r.reason : '-');
+    if (typeof r.errorName === 'string' && r.errorName) line += ' error=' + r.errorName;
+    try { console.log(line); } catch (eInfo) { }
+  }
+
   function extUrl(relPath) {
     try {
       if (root.chrome && root.chrome.runtime && typeof root.chrome.runtime.getURL === 'function') {
@@ -123,7 +136,9 @@
     var maxPages = num(o.maxPages) || DEFAULT_MAX_PAGES;
     var len = (bytes && typeof bytes.byteLength === 'number') ? bytes.byteLength : 0;
     if (len <= 0) {
-      return Promise.resolve(done({ ok: false, text: '', pages: 0, truncated: false, reason: 'pdf-invalid' }));
+      var invalid = { ok: false, text: '', pages: 0, truncated: false, reason: 'pdf-invalid' };
+      infoDone(invalid);
+      return Promise.resolve(done(invalid));
     }
     return loadLib().then(function (pdfjs) {
       var task = pdfjs.getDocument({
@@ -152,14 +167,18 @@
       }).then(function (res) {
         activeTask = null;
         destroyTask(task);
+        infoDone(res);
         return res;
       }, function (err) {
         activeTask = null;
         destroyTask(task);
-        return { ok: false, text: '', pages: 0, truncated: false, reason: mapError(err) };
+        var reason = mapError(err);
+        infoDone({ ok: false, text: '', pages: 0, reason: reason, errorName: (err && err.name) || 'Error' });
+        return { ok: false, text: '', pages: 0, truncated: false, reason: reason };
       });
     }, function (err) {
       warn('import', err);
+      infoDone({ ok: false, text: '', pages: 0, reason: 'pdf-host-error', errorName: (err && err.name) || 'Error' });
       return { ok: false, text: '', pages: 0, truncated: false, reason: 'pdf-host-error' };
     });
   }

@@ -252,6 +252,15 @@
       size: num(out.size) || session.bytes,
       ms: num(out.ms)
     };
+    // Фикс A: ровно одна info-строка на каждый парсинг. reason печатается
+    // всегда ('' для успеха, код ошибки/таймаута иначе) — по логу видно исход
+    // без чтения экспорта. В тестах debugLog подменяется на jest-мок.
+    if (typeof debugLog === 'function') {
+      debugLog('log', '[ai-cm-pdf] id=' + id + ' ok=' + (payload.ok ? 1 : 0) +
+        ' size=' + payload.size + ' pages=' + payload.pages +
+        ' chars=' + payload.text.length + ' ms=' + payload.ms +
+        ' reason=' + (payload.reason || '-'));
+    }
     try {
       session.port.postMessage(payload);
     } catch (ePost) {

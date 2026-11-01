@@ -223,7 +223,11 @@
       return '\n\n[FILE: ' + name + ']\n' + rec.text;
     }
     if (rec && gfStr(rec.note)) {
-      return '\n\n[FILE: ' + name + ' — ' + rec.note + ']';
+      // v2.0.37 (fix A): note содержит «текст не получен», но без reason метка не
+      // отвечает на вопрос «почему». Печатаем причину рядом с note (pdf-no-text,
+      // pdf-password, pdf-no-url, unsupported-mime), если она есть.
+      var noteReason = gfStr(rec.reason);
+      return '\n\n[FILE: ' + name + ' — ' + rec.note + (noteReason ? ': ' + noteReason : '') + ']';
     }
     var reason = gfStr(rec && rec.reason);
     return '\n\n[FILE: ' + name + ' — текст не получен' + (reason ? ': ' + reason : '') + ']';

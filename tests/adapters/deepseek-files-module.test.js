@@ -509,9 +509,11 @@ describe('Step D.10: fileTextsByMsg, пересборка хода и дебау
     expect(h.deps.turnsMap.m9.order).toBe(0);
     expect(h.deps.orderCounter).toBe(1);
     expect(h.deps.turnsMap.m9.text).toBe('');
-    h.fetchCalls[0].resolve(resp('PDF BODY'));
     await flush();
-    expect(h.deps.turnsMap.m9.text).toBe('\n\n[FILE: doc.pdf]\nPDF BODY');
+    // fix A: без pdf.js-хелпера PDF не читается как UTF-8 и тело не качается —
+    // ход получает метку с причиной вместо мусорного текста.
+    expect(h.fetchCalls).toHaveLength(0);
+    expect(h.deps.turnsMap.m9.text).toBe('\n\n[FILE: doc.pdf — текст не получен: pdf-unavailable]');
   });
 
   test('S3: applyPendingFileTexts переносит кэш в СВЕЖИЙ turnsMap после повторного ingest', async () => {
@@ -569,11 +571,11 @@ describe('Step D.10: несколько вложений одного сообщ
     h.Fn.enqueueChainFiles([msg('m7', 'USER', [fileFrag('f1', 'ok.txt'), fileFrag('f2', 'bad.pdf')])], {});
     h.fetchCalls[0].resolve(resp('OK BODY'));
     await flush();
-    h.fetchCalls[1].resolve(resp('', 500, false));
-    await flush();
+    // fix A: PDF без pdf.js-хелпера не качается вовсе, его причина — pdf-unavailable.
+    expect(h.fetchCalls).toHaveLength(1);
     expect(h.deps.turnsMap.m7.text).toBe(
       '\n\n[FILE: ok.txt]\nOK BODY' +
-      '\n\n[FILE: bad.pdf — текст не получен: http-500]'
+      '\n\n[FILE: bad.pdf — текст не получен: pdf-unavailable]'
     );
   });
 

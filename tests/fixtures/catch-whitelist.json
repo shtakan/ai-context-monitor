@@ -7,7 +7,7 @@
     "adapters"
   ],
   "definition": "Молчаливый catch = тело после вырезания комментариев содержит только пробелы, ИЛИ ровно один no-op (void 0; / return; / continue; / break;). Комментарий-только тело тоже молчаливое (комментарии маскируются в пробелы).",
-  "totalEntries": 478,
+  "totalEntries": 480,
   "groups": [
     {
       "file": "adapters/claude-adapter.js",
@@ -118,9 +118,9 @@
       "file": "core/background.js",
       "category": "debug-instrumentation",
       "lines": [
-        445,
-        1090,
-        1108
+        526,
+        1171,
+        1189
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: chrome.action.setBadgeText({ text: '', tabId: tabIdR }); debugLog('log',"
     },
@@ -128,7 +128,7 @@
       "file": "core/background.js",
       "category": "defensive-assignment",
       "lines": [
-        1009
+        1090
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: errText = await response.text();"
     },
@@ -136,7 +136,7 @@
       "file": "core/background.js",
       "category": "guard-clause",
       "lines": [
-        821
+        902
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: for (var k in (all || {})) { if (k.indexOf(AI_CM_FIRED_SESSION_PREFIX) ="
     },
@@ -149,13 +149,13 @@
         95,
         97,
         100,
-        211,
-        261,
-        339,
-        356,
-        562,
-        636,
-        638
+        314,
+        364,
+        442,
+        459,
+        643,
+        717,
+        719
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: void chrome.runtime.lastError;"
     },
@@ -802,9 +802,9 @@
       "lines": [
         97,
         111,
-        377,
-        398,
-        399
+        381,
+        402,
+        403
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (ctrl) ctrl.abort();"
     },
@@ -812,7 +812,7 @@
       "file": "core/gemini-files.js",
       "category": "parse-guard",
       "lines": [
-        565
+        569
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: if (typeof TextDecoder === 'function') return new TextDecoder('utf-8').d"
     },
@@ -1396,7 +1396,7 @@
       "file": "core/qwen-files.js",
       "category": "feature-detect",
       "lines": [
-        367
+        371
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: if (res && res.headers && typeof res.headers.get === 'function') return qfStr(res.headers.get(name));"
     },
@@ -1837,6 +1837,15 @@
         69
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: if (typeof TextDecoder !== 'undefined') return TextDecoder;"
+    },
+    {
+      "file": "core/background.js",
+      "category": "best-effort-cleanup",
+      "lines": [
+        183,
+        184
+      ],
+      "reason": "v2.0.37 fix B: таймер и listener самопроверки — best-effort cleanup в инжектируемой функции; их сбой не меняет исход (settled уже выставлен). Пример: try { clearTimeout(timer); } catch (eT) { }"
     }
   ]
 }
