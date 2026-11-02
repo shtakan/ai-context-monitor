@@ -83,12 +83,12 @@ describe('DeepSeek v4.1-flash: контракт детекции модели о
     ).toBe('deepseek-v4.1-flash');
   });
 
-  test('(a) явное непустое имя модели из сети приоритетнее сигналов контракта', () => {
+  test('(v95) живые unified-сигналы приоритетнее непустого model (в т.ч. исторического chat_session.model)', () => {
     expect(
       INTERCEPT.resolveNetworkModelSlug({
         modelPresent: true, model: 'deepseek-v3', modelType: 'default', conversationMode: 'DEFAULT'
       })
-    ).toBe('deepseek-v3');
+    ).toBe('deepseek-v4.1-flash');
   });
 
   test('(c) старые сигналы (expert / пустой набор) резолвер не маппит — прежний фолбэк сохранён', () => {

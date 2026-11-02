@@ -183,29 +183,29 @@ var AI_CM_DEEPSEEK_V4_FLASH_SLUG = 'deepseek-v4.1-flash';
  */
 /**
  * Slug модели по сетевым сигналам. Приоритет:
- *   (a) явный непустой model из сети → он же (обратная совместимость);
- *   (b) сигналы unified Intelligent Mode → 'deepseek-v4.1-flash';
- *   (c) иначе '' — вызывающий применяет прежний фолбэк по thinking_enabled.
+ *   (a) живые сигналы unified Intelligent Mode → 'deepseek-v4.1-flash';
+ *   (b) иначе непустой model (исторический chat_session.model) → он же;
+ *   (c) пусто → '' — вызывающий применяет прежний фолбэк по thinking_enabled.
  * @param {AiCmDeepSeekModelSignals} [signals]
  * @returns {string}
  */
 function __aiCmDeepseekResolveModelSlug(signals) {
   var s = signals || {};
   var raw = (typeof s.model === 'string') ? s.model.trim() : '';
-  if (raw) return raw;   // (a)
   var modelType = String(s.modelType || '').toLowerCase();
   var convMode = String(s.conversationMode || '').toUpperCase();
   var configName = String(s.configName || '').toLowerCase();
   var isDefaultType = modelType === 'default';
   var isDefaultConv = convMode === 'DEFAULT';
-  // model:"" присутствует и разговор в DEFAULT-режиме — та же новая ветка без model_type
   var emptyModelNewContract = (s.modelPresent === true) && raw === '' && isDefaultConv;
   // v94 (2026-10-23): у СТАРЫХ чатов conversation_mode в ответе НЕТ вовсе ('' после нормализации); пустой режим при model_type:"default" трактуем как DEFAULT — "default" в контракте DeepSeek единственная unified-запись (1M), а не фолбэк deepseek-v3 (128K). Контракт сети 2026-10-11: name локализуется (Instant / Быстрый / Fast); матч по структурному is_default + model_type, а не по локализованному имени.
   var isUnifiedDefault = isDefaultType && (isDefaultConv || convMode === '');
   if (isUnifiedDefault || emptyModelNewContract || (isDefaultType && (s.isDefault === true || configName !== ''))) {
     return AI_CM_DEEPSEEK_V4_FLASH_SLUG;   // (b)
   }
-  return '';   // (c)
+  // historical slug: chat_session.model, не текущая модель — фолбэк в самом конце
+  if (raw) { if (typeof window !== 'undefined' && window.AiCmDeepseekDiag && window.AiCmDeepseekDiag.diagMark) window.AiCmDeepseekDiag.diagMark('model-slug-historical', { model: raw }); return raw; }   // (c)
+  return '';   // (d)
 }
 
 if (typeof window !== 'undefined') {
