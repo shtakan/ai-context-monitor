@@ -1795,27 +1795,44 @@
   // Здесь — чистое ОБРАТНОЕ преобразование той же пары: пара → отдельные поля, чтобы
   // вызывающий мог отдать размышление рендеру отдельным полем (контракт O-35) ДО урезания.
   //
-  // Инварианты (симметричны stripReasoningSections):
-  //   - пары нет ([REASONING] без [ANSWER], нет маркеров вовсе) → { reasoning:'', answer: текст }
-  //     БАЙТОВО прежний в answer (текст не меняется);
-  //   - берётся ПЕРВАЯ пара: reasoning — текст между маркерами (без форматного перевода строки
+  // Инварианты (СТРУКТУРНЫЕ, не «любая пара маркеров»):
+  //   - пара признаётся, только если [REASONING] стоит в НАЧАЛЕ текста (допустимы ведущие
+  //     пустые строки/пробелы) И [ANSWER] идёт сразу после перевода строки-разделителя —
+  //     ровно форма composeTurnText перехватчиков;
+  //   - литералы в ПРОЗЕ (модель написала маркеры словами внутри ответа) структурой не
+  //     считаются → { reasoning:'', answer: текст }, текст БАЙТОВО прежний, секций не появляется;
+  //   - каноническая пара: reasoning — текст между маркерами (без форматного перевода строки
   //     сразу после [REASONING] и без пробельного хвоста перед [ANSWER]), answer — всё после
   //     [ANSWER] плюс снятый ОДИН форматный перевод строки (как в stripReasoningSections);
   //   - round-trip: '[REASONING]\n<r>\n\n[ANSWER]\n<a>' → { reasoning:<r>, answer:<a> };
   //   - идемпотентна на своём выходе: у answer пары уже нет → answer возвращается как есть;
-  //   - чистая: без логов, DOM и chrome. Маркеры — формат ДАННЫХ (прецедент O-35/O-36).
+  //   - чистая: без DOM и chrome; единственный побочный эффект — диаг-строка под гейтом
+  //     aiCmDebug (diagTag). Маркеры — формат ДАННЫХ (прецедент O-35/O-36).
   // =====================================================================================
+  // Структурная пара: [REASONING] — НАЧАЛО текста (допустимы ведущие пустые строки/пробелы),
+  // [ANSWER] — сразу после перевода строки-разделителя. Литеральные маркеры, которые модель
+  // написала В ПРОЗЕ, парой не считаются: текст возвращается байтово, ни один байт не режется.
+  var REASONING_SECTION_PAIR_RE = /^\s*\[REASONING\]\r?\n([\s\S]*?)\r?\n\r?\n\[ANSWER\]\r?\n([\s\S]*)$/;
+  // ДИАГНОСТИКА (гейт aiCmDebug — канон utils/debug.js:aiCmDiagLine, прецедент bdsDiagLine):
+  // оба литерала есть, но структура не парная. Хелпера нет (срез-песочницы) или гейт выключен
+  // → ни одной строки; на возврат и байты не влияет.
+  function diagTag(tag, fields) {
+    try {
+      if (typeof aiCmDiagLine !== 'function') return false;
+      return aiCmDiagLine(tag, fields) !== false;
+    } catch (eDiag) { return false; }
+  }
+
   function splitReasoningSections(text) {
     var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
+    var m = REASONING_SECTION_PAIR_RE.exec(s);
+    if (m) return { reasoning: m[1].replace(/\s+$/, ''), answer: m[2] };
     var r = s.indexOf(SECTION_REASONING_TAG);
-    if (r === -1) return { reasoning: '', answer: s };
-    var a = s.indexOf(SECTION_ANSWER_TAG, r + SECTION_REASONING_TAG.length);
-    if (a === -1) return { reasoning: '', answer: s };
-    var reasoning = s.slice(r + SECTION_REASONING_TAG.length, a).replace(/^\r?\n/, '').replace(/\s+$/, '');
-    var i = a + SECTION_ANSWER_TAG.length;
-    if (s.charAt(i) === '\r' && s.charAt(i + 1) === '\n') i += 2;
-    else if (s.charAt(i) === '\n') i += 1;
-    return { reasoning: reasoning, answer: s.slice(i) };
+    var a = s.indexOf(SECTION_ANSWER_TAG);
+    if (r !== -1 && a !== -1) {
+      diagTag('reasoning-marker-in-prose', { len: s.length, r: r, a: a });
+    }
+    return { reasoning: '', answer: s };
   }
 
   // =====================================================================================
