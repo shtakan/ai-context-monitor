@@ -180,9 +180,12 @@
 
   // Решение о следующем шаге — тот же контракт, что у Gemini
   // (utils/gemini-intercept-logic.js:959-985): потолки → продолжение по курсору → конец.
-  // state = { hasCursor, pages, elapsedMs, added, failedPage }
-  // Возвращает { action: 'continue'|'complete'|'cap', reason, reachedStart, baseComplete, warn }.
-  function pageStepDecision(state, caps) {
+  // state = { hasCursor, pages, elapsedMs, added, failedPage, finishReason? }
+  // finishReason (3-й аргумент) — причина, с которой вызывающий уже готов завершить прогон;
+  // 'no-cursor' (сервер не дал курсор и не сказал has_more_older=false) НЕ является концом.
+  // Возвращает { action: 'continue'|'complete'|'cap'|'incomplete', reason, reachedStart,
+  // baseComplete, complete?, warn }.
+  function pageStepDecision(state, caps, finishReason) {
     caps = caps || {};
     var pageCap = (typeof caps.pageCap === 'number' && caps.pageCap > 0) ? caps.pageCap : DEFAULT_PAGE_CAP;
     var timeCapMs = (typeof caps.timeCapMs === 'number' && caps.timeCapMs > 0) ? caps.timeCapMs : DEFAULT_TIME_CAP_MS;
@@ -191,6 +194,19 @@
     var elapsedMs = (state && typeof state.elapsedMs === 'number') ? state.elapsedMs : 0;
     var added = (state && typeof state.added === 'number') ? state.added : 0;
     var failedPage = !!(state && state.failedPage);
+    // П1: «курсора нет» — это НЕ доказанный конец истории. Раньше отсутствие курсора
+    // безусловно трактовалось как has_more_older=false, снимок объявлялся полным (end),
+    // и автоэкспорт выпускал файл без старших ходов. Причина проверяется ПЕРВОЙ: даже у
+    // потолка страниц нельзя объявлять reachedStart/baseComplete, если сервер молчит.
+    var noCursor = (typeof finishReason === 'string' && finishReason) ? finishReason
+      : ((state && typeof state.finishReason === 'string') ? state.finishReason : '');
+    if (noCursor === 'no-cursor') {
+      return {
+        action: 'incomplete', reason: 'no-cursor', reachedStart: false,
+        baseComplete: false, complete: false,
+        warn: 'конец истории не доказан: сервер не вернул курсор и не сказал has_more_older=false'
+      };
+    }
 
     if (pages >= pageCap) {
       return { action: 'cap', reason: 'page-cap', reachedStart: false, baseComplete: false, warn: 'страховочный потолок страниц достигнут (' + pageCap + ')' };

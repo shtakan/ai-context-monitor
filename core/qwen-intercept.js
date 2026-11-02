@@ -1053,10 +1053,10 @@
       // O-53: полнота — часть сигнатуры. Иначе промежуточный (complete=false) и финальный
       // (complete=true) снимки одной базы дедупятся и финальный emit теряется.
       parts.push('c:' + (complete === false ? 0 : 1));
-      // R1: мягкий финал (time-cap/page-cap/no-gain) идёт с тем же complete=false и тем же
-      // набором ходов, что и последний промежуточный эмит, поэтому без этого слагаемого он
-      // дедупился бы как same-signature (R-1 плана) и фикс был бы недетерминирован.
-      parts.push('s:' + (soft === true ? 1 : 0));
+      // R1: мягкий финал с тем же complete=false и набором ходов дедупился бы без s-слагаемого.
+      // П1: |u:сумма длин вопросов — потеря вопроса не меняет turns/serverTokens, без агрегата
+      // ре-эмит глушится дедупом; typeof-гард O-54, 'na' в срез-песочницах.
+      parts.push('s:' + (soft === true ? 1 : 0)); if (typeof userTurns !== 'undefined' && userTurns) parts.push('u:' + userTurns.reduce(function (n, u) { return n + ((u && typeof u.text === 'string') ? u.text.length : 0); }, 0));
       for (var i = 0; i < turns.length; i++) {
         var t = turns[i];
         parts.push(t.key + ':' + t.userKey + ':' + t.order + ':' +
@@ -1394,8 +1394,8 @@
     pq.lastAdded = added;
     var next = api ? api.nextCursorOf(json) : '';
     // Порядок важен: корень (has_more_older=false) может не добавить НИ ОДНОГО хода,
-    // но это честный конец, а не no-gain.
-    if (!next) { pqFinish('end'); return; }
+    // но это честный конец; отсутствие курсора БЕЗ флага «старше нет» — не конец (П1).
+    if (!next) { pqFinish((api && typeof api.paginationInfo === 'function' && api.paginationInfo(json).hasMoreOlder === false) ? 'end' : 'no-cursor'); return; }
     if (!added) { pqFinish('no-gain'); return; }
     if (pq.usedCursors[next]) { pqFinish('cursor-loop'); return; }
     pq.cursor = next;

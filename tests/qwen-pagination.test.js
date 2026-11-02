@@ -105,7 +105,8 @@ function makeHistoryStore() {
     'buildSignature', 'userTextOf', 'emitSnapshot', 'applyHistoryPayload', 'renumberHistoryPage'];
   const SCOPE = 'with (ctx) { ' + FNS.map(function (n) { return fnDecl(INTERCEPT_SRC, n); }).join('\n') +
     '\n return { applyHistoryPayload: applyHistoryPayload, recordTurn: recordTurn,' +
-    ' emitSnapshot: emitSnapshot, renumberHistoryPage: renumberHistoryPage }; }';
+    ' emitSnapshot: emitSnapshot, buildSignature: buildSignature,' +
+    ' renumberHistoryPage: renumberHistoryPage }; }';
   const api = new Function('ctx', SCOPE)(ctx);
   api.ctx = ctx;
   return api;
@@ -735,5 +736,109 @@ describe('O-55: регрессы R1 (живой ход в конец) и R2 (д�
     expect(store.ctx.turns.length).toBe(2);
     expect(store.ctx.turns.map(function (t) { return t.text; })).toEqual(['A', 'A']);
     // Дедуп по составному ключу — отдельная задача П2-C; здесь поведение намеренно прежнее.
+  });
+});
+
+// ===== П1: отсутствие курсора не означает конец истории =====
+describe('П1: no-cursor не объявляет историю полной', function () {
+  const MGR_SRC = fs.readFileSync(path.join(__dirname, '..', 'core', 'export-manager.js'), 'utf8');
+
+  // Реальный pqFinish из исходника: причина → аргумент снимка (complete/partial/partialSoft).
+  function makeFinishStore() {
+    const emitted = [];
+    const ctx = {
+      pq: { chatId: CHAT, url: BASE_URL, pages: 3, cursorSrc: 'field',
+        startTs: Date.now(), running: true, aborted: false },
+      turns: [],
+      diagTag: function () {},
+      swallow: function () {},
+      qwenPaginationApi: function () { return P; },
+      emitSnapshot: function (s) { emitted.push(s); return true; }
+    };
+    const SCOPE = 'with (ctx) { ' + fnDecl(INTERCEPT_SRC, 'pqFinish') + '\n return pqFinish; }';
+    return { ctx: ctx, emitted: emitted, finish: new Function('ctx', SCOPE)(ctx) };
+  }
+
+  function incompleteQwen(baseSeen, baseComplete, partialSoft) {
+    const fn = new Function('ctx',
+      'with (ctx) { ' + fnDecl(MGR_SRC, 'aiCmHistoryPaginationIncomplete') +
+      '\n return aiCmHistoryPaginationIncomplete; }')({});
+    return fn('qwen', baseSeen, baseComplete, partialSoft);
+  }
+
+  function snapshotDetail(s) {
+    const store = makeTurnStore();
+    store.ctx.turns = [{ key: 'a', order: 0, text: 'A' }];
+    store.emitSnapshot(s);
+    return store.ctx.dispatched[0].detail;
+  }
+
+  test('D1: oldest_id нет, has_more_older !== false → no-cursor, база неполная, автоэкспорт закрыт', function () {
+    // Реальный payload: поля курсора нет вовсе, флаг «старше есть» во вложенном pagination.
+    const payload = pageOf({ has_more_older: true, oldest_id: '' });
+    expect(P.nextCursorOf(payload)).toBe('');
+    expect(P.paginationInfo(payload).hasMoreOlder).toBe(true);
+    // Шаг не может быть объявлен «концом»: pageStepDecision получает причину no-cursor.
+    const dec = P.pageStepDecision({ hasCursor: false, pages: 3 }, {}, 'no-cursor');
+    expect(dec.action).toBe('incomplete');
+    expect(dec.complete).toBe(false);
+    expect(dec.baseComplete).toBe(false);
+    expect(dec.reachedStart).toBe(false);
+    // Финал прогона: реальный pqFinish('no-cursor') → неполный снимок, НЕ мягкий.
+    const fin = makeFinishStore();
+    fin.finish('no-cursor');
+    const s = fin.emitted[0];
+    expect(s.complete).toBe(false);
+    expect(s.partial).toEqual({ pages: 3, reason: 'no-cursor' });
+    expect(s.partialSoft).toBe(false);
+    const detail = snapshotDetail(s);
+    expect(detail.historyComplete).toBe(false);
+    expect(detail.reachedRoot).toBe(false);
+    expect(detail.partial).toEqual({ pages: 3, reason: 'no-cursor' });
+    // Гейт автоэкспорта: предикат неполноты держит файл (O-54 не ослаблен).
+    expect(incompleteQwen(true, false, detail.partialSoft)).toBe(true);
+    expect(Gate.shouldSkipAutoExport({
+      enabled: true, percentage: 95, threshold: 90, loaderRunning: false, fired: false,
+      isGemini: false, domBaseTrusted: true,
+      site: 'qwen', baseComplete: false, baseSeen: true,
+      historyIncomplete: incompleteQwen(true, false, detail.partialSoft)
+    })).toEqual({ skip: true, reason: 'not-complete', resetFired: false });
+  });
+
+  test('D2: has_more_older === false → end, история полная', function () {
+    const payload = pageOf({ has_more_older: false, oldest_id: '' });
+    expect(P.nextCursorOf(payload)).toBe('');
+    expect(P.paginationInfo(payload).hasMoreOlder).toBe(false);
+    // Легитимный конец: pageStepDecision без причины и pqFinish('end') объявляют полноту.
+    expect(P.pageStepDecision({ hasCursor: false, pages: 3 }).baseComplete).toBe(true);
+    const fin = makeFinishStore();
+    fin.finish('end');
+    const s = fin.emitted[0];
+    expect(s.complete).toBe(true);
+    expect(s.partial).toBe(null);
+    const detail = snapshotDetail(s);
+    expect(detail.historyComplete).toBe(true);
+    expect(detail.reachedRoot).toBe(true);
+    expect(incompleteQwen(true, true, false)).toBe(false);
+  });
+
+  test('D2: source-пин pqApplyPage — «нет курсора» разводится по has_more_older', function () {
+    const body = fnDecl(INTERCEPT_SRC, 'pqApplyPage');
+    expect(body).toContain('api.paginationInfo(json).hasMoreOlder === false');
+    expect(body).toContain("? 'end' : 'no-cursor'");
+    expect(body.indexOf('no-gain')).toBeGreaterThan(body.indexOf("'no-cursor'"));
+  });
+
+  test('D3: buildSignature меняется от суммы длин пользовательских текстов', function () {
+    const store = makeHistoryStore();
+    store.ctx.turns = [{ key: 'q1', userKey: 'u1', order: 0, text: 'A' }];
+    store.ctx.userTurns = [{ key: 'u1', text: 'ab' }];
+    const before = store.buildSignature(100, true, false);
+    expect(before).toContain('u:2');
+    // Число ходов, ответ и serverTokens те же — меняется только длина вопроса.
+    store.ctx.userTurns = [{ key: 'u1', text: 'abcdef' }];
+    const after = store.buildSignature(100, true, false);
+    expect(after).toContain('u:6');
+    expect(after).not.toBe(before);
   });
 });
