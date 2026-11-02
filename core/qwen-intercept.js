@@ -739,7 +739,7 @@
   // уезжает в detail.messages[].reasoning и в текст хода секциями [REASONING]/[ANSWER].
   // usage для снимка — usage ПОСЛЕДНЕГО assistant-хода (как у стрима: последний кумулятивный).
   function applyHistoryPayload(payload, meta) {
-    var m = meta || {}; var pgRaw = payload && payload.data && payload.data.chat && payload.data.chat.history ? payload.data.chat.history.pagination : null; var fullDoc = (m.full === true) || (typeof isFullHistoryUrl === 'function' && isFullHistoryUrl(m.url) && !pgRaw);
+    var m = meta || {}; var pgRaw = payload && payload.data && payload.data.chat && payload.data.chat.history ? payload.data.chat.history.pagination : null; var fullDoc = (m.full === true) || (typeof isFullHistoryUrl === 'function' && isFullHistoryUrl(m.url) && !pgRaw); /* O-57: полная история принята → страницу пагинации не применяем (до парсинга и recordTurn) */ if (fullHistoryBlocksPage(m.chatId || currentChatId || lastReqChatId, m.url, m)) return skipFullHistoryPage(m);
     var parsed = parseQwenHistory(payload);
     if (!parsed.messages.length) {
       diagTag('qwen-history', { ts: Date.now(), event: 'skip', reason: 'no-messages', url: m.url || '' });
@@ -982,7 +982,7 @@
   // колбэков страницы не меняются.
   function consumeHistoryXhr(xhr, meta) {
     var m = meta || {};
-    try {
+    try { /* O-57: полная история уже в базе → пагинацию сайта не читаем и не применяем (до разбора тела) */ if (fullHistoryBlocksPage(m.chatId || currentChatId || lastReqChatId, m.url, m)) return skipFullHistoryPage(m, 'xhr');
       var status = 0;
       try { status = Number(xhr.status) || 0; } catch (eXSt) { status = 0; }
       if (status && (status < 200 || status >= 300)) {
@@ -1920,6 +1920,30 @@
       }
       return true;
     } catch (eFull) { return false; }
+  }
+
+  // O-57: полная история чата уже принята (нативный GET /api/v2/chats/{id}) — страница
+  // пагинации (direction/limit/cursor), которой сайт отвечает на прокрутку вверх, её больше
+  // не перезаписывает. Наш собственный полный GET идёт мимо хуков (originalFetch) и помечен
+  // m.full; полная форма URL распознаётся isFullHistoryUrl — оба случая гард пропускает.
+  function fullHistoryBlocksPage(chatId, url, meta) {
+    var m = meta || {};
+    if (m.full === true) return false;                                  // наш полный GET
+    if (typeof isFullHistoryUrl !== 'function') return false;            // срез-песочница
+    if (isFullHistoryUrl(url)) return false;                            // сам полный документ
+    if (typeof fh === 'undefined' || !fh) return false;
+    var id = String(chatId || '');
+    return !!id && fh[id] === 'done';
+  }
+
+  // O-57: единая точка пропуска страницы, когда полная история уже принята (диагностика
+  // и форма ответа applyHistoryPayload — в одном месте).
+  function skipFullHistoryPage(meta, transport) {
+    var m = meta || {};
+    var ev = { ts: Date.now(), event: 'skip', reason: 'full-history-applied', url: m.url || '' };
+    if (transport) ev.transport = transport;
+    diagTag('qwen-history', ev);
+    return { added: 0, foreign: false, blocked: 'full-history' };
   }
 
   var FH_HEADER_NAMES = ['authorization', 'bx-ua', 'bx-umidtoken', 'bx-v', 'accept'];

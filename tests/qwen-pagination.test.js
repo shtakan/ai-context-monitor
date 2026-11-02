@@ -80,6 +80,8 @@ function makeHistoryStore(opts) {
     turnSeq: 0,
     currentChatId: '',
     lastReqChatId: '',
+    // O-57: состояние нативной полной истории (chatId → 'pending' | 'done' | 'failed').
+    fh: o.fh || {},
     dispatchSig: null,
     lastDispatchResult: false,
     dispatched: [],
@@ -106,7 +108,9 @@ function makeHistoryStore(opts) {
     'buildSignature', 'userTextOf', 'emitSnapshot', 'applyHistoryPayload', 'renumberHistoryPage',
     // O-56: полная история — распознавание формы URL, парсер словаря и хронология по parentId.
     'isFullHistoryUrl', 'reindexByChain', 'qwenParseFullChain', 'qwenThinkingItem',
-    'qwenReasoningOf', 'qwenContentText'];
+    'qwenReasoningOf', 'qwenContentText',
+    // O-57: гард «полная история уже принята → страницу пагинации не применяем».
+    'fullHistoryBlocksPage', 'skipFullHistoryPage'];
   const SCOPE = 'with (ctx) { ' + FNS.map(function (n) { return fnDecl(INTERCEPT_SRC, n); }).join('\n') +
     '\n return { applyHistoryPayload: applyHistoryPayload, recordTurn: recordTurn,' +
     ' emitSnapshot: emitSnapshot, buildSignature: buildSignature,' +
@@ -964,5 +968,104 @@ describe('O-56: нативная полная история — парсер б
     const detail = lastDetail(store);
     expect(detail.historyComplete).toBe(false);
     expect(detail.partial.reason).toBe('in-progress');
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// O-57: полная история чата (fh=done) — страница пагинации сайта её не перезаписывает.
+// Дефект живого прогона: прокрутка вверх отдавала ?cursor=-страницу, она применялась
+// поверх уже полной базы, recordTurn перезаписывал текст ходов (573k → 471k).
+// ---------------------------------------------------------------------------------------
+describe('O-57: fh=done — пагинационная страница не перезаписывает полную базу', function () {
+  const FULL_URL = 'https://chat.qwen.ai/api/v2/chats/' + CHAT;
+
+  // Нативный полный GET: 19 обменов = 38 сообщений, словарь без пагинации.
+  function fullPayload19() {
+    const nodes = [];
+    let parent = '';
+    for (let i = 0; i < 19; i++) {
+      const uid = 'u' + String(i).padStart(2, '0');
+      const aid = 'a' + String(i).padStart(2, '0');
+      nodes.push(fullNode(uid, 'user', parent, 'Q' + i));
+      nodes.push(fullNode(aid, 'assistant', uid, 'A' + i));
+      parent = aid;
+    }
+    return fullDoc(nodes, null, true);
+  }
+
+  function textLen(store) {
+    return store.ctx.turns.reduce(function (n, t) { return n + String(t.text || '').length; }, 0);
+  }
+
+  test('S: гард стоит в обеих точках входа — до разбора тела', function () {
+    const apply = fnDecl(INTERCEPT_SRC, 'applyHistoryPayload');
+    expect(apply.indexOf('fullHistoryBlocksPage(')).toBeGreaterThan(-1);
+    expect(apply.indexOf('fullHistoryBlocksPage(')).toBeLessThan(apply.indexOf('parseQwenHistory('));
+    const xhr = fnDecl(INTERCEPT_SRC, 'consumeHistoryXhr');
+    expect(xhr.indexOf('fullHistoryBlocksPage(')).toBeGreaterThan(-1);
+    expect(xhr.indexOf('fullHistoryBlocksPage(')).toBeLessThan(xhr.indexOf('JSON.parse('));
+    // Наш собственный полный GET идёт мимо хуков и помечен m.full — гард его пропускает.
+    expect(fnDecl(INTERCEPT_SRC, 'fullHistoryBlocksPage')).toContain('m.full === true');
+  });
+
+  test('D1: fh=done + ?cursor=-страница → count и textLen не меняются', function () {
+    const store = makeHistoryStore();
+    store.applyHistoryPayload(fullPayload19(), { chatId: CHAT, url: FULL_URL, full: true });
+    expect(lastDetail(store).messages.length).toBe(38);
+    store.ctx.fh[CHAT] = 'done';                        // noteNativeFullHistory по транспорту
+
+    const count = store.ctx.turns.length;
+    const len = textLen(store);
+    const emitted = store.ctx.dispatched.length;
+    const users = store.ctx.userTurns.length;
+    expect([count, emitted]).toEqual([19, 1]);
+
+    // Сайт прокрутили вверх: ?cursor=-страница несёт ТЕ ЖЕ ключи с усечённым текстом.
+    const older = store.applyHistoryPayload(historyPage([
+      [{ id: 'u-a00', role: 'user', content: 'Q0' },
+        { id: 'a00', role: 'assistant', content: 'A' }],
+      histTurn('x0', 'Xq', 'X')
+    ]), { chatId: CHAT, url: OLDER_URL });
+
+    expect(older.added).toBe(0);
+    expect(older.blocked).toBe('full-history');
+    expect(store.ctx.turns.length).toBe(count);
+    expect(textLen(store)).toBe(len);
+    expect(store.ctx.dispatched.length).toBe(emitted);   // снимок/экспорт не пересобирались
+    expect(store.ctx.userTurns.length).toBe(users);
+    expect(turnOf(store, 'a00').text).toBe('A0');        // текст хода не перезаписан
+
+    // Базовая страница (?direction=up&limit=10) — тоже не трогает полную базу.
+    const base = store.applyHistoryPayload(historyPage([
+      [{ id: 'u-a01', role: 'user', content: 'Q1' },
+        { id: 'a01', role: 'assistant', content: 'A' }]
+    ]), { chatId: CHAT, url: BASE_URL });
+    expect(base.blocked).toBe('full-history');
+    expect(turnOf(store, 'a01').text).toBe('A1');
+    expect(store.ctx.turns.length).toBe(count);
+  });
+
+  test('R1: полная история грузится штатно и при уже взведённом fh (38 сообщений)', function () {
+    const store = makeHistoryStore();
+    store.ctx.fh[CHAT] = 'done';
+    const res = store.applyHistoryPayload(fullPayload19(), { chatId: CHAT, url: FULL_URL, full: true });
+    const detail = lastDetail(store);
+    expect(res.added).toBe(19);
+    expect(detail.messages.length).toBe(38);
+    expect(detail.historyComplete).toBe(true);
+  });
+
+  test('R2: полной истории нет — ?cursor=-фолбэк работает как раньше', function () {
+    const store = makeHistoryStore();
+    store.ctx.fh[CHAT] = 'failed';                      // полный GET не удался → фолбэк
+    const base = store.applyHistoryPayload(historyPage([histTurn('a', 'Aq', 'A')]),
+      { chatId: CHAT, url: BASE_URL });
+    expect(base.added).toBe(1);
+    const older = store.applyHistoryPayload(historyPage([histTurn('x', 'Xq', 'X')]),
+      { chatId: CHAT, url: OLDER_URL });
+    expect(older.added).toBe(1);
+    expect(older.blocked).toBeUndefined();
+    expect(turnOf(store, 'x').order).toBeLessThan(turnOf(store, 'a').order);
+    expect(lastDetail(store).messageTexts).toEqual(['Xq', 'X', 'Aq', 'A']);
   });
 });
