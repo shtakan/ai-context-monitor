@@ -155,6 +155,21 @@ async function flush() {
   for (let j = 0; j < 12; j++) await Promise.resolve();
 }
 
+/**
+ * Ждёт выполнения предиката в реальном времени (не по числу тиков event loop).
+ * DOCX распаковывается через DecompressionStream → zlib в libuv-пуле: на быстрой
+ * машине хватает 3 setImmediate, а под нагрузкой CI (воркеры jest делят пул) — нет,
+ * поэтому `flush()` с фиксированным бюджетом тиков давал пустую секцию "".
+ */
+async function waitFor(fn, timeoutMs) {
+  const deadline = Date.now() + (timeoutMs || 3000);
+  for (;;) {
+    if (fn()) return true;
+    if (Date.now() >= deadline) return false;
+    await new Promise(function (r) { timers.setTimeout(r, 5); });
+  }
+}
+
 function makeRes(spec) {
   spec = spec || {};
   const headers = spec.headers || {};
@@ -290,6 +305,12 @@ describe('R2: очередь, дедуп и секции', function () {
 
     h.fetchCalls[0].resolve(makeRes({ buffer: buf }));
     await flush();
+    // Готовность DOCX — появление записи секции (успех или причина отказа),
+    // а не число тиков event loop: см. waitFor.
+    const ready = await waitFor(function () {
+      return h.Fn.gfSectionsFor(CHAT, 'u1') !== '';
+    }, 3000);
+    expect(ready).toBe(true);
     h.tick(300);
 
     const section = h.Fn.gfSectionsFor(CHAT, 'u1');
