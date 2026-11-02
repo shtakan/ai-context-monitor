@@ -2802,7 +2802,7 @@ function processAndSend() {
         var cidS24 = getCurrentConvId() || '';
         var msgsS24 = buildHistoryMessages();
         var histKeyS24 = 'adapter|' + msgsS24.length;
-        if (msgsS24.length > 0 && histKeyS24 !== lastHistoryWroteKey) {
+        if (msgsS24.length > 0 && histKeyS24 !== lastHistoryWroteKey && cidS24 !== '') {
           lastHistoryWroteKey = histKeyS24;
           // O-35 (v54, фикс badge-suppress): ЕДИНСТВЕННАЯ точка взвода состояния «база принята
           // по convId для adapter-пути» — ровно там, где база фактически записана (источник

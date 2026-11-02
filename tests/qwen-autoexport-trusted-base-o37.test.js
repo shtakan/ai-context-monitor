@@ -78,7 +78,7 @@ const SCOPE = 'with (ctx) { ' +
   fnDecl(MGR_SRC, 'aiCmAutoExportStartDownload') + '\n' +
   fnDecl(MGR_SRC, 'doAutoExportDownload') + '\n' +
   fnDecl(MGR_SRC, 'maybeAutoExport') + '\n' +
-  ' return { run: maybeAutoExport }; }';
+  ' return { run: maybeAutoExport, dl: doAutoExportDownload }; }';
 const makeScope = new Function('ctx', SCOPE);
 
 /**
@@ -104,6 +104,7 @@ function stand(over) {
   const logs = [];
   const diag = [];
   const downloads = [];
+  const storageReads = [];
   const ctx = {
     sessionStorage: (o.storage || makeStorage()),
     autoExportSettings: { enabled: true, pct: (o.threshold !== undefined) ? o.threshold : LIVE_THRESHOLD, fmt: 'txt' },
@@ -146,7 +147,19 @@ function stand(over) {
     swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.js (его нет в песочнице)
     swallowSoft: function () { },   // Step E.2c-B2b-3c (swallowSoft): канал B — тот же хелпер utils/debug.js, вне песочницы.
     console: { log: function (m) { diag.push(String(m)); }, error: function () { } },
-    chrome: { storage: { session: { set: function () { }, remove: function () { } } } },
+    __store: (o.store || {}),
+    chrome: {
+      storage: {
+        session: { set: function () { }, remove: function () { } },
+        local: {
+          get: function (keys, cb) {
+            storageReads.push(Array.isArray(keys) ? keys.slice() : keys);
+            if (typeof cb === 'function') cb(ctx.__store || {});
+            return undefined;
+          }
+        }
+      }
+    },
     window: {
       __aiCmDebugLogs: (o.debug === true),
       location: { hostname: 'chat.qwen.ai' },
@@ -166,7 +179,9 @@ function stand(over) {
     diag: diag,
     downloads: downloads,
     storage: ctx.sessionStorage,
+    storageReads: storageReads,
     run: api.run,
+    dl: api.dl,
     trustedDiag: function () {
       return diag.filter(function (l) {
         return l.indexOf(DIAG_PREFIX) === 0 && l.indexOf('adapterBaseSeen=') !== -1;
@@ -473,5 +488,119 @@ describe('O-37 A: проводка и границы (source-пины)', () => {
     expect(gate).toContain("reason: 'archive-pending-live'");
     expect(gate).toContain("reason: 'loader-running'");
     expect(gate).toContain('? s.threshold : 90');
+  });
+});
+
+// =====================================================================================
+// O-60: история qwen без явного convId — не пишется (D1) и не читается (D2);
+// нормальный чат /c/<id> пишет и читает штатно (R1).
+// =====================================================================================
+describe('O-60: изоляция истории qwen по явному convId', () => {
+  const ADAPTER_START = 'var svcS24 = getServiceKey();';
+  const ADAPTER_END = '} catch (eS24) {';
+  const ADAPTER_BRANCH = (function () {
+    const s = CONTENT_ONLY.indexOf(ADAPTER_START);
+    const e = CONTENT_ONLY.indexOf(ADAPTER_END, s);
+    expect(s).toBeGreaterThan(-1);
+    expect(e).toBeGreaterThan(s);
+    return CONTENT_ONLY.slice(s, e);
+  })();
+  const makeAdapter = new Function('ctx', 'with (ctx) { ' + ADAPTER_BRANCH + '\n }');
+
+  // Песочница adapter-ветки: общий лексический скоуп content-скрипта + мок storage.set.
+  function adapterStand(over) {
+    const o = over || {};
+    const writes = [];
+    const diag = [];
+    const traces = [];
+    const ctx = {
+      currentAdapter: { siteName: 'qwen' },
+      baseSeen: false,
+      currentConvB: '',
+      lastEmitConvId: '',
+      lastHistoryWroteKey: '',
+      adapterBaseSeen: false,
+      aiCmQwenSpaResetAt: 0,
+      maxTokenCount: 81672,
+      displayLimit: 0,
+      percentage: LIVE_PCT,
+      modelId: 'qwen3.8-max',
+      lastSnapshotModelName: 'Qwen3.8-Max',
+      ModelConfig: { getModel: function () { return { name: 'Qwen3.8-Max' }; } },
+      window: { location: { hostname: 'chat.qwen.ai', href: 'https://chat.qwen.ai/' } },
+      location: { href: 'https://chat.qwen.ai/' },
+      isExtensionValid: function () { return true; },
+      getServiceKey: function () { return 'qwen'; },
+      getCurrentConvId: function () { return (o.cid === undefined) ? CID : o.cid; },
+      buildHistoryMessages: function () { return (o.msgs || ADAPTER_MSGS).slice(); },
+      aiCmHostHistoryRecord: function (s) {
+        return { host: s.host, convId: s.convId, site: s.site, messages: s.messages };
+      },
+      debugLog: function (lvl, msg) { traces.push(String(msg)); },
+      aiCmDiagLine: function (kind, fields) { diag.push({ kind: kind, fields: fields }); },
+      swallowSoft: function () { },
+      chrome: { storage: { local: { set: function (patch) { writes.push(patch); } } } }
+    };
+    if (o.href) { ctx.window.location.href = o.href; ctx.location.href = o.href; }
+    makeAdapter(ctx);
+    return { ctx: ctx, writes: writes, diag: diag, traces: traces };
+  }
+
+  test('D1: SPA-переход (/p/, пустой convId) НЕ пишет adapter-историю и не взводит базу', () => {
+    const h = adapterStand({ cid: '', href: 'https://chat.qwen.ai/p/2f1c9a' });
+    expect(h.writes).toEqual([]);
+    expect(h.ctx.adapterBaseSeen).toBe(false);
+    expect(h.ctx.lastHistoryWroteKey).toBe('');
+    expect(h.diag.filter(function (d) { return d.kind === 'qwen-adapter'; })).toEqual([]);
+    expect(h.traces.join('\n')).not.toContain('history-write source=adapter');
+    // source-пин: запись требует явный convId (условие в конце — пины v54 не сдвинуты)
+    expect(CONTENT_ONLY).toContain("histKeyS24 !== lastHistoryWroteKey && cidS24 !== ''");
+  });
+
+  test('R1: нормальный чат /c/<id> пишет историю с явным convId', () => {
+    const h = adapterStand({ cid: CID, href: 'https://chat.qwen.ai/c/' + CID });
+    expect(h.writes).toHaveLength(1);
+    const patch = h.writes[0];
+    expect(patch.aiCmHistory.convId).toBe(CID);
+    expect(patch['aiCmHistory:chat.qwen.ai'].convId).toBe(CID);
+    expect(patch.aiCmHistory.messages).toHaveLength(ADAPTER_MSGS.length);
+    expect(h.ctx.adapterBaseSeen).toBe(true);
+    expect(h.ctx.lastHistoryWroteKey).toBe('adapter|' + ADAPTER_MSGS.length);
+    expect(h.diag.filter(function (d) { return d.kind === 'qwen-adapter'; })).toHaveLength(1);
+  });
+
+  test('D2: storage-фолбэк с пустым histConvId отклоняется — фантом не читается', () => {
+    const h = stand({
+      store: {
+        'aiCmHistory:chat.qwen.ai': {
+          host: 'chat.qwen.ai', convId: '', site: 'qwen',
+          messages: [{ role: 'user', text: 'фантом из другого чата' }]
+        }
+      }
+    });
+    h.ctx.buildHistoryMessages = function () { return []; };
+    h.dl(CID, LIVE_PCT, 'threshold');
+    expect(h.downloads).toEqual([]);
+    expect(h.storageReads).toEqual([['aiCmHistory:chat.qwen.ai']]);
+    expect(h.logs.join('\n')).toContain('abort reason=history-source-mismatch histConvId= site=qwen');
+    expect(h.ctx.autoExportFired).toEqual({});
+    // source-пин: storage-host без convId отклоняется; memory-путь (histSource=local) не задет
+    const guard = fnDecl(MGR_SRC, 'aiCmWriteAutoExportFile');
+    expect(guard).toContain("histSource === 'storage-host' && !histConvId && cid");
+    expect(guard).toContain('String(histConvId) !== String(cid)');
+  });
+
+  test('R1: штатная storage-история того же чата читается — файл и fired-строка', () => {
+    const h = stand({
+      store: {
+        'aiCmHistory:chat.qwen.ai': {
+          host: 'chat.qwen.ai', convId: CID, site: 'qwen', messages: ADAPTER_MSGS
+        }
+      }
+    });
+    h.ctx.buildHistoryMessages = function () { return []; };
+    h.dl(CID, LIVE_PCT, 'threshold');
+    expect(h.downloads).toHaveLength(1);
+    expect(h.logs.join('\n')).toContain('histSource=storage-host histConvId=' + CID);
   });
 });

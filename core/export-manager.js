@@ -1787,7 +1787,7 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
     // подмена тела исключена; histSource/histConvId видны в fired-строке).
     function aiCmWriteAutoExportFile(fileMsgs, histSource, histConvId, histSite) {
       try {
-        if ((histConvId && cid && String(histConvId) !== String(cid)) ||
+        if ((histSource === 'storage-host' && !histConvId && cid) || (histConvId && cid && String(histConvId) !== String(cid)) ||
             (histSite && siteNameD && String(histSite) !== String(siteNameD))) {
           debugLog('log', '[AI CM][auto-export] abort reason=history-source-mismatch histConvId=' +
             histConvId + ' site=' + histSite);
