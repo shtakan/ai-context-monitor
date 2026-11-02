@@ -114,6 +114,9 @@ function makeHistoryStore(opts) {
   const SCOPE = 'with (ctx) { ' + FNS.map(function (n) { return fnDecl(INTERCEPT_SRC, n); }).join('\n') +
     '\n return { applyHistoryPayload: applyHistoryPayload, recordTurn: recordTurn,' +
     ' emitSnapshot: emitSnapshot, buildSignature: buildSignature,' +
+    // O-61: парсер и цепочка — наружу, чтобы пины били по исходнику (off-chain ветвление).
+    ' parseQwenHistory: parseQwenHistory, qwenParseFullChain: qwenParseFullChain,' +
+    ' reindexByChain: reindexByChain,' +
     ' renumberHistoryPage: renumberHistoryPage }; }';
   const api = new Function('ctx', SCOPE)(ctx);
   api.ctx = ctx;
@@ -1067,5 +1070,127 @@ describe('O-57: fh=done — пагинационная страница не п�
     expect(older.blocked).toBeUndefined();
     expect(turnOf(store, 'x').order).toBeLessThan(turnOf(store, 'a').order);
     expect(lastDetail(store).messageTexts).toEqual(['Xq', 'X', 'Aq', 'A']);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// O-61: abandoned-ветки (off-chain) — в экспорт и метрики не идут, в nodes остаются.
+// Живой дефект: полная история несёт словарь со всеми ответвлениями; цепочка currentId →
+// parentId задаёт активные ходы, остальные — «мёртвые» ветки, которые попадали в файл.
+// ---------------------------------------------------------------------------------------
+describe('O-61: off-chain (abandoned) ветки не попадают в экспорт и метрики', function () {
+  const FULL_URL = 'https://chat.qwen.ai/api/v2/chats/' + CHAT;
+
+  // Активная цепочка: ровно turns обменов, parentId связывает ходы, корень — пустой.
+  function activeNodes(turns) {
+    const nodes = [];
+    let parent = '';
+    for (let i = 0; i < turns; i++) {
+      const uid = 'u' + String(i).padStart(2, '0');
+      const aid = 'a' + String(i).padStart(2, '0');
+      nodes.push(fullNode(uid, 'user', parent, 'Q' + i));
+      nodes.push(fullNode(aid, 'assistant', uid, 'A' + i));
+      parent = aid;
+    }
+    return nodes;
+  }
+
+  // currentId — последний АКТИВНЫЙ узел: extra лежат в словаре, но в цепочку не входят.
+  function docWithExtra(active, extra) {
+    const messages = {};
+    (extra || []).forEach(function (n) { messages[n.id] = n; });
+    active.forEach(function (n) { messages[n.id] = n; });
+    return {
+      success: true,
+      request_id: 'o61',
+      data: {
+        id: CHAT,
+        chat: {
+          history: {
+            messages: messages,
+            currentId: active[active.length - 1].id,
+            pagination: null
+          }
+        }
+      }
+    };
+  }
+
+  function abandonedNodes() {
+    const out = [];
+    for (let i = 0; i < 8; i++) {
+      out.push(fullNode('x' + i, 'assistant', 'a' + String(i * 11).padStart(2, '0'),
+        'ABANDONED ' + i));
+    }
+    return out;
+  }
+
+  test('D1: 198 узлов (190 актив + 8 abandoned) → 190 сообщений / 95 ходов', function () {
+    const active = activeNodes(95);
+    const abandoned = abandonedNodes();
+    const payload = docWithExtra(active, abandoned);
+    const store = makeHistoryStore();
+
+    const parsed = store.parseQwenHistory(payload);
+    expect(parsed.nodes).toBe(198);                       // диагностика: пришло всё
+    expect(parsed.messages.length).toBe(190);             // экспорт: только активные
+    expect(parsed.messages.filter(function (m) { return m.role === 'assistant'; }).length).toBe(95);
+    expect(parsed.messages.some(function (m) { return m.text.indexOf('ABANDONED') !== -1; })).toBe(false);
+
+    // Цепочка помечает только 8 ответвлений; payload не мутирован.
+    const chain = store.qwenParseFullChain(payload);
+    expect(chain.nodes.length).toBe(198);
+    expect(chain.nodes.filter(function (n) { return n.offChain === true; }).length).toBe(8);
+    expect(abandoned.every(function (n) { return n.offChain === undefined; })).toBe(true);
+
+    const res = store.applyHistoryPayload(payload, { chatId: CHAT, url: FULL_URL, full: true });
+    const detail = lastDetail(store);
+    expect(res.added).toBe(95);
+    expect(detail.messages.length).toBe(190);
+    expect(detail.count).toBe(190);
+    expect(detail.text.indexOf('ABANDONED')).toBe(-1);
+    expect(store.ctx.turns.length).toBe(95);
+    // STEP 4: reindexByChain нумерует ТОЛЬКО активные ходы — 0..94 без дыр.
+    expect(store.ctx.turns.map(function (t) { return t.order; }))
+      .toEqual(Array.from({ length: 95 }, function (_, i) { return i; }));
+  });
+
+  test('R1: битый parentId — цепочка недоказана, в messages идут ВСЕ узлы (fallback)', function () {
+    const active = activeNodes(3);
+    active[active.length - 1].parentId = 'ghost';          // обрыв цепочки на листе
+    const store = makeHistoryStore();
+    const payload = docWithExtra(active, []);
+
+    const parsed = store.parseQwenHistory(payload);
+    expect(parsed.nodes).toBe(6);
+    expect(parsed.messages.length).toBe(6);                // потерь нет
+    const chain = store.qwenParseFullChain(payload);
+    expect(chain.nodes.length).toBe(6);
+    expect(chain.nodes.filter(function (n) { return n.offChain === true; }).length).toBe(0);
+
+    // Второй вид неразрешённой цепочки: currentId не найден вовсе → walker-фолбэк.
+    const broken = docWithExtra(active, []);
+    broken.data.chat.history.currentId = 'ghost';
+    const parsed2 = store.parseQwenHistory(broken);
+    expect(parsed2.messages.length).toBe(6);
+  });
+
+  test('R2: метрики базы (textLen, msgs) считаются без off-chain', function () {
+    const clean = activeNodes(95);
+    const cleanStore = makeHistoryStore();
+    const dirtyStore = makeHistoryStore();
+
+    cleanStore.applyHistoryPayload(docWithExtra(clean, []),
+      { chatId: CHAT, url: FULL_URL, full: true });
+    dirtyStore.applyHistoryPayload(docWithExtra(clean, abandonedNodes()),
+      { chatId: CHAT, url: FULL_URL, full: true });
+
+    const a = lastDetail(cleanStore);
+    const b = lastDetail(dirtyStore);
+    expect(b.text).toBe(a.text);                          // textLen одинаков
+    expect(b.text.length).toBe(a.text.length);
+    expect(b.count).toBe(a.count);
+    expect(b.messages.length).toBe(a.messages.length);    // msgs одинаков
+    expect(dirtyStore.ctx.turns.length).toBe(cleanStore.ctx.turns.length);
   });
 });

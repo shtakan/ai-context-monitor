@@ -696,7 +696,7 @@
     var thinkingDuplicates = 0;
     var reasoningMessages = 0;
     for (var i = 0; i < nodes.length; i++) {
-      var node = nodes[i];
+      var node = nodes[i]; if (node.offChain === true) continue;   // O-61: abandoned — не в messages, но в nodes (диагностика)
       var role = (node.role === 'user') ? 'user' : ((node.role === 'assistant') ? 'assistant' : '');
       if (!role) continue;
       if (!chatId) chatId = historyChatIdOf(node);
@@ -1871,17 +1871,32 @@
       keys.push(key);
     }
     function resolve(ref) { return ref ? (byKey[ref] || byId[ref] || null) : null; }
-    var seq = [], visited = [], cur = found.currentId;
+    // O-61: узел вне цепочки — копия с offChain:true, а не мутация payload (тело ответа
+    // может разбираться повторно). Флаг переживает разбор и режет messages (parseQwenHistory).
+    function markOffChain(node) {
+      var copy = {};
+      for (var k in node) {
+        if (Object.prototype.hasOwnProperty.call(node, k)) copy[k] = node[k];
+      }
+      copy.offChain = true;
+      return copy;
+    }
+    var seq = [], visited = [], cur = found.currentId, truncated = false;
     while (cur) {
       var curNode = resolve(cur);
-      if (!curNode || visited.indexOf(curNode) !== -1) break;
+      // Битый parentId / цикл: цепочка не дошла до корня. Ветвление тогда недоказано —
+      // R1: НИЧЕГО не помечаем off-chain (все узлы остаются в messages, потери нет).
+      if (!curNode || visited.indexOf(curNode) !== -1) { truncated = true; break; }
       visited.push(curNode); seq.push(curNode); cur = parentIdOf(curNode);
     }
     if (!seq.length) return { nodes: [] };
     seq.reverse();
     for (var i = 0; i < keys.length; i++) {
       var extra = byKey[keys[i]];
-      if (visited.indexOf(extra) === -1) { visited.push(extra); seq.push(extra); }
+      if (visited.indexOf(extra) === -1) {
+        visited.push(extra);
+        seq.push(truncated ? extra : markOffChain(extra));
+      }
     }
     return { nodes: seq };
   }
