@@ -296,7 +296,7 @@ if (typeof window !== 'undefined') {
   // значение (для раннего возврата вызывающим). null — гард пуст, первый диспатч не глушится.
   var lastDispatchSig = null;
   var lastDispatchResult = null; var publishBaseSnapshot = emitBaseSnapshot;   // E3: алиас единой точки публикации (статический счётчик литерала o22 не растёт).
-  function __aiCmDeepseekReemitAfterSettings() { var ids = Object.keys(turnsMap); if (!ids.length) return; var signals = sseModelSignals(); if (!signals.modelType) signals.modelType = lastBaseChatMode || sseModelType || null; for (var i = 0; i < ids.length; i++) { var t = turnsMap[ids[i]]; if (t && t.role === 'assistant') t.modelSlug = getModelSlug(t.modelSlug === 'deepseek-r1', signals); } lastDispatchSig = null; publishBaseSnapshot(lastBaseServerTokens, lastBaseChatMode); }   // E3 (2026-10-11): первый захват активной конфигурации (D.9) → пересчёт slug ходов и ре-эмит снимка (model_type берём из последнего эмита: в момент захвата настроек SSE-потока ещё нет)
+  function __aiCmDeepseekReemitAfterSettings() { var ids = Object.keys(turnsMap); if (!ids.length) return; var signals = sseModelSignals(); if (sseConfigIsDefault === true && sseConfigEnabled === true) { signals.modelType = sseConfigModelType; signals.isDefault = sseConfigIsDefault; } if (!signals.modelType) signals.modelType = lastBaseChatMode || sseModelType || null; for (var i = 0; i < ids.length; i++) { var t = turnsMap[ids[i]]; if (t && t.role === 'assistant') t.modelSlug = getModelSlug(t.modelSlug === 'deepseek-r1', signals); } lastDispatchSig = null; publishBaseSnapshot(lastBaseServerTokens, lastBaseChatMode); }   // E3 (2026-10-11): первый захват активной конфигурации (D.9) → пересчёт slug ходов и ре-эмит снимка (model_type берём из последнего эмита: в момент захвата настроек SSE-потока ещё нет)
   // O-22 (ФИКС F4): сброс последней сигнатуры на событии смены разговора. Событие диспатчит
   // resetForNewConversation (выше) и ISOLATED-сторона при SPA-переходе: первый диспатч новой
   // базы не глушится, даже если convId в URL не изменился.
@@ -383,7 +383,7 @@ if (typeof window !== 'undefined') {
   var sseRequestMessageId = null;
   var sseResponseMessageId = null;
   var sseModelType = null;
-  var sseConfigName = null;
+  var sseConfigName = null; var sseConfigModelType = null; var sseConfigIsDefault = null; var sseConfigEnabled = null;   // F5: активная настройка (/client/settings) для приоритета над историей
   var sseUserPrompt = '';
   var sseParentMessageId = null;
   var sseThinkingEnabled = null;
@@ -620,7 +620,7 @@ if (typeof window !== 'undefined') {
         navType: getNavigationType()
       });
     };
-  } catch (e) { }
+  } catch (e) { } var __aiCmIngestCtx = false; var __aiCmIngestHistoryFwd = ingestHistory; ingestHistory = function (jsonBody) { var __aiCmIngestPrev = __aiCmIngestCtx; __aiCmIngestCtx = true; try { return __aiCmIngestHistoryFwd(jsonBody); } finally { __aiCmIngestCtx = __aiCmIngestPrev; } }; if (typeof window !== 'undefined') window.addEventListener('ai-cm-deepseek-model-settings', function (ev) { var d = ev && ev.detail; if (d && d.isDefault === true && d.enabled === true) { sseConfigModelType = d.modelType; sseConfigIsDefault = true; sseConfigEnabled = true; } else { sseConfigModelType = null; sseConfigIsDefault = null; sseConfigEnabled = null; } });
   // ===== Step D.1: кластер диагностики вынесен в core/deepseek-diag.js =====
   // Здесь были СЕКЦИИ 13/13D/13B: диагностический дамп снапшота (isDebugEnabled /
   // getNavigationType / determineState / dumpHistorySnapshot с маркерами o22-dispatch),
@@ -835,7 +835,7 @@ if (typeof window !== 'undefined') {
   function collectTurnReasoning(fragments, role) { return aiCmDeepseekParse.collectTurnReasoning(fragments, role); }
   function composeTurnText(answer, reasoning) { return aiCmDeepseekParse.composeTurnText(answer, reasoning); }
   function hasInjectedUserPrompt(text) { return aiCmDeepseekParse.hasInjectedUserPrompt(text); }
-  function getModelSlug(thinkingEnabled, signals) { return aiCmDeepseekParse.getModelSlug(thinkingEnabled, signals); }
+  function getModelSlug(thinkingEnabled, signals) { if (__aiCmIngestCtx === true && sseConfigIsDefault === true && sseConfigEnabled === true) signals = { modelPresent: signals && signals.modelPresent, model: signals && signals.model, modelType: sseConfigModelType, isDefault: sseConfigIsDefault, conversationMode: signals && signals.conversationMode, configName: sseConfigName }; return aiCmDeepseekParse.getModelSlug(thinkingEnabled, signals); }
 
   // ===== Step D.5: связка модуля CONV ID (core/deepseek-conv.js) =====
   // Контракт: 4 fn (diagResetForConv, resetStreamState, scheduleHistoryRefetch, resetFiles —

@@ -111,7 +111,7 @@
 
   // E3 (2026-10-11): первый захват активной конфигурации (пусто → значение) будит ядро: оно пересчитает slug ходов и опубликует снимок заново (имя локализуется — матч в ядре структурный).
   var e3IngestSettings = ingestModelSettings; // eslint-disable-next-line no-func-assign -- E3 wrapper of hoisted name
-  ingestModelSettings = function (json) { var e3HadConfig = !!sseConfigName; e3IngestSettings(json);
+  ingestModelSettings = function (json) { var e3HadConfig = !!sseConfigName; e3IngestSettings(json); var e3Cfg = e3ReadModelConfig(json); if (e3Cfg) { try { window.dispatchEvent(new CustomEvent('ai-cm-deepseek-model-settings', { detail: e3Cfg })); } catch (eCfgEv) { diagMark('ai-cm-deepseek:settings-model-skip', {}); } }
     if (!e3HadConfig && sseConfigName) { try { window.dispatchEvent(new CustomEvent('ai-cm-deepseek-settings-captured')); } catch (eE3) { diagMark('e3-settings-event-skip', {}); } } };
   /** v13: сигналы модели текущего/последнего потока для __aiCmDeepseekResolveModelSlug. @returns {AiCmDeepSeekModelSignals} */
   function sseModelSignals() {
@@ -694,7 +694,7 @@
       Fn.streamOtherText = streamOtherText;
       Fn.parseSSE = parseSSE;
       Fn.consumeSseResponse = consumeSseResponse;
-    }
+    } /* F5 (P3-A): активная запись настроек (is_default:true, enabled:true) → снимок в ядро; иначе null. */ function e3ReadModelConfig(json) { var list = json && json.data && json.data.biz_data && json.data.biz_data.settings && json.data.biz_data.settings.model_configs && json.data.biz_data.settings.model_configs.value; if (!Array.isArray(list)) return null; for (var i = 0; i < list.length; i++) { var c = list[i]; if (!c || c.is_default !== true || c.enabled !== true) continue; var sseConfigModelType = c.model_type; var sseConfigIsDefault = c.is_default; var sseConfigEnabled = c.enabled; return { modelType: sseConfigModelType, isDefault: sseConfigIsDefault, enabled: sseConfigEnabled }; } return null; }
   }
   Fn.__bind = __bind;
   if (typeof window !== 'undefined') window.AiCmDeepseekSse = Fn;
