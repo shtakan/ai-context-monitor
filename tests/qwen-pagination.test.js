@@ -72,7 +72,8 @@ function makeTurnStore() {
 // O-55: песочница «страница истории» — боевые applyHistoryPayload/recordTurn/emitSnapshot/
 // renumberHistoryPage и парсер с НАСТОЯЩИМ модулем пагинации в window.AiCmQwenPagination.
 // Тот же приём, что makeTurnStore: пины бьют по исходнику, а не по переписанной копии.
-function makeHistoryStore() {
+function makeHistoryStore(opts) {
+  const o = opts || {};
   const ctx = {
     turns: [],
     userTurns: [],
@@ -88,7 +89,7 @@ function makeHistoryStore() {
     REASONING_TAG: '[REASONING]',
     ANSWER_TAG: '[ANSWER]',
     qwenPaginationApi: function () { return P; },
-    startQwenPagination: function () { return false; },
+    startQwenPagination: o.startQwenPagination || function () { return false; },
     diagLine: function () {},
     diagTag: function () {},
     diagUrl: function () { return ''; },
@@ -102,13 +103,19 @@ function makeHistoryStore() {
   const FNS = ['contentListOf', 'isHistoryMessageNode', 'walkHistoryMessages', 'historyMessageId',
     'thinkingTextOf', 'historyThinkingOf', 'historyAnswerOf', 'historyUsageOf', 'historyChatIdOf',
     'findHistoryChatId', 'historyFilesOf', 'parseQwenHistory', 'composeTurnText', 'recordTurn',
-    'buildSignature', 'userTextOf', 'emitSnapshot', 'applyHistoryPayload', 'renumberHistoryPage'];
+    'buildSignature', 'userTextOf', 'emitSnapshot', 'applyHistoryPayload', 'renumberHistoryPage',
+    // O-56: полная история — распознавание формы URL, парсер словаря и хронология по parentId.
+    'isFullHistoryUrl', 'reindexByChain', 'qwenParseFullChain', 'qwenThinkingItem',
+    'qwenReasoningOf', 'qwenContentText'];
   const SCOPE = 'with (ctx) { ' + FNS.map(function (n) { return fnDecl(INTERCEPT_SRC, n); }).join('\n') +
     '\n return { applyHistoryPayload: applyHistoryPayload, recordTurn: recordTurn,' +
     ' emitSnapshot: emitSnapshot, buildSignature: buildSignature,' +
     ' renumberHistoryPage: renumberHistoryPage }; }';
   const api = new Function('ctx', SCOPE)(ctx);
   api.ctx = ctx;
+  // O-56: чистые функции полной истории доступны тестам как есть.
+  api.isFullHistoryUrl = new Function('ctx', 'with (ctx) { ' +
+    fnDecl(INTERCEPT_SRC, 'isFullHistoryUrl') + ' return isFullHistoryUrl; }')(ctx);
   return api;
 }
 
@@ -598,6 +605,37 @@ function historyPage(turns) {
   }, [].concat.apply([], turns));
 }
 
+// O-56: узел нативного полного ответа (словарь chat.history.messages).
+function fullNode(id, role, parentId, answer, opts) {
+  const o = opts || {};
+  const node = { id: id, role: role, parentId: parentId, content_list: [] };
+  if (o.thinking) node.content_list.push({ phase: 'thinking', content: o.thinking });
+  node.content_list.push({ phase: 'answer', content: answer });
+  if (o.reasoningContent) node.reasoning_content = o.reasoningContent;
+  return node;
+}
+
+// reverse=true — ключи словаря вставлены задом наперёд: хронологию задаёт только parentId.
+function fullDoc(nodes, pagination, reverse) {
+  const messages = {};
+  const list = reverse ? nodes.slice().reverse() : nodes;
+  list.forEach(function (n) { messages[n.id] = n; });
+  return {
+    success: true,
+    request_id: 'full',
+    data: {
+      id: CHAT,
+      chat: {
+        history: {
+          messages: messages,
+          currentId: nodes[nodes.length - 1].id,
+          pagination: pagination === undefined ? null : pagination
+        }
+      }
+    }
+  };
+}
+
 function turnOf(store, key) {
   return store.ctx.turns.filter(function (t) { return t.key === key; })[0];
 }
@@ -840,5 +878,91 @@ describe('П1: no-cursor не объявляет историю полной', f
     const after = store.buildSignature(100, true, false);
     expect(after).toContain('u:6');
     expect(after).not.toBe(before);
+  });
+});
+
+describe('O-56: нативная полная история — парсер без пагинации', function () {
+  const FULL_URL = 'https://chat.qwen.ai/api/v2/chats/' + CHAT;
+
+  test('S: полный URL распознаётся по отсутствию direction/limit/cursor', function () {
+    const store = makeHistoryStore();
+    expect(store.isFullHistoryUrl(FULL_URL)).toBe(true);
+    expect(store.isFullHistoryUrl(FULL_URL + '?')).toBe(true);
+    expect(store.isFullHistoryUrl(BASE_URL)).toBe(false);
+    expect(store.isFullHistoryUrl(OLDER_URL)).toBe(false);
+    expect(store.isFullHistoryUrl(FULL_URL + '?foo=1')).toBe(true);
+  });
+
+  test('D1: pagination:null разбирается целиком, ходы идут по parentId (38 сообщений)', function () {
+    const nodes = [];
+    let parent = '';
+    for (let i = 0; i < 19; i++) {
+      const uid = 'u' + String(i).padStart(2, '0');
+      const aid = 'a' + String(i).padStart(2, '0');
+      nodes.push(fullNode(uid, 'user', parent, 'Q' + i));
+      nodes.push(fullNode(aid, 'assistant', uid, 'A' + i));
+      parent = aid;
+    }
+    const payload = fullDoc(nodes, null, true);
+    const starts = [];
+    const store = makeHistoryStore({
+      startQwenPagination: function () { starts.push(1); return true; }
+    });
+    const res = store.applyHistoryPayload(payload, { chatId: CHAT, url: FULL_URL });
+    const detail = lastDetail(store);
+
+    expect(res.added).toBe(19);
+    expect(detail.messages.length).toBe(38);
+    expect(detail.messageTexts.length).toBe(38);
+    expect(detail.messageTexts[0]).toBe('Q0');
+    expect(detail.messageTexts[1]).toBe('A0');
+    expect(detail.messageTexts[37]).toBe('A18');
+    expect(store.ctx.turns.map(function (t) { return t.key; }))
+      .toEqual(nodes.filter(function (n) { return n.role === 'assistant'; }).map(function (n) { return n.id; }));
+    expect(store.ctx.turns.map(function (t) { return t.order; }))
+      .toEqual(Array.from({ length: 19 }, function (_, i) { return i; }));
+    expect(detail.historyComplete).toBe(true);
+    expect(starts.length).toBe(0);
+  });
+
+  test('D2: reasoning из phase:thinking и reasoning_content попадает в [REASONING]', function () {
+    const payload = fullDoc([
+      fullNode('u0', 'user', '', 'Вопрос 1'),
+      fullNode('a0', 'assistant', 'u0', 'Ответ 1', { thinking: 'Мысль из thinking' }),
+      fullNode('u1', 'user', 'a0', 'Вопрос 2'),
+      fullNode('a1', 'assistant', 'u1', 'Ответ 2', { reasoningContent: 'Мысль из поля' })
+    ]);
+    const store = makeHistoryStore();
+    store.applyHistoryPayload(payload, { chatId: CHAT, url: FULL_URL });
+
+    expect(turnOf(store, 'a0').reasoning).toBe('Мысль из thinking');
+    expect(turnOf(store, 'a0').text).toBe('[REASONING]\nМысль из thinking\n\n[ANSWER]\nОтвет 1');
+    expect(turnOf(store, 'a1').reasoning).toBe('Мысль из поля');
+    expect(turnOf(store, 'a1').text).toBe('[REASONING]\nМысль из поля\n\n[ANSWER]\nОтвет 2');
+
+    const messages = lastDetail(store).messages;
+    expect(messages[1].role).toBe('assistant');
+    expect(messages[1].reasoning).toBe('Мысль из thinking');
+    expect(messages[1].hiddenReasoning).toBe('Мысль из thinking');
+    expect(messages[3].reasoning).toBe('Мысль из поля');
+  });
+
+  test('R1: pagination.oldest_id по-прежнему запускает старую пагинацию (фолбэк)', function () {
+    const starts = [];
+    const store = makeHistoryStore({
+      startQwenPagination: function (meta, payload, count) {
+        starts.push({ meta: meta, payload: payload, count: count });
+        return true;
+      }
+    });
+    store.applyHistoryPayload(historyPage([histTurn('a1', 'Вопрос', 'Ответ')]),
+      { chatId: CHAT, url: BASE_URL });
+
+    expect(starts.length).toBe(1);
+    expect(starts[0].meta.url).toBe(BASE_URL);
+    expect(starts[0].count).toBe(1);
+    const detail = lastDetail(store);
+    expect(detail.historyComplete).toBe(false);
+    expect(detail.partial.reason).toBe('in-progress');
   });
 });

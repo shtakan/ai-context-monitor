@@ -592,7 +592,7 @@
     var firstWithText = '';
     var occurrences = 0;
     for (var i = 0; i < list.length; i++) {
-      var item = list[i];
+      var item = (typeof qwenThinkingItem === 'function') ? qwenThinkingItem(list[i]) : list[i];
       if (!item || typeof item !== 'object') continue;
       if (item.phase !== PHASE_THINKING) continue;
       occurrences++;
@@ -604,14 +604,14 @@
   }
   // Ответ хода истории: не-thinking элементы content_list клеятся APPEND (как delta.content SSE).
   function historyAnswerOf(list) {
-    var out = '';
+    var out = '', fallbackAnswer = '';
     for (var i = 0; i < list.length; i++) {
       var item = list[i];
       if (!item || typeof item !== 'object') continue;
-      if (item.phase === PHASE_THINKING) continue;
-      if (typeof item.content === 'string' && item.content) out += item.content;
+      if (item.phase === PHASE_THINKING || item.phase === 'thinking') continue;
+      if (typeof item.content === 'string' && item.content) { if (item.phase === 'answer') out += item.content; else fallbackAnswer += item.content; }
     }
-    return out;
+    return out || fallbackAnswer;
   }
   // usage хода истории (спека: usage{input_tokens,output_tokens}) — та же нормализация, что у
   // кадров стрима (utils/stream-frames.js:normUsage); утилиты нет — читаем измеренные поля сами.
@@ -687,8 +687,8 @@
    * отбрасывается (первое вхождение побеждает — спека O-39 п.5).
    */
   function parseQwenHistory(payload) {
-    var nodes = [];
-    try { walkHistoryMessages(payload, nodes, 0, []); } catch (eWalk) { nodes = []; }
+    var nodes = [], chain = false, fullParsed = (typeof qwenParseFullChain === 'function') ? qwenParseFullChain(payload) : null;
+    if (fullParsed && fullParsed.nodes && fullParsed.nodes.length) { nodes = fullParsed.nodes; chain = true; } else { try { walkHistoryMessages(payload, nodes, 0, []); } catch (eWalk) { nodes = []; } }
     var messages = [];
     var seen = {};
     var chatId = '';
@@ -701,21 +701,21 @@
       if (!role) continue;
       if (!chatId) chatId = historyChatIdOf(node);
       var list = contentListOf(node) || [];
-      var thinking = historyThinkingOf(list);
+      var thinking = historyThinkingOf(list); var nodeReasoning = (typeof qwenReasoningOf === 'function') ? qwenReasoningOf(node) : '';
       if (thinking.occurrences > 1) thinkingDuplicates++;
       var text = historyAnswerOf(list);
       if (!text && typeof node.content === 'string') text = node.content;
       if (!text && typeof node.text === 'string') text = node.text;
       var id = historyMessageId(node, role);
-      var dedupeKey = id || (role + '\u0000' + text + '\u0000' + thinking.text);
+      var dedupeKey = id || (role + '\u0000' + text + '\u0000' + (nodeReasoning || thinking.text));
       if (seen[dedupeKey] === 1) { duplicates++; continue; }   // первое вхождение побеждает
       seen[dedupeKey] = 1;
-      if (thinking.text) reasoningMessages++;
+      if (nodeReasoning || thinking.text) reasoningMessages++;
       messages.push({
         key: id,
         role: role,
         text: text,
-        reasoning: thinking.text,
+        reasoning: nodeReasoning || thinking.text,
         usage: historyUsageOf(node),
         model: (typeof node.model === 'string') ? node.model : '',
         parentId: (typeof node.parent_id === 'string') ? node.parent_id
@@ -724,14 +724,14 @@
         files: historyFilesOf(node)
       });
     }
-    if (!chatId) chatId = findHistoryChatId(payload, 0, []) || '';
+    if (!chatId) chatId = findHistoryChatId(payload, 0, []) || ((payload && payload.data && payload.data.id) || '');
     return {
       chatId: chatId,
       messages: messages,
       nodes: nodes.length,
       duplicates: duplicates,
       thinkingDuplicates: thinkingDuplicates,
-      reasoningMessages: reasoningMessages
+      reasoningMessages: reasoningMessages, chain: chain
     };
   }
 
@@ -739,7 +739,7 @@
   // уезжает в detail.messages[].reasoning и в текст хода секциями [REASONING]/[ANSWER].
   // usage для снимка — usage ПОСЛЕДНЕГО assistant-хода (как у стрима: последний кумулятивный).
   function applyHistoryPayload(payload, meta) {
-    var m = meta || {};
+    var m = meta || {}; var pgRaw = payload && payload.data && payload.data.chat && payload.data.chat.history ? payload.data.chat.history.pagination : null; var fullDoc = (m.full === true) || (typeof isFullHistoryUrl === 'function' && isFullHistoryUrl(m.url) && !pgRaw);
     var parsed = parseQwenHistory(payload);
     if (!parsed.messages.length) {
       diagTag('qwen-history', { ts: Date.now(), event: 'skip', reason: 'no-messages', url: m.url || '' });
@@ -894,15 +894,15 @@
       });
     }
     // O-53/O-55: страница истории (цикл ИЛИ публичный ?cursor=) — ПЕРЕД собранными, все ходы.
-    if (created.length) renumberHistoryPage(pageTurns, m.paginate, m.url);
+    if (created.length) renumberHistoryPage(pageTurns, m.paginate, m.url); if (fullDoc && parsed.chain === true && typeof reindexByChain === 'function') reindexByChain(pageTurns); if (fullDoc && pq && typeof pqAbort === 'function') pqAbort('full-history');
     // O-53: пагинация стартует ДО emit — первый снимок сразу честно неполный
     // (historyComplete=false), а не «полный, но потом вдруг нет» (дефект базовой страницы).
-    var paginating = false;
-    if (!m.paginate) {
-      try { paginating = startQwenPagination(m, payload, created.length); }
-      catch (eStart) { swallow(eStart, 'qwen:paginate-start'); }
+    var paginating = false, fullPending = false;
+    if (!m.paginate && !fullDoc) {
+      var fullStatus = (typeof ensureFullHistory === 'function') ? ensureFullHistory(chatId, m.url, payload, m, created.length) : false; fullPending = (fullStatus === 'pending'); if (!fullStatus) { try { paginating = startQwenPagination(m, payload, created.length); }
+      catch (eStart) { swallow(eStart, 'qwen:paginate-start'); } }
     }
-    var partialFlag = (m.paginate || paginating);
+    var partialFlag = (m.paginate || paginating || fullPending);
     var emitted = emitSnapshot({
       chatId: chatId,
       url: m.url || '',
@@ -1036,7 +1036,7 @@
       // O-53: заголовки этого XHR (setRequestHeader) — для реплея старых страниц. meta остаётся
       // литералом (байтовый пин O-39), заголовки читает только старт цикла пагинации.
       lastHistoryHeaders = (xhr && xhr.__aiCmQwenHistHeaders) ? xhr.__aiCmQwenHistHeaders : null;
-      applyHistoryPayload(payload, { chatId: m.chatId, url: m.url });
+      if (isFullHistoryUrl(m.url)) noteNativeFullHistory(m.chatId); applyHistoryPayload(payload, { chatId: m.chatId, url: m.url });
       lastHistoryHeaders = null;
     } catch (eXConsume) {
       diagTag('qwen-history', {
@@ -1463,7 +1463,7 @@
   // ===== Перехват fetch (обёртка по образцу core/deepseek-intercept.js:1861-1945) =====
   if (typeof originalFetch === 'function') {
     window.fetch = function (input, init) {
-      var url = urlOf(input);
+      var url = urlOf(input); try { if (typeof rememberFetchHeaders === 'function') rememberFetchHeaders(url, input, init); } catch (eRh) { swallow(eRh, 'qwen:auth-headers'); }
       var method = methodOf(init, input);
       var hit = false;
       try { hit = isQwenCompletions(url, method); } catch (eDet) { hit = false; }
@@ -1572,7 +1572,7 @@
               diagTag('qwen-history', { ts: Date.now(), event: 'skip', reason: 'http', status: resp ? resp.status : 'none', url: histMeta.url || '' });
               return resp;
             }
-            consumeHistory(resp, histMeta);
+            if (isFullHistoryUrl(histMeta.url)) noteNativeFullHistory(histMeta.chatId); consumeHistory(resp, histMeta);
           } catch (eResp) {
             diagLine('response-error', { err: String(eResp && eResp.message || eResp).slice(0, 80) });
           }
@@ -1599,7 +1599,7 @@
       var origXHRSend = XMLHttpRequest.prototype.send;
       var origXHRSetHeader = XMLHttpRequest.prototype.setRequestHeader;
       XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
-        try {
+        try { if (typeof isQwenApiUrl === 'function' && isQwenApiUrl(this.__aiCmQwenUrl)) { var oneHdr = {}; oneHdr[String(name)] = String(value); mergeQwenHeaders(oneHdr); }
           // O-53: копилка заголовков запроса страницы (auth/anti-bot) — для реплея страниц.
           if (this.__aiCmQwenHist) {
             if (!this.__aiCmQwenHistHeaders) this.__aiCmQwenHistHeaders = {};
@@ -1612,9 +1612,9 @@
         try {
           // Сброс флага на экземпляре: повторный open() того же XHR не наследует старую историю.
           this.__aiCmQwenHist = null;
-          this.__aiCmQwenHistHeaders = null;
+          this.__aiCmQwenHistHeaders = null; this.__aiCmQwenUrl = null;
           var xMethod = String(method == null ? 'GET' : method).toUpperCase();
-          var xUrl = String(url == null ? '' : url);
+          var xUrl = String(url == null ? '' : url); this.__aiCmQwenUrl = xUrl;
           var xHit = false;
           try { xHit = isQwenHistory(xUrl, xMethod); } catch (eXDet) { xHit = false; }
           if (xHit) {
@@ -1674,7 +1674,7 @@
         try { aiCmQwenFiles.qfReset(next); } catch (eQfReset) { swallow(eQfReset, 'qwen:files-reset'); }
       }
       // O-53: незавершённый прогон пагинации покинутого чата не продолжается.
-      if (pq) pqAbort('chat-changed');
+      if (pq) pqAbort('chat-changed'); if (prev && fh[prev]) delete fh[prev]; fhFallback = null;
       diagLine('chat-change', { chat: String(next || '').slice(0, 8) });
       // O-35 C (ФИКС): трансляция смены разговора в ISOLATED-сторону. До фикса событие
       // здесь НЕ диспатчилось (dispatched=0): content.js не делал resetConversationState,
@@ -1740,7 +1740,7 @@
   // боевой путь их не использует.
   window.__aiCmQwenBridge = {
     isQwenCompletions: isQwenCompletions,
-    isQwenHistory: isQwenHistory,
+    isQwenHistory: isQwenHistory, isFullHistoryUrl: isFullHistoryUrl,
     chatIdFromUrl: chatIdFromUrl,
     historyChatIdFromUrl: historyChatIdFromUrl,
     composeTurnText: composeTurnText,
@@ -1778,4 +1778,256 @@
     'O-39: JSON-история GET /api/v*N*/chats/{id} через resp.clone().json() (fetch) ' +
     'и XMLHttpRequest loadend (XHR/jQuery); ' +
     'O-53: курсорная пагинация истории (pagination.oldest_id, limit=10, до has_more_older=false)');
+
+  // ===== O-56: нативная ПОЛНАЯ история (GET /api/v\d+/chats/{id} без query) =====
+  // Сайт делает такой запрос только при экспорте (artifacts/qwen-native-export-network.json,
+  // seq 319); на загрузке чата — курсорную страницу (seq 94). Если полный ответ сайта поймали
+  // хуки выше — он просто разбирается. Иначе повторяем запрос сами, перенося заголовки живых
+  // запросов страницы (authorization/bx-ua/bx-umidtoken/bx-v снимаются fetch init/Request.headers
+  // и XHR setRequestHeader), cookies добавляет credentials:'include'. Провал → фолбэк на
+  // прежнюю курсорную пагинацию по базовой странице.
+  function qwenContentText(raw) {
+    if (typeof raw === 'string') return raw;
+    if (Array.isArray(raw)) {
+      var parts = [];
+      for (var i = 0; i < raw.length; i++) {
+        var p = raw[i];
+        if (typeof p === 'string' && p) parts.push(p);
+        else if (p && typeof p === 'object' && typeof p.content === 'string' && p.content) parts.push(p.content);
+      }
+      return parts.join('\n\n');
+    }
+    if (raw && typeof raw === 'object' && typeof raw.content === 'string') return raw.content;
+    return '';
+  }
+  // phase='thinking' полного ответа приводим к канонической фазе thinking_summary.
+  function qwenThinkingItem(item) {
+    if (!item || typeof item !== 'object') return item;
+    if (item.phase !== 'thinking') return item;
+    return {
+      phase: PHASE_THINKING,
+      content: (typeof item.content === 'string' && item.content) ? item.content
+        : ((typeof item.reasoning_content === 'string') ? item.reasoning_content : ''),
+      extras: item.extras || item.extra || null
+    };
+  }
+  // reasoning полного ответа: отдельное поле reasoning_content (строка/массив) приоритетнее
+  // content_list phase='thinking' — оно не зависит от разметки.
+  function qwenReasoningOf(node) {
+    if (!node || typeof node !== 'object') return '';
+    var raw = node.reasoning_content;
+    if (raw == null) raw = node.reasoningContent;
+    return qwenContentText(raw);
+  }
+  // chat.history.messages (словарь) + currentId → цепочка предков от корня к currentId.
+  // Узлы вне цепочки не теряем: дописываем в порядке ключей словаря.
+  function qwenParseFullChain(payload) {
+    function nodeIdOf(node) {
+      if (!node || typeof node !== 'object') return '';
+      var keys = ['id', 'message_id', 'msg_id', 'uuid', 'response_id', 'fid'];
+      for (var i = 0; i < keys.length; i++) {
+        var v = node[keys[i]];
+        if (typeof v === 'string' && v) return v;
+        if (typeof v === 'number') return String(v);
+      }
+      return '';
+    }
+    function parentIdOf(node) {
+      if (!node || typeof node !== 'object') return '';
+      if (typeof node.parentId === 'string') return node.parentId;
+      if (typeof node.parent_id === 'string') return node.parent_id;
+      return '';
+    }
+    var found = null;
+    var seenRoots = [];
+    function scan(node, depth) {
+      if (found || !node || typeof node !== 'object' || depth > 6) return;
+      for (var v = 0; v < seenRoots.length; v++) { if (seenRoots[v] === node) return; }
+      seenRoots.push(node);
+      var hist = node.history;
+      if (hist && typeof hist === 'object' && hist.messages &&
+        typeof hist.messages === 'object' && !Array.isArray(hist.messages)) {
+        var cid = (typeof hist.currentId === 'string' && hist.currentId)
+          ? hist.currentId
+          : ((typeof hist.current_id === 'string' && hist.current_id) ? hist.current_id : '');
+        if (cid) { found = { messages: hist.messages, currentId: cid }; return; }
+      }
+      for (var key in node) {
+        if (!Object.prototype.hasOwnProperty.call(node, key)) continue;
+        var child = node[key];
+        if (child && typeof child === 'object') scan(child, depth + 1);
+      }
+    }
+    try { scan(payload, 0); } catch (eScan) { swallow(eScan, 'qwen:full-chain-scan'); }
+    if (!found) return { nodes: [] };
+    var byKey = {}, byId = {}, keys = [];
+    for (var key in found.messages) {
+      if (!Object.prototype.hasOwnProperty.call(found.messages, key)) continue;
+      var node = found.messages[key];
+      if (!node || typeof node !== 'object' || Array.isArray(node)) continue;
+      byKey[key] = node;
+      var id = nodeIdOf(node);
+      if (id && !byId[id]) byId[id] = node;
+      keys.push(key);
+    }
+    function resolve(ref) { return ref ? (byKey[ref] || byId[ref] || null) : null; }
+    var seq = [], visited = [], cur = found.currentId;
+    while (cur) {
+      var curNode = resolve(cur);
+      if (!curNode || visited.indexOf(curNode) !== -1) break;
+      visited.push(curNode); seq.push(curNode); cur = parentIdOf(curNode);
+    }
+    if (!seq.length) return { nodes: [] };
+    seq.reverse();
+    for (var i = 0; i < keys.length; i++) {
+      var extra = byKey[keys[i]];
+      if (visited.indexOf(extra) === -1) { visited.push(extra); seq.push(extra); }
+    }
+    return { nodes: seq };
+  }
+  // Полный документ: order = позиция в цепочке; ходы вне цепочки — после неё.
+  function reindexByChain(pageTurns) {
+    if (!pageTurns || !pageTurns.length) return;
+    try {
+      var inChain = {};
+      for (var i = 0; i < pageTurns.length; i++) {
+        if (!pageTurns[i]) continue;
+        pageTurns[i].order = i;
+        inChain[pageTurns[i].key] = 1;
+      }
+      var rest = [];
+      for (var j = 0; j < turns.length; j++) {
+        if (!turns[j] || inChain[turns[j].key]) continue;
+        rest.push(turns[j]);
+      }
+      rest.sort(function (a, b) { return (a.order || 0) - (b.order || 0); });
+      for (var k = 0; k < rest.length; k++) rest[k].order = pageTurns.length + k;
+      if (pq) pq.orderFloor = 0;
+    } catch (eReindex) { swallow(eReindex, 'qwen:reindex-chain'); }
+  }
+  // Полная форма URL: нет query либо в ней нет direction/limit/cursor.
+  function isFullHistoryUrl(url) {
+    try {
+      var s = String(url || '');
+      var q = s.indexOf('?');
+      if (q === -1) return true;
+      var query = s.slice(q + 1).split('#')[0];
+      if (!query) return true;
+      var parts = query.split('&');
+      for (var i = 0; i < parts.length; i++) {
+        var k = parts[i].split('=')[0];
+        if (k === 'direction' || k === 'limit' || k === 'cursor') return false;
+      }
+      return true;
+    } catch (eFull) { return false; }
+  }
+
+  var FH_HEADER_NAMES = ['authorization', 'bx-ua', 'bx-umidtoken', 'bx-v', 'accept'];
+  var qwenAuthHeaders = {};        // последние увиденные заголовки qwen API (lowercase-ключи)
+  var fh = {};                     // chatId → 'pending' | 'done' | 'failed'
+  var fhFallback = null;           // базовая страница на случай провала своего запроса
+
+  function isQwenApiUrl(url) {
+    try {
+      var s = String(url || '');
+      if (!/\/api\/v\d+\//.test(s)) return false;
+      if (/^https?:\/\//i.test(s) && !/qwen\.ai/i.test(s)) return false;
+      return true;
+    } catch (eQa) { return false; }
+  }
+  function mergeQwenHeaders(src) {
+    if (!src) return;
+    try {
+      for (var k in src) {
+        if (!Object.prototype.hasOwnProperty.call(src, k)) continue;
+        var lk = String(k).toLowerCase();
+        if (FH_HEADER_NAMES.indexOf(lk) === -1) continue;
+        var v = src[k];
+        if (v == null || v === '') continue;
+        qwenAuthHeaders[lk] = String(v);
+      }
+    } catch (eMerge) { swallow(eMerge, 'qwen:auth-headers'); }
+  }
+  function rememberFetchHeaders(url, input, init) {
+    if (!isQwenApiUrl(url)) return;
+    mergeQwenHeaders(collectRequestHeaders(input, init));
+  }
+  function nativeFullHeaders() {
+    var out = {};
+    for (var k in qwenAuthHeaders) {
+      if (Object.prototype.hasOwnProperty.call(qwenAuthHeaders, k)) out[k] = qwenAuthHeaders[k];
+    }
+    if (!out.accept) out.accept = 'application/json, text/plain, */*';
+    return out;
+  }
+  function fullHistoryUrlOf(pageUrl, chatId) {
+    try {
+      var s = String(pageUrl || '');
+      var q = s.indexOf('?');
+      var noQuery = q === -1 ? s : s.slice(0, q);
+      var h = noQuery.indexOf('#');
+      if (h !== -1) noQuery = noQuery.slice(0, h);
+      if (/\/api\/v\d+\/chats\/[A-Za-z0-9_-]+$/.test(noQuery)) return noQuery;
+      var u = (typeof URL === 'function')
+        ? new URL(s, (typeof location !== 'undefined' ? location.href : undefined)) : null;
+      if (u && /\/api\/v\d+\/chats\//.test(u.pathname)) return u.origin + u.pathname;
+      if (u) return u.origin + '/api/v2/chats/' + encodeURIComponent(chatId);
+    } catch (eFullUrl) { swallow(eFullUrl, 'qwen:full-history-url'); }
+    return '';
+  }
+  function noteNativeFullHistory(chatId) {
+    if (chatId) fh[chatId] = 'done';
+  }
+  function ensureFullHistory(chatId, pageUrl, payload, meta, createdCount) {
+    if (!chatId) return false;
+    if (pq && pq.running) return false;                     // курсорный цикл уже идёт
+    var state = fh[chatId];
+    if (state === 'pending') return 'pending';
+    if (state === 'done') return 'done';
+    if (state === 'failed') return false;                   // уже пробовали — старый путь
+    if (!qwenAuthHeaders['authorization']) return false;    // заголовков ещё нет
+    var url = fullHistoryUrlOf(pageUrl, chatId);
+    if (!url) return false;
+    fh[chatId] = 'pending';
+    fhFallback = { chatId: chatId, payload: payload, meta: meta, count: createdCount };
+    var promise = null;
+    try {
+      promise = originalFetch.call(window, url, {
+        method: 'GET',
+        credentials: 'include',
+        headers: nativeFullHeaders()
+      });
+    } catch (eCall) { fh[chatId] = 'failed'; return false; }
+    Promise.resolve(promise).then(function (resp) {
+      if (!resp || !resp.ok) throw new Error('http ' + (resp ? resp.status : 'none'));
+      return resp.json();
+    }).then(function (json) {
+      fh[chatId] = 'done';
+      fhFallback = null;
+      diagTag('qwen-history', {
+        ts: Date.now(), event: 'full-history', chat: String(chatId).slice(0, 8), url: url
+      });
+      try { applyHistoryPayload(json, { chatId: chatId, url: url, full: true }); }
+      catch (eApplyFull) { swallow(eApplyFull, 'qwen:full-history-apply'); }
+    }).catch(function (eFull) {
+      if (fh[chatId] === 'done') return;
+      if (currentChatId && String(currentChatId) !== String(chatId)) return;
+      fh[chatId] = 'failed';
+      diagTag('qwen-history', {
+        ts: Date.now(), event: 'full-history-fail', chat: String(chatId).slice(0, 8),
+        err: String(eFull && eFull.message || eFull).slice(0, 80)
+      });
+      var fb = fhFallback;
+      fhFallback = null;
+      if (!fb || fb.chatId !== chatId) return;
+      var started = false;
+      try { started = startQwenPagination(fb.meta || {}, fb.payload, fb.count); }
+      catch (eFb) { swallow(eFb, 'qwen:full-history-fallback'); }
+      if (!started) {
+        try { emitSnapshot({ chatId: chatId, url: (fb.meta && fb.meta.url) || url, complete: true }); }
+        catch (eFbEmit) { swallow(eFbEmit, 'qwen:full-history-fallback-emit'); }
+      }
+    });
+    return 'pending';
+  }
 })();
