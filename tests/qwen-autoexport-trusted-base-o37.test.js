@@ -32,6 +32,7 @@ const { contentSource: CONTENT } = require('./helpers/content-source.js');
 const ROOT = path.join(__dirname, '..');
 const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const WIDGET_SRC = fs.readFileSync(path.join(ROOT, 'core', 'widget.js'), 'utf8');
 const CONTENT_ONLY = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
 const DEBUG_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'debug.js'), 'utf8');
 
@@ -72,6 +73,8 @@ const SCOPE = 'with (ctx) { ' +
   fnDecl(MGR_SRC, 'aiCmAutoExportConvId') + '\n' +
   fnDecl(MGR_SRC, 'aiCmAutoExportBasePendingLog') + '\n' +
   fnDecl(MGR_SRC, 'aiCmExportBaseSource') + '\n' +
+  fnDecl(MGR_SRC, 'aiCmAutoExportFiredInStorage') + '\n' +
+  fnDecl(MGR_SRC, 'aiCmAutoExportMarkFiredInStorage') + '\n' +
   fnDecl(MGR_SRC, 'aiCmAutoExportStartDownload') + '\n' +
   fnDecl(MGR_SRC, 'doAutoExportDownload') + '\n' +
   fnDecl(MGR_SRC, 'maybeAutoExport') + '\n' +
@@ -79,8 +82,22 @@ const SCOPE = 'with (ctx) { ' +
 const makeScope = new Function('ctx', SCOPE);
 
 /**
+ * sessionStorage страницы: один и тот же мок между stand()-ами эмулирует SPA-возврат
+ * (новый прогон виджета на том же хранилище), новый мок — F5/новую вкладку.
+ */
+function makeStorage() {
+  const map = Object.create(null);
+  return {
+    getItem: function (k) { return Object.prototype.hasOwnProperty.call(map, k) ? map[k] : null; },
+    setItem: function (k, v) { map[k] = String(v); },
+    removeItem: function (k) { delete map[k]; },
+    clear: function () { Object.keys(map).forEach(function (k) { delete map[k]; }); }
+  };
+}
+
+/**
  * Харнесс: состояние content-скрипта как в браузере (общий лексический скоуп модулей).
- * over: site, adapterBaseSeen, baseSeen, baseComplete, threshold, msgs, debug.
+ * over: site, adapterBaseSeen, baseSeen, baseComplete, threshold, msgs, debug, storage.
  */
 function stand(over) {
   const o = over || {};
@@ -88,11 +105,13 @@ function stand(over) {
   const diag = [];
   const downloads = [];
   const ctx = {
+    sessionStorage: (o.storage || makeStorage()),
     autoExportSettings: { enabled: true, pct: (o.threshold !== undefined) ? o.threshold : LIVE_THRESHOLD, fmt: 'txt' },
     autoExportPctBySite: {},
     autoExportLastConvId: '',
     autoExportLastPct: -1,
     autoExportFired: {},
+    aiCmAutoExportFiredOnce: Object.create(null),
     aiCmAutoExportNamesUsed: {},
     notCompleteLogged: {},
     sessionFiredCache: {},
@@ -146,6 +165,7 @@ function stand(over) {
     logs: logs,
     diag: diag,
     downloads: downloads,
+    storage: ctx.sessionStorage,
     run: api.run,
     trustedDiag: function () {
       return diag.filter(function (l) {
@@ -311,6 +331,82 @@ describe('O-37 A-D: реальный maybeAutoExport — один файр по 
     const noBase = stand({ adapterBaseSeen: false, debug: true });
     noBase.run(LIVE_PCT);
     expect(noBase.trustedDiag()).toEqual([]);
+  });
+});
+
+// =====================================================================================
+// O-59: флаг «already-fired» в sessionStorage — переживает SPA-сброс состояния виджета
+// =====================================================================================
+describe('O-59: SPA-возврат в уже экспортированный чат — второго файла нет', () => {
+  const KEY = 'aiCmAutoExportFired_' + CID;
+
+  test('R2: первый вход в чат → файр штатный, флаг sessionStorage поставлен', () => {
+    const h = stand({ adapterBaseSeen: true });
+    expect(h.storage.getItem(KEY)).toBeNull();
+    h.run(LIVE_PCT);
+    expect(h.downloads).toHaveLength(1);
+    expect(h.storage.getItem(KEY)).toBe('1');
+  });
+
+  test('D1: файр → SPA-возврат (сброс виджета и всех трёх латчей) → файла нет, лог already-fired', () => {
+    const h = stand({ adapterBaseSeen: true });
+    h.run(LIVE_PCT);
+    expect(h.downloads).toHaveLength(1);
+    // SPA-вход: resetConversationState() снимает состояние виджета и латчи ЦЕЛЕВОГО чата (D14),
+    // база адаптера переснимается (O-35). Хранилище страницы виджет не чистит — флаг жив.
+    h.ctx.autoExportFired = {};
+    h.ctx.sessionFiredCache = {};
+    h.ctx.aiCmAutoExportFiredOnce = Object.create(null);
+    h.ctx.autoExportLastConvId = '';
+    h.ctx.autoExportLastPct = -1;
+    h.ctx.notCompleteLogged = {};
+    h.ctx.baseSeen = false;
+    h.ctx.baseComplete = false;
+    h.ctx.lastEmitConvId = '';
+    expect(h.storage.getItem(KEY)).toBe('1');
+    h.ctx.lastEmitConvId = CID;
+    h.run(LIVE_PCT);
+    expect(h.downloads).toHaveLength(1);
+    expect(h.logs.join('\n')).toContain('skip reason=already-fired convId=' + CID);
+    expect(h.storage.getItem(KEY)).toBe('1');
+  });
+
+  test('R1: новый инстанс страницы (пустой sessionStorage) — флаг не наследуется, файр заново', () => {
+    const first = stand({ adapterBaseSeen: true });
+    first.run(LIVE_PCT);
+    expect(first.downloads).toHaveLength(1);
+    expect(first.storage.getItem(KEY)).toBe('1');
+    // F5/новая вкладка: новый инстанс контент-скрипта, хранилище пустое
+    const second = stand({ adapterBaseSeen: true });
+    expect(second.storage.getItem(KEY)).toBeNull();
+    second.run(LIVE_PCT);
+    expect(second.downloads).toHaveLength(1);
+    expect(second.logs.join('\n')).toContain('fired convId=' + CID);
+  });
+
+  test('флаг не снимается resetConversationState (widget.js о ключе не знает)', () => {
+    const reset = fnDecl(WIDGET_SRC, 'resetConversationState');
+    expect(reset).not.toContain('aiCmAutoExportFired_');
+    expect(reset).not.toContain('aiCmAutoExportFiredInStorage');
+  });
+
+  test('флаг qwen-only: чат другого сайта в этот sessionStorage флаг не пишет', () => {
+    const h = stand({ site: 'gemini', baseComplete: true, adapterBaseSeen: true });
+    h.run(LIVE_PCT);
+    expect(h.downloads).toHaveLength(1);
+    expect(h.storage.getItem(KEY)).toBeNull();
+  });
+
+  test('source-пины: проверка в трёх гейтах, установка после скачивания, pre-trim без флага', () => {
+    expect(fnDecl(MGR_SRC, 'maybeAutoExport')).toContain('aiCmAutoExportFiredInStorage(cid)');
+    expect(fnDecl(MGR_SRC, 'doAutoExportDownload')).toContain('aiCmAutoExportMarkFiredInStorage(cid, reason)');
+    const get = fnDecl(MGR_SRC, 'aiCmAutoExportFiredInStorage');
+    expect(get).toContain("sessionStorage.getItem('aiCmAutoExportFired_' + String(cid)) === '1'");
+    expect(get).toContain("currentAdapter.siteName !== 'qwen'");
+    const set = fnDecl(MGR_SRC, 'aiCmAutoExportMarkFiredInStorage');
+    expect(set).toContain("sessionStorage.setItem('aiCmAutoExportFired_' + String(cid), '1')");
+    expect(set).toContain("if (reason === 'pre-trim') return false;");
+    expect(set).toContain("currentAdapter.siteName !== 'qwen'");
   });
 });
 

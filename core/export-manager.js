@@ -1338,7 +1338,7 @@ function maybeAutoExport(percentage) {
         // O-38: + модульный латч — переживает resetConversationState (SPA-возврат)
         fired: P.getAutoExportFired(autoExportFired, siteName, cid) ||
                (typeof P.isFiredInSession === 'function' ? P.isFiredInSession(sessionFiredCache, siteName, cid) : false) ||
-               (typeof aiCmAutoExportFiredOnce === 'object' && aiCmAutoExportFiredOnce && aiCmAutoExportFiredOnce[siteName + '|' + cid] === 1),
+               (typeof aiCmAutoExportFiredOnce === 'object' && aiCmAutoExportFiredOnce && aiCmAutoExportFiredOnce[siteName + '|' + cid] === 1) || (typeof aiCmAutoExportFiredInStorage === 'function' && aiCmAutoExportFiredInStorage(cid)),
         isGemini: isGeminiSvc,
         // O-37 (A): база сервиса БЕЗ сети (qwen) — доверенная по дизайну O-35 (живой источник —
         // DOM-адаптер; признак «база адаптера принята» взведён записью source=adapter). Предикат живёт в
@@ -1518,7 +1518,7 @@ function maybeAutoExport(percentage) {
     // O-38: + модульный латч — переживает resetConversationState (SPA-возврат)
     if (autoExportFired[cid] ||
         (P && typeof P.isFiredInSession === 'function' && P.isFiredInSession(sessionFiredCache, siteName, cid)) ||
-        (typeof aiCmAutoExportFiredOnce === 'object' && aiCmAutoExportFiredOnce && aiCmAutoExportFiredOnce[siteName + '|' + cid] === 1)) {
+        (typeof aiCmAutoExportFiredOnce === 'object' && aiCmAutoExportFiredOnce && aiCmAutoExportFiredOnce[siteName + '|' + cid] === 1) || (typeof aiCmAutoExportFiredInStorage === 'function' && aiCmAutoExportFiredInStorage(cid))) {
       debugLog('log', '[AI CM][auto-export] skip reason=already-fired convId=' + cid);
       return; // уже скачивали в этом чате
     }
@@ -1877,7 +1877,7 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
             });
           }
         } catch (eDiagDl) { }
-        file = aiCmAutoExportStartDownload(content, file, fmt);
+        file = aiCmAutoExportStartDownload(content, file, fmt); if (typeof aiCmAutoExportMarkFiredInStorage === 'function') aiCmAutoExportMarkFiredInStorage(cid, reason);
         debugLog('log', '[AI CM][auto-export] fired convId=' + cid + ' pct=' + percentage + ' file=' + file +
           ' textLen=' + textLen + ' pendingCursor=' + (aiCmCursorLiveByConv[cid] ? '1' : '0') +
           ' baseComplete=' + (baseComplete === true ? '1' : '0') +
@@ -2018,7 +2018,7 @@ window.addEventListener('ai-cm-loader-state', function (/** @type {CustomEvent} 
             var Pbc = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
             return Pbc.getAutoExportFired(autoExportFired, siteBc, cid) ||
                    (typeof Pbc.isFiredInSession === 'function' ? Pbc.isFiredInSession(sessionFiredCache, siteBc, cid) : false) ||
-                   (typeof aiCmAutoExportFiredOnce === 'object' && aiCmAutoExportFiredOnce && aiCmAutoExportFiredOnce[siteBc + '|' + cid] === 1);
+                   (typeof aiCmAutoExportFiredOnce === 'object' && aiCmAutoExportFiredOnce && aiCmAutoExportFiredOnce[siteBc + '|' + cid] === 1) || (typeof aiCmAutoExportFiredInStorage === 'function' && aiCmAutoExportFiredInStorage(cid));
           })() && (baseCount || 0) > 0) {
         var pctBc64 = (typeof autoExportLastPct === 'number' && autoExportLastPct >= 0) ? autoExportLastPct : 0;
         // O-36 (D3): ФИКС — второй триггер подчиняется порогу автоэкспорта. До фикса
@@ -2048,6 +2048,40 @@ window.addEventListener('ai-cm-loader-state', function (/** @type {CustomEvent} 
     debugLog('error', '[AI CM][auto-export] loader-state error:', e);
   }
 });
+
+// ========== O-59: «already-fired» этого чата в sessionStorage (переживает SPA-возврат) ==========
+// resetConversationState() (core/widget.js:196) на SPA-входе снимает in-memory autoExportFired и
+// кросс-табовый session-латч целевого чата (D14: «новый вход = один новый fired»). Флаг ниже
+// живёт в web-storage САМОЙ страницы и этим сбросом НЕ снимается: SPA-возврат в уже
+// экспортированный чат второго файла не даёт, а до закрытия вкладки запись остаётся.
+// Ключ — ровно aiCmAutoExportFired_<convId>, значение '1'; пустой convId (новый чат до первого
+// id) флага не получает и не читает. Ошибки хранилища (private/quota/запрет) не фатальны:
+// без флага решение принимают прежние три латча — поведение 1:1.
+// Функции объявлены в конце модуля (function-декларации хойстятся в общий скоуп контент-скрипта):
+// вставка выше сдвинула бы строки, построчно закреплённые tests/fixtures/catch-whitelist.json.
+function aiCmAutoExportFiredInStorage(cid) {
+  try {
+    if (!cid) return false;
+    // O-59 адресован qwen: только там SPA-возврат пересобирает виджет, оставляя тот же чат.
+    // Остальные сайты живут на своих origin со своим sessionStorage — их путь не меняется.
+    if (typeof currentAdapter === 'undefined' || !currentAdapter || currentAdapter.siteName !== 'qwen') return false;
+    if (typeof sessionStorage === 'undefined' || !sessionStorage) return false;
+    return sessionStorage.getItem('aiCmAutoExportFired_' + String(cid)) === '1';
+  } catch (e) { swallowSoft(e, 'export:autoexport-fired-storage-read'); return false; }
+}
+
+function aiCmAutoExportMarkFiredInStorage(cid, reason) {
+  try {
+    // pre-trim — спасательный экспорт перед обрезкой: латч ему не положен (та же семантика,
+    // что у блока латчей в doAutoExportDownload) — иначе поздний честный файл был бы запрещён.
+    if (reason === 'pre-trim') return false;
+    if (!cid) return false;
+    if (typeof currentAdapter === 'undefined' || !currentAdapter || currentAdapter.siteName !== 'qwen') return false;
+    if (typeof sessionStorage === 'undefined' || !sessionStorage) return false;
+    sessionStorage.setItem('aiCmAutoExportFired_' + String(cid), '1');
+    return true;
+  } catch (e) { swallowSoft(e, 'export:autoexport-fired-storage-write'); return false; }
+}
 
 // ========== v2.0 (этап 1/3): UMD-экспорт модуля ==========
 // Паттерн как у utils/export-emit-pipeline.js: window.<Api> + module.exports.
