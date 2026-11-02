@@ -9,7 +9,9 @@
  *   5) pageStepDecision / assignPageOrders — решение о шаге и порядок ходов;
  *   6) emitSnapshot / recordTurn — снимок собирается по order, а не по порядку добавления (O-54);
  *   7) гейт автоэкспорта держит Qwen до конца пагинации (O-54);
- *   8) предикат неполноты базы — только Qwen, в core/export-manager.js (O-54).
+ *   8) предикат неполноты базы — только Qwen, в core/export-manager.js (O-54);
+ *   9) O-55: публичный курсорный путь — старая страница вливается в НАЧАЛО истории,
+ *      а перекрытие adopted-ходов не разрезает блок страницы.
  *
  * Модуль ЧИСТЫЙ: сети и состояния нет, payload-объекты собраны вручную по замеру probe
  * (data.chat.history.pagination = {enabled, oldest_id, newest_id, has_more_older, ...}).
@@ -67,6 +69,48 @@ function makeTurnStore() {
   return { ctx: ctx, recordTurn: api.recordTurn, emitSnapshot: api.emitSnapshot };
 }
 
+// O-55: песочница «страница истории» — боевые applyHistoryPayload/recordTurn/emitSnapshot/
+// renumberHistoryPage и парсер с НАСТОЯЩИМ модулем пагинации в window.AiCmQwenPagination.
+// Тот же приём, что makeTurnStore: пины бьют по исходнику, а не по переписанной копии.
+function makeHistoryStore() {
+  const ctx = {
+    turns: [],
+    userTurns: [],
+    turnSeq: 0,
+    currentChatId: '',
+    lastReqChatId: '',
+    dispatchSig: null,
+    lastDispatchResult: false,
+    dispatched: [],
+    pq: { chatId: CHAT, running: false, orderFloor: 0, usedCursors: {}, pages: 0 },
+    FILE_ONLY_PLACEHOLDER: '[Вложение]',
+    PHASE_THINKING: 'thinking_summary',
+    REASONING_TAG: '[REASONING]',
+    ANSWER_TAG: '[ANSWER]',
+    qwenPaginationApi: function () { return P; },
+    startQwenPagination: function () { return false; },
+    diagLine: function () {},
+    diagTag: function () {},
+    diagUrl: function () { return ''; },
+    swallow: function () {},
+    CustomEvent: function (type, init) { this.type = type; this.detail = init && init.detail; }
+  };
+  ctx.window = {
+    AiCmQwenPagination: P,
+    dispatchEvent: function (ev) { ctx.dispatched.push(ev); return true; }
+  };
+  const FNS = ['contentListOf', 'isHistoryMessageNode', 'walkHistoryMessages', 'historyMessageId',
+    'thinkingTextOf', 'historyThinkingOf', 'historyAnswerOf', 'historyUsageOf', 'historyChatIdOf',
+    'findHistoryChatId', 'historyFilesOf', 'parseQwenHistory', 'composeTurnText', 'recordTurn',
+    'buildSignature', 'userTextOf', 'emitSnapshot', 'applyHistoryPayload', 'renumberHistoryPage'];
+  const SCOPE = 'with (ctx) { ' + FNS.map(function (n) { return fnDecl(INTERCEPT_SRC, n); }).join('\n') +
+    '\n return { applyHistoryPayload: applyHistoryPayload, recordTurn: recordTurn,' +
+    ' emitSnapshot: emitSnapshot, renumberHistoryPage: renumberHistoryPage }; }';
+  const api = new Function('ctx', SCOPE)(ctx);
+  api.ctx = ctx;
+  return api;
+}
+
 const CHAT = 'ab45dc99-cbab-435e-b0d3-f0440f6422df';
 const CUR = 'dad1e741-f84e-4498-adc4-30de309636bd';
 const NEXT = '1bce0eea-3b22-45ae-828a-4c666c95bd68';
@@ -103,7 +147,7 @@ describe('O-53: форма модуля и UUID-курсор', function () {
     expect(P.DEFAULT_TIME_CAP_MS).toBe(30000);
     expect(P.SOFT_PARTIAL_REASONS).toEqual(['time-cap', 'page-cap', 'no-gain']);
     ['isUuid', 'historyPageUrl', 'paginationInfo', 'nextCursorOf', 'isSoftPartialReason',
-      'oldestMessageId', 'pageStepDecision', 'assignPageOrders'].forEach(function (name) {
+      'oldestMessageId', 'pageStepDecision', 'assignPageOrders', 'isOlderPageUrl', 'floorOf'].forEach(function (name) {
       expect(typeof P[name]).toBe('function');
     });
   });
@@ -525,5 +569,171 @@ describe('O-54: предикат неполноты базы — только Qw
       expect(incomplete(site, true, false)).toBe(false);
     });
     expect(incomplete('', true, false)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// O-55: публичный курсорный путь. Сайт сам скроллит вверх и запрашивает ?cursor=... —
+// метаданных НАШЕГО цикла (m.paginate) у такого ответа нет. Раньше он дописывался в КОНЕЦ
+// истории (order = max + 1), а перенумерация страницы шла только по created.
+// ---------------------------------------------------------------------------------------
+const BASE_URL = 'https://chat.qwen.ai/api/v2/chats/' + CHAT + '?direction=up&limit=10';
+const OLDER_URL = BASE_URL + '&cursor=' + CUR;
+
+function histTurn(id, question, answer) {
+  return [
+    { id: 'u-' + id, role: 'user', content: question },
+    { id: id, role: 'assistant', content: answer }
+  ];
+}
+
+function historyPage(turns) {
+  return pageOf({
+    enabled: true,
+    oldest_id: CUR,
+    newest_id: NEXT,
+    has_more_older: true,
+    path_count: 2
+  }, [].concat.apply([], turns));
+}
+
+function turnOf(store, key) {
+  return store.ctx.turns.filter(function (t) { return t.key === key; })[0];
+}
+
+function lastDetail(store) {
+  return store.ctx.dispatched[store.ctx.dispatched.length - 1].detail;
+}
+
+function sortedKeys(turns) {
+  return turns.slice().sort(function (l, r) { return l.order - r.order; })
+    .map(function (t) { return t.key; });
+}
+
+describe('O-55: isOlderPageUrl — сайт сам просит более старую страницу', function () {
+  test('курсор в query — старая страница; базовая и направление вниз — нет', function () {
+    expect(P.isOlderPageUrl(BASE_URL)).toBe(false);
+    expect(P.isOlderPageUrl(OLDER_URL)).toBe(true);
+    expect(P.isOlderPageUrl('https://chat.qwen.ai/api/v2/chats/' + CHAT + '?cursor=' + CUR)).toBe(true);
+    expect(P.isOlderPageUrl('https://chat.qwen.ai/api/v2/chats/' + CHAT +
+      '?direction=up&limit=10&next_cursor=' + CUR)).toBe(true);
+    expect(P.isOlderPageUrl('https://chat.qwen.ai/api/v2/chats/' + CHAT +
+      '?cursor=' + CUR + '&direction=down')).toBe(false);
+    expect(P.isOlderPageUrl('https://chat.qwen.ai/api/v2/chats/' + CHAT)).toBe(false);
+    expect(P.isOlderPageUrl('https://chat.qwen.ai/api/v2/chats/' + CHAT + '?cursor=')).toBe(false);
+    expect(P.isOlderPageUrl('')).toBe(false);
+    expect(P.isOlderPageUrl(null)).toBe(false);
+  });
+});
+
+describe('O-55: floorOf — пол страницы считается без её собственных ходов', function () {
+  function t(key, order) { return { key: key, order: order }; }
+
+  test('минимум известных ходов вне страницы', function () {
+    const a = t('a', 0), b = t('b', 1), c = t('c', 2);
+    expect(P.floorOf([a, b, c], [])).toBe(0);
+    expect(P.floorOf([a, b, c], [a, b, c])).toBe(0);     // вся страница уже известна
+    expect(P.floorOf([a, b, c], [b])).toBe(0);
+    expect(P.floorOf([a, b, c], [a])).toBe(1);
+  });
+
+  test('отрицательный пол прошлой страницы продолжается', function () {
+    const o1 = t('o1', -4), o2 = t('o2', -3), base = t('p1', 0);
+    expect(P.floorOf([o1, o2, base], [o1, o2])).toBe(0);
+    expect(P.floorOf([o1, o2, base], [base])).toBe(-4);
+  });
+
+  test('пустой список и нечисловой order — пол 0', function () {
+    expect(P.floorOf([], [])).toBe(0);
+    expect(P.floorOf(null, null)).toBe(0);
+    expect(P.floorOf([{ key: 'x', order: 'oops' }], [])).toBe(0);
+  });
+});
+
+describe('O-55: публичная старая страница (?cursor=) вливается в НАЧАЛО истории', function () {
+  test('D1: запрос сайта без m.paginate — ходы страницы уходят в отрицательные order', function () {
+    const store = makeHistoryStore();
+    const base = store.applyHistoryPayload(historyPage([
+      histTurn('a', 'Aq', 'A'),
+      histTurn('b', 'Bq', 'B')
+    ]), { chatId: CHAT, url: BASE_URL });
+    expect(base.added).toBe(2);
+    expect(store.ctx.turns.map(function (t) { return t.order; })).toEqual([0, 1]);
+    expect(lastDetail(store).messageTexts).toEqual(['Aq', 'A', 'Bq', 'B']);
+
+    // Публичный путь: сайт сам просит более старую страницу. m.paginate НЕТ.
+    const older = store.applyHistoryPayload(historyPage([
+      histTurn('x', 'Xq', 'X'),
+      histTurn('y', 'Yq', 'Y')
+    ]), { chatId: CHAT, url: OLDER_URL });
+
+    expect(older.added).toBe(2);
+    expect(turnOf(store, 'x').order).toBe(-2);
+    expect(turnOf(store, 'y').order).toBe(-1);
+    expect(store.ctx.pq.orderFloor).toBe(-2);
+    expect(lastDetail(store).messageTexts)
+      .toEqual(['Xq', 'X', 'Yq', 'Y', 'Aq', 'A', 'Bq', 'B']);
+  });
+
+  test('D2: перекрытие adopted в середине страницы не разрезает блок ходов', function () {
+    const store = makeHistoryStore();
+    store.applyHistoryPayload(historyPage([
+      histTurn('a', 'Aq', 'A'),
+      histTurn('b', 'Bq', 'B'),
+      histTurn('c', 'Cq', 'C')
+    ]), { chatId: CHAT, url: BASE_URL });
+
+    // Старая страница, в середине которой сервер повторил уже известный ход b (adopted).
+    store.applyHistoryPayload(historyPage([
+      histTurn('x', 'Xq', 'X'),
+      histTurn('b', 'Bq', 'B'),
+      histTurn('y', 'Yq', 'Y')
+    ]), { chatId: CHAT, url: OLDER_URL });
+
+    const x = turnOf(store, 'x'), b = turnOf(store, 'b');
+    const y = turnOf(store, 'y'), c = turnOf(store, 'c');
+    expect([x.order, b.order, y.order]).toEqual([-3, -2, -1]);   // блок страницы непрерывен
+    expect(y.order).toBeLessThan(c.order);
+
+    const texts = lastDetail(store).messageTexts;
+    const iX = texts.indexOf('Xq'), iB = texts.indexOf('Bq'), iY = texts.indexOf('Yq');
+    expect(iX).toBeGreaterThanOrEqual(0);
+    expect([iB - iX, iY - iB]).toEqual([2, 2]);                  // Xq,X | Bq,B | Yq,Y — без разрезов
+
+    // Контроль дефекта: старый вызов assignPageOrders(created, 0) двигал ТОЛЬКО новые ходы —
+    // adopted b оставался на order 1 и вклинивался между страницей и базой.
+    const legacy = [
+      { key: 'a', order: 0 }, { key: 'b', order: 1 }, { key: 'c', order: 2 },
+      { key: 'x', order: 3 }, { key: 'y', order: 4 }
+    ];
+    P.assignPageOrders([legacy[3], legacy[4]], 0);
+    expect(sortedKeys(legacy)).toEqual(['x', 'y', 'a', 'b', 'c']);
+  });
+});
+
+describe('O-55: регрессы R1 (живой ход в конец) и R2 (дубликаты не чинятся)', function () {
+  test('R1: живой ход после перенумерации старой страницы встаёт в конец (max+1)', function () {
+    const store = makeHistoryStore();
+    store.applyHistoryPayload(historyPage([histTurn('a', 'Aq', 'A')]), { chatId: CHAT, url: BASE_URL });
+    store.applyHistoryPayload(historyPage([histTurn('x', 'Xq', 'X')]), { chatId: CHAT, url: OLDER_URL });
+
+    const live = store.recordTurn({
+      chatId: CHAT, responseId: 'z', userKey: 'u-z', userPrompt: 'Zq', answer: 'Z'
+    });
+    expect(live.created).toBe(true);
+    expect(live.turn.order).toBe(1);                             // max(0) + 1
+    store.emitSnapshot({ complete: true });
+    expect(lastDetail(store).messageTexts).toEqual(['Xq', 'X', 'Aq', 'A', 'Zq', 'Z']);
+  });
+
+  test('R2: дубликат с другим id остаётся дублем — составной ключ отложен (П2-C)', function () {
+    const store = makeHistoryStore();
+    store.applyHistoryPayload(historyPage([histTurn('a', 'Aq', 'A')]), { chatId: CHAT, url: BASE_URL });
+    const dup = store.applyHistoryPayload(historyPage([histTurn('a2', 'Aq', 'A')]), { chatId: CHAT, url: OLDER_URL });
+
+    expect(dup.added).toBe(1);                                   // второй ход заведён, не слит
+    expect(store.ctx.turns.length).toBe(2);
+    expect(store.ctx.turns.map(function (t) { return t.text; })).toEqual(['A', 'A']);
+    // Дедуп по составному ключу — отдельная задача П2-C; здесь поведение намеренно прежнее.
   });
 });

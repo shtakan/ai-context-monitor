@@ -766,7 +766,7 @@
     var lastResponseId = '';
     var lastModel = '';
     var applied = 0;
-    var created = [];
+    var created = [], pageTurns = [];   // O-55: pageTurns — все ходы страницы (и новые, и adopted)
     var filesOnlyTurns = 0;
     // R4: вложения могут прийти и в user-узле, и в assistant-узле (наблюдённые формы).
     // В очередь ставим ОБЪЕДИНЕНИЕ, а источник пишем в диагностику (без имён/URL).
@@ -843,7 +843,7 @@
       pendingUserText = '';
       pendingUserFiles = [];
       // O-53: ходы этой страницы — в created (их order перенумеровывает пагинация).
-      if (rec && rec.created) created.push(rec);
+      if (rec && rec.turn) { pageTurns.push(rec.turn); if (rec.created) created.push(rec); }
       applied++;
     }
     // R4: сообщение только с вложениями БЕЗ ответа assistant. Отдельного хода-ответа нет,
@@ -873,7 +873,7 @@
       if (recU && recU.turn && recU.turn.userKey) {
         enqueueHistoryFiles(pendingUserFiles, recU, 'user');
       }
-      if (recU && recU.created) created.push(recU);
+      if (recU && recU.turn) { pageTurns.push(recU.turn); if (recU.created) created.push(recU); }
       filesOnlyTurns++;
       applied++;
       pendingUserKey = '';
@@ -893,8 +893,8 @@
         nodes: parsed.nodes, taken: 'first'
       });
     }
-    // O-53: страница, добавленная пагинацией, встаёт ПЕРЕД уже собранными (order меньше).
-    if (m.paginate && created.length) renumberHistoryPage(created);
+    // O-53/O-55: страница истории (цикл ИЛИ публичный ?cursor=) — ПЕРЕД собранными, все ходы.
+    if (created.length) renumberHistoryPage(pageTurns, m.paginate, m.url);
     // O-53: пагинация стартует ДО emit — первый снимок сразу честно неполный
     // (historyComplete=false), а не «полный, но потом вдруг нет» (дефект базовой страницы).
     var paginating = false;
@@ -1271,11 +1271,11 @@
     return out;
   }
 
-  // order страницы истории, добавленной пагинацией: base = floor - N (старее = меньше).
-  function renumberHistoryPage(created) {
-    var api = qwenPaginationApi();
-    if (!api || !pq || !created || !created.length) return;
-    try { pq.orderFloor = api.assignPageOrders(created, pq.orderFloor); }
+  // O-53/O-55: страница (наш цикл или публичный ?cursor=) — все её ходы ниже пола, блок цел.
+  function renumberHistoryPage(pageTurns, fromCycle, url) {
+    var api = qwenPaginationApi(); if (!api || !pageTurns || !pageTurns.length) return;
+    if (!fromCycle && !(api.isOlderPageUrl && api.isOlderPageUrl(url))) return;
+    try { var base = api.assignPageOrders(pageTurns, api.floorOf(turns, pageTurns)); if (pq) pq.orderFloor = base; }
     catch (eOrd) { swallow(eOrd, 'qwen:page-orders'); }
   }
 

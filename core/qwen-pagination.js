@@ -62,6 +62,40 @@
     walk(root, 0);
   }
 
+  // Декодирование части query без падения на битой последовательности: имя/значение как есть.
+  function decodePart(raw) {
+    var s = String(raw == null ? '' : raw);
+    try { return decodeURIComponent(s); } catch (eDec) { return s; }
+  }
+
+  // O-55: публичный запрос сайта за БОЛЕЕ СТАРОЙ страницей узнаётся по курсору в query.
+  // Наш цикл помечает свои страницы m.paginate; когда сайт сам скроллит вверх и просит
+  // ?cursor=<oldest_id>&direction=up, метаданных цикла нет — направление читаем из URL.
+  // Курсор без направления тоже считается «старше» (курсор Qwen эксклюзивный, только вверх);
+  // явное direction вниз/к новым — не наша страница.
+  function isOlderPageUrl(url) {
+    var s = String(url == null ? '' : url);
+    var q = s.indexOf('?');
+    if (q === -1) return false;
+    var query = s.slice(q + 1);
+    var hash = query.indexOf('#');
+    if (hash !== -1) query = query.slice(0, hash);
+    var parts = query.split('&');
+    var cursor = '';
+    var direction = '';
+    for (var i = 0; i < parts.length; i++) {
+      var eq = parts[i].indexOf('=');
+      if (eq === -1) continue;
+      var name = decodePart(parts[i].slice(0, eq));
+      var value = decodePart(parts[i].slice(eq + 1).replace(/\+/g, ' '));
+      if (!cursor && (name === 'cursor' || CURSOR_NAMES.indexOf(name) !== -1)) cursor = value;
+      if (!direction && (name === 'direction' || name === 'dir')) direction = String(value).toLowerCase();
+    }
+    if (!cursor) return false;
+    if (direction && direction !== 'up') return false;
+    return true;
+  }
+
   // URL следующей (более старой) страницы. Пустой курсор — базовая страница как есть.
   // Базовый URL уже несёт direction=up&limit=10 — параметры перезаписываются, не дублируются.
   function historyPageUrl(baseUrl, cursor) {
@@ -189,6 +223,23 @@
     return base;
   }
 
+  // O-55: «пол» страницы — минимальный order уже известных ходов, которых НЕТ на этой странице.
+  // Их перенумерация не трогает, поэтому блок страницы обязан встать строго ниже пола; при
+  // перекрытии (adopted-ходы на странице) пол считается по остальным ходам базы, а не по ним.
+  function floorOf(turns, pageTurns) {
+    var known = Array.isArray(turns) ? turns : [];
+    var page = Array.isArray(pageTurns) ? pageTurns : [];
+    var floor = null;
+    for (var i = 0; i < known.length; i++) {
+      var t = known[i];
+      if (!t || typeof t !== 'object') continue;
+      if (page.indexOf(t) !== -1) continue;
+      if (typeof t.order !== 'number' || !isFinite(t.order)) continue;
+      if (floor === null || t.order < floor) floor = t.order;
+    }
+    return (floor === null) ? 0 : floor;
+  }
+
   var Fn = {
     UUID_RE: UUID_RE,
     PAGE_LIMIT: PAGE_LIMIT,
@@ -197,12 +248,14 @@
     SOFT_PARTIAL_REASONS: SOFT_PARTIAL_REASONS,
     isUuid: isUuid,
     isSoftPartialReason: isSoftPartialReason,
+    isOlderPageUrl: isOlderPageUrl,
     historyPageUrl: historyPageUrl,
     paginationInfo: paginationInfo,
     nextCursorOf: nextCursorOf,
     oldestMessageId: oldestMessageId,
     pageStepDecision: pageStepDecision,
-    assignPageOrders: assignPageOrders
+    assignPageOrders: assignPageOrders,
+    floorOf: floorOf
   };
 
   if (typeof window !== 'undefined') window.AiCmQwenPagination = Fn;
