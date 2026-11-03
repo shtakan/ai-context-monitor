@@ -154,3 +154,6 @@ step-*.md
 plan-*.md
 tsc_err.txt
 docs/videos/*.mp4
+
+# Generated esbuild entry points (build.mjs stage 0; inputs, not artefacts)
+/.build/

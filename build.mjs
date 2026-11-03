@@ -66,16 +66,37 @@
  * frozen by the test suite (tests/manifest-smoke.test.js, tests/qwen-provider-wiring.test.js)
  * and are no longer what Chrome loads.
  *
- * Usage:
- *   node build.mjs              # dev build (dist/ + dist-firefox/), sourcemaps on
- *   node build.mjs --watch      # rebuild on change (own watcher, see note below)
- *   node build.mjs --minify     # production, sourcemaps off
- *   node build.mjs --clean      # remove dist/ and dist-firefox/, then exit
- *   node build.mjs --no-sourcemap
+ * Stage 0 (entry points): every bundle is built from a generated entry file,
+ * `.build/entry-<name>.js`, instead of from `stdin`. The entry files are
+ * regenerated from the SSOTs on every build and are gitignored:
+ *   .build/entry-background.js    <- BACKGROUND_PRELUDE + manifest.background.service_worker
+ *   .build/entry-content.js       <- manifest.content_scripts[0].js
+ *   .build/entry-options.js       <- options/options.html script order
+ *   .build/entry-print.js         <- print/print.html script order
+ *   .build/entry-shared-i18n.js   <- privacy/privacy.html (docs/index.html must match)
  *
- * Watch note: because the sources are fed to esbuild through `stdin`, esbuild's
- * own `ctx.watch()` has no file to watch and never fires. The dev watcher below
- * therefore tracks the SSOT-derived file set itself with fs.watch.
+ * The entry file holds the *concatenation* of its sources, not an
+ * `import './x.js'` chain, and that is deliberate: these sources are classic
+ * scripts that reference each other by bare identifier inside one shared scope
+ * (see the header of utils/platform.js). An import chain gives every file its
+ * own module scope, so any file carrying the `module.exports` UMD shim for jest
+ * becomes a CommonJS closure and its declarations vanish from that shared scope.
+ * The build stays green while the extension breaks at runtime (no top-level
+ * aiCmIsFirefox(), Tokenizer, core/state.js globals…), so concatenation — one
+ * shared scope — is what this build must keep.
+ *
+ * Usage:
+ *   node build.mjs                # dev build (dist/ + dist-firefox/), sourcemaps on
+ *   node build.mjs --watch        # rebuild on change (native esbuild ctx.watch())
+ *   node build.mjs --minify       # production, sourcemaps off
+ *   node build.mjs --clean        # remove dist/ and dist-firefox/, then exit
+ *   node build.mjs --no-sourcemap
+ *   node build.mjs --write-entries  # only regenerate .build/entry-*.js, then exit
+ *
+ * Watch note: esbuild's own `ctx.watch()` drives the dev loop now. The entry
+ * plugin reports every real input through `watchFiles` (entry sources,
+ * manifest.json, the assets copied verbatim and the recursively copied trees),
+ * so a change to any of them triggers a native rebuild.
  */
 import * as esbuild from 'esbuild';
 import fs from 'node:fs';
@@ -89,11 +110,15 @@ const DIST = path.join(ROOT, 'dist');
 // the two engines refuse each other's background shape, so they cannot share
 // one output root.
 const DIST_FIREFOX = path.join(ROOT, 'dist-firefox');
+// Stage 0: the generated entry files are build inputs, not artefacts, so they
+// live outside dist/ and are gitignored.
+const BUILD_DIR = path.join(ROOT, '.build');
 
 const argv = process.argv.slice(2);
 const flag = (name) => argv.includes(name);
 const WATCH = flag('--watch');
 const CLEAN_ONLY = flag('--clean');
+const ENTRIES_ONLY = flag('--write-entries');
 const MINIFY = flag('--minify') || process.env.NODE_ENV === 'production';
 const SOURCEMAP = flag('--no-sourcemap') ? false : !MINIFY || flag('--sourcemap');
 
@@ -403,9 +428,20 @@ async function rewireDist() {
 
 /* ------------------------------------------------------------------ *
  * 3. Entry assembly (concat into one shared scope)
+ *
+ * Stage 0: the concatenation is materialised on disk as
+ * .build/entry-<name>.js and handed to esbuild through `entryPoints`, instead
+ * of through `stdin`. The generated file is exactly what the stdin build used
+ * to receive (same markers, same order, same bytes), so the bundles cannot
+ * change shape just because the transport did.
  * ------------------------------------------------------------------ */
 
-function readSources(entryRelPaths) {
+/** Absolute path of the generated entry file of one bundle. */
+function entryPath(name) {
+  return path.join(BUILD_DIR, `entry-${name}.js`);
+}
+
+function renderEntry(entryRelPaths) {
   const parts = [];
   let bytes = 0;
   for (const r of entryRelPaths) {
@@ -419,6 +455,36 @@ function readSources(entryRelPaths) {
     bytes += Buffer.byteLength(src);
   }
   return { contents: parts.join('\n'), bytes };
+}
+
+/**
+ * Materialise .build/entry-<name>.js for every bundle. A file is only rewritten
+ * when the rendered text actually differs, so a watch rebuild of an unrelated
+ * entry cannot retrigger the watcher in a loop.
+ */
+async function writeEntryFiles(entries = collectEntries()) {
+  await fsp.mkdir(BUILD_DIR, { recursive: true });
+  const written = [];
+  for (const [name, list] of Object.entries(entries)) {
+    const { contents, bytes } = renderEntry(list);
+    const file = entryPath(name);
+    let previous = null;
+    try {
+      previous = await fsp.readFile(file, 'utf8');
+    } catch {
+      previous = null; // first build: no entry file yet
+    }
+    if (previous !== contents) {
+      // Rename over, never truncate in place: esbuild (and jest, which runs
+      // `--write-entries`) may read the entry file at any moment, and a
+      // half-written entry would be a build input, not a stale artifact.
+      const tmp = `${file}.tmp`;
+      await fsp.writeFile(tmp, contents);
+      await fsp.rename(tmp, file);
+    }
+    written.push({ name, file, list, bytes });
+  }
+  return written;
 }
 
 function collectEntries() {
@@ -843,47 +909,90 @@ async function verifyFirefoxDist() {
  * 5. Build
  * ------------------------------------------------------------------ */
 
-async function buildOnce(entries, { quiet = false } = {}) {
+/**
+ * esbuild plugin: regenerates the .build/entry-*.js files from the SSOTs before
+ * every build (including watch rebuilds), serves them as the entry contents and
+ * reports every real input through `watchFiles` so `ctx.watch()` can see it.
+ */
+function entryFilesPlugin() {
+  return {
+    name: 'ai-cm-entry-files',
+    setup(build) {
+      build.onStart(async () => {
+        const entries = collectEntries();
+        const written = await writeEntryFiles(entries);
+        for (const { name, bytes, list } of written) {
+          console.log(
+            `[build] ${name}: ${bytes.toLocaleString('en-US')} source bytes (${list.length} files)`
+          );
+        }
+        // Drop stale artifacts of the targets we are about to write, so switching
+        // between dev and prod cannot leave an orphaned (and stale) sourcemap behind.
+        for (const name of Object.keys(entries)) {
+          for (const stale of [`${name}.js`, `${name}.js.map`]) {
+            await fsp.rm(path.join(DIST, stale), { force: true });
+          }
+        }
+        return {};
+      });
+
+      build.onLoad({ filter: /[\\/]\.build[\\/]entry-[^\\/]+\.js$/ }, async (args) => {
+        const name = path.basename(args.path).replace(/^entry-/, '').replace(/\.js$/, '');
+        const entries = collectEntries();
+        if (!entries[name]) {
+          fail(`generated entry "${rel(args.path)}" has no SSOT list for bundle "${name}"`);
+        }
+        return {
+          contents: await fsp.readFile(args.path, 'utf8'),
+          loader: 'js',
+          resolveDir: ROOT,
+          watchFiles: watchFiles(entries),
+        };
+      });
+    },
+  };
+}
+
+/** Every input whose change must trigger a rebuild under `--watch`. */
+function watchFiles(entries) {
+  const files = new Set([abs('manifest.json')]);
+  for (const r of ASSET_FILES) files.add(abs(r));
+  for (const list of Object.values(entries)) for (const r of list) files.add(abs(r));
+  // runtime-registered files are copied verbatim, so a change must rebuild too
+  for (const r of runtimeRegisteredFiles()) files.add(abs(r));
+  // Whole trees copied verbatim (icons/, _locales/, docs/screenshots/): watch the
+  // directory itself, so a newly added or renamed file inside one rebuilds too.
+  for (const r of ASSET_DIRS) files.add(abs(r));
+  for (const r of ASSET_TREES) files.add(abs(r));
+  return [...files];
+}
+
+/**
+ * esbuild plugin: asset copying and dist verification run after the bundles were
+ * written. Hooking onEnd means `--watch` keeps dist/ and dist-firefox/ in sync
+ * through the same code path as a one-shot build.
+ */
+function postBuildPlugin() {
+  return {
+    name: 'ai-cm-post-build',
+    setup(build) {
+      build.onEnd(async (result) => {
+        if (result.errors.length) return; // esbuild rejects the build on its own
+        await finishBuild(collectEntries());
+      });
+    },
+  };
+}
+
+async function finishBuild(entries) {
   await fsp.mkdir(DIST, { recursive: true });
-
-  const outputs = [];
-
-  // Drop stale artifacts of the targets we are about to write, so switching
-  // between dev and prod cannot leave an orphaned (and stale) sourcemap behind.
-  for (const name of Object.keys(entries)) {
-    for (const stale of [`${name}.js`, `${name}.js.map`]) {
-      await fsp.rm(path.join(DIST, stale), { force: true });
-    }
-  }
-
-  for (const [name, list] of Object.entries(entries)) {
-    const outfile = path.join(DIST, `${name}.js`);
-    const { contents, bytes } = readSources(list);
-    if (!quiet) console.log(`[build] ${name}: ${bytes.toLocaleString('en-US')} source bytes (${list.length} files)`);
-
-    await esbuild.build({
-      // Concatenated sources are handed to esbuild through stdin so that no
-      // generated entry file ever lands in the repository.
-      stdin: { contents, resolveDir: ROOT, sourcefile: `${name}.js`, loader: 'js' },
-      outfile,
-      format: 'iife', // classic script: MV3 content scripts / non-module manifest
-      bundle: true,
-      platform: 'browser',
-      target: 'es2020',
-      sourcemap: SOURCEMAP,
-      minify: MINIFY,
-      external: [],
-      legalComments: 'none',
-      logLevel: 'warning',
-    });
-    outputs.push({ name, outfile });
-  }
-
+  const outputs = Object.keys(entries).map((name) => ({
+    name,
+    outfile: path.join(DIST, `${name}.js`),
+  }));
   const copied = [...(await copyAssets()), ...(await copyPdfjsAssets())];
-  if (!quiet) {
-    console.log(`[build] mode=${MINIFY ? 'production' : 'development'} sourcemap=${SOURCEMAP}`);
-    console.log(`[build] ${copied.length} asset file(s) copied into dist/`);
-  }
+  console.log(`[build] mode=${MINIFY ? 'production' : 'development'} sourcemap=${SOURCEMAP}`);
+  console.log(`[build] ${copied.length} asset file(s) copied into dist/`);
   await verify(outputs);
   await verifyDist();
   await writeFirefoxDist();
@@ -891,69 +1000,34 @@ async function buildOnce(entries, { quiet = false } = {}) {
 }
 
 /* ------------------------------------------------------------------ *
- * 6. Dev watcher (esbuild cannot watch stdin)
+ * 6. Runner: one-shot build or native esbuild watch
  * ------------------------------------------------------------------ */
 
-function startWatcher() {
-  const targets = new Map(); // dir -> { names: Set<string>, all: boolean }
-
-  const watchFile = (relPath) => {
-    const file = abs(relPath);
-    const dir = path.dirname(file);
-    if (!targets.has(dir)) targets.set(dir, { names: new Set(), all: false });
-    targets.get(dir).names.add(path.basename(file));
+function buildOptions(entries = collectEntries()) {
+  return {
+    // Entry names are spelled relative to .build/ (absWorkingDir) so esbuild's
+    // module label stays short: the label is baked into the bundle by the
+    // CommonJS wrapper (`// entry-background.js`, `require_entry_background`),
+    // and keeping it minimal keeps every bundle within 1% of the old sizes.
+    absWorkingDir: BUILD_DIR,
+    entryPoints: Object.fromEntries(
+      Object.keys(entries).map((name) => [name, path.basename(entryPath(name))])
+    ),
+    outdir: DIST,
+    // Entry names are flat: dist/background.js, dist/shared-i18n.js, … — the
+    // bundles all live at the dist root, whatever .build/ nesting they came from.
+    entryNames: '[name]',
+    format: 'iife', // classic script: MV3 content scripts / non-module manifest
+    bundle: true,
+    platform: 'browser',
+    target: 'es2020',
+    sourcemap: SOURCEMAP,
+    minify: MINIFY,
+    external: [],
+    legalComments: 'none',
+    logLevel: WATCH ? 'info' : 'warning',
+    plugins: [entryFilesPlugin(), postBuildPlugin()],
   };
-
-  const refreshTargets = () => {
-    targets.clear();
-    watchFile('manifest.json');
-    for (const r of ASSET_FILES) watchFile(r);
-    for (const list of Object.values(collectEntries())) for (const r of list) watchFile(r);
-    // runtime-registered files are copied verbatim, so a change must rebuild too
-    for (const r of runtimeRegisteredFiles()) watchFile(r);
-    // whole trees copied verbatim (icons/, _locales/, docs/screenshots/): a
-    // newly added or renamed file inside one of them should rebuild as well
-    targets.set(abs('icons'), { names: new Set(), all: true });
-    for (const r of ASSET_TREES) targets.set(abs(r), { names: new Set(), all: true });
-  };
-
-  refreshTargets();
-
-  let timer = null;
-  const schedule = (reason) => {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(async () => {
-      timer = null;
-      const stamp = new Date().toLocaleTimeString('en-GB');
-      console.log(`\n[build ${stamp}] change detected (${reason}) — rebuilding…`);
-      try {
-        refreshTargets();
-        await buildOnce(collectEntries());
-        console.log(`[build ${stamp}] rebuild done. watching…`);
-      } catch (err) {
-        // keep watching: a broken edit must not kill the dev loop
-        console.error(`[build] rebuild failed: ${err.message}\n[build] still watching…`);
-      }
-    }, 120);
-  };
-
-  for (const [dir, { names, all }] of targets) {
-    // `all` marks a whole-directory target (icons/, _locales/): watch it
-    // recursively, otherwise a change inside _locales/<locale>/messages.json
-    // never reaches the callback. The repo root and options/ are watched
-    // per-file (names), so they must stay non-recursive.
-    fs.watch(dir, { persistent: true, recursive: all }, (event, filename) => {
-      if (all || !filename) schedule(`${path.basename(dir)}/${filename || '*'}`);
-      else if (names.has(filename)) schedule(rel(path.join(dir, filename)));
-    });
-  }
-
-  const stop = () => {
-    console.log('\n[build] watcher stopped.');
-    process.exit(0);
-  };
-  process.on('SIGINT', stop);
-  process.on('SIGTERM', stop);
 }
 
 /* ------------------------------------------------------------------ */
@@ -966,17 +1040,38 @@ async function main() {
     return;
   }
 
+  if (ENTRIES_ONLY) {
+    const entries = collectEntries();
+    const written = await writeEntryFiles(entries);
+    for (const { file, list } of written) {
+      console.log(`  ${rel(file)} <- ${list.length} file(s), SSOT order preserved`);
+    }
+    console.log('[build] entry files written, no bundle build requested.');
+    return;
+  }
+
   const entries = collectEntries();
+  // absWorkingDir is .build/ (see buildOptions), so the directory must exist
+  // before esbuild resolves the entry points on a clean clone.
+  await fsp.mkdir(BUILD_DIR, { recursive: true });
   console.log('[build] entries derived from SSOTs:');
   for (const [name, list] of Object.entries(entries)) console.log(`  ${name} <- ${list.length} file(s)`);
   console.log(`  runtime-registered <- ${runtimeRegisteredFiles().length} file(s) (copied verbatim)`);
-
-  await buildOnce(entries);
+  console.log(`[build] generated entry files: ${rel(BUILD_DIR)}/entry-<name>.js`);
 
   if (WATCH) {
-    startWatcher();
-    console.log('[build] watching for changes…');
+    const ctx = await esbuild.context(buildOptions(entries));
+    await ctx.watch();
+    const stop = async () => {
+      await ctx.dispose();
+      console.log('\n[build] watcher stopped.');
+      process.exit(0);
+    };
+    process.on('SIGINT', stop);
+    process.on('SIGTERM', stop);
+    console.log('[build] watching for changes… (native esbuild watch)');
   } else {
+    await esbuild.build(buildOptions(entries));
     console.log('[build] done.');
   }
 }
