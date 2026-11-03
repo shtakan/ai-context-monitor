@@ -114,6 +114,7 @@ function makeHarness(over) {
     aiCmDiagWarn: jest.fn(),
     aiCmDiagLine: jest.fn()
   };
+  if (over.location) sandbox.location = over.location;
   const ctx = vm.createContext(sandbox);
   vm.runInContext(PARSER_SRC, ctx, { filename: 'utils/gemini-batchexecute-parser.js' });
   const Parser = windowObj.GeminiBatchexecuteParser;
@@ -434,6 +435,32 @@ describe('R2: очередь, дедуп и секции', function () {
     const section = h2.Fn.gfSectionsFor(CHAT, 'u2');
     expect(section).toContain('…[обрезано 5]');
     expect(section.indexOf(']' + '\n') > 0).toBe(true);
+  });
+});
+
+describe('D: authuser скачивания вложений Gemini (403 в мультиаккаунте)', function () {
+  const DL = 'https://contribution.usercontent.google.com/download?c=pdf-1';
+
+  function downloadCall(pathname) {
+    const h = makeHarness({ location: { pathname: pathname } });
+    const ref = h.Fn.collectTurnFiles(turnWith([pdfNode('auth.pdf')]))[0];
+    h.Fn.gfEnqueueTurnFiles(CHAT, 'u1', [ref]);
+    expect(h.fetchCalls).toHaveLength(1);
+    return h.fetchCalls[0];
+  }
+
+  test('D1: в пути нет /u/ — authuser не добавляется', function () {
+    const call = downloadCall('/app/7c1f0e');
+    expect(call.url).toBe(DL);
+    expect(call.opts.credentials).toBe('include');
+  });
+
+  test('D2: путь /u/1/ — скачивание с &authuser=1', function () {
+    expect(downloadCall('/u/1/app/7c1f0e').url).toBe(DL + '&authuser=1');
+  });
+
+  test('D3: путь /u/0/ — скачивание с &authuser=0 (аккаунт по умолчанию)', function () {
+    expect(downloadCall('/u/0/app/7c1f0e').url).toBe(DL + '&authuser=0');
   });
 });
 

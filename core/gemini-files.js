@@ -367,6 +367,27 @@
   }
 
   // ===== СЕКЦИЯ 6: СКАЧИВАНИЕ И РАЗБОР ТЕЛА =====
+  // v2.1 (fix 403): индекс аккаунта из пути /u/<N>/ текущей вкладки. Cookie
+  // сессии в мультиаккаунте принадлежат аккаунту из URL, а download-URL
+  // вложения приходит без authuser — Google отдаёт 403 как «чужому» аккаунту.
+  // Нет индекса в пути (/app/…) — параметр не добавляем (аккаунт по умолчанию).
+  function gfAuthUserIndex() {
+    try {
+      if (typeof location === 'undefined' || !location) return '';
+      var m = /\/u\/(\d+)\//.exec(gfStr(location.pathname));
+      return m ? m[1] : '';
+    } catch (eAu) { return ''; }
+  }
+
+  function gfWithAuthUser(url) {
+    var u = gfStr(url);
+    if (!u) return u;
+    var idx = gfAuthUserIndex();
+    if (!idx) return u;
+    if (/([?&])authuser=/.test(u)) return u;
+    return u + (u.indexOf('?') === -1 ? '?' : '&') + 'authuser=' + idx;
+  }
+
   function gfFetchImpl() {
     var f = null;
     try { f = D ? D.originalFetch : null; } catch (eF) { f = null; }
@@ -849,7 +870,7 @@
       dk: ref.dk,
       chatId: cid,
       ref: ref,
-      url: ref.dl || ref.img,
+      url: gfWithAuthUser(ref.dl || ref.img),
       targets: {},
       result: null,
       state: 'queued',
