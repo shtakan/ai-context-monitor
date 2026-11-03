@@ -30,9 +30,11 @@ const path = require('path');
 
 const P = require('../utils/export-emit-pipeline.js');
 const Builders = require('../utils/export-text-builders.js');
+const H = require('./helpers/content-source.js');
 
 const ROOT = path.join(__dirname, '..');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const CONTENT = H.contentSource;   // state/widget/base-handler/hybrid-tail/export-manager + content.js
 
 const CID = 'e292103e4b521dae';                 // живой convId Gemini из fixture H21
 const OTHER = '1984298ffe185ef1';
@@ -199,7 +201,10 @@ function loadManager(over) {
     }
   };
   Object.assign(ctx, o.ctx || {});
-  new Function('ctx', 'with (ctx) { ' + MGR_SRC + '\n }')(ctx);
+  // extra — добавка к тексту модуля в ТОМ ЖЕ скоупе (нужно P1-пинам: планировщик живёт
+  // в content.js и обязан видеть настоящие maybeAutoExport/aiCmAutoExportConvId).
+  const extra = o.extra ? '\n' + o.extra + '\n' : '';
+  new Function('ctx', 'with (ctx) { ' + MGR_SRC + extra + '\n }')(ctx);
   return {
     ctx: ctx,
     logs: logs,
@@ -378,5 +383,141 @@ describe('O-36 D3 (source-пины): гейт стоит перед файром
       expect(gate).toContain("'" + reason + "'");
     });
     expect(gate).not.toContain('shouldSkipBaseCompleteTrigger'); // гейты независимы
+  });
+});
+
+// =====================================================================================
+// 4) P1: автоэкспорт отвязан от отрисовки бейджа — триггер = принятие базы + 500 мс
+// =====================================================================================
+/** Детерминированный таймер вместо jest fake timers (планировщик берёт его из ctx). */
+function makeClock() {
+  var now = 0;
+  var seq = 0;
+  var timers = [];
+  return {
+    now: function () { return now; },
+    setTimeout: function (fn, ms) {
+      var id = ++seq;
+      timers.push({ id: id, fn: fn, at: now + (ms || 0) });
+      return id;
+    },
+    clearTimeout: function (id) {
+      timers = timers.filter(function (t) { return t.id !== id; });
+    },
+    pending: function () { return timers.length; },
+    tick: function (ms) {
+      var target = now + ms;
+      for (;;) {
+        var best = null;
+        for (var i = 0; i < timers.length; i++) {
+          var t = timers[i];
+          if (t.at <= target && (!best || t.at < best.at || (t.at === best.at && t.id < best.id))) best = t;
+        }
+        if (!best) break;
+        now = best.at;
+        timers = timers.filter(function (x) { return x !== best; });
+        best.fn();
+      }
+      now = target;
+    }
+  };
+}
+
+/**
+ * Реальный maybeAutoExport из MGR_SRC + реальный aiCmScheduleAutoExport из content.js
+ * в ОДНОМ скоупе `with (ctx)`. Таймеры — makeClock; aiCmLatchSet — no-op (в браузере
+ * это SW-канал из state.js, которого нет в песочнице).
+ */
+function loadScheduler(over) {
+  const o = over || {};
+  const clock = o.clock || makeClock();
+  const ctxOver = Object.assign({}, o.ctx || {});
+  ctxOver.setTimeout = clock.setTimeout;
+  ctxOver.clearTimeout = clock.clearTimeout;
+  ctxOver.AI_CM_AUTOEXPORT_DEBOUNCE_MS = 500;
+  ctxOver.autoExportDebounceTimer = null;
+  ctxOver.autoExportDebouncePct = -1;
+  ctxOver.autoExportDebounceCid = '';
+  ctxOver.aiCmLatchSet = function () { };
+  const schedSrc = fnDecl(CONTENT, 'aiCmScheduleAutoExport');
+  const h = loadManager({
+    ctx: ctxOver,
+    extra: schedSrc + '\nctx.__p1ScheduleAutoExport = aiCmScheduleAutoExport;'
+  });
+  h.clock = clock;
+  h.schedule = function (pct) { return h.ctx.__p1ScheduleAutoExport(pct); };
+  return h;
+}
+
+describe('P1 D1: pct при загрузке не выгружает, пока база не стабилизировалась', function () {
+  test('D1 source: processAndSend не зовёт maybeAutoExport; вызов — в слушателе базы, 500 мс', function () {
+    const draw = fnDecl(CONTENT, 'processAndSend');
+    // внутри DRAW остаётся только tape-restore вызов (не отрисовка бейджа); pct-вызова нет
+    expect(draw).not.toContain('maybeAutoExport(percentage);');
+    // adapter-путь (AI Studio/Qwen, без ai-cm-full-history) планирует ту же проверку
+    expect(draw).toContain('aiCmScheduleAutoExport(percentage);');
+
+    const iListener = CONTENT.indexOf("window.addEventListener('ai-cm-full-history', function");
+    const iProc = CONTENT.indexOf('function processAndSend(');
+    const iCall = CONTENT.indexOf('aiCmScheduleAutoExport(lastPercentage)', iListener);
+    expect(iListener).toBeGreaterThan(-1);
+    expect(iCall).toBeGreaterThan(iListener);
+    expect(iCall).toBeLessThan(iProc);   // вызов внутри слушателя (объявлен выше processAndSend)
+
+    expect(CONTENT).toContain('var AI_CM_AUTOEXPORT_DEBOUNCE_MS = 500;');
+    const sched = fnDecl(CONTENT, 'aiCmScheduleAutoExport');
+    expect(sched).toContain('clearTimeout(autoExportDebounceTimer)');
+    expect(sched).toContain('aiCmAutoExportConvId');   // смена чата во время дебаунса — отмена
+  });
+
+  test('D1: серия pct во время догрузки не даёт файла; файл — после стабилизации базы', function () {
+    const h = loadScheduler({ ctx: { baseSeen: true, baseComplete: false, autoExportLastPct: -1 } });
+
+    // два pct-события во время загрузки: дебаунс склеивает, гейт ещё даже не спрашивали
+    h.schedule(95);
+    h.clock.tick(400);
+    h.schedule(96);
+    h.clock.tick(400);
+    expect(h.downloads).toEqual([]);
+    expect(h.logs.join('\n')).not.toContain('[AI CM][auto-export] skip reason=');
+
+    h.clock.tick(100);   // 500 мс от последнего pct — гейт спрошен, база неполна
+    expect(h.downloads).toEqual([]);
+    expect(h.line('skip reason=not-complete')).toHaveLength(1);
+
+    // ещё одна волна pct при неполной базе — файла по-прежнему нет
+    h.schedule(97);
+    h.clock.tick(500);
+    expect(h.downloads).toEqual([]);
+
+    // база стабилизировалась: ровно один файл, ровно на границе 500 мс
+    h.ctx.baseComplete = true;
+    h.schedule(97);
+    h.clock.tick(499);
+    expect(h.downloads).toEqual([]);
+    h.clock.tick(1);
+    expect(h.downloads).toHaveLength(1);
+  });
+});
+
+describe('P1 D2: F5 с тем же convId — session-латч срезает повторный файл', function () {
+  test('D2: новый instance (пустые in-memory латчи) видит session-латч прошлой загрузки', function () {
+    const key = P.firedSessionKey('gemini', CID);
+
+    const first = loadScheduler({ ctx: { baseComplete: true, autoExportLastPct: -1 } });
+    first.schedule(95);
+    first.clock.tick(500);
+    expect(first.downloads).toHaveLength(1);
+    // латч записан (aiCmLatchSet — no-op): session-кэш переживает reload той же сессии
+    expect(first.ctx.sessionFiredCache[key]).toBe(1);
+
+    // F5: новый инстанс content-скрипта, chrome.storage.session тот же
+    const second = loadScheduler({ ctx: { baseComplete: true, autoExportLastPct: -1 } });
+    expect(second.ctx.autoExportFired).toEqual({});           // in-memory латч пуст
+    second.ctx.sessionFiredCache[key] = 1;                    // ...но session-латч в силе
+    second.schedule(95);
+    second.clock.tick(500);
+    expect(second.downloads).toEqual([]);
+    expect(second.logs.join('\n')).toContain('skip reason=already-fired convId=' + CID);
   });
 });

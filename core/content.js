@@ -572,6 +572,42 @@ window.addEventListener('ai-cm-model-slug', function (/** @type {CustomEvent} */
     }
   }
 });
+// P1: автоэкспорт отвязан от отрисовки бейджа. Раньше maybeAutoExport(percentage)
+// вызывался в processAndSend на КАЖДОМ обновлении бейджа — включая транзиентные pct
+// во время догрузки базы и скролла. Теперь проверка порога запускается только в точке
+// ПРИНЯТИЯ базы (слушатель ai-cm-full-history ниже либо adapter-запись базы) и
+// склеивается дебаунсом 500 мс: серия мутаций DOM/эмитов не даёт ложного файра, пока
+// база не стабилизировалась. Гейты baseComplete/латча остаются в maybeAutoExport.
+var AI_CM_AUTOEXPORT_DEBOUNCE_MS = 500;
+var autoExportDebounceTimer = null;
+var autoExportDebouncePct = -1;
+var autoExportDebounceCid = '';
+function aiCmScheduleAutoExport(percentage) {
+  try {
+    if (!autoExportSettings || autoExportSettings.enabled !== true) return;
+    if (typeof percentage !== 'number' || !isFinite(percentage) || percentage < 0) return;
+    autoExportDebouncePct = percentage;
+    autoExportDebounceCid = (typeof aiCmAutoExportConvId === 'function') ? (aiCmAutoExportConvId() || '') : '';
+    if (autoExportDebounceTimer !== null) clearTimeout(autoExportDebounceTimer);
+    autoExportDebounceTimer = setTimeout(function () {
+      autoExportDebounceTimer = null;
+      var pct = autoExportDebouncePct;
+      var cid = autoExportDebounceCid;
+      autoExportDebouncePct = -1;
+      autoExportDebounceCid = '';
+      if (typeof pct !== 'number' || pct < 0) return;
+      // Пока тикал дебаунс, пользователь мог переключить чат: чужой convId не экспортируем.
+      if (cid && typeof aiCmAutoExportConvId === 'function' && (aiCmAutoExportConvId() || '') !== cid) return;
+      try {
+        maybeAutoExport(pct);
+      } catch (eFire) {
+        swallowSoft(eFire, 'content:autoexport-debounce');
+      }
+    }, AI_CM_AUTOEXPORT_DEBOUNCE_MS);
+  } catch (eSched) {
+    swallowSoft(eSched, 'content:autoexport-schedule');
+  }
+}
 window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} */ ev) {
   // O-22 (ИЗМЕРЕНИЕ-2): маркер ПЕРВОЙ строки колбэка слушателя — ДО блока v81 Step1
   // и ДО вставок O-22 (блоки A–G2). Только диагностика под гейтом aiCmDebug.
@@ -928,6 +964,9 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
     }
   } catch (eO22L2) { }
   processAndSend();
+  // P1: база принята и pct пересчитан — единственная точка проверки автоэкспорта для
+  // сетевого пути (дебаунс гасит серию эмитов во время догрузки/скролла).
+  if (typeof aiCmScheduleAutoExport === 'function') aiCmScheduleAutoExport(lastPercentage);
 });
 
 // =============================================================================
@@ -2672,9 +2711,9 @@ function processAndSend() {
         });
       }
     } catch (eQbw) { }
-    // v30.4: автоэкспорт на ЛЮБОМ пути badge-update с реальным pct (включая кэш-путь и
-    // путь снятия супрессии); условие внутри maybeAutoExport — без требования baseComplete.
-    maybeAutoExport(percentage);
+    // P1: здесь автоэкспорт больше НЕ вызывается. Отрисовка бейджа (включая кэш-путь и
+    // путь снятия супрессии) не является принятием базы; проверка порога перенесена в
+    // aiCmScheduleAutoExport и запускается событием базы / adapter-записью (дебаунс 500 мс).
     // Фаза B: проактивные пороги 70/85/95 → SW (бейдж + opt-in уведомления)
     sendThresholdPct(percentage);
     if (hasChanged) {
@@ -2811,6 +2850,9 @@ function processAndSend() {
           // отпускается по baseSeen ИЛИ adapterBaseSeen, а D1 (widget.js) не подменяет
           // посчитанное число на «—». Сброс — только resetConversationState().
           adapterBaseSeen = true;
+          // P1: adapter-путь (AI Studio/Qwen, без ai-cm-full-history) принял базу — та же
+          // отложенная проверка порога, что и у сетевого пути.
+          if (typeof aiCmScheduleAutoExport === 'function') aiCmScheduleAutoExport(percentage);
           debugLog('log', '[AI CM][trace] history-write source=adapter site=' + (currentAdapter.siteName || '') +
             ' convId=' + cidS24 + ' msgs=' + msgsS24.length);
           // O-35 (ДИАГНОСТИКА, только измерение): qwen-adapter — запись истории путём

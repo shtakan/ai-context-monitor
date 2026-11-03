@@ -308,7 +308,7 @@ describe('Шаг 4: при BYOK без точного числа эвристи�
     expect(drawHoldCode).not.toContain('updateWidget');
     expect(drawHoldCode).not.toContain('lastWidgetData');
     expect(draw.indexOf('updateWidget(percentage, maxTokenCount, effectiveLimit')).toBeGreaterThan(iDrawHold);
-    expect(draw.indexOf('maybeAutoExport(percentage);')).toBeGreaterThan(iDrawHold);
+    expect(draw.indexOf('aiCmScheduleAutoExport(percentage);')).toBeGreaterThan(iDrawHold);
   });
 
   test('S14: успех/отказ countTokens управляют держанием, сброс чата чистит отметку', () => {

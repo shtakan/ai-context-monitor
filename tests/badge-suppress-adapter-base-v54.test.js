@@ -305,9 +305,11 @@ describe('v54 R: шесть платформ — гейт и бейдж при �
   });
 
   test('R: семантики O-33 (автоэкспорт ждёт базу) и O-14 (reset чистит ровно снимок) живы', function () {
-    // O-33: вызов автоэкспорта — вне ветвления бейджа, гейт полноты прежний
-    expect(DRAW).toContain('maybeAutoExport(percentage);');
-    expect(DRAW.indexOf('maybeAutoExport(percentage);')).toBeGreaterThan(DRAW.indexOf('if (badgeSuppressActive) {'));
+    // P1/O-33: вызов автоэкспорта вынесен из отрисовки бейджа в точки принятия базы;
+    // adapter-путь планирует ту же проверку (дебаунс 500 мс) отдельно от ветвления бейджа
+    expect(DRAW).not.toContain('maybeAutoExport(percentage);');
+    expect(DRAW).toContain('aiCmScheduleAutoExport(percentage);');
+    expect(fnDecl(CONTENT, 'aiCmScheduleAutoExport')).toContain('AI_CM_AUTOEXPORT_DEBOUNCE_MS');
     expect(fnDecl(CONTENT, 'maybeAutoExport')).toContain('P.shouldSkipAutoExport({');
     // новое состояние в автоэкспорт-контур не проникает вовсе
     expect(MGR_SRC).not.toContain('adapterBaseSeen');

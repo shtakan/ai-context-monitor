@@ -451,8 +451,9 @@ describe('O-27: source-пины (где живёт гарантия)', () => {
     // вызов — на входе DRAW (до расчёта pct и до maybeAutoExport)
     const draw = fnDecl(CONTENT, 'processAndSend');
     expect(draw).toContain('aiCmGsaResetStaleStateOnChatlessDoc();');
+    expect(draw).not.toContain('maybeAutoExport(percentage);');
     expect(draw.indexOf('aiCmGsaResetStaleStateOnChatlessDoc();'))
-      .toBeLessThan(draw.indexOf('maybeAutoExport(percentage);'));
+      .toBeLessThan(draw.indexOf('aiCmScheduleAutoExport(percentage);'));
   });
 
   test('export-manager: гейт получает site + факты чат-страницы', () => {

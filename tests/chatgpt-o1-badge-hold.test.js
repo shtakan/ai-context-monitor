@@ -461,10 +461,10 @@ describe('O-1 R2: SPA-держание (conv-changed) не тронуто', () =
 describe('O-1 R3: автоэкспорт не тронут', () => {
   test('R3: maybeAutoExport вне ветвления щита, его skip-строки и латч прежние', () => {
     const draw = fnDecl(CONTENT, 'processAndSend');
-    expect(draw).toContain('maybeAutoExport(percentage);');
+    expect(draw).not.toContain('maybeAutoExport(percentage);');
     const badgeBranch = draw.indexOf('} else if (aiCmBadgeHoldActive()) {');
     expect(badgeBranch).toBeGreaterThan(-1);
-    expect(draw.indexOf('maybeAutoExport(percentage);')).toBeGreaterThan(badgeBranch);
+    expect(draw.indexOf('aiCmScheduleAutoExport(percentage);')).toBeGreaterThan(badgeBranch);
     expect(fnDecl(CONTENT, 'maybeAutoExport')).toContain('P.shouldSkipAutoExport({');
     // skip-строки автоэкспорта — на месте
     expect(MGR_SRC).toContain("skip reason=already-fired convId=");
