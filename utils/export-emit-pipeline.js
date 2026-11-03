@@ -86,7 +86,38 @@
 (function () {
   'use strict';
 
+  /** @typedef {import('../types/export').ExportFormat} ExportFormat */
+  /** @typedef {import('../types/export').ExportMessage} ExportMessage */
+  /** @typedef {import('../types/export').ExportHistory} ExportHistory */
+  /** @typedef {import('../types/export').ExportSourceTier} ExportSourceTier */
+  /** @typedef {import('../types/export').ExportPipelineApi} ExportPipelineApi */
+  /**
+   * Измеренная форма инъекции Better DeepSeek (таблица BDS_INJECTION_FORMS).
+   * @typedef {Object} BdsInjectionForm
+   * @property {string} id идентификатор формы
+   * @property {string} match способ сравнения ('exact' | 'prefix')
+   * @property {string} head опорная строка
+   * @property {string} basis основание из артефакта
+   */
+  /**
+   * Измеренный дескриптор агентного конверта (таблица TC_ENVELOPE_FORMS).
+   * @typedef {Object} TcEnvelopeForm
+   * @property {string} id идентификатор формы
+   * @property {string} rule правило границы ('pair' | 'run')
+   * @property {string} [open] открывающий тег
+   * @property {string} [close] закрывающий тег
+   * @property {string} [openPrefix] префикс строки-якоря
+   * @property {string} boundary правило границы
+   * @property {string} scope область ('envelope' | 'tool-request')
+   * @property {string} basis основание из артефакта
+   */
+
   // Санация сегмента имени файла (как в options.js)
+  /**
+   * Безопасный сегмент имени файла.
+   * @param {string} s фрагмент
+   * @returns {string} безопасный сегмент
+   */
   function safeSeg(s) {
     return String(s == null ? '' : s).replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
   }
@@ -99,6 +130,11 @@
   // maybeAutoExport() молча выходил на «if (!cid) return;» при зелёных гейтах.
   // /search матчится ТОЛЬКО с id-сегментом ([A-Za-z0-9_-]{8,}) — путь
   // google.com/search без id (GSA) остаётся '' (по-прежнему не выдумываем).
+  /**
+   * Извлекает id беседы из пути URL.
+   * @param {string} pathname путь URL
+   * @returns {string} id беседы
+   */
   function extractConvIdFromUrl(pathname) {
     try {
       var p = String(pathname || '');
@@ -155,32 +191,58 @@
   // переименовывается. Уникальность даёт дисамбигуатор — convId по-прежнему НЕ выдумываем.
   // =====================================================================================
 
-  /** Формат файла: txt | md | json (неизвестное → txt) — как в обеих прежних масках. */
+  /**
+   * Формат файла: txt | md | json (неизвестное → txt) — как в обеих прежних масках.
+   * @param {string} fmt формат
+   * @returns {ExportFormat} нормализованный формат
+   */
   function normExportFmt(fmt) {
     return (fmt === 'md') ? 'md' : ((fmt === 'json') ? 'json' : 'txt');
   }
 
+  /**
+   * Дополняет число до двух цифр.
+   * @param {number} n число
+   * @returns {string} две цифры
+   */
   function exportPad2(n) { return (n < 10 ? '0' : '') + n; }
 
-  /** Метка времени маски convId: YYYY-MM-DD_HH-MM (байтово прежняя). */
+  /**
+   * Метка времени маски convId: YYYY-MM-DD_HH-MM (байтово прежняя).
+   * @param {Date} d дата
+   * @returns {string} метка
+   */
   function convIdStamp(d) {
     return d.getFullYear() + '-' + exportPad2(d.getMonth() + 1) + '-' + exportPad2(d.getDate()) +
       '_' + exportPad2(d.getHours()) + '-' + exportPad2(d.getMinutes());
   }
 
-  /** Метка времени шаблона ручного экспорта: YYYY-MM-DD-HH-MM (как options.js buildFileName). */
+  /**
+   * Метка времени шаблона ручного экспорта: YYYY-MM-DD-HH-MM (как options.js buildFileName).
+   * @param {Date} d дата
+   * @returns {string} метка
+   */
   function manualExportStamp(d) {
     return d.getFullYear() + '-' + exportPad2(d.getMonth() + 1) + '-' + exportPad2(d.getDate()) +
       '-' + exportPad2(d.getHours()) + '-' + exportPad2(d.getMinutes());
   }
 
-  /** Сегмент модели ручного шаблона: та же санация, что в options.js (точки сохраняются). */
+  /**
+   * Сегмент модели ручного шаблона: та же санация, что в options.js (точки сохраняются).
+   * @param {string} model модель
+   * @returns {string} безопасный сегмент
+   */
   function safeModelSeg(model) {
     return String(model == null ? '' : model)
       .replace(/[^a-zA-Z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '') || 'model';
   }
 
-  /** Имя занято? taken: массив имён | объект-карта (имя → что угодно) | Set. */
+  /**
+   * Имя занято? taken: массив имён | объект-карта (имя → что угодно) | Set.
+   * @param {*} taken занятые имена
+   * @param {string} name имя файла
+   * @returns {boolean} имя занято
+   */
   function isFileNameTaken(taken, name) {
     try {
       if (!taken || !name) return false;
@@ -191,7 +253,12 @@
     } catch (e) { return false; }
   }
 
-  /** O-11: дисамбигуатор -2, -3, … перед расширением, пока имя занято. */
+  /**
+   * O-11: дисамбигуатор -2, -3, … перед расширением, пока имя занято.
+   * @param {string} name имя файла
+   * @param {*} taken занятые имена
+   * @returns {string} свободное имя
+   */
   function disambiguateFileName(name, taken) {
     var base = String(name == null ? '' : name);
     try {
@@ -216,6 +283,8 @@
    *   taken: необязательный набор занятых имён — гард коллизии (дисамбигуатор -2, -3, …).
    * Префикс [LOW CONFIDENCE]_ — ТОЛЬКО при isLowConfidence=true (baseComplete=0).
    * reason: 'threshold' (без суффикса) | 'pre-trim' → -pretrim | 'base-complete' → -base-complete.
+   * @param {*} spec параметры имени
+   * @returns {string} имя файла
    */
   function buildAutoExportFileName(spec) {
     var s = spec || {};
@@ -244,6 +313,12 @@
    * reason: 'threshold' (без суффикса) | 'pre-trim' → -pretrim | 'base-complete' → -base-complete.
    * O-11: необязательный 6-й аргумент (arguments[5]) — набор занятых имён (гард коллизии);
    * сигнатура .length = 5 сохранена (пин tests/low-confidence-prefix.test.js).
+   * @param {string} service сервис
+   * @param {string} convId id беседы
+   * @param {string} [reason] причина
+   * @param {boolean} [isLowConfidence] низкая уверенность
+   * @param {string} [fmt] формат
+   * @returns {string} имя файла
    */
   function buildExportFileName(service, convId, reason, isLowConfidence, fmt) {
     return buildAutoExportFileName({
@@ -268,6 +343,11 @@
    * Остальные сервисы (в т.ч. Gemini — байтово) идут прежним buildExportFileName.
    * O-11: необязательный 5-й аргумент (arguments[4]) — набор занятых имён (гард коллизии):
    * два автоэкспорта GSA в одну минуту больше не дают одно имя (дисамбигуатор -2).
+   * @param {string} site сайт
+   * @param {string} model модель
+   * @param {boolean} [isLowConfidence] низкая уверенность
+   * @param {string} [fmt] формат
+   * @returns {string} имя файла
    */
   function buildGsaExportFileName(site, model, isLowConfidence, fmt) {
     return buildAutoExportFileName({
@@ -290,6 +370,10 @@
    * первый return. Логика GSA (threadId) и Gemini не тронута.
    * Ключ латча = site + этот convId (см. latchKey), поэтому GSA-разговоры изолированы
    * друг от друга, а не делят один пустой ключ.
+   * @param {string} site сайт
+   * @param {string} urlConvId id из URL
+   * @param {string} threadId id треда
+   * @returns {string} id беседы
    */
   function resolveAutoExportConvId(site, urlConvId, threadId) {
     var cid = String(urlConvId == null ? '' : urlConvId);
@@ -306,6 +390,8 @@
    * probe-классификатор страницы продолжения, и пока probe в полёте, полноты нет по
    * определению — это 'probe-running', а не общий 'not-complete'.
    * state: { site, probeRunning }.
+   * @param {*} state состояние
+   * @returns {string} причина неполноты
    */
   function notCompleteReason(state) {
     var s = state || {};
@@ -317,6 +403,9 @@
    * v82 (D2): выбор источника экспорта. baseSeen=true → 'network' (ЕДИНСТВЕННЫЙ
    * источник; пустые сетевые тексты дают [] — потребители skip), baseSeen=false →
    * 'adapter'. hasNetworkTexts нужен только для читаемости/диагностики.
+   * @param {boolean} hasBaseSeen база видела
+   * @param {boolean} hasNetworkTexts есть сетевые тексты
+   * @returns {'network'|'adapter'} источник
    */
   function pickExportSource(hasBaseSeen, hasNetworkTexts) {
     return (hasBaseSeen === true) ? 'network' : 'adapter';
@@ -338,6 +427,8 @@
    *       архив не импортирован / объединённая база не больше локального снимка).
    * state: { isGemini, bridge, archiveCount, liveCount, baseCount, localCount }.
    * Обратная совместимость: без архива (archiveCount=0) всегда 'local'.
+   * @param {*} state состояние
+   * @returns {{action: 'block'|'union'|'local', reason: string}} решение
    */
   function resolveExportSource(state) {
     var s = state || {};
@@ -364,6 +455,8 @@
    * Латиница без локализации — прецедент [REASONING]/[ANSWER]; подача метки в файл — за
    * сборщиками (utils/export-text-builders.js), гейт по site === 'gemini'.
    * state: { archiveCount, liveCount }.
+   * @param {*} state состояние
+   * @returns {ExportSourceTier} уровень источника
    */
   function sourceTierOf(state) {
     var s = state || {};
@@ -388,6 +481,8 @@
    *   - msgCount < 1 → 'no-messages' (база пуста: файл писать не из чего);
    *   - baseTextLen < 1 → 'empty-base' (текст базы пуст).
    * Возврат: { skip, reason }.
+   * @param {*} state состояние
+   * @returns {{skip: boolean, reason: string|null}} вердикт
    */
   function shouldSkipGsaPageGuard(state) {
     var s = state || {};
@@ -441,6 +536,8 @@
    *   pct < threshold − 10 (DOM-pct)         → below-threshold-unreliable;
    *   pct < threshold                        → below-threshold;
    *   fired                                  → already-fired.
+   * @param {*} state состояние
+   * @returns {{skip: boolean, reason: string|null, resetFired: boolean}} вердикт
    */
   function shouldSkipAutoExport(state) {
     var s = state || {};
@@ -528,6 +625,8 @@
    *   percentage < threshold   → below-threshold-base-complete;
    *   иначе                    → skip:false.
    * Чистая функция: без логов и побочных эффектов, латч fired не ставит и не снимает.
+   * @param {*} state состояние
+   * @returns {{skip: boolean, reason: string|null, threshold: number}} вердикт
    */
   function shouldSkipBaseCompleteTrigger(state) {
     var s = state || {};
@@ -546,6 +645,9 @@
    * Приоритет: per-site ('aiCmAutoExportPct_<site>') → глобальный → 90.
    * per-site значение клампится в [1,100]; нечисловой/пустой per-site — фолбэк на
    * глобальный; невалидный глобальный — дефолт 90 (поведение глобального пути 1:1).
+   * @param {number} globalPct глобальный порог
+   * @param {*} perSitePct пороги по сайтам
+   * @returns {number} порог
    */
   function effectiveAutoExportThreshold(globalPct, perSitePct) {
     function clampPerSite(v) {
@@ -565,15 +667,40 @@
 
   // Латч «один раз на чат» — per service+convId (изоляция по сервису: одинаковый
   // формальный идентификатор у разных сервисов НЕ блокирует друг друга).
+  /**
+   * Ключ защёлки авто-экспорта.
+   * @param {string} service сервис
+   * @param {string} convId id беседы
+   * @returns {string} ключ защёлки
+   */
   function latchKey(service, convId) {
     return safeSeg(service) + '|' + String(convId || '');
   }
+  /**
+   * Помечает авто-экспорт сработавшим.
+   * @param {*} store хранилище
+   * @param {string} service сервис
+   * @param {string} convId id беседы
+   */
   function markAutoExportFired(store, service, convId) {
     try { store[latchKey(service, convId)] = 1; } catch (e) { }
   }
+  /**
+   * Сработал ли авто-экспорт.
+   * @param {*} store хранилище
+   * @param {string} service сервис
+   * @param {string} convId id беседы
+   * @returns {boolean} сработал ли
+   */
   function getAutoExportFired(store, service, convId) {
     try { return store[latchKey(service, convId)] === 1; } catch (e) { return false; }
   }
+  /**
+   * Сбрасывает отметку авто-экспорта.
+   * @param {*} store хранилище
+   * @param {string} service сервис
+   * @param {string} convId id беседы
+   */
   function resetAutoExportFired(store, service, convId) {
     try { delete store[latchKey(service, convId)]; } catch (e) { }
   }
@@ -582,15 +709,35 @@
   // chrome.storage.session общий для всех вкладок профиля — двойной экспорт одного
   // чата из двух окон (наблюдался 2026-09-02, файлы …22-12.txt и …22-12(1).txt)
   // становится невозможным: вторая вкладка видит session-латч первой.
+  /** @type {string} префикс ключа сессии */
   var FIRED_SESSION_PREFIX = 'aiCmFired:';
+  /**
+   * Ключ сессионной отметки.
+   * @param {string} service сервис
+   * @param {string} convId id беседы
+   * @returns {string} ключ сессии
+   */
   function firedSessionKey(service, convId) {
     return FIRED_SESSION_PREFIX + latchKey(service, convId);
   }
+  /**
+   * Сработал ли авто-экспорт в сессии.
+   * @param {*} sessionMap карта сессии
+   * @param {string} service сервис
+   * @param {string} convId id беседы
+   * @returns {boolean} сработал ли
+   */
   function isFiredInSession(sessionMap, service, convId) {
     try {
       return !!sessionMap && sessionMap[firedSessionKey(service, convId)] === 1;
     } catch (e) { return false; }
   }
+  /**
+   * Патч сессионной карты отметок.
+   * @param {string} service сервис
+   * @param {string} convId id беседы
+   * @returns {Object} патч карты
+   */
   function sessionFiredPatch(service, convId) {
     var patch = {};
     try { patch[firedSessionKey(service, convId)] = 1; } catch (e) { }
@@ -605,6 +752,8 @@
    * которую базовый текст НЕ несёт) едет РЯДОМ с текстом и в text НЕ входит: метрики
    * его не видят, а в экспорт он попадает только при включённом тумблере (см.
    * includeHiddenExportBlocks). Нет захвата — поле не появляется вовсе (байты прежние).
+   * @param {Array} raw сырые сообщения
+   * @returns {ExportMessage[]} нормализованные сообщения
    */
   function normalizeExportMessages(raw) {
     var out = [];
@@ -643,21 +792,40 @@
   // =====================================================================================
   /** Строка-заголовок ЛЮБОГО уровня: с начала строки, с точностью до ведущих маркеров
    *  списка/цитаты ('- ### ', '> ## ', '1. # '), за которыми идёт один и более '#'. */
+  /** @type {RegExp} регулярка строки-заголовка */
   var RE_RAW_HEADING_LINE = /^[\s>*+\-\d.)\]]*#{1,}(?=\s|$)/;
-  /** Строка-ОСТАТОК разметки: одни '#' (маркер вырезанного/осиротевшего заголовка). */
+  /**
+   * Строка-ОСТАТОК разметки: одни '#' (маркер вырезанного/осиротевшего заголовка).
+   * @type {RegExp} регулярка остатков маркеров
+   */
   var RE_MARKER_RESIDUE_LINE = /^[\s>*+\-\d.)\]]*#{1,}[\s]*$/;
-  /** Строка code-fence — служебная разметка (её содержимое остаётся). */
+  /**
+   * Строка code-fence — служебная разметка (её содержимое остаётся).
+   * @type {RegExp} регулярка code-fence
+   */
   var RE_CODE_FENCE_LINE = /^[\s>*+\-\d.)\]]*(`{3,}|~{3,})/;
-  /** Маркер списка: '- ', '* ', '+ ', '1. ', '1) '. */
+  /**
+   * Маркер списка: '- ', '* ', '+ ', '1. ', '1) '.
+   * @type {RegExp} регулярка маркера списка
+   */
   var RE_LIST_MARK = /^(?:[-*+]|\d+[.)])[ \t]+/;
+  /** @type {RegExp} регулярка пробелов */
   var RE_ANY_SPACE = /[\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000\ufeff]/g;
 
-  /** NBSP и прочие неразрывные пробелы → обычный пробел (сравнение по «ядру»). */
+  /**
+   * NBSP и прочие неразрывные пробелы → обычный пробел (сравнение по «ядру»).
+   * @param {string} s текст
+   * @returns {string} нормализованный текст
+   */
   function deSpaceAny(s) {
     return String(s == null ? '' : s).replace(RE_ANY_SPACE, ' ');
   }
 
-  /** Ядро ОДНОЙ строки: снять ведущие маркеры (заголовок/список/цитата) и inline-разметку. */
+  /**
+   * Ядро ОДНОЙ строки: снять ведущие маркеры (заголовок/список/цитата) и inline-разметку.
+   * @param {string} line строка
+   * @returns {string} ядро строки
+   */
   function coreOfLine(line) {
     try {
       var s = deSpaceAny(line);
@@ -676,6 +844,11 @@
 
   /** Ядро текста: каждая строка → ядро строки, пустые ядра (маркеры/фенсы) отбрасываются,
    *  результат схлопывается в один пробел. */
+  /**
+   * Ядро текста без разметки.
+   * @param {string} text текст
+   * @returns {string} ядро текста
+   */
   function coreText(text) {
     try {
       var lines = deSpaceAny(text).split('\n');
@@ -691,6 +864,11 @@
   /** E-2.3: убрать из текста строки-остатки разметки (одни '#') — маркер вырезанного
    *  raw-заголовка удаляется ЦЕЛИКОМ, включая оставшиеся символы решётки. Сообщение без
    *  таких строк возвращается БАЙТОВО тем же (чужие форматы не трогаем). */
+  /**
+   * Убирает строки-остатки маркеров.
+   * @param {string} text текст
+   * @returns {string} очищенный текст
+   */
   function stripMarkerResidue(text) {
     try {
       var s = String(text == null ? '' : text);
@@ -719,6 +897,8 @@
    * Карточка плана («Вот план исследования…» + цитата цели) — другой текст → остаётся
    * ОДНИМ assistant-сообщением, её текст не режется.
    * Чистая функция: возвращает { messages, removed } — без логов и побочных эффектов.
+   * @param {Array} messages сообщения
+   * @returns {{messages: ExportMessage[], removed: number}} результат дедупа
    */
   function dedupeMessages(messages) {
     var out = [];
@@ -752,10 +932,16 @@
   // которой он считается дублем отрендеренного текста. Ниже порога блок из одних
   // заголовков ('### ROLE') ничьей копией не признаётся — короткие служебные блоки
   // («Да.», «Готово.») не вырезаются из ответа.
+  /** @type {number} минимум длины ядра */
   var INTRA_CORE_MIN_LEN = 20;
 
   /** Блок — сырой markdown Gemini (в нём есть строка-заголовок ЛЮБОГО уровня '#'+;
    *  E-2.3: и одинокая '#'-строка — тоже маркер заголовка, а не контент). */
+  /**
+   * Сырой markdown-блок?
+   * @param {string} block блок
+   * @returns {boolean} сырой ли блок
+   */
   function isRawMarkdownBlock(block) {
     try {
       var lines = String(block == null ? '' : block).split('\n');
@@ -789,6 +975,8 @@
    * Одиночный перенос перед заголовком ('…копированию.\n### ROLE') сюда НЕ входит: его
    * нормализация схлопывала бы пустые строки ВНУТРИ сырого блока и ломала E-2.1, поэтому
    * такой стык разбирается посекционно (splitRawSections + cutLeadingCopy).
+   * @param {string} text текст
+   * @returns {string} нормализованный текст
    */
   function separateRawBlocks(text) {
     // Предыдущий символ — НЕ '#' (иначе '### ' распалось бы само на '#' + '## '); пробелы
@@ -807,6 +995,8 @@
    * ('### CONSTRAINTS' и т.п.), дублирующая копия вырезалась посекционно: раньше
    * «ядро» считалось по всему блоку, не совпадало с отрендеренным текстом и блок
    * выживал ЦЕЛИКОМ (копия промпта оставалась в экспорте/бейдже).
+   * @param {string} block блок
+   * @returns {string[]} секции
    */
   function splitRawSections(block) {
     try {
@@ -830,6 +1020,11 @@
 
   /** Разделитель при пересборке секций сырого блока: сохраняем форму исходного блока
    *  (пустая строка между секциями, если она там была; иначе — один перевод строки). */
+  /**
+   * Разделитель секций блока.
+   * @param {string} block блок
+   * @returns {string} разделитель
+   */
   function sepForSections(block) {
     return /\n{2,}/.test(String(block == null ? '' : block)) ? '\n\n' : '\n';
   }
@@ -840,6 +1035,12 @@
    *  E-2.3: копия может отличаться от тела только РАЗМЕТКОЙ (уровень заголовков, '*'/'_'/
    *  '`', '>', NBSP) — тогда граница ищется по «ядрам» (corePrefixCutIndex).
    *  Возвращает остаток ({ text, trimmed }) или null, если вся секция — копия. */
+  /**
+   * Срезает ведущую копию секции.
+   * @param {string} section секция
+   * @param {string} folded копия
+   * @returns {{text: string, trimmed: boolean}|null} остаток или null
+   */
   function cutLeadingCopy(section, folded) {
     var lines = String(section).split('\n');
     if (lines.length < 2) return { text: String(section), trimmed: false };
@@ -870,6 +1071,12 @@
 
   /** E-2.3: индекс конца ведущей копии в теле по «ядрам» (тело может отличаться от копии
    *  только разметкой). Возвращает длину префикса тела, чей coreText равен copyCore, или -1. */
+  /**
+   * Индекс конца ведущей копии.
+   * @param {string} body тело
+   * @param {string} copyCore ядро копии
+   * @returns {number} индекс границы
+   */
   function corePrefixCutIndex(body, copyCore) {
     try {
       if (!copyCore) return -1;
@@ -890,6 +1097,13 @@
   /** E-2.2: отрендеренная копия, к которой относится сырой блок blocks[i] — ближайший
    *  НЕсырой блок (как правило непосредственно перед сырым). Возвращает текст копии или
    *  null, если её нет: тогда сырой блок не пересобираем, чтобы не потерять содержимое. */
+  /**
+   * Отрендеренная копия перед сырым блоком.
+   * @param {string[]} blocks блоки
+   * @param {number} i индекс
+   * @param {boolean[]} raw сырые блоки
+   * @returns {string|null} копия или null
+   */
   function renderedBeforeRaw(blocks, i, raw) {
     for (var b = i - 1; b >= 0; b--) {
       if (b === i || raw[b]) continue;
@@ -902,6 +1116,11 @@
   /** Нормализация блока для поиска ГРАНИЦЫ копии: trim + схлоп пробелов. Сами сравнения
    *  дедупа (E-2.3) идут по coreText/coreOfBlock, а здесь сохраняется точное соответствие
    *  нормализованного текста исходному (по нему находится конец копии в теле секции). */
+  /**
+   * Нормализация блока для границы копии.
+   * @param {string} block блок
+   * @returns {string} нормализованный блок
+   */
   function normalizeIntraBlock(block) {
     return String(block == null ? '' : block).replace(/\s+/g, ' ').trim();
   }
@@ -910,6 +1129,9 @@
    * «Ядро» и отрендеренный текст — это одна и та же реплика, если «ядра» совпадают ИЛИ
    * одно содержится в другом. E-2.3: сравнение идёт по coreText (разметка снята).
    * Порог длины отсекает короткие служебные блоки.
+   * @param {string} a блок A
+   * @param {string} b блок B
+   * @returns {boolean} похожи ли
    */
   function intraBlocksSimilar(a, b) {
     var x = coreText(a);
@@ -938,6 +1160,8 @@
    *   - если отрендеренный дубль идёт ПОСЛЕ сырого блока — выживает всё равно
    *     отрендеренный (приоритет отрендеренного текста), сырой отбрасывается.
    * Возвращает { text, removedBlocks } — чистая функция, без логов и побочных эффектов.
+   * @param {ExportMessage} message сообщение
+   * @returns {{text: string, removedBlocks: number}} результат дедупа
    */
   function dedupeIntraMessage(message) {
     var text = (message && typeof message.text === 'string') ? message.text : '';
@@ -1058,6 +1282,11 @@
 
   /** Ядро блока — текст без строк-заголовков '#'+ (E-2.3: заголовок любого уровня):
    *  по нему сырой markdown-блок сопоставляется с его отрендеренной копией. */
+  /**
+   * Ядро блока без строк-заголовков.
+   * @param {string} block блок
+   * @returns {string} ядро блока
+   */
   function coreOfBlock(block) {
     try {
       var lines = String(block == null ? '' : block).split('\n');
@@ -1084,49 +1313,96 @@
   // плана это её текст («Вот план исследования…»), у промпта — первое вхождение (пузырь).
   // Пороги не дают случайному совпадению одной короткой строки («Готово.») резать блок:
   // копия — это минимум 2 непустые строки (заголовок + тело) И не меньше 80 символов.
+  /** @type {number} минимум строк копии */
   var CROSS_RAW_MIN_LINES = 2;
+  /** @type {number} минимум символов копии */
   var CROSS_RAW_MIN_CHARS = 80;
 
   /** E-2.3: строки блока двумя параллельными массивами — «ядра» (сравнение копий НЕ
    *  зависит от разметки) и ИСХОДНЫЕ строки (именно они попадают в пересобранный блок,
    *  поэтому markdown выжившего остатка не деградирует). Пустые ядра по краям снимаются.
    *  NBSP-разделитель абзацев живого экспорта обрабатывает coreOfLine (deSpaceAny). */
+  /**
+   * Строки блока: исходные и ядра.
+   * @param {string} block блок
+   * @returns {{raw: string[], core: string[]}} пара массивов
+   */
   function blockLinePair(block) {
     var raw = deSpaceAny(block).split('\n');
     var core = [];
     for (var i = 0; i < raw.length; i++) core.push(coreOfLine(raw[i]));
     return trimPairEdges(raw, core);
   }
+  /**
+   * Снимает пустые ядра по краям.
+   * @param {string[]} raw исходные строки
+   * @param {string[]} core ядра строк
+   * @returns {{raw: string[], core: string[]}} пара массивов
+   */
   function trimPairEdges(raw, core) {
     var a = 0, b = raw.length;
     while (a < b && !core[a]) a++;
     while (b > a && !core[b - 1]) b--;
     return { raw: raw.slice(a, b), core: core.slice(a, b) };
   }
+  /**
+   * Срезает n строк с начала пары.
+   * @param {{raw: string[], core: string[]}} pair пара
+   * @param {number} n сколько срезать
+   * @returns {{raw: string[], core: string[]}} пара массивов
+   */
   function cutPairHead(pair, n) {
     return trimPairEdges(pair.raw.slice(n), pair.core.slice(n));
   }
+  /**
+   * Срезает n строк с конца пары.
+   * @param {{raw: string[], core: string[]}} pair пара
+   * @param {number} n сколько срезать
+   * @returns {{raw: string[], core: string[]}} пара массивов
+   */
   function cutPairTail(pair, n) {
     var k = pair.raw.length - n;
     return trimPairEdges(pair.raw.slice(0, k), pair.core.slice(0, k));
   }
-  /** Убрать пустые строки по краям (внутренние сохраняются). */
+  /**
+   * Убрать пустые строки по краям (внутренние сохраняются).
+   * @param {string[]} lines строки
+   * @returns {string[]} строки
+   */
   function trimEdgeEmpty(lines) {
     var a = lines.slice();
     while (a.length && !a[0]) a.shift();
     while (a.length && !a[a.length - 1]) a.pop();
     return a;
   }
+  /**
+   * Последовательности равны.
+   * @param {string[]} a последовательность A
+   * @param {string[]} b последовательность B
+   * @returns {boolean} равны ли
+   */
   function seqEqual(a, b) {
     if (a.length !== b.length) return false;
     for (var i = 0; i < a.length; i++) { if (a[i] !== b[i]) return false; }
     return true;
   }
+  /**
+   * Короткая — префикс длинной.
+   * @param {string[]} shortArr короткая
+   * @param {string[]} longArr длинная
+   * @returns {boolean} префикс ли
+   */
   function seqIsPrefix(shortArr, longArr) {
     if (!shortArr.length || shortArr.length >= longArr.length) return false;
     for (var i = 0; i < shortArr.length; i++) { if (shortArr[i] !== longArr[i]) return false; }
     return true;
   }
+  /**
+   * Короткая — суффикс длинной.
+   * @param {string[]} shortArr короткая
+   * @param {string[]} longArr длинная
+   * @returns {boolean} суффикс ли
+   */
   function seqIsSuffix(shortArr, longArr) {
     if (!shortArr.length || shortArr.length >= longArr.length) return false;
     var off = longArr.length - shortArr.length;
@@ -1135,6 +1411,11 @@
   }
   /** Копия «существенна»: минимум CROSS_RAW_MIN_LINES непустых строк И CROSS_RAW_MIN_CHARS
    *  символов — иначе это случайное совпадение короткой строки, а не размноженный промпт. */
+  /**
+   * Копия достаточно существенна.
+   * @param {string[]} lines строки
+   * @returns {boolean} существенна ли копия
+   */
   function crossCopyIsSubstantial(lines) {
     var ls = trimEdgeEmpty(lines);
     var nonEmpty = 0;
@@ -1153,6 +1434,8 @@
    * режется только текст-копия внутри блока. Блок, из которого вырезана копия, остаётся
    * своим остатком; блок, целиком состоящий из копии, удаляется.
    * Чистая функция: возвращает { messages, removed } — без логов и побочных эффектов.
+   * @param {Array} messages сообщения
+   * @returns {{messages: Array, removed: number}} результат дедупа
    */
   function dedupeCrossRawCopies(messages) {
     var out = [];
@@ -1232,6 +1515,9 @@
    * Логирование вынесено наружу (onMessageDedupe callback): чистая функция остаётся
    * чистой, а гейт сервиса и антиспам-подпись живут в вызывающем коде (core/content.js).
    * Возвращает { messages, intraRemoved, removed, crossRemoved }.
+   * @param {Array} raw сырые сообщения
+   * @param {*} onMessageDedupe колбэк лога
+   * @returns {{messages: ExportMessage[], intraRemoved: number, removed: number, crossRemoved: number}} результат подготовки
    */
   function prepareExportMessages(raw, onMessageDedupe) {
     var intraRemoved = 0;
@@ -1266,6 +1552,7 @@
     var cleaned = [];
     for (var k = 0; k < cross.messages.length; k++) {
       var mk = cross.messages[k] || {};
+      /** @type {ExportMessage} очищенное сообщение экспорта */
       var clean = {
         role: (mk.role === 'user') ? 'user' : 'assistant',
         text: stripMarkerResidue(typeof mk.text === 'string' ? mk.text : '')
@@ -1297,11 +1584,19 @@
   // отклонение (маркеров нет / пар больше одной / пара неполная или перевёрнутая / только
   // value-форма) → строка возвращается БАЙТОВО без изменений.
   // =====================================================================================
+  /** @type {string} начало видимого промпта */
   var VISIBLE_USER_PROMPT_START = '<!-- deepseek-pp-visible-user-prompt:start -->';
+  /** @type {string} конец видимого промпта */
   var VISIBLE_USER_PROMPT_END = '<!-- deepseek-pp-visible-user-prompt:end -->';
+  /** @type {string} value-форма промпта */
   var VISIBLE_USER_PROMPT_VALUE = '<!-- deepseek-pp-visible-user-prompt:value=';
 
-  /** Сколько раз маркер встречается в строке (без регулярок — только чтение). */
+  /**
+   * Сколько раз маркер встречается в строке (без регулярок — только чтение).
+   * @param {string} text текст
+   * @param {string} marker маркер
+   * @returns {number} число вхождений
+   */
   function countMarker(text, marker) {
     var n = 0;
     var at = text.indexOf(marker);
@@ -1317,6 +1612,8 @@
    *   'multiple-pairs'   — пар больше одной (пользователь сам написал маркеры);
    *   'value-only'       — только value-форма <!-- …:value=… -->, пары start/end нет.
    * Чистая функция: строку не меняет.
+   * @param {string} text текст
+   * @returns {'no-markers'|'unpaired-markers'|'multiple-pairs'|'value-only'|null} причина пропуска
    */
   function injectedUserTextSkipReason(text) {
     var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
@@ -1336,6 +1633,8 @@
   /**
    * O-20: санация user-текста. РОВНО одна пара маркеров start/end → trim(текст между ними);
    * иначе — исходная строка БАЙТОВО. Чистая функция: без логов и побочных эффектов.
+   * @param {string} text текст
+   * @returns {string} очищенный текст
    */
   function sanitizeInjectedUserText(text) {
     var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
@@ -1392,9 +1691,13 @@
   // chat.deepseek.com, а опоры — точные байтовые строки (не регулярки-обобщения), поэтому
   // прочие пять платформ не задеваются по построению (пин R: их байты прежние).
   // =====================================================================================
+  /** @type {string} открывающий тег BDS */
   var BDS_OPEN_TAG = '<BetterDeepSeek>';
+  /** @type {string} закрывающий тег BDS */
   var BDS_CLOSE_TAG = '</BetterDeepSeek>';
+  /** @type {string} маркер усечения BDS */
   var BDS_TRUNCATION_MARK = '...[truncated]';
+  /** @type {string} BOM файла BDS */
   var BDS_BOM = '\ufeff';
 
   // -------------------------------------------------------------------------------------
@@ -1414,6 +1717,12 @@
   // тестов) или гейт aiCmDebug выключен → НИ ОДНОЙ строки; читаются только посчитанные
   // значения.
   // -------------------------------------------------------------------------------------
+  /**
+   * Строка диагностики BDS.
+   * @param {string} tag тег
+   * @param {Object} fields поля
+   * @returns {boolean} напечатано ли
+   */
   function bdsDiagLine(tag, fields) {
     try {
       if (typeof aiCmDiagLine !== 'function') return false;
@@ -1421,7 +1730,13 @@
     } catch (eDiag) { return false; }
   }
 
-  /** JSON-escaped срез текста: from=0 — head (первые n символов), иначе tail (последние n). */
+  /**
+   * JSON-escaped срез текста: from=0 — head (первые n символов), иначе tail (последние n).
+   * @param {string} text текст
+   * @param {number} from начало
+   * @param {number} n длина
+   * @returns {string} срез
+   */
   function bdsDiagSlice(text, from, n) {
     try {
       var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
@@ -1431,6 +1746,7 @@
 
   // Таблица измеренных форм: id | опорная строка (match: 'exact' — строка целиком,
   // 'prefix' — литеральный префикс строки с переменным хвостом) | основание из артефакта.
+  /** @type {BdsInjectionForm[]} таблица форм BDS */
   var BDS_INJECTION_FORMS = [
     {
       id: 'bds-deep-code-prompt',
@@ -1452,15 +1768,25 @@
     }
   ];
   // Обёртка без измеренной формы (реальный текст пользователя внутри) — F3.
+  /** @type {string} id формы-обёртки */
   var BDS_WRAPPER_ID = 'bds-prompt-wrapper';
 
-  /** Строка — ровно строка открывающего тега? (строка 0 артефакта несёт BOM файла). */
+  /**
+   * Строка — ровно строка открывающего тега? (строка 0 артефакта несёт BOM файла).
+   * @param {string} line строка
+   * @param {number} at индекс
+   * @returns {boolean} открывающий ли тег
+   */
   function isBdsOpenTagLine(line, at) {
     if (line === BDS_OPEN_TAG) return true;
     return (at === 0 && line === BDS_BOM + BDS_OPEN_TAG);
   }
 
-  /** Опорная строка измеренной формы (или null — форма не распознана). */
+  /**
+   * Опорная строка измеренной формы (или null — форма не распознана).
+   * @param {string} line строка
+   * @returns {BdsInjectionForm|null} форма или null
+   */
   function bdsFormOfHeadLine(line) {
     var s = (typeof line === 'string') ? line : '';
     for (var i = 0; i < BDS_INJECTION_FORMS.length; i++) {
@@ -1471,13 +1797,21 @@
     return null;
   }
 
-  /** Индекс первой непустой строки текста (-1 — текста нет). */
+  /**
+   * Индекс первой непустой строки текста (-1 — текста нет).
+   * @param {string[]} lines строки
+   * @returns {number} индекс
+   */
   function bdsFirstContentLine(lines) {
     for (var i = 0; i < lines.length; i++) { if (String(lines[i]).trim() !== '') return i; }
     return -1;
   }
 
-  /** Индекс последней непустой строки текста (-1 — текста нет). */
+  /**
+   * Индекс последней непустой строки текста (-1 — текста нет).
+   * @param {string[]} lines строки
+   * @returns {number} индекс
+   */
   function bdsLastContentLine(lines) {
     for (var i = lines.length - 1; i >= 0; i--) { if (String(lines[i]).trim() !== '') return i; }
     return -1;
@@ -1490,6 +1824,8 @@
    * Значения не меняются: diag (o40-bds-line) только ЧИТАЕТ уже посчитанные k/firstLine/
    * pair/lastLine/форму/removed и печатается каноническим хелпером гейта aiCmDebug; без
    * хелпера или без гейта — ни одной строки. DOM и chrome функция не трогает; идемпотентна.
+   * @param {string} text текст
+   * @returns {{text: string, removed: number, forms: string[]}} результат санации
    */
   function sanitizeBetterDeepSeekText(text) {
     var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
@@ -1607,15 +1943,23 @@
   // бейдж и метрики НЕ пересчитываются. Опоры — точные байтовые строки (не регулярки-обобщения),
   // поэтому прочие пять платформ по построению не задеваются (пин R: их байты прежние).
   // =====================================================================================
+  /** @type {string} открывающий тег local_file_read */
   var TC_LFR_OPEN = '<local_file_read>';
+  /** @type {string} закрывающий тег local_file_read */
   var TC_LFR_CLOSE = '</local_file_read>';
+  /** @type {string} открывающий тег original_task */
   var TC_TASK_OPEN = '<original_task>';
+  /** @type {string} закрывающий тег original_task */
   var TC_TASK_CLOSE = '</original_task>';
+  /** @type {string} открывающий тег tool_results */
   var TC_RESULTS_OPEN = '<tool_results>';
+  /** @type {string} закрывающий тег tool_results */
   var TC_RESULTS_CLOSE = '</tool_results>';
+  /** @type {string} строка-якорь прозы */
   var TC_PROSE_ANCHOR = 'These are the tool results just executed for the tool-continuation task.';
 
   // Таблица измеренных дескрипторов конверта: id | опорные строки | правило границы | основание.
+  /** @type {TcEnvelopeForm[]} таблица форм конверта */
   var TC_ENVELOPE_FORMS = [
     {
       id: 'tc-local-file-read', rule: 'pair', open: TC_LFR_OPEN, close: TC_LFR_CLOSE,
@@ -1643,7 +1987,14 @@
     }
   ];
 
-  /** Первая пара 'open … close' начиная со строки from; незакрытая пара → null (границы нет). */
+  /**
+   * Первая пара 'open … close' начиная со строки from; незакрытая пара → null (границы нет).
+   * @param {string[]} lines строки
+   * @param {number} from начало
+   * @param {string} open открывающий тег
+   * @param {string} close закрывающий тег
+   * @returns {{open: number, close: number}|null} пара или null
+   */
   function tcPairAfter(lines, from, open, close) {
     for (var i = Math.max(0, from); i < lines.length; i++) {
       if (lines[i] !== open) continue;
@@ -1653,7 +2004,12 @@
     return null;
   }
 
-  /** Пара — целое сообщение? (до открывающего и после закрывающего нет непробельных строк) */
+  /**
+   * Пара — целое сообщение? (до открывающего и после закрывающего нет непробельных строк)
+   * @param {string[]} lines строки
+   * @param {{open: number, close: number}} pair пара
+   * @returns {boolean} целое ли сообщение
+   */
   function tcIsWholeMessagePair(lines, pair) {
     var i;
     for (i = 0; i < pair.open; i++) { if (String(lines[i]).trim() !== '') return false; }
@@ -1661,7 +2017,11 @@
     return true;
   }
 
-  /** Индекс строки-якоря проза-блока конверта (-1 — конверта нет). */
+  /**
+   * Индекс строки-якоря проза-блока конверта (-1 — конверта нет).
+   * @param {string[]} lines строки
+   * @returns {number} индекс
+   */
   function tcProseAnchorLine(lines) {
     for (var i = 0; i < lines.length; i++) {
       if (String(lines[i]).slice(0, TC_PROSE_ANCHOR.length) === TC_PROSE_ANCHOR) return i;
@@ -1678,6 +2038,8 @@
    * внутри сообщения — байтово (см. комментарий ветки (2): измерения спана нет). Чистая
    * функция: без логов, DOM и chrome; идемпотентна (на своём же выходе повторный вызов
    * ничего не меняет).
+   * @param {string} text текст
+   * @returns {{text: string, removed: number, forms: string[]}} результат санации
    */
   function sanitizeToolContinuationText(text) {
     var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
@@ -1754,9 +2116,16 @@
   //   - идемпотентна: на своём же выходе повторный вызов ничего не меняет;
   //   - чистая: без логов, DOM, chrome и побочных эффектов.
   // =====================================================================================
+  /** @type {string} тег секции рассуждений */
   var SECTION_REASONING_TAG = '[REASONING]';
+  /** @type {string} тег секции ответа */
   var SECTION_ANSWER_TAG = '[ANSWER]';
 
+  /**
+   * Убирает секции рассуждений.
+   * @param {string} text текст
+   * @returns {string} текст без рассуждений
+   */
   function stripReasoningSections(text) {
     var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
     // Нет пары — байтово прежний текст (все прочие платформы, обычные ответы).
@@ -1812,10 +2181,17 @@
   // Структурная пара: [REASONING] — НАЧАЛО текста (допустимы ведущие пустые строки/пробелы),
   // [ANSWER] — сразу после перевода строки-разделителя. Литеральные маркеры, которые модель
   // написала В ПРОЗЕ, парой не считаются: текст возвращается байтово, ни один байт не режется.
+  /** @type {RegExp} регулярка пары секций */
   var REASONING_SECTION_PAIR_RE = /^\s*\[REASONING\]\r?\n([\s\S]*?)\r?\n\r?\n\[ANSWER\]\r?\n([\s\S]*)$/;
   // ДИАГНОСТИКА (гейт aiCmDebug — канон utils/debug.js:aiCmDiagLine, прецедент bdsDiagLine):
   // оба литерала есть, но структура не парная. Хелпера нет (срез-песочницы) или гейт выключен
   // → ни одной строки; на возврат и байты не влияет.
+  /**
+   * Строка диагностики секций.
+   * @param {string} tag тег
+   * @param {Object} fields поля
+   * @returns {boolean} напечатано ли
+   */
   function diagTag(tag, fields) {
     try {
       if (typeof aiCmDiagLine !== 'function') return false;
@@ -1823,6 +2199,11 @@
     } catch (eDiag) { return false; }
   }
 
+  /**
+   * Делит текст на рассуждение и ответ.
+   * @param {string} text текст
+   * @returns {{reasoning: string, answer: string}} секции
+   */
   function splitReasoningSections(text) {
     var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
     var m = REASONING_SECTION_PAIR_RE.exec(s);
@@ -1856,6 +2237,12 @@
   // Нет размышления — сообщение не меняется (нет секции — норма). Чистая: без логов и DOM.
   // Возврат { changed } — только измерение (пины), на байты не влияет.
   // =====================================================================================
+  /**
+   * Проставляет поля рассуждений.
+   * @param {Array} messages сообщения
+   * @param {boolean} enabled включено
+   * @returns {{changed: number}} число изменений
+   */
   function applyReasoningExportFields(messages, enabled) {
     var changed = 0;
     try {
@@ -1914,14 +2301,19 @@
   // платформ и обычных ходов DeepSeek целы). Трогается ТОЛЬКО OFF-путь: ON
   // (includeHiddenExportBlocks) отдаёт всё как есть.
   // =====================================================================================
+  /** @type {string} открывающий тег результатов */
   var TOOL_RESULTS_OPEN = '[TOOL_RESULTS]';
+  /** @type {string} закрывающий тег результатов */
   var TOOL_RESULTS_CLOSE = '[/TOOL_RESULTS]';
+  /** @type {string} хвост блока результатов */
   var TOOL_RESULTS_TAIL = 'Continue answering based on the tool results above.';
 
   /**
    * S3: текст — ЦЕЛИКОМ блок результатов тулов DeepSeek++ (+ необязательный хвост)?
    * Пустое/чужое/многосоставное (два блока, текст вокруг) → false: удаляем только
    * машинный ход целиком, ничего пользовательского не выбрасываем.
+   * @param {string} text текст
+   * @returns {boolean} только результаты
    */
   function isToolResultsOnlyText(text) {
     try {
@@ -1939,6 +2331,7 @@
   // S4: список тегов вызовов DeepSeek++ (18 browser_* + 3 memory_* + web_search/web_fetch)
   // и три префиксных семейства (shell_*, python_*, skill_*). Пары ищутся по имени тега
   // (обратная ссылка), поэтому 'browser_key' не съедает 'browser_key_result'.
+  /** @type {string[]} имена тегов вызовов */
   var TOOL_CALL_TAG_NAMES = [
     'browser_navigate', 'browser_go_back', 'browser_go_forward', 'browser_refresh',
     'browser_list_tabs', 'browser_select_tab', 'browser_close_tab', 'browser_snapshot',
@@ -1947,7 +2340,9 @@
     'browser_evaluate_script', 'memory_save', 'memory_update', 'memory_delete',
     'web_search', 'web_fetch'
   ];
+  /** @type {string} альтернатива имён тегов */
   var TOOL_CALL_TAG_ALT = '(?:' + TOOL_CALL_TAG_NAMES.join('|') + '|shell_\\w+|python_\\w+|skill_\\w+)';
+  /** @type {RegExp} регулярка блока вызова */
   var RE_TOOL_CALL_BLOCK = new RegExp(
     '<(' + TOOL_CALL_TAG_ALT + ')(?:\\s[^>]*)?>[\\s\\S]*?<\\/\\1\\s*>\\s*', 'g');
 
@@ -1964,6 +2359,8 @@
    *     реально вырезаны);
    *   - текст без таких блоков возвращается БАЙТОВО тем же (обычные ходы всех сервисов);
    *   - чистая: без логов, DOM и chrome. Идемпотентна на своём же выходе.
+   * @param {string} text текст
+   * @returns {string} текст без блоков
    */
   function stripToolCallBlocks(text) {
     var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
@@ -1974,12 +2371,21 @@
     return out.replace(/\s+$/, '');
   }
 
-  /** S5: текст экспорта пуст ('' или одни пробелы) → сообщения в файле нет. */
+  /**
+   * S5: текст экспорта пуст ('' или одни пробелы) → сообщения в файле нет.
+   * @param {string} text текст
+   * @returns {boolean} пусто ли
+   */
   function isEmptyExportText(text) {
     try { return String(text == null ? '' : text).trim() === ''; } catch (e) { return false; }
   }
 
-  /** Копия собственных полей сообщения с ЗАМЕНЁННЫМ текстом (вход не мутируется). */
+  /**
+   * Копия собственных полей сообщения с ЗАМЕНЁННЫМ текстом (вход не мутируется).
+   * @param {ExportMessage} message сообщение
+   * @param {string} text новый текст
+   * @returns {Object} копия сообщения
+   */
   function copyMessageWithText(message, text) {
     var keep = {};
     for (var k in message) {
@@ -2020,6 +2426,8 @@
    * skipped — причины НЕприменённой санации O-20 (как было); dropped — счётчик
    * сообщений, не поехавших в экспорт по S3/S5 (в т.ч. опустевших после O-40);
    * bdsRemoved/bdsForms — измерение O-40 (снятые элементы и их формы), на байты не влияет.
+   * @param {ExportMessage[]} messages сообщения
+   * @returns {{messages: ExportMessage[], sanitized: number, skipped: string[], dropped: number, bdsRemoved: number, bdsForms: string[], tcRemoved: number, tcForms: string[]}} результат санации
    */
   function sanitizeEmitMessages(messages) {
     var out = [];
@@ -2124,10 +2532,16 @@
   // =====================================================================================
   // Маркеры секций — ОДНА пара констант на оба пути O-7: OFF их вырезает вместе с
   // reasoning (stripReasoningSections), ON — восстанавливает формат '[REASONING]…[ANSWER]…'.
+  /** @type {string} тег скрытого рассуждения */
   var HIDDEN_REASONING_TAG = SECTION_REASONING_TAG;
+  /** @type {string} тег скрытого ответа */
   var HIDDEN_ANSWER_TAG = SECTION_ANSWER_TAG;
 
-  /** Есть ли у сообщения служебные поля hidden-захвата (любое, даже пустое). */
+  /**
+   * Есть ли у сообщения служебные поля hidden-захвата (любое, даже пустое).
+   * @param {ExportMessage} message сообщение
+   * @returns {boolean} есть скрытые
+   */
   function hasHiddenFields(message) {
     try {
       if (!message || typeof message !== 'object') return false;
@@ -2136,7 +2550,11 @@
     } catch (e) { return false; }
   }
 
-  /** Reasoning скрытого захвата сообщения (поле hiddenReasoning) или '' (нет/не строка). */
+  /**
+   * Reasoning скрытого захвата сообщения (поле hiddenReasoning) или '' (нет/не строка).
+   * @param {ExportMessage} message сообщение
+   * @returns {string} скрытое рассуждение
+   */
   function hiddenReasoningOf(message) {
     try {
       var r = (message && typeof message.hiddenReasoning === 'string') ? message.hiddenReasoning : '';
@@ -2144,7 +2562,11 @@
     } catch (e) { return ''; }
   }
 
-  /** Копия собственных полей сообщения БЕЗ служебных hidden-полей захвата. */
+  /**
+   * Копия собственных полей сообщения БЕЗ служебных hidden-полей захвата.
+   * @param {ExportMessage} message сообщение
+   * @returns {Object} копия
+   */
   function withoutHiddenFields(message) {
     var keep = {};
     for (var k in message) {
@@ -2158,6 +2580,8 @@
   /**
    * O-7 (OFF-путь): тот же объект, если hidden-полей нет; иначе копия без них.
    * Пины идентичности O-20 (assistant и текст без маркеров — те же объекты) сохранены.
+   * @param {ExportMessage} message сообщение
+   * @returns {Object} копия
    */
   function stripHiddenFields(message) {
     if (!message || typeof message !== 'object') return message;
@@ -2199,7 +2623,11 @@
   // авто-ON работает как в исходном D-O41. Санация OFF-пути не переписана: правило выбирает
   // РОВНО ветку, как и раньше.
   // =====================================================================================
-  /** Есть ли в источнике экспорта (массив сообщений) хотя бы одно размышление (см. блок выше). */
+  /**
+   * Есть ли в источнике экспорта (массив сообщений) хотя бы одно размышление (см. блок выше).
+   * @param {ExportMessage[]} messages сообщения
+   * @returns {boolean} есть рассуждения
+   */
   function hasReasoningInSource(messages) {
     var src = Array.isArray(messages) ? messages : [];
     for (var i = 0; i < src.length; i++) {
@@ -2217,6 +2645,10 @@
    * Эффективное значение тумблера: OFF пользователя при reasoning в источнике игнорируется
    * (авто-ON) — КРОМЕ Qwen и DeepSeek, у которых OFF означает принудительное исключение.
    * site не передан (прежние вызовы/срез-песочницы) → поведение исходного D-O41: авто-ON.
+   * @param {boolean} userToggle тумблер
+   * @param {boolean} sourceHasReasoning есть рассуждения
+   * @param {string} site сайт
+   * @returns {boolean} итоговый тумблер
    */
   function effectiveReasoningToggle(userToggle, sourceHasReasoning, site) {
     if (userToggle === true) return true;                 // пользовательский ON — как есть
@@ -2236,6 +2668,8 @@
    *   - служебные поля захвата в результат НЕ переносятся (они уже в тексте).
    * Чистая функция: без логов, DOM и chrome. Идемпотентна — на своём же выходе
    * повторный вызов ничего не меняет.
+   * @param {ExportMessage[]} messages сообщения
+   * @returns {ExportMessage[]} сообщения
    */
   function includeHiddenExportBlocks(messages) {
     var src = Array.isArray(messages) ? messages : [];
@@ -2259,6 +2693,9 @@
    * tape-save пишет ОБЪЕДИНЕНИЕ существующего тейпа и текущей базы: msgs никогда
    * не меньше прежнего (контент старших ходов не уничтожается при хвостовом окне).
    * Порядок: сначала существующие (порядок тейпа), затем новые из базы.
+   * @param {*} existing существующие
+   * @param {*} incoming новые
+   * @returns {Array} объединение
    */
   function unionTurnsById(existing, incoming) {
     var seen = {};
@@ -2279,6 +2716,7 @@
     return out;
   }
 
+  /** @type {ExportPipelineApi} публичное API модуля */
   var Api = {
     buildAutoExportFileName: buildAutoExportFileName,
     disambiguateFileName: disambiguateFileName,

@@ -9,10 +9,23 @@
 (function () {
   'use strict';
 
+  /** @typedef {import('../types/export').ExportFormat} ExportFormat */
+  /** @typedef {import('../types/export').ExportMessage} ExportMessage */
+  /** @typedef {import('../types/export').ExportHistory} ExportHistory */
+  /** @typedef {import('../types/export').ExportSourceTier} ExportSourceTier */
+  /** @typedef {import('../types/export').ExportBuildersApi} ExportBuildersApi */
+
   // M-4.2: пользовательские строки рендеримого md-документа (шапка и роли) берутся из
   // _locales через chrome.i18n.getMessage (ключи export_md_*). chrome.i18n недоступен
   // (Node/jest, отладочный контекст) → прежний русский литерал: md без локали байтово
   // прежний. Ключи json-схемы (platform/model/...) — формат данных, их НЕ переводим.
+  /**
+   * Локализованная строка с фолбэком.
+   * @param {string} key ключ локализации
+   * @param {string} fallback запасной текст
+   * @param {string|string[]} [substitutions] подстановки
+   * @returns {string} локализованная строка
+   */
   function aiCmI18nMessage(key, fallback, substitutions) {
     try {
       if (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.getMessage === 'function') {
@@ -38,13 +51,26 @@
   //      перехватчиком) → повторно НЕ дописывается, дубля нет.
   // Функция чистая: не логирует, не читает DOM/chrome, не меняет токены.
   // ===========================================================================
+  /** @type {string} тег секции рассуждений */
   var REASONING_SECTION_TAG = '[REASONING]';
+  /** @type {string} тег секции ответа */
   var ANSWER_SECTION_TAG = '[ANSWER]';
+  /**
+   * Секция [REASONING] сообщения.
+   * @param {ExportMessage} msg сообщение истории
+   * @returns {string} секция рассуждений
+   */
   function reasoningOfMessage(msg) {
     if (!msg || typeof msg !== 'object') return '';
     var r = msg.reasoning;
     return (typeof r === 'string') ? r : '';
   }
+  /**
+   * Собирает текст с секциями [REASONING]/[ANSWER].
+   * @param {string} text текст ответа
+   * @param {string} reasoning текст рассуждений
+   * @returns {string} текст с секциями
+   */
   function withReasoningSections(text, reasoning) {
     var t = (typeof text === 'string') ? text : '';
     var r = (typeof reasoning === 'string') ? reasoning : '';
@@ -52,6 +78,11 @@
     if (t.indexOf(r) !== -1) return t;                 // уже в тексте — не дублируем
     return REASONING_SECTION_TAG + '\n' + r + '\n\n' + ANSWER_SECTION_TAG + '\n' + t;
   }
+  /**
+   * Текст сообщения с секцией рассуждений.
+   * @param {ExportMessage} msg сообщение истории
+   * @returns {string} текст сообщения
+   */
   function messageTextWithReasoning(msg) {
     if (!msg || typeof msg !== 'object') return '';
     return withReasoningSections(msg.text, reasoningOfMessage(msg));
@@ -72,13 +103,24 @@
   // прежний «эталон» (только поле reasoning), байты не меняются (R1). Нет размышления — нет
   // секции (норма): withReasoningSections возвращает текст байтово.
   // ===========================================================================
+  /**
+   * Рассуждение для экспорта с учётом скрытых полей.
+   * @param {ExportMessage} msg сообщение истории
+   * @param {boolean} useHidden брать скрытые поля
+   * @returns {string} секция рассуждений
+   */
   function reasoningOfMessageForExport(msg, useHidden) {
     var r = reasoningOfMessage(msg);
     if (r) return r;
     if (useHidden !== true || !msg || typeof msg !== 'object') return '';
     return (typeof msg.hiddenReasoning === 'string') ? msg.hiddenReasoning : '';
   }
-  /** Текст сообщения для маркерного пути + секции [REASONING]/[ANSWER] (текст — как у рендера). */
+  /**
+   * Текст сообщения для маркерного пути + секции [REASONING]/[ANSWER] (текст — как у рендера).
+   * @param {ExportMessage} msg сообщение истории
+   * @param {boolean} useHidden брать скрытые поля
+   * @returns {string} текст с маркерами роли
+   */
   function markersMessageTextWithReasoning(msg, useHidden) {
     return withReasoningSections(messageTextForMarkers(msg),
       reasoningOfMessageForExport(msg, useHidden));
@@ -97,21 +139,35 @@
   // нового байта). Маркеры — формат ДАННЫХ, а не UI-строка (прецедент:
   // [REASONING]/[ANSWER] ниже), поэтому _locales не трогаются.
   // ===========================================================================
+  /** @type {string[]} сайты с txt-маркерами роли */
   var TXT_ROLE_MARKER_SITES = ['qwen'];
-  /** Роли-маркеры включает РОВНО тот сайт, чей живой источник — DOM-адаптер (qwen). */
+  /**
+   * Роли-маркеры включает РОВНО тот сайт, чей живой источник — DOM-адаптер (qwen).
+   * @param {ExportHistory} history история экспорта
+   * @returns {boolean} нужны ли маркеры роли
+   */
   function isTxtRoleMarkerHistory(history) {
     try {
       var site = String((history && history.site) || '').toLowerCase();
       return TXT_ROLE_MARKER_SITES.indexOf(site) !== -1;
     } catch (e) { return false; }
   }
-  /** Метка роли в txt-экспорте: 'USER:' у user, 'ASSISTANT:' у всех прочих (бинарно, как в проекте). */
+  /**
+   * Метка роли в txt-экспорте: 'USER:' у user, 'ASSISTANT:' у всех прочих (бинарно, как в проекте).
+   * @param {string} role роль сообщения
+   * @returns {string} маркер роли
+   */
   function txtRoleMarker(role) {
     return (role === 'user') ? 'USER:' : 'ASSISTANT:';
   }
   /** O-36 (R2): метка роли в md-экспорте qwen — как в нативном экспорте Qwen Studio
    *  ('### USER' / '### ASSISTANT'). Формат ДАННЫХ, поэтому вне _locales (прецедент:
    *  [REASONING]/[ANSWER]). Прочие платформы держат прежние локализованные заголовки 1:1. */
+  /**
+   * Markdown-маркер роли.
+   * @param {string} role роль сообщения
+   * @returns {string} маркер роли
+   */
   function mdRoleMarker(role) {
     return (role === 'user') ? '### USER' : '### ASSISTANT';
   }
@@ -135,11 +191,18 @@
   // реплику: ответ, процитировавший один короткий вопрос целиком, контейнером не считается.
   // Гейт — только сайт с маркерами ролей (qwen): прочие платформы байтово прежние (R1).
   // ===========================================================================
+  /** @type {number} минимум вложенных для контейнера */
   var CONTAINER_MIN_CONTAINED = 2;
+  /** @type {number} минимум покрытия для контейнера */
   var CONTAINER_COVER_MIN = 0.8;
   /** Текст сообщения для маркерного пути: .text, иначе .content (сырой объект адаптера).
    *  Пустая строка в .text (след reasoning-нормализации) значением не считается: иначе
    *  реплика из одного .content дала бы пустой блок и висячий маркер. */
+  /**
+   * Текст сообщения для маркеров роли.
+   * @param {ExportMessage} msg сообщение истории
+   * @returns {string} текст сообщения
+   */
   function messageTextForMarkers(msg) {
     if (!msg || typeof msg !== 'object') return '';
     if (typeof msg.text === 'string' && msg.text) return msg.text;
@@ -148,6 +211,11 @@
   }
   /** Сообщения без узлов-контейнеров (см. блок выше). Чистая функция: порядок и объекты
    *  оставшихся сообщений не меняются, поле роли не переписывается. */
+  /**
+   * Убирает служебные сообщения-контейнеры.
+   * @param {ExportMessage[]} list сообщения истории
+   * @returns {ExportMessage[]} сообщения без контейнеров
+   */
   function dropContainerMessages(list) {
     var src = Array.isArray(list) ? list : [];
     var texts = [];
@@ -180,6 +248,12 @@
   // Печатается ПЕРВОЕ сообщение (role, тип и длина текста, голова), сколько сообщений
   // дошло до рендера, сколько было до контейнер-чистки и сколько отброшено. Байты файла
   // не меняются: функция только читает уже собранный список. Гейт выключен → тишина.
+  /**
+   * Диагностика структуры txt-маркеров роли.
+   * @param {Array} list сообщения истории
+   * @param {number} totalCount всего сообщений
+   * @returns {boolean} удалось ли напечатать
+   */
   function diagTxtRoleStructure(list, totalCount) {
     if (!diagOn()) return false;
     try {
@@ -206,6 +280,11 @@
   }
   // Рендер «эталона» (окно или Node-модуль). null — рендерер недоступен (отладочный
   // контекст): вызывающий отдаёт прежний пустой результат.
+  /**
+   * Рендер текста истории.
+   * @param {Array} list сообщения истории
+   * @returns {string|null} текст или null
+   */
   function renderReferenceText(list) {
     if (typeof window !== 'undefined' && typeof window.buildReferenceText === 'function') {
       return window.buildReferenceText(list);
@@ -220,6 +299,11 @@
    *  блоками ровно одна пустая строка. Вход — только массив (не массив → пустой файл,
    *  а не мусор из посимвольного обхода строки); текст берётся через messageTextForMarkers,
    *  поэтому сырой объект адаптера с .content тоже даёт блок, а не висячий маркер. */
+  /**
+   * Рендер текста истории с маркерами роли.
+   * @param {Array} list сообщения истории
+   * @returns {string|null} текст или null
+   */
   function renderReferenceTextWithRoleMarkers(list) {
     var src = Array.isArray(list) ? list : [];
     var parts = [];
@@ -236,6 +320,11 @@
   // txt «эталон»: тот же buildReferenceText, что использует кнопка «Сохранить .txt»
   // (O-36/D2: для qwen — с маркерами ролей; O-36/D2.1: у qwen дополнительно снимается
   // контейнер-склейка DOM-адаптера, см. блок выше).
+  /**
+   * Собирает txt-экспорт истории.
+   * @param {ExportHistory} history история экспорта
+   * @returns {string} txt-экспорт
+   */
   function buildTxtFromHistory(history) {
     var hist = history || {};
     var site = (typeof hist.site === 'string') ? hist.site : '';
@@ -279,6 +368,12 @@
 
   // md: та же разметка, что использовала кнопка «Сохранить .md» в попапе
   // (M-4.2: шапка и роли — из _locales, ключи export_md_*)
+  /**
+   * Собирает markdown-экспорт истории.
+   * @param {ExportHistory} history история экспорта
+   * @param {string} platform платформа
+   * @returns {string} markdown-экспорт
+   */
   function buildMdFromHistory(history, platform) {
     var h = history || {};
     var site = (typeof h.site === 'string') ? h.site : '';
@@ -304,6 +399,7 @@
     // в md давали ту же «стену» (живой артефакт 21:03). Прочие платформы: прежние
     // локализованные заголовки и прежний массив сообщений 1:1 (R1) — ни одного нового байта.
     var mdMarked = isTxtRoleMarkerHistory(h);
+    /** @type {Array} сообщения истории для md */
     var messages = Array.isArray(h.messages) ? h.messages : [];
     if (mdMarked) messages = dropContainerMessages(messages);
     for (var i = 0; i < messages.length; i++) {
@@ -335,6 +431,12 @@
   // v1.18 (F4): json — та же схема, что у ручной кнопки «Сохранить .json»
   // (options/options.js buildJsonText): platform/model/exportedAt/tokens/limit/percent/messages.
   // Добавлен в общий сборщик, чтобы автоэкспорт по порогу умел json-формат селектора.
+  /**
+   * Собирает json-экспорт истории.
+   * @param {ExportHistory} history история экспорта
+   * @param {string} platform платформа
+   * @returns {string} json-экспорт
+   */
   function buildJsonFromHistory(history, platform) {
     var h = history || {};
     return JSON.stringify({
@@ -361,7 +463,12 @@
   // ===========================================================================
   // Единый префикс диагностических строк этого файла (ровно одно место — литерал ниже):
   // и обычная строка скачивания, и строка отказа печатаются через DIAG_PREFIX.
+  /** @type {string} префикс диагностики */
   var DIAG_PREFIX = '[AI CM][diag]';
+  /**
+   * Включена ли диагностика.
+   * @returns {boolean} включена ли диагностика
+   */
   function diagOn() {
     try {
       if (typeof sessionStorage !== 'undefined' && sessionStorage &&
@@ -372,6 +479,12 @@
     } catch (eWin) { }
     return false;
   }
+  /**
+   * Короткий срез значения для диагностики.
+   * @param {*} v значение
+   * @param {number} n длина среза
+   * @returns {string} срез значения
+   */
   function diagHead(v, n) {
     try {
       var lim = (typeof n === 'number' && n > 0) ? n : 100;
@@ -383,6 +496,10 @@
       return (flat.length > lim) ? (flat.slice(0, lim) + '…') : flat;
     } catch (eHead) { return ''; }
   }
+  /**
+   * Стек вызовов для диагностики.
+   * @returns {string} стек вызовов
+   */
   function diagStack() {
     try {
       var lines = String((new Error()).stack || '').split('\n');
@@ -397,6 +514,14 @@
   }
   // Единая точка: триггер, имя файла (пустое — словом «пустое»), первые 100 символов
   // базы, её длина, URL документа, threadId, источник вызова (dev-режим).
+  /**
+   * Диагностика запуска скачивания.
+   * @param {string} trigger триггер скачивания
+   * @param {string} content содержимое
+   * @param {string} fileName имя файла
+   * @param {*} [extra] доп. поля
+   * @returns {boolean} удалось ли напечатать
+   */
   function diagDownload(trigger, content, fileName, extra) {
     try {
       if (typeof aiCmDiagDownload === 'function') return aiCmDiagDownload(trigger, content, fileName, extra);
@@ -429,10 +554,16 @@
   // reason=xssi-prefix|empty-name) печатается только под гейтом aiCmDebug. Content/fileName
   // только читаются: байты легитимного экспорта не меняются.
   // ===========================================================================
+  /** @type {number} длина XSSI-префикса */
   var XSSI_PREFIX_LEN = 4;
   // Первые байты контента — четырёхсимвольный XSSI-префикс Google (`)]}'`)? Сравнение по
   // кодам символов: в литерале нет фигурной скобки (source-пин-тесты режут функции по
   // балансу скобок).
+  /**
+   * Начинается ли содержимое с XSSI-префикса.
+   * @param {string} content содержимое файла
+   * @returns {boolean} есть ли XSSI-префикс
+   */
   function startsWithXssiPrefix(content) {
     try {
       if (content === undefined || content === null) return false;
@@ -444,6 +575,12 @@
   }
   // Причина отказа точки скачивания или null. Контент проверяется ПЕРВЫМ: живой `f.txt`
   // подходит под оба условия (XSSI-тело + пустое имя), и решающая причина там — форма мусора.
+  /**
+   * Причина блокировки скачивания или null.
+   * @param {string} content содержимое файла
+   * @param {string} fileName имя файла
+   * @returns {'xssi-prefix'|'empty-name'|null} причина блокировки
+   */
   function downloadBlockReason(content, fileName) {
     if (startsWithXssiPrefix(content)) return 'xssi-prefix';
     if (fileName === undefined || fileName === null || String(fileName).trim() === '') return 'empty-name';
@@ -452,6 +589,15 @@
   // Строка отказа: `download-blocked reason=<причина> …` с общим префиксом DIAG_PREFIX.
   // В контент-скрипте приоритет у канонического хелпера utils/debug.js (тот же гейт
   // aiCmDebug и та же строка).
+  /**
+   * Диагностика заблокированного скачивания.
+   * @param {string} trigger триггер скачивания
+   * @param {string} content содержимое
+   * @param {string} fileName имя файла
+   * @param {string} reason причина
+   * @param {*} [extra] доп. поля
+   * @returns {boolean} удалось ли напечатать
+   */
   function diagDownloadBlocked(trigger, content, fileName, reason, extra) {
     try {
       if (typeof aiCmDiagDownloadBlocked === 'function') {
@@ -481,6 +627,15 @@
   // O-27/O-32: 4-й аргумент trigger и 5-й extra — ТОЛЬКО для диагностической строки;
   // поведение, байты (content), mime и имя файла не меняются.
   // O-27 (защитный фикс): перед выдачей файла — пост-гард формы мусора/пустого имени.
+  /**
+   * Скачивает blob и возвращает признак успеха.
+   * @param {string} content содержимое
+   * @param {string} fileName имя файла
+   * @param {string} mimeType MIME-тип
+   * @param {string} [trigger] триггер
+   * @param {*} [extra] доп. поля
+   * @returns {boolean} успех скачивания
+   */
   function downloadBlob(content, fileName, mimeType, trigger, extra) {
     var ex = extra || {};
     var blockReason = downloadBlockReason(content, fileName);
@@ -511,6 +666,7 @@
     return true;
   }
 
+  /** @type {ExportBuildersApi} публичное API модуля */
   var Api = {
     buildTxtFromHistory: buildTxtFromHistory,
     buildMdFromHistory: buildMdFromHistory,

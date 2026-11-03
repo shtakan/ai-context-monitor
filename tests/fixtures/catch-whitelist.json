@@ -1628,8 +1628,8 @@
       "file": "utils/export-emit-pipeline.js",
       "category": "best-effort-guard",
       "lines": [
-        572,
-        596
+        686,
+        743
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: store[latchKey(service, convId)] = 1;"
     },
@@ -1637,7 +1637,7 @@
       "file": "utils/export-emit-pipeline.js",
       "category": "cleanup-guard",
       "lines": [
-        578
+        705
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete store[latchKey(service, convId)];"
     },
@@ -1645,7 +1645,7 @@
       "file": "utils/export-emit-pipeline.js",
       "category": "local-helper-guard",
       "lines": [
-        1252
+        1538
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: onMessageDedupe(role, res.removedBlocks);"
     },
@@ -1653,7 +1653,7 @@
       "file": "utils/export-text-builders.js",
       "category": "debug-instrumentation",
       "lines": [
-        372
+        479
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof window !== 'undefined' && window && window.__aiCmDebugLogs =="
     },
@@ -1661,8 +1661,8 @@
       "file": "utils/export-text-builders.js",
       "category": "defensive-assignment",
       "lines": [
-        408,
-        465
+        533,
+        611
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: url = String((typeof location !== 'undefined' && location && location.hr"
     },
@@ -1670,9 +1670,9 @@
       "file": "utils/export-text-builders.js",
       "category": "guard-clause",
       "lines": [
-        214,
-        403,
-        460
+        293,
+        528,
+        606
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: return require('./buildReferenceText.js')(list);"
     },
@@ -1680,8 +1680,8 @@
       "file": "utils/export-text-builders.js",
       "category": "host-api-guard",
       "lines": [
-        22,
-        369
+        35,
+        476
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: if (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.g"
     },
@@ -1689,8 +1689,8 @@
       "file": "utils/export-text-builders.js",
       "category": "local-helper-guard",
       "lines": [
-        491,
-        497
+        646,
+        652
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: diagDownloadBlocked(trigger || 'builder-download', content, fileName, bl"
     },
@@ -1698,9 +1698,9 @@
       "file": "utils/export-text-builders.js",
       "category": "logging-guard",
       "lines": [
-        204,
-        419,
-        476
+        278,
+        544,
+        622
       ],
       "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: var kept = Array.isArray(list) ? list.length : -1; var total = (typeof t"
     },
