@@ -15,9 +15,32 @@
  */
 
 (function () {
+  /**
+   * Ход, извлечённый из ChatGPT mapping. Текст лежит в content (не в text),
+   * поэтому Message/ExportMessage из types/ совместимы лишь по смыслу role/текста.
+   * @typedef {Object} ChatGptExtractedMessage
+   * @property {string} role Роль автора: user/assistant (system/tool отфильтрованы).
+   * @property {string} content Санированный текст сообщения.
+   */
+
+  /**
+   * Результат разбора полного ChatGPT-разговора.
+   * @typedef {Object} ChatGptConversationResult
+   * @property {ChatGptExtractedMessage[]} messages Ходы в хронологическом порядке.
+   * @property {string} model Модель разговора (фолбэк — CHATGPT_DEFAULT_MODEL).
+   * @property {number} tokens Значение json.tokens (0, если его нет).
+   */
+
+  /** @type {string} Модель по умолчанию, если в разговоре нет model_slug. */
   var CHATGPT_DEFAULT_MODEL = 'gpt-4o';
 
   // ---- 1. Навигация /c/<id> ----
+
+  /**
+   * Идентификатор разговора из пути /c/<id>.
+   * @param {string|null|undefined} pathname Путь страницы (обычно location.pathname).
+   * @returns {string} id разговора или '' (нет совпадения / путь не строка).
+   */
   function getConvIdFromPath(pathname) {
     try {
       var m = String(pathname || '').match(/\/c\/([A-Za-z0-9_-]+)/);
@@ -25,20 +48,30 @@
     } catch (e) { return ''; }
   }
 
-  // Сброс нужен только когда появился НОВЫЙ непустой id чата, отличный от предыдущего.
-  // Контракт сохранён 1:1 (пин tests/adapters/chatgpt-conversation-parser.test.js):
-  // уход на URL без /c/<id> этот предикат НЕ покрывает — для навигации есть решение ниже.
+  /**
+   * Сброс нужен только когда появился НОВЫЙ непустой id чата, отличный от предыдущего.
+   * Контракт сохранён 1:1 (пин tests/adapters/chatgpt-conversation-parser.test.js):
+   * уход на URL без /c/<id> этот предикат НЕ покрывает — для навигации есть решение ниже.
+   * @param {string|null|undefined} prevId Прежний id разговора.
+   * @param {string|null|undefined} newId Новый id разговора.
+   * @returns {boolean} true — появился другой непустой id.
+   */
   function shouldResetChatConversation(prevId, newId) {
     if (!newId) return false;
     return prevId !== newId;
   }
 
-  // O-34 (N1): решение о сбросе на НАВИГАЦИИ — надмножество предиката выше.
-  // Уход с /c/<id> на URL без разговора (корень чата, /gpts, новый чат) — тоже смена
-  // контекста: остаточные значения прошлой сессии (виджет, бейдж, снимок попапа) обязаны
-  // быть сброшены, а не проигнорированы. Возврат: true — контекст разговора изменился
-  // (в т.ч. появление id, смена id, ПОТЕРЯ id); false — тот же контекст (id совпал,
-  // в т.ч. '' → '').
+  /**
+   * O-34 (N1): решение о сбросе на НАВИГАЦИИ — надмножество предиката выше.
+   * Уход с /c/<id> на URL без разговора (корень чата, /gpts, новый чат) — тоже смена
+   * контекста: остаточные значения прошлой сессии (виджет, бейдж, снимок попапа) обязаны
+   * быть сброшены, а не проигнорированы. Возврат: true — контекст разговора изменился
+   * (в т.ч. появление id, смена id, ПОТЕРЯ id); false — тот же контекст (id совпал,
+   * в т.ч. '' → '').
+   * @param {string|null|undefined} prevId Прежний id разговора.
+   * @param {string|null|undefined} newId Новый id разговора.
+   * @returns {boolean} true — контекст разговора изменился (сравнение нормализованных строк).
+   */
   function shouldResetConversationOnNav(prevId, newId) {
     var p = (prevId == null) ? '' : String(prevId);
     var n = (newId == null) ? '' : String(newId);
@@ -46,9 +79,15 @@
   }
 
   // ---- 3. Санация маркеров ----
-  // Живые ChatGPT-маркеры обёрнуты в PUA-символы Unicode (U+E200/U+E202/U+E201),
-  // регулярки по брекетам их не видят. Вырезаем PUA-токен целиком
-  // ( cite/entity/image_group + полезная нагрузка ), затем добиваем одиночные PUA.
+
+  /**
+   * Санация сырых маркеров ответа ChatGPT: живые маркеры обёрнуты в PUA-символы Unicode
+   * (U+E200/U+E202/U+E201), регулярки по брекетам их не видят — PUA-токен вырезается
+   * целиком (cite/entity/image_group + полезная нагрузка), затем добиваются одиночные PUA,
+   * legacy [entity][…] и [cite:…].
+   * @param {string} s Сырой текст ответа.
+   * @returns {string} Текст без маркеров; двойные пробелы схлопнуты.
+   */
   function sanitizeChatGPTText(s) {
     if (typeof s !== 'string') return s;
     return String(s)
@@ -77,11 +116,15 @@
   }
 
   // ---- 2. Линеаризация mapping по parent/children ----
-  // ChatGPT mapping: каждый узел { id, parent, children, message }.
-  // Корень — узел с parent === null/undefined. Обход DFS от корня по children
-  // (порядок children из mapping). При отсутствии parent/children — фолбэк на
-  // create_time, затем на порядок ключей. Возвращает массив ключей mapping
-  // в хронологическом порядке (голова = первый user).
+
+  /**
+   * Линеаризация ChatGPT mapping по parent/children. ChatGPT mapping: каждый узел
+   * { id, parent, children, message }. Корень — узел с parent === null/undefined; обход
+   * DFS от корня по children (порядок children из mapping авторитетен). При отсутствии
+   * parent/children — фолбэк на create_time, затем на порядок ключей.
+   * @param {Record<string, any>|null|undefined} mapping Объект mapping разговора.
+   * @returns {string[]} Ключи mapping в хронологическом порядке (голова = первый user).
+   */
   function orderChatGPTMapping(mapping) {
     var keys = Object.keys(mapping || {});
     if (!keys.length) return [];
@@ -168,8 +211,12 @@
     return out;
   }
 
-  // Полный парсер (для тестов и потенциального переиспользования): messages в
-  // хронологическом порядке, голова = первый user, с санацией маркеров.
+  /**
+   * Полный парсер (для тестов и потенциального переиспользования): messages в
+   * хронологическом порядке, голова = первый user, с санацией маркеров.
+   * @param {any} json Сырой ответ ChatGPT (mapping/model_slug/tokens).
+   * @returns {ChatGptConversationResult} Ходы, модель и счётчик токенов.
+   */
   function parseChatGPTConversation(json) {
     var messages = [];
     var model = '';
@@ -217,6 +264,19 @@
     return { messages: messages, model: model, tokens: tokens };
   }
 
+  /**
+   * Публичный API парсера ChatGPT (window.ChatGPTConversationParser / module.exports).
+   * Зеркало в types/globals.d.ts описано как any — здесь тип уточняется.
+   * @typedef {Object} ChatGptConversationParserApi
+   * @property {typeof getConvIdFromPath} getConvIdFromPath id разговора из пути /c/<id>.
+   * @property {typeof shouldResetChatConversation} shouldResetChatConversation Сброс по новому непустому id.
+   * @property {typeof shouldResetConversationOnNav} shouldResetConversationOnNav Сброс на навигации (включая потерю id).
+   * @property {typeof orderChatGPTMapping} orderChatGPTMapping Линеаризация mapping по parent/children.
+   * @property {typeof sanitizeChatGPTText} sanitizeChatGPTText Санация PUA/[entity]/[cite:…] маркеров.
+   * @property {typeof parseChatGPTConversation} parseChatGPTConversation Полный разбор разговора.
+   */
+
+  /** @type {ChatGptConversationParserApi} */
   var api = {
     getConvIdFromPath: getConvIdFromPath,
     shouldResetChatConversation: shouldResetChatConversation,

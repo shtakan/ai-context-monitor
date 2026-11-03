@@ -20,10 +20,69 @@
  */
 
 (function () {
+  /**
+   * Сообщение хода, собранное из turn. Текст лежит в content (сетевой ключ, не text).
+   * @typedef {Object} GeminiTurnEntry
+   * @property {string} role Роль сообщения: user/assistant.
+   * @property {string} content Текст сообщения.
+   * @property {string} model Модель хода ('' если не найдена).
+   * @property {string} id Идентификатор сообщения (turnId_role).
+   * @property {number} ts Время хода в секундах (0 если нет).
+   * @property {string|null} r1 id соседа НОВЕЕ (связный список порядка).
+   */
+
+  /**
+   * Сообщение итоговой истории Gemini; по role/text совместимо с ExportMessage
+   * (types/export.d.ts).
+   * @typedef {Object} GeminiHistoryMessage
+   * @property {string} role Роль: user/assistant.
+   * @property {string} text Текст сообщения.
+   * @property {string} model Модель хода ('' если не найдена).
+   * @property {string} id Идентификатор сообщения.
+   * @property {number} ts Время хода в секундах.
+   * @property {string|null} r1 id соседа НОВЕЕ.
+   */
+
+  /**
+   * Результат parseGeminiHistory.
+   * @typedef {Object} GeminiHistoryResult
+   * @property {GeminiHistoryMessage[]} messages Сообщения в хронологическом порядке.
+   * @property {string} model Модель (фолбэк 'Gemini 2.5 Pro').
+   * @property {number} tokens Оценка токенов: ceil(символы / 4).
+   * @property {string} text Все тексты через перевод строки.
+   * @property {number} count Число сообщений.
+   */
+
+  /**
+   * Нормализованное вложение хода Gemini.
+   * @typedef {Object} GeminiFileRef
+   * @property {string} name Имя файла.
+   * @property {string} mime MIME-тип ('' если нет).
+   * @property {number} type Код типа: 1=image, 10=docx, 11=pdf.
+   * @property {string} token Токен файла.
+   * @property {string} img CDN-ссылка изображения ('' для документов).
+   * @property {string} dl Ссылка скачивания ('' если нет).
+   * @property {string[]} urls Все строковые ссылки узла.
+   * @property {boolean} isImage true — изображение (type=1 или mime image/*).
+   */
+
+  /**
+   * Тексты Deep Research, извлечённые из хода.
+   * @typedef {Object} GeminiDrTexts
+   * @property {string} planText Текст плана ('' если не найден).
+   * @property {string} reportText Текст отчёта ('' если не найден).
+   */
+
+  /** @type {string} Версия логики парсинга (экспортируется для диагностики). */
   var PARSER_VERSION = 'g3';
 
-  // Локальный лог-хелпер «вершины» JSON.parse сегментов. Чистый модуль без debugLog —
-  // guard-нутый console.log (в try/catch), срабатывает ТОЛЬКО при реальном провале парса.
+  /**
+   * Локальный лог-хелпер «вершины» JSON.parse сегментов. Чистый модуль без debugLog —
+   * guard-нутый console.log (в try/catch), срабатывает ТОЛЬКО при реальном провале парса.
+   * @param {any} e Ошибка парсинга.
+   * @param {string} where Метка места вызова.
+   * @returns {void}
+   */
   function logSegmentParseFail(e, where) {
     try {
       console.log('[AI CM][batchexecute] segment parse fail ' + where + ': ' + (e && e.message || e));
@@ -31,14 +90,25 @@
   }
 
   // ---- токены вложений ----
+
+  /** @type {RegExp} Токен вложения Gemini ($AXzLiR…). */
   var ATTACH_TOKEN_RE = /\$AXzLiR[A-Za-z0-9+\/=]+/g;
+  /**
+   * Вырезает токены вложений $AXzLiR… и схлопывает пробельные символы.
+   * @param {string} s Текст с токенами вложений.
+   * @returns {string} Текст без токенов.
+   */
   function stripAttachmentTokens(s) {
     if (typeof s !== 'string') return s;
     return s.replace(ATTACH_TOKEN_RE, ' ').replace(/[ \t\f\v]+/g, ' ');
   }
 
-  // Единая санация текста Gemini: токены вложений $AXzLiR, системная строка-заглушка
-  // "File attachment was not previously registered" и [cite:N].
+  /**
+   * Единая санация текста Gemini: токены вложений $AXzLiR, системная строка-заглушка
+   * "File attachment was not previously registered" и [cite:N].
+   * @param {string} s Сырой текст сегмента.
+   * @returns {string} Санированный текст.
+   */
   function sanitizeGeminiText(s) {
     if (typeof s !== 'string') return s;
     return s
@@ -48,15 +118,26 @@
   }
 
   // ---- фильтры мусора ----
+  /** @param {unknown} s Проверяемое значение. @returns {boolean} true — похоже на внутренний id. */
   function isIdLike(s) { return typeof s === 'string' && /^(c_|r_|rc_|fbb[0-9a-f]|[0-9a-f]{16})/.test(s); }
+  /** @param {unknown} s Проверяемое значение. @returns {boolean} true — похоже на имя файла. */
   function isFileLike(s) { return typeof s === 'string' && /\.(pdf|png|jpe?g|gif|docx?|txt|webp|csv|xlsx?)(\b|$)/i.test(s); }
+  /** @param {unknown} s Проверяемое значение. @returns {boolean} true — похоже на URL. */
   function isUrlLike(s) { return typeof s === 'string' && /^https?:\/\//i.test(s); }
+  /** @param {unknown} s Проверяемое значение. @returns {boolean} true — похоже на токен ($?AVuib…). */
   function isTokenLike(s) { return typeof s === 'string' && /^\$?AVuib/.test(s); }
+  /** @param {unknown} s Проверяемое значение. @returns {boolean} true — похоже на MIME-тип. */
   function isMimeLike(s) { return typeof s === 'string' && /^(image|application|video|audio)\//i.test(s); }
+  /** @type {Record<string, number>} UI-строки и служебные значения, не являющиеся контентом. */
   var UI_BLACKLIST = {
     'DE': 1, 'ru': 1, 'mk': 1, 'generic': 1, 'personal_context': 1, 'google': 1,
     'Ищу в интернете': 1, 'Персональный контекст': 1, 'Google Search': 1, 'true': 1, 'false': 1
   };
+  /**
+   * Мусорный сегмент: пустой, UI-строка или id/файл/URL/токен/MIME.
+   * @param {unknown} s Проверяемый сегмент.
+   * @returns {boolean} true — сегмент не является контентом.
+   */
   function isJunk(s) {
     if (typeof s !== 'string') return true;
     var t = s.trim();
@@ -65,10 +146,14 @@
     return isIdLike(t) || isFileLike(t) || isUrlLike(t) || isTokenLike(t) || isMimeLike(t);
   }
 
-  // Мусор именно для поля вопроса пользователя (turn[2][0][0]). В отличие от
-  // collectTurnText (свалка сегментов), здесь НЕ применяем isFileLike: валидный
-  // пользовательский промпт может содержать имена файлов (.pdf/.docx/.txt) —
-  // терять из-за этого весь вопрос-инструкцию нельзя (терялся user-блок r_f6c).
+  /**
+   * Мусор именно для поля вопроса пользователя (turn[2][0][0]). В отличие от
+   * collectTurnText (свалка сегментов), здесь НЕ применяем isFileLike: валидный
+   * пользовательский промпт может содержать имена файлов (.pdf/.docx/.txt) —
+   * терять из-за этого весь вопрос-инструкцию нельзя (терялся user-блок r_f6c).
+   * @param {unknown} s Кандидат в вопрос.
+   * @returns {boolean} true — кандидат непригоден как вопрос.
+   */
   function isUserQuestionJunk(s) {
     if (typeof s !== 'string') return true;
     var t = s.trim();
@@ -79,17 +164,27 @@
 
   // ---- детекция мышления ----
   // (a) markdown-заголовок мышления: строка начинается с "**Title**".
+  /** @type {RegExp} markdown-заголовок мышления: строка начинается с "**Title**". */
   var THINKING_TITLE_RE = /^\s*\*\*[^*\n]{1,120}\*\*/;
   // Страховочные first-person вводные мышления Gemini (голое тело без **Title**).
+  /** @type {RegExp} Страховочные first-person вводные мышления Gemini (голое тело без **Title**). */
   var THINKING_BODY_RE = /^(I'm now|I've been|I am going|I'm currently|I'm focusing|I'm working|I will now|I've fleshed|I've got|I need to|I'm going to|I've shifted|My focus is|I've settled|I've outlined|I've started|I'm aiming|My approach is|I'm leaning|I'm choosing|I'm prioritizing)\b/i;
   // Дополнительные стартовые тела мышления (голые first-person вводные без **Title**).
+  /** @type {RegExp} Дополнительные стартовые тела мышления (голые first-person вводные). */
   var THINKING_BODY_EXTRA_RE = /^(I'm (?:currently|now|also|still) (?:focused|zeroing|analyzing|integrating|identifying|assessing|refining|evaluating|structuring|addressing|considering|formulating|prioritizing|parsing)|I've (?:been|now) (?:analyzing|noted|shifted|outlined|fleshed)|My (?:focus|goal) is|Specifically, I've)\b/i;
   // Герундийные титулы мышления, приходящие «голыми», без **Title**:
   // "Assessing the Core Task", "Defining the Scope", "Outlining the Procedure" и т.п.
+  /** @type {RegExp} Герундийные титулы мышления, приходящие «голыми», без **Title**. */
   var THINKING_GERUND_RE = /^(Assessing|Defining|Refining|Outlining|Constructing|Uncovering|Tracing|Confirming|Reassuring|Clarifying|Deepening|Integrating|Evaluating|Formulating|Focusing|Prioritizing|Solidifying|Exploring|Analyzing|Reviewing|Validating|Synthesizing|Considering|Identifying|Structuring|Addressing|Reconstructing)\b/;
   // Системная строка вложения-заглушки — не должна попадать в историю.
+  /** @type {RegExp} Системная строка вложения-заглушки — не должна попадать в историю. */
   var FILE_ATTACHMENT_RE = /File attachment was not previously registered/;
 
+  /**
+   * Есть ли в строке кириллица (U+0400..U+04FF).
+   * @param {string} s Проверяемая строка.
+   * @returns {boolean} true — кириллица найдена.
+   */
   function hasCyrillic(s) {
     for (var i = 0; i < s.length; i++) {
       var c = s.charCodeAt(i);
@@ -98,8 +193,12 @@
     return false;
   }
 
-  // Единый предикат «начала мышления»: **Title**, first-person вводная или герундий.
-  // Кириллица всегда считается ответом (никогда мышлением).
+  /**
+   * Единый предикат «начала мышления»: **Title**, first-person вводная или герундий.
+   * Кириллица всегда считается ответом (никогда мышлением).
+   * @param {unknown} s Проверяемый сегмент.
+   * @returns {boolean} true — сегмент открывает блок мышления.
+   */
   function isThinkingStart(s) {
     if (typeof s !== 'string') return false;
     var t = s.trim();
@@ -112,9 +211,13 @@
     return false;
   }
 
-  // Предикат «ответного» сегмента (выход из режима скипа мышления):
-  // сегмент считается ответом только если содержит кириллицу, markdown-таблицу
-  // или code fence. Чисто английские тела мышления ответом НЕ являются.
+  /**
+   * Предикат «ответного» сегмента (выход из режима скипа мышления):
+   * сегмент считается ответом только если содержит кириллицу, markdown-таблицу
+   * или code fence. Чисто английские тела мышления ответом НЕ являются.
+   * @param {unknown} s Проверяемый сегмент.
+   * @returns {boolean} true — сегмент завершает блок мышления.
+   */
   function isResponseSegment(s) {
     if (typeof s !== 'string') return false;
     var t = s.trim();
@@ -125,10 +228,15 @@
     return false;
   }
 
-  // Блок мышления: массив, чей ПЕРВЫЙ элемент является маркером мышления —
-  // либо строкой-началом мышления, либо вложенным массивом, у которого
-  // глубже лежит такая строка. Проверяем только голову (не рекурсивно по всему
-  // поддереву), чтобы не зацепить таблицу-соседку в одном родителе с мышлением.
+  /**
+   * Блок мышления: массив, чей ПЕРВЫЙ элемент является маркером мышления —
+   * либо строкой-началом мышления, либо вложенным массивом, у которого
+   * глубже лежит такая строка. Проверяем только голову (не рекурсивно по всему
+   * поддереву), чтобы не зацепить таблицу-соседку в одном родителе с мышлением.
+   * @param {any} node Проверяемый узел.
+   * @param {number} depth Текущая глубина рекурсии (защита от переполнения).
+   * @returns {boolean} true — голова узла является маркером мышления.
+   */
   function headIsThinking(node, depth) {
     if (typeof node === 'string') return isThinkingStart(node);
     if (Array.isArray(node)) {
@@ -137,16 +245,26 @@
     }
     return false;
   }
+  /**
+   * Массив-блок мышления (голова — маркер мышления).
+   * @param {any} node Проверяемый узел.
+   * @returns {boolean} true — узел является блоком мышления.
+   */
   function isThoughtBlock(node) {
     if (!Array.isArray(node)) return false;
     return headIsThinking(node[0], 0);
   }
 
-  // ---- stateful-сбор текста ответа: run-skip мышления ----
-  // После срабатывания маркера мышления пропускаем последующие сегменты, пока
-  // не встретится «ответный» (кириллица/таблица/code fence). Это ловит
-  // голые продолжения мышления ("I'm now zeroing in…", "Assessing the Core Task"),
-  // приходящие отдельными строками без **Title**.
+  /**
+   * Stateful-сбор текста ответа: run-skip мышления. После срабатывания маркера мышления
+   * пропускаем последующие сегменты, пока не встретится «ответный» (кириллица/таблица/code
+   * fence). Это ловит голые продолжения мышления ("I'm now zeroing in…", "Assessing the
+   * Core Task"), приходящие отдельными строками без **Title**.
+   * @param {any} node Узел дерева ответа (строка или массив).
+   * @param {string[]} out Накопитель текстовых сегментов.
+   * @param {{inThinking: boolean}} [state] Состояние прохода (создаётся при отсутствии).
+   * @returns {void}
+   */
   function collectTurnText(node, out, state) {
     state = state || { inThinking: false };
     if (typeof node === 'string') {
@@ -173,7 +291,11 @@
     for (var k = 0; k < node.length; k++) collectTurnText(node[k], out, state);
   }
 
-  // ---- вопрос пользователя: turn[2][0][0] ----
+  /**
+   * Вопрос пользователя хода: turn[2][0][0] после санации и фильтра мусора.
+   * @param {any} turn Ход batchexecute.
+   * @returns {string} Текст вопроса или '' (нет/мусор/похоже на мышление).
+   */
   function extractUserQuestion(turn) {
     var q = '';
     try { q = turn[2][0][0]; } catch (e) { q = ''; }
@@ -185,7 +307,13 @@
   }
 
   // ---- модель/id/ts ----
+  /** @type {RegExp} Имя модели Gemini в строке хода. */
   var MODEL_NAME_RE = /^\s*(?:Gemini\s*[\d.]?|\d+(?:\.\d+)?\s+(?:Flash|Pro|Ultra|Gemini))/i;
+  /**
+   * Имя модели хода (первая короткая строка, похожая на "Gemini 2.5 Pro").
+   * @param {any} node Узел хода.
+   * @returns {string} Имя модели или ''.
+   */
   function extractModelName(node) {
     var found = null;
     (function walk(n) {
@@ -196,6 +324,11 @@
     })(node);
     return found || '';
   }
+  /**
+   * Идентификатор хода (первая строка вида r_<hex>).
+   * @param {any} node Узел хода.
+   * @returns {string|null} id хода или null.
+   */
   function extractTurnId(node) {
     var found = null;
     (function walk(n) {
@@ -205,13 +338,22 @@
     })(node);
     return found;
   }
-  // r1 = id соседа НОВЕЕ (подтверждено логами idmap: t[1][1]).
+  /**
+   * r1 = id соседа НОВЕЕ (подтверждено логами idmap: t[1][1]).
+   * @param {any} t Ход batchexecute.
+   * @returns {string|null} id более нового хода или null.
+   */
   function extractTurnR1(t) {
     try {
       if (Array.isArray(t) && Array.isArray(t[1]) && typeof t[1][1] === 'string') return t[1][1];
     } catch (e) { }
     return null;
   }
+  /**
+   * Время хода (t[4][0]) в секундах.
+   * @param {any} t Ход batchexecute.
+   * @returns {number} Секунды эпохи или 0 (нет/некорректно).
+   */
   function extractTurnTs(t) {
     try {
       if (Array.isArray(t) && Array.isArray(t[4]) && typeof t[4][0] === 'number' && t[4][0] > 1000000000) return t[4][0];
@@ -223,7 +365,11 @@
   // Форма узла (см. plan-gemini-attachments.md): [null, type, name, imgCdn, null,
   // token, null, [thumb, download, upload], 1, [sec, nanos], null, mime, ...].
   // type: 1=image, 10=docx, 11=pdf; у документов imgCdn=null, у изображений urls=null.
-  // Возвращаем нормализованный ref либо null. Функция не бросает.
+  /**
+   * Нормализованный ref вложения либо null. Функция не бросает.
+   * @param {any} n Узел вложения из turn[2][0][4][0][4].
+   * @returns {GeminiFileRef|null} ref вложения или null (не массив / нет имени).
+   */
   function fileRefFromNode(n) {
     try {
       if (!Array.isArray(n)) return null;
@@ -256,6 +402,11 @@
     } catch (e) { return null; }
   }
 
+  /**
+   * Вложения хода.
+   * @param {any} turn Ход batchexecute.
+   * @returns {GeminiFileRef[]} Нормализованные вложения (пусто, если их нет).
+   */
   function collectTurnFiles(turn) {
     var out = [];
     try {
@@ -271,10 +422,18 @@
 
   // Чисто английский блок-мышление assistant (без кириллицы, начинающийся с герундия /
   // first-person вводной / префиксов "sr "/"Ev "). Смешанные блоки (с кириллицей) не трогаем.
+  /** @type {RegExp} Чисто английский блок-мышление assistant (герундий/first-person/"sr "/"Ev "). */
   var THINKING_ASSISTANT_RE = /^([A-Z][a-z]+ing\b|I'm\b|I've\b|My (?:focus|goal)\b|sr |Ev )/;
   // Ведущий thinking-фрагмент (с необязательными ведущими * / **) — для среза в смешанных блоках.
+  /** @type {RegExp} Ведущий thinking-фрагмент (с необязательными ведущими * / **). */
   var LEADING_THINKING_RE = /^\s*\*?\*?([A-Z][a-z]+ing\b|I'm|I've|My (focus|goal)|sr |Ev )/;
 
+  /**
+   * Чисто английский блок-мышление assistant: без кириллицы, начинается с герундия,
+   * first-person вводной или префиксов "sr "/"Ev ".
+   * @param {unknown} s Проверяемый текст ответа.
+   * @returns {boolean} true — блок целиком является мышлением.
+   */
   function isThinkingAssistant(s) {
     if (typeof s !== 'string') return false;
     var t = s.trim();
@@ -283,6 +442,11 @@
     return THINKING_ASSISTANT_RE.test(t);
   }
 
+  /**
+   * Индекс первого кириллического символа.
+   * @param {string} s Проверяемая строка.
+   * @returns {number} Индекс символа или -1.
+   */
   function firstCyrillicIndex(s) {
     for (var i = 0; i < s.length; i++) {
       var c = s.charCodeAt(i);
@@ -291,8 +455,12 @@
     return -1;
   }
 
-  // Срез ведущего thinking-фрагмента (до первого кириллического символа).
-  // Чисто английский блок обрабатывается isThinkingAssistant отдельно.
+  /**
+   * Срез ведущего thinking-фрагмента (до первого кириллического символа).
+   * Чисто английский блок обрабатывается isThinkingAssistant отдельно.
+   * @param {string} s Текст ответа.
+   * @returns {string} Текст без ведущего мышления ('' — мышление целиком).
+   */
   function stripLeadingThinking(s) {
     if (typeof s !== 'string') return s;
     var t = s.trim();
@@ -302,10 +470,14 @@
     return t.slice(idx);
   }
 
-  // Маркеры markdown-разметки для выбора канонического сегмента ответа.
-  // В одном ходе batchexecute лежат ТРИ копии ответа: канонический markdown-ответ
-  // (turn[3][0][0][1][0]), англ. thinking-саммари (turn[3][0][0][37]) и plain-копия
-  // без markdown (turn[3][12][0][0]). Канон — сегмент с markdown-разметкой.
+  /**
+   * Маркеры markdown-разметки для выбора канонического сегмента ответа.
+   * В одном ходе batchexecute лежат ТРИ копии ответа: канонический markdown-ответ
+   * (turn[3][0][0][1][0]), англ. thinking-саммари (turn[3][0][0][37]) и plain-копия
+   * без markdown (turn[3][12][0][0]). Канон — сегмент с markdown-разметкой.
+   * @param {unknown} t Проверяемый текст сегмента.
+   * @returns {boolean} true — в сегменте есть markdown-разметка.
+   */
   function hasMarkdownMarkup(t) {
     if (typeof t !== 'string') return false;
     if (/\*\*[^*\n]+\*\*/.test(t)) return true; // **жирный**
@@ -319,8 +491,12 @@
     return false;
   }
 
-  // Канонический сегмент ответа: первый сегмент с markdown-разметкой;
-  // при отсутствии разметки — первый сегмент-ответ (фолбэк).
+  /**
+   * Канонический сегмент ответа: первый сегмент с markdown-разметкой;
+   * при отсутствии разметки — первый сегмент-ответ (фолбэк).
+   * @param {string[]} parts Санированные сегменты ответа.
+   * @returns {string} Канонический текст ('' для пустого списка).
+   */
   function pickCanonicalAnswer(parts) {
     if (!parts || !parts.length) return '';
     for (var i = 0; i < parts.length; i++) {
@@ -329,17 +505,19 @@
     return parts[0];
   }
 
-  // Извлечение канонического ответа хода. В batchexecute ход несёт ТРИ копии ответа:
-  //   - markdown-ответ: turn[3][0][0][1][0] (канон, с разметкой);
-  //   - англ. thinking-саммари: turn[3][0][0][37];
-  //   - plain-копия без разметки: turn[3][12][0][0].
-  // Берём сегменты из контейнера turn[3][0][0][1] (не через collectTurnText, т.к. его
-  // isFileLike отбрасывает markdown-ответ, содержащий ".docx" в списке файлов) и выбираем
-  // первый markdown-сегмент. Фолбэк — прежний run-skip сбор collectTurnText (страховка).
-  // v1.5.2: канонический ответ не трогаем thinking-эвристиками. Возврат
-  // { text, isFallback }: isFallback=true означает, что текст добыт путём
-  // collectTurnText (fallback) — только к нему применяются isThinkingAssistant /
-  // stripLeadingThinking. Канонический markdown-сегмент сохраняется как есть.
+  /**
+   * Извлечение канонического ответа хода. В batchexecute ход несёт ТРИ копии ответа:
+   *   - markdown-ответ: turn[3][0][0][1][0] (канон, с разметкой);
+   *   - англ. thinking-саммари: turn[3][0][0][37];
+   *   - plain-копия без разметки: turn[3][12][0][0].
+   * Берём сегменты из контейнера turn[3][0][0][1] (не через collectTurnText, т.к. его
+   * isFileLike отбрасывает markdown-ответ, содержащий ".docx" в списке файлов) и выбираем
+   * первый markdown-сегмент. Фолбэк — прежний run-skip сбор collectTurnText (страховка).
+   * v1.5.2: канонический ответ не трогаем thinking-эвристиками.
+   * @param {any} turn Ход batchexecute.
+   * @returns {{text: string, isFallback: boolean}} Текст ответа и признак fallback-пути
+   *   (isFallback=true — текст добыт через collectTurnText).
+   */
   function extractCanonicalAnswer(turn) {
     var cands = [];
     var isFallback = false;
@@ -373,8 +551,19 @@
   //   http://googleusercontent.com/deep_research_confirmation_content/0 (план)
   // Инъекция stateless: при КАЖДОМ парсе (handleOuter) вычисляем {planText,reportText}
   // детерминированно из realTurns и в buildTurnMessages заменяем ссылку на текст.
+  /** @type {number} Минимальная длина строки-отчёта Deep Research. */
   var DR_REPORT_MIN_LEN = 1000;
+  /** @type {number} Минимальная длина строки-плана Deep Research. */
   var DR_PLAN_MIN_LEN = 60;
+
+  /**
+   * Сбор длинных строковых кандидатов DR (глубже minLen символов).
+   * @param {any} node Узел дерева хода.
+   * @param {string[]} out Накопитель строк.
+   * @param {number} minLen Минимальная длина строки.
+   * @param {number} depth Текущая глубина рекурсии.
+   * @returns {void}
+   */
   function collectDrStrings(node, out, minLen, depth) {
     try {
       if (typeof node === 'string') {
@@ -386,10 +575,20 @@
       }
     } catch (e) { swallowSoft(e, 'gemini-utils:collectDrStrings'); }
   }
+  /**
+   * Санированный текст строки (trim).
+   * @param {string} s Сырая строка.
+   * @returns {string} Санированный текст.
+   */
   function ctText(s) { return sanitizeGeminiText(s).trim(); }
-  // extractDrTexts(raw)(realTurns) → { planText, reportText }
-  // report: самая длинная контентная строка (>=1000), не URL/junk.
-  // plan: самая длинная контентная строка в промежутке [60, report.length), не URL/junk.
+
+  /**
+   * Извлечение текстов Deep Research из ходов.
+   * report: самая длинная контентная строка (>=1000), не URL/junk.
+   * plan: самая длинная контентная строка в промежутке [60, report.length), не URL/junk.
+   * @param {any[]} realTurns Ходы разговора.
+   * @returns {GeminiDrTexts} Тексты плана и отчёта ('' если не найдены).
+   */
   function extractDrTexts(realTurns) {
     var res = { planText: '', reportText: '' };
     try {
@@ -421,10 +620,22 @@
     return res;
   }
 
-  var lastDrTexts = { planText: '', reportText: '' }; // state последнего handleOuter (для splitTurnMessages)
+  /** @type {GeminiDrTexts} State последнего handleOuter (для splitTurnMessages). */
+  var lastDrTexts = { planText: '', reportText: '' };
+
+  /**
+   * Установка DR-текстов текущего парса (перед buildTurnMessages).
+   * @param {GeminiDrTexts|null|undefined} d Тексты Deep Research.
+   * @returns {void}
+   */
   function __setDrTexts(d) { try { lastDrTexts = d || { planText: '', reportText: '' }; } catch (e) { } }
 
-  // Замена голой ссылки-заглушки на контент DR в тексте assistant.
+  /**
+   * Замена голой ссылки-заглушки на контент DR в тексте assistant.
+   * @param {string} text Текст ответа.
+   * @param {GeminiDrTexts|null|undefined} dr Тексты Deep Research.
+   * @returns {string} Текст с подставленными отчётом/планом.
+   */
   function injectDrLinks(text, dr) {
     try {
       if (typeof text !== 'string') return text;
@@ -440,6 +651,13 @@
   }
 
   // ---- turn → до двух сообщений ----
+
+  /**
+   * Ход → до двух сообщений: {role:'user'} (вопрос) и {role:'assistant'} (ответ).
+   * thinking-эвристики применяются только к fallback-пути (canon.isFallback).
+   * @param {any} turn Ход batchexecute.
+   * @returns {Array<{role: string, text: string}>} Сообщения хода (user/assistant).
+   */
   function buildTurnMessages(turn) {
     var question = extractUserQuestion(turn);
     // Канон: только markdown-сегмент ответа; thinking-саммари и plain-копию не конкатенируем.
@@ -473,6 +691,14 @@
   }
 
   // ---- разбор batchexecute ----
+
+  /**
+   * Разбор одного внешнего блока batchexecute (outer[0][1] === 'hNvQHb'):
+   * turns → ходы → сообщения, дописываются в out. Кривой блок не ломает остальные.
+   * @param {any} outer Внешний блок (JSON.parse строки ответа).
+   * @param {GeminiTurnEntry[]} out Накопитель сообщений.
+   * @returns {void}
+   */
   function handleOuter(outer, out) {
     try {
       if (!Array.isArray(outer) || !Array.isArray(outer[0])) return;
@@ -513,6 +739,12 @@
     } catch (e) { logSegmentParseFail(e, 'handleOuter'); /* кривой блок не ломает остальные */ }
   }
 
+  /**
+   * Разбор ответа в формате byte-chunked: "<len>\n<payload>" с заголовком )]}'.
+   * @param {string} raw Сырое тело ответа batchexecute.
+   * @param {GeminiTurnEntry[]} out Накопитель сообщений.
+   * @returns {void}
+   */
   function parseByBytes(raw, out) {
     var bytes;
     try { bytes = new TextEncoder().encode(raw); } catch (e) { return; }
@@ -537,6 +769,12 @@
     }
   }
 
+  /**
+   * Фолбэк-разбор по строкам (когда byte-chunked разбор не дал сообщений).
+   * @param {string} raw Сырое тело ответа batchexecute.
+   * @param {GeminiTurnEntry[]} out Накопитель сообщений.
+   * @returns {void}
+   */
   function parseByLines(raw, out) {
     var lines = raw.split('\n');
     for (var i = 0; i < lines.length; i++) {
@@ -549,6 +787,11 @@
     }
   }
 
+  /**
+   * Полный разбор сетевой истории Gemini (batchexecute hNvQHb).
+   * @param {string} raw Сырое тело ответа (HTML/скрипт или byte-chunked поток).
+   * @returns {GeminiHistoryResult} Сообщения, модель, оценка токенов, текст и счётчик.
+   */
   function parseGeminiHistory(raw) {
     var parsed = [];
     parseByBytes(raw, parsed);
@@ -577,6 +820,26 @@
     };
   }
 
+  /**
+   * Публичный API парсера batchexecute (window.GeminiBatchexecuteParser / module.exports).
+   * @typedef {Object} GeminiBatchexecuteParserApi
+   * @property {string} PARSER_VERSION Версия логики парсинга.
+   * @property {typeof stripAttachmentTokens} stripAttachmentTokens Вырезание токенов вложений.
+   * @property {typeof sanitizeGeminiText} sanitizeGeminiText Санация текста Gemini.
+   * @property {typeof collectTurnText} collectTurnText Stateful-сбор текста ответа.
+   * @property {typeof isThinkingAssistant} isThinkingAssistant Предикат чисто английского мышления.
+   * @property {typeof firstCyrillicIndex} firstCyrillicIndex Индекс первого кириллического символа.
+   * @property {typeof stripLeadingThinking} stripLeadingThinking Срез ведущего мышления.
+   * @property {typeof buildTurnMessages} splitTurnMessages Ход → сообщения.
+   * @property {typeof extractDrTexts} extractDrTexts Тексты Deep Research.
+   * @property {typeof injectDrLinks} injectDrLinks Инъекция DR-контента вместо ссылок-заглушек.
+   * @property {typeof __setDrTexts} __setDrTexts Установка DR-текстов текущего парса.
+   * @property {typeof fileRefFromNode} fileRefFromNode Нормализованный ref вложения.
+   * @property {typeof collectTurnFiles} collectTurnFiles Вложения хода.
+   * @property {typeof parseGeminiHistory} parseGeminiHistory Полный разбор истории.
+   */
+
+  /** @type {GeminiBatchexecuteParserApi} */
   var api = {
     PARSER_VERSION: PARSER_VERSION,
     stripAttachmentTokens: stripAttachmentTokens,

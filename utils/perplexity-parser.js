@@ -5,14 +5,42 @@
  * Источник ассистентских сообщений: entry.blocks (workflow/web_results) и, при
  * их отсутствии, fallback entry.text — живой REST /rest/thread/{slug} отдаёт
  * JSON-строку шагов: FINAL-шаг → content.answer (JSON-строка) → поле answer.
- *
- * @param {object} json - распарсенный JSON ответа истории Perplexity
- * @returns {{ model: string, messages: Array<{role: string, text: string}>, pieces: string[], ids: string[], count: number, lastText: string, modelSlug: string }}
  */
 
 (function () {
+  /**
+   * Сообщение истории Perplexity.
+   * @typedef {Object} PerplexityThreadMessage
+   * @property {string} role Роль автора: user/assistant.
+   * @property {string} text Текст сообщения.
+   */
+
+  /**
+   * Результат parsePerplexityThread.
+   * @typedef {Object} PerplexityThreadResult
+   * @property {string} text Все куски через перевод строки.
+   * @property {number} count Число собранных сообщений.
+   * @property {string} lastText Текст последнего собранного сообщения.
+   * @property {string} modelSlug Модель из display_model/user_selected_model.
+   * @property {string[]} pieces Куски в порядке следования.
+   * @property {string[]} ids Идентификаторы кусков (entryId_user / entryId_assistant).
+   * @property {PerplexityThreadMessage[]} messages Сообщения {role, text}.
+   * @property {string} model Дубликат modelSlug (совместимость).
+   */
+
+  /**
+   * Разбор JSON истории Perplexity в сообщения: user — query_str, assistant — блоки
+   * workflow/web_results, а при их отсутствии fallback entry.text (FINAL-шаг → answer).
+   * @param {any} json Распарсенный JSON ответа истории Perplexity.
+   * @returns {PerplexityThreadResult} Куски, сообщения, модель и счётчики.
+   */
   function parsePerplexityThread(json) {
-    // getTrim: чтение поля с учётом пробелов в ключах
+    /**
+     * Чтение поля с учётом пробелов в ключах объекта.
+     * @param {any} obj Объект ответа.
+     * @param {string} name Имя поля (сравнивается после trim).
+     * @returns {any} Значение поля или undefined.
+     */
     function getTrim(obj, name) {
       if (!obj || typeof obj !== 'object') return undefined;
       var keys = Object.keys(obj);
@@ -200,9 +228,13 @@
     };
   }
 
-  // v2.0.34: Perplexity дописывает в адрес истории limit=20&offset=0&from_first=false —
-  // это урезанный снимок (последние 20 записей). Для шаблона полной истории такие
-  // параметры выкидываем, остальные (with_parent_info и т.п.) и #hash сохраняем.
+  /**
+   * v2.0.34: Perplexity дописывает в адрес истории limit=20&offset=0&from_first=false —
+   * это урезанный снимок (последние 20 записей). Для шаблона полной истории такие
+   * параметры выкидываем, остальные (with_parent_info и т.п.) и #hash сохраняем.
+   * @param {string|null|undefined} urlStr Адрес истории Perplexity.
+   * @returns {string} Адрес без limit/offset/from_first, с сохранёнными прочими параметрами и #hash.
+   */
   function stripPerplexityHistoryTruncation(urlStr) {
     var src = String(urlStr || '');
     if (!src) return src;

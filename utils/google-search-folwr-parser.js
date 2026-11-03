@@ -28,6 +28,76 @@
  */
 
 (function () {
+  /**
+   * Ход переписки folwr: вопрос и ответ (любой из них может отсутствовать).
+   * @typedef {Object} FolwrTurn
+   * @property {string} id Идентификатор хода (jsuid из разметки либо синтетический 'idxN').
+   * @property {string|null} userText Вопрос пользователя; null — вопрос не найден.
+   * @property {string|null} assistantText Ответ ассистента; null — ответ не найден.
+   */
+
+  /**
+   * Сообщение для базы/экспорта; по форме совместимо с Message (types/message.d.ts).
+   * @typedef {Object} FolwrMessage
+   * @property {string} role Роль автора: user/assistant.
+   * @property {string} text Текст сообщения.
+   */
+
+  /**
+   * Результат разбора снимка folwr.
+   * @typedef {Object} FolwrParseResult
+   * @property {string} threadId Идентификатор треда (data-session-thread-id) либо ''.
+   * @property {FolwrTurn[]} turns Ходы в document-порядке.
+   * @property {FolwrMessage[]} messages Плоский список сообщений user/assistant.
+   * @property {string} text Склейка текстов сообщений через '\n'.
+   * @property {number} count Число сообщений в messages.
+   */
+
+  /**
+   * Вид страницы продолжения диалога.
+   * @typedef {'http-error'|'empty-body'|'cursor-repeat'|'no-new-turns'|'new-turns'} FolwrContinuationKind
+   */
+
+  /**
+   * Классификация страницы продолжения: можно ли считать историю полной.
+   * @typedef {Object} FolwrContinuation
+   * @property {FolwrContinuationKind} kind Вид исхода запроса.
+   * @property {boolean} complete true — истории больше нет, базу можно объявить полной.
+   * @property {boolean} canContinue true — имеет смысл запрашивать следующую страницу.
+   * @property {number} status HTTP-статус (0, если неизвестен).
+   * @property {boolean} ok Признак успешного запроса.
+   * @property {number} bodyLength Длина тела ответа в байтах.
+   * @property {number} newTurns Сколько НОВЫХ ходов дал ответ.
+   * @property {string|null} cursor Полученный курсор продолжения.
+   * @property {boolean} cursorRepeated Курсор совпал с отправленным.
+   * @property {string} log Готовая строка лога.
+   */
+
+  /**
+   * Утилиты разбора Google Search (window.GoogleFolwrUtils и module.exports).
+   * @typedef {Object} GoogleFolwrUtilsApi
+   * @property {typeof countTurnContainers} countTurnContainers Счётчик turn-контейнеров.
+   * @property {typeof extractTurnsFromDocument} extractTurnsFromDocument Ходы из живого DOM.
+   * @property {typeof mergeTurnsByKey} mergeTurnsByKey Слияние по каноническому ключу.
+   * @property {typeof extractContinuationToken} extractContinuationToken Курсор продолжения.
+   * @property {typeof mergeTurnsById} mergeTurnsById Слияние по id.
+   * @property {typeof mergeTurnsMonotone} mergeTurnsMonotone Монотонное слияние.
+   * @property {typeof classifyFolwrContinuation} classifyFolwrContinuation Классификация страницы.
+   * @property {typeof canonicalTurnKeyOf} canonicalTurnKeyOf Канонический ключ хода.
+   * @property {typeof canonicalAnswerBody} canonicalAnswerBody Тело ответа без обёртки.
+   * @property {typeof canonicalizeTurnForThread} canonicalizeTurnForThread Каноническая форма хода.
+   * @property {typeof normalizeTurnKeyPart} normalizeTurnKeyPart Нормализация части ключа.
+   * @property {typeof renderCodeBlock} renderCodeBlock Рендер код-блока фенсом.
+   * @property {typeof answerTextOf} answerTextOf Текст контент-узла ответа.
+   * @property {typeof answerDomNodes} answerDomNodes Отбор контент-узлов DOM.
+   * @property {typeof isCodeBlockElement} isCodeBlockElement Признак код-блока.
+   */
+
+  /**
+   * Декодирует HTML-сущности: именованные (&quot;, &amp;, …) и числовые (&#123;).
+   * @param {string} s Разметка или текст с сущностями.
+   * @returns {string} Текст с раскрытыми сущностями; '' для пустого входа.
+   */
   function decodeEntities(s) {
     if (!s) return '';
     var out = String(s);
@@ -48,9 +118,16 @@
   // строкам, иначе многострочное окно кода превратится в одну строку и форматирование погибнет.
   // Фенс может быть ДЛИННЕЕ трёх кавычек (если внутри кода есть ```), поэтому квантификатор
   // {3,} и обратная ссылка: закрывающий фенс — ровно той же длины, что открывающий.
+  /** @type {RegExp} Фенс markdown-кода: открывающий и закрывающий одинаковой длины ({3,}). */
   var FENCE_RE = /(`{3,})[\s\S]*?\1/g;
 
   // Применяет fn к сегментам ВНЕ фенсов; сами фенсы возвращаются байтово как есть.
+  /**
+   * Применяет fn к сегментам ВНЕ фенсов; сами фенсы возвращаются байтово как есть.
+   * @param {string|null|undefined} s Исходный текст.
+   * @param {(seg: string) => string} fn Обработчик сегмента вне фенса.
+   * @returns {string} Текст с обработанными сегментами.
+   */
   function mapOutsideFences(s, fn) {
     var str = String(s == null ? '' : s);
     var out = '';
@@ -64,6 +141,11 @@
     return out + fn(str.slice(last));
   }
 
+  /**
+   * Сегмент без тегов: script/style вырезаются, теги → пробел, пробелы схлопываются.
+   * @param {string} seg Сегмент разметки (вне фенса).
+   * @returns {string} Текст без тегов в одну строку.
+   */
   function stripTagsSeg(seg) {
     return String(seg)
       .replace(/<script[\s\S]*?<\/script>/gi, ' ')
@@ -74,11 +156,21 @@
 
   // O-45: текст без тегов, но фенсы (окна кода) не трогаются — раньше `\s+` → ' ' схлопывал
   // многострочный код в одну строку. Для строки без фенсов результат байтово прежний.
+  /**
+   * Текст без тегов; фенсы (окна кода) не трогаются — O-45.
+   * @param {string} html Разметка с возможными фенсами.
+   * @returns {string} Текст без тегов и краевых пробелов.
+   */
   function stripTags(html) {
     if (!html) return '';
     return mapOutsideFences(html, stripTagsSeg).replace(/^\s+/, '').replace(/\s+$/, '');
   }
 
+  /**
+   * Сегмент ответа без тегов с сохранением переводов строк.
+   * @param {string} seg Сегмент разметки (вне фенса).
+   * @returns {string} Текст: строки обрезаны по краям, пустые серии схлопнуты.
+   */
   function sanitizeAssistantSeg(seg) {
     return String(seg)
       .replace(/<script[\s\S]*?<\/script>/gi, ' ')
@@ -94,12 +186,22 @@
   // Очистка текста ответа с сохранением переводов строк (markdown-строки таблиц не схлопываются).
   // O-45: сегменты внутри фенсов (окна кода) проходят КАК ЕСТЬ — построчный trim и схлопывание
   // пробелов уничтожили бы отступы кода; для текста без фенсов результат байтово прежний.
+  /**
+   * Очистка текста ответа с сохранением переводов строк; сегменты внутри фенсов — как есть.
+   * @param {string} s Текст ответа (возможно с разметкой).
+   * @returns {string} Очищенный текст; '' для пустого входа.
+   */
   function sanitizeAssistant(s) {
     if (!s) return '';
     return mapOutsideFences(s, sanitizeAssistantSeg).replace(/^\s+/, '').replace(/\s+$/, '');
   }
 
   // Ячейка таблицы: текст без внутренних тегов, без мусорных узлов.
+  /**
+   * Ячейка таблицы: текст без внутренних тегов, без мусорных узлов (script/style/button/svg).
+   * @param {any} cellEl Ячейка th/td.
+   * @returns {string} Текст ячейки.
+   */
   function tableCellText(cellEl) {
     var clone = cellEl.cloneNode(true);
     clone.querySelectorAll('script, style, button, svg').forEach(function (el) { el.remove(); });
@@ -107,6 +209,11 @@
   }
 
   // Таблица → markdown-строки: каждая строка таблицы = "| ячейка | ячейка |", строки через '\n'.
+  /**
+   * Таблица → markdown-строки вида «| ячейка | ячейка |».
+   * @param {any} tableEl Элемент table.
+   * @returns {string} Строки таблицы через '\n'; '' для пустой таблицы.
+   */
   function tableToMarkdown(tableEl) {
     var rows = tableEl.querySelectorAll('tr');
     var lines = [];
@@ -122,6 +229,11 @@
     return lines.join('\n');
   }
 
+  /**
+   * Заголовок-вопрос пользователя (h2 с классом iMqumd).
+   * @param {any} el Проверяемый элемент.
+   * @returns {boolean} true — это заголовок вопроса, а не контент ответа.
+   */
   function isQuestionHeading(el) {
     return el.tagName === 'H2' && el.className && String(el.className).indexOf('iMqumd') !== -1;
   }
@@ -135,16 +247,28 @@
   // потерял бы маркеры языка). Здесь: отбор код-контейнеров + рендер в фенс ОДНИМ хелпером,
   // который переиспользуют сетевой путь (parseGoogleFolwrOpen), DOM-добор (extractTurnsFromDocument)
   // и DOM-путь адаптера (adapters/google-search-adapter.js).
+  /** @type {string} Селектор код-контейнеров: pre/code и блочные обёртки окна кода. */
   var CODE_CONTAINER_SEL = 'pre, code, [class*="code-block"], [class*="codeBlock"], [class*="codeblock"]';
   // Метка языка — ASCII-токен (python, js, bash, c++…). Кириллическая проза меткой не является,
   // иначе соседний абзац («Пример:») уехал бы в маркер языка.
+  /** @type {RegExp} Метка языка: короткий ASCII-токен, кириллическая проза меткой не является. */
   var CODE_LANG_RE = /^[A-Za-z][A-Za-z0-9+#._-]{0,19}$/;
 
+  /**
+   * Строка классов узла (className как строка; '' для узла без классов).
+   * @param {any} el Проверяемый узел.
+   * @returns {string} Классы через пробел.
+   */
   function classOf(el) {
     try { return String((el && el.className) || ''); } catch (e) { return ''; }
   }
 
   // Узел ПОХОЖ на код по тегу/классу (без решения «блок это или инлайн»).
+  /**
+   * Узел ПОХОЖ на код по тегу/классу (без решения «блок это или инлайн»).
+   * @param {any} el Проверяемый узел.
+   * @returns {boolean} true — pre/code либо класс …code-block….
+   */
   function isCodeLikeNode(el) {
     if (!el || !el.tagName) return false;
     var tag = String(el.tagName).toUpperCase();
@@ -155,6 +279,11 @@
   // (кнопка «Скопировать код», script/style/svg) снимается, <br> становится переносом строки,
   // а если переносов нет и строк-детей несколько (в живом DOM строки кода — отдельные div'ы) —
   // собираем по строке на элемент. Краевые пустые строки и хвостовые пробелы не значимы.
+  /**
+   * Текст кода с сохранением переносов строк и отступов.
+   * @param {any} el Код-контейнер.
+   * @returns {string} Код без сервисной обвязки; '' для узла без DOM-API.
+   */
   function codeTextOf(el) {
     if (!el || typeof el.cloneNode !== 'function') return '';
     var clone;
@@ -199,6 +328,11 @@
 
   // Носитель текста кода: самый глубокий <pre>/<code> внутри контейнера — обёртка окна кода
   // может нести ещё и метку языка, и обвязку, в тело кода они попадать не должны.
+  /**
+   * Носитель текста кода: самый глубокий pre/code внутри контейнера (иначе сам узел).
+   * @param {any} el Код-контейнер.
+   * @returns {any} Узел, из которого читается текст кода.
+   */
   function codeBodyElement(el) {
     try {
       var inner = el.querySelectorAll ? el.querySelectorAll('pre, code') : null;
@@ -211,6 +345,12 @@
   // code-lang="python"), (3) СОСЕДНИЙ узел-метка ПЕРЕД окном кода — так устроен живой DOM GSA:
   // отдельный StaticText «python» → узел code с текстом кода. Меткой считается только короткий
   // ASCII-токен (CODE_LANG_RE): прозаический сосед метку не подменяет.
+  /**
+   * Метка языка окна кода: явный аргумент → атрибут/класс контейнера → соседний узел-метка.
+   * @param {any} el Код-контейнер.
+   * @param {string|null|undefined} [langHint] Явная метка языка, если известна.
+   * @returns {string} Метка языка либо '' (без метки).
+   */
   function detectCodeLang(el, langHint) {
     if (langHint != null && CODE_LANG_RE.test(String(langHint).trim())) return String(langHint).trim();
     var attrNames = ['code-lang', 'data-lang', 'data-code-lang'];
@@ -242,6 +382,11 @@
   // Код-БЛОК, а не инлайн-фрагмент: <pre>; <code> с переносом строки или меткой языка; блочная
   // обёртка окна кода (class …code-block…). Инлайн <code> в прозе («Код <code>nums.sort()</code>»)
   // блоком НЕ считается — он остаётся инлайн-текстом, а не превращается в фенс.
+  /**
+   * Код-БЛОК, а не инлайн-фрагмент: pre; code с переносом строки или меткой языка; блочная обёртка.
+   * @param {any} el Проверяемый узел.
+   * @returns {boolean} true — узел рендерится фенсом.
+   */
   function isCodeBlockElement(el) {
     if (!el || !el.tagName) return false;
     var tag = String(el.tagName).toUpperCase();
@@ -255,6 +400,12 @@
   // Код-блок → markdown-фенс СО ЗНАКОМ ЯЗЫКА (спецификация O-45): ```lang\n<код>\n```.
   // Без метки — пустой язык: ```\n<код>\n```. Если внутри кода есть тройные кавычки, фенс
   // удлиняется (CommonMark), иначе окно кода развалилось бы на середине.
+  /**
+   * Код-блок → markdown-фенс со знаком языка: ```lang\n<код>\n``` (O-45).
+   * @param {any} node Код-блок.
+   * @param {string|null|undefined} [langHint] Явная метка языка.
+   * @returns {string} Фенс с кодом; '' для пустого кода.
+   */
   function renderCodeBlock(node, langHint) {
     if (!node) return '';
     var body = codeBodyElement(node);
@@ -270,6 +421,11 @@
   // Текст контент-узла ответа: код-контейнер → фенс; обычный узел (чанк прозы, заголовок…) —
   // его текст, в котором код-окна ПОДМЕНЕНЫ фенсами: окно кода, лежащее внутри чанка,
   // не теряется и не схлопывается. Инлайн <code> не трогаем.
+  /**
+   * Текст контент-узла ответа: код-контейнер → фенс, обычный узел → текст с фенсами вместо кода.
+   * @param {any} node Контент-узел ответа.
+   * @returns {string} Текст узла без краевых пробелов.
+   */
   function answerTextOf(node) {
     if (!node) return '';
     if (isCodeBlockElement(node)) return renderCodeBlock(node);
@@ -308,6 +464,11 @@
   // код-окна между ними (вложенные и инлайн <code> отбрасываются). Один и тот же отбор
   // используют DOM-добор перехватчика (extractTurnsFromDocument) и адаптер — иначе сетевой
   // и DOM-пути разошлись бы по составу кода.
+  /**
+   * Узлы ответа DOM-пути в document-порядке: чанки прозы + самостоятельные код-окна (O-45).
+   * @param {any} root Корень поиска (документ живого DOM).
+   * @returns {any[]} Контент-узлы без вложенных дублей.
+   */
   function answerDomNodes(root) {
     var doc = root || (typeof document !== 'undefined' ? document : null);
     if (!doc || typeof doc.querySelectorAll !== 'function') return [];
@@ -331,20 +492,37 @@
   // приклеивались к ходу ассистента через assignContentToTurns. Отсекаем их по тексту:
   // заголовок чипа веб-поиска и «Вы сказали:»-реплику, не привязанную к turn-контейнеру
   // (настоящий вопрос всегда h2.iMqumd внутри turn, поэтому в contentNodes он не попадает).
+  /** @type {RegExp} Заголовок чипа веб-поиска: начало блока «связанных запросов» (v1.5.2). */
   var WEB_SEARCH_CHIP_RE = /(?:Самые популярные результаты веб-поиска по этой теме|People also search|Related searches|Похожие запросы|Связанные запросы)/i;
+  /** @type {RegExp} Чужая реплика «Вы сказали: "…"» вне turn-контейнера. */
   var FOREIGN_QUESTION_RE = /^Вы сказали:\s*"/;
 
+  /**
+   * Текст узла без краевых пробелов (устойчиво к узлам без DOM-API).
+   * @param {any} node Проверяемый узел.
+   * @returns {string} Текст узла либо ''.
+   */
   function nodeText(node) {
     try { return (node.textContent || '').trim(); } catch (e) { return ''; }
   }
 
   // v1.5.2: заголовок чипа веб-поиска в folwr начинает блок «связанных запросов»,
   // который идёт ПОСЛЕ последнего ответа модели и ранее приклеивался к ходу ассистента.
+  /**
+   * Узел — заголовок чипа веб-поиска (артефакт UI, а не ответ модели).
+   * @param {any} node Проверяемый узел.
+   * @returns {boolean} true — узел начинает блок связанных запросов.
+   */
   function isWebSearchChipNode(node) {
     return WEB_SEARCH_CHIP_RE.test(nodeText(node));
   }
 
   // Чужая пользовательская реплика вне turn-контейнера (настоящий вопрос — h2.iMqumd внутри turn).
+  /**
+   * Узел — чужая пользовательская реплика вне turn-контейнера.
+   * @param {any} node Проверяемый узел.
+   * @returns {boolean} true — узел не относится к ответу модели.
+   */
   function isForeignQuestionNode(node) {
     return FOREIGN_QUESTION_RE.test(nodeText(node));
   }
@@ -353,6 +531,11 @@
   // Формат: «- **Метка**: текст» (метка — первый bold/strong в пункте), без метки — «- текст».
   // Вложенные списки превращаются в текст родительского li, поэтому все пункты
   // входят в итоговый текст в исходном порядке.
+  /**
+   * Пункт списка → markdown-строка «- **Метка**: текст» либо «- текст».
+   * @param {any} liEl Элемент li.
+   * @returns {string} Markdown-строка пункта; '' для пустого пункта.
+   */
   function listItemToMarkdown(liEl) {
     var clone = liEl.cloneNode(true);
     clone.querySelectorAll('script, style, button, svg').forEach(function (el) { el.remove(); });
@@ -368,6 +551,11 @@
     }
     return rest ? '- ' + rest : '';
   }
+  /**
+   * Список (ul/ol) → markdown-пункты через '\n'.
+   * @param {any} listEl Элемент списка.
+   * @returns {string} Текст списка; '' для пустого списка.
+   */
   function listToText(listEl) {
     var items = listEl.querySelectorAll('li');
     var lines = [];
@@ -383,6 +571,11 @@
   // дублировался: если список лежит ВНУТРИ чанка .n6owBd.awi2gc — чанк уже содержит его текст;
   // если список — самостоятельный узел между заголовком и финальным абзацем — он попадает сюда
   // как отдельный контент-узел и больше не теряется.
+  /**
+   * ВСЕ контент-узлы ответа в document-порядке (чанки, таблицы, заголовки, списки, код-окна).
+   * @param {any} doc Документ снимка folwr.
+   * @returns {any[]} Узлы без вложенных дублей; заголовки вопросов исключены.
+   */
   function gatherAnswerContentNodes(doc) {
     var raw = doc.querySelectorAll('.n6owBd.awi2gc, table, [role="heading"], h2, h3, h4, ul, ol, li, [role="list"], [role="listitem"], ' + CODE_CONTAINER_SEL);
     var out = [];
@@ -404,6 +597,12 @@
 
   // Распределяем глобальные контент-узлы ответа по turn-контейнерам: узел относится к последнему
   // предшествующему ему ходу (compareDocumentPosition FOLLOWING). Возвращает массив answerParts по turn.
+  /**
+   * Распределяет глобальные контент-узлы по turn-контейнерам (последний предшествующий ход).
+   * @param {any[]} turnsArr Turn-контейнеры в document-порядке.
+   * @param {any[]} contentNodes Контент-узлы ответа в document-порядке.
+   * @returns {string[][]} Части ответа по индексу хода.
+   */
   function assignContentToTurns(turnsArr, contentNodes) {
     var answers = [];
     var skipAfterChip = [];
@@ -448,6 +647,11 @@
     return answers;
   }
 
+  /**
+   * Идентификатор треда из разметки (data-session-thread-id).
+   * @param {any} doc Документ снимка folwr.
+   * @returns {string} Идентификатор треда либо ''.
+   */
   function readThreadId(doc) {
     try {
       var el = doc.querySelector('[data-session-thread-id]');
@@ -459,6 +663,11 @@
     return '';
   }
 
+  /**
+   * Разбор снимка folwr: threadId, ходы, сообщения, склеенный текст.
+   * @param {string} htmlText HTML-снимок страницы folwr.
+   * @returns {FolwrParseResult} Результат разбора; пустой результат для не-строки.
+   */
   function parseGoogleFolwrOpen(htmlText) {
     var turns = [];
     var messages = [];
@@ -590,6 +799,11 @@
   // иначе — досбор: merge хвоста/головы из DOM в снимок folwr.
 
   // Число turn-контейнеров в HTML-строке (снимок folwr).
+  /**
+   * Число turn-контейнеров в HTML-строке снимка folwr.
+   * @param {string} htmlText HTML-снимок.
+   * @returns {number} Количество ходов (0 при ошибке разбора).
+   */
   function countTurnContainers(htmlText) {
     if (!htmlText || typeof htmlText !== 'string') return 0;
     try {
@@ -600,6 +814,11 @@
 
   // Извлекает ходы из ЖИВОГО DOM (тот же формат, что GoogleSearchAdapter.extractMessages).
   // Используется для досбора, когда folwr отдал меньше ходов, чем видно на странице.
+  /**
+   * Извлекает ходы из ЖИВОГО DOM (для досбора, когда folwr отдал меньше ходов).
+   * @param {any} doc Документ живого DOM.
+   * @returns {FolwrTurn[]} Ходы в document-порядке.
+   */
   function extractTurnsFromDocument(doc) {
     if (!doc || typeof doc.querySelectorAll !== 'function') return [];
     var turns = [];
@@ -657,6 +876,11 @@
 
   // Токен продолжения (курсор пагинации) в ответе folwr: атрибут data-mstk на скрытых
   // div'ах-контейнерах следующих порций. Возвращает строку курсора или null.
+  /**
+   * Токен продолжения (курсор пагинации): атрибут data-mstk на скрытых div'ах.
+   * @param {string} htmlText HTML-снимок ответа folwr.
+   * @returns {string|null} Курсор либо null, если его нет.
+   */
   function extractContinuationToken(htmlText) {
     if (!htmlText || typeof htmlText !== 'string') return null;
     try {
@@ -691,6 +915,11 @@
   //
   // ГРАНИЦЫ: ключ меняет ТОЛЬКО идентичность (дедуп/seed). Сам текст хода остаётся байтово
   // прежним: reference-значение треда A (12255 знаков / 5658 токенов / 4.4%) не сдвигается.
+  /**
+   * Нормализация части канонического ключа: нижний регистр, NBSP → пробел, только буквы и цифры.
+   * @param {string|null|undefined} s Часть ключа (userText или тело ответа).
+   * @returns {string} Нормализованная строка.
+   */
   function normalizeTurnKeyPart(s) {
     return String(s == null ? '' : s)
       .toLowerCase()
@@ -705,6 +934,11 @@
   // является, иначе вопрос-цитата в прозе принималась бы за обёртку с пустым телом ответа.
   // Проверка «есть ли тело» — простым сравнением (регулярка с «хвостовым непробелом» ложно
   // отклоняла тела из одного слова на коротких строках).
+  /**
+   * Хвост обёртки-вопроса содержит тело ответа (а не только закрывающую кавычку).
+   * @param {string|null|undefined} tail Текст после закрывающей кавычки обёртки.
+   * @returns {boolean} true — тело ответа непустое.
+   */
   function isAnswerWrapperTail(tail) {
     var t = String(tail == null ? '' : tail);
     // Вызывающий уже снял ЗАКРЫВАЮЩУЮ кавычку обёртки; здесь допускаем её повтор
@@ -712,6 +946,7 @@
     var body = t.replace(/^["»”']{0,2}/, '').replace(/^[\s.,:;-]{0,4}/, '');
     return body.replace(/\s+/g, '').length > 0;
   }
+  /** @type {RegExp} Служебная связка «вопрос:» в начале ответа (остаточное эхо). */
   var QUESTION_ASK_RE = /^(?:в\s+)?(?:ответ(?:е)?(?:\s+на\s+вопрос)?|на\s+вопрос|вопрос)\s*:?\s*/i;
 
   // Разбор ОБЁРТКИ-вопроса: {question, body} либо null (обёртки нет).
@@ -719,6 +954,11 @@
   // Кавычка обёртки ищется по ПРЕФИКСУ текста, а не первой кавычке вообще: прозаический
   // ответ, начинающийся с цитаты («"Цитата" — так пишут…»), обёрткой не считается, потому
   // что в префиксе до кавычки нет сервисной связки «…: "Q"» (двоеточия).
+  /**
+   * Префикс обёртки-вопроса до открывающей кавычки включительно («…: "»).
+   * @param {string|null|undefined} text Текст ответа.
+   * @returns {string|null} Префикс либо null, если обёртки нет.
+   */
   function wrapperPrefix(text) {
     var s = String(text == null ? '' : text);
     var head = s.slice(0, 96);
@@ -730,6 +970,11 @@
     return s.slice(0, at + 1 + m[0].length);
   }
 
+  /**
+   * Разбор обёртки-вопроса: {question, body} либо null (обёртки нет).
+   * @param {string|null|undefined} text Текст ответа.
+   * @returns {{question: string, body: string}|null} Вопрос обёртки и тело ответа.
+   */
   function answerWrapperParts(text) {
     var s = String(text == null ? '' : text);
     var prefix = wrapperPrefix(s);
@@ -748,6 +993,11 @@
 
   // Тело ответа без сервисной обёртки. Обычный текст (обёртки нет) возвращается БАЙТОВО тем
   // же: функция ничего не схлопывает и не срезает отступы — только снимает обёртку-вопрос.
+  /**
+   * Тело ответа без сервисной обёртки-вопроса; обычный текст возвращается байтово.
+   * @param {string|null|undefined} text Текст ответа.
+   * @returns {string} Тело ответа.
+   */
   function canonicalAnswerBody(text) {
     var wrapper = answerWrapperParts(text);
     if (wrapper) return wrapper.body;
@@ -771,6 +1021,11 @@
   // вопрос, извлечённый из обёртки; answerBody — ответ без обёртки. Обе живые формы дают
   // РОВНО один ключ: ход сети ('Q' + 'A') и ход добора/сети-эмита (null + 'Ответ в режиме ИИ,
   // исходный запрос: "Q" A') → 'q||a'.
+  /**
+   * Канонический CONTENT-ключ хода: normalized(userText) + '||' + normalized(answerBody).
+   * @param {FolwrTurn|null|undefined} turn Ход переписки.
+   * @returns {string} Ключ вида 'q||a'; '' для пустого хода.
+   */
   function canonicalTurnKeyOf(turn) {
     if (!turn) return '';
     var wrapper = answerWrapperParts(turn.assistantText);
@@ -784,6 +1039,11 @@
   // в userText (структурный источник), сам текст ответа сохраняется БАЙТОВО. Ход уже
   // канонической формы возвращается как есть — повторный проход идемпотентен.
   // Формы различаются ТОЛЬКО вопросом: у хода-обёртки его в структуре нет.
+  /**
+   * Каноническая форма хода: вопрос из обёртки выносится в userText, текст ответа не меняется.
+   * @param {FolwrTurn|null|undefined} turn Ход переписки.
+   * @returns {FolwrTurn|null} Ход канонической формы (идемпотентно).
+   */
   function canonicalizeTurnForThread(turn) {
     if (!turn) return turn;
     var question = (turn.userText == null) ? '' : String(turn.userText).trim();
@@ -801,6 +1061,12 @@
   // Предпочтение формы одного и того же хода: богатейшая (полный текст ответа, затем
   // заполненный вопрос). Форма-обёртка несёт текст ответа целиком, форма сети — только тело;
   // при слиянии двух форм одного хода остаётся обёртка (reference-байты базы не сдвигаются).
+  /**
+   * Предпочтение формы одного и того же хода: длиннее ответ, затем длиннее вопрос.
+   * @param {FolwrTurn|null|undefined} candidate Кандидат на замену.
+   * @param {FolwrTurn|null|undefined} current Текущая сохранённая форма.
+   * @returns {boolean} true — candidate богаче.
+   */
   function isBetterTurn(candidate, current) {
     if (!current) return true;
     var la = String((candidate && candidate.assistantText) || '').length;
@@ -809,6 +1075,12 @@
     return String((candidate && candidate.userText) || '').length >
       String((current && current.userText) || '').length;
   }
+  /**
+   * Нормализованная запись хода: id с fallback, userText/assistantText → null для пустых.
+   * @param {FolwrTurn|null|undefined} t Исходный ход.
+   * @param {string} idFallback Идентификатор, если у хода его нет.
+   * @returns {FolwrTurn} Запись хода.
+   */
   function turnRecord(t, idFallback) {
     return {
       id: (t && t.id != null) ? t.id : idFallback,
@@ -822,6 +1094,12 @@
   // O-32: вторая ось дедупа — КАНОНИЧЕСКИЙ ключ (canonicalTurnKeyOf): один и тот же ход,
   // пришедший разными формами текста и потому с разными id (id-обёртки DOM/кэша vs id-сети),
   // больше не входит в базу дважды.
+  /**
+   * Слияние ходов по id и по каноническому ключу (O-32): дубли не входят в базу дважды.
+   * @param {FolwrTurn[]|null|undefined} baseTurns Базовая база ходов.
+   * @param {FolwrTurn[]|null|undefined} extraTurns Дополнительные (новые) ходы.
+   * @returns {FolwrTurn[]} Слитый список в порядке базы.
+   */
   function mergeTurnsById(baseTurns, extraTurns) {
     baseTurns = Array.isArray(baseTurns) ? baseTurns : [];
     extraTurns = Array.isArray(extraTurns) ? extraTurns : [];
@@ -853,6 +1131,12 @@
   // Единая точка для «накопитель ∪ новая база» (activateThread/applyTurns/mergeTurns):
   // дедуп по id (пагинация) И по каноническому ключу (одна и та же пара в разных формах).
   // Порядок базы сохраняется; новый ход дописывается в хвост.
+  /**
+   * Монотонное слияние по каноническому ключу: счётчик ходов не может упасть (O-32).
+   * @param {FolwrTurn[]|null|undefined} baseTurns Базовая база ходов.
+   * @param {FolwrTurn[]|null|undefined} extraTurns Дополнительные ходы.
+   * @returns {FolwrTurn[]} Слитый список.
+   */
   function mergeTurnsMonotone(baseTurns, extraTurns) {
     return mergeTurnsById(baseTurns, extraTurns);
   }
@@ -863,6 +1147,12 @@
   // РАЗНЫЕ ключи, и один и тот же ход входил в базу дважды (живой дефект 16:47:48:
   // 6 → 12 ходов, 18 сообщений, textLen 12255 → 24764, бейдж 4.4% → 9%).
   // При совпадении ключа ход не дублируется: остаётся богатейшая форма (isBetterTurn).
+  /**
+   * Досбор: сливает ходы folwr и DOM по каноническому ключу; побеждает богатейшая форма.
+   * @param {FolwrTurn[]|null|undefined} baseTurns Ходы из сети.
+   * @param {FolwrTurn[]|null|undefined} extraTurns Ходы DOM-добора.
+   * @returns {FolwrTurn[]} Слитый список без дублей.
+   */
   function mergeTurnsByKey(baseTurns, extraTurns) {
     baseTurns = Array.isArray(baseTurns) ? baseTurns : [];
     extraTurns = Array.isArray(extraTurns) ? extraTurns : [];
@@ -900,6 +1190,11 @@
   //   kind: 'http-error' | 'empty-body' | 'cursor-repeat' | 'no-new-turns' | 'new-turns'
   //   complete=true   → истории больше нет, базу можно объявить ПОЛНОЙ;
   //   canContinue=true → имеет смысл запрашивать следующую страницу (только 'new-turns').
+  /**
+   * Классификация страницы ПРОДОЛЖЕНИЯ по содержимому, а не по длине (v1.17).
+   * @param {{ok?: boolean, status?: number|null, bodyLength?: number, newTurns?: number, cursor?: string|null, sentCursor?: string|null}} input Результат запроса.
+   * @returns {FolwrContinuation} Вид исхода и признаки complete/canContinue.
+   */
   function classifyFolwrContinuation(input) {
     var i = input || {};
     var ok = i.ok === true;
@@ -910,7 +1205,9 @@
     var sentCursor = i.sentCursor ? String(i.sentCursor) : null;
     var cursorRepeated = !!(cursor && sentCursor && cursor === sentCursor);
 
-    var kind, complete, canContinue;
+    /** @type {FolwrContinuationKind} */
+    var kind;
+    var complete, canContinue;
     if (!ok) {
       kind = 'http-error'; complete = false; canContinue = false;
     } else if (bodyLength === 0) {
@@ -944,6 +1241,7 @@
   // Универсальный экспорт: браузер и Node
   if (typeof window !== 'undefined') {
     window.parseGoogleFolwrOpen = parseGoogleFolwrOpen;
+    /** @type {GoogleFolwrUtilsApi} */
     window.GoogleFolwrUtils = {
       countTurnContainers: countTurnContainers,
       extractTurnsFromDocument: extractTurnsFromDocument,
@@ -967,6 +1265,7 @@
     };
   }
   if (typeof module !== 'undefined' && module.exports) {
+    /** @type {GoogleFolwrUtilsApi} */
     module.exports = {
       parseGoogleFolwrOpen: parseGoogleFolwrOpen,
       countTurnContainers: countTurnContainers,

@@ -1598,7 +1598,7 @@
       "file": "utils/chatgpt-conversation-parser.js",
       "category": "best-effort-guard",
       "lines": [
-        68
+        107
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var mt = String(payload).match(/\"([^\"]+)\"/g); if (mt && mt.length > 1) {"
     },
@@ -1708,7 +1708,7 @@
       "file": "utils/gemini-batchexecute-parser.js",
       "category": "best-effort-guard",
       "lines": [
-        268
+        419
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var arr = turn[2][0][4][0][4]; if (!Array.isArray(arr)) return out; for"
     },
@@ -1716,8 +1716,8 @@
       "file": "utils/gemini-batchexecute-parser.js",
       "category": "defensive-assignment",
       "lines": [
-        425,
-        487
+        631,
+        713
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: lastDrTexts = extractDrTexts(realTurns);"
     },
@@ -1725,7 +1725,7 @@
       "file": "utils/gemini-batchexecute-parser.js",
       "category": "feature-detect",
       "lines": [
-        353
+        531
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var box = (Array.isArray(turn[3]) && Array.isArray(turn[3][0]) && Array."
     },
@@ -1733,8 +1733,8 @@
       "file": "utils/gemini-batchexecute-parser.js",
       "category": "guard-clause",
       "lines": [
-        212,
-        218
+        349,
+        360
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (Array.isArray(t) && Array.isArray(t[1]) && typeof t[1][1] === 'strin"
     },
@@ -1742,7 +1742,7 @@
       "file": "utils/gemini-batchexecute-parser.js",
       "category": "logging-guard",
       "lines": [
-        30
+        89
       ],
       "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: console.log('[AI CM][batchexecute] segment parse fail ' + where + ': ' +"
     },
@@ -1750,7 +1750,7 @@
       "file": "utils/gemini-batchexecute-parser.js",
       "category": "noop-guard",
       "lines": [
-        518
+        750
       ],
       "reason": "noop-guard: единственный no-op — штатный выход из цикла/функции без восстановления; пример: bytes = new TextEncoder().encode(raw);"
     },
@@ -1758,7 +1758,7 @@
       "file": "utils/gemini-dom-parser.js",
       "category": "best-effort-guard",
       "lines": [
-        42
+        64
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var v = el.getAttribute ? el.getAttribute(names[i]) : null; if (v) out +"
     },
@@ -1766,7 +1766,7 @@
       "file": "utils/gemini-dom-parser.js",
       "category": "container-drop",
       "lines": [
-        102
+        163
       ],
       "reason": "container-drop: контейнер уже откреплён от DOM (SPA-навигация) — снимать нечего; пример: clone.querySelectorAll('script, style, button, svg').forEach(function (x"
     },
@@ -1774,7 +1774,7 @@
       "file": "utils/gemini-dom-parser.js",
       "category": "dom-read-guard",
       "lines": [
-        66
+        107
       ],
       "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: label += ' ' + (el.textContent || '');"
     },
@@ -1799,8 +1799,8 @@
       "file": "utils/google-search-folwr-parser.js",
       "category": "container-drop",
       "lines": [
-        174,
-        301
+        303,
+        457
       ],
       "reason": "container-drop: контейнер уже откреплён от DOM (SPA-навигация) — снимать нечего; пример: var junk = clone.querySelectorAll('script, style, button, svg'); for (va"
     },
@@ -1808,8 +1808,8 @@
       "file": "utils/google-search-folwr-parser.js",
       "category": "dom-read-guard",
       "lines": [
-        206,
-        458
+        340,
+        662
       ],
       "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: var inner = el.querySelectorAll ? el.querySelectorAll('pre, code') : nul"
     },
@@ -1817,7 +1817,7 @@
       "file": "utils/google-search-folwr-parser.js",
       "category": "guard-clause",
       "lines": [
-        222
+        362
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: for (var a = 0; a < attrNames.length; a++) { var v = (el && el.getAttrib"
     },
@@ -1825,7 +1825,7 @@
       "file": "utils/stream-frames.js",
       "category": "guard-clause",
       "lines": [
-        98
+        108
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof v === 'string') return null; if (v && typeof v.length === 'nu"
     },
@@ -1833,8 +1833,8 @@
       "file": "utils/stream-frames.js",
       "category": "parse-guard",
       "lines": [
-        63,
-        69
+        69,
+        75
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: if (typeof TextDecoder !== 'undefined') return TextDecoder;"
     },

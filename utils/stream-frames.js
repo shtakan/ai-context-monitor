@@ -39,6 +39,11 @@
 
   // Резать склейку {...}{...} на отдельные объекты (не-SSE фолбэк). Тот же алгоритм, что в
   // исходном каркасе: глубина фигурных скобок + корректный учёт строк/экранирования.
+  /**
+   * Режет склейку {...}{...} на отдельные JSON-объекты (не-SSE фолбэк).
+   * @param {string|null|undefined} s Склейка объектов.
+   * @returns {string[]} Объекты в порядке следования; '' для пустого входа.
+   */
   function splitJsonObjects(s) {
     var out = [], depth = 0, start = -1, inStr = false, esc = false;
     var str = String(s == null ? '' : s);
@@ -59,6 +64,7 @@
 
   // Декодер тела: глобальный TextDecoder (браузер, worker, Node 18+) либо, если глобального
   // нет (jsdom-стенды jest, урезанные песочницы), — из встроенного модуля 'util'.
+  /** @type {any} Декодер тела: глобальный TextDecoder либо встроенный из 'util', иначе null. */
   var TEXT_DECODER = (function () {
     try { if (typeof TextDecoder !== 'undefined') return TextDecoder; } catch (eG) { }
     try {
@@ -76,6 +82,10 @@
   // Фолбэк ОБЯЗАН дочитывать многобайтные последовательности между чанками: у Qwen русский
   // текст режется по байтам, и побайтовое String.fromCharCode дало бы «ÐÐ¾Ð»…» (ловлено пробой).
   // Возвращает { text(v, stream), flush() } — один контракт для обеих веток frames().
+  /**
+   * Единый потоковый декодер кадров: TextDecoder либо встроенный UTF-8 декодер.
+   * @returns {{text: (v: any, stream?: boolean) => string, flush: () => string}} Контракт декодера.
+   */
   function makeDecodeStream() {
     var dec = null;
     if (TEXT_DECODER) {
@@ -156,6 +166,12 @@
   //
   // Резак склейки берётся из замыкания модуля, декодер потока приходит АРГУМЕНТОМ (это ровно
   // те две вещи, которые прежняя фабрика передавала сгенерированному коду параметрами).
+  /**
+   * Нативный async-генератор кадров (ES2018-литерал, не ESM): SSE — построчно, не-SSE — целиком.
+   * @param {{headers?: {get(name: string): string|null}|null, body?: {getReader(): {read(): Promise<{done: boolean, value?: unknown}>}}|null}|null} res Response-подобный объект.
+   * @param {{text: (v: any, stream?: boolean) => string, flush: () => string}} dec Декодер потока.
+   * @returns {AsyncGenerator<import('../types/stream').StreamFrame, void, unknown>} Кадры потока.
+   */
   async function* framesNative(res, dec) {
     var ct = '';
     try { if (res && res.headers && typeof res.headers.get === 'function') ct = String(res.headers.get('content-type') || '').toLowerCase(); } catch (eCt) { ct = ''; }
@@ -214,6 +230,11 @@
   // кадры кладутся в очередь, а каждый next() отдаёт голову очереди — либо ждёт следующего
   // кадра/конца. Хвост без '\n' кладётся в очередь ПОСЛЕДНИМ кадром, поэтому порядок
   // «хвост → done» соблюдён (ровно этот случай ловился пробой на этапе разработки).
+  /**
+   * Ручной pull-итератор кадров (ES5-эталон паритета): очередь кадров + ожидающие next().
+   * @param {any} res Response-подобный объект.
+   * @returns {any} Итератор кадров с next() и Symbol.asyncIterator.
+   */
   function framesManual(res) {
     var queue = [];
     var waiters = [];
@@ -327,17 +348,34 @@
   // Декодер создаётся ОДИН раз при инициализации модуля — ровно как в прежней фабрике, которой
   // он передавался аргументом, и не создаётся заново на каждый вызов frames(). Семантика
   // сохранена 1:1 (один экземпляр на модуль); ручная ветка по-прежнему делает свой декодер в run().
+  /** @type {{text: (v: any, stream?: boolean) => string, flush: () => string}} Декодер модуля (один на файл). */
   var framesDecodeStream = makeDecodeStream();
+  /**
+   * Кадры потока: нативная async-функция-генератор с декодером модуля.
+   * @param {any} res Response-подобный объект.
+   * @returns {AsyncGenerator<import('../types/stream').StreamFrame, void, unknown>} Кадры потока.
+   */
   function frames(res) { return framesNative(res, framesDecodeStream); }
 
   // ─────────────── Нормализация usage ───────────────
   // Первое ЧИСЛОВОЕ значение из кандидатов (0 — валидное число, undefined/null/строки — нет).
+  /**
+   * Первое ЧИСЛОВОЕ значение из кандидатов (0 — валидное число).
+   * @param {...any} args Кандидаты значений.
+   * @returns {number|null} Первое число либо null.
+   */
   function num() {
     for (var i = 0; i < arguments.length; i++) {
       if (typeof arguments[i] === 'number') return arguments[i];
     }
     return null;
   }
+  /**
+   * Безопасное чтение поля объекта (не бросает на null/примитивах).
+   * @param {any} obj Объект-источник.
+   * @param {string} key Имя поля.
+   * @returns {any} Значение поля либо undefined.
+   */
   function pick(obj, key) {
     try { return (obj && typeof obj === 'object') ? obj[key] : undefined; } catch (e) { return undefined; }
   }
@@ -346,6 +384,8 @@
    * Нормализация usage разных провайдеров к единой форме.
    * Qwen: input_tokens/output_tokens/total_tokens + output_tokens_details.reasoning_tokens
    * + prompt_tokens_details.cached_tokens (спека провайдера, экспорт чата 2026-09-18).
+   * @param {any} u Сырой usage провайдера.
+   * @returns {import('../types/stream').Usage|null} Нормализованный usage; null — не объект.
    */
   function normalizeUsage(u) {
     if (!u || typeof u !== 'object') return null;
@@ -367,6 +407,10 @@
    * чанке: сумма 63+174+337+553+884 даёт 2011 — неверно, верно последнее значение 884).
    * cumulative !== true → суммирование полей (OpenAI/Claude: usage приходит частями).
    * null-поля next не затирают уже собранное.
+   * @param {any} prev Собранный usage (null — ещё ничего не собрано).
+   * @param {any} next Новый usage из кадра.
+   * @param {boolean} [cumulative] true — перезапись, иначе суммирование.
+   * @returns {any} Слитый usage.
    */
   function mergeUsage(prev, next, cumulative) {
     if (!next) return prev;
@@ -390,6 +434,7 @@
     return out;
   }
 
+  /** @type {import('../types/stream').StreamFramesApi} */
   var api = {
     frames: frames,
     normUsage: normalizeUsage,

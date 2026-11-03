@@ -24,15 +24,37 @@
  */
 
 (function () {
+  /**
+   * Результат extractGeminiResponse.
+   * @typedef {Object} GeminiDomResponse
+   * @property {string} text Итоговый текст (абзацы и markdown-таблицы через перевод строки).
+   * @property {number} count Число собранных кусков (абзацев или таблиц).
+   * @property {string[]} parts Куски в порядке следования.
+   */
+
+  /** @type {RegExp} Признак контейнера мышления в class/id. */
   var THINK_RE = /think|thought/i;
+  /** @type {RegExp} Заголовок мышления (Thinking / Thought / Думал). */
   var THINKING_LABEL_RE = /thinking|\bthought\b|\bдумал\b/i;
+  /** @type {RegExp} Токен вложения Gemini ($AXzLiR…). */
   var ATTACH_TOKEN_RE = /\$AXzLiR[A-Za-z0-9+\/=]+/g;
 
+  /**
+   * Вырезает токены вложений $AXzLiR… и схлопывает пробельные символы.
+   * @param {string} s Текст с токенами вложений.
+   * @returns {string} Текст без токенов; пробелы схлопнуты.
+   */
   function stripAttachmentTokens(s) {
     if (typeof s !== 'string') return s;
     return s.replace(ATTACH_TOKEN_RE, ' ').replace(/[ \t\f\v]+/g, ' ');
   }
 
+  /**
+   * Склейка значений атрибутов элемента в одну строку.
+   * @param {any} el DOM-элемент.
+   * @param {string[]} names Имена атрибутов в порядке чтения.
+   * @returns {string} Значения найденных атрибутов через пробел.
+   */
   function attrString(el, names) {
     var out = '';
     for (var i = 0; i < names.length; i++) {
@@ -44,22 +66,41 @@
     return out;
   }
 
+  /**
+   * class и id элемента одной строкой — для поиска признаков по подстроке.
+   * @param {any} el DOM-элемент.
+   * @returns {string} Значения className и id через пробел ('' при ошибке).
+   */
   function classNameId(el) {
     try { return String(el.className || '') + ' ' + String(el.id || ''); } catch (e) { return ''; }
   }
 
+  /**
+   * Визуально скрытый контейнер Angular CDK (cdk-visually-hidden / cdk-live-announcer).
+   * @param {any} el DOM-элемент.
+   * @returns {boolean} true — элемент скрыт техническими классами CDK.
+   */
   function isHiddenContainer(el) {
     var h = classNameId(el).toLowerCase();
     return h.indexOf('cdk-visually-hidden') !== -1 || h.indexOf('cdk-live-announcer') !== -1;
   }
 
+  /**
+   * Контейнер мышления: признак в class/id или в aria-label/title.
+   * @param {any} el DOM-элемент.
+   * @returns {boolean} true — контейнер относится к блоку мышления.
+   */
   function isThinkingContainer(el) {
     if (THINK_RE.test(classNameId(el))) return true;
     var label = attrString(el, ['aria-label', 'title']);
     return THINKING_LABEL_RE.test(label);
   }
 
-  // Заголовок мышления у кнопки/элемента: aria-label / title / текст кнопки.
+  /**
+   * Заголовок мышления у кнопки/элемента: aria-label / title / текст кнопки.
+   * @param {any} el DOM-элемент.
+   * @returns {string} Склеенный заголовок для проверки THINKING_LABEL_RE.
+   */
   function thinkingControlLabel(el) {
     var label = attrString(el, ['aria-label', 'title']);
     if (el.tagName && String(el.tagName).toLowerCase() === 'button') {
@@ -68,8 +109,12 @@
     return label;
   }
 
-  // Панель мышления: элемент, содержащий кнопку/заголовок мышления, но не таблицу.
-  // Применяется к узлам-контейнерам (не к корню обхода), чтобы пропустить всю панель.
+  /**
+   * Панель мышления: элемент, содержащий кнопку/заголовок мышления, но не таблицу.
+   * Применяется к узлам-контейнерам (не к корню обхода), чтобы пропустить всю панель.
+   * @param {any} node DOM-узел.
+   * @returns {boolean} true — поддерево целиком относится к мышлению.
+   */
   function containsThinkingControl(node) {
     var found = false;
     (function scan(n, depth) {
@@ -82,10 +127,22 @@
     return found;
   }
 
+  /**
+   * Есть ли внутри узла таблица (такие узлы не считаем панелью мышления).
+   * @param {any} node DOM-узел.
+   * @returns {boolean} true — внутри есть table.
+   */
   function containsTable(node) {
     try { return !!node.querySelector && !!node.querySelector('table'); } catch (e) { return false; }
   }
 
+  /**
+   * Панель мышления целиком (скрытый блок, контейнер мышления или контейнер с
+   * заголовком мышления). Контейнер с таблицей панелью не считается — иначе потеряется
+   * markdown-таблица.
+   * @param {any} node DOM-узел.
+   * @returns {boolean} true — узел (вместе с потомками) пропускается при обходе.
+   */
   function isThinkingPanel(node) {
     if (isHiddenContainer(node) || isThinkingContainer(node)) return true;
     // Контейнер с таблицей не считаем панелью мышления, чтобы не потерять markdown-таблицу.
@@ -93,7 +150,11 @@
     return containsThinkingControl(node);
   }
 
-  // Текст ячейки таблицы без внутренних тегов, мусорных узлов и токенов вложений.
+  /**
+   * Текст ячейки таблицы без внутренних тегов, мусорных узлов и токенов вложений.
+   * @param {any} el Ячейка (td/th) или её клон.
+   * @returns {string} Однострочный текст ячейки.
+   */
   function cleanCell(el) {
     var clone;
     try { clone = el.cloneNode(true); } catch (e) { return ''; }
@@ -103,7 +164,11 @@
     try { return stripAttachmentTokens((clone.textContent || '').replace(/\s+/g, ' ').trim()); } catch (e) { return ''; }
   }
 
-  // Таблица в markdown-строки: каждая строка = "| ячейка | ячейка |", строки через перевод строки.
+  /**
+   * Таблица в markdown-строки: каждая строка = "| ячейка | ячейка |", строки через перевод строки.
+   * @param {any} tableEl DOM-элемент table.
+   * @returns {string} Markdown-таблица ('' при ошибке доступа к строкам).
+   */
   function tableToMarkdown(tableEl) {
     var rows = [];
     try { rows = tableEl.querySelectorAll('tr'); } catch (e) { rows = []; }
@@ -120,6 +185,7 @@
     return lines.join('\n');
   }
 
+  /** @type {Record<string, number>} Теги, завершающие текущий текстовый кусок. */
   var BLOCK_TAGS = {
     'P': 1, 'DIV': 1, 'SECTION': 1, 'ARTICLE': 1, 'UL': 1, 'OL': 1,
     'LI': 1, 'H1': 1, 'H2': 1, 'H3': 1, 'H4': 1, 'H5': 1, 'H6': 1,
@@ -127,10 +193,17 @@
     'MAIN': 1, 'ASIDE': 1, 'TR': 1, 'THEAD': 1, 'TBODY': 1
   };
 
+  /**
+   * DOM-парсер ответа Gemini: обход в документном порядке, пропуск скрытых блоков и
+   * панелей мышления, вырезание токенов вложений, конвертация таблиц в markdown.
+   * @param {any} root Корневой DOM-узел ответа.
+   * @returns {GeminiDomResponse} Текст, число кусков и сами куски.
+   */
   function extractGeminiResponse(root) {
     var parts = [];
     var buf = [];
 
+    /** Сбрасывает накопленный буфер в parts (склейка + схлопывание пробелов). */
     function flush() {
       if (!buf.length) return;
       var s = buf.join(' ');
@@ -139,12 +212,22 @@
       if (s) parts.push(s);
     }
 
+    /**
+     * Кладёт текстовый кусок в буфер после зачистки токенов и пробелов.
+     * @param {string} str Текст узла.
+     * @returns {void}
+     */
     function pushText(str) {
       if (typeof str !== 'string') return;
       var t = stripAttachmentTokens(str.replace(/\s+/g, ' ').trim());
       if (t) buf.push(t);
     }
 
+    /**
+     * Рекурсивный обход узла: текст → буфер, таблица → markdown, панель мышления → пропуск.
+     * @param {any} node Текущий DOM-узел.
+     * @returns {void}
+     */
     function walk(node) {
       if (!node) return;
       var type = node.nodeType;
@@ -194,6 +277,15 @@
     return { text: text, count: parts.length, parts: parts };
   }
 
+  /**
+   * Публичный API DOM-парсера Gemini (window.GeminiDomParser / module.exports).
+   * @typedef {Object} GeminiDomParserApi
+   * @property {typeof extractGeminiResponse} extractGeminiResponse Разбор ответа из DOM.
+   * @property {typeof tableToMarkdown} tableToMarkdown Таблица → markdown.
+   * @property {typeof stripAttachmentTokens} stripAttachmentTokens Вырезание токенов вложений.
+   */
+
+  /** @type {GeminiDomParserApi} */
   var api = { extractGeminiResponse: extractGeminiResponse, tableToMarkdown: tableToMarkdown, stripAttachmentTokens: stripAttachmentTokens };
 
   if (typeof window !== 'undefined') {
