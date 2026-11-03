@@ -13,6 +13,11 @@
 (function () {
   'use strict';
 
+  /**
+   * Экранирует HTML-спецсимволы (& < > ") в тексте.
+   * @param {unknown} s Любое значение; null/undefined → ''.
+   * @returns {string} Экранированная строка.
+   */
   function escapeHtml(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&' + 'amp;')
@@ -21,8 +26,12 @@
       .replace(/"/g, '&' + 'quot;');
   }
 
-  // Инлайн-разметка: инлайн-код, жирный, курсив, ссылки.
-  // Работает на уже экранированной строке (HTML не может пролезть внутрь).
+  /**
+   * Инлайн-разметка: инлайн-код, жирный, курсив, ссылки.
+   * Работает на уже экранированной строке (HTML не может пролезть внутрь).
+   * @param {unknown} text Исходный текст строки.
+   * @returns {string} HTML строки.
+   */
   function inline(text) {
     var src = escapeHtml(text);
     return src.replace(
@@ -46,7 +55,11 @@
     );
   }
 
-  // Строка-разделитель таблицы: только | - : и пробелы, содержит хотя бы один минус
+  /**
+   * Строка-разделитель таблицы: только | - : и пробелы, содержит хотя бы один минус.
+   * @param {string|null|undefined} line Проверяемая строка.
+   * @returns {boolean} true — строка является разделителем markdown-таблицы.
+   */
   function isTableSeparator(line) {
     if (!line) return false;
     var c = line.charAt(0);
@@ -54,6 +67,12 @@
     return /^[\s|:—-]+$/.test(line) && /-/.test(line);
   }
 
+  /**
+   * Рендерит одну строку markdown-таблицы в <tr>.
+   * @param {string|null|undefined} line Строка таблицы (с ведущим/хвостовым | или без).
+   * @param {'th'|'td'} tag Тег ячейки: шапка таблицы или тело.
+   * @returns {string} HTML-фрагмент строки `<tr>…</tr>`.
+   */
   function parseRow(line, tag) {
     var s = String(line || '').trim();
     if (s.charAt(0) === '|') s = s.slice(1);
@@ -66,7 +85,12 @@
     return out + '</tr>';
   }
 
-  // Собирает таблицу, начиная со строки lines[i] (содержит | и есть разделитель ниже).
+  /**
+   * Собирает таблицу, начиная со строки lines[i] (содержит | и есть разделитель ниже).
+   * @param {string[]} lines Все строки документа.
+   * @param {number} i Индекс строки заголовка таблицы.
+   * @returns {{ html: string, nextIndex: number }} HTML таблицы и индекс первой строки после неё.
+   */
   function renderTable(lines, i) {
     var head = parseRow(lines[i], 'th');
     var body = [];
@@ -88,6 +112,11 @@
   var HEADING_RE = /^(#{1,6})\s+(.*)$/;
   var FENCE_RE = /^```/;
 
+  /**
+   * Конвертирует markdown в HTML печатной формы.
+   * @param {unknown} md Исходный markdown; не-строка → ''.
+   * @returns {string} HTML документа.
+   */
   function renderMarkdown(md) {
     if (typeof md !== 'string') return '';
     var lines = String(md).replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
@@ -166,6 +195,15 @@
     return out.join('\n');
   }
 
+  /**
+   * Публичный API рендерера (window.MarkdownRenderer / module.exports).
+   * @typedef {Object} MarkdownRendererApi
+   * @property {(md: unknown) => string} render Markdown → HTML.
+   * @property {(text: unknown) => string} inline Инлайн-разметка одной строки.
+   * @property {(s: unknown) => string} escapeHtml Экранирование HTML-спецсимволов.
+   */
+
+  /** @type {MarkdownRendererApi} */
   var MarkdownRenderer = {
     render: renderMarkdown,
     inline: inline,

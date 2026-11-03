@@ -13,8 +13,22 @@
  */
 
 (function () {
-  // setInterval с гардом видимости. opts.skipWhenHidden === false — принудительно
-  // выполнять тик даже в скрытой вкладке (явный обход гарда).
+  /**
+   * Опции setIntervalVisible.
+   * @typedef {Object} VisibleIntervalOptions
+   * @property {boolean} [skipWhenHidden] false — выполнять тик даже в скрытой вкладке
+   *   (явный обход гарда); иначе тик только при document.visibilityState === 'visible'.
+   */
+
+  /**
+   * setInterval с гардом видимости. opts.skipWhenHidden === false — принудительно
+   * выполнять тик даже в скрытой вкладке (явный обход гарда). Бросок тика
+   * проглатывается через swallowSoft и не ломает интервал / страницу.
+   * @param {() => void} fn Тик интервала.
+   * @param {number} ms Период в миллисекундах.
+   * @param {VisibleIntervalOptions} [opts] Опции гарда видимости.
+   * @returns {ReturnType<typeof setInterval>} Идентификатор интервала для clearInterval.
+   */
   function setIntervalVisible(fn, ms, opts) {
     var id = setInterval(function () {
       try {
@@ -31,6 +45,14 @@
     return id;
   }
 
+  /**
+   * Публичный API модуля (window.aiCmCommon / self.aiCmCommon / module.exports).
+   * Тип window-зеркала описан в types/globals.d.ts как any — здесь он уточняется.
+   * @typedef {Object} AiCmCommonApi
+   * @property {typeof setIntervalVisible} setIntervalVisible setInterval с visibility-гардом.
+   */
+
+  /** @type {AiCmCommonApi} */
   var api = {
     setIntervalVisible: setIntervalVisible
   };

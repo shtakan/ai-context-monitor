@@ -14,6 +14,12 @@
  * область видимости (options.html, content_scripts, BACKGROUND_PRELUDE сборки), поэтому
  * потребители зовут её по имени. module.exports — только для jest-тестов в Node.
  * ============================================================================================ */
+
+/**
+ * Определяет движок по схеме URL расширения: moz-extension:// → Firefox.
+ * Не бросает: при недоступном runtime/getURL возвращает false.
+ * @returns {boolean} true — расширение запущено в Gecko (Firefox).
+ */
 function aiCmIsFirefox() {
   try {
     var api = (typeof browser !== 'undefined' && browser && browser.runtime) ? browser

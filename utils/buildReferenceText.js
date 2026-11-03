@@ -24,7 +24,19 @@
 (function () {
   'use strict';
 
-  // Инлайн-зачистка одной строки (после построчных правил).
+  /**
+   * Сообщение источника для эталона: читается только текстовое поле.
+   * По форме совместимо с Message/ExportMessage (types/message.d.ts,
+   * types/export.d.ts), но требует лишь text.
+   * @typedef {Object} ReferenceMessage
+   * @property {string|null} [text] Текст сообщения; null/undefined → ''.
+   */
+
+  /**
+   * Инлайн-зачистка одной строки (после построчных правил).
+   * @param {string} s Строка после cleanLine.
+   * @returns {string} Строка без ссылок, жирности, курсива и обратных кавычек.
+   */
   function cleanInline(s) {
     // Ссылки [text](url) -> text (url без пробелов и скобок)
     s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '$1');
@@ -39,7 +51,11 @@
     return s;
   }
 
-  // Построчные правила: только маркеры в самом начале строки.
+  /**
+   * Построчные правила: только маркеры в самом начале строки.
+   * @param {string|null|undefined} line Сырая строка сообщения.
+   * @returns {string} Строка без ведущих маркеров заголовка, цитаты и списка.
+   */
   function cleanLine(line) {
     var s = String(line == null ? '' : line);
     // Заголовки: "# " ... "###### "
@@ -51,7 +67,12 @@
     return s;
   }
 
-  // Зачистка текста одного сообщения.
+  /**
+   * Зачистка текста одного сообщения: построчные правила + инлайн-разметка.
+   * Строки-разделители "---" удаляются целиком.
+   * @param {string|null|undefined} text Текст сообщения.
+   * @returns {string} Очищенный текст (LF, без завершающих переводов строк).
+   */
   function cleanText(text) {
     var lines = String(text).split('\n');
     var out = [];
@@ -65,10 +86,16 @@
     return out.join('\n');
   }
 
+  /**
+   * Собирает plain-text «эталон» из сообщений снимка.
+   * @param {ReferenceMessage[]|null|undefined} messages Сообщения в порядке исходного массива.
+   * @returns {string} Текст сообщений, разделённых ровно одной пустой строкой (LF, без BOM).
+   */
   function buildReferenceText(messages) {
     var list = Array.isArray(messages) ? messages : [];
     var parts = [];
     for (var i = 0; i < list.length; i++) {
+      /** @type {ReferenceMessage} */
       var msg = list[i] || {};
       parts.push(cleanText(msg.text == null ? '' : msg.text));
     }

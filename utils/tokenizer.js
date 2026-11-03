@@ -26,6 +26,12 @@
 // слово из 6 букв — 6/1.8 = 3.33 → 4 токена (+20%), короткие слова — до +100%.
 // Поэтому кириллица теперь копит дробь, а округление делается ОДИН раз в конце countTokens.
 // Арифметика и пины — tests/tokenizer-cyrillic-calibration.test.js (+ O-23).
+/**
+ * Класс символа для эвристики countTokens (выбор правила «символов на токен»).
+ * @typedef {'cyrillic'|'cjk'|'latin'|'digit'|'space'|'punctuation'|'other'} CharType
+ */
+
+/** @type {number} Калибровка O-23: символов на токен для кириллицы. */
 const CYRILLIC_CHARS_PER_TOKEN = 3.3;
 
 const Tokenizer = {
@@ -33,6 +39,8 @@ const Tokenizer = {
 
   /**
    * Определяет тип символа.
+   * @param {string} char Один символ текста.
+   * @returns {CharType} Класс символа для выбора эвристики.
    */
   _getCharType(char) {
     if (/[а-яёА-ЯЁ]/.test(char)) return 'cyrillic';
@@ -135,8 +143,8 @@ const Tokenizer = {
    * Оценивает токены в диалоге с учётом структуры чата.
    * Учитывает накладные расходы на форматирование сообщений.
    * @param {string} dialogText - полный текст диалога
-   * @param {number} messageCount - количество сообщений
-   * @returns {number}
+   * @param {number} [messageCount=1] - количество сообщений
+   * @returns {number} - токены текста плюс накладные расходы на форматирование
    */
   estimateDialogTokens(dialogText, messageCount = 1) {
     const textTokens = this.countTokens(dialogText);
