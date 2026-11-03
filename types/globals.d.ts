@@ -57,14 +57,14 @@ interface Window {
   parsePerplexityThread?: any;
   /** utils/intercept-common.js */
   aiCmCommon?: any;
-  /** utils/stream-frames.js */
-  aiCmStreamFrames?: any;
+  /** utils/stream-frames.js — frames/normUsage/mergeUsage (types/stream.d.ts). */
+  aiCmStreamFrames?: import('./stream').StreamFramesApi;
   /** utils/debug.js — гейт диагностики (включается одноимённой настройкой) */
   __aiCmDebugLogs?: boolean;
   /** utils/debug.js — хелпер swallow(error, tag): молчаливый catch → диагностируемый (Step E.2a) */
-  __aiCmSwallow?: any;
+  __aiCmSwallow?: import('./debug').DiagFn;
   /** utils/debug.js — хелпер swallowSoft(error, tag): канал B, console.error не вызывает (Step E.2c-A) */
-  __aiCmSwallowSoft?: any;
+  __aiCmSwallowSoft?: import('./debug').DiagFn;
   /**
    * core/content.js ← core/aistudio-intercept.js: слаг модели, названный в теле
    * сетевого запроса AI Studio (models/gemini-…). Читается adapters/aistudio-adapter.js.
@@ -80,12 +80,12 @@ interface Window {
     ts: number;
     href: string;
   } | null;
-  /** utils/archive-import.js */
-  AiCmArchiveImport?: any;
-  /** utils/export-text-builders.js */
-  AiCmExportBuilders?: any;
-  /** utils/export-emit-pipeline.js */
-  AiCmExportEmitPipeline?: any;
+  /** utils/archive-import.js — разбор/план импорта (types/archive-import.d.ts). */
+  AiCmArchiveImport?: import('./archive-import').ArchiveImportApi;
+  /** utils/export-text-builders.js — сборщики txt/md/json (types/export.d.ts). */
+  AiCmExportBuilders?: import('./export').ExportBuildersApi;
+  /** utils/export-emit-pipeline.js — имена файлов/ярус источника (types/export.d.ts). */
+  AiCmExportEmitPipeline?: import('./export').ExportPipelineApi;
   /** utils/buildReferenceText.js */
   buildReferenceText?: any;
   /** utils/markdown.js */
