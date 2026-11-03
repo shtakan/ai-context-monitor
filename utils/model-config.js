@@ -3,8 +3,35 @@
 // manifest / адаптеры — НЕ ТРОГАТЬ. Правка аддитивна: цикл в конце только ДОБАВЛЯЕТ ключи
 // (проверка "если ключа нет"), существующие не меняет → поведение для уже замаппленных slug
 // не меняется, цифра не трогается (окно/порог те же), меняется только подпись имени в кружке.
+
+/**
+ * Запись модели в реестре (types/model.d.ts:ModelRecord).
+ * @typedef {import('../types/model').ModelRecord} ModelRecord
+ */
+
+/**
+ * Каталог моделей: канонический id → запись (types/model.d.ts:ModelCatalog).
+ * @typedef {import('../types/model').ModelCatalog} ModelCatalog
+ */
+
+/**
+ * Дефолтная модель по имени сайта (types/model.d.ts:SiteDefaults).
+ * @typedef {import('../types/model').SiteDefaults} SiteDefaults
+ */
+
+/**
+ * Семейный дефолт веб-UI Gemini (ModelConfig.familyDefaults): ключ семьи →
+ * модель и окно контекста (без номера версии — v49).
+ * @typedef {Object} FamilyDefault
+ * @property {string} modelId Каноническое имя модели ('3.1 Pro', '3.6 Flash', …).
+ * @property {number} contextLimit Окно семейства в токенах.
+ */
+
+/** Реестр моделей: каталог, дефолты сайтов и вычисление действующего лимита. */
 const ModelConfig = {
+  /** Общий потолок окна: действующий лимит = min(contextLimit, это значение). @type {number} */
   EFFECTIVE_CAP_DEFAULT: 128000,
+  /** @type {ModelCatalog} */
   models: {
     // ---- OpenAI: текущая линейка 2026-10 ----
     // Окна взяты с официальной страницы моделей OpenAI (platform.openai.com/docs/models).
@@ -471,6 +498,7 @@ const ModelConfig = {
       description: 'Быстрая модель Google'
     }
   },
+  /** @type {SiteDefaults} */
   siteDefaults: {
     'chatgpt': 'gpt-5.5',
     'gemini': 'gemini-2.5-flash',
@@ -485,6 +513,7 @@ const ModelConfig = {
   // не несёт номера версии). Пункт (c) приоритета DOM-сигнала — когда ни кэш меню,
   // ни сетевая версия с совпадающей семьёй не дали точной версии.
   // Окна сверены с записями таблицы: Pro=128_000, Flash/Flash-Lite=1_048_576.
+  /** @type {Record<string, FamilyDefault>} */
   familyDefaults: {
     'pro': { modelId: '3.1 Pro', contextLimit: 128000 },
     'pro-lite': { modelId: '3.1 Pro', contextLimit: 128000 },
@@ -498,12 +527,27 @@ const ModelConfig = {
     // Источник: https://ai.google.dev/gemini-api/docs/models (снят 2026-10-04)
     'ultra': { modelId: '3.1 Ultra', contextLimit: 1048576 }
   },
+  /**
+   * Запись модели по каноническому ключу.
+   * @param {string} modelId Канонический ключ каталога (либо его нормализованная форма).
+   * @returns {ModelRecord|null} Запись модели; null — ключа в каталоге нет.
+   */
   getModel(modelId) {
     return this.models[modelId] || null;
   },
+  /**
+   * Дефолтная модель сайта (по умолчанию — 'gpt-5.5').
+   * @param {string} site Имя сайта: chatgpt / gemini / deepseek / claude / …
+   * @returns {string} Ключ каталога ModelCatalog.
+   */
   getDefaultModel(site) {
     return this.siteDefaults[site] || 'gpt-5.5';
   },
+  /**
+   * Окно контекста модели из каталога.
+   * @param {string} modelId Канонический ключ каталога.
+   * @returns {number} contextLimit записи; 128000 — если ключ неизвестен.
+   */
   getContextLimit(modelId) {
     const model = this.getModel(modelId);
     return model ? model.contextLimit : 128000;
@@ -529,6 +573,12 @@ const ModelConfig = {
   // Явный выбор модели в дропдауне авторитетен для лимита и токенизации.
   // 'auto'/пусто/неизвестный id → null = «Автоопределение» (прежний путь: сетевой slug →
   // DOM-сигнал → дефолт сайта), поведение байтово прежнее.
+  /**
+   * Канонический id из значения дропдауна «Модель».
+   * 'auto'/пусто/неизвестный id → null (Автоопределение).
+   * @param {string|null|undefined} raw Сырое значение выбора попапа.
+   * @returns {string|null} Ключ каталога; null — режим «Авто».
+   */
   resolvePopupModelId(raw) {
     if (raw == null) return null;
     const s = String(raw).trim();
@@ -538,6 +588,11 @@ const ModelConfig = {
   },
   // Поле «Лимит контекста» = % от Авто-порога. Пусто/null → null (Авто).
   // Вне 1–100 (2000, 0, мусор) → фолбэк 100 = как Авто.
+  /**
+   * Процент от Авто-порога из поля «Лимит контекста».
+   * @param {string|number|null|undefined} raw Сырое значение поля ('' / null → Авто).
+   * @returns {number|null} 1…100; null — Авто (поле пустое).
+   */
   resolveLimitPct(raw) {
     if (raw == null) return null;
     const s = String(raw).trim();
@@ -548,10 +603,22 @@ const ModelConfig = {
   },
   // displayLimit = Авто-порог × pct/100 (округление 1:1 с прежним виджетом).
   // pct не задан → Авто-порог байтово.
+  /**
+   * Действующий лимит, урезанный процентом от Авто-порога.
+   * @param {number} effectiveLimit Авто-порог модели (getEffectiveLimit).
+   * @param {number|null|undefined} pct Процент 1…100; не число/≤0 — лимит не меняется.
+   * @returns {number} Лимит в токенах (минимум 1).
+   */
   applyLimitPct(effectiveLimit, pct) {
     if (typeof pct !== 'number' || !(pct > 0)) return effectiveLimit;
     return Math.max(1, Math.round(pct / 100 * effectiveLimit));
   },
+  /**
+   * Отображаемый лимит модели с учётом процента попапа.
+   * @param {string} modelId Канонический ключ каталога.
+   * @param {number|null|undefined} pct Процент 1…100 (null — Авто).
+   * @returns {number} displayLimit в токенах.
+   */
   computeDisplayLimit(modelId, pct) {
     return this.applyLimitPct(this.getEffectiveLimit(modelId), pct);
   },
@@ -559,6 +626,12 @@ const ModelConfig = {
   // variant нормируется: «Расширенный»/«Расширенная»/«Расширенн…» → «pro/…-расширенный»? нет:
   // вариант влияет только при выборе подходящего семейного дефолта (flash-lite vs flash).
   // Окно возвращаемой модели уже лежит в записи таблицы (см. переопределения ниже).
+  /**
+   * Модель семейного дефолта Gemini по семье и варианту (v49).
+   * @param {string} fam Семья без номера версии: pro / flash / pro-lite / flash-lite / ultra.
+   * @param {string} [variant] Вариант из UI («Lite», «Расширенная», «Extended»).
+   * @returns {string|null} Имя модели семейства; null — семьи нет в familyDefaults.
+   */
   getFamilyDefaultModelId(fam, variant) {
     const famK = String(fam || '').toLowerCase().replace(/[^a-z]/g, '');
     const varK = String(variant || '').toLowerCase();
@@ -571,8 +644,19 @@ const ModelConfig = {
   },
   // Привести сырое имя/slug к каноническому ключу. Нормализация схлопывает пробелы,
   // подчёркивания И ТОЧКИ в дефис (gpt-5-5 из сети == gpt-5.5; 3.6 Flash Расширенная == ключу).
+  /**
+   * Приводит сырое имя/slug модели к каноническому ключу каталога.
+   * Порядок: авто-регистрация Gemini-слаг-а → точное совпадение → префикс → подстрока.
+   * @param {string|null|undefined} raw Сырое имя модели (slug из сети, DOM-ярлык, API-id).
+   * @returns {string|null} Ключ ModelCatalog; null — совпадений нет.
+   */
   resolveModelId(raw) {
     if (!raw) return null;
+    /**
+     * Нормализация имени: нижний регистр, пробелы/подчёркивания/точки/слэши → дефис.
+     * @param {string} s Сырое имя.
+     * @returns {string} Нормализованная форма ключа.
+     */
     const norm = function (s) {
       return String(s).toLowerCase().replace(/[\s_./]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
     };
@@ -625,6 +709,12 @@ const ModelConfig = {
     }
     return null;
   },
+  /**
+   * Процент занятого контекста для бейджа (округление до 0.1, потолок 100).
+   * @param {number} usedTokens Использовано токенов.
+   * @param {number} contextLimit Действующий лимит контекста.
+   * @returns {number} Процент 0…100 (0 — лимит не положителен).
+   */
   calculatePercentage(usedTokens, contextLimit) {
     if (contextLimit <= 0) return 0;
     const percentage = (usedTokens / contextLimit) * 100;
@@ -634,6 +724,12 @@ const ModelConfig = {
   // Принимает канонический ключ (gemini-2.5-flash) или необработанный slug.
   // Токенизатор у Gemini общий, поэтому дефолт — стабильная общедоступная модель.
   // 09.2026: семейства 1.5/2.0 целиком 404 в v1beta → дефолт/фолбэк 'gemini-flash-latest'.
+  /**
+   * API-id модели для Google countTokens (токенизатор у Gemini общий).
+   * Принимает канонический ключ или необработанный slug.
+   * @param {string|null|undefined} modelId Ключ каталога либо сырой slug.
+   * @returns {string} Валидный API-id; 'gemini-flash-latest' — фолбэк.
+   */
   getGeminiApiModelId(modelId) {
     // Детект-слаги, которые уже являются валидными API-id — пропускать как есть (passthrough)
     var passthrough = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3-flash'];
@@ -665,9 +761,18 @@ if (typeof module !== 'undefined' && module.exports) {
 // ключи (проверка ниже) → существующие явные ключи не трогает, риск слома ≈ 0.
 // Окно: 1.5 Pro = 2M, остальные = 1M (на цифру не влияет — она от порога 128000).
 (function () {
+  /** @type {string[]} Версии Gemini для авто-ключей. */
   var V = ['1.5', '2.0', '2.5', '3.1', '3.5', '3.6', '3.7'];
+  /** @type {string[]} Семейства Gemini. */
   var F = ['Flash', 'Pro', 'Ultra'];
+  /** @type {string[]} Суффиксы варианта ('' — базовый). */
   var S = ['', ' Lite', ' Расширенная', ' Extended'];
+  /**
+   * Окно авто-генерируемого ключа: 1.5 Pro — 2M, остальные — 1M.
+   * @param {string} v Версия ('1.5', '3.6', …).
+   * @param {string} f Семейство ('Flash', 'Pro', 'Ultra').
+   * @returns {number} Окно контекста в токенах.
+   */
   function win(v, f) { return (v === '1.5' && f === 'Pro') ? 2097152 : 1048576; }
   V.forEach(function (v) {
     F.forEach(function (f) {

@@ -1585,12 +1585,12 @@
       "file": "utils/archive-import.js",
       "category": "guard-clause",
       "lines": [
-        164,
-        170,
-        181,
-        187,
-        198,
-        203
+        324,
+        330,
+        347,
+        353,
+        369,
+        374
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof require === 'function') { var m = require('./chatgpt-conversa"
     },
