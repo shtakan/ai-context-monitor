@@ -344,9 +344,18 @@
         // ходом первого упоминания (общий список Gemini повторяется в соседях),
         // реестр dk → turnId чистится на SPA-переходе (gfReset).
         var turnFiles = [];
+        // v2.5 (Фикс D1): полный кумулятивный пул хода. Раздача вложений
+        // откладывается до reachedStart и идёт по пулам в хронологическом
+        // порядке — так файл закрепляется за ходом, где он впервые появился,
+        // даже если страницы пришли новые→старые.
+        var turnFilePool = null;
         try {
           turnFiles = turnFilesForIngest(t, turnId, turnTs);
-        } catch (eFiles) { turnFiles = []; }
+          if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&
+              typeof window.GeminiBatchexecuteParser.collectTurnFiles === 'function') {
+            turnFilePool = window.GeminiBatchexecuteParser.collectTurnFiles(t);
+          }
+        } catch (eFiles) { turnFiles = []; turnFilePool = null; }
         // v30/v31: текст хода и роли собираем через чистый сетевой парсер
         // (utils/gemini-batchexecute-parser.js): вычищаем $AXzLiR-токены и сегменты «мышления»,
         // разделяем вопрос пользователя и ответ модели, сохраняем таблицы.
@@ -371,7 +380,8 @@
           out.turns.push({
             id: mid, text: stxt, modelName: modelName, ts: turnTs, role: role,
             turnId: turnId, r1: r1,
-            files: (role === 'user' && turnFiles.length) ? turnFiles : null
+            files: (role === 'user' && turnFiles.length) ? turnFiles : null,
+            filePool: (role === 'user' && turnFilePool && turnFilePool.length) ? turnFilePool : null
           });
           // v2.3.1: файлы НЕ раздаём здесь. Пока не подтверждено начало истории,
           // «самый старый» ход текущей страницы может смениться на более старый
@@ -805,11 +815,34 @@
   function enqueueOwnedTurnFiles(fid, ids) {
     if (typeof window === 'undefined' || !window.AiCmGeminiFiles ||
         typeof window.AiCmGeminiFiles.gfEnqueueTurnFiles !== 'function') return;
+    // v2.5: раздаём по полному пулу хода, а не по дельте парсера: дельта
+    // зависит от порядка прихода страниц (Gemini отдаёт новые раньше старых).
+    // Хронологический проход + claimed закрепляет файл за ходом первого
+    // появления независимо от порядка страниц.
+    var P = (typeof window !== 'undefined') ? window.GeminiBatchexecuteParser : null;
+    var identity = (P && typeof P.fileRefIdentityKey === 'function')
+      ? function (ref) { return P.fileRefIdentityKey(ref); }
+      : function (ref) {
+        var url = (ref && (ref.img || ref.dl)) || ((ref && ref.urls && ref.urls[0]) || '');
+        return ((ref && ref.name) || '') + '|' + ((ref && ref.size) || 0) + '|' + url;
+      };
+    var claimed = {};
     for (var i = 0; i < ids.length; i++) {
       var rec = turnsMap[ids[i]];
-      if (!rec || rec.role !== 'user' || !Array.isArray(rec.files) || !rec.files.length) continue;
+      if (!rec || rec.role !== 'user') continue;
+      var pool = (Array.isArray(rec.filePool) && rec.filePool.length) ? rec.filePool : rec.files;
+      if (!Array.isArray(pool) || !pool.length) continue;
+      var own = [];
+      for (var j = 0; j < pool.length; j++) {
+        var ref = pool[j];
+        var key = identity(ref);
+        if (claimed[key]) continue;
+        claimed[key] = true;
+        own.push(ref);
+      }
+      if (!own.length) continue;
       try {
-        window.AiCmGeminiFiles.gfEnqueueTurnFiles(fid, ids[i], rec.files);
+        window.AiCmGeminiFiles.gfEnqueueTurnFiles(fid, ids[i], own);
       } catch (eEnq) { swallowSoft(eEnq, 'gemini:enqueueOwnedTurnFiles'); }
     }
   }
@@ -1284,7 +1317,7 @@
     for (var i = 0; i < pageSeq.length; i++) {
       var p = pageSeq[i];
       if (!turnsMap[p.id]) {
-        turnsMap[p.id] = { text: p.text, modelName: p.modelName, order: pageOrders[i], pageMode: src, ts: p.ts || 0, role: (p.role === 'user') ? 'user' : 'assistant', turnId: p.turnId || null, r1: p.r1 || null, files: p.files || null };
+        turnsMap[p.id] = { text: p.text, modelName: p.modelName, order: pageOrders[i], pageMode: src, ts: p.ts || 0, role: (p.role === 'user') ? 'user' : 'assistant', turnId: p.turnId || null, r1: p.r1 || null, files: p.files || null, filePool: p.filePool || null };
         added++;
       } else if (turnsMap[p.id].pageMode === 'restored') {
         // v1.14.1 (SHRINK-GUARD): сетевой ход перезаписывает restored-ход того же id
@@ -1302,7 +1335,7 @@
             : { replace: false, r1: (!recRest.r1 && p.r1) ? p.r1 : null, turnId: (!recRest.turnId && p.turnId) ? p.turnId : null };
         }
         if (dRm.replace) {
-          turnsMap[p.id] = { text: p.text, modelName: p.modelName, order: pageOrders[i], pageMode: src, ts: p.ts || 0, role: (p.role === 'user') ? 'user' : 'assistant', turnId: p.turnId || null, r1: p.r1 || null, files: p.files || null };
+          turnsMap[p.id] = { text: p.text, modelName: p.modelName, order: pageOrders[i], pageMode: src, ts: p.ts || 0, role: (p.role === 'user') ? 'user' : 'assistant', turnId: p.turnId || null, r1: p.r1 || null, files: p.files || null, filePool: p.filePool || null };
         } else {
           if (dRm.r1) recRest.r1 = dRm.r1;
           if (dRm.turnId) recRest.turnId = dRm.turnId;

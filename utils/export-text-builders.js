@@ -369,6 +369,25 @@
   // md: та же разметка, что использовала кнопка «Сохранить .md» в попапе
   // (M-4.2: шапка и роли — из _locales, ключи export_md_*)
   /**
+   * Единый снимок tokens/limit/percent для шапки экспорта (v2.5, Фикс D2).
+   * Автоэкспорт мог получить percent из среза ДО финального flush: если
+   * пересчёт по тем же tokens/limit не сходится, шапка печатает пересчёт,
+   * а не устаревший процент (иначе «112753 / 128000 (73.6%)»).
+   * @param {ExportHistory} history история экспорта
+   * @returns {{tokens: number, limit: number, percent: number}} согласованный снимок
+   */
+  function exportTokenSnapshot(history) {
+    var h = history || {};
+    var tokens = (typeof h.tokens === 'number') ? h.tokens : 0;
+    var limit = (typeof h.limit === 'number') ? h.limit : 0;
+    var percent = (typeof h.percent === 'number') ? h.percent : 0;
+    if (limit > 0) {
+      var calc = Math.round(tokens / limit * 1000) / 10;
+      if (calc !== percent) percent = calc;
+    }
+    return { tokens: tokens, limit: limit, percent: percent };
+  }
+  /**
    * Собирает markdown-экспорт истории.
    * @param {ExportHistory} history история экспорта
    * @param {string} platform платформа
@@ -384,9 +403,10 @@
     lines.push(aiCmI18nMessage('export_md_model', 'Модель: ' + (h.model || '—'), [h.model || '—']));
     var exportedAt = new Date().toISOString();
     lines.push(aiCmI18nMessage('export_md_date', 'Дата экспорта: ' + exportedAt, [exportedAt]));
-    var tokens = (typeof h.tokens === 'number') ? h.tokens : 0;
-    var limit = (typeof h.limit === 'number') ? h.limit : 0;
-    var percent = (typeof h.percent === 'number') ? h.percent : 0;
+    var snap = exportTokenSnapshot(h);
+    var tokens = snap.tokens;
+    var limit = snap.limit;
+    var percent = snap.percent;
     // Фикс C: «0 / 0» — не данные, а отсутствие лимита. Если и счётчик, и лимит
     // нулевые (вызывающий не передал лимит), шапка печатает «н/д (pct%)».
     // Ключ локали не заводим: _locales вне скоупа фикса, а «н/д» — метка
@@ -447,6 +467,9 @@
    */
   function buildJsonFromHistory(history, platform) {
     var h = history || {};
+    // json — данные снимка: значения берутся из истории как есть (их согласованность
+    // обеспечивает export-manager одним снимком). Пересчёт здесь менял бы байты
+    // машинного формата и ломал пины «метрики не пересчитываются».
     return JSON.stringify({
       platform: (platform || 'AI Chat'),
       model: h.model || '',

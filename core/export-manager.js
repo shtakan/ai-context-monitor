@@ -1800,12 +1800,22 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
         // (вариант «200k», автолимит модели), а не жёсткий 0 — иначе «Токены: 0 / 0».
         // typeof-страховка: в unit-песочницах core/widget.js не подключён.
         var dispLimitAuto = (typeof computeEffectiveLimit === 'function') ? computeEffectiveLimit(lastResolvedModelId) : 0;
+        // v2.5 (Фикс D2): tokens, limit и percent — из ОДНОГО снимка. Глобальный
+        // percentage мог быть посчитан до финального flush/resync; если он не
+        // сходится с round(tokens/limit*100), пересчитываем из этих же tokens/limit,
+        // чтобы шапка «112753 / 128000 (73.6%)» не противоречила сама себе.
+        var snapTokens = (typeof maxTokenCount === 'number') ? maxTokenCount : 0;
+        var snapPercent = (typeof percentage === 'number') ? percentage : 0;
+        if (dispLimitAuto > 0) {
+          var snapCalc = Math.round(snapTokens / dispLimitAuto * 1000) / 10;
+          if (snapCalc !== snapPercent) snapPercent = snapCalc;
+        }
         var hist = {
           site: (currentAdapter && currentAdapter.siteName) || '',
           model: ModelConfig.getModel(lastResolvedModelId || '')?.name || '',
-          tokens: maxTokenCount,
+          tokens: snapTokens,
           limit: dispLimitAuto,
-          percent: percentage,
+          percent: snapPercent,
           // Two-Tier (v89): метка источника — из ОБЪЕДИНЁННОЙ базы в момент сборки файла;
           // сборщики TXT/MD ставят её первой строкой/блоком только для Gemini.
           // typeof-гард — как у снимка истории выше (срез-песочницы тестов).

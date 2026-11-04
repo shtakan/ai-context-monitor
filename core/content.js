@@ -937,19 +937,22 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
     try {
       var cid79 = emitConvId || lastEmitConvId || getCurrentConvId() || '';
       if (cid79) {
-        if (aiCmLateCheckByConv[cid79]) {
-          aiCmTryLateAutoExport(cid79);
-        } else if (autoExportSettings.enabled === true && typeof autoExportLastPct === 'number' && autoExportLastPct >= 0) {
-          debugLog('log', '[AI CM][auto-export] base-complete 0→1 check (не loader-stop) convId=' + cid79 + ' pct=' + autoExportLastPct);
-          maybeAutoExport(autoExportLastPct);
-        }
         // v83: если deferred-запись aiCmHistory ещё висит (loader-stop был при
         // base-unconfirmed) — флашим сразу при подтверждении полноты 0→1, не ждём 60s.
         // Гарды внутри flush сами требуют baseComplete && !loaderRunning.
         try { aiCmFlushDeferredHistWrite(cid79, 'base-complete'); } catch (eF79) { swallowSoft(eF79, 'content:full-history-flush-deferred'); }
         // v95 (METRICS-SYNC): флаш записал финальный срез — histKey/pct пересчитываем
         // по нему же, иначе бейдж/запись остаются на устаревшем снимке (101 вместо 120).
+        // v2.5 (Фикс D2): ресинк идёт ДО автоэкспорта — файл обязан получить тот же
+        // tokens/percent, что и бейдж, а не срез, снятый до финального flush.
         try { aiCmResyncMetricsAfterFlush(cid79, 'base-complete'); } catch (eRs79) { swallowSoft(eRs79, 'content:metrics-resync-flush'); }
+        var freshPct79 = (typeof lastPercentage === 'number' && lastPercentage >= 0) ? lastPercentage : autoExportLastPct;
+        if (aiCmLateCheckByConv[cid79]) {
+          aiCmTryLateAutoExport(cid79);
+        } else if (autoExportSettings.enabled === true && typeof freshPct79 === 'number' && freshPct79 >= 0) {
+          debugLog('log', '[AI CM][auto-export] base-complete 0→1 check (не loader-stop) convId=' + cid79 + ' pct=' + freshPct79);
+          maybeAutoExport(freshPct79);
+        }
       }
     } catch (e79) { swallowSoft(e79, 'content:full-history-complete-transition'); }
   }
