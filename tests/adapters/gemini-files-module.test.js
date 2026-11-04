@@ -228,6 +228,16 @@ function textNode(name) {
   });
 }
 
+/** PDF-узел с известным размером: изображения/хвост узла [w, h, bytes]. */
+function pdfNodeSized(name, size, token, url) {
+  const node = fileNode(11, name, 'application/pdf', {
+    token: token || TOKEN_PDF,
+    urls: ['thumb', 'https://contribution.usercontent.google.com/download?c=' + (url || encodeURIComponent(name)), 'upload']
+  });
+  node[15] = [null, null, size];
+  return node;
+}
+
 function docxBuffer(xml) {
   // Минимальный ZIP: local header + deflate-raw. Центральный каталог не нужен —
   // модуль умеет fallback по local header (см. gfZipEntry).
@@ -375,11 +385,10 @@ describe('R2: очередь, дедуп и секции', function () {
       .toContain('[FILE: scan.pdf — application/pdf, размер неизвестен, текст не получен: pdf-no-text]');
   });
 
-  test('дубли в одном ходе и повтор файла в другом — один запрос, секция только у владельца', async function () {
+  test('дубли в одном ходе — один запрос и одна секция; повторная эмиссия идемпотентна', async function () {
     const h = makeHarness();
     const ref = h.Fn.collectTurnFiles(turnWith([pdfNode('same.pdf')]))[0];
     h.Fn.gfEnqueueTurnFiles(CHAT, 'u1', [ref, ref]);
-    h.Fn.gfEnqueueTurnFiles(CHAT, 'u2', [ref]);
     expect(h.fetchCalls).toHaveLength(1);
 
     h.fetchCalls[0].resolve(makeRes({ headers: { 'content-length': '7' } }));
@@ -387,10 +396,7 @@ describe('R2: очередь, дедуп и секции', function () {
     h.tick(300);
 
     const s1 = h.Fn.gfSectionsFor(CHAT, 'u1');
-    const s2 = h.Fn.gfSectionsFor(CHAT, 'u2');
     expect(sectionsCount(s1)).toBe(1);
-    // v2.2: файл принадлежит ходу первого упоминания — соседний ход секцию не получает
-    expect(s2).toBe('');
 
     // повторная эмиссия того же сообщения не добавляет секцию
     h.Fn.gfEnqueueTurnFiles(CHAT, 'u1', [ref]);
@@ -443,25 +449,43 @@ describe('R2: очередь, дедуп и секции', function () {
   });
 });
 
-describe('v2.2 (A): вложения привязаны к своему ходу', function () {
-  test('D0: тот же файл с другим токеном не создаёт второй запрос', function () {
+describe('v2.4 (A+B): дельта пула и единый ключ файла', function () {
+  test('D2: два test.pdf с разными размерами — разные файлы, обе секции в экспорте', async function () {
     const h = makeHarness();
-    const r1 = h.Fn.collectTurnFiles(turnWith([pdfNode('token.pdf')]))[0];
-    const r2 = h.Fn.collectTurnFiles(turnWith([fileNode(11, 'token.pdf', 'application/pdf', {
-      token: '$AfW07Ichanged',
-      urls: ['https://contribution.usercontent.google.com/download?c=pdf-2']
-    })]))[0];
-    h.Fn.gfEnqueueTurnFiles(CHAT, 'u1', [r1, r2]);
-    expect(h.fetchCalls).toHaveLength(1);
+    const small = h.Fn.collectTurnFiles(turnWith([pdfNodeSized('test.pdf', 100, TOKEN_PDF, 'pdf-small')]))[0];
+    const big = h.Fn.collectTurnFiles(turnWith([pdfNodeSized('test.pdf', 200, TOKEN_PDF, 'pdf-big')]))[0];
+    // размер реально прочитан из узла (Фикс B), ключи различаются
+    expect(small.size).toBe(100);
+    expect(big.size).toBe(200);
+    h.Fn.gfEnqueueTurnFiles(CHAT, 'u1', [small, big]);
+    expect(h.fetchCalls).toHaveLength(2);
+
+    h.fetchCalls[0].resolve(makeRes({ headers: { 'content-length': '100' } }));
+    h.fetchCalls[1].resolve(makeRes({ headers: { 'content-length': '200' } }));
+    await flush();
+    h.tick(300);
+
+    const s = h.Fn.gfSectionsFor(CHAT, 'u1');
+    expect(sectionsCount(s)).toBe(2);
+    expect(s).toContain(', 100 Б,');
+    expect(s).toContain(', 200 Б,');
+    expect(h.Fn.gfPendingCount(CHAT)).toBe(0);
   });
 
-  test('D1: один файл в чате на 10 ходов → одна секция, textLen не раздувается', async function () {
+  test('D1: один файл в накопительном пуле на 10 ходов → одна секция, textLen не раздувается', async function () {
     const h = makeHarness();
-    const ref = h.Fn.collectTurnFiles(turnWith([pdfNode('same.pdf')]))[0];
-    const baseTexts = [];
+    const ts0 = 1762000000;
+    const turns = [];
+    // ingest: предварительный проход регистрирует пулы старые→новые,
+    // затем эмиссия получает ДЕЛЬТУ пула (Фикс A).
     for (let i = 0; i < 10; i++) {
-      baseTexts.push('вопрос ' + i);
-      h.Fn.gfEnqueueTurnFiles(CHAT, 'u' + i, [ref]);
+      const t = turnWith([pdfNode('same.pdf')], ts0 + i * 60);
+      turns.push(t);
+      h.Parser.registerTurnFileOwner(t, CHAT, 'u' + i, ts0 + i * 60, i);
+    }
+    for (let i = 0; i < 10; i++) {
+      const files = h.Parser.collectTurnFilesForOwner(turns[i], CHAT, 'u' + i, ts0 + i * 60, i);
+      h.Fn.gfEnqueueTurnFiles(CHAT, 'u' + i, files);
     }
     expect(h.fetchCalls).toHaveLength(1);
 
@@ -474,13 +498,71 @@ describe('v2.2 (A): вложения привязаны к своему ходу
     for (let i = 0; i < 10; i++) {
       const s = h.Fn.gfSectionsFor(CHAT, 'u' + i);
       sections += sectionsCount(s);
-      textLen += baseTexts[i].length + s.length;
+      textLen += ('вопрос ' + i).length + s.length;
     }
     expect(sections).toBe(1);
     const only = h.Fn.gfSectionsFor(CHAT, 'u0');
     expect(sectionsCount(only)).toBe(1);
+    expect(h.Fn.gfSectionsFor(CHAT, 'u9')).toBe('');
     // ровно одна секция на всю базу: длина = сумма ходов + эта секция
-    expect(textLen).toBe(baseTexts.join('').length + only.length);
+    let baseLen = 0;
+    for (let i = 0; i < 10; i++) baseLen += ('вопрос ' + i).length;
+    expect(textLen).toBe(baseLen + only.length);
+    expect(h.Fn.gfPendingCount(CHAT)).toBe(0);
+  });
+
+  test('D1 (дельта): A → A+B → A+B+C даёт по ходам ровно A, B, C', function () {
+    const h = makeHarness();
+    const ts0 = 1762000000;
+    const t1 = turnWith([textNode('A.txt')], ts0);
+    const t2 = turnWith([textNode('A.txt'), textNode('B.txt')], ts0 + 60);
+    const t3 = turnWith([textNode('A.txt'), textNode('B.txt'), textNode('C.txt')], ts0 + 120);
+    h.Parser.registerTurnFileOwner(t1, CHAT, 'u1', ts0, 0);
+    h.Parser.registerTurnFileOwner(t2, CHAT, 'u2', ts0 + 60, 1);
+    h.Parser.registerTurnFileOwner(t3, CHAT, 'u3', ts0 + 120, 2);
+
+    const names = function (files) { return files.map(function (r) { return r.name; }); };
+    expect(names(h.Parser.collectTurnFilesForOwner(t1, CHAT, 'u1', ts0, 0))).toEqual(['A.txt']);
+    expect(names(h.Parser.collectTurnFilesForOwner(t2, CHAT, 'u2', ts0 + 60, 1))).toEqual(['B.txt']);
+    expect(names(h.Parser.collectTurnFilesForOwner(t3, CHAT, 'u3', ts0 + 120, 2))).toEqual(['C.txt']);
+  });
+
+  test('D1 (экспорт): ход 1 = A, ход 2 = B, ход 3 = C в секциях сообщений', async function () {
+    const h = makeHarness();
+    const ts0 = 1762000000;
+    const t1 = turnWith([textNode('A.txt')], ts0);
+    const t2 = turnWith([textNode('A.txt'), textNode('B.txt')], ts0 + 60);
+    const t3 = turnWith([textNode('A.txt'), textNode('B.txt'), textNode('C.txt')], ts0 + 120);
+    h.Parser.registerTurnFileOwner(t1, CHAT, 'u1', ts0, 0);
+    h.Parser.registerTurnFileOwner(t2, CHAT, 'u2', ts0 + 60, 1);
+    h.Parser.registerTurnFileOwner(t3, CHAT, 'u3', ts0 + 120, 2);
+    h.Fn.gfEnqueueTurnFiles(CHAT, 'u1', h.Parser.collectTurnFilesForOwner(t1, CHAT, 'u1', ts0, 0));
+    h.Fn.gfEnqueueTurnFiles(CHAT, 'u2', h.Parser.collectTurnFilesForOwner(t2, CHAT, 'u2', ts0 + 60, 1));
+    h.Fn.gfEnqueueTurnFiles(CHAT, 'u3', h.Parser.collectTurnFilesForOwner(t3, CHAT, 'u3', ts0 + 120, 2));
+    // concurrency 2: третья загрузка стартует после завершения одной из первых двух
+    expect(h.fetchCalls).toHaveLength(2);
+
+    h.fetchCalls[0].resolve(makeRes({ body: 'one' }));
+    h.fetchCalls[1].resolve(makeRes({ body: 'two' }));
+    await flush();
+    expect(h.fetchCalls).toHaveLength(3);
+    h.fetchCalls[2].resolve(makeRes({ body: 'three' }));
+    await flush();
+    h.tick(300);
+
+    const s1 = h.Fn.gfSectionsFor(CHAT, 'u1');
+    const s2 = h.Fn.gfSectionsFor(CHAT, 'u2');
+    const s3 = h.Fn.gfSectionsFor(CHAT, 'u3');
+    expect(sectionsCount(s1)).toBe(1);
+    expect(sectionsCount(s2)).toBe(1);
+    expect(sectionsCount(s3)).toBe(1);
+    expect(s1).toContain('[FILE: A.txt]\none');
+    expect(s2).toContain('[FILE: B.txt]\ntwo');
+    expect(s3).toContain('[FILE: C.txt]\nthree');
+    expect(s1).not.toContain('B.txt');
+    expect(s2).not.toContain('A.txt');
+    expect(s2).not.toContain('C.txt');
+    expect(s3).not.toContain('A.txt');
     expect(h.Fn.gfPendingCount(CHAT)).toBe(0);
   });
 

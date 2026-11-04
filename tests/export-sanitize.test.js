@@ -288,6 +288,26 @@ describe('O-20 (4): четыре формата из одного эмита', (
     expect(md).toContain('Токены: ' + TOKENS + ' / ' + LIMIT + ' (' + PERCENT + '%)');
   });
 
+  test('D3: шапка md — при limit=0 «Токены: н/д (pct%)», при limit=128000 «Токены: X / 128000»', () => {
+    const base = historyFrom(emittedMessages().messages);
+    const noLimit = Builders.buildMdFromHistory(
+      Object.assign({}, base, { tokens: 0, limit: 0, percent: 0 }), 'DeepSeek');
+    expect(noLimit).toContain('Токены: н/д (0%)');
+    expect(noLimit).not.toContain('Токены: 0 / 0');
+
+    const withLimit = Builders.buildMdFromHistory(
+      Object.assign({}, base, { tokens: 4200, limit: 128000, percent: 3.3 }), 'DeepSeek');
+    expect(withLimit).toContain('Токены: 4200 / 128000 (3.3%)');
+  });
+
+  test('D3 (wiring): aiCmWriteAutoExportFile передаёт limit из computeEffectiveLimit, не 0', () => {
+    const fn = block(EXPORT_MGR_SRC, 'function aiCmWriteAutoExportFile(',
+      'aiCmCancelDeferredHistWrite(cid); // v54');
+    expect(fn).toContain('(typeof computeEffectiveLimit === \'function\') ? computeEffectiveLimit(lastResolvedModelId) : 0');
+    expect(fn).toContain('limit: dispLimitAuto,');
+    expect(fn).not.toContain('limit: 0,');
+  });
+
   test('json: messages санированы, tokens/limit/percent НЕ пересчитаны', () => {
     const hist = historyFrom(emittedMessages().messages);
     const json = JSON.parse(Builders.buildJsonFromHistory(hist, 'DeepSeek'));

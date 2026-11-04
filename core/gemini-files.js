@@ -17,9 +17,10 @@
  *   • PDF не парсится: запрашивается Range: bytes=0-0, из content-range берётся
  *     полный размер (запасной путь — content-length), в экспорт едет мета-секция;
  *   • изображения не скачиваются (CORS lh3), в экспорт едет [IMAGE: имя] URL;
- *   • FIFO-очередь, concurrency 2, дедуп convId|name|size: токен в ключ не входит
- *     (Gemini переиздаёт его), а уникальный файл закрепляется за ходом первого
- *     упоминания и эмитится только там — без дублей секций в соседних ходах;
+ *   • FIFO-очередь, concurrency 2, дедуп convId|name|size|token (v2.4, Фикс B):
+ *     токен различает разные загрузки с одинаковыми именами и размерами, а
+ *     уникальный файл приходит только из своего хода — парсер отдаёт дельту
+ *     пула (utils/gemini-batchexecute-parser.js), поэтому секции не дублируются;
  *   • готовый текст складывается в карту <convId>\u0000<msgId> и дописывается
  *     к тексту пользовательского хода в emitBaseSnapshot;
  *   • после прихода текста — дебаунс 250 мс и повторный снимок базы;
@@ -56,10 +57,6 @@
 
   // Карта сообщений: `<convId>\u0000<msgId>` -> { convId, msgId, refs:[], recs:{} }.
   var gfMsgs = {};
-  // Владелец файла: dedupe-ключ -> msgId хода, где файл встретился первым.
-  // Gemini повторяет один и тот же список вложений в соседних ходах — секцию
-  // получает только владелец, иначе textLen базы раздувается.
-  var gfOwnerByDk = {};
   // Израсходованный кап чата: convId -> символов уже отдано в текст.
   var gfCharsByChat = {};
   // Очередь FIFO + карта дедупа convId|token|name + счётчики активных.
@@ -91,11 +88,12 @@
     return gfStr(convId) + '\u0000' + gfStr(msgId);
   }
 
-  // v2.2 (A): токен доступа НЕ входит в ключ — Gemini переиздаёт его для того же
-  // файла, из-за чего раньше появлялись дубликаты. Размер известен не сразу
-  // (PDF узнаёт его Range-пробой), поэтому при отсутствии size ключ = convId|name|0.
+  // v2.4 (B): ключ = convId|name|size|token. Токен различает РАЗНЫЕ загрузки с
+  // одинаковыми именем и размером (13 дублей имён в живом чате), а размер берётся
+  // из самого узла (изображения) либо остаётся 0 до Range-пробы (PDF).
   function gfDedupeKey(convId, ref) {
-    return gfStr(convId) + '|' + gfStr(ref && ref.name) + '|' + (gfNum(ref && ref.size) || 0);
+    return gfStr(convId) + '|' + gfStr(ref && ref.name) + '|' + (gfNum(ref && ref.size) || 0) +
+      '|' + gfStr(ref && ref.token);
   }
 
   function gfCurrentConvId() {
@@ -140,6 +138,9 @@
       var type = (typeof n[1] === 'number') ? n[1] : 0;
       var token = (typeof n[5] === 'string') ? n[5] : '';
       var img = (typeof n[3] === 'string') ? n[3] : '';
+      // Размер (Фикс B): хвост узла изображения — [width, height, bytes].
+      var tail = n ? n[15] : null;
+      var size = (Array.isArray(tail) && typeof tail[2] === 'number' && isFinite(tail[2]) && tail[2] > 0) ? tail[2] : 0;
       var dl = '';
       var urls = [];
       (function walk(v) {
@@ -155,6 +156,7 @@
         mime: mime,
         type: type,
         token: token,
+        size: size,
         img: img,
         dl: dl,
         urls: urls,
@@ -189,6 +191,7 @@
       mime: mime,
       type: type,
       token: gfStr(o.token),
+      size: gfNum(o.size),
       img: gfStr(o.img),
       dl: gfStr(o.dl),
       urls: Array.isArray(o.urls) ? o.urls.slice() : [],
@@ -912,13 +915,11 @@
         var ref = gfNormalizeRef(files[i]);
         if (!ref) continue;
         ref.dk = gfDedupeKey(cid, ref);
-        var owner = gfOwnerByDk[ref.dk];
-        // v2.2 (A): файл закреплён за ходом первого упоминания. Другой ход с тем
-        // же списком (Gemini дублирует его) секцию не получает.
-        if (owner && owner !== mid) continue;
+        // v2.4 (B): владелец в модуле больше не нужен — парсер отдаёт дельту
+        // пула, т.е. только файлы, загруженные в этом ходе. Дедуп остаётся
+        // внутри сообщения (одна секция на файл).
         if (seen[ref.dk]) continue;
         seen[ref.dk] = 1;
-        if (!owner) gfOwnerByDk[ref.dk] = mid;
         refs.push(ref);
       }
       if (!refs.length) return 0;
@@ -1003,8 +1004,7 @@
   function gfReset(convId) {
     gfEpoch++;
     gfMsgs = {};
-    gfOwnerByDk = {};
-    // Реестр владельцев в парсере живёт отдельно — чистим и его, иначе после
+    // Реестр пулов в парсере живёт отдельно — чистим и его, иначе после
     // SPA-перехода файлы старого разговора остались бы «занятыми».
     try {
       if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&

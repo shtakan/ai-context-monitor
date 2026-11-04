@@ -380,6 +380,10 @@
       var type = (typeof n[1] === 'number') ? n[1] : 0;
       var token = (typeof n[5] === 'string') ? n[5] : '';
       var img = (typeof n[3] === 'string') ? n[3] : '';
+      // Размер (Фикс B): у изображений хвост узла — [width, height, bytes].
+      // У документов размера в узле нет (PDF узнаётся Range-пробой) → 0.
+      var tail = n ? n[15] : null;
+      var size = (Array.isArray(tail) && typeof tail[2] === 'number' && isFinite(tail[2]) && tail[2] > 0) ? tail[2] : 0;
       var dl = '';
       var urls = [];
       (function walk(v) {
@@ -395,6 +399,7 @@
         mime: mime,
         type: type,
         token: token,
+        size: size,
         img: img,
         dl: dl,
         urls: urls,
@@ -422,16 +427,19 @@
   }
 
   /**
-   * Реестр владельцев: dedupe-ключ файла → { turnId, ts, order } владельца.
-   * Gemini повторяет один и тот же список `turn[2][0][4][0][4]` в нескольких
-   * ходах, поэтому без реестра один и тот же файл уезжает в базу столько раз,
-   * сколько ходов его содержат (textLen раздувается).
-   * Владелец — ход с НАИМЕНЬШИМ ts (хронологически первый), а не первый
-   * встреченный при обходе: обход идёт с конца (новые→старые), из-за чего
-   * раньше файл прилипал к последнему сообщению.
-   * @type {Record<string, {turnId: string, ts: number, order: number}>}
+   * Реестр пулов вложений по разговору:
+   * convId → { turns: { [turnId]: { turnId, ts, order, seq, refs } }, seq }.
+   *
+   * Gemini повторяет НАКОПИТЕЛЬНЫЙ список `turn[2][0][4][0][4]` в нескольких
+   * ходах, поэтому сам пул не говорит, что загружено именно в этом ходе.
+   * Собственные файлы хода — дельта пула:
+   *   own(k) = multiset(pool(k)) − multiset(pool(k−1)),
+   * где k−1 — ближайший предшествующий по хронологии ход (по ts, затем order).
+   * Дельта сохраняет порядок записей пула, поэтому разные загрузки с
+   * одинаковыми именами остаются разными файлами в своих ходах.
+   * @type {Record<string, {turns: Record<string, {turnId: string, ts: number, order: number, seq: number, refs: GeminiFileRef[]}>, seq: number}>}
    */
-  var fileOwnersByKey = {};
+  var filePoolsByConv = {};
 
   /**
    * Нормализует timestamp хода: нечисло/0/отрицательное → 0 (неизвестно).
@@ -452,133 +460,153 @@
   }
 
   /**
-   * Должен ли новый ход перехватить файл у текущего владельца.
-   * Приоритет — меньший ts; если время неизвестно/равно — меньший
-   * хронологический индекс. Без времени и индекса владелец не меняется
-   * (обратная совместимость с прежним «первый встреченный»).
-   * @param {{turnId: string, ts: number, order: number}|undefined} prev Владелец.
-   * @param {unknown} ts Время нового хода.
-   * @param {unknown} order Индекс нового хода.
-   * @returns {boolean} true, если файл переходит к новому ходу.
+   * Пул ходов разговора; при `create` заводится пустой.
+   * @param {unknown} convId Id разговора.
+   * @param {boolean=} create Создать запись, если её нет.
+   * @returns {{turns: Record<string, {turnId: string, ts: number, order: number, seq: number, refs: GeminiFileRef[]}>, seq: number}|null} Пул.
    */
-  function isOlderFileOwner(prev, ts, order) {
-    if (!prev) return true;
-    var pTs = fileOwnerTs(prev.ts);
-    var nTs = fileOwnerTs(ts);
-    if (nTs > 0 && nTs !== pTs) return pTs === 0 || nTs < pTs;
-    if (nTs === 0 && pTs > 0) return false;
-    var pOrd = fileOwnerOrder(prev.order);
-    var nOrd = fileOwnerOrder(order);
-    if (pOrd < 0 || nOrd < 0) return false;
-    return nOrd < pOrd;
+  function filePoolForConv(convId, create) {
+    var cid = (typeof convId === 'string') ? convId : '';
+    var pool = filePoolsByConv[cid];
+    if (!pool && create) {
+      pool = { turns: {}, seq: 0 };
+      filePoolsByConv[cid] = pool;
+    }
+    return pool || null;
   }
 
   /**
-   * Ключ владельца файла: разговор + имя (+ размер, если он уже известен).
-   * Токен доступа в ключ НЕ входит — Gemini переиздаёт его, а файл тот же.
+   * Хронологический порядок ходов: сначала известный ts, затем индекс кадра,
+   * затем порядок регистрации (предварительный проход ingest идёт старые→новые).
+   * @param {{ts: number, order: number, seq: number}} a Первый ход.
+   * @param {{ts: number, order: number, seq: number}} b Второй ход.
+   * @returns {boolean} true, если `a` хронологически раньше `b`.
+   */
+  function isTurnBefore(a, b) {
+    var aTs = fileOwnerTs(a.ts);
+    var bTs = fileOwnerTs(b.ts);
+    if (aTs > 0 && bTs > 0 && aTs !== bTs) return aTs < bTs;
+    if (aTs > 0 && bTs === 0) return true;
+    if (aTs === 0 && bTs > 0) return false;
+    var aOrd = fileOwnerOrder(a.order);
+    var bOrd = fileOwnerOrder(b.order);
+    if (aOrd >= 0 && bOrd >= 0 && aOrd !== bOrd) return aOrd < bOrd;
+    return a.seq < b.seq;
+  }
+
+  /**
+   * Ключ файла в мультимножестве пула: разговор + имя + размер + токен.
+   * Токен входит в ключ (v2.4, Фикс B): разные загрузки с одинаковыми именами
+   * получают разные токены и не схлопываются в один файл.
    * @param {unknown} convId Id разговора.
    * @param {GeminiFileRef} ref Нормализованный ref вложения.
-   * @returns {string} Ключ реестра.
+   * @returns {string} Ключ мультимножества.
    */
   function fileOwnerKey(convId, ref) {
     var cid = (typeof convId === 'string') ? convId : '';
     var name = (ref && typeof ref.name === 'string') ? ref.name : '';
     var size = (ref && typeof ref.size === 'number' && isFinite(ref.size)) ? ref.size : 0;
-    return cid + '|' + name + '|' + size;
+    var token = (ref && typeof ref.token === 'string') ? ref.token : '';
+    return cid + '|' + name + '|' + size + '|' + token;
   }
 
   /**
-   * Регистрирует все файлы хода в реестре владельцев, не отдавая их.
-   * Нужен для предварительного прохода ingest: владелец (min ts) выбирается
-   * ДО эмиссии, иначе более новый ход успевает забрать файл себе.
+   * Регистрирует пул хода, не отдавая файлы.
+   * Нужен для предварительного прохода ingest: дельта считается по пулам всех
+   * ходов, поэтому пул должен быть известен ДО эмиссии. Ходы с пустым пулом
+   * (assistant) не регистрируются — иначе они разрывали бы дельту.
+   * Повторный разбор того же хода идемпотентно обновляет снимок пула.
    * @param {any} turn Ход batchexecute.
    * @param {string} convId Id разговора (скоуп реестра).
    * @param {string} turnId Id хода.
    * @param {number=} ts Время хода (секунды эпохи).
    * @param {number=} order Хронологический индекс (0 = самый старый).
-   * @returns {number} Сколько файлов получило/уточнило владельца.
+   * @returns {number} Сколько файлов в пуле хода.
    */
   function registerTurnFileOwner(turn, convId, turnId, ts, order) {
     var own = (typeof turnId === 'string') ? turnId : '';
     if (!own) return 0;
     var all = collectTurnFiles(turn);
+    var pool = filePoolForConv(convId, true);
+    if (!all.length) {
+      if (pool && pool.turns[own]) delete pool.turns[own];
+      return 0;
+    }
     var nTs = fileOwnerTs(ts);
     var nOrd = fileOwnerOrder(order);
-    var changed = 0;
-    for (var i = 0; i < all.length; i++) {
-      var key = fileOwnerKey(convId, all[i]);
-      var prev = fileOwnersByKey[key];
-      if (!prev) {
-        fileOwnersByKey[key] = { turnId: own, ts: nTs, order: nOrd };
-        changed++;
-      } else if (prev.turnId === own) {
-        // Повторный разбор того же хода: уточняем время/индекс, не плодя записи.
-        if (nTs > 0 && (prev.ts === 0 || nTs < prev.ts)) prev.ts = nTs;
-        if (nOrd >= 0 && (prev.order < 0 || nOrd < prev.order)) prev.order = nOrd;
-      } else if (isOlderFileOwner(prev, ts, order)) {
-        prev.turnId = own;
-        prev.ts = nTs;
-        prev.order = nOrd;
-        changed++;
-      }
+    var prev = pool.turns[own];
+    if (prev) {
+      // Повторный разбор того же хода: обновляем снимок, не плодя записи.
+      prev.refs = all;
+      if (nTs > 0) prev.ts = nTs;
+      if (nOrd >= 0) prev.order = nOrd;
+      return all.length;
     }
-    return changed;
+    pool.seq++;
+    pool.turns[own] = { turnId: own, ts: nTs, order: nOrd, seq: pool.seq, refs: all };
+    return all.length;
   }
 
   /**
-   * Вложения ТОЛЬКО этого хода. Владелец — ход с наименьшим ts (хронологически
-   * первый); при равном/неизвестном времени решает хронологический индекс.
+   * Вложения, загруженные ИМЕННО в этом ходе: дельта пула против ближайшего
+   * предшествующего по хронологии хода. Порядок записей пула сохраняется.
+   * Если предшественник ещё не зарегистрирован, отдаётся весь пул (без потерь).
    * Без `ownerId` поведение прежнее (весь список) — обратная совместимость.
    * @param {any} turn Ход batchexecute.
    * @param {string} convId Id разговора.
-   * @param {string} ownerId Id хода-владельца (turnId).
+   * @param {string} ownerId Id хода (turnId).
    * @param {number=} ts Время хода (секунды эпохи).
    * @param {number=} order Хронологический индекс (0 = самый старый).
-   * @returns {GeminiFileRef[]} Файлы, принадлежащие этому ходу.
+   * @returns {GeminiFileRef[]} Файлы, загруженные в этом ходе.
    */
   function collectTurnFilesForOwner(turn, convId, ownerId, ts, order) {
     var all = collectTurnFiles(turn);
     var own = (typeof ownerId === 'string') ? ownerId : '';
-    if (!own) return all;
-    var nTs = fileOwnerTs(ts);
-    var nOrd = fileOwnerOrder(order);
+    if (!own || !all.length) return own ? [] : all;
+    var pool = filePoolForConv(convId, true);
+    var rec = pool.turns[own];
+    if (!rec) {
+      // Ход ещё не проходил предварительную регистрацию — регистрируем на месте.
+      pool.seq++;
+      rec = { turnId: own, ts: fileOwnerTs(ts), order: fileOwnerOrder(order), seq: pool.seq, refs: all };
+      pool.turns[own] = rec;
+    }
+    // Ближайший предшествующий ход (самый поздний из тех, что раньше текущего).
+    var prev = null;
+    var ids = Object.keys(pool.turns);
+    for (var i = 0; i < ids.length; i++) {
+      if (ids[i] === own) continue;
+      var cand = pool.turns[ids[i]];
+      if (!isTurnBefore(cand, rec)) continue;
+      if (!prev || isTurnBefore(prev, cand)) prev = cand;
+    }
+    if (!prev) return all;
+    // Мультимножество предыдущего пула: сколько раз какой ключ там встречался.
+    var prevCount = {};
+    for (i = 0; i < prev.refs.length; i++) {
+      var pk = fileOwnerKey(convId, prev.refs[i]);
+      prevCount[pk] = (prevCount[pk] || 0) + 1;
+    }
     var out = [];
-    for (var i = 0; i < all.length; i++) {
-      var key = fileOwnerKey(convId, all[i]);
-      var prev = fileOwnersByKey[key];
-      if (!prev) {
-        fileOwnersByKey[key] = { turnId: own, ts: nTs, order: nOrd };
-        out.push(all[i]);
-      } else if (prev.turnId === own) {
-        if (nTs > 0 && (prev.ts === 0 || nTs < prev.ts)) prev.ts = nTs;
-        out.push(all[i]);
-      } else if (isOlderFileOwner(prev, ts, order)) {
-        // Более старый ход перехватывает файл. В штатном ingest это не нужно:
-        // предварительный проход регистрирует владельцев до эмиссии.
-        prev.turnId = own;
-        prev.ts = nTs;
-        prev.order = nOrd;
-        out.push(all[i]);
-      }
+    for (i = 0; i < all.length; i++) {
+      var k = fileOwnerKey(convId, all[i]);
+      if (prevCount[k] > 0) { prevCount[k]--; continue; }
+      out.push(all[i]);
     }
     return out;
   }
 
   /**
-   * Сброс реестра владельцев (SPA-переход/смена разговора).
+   * Сброс реестра пулов (SPA-переход/смена разговора).
    * @param {string=} convId Разговор; без него чистится весь реестр.
    * @returns {void}
    */
   function __resetFileOwners(convId) {
     if (convId === undefined || convId === null || convId === '') {
-      fileOwnersByKey = {};
+      filePoolsByConv = {};
       return;
     }
-    var prefix = String(convId) + '|';
-    var keys = Object.keys(fileOwnersByKey);
-    for (var i = 0; i < keys.length; i++) {
-      if (keys[i].indexOf(prefix) === 0) delete fileOwnersByKey[keys[i]];
-    }
+    delete filePoolsByConv[(typeof convId === 'string') ? convId : String(convId)];
   }
 
   // Чисто английский блок-мышление assistant (без кириллицы, начинающийся с герундия /

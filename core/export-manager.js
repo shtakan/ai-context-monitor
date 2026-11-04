@@ -1796,11 +1796,15 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
         var msgs = fileMsgs;
         // v61diag: дамп turnsMap в момент fired автоэкспорта (md/txt)
         try { aiCmDumpTurnsSnapshot('snapshot-at-fired', cid, msgs); } catch (eDump) { }
+        // Фикс C: шапка файла берёт ТОТ ЖЕ эффективный лимит, что бейдж и pct
+        // (вариант «200k», автолимит модели), а не жёсткий 0 — иначе «Токены: 0 / 0».
+        // typeof-страховка: в unit-песочницах core/widget.js не подключён.
+        var dispLimitAuto = (typeof computeEffectiveLimit === 'function') ? computeEffectiveLimit(lastResolvedModelId) : 0;
         var hist = {
           site: (currentAdapter && currentAdapter.siteName) || '',
           model: ModelConfig.getModel(lastResolvedModelId || '')?.name || '',
           tokens: maxTokenCount,
-          limit: 0,
+          limit: dispLimitAuto,
           percent: percentage,
           // Two-Tier (v89): метка источника — из ОБЪЕДИНЁННОЙ базы в момент сборки файла;
           // сборщики TXT/MD ставят её первой строкой/блоком только для Gemini.

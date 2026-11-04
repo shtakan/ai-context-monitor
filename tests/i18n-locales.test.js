@@ -781,6 +781,9 @@ const LOG_PAYLOAD_LITERALS = [
 ];
 // Содержимое экспорт-файла диагностики (данные, а не UI) — не переводится (M-4.2, п.6).
 const EXPORT_DATA_LITERALS = ['нет активной вкладки', 'content script не ответил: ', 'пустой ответ'];
+// Фикс C: шапка экспорта без лимита и счётчика — метка отсутствия данных, а не
+// пользовательский текст; ключ в _locales не заводится (вне скоупа фикса).
+const EXPORT_HEADER_LITERALS = ['Токены: н/д ('];
 
 describe('M-4.2: литералы — пользовательских ru-строк вне логов и фолбэков локали нет', () => {
   test('лексер различает литералы, комментарии, регулярки и интерполяции шаблонов', () => {
@@ -809,7 +812,7 @@ describe('M-4.2: литералы — пользовательских ru-стр
   test('в content.js / options.js / print.js / export-text-builders.js ru-литералы = ровно фолбэки локали', () => {
     const allowed = localeLiterals(ru);
     const whitelist = {};
-    LOG_PAYLOAD_LITERALS.concat(EXPORT_DATA_LITERALS).forEach(function (v) { whitelist[v] = true; });
+    LOG_PAYLOAD_LITERALS.concat(EXPORT_DATA_LITERALS, EXPORT_HEADER_LITERALS).forEach(function (v) { whitelist[v] = true; });
     const offenders = [];
     DYNAMIC_SOURCES.forEach(function (pair) {
       const src = pair[1];

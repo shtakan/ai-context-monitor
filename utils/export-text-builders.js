@@ -387,7 +387,15 @@
     var tokens = (typeof h.tokens === 'number') ? h.tokens : 0;
     var limit = (typeof h.limit === 'number') ? h.limit : 0;
     var percent = (typeof h.percent === 'number') ? h.percent : 0;
-    lines.push(aiCmI18nMessage('export_md_tokens', 'Токены: ' + tokens + ' / ' + limit + ' (' + percent + '%)', [String(tokens), String(limit), String(percent)]));
+    // Фикс C: «0 / 0» — не данные, а отсутствие лимита. Если и счётчик, и лимит
+    // нулевые (вызывающий не передал лимит), шапка печатает «н/д (pct%)».
+    // Ключ локали не заводим: _locales вне скоупа фикса, а «н/д» — метка
+    // отсутствия данных, а не пользовательский текст платформы.
+    if (tokens === 0 && limit === 0) {
+      lines.push('Токены: н/д (' + percent + '%)');
+    } else {
+      lines.push(aiCmI18nMessage('export_md_tokens', 'Токены: ' + tokens + ' / ' + limit + ' (' + percent + '%)', [String(tokens), String(limit), String(percent)]));
+    }
     lines.push('');
     // Two-Tier (v89): метка достоверности источника — отдельным блоком сразу после шапки,
     // только Gemini и только когда метка есть в истории (см. aiCmGetSourceTier).
