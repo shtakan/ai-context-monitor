@@ -202,7 +202,7 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
     expect(PAG.match(/emitBaseSnapshot\(\)/g)).toHaveLength(2);
     // ingest: 1 декларация `function emitBaseSnapshot()` + 2 вызова (ingest и mergeRestoredTurns)
     expect(MOD.match(/emitBaseSnapshot\(\)/g)).toHaveLength(3);
-    expect(linesOf(MOD, 'function emitBaseSnapshot()')).toEqual([482]);
+    expect(linesOf(MOD, 'function emitBaseSnapshot()')).toEqual([502]);
     // E.2a.2a: тело catch инструментировано swallow (LOG-точка P0). Расхождение с
     // до-E.2a.2a эталоном — ровно эта одна строка; сам вызов emitBaseSnapshot() и
     // его try-обёртка не менялись, поэтому R-D маршрут записи базы прежний.

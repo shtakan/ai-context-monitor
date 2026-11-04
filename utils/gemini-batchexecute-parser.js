@@ -422,13 +422,56 @@
   }
 
   /**
-   * Реестр владельцев: dedupe-ключ файла → id хода, где он встретился первым.
+   * Реестр владельцев: dedupe-ключ файла → { turnId, ts, order } владельца.
    * Gemini повторяет один и тот же список `turn[2][0][4][0][4]` в нескольких
    * ходах, поэтому без реестра один и тот же файл уезжает в базу столько раз,
    * сколько ходов его содержат (textLen раздувается).
-   * @type {Record<string, string>}
+   * Владелец — ход с НАИМЕНЬШИМ ts (хронологически первый), а не первый
+   * встреченный при обходе: обход идёт с конца (новые→старые), из-за чего
+   * раньше файл прилипал к последнему сообщению.
+   * @type {Record<string, {turnId: string, ts: number, order: number}>}
    */
   var fileOwnersByKey = {};
+
+  /**
+   * Нормализует timestamp хода: нечисло/0/отрицательное → 0 (неизвестно).
+   * @param {unknown} ts Время хода.
+   * @returns {number} Секунды эпохи или 0.
+   */
+  function fileOwnerTs(ts) {
+    return (typeof ts === 'number' && isFinite(ts) && ts > 0) ? ts : 0;
+  }
+
+  /**
+   * Нормализует хронологический индекс: 0 — самый старый в кадре, -1 — нет.
+   * @param {unknown} order Индекс хода.
+   * @returns {number} Неотрицательный индекс или -1.
+   */
+  function fileOwnerOrder(order) {
+    return (typeof order === 'number' && isFinite(order) && order >= 0) ? order : -1;
+  }
+
+  /**
+   * Должен ли новый ход перехватить файл у текущего владельца.
+   * Приоритет — меньший ts; если время неизвестно/равно — меньший
+   * хронологический индекс. Без времени и индекса владелец не меняется
+   * (обратная совместимость с прежним «первый встреченный»).
+   * @param {{turnId: string, ts: number, order: number}|undefined} prev Владелец.
+   * @param {unknown} ts Время нового хода.
+   * @param {unknown} order Индекс нового хода.
+   * @returns {boolean} true, если файл переходит к новому ходу.
+   */
+  function isOlderFileOwner(prev, ts, order) {
+    if (!prev) return true;
+    var pTs = fileOwnerTs(prev.ts);
+    var nTs = fileOwnerTs(ts);
+    if (nTs > 0 && nTs !== pTs) return pTs === 0 || nTs < pTs;
+    if (nTs === 0 && pTs > 0) return false;
+    var pOrd = fileOwnerOrder(prev.order);
+    var nOrd = fileOwnerOrder(order);
+    if (pOrd < 0 || nOrd < 0) return false;
+    return nOrd < pOrd;
+  }
 
   /**
    * Ключ владельца файла: разговор + имя (+ размер, если он уже известен).
@@ -445,26 +488,76 @@
   }
 
   /**
-   * Вложения ТОЛЬКО этого хода. Если файл уже закреплён за другим ходом —
-   * пропускаем: уникальный файл эмитится один раз, в ходе первого упоминания.
+   * Регистрирует все файлы хода в реестре владельцев, не отдавая их.
+   * Нужен для предварительного прохода ingest: владелец (min ts) выбирается
+   * ДО эмиссии, иначе более новый ход успевает забрать файл себе.
+   * @param {any} turn Ход batchexecute.
+   * @param {string} convId Id разговора (скоуп реестра).
+   * @param {string} turnId Id хода.
+   * @param {number=} ts Время хода (секунды эпохи).
+   * @param {number=} order Хронологический индекс (0 = самый старый).
+   * @returns {number} Сколько файлов получило/уточнило владельца.
+   */
+  function registerTurnFileOwner(turn, convId, turnId, ts, order) {
+    var own = (typeof turnId === 'string') ? turnId : '';
+    if (!own) return 0;
+    var all = collectTurnFiles(turn);
+    var nTs = fileOwnerTs(ts);
+    var nOrd = fileOwnerOrder(order);
+    var changed = 0;
+    for (var i = 0; i < all.length; i++) {
+      var key = fileOwnerKey(convId, all[i]);
+      var prev = fileOwnersByKey[key];
+      if (!prev) {
+        fileOwnersByKey[key] = { turnId: own, ts: nTs, order: nOrd };
+        changed++;
+      } else if (prev.turnId === own) {
+        // Повторный разбор того же хода: уточняем время/индекс, не плодя записи.
+        if (nTs > 0 && (prev.ts === 0 || nTs < prev.ts)) prev.ts = nTs;
+        if (nOrd >= 0 && (prev.order < 0 || nOrd < prev.order)) prev.order = nOrd;
+      } else if (isOlderFileOwner(prev, ts, order)) {
+        prev.turnId = own;
+        prev.ts = nTs;
+        prev.order = nOrd;
+        changed++;
+      }
+    }
+    return changed;
+  }
+
+  /**
+   * Вложения ТОЛЬКО этого хода. Владелец — ход с наименьшим ts (хронологически
+   * первый); при равном/неизвестном времени решает хронологический индекс.
    * Без `ownerId` поведение прежнее (весь список) — обратная совместимость.
    * @param {any} turn Ход batchexecute.
    * @param {string} convId Id разговора.
    * @param {string} ownerId Id хода-владельца (turnId).
+   * @param {number=} ts Время хода (секунды эпохи).
+   * @param {number=} order Хронологический индекс (0 = самый старый).
    * @returns {GeminiFileRef[]} Файлы, принадлежащие этому ходу.
    */
-  function collectTurnFilesForOwner(turn, convId, ownerId) {
+  function collectTurnFilesForOwner(turn, convId, ownerId, ts, order) {
     var all = collectTurnFiles(turn);
     var own = (typeof ownerId === 'string') ? ownerId : '';
     if (!own) return all;
+    var nTs = fileOwnerTs(ts);
+    var nOrd = fileOwnerOrder(order);
     var out = [];
     for (var i = 0; i < all.length; i++) {
       var key = fileOwnerKey(convId, all[i]);
       var prev = fileOwnersByKey[key];
-      if (typeof prev === 'undefined') {
-        fileOwnersByKey[key] = own;
+      if (!prev) {
+        fileOwnersByKey[key] = { turnId: own, ts: nTs, order: nOrd };
         out.push(all[i]);
-      } else if (prev === own) {
+      } else if (prev.turnId === own) {
+        if (nTs > 0 && (prev.ts === 0 || nTs < prev.ts)) prev.ts = nTs;
+        out.push(all[i]);
+      } else if (isOlderFileOwner(prev, ts, order)) {
+        // Более старый ход перехватывает файл. В штатном ingest это не нужно:
+        // предварительный проход регистрирует владельцев до эмиссии.
+        prev.turnId = own;
+        prev.ts = nTs;
+        prev.order = nOrd;
         out.push(all[i]);
       }
     }
@@ -904,6 +997,7 @@
    * @property {typeof __setDrTexts} __setDrTexts Установка DR-текстов текущего парса.
    * @property {typeof fileRefFromNode} fileRefFromNode Нормализованный ref вложения.
    * @property {typeof collectTurnFiles} collectTurnFiles Вложения хода.
+   * @property {typeof registerTurnFileOwner} registerTurnFileOwner Регистрация владельца файлов до эмиссии.
    * @property {typeof collectTurnFilesForOwner} collectTurnFilesForOwner Вложения хода-владельца.
    * @property {typeof __resetFileOwners} __resetFileOwners Сброс реестра владельцев файлов.
    * @property {typeof parseGeminiHistory} parseGeminiHistory Полный разбор истории.
@@ -924,6 +1018,7 @@
     __setDrTexts: __setDrTexts,
     fileRefFromNode: fileRefFromNode,
     collectTurnFiles: collectTurnFiles,
+    registerTurnFileOwner: registerTurnFileOwner,
     collectTurnFilesForOwner: collectTurnFilesForOwner,
     __resetFileOwners: __resetFileOwners,
     parseGeminiHistory: parseGeminiHistory

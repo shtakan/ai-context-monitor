@@ -185,9 +185,12 @@ function makeRes(spec) {
   };
 }
 
-function turnWith(nodes) {
+function turnWith(nodes, ts) {
   // turn[2][0][4][0][4] — ровно тот путь, который читает план/парсер.
-  return [null, null, [[null, null, null, null, [[null, null, null, null, nodes]]]]];
+  // turn[4] — время хода, которое читает extractTurnTs (секунды эпохи).
+  const turn = [null, null, [[null, null, null, null, [[null, null, null, null, nodes]]]]];
+  if (typeof ts === 'number') turn[4] = [ts];
+  return turn;
 }
 
 function fileNode(type, name, mime, opts) {
@@ -521,6 +524,34 @@ describe('v2.2 (A): вложения привязаны к своему ходу
     expect(h.Parser.collectTurnFilesForOwner(turnWith([docxNode('other.docx')]), CHAT, 't2')).toHaveLength(1);
     // без ownerId — прежний контракт: весь список
     expect(h.Parser.collectTurnFiles(dupTurn)).toHaveLength(1);
+  });
+
+  test('D1 (v2.3): файл привязан к хронологически первому ходу (min ts), а не к последнему', function () {
+    const h = makeHarness();
+    const ts1000 = 1762000000;      // 10:00
+    const ts1005 = ts1000 + 300;    // 10:05
+    const early = turnWith([pdfNode('same.pdf')], ts1000);
+    const late = turnWith([pdfNode('same.pdf')], ts1005);
+    // ingest сначала регистрирует владельцев (обход с конца: поздний раньше),
+    // и только потом эмитит вложения.
+    h.Parser.registerTurnFileOwner(late, CHAT, 't-late', ts1005, 1);
+    h.Parser.registerTurnFileOwner(early, CHAT, 't-early', ts1000, 0);
+    expect(h.Parser.collectTurnFilesForOwner(early, CHAT, 't-early', ts1000, 0)).toHaveLength(1);
+    expect(h.Parser.collectTurnFilesForOwner(late, CHAT, 't-late', ts1005, 1)).toHaveLength(0);
+  });
+
+  test('R1 (v2.3): дедупликация сохранена — общий файл один раз, уникальные не теряются', function () {
+    const h = makeHarness();
+    const ts1 = 1762000000;
+    const ts2 = ts1 + 300;
+    const early = turnWith([pdfNode('shared.pdf')], ts1);
+    const late = turnWith([pdfNode('shared.pdf'), docxNode('only-late.docx')], ts2);
+    h.Parser.registerTurnFileOwner(late, CHAT, 't-late', ts2, 1);
+    h.Parser.registerTurnFileOwner(early, CHAT, 't-early', ts1, 0);
+    const a = h.Parser.collectTurnFilesForOwner(early, CHAT, 't-early', ts1, 0);
+    const b = h.Parser.collectTurnFilesForOwner(late, CHAT, 't-late', ts2, 1);
+    expect(a.map(function (r) { return r.name; })).toEqual(['shared.pdf']);
+    expect(b.map(function (r) { return r.name; })).toEqual(['only-late.docx']);
   });
 });
 

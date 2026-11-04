@@ -297,6 +297,26 @@
           window.GeminiBatchexecuteParser.__setDrTexts(window.GeminiBatchexecuteParser.extractDrTexts(realTurns));
         }
       } catch (eD13) { debugLog('log', '[gemini-intercept] parse-top fail (eD13/DR): ' + (eD13 && eD13.message || eD13)); }
+      // v2.3 (chronology): владелец вложения — ход с НАИМЕНЬШИМ ts (хронологически
+      // первый), а не первый встреченный при обходе. Обход идёт с конца
+      // (новые→старые), поэтому раньше файлы прилипали к последнему сообщению.
+      // Регистрируем владельцев ДО эмиссии: иначе более новый ход успевает их
+      // забрать. Индекс (0 = самый старый) — фолбэк, когда timestamps нет.
+      // Id ходов считаем в том же порядке, что и основной цикл, чтобы
+      // stableTurnFallbackId(out.total) нумеровал ходы как раньше.
+      var turnIds = [];
+      var turnTss = [];
+      for (var pre = realTurns.length - 1; pre >= 0; pre--) {
+        var t = realTurns[pre];
+        if (!Array.isArray(t)) { turnIds[pre] = ''; turnTss[pre] = 0; continue; }
+        turnIds[pre] = extractTurnId(t) || stableTurnFallbackId(t, out);
+        turnTss[pre] = extractTurnTs(t);
+        try {
+          turnFilesRegister(t, turnIds[pre], turnTss[pre], realTurns.length - 1 - pre);
+        } catch (ePreFiles) {
+          debugLog('log', '[gemini-files] owner preregister fail: ' + (ePreFiles && ePreFiles.message || ePreFiles));
+        }
+      }
       // v38: raw внутри страницы идёт «новые→старые». Обходим С КОНЦА, чтобы
       // по возрастанию order (assignPageOrders) итог был «старые→новые»;
       // внутри хода user стоит раньше assistant → получает меньший order.
@@ -307,8 +327,8 @@
         collectAttachments(t, localSeen, items);
         ingestAttachments(items);
         var modelName = extractModelName(t);
-        var turnId = extractTurnId(t) || stableTurnFallbackId(t, out);
-        var turnTs = extractTurnTs(t);
+        var turnId = turnIds[i];
+        var turnTs = turnTss[i] || 0;
         var r1 = extractTurnR1(t);
         // v2.0 (Gemini files): ref-ы вложений хода. Парсер не бросает; пустой
         // массив — обычный ход без файлов.
@@ -317,7 +337,7 @@
         // реестр dk → turnId чистится на SPA-переходе (gfReset).
         var turnFiles = [];
         try {
-          turnFiles = turnFilesForIngest(t, turnId);
+          turnFiles = turnFilesForIngest(t, turnId, turnTs);
         } catch (eFiles) { turnFiles = []; }
         // v30/v31: текст хода и роли собираем через чистый сетевой парсер
         // (utils/gemini-batchexecute-parser.js): вычищаем $AXzLiR-токены и сегменты «мышления»,
@@ -750,14 +770,25 @@
   // ---- v2.2 (A): вложения строго своего хода ----
   // Парсер закрепляет уникальный файл за ходом первого упоминания (реестр
   // dk → turnId): один и тот же список Gemini повторяет в соседних ходах.
-  function turnFilesForIngest(turn, turnId) {
+  // v2.3: «первое» — хронологически первое (min ts), а не первое встреченное.
+  function turnFilesForIngest(turn, turnId, turnTs) {
     if (typeof window === 'undefined' || !window.GeminiBatchexecuteParser) return [];
     var P = window.GeminiBatchexecuteParser;
     if (typeof P.collectTurnFilesForOwner === 'function') {
-      return P.collectTurnFilesForOwner(turn, getConvId(), turnId) || [];
+      return P.collectTurnFilesForOwner(turn, getConvId(), turnId, turnTs) || [];
     }
     if (typeof P.collectTurnFiles === 'function') return P.collectTurnFiles(turn) || [];
     return [];
+  }
+
+  // Предварительная регистрация владельцев до эмиссии: ход с наименьшим ts
+  // забирает файл, даже если при обходе он встретился последним.
+  function turnFilesRegister(turn, turnId, turnTs, order) {
+    if (typeof window === 'undefined' || !window.GeminiBatchexecuteParser) return;
+    var P = window.GeminiBatchexecuteParser;
+    if (typeof P.registerTurnFileOwner === 'function') {
+      P.registerTurnFileOwner(turn, getConvId(), turnId, turnTs, order);
+    }
   }
 
   // ---- v2.2 (C): гейт файлового ожидания ----
