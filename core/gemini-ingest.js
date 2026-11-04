@@ -312,12 +312,12 @@
         var r1 = extractTurnR1(t);
         // v2.0 (Gemini files): ref-ы вложений хода. Парсер не бросает; пустой
         // массив — обычный ход без файлов.
+        // v2.2 (A+C): только вложения ЭТОГО хода — парсер закрепляет файл за
+        // ходом первого упоминания (общий список Gemini повторяется в соседях),
+        // реестр dk → turnId чистится на SPA-переходе (gfReset).
         var turnFiles = [];
         try {
-          if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&
-              typeof window.GeminiBatchexecuteParser.collectTurnFiles === 'function') {
-            turnFiles = window.GeminiBatchexecuteParser.collectTurnFiles(t) || [];
-          }
+          turnFiles = turnFilesForIngest(t, turnId);
         } catch (eFiles) { turnFiles = []; }
         // v30/v31: текст хода и роли собираем через чистый сетевой парсер
         // (utils/gemini-batchexecute-parser.js): вычищаем $AXzLiR-токены и сегменты «мышления»,
@@ -660,9 +660,33 @@
         filesPending = window.AiCmGeminiFiles.gfPendingCount(fid) || 0;
       }
     } catch (ePend) { filesPending = 0; }
-    var baseComplete = historyFullByQuiet && filesPending === 0;
+    // v2.2 (C): большой пакет вложений не держит экспорт вечно. Порог превышен
+    // больше 5 с назад — финализируем базу как filesTruncated (секции уже
+    // пришедших файлов сохраняются), вместо ожидания всех 124 МБ.
+    var gateKey = fid || '__';
+    var filesTruncated = false;
+    if (filesPending > GF_FILES_GATE_MAX) {
+      var gateNow = Date.now();
+      if (!filesGateSince[gateKey]) filesGateSince[gateKey] = gateNow;
+      var gate = filesGateDecision(filesPending, filesGateSince[gateKey], gateNow);
+      filesTruncated = gate.release === true;
+      if (filesTruncated) {
+        if (filesGateTimers[gateKey]) { clearTimeout(filesGateTimers[gateKey]); delete filesGateTimers[gateKey]; }
+      } else if (typeof setTimeout === 'function' && !filesGateTimers[gateKey]) {
+        var gateReemit = emitBaseSnapshot;
+        filesGateTimers[gateKey] = setTimeout(function () {
+          delete filesGateTimers[gateKey];
+          try { gateReemit(); } catch (eGate) { swallowSoft(eGate, 'gemini:files-gate-emit'); }
+        }, gate.delay);
+      }
+    } else {
+      delete filesGateSince[gateKey];
+      if (filesGateTimers[gateKey]) { clearTimeout(filesGateTimers[gateKey]); delete filesGateTimers[gateKey]; }
+    }
+    var baseComplete = baseCompleteWithFiles(historyFullByQuiet, filesPending, filesTruncated);
     debugLog('log', '[gemini-base-diag] count=' + ids.length + ' textLen=' + text.length +
       ' baseComplete=' + baseComplete + ' filesPending=' + filesPending +
+      ' filesTruncated=' + filesTruncated +
       ' floorCount=' + (savedFloor ? savedFloor.count : '-'));
 
     // v27/vXX: пол применяем ТОЛЬКО как защиту от просадки при НЕполной загрузке
@@ -712,6 +736,7 @@
           attachBreak: { imgTokens: attachBreak.imgTokens, docTokens: attachBreak.docTokens, imgCount: attachBreak.imgCount, docCount: attachBreak.docCount },
           historyComplete: baseComplete,
           filesPending: filesPending,
+          filesTruncated: filesTruncated,
           reachedStart: reachedStart === true, // v1.13.1: подтверждение полноты для гейта экспорта
           isLowConfidenceBase: isLowConfidenceBase === true, // v63: sanity-фолбэк без proof — префикс [LOW CONFIDENCE]_
           floorApplied: floorApplied,
@@ -720,6 +745,40 @@
       }));
     } catch (e) { swallowSoft(e, 'gemini:emitBaseSnapshot-dispatch'); }
     return { count: ids.length, textLen: text.length, effectiveLen: effectiveLen, lastModelName: lastModelName, floorApplied: floorApplied, floorValue: floorValue };
+  }
+
+  // ---- v2.2 (A): вложения строго своего хода ----
+  // Парсер закрепляет уникальный файл за ходом первого упоминания (реестр
+  // dk → turnId): один и тот же список Gemini повторяет в соседних ходах.
+  function turnFilesForIngest(turn, turnId) {
+    if (typeof window === 'undefined' || !window.GeminiBatchexecuteParser) return [];
+    var P = window.GeminiBatchexecuteParser;
+    if (typeof P.collectTurnFilesForOwner === 'function') {
+      return P.collectTurnFilesForOwner(turn, getConvId(), turnId) || [];
+    }
+    if (typeof P.collectTurnFiles === 'function') return P.collectTurnFiles(turn) || [];
+    return [];
+  }
+
+  // ---- v2.2 (C): гейт файлового ожидания ----
+  // Большой пакет вложений (124 МБ и т.п.) не должен держать базу вечно: больше
+  // 10 файлов, не докачанных за 5 с, финализируют базу как filesTruncated.
+  var GF_FILES_GATE_MAX = 10;
+  var GF_FILES_GATE_MS = 5000;
+  var filesGateSince = {};
+  var filesGateTimers = {};
+  function filesGateDecision(filesPending, sinceMs, nowMs) {
+    var pending = (typeof filesPending === 'number') ? filesPending : 0;
+    var now = (typeof nowMs === 'number') ? nowMs : Date.now();
+    if (pending <= GF_FILES_GATE_MAX) return { release: false, delay: 0, since: 0 };
+    var since = (typeof sinceMs === 'number' && sinceMs > 0) ? sinceMs : (now || 1);
+    var waited = now - since;
+    if (waited > GF_FILES_GATE_MS) return { release: true, delay: 0, since: since };
+    var delay = GF_FILES_GATE_MS - waited + 1;
+    return { release: false, delay: delay > 0 ? delay : 0, since: since };
+  }
+  function baseCompleteWithFiles(historyFullByQuiet, filesPending, filesTruncated) {
+    return !!historyFullByQuiet && ((filesPending === 0) || filesTruncated === true);
   }
 
   // ---- v2.1 (dedupe): устойчивый fallback-id хода ----

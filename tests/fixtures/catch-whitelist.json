@@ -792,7 +792,7 @@
       "file": "core/gemini-files.js",
       "category": "best-effort-guard",
       "lines": [
-        167
+        175
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var arr = turn[2][0][4][0][4]; if (!Array.isArray(arr)) return out; for"
     },
@@ -800,11 +800,11 @@
       "file": "core/gemini-files.js",
       "category": "guard-clause",
       "lines": [
-        97,
-        111,
-        402,
-        423,
-        424
+        105,
+        119,
+        410,
+        431,
+        432
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (ctrl) ctrl.abort();"
     },
@@ -812,7 +812,7 @@
       "file": "core/gemini-files.js",
       "category": "parse-guard",
       "lines": [
-        590
+        598
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: if (typeof TextDecoder === 'function') return new TextDecoder('utf-8').d"
     },
@@ -881,8 +881,8 @@
       "category": "debug-instrumentation",
       "lines": [
         280,
-        827,
-        879
+        886,
+        938
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var restDiag = arr0.slice(3); for (var rdi = 0; rdi < restDiag.length; r"
     },
@@ -917,9 +917,9 @@
       "category": "local-helper-guard",
       "lines": [
         190,
-        811,
-        1216,
-        1320
+        870,
+        1275,
+        1379
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmEnsureColdWindow();"
     },
@@ -1708,7 +1708,7 @@
       "file": "utils/gemini-batchexecute-parser.js",
       "category": "best-effort-guard",
       "lines": [
-        419
+        420
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var arr = turn[2][0][4][0][4]; if (!Array.isArray(arr)) return out; for"
     },
@@ -1716,8 +1716,8 @@
       "file": "utils/gemini-batchexecute-parser.js",
       "category": "defensive-assignment",
       "lines": [
-        631,
-        713
+        699,
+        781
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: lastDrTexts = extractDrTexts(realTurns);"
     },
@@ -1725,7 +1725,7 @@
       "file": "utils/gemini-batchexecute-parser.js",
       "category": "feature-detect",
       "lines": [
-        531
+        599
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var box = (Array.isArray(turn[3]) && Array.isArray(turn[3][0]) && Array."
     },
@@ -1733,8 +1733,8 @@
       "file": "utils/gemini-batchexecute-parser.js",
       "category": "guard-clause",
       "lines": [
-        349,
-        360
+        350,
+        361
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (Array.isArray(t) && Array.isArray(t[1]) && typeof t[1][1] === 'strin"
     },
@@ -1742,7 +1742,7 @@
       "file": "utils/gemini-batchexecute-parser.js",
       "category": "logging-guard",
       "lines": [
-        89
+        90
       ],
       "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: console.log('[AI CM][batchexecute] segment parse fail ' + where + ': ' +"
     },
@@ -1750,7 +1750,7 @@
       "file": "utils/gemini-batchexecute-parser.js",
       "category": "noop-guard",
       "lines": [
-        750
+        818
       ],
       "reason": "noop-guard: единственный no-op — штатный выход из цикла/функции без восстановления; пример: bytes = new TextEncoder().encode(raw);"
     },

@@ -21,6 +21,7 @@ const timers = require('timers');
 const ROOT = path.join(__dirname, '..', '..');
 const MODULE_SRC = fs.readFileSync(path.join(ROOT, 'core', 'gemini-files.js'), 'utf8');
 const PARSER_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'gemini-batchexecute-parser.js'), 'utf8');
+const INGEST_SRC = fs.readFileSync(path.join(ROOT, 'core', 'gemini-ingest.js'), 'utf8');
 const read = function (rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); };
 
 /** Вырезает `function <name>(…) { … }` по балансу скобок (для чистых хелперов). */
@@ -371,7 +372,7 @@ describe('R2: очередь, дедуп и секции', function () {
       .toContain('[FILE: scan.pdf — application/pdf, размер неизвестен, текст не получен: pdf-no-text]');
   });
 
-  test('дубли в одном ходе и повтор файла в другом — один запрос, без дублей секций', async function () {
+  test('дубли в одном ходе и повтор файла в другом — один запрос, секция только у владельца', async function () {
     const h = makeHarness();
     const ref = h.Fn.collectTurnFiles(turnWith([pdfNode('same.pdf')]))[0];
     h.Fn.gfEnqueueTurnFiles(CHAT, 'u1', [ref, ref]);
@@ -385,7 +386,8 @@ describe('R2: очередь, дедуп и секции', function () {
     const s1 = h.Fn.gfSectionsFor(CHAT, 'u1');
     const s2 = h.Fn.gfSectionsFor(CHAT, 'u2');
     expect(sectionsCount(s1)).toBe(1);
-    expect(s1).toBe(s2);
+    // v2.2: файл принадлежит ходу первого упоминания — соседний ход секцию не получает
+    expect(s2).toBe('');
 
     // повторная эмиссия того же сообщения не добавляет секцию
     h.Fn.gfEnqueueTurnFiles(CHAT, 'u1', [ref]);
@@ -435,6 +437,122 @@ describe('R2: очередь, дедуп и секции', function () {
     const section = h2.Fn.gfSectionsFor(CHAT, 'u2');
     expect(section).toContain('…[обрезано 5]');
     expect(section.indexOf(']' + '\n') > 0).toBe(true);
+  });
+});
+
+describe('v2.2 (A): вложения привязаны к своему ходу', function () {
+  test('D0: тот же файл с другим токеном не создаёт второй запрос', function () {
+    const h = makeHarness();
+    const r1 = h.Fn.collectTurnFiles(turnWith([pdfNode('token.pdf')]))[0];
+    const r2 = h.Fn.collectTurnFiles(turnWith([fileNode(11, 'token.pdf', 'application/pdf', {
+      token: '$AfW07Ichanged',
+      urls: ['https://contribution.usercontent.google.com/download?c=pdf-2']
+    })]))[0];
+    h.Fn.gfEnqueueTurnFiles(CHAT, 'u1', [r1, r2]);
+    expect(h.fetchCalls).toHaveLength(1);
+  });
+
+  test('D1: один файл в чате на 10 ходов → одна секция, textLen не раздувается', async function () {
+    const h = makeHarness();
+    const ref = h.Fn.collectTurnFiles(turnWith([pdfNode('same.pdf')]))[0];
+    const baseTexts = [];
+    for (let i = 0; i < 10; i++) {
+      baseTexts.push('вопрос ' + i);
+      h.Fn.gfEnqueueTurnFiles(CHAT, 'u' + i, [ref]);
+    }
+    expect(h.fetchCalls).toHaveLength(1);
+
+    h.fetchCalls[0].resolve(makeRes({ headers: { 'content-length': '7' } }));
+    await flush();
+    h.tick(300);
+
+    let sections = 0;
+    let textLen = 0;
+    for (let i = 0; i < 10; i++) {
+      const s = h.Fn.gfSectionsFor(CHAT, 'u' + i);
+      sections += sectionsCount(s);
+      textLen += baseTexts[i].length + s.length;
+    }
+    expect(sections).toBe(1);
+    const only = h.Fn.gfSectionsFor(CHAT, 'u0');
+    expect(sectionsCount(only)).toBe(1);
+    // ровно одна секция на всю базу: длина = сумма ходов + эта секция
+    expect(textLen).toBe(baseTexts.join('').length + only.length);
+    expect(h.Fn.gfPendingCount(CHAT)).toBe(0);
+  });
+
+  test('R1: нормальный чат — каждый из 3 файлов остаётся в своём ходе', async function () {
+    const h = makeHarness();
+    const refs = h.Fn.collectTurnFiles(turnWith([
+      textNode('one.txt'), textNode('two.txt'), textNode('three.txt')
+    ]));
+    h.Fn.gfEnqueueTurnFiles(CHAT, 'u1', [refs[0]]);
+    h.Fn.gfEnqueueTurnFiles(CHAT, 'u2', [refs[1]]);
+    h.Fn.gfEnqueueTurnFiles(CHAT, 'u3', [refs[2]]);
+    expect(h.fetchCalls).toHaveLength(2);
+
+    h.fetchCalls[0].resolve(makeRes({ body: '1' }));
+    h.fetchCalls[1].resolve(makeRes({ body: '2' }));
+    await flush();
+    expect(h.fetchCalls).toHaveLength(3);
+    h.fetchCalls[2].resolve(makeRes({ body: '3' }));
+    await flush();
+    h.tick(300);
+
+    const s1 = h.Fn.gfSectionsFor(CHAT, 'u1');
+    const s2 = h.Fn.gfSectionsFor(CHAT, 'u2');
+    const s3 = h.Fn.gfSectionsFor(CHAT, 'u3');
+    expect(s1).toContain('[FILE: one.txt]\n1');
+    expect(s2).toContain('[FILE: two.txt]\n2');
+    expect(s3).toContain('[FILE: three.txt]\n3');
+    expect(s1).not.toContain('two.txt');
+    expect(s2).not.toContain('three.txt');
+    expect(h.Fn.gfPendingCount(CHAT)).toBe(0);
+  });
+
+  test('реестр dk→turnId: общий список не уезжает во все ходы, разные файлы не теряются', function () {
+    const h = makeHarness();
+    const dupTurn = turnWith([pdfNode('same.pdf')]);
+    expect(h.Parser.collectTurnFilesForOwner(dupTurn, CHAT, 't1')).toHaveLength(1);
+    expect(h.Parser.collectTurnFilesForOwner(dupTurn, CHAT, 't2')).toHaveLength(0);
+    // повторный разбор того же хода идемпотентен
+    expect(h.Parser.collectTurnFilesForOwner(dupTurn, CHAT, 't1')).toHaveLength(1);
+    // другой файл в другом ходе не подавляется
+    expect(h.Parser.collectTurnFilesForOwner(turnWith([docxNode('other.docx')]), CHAT, 't2')).toHaveLength(1);
+    // без ownerId — прежний контракт: весь список
+    expect(h.Parser.collectTurnFiles(dupTurn)).toHaveLength(1);
+  });
+});
+
+describe('v2.2 (C): filesTruncated снимает вечное ожидание filesPending', function () {
+  function loadIngestHelpers() {
+    const ctx = vm.createContext({ Date: Date });
+    vm.runInContext('var GF_FILES_GATE_MAX = 10; var GF_FILES_GATE_MS = 5000;\n' +
+      fnSource(INGEST_SRC, 'filesGateDecision') + '\n' +
+      fnSource(INGEST_SRC, 'baseCompleteWithFiles'), ctx);
+    return {
+      decision: vm.runInContext('filesGateDecision', ctx),
+      baseComplete: vm.runInContext('baseCompleteWithFiles', ctx)
+    };
+  }
+
+  test('D2: filesPending > 10 дольше 5 с → baseComplete и filesTruncated', function () {
+    const H = loadIngestHelpers();
+    // порог: 11 файлов и 5 001 мс ожидания; ровно 5 000 мс и 10 файлов — ещё ждём
+    expect(H.decision(11, 1000, 6001)).toMatchObject({ release: true, delay: 0 });
+    expect(H.decision(11, 1000, 6000)).toMatchObject({ release: false, delay: 1 });
+    expect(H.decision(10, 0, 999999).release).toBe(false);
+
+    expect(H.baseComplete(true, 11, true)).toBe(true);   // экспорт не блокируется
+    expect(H.baseComplete(true, 11, false)).toBe(false); // до 5 с — ждём
+    expect(H.baseComplete(true, 0, false)).toBe(true);   // очередь пуста — полная
+    expect(H.baseComplete(false, 11, true)).toBe(false); // тишина пагинации не наступила
+
+    // реальный emitBaseSnapshot принимает решение этими хелперами и публикует флаг
+    const body = fnSource(INGEST_SRC, 'emitBaseSnapshot');
+    expect(body).toContain('filesGateDecision(filesPending, filesGateSince[gateKey], gateNow)');
+    expect(body).toContain('baseCompleteWithFiles(historyFullByQuiet, filesPending, filesTruncated)');
+    expect(body).toContain('filesTruncated: filesTruncated');
   });
 });
 

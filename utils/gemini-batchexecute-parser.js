@@ -64,6 +64,7 @@
    * @property {string} dl Ссылка скачивания ('' если нет).
    * @property {string[]} urls Все строковые ссылки узла.
    * @property {boolean} isImage true — изображение (type=1 или mime image/*).
+   * @property {number} [size] Размер в байтах (не задан — ещё неизвестен).
    */
 
   /**
@@ -418,6 +419,73 @@
       }
     } catch (e) { }
     return out;
+  }
+
+  /**
+   * Реестр владельцев: dedupe-ключ файла → id хода, где он встретился первым.
+   * Gemini повторяет один и тот же список `turn[2][0][4][0][4]` в нескольких
+   * ходах, поэтому без реестра один и тот же файл уезжает в базу столько раз,
+   * сколько ходов его содержат (textLen раздувается).
+   * @type {Record<string, string>}
+   */
+  var fileOwnersByKey = {};
+
+  /**
+   * Ключ владельца файла: разговор + имя (+ размер, если он уже известен).
+   * Токен доступа в ключ НЕ входит — Gemini переиздаёт его, а файл тот же.
+   * @param {unknown} convId Id разговора.
+   * @param {GeminiFileRef} ref Нормализованный ref вложения.
+   * @returns {string} Ключ реестра.
+   */
+  function fileOwnerKey(convId, ref) {
+    var cid = (typeof convId === 'string') ? convId : '';
+    var name = (ref && typeof ref.name === 'string') ? ref.name : '';
+    var size = (ref && typeof ref.size === 'number' && isFinite(ref.size)) ? ref.size : 0;
+    return cid + '|' + name + '|' + size;
+  }
+
+  /**
+   * Вложения ТОЛЬКО этого хода. Если файл уже закреплён за другим ходом —
+   * пропускаем: уникальный файл эмитится один раз, в ходе первого упоминания.
+   * Без `ownerId` поведение прежнее (весь список) — обратная совместимость.
+   * @param {any} turn Ход batchexecute.
+   * @param {string} convId Id разговора.
+   * @param {string} ownerId Id хода-владельца (turnId).
+   * @returns {GeminiFileRef[]} Файлы, принадлежащие этому ходу.
+   */
+  function collectTurnFilesForOwner(turn, convId, ownerId) {
+    var all = collectTurnFiles(turn);
+    var own = (typeof ownerId === 'string') ? ownerId : '';
+    if (!own) return all;
+    var out = [];
+    for (var i = 0; i < all.length; i++) {
+      var key = fileOwnerKey(convId, all[i]);
+      var prev = fileOwnersByKey[key];
+      if (typeof prev === 'undefined') {
+        fileOwnersByKey[key] = own;
+        out.push(all[i]);
+      } else if (prev === own) {
+        out.push(all[i]);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Сброс реестра владельцев (SPA-переход/смена разговора).
+   * @param {string=} convId Разговор; без него чистится весь реестр.
+   * @returns {void}
+   */
+  function __resetFileOwners(convId) {
+    if (convId === undefined || convId === null || convId === '') {
+      fileOwnersByKey = {};
+      return;
+    }
+    var prefix = String(convId) + '|';
+    var keys = Object.keys(fileOwnersByKey);
+    for (var i = 0; i < keys.length; i++) {
+      if (keys[i].indexOf(prefix) === 0) delete fileOwnersByKey[keys[i]];
+    }
   }
 
   // Чисто английский блок-мышление assistant (без кириллицы, начинающийся с герундия /
@@ -836,6 +904,8 @@
    * @property {typeof __setDrTexts} __setDrTexts Установка DR-текстов текущего парса.
    * @property {typeof fileRefFromNode} fileRefFromNode Нормализованный ref вложения.
    * @property {typeof collectTurnFiles} collectTurnFiles Вложения хода.
+   * @property {typeof collectTurnFilesForOwner} collectTurnFilesForOwner Вложения хода-владельца.
+   * @property {typeof __resetFileOwners} __resetFileOwners Сброс реестра владельцев файлов.
    * @property {typeof parseGeminiHistory} parseGeminiHistory Полный разбор истории.
    */
 
@@ -854,6 +924,8 @@
     __setDrTexts: __setDrTexts,
     fileRefFromNode: fileRefFromNode,
     collectTurnFiles: collectTurnFiles,
+    collectTurnFilesForOwner: collectTurnFilesForOwner,
+    __resetFileOwners: __resetFileOwners,
     parseGeminiHistory: parseGeminiHistory
   };
 
