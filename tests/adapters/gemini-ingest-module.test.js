@@ -142,6 +142,17 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
     EXPORTED.forEach((n) => expect(body).toContain('Fn.' + n + ' = ' + n + ';'));
   });
 
+  test('v2.3: extractTurnTs берёт реальный ts из t[4][0], а не convId из t[1][0]', () => {
+    const { api } = loadModule();
+    api.__bind({});
+    // боевая раскладка: t[1][0] — строка convId, t[4][0] — epoch-секунды хода
+    expect(api.extractTurnTs([[], ['c_e1020dbabcfa5a02'], [], [], [1762000000]])).toBe(1762000000);
+    // фолбэк для старых фикстур, где ts лежал в t[1][0]
+    expect(api.extractTurnTs([[], [1762000000]])).toBe(1762000000);
+    // мусор/маленькие значения не принимаем
+    expect(api.extractTurnTs([[], ['c_x'], [], [], [123]])).toBe(0);
+  });
+
   test('R-D №3: форвардеры ядра стоят в тех же точках подстановки (235/323/368/452/453)', () => {
     Object.keys(FORWARDER_DEF).forEach((n) => {
       expect(CORE).toContain(FORWARDER_DEF[n]);
@@ -202,7 +213,7 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
     expect(PAG.match(/emitBaseSnapshot\(\)/g)).toHaveLength(2);
     // ingest: 1 декларация `function emitBaseSnapshot()` + 2 вызова (ingest и mergeRestoredTurns)
     expect(MOD.match(/emitBaseSnapshot\(\)/g)).toHaveLength(3);
-    expect(linesOf(MOD, 'function emitBaseSnapshot()')).toEqual([502]);
+    expect(linesOf(MOD, 'function emitBaseSnapshot()')).toEqual([504]);
     // E.2a.2a: тело catch инструментировано swallow (LOG-точка P0). Расхождение с
     // до-E.2a.2a эталоном — ровно эта одна строка; сам вызов emitBaseSnapshot() и
     // его try-обёртка не менялись, поэтому R-D маршрут записи базы прежний.

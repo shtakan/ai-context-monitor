@@ -139,7 +139,15 @@
   }
   function extractTurnTs(t) {
     try {
-      if (Array.isArray(t) && Array.isArray(t[1]) && typeof t[1][0] === 'number' && t[1][0] > 1000000000) return t[1][0];
+      if (Array.isArray(t)) {
+        // v2.3 (chronology fix): реальный ts хода лежит в t[4][0] (там же его
+        // читает парсер). В t[1][0] у Gemini строка convId, из-за чего ingest
+        // раньше отдавал 0 всем ходам и владелец вложения выбирался по
+        // локальному порядку страницы, а не по времени. Старый путь t[1][0]
+        // оставлен фолбэком для фикстур/старых раскладок.
+        if (Array.isArray(t[4]) && typeof t[4][0] === 'number' && t[4][0] > 1000000000) return t[4][0];
+        if (Array.isArray(t[1]) && typeof t[1][0] === 'number' && t[1][0] > 1000000000) return t[1][0];
+      }
     } catch (e) { swallowSoft(e, 'gemini:extractTurnTs'); }
     return 0;
   }
@@ -365,16 +373,10 @@
             turnId: turnId, r1: r1,
             files: (role === 'user' && turnFiles.length) ? turnFiles : null
           });
-          // Вложения привязаны к ПОЛЬЗОВАТЕЛЬСКОМУ ходу: модуль скачивания
-          // раскладывает их по msgId и дописывает секции при эмиссии.
-          if (role === 'user' && turnFiles.length) {
-            try {
-              if (typeof window !== 'undefined' && window.AiCmGeminiFiles &&
-                  typeof window.AiCmGeminiFiles.gfEnqueueTurnFiles === 'function') {
-                window.AiCmGeminiFiles.gfEnqueueTurnFiles(getConvId(), mid, turnFiles);
-              }
-            } catch (eEnqFiles) { }
-          }
+          // v2.3.1: файлы НЕ раздаём здесь. Пока не подтверждено начало истории,
+          // «самый старый» ход текущей страницы может смениться на более старый
+          // с предыдущей страницы, а gfEnqueueTurnFiles закрепляет владельца
+          // навсегда. Раздача — в emitBaseSnapshot, когда reachedStart=true.
         }
         if (doIdmap) {
           try {
@@ -621,6 +623,10 @@
     // v2.0 (Gemini files): convId нужен и для секций вложений, и для гварда
     // полноты ниже — вычисляем один раз.
     var fid = getConvId();
+    // v2.3.1: раздаём вложения только после подтверждения начала истории —
+    // к этому моменту парсер уже видел самый старый ход и выбрал владельца по
+    // минимальному ts, а не по порядку страниц.
+    if (reachedStart === true) enqueueOwnedTurnFiles(fid, ids);
     // v31: сообщения с ролями (user/assistant) для экспорта истории
     var messages = [];
     for (var mi = 0; mi < ids.length; mi++) {
@@ -788,6 +794,23 @@
     var P = window.GeminiBatchexecuteParser;
     if (typeof P.registerTurnFileOwner === 'function') {
       P.registerTurnFileOwner(turn, getConvId(), turnId, turnTs, order);
+    }
+  }
+
+  // v2.3.1 (chronology fix): отложенная раздача файлов. Начинаем её только когда
+  // начало истории подтверждено (reachedStart), иначе владельцем станет самый
+  // старый ход НОВЕЙШЕЙ страницы, а gfEnqueueTurnFiles закрепит его навсегда.
+  // ids — хронологический порядок (старые→новые): первый ход с файлом получает
+  // владение, повторы в более новых ходах gfEnqueueTurnFiles отбрасывает сам.
+  function enqueueOwnedTurnFiles(fid, ids) {
+    if (typeof window === 'undefined' || !window.AiCmGeminiFiles ||
+        typeof window.AiCmGeminiFiles.gfEnqueueTurnFiles !== 'function') return;
+    for (var i = 0; i < ids.length; i++) {
+      var rec = turnsMap[ids[i]];
+      if (!rec || rec.role !== 'user' || !Array.isArray(rec.files) || !rec.files.length) continue;
+      try {
+        window.AiCmGeminiFiles.gfEnqueueTurnFiles(fid, ids[i], rec.files);
+      } catch (eEnq) { swallowSoft(eEnq, 'gemini:enqueueOwnedTurnFiles'); }
     }
   }
 

@@ -7,7 +7,7 @@
     "adapters"
   ],
   "definition": "Молчаливый catch = тело после вырезания комментариев содержит только пробелы, ИЛИ ровно один no-op (void 0; / return; / continue; / break;). Комментарий-только тело тоже молчаливое (комментарии маскируются в пробелы).",
-  "totalEntries": 480,
+  "totalEntries": 479,
   "groups": [
     {
       "file": "adapters/claude-adapter.js",
@@ -872,7 +872,7 @@
       "file": "core/gemini-ingest.js",
       "category": "best-effort-guard",
       "lines": [
-        386
+        388
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var previewTxt = ''; for (var pv = 0; pv < segs.length; pv++) { if (segs"
     },
@@ -880,9 +880,9 @@
       "file": "core/gemini-ingest.js",
       "category": "debug-instrumentation",
       "lines": [
-        280,
-        917,
-        969
+        288,
+        940,
+        992
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var restDiag = arr0.slice(3); for (var rdi = 0; rdi < restDiag.length; r"
     },
@@ -890,7 +890,7 @@
       "file": "core/gemini-ingest.js",
       "category": "dom-read-guard",
       "lines": [
-        456
+        458
       ],
       "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: if (tgt && tgt.closest && tgt.closest('#ai-context-widget')) continue;"
     },
@@ -898,7 +898,7 @@
       "file": "core/gemini-ingest.js",
       "category": "event-guard",
       "lines": [
-        484
+        486
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-dom-emit-request'));"
     },
@@ -907,8 +907,7 @@
       "category": "guard-clause",
       "lines": [
         83,
-        376,
-        641
+        647
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (Array.isArray(t) && Array.isArray(t[1]) && typeof t[1][0] === 'numbe"
     },
@@ -916,10 +915,10 @@
       "file": "core/gemini-ingest.js",
       "category": "local-helper-guard",
       "lines": [
-        190,
-        901,
-        1306,
-        1410
+        198,
+        924,
+        1329,
+        1433
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmEnsureColdWindow();"
     },
