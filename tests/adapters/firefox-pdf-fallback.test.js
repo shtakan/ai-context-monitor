@@ -22,7 +22,10 @@
  *       локального разбора нет;
  *   П2  мусор вместо PDF + мёртвый порт → ровно один отказ pdf-aborted;
  *   E1…E4  сам локальный извлекатель: FlateDecode (DecompressionStream),
- *       hex-строки и UTF-16BE, pdf-invalid, pdf-no-text.
+ *       hex-строки и UTF-16BE, pdf-invalid, pdf-no-text;
+ *   D1/R1 (фильтрация мусора): сложная кодировка реального PDF (CID-хексы,
+ *       \001-escape, бинарные шрифт и XMP) → чистый текст без SOH; простой
+ *       текстовый PDF разбирается как раньше.
  */
 
 const fs = require('fs');
@@ -243,6 +246,45 @@ function buildPdf(opts) {
   return Buffer.concat([Buffer.from(head, 'latin1'), stream, Buffer.from(tail, 'latin1')]);
 }
 
+/**
+ * «Сложная кодировка» как в реальном PDF: CID/Type0-шрифт отдаёт глифы
+ * двухбайтовыми hex-кодами, в литералах есть восьмеричные escape'ы, рядом лежат
+ * бинарная программа шрифта и XMP-поток. До фильтрации байты 0x00–0x1F уезжали
+ * в текст вложения (SOH = \x01), потому что decodeHex/decodeLiteral не отличают
+ * код глифа от печатного символа.
+ */
+function buildEncodedPdf() {
+  const content = [
+    'BT /F1 12 Tf 72 720 Td (Document title) Tj ET',
+    'BT /F2 12 Tf 72 700 Td <00010002000300040005> Tj ET',
+    'BT /F1 12 Tf 72 680 Td (\\001\\002Report body) Tj ET'
+  ].join('\n');
+  // Программа шрифта: нули/управляющие байты и строка, похожая на операнд Tj.
+  const font = Buffer.concat([
+    Buffer.from([0x00, 0x01, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
+    Buffer.from('(font program bytes) Tj', 'latin1')
+  ]);
+  const xmp = Buffer.from('<x:xmpmeta>(metadata \x01\x02 junk)</x:xmpmeta>', 'latin1');
+  const head = '%PDF-1.4\n' +
+    '1 0 obj\n<</Type /Catalog /Pages 2 0 R>>\nendobj\n' +
+    '2 0 obj\n<</Type /Pages /Count 1 /Kids [3 0 R]>>\nendobj\n' +
+    // /Metadata в page-словаре — соседнем объекте: его нельзя путать с самим
+    // stream-объектом (иначе content-стрим ошибочно считается метаданными).
+    '3 0 obj\n<</Type /Page /Parent 2 0 R /Contents 4 0 R /Metadata 6 0 R>>\nendobj\n';
+  return Buffer.concat([
+    Buffer.from(head, 'latin1'),
+    Buffer.from('4 0 obj\n<</Length ' + content.length + '>>\nstream\n' + content +
+      '\nendstream\nendobj\n', 'latin1'),
+    Buffer.from('5 0 obj\n<</Length ' + font.length + ' /Length1 12 /FontFile2 3 0 R>>\nstream\n', 'latin1'),
+    font,
+    Buffer.from('\nendstream\nendobj\n', 'latin1'),
+    Buffer.from('6 0 obj\n<</Type /Metadata /Subtype /XML /Length ' + xmp.length +
+      '>>\nstream\n', 'latin1'),
+    xmp,
+    Buffer.from('\nendstream\nendobj\n%%EOF\n', 'latin1')
+  ]);
+}
+
 /** MAIN отдаёт байты чанками (как postChunks в core/pdf-bytes.js). */
 function feed(page, bytes, opts) {
   const o = opts || {};
@@ -441,6 +483,45 @@ describe('A2: резервный разбор PDF в странице (Firefox p
     expect(res.ok).toBe(true);
     expect(res.text.length).toBe(40);
     expect(res.truncated).toBe(true);
+  });
+
+  test('D1: сложная кодировка (CID-хексы, \\001-escape, бинарный шрифт) → чистый текст без SOH', async () => {
+    const page = createPage({ userAgent: FIREFOX_UA });
+    const pdf = buildEncodedPdf();
+    const res = await page.getGlobal('window').AiCmPdf.parseLocal(page.toBytes(Array.from(pdf)));
+
+    expect(res.ok).toBe(true);
+    // Содержание на месте: фильтр обязан резать мусор, а не текст.
+    expect(res.text).toContain('Document title');
+    expect(res.text).toContain('Report body');
+    expect(res.pages).toBe(1);
+    // Бинарный мусор не добрался до вложения: ни SOH (\x01), ни ESC, ни C1.
+    expect(res.text).not.toContain('\x01');
+    expect(res.text).not.toMatch(/[\x00-\x08\x0B\x0C\x0E-\x1F]/);
+    expect(res.text).not.toMatch(/[\x7F-\x9F]/);
+    // Бинарные потоки (программа шрифта, XMP) не стали текстом.
+    expect(res.text).not.toContain('font program bytes');
+    expect(res.text).not.toContain('metadata');
+  });
+
+  test('D1b: PDF только из CID-кодов → pdf-no-text, а не мусор (откат на pdf.js)', async () => {
+    const page = createPage({ userAgent: FIREFOX_UA });
+    const pdf = buildPdf({ content: 'BT /F2 12 Tf 72 720 Td <00010002000300040005> Tj ET' });
+    const res = await page.getGlobal('window').AiCmPdf.parseLocal(page.toBytes(Array.from(pdf)));
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('pdf-no-text');
+    expect(res.text).toBe('');
+  });
+
+  test('R1: простой текстовый PDF разбирается как раньше', async () => {
+    const page = createPage({ userAgent: FIREFOX_UA });
+    const pdf = buildPdf({ content: 'BT /F1 12 Tf 72 720 Td (Simple text stays intact) Tj ET' });
+    const res = await page.getGlobal('window').AiCmPdf.parseLocal(page.toBytes(Array.from(pdf)));
+    expect(res.ok).toBe(true);
+    expect(res.text).toBe('Simple text stays intact');
+    expect(res.pages).toBe(1);
+    expect(res.truncated).toBe(false);
+    expect(res.reason).toBe('');
   });
 
   test('S1: маркеры моста и константы ретрая/лимита зафиксированы в source', () => {

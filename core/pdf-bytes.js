@@ -292,7 +292,7 @@
   // литеральными/hex-строками Tj/TJ и FlateDecode (DecompressionStream).
   // CID-шрифты и ToUnicode остаются за pdf.js-хостом — если локальный разбор
   // вернул пусто, мост всё равно пробует Port.
-  var LOCAL_VERSION = '1.1.0';
+  var LOCAL_VERSION = '1.2.0';
   var LOCAL_SRC = 'ai-cm-pdf-local';
   var LOCAL_MAX_CHARS = 200000;
   var LOCAL_MAX_SEGMENTS = 4096;
@@ -430,6 +430,47 @@
     return { text: out, next: end + 1 };
   }
 
+  // ===== Фильтрация бинарного мусора в тексте (SOH, \x01, ESC) =====
+  // Причина: у CID/Type0-шрифтов глифы приходят двухбайтовыми кодами
+  // (`<000100020003>` Tj), а `\001` в литерале — восьмеричный escape. Без фильтра
+  // такие коды уезжают в текст вложения управляющими символами.
+  // Печатный: код > 31 вне 127…255; исключение — кириллица: Unicode 0x0400–0x04FF
+  // и байты CP1251 0xC0–0xFF (PDFDocEncoding ≈ latin1).
+  function isPrintableCode(code) {
+    if (code === 0x09 || code === 0x0A || code === 0x0D) return true;
+    if (code < 0x20) return false;
+    if (code >= 0x7F && code <= 0x9F) return false;
+    if (code >= 0x0400 && code <= 0x04FF) return true;
+    if (code >= 0x80 && code <= 0xFF) return code >= 0xC0;
+    return true;
+  }
+
+  /** Оставляет в строке потока только печатные символы. */
+  function filterPrintable(raw) {
+    var out = '';
+    for (var i = 0; i < raw.length; i++) {
+      var code = raw.charCodeAt(i);
+      if (isPrintableCode(code)) out += raw.charAt(i);
+    }
+    return out;
+  }
+
+  /** Бинарный поток (программа шрифта, objstm, XMP): серия управляющих байтов. */
+  function looksBinary(content) {
+    var cap = Math.min(content.length, 8192);
+    var run = 0;
+    for (var i = 0; i < cap; i++) {
+      var code = content.charCodeAt(i);
+      if (code < 0x20 && code !== 0x09 && code !== 0x0A && code !== 0x0D) {
+        run++;
+        if (run >= 8) return true;
+      } else {
+        run = 0;
+      }
+    }
+    return false;
+  }
+
   var SHOW_OPS = { Tj: true, TJ: true, "'": true, '"': true };
   var BREAK_OPS = { BT: true, ET: true, Tm: true, Td: true, TD: true, 'T*': true };
 
@@ -442,11 +483,12 @@
     var cap = (typeof limit === 'number' && limit > 0) ? limit : LOCAL_MAX_CHARS;
     var out = '';
     var pending = '';
+    var shown = 0;
     var i = 0;
     var n = content.length;
     function flushOp(op) {
       if (pending) {
-        if (SHOW_OPS[op] === true) out += pending;
+        if (SHOW_OPS[op] === true) { out += pending; shown++; }
         pending = '';
       }
       if (SHOW_OPS[op] === true) {
@@ -459,14 +501,14 @@
       var ch = content.charAt(i);
       if (ch === '(') {
         var lit = decodeLiteral(content, i);
-        pending += decodeTextString(lit.text);
+        pending += filterPrintable(decodeTextString(lit.text));
         i = lit.next;
         continue;
       }
       if (ch === '<') {
         if (content.charAt(i + 1) === '<') { i += 2; continue; }
         var hx = decodeHex(content, i);
-        pending += decodeTextString(hx.text);
+        pending += filterPrintable(decodeTextString(hx.text));
         i = hx.next;
         continue;
       }
@@ -479,7 +521,9 @@
       }
       i++;
     }
-    return out;
+    // Поток без валидных операторов показа текста (шрифты, objstm, XMP) не даёт
+    // ни символа: только строки под Tj/TJ/'/" попадают в результат.
+    return shown > 0 ? out : '';
   }
 
   function countPages(all) {
@@ -530,6 +574,8 @@
     var truncated = false;
     function finish() {
       var out = text.replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
+      // Вторая линия защиты: управляющие символы не должны дожить до вложения.
+      out = out.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
       out = out.replace(/^\s+|\s+$/g, '');
       if (out.length > maxChars) {
         out = out.slice(0, maxChars);
@@ -543,16 +589,29 @@
       var seg = segments[index];
       index++;
       var dict = seg.dict;
-      var isImage = dict.indexOf('/Image') !== -1 || dict.indexOf('/DCTDecode') !== -1 ||
-        dict.indexOf('/JPXDecode') !== -1;
-      if (isImage || !seg.body) return step();
+      // 4 КиБ перед `stream` захватывают и предыдущие объекты, поэтому смотрим
+      // словарь самого stream-объекта: от последнего «N 0 obj» до `stream`.
+      var own = dict;
+      var objRe = /(?:^|[\s>])\d+\s+\d+\s+obj\b/g;
+      var lastObj = -1;
+      var objHit;
+      while ((objHit = objRe.exec(dict)) !== null) lastObj = objHit.index;
+      if (lastObj >= 0) own = dict.slice(lastObj);
+      var isImage = own.indexOf('/Image') !== -1 || own.indexOf('/DCTDecode') !== -1 ||
+        own.indexOf('/JPXDecode') !== -1;
+      // Программа шрифта, objstm, ICC-профиль и XMP — не content-стримы: в них
+      // нет операторов показа текста, а байты после FlateDecode похожи на строки.
+      var isBinaryDict = own.indexOf('/FontFile') !== -1 || own.indexOf('/Length1') !== -1 ||
+        own.indexOf('/ObjStm') !== -1 || own.indexOf('/ICCBased') !== -1 ||
+        own.indexOf('/Metadata') !== -1;
+      if (isImage || isBinaryDict || !seg.body) return step();
       var bodyText = dict.indexOf('/FlateDecode') !== -1
         ? inflate(segmentBytes(trimStreamEol(seg.body))).then(function (bytes) {
           return bytes ? latin1(bytes, 0) : null;
         })
         : Promise.resolve(seg.body);
       return bodyText.then(function (content) {
-        if (content) {
+        if (content && !looksBinary(content)) {
           var piece = extractText(content, maxChars);
           if (piece) {
             if (text) text += '\n';
@@ -594,7 +653,7 @@
   emit('ai-cm-pdf-local-ready', { version: LOCAL_VERSION });
 
   window.AiCmPdf = {
-    version: '1.1.0',
+    version: '1.2.0',
     MAX_BYTES: MAX_BYTES,
     CHUNK: CHUNK,
     isReady: function () { return readyFlag; },
