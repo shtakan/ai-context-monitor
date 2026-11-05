@@ -26,6 +26,17 @@
  *   D1/R1 (фильтрация мусора): сложная кодировка реального PDF (CID-хексы,
  *       \001-escape, бинарные шрифт и XMP) → чистый текст без SOH; простой
  *       текстовый PDF разбирается как раньше.
+ *
+ * Пины Xray/дедупликации (plan-firefox-xray-pdf, Фиксы A/B/C):
+ *   D1 (Xray)  ArrayBuffer из чужого realm (instanceof ложен, как у Xray-обёртки)
+ *              не отбрасывается: байты копируются в свой буфер, чанк уходит
+ *              ArrayBuffer'ом с transfer, текст извлекается, ошибок нет;
+ *   D2 (взрыв)  пул с переподписанной `dl`-ссылкой — тот же файл: одна запись,
+ *              один [FILE:]-блок, повторный разбор хода не размножает текст;
+ *   R1 (байты)  Chrome-путь прежний: те же байты, тот же ArrayBuffer с transfer.
+ *   C          холодный старт тестового чата снимает латчи автоэкспорта
+ *              (aiCmAutoExportFiredOnce / preTrimExportFired), иначе второй
+ *              прогон не эмитит текст и дедупликацию не измерить.
  */
 
 const fs = require('fs');
@@ -38,6 +49,7 @@ const ROOT = path.join(__dirname, '..', '..');
 const CONTENT_PATH = path.join(ROOT, 'core', 'content.js');
 const BYTES_PATH = path.join(ROOT, 'core', 'pdf-bytes.js');
 const BROKER_PATH = path.join(ROOT, 'core', 'pdf-parser.js');
+const PARSER_PATH = path.join(ROOT, 'utils', 'gemini-batchexecute-parser.js');
 const START_MARK = '// [pdf-bridge:start]';
 const END_MARK = '// [pdf-bridge:end]';
 
@@ -317,6 +329,55 @@ function localRequests(page) {
   });
 }
 
+function byteChunks(page) {
+  return page.posted.filter(function (p) {
+    return p.msg && p.msg.source === 'ai-cm-pdf';
+  });
+}
+
+/**
+ * Фикс C: холодный старт тестового чата. Латчи автоэкспорта — модульные мапы:
+ *   state.js:            aiCmAutoExportFiredOnce['gemini|' + convId]
+ *   export-manager.js:   preTrimExportFired[convId]
+ * Прогретый процесс держит их взведёнными, поэтому холодный старт тестового
+ * чата снимает обе записи (иначе повторный прогон не эмитит базу и текст
+ * дедупликации не измерить). Чужие чаты не трогаем.
+ */
+const TEST_CHAT = 'c_e1020dbabcfa5a02';
+
+function coldStartResetAutoExportLatches(convId, state) {
+  if (!state || !state.aiCmAutoExportFiredOnce || !state.preTrimExportFired) return false;
+  if (convId !== TEST_CHAT) return false;
+  delete state.aiCmAutoExportFiredOnce['gemini|' + convId];
+  delete state.preTrimExportFired[convId];
+  return true;
+}
+
+/** Ход batchexecute с пулом вложений: turn[2][0][4][0][4] = nodes. */
+function turnWithFileNodes(nodes, ts) {
+  const turn = [null, null, null, [], [ts || 0]];
+  turn[2] = [[null, null, null, null, [[null, null, null, null, nodes]]]];
+  return turn;
+}
+
+/** Узел вложения документа: download-ссылка `dl` переподписывается в ответах. */
+function docNode(name, dl, size, index) {
+  const node = [null, 11, name, null, null, 'token-' + (index || 0), null,
+    ['https://drive-thumb/' + (index || 0) + '?sig=' + (index || 0), dl, 'upload-' + (index || 0)],
+    1, [1762000000, 0], null, 'application/pdf'];
+  node[15] = [null, null, typeof size === 'number' ? size : 0];
+  return node;
+}
+
+/** Текст вложения так, как его собирает экспорт: [FILE: имя]. */
+function fileSections(refs) {
+  return refs.map(function (ref) { return '\n\n[FILE: ' + ref.name + ']'; }).join('');
+}
+
+function countOf(haystack, needle) {
+  return haystack.split(needle).length - 1;
+}
+
 async function waitFor(predicate, label) {
   const deadline = Date.now() + 4000;
   while (Date.now() < deadline) {
@@ -542,5 +603,114 @@ describe('A2: резервный разбор PDF в странице (Firefox p
     expect(bytes).toContain("emit('ai-cm-pdf-local-result'");
     expect(bytes).toContain("emit('ai-cm-pdf-local-ready'");
     expect(bytes).toContain('parseLocal: function (buf, opts)');
+  });
+
+  // Фикс A (Xray). Байты из page-realm приходят в песочницу обёрнутыми: у
+  // Xray-объекта `buf instanceof ArrayBuffer` ложно, поэтому прежний toBytes
+  // отбрасывал доставленный массив как «не байты» → pdf-invalid. Класс по
+  // Object.prototype.toString у обёртки верный, а передача идёт СВОЕЙ копией.
+  test('D1 (Xray): ArrayBuffer чужого realm не теряется и уходит копией', async () => {
+    const page = createPage({ userAgent: FIREFOX_UA });
+    const pdf = buildPdf({ content: 'BT /F1 12 Tf 72 720 Td (Xray bytes) Tj ET' });
+    // Буфер из другого realm: ровно та ситуация, в которой ломается instanceof.
+    const foreign = vm.runInNewContext('new Uint8Array(' + pdf.length + ')');
+    for (let i = 0; i < pdf.length; i++) foreign[i] = pdf[i];
+
+    const crossRealm = page.getGlobal(
+      '(function (b) { return (typeof ArrayBuffer !== "undefined") && (b instanceof ArrayBuffer); })'
+    );
+    expect(crossRealm(foreign.buffer)).toBe(false);
+
+    const res = await page.getGlobal('window').AiCmPdf.fromBytes(foreign.buffer, { maxChars: 200000 });
+    expect(res.ok).toBe(true);
+    expect(res.text).toBe('Xray bytes');
+    expect(page.errors).toEqual([]);
+
+    const chunks = byteChunks(page);
+    expect(chunks.length).toBe(1);
+    // Своя копия, а не чужой буфер: иначе Firefox бросает constructor error.
+    expect(chunks[0].msg.bytes).not.toBe(foreign.buffer);
+    expect(Object.prototype.toString.call(chunks[0].msg.bytes)).toBe('[object ArrayBuffer]');
+    expect(chunks[0].transfer[0]).toBe(chunks[0].msg.bytes);
+    expect(Buffer.from(new Uint8Array(chunks[0].msg.bytes)).equals(pdf)).toBe(true);
+  });
+
+  // Фикс B. `dl`-ссылка переподписывается в каждом ответе batchexecute, поэтому
+  // тот же файл получал новый ключ идентичности и эмитился повторно — текст
+  // вложений размножался. Ключ теперь name|size, `claimed` сбрасывается при
+  // смене подписи пула, а без хронологического предшественника дельта считается
+  // против предыдущего ЗАРЕГИСТРИРОВАННОГО хода.
+  test('D2 (взрыв): переподписанная dl-ссылка не плодит файл и текст', () => {
+    const P = require(PARSER_PATH);
+    const conv = TEST_CHAT;
+    const dlA = 'https://contribution.usercontent.google.com/download?c=report-A';
+    const dlB = 'https://contribution.usercontent.google.com/download?c=report-B';
+
+    // Фикс C: холодный старт тестового чата снимает латчи автоэкспорта, иначе
+    // повторный прогон не эмитит базу и дедупликацию текста не измерить.
+    const latches = {
+      aiCmAutoExportFiredOnce: { ['gemini|' + conv]: 1, 'gemini|c_other': 1 },
+      preTrimExportFired: { [conv]: true, c_other: true }
+    };
+    expect(coldStartResetAutoExportLatches(conv, latches)).toBe(true);
+    expect(latches.aiCmAutoExportFiredOnce['gemini|' + conv]).toBeUndefined();
+    expect(latches.preTrimExportFired[conv]).toBeUndefined();
+    // Чужой чат холодный старт тестового не сбрасывает.
+    expect(coldStartResetAutoExportLatches('c_other', latches)).toBe(false);
+    expect(latches.aiCmAutoExportFiredOnce['gemini|c_other']).toBe(1);
+
+    P.__resetFileOwners(conv);
+    const t1 = turnWithFileNodes([docNode('report.pdf', dlA, 0, 0)], 100);
+    const t2 = turnWithFileNodes([docNode('report.pdf', dlB, 0, 1)], 200);
+
+    P.registerTurnFileOwner(t1, conv, 'r_t1', 100, 0);
+    const out1 = P.collectTurnFilesForOwner(t1, conv, 'r_t1', 100, 0);
+    expect(out1.map(function (r) { return r.name; })).toEqual(['report.pdf']);
+    // Идентичность не зависит от переподписываемых ссылок (Фикс B1).
+    const key = P.fileRefIdentityKey(out1[0]);
+    expect(key).toBe('report.pdf|0');
+    expect(P.fileRefIdentityKey({ name: 'report.pdf', size: 0, dl: 'other-dl', urls: ['u2'], img: 'img2' })).toBe(key);
+
+    P.registerTurnFileOwner(t2, conv, 'r_t2', 200, 1);
+    const out2 = P.collectTurnFilesForOwner(t2, conv, 'r_t2', 200, 1);
+    expect(out2).toEqual([]);
+    expect(fileSections(out1.concat(out2))).toBe('\n\n[FILE: report.pdf]');
+    expect(countOf(fileSections(out1.concat(out2)), '[FILE: report.pdf]')).toBe(1);
+
+    // Повторный разбор того же хода с новым файлом: подпись пула меняется,
+    // прежние закрепления снимаются, но старый файл не повторяется.
+    const t2b = turnWithFileNodes([
+      docNode('report.pdf', dlA, 0, 2),
+      docNode('contract.pdf', dlB, 0, 3)
+    ], 200);
+    P.registerTurnFileOwner(t2b, conv, 'r_t2', 200, 1);
+    const out2b = P.collectTurnFilesForOwner(t2b, conv, 'r_t2', 200, 1);
+    expect(out2b.map(function (r) { return r.name; })).toEqual(['contract.pdf']);
+    const all = fileSections(out1.concat(out2).concat(out2b));
+    expect(countOf(all, '[FILE: report.pdf]')).toBe(1);
+    expect(countOf(all, '[FILE: contract.pdf]')).toBe(1);
+  });
+
+  // R1 (байты). Chrome-путь не изменился: те же байты уходят ArrayBuffer'ом с
+  // transfer, копия не портит содержимое и не роняет страницу.
+  test('R1: Chrome-путь байтов прежний', async () => {
+    const page = createPage({ userAgent: CHROME_UA });
+    const pdf = buildPdf({ content: 'BT /F1 12 Tf 72 720 Td (Chrome bytes) Tj ET' });
+    const bytes = page.toBytes(Array.from(pdf));
+    // Порт в этом тесте молчит: мост исчерпывает ретрай и закрывает запрос —
+    // точный reason не важен, важен сам байтовый путь до порта.
+    const res = await page.getGlobal('window').AiCmPdf.fromBytes(bytes, { timeoutMs: 60 });
+    expect(res.ok).toBe(false);
+    expect(['pdf-aborted', 'pdf-timeout']).toContain(res.reason);
+    expect(page.errors).toEqual([]);
+
+    const chunks = byteChunks(page);
+    expect(chunks.length).toBe(1);
+    expect(Object.prototype.toString.call(chunks[0].msg.bytes)).toBe('[object ArrayBuffer]');
+    expect(chunks[0].transfer[0]).toBe(chunks[0].msg.bytes);
+    expect(Buffer.from(new Uint8Array(chunks[0].msg.bytes)).equals(pdf)).toBe(true);
+    // Chrome пошёл через порт, а не через локальный разбор страницы.
+    expect(page.connectCalls.length).toBeGreaterThan(0);
+    expect(localRequests(page)).toHaveLength(0);
   });
 });

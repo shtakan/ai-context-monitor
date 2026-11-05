@@ -515,36 +515,26 @@
   }
 
   /**
-   * Стабильный URL-идентификатор вложения: lh3-ссылка картинки или
-   * download-ссылка документа. Обе не переподписываются между ответами,
-   * в отличие от drive-thumb (`urls[0]`) и `token`.
-   * @param {GeminiFileRef} ref Нормализованный ref вложения.
-   * @returns {string} Стабильный URL или ''.
-   */
-  function fileRefUrl(ref) {
-    if (!ref) return '';
-    if (typeof ref.img === 'string' && ref.img) return ref.img;
-    if (typeof ref.dl === 'string' && ref.dl) return ref.dl;
-    if (Array.isArray(ref.urls) && ref.urls.length && typeof ref.urls[0] === 'string') return ref.urls[0];
-    return '';
-  }
-
-  /**
-   * Идентичность файла без скоупа разговора: имя + размер + стабильный URL.
+   * Идентичность файла без скоупа разговора: имя + размер.
+   *
+   * Фикс B1 (Xray/дедупликация): URL в ключ НЕ входит. `dl` переподписывается
+   * на каждый ответ batchexecute, поэтому одинаковый файл получал новый ключ и
+   * эмитился повторно — текст вложения размножался. `img`/`urls[0]` тоже не
+   * годится в опору: drive-thumb переподписывается, а lh3-ссылка у документа
+   * одна и та же для всех копий. Имя и размер стабильны между ответами.
    * @param {GeminiFileRef} ref Нормализованный ref вложения.
    * @returns {string} Ключ идентичности.
    */
   function fileRefIdentityKey(ref) {
     var name = (ref && typeof ref.name === 'string') ? ref.name : '';
     var size = (ref && typeof ref.size === 'number' && isFinite(ref.size)) ? ref.size : 0;
-    return name + '|' + size + '|' + fileRefUrl(ref);
+    return name + '|' + size;
   }
 
   /**
-   * Ключ файла в мультимножестве пула: разговор + имя + размер + стабильный URL.
-   * Токен в ключ НЕ входит (v2.5, Фикс D1): он переподписывается в каждом ответе,
-   * из-за чего одинаковые файлы с разных страниц не схлопывались. `urls[0]`
-   * (drive-thumb) тоже переподписывается — берём `img`/`dl`, см. fileRefUrl.
+   * Ключ файла в мультимножестве пула: разговор + имя + размер.
+   * Токен и URL в ключ НЕ входят (v2.5, Фикс D1/B1): они переподписываются в
+   * каждом ответе, из-за чего одинаковые файлы с разных страниц не схлопывались.
    * @param {unknown} convId Id разговора.
    * @param {GeminiFileRef} ref Нормализованный ref вложения.
    * @returns {string} Ключ мультимножества.
@@ -596,9 +586,11 @@
   /**
    * Вложения, загруженные ИМЕННО в этом ходе: дельта пула против ближайшего
    * предшествующего по хронологии хода. Порядок записей пула сохраняется.
-   * Если предшественник ещё не зарегистрирован (голова неизвестной истории),
-   * отдаются только файлы, ещё не закреплённые за другими пулами: объединение
-   * более поздних пулов уже принадлежит им, поэтому весь пул не повторяется.
+   * Фикс B2: если хронология предшественника не дала (голова неизвестной
+   * истории, ts=0), сравниваем с предыдущим ЗАРЕГИСТРИРОВАННЫМ ходом, а не со
+   * всем пулом: иначе накопительный список повторяется, пока пусто в claimed.
+   * Файлы, не подтверждённые предшественником, дополнительно фильтруются по
+   * `claimed` — ключам, уже отданным любому ходу.
    * Без `ownerId` поведение прежнее (весь список) — обратная совместимость.
    * @param {any} turn Ход batchexecute.
    * @param {string} convId Id разговора.
@@ -627,6 +619,16 @@
     for (i = 0; i < all.length; i++) sigParts.push(fileOwnerKey(convId, all[i]));
     var sig = sigParts.join('\u0001');
     if (Array.isArray(rec.ownCache) && rec.ownSig === sig) return rec.ownCache;
+    // Фикс B3: подпись пула изменилась — снимаем прежние закрепления ЭТОГО хода,
+    // иначе файл с новым ключом пройдёт мимо claimed, и текст размножится.
+    if (typeof rec.ownSig === 'string' && rec.ownSig !== sig) {
+      var stale = Array.isArray(rec.claimedKeys) ? rec.claimedKeys : [];
+      for (i = 0; i < stale.length; i++) delete pool.claimed[stale[i]];
+      rec.claimedKeys = [];
+      rec.ownCache = null;
+    } else if (!Array.isArray(rec.claimedKeys)) {
+      rec.claimedKeys = [];
+    }
     rec.refs = all;
     rec.ownSig = sig;
     // Ближайший предшествующий ход (самый поздний из тех, что раньше текущего).
@@ -637,6 +639,22 @@
       var cand = pool.turns[ids[i]];
       if (!isTurnBefore(cand, rec)) continue;
       if (!prev || isTurnBefore(prev, cand)) prev = cand;
+    }
+    // Фикс B2: хронология не дала предшественника (голова истории, ts=0,
+    // одинаковый turnId) — берём предыдущий ЗАРЕГИСТРИРОВАННЫЙ ход, а не весь
+    // пул: иначе накопительный список повторяется целиком, пока пусто в claimed.
+    if (!prev) {
+      for (i = 0; i < ids.length; i++) {
+        if (ids[i] === own) continue;
+        var reg = pool.turns[ids[i]];
+        if (!reg || reg.seq >= rec.seq) continue;
+        // Зарегистрированный позже по порядку ход всё равно может быть
+        // хронологически ПОЗЖЕ текущего (ingest обходит кадры с конца) — такой
+        // предшественником не считается, иначе дельта вычитает будущее и
+        // файл «пропадает» из более раннего хода.
+        if (isTurnBefore(rec, reg)) continue;
+        if (!prev || reg.seq > prev.seq) prev = reg;
+      }
     }
     // Мультимножество предыдущего пула: сколько раз какой ключ там встречался.
     var prevCount = {};
@@ -655,7 +673,11 @@
       if (pool.claimed[k]) continue;
       out.push(all[i]);
     }
-    for (i = 0; i < out.length; i++) pool.claimed[fileOwnerKey(convId, out[i])] = true;
+    for (i = 0; i < out.length; i++) {
+      var outKey = fileOwnerKey(convId, out[i]);
+      pool.claimed[outKey] = true;
+      rec.claimedKeys.push(outKey);
+    }
     rec.ownCache = out;
     rec.ownSig = sig;
     return out;

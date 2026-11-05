@@ -127,11 +127,45 @@
     }
   });
 
+  // Xray (Firefox): байты приходят из другого realm. Там `instanceof ArrayBuffer`
+  // ложен (Xray-обёртка не наследует конструктор песочницы), а `.slice()` на чужом
+  // типизированном массиве падает на чтении `constructor` («constructor error»).
+  // Поэтому класс определяем через Object.prototype.toString, а байты сразу
+  // копируем в свой буфер: только он гарантированно transferable из этого realm.
+  function isArrayBufferLike(buf) {
+    if (buf == null) return false;
+    try {
+      return Object.prototype.toString.call(buf) === '[object ArrayBuffer]';
+    } catch (eClass) {
+      aiCmPdfWarn('array-buffer-class', eClass);
+      return false;
+    }
+  }
+
+  function copyBytes(src, len) {
+    var out = new Uint8Array(len);
+    try {
+      out.set(src);
+    } catch (eSet) {
+      // set() через Xray может быть недоступен — построчная копия как резерв.
+      aiCmPdfWarn('bytes-copy', eSet);
+      for (var i = 0; i < len; i++) out[i] = src[i];
+    }
+    return out;
+  }
+
   function toBytes(buf) {
-    if (!buf) return null;
-    if (typeof ArrayBuffer !== 'undefined' && buf instanceof ArrayBuffer) return new Uint8Array(buf);
-    if (buf && typeof buf.byteLength === 'number' && typeof buf.length === 'number') return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
-    return null;
+    try {
+      if (!buf) return null;
+      if (isArrayBufferLike(buf)) return copyBytes(new Uint8Array(buf), buf.byteLength);
+      if (buf && typeof buf.byteLength === 'number' && typeof buf.length === 'number') {
+        return copyBytes(new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength), buf.byteLength);
+      }
+      return null;
+    } catch (eBytes) {
+      aiCmPdfWarn('to-bytes', eBytes);
+      return null;
+    }
   }
 
   // Нарезка 512 КиБ с yield между сообщениями: MAIN не должен стоять дольше ~50 мс,
@@ -144,24 +178,29 @@
     }
     var seq = 0;
     function next() {
-      if (seq >= total) {
-        done(total);
-        return;
-      }
-      var start = seq * CHUNK;
-      var slice = u8.slice(start, Math.min(start + CHUNK, u8.length));
-      var buf = slice.buffer;
-      var msg = { source: SRC, id: id, seq: seq, total: total, bytes: buf };
-      if (maxChars > 0) msg.maxChars = maxChars;
-      seq++;
+      // Тело в try/catch: любая Xray-ошибка (срез чужого массива, конструктор
+      // ArrayBuffer, transfer) должна оставить след [ai-cm-pdf], а не повиснуть.
       try {
+        if (seq >= total) {
+          done(total);
+          return;
+        }
+        var start = seq * CHUNK;
+        var end = Math.min(start + CHUNK, u8.length);
+        // Копия в свой буфер: `.slice()` у чужого массива читает `constructor`
+        // (в Firefox это «constructor error»), а buffer среза может остаться
+        // чужим — такой ArrayBuffer нельзя передать в transfer.
+        var copy = copyBytes(u8.subarray(start, end), end - start);
+        var buf = copy.buffer;
+        var msg = { source: SRC, id: id, seq: seq, total: total, bytes: buf };
+        if (maxChars > 0) msg.maxChars = maxChars;
+        seq++;
         window.postMessage(msg, '*', [buf]);
-      } catch (ePost) {
-        aiCmPdfWarn('postMessage', ePost);
+        setTimeout(next, 0);
+      } catch (eChunk) {
+        aiCmPdfWarn('chunk', eChunk);
         done(-1);
-        return;
       }
-      setTimeout(next, 0);
     }
     next();
   }
@@ -232,6 +271,19 @@
     }
   }
 
+  // Xray: Promise.resolve(чужой_promise) возвращает сам чужой promise (IsPromise
+  // видит internal slot через обёртку), и следующий .then уходит за границу realm.
+  // new Promise с явным .then забирает результат в этот realm — обе ветки целы.
+  function adopt(thenable) {
+    return new Promise(function (resolve, reject) {
+      try {
+        thenable.then(resolve, reject);
+      } catch (eThen) {
+        reject(eThen);
+      }
+    });
+  }
+
   function fromUrl(url, opts) {
     var o = opts || {};
     var impl = (typeof o.fetch === 'function') ? o.fetch : ((typeof window.fetch === 'function') ? window.fetch : null);
@@ -247,7 +299,7 @@
       aiCmPdfWarn('fetch', eFetch);
       return Promise.resolve(fail('pdf-host-error', 0));
     }
-    return Promise.resolve(p).then(function (res) {
+    return adopt(p).then(function (res) {
       if (!res || res.ok !== true) {
         abortBody(res);
         return fail('pdf-host-error', 0);
@@ -269,7 +321,7 @@
         abortBody(res);
         return fail('pdf-invalid', 0);
       }
-      return Promise.resolve(res.arrayBuffer()).then(function (buf) {
+      return adopt(res.arrayBuffer()).then(function (buf) {
         if (!buf || !buf.byteLength) return fail('pdf-invalid', 0);
         return run(buf, o);
       }, function (eRead) {

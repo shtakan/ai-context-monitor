@@ -829,9 +829,10 @@
     var P = (typeof window !== 'undefined') ? window.GeminiBatchexecuteParser : null;
     var identity = (P && typeof P.fileRefIdentityKey === 'function')
       ? function (ref) { return P.fileRefIdentityKey(ref); }
+      // Резерв, если парсер ещё не загрузился: та же идентичность, что и в
+      // fileRefIdentityKey (Фикс B1) — имя + размер, без переподписываемых URL.
       : function (ref) {
-        var url = (ref && (ref.img || ref.dl)) || ((ref && ref.urls && ref.urls[0]) || '');
-        return ((ref && ref.name) || '') + '|' + ((ref && ref.size) || 0) + '|' + url;
+        return ((ref && ref.name) || '') + '|' + ((ref && ref.size) || 0);
       };
     var claimed = {};
     for (var i = 0; i < ids.length; i++) {

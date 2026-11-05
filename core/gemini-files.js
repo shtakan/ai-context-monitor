@@ -507,11 +507,23 @@
       typeof window.AiCmPdf.fromUrl === 'function';
   }
 
+  // Xray (Firefox): fetch из песочницы в MAIN не передаём — страница тянет файл
+  // своим window.fetch. Иначе промис fetch и байты приходят из чужого realm, а
+  // `buf instanceof ArrayBuffer` там ложен (мост отдавал pdf-invalid).
+  // Возвращённый MAIN-хелпером promise тоже забираем в свой realm явным .then:
+  // Promise.resolve(чужой_promise) вернул бы его же, и .then ушёл бы за границу.
+  function gfAdoptPdf(p) {
+    return new Promise(function (resolve, reject) {
+      try {
+        p.then(resolve, reject);
+      } catch (eThen) { reject(eThen); }
+    });
+  }
+
   function gfFetchPdfText(item, size) {
     var pdf = (typeof window !== 'undefined') ? window.AiCmPdf : null;
     var ref = (item && item.ref) || {};
-    return Promise.resolve(pdf.fromUrl(gfStr(item && item.url), {
-      fetch: gfFetchImpl(),
+    return gfAdoptPdf(pdf.fromUrl(gfStr(item && item.url), {
       credentials: 'include',
       name: gfStr(ref.name),
       maxBytes: GF_PDF_MAX,
