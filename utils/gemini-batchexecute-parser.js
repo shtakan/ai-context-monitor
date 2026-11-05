@@ -688,6 +688,39 @@
   }
 
   /**
+   * ВЛАДЕНИЕ ВЛОЖЕНИЯМИ НА ЭМИССИИ (v2.7).
+   *
+   * Реестр `registerTurnFileOwner`/`collectTurnFilesForOwner` считает дельту в
+   * момент прихода СТРАНИЦЫ и потому видит только уже загруженные страницы: у
+   * самого старого хода страницы предшественника ещё нет, и он забирал весь
+   * кумулятивный пул (16-24 блока в одном сообщении экспорта). Здесь дельта
+   * считается один раз по ПОЛНОМУ хронологическому списку ходов, поэтому
+   * результат не зависит от порядка прихода страниц и идемпотентен при
+   * повторной эмиссии.
+   *
+   * @param {Array<{id: string, refs: GeminiFileRef[]}>} turns Ходы в
+   *   хронологическом порядке (старые→новые).
+   * @returns {Array<{id: string, own: GeminiFileRef[]}>} Собственные вложения.
+   */
+  function assignPoolOwners(turns) {
+    var list = Array.isArray(turns) ? turns : [];
+    var out = [];
+    var prevPool = [];
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      if (!item) continue;
+      var pool = Array.isArray(item.refs) ? item.refs : [];
+      var own = [];
+      if (pool.length) {
+        own = prevPool.length ? poolDelta(prevPool, pool) : pool.slice(0);
+        prevPool = pool;
+      }
+      out.push({ id: item.id, own: own });
+    }
+    return out;
+  }
+
+  /**
    * Вложения, загруженные ИМЕННО в этом ходе: хвост кумулятивного пула после
    * общего префикса с пулом предшествующего хода. Порядок записей сохраняется.
    * Без `ownerId` поведение прежнее (весь список) — обратная совместимость.
@@ -1151,6 +1184,7 @@
    * @property {typeof collectTurnFiles} collectTurnFiles Вложения хода.
    * @property {typeof registerTurnFileOwner} registerTurnFileOwner Регистрация владельца файлов до эмиссии.
    * @property {typeof collectTurnFilesForOwner} collectTurnFilesForOwner Вложения хода-владельца.
+   * @property {typeof assignPoolOwners} assignPoolOwners Владение вложениями по полному списку ходов.
    * @property {typeof __resetFileOwners} __resetFileOwners Сброс реестра владельцев файлов.
    * @property {typeof parseGeminiHistory} parseGeminiHistory Полный разбор истории.
    */
@@ -1173,6 +1207,7 @@
     collectTurnFiles: collectTurnFiles,
     registerTurnFileOwner: registerTurnFileOwner,
     collectTurnFilesForOwner: collectTurnFilesForOwner,
+    assignPoolOwners: assignPoolOwners,
     __resetFileOwners: __resetFileOwners,
     parseGeminiHistory: parseGeminiHistory
   };

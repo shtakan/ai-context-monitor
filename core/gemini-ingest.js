@@ -814,24 +814,43 @@
     }
   }
 
-  // v2.3.1 (chronology fix): отложенная раздача файлов. Начинаем её только когда
-  // начало истории подтверждено (reachedStart), иначе владельцем станет самый
-  // старый ход НОВЕЙШЕЙ страницы, а gfEnqueueTurnFiles закрепит его навсегда.
-  // ids — хронологический порядок (старые→новые).
-  // v2.6 (позиционная дельта): вложения хода уже посчитаны парсером как ХВОСТ
-  // кумулятивного пула (collectTurnFilesForOwner), поэтому здесь не нужен ни
-  // claimed по имени, ни полный пул: раздаём ровно rec.files. Пустой список тоже
-  // отправляем — если после прихода более старой страницы дельта сузилась до нуля,
-  // прежние секции хода обязаны исчезнуть, а не остаться дублем в экспорте.
+  // v2.7 (владение на эмиссии): раздача вложений считается ОДИН РАЗ по полному
+  // хронологическому списку ходов — ids (r1-цепочка, старые→новые). Кумулятивный
+  // пул хода (rec.filePool) — префикс пула следующего хода, поэтому собственные
+  // вложения хода = хвост после общего префикса (parser.assignPoolOwners).
+  // Прежняя схема считала дельту при приходе страницы и накапливала её в
+  // rec.files: у самого старого хода НОВОЙ страницы предшественника ещё не было,
+  // и он забирал весь пул (16-24 блока в одном сообщении, 42 [FILE:] вместо 14).
+  // Пересчёт на каждом эмите снимает зависимость от порядка прихода страниц и
+  // идемпотентен: если дельта сузилась, прежние секции хода исчезают.
   function enqueueOwnedTurnFiles(fid, ids) {
     if (typeof window === 'undefined' || !window.AiCmGeminiFiles ||
         typeof window.AiCmGeminiFiles.gfEnqueueTurnFiles !== 'function') return;
+    var items = [];
     for (var i = 0; i < ids.length; i++) {
       var rec = turnsMap[ids[i]];
       if (!rec || rec.role !== 'user') continue;
-      var own = Array.isArray(rec.files) ? rec.files : [];
+      items.push({
+        id: ids[i],
+        refs: (Array.isArray(rec.filePool) && rec.filePool.length) ? rec.filePool : []
+      });
+    }
+    var P = window.GeminiBatchexecuteParser;
+    var assigned = (P && typeof P.assignPoolOwners === 'function') ? P.assignPoolOwners(items) : null;
+    if (!assigned) {
+      // Старый парсер (не пересобранный бандл): ведём себя как прежде — отдаём
+      // замороженную дельту страницы, чтобы не потерять вложения совсем.
+      assigned = [];
+      for (var f = 0; f < items.length; f++) {
+        var frec = turnsMap[items[f].id];
+        assigned.push({ id: items[f].id, own: (frec && Array.isArray(frec.files)) ? frec.files : [] });
+      }
+    }
+    for (var k = 0; k < assigned.length; k++) {
+      var item = assigned[k];
+      if (!item || !item.id) continue;
       try {
-        window.AiCmGeminiFiles.gfEnqueueTurnFiles(fid, ids[i], own);
+        window.AiCmGeminiFiles.gfEnqueueTurnFiles(fid, item.id, item.own || []);
       } catch (eEnq) { swallowSoft(eEnq, 'gemini:enqueueOwnedTurnFiles'); }
     }
   }

@@ -146,6 +146,120 @@ describe('v2.6: позиционная дельта кумулятивного �
   });
 });
 
+// ============ A5: владение считается на эмиссии, а не на странице ============
+// Реальный чат e1020dbabcfa5a02: 59 ходов, 6 страниц (приходят новыми→старыми),
+// кумулятивный пул повторяется в каждом ходе, 33 позиции = 14 файлов + 19 картинок.
+// Прежний код считал дельту в момент прихода страницы: у самого старого хода
+// страницы предшественника ещё нет → он забирал весь пул (в экспорте 42 [FILE:]
+// и 91 [IMAGE:] вместо 14 и 19). Здесь пинуется дельта по ПОЛНОМУ списку ходов.
+
+function attachmentsFixture() {
+  const img = (name, size) => fileNode(name, { image: true, size: size });
+  const doc = (name) => fileNode(name, { dl: 'https://contribution.usercontent.google.com/download?c=' + name });
+  // Точная раскладка реального чата e1020dbabcfa5a02 (59 ходов, 6 страниц):
+  // 33 позиции кумулятивного пула = 14 файлов + 19 картинок. Повторы имён —
+  // НОВЫЕ загрузки на новых позициях (Защита.docx ×5, Досудебная..docx ×3,
+  // Мед_без_укэп.pdf ×2), их нельзя склеивать.
+  const nodes = [
+    doc('Досудебная..docx'), doc('Мед_без_укэп.pdf'), img('Заявление_11.06.jpg', 337969), img('Направление.jpg', 354682), img('Ответ_ГКП.jpg', 245644), // t0: 0..4
+    doc('Мед_без_укэп.pdf'), img('Заявление_11.06.jpg', 337969), img('Направление.jpg', 354682), img('Ответ_ГКП.jpg', 245644), doc('Досудебная..docx'), // t1: 5..9
+    doc('Досудебная..docx'), doc('Мед_для_промт.pdf'), img('Заявление_11.06.jpg', 337969), img('Направление.jpg', 354682), img('Ответ_ГКП.jpg', 245644), // t2: 10..14
+    doc('Аудит.docx'), // t5: 15
+    img('image_d1bc35.png', 135833), // t6: 16
+    img('image_d1c684.png', 152058), // t7: 17
+    doc('Заявление.docx'), // t8: 18
+    img('1000000818.jpg', 196034), // t20: 19
+    img('1000000819.jpg', 249886), // t21: 20
+    img('IMG20260707143506.jpg', 317514), // t23: 21
+    img('1000000822.jpg', 190042), img('1000000821.jpg', 198961), // t25: 22..23
+    img('1000000823.jpg', 82849), // t34: 24
+    doc('download7.pdf'), // t35: 25
+    doc('Защита.docx'), // t42: 26
+    doc('Защита.docx'), // t43: 27
+    doc('Защита.docx'), // t46: 28
+    doc('Защита.docx'), // t50: 29
+    doc('Защита.docx'), // t52: 30
+    img('image_ae5923.png', 195454), // t54: 31
+    img('image_844d45.png', 184424) // t57: 32
+  ];
+  const starts = { 0: 5, 1: 5, 2: 5, 5: 1, 6: 1, 7: 1, 8: 1, 20: 1, 21: 1, 23: 1, 25: 2, 34: 1, 35: 1, 42: 1, 43: 1, 46: 1, 50: 1, 52: 1, 54: 1, 57: 1 };
+  const TOTAL_TURNS = 59;
+  const turns = [];
+  const expected = [];
+  let pool = [];
+  let at = 0;
+  for (let t = 0; t < TOTAL_TURNS; t++) {
+    const add = starts[t] || 0;
+    const own = [];
+    for (let k = 0; k < add; k++) {
+      const ref = P.fileRefFromNode(nodes[at]);
+      ref.pos = at;
+      own.push(ref);
+      at++;
+    }
+    pool = pool.concat(own);
+    turns.push({ id: 'r_' + t, refs: pool.slice() });
+    expected.push(own.map((r) => r.pos));
+  }
+  return { turns, expected, total: pool.length, files: pool.filter((r) => !r.isImage).length, images: pool.filter((r) => r.isImage).length };
+}
+
+describe('v2.7: владение вложениями на полном списке ходов', () => {
+  test('A5: 6 страниц (новые→старые), 33 позиции = 14 файлов + 19 картинок', () => {
+    const fx = attachmentsFixture();
+    expect(fx.turns).toHaveLength(59);
+    expect(fx.total).toBe(33);
+    expect(fx.files).toBe(14);
+    expect(fx.images).toBe(19);
+
+    // Страницы приходят новыми→старыми (10,10,10,10,10,9 ходов), но раздача идёт
+    // по хронологической цепочке (старые→новые), а не по страницам.
+    const pages = [fx.turns.slice(0, 10), fx.turns.slice(10, 20), fx.turns.slice(20, 30), fx.turns.slice(30, 40), fx.turns.slice(40, 50), fx.turns.slice(50, 59)];
+    expect(pages.map((p) => p.length)).toEqual([10, 10, 10, 10, 10, 9]);
+
+    const chain = fx.turns;
+    const assigned = P.assignPoolOwners(chain);
+    expect(assigned).toHaveLength(59);
+    expect(assigned.reduce((s, a) => s + a.own.length, 0)).toBe(33);
+    for (let t = 0; t < chain.length; t++) {
+      expect(assigned[t].own.map((r) => r.pos)).toEqual(fx.expected[t]);
+    }
+    // Самая старая страница: её «старый» ход получает свои 5, а не весь пул 33 —
+    // именно это ломалось в экспорте (свалки по 16-24 блока).
+    expect(assigned[0].own).toHaveLength(5);
+    expect(assigned[58].own).toHaveLength(0);
+  });
+
+  test('A5b: повторная загрузка с тем же именем остаётся отдельным файлом', () => {
+    const fx = attachmentsFixture();
+    const assigned = P.assignPoolOwners(fx.turns);
+    const protect = [];
+    for (const a of assigned) for (const r of a.own) if (r.name === 'Защита.docx') protect.push(r.pos);
+    expect(protect).toEqual([26, 27, 28, 29, 30]);
+    expect(new Set(protect).size).toBe(5);
+    const pretrial = [];
+    for (const a of assigned) for (const r of a.own) if (r.name === 'Досудебная..docx') pretrial.push(r.pos);
+    expect(pretrial).toEqual([0, 9, 10]);
+  });
+
+  test('A5c: пул перестал быть префиксом — дельта по мультимножеству', () => {
+    const prev = [P.fileRefFromNode(fileNode('a.txt', { size: 1 })), P.fileRefFromNode(fileNode('b.txt', { size: 2 }))];
+    const cur = [P.fileRefFromNode(fileNode('a.txt', { size: 1 })), P.fileRefFromNode(fileNode('c.txt', { size: 3 }))];
+    prev.forEach((r, i) => { r.pos = i; });
+    cur.forEach((r, i) => { r.pos = i; });
+    const out = P.assignPoolOwners([{ id: 't1', refs: prev }, { id: 't2', refs: cur }]);
+    expect(out[0].own.map((r) => r.name)).toEqual(['a.txt', 'b.txt']);
+    expect(out[1].own.map((r) => r.name)).toEqual(['c.txt']);
+  });
+
+  test('A6: ingest раздаёт по пулу, а не по замороженной дельте страницы', () => {
+    const src = fs.readFileSync(path.join(ROOT, 'core', 'gemini-ingest.js'), 'utf8');
+    expect(src).toContain('assignPoolOwners');
+    expect(src).toContain('rec.filePool');
+    expect(src).not.toContain('Array.isArray(rec.files)');
+  });
+});
+
 // ===================== 2. PDF-мусор (CID) =====================
 
 function buildPdf(contentText) {

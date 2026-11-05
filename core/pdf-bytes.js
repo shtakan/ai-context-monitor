@@ -205,6 +205,56 @@
     next();
   }
 
+  // Firefox: передача байтов через границу realm ломается на Xray-проверке
+  // («Permission denied to access property "constructor"» в content.js при
+  // postMessage с base64 и при transfer ArrayBuffer). Из-за этого локальный
+  // разбор в Firefox не запускался вовсе, Port не получал чанков, и любой PDF
+  // заканчивался pdf-host-error / pdf-too-large. Поэтому в Firefox разбираем
+  // PDF ЗДЕСЬ ЖЕ, в этом realm: ни base64, ни transfer, ни ожидания
+  // 'ai-cm-pdf-ready' от изолированного мира. Chrome идёт прежним путём.
+  function isFirefoxRealm() {
+    try {
+      if (typeof navigator === 'undefined' || !navigator) return false;
+      var ua = (typeof navigator.userAgent === 'string') ? navigator.userAgent : '';
+      return ua.indexOf('Firefox/') !== -1;
+    } catch (eUa) {
+      aiCmPdfWarn('firefox-ua', eUa);
+      return false;
+    }
+  }
+
+  // Локальный разбор с тем же контрактом ответа, что у моста: {ok, text, pages,
+  // truncated, reason, size, ms}. Таймаут не отменяет разбор (он уже идёт), но
+  // не даёт эмиссии висеть дольше положенного.
+  function runLocalOnly(buf, opts) {
+    var o = opts || {};
+    var u8 = toBytes(buf);
+    var started = nowMs();
+    var timeoutMs = num(o.timeoutMs) || DEFAULT_TIMEOUT;
+    var size = u8 ? u8.length : 0;
+    return new Promise(function (resolve) {
+      var settled = false;
+      var timer = setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        resolve(fail('pdf-timeout', size));
+      }, timeoutMs);
+      function finish(res) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        var out = (res && typeof res === 'object') ? res : fail('pdf-host-error', size);
+        if (!num(out.size)) out.size = size;
+        if (typeof out.ms !== 'number') out.ms = nowMs() - started;
+        resolve(out);
+      }
+      parseLocal(u8, { maxChars: num(o.maxChars) }).then(finish, function (eLocal) {
+        aiCmPdfWarn('local-run', eLocal);
+        finish(fail('pdf-host-error', size));
+      });
+    });
+  }
+
   function run(buf, opts) {
     var o = opts || {};
     var maxBytes = num(o.maxBytes) || MAX_BYTES;
@@ -215,6 +265,7 @@
     if (u8.length > maxBytes || u8.length > MAX_BYTES) {
       return Promise.resolve(fail('pdf-too-large', u8.length));
     }
+    if (isFirefoxRealm()) return runLocalOnly(u8, o);
     var id = newId();
     var started = nowMs();
     return ensureReady(id).then(function (ready) {

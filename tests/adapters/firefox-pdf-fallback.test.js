@@ -603,13 +603,22 @@ describe('A2: резервный разбор PDF в странице (Firefox p
     expect(bytes).toContain("emit('ai-cm-pdf-local-result'");
     expect(bytes).toContain("emit('ai-cm-pdf-local-ready'");
     expect(bytes).toContain('parseLocal: function (buf, opts)');
+    // v2.8: в Firefox разбор идёт в своём realm, без границы Xray.
+    expect(bytes).toContain('function isFirefoxRealm()');
+    expect(bytes).toContain('function runLocalOnly(buf, opts)');
+    expect(bytes).toContain('if (isFirefoxRealm()) return runLocalOnly(u8, o);');
   });
 
   // Фикс A (Xray). Байты из page-realm приходят в песочницу обёрнутыми: у
   // Xray-объекта `buf instanceof ArrayBuffer` ложно, поэтому прежний toBytes
-  // отбрасывал доставленный массив как «не байты» → pdf-invalid. Класс по
-  // Object.prototype.toString у обёртки верный, а передача идёт СВОЕЙ копией.
-  test('D1 (Xray): ArrayBuffer чужого realm не теряется и уходит копией', async () => {
+  // отбрасывал доставленный массив как «не байты» → pdf-invalid.
+  //
+  // v2.8 (Firefox без моста). В Firefox любой поход через границу realm
+  // (transfer ArrayBuffer в локальный разбор, base64-чанки в Port) падает с
+  // «Permission denied to access property "constructor"», поэтому pdf-bytes.js
+  // разбирает PDF в СВОЁМ realm и чанки никуда не отправляет. Проверяем обе
+  // половины: чужой ArrayBuffer доходит до парсера, а граница не пересекается.
+  test('D1 (Xray): ArrayBuffer чужого realm не теряется, Firefox не шлёт чанки', async () => {
     const page = createPage({ userAgent: FIREFOX_UA });
     const pdf = buildPdf({ content: 'BT /F1 12 Tf 72 720 Td (Xray bytes) Tj ET' });
     // Буфер из другого realm: ровно та ситуация, в которой ломается instanceof.
@@ -621,10 +630,29 @@ describe('A2: резервный разбор PDF в странице (Firefox p
     );
     expect(crossRealm(foreign.buffer)).toBe(false);
 
+    // Прямой локальный разбор: чужой буфер принимается как байты.
+    const direct = await page.getGlobal('window').AiCmPdf.parseLocal(foreign.buffer, { maxChars: 200000 });
+    expect(direct.ok).toBe(true);
+    expect(direct.text).toBe('Xray bytes');
+
     const res = await page.getGlobal('window').AiCmPdf.fromBytes(foreign.buffer, { maxChars: 200000 });
     expect(res.ok).toBe(true);
     expect(res.text).toBe('Xray bytes');
     expect(page.errors).toEqual([]);
+    // Мост не задействован: ни чанков, ни transfer — Xray-исключения невозможны.
+    expect(byteChunks(page).length).toBe(0);
+    expect(page.transfers.length).toBe(0);
+  });
+
+  test('D1b (Chrome): чанк в изолированный мир уходит своей копией байтов', async () => {
+    const page = createPage({ userAgent: CHROME_UA });
+    const pdf = buildPdf({ content: 'BT /F1 12 Tf 72 720 Td (Chunk copy) Tj ET' });
+    const foreign = vm.runInNewContext('new Uint8Array(' + pdf.length + ')');
+    for (let i = 0; i < pdf.length; i++) foreign[i] = pdf[i];
+
+    const res = await page.getGlobal('window').AiCmPdf.fromBytes(foreign.buffer, { maxChars: 200000, timeoutMs: 60 });
+    expect(res.ok).toBe(false);
+    expect(['pdf-aborted', 'pdf-timeout']).toContain(res.reason);
 
     const chunks = byteChunks(page);
     expect(chunks.length).toBe(1);
