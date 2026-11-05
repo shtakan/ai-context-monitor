@@ -529,6 +529,10 @@ function makeListenerCtx(overrides) {
     AiCmExportEmitPipeline: P,
     aiCmGeminiTurnsSnapshotSync: function () { return null; },
     aiCmDiagHash6: function () { return '000000'; },
+    // O-23/B2: канонический эстиматор живёт в core/content.js и в частичный скоуп песочницы
+    // не попадает; trace badge-recv от него зависит. Значение здесь не проверяется —
+    // достаточно байтово совместимой формы вызова (text, attach, count).
+    aiCmCanonicalTokens: function (t, a, n) { return Math.ceil(String(t || '').length / 4) + (a || 0) + (n || 0) * 4; },
     geminiParserVersion: function () { return 'test'; },
     GeminiInterceptLogic: null,
     isExtensionValid: function () { return true; },

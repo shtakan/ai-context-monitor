@@ -552,6 +552,52 @@ function aiCmEstimateTokensTilde(text, attachTokens) {
   return result;
 }
 
+// v2.3 (B2): ЕДИНЫЙ канонический эстиматор токенов диалога — единственная точка,
+// через которую считает и бейдж (processAndSend / GET_STATS через
+// Tokenizer.estimateDialogTokens), и трасса badge-recv. Внутри — тот же
+// Tokenizer.countTokens (кириллица ÷3.3 по O-23, см. utils/tokenizer.js) плюс
+// служебные 4 токена на ход. Латинская эвристика Math.round(length / 4) из боевых
+// путей убрана: на русском тексте она систематически занижала оценку, из-за чего
+// бейдж показывал заниженный процент (B2). Фолбэк для песочниц без Tokenizer —
+// языковая ветвь aiCmEstimateTokensTilde (та же ÷3.3 на кириллице).
+function aiCmCanonicalTokens(text, attachTokens, messageCount) {
+  var attach = (typeof attachTokens === 'number' && attachTokens > 0) ? attachTokens : 0;
+  var msgs = (typeof messageCount === 'number' && messageCount > 0) ? messageCount : 0;
+  if (typeof Tokenizer !== 'undefined' && Tokenizer &&
+      typeof Tokenizer.estimateDialogTokens === 'function') {
+    try {
+      return Tokenizer.estimateDialogTokens(text, msgs) + attach;
+    } catch (eCanon) {
+      swallowSoft(eCanon, 'content:canonical-tokens');
+    }
+  }
+  return aiCmEstimateTokensTilde(text, attach) + msgs * 4;
+}
+
+// v2.3 (B1): сколько токенов пула вложений ЕЩЁ НЕ отрендерено в fullText.
+// Раньше при наличии любой секции [FILE: …] сбрасывался ВЕСЬ пул netAttachTokens,
+// поэтому файл, который ещё качался, не попадал в метрику вовсе (D3: один файл
+// уже отрендерен, второй висит — пул обнулялся). Теперь из пула вычитаются
+// только токены реально отрендеренных файлов (по числу секций и весам
+// attachBreak), остаток добавляется к оценке. Секций нет — весь пул, как раньше;
+// отрендерены все — добавка 0 (двойного счёта нет).
+function aiCmAttachPendingTokens(fullText, attachTokens, attachBreak) {
+  var pool = (typeof attachTokens === 'number' && attachTokens > 0) ? attachTokens : 0;
+  if (pool <= 0) return 0;
+  var text = (typeof fullText === 'string') ? fullText : '';
+  var imgRendered = (text.match(/\[IMAGE: /g) || []).length;
+  var docRendered = (text.match(/\[FILE: /g) || []).length;
+  if (imgRendered === 0 && docRendered === 0) return pool;
+  var br = (attachBreak && typeof attachBreak === 'object') ? attachBreak : {};
+  var imgTotal = (typeof br.imgCount === 'number' && br.imgCount > 0) ? br.imgCount : 0;
+  var docTotal = (typeof br.docCount === 'number' && br.docCount > 0) ? br.docCount : 0;
+  var total = imgTotal + docTotal;
+  if (total <= 0) return 0; // дробление неизвестно: секции уже в тексте — не добавляем
+  var done = Math.min(imgRendered, imgTotal) + Math.min(docRendered, docTotal);
+  if (done >= total) return 0;
+  return Math.round(pool * (total - done) / total);
+}
+
 // v2.0.20: слаг модели из сети. Мост из MAIN world (core/gemini-intercept.js:captureModelSlugFromBody
 // → window.dispatchEvent) в переменную этого мира (core/state.js:87). Несёт то же значение, что
 // detail.modelSlug в ai-cm-full-history, но приходит на КАЖДЫЙ сетевой ответ и раньше снимка.
@@ -659,11 +705,9 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
   // v38/O-23: trace приёма снимка — видно, что сообщение дошло до content.js.
   // tokens~ — языково-зависимая оценка (O-23: раньше здесь была латинская эвристика
   // length/4, из-за которой кириллический текст систематически недооценивался).
-  // typeof-гард: срез-песочницы тестов (частичный скоуп без этого хелпера) сохраняют
-  // прежнюю формулу и прежние байты строки 1:1.
-  var tokenTilde = (typeof aiCmEstimateTokensTilde === 'function')
-    ? aiCmEstimateTokensTilde(detail.text, detail.attachTokens)
-    : (Math.round((detail.text || '').length / 4) + (detail.attachTokens || 0));
+  // v2.3 (B2): трасса считает ТЕМ ЖЕ каноническим эстиматором, что и бейдж, включая
+  // служебные 4 токена на сообщение — цифры в логе и на бейдже больше не расходятся.
+  var tokenTilde = aiCmCanonicalTokens(detail.text, detail.attachTokens, detail.count || 0);
   debugLog('log', '[AI CM][trace] badge-recv convId=' + (detail.convId || '-') +
     ' msgs=' + (detail.count || 0) +
     ' tokens~' + tokenTilde);
@@ -2585,13 +2629,16 @@ function processAndSend() {
     if (baseComplete === true && metricServerTokens === 0 && netEffectiveLen > 0 && fullText && fullText.length > 0 && netEffectiveLen > fullText.length) {
       tokenEstimate = Math.round(tokenEstimate * (netEffectiveLen / fullText.length));
     }
-    // v2.1: если секции [FILE: …] уже в fullText, legacy-оценка вложений не добавляется
-    // (иначе двойной счёт). Aistudio-компенсация вычитает ровно ту же добавку.
-    if (netAttachTokens > 0 && String(fullText || '').indexOf('[FILE:') === -1) tokenEstimate += netAttachTokens;
+    // v2.3 (B1): секции [FILE: …]/[IMAGE: …] уже посчитаны каноническим эстиматором
+    // в составе fullText. Добавляем ТОЛЬКО долю пула, приходящуюся на неотрендеренные
+    // вложения (раньше при первой же секции пул сбрасывался целиком и висящий файл
+    // не учитывался вовсе).
+    var attachAdd = aiCmAttachPendingTokens(fullText, netAttachTokens, netAttachBreak);
+    if (attachAdd > 0) tokenEstimate += attachAdd;
     // v2.0.32: счётчик шапки AI Studio считает промпт целиком, вложения в нём уже есть —
-    // иначе метрика складывала бы их дважды. Другие сервисы строку выше не трогают.
-    if (svc === 'aistudio' && typeof aiCmAistudioNativePromptTokens === 'function' && aiCmAistudioNativePromptTokens() > 0 && String(fullText || '').indexOf('[FILE:') === -1) {
-      tokenEstimate -= netAttachTokens;
+    // иначе метрика складывала бы их дважды. Вычитаем ровно ту же добавку (B1).
+    if (svc === 'aistudio' && typeof aiCmAistudioNativePromptTokens === 'function' && aiCmAistudioNativePromptTokens() > 0 && attachAdd > 0) {
+      tokenEstimate -= attachAdd;
     }
     const contextLimit = ModelConfig.getContextLimit(modelId);
     const effectiveLimit = ModelConfig.getEffectiveLimit(modelId);
@@ -3214,10 +3261,13 @@ if (isExtensionValid()) {
         if (baseComplete === true && metricServerTokens === 0 && netEffectiveLen > 0 && fullText && fullText.length > 0 && netEffectiveLen > fullText.length) {
           tokenEstimate = Math.round(tokenEstimate * (netEffectiveLen / fullText.length));
         }
-        if (netAttachTokens > 0 && String(fullText || '').indexOf('[FILE:') === -1) tokenEstimate += netAttachTokens;
-        // v2.0.32: вложения уже внутри счётчика шапки AI Studio — второй раз не добавляем.
-        if (currentAdapter.siteName === 'aistudio' && typeof aiCmAistudioNativePromptTokens === 'function' && aiCmAistudioNativePromptTokens() > 0 && String(fullText || '').indexOf('[FILE:') === -1) {
-          tokenEstimate -= netAttachTokens;
+        // v2.3 (B1): тот же расчёт, что у бейджа — добавляется только доля пула
+        // неотрендеренных вложений (см. aiCmAttachPendingTokens).
+        var attachAddM = aiCmAttachPendingTokens(fullText, netAttachTokens, netAttachBreak);
+        if (attachAddM > 0) tokenEstimate += attachAddM;
+        // v2.0.32: вложения уже внутри счётчика шапки AI Studio — вычитаем ту же добавку.
+        if (currentAdapter.siteName === 'aistudio' && typeof aiCmAistudioNativePromptTokens === 'function' && aiCmAistudioNativePromptTokens() > 0 && attachAddM > 0) {
+          tokenEstimate -= attachAddM;
         }
         // Шаг 3: точный счётчик (API BYOK / серверный) авторитетен — монотонный max() эвристики
         // его не поднимает, иначе попап перезаписывал бы ответ API оценкой tokens~ и расходился

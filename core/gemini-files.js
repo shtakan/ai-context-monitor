@@ -26,8 +26,9 @@
  *   • после прихода текста — дебаунс 250 мс и повторный снимок базы;
  *   • пока очередь не пуста, gfPendingCount()>0 и база не объявляется полной.
  *
- * Лимиты: 200 000 символов текста на файл, 2 000 000 на чат, тело файла
- * 200 КБ, таймаут запроса 15 с.
+ * Лимиты: 200 000 символов текста на файл (A3: жёсткого лимита 200 КБ по
+ * content-length больше нет — тело читается потоком до капа), 2 000 000 на чат,
+ * таймаут запроса 15 с.
  *
  * Контракт связки: только __bind(deps) из core/gemini-intercept.js.
  *   emitSnapshot — форвардер emitBaseSnapshot;
@@ -49,7 +50,11 @@
   var GF_TIMEOUT_MS = 15000;
   var GF_EMIT_DEBOUNCE_MS = 250;
   var GF_DRAIN_TIMEOUT_MS = 6000;
-  var GF_BODY_MAX = 200 * 1024;
+  // v2.3 (A3): жёсткого лимита по content-length (было 200 КБ) больше нет — DOCX
+  // на 500 КБ отбрасывался как too-large. Текст читается потоком до GF_TEXT_CAP
+  // символов, поэтому GF_BODY_MAX остался только потолком ПАМЯТИ для бинарных
+  // тел (DOCX — zip): кап по символам держит объём текста, а не объём файла.
+  var GF_BODY_MAX = 16 * 1024 * 1024;
   // v2.0.37 (PDF): pdf.js-ветка. Больше 10 МиБ не качаем вовсе — Range-проба уже
   // знает размер, а вложение такого объёма не стоит своих 15 секунд.
   var GF_PDF_MAX = 10 * 1024 * 1024;
@@ -445,6 +450,55 @@
     return { text: s.slice(0, keep) + suffix, truncated: true };
   }
 
+  // v2.3 (A3): тело текстового вложения читается ПОТОКОМ и обрывается ровно на
+  // GF_TEXT_CAP символах. Прежняя проверка content-length > 200 КБ отбрасывала
+  // файл целиком, хотя его текст помещался в кап. Фолбэк без ReadableStream —
+  // res.text() + gfCapText (поведение прежнего успешного пути, без too-large).
+  function gfReadTextCapped(res) {
+    return new Promise(function (resolve) {
+      var body = res && res.body;
+      var reader = (body && typeof body.getReader === 'function') ? body.getReader() : null;
+      var dec = (typeof TextDecoder === 'function') ? new TextDecoder('utf-8') : null;
+      if (!reader || !dec) {
+        if (!res || typeof res.text !== 'function') { resolve({ text: '', truncated: false, error: true }); return; }
+        try {
+          Promise.resolve(res.text()).then(function (raw) {
+            var capped = gfCapText(raw);
+            resolve({ text: capped.text, truncated: capped.truncated === true });
+          }, function () { resolve({ text: '', truncated: false, error: true }); });
+        } catch (eRead) { resolve({ text: '', truncated: false, error: true }); }
+        return;
+      }
+      var out = '';
+      var truncated = false;
+      var stopped = false;
+      function finish(error) {
+        if (stopped) return;
+        stopped = true;
+        resolve({ text: out, truncated: truncated, error: error === true });
+      }
+      function pump() {
+        reader.read().then(function (step) {
+          if (stopped) return;
+          if (!step || step.done) { finish(false); return; }
+          try { out += dec.decode(step.value, { stream: true }); } catch (eDec) { gfDiag('text-decode-error', {}); }
+          if (out.length >= GF_TEXT_CAP) {
+            truncated = out.length > GF_TEXT_CAP;
+            out = out.slice(0, GF_TEXT_CAP);
+            try { if (typeof reader.cancel === 'function') reader.cancel(); } catch (eCancel) { gfDiag('reader-cancel-error', {}); }
+            finish(false);
+            return;
+          }
+          pump();
+        }, function () {
+          // Обрыв потока на середине: отдаём то, что успели прочитать.
+          finish(out === '');
+        });
+      }
+      pump();
+    });
+  }
+
   // v2.0.37: текст PDF достаёт MAIN-хелпер core/pdf-bytes.js (pdf.js в
   // offscreen-документе). Если хелпера нет (другая сборка, jsdom-тесты) —
   // ветка PDF остаётся прежней: мета-секция без текста.
@@ -545,8 +599,9 @@
           done({ ok: false, pdf: true, size: pdfSize, reason: 'pdf-no-text', text: '' });
           return;
         }
-        var clen = gfNum(gfHeader(res, 'content-length'));
-        if (clen > GF_BODY_MAX) { gfCancelBody(res, ctrl); done({ ok: false, reason: 'too-large', text: '' }); return; }
+        // v2.3 (A3): content-length больше не отбраковывает файл — размер тела
+        // не связан с объёмом текста (DOCX/PDF — контейнеры). Кап ставится на
+        // СИМВОЛЫ при чтении/разборе, а не на байты тела.
         if (gfIsDocx(item.ref)) {
           if (typeof res.arrayBuffer !== 'function') { done({ ok: false, reason: 'body-error', text: '' }); return; }
           var ab;
@@ -569,12 +624,12 @@
             done({ ok: false, reason: 'body-error', text: '' });
           });
         }
-        if (typeof res.text !== 'function') { done({ ok: false, reason: 'body-error', text: '' }); return; }
-        return Promise.resolve(res.text()).then(function (raw) {
-          var text = gfStr(raw);
-          if (text.length > GF_BODY_MAX) { done({ ok: false, reason: 'too-large', text: '' }); return; }
-          if (!text) { done({ ok: false, reason: 'empty-body', text: '' }); return; }
-          done({ ok: true, text: text, truncated: false });
+        // v2.3 (A3): текст читается потоком до GF_TEXT_CAP символов; прежний
+        // отброс по text.length > 200 КБ (это и был «лимит DOCX») снят.
+        return gfReadTextCapped(res).then(function (rr) {
+          var text = gfStr(rr && rr.text);
+          if (!text) { done({ ok: false, reason: (rr && rr.error) ? 'body-error' : 'empty-body', text: '' }); return; }
+          done({ ok: true, text: text, truncated: (rr && rr.truncated) === true });
         }, function (eBody) {
           gfWarn('gemini:files:body', '[gemini-files] тело вложения не прочитано:', eBody);
           done({ ok: false, reason: 'body-error', text: '' });

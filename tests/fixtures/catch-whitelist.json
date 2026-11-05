@@ -311,9 +311,9 @@
       "category": "best-effort-guard",
       "lines": [
         550,
-        2333,
-        2473,
-        3443
+        2377,
+        2517,
+        3493
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cyrDiag = (t.match(/[а-яёА-ЯЁ]/g) || []).length; var cyrillicPct = t"
     },
@@ -321,7 +321,7 @@
       "file": "core/content.js",
       "category": "cleanup-guard",
       "lines": [
-        2058
+        2102
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: if (aiCmBadgeHoldTimer) return; aiCmBadgeHoldTimer = setTimeout(function"
     },
@@ -329,41 +329,41 @@
       "file": "core/content.js",
       "category": "debug-instrumentation",
       "lines": [
-        628,
-        1022,
-        1128,
-        1133,
-        1136,
-        1139,
-        1141,
-        1142,
-        1143,
-        1162,
-        1164,
-        1169,
-        1204,
-        1211,
-        1219,
-        1222,
-        1282,
-        1290,
-        1292,
-        1297,
-        1304,
-        1310,
-        1328,
-        1333,
-        1339,
+        674,
+        1066,
+        1172,
+        1177,
+        1180,
+        1183,
+        1185,
+        1186,
+        1187,
+        1206,
+        1208,
+        1213,
+        1248,
+        1255,
+        1263,
+        1266,
+        1326,
+        1334,
+        1336,
         1341,
-        1346,
-        1933,
-        2297,
-        2484,
-        2508,
-        2517,
-        3327,
-        3353,
-        3355
+        1348,
+        1354,
+        1372,
+        1377,
+        1383,
+        1385,
+        1390,
+        1977,
+        2341,
+        2528,
+        2552,
+        2561,
+        3377,
+        3403,
+        3405
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
     },
@@ -371,8 +371,8 @@
       "file": "core/content.js",
       "category": "defensive-assignment",
       "lines": [
-        740,
-        749
+        784,
+        793
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: aiCmLowConfidenceByConv[emitConvId] = (detail.isLowConfidenceBase === tr"
     },
@@ -380,7 +380,7 @@
       "file": "core/content.js",
       "category": "dom-read-guard",
       "lines": [
-        1969
+        2013
       ],
       "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: var info = aiCmSourceInfo(); aiCmSourceLabelNow = info ? info.label : ''"
     },
@@ -388,12 +388,12 @@
       "file": "core/content.js",
       "category": "event-guard",
       "lines": [
-        1010,
-        1019,
-        2426,
-        2449,
-        3309,
-        3315
+        1054,
+        1063,
+        2470,
+        2493,
+        3359,
+        3365
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
     },
@@ -401,7 +401,7 @@
       "file": "core/content.js",
       "category": "feature-detect",
       "lines": [
-        2635
+        2682
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var metricSrc = baseComplete ? 'base-complete' : (lastBounded ? 'base-fl"
     },
@@ -414,16 +414,16 @@
         278,
         321,
         337,
-        618,
-        644,
-        681,
-        794,
-        968,
-        2007,
-        2716,
-        2778,
-        2795,
-        2879
+        664,
+        690,
+        725,
+        838,
+        1012,
+        2051,
+        2763,
+        2825,
+        2842,
+        2926
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -434,7 +434,7 @@
         26,
         288,
         358,
-        2948
+        2995
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.runtime.sendMessage({ type: 'BADGE_RESET' }).catch(function () {"
     },
@@ -443,7 +443,7 @@
       "category": "local-helper-guard",
       "lines": [
         285,
-        3131
+        3178
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmCancelDeferredHistWrite('');"
     },
@@ -451,7 +451,7 @@
       "file": "core/content.js",
       "category": "parse-guard",
       "lines": [
-        3389
+        3439
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof window !== 'undefined' && window && window.AiCmEx"
     },
@@ -792,7 +792,7 @@
       "file": "core/gemini-files.js",
       "category": "best-effort-guard",
       "lines": [
-        177
+        182
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var arr = turn[2][0][4][0][4]; if (!Array.isArray(arr)) return out; for"
     },
@@ -800,11 +800,11 @@
       "file": "core/gemini-files.js",
       "category": "guard-clause",
       "lines": [
-        103,
-        117,
-        413,
-        434,
-        435
+        108,
+        122,
+        418,
+        439,
+        440
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (ctrl) ctrl.abort();"
     },
@@ -812,7 +812,7 @@
       "file": "core/gemini-files.js",
       "category": "parse-guard",
       "lines": [
-        601
+        656
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: if (typeof TextDecoder === 'function') return new TextDecoder('utf-8').d"
     },
@@ -881,8 +881,8 @@
       "category": "debug-instrumentation",
       "lines": [
         288,
-        973,
-        1025
+        981,
+        1033
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var restDiag = arr0.slice(3); for (var rdi = 0; rdi < restDiag.length; r"
     },
@@ -916,9 +916,9 @@
       "category": "local-helper-guard",
       "lines": [
         198,
-        957,
-        1362,
-        1466
+        965,
+        1370,
+        1474
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmEnsureColdWindow();"
     },

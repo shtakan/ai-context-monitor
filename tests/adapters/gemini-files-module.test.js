@@ -238,11 +238,12 @@ function pdfNodeSized(name, size, token, url) {
   return node;
 }
 
-function docxBuffer(xml) {
+function docxBuffer(xml, level) {
   // Минимальный ZIP: local header + deflate-raw. Центральный каталог не нужен —
   // модуль умеет fallback по local header (см. gfZipEntry).
+  // level=0 (store) — чтобы получить файл реального размера (пины A3/D2).
   const name = Buffer.from('word/document.xml', 'utf8');
-  const raw = zlib.deflateRawSync(Buffer.from(xml, 'utf8'));
+  const raw = zlib.deflateRawSync(Buffer.from(xml, 'utf8'), (typeof level === 'number') ? { level: level } : undefined);
   const local = Buffer.alloc(30);
   local.writeUInt32LE(0x04034b50, 0);
   local.writeUInt16LE(20, 4);
@@ -428,24 +429,41 @@ describe('R2: очередь, дедуп и секции', function () {
     expect(section).toContain('[FILE: c.txt]\nC');
   });
 
-  test('кап 200 000 символов на файл помечается, тело сверх content-length не читается', async function () {
+  test('A3: content-length больше прежних 200 КБ не повод для too-large, текст режется капом', async function () {
     const h = makeHarness();
-    const ref = h.Fn.collectTurnFiles(turnWith([textNode('long.txt')]))[0];
+    const ref = h.Fn.collectTurnFiles(turnWith([textNode('big.txt')]))[0];
     h.Fn.gfEnqueueTurnFiles(CHAT, 'u1', [ref]);
-    h.fetchCalls[0].resolve(makeRes({ headers: { 'content-length': String(200 * 1024 + 1) } }));
+    // 500 КБ по content-length: прежний жёсткий лимит 200 КБ снят — файл читается
+    h.fetchCalls[0].resolve(makeRes({ headers: { 'content-length': String(500 * 1024) }, body: 'x'.repeat(200005) }));
     await flush();
     h.tick(300);
-    expect(h.Fn.gfSectionsFor(CHAT, 'u1')).toContain('too-large');
-
-    const h2 = makeHarness();
-    const ref2 = h2.Fn.collectTurnFiles(turnWith([textNode('big.txt')]))[0];
-    h2.Fn.gfEnqueueTurnFiles(CHAT, 'u2', [ref2]);
-    h2.fetchCalls[0].resolve(makeRes({ body: 'x'.repeat(200005) }));
-    await flush();
-    h2.tick(300);
-    const section = h2.Fn.gfSectionsFor(CHAT, 'u2');
+    const section = h.Fn.gfSectionsFor(CHAT, 'u1');
+    expect(section).not.toContain('too-large');
+    expect(section).toContain('[FILE: big.txt]');
     expect(section).toContain('…[обрезано 5]');
-    expect(section.indexOf(']' + '\n') > 0).toBe(true);
+  });
+
+  test('D2 (A3): DOCX ~500 КБ читается целиком, текст секции обрезан до капа', async function () {
+    const h = makeHarness();
+    // 250 000 кириллических символов = 500 000 байт в word/document.xml;
+    // level 0 (store) держит тело файла ~500 КБ, чтобы проверялся реальный размер.
+    const xml = '<w:document><w:body><w:p><w:r><w:t>' + 'Д'.repeat(250000) +
+      '</w:t></w:r></w:p></w:body></w:document>';
+    const buf = docxBuffer(xml, 0);
+    expect(buf.length).toBeGreaterThan(400 * 1024);
+    const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+    const ref = h.Fn.collectTurnFiles(turnWith([docxNode('huge.docx')]))[0];
+    h.Fn.gfEnqueueTurnFiles(CHAT, 'u1', [ref]);
+    h.fetchCalls[0].resolve(makeRes({ headers: { 'content-length': String(buf.length) }, buffer: ab }));
+    const got = await waitFor(function () {
+      return h.Fn.gfSectionsFor(CHAT, 'u1').indexOf('[FILE: huge.docx]') >= 0;
+    }, 4000);
+    expect(got).toBe(true);
+    h.tick(300);
+    const section = h.Fn.gfSectionsFor(CHAT, 'u1');
+    expect(section).not.toContain('too-large');
+    expect(section).toContain('…[обрезано 50000]');
+    expect(h.Fn.gfPendingCount(CHAT)).toBe(0);
   });
 });
 
@@ -637,10 +655,10 @@ describe('v2.4 (A+B): дельта пула и единый ключ файла'
   });
 });
 
-describe('v2.2 (C): filesTruncated снимает вечное ожидание filesPending', function () {
+describe('v2.3 (A1): база не финализируется, пока очередь вложений не пуста', function () {
   function loadIngestHelpers() {
     const ctx = vm.createContext({ Date: Date });
-    vm.runInContext('var GF_FILES_GATE_MAX = 10; var GF_FILES_GATE_MS = 5000;\n' +
+    vm.runInContext('var GF_FILES_GATE_MS = 30000;\n' +
       fnSource(INGEST_SRC, 'filesGateDecision') + '\n' +
       fnSource(INGEST_SRC, 'baseCompleteWithFiles'), ctx);
     return {
@@ -649,23 +667,56 @@ describe('v2.2 (C): filesTruncated снимает вечное ожидание 
     };
   }
 
-  test('D2: filesPending > 10 дольше 5 с → baseComplete и filesTruncated', function () {
+  test('D1: filesPending > 0 держит baseComplete; 30 с лишь перезапускают ожидание', function () {
     const H = loadIngestHelpers();
-    // порог: 11 файлов и 5 001 мс ожидания; ровно 5 000 мс и 10 файлов — ещё ждём
-    expect(H.decision(11, 1000, 6001)).toMatchObject({ release: true, delay: 0 });
-    expect(H.decision(11, 1000, 6000)).toMatchObject({ release: false, delay: 1 });
-    expect(H.decision(10, 0, 999999).release).toBe(false);
+    // прежний порог «11 файлов и 5 001 мс» больше не финализирует базу
+    expect(H.decision(11, 1000, 6001)).toMatchObject({ release: false });
+    expect(H.decision(11, 1000, 6000).release).toBe(false);
+    // окно ожидания — 30 с: на границе release только перезапускает отсчёт
+    expect(H.decision(11, 1000, 1000 + 29999)).toMatchObject({ release: false, delay: 1 });
+    expect(H.decision(11, 1000, 1000 + 30000)).toMatchObject({ release: true, delay: 0 });
+    // очередь пуста — гейт молчит независимо от времени
+    expect(H.decision(0, 0, 999999).release).toBe(false);
 
-    expect(H.baseComplete(true, 11, true)).toBe(true);   // экспорт не блокируется
-    expect(H.baseComplete(true, 11, false)).toBe(false); // до 5 с — ждём
-    expect(H.baseComplete(true, 0, false)).toBe(true);   // очередь пуста — полная
-    expect(H.baseComplete(false, 11, true)).toBe(false); // тишина пагинации не наступила
+    // база полная только при пустой очереди, флаг обрезки больше не спасает
+    expect(H.baseComplete(true, 11)).toBe(false);
+    expect(H.baseComplete(true, 1)).toBe(false);
+    expect(H.baseComplete(true, 0)).toBe(true);
+    expect(H.baseComplete(false, 0)).toBe(false);
 
-    // реальный emitBaseSnapshot принимает решение этими хелперами и публикует флаг
     const body = fnSource(INGEST_SRC, 'emitBaseSnapshot');
     expect(body).toContain('filesGateDecision(filesPending, filesGateSince[gateKey], gateNow)');
-    expect(body).toContain('baseCompleteWithFiles(historyFullByQuiet, filesPending, filesTruncated)');
-    expect(body).toContain('filesTruncated: filesTruncated');
+    expect(body).toContain('baseCompleteWithFiles(historyFullByQuiet, filesPending)');
+    // filesTruncated остаётся только полем формы снимка и не выставляется ожиданием
+    expect(body).toContain('var filesTruncated = false;');
+    expect(body).not.toContain('filesTruncated = gate.release');
+  });
+
+  test('R1: обычный чат (1 страница, 1 файл) — прежнее поведение без ожиданий', async function () {
+    const h = makeHarness();
+    const ref = h.Fn.collectTurnFiles(turnWith([textNode('note.txt')]))[0];
+    h.Fn.gfEnqueueTurnFiles(CHAT, 'u1', [ref]);
+    expect(h.Fn.gfPendingCount(CHAT)).toBe(1);
+    h.fetchCalls[0].resolve(makeRes({ headers: { 'content-length': '5' }, body: 'hello' }));
+    await flush();
+    h.tick(300);
+    expect(h.Fn.gfSectionsFor(CHAT, 'u1')).toContain('[FILE: note.txt]\nhello');
+    expect(h.Fn.gfPendingCount(CHAT)).toBe(0);
+    expect(h.deps.emitSnapshot).toHaveBeenCalled();
+  });
+
+  test('D1: отложенный fetch-done пере-эмитит снимок, раньше очередь молчит', async function () {
+    const h = makeHarness();
+    const refs = h.Fn.collectTurnFiles(turnWith([textNode('a.txt'), textNode('b.txt')]));
+    h.Fn.gfEnqueueTurnFiles(CHAT, 'u1', refs);
+    // дебаунс-таймеры прошли, но ни один файл ещё не докачан — снимок не финализируется
+    h.tick(1000);
+    expect(h.deps.emitSnapshot).not.toHaveBeenCalled();
+    // fetch-done первого файла → пере-эмиссия (второй всё ещё в очереди)
+    h.fetchCalls[0].resolve(makeRes({ body: 'A' }));
+    await flush();
+    h.tick(300);
+    expect(h.deps.emitSnapshot).toHaveBeenCalled();
   });
 });
 
@@ -756,25 +807,28 @@ describe('v2.1: дедуп ходов/вложений и метрика без 
     expect(stable([], { total: 7 })).toBe('idx7');
   });
 
-  test('метрика: [FILE: …] уже в fullText — legacy attachTokens не добавляются', function () {
+  test('B1/D3: частичное наличие файлов — в метрику идёт только доля неотрендеренного пула', function () {
     const content = read('core/content.js');
-    const ADD = "if (netAttachTokens > 0 && String(fullText || '').indexOf('[FILE:') === -1) tokenEstimate += netAttachTokens;";
-    expect(content.split(ADD).length - 1).toBe(2); // бейдж + GET_STATS
-    const runAdd = function (fullText, netAttachTokens) {
-      return new Function('ctx',
-        'with (ctx) { let tokenEstimate = 0; ' + ADD + ' return tokenEstimate; }'
-      )({ fullText: fullText, netAttachTokens: netAttachTokens });
-    };
-    expect(runAdd('Вопрос\n\n[FILE: a.txt]\nтело', 2500)).toBe(0);
-    expect(runAdd('Вопрос\n\n[FILE: report.pdf — application/pdf, размер неизвестен, текст не получен]', 516)).toBe(0);
-    expect(runAdd('Вопрос', 2500)).toBe(2500);
-    expect(runAdd('', 516)).toBe(516);
-    expect(runAdd('Вопрос', 0)).toBe(0);
-
-    // прямой неохраняемой формы нет, aistudio-компенсация тоже под тем же гейтом
+    // оба пути метрики (бейдж и GET_STATS) используют ОДИН хелпер
+    expect(content.split('var attachAdd = aiCmAttachPendingTokens(fullText, netAttachTokens, netAttachBreak);').length - 1).toBe(1);
+    expect(content.split('var attachAddM = aiCmAttachPendingTokens(fullText, netAttachTokens, netAttachBreak);').length - 1).toBe(1);
+    // прежнего двоичного гейта «есть [FILE: → пул целиком в ноль» больше нет
+    expect(content).not.toContain("indexOf('[FILE:') === -1");
     expect(content).not.toMatch(/(^|\n)\s*tokenEstimate \+= netAttachTokens;/);
-    const SUB = "aiCmAistudioNativePromptTokens() > 0 && String(fullText || '').indexOf('[FILE:') === -1) {";
-    expect(content.split(SUB).length - 1).toBe(2);
+
+    const pending = new Function('return (' + fnSource(content, 'aiCmAttachPendingTokens') + ');')();
+
+    // все файлы отрендерены — добавки нет (двойного счёта нет)
+    expect(pending('Вопрос\n\n[FILE: a.txt]\nтело\n\n[FILE: b.txt]\nтело', 2860, { imgCount: 0, docCount: 2 })).toBe(0);
+    // D3: один отрендерен, второй ещё качается → учитывается ровно половина пула
+    expect(pending('Вопрос\n\n[FILE: a.txt]\nтело', 2860, { imgCount: 0, docCount: 2 })).toBe(1430);
+    // секций нет — весь пул, как раньше
+    expect(pending('Вопрос', 2860, { imgCount: 0, docCount: 2 })).toBe(2860);
+    // смешанный набор: картинка ещё качается, файл уже в тексте → остаётся доля картинки
+    expect(pending('Вопрос\n\n[FILE: a.txt]\nтело', 1000, { imgTokens: 500, imgCount: 1, docTokens: 500, docCount: 1 })).toBe(500);
+    // старый detail без attachBreak: дробление неизвестно — не добавляем (секции уже в тексте)
+    expect(pending('Вопрос\n\n[FILE: a.txt]\nтело', 2500, null)).toBe(0);
+    expect(pending('Вопрос', 0, null)).toBe(0);
   });
 });
 

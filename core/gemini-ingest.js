@@ -696,30 +696,37 @@
         filesPending = window.AiCmGeminiFiles.gfPendingCount(fid) || 0;
       }
     } catch (ePend) { filesPending = 0; }
-    // v2.2 (C): большой пакет вложений не держит экспорт вечно. Порог превышен
-    // больше 5 с назад — финализируем базу как filesTruncated (секции уже
-    // пришедших файлов сохраняются), вместо ожидания всех 124 МБ.
+    // v2.3 (A1): таймаут больше НЕ финализирует базу с потерянными [FILE:]-секциями.
+    // Пока filesPending > 0, база неполная: ждём опустошения очереди (fetch-done →
+    // gfScheduleEmit → повторный emitBaseSnapshot) окном GF_FILES_GATE_MS = 30 с,
+    // после чего окно открывается заново. Ни один таймаут не выдаёт baseComplete.
+    // filesTruncated остаётся только полем формы снимка (совместимость detail)
+    // и всегда false — флаг больше не «отпускает» экспорт.
     var gateKey = fid || '__';
     var filesTruncated = false;
-    if (filesPending > GF_FILES_GATE_MAX) {
+    if (filesPending > 0) {
       var gateNow = Date.now();
       if (!filesGateSince[gateKey]) filesGateSince[gateKey] = gateNow;
       var gate = filesGateDecision(filesPending, filesGateSince[gateKey], gateNow);
-      filesTruncated = gate.release === true;
-      if (filesTruncated) {
+      if (gate.release) {
+        // Очередь не опустела за окно: перезапускаем ожидание, полноты не даём.
+        filesGateSince[gateKey] = gateNow;
         if (filesGateTimers[gateKey]) { clearTimeout(filesGateTimers[gateKey]); delete filesGateTimers[gateKey]; }
-      } else if (typeof setTimeout === 'function' && !filesGateTimers[gateKey]) {
+        debugLog('log', '[gemini-base-diag] files-gate wait-timeout pending=' + filesPending + ' — ждём дальше');
+      }
+      if (typeof setTimeout === 'function' && !filesGateTimers[gateKey]) {
         var gateReemit = emitBaseSnapshot;
+        var gateDelay = (gate.release || !gate.delay) ? GF_FILES_GATE_MS : gate.delay;
         filesGateTimers[gateKey] = setTimeout(function () {
           delete filesGateTimers[gateKey];
           try { gateReemit(); } catch (eGate) { swallowSoft(eGate, 'gemini:files-gate-emit'); }
-        }, gate.delay);
+        }, gateDelay);
       }
     } else {
       delete filesGateSince[gateKey];
       if (filesGateTimers[gateKey]) { clearTimeout(filesGateTimers[gateKey]); delete filesGateTimers[gateKey]; }
     }
-    var baseComplete = baseCompleteWithFiles(historyFullByQuiet, filesPending, filesTruncated);
+    var baseComplete = baseCompleteWithFiles(historyFullByQuiet, filesPending);
     debugLog('log', '[gemini-base-diag] count=' + ids.length + ' textLen=' + text.length +
       ' baseComplete=' + baseComplete + ' filesPending=' + filesPending +
       ' filesTruncated=' + filesTruncated +
@@ -847,25 +854,26 @@
     }
   }
 
-  // ---- v2.2 (C): гейт файлового ожидания ----
-  // Большой пакет вложений (124 МБ и т.п.) не должен держать базу вечно: больше
-  // 10 файлов, не докачанных за 5 с, финализируют базу как filesTruncated.
-  var GF_FILES_GATE_MAX = 10;
-  var GF_FILES_GATE_MS = 5000;
+  // ---- v2.3 (A1): гейт файлового ожидания ----
+  // База НЕ финализируется, пока в очереди есть вложения: экспорт, зафиксированный
+  // по 5-секундному таймауту, терял [FILE:]-секции (A1). Окно ожидания — 30 с,
+  // дальше перезапускается; полноту даёт только опустевшая очередь
+  // (fetch-done → gfScheduleEmit → re-emit). Порог «больше 10 файлов» снят:
+  // он же и разрывал ожидание на больших пакетах.
+  var GF_FILES_GATE_MS = 30000;
   var filesGateSince = {};
   var filesGateTimers = {};
   function filesGateDecision(filesPending, sinceMs, nowMs) {
     var pending = (typeof filesPending === 'number') ? filesPending : 0;
     var now = (typeof nowMs === 'number') ? nowMs : Date.now();
-    if (pending <= GF_FILES_GATE_MAX) return { release: false, delay: 0, since: 0 };
+    if (pending <= 0) return { release: false, delay: 0, since: 0 };
     var since = (typeof sinceMs === 'number' && sinceMs > 0) ? sinceMs : (now || 1);
     var waited = now - since;
-    if (waited > GF_FILES_GATE_MS) return { release: true, delay: 0, since: since };
-    var delay = GF_FILES_GATE_MS - waited + 1;
-    return { release: false, delay: delay > 0 ? delay : 0, since: since };
+    if (waited >= GF_FILES_GATE_MS) return { release: true, delay: 0, since: since };
+    return { release: false, delay: GF_FILES_GATE_MS - waited, since: since };
   }
-  function baseCompleteWithFiles(historyFullByQuiet, filesPending, filesTruncated) {
-    return !!historyFullByQuiet && ((filesPending === 0) || filesTruncated === true);
+  function baseCompleteWithFiles(historyFullByQuiet, filesPending) {
+    return !!historyFullByQuiet && (filesPending === 0);
   }
 
   // ---- v2.1 (dedupe): устойчивый fallback-id хода ----

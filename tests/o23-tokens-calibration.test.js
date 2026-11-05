@@ -221,21 +221,23 @@ describe('O-23 R: регресс байтов tokens~ (serverTokens = 0)', () =>
     }
   });
 
-  test('R4: трасса badge-recv идёт через хелпер, латинская формула — только фолбэк (корень 1)', () => {
-    expect(CONTENT_SRC).toContain("? aiCmEstimateTokensTilde(detail.text, detail.attachTokens)");
+  test('R4: трасса badge-recv идёт тем же эстиматором, латинской формулы в боевом коде нет (корень 1)', () => {
+    expect(CONTENT_SRC).toContain('var tokenTilde = aiCmCanonicalTokens(detail.text, detail.attachTokens, detail.count || 0);');
     expect(CONTENT_SRC).toContain("' tokens~' + tokenTilde)");
-    // латинская формула осталась ровно одна и стоит ПОСЛЕ typeof-гарда (фолбэк песочниц)
-    const guard = CONTENT_SRC.indexOf("typeof aiCmEstimateTokensTilde === 'function'");
-    const legacy = CONTENT_SRC.indexOf('Math.round((detail.text || \'\').length / 4)');
-    expect(guard).toBeGreaterThan(-1);
-    expect(legacy).toBeGreaterThan(guard);
-    expect(CONTENT_SRC.split('Math.round((detail.text || \'\').length / 4)').length - 1).toBe(1);
+    // v2.3 (B2): наивной length/4 в боевых путях не осталось вовсе
+    expect(CONTENT_SRC.split('Math.round((detail.text || \'\').length / 4)').length - 1).toBe(0);
     // хелпер: приоритет Tokenizer.countTokens, фолбэк — языковая ветвь (тот же коэффициент 3.3)
     const src = helperSource();
     expect(src).toContain('TK.countTokens(t) + attach');
     expect(src).toContain('Math.ceil(cyr / 3.3)');
     expect(src).not.toContain('Math.ceil(cyr / 1.8)');
     expect(src).toContain('Math.round((t.length - cyr) / 4)');
+    // B2: единственный канонический эстиматор, на который замкнута трасса и который
+    // делегирует бейджному Tokenizer.estimateDialogTokens (один и тот же счётчик).
+    expect(CONTENT_SRC).toContain('function aiCmCanonicalTokens(text, attachTokens, messageCount)');
+    const canon = CONTENT_SRC.slice(CONTENT_SRC.indexOf('function aiCmCanonicalTokens('));
+    expect(canon.slice(0, 900)).toContain('Tokenizer.estimateDialogTokens(text, msgs) + attach');
+    expect(canon.slice(0, 1200)).toContain('aiCmEstimateTokensTilde(text, attach) + msgs * 4');
   });
 
   test('R5: бейдж авторитетен по serverTokens на ОБОИХ путях (updateWidget и GET_STATS)', () => {

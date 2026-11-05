@@ -235,7 +235,9 @@ describe('v95 metrics-resync: вызов стоит сразу после deferr
 // можно только при baseComplete === true. Исполняются РЕАЛЬНЫЕ байты core/content.js
 // (срез по маркерам + new Function, конвенция сьюта), не пересказ логики.
 // =====================================================================================
-const NET_ATTACH_TAIL = 'tokenEstimate += netAttachTokens;';
+// v2.3 (B1): вложения добавляются долей пула через aiCmAttachPendingTokens — это и есть
+// конечная точка среза масштабирования (раньше здесь стоял безусловный += netAttachTokens).
+const NET_ATTACH_TAIL = 'if (attachAdd > 0) tokenEstimate += attachAdd;';
 
 /** Срез масштабирования tokenEstimate из processAndSend — реальными байтами исходника. */
 function metricScaleSnippet() {
@@ -267,6 +269,8 @@ function runScale(o) {
     fullText: o.fullText,
     countForTokens: 1,
     netAttachTokens: 0,
+    netAttachBreak: null,
+    aiCmAttachPendingTokens: function () { return 0; },
     baseComplete: o.baseComplete === true,
     Tokenizer: {
       estimateDialogTokens: function () { return o.raw; }
@@ -342,7 +346,7 @@ describe('v98: масштаб по netEffectiveLen только при baseCompl
     // неохраняемой формы (масштаб без вердикта полноты) в исходнике не осталось
     expect(CONTENT).not.toContain('if (metricServerTokens === 0 && netEffectiveLen > 0');
     expect(metricScaleSnippet()).toContain('if (baseComplete === true && metricServerTokens === 0');
-    // масштаб идёт ДО `tokenEstimate += netAttachTokens` (вложения добавляются к готовому числу)
+    // масштаб идёт ДО добавки доли вложений (вложения добавляются к готовому числу)
     const draw = sliceFunction(CONTENT, 'processAndSend');
     expect(draw.indexOf('if (baseComplete === true && metricServerTokens === 0'))
       .toBeLessThan(draw.indexOf(NET_ATTACH_TAIL));
