@@ -488,10 +488,17 @@
   // такие коды уезжают в текст вложения управляющими символами.
   // Печатный: код > 31 вне 127…255; исключение — кириллица: Unicode 0x0400–0x04FF
   // и байты CP1251 0xC0–0xFF (PDFDocEncoding ≈ latin1).
+  // v2.6 (CID-мусор): UTF-16BE-ветка `decodeTextString` собирает code point'ы из
+  // двух байт, поэтому глифовые коды CID-шрифта приходят как U+FFFD, U+FFFE/FFFF
+  // и U+E000–F8FF (зона приватного использования). Это не текст, а номера глифов:
+  // раньше они проходили фильтр и раздували textLen. Теперь отбрасываются.
   function isPrintableCode(code) {
     if (code === 0x09 || code === 0x0A || code === 0x0D) return true;
     if (code < 0x20) return false;
     if (code >= 0x7F && code <= 0x9F) return false;
+    if (code === 0xFFFD || code === 0xFFFE || code === 0xFFFF) return false;
+    if (code >= 0xD800 && code <= 0xDFFF) return false;
+    if (code >= 0xE000 && code <= 0xF8FF) return false;
     if (code >= 0x0400 && code <= 0x04FF) return true;
     if (code >= 0x80 && code <= 0xFF) return code >= 0xC0;
     return true;
@@ -583,6 +590,61 @@
     return m ? m.length : 0;
   }
 
+  /**
+   * Похож ли собранный текст на мусор, а не на содержимое PDF.
+   * Локальный разбор не читает ToUnicode, поэтому при CID-шрифтах вместо букв
+   * приходят коды глифов. Признаки: доля replacement/private-use/управляющих
+   * code point'ов выше 2%, текст без единого пробела на 400+ символов, или одна
+   * «строка» длиннее 2000 символов без разрывов. В таких случаях текст
+   * отбрасывается целиком (pdf-no-text), а не попадает в базу.
+   * @param {string} text Собранный текст.
+   * @returns {boolean} true — текст мусорный.
+   */
+  function localTextIsGarbage(text) {
+    if (!text) return true;
+    var total = text.length;
+    var bad = 0;
+    var spaces = 0;
+    var longestRun = 0;
+    var run = 0;
+    for (var i = 0; i < total; i++) {
+      var code = text.charCodeAt(i);
+      var isBlank = (code === 0x20 || code === 0x09 || code === 0x0A || code === 0x0D);
+      if (isBlank) { spaces++; run = 0; } else { run++; if (run > longestRun) longestRun = run; }
+      if (code === 0xFFFD || code === 0xFFFE || code === 0xFFFF ||
+          (code >= 0xD800 && code <= 0xDFFF) || (code >= 0xE000 && code <= 0xF8FF) ||
+          (code < 0x20 && !isBlank) || (code >= 0x7F && code <= 0x9F)) bad++;
+    }
+    if (bad / total > 0.02) return true;
+    if (total >= 400 && spaces / total < 0.005) return true;
+    if (longestRun > 2000) return true;
+    return !localTextLooksLikeLanguage(text);
+  }
+
+  /**
+   * Похож ли текст на связный язык: среди «слов» должна быть заметная доля
+   * таких, где есть латиница, кириллица или цифра. CID-мусор, декодированный
+   * как latin1, даёт слова из символов ÿýþø — букв латиницы/кириллицы там нет,
+   * зато они похожи на текст и проходят фильтр печатности. Проверка идёт по
+   * первым 20000 символам: страница PDF этого хватает.
+   * @param {string} text Проверяемый текст.
+   * @returns {boolean} true — текст похож на язык.
+   */
+  function localTextLooksLikeLanguage(text) {
+    var sample = text.length > 20000 ? text.slice(0, 20000) : text;
+    var words = sample.split(/\s+/);
+    var words_n = 0;
+    var plausible = 0;
+    for (var i = 0; i < words.length; i++) {
+      var w = words[i];
+      if (!w) continue;
+      words_n++;
+      if (/[a-zA-Zа-яА-ЯёЁ0-9]/.test(w)) plausible++;
+    }
+    if (words_n < 10) return true;
+    return plausible / words_n >= 0.5;
+  }
+
   /** EOL перед `endstream` — разделитель, а не данные: иначе zlib видит хвост. */
   function trimStreamEol(s) {
     var end = s.length;
@@ -633,7 +695,7 @@
         out = out.slice(0, maxChars);
         truncated = true;
       }
-      if (!out) return fail('pdf-no-text', u8.length);
+      if (!out || localTextIsGarbage(out)) return fail('pdf-no-text', u8.length);
       return { ok: true, text: out, pages: pages, truncated: truncated, reason: '', size: u8.length };
     }
     function step() {

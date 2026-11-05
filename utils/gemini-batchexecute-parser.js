@@ -65,6 +65,7 @@
    * @property {string[]} urls Все строковые ссылки узла.
    * @property {boolean} isImage true — изображение (type=1 или mime image/*).
    * @property {number} [size] Размер в байтах (не задан — ещё неизвестен).
+   * @property {number} [pos] Позиция узла в накопительном пуле хода (0…).
    */
 
   /**
@@ -410,6 +411,13 @@
 
   /**
    * Вложения хода.
+   *
+   * v2.6 (позиционная дельта): каждому ref проставляется `pos` — индекс узла в
+   * кумулятивном списке разговора. Список Gemini только дописывает в ХВОСТ
+   * (проверено на 60 переходах реального чата: пул старого хода всегда префикс
+   * пула нового), поэтому позиция — устойчивая идентичность загрузки: переподпись
+   * URL/токена её не меняет, а повторная загрузка с тем же именем занимает новую
+   * позицию и не схлопывается с прежней.
    * @param {any} turn Ход batchexecute.
    * @returns {GeminiFileRef[]} Нормализованные вложения (пусто, если их нет).
    */
@@ -420,38 +428,40 @@
       if (!Array.isArray(arr)) return out;
       for (var i = 0; i < arr.length; i++) {
         var ref = fileRefFromNode(arr[i]);
-        if (ref) out.push(ref);
+        if (ref) {
+          ref.pos = i;
+          out.push(ref);
+        }
       }
     } catch (e) { }
     return out;
   }
 
   /**
-   * Запись пула хода: снимок накопительного списка + кэш собственной дельты.
+   * Запись пула хода: снимок накопительного списка.
    * @typedef {Object} GeminiFilePoolTurn
    * @property {string} turnId Id хода.
    * @property {number} ts Время хода (0 = неизвестно).
    * @property {number} order Хронологический индекс (-1 = неизвестно).
    * @property {number} seq Порядок регистрации в реестре.
-   * @property {GeminiFileRef[]} refs Полный пул хода.
-   * @property {GeminiFileRef[]|null=} ownCache Кэш вычисленной дельты (идемпотентность).
-   * @property {string=} ownSig Подпись пула, к которому относится ownCache.
+   * @property {GeminiFileRef[]} [refs] Полный пул хода (нет до регистрации).
    */
 
   /**
    * Реестр пулов вложений по разговору:
-   * convId → { turns: { [turnId]: GeminiFilePoolTurn }, seq, claimed }.
+   * convId → { turns: { [turnId]: GeminiFilePoolTurn }, seq }.
    *
    * Gemini повторяет НАКОПИТЕЛЬНЫЙ список `turn[2][0][4][0][4]` в нескольких
    * ходах, поэтому сам пул не говорит, что загружено именно в этом ходе.
-   * Собственные файлы хода — дельта пула:
-   *   own(k) = multiset(pool(k)) − multiset(pool(k−1)),
-   * где k−1 — ближайший предшествующий по хронологии ход (по ts, затем turnId).
-   * Дельта сохраняет порядок записей пула, поэтому разные загрузки с
-   * одинаковыми именами остаются разными файлами в своих ходах.
-   * `claimed` — ключи, уже отданные любым ходом: страховка от повторной
-   * выдачи накопительного пула, когда предшественник ещё не пришёл.
-   * @type {Record<string, {turns: Record<string, GeminiFilePoolTurn>, seq: number, claimed: Record<string, boolean>}>}
+   * Собственные файлы хода — ХВОСТ пула после общего префикса с пулом
+   * предшествующего хода:
+   *   k = длина общего префикса по именам записей;
+   *   own(k) = pool(k)[k..]  (пул только растёт в хвост).
+   * Позиционное сравнение не зависит от переподписываемых URL и токенов, поэтому
+   * одна и та же загрузка, вернувшаяся в другом ответе с новым токеном, не
+   * превращается в дубль, а две загрузки с одинаковым именем сидят на разных
+   * позициях и остаются разными файлами.
+   * @type {Record<string, {turns: Record<string, GeminiFilePoolTurn>, seq: number}>}
    */
   var filePoolsByConv = {};
 
@@ -477,24 +487,47 @@
    * Пул ходов разговора; при `create` заводится пустой.
    * @param {unknown} convId Id разговора.
    * @param {boolean=} create Создать запись, если её нет.
-   * @returns {{turns: Record<string, GeminiFilePoolTurn>, seq: number, claimed: Record<string, boolean>}|null} Пул.
+   * @returns {{turns: Record<string, GeminiFilePoolTurn>, seq: number}|null} Пул.
    */
   function filePoolForConv(convId, create) {
     var cid = (typeof convId === 'string') ? convId : '';
     var pool = filePoolsByConv[cid];
     if (!pool && create) {
-      pool = { turns: {}, seq: 0, claimed: {} };
+      pool = { turns: {}, seq: 0 };
       filePoolsByConv[cid] = pool;
     }
     return pool || null;
   }
 
   /**
+   * Имя записи пула — единственный устойчивый признак порядка: Gemini
+   * переподписывает dl/img/urls и токен, но имя и место в списке не меняет.
+   * @param {GeminiFileRef} ref Нормализованный ref вложения.
+   * @returns {string} Имя записи.
+   */
+  function fileRefPoolName(ref) {
+    return (ref && typeof ref.name === 'string') ? ref.name : '';
+  }
+
+  /**
+   * Длина общего префикса двух пулов по именам записей.
+   * @param {GeminiFileRef[]} a Первый пул.
+   * @param {GeminiFileRef[]} b Второй пул.
+   * @returns {number} Число совпавших с начала записей.
+   */
+  function poolSharedPrefixLen(a, b) {
+    var n = Math.min(a.length, b.length);
+    var k = 0;
+    while (k < n && fileRefPoolName(a[k]) === fileRefPoolName(b[k])) k++;
+    return k;
+  }
+
+  /**
    * Хронологический порядок ходов: сначала известный ts, затем turnId
    * (детерминированный тай-брейк равных ts), затем индекс кадра, затем
    * порядок регистрации (предварительный проход ingest идёт старые→новые).
-   * @param {{ts: number, turnId?: string, order: number, seq: number}} a Первый ход.
-   * @param {{ts: number, turnId?: string, order: number, seq: number}} b Второй ход.
+   * @param {GeminiFilePoolTurn} a Первый ход.
+   * @param {GeminiFilePoolTurn} b Второй ход.
    * @returns {boolean} true, если `a` хронологически раньше `b`.
    */
   function isTurnBefore(a, b) {
@@ -503,8 +536,15 @@
     if (aTs > 0 && bTs > 0 && aTs !== bTs) return aTs < bTs;
     if (aTs > 0 && bTs === 0) return true;
     if (aTs === 0 && bTs > 0) return false;
-    // Фикс D1 (равные ts): page-local order не глобален, поэтому при равном ts
-    // решает turnId — он одинаков независимо от того, какой страницей пришёл ход.
+    // Равные ts: сначала вложенность пулов — более короткий префиксный пул
+    // хронологически раньше (пул растёт только в хвост), затем turnId (он
+    // одинаков на любой странице), затем индекс кадра и порядок регистрации.
+    var aRefs = Array.isArray(a.refs) ? a.refs : null;
+    var bRefs = Array.isArray(b.refs) ? b.refs : null;
+    if (aRefs && bRefs && aRefs.length !== bRefs.length) {
+      var nest = poolSharedPrefixLen(aRefs, bRefs);
+      if (nest === Math.min(aRefs.length, bRefs.length)) return aRefs.length < bRefs.length;
+    }
     var aTid = (typeof a.turnId === 'string') ? a.turnId : '';
     var bTid = (typeof b.turnId === 'string') ? b.turnId : '';
     if (aTid && bTid && aTid !== bTid) return aTid < bTid;
@@ -562,7 +602,6 @@
     if (!own) return 0;
     var all = collectTurnFiles(turn);
     var pool = filePoolForConv(convId, true);
-    if (!pool.claimed) pool.claimed = {};
     if (!all.length) {
       if (pool && pool.turns[own]) delete pool.turns[own];
       return 0;
@@ -573,7 +612,6 @@
     if (prev) {
       // Повторный разбор того же хода: обновляем снимок, не плодя записи.
       prev.refs = all;
-      prev.ownCache = null;
       if (nTs > 0) prev.ts = nTs;
       if (nOrd >= 0) prev.order = nOrd;
       return all.length;
@@ -584,13 +622,74 @@
   }
 
   /**
-   * Вложения, загруженные ИМЕННО в этом ходе: дельта пула против ближайшего
-   * предшествующего по хронологии хода. Порядок записей пула сохраняется.
-   * Фикс B2: если хронология предшественника не дала (голова неизвестной
-   * истории, ts=0), сравниваем с предыдущим ЗАРЕГИСТРИРОВАННЫМ ходом, а не со
-   * всем пулом: иначе накопительный список повторяется, пока пусто в claimed.
-   * Файлы, не подтверждённые предшественником, дополнительно фильтруются по
-   * `claimed` — ключам, уже отданным любому ходу.
+   * Предшественник хода: ближайший хронологически, а если такого нет — самый
+   * глубокий зарегистрированный ПРЕФИКС текущего пула. Второе правило работает
+   * без дат: у накопительного списка старый пул всегда префикс нового, поэтому
+   * ближайший по глубине префикс и есть предыдущее состояние разговора.
+   * @param {{turns: Record<string, GeminiFilePoolTurn>, seq: number}} pool Реестр.
+   * @param {GeminiFilePoolTurn} rec Текущий ход.
+   * @param {GeminiFileRef[]} all Текущий пул.
+   * @returns {GeminiFilePoolTurn|null} Предшественник или null.
+   */
+  function previousPoolTurn(pool, rec, all) {
+    var ids = Object.keys(pool.turns);
+    var chrono = null;
+    var i;
+    for (i = 0; i < ids.length; i++) {
+      if (ids[i] === rec.turnId) continue;
+      var cand = pool.turns[ids[i]];
+      if (!cand || !Array.isArray(cand.refs)) continue;
+      if (!isTurnBefore(cand, rec)) continue;
+      if (!chrono || isTurnBefore(chrono, cand)) chrono = cand;
+    }
+    var donor = null;
+    for (i = 0; i < ids.length; i++) {
+      if (ids[i] === rec.turnId) continue;
+      var reg = pool.turns[ids[i]];
+      if (!reg || !Array.isArray(reg.refs)) continue;
+      var len = reg.refs.length;
+      // Строгий префикс: пул-«донор» короче текущего и совпадает с началом.
+      if (!len || len >= all.length) continue;
+      if (poolSharedPrefixLen(reg.refs, all) !== len) continue;
+      if (!donor || len > donor.refs.length) donor = reg;
+    }
+    if (donor && (!chrono || donor.refs.length > chrono.refs.length)) return donor;
+    return chrono;
+  }
+
+  /**
+   * Дельта пула: записи, которых не было у предшественника.
+   *
+   * Основной путь — позиционный: пул растёт только в хвост, поэтому дельта это
+   * `all[k..]`, где k — общий префикс. Сравнение по именам, а не по токенам:
+   * переподпись URL не меняет ни порядок, ни имена.
+   * Резерв (пулы не вложены — в ходе другой набор файлов): вычитание
+   * мультимножества по имени+размеру, как раньше.
+   * @param {GeminiFileRef[]} prevRefs Пул предшественника.
+   * @param {GeminiFileRef[]} all Текущий пул.
+   * @returns {GeminiFileRef[]} Собственные файлы хода в порядке пула.
+   */
+  function poolDelta(prevRefs, all) {
+    var k = poolSharedPrefixLen(prevRefs, all);
+    if (k === prevRefs.length || k === all.length) return all.slice(k);
+    var spent = {};
+    var i;
+    for (i = 0; i < prevRefs.length; i++) {
+      var pk = fileRefIdentityKey(prevRefs[i]);
+      spent[pk] = (spent[pk] || 0) + 1;
+    }
+    var out = [];
+    for (i = 0; i < all.length; i++) {
+      var ck = fileRefIdentityKey(all[i]);
+      if (spent[ck] > 0) { spent[ck]--; continue; }
+      out.push(all[i]);
+    }
+    return out;
+  }
+
+  /**
+   * Вложения, загруженные ИМЕННО в этом ходе: хвост кумулятивного пула после
+   * общего префикса с пулом предшествующего хода. Порядок записей сохраняется.
    * Без `ownerId` поведение прежнее (весь список) — обратная совместимость.
    * @param {any} turn Ход batchexecute.
    * @param {string} convId Id разговора.
@@ -602,85 +701,22 @@
   function collectTurnFilesForOwner(turn, convId, ownerId, ts, order) {
     var all = collectTurnFiles(turn);
     var own = (typeof ownerId === 'string') ? ownerId : '';
-    if (!own || !all.length) return own ? [] : all;
+    if (!own) return all;
+    if (!all.length) return [];
     var pool = filePoolForConv(convId, true);
-    if (!pool.claimed) pool.claimed = {};
     var rec = pool.turns[own];
     if (!rec) {
       // Ход ещё не проходил предварительную регистрацию — регистрируем на месте.
       pool.seq++;
-      rec = { turnId: own, ts: fileOwnerTs(ts), order: fileOwnerOrder(order), seq: pool.seq, refs: all, ownCache: null };
+      rec = { turnId: own, ts: fileOwnerTs(ts), order: fileOwnerOrder(order), seq: pool.seq, refs: all };
       pool.turns[own] = rec;
     }
-    // Идемпотентность: повторный сбор того же хода не должен ни дублировать
-    // файлы, ни заново вычитать уже закреплённые. Кэш привязан к подписи пула:
-    // если повторный разбор принёс другой список, дельта пересчитывается.
-    var sigParts = [];
-    for (i = 0; i < all.length; i++) sigParts.push(fileOwnerKey(convId, all[i]));
-    var sig = sigParts.join('\u0001');
-    if (Array.isArray(rec.ownCache) && rec.ownSig === sig) return rec.ownCache;
-    // Фикс B3: подпись пула изменилась — снимаем прежние закрепления ЭТОГО хода,
-    // иначе файл с новым ключом пройдёт мимо claimed, и текст размножится.
-    if (typeof rec.ownSig === 'string' && rec.ownSig !== sig) {
-      var stale = Array.isArray(rec.claimedKeys) ? rec.claimedKeys : [];
-      for (i = 0; i < stale.length; i++) delete pool.claimed[stale[i]];
-      rec.claimedKeys = [];
-      rec.ownCache = null;
-    } else if (!Array.isArray(rec.claimedKeys)) {
-      rec.claimedKeys = [];
-    }
     rec.refs = all;
-    rec.ownSig = sig;
-    // Ближайший предшествующий ход (самый поздний из тех, что раньше текущего).
-    var prev = null;
-    var ids = Object.keys(pool.turns);
-    for (var i = 0; i < ids.length; i++) {
-      if (ids[i] === own) continue;
-      var cand = pool.turns[ids[i]];
-      if (!isTurnBefore(cand, rec)) continue;
-      if (!prev || isTurnBefore(prev, cand)) prev = cand;
-    }
-    // Фикс B2: хронология не дала предшественника (голова истории, ts=0,
-    // одинаковый turnId) — берём предыдущий ЗАРЕГИСТРИРОВАННЫЙ ход, а не весь
-    // пул: иначе накопительный список повторяется целиком, пока пусто в claimed.
-    if (!prev) {
-      for (i = 0; i < ids.length; i++) {
-        if (ids[i] === own) continue;
-        var reg = pool.turns[ids[i]];
-        if (!reg || reg.seq >= rec.seq) continue;
-        // Зарегистрированный позже по порядку ход всё равно может быть
-        // хронологически ПОЗЖЕ текущего (ingest обходит кадры с конца) — такой
-        // предшественником не считается, иначе дельта вычитает будущее и
-        // файл «пропадает» из более раннего хода.
-        if (isTurnBefore(rec, reg)) continue;
-        if (!prev || reg.seq > prev.seq) prev = reg;
-      }
-    }
-    // Мультимножество предыдущего пула: сколько раз какой ключ там встречался.
-    var prevCount = {};
-    if (prev) {
-      for (i = 0; i < prev.refs.length; i++) {
-        var pk = fileOwnerKey(convId, prev.refs[i]);
-        prevCount[pk] = (prevCount[pk] || 0) + 1;
-      }
-    }
-    var out = [];
-    for (i = 0; i < all.length; i++) {
-      var k = fileOwnerKey(convId, all[i]);
-      if (prevCount[k] > 0) { prevCount[k]--; continue; }
-      // Ключ уже закреплён за другим ходом (в т.ч. головой более позднего пула):
-      // повторно не отдаём — иначе кумулятивный пул снова даёт дубли.
-      if (pool.claimed[k]) continue;
-      out.push(all[i]);
-    }
-    for (i = 0; i < out.length; i++) {
-      var outKey = fileOwnerKey(convId, out[i]);
-      pool.claimed[outKey] = true;
-      rec.claimedKeys.push(outKey);
-    }
-    rec.ownCache = out;
-    rec.ownSig = sig;
-    return out;
+    if (fileOwnerTs(ts) > 0) rec.ts = fileOwnerTs(ts);
+    if (fileOwnerOrder(order) >= 0) rec.order = fileOwnerOrder(order);
+    var prev = previousPoolTurn(pool, rec, all);
+    if (!prev) return all;
+    return poolDelta(prev.refs, all);
   }
 
   /**

@@ -817,38 +817,19 @@
   // v2.3.1 (chronology fix): отложенная раздача файлов. Начинаем её только когда
   // начало истории подтверждено (reachedStart), иначе владельцем станет самый
   // старый ход НОВЕЙШЕЙ страницы, а gfEnqueueTurnFiles закрепит его навсегда.
-  // ids — хронологический порядок (старые→новые): первый ход с файлом получает
-  // владение, повторы в более новых ходах gfEnqueueTurnFiles отбрасывает сам.
+  // ids — хронологический порядок (старые→новые).
+  // v2.6 (позиционная дельта): вложения хода уже посчитаны парсером как ХВОСТ
+  // кумулятивного пула (collectTurnFilesForOwner), поэтому здесь не нужен ни
+  // claimed по имени, ни полный пул: раздаём ровно rec.files. Пустой список тоже
+  // отправляем — если после прихода более старой страницы дельта сузилась до нуля,
+  // прежние секции хода обязаны исчезнуть, а не остаться дублем в экспорте.
   function enqueueOwnedTurnFiles(fid, ids) {
     if (typeof window === 'undefined' || !window.AiCmGeminiFiles ||
         typeof window.AiCmGeminiFiles.gfEnqueueTurnFiles !== 'function') return;
-    // v2.5: раздаём по полному пулу хода, а не по дельте парсера: дельта
-    // зависит от порядка прихода страниц (Gemini отдаёт новые раньше старых).
-    // Хронологический проход + claimed закрепляет файл за ходом первого
-    // появления независимо от порядка страниц.
-    var P = (typeof window !== 'undefined') ? window.GeminiBatchexecuteParser : null;
-    var identity = (P && typeof P.fileRefIdentityKey === 'function')
-      ? function (ref) { return P.fileRefIdentityKey(ref); }
-      // Резерв, если парсер ещё не загрузился: та же идентичность, что и в
-      // fileRefIdentityKey (Фикс B1) — имя + размер, без переподписываемых URL.
-      : function (ref) {
-        return ((ref && ref.name) || '') + '|' + ((ref && ref.size) || 0);
-      };
-    var claimed = {};
     for (var i = 0; i < ids.length; i++) {
       var rec = turnsMap[ids[i]];
       if (!rec || rec.role !== 'user') continue;
-      var pool = (Array.isArray(rec.filePool) && rec.filePool.length) ? rec.filePool : rec.files;
-      if (!Array.isArray(pool) || !pool.length) continue;
-      var own = [];
-      for (var j = 0; j < pool.length; j++) {
-        var ref = pool[j];
-        var key = identity(ref);
-        if (claimed[key]) continue;
-        claimed[key] = true;
-        own.push(ref);
-      }
-      if (!own.length) continue;
+      var own = Array.isArray(rec.files) ? rec.files : [];
       try {
         window.AiCmGeminiFiles.gfEnqueueTurnFiles(fid, ids[i], own);
       } catch (eEnq) { swallowSoft(eEnq, 'gemini:enqueueOwnedTurnFiles'); }

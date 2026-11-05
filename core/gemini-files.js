@@ -93,12 +93,18 @@
     return gfStr(convId) + '\u0000' + gfStr(msgId);
   }
 
-  // v2.4 (B): ключ = convId|name|size|token. Токен различает РАЗНЫЕ загрузки с
-  // одинаковыми именем и размером (13 дублей имён в живом чате), а размер берётся
-  // из самого узла (изображения) либо остаётся 0 до Range-пробы (PDF).
+  // v2.6 (позиционная идентичность): ключ = convId|name|size|pos.
+  // `pos` — индекс узла в кумулятивном списке разговора (Gemini только дописывает
+  // новые узлы в хвост). Токен и URL в ключ НЕ входят: они переподписываются на
+  // каждый ответ, из-за чего один и тот же файл экспортировался дважды. Позиция
+  // же различает РАЗНЫЕ загрузки с одинаковыми именем и размером (13 дублей имён
+  // в живом чате), потому что каждая занимает свою позицию. Размер берётся из
+  // узла (изображения) либо остаётся 0 до Range-пробы (PDF).
   function gfDedupeKey(convId, ref) {
+    var pos = (ref && typeof ref.pos === 'number' && isFinite(ref.pos) && ref.pos >= 0)
+      ? Math.floor(ref.pos) : -1;
     return gfStr(convId) + '|' + gfStr(ref && ref.name) + '|' + (gfNum(ref && ref.size) || 0) +
-      '|' + gfStr(ref && ref.token);
+      '|' + pos;
   }
 
   function gfCurrentConvId() {
@@ -165,6 +171,8 @@
         img: img,
         dl: dl,
         urls: urls,
+        // pos проставляет gfCollectTurnFiles: индекс узла в кумулятивном списке.
+        pos: -1,
         isImage: (type === 1) || /^image\//i.test(mime)
       };
     } catch (e) { return null; }
@@ -177,7 +185,7 @@
       if (!Array.isArray(arr)) return out;
       for (var i = 0; i < arr.length; i++) {
         var ref = gfRefFromNode(arr[i]);
-        if (ref) out.push(ref);
+        if (ref) { ref.pos = i; out.push(ref); }
       }
     } catch (e) { }
     return out;
@@ -200,6 +208,8 @@
       img: gfStr(o.img),
       dl: gfStr(o.dl),
       urls: Array.isArray(o.urls) ? o.urls.slice() : [],
+      // Позиция в кумулятивном пуле — часть идентичности загрузки (см. gfDedupeKey).
+      pos: (typeof o.pos === 'number' && isFinite(o.pos) && o.pos >= 0) ? Math.floor(o.pos) : -1,
       isImage: (o.isImage === true) || (type === 1) || /^image\//i.test(mime)
     };
   }
@@ -520,6 +530,65 @@
     });
   }
 
+  // ===== СЕКЦИЯ 6.4: САНИТАРИЯ ТЕКСТА PDF =====
+  // PDF умеет отдавать «текст», который на самом деле — байты CID-шрифта или
+  // таблицы ToUnicode. pdf.js (Chrome) и локальный разбор (Firefox) ошибаются
+  // по-разному, но мусор всегда узнаваем: replacement-символы U+FFFD, зона
+  // приватного использования, суррогаты, управляющие коды, и текст без единого
+  // пробела на килобайты. Такой текст нельзя класть в базу: он раздувает textLen
+  // и ломает экспорт. Ограничение действует для обоих браузеров — это общая
+  // страховка поверх любого источника текста.
+  var GF_PDF_BAD_MAX = 0.02;
+  var GF_PDF_SPACES_MIN = 0.005;
+
+  function gfSanitizePdfText(text) {
+    var src = gfStr(text);
+    if (!src) return { text: '', garbage: false };
+    var out = '';
+    var total = 0;
+    var bad = 0;
+    var spaces = 0;
+    var longestRun = 0;
+    var run = 0;
+    for (var i = 0; i < src.length; i++) {
+      var code = src.charCodeAt(i);
+      total++;
+      var isBlank = (code === 0x20 || code === 0x09 || code === 0x0A || code === 0x0D);
+      if (isBlank) { spaces++; run = 0; } else { run++; if (run > longestRun) longestRun = run; }
+      if (code === 0xFFFD || code === 0xFFFE || code === 0xFFFF ||
+          (code >= 0xD800 && code <= 0xDFFF) || (code >= 0xE000 && code <= 0xF8FF) ||
+          (code < 0x20 && !isBlank) || (code >= 0x7F && code <= 0x9F)) {
+        bad++;
+        continue;
+      }
+      out += src.charAt(i);
+    }
+    var garbage = (total > 0 && bad / total > GF_PDF_BAD_MAX) ||
+      (out.length >= 400 && spaces / total < GF_PDF_SPACES_MIN) ||
+      longestRun > 2000;
+    if (!garbage && out.length >= 400 && !gfPdfLooksLikeLanguage(out)) garbage = true;
+    if (garbage) return { text: '', garbage: true };
+    return { text: out, garbage: false };
+  }
+
+  // Текст должен содержать заметную долю «слов» с латиницей, кириллицей или
+  // цифрой (см. localTextLooksLikeLanguage в core/pdf-bytes.js): CID-мусор
+  // вида «ÿýþø» похож на текст, но слов языка в нём нет.
+  function gfPdfLooksLikeLanguage(text) {
+    var sample = text.length > 20000 ? text.slice(0, 20000) : text;
+    var words = sample.split(/\s+/);
+    var count = 0;
+    var plausible = 0;
+    for (var i = 0; i < words.length; i++) {
+      var w = words[i];
+      if (!w) continue;
+      count++;
+      if (/[a-zA-Zа-яА-ЯёЁ0-9]/.test(w)) plausible++;
+    }
+    if (count < 10) return true;
+    return plausible / count >= 0.5;
+  }
+
   function gfFetchPdfText(item, size) {
     var pdf = (typeof window !== 'undefined') ? window.AiCmPdf : null;
     var ref = (item && item.ref) || {};
@@ -531,7 +600,8 @@
       timeoutMs: GF_PDF_TIMEOUT_MS
     })).then(function (r) {
       var res = r || {};
-      var text = gfStr(res.text);
+      var clean = gfSanitizePdfText(gfStr(res.text));
+      var text = (res.ok === true) ? clean.text : '';
       return {
         ok: res.ok === true && text !== '',
         pdf: true,
@@ -539,7 +609,8 @@
         text: text,
         pages: gfNum(res.pages),
         truncated: res.truncated === true,
-        reason: gfStr(res.reason) || (res.ok === true ? '' : 'pdf-no-text')
+        reason: clean.garbage ? 'pdf-no-text'
+          : (gfStr(res.reason) || (res.ok === true && text !== '' ? '' : 'pdf-no-text'))
       };
     }, function (ePdf) {
       gfWarn('gemini:files:pdf', '[gemini-files] pdf.js не разобрал вложение:', ePdf);
@@ -965,7 +1036,6 @@
 
   function gfEnqueueTurnFiles(convId, msgId, files) {
     try {
-      if (!Array.isArray(files) || !files.length) return 0;
       var mid = gfStr(msgId);
       if (!mid) return 0;
       var cid = gfStr(convId) || gfCurrentConvId();
@@ -974,12 +1044,13 @@
         gfDiag('enqueue-skip', { reason: 'other-chat' });
         return 0;
       }
+      var list = Array.isArray(files) ? files : [];
       var m = gfMsgEntry(cid, mid);
       var oldRecs = m.recs || {};
       var refs = [];
       var seen = {};
-      for (var i = 0; i < files.length; i++) {
-        var ref = gfNormalizeRef(files[i]);
+      for (var i = 0; i < list.length; i++) {
+        var ref = gfNormalizeRef(list[i]);
         if (!ref) continue;
         ref.dk = gfDedupeKey(cid, ref);
         // v2.4 (B): владелец в модуле больше не нужен — парсер отдаёт дельту
@@ -989,7 +1060,16 @@
         seen[ref.dk] = 1;
         refs.push(ref);
       }
-      if (!refs.length) return 0;
+      if (!refs.length) {
+        // v2.6: пустая дельта обязана снять прежние секции сообщения. Файл мог
+        // «переехать» в более старый ход, когда пришла следующая страница; без
+        // очистки в экспорте осталась бы вторая копия [FILE:]/[IMAGE:].
+        if (m.refs && m.refs.length) {
+          m.refs = [];
+          m.recs = {};
+        }
+        return 0;
+      }
       m.refs = refs;
       m.recs = {};
       var msgKey = gfMsgKey(cid, mid);
