@@ -55,10 +55,20 @@ describe('R4/A.2: paste-capture postMessage использует location.origin
     expect(pasteBlock()).not.toContain("'*'");
   });
 
-  test('пост-сообщение в content.js вне paste-capture не затронуто', () => {
-    // единственный window.postMessage в content.js — paste-capture (pasteOrigin)
+  test('пост-сообщения content.js: paste-capture (pasteOrigin) и PDF-мост (same-window transfer)', () => {
+    // До A2 единственным window.postMessage был paste-capture. Фикс A2 добавил
+    // второй сайт — резервный разбор PDF в MAIN-мире ТОГО ЖЕ окна: байты уходят
+    // ArrayBuffer'ом с transfer-списком, получатель проверяет ev.source === window
+    // (пин D1b в tests/adapters/firefox-pdf-fallback.test.js). '*' здесь — это
+    // «это же окно», а не фрейм: paste-канал по-прежнему идёт в pasteOrigin.
     const pms = contentSrc.match(/window\.postMessage\(/g) || [];
-    expect(pms.length).toBe(1);
+    expect(pms.length).toBe(2);
+    expect(pasteBlock()).toContain('}, pasteOrigin);');
+    const pdfFrom = contentSrc.indexOf('function aiCmPdfLocalSend(');
+    const pdfTo = contentSrc.indexOf('function aiCmPdfLocalStart(');
+    expect(pdfFrom).toBeGreaterThan(-1);
+    expect(pdfTo).toBeGreaterThan(pdfFrom);
+    expect(contentSrc.slice(pdfFrom, pdfTo)).toContain("}, '*', [bytes.buffer]);");
   });
 
   test('приёмник: ev.source === window и ev.origin === location.origin ДО pasteQueue.push', () => {

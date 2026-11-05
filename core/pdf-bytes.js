@@ -79,6 +79,9 @@
   // на заглушку, а не держать очередь вложений.
   window.addEventListener('ai-cm-pdf-ready', function () {
     readyFlag = true;
+    // Мост поднялся — сообщаем ему, что локальный разбор в странице доступен:
+    // это его резервный путь при отвале порта в Firefox (фикс A2).
+    emit('ai-cm-pdf-local-ready', { version: LOCAL_VERSION });
   });
 
   function ensureReady(requestId) {
@@ -279,13 +282,325 @@
     });
   }
 
+  // ===== A2: резервный разбор PDF прямо в странице (Firefox pdf-aborted) =====
+  // Порядок в мосте: Port → один реконнект → этот разбор → pdf-aborted. Байты
+  // уже лежат в MAIN, поэтому запрос и ответ идут postMessage/CustomEvent'ом:
+  // ни base64, ни мегабайтов по messaging-каналу, ни зависимости от того, спит
+  // ли event page Firefox.
+  //
+  // Это НЕ pdf.js и не замена ему: поддерживаются только content-стримы с
+  // литеральными/hex-строками Tj/TJ и FlateDecode (DecompressionStream).
+  // CID-шрифты и ToUnicode остаются за pdf.js-хостом — если локальный разбор
+  // вернул пусто, мост всё равно пробует Port.
+  var LOCAL_VERSION = '1.1.0';
+  var LOCAL_SRC = 'ai-cm-pdf-local';
+  var LOCAL_MAX_CHARS = 200000;
+  var LOCAL_MAX_SEGMENTS = 4096;
+
+  /** Байты → строка latin1 (код символа === байт): так индексы строки совпадают с индексами PDF. */
+  function latin1(u8, from, to) {
+    var s = '';
+    var step = 0x8000;
+    var end = (to === undefined) ? u8.length : to;
+    for (var i = from; i < end; i += step) {
+      s += String.fromCharCode.apply(null, u8.subarray(i, Math.min(i + step, end)));
+    }
+    return s;
+  }
+
+  /** zlib-поток → байты; null, если DecompressionStream недоступен или поток битый. */
+  function inflate(u8) {
+    if (typeof DecompressionStream !== 'function') return Promise.resolve(null);
+    var stream = null;
+    try {
+      stream = new DecompressionStream('deflate');
+    } catch (eOpen) {
+      aiCmPdfWarn('local-inflate-open', eOpen);
+      return Promise.resolve(null);
+    }
+    var writer = stream.writable.getWriter();
+    var reader = stream.readable.getReader();
+    try {
+      writer.write(u8).then(function () {
+        return writer.close();
+      }, function (eWrite) {
+        aiCmPdfWarn('local-inflate-write', eWrite);
+      }).then(null, function (eClose) {
+        // Битый zlib отвечает ошибкой и на close — без обработчика это был бы
+        // unhandled rejection страницы.
+        aiCmPdfWarn('local-inflate-close', eClose);
+      });
+    } catch (ePost) {
+      aiCmPdfWarn('local-inflate-write', ePost);
+    }
+    var parts = [];
+    var total = 0;
+    function pump() {
+      return reader.read().then(function (step) {
+        if (!step || step.done) {
+          var out = new Uint8Array(total);
+          var at = 0;
+          for (var i = 0; i < parts.length; i++) {
+            out.set(parts[i], at);
+            at += parts[i].length;
+          }
+          return out;
+        }
+        var chunk = (step.value && typeof step.value.length === 'number') ? step.value : null;
+        if (!chunk) return null;
+        parts.push(chunk);
+        total += chunk.length;
+        return pump();
+      });
+    }
+    return pump().then(null, function (eRead) {
+      aiCmPdfWarn('local-inflate-read', eRead);
+      return null;
+    });
+  }
+
+  function segmentBytes(s) {
+    var out = new Uint8Array(s.length);
+    for (var i = 0; i < s.length; i++) out[i] = s.charCodeAt(i) & 0xFF;
+    return out;
+  }
+
+  /** PDF-строка: UTF-16BE по BOM (FE FF), иначе PDFDocEncoding ≈ latin1. */
+  function decodeTextString(raw) {
+    if (raw.length >= 2 && raw.charCodeAt(0) === 0xFE && raw.charCodeAt(1) === 0xFF) {
+      var out = '';
+      for (var i = 2; i + 1 < raw.length; i += 2) {
+        out += String.fromCharCode((raw.charCodeAt(i) << 8) | raw.charCodeAt(i + 1));
+      }
+      return out;
+    }
+    return raw;
+  }
+
+  /** Литерал `(...)` с балансом скобок и escape-последовательностями. */
+  function decodeLiteral(s, start) {
+    var out = '';
+    var depth = 1;
+    var i = start + 1;
+    var n = s.length;
+    while (i < n && depth > 0) {
+      var ch = s.charAt(i);
+      if (ch === '\\') {
+        var next = s.charAt(i + 1);
+        i += 2;
+        if (next === 'n') out += '\n';
+        else if (next === 'r') out += '\r';
+        else if (next === 't') out += '\t';
+        else if (next === 'b') out += '\b';
+        else if (next === 'f') out += '\f';
+        else if (next === '\n') { /* склейка строк: символ не выводим */ }
+        else if (next === '\r') { if (s.charAt(i) === '\n') i++; }
+        else if (next >= '0' && next <= '7') {
+          var oct = next;
+          for (var k = 0; k < 2; k++) {
+            var c2 = s.charAt(i);
+            if (c2 >= '0' && c2 <= '7') { oct += c2; i++; } else break;
+          }
+          out += String.fromCharCode(parseInt(oct, 8) & 0xFF);
+        } else out += next;
+        continue;
+      }
+      if (ch === '(') { depth++; out += ch; i++; continue; }
+      if (ch === ')') {
+        depth--;
+        i++;
+        if (depth === 0) break;
+        out += ch;
+        continue;
+      }
+      out += ch;
+      i++;
+    }
+    return { text: out, next: i };
+  }
+
+  /** Hex-строка `<48656C6C6F>` (не путать с `<<`-словарём). */
+  function decodeHex(s, start) {
+    var end = s.indexOf('>', start);
+    if (end < 0) return { text: '', next: s.length };
+    var hex = s.slice(start + 1, end).replace(/[^0-9A-Fa-f]/g, '');
+    if (hex.length % 2 === 1) hex += '0';
+    var out = '';
+    for (var i = 0; i < hex.length; i += 2) out += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+    return { text: out, next: end + 1 };
+  }
+
+  var SHOW_OPS = { Tj: true, TJ: true, "'": true, '"': true };
+  var BREAK_OPS = { BT: true, ET: true, Tm: true, Td: true, TD: true, 'T*': true };
+
+  function isOpChar(ch) {
+    return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch === '"' || ch === "'";
+  }
+
+  /** Текст content-стрима: строки, привязанные к операторам показа Tj/TJ/'/". */
+  function extractText(content, limit) {
+    var cap = (typeof limit === 'number' && limit > 0) ? limit : LOCAL_MAX_CHARS;
+    var out = '';
+    var pending = '';
+    var i = 0;
+    var n = content.length;
+    function flushOp(op) {
+      if (pending) {
+        if (SHOW_OPS[op] === true) out += pending;
+        pending = '';
+      }
+      if (SHOW_OPS[op] === true) {
+        if (out && out.charAt(out.length - 1) !== '\n') out += ' ';
+        return;
+      }
+      if (BREAK_OPS[op] === true && out && out.charAt(out.length - 1) !== '\n') out += '\n';
+    }
+    while (i < n && out.length < cap) {
+      var ch = content.charAt(i);
+      if (ch === '(') {
+        var lit = decodeLiteral(content, i);
+        pending += decodeTextString(lit.text);
+        i = lit.next;
+        continue;
+      }
+      if (ch === '<') {
+        if (content.charAt(i + 1) === '<') { i += 2; continue; }
+        var hx = decodeHex(content, i);
+        pending += decodeTextString(hx.text);
+        i = hx.next;
+        continue;
+      }
+      if (ch === '>' && content.charAt(i + 1) === '>') { i += 2; continue; }
+      if (isOpChar(ch)) {
+        var start = i;
+        while (i < n && isOpChar(content.charAt(i))) i++;
+        flushOp(content.slice(start, i));
+        continue;
+      }
+      i++;
+    }
+    return out;
+  }
+
+  function countPages(all) {
+    var m = all.match(/\/Type\s*\/Page(?![a-zA-Z])/g);
+    return m ? m.length : 0;
+  }
+
+  /** EOL перед `endstream` — разделитель, а не данные: иначе zlib видит хвост. */
+  function trimStreamEol(s) {
+    var end = s.length;
+    if (end > 0 && s.charAt(end - 1) === '\n') end--;
+    if (end > 0 && s.charAt(end - 1) === '\r') end--;
+    return end === s.length ? s : s.slice(0, end);
+  }
+
+  /** Стримы PDF со словарём (последние 4 КиБ перед `stream`) и телом. */
+  function collectSegments(all) {
+    var out = [];
+    var from = 0;
+    while (out.length < LOCAL_MAX_SEGMENTS) {
+      var start = all.indexOf('stream', from);
+      if (start < 0) break;
+      if (start >= 3 && all.slice(start - 3, start) === 'end') { from = start + 6; continue; }
+      var dict = all.slice(Math.max(0, start - 4096), start);
+      var body = start + 6;
+      if (all.charAt(body) === '\r') body++;
+      if (all.charAt(body) === '\n') body++;
+      var end = all.indexOf('endstream', body);
+      if (end < 0) break;
+      out.push({ dict: dict, body: all.slice(body, end) });
+      from = end + 9;
+    }
+    return out;
+  }
+
+  function parseLocal(buf, opts) {
+    var o = opts || {};
+    var maxChars = num(o.maxChars) || LOCAL_MAX_CHARS;
+    var u8 = toBytes(buf);
+    if (!u8 || u8.length === 0) return Promise.resolve(fail('pdf-invalid', 0));
+    if (u8.length > MAX_BYTES) return Promise.resolve(fail('pdf-too-large', u8.length));
+    var all = latin1(u8, 0);
+    if (all.indexOf('%PDF-') === -1) return Promise.resolve(fail('pdf-invalid', u8.length));
+    var pages = countPages(all);
+    var segments = collectSegments(all);
+    var text = '';
+    var index = 0;
+    var truncated = false;
+    function finish() {
+      var out = text.replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
+      out = out.replace(/^\s+|\s+$/g, '');
+      if (out.length > maxChars) {
+        out = out.slice(0, maxChars);
+        truncated = true;
+      }
+      if (!out) return fail('pdf-no-text', u8.length);
+      return { ok: true, text: out, pages: pages, truncated: truncated, reason: '', size: u8.length };
+    }
+    function step() {
+      if (index >= segments.length || text.length >= maxChars) return Promise.resolve(finish());
+      var seg = segments[index];
+      index++;
+      var dict = seg.dict;
+      var isImage = dict.indexOf('/Image') !== -1 || dict.indexOf('/DCTDecode') !== -1 ||
+        dict.indexOf('/JPXDecode') !== -1;
+      if (isImage || !seg.body) return step();
+      var bodyText = dict.indexOf('/FlateDecode') !== -1
+        ? inflate(segmentBytes(trimStreamEol(seg.body))).then(function (bytes) {
+          return bytes ? latin1(bytes, 0) : null;
+        })
+        : Promise.resolve(seg.body);
+      return bodyText.then(function (content) {
+        if (content) {
+          var piece = extractText(content, maxChars);
+          if (piece) {
+            if (text) text += '\n';
+            text += piece;
+          }
+        }
+        return step();
+      }, function (eStream) {
+        aiCmPdfWarn('local-stream', eStream);
+        return step();
+      });
+    }
+    return step();
+  }
+
+  // Запрос локального разбора: изолированный мир → MAIN. Ответ уходит
+  // 'ai-cm-pdf-local-result' (JSON-строка в detail, как остальные мосты).
+  window.addEventListener('message', function (ev) {
+    if (!ev || ev.source !== window) return;
+    var data = ev.data;
+    if (!data || data.source !== LOCAL_SRC) return;
+    var id = (typeof data.id === 'string') ? data.id : '';
+    if (!id) return;
+    var started = nowMs();
+    Promise.resolve(parseLocal(data.bytes, { maxChars: num(data.maxChars) })).then(function (res) {
+      var out = (res && typeof res === 'object') ? res : fail('pdf-host-error', 0);
+      out.id = id;
+      out.ms = nowMs() - started;
+      emit('ai-cm-pdf-local-result', out);
+    }, function (eLocal) {
+      aiCmPdfWarn('local-parse', eLocal);
+      emit('ai-cm-pdf-local-result', {
+        id: id, ok: false, text: '', pages: 0, truncated: false,
+        reason: 'pdf-host-error', ms: nowMs() - started
+      });
+    });
+  });
+
+  emit('ai-cm-pdf-local-ready', { version: LOCAL_VERSION });
+
   window.AiCmPdf = {
-    version: '1.0.0',
+    version: '1.1.0',
     MAX_BYTES: MAX_BYTES,
     CHUNK: CHUNK,
     isReady: function () { return readyFlag; },
     fromUrl: fromUrl,
     fromBytes: function (buf, opts) { return run(buf, opts); },
+    parseLocal: function (buf, opts) { return parseLocal(buf, opts); },
     cancel: function (id) { emit('ai-cm-pdf-cancel', { id: String(id || '') }); }
   };
 }());
