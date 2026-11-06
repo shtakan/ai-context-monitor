@@ -432,15 +432,15 @@
     "reason": "legacy-pin"
   },
   "tests/qwen-gate-diag-o35.test.js": {
-    "count": 26,
+    "count": 25,
     "reason": "static-linter"
   },
   "tests/qwen-intercept.test.js": {
-    "count": 7,
+    "count": 6,
     "reason": "legacy-pin"
   },
   "tests/qwen-o39-history-reasoning.test.js": {
-    "count": 16,
+    "count": 15,
     "reason": "legacy-pin"
   },
   "tests/qwen-o39-reasoning-passthrough.test.js": {
@@ -464,7 +464,7 @@
     "reason": "legacy-pin"
   },
   "tests/qwen-r4-files-only.test.js": {
-    "count": 4,
+    "count": 3,
     "reason": "legacy-pin"
   },
   "tests/qwen-reasoning-export-o37.test.js": {

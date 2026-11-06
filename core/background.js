@@ -420,9 +420,9 @@ async function ensureInterceptor() {
     }
 
     // O-35: перехватчик Qwen (chat.qwen.ai). Тот же паттерн, что у остальных шести:
-    // MAIN-мир, document_start, отдельный id. utils/stream-frames.js идёт ПЕРЕД
-    // core/qwen-pagination.js и core/qwen-intercept.js (порядок js[] внутри регистрации
-    // соблюдается: пагинация объявляет window.AiCmQwenPagination, перехватчик читает его).
+    // MAIN-мир, document_start, отдельный id. Пакет js[] грузится по порядку: пагинация
+    // объявляет window.AiCmQwenPagination, модуль вложений — window.AiCmQwenFiles, перехватчик
+    // читает оба при загрузке.
     // O-53: id бампнут -v1 → -v2 — в js[] добавлен core/qwen-pagination.js. Причина бампа
     // та же, что у Gemini/DeepSeek: MV3 registerContentScripts не перезаписывает js[] у уже
     // зарегистрированного id, и без нового id курсорная пагинация не доехала бы до профилей
@@ -431,27 +431,36 @@ async function ensureInterceptor() {
     // Модуль идёт ПЕРЕД перехватчиком: он объявляет window.AiCmQwenFiles при загрузке, а
     // qwen-intercept делает __bind/читает секции уже синхронно. Старый -v2 остаётся в профиле
     // после обновления и нёс бы прежний js[] (без модуля) параллельно — двойной инжект.
+    // Ph2: id бампнут -v3 → -v4 — utils/stream-frames.js переведён на ESM и больше НЕ отдельный
+    // script: esbuild вшивает его в core/qwen-intercept.js (build.mjs, mainInterceptOptions),
+    // поэтому путь удалён из js[]. Прежние id ссылались бы на отсутствующий в dist файл
+    // utils/stream-frames.js — chrome.scripting не инжектит пакет частично (упал бы весь
+    // перехватчик), поэтому старые регистрации снимаются. Пакет теперь: debug.js → пагинация →
+    // вложения → qwen-intercept (один IIFE-бандл).
     // Своих запросов перехватчик истории не делает, КРОМЕ цикла пагинации O-53: он
     // реплеит страницы оригинальным fetch С ЗАГОЛОВКАМИ исходного запроса страницы
     // (включая антибот bx-ua/bx-umidtoken) и credentials:'include'. Вложения (R2) качает
     // core/qwen-files.js тем же MAIN-мирным originalFetch и credentials:'omit': ссылки
     // files[].url — предподписанные CDN, cookie им не нужны, а ACAO у CDN только на chat.qwen.ai.
-    if (ids.indexOf('ai-cm-qwen-intercept-v3') === -1) {
-      // Снимаем обе прежние регистрации: они остались в профиле после обновления и несли бы
-      // старый js[] (без qwen-files.js) параллельно с новым пучком — двойной инжект.
+    if (ids.indexOf('ai-cm-qwen-intercept-v4') === -1) {
+      // Снимаем ВСЕ прежние регистрации: они остались в профиле после обновления и несли бы
+      // старый js[] (с отдельным utils/stream-frames.js) параллельно с новым пучком — двойной
+      // инжект, а в Ph2 ещё и битый пакет (файла больше нет в dist).
       // Прежних id может не быть (чистая установка) — поэтому тихий catch без диагностики.
       try {
-        await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-qwen-intercept', 'ai-cm-qwen-intercept-v2'] });
+        await chrome.scripting.unregisterContentScripts({
+          ids: ['ai-cm-qwen-intercept', 'ai-cm-qwen-intercept-v2', 'ai-cm-qwen-intercept-v3']
+        });
       } catch (eUnregQwen) { }
-      await registerSafe('ai-cm-qwen-intercept-v3', {
-        id: 'ai-cm-qwen-intercept-v3',
+      await registerSafe('ai-cm-qwen-intercept-v4', {
+        id: 'ai-cm-qwen-intercept-v4',
         matches: ['https://chat.qwen.ai/*'],
-        js: ['utils/debug.js', 'utils/stream-frames.js', 'core/qwen-pagination.js', 'core/qwen-files.js', 'core/qwen-intercept.js'],
+        js: ['utils/debug.js', 'core/qwen-pagination.js', 'core/qwen-files.js', 'core/qwen-intercept.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false
       });
-      console.log('AI Context Monitor: перехватчик Qwen (v3, пагинация истории + вложения) зарегистрирован (мир сайта, document_start)');
+      console.log('AI Context Monitor: перехватчик Qwen (v4, ESM-бандл кадров + пагинация + вложения) зарегистрирован (мир сайта, document_start)');
     }
 
     // AI Studio: сетевой перехватчик истории ($rpc) + вложения (Drive API). Отдельный

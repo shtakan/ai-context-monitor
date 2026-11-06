@@ -92,9 +92,10 @@ describe('O-35: manifest.json — Qwen добавлен, прежние серв
 
 describe('O-35/O-53/R2: core/background.js — регистрация перехватчика Qwen в MAIN-мире', function () {
   test('новый id зарегистрирован с MAIN-миром и document_start', function () {
-    const m = /id: 'ai-cm-qwen-intercept-v3',[\s\S]*?matches: \['https:\/\/chat\.qwen\.ai\/\*'\],[\s\S]*?js: \[([^\]]*)\],[\s\S]*?runAt: 'document_start',[\s\S]*?world: 'MAIN'/.exec(background);
+    const m = /id: 'ai-cm-qwen-intercept-v4',[\s\S]*?matches: \['https:\/\/chat\.qwen\.ai\/\*'\],[\s\S]*?js: \[([^\]]*)\],[\s\S]*?runAt: 'document_start',[\s\S]*?world: 'MAIN'/.exec(background);
     expect(m).not.toBeNull();
-    expect(m[1]).toContain('utils/stream-frames.js');
+    // Ph2: utils/stream-frames.js — ESM-модуль, esbuild вшивает его в core/qwen-intercept.js.
+    expect(m[1]).not.toContain('utils/stream-frames.js');
     // O-53: модуль пагинации едет ПЕРЕД перехватчиком (перехватчик читает window.AiCmQwenPagination).
     expect(m[1]).toContain('core/qwen-pagination.js');
     // R2: модуль вложений — ПЕРЕД перехватчиком: он объявляет window.AiCmQwenFiles при
@@ -102,18 +103,25 @@ describe('O-35/O-53/R2: core/background.js — регистрация перех
     expect(m[1]).toContain('core/qwen-files.js');
     expect(m[1]).toContain('core/qwen-intercept.js');
     // порядок: утилита кадров, пагинация, вложения — объявлены ПЕРЕД перехватчиком
-    expect(m[1].indexOf('utils/stream-frames.js')).toBeLessThan(m[1].indexOf('core/qwen-pagination.js'));
+    expect(m[1].indexOf('utils/debug.js')).toBeLessThan(m[1].indexOf('core/qwen-pagination.js'));
+    // Ph2: пакет ровно из четырёх скриптов — утилита кадров больше не отдельный файл.
+    expect((m[1].match(/\.js'/g) || []).length).toBe(4);
     expect(m[1].indexOf('core/qwen-pagination.js')).toBeLessThan(m[1].indexOf('core/qwen-files.js'));
     expect(m[1].indexOf('core/qwen-files.js')).toBeLessThan(m[1].indexOf('core/qwen-intercept.js'));
   });
 
   test('идемпотентность как у остальных: гард по ids.indexOf + registerSafe + снятие старых id', function () {
-    expect(background).toContain("if (ids.indexOf('ai-cm-qwen-intercept-v3') === -1) {");
-    const idx = background.indexOf("if (ids.indexOf('ai-cm-qwen-intercept-v3') === -1) {");
+    expect(background).toContain("if (ids.indexOf('ai-cm-qwen-intercept-v4') === -1) {");
+    const idx = background.indexOf("if (ids.indexOf('ai-cm-qwen-intercept-v4') === -1) {");
     const block = background.slice(idx, idx + 1600);
-    expect(block).toContain("await registerSafe('ai-cm-qwen-intercept-v3'");
+    expect(block).toContain("await registerSafe('ai-cm-qwen-intercept-v4'");
     // O-53/R2: двойного инжекта нет — прежние id снимаются перед регистрацией нового.
-    expect(block).toContain("unregisterContentScripts({ ids: ['ai-cm-qwen-intercept', 'ai-cm-qwen-intercept-v2'] })");
+    const unreg = block.indexOf('unregisterContentScripts(');
+    expect(unreg).toBeGreaterThan(-1);
+    expect(unreg).toBeLessThan(block.indexOf("registerSafe('ai-cm-qwen-intercept-v4'"));
+    ['ai-cm-qwen-intercept', 'ai-cm-qwen-intercept-v2', 'ai-cm-qwen-intercept-v3'].forEach(function (id) {
+      expect(block).toContain("'" + id + "'");
+    });
   });
 
   test('R-пин: шесть существующих регистраций не тронуты', function () {

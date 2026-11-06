@@ -66,8 +66,6 @@ interface Window {
   parsePerplexityThread?: any;
   /** utils/intercept-common.js */
   aiCmCommon?: any;
-  /** utils/stream-frames.js — frames/normUsage/mergeUsage (types/stream.d.ts). */
-  aiCmStreamFrames?: import('./stream').StreamFramesApi;
   /** utils/debug.js — гейт диагностики (включается одноимённой настройкой) */
   __aiCmDebugLogs?: boolean;
   /** utils/debug.js — хелпер swallow(error, tag): молчаливый catch → диагностируемый (Step E.2a) */

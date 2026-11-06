@@ -92,7 +92,8 @@
  * ESM-пилот (Roadmap Ph2) is the one deliberate exception: a source may instead
  * carry a real `import` and let esbuild pull that module into the same bundle
  * (print/print.js → markdown, options|content.js → platform, export-text-builders
- * → buildReferenceText, а MAIN-перехватчики → intercept-common). The imported
+ * → buildReferenceText, MAIN-перехватчики → intercept-common, core/qwen-intercept.js
+ * → utils/stream-frames.js). The imported
  * module is then excluded from its entry's concatenation list, and the bundle
  * still ends up as ONE scope. MAIN-перехватчики не входят в общий content-бандл:
  * они собираются отдельными IIFE (mainInterceptOptions) в те же пути dist/core/,
@@ -174,11 +175,17 @@ const BACKGROUND_PRELUDE = [
 // содержат top-level import, поэтому они не копируются verbatim: каждый
 // собирается отдельным IIFE в тот же путь dist/core/<name>.js, на который
 // продолжает указывать js[] в core/background.js.
+// Ph2, шаг stream-frames: core/qwen-intercept.js тоже ESM — он импортирует
+// utils/stream-frames.js, поэтому esbuild вшивает модуль кадров прямо в
+// dist/core/qwen-intercept.js. Из js[] путь utils/stream-frames.js удалён
+// (см. registration id -v4 в core/background.js): копировать нечего, а старый
+// путь в dist больше не существует.
 const MAIN_INTERCEPTS = [
   'core/page-intercept.js',
   'core/claude-intercept.js',
   'core/perplexity-intercept.js',
   'core/google-search-intercept.js',
+  'core/qwen-intercept.js',
 ];
 
 /**
@@ -1121,6 +1128,10 @@ async function finishBuild(entries) {
   // Ph2: intercept-common.js вшит в MAIN-бандлы и больше не копируется. Копия
   // от предыдущей сборки иначе осталась бы в dist/ и упала бы в verifyDist.
   await fsp.rm(path.join(DIST, 'utils', 'intercept-common.js'), { force: true });
+  // Ph2: stream-frames.js переведён на ESM и вшит в бандл core/qwen-intercept.js,
+  // из js[] в background.js удалён. Копия от предыдущей сборки (verbatim из
+  // runtimeRegisteredFiles) иначе осталась бы в dist/ и упала бы в verifyDist.
+  await fsp.rm(path.join(DIST, 'utils', 'stream-frames.js'), { force: true });
   const outputs = Object.keys(entries).map((name) => ({
     name,
     outfile: path.join(DIST, `${name}.js`),

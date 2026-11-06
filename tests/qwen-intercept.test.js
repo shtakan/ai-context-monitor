@@ -27,8 +27,10 @@ const { TextEncoder } = require('util');
 
 const ROOT = path.join(__dirname, '..');
 const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'qwen-intercept.js'), 'utf8');
-const STREAM_FRAMES_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'stream-frames.js'), 'utf8');
 const DEBUG_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'debug.js'), 'utf8');
+const { loadAsClassic } = require('./helpers/load-esm.js');
+// Ph2: stream-frames.js — ESM; перехватчик исполняется с втянутыми импортами.
+const QWEN_CLASSIC = loadAsClassic('core/qwen-intercept.js');
 
 const CHAT_ID = 'cda86f26-0155-4243-a134-777d909a936b';
 const RESPONSE_ID = '3d0a3654-aaaa-bbbb-cccc-000000000001';
@@ -148,7 +150,6 @@ function installStand(opts) {
   const o = opts || {};
   // Реальные utils в окно стенда (MAIN-мир страницы).
   new Function('window', 'self', DEBUG_SRC)(window, window);
-  new Function('window', 'self', STREAM_FRAMES_SRC)(window, window);
 
   const events = [];
   const calls = [];
@@ -168,7 +169,7 @@ function installStand(opts) {
 
   // Свежий перехватчик на каждый стенд: снимаем latч установки (в браузере он ставится один раз).
   delete window.__aiCmQwenInterceptInstalled;
-  new Function(INTERCEPT_SRC)();
+  new Function(QWEN_CLASSIC)();
   return { events: events, calls: calls };
 }
 

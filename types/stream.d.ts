@@ -48,25 +48,19 @@ export interface Usage {
 }
 
 /**
- * Публичный API utils/stream-frames.js (window.aiCmStreamFrames /
- * self.aiCmStreamFrames, utils/stream-frames.js:393-413).
- *
- * frames(res) — async-генератор кадров; res — Response-подобный объект
- * (headers.get('content-type') + body.getReader()), поэтому параметр описан
- * структурно, без зависимости от DOM lib-деталей.
+ * utils/stream-frames.js — ESM-модуль (Roadmap Ph2). Типы экспортов выводятся
+ * из JSDoc самого модуля (tsconfig: allowJs + checkJs); здесь — только контракт
+ * вызывающего: frames(res) читает Response-подобный поток и отдаёт кадры,
+ * normalizeUsage/mergeUsage нормализуют и сливают usage.
  */
-export interface StreamFramesApi {
-  /**
-   * Читает поток и отдаёт кадры. Не-SSE тело разбирается целиком после done;
-   * SSE — построчно, с дочитыванием хвоста без '\n'.
-   */
+export interface StreamFramesModule {
   frames(res: {
     headers?: { get(name: string): string | null } | null;
     body?: { getReader(): { read(): Promise<{ done: boolean; value?: unknown }> } } | null;
   } | null): AsyncGenerator<StreamFrame, void, unknown>;
 
   /** Нормализация usage провайдера; null — usage не объект. */
-  normUsage(u: unknown): Usage | null;
+  normalizeUsage(u: unknown): Usage | null;
 
   /**
    * Слияние usage: cumulative === true → перезапись (Qwen отдаёт кумулятив),
@@ -74,8 +68,9 @@ export interface StreamFramesApi {
    */
   mergeUsage(prev: Usage | null, next: Partial<Usage> | null, cumulative?: boolean): Usage | null;
 
-  /** Маркер поддержки нативного async-генератора (пины/диагностика). */
-  _nativeAsyncGenerator: boolean;
+  /** Эталон паритета: ручной pull-итератор кадров (не рантайм-фолбэк). */
+  framesManual(res: unknown): AsyncIterator<StreamFrame, void, unknown>;
 
-  [key: string]: any;
+  /** Режет склейку {...}{...} на отдельные JSON-объекты. */
+  splitJsonObjects(s: string | null | undefined): string[];
 }

@@ -223,6 +223,10 @@ export default [
   //    Ph2, шаг 4: utils/intercept-common.js переведён на export, а четыре
   //    MAIN-перехватчика импортируют setIntervalVisible статически; их сборка —
   //    отдельные IIFE-бандлы (build.mjs, mainInterceptOptions).
+  //    Ph2, шаг stream-frames: utils/stream-frames.js — ESM (frames/normalizeUsage/
+  //    mergeUsage + эталонные framesManual/splitJsonObjects), его единственный
+  //    потребитель core/qwen-intercept.js тоже переведён на статический import и
+  //    собирается отдельным IIFE-бандлом.
   // ---------------------------------------------------------------------------
   {
     files: [
@@ -231,6 +235,7 @@ export default [
       'utils/export-text-builders.js',
       'utils/platform.js',
       'utils/intercept-common.js',
+      'utils/stream-frames.js',
       'print/print.js',
       'core/background.js',
       'core/content.js',
@@ -238,6 +243,7 @@ export default [
       'core/claude-intercept.js',
       'core/perplexity-intercept.js',
       'core/google-search-intercept.js',
+      'core/qwen-intercept.js',
       'options/options.js',
     ],
     languageOptions: {

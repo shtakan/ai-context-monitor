@@ -74,8 +74,10 @@ const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-te
 
 const ROOT = path.join(__dirname, '..');
 const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'qwen-intercept.js'), 'utf8');
-const STREAM_FRAMES_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'stream-frames.js'), 'utf8');
 const DEBUG_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'debug.js'), 'utf8');
+const { loadAsClassic } = require('./helpers/load-esm.js');
+// Ph2: stream-frames.js — ESM; перехватчик исполняется с втянутыми импортами.
+const QWEN_CLASSIC = loadAsClassic('core/qwen-intercept.js');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 const BASE_HANDLER_SRC = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.js'), 'utf8');
 
@@ -233,7 +235,6 @@ function jsonResponse(payload, opts) {
 function installStand(opts) {
   const o = opts || {};
   new Function('window', 'self', DEBUG_SRC)(window, window);
-  new Function('window', 'self', STREAM_FRAMES_SRC)(window, window);
 
   const events = [];
   const calls = [];
@@ -263,7 +264,7 @@ function installStand(opts) {
   const xhrTr = o.xhr ? installXhrTransport(o.xhr) : null;
 
   delete window.__aiCmQwenInterceptInstalled;
-  new Function(INTERCEPT_SRC)();
+  new Function(QWEN_CLASSIC)();
   return { events: events, calls: calls, xhr: xhrTr };
 }
 

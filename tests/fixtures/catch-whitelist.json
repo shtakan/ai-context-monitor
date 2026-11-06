@@ -7,7 +7,7 @@
     "adapters"
   ],
   "definition": "Молчаливый catch = тело после вырезания комментариев содержит только пробелы, ИЛИ ровно один no-op (void 0; / return; / continue; / break;). Комментарий-только тело тоже молчаливое (комментарии маскируются в пробелы).",
-  "totalEntries": 478,
+  "totalEntries": 477,
   "groups": [
     {
       "file": "adapters/claude-adapter.js",
@@ -118,9 +118,9 @@
       "file": "core/background.js",
       "category": "debug-instrumentation",
       "lines": [
-        529,
-        1174,
-        1192
+        538,
+        1183,
+        1201
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: chrome.action.setBadgeText({ text: '', tabId: tabIdR }); debugLog('log',"
     },
@@ -128,7 +128,7 @@
       "file": "core/background.js",
       "category": "defensive-assignment",
       "lines": [
-        1093
+        1102
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: errText = await response.text();"
     },
@@ -136,7 +136,7 @@
       "file": "core/background.js",
       "category": "guard-clause",
       "lines": [
-        905
+        914
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: for (var k in (all || {})) { if (k.indexOf(AI_CM_FIRED_SESSION_PREFIX) ="
     },
@@ -151,11 +151,11 @@
         103,
         317,
         367,
-        445,
-        462,
-        646,
-        720,
-        722
+        454,
+        471,
+        655,
+        729,
+        731
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: void chrome.runtime.lastError;"
     },
@@ -1403,10 +1403,10 @@
       "file": "core/qwen-intercept.js",
       "category": "best-effort-guard",
       "lines": [
-        113,
-        202,
-        375,
-        1608
+        119,
+        208,
+        366,
+        1598
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: iterator.return();"
     },
@@ -1414,11 +1414,11 @@
       "file": "core/qwen-intercept.js",
       "category": "debug-instrumentation",
       "lines": [
-        67,
-        70,
-        137,
-        1640,
-        1652
+        73,
+        76,
+        143,
+        1630,
+        1642
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: for (var i = 0; i < diagRing.length; i++) printDiag(diagRing[i][0], diag"
     },
@@ -1426,8 +1426,8 @@
       "file": "core/qwen-intercept.js",
       "category": "event-guard",
       "lines": [
-        1689,
-        1719
+        1679,
+        1709
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); dis"
     },
@@ -1435,8 +1435,8 @@
       "file": "core/qwen-intercept.js",
       "category": "guard-clause",
       "lines": [
-        150,
-        157
+        156,
+        163
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof input === 'string') return input; if (input && typeof input.u"
     },
@@ -1444,7 +1444,7 @@
       "file": "core/qwen-intercept.js",
       "category": "host-api-guard",
       "lines": [
-        95
+        101
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: if (typeof sessionStorage !== 'undefined' && sessionStorage && sessionSt"
     },
@@ -1452,9 +1452,9 @@
       "file": "core/qwen-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        1706,
-        1714,
-        1718
+        1696,
+        1704,
+        1708
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkChatChange();"
     },
@@ -1462,7 +1462,7 @@
       "file": "core/qwen-intercept.js",
       "category": "logging-guard",
       "lines": [
-        131
+        137
       ],
       "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: var f = fields || {}; diagLineCount++; if (typeof aiCmDiagLine === 'func"
     },
@@ -1470,8 +1470,8 @@
       "file": "core/qwen-intercept.js",
       "category": "parse-guard",
       "lines": [
-        187,
-        195
+        193,
+        201
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var m = /[?&]chat_id=([^&]+)/.exec(url); if (m) return decodeURIComponen"
     },
@@ -1823,7 +1823,7 @@
       "file": "utils/stream-frames.js",
       "category": "guard-clause",
       "lines": [
-        108
+        103
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof v === 'string') return null; if (v && typeof v.length === 'nu"
     },
@@ -1831,8 +1831,7 @@
       "file": "utils/stream-frames.js",
       "category": "parse-guard",
       "lines": [
-        69,
-        75
+        70
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: if (typeof TextDecoder !== 'undefined') return TextDecoder;"
     },

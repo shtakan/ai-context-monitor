@@ -24,8 +24,10 @@ const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-te
 
 const ROOT = path.join(__dirname, '..');
 const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'qwen-intercept.js'), 'utf8');
-const STREAM_FRAMES_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'stream-frames.js'), 'utf8');
 const DEBUG_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'debug.js'), 'utf8');
+const { loadAsClassic } = require('./helpers/load-esm.js');
+// Ph2: stream-frames.js — ESM; перехватчик исполняется с втянутыми импортами.
+const QWEN_CLASSIC = loadAsClassic('core/qwen-intercept.js');
 const QWEN_FILES_SRC = fs.readFileSync(path.join(ROOT, 'core', 'qwen-files.js'), 'utf8');
 
 const CHAT_ID = 'aaaaaaaa-1111-4222-8333-444455556666';
@@ -125,7 +127,6 @@ function fileResponse(text) {
 
 function installStand(payload) {
   new Function('window', 'self', DEBUG_SRC)(window, window);
-  new Function('window', 'self', STREAM_FRAMES_SRC)(window, window);
   if (!window.AiCmQwenFiles) {
     new Function('window', 'self', QWEN_FILES_SRC)(window, window);
   }
@@ -151,7 +152,7 @@ function installStand(payload) {
   jest.spyOn(console, 'warn').mockImplementation(function () { });
 
   delete window.__aiCmQwenInterceptInstalled;
-  new Function(INTERCEPT_SRC)();
+  new Function(QWEN_CLASSIC)();
   return { events: events, calls: calls };
 }
 

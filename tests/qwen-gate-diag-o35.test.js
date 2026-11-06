@@ -31,8 +31,10 @@ const CONTENT = H.contentSource;
 const WIDGET_SRC = H.moduleSource('core/widget.js');
 const BASE_HANDLER_SRC = H.moduleSource('core/base-handler.js');
 const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'qwen-intercept.js'), 'utf8');
-const STREAM_FRAMES_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'stream-frames.js'), 'utf8');
 const DEBUG_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'debug.js'), 'utf8');
+const { loadAsClassic } = require('./helpers/load-esm.js');
+// Ph2: stream-frames.js — ESM; перехватчик исполняется с втянутыми импортами.
+const QWEN_CLASSIC = loadAsClassic('core/qwen-intercept.js');
 const OPTIONS_SRC = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
 const ADAPTER_SRC = fs.readFileSync(path.join(ROOT, 'adapters', 'qwen-adapter.js'), 'utf8');
 // ru-словарь M-4.2: песочницы виджета получают ТОЧНО ТУ ЖЕ подстановку, что chrome.i18n
@@ -113,7 +115,6 @@ function settle(rounds) {
 function installStand(opts) {
   const o = opts || {};
   new Function('window', 'self', DEBUG_SRC)(window, window);
-  new Function('window', 'self', STREAM_FRAMES_SRC)(window, window);
 
   const events = [];
   window.addEventListener('ai-cm-full-history', function (ev) { events.push(ev.detail); });
@@ -123,7 +124,7 @@ function installStand(opts) {
   jest.spyOn(console, 'warn').mockImplementation(function () { });
 
   delete window.__aiCmQwenInterceptInstalled;
-  new Function(INTERCEPT_SRC)();
+  new Function(QWEN_CLASSIC)();
   return { events: events };
 }
 

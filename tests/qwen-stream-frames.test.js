@@ -1,28 +1,32 @@
 /**
- * O-35: utils/stream-frames.js — UMD-порт КАРКАСА stream-analyzer.js
- * (frames / normUsage / mergeUsage). Источник: экспорт чата
- * ai-context-monitor-deepseek-DeepSeek-R1-2026-09-18-17-53.txt («stream-analyzer.js»).
+ * O-35: utils/stream-frames.js — КАРКАС stream-analyzer.js, ESM-модуль (Roadmap Ph2).
+ * (frames / normalizeUsage / mergeUsage + эталонные framesManual / splitJsonObjects).
+ * Источник: экспорт чата ai-context-monitor-deepseek-DeepSeek-R1-2026-09-18-17-53.txt
+ * («stream-analyzer.js»).
  *
  * Пины:
- *   1) НЕТ ESM-синтаксиса: файл обязан грузиться как КЛАССИЧЕСКИЙ скрипт MV3 (это и был
- *      блокер O-35). Нативный async-generator — ЛИТЕРАЛ в коде (ES2018, не ESM), Function-
- *      конструктор не используется; ручная ES5-ветка остаётся эталоном паритета;
+ *   1) файл — настоящий ESM: inline 'export function ...', UMD-хвоста и CJS-экспорта нет;
+ *      нативный async-генератор — ЛИТЕРАЛ в коде (ES2018), Function-конструктора нет;
  *   2) frames(): SSE-кадры ({event,data}, ':'-комментарии, пустая строка как граница
  *      события, хвост без \n, CRLF), не-SSE фолбэк (склейка {...}{...} и JSON-массив);
- *   3) normUsage(): имена полей Qwen/OpenAI/Anthropic/Gemini → единая форма;
- *   4) mergeUsage(): cumulative=true — ПЕРЕЗАПИСЬ (Qwen: 63→174→337→553→884 даёт 884,
+ *   3) normalizeUsage(): имена полей Qwen/OpenAI/Anthropic/Gemini -> единая форма;
+ *   4) mergeUsage(): cumulative=true — ПЕРЕЗАПИСЬ (Qwen: 63->174->337->553->884 даёт 884,
  *      а не 2011), cumulative=false — сумма; null не затирает собранное;
  *   5) паритет нативной и ручной веток frames() на одних и тех же телах;
- *   6) именованная обёртка по образцу utils/intercept-common.js (window/self/module.exports).
+ *   6) модуль подключается ТОЛЬКО статическим import (core/qwen-intercept.js), поэтому
+ *      глобальных window/self-имён больше нет.
  */
 const fs = require('fs');
 const path = require('path');
 const { TextEncoder } = require('util');   // jsdom-окружение не даёт TextEncoder глобально
+const { loadEsmModule } = require('./helpers/load-esm.js');
 
 const ROOT = path.join(__dirname, '..');
 const SRC = fs.readFileSync(path.join(ROOT, 'utils', 'stream-frames.js'), 'utf8');
-const SF = require('../utils/stream-frames.js');
-const { frames, normUsage, mergeUsage } = SF;
+// Ph2: модуль — ESM, require() его не берёт; грузим тем же приёмом, что прод-код
+// (tests/helpers/load-esm.js: fs + new Function, без babel и новых зависимостей).
+const SF = loadEsmModule('utils/stream-frames.js');
+const { frames, normalizeUsage, mergeUsage, framesManual, splitJsonObjects } = SF;
 
 // ---------- фейковый ReadableStream-ответ (jsdom без ReadableStream) ----------
 // ВАЖНО: каждый вызов getReader() отдаёт НЕЗАВИСИМОЕ чтение с нуля — иначе повторный
@@ -61,18 +65,17 @@ async function collect(fn, res) {
 // где TextDecoder нет ни глобально, ни в util), подменяем ровно util.TextDecoder на время
 // загрузки СВЕЖЕГО экземпляра модуля (jest.resetModules + doMock/dontMock).
 function loadWithoutTextDecoder() {
-  const realUtil = require('util');
-  const savedTextDecoder = realUtil.TextDecoder;
-  jest.resetModules();
-  jest.doMock('util', function () {
-    return Object.assign({}, realUtil, { TextDecoder: undefined });
-  });
+  // Модуль больше не тянет Node-'util': без глобального TextDecoder он сразу выбирает
+  // ВСТРОЕННЫЙ потоковый UTF-8 декодер. Убираем глобал на время загрузки СВЕЖЕГО экземпляра
+  // модуля и возвращаем его назад в finally.
+  const had = Object.prototype.hasOwnProperty.call(globalThis, 'TextDecoder');
+  const saved = globalThis.TextDecoder;
   try {
-    return require('../utils/stream-frames.js');
+    delete globalThis.TextDecoder;
+    return loadEsmModule('utils/stream-frames.js');
   } finally {
-    jest.dontMock('util');
-    realUtil.TextDecoder = savedTextDecoder;
-    jest.resetModules();
+    if (had) globalThis.TextDecoder = saved;
+    else delete globalThis.TextDecoder;
   }
 }
 
@@ -94,44 +97,39 @@ function responseOfChunks(chunks, contentType) {
   };
 }
 
-describe('O-35: stream-frames.js — совместимость (нет ESM, UMD-обёртка)', () => {
-  test('в исходнике нет ESM-синтаксиса (export / import) и РОВНО ОДИН литерал async-генератора', () => {
-    // Литерал = строка КОДА вида: async function* name(...). Прежняя строковая константа
-    // генератора удалена вместе с фабрикой: нативная реализация теперь единственная.
+describe('O-35: stream-frames.js — ESM-модуль (Roadmap Ph2)', () => {
+  test('исходник — ESM: inline export есть, UMD-хвоста нет, генератор — один литерал', () => {
+    expect(SRC).toContain('export function frames(res)');
+    expect(SRC).toContain('export function normalizeUsage(u)');
+    expect(SRC).not.toContain('module.exports');
+    expect(SRC).not.toContain('window.aiCmStreamFrames');
+    // Литерал = строка КОДА вида: async function* name(...). Нативная реализация —
+    // единственная, поэтому литерал ровно один (комментарии и строки не считаются).
     const codeLines = SRC.split(/\r?\n/).filter(function (l) {
       const t = l.trim();
       return t.indexOf('//') !== 0 && t.indexOf('*') !== 0 && t.indexOf('/*') !== 0;
     });
-    const code = codeLines.join('\n');
-    expect(code).not.toMatch(/\bexport\s+(default|const|function|\{)/);
-    expect(code).not.toMatch(/^\s*import\s/m);
-    // ровно ОДНА строка кода начинается с литерала async-генератора — сама framesNative
-    const asyncGenLiterals = codeLines.filter(function (l) {
-      const t = l.trim();
-      return /^async\s+function\s*\*/.test(t) && t.indexOf("'") !== 0 && t.indexOf('"') !== 0;
-    });
+    const asyncGenLiterals = codeLines.filter(function (l) { return /^async\s+function\s*\*/.test(l.trim()); });
     expect(asyncGenLiterals).toHaveLength(1);
     expect(asyncGenLiterals[0]).toContain('async function* framesNative');
   });
 
   test('нативный async-generator объявлен литералом, Function-конструктор не нужен (CSP)', () => {
     expect(SRC).not.toContain('new Function');
-    expect(SRC).toContain('async function* framesNative');     // единственный литерал генератора в коде
-    expect(typeof SF._framesManual).toBe('function');          // ручной pull-итератор — эталон паритета
+    expect(typeof framesManual).toBe('function');              // ручной pull-итератор — эталон паритета
   });
 
-  test('UMD-обёртка: module.exports + window/self-имена (образец intercept-common.js)', () => {
+  test('ESM-экспорт: frames/normalizeUsage/mergeUsage + эталонные helpers', () => {
     expect(typeof SF.frames).toBe('function');
-    expect(typeof normUsage).toBe('function');
+    expect(typeof normalizeUsage).toBe('function');
     expect(typeof mergeUsage).toBe('function');
-    expect(SRC).toContain('window.aiCmStreamFrames = api;');
-    expect(SRC).toContain('self.aiCmStreamFrames = api;');
-    expect(SRC).toContain('module.exports = api;');
+    expect(typeof framesManual).toBe('function');
+    expect(typeof splitJsonObjects).toBe('function');
   });
 
   test('порядок аргументов mergeUsage(prev, next, cumulative) сохранён', () => {
     expect(mergeUsage.length).toBe(3);
-    expect(normUsage.length).toBe(1);
+    expect(normalizeUsage.length).toBe(1);
   });
 });
 
@@ -180,18 +178,18 @@ describe('O-35: frames() — SSE-кадры', () => {
     ];
     for (const [body, ct] of cases) {
       const native = await collect(frames, responseOf(body, ct));
-      const manual = await collect(SF._framesManual, responseOf(body, ct));
+      const manual = await collect(framesManual, responseOf(body, ct));
       expect([body, manual]).toEqual([body, native]);
     }  });
 
   test('резак склейки публичен и учитывает строки/экранирование', () => {
-    expect(SF._splitJsonObjects('{"a":"}{"}{"b":1}')).toEqual(['{"a":"}{"}', '{"b":1}']);
+    expect(splitJsonObjects('{"a":"}{"}{"b":1}')).toEqual(['{"a":"}{"}', '{"b":1}']);
   });
 });
 
-describe('O-35: normUsage() — нормализация usage провайдеров', () => {
+describe('O-35: normalizeUsage() — нормализация usage провайдеров', () => {
   test('Qwen: input/output/total + reasoning внутри output + cached', () => {
-    expect(normUsage({
+    expect(normalizeUsage({
       input_tokens: 1709,
       output_tokens: 884,
       total_tokens: 2593,
@@ -201,7 +199,7 @@ describe('O-35: normUsage() — нормализация usage провайде�
   });
 
   test('OpenAI-совместимые: prompt/completion + completion_tokens_details', () => {
-    expect(normUsage({
+    expect(normalizeUsage({
       prompt_tokens: 10, completion_tokens: 20, total_tokens: 30,
       completion_tokens_details: { reasoning_tokens: 7 },
       prompt_tokens_details: { cached_tokens: 3 }
@@ -209,20 +207,20 @@ describe('O-35: normUsage() — нормализация usage провайде�
   });
 
   test('Anthropic/Gemini имена: cache_read_input_tokens, thoughtsTokenCount, *TokenCount', () => {
-    expect(normUsage({ input_tokens: 5, output_tokens: 6, cache_read_input_tokens: 2 }))
+    expect(normalizeUsage({ input_tokens: 5, output_tokens: 6, cache_read_input_tokens: 2 }))
       .toEqual({ input: 5, output: 6, total: null, reasoning: null, cached: 2 });
-    expect(normUsage({ promptTokenCount: 11, candidatesTokenCount: 12, totalTokenCount: 23, thoughtsTokenCount: 4, cachedContentTokenCount: 1 }))
+    expect(normalizeUsage({ promptTokenCount: 11, candidatesTokenCount: 12, totalTokenCount: 23, thoughtsTokenCount: 4, cachedContentTokenCount: 1 }))
       .toEqual({ input: 11, output: 12, total: 23, reasoning: 4, cached: 1 });
   });
 
   test('не-объект/пусто → null (не выдумываем нули)', () => {
-    expect(normUsage(null)).toBeNull();
-    expect(normUsage(undefined)).toBeNull();
-    expect(normUsage('x')).toBeNull();
+    expect(normalizeUsage(null)).toBeNull();
+    expect(normalizeUsage(undefined)).toBeNull();
+    expect(normalizeUsage('x')).toBeNull();
   });
 
   test('0 — валидное число (cached 0 не превращается в null)', () => {
-    expect(normUsage({ input_tokens: 0, output_tokens: 0 }).input).toBe(0);
+    expect(normalizeUsage({ input_tokens: 0, output_tokens: 0 }).input).toBe(0);
   });
 });
 
@@ -267,13 +265,10 @@ describe('O-35: mergeUsage() — кумулятивный vs аддитивны�
 describe('O-35: frames() — fallback UTF-8 декодер (без TextDecoder)', () => {
   const dec = loadWithoutTextDecoder();
 
-  test('стенд действительно без TextDecoder: фолбэк-ветка декодера выбрана', () => {
-    console.log('DIAG typeof global.TextDecoder =', typeof globalThis.TextDecoder,
-      '| util.TextDecoder =', typeof require('util').TextDecoder,
-      '| dec.frames === SF.frames =', dec.frames === SF.frames,
-      '| dec._nativeAsyncGenerator =', dec._nativeAsyncGenerator);
+  test('стенд действительно без TextDecoder: выбран встроенный декодер', () => {
     expect(typeof TextDecoder).toBe('undefined');
-    expect(typeof dec._framesManual).toBe('function');
+    expect(typeof dec.frames).toBe('function');
+    expect(typeof dec.framesManual).toBe('function');
   });
 
   test('fallback-декодер: многобайтная UTF-8 последовательность через границу чанка', async () => {
@@ -284,7 +279,7 @@ describe('O-35: frames() — fallback UTF-8 декодер (без TextDecoder)'
     const chunk1 = fullBytes.slice(0, 10);
     const chunk2 = fullBytes.slice(10);
 
-    const out = await collect(dec._framesManual, responseOfChunks([chunk1, chunk2], 'text/event-stream'));
+    const out = await collect(dec.framesManual, responseOfChunks([chunk1, chunk2], 'text/event-stream'));
     expect(out).toHaveLength(1);
     expect(out[0].data).toBe('{"text":"Привет"}');
   });
@@ -295,7 +290,7 @@ describe('O-35: frames() — fallback UTF-8 декодер (без TextDecoder)'
     const chunks = [];
     for (let i = 0; i < bytes.length; i++) chunks.push(bytes.slice(i, i + 1));
 
-    const out = await collect(dec._framesManual, responseOfChunks(chunks, 'text/event-stream'));
+    const out = await collect(dec.framesManual, responseOfChunks(chunks, 'text/event-stream'));
     expect(out).toHaveLength(1);
     expect(out[0].data).toBe('{"t":"Привет"}');
   });
@@ -304,7 +299,7 @@ describe('O-35: frames() — fallback UTF-8 декодер (без TextDecoder)'
     const enc = new TextEncoder();
     const fullBytes = enc.encode('data: "🙂"\n\n');
     const cut = fullBytes.indexOf(0xF0) + 2;            // внутри 4-байтного эмодзи
-    const out = await collect(dec._framesManual,
+    const out = await collect(dec.framesManual,
       responseOfChunks([fullBytes.slice(0, cut), fullBytes.slice(cut)], 'text/event-stream'));
     expect(out).toHaveLength(1);
     expect(out[0].data).toBe('"🙂"');
@@ -316,7 +311,7 @@ describe('O-35: frames() — fallback UTF-8 декодер (без TextDecoder)'
     // Обрезаем многобайтный символ: flush() обязан вернуть остаток байтами
     const chunk = bytes.slice(0, bytes.length - 1);
 
-    const out = await collect(dec._framesManual, responseOfChunks([chunk], 'text/event-stream'));
+    const out = await collect(dec.framesManual, responseOfChunks([chunk], 'text/event-stream'));
     expect(out).toHaveLength(1);
     expect(out[0].data).toContain('Приве');
   });
@@ -324,7 +319,7 @@ describe('O-35: frames() — fallback UTF-8 декодер (без TextDecoder)'
   test('fallback-декодер: flush() без pending (поток оборвался на границе символа)', async () => {
     const enc = new TextEncoder();
     const bytes = enc.encode('data: {"t":"ok"}\n\n');
-    const out = await collect(dec._framesManual, responseOfChunks([bytes], 'text/event-stream'));
+    const out = await collect(dec.framesManual, responseOfChunks([bytes], 'text/event-stream'));
     expect(out).toHaveLength(1);
     expect(out[0].data).toBe('{"t":"ok"}');
   });
@@ -335,31 +330,31 @@ describe('O-35: frames() — fallback UTF-8 декодер (без TextDecoder)'
     // Передаём как ArrayBuffer (не Uint8Array)
     const ab = encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.byteLength);
 
-    const out = await collect(dec._framesManual, responseOfChunks([ab], 'text/event-stream'));
+    const out = await collect(dec.framesManual, responseOfChunks([ab], 'text/event-stream'));
     expect(out).toHaveLength(1);
     expect(out[0].data).toBe('{"a":1}');
   });
 
   test('asBytes: не-байты (объект без length/byteLength) → String(v) без падения', async () => {
     const notBytes = { toString: function () { return 'data: {"s":1}\n\n'; } };
-    const out = await collect(dec._framesManual, responseOfChunks([notBytes], 'text/event-stream'));
+    const out = await collect(dec.framesManual, responseOfChunks([notBytes], 'text/event-stream'));
     expect(out).toHaveLength(1);
     expect(out[0].data).toBe('{"s":1}');
   });
 
   test('fallback-декодер: не-SSE ветка (склейка {...}{...} и JSON-массив)', async () => {
     const enc = new TextEncoder();
-    const glued = await collect(dec._framesManual,
+    const glued = await collect(dec.framesManual,
       responseOfChunks([enc.encode('{"a":1}'), enc.encode('{"b":2}')], 'application/json'));
     expect(glued.map(function (f) { return f.data; })).toEqual(['{"a":1}', '{"b":2}']);
 
-    const arr = await collect(dec._framesManual,
+    const arr = await collect(dec.framesManual,
       responseOfChunks([enc.encode('[{"c":3},{"d":4}]')], 'application/json'));
     expect(arr.map(function (f) { return f.data; })).toEqual(['{"c":3}', '{"d":4}']);
   });
 
   test('fallback-декодер: пустое тело → ни одного кадра', async () => {
-    const out = await collect(dec._framesManual, responseOfChunks([new Uint8Array(0)], 'text/event-stream'));
+    const out = await collect(dec.framesManual, responseOfChunks([new Uint8Array(0)], 'text/event-stream'));
     expect(out).toEqual([]);
   });
 
@@ -367,19 +362,19 @@ describe('O-35: frames() — fallback UTF-8 декодер (без TextDecoder)'
     const enc = new TextEncoder();
     const body = 'data: {"text":"Привет, мир"}\n\ndata: {"text":"ещё"}\n\n';
     const native = await collect(frames, responseOf(body, 'text/event-stream'));
-    const fallback = await collect(dec._framesManual, responseOfChunks([enc.encode(body)], 'text/event-stream'));
+    const fallback = await collect(dec.framesManual, responseOfChunks([enc.encode(body)], 'text/event-stream'));
     expect(fallback).toEqual(native);
   });
 });
 
-describe('O-35: _framesManual — защитные ветки читателя и очереди', () => {
+describe('O-35: framesManual — защитные ветки читателя и очереди', () => {
   test('res без body.getReader → ни одного кадра, мгновенный done', async () => {
-    const out = await collect(SF._framesManual, { headers: { get: function () { return 'text/event-stream'; } } });
+    const out = await collect(framesManual, { headers: { get: function () { return 'text/event-stream'; } } });
     expect(out).toEqual([]);
   });
 
   test('res = null → ни одного кадра (нет читателя, нет заголовков)', async () => {
-    const out = await collect(SF._framesManual, null);
+    const out = await collect(framesManual, null);
     expect(out).toEqual([]);
   });
 
@@ -400,7 +395,7 @@ describe('O-35: _framesManual — защитные ветки читателя �
         }
       }
     };
-    const out = await collect(SF._framesManual, res);
+    const out = await collect(framesManual, res);
     expect(out.map(function (f) { return f.data; })).toEqual(['{"a":1}']);
   });
 
@@ -413,26 +408,26 @@ describe('O-35: _framesManual — защитные ветки читателя �
         }
       }
     };
-    await expect(collect(SF._framesManual, res)).rejects.toThrow('обрыв потока');
+    await expect(collect(framesManual, res)).rejects.toThrow('обрыв потока');
   });
 
   test('не-SSE: невалидный JSON-массив целиком → кадров нет (JSON.parse в catch)', async () => {
     const enc = new TextEncoder();
-    const out = await collect(SF._framesManual,
+    const out = await collect(framesManual,
       responseOfChunks([enc.encode('[{"a":1}')], 'application/json'));
     expect(out).toEqual([]);
   });
 
   test('не-SSE: пустое тело после trim → кадров нет', async () => {
     const enc = new TextEncoder();
-    const out = await collect(SF._framesManual, responseOfChunks([enc.encode('   \n  ')], 'application/json'));
+    const out = await collect(framesManual, responseOfChunks([enc.encode('   \n  ')], 'application/json'));
     expect(out).toEqual([]);
   });
 
   test('SSE: не-data строки (мусор) игнорируются, хвост без \\n отдаётся последним кадром', async () => {
     const enc = new TextEncoder();
     const body = 'event: message\ndata: {"a":1}\n\n: ping\nмусорная строка\ndata: tail';
-    const out = await collect(SF._framesManual, responseOfChunks([enc.encode(body)], 'text/event-stream'));
+    const out = await collect(framesManual, responseOfChunks([enc.encode(body)], 'text/event-stream'));
     expect(out).toEqual([
       { event: 'message', data: '{"a":1}' },
       { event: null, data: 'tail' }

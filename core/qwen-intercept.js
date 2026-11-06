@@ -19,7 +19,8 @@
  *     перехватывается уже уходящий запрос страницы, поэтому все её заголовки/куки/антибот
  *     остаются родными (ровно этот путь рекомендован спекой как «самый надёжный»).
  *
- * РАЗБОР SSE — через utils/stream-frames.js (UMD-каркас frames/normUsage/mergeUsage);
+ * РАЗБОР SSE — через utils/stream-frames.js (ESM-модуль frames/normalizeUsage/mergeUsage,
+ * вшит в этот бандл статическим import'ом — Ph2);
  * формат [REASONING]/[ANSWER] — тот же контракт, что у DeepSeek (deepseek-intercept.js:543).
  *
  * ФОЛБЭК (прецедент claude-intercept.js:1481-1492 — clone() сломал чтение SSE страницей):
@@ -48,7 +49,12 @@
  * addEventListener; тело берётся из responseText (responseType ''/text, JSON.parse) либо из
  * готового xhr.response (responseType 'json'). onreadystatechange страницы не перезаписывается,
  * XHR без флага не трогается вовсе, любое исключение внутри хука глушится.
+ *
+ * Ph2 (ESM): каркас кадров — настоящий модуль; esbuild вшивает его в ЭТОТ бандл MAIN-перехватчика
+ * (build.mjs, mainInterceptOptions). Отдельным script'ом из js[] он больше не грузится, поэтому
+ * ленивого разрешения через window нет: функции доступны статически.
  */
+import { frames as framesApi, normalizeUsage, mergeUsage } from '../utils/stream-frames.js';
 (function () {
   if (window.__aiCmQwenInterceptInstalled) return;
   window.__aiCmQwenInterceptInstalled = true;
@@ -209,6 +215,9 @@
   // R2: модуль вложений (core/qwen-files.js грузится ПЕРЕД перехватчиком). null — срезанная
   // сборка без модуля/старый манифест: каждое касание ниже проверяет наличие и молчит.
   var aiCmQwenFiles = (typeof window !== 'undefined' && window.AiCmQwenFiles) ? window.AiCmQwenFiles : null;
+  // Ph2: каркас кадров импортирован статически. Фасад повторяет прежний контракт вызовов
+  // (SF.frames / SF.normUsage / SF.mergeUsage), чтобы остальная логика не менялась.
+  var SF = { frames: framesApi, normUsage: normalizeUsage, mergeUsage: mergeUsage };
   // R2: метаданные ПОСЛЕДНЕГО снимка. Ре-эмит после прихода текста вложения повторяет прежние
   // serverTokens/complete: токены не пересчитываются, а незавершённая пагинация не «закрывается».
   var lastEmitMeta = { tokens: 0, complete: true, chatId: '', responseId: '' };
@@ -260,14 +269,11 @@
 
   function applyUsage(obj) {
     if (!sse || !obj || !obj.usage || typeof obj.usage !== 'object') return;
-    var SF = (typeof window !== 'undefined' && window.aiCmStreamFrames) ? window.aiCmStreamFrames : null;
-    var next = SF && typeof SF.normUsage === 'function' ? SF.normUsage(obj.usage) : null;
+    var next = normalizeUsage(obj.usage);
     if (!next) return;
     // КУМУЛЯТИВНЫЙ usage Qwen: cumulative=true → ПЕРЕЗАПИСЬ последним кадром.
     // Сумма 63+174+337+553+884 = 2011 — неверно (антипод-пин D4).
-    sse.usage = (SF && typeof SF.mergeUsage === 'function')
-      ? SF.mergeUsage(sse.usage, next, true)
-      : next;
+    sse.usage = mergeUsage(sse.usage, next, true);
     sse.rawUsage = obj.usage;
     sse.usageFrames++;
     diagLine('usage', {
@@ -315,24 +321,11 @@
   }
 
   // ---- чтение потока: ТОЛЬКО через clone(); фолбэк без чтения тела ----
-  // Утилита разрешается ЛЕНИВО на каждом кадре: порядок двух MAIN-скриптов
-  // (utils/stream-frames.js и core/qwen-intercept.js) в js[] не должен быть критичен.
-  function streamFrames() {
-    try {
-      var api = (typeof window !== 'undefined') ? window.aiCmStreamFrames : null;
-      return (api && typeof api.frames === 'function') ? api : null;
-    } catch (eSf) { return null; }
-  }
-
+  // Ph2: каркас кадров вшит в бандл статическим import'ом — разрешать его лениво не нужно,
+  // поэтому ветка «stream-frames-missing» удалена (модуль есть всегда, если собрался бандл).
   function consumeStream(resp, meta) {
     beginStream(meta);
     diagLine('consume-enter', { chat: String(meta.chatId || '').slice(0, 8) });
-    if (!streamFrames()) {
-      // Утилита не подключена вовсе — тихо: DOM-фолбэк (база не пустеет).
-      diagLine('stream-skip', { reason: 'stream-frames-missing', fallback: 'dom' });
-      sse = null;
-      return;
-    }
     var clone = null;
     try { clone = resp.clone(); } catch (eClone) { clone = null; }
     if (!clone) {
@@ -358,9 +351,7 @@
   }
 
   function readFrames(resp) {
-    var api = streamFrames();
-    if (!api) return Promise.resolve();
-    var iterator = api.frames(resp);
+    var iterator = SF.frames(resp);
     if (!iterator || typeof iterator.next !== 'function') return Promise.resolve();
     var stopped = false;
     function step() {
@@ -614,12 +605,11 @@
     return out || fallbackAnswer;
   }
   // usage хода истории (спека: usage{input_tokens,output_tokens}) — та же нормализация, что у
-  // кадров стрима (utils/stream-frames.js:normUsage); утилиты нет — читаем измеренные поля сами.
+  // кадров стрима (utils/stream-frames.js:normalizeUsage); её null — читаем измеренные поля сами.
   function historyUsageOf(node) {
     var raw = (node && node.usage && typeof node.usage === 'object') ? node.usage : null;
     if (!raw) return null;
-    var SF = (typeof window !== 'undefined' && window.aiCmStreamFrames) ? window.aiCmStreamFrames : null;
-    var norm = (SF && typeof SF.normUsage === 'function') ? SF.normUsage(raw) : null;
+    var norm = normalizeUsage(raw);
     if (norm) return norm;
     return {
       input: (typeof raw.input_tokens === 'number') ? raw.input_tokens : null,
