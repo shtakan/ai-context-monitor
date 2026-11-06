@@ -4,15 +4,14 @@
  * Тик при 'visible', skip при 'hidden', обход гарда через
  * opts.skipWhenHidden === false, возврат id и очистка clearInterval.
  */
-const interceptCommon = require('../utils/intercept-common.js');
+const { loadCommon } = require('./helpers/main-intercept.js');
 
-const { setIntervalVisible } = interceptCommon;
+// Ph2: intercept-common.js — ESM; тестовый мост подставляет swallowSoft,
+// делегирующий в window-зеркало debug.js (как и сборка, build.mjs).
+const { setIntervalVisible } = loadCommon();
 
-// E.2a.2b.4cd: хелпер swallow из utils/debug.js (его нет в Node-require; в
-// MAIN-инжекте debug.js идёт первым — core/background.js:135/282/295/308).
-global.swallow = function () { };
 // Step E.2c-B2b-3d (swallowSoft): канал B из utils/debug.js — вне Node-require так же, как swallow.
-global.swallowSoft = function () { };
+window.__aiCmSwallowSoft = function () { };
 
 function setVisibility(state) {
   Object.defineProperty(document, 'visibilityState', {

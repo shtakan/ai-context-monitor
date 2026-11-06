@@ -198,10 +198,10 @@
       "file": "core/claude-intercept.js",
       "category": "best-effort-guard",
       "lines": [
-        439,
-        652,
-        702,
-        1432
+        441,
+        654,
+        704,
+        1434
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: hdrs.forEach(function (hv, hk) { var hkl = String(hk).toLowerCase(); if"
     },
@@ -209,10 +209,10 @@
       "file": "core/claude-intercept.js",
       "category": "cleanup-guard",
       "lines": [
-        109,
-        195,
-        289,
-        444
+        111,
+        197,
+        291,
+        446
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete internalFetchUrls[u];"
     },
@@ -220,13 +220,13 @@
       "file": "core/claude-intercept.js",
       "category": "debug-instrumentation",
       "lines": [
-        18,
-        22,
-        126,
-        249,
-        752,
-        790,
-        884
+        20,
+        24,
+        128,
+        251,
+        754,
+        792,
+        886
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (window.__aiCmDebugLogs) console.info('[AI CM][Claude][trace] ' + msg"
     },
@@ -234,17 +234,17 @@
       "file": "core/claude-intercept.js",
       "category": "defensive-assignment",
       "lines": [
-        202,
         204,
-        228,
-        448,
-        818,
-        1062,
-        1104,
-        1209,
-        1429,
-        1629,
-        1649
+        206,
+        230,
+        450,
+        820,
+        1064,
+        1106,
+        1211,
+        1431,
+        1631,
+        1651
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: st = response.status;"
     },
@@ -252,12 +252,12 @@
       "file": "core/claude-intercept.js",
       "category": "event-guard",
       "lines": [
-        514,
-        550,
-        1175,
-        1196,
-        1200,
-        1203
+        516,
+        552,
+        1177,
+        1198,
+        1202,
+        1205
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
     },
@@ -265,7 +265,7 @@
       "file": "core/claude-intercept.js",
       "category": "feature-detect",
       "lines": [
-        1652
+        1654
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var blen = -1; try { blen = (typeof xhr.responseText === 'string') ? xhr"
     },
@@ -273,9 +273,9 @@
       "file": "core/claude-intercept.js",
       "category": "guard-clause",
       "lines": [
-        1404,
-        1436,
-        1463
+        1406,
+        1438,
+        1465
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (m.full && internalFetchUrls[m.full]) { return originalFetch.call(thi"
     },
@@ -283,9 +283,9 @@
       "file": "core/claude-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        537,
-        545,
-        549
+        539,
+        547,
+        551
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkConvChange();"
     },
@@ -293,8 +293,8 @@
       "file": "core/claude-intercept.js",
       "category": "noop-guard",
       "lines": [
-        181,
-        275
+        183,
+        277
       ],
       "reason": "noop-guard: единственный no-op — штатный выход из цикла/функции без восстановления; пример: v = data[k];"
     },
@@ -302,7 +302,7 @@
       "file": "core/claude-intercept.js",
       "category": "parse-guard",
       "lines": [
-        311
+        313
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: v = decodeURIComponent(v.replace(/\\+/g, ' '));"
     },
@@ -1158,8 +1158,8 @@
       "file": "core/google-search-intercept.js",
       "category": "cleanup-guard",
       "lines": [
-        825,
-        876
+        827,
+        878
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: var tgReB = /<!--TgQPHd\\|[\\s\\S]*?-->/g; var tgMatchB; while ((tgMatchB ="
     },
@@ -1167,8 +1167,8 @@
       "file": "core/google-search-intercept.js",
       "category": "debug-instrumentation",
       "lines": [
-        23,
-        1625
+        25,
+        1624
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDeb"
     },
@@ -1176,8 +1176,8 @@
       "file": "core/google-search-intercept.js",
       "category": "defensive-assignment",
       "lines": [
-        157,
-        1632
+        159,
+        1631
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: lastFolwrOpenUrl = url;"
     },
@@ -1185,8 +1185,8 @@
       "file": "core/google-search-intercept.js",
       "category": "dom-read-guard",
       "lines": [
-        288,
-        1207
+        290,
+        1209
       ],
       "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: var el = document.querySelector('[data-session-thread-id]'); if (el) { v"
     },
@@ -1194,8 +1194,8 @@
       "file": "core/google-search-intercept.js",
       "category": "event-guard",
       "lines": [
-        542,
-        1325
+        544,
+        1327
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-full-history', { detail: det"
     },
@@ -1203,11 +1203,11 @@
       "file": "core/google-search-intercept.js",
       "category": "guard-clause",
       "lines": [
-        252,
-        387,
-        503,
-        539,
-        723
+        254,
+        389,
+        505,
+        541,
+        725
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (window.GoogleFolwrUtils && window.GoogleFolwrUtils.classifyFolwrCont"
     },
@@ -1215,7 +1215,7 @@
       "file": "core/google-search-intercept.js",
       "category": "parse-guard",
       "lines": [
-        890
+        892
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var u = new URL(rawUrl, location.href); var a = u.searchParams.get('auth"
     },
@@ -1239,7 +1239,7 @@
       "file": "core/page-intercept.js",
       "category": "best-effort-guard",
       "lines": [
-        524
+        523
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var h = captureHeaders(input, init); if (hasAuth(h)) lastHeaders = h;"
     },
@@ -1247,7 +1247,7 @@
       "file": "core/page-intercept.js",
       "category": "debug-instrumentation",
       "lines": [
-        61
+        63
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.addEventListener('ai-cm-debug-logs', function ( ev) { __aiCmSetDe"
     },
@@ -1255,9 +1255,9 @@
       "file": "core/page-intercept.js",
       "category": "event-guard",
       "lines": [
-        116,
-        160,
-        357
+        118,
+        162,
+        359
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
     },
@@ -1265,9 +1265,9 @@
       "file": "core/page-intercept.js",
       "category": "guard-clause",
       "lines": [
-        173,
-        177,
-        280
+        175,
+        179,
+        282
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof input === 'string') return input; if (input && input.url) ret"
     },
@@ -1275,9 +1275,9 @@
       "file": "core/page-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        147,
-        155,
-        159
+        149,
+        157,
+        161
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkConvChange();"
     },
@@ -1285,8 +1285,8 @@
       "file": "core/page-intercept.js",
       "category": "timing-guard",
       "lines": [
-        478,
-        487
+        480,
+        489
       ],
       "reason": "timing-guard: отмена таймера/подписки: обработчик мог быть снят хостом или гонкой; пример: clearTimeout(fallbackTimer);"
     },
@@ -1342,7 +1342,7 @@
       "file": "core/perplexity-intercept.js",
       "category": "debug-instrumentation",
       "lines": [
-        20
+        22
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDeb"
     },
@@ -1350,8 +1350,8 @@
       "file": "core/perplexity-intercept.js",
       "category": "event-guard",
       "lines": [
-        265,
-        280
+        267,
+        282
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
     },
@@ -1359,7 +1359,7 @@
       "file": "core/perplexity-intercept.js",
       "category": "feature-detect",
       "lines": [
-        233
+        235
       ],
       "reason": "feature-detect: capability-probe: валидатор урезанного шаблона из utils/perplexity-parser.js может отсутствовать в MAIN-мире — тогда шаблон оставляем как есть"
     },
@@ -1367,9 +1367,9 @@
       "file": "core/perplexity-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        276,
         278,
-        279
+        280,
+        281
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkConvChange();"
     },
@@ -1377,9 +1377,9 @@
       "file": "core/perplexity-intercept.js",
       "category": "parse-guard",
       "lines": [
-        109,
-        170,
-        492
+        111,
+        172,
+        494
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: raw = decodeURIComponent(raw);"
     },

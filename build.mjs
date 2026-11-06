@@ -58,10 +58,14 @@
  *   2b. the copies handed to Chrome are rewritten (manifest.json + options.html)
  *       so the bundles are loaded instead of the legacy global scripts;
  *   2c. the files that Chrome resolves by path at runtime — the MAIN-world
- *       interceptors registered from core/background.js and _locales/ — are
- *       copied next to the bundles. A single IIFE cannot replace those: the
- *       interceptors must run in the MAIN world at document_start, which only
- *       chrome.scripting.registerContentScripts can express.
+ *       interceptors registered from core/background.js and _locales/ — must
+ *       exist next to the bundles. Most of them are copied verbatim, but the
+ *       four ESM interceptors (page / claude / perplexity / google-search) are
+ *       built as their OWN IIFE bundles into dist/core/<name>.js: a MAIN-world
+ *       script is registered by path and cannot carry `import`/`export`, while
+ *       the interceptor source now imports utils/intercept-common.js.
+ *       chrome.scripting.registerContentScripts still points at the same path,
+ *       so the js[] registration in core/background.js does not change shape.
  * The root manifest.json / options/options.html stay legacy on purpose: they are
  * frozen by the test suite (tests/manifest-smoke.test.js, tests/qwen-provider-wiring.test.js)
  * and are no longer what Chrome loads.
@@ -88,8 +92,11 @@
  * ESM-пилот (Roadmap Ph2) is the one deliberate exception: a source may instead
  * carry a real `import` and let esbuild pull that module into the same bundle
  * (print/print.js → markdown, options|content.js → platform, export-text-builders
- * → buildReferenceText). The imported module is then excluded from its entry's
- * concatenation list, and the bundle still ends up as ONE scope.
+ * → buildReferenceText, а MAIN-перехватчики → intercept-common). The imported
+ * module is then excluded from its entry's concatenation list, and the bundle
+ * still ends up as ONE scope. MAIN-перехватчики не входят в общий content-бандл:
+ * они собираются отдельными IIFE (mainInterceptOptions) в те же пути dist/core/,
+ * потому что их грузит chrome.scripting по пути, а не manifest.
  *
  * Usage:
  *   node build.mjs                # dev build (dist/ + dist-firefox/), sourcemaps on
@@ -162,6 +169,73 @@ const BACKGROUND_PRELUDE = [
   // причине, что и gemini-intercept-logic: importScripts в Firefox event page нет.
   'core/pdf-parser.js',
 ];
+
+// Ph2: MAIN-перехватчики, перешедшие на ESM (intercept-common). Их исходники
+// содержат top-level import, поэтому они не копируются verbatim: каждый
+// собирается отдельным IIFE в тот же путь dist/core/<name>.js, на который
+// продолжает указывать js[] в core/background.js.
+const MAIN_INTERCEPTS = [
+  'core/page-intercept.js',
+  'core/claude-intercept.js',
+  'core/perplexity-intercept.js',
+  'core/google-search-intercept.js',
+];
+
+/**
+ * Ph2: utils/debug.js — классический MAIN-world скрипт (грузится первым в js[]),
+ * поэтому у него нет export. Плагин подменяет его при сборке MAIN-перехватчиков
+ * тонкой ESM-гранью: swallowSoft делегирует в window.__aiCmSwallowSoft, который
+ * debug.js публикует сам (utils/debug.js:307). Так ring-буфер и window-зеркала
+ * debug.js остаются в ОДНОМ экземпляре, а не дублируются в каждом бандле.
+ */
+function debugSoftFacadePlugin() {
+  return {
+    name: 'ai-cm-debug-soft-facade',
+    setup(build) {
+      build.onLoad({ filter: /[\\/]utils[\\/]debug\.js$/ }, () => ({
+        contents: [
+          'export function swallowSoft(error, tag) {',
+          '  try {',
+          "    if (typeof window !== 'undefined' && typeof window.__aiCmSwallowSoft === 'function') {",
+          '      return window.__aiCmSwallowSoft(error, tag);',
+          '    }',
+          '  } catch (e) {',
+          '    // window недоступен — молча выходим, как и зеркало debug.js',
+          '  }',
+          '  return undefined;',
+          '}',
+        ].join('\n'),
+        loader: 'js',
+      }));
+    },
+  };
+}
+
+/** esbuild options для одного MAIN-бандла на перехватчик (IIFE, путь сохраняется). */
+function mainInterceptOptions() {
+  return {
+    absWorkingDir: ROOT,
+    entryPoints: MAIN_INTERCEPTS,
+    // outbase='.' сохраняет core/ в имени: dist/core/<name>.js — тот же путь,
+    // который service worker уже регистрирует через js[].
+    outbase: '.',
+    outdir: DIST,
+    format: 'iife',
+    bundle: true,
+    platform: 'browser',
+    target: 'es2020',
+    sourcemap: false,
+    minify: MINIFY,
+    legalComments: 'none',
+    logLevel: WATCH ? 'info' : 'warning',
+    plugins: [debugSoftFacadePlugin()],
+  };
+}
+
+async function buildMainIntercepts() {
+  await fsp.mkdir(DIST, { recursive: true });
+  await esbuild.build(mainInterceptOptions());
+}
 
 /** background entry — build-time prelude + manifest.background.service_worker */
 function backgroundEntry(manifest) {
@@ -587,7 +661,11 @@ async function copyAssets() {
     if (!fs.existsSync(abs(r))) fail(`asset tree "${r}" is missing`);
     copied.push(...(await copyTree(r, path.join(DIST, r))));
   }
+  const mainBundleSources = new Set(MAIN_INTERCEPTS);
   for (const r of runtimeRegisteredFiles()) {
+    // Ph2: эти четыре файла собираются esbuild'ом в dist/core/<name>.js,
+    // копировать исходник поверх бандла нельзя.
+    if (mainBundleSources.has(r)) continue;
     const from = abs(r);
     if (!fs.existsSync(from)) {
       fail(`"${r}" is registered at runtime by ${BACKGROUND_SRC} but does not exist`);
@@ -1007,6 +1085,10 @@ function watchFiles(entries) {
   for (const list of Object.values(entries)) for (const r of list) files.add(abs(r));
   // runtime-registered files are copied verbatim, so a change must rebuild too
   for (const r of runtimeRegisteredFiles()) files.add(abs(r));
+  // Ph2: MAIN-перехватчики собираются отдельно, а intercept-common втягивается
+  // в каждый из них — оба набора обязаны триггерить watcher.
+  for (const r of MAIN_INTERCEPTS) files.add(abs(r));
+  files.add(abs('utils/intercept-common.js'));
   // Whole trees copied verbatim (icons/, _locales/, docs/screenshots/): watch the
   // directory itself, so a newly added or renamed file inside one rebuilds too.
   for (const r of ASSET_DIRS) files.add(abs(r));
@@ -1033,6 +1115,12 @@ function postBuildPlugin() {
 
 async function finishBuild(entries) {
   await fsp.mkdir(DIST, { recursive: true });
+  // Ph2: MAIN-перехватчики собираются до copyAssets; свои dist/core/<name>.js
+  // они пишут сами, а copyAssets эти четыре пути пропускает.
+  await buildMainIntercepts();
+  // Ph2: intercept-common.js вшит в MAIN-бандлы и больше не копируется. Копия
+  // от предыдущей сборки иначе осталась бы в dist/ и упала бы в verifyDist.
+  await fsp.rm(path.join(DIST, 'utils', 'intercept-common.js'), { force: true });
   const outputs = Object.keys(entries).map((name) => ({
     name,
     outfile: path.join(DIST, `${name}.js`),
@@ -1103,7 +1191,7 @@ async function main() {
   await fsp.mkdir(BUILD_DIR, { recursive: true });
   console.log('[build] entries derived from SSOTs:');
   for (const [name, list] of Object.entries(entries)) console.log(`  ${name} <- ${list.length} file(s)`);
-  console.log(`  runtime-registered <- ${runtimeRegisteredFiles().length} file(s) (copied verbatim)`);
+  console.log(`  runtime-registered <- ${runtimeRegisteredFiles().length} file(s) (copied verbatim; MAIN intercepts bundled)`);
   console.log(`[build] generated entry files: ${rel(BUILD_DIR)}/entry-<name>.js`);
 
   if (WATCH) {

@@ -123,7 +123,7 @@ describe('O-35/O-53/R2: core/background.js — регистрация перех
       expect(background).toContain("ids.indexOf('" + id + "') === -1");
     });
     // набор js[] каждого из шести не изменился
-    expect(background).toContain("js: ['utils/debug.js', 'utils/chatgpt-conversation-parser.js', 'utils/intercept-common.js', 'core/page-intercept.js']");
+    expect(background).toContain("js: ['utils/debug.js', 'utils/chatgpt-conversation-parser.js', 'core/page-intercept.js']");
     // Gemini: набор пинован как есть; на шаге «диагностика» (Phase 3 step 1) в него ДОБАВЛЕН модуль
     // core/gemini-diag.js, на шаге «rpc» (Phase 3 step 5) — core/gemini-rpc.js (оба перед ядром,
     // вместе с id -v2 → -v3), на шаге «парсеры» (Phase 3 step 6) — core/gemini-parse.js
@@ -191,9 +191,9 @@ describe('O-35/O-53/R2: core/background.js — регистрация перех
     // turnsMap и вердикт полноты не обновляются, то есть база (и бейдж, и экспорт) остаётся
     // пустой либо live-обрезанной.
     expect(background).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-ingest.js', 'core/deepseek-files.js', 'core/deepseek-sse.js', 'core/deepseek-intercept.js']");
-    expect(background).toContain("js: ['utils/debug.js', 'utils/intercept-common.js', 'core/claude-intercept.js']");
-    expect(background).toContain("js: ['utils/debug.js', 'utils/perplexity-parser.js', 'utils/intercept-common.js', 'core/perplexity-intercept.js']");
-    expect(background).toContain("js: ['utils/debug.js', 'utils/google-search-folwr-parser.js', 'utils/intercept-common.js', 'core/google-search-intercept.js']");
+    expect(background).toContain("js: ['utils/debug.js', 'core/claude-intercept.js']");
+    expect(background).toContain("js: ['utils/debug.js', 'utils/perplexity-parser.js', 'core/perplexity-intercept.js']");
+    expect(background).toContain("js: ['utils/debug.js', 'utils/google-search-folwr-parser.js', 'core/google-search-intercept.js']");
   });
 });
 

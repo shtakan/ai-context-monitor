@@ -35,7 +35,8 @@ const ROOT = path.join(__dirname, '..', '..');
 const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');
 const DEBUG_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'debug.js'), 'utf8');
 const PARSER_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'google-search-folwr-parser.js'), 'utf8');
-const COMMON_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'intercept-common.js'), 'utf8');
+// Ph2: перехватчик — ESM; мост втягивает intercept-common в тот же classic-исходник.
+const MAIN_SRC = require('../helpers/main-intercept.js').interceptSource('core/google-search-intercept.js');
 // Живой артефакт базы GSA (4 сообщения / 2 хода, threadId SYNTHETIC-THREAD-1).
 const FIXTURE = fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'google-folwr-open.html'), 'utf8');
 
@@ -80,10 +81,10 @@ function installStand(opts) {
   jest.spyOn(console, 'log').mockImplementation(function (m) { logs.push(String(m)); });
   jest.spyOn(console, 'warn').mockImplementation(function () { });
 
-  // Порядок core/background.js:155: debug.js → парсер → intercept-common → перехватчик.
+  // Порядок core/background.js:155: debug.js → парсер → (intercept-common вшит в
+  // MAIN_SRC мостом) → перехватчик.
   loadGlobal(DEBUG_SRC);
   loadGlobal(PARSER_SRC);
-  loadGlobal(COMMON_SRC);
 
   const events = [];
   window.addEventListener('ai-cm-full-history', function (ev) { events.push(ev.detail); });
@@ -96,7 +97,7 @@ function installStand(opts) {
     return Promise.resolve(makeResponse(spec));
   };
 
-  loadGlobal(INTERCEPT_SRC);
+  loadGlobal(MAIN_SRC);
   return {
     logs: logs,
     events: events,

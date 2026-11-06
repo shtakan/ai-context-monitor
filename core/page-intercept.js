@@ -53,6 +53,8 @@
 //   чужих прерванных запросов, не меняя поведения страницы; (2) устранение висячего
 //   Promise.reject(err) в onRejected пассивной ловли снимка (замена на пустую функцию).
 
+// ESM (Roadmap Ph2): setIntervalVisible втягивается сборкой в MAIN-бандл перехватчика.
+import { setIntervalVisible } from '../utils/intercept-common.js';
 (function () {
   if (window.__aiCmInterceptInstalled) return;
   window.__aiCmInterceptInstalled = true;
@@ -495,11 +497,8 @@
   }
 
   // таймер-страховка: если был обмен, а снимок давно не приходил — сходим сами
-  // v1.13.1 (R2): guard-поллинг через aiCmCommon.setIntervalVisible — skip при
-  // скрытой вкладке; фолбэк на plain setInterval, если window.aiCmCommon недоступен.
-  var aiCmPoll = (typeof window !== 'undefined' && window.aiCmCommon && window.aiCmCommon.setIntervalVisible)
-    ? function (f, m) { return window.aiCmCommon.setIntervalVisible(f, m); }
-    : setInterval;
+  // ESM (Roadmap Ph2): импорт setIntervalVisible статический; фолбэк не нужен.
+  var aiCmPoll = setIntervalVisible;
   aiCmPoll(function () {
     if (activeDisabled || !dirty || refreshBusy) return;
     activeRefresh('таймер-страховка');

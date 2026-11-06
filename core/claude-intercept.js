@@ -10,6 +10,8 @@
 //   При отправке: сайт делает GET истории (уже с сообщением пользователя) ДО completion.
 //   Ответ ассистента приходит только через completion.
 
+// ESM (Roadmap Ph2): setIntervalVisible втягивается сборкой в MAIN-бандл перехватчика.
+import { setIntervalVisible } from '../utils/intercept-common.js';
 (function () {
   if (window.__aiCmClaudeInterceptInstalled) return;
   window.__aiCmClaudeInterceptInstalled = true;
@@ -1660,11 +1662,8 @@
   })();
 
   // ---- страховка: если стрим прочитан, но stop не поймался ----
-  // v1.13.1 (R2): guard-поллинг через aiCmCommon.setIntervalVisible — skip при
-  // скрытой вкладке; фолбэк на plain setInterval, если window.aiCmCommon недоступен.
-  var aiCmPoll = (typeof window !== 'undefined' && window.aiCmCommon && window.aiCmCommon.setIntervalVisible)
-    ? function (f, m) { return window.aiCmCommon.setIntervalVisible(f, m); }
-    : setInterval;
+  // ESM (Roadmap Ph2): импорт setIntervalVisible статический; фолбэк не нужен.
+  var aiCmPoll = setIntervalVisible;
   aiCmPoll(function () {
     if (dirty && !refreshBusy) {
       // v36: интервал вне promise-цепочки — бросок был бы uncaught

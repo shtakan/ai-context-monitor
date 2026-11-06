@@ -238,7 +238,7 @@ async function ensureInterceptor() {
       await registerSafe('ai-cm-page-intercept', {
         id: 'ai-cm-page-intercept',
         matches: ['https://chatgpt.com/*'],
-        js: ['utils/debug.js', 'utils/chatgpt-conversation-parser.js', 'utils/intercept-common.js', 'core/page-intercept.js'],
+        js: ['utils/debug.js', 'utils/chatgpt-conversation-parser.js', 'core/page-intercept.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false
@@ -385,7 +385,7 @@ async function ensureInterceptor() {
       await registerSafe('ai-cm-claude-intercept', {
         id: 'ai-cm-claude-intercept',
         matches: ['https://claude.ai/*'],
-        js: ['utils/debug.js', 'utils/intercept-common.js', 'core/claude-intercept.js'],
+        js: ['utils/debug.js', 'core/claude-intercept.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false
@@ -398,7 +398,7 @@ async function ensureInterceptor() {
       await registerSafe('ai-cm-perplexity-intercept', {
         id: 'ai-cm-perplexity-intercept',
         matches: ['https://www.perplexity.ai/*', 'https://perplexity.ai/*'],
-        js: ['utils/debug.js', 'utils/perplexity-parser.js', 'utils/intercept-common.js', 'core/perplexity-intercept.js'],
+        js: ['utils/debug.js', 'utils/perplexity-parser.js', 'core/perplexity-intercept.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false
@@ -411,7 +411,7 @@ async function ensureInterceptor() {
       await registerSafe('ai-cm-google-search-intercept', {
         id: 'ai-cm-google-search-intercept',
         matches: ['https://www.google.com/*'],
-        js: ['utils/debug.js', 'utils/google-search-folwr-parser.js', 'utils/intercept-common.js', 'core/google-search-intercept.js'],
+        js: ['utils/debug.js', 'utils/google-search-folwr-parser.js', 'core/google-search-intercept.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false

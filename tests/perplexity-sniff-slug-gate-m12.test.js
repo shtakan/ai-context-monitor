@@ -25,6 +25,7 @@ const { TextDecoder } = require('util');
 if (typeof global.TextDecoder === 'undefined') global.TextDecoder = TextDecoder;
 
 const SRC = fs.readFileSync(path.join(__dirname, '..', 'core', 'perplexity-intercept.js'), 'utf8');
+const { interceptSource } = require('./helpers/main-intercept.js');
 
 const OWN = '5fe65fcb';        // slug страницы
 const FOREIGN = 'e2ffa178';    // чужой тред из лога дефекта
@@ -112,7 +113,8 @@ function installIntercept(pathname, handler, xhr) {
   window.addEventListener('ai-cm-full-history', onHist);
   delete window.__aiCmPerplexityInterceptInstalled;
 
-  eval(SRC);
+  // Ph2: перехватчик — ESM; мост втягивает intercept-common в classic-исходник.
+  eval(interceptSource('core/perplexity-intercept.js'));
   return {
     fetchMock: fetchMock,
     events: events,

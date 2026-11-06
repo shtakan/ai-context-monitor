@@ -220,6 +220,9 @@ export default [
   //    Ph2, шаг 3: utils/platform.js переведён на export, его потребители —
   //    core/background.js, core/content.js, options/options.js — на статический
   //    import, поэтому все четыре файла здесь.
+  //    Ph2, шаг 4: utils/intercept-common.js переведён на export, а четыре
+  //    MAIN-перехватчика импортируют setIntervalVisible статически; их сборка —
+  //    отдельные IIFE-бандлы (build.mjs, mainInterceptOptions).
   // ---------------------------------------------------------------------------
   {
     files: [
@@ -227,9 +230,14 @@ export default [
       'utils/buildReferenceText.js',
       'utils/export-text-builders.js',
       'utils/platform.js',
+      'utils/intercept-common.js',
       'print/print.js',
       'core/background.js',
       'core/content.js',
+      'core/page-intercept.js',
+      'core/claude-intercept.js',
+      'core/perplexity-intercept.js',
+      'core/google-search-intercept.js',
       'options/options.js',
     ],
     languageOptions: {

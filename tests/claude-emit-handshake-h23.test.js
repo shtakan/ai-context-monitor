@@ -24,6 +24,7 @@ const ROOT = path.join(__dirname, '..');
 const INTERCEPT = path.join(ROOT, 'core', 'claude-intercept.js');
 const CONTENT_SRC = require('./helpers/content-source.js').contentSource;
 const INTERCEPT_SRC = fs.readFileSync(INTERCEPT, 'utf8');
+const { interceptSource } = require('./helpers/main-intercept.js');
 
 const CONV = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'claude-conversation.json'), 'utf8'));
 const CONV_ID = CONV.uuid;
@@ -75,7 +76,8 @@ beforeAll(() => {
   global.debugLog = jest.fn();
   global.__aiCmSetDebugLogs = jest.fn();
   global.__aiCmDebugLogs = false;
-  require(INTERCEPT);
+  // Ph2: перехватчик — ESM; мост разворачивает import intercept-common в classic-код.
+  (0, eval)(interceptSource('core/claude-intercept.js'));
 });
 
 describe('H23 (a) гонка: снимок ушёл ДО регистрации слушателя', () => {

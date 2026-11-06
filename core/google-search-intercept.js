@@ -15,6 +15,8 @@
 //     сбрасывает накопитель, ответ чужого треда не дописывается в активную базу
 //     (см. activateThread/absorbForeignSnapshot).
 
+// ESM (Roadmap Ph2): setIntervalVisible втягивается сборкой в MAIN-бандл перехватчика.
+import { setIntervalVisible } from '../utils/intercept-common.js';
 (function () {
   if (window.__aiCmGoogleSearchInterceptInstalled) return;
   window.__aiCmGoogleSearchInterceptInstalled = true;
@@ -1540,11 +1542,8 @@
   // ---- инициализация/опрос threadId ----
   currentThreadId = readDomThreadId();
   baseThreadId = currentThreadId; // v1.27 (O-31): база с самого старта привязана к разговору страницы
-  // v1.13.1 (R2): guard-поллинг через aiCmCommon.setIntervalVisible — skip при
-  // скрытой вкладке; фолбэк на plain setInterval, если window.aiCmCommon недоступен.
-  var aiCmPoll = (typeof window !== 'undefined' && window.aiCmCommon && window.aiCmCommon.setIntervalVisible)
-    ? function (f, m) { return window.aiCmCommon.setIntervalVisible(f, m); }
-    : setInterval;
+  // ESM (Roadmap Ph2): импорт setIntervalVisible статический; фолбэк не нужен.
+  var aiCmPoll = setIntervalVisible;
   aiCmPoll(function () {
     checkThreadSwitch();
   }, 1000);

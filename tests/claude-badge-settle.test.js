@@ -21,6 +21,7 @@ const zlib = require('zlib');
 const ROOT = path.join(__dirname, '..');
 const INTERCEPT = path.join(ROOT, 'core', 'claude-intercept.js');
 const INTERCEPT_SRC = fs.readFileSync(INTERCEPT, 'utf8');
+const { interceptSource } = require('./helpers/main-intercept.js');
 
 const CONV_ID = '3f2a1c5e-0000-4000-8000-000000000001';
 const CHAT_URL = '/chat/' + CONV_ID;
@@ -208,7 +209,8 @@ beforeAll(async () => {
   snapshotFor[CONV_ID] = snap(4, 'assistant', SEED_TAIL_UUID);
   snapshotFor[OTHER_CONV_ID] = snap(4, 'assistant', OTHER_TAIL_UUID, OTHER_CONV_ID);
   installDecompressionGlobals(); // v65: сжатая ветка тела POST достижима в jsdom
-  require(INTERCEPT);
+  // Ph2: перехватчик — ESM; мост разворачивает import intercept-common в classic-код.
+  (0, eval)(interceptSource('core/claude-intercept.js'));
   jest.advanceTimersByTime(1600); // bootstrap-снимок (1500мс)
   await flush();
 });

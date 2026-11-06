@@ -648,7 +648,7 @@ describe('O-34 R3: пины проводки и границ', () => {
     expect(js[js.length - 1]).toBe('core/content.js');     // порядок контент-скриптов прежний
     // парсер и перехватчик едут ОДНИМ пакетом: новое решение доступно checkConvChange
     expect(BG_SRC).toContain("js: ['utils/debug.js', 'utils/chatgpt-conversation-parser.js', " +
-      "'utils/intercept-common.js', 'core/page-intercept.js']");
+      "'core/page-intercept.js']");
     expect(BG_SRC).toContain("world: 'MAIN'");
   });
 });
