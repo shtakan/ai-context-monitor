@@ -27,7 +27,7 @@ const background = read('core/background.js');
 const content = read('core/content.js');
 const modelConfigRaw = read('utils/model-config.js');
 const ModelConfig = require('../utils/model-config.js');
-const Builders = require('../utils/export-text-builders.js');
+const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
 
 // Рез по балансу фигурных скобок (конвенция сьюта): тело функции до парной скобки.
 function fnDecl(src, name) {

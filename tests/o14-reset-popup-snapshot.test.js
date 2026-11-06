@@ -266,8 +266,8 @@ beforeEach(() => {
   jest.resetModules();
   document.body.innerHTML = '';
   setupDom();
-  window.buildReferenceText = require('../utils/buildReferenceText.js');
-  window.AiCmExportBuilders = require('../utils/export-text-builders.js');
+  window.buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.js');
+  window.AiCmExportBuilders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
 });
 
 afterEach(() => {

@@ -219,7 +219,12 @@ export default [
   //    Список точечный: по мере расширения пилота сюда добавляются файлы.
   // ---------------------------------------------------------------------------
   {
-    files: ['utils/markdown.js', 'print/print.js'],
+    files: [
+      'utils/markdown.js',
+      'utils/buildReferenceText.js',
+      'utils/export-text-builders.js',
+      'print/print.js',
+    ],
     languageOptions: {
       sourceType: 'module',
     },

@@ -126,10 +126,10 @@ function loadOptions() {
 function openOptionsExportGate(opts) {
   document.body.innerHTML = '';
   if (!window.AiCmExportBuilders) {
-    window.AiCmExportBuilders = require('../../utils/export-text-builders.js');
+    window.AiCmExportBuilders = require('./load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
   }
   if (!window.buildReferenceText) {
-    window.buildReferenceText = require('../../utils/buildReferenceText.js');
+    window.buildReferenceText = require('./load-esm.js').loadEsm('utils/buildReferenceText.js');
   }
   setupDom();
   setupChrome(opts);

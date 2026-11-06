@@ -206,8 +206,8 @@ describe('options.js: BYOK-UI по движку (Chrome 148+ больше не �
   beforeEach(() => {
     document.body.innerHTML = '';
     setupOptionsDom();
-    window.buildReferenceText = require('../utils/buildReferenceText.js');
-    window.AiCmExportBuilders = require('../utils/export-text-builders.js');
+    window.buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.js');
+    window.AiCmExportBuilders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
   });
 
   afterEach(() => {

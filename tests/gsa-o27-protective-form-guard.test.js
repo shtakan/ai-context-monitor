@@ -448,7 +448,7 @@ beforeEach(() => {
 
 afterEach(() => { jest.restoreAllMocks(); });
 
-function loadBuilders() { return require('../utils/export-text-builders.js'); }
+function loadBuilders() { return require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders'); }
 function diagLines() { return logs.filter(function (l) { return l.indexOf('[AI CM][diag]') === 0; }); }
 function blobText(blob) {
   return new Promise(function (resolve) {

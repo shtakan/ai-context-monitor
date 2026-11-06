@@ -106,8 +106,8 @@ describe('H20: jsdom — ввод в поле лимита → дебаунс 50
     jest.resetModules();
     document.body.innerHTML = '';
     setupDom();
-    window.AiCmExportBuilders = require('../utils/export-text-builders.js');
-    window.buildReferenceText = require('../utils/buildReferenceText.js');
+    window.AiCmExportBuilders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+    window.buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.js');
   });
 
   afterEach(() => {

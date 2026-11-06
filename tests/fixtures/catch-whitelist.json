@@ -7,7 +7,7 @@
     "adapters"
   ],
   "definition": "Молчаливый catch = тело после вырезания комментариев содержит только пробелы, ИЛИ ровно один no-op (void 0; / return; / continue; / break;). Комментарий-только тело тоже молчаливое (комментарии маскируются в пробелы).",
-  "totalEntries": 479,
+  "totalEntries": 478,
   "groups": [
     {
       "file": "adapters/claude-adapter.js",
@@ -1652,7 +1652,7 @@
       "file": "utils/export-text-builders.js",
       "category": "debug-instrumentation",
       "lines": [
-        510
+        507
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof window !== 'undefined' && window && window.__aiCmDebugLogs =="
     },
@@ -1660,8 +1660,8 @@
       "file": "utils/export-text-builders.js",
       "category": "defensive-assignment",
       "lines": [
-        564,
-        642
+        561,
+        639
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: url = String((typeof location !== 'undefined' && location && location.hr"
     },
@@ -1669,18 +1669,17 @@
       "file": "utils/export-text-builders.js",
       "category": "guard-clause",
       "lines": [
-        293,
-        559,
-        637
+        556,
+        634
       ],
-      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: return require('./buildReferenceText.js')(list);"
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: } catch (eGlobal) { }"
     },
     {
       "file": "utils/export-text-builders.js",
       "category": "host-api-guard",
       "lines": [
-        35,
-        507
+        38,
+        504
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: if (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.g"
     },
@@ -1688,8 +1687,8 @@
       "file": "utils/export-text-builders.js",
       "category": "local-helper-guard",
       "lines": [
-        677,
-        683
+        674,
+        680
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: diagDownloadBlocked(trigger || 'builder-download', content, fileName, bl"
     },
@@ -1697,9 +1696,9 @@
       "file": "utils/export-text-builders.js",
       "category": "logging-guard",
       "lines": [
-        278,
-        575,
-        653
+        281,
+        572,
+        650
       ],
       "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: var kept = Array.isArray(list) ? list.length : -1; var total = (typeof t"
     },

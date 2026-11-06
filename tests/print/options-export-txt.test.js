@@ -6,7 +6,7 @@
  * в downloadBlob (mock URL.createObjectURL).
  */
 
-const buildReferenceText = require('../../utils/buildReferenceText.js');
+const buildReferenceText = require('../helpers/load-esm.js').loadEsm('utils/buildReferenceText.js');
 
 function setupDom() {
   const ids = [
@@ -72,7 +72,7 @@ function loadOptions() {
 beforeEach(() => {
   document.body.innerHTML = '';
   window.buildReferenceText = buildReferenceText;
-  window.AiCmExportBuilders = require('../../utils/export-text-builders.js');
+  window.AiCmExportBuilders = require('../helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
   global.URL.createObjectURL = jest.fn(function () { return 'blob:mock'; });
   global.URL.revokeObjectURL = jest.fn();
 });

@@ -34,9 +34,9 @@ const fs = require('fs');
 const path = require('path');
 const { JSDOM, VirtualConsole } = require('jsdom');
 
-const Builders = require('../../utils/export-text-builders.js');
+const Builders = require('../helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
 const P = require('../../utils/export-emit-pipeline.js');
-const buildReferenceText = require('../../utils/buildReferenceText.js');
+const buildReferenceText = require('../helpers/load-esm.js').loadEsm('utils/buildReferenceText.js');
 
 const ROOT = path.join(__dirname, '..', '..');
 // Step D.1: ядро декомпозировано — диагностика уехала в core/deepseek-diag.js, поэтому

@@ -10,7 +10,7 @@
  * Плюс покрытие валидатора/чтения utils/gemini-intercept-logic.js (та же цепочка).
  */
 
-const buildReferenceText = require('../utils/buildReferenceText.js');
+const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.js');
 
 function setupDom() {
   const ids = [
@@ -110,7 +110,7 @@ beforeEach(() => {
   document.body.innerHTML = '';
   setupDom();
   window.buildReferenceText = buildReferenceText;
-  window.AiCmExportBuilders = require('../utils/export-text-builders.js');
+  window.AiCmExportBuilders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
   warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 });
 

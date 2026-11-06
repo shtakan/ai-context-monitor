@@ -183,7 +183,12 @@ function contentEntry(manifest) {
   if (!Array.isArray(js) || js.length === 0) {
     fail('manifest.json: content_scripts[0].js is missing or empty');
   }
-  return js;
+  // ESM-пилот (Roadmap Ph2): utils/buildReferenceText.js больше не отдельный
+  // content script — его втягивает esbuild по import из utils/export-text-builders.js.
+  // Фильтр держит SSOT устойчивым, даже если строку случайно вернут в манифест.
+  return js.filter(function (rel) {
+    return rel !== 'utils/buildReferenceText.js';
+  });
 }
 
 /** Entry derived from the <script src> order of a legacy HTML page (order-sensitive). */
@@ -210,7 +215,12 @@ function htmlScriptEntry(htmlPath) {
 
 /** options entry — <script src> order in options/options.html */
 function optionsEntry() {
-  return htmlScriptEntry('options/options.html');
+  // ESM-пилот (Roadmap Ph2): utils/buildReferenceText.js втягивается import'ом
+  // из utils/export-text-builders.js, поэтому тег <script> из options.html убран.
+  // Фильтр — страховка SSOT: тег не должен вернуться в разметку.
+  return htmlScriptEntry('options/options.html').filter(function (rel) {
+    return rel !== 'utils/buildReferenceText.js';
+  });
 }
 
 /**
@@ -446,6 +456,27 @@ function entryPath(name) {
   return path.join(BUILD_DIR, `entry-${name}.js`);
 }
 
+/**
+ * A file concatenated into ".build/entry-<name>.js" keeps the relative imports it
+ * was written with for its own folder, while the generated entry sits one level
+ * above the source tree. Rebase every static import specifier from the source
+ * directory to the entry directory — exactly the path esbuild resolves from
+ * ".build/entry-*.js".
+ * ESM-пилот (Roadmap Ph2): print/print.js's '../utils/markdown.js' is already
+ * entry-relative and stays as is; utils/export-text-builders.js's
+ * './buildReferenceText.js' becomes '../utils/buildReferenceText.js'.
+ */
+function rebaseImportSpecifiers(src, sourceRel) {
+  const dir = path.posix.dirname(String(sourceRel).replace(/\\/g, '/'));
+  return src.replace(
+    /^([ \t]*(?:import|export)\b[^\n]*?\bfrom\s*['"])(\.\.?\/[^'"]+)(['"])/gm,
+    function (line, head, spec, tail) {
+      const target = path.posix.normalize(path.posix.join(dir, spec));
+      return head + '../' + target + tail;
+    }
+  );
+}
+
 function renderEntry(entryRelPaths) {
   const parts = [];
   let bytes = 0;
@@ -455,6 +486,7 @@ function renderEntry(entryRelPaths) {
       fail(`entry "${r}" is referenced by the SSOT but does not exist: ${file}`);
     }
     let src = fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '');
+    src = rebaseImportSpecifiers(src, r);
     if (!src.endsWith('\n')) src += '\n';
     parts.push(`/* ==== ${r} ==== */\n${src}`);
     bytes += Buffer.byteLength(src);

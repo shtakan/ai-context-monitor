@@ -139,13 +139,49 @@ function dropLocalRequires(src) {
   return src.replace(/require\((['"])(\.[^'"]*)\1\)/g, 'void 0');
 }
 
+/**
+ * ESM-импорты в склеиваемом Function-body (ESM-миграция Roadmap Ph2).
+ *
+ * После перевода utils/export-text-builders.js на `import { buildReferenceText }`
+ * его исходник не парсится как классический скрипт: `import` внутри Function-body —
+ * SyntaxError. А файл реально въезжает в песочницу: adapters/qwen-adapter.js:429
+ * делает `require('../utils/export-text-builders.js')`, а collectFiles() вклеивает
+ * исходник зависимости целиком. Поэтому named-import переписываем в CJS-эквивалент:
+ * привязки берём из namespace-объекта модуля через tests/helpers/load-esm.js
+ * (он разворачивает ESM без babel). Спецификатор резолвится от каталога самого
+ * файла — ровно как это делает esbuild в build.mjs.
+ */
+const LOAD_ESM_HELPER = path.join(__dirname, 'load-esm.js');
+
+function inlineEsmImports(src, fileAbs) {
+  return src.replace(
+    /^[ \t]*import\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"];?[ \t]*$/gm,
+    function (line, names, spec) {
+      const binds = names
+        .split(',')
+        .map(function (s) { return s.trim(); })
+        .filter(Boolean)
+        .map(function (s) {
+          const parts = s.split(/\s+as\s+/);
+          const imported = parts[0].trim();
+          const local = (parts[1] || parts[0]).trim();
+          return imported + ': ' + local;
+        })
+        .join(', ');
+      const dep = relKey(path.resolve(path.dirname(fileAbs), spec));
+      return 'var { ' + binds + ' } = require(' + JSON.stringify(LOAD_ESM_HELPER) +
+        ').loadEsmModule(' + JSON.stringify(dep) + ');';
+    }
+  );
+}
+
 function collectFiles(file, seen, all) {
   const abs = path.isAbsolute(file) ? file : path.join(REPO_ROOT, file);
   const key = relKey(abs);
   if (seen.has(key)) return '';
   seen.add(key);
   if (all) all.push(key);
-  const src = stripCjsTail(fs.readFileSync(abs, 'utf8'));
+  const src = inlineEsmImports(stripCjsTail(fs.readFileSync(abs, 'utf8')), abs);
   const dir = path.dirname(abs);
   const deps = [];
   const re = /require\((['"])([^'"]+)\1\)/g;

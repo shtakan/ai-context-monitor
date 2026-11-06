@@ -139,6 +139,14 @@ describe('build-integrity: generated entry files', () => {
       expect(/^\s*export\b/m.test(text)).toBe(false);
       return;
     }
+    // Ph2, шаг 2: utils/export-text-builders.js импортирует buildReferenceText
+    // статическим import'ом; спецификатор перебазирован из utils/ в .build/
+    // (см. rebaseImportSpecifiers в build.mjs) — осознанное исключение.
+    if (name === 'options' || name === 'content') {
+      expect(text).toContain("import { buildReferenceText } from '../utils/buildReferenceText.js';");
+      expect(/^[ \t]*export\b/m.test(text)).toBe(false);
+      return;
+    }
     expect(/^\s*import\b/m.test(text)).toBe(false);
     expect(/^\s*export\b/m.test(text)).toBe(false);
   });

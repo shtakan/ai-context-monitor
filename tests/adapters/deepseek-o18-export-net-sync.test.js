@@ -29,7 +29,7 @@ const path = require('path');
 const { JSDOM, VirtualConsole } = require('jsdom');
 
 const P = require('../../utils/export-emit-pipeline.js');
-const Builders = require('../../utils/export-text-builders.js');
+const Builders = require('../helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
 const CONTENT = require('../helpers/content-source.js').contentSource;
 
 const ROOT = path.join(__dirname, '..', '..');

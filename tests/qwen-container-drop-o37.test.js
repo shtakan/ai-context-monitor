@@ -27,7 +27,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const Builders = require('../utils/export-text-builders.js');
+const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
 const Tokenizer = require('../utils/tokenizer.js');
 
 const ROOT = path.join(__dirname, '..');

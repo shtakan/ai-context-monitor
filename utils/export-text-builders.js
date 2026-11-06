@@ -2,10 +2,13 @@
  * Общие сборщики экспорта истории чата (v1.8).
  * Используются и ручными кнопками попапа (options/options.js),
  * и автоэкспортом по порогу (core/content.js).
- * Паттерн как у buildReferenceText.js: работает в браузере
- * (window.AiCmExportBuilders) и в Node (module.exports).
+ * ESM-модуль: статический import buildReferenceText из ./buildReferenceText.js;
+ * публичное API по-прежнему отдаётся как window.AiCmExportBuilders (браузерный
+ * бандл) и module.exports (Node/jest).
  * Поведение функций НЕ менялось — перенесено из options/options.js.
  */
+import { buildReferenceText } from './buildReferenceText.js';
+
 (function () {
   'use strict';
 
@@ -278,21 +281,15 @@
     } catch (eLogRoles) { }
     return true;
   }
-  // Рендер «эталона» (окно или Node-модуль). null — рендерер недоступен (отладочный
-  // контекст): вызывающий отдаёт прежний пустой результат.
+  // Рендер «эталона» — ровно один путь: статический import buildReferenceText.
+  // window.buildReferenceText и require-фолбэк удалены вместе с UMD-хвостом модуля.
   /**
    * Рендер текста истории.
    * @param {Array} list сообщения истории
-   * @returns {string|null} текст или null
+   * @returns {string} текст
    */
   function renderReferenceText(list) {
-    if (typeof window !== 'undefined' && typeof window.buildReferenceText === 'function') {
-      return window.buildReferenceText(list);
-    }
-    if (typeof require === 'function') {
-      try { return require('./buildReferenceText.js')(list); } catch (e) { /* fallthrough */ }
-    }
-    return null;
+    return buildReferenceText(list);
   }
   /** O-36 (D2/D2.1): тот же «эталон», но с маркером роли перед КАЖДЫМ сообщением;
    *  null — рендерер недоступен. Контракт D2.1: маркер — отдельной строкой, между

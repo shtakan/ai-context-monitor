@@ -335,8 +335,8 @@ describe('T1: options.js — импорт архива и индикатор и�
     document.body.innerHTML = '';
     setupDom();
     window.AiCmArchiveImport = require('../../utils/archive-import.js');
-    window.AiCmExportBuilders = require('../../utils/export-text-builders.js');
-    window.buildReferenceText = require('../../utils/buildReferenceText.js');
+    window.AiCmExportBuilders = require('../helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+    window.buildReferenceText = require('../helpers/load-esm.js').loadEsm('utils/buildReferenceText.js');
     mock = createChromeMock({});
     global.chrome = mock.chrome;
     mod = require('../../options/options.js');

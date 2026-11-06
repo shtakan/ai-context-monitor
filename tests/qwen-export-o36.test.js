@@ -27,8 +27,8 @@ const fs = require('fs');
 const path = require('path');
 
 const P = require('../utils/export-emit-pipeline.js');
-const Builders = require('../utils/export-text-builders.js');
-const buildReferenceText = require('../utils/buildReferenceText.js');
+const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.js');
 const H = require('./helpers/content-source.js');
 
 const ROOT = path.join(__dirname, '..');
@@ -137,7 +137,7 @@ describe('O-36 D2: txt qwen — маркеры USER:/ASSISTANT: перед ка�
     expect(Builders.buildTxtFromHistory(null)).toBe('');
   });
 
-  test('рендерер: window недоступен → тот же текст через Node-модуль; полная деградация → пустой файл', function () {
+  test('рендерер: единственный путь — статический import (деградации null больше нет)', function () {
     const saved = window.buildReferenceText;
     delete window.buildReferenceText;
     try {
@@ -147,9 +147,10 @@ describe('O-36 D2: txt qwen — маркеры USER:/ASSISTANT: перед ка�
     } finally {
       window.buildReferenceText = saved;
     }
-    // нет ни окна, ни Node-модуля → прежний пустой результат (нормализация null → '')
+        // Ph2: window.buildReferenceText удалён из контракта — путь рендера ровно один,
+    // поэтому нормализация null → '' ниже фиксирует только контракт buildTxtFromHistory.
     const src = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.js'), 'utf8');
-    expect(fnDecl(src, 'renderReferenceText')).toContain('return null;');
+    expect(fnDecl(src, 'renderReferenceText')).toContain('return buildReferenceText(list);');
     expect(fnDecl(src, 'buildTxtFromHistory')).toContain("return (out === null) ? '' : out;");
   });
 

@@ -36,7 +36,7 @@ const fs = require('fs');
 const path = require('path');
 
 const P = require('../utils/export-emit-pipeline.js');
-const Builders = require('../utils/export-text-builders.js');
+const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
 const { contentSource: CONTENT } = require('./helpers/content-source.js');
 
 const ROOT = path.join(__dirname, '..');

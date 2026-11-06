@@ -6,7 +6,7 @@
  * ссылки, обратные кавычки.
  */
 
-const buildReferenceText = require('../../utils/buildReferenceText.js');
+const buildReferenceText = require('../helpers/load-esm.js').loadEsm('utils/buildReferenceText.js');
 
 describe('buildReferenceText — порядок и содержимое', () => {
   test('сообщения идут строго по порядку исходного массива', () => {

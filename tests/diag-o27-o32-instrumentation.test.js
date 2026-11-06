@@ -86,7 +86,7 @@ describe('O-27/O-32: downloadBlob — гейт aiCmDebug, поля строки 
 
   afterEach(() => { jest.restoreAllMocks(); });
 
-  function loadBuilders() { return require('../utils/export-text-builders.js'); }
+  function loadBuilders() { return require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders'); }
   function diagLines() { return logs.filter(function (l) { return l.indexOf(DIAG_PREFIX) === 0; }); }
   function blobText(blob) {
     return new Promise(function (resolve) {
