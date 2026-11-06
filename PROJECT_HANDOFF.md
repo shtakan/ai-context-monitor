@@ -1200,3 +1200,54 @@ v90–v114 (исходные строки 783–2 440, 1 658 строк) — т�
 ### Секция 7. Плейсхолдер.
 **Коммит A:** `a0b8009` — тело аппендикса v120; SHA проставлен коммитом B (двухшаговый паттерн).
 **SHA4:** `5f02897` (для коммита C).
+
+## Аппендикс v121 (2026-11-06): ESM-миграция (Фаза 2 Roadmap)
+
+**Дата:** 2026-11-06 (Asia/Yekaterinburg).
+**Коммиты:** `<SHA v121>` (коммит A), а также `0ca3434` (markdown), `3b3d0b8` (eslint fix), `c61231a` (buildReferenceText), `f3f9b57` (tsc fix).
+**Статус:** Фаза 2 переведена в активную стадию. Два модуля переведены на ESM, сборка и CI адаптированы. Сьют 216/3841/7/0.
+
+### Секция 1. Что сделано.
+1. **Пилот ESM (коммит `0ca3434`).** `utils/markdown.js` переведён на ESM (`export`); `print/print.js` и `print/print.html` адаптированы под модульный бандл; добавлен ESM-хелпер загрузки `tests/helpers/load-esm.js`.
+2. **Фикс CI #353 (коммит `3b3d0b8`).** `eslint.config.mjs` получил `sourceType: 'module'` для ESM-файлов (`utils/markdown.js`, `print/print.js`); прежний `sourceType: 'script'` для остальных `utils/**/*.js` и `print/**/*.js` сохранён.
+3. **Миграция `utils/buildReferenceText.js` (коммит `c61231a`).** UMD-скрипты удалены из `manifest.json` и `options/options.html`; `build.mjs` обновлён под ESM-импорт; добавлен ESM-хелпер загрузки в тестах, тестовые файлы переведены на него.
+4. **Фикс CI #355 (коммит `f3f9b57`).** `types/globals.d.ts` дополнен `declare const module` для Node-ветки тестов; в `adapters/qwen-adapter.js` — JSDoc-каст, снимающий tsc-ошибку.
+5. **Пин корпуса аппендиксов** в `tests/docs-hygiene.test.js` обновлён 106 → 107 (добавлен v121; комментарий приведён к диапазону v115–v121).
+
+### Секция 2. Свидетели/факты.
+
+| # | Свидетель | Факт | Источник |
+|---|---|---|---|
+| 1 | `git show --stat HEAD` (коммит A) | 2 файла: `PROJECT_HANDOFF.md`, `tests/docs-hygiene.test.js` | git |
+| 2 | `git show --stat` по `0ca3434` / `3b3d0b8` / `c61231a` / `f3f9b57` | пилот markdown (11 файлов); eslint sourceType (1 файл); buildReferenceText (54 файла); tsc-фикс (2 файла) | git |
+| 3 | `grep -c '## Аппендикс v121' PROJECT_HANDOFF.md` | 1 | отчёт DSH |
+| 4 | пин корпуса | `107`; заголовков активного файла = 7 | отчёт DSH |
+| 5 | плейсхолдеры SHA после коммита B | v121 = 0; SHA4 = 1 | отчёт DSH |
+| 6 | `npx jest tests/docs-hygiene.test.js` | 28/28 | отчёт DSH |
+| 7 | `npm test -- --runInBand` | 216/3841/7/0, exit 0 | отчёт DSH |
+| 8 | `node build.mjs` | exit 0, 70 asset-файлов в `dist/` | отчёт DSH |
+| 9 | `npx tsc --noEmit` | exit 0 | отчёт DSH |
+| 10 | `npx eslint .` | exit 0 (0 errors, 543 warnings) | отчёт DSH |
+| 11 | счётчики handoff | `**Тесты:**` = 1, `**Версия:**` = 1 | отчёт DSH |
+| 12 | кодировка | UTF-8 без BOM, CR=0 | отчёт DSH |
+
+### Секция 3. Отклонения от промпта.
+1. Пин `docs-hygiene` обновлён 106 → 107 (добавляется v121) — единственная правка тестов; код, CHANGELOG и аппендиксы выше v120 не трогались.
+2. Остальное — по плану; отклонений по существу нет.
+
+### Секция 4. Новые residual.
+- **R1 (Low) — `utils/export-text-builders.js` сохраняет Node-ветку (`module.exports`), что требует поддержки `declare const module` в TS.** Контракт: `utils/export-text-builders.js:736` — `if (typeof module !== 'undefined' && module.exports) module.exports = Api;`; JSDoc-описание ветки — в шапке файла (`utils/export-text-builders.js:7`). Условие переоткрытия: полный уход от Node-ветки (ESM-only), после чего `declare const module` в `types/globals.d.ts:35` можно удалить.
+
+### Секция 5. Переопределение residual-точек и Roadmap (тексты аппендиксов выше не редактируются).
+- **Roadmap Ф2** (активный handoff, строка 808: «1.3. Вывод инвентаризации Фазы 2: полный ESM отложен») → ПЕРЕОПРЕДЕЛЕНА: пилот закрыт (`utils/markdown.js`), миграция пошла (`utils/buildReferenceText.js`); полный ESM больше не отложен, а выполняется по модулям. Строка 808 не редактируется — новое состояние фиксируется здесь.
+- **Остальные residual — без изменений:** этой правкой не переоткрываются и не переопределяются.
+
+### Секция 6. Сводка.
+1. Сьют 216/3841/7/0, exit 0; docs-hygiene 28/28.
+2. Версия 2.0.40 (не менялась); продукт этим аппендиксом не менялся.
+3. HEAD `f3f9b57`; origin/main = `f3f9b57`, ahead 0 (до коммита A).
+4. Верхний блок handoff, bridge и аппендиксы v1–v120 не переписывались — вставка только в конец файла; синк верхнего блока — коммитом C после push A+B.
+
+### Секция 7. Плейсхолдер.
+**Коммит A:** `<SHA v121>` — тело аппендикса v121; SHA проставляется коммитом B (двухшаговый паттерн).
+**SHA4:** `<SHA4>` (для коммита C).
