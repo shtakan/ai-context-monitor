@@ -64,6 +64,12 @@ const ENCODED_DOCS = [
   { rel: 'docs/HANDOFF_ARCHIVE.md', buf: archiveBuf, text: archive }
 ];
 
+// v118 R1: гейт размера архива. Потолок, а не цель: 8000 строк и 1 МБ оставляют
+// запас над текущими ~5,5 тыс. строк / ~0,85 МБ, но не дают файлу расти
+// бесконечно — при превышении тест напомнит про tools/split-handoff.js.
+const MAX_ARCHIVE_LINES = 8000;
+const MAX_ARCHIVE_BYTES = 1048576;   // 1 МБ
+
 // O-53 (вариант б1): две независимые сущности счётчиков handoff —
 //   «текущий прогон» (обновляется синхронно с фактом) и
 //   «исторический максимум» (рекорд зелёных прогонов, не падает при удалении тестов).
@@ -320,6 +326,20 @@ describe('O-53: PROJECT_HANDOFF.md — гигиена кодировки и ст
     // 104 = 100 в архиве (75 эшелон 1 + 25 эшелон 2) + 4 в активном (v115–v118);
     // постановка называла 103 — это счёт ДО вставки тела v118 (см. аппендикс v118 §3).
     expect((corpus.match(/^## Аппендикс v\d+/gm) || []).length).toBe(105);
+  });
+
+  test('размер: docs/HANDOFF_ARCHIVE.md ≤ 8000 строк и ≤ 1 МБ (v118 R1)', () => {
+    const lines = archive.split(/\r?\n/).length;
+    const bytes = Buffer.byteLength(archive, 'utf8');
+    // Jest не принимает сообщение вторым аргументом expect («Expect takes at most
+    // one argument»), поэтому подсказка вынесена в отдельную проверку — она
+    // попадает в вывод только при реальном превышении лимита.
+    if (lines > MAX_ARCHIVE_LINES || bytes > MAX_ARCHIVE_BYTES) {
+      throw new Error('HANDOFF_ARCHIVE.md превысил лимит; запустите tools/split-handoff.js'
+        + ' (сейчас: ' + lines + ' строк / ' + bytes + ' B)');
+    }
+    expect(lines).toBeLessThanOrEqual(MAX_ARCHIVE_LINES);
+    expect(bytes).toBeLessThanOrEqual(MAX_ARCHIVE_BYTES);
   });
 
   test('семантика: «текущий прогон» и «исторический максимум» — независимые сущности (O-53)', () => {
