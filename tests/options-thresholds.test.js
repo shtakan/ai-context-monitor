@@ -90,7 +90,7 @@ function createChromeMock(initialLocal) {
 }
 
 function loadOptions() {
-  require('../options/options.js');
+  require('./helpers/load-options.js').loadOptions();
 }
 
 function inputValue(id) {

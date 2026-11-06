@@ -200,7 +200,7 @@
     "reason": "legacy-pin"
   },
   "tests/background-counttokens.test.js": {
-    "count": 2,
+    "count": 1,
     "reason": "vm-harness"
   },
   "tests/badge-suppress-adapter-base-v54.test.js": {
@@ -216,7 +216,7 @@
     "reason": "vm-harness"
   },
   "tests/byok-session.test.js": {
-    "count": 6,
+    "count": 5,
     "reason": "vm-harness"
   },
   "tests/chatgpt-o1-badge-hold.test.js": {

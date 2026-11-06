@@ -118,7 +118,7 @@ describe('H20: jsdom — ввод в поле лимита → дебаунс 50
   function mount(initialSync) {
     const m = createChromeMock(initialSync);
     global.chrome = m.chrome;
-    require('../options/options.js');
+    require('./helpers/load-options.js').loadOptions();
     return { m: m, el: document.getElementById('custom-limit') };
   }
 

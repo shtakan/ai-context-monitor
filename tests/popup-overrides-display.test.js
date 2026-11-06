@@ -397,7 +397,7 @@ describe('H19: options — поле «Лимит контекста» = % от �
     test('ввод 50 → sync.set({customLimit: 50}) (после дебаунса H20)', () => {
       const m = createChromeMock({});
       global.chrome = m.chrome;
-      require('../options/options.js');
+      require('./helpers/load-options.js').loadOptions();
       const el = document.getElementById('custom-limit');
       el.value = '50';
       el.dispatchEvent(new window.Event('input', { bubbles: true }));
@@ -410,7 +410,7 @@ describe('H19: options — поле «Лимит контекста» = % от �
     test('сохранённое значение загружается в поле; выбор модели → sync.set({selectedModel})', () => {
       const m = createChromeMock({ selectedModel: 'gemini-1.5-pro', customLimit: 50 });
       global.chrome = m.chrome;
-      require('../options/options.js');
+      require('./helpers/load-options.js').loadOptions();
       expect(String(document.getElementById('custom-limit').value)).toBe('50');
       const sel = document.getElementById('model-select');
       expect(sel.value).toBe('gemini-1.5-pro');
@@ -423,7 +423,7 @@ describe('H19: options — поле «Лимит контекста» = % от �
     test('кнопка «Авто» очищает поле → sync.set({customLimit: null})', () => {
       const m = createChromeMock({ customLimit: 50 });
       global.chrome = m.chrome;
-      require('../options/options.js');
+      require('./helpers/load-options.js').loadOptions();
       const btn = document.getElementById('reset-limit');
       btn.dispatchEvent(new window.Event('click', { bubbles: true }));
       const last = m.syncSets[m.syncSets.length - 1];

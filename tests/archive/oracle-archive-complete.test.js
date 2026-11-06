@@ -339,7 +339,7 @@ describe('T1: options.js — импорт архива и индикатор и�
     window.buildReferenceText = require('../helpers/load-esm.js').loadEsm('utils/buildReferenceText.js');
     mock = createChromeMock({});
     global.chrome = mock.chrome;
-    mod = require('../../options/options.js');
+    mod = require('../helpers/load-options.js').loadOptions();
   });
 
   afterEach(() => {
@@ -408,7 +408,7 @@ describe('T1: options.js — импорт архива и индикатор и�
   });
 
   test('попап показывает ярлык источника из aiCmState хоста', () => {
-    require('../../options/options.js');
+    require('../helpers/load-options.js').loadOptions();
     // состояние активной вкладки Gemini с архивным источником
     mock.store['aiCmState:gemini.google.com'] = {
       host: 'gemini.google.com',
@@ -470,7 +470,7 @@ describe('LOW-1: потолок MAX_ARCHIVE_SIZE при импорте архи�
     document.body.innerHTML = '';
     window.AiCmArchiveImport = require('../../utils/archive-import.js');
     global.chrome = chromeMockLow1();
-    modLow1 = require('../../options/options.js');
+    modLow1 = require('../helpers/load-options.js').loadOptions();
   });
 
   afterEach(() => {

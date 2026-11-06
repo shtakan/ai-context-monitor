@@ -166,7 +166,7 @@ describe('M-13 (а)/(б): options.js — полный объект настро�
   test('(а) сохранение порога из попапа сохраняет enabled=true (сценарий дефекта 17:12)', () => {
     const m = createChromeMock({ aiCmAutoExport: true, aiCmAutoExportPct: 20, aiCmAutoExportFmt: 'md' });
     global.chrome = m.chrome;
-    require('../options/options.js');
+    require('./helpers/load-options.js').loadOptions();
 
     // форма инициализирована из storage: галка видна включённой, как было в дефекте
     expect(document.getElementById('aiCmAutoExport').checked).toBe(true);
@@ -188,7 +188,7 @@ describe('M-13 (а)/(б): options.js — полный объект настро�
   test('(а) смена формата и снятие галки тоже пишут полный объект — ни одно поле не теряется', () => {
     const m = createChromeMock({ aiCmAutoExport: true, aiCmAutoExportPct: 20, aiCmAutoExportFmt: 'txt' });
     global.chrome = m.chrome;
-    require('../options/options.js');
+    require('./helpers/load-options.js').loadOptions();
 
     const fmtEl = document.getElementById('aiCmAutoExportFmt');
     fmtEl.value = 'json';
@@ -204,7 +204,7 @@ describe('M-13 (а)/(б): options.js — полный объект настро�
   test('(а) частичной записи нет: КАЖДАЯ запись настроек содержит все три ключа', () => {
     const m = createChromeMock({ aiCmAutoExport: true, aiCmAutoExportPct: 20, aiCmAutoExportFmt: 'txt' });
     global.chrome = m.chrome;
-    require('../options/options.js');
+    require('./helpers/load-options.js').loadOptions();
 
     const pctEl = document.getElementById('aiCmAutoExportPct');
     pctEl.value = '55';
@@ -225,7 +225,7 @@ describe('M-13 (а)/(б): options.js — полный объект настро�
   test('(б) полный валидный storage → форма = storage, лишней записи при открытии нет', () => {
     const m = createChromeMock({ aiCmAutoExport: true, aiCmAutoExportPct: 42, aiCmAutoExportFmt: 'json' });
     global.chrome = m.chrome;
-    require('../options/options.js');
+    require('./helpers/load-options.js').loadOptions();
 
     expect(document.getElementById('aiCmAutoExport').checked).toBe(true);
     expect(String(document.getElementById('aiCmAutoExportPct').value)).toBe('42');
@@ -236,7 +236,7 @@ describe('M-13 (а)/(б): options.js — полный объект настро�
   test('(б) storage без ключей → форма нормализована И storage дозаписан полным объектом', () => {
     const m = createChromeMock({});
     global.chrome = m.chrome;
-    require('../options/options.js');
+    require('./helpers/load-options.js').loadOptions();
 
     expect(document.getElementById('aiCmAutoExport').checked).toBe(false);
     expect(String(document.getElementById('aiCmAutoExportPct').value)).toBe('90');
@@ -251,7 +251,7 @@ describe('M-13 (а)/(б): options.js — полный объект настро�
   test('(б) битый storage (pct=999, fmt=zzz, enabled=строка) → нормализация в форме и в storage', () => {
     const m = createChromeMock({ aiCmAutoExport: 'нет', aiCmAutoExportPct: 999, aiCmAutoExportFmt: 'zzz' });
     global.chrome = m.chrome;
-    require('../options/options.js');
+    require('./helpers/load-options.js').loadOptions();
 
     expect(document.getElementById('aiCmAutoExport').checked).toBe(false); // строка ≠ true
     expect(String(document.getElementById('aiCmAutoExportPct').value)).toBe('100');

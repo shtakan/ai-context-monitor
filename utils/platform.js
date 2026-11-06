@@ -10,9 +10,11 @@
  * `moz-extension://`, у Chrome — `chrome-extension://`. Берём её у runtime.getURL('')
  * (в WebExtensions API это `api.runtime.getURL`; запасная ветка api.getURL — для моков).
  *
- * ГДЕ ЖИВЁТ. Классический скрипт без import/export: function-декларация попадает в общую
- * область видимости (options.html, content_scripts, BACKGROUND_PRELUDE сборки), поэтому
- * потребители зовут её по имени. module.exports — только для jest-тестов в Node.
+ * ГДЕ ЖИВЁТ. ESM-модуль (Roadmap Ph2): экспортирует aiCmIsFirefox() статически, потребители
+ * (core/background.js, core/content.js, options/options.js) импортируют её. Сборка
+ * (build.mjs) втягивает модуль в общий бандл через esbuild, поэтому в рантайме расширения
+ * он по-прежнему исполняется в одной области видимости с потребителями, а не отдельным
+ * <script>/content_script. tests/helpers/load-esm.js повторяет этот шаг для jest (CJS).
  * ============================================================================================ */
 
 /**
@@ -20,7 +22,7 @@
  * Не бросает: при недоступном runtime/getURL возвращает false.
  * @returns {boolean} true — расширение запущено в Gecko (Firefox).
  */
-function aiCmIsFirefox() {
+export function aiCmIsFirefox() {
   try {
     var api = (typeof browser !== 'undefined' && browser && browser.runtime) ? browser
       : (typeof chrome !== 'undefined' && chrome && chrome.runtime) ? chrome : null;
@@ -35,8 +37,4 @@ function aiCmIsFirefox() {
   } catch (e) {
     return false;
   }
-}
-
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { aiCmIsFirefox: aiCmIsFirefox };
 }

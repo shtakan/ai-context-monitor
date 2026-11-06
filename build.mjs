@@ -77,13 +77,19 @@
  *
  * The entry file holds the *concatenation* of its sources, not an
  * `import './x.js'` chain, and that is deliberate: these sources are classic
- * scripts that reference each other by bare identifier inside one shared scope
- * (see the header of utils/platform.js). An import chain gives every file its
- * own module scope, so any file carrying the `module.exports` UMD shim for jest
- * becomes a CommonJS closure and its declarations vanish from that shared scope.
- * The build stays green while the extension breaks at runtime (no top-level
- * aiCmIsFirefox(), Tokenizer, core/state.js globals…), so concatenation — one
- * shared scope — is what this build must keep.
+ * scripts that reference each other by bare identifier inside one shared scope.
+ * An import chain gives every file its own module scope, so a source carrying a
+ * `module.exports` UMD shim for jest would become a CommonJS closure and its
+ * declarations would vanish from that shared scope. The build stays green while
+ * the extension breaks at runtime (no top-level aiCmIsFirefox(), Tokenizer,
+ * core/state.js globals…), so concatenation — one shared scope — is what this
+ * build must keep.
+ *
+ * ESM-пилот (Roadmap Ph2) is the one deliberate exception: a source may instead
+ * carry a real `import` and let esbuild pull that module into the same bundle
+ * (print/print.js → markdown, options|content.js → platform, export-text-builders
+ * → buildReferenceText). The imported module is then excluded from its entry's
+ * concatenation list, and the bundle still ends up as ONE scope.
  *
  * Usage:
  *   node build.mjs                # dev build (dist/ + dist-firefox/), sourcemaps on
@@ -148,10 +154,9 @@ function readJSON(relPath) {
 // и пороги проактивных предупреждений молча падали на дефолт. Файл — самодостаточный
 // IIFE без top-level объявлений: он публикует self.GeminiInterceptLogic, потребитель
 // в background.js не меняется, коллизий имён нет по построению.
-// utils/platform.js — тот же приём: объявляет aiCmIsFirefox() в общей области,
-// им пользуются background.js (гейт BYOK) и options.js (скрытие BYOK-UI).
+// utils/platform.js здесь больше нет: Ph2, шаг 3 перевёл его на ESM, и background.js
+// втягивает модуль статическим import'ом (esbuild кладёт его в тот же бандл SW).
 const BACKGROUND_PRELUDE = [
-  'utils/platform.js',
   'utils/gemini-intercept-logic.js',
   // v2.0.37 (PDF): SW-брокер pdf.js вшивается в бандл статически — по той же
   // причине, что и gemini-intercept-logic: importScripts в Firefox event page нет.
@@ -185,9 +190,11 @@ function contentEntry(manifest) {
   }
   // ESM-пилот (Roadmap Ph2): utils/buildReferenceText.js больше не отдельный
   // content script — его втягивает esbuild по import из utils/export-text-builders.js.
-  // Фильтр держит SSOT устойчивым, даже если строку случайно вернут в манифест.
+  // utils/platform.js теперь импортирует core/content.js (шаг 3), поэтому в списке
+  // конкатенации ему тоже не место. Фильтр держит SSOT устойчивым, даже если строку
+  // случайно вернут в манифест.
   return js.filter(function (rel) {
-    return rel !== 'utils/buildReferenceText.js';
+    return rel !== 'utils/buildReferenceText.js' && rel !== 'utils/platform.js';
   });
 }
 
@@ -217,9 +224,10 @@ function htmlScriptEntry(htmlPath) {
 function optionsEntry() {
   // ESM-пилот (Roadmap Ph2): utils/buildReferenceText.js втягивается import'ом
   // из utils/export-text-builders.js, поэтому тег <script> из options.html убран.
-  // Фильтр — страховка SSOT: тег не должен вернуться в разметку.
+  // utils/platform.js втягивается import'ом из options/options.js (шаг 3) — его тег
+  // тоже удалён. Фильтр — страховка SSOT: теги не должны вернуться в разметку.
   return htmlScriptEntry('options/options.html').filter(function (rel) {
-    return rel !== 'utils/buildReferenceText.js';
+    return rel !== 'utils/buildReferenceText.js' && rel !== 'utils/platform.js';
   });
 }
 

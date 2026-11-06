@@ -99,7 +99,7 @@ function createChromeMock(initialLocal, activeTabUrl) {
 }
 
 function loadOptions() {
-  require('../options/options.js');
+  require('./helpers/load-options.js').loadOptions();
 }
 
 
@@ -118,7 +118,7 @@ afterEach(() => {
 
 describe('options.js — isChatHome(hostname, pathname) (H8)', () => {
   function loadApi() {
-    return require('../options/options.js');
+    return require('./helpers/load-options.js').loadOptions();
   }
 
   test('chatgpt: "/" (home) → false; "/c/…" (диалог) → true', () => {

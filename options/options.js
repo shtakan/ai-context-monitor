@@ -1,3 +1,7 @@
+// ESM (Roadmap Ph2): сборка втягивает utils/platform.js в тот же options-бандл, поэтому
+// aiCmIsFirefox() остаётся в общей области видимости страницы (отдельный <script> убран).
+import { aiCmIsFirefox } from '../utils/platform.js';
+
 console.log('AI Context Monitor: Настройки загружены');
 
 const siteEl = document.getElementById('stat-site');

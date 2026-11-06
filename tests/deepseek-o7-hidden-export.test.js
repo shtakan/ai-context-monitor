@@ -1333,7 +1333,7 @@ describe('O-7 R4: i18n и a11y тумблера «Включать reasoning и 
       }
     };
     jest.resetModules();
-    require('../options/options.js');
+    require('./helpers/load-options.js').loadOptions();
     expect(document.getElementById(SETTING_KEY).checked).toBe(false);
     document.getElementById(SETTING_KEY).checked = true;
     document.getElementById(SETTING_KEY).dispatchEvent(new window.Event('change', { bubbles: true }));

@@ -19,9 +19,11 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.js'), 'utf8');
-// Сборка кладёт utils/platform.js в общую область SW (BACKGROUND_PRELUDE); в vm-песочнице
-// подкладываем исходник вручную — getURL мока отдаёт chrome-extension://, как в Chrome.
-const PLATFORM_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'platform.js'), 'utf8');
+// Ph2, шаг 3: background.js начинается со статического import'а utils/platform.js,
+// поэтому в vm-песочницу подаём не сырой исходник, а loadAsClassic(): тот разворачивает
+// import в IIFE зависимости — ровно тот граф, который esbuild кладёт в бандл SW.
+// getURL мока отдаёт chrome-extension://, как в Chrome.
+const BG_CLASSIC = require('./helpers/load-esm.js').loadAsClassic('core/background.js');
 const OPTIONS_HTML = fs.readFileSync(path.join(ROOT, 'options', 'options.html'), 'utf8');
 const PRIVACY_HTML = fs.readFileSync(path.join(ROOT, 'privacy', 'privacy.html'), 'utf8');
 
@@ -154,7 +156,7 @@ function mountOptions(local, session) {
   const m = createOptionsChromeMock(local, session);
   global.chrome = m.chrome;
   jest.resetModules();
-  require('../options/options.js');
+  require('./helpers/load-options.js').loadOptions();
   return m;
 }
 
@@ -327,7 +329,7 @@ function loadBackground(opts) {
   sandbox.globalThis = sandbox;
   sandbox.navigator = { userAgent: 'jest-sw' };
   vm.createContext(sandbox);
-  vm.runInContext(PLATFORM_SRC + '\n' + BG_SRC, sandbox, { filename: 'core/background.js' });
+  vm.runInContext(BG_CLASSIC, sandbox, { filename: 'core/background.js' });
 
   return {
     sandbox,

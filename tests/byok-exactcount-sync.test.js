@@ -135,7 +135,7 @@ function mountOptions(local, session) {
   const m = createChromeMock(local, session);
   global.chrome = m.chrome;
   jest.resetModules();
-  require('../options/options.js');
+  require('./helpers/load-options.js').loadOptions();
   return m;
 }
 

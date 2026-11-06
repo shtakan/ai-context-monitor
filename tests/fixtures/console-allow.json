@@ -22,8 +22,8 @@
       "file": "core/background.js",
       "category": "logger-definition",
       "lines": [
-        13,
-        14
+        16,
+        17
       ],
       "reason": "SW-дубль debugLog: computed-доступ (console[level] || console.log).apply; в MV3 non-module SW importScripts utils/debug.js невозможен, поэтому это вторая легальная точка владения console.* в дереве."
     },
@@ -31,7 +31,7 @@
       "file": "core/background.js",
       "category": "a-class-critical",
       "lines": [
-        133
+        136
       ],
       "reason": "v2.0.37 fix B: PDF self-check failure must stay visible in the SW console (no diag ring on this path). One shared warn site covers register / executeScript / not-ready reasons."
     },
@@ -39,7 +39,7 @@
       "file": "core/background.js",
       "category": "a-class-critical",
       "lines": [
-        471
+        474
       ],
       "reason": "A-class: registerContentScripts failure is critical; not migrated"
     },

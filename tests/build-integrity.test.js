@@ -73,7 +73,7 @@ const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'u
  * the SSOTs plus the background prelude declared in build.mjs (duplicating that
  * one list here is what makes a silent prelude reshuffle fail).
  */
-const BACKGROUND_PRELUDE = ['utils/platform.js', 'utils/gemini-intercept-logic.js', 'core/pdf-parser.js'];
+const BACKGROUND_PRELUDE = ['utils/gemini-intercept-logic.js', 'core/pdf-parser.js'];
 
 const EXPECTED = {
   background: [...BACKGROUND_PRELUDE, manifest.background.service_worker],
@@ -127,9 +127,9 @@ describe('build-integrity: generated entry files', () => {
   });
 
   // Stage 0 regression guard: concatenation, not an `import './x.js'` chain.
-  // A chain gives every source its own module scope, so `module.exports` UMD
-  // shims (utils/platform.js and friends) become CommonJS closures and their
-  // declarations vanish from the shared scope the classic scripts rely on.
+  // A chain gives every source its own module scope, so a source carrying a
+  // `module.exports` UMD shim would become a CommonJS closure and its
+  // declarations would vanish from the shared scope the classic scripts rely on.
   it.each(Object.keys(EXPECTED))('%s: entry is a concatenation, not an import chain', (name) => {
     const text = fs.readFileSync(entryFile(name), 'utf8');
     // ESM-пилот (Roadmap Ph2): print/print.js — первый ESM-модуль, его статический
@@ -142,8 +142,16 @@ describe('build-integrity: generated entry files', () => {
     // Ph2, шаг 2: utils/export-text-builders.js импортирует buildReferenceText
     // статическим import'ом; спецификатор перебазирован из utils/ в .build/
     // (см. rebaseImportSpecifiers в build.mjs) — осознанное исключение.
-    if (name === 'options' || name === 'content') {
-      expect(text).toContain("import { buildReferenceText } from '../utils/buildReferenceText.js';");
+    // Ph2, шаг 3: background.js импортирует platform статически, content.js и
+    // options.js — тоже (плюс buildReferenceText через export-text-builders).
+    // Спецификаторы перебазированы из core|options/ в .build/ (rebaseImportSpecifiers),
+    // export-обёрток в конкатенации по-прежнему нет.
+    if (name === 'options' || name === 'content' || name === 'background') {
+      expect(text).toContain("import { aiCmIsFirefox } from '../utils/platform.js';");
+      expect(text).not.toContain('module.exports = { aiCmIsFirefox');
+      if (name !== 'background') {
+        expect(text).toContain("import { buildReferenceText } from '../utils/buildReferenceText.js';");
+      }
       expect(/^[ \t]*export\b/m.test(text)).toBe(false);
       return;
     }

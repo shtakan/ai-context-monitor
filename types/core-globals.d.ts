@@ -16,9 +16,44 @@
  * ПРАВИЛО НЕДУБЛИРОВАНИЯ: имена, объявленные В САМОМ файле-владельце (self-declared,
  * например aiCmAdapterBaseCount/aiCmAdapterBaseSeen в content.js или countTokensPending
  * в state.js/background.js), здесь НЕ декларируются — TS видит их объявления напрямую.
+ * ИСКЛЮЧЕНИЕ — core/content.js после ESM-пилота (Ph2, шаг 3): файл начинается со
+ * статического import'а, поэтому TS считает его модулем и его top-level объявления
+ * больше не попадают в общий скоуп; для соседей они объявлены в секции ниже.
  * Только кросс-файловые чтения. Интерсепторы (gemini/deepseek/claude/google-search/
  * perplexity/qwen-intercept.js) НЕ типизируются — Фаза 3.
  */
+
+// --- core/content.js: ESM-пилот (Roadmap Ph2, шаг 3) ---------------------------
+// core/content.js импортирует utils/platform.js, поэтому TypeScript компилирует его как
+// модуль: top-level function/var перестают быть глобалами общего скоупа, и
+// core/widget.js, core/base-handler.js, core/export-manager.js получают TS2304.
+// Рантайм не меняется: build.mjs втягивает платформу в тот же бандл esbuild, и в
+// content.js всё по-прежнему живёт в одной области видимости (это же пиннит
+// tests/build-integrity.test.js). Объявления ниже — шов для соседей по бандлу.
+
+/** Валиден ли контекст расширения (chrome.runtime.id); false в осиротевшем документе. */
+declare function isExtensionValid(): boolean;
+
+/** Google Search AI: документ действительно является чат-страницей (threadId/чат-контейнер). */
+declare function aiCmGsaChatPageMarker(): boolean;
+
+/** Число сообщений разговора convId в архиве (0, если записи нет). */
+declare function aiCmArchiveCountFor(convId: string): number;
+
+/** Отправлен ли в SW маркер готовности контента для текущего документа. */
+declare var aiCmContentReadySent: boolean;
+
+/** Таймер отложенного EMIT после сетевого события (null — таймера нет). */
+declare var aiCmRequestEmitTimer: any;
+
+/** Сброс признака полноты сети AI Studio (вызов из resetConversationState). */
+declare function aiCmNetReadyAistudioReset(): boolean;
+
+/** Сброс кэша предыдущего разговора AI Studio при смене чата. */
+declare function aiCmAistudioHistoryCacheClear(): boolean;
+
+/** core/state.js: защита от повторного COUNT_TOKENS, пока предыдущий в полёте. */
+declare let countTokensPending: any;
 
 // --- Service Worker (MV3) ----------------------------------------------------
 

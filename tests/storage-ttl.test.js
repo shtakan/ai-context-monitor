@@ -16,6 +16,9 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.js'), 'utf8');
+// Ph2, шаг 3: background.js импортирует utils/platform.js, поэтому для vm берём
+// loadAsClassic() — import развёрнут в IIFE зависимости, как в собранном SW.
+const BG_CLASSIC = require('./helpers/load-esm.js').loadAsClassic('core/background.js');
 const CONTENT_SRC = require('./helpers/content-source.js').contentSource;
 
 const DAY_MS = 86400000;
@@ -137,7 +140,7 @@ function loadBackground(storage) {
   sandbox.globalThis = sandbox;
   sandbox.navigator = { userAgent: 'jest-sw' };
   vm.createContext(sandbox);
-  vm.runInContext(BG_SRC, sandbox, { filename: 'core/background.js' });
+  vm.runInContext(BG_CLASSIC, sandbox, { filename: 'core/background.js' });
   return {
     sandbox,
     listeners,

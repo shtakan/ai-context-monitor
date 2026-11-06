@@ -7,9 +7,10 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.js'), 'utf8');
-// SW в сборке получает utils/platform.js из BACKGROUND_PRELUDE — в песочнице повторяем
-// это вручную. Схема getURL ниже — chrome-extension://, т.е. движок определяется как Chrome.
-const PLATFORM_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'platform.js'), 'utf8');
+// Ph2, шаг 3: background.js импортирует utils/platform.js статически, поэтому в песочницу
+// подаём loadAsClassic(): import развёрнут в IIFE зависимости, как в собранном SW.
+// Схема getURL ниже — chrome-extension://, т.е. движок определяется как Chrome.
+const BG_CLASSIC = require('./helpers/load-esm.js').loadAsClassic('core/background.js');
 
 const CACHE_MAX = 200;
 
@@ -83,7 +84,7 @@ function loadBackground(opts) {
   sandbox.globalThis = sandbox;
   sandbox.navigator = { userAgent: 'jest-sw' };
   vm.createContext(sandbox);
-  vm.runInContext(PLATFORM_SRC + '\n' + BG_SRC, sandbox, { filename: 'core/background.js' });
+  vm.runInContext(BG_CLASSIC, sandbox, { filename: 'core/background.js' });
 
   return {
     sandbox,

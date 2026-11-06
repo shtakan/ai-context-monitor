@@ -508,7 +508,7 @@ describe('M-4: options.js — статус ключа через chrome.i18n.get
   function mountOptions(locale, sessionStore) {
     global.chrome = chromeStub(locale, sessionStore);
     jest.resetModules();
-    require('../options/options.js');
+    require('./helpers/load-options.js').loadOptions();
   }
 
   function flush() {
@@ -1054,7 +1054,7 @@ describe('M-4.3: options.js — метка источника не выдаёт 
   function mount(locale, store) {
     global.chrome = chromeStub(locale, store);
     jest.resetModules();
-    require('../options/options.js');
+    require('./helpers/load-options.js').loadOptions();
     document.dispatchEvent(new Event('DOMContentLoaded'));
   }
 

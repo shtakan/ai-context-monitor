@@ -217,13 +217,20 @@ export default [
   //    browser/webextensions-глобали из секции 2 продолжают действовать
   //    (languageOptions.globals мержатся, только sourceType заменяется).
   //    Список точечный: по мере расширения пилота сюда добавляются файлы.
+  //    Ph2, шаг 3: utils/platform.js переведён на export, его потребители —
+  //    core/background.js, core/content.js, options/options.js — на статический
+  //    import, поэтому все четыре файла здесь.
   // ---------------------------------------------------------------------------
   {
     files: [
       'utils/markdown.js',
       'utils/buildReferenceText.js',
       'utils/export-text-builders.js',
+      'utils/platform.js',
       'print/print.js',
+      'core/background.js',
+      'core/content.js',
+      'options/options.js',
     ],
     languageOptions: {
       sourceType: 'module',

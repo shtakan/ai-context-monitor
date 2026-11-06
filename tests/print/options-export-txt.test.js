@@ -64,9 +64,9 @@ function setupChrome(history) {
 }
 
 function loadOptions() {
-  const resolved = require.resolve('../../options/options.js');
-  delete require.cache[resolved];
-  require(resolved);
+  // Ph2, шаг 3: options.js начинается со статического import, поэтому require невозможен —
+  // load-options.js разворачивает import и исполняет скрипт заново на каждом вызове.
+  require('../helpers/load-options.js').loadOptions();
 }
 
 beforeEach(() => {

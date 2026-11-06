@@ -33,6 +33,10 @@ const ROOT = path.join(__dirname, '..', '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const BG_SRC = read('core/background.js');
+// Ph2, шаг 3: в background.js есть статический import (utils/platform.js). Для текст-пинов
+// выше нужен сырой исходник, а для vm — loadAsClassic(): import развёрнут в IIFE зависимости,
+// как в собранном SW.
+const BG_CLASSIC = require('../helpers/load-esm.js').loadAsClassic('core/background.js');
 const CONTENT_SRC = require('../helpers/content-source.js').contentSource;
 const MANIFEST = JSON.parse(read('manifest.json'));
 
@@ -170,7 +174,7 @@ function loadBackground(opts) {
   sandbox.globalThis = sandbox;
   sandbox.navigator = { userAgent: 'jest-sw' };
   vm.createContext(sandbox);
-  vm.runInContext(BG_SRC, sandbox, { filename: 'core/background.js' });
+  vm.runInContext(BG_CLASSIC, sandbox, { filename: 'core/background.js' });
 
   return {
     sandbox,

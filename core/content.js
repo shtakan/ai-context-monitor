@@ -1,3 +1,7 @@
+// ESM (Roadmap Ph2): сборка втягивает utils/platform.js в тот же бандл контент-скрипта,
+// поэтому aiCmIsFirefox() остаётся в общей области видимости (как и до перевода на ESM).
+import { aiCmIsFirefox } from '../utils/platform.js';
+
 (function () {
   let v = 'unknown';
   try { v = chrome.runtime.getManifest().version; } catch (e) { v = 'unknown'; }

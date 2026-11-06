@@ -333,14 +333,14 @@ describe('R-1: футер options рендерит версию из маниф�
   test('футер рендерит «v» + версию из chrome.runtime.getManifest() (сентинел ≠ версия манифеста)', () => {
     expect(SENTINEL_VERSION).not.toBe(manifest.version);      // пин не вакуумный
     global.chrome = chromeMock(SENTINEL_VERSION);
-    require('../options/options.js');
+    require('./helpers/load-options.js').loadOptions();
     expect(document.querySelector('.version').textContent).toBe('v' + SENTINEL_VERSION);
   });
 
   test('подмена версии манифеста переносится в футер (источник — манифест, не литерал)', () => {
     const other = '7.7.7-test';
     global.chrome = chromeMock(other);
-    require('../options/options.js');
+    require('./helpers/load-options.js').loadOptions();
     expect(document.querySelector('.version').textContent).toBe('v' + other);
     // литерала версии в коде футера нет — только 'v' + manifest.version
     expect(optionsJs).not.toContain(other);

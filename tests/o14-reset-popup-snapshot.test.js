@@ -253,7 +253,7 @@ function createChromeMock(initialLocal, activeTabUrl) {
 function mountOptions(initialLocal, activeTabUrl) {
   const m = createChromeMock(initialLocal, activeTabUrl);
   global.chrome = m.chrome;
-  require('../options/options.js');
+  require('./helpers/load-options.js').loadOptions();
   document.dispatchEvent(new Event('DOMContentLoaded'));
   return m;
 }

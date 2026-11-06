@@ -110,12 +110,10 @@ function setupChrome(opts) {
 }
 
 function loadOptions() {
-  const resolved = require.resolve('../../options/options.js');
-  delete require.cache[resolved];
-  // Jest кэширует модули отдельно от require.cache: без resetModules второй попап
-  // не переисполнил бы options.js и слушал бы DOMContentLoaded от прежнего DOM.
-  jest.resetModules();
-  require(resolved);
+  // Ph2, шаг 3: у options.js статический import (utils/platform.js), поэтому require
+  // в CJS-jest невозможен — load-options.js разворачивает import и исполняет скрипт
+  // заново на каждом вызове, так что попап переисполняется без require.cache/resetModules.
+  require('./load-options.js').loadOptions();
   // Как при открытии попапа: статистика + состояние экспорта.
   document.dispatchEvent(new Event('DOMContentLoaded'));
 }

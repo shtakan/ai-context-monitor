@@ -2,7 +2,10 @@
 // Service Worker. Ставит перехватчики в МИР САЙТА ДО загрузки страницы
 // (document_start), программно, через registerContentScripts.
 // Это не зависит от manifest и не ломает существующую инжекцию content.js.
-// Копия DEBUG + debugLog для SW (импорт невозможен в MV3 non-module SW).
+// Копия DEBUG + debugLog для SW (в SW бандл собирается esbuild'ом, импорты разрешены).
+// ESM (Roadmap Ph2): статический import втягивается сборкой в тот же бандл SW, поэтому
+// в рантайме aiCmIsFirefox() остаётся в общей области видимости бандла.
+import { aiCmIsFirefox } from '../utils/platform.js';
 var DEBUG = false;
 // v51 (A3): lastGoodModel — ТОЛЬКО кэш-оптимизация (предпочтительный кандидат для countTokens).
 // MV3 SW не персистентен: глобал теряется при рестарте SW — это ожидаемо и безопасно,

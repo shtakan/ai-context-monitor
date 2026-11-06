@@ -8,7 +8,9 @@
 //
 // Сьют пиннит обе стороны: Chrome с алиасом `browser` → BYOK-UI виден, реальный
 // Firefox → секции по-прежнему скрыты и флаг точного подсчёта сброшен.
-const { aiCmIsFirefox } = require('../utils/platform.js');
+// Ph2, шаг 3: utils/platform.js — ESM-модуль, поэтому require() его не возьмёт;
+// грузим через тот же load-esm.js, что и остальные пилотные модули.
+const { aiCmIsFirefox } = require('./helpers/load-esm.js').loadEsmModule('utils/platform.js');
 
 /* =====================================================================================
  * 1. aiCmIsFirefox(): чистая функция
@@ -190,7 +192,7 @@ function mountOptions(urlScheme, local, session, withBrowserAlias) {
   // повторяем порядок, чтобы детекция проверялась на момент загрузки options.js.
   if (withBrowserAlias) global.browser = m.chrome;
   jest.resetModules();
-  require('../options/options.js');
+  require('./helpers/load-options.js').loadOptions();
   return m;
 }
 
