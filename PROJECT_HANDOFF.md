@@ -1251,3 +1251,54 @@ v90–v114 (исходные строки 783–2 440, 1 658 строк) — т�
 ### Секция 7. Плейсхолдер.
 **Коммит A:** `289a8dd` — тело аппендикса v121; SHA проставляется коммитом B (двухшаговый паттерн).
 **SHA4:** `fc1949a` (для коммита C).
+
+## Аппендикс v122 (2026-11-06): ESM-миграция MAIN-world утилит
+
+**Дата:** 2026-11-06 (Asia/Yekaterinburg).
+**Коммиты:** `<SHA v122>` (коммит A), а также `ac76e3d` (platform), `2946618` (intercept-common).
+**Статус:** Фаза 2 (ESM) продвинулась на MAIN-world. Перехватчики больше не используют window-глобалы для утилит. Сьют 216/3841/7/0.
+
+### Секция 1. Что сделано.
+1. **`utils/platform.js` → ESM (коммит `ac76e3d`, 33 файла, +291/−179).** Модуль экспортирует `aiCmIsFirefox()` статически; потребители импортируют её явно: `core/content.js:3`, `core/background.js:8`, `options/options.js:3`. Подключение скрипта удалено из `manifest.json` и `options/options.html` (по одной строке); в `eslint.config.mjs` добавлен `sourceType: 'module'` для этого файла. `build.mjs` втягивает модуль в общий бандл через esbuild — в рантайме расширения он исполняется в одной области видимости с потребителями, а не отдельным `<script>`; `tests/helpers/load-esm.js` повторяет этот шаг для jest (CJS).
+2. **`utils/intercept-common.js` → ESM (коммит `2946618`, 20 файлов, +362/−190).** Неявная зависимость от `swallowSoft` заменена явным импортом `import { swallowSoft } from './debug.js';` (`utils/intercept-common.js:24`); сам хелпер объявлен как `export function setIntervalVisible(...)` (`utils/intercept-common.js:42`). Обновлены 4 перехватчика: `core/claude-intercept.js:14`, `core/google-search-intercept.js:19`, `core/page-intercept.js:57`, `core/perplexity-intercept.js:16` — все берут `setIntervalVisible` импортом, а не из `window`.
+3. **Сборка `build.mjs` переведена на IIFE для MAIN-world.** Каждый MAIN-перехватчик собирается в собственный IIFE-бандл по тому же пути `dist/core/<name>.js` (`format: 'iife'`, `build.mjs:223`, фабрика `mainInterceptOptions`); встроенные проверки падают на top-level `import`/`export` (`build.mjs:732`) и на список экспортов (`build.mjs:735`) — MAIN-world скрипт обязан оставаться классическим.
+4. **Тестовая обвязка.** Добавлен `tests/helpers/main-intercept.js` (81 строка) — загрузка MAIN-перехватчиков в jest по рантайм-подобной схеме; обновлены `tests/intercept-common.test.js` и профильные тесты перехватчиков, фикстуры `tests/fixtures/behavior-gate-whitelist.json` и `tests/fixtures/catch-whitelist.json`.
+5. **Пин корпуса аппендиксов** в `tests/docs-hygiene.test.js` обновлён 107 → 108 (добавлен v122; комментарий приведён к диапазону v115–v122).
+
+### Секция 2. Свидетели/факты.
+
+| # | Свидетель | Факт | Источник |
+|---|---|---|---|
+| 1 | `git show --stat HEAD` (коммит A) | 2 файла: `PROJECT_HANDOFF.md`, `tests/docs-hygiene.test.js` | git |
+| 2 | `git show --stat ac76e3d` | 33 файла, +291/−179: `utils/platform.js`, `build.mjs`, `manifest.json`, `options/options.js`, `options/options.html`, `eslint.config.mjs`, `types/core-globals.d.ts`, тесты | git |
+| 3 | `git show --stat 2946618` | 20 файлов, +362/−190: `utils/intercept-common.js`, 4 перехватчика, `core/background.js`, `eslint.config.mjs`, `tests/helpers/main-intercept.js`, фикстуры, тесты | git |
+| 4 | `node build.mjs` | exit 0; 65 asset-файлов; `dist/` = 50 `.js` (5 бандлов + 45 runtime-registered); MAIN-перехватчики — IIFE в `dist/core/` | отчёт DSH |
+| 5 | `npx tsc --noEmit` | exit 0 | отчёт DSH |
+| 6 | `npx eslint .` | exit 0 (0 errors, 543 warnings) | отчёт DSH |
+| 7 | `npx jest tests/docs-hygiene.test.js` | 28/28 | отчёт DSH |
+| 8 | `npm test -- --runInBand` | 216/3841/7/0, exit 0 | отчёт DSH |
+| 9 | пин корпуса | `108`; заголовков активного файла = 8 | отчёт DSH |
+| 10 | плейсхолдеры SHA после коммита B | v122 = 0; SHA4 = 1 | отчёт DSH |
+| 11 | `grep -c '## Аппендикс v122' PROJECT_HANDOFF.md` | 1 | отчёт DSH |
+| 12 | счётчики handoff | `**Тесты:**` = 1, `**Версия:**` = 1; UTF-8 без BOM, CR=0 | отчёт DSH |
+
+### Секция 3. Отклонения от промпта.
+1. Пин `docs-hygiene` обновлён 107 → 108 (добавляется v122) — единственная правка тестов; код, CHANGELOG и аппендиксы выше v121 не трогались.
+2. Остальное — по плану; отклонений по существу нет.
+
+### Секция 4. Новые residual.
+- **R1 (Low) — `utils/debug.js` всё ещё не переведён на ESM, но уже импортируется из `intercept-common.js`.** Контракт: `utils/intercept-common.js:24` — `import { swallowSoft } from './debug.js';`, тогда как сам `utils/debug.js` остаётся классическим скриптом (`var DEBUG = false;`, без `export`); esbuild трактует его как CJS и разрешает импорт через граф сборки. Условие переоткрытия: ошибка рантайма при отсутствии сборки (загрузка `intercept-common.js`/`debug.js` как отдельных классических скриптов без бандла) — тогда `debug.js` переводится на ESM в первую очередь.
+
+### Секция 5. Переопределение residual-точек и Roadmap (тексты аппендиксов выше не редактируются).
+- **Roadmap Ф2** продвинута: вслед за ISOLATED-модулями (`utils/markdown.js`, `utils/buildReferenceText.js`, аппендикс v121) на ESM переведены MAIN-world утилиты — `utils/platform.js` и `utils/intercept-common.js`; перехватчики больше не читают эти утилиты из `window`-глобалов, а импортируют их. Строки активного handoff не редактируются — новое состояние фиксируется здесь.
+- **Остальные residual — без изменений:** этой правкой не переоткрываются и не переопределяются.
+
+### Секция 6. Сводка.
+1. Сьют 216/3841/7/0, exit 0; docs-hygiene 28/28.
+2. Версия 2.0.40 (не менялась); продукт этим аппендиксом не менялся.
+3. HEAD `2946618`; origin/main = `2946618`, ahead 0 (до коммита A).
+4. Верхний блок handoff, bridge и аппендиксы v1–v121 не переписывались — вставка только в конец файла; синк верхнего блока — коммитом C после push A+B.
+
+### Секция 7. Плейсхолдер.
+**Коммит A:** `<SHA v122>` — тело аппендикса v122; SHA проставляется коммитом B (двухшаговый паттерн).
+**SHA4:** `<SHA4>` (для коммита C).
