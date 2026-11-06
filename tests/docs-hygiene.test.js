@@ -53,6 +53,17 @@ const archiveBuf = fs.readFileSync(abs('docs/HANDOFF_ARCHIVE.md'));   // Buffer 
 const archive = archiveBuf.toString('utf8');
 const corpus = handoff + '\n' + archive;
 
+// O-53: единый список документов под проверкой кодировки. Явный массив, а не
+// две разрозненные проверки, — новый документ гигиены попадает в покрытие
+// одной строкой и выпасть из него незаметно уже не может.
+//   rel  — путь относительно корня репозитория (для сообщений об ошибке);
+//   buf  — сырые байты (BOM и строгая UTF-8-валидность);
+//   text — декодированный текст (нормализация EOL).
+const ENCODED_DOCS = [
+  { rel: 'PROJECT_HANDOFF.md', buf: handoffBuf, text: handoff },
+  { rel: 'docs/HANDOFF_ARCHIVE.md', buf: archiveBuf, text: archive }
+];
+
 // O-53 (вариант б1): две независимые сущности счётчиков handoff —
 //   «текущий прогон» (обновляется синхронно с фактом) и
 //   «исторический максимум» (рекорд зелёных прогонов, не падает при удалении тестов).
@@ -271,12 +282,18 @@ describe('M-6: release.yml — руководство в ZIP и контроль
 
 describe('O-53: PROJECT_HANDOFF.md — гигиена кодировки и статусных чисел', () => {
   test('кодировка: без BOM, переводы строк нормализуются без одиночных CR', () => {
-    expect(handoffBuf.length).toBeGreaterThan(100000);   // осмысленный объём, а не заглушка
-    expect(archiveBuf.length).toBeGreaterThan(100000);   // архив — тоже содержательный файл
-    const hasBom = handoffBuf[0] === 0xEF && handoffBuf[1] === 0xBB && handoffBuf[2] === 0xBF;
-    expect(hasBom).toBe(false);
-    const archiveHasBom = archiveBuf[0] === 0xEF && archiveBuf[1] === 0xBB && archiveBuf[2] === 0xBF;
-    expect(archiveHasBom).toBe(false);
+    // Проверки идут по списку ENCODED_DOCS: активный handoff и архив проходят
+    // одни и те же пины, поэтому расхождение покрытия между ними исключено.
+    ENCODED_DOCS.forEach(function (doc) {
+      expect(doc.buf.length).toBeGreaterThan(100000);   // осмысленный объём, а не заглушка
+      const hasBom = doc.buf[0] === 0xEF && doc.buf[1] === 0xBB && doc.buf[2] === 0xBF;
+      expect(hasBom).toBe(false);
+      // Строгая UTF-8-валидность — то, что раньше ловилось только руками: битая
+      // последовательность декодируется в U+FFFD и/или не переживает обратную
+      // сборку байт-в-байт. Пин на один BOM такие файлы пропускал.
+      expect(doc.text).not.toContain('\uFFFD');
+      expect(Buffer.from(doc.text, 'utf8').equals(doc.buf)).toBe(true);
+    });
     // EOL намеренно НЕ пинится жёстко: .gitattributes держит eol=lf, поэтому в рабочей
     // копии Windows файл честно CRLF, а на Linux/CI — LF. Пин на loneLF/loneCR фиксировал
     // бы средство (рабочую копию), а не требование, и падал бы на CI при зелёном локально.
