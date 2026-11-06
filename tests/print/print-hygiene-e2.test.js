@@ -20,6 +20,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
 const PRINT_JS = fs.readFileSync(path.join(ROOT, 'print', 'print.js'), 'utf8');
+const PRINT_CLASSIC = require('../helpers/load-esm.js').loadAsClassic('print/print.js');
 const PRINT_HTML = fs.readFileSync(path.join(ROOT, 'print', 'print.html'), 'utf8');
 
 const HISTORY = {
@@ -100,7 +101,7 @@ function loadPrintScript(chrome, consoleImpl) {
   // print.html?tab=<id> (chrome.tabs.create), а jsdom-URL теста параметра не несёт.
   const params = { get: function (name) { return (name === 'tab') ? '4242' : null; } };
 
-  const fn = new Function('window', 'document', 'chrome', 'console', 'setTimeout', 'clearTimeout', 'URLSearchParams', PRINT_JS);
+  const fn = new Function('window', 'document', 'chrome', 'console', 'setTimeout', 'clearTimeout', 'URLSearchParams', PRINT_CLASSIC);
   fn(window, document, chrome, consoleImpl || console, function (cb, ms) { return setTimeout(cb, ms); }, function (id) { return clearTimeout(id); }, function () { return params; });
 }
 

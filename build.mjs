@@ -219,7 +219,12 @@ function optionsEntry() {
  * scripts become one bundle and the page stops referencing the source layout.
  */
 function printEntry() {
-  return htmlScriptEntry('print/print.html');
+  // ESM-пилот (Roadmap Ph2): utils/markdown.js больше не тег <script> печатной
+  // страницы — его втягивает esbuild по import из print/print.js. Фильтр держит
+  // SSOT устойчивым, даже если тег случайно вернут в разметку.
+  return htmlScriptEntry('print/print.html').filter(function (rel) {
+    return rel !== 'utils/markdown.js';
+  });
 }
 
 /**
@@ -945,7 +950,9 @@ function entryFilesPlugin() {
         return {
           contents: await fsp.readFile(args.path, 'utf8'),
           loader: 'js',
-          resolveDir: ROOT,
+          // ESM-пилот: entry-*.js физически лежат в .build/, поэтому относительные
+          // импорты (print.js -> ../utils/markdown.js) резолвятся от корня репо.
+          resolveDir: BUILD_DIR,
           watchFiles: watchFiles(entries),
         };
       });

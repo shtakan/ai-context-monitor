@@ -4,7 +4,7 @@
  * экранирование HTML, заголовки и инлайн-разметку.
  */
 
-const MarkdownRenderer = require('../../utils/markdown.js');
+const MarkdownRenderer = require('../helpers/load-esm.js').loadEsm('utils/markdown.js');
 
 describe('MarkdownRenderer.render — таблицы', () => {
   test('превращает markdown-таблицу в HTML-таблицу', () => {
@@ -20,6 +20,16 @@ describe('MarkdownRenderer.render — таблицы', () => {
     expect(html).toContain('<td>Ячейка 1</td>');
     expect(html).toContain('<td>Ячейка 4</td>');
     expect(html).toContain('</table>');
+  });
+
+  // R3 (ESM-пилот): реальный рендер не должен деградировать до escapeText —
+  // markdown-таблица обязана дать настоящий <table>, а не экранированный текст.
+  test('R3: markdown-таблица рендерится в <table>, а не в escapeText', () => {
+    const md = '| A | B |\n| - | - |\n| 1 | 2 |';
+    const html = MarkdownRenderer.render(md);
+    expect(html).toContain('<table>');
+    expect(html).toContain('<td>1</td>');
+    expect(html).not.toContain('&' + 'lt;table');
   });
 });
 

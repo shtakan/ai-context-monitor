@@ -48,6 +48,7 @@ const optionsJs = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf
 // (tests/helpers/content-source.js). Резолв источника, не ассерты.
 const contentSourceMap = require('./helpers/content-source.js');
 const printJs = fs.readFileSync(path.join(ROOT, 'print', 'print.js'), 'utf8');
+const printClassic = require('./helpers/load-esm.js').loadAsClassic('print/print.js');
 const exportBuildersJs = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.js'), 'utf8');
 const i18nApplySrc = fs.readFileSync(path.join(ROOT, 'options', 'i18n-apply.js'), 'utf8');
 // M-4.4: страницы, локализованные тем же механизмом.
@@ -900,7 +901,7 @@ describe('M-4.2: print.js — роли и шапка печатной формы
     window.print = function () { };
     const params = { get: function (name) { return (name === 'tab') ? '7' : null; } };
 
-    const fn = new Function('window', 'document', 'chrome', 'console', 'setTimeout', 'clearTimeout', 'URLSearchParams', printJs);
+    const fn = new Function('window', 'document', 'chrome', 'console', 'setTimeout', 'clearTimeout', 'URLSearchParams', printClassic);
     try {
       fn(window, document, chromeMock(locale), console,
         function (cb, ms) { return setTimeout(cb, ms); },

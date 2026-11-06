@@ -132,6 +132,13 @@ describe('build-integrity: generated entry files', () => {
   // declarations vanish from the shared scope the classic scripts rely on.
   it.each(Object.keys(EXPECTED))('%s: entry is a concatenation, not an import chain', (name) => {
     const text = fs.readFileSync(entryFile(name), 'utf8');
+    // ESM-пилот (Roadmap Ph2): print/print.js — первый ESM-модуль, его статический
+    // import втягивает utils/markdown.js в граф esbuild; это осознанное исключение.
+    if (name === 'print') {
+      expect(text).toMatch(/^import MarkdownRenderer from '\.\.\/utils\/markdown\.js';$/m);
+      expect(/^\s*export\b/m.test(text)).toBe(false);
+      return;
+    }
     expect(/^\s*import\b/m.test(text)).toBe(false);
     expect(/^\s*export\b/m.test(text)).toBe(false);
   });

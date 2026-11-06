@@ -13,6 +13,7 @@
  *      и вызываем window.print() — ровно ОДИН раз за жизненный цикл страницы;
  *      пользователь сохраняет PDF штатным диалогом Chrome.
  */
+import MarkdownRenderer from '../utils/markdown.js';
 
 (function () {
   'use strict';
@@ -97,10 +98,10 @@
     return header + body;
   }
 
-  function escapeText(s) {
-    var md = (typeof window.MarkdownRenderer !== 'undefined' && window.MarkdownRenderer) ?
-      window.MarkdownRenderer : null;
-    if (md && md.escapeHtml) return md.escapeHtml(s);
+  // Локальный фолбэк экранирования: нужен, если модуль markdown недоступен
+  // или его метод бросил исключение (ESM-пилот: import статический, но печать
+  // не должна зависеть от целостности рендерера).
+  function escapeTextFallback(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -108,11 +109,26 @@
       .replace(/"/g, '&quot;');
   }
 
+  function escapeText(s) {
+    if (MarkdownRenderer && typeof MarkdownRenderer.escapeHtml === 'function') {
+      try {
+        return MarkdownRenderer.escapeHtml(s);
+      } catch (eRenderer) {
+        return escapeTextFallback(s);
+      }
+    }
+    return escapeTextFallback(s);
+  }
+
   function renderMarkdown(text) {
-    var md = (typeof window.MarkdownRenderer !== 'undefined' && window.MarkdownRenderer) ?
-      window.MarkdownRenderer : null;
-    if (md && md.render) return md.render(text);
-    return escapeText(text);
+    if (MarkdownRenderer && typeof MarkdownRenderer.render === 'function') {
+      try {
+        return MarkdownRenderer.render(text);
+      } catch (eRenderer) {
+        return escapeTextFallback(text);
+      }
+    }
+    return escapeTextFallback(text);
   }
 
   // AMO/addons-linter UNSAFE_VAR_ASSIGNMENT ловит и присваивание innerHTML, и вызов
@@ -159,11 +175,9 @@
   }
 
   function waitForRenderer(cb) {
-    if (typeof window.MarkdownRenderer !== 'undefined' && window.MarkdownRenderer) {
-      cb();
-      return;
-    }
-    setTimeout(function () { waitForRenderer(cb); }, 30);
+    // ESM: MarkdownRenderer втянут статическим import и доступен к моменту
+    // выполнения модуля — опрос window больше не нужен.
+    cb();
   }
 
   // Автозакрытие вкладки печати после сохранения PDF: диалог печати закрылся (afterprint)

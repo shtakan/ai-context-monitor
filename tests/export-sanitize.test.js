@@ -27,6 +27,7 @@ const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipel
 const EXPORT_MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 const BASE_HANDLER_SRC = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.js'), 'utf8');
 const PRINT_JS = fs.readFileSync(path.join(ROOT, 'print', 'print.js'), 'utf8');
+const PRINT_CLASSIC = require('./helpers/load-esm.js').loadAsClassic('print/print.js');
 
 const START = '<!-- deepseek-pp-visible-user-prompt:start -->';
 const END = '<!-- deepseek-pp-visible-user-prompt:end -->';
@@ -376,7 +377,7 @@ async function renderPdfForm(history) {
     window.print = function () { };
     const consoleStub = { log: function () { }, warn: function () { }, error: function () { } };
 
-    const fn = new Function('window', 'document', 'chrome', 'console', 'setTimeout', 'clearTimeout', 'URLSearchParams', PRINT_JS);
+    const fn = new Function('window', 'document', 'chrome', 'console', 'setTimeout', 'clearTimeout', 'URLSearchParams', PRINT_CLASSIC);
     fn(window, document, chromeMock, consoleStub,
       function (cb, ms) { return setTimeout(cb, ms); },
       function (id) { return clearTimeout(id); },

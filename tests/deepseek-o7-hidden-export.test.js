@@ -64,6 +64,7 @@ const INTERCEPT_SRC = require('./helpers/deepseek-intercept-source.js').deepseek
 const OPTIONS_JS = read('options/options.js');
 const OPTIONS_HTML = read('options/options.html');
 const PRINT_JS = read('print/print.js');
+const PRINT_CLASSIC = require('./helpers/load-esm.js').loadAsClassic('print/print.js');
 const manifest = JSON.parse(read('manifest.json'));
 const pkg = JSON.parse(read('package.json'));
 const lock = JSON.parse(read('package-lock.json'));
@@ -448,7 +449,7 @@ async function renderPdfForm(history) {
     window.print = function () { };
     const consoleStub = { log: function () { }, warn: function () { }, error: function () { } };
 
-    const fn = new Function('window', 'document', 'chrome', 'console', 'setTimeout', 'clearTimeout', 'URLSearchParams', PRINT_JS);
+    const fn = new Function('window', 'document', 'chrome', 'console', 'setTimeout', 'clearTimeout', 'URLSearchParams', PRINT_CLASSIC);
     fn(window, document, chromeMock, consoleStub,
       function (cb, ms) { return setTimeout(cb, ms); },
       function (id) { return clearTimeout(id); },
