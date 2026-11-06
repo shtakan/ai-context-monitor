@@ -203,4 +203,25 @@ export default [
     },
     rules: hygieneRules,
   },
+
+  // ---------------------------------------------------------------------------
+  // 6. ESM-пилот (commit 0ca3434, Roadmap Ph2). `utils/markdown.js` и
+  //    `print/print.js` переведены на import/export, но секции 2 описывают
+  //    utils/**/*.js и print/**/*.js как `sourceType: 'script'` — без этого
+  //    override парсер падал: «'import' and 'export' may appear only with
+  //    'sourceType: module'» (Lint #353). `print/print.js` включён в тот же
+  //    override, потому что CI-шаг — `npm run lint` (= `eslint .`), и один
+  //    оставленный ESM-файл держал бы job «Lint» красным.
+  //    Блок идёт ПОСЛЕ секций 2/5 намеренно: в flat config побеждает
+  //    последний матч, поэтому sourceType переопределяется, а
+  //    browser/webextensions-глобали из секции 2 продолжают действовать
+  //    (languageOptions.globals мержатся, только sourceType заменяется).
+  //    Список точечный: по мере расширения пилота сюда добавляются файлы.
+  // ---------------------------------------------------------------------------
+  {
+    files: ['utils/markdown.js', 'print/print.js'],
+    languageOptions: {
+      sourceType: 'module',
+    },
+  },
 ];
