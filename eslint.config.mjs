@@ -227,6 +227,9 @@ export default [
   //    mergeUsage + эталонные framesManual/splitJsonObjects), его единственный
   //    потребитель core/qwen-intercept.js тоже переведён на статический import и
   //    собирается отдельным IIFE-бандлом.
+  //    Ph2, шаг debug.js: utils/debug.js — настоящий ESM (R1 закрыт), поэтому его
+  //    импортируют core/background.js, core/content.js и utils/intercept-common.js.
+  //    Для 8 MAIN-регистраций сборка выводит classic-артефакт dist/utils/debug.js.
   // ---------------------------------------------------------------------------
   {
     files: [
@@ -236,6 +239,9 @@ export default [
       'utils/platform.js',
       'utils/intercept-common.js',
       'utils/stream-frames.js',
+      // R1 (Ph2): utils/debug.js переведён на ESM — его импортируют
+      // core/background.js, core/content.js и utils/intercept-common.js.
+      'utils/debug.js',
       'print/print.js',
       'core/background.js',
       'core/content.js',

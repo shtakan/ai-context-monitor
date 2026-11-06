@@ -42,7 +42,9 @@ const { contentSource: CONTENT } = require('./helpers/content-source.js');
 const ROOT = path.join(__dirname, '..');
 const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
-const DEBUG_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'debug.js'), 'utf8');
+// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+// `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
 const BUILDERS_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.js'), 'utf8');
 
 // Рез по балансу фигурных скобок (конвенция сьюта: tests/gsa-autoexport.test.js, tests/chatgpt-o1-badge-hold.test.js).

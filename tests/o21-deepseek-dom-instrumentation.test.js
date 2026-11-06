@@ -36,7 +36,9 @@ if (typeof global.TextDecoder === 'undefined') global.TextDecoder = utilEnc.Text
 const { JSDOM, VirtualConsole } = require('jsdom');
 
 const ROOT = path.join(__dirname, '..');
-const DEBUG_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'debug.js'), 'utf8');
+// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+// `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
 const ADAPTER_DIR = path.join(ROOT, 'adapters');
 const ADAPTER_SRC = fs.readFileSync(path.join(ADAPTER_DIR, 'deepseek-adapter.js'), 'utf8');
 const BASE_ADAPTER_SRC = fs.readFileSync(path.join(ADAPTER_DIR, 'base-adapter.js'), 'utf8');

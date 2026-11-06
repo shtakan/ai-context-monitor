@@ -529,7 +529,7 @@ declare function aiCmLoadArchiveTier(convId: string, reason: string): void;
 declare function logTextProbe(label: string, text: string): void;
 declare function aiCmBadgeHoldActive(): boolean;
 declare function aiCmDomThreadId(): string | null;
-declare function aiCmDiagLine(marker: string, data?: unknown): void;
+declare function aiCmDiagLine(marker: string, data?: unknown): boolean;
 declare function aiCmDiagDocKind(): string;
 declare function aiCmDiagStack(depth?: number): string;
 declare function aiCmDiagOn(): boolean;
@@ -540,6 +540,17 @@ declare function aiCmAutoExportTrustedBase(): boolean;
 declare function aiCmAutoExportTrustedBaseDiag(...args: unknown[]): void;
 declare function aiCmLoadProactiveFlag(): void;
 declare function debugLog(level: string, ...args: unknown[]): void;
+
+// Ph2 (R1): utils/debug.js переведён на ESM, поэтому его объявления больше не попадают
+// в глобальную область вывода tsc автоматически. Но в MAIN-мире классический артефакт
+// dist/utils/debug.js по-прежнему публикует эти функции глобально (см. writeDebugClassic
+// в build.mjs), поэтому глобальный контракт объявляется здесь явно.
+declare function swallow(error: unknown, tag: string): void;
+declare function swallowSoft(error: unknown, tag: string): void;
+declare function aiCmDiagWarn(tag: string, message: string, detail?: unknown): void;
+declare function aiCmDiagDownload(trigger: string, content: unknown, fileName: string, extra?: unknown): boolean;
+declare function aiCmDiagDownloadBlocked(trigger: string, content: unknown, fileName: string, reason: string, extra?: unknown): boolean;
+declare function __aiCmSetDebugLogs(v: boolean): void;
 declare const aiCmIncludeHiddenInExport: boolean;
 
 // Window-поля: трассировка/UMD-глобали (прецедент types/globals.d.ts — any до Фазы 3).

@@ -34,7 +34,9 @@ const CONTENT = H.contentSource;                                    // моду�
 const CONTENT_ONLY = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
 const WIDGET_SRC = H.moduleSource('core/widget.js');
 const STATE_SRC = H.moduleSource('core/state.js');
-const DEBUG_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'debug.js'), 'utf8');
+// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+// `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
 

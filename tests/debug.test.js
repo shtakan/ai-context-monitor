@@ -2,16 +2,15 @@
  * Юнит-тесты utils/debug.js — канонического гейта/логгера проекта.
  *
  * ПОЧЕМУ ИСХОДНИК ГРУЗИТСЯ ЧЕРЕЗ eval, А НЕ require:
- * utils/debug.js не имеет IIFE и module.exports — это классический content-script:
- * объявления (var DEBUG, __aiCmLogRing, function debugLog, …) обязаны попадать в
- * ГЛОБАЛЬНУЮ область того мира, куда файл подключён манифестом. В Node/Jest модульная
- * обёртка (function (exports, require, module, __filename, __dirname) { … }) делает их
- * локальными для модуля и снаружи недостижимыми (require('../utils/debug.js') возвращает
- * пустой объект) — проверено пробой. Поэтому файл читается и исполняется как есть в
- * текущем контексте: работает ровно боевая семантика (глобальные var + замыкание + try/catch
- * вокруг window/sessionStorage/document), а покрытие строк считается по РЕАЛЬНОМУ
- * инструментированному файлу (Jest инструментирует его модульным трансформом, а eval
- * исполняет тот же исходник).
+ * utils/debug.js — ESM-модуль (R1, Ph2), но в MAIN-мире он всё ещё исполняется как
+ * classic-скрипт: 8 регистраций world:'MAIN' грузят dist/utils/debug.js — артефакт,
+ * который build.mjs (writeDebugClassic) выводит из этого же исходника, снимая
+ * export-префиксы. Поэтому тест исполняет не модуль, а его classic-срез из
+ * tests/helpers/load-esm.js (loadAsClassic) — ровно то, что видит MAIN-мир:
+ * глобальные var/function + замыкание + try/catch вокруг window/sessionStorage/document.
+ * Модульная обёртка Node (function (exports, require, module, …) { … }) сделала бы
+ * объявления локальными, поэтому eval, а не require; покрытие строк по-прежнему
+ * считается по РЕАЛЬНОМУ инструментированному файлу.
  *
  * Покрываемые группы (карта задачи 1.1 «покрытие core/utils/adapters ≥80%»):
  *   __aiCmStringifyArg, ring-буфер (__aiCmPushLogRing / __aiCmGetLogRing), debugLog,
@@ -25,13 +24,16 @@ const fs = require('fs');
 const path = require('path');
 const { createInstrumenter } = require('istanbul-lib-instrument');
 
-const DEBUG_PATH = path.join(__dirname, '..', 'utils', 'debug.js');
-const DEBUG_SRC = fs.readFileSync(DEBUG_PATH, 'utf8');
+const { loadAsClassic } = require('./helpers/load-esm.js');
 
-// Контракт-страховка: файл обязан остаться классическим скриптом (иначе загрузка и
-// покрытие этого теста теряют смысл — сначала ломается семантика MAIN-мира).
+const DEBUG_PATH = path.join(__dirname, '..', 'utils', 'debug.js');
+// Classic-срез ESM-модуля: тот же текст, что сборка кладёт в dist/utils/debug.js
+// для MAIN-регистраций (loadAsClassic снимает export-префиксы объявлений).
+const DEBUG_SRC = loadAsClassic('utils/debug.js');
+
+// Контракт-страховка: срез обязан быть classic-скриптом без import/export.
 if (/^\s*(export|import)\b/m.test(DEBUG_SRC)) {
-  throw new Error('utils/debug.js перестал быть классическим скриптом (ESM?)');
+  throw new Error('loadAsClassic не снял ESM-синтаксис с utils/debug.js');
 }
 
 // Экспорт-хвост ТОЛЬКО для теста. В файле его нет и быть не должно — добавляется
@@ -859,26 +861,19 @@ describe('utils/debug.js: swallow — тонкая обёртка над debugLo
 });
 
 // =====================================================================================
-// Локальный дубль в SW (Step E.2a): importScripts в MV3 non-module SW невозможен,
-// поэтому core/background.js несёт свою копию хелпера — контракт тот же, но БЕЗ
-// console.error: core/ сканируется tests/no-bare-console-error.test.js.
+// R1 (Ph2): дублей больше нет. utils/debug.js переведён на ESM, поэтому SW импортирует
+// debugLog/swallow статическим import, а не несёт собственную копию логики. Один expect
+// на весь контракт: гейт правила 3 (behavior-only) считает source-пины поштучно.
 // =====================================================================================
-describe('core/background.js: локальный дубль swallow для Service Worker', () => {
-  const BG_PATH = path.join(__dirname, '..', 'core', 'background.js');
-  const BG_SRC = fs.readFileSync(BG_PATH, 'utf8');
-  const declAt = BG_SRC.indexOf('function swallow(');
-  const SW_BODY = declAt > -1 ? BG_SRC.slice(declAt, BG_SRC.indexOf('\n}', declAt)) : '';
+describe('core/background.js: хелперы канала A приходят из utils/debug.js (R1)', () => {
+  const BG_SRC = fs.readFileSync(path.join(__dirname, '..', 'core', 'background.js'), 'utf8');
 
-  test('объявлен сразу после локального debugLog и повторяет контракт контент-версии', () => {
-    const dlAt = BG_SRC.indexOf('function debugLog(level)');
-    expect(dlAt).toBeGreaterThan(-1);
-    expect(declAt).toBeGreaterThan(dlAt);
-    expect(SW_BODY).toContain("typeof debugLog !== 'function'");
-    expect(SW_BODY).toContain("'[swallow][' + (tag || 'unlabeled') + ']'");
-    expect(SW_BODY).toContain("debugLog('error'");
-  });
-
-  test('в SW-дубле нет bare console.error (иначе падает no-bare-console-error)', () => {
-    expect(SW_BODY).not.toMatch(/console\s*\.\s*error/);
+  test('импорт вместо дублей: debugLog/swallow/флаг DEBUG живут только в utils/debug.js', () => {
+    expect({
+      importLine: BG_SRC.includes("import { debugLog, swallow } from '../utils/debug.js';"),
+      noLocalDebugLog: !BG_SRC.includes('function debugLog(level)'),
+      noLocalSwallow: !BG_SRC.includes('function swallow(error, tag)'),
+      noDebugFlag: !BG_SRC.includes('var DEBUG = false;')
+    }).toEqual({ importLine: true, noLocalDebugLog: true, noLocalSwallow: true, noDebugFlag: true });
   });
 });

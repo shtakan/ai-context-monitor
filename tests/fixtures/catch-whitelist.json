@@ -7,7 +7,7 @@
     "adapters"
   ],
   "definition": "Молчаливый catch = тело после вырезания комментариев содержит только пробелы, ИЛИ ровно один no-op (void 0; / return; / continue; / break;). Комментарий-только тело тоже молчаливое (комментарии маскируются в пробелы).",
-  "totalEntries": 477,
+  "totalEntries": 476,
   "groups": [
     {
       "file": "adapters/claude-adapter.js",
@@ -118,9 +118,9 @@
       "file": "core/background.js",
       "category": "debug-instrumentation",
       "lines": [
-        538,
-        1183,
-        1201
+        522,
+        1167,
+        1185
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: chrome.action.setBadgeText({ text: '', tabId: tabIdR }); debugLog('log',"
     },
@@ -128,7 +128,7 @@
       "file": "core/background.js",
       "category": "defensive-assignment",
       "lines": [
-        1102
+        1086
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: errText = await response.text();"
     },
@@ -136,7 +136,7 @@
       "file": "core/background.js",
       "category": "guard-clause",
       "lines": [
-        914
+        898
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: for (var k in (all || {})) { if (k.indexOf(AI_CM_FIRED_SESSION_PREFIX) ="
     },
@@ -144,28 +144,29 @@
       "file": "core/background.js",
       "category": "host-api-guard",
       "lines": [
-        44,
-        94,
-        98,
-        100,
-        103,
-        317,
-        367,
-        454,
-        471,
-        655,
-        729,
-        731
+        28,
+        78,
+        82,
+        84,
+        87,
+        301,
+        351,
+        438,
+        455,
+        639,
+        713,
+        715
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: void chrome.runtime.lastError;"
     },
     {
       "file": "core/background.js",
-      "category": "swallow-helper-internals",
+      "category": "timing-guard",
       "lines": [
-        30
+        170,
+        171
       ],
-      "reason": "swallow-helper-internals: внутренность хелпера swallow: его собственный guard на недоступность debugLog; пример: if (typeof debugLog !== 'function') return; debugLog('error', '[swallow]"
+      "reason": "timing-guard: отмена таймера/подписки: обработчик мог быть снят хостом или гонкой; пример: clearTimeout(timer);"
     },
     {
       "file": "core/base-handler.js",
@@ -310,10 +311,10 @@
       "file": "core/content.js",
       "category": "best-effort-guard",
       "lines": [
-        554,
-        2381,
-        2521,
-        3512
+        560,
+        2387,
+        2527,
+        3518
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cyrDiag = (t.match(/[а-яёА-ЯЁ]/g) || []).length; var cyrillicPct = t"
     },
@@ -321,7 +322,7 @@
       "file": "core/content.js",
       "category": "cleanup-guard",
       "lines": [
-        2106
+        2112
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: if (aiCmBadgeHoldTimer) return; aiCmBadgeHoldTimer = setTimeout(function"
     },
@@ -329,41 +330,41 @@
       "file": "core/content.js",
       "category": "debug-instrumentation",
       "lines": [
-        678,
-        1070,
-        1176,
-        1181,
-        1184,
+        684,
+        1076,
+        1182,
         1187,
-        1189,
         1190,
-        1191,
-        1210,
-        1212,
-        1217,
-        1252,
-        1259,
-        1267,
-        1270,
-        1330,
-        1338,
-        1340,
-        1345,
-        1352,
+        1193,
+        1195,
+        1196,
+        1197,
+        1216,
+        1218,
+        1223,
+        1258,
+        1265,
+        1273,
+        1276,
+        1336,
+        1344,
+        1346,
+        1351,
         1358,
-        1376,
-        1381,
+        1364,
+        1382,
         1387,
-        1389,
-        1394,
-        1981,
-        2345,
-        2532,
-        2556,
-        2565,
-        3396,
-        3422,
-        3424
+        1393,
+        1395,
+        1400,
+        1987,
+        2351,
+        2538,
+        2562,
+        2571,
+        3402,
+        3428,
+        3430
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
     },
@@ -371,16 +372,16 @@
       "file": "core/content.js",
       "category": "defensive-assignment",
       "lines": [
-        788,
-        797
+        794,
+        803
       ],
-      "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: aiCmLowConfidenceByConv[emitConvId] = (detail.isLowConfidenceBase === tr"
+      "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: aiCmPartialSoftByConv[softKey63] = (detail.partialSoft === true);"
     },
     {
       "file": "core/content.js",
       "category": "dom-read-guard",
       "lines": [
-        2017
+        2023
       ],
       "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: var info = aiCmSourceInfo(); aiCmSourceLabelNow = info ? info.label : ''"
     },
@@ -388,12 +389,12 @@
       "file": "core/content.js",
       "category": "event-guard",
       "lines": [
-        1058,
-        1067,
-        2474,
-        2497,
-        3378,
-        3384
+        1064,
+        1073,
+        2480,
+        2503,
+        3384,
+        3390
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
     },
@@ -401,7 +402,7 @@
       "file": "core/content.js",
       "category": "feature-detect",
       "lines": [
-        2686
+        2692
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var metricSrc = baseComplete ? 'base-complete' : (lastBounded ? 'base-fl"
     },
@@ -409,21 +410,21 @@
       "file": "core/content.js",
       "category": "guard-clause",
       "lines": [
-        71,
-        269,
-        282,
-        325,
-        341,
-        668,
-        694,
-        729,
-        842,
-        1016,
-        2055,
-        2782,
-        2844,
-        2861,
-        2945
+        77,
+        275,
+        288,
+        331,
+        347,
+        674,
+        700,
+        735,
+        848,
+        1022,
+        2061,
+        2788,
+        2850,
+        2867,
+        2951
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -431,10 +432,10 @@
       "file": "core/content.js",
       "category": "host-api-guard",
       "lines": [
-        30,
-        292,
-        362,
-        3014
+        36,
+        298,
+        368,
+        3020
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.runtime.sendMessage({ type: 'BADGE_RESET' }).catch(function () {"
     },
@@ -442,8 +443,8 @@
       "file": "core/content.js",
       "category": "local-helper-guard",
       "lines": [
-        289,
-        3197
+        295,
+        3203
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmCancelDeferredHistWrite('');"
     },
@@ -451,7 +452,7 @@
       "file": "core/content.js",
       "category": "parse-guard",
       "lines": [
-        3458
+        3464
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof window !== 'undefined' && window && window.AiCmEx"
     },
@@ -1834,15 +1835,6 @@
         70
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: if (typeof TextDecoder !== 'undefined') return TextDecoder;"
-    },
-    {
-      "file": "core/background.js",
-      "category": "best-effort-cleanup",
-      "lines": [
-        186,
-        187
-      ],
-      "reason": "v2.0.37 fix B: таймер и listener самопроверки — best-effort cleanup в инжектируемой функции; их сбой не меняет исход (settled уже выставлен). Пример: try { clearTimeout(timer); } catch (eT) { }"
     }
   ]
 }

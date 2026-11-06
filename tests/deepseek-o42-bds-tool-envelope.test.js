@@ -33,7 +33,9 @@ const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-te
 const ROOT = path.join(__dirname, '..');
 const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const PIPELINE_SRC = read('utils/export-emit-pipeline.js');
-const DEBUG_SRC = read('utils/debug.js');
+// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+// `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
 const OPTIONS_JS = read('options/options.js');
 const OPTIONS_HTML = read('options/options.html');
 const ru = JSON.parse(read('_locales/ru/messages.json'));

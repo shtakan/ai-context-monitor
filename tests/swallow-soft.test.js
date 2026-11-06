@@ -10,9 +10,10 @@
  *   R2 — SW-зеркало в core/background.js: функции есть, console.error в них нет;
  *   S1 — window.__aiCmSwallowSoft === swallowSoft.
  *
- * Исходник грузится целиком и исполняется косвенным eval как классический скрипт —
- * ровно как в tests/debug.test.js (instrumentation здесь не нужна: пины проверяют
- * поведение, а не покрытие). Мок console — не замена реальной формы, а сама цель
+ * Исходник грузится через loadAsClassic: utils/debug.js — ESM-модуль (R1), а песочница
+ * исполняет ровно тот классический срез, что MAIN-мир получает из dist/utils/debug.js
+ * (см. writeDebugClassic в build.mjs). Instrumentation здесь не нужна: пины проверяют
+ * поведение, а не покрытие. Мок console — не замена реальной формы, а сама цель
  * пинов D1/D2/D3/D5: проверяется, что хелпер НЕ печатает там, где не должен.
  */
 const fs = require('fs');
@@ -22,7 +23,7 @@ const vm = require('vm');
 const ROOT = path.join(__dirname, '..');
 const DEBUG_PATH = path.join(ROOT, 'utils', 'debug.js');
 const BG_PATH = path.join(ROOT, 'core', 'background.js');
-const DEBUG_SRC = fs.readFileSync(DEBUG_PATH, 'utf8');
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
 const BG_SRC = fs.readFileSync(BG_PATH, 'utf8');
 const DEBUG_LINES = DEBUG_SRC.split('\n');
 

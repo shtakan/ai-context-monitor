@@ -1,6 +1,12 @@
 // ESM (Roadmap Ph2): сборка втягивает utils/platform.js в тот же бандл контент-скрипта,
 // поэтому aiCmIsFirefox() остаётся в общей области видимости (как и до перевода на ESM).
 import { aiCmIsFirefox } from '../utils/platform.js';
+// R1 (Roadmap Ph2): utils/debug.js переведён на ESM — хелперы диагностики втягиваются
+// сборкой статическим import'ом в общую область видимости content-бандла (раньше модуль
+// грузился отдельным classic-скриптом из manifest.content_scripts).
+import { __aiCmSetDebugLogs, __aiCmGetLogRing, debugLog, swallow, swallowSoft, aiCmDiagOn,
+  aiCmDiagDocKind, aiCmDiagHead, aiCmDiagStack, aiCmDiagLine, aiCmDiagWarn,
+  aiCmDiagDownload, aiCmDiagDownloadBlocked } from '../utils/debug.js';
 
 (function () {
   let v = 'unknown';

@@ -93,7 +93,10 @@
  * carry a real `import` and let esbuild pull that module into the same bundle
  * (print/print.js → markdown, options|content.js → platform, export-text-builders
  * → buildReferenceText, MAIN-перехватчики → intercept-common, core/qwen-intercept.js
- * → utils/stream-frames.js). The imported
+ * → utils/stream-frames.js, core/background.js + core/content.js → utils/debug.js).
+ * utils/debug.js остаётся в js[] MAIN-регистраций (парсеры пакета — classic-скрипты
+ * без import), поэтому для них дополнительно выводится classic-артефакт dist/.
+ * The imported
  * module is then excluded from its entry's concatenation list, and the bundle
  * still ends up as ONE scope. MAIN-перехватчики не входят в общий content-бандл:
  * они собираются отдельными IIFE (mainInterceptOptions) в те же пути dist/core/,
@@ -189,34 +192,11 @@ const MAIN_INTERCEPTS = [
 ];
 
 /**
- * Ph2: utils/debug.js — классический MAIN-world скрипт (грузится первым в js[]),
- * поэтому у него нет export. Плагин подменяет его при сборке MAIN-перехватчиков
- * тонкой ESM-гранью: swallowSoft делегирует в window.__aiCmSwallowSoft, который
- * debug.js публикует сам (utils/debug.js:307). Так ring-буфер и window-зеркала
- * debug.js остаются в ОДНОМ экземпляре, а не дублируются в каждом бандле.
+ * Ph2, шаг debug.js: модуль переведён на ESM (R1), поэтому подменять его
+ * синтезированной гранью больше не нужно — esbuild втягивает utils/debug.js в
+ * MAIN-бандл по настоящему статическому import'у из utils/intercept-common.js.
+ * Прежний debugSoftFacadePlugin удалён вместе с причиной своего существования.
  */
-function debugSoftFacadePlugin() {
-  return {
-    name: 'ai-cm-debug-soft-facade',
-    setup(build) {
-      build.onLoad({ filter: /[\\/]utils[\\/]debug\.js$/ }, () => ({
-        contents: [
-          'export function swallowSoft(error, tag) {',
-          '  try {',
-          "    if (typeof window !== 'undefined' && typeof window.__aiCmSwallowSoft === 'function') {",
-          '      return window.__aiCmSwallowSoft(error, tag);',
-          '    }',
-          '  } catch (e) {',
-          '    // window недоступен — молча выходим, как и зеркало debug.js',
-          '  }',
-          '  return undefined;',
-          '}',
-        ].join('\n'),
-        loader: 'js',
-      }));
-    },
-  };
-}
 
 /** esbuild options для одного MAIN-бандла на перехватчик (IIFE, путь сохраняется). */
 function mainInterceptOptions() {
@@ -235,7 +215,6 @@ function mainInterceptOptions() {
     minify: MINIFY,
     legalComments: 'none',
     logLevel: WATCH ? 'info' : 'warning',
-    plugins: [debugSoftFacadePlugin()],
   };
 }
 
@@ -274,8 +253,16 @@ function contentEntry(manifest) {
   // utils/platform.js теперь импортирует core/content.js (шаг 3), поэтому в списке
   // конкатенации ему тоже не место. Фильтр держит SSOT устойчивым, даже если строку
   // случайно вернут в манифест.
+  // R1 (Ph2): utils/debug.js переведён на ESM и втягивается import'ом из
+  // core/content.js — как строку конкатенации его больше не берём (иначе в одной
+  // области видимости оказались бы и импорт, и текст модуля). В манифесте путь
+  // остаётся ради SSOT-порядка; фильтр держит сборку устойчивой.
   return js.filter(function (rel) {
-    return rel !== 'utils/buildReferenceText.js' && rel !== 'utils/platform.js';
+    return (
+      rel !== 'utils/buildReferenceText.js' &&
+      rel !== 'utils/platform.js' &&
+      rel !== 'utils/debug.js'
+    );
   });
 }
 
@@ -386,6 +373,31 @@ const ASSET_TREES = ['_locales', 'docs/screenshots'];
  * ------------------------------------------------------------------ */
 
 const BACKGROUND_SRC = 'core/background.js';
+
+// R1 (Ph2): ESM-исходник debug.js и путь, под которым его ждут runtime-регистрации.
+const DEBUG_SOURCE = 'utils/debug.js';
+const DEBUG_CLASSIC = 'utils/debug.js';
+
+/**
+ * dist/utils/debug.js: classic-артефакт того же модуля.
+ *
+ * utils/debug.js переведён на ESM, но его грузят 8 регистраций world:'MAIN' через
+ * chrome.scripting — путь резолвится в файл, а classic-скрипт не может содержать
+ * export-объявления. Снять только префиксы объявлений (export function → function) —
+ * весь остальной текст (ring-буфер, window-зеркала, гейты) остаётся байт-в-байт
+ * прежним, поэтому поведение в MAIN-мире не меняется.
+ */
+async function writeDebugClassic() {
+  const src = fs.readFileSync(abs(DEBUG_SOURCE), 'utf8').replace(/^\uFEFF/, '');
+  const classic = src.replace(/^export\s+(?=(?:async\s+)?function\b)/gm, '');
+  if (/^\s*(?:import|export)\b/m.test(classic)) {
+    fail(DEBUG_CLASSIC + ': classic-артефакт всё ещё содержит import/export');
+  }
+  const to = path.join(DIST, DEBUG_CLASSIC);
+  await fsp.mkdir(path.dirname(to), { recursive: true });
+  await fsp.writeFile(to, classic, 'utf8');
+  return DEBUG_CLASSIC;
+}
 
 function runtimeRegisteredFiles() {
   const src = fs.readFileSync(abs(BACKGROUND_SRC), 'utf8');
@@ -673,6 +685,11 @@ async function copyAssets() {
     // Ph2: эти четыре файла собираются esbuild'ом в dist/core/<name>.js,
     // копировать исходник поверх бандла нельзя.
     if (mainBundleSources.has(r)) continue;
+    // R1 (Ph2): utils/debug.js — ESM-модуль, но 8 MAIN-регистраций грузят его как
+    // classic-скрипт (world: 'MAIN' не умеет import). Копировать ESM-исходник в dist/
+    // нельзя: браузер выполнит его как classic и упадёт на export-префиксах. Ниже из
+    // того же исходника выводится classic-артефакт — второй копии логики в дереве нет.
+    if (r === DEBUG_CLASSIC) continue;
     const from = abs(r);
     if (!fs.existsSync(from)) {
       fail(`"${r}" is registered at runtime by ${BACKGROUND_SRC} but does not exist`);
@@ -682,6 +699,7 @@ async function copyAssets() {
     await fsp.copyFile(from, to);
     copied.push(r);
   }
+  copied.push(await writeDebugClassic());
   copied.push(...(await rewireDist()));
   return copied;
 }

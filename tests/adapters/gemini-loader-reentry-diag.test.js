@@ -238,7 +238,7 @@ describe('loader-reentry: R2 без гейта строка не печатае�
     expect(TARGET.slice(at - 40, at)).not.toContain("debugLog('error'");
     expect(TARGET.slice(at - 40, at)).not.toContain("debugLog('warn'");
     // гейт жив: 'log' под флагом, 'error'/'warn' — всегда (utils/debug.js:61-71)
-    const dbg = readFile('utils/debug.js');
+    const dbg = require('../helpers/load-esm.js').loadAsClassic('utils/debug.js');
     expect(dbg).toContain("if (level === 'error' || level === 'warn') {");
     expect(dbg).toContain('var enabled = DEBUG;');
     expect(dbg).toContain('if (enabled) {');

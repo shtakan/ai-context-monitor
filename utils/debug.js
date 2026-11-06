@@ -8,7 +8,7 @@ var DEBUG = false;
 
 // v31: сеттер флага (вызывается из content.js при загрузке ключа и по onChanged;
 // в MAIN-мире перехватчики получают значение через событие 'ai-cm-debug-logs').
-function __aiCmSetDebugLogs(v) {
+export function __aiCmSetDebugLogs(v) {
   DEBUG = !!v;
   try { if (typeof window !== 'undefined') window.__aiCmDebugLogs = !!v; } catch (e) { }
 }
@@ -19,7 +19,7 @@ function __aiCmSetDebugLogs(v) {
 var __aiCmLogRing = [];
 var __aiCmLogRingMax = 200;
 
-function __aiCmStringifyArg(a) {
+export function __aiCmStringifyArg(a) {
   if (typeof a === 'string') return a;
   try {
     var s = JSON.stringify(a);
@@ -29,7 +29,7 @@ function __aiCmStringifyArg(a) {
   } catch (e) { return String(a); }
 }
 
-function __aiCmPushLogRing(line) {
+export function __aiCmPushLogRing(line) {
   try {
     __aiCmLogRing.push(line);
     if (__aiCmLogRing.length > __aiCmLogRingMax) __aiCmLogRing.shift();
@@ -37,7 +37,7 @@ function __aiCmPushLogRing(line) {
 }
 
 // Копия ring-буфера текущего мира (для дампа диагностики).
-function __aiCmGetLogRing() {
+export function __aiCmGetLogRing() {
   try { return __aiCmLogRing.slice(); } catch (e) { return []; }
 }
 
@@ -52,7 +52,7 @@ function __aiCmGetLogRing() {
  *   - 'warn' и 'error' → выводятся ВСЕГДА (сигнал реальной проблемы, не спам)
  *   - 'log' / 'info' / 'debug' → выводятся ТОЛЬКО при DEBUG === true
  */
-function debugLog(level) {
+export function debugLog(level) {
   var args = Array.prototype.slice.call(arguments, 1);
   try {
     var line = args.map(__aiCmStringifyArg).join(' ');
@@ -82,7 +82,7 @@ function debugLog(level) {
  * @param {string} tag контекст точки вида '<domain>:<function>' ('deepseek:parseSSELines')
  * @returns {void}
  */
-function swallow(error, tag) {
+export function swallow(error, tag) {
   try {
     if (typeof debugLog !== 'function') return;   // песочница без utils/debug.js: тихо и без броска
     debugLog('error', '[swallow][' + (tag || 'unlabeled') + ']', error);
@@ -103,7 +103,7 @@ function swallow(error, tag) {
 //   - вызовы в чужом коде защищены typeof-гардом, поэтому срез-песочницы тестов без
 //     этих хелперов видят прежнее поведение 1:1.
 // =============================================================================
-function aiCmDiagOn() {
+export function aiCmDiagOn() {
   try {
     if (typeof sessionStorage !== 'undefined' && sessionStorage &&
       sessionStorage.getItem('aiCmDebug') === '1') return true;
@@ -115,7 +115,7 @@ function aiCmDiagOn() {
 }
 
 // Тип документа для логов сброса состояния: captcha / chat / search / unknown.
-function aiCmDiagDocKind() {
+export function aiCmDiagDocKind() {
   var href = '';
   var host = '';
   try { href = String((typeof location !== 'undefined' && location && location.href) || ''); } catch (eHref) { }
@@ -140,7 +140,7 @@ function aiCmDiagDocKind() {
 }
 
 // Первые n символов (по умолчанию 100) базы/тела ОДНОЙ строкой; пустое — явно.
-function aiCmDiagHead(v, n) {
+export function aiCmDiagHead(v, n) {
   try {
     var lim = (typeof n === 'number' && n > 0) ? n : 100;
     if (v === undefined || v === null) return '(пусто)';
@@ -153,7 +153,7 @@ function aiCmDiagHead(v, n) {
 }
 
 // Источник вызова (dev-режим/подробные логи): верхние кадры стека одной строкой.
-function aiCmDiagStack(skip) {
+export function aiCmDiagStack(skip) {
   try {
     var st = String((new Error()).stack || '');
     if (!st) return '';
@@ -170,7 +170,7 @@ function aiCmDiagStack(skip) {
 }
 
 // Печать строки диагностики: tag + key=value… Только под гейтом aiCmDebug.
-function aiCmDiagLine(tag, fields) {
+export function aiCmDiagLine(tag, fields) {
   if (!aiCmDiagOn()) return false;
   try {
     var parts = [];
@@ -187,7 +187,7 @@ function aiCmDiagLine(tag, fields) {
 
 // ЕДИНАЯ точка лога скачивания: триггер, имя файла (пустое — словом «пустое»),
 // первые 100 символов базы, длина, URL документа, threadId, источник вызова.
-function aiCmDiagDownload(trigger, content, fileName, extra) {
+export function aiCmDiagDownload(trigger, content, fileName, extra) {
   if (!aiCmDiagOn()) return false;
   var e = extra || {};
   var url = '';
@@ -211,7 +211,7 @@ function aiCmDiagDownload(trigger, content, fileName, extra) {
 // живой артефакт `f.txt`); reason=empty-name — имя файла пустое/не задано (живой путь
 // автоэкспорта на captcha-странице). Строка — только под гейтом aiCmDebug; reason идёт
 // ПЕРВЫМ полем, поэтому в логе всегда читается `download-blocked reason=<причина>`.
-function aiCmDiagDownloadBlocked(trigger, content, fileName, reason, extra) {
+export function aiCmDiagDownloadBlocked(trigger, content, fileName, reason, extra) {
   if (!aiCmDiagOn()) return false;
   var e = extra || {};
   var url = '';
@@ -261,7 +261,7 @@ try { if (typeof window !== 'undefined') window.__aiCmSwallow = swallow; } catch
  * @param {string} tag контекст точки вида '<domain>:<function>' ('deepseek:parseSSELines')
  * @returns {void}
  */
-function swallowSoft(error, tag) {
+export function swallowSoft(error, tag) {
   var label = tag || 'unlabeled';
   var msg = '';
   try { msg = (error && error.message) ? String(error.message) : String(error); } catch (eSoftMsg) { msg = '(нечитаемая ошибка)'; }
@@ -286,7 +286,7 @@ function swallowSoft(error, tag) {
  * @param {any} [detail] необязательная деталь (уходит вторым аргументом console.warn)
  * @returns {void}
  */
-function aiCmDiagWarn(tag, message, detail) {
+export function aiCmDiagWarn(tag, message, detail) {
   var label = tag || 'unlabeled';
   var text = (message === undefined || message === null) ? '' : String(message);
   try {

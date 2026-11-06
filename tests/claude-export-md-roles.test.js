@@ -501,7 +501,9 @@ describe('Claude md roles R5: normalizeExportMessages — human→user, проч
 // проверяются факт и значения печати + байтовая идентичность md.
 // =====================================================================================
 
-const DEBUG_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'debug.js'), 'utf8');
+// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+// `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
 const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
 const DIAG_PREFIX = '[AI CM][diag] ';
 

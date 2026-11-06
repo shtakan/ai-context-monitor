@@ -62,7 +62,9 @@ const BASE_HANDLER_SRC = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.j
 const BUILDERS_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.js'), 'utf8');
 // D7: РЕАЛЬНЫЙ utils/debug.js (канонический гейт aiCmDebug) — только для пина «диагностика
 // под гейтом»: в прочих пинах он не подключается вовсе (прежнее поведение песочницы 1:1).
-const DEBUG_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'debug.js'), 'utf8');
+// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+// `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
 
 // Рез по балансу фигурных скобок (конвенция сьюта: tests/qwen-reasoning-export-o37.test.js).
 function fnDecl(src, name) {

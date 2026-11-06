@@ -2,33 +2,17 @@
 // Service Worker. Ставит перехватчики в МИР САЙТА ДО загрузки страницы
 // (document_start), программно, через registerContentScripts.
 // Это не зависит от manifest и не ломает существующую инжекцию content.js.
-// Копия DEBUG + debugLog для SW (в SW бандл собирается esbuild'ом, импорты разрешены).
-// ESM (Roadmap Ph2): статический import втягивается сборкой в тот же бандл SW, поэтому
-// в рантайме aiCmIsFirefox() остаётся в общей области видимости бандла.
+// ESM (Roadmap Ph2): статические import'ы втягиваются сборкой в тот же бандл SW, поэтому
+// в рантайме aiCmIsFirefox() и хелперы utils/debug.js остаются в общей области видимости бандла.
 import { aiCmIsFirefox } from '../utils/platform.js';
-var DEBUG = false;
+// R1 (Ph2): логику debugLog/swallow больше не дублируем — utils/debug.js переведён на ESM,
+// и esbuild вшивает модуль в бандл SW (ring-буфер + гейт DEBUG приходят вместе с ним).
+import { debugLog, swallow } from '../utils/debug.js';
 // v51 (A3): lastGoodModel — ТОЛЬКО кэш-оптимизация (предпочтительный кандидат для countTokens).
 // MV3 SW не персистентен: глобал теряется при рестарте SW — это ожидаемо и безопасно,
 // handleCountTokens просто пробует кандидатов заново. Персистентность не обязательна.
 var lastGoodModel = '';
-function debugLog(level) {
-  var args = Array.prototype.slice.call(arguments, 1);
-  if (level === 'error' || level === 'warn') { (console[level] || console.log).apply(console, args); return; }
-  if (DEBUG) { (console[level] || console.log).apply(console, args); }
-}
 
-// Step E.2a: ЛОКАЛЬНЫЙ дубль хелпера swallow (utils/debug.js:85) для SW — importScripts
-// в MV3 non-module SW невозможен, как и для debugLog выше. Контракт тот же: молчаливый
-// catch → диагностируемый (ring у SW нет, 'error' идёт в console.error всегда через
-// debugLog), поток управления не меняется, возврат undefined. typeof-гард обязателен:
-// срезы-песочницы тестов грузят background.js без debugLog. Своего console.error здесь
-// быть НЕ должно — core/ сканируется tests/no-bare-console-error.test.js.
-function swallow(error, tag) {
-  try {
-    if (typeof debugLog !== 'function') return;
-    debugLog('error', '[swallow][' + (tag || 'unlabeled') + ']', error);
-  } catch (eSwallow) { /* сам логгер не должен бросать: swallow безопасен всегда */ }
-}
 
 // ========== M-4.5 (аудит 1.7): i18n — строки Chrome-уведомлений из _locales ==========
 // Пользовательские строки уведомления берутся из chrome.i18n.getMessage (ключи

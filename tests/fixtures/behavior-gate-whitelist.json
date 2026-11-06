@@ -92,7 +92,7 @@
     "reason": "vm-harness"
   },
   "tests/adapters/gemini-loader-reentry-diag.test.js": {
-    "count": 17,
+    "count": 13,
     "reason": "vm-harness"
   },
   "tests/adapters/gemini-loader-sleep-until-fired.test.js": {
@@ -136,7 +136,7 @@
     "reason": "legacy-pin"
   },
   "tests/adapters/gsa-fetch-consent-telemetry.test.js": {
-    "count": 5,
+    "count": 4,
     "reason": "legacy-pin"
   },
   "tests/adapters/helpers/gsa-loop-sandbox.js": {
@@ -204,7 +204,7 @@
     "reason": "vm-harness"
   },
   "tests/badge-suppress-adapter-base-v54.test.js": {
-    "count": 14,
+    "count": 13,
     "reason": "legacy-pin"
   },
   "tests/build-integrity.test.js": {
@@ -220,7 +220,7 @@
     "reason": "vm-harness"
   },
   "tests/chatgpt-o1-badge-hold.test.js": {
-    "count": 11,
+    "count": 10,
     "reason": "legacy-pin"
   },
   "tests/claude-badge-settle.test.js": {
@@ -232,7 +232,7 @@
     "reason": "legacy-pin"
   },
   "tests/claude-export-md-roles.test.js": {
-    "count": 22,
+    "count": 20,
     "reason": "legacy-pin"
   },
   "tests/d-o41-reasoning-auto-on.test.js": {
@@ -240,7 +240,7 @@
     "reason": "legacy-pin"
   },
   "tests/debug.test.js": {
-    "count": 2,
+    "count": 1,
     "reason": "legacy-pin"
   },
   "tests/deepseek-o40-better-deepseek-sanitation.test.js": {
@@ -248,7 +248,7 @@
     "reason": "legacy-pin"
   },
   "tests/deepseek-o42-bds-tool-envelope.test.js": {
-    "count": 10,
+    "count": 9,
     "reason": "legacy-pin"
   },
   "tests/deepseek-o7-hidden-export.test.js": {
@@ -260,7 +260,7 @@
     "reason": "legacy-pin"
   },
   "tests/diag-o27-o32-instrumentation.test.js": {
-    "count": 25,
+    "count": 24,
     "reason": "legacy-pin"
   },
   "tests/docs-hygiene.test.js": {
@@ -312,7 +312,7 @@
     "reason": "legacy-pin"
   },
   "tests/gsa-o27-protective-form-guard.test.js": {
-    "count": 12,
+    "count": 11,
     "reason": "legacy-pin"
   },
   "tests/gsa-o31-thread-segmentation.test.js": {
@@ -336,7 +336,7 @@
     "reason": "legacy-pin"
   },
   "tests/o21-deepseek-dom-instrumentation.test.js": {
-    "count": 16,
+    "count": 15,
     "reason": "legacy-pin"
   },
   "tests/o23-tokens-calibration.test.js": {
@@ -344,7 +344,7 @@
     "reason": "legacy-pin"
   },
   "tests/o29-autoexport-log-spam.test.js": {
-    "count": 14,
+    "count": 13,
     "reason": "legacy-pin"
   },
   "tests/o32-gsa-canonical-thread-invariant.test.js": {
@@ -352,7 +352,7 @@
     "reason": "legacy-pin"
   },
   "tests/o33-autoexport-base-pending.test.js": {
-    "count": 12,
+    "count": 11,
     "reason": "legacy-pin"
   },
   "tests/o34-reset-on-empty-convid.test.js": {
@@ -360,7 +360,7 @@
     "reason": "legacy-pin"
   },
   "tests/o40-f3-diag-instrumentation.test.js": {
-    "count": 5,
+    "count": 4,
     "reason": "legacy-pin"
   },
   "tests/o45-gsa-code-blocks-export.test.js": {
@@ -416,7 +416,7 @@
     "reason": "legacy-pin"
   },
   "tests/qwen-autoexport-trusted-base-o37.test.js": {
-    "count": 11,
+    "count": 10,
     "reason": "legacy-pin"
   },
   "tests/qwen-container-drop-o37.test.js": {
@@ -432,19 +432,19 @@
     "reason": "legacy-pin"
   },
   "tests/qwen-gate-diag-o35.test.js": {
-    "count": 25,
+    "count": 24,
     "reason": "static-linter"
   },
   "tests/qwen-intercept.test.js": {
-    "count": 6,
+    "count": 5,
     "reason": "legacy-pin"
   },
   "tests/qwen-o39-history-reasoning.test.js": {
-    "count": 15,
+    "count": 14,
     "reason": "legacy-pin"
   },
   "tests/qwen-o39-reasoning-passthrough.test.js": {
-    "count": 7,
+    "count": 3,
     "reason": "legacy-pin"
   },
   "tests/qwen-o7-reasoning-toggle.test.js": {
@@ -464,15 +464,11 @@
     "reason": "legacy-pin"
   },
   "tests/qwen-r4-files-only.test.js": {
-    "count": 3,
+    "count": 2,
     "reason": "legacy-pin"
   },
   "tests/qwen-reasoning-export-o37.test.js": {
     "count": 11,
-    "reason": "legacy-pin"
-  },
-  "tests/qwen-spa-terminal-o35.test.js": {
-    "count": 1,
     "reason": "legacy-pin"
   },
   "tests/qwen-stream-frames.test.js": {
@@ -488,7 +484,7 @@
     "reason": "vm-harness"
   },
   "tests/swallow-soft.test.js": {
-    "count": 9,
+    "count": 4,
     "reason": "vm-harness"
   },
   "tests/tokenizer-cyrillic-calibration.test.js": {

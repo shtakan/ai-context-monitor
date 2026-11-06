@@ -8,10 +8,10 @@
  * перехватчика. Прежние UMD-зеркала и module.exports больше не публикуются —
  * единственный способ потребления это import.
  *
- * swallowSoft берётся из utils/debug.js. debug.js остаётся классическим
- * MAIN-world скриптом (грузится первым в js[]), поэтому его экспорт синтезирует
- * сборка поверх window.__aiCmSwallowSoft (build.mjs, debugSoftFacadePlugin):
- * ring-буфер и window-зеркала debug.js не дублируются в каждом бандле.
+ * swallowSoft берётся из utils/debug.js настоящим статическим import'ом: модуль
+ * переведён на ESM (R1), поэтому esbuild втягивает его по-настоящему, без
+ * синтезированной грани поверх window.__aiCmSwallowSoft (прежний
+ * debugSoftFacadePlugin из build.mjs удалён).
  *
  * Задача (R2): страховочные setInterval живут всю страницу и поллят даже в
  * скрытой вкладке (document.visibilityState !== 'visible'). Гард по видимости:
@@ -20,7 +20,7 @@
  * не нужен.
  */
 
-// @ts-expect-error utils/debug.js — классический скрипт без export; ESM-грань синтезирует сборка.
+// R1 (Ph2): utils/debug.js — настоящий ESM-модуль, экспорт реальный (@ts-expect-error снят).
 import { swallowSoft } from './debug.js';
 
 /**

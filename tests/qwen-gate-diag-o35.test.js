@@ -31,7 +31,9 @@ const CONTENT = H.contentSource;
 const WIDGET_SRC = H.moduleSource('core/widget.js');
 const BASE_HANDLER_SRC = H.moduleSource('core/base-handler.js');
 const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'qwen-intercept.js'), 'utf8');
-const DEBUG_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'debug.js'), 'utf8');
+// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+// `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
 const { loadAsClassic } = require('./helpers/load-esm.js');
 // Ph2: stream-frames.js — ESM; перехватчик исполняется с втянутыми импортами.
 const QWEN_CLASSIC = loadAsClassic('core/qwen-intercept.js');

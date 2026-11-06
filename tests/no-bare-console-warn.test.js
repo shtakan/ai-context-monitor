@@ -10,8 +10,9 @@
  *   1. Ловится и computed-доступ: `console['warn'](` / `console["warn"](` — форма, которую
  *      страж console.error намеренно НЕ ловит (tests/no-bare-console-error.test.js:261).
  *      Лексер стирает ключ-литерал, поэтому форма ловится по виду `console[…] (`, см. WARN_PATTERNS.
- *   2. Ловится и динамический уровень `console[level]` — иначе сам логгер (utils/debug.js:62,69
- *      и SW-дубль core/background.js:13,14) был бы невидим для стража.
+ *   2. Ловится и динамический уровень `console[level]` — иначе сам логгер (utils/debug.js:62,69)
+ *      был бы невидим для стража. SW-дубля debugLog в core/background.js больше нет:
+ *      Ph2 перевёл utils/debug.js на ESM и SW импортирует его (R1).
  *   3. utils/debug.js не «белый список целиком», а ЯВНО сканируемый файл: его сайты внесены
  *      в allow-list поимённо (иначе «владелец console.*» оказался бы непроверяемым).
  *   4. Вместо белого списка — allow-list tests/fixtures/console-allow.json (schema
