@@ -2692,6 +2692,21 @@ function processAndSend() {
       // монотонный максимум — случайная инфляция (двойной учёт вложений и т.п.)
       // самолечится следующим доверенным снапшотом вместо max-merge.
       maxTokenCount = tokenEstimate;
+    } else if ((typeof baseSeen !== 'undefined') && baseSeen === true &&
+      (typeof baseCount === 'number') && baseCount > 0 &&
+      (typeof aiCmDomListS1 !== 'undefined') && aiCmDomListS1 &&
+      aiCmDomListS1.length > 0 && baseCount > aiCmDomListS1.length &&
+      tokenEstimate < maxTokenCount) {
+      // O-32 (фикс C): СБРОС ХРАПОВИКА на раздутой базе. Сеть не доказала полноту
+      // (baseComplete=false), но заявляет БОЛЬШЕ сообщений, чем реально отдаёт DOM:
+      // признак базы с дублями (одна пара «вопрос+ответ» вошла двумя формами тела).
+      // Храповик удерживал это завышение навсегда — бейдж залипал на 9% вместо 4.4%.
+      // Сбрасываем максимум к текущей оценке (она посчитана по канонической базе —
+      // core/hybrid-tail.js: пол базы, без дублей) и снимаем DOM-границу (lastBounded),
+      // чтобы следующий проход снова мерил источник с нуля. Срабатывает ТОЛЬКО вниз
+      // (tokenEstimate < maxTokenCount): на здоровом росте поведение не меняется.
+      maxTokenCount = tokenEstimate;
+      lastBounded = false;
     } else if (useMonotonic) {
       if (tokenEstimate > maxTokenCount) maxTokenCount = tokenEstimate;
     } else {

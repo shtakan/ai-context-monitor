@@ -87,6 +87,9 @@
    * @property {typeof canonicalAnswerBody} canonicalAnswerBody Тело ответа без обёртки.
    * @property {typeof canonicalizeTurnForThread} canonicalizeTurnForThread Каноническая форма хода.
    * @property {typeof normalizeTurnKeyPart} normalizeTurnKeyPart Нормализация части ключа.
+   * @property {typeof turnIdentityParts} turnIdentityParts Части идентичности хода (вопрос, тело).
+   * @property {typeof bodiesPrefixCompatible} bodiesPrefixCompatible Совместимость тел по префиксу.
+   * @property {typeof dedupeTurns} dedupeTurns Дедуп списка ходов без переписывания объектов.
    * @property {typeof renderCodeBlock} renderCodeBlock Рендер код-блока фенсом.
    * @property {typeof answerTextOf} answerTextOf Текст контент-узла ответа.
    * @property {typeof answerDomNodes} answerDomNodes Отбор контент-узлов DOM.
@@ -1022,17 +1025,28 @@
   // РОВНО один ключ: ход сети ('Q' + 'A') и ход добора/сети-эмита (null + 'Ответ в режиме ИИ,
   // исходный запрос: "Q" A') → 'q||a'.
   /**
+   * Части канонической идентичности хода: нормализованный вопрос и нормализованное тело.
+   * @param {FolwrTurn|null|undefined} turn Ход переписки.
+   * @returns {{u: string, a: string}} Вопрос и тело (обе части нормализованы).
+   */
+  function turnIdentityParts(turn) {
+    if (!turn) return { u: '', a: '' };
+    var wrapper = answerWrapperParts(turn.assistantText);
+    var u = normalizeTurnKeyPart(turn.userText);
+    if (!u && wrapper) u = normalizeTurnKeyPart(wrapper.question);
+    var a = normalizeTurnKeyPart(wrapper ? wrapper.body : canonicalAnswerBody(turn.assistantText));
+    return { u: u, a: a };
+  }
+
+  /**
    * Канонический CONTENT-ключ хода: normalized(userText) + '||' + normalized(answerBody).
    * @param {FolwrTurn|null|undefined} turn Ход переписки.
    * @returns {string} Ключ вида 'q||a'; '' для пустого хода.
    */
   function canonicalTurnKeyOf(turn) {
     if (!turn) return '';
-    var wrapper = answerWrapperParts(turn.assistantText);
-    var u = normalizeTurnKeyPart(turn.userText);
-    if (!u && wrapper) u = normalizeTurnKeyPart(wrapper.question);
-    var a = normalizeTurnKeyPart(wrapper ? wrapper.body : canonicalAnswerBody(turn.assistantText));
-    return u + '||' + a;
+    var parts = turnIdentityParts(turn);
+    return parts.u + '||' + parts.a;
   }
 
   // Каноническая ФОРМА хода: вопрос, живущий только внутри обёртки текста ответа, выносится
@@ -1089,6 +1103,84 @@
     };
   }
 
+  // =====================================================================================
+  // O-32 (фикс A): ПРЕФИКС-ТЕРПИМАЯ ИДЕНТИЧНОСТЬ ОДНОГО ХОДА
+  // =====================================================================================
+  // Живой дефект (O-32, регрессия SPA): тело ОДНОГО ответа приходило в базу двумя разными
+  // телами — прерванный стрим (короткая форма) и полный добор (длинная), либо тело с
+  // маркерами цитат в хвосте. Точный канонический ключ такие формы НЕ схлопывал: база росла
+  // «старый ход + его продолжение», бейдж удваивался (4.4% → 9%).
+  // При ОДНОМ И ТОМ ЖЕ вопросе тело одного хода отличается только степенью полноты, поэтому
+  // тела считаются совместимыми, если одно — префикс другого ЛИБО общий префикс ≥ 80%
+  // короткого тела. Порог PREFIX_MIN_CHARS отсекает короткие тела («Да» / «Да, верно»), где
+  // совпадение префикса ничего не доказывает и склейка потеряла бы отдельный ход.
+  /** @type {number} Минимальная длина тела (нормализованные знаки) для префикс-правила. */
+  var PREFIX_MIN_CHARS = 12;
+  /** @type {number} Доля общего префикса, при которой тела считаются одним ответом. */
+  var PREFIX_FUZZY_RATIO = 0.8;
+
+  /**
+   * Совместимость тел: одно — префикс другого либо общий префикс ≥ 80% короткого тела.
+   * @param {string|null|undefined} a Тело A (нормализованное).
+   * @param {string|null|undefined} b Тело B (нормализованное).
+   * @returns {boolean} true — тела принадлежат одному ответу разной полноты.
+   */
+  function bodiesPrefixCompatible(a, b) {
+    var x = String(a == null ? '' : a);
+    var y = String(b == null ? '' : b);
+    if (!x || !y) return false;
+    if (x === y) return true;
+    var n = Math.min(x.length, y.length);
+    if (n < PREFIX_MIN_CHARS) return false;
+    var common = 0;
+    while (common < n && x.charCodeAt(common) === y.charCodeAt(common)) common++;
+    if (common === n) return true;
+    return (common / n) >= PREFIX_FUZZY_RATIO;
+  }
+
+  /**
+   * Полнее ли тело кандидата: при префикс-совместимости решает длина ТЕЛА, не обёртки.
+   * @param {FolwrTurn|null|undefined} candidate Кандидат на замену.
+   * @param {FolwrTurn|null|undefined} current Текущая сохранённая форма.
+   * @returns {boolean} true — тело кандидата полнее.
+   */
+  function isFullerTurn(candidate, current) {
+    var la = turnIdentityParts(candidate).a.length;
+    var lb = turnIdentityParts(current).a.length;
+    if (la !== lb) return la > lb;
+    return isBetterTurn(candidate, current);
+  }
+
+  /**
+   * Индекс хода с тем же вопросом и префикс-совместимым телом (линейный поиск: баз ≤ сотен).
+   * @param {FolwrTurn[]} turns Список ходов.
+   * @param {FolwrTurn|null|undefined} turn Проверяемый ход.
+   * @returns {number} Индекс совместимого хода либо -1.
+   */
+  function findPrefixCompatibleIndex(turns, turn) {
+    var parts = turnIdentityParts(turn);
+    if (!parts.u || !parts.a) return -1;
+    for (var i = 0; i < turns.length; i++) {
+      var other = turnIdentityParts(turns[i]);
+      if (other.u === parts.u && bodiesPrefixCompatible(other.a, parts.a)) return i;
+    }
+    return -1;
+  }
+
+  /**
+   * Переиндексация канонического ключа после укрупнения хода (старый ключ удаляется).
+   * @param {Object<string, number>} byKey Карта ключ → индекс.
+   * @param {FolwrTurn[]} turns Список ходов.
+   * @param {number} at Индекс изменённого хода.
+   * @returns {void}
+   */
+  function reindexTurnKey(byKey, turns, at) {
+    var k;
+    for (k in byKey) { if (byKey[k] === at) delete byKey[k]; }
+    var key = canonicalTurnKeyOf(turns[at]);
+    if (key !== '||') byKey[key] = at;
+  }
+
   // Слияние ходов по id (turn.id) — для тихой пагинации чанков folwr, где один и тот же ход
   // может повториться на границе порций. Более новый ход не перезаписывает; дубли по id убираются.
   // O-32: вторая ось дедупа — КАНОНИЧЕСКИЙ ключ (canonicalTurnKeyOf): один и тот же ход,
@@ -1104,6 +1196,7 @@
     baseTurns = Array.isArray(baseTurns) ? baseTurns : [];
     extraTurns = Array.isArray(extraTurns) ? extraTurns : [];
     var byId = {};
+    /** @type {Object<string, number>} */
     var byKey = {};
     var out = [];
     function add(t) {
@@ -1112,9 +1205,15 @@
       var key = canonicalTurnKeyOf(t);
       var hasId = Object.prototype.hasOwnProperty.call(byId, id);
       var hasKey = (key !== '||') && Object.prototype.hasOwnProperty.call(byKey, key);
-      if (hasId || hasKey) {
-        var at = hasId ? byId[id] : byKey[key];
-        if (isBetterTurn(t, out[at])) out[at] = turnRecord(t, out[at].id);
+      // O-32 (фикс A): третий путь идентичности — тот же вопрос и префикс-совместимое тело
+      // (прерванный стрим / маркеры цитат): это ОДИН ход, побеждает полное тело.
+      var at = hasId ? byId[id] : (hasKey ? byKey[key] : findPrefixCompatibleIndex(out, t));
+      if (at !== -1) {
+        var richer = (hasId || hasKey) ? isBetterTurn(t, out[at]) : isFullerTurn(t, out[at]);
+        if (richer) {
+          out[at] = turnRecord(t, out[at].id);
+          reindexTurnKey(byKey, out, at);
+        }
         return;
       }
       byId[id] = out.length;
@@ -1156,22 +1255,64 @@
   function mergeTurnsByKey(baseTurns, extraTurns) {
     baseTurns = Array.isArray(baseTurns) ? baseTurns : [];
     extraTurns = Array.isArray(extraTurns) ? extraTurns : [];
-    var seen = {};
+    /** @type {Object<string, number>} */
+    var byKey = {};
     var out = [];
     function add(t) {
       if (!t) return;
       var key = canonicalTurnKeyOf(t);
       if (key === '||') return;
-      if (seen[key] === undefined) {
-        seen[key] = out.length;
+      var hasKey = Object.prototype.hasOwnProperty.call(byKey, key);
+      // O-32 (фикс A): без точного ключа — префикс-совместимое тело того же вопроса.
+      var at = hasKey ? byKey[key] : findPrefixCompatibleIndex(out, t);
+      if (at === -1) {
+        byKey[key] = out.length;
         out.push(turnRecord(t, 'x' + out.length));
         return;
       }
-      var at = seen[key];
-      if (isBetterTurn(t, out[at])) out[at] = turnRecord(t, out[at].id);
+      var richer = hasKey ? isBetterTurn(t, out[at]) : isFullerTurn(t, out[at]);
+      if (richer) {
+        out[at] = turnRecord(t, out[at].id);
+        reindexTurnKey(byKey, out, at);
+      }
     }
     for (var i = 0; i < baseTurns.length; i++) add(baseTurns[i]);
     for (var j = 0; j < extraTurns.length; j++) add(extraTurns[j]);
+    return out;
+  }
+
+  // O-32 (фикс C): ЧИСТКА ГОТОВОГО СПИСКА ХОДОВ перед записью в кэш треда.
+  // Кэш — источник базы при возврате в тред по SPA, поэтому дубли обязаны отсекаться ДО
+  // записи: иначе раздутая база переживает навигацию и бейдж остаётся завышенным.
+  // Объекты ходов не копируются и не переписываются (id и лишние поля сохраняются);
+  // префикс-совместимые дубли схлопываются, побеждает более полная форма.
+  /**
+   * Дедуп списка ходов: одинаковые и префикс-совместимые ходы схлопываются.
+   * @param {FolwrTurn[]|null|undefined} turns Ходы треда.
+   * @returns {FolwrTurn[]} Список без дублей (порядок первых вхождений).
+   */
+  function dedupeTurns(turns) {
+    var list = Array.isArray(turns) ? turns : [];
+    /** @type {Object<string, number>} */
+    var byKey = {};
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var t = list[i];
+      if (!t) continue;
+      var key = canonicalTurnKeyOf(t);
+      var hasKey = (key !== '||') && Object.prototype.hasOwnProperty.call(byKey, key);
+      var at = hasKey ? byKey[key] : findPrefixCompatibleIndex(out, t);
+      if (at === -1) {
+        if (key !== '||') byKey[key] = out.length;
+        out.push(t);
+        continue;
+      }
+      var richer = hasKey ? isBetterTurn(t, out[at]) : isFullerTurn(t, out[at]);
+      if (richer) {
+        out[at] = t;
+        reindexTurnKey(byKey, out, at);
+      }
+    }
     return out;
   }
 
@@ -1256,6 +1397,10 @@
       canonicalAnswerBody: canonicalAnswerBody,
       canonicalizeTurnForThread: canonicalizeTurnForThread,
       normalizeTurnKeyPart: normalizeTurnKeyPart,
+      // O-32 (фикс A/C): префикс-терпимая идентичность хода и дедуп списка перед кэшем.
+      turnIdentityParts: turnIdentityParts,
+      bodiesPrefixCompatible: bodiesPrefixCompatible,
+      dedupeTurns: dedupeTurns,
       // O-45: общий рендер код-блоков (```lang … ```) и отбор узлов DOM-пути —
       // переиспользуются адаптером (adapters/google-search-adapter.js) и тестами.
       renderCodeBlock: renderCodeBlock,
@@ -1279,6 +1424,9 @@
       canonicalAnswerBody: canonicalAnswerBody,
       canonicalizeTurnForThread: canonicalizeTurnForThread,
       normalizeTurnKeyPart: normalizeTurnKeyPart,
+      turnIdentityParts: turnIdentityParts,
+      bodiesPrefixCompatible: bodiesPrefixCompatible,
+      dedupeTurns: dedupeTurns,
       renderCodeBlock: renderCodeBlock,
       answerTextOf: answerTextOf,
       answerDomNodes: answerDomNodes,

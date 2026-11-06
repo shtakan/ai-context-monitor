@@ -313,7 +313,7 @@
         550,
         2377,
         2517,
-        3493
+        3508
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cyrDiag = (t.match(/[а-яёА-ЯЁ]/g) || []).length; var cyrillicPct = t"
     },
@@ -361,9 +361,9 @@
         2528,
         2552,
         2561,
-        3377,
-        3403,
-        3405
+        3392,
+        3418,
+        3420
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
     },
@@ -392,8 +392,8 @@
         1063,
         2470,
         2493,
-        3359,
-        3365
+        3374,
+        3380
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
     },
@@ -420,10 +420,10 @@
         838,
         1012,
         2051,
-        2763,
-        2825,
-        2842,
-        2926
+        2778,
+        2840,
+        2857,
+        2941
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -434,7 +434,7 @@
         26,
         288,
         358,
-        2995
+        3010
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.runtime.sendMessage({ type: 'BADGE_RESET' }).catch(function () {"
     },
@@ -443,7 +443,7 @@
       "category": "local-helper-guard",
       "lines": [
         285,
-        3178
+        3193
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmCancelDeferredHistWrite('');"
     },
@@ -451,7 +451,7 @@
       "file": "core/content.js",
       "category": "parse-guard",
       "lines": [
-        3439
+        3454
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof window !== 'undefined' && window && window.AiCmEx"
     },
@@ -1158,8 +1158,8 @@
       "file": "core/google-search-intercept.js",
       "category": "cleanup-guard",
       "lines": [
-        788,
-        839
+        825,
+        876
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: var tgReB = /<!--TgQPHd\\|[\\s\\S]*?-->/g; var tgMatchB; while ((tgMatchB ="
     },
@@ -1168,7 +1168,7 @@
       "category": "debug-instrumentation",
       "lines": [
         23,
-        1588
+        1625
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDeb"
     },
@@ -1177,7 +1177,7 @@
       "category": "defensive-assignment",
       "lines": [
         157,
-        1595
+        1632
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: lastFolwrOpenUrl = url;"
     },
@@ -1186,7 +1186,7 @@
       "category": "dom-read-guard",
       "lines": [
         288,
-        1170
+        1207
       ],
       "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: var el = document.querySelector('[data-session-thread-id]'); if (el) { v"
     },
@@ -1194,8 +1194,8 @@
       "file": "core/google-search-intercept.js",
       "category": "event-guard",
       "lines": [
-        516,
-        1288
+        542,
+        1325
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-full-history', { detail: det"
     },
@@ -1205,9 +1205,9 @@
       "lines": [
         252,
         387,
-        477,
-        513,
-        686
+        503,
+        539,
+        723
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (window.GoogleFolwrUtils && window.GoogleFolwrUtils.classifyFolwrCont"
     },
@@ -1215,7 +1215,7 @@
       "file": "core/google-search-intercept.js",
       "category": "parse-guard",
       "lines": [
-        853
+        890
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var u = new URL(rawUrl, location.href); var a = u.searchParams.get('auth"
     },
@@ -1798,8 +1798,8 @@
       "file": "utils/google-search-folwr-parser.js",
       "category": "container-drop",
       "lines": [
-        303,
-        457
+        306,
+        460
       ],
       "reason": "container-drop: контейнер уже откреплён от DOM (SPA-навигация) — снимать нечего; пример: var junk = clone.querySelectorAll('script, style, button, svg'); for (va"
     },
@@ -1807,8 +1807,8 @@
       "file": "utils/google-search-folwr-parser.js",
       "category": "dom-read-guard",
       "lines": [
-        340,
-        662
+        343,
+        665
       ],
       "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: var inner = el.querySelectorAll ? el.querySelectorAll('pre, code') : nul"
     },
@@ -1816,7 +1816,7 @@
       "file": "utils/google-search-folwr-parser.js",
       "category": "guard-clause",
       "lines": [
-        362
+        365
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: for (var a = 0; a < attrNames.length; a++) { var v = (el && el.getAttrib"
     },

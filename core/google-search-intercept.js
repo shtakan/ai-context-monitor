@@ -400,6 +400,32 @@
     return seenKeys;
   }
 
+  // O-32 (фикс C): чистка списка ходов ПЕРЕД записью в кэш треда.
+  // Кэш — источник базы при возврате в тред по SPA (activateThread), поэтому дубли обязаны
+  // отсекаться ДО записи: иначе раздутая база переживает навигацию. Схлопывает точные И
+  // префикс-совместимые дубли (прерванный стрим / маркеры цитат) единый парсер — dedupeTurns;
+  // объекты ходов и их id не переписываются. Локальный фолбэк — только точный ключ.
+  function dedupeTurnsForCache(turns) {
+    var list = Array.isArray(turns) ? turns : [];
+    try {
+      if (window.GoogleFolwrUtils && typeof window.GoogleFolwrUtils.dedupeTurns === 'function') {
+        var deduped = window.GoogleFolwrUtils.dedupeTurns(list);
+        if (Array.isArray(deduped)) return deduped;
+      }
+    } catch (e) { deduped = null; }
+    var seen = {};
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var key = gsaTurnKey(list[i]);
+      if (key && key !== '||') {
+        if (seen[key]) continue;
+        seen[key] = true;
+      }
+      out.push(list[i]);
+    }
+    return out;
+  }
+
   // ---- плоские messages из turns (fallback) ----
   function messagesFromTurns(turns) {
     var msgs = [];
@@ -582,8 +608,12 @@
   // ---- установка активной базы из готового снимка (для сетевого и кэш-эмита) ----
   function applySnapshot(parsed, threadId) {
     if (!parsed || !parsed.turns || parsed.turns.length === 0) return;
-    lastFullTurns = parsed.turns.slice();
-    lastFullMessages = Array.isArray(parsed.messages) ? parsed.messages.slice() : messagesFromTurns(lastFullTurns);
+    var rawTurns = parsed.turns.slice();
+    // O-32 (фикс C): в кэш/base дубли не попадают — ни точные, ни префикс-совместимые.
+    lastFullTurns = dedupeTurnsForCache(rawTurns);
+    lastFullMessages = (lastFullTurns.length === rawTurns.length && Array.isArray(parsed.messages))
+      ? parsed.messages.slice()
+      : messagesFromTurns(lastFullTurns);
     // O-32: тот же канонический ключ, что у mergeTurns/applyTurns (было — сырая пара).
     seedSeenKeys(lastFullTurns);
     lastFullSnapshot = buildDetail(lastFullTurns, lastFullMessages, threadId);
@@ -605,7 +635,9 @@
     }
     for (var i = 0; i < lastFullTurns.length; i++) addTurn(lastFullTurns[i]);
     for (var j = 0; j < streamTurns.length; j++) addTurn(streamTurns[j]);
-    lastFullTurns = merged;
+    // O-32 (фикс C): префикс-совместимые формы одного хода схлопываются до записи в кэш.
+    lastFullTurns = dedupeTurnsForCache(merged);
+    seedSeenKeys(lastFullTurns);
     lastFullMessages = messagesFromTurns(lastFullTurns);
     lastFullSnapshot = buildDetail(lastFullTurns, lastFullMessages, threadId || currentThreadId || emittedThreadId);
     emittedThreadId = lastFullSnapshot.threadId || '';
@@ -662,6 +694,11 @@
         }
       }
     }
+    // O-32 (фикс C): база и её кэш-сегмент не содержат дублей — включая префикс-совместимые
+    // формы одного ответа (прерванный стрим / маркеры цитат). Дедуп ДО сборки messages:
+    // иначе счётчик сообщений и textLen остаются раздутыми.
+    lastFullTurns = dedupeTurnsForCache(lastFullTurns);
+    seedSeenKeys(lastFullTurns);
     lastFullMessages = messagesFromTurns(lastFullTurns);
     if (lastFullTurns.length > 0) {
       lastFullSnapshot = buildDetail(lastFullTurns, lastFullMessages, threadId);

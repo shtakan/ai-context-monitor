@@ -90,6 +90,7 @@ const SCOPE_FNS = [
   'gsaTurnKeyOfLocal',
   'gsaTurnKey',
   'seedSeenKeys',
+  'dedupeTurnsForCache',
   'isRawXssiPayload',
   'isUsableTurn',
   'hasUsableTurns',
@@ -607,5 +608,28 @@ describe('O-32 (8): reference треда A — 6 сообщений / 12255 зн
     const w = TURNS_A[0];
     expect(Parser.canonicalizeTurnForThread({ id: 'x', userText: null, assistantText: w.a }).assistantText).toBe(w.a);
     expect(Parser.mergeTurnsById([{ id: 'x', userText: null, assistantText: w.a }], [])[0].assistantText).toBe(w.a);
+  });
+});
+
+// =====================================================================================
+// (10) Фикс C: кэш треда не хранит дублей (префикс-совместимые формы одного хода)
+// =====================================================================================
+describe('O-32 (10): кэш треда пишется без дублей — фикс C', () => {
+  test('прерванный стрим + полный добор в кэше = ОДИН ход с полным телом', () => {
+    const q = 'Напиши Python-код для N-го числа Фибоначчи итеративно';
+    const shortBody = 'Вот код:\n```python\ndef fib(n):\n    a, b = 0, 1';
+    const fullBody = shortBody + '\n    for _ in range(n):\n        a, b = b, a + b\n    return a\n```';
+    const h = interceptCtx({});
+    h.api.mergeTurns([{ id: 'idx0', userText: q, assistantText: shortBody }], false, TID, 'legacy-body');
+    h.api.mergeTurns([{ id: 'net0', userText: q, assistantText: fullBody }], false, TID, 'legacy-body');
+    expect(h.ctx.lastFullTurns).toHaveLength(1);                       // было 2 (ход + продолжение)
+    expect(h.ctx.lastFullTurns[0].assistantText).toBe(fullBody);
+    const seg = h.ctx.threadCache.get(TID);
+    expect(seg.turns).toHaveLength(1);                                 // в кэш дубль не записан
+    expect(seg.snapshot.count).toBe(2);                                // вопрос + ответ (было 4)
+    // возврат в тред по SPA берёт базу из кэша — она тоже без дублей
+    h.ctx.baseThreadId = '';
+    h.api.activateThread(TID);
+    expect(h.ctx.lastFullTurns).toHaveLength(1);
   });
 });

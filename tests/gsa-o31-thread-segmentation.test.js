@@ -60,6 +60,9 @@ const SCOPE_FNS = [
   'gsaTurnKeyOfLocal',
   'gsaTurnKey',
   'seedSeenKeys',
+  // O-32 (фикс C): чистка ходов перед записью в кэш/base — зовётся из applySnapshot/
+  // mergeStreamTurns/mergeTurns, поэтому в песочнице тоже должна быть в скоупе.
+  'dedupeTurnsForCache',
   // O-27 (защитный фикс): валидация сетевого тела (≥1 непустой ход + форма мусора по телу) —
   // писатели базы зовут её из applyTurns/mergeTurns, поэтому в песочнице она в скоупе.
   'isRawXssiPayload',
