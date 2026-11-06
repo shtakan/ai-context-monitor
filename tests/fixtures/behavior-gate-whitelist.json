@@ -1,0 +1,506 @@
+{
+  "tests/a11y-options.test.js": {
+    "count": 19,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/aistudio-export-block.test.js": {
+    "count": 11,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/aistudio-files-drain.test.js": {
+    "count": 14,
+    "reason": "vm-harness"
+  },
+  "tests/adapters/aistudio-files-module.test.js": {
+    "count": 1,
+    "reason": "vm-harness"
+  },
+  "tests/adapters/aistudio-history-cache.test.js": {
+    "count": 1,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/aistudio-native-tokens.test.js": {
+    "count": 1,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/chatgpt-adapter-revive.test.js": {
+    "count": 6,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/contract-chatgpt.test.js": {
+    "count": 5,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/deepseek-e3-slug-localized-config.test.js": {
+    "count": 11,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/deepseek-files-module.test.js": {
+    "count": 3,
+    "reason": "vm-harness"
+  },
+  "tests/adapters/deepseek-o15-pairing.test.js": {
+    "count": 2,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/deepseek-o16-stream-export.test.js": {
+    "count": 4,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/deepseek-o17-spa-chat.test.js": {
+    "count": 7,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/deepseek-o18-export-net-sync.test.js": {
+    "count": 8,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/deepseek-o22-dispatch-dedupe.test.js": {
+    "count": 6,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/firefox-pdf-fallback.test.js": {
+    "count": 10,
+    "reason": "vm-harness"
+  },
+  "tests/adapters/gemini-archive-module.test.js": {
+    "count": 44,
+    "reason": "vm-harness"
+  },
+  "tests/adapters/gemini-attachment-architecture.test.js": {
+    "count": 12,
+    "reason": "vm-harness"
+  },
+  "tests/adapters/gemini-autoscroll-gate.test.js": {
+    "count": 3,
+    "reason": "vm-harness"
+  },
+  "tests/adapters/gemini-files-module.test.js": {
+    "count": 14,
+    "reason": "vm-harness"
+  },
+  "tests/adapters/gemini-h13-inner-cursor.test.js": {
+    "count": 3,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/gemini-ingest-module.test.js": {
+    "count": 34,
+    "reason": "vm-harness"
+  },
+  "tests/adapters/gemini-loader-fired-after-await.test.js": {
+    "count": 4,
+    "reason": "vm-harness"
+  },
+  "tests/adapters/gemini-loader-reentry-diag.test.js": {
+    "count": 17,
+    "reason": "vm-harness"
+  },
+  "tests/adapters/gemini-loader-sleep-until-fired.test.js": {
+    "count": 2,
+    "reason": "vm-harness"
+  },
+  "tests/adapters/gemini-loader-visible-scroll.test.js": {
+    "count": 9,
+    "reason": "vm-harness"
+  },
+  "tests/adapters/gemini-oracle-module.test.js": {
+    "count": 39,
+    "reason": "vm-harness"
+  },
+  "tests/adapters/gemini-overlay-gate.test.js": {
+    "count": 6,
+    "reason": "vm-harness"
+  },
+  "tests/adapters/gemini-overlay-module.test.js": {
+    "count": 34,
+    "reason": "vm-harness"
+  },
+  "tests/adapters/gemini-overlay-ui-timeout.test.js": {
+    "count": 11,
+    "reason": "vm-harness"
+  },
+  "tests/adapters/gemini-pagination-module.test.js": {
+    "count": 18,
+    "reason": "vm-harness"
+  },
+  "tests/adapters/gemini-scroll-stall-fix.test.js": {
+    "count": 15,
+    "reason": "vm-harness"
+  },
+  "tests/adapters/gemini-stale-cursor.test.js": {
+    "count": 2,
+    "reason": "vm-harness"
+  },
+  "tests/adapters/google-folwr-open.test.js": {
+    "count": 10,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/gsa-fetch-consent-telemetry.test.js": {
+    "count": 6,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/helpers/gsa-loop-sandbox.js": {
+    "count": 1,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/o48-gemini-parse-fail-salvage.test.js": {
+    "count": 6,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/o49-gemini-deepresearch-lowconfidence.test.js": {
+    "count": 9,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/o50-gemini-char-frame-slice.test.js": {
+    "count": 1,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/o51-gemini-vf5-subset-merge.test.js": {
+    "count": 5,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/o51b-gemini-vf5-id-evidence.test.js": {
+    "count": 6,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/o52-gemini-json-boundary.test.js": {
+    "count": 1,
+    "reason": "legacy-pin"
+  },
+  "tests/adapters/qwen-files-module.test.js": {
+    "count": 24,
+    "reason": "vm-harness"
+  },
+  "tests/archive/archive-export-gate.test.js": {
+    "count": 4,
+    "reason": "static-linter"
+  },
+  "tests/archive/archive-export-union.test.js": {
+    "count": 8,
+    "reason": "legacy-pin"
+  },
+  "tests/archive/archive-oracle.test.js": {
+    "count": 4,
+    "reason": "legacy-pin"
+  },
+  "tests/archive/oracle-archive-complete.test.js": {
+    "count": 26,
+    "reason": "legacy-pin"
+  },
+  "tests/audit-r3-silent-catch-logs.test.js": {
+    "count": 6,
+    "reason": "static-linter"
+  },
+  "tests/audit-r4-paste-origin.test.js": {
+    "count": 1,
+    "reason": "static-linter"
+  },
+  "tests/autoexport-settings-m13.test.js": {
+    "count": 10,
+    "reason": "legacy-pin"
+  },
+  "tests/background-counttokens.test.js": {
+    "count": 2,
+    "reason": "vm-harness"
+  },
+  "tests/badge-suppress-adapter-base-v54.test.js": {
+    "count": 14,
+    "reason": "legacy-pin"
+  },
+  "tests/build-integrity.test.js": {
+    "count": 1,
+    "reason": "static-linter"
+  },
+  "tests/byok-exactcount-sync.test.js": {
+    "count": 5,
+    "reason": "vm-harness"
+  },
+  "tests/byok-session.test.js": {
+    "count": 6,
+    "reason": "vm-harness"
+  },
+  "tests/chatgpt-o1-badge-hold.test.js": {
+    "count": 11,
+    "reason": "legacy-pin"
+  },
+  "tests/claude-badge-settle.test.js": {
+    "count": 14,
+    "reason": "legacy-pin"
+  },
+  "tests/claude-emit-handshake-h23.test.js": {
+    "count": 10,
+    "reason": "legacy-pin"
+  },
+  "tests/claude-export-md-roles.test.js": {
+    "count": 22,
+    "reason": "legacy-pin"
+  },
+  "tests/d-o41-reasoning-auto-on.test.js": {
+    "count": 15,
+    "reason": "legacy-pin"
+  },
+  "tests/debug.test.js": {
+    "count": 2,
+    "reason": "legacy-pin"
+  },
+  "tests/deepseek-o40-better-deepseek-sanitation.test.js": {
+    "count": 4,
+    "reason": "legacy-pin"
+  },
+  "tests/deepseek-o42-bds-tool-envelope.test.js": {
+    "count": 10,
+    "reason": "legacy-pin"
+  },
+  "tests/deepseek-o7-hidden-export.test.js": {
+    "count": 50,
+    "reason": "legacy-pin"
+  },
+  "tests/deepseek-usage-dump.test.js": {
+    "count": 8,
+    "reason": "legacy-pin"
+  },
+  "tests/diag-o27-o32-instrumentation.test.js": {
+    "count": 25,
+    "reason": "legacy-pin"
+  },
+  "tests/docs-hygiene.test.js": {
+    "count": 13,
+    "reason": "static-linter"
+  },
+  "tests/exact-token-count-models.test.js": {
+    "count": 11,
+    "reason": "legacy-pin"
+  },
+  "tests/export-emit-pipeline.test.js": {
+    "count": 11,
+    "reason": "legacy-pin"
+  },
+  "tests/export-manager-invariants.test.js": {
+    "count": 5,
+    "reason": "legacy-pin"
+  },
+  "tests/export-sanitize.test.js": {
+    "count": 4,
+    "reason": "legacy-pin"
+  },
+  "tests/gemini-autoexport-threshold.test.js": {
+    "count": 14,
+    "reason": "legacy-pin"
+  },
+  "tests/gemini-deepresearch-dedupe.test.js": {
+    "count": 2,
+    "reason": "legacy-pin"
+  },
+  "tests/gemini-model-network.test.js": {
+    "count": 10,
+    "reason": "legacy-pin"
+  },
+  "tests/gemini-source-tier.test.js": {
+    "count": 13,
+    "reason": "legacy-pin"
+  },
+  "tests/gsa-autoexport-o11-name-collision.test.js": {
+    "count": 18,
+    "reason": "legacy-pin"
+  },
+  "tests/gsa-autoexport.test.js": {
+    "count": 17,
+    "reason": "legacy-pin"
+  },
+  "tests/gsa-o27-captcha-base-guard.test.js": {
+    "count": 6,
+    "reason": "legacy-pin"
+  },
+  "tests/gsa-o27-protective-form-guard.test.js": {
+    "count": 12,
+    "reason": "legacy-pin"
+  },
+  "tests/gsa-o31-thread-segmentation.test.js": {
+    "count": 6,
+    "reason": "legacy-pin"
+  },
+  "tests/i18n-locales.test.js": {
+    "count": 31,
+    "reason": "legacy-pin"
+  },
+  "tests/manifest-smoke.test.js": {
+    "count": 8,
+    "reason": "legacy-pin"
+  },
+  "tests/no-bare-console-error.test.js": {
+    "count": 1,
+    "reason": "static-linter"
+  },
+  "tests/o14-reset-popup-snapshot.test.js": {
+    "count": 9,
+    "reason": "legacy-pin"
+  },
+  "tests/o21-deepseek-dom-instrumentation.test.js": {
+    "count": 16,
+    "reason": "legacy-pin"
+  },
+  "tests/o23-tokens-calibration.test.js": {
+    "count": 14,
+    "reason": "legacy-pin"
+  },
+  "tests/o29-autoexport-log-spam.test.js": {
+    "count": 14,
+    "reason": "legacy-pin"
+  },
+  "tests/o32-gsa-canonical-thread-invariant.test.js": {
+    "count": 10,
+    "reason": "legacy-pin"
+  },
+  "tests/o33-autoexport-base-pending.test.js": {
+    "count": 12,
+    "reason": "legacy-pin"
+  },
+  "tests/o34-reset-on-empty-convid.test.js": {
+    "count": 10,
+    "reason": "legacy-pin"
+  },
+  "tests/o40-f3-diag-instrumentation.test.js": {
+    "count": 5,
+    "reason": "legacy-pin"
+  },
+  "tests/o45-gsa-code-blocks-export.test.js": {
+    "count": 20,
+    "reason": "legacy-pin"
+  },
+  "tests/o47-qwen-badge-metric.test.js": {
+    "count": 4,
+    "reason": "legacy-pin"
+  },
+  "tests/options-advanced-section.test.js": {
+    "count": 4,
+    "reason": "legacy-pin"
+  },
+  "tests/options-custom-limit-debounce-h20.test.js": {
+    "count": 9,
+    "reason": "legacy-pin"
+  },
+  "tests/options-minor-polish.test.js": {
+    "count": 6,
+    "reason": "legacy-pin"
+  },
+  "tests/pdf/background-inject.test.js": {
+    "count": 2,
+    "reason": "vm-harness"
+  },
+  "tests/pdf/providers.test.js": {
+    "count": 1,
+    "reason": "vm-harness"
+  },
+  "tests/perplexity-empty-thread-recovery.test.js": {
+    "count": 3,
+    "reason": "legacy-pin"
+  },
+  "tests/perplexity-sniff-slug-gate-m12.test.js": {
+    "count": 8,
+    "reason": "static-linter"
+  },
+  "tests/perplexity-spa-bootstrap-m14.test.js": {
+    "count": 10,
+    "reason": "legacy-pin"
+  },
+  "tests/popup-overrides-display.test.js": {
+    "count": 6,
+    "reason": "legacy-pin"
+  },
+  "tests/privacy.test.js": {
+    "count": 14,
+    "reason": "static-linter"
+  },
+  "tests/qwen-adapter.test.js": {
+    "count": 18,
+    "reason": "legacy-pin"
+  },
+  "tests/qwen-autoexport-trusted-base-o37.test.js": {
+    "count": 11,
+    "reason": "legacy-pin"
+  },
+  "tests/qwen-container-drop-o37.test.js": {
+    "count": 22,
+    "reason": "legacy-pin"
+  },
+  "tests/qwen-export-marker-prose.test.js": {
+    "count": 2,
+    "reason": "legacy-pin"
+  },
+  "tests/qwen-export-o36.test.js": {
+    "count": 12,
+    "reason": "legacy-pin"
+  },
+  "tests/qwen-gate-diag-o35.test.js": {
+    "count": 26,
+    "reason": "static-linter"
+  },
+  "tests/qwen-intercept.test.js": {
+    "count": 7,
+    "reason": "legacy-pin"
+  },
+  "tests/qwen-o39-history-reasoning.test.js": {
+    "count": 16,
+    "reason": "legacy-pin"
+  },
+  "tests/qwen-o39-reasoning-passthrough.test.js": {
+    "count": 7,
+    "reason": "legacy-pin"
+  },
+  "tests/qwen-o7-reasoning-toggle.test.js": {
+    "count": 1,
+    "reason": "legacy-pin"
+  },
+  "tests/qwen-pagination.test.js": {
+    "count": 3,
+    "reason": "legacy-pin"
+  },
+  "tests/qwen-provider-wiring.test.js": {
+    "count": 42,
+    "reason": "legacy-pin"
+  },
+  "tests/qwen-r1-timecap.test.js": {
+    "count": 28,
+    "reason": "legacy-pin"
+  },
+  "tests/qwen-r4-files-only.test.js": {
+    "count": 4,
+    "reason": "legacy-pin"
+  },
+  "tests/qwen-reasoning-export-o37.test.js": {
+    "count": 11,
+    "reason": "legacy-pin"
+  },
+  "tests/qwen-spa-terminal-o35.test.js": {
+    "count": 1,
+    "reason": "legacy-pin"
+  },
+  "tests/qwen-stream-frames.test.js": {
+    "count": 6,
+    "reason": "legacy-pin"
+  },
+  "tests/security/byok-isolation.test.js": {
+    "count": 21,
+    "reason": "vm-harness"
+  },
+  "tests/storage-ttl.test.js": {
+    "count": 2,
+    "reason": "vm-harness"
+  },
+  "tests/swallow-soft.test.js": {
+    "count": 9,
+    "reason": "vm-harness"
+  },
+  "tests/tokenizer-cyrillic-calibration.test.js": {
+    "count": 6,
+    "reason": "legacy-pin"
+  },
+  "tests/version-hygiene.test.js": {
+    "count": 9,
+    "reason": "static-linter"
+  },
+  "tests/wcag-contrast.test.js": {
+    "count": 4,
+    "reason": "legacy-pin"
+  }
+}
