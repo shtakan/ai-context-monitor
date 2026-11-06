@@ -426,7 +426,7 @@ class QwenAdapter extends BaseAdapter {
     try {
       var hasNodeModule = (typeof module !== 'undefined') && !!module && (typeof require === 'function');
       if (hasNodeModule) {
-        var builders = require('../utils/export-text-builders.js');
+        var builders = /** @type {any} */ (require('../utils/export-text-builders.js'));
         if (builders && typeof builders.aiCmDropContainerMessages === 'function') {
           return builders.aiCmDropContainerMessages;
         }

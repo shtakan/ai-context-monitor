@@ -26,6 +26,15 @@
 declare function require(id: string): any;
 
 /**
+ * CommonJS-объект модуля. utils/*.js отдают публичное API и через
+ * `module.exports` (UMD-хвост) — это Node-ветка тестов: tests/helpers/load-esm.js
+ * исполняет исходник с параметром `module`, а @jest-environment node (окна нет)
+ * забирает API именно отсюда. Без @types/node TS не знает имя `module`,
+ * поэтому объявляем форму контейнера; содержимое — any.
+ */
+declare const module: { exports: any };
+
+/**
  * Встроенный модуль Node 'util'. Без @types/node TS не резолвит его сам, а строковый
  * литерал в require('util') он резолвит всегда — поэтому объявляем модуль явно.
  */
