@@ -1151,8 +1151,69 @@
     return isBetterTurn(candidate, current);
   }
 
+  // =====================================================================================
+  // O-46 (фикс B): ТЕЛО ОДНОГО ОТВЕТА С ДРУГИМ ПОРЯДКОМ АБЗАЦЕВ
+  // =====================================================================================
+  // Живой дефект (SPA-возврат в тред 8bTpaveu, 2026-11-07): при возврате на тестовый чат
+  // пассивный снимок /async/folif приносил тот же ход с ТЕМ ЖЕ телом, но с переставленными
+  // абзацами (source-snippet-пункт стоял в снимке на 2-м месте, а в кэше треда — на 7-м).
+  // Канонический ключ порядко-зависим, префикс-правило такой ход не схлопывало (общий
+  // префикс 429/1865 = 0.19), mergeTurns добавлял его как НОВЫЙ ход: 12 → 14 ходов,
+  // 24 → 28 сообщений, textLen 34753 → 38902, бейдж 8.4% → 9.3%; на каждом SPA-возврате
+  // прибавлялись те же 2 хода. Правило: при ОДНОМ вопросе тела эквивалентны, если их
+  // мультимножества абзацев (текст абзацев без учёта порядка) совпадают. Побайтовое
+  // равенство упорядоченных тел уже ловит точный ключ, поэтому новый критерий не расширяет
+  // класс «одинаковых» ответов сверх уже схлопываемого, а только снимает зависимость от
+  // порядка абзацев, который меняется между снимками.
+  /** @type {number} Минимум непустых абзацев для правила перестановки. */
+  var PARAGRAPH_PERMUTATION_MIN = 2;
+
   /**
-   * Индекс хода с тем же вопросом и префикс-совместимым телом (линейный поиск: баз ≤ сотен).
+   * Непустые нормализованные абзацы тела ответа (граница — пустая строка).
+   * @param {FolwrTurn|null|undefined} turn Ход переписки.
+   * @returns {string[]} Нормализованные абзацы в порядке текста.
+   */
+  function answerBodyParagraphs(turn) {
+    var wrapper = answerWrapperParts(turn && turn.assistantText);
+    var body = wrapper ? wrapper.body : canonicalAnswerBody(turn && turn.assistantText);
+    var lines = String(body == null ? '' : body).split(String.fromCharCode(10));
+    var out = [];
+    var cur = '';
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      if (line.trim() === '') {
+        var p = normalizeTurnKeyPart(cur);
+        if (p) out.push(p);
+        cur = '';
+        continue;
+      }
+      cur = cur ? cur + String.fromCharCode(10) + line : line;
+    }
+    var tail = normalizeTurnKeyPart(cur);
+    if (tail) out.push(tail);
+    return out;
+  }
+
+  /**
+   * Одно ли тело у ходов A и B при разном порядке абзацев (мультимножество совпало).
+   * @param {FolwrTurn|null|undefined} aTurn Ход A.
+   * @param {FolwrTurn|null|undefined} bTurn Ход B.
+   * @returns {boolean} true — тела различаются только порядком абзацев.
+   */
+  function bodiesParagraphPermutation(aTurn, bTurn) {
+    var pa = answerBodyParagraphs(aTurn);
+    var pb = answerBodyParagraphs(bTurn);
+    if (pa.length < PARAGRAPH_PERMUTATION_MIN || pa.length !== pb.length) return false;
+    pa.sort();
+    pb.sort();
+    for (var i = 0; i < pa.length; i++) {
+      if (pa[i] !== pb[i]) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Индекс хода с тем же вопросом и совместимым телом (линейный поиск: баз ≤ сотен).
    * @param {FolwrTurn[]} turns Список ходов.
    * @param {FolwrTurn|null|undefined} turn Проверяемый ход.
    * @returns {number} Индекс совместимого хода либо -1.
@@ -1162,7 +1223,12 @@
     if (!parts.u || !parts.a) return -1;
     for (var i = 0; i < turns.length; i++) {
       var other = turnIdentityParts(turns[i]);
-      if (other.u === parts.u && bodiesPrefixCompatible(other.a, parts.a)) return i;
+      if (other.u !== parts.u) continue;
+      if (bodiesPrefixCompatible(other.a, parts.a)) return i;
+      // O-46: то же тело пришло с другим порядком абзацев — порядко-зависимый ключ и
+      // префикс-правило его не видят; равенство нормализованных длин отсекает лишние
+      // разборы строк, мультимножество абзацев доказывает эквивалентность тела.
+      if (other.a.length === parts.a.length && bodiesParagraphPermutation(turns[i], turn)) return i;
     }
     return -1;
   }
