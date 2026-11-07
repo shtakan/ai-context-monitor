@@ -1217,7 +1217,7 @@
       "file": "core/hybrid-tail.js",
       "category": "defensive-assignment",
       "lines": [
-        37
+        40
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: id = (node.getAttribute && node.getAttribute('data-message-id')) || '';"
     },
@@ -1225,7 +1225,7 @@
       "file": "core/hybrid-tail.js",
       "category": "guard-clause",
       "lines": [
-        54
+        57
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (currentAdapter && currentAdapter.siteName === 'gemini') return true;"
     },
@@ -1735,7 +1735,7 @@
       "file": "utils/gemini-dom-parser.js",
       "category": "best-effort-guard",
       "lines": [
-        64
+        63
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var v = el.getAttribute ? el.getAttribute(names[i]) : null; if (v) out +"
     },
@@ -1743,7 +1743,7 @@
       "file": "utils/gemini-dom-parser.js",
       "category": "container-drop",
       "lines": [
-        163
+        162
       ],
       "reason": "container-drop: контейнер уже откреплён от DOM (SPA-навигация) — снимать нечего; пример: clone.querySelectorAll('script, style, button, svg').forEach(function (x"
     },
@@ -1751,7 +1751,7 @@
       "file": "utils/gemini-dom-parser.js",
       "category": "dom-read-guard",
       "lines": [
-        107
+        106
       ],
       "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: label += ' ' + (el.textContent || '');"
     },

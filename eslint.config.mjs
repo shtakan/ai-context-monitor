@@ -261,6 +261,12 @@ export default [
       // снят) и втягивается side-effect import'ом из core/content.js; для MAIN-мира
       // build.mjs выводит classic-артефакт dist/utils/gemini-batchexecute-parser.js.
       'utils/gemini-batchexecute-parser.js',
+      // Ph2, шаг gemini-dom-parser.js: модуль переведён на ESM (UMD-хвост снят) и
+      // втягивается import'ом из core/hybrid-tail.js.
+      'utils/gemini-dom-parser.js',
+      // Потребитель core/hybrid-tail.js получает top-level import, поэтому тоже
+      // разбирается как module. Файл остаётся частью конкатенации content-бандла.
+      'core/hybrid-tail.js',
       'print/print.js',
       'core/background.js',
       'core/content.js',

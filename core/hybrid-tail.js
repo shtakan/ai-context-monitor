@@ -14,6 +14,9 @@
 // литералы байтово прежние (декомпозиция, а не переписывание).
 // =============================================================================
 
+// Ph2: парсер ответа Gemini — ES-модуль; esbuild втягивает его статическим import'ом.
+import { extractGeminiResponse } from '../utils/gemini-dom-parser.js';
+
 function normalize(s) { return (s || '').toLowerCase().replace(/[^a-zа-яё0-9]+/g, ''); }
 function stripMd(s) {
   if (!s) return '';
@@ -78,8 +81,8 @@ function computeTailFromDom() {
     var txt = '';
     if (shouldUseGeminiDomParser()) {
       try {
-        txt = (typeof GeminiDomParser !== 'undefined' && GeminiDomParser)
-          ? GeminiDomParser.extractGeminiResponse(tailNodes[j]).text
+        txt = (typeof extractGeminiResponse !== 'undefined' && extractGeminiResponse)
+          ? extractGeminiResponse(tailNodes[j]).text
           : '';
       } catch (e) {
         txt = (tailNodes[j].innerText || tailNodes[j].textContent || '').trim();

@@ -4,7 +4,8 @@
  * таблицы конвертируются в markdown-строки и попадают в текст, count > 0.
  */
 
-const { extractGeminiResponse } = require('../../utils/gemini-dom-parser');
+const { loadEsmModule } = require('../helpers/load-esm.js');
+const { extractGeminiResponse } = loadEsmModule('utils/gemini-dom-parser.js');
 
 describe('Gemini DOM-парсер ответа (extractGeminiResponse)', () => {
   function buildFixture() {

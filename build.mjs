@@ -284,7 +284,11 @@ function contentEntry(manifest) {
       rel !== 'utils/export-text-builders.js' &&
       rel !== 'utils/perplexity-parser.js' &&
       rel !== 'utils/chatgpt-conversation-parser.js' &&
-      rel !== 'utils/gemini-batchexecute-parser.js'
+      rel !== 'utils/gemini-batchexecute-parser.js' &&
+      // Ph2, шаг gemini-dom-parser.js: модуль ESM — его втягивает статический
+      // import из core/hybrid-tail.js (ISOLATED-мир). MAIN-регистраций у парсера
+      // нет, поэтому classic-артефакт не выводится; как строку конкатенации не берём.
+      rel !== 'utils/gemini-dom-parser.js'
     );
   });
 }
