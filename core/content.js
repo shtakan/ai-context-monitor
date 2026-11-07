@@ -15,6 +15,13 @@ import { __aiCmSetDebugLogs, __aiCmGetLogRing, debugLog, swallow, swallowSoft, a
 // оценку именно через Tokenizer.*. Фолбэк «песочница без Tokenizer» ниже остаётся:
 // срезанные функции тестируются и без модуля (new Function без привязки).
 import { Tokenizer } from '../utils/tokenizer.js';
+// ESM (Roadmap Ph2): utils/model-config.js переведён на ES-модуль и втягивается этим
+// import'ом в общий бандл контент-скрипта (в manifest.content_scripts отдельного
+// classic-скрипта больше нет). Идентификатор ModelConfig намеренно тот же: его
+// разделяют core/widget.js и core/export-manager.js, склеенные в ТОТ ЖЕ модуль, —
+// объявления import хойстятся, поэтому второй импорт в них не нужен (и был бы
+// дублирующим объявлением имени в одном модуле).
+import { ModelConfig } from '../utils/model-config.js';
 
 (function () {
   let v = 'unknown';

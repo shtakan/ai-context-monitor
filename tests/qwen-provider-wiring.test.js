@@ -26,7 +26,7 @@ const manifestRaw = read('manifest.json');
 const background = read('core/background.js');
 const content = read('core/content.js');
 const modelConfigRaw = read('utils/model-config.js');
-const ModelConfig = require('../utils/model-config.js');
+const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.js');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
 
 // Рез по балансу фигурных скобок (конвенция сьюта): тело функции до парной скобки.
@@ -70,7 +70,7 @@ describe('O-35: manifest.json — Qwen добавлен, прежние серв
   test('content_scripts.js: qwen-adapter.js подключён, прежние пути сохранены', function () {
     const js = manifest.content_scripts[0].js;
     expect(js).toContain('adapters/qwen-adapter.js');
-    ['utils/model-config.js', 'adapters/base-adapter.js',
+    ['adapters/base-adapter.js',
       'adapters/chatgpt-adapter.js', 'adapters/gemini-adapter.js', 'adapters/deepseek-adapter.js',
       'adapters/google-search-adapter.js', 'adapters/claude-adapter.js',
       'adapters/perplexity-adapter.js', 'utils/export-text-builders.js',
@@ -87,6 +87,9 @@ describe('O-35: manifest.json — Qwen добавлен, прежние серв
     // Ph2, шаг tokenizer.js: модуль переведён на ESM и втягивается import'ом из
     // core/content.js — отдельным classic-скриптом в манифесте он больше не грузится.
     expect(js).not.toContain('utils/tokenizer.js');
+    // Ph2, шаг model-config.js: модуль переведён на ESM и втягивается import'ом из
+    // core/content.js — отдельным classic-скриптом в манифесте он больше не грузится.
+    expect(js).not.toContain('utils/model-config.js');
   });
 
   test('version/инварианты: 2.0.41 (бамп — отдельным релизным коммитом), MV3 и один content_script не тронуты', function () {

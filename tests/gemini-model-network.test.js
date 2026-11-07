@@ -21,7 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 const Rpc = require('../core/gemini-rpc.js');
-const ModelConfig = require('../utils/model-config.js');
+const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.js');
 
 const CONTENT = fs.readFileSync(path.join(__dirname, '..', 'core', 'content.js'), 'utf8');
 

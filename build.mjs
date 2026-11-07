@@ -259,12 +259,15 @@ function contentEntry(manifest) {
   // остаётся ради SSOT-порядка; фильтр держит сборку устойчивой.
   // Ph2, шаг tokenizer.js: модуль тоже ESM — его втягивает статический import из
   // core/content.js, из списка конкатенации исключён по той же причине.
+  // Ph2, шаг model-config.js: модуль ESM — его втягивает статический import из
+  // core/content.js; из манифеста строка удалена, фильтр держит SSOT устойчивым.
   return js.filter(function (rel) {
     return (
       rel !== 'utils/buildReferenceText.js' &&
       rel !== 'utils/platform.js' &&
       rel !== 'utils/debug.js' &&
-      rel !== 'utils/tokenizer.js'
+      rel !== 'utils/tokenizer.js' &&
+      rel !== 'utils/model-config.js'
     );
   });
 }

@@ -55,7 +55,6 @@
     "https://chat.qwen.ai/*"
   ],
   "js": [
-    "utils/model-config.js",
     "adapters/base-adapter.js",
     "adapters/chatgpt-adapter.js",
     "adapters/gemini-adapter.js",

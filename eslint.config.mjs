@@ -245,6 +245,9 @@ export default [
       // Ph2, шаг tokenizer.js: модуль переведён на ESM (UMD-хвост снят) и
       // втягивается import'ом из core/content.js.
       'utils/tokenizer.js',
+      // Ph2, шаг model-config.js: модуль переведён на ESM (UMD-хвост снят) и
+      // втягивается import'ом из core/content.js.
+      'utils/model-config.js',
       'print/print.js',
       'core/background.js',
       'core/content.js',

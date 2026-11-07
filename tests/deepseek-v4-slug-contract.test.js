@@ -24,7 +24,7 @@ const DS = require('./helpers/deepseek-intercept-source.js');
 // (module.exports не тронут декомпозицией), а diag-пути в нём не исполняются —
 // связка видит aiCmDeepseekDiag === null и пропускает __bind, форвардеры не зовутся.
 const INTERCEPT = require(path.join(DS.ROOT, DS.INTERCEPT_JS));
-const ModelConfig = require(path.join(__dirname, '..', 'utils', 'model-config.js'));
+const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.js');
 
 // ---- РЕАЛЬНЫЕ ЗАХВАЧЕННЫЕ PAYLOAD'Ы (усечены до контрактных полей) ----
 // 1) SSE ready (XHR /api/v0/chat/completion)

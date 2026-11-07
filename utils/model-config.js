@@ -27,8 +27,11 @@
  * @property {number} contextLimit Окно семейства в токенах.
  */
 
+// ESM (Roadmap Ph2): модуль больше не UMD — потребители (core/content.js) тянут
+// ModelConfig статическим import'ом, поэтому сборка вшивает его в бандл сама, а
+// отдельного classic-скрипта в manifest.content_scripts больше нет.
 /** Реестр моделей: каталог, дефолты сайтов и вычисление действующего лимита. */
-const ModelConfig = {
+export const ModelConfig = {
   /** Общий потолок окна: действующий лимит = min(contextLimit, это значение). @type {number} */
   EFFECTIVE_CAP_DEFAULT: 128000,
   /** @type {ModelCatalog} */
@@ -750,11 +753,6 @@ const ModelConfig = {
   }
 };
 
-// Экспорт для тестов (jest); в браузере не влияет
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = ModelConfig;
-}
-
 // ---- пункт b: авто-генерация Gemini-ключей из данных сети ----
 // Покрывает ВСЕ сочетания версия×семейство×суффикс, чтобы имя вроде "3.5 Flash Lite" /
 // "3.1 Pro Extended" маппилось точно, а не падало на дефолт. Только ДОБАВЛЯЕТ отсутствующие
@@ -808,3 +806,9 @@ if (typeof module !== 'undefined' && module.exports) {
     if (r && r.contextLimit !== 1048576) r.contextLimit = 1048576;
   });
 })();
+
+// ESM (Roadmap Ph2): default-экспорт отдаётся ПОСЛЕ двух IIFE выше — они дописывают
+// авто-ключи Gemini и переопределяют окна по ссылке, поэтому экспортируется тот же
+// (уже наполненный) объект. Публичный API не менялся: MODELS-каталог = ModelConfig.models,
+// getEffectiveLimit / resolveModelId и прочие методы остаются на месте с теми же сигнатурами.
+export default ModelConfig;

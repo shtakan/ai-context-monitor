@@ -263,7 +263,7 @@ describe('O-35: QwenAdapter — detectModel', function () {
     document.body.innerHTML = '<div class="model-picker"><span class="model-name-text">Qwen3.7-Plus</span></div>';
     const slug = loadAdapter().detectModel();
     expect(slug).toBe('qwen3.7-plus');
-    const ModelConfig = require(path.join(ROOT, 'utils', 'model-config.js'));
+    const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.js');
     const id = ModelConfig.resolveModelId(slug);
     expect(id).toBe('qwen3.7-plus');
     expect(ModelConfig.getModel(id).name).toBe('Qwen3.7-Plus');

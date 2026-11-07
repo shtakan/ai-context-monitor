@@ -13,7 +13,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const ModelConfig = require('../utils/model-config.js');
+const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.js');
 
 // v2.0 (этап 1/3): исходник контент-скрипта — модули + content.js в порядке manifest.json
 // (tests/helpers/content-source.js). Резолв источника, не ассерты.

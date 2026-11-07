@@ -35,7 +35,7 @@ const fs = require('fs');
 const path = require('path');
 // Ph2: tokenizer.js — ES-модуль (CJS require по нему больше не разрешается).
 const Tokenizer = require('./helpers/load-esm.js').loadEsm('utils/tokenizer.js');
-const ModelConfig = require('../utils/model-config.js');
+const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.js');
 const Parser = require('../utils/google-search-folwr-parser.js');
 const H = require('./helpers/content-source.js');
 
