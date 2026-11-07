@@ -590,7 +590,7 @@ describe('O-32 (9): строка gsa-thread-fingerprint — инструмент
 // =====================================================================================
 describe('O-32 (8): reference треда A — 6 сообщений / 12255 знаков / 5658 токенов / 4.4%', () => {
   test('tokenizer+limit эталона дают ровно 4.4% (границы ±0.1 п.п. приняты)', () => {
-    const T = require('../utils/tokenizer.js');
+    const T = require('./helpers/load-esm.js').loadEsm('utils/tokenizer.js');
     const ModelConfig = require('../utils/model-config.js');
     const limit = ModelConfig.getEffectiveLimit('gemini-search-default');
     expect(limit).toBe(128000);

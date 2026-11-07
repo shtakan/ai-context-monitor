@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-const Tokenizer = require('../utils/tokenizer');
+// Ph2: utils/tokenizer.js — ES-модуль, поэтому CJS require('...') больше не работает
+// (SyntaxError на `export`). Грузим его тем же резолвером графа, что и остальной ESM-пилот.
+const Tokenizer = require('./helpers/load-esm.js').loadEsm('utils/tokenizer.js');
 
 // Служебные и смысловые слова разной длины — имитация типового русского чата.
 // Средняя длина кириллической серии ≈6.4 буквы (как в живом чате калибровки 161025 кир / ~25 тыс. слов).

@@ -257,11 +257,14 @@ function contentEntry(manifest) {
   // core/content.js — как строку конкатенации его больше не берём (иначе в одной
   // области видимости оказались бы и импорт, и текст модуля). В манифесте путь
   // остаётся ради SSOT-порядка; фильтр держит сборку устойчивой.
+  // Ph2, шаг tokenizer.js: модуль тоже ESM — его втягивает статический import из
+  // core/content.js, из списка конкатенации исключён по той же причине.
   return js.filter(function (rel) {
     return (
       rel !== 'utils/buildReferenceText.js' &&
       rel !== 'utils/platform.js' &&
-      rel !== 'utils/debug.js'
+      rel !== 'utils/debug.js' &&
+      rel !== 'utils/tokenizer.js'
     );
   });
 }

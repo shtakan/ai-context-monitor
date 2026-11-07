@@ -41,7 +41,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const Tokenizer = require('../utils/tokenizer.js');
+// Ph2: tokenizer.js стал ES-модулем — CJS require('...') на нём бросает SyntaxError.
+const Tokenizer = require('./helpers/load-esm.js').loadEsm('utils/tokenizer.js');
 
 const CONTENT_SRC = fs.readFileSync(path.join(__dirname, '..', 'core', 'content.js'), 'utf8');
 const TOKENIZER_SRC = fs.readFileSync(path.join(__dirname, '..', 'utils', 'tokenizer.js'), 'utf8');

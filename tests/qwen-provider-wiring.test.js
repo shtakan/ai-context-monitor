@@ -70,7 +70,7 @@ describe('O-35: manifest.json — Qwen добавлен, прежние серв
   test('content_scripts.js: qwen-adapter.js подключён, прежние пути сохранены', function () {
     const js = manifest.content_scripts[0].js;
     expect(js).toContain('adapters/qwen-adapter.js');
-    ['utils/tokenizer.js', 'utils/model-config.js', 'adapters/base-adapter.js',
+    ['utils/model-config.js', 'adapters/base-adapter.js',
       'adapters/chatgpt-adapter.js', 'adapters/gemini-adapter.js', 'adapters/deepseek-adapter.js',
       'adapters/google-search-adapter.js', 'adapters/claude-adapter.js',
       'adapters/perplexity-adapter.js', 'utils/export-text-builders.js',
@@ -84,6 +84,9 @@ describe('O-35: manifest.json — Qwen добавлен, прежние серв
     // Ph2: utils/debug.js стал ESM-модулем и вшивается в content-бандл через import
     // из core/content.js — отдельным <script> в манифесте он больше не грузится (R1).
     expect(js).not.toContain('utils/debug.js');
+    // Ph2, шаг tokenizer.js: модуль переведён на ESM и втягивается import'ом из
+    // core/content.js — отдельным classic-скриптом в манифесте он больше не грузится.
+    expect(js).not.toContain('utils/tokenizer.js');
   });
 
   test('version/инварианты: 2.0.41 (бамп — отдельным релизным коммитом), MV3 и один content_script не тронуты', function () {

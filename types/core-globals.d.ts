@@ -78,11 +78,10 @@ declare const ModelConfig: {
   getGeminiApiModelId(modelId: string): string;
 };
 
-/** utils/tokenizer.js: оценка токенов (countTokens, estimateDialogTokens). */
-declare const Tokenizer: {
-  countTokens(text: string): number;
-  estimateDialogTokens(dialogText: string, messageCount?: number): number;
-};
+// Ph2, шаг tokenizer.js: utils/tokenizer.js переведён на ES-модуль (UMD-хвост снят),
+// отдельного classic-скрипта в манифесте больше нет — глобального Tokenizer в рантайме
+// не существует. Его единственный потребитель core/content.js получает объект статическим
+// import'ом, поэтому глобальное объявление здесь снято: типы и рантайм совпадают.
 
 // --- core/widget.js: кросс-модульные функции ---------------------------------
 

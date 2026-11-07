@@ -28,7 +28,7 @@ const fs = require('fs');
 const path = require('path');
 
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
-const Tokenizer = require('../utils/tokenizer.js');
+const Tokenizer = require('./helpers/load-esm.js').loadEsm('utils/tokenizer.js');
 
 const ROOT = path.join(__dirname, '..');
 const BASE_SRC = fs.readFileSync(path.join(ROOT, 'adapters', 'base-adapter.js'), 'utf8');

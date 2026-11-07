@@ -34,7 +34,7 @@
 /** @type {number} Калибровка O-23: символов на токен для кириллицы. */
 const CYRILLIC_CHARS_PER_TOKEN = 3.3;
 
-const Tokenizer = {
+export const Tokenizer = {
   CYRILLIC_CHARS_PER_TOKEN: CYRILLIC_CHARS_PER_TOKEN,
 
   /**
@@ -156,7 +156,31 @@ const Tokenizer = {
   }
 };
 
-// Экспорт
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = Tokenizer;
+// --- Экспорт: ES-модуль (Roadmap Ph2) ----------------------------------------------
+// UMD-хвост (CJS-экспорт) снят: модуль больше не classic-скрипт манифеста, его
+// втягивает esbuild статическим import'ом из core/content.js. Публичный контракт не
+// изменился — объект Tokenizer (countTokens/estimateDialogTokens/CYRILLIC_CHARS_PER_TOKEN)
+// по-прежнему единственный источник калибровки; named-экспорты ниже — те же функции,
+// для новых потребителей, которым не нужен namespace.
+
+/**
+ * Приблизительный подсчёт токенов в тексте (named-экспорт, делегирует Tokenizer.countTokens).
+ * @param {string} text - текст для оценки
+ * @returns {number} - приблизительное количество токенов
+ */
+export function countTokens(text) {
+  return Tokenizer.countTokens(text);
 }
+
+/**
+ * Токены диалога с накладными расходами на форматирование сообщений
+ * (named-экспорт, делегирует Tokenizer.estimateDialogTokens).
+ * @param {string} dialogText - полный текст диалога
+ * @param {number} [messageCount=1] - количество сообщений
+ * @returns {number} - токены текста плюс накладные расходы
+ */
+export function estimateDialogTokens(dialogText, messageCount = 1) {
+  return Tokenizer.estimateDialogTokens(dialogText, messageCount);
+}
+
+export default Tokenizer;

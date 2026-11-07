@@ -7,6 +7,14 @@ import { aiCmIsFirefox } from '../utils/platform.js';
 import { __aiCmSetDebugLogs, __aiCmGetLogRing, debugLog, swallow, swallowSoft, aiCmDiagOn,
   aiCmDiagDocKind, aiCmDiagHead, aiCmDiagStack, aiCmDiagLine, aiCmDiagWarn,
   aiCmDiagDownload, aiCmDiagDownloadBlocked } from '../utils/debug.js';
+// ESM (Roadmap Ph2): utils/tokenizer.js переведён на ES-модуль и втягивается этим
+// import'ом в общий бандл контент-скрипта; отдельного classic-скрипта в
+// manifest.content_scripts больше нет. Идентификатор Tokenizer сохранён намеренно:
+// калибровка O-23 и её пины (tests/tokenizer-cyrillic-calibration.test.js,
+// tests/o23-tokens-calibration.test.js, tests/o47-qwen-badge-metric.test.js) адресуют
+// оценку именно через Tokenizer.*. Фолбэк «песочница без Tokenizer» ниже остаётся:
+// срезанные функции тестируются и без модуля (new Function без привязки).
+import { Tokenizer } from '../utils/tokenizer.js';
 
 (function () {
   let v = 'unknown';
