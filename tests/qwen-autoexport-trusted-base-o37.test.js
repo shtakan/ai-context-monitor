@@ -174,6 +174,9 @@ function stand(over) {
       }
     }
   };
+    // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.js;
+    // срез-песочница получает тот же объект биндингом общего скоупа (window-зеркало прежнее).
+    if (ctx.window && ctx.window.AiCmExportBuilders) ctx.AiCmExportBuilders = ctx.window.AiCmExportBuilders;
   const api = makeScope(ctx);
   return {
     ctx: ctx,

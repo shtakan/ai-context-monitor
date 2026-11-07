@@ -113,14 +113,16 @@ function loadEsmModule(relPath) {
 }
 
 /**
- * Исполняет модуль и отдаёт его публичное API: window[globalName], если модуль его там
- * выставил, иначе CJS-экспорт (`module.exports` в UMD-хвосте). Фолбэк обязателен: часть
- * тестов идёт в `@jest-environment node` (tests/adapters/deepseek-o17-spa-chat.test.js),
- * где window нет, и раньше api отдавал именно `module.exports`.
+ * Исполняет модуль и отдаёт его публичное API: default-экспорт ES-модуля (Roadmap Ph2 —
+ * сборщики экспорта), иначе window[globalName], иначе CJS-экспорт (`module.exports`
+ * в UMD-хвосте ещё не переведённых модулей). Последний фолбэк обязателен: часть тестов
+ * идёт в `@jest-environment node` (tests/adapters/deepseek-o17-spa-chat.test.js), где
+ * window нет.
  */
 function loadEsmGlobal(relPath, globalName) {
   const moduleObj = { exports: {} };
-  new Function('module', 'exports', inlineModule(relPath))(moduleObj, moduleObj.exports);
+  const api = new Function('module', 'exports', inlineModule(relPath))(moduleObj, moduleObj.exports);
+  if (api !== undefined && api !== null) return api;
   const scope = typeof window !== 'undefined'
     ? window
     : (typeof globalThis !== 'undefined' ? globalThis : null);

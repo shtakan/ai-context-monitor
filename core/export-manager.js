@@ -1598,7 +1598,7 @@ function aiCmAutoExportStartDownload(content, file, fmt) {
   // поэтому его проходит ЛЮБОЙ триггер (автоэкспорт, options, печать). Порядок и содержимое
   // O-11 не тронуты: реестр консультируется и имя резервируется синхронно ДО старта, как и
   // раньше; отказ лишь не выдаёт файл и пишет `[AI CM][diag] download-blocked reason=…`.
-  var Bdl = (typeof window !== 'undefined' && window.AiCmExportBuilders) ? window.AiCmExportBuilders : null;
+  var Bdl = (typeof AiCmExportBuilders !== 'undefined') ? AiCmExportBuilders : null;
   if (!Bdl || typeof Bdl.downloadBlob !== 'function') throw new Error('utils/export-text-builders.js не загружен');
   Bdl.downloadBlob(content, file, fmt === 'md' ? 'text/markdown' : (fmt === 'json' ? 'application/json' : 'text/plain;charset=utf-8'), 'autoexport');
   return file;
@@ -1661,7 +1661,7 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
       debugLog('log', '[AI CM][auto-export] net-sync уже выполняется convId=' + cid);
       return;
     }
-    var B = (typeof window !== 'undefined' && window.AiCmExportBuilders) ? window.AiCmExportBuilders : null;
+    var B = (typeof AiCmExportBuilders !== 'undefined') ? AiCmExportBuilders : null;
     if (!B) throw new Error('utils/export-text-builders.js не загружен');
     var fmt = (autoExportSettings.fmt === 'md') ? 'md' : ((autoExportSettings.fmt === 'json') ? 'json' : 'txt');
     // v81 (2.6): имя файла — ТОЛЬКО через пайплайн (utils/export-emit-pipeline.js);
@@ -1881,7 +1881,7 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
         // триггер/reason, имя файла («пустое» — словом), первые 100 символов базы, URL,
         // threadId и источник вызова. Только под гейтом aiCmDebug; байты и имя не меняются.
         try {
-          var BdiagDl = (typeof window !== 'undefined' && window && window.AiCmExportBuilders) ? window.AiCmExportBuilders : null;
+          var BdiagDl = (typeof AiCmExportBuilders !== 'undefined') ? AiCmExportBuilders : null;
           if (BdiagDl && typeof BdiagDl.aiCmDiagDownload === 'function') {
             BdiagDl.aiCmDiagDownload('autoexport', content, file, {
               reason: reason,

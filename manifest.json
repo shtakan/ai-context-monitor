@@ -67,7 +67,6 @@
     "utils/gemini-dom-parser.js",
     "utils/gemini-batchexecute-parser.js",
     "utils/google-search-folwr-parser.js",
-    "utils/export-text-builders.js",
     "utils/export-emit-pipeline.js",
     "core/state.js",
     "core/widget.js",

@@ -261,13 +261,17 @@ function contentEntry(manifest) {
   // core/content.js, из списка конкатенации исключён по той же причине.
   // Ph2, шаг model-config.js: модуль ESM — его втягивает статический import из
   // core/content.js; из манифеста строка удалена, фильтр держит SSOT устойчивым.
+  // Ph2, шаг export-text-builders.js: модуль ESM — его втягивает статический import из
+  // core/content.js (единый скоуп бандла: AiCmExportBuilders делят core/export-manager.js,
+  // adapters/qwen-adapter.js и core/content.js); строка из манифеста удалена.
   return js.filter(function (rel) {
     return (
       rel !== 'utils/buildReferenceText.js' &&
       rel !== 'utils/platform.js' &&
       rel !== 'utils/debug.js' &&
       rel !== 'utils/tokenizer.js' &&
-      rel !== 'utils/model-config.js'
+      rel !== 'utils/model-config.js' &&
+      rel !== 'utils/export-text-builders.js'
     );
   });
 }
@@ -299,9 +303,12 @@ function optionsEntry() {
   // ESM-пилот (Roadmap Ph2): utils/buildReferenceText.js втягивается import'ом
   // из utils/export-text-builders.js, поэтому тег <script> из options.html убран.
   // utils/platform.js втягивается import'ом из options/options.js (шаг 3) — его тег
-  // тоже удалён. Фильтр — страховка SSOT: теги не должны вернуться в разметку.
+  // тоже удалён. utils/export-text-builders.js — ESM: и options.html-тег, и строка
+  // конкатенации убраны, модуль втягивается import'ом из options/options.js.
+  // Фильтр — страховка SSOT: теги не должны вернуться в разметку.
   return htmlScriptEntry('options/options.html').filter(function (rel) {
-    return rel !== 'utils/buildReferenceText.js' && rel !== 'utils/platform.js';
+    return rel !== 'utils/buildReferenceText.js' && rel !== 'utils/platform.js' &&
+      rel !== 'utils/export-text-builders.js';
   });
 }
 

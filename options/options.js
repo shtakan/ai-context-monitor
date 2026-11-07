@@ -1,6 +1,9 @@
 // ESM (Roadmap Ph2): сборка втягивает utils/platform.js в тот же options-бандл, поэтому
 // aiCmIsFirefox() остаётся в общей области видимости страницы (отдельный <script> убран).
 import { aiCmIsFirefox } from '../utils/platform.js';
+// ESM (Roadmap Ph2): utils/export-text-builders.js переведён на ES-модуль — тег <script>
+// из options/options.html удалён, модуль втягивается этим import'ом в options-бандл.
+import AiCmExportBuilders from '../utils/export-text-builders.js';
 
 console.log('AI Context Monitor: Настройки загружены');
 
@@ -860,8 +863,8 @@ function updateExportButtons() {
 
 // v1.8: сборщики вынесены в utils/export-text-builders.js — здесь только делегирование
 function buildTxtText(hist) {
-  return window.AiCmExportBuilders
-    ? window.AiCmExportBuilders.buildTxtFromHistory(hist || cachedHistory)
+  return AiCmExportBuilders
+    ? AiCmExportBuilders.buildTxtFromHistory(hist || cachedHistory)
     : '';
 }
 
@@ -898,8 +901,8 @@ function downloadBlob(content, fileName, mimeType, trigger) {
   // v1.8: общий downloadBlob из utils/export-text-builders.js
   // O-27/O-32 (диагностика): trigger доезжает только до диагностической строки точки
   // скачивания (гейт aiCmDebug); байты, mime и имя файла не меняются.
-  if (window.AiCmExportBuilders && window.AiCmExportBuilders.downloadBlob) {
-    window.AiCmExportBuilders.downloadBlob(content, fileName, mimeType, trigger || 'options');
+  if (AiCmExportBuilders && AiCmExportBuilders.downloadBlob) {
+    AiCmExportBuilders.downloadBlob(content, fileName, mimeType, trigger || 'options');
   }
 }
 
@@ -925,8 +928,8 @@ function buildJsonText(hist) {
 
 function buildMdText(hist) {
   // v1.8: общий сборщик из utils/export-text-builders.js
-  return window.AiCmExportBuilders
-    ? window.AiCmExportBuilders.buildMdFromHistory(hist || cachedHistory, getPlatform(hist))
+  return AiCmExportBuilders
+    ? AiCmExportBuilders.buildMdFromHistory(hist || cachedHistory, getPlatform(hist))
     : '';
 }
 

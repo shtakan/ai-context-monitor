@@ -73,7 +73,7 @@ describe('O-35: manifest.json — Qwen добавлен, прежние серв
     ['adapters/base-adapter.js',
       'adapters/chatgpt-adapter.js', 'adapters/gemini-adapter.js', 'adapters/deepseek-adapter.js',
       'adapters/google-search-adapter.js', 'adapters/claude-adapter.js',
-      'adapters/perplexity-adapter.js', 'utils/export-text-builders.js',
+      'adapters/perplexity-adapter.js',
       'utils/export-emit-pipeline.js', 'core/content.js'].forEach(function (p) {
       expect(js).toContain(p);
     });
@@ -90,6 +90,9 @@ describe('O-35: manifest.json — Qwen добавлен, прежние серв
     // Ph2, шаг model-config.js: модуль переведён на ESM и втягивается import'ом из
     // core/content.js — отдельным classic-скриптом в манифесте он больше не грузится.
     expect(js).not.toContain('utils/model-config.js');
+    // Ph2, шаг export-text-builders.js: модуль переведён на ESM и втягивается import'ом из
+    // core/content.js — отдельным classic-скриптом в манифесте он больше не грузится.
+    expect(js).not.toContain('utils/export-text-builders.js');
   });
 
   test('version/инварианты: 2.0.41 (бамп — отдельным релизным коммитом), MV3 и один content_script не тронуты', function () {

@@ -22,6 +22,12 @@ import { Tokenizer } from '../utils/tokenizer.js';
 // объявления import хойстятся, поэтому второй импорт в них не нужен (и был бы
 // дублирующим объявлением имени в одном модуле).
 import { ModelConfig } from '../utils/model-config.js';
+// ESM (Roadmap Ph2): utils/export-text-builders.js переведён на ES-модуль и втягивается
+// этим import'ом в общий бандл контент-скрипта (строка из manifest.content_scripts удалена).
+// Идентификатор AiCmExportBuilders намеренно тот же: его разделяют core/export-manager.js,
+// adapters/qwen-adapter.js и сам core/content.js, склеенные в ТОТ ЖЕ модуль, — объявления
+// import хойстятся, поэтому второй импорт в них не нужен (и был бы дублирующим именем).
+import AiCmExportBuilders from '../utils/export-text-builders.js';
 
 (function () {
   let v = 'unknown';
@@ -3469,7 +3475,7 @@ document.addEventListener('keydown', function (e) {
     // Только под гейтом aiCmDebug; содержимое дампа и имя файла не меняются.
     var dumpFile = 'ai-cm-history-' + Date.now() + '.json';
     try {
-      var BdiagHot = (typeof window !== 'undefined' && window && window.AiCmExportBuilders) ? window.AiCmExportBuilders : null;
+      var BdiagHot = (typeof AiCmExportBuilders !== 'undefined') ? AiCmExportBuilders : null;
       if (BdiagHot && typeof BdiagHot.aiCmDiagDownload === 'function') {
         BdiagHot.aiCmDiagDownload('hotkey-json-dump', JSON.stringify(payload, null, 2), dumpFile, {
           site: (typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName) || '',

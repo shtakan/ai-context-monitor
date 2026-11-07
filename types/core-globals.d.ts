@@ -83,6 +83,15 @@ declare const ModelConfig: {
 // не существует. Его единственный потребитель core/content.js получает объект статическим
 // import'ом, поэтому глобальное объявление здесь снято: типы и рантайм совпадают.
 
+/**
+ * utils/export-text-builders.js: публичное API сборщиков экспорта (default-экспорт Api).
+ * В бандле это ESM-биндинг, который втягивает core/content.js; core/export-manager.js и
+ * adapters/qwen-adapter.js склеены в тот же модуль (import хойстится), поэтому второго
+ * import'а в них нет — объявление закрывает их типы. В срезах-песочницах биндинга нет:
+ * потребители резолвят его через typeof-гард.
+ */
+declare const AiCmExportBuilders: import('./export').ExportBuildersApi;
+
 // --- core/widget.js: кросс-модульные функции ---------------------------------
 
 /** Идентификатор сервиса по URL ('chatgpt' | 'deepseek' | 'gemini' | 'google_search' | ...). */

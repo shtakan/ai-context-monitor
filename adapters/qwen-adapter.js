@@ -411,27 +411,26 @@ class QwenAdapter extends BaseAdapter {
   }
 
   /**
-   * Ленивый резолв общего хелпера контейнер-чистки (боевой путь — window сборщиков,
-   * Node-путь — require), иначе null (правила не дублируются локально).
-   * TODO: уточнить тип в шаге 5 (форма window.AiCmExportBuilders без @types).
+   * Ленивый резолв общего хелпера контейнер-чистки, иначе null (правила не дублируются
+   * локально). Боевой путь — ESM-биндинг AiCmExportBuilders, который сборка втягивает
+   * в общий скоуп content-бандла (тот же модуль, что и остальные core/*.js); фолбэк на
+   * window — для песочниц, где адаптер исполняется как сырой текст (new Function).
+   * Node-путь (require) удалён вместе с UMD-хвостом сборщиков.
    * @returns {QwenContainerDrop<unknown>|null}
    */
   _containerDrop() {
+    try {
+      if (typeof AiCmExportBuilders !== 'undefined' && AiCmExportBuilders &&
+        typeof AiCmExportBuilders.aiCmDropContainerMessages === 'function') {
+        return AiCmExportBuilders.aiCmDropContainerMessages;
+      }
+    } catch (eEsm) { }
     try {
       if (typeof window !== 'undefined' && window && window.AiCmExportBuilders &&
         typeof window.AiCmExportBuilders.aiCmDropContainerMessages === 'function') {
         return window.AiCmExportBuilders.aiCmDropContainerMessages;
       }
     } catch (eWin) { }
-    try {
-      var hasNodeModule = (typeof module !== 'undefined') && !!module && (typeof require === 'function');
-      if (hasNodeModule) {
-        var builders = /** @type {any} */ (require('../utils/export-text-builders.js'));
-        if (builders && typeof builders.aiCmDropContainerMessages === 'function') {
-          return builders.aiCmDropContainerMessages;
-        }
-      }
-    } catch (eReq) { }
     return null;
   }
 

@@ -226,6 +226,9 @@ describe('O-11: два автоэкспорта GSA в одну минуту —
       }
     };
     Object.assign(ctx, over || {});
+    // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.js;
+    // срез-песочница получает тот же объект биндингом общего скоупа (window-зеркало прежнее).
+    if (ctx.window && ctx.window.AiCmExportBuilders) ctx.AiCmExportBuilders = ctx.window.AiCmExportBuilders;
     const api = makeContent(ctx);
     return {
       ctx: ctx, downloads: downloads, logs: logs, api: api,
@@ -389,6 +392,9 @@ describe('O-11-2: два файра разных чатов в одну мину
       }
     };
     Object.assign(ctx, over || {});
+    // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.js;
+    // срез-песочница получает тот же объект биндингом общего скоупа (window-зеркало прежнее).
+    if (ctx.window && ctx.window.AiCmExportBuilders) ctx.AiCmExportBuilders = ctx.window.AiCmExportBuilders;
     const api = makeFire(ctx);
     return {
       ctx: ctx, downloads: downloads, logs: logs, fire: api.fire,

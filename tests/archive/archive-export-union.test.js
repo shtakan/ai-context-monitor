@@ -441,6 +441,9 @@ describe('T1-fix#3: doAutoExportDownload — файл из объединённ�
         AiCmExportEmitPipeline: Pipeline
       }
     };
+    // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.js;
+    // срез-песочница получает тот же объект биндингом общего скоупа (window-зеркало прежнее).
+    if (ctx.window && ctx.window.AiCmExportBuilders) ctx.AiCmExportBuilders = ctx.window.AiCmExportBuilders;
     return { ctx: ctx, downloads: downloads, logs: logs, api: makeContent(ctx) };
   }
   const unionSnap = {

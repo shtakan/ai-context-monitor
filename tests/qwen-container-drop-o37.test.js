@@ -40,19 +40,19 @@ const FAKE_LOCATION = { hostname: 'chat.qwen.ai', pathname: '/c/cda86f26-0155-42
 
 /**
  * Песочница адаптера (как в tests/qwen-adapter.test.js): base-adapter.js + qwen-adapter.js в
- * одном лексическом скоупе. window/require передаются ЯВНО, чтобы пинить пути резолва общего
- * хелпера: боевой (window.AiCmExportBuilders), Node-фолбэк (require) и отсутствие обоих.
+ * одном лексическом скоупе. Биндинг AiCmExportBuilders/window передаются ЯВНО, чтобы пинить
+ * пути резолва общего хелпера: боевой (статический import content.js), window-зеркало и отсутствие обоих.
  */
 function loadAdapter(opts) {
   const o = opts || {};
-  const sandbox = new Function('document', 'location', 'debugLog', 'console', 'window', 'require', 'module',
+  const sandbox = new Function('document', 'location', 'debugLog', 'console', 'window', 'AiCmExportBuilders',
     BASE_SRC.replace(/if \(typeof module[\s\S]*$/, '') + '\n' +
     QWEN_SRC.replace(/if \(typeof module[\s\S]*$/, '') + '\nreturn QwenAdapter;');
   const win = (o.noWindow === true) ? undefined
     : ((o.window !== undefined) ? o.window : { AiCmExportBuilders: Builders });
-  const req = (o.require !== undefined) ? o.require : undefined;
-  const mod = (o.module !== undefined) ? o.module : undefined;
-  const QwenAdapterClass = sandbox(document, FAKE_LOCATION, function () { }, console, win, req, mod);
+  // o.builders === null → биндинга нет; по умолчанию — общий хелпер, как в бандле контента.
+  const binding = (o.builders !== undefined) ? o.builders : Builders;
+  const QwenAdapterClass = sandbox(document, FAKE_LOCATION, function () { }, console, win, binding);
   return new QwenAdapterClass();
 }
 
@@ -183,24 +183,24 @@ describe('O-37 O36.2-D: extractMessages отбрасывает узлы-конт
     expect(filtered.length).toBe(REAL_TEXTS.join('\n').length);
   });
 
-  test('боевой путь резолва хелпера: window.AiCmExportBuilders (общий ISOLATED-мир)', function () {
+  test('боевой путь резолва хелпера: биндинг общего скоупа (статический import content.js)', function () {
     renderFixture();
-    const withHelper = loadAdapter({ window: { AiCmExportBuilders: Builders } }).extractMessages();
+    const withHelper = loadAdapter().extractMessages();
     expect(withHelper).toHaveLength(REAL.length);
     // хелпер подключён лениво: адаптер сам правил не держит (см. source-пин ниже)
     expect(typeof Builders.aiCmDropContainerMessages).toBe('function');
   });
 
-  test('Node-фолбэк резолва: window нет, require/module есть → тот же результат (Node/тесты)', function () {
+  test('window-зеркало резолва: биндинга нет, window.AiCmExportBuilders есть → тот же результат', function () {
     renderFixture();
-    const viaRequire = loadAdapter({ noWindow: true, require: require, module: { exports: {} } }).extractMessages();
-    expect(viaRequire).toHaveLength(REAL.length);
-    expect(viaRequire.map(function (m) { return m.content; })).toEqual(REAL_TEXTS);
+    const viaWindow = loadAdapter({ builders: null, window: { AiCmExportBuilders: Builders } }).extractMessages();
+    expect(viaWindow).toHaveLength(REAL.length);
+    expect(viaWindow.map(function (m) { return m.content; })).toEqual(REAL_TEXTS);
   });
 
-  test('R1: ни окна, ни require → правило живёт РОВНО в сборщиках (в адаптере его нет)', function () {
+  test('R1: ни биндинга, ни окна → правило живёт РОВНО в сборщиках (в адаптере его нет)', function () {
     renderFixture();
-    const noHelper = loadAdapter({ noWindow: true, require: undefined });
+    const noHelper = loadAdapter({ noWindow: true, builders: null });
     expect(noHelper._containerDrop()).toBe(null);                  // хелпер не резолвится
     expect(noHelper.extractMessages()).toHaveLength(REAL.length);  // узлы как есть (73 реплики)
     // набор второй ступени собирается и в этом режиме — правило снимает 3 контейнера
@@ -269,7 +269,7 @@ describe('O-37 O36.2-R: контейнеров нет — байты прежн�
 
   test('экспорт идемпотентен: вторая ступень даёт те же байты и на СЫРОМ (75 узлов) массиве', function () {
     renderFixture();
-    const raw = loadAdapter({ noWindow: true, require: undefined }).extractMessages();
+    const raw = loadAdapter({ noWindow: true, builders: null }).extractMessages();
     const fromRaw = Builders.buildTxtFromHistory({ site: 'qwen', messages: raw });
     const fromAdapter = Builders.buildTxtFromHistory({ site: 'qwen', messages: loadAdapter().extractMessages() });
     expect(fromRaw).toBe(fromAdapter);
@@ -282,7 +282,9 @@ describe('O-37 O36.2-R: контейнеров нет — байты прежн�
 describe('O-37 O-36.2: границы фикса (source-пины)', () => {
   test('адаптер переиспользует ОБЩИЙ хелпер и не дублирует пороги правила', function () {
     expect(QWEN_SRC).toContain('AiCmExportBuilders.aiCmDropContainerMessages');
-    expect(QWEN_SRC).toContain("require('../utils/export-text-builders.js')");
+    // Ph2: хелпер берётся биндингом общего скоупа (import в core/content.js); CJS require-фолбэк
+    // удалён — ESM-модуль не require-ится, в бандл он попадает через esbuild.
+    expect(QWEN_SRC).not.toContain("require('../utils/export-text-builders.js')");
     expect(QWEN_SRC).toContain('_dropContainerNodes(messages)');
     // ни одной копии правила контейнера внутри адаптера (пороги/minContained/coverMin)
     expect(QWEN_SRC).not.toContain('minContained');

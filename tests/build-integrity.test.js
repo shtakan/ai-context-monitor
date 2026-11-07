@@ -139,18 +139,18 @@ describe('build-integrity: generated entry files', () => {
       expect(/^\s*export\b/m.test(text)).toBe(false);
       return;
     }
-    // Ph2, шаг 2: utils/export-text-builders.js импортирует buildReferenceText
-    // статическим import'ом; спецификатор перебазирован из utils/ в .build/
-    // (см. rebaseImportSpecifiers в build.mjs) — осознанное исключение.
+    // Ph2, шаг 2: utils/export-text-builders.js — ESM-модуль; он импортирует
+    // buildReferenceText уже ВНУТРИ себя, а в entry входит как
+    // import AiCmExportBuilders from '../utils/export-text-builders.js'
+    // (спецификатор перебазирован из core|options/ в .build/, см. rebaseImportSpecifiers).
     // Ph2, шаг 3: background.js импортирует platform статически, content.js и
-    // options.js — тоже (плюс buildReferenceText через export-text-builders).
-    // Спецификаторы перебазированы из core|options/ в .build/ (rebaseImportSpecifiers),
+    // options.js — тоже.
     // export-обёрток в конкатенации по-прежнему нет.
     if (name === 'options' || name === 'content' || name === 'background') {
       expect(text).toContain("import { aiCmIsFirefox } from '../utils/platform.js';");
       expect(text).not.toContain('module.exports = { aiCmIsFirefox');
       if (name !== 'background') {
-        expect(text).toContain("import { buildReferenceText } from '../utils/buildReferenceText.js';");
+        expect(text).toContain("import AiCmExportBuilders from '../utils/export-text-builders.js';");
       }
       expect(/^[ \t]*export\b/m.test(text)).toBe(false);
       return;
