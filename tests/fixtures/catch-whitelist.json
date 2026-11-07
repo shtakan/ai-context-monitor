@@ -7,7 +7,7 @@
     "adapters"
   ],
   "definition": "Молчаливый catch = тело после вырезания комментариев содержит только пробелы, ИЛИ ровно один no-op (void 0; / return; / continue; / break;). Комментарий-только тело тоже молчаливое (комментарии маскируются в пробелы).",
-  "totalEntries": 476,
+  "totalEntries": 475,
   "groups": [
     {
       "file": "adapters/claude-adapter.js",
@@ -1336,7 +1336,7 @@
       "file": "core/perplexity-intercept.js",
       "category": "debug-instrumentation",
       "lines": [
-        22
+        25
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDeb"
     },
@@ -1344,26 +1344,18 @@
       "file": "core/perplexity-intercept.js",
       "category": "event-guard",
       "lines": [
-        267,
-        282
+        264,
+        279
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
     },
     {
       "file": "core/perplexity-intercept.js",
-      "category": "guard-clause",
-      "lines": [
-        235
-      ],
-      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && typeof window.stripPerplexityHistor"
-    },
-    {
-      "file": "core/perplexity-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        278,
-        280,
-        281
+        275,
+        277,
+        278
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkConvChange();"
     },
@@ -1371,9 +1363,9 @@
       "file": "core/perplexity-intercept.js",
       "category": "parse-guard",
       "lines": [
-        111,
-        172,
-        494
+        114,
+        175,
+        491
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: raw = decodeURIComponent(raw);"
     },

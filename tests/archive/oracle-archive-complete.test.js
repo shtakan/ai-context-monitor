@@ -246,7 +246,8 @@ describe('T1: проводка ISOLATED → MAIN и запрет внешних 
     // (проводка проверяется поведением ниже: jsdom-импорт архива зовёт API модуля).
     expect(OPTIONS_HTML).not.toContain('../utils/archive-import.js');
     expect(OPTIONS_HTML).toContain('../utils/chatgpt-conversation-parser.js');
-    expect(OPTIONS_HTML).toContain('../utils/perplexity-parser.js');
+    // Ph2 (ESM): парсер Perplexity — ES-модуль, втягивается import'ом из options.js.
+    expect(OPTIONS_HTML).not.toContain('../utils/perplexity-parser.js');
   });
 
   test('manifest.json НЕ изменён: архив не добавлен в content_scripts/host_permissions', () => {

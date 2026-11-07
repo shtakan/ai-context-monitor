@@ -251,6 +251,9 @@ export default [
       // Ph2, шаг archive-import.js: модуль переведён на ESM (UMD-хвост снят) и
       // втягивается import'ом из options/options.js.
       'utils/archive-import.js',
+      // Ph2, шаг perplexity-parser.js: модуль переведён на ESM (UMD-хвост снят) и
+      // втягивается import'ами из core/perplexity-intercept.js и options/options.js.
+      'utils/perplexity-parser.js',
       'print/print.js',
       'core/background.js',
       'core/content.js',

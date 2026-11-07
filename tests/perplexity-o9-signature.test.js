@@ -17,7 +17,7 @@
  * (формула и дефолты прежние).
  */
 const P = require('../utils/export-emit-pipeline.js');
-const Parser = require('../utils/perplexity-parser.js');
+const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/perplexity-parser.js');
 const { readSource } = require('./helpers/content-source.js');
 
 const CONTENT = readSource('core/content.js');

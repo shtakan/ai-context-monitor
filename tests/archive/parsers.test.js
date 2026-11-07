@@ -17,13 +17,14 @@
 
 const path = require('path');
 const fs = require('fs');
-const { loadEsm } = require('../helpers/load-esm.js');
+const { loadEsm, loadEsmModule } = require('../helpers/load-esm.js');
 
-// Ph2: utils/archive-import.js переведён на ESM. В браузере общие парсеры приходят
-// window-глобалами (скрипт-теги options.html); в Node ES-модуль больше не делает
-// require сам, поэтому page-глобалы ставим здесь — ровно так, как их видит страница.
+// Ph2: utils/archive-import.js переведён на ESM. В браузере ChatGPT-парсер приходит
+// window-глобалом (скрипт-тег options.html); в Node ES-модуль больше не делает
+// require сам, поэтому page-глобал ставим здесь — ровно так, как его видит страница.
+// Перплексити-парсер — тоже ES-модуль, грузится namespace-ом через loadEsmModule.
 const ChatGPTParser = require('../../utils/chatgpt-conversation-parser.js');
-const PerplexityParser = require('../../utils/perplexity-parser.js');
+const PerplexityParser = loadEsmModule('utils/perplexity-parser.js');
 const AI = loadEsm('utils/archive-import.js');
 
 function installPageGlobals() {

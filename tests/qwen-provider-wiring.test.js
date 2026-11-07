@@ -212,7 +212,8 @@ describe('O-35/O-53/R2: core/background.js — регистрация перех
     // пустой либо live-обрезанной.
     expect(background).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-ingest.js', 'core/deepseek-files.js', 'core/deepseek-sse.js', 'core/deepseek-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'core/claude-intercept.js']");
-    expect(background).toContain("js: ['utils/debug.js', 'utils/perplexity-parser.js', 'core/perplexity-intercept.js']");
+    // Ph2: utils/perplexity-parser.js — ES-модуль, втягивается import'ом внутри перехватчика.
+    expect(background).toContain("js: ['utils/debug.js', 'core/perplexity-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'utils/google-search-folwr-parser.js', 'core/google-search-intercept.js']");
   });
 });

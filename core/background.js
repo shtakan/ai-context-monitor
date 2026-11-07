@@ -382,7 +382,7 @@ async function ensureInterceptor() {
       await registerSafe('ai-cm-perplexity-intercept', {
         id: 'ai-cm-perplexity-intercept',
         matches: ['https://www.perplexity.ai/*', 'https://perplexity.ai/*'],
-        js: ['utils/debug.js', 'utils/perplexity-parser.js', 'core/perplexity-intercept.js'],
+        js: ['utils/debug.js', 'core/perplexity-intercept.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false

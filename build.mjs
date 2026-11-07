@@ -261,6 +261,9 @@ function contentEntry(manifest) {
   // core/content.js, из списка конкатенации исключён по той же причине.
   // Ph2, шаг model-config.js: модуль ESM — его втягивает статический import из
   // core/content.js; из манифеста строка удалена, фильтр держит SSOT устойчивым.
+  // Ph2, шаг perplexity-parser.js: модуль ESM — его втягивают статические import'ы
+  // core/perplexity-intercept.js (MAIN-бандл) и options/options.js; как строку
+  // конкатенации content-скрипта не берём.
   // Ph2, шаг export-text-builders.js: модуль ESM — его втягивает статический import из
   // core/content.js (единый скоуп бандла: AiCmExportBuilders делят core/export-manager.js,
   // adapters/qwen-adapter.js и core/content.js); строка из манифеста удалена.
@@ -271,7 +274,8 @@ function contentEntry(manifest) {
       rel !== 'utils/debug.js' &&
       rel !== 'utils/tokenizer.js' &&
       rel !== 'utils/model-config.js' &&
-      rel !== 'utils/export-text-builders.js'
+      rel !== 'utils/export-text-builders.js' &&
+      rel !== 'utils/perplexity-parser.js'
     );
   });
 }

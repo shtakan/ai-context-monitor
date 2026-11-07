@@ -61,11 +61,37 @@ function commonSource() {
   return stripExports(src);
 }
 
+/**
+ * Ph2: импорт utils/perplexity-parser.js в перехватчике — статический ESM-импорт.
+ * В classic-eval его разворачивать не нужно: тесты этих перехватчиков подменяют парсер
+ * через window.parsePerplexityThread (мок снимка), поэтому мост смотрит в тот же
+ * window-глобал, что и до миграции. Нет глобала — пустой результат ровно как раньше.
+ */
+function parserBridge() {
+  return [
+    'var parsePerplexityThread = function (json) {',
+    '  if (typeof window !== "undefined" && typeof window.parsePerplexityThread === "function") {',
+    '    return window.parsePerplexityThread(json);',
+    '  }',
+    "  return { text: '', count: 0 };",
+    '};',
+    'var stripPerplexityHistoryTruncation = function (urlStr) {',
+    '  if (typeof window !== "undefined" && typeof window.stripPerplexityHistoryTruncation === "function") {',
+    '    return window.stripPerplexityHistoryTruncation(urlStr);',
+    '  }',
+    "  return String(urlStr || '');",
+    '};',
+  ].join('\n');
+}
+
 /** commonSource() + перехватчик без import'а, одна classic-область видимости. */
 function interceptSource(relPath) {
   let src = read(relPath).replace(
     /^[ \t]*import\s*\{[^}]*\}\s*from\s*['"][^'"]*intercept-common\.js['"];?[ \t]*$/m,
     ''
+  ).replace(
+    /^[ \t]*import\s*\{[^}]*\}\s*from\s*['"][^'"]*perplexity-parser\.js['"];?[ \t]*$/m,
+    parserBridge()
   );
   src = stripExports(src);
   return commonSource() + '\n' + src;

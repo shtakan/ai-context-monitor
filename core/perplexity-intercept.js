@@ -9,11 +9,14 @@
 //   История треда: загружается через fetch или XHR (точный URL неизвестен).
 //     Ответ JSON: { entries: [...], thread_metadata: {...}, ... }
 //     КЛЮЧИ МОГУТ БЫТЬ С ПРОБЕЛАМИ ("entries ", "thread_metadata " и т.д. на всех уровнях).
-//   Парсинг делегирован в window.parsePerplexityThread (utils/perplexity-parser.js).
+//   Парсинг делегирован в parsePerplexityThread (utils/perplexity-parser.js, ESM-импорт).
 //   usage НЕТ — токены считаются эвристикой на стороне расширения.
 
 // ESM (Roadmap Ph2): setIntervalVisible втягивается сборкой в MAIN-бандл перехватчика.
 import { setIntervalVisible } from '../utils/intercept-common.js';
+// ESM (Roadmap Ph2): парсер Perplexity — тоже ES-модуль; window.parsePerplexityThread больше нет,
+// именованные экспорты втягиваются сборкой (esbuild) в этот же MAIN-бандл.
+import { parsePerplexityThread, stripPerplexityHistoryTruncation } from '../utils/perplexity-parser.js';
 (function () {
   if (window.__aiCmPerplexityInterceptInstalled) return;
   window.__aiCmPerplexityInterceptInstalled = true;
@@ -21,7 +24,7 @@ import { setIntervalVisible } from '../utils/intercept-common.js';
   // v31: флаг «Подробные логи» транслируется из content.js (ISOLATED) через CustomEvent
   try { window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDebugLogs(!!(ev && ev.detail)); }); } catch (e) {}
 
-  console.log('[perplexity-intercept] parser available: ' + typeof window.parsePerplexityThread);
+  console.log('[perplexity-intercept] parser available: ' + typeof parsePerplexityThread);
 
   var originalFetch = window.fetch;
   if (typeof originalFetch !== 'function') return;
@@ -225,15 +228,9 @@ import { setIntervalVisible } from '../utils/intercept-common.js';
 
   // v2.0.34: шаблон истории не должен закреплять урезанный адрес Perplexity
   // (limit=20&offset=0&from_first=false) — иначе bootstrap тянет лишь последние 20 записей.
-  // Чистая функция живёт в utils/perplexity-parser.js (инжектится раньше этого файла).
+  // Чистая функция живёт в utils/perplexity-parser.js (ESM-импорт, см. шапку файла).
   function normalizeHistoryUrl(urlStr) {
-    var u = String(urlStr || '');
-    try {
-      if (typeof window !== 'undefined' && typeof window.stripPerplexityHistoryTruncation === 'function') {
-        return window.stripPerplexityHistoryTruncation(u);
-      }
-    } catch (eNorm) {}
-    return u;
+    return stripPerplexityHistoryTruncation(String(urlStr || ''));
   }
 
   // M-14: выучить historyUrlTemplate из URL, отклонённого гейтом M-12 (id-сегмент → {slug}).
@@ -341,11 +338,11 @@ import { setIntervalVisible } from '../utils/intercept-common.js';
       }).catch(function (e) { scheduleBootstrapAcceptJsonRetry(); debugLog('log', '[perplexity-intercept] bootstrap: REST-fallback ошибка ' + e); });
   }
 
-  // ---- эмит снимка через window.parsePerplexityThread ----
+  // ---- эмит снимка через parsePerplexityThread ----
   function emitSnapshot(data, when) {
     var parsed = { text: '', count: 0 };
     try {
-      parsed = window.parsePerplexityThread ? window.parsePerplexityThread(data) : { text: '', count: 0 };
+      parsed = parsePerplexityThread(data) || { text: '', count: 0 };
     } catch (e) {
       console.log('[perplexity-intercept] ошибка emitSnapshot:', e && e.message);
       return;
@@ -552,5 +549,5 @@ import { setIntervalVisible } from '../utils/intercept-common.js';
   aiCmPoll(function () { if (dirty && !refreshBusy) activeRefresh('таймер-страховка'); }, 15000);
   bootstrapTimer = setTimeout(function () { bootstrapSnapshot(); }, 1500);
 
-  console.log('[perplexity-intercept] перехватчик Perplexity установлен (window.parsePerplexityThread + extractUrl + сниффинг, MAIN world, document_start)');
+  console.log('[perplexity-intercept] перехватчик Perplexity установлен (parsePerplexityThread + extractUrl + сниффинг, MAIN world, document_start)');
 })();

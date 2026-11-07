@@ -8,6 +8,10 @@ import AiCmExportBuilders from '../utils/export-text-builders.js';
 // из options/options.html удалён, модуль втягивается этим import'ом в options-бандл
 // (публичный API модуля — default-экспорт, как у export-text-builders выше).
 import AiCmArchiveImport from '../utils/archive-import.js';
+// ESM (Roadmap Ph2): utils/perplexity-parser.js переведён на ES-модуль — тег <script>
+// из options/options.html удалён. Архив Perplexity разбирается инъекцией парсера в
+// archive-import (window.parsePerplexityThread больше не публикуется).
+import { parsePerplexityThread } from '../utils/perplexity-parser.js';
 
 console.log('AI Context Monitor: Настройки загружены');
 
@@ -1174,7 +1178,7 @@ function aiCmImportArchiveFiles(files, onDone) {
     };
     reader.onload = function () {
       try {
-        const parsed = API.parseArchiveText(String(reader.result == null ? '' : reader.result));
+        const parsed = API.parseArchiveText(String(reader.result == null ? '' : reader.result), { parsePerplexityThread: parsePerplexityThread });
         if (!parsed.ok) {
           report.errors.push({ fileName: file.name, error: parsed.error });
           step();
