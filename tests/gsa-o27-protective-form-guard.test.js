@@ -30,7 +30,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const P = require('../utils/export-emit-pipeline.js');
-const Parser = require('../utils/google-search-folwr-parser.js');
+const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.js');
 const CONTENT = require('./helpers/content-source.js').contentSource;
 
 const INTERCEPT = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');

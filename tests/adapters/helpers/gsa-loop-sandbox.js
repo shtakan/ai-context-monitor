@@ -15,7 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const Parser = require('../../../utils/google-search-folwr-parser.js');
+const Parser = require('../../helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.js');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
 const INTERCEPT = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');

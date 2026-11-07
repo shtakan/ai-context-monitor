@@ -136,7 +136,7 @@
     "reason": "legacy-pin"
   },
   "tests/adapters/gsa-fetch-consent-telemetry.test.js": {
-    "count": 4,
+    "count": 3,
     "reason": "legacy-pin"
   },
   "tests/adapters/helpers/gsa-loop-sandbox.js": {

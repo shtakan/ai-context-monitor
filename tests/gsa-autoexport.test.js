@@ -617,7 +617,7 @@ describe('регрессионный контур v1.18: запрещённые 
   });
 
   test('классификатор GSA не изменён (те же kind-вердикты)', () => {
-    const { classifyFolwrContinuation } = require('../utils/google-search-folwr-parser');
+    const { classifyFolwrContinuation } = require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.js');
     expect(classifyFolwrContinuation({ ok: true, status: 200, bodyLength: 30, newTurns: 0, cursor: 'C1', sentCursor: 'C1' }))
       .toMatchObject({ kind: 'cursor-repeat', complete: true, canContinue: false });
     expect(classifyFolwrContinuation({ ok: true, status: 200, bodyLength: 4200, newTurns: 0, cursor: null, sentCursor: 'C1' }))

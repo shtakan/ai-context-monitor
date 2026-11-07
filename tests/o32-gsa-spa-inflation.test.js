@@ -30,7 +30,7 @@ const H = require('./helpers/content-source.js');
 const ROOT = H.ROOT;
 const CONTENT = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
 const INTERCEPT = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');
-const Parser = require('../utils/google-search-folwr-parser.js');
+const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.js');
 
 /** Тело функции по имени: от `function name(` до парной закрывающей скобки. */
 function sliceFunction(src, name) {

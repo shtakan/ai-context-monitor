@@ -35,6 +35,13 @@ import AiCmExportBuilders from '../utils/export-text-builders.js';
 // MAIN-мира (chrome.scripting не умеет import) build.mjs выводит classic-артефакт
 // того же модуля в dist/utils/gemini-batchexecute-parser.js.
 import '../utils/gemini-batchexecute-parser.js';
+// ESM (Roadmap Ph2): utils/google-search-folwr-parser.js переведён на ES-модуль.
+// Именованных потребителей в content-скрипте нет, нужен его побочный эффект —
+// window-зеркало (window.GoogleFolwrUtils): из него читает
+// adapters/google-search-adapter.js в ISOLATED-мире. Для MAIN-мира
+// (chrome.scripting не умеет import) build.mjs выводит classic-артефакт
+// того же модуля в dist/utils/google-search-folwr-parser.js.
+import '../utils/google-search-folwr-parser.js';
 
 (function () {
   let v = 'unknown';

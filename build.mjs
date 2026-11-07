@@ -288,7 +288,12 @@ function contentEntry(manifest) {
       // Ph2, шаг gemini-dom-parser.js: модуль ESM — его втягивает статический
       // import из core/hybrid-tail.js (ISOLATED-мир). MAIN-регистраций у парсера
       // нет, поэтому classic-артефакт не выводится; как строку конкатенации не берём.
-      rel !== 'utils/gemini-dom-parser.js'
+      rel !== 'utils/gemini-dom-parser.js' &&
+      // Ph2, шаг google-search-folwr-parser.js: модуль ESM — его втягивает side-effect
+      // import из core/content.js (window-зеркало для адаптера GSA в ISOLATED-мире),
+      // а для MAIN-регистрации ai-cm-google-search-intercept ниже выводится
+      // classic-артефакт. Как строку конкатенации не берём; строка из манифеста удалена.
+      rel !== 'utils/google-search-folwr-parser.js'
     );
   });
 }
@@ -465,6 +470,40 @@ async function writeParserClassic() {
   await fsp.mkdir(path.dirname(to), { recursive: true });
   await fsp.writeFile(to, classic, 'utf8');
   return PARSER_CLASSIC;
+}
+
+// Ph2, шаг google-search-folwr-parser.js: ESM-исходник и путь, под которым его ждёт
+// MAIN-регистрация ai-cm-google-search-intercept в core/background.js.
+const GSA_PARSER_SOURCE = 'utils/google-search-folwr-parser.js';
+const GSA_PARSER_CLASSIC = 'utils/google-search-folwr-parser.js';
+
+/**
+ * dist/utils/google-search-folwr-parser.js: classic-артефакт того же модуля.
+ *
+ * GSA-перехватчик работает в world:'MAIN' и получает парсер отдельным classic-скриптом
+ * (core/google-search-intercept.js читает window.GoogleFolwrUtils). classic-скрипт не
+ * может содержать import/export, поэтому снимаем префиксы объявлений и заворачиваем
+ * тело в IIFE — так внутренние имена не протекают в общий скоуп MAIN-мира.
+ *
+ * window-зеркало остаётся в исходнике и попадает как в бандл content.js (ISOLATED-мир),
+ * так и сюда.
+ */
+async function writeGsaParserClassic() {
+  const src = fs.readFileSync(abs(GSA_PARSER_SOURCE), 'utf8').replace(/^\uFEFF/, '');
+  const body = src
+    .replace(/^[ \t]*import\s[^\n]*\bfrom\s*['"][^'"]+['"];?[ \t]*$/gm, '')
+    .replace(/^[ \t]*export\s+(?=(?:async\s+)?(?:function|var|let|const|class)\b)/gm, '');
+  if (/^\s*(?:import|export)\b/m.test(body)) {
+    fail(GSA_PARSER_CLASSIC + ': classic-артефакт всё ещё содержит import/export');
+  }
+  if (!/window\.GoogleFolwrUtils\s*=/.test(body)) {
+    fail(GSA_PARSER_CLASSIC + ': самовызывающаяся обёртка не публикует window.GoogleFolwrUtils');
+  }
+  const classic = '(function () {\n' + body.trim() + '\n})();\n';
+  const to = path.join(DIST, GSA_PARSER_CLASSIC);
+  await fsp.mkdir(path.dirname(to), { recursive: true });
+  await fsp.writeFile(to, classic, 'utf8');
+  return GSA_PARSER_CLASSIC;
 }
 
 function runtimeRegisteredFiles() {
@@ -761,6 +800,9 @@ async function copyAssets() {
     // Ph2: utils/gemini-batchexecute-parser.js — та же история (Gemini MAIN-регистрация
     // v12); classic-артефакт выводит writeParserClassic ниже.
     if (r === PARSER_CLASSIC) continue;
+    // Ph2: utils/google-search-folwr-parser.js — та же история (GSA MAIN-регистрация
+    // ai-cm-google-search-intercept); classic-артефакт выводит writeGsaParserClassic ниже.
+    if (r === GSA_PARSER_CLASSIC) continue;
     const from = abs(r);
     if (!fs.existsSync(from)) {
       fail(`"${r}" is registered at runtime by ${BACKGROUND_SRC} but does not exist`);
@@ -772,6 +814,7 @@ async function copyAssets() {
   }
   copied.push(await writeDebugClassic());
   copied.push(await writeParserClassic());
+  copied.push(await writeGsaParserClassic());
   copied.push(...(await rewireDist()));
   return copied;
 }

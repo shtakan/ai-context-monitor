@@ -37,7 +37,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const Parser = require('../utils/google-search-folwr-parser.js');
+const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.js');
 
 const ROOT = path.join(__dirname, '..');
 const CONTENT = require('./helpers/content-source.js').contentSource;
@@ -75,7 +75,13 @@ function loadAdapter(opts) {
     BASE_SRC + '\n' + ADAPTER_SRC + '\nreturn GoogleSearchAdapter;');
   const win = (o.noWindow === true) ? undefined
     : ((o.window !== undefined) ? o.window : { GoogleFolwrUtils: Parser, dispatchEvent: function () { } });
-  const req = (o.require !== undefined) ? o.require : undefined;
+  const req = (o.require !== undefined)
+    ? function (id) {
+      // Ph2: парсер переведён на ESM — Node-путь теста резолвит его через loadEsmModule.
+      if (String(id).indexOf('google-search-folwr-parser') !== -1) return Parser;
+      return o.require(id);
+    }
+    : undefined;
   const GsaAdapterClass = sandbox(document, { hostname: 'www.google.com', pathname: '/search' },
     function () { }, console, win, req, undefined);
   return new GsaAdapterClass();

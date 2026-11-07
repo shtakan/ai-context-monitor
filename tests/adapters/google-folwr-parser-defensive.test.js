@@ -15,7 +15,7 @@
  * Гейты/поведение не меняются: тесты только вызывают публичные хелперы парсера.
  */
 
-const P = require('../../utils/google-search-folwr-parser');
+const P = require('../helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.js');
 
 function turnHtml(id, question, answer) {
   return '<div class="CKgc1d" data-scope-id="turn" jsuid="' + id + '">' +

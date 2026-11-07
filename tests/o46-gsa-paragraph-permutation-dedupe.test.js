@@ -17,7 +17,7 @@
 
 'use strict';
 
-const Parser = require('../utils/google-search-folwr-parser.js');
+const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.js');
 
 // Разделитель абзацев без escape-последовательностей в исходнике теста.
 const P = String.fromCharCode(10, 10);

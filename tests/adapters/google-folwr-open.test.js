@@ -14,7 +14,7 @@ const {
   canonicalTurnKeyOf,
   canonicalizeTurnForThread,
   classifyFolwrContinuation
-} = require('../../utils/google-search-folwr-parser');
+} = require('../helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.js');
 const fs = require('fs');
 const path = require('path');
 
