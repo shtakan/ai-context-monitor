@@ -40,7 +40,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('../utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
 const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.js');
 
 const ROOT = path.join(__dirname, '..');

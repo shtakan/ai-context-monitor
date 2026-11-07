@@ -295,7 +295,7 @@ function resetConversationState() {
   // site+threadId и переживает уход/возврат в пределах сессии страницы.
   try {
     var cidD14 = getCurrentConvId() || '';
-    var P14 = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+    var P14 = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
     var siteD14 = (currentAdapter && currentAdapter.siteName) || '';
     if (siteD14 === 'google_search') {
       // O-29 (Low, лог-спам): строка печатается только на СМЕНУ состояния SPA-входа.

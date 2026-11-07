@@ -32,7 +32,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const CONTENT = require('./helpers/content-source.js').contentSource;
 const INTERCEPT = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');
-const P = require('../utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
 
 // Рез по балансу фигурных скобок (как в tests/gsa-autoexport.test.js).
 function fnDecl(src, name) {

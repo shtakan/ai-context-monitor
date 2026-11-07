@@ -28,7 +28,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('../../utils/export-emit-pipeline.js');
+const P = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
 
 const ROOT = path.join(__dirname, '..', '..');
 const EXPORT_MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');

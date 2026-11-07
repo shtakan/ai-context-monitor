@@ -27,7 +27,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('../utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
 
 const ROOT = path.join(__dirname, '..');

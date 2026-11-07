@@ -4,7 +4,7 @@
  * латч per service+convId, извлечение convId из URL, нормализация сообщений.
  * v1.19.1 (M-11): Perplexity /search/<id> — живой URL диалога (см. 3.3b).
  */
-const P = require('../utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
 const fs = require('fs');
 const path = require('path');
 

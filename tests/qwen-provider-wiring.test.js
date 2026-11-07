@@ -74,9 +74,12 @@ describe('O-35: manifest.json — Qwen добавлен, прежние серв
       'adapters/chatgpt-adapter.js', 'adapters/gemini-adapter.js', 'adapters/deepseek-adapter.js',
       'adapters/google-search-adapter.js', 'adapters/claude-adapter.js',
       'adapters/perplexity-adapter.js',
-      'utils/export-emit-pipeline.js', 'core/content.js'].forEach(function (p) {
+      'core/content.js'].forEach(function (p) {
       expect(js).toContain(p);
     });
+    // Ph2: utils/export-emit-pipeline.js стал ESM-модулем и вшивается в content-бандл
+    // статическим import'ом из core/content.js — отдельной строки в манифесте больше нет.
+    expect(js).not.toContain('utils/export-emit-pipeline.js');
     // Перехватчик Qwen в content_scripts НЕ дублируется: он ставится программно в MAIN-мир
     // через registerContentScripts (тот же паттерн, что у шести существующих перехватчиков).
     expect(js).not.toContain('core/qwen-intercept.js');

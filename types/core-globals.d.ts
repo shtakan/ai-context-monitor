@@ -92,6 +92,15 @@ declare const ModelConfig: {
  */
 declare const AiCmExportBuilders: import('./export').ExportBuildersApi;
 
+/**
+ * utils/export-emit-pipeline.js (Ph2: ESM) — публичный API пайплайна экспорта.
+ * В бандле это ESM-биндинг, который втягивает core/content.js; core/export-manager.js,
+ * core/base-handler.js и core/widget.js склеены в тот же модуль (import хойстится),
+ * поэтому второго import'а в них нет — объявление закрывает их типы. В срезах-песочницах
+ * биндинга нет: потребители резолвят его через typeof-гард.
+ */
+declare const AiCmExportEmitPipeline: import('./export').ExportPipelineApi;
+
 // --- core/widget.js: кросс-модульные функции ---------------------------------
 
 /** Идентификатор сервиса по URL ('chatgpt' | 'deepseek' | 'gemini' | 'google_search' | ...). */

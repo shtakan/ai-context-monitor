@@ -24,7 +24,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('../utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
 
 const ROOT = path.join(__dirname, '..');
@@ -88,7 +88,12 @@ function makeSplitSandbox(diagLine) {
   const end = PIPELINE_SRC.indexOf(SPLIT_REGION_END);
   expect(start).toBeGreaterThan(-1);
   expect(end).toBeGreaterThan(start);
-  const src = PIPELINE_SRC.slice(start, end);
+  // Ph2: пайплайн — ES-модуль; в Function-body снимаем префиксы объявлений,
+  // как esbuild при упаковке бандла и как tests/helpers/load-esm.js.
+  const src = PIPELINE_SRC.slice(start, end)
+    .replace(/^[ \t]*export\s+(?=(?:async\s+)?(?:function|var|let|const|class)\s)/gm, '')
+    // срез заканчивается перед 'function applyReasoningExportFields', оставляя хвост 'export'
+    .replace(/export\s*$/, '');
   const ctx = {};
   if (diagLine) ctx.aiCmDiagLine = diagLine;
   const fn = new Function('ctx', 'with (ctx) { (function () {\n' + src +

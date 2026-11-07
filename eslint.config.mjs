@@ -272,6 +272,10 @@ export default [
       // снят) и втягивается side-effect import'ом из core/content.js; для MAIN-мира
       // build.mjs выводит classic-артефакт dist/utils/google-search-folwr-parser.js.
       'utils/google-search-folwr-parser.js',
+      // Ph2, шаг export-emit-pipeline.js: модуль переведён на ESM (UMD-хвост снят)
+      // и втягивается в content-бандл статическим import'ом из core/content.js;
+      // MAIN-регистрации у него нет, classic-артефакт не выводится.
+      'utils/export-emit-pipeline.js',
       // Потребитель core/hybrid-tail.js получает top-level import, поэтому тоже
       // разбирается как module. Файл остаётся частью конкатенации content-бандла.
       'core/hybrid-tail.js',

@@ -24,7 +24,7 @@ const path = require('path');
 // ===== Песочница state.js (общий скоуп контент-скрипта) =====
 function buildSandbox() {
   const state = require('../core/state.js');
-  const pipeline = require('../utils/export-emit-pipeline.js');
+  const pipeline = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
 
   // Сброс состояния песочницы
   state.autoExportFired = {};
@@ -176,7 +176,7 @@ describe('O-38 R: регресс — шесть платформ', () => {
 // ===== Gate pin: shouldSkipAutoExport получает fired из once-латча =====
 describe('O-38 Gate: shouldSkipAutoExport fired из once-латча', () => {
   test('once-латч = 1, autoExportFired пуст → fired=true, reason=already-fired', () => {
-    const pipeline = require('../utils/export-emit-pipeline.js');
+    const pipeline = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
     const onceLatch = Object.create(null);
     onceLatch['qwen|7fec9bd3'] = 1;
 
@@ -195,7 +195,7 @@ describe('O-38 Gate: shouldSkipAutoExport fired из once-латча', () => {
   });
 
   test('once-латч пуст, autoExportFired пуст → fired=false, skip=false', () => {
-    const pipeline = require('../utils/export-emit-pipeline.js');
+    const pipeline = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
     const onceLatch = Object.create(null);
 
     const fired = false || (onceLatch['qwen|new-conv'] === 1);

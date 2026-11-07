@@ -274,7 +274,7 @@ describe('Claude md roles R2: site=qwen — прежние маркеры ### US
 // модулей в одном лексическом скоупе (как в браузере) — ровно выражение buildHistoryMessages.
 // =====================================================================================
 
-const P = require('../utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 const BASE_HANDLER_SRC = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.js'), 'utf8');
 

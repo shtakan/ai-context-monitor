@@ -113,7 +113,7 @@ function aiCmEmitEntryDiag(branch, inMsgs, outMsgs, effectiveOn) {
 function aiCmHiddenExportEffectiveOn(messages) {
   var userOn = (typeof aiCmIncludeHiddenInExport !== 'undefined') && aiCmIncludeHiddenInExport === true;
   try {
-    var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+    var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
     if (!P || typeof P.hasReasoningInSource !== 'function' ||
       typeof P.effectiveReasoningToggle !== 'function') return userOn;
     // Сайт — из текущего адаптера (та же точка правды, что у остальных site-гейтов этого модуля);
@@ -139,7 +139,7 @@ function aiCmHiddenExportEffectiveOn(messages) {
 // санация не переписана.
 function aiCmSanitizeEmitUserTexts(messages) {
   try {
-    var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+    var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
     if (!P || typeof P.sanitizeEmitMessages !== 'function') {
       // O-40 (диагностика): пайплайна нет — ветка no-pipeline, массив не тронут.
       if (typeof aiCmEmitEntryDiag === 'function') aiCmEmitEntryDiag('no-pipeline', messages, messages);
@@ -207,14 +207,14 @@ function aiCmReasoningExportSite() {
 // песочница) → массив не тронут; сайт не тот → хелпер возвращается сразу (0 изменений).
 function aiCmPrepareReasoningForExport(messages) {
   try {
-    var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+    var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
     if (!P || typeof P.applyReasoningExportFields !== 'function') return messages;
     P.applyReasoningExportFields(messages, aiCmReasoningExportSite());
   } catch (ePrep) { swallowSoft(ePrep, 'export:aiCmPrepareReasoningForExport'); }
   return messages;
 }
 function aiCmCollectExportSource() {
-  var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+  var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
   var texts = lastBaseTexts || [];
   // O-37 (C): хелпер нормализации reasoning берём typeof-гардом ОДИН раз (он объявлен рядом,
   // в этом же модуле): в срез-песочницах тестов, где вырезана только эта функция, хелпера нет
@@ -365,7 +365,7 @@ function aiCmCollectExportSource() {
 function aiCmExportBaseSource(convId, localMsgs) {
   try {
     var site = (currentAdapter && currentAdapter.siteName) || '';
-    var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+    var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
     if (!P || typeof P.resolveExportSource !== 'function') return null;
     if (site !== 'gemini') return null; // прочие сервисы: архив — только индикатор источника
     var snap = /** @type {{convId?: string, messages?: Array<{role?: string, text?: string}>|null, archiveCount?: number, liveCount?: number, baseMsgs?: number}|null} */
@@ -417,7 +417,7 @@ function aiCmGetSourceTier() {
   try {
     if (!(currentAdapter && currentAdapter.siteName === 'gemini')) return undefined;
     if (typeof aiCmGeminiTurnsSnapshotSync !== 'function') return undefined;
-    var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+    var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
     if (!P || typeof P.sourceTierOf !== 'function') return undefined;
     var snap = /** @type {{archiveCount?: number, liveCount?: number}|null} */ (aiCmGeminiTurnsSnapshotSync());
     if (!snap || typeof snap !== 'object') return undefined;
@@ -930,7 +930,7 @@ function aiCmAutoExportConvId() {
   try {
     var urlCid = getCurrentConvId() || '';
     var site = (currentAdapter && currentAdapter.siteName) || '';
-    var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+    var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
     if (P && typeof P.resolveAutoExportConvId === 'function') {
       return P.resolveAutoExportConvId(site, urlCid, lastThreadId || '') || '';
     }
@@ -1225,7 +1225,7 @@ function aiCmAutoExportDecisionDiag(percentage, verdictSkip, reason) {
     // pickExportSource(baseSeen, texts.length>0); хелпера нет (срез-песочницы) → поле не печатаем.
     var fileSource;
     try {
-      var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+      var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
       if (P && typeof P.pickExportSource === 'function') {
         fileSource = P.pickExportSource(baseSeen === true, memMsgs > 0);
       }
@@ -1278,7 +1278,7 @@ function maybeAutoExport(percentage) {
       notCompleteLogged = {};
       autoExportLastConvId = cid;
     }
-    var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+    var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
     var siteName = (currentAdapter && currentAdapter.siteName) || '';
     // S2: per-site порог 'aiCmAutoExportPct_<siteName>' (например aiCmAutoExportPct_chatgpt)
     // переопределяет глобальный autoExportSettings.pct для этого сайта; отсутствует —
@@ -1546,7 +1546,7 @@ function maybeAutoExport(percentage) {
 // глобального пути 1:1.
 function aiCmEffectiveAutoExportThreshold(siteName) {
   try {
-    var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+    var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
     var s = (typeof autoExportSettings === 'object' && autoExportSettings) ? autoExportSettings : null;
     var globalPct = (s && typeof s.pct === 'number') ? s.pct : undefined;
     var perSitePct = (typeof autoExportPctBySite === 'object' && autoExportPctBySite)
@@ -1582,7 +1582,7 @@ var aiCmAutoExportNamesUsed = Object.create(null);
 // Байты файла, маска имени, формат и гейты не изменяются: сюда приходит уже собранный
 // content. Возвращает ИТОГОВОЕ имя файла (его печатает fired-строка).
 function aiCmAutoExportStartDownload(content, file, fmt) {
-  var Pdl = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+  var Pdl = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
   var used = (typeof aiCmAutoExportNamesUsed === 'object' && aiCmAutoExportNamesUsed)
     ? aiCmAutoExportNamesUsed : null;
   // (1) синхронная консультация реестра имён
@@ -1666,7 +1666,7 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
     var fmt = (autoExportSettings.fmt === 'md') ? 'md' : ((autoExportSettings.fmt === 'json') ? 'json' : 'txt');
     // v81 (2.6): имя файла — ТОЛЬКО через пайплайн (utils/export-emit-pipeline.js);
     // site/модель — из текущего адаптера, не из Gemini-констант.
-    var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+    var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
     var siteNameD = (currentAdapter && currentAdapter.siteName) || '';
     // v81 (2.5): low-confidence НЕ ставится автоматически для не-Gemini (полный DOM-адаптер);
     // для Gemini — прежний флаг v63 (aiCmLowConfidenceByConv).
@@ -1839,7 +1839,7 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
         if (reason !== 'pre-trim') {
           // v81 (2.5): латч «один раз на чат» — per service+convId (изоляция по сервису);
           // для Gemini ключ по-прежнему уникален на чат — поведение 1:1.
-          var PDl = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+          var PDl = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
           if (PDl && typeof PDl.markAutoExportFired === 'function') {
             PDl.markAutoExportFired(autoExportFired, (currentAdapter && currentAdapter.siteName) || '', cid);
             // O-38: модульный латч — переживает resetConversationState (SPA-возврат в уже
@@ -2029,7 +2029,7 @@ window.addEventListener('ai-cm-loader-state', function (/** @type {CustomEvent} 
             // in-memory autoExportFired сбрасывается при F5; session-латч (isFiredInSession) и once-латч
             // (aiCmAutoExportFiredOnce) переживают F5/SPA — без них повторный автоэкспорт при F5.
             var siteBc = (currentAdapter && currentAdapter.siteName) || '';
-            var Pbc = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+            var Pbc = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
             return Pbc.getAutoExportFired(autoExportFired, siteBc, cid) ||
                    (typeof Pbc.isFiredInSession === 'function' ? Pbc.isFiredInSession(sessionFiredCache, siteBc, cid) : false) ||
                    (typeof aiCmAutoExportFiredOnce === 'object' && aiCmAutoExportFiredOnce && aiCmAutoExportFiredOnce[siteBc + '|' + cid] === 1) || (typeof aiCmAutoExportFiredInStorage === 'function' && aiCmAutoExportFiredInStorage(cid));
@@ -2044,7 +2044,7 @@ window.addEventListener('ai-cm-loader-state', function (/** @type {CustomEvent} 
         // Латч fired срезанным триггером НЕ ставится: поздний честный экспорт по порогу
         // (или рост pct выше порога) остаётся возможен — семантика skip-ов прежняя.
         var thrBc64 = aiCmEffectiveAutoExportThreshold((typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName) || '');
-        var Pbc64 = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+        var Pbc64 = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
         var gateBc64 = (Pbc64 && typeof Pbc64.shouldSkipBaseCompleteTrigger === 'function')
           ? Pbc64.shouldSkipBaseCompleteTrigger({ percentage: pctBc64, threshold: thrBc64 })
           : { skip: (pctBc64 < thrBc64), reason: 'below-threshold-base-complete', threshold: thrBc64 };

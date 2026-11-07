@@ -43,7 +43,7 @@ const ADAPTER_DIR = path.join(ROOT, 'adapters');
 const ADAPTER_SRC = fs.readFileSync(path.join(ADAPTER_DIR, 'deepseek-adapter.js'), 'utf8');
 const BASE_ADAPTER_SRC = fs.readFileSync(path.join(ADAPTER_DIR, 'base-adapter.js'), 'utf8');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
-const P = require(path.join(ROOT, 'utils', 'export-emit-pipeline.js'));
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
 
 const PREFIX = '[AI CM][diag] ';
 const TAG_EXTRACT = PREFIX + 'o21-dom-extract';

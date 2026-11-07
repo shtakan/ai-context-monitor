@@ -23,7 +23,7 @@ const fs = require('fs');
 const path = require('path');
 
 const P = require('../core/qwen-pagination.js');
-const Gate = require('../utils/export-emit-pipeline.js');
+const Gate = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
 
 const ROOT = path.join(__dirname, '..');

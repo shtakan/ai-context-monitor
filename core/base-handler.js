@@ -54,7 +54,7 @@ function aiCmDedupeExportSource(messages) {
     // cross-raw → гигиена остатков разметки), поэтому дубль-копия одного хода до потребителей
     // (метрики/бейдж/pct/экспорт) не доезжает. Для прочих не-Gemini сайтов путь прежний.
     if (site === 'google_search') {
-      var Pgsa = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+      var Pgsa = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
       if (Pgsa && typeof Pgsa.prepareExportMessages === 'function') {
         var resGsa = Pgsa.prepareExportMessages(messages, aiCmLogIntraDedupe);
         var outGsa = Array.isArray(resGsa.messages) ? resGsa.messages : messages;
@@ -90,7 +90,7 @@ function aiCmDedupeExportSource(messages) {
       }
       return { messages: keep, removed: 0 };
     }
-    var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+    var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
     if (!P) return { messages: messages, removed: 0 };
     // E-2.1: внутри-сообщенческая дедупликация идёт ПЕРВОЙ, меж-сообщенческая — второй;
     // порядок задан prepareExportMessages (единая точка входа пайплайна).

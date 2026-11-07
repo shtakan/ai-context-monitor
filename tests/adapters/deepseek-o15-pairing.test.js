@@ -30,7 +30,7 @@ const { JSDOM, VirtualConsole } = require('jsdom');
 // стенд грузит КОНКАТЕНАЦИЮ модулей + ядра (как js[] одного registration в браузере).
 const DS = require('../helpers/deepseek-intercept-source.js');
 const ADAPTER_DIR = path.join(__dirname, '..', '..', 'adapters');
-const P = require('../../utils/export-emit-pipeline.js');
+const P = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
 
 // ===================== фикстуры =====================
 

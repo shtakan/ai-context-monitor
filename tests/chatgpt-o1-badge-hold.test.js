@@ -499,7 +499,7 @@ describe('O-1 R3: автоэкспорт не тронут', () => {
 // =====================================================================================
 describe('O-1 R4: регресс-маркеры соседних задач на месте', () => {
   test('R4: O-11 (латч/имена), O-31 (сегментация), O-27 (гарды), экспорт-байты', () => {
-    const P = require('../utils/export-emit-pipeline.js');
+    const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
     expect(typeof P.latchKey).toBe('function');                    // O-11
     expect(typeof P.disambiguateFileName).toBe('function');        // O-11
     expect(typeof P.shouldSkipAutoExport).toBe('function');        // O-11/O-27

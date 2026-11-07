@@ -304,10 +304,10 @@
       "file": "core/content.js",
       "category": "best-effort-guard",
       "lines": [
-        595,
-        2422,
-        2562,
-        3553
+        603,
+        2430,
+        2570,
+        3561
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cyrDiag = (t.match(/[а-яёА-ЯЁ]/g) || []).length; var cyrillicPct = t"
     },
@@ -315,7 +315,7 @@
       "file": "core/content.js",
       "category": "cleanup-guard",
       "lines": [
-        2147
+        2155
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: if (aiCmBadgeHoldTimer) return; aiCmBadgeHoldTimer = setTimeout(function"
     },
@@ -323,41 +323,41 @@
       "file": "core/content.js",
       "category": "debug-instrumentation",
       "lines": [
-        719,
-        1111,
-        1217,
-        1222,
+        727,
+        1119,
         1225,
-        1228,
         1230,
-        1231,
-        1232,
-        1251,
-        1253,
-        1258,
-        1293,
-        1300,
+        1233,
+        1236,
+        1238,
+        1239,
+        1240,
+        1259,
+        1261,
+        1266,
+        1301,
         1308,
-        1311,
-        1371,
+        1316,
+        1319,
         1379,
-        1381,
-        1386,
-        1393,
-        1399,
-        1417,
-        1422,
-        1428,
+        1387,
+        1389,
+        1394,
+        1401,
+        1407,
+        1425,
         1430,
-        1435,
-        2022,
-        2386,
-        2573,
-        2597,
-        2606,
-        3437,
-        3463,
-        3465
+        1436,
+        1438,
+        1443,
+        2030,
+        2394,
+        2581,
+        2605,
+        2614,
+        3445,
+        3471,
+        3473
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
     },
@@ -365,8 +365,8 @@
       "file": "core/content.js",
       "category": "defensive-assignment",
       "lines": [
-        829,
-        838
+        837,
+        846
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: aiCmPartialSoftByConv[softKey63] = (detail.partialSoft === true);"
     },
@@ -374,7 +374,7 @@
       "file": "core/content.js",
       "category": "dom-read-guard",
       "lines": [
-        2058
+        2066
       ],
       "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: var info = aiCmSourceInfo(); aiCmSourceLabelNow = info ? info.label : ''"
     },
@@ -382,12 +382,12 @@
       "file": "core/content.js",
       "category": "event-guard",
       "lines": [
-        1099,
-        1108,
-        2515,
-        2538,
-        3419,
-        3425
+        1107,
+        1116,
+        2523,
+        2546,
+        3427,
+        3433
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
     },
@@ -395,7 +395,7 @@
       "file": "core/content.js",
       "category": "feature-detect",
       "lines": [
-        2727
+        2735
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var metricSrc = baseComplete ? 'base-complete' : (lastBounded ? 'base-fl"
     },
@@ -403,21 +403,21 @@
       "file": "core/content.js",
       "category": "guard-clause",
       "lines": [
-        112,
-        310,
-        323,
-        366,
-        382,
-        709,
-        735,
-        770,
-        883,
-        1057,
-        2096,
-        2823,
-        2885,
-        2902,
-        2986
+        120,
+        318,
+        331,
+        374,
+        390,
+        717,
+        743,
+        778,
+        891,
+        1065,
+        2104,
+        2831,
+        2893,
+        2910,
+        2994
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -425,10 +425,10 @@
       "file": "core/content.js",
       "category": "host-api-guard",
       "lines": [
-        71,
-        333,
-        403,
-        3055
+        79,
+        341,
+        411,
+        3063
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.runtime.sendMessage({ type: 'BADGE_RESET' }).catch(function () {"
     },
@@ -436,8 +436,8 @@
       "file": "core/content.js",
       "category": "local-helper-guard",
       "lines": [
-        330,
-        3238
+        338,
+        3246
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmCancelDeferredHistWrite('');"
     },
@@ -445,7 +445,7 @@
       "file": "core/content.js",
       "category": "parse-guard",
       "lines": [
-        3499
+        3507
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof AiCmExportBuilders !== 'undefined') ? AiCmExportB"
     },
@@ -1606,8 +1606,8 @@
       "file": "utils/export-emit-pipeline.js",
       "category": "best-effort-guard",
       "lines": [
-        686,
-        743
+        687,
+        744
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: store[latchKey(service, convId)] = 1;"
     },
@@ -1615,7 +1615,7 @@
       "file": "utils/export-emit-pipeline.js",
       "category": "cleanup-guard",
       "lines": [
-        705
+        706
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete store[latchKey(service, convId)];"
     },
@@ -1623,7 +1623,7 @@
       "file": "utils/export-emit-pipeline.js",
       "category": "local-helper-guard",
       "lines": [
-        1538
+        1539
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: onMessageDedupe(role, res.removedBlocks);"
     },

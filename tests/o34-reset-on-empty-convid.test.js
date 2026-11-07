@@ -54,7 +54,7 @@ const H = require('./helpers/content-source.js');
 // Ph2: utils/chatgpt-conversation-parser.js — ES-модуль; тест берёт его именованные
 // экспорты через настоящий ESM-лоадер (никакого module.exports/window-хоста больше нет).
 const PARSER = require('./helpers/load-esm.js').loadEsmModule('utils/chatgpt-conversation-parser.js');
-const Pipeline = require('../utils/export-emit-pipeline.js');
+const Pipeline = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
 
 const ROOT = path.join(__dirname, '..');
 const CONTENT = H.contentSource;                                  // модули + content.js (единый скоуп)

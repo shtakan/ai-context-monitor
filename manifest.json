@@ -64,7 +64,6 @@
     "adapters/claude-adapter.js",
     "adapters/perplexity-adapter.js",
     "adapters/qwen-adapter.js",
-    "utils/export-emit-pipeline.js",
     "core/state.js",
     "core/widget.js",
     "core/base-handler.js",

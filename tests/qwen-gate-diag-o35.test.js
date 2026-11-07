@@ -689,7 +689,7 @@ describe('O-35 A: счётчик msgs привязан к convId и URL на к�
   });
 
   test('A: convId берётся из URL (/c/<id>) — привязка числа к разговору проверяема', function () {
-    const P = require('../utils/export-emit-pipeline.js');
+    const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
     expect(P.extractConvIdFromUrl('/c/' + OTHER_CHAT_ID)).toBe(OTHER_CHAT_ID);
     expect(CONTENT).toContain('var cidS24 = getCurrentConvId()');
   });

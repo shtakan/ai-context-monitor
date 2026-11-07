@@ -28,6 +28,14 @@ import { ModelConfig } from '../utils/model-config.js';
 // adapters/qwen-adapter.js и сам core/content.js, склеенные в ТОТ ЖЕ модуль, — объявления
 // import хойстятся, поэтому второй импорт в них не нужен (и был бы дублирующим именем).
 import AiCmExportBuilders from '../utils/export-text-builders.js';
+// ESM (Roadmap Ph2): utils/export-emit-pipeline.js переведён на ES-модуль (UMD-хвост
+// снят), строка из manifest.content_scripts удалена. Идентификатор AiCmExportEmitPipeline
+// намеренно тот же: его разделяют core/export-manager.js, core/base-handler.js,
+// core/widget.js и сам core/content.js, склеенные в ТОТ ЖЕ модуль, — import хойстится,
+// поэтому второго импорта в них не нужно. Потребители читают ESM-биндинг с
+// window-фолбэком (срезы-песочницы в тестах). MAIN-регистраций у модуля нет,
+// classic-артефакт не выводится.
+import * as AiCmExportEmitPipeline from '../utils/export-emit-pipeline.js';
 // ESM (Roadmap Ph2): utils/gemini-batchexecute-parser.js переведён на ES-модуль.
 // Именованных потребителей в content-скрипте нет, нужен его побочный эффект —
 // window-зеркало (window.GeminiBatchexecuteParser): из него читают
@@ -157,7 +165,7 @@ var GeminiTapeStore = {
       self.load(convId).then(function (entry) {
         var existing = (entry && entry.turns) || [];
         var unionTurns = turns;
-        var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+        var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
         if (P && typeof P.unionTurnsById === 'function') {
           var u = P.unionTurnsById(existing, turns);
           if (u.length > turns.length) unionTurns = u;
@@ -712,7 +720,7 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
   try {
     if (!window.__aiCmEmitChannelSeen) {
       window.__aiCmEmitChannelSeen = true;
-      var P1 = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+      var P1 = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
       debugLog('log', '[AI CM][svc-emit-trace] site=' + ((currentAdapter && currentAdapter.siteName) || '?') +
         ' emit-channel=received convId=' + ((P1 && P1.extractConvIdFromUrl(location.pathname)) || ''));
     }
@@ -1120,7 +1128,7 @@ function getCurrentConvId() {
     // chatgpt.com /c/<id>, chat.deepseek.com /a/chat/s/<id>,
     // perplexity.ai /search/<id> (живой диалог, M-11 v1.19.1) или /thread/<id>;
     // google.com (Search AI) — надёжного id в URL нет → '' (не выдумываем).
-    var P = (typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null;
+    var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
     if (P && typeof P.extractConvIdFromUrl === 'function') return P.extractConvIdFromUrl(location.pathname) || '';
     // фолбэк (утилита не загружена): логика v38 + convId-фикс (литералы /app/prompts|new|apikey)
     var m = location.pathname.match(/\/app\/(?!prompts(?:\/|$)|new(?:\/|$)|apikey(?:\/|$))([A-Za-z0-9_-]+)/);

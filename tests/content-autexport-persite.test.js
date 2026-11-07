@@ -7,7 +7,7 @@
  * здесь же интеграционная проверка с shouldSkipAutoExport (гейт maybeAutoExport).
  */
 
-const P = require('../utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
 
 describe('effectiveAutoExportThreshold (S2: per-site автоэкспорт)', () => {
   test('per-site ключ переопределяет глобальный порог', () => {

@@ -131,7 +131,7 @@ describe('H21: пин порядка в core/content.js', () => {
   });
 
   test('поведенческий пин латча: после fired следующий гейт даёт already-fired', () => {
-    const P = require('../utils/export-emit-pipeline.js');
+    const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
     const store = {};
     // fired-путь: латч ставится, затем пишется лог fired
     P.markAutoExportFired(store, 'gemini', 'e292103e4b521dae');

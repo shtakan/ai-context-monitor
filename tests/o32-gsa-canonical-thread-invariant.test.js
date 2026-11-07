@@ -33,7 +33,7 @@ const INTERCEPT = fs.readFileSync(path.join(ROOT, 'core', 'google-search-interce
 const HYBRID = fs.readFileSync(path.join(ROOT, 'core', 'hybrid-tail.js'), 'utf8');
 const BASE_HANDLER = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.js'), 'utf8');
 const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.js');
-const P = require('../utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
 
 // Рез по балансу фигурных скобок (как в tests/gsa-o31-thread-segmentation.test.js).
 function fnDecl(src, name) {

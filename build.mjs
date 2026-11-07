@@ -292,7 +292,12 @@ function contentEntry(manifest) {
       // import из core/content.js (window-зеркало для адаптера GSA в ISOLATED-мире),
       // а для MAIN-регистрации ai-cm-google-search-intercept ниже выводится
       // classic-артефакт. Как строку конкатенации не берём; строка из манифеста удалена.
-      rel !== 'utils/google-search-folwr-parser.js'
+      rel !== 'utils/google-search-folwr-parser.js' &&
+      // Ph2, шаг export-emit-pipeline.js: модуль ESM — его втягивает статический
+      // import из core/content.js (единый скоуп бандла: AiCmExportEmitPipeline делят
+      // core/export-manager.js, core/base-handler.js и core/content.js). MAIN-регистраций
+      // нет, classic-артефакт не выводится; как строку конкатенации не берём.
+      rel !== 'utils/export-emit-pipeline.js'
     );
   });
 }

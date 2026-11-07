@@ -32,7 +32,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
 const Logic = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
-const Pipeline = require('../../utils/export-emit-pipeline.js');
+const Pipeline = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
 // Ph2: utils/archive-import.js — ES-модуль; фасад берём его default-экспортом.
 const Archive = require('../helpers/load-esm.js').loadEsm('utils/archive-import.js');
 const CORE_GEMINI = require('../helpers/gemini-intercept-source.js').geminiSource;

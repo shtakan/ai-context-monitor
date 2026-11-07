@@ -275,7 +275,7 @@ describe('O-45 D6: код-блок доезжает до санации выхо
     '<pre><code>' + PY_CODE + '</code></pre></div>';
 
   test('sanitizeEmitMessages сохраняет фенс и многострочный код 1:1', () => {
-    const P = require('../utils/export-emit-pipeline.js');
+    const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
     const parsed = Parser.parseGoogleFolwrOpen(html);
     const messages = parsed.messages.map(function (m, i) {
       return { role: m.role, text: m.text, id: 'm' + i };
@@ -326,7 +326,7 @@ describe('O-45 R1: прежние контуры GSA не тронуты', () =>
   });
 
   test('R1: пороги/латчи автоэкспорта не тронуты (текст фенсов их не размыкает)', () => {
-    const P = require('../utils/export-emit-pipeline.js');
+    const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
     expect(typeof P.shouldSkipAutoExport).toBe('function');
     expect(MGR_SRC).toContain("aiCmAutoExportFiredOnce[siteName + '|' + cid] === 1");
   });
