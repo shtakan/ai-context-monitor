@@ -7,7 +7,7 @@
  * нет $AXzLiR, таблица — в assistant-сообщении.
  */
 
-const { parseGeminiHistory, stripAttachmentTokens, splitTurnMessages, collectTurnText, stripLeadingThinking } = require('../../utils/gemini-batchexecute-parser');
+const { parseGeminiHistory, stripAttachmentTokens, splitTurnMessages, collectTurnText, stripLeadingThinking } = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-batchexecute-parser.js');
 
 describe('Gemini batchexecute history parser (parseGeminiHistory)', () => {
   function makeTurn(question, answerParts) {

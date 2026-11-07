@@ -34,7 +34,7 @@ const { TextDecoder } = require('util');
 const ROOT = path.join(__dirname, '..', '..');
 const PDF_PATH = path.join(ROOT, 'core', 'pdf-bytes.js');
 const FILES_PATH = path.join(ROOT, 'core', 'gemini-files.js');
-const P = require('../../utils/gemini-batchexecute-parser');
+const P = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-batchexecute-parser.js');
 
 // ===================== 1. Позиционная дельта пула =====================
 

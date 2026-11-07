@@ -669,7 +669,7 @@ describe('A2: резервный разбор PDF в странице (Firefox p
   // смене подписи пула, а без хронологического предшественника дельта считается
   // против предыдущего ЗАРЕГИСТРИРОВАННОГО хода.
   test('D2 (взрыв): переподписанная dl-ссылка не плодит файл и текст', () => {
-    const P = require(PARSER_PATH);
+    const P = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-batchexecute-parser.js');
     const conv = TEST_CHAT;
     const dlA = 'https://contribution.usercontent.google.com/download?c=report-A';
     const dlB = 'https://contribution.usercontent.google.com/download?c=report-B';

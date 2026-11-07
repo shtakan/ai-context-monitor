@@ -6,7 +6,7 @@
  * Инъекция детерминирована (extractDrTexts из realTurns каждого парса), без
  * синтетического хода — пересборки стабильны.
  */
-const { parseGeminiHistory, extractDrTexts, injectDrLinks, splitTurnMessages, __setDrTexts } = require('../../utils/gemini-batchexecute-parser');
+const { parseGeminiHistory, extractDrTexts, injectDrLinks, splitTurnMessages, __setDrTexts } = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-batchexecute-parser.js');
 
 const REPORT_MARK = 'Настоящее экспертное заключение подготовлено в рамках комплексного анализа';
 const LINK_REPORT = 'http://googleusercontent.com/immersive_entry_chip/0';

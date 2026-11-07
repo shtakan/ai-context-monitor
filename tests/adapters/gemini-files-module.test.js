@@ -20,7 +20,7 @@ const timers = require('timers');
 
 const ROOT = path.join(__dirname, '..', '..');
 const MODULE_SRC = fs.readFileSync(path.join(ROOT, 'core', 'gemini-files.js'), 'utf8');
-const PARSER_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'gemini-batchexecute-parser.js'), 'utf8');
+const PARSER_SRC = require('../helpers/load-esm.js').loadAsClassic('utils/gemini-batchexecute-parser.js');
 const INGEST_SRC = fs.readFileSync(path.join(ROOT, 'core', 'gemini-ingest.js'), 'utf8');
 const read = function (rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); };
 

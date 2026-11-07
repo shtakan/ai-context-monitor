@@ -28,6 +28,13 @@ import { ModelConfig } from '../utils/model-config.js';
 // adapters/qwen-adapter.js и сам core/content.js, склеенные в ТОТ ЖЕ модуль, — объявления
 // import хойстятся, поэтому второй импорт в них не нужен (и был бы дублирующим именем).
 import AiCmExportBuilders from '../utils/export-text-builders.js';
+// ESM (Roadmap Ph2): utils/gemini-batchexecute-parser.js переведён на ES-модуль.
+// Именованных потребителей в content-скрипте нет, нужен его побочный эффект —
+// window-зеркало (window.GeminiBatchexecuteParser): из него читают
+// core/export-manager.js:sanitizeGeminiText и geminiParserVersion() ниже. Для
+// MAIN-мира (chrome.scripting не умеет import) build.mjs выводит classic-артефакт
+// того же модуля в dist/utils/gemini-batchexecute-parser.js.
+import '../utils/gemini-batchexecute-parser.js';
 
 (function () {
   let v = 'unknown';

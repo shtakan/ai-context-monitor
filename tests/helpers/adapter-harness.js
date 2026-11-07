@@ -175,13 +175,23 @@ function inlineEsmImports(src, fileAbs) {
   );
 }
 
+/**
+ * export-объявления в склеиваемом Function-body: после ESM-миграции (Roadmap Ph2)
+ * исходник бывает ES-модулем (`export function …`), а `export` внутри Function-body —
+ * SyntaxError. Снимаем только префиксы объявлений — ровно как esbuild при упаковке
+ * бандла и как tests/helpers/load-esm.js делает при разворачивании графа.
+ */
+function stripEsmExports(src) {
+  return src.replace(/^[ \t]*export\s+(?=(?:async\s+)?(?:function|var|let|const|class)\s)/gm, '');
+}
+
 function collectFiles(file, seen, all) {
   const abs = path.isAbsolute(file) ? file : path.join(REPO_ROOT, file);
   const key = relKey(abs);
   if (seen.has(key)) return '';
   seen.add(key);
   if (all) all.push(key);
-  const src = inlineEsmImports(stripCjsTail(fs.readFileSync(abs, 'utf8')), abs);
+  const src = stripEsmExports(inlineEsmImports(stripCjsTail(fs.readFileSync(abs, 'utf8')), abs));
   const dir = path.dirname(abs);
   const deps = [];
   const re = /require\((['"])([^'"]+)\1\)/g;

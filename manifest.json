@@ -65,7 +65,6 @@
     "adapters/perplexity-adapter.js",
     "adapters/qwen-adapter.js",
     "utils/gemini-dom-parser.js",
-    "utils/gemini-batchexecute-parser.js",
     "utils/google-search-folwr-parser.js",
     "utils/export-emit-pipeline.js",
     "core/state.js",

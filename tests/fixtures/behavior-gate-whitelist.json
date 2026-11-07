@@ -76,7 +76,7 @@
     "reason": "vm-harness"
   },
   "tests/adapters/gemini-files-module.test.js": {
-    "count": 14,
+    "count": 13,
     "reason": "vm-harness"
   },
   "tests/adapters/gemini-h13-inner-cursor.test.js": {
@@ -385,10 +385,6 @@
   },
   "tests/pdf/background-inject.test.js": {
     "count": 2,
-    "reason": "vm-harness"
-  },
-  "tests/pdf/providers.test.js": {
-    "count": 1,
     "reason": "vm-harness"
   },
   "tests/perplexity-empty-thread-recovery.test.js": {

@@ -270,6 +270,10 @@ function contentEntry(manifest) {
   // Ph2, шаг export-text-builders.js: модуль ESM — его втягивает статический import из
   // core/content.js (единый скоуп бандла: AiCmExportBuilders делят core/export-manager.js,
   // adapters/qwen-adapter.js и core/content.js); строка из манифеста удалена.
+  // Ph2, шаг gemini-batchexecute-parser.js: модуль ESM — его втягивает side-effect
+  // import из core/content.js (нужно window-зеркало для core/export-manager.js и
+  // PARSER_VERSION), а для MAIN-мира ниже выводится classic-артефакт. Как строку
+  // конкатенации не берём; строка из манифеста удалена.
   return js.filter(function (rel) {
     return (
       rel !== 'utils/buildReferenceText.js' &&
@@ -279,7 +283,8 @@ function contentEntry(manifest) {
       rel !== 'utils/model-config.js' &&
       rel !== 'utils/export-text-builders.js' &&
       rel !== 'utils/perplexity-parser.js' &&
-      rel !== 'utils/chatgpt-conversation-parser.js'
+      rel !== 'utils/chatgpt-conversation-parser.js' &&
+      rel !== 'utils/gemini-batchexecute-parser.js'
     );
   });
 }
@@ -420,6 +425,42 @@ async function writeDebugClassic() {
   await fsp.mkdir(path.dirname(to), { recursive: true });
   await fsp.writeFile(to, classic, 'utf8');
   return DEBUG_CLASSIC;
+}
+
+// Ph2, шаг gemini-batchexecute-parser.js: ESM-исходник и путь, под которым его ждут
+// регистрации world:'MAIN' в core/background.js (регистрация ai-cm-gemini-intercept-v12).
+const PARSER_SOURCE = 'utils/gemini-batchexecute-parser.js';
+const PARSER_CLASSIC = 'utils/gemini-batchexecute-parser.js';
+
+/**
+ * dist/utils/gemini-batchexecute-parser.js: classic-артефакт того же модуля.
+ *
+ * Парсер переведён на ESM (Roadmap Ph2), но его грузит 16-скриптовая MAIN-регистрация
+ * через chrome.scripting: путь резолвится в файл, а classic-скрипт не может содержать
+ * import/export. Снять префиксы объявлений и строку импорта (swallowSoft в MAIN-мире
+ * даёт classic-артефакт utils/debug.js — он первый в js[]), затем завернуть тело в
+ * IIFE: до миграции файл был самовызывающейся функцией и держал ~40 внутренних имён
+ * вне общего скоупа MAIN-мира, где рядом живут 15 других classic-скриптов.
+ *
+ * window-зеркало (window.GeminiBatchexecuteParser) остаётся в исходнике и потому
+ * попадает и в бандл content.js (core/content.js → core/export-manager.js), и сюда.
+ */
+async function writeParserClassic() {
+  const src = fs.readFileSync(abs(PARSER_SOURCE), 'utf8').replace(/^\uFEFF/, '');
+  const body = src
+    .replace(/^[ \t]*import\s[^\n]*\bfrom\s*['"][^'"]+['"];?[ \t]*$/gm, '')
+    .replace(/^[ \t]*export\s+(?=(?:async\s+)?(?:function|var|let|const|class)\b)/gm, '');
+  if (/^\s*(?:import|export)\b/m.test(body)) {
+    fail(PARSER_CLASSIC + ': classic-артефакт всё ещё содержит import/export');
+  }
+  if (!/window\.GeminiBatchexecuteParser\s*=/.test(body)) {
+    fail(PARSER_CLASSIC + ': самовызывающаяся обёртка не публикует window.GeminiBatchexecuteParser');
+  }
+  const classic = '(function () {\n' + body.trim() + '\n})();\n';
+  const to = path.join(DIST, PARSER_CLASSIC);
+  await fsp.mkdir(path.dirname(to), { recursive: true });
+  await fsp.writeFile(to, classic, 'utf8');
+  return PARSER_CLASSIC;
 }
 
 function runtimeRegisteredFiles() {
@@ -713,6 +754,9 @@ async function copyAssets() {
     // нельзя: браузер выполнит его как classic и упадёт на export-префиксах. Ниже из
     // того же исходника выводится classic-артефакт — второй копии логики в дереве нет.
     if (r === DEBUG_CLASSIC) continue;
+    // Ph2: utils/gemini-batchexecute-parser.js — та же история (Gemini MAIN-регистрация
+    // v12); classic-артефакт выводит writeParserClassic ниже.
+    if (r === PARSER_CLASSIC) continue;
     const from = abs(r);
     if (!fs.existsSync(from)) {
       fail(`"${r}" is registered at runtime by ${BACKGROUND_SRC} but does not exist`);
@@ -723,6 +767,7 @@ async function copyAssets() {
     copied.push(r);
   }
   copied.push(await writeDebugClassic());
+  copied.push(await writeParserClassic());
   copied.push(...(await rewireDist()));
   return copied;
 }

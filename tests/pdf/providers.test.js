@@ -13,7 +13,7 @@ const { DecompressionStream } = require('stream/web');
 
 const ROOT = path.join(__dirname, '..', '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
-const PARSER_SRC = read('utils/gemini-batchexecute-parser.js');
+const PARSER_SRC = require('../helpers/load-esm.js').loadAsClassic('utils/gemini-batchexecute-parser.js');
 
 const PDF_TEXT = 'PDF-текст';
 const PDF_MAX = 10 * 1024 * 1024;
