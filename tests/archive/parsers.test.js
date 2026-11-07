@@ -19,11 +19,11 @@ const path = require('path');
 const fs = require('fs');
 const { loadEsm, loadEsmModule } = require('../helpers/load-esm.js');
 
-// Ph2: utils/archive-import.js переведён на ESM. В браузере ChatGPT-парсер приходит
-// window-глобалом (скрипт-тег options.html); в Node ES-модуль больше не делает
-// require сам, поэтому page-глобал ставим здесь — ровно так, как его видит страница.
-// Перплексити-парсер — тоже ES-модуль, грузится namespace-ом через loadEsmModule.
-const ChatGPTParser = require('../../utils/chatgpt-conversation-parser.js');
+// Ph2: парсеры ChatGPT и Perplexity — ES-модули, грузятся namespace-ом через loadEsmModule.
+// В браузере их функции инжектит options.js в archive-import через deps; ресолверы
+// archive-import умеют и page-глобал (3-й уровень) — тест ставит его ниже, как в прежнем
+// контракте страницы.
+const ChatGPTParser = loadEsmModule('utils/chatgpt-conversation-parser.js');
 const PerplexityParser = loadEsmModule('utils/perplexity-parser.js');
 const AI = loadEsm('utils/archive-import.js');
 
@@ -128,8 +128,8 @@ describe('T1: ChatGPT conversations.json', () => {
 });
 
 describe('T1: недоступный общий парсер → честная диагностика (без дублей логики)', () => {
-  // В браузере (страница настроек) парсеры приходят window-глобалами
-  // (скрипт-теги options.html). После перевода модуля на ESM (Roadmap Ph2)
+  // В браузере (страница настроек) парсеры инжектит options.js через deps; ресолверы
+  // archive-import умеют и page-глобал. После перевода модулей на ESM (Roadmap Ph2)
   // fallback через require исчез, поэтому «парсер недоступен» воспроизводится
   // только вычищением page-глобалов — резолверы читают window в момент вызова.
   afterEach(installPageGlobals);

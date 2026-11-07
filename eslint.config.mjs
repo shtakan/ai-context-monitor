@@ -254,6 +254,9 @@ export default [
       // Ph2, шаг perplexity-parser.js: модуль переведён на ESM (UMD-хвост снят) и
       // втягивается import'ами из core/perplexity-intercept.js и options/options.js.
       'utils/perplexity-parser.js',
+      // Ph2, шаг chatgpt-conversation-parser.js: модуль переведён на ESM (UMD-хвост
+      // снят) и втягивается import'ами из core/page-intercept.js и options/options.js.
+      'utils/chatgpt-conversation-parser.js',
       'print/print.js',
       'core/background.js',
       'core/content.js',

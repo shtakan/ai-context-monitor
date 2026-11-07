@@ -1233,7 +1233,7 @@
       "file": "core/page-intercept.js",
       "category": "best-effort-guard",
       "lines": [
-        525
+        515
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var h = captureHeaders(input, init); if (hasAuth(h)) lastHeaders = h;"
     },
@@ -1241,7 +1241,7 @@
       "file": "core/page-intercept.js",
       "category": "debug-instrumentation",
       "lines": [
-        63
+        72
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.addEventListener('ai-cm-debug-logs', function ( ev) { __aiCmSetDe"
     },
@@ -1249,9 +1249,9 @@
       "file": "core/page-intercept.js",
       "category": "event-guard",
       "lines": [
-        118,
-        162,
-        359
+        121,
+        159,
+        349
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
     },
@@ -1259,9 +1259,9 @@
       "file": "core/page-intercept.js",
       "category": "guard-clause",
       "lines": [
-        175,
-        179,
-        282
+        172,
+        176,
+        272
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof input === 'string') return input; if (input && input.url) ret"
     },
@@ -1269,9 +1269,9 @@
       "file": "core/page-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        149,
-        157,
-        161
+        146,
+        154,
+        158
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkConvChange();"
     },
@@ -1279,8 +1279,8 @@
       "file": "core/page-intercept.js",
       "category": "timing-guard",
       "lines": [
-        480,
-        489
+        470,
+        479
       ],
       "reason": "timing-guard: отмена таймера/подписки: обработчик мог быть снят хостом или гонкой; пример: clearTimeout(fallbackTimer);"
     },
@@ -1576,7 +1576,7 @@
       "file": "utils/chatgpt-conversation-parser.js",
       "category": "best-effort-guard",
       "lines": [
-        107
+        113
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var mt = String(payload).match(/\"([^\"]+)\"/g); if (mt && mt.length > 1) {"
     },

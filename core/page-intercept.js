@@ -55,6 +55,15 @@
 
 // ESM (Roadmap Ph2): setIntervalVisible втягивается сборкой в MAIN-бандл перехватчика.
 import { setIntervalVisible } from '../utils/intercept-common.js';
+// ESM (Roadmap Ph2): парсер ChatGPT — тоже ES-модуль; window.ChatGPTConversationParser
+// больше не публикуется, именованные экспорты втягиваются сборкой (esbuild) в этот же
+// MAIN-бандл.
+import {
+  getConvIdFromPath,
+  orderChatGPTMapping,
+  sanitizeChatGPTText,
+  shouldResetConversationOnNav
+} from '../utils/chatgpt-conversation-parser.js';
 (function () {
   if (window.__aiCmInterceptInstalled) return;
   window.__aiCmInterceptInstalled = true;
@@ -90,15 +99,9 @@ import { setIntervalVisible } from '../utils/intercept-common.js';
   var fallbackTimer = null;       // таймер отложенного фолбэка снимка при открытии/переключении
 
   // ============== v11: детектор смены чата в SPA (образец: gemini-intercept.js v17) ==============
+  // ChatGPT URL: https://chatgpt.com/c/<conversation-id> — регексп живёт в ESM-модуле.
   function getConvId() {
-    if (typeof window !== 'undefined' && window.ChatGPTConversationParser && window.ChatGPTConversationParser.getConvIdFromPath) {
-      return window.ChatGPTConversationParser.getConvIdFromPath(location.pathname);
-    }
-    try {
-      // ChatGPT URL: https://chatgpt.com/c/<conversation-id>
-      var m = location.pathname.match(/\/c\/([A-Za-z0-9_-]+)/);
-      return m ? m[1] : '';
-    } catch (e) { return ''; }
+    return getConvIdFromPath(location.pathname);
   }
   var currentConvId = getConvId();
 
@@ -122,19 +125,13 @@ import { setIntervalVisible } from '../utils/intercept-common.js';
 
   function checkConvChange() {
     var newId = getConvId();
-    var shouldReset;
-    var P = (typeof window !== 'undefined' && window.ChatGPTConversationParser) ? window.ChatGPTConversationParser : null;
-    if (P && typeof P.shouldResetConversationOnNav === 'function') {
-      // O-34 (N1): сброс и при ПОТЕРЕ convId — уход на URL без /c/<id> (корень чата,
-      // /gpts, новый чат) обязан очистить состояние прошлого разговора: иначе
-      // ai-cm-conversation-changed не диспатчится, а виджет/бейдж держат остаточные
-      // значения (прежний предикат отвечал false на newId=''). Для валидных переходов
-      // (непустой новый id) решение 1:1 прежнему.
-      shouldReset = P.shouldResetConversationOnNav(currentConvId, newId);
-    } else {
-      // фолбэк (утилита не загружена): смена контекста, включая потерю id
-      shouldReset = (newId !== currentConvId);
-    }
+    // O-34 (N1): сброс и при ПОТЕРЕ convId — уход на URL без /c/<id> (корень чата,
+    // /gpts, новый чат) обязан очистить состояние прошлого разговора: иначе
+    // ai-cm-conversation-changed не диспатчится, а виджет/бейдж держат остаточные
+    // значения (прежний предикат отвечал false на newId=''). Для валидных переходов
+    // (непустой новый id) решение 1:1 прежнему.
+    // Ph2: решение приходит ESM-импортом (utils/chatgpt-conversation-parser.js).
+    var shouldReset = shouldResetConversationOnNav(currentConvId, newId);
     if (shouldReset) {
       currentConvId = newId;
       resetForNewConversation();
@@ -235,15 +232,8 @@ import { setIntervalVisible } from '../utils/intercept-common.js';
     var strippedMarkers = 0; var firstUserHead = '';
     // v1.5.2: линеаризуем mapping по parent/children (не по порядку ключей и не по create_time),
     // чтобы первый user+assistant не терялся и порядок был хронологическим.
-    var orderedKeys = [];
-    if (typeof window !== 'undefined' && window.ChatGPTConversationParser && window.ChatGPTConversationParser.orderChatGPTMapping) {
-      orderedKeys = window.ChatGPTConversationParser.orderChatGPTMapping(mapping);
-    } else {
-      orderedKeys = Object.keys(mapping);
-    }
-    var sanitizeText = (typeof window !== 'undefined' && window.ChatGPTConversationParser && window.ChatGPTConversationParser.sanitizeChatGPTText)
-      ? window.ChatGPTConversationParser.sanitizeChatGPTText
-      : function (s) { return s; };
+    var orderedKeys = orderChatGPTMapping(mapping);
+    var sanitizeText = sanitizeChatGPTText;
     function countMarkers(s) {
       if (typeof s !== 'string') return 0;
       var n = 0; var m;

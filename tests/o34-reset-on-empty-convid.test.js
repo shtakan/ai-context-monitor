@@ -51,7 +51,9 @@ const fs = require('fs');
 const path = require('path');
 
 const H = require('./helpers/content-source.js');
-const PARSER = require('../utils/chatgpt-conversation-parser.js');
+// Ph2: utils/chatgpt-conversation-parser.js — ES-модуль; тест берёт его именованные
+// экспорты через настоящий ESM-лоадер (никакого module.exports/window-хоста больше нет).
+const PARSER = require('./helpers/load-esm.js').loadEsmModule('utils/chatgpt-conversation-parser.js');
 const Pipeline = require('../utils/export-emit-pipeline.js');
 
 const ROOT = path.join(__dirname, '..');
@@ -103,15 +105,10 @@ const SNAPSHOT_KEYS = ['aiCmState', 'aiCmState:' + HOST];
 
 const listeners = [];
 
-beforeEach(() => {
-  window.ChatGPTConversationParser = PARSER; // MAIN-мир манифеста: utils/chatgpt-conversation-parser.js
-});
-
 afterEach(() => {
   listeners.splice(0).forEach(function (l) {
     try { window.removeEventListener('ai-cm-conversation-changed', l); } catch (e) { }
   });
-  try { delete window.ChatGPTConversationParser; } catch (e) { }
   document.body.innerHTML = '';
 });
 
@@ -303,6 +300,9 @@ function makeSpa(startConvId, startPath, over) {
     window: window,
     location: { pathname: startPath },
     currentConvId: startConvId,
+    // Ph2: парсер — ESM-импорт; в with (ctx) его имена приходят из этого ctx.
+    getConvIdFromPath: PARSER.getConvIdFromPath,
+    shouldResetConversationOnNav: PARSER.shouldResetConversationOnNav,
     debugLog: function () { },
     scheduleSwitchRefetch: function () { },
     scheduleFallback: function () { },
@@ -609,9 +609,9 @@ describe('O-34 R2: холостые SPA-переходы не сбрасываю
 describe('O-34 R3: пины проводки и границ', () => {
   test('R3: MAIN использует решение с учётом потери id; прежний предикат остался в API', () => {
     const check = fnDecl(PAGE_SRC, 'checkConvChange');
-    expect(check).toContain('P.shouldResetConversationOnNav(currentConvId, newId)');
+    expect(check).toContain('var shouldReset = shouldResetConversationOnNav(currentConvId, newId);');
     expect(check).not.toContain('shouldReset = !!newId &&');
-    expect(check).toContain('shouldReset = (newId !== currentConvId);');   // фолбэк без утилиты
+    expect(check).not.toContain('window.ChatGPTConversationParser');   // Ph2: window-хост снят
     expect(typeof PARSER.shouldResetConversationOnNav).toBe('function');
     expect(typeof PARSER.shouldResetChatConversation).toBe('function');
     // старый контракт не переписан (пин tests/adapters/chatgpt-conversation-parser.test.js)
@@ -646,9 +646,9 @@ describe('O-34 R3: пины проводки и границ', () => {
     const js = manifest.content_scripts[0].js;
     expect(js).not.toContain('core/page-intercept.js');   // MAIN-перехватчик — программная регистрация
     expect(js[js.length - 1]).toBe('core/content.js');     // порядок контент-скриптов прежний
-    // парсер и перехватчик едут ОДНИМ пакетом: новое решение доступно checkConvChange
-    expect(BG_SRC).toContain("js: ['utils/debug.js', 'utils/chatgpt-conversation-parser.js', " +
-      "'core/page-intercept.js']");
+    // парсер и перехватчик едут ОДНИМ пакетом: Ph2 — esbuild втягивает парсер в
+    // MAIN-бандл перехватчика статическим import'ом, отдельной строки js[] больше нет.
+    expect(BG_SRC).toContain("js: ['utils/debug.js', 'core/page-intercept.js']");
     expect(BG_SRC).toContain("world: 'MAIN'");
   });
 });

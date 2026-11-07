@@ -142,8 +142,9 @@ describe('O-35/O-53/R2: core/background.js — регистрация перех
       'ai-cm-google-search-intercept'].forEach(function (id) {
       expect(background).toContain("ids.indexOf('" + id + "') === -1");
     });
-    // набор js[] каждого из шести не изменился
-    expect(background).toContain("js: ['utils/debug.js', 'utils/chatgpt-conversation-parser.js', 'core/page-intercept.js']");
+    // набор js[] каждого из шести не изменился; Ph2: парсер ChatGPT втягивается в
+    // MAIN-бандл перехватчика статическим import'ом — отдельной строки js[] нет.
+    expect(background).toContain("js: ['utils/debug.js', 'core/page-intercept.js']");
     // Gemini: набор пинован как есть; на шаге «диагностика» (Phase 3 step 1) в него ДОБАВЛЕН модуль
     // core/gemini-diag.js, на шаге «rpc» (Phase 3 step 5) — core/gemini-rpc.js (оба перед ядром,
     // вместе с id -v2 → -v3), на шаге «парсеры» (Phase 3 step 6) — core/gemini-parse.js

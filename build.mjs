@@ -264,6 +264,9 @@ function contentEntry(manifest) {
   // Ph2, шаг perplexity-parser.js: модуль ESM — его втягивают статические import'ы
   // core/perplexity-intercept.js (MAIN-бандл) и options/options.js; как строку
   // конкатенации content-скрипта не берём.
+  // Ph2, шаг chatgpt-conversation-parser.js: модуль ESM — его втягивают статические
+  // import'ы core/page-intercept.js (MAIN-бандл) и options/options.js; как строку
+  // конкатенации не берём.
   // Ph2, шаг export-text-builders.js: модуль ESM — его втягивает статический import из
   // core/content.js (единый скоуп бандла: AiCmExportBuilders делят core/export-manager.js,
   // adapters/qwen-adapter.js и core/content.js); строка из манифеста удалена.
@@ -275,7 +278,8 @@ function contentEntry(manifest) {
       rel !== 'utils/tokenizer.js' &&
       rel !== 'utils/model-config.js' &&
       rel !== 'utils/export-text-builders.js' &&
-      rel !== 'utils/perplexity-parser.js'
+      rel !== 'utils/perplexity-parser.js' &&
+      rel !== 'utils/chatgpt-conversation-parser.js'
     );
   });
 }
