@@ -499,6 +499,8 @@ import { setIntervalVisible } from '../utils/intercept-common.js';
   // таймер-страховка: если был обмен, а снимок давно не приходил — сходим сами
   // ESM (Roadmap Ph2): импорт setIntervalVisible статический; фолбэк не нужен.
   var aiCmPoll = setIntervalVisible;
+  // (M2) QUALITY_AUDIT: страховочный поллинг только на видимой вкладке —
+  // setIntervalVisible не вызывает колбэк при document.visibilityState !== 'visible'.
   aiCmPoll(function () {
     if (activeDisabled || !dirty || refreshBusy) return;
     activeRefresh('таймер-страховка');

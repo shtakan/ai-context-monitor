@@ -502,5 +502,9 @@
   "tests/helpers/main-intercept.js": {
     "count": 1,
     "reason": "vm-harness"
+  },
+  "tests/perf-m1-file-text-cache-lru.test.js": {
+    "count": 2,
+    "reason": "legacy-pin"
   }
 }

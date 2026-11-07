@@ -77,7 +77,9 @@ import { setIntervalVisible } from '../utils/intercept-common.js';
   // чтобы повторные эмиты не ре-фетчили. null = файл не текстовый (заглушка).
   var fileTextCache = {};
   var fileFetchInFlight = {};
-  // v51 (M1): LRU-лимит на fileTextCache — не даём кэшу текстов вложений расти бесконечно
+  // v51 (M1): строгий LRU-лимит на fileTextCache — не даём кэшу текстов вложений расти
+  // бесконечно. fileTextCacheOrder хранит ключи по возрастанию давности использования;
+  // insert/touch освежают запись, вытесняется самая старая.
   var fileTextCacheMax = 50;
   var fileTextCacheOrder = [];
   function fileTextCacheInsert(uuid, val) {
@@ -91,6 +93,17 @@ import { setIntervalVisible } from '../utils/intercept-common.js';
         delete fileTextCache[oldest];
       }
     } catch (e) { swallow(e, 'claude:fileTextCacheInsert'); }
+  }
+  // v51 (M1): true-LRU — попадание в кэш освежает запись, чтобы вытеснялись давно
+  // не использованные тексты, а не только давно записанные.
+  function fileTextCacheTouch(uuid) {
+    try {
+      var idx = fileTextCacheOrder.indexOf(uuid);
+      if (idx !== -1) {
+        fileTextCacheOrder.splice(idx, 1);
+        fileTextCacheOrder.push(uuid);
+      }
+    } catch (e) { swallow(e, 'claude:fileTextCacheTouch'); }
   }
   var lastHistoryRaw = null; // сырые данные последней истории для пере-эмита после догрузки файлов
   var lastHistoryRawConvId = ''; // v48: чат, которому принадлежит lastHistoryRaw (stale-защита)
@@ -148,7 +161,7 @@ import { setIntervalVisible } from '../utils/intercept-common.js';
     for (var i = 0; i < found.length; i++) {
       var it = found[i];
       var cur = Object.prototype.hasOwnProperty.call(fileTextCache, it.uuid) ? fileTextCache[it.uuid] : undefined;
-      if (typeof cur === 'string') continue; // уже есть строка
+      if (typeof cur === 'string') { fileTextCacheTouch(it.uuid); continue; } // M1: попадание освежает LRU
       var t = it.text;
       var realLen = t.length;
       if (realLen > 500000) { t = t.slice(0, 500000) + '\n[обрезано]'; }
@@ -758,6 +771,7 @@ import { setIntervalVisible } from '../utils/intercept-common.js';
     if (!uuid) return;
     // v47-5: dedup ТОЛЬКО по строке в кэше (null от html-reject не блокирует новые попытки)
     if (typeof fileTextCache[uuid] === 'string') {
+      fileTextCacheTouch(uuid); // M1: попадание освежает LRU
       debugLog('log', '[AI CM][Claude][pasted] paste-match skip uuid=' + String(uuid).slice(0, 8) + ' already-cached');
       return;
     }
@@ -930,6 +944,7 @@ import { setIntervalVisible } from '../utils/intercept-common.js';
           // v33: pasted-вложение без preview_url и без file_uuid — текст может лежать в самом объекте
           var inline = (typeof cached !== 'string') ? extractPastedText(f) : '';
           if (typeof cached === 'string' && cached) {
+            if (uuid) fileTextCacheTouch(uuid); // M1: попадание освежает LRU
             // v46-3: dedup — текст для этого uuid уже в кэше
             debugLog('log', '[AI CM][Claude][pasted] paste-match skip uuid=' + String(uuid || '').slice(0, 8) + ' already-cached');
             extras.push('[File ' + fname + ']:\n' + cached);
@@ -1664,6 +1679,8 @@ import { setIntervalVisible } from '../utils/intercept-common.js';
   // ---- страховка: если стрим прочитан, но stop не поймался ----
   // ESM (Roadmap Ph2): импорт setIntervalVisible статический; фолбэк не нужен.
   var aiCmPoll = setIntervalVisible;
+  // (M2) QUALITY_AUDIT: страховочный поллинг только на видимой вкладке —
+  // setIntervalVisible не вызывает колбэк при document.visibilityState !== 'visible'.
   aiCmPoll(function () {
     if (dirty && !refreshBusy) {
       // v36: интервал вне promise-цепочки — бросок был бы uncaught
