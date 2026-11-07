@@ -4,6 +4,10 @@ import { aiCmIsFirefox } from '../utils/platform.js';
 // ESM (Roadmap Ph2): utils/export-text-builders.js переведён на ES-модуль — тег <script>
 // из options/options.html удалён, модуль втягивается этим import'ом в options-бандл.
 import AiCmExportBuilders from '../utils/export-text-builders.js';
+// ESM (Roadmap Ph2): utils/archive-import.js переведён на ES-модуль — тег <script>
+// из options/options.html удалён, модуль втягивается этим import'ом в options-бандл
+// (публичный API модуля — default-экспорт, как у export-text-builders выше).
+import AiCmArchiveImport from '../utils/archive-import.js';
 
 console.log('AI Context Monitor: Настройки загружены');
 
@@ -1084,10 +1088,15 @@ const archiveListEl = document.getElementById('archive-list');
 // Защита от случайного выбора огромной папки: за один импорт не больше N файлов.
 const AI_ARCHIVE_MAX_FILES = 20;
 
+// Шов «API импорта доступен» — единственная точка, где options.js берёт модуль.
+// Ph2 (ESM): модуль втянут статическим import'ом (тег <script> из options.html
+// удалён), поэтому null здесь означает не «модуль не долетел по сети», а
+// несовместимую сборку: бандл options.js собран не с тем utils/archive-import.js.
+// Сообщение options_archive_module_missing остаётся стражем этого случая.
 function aiCmArchiveApi() {
-  try {
-    return (typeof window !== 'undefined' && window.AiCmArchiveImport) ? window.AiCmArchiveImport : null;
-  } catch (e) { return null; }
+  const api = AiCmArchiveImport;
+  return (api && typeof api.parseArchiveText === 'function' &&
+    typeof api.planArchiveImport === 'function') ? api : null;
 }
 
 function aiCmSetArchiveStatus(text, isError) {

@@ -12,7 +12,10 @@
 
 const path = require('path');
 const fs = require('fs');
-const AI = require('../../utils/archive-import.js');
+const { loadEsm } = require('../helpers/load-esm.js');
+
+// Ph2: utils/archive-import.js — ES-модуль (UMD-хвост снят).
+const AI = loadEsm('utils/archive-import.js');
 
 const FIXTURES = path.join(__dirname, '..', 'fixtures', 'archive');
 function loadFixture(name) {

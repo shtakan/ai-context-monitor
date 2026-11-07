@@ -16,7 +16,8 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
 const Logic = require('../../utils/gemini-intercept-logic.js');
-const AI = require('../../utils/archive-import.js');
+// Ph2: utils/archive-import.js — ES-модуль (UMD-хвост снят).
+const AI = require('../helpers/load-esm.js').loadEsm('utils/archive-import.js');
 
 const CORE_CONTENT = require('../helpers/content-source.js').contentSource;
 const CORE_GEMINI = require('../helpers/gemini-intercept-source.js').geminiSource;
@@ -241,7 +242,9 @@ describe('T1: проводка ISOLATED → MAIN и запрет внешних 
     expect(OPTIONS_HTML).toContain('id="archive-import"');
     expect(OPTIONS_HTML).toContain('id="archive-list"');
     expect(OPTIONS_HTML).toContain('id="stat-source"');
-    expect(OPTIONS_HTML).toContain('../utils/archive-import.js');
+    // Ph2 (ESM): тег <script> убран — модуль втягивается import'ом из options.js
+    // (проводка проверяется поведением ниже: jsdom-импорт архива зовёт API модуля).
+    expect(OPTIONS_HTML).not.toContain('../utils/archive-import.js');
     expect(OPTIONS_HTML).toContain('../utils/chatgpt-conversation-parser.js');
     expect(OPTIONS_HTML).toContain('../utils/perplexity-parser.js');
   });
@@ -334,7 +337,7 @@ describe('T1: options.js — импорт архива и индикатор и�
     jest.resetModules();
     document.body.innerHTML = '';
     setupDom();
-    window.AiCmArchiveImport = require('../../utils/archive-import.js');
+    // Ph2 (ESM): модуль втягивается import'ом из options.js — глобал больше не нужен.
     window.AiCmExportBuilders = require('../helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
     window.buildReferenceText = require('../helpers/load-esm.js').loadEsm('utils/buildReferenceText.js');
     mock = createChromeMock({});
@@ -344,7 +347,6 @@ describe('T1: options.js — импорт архива и индикатор и�
 
   afterEach(() => {
     delete global.chrome;
-    delete window.AiCmArchiveImport;
     delete window.AiCmExportBuilders;
     delete window.buildReferenceText;
   });
@@ -468,14 +470,13 @@ describe('LOW-1: потолок MAX_ARCHIVE_SIZE при импорте архи�
   beforeEach(() => {
     jest.resetModules();
     document.body.innerHTML = '';
-    window.AiCmArchiveImport = require('../../utils/archive-import.js');
+    // Ph2 (ESM): модуль втягивается import'ом из options.js — глобал больше не нужен.
     global.chrome = chromeMockLow1();
     modLow1 = require('../helpers/load-options.js').loadOptions();
   });
 
   afterEach(() => {
     delete global.chrome;
-    delete window.AiCmArchiveImport;
   });
 
   test('MAX_ARCHIVE_SIZE — константа 50 МБ в utils/archive-import.js и в API', () => {

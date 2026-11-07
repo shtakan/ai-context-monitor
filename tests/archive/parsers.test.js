@@ -17,7 +17,20 @@
 
 const path = require('path');
 const fs = require('fs');
-const AI = require('../../utils/archive-import.js');
+const { loadEsm } = require('../helpers/load-esm.js');
+
+// Ph2: utils/archive-import.js переведён на ESM. В браузере общие парсеры приходят
+// window-глобалами (скрипт-теги options.html); в Node ES-модуль больше не делает
+// require сам, поэтому page-глобалы ставим здесь — ровно так, как их видит страница.
+const ChatGPTParser = require('../../utils/chatgpt-conversation-parser.js');
+const PerplexityParser = require('../../utils/perplexity-parser.js');
+const AI = loadEsm('utils/archive-import.js');
+
+function installPageGlobals() {
+  window.ChatGPTConversationParser = ChatGPTParser;
+  window.parsePerplexityThread = PerplexityParser.parsePerplexityThread;
+}
+installPageGlobals();
 
 const FIXTURES = path.join(__dirname, '..', 'fixtures', 'archive');
 function loadFixture(name) {
@@ -115,13 +128,10 @@ describe('T1: ChatGPT conversations.json', () => {
 
 describe('T1: недоступный общий парсер → честная диагностика (без дублей логики)', () => {
   // В браузере (страница настроек) парсеры приходят window-глобалами
-  // (скрипт-теги options.html); в Node — через require. Проверяем ОБА пути
-  // отказа: мок-модуль + вычищенные page-глобалы (resetModules их не трогает).
-  afterEach(() => {
-    jest.dontMock('../../utils/chatgpt-conversation-parser.js');
-    jest.dontMock('../../utils/perplexity-parser.js');
-    jest.resetModules();
-  });
+  // (скрипт-теги options.html). После перевода модуля на ESM (Roadmap Ph2)
+  // fallback через require исчез, поэтому «парсер недоступен» воспроизводится
+  // только вычищением page-глобалов — резолверы читают window в момент вызова.
+  afterEach(installPageGlobals);
 
   function clearPageGlobals() {
     delete window.ChatGPTConversationParser;
@@ -129,11 +139,8 @@ describe('T1: недоступный общий парсер → честная 
   }
 
   test('ChatGPT: без orderChatGPTMapping импорт отклоняется, а не «угадывается»', () => {
-    jest.resetModules();
     clearPageGlobals();
-    jest.doMock('../../utils/chatgpt-conversation-parser.js', () => ({}));
-    const isolated = require('../../utils/archive-import.js');
-    const r = isolated.parseArchive(loadFixture('chatgpt-conversations.json'));
+    const r = AI.parseArchive(loadFixture('chatgpt-conversations.json'));
     expect(r.ok).toBe(false);
     expect(r.error).toBe('chatgpt-parser-unavailable');
     expect(r.format).toBe(AI.FORMATS.CHATGPT_CONVERSATIONS);
@@ -141,32 +148,23 @@ describe('T1: недоступный общий парсер → честная 
   });
 
   test('Perplexity: без parsePerplexityThread импорт отклоняется', () => {
-    jest.resetModules();
     clearPageGlobals();
-    jest.doMock('../../utils/perplexity-parser.js', () => ({}));
-    const isolated = require('../../utils/archive-import.js');
-    const r = isolated.parseArchive(loadFixture('perplexity-threads.json'));
+    const r = AI.parseArchive(loadFixture('perplexity-threads.json'));
     expect(r.ok).toBe(false);
     expect(r.error).toBe('perplexity-parser-unavailable');
     expect(r.conversations).toEqual([]);
   });
 
   test('инъекция парсеров через deps работает без глобалов (явный шов)', () => {
-    jest.resetModules();
     clearPageGlobals();
-    jest.doMock('../../utils/chatgpt-conversation-parser.js', () => ({}));
-    const isolated = require('../../utils/archive-import.js');
-    const real = require('../../utils/chatgpt-conversation-parser.js');
-    jest.dontMock('../../utils/chatgpt-conversation-parser.js');
-    // deps приоритетнее require/window
+    // deps приоритетнее window-глобалов
     const deps = {
-      orderChatGPTMapping: require('../../utils/chatgpt-conversation-parser.js').orderChatGPTMapping,
-      sanitizeChatGPTText: require('../../utils/chatgpt-conversation-parser.js').sanitizeChatGPTText
+      orderChatGPTMapping: ChatGPTParser.orderChatGPTMapping,
+      sanitizeChatGPTText: ChatGPTParser.sanitizeChatGPTText
     };
-    const r = isolated.parseArchive(loadFixture('chatgpt-conversations.json'), deps);
+    const r = AI.parseArchive(loadFixture('chatgpt-conversations.json'), deps);
     expect(r.ok).toBe(true);
     expect(r.conversations.length).toBe(2);
-    expect(typeof real).toBe('object');
   });
 });
 

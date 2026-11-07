@@ -305,10 +305,12 @@ function optionsEntry() {
   // utils/platform.js втягивается import'ом из options/options.js (шаг 3) — его тег
   // тоже удалён. utils/export-text-builders.js — ESM: и options.html-тег, и строка
   // конкатенации убраны, модуль втягивается import'ом из options/options.js.
+  // Ph2, шаг archive-import.js: модуль ESM — его втягивает статический import из
+  // options/options.js, поэтому и options.html-тег, и строка конкатенации убраны.
   // Фильтр — страховка SSOT: теги не должны вернуться в разметку.
   return htmlScriptEntry('options/options.html').filter(function (rel) {
     return rel !== 'utils/buildReferenceText.js' && rel !== 'utils/platform.js' &&
-      rel !== 'utils/export-text-builders.js';
+      rel !== 'utils/export-text-builders.js' && rel !== 'utils/archive-import.js';
   });
 }
 

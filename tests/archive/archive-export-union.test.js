@@ -33,7 +33,8 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..', '..');
 const Logic = require('../../utils/gemini-intercept-logic.js');
 const Pipeline = require('../../utils/export-emit-pipeline.js');
-const Archive = require('../../utils/archive-import.js');
+// Ph2: utils/archive-import.js — ES-модуль; фасад берём его default-экспортом.
+const Archive = require('../helpers/load-esm.js').loadEsm('utils/archive-import.js');
 const CORE_GEMINI = require('../helpers/gemini-intercept-source.js').geminiSource;
 const CORE_CONTENT = require('../helpers/content-source.js').contentSource;
 const OPTIONS_SRC = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
@@ -585,7 +586,9 @@ describe('T1-fix#3: проводка (source-level)', () => {
     const scope = 'with (ctx) { ' + fnDecl(OPTIONS_SRC, 'aiCmArchiveApi') + '\n' +
       fnDecl(OPTIONS_SRC, 'buildArchiveStoragePatch') +
       ' return buildArchiveStoragePatch; }';
-    const build = new Function('ctx', scope)({ window: { AiCmArchiveImport: Archive } });
+    // Ph2 (ESM): шов aiCmArchiveApi читает default-импорт AiCmArchiveImport,
+    // а не window-глобал — песочница подкладывает его тем же именем.
+    const build = new Function('ctx', scope)({ AiCmArchiveImport: Archive });
     const rec = Archive.buildArchiveRecord({
       convId: 'c1', service: 'gemini', format: Archive.FORMATS.GEMINI_TAKEOUT,
       messages: archiveMessages().map((m, i) => ({ role: m.role, text: m.text, id: 'a:' + i }))
