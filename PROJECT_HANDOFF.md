@@ -1302,3 +1302,56 @@ v90–v114 (исходные строки 783–2 440, 1 658 строк) — т�
 ### Секция 7. Плейсхолдер.
 **Коммит A:** `28f659b` — тело аппендикса v122; SHA проставляется коммитом B (двухшаговый паттерн).
 **SHA4:** `195c2b5` (для коммита C).
+
+## Аппендикс v123 (2026-11-07): ESM Phase 2 (6 утилит) и фикс GSA
+
+**Дата:** 2026-11-07 (Asia/Yekaterinburg).
+**Коммиты:** `<SHA v123>` (коммит A), а также вся цепочка ESM: `ac76e3d`, `2946618`, `673aba2`, `c9eafba`, `3b3d0b8`, `c61231a`, `f3f9b57` и фикс GSA: `3440125`.
+**Статус:** Phase 2 (ESM) переведена в активную стадию. 6 модулей (`markdown`, `buildReferenceText`, `platform`, `intercept-common`, `stream-frames`, `debug`) переведены на ESM. Устранён баг GSA (перестановка абзацев). Сьют 217/3848/7/0.
+
+### Секция 1. Что сделано.
+1. **ESM-перевод утилит: UMD-обёртки удалены, объявления заменены на `export`, потребители — на `import`.** Суммарно Phase 2 закрыла шесть модулей: `utils/markdown.js` (пилот `0ca3434`, аппендикс v121), `utils/buildReferenceText.js` (`c61231a`, v121), `utils/platform.js` (`ac76e3d`, v122), `utils/intercept-common.js` (`2946618`, v122), `utils/stream-frames.js` (`673aba2`, 16 файлов, +570/−584) и `utils/debug.js` (`c9eafba`, 34 файла, +306/−268). Подключение отдельным `<script>` снято там, где модуль грузился манифестом или страницей: `manifest.json` и `options/options.html` (платформа, buildReferenceText), `manifest.json` (debug); `core/qwen-intercept.js` больше не рассчитывает на отдельный `utils/stream-frames.js` — esbuild вшивает модуль кадров прямо в `dist/core/qwen-intercept.js` (`build.mjs:181-185`).
+2. **Сборка `build.mjs` переведена на esbuild-граф (main-world IIFE, background как модуль).** MAIN-перехватчики собираются функцией `mainInterceptOptions()` (`build.mjs:202`) с `format: 'iife'` (`build.mjs:210`) в тот же путь `dist/core/<name>.js`, на который продолжает указывать `js[]` в `core/background.js`; background втягивается в граф как entry-модуль через `backgroundEntry()` (`build.mjs:227`) = `BACKGROUND_PRELUDE` + `manifest.background.service_worker`, при этом выход остаётся классическим бандлом service worker (`delete out.background.type`, `build.mjs:477`), а не ES-модулем. `utils/platform.js` из `BACKGROUND_PRELUDE` убран (`build.mjs:168`) — модуль тянется статическим `import` из `core/background.js`. Плагин-фасад `debugSoftFacadePlugin` удалён: `utils/debug.js` попадает в MAIN-бандл по настоящему статическому импорту из `utils/intercept-common.js` (`build.mjs:196-198`).
+3. **`eslint.config.mjs` и типы `tsc` адаптированы под ESM.** `sourceType: 'module'` включается точечно по файлу — коммиты `3b3d0b8` (markdown, фикс CI #353), `ac76e3d`, `2946618`, `673aba2`, `c9eafba`. Типы: `types/core-globals.d.ts` (+35 в `ac76e3d` под `platform.js`, ещё +12/−1 в `c9eafba`), `types/stream.d.ts` (+10/−15, `stream-frames`), `types/globals.d.ts` и JSDoc-каст в `adapters/qwen-adapter.js` — фикс tsc-ошибок после миграции (`f3f9b57`, 2 файла, +10/−1).
+4. **GSA: `findPrefixCompatibleIndex` научился распознавать перестановку абзацев (`bodiesParagraphPermutation`), что предотвратило дублирование ходов при SPA-возврате.** Живой дефект (SPA-возврат в тред `8bTpaveu`, 2026-11-07): пассивный снимок `/async/folif` приносил тот же ход с тем же телом, но с переставленными абзацами — общий префикс 429/1865 = 0.19, порядко-зависимый канонический ключ и префикс-правило ход не схлопывали, `mergeTurns` добавлял его как новый: 12 → 14 ходов, 24 → 28 сообщений, `textLen` 34753 → 38902, бейдж 8.4% → 9.3%, и на каждом SPA-возврате прибавлялись те же 2 хода. Фикс: `answerBodyParagraphs` (`utils/google-search-folwr-parser.js:1176`) режет тело по пустым строкам и нормализует абзацы, `bodiesParagraphPermutation` (`:1203`) сравнивает их мультимножества при `PARAGRAPH_PERMUTATION_MIN = 2` (`:1169`), `findPrefixCompatibleIndex` (`:1221`) применяет правило вторым шагом — только при равной длине нормализованного тела (`:1231`), поэтому класс «одинаковых» ответов не расширяется сверх уже схлопываемого. Пины: `tests/o46-gsa-paragraph-permutation-dedupe.test.js` (126 строк) и строка в `docs/REGRESSION-LEDGER.md`.
+
+### Секция 2. Свидетели/факты.
+
+| # | Свидетель | Факт | Источник |
+|---|---|---|---|
+| 1 | `git show --stat HEAD~1 HEAD` | коммит A — 2 файла: `PROJECT_HANDOFF.md`, `tests/docs-hygiene.test.js`; коммит B — 1 файл: `PROJECT_HANDOFF.md` | git |
+| 2 | `git show --stat 3440125` | 3 файла, +195/−2: `utils/google-search-folwr-parser.js`, новый тест, `docs/REGRESSION-LEDGER.md` | git |
+| 3 | `git show --stat 673aba2` | 16 файлов, +570/−584: `utils/stream-frames.js`, `core/qwen-intercept.js`, `build.mjs`, `eslint.config.mjs`, `types/stream.d.ts`, тесты | git |
+| 4 | `git show --stat c9eafba` | 34 файла, +306/−268: `utils/debug.js`, `utils/intercept-common.js`, `build.mjs`, `core/background.js`, `core/content.js`, `types/core-globals.d.ts`, тесты | git |
+| 5 | `node build.mjs` | exit 0; 63 asset-файла; `dist/` = 49 `.js` (5 бандлов + 44 runtime-registered); MAIN-перехватчики — IIFE в `dist/core/` | отчёт DSH |
+| 6 | `npx tsc --noEmit` | exit 0 | отчёт DSH |
+| 7 | `npx eslint .` | exit 0 (0 errors, 543 warnings) | отчёт DSH |
+| 8 | `npx jest tests/docs-hygiene.test.js` | 28/28 | отчёт DSH |
+| 9 | `npm test -- --runInBand` | 217/3848/7/0, exit 0 | отчёт DSH |
+| 10 | пин корпуса | `109`; заголовков активного файла = 9 | отчёт DSH |
+| 11 | плейсхолдеры SHA после коммита B | v123 = 0; SHA4 = 1 | отчёт DSH |
+| 12 | заголовков аппендикса v123 в активном файле | 1 | отчёт DSH |
+| 13 | счётчики handoff | `**Тесты:**` = 1, `**Версия:**` = 1; UTF-8 без BOM, CR=0 | отчёт DSH |
+
+### Секция 3. Отклонения от промпта.
+1. Пин `docs-hygiene` обновлён 108 → 109 (добавляется v123; комментарий приведён к диапазону v115–v123) — единственная правка тестов; код, CHANGELOG и аппендиксы выше v122 не трогались.
+2. Остальное — по плану; отклонений по существу нет.
+
+### Секция 4. Новые residual.
+- **R1 (Low) — `utils/debug.js` оставлен в `dist` как `writeDebugClassic` для MAIN-перехватчиков (гибридный мост до полного бандлинга).** Контракт: `writeDebugClassic()` (`build.mjs:390`) читает `DEBUG_SOURCE = 'utils/debug.js'` (`build.mjs:378`) и пишет в `dist` классический артефакт `DEBUG_CLASSIC = 'utils/debug.js'` (`build.mjs:379`), снимая `export ` у объявлений функций (`build.mjs:392`); сборка падает, если в артефакте остались `import`/`export` (`build.mjs:393`). Условие переоткрытия: MAIN-мир окончательно переходит на бандлы целиком — тогда артефакт снимается вместе с функцией.
+- **R2 (Low) — `writeDebugClassic` требует ручной синхронизации при изменении ESM-экспортов.** Регулярка снимает только `export function`/`export async function`; всякая новая форма экспорта (`export const`, `export default`, `export { … }`) в `utils/debug.js` не снимется и уронит сборку гейтом `build.mjs:393`. Условие переоткрытия: первая такая правка `utils/debug.js` — тогда правьте регулярку и гейт вместе.
+
+### Секция 5. Переопределение residual-точек и Roadmap (тексты аппендиксов выше не редактируются).
+- **Roadmap Ф2** продвинута: на ESM переведены `utils/stream-frames.js` и `utils/debug.js`, суммарно шесть модулей Phase 2; MAIN-перехватчики и `core/qwen-intercept.js` собираются esbuild-графом, а не склейкой классических скриптов. Строки активного handoff не редактируются — новое состояние фиксируется здесь.
+- **GSA Badge Inflation закрыт** коммитом `3440125` (регрессия класса O-32): перестановка абзацев в снимке `/async/folif` больше не порождает дублей ходов, бейдж перестал инфлировать на SPA-возврате. Живая приёмка не проводилась — свидетельство в пинах и в числах дефекта выше.
+- **Остальные residual — без изменений:** этой правкой не переоткрываются и не переопределяются.
+
+### Секция 6. Сводка.
+1. Сьют 217/3848/7/0, exit 0; docs-hygiene 28/28.
+2. версия 2.0.40 (не менялась); продукт этим аппендиксом не менялся.
+3. HEAD `3440125`; origin/main = `3440125`, ahead 0 (до коммита A).
+4. Верхний блок handoff, bridge и аппендиксы v1–v122 не переписывались — вставка только в конец файла; синк верхнего блока — коммитом C после push A+B.
+
+### Секция 7. Плейсхолдер.
+**Коммит A:** `<SHA v123>` — тело аппендикса v123; SHA проставляется коммитом B (двухшаговый паттерн).
+**SHA4:** `<SHA4>` (для коммита C).
