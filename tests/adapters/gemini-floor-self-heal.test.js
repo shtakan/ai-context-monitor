@@ -30,7 +30,7 @@
  * код, а не копия логики.
  */
 
-const GIL = require('../../utils/gemini-intercept-logic.js');
+const GIL = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
 
 const CORE_GEMINI = require('../helpers/gemini-intercept-source.js').geminiSource;
 const CORE_CONTENT = require('../helpers/content-source.js').contentSource;

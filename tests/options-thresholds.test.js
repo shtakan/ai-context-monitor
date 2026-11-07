@@ -214,7 +214,7 @@ describe('options.js — проактивные пороги (S2: aiCmProactiveT
 });
 
 describe('utils/gemini-intercept-logic.js — normalize/getProactiveThresholds (S2)', () => {
-  const L = require('../utils/gemini-intercept-logic.js');
+  const L = require('./helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
 
   test('normalizeProactiveThresholds: валидные и битые значения', () => {
     expect(L.normalizeProactiveThresholds([60, 80, 90])).toEqual([60, 80, 90]);

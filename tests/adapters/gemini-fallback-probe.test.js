@@ -14,7 +14,7 @@
  *   г) core реально вызывает хелпер (гард присутствует в исходнике).
  */
 
-const GIL = require('../../utils/gemini-intercept-logic.js');
+const GIL = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
 
 const FULL_META = { atEncoded: 'at-token', baseUrl: 'https://gemini.google.com/_/BardChatUi/data/...', headers: { authorization: 'SATK' } };
 const WIDE_CUR = { cursor: 'opaque-continuation' };

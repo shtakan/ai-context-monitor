@@ -264,6 +264,10 @@ export default [
       // Ph2, шаг gemini-dom-parser.js: модуль переведён на ESM (UMD-хвост снят) и
       // втягивается import'ом из core/hybrid-tail.js.
       'utils/gemini-dom-parser.js',
+      // Ph2, шаг gemini-intercept-logic.js: модуль переведён на ESM (UMD-хвост снят) и
+      // втягивается статическим import'ом из core/background.js; для MAIN-регистрации
+      // v12 build.mjs выводит classic-артефакт dist/utils/gemini-intercept-logic.js.
+      'utils/gemini-intercept-logic.js',
       // Ph2, шаг google-search-folwr-parser.js: модуль переведён на ESM (UMD-хвост
       // снят) и втягивается side-effect import'ом из core/content.js; для MAIN-мира
       // build.mjs выводит classic-артефакт dist/utils/google-search-folwr-parser.js.

@@ -86,11 +86,11 @@ try {
   }
 } catch (eByokWatch) { }
 
-// Фаза B: чистая логика проактивных порогов из utils/gemini-intercept-logic.js.
-// Файл ВШИТ в бандл на этапе сборки (build.mjs: BACKGROUND_PRELUDE): importScripts —
-// API только воркера, в Firefox event page его нет, поэтому динамическая загрузка заменена
-// статической склейкой в один скоуп. Модуль по-прежнему публикует self.GeminiInterceptLogic.
-// Гейт: verifyDist/verifyFirefoxDist валят сборку, если importScripts вернётся в бандл.
+// Фаза B: чистая логика проактивных порогов из utils/gemini-intercept-logic.js —
+// Ph2 (ESM): входит в бандл статическим import'ом (importScripts запрещён: API воркера;
+// гейт — verifyDist/verifyFirefoxDist). Тот же файл публикует window/self-зеркало, поэтому
+// core/gemini-*.js в MAIN-мире грузят его classic-артефактом и читают window.GeminiInterceptLogic.
+import { getProactiveThresholds, pickProactiveThreshold } from '../utils/gemini-intercept-logic.js';
 
 // v52: дубликаты регистраций после перезагрузки расширения гасим здесь:
 // при "Duplicate script ID" снимаем старую и регистрируем заново.
@@ -595,7 +595,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // разговор»: латч — chrome.storage.session, ключ 'aiCmThr:'+convId → массив
 // исполненных порогов. Ключ по convId → смена вкладки НЕ сбрасывает, смена разговора
 // даёт новый ключ (самосброс); элементы никогда не снимаются до конца разговора.
-// Пороги [low,medium,high] читаются через G.getProactiveThresholds() из
+// Пороги [low,medium,high] читаются через getProactiveThresholds() из
 // chrome.storage.local ('aiCmProactiveThresholds', дефолт [70,85,95]).
 // Цвет бейджа — зонный для уровня T: low зелёный, medium жёлтый, high красный.
 function aiCmZoneColorFor(t, thresholds) {
@@ -620,14 +620,14 @@ async function checkThresholds(data, sender) {
     var firedArr = Array.isArray(ses[latchKey]) ? ses[latchKey] : [];
     var firedSet = new Set(firedArr);
 
-    var G = (typeof GeminiInterceptLogic !== 'undefined') ? GeminiInterceptLogic :
-      ((typeof self !== 'undefined') ? self.GeminiInterceptLogic : null);
     // S2: настраиваемые пороги [low,medium,high] из chrome.storage.local
     // ('aiCmProactiveThresholds'); storage недоступен/не загрузился → дефолт [70,85,95].
-    var thresholds = (G && typeof G.getProactiveThresholds === 'function')
-      ? await G.getProactiveThresholds() : [70, 85, 95];
-    var T = (G && typeof G.pickProactiveThreshold === 'function')
-      ? G.pickProactiveThreshold(pct, firedSet, thresholds) : null;
+    // Ph2: раньше здесь читался window/self-глобал (модуль склеивался в бандл текстом),
+    // и каждая функция проверялась на typeof. Теперь обе приходят статическим import'ом
+    // сверху, поэтому проверок на отсутствие API нет: модуль в графе импортов SW всегда,
+    // а self-зеркало остаётся только для MAIN-мира, где файл грузится classic-артефактом.
+    var thresholds = await getProactiveThresholds();
+    var T = pickProactiveThreshold(pct, firedSet, thresholds);
     if (T == null) return;
 
     // Бейдж — пер-вкладочно, чтобы чужие табы не затирались

@@ -160,17 +160,16 @@ function readJSON(relPath) {
 }
 
 // Статические зависимости background-бандла, склеиваемые ДО esbuild в одну область
-// видимости. Раньше utils/gemini-intercept-logic.js грузился в рантайме через
-// importScripts() — API только воркера, поэтому Firefox event page его не исполнял,
-// и пороги проактивных предупреждений молча падали на дефолт. Файл — самодостаточный
-// IIFE без top-level объявлений: он публикует self.GeminiInterceptLogic, потребитель
-// в background.js не меняется, коллизий имён нет по построению.
-// utils/platform.js здесь больше нет: Ph2, шаг 3 перевёл его на ESM, и background.js
-// втягивает модуль статическим import'ом (esbuild кладёт его в тот же бандл SW).
+// видимости. Здесь остаётся только то, что не умеет ESM: классический IIFE, который
+// публикует window-API. importScripts в сборке запрещён: API только воркера, поэтому
+// Firefox event page его не исполняет, и пороги проактивных предупреждений молча
+// падали бы на дефолт (гейт — verifyDist/verifyFirefoxDist).
+// Ph2: utils/gemini-intercept-logic.js из этого списка ушёл — модуль переведён на ESM,
+// и core/background.js втягивает его статическим import'ом (esbuild кладёт его в тот же
+// бандл SW); для MAIN-регистрации ниже выводится classic-артефакт. Так же раньше ушёл
+// utils/platform.js (Ph2, шаг 3).
 const BACKGROUND_PRELUDE = [
-  'utils/gemini-intercept-logic.js',
-  // v2.0.37 (PDF): SW-брокер pdf.js вшивается в бандл статически — по той же
-  // причине, что и gemini-intercept-logic: importScripts в Firefox event page нет.
+  // v2.0.37 (PDF): SW-брокер pdf.js вшивается в бандл статически.
   'core/pdf-parser.js',
 ];
 
@@ -506,6 +505,43 @@ async function writeGsaParserClassic() {
   return GSA_PARSER_CLASSIC;
 }
 
+// Ph2, шаг gemini-intercept-logic.js: ESM-исходник и путь, под которым его ждёт
+// 16-скриптовая MAIN-регистрация ai-cm-gemini-intercept-v12 в core/background.js.
+const GEMINI_LOGIC_SOURCE = 'utils/gemini-intercept-logic.js';
+const GEMINI_LOGIC_CLASSIC = 'utils/gemini-intercept-logic.js';
+
+/**
+ * dist/utils/gemini-intercept-logic.js: classic-артефакт того же модуля.
+ *
+ * Логика переведена на ESM (Roadmap Ph2) и входит в бандл SW статическим import'ом
+ * из core/background.js. Но тот же путь перечислен в js[] MAIN-регистрации
+ * (ai-cm-gemini-intercept-v12), а chrome.scripting грузит classic-скрипты, где
+ * import/export недопустимы. Снимаем префиксы объявлений и заворачиваем тело в IIFE:
+ * до миграции файл был самовызывающейся функцией и держал ~90 внутренних имён вне
+ * общего скоупа MAIN-мира, где рядом живут 15 других classic-скриптов.
+ *
+ * window/self-зеркала остаются в исходнике и потому попадают и в бандл SW (self),
+ * и сюда (window): потребители в core/gemini-*.js по-прежнему читают
+ * window.GeminiInterceptLogic, поэтому ни один из них не меняется.
+ */
+async function writeGeminiLogicClassic() {
+  const src = fs.readFileSync(abs(GEMINI_LOGIC_SOURCE), 'utf8').replace(/^\uFEFF/, '');
+  const body = src
+    .replace(/^[ \t]*import\s[^\n]*\bfrom\s*['"][^'"]+['"];?[ \t]*$/gm, '')
+    .replace(/^[ \t]*export\s+(?=(?:async\s+)?(?:function|var|let|const|class)\b)/gm, '');
+  if (/^\s*(?:import|export)\b/m.test(body)) {
+    fail(GEMINI_LOGIC_CLASSIC + ': classic-артефакт всё ещё содержит import/export');
+  }
+  if (!/window\.GeminiInterceptLogic\s*=/.test(body)) {
+    fail(GEMINI_LOGIC_CLASSIC + ': самовызывающаяся обёртка не публикует window.GeminiInterceptLogic');
+  }
+  const classic = '(function () {\n' + body.trim() + '\n})();\n';
+  const to = path.join(DIST, GEMINI_LOGIC_CLASSIC);
+  await fsp.mkdir(path.dirname(to), { recursive: true });
+  await fsp.writeFile(to, classic, 'utf8');
+  return GEMINI_LOGIC_CLASSIC;
+}
+
 function runtimeRegisteredFiles() {
   const src = fs.readFileSync(abs(BACKGROUND_SRC), 'utf8');
   const out = new Set();
@@ -803,6 +839,10 @@ async function copyAssets() {
     // Ph2: utils/google-search-folwr-parser.js — та же история (GSA MAIN-регистрация
     // ai-cm-google-search-intercept); classic-артефакт выводит writeGsaParserClassic ниже.
     if (r === GSA_PARSER_CLASSIC) continue;
+    // Ph2: utils/gemini-intercept-logic.js — та же история (Gemini MAIN-регистрация
+    // v12); ESM-исходник уходит в бандл SW статическим import'ом из core/background.js,
+    // а classic-артефакт для MAIN-мира выводит writeGeminiLogicClassic ниже.
+    if (r === GEMINI_LOGIC_CLASSIC) continue;
     const from = abs(r);
     if (!fs.existsSync(from)) {
       fail(`"${r}" is registered at runtime by ${BACKGROUND_SRC} but does not exist`);
@@ -815,6 +855,7 @@ async function copyAssets() {
   copied.push(await writeDebugClassic());
   copied.push(await writeParserClassic());
   copied.push(await writeGsaParserClassic());
+  copied.push(await writeGeminiLogicClassic());
   copied.push(...(await rewireDist()));
   return copied;
 }
@@ -970,7 +1011,8 @@ async function verifyDist() {
   }
   // Один статический бандл: importScripts() — API воркера, а в Firefox event page его
   // нет, поэтому рантайм-загрузка в поставке запрещена (utils/gemini-intercept-logic.js
-  // вшит на сборке, BACKGROUND_PRELUDE). Гейт держит инвариант в обоих пакетах.
+  // вшит на сборке статическим import'ом из core/background.js). Гейт держит тот же
+  // инвариант в обоих пакетах.
   const bgSource = await fsp.readFile(path.join(DIST, REWIRED_SERVICE_WORKER), 'utf8');
   if (/\bimportScripts\s*\(/.test(bgSource)) {
     problems.push(

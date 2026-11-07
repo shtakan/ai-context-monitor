@@ -13,7 +13,7 @@
  *     архив меньше сохранённого пола НЕ опускает пол.
  */
 
-const Logic = require('../../utils/gemini-intercept-logic.js');
+const Logic = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
 
 function msgs(list) {
   return list.map((m) => ({ id: m[0], role: m[1], text: m[2] }));

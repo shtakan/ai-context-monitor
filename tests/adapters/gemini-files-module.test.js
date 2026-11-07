@@ -748,7 +748,7 @@ describe('D: authuser скачивания вложений Gemini (403 в му�
 
 describe('v2.1: дедуп ходов/вложений и метрика без двойного счёта', function () {
   test('один и тот же ход с двух страниц не дублируется (user + assistant)', function () {
-    const Logic = require('../../utils/gemini-intercept-logic');
+    const Logic = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
     const msgs = [
       { role: 'user', text: 'Вопрос', id: 'h1_user' },
       { role: 'assistant', text: 'Ответ', id: 'h1_assistant' },

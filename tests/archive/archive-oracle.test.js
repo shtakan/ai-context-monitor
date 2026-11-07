@@ -22,7 +22,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
-const Logic = require('../../utils/gemini-intercept-logic.js');
+const Logic = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
 const CORE_GEMINI = require('../helpers/gemini-intercept-source.js').geminiSource;
 const LOGIC_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'gemini-intercept-logic.js'), 'utf8');
 
@@ -30,7 +30,14 @@ function fnSource(src, name) {
   const start = src.indexOf('function ' + name + '(');
   expect(start).toBeGreaterThan(-1);
   const rest = src.slice(start);
-  const nextFn = rest.indexOf('\n  function ', 10);
+  // Ph2 (ESM): top-level объявления utils/gemini-intercept-logic.js больше не вложены
+  // в IIFE (нулевой отступ, с 'export '), но core/gemini-*.js по-прежнему держат функции
+  // внутри IIFE. Поэтому ищем оба стиля и берём ближайшую границу.
+  const tail = rest.slice(10);
+  const indented = tail.search(/\n {2}function [A-Za-z_$]/);
+  const topLevel = tail.search(/\n(?:export )?function [A-Za-z_$]/);
+  const bounds = [indented, topLevel].filter((n) => n !== -1);
+  const nextFn = bounds.length ? Math.min.apply(null, bounds) + 10 : -1;
   return nextFn === -1 ? rest : rest.slice(0, nextFn);
 }
 

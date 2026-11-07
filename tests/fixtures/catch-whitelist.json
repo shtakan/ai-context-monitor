@@ -1759,7 +1759,7 @@
       "file": "utils/gemini-intercept-logic.js",
       "category": "logging-guard",
       "lines": [
-        1195
+        1194
       ],
       "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: console.warn('[AI CM][thresholds] битые aiCmProactiveThresholds → дефолт"
     },
@@ -1767,8 +1767,8 @@
       "file": "utils/gemini-intercept-logic.js",
       "category": "parse-guard",
       "lines": [
-        1488,
-        1492
+        1487,
+        1491
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: metaS += JSON.stringify(a0m[mi]);"
     },

@@ -625,7 +625,7 @@ describe('регрессионный контур v1.18: запрещённые 
   });
 
   test('H9/H10-гейты и пол (gemini-intercept-logic) не тронуты', () => {
-    const Logic = require('../utils/gemini-intercept-logic.js');
+    const Logic = require('./helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
     expect(typeof Logic.resolveFloor).toBe('function');
     expect(typeof Logic.shouldSaveFloor).toBe('function');
     expect(Logic.shouldSaveFloor(true, true)).toBe(true);

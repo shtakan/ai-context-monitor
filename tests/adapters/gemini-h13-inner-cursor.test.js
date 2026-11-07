@@ -33,7 +33,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const GIL = require('../../utils/gemini-intercept-logic.js');
+const GIL = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
 const coreSrc = require('../helpers/gemini-intercept-source.js').geminiSource;
 
 // ---- фикстуры e292: токены в форме реальных континуационных токенов tC…Ag== ----

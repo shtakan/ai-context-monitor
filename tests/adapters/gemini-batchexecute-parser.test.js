@@ -352,7 +352,7 @@ describe('Gemini thinking-run: голые продолжения и систем
 describe('Gemini живой путь на min-fixture (gemini-head-sample.min.txt)', () => {
   const fs_min = require('fs');
   const path_min = require('path');
-  const logic_min = require('../../utils/gemini-intercept-logic');
+  const logic_min = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
   const MIN_FIXTURE = path_min.join(__dirname, '..', 'fixtures', 'gemini-head-sample.min.txt');
 
   function loadMin() {
@@ -409,7 +409,7 @@ if (!hasLiveFixture) {
 (hasLiveFixture ? describe : describe.skip)('Gemini живой образец (gemini-head-sample.txt) через живой путь', () => {
   const fs = require('fs');
   const path = require('path');
-  const logic = require('../../utils/gemini-intercept-logic');
+  const logic = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
 
   function loadLive() {
     const p = path.join(__dirname, '..', '..', 'gemini-head-sample.txt');

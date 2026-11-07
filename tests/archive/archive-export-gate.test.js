@@ -24,7 +24,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
-const Logic = require('../../utils/gemini-intercept-logic.js');
+const Logic = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
 const Pipeline = require('../../utils/export-emit-pipeline.js');
 const CORE_GEMINI = require('../helpers/gemini-intercept-source.js').geminiSource;
 const CORE_CONTENT = require('../helpers/content-source.js').contentSource;

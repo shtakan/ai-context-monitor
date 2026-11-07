@@ -45,7 +45,7 @@ const ROOT = path.join(__dirname, '..', '..');
 const CORE = require('../helpers/gemini-intercept-source.js').geminiSource;
 const LOGIC_PATH = path.join(ROOT, 'utils', 'gemini-intercept-logic.js');
 const LOGIC_SRC = fs.readFileSync(LOGIC_PATH, 'utf8');
-const LOGIC = require(LOGIC_PATH);
+const LOGIC = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
 
 if (typeof window !== 'undefined') window.GeminiInterceptLogic = LOGIC;
 

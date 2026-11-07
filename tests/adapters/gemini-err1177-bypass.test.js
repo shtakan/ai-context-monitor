@@ -23,7 +23,7 @@
 const {
   paginateErrorEscalation,
   paginatePaceDelayMs,
-} = require('../../utils/gemini-intercept-logic');
+} = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
 
 const coreSrc = require('../helpers/gemini-intercept-source.js').geminiSource;
 
