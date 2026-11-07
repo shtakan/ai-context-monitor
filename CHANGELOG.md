@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.0.41] - 2026-11-07
+
+### Added
+- **ESM Phase 2:** `utils/markdown.js`, `buildReferenceText.js`, `platform.js`, `intercept-common.js`, `stream-frames.js`, `debug.js` переведены на модули. Сборка переведена на esbuild-граф.
+
+### Fixed
+- **GSA Badge Inflation:** при SPA-возврате перестановка абзацев вызывала дублирование ходов (`bodiesParagraphPermutation`).
+- **M1:** `fileTextCache` теперь использует LRU (лимит 50).
+- **M2:** страховочные `setInterval` приостанавливаются при скрытой вкладке.
+
+### Notes
+- Счётчики сьюта: 219 suites / 3855 passed / 7 skipped / 0 failed.
+
 ## [2.0.40] - 2026-11-06
 
 ### Fixed

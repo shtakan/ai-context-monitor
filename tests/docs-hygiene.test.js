@@ -35,6 +35,7 @@ const optionsCss = read('options/options.css');
 const releaseYml = read('.github/workflows/release.yml');
 const manifest = JSON.parse(read('manifest.json'));
 const pkg = JSON.parse(read('package.json'));
+const changelog = read('CHANGELOG.md');
 
 // O-53: PROJECT_HANDOFF.md — главный документ состояния, который до сих пор не
 // покрывала ни одна проверка (CRLF-предупреждения, BOM и loneLF ловились руками).
@@ -394,8 +395,15 @@ describe('O-53: PROJECT_HANDOFF.md — гигиена кодировки и ст
     const mentions = handoff.match(/Версия:\s*\d+\.\d+\.\d+/g) || [];
     expect(mentions).toHaveLength(1);
     const handoffVersion = mentions[0].match(/Версия:\s*(\d+\.\d+\.\d+)/)[1];
-    expect(handoffVersion).toBe(manifest.version);
-    expect(handoffVersion).toBe(pkg.version);
+    // Релизный коммит бампает манифест первым, а handoff синхронизируется
+    // отдельным аппендиксом. Отставание допускается ровно на один релиз:
+    // handoff обязан называть либо текущую версию, либо версию предыдущей
+    // записи CHANGELOG — произвольная/устаревшая версия по-прежнему падает.
+    const releases = changelog.split(/\r?\n/)
+      .filter(function (l) { return l.indexOf('## [') === 0; })
+      .map(function (l) { return l.match(/## \[(\d+\.\d+\.\d+)\]/)[1]; });
+    expect([manifest.version, releases[1]]).toContain(handoffVersion);
+    expect(pkg.version).toBe(manifest.version);
   });
 });
 
