@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.0.43] - 2026-11-08
+
+### Added
+- **Phase 3 (Декомпозиция ядра):** вынос `gemini-payload.js`, `gemini-state.js` (101 переменная), `gemini-spa-lifecycle.js`, `gemini-active-refresh.js`. Ядро сокращено с 4000+ до ~1150 строк.
+
+### Fixed
+- **Gemini:** восстановлена работа `originalFetch` в `gemini-active-refresh.js` (Illegal invocation).
+- **Gemini:** устранена заморозка бейджа при `baseComplete` (учёт bounded DOM-хвоста в `hybrid-tail.js`).
+- **Perplexity:** поддержка роутинга `/session/` для корректного отображения бейджа.
+- **AI Studio:** автоэкспорт ждёт завершения скачивания вложений (`aiCmFilesDrainDefer`).
+- **Gemini:** защита от падения бейджа (монотонность) при неполной базе.
+
+### Notes
+- Счётчики сьюта: 227 suites / 3920 passed / 7 skipped / 0 failed.
+
 ## [2.0.42] - 2026-11-08
 
 ### Added
