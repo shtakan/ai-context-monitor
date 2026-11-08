@@ -38,9 +38,9 @@ const H = require('./helpers/content-source.js');
 
 const ROOT = path.join(__dirname, '..');
 const CONTENT = H.contentSource;
-// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+// R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
-const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
 
 const CHAT_ID = 'cda86f26-0155-4243-a134-777d909a936b';
 const OTHER_CHAT_ID = 'be4e7956-0000-1111-2222-333333333333';

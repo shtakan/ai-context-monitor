@@ -28,7 +28,7 @@ const fs = require('fs');
 const path = require('path');
 const { JSDOM, VirtualConsole } = require('jsdom');
 
-const P = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('../helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const CONTENT = require('../helpers/content-source.js').contentSource;
 
@@ -112,7 +112,7 @@ function makeStand(over) {
   window.sessionStorage.setItem('aiCmDebug', '1');
   window.currentAdapter = { siteName: 'deepseek' };
   window.debugLog = (lvl, msg) => { logs.push(String(msg)); };
-  // Step E.2c-B2c-1 (aiCmDiagWarn): канал B из utils/debug.js — вне песочницы (как swallowSoft в B2b-3c).
+  // Step E.2c-B2c-1 (aiCmDiagWarn): канал B из utils/debug.ts — вне песочницы (как swallowSoft в B2b-3c).
   // Гейт повторён по контракту хелпера, строка под гейтом доезжает до logs как раньше.
   window.aiCmDiagWarn = (tag, message, detail) => {
     if (window.sessionStorage.getItem('aiCmDebug') !== '1' && window.__aiCmDebugLogs !== true) return;
@@ -227,8 +227,8 @@ function makeExportSandbox(stand, over) {
     aiCmNetSyncInFlight: {},
     ModelConfig: { getModel: function () { return { name: 'DeepSeek-R1' }; } },
     debugLog: function (lvl, msg) { logs.push(String(msg)); },
-    swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.js (его нет в песочнице)
-    swallowSoft: function () { },   // Step E.2c-B2b-3c (swallowSoft): канал B — тот же хелпер utils/debug.js, вне песочницы.
+    swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.ts (его нет в песочнице)
+    swallowSoft: function () { },   // Step E.2c-B2b-3c (swallowSoft): канал B — тот же хелпер utils/debug.ts, вне песочницы.
     chrome: { storage: { session: { remove: function () { }, set: function () { } }, local: { get: function () { } } } }
   };
   Object.assign(ctx, over || {});

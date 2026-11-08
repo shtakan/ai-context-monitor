@@ -4,13 +4,13 @@
  *   D1 — swallowSoft НЕ вызывает console.error ни при каком гейте;
  *   D2 — гейт выключен: строка уходит в ring, в консоль — ничего;
  *   D3 — гейт включён: ровно одна строка через aiCmDiagLine (console.log) + ring;
- *   D4 — срез-песочница БЕЗ utils/debug.js: вызов не бросает (typeof-гард);
+ *   D4 — срез-песочница БЕЗ utils/debug.ts: вызов не бросает (typeof-гард);
  *   D5 — aiCmDiagWarn: под гейтом ровно один console.warn, вне гейта — ни одного, ring всегда;
- *   R1 — swallow (utils/debug.js:85-90) не изменилась: источник байт-в-байт + поведение;
+ *   R1 — swallow (utils/debug.ts:85-90) не изменилась: источник байт-в-байт + поведение;
  *   R2 — SW-зеркало в core/background.js: функции есть, console.error в них нет;
  *   S1 — window.__aiCmSwallowSoft === swallowSoft.
  *
- * Исходник грузится через loadAsClassic: utils/debug.js — ESM-модуль (R1), а песочница
+ * Исходник грузится через loadAsClassic: utils/debug.ts — ESM-модуль (R1), а песочница
  * исполняет ровно тот классический срез, что MAIN-мир получает из dist/utils/debug.js
  * (см. writeDebugClassic в build.mjs). Instrumentation здесь не нужна: пины проверяют
  * поведение, а не покрытие. Мок console — не замена реальной формы, а сама цель
@@ -21,11 +21,15 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
-const DEBUG_PATH = path.join(ROOT, 'utils', 'debug.js');
+const DEBUG_PATH = path.join(ROOT, 'utils', 'debug.ts');
 const BG_PATH = path.join(ROOT, 'core', 'background.js');
-const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
 const BG_SRC = fs.readFileSync(BG_PATH, 'utf8');
 const DEBUG_LINES = DEBUG_SRC.split('\n');
+// R1 сравнивает ИСХОДНИК: esbuild-этап (loadAsClassic) перепечатывает код, теряя
+// комментарии внутри тела и меняя кавычки, поэтому байт-в-байт пин берёт файл как есть.
+const DEBUG_RAW = fs.readFileSync(DEBUG_PATH, 'utf8');
+const RAW_LINES = DEBUG_RAW.split('\n');
 
 const EXPORT_TAIL = `
 ;globalThis.__aiCmSoftTestApi = {
@@ -78,7 +82,7 @@ function gateOn() {
 }
 
 describe('Step E.2c-A: swallowSoft — канал B', () => {
-  test('A1/A2: хелперы объявлены в utils/debug.js и в SW-дубле core/background.js', () => {
+  test('A1/A2: хелперы объявлены в utils/debug.ts и в SW-дубле core/background.js', () => {
     expect(DEBUG_SRC).toContain('function swallowSoft(error, tag) {');
     expect(DEBUG_SRC).toContain('function aiCmDiagWarn(tag, message, detail) {');
     expect(BG_SRC).toContain('function swallowSoft(error, tag) {');
@@ -128,7 +132,7 @@ describe('Step E.2c-A: swallowSoft — канал B', () => {
     expect(consoleLog).toHaveBeenCalledTimes(1);
   });
 
-  test('D4: срез-песочница БЕЗ utils/debug.js — вызов не бросает (typeof-гард)', () => {
+  test('D4: срез-песочница БЕЗ utils/debug.ts — вызов не бросает (typeof-гард)', () => {
     const ctx = vm.createContext({
       console: {
         log: function () { throw new Error('песочница не должна печатать'); },
@@ -177,19 +181,19 @@ describe('Step E.2c-A: swallowSoft — канал B', () => {
     expect(Api.getLogRing()).toEqual(['[ai-cm-warn][pagination] потолок достигнут']);
   });
 
-  test('R1: swallow (utils/debug.js:85-90) не изменилась — источник байт-в-байт', () => {
+  test('R1: swallow (utils/debug.ts:85-90) не изменилась — источник байт-в-байт', () => {
     const pinned = [
-      'function swallow(error, tag) {',
+      'function swallow(error: unknown, tag?: string): void {',
       '  try {',
-      "    if (typeof debugLog !== 'function') return;   // песочница без utils/debug.js: тихо и без броска",
+      "    if (typeof debugLog !== 'function') return;   // песочница без utils/debug.ts: тихо и без броска",
       "    debugLog('error', '[swallow][' + (tag || 'unlabeled') + ']', error);",
       '  } catch (eSwallow) { /* сам логгер не должен бросать: swallow безопасен всегда */ }',
       '}'
     ].join('\n');
-    expect(fnSlice(DEBUG_SRC, 'swallow')).toBe(pinned);
+    expect(fnSlice(DEBUG_RAW, 'swallow')).toBe(pinned);
     // Номер строки catch — часть контракта: его построчно пинует tests/fixtures/catch-whitelist.json (:89).
-    expect(DEBUG_LINES[84]).toBe('function swallow(error, tag) {');
-    expect(DEBUG_LINES[88]).toContain('catch (eSwallow)');
+    expect(RAW_LINES[84]).toBe('export function swallow(error: unknown, tag?: string): void {');
+    expect(RAW_LINES[88]).toContain('catch (eSwallow)');
   });
 
   test('R1b: поведение swallow прежнее — ring + console.error всегда', () => {
@@ -209,7 +213,7 @@ describe('Step E.2c-A: swallowSoft — канал B', () => {
     expect(swWarn).toContain("typeof debugLog !== 'function'");
     expect(swSoft).toContain('aiCmHistWinDebugOn');
     expect(swWarn).toContain('aiCmHistWinDebugOn');
-    // SW не может звать хелперы utils/debug.js — только свой латч и свой debugLog.
+    // SW не может звать хелперы utils/debug.ts — только свой латч и свой debugLog.
     expect(swSoft).not.toContain('aiCmDiagLine');
     expect(swWarn).not.toContain('aiCmDiagOn');
     expect(swSoft).not.toContain('__aiCmPushLogRing');

@@ -195,7 +195,7 @@ function aiCmMigrateSafePct(onDone) {
 // ========== v1.18/v1.22: сброс состояния виджета при смене чата в SPA ==========
 function resetConversationState() {
   // O-27/O-32 (диагностика, только измерение): тип документа (captcha/чат/поиск) и
-  // источник вызова (кто именно сбросил состояние). Гейт — aiCmDebug (utils/debug.js);
+  // источник вызова (кто именно сбросил состояние). Гейт — aiCmDebug (utils/debug.ts);
   // поведение/сброс не меняются.
   if (typeof aiCmDiagLine === 'function') {
     aiCmDiagLine('gsa-state', {
@@ -1048,7 +1048,7 @@ function updateWidget(percentage, tokens, effectiveLimit, contextLimit, displayL
 }
 
 // ========== v2.0 (этап 1/3): UMD-экспорт модуля ==========
-// Паттерн как у utils/export-emit-pipeline.js: window.<Api> + module.exports.
+// Паттерн как у utils/export-emit-pipeline.ts: window.<Api> + module.exports.
 // Рабочий путь ничего не импортирует: content-скрипты манифеста делят один
 // глобальный лексический скоуп, поэтому объявления выше видны всем модулям и
 // content.js по прежним именам. Api — для инструментов, отладки и тестов.

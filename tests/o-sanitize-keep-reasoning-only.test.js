@@ -13,7 +13,7 @@
  * (роль обязательна), пустой ассистентский ход БЕЗ reasoning — тоже (машинный мусор).
  */
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 
 const CHAIN = 'Сначала проверяю аргументы, затем собираю историю и замечаю гонку пустого ответа.';
 // Ровно форма composeTurnText при пустом answer: секции есть, части [ANSWER] нет.

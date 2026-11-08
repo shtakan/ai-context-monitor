@@ -66,11 +66,11 @@ interface Window {
   parsePerplexityThread?: any;
   /** utils/intercept-common.js */
   aiCmCommon?: any;
-  /** utils/debug.js — гейт диагностики (включается одноимённой настройкой) */
+  /** utils/debug.ts — гейт диагностики (включается одноимённой настройкой) */
   __aiCmDebugLogs?: boolean;
-  /** utils/debug.js — хелпер swallow(error, tag): молчаливый catch → диагностируемый (Step E.2a) */
+  /** utils/debug.ts — хелпер swallow(error, tag): молчаливый catch → диагностируемый (Step E.2a) */
   __aiCmSwallow?: import('./debug').DiagFn;
-  /** utils/debug.js — хелпер swallowSoft(error, tag): канал B, console.error не вызывает (Step E.2c-A) */
+  /** utils/debug.ts — хелпер swallowSoft(error, tag): канал B, console.error не вызывает (Step E.2c-A) */
   __aiCmSwallowSoft?: import('./debug').DiagFn;
   /**
    * core/content.js ← core/aistudio-intercept.js: слаг модели, названный в теле
@@ -91,7 +91,7 @@ interface Window {
   AiCmArchiveImport?: import('./archive-import').ArchiveImportApi;
   /** utils/export-text-builders.js — сборщики txt/md/json (types/export.d.ts). */
   AiCmExportBuilders?: import('./export').ExportBuildersApi;
-  /** utils/export-emit-pipeline.js — имена файлов/ярус источника (types/export.d.ts). */
+  /** utils/export-emit-pipeline.ts — имена файлов/ярус источника (types/export.d.ts). */
   AiCmExportEmitPipeline?: import('./export').ExportPipelineApi;
   /** utils/buildReferenceText.js */
   buildReferenceText?: any;
@@ -101,7 +101,7 @@ interface Window {
   GeminiInterceptLogic?: any;
   /** utils/gemini-dom-parser.js */
   GeminiDomParser?: any;
-  /** utils/gemini-batchexecute-parser.js */
+  /** utils/gemini-batchexecute-parser.ts */
   GeminiBatchexecuteParser?: any;
   /** utils/google-search-folwr-parser.js */
   parseGoogleFolwrOpen?: any;

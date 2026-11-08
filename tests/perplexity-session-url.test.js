@@ -27,7 +27,7 @@ const ROOT = path.join(__dirname, '..');
 const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'perplexity-intercept.js'), 'utf8');
 const ADAPTER_SRC = fs.readFileSync(path.join(ROOT, 'adapters', 'perplexity-adapter.js'), 'utf8');
 const { interceptSource } = require('./helpers/main-intercept.js');
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 
 const SESSION = '0a1b2c3d-4e5f-4a6b-8c9d-0e1f2a3b4c5d'; // /session/<uuid> приёмки
 const FOREIGN = 'e2ffa178';                                 // чужой тред из лога M-12

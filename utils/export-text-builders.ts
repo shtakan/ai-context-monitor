@@ -11,7 +11,7 @@
  * Поведение функций НЕ менялось — перенесено из options/options.js.
  */
 import { buildReferenceText } from './buildReferenceText.ts';
-import { aiCmDiagDownload, aiCmDiagDownloadBlocked } from './debug.js';
+import { aiCmDiagDownload, aiCmDiagDownloadBlocked } from './debug.ts';
 
 import type {
   ExportMessage,
@@ -446,7 +446,7 @@ export function buildMdFromHistory(history: ExportHistory, platform?: string): s
     var msg = messages[i] || ({} as ExportMessage);
     // Claude md (ДИАГНОСТИКА — только измерение под гейтом aiCmDebug): роль хода и вердикт
     // маркерного пути ПЕРЕД выбором заголовка (## Пользователь / ## Ассистент / ### USER…).
-    // Канонический хелпер utils/debug.js:aiCmDiagLine; в popup/options его нет, гейт выключен
+    // Канонический хелпер utils/debug.ts:aiCmDiagLine; в popup/options его нет, гейт выключен
     // → ни одной строки. Читаются только msg.role и mdMarked: байты md не меняются.
     if (typeof aiCmDiagLine === 'function') {
       aiCmDiagLine('claude-role-builder', { msgRole: msg.role, mdMarked: mdMarked });
@@ -499,7 +499,7 @@ export function buildJsonFromHistory(history: ExportHistory, platform?: string):
 // ===========================================================================
 // O-27/O-32 (ДИАГНОСТИКА, только измерение): лог точки скачивания файла.
 // Гейт — aiCmDebug: sessionStorage 'aiCmDebug' === '1' ИЛИ чекбокс «Подробные логи»
-// (глобальный флаг __aiCmDebugLogs, globalThis). Каноническая строка скачивания — utils/debug.js
+// (глобальный флаг __aiCmDebugLogs, globalThis). Каноническая строка скачивания — utils/debug.ts
 // (aiCmDiagDownload, импортирован выше); локальные diagOn/diagHead оставлены как
 // самодостаточная семантика гейта этого файла. Гейт выключен → ни одной строки;
 // функция только читает уже собранные content/fileName и НЕ меняет байты экспорта.
@@ -518,7 +518,7 @@ export function diagOn(): boolean {
       sessionStorage.getItem('aiCmDebug') === '1') return true;
   } catch (eSess) { }
   try {
-    // Флаг «Подробные логи» пишет __aiCmSetDebugLogs (utils/debug.js) в глобальный объект
+    // Флаг «Подробные логи» пишет __aiCmSetDebugLogs (utils/debug.ts) в глобальный объект
     // страницы; читаем через globalThis — модуль больше не держит window-зеркала.
     var gRoot = globalThis as any;
     if (gRoot && gRoot.__aiCmDebugLogs === true) return true;
@@ -633,7 +633,7 @@ export function downloadBlockReason(content: string, fileName: string): Download
   return null;
 }
 // Строка отказа: `download-blocked reason=<причина> …` с общим префиксом DIAG_PREFIX.
-// В контент-скрипте приоритет у канонического хелпера utils/debug.js (тот же гейт
+// В контент-скрипте приоритет у канонического хелпера utils/debug.ts (тот же гейт
 // aiCmDebug и та же строка).
 /**
  * Диагностика заблокированного скачивания.
@@ -722,7 +722,7 @@ var Api: ExportBuildersApi = {
   aiCmDownloadBlockReason: downloadBlockReason,
   aiCmDiagDownloadBlocked: diagDownloadBlocked,
   // O-27/O-32: диагностические хелперы наружу (content.js/export-manager.js зовут их
-  // через этот объект; канон строки по-прежнему utils/debug.js, импортированный выше).
+  // через этот объект; канон строки по-прежнему utils/debug.ts, импортированный выше).
   aiCmDiagOn: diagOn,
   aiCmDiagHead: diagHead,
   aiCmDiagDownload: diagDownload,

@@ -4,7 +4,7 @@
  * ЧТО ЗДЕСЬ. Бывший «Кластер 2» ядра (строки 1628-1663 core/gemini-intercept.js):
  * слушатель 'ai-cm-diag-request' и ответ 'ai-cm-diag-response'. content.js (ISOLATED-мир)
  * просит дамп — сводку ходов (id/order/pageMode/r1/role/preview), порядок lastOrderedIds,
- * ring логов перехватчика (__aiCmGetLogRing из utils/debug.js) и скелет страницы, которая
+ * ring логов перехватчика (__aiCmGetLogRing из utils/debug.ts) и скелет страницы, которая
  * не распарсилась (lastFailedSkeleton). Это чистая диагностика: дамп ничего не пишет в
  * ядро и не участвует в сборе базы.
  *

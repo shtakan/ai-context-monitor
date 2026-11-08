@@ -1,7 +1,7 @@
 /**
  * Типы сообщения диалога (нормализованная форма экспортного конвейера).
  *
- * Формы выведены из utils/export-emit-pipeline.js:
+ * Формы выведены из utils/export-emit-pipeline.ts:
  *   - normalizeExportMessages(raw) — приведение источника к { role, text };
  *   - dedupeMessages(messages) — перенос id хода при схлопывании дублей (E-2.1);
  *   - applyReasoningExportFields(messages, enabled) — поле reasoning (O-37);

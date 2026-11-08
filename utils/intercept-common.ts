@@ -8,7 +8,7 @@
  * перехватчика. Прежние UMD-зеркала и module.exports больше не публикуются —
  * единственный способ потребления это import.
  *
- * swallowSoft берётся из utils/debug.js настоящим статическим import'ом: модуль
+ * swallowSoft берётся из utils/debug.ts настоящим статическим import'ом: модуль
  * переведён на ESM (R1), поэтому esbuild втягивает его по-настоящему, без
  * синтезированной грани поверх window.__aiCmSwallowSoft (прежний
  * debugSoftFacadePlugin из build.mjs удалён).
@@ -20,8 +20,8 @@
  * не нужен.
  */
 
-// R1 (Ph2): utils/debug.js — настоящий ESM-модуль, экспорт реальный (@ts-expect-error снят).
-import { swallowSoft } from './debug.js';
+// R1 (Ph2): utils/debug.ts — настоящий ESM-модуль, экспорт реальный (@ts-expect-error снят).
+import { swallowSoft } from './debug.ts';
 
 /**
  * Опции setIntervalVisible (локально для этого модуля, см. types/ — там

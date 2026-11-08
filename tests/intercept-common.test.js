@@ -10,7 +10,7 @@ const { loadCommon } = require('./helpers/main-intercept.js');
 // делегирующий в window-зеркало debug.js (как и сборка, build.mjs).
 const { setIntervalVisible } = loadCommon();
 
-// Step E.2c-B2b-3d (swallowSoft): канал B из utils/debug.js — вне Node-require так же, как swallow.
+// Step E.2c-B2b-3d (swallowSoft): канал B из utils/debug.ts — вне Node-require так же, как swallow.
 window.__aiCmSwallowSoft = function () { };
 
 function setVisibility(state) {

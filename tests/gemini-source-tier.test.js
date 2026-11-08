@@ -27,7 +27,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
 
@@ -165,7 +165,7 @@ describe('Two-Tier D8: json — аддитивное поле, undefined не д
 describe('Two-Tier S1–S3: source-пины проводки', function () {
   test('S1: чистая функция классификации экспортирована в Api пайплайна', function () {
     expect(typeof P.sourceTierOf).toBe('function');
-    const PIPE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
+    const PIPE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
     expect(PIPE_SRC).toContain('sourceTierOf: sourceTierOf,');
     expect(PIPE_SRC).toContain('MERGED: ARCHIVE+LIVE');
     expect(PIPE_SRC).toContain('BEST-EFFORT: LIVE CAPTURE');

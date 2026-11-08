@@ -2,7 +2,7 @@
  * Step D.1 (декомпозиция core/deepseek-intercept.js): контракт модуля диагностики.
  *
  * Кластер СЕКЦИЙ 13/13D/13B уехал в core/deepseek-diag.js. Модуль и ядро — РАЗНЫЕ IIFE
- * одного registerContentScripts-пакета (js[]: utils/debug.js -> deepseek-diag.js ->
+ * одного registerContentScripts-пакета (js[]: utils/debug.ts -> deepseek-diag.js ->
  * deepseek-intercept.js), поэтому связь идёт ровно через один контракт:
  *
  *   ядро -> модуль: window.AiCmDeepseekDiag.__bind(deps)

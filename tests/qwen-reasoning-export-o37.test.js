@@ -18,7 +18,7 @@
  *     секции [REASONING]…[ANSWER]… до части [ANSWER] — то есть размышление снимается ещё ДО
  *     рендера, независимо от того, что оно было и в тексте, и в поле снимка.
  *
- * Фикс: единая нормализация на выходе точки сбора (utils/export-emit-pipeline.js:
+ * Фикс: единая нормализация на выходе точки сбора (utils/export-emit-pipeline.ts:
  * applyReasoningExportFields, гейт — флаг сайта из core/export-manager.js): размышление
  * переезжает в ОТДЕЛЬНОЕ поле reasoning (из поля захвата или разбором пары секций
  * splitReasoningSections) ДО санации, а рендер маркерного пути (qwen) собирает секции
@@ -29,12 +29,12 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const { contentSource: CONTENT } = require('./helpers/content-source.js');
 
 const ROOT = path.join(__dirname, '..');
-const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
+const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 const CONTENT_ONLY = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
 const WIDGET_SRC = fs.readFileSync(path.join(ROOT, 'core', 'widget.js'), 'utf8');

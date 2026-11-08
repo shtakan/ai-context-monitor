@@ -137,7 +137,7 @@
     return true;
   }
 
-  // Канал диагностики: aiCmDiagWarn — глобал utils/debug.js (канал B); в модульных
+  // Канал диагностики: aiCmDiagWarn — глобал utils/debug.ts (канал B); в модульных
   // песочницах без него падаем на console.warn, но НИКОГДА не молчим в catch.
   function filesWarn(tag, msg, e) {
     // Канал B: bare console.warn запрещён стражем tests/no-bare-console-warn.test.js.
@@ -149,7 +149,7 @@
     return (typeof v === 'string') ? v : '';
   }
 
-  // Строка диагностики под гейтом aiCmDebug (utils/debug.js сам решает, печатать ли).
+  // Строка диагностики под гейтом aiCmDebug (utils/debug.ts сам решает, печатать ли).
   // В срез-песочницах без хелпера молчим: диагностика не имеет права ломать догрузку.
   function filesDiag(tag, fields) {
     if (typeof aiCmDiagLine === 'function') aiCmDiagLine(tag, fields);

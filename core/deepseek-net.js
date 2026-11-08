@@ -55,7 +55,7 @@
 // parseSSE/consumeSseResponse/ingestModelSettings — K6 (СЕКЦИЯ 9).
 //
 // Порядок подключения (core/background.js, registerSafe 'ai-cm-deepseek-intercept-v9',
-// document_start, world MAIN): utils/debug.js -> core/deepseek-diag.js ->
+// document_start, world MAIN): utils/debug.ts -> core/deepseek-diag.js ->
 // core/deepseek-netsync.js -> core/deepseek-refetch.js -> core/deepseek-parse.js ->
 // core/deepseek-conv.js -> core/deepseek-emit.js -> ЭТОТ ФАЙЛ ->
 // core/deepseek-intercept.js. До связки на window.AiCmDeepseekNet лежит только __bind.

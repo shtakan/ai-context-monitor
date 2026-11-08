@@ -323,7 +323,7 @@ describe('O-26 (2): счётчики netMsgs/domMsgs в trace-строке svc-e
   });
 
   test('не тронуты: санация O-20, экспортный пайплайн, прочие адаптеры, версия', () => {
-    const pipe = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
+    const pipe = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
     const manifest = fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8');
     expect(pipe).toContain('sanitizeEmitMessages');
     expect(pipe).not.toContain('netMsgs');

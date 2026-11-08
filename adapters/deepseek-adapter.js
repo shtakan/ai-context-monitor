@@ -118,7 +118,7 @@ isOnDialogPage() {
   // терялся на ЗАХВАТЕ. Здесь он сохраняется рядом с текстом (hiddenReasoning) и НЕ
   // попадает ни в content, ни в метрики/токены: базовый текст байтово прежний, а в
   // экспорт блок уходит только при включённом тумблере aiCmIncludeHiddenInExport
-  // (сырой режим, utils/export-emit-pipeline.js:includeHiddenExportBlocks).
+  // (сырой режим, utils/export-emit-pipeline.ts:includeHiddenExportBlocks).
   // Служебная шапка свёрнутой панели («DeepThink · 12 с», «Размышления:», «Thought for 3s») —
   /**
    * Снимает служебную шапку панели в начале текста («DeepThink · 12 с», «Размышления:»).
@@ -260,10 +260,10 @@ isOnDialogPage() {
       // сетевых msgs=6. Живые артефакты утеряны, механизм — неподтверждённая гипотеза,
       // поэтому здесь ТОЛЬКО счётчики и сэмплы: ни одна ветка extractMessages не меняется,
       // messages/роли/hiddenReasoning побайтово прежние. Гейт — канонический
-      // utils/debug.js:aiCmDiagOn (sessionStorage 'aiCmDebug' === '1' ИЛИ чекбокс «Подробные
+      // utils/debug.ts:aiCmDiagOn (sessionStorage 'aiCmDebug' === '1' ИЛИ чекбокс «Подробные
       // логи» → window.__aiCmDebugLogs). Гейт выключен → счётчики не считаются вовсе
       // (нулевой оверхед) и не печатается ни одной строки.
-      // typeof-гарды — конвенция срез-песочниц тестов: адаптер грузится без utils/debug.js,
+      // typeof-гарды — конвенция срез-песочниц тестов: адаптер грузится без utils/debug.ts,
       // там хелперов нет → o21Stats === null → поведение прежнее 1:1.
       const o21DiagOn = (typeof aiCmDiagOn === 'function') ? aiCmDiagOn() : false;
       const o21Stats = o21DiagOn ? {
@@ -351,7 +351,7 @@ isOnDialogPage() {
       if (messages.length > 0) {
         debugLog('log', `[DeepSeekAdapter] Извлечено ${messages.length} сообщений, роли: ${messages.map(m => m.role.substring(0, 4)).join(', ')}`);
       }
-      // O-21: печать счётчиков каноническим хелпером utils/debug.js:aiCmDiagLine — тот же
+      // O-21: печать счётчиков каноническим хелпером utils/debug.ts:aiCmDiagLine — тот же
       // гейт aiCmDebug, та же форма k=v, канон-префикс '[AI CM][diag] o21-dom-extract'.
       // Хелпера нет (срез-песочница тестов) → ни одной строки, поведение прежнее 1:1.
       if (o21Stats && typeof aiCmDiagLine === 'function') {

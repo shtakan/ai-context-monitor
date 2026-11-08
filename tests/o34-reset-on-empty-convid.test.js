@@ -34,7 +34,7 @@
  *
  * Исполняются РЕАЛЬНЫЕ функции: utils/chatgpt-conversation-parser.ts
  * (getConvIdFromPath/shouldResetConversationOnNav — для MAIN и для прежнего предиката),
- * utils/export-emit-pipeline.js (extractConvIdFromUrl — id со стороны ISOLATED, как в
+ * utils/export-emit-pipeline.ts (extractConvIdFromUrl — id со стороны ISOLATED, как в
  * content.js:getCurrentConvId), core/page-intercept.js (getConvId/resetForNewConversation/
  * checkConvChange), слушатель 'ai-cm-conversation-changed' из core/content.js,
  * core/content.js:aiCmResetStaleStateOnChatlessChatGptUrl, core/widget.js
@@ -54,7 +54,7 @@ const H = require('./helpers/content-source.js');
 // Ph2: utils/chatgpt-conversation-parser.ts — ES-модуль; тест берёт его именованные
 // экспорты через настоящий ESM-лоадер (никакого module.exports/window-хоста больше нет).
 const PARSER = require('./helpers/load-esm.js').loadEsmModule('utils/chatgpt-conversation-parser.ts');
-const Pipeline = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const Pipeline = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 
 const ROOT = path.join(__dirname, '..');
 const CONTENT = H.contentSource;                                  // модули + content.js (единый скоуп)
@@ -623,7 +623,7 @@ describe('O-34 R3: пины проводки и границ', () => {
   test('R3: новое решение живёт ровно в двух точках (парсер + перехватчик), дублей нет', () => {
     const files = [
       'utils/chatgpt-conversation-parser.ts', 'core/page-intercept.js', 'core/content.js',
-      'core/widget.js', 'core/state.js', 'core/export-manager.js', 'utils/export-emit-pipeline.js',
+      'core/widget.js', 'core/state.js', 'core/export-manager.js', 'utils/export-emit-pipeline.ts',
       'utils/tokenizer.ts', 'manifest.json'
     ];
     const withSymbol = files.filter(function (rel) {

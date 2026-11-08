@@ -16,10 +16,10 @@
  *   3. сети не было вовсе → доверия нет, base-pending остаётся.
  * Плюс: доверие привязано к чату (карта по ключу convId/пути), сброс в resetConversationState
  * и защита прочих платформ (qwen/остальные вердикты не сдвинулись, признак не проник в
- * core/export-manager.js и utils/export-emit-pipeline.js).
+ * core/export-manager.js и utils/export-emit-pipeline.ts).
  *
  * КАК ЗАПУСКАЕМ. Группа 1 — реальный предикат core/content.js (aiCmAutoExportTrustedBase +
- * его диагностика) в `with (ctx)`-песочнице + реальный гейт utils/export-emit-pipeline.js.
+ * его диагностика) в `with (ctx)`-песочнице + реальный гейт utils/export-emit-pipeline.ts.
  * Группа 2 — реальный срез core/content.js от `var aiCmNetMsgsAistudio` до восстановления
  * кэша (тот же приём, что в tests/adapters/aistudio-history-cache.test.js): проверяем, что
  * флаг взводится РОВНО полным снимком текущего пути.
@@ -28,14 +28,14 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const { contentSource: CONTENT } = require('../helpers/content-source.js');
 
 const ROOT = path.join(__dirname, '..', '..');
 const CONTENT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
 const WIDGET_SRC = fs.readFileSync(path.join(ROOT, 'core', 'widget.js'), 'utf8');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
-const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
+const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
 
 // Рез по балансу фигурных скобок (конвенция сьюта).
 function fnDecl(src, name) {

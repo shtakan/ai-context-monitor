@@ -8,7 +8,7 @@
  * JSON-строку шагов: FINAL-шаг → content.answer (JSON-строка) → поле answer.
  */
 
-import { swallowSoft } from './debug.js';
+import { swallowSoft } from './debug.ts';
 
 /** Роль автора сообщения в истории Perplexity. */
 export type PerplexityRole = 'user' | 'assistant';

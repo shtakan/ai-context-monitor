@@ -4,7 +4,7 @@
  * Здесь ровно две группы:
  *   1) РАНТАЙМ (реальные core/qwen-intercept.js + utils/stream-frames.ts на jsdom-стенде,
  *      реальный core/widget.js updateWidget): строки qwen-sse / qwen-spa / qwen-badge
- *      печатаются ТОЛЬКО под гейтом aiCmDebug, идут через канон utils/debug.js:aiCmDiagLine
+ *      печатаются ТОЛЬКО под гейтом aiCmDebug, идут через канон utils/debug.ts:aiCmDiagLine
  *      и НЕ меняют байты выхода (G1/G2);
  *   2) SOURCE-ПИНЫ механизмов, чтобы вердикты отчёта были привязаны к строкам:
  *      C — хук смены разговора у qwen диспатчит ai-cm-conversation-changed, а ISOLATED
@@ -31,9 +31,9 @@ const CONTENT = H.contentSource;
 const WIDGET_SRC = H.moduleSource('core/widget.js');
 const BASE_HANDLER_SRC = H.moduleSource('core/base-handler.js');
 const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'qwen-intercept.js'), 'utf8');
-// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+// R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
-const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
 const { loadAsClassic } = require('./helpers/load-esm.js');
 // Ph2: stream-frames.js — ESM; перехватчик исполняется с втянутыми импортами.
 const QWEN_CLASSIC = loadAsClassic('core/qwen-intercept.js');
@@ -226,7 +226,7 @@ describe('O-35 G1/G2: строки qwen-sse/spa печатаются тольк�
     expect(offDetail.serverTokens).toBeUndefined();
   });
 
-  test('канон: строки уходят через utils/debug.js:aiCmDiagLine (MAIN-мир), формат не дублируется', async function () {
+  test('канон: строки уходят через utils/debug.ts:aiCmDiagLine (MAIN-мир), формат не дублируется', async function () {
     sessionStorage.setItem('aiCmDebug', '1');
     const canon = [];
     window.aiCmDiagLine = function (tag, fields) { canon.push({ tag: tag, fields: fields }); };
@@ -689,7 +689,7 @@ describe('O-35 A: счётчик msgs привязан к convId и URL на к�
   });
 
   test('A: convId берётся из URL (/c/<id>) — привязка числа к разговору проверяема', function () {
-    const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+    const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
     expect(P.extractConvIdFromUrl('/c/' + OTHER_CHAT_ID)).toBe(OTHER_CHAT_ID);
     expect(CONTENT).toContain('var cidS24 = getCurrentConvId()');
   });

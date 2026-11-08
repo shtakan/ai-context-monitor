@@ -262,7 +262,7 @@ function makeSandbox() {
     CustomEvent: CustomEvent,
     setTimeout: function (fn) { return 0; }, clearTimeout: function () { }
   };
-  // Step E.2c-B2c-1 (aiCmDiagWarn): канал B из utils/debug.js — вне песочницы так же,
+  // Step E.2c-B2c-1 (aiCmDiagWarn): канал B из utils/debug.ts — вне песочницы так же,
   // как swallowSoft (B2b-2) и swallow (E.2a.1): модуль зовёт их, объявлений здесь нет.
   sandbox.aiCmDiagWarn = function () { };
   sandbox.swallowSoft = function () { };

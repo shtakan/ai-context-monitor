@@ -92,7 +92,7 @@ function makeSandbox(options) {
     TextDecoder: require('util').TextDecoder
   };
 
-  // Диагностика (v2.0.31): перехватчик берёт канал B из utils/debug.js, если он подключён
+  // Диагностика (v2.0.31): перехватчик берёт канал B из utils/debug.ts, если он подключён
   // (core/background.js: js: ['utils/debug.js', 'core/aistudio-intercept.js']). В песочнице
   // его нет — тесты либо подставляют свой aiCmDiagLine, либо проверяют прямой гейт
   // sessionStorage 'aiCmDebug' === '1'. Ключи добавляются ТОЛЬКО когда заданы: набор
@@ -935,7 +935,7 @@ describe('core/aistudio-intercept.js: диаг формы пустого раз�
     expect(lines).toEqual([]);
   });
 
-  test('без utils/debug.js гейт читается из sessionStorage aiCmDebug', () => {
+  test('без utils/debug.ts гейт читается из sessionStorage aiCmDebug', () => {
     const on = makeSandbox({ sessionStorage: { getItem: function (k) { return k === 'aiCmDebug' ? '1' : null; } } });
     on.api.__handlers.parseHistory(DRIVE_OTHER_SHAPE, DRIVE_URL);
     expect(on.logs.join('\n')).toContain('aistudio-history-empty');

@@ -87,11 +87,107 @@
  */
 'use strict';
 
-/** @typedef {import('../types/export').ExportFormat} ExportFormat */
-/** @typedef {import('../types/export').ExportMessage} ExportMessage */
-/** @typedef {import('../types/export').ExportHistory} ExportHistory */
-/** @typedef {import('../types/export').ExportSourceTier} ExportSourceTier */
-/** @typedef {import('../types/export').ExportPipelineApi} ExportPipelineApi */
+import type {
+  ExportFormat,
+  ExportHistory,
+  ExportMessage,
+  ExportPipelineApi,
+  ExportSourceTier
+} from '../types/export';
+
+/**
+ * Сообщение экспортного конвейера: нормализованная форма { role, text } плюс
+ * служебные поля захвата (id, reasoning, hiddenReasoning). Контракт — ExportMessage
+ * из types/export.d.ts; локальный алиас держит сигнатуры модуля самодостаточными.
+ */
+export type Message = ExportMessage;
+
+/** Источник файла (v82/D2): 'network' — база перехвата, 'adapter' — DOM-адаптер. */
+export type ExportSourceKind = 'network' | 'adapter';
+
+/** Вердикт resolveExportSource (T1-fix#3): что делать с файлом. */
+export type ExportSourceAction = 'block' | 'union' | 'local';
+
+/** Решение об источнике экспорта: действие и машинная причина. */
+export interface ExportSourceDecision {
+  action: ExportSourceAction;
+  reason: string;
+}
+
+/** Вход resolveExportSource: признаки Gemini-моста и счётчики ярусов базы. */
+export interface ExportSourceState {
+  isGemini?: boolean;
+  bridge?: boolean;
+  archiveCount?: number;
+  liveCount?: number;
+  baseCount?: number;
+  localCount?: number;
+}
+
+/** Параметры единственной точки генерации имени автоэкспорта (O-11). */
+export interface ExportFileNameSpec {
+  mask?: 'convId' | 'manual';
+  service?: string;
+  convId?: unknown;
+  site?: string;
+  model?: string;
+  reason?: string;
+  isLowConfidence?: boolean;
+  fmt?: unknown;
+  taken?: string[] | null;
+}
+
+/** Итог санации массива сообщений в конвейере (S3/S4/S5). */
+export interface SanitizeEmitResult {
+  messages: Message[];
+  sanitized: number;
+  skipped: string[];
+  dropped: number;
+  bdsRemoved: number;
+  bdsForms: string[];
+  tcRemoved: number;
+  tcForms: string[];
+}
+
+/** Итог подготовки сообщений (intra/cross-дедуп + санация). */
+export interface PrepareExportResult {
+  messages: Message[];
+  intraRemoved: number;
+  removed: number;
+  crossRemoved: number;
+}
+
+/** Счётчик сообщений, у которых появились reasoning-поля. */
+export interface ReasoningApplyResult {
+  changed: number;
+}
+
+/** Итог дедупликации массива сообщений. */
+export interface DedupeResult {
+  messages: Message[];
+  removed: number;
+}
+
+/** Итог дедупликации внутри одного сообщения. */
+export interface IntraDedupeResult {
+  text: string;
+  removedBlocks: number;
+}
+
+/** Состояние страницы, которое смотрит защитный guard Google Search (O-27). */
+export interface GsaPageGuardState {
+  [key: string]: unknown;
+}
+
+/** Вердикт защитного guard'а Google Search (O-27). */
+export interface GsaPageGuardDecision {
+  skip: boolean;
+  reason: string | null;
+}
+
+/** Колбэк логгера intra-дедупа (export-manager передаёт aiCmLogIntraDedupe). */
+export type MessageDedupeLogger = (role: string, removed: number) => void;
+
 /**
  * Измеренная форма инъекции Better DeepSeek (таблица BDS_INJECTION_FORMS).
  * @typedef {Object} BdsInjectionForm
@@ -119,7 +215,7 @@
  * @param {string} s фрагмент
  * @returns {string} безопасный сегмент
  */
-export function safeSeg(s) {
+export function safeSeg(s: string): string {
   return String(s == null ? '' : s).replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
@@ -136,7 +232,7 @@ export function safeSeg(s) {
  * @param {string} pathname путь URL
  * @returns {string} id беседы
  */
-export function extractConvIdFromUrl(pathname) {
+export function extractConvIdFromUrl(pathname: string): string {
   try {
     var p = String(pathname || '');
     // Gemini (и AI Studio): /app/<id>. Ловушка convId (aistudio): литералы пути prompts / new / apikey — не id; lookahead отсекает литерал, id-сегмент не тронут.
@@ -202,7 +298,7 @@ export function extractConvIdFromUrl(pathname) {
  * @param {string} fmt формат
  * @returns {ExportFormat} нормализованный формат
  */
-export function normExportFmt(fmt) {
+export function normExportFmt(fmt: unknown): ExportFormat {
   return (fmt === 'md') ? 'md' : ((fmt === 'json') ? 'json' : 'txt');
 }
 
@@ -211,14 +307,14 @@ export function normExportFmt(fmt) {
  * @param {number} n число
  * @returns {string} две цифры
  */
-export function exportPad2(n) { return (n < 10 ? '0' : '') + n; }
+export function exportPad2(n: number): string { return (n < 10 ? '0' : '') + n; }
 
 /**
  * Метка времени маски convId: YYYY-MM-DD_HH-MM (байтово прежняя).
  * @param {Date} d дата
  * @returns {string} метка
  */
-export function convIdStamp(d) {
+export function convIdStamp(d: Date): string {
   return d.getFullYear() + '-' + exportPad2(d.getMonth() + 1) + '-' + exportPad2(d.getDate()) +
     '_' + exportPad2(d.getHours()) + '-' + exportPad2(d.getMinutes());
 }
@@ -228,7 +324,7 @@ export function convIdStamp(d) {
  * @param {Date} d дата
  * @returns {string} метка
  */
-export function manualExportStamp(d) {
+export function manualExportStamp(d: Date): string {
   return d.getFullYear() + '-' + exportPad2(d.getMonth() + 1) + '-' + exportPad2(d.getDate()) +
     '-' + exportPad2(d.getHours()) + '-' + exportPad2(d.getMinutes());
 }
@@ -238,7 +334,7 @@ export function manualExportStamp(d) {
  * @param {string} model модель
  * @returns {string} безопасный сегмент
  */
-export function safeModelSeg(model) {
+export function safeModelSeg(model: unknown): string {
   return String(model == null ? '' : model)
     .replace(/[^a-zA-Z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '') || 'model';
 }
@@ -249,7 +345,7 @@ export function safeModelSeg(model) {
  * @param {string} name имя файла
  * @returns {boolean} имя занято
  */
-export function isFileNameTaken(taken, name) {
+export function isFileNameTaken(taken: unknown, name: string): boolean {
   try {
     if (!taken || !name) return false;
     if (typeof Set !== 'undefined' && taken instanceof Set) return taken.has(name);
@@ -265,7 +361,7 @@ export function isFileNameTaken(taken, name) {
  * @param {*} taken занятые имена
  * @returns {string} свободное имя
  */
-export function disambiguateFileName(name, taken) {
+export function disambiguateFileName(name: unknown, taken: string[] | null | undefined): string {
   var base = String(name == null ? '' : name);
   try {
     if (!isFileNameTaken(taken, base)) return base;
@@ -292,7 +388,7 @@ export function disambiguateFileName(name, taken) {
  * @param {*} spec параметры имени
  * @returns {string} имя файла
  */
-export function buildAutoExportFileName(spec) {
+export function buildAutoExportFileName(spec: ExportFileNameSpec | null | undefined): string {
   var s = spec || {};
   var lowConfPrefix = (s.isLowConfidence === true) ? '[LOW CONFIDENCE]_' : '';
   var d = new Date();
@@ -326,7 +422,7 @@ export function buildAutoExportFileName(spec) {
  * @param {string} [fmt] формат
  * @returns {string} имя файла
  */
-export function buildExportFileName(service, convId, reason, isLowConfidence, fmt) {
+export function buildExportFileName(service: string, convId: string, reason?: string, isLowConfidence?: boolean, fmt?: string): string {
   return buildAutoExportFileName({
     mask: 'convId',
     service: service,
@@ -355,7 +451,7 @@ export function buildExportFileName(service, convId, reason, isLowConfidence, fm
  * @param {string} [fmt] формат
  * @returns {string} имя файла
  */
-export function buildGsaExportFileName(site, model, isLowConfidence, fmt) {
+export function buildGsaExportFileName(site: string, model: string, isLowConfidence?: boolean, fmt?: string): string {
   return buildAutoExportFileName({
     mask: 'manual',
     site: site,
@@ -381,7 +477,7 @@ export function buildGsaExportFileName(site, model, isLowConfidence, fmt) {
  * @param {string} threadId id треда
  * @returns {string} id беседы
  */
-export function resolveAutoExportConvId(site, urlConvId, threadId) {
+export function resolveAutoExportConvId(site: string, urlConvId?: string, threadId?: string): string {
   var cid = String(urlConvId == null ? '' : urlConvId);
   if (cid) return cid;
   if (String(site == null ? '' : site) === 'google_search') {
@@ -399,7 +495,7 @@ export function resolveAutoExportConvId(site, urlConvId, threadId) {
  * @param {*} state состояние
  * @returns {string} причина неполноты
  */
-export function notCompleteReason(state) {
+export function notCompleteReason(state: Record<string, unknown> | null): string {
   var s = state || {};
   if (s.site === 'google_search' && s.probeRunning === true) return 'probe-running';
   return 'not-complete';
@@ -413,7 +509,7 @@ export function notCompleteReason(state) {
  * @param {boolean} hasNetworkTexts есть сетевые тексты
  * @returns {'network'|'adapter'} источник
  */
-export function pickExportSource(hasBaseSeen, hasNetworkTexts) {
+export function pickExportSource(hasBaseSeen: unknown, hasNetworkTexts: unknown): ExportSourceKind {
   return (hasBaseSeen === true) ? 'network' : 'adapter';
 }
 
@@ -436,7 +532,7 @@ export function pickExportSource(hasBaseSeen, hasNetworkTexts) {
  * @param {*} state состояние
  * @returns {{action: 'block'|'union'|'local', reason: string}} решение
  */
-export function resolveExportSource(state) {
+export function resolveExportSource(state: ExportSourceState | null): ExportSourceDecision {
   var s = state || {};
   if (s.isGemini !== true) return { action: 'local', reason: 'non-gemini' };
   if (s.bridge !== true) return { action: 'local', reason: 'no-bridge' };
@@ -464,7 +560,7 @@ export function resolveExportSource(state) {
  * @param {*} state состояние
  * @returns {ExportSourceTier} уровень источника
  */
-export function sourceTierOf(state) {
+export function sourceTierOf(state: { archiveCount?: unknown, liveCount?: unknown } | null): ExportSourceTier {
   var s = state || {};
   var arch = (typeof s.archiveCount === 'number' && s.archiveCount > 0) ? s.archiveCount : 0;
   var live = (typeof s.liveCount === 'number' && s.liveCount > 0) ? s.liveCount : 0;
@@ -490,7 +586,7 @@ export function sourceTierOf(state) {
  * @param {*} state состояние
  * @returns {{skip: boolean, reason: string|null}} вердикт
  */
-export function shouldSkipGsaPageGuard(state) {
+export function shouldSkipGsaPageGuard(state: GsaPageGuardState | null): GsaPageGuardDecision {
   var s = state || {};
   if (s.site !== 'google_search') return { skip: false, reason: null };
   if (s.chatPageMarker === false) return { skip: true, reason: 'not-chat-page' };
@@ -761,7 +857,7 @@ export function sessionFiredPatch(service, convId) {
  * @param {Array} raw сырые сообщения
  * @returns {ExportMessage[]} нормализованные сообщения
  */
-export function normalizeExportMessages(raw) {
+export function normalizeExportMessages(raw: unknown): Message[] {
   var out = [];
   try {
     if (!Array.isArray(raw)) return out;
@@ -770,9 +866,9 @@ export function normalizeExportMessages(raw) {
       var text = (typeof m.text === 'string') ? m.text : (typeof m.content === 'string' ? m.content : '');
       if (!text) continue;
       // FIX (Claude md): 'human' (парсер Claude) — та же роль пользователя, что 'user'.
-      var norm = { role: (m.role === 'user' || m.role === 'human') ? 'user' : 'assistant', text: text };
+      var norm: Message = { role: (m.role === 'user' || m.role === 'human') ? 'user' : 'assistant', text: text };
       // Claude md (ДИАГНОСТИКА — только измерение под гейтом aiCmDebug): роль на входе
-      // нормализации и роль на выходе. Канонический хелпер utils/debug.js:aiCmDiagLine;
+      // нормализации и роль на выходе. Канонический хелпер utils/debug.ts:aiCmDiagLine;
       // хелпера нет (Node/срез-песочницы) или гейт выключен → ни одной строки.
       if (typeof aiCmDiagLine === 'function') {
         aiCmDiagLine('claude-role-normalize', { inputRole: m.role, outputRole: norm.role });
@@ -906,7 +1002,7 @@ export function stripMarkerResidue(text) {
  * @param {Array} messages сообщения
  * @returns {{messages: ExportMessage[], removed: number}} результат дедупа
  */
-export function dedupeMessages(messages) {
+export function dedupeMessages(messages: unknown): DedupeResult {
   var out = [];
   var seen = {};
   var removed = 0;
@@ -924,7 +1020,7 @@ export function dedupeMessages(messages) {
       // и текст вида 'toString' ложно считался бы уже виденным.
       if (Object.prototype.hasOwnProperty.call(seen, key)) { removed++; continue; }
       seen[key] = true;
-      var keep = { role: role, text: text };
+      var keep: Message = { role: role, text: text };
       // v1.18 (E-2.1): id ходов переносится — иначе набор id базы (baseIdSet) и запись
       // ленты рвутся после схлопывания. Потребители без id получают прежний {role,text}.
       if (m.id != null) keep.id = m.id;
@@ -1169,7 +1265,7 @@ export function intraBlocksSimilar(a, b) {
  * @param {ExportMessage} message сообщение
  * @returns {{text: string, removedBlocks: number}} результат дедупа
  */
-export function dedupeIntraMessage(message) {
+export function dedupeIntraMessage(message: Message | null | undefined): IntraDedupeResult {
   var text = (message && typeof message.text === 'string') ? message.text : '';
   var removedBlocks = 0;
   try {
@@ -1443,7 +1539,7 @@ export function crossCopyIsSubstantial(lines) {
  * @param {Array} messages сообщения
  * @returns {{messages: Array, removed: number}} результат дедупа
  */
-export function dedupeCrossRawCopies(messages) {
+export function dedupeCrossRawCopies(messages: unknown): DedupeResult {
   var out = [];
   var removed = 0;
   var refs = [];   // нормализованные строки уже оставленных СЫРЫХ блоков (эталоны копий)
@@ -1495,7 +1591,7 @@ export function dedupeCrossRawCopies(messages) {
       }
       // Ничего не резали — отдаём ИСХОДНЫЙ текст сообщения байт-в-байт (никакой
       // нормализации переводов строк и разделителей блоков для чужих путей).
-      var keep = { role: (m.role === 'user') ? 'user' : 'assistant', text: touched ? keptBlocks.join('\n\n') : text };
+      var keep: Message = { role: (m.role === 'user') ? 'user' : 'assistant', text: touched ? keptBlocks.join('\n\n') : text };
       if (m.id != null) keep.id = m.id;
       out.push(keep);
     }
@@ -1525,7 +1621,7 @@ export function dedupeCrossRawCopies(messages) {
  * @param {*} onMessageDedupe колбэк лога
  * @returns {{messages: ExportMessage[], intraRemoved: number, removed: number, crossRemoved: number}} результат подготовки
  */
-export function prepareExportMessages(raw, onMessageDedupe) {
+export function prepareExportMessages(raw: unknown, onMessageDedupe?: MessageDedupeLogger | null): PrepareExportResult {
   var intraRemoved = 0;
   var out = [];
   try {
@@ -1535,7 +1631,7 @@ export function prepareExportMessages(raw, onMessageDedupe) {
       var role = (m.role === 'user') ? 'user' : 'assistant';
       var text = (typeof m.text === 'string') ? m.text : '';
       var res = dedupeIntraMessage({ role: role, text: text });
-      var next = { role: role, text: res.text };
+      var next: Message = { role: role, text: res.text };
       if (m.id != null) next.id = m.id;
       out.push(next);
       if (res.removedBlocks > 0) {
@@ -1557,9 +1653,9 @@ export function prepareExportMessages(raw, onMessageDedupe) {
   // порядок/роли/id и счётчики removed не меняются.
   var cleaned = [];
   for (var k = 0; k < cross.messages.length; k++) {
-    var mk = cross.messages[k] || {};
-    /** @type {ExportMessage} очищенное сообщение экспорта */
-    var clean = {
+    var mk = cross.messages[k] || ({} as Message);
+    /** Очищенное сообщение экспорта. */
+    var clean: Message = {
       role: (mk.role === 'user') ? 'user' : 'assistant',
       text: stripMarkerResidue(typeof mk.text === 'string' ? mk.text : '')
     };
@@ -1718,7 +1814,7 @@ export var BDS_BOM = '\ufeff';
 //                  (no-boundary | unpaired-tag). Пара тегов без измеренной формы (F3)
 //                  снимается в любом месте сообщения, поэтому причины пропуска
 //                  'pair-not-whole-message' у неё больше нет — она распознана как обёртка.
-// Печать — ТОЛЬКО существующим гейтом: каноническим хелпером utils/debug.js:aiCmDiagLine
+// Печать — ТОЛЬКО существующим гейтом: каноническим хелпером utils/debug.ts:aiCmDiagLine
 // (своего вывода в консоль и своего формата здесь нет). Хелпера нет (Node/срез-песочницы
 // тестов) или гейт aiCmDebug выключен → НИ ОДНОЙ строки; читаются только посчитанные
 // значения.
@@ -2189,7 +2285,7 @@ export function stripReasoningSections(text) {
 // написала В ПРОЗЕ, парой не считаются: текст возвращается байтово, ни один байт не режется.
 /** @type {RegExp} регулярка пары секций */
 export var REASONING_SECTION_PAIR_RE = /^\s*\[REASONING\]\r?\n([\s\S]*?)\r?\n\r?\n\[ANSWER\]\r?\n([\s\S]*)$/;
-// ДИАГНОСТИКА (гейт aiCmDebug — канон utils/debug.js:aiCmDiagLine, прецедент bdsDiagLine):
+// ДИАГНОСТИКА (гейт aiCmDebug — канон utils/debug.ts:aiCmDiagLine, прецедент bdsDiagLine):
 // оба литерала есть, но структура не парная. Хелпера нет (срез-песочницы) или гейт выключен
 // → ни одной строки; на возврат и байты не влияет.
 /**
@@ -2249,7 +2345,7 @@ export function splitReasoningSections(text) {
  * @param {boolean} enabled включено
  * @returns {{changed: number}} число изменений
  */
-export function applyReasoningExportFields(messages, enabled) {
+export function applyReasoningExportFields(messages: Message[], enabled: unknown): ReasoningApplyResult {
   var changed = 0;
   try {
     if (enabled !== true || !Array.isArray(messages)) return { changed: 0 };
@@ -2269,7 +2365,7 @@ export function applyReasoningExportFields(messages, enabled) {
       if (!reasoning) continue;
       // Нечего менять (reasoning уже полем, поле захвата пусто, текст не резался) — объект прежний.
       if (!captured && text === m.text) continue;
-      var next = {};
+      var next = {} as Message;
       for (var k in m) {
         if (Object.prototype.hasOwnProperty.call(m, k)) next[k] = m[k];
       }
@@ -2412,8 +2508,8 @@ function isReasoningOnlyAssistantTurn(message) {
  * @param {string} text новый текст
  * @returns {Object} копия сообщения
  */
-export function copyMessageWithText(message, text) {
-  var keep = {};
+export function copyMessageWithText(message: Message, text: string): Message {
+  var keep = {} as Message;
   for (var k in message) {
     if (Object.prototype.hasOwnProperty.call(message, k)) keep[k] = message[k];
   }
@@ -2455,7 +2551,7 @@ export function copyMessageWithText(message, text) {
  * @param {ExportMessage[]} messages сообщения
  * @returns {{messages: ExportMessage[], sanitized: number, skipped: string[], dropped: number, bdsRemoved: number, bdsForms: string[], tcRemoved: number, tcForms: string[]}} результат санации
  */
-export function sanitizeEmitMessages(messages) {
+export function sanitizeEmitMessages(messages: Message[]): SanitizeEmitResult {
   var out = [];
   var sanitized = 0;
   var skipped = [];
@@ -2569,7 +2665,7 @@ export var HIDDEN_ANSWER_TAG = SECTION_ANSWER_TAG;
  * @param {ExportMessage} message сообщение
  * @returns {boolean} есть скрытые
  */
-export function hasHiddenFields(message) {
+export function hasHiddenFields(message: unknown): boolean {
   try {
     if (!message || typeof message !== 'object') return false;
     return Object.prototype.hasOwnProperty.call(message, 'hiddenReasoning') ||
@@ -2582,7 +2678,7 @@ export function hasHiddenFields(message) {
  * @param {ExportMessage} message сообщение
  * @returns {string} скрытое рассуждение
  */
-export function hiddenReasoningOf(message) {
+export function hiddenReasoningOf(message: Message | null | undefined): string {
   try {
     var r = (message && typeof message.hiddenReasoning === 'string') ? message.hiddenReasoning : '';
     return r.trim();
@@ -2594,8 +2690,8 @@ export function hiddenReasoningOf(message) {
  * @param {ExportMessage} message сообщение
  * @returns {Object} копия
  */
-export function withoutHiddenFields(message) {
-  var keep = {};
+export function withoutHiddenFields(message: Message): Message {
+  var keep = {} as Message;
   for (var k in message) {
     if (!Object.prototype.hasOwnProperty.call(message, k)) continue;
     if (k === 'hiddenReasoning' || k === 'hiddenInjection') continue;
@@ -2610,7 +2706,7 @@ export function withoutHiddenFields(message) {
  * @param {ExportMessage} message сообщение
  * @returns {Object} копия
  */
-export function stripHiddenFields(message) {
+export function stripHiddenFields(message: Message | null | undefined): Message | null | undefined {
   if (!message || typeof message !== 'object') return message;
   return hasHiddenFields(message) ? withoutHiddenFields(message) : message;
 }
@@ -2698,7 +2794,7 @@ export function effectiveReasoningToggle(userToggle, sourceHasReasoning, site) {
  * @param {ExportMessage[]} messages сообщения
  * @returns {ExportMessage[]} сообщения
  */
-export function includeHiddenExportBlocks(messages) {
+export function includeHiddenExportBlocks(messages: Message[]): Message[] {
   var src = Array.isArray(messages) ? messages : [];
   var out = [];
   for (var i = 0; i < src.length; i++) {

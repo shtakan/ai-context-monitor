@@ -17,9 +17,9 @@
  *     (включая [cite:turn0searchN]).
  */
 
-// ESM (Roadmap Ph2): раньше swallowSoft приходил глобалом из utils/debug.js (js[]
+// ESM (Roadmap Ph2): раньше swallowSoft приходил глобалом из utils/debug.ts (js[]
 // MAIN-регистрации). Теперь модуль втягивается статическим import'ом.
-import { swallowSoft } from './debug.js';
+import { swallowSoft } from './debug.ts';
 
 /** Роль автора хода в ChatGPT mapping. */
 export type ChatGptRole = 'user' | 'assistant' | 'system' | 'tool';

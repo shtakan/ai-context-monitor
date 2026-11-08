@@ -5,7 +5,7 @@
  * history_messages, сборка turnsMap ПОХОДОВО, детектор усечения цепочки с однократным
  * тихим дозапросом, авторитетно пустая база v11/O-17, MERGE-ветка пустого кеша и режим
  * экспортного дозапроса v12/O-18) уехал в core/deepseek-ingest.js. Модуль и ядро —
- * РАЗНЫЕ IIFE одного registerContentScripts-пакета (js[]: utils/debug.js ->
+ * РАЗНЫЕ IIFE одного registerContentScripts-пакета (js[]: utils/debug.ts ->
  * deepseek-diag.js -> deepseek-netsync.js -> deepseek-refetch.js -> deepseek-parse.js ->
  * deepseek-conv.js -> deepseek-emit.js -> deepseek-net.js -> deepseek-ingest.js ->
  * deepseek-intercept.js), поэтому связь идёт ровно через один контракт:

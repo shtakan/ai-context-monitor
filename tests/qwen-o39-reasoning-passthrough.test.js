@@ -31,7 +31,7 @@
  *        applyReasoningExportFields на выходе точки сбора). D1/D5 кормят точку сбора
  *        синтетическим снимком с полем — полный live-путь покрывал только D6;
  *   D7 — R-D «диагностика только под гейтом aiCmDebug» и «байты выхода при гейте вкл/выкл
- *        идентичны» на путях ЭТОГО дефекта (реальный utils/debug.js в песочнице);
+ *        идентичны» на путях ЭТОГО дефекта (реальный utils/debug.ts в песочнице);
  *   R1 — DeepSeek (сетевой путь): поля reasoning в снимке нет → ключа нет, txt байтово прежний;
  *   R2 — ChatGPT/Claude/Perplexity/GSA/Gemini/AI Studio: то же (шесть платформ не задеты);
  *   R3 — пустое reasoning ('') → поле НЕ копируется (falsy-check обоих фиксов);
@@ -53,18 +53,18 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 
 const ROOT = path.join(__dirname, '..');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 const BASE_HANDLER_SRC = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.js'), 'utf8');
 const BUILDERS_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.ts'), 'utf8');
-// D7: РЕАЛЬНЫЙ utils/debug.js (канонический гейт aiCmDebug) — только для пина «диагностика
+// D7: РЕАЛЬНЫЙ utils/debug.ts (канонический гейт aiCmDebug) — только для пина «диагностика
 // под гейтом»: в прочих пинах он не подключается вовсе (прежнее поведение песочницы 1:1).
-// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+// R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
-const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
 
 // Рез по балансу фигурных скобок (конвенция сьюта: tests/qwen-reasoning-export-o37.test.js).
 function fnDecl(src, name) {
@@ -111,7 +111,7 @@ function makeBaseWriter(opts) {
   const o = opts || {};
   const site = o.site || 'qwen';
   const adapterMessages = o.adapterMessages || [];
-  // D7: гейт aiCmDebug. Песочница без opts.diag не подключает utils/debug.js вовсе —
+  // D7: гейт aiCmDebug. Песочница без opts.diag не подключает utils/debug.ts вовсе —
   // для неё aiCmDiagLine не существует (typeof-гард), поведение прежнее 1:1.
   let gate = (o.gate === true);
   const logs = [];
@@ -614,8 +614,8 @@ describe('O-39 D7: диагностика только под гейтом aiCmD
     expect(w.diag().filter(function (s) { return s.indexOf('qwen-') !== -1; })).toEqual([]);
   });
 
-  test('S-пин D7: гейт — канонический utils/debug.js (sessionStorage aiCmDebug), не свой', () => {
-    expect(DEBUG_SRC).toContain("sessionStorage.getItem('aiCmDebug') === '1'");
+  test('S-пин D7: гейт — канонический utils/debug.ts (sessionStorage aiCmDebug), не свой', () => {
+    expect(DEBUG_SRC).toContain('sessionStorage.getItem("aiCmDebug") === "1"');
     expect(DEBUG_SRC).toContain('function aiCmDiagOn()');
     expect(DEBUG_SRC).toContain('if (!aiCmDiagOn()) return false;');
   });

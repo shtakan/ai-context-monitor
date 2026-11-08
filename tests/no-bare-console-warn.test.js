@@ -10,10 +10,10 @@
  *   1. Ловится и computed-доступ: `console['warn'](` / `console["warn"](` — форма, которую
  *      страж console.error намеренно НЕ ловит (tests/no-bare-console-error.test.js:261).
  *      Лексер стирает ключ-литерал, поэтому форма ловится по виду `console[…] (`, см. WARN_PATTERNS.
- *   2. Ловится и динамический уровень `console[level]` — иначе сам логгер (utils/debug.js:62,69)
+ *   2. Ловится и динамический уровень `console[level]` — иначе сам логгер (utils/debug.ts:62,69)
  *      был бы невидим для стража. SW-дубля debugLog в core/background.js больше нет:
- *      Ph2 перевёл utils/debug.js на ESM и SW импортирует его (R1).
- *   3. utils/debug.js не «белый список целиком», а ЯВНО сканируемый файл: его сайты внесены
+ *      Ph2 перевёл utils/debug.ts на ESM и SW импортирует его (R1).
+ *   3. utils/debug.ts не «белый список целиком», а ЯВНО сканируемый файл: его сайты внесены
  *      в allow-list поимённо (иначе «владелец console.*» оказался бы непроверяемым).
  *   4. Вместо белого списка — allow-list tests/fixtures/console-allow.json (schema
  *      ai-cm/console-allow@1) с обязательным reason у каждой записи и проверкой мёртвых записей.
@@ -30,8 +30,8 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const SCAN_DIRS = ['core', 'adapters'];
 // Модуль-обёртка: в SCAN_DIRS не входит, но сканируется явно (plan §7.1а) — записи
-// allow-list для utils/debug.js должны указывать на живые сайты, а не висеть мёртвыми.
-const EXTRA_SCANNED_FILES = ['utils/debug.js'];
+// allow-list для utils/debug.ts должны указывать на живые сайты, а не висеть мёртвыми.
+const EXTRA_SCANNED_FILES = ['utils/debug.ts'];
 const ALLOW_PATH = path.join(ROOT, 'tests', 'fixtures', 'console-allow.json');
 const ALLOW_SCHEMA = 'ai-cm/console-allow@1';
 const HINT = 'either migrate to aiCmDiagWarn or add to tests/fixtures/console-allow.json with reason';
@@ -349,9 +349,9 @@ describe('Step E.2c-A: страж bare console.warn — allow-list', () => {
     expect(hits[0].line).toBe(2);
   });
 
-  test('реальный логгер (utils/debug.js) сканируется и покрыт allow-list, а не пропущен', () => {
-    expect(EXTRA_SCANNED_FILES).toContain('utils/debug.js');
-    const loggerHits = scanFile(path.join(ROOT, 'utils', 'debug.js'));
+  test('реальный логгер (utils/debug.ts) сканируется и покрыт allow-list, а не пропущен', () => {
+    expect(EXTRA_SCANNED_FILES).toContain('utils/debug.ts');
+    const loggerHits = scanFile(path.join(ROOT, 'utils', 'debug.ts'));
     expect(loggerHits.length).toBeGreaterThan(0);
     const { declared } = expandAllow(loadAllow());
     for (const h of loggerHits) expect(declared.has(h.file + ':' + h.line)).toBe(true);

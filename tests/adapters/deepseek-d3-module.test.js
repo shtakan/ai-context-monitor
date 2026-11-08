@@ -6,7 +6,7 @@
  * MERGE-дозапроса: collectHeaders / stripCacheParams / historyRefetchUrl /
  * historyUrlForConv / refetchFullHistory / scheduleHistoryRefetch + таймер
  * historyRefetchTimer) уехал в core/deepseek-refetch.js. Модуль и ядро — РАЗНЫЕ IIFE
- * одного registerContentScripts-пакета (js[]: utils/debug.js -> deepseek-diag.js ->
+ * одного registerContentScripts-пакета (js[]: utils/debug.ts -> deepseek-diag.js ->
  * deepseek-netsync.js -> deepseek-refetch.js -> deepseek-intercept.js), поэтому связь
  * идёт ровно через один контракт:
  *

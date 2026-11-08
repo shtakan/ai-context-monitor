@@ -446,7 +446,7 @@ describe('H19: «НЕ трогать» — гейты/оракулы/видже�
   });
 
   test('export-emit-pipeline: чистые функции экспорта не изменены', () => {
-    const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+    const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
     expect(P.shouldSkipAutoExport({ enabled: false }).skip).toBe(true);
     expect(P.effectiveAutoExportThreshold(90, 50)).toBe(50);
     expect(P.pickExportSource(true, true)).toBe('network');

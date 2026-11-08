@@ -5,7 +5,7 @@
  * (walk по parent_id); СЕКЦИЯ 7 — collectTurnText / collectTurnReasoning / composeTurnText
  * плюс hidden-пометки базы DS_PP_VISIBLE_MARKER / hasInjectedUserPrompt) уехал в
  * core/deepseek-parse.js. Модуль и ядро — РАЗНЫЕ IIFE одного registerContentScripts-пакета
- * (js[]: utils/debug.js -> deepseek-diag.js -> deepseek-netsync.js -> deepseek-refetch.js ->
+ * (js[]: utils/debug.ts -> deepseek-diag.js -> deepseek-netsync.js -> deepseek-refetch.js ->
  * deepseek-parse.js -> deepseek-intercept.js), поэтому связь идёт ровно через один
  * контракт:
  *

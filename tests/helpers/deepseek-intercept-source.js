@@ -50,7 +50,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..', '..');
 
 // Порядок = порядок js[] в core/background.js для 'ai-cm-deepseek-intercept-v11'.
-// utils/debug.js сюда НЕ входит: он не декомпозировался (как и в content-source.js).
+// utils/debug.ts сюда НЕ входит: он не декомпозировался (как и в content-source.js).
 const MODULES = [
   'core/deepseek-diag.js',
   'core/deepseek-netsync.js',

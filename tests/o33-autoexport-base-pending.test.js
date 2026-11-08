@@ -9,7 +9,7 @@
  * уйти по частичной DOM-оценке (msgs=5) вместо полной сетевой базы.
  *
  * Продуктовое решение (a):
- *   1. utils/export-emit-pipeline.js: из completeOk убран дизъюнкт `!baseSeen ||` — полнота
+ *   1. utils/export-emit-pipeline.ts: из completeOk убран дизъюнкт `!baseSeen ||` — полнота
  *      ТОЛЬКО по сетевому baseComplete (Gemini-семантика прежняя);
  *   2. новая причина base-pending: не-Gemini, baseSeen=false, enabled=true, cid ≠ '', pct ≥ 0
  *      (все предшествующие гейты пройдены, кроме completeOk); вердикт выносится ПОСЛЕ пороговых
@@ -20,10 +20,10 @@
  *   4. лог причины — ровно одна строка на СМЕНУ состояния (урок O-29) каноническим
  *      aiCmDiagLine под гейтом aiCmDebug (прецедент O-27/O-32).
  *
- * Исполняются РЕАЛЬНЫЕ функции: shouldSkipAutoExport (utils/export-emit-pipeline.js),
+ * Исполняются РЕАЛЬНЫЕ функции: shouldSkipAutoExport (utils/export-emit-pipeline.ts),
  * maybeAutoExport + aiCmAutoExportStartDownload + doAutoExportDownload + aiCmWriteAutoExportFile
  * + aiCmAutoExportBasePendingLog (core/export-manager.js), канонический aiCmDiagLine
- * (utils/debug.js) и реальные сборщики байтов (utils/export-text-builders.ts).
+ * (utils/debug.ts) и реальные сборщики байтов (utils/export-text-builders.ts).
  *
  * НЕ ТРОГАЕТСЯ (пины R1–R6 ниже): байты и маски всех форматов (buildAutoExportFileName, O-11),
  * латч и реестр имён, сегментация базы GSA (O-31), гарды O-27 (shouldSkipGsaPageGuard,
@@ -35,16 +35,16 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const { contentSource: CONTENT } = require('./helpers/content-source.js');
 
 const ROOT = path.join(__dirname, '..');
-const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
+const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
-// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+// R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
-const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
 const BUILDERS_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.ts'), 'utf8');
 
 // Рез по балансу фигурных скобок (конвенция сьюта: tests/gsa-autoexport.test.js, tests/chatgpt-o1-badge-hold.test.js).
@@ -146,8 +146,8 @@ function o33(over) {
     aiCmGsaChatPageMarker: function () { return o.gsaChatPage !== false; },
     ModelConfig: { getModel: function () { return { name: MODEL }; } },
     debugLog: function (lvl, msg) { logs.push(String(msg)); },
-    swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.js (его нет в песочнице)
-    swallowSoft: function () { },   // Step E.2c-B2b-3c (swallowSoft): канал B — тот же хелпер utils/debug.js, вне песочницы.
+    swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.ts (его нет в песочнице)
+    swallowSoft: function () { },   // Step E.2c-B2b-3c (swallowSoft): канал B — тот же хелпер utils/debug.ts, вне песочницы.
     // aiCmDiagLine печатает через console.log — тот же ctx-скоуп (как в браузере):
     // строки попадают в diag только при включённом гейте aiCmDebug.
     console: {

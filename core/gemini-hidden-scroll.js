@@ -16,7 +16,7 @@
 // core/gemini-intercept.js — его вынос планируется на этап 3/3.
 //
 // Порядок подключения (core/background.js, registerSafe для перехватчика Gemini,
-// document_start, world MAIN): utils/debug.js -> utils-парсеры -> ЭТОТ ФАЙЛ ->
+// document_start, world MAIN): utils/debug.ts -> utils-парсеры -> ЭТОТ ФАЙЛ ->
 // core/gemini-intercept.js. Экспорт: window.AiCmGeminiHiddenScroll + module.exports.
 // =============================================================================
 

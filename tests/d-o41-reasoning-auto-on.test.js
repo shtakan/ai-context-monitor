@@ -48,14 +48,14 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 
 const ROOT = path.join(__dirname, '..');
 const read = function (rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); };
 
 const MGR_SRC = read('core/export-manager.js');
-const PIPELINE_SRC = read('utils/export-emit-pipeline.js');
+const PIPELINE_SRC = read('utils/export-emit-pipeline.ts');
 const BASE_HANDLER_SRC = read('core/base-handler.js');
 const OPTIONS_HTML = read('options/options.html');
 const I18N_APPLY_SRC = read('options/i18n-apply.js');
@@ -562,7 +562,7 @@ describe('D-O41 R3: Gemini/AI Studio байтово прежний при ON и 
     const dedupe = fnDecl(BASE_HANDLER_SRC, 'aiCmDedupeExportSource');
     expect(dedupe).toContain("if (site !== 'gemini' && site !== 'aistudio') {");
     expect(dedupe).toContain('P.prepareExportMessages(messages, aiCmLogIntraDedupe)');
-    expect(PIPELINE_SRC).toContain('function prepareExportMessages(raw, onMessageDedupe)');
+    expect(PIPELINE_SRC).toContain('function prepareExportMessages(raw: unknown, onMessageDedupe?: MessageDedupeLogger | null)');
     // D-O41 (и его пересмотр) в подготовку Gemini-ветки не вмешивается
     const prep = fnDecl(PIPELINE_SRC, 'prepareExportMessages');
     expect(prep).not.toContain('effectiveReasoningToggle');

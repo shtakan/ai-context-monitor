@@ -4,7 +4,7 @@
  * Кластер K9 (СЕКЦИИ 11/12 ядра — обёртка window.fetch и обёртки
  * XMLHttpRequest.prototype.open/send/setRequestHeader + копилки авторизации и истории)
  * уехал в core/deepseek-net.js. Модуль и ядро — РАЗНЫЕ IIFE одного registerContentScripts-
- * пакета (js[]: utils/debug.js -> deepseek-diag.js -> deepseek-netsync.js ->
+ * пакета (js[]: utils/debug.ts -> deepseek-diag.js -> deepseek-netsync.js ->
  * deepseek-refetch.js -> deepseek-parse.js -> deepseek-conv.js -> deepseek-emit.js ->
  * deepseek-net.js -> deepseek-intercept.js), поэтому связь идёт ровно через один контракт:
  *

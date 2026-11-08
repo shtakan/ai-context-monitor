@@ -22,7 +22,7 @@
  *
  * Исполняются РЕАЛЬНЫЕ функции: условие супрессии и блок записи базы — текстом из
  * core/content.js (не литералами теста), updateWidget — из core/widget.js, канонический
- * aiCmDiagLine + гейт — из utils/debug.js.
+ * aiCmDiagLine + гейт — из utils/debug.ts.
  */
 
 const fs = require('fs');
@@ -34,11 +34,11 @@ const CONTENT = H.contentSource;                                    // моду�
 const CONTENT_ONLY = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
 const WIDGET_SRC = H.moduleSource('core/widget.js');
 const STATE_SRC = H.moduleSource('core/state.js');
-// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+// R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
-const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
-const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
+const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
 
 const RU_MESSAGES = JSON.parse(fs.readFileSync(path.join(ROOT, '_locales', 'ru', 'messages.json'), 'utf8'));
 function i18nMock(key, fallback, substitutions) {

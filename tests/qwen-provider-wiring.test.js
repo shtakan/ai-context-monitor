@@ -77,16 +77,16 @@ describe('O-35: manifest.json — Qwen добавлен, прежние серв
       'core/content.js'].forEach(function (p) {
       expect(js).toContain(p);
     });
-    // Ph2: utils/export-emit-pipeline.js стал ESM-модулем и вшивается в content-бандл
+    // Ph2: utils/export-emit-pipeline.ts стал ESM-модулем и вшивается в content-бандл
     // статическим import'ом из core/content.js — отдельной строки в манифесте больше нет.
-    expect(js).not.toContain('utils/export-emit-pipeline.js');
+    expect(js).not.toContain('utils/export-emit-pipeline.ts');
     // Перехватчик Qwen в content_scripts НЕ дублируется: он ставится программно в MAIN-мир
     // через registerContentScripts (тот же паттерн, что у шести существующих перехватчиков).
     expect(js).not.toContain('core/qwen-intercept.js');
     expect(js).not.toContain('utils/stream-frames.ts');
-    // Ph2: utils/debug.js стал ESM-модулем и вшивается в content-бандл через import
+    // Ph2: utils/debug.ts стал ESM-модулем и вшивается в content-бандл через import
     // из core/content.js — отдельным <script> в манифесте он больше не грузится (R1).
-    expect(js).not.toContain('utils/debug.js');
+    expect(js).not.toContain('utils/debug.ts');
     // Ph2, шаг tokenizer.js: модуль переведён на ESM и втягивается import'ом из
     // core/content.js — отдельным classic-скриптом в манифесте он больше не грузится.
     expect(js).not.toContain('utils/tokenizer.ts');
@@ -118,7 +118,7 @@ describe('O-35/O-53/R2: core/background.js — регистрация перех
     expect(m[1]).toContain('core/qwen-files.js');
     expect(m[1]).toContain('core/qwen-intercept.js');
     // порядок: утилита кадров, пагинация, вложения — объявлены ПЕРЕД перехватчиком
-    expect(m[1].indexOf('utils/debug.js')).toBeLessThan(m[1].indexOf('core/qwen-pagination.js'));
+    expect(m[1].indexOf('utils/debug.ts')).toBeLessThan(m[1].indexOf('core/qwen-pagination.js'));
     // Ph2: пакет ровно из четырёх скриптов — утилита кадров больше не отдельный файл.
     expect((m[1].match(/\.js'/g) || []).length).toBe(4);
     expect(m[1].indexOf('core/qwen-pagination.js')).toBeLessThan(m[1].indexOf('core/qwen-files.js'));
@@ -387,7 +387,7 @@ describe('O-35 (G3): R-D на каждый путь записи базы Qwen',
   });
 
   test('R-пин: остальные шесть платформ в content.js/emit-пайплайне не переписаны', function () {
-    const pipeline = read('utils/export-emit-pipeline.js');
+    const pipeline = read('utils/export-emit-pipeline.ts');
     // D-O41 (пересмотр 2026-09-25): единственное знание пайплайна об именах платформ — пара
     // force-exclude сервисов внутри ЧИСТОЙ функции effectiveReasoningToggle (Qwen/DeepSeek:
     // OFF у них значит принудительное исключение reasoning, авто-ON не срабатывает).

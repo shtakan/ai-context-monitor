@@ -739,7 +739,7 @@ function lineOfIndex(src, idx) {
 function logCallLines(src) {
   const masked = lexSource(src).masked;
   const lines = {};
-  // aiCmDiagWarn — тот же логовый канал B (utils/debug.js), что и console.*: сообщение уходит
+  // aiCmDiagWarn — тот же логовый канал B (utils/debug.ts), что и console.*: сообщение уходит
   // в ring и (под гейтом) в console.warn, поэтому ru-литералы внутри него — не UI-строки
   // (Step E.2c-B2c-1: миграция content.js на aiCmDiagWarn).
   const re = /(?:debugLog|aiCmDiagWarn|\bconsole\s*\.\s*(?:log|warn|error|info|debug))\s*\(/g;

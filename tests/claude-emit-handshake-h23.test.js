@@ -72,7 +72,7 @@ beforeAll(() => {
   window.history.pushState({}, '', CHAT_URL);
   window.fetch = fakeFetch;
   global.fetch = fakeFetch;
-  // MAIN-мир получает эти глобалы из utils/debug.js (в тестах — заглушки)
+  // MAIN-мир получает эти глобалы из utils/debug.ts (в тестах — заглушки)
   global.debugLog = jest.fn();
   global.__aiCmSetDebugLogs = jest.fn();
   global.__aiCmDebugLogs = false;

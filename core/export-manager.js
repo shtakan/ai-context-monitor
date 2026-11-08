@@ -17,7 +17,7 @@
 // =============================================================================
 
 // v31: страховочная чистка перед записью экспорта истории.
-// Единая санация вынесена в utils/gemini-batchexecute-parser.js (sanitizeGeminiText):
+// Единая санация вынесена в utils/gemini-batchexecute-parser.ts (sanitizeGeminiText):
 //   strip /$AXzLiR[A-Za-z0-9+\/=\s]+/g, точную строку "File attachment was not previously
 //   registered" и /\[cite:\s*\d+\]/g. Здесь — делегирование к парсеру с локальным фолбэком
 //   на случай, если парсер ещё не загрузился.
@@ -34,13 +34,13 @@ function sanitizeGeminiText(s) {
 // ===== O-20: санация инъекций сторонних расширений на выходе экспорта =====
 // DeepSeek++ (соседнее расширение) дописывает в user-промпт memory-преамбулу и тул-схему,
 // а видимый пользователю текст оборачивает парой маркеров видимого промпта
-// (deepseek-pp-visible-user-prompt:start / :end — точные строки в utils/export-emit-pipeline.js).
+// (deepseek-pp-visible-user-prompt:start / :end — точные строки в utils/export-emit-pipeline.ts).
 // Серверная история отдаёт эти инъекции в локальный снимок, и они уезжали в файл экспорта.
 // Санация ставится в ОДНОЙ точке — на выходе aiCmCollectExportSource(): отсюда сообщения
 // берут ВСЕ четыре формата (md/json/txt из options/автоэкспорта + print-pdf) и запись
 // aiCmHistory. Ветки базы (lastBaseTexts/baseText/aiCmBasePrepared), serverTokens, turnsMap,
 // бейдж и поля tokens/percent/limit НЕ тронуты — серверная правда контекста не пересчитывается.
-// Чистые функции санации — utils/export-emit-pipeline.js (sanitizeEmitMessages).
+// Чистые функции санации — utils/export-emit-pipeline.ts (sanitizeEmitMessages).
 var aiCmSanitizeSkipLogged = {};
 // ===== O-7: тумблер «Включать reasoning и инъекции DeepSeek++ в экспорт» =====
 // aiCmIncludeHiddenInExport (chrome.storage.local, default ВЫКЛ). Решение владельца
@@ -73,7 +73,7 @@ function aiCmLogSanitizeSkip(reasons) {
 // санации экспорта печатает под гейтом aiCmDebug РОВНО то, что выбрано — значение тумблера
 // aiCmIncludeHiddenInExport (D-O41: ЭФФЕКТИВНОЕ — авто-ON при reasoning в источнике виден
 // как hidden=on), ветку (includeHiddenExportBlocks | sanitizeEmitMessages | no-pipeline) и
-// число сообщений на входе/выходе. Строка уходит каноническим хелпером utils/debug.js:aiCmDiagLine
+// число сообщений на входе/выходе. Строка уходит каноническим хелпером utils/debug.ts:aiCmDiagLine
 // (собственного вывода в консоль и собственного формата здесь нет); хелпера нет
 // (Node/срез-песочницы тестов) или гейт выключен → ни одной строки. Читаются только уже
 // посчитанные значения; сам вызов в точке входа защищён typeof-гардом, поэтому песочницы
@@ -263,7 +263,7 @@ function aiCmCollectExportSource() {
         // Claude md (ДИАГНОСТИКА — только измерение под гейтом aiCmDebug): роль сетевого снимка
         // и роль после нормализации. Маркер claude-role-* SCOPED по сайту (currentAdapter):
         // живой замер идёт по Claude-цепочке, чужие сайты строку этого маркера не получают.
-        // Канонический хелпер utils/debug.js:aiCmDiagLine; гейт выключен или хелпера нет →
+        // Канонический хелпер utils/debug.ts:aiCmDiagLine; гейт выключен или хелпера нет →
         // ни одной строки, байты выхода не меняются.
         if (typeof aiCmDiagLine === 'function' && typeof currentAdapter !== 'undefined' &&
           currentAdapter && currentAdapter.siteName === 'claude') {
@@ -1168,7 +1168,7 @@ function aiCmDeferAutoExportOnLiveStream(cid, percentage) {
 // source-песочницах тестов его нет — доступ только через typeof-гард (поведение 1:1).
 var aiCmAutoExportSkipReasonState = { reason: '' };
 // O-33: печать причины base-pending каноническим aiCmDiagLine под гейтом aiCmDebug
-// (прецедент O-27/O-32, utils/debug.js). Гейт выключен → НИ ОДНОЙ строки; функция только
+// (прецедент O-27/O-32, utils/debug.ts). Гейт выключен → НИ ОДНОЙ строки; функция только
 // читает уже посчитанные значения и на поведение/байты файла не влияет никогда.
 function aiCmAutoExportBasePendingLog(cid, percentage) {
   try {
@@ -1282,7 +1282,7 @@ function maybeAutoExport(percentage) {
     var siteName = (currentAdapter && currentAdapter.siteName) || '';
     // S2: per-site порог 'aiCmAutoExportPct_<siteName>' (например aiCmAutoExportPct_chatgpt)
     // переопределяет глобальный autoExportSettings.pct для этого сайта; отсутствует —
-    // глобальный. Кламп [1,100], финальный фолбэк 90 (utils/export-emit-pipeline.js).
+    // глобальный. Кламп [1,100], финальный фолбэк 90 (utils/export-emit-pipeline.ts).
     var perSiteThr = (typeof autoExportPctBySite === 'object' && autoExportPctBySite) ? autoExportPctBySite[siteName] : undefined;
     var threshold = (P && typeof P.effectiveAutoExportThreshold === 'function')
       ? P.effectiveAutoExportThreshold(s.pct, perSiteThr)
@@ -1296,7 +1296,7 @@ function maybeAutoExport(percentage) {
       autoExportLastPct = percentage; // v42: запоминаем для re-check после стопа лоадера
     }
     // v81 (2.5): гейты автоэкспорта вынесены в чистую shouldSkipAutoExport
-    // (utils/export-emit-pipeline.js); для Gemini порядок и смысл гейтов 1:1 прежние
+    // (utils/export-emit-pipeline.ts); для Gemini порядок и смысл гейтов 1:1 прежние
     // (v30.5 полнота сети, v42 лоадер, гистерезис −10 п.п., латч already-fired).
     var isGeminiSvc = siteName === 'gemini';
     // O-27 (b/c): факты ЧАТ-страницы GSA для гейта — признак чата в DOM (threadId снаффнут
@@ -1672,7 +1672,7 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
     var B = (typeof AiCmExportBuilders !== 'undefined') ? AiCmExportBuilders : null;
     if (!B) throw new Error('utils/export-text-builders.js не загружен');
     var fmt = (autoExportSettings.fmt === 'md') ? 'md' : ((autoExportSettings.fmt === 'json') ? 'json' : 'txt');
-    // v81 (2.6): имя файла — ТОЛЬКО через пайплайн (utils/export-emit-pipeline.js);
+    // v81 (2.6): имя файла — ТОЛЬКО через пайплайн (utils/export-emit-pipeline.ts);
     // site/модель — из текущего адаптера, не из Gemini-констант.
     var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
     var siteNameD = (currentAdapter && currentAdapter.siteName) || '';
@@ -2106,7 +2106,7 @@ function aiCmAutoExportMarkFiredInStorage(cid, reason) {
 }
 
 // ========== v2.0 (этап 1/3): UMD-экспорт модуля ==========
-// Паттерн как у utils/export-emit-pipeline.js: window.<Api> + module.exports.
+// Паттерн как у utils/export-emit-pipeline.ts: window.<Api> + module.exports.
 // Рабочий путь ничего не импортирует: content-скрипты манифеста делят один
 // глобальный лексический скоуп, поэтому объявления выше видны всем модулям и
 // content.js по прежним именам. Api — для инструментов, отладки и тестов.

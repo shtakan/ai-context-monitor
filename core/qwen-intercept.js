@@ -66,7 +66,7 @@ import { frames as framesApi, normalizeUsage, mergeUsage } from '../utils/stream
     window.addEventListener('ai-cm-debug-logs', function (ev) {
       DEBUG_LOGS = !!(ev && ev.detail);
       GATE_SEEN = true;
-      // O-35 (ДИАГНОСТИКА, только измерение): канон utils/debug.js получает флаг тем же
+      // O-35 (ДИАГНОСТИКА, только измерение): канон utils/debug.ts получает флаг тем же
       // способом, что у шести существующих перехватчиков (claude-intercept.js:18 и др.) —
       // иначе aiCmDiagOn() в MAIN-мире не увидел бы чекбокс «Подробные логи» и канонический
       // принтер молчал бы при включённом гейте. Поведение продукта не меняется.
@@ -89,7 +89,7 @@ import { frames as framesApi, normalizeUsage, mergeUsage } from '../utils/stream
   var PHASE_ANSWER = 'answer';
 
   // ===== ДИАГНОСТИКА: строки ТОЛЬКО под гейтом aiCmDebug =====
-  // Гейт — тот же, что у utils/debug.js: sessionStorage 'aiCmDebug' === '1' ИЛИ флаг
+  // Гейт — тот же, что у utils/debug.ts: sessionStorage 'aiCmDebug' === '1' ИЛИ флаг
   // window.__aiCmDebugLogs (его присылает content.js событием 'ai-cm-debug-logs').
   // Пока гейт неизвестен (событие не пришло), строки копятся в маленьком кольце и
   // печатаются ТОЛЬКО если гейт в итоге оказался включён. Выключенный гейт → ни одной
@@ -122,7 +122,7 @@ import { frames as framesApi, normalizeUsage, mergeUsage } from '../utils/stream
     try {
       var f = fields || {};
       diagLineCount++;
-      // Канон utils/debug.js:aiCmDiagLine (в MAIN-мир файл приходит первым —
+      // Канон utils/debug.ts:aiCmDiagLine (в MAIN-мир файл приходит первым —
       // core/background.js:173): тот же префикс '[AI CM][diag] ', та же форма k=v и тот же
       // гейт aiCmDebug. Хелпер может отсутствовать (срез-песочницы тестов) — тогда строчку
       // печатает локальный принтер в ТОЧНО таком же формате.
@@ -1121,7 +1121,7 @@ import { frames as framesApi, normalizeUsage, mergeUsage } from '../utils/stream
         ids.push(t.key);
         var msg = { role: 'assistant', text: t.text, reasoning: t.reasoning || '' };
         // hiddenReasoning — та же пометка, что у DeepSeek: сырой режим экспорта
-        // (utils/export-emit-pipeline.js:includeHiddenExportBlocks) читает её,
+        // (utils/export-emit-pipeline.ts:includeHiddenExportBlocks) читает её,
         // обычный режим урезает секции до [ANSWER] (stripReasoningSections).
         if (t.reasoning) { msg.hiddenReasoning = t.reasoning; reasoningTurns++; }
         messages.push(msg);

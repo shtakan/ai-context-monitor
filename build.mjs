@@ -252,7 +252,7 @@ function contentEntry(manifest) {
   // utils/platform.ts теперь импортирует core/content.js (шаг 3), поэтому в списке
   // конкатенации ему тоже не место. Фильтр держит SSOT устойчивым, даже если строку
   // случайно вернут в манифест.
-  // R1 (Ph2): utils/debug.js переведён на ESM и втягивается import'ом из
+  // R1 (Ph2): utils/debug.ts переведён на ESM и втягивается import'ом из
   // core/content.js — как строку конкатенации его больше не берём (иначе в одной
   // области видимости оказались бы и импорт, и текст модуля). В манифесте путь
   // остаётся ради SSOT-порядка; фильтр держит сборку устойчивой.
@@ -277,13 +277,13 @@ function contentEntry(manifest) {
     return (
       rel !== 'utils/buildReferenceText.ts' &&
       rel !== 'utils/platform.ts' &&
-      rel !== 'utils/debug.js' &&
+      rel !== 'utils/debug.ts' &&
       rel !== 'utils/tokenizer.ts' &&
       rel !== 'utils/model-config.ts' &&
       rel !== 'utils/export-text-builders.ts' &&
       rel !== 'utils/perplexity-parser.ts' &&
       rel !== 'utils/chatgpt-conversation-parser.ts' &&
-      rel !== 'utils/gemini-batchexecute-parser.js' &&
+      rel !== 'utils/gemini-batchexecute-parser.ts' &&
       // Ph2, шаг gemini-dom-parser.ts: модуль ESM — его втягивает статический
       // import из core/hybrid-tail.js (ISOLATED-мир). MAIN-регистраций у парсера
       // нет, поэтому classic-артефакт не выводится; как строку конкатенации не берём.
@@ -297,7 +297,7 @@ function contentEntry(manifest) {
       // import из core/content.js (единый скоуп бандла: AiCmExportEmitPipeline делят
       // core/export-manager.js, core/base-handler.js и core/content.js). MAIN-регистраций
       // нет, classic-артефакт не выводится; как строку конкатенации не берём.
-      rel !== 'utils/export-emit-pipeline.js'
+      rel !== 'utils/export-emit-pipeline.ts'
     );
   });
 }
@@ -480,7 +480,7 @@ async function classicIife(src, label, globalName) {
   return code;
 }
 // R1 (Ph2): ESM-исходник debug.js и путь, под которым его ждут runtime-регистрации.
-const DEBUG_SOURCE = 'utils/debug.js';
+const DEBUG_SOURCE = 'utils/debug.ts';
 const DEBUG_CLASSIC = 'utils/debug.js';
 
 /**
@@ -491,7 +491,7 @@ const DEBUG_CLASSIC = 'utils/debug.js';
 /**
  * dist/utils/debug.js: classic-артефакт того же модуля.
  *
- * utils/debug.js переведён на ESM, но его грузят 8 регистраций world:'MAIN' через
+ * utils/debug.ts переведён на ESM, но его грузят 8 регистраций world:'MAIN' через
  * chrome.scripting — путь резолвится в файл, а classic-скрипт не может содержать
  * export-объявления. Снять только префиксы объявлений (export function → function) —
  * весь остальной текст (ring-буфер, window-зеркала, гейты) остаётся байт-в-байт
@@ -511,7 +511,7 @@ async function writeDebugClassic() {
 
 // Ph2, шаг gemini-batchexecute-parser.js: ESM-исходник и путь, под которым его ждут
 // регистрации world:'MAIN' в core/background.js (регистрация ai-cm-gemini-intercept-v18).
-const PARSER_SOURCE = 'utils/gemini-batchexecute-parser.js';
+const PARSER_SOURCE = 'utils/gemini-batchexecute-parser.ts';
 const PARSER_CLASSIC = 'utils/gemini-batchexecute-parser.js';
 
 /**

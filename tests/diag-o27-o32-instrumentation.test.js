@@ -18,16 +18,20 @@
  *   5. O-27 (защитный фикс): в ЕДИНСТВЕННОЙ точке скачивания (downloadBlob) отказ по форме
  *      мусора/пустому имени — отказ есть поведение (файл не выдаётся), а строка
  *      `[AI CM][diag] download-blocked reason=…` печатается только под гейтом aiCmDebug
- *      (канонический хелпер utils/debug.js: aiCmDiagDownloadBlocked).
+ *      (канонический хелпер utils/debug.ts: aiCmDiagDownloadBlocked).
  */
 
 const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+// R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
-const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
+// Текстовые пины по телу хелпера читают ИСХОДНИК: печать через esbuild экранирует
+// кириллицу в \uXXXX и теряет комментарии, поэтому сравнивать «пустое» можно только
+// с сырым файлом. Песочница (makeDiag) по-прежнему получает classic-срез.
+const DEBUG_RAW = fs.readFileSync(path.join(ROOT, 'utils', 'debug.ts'), 'utf8');
 const BUILDERS_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.ts'), 'utf8');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');
@@ -335,13 +339,13 @@ describe('O-27/O-32: точки записи базы GSA — форма ход�
 // (3) Source-пины: гейт, четыре точки скачивания, отсутствие обходов
 // =====================================================================================
 describe('O-27/O-32: source-пины инструментирования', () => {
-  test('utils/debug.js: единый гейт aiCmDebug и печать только через него', () => {
+  test('utils/debug.ts: единый гейт aiCmDebug и печать только через него', () => {
     const gate = fnDecl(DEBUG_SRC, 'aiCmDiagOn');
-    expect(gate).toContain("sessionStorage.getItem('aiCmDebug') === '1'");
+    expect(gate).toContain('sessionStorage.getItem("aiCmDebug") === "1"');
     expect(gate).toContain('window.__aiCmDebugLogs === true');
     const line = fnDecl(DEBUG_SRC, 'aiCmDiagLine');
     expect(line.indexOf('aiCmDiagOn()')).toBeLessThan(line.indexOf('console.log'));
-    const dl = fnDecl(DEBUG_SRC, 'aiCmDiagDownload');
+    const dl = fnDecl(DEBUG_RAW, 'aiCmDiagDownload');
     expect(dl.indexOf('aiCmDiagOn()')).toBeLessThan(dl.indexOf('aiCmDiagLine('));
     // поля строки точки скачивания: триггер, имя файла, первые 100 символов, URL, threadId, src
     ['trigger:', 'file:', 'bytes100:', 'url:', 'threadId:', 'src:'].forEach(function (f) {
@@ -350,7 +354,7 @@ describe('O-27/O-32: source-пины инструментирования', () =
   });
 
   test('пустое имя файла печатается словом «пустое» и в каноническом, и в popup-хелпере', () => {
-    expect(fnDecl(DEBUG_SRC, 'aiCmDiagDownload')).toContain("'пустое'");
+    expect(fnDecl(DEBUG_RAW, 'aiCmDiagDownload')).toContain("'пустое'");
     expect(fnDecl(BUILDERS_SRC, 'diagDownload')).toContain("'пустое'");
   });
 
@@ -371,7 +375,7 @@ describe('O-27/O-32: source-пины инструментирования', () =
     const blocked = fnDecl(DEBUG_SRC, 'aiCmDiagDownloadBlocked');
     expect(blocked).toContain('aiCmDiagOn()');
     expect(blocked.indexOf('aiCmDiagOn()')).toBeLessThan(blocked.indexOf('aiCmDiagLine('));
-    expect(blocked).toContain("aiCmDiagLine('download-blocked'");
+    expect(blocked).toContain('aiCmDiagLine("download-blocked"');
     expect(blocked.indexOf('reason:')).toBeLessThan(blocked.indexOf('trigger:'));
     // popup/options-фолбэк: та же строка через общий DIAG_PREFIX
     const local = fnDecl(BUILDERS_SRC, 'diagDownloadBlocked');
@@ -425,7 +429,7 @@ describe('O-27/O-32: source-пины инструментирования', () =
     expect(fnDecl(INTERCEPT_SRC, 'activateThread')).toContain("typeof gsaDiagState === 'function'");
     expect(fnDecl(INTERCEPT_SRC, 'gsaDiagBaseWrite')).toContain("typeof aiCmDiagOn !== 'function'");
     expect(fnDecl(INTERCEPT_SRC, 'gsaDiagState')).toContain("typeof aiCmDiagOn !== 'function'");
-    // content-сторона: новые вызовы не ломают песочницы без utils/debug.js
+    // content-сторона: новые вызовы не ломают песочницы без utils/debug.ts
     expect(fnDecl(CONTENT, 'aiCmGsaDiagState')).toContain("typeof aiCmDiagLine === 'function'");
     expect(fnDecl(CONTENT, 'aiCmGsaResetStaleStateOnChatlessDoc')).toContain('resetConversationState()');
   });

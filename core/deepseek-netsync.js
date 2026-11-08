@@ -40,7 +40,7 @@
 // и порядок ходов в файле перестал бы расти.
 //
 // Порядок подключения (core/background.js, registerSafe 'ai-cm-deepseek-intercept-v4',
-// document_start, world MAIN): utils/debug.js -> core/deepseek-diag.js -> ЭТОТ ФАЙЛ ->
+// document_start, world MAIN): utils/debug.ts -> core/deepseek-diag.js -> ЭТОТ ФАЙЛ ->
 // core/deepseek-intercept.js. До связки на window.AiCmDeepseekNetsync лежит только
 // __bind; после связки Fn заполнен 5 функциями, а ядро раздаёт 2 из них
 // форвардерами по прежним именам (liveTurnRecord, netSyncNeeded — function

@@ -55,7 +55,7 @@ function commonSource() {
     '};',
   ].join('\n');
   let src = read(COMMON_REL).replace(
-    /^[ \t]*import\s*\{[^}]*\}\s*from\s*['"][^'"]*debug\.js['"];?[ \t]*$/m,
+    /^[ \t]*import\s*\{[^}]*\}\s*from\s*['"][^'"]*debug\.(?:js|ts)['"];?[ \t]*$/m,
     bridge
   );
   // Директива относится к import'у, который мы только что убрали.

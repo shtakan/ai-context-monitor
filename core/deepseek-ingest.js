@@ -78,7 +78,7 @@
 // форвардеры D.4, emitBaseSnapshot — форвардер D.6. Итого 15 fn.
 //
 // Порядок подключения (core/background.js, registerSafe 'ai-cm-deepseek-intercept-v10',
-// document_start, world MAIN): utils/debug.js -> core/deepseek-diag.js ->
+// document_start, world MAIN): utils/debug.ts -> core/deepseek-diag.js ->
 // core/deepseek-netsync.js -> core/deepseek-refetch.js -> core/deepseek-parse.js ->
 // core/deepseek-conv.js -> core/deepseek-emit.js -> core/deepseek-net.js -> ЭТОТ ФАЙЛ ->
 // core/deepseek-intercept.js. До связки на window.AiCmDeepseekIngest лежит только __bind;

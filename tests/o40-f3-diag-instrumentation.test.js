@@ -8,7 +8,7 @@
  * 'o40-bds-line k=1166 firstLine=0 pair=1195 lastLine=1212 form=(нет)
  * skip=pair-not-whole-message' — пара тегов есть, но обёртывает НЕ целое сообщение.
  *
- * ФИКС (utils/export-emit-pipeline.js, ветка «Тег без измеренной формы»): если пара найдена,
+ * ФИКС (utils/export-emit-pipeline.ts, ветка «Тег без измеренной формы»): если пара найдена,
  * снимаются РОВНО строки тегов — и когда пара обёртывает целое сообщение, и когда лежит ВНУТРИ
  * сообщения (текст до открывающего тега и хвост после закрывающего — байтово). Причина пропуска
  * 'pair-not-whole-message' у этой ветки БОЛЬШЕ НЕ СУЩЕСТВУЕТ; D2 ниже пинован ПОСЛЕ фикса.
@@ -22,7 +22,7 @@
  *       точка входа печатает значение тумблера aiCmIncludeHiddenInExport, выбранную ветку и
  *       числа msgsIn/msgsOut.
  *   R — без гейта НИ ОДНОЙ строки; байты выхода (сообщения и blob txt/md/json) при гейте
- *       вкл/выкл идентичны; печать идёт ТОЛЬКО каноническим хелпером utils/debug.js
+ *       вкл/выкл идентичны; печать идёт ТОЛЬКО каноническим хелпером utils/debug.ts
  *       (aiCmDiagLine) — своего формата/консоли в инструментировании нет; вызовы в чужом
  *       коде защищены typeof-гардом (срез-песочницы без хелпера видят прежнее поведение 1:1);
  *       регресс существующего набора O-40 (tests/deepseek-o40-better-deepseek-sanitation.test.js)
@@ -32,7 +32,7 @@
  *   o40-emit-entry — точка входа aiCmSanitizeEmitUserTexts (core/export-manager.js):
  *                    hidden=on|off, branch=includeHiddenExportBlocks|sanitizeEmitMessages|
  *                    no-pipeline, msgsIn, msgsOut;
- *   o40-emit-msg   — sanitizeEmitMessages (utils/export-emit-pipeline.js) на КАЖДОЕ сообщение:
+ *   o40-emit-msg   — sanitizeEmitMessages (utils/export-emit-pipeline.ts) на КАЖДОЕ сообщение:
  *                    i, len текста на входе O-40, head/tail по 40 символов (JSON-escaped),
  *                    called (факт вызова sanitizeBetterDeepSeekText), removed;
  *   o40-bds-line   — sanitizeBetterDeepSeekText на КАЖДУЮ строку-кандидат с открывающим тегом:
@@ -45,16 +45,16 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
 
 const ROOT = path.join(__dirname, '..');
-const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
+const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
-// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+// R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
-const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
 
 const PREFIX = '[AI CM][diag] ';
 const TAG_ENTRY = 'o40-emit-entry';
@@ -107,7 +107,7 @@ const F3_LAST = F3.split('\n').length - 1;                 // 3
 const LIVE_LAST = LIVE_F3.split('\n').length - 1;          // 7
 
 // =====================================================================================
-// Канонический гейт: РЕАЛЬНЫЕ aiCmDiagOn/aiCmDiagLine из utils/debug.js, объявленные в
+// Канонический гейт: РЕАЛЬНЫЕ aiCmDiagOn/aiCmDiagLine из utils/debug.ts, объявленные в
 // песочнице как в контент-скрипте (общий глобальный мир; sessionStorage aiCmDebug / чекбокс
 // window.__aiCmDebugLogs). Пайплайн (require) ищет aiCmDiagLine свободным идентификатором.
 // =====================================================================================

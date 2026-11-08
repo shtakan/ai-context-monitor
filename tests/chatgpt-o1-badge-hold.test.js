@@ -27,7 +27,7 @@
  *   P2a начальный плейсхолдер разметки виджета — «—» (не DOM-догадка 0.0%), новых
  *      состояний и индикаторов «загрузка» не введено.
  *
- * Исполняются РЕАЛЬНЫЕ функции: utils/debug.js (канонический aiCmDiagLine + гейт),
+ * Исполняются РЕАЛЬНЫЕ функции: utils/debug.ts (канонический aiCmDiagLine + гейт),
  * core/content.js (щит: aiCmBadgeHoldDiag/Release/Active/ArmBadgeHoldFallback),
  * core/widget.js (updateWidget — единственная печать badge-update, createWidget,
  * resetConversationState). DRAW-исполнитель воспроизводит ветвление processAndSend
@@ -42,17 +42,17 @@ const H = require('./helpers/content-source.js');
 const CONTENT = H.contentSource;
 const WIDGET_SRC = H.moduleSource('core/widget.js');
 
-// E.2a.2b.4b: хелпер swallow из utils/debug.js (его нет в eval-песочнице: срез
+// E.2a.2b.4b: хелпер swallow из utils/debug.ts (его нет в eval-песочнице: срез
 // исполняется через new Function/eval; в MAIN-инжекте debug.js идёт первым).
 global.swallow = function () { };
-// Step E.2c-B2b-3b (swallowSoft): канал B из utils/debug.js — вне eval-песочницы так же, как swallow.
+// Step E.2c-B2b-3b (swallowSoft): канал B из utils/debug.ts — вне eval-песочницы так же, как swallow.
 global.swallowSoft = function () { };
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
-const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
+const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
 const BUILDERS_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.ts'), 'utf8');
-// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+// R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
-const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
 
 // Рез по балансу фигурных скобок (как в tests/diag-o27-o32-instrumentation.test.js).
 function fnDecl(src, name) {
@@ -499,7 +499,7 @@ describe('O-1 R3: автоэкспорт не тронут', () => {
 // =====================================================================================
 describe('O-1 R4: регресс-маркеры соседних задач на месте', () => {
   test('R4: O-11 (латч/имена), O-31 (сегментация), O-27 (гарды), экспорт-байты', () => {
-    const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+    const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
     expect(typeof P.latchKey).toBe('function');                    // O-11
     expect(typeof P.disambiguateFileName).toBe('function');        // O-11
     expect(typeof P.shouldSkipAutoExport).toBe('function');        // O-11/O-27
@@ -508,7 +508,7 @@ describe('O-1 R4: регресс-маркеры соседних задач на
     expect(fnDecl(CONTENT, 'aiCmGsaResetStaleStateOnChatlessDoc')).toContain('resetConversationState()');
     expect(fnDecl(BUILDERS_SRC, 'downloadBlockReason')).toContain("return 'xssi-prefix';"); // O-27
     expect(fnDecl(BUILDERS_SRC, 'downloadBlob')).toContain('new Blob([content], { type: mimeType })');
-    expect(fnDecl(DEBUG_SRC, 'aiCmDiagDownloadBlocked')).toContain("aiCmDiagLine('download-blocked'");
+    expect(fnDecl(DEBUG_SRC, 'aiCmDiagDownloadBlocked')).toContain('aiCmDiagLine("download-blocked"');
   });
 });
 
@@ -547,7 +547,7 @@ describe('O-1 R5: диагностика щита под гейтом aiCmDebug'
       expect(src).toContain(r);
     });
     // гейт берётся из канонического aiCmDiagOn (sessionStorage aiCmDebug === '1' / чекбокс)
-    expect(fnDecl(DEBUG_SRC, 'aiCmDiagOn')).toContain("sessionStorage.getItem('aiCmDebug') === '1'");
+    expect(fnDecl(DEBUG_SRC, 'aiCmDiagOn')).toContain('sessionStorage.getItem("aiCmDebug") === "1"');
   });
 
   test('R5: одноразовость на документ и снятая жёсткая семантика 2500 мс', () => {

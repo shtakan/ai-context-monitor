@@ -22,65 +22,70 @@
  * PARSER_VERSION — версия логики парсинга (экспортируется для диагностики).
  */
 
-import { swallowSoft } from './debug.js';
+import { swallowSoft } from './debug.ts';
 
 /**
  * Сообщение хода, собранное из turn. Текст лежит в content (сетевой ключ, не text).
- * @typedef {Object} GeminiTurnEntry
- * @property {string} role Роль сообщения: user/assistant.
- * @property {string} content Текст сообщения.
- * @property {string} model Модель хода ('' если не найдена).
- * @property {string} id Идентификатор сообщения (turnId_role).
- * @property {number} ts Время хода в секундах (0 если нет).
- * @property {string|null} r1 id соседа НОВЕЕ (связный список порядка).
  */
+export interface GeminiTurnEntry {
+  role: string; // Роль сообщения: user/assistant.
+  content: string; // Текст сообщения.
+  model: string; // Модель хода ('' если не найдена).
+  id: string; // Идентификатор сообщения (turnId_role).
+  ts: number; // Время хода в секундах (0 если нет).
+  r1: string | null; // id соседа НОВЕЕ (связный список порядка).
+}
 
 /**
  * Сообщение итоговой истории Gemini; по role/text совместимо с ExportMessage
  * (types/export.d.ts).
- * @typedef {Object} GeminiHistoryMessage
- * @property {string} role Роль: user/assistant.
- * @property {string} text Текст сообщения.
- * @property {string} model Модель хода ('' если не найдена).
- * @property {string} id Идентификатор сообщения.
- * @property {number} ts Время хода в секундах.
- * @property {string|null} r1 id соседа НОВЕЕ.
  */
+export interface GeminiHistoryMessage {
+  role: string; // Роль: user/assistant.
+  text: string; // Текст сообщения.
+  model: string; // Модель хода ('' если не найдена).
+  id: string; // Идентификатор сообщения.
+  ts: number; // Время хода в секундах.
+  r1: string | null; // id соседа НОВЕЕ.
+}
 
 /**
  * Результат parseGeminiHistory.
- * @typedef {Object} GeminiHistoryResult
- * @property {GeminiHistoryMessage[]} messages Сообщения в хронологическом порядке.
- * @property {string} model Модель (фолбэк 'Gemini 2.5 Pro').
- * @property {number} tokens Оценка токенов: ceil(символы / 4).
- * @property {string} text Все тексты через перевод строки.
- * @property {number} count Число сообщений.
  */
+export interface GeminiHistoryResult {
+  messages: GeminiHistoryMessage[]; // Сообщения в хронологическом порядке.
+  model: string; // Модель (фолбэк 'Gemini 2.5 Pro').
+  tokens: number; // Оценка токенов: ceil(символы / 4).
+  text: string; // Все тексты через перевод строки.
+  count: number; // Число сообщений.
+}
 
 /**
  * Нормализованное вложение хода Gemini.
- * @typedef {Object} GeminiFileRef
- * @property {string} name Имя файла.
- * @property {string} mime MIME-тип ('' если нет).
- * @property {number} type Код типа: 1=image, 10=docx, 11=pdf.
- * @property {string} token Токен файла.
- * @property {string} img CDN-ссылка изображения ('' для документов).
- * @property {string} dl Ссылка скачивания ('' если нет).
- * @property {string[]} urls Все строковые ссылки узла.
- * @property {boolean} isImage true — изображение (type=1 или mime image/*).
- * @property {number} [size] Размер в байтах (не задан — ещё неизвестен).
- * @property {number} [pos] Позиция узла в накопительном пуле хода (0…).
  */
+export interface GeminiFileRef {
+  name: string; // Имя файла.
+  mime: string; // MIME-тип ('' если нет).
+  type: number; // Код типа: 1=image, 10=docx, 11=pdf.
+  token: string; // Токен файла.
+  img: string; // CDN-ссылка изображения ('' для документов).
+  dl: string; // Ссылка скачивания ('' если нет).
+  urls: string[]; // Все строковые ссылки узла.
+  isImage: boolean; // true — изображение (type=1 или mime image/*).
+  size?: number; // Размер в байтах (не задан — ещё неизвестен).
+  pos?: number; // Позиция узла в накопительном пуле хода (0…).
+}
 
 /**
  * Тексты Deep Research, извлечённые из хода.
- * @typedef {Object} GeminiDrTexts
- * @property {string} planText Текст плана ('' если не найден).
- * @property {string} reportText Текст отчёта ('' если не найден).
  */
+export interface GeminiDrTexts {
+  planText: string; // Текст плана ('' если не найден).
+  reportText: string; // Текст отчёта ('' если не найден).
+}
 
-/** @type {string} Версия логики парсинга (экспортируется для диагностики). */
-export var PARSER_VERSION = 'g3';
+/** Версия логики парсинга (экспортируется для диагностики). */
+export var PARSER_VERSION: string = 'g3';
 
 /**
  * Локальный лог-хелпер «вершины» JSON.parse сегментов. Чистый модуль без debugLog —
@@ -89,7 +94,7 @@ export var PARSER_VERSION = 'g3';
  * @param {string} where Метка места вызова.
  * @returns {void}
  */
-function logSegmentParseFail(e, where) {
+function logSegmentParseFail(e: any, where: string): void {
   try {
     console.log('[AI CM][batchexecute] segment parse fail ' + where + ': ' + (e && e.message || e));
   } catch (e2) { /* проглат сохранён */ }
@@ -104,7 +109,7 @@ var ATTACH_TOKEN_RE = /\$AXzLiR[A-Za-z0-9+\/=]+/g;
  * @param {string} s Текст с токенами вложений.
  * @returns {string} Текст без токенов.
  */
-export function stripAttachmentTokens(s) {
+export function stripAttachmentTokens(s: string): string {
   if (typeof s !== 'string') return s;
   return s.replace(ATTACH_TOKEN_RE, ' ').replace(/[ \t\f\v]+/g, ' ');
 }
@@ -115,7 +120,7 @@ export function stripAttachmentTokens(s) {
  * @param {string} s Сырой текст сегмента.
  * @returns {string} Санированный текст.
  */
-export function sanitizeGeminiText(s) {
+export function sanitizeGeminiText(s: string): string {
   if (typeof s !== 'string') return s;
   return s
     .replace(/\$AXzLiR[A-Za-z0-9+\/=\s]+/g, ' ')
@@ -125,17 +130,17 @@ export function sanitizeGeminiText(s) {
 
 // ---- фильтры мусора ----
 /** @param {unknown} s Проверяемое значение. @returns {boolean} true — похоже на внутренний id. */
-function isIdLike(s) { return typeof s === 'string' && /^(c_|r_|rc_|fbb[0-9a-f]|[0-9a-f]{16})/.test(s); }
+function isIdLike(s: unknown): boolean { return typeof s === 'string' && /^(c_|r_|rc_|fbb[0-9a-f]|[0-9a-f]{16})/.test(s); }
 /** @param {unknown} s Проверяемое значение. @returns {boolean} true — похоже на имя файла. */
-function isFileLike(s) { return typeof s === 'string' && /\.(pdf|png|jpe?g|gif|docx?|txt|webp|csv|xlsx?)(\b|$)/i.test(s); }
+function isFileLike(s: unknown): boolean { return typeof s === 'string' && /\.(pdf|png|jpe?g|gif|docx?|txt|webp|csv|xlsx?)(\b|$)/i.test(s); }
 /** @param {unknown} s Проверяемое значение. @returns {boolean} true — похоже на URL. */
-function isUrlLike(s) { return typeof s === 'string' && /^https?:\/\//i.test(s); }
+function isUrlLike(s: unknown): boolean { return typeof s === 'string' && /^https?:\/\//i.test(s); }
 /** @param {unknown} s Проверяемое значение. @returns {boolean} true — похоже на токен ($?AVuib…). */
-function isTokenLike(s) { return typeof s === 'string' && /^\$?AVuib/.test(s); }
+function isTokenLike(s: unknown): boolean { return typeof s === 'string' && /^\$?AVuib/.test(s); }
 /** @param {unknown} s Проверяемое значение. @returns {boolean} true — похоже на MIME-тип. */
-function isMimeLike(s) { return typeof s === 'string' && /^(image|application|video|audio)\//i.test(s); }
-/** @type {Record<string, number>} UI-строки и служебные значения, не являющиеся контентом. */
-var UI_BLACKLIST = {
+function isMimeLike(s: unknown): boolean { return typeof s === 'string' && /^(image|application|video|audio)\//i.test(s); }
+/** UI-строки и служебные значения, не являющиеся контентом. */
+var UI_BLACKLIST: Record<string, number> = {
   'DE': 1, 'ru': 1, 'mk': 1, 'generic': 1, 'personal_context': 1, 'google': 1,
   'Ищу в интернете': 1, 'Персональный контекст': 1, 'Google Search': 1, 'true': 1, 'false': 1
 };
@@ -144,7 +149,7 @@ var UI_BLACKLIST = {
  * @param {unknown} s Проверяемый сегмент.
  * @returns {boolean} true — сегмент не является контентом.
  */
-function isJunk(s) {
+function isJunk(s: unknown): boolean {
   if (typeof s !== 'string') return true;
   var t = s.trim();
   if (t.length === 0) return true;
@@ -160,7 +165,7 @@ function isJunk(s) {
  * @param {unknown} s Кандидат в вопрос.
  * @returns {boolean} true — кандидат непригоден как вопрос.
  */
-function isUserQuestionJunk(s) {
+function isUserQuestionJunk(s: unknown): boolean {
   if (typeof s !== 'string') return true;
   var t = s.trim();
   if (!t) return true;
@@ -191,7 +196,7 @@ var FILE_ATTACHMENT_RE = /File attachment was not previously registered/;
  * @param {string} s Проверяемая строка.
  * @returns {boolean} true — кириллица найдена.
  */
-function hasCyrillic(s) {
+function hasCyrillic(s: string): boolean {
   for (var i = 0; i < s.length; i++) {
     var c = s.charCodeAt(i);
     if (c >= 0x0400 && c <= 0x04FF) return true;
@@ -205,7 +210,7 @@ function hasCyrillic(s) {
  * @param {unknown} s Проверяемый сегмент.
  * @returns {boolean} true — сегмент открывает блок мышления.
  */
-function isThinkingStart(s) {
+function isThinkingStart(s: unknown): boolean {
   if (typeof s !== 'string') return false;
   var t = s.trim();
   if (!t) return false;
@@ -224,7 +229,7 @@ function isThinkingStart(s) {
  * @param {unknown} s Проверяемый сегмент.
  * @returns {boolean} true — сегмент завершает блок мышления.
  */
-function isResponseSegment(s) {
+function isResponseSegment(s: unknown): boolean {
   if (typeof s !== 'string') return false;
   var t = s.trim();
   if (!t) return false;
@@ -243,7 +248,7 @@ function isResponseSegment(s) {
  * @param {number} depth Текущая глубина рекурсии (защита от переполнения).
  * @returns {boolean} true — голова узла является маркером мышления.
  */
-function headIsThinking(node, depth) {
+function headIsThinking(node: any, depth: number): boolean {
   if (typeof node === 'string') return isThinkingStart(node);
   if (Array.isArray(node)) {
     if (depth > 4) return false;
@@ -256,7 +261,7 @@ function headIsThinking(node, depth) {
  * @param {any} node Проверяемый узел.
  * @returns {boolean} true — узел является блоком мышления.
  */
-function isThoughtBlock(node) {
+function isThoughtBlock(node: unknown): boolean {
   if (!Array.isArray(node)) return false;
   return headIsThinking(node[0], 0);
 }
@@ -271,7 +276,7 @@ function isThoughtBlock(node) {
  * @param {{inThinking: boolean}} [state] Состояние прохода (создаётся при отсутствии).
  * @returns {void}
  */
-export function collectTurnText(node, out, state) {
+export function collectTurnText(node: any, out: string[], state?: { inThinking: boolean }): void {
   state = state || { inThinking: false };
   if (typeof node === 'string') {
     var s = sanitizeGeminiText(node);
@@ -302,7 +307,7 @@ export function collectTurnText(node, out, state) {
  * @param {any} turn Ход batchexecute.
  * @returns {string} Текст вопроса или '' (нет/мусор/похоже на мышление).
  */
-function extractUserQuestion(turn) {
+function extractUserQuestion(turn: any): string {
   var q = '';
   try { q = turn[2][0][0]; } catch (e) { q = ''; }
   if (typeof q === 'string') {
@@ -320,7 +325,7 @@ var MODEL_NAME_RE = /^\s*(?:Gemini\s*[\d.]?|\d+(?:\.\d+)?\s+(?:Flash|Pro|Ultra|G
  * @param {any} node Узел хода.
  * @returns {string} Имя модели или ''.
  */
-function extractModelName(node) {
+function extractModelName(node: any): string {
   var found = null;
   (function walk(n) {
     if (found) return;
@@ -333,9 +338,9 @@ function extractModelName(node) {
 /**
  * Идентификатор хода (первая строка вида r_<hex>).
  * @param {any} node Узел хода.
- * @returns {string|null} id хода или null.
+ * @returns {string | null} id хода или null.
  */
-function extractTurnId(node) {
+function extractTurnId(node: any): string | null {
   var found = null;
   (function walk(n) {
     if (found) return;
@@ -347,9 +352,9 @@ function extractTurnId(node) {
 /**
  * r1 = id соседа НОВЕЕ (подтверждено логами idmap: t[1][1]).
  * @param {any} t Ход batchexecute.
- * @returns {string|null} id более нового хода или null.
+ * @returns {string | null} id более нового хода или null.
  */
-function extractTurnR1(t) {
+function extractTurnR1(t: any): string | null {
   try {
     if (Array.isArray(t) && Array.isArray(t[1]) && typeof t[1][1] === 'string') return t[1][1];
   } catch (e) { }
@@ -360,7 +365,7 @@ function extractTurnR1(t) {
  * @param {any} t Ход batchexecute.
  * @returns {number} Секунды эпохи или 0 (нет/некорректно).
  */
-function extractTurnTs(t) {
+function extractTurnTs(t: any): number {
   try {
     if (Array.isArray(t) && Array.isArray(t[4]) && typeof t[4][0] === 'number' && t[4][0] > 1000000000) return t[4][0];
   } catch (e) { }
@@ -376,7 +381,7 @@ function extractTurnTs(t) {
  * @param {any} n Узел вложения из turn[2][0][4][0][4].
  * @returns {GeminiFileRef|null} ref вложения или null (не массив / нет имени).
  */
-export function fileRefFromNode(n) {
+export function fileRefFromNode(n: any): GeminiFileRef | null {
   try {
     if (!Array.isArray(n)) return null;
     var name = (typeof n[2] === 'string') ? n[2].trim() : '';
@@ -425,7 +430,7 @@ export function fileRefFromNode(n) {
  * @param {any} turn Ход batchexecute.
  * @returns {GeminiFileRef[]} Нормализованные вложения (пусто, если их нет).
  */
-export function collectTurnFiles(turn) {
+export function collectTurnFiles(turn: any): GeminiFileRef[] {
   var out = [];
   try {
     var arr = turn[2][0][4][0][4];
@@ -443,13 +448,20 @@ export function collectTurnFiles(turn) {
 
 /**
  * Запись пула хода: снимок накопительного списка.
- * @typedef {Object} GeminiFilePoolTurn
- * @property {string} turnId Id хода.
- * @property {number} ts Время хода (0 = неизвестно).
- * @property {number} order Хронологический индекс (-1 = неизвестно).
- * @property {number} seq Порядок регистрации в реестре.
- * @property {GeminiFileRef[]} [refs] Полный пул хода (нет до регистрации).
  */
+export interface GeminiFilePoolTurn {
+  turnId: string; // Id хода.
+  ts: number; // Время хода (0 = неизвестно).
+  order: number; // Хронологический индекс (-1 = неизвестно).
+  seq: number; // Порядок регистрации в реестре.
+  refs?: GeminiFileRef[]; // Полный пул хода (нет до регистрации).
+}
+
+/** Реестр пулов вложений одного разговора. */
+export interface GeminiFilePool {
+  turns: Record<string, GeminiFilePoolTurn>; // Ходы по turnId.
+  seq: number; // Сквозной счётчик регистраций.
+}
 
 /**
  * Реестр пулов вложений по разговору:
@@ -465,16 +477,15 @@ export function collectTurnFiles(turn) {
  * одна и та же загрузка, вернувшаяся в другом ответе с новым токеном, не
  * превращается в дубль, а две загрузки с одинаковым именем сидят на разных
  * позициях и остаются разными файлами.
- * @type {Record<string, {turns: Record<string, GeminiFilePoolTurn>, seq: number}>}
  */
-var filePoolsByConv = {};
+var filePoolsByConv: Record<string, GeminiFilePool> = {};
 
 /**
  * Нормализует timestamp хода: нечисло/0/отрицательное → 0 (неизвестно).
  * @param {unknown} ts Время хода.
  * @returns {number} Секунды эпохи или 0.
  */
-function fileOwnerTs(ts) {
+function fileOwnerTs(ts: unknown): number {
   return (typeof ts === 'number' && isFinite(ts) && ts > 0) ? ts : 0;
 }
 
@@ -483,7 +494,7 @@ function fileOwnerTs(ts) {
  * @param {unknown} order Индекс хода.
  * @returns {number} Неотрицательный индекс или -1.
  */
-function fileOwnerOrder(order) {
+function fileOwnerOrder(order: unknown): number {
   return (typeof order === 'number' && isFinite(order) && order >= 0) ? order : -1;
 }
 
@@ -493,7 +504,7 @@ function fileOwnerOrder(order) {
  * @param {boolean=} create Создать запись, если её нет.
  * @returns {{turns: Record<string, GeminiFilePoolTurn>, seq: number}|null} Пул.
  */
-function filePoolForConv(convId, create) {
+function filePoolForConv(convId: unknown, create?: boolean): GeminiFilePool | null {
   var cid = (typeof convId === 'string') ? convId : '';
   var pool = filePoolsByConv[cid];
   if (!pool && create) {
@@ -509,7 +520,7 @@ function filePoolForConv(convId, create) {
  * @param {GeminiFileRef} ref Нормализованный ref вложения.
  * @returns {string} Имя записи.
  */
-function fileRefPoolName(ref) {
+function fileRefPoolName(ref: GeminiFileRef | null): string {
   return (ref && typeof ref.name === 'string') ? ref.name : '';
 }
 
@@ -519,7 +530,7 @@ function fileRefPoolName(ref) {
  * @param {GeminiFileRef[]} b Второй пул.
  * @returns {number} Число совпавших с начала записей.
  */
-function poolSharedPrefixLen(a, b) {
+function poolSharedPrefixLen(a: GeminiFileRef[], b: GeminiFileRef[]): number {
   var n = Math.min(a.length, b.length);
   var k = 0;
   while (k < n && fileRefPoolName(a[k]) === fileRefPoolName(b[k])) k++;
@@ -534,7 +545,7 @@ function poolSharedPrefixLen(a, b) {
  * @param {GeminiFilePoolTurn} b Второй ход.
  * @returns {boolean} true, если `a` хронологически раньше `b`.
  */
-function isTurnBefore(a, b) {
+function isTurnBefore(a: GeminiFilePoolTurn, b: GeminiFilePoolTurn): boolean {
   var aTs = fileOwnerTs(a.ts);
   var bTs = fileOwnerTs(b.ts);
   if (aTs > 0 && bTs > 0 && aTs !== bTs) return aTs < bTs;
@@ -569,7 +580,7 @@ function isTurnBefore(a, b) {
  * @param {GeminiFileRef} ref Нормализованный ref вложения.
  * @returns {string} Ключ идентичности.
  */
-export function fileRefIdentityKey(ref) {
+export function fileRefIdentityKey(ref: GeminiFileRef | null): string {
   var name = (ref && typeof ref.name === 'string') ? ref.name : '';
   var size = (ref && typeof ref.size === 'number' && isFinite(ref.size)) ? ref.size : 0;
   return name + '|' + size;
@@ -583,7 +594,7 @@ export function fileRefIdentityKey(ref) {
  * @param {GeminiFileRef} ref Нормализованный ref вложения.
  * @returns {string} Ключ мультимножества.
  */
-function fileOwnerKey(convId, ref) {
+function fileOwnerKey(convId: unknown, ref: GeminiFileRef | null): string {
   var cid = (typeof convId === 'string') ? convId : '';
   return cid + '|' + fileRefIdentityKey(ref);
 }
@@ -601,7 +612,7 @@ function fileOwnerKey(convId, ref) {
  * @param {number=} order Хронологический индекс (0 = самый старый).
  * @returns {number} Сколько файлов в пуле хода.
  */
-export function registerTurnFileOwner(turn, convId, turnId, ts, order) {
+export function registerTurnFileOwner(turn: any, convId: string, turnId: string, ts?: number, order?: number): number {
   var own = (typeof turnId === 'string') ? turnId : '';
   if (!own) return 0;
   var all = collectTurnFiles(turn);
@@ -635,7 +646,7 @@ export function registerTurnFileOwner(turn, convId, turnId, ts, order) {
  * @param {GeminiFileRef[]} all Текущий пул.
  * @returns {GeminiFilePoolTurn|null} Предшественник или null.
  */
-function previousPoolTurn(pool, rec, all) {
+function previousPoolTurn(pool: GeminiFilePool, rec: GeminiFilePoolTurn, all: GeminiFileRef[]): GeminiFilePoolTurn | null {
   var ids = Object.keys(pool.turns);
   var chrono = null;
   var i;
@@ -673,7 +684,7 @@ function previousPoolTurn(pool, rec, all) {
  * @param {GeminiFileRef[]} all Текущий пул.
  * @returns {GeminiFileRef[]} Собственные файлы хода в порядке пула.
  */
-function poolDelta(prevRefs, all) {
+function poolDelta(prevRefs: GeminiFileRef[], all: GeminiFileRef[]): GeminiFileRef[] {
   var k = poolSharedPrefixLen(prevRefs, all);
   if (k === prevRefs.length || k === all.length) return all.slice(k);
   var spent = {};
@@ -706,7 +717,7 @@ function poolDelta(prevRefs, all) {
  *   хронологическом порядке (старые→новые).
  * @returns {Array<{id: string, own: GeminiFileRef[]}>} Собственные вложения.
  */
-export function assignPoolOwners(turns) {
+export function assignPoolOwners(turns: Array<{ id: string, refs: GeminiFileRef[] }>): Array<{ id: string, own: GeminiFileRef[] }> {
   var list = Array.isArray(turns) ? turns : [];
   var out = [];
   var prevPool = [];
@@ -735,7 +746,7 @@ export function assignPoolOwners(turns) {
  * @param {number=} order Хронологический индекс (0 = самый старый).
  * @returns {GeminiFileRef[]} Файлы, загруженные в этом ходе.
  */
-export function collectTurnFilesForOwner(turn, convId, ownerId, ts, order) {
+export function collectTurnFilesForOwner(turn: any, convId: string, ownerId: string, ts?: number, order?: number): GeminiFileRef[] {
   var all = collectTurnFiles(turn);
   var own = (typeof ownerId === 'string') ? ownerId : '';
   if (!own) return all;
@@ -761,7 +772,7 @@ export function collectTurnFilesForOwner(turn, convId, ownerId, ts, order) {
  * @param {string=} convId Разговор; без него чистится весь реестр.
  * @returns {void}
  */
-export function __resetFileOwners(convId) {
+export function __resetFileOwners(convId?: string): void {
   if (convId === undefined || convId === null || convId === '') {
     filePoolsByConv = {};
     return;
@@ -783,7 +794,7 @@ var LEADING_THINKING_RE = /^\s*\*?\*?([A-Z][a-z]+ing\b|I'm|I've|My (focus|goal)|
  * @param {unknown} s Проверяемый текст ответа.
  * @returns {boolean} true — блок целиком является мышлением.
  */
-export function isThinkingAssistant(s) {
+export function isThinkingAssistant(s: unknown): boolean {
   if (typeof s !== 'string') return false;
   var t = s.trim();
   if (!t) return false;
@@ -796,7 +807,7 @@ export function isThinkingAssistant(s) {
  * @param {string} s Проверяемая строка.
  * @returns {number} Индекс символа или -1.
  */
-export function firstCyrillicIndex(s) {
+export function firstCyrillicIndex(s: string): number {
   for (var i = 0; i < s.length; i++) {
     var c = s.charCodeAt(i);
     if (c >= 0x0400 && c <= 0x04FF) return i;
@@ -810,7 +821,7 @@ export function firstCyrillicIndex(s) {
  * @param {string} s Текст ответа.
  * @returns {string} Текст без ведущего мышления ('' — мышление целиком).
  */
-export function stripLeadingThinking(s) {
+export function stripLeadingThinking(s: string): string {
   if (typeof s !== 'string') return s;
   var t = s.trim();
   if (!LEADING_THINKING_RE.test(t)) return s;
@@ -827,7 +838,7 @@ export function stripLeadingThinking(s) {
  * @param {unknown} t Проверяемый текст сегмента.
  * @returns {boolean} true — в сегменте есть markdown-разметка.
  */
-function hasMarkdownMarkup(t) {
+function hasMarkdownMarkup(t: unknown): boolean {
   if (typeof t !== 'string') return false;
   if (/\*\*[^*\n]+\*\*/.test(t)) return true; // **жирный**
   if (/^\s*#{1,6}\s/m.test(t)) return true;   // заголовок
@@ -846,7 +857,7 @@ function hasMarkdownMarkup(t) {
  * @param {string[]} parts Санированные сегменты ответа.
  * @returns {string} Канонический текст ('' для пустого списка).
  */
-function pickCanonicalAnswer(parts) {
+function pickCanonicalAnswer(parts: string[]): string {
   if (!parts || !parts.length) return '';
   for (var i = 0; i < parts.length; i++) {
     if (hasMarkdownMarkup(parts[i])) return parts[i];
@@ -867,7 +878,7 @@ function pickCanonicalAnswer(parts) {
  * @returns {{text: string, isFallback: boolean}} Текст ответа и признак fallback-пути
  *   (isFallback=true — текст добыт через collectTurnText).
  */
-function extractCanonicalAnswer(turn) {
+function extractCanonicalAnswer(turn: any): { text: string, isFallback: boolean } {
   var cands = [];
   var isFallback = false;
   try {
@@ -900,10 +911,10 @@ function extractCanonicalAnswer(turn) {
 //   http://googleusercontent.com/deep_research_confirmation_content/0 (план)
 // Инъекция stateless: при КАЖДОМ парсе (handleOuter) вычисляем {planText,reportText}
 // детерминированно из realTurns и в splitTurnMessages заменяем ссылку на текст.
-/** @type {number} Минимальная длина строки-отчёта Deep Research. */
-var DR_REPORT_MIN_LEN = 1000;
-/** @type {number} Минимальная длина строки-плана Deep Research. */
-var DR_PLAN_MIN_LEN = 60;
+/** Минимальная длина строки-отчёта Deep Research. */
+var DR_REPORT_MIN_LEN: number = 1000;
+/** Минимальная длина строки-плана Deep Research. */
+var DR_PLAN_MIN_LEN: number = 60;
 
 /**
  * Сбор длинных строковых кандидатов DR (глубже minLen символов).
@@ -913,7 +924,7 @@ var DR_PLAN_MIN_LEN = 60;
  * @param {number} depth Текущая глубина рекурсии.
  * @returns {void}
  */
-function collectDrStrings(node, out, minLen, depth) {
+function collectDrStrings(node: any, out: string[], minLen: number, depth: number): void {
   try {
     if (typeof node === 'string') {
       if (node.length >= minLen) out.push(node);
@@ -929,7 +940,7 @@ function collectDrStrings(node, out, minLen, depth) {
  * @param {string} s Сырая строка.
  * @returns {string} Санированный текст.
  */
-function ctText(s) { return sanitizeGeminiText(s).trim(); }
+function ctText(s: string): string { return sanitizeGeminiText(s).trim(); }
 
 /**
  * Извлечение текстов Deep Research из ходов.
@@ -938,7 +949,7 @@ function ctText(s) { return sanitizeGeminiText(s).trim(); }
  * @param {any[]} realTurns Ходы разговора.
  * @returns {GeminiDrTexts} Тексты плана и отчёта ('' если не найдены).
  */
-export function extractDrTexts(realTurns) {
+export function extractDrTexts(realTurns: any[]): GeminiDrTexts {
   var res = { planText: '', reportText: '' };
   try {
     if (!Array.isArray(realTurns)) return res;
@@ -969,15 +980,15 @@ export function extractDrTexts(realTurns) {
   return res;
 }
 
-/** @type {GeminiDrTexts} State последнего handleOuter (для splitTurnMessages). */
-var lastDrTexts = { planText: '', reportText: '' };
+/** State последнего handleOuter (для splitTurnMessages). */
+var lastDrTexts: GeminiDrTexts = { planText: '', reportText: '' };
 
 /**
  * Установка DR-текстов текущего парса (перед splitTurnMessages).
  * @param {GeminiDrTexts|null|undefined} d Тексты Deep Research.
  * @returns {void}
  */
-export function __setDrTexts(d) { try { lastDrTexts = d || { planText: '', reportText: '' }; } catch (e) { } }
+export function __setDrTexts(d: GeminiDrTexts | null | undefined): void { try { lastDrTexts = d || { planText: '', reportText: '' }; } catch (e) { } }
 
 /**
  * Замена голой ссылки-заглушки на контент DR в тексте assistant.
@@ -985,7 +996,7 @@ export function __setDrTexts(d) { try { lastDrTexts = d || { planText: '', repor
  * @param {GeminiDrTexts|null|undefined} dr Тексты Deep Research.
  * @returns {string} Текст с подставленными отчётом/планом.
  */
-export function injectDrLinks(text, dr) {
+export function injectDrLinks(text: string, dr: GeminiDrTexts | null | undefined): string {
   try {
     if (typeof text !== 'string') return text;
     var t = text;
@@ -1007,7 +1018,7 @@ export function injectDrLinks(text, dr) {
  * @param {any} turn Ход batchexecute.
  * @returns {Array<{role: string, text: string}>} Сообщения хода (user/assistant).
  */
-export function splitTurnMessages(turn) {
+export function splitTurnMessages(turn: any): Array<{ role: string, text: string }> {
   var question = extractUserQuestion(turn);
   // Канон: только markdown-сегмент ответа; thinking-саммари и plain-копию не конкатенируем.
   var canon = extractCanonicalAnswer(turn);
@@ -1048,7 +1059,7 @@ export function splitTurnMessages(turn) {
  * @param {GeminiTurnEntry[]} out Накопитель сообщений.
  * @returns {void}
  */
-function handleOuter(outer, out) {
+function handleOuter(outer: any, out: GeminiTurnEntry[]): void {
   try {
     if (!Array.isArray(outer) || !Array.isArray(outer[0])) return;
     if (outer[0][1] !== 'hNvQHb') return;
@@ -1094,7 +1105,7 @@ function handleOuter(outer, out) {
  * @param {GeminiTurnEntry[]} out Накопитель сообщений.
  * @returns {void}
  */
-function parseByBytes(raw, out) {
+function parseByBytes(raw: string, out: GeminiTurnEntry[]): void {
   var bytes;
   try { bytes = new TextEncoder().encode(raw); } catch (e) { return; }
   var pos = 0;
@@ -1124,7 +1135,7 @@ function parseByBytes(raw, out) {
  * @param {GeminiTurnEntry[]} out Накопитель сообщений.
  * @returns {void}
  */
-function parseByLines(raw, out) {
+function parseByLines(raw: string, out: GeminiTurnEntry[]): void {
   var lines = raw.split('\n');
   for (var i = 0; i < lines.length; i++) {
     var ln = lines[i];
@@ -1141,7 +1152,7 @@ function parseByLines(raw, out) {
  * @param {string} raw Сырое тело ответа (HTML/скрипт или byte-chunked поток).
  * @returns {GeminiHistoryResult} Сообщения, модель, оценка токенов, текст и счётчик.
  */
-export function parseGeminiHistory(raw) {
+export function parseGeminiHistory(raw: string): GeminiHistoryResult {
   var parsed = [];
   parseByBytes(raw, parsed);
   if (!parsed.length) parseByLines(raw, parsed);
@@ -1179,30 +1190,30 @@ export function parseGeminiHistory(raw) {
  * именем — chrome.scripting-регистрации не умеют import, а core/gemini-ingest.js,
  * core/gemini-files.js и core/gemini-intercept.js читают window.GeminiBatchexecuteParser.
  * В ESM-пути (core/content.js) он заодно даёт зеркало для core/export-manager.js.
- * @typedef {Object} GeminiBatchexecuteParserApi
- * @property {string} PARSER_VERSION Версия логики парсинга.
- * @property {typeof stripAttachmentTokens} stripAttachmentTokens Вырезание токенов вложений.
- * @property {typeof sanitizeGeminiText} sanitizeGeminiText Санация текста Gemini.
- * @property {typeof collectTurnText} collectTurnText Stateful-сбор текста ответа.
- * @property {typeof isThinkingAssistant} isThinkingAssistant Предикат чисто английского мышления.
- * @property {typeof firstCyrillicIndex} firstCyrillicIndex Индекс первого кириллического символа.
- * @property {typeof stripLeadingThinking} stripLeadingThinking Срез ведущего мышления.
- * @property {typeof splitTurnMessages} splitTurnMessages Ход → сообщения.
- * @property {typeof extractDrTexts} extractDrTexts Тексты Deep Research.
- * @property {typeof injectDrLinks} injectDrLinks Инъекция DR-контента вместо ссылок-заглушек.
- * @property {typeof __setDrTexts} __setDrTexts Установка DR-текстов текущего парса.
- * @property {typeof fileRefFromNode} fileRefFromNode Нормализованный ref вложения.
- * @property {typeof fileRefIdentityKey} fileRefIdentityKey Стабильная идентичность вложения.
- * @property {typeof collectTurnFiles} collectTurnFiles Вложения хода.
- * @property {typeof registerTurnFileOwner} registerTurnFileOwner Регистрация владельца файлов до эмиссии.
- * @property {typeof collectTurnFilesForOwner} collectTurnFilesForOwner Вложения хода-владельца.
- * @property {typeof assignPoolOwners} assignPoolOwners Владение вложениями по полному списку ходов.
- * @property {typeof __resetFileOwners} __resetFileOwners Сброс реестра владельцев файлов.
- * @property {typeof parseGeminiHistory} parseGeminiHistory Полный разбор истории.
  */
+export interface GeminiBatchexecuteParserApi {
+  PARSER_VERSION: string; // Версия логики парсинга.
+  stripAttachmentTokens: typeof stripAttachmentTokens; // Вырезание токенов вложений.
+  sanitizeGeminiText: typeof sanitizeGeminiText; // Санация текста Gemini.
+  collectTurnText: typeof collectTurnText; // Stateful-сбор текста ответа.
+  isThinkingAssistant: typeof isThinkingAssistant; // Предикат чисто английского мышления.
+  firstCyrillicIndex: typeof firstCyrillicIndex; // Индекс первого кириллического символа.
+  stripLeadingThinking: typeof stripLeadingThinking; // Срез ведущего мышления.
+  splitTurnMessages: typeof splitTurnMessages; // Ход → сообщения.
+  extractDrTexts: typeof extractDrTexts; // Тексты Deep Research.
+  injectDrLinks: typeof injectDrLinks; // Инъекция DR-контента вместо ссылок-заглушек.
+  __setDrTexts: typeof __setDrTexts; // Установка DR-текстов текущего парса.
+  fileRefFromNode: typeof fileRefFromNode; // Нормализованный ref вложения.
+  fileRefIdentityKey: typeof fileRefIdentityKey; // Стабильная идентичность вложения.
+  collectTurnFiles: typeof collectTurnFiles; // Вложения хода.
+  registerTurnFileOwner: typeof registerTurnFileOwner; // Регистрация владельца файлов до эмиссии.
+  collectTurnFilesForOwner: typeof collectTurnFilesForOwner; // Вложения хода-владельца.
+  assignPoolOwners: typeof assignPoolOwners; // Владение вложениями по полному списку ходов.
+  __resetFileOwners: typeof __resetFileOwners; // Сброс реестра владельцев файлов.
+  parseGeminiHistory: typeof parseGeminiHistory; // Полный разбор истории.
+}
 
-/** @type {GeminiBatchexecuteParserApi} */
-var api = {
+var api: GeminiBatchexecuteParserApi = {
   PARSER_VERSION: PARSER_VERSION,
   stripAttachmentTokens: stripAttachmentTokens,
   sanitizeGeminiText: sanitizeGeminiText,

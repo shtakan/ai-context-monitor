@@ -57,7 +57,7 @@
 // declaration ядра хойстятся, поэтому значения доступны на момент связки.
 //
 // Порядок подключения (core/background.js, registerSafe 'ai-cm-deepseek-intercept-v8',
-// document_start, world MAIN): utils/debug.js -> core/deepseek-diag.js ->
+// document_start, world MAIN): utils/debug.ts -> core/deepseek-diag.js ->
 // core/deepseek-netsync.js -> core/deepseek-refetch.js -> core/deepseek-parse.js ->
 // core/deepseek-conv.js -> ЭТОТ ФАЙЛ -> core/deepseek-intercept.js. До связки на
 // window.AiCmDeepseekEmit лежит только __bind; после связки ядро раздаёт 1 из 4 тел

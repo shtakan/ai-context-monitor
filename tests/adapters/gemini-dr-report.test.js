@@ -1,12 +1,12 @@
 /**
- * Тесты D13: stateless-инъекция DR-контента Gemini (utils/gemini-batchexecute-parser.js).
+ * Тесты D13: stateless-инъекция DR-контента Gemini (utils/gemini-batchexecute-parser.ts).
  * В canonical-тексте assistant стоят голые ссылки-заглушки:
  *   http://googleusercontent.com/immersive_entry_chip/0                    → отчёт
  *   http://googleusercontent.com/deep_research_confirmation_content/0      → план
  * Инъекция детерминирована (extractDrTexts из realTurns каждого парса), без
  * синтетического хода — пересборки стабильны.
  */
-const { parseGeminiHistory, extractDrTexts, injectDrLinks, splitTurnMessages, __setDrTexts } = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-batchexecute-parser.js');
+const { parseGeminiHistory, extractDrTexts, injectDrLinks, splitTurnMessages, __setDrTexts } = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-batchexecute-parser.ts');
 
 const REPORT_MARK = 'Настоящее экспертное заключение подготовлено в рамках комплексного анализа';
 const LINK_REPORT = 'http://googleusercontent.com/immersive_entry_chip/0';

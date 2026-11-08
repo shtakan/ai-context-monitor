@@ -25,12 +25,12 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 
 const ROOT = path.join(__dirname, '..');
 const CONTENT = require('./helpers/content-source.js').contentSource;
-const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
+const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
 const OPTIONS_JS = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
 
 // Рез по балансу фигурных скобок (как в tests/gsa-autoexport.test.js).
@@ -88,7 +88,7 @@ describe('O-11: две маски имён автоэкспорта (репро 
 
   test('одна функция-источник: обе прежние точки — тонкие обёртки, литерал шаблона один', () => {
     expect(typeof P.buildAutoExportFileName).toBe('function');
-    expect(PIPELINE_SRC).toContain('function buildAutoExportFileName(spec)');
+    expect(PIPELINE_SRC).toContain('function buildAutoExportFileName(spec: ExportFileNameSpec | null | undefined)');
     // шаблон ручного экспорта ('ai-context-monitor-') печатается РОВНО в одном месте
     expect((PIPELINE_SRC.match(/'ai-context-monitor-'/g) || []).length).toBe(1);
     const gsa = fnDecl(PIPELINE_SRC, 'buildGsaExportFileName');
@@ -207,8 +207,8 @@ describe('O-11: два автоэкспорта GSA в одну минуту —
       aiCmDumpTurnsSnapshot: function () { },
       aiCmCancelDeferredHistWrite: function () { },
       debugLog: function (lvl, msg) { logs.push(String(msg)); },
-      swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.js (его нет в песочнице)
-      swallowSoft: function () { },   // Step E.2c-B2b-3c (swallowSoft): канал B — тот же хелпер utils/debug.js, вне песочницы.
+      swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.ts (его нет в песочнице)
+      swallowSoft: function () { },   // Step E.2c-B2b-3c (swallowSoft): канал B — тот же хелпер utils/debug.ts, вне песочницы.
       console: { error: function () { } },
       ModelConfig: { getModel: function () { return { name: MODEL }; } },
       chrome: { storage: { session: { set: function () { }, remove: function () { } } } },
@@ -375,8 +375,8 @@ describe('O-11-2: два файра разных чатов в одну мину
       aiCmDumpTurnsSnapshot: function () { },
       aiCmCancelDeferredHistWrite: function () { },
       debugLog: function (lvl, msg) { logs.push(String(msg)); },
-      swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.js (его нет в песочнице)
-      swallowSoft: function () { },   // Step E.2c-B2b-3c (swallowSoft): канал B — тот же хелпер utils/debug.js, вне песочницы.
+      swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.ts (его нет в песочнице)
+      swallowSoft: function () { },   // Step E.2c-B2b-3c (swallowSoft): канал B — тот же хелпер utils/debug.ts, вне песочницы.
       console: { error: function () { } },
       ModelConfig: { getModel: function () { return { name: MODEL }; } },
       chrome: { storage: { session: { set: function () { }, remove: function () { } } } },

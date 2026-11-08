@@ -16,7 +16,7 @@
  * perplexity-intercept, firstMsgHash/lastMsgHash + baseComplete/reachedStart/confirmedByScroll
  * (формула и дефолты прежние).
  */
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/perplexity-parser.ts');
 const { readSource } = require('./helpers/content-source.js');
 

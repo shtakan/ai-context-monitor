@@ -8,7 +8,7 @@
  * после [ANSWER].
  *
  * Корень: структурного критерия не было — позиция маркеров в тексте не проверялась.
- * Фикс (utils/export-emit-pipeline.js:splitReasoningSections): пара признаётся ТОЛЬКО
+ * Фикс (utils/export-emit-pipeline.ts:splitReasoningSections): пара признаётся ТОЛЬКО
  * канонической формой composeTurnText — [REASONING] в начале текста (допустимы ведущие
  * пустые строки) и [ANSWER] сразу после перевода строки-разделителя. Иначе возвращается
  * { reasoning:'', answer:s } байтово, а под гейтом aiCmDebug пишется диаг-строка
@@ -24,11 +24,11 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 
 const ROOT = path.join(__dirname, '..');
-const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
+const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 
 // Рез по балансу фигурных скобок (конвенция сьюта).

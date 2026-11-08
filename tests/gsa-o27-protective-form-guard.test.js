@@ -29,15 +29,15 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.js');
 const CONTENT = require('./helpers/content-source.js').contentSource;
 
 const INTERCEPT = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');
 const BUILDERS_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.ts'), 'utf8');
-// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+// R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
-const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 const FOLWR_FIXTURE = fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'google-folwr-open.html'), 'utf8');
 
@@ -410,7 +410,7 @@ describe('R-D (д): гейт aiCmDebug — строки только под ге
     expect(Buffer.from(on).toString('utf8')).toBe(content);
   });
 
-  test('канонический хелпер utils/debug.js печатает ту же строку и уважает гейт', () => {
+  test('канонический хелпер utils/debug.ts печатает ту же строку и уважает гейт', () => {
     const sinkOff = [];
     const sinkOn = [];
     makeDiag(false, sinkOff).blocked('autoexport', F_TXT, 'f.txt', 'xssi-prefix', {});
@@ -424,7 +424,7 @@ describe('R-D (д): гейт aiCmDebug — строки только под ге
     expect(sinkOn[0]).toContain('src=');
     // строка отказа — ровно в одном месте каждого файла-носителя
     expect((BUILDERS_SRC.match(/\[AI CM\]\[diag\]/g) || []).length).toBe(1);
-    expect(fnDecl(DEBUG_SRC, 'aiCmDiagDownloadBlocked')).toContain("aiCmDiagLine('download-blocked'");
+    expect(fnDecl(DEBUG_SRC, 'aiCmDiagDownloadBlocked')).toContain('aiCmDiagLine("download-blocked"');
     // источник отказа — ЕДИНСТВЕННАЯ точка скачивания; в export-manager.js ровно один её вызов
     expect(MGR_SRC.split('.downloadBlob(').length - 1).toBe(1);
     expect(fnDecl(BUILDERS_SRC, 'downloadBlob')).toContain('downloadBlockReason(content, fileName)');
@@ -484,7 +484,7 @@ function autoExportCtx(B) {
   return { ctx: ctx, used: used, run: new Function('ctx', scope)(ctx).run };
 }
 
-// Песочница канонических диаг-хелперов utils/debug.js (единый гейт aiCmDebug).
+// Песочница канонических диаг-хелперов utils/debug.ts (единый гейт aiCmDebug).
 function makeDiag(gate, sink) {
   const scope = 'with (ctx) { ' +
     fnDecl(DEBUG_SRC, 'aiCmDiagOn') + '\n' +

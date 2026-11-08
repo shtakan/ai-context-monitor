@@ -26,9 +26,9 @@
  *   D4 — live-цепочка сети: role='human' в lastDetailMessages → 'user' → '## Пользователь';
  *   R3 — live-цепочка пяти прочих платформ (user/assistant): md байтово равен оракулу;
  *   R4 — live-цепочка Gemini/AI Studio: роли и байты md прежние (ветка дедупа не тронута);
- *   R5 — normalizeExportMessages (utils/export-emit-pipeline.js): 'human'→'user', прочие роли
+ *   R5 — normalizeExportMessages (utils/export-emit-pipeline.ts): 'human'→'user', прочие роли
  *        прежние (user→user, model/bot→assistant).
- *   R6 — live-измерение под гейтом aiCmDebug (РЕАЛЬНЫЕ aiCmDiagOn/aiCmDiagLine из utils/debug.js):
+ *   R6 — live-измерение под гейтом aiCmDebug (РЕАЛЬНЫЕ aiCmDiagOn/aiCmDiagLine из utils/debug.ts):
  *        пять диаг-маркеров claude-role-* печатаются с фактом «human на входе → user на выходе»
  *        и НЕ меняют байты md; site-aware маркеры (dedupe/network/adapter) SCOPED по 'claude' —
  *        на чужом сайте их строк нет, то есть чужой тег через канон инструментирования не уходит;
@@ -274,7 +274,7 @@ describe('Claude md roles R2: site=qwen — прежние маркеры ### US
 // модулей в одном лексическом скоупе (как в браузере) — ровно выражение buildHistoryMessages.
 // =====================================================================================
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 const BASE_HANDLER_SRC = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.js'), 'utf8');
 
@@ -383,10 +383,10 @@ describe('Claude md roles D3: live-цепочка адаптера (role=human) 
     // уходил бы фолбэком чередования и терял настоящие роли ходов).
     expect(MGR_SRC)
       .toContain("if (raw[k] && (raw[k].role === 'user' || raw[k].role === 'assistant' || raw[k].role === 'human')) { hasRoles = true; break; }");
-    // Нормализация пайплайна (utils/export-emit-pipeline.js:normalizeExportMessages) — та же роль.
-    const pipelineSrc = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
+    // Нормализация пайплайна (utils/export-emit-pipeline.ts:normalizeExportMessages) — та же роль.
+    const pipelineSrc = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
     expect(pipelineSrc)
-      .toContain("var norm = { role: (m.role === 'user' || m.role === 'human') ? 'user' : 'assistant', text: text };");
+      .toContain("var norm: Message = { role: (m.role === 'user' || m.role === 'human') ? 'user' : 'assistant', text: text };");
     // Защита от ПРЯМОЙ подачи 'human' в сборщик (utils/export-text-builders.ts:300) — прежняя.
     expect(BUILDERS_SRC).toContain("(msg.role === 'user' || msg.role === 'human')");
     // Копия поля reasoning (O-39) в обеих ветках — байтово прежняя.
@@ -493,7 +493,7 @@ describe('Claude md roles R5: normalizeExportMessages — human→user, проч
 // =====================================================================================
 // R6/R7: ДИАГНОСТИКА РОЛЕЙ claude-role-* — ТОЛЬКО ПОД ГЕЙТОМ aiCmDebug
 // =====================================================================================
-// Гейт — РЕАЛЬНЫЕ канонические aiCmDiagOn/aiCmDiagLine из utils/debug.js (как в контент-
+// Гейт — РЕАЛЬНЫЕ канонические aiCmDiagOn/aiCmDiagLine из utils/debug.ts (как в контент-
 // скрипте): строки печатаются ровно под sessionStorage 'aiCmDebug' === '1' ИЛИ чекбоксом
 // «Подробные логи» (window.__aiCmDebugLogs), и молчат без гейта. Каналов печати два —
 // песочница живой цепочки (ctx.console) и сборщик md (глобальный console); оба сведены в
@@ -501,13 +501,13 @@ describe('Claude md roles R5: normalizeExportMessages — human→user, проч
 // проверяются факт и значения печати + байтовая идентичность md.
 // =====================================================================================
 
-// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+// R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
-const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
-const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
+const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
 const DIAG_PREFIX = '[AI CM][diag] ';
 
-// Канонический гейт диагностики: РЕАЛЬНЫЕ функции из utils/debug.js, а не заглушки.
+// Канонический гейт диагностики: РЕАЛЬНЫЕ функции из utils/debug.ts, а не заглушки.
 const DEBUG_API = new Function(
   fnDecl(DEBUG_SRC, 'aiCmDiagOn') + '\n' +
   fnDecl(DEBUG_SRC, 'aiCmDiagLine') + '\n' +
@@ -517,7 +517,7 @@ const ROLE_MARKERS = [
   'claude-role-dedupe',     // core/base-handler.js:aiCmDedupeExportSource
   'claude-role-network',    // core/export-manager.js:aiCmCollectExportSource (сеть)
   'claude-role-adapter',    // core/export-manager.js:aiCmCollectExportSource (DOM-адаптер)
-  'claude-role-normalize',  // utils/export-emit-pipeline.js:normalizeExportMessages
+  'claude-role-normalize',  // utils/export-emit-pipeline.ts:normalizeExportMessages
   'claude-role-builder'     // utils/export-text-builders.ts:buildMdFromHistory
 ];
 
@@ -739,11 +739,11 @@ describe('Claude md roles R6/R7: диаг-маркеры ролей — толь
       .toBeGreaterThan(collect.indexOf('P.normalizeExportMessages(raw)'));
     expect(collect).toContain("if (raw[k] && (raw[k].role === 'user' || raw[k].role === 'assistant' || raw[k].role === 'human')) { hasRoles = true; break; }");
 
-    // (3) utils/export-emit-pipeline.js:normalizeExportMessages — ПОСЛЕ нормализации роли.
+    // (3) utils/export-emit-pipeline.ts:normalizeExportMessages — ПОСЛЕ нормализации роли.
     const normalize = fnDecl(PIPELINE_SRC, 'normalizeExportMessages');
     expect(normalize).toContain("aiCmDiagLine('claude-role-normalize', { inputRole: m.role, outputRole: norm.role });");
     expect(normalize.indexOf("aiCmDiagLine('claude-role-normalize'"))
-      .toBeGreaterThan(normalize.indexOf("var norm = { role: (m.role === 'user' || m.role === 'human')"));
+      .toBeGreaterThan(normalize.indexOf("var norm: Message = { role: (m.role === 'user' || m.role === 'human')"));
 
     // (4) utils/export-text-builders.ts:buildMdFromHistory — ПЕРЕД условием mdMarked, внутри
     // цикла ходов (там доступны и msg.role, и mdMarked); логика заголовка не тронута.
@@ -766,7 +766,7 @@ describe('Claude md roles R6/R7: диаг-маркеры ролей — толь
     // канон чужой тег. Точки без знания сайта (normalize/builder) печатают как описано выше.
     expect(dedupe).toContain("if (typeof aiCmDiagLine === 'function' && site === 'claude') {");
     expect(collect.match(/currentAdapter\.siteName === 'claude'/g)).toHaveLength(2);
-    expect(DEBUG_SRC).toContain("sessionStorage.getItem('aiCmDebug') === '1'");
+    expect(DEBUG_SRC).toContain('sessionStorage.getItem("aiCmDebug") === "1"');
   });
 });
 

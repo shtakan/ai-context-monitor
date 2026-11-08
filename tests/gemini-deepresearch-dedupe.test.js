@@ -5,7 +5,7 @@
  * (13 737 токенов при реальном однократном промпте).
  *
  * Фикс:
- *   1) чистая функция Utils/gemini-batchexecute-parser → utils/export-emit-pipeline.js:
+ *   1) чистая функция Utils/gemini-batchexecute-parser → utils/export-emit-pipeline.ts:
  *      dedupeMessages(messages) — схлопывание сообщений с одинаковой ролью и идентичным
  *      нормализованным текстом (trim + схлоп пробелов), ПЕРВОЕ вхождение побеждает;
  *   2) core/content.js — слушатель ai-cm-full-history схлопывает базу ДО потребителей
@@ -40,7 +40,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 
 const ROOT = path.join(__dirname, '..');
 const CONTENT_SRC = require('./helpers/content-source.js').contentSource;
@@ -565,8 +565,8 @@ function makeListenerCtx(overrides) {
     maybeAutoExport: function () { },
     notifyCounterMode: function () { },
     debugLog: function (kind, msg) { ctx.logs.push(String(msg)); },
-    swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.js (его нет в песочнице)
-    // Step E.2c-B2b-3b (swallowSoft): канал B — тот же хелпер utils/debug.js, тоже вне песочницы.
+    swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.ts (его нет в песочнице)
+    // Step E.2c-B2b-3b (swallowSoft): канал B — тот же хелпер utils/debug.ts, тоже вне песочницы.
     swallowSoft: function () { },
     processAndSendCalls: 0,
     effectiveTextAtSend: null,
@@ -842,12 +842,12 @@ describe('E-2 (3): точка врезки в core/content.js', () => {
   test('E-2.1: пайплайн экспортирует функции и сохраняет порядок дедупликации', () => {
     expect(typeof P.dedupeIntraMessage).toBe('function');
     expect(typeof P.prepareExportMessages).toBe('function');
-    const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
+    const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
     // dedupeIntraMessage вызывается на КАЖДОЕ сообщение ДО dedupeMessages
     expect(PIPELINE_SRC.indexOf('var res = dedupeIntraMessage({ role: role, text: text });'))
       .toBeLessThan(PIPELINE_SRC.indexOf('var inter = dedupeMessages(out);'));
     // чистые функции не логируют (логирование вынесено в content.js через callback)
-    const intraSrc = extractBlock(PIPELINE_SRC, 'function dedupeIntraMessage(message)', 'function coreOfBlock(block)');
+    const intraSrc = extractBlock(PIPELINE_SRC, 'function dedupeIntraMessage(message: Message | null | undefined)', 'function coreOfBlock(block)');
     expect(intraSrc).not.toContain('console.');
   });
 });

@@ -3,11 +3,11 @@
 // (document_start), программно, через registerContentScripts.
 // Это не зависит от manifest и не ломает существующую инжекцию content.js.
 // ESM (Roadmap Ph2): статические import'ы втягиваются сборкой в тот же бандл SW, поэтому
-// в рантайме aiCmIsFirefox() и хелперы utils/debug.js остаются в общей области видимости бандла.
+// в рантайме aiCmIsFirefox() и хелперы utils/debug.ts остаются в общей области видимости бандла.
 import { aiCmIsFirefox } from '../utils/platform.ts';
-// R1 (Ph2): логику debugLog/swallow больше не дублируем — utils/debug.js переведён на ESM,
+// R1 (Ph2): логику debugLog/swallow больше не дублируем — utils/debug.ts переведён на ESM,
 // и esbuild вшивает модуль в бандл SW (ring-буфер + гейт DEBUG приходят вместе с ним).
-import { debugLog, swallow } from '../utils/debug.js';
+import { debugLog, swallow } from '../utils/debug.ts';
 // v51 (A3): lastGoodModel — ТОЛЬКО кэш-оптимизация (предпочтительный кандидат для countTokens).
 // MV3 SW не персистентен: глобал теряется при рестарте SW — это ожидаемо и безопасно,
 // handleCountTokens просто пробует кандидатов заново. Персистентность не обязательна.
@@ -854,7 +854,7 @@ async function aiCmGetByokKeyForContent() {
 
 // ========== Шаг A.1 (security): O3-латч already-fired за SW ==========
 // Ключ 'aiCmFired:service|convId' → 1, ОБЩИЙ на профиль в chrome.storage.session.
-// Дублирует построение ключа из utils/export-emit-pipeline.js:551-564 (там он для
+// Дублирует построение ключа из utils/export-emit-pipeline.ts:551-564 (там он для
 // sessionMap контент-стороны): санация safeSeg для имён сервисов расширения — тождество
 // (все siteName: gemini/chatgpt/deepseek/google_search/claude/perplexity/qwen — из
 // [a-zA-Z0-9_-]), поэтому ключи SW и контента совпадают; совпадение пинуется тестом.
@@ -1242,7 +1242,7 @@ if (chrome.storage && chrome.storage.onChanged && chrome.storage.onChanged.addLi
 //     НЕ сливаются — plan §3.3.
 // Вне гейта — тихо, ничего не пишется; console.error не вызывается нигде.
 //
-// Размещение в ХВОСТЕ файла — как и в utils/debug.js: вставка выше сдвинула бы номера
+// Размещение в ХВОСТЕ файла — как и в utils/debug.ts: вставка выше сдвинула бы номера
 // строк catch, запинутые в tests/fixtures/catch-whitelist.json (в шаге E.2c-A этот файл
 // не обновляется, а tests/catch-hygiene.test.js сверяет дерево запись-в-запись). Плюс
 // не сдвигаются строки 13/14, на которые ссылается allow-list стража

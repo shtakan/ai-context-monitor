@@ -264,7 +264,7 @@
     "reason": "legacy-pin"
   },
   "tests/diag-o27-o32-instrumentation.test.js": {
-    "count": 24,
+    "count": 25,
     "reason": "legacy-pin"
   },
   "tests/docs-hygiene.test.js": {
@@ -488,7 +488,7 @@
     "reason": "vm-harness"
   },
   "tests/swallow-soft.test.js": {
-    "count": 4,
+    "count": 5,
     "reason": "vm-harness"
   },
   "tests/tokenizer-cyrillic-calibration.test.js": {

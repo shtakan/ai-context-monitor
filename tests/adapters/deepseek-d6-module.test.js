@@ -4,7 +4,7 @@
  * Кластер K2 (СЕКЦИЯ 4 ядра — buildDispatchSignature, emitBaseSnapshot, clipTurnText,
  * turnsSnapshot и мост ai-cm-turns-snap-request → ai-cm-turns-snap-response) уехал
  * в core/deepseek-emit.js. Модуль и ядро — РАЗНЫЕ IIFE одного registerContentScripts-
- * пакета (js[]: utils/debug.js -> deepseek-diag.js -> deepseek-netsync.js ->
+ * пакета (js[]: utils/debug.ts -> deepseek-diag.js -> deepseek-netsync.js ->
  * deepseek-refetch.js -> deepseek-parse.js -> deepseek-conv.js -> deepseek-emit.js ->
  * deepseek-intercept.js), поэтому связь идёт ровно через один контракт:
  *

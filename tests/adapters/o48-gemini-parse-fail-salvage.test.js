@@ -46,7 +46,7 @@ function frame(payload) {
   return Buffer.byteLength(payload, 'utf8') + '\n' + payload + '\n';
 }
 
-// Ход Gemini в реальной форме (utils/gemini-batchexecute-parser.js):
+// Ход Gemini в реальной форме (utils/gemini-batchexecute-parser.ts):
 // [null, [id, r1], [[вопрос]], [[[null,[ответ]]]], [ts]] (+ opaque-курсор полем).
 function turnStr(id, r1, q, a, ts, cursor) {
   const t = [null, [id, r1], [[q]], [[[null, [a]]]], [ts]];

@@ -19,7 +19,7 @@
 // ОСТАЛИСЬ в core/gemini-intercept.js: это разные темы, и состояние у них общее с ядром.
 //
 // Порядок подключения (core/background.js, registerSafe для перехватчика Gemini,
-// document_start, world MAIN): utils/debug.js -> utils-парсеры -> hidden-scroll ->
+// document_start, world MAIN): utils/debug.ts -> utils-парсеры -> hidden-scroll ->
 // diag -> ЭТОТ ФАЙЛ -> core/gemini-intercept.js. Экспорт: window.AiCmGeminiRpc + module.exports.
 // =============================================================================
 

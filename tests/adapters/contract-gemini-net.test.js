@@ -5,7 +5,7 @@
  * реальный ответ `batchexecute` с XSSI-префиксом `)]}'`, объявленной длиной кадра
  * 2 124 014 и тройками id c_, r_, rc_. Адаптера `gemini-net-adapter.js` в репозитории НЕТ:
  * контракт держит парсерный слой — core/gemini-parse.js (разбор кадра) и
- * utils/gemini-batchexecute-parser.js (извлечение истории). Поэтому загрузка идёт через
+ * utils/gemini-batchexecute-parser.ts (извлечение истории). Поэтому загрузка идёт через
  * loadSource, а не loadAdapter (у второго файла нет класса-адаптера).
  *
  * ГЛАВНЫЙ ФАКТ АРТЕФАКТА: кадр ОБРЕЗАН (объявлено 2 124 014 символов, фактический payload
@@ -50,7 +50,7 @@ function readDr() {
 
 /** Парсерный слой в песочнице: оба файла — самодостаточные IIFE на window.*. */
 function parsers() {
-  const res = loadSource(['core/gemini-parse.js', 'utils/gemini-batchexecute-parser.js'], { returnExpr: 'null' });
+  const res = loadSource(['core/gemini-parse.js', 'utils/gemini-batchexecute-parser.ts'], { returnExpr: 'null' });
   const win = res.sandbox.window;
   expect(typeof win.AiCmGeminiParse.parseBatchExecute).toBe('function');
   expect(typeof win.GeminiBatchexecuteParser.parseGeminiHistory).toBe('function');

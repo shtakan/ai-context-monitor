@@ -93,7 +93,7 @@ declare const ModelConfig: {
 declare const AiCmExportBuilders: import('./export').ExportBuildersApi;
 
 /**
- * utils/export-emit-pipeline.js (Ph2: ESM) — публичный API пайплайна экспорта.
+ * utils/export-emit-pipeline.ts (Ph2: ESM) — публичный API пайплайна экспорта.
  * В бандле это ESM-биндинг, который втягивает core/content.js; core/export-manager.js,
  * core/base-handler.js и core/widget.js склеены в тот же модуль (import хойстится),
  * поэтому второго import'а в них нет — объявление закрывает их типы. В срезах-песочницах
@@ -558,7 +558,7 @@ declare function aiCmAutoExportTrustedBaseDiag(...args: unknown[]): void;
 declare function aiCmLoadProactiveFlag(): void;
 declare function debugLog(level: string, ...args: unknown[]): void;
 
-// Ph2 (R1): utils/debug.js переведён на ESM, поэтому его объявления больше не попадают
+// Ph2 (R1): utils/debug.ts переведён на ESM, поэтому его объявления больше не попадают
 // в глобальную область вывода tsc автоматически. Но в MAIN-мире классический артефакт
 // dist/utils/debug.js по-прежнему публикует эти функции глобально (см. writeDebugClassic
 // в build.mjs), поэтому глобальный контракт объявляется здесь явно.

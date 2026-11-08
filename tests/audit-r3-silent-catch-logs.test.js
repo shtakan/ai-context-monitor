@@ -10,7 +10,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const contentSrc = require('./helpers/content-source.js').contentSource;
-const parserSrc = fs.readFileSync(path.join(ROOT, 'utils', 'gemini-batchexecute-parser.js'), 'utf8');
+const parserSrc = fs.readFileSync(path.join(ROOT, 'utils', 'gemini-batchexecute-parser.ts'), 'utf8');
 const interceptSrc = require('./helpers/gemini-intercept-source.js').geminiSource;
 
 function sliceContent(from, to) {

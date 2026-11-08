@@ -25,10 +25,10 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
 const Logic = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
-const Pipeline = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const Pipeline = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const CORE_GEMINI = require('../helpers/gemini-intercept-source.js').geminiSource;
 const CORE_CONTENT = require('../helpers/content-source.js').contentSource;
-const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
+const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
 
 // fnSource останавливается на '\n  function ' и потому затягивает комментарии следующей
 // функции; здесь нужен ровно текст объявления — режем по балансу фигурных скобок.

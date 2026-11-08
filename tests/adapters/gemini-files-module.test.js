@@ -20,7 +20,7 @@ const timers = require('timers');
 
 const ROOT = path.join(__dirname, '..', '..');
 const MODULE_SRC = fs.readFileSync(path.join(ROOT, 'core', 'gemini-files.js'), 'utf8');
-const PARSER_SRC = require('../helpers/load-esm.js').loadAsClassic('utils/gemini-batchexecute-parser.js');
+const PARSER_SRC = require('../helpers/load-esm.js').loadAsClassic('utils/gemini-batchexecute-parser.ts');
 const INGEST_SRC = fs.readFileSync(path.join(ROOT, 'core', 'gemini-ingest.js'), 'utf8');
 const read = function (rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); };
 
@@ -117,7 +117,7 @@ function makeHarness(over) {
   };
   if (over.location) sandbox.location = over.location;
   const ctx = vm.createContext(sandbox);
-  vm.runInContext(PARSER_SRC, ctx, { filename: 'utils/gemini-batchexecute-parser.js' });
+  vm.runInContext(PARSER_SRC, ctx, { filename: 'utils/gemini-batchexecute-parser.ts' });
   const Parser = windowObj.GeminiBatchexecuteParser;
   vm.runInContext(MODULE_SRC, ctx, { filename: 'core/gemini-files.js' });
   const Fn = windowObj.AiCmGeminiFiles;

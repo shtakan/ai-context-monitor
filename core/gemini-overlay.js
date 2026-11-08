@@ -36,7 +36,7 @@
  * байтово-идентичными и не потребовали правок; изменились только два литерала логов
  * overlay-on/overlay-off, где участвует getConvId.
  *
- * ПОРЯДОК ПОДКЛЮЧЕНИЯ. utils/debug.js, utils/gemini-batchexecute-parser.js,
+ * ПОРЯДОК ПОДКЛЮЧЕНИЯ. utils/debug.ts, utils/gemini-batchexecute-parser.ts,
  * utils/gemini-intercept-logic.js, core/gemini-hidden-scroll.js, core/gemini-diag.js,
  * core/gemini-rpc.js, core/gemini-parse.js, core/gemini-sse.js,
  * core/pagination/pagination.js, core/gemini-loader-scroll.js, core/gemini-ingest.js,

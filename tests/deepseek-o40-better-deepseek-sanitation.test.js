@@ -44,7 +44,7 @@
  * всех прочих пинов не переписаны.
  *
  * Точка применения — та же, что у O-20: чистая функция sanitizeEmitMessages() пайплайна
- * (utils/export-emit-pipeline.js), вызываемая ЕДИНСТВЕННОЙ точкой сбора aiCmCollectExportSource()
+ * (utils/export-emit-pipeline.ts), вызываемая ЕДИНСТВЕННОЙ точкой сбора aiCmCollectExportSource()
  * в core/export-manager.js через aiCmSanitizeEmitUserTexts(); гейтинг — только OFF-путь
  * тумблера aiCmIncludeHiddenInExport (ON-путь — сырой режим, обходит и O-20, и O-40).
  * Токены/проценты не пересчитываются (паритет O-20).
@@ -52,12 +52,12 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
 
 const ROOT = path.join(__dirname, '..');
-const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
+const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
 const EXPORT_MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 
 const ARTIFACT = 'deepseek-565a7cd8-2026-09-20_11-40.txt';
@@ -134,10 +134,10 @@ const F1 = [
   "utils/archive-import.js",
   "utils/buildReferenceText.js",
   "utils/chatgpt-conversation-parser.js",
-  "utils/debug.js",
-  "utils/export-emit-pipeline.js",
+  "utils/debug.ts",
+  "utils/export-emit-pipeline.ts",
   "utils/export-text-builders.js",
-  "utils/gemini-batchexecute-parser.js",
+  "utils/gemini-batchexecute-parser.ts",
   "utils/gemini-dom-parser.js",
   "utils/gemini-intercept-logic.js",
   "utils/google-search-folwr-parser.js",
@@ -1192,10 +1192,10 @@ const F5 = '<original_task>' + '\n' + [
   "utils/archive-import.js",
   "utils/buildReferenceText.js",
   "utils/chatgpt-conversation-parser.js",
-  "utils/debug.js",
-  "utils/export-emit-pipeline.js",
+  "utils/debug.ts",
+  "utils/export-emit-pipeline.ts",
   "utils/export-text-builders.js",
-  "utils/gemini-batchexecute-parser.js",
+  "utils/gemini-batchexecute-parser.ts",
   "utils/gemini-dom-parser.js",
   "utils/gemini-intercept-logic.js",
   "utils/google-search-folwr-parser.js",
@@ -1397,10 +1397,10 @@ const F6 = '<original_task>' + '\n' + [
   "utils/archive-import.js",
   "utils/buildReferenceText.js",
   "utils/chatgpt-conversation-parser.js",
-  "utils/debug.js",
-  "utils/export-emit-pipeline.js",
+  "utils/debug.ts",
+  "utils/export-emit-pipeline.ts",
   "utils/export-text-builders.js",
-  "utils/gemini-batchexecute-parser.js",
+  "utils/gemini-batchexecute-parser.ts",
   "utils/gemini-dom-parser.js",
   "utils/gemini-intercept-logic.js",
   "utils/google-search-folwr-parser.js",
@@ -1889,7 +1889,7 @@ describe('O-40 (R): байтовые регрессии', () => {
 
   test('R7: source-пин — O-40 в той же точке, что O-20, и чистая (без логов/DOM)', () => {
     const fnSrc = PIPELINE_SRC.slice(
-      PIPELINE_SRC.indexOf('function sanitizeEmitMessages(messages)'),
+      PIPELINE_SRC.indexOf('function sanitizeEmitMessages(messages: Message[])'),
       PIPELINE_SRC.indexOf('function unionTurnsById(')
     );
     expect(fnSrc).toContain('sanitizeBetterDeepSeekText(');

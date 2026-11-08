@@ -244,7 +244,7 @@ export default [
       'utils/stream-frames.ts',
       // R1 (Ph2): utils/debug.js переведён на ESM — его импортируют
       // core/background.js, core/content.js и utils/intercept-common.ts.
-      'utils/debug.js',
+      'utils/debug.ts',
       // Ph2, шаг tokenizer.js: модуль переведён на ESM (UMD-хвост снят) и
       // втягивается import'ом из core/content.js.
       'utils/tokenizer.ts',
@@ -263,7 +263,7 @@ export default [
       // Ph2, шаг gemini-batchexecute-parser.js: модуль переведён на ESM (UMD-хвост
       // снят) и втягивается side-effect import'ом из core/content.js; для MAIN-мира
       // build.mjs выводит classic-артефакт dist/utils/gemini-batchexecute-parser.js.
-      'utils/gemini-batchexecute-parser.js',
+      'utils/gemini-batchexecute-parser.ts',
       // Ph2, шаг gemini-dom-parser.ts: модуль переведён на ESM (UMD-хвост снят) и
       // втягивается import'ом из core/hybrid-tail.js.
       'utils/gemini-dom-parser.ts',
@@ -278,7 +278,7 @@ export default [
       // Ph2, шаг export-emit-pipeline.js: модуль переведён на ESM (UMD-хвост снят)
       // и втягивается в content-бандл статическим import'ом из core/content.js;
       // MAIN-регистрации у него нет, classic-артефакт не выводится.
-      'utils/export-emit-pipeline.js',
+      'utils/export-emit-pipeline.ts',
       // Потребитель core/hybrid-tail.js получает top-level import, поэтому тоже
       // разбирается как module. Файл остаётся частью конкатенации content-бандла.
       'core/hybrid-tail.js',

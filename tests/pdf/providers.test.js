@@ -13,7 +13,7 @@ const { DecompressionStream } = require('stream/web');
 
 const ROOT = path.join(__dirname, '..', '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
-const PARSER_SRC = require('../helpers/load-esm.js').loadAsClassic('utils/gemini-batchexecute-parser.js');
+const PARSER_SRC = require('../helpers/load-esm.js').loadAsClassic('utils/gemini-batchexecute-parser.ts');
 
 const PDF_TEXT = 'PDF-текст';
 const PDF_MAX = 10 * 1024 * 1024;
@@ -56,7 +56,7 @@ function makeSandbox() {
 
 function loadProvider(rel, withParser) {
   const { ctx, windowObj } = makeSandbox();
-  if (withParser) vm.runInContext(PARSER_SRC, ctx, { filename: 'utils/gemini-batchexecute-parser.js' });
+  if (withParser) vm.runInContext(PARSER_SRC, ctx, { filename: 'utils/gemini-batchexecute-parser.ts' });
   vm.runInContext(read(rel), ctx, { filename: rel });
   return windowObj;
 }

@@ -1,5 +1,5 @@
 /**
- * Тесты чистого сетевого парсера Gemini (utils/gemini-batchexecute-parser.js).
+ * Тесты чистого сетевого парсера Gemini (utils/gemini-batchexecute-parser.ts).
  * Фикстура моделирует СЫРОЙ порядок batchexecute «новые сверху» и реальную структуру хода:
  *   turn = [metaA, metaB, [[question, ...]], answerArr, [ts, ...]]
  *   question = turn[2][0][0], answer = turn[3]
@@ -7,7 +7,7 @@
  * нет $AXzLiR, таблица — в assistant-сообщении.
  */
 
-const { parseGeminiHistory, stripAttachmentTokens, splitTurnMessages, collectTurnText, stripLeadingThinking } = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-batchexecute-parser.js');
+const { parseGeminiHistory, stripAttachmentTokens, splitTurnMessages, collectTurnText, stripLeadingThinking } = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-batchexecute-parser.ts');
 
 describe('Gemini batchexecute history parser (parseGeminiHistory)', () => {
   function makeTurn(question, answerParts) {

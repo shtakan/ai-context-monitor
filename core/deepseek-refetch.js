@@ -40,7 +40,7 @@
 // оставшаяся секция ядра.
 //
 // Порядок подключения (core/background.js, registerSafe 'ai-cm-deepseek-intercept-v5',
-// document_start, world MAIN): utils/debug.js -> core/deepseek-diag.js ->
+// document_start, world MAIN): utils/debug.ts -> core/deepseek-diag.js ->
 // core/deepseek-netsync.js -> ЭТОТ ФАЙЛ -> core/deepseek-intercept.js. До связки на
 // window.AiCmDeepseekRefetch лежит только __bind; после связки ядро раздаёт 7 из 9
 // функций форвардерами по прежним именам (convIdFromHistoryUrl, convIdFromCompletionBody,

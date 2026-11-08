@@ -1,10 +1,10 @@
 /**
  * Тесты общего EMIT-пайплайна экспорта (v81, Задача A, Шаг 3).
- * utils/export-emit-pipeline.js — чистые функции: имя файла, гейт автоэкспорта,
+ * utils/export-emit-pipeline.ts — чистые функции: имя файла, гейт автоэкспорта,
  * латч per service+convId, извлечение convId из URL, нормализация сообщений.
  * v1.19.1 (M-11): Perplexity /search/<id> — живой URL диалога (см. 3.3b).
  */
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const fs = require('fs');
 const path = require('path');
 
@@ -229,15 +229,15 @@ describe('R1: 5 сервисов не сломаны convId-фиксом', () =>
 });
 
 // —— S-1: ВСЕ копии ветки /app/ в core/content.js синхронизированы с каноничной ——
-// Каноничная — utils/export-emit-pipeline.js : extractConvIdFromUrl. Локальные копии
+// Каноничная — utils/export-emit-pipeline.ts : extractConvIdFromUrl. Локальные копии
 // (фолбэк getCurrentConvId, tape-restore v28, retry D8, JSON-дамп Ctrl+Shift+D) обязаны
 // нести тот же lookahead: иначе одна из них снова вернёт 'prompts'.
 describe('S-1: копии ветки /app/ в core/content.js синхронизированы', () => {
   const CANON = '/\\/app\\/(?!prompts(?:\\/|$)|new(?:\\/|$)|apikey(?:\\/|$))([A-Za-z0-9_-]+)/';
   const LEGACY = '/\\/app\\/([A-Za-z0-9_-]+)/';
 
-  test('каноничная ветка в utils/export-emit-pipeline.js несёт lookahead-отсев литералов', () => {
-    const src = fs.readFileSync(path.join(__dirname, '..', 'utils', 'export-emit-pipeline.js'), 'utf8');
+  test('каноничная ветка в utils/export-emit-pipeline.ts несёт lookahead-отсев литералов', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'utils', 'export-emit-pipeline.ts'), 'utf8');
     expect(src).toContain(CANON);
   });
 

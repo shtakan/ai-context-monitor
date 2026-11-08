@@ -66,7 +66,7 @@ const CONTENT = require('./helpers/content-source.js').contentSource;
 const WIDGET = require('./helpers/content-source.js').moduleSource('core/widget.js');
 const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.ts');
 
-// Хелпер swallowSoft из utils/debug.js в eval-песочнице отсутствует (как в tests/widget-inapp-theme-h24.test.js:33).
+// Хелпер swallowSoft из utils/debug.ts в eval-песочнице отсутствует (как в tests/widget-inapp-theme-h24.test.js:33).
 global.swallowSoft = function () { };
 
 // ---------- извлечение РЕАЛЬНЫХ тел функций/констант из исходника ----------

@@ -59,7 +59,7 @@
 // снимка (K5) и emit-композиция (K3/K4), а lastDispatchSig/lastDispatchResult пишет сам
 // emit-гард O-22. Их переезд означал бы правку K3-K11 (запрещено рамками шага).
 // Порядок подключения (core/background.js, registerSafe 'ai-cm-deepseek-intercept-v7',
-// document_start, world MAIN): utils/debug.js -> core/deepseek-diag.js ->
+// document_start, world MAIN): utils/debug.ts -> core/deepseek-diag.js ->
 // core/deepseek-netsync.js -> core/deepseek-refetch.js -> core/deepseek-parse.js ->
 // ЭТОТ ФАЙЛ -> core/deepseek-intercept.js. До связки на window.AiCmDeepseekConv лежит
 // только __bind; после связки ядро раздаёт 2 из 3 тел форвардерами по прежним именам

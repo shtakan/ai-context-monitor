@@ -16,13 +16,13 @@
  * (core/content.js, слушатель 'ai-cm-full-history'); НЕ снимается эмитами historyComplete=0;
  * сброс — только на смене треда (core/widget.js:resetConversationState по data-session-thread-id);
  * чтение — core/export-manager.js:maybeAutoExport → state.gsaNetworkCompleteLatch →
- * utils/export-emit-pipeline.js:shouldSkipAutoExport.
+ * utils/export-emit-pipeline.ts:shouldSkipAutoExport.
  *
  * НЕ ТРОГАЕТСЯ (пины R ниже): mergeTurns/applyTurns, пороги и гистерезис −10 п.п., имена и
  * байты файла, латч fired (O-38) и латч spa-entry (O-29), формулировки причин skip, вердикты
  * шести платформ при отсутствии поля, GSA threadId-сегментация (O-31) и captcha-гард (O-27).
  *
- * Исполняются РЕАЛЬНЫЕ функции: shouldSkipAutoExport (utils/export-emit-pipeline.js),
+ * Исполняются РЕАЛЬНЫЕ функции: shouldSkipAutoExport (utils/export-emit-pipeline.ts),
  * aiCmGsaNetworkCompleteReset/Set/Is + maybeAutoExport (core/export-manager.js),
  * resetConversationState (core/widget.js) — в песочнице с РЕАЛЬНЫМ объектом состояния
  * (require core/state.js), как в browser'е (общий лексический скоуп контент-скриптов).
@@ -31,7 +31,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const STATE = require('../core/state.js');
 const HELPER = require('./helpers/content-source.js');
 

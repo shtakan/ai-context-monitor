@@ -3,11 +3,11 @@
  * Ключ 'aiCmAutoExportPct_<site>' (например aiCmAutoExportPct_chatgpt)
  * переопределяет глобальный aiCmAutoExportPct (autoExportSettings.pct) для этого
  * сайта; отсутствует запись → глобальный; кламп [1,100]; фолбэк 90.
- * Чистая функция — utils/export-emit-pipeline.js effectiveAutoExportThreshold;
+ * Чистая функция — utils/export-emit-pipeline.ts effectiveAutoExportThreshold;
  * здесь же интеграционная проверка с shouldSkipAutoExport (гейт maybeAutoExport).
  */
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 
 describe('effectiveAutoExportThreshold (S2: per-site автоэкспорт)', () => {
   test('per-site ключ переопределяет глобальный порог', () => {

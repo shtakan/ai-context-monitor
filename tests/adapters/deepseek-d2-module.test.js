@@ -4,7 +4,7 @@
  * Кластер СЕКЦИИ 9C (O-18, фаза 2: liveTurnRecord / netSyncNeeded / exportComposeTurns /
  * applyExportNetSnapshot / exportNetSync + мост 'ai-cm-deepseek-net-sync') уехал в
  * core/deepseek-netsync.js. Модуль и ядро — РАЗНЫЕ IIFE одного registerContentScripts-
- * пакета (js[]: utils/debug.js -> deepseek-diag.js -> deepseek-netsync.js ->
+ * пакета (js[]: utils/debug.ts -> deepseek-diag.js -> deepseek-netsync.js ->
  * deepseek-intercept.js), поэтому связь идёт ровно через один контракт:
  *
  *   ядро -> модуль: window.AiCmDeepseekNetsync.__bind(deps)

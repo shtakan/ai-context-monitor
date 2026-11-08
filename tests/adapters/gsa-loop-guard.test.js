@@ -34,7 +34,7 @@ const { Parser, INTERCEPT, makeApi, makeFetch } = SANDBOX;
 const TID_A = 'GSA-LOOP-A';
 const TID_B = 'GSA-LOOP-B';
 const FOLWR_URL = 'https://www.google.com/search?udm=50&async=folwr';
-// Формат канонического хелпера utils/debug.js:162 — '[AI CM][diag] ' + tag + ' ' + key=value…
+// Формат канонического хелпера utils/debug.ts:162 — '[AI CM][diag] ' + tag + ' ' + key=value…
 const DIAG_PREFIX = '[AI CM][diag]';
 
 function turn(id, q, a) {
@@ -178,7 +178,7 @@ function loopCtx(over) {
 
   const diag = {
     on: function () { return ctx.diagGate === true; },
-    // Как реальный utils/debug.js: гейт aiCmDebug решает, печатать ли строку.
+    // Как реальный utils/debug.ts: гейт aiCmDebug решает, печатать ли строку.
     line: function (point, fields) {
       if (!diag.on()) return false;
       const pairs = [];

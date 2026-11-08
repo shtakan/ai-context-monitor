@@ -28,16 +28,16 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 
 const ROOT = path.join(__dirname, '..', '..');
 const EXPORT_MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 const BASE_HANDLER_SRC = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.js'), 'utf8');
 
-// E.2a.2b.4b: хелпер swallow из utils/debug.js (его нет в eval-песочнице: срез
+// E.2a.2b.4b: хелпер swallow из utils/debug.ts (его нет в eval-песочнице: срез
 // исполняется через new Function/eval; в MAIN-инжекте debug.js идёт первым).
 global.swallow = function () { };
-// Step E.2c-B2b-3b (swallowSoft): канал B из utils/debug.js — вне eval-песочницы так же, как swallow.
+// Step E.2c-B2b-3b (swallowSoft): канал B из utils/debug.ts — вне eval-песочницы так же, как swallow.
 global.swallowSoft = function () { };
 const CONTENT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
 const OPTIONS_SRC = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');

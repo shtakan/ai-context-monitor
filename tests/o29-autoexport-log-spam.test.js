@@ -18,8 +18,8 @@
  *
  * Исполняются РЕАЛЬНЫЕ функции: resetConversationState (core/widget.js), maybeAutoExport +
  * aiCmAutoExportConvId + aiCmGsaProbeRunningFor + aiCmGsaAutoExportSkipLog (core/export-manager.js),
- * хелперы O-29, канонический debugLog (utils/debug.js) под гейтом aiCmDebug и чистый гейт
- * shouldSkipAutoExport (utils/export-emit-pipeline.js).
+ * хелперы O-29, канонический debugLog (utils/debug.ts) под гейтом aiCmDebug и чистый гейт
+ * shouldSkipAutoExport (utils/export-emit-pipeline.ts).
  *
  * НЕ ТРОГАЕТСЯ (пины R ниже): вердикт shouldSkipAutoExport и порядок гейтов, латчи fired
  * (markAutoExportFired/resetAutoExportFired вызываются ровно там же, где прежде), пороги
@@ -30,17 +30,17 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const { contentSource: CONTENT } = require('./helpers/content-source.js');
 
 const ROOT = path.join(__dirname, '..');
 const WIDGET_SRC = fs.readFileSync(path.join(ROOT, 'core', 'widget.js'), 'utf8');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 const STATE_SRC = fs.readFileSync(path.join(ROOT, 'core', 'state.js'), 'utf8');
-// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+// R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
-const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
-const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
+const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
 
 // Рез по балансу фигурных скобок (конвенция сьюта: tests/gsa-autoexport.test.js).
 function fnDecl(src, name) {
@@ -197,7 +197,7 @@ function o29(over) {
     aiCmArchiveRestoredDispatched: {},
     aiCmArchiveCountByConv: {},
     // ---- лог/диагностика ----
-    // ВАЖНО: debugLog НЕ кладём в ctx — его объявляет сама песочница (fnDecl utils/debug.js);
+    // ВАЖНО: debugLog НЕ кладём в ctx — его объявляет сама песочница (fnDecl utils/debug.ts);
     // свойство ctx перекрыло бы объявление в with-скоупе и вызов упал бы на null.
     __aiCmStringifyArg: function (a) { return String(a); },
     console: {

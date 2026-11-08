@@ -1,12 +1,12 @@
 // ESM (Roadmap Ph2): сборка втягивает utils/platform.ts в тот же бандл контент-скрипта,
 // поэтому aiCmIsFirefox() остаётся в общей области видимости (как и до перевода на ESM).
 import { aiCmIsFirefox } from '../utils/platform.ts';
-// R1 (Roadmap Ph2): utils/debug.js переведён на ESM — хелперы диагностики втягиваются
+// R1 (Roadmap Ph2): utils/debug.ts переведён на ESM — хелперы диагностики втягиваются
 // сборкой статическим import'ом в общую область видимости content-бандла (раньше модуль
 // грузился отдельным classic-скриптом из manifest.content_scripts).
 import { __aiCmSetDebugLogs, __aiCmGetLogRing, debugLog, swallow, swallowSoft, aiCmDiagOn,
   aiCmDiagDocKind, aiCmDiagHead, aiCmDiagStack, aiCmDiagLine, aiCmDiagWarn,
-  aiCmDiagDownload, aiCmDiagDownloadBlocked } from '../utils/debug.js';
+  aiCmDiagDownload, aiCmDiagDownloadBlocked } from '../utils/debug.ts';
 // ESM (Roadmap Ph2): utils/tokenizer.ts переведён на ES-модуль и втягивается этим
 // import'ом в общий бандл контент-скрипта; отдельного classic-скрипта в
 // manifest.content_scripts больше нет. Идентификатор Tokenizer сохранён намеренно:
@@ -28,21 +28,21 @@ import { ModelConfig } from '../utils/model-config.ts';
 // adapters/qwen-adapter.js и сам core/content.js, склеенные в ТОТ ЖЕ модуль, — объявления
 // import хойстятся, поэтому второй импорт в них не нужен (и был бы дублирующим именем).
 import AiCmExportBuilders from '../utils/export-text-builders.ts';
-// ESM (Roadmap Ph2): utils/export-emit-pipeline.js переведён на ES-модуль (UMD-хвост
+// ESM (Roadmap Ph2): utils/export-emit-pipeline.ts переведён на ES-модуль (UMD-хвост
 // снят), строка из manifest.content_scripts удалена. Идентификатор AiCmExportEmitPipeline
 // намеренно тот же: его разделяют core/export-manager.js, core/base-handler.js,
 // core/widget.js и сам core/content.js, склеенные в ТОТ ЖЕ модуль, — import хойстится,
 // поэтому второго импорта в них не нужно. Потребители читают ESM-биндинг с
 // window-фолбэком (срезы-песочницы в тестах). MAIN-регистраций у модуля нет,
 // classic-артефакт не выводится.
-import * as AiCmExportEmitPipeline from '../utils/export-emit-pipeline.js';
-// ESM (Roadmap Ph2): utils/gemini-batchexecute-parser.js переведён на ES-модуль.
+import * as AiCmExportEmitPipeline from '../utils/export-emit-pipeline.ts';
+// ESM (Roadmap Ph2): utils/gemini-batchexecute-parser.ts переведён на ES-модуль.
 // Именованных потребителей в content-скрипте нет, нужен его побочный эффект —
 // window-зеркало (window.GeminiBatchexecuteParser): из него читают
 // core/export-manager.js:sanitizeGeminiText и geminiParserVersion() ниже. Для
 // MAIN-мира (chrome.scripting не умеет import) build.mjs выводит classic-артефакт
 // того же модуля в dist/utils/gemini-batchexecute-parser.js.
-import '../utils/gemini-batchexecute-parser.js';
+import '../utils/gemini-batchexecute-parser.ts';
 // ESM (Roadmap Ph2): utils/google-search-folwr-parser.js переведён на ES-модуль.
 // Именованных потребителей в content-скрипте нет, нужен его побочный эффект —
 // window-зеркало (window.GoogleFolwrUtils): из него читает
@@ -110,7 +110,7 @@ const STORAGE_INDEX_PREFIX = 'ai-cm-gemini-index-';
 const MAX_DIALOGUES = 50;
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 дней
 
-// Версия логики парсинга Gemini (PARSER_VERSION из utils/gemini-batchexecute-parser.js).
+// Версия логики парсинга Gemini (PARSER_VERSION из utils/gemini-batchexecute-parser.ts).
 // Ключ ленты включает версию: протухшие записи другой версии не читаются и не мигрируются.
 function geminiParserVersion() {
   try {
@@ -1127,7 +1127,7 @@ function aiCmDispatchContentReady() {
 
 function getCurrentConvId() {
   try {
-    // v81: обобщено на 6 сервисов через utils/export-emit-pipeline.js:
+    // v81: обобщено на 6 сервисов через utils/export-emit-pipeline.ts:
     // Gemini /app/<id> и claude /chat/<uuid> сохранены 1:1; добавлены ветки
     // chatgpt.com /c/<id>, chat.deepseek.com /a/chat/s/<id>,
     // perplexity.ai /search/<id> (живой диалог, M-11 v1.19.1) или /thread/<id>;
@@ -1191,7 +1191,7 @@ function aiCmQwenInitErrText(e) {
 //   3) вход/выход/throw initialize (в т.ч. пропуск лесенки 2000/4000/6000 при исключении);
 //   4) вердикт DRAW-гарда processAndSend — единственное место, где видно, что проход вернулся
 //      ДО записи базы адаптером и снимка aiCmState.
-// Гейт — общий aiCmDebug (utils/debug.js: aiCmDiagLine → aiCmDiagOn): выключен → НИ ОДНОЙ
+// Гейт — общий aiCmDebug (utils/debug.ts: aiCmDiagLine → aiCmDiagOn): выключен → НИ ОДНОЙ
 // строки и ни одного лишнего чтения. Ничего не пишет в состояние/storage/DOM и не меняет
 // байты выхода; строки — только для qwen. Вызовы защищены try/catch, поэтому срез-песочницы
 // тестов без этого хелпера видят прежнее поведение 1:1.
@@ -2091,7 +2091,7 @@ var aiCmBadgeHoldSpent = false; // щит уже отработал (запис�
 var aiCmBadgeHoldTimer = null;
 
 // O-1 (диагностика, только измерение): взвод/отпускание щита каноническим хелпером
-// utils/debug.js — под гейтом aiCmDebug. reason=armed|armed-empty-convid|released-baseSeen|
+// utils/debug.ts — под гейтом aiCmDebug. reason=armed|armed-empty-convid|released-baseSeen|
 // released-fallback. Гейт выключен → ни одной новой строки (aiCmDiagLine возвращает false,
 // console не трогается), поведение щита то же. typeof-гард — срез-песочницы тестов.
 function aiCmBadgeHoldDiag(reason) {
@@ -2712,7 +2712,7 @@ function processAndSend() {
     // O-32 (ДИАГНОСТИКА, только измерение): ИСТОЧНИК и РЕЖИМ значения бейджа одним маркером —
     // видно, каким путём получено число (полная база / канонический пол базы + DOM-хвост /
     // канонический пол базы / DOM-адаптер) и удерживался ли монотонный максимум. Печать —
-    // каноническим хелпером utils/debug.js под гейтом aiCmDebug и ТОЛЬКО на смену состояния
+    // каноническим хелпером utils/debug.ts под гейтом aiCmDebug и ТОЛЬКО на смену состояния
     // (сигнатура src|msgs|textLen|tokens|percentage — урок O-29 про лог-спам); читаются только
     // уже посчитанные значения, байты/пороги/латчи не меняются.
     try {
@@ -3173,7 +3173,7 @@ function aiCmQwenExportBaseTrusted() {
 // Симптом (живой лог 21:47:18 / 21:58:03 / 22:03:50 / 22:07:44):
 //   [AI CM][diag] auto-export point=maybeAutoExport verdict=skip reason=base-pending
 //   site=qwen pct=63.7 baseSeen=0 baseComplete=0 — при пороге 30 файла нет вовсе.
-// Корень (ИЗМЕРЕН): гейт O-33 (utils/export-emit-pipeline.js:shouldSkipAutoExport) требовал
+// Корень (ИЗМЕРЕН): гейт O-33 (utils/export-emit-pipeline.ts:shouldSkipAutoExport) требовал
 // СЕТЕВОЙ снимок (baseSeen=1), а adapterBaseSeen (единственная точка взвода — запись базы
 // путём DOM-адаптера, v54) гейтом не читался: у qwen сети не будет никогда, поэтому
 // base-pending возвращался на каждом DRAW и автоэкспорт не срабатывал ни разу. Доверие

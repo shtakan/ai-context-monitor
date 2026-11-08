@@ -12,7 +12,7 @@
  * БАЗА и метрики (tokens/pct/limit/модель/бейдж) считаются по базовому тексту и от
  * положения тумблера НЕ зависят: секции остаются в тексте хода (core/deepseek-intercept.js,
  * v8), hidden живёт отдельным полем захвата; урезание — ТОЛЬКО на выходе экспорта
- * (utils/export-emit-pipeline.js:stripReasoningSections).
+ * (utils/export-emit-pipeline.ts:stripReasoningSections).
  *
  * Контур сьюта (правило R-D: пины на КАЖДЫЙ путь захвата + на единственную точку выхода):
  *   D1 — тумблер ON → md/txt/json/pdf несут reasoning-секции и инъекции; DOM-путь (панель
@@ -46,14 +46,14 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
 
 const ROOT = path.join(__dirname, '..');
 const read = function (rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); };
 
-const PIPELINE_SRC = read('utils/export-emit-pipeline.js');
+const PIPELINE_SRC = read('utils/export-emit-pipeline.ts');
 const EXPORT_MGR_SRC = read('core/export-manager.js');
 const BASE_HANDLER_SRC = read('core/base-handler.js');
 const CONTENT_SRC = require('./helpers/content-source.js').contentSource;
@@ -931,7 +931,7 @@ describe('O-7 S3/S4/S5: OFF-путь убирает [TOOL_RESULTS] и XML-выз
     });
     expect(PIPELINE_SRC).toContain("|shell_\\\\w+|python_\\\\w+|skill_\\\\w+");
     // ON-путь (сырой режим) S3/S4/S5 не зовёт: вырезает и удаляет ТОЛЬКО OFF
-    const onFn = sliceSource(PIPELINE_SRC, 'function includeHiddenExportBlocks(messages)', 'var Api = {');
+    const onFn = sliceSource(PIPELINE_SRC, 'function includeHiddenExportBlocks(messages: Message[])', 'var Api = {');
     expect(onFn).not.toContain('stripToolCallBlocks');
     expect(onFn).not.toContain('isToolResultsOnlyText');
     expect(onFn).not.toContain('isEmptyExportText');
@@ -1193,12 +1193,12 @@ describe('O-7 R3: регресс-контур O-11/O-31/O-27/O-33/O-15…O-20 н
   });
 
   test('маркеры соседей в коде живы', () => {
-    expect(PIPELINE_SRC).toContain('function sanitizeEmitMessages(messages)');
-    expect(PIPELINE_SRC).toContain('function buildAutoExportFileName(spec)');
+    expect(PIPELINE_SRC).toContain('function sanitizeEmitMessages(messages: Message[])');
+    expect(PIPELINE_SRC).toContain('function buildAutoExportFileName(spec: ExportFileNameSpec | null | undefined)');
     expect(PIPELINE_SRC).toContain('function sanitizeInjectedUserText(text)');
-    expect(PIPELINE_SRC).toContain('function shouldSkipGsaPageGuard(state)');
+    expect(PIPELINE_SRC).toContain('function shouldSkipGsaPageGuard(state: GsaPageGuardState | null)');
     expect(PIPELINE_SRC).toContain('function shouldSkipAutoExport(state)');
-    expect(PIPELINE_SRC).toContain('function includeHiddenExportBlocks(messages)');
+    expect(PIPELINE_SRC).toContain('function includeHiddenExportBlocks(messages: Message[])');
     expect(PIPELINE_SRC).toContain('function stripReasoningSections(text)');
     // S3/S4/S5: чистые функции тул-мусора DeepSeek++ (OFF-путь) на месте
     expect(PIPELINE_SRC).toContain('function isToolResultsOnlyText(text)');

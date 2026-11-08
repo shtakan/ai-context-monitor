@@ -4,7 +4,7 @@
  * Кластер K1 (СЕКЦИЯ 3 ядра — CONV ID + детектор смены чата: getConvId, сброс состояния
  * resetForNewConversation, checkConvChange и патчи history.pushState/replaceState/popstate)
  * уехал в core/deepseek-conv.js. Модуль и ядро — РАЗНЫЕ IIFE одного registerContentScripts-
- * пакета (js[]: utils/debug.js -> deepseek-diag.js -> deepseek-netsync.js ->
+ * пакета (js[]: utils/debug.ts -> deepseek-diag.js -> deepseek-netsync.js ->
  * deepseek-refetch.js -> deepseek-parse.js -> deepseek-conv.js -> deepseek-intercept.js),
  * поэтому связь идёт ровно через один контракт:
  *

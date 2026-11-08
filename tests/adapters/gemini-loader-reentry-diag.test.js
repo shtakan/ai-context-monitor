@@ -12,7 +12,7 @@
  *       с латчем, как и требовалось: карта не может разойтись с latchem по ветке.
  *   D2  гейт: вызов имеет ровно ту же форму, что соседние диаг-строки файла —
  *       `debugLog('log', '[AI CM][Gemini][loader] …')`, без собственного try/catch: уровень
- *       'log' печатает только utils/debug.js под флагом, а сам вызов стоит ДО проверки латча
+ *       'log' печатает только utils/debug.ts под флагом, а сам вызов стоит ДО проверки латча
  *       и ничего не присваивает, поэтому изменить поток управления не может.
  *   D3  поведение: модуль грузится в vm (как в gemini-overlay-module.test.js), получает
  *       макет зависимостей через __bind, maybeStartLoader не бросает, латч loaderDoneMap
@@ -21,7 +21,7 @@
  *   R1  гигиена: 'loaderRunAtMap' не встречается нигде, кроме TARGET, — ни в core/**, ни в
  *       adapters/**. Карта не утекает в другие модули и не читается чужим кодом.
  *   R2  без гейта строка не печатается: уровень 'log' (а не 'error'/'warn', которые
- *       utils/debug.js печатает ВСЕГДА) + поведенческая проверка — при закрытом гейте
+ *       utils/debug.ts печатает ВСЕГДА) + поведенческая проверка — при закрытом гейте
  *       модуль не отдаёт ни одной строки.
  *
  * Логика гардов (v17/v20/v59), латчи loaderDoneMap/loaderRunningFor и ветки
@@ -63,7 +63,7 @@ const countOf = (haystack, needle) => haystack.split(needle).length - 1;
 /**
  * Загрузка TARGET в отдельный vm-контекст — как это делает реальный content script:
  * модуль — IIFE, зависимости приходят через __bind, debugLog — глобальная функция
- * utils/debug.js. Гейт 'log' воспроизведён ровно как в utils/debug.js:55-71: пока
+ * utils/debug.ts. Гейт 'log' воспроизведён ровно как в utils/debug.ts:55-71: пока
  * gateOn не выставлен, строка не печатается.
  */
 function loadTarget() {
@@ -231,15 +231,15 @@ describe('loader-reentry: R1 карта не читается вне TARGET', ()
 });
 
 describe('loader-reentry: R2 без гейта строка не печатается', () => {
-  test('R2: уровень log (не error/warn) — иначе utils/debug.js печатает всегда', () => {
+  test('R2: уровень log (не error/warn) — иначе utils/debug.ts печатает всегда', () => {
     const at = TARGET.indexOf("'" + DIAG_MARK);
     expect(at).toBeGreaterThan(39);
     expect(TARGET.slice(at - 40, at)).toContain("debugLog('log', ");
     expect(TARGET.slice(at - 40, at)).not.toContain("debugLog('error'");
     expect(TARGET.slice(at - 40, at)).not.toContain("debugLog('warn'");
-    // гейт жив: 'log' под флагом, 'error'/'warn' — всегда (utils/debug.js:61-71)
-    const dbg = require('../helpers/load-esm.js').loadAsClassic('utils/debug.js');
-    expect(dbg).toContain("if (level === 'error' || level === 'warn') {");
+    // гейт жив: 'log' под флагом, 'error'/'warn' — всегда (utils/debug.ts:61-71)
+    const dbg = require('../helpers/load-esm.js').loadAsClassic('utils/debug.ts');
+    expect(dbg).toContain('if (level === "error" || level === "warn") {');
     expect(dbg).toContain('var enabled = DEBUG;');
     expect(dbg).toContain('if (enabled) {');
   });

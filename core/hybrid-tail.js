@@ -171,7 +171,7 @@ function getEffectiveCount(fallbackCount) {
 }
 
 // ========== v2.0 (этап 1/3): UMD-экспорт модуля ==========
-// Паттерн как у utils/export-emit-pipeline.js: window.<Api> + module.exports.
+// Паттерн как у utils/export-emit-pipeline.ts: window.<Api> + module.exports.
 // Рабочий путь ничего не импортирует: content-скрипты манифеста делят один
 // глобальный лексический скоуп, поэтому объявления выше видны всем модулям и
 // content.js по прежним именам. Api — для инструментов, отладки и тестов.

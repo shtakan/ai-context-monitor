@@ -83,7 +83,7 @@ const RAISE_IDX = lineIdx(RAISE);
 
 /**
  * Загрузка core/gemini-hidden-scroll.js в vm-контекст как content script: IIFE,
- * зависимости через __bind, debugLog — глобальная функция utils/debug.js.
+ * зависимости через __bind, debugLog — глобальная функция utils/debug.ts.
  * Часы подменены (модуль читает время только через Date.now()), D.sleep двигает
  * фейковые часы, поэтому прогон autoScrollCollect не ждёт реального времени.
  */

@@ -38,7 +38,7 @@
  *   отличием — строковые/регулярочные/шаблонные литералы маскируются в
  *   непустой плейсхолдер §, а не в пробел. Иначе `catch (e) { return 'x'; }`
  *   вырождается в «пустое» тело и даёт ложное срабатывание (проверено: это
- *   ломало utils/debug.js:152/169). Комментарии по-прежнему → пробелы.
+ *   ломало utils/debug.ts:152/169). Комментарии по-прежнему → пробелы.
  */
 'use strict';
 
@@ -341,7 +341,7 @@ describe('Step E.2b.1: страж молчаливых catch — whitelist', () 
     // audit-r3 пинует литералы ИНСТРУМЕНТИРОВАННЫХ catch. Страж их не видит
     // (тела непустые) и не требует их удаления — сосуществование проверяем
     // пофайлово: у каждого catch с logSegmentParseFail тело непустое.
-    const rel = 'utils/gemini-batchexecute-parser.js';
+    const rel = 'utils/gemini-batchexecute-parser.ts';
     const raw = fs.readFileSync(path.join(ROOT, rel), 'utf8');
     expect(raw).toContain('function logSegmentParseFail');
     expect(raw).toContain('[AI CM][batchexecute] segment parse fail ');

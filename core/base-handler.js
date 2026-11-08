@@ -39,7 +39,7 @@ function aiCmLogIntraDedupe(role, blocks) {
 // v1.18 (E-2): схлопывание дублей собранного массива сообщений для Gemini/AI Studio.
 // Deep Research отдаёт один и тот же текст пользователя несколько раз (пузырь реплики,
 // карточка плана, узлы шагов) — история, идущая в бейдж/токены/экспорт/print, обязана
-// содержать первое вхождение. Чистые функции — utils/export-emit-pipeline.js
+// содержать первое вхождение. Чистые функции — utils/export-emit-pipeline.ts
 // (dedupeIntraMessage → dedupeMessages, порядок задан prepareExportMessages); здесь
 // только гейт сервиса (прочие адаптеры не трогаем) и лог внутри-сообщенческих удалений.
 function aiCmDedupeExportSource(messages) {
@@ -77,7 +77,7 @@ function aiCmDedupeExportSource(messages) {
         // точки и после нормализации. Маркер claude-role-* SCOPED по сайту: живой замер идёт по
         // Claude-цепочке, а на прочих сайтах роль хода — не предмет этого маркера (чужие строки
         // под именем claude-role-* вводили бы в заблуждение). Печать — каноническим хелпером
-        // utils/debug.js:aiCmDiagLine; хелпера нет (Node/срез-песочницы тестов) или гейт выключен
+        // utils/debug.ts:aiCmDiagLine; хелпера нет (Node/срез-песочницы тестов) или гейт выключен
         // → НИ ОДНОЙ строки. Читаются только уже посчитанные значения: байты не меняются.
         if (typeof aiCmDiagLine === 'function' && site === 'claude') {
           aiCmDiagLine('claude-role-dedupe', { site: site, mpRole: mp.role, normalizedRole: msg.role });
@@ -483,7 +483,7 @@ function aiCmFilesDrainDefer(cid, percentage, reason, netSynced) {
 // ================= конец Step D.10 =================
 
 // ========== v2.0 (этап 1/3): UMD-экспорт модуля ==========
-// Паттерн как у utils/export-emit-pipeline.js: window.<Api> + module.exports.
+// Паттерн как у utils/export-emit-pipeline.ts: window.<Api> + module.exports.
 // Рабочий путь ничего не импортирует: content-скрипты манифеста делят один
 // глобальный лексический скоуп, поэтому объявления выше видны всем модулям и
 // content.js по прежним именам. Api — для инструментов, отладки и тестов.

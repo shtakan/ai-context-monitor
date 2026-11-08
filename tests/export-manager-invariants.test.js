@@ -37,7 +37,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 
 const ROOT = path.join(__dirname, '..');
@@ -282,7 +282,7 @@ describe('Инвариант автоэкспорта: fired ⟹ pendingCursor=0
 
     expect(h.downloads).toHaveLength(1);
     expect(h.line('[AI CM][auto-export] fired convId=')).toHaveLength(1);
-    // in-memory латч keyed 'service|convId' (utils/export-emit-pipeline.js:latchKey)
+    // in-memory латч keyed 'service|convId' (utils/export-emit-pipeline.ts:latchKey)
     expect(h.ctx.autoExportFired['gemini|' + CID]).toBe(1);
     expect(h.ctx.aiCmAutoExportFiredOnce['gemini|' + CID]).toBe(1);
     // повторный вызов на том же convId — already-fired, второго файла нет

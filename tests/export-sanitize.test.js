@@ -18,12 +18,12 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
 
 const ROOT = path.join(__dirname, '..');
-const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
+const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
 const EXPORT_MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 const BASE_HANDLER_SRC = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.js'), 'utf8');
 const PRINT_JS = fs.readFileSync(path.join(ROOT, 'print', 'print.js'), 'utf8');
@@ -195,8 +195,8 @@ describe('O-20 (1): sanitizeInjectedUserText — чистая санация use
   });
 
   test('чистота: в функциях санации нет логирования и обращений к DOM', () => {
-    const pure = block(PIPELINE_SRC, 'function injectedUserTextSkipReason(text)', 'function sanitizeEmitMessages(messages)') +
-      block(PIPELINE_SRC, 'function sanitizeEmitMessages(messages)', 'function unionTurnsById(');
+    const pure = block(PIPELINE_SRC, 'function injectedUserTextSkipReason(text)', 'function sanitizeEmitMessages(messages: Message[])') +
+      block(PIPELINE_SRC, 'function sanitizeEmitMessages(messages: Message[])', 'function unionTurnsById(');
     expect(pure).not.toContain('console.');
     expect(pure).not.toContain('document.');
   });

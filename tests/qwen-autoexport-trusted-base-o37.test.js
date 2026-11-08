@@ -16,27 +16,27 @@
  * не возвращается; дальше решают порог и латч. Порядок причин и вердикты прочих сайтов не
  * меняются (поле не передано → поведение 1:1, пины O-33 зелёные).
  *
- * Исполняются РЕАЛЬНЫЕ функции: shouldSkipAutoExport (utils/export-emit-pipeline.js),
+ * Исполняются РЕАЛЬНЫЕ функции: shouldSkipAutoExport (utils/export-emit-pipeline.ts),
  * maybeAutoExport → doAutoExportDownload → aiCmWriteAutoExportFile (core/export-manager.js),
  * aiCmAutoExportTrustedBase + aiCmAutoExportTrustedBaseDiag (core/content.js), канонический
- * aiCmDiagLine (utils/debug.js) и реальные сборщики байтов (utils/export-text-builders.ts).
+ * aiCmDiagLine (utils/debug.ts) и реальные сборщики байтов (utils/export-text-builders.ts).
  */
 
 const fs = require('fs');
 const path = require('path');
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const { contentSource: CONTENT } = require('./helpers/content-source.js');
 
 const ROOT = path.join(__dirname, '..');
-const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
+const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 const WIDGET_SRC = fs.readFileSync(path.join(ROOT, 'core', 'widget.js'), 'utf8');
 const CONTENT_ONLY = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
-// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+// R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
-const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
 
 // Рез по балансу фигурных скобок (конвенция сьюта: tests/o33-autoexport-base-pending.test.js).
 function fnDecl(src, name) {
@@ -146,8 +146,8 @@ function stand(over) {
     aiCmGsaChatPageMarker: function () { return true; },
     ModelConfig: { getModel: function () { return { name: 'Qwen3.8-Max' }; } },
     debugLog: function (lvl, msg) { logs.push(String(msg)); },
-    swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.js (его нет в песочнице)
-    swallowSoft: function () { },   // Step E.2c-B2b-3c (swallowSoft): канал B — тот же хелпер utils/debug.js, вне песочницы.
+    swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.ts (его нет в песочнице)
+    swallowSoft: function () { },   // Step E.2c-B2b-3c (swallowSoft): канал B — тот же хелпер utils/debug.ts, вне песочницы.
     console: { log: function (m) { diag.push(String(m)); }, error: function () { } },
     __store: (o.store || {}),
     chrome: {

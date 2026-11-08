@@ -7,7 +7,7 @@
     "adapters"
   ],
   "definition": "Молчаливый catch = тело после вырезания комментариев содержит только пробелы, ИЛИ ровно один no-op (void 0; / return; / continue; / break;). Комментарий-только тело тоже молчаливое (комментарии маскируются в пробелы).",
-  "totalEntries": 451,
+  "totalEntries": 424,
   "groups": [
     {
       "file": "adapters/claude-adapter.js",
@@ -1579,103 +1579,6 @@
         715
       ],
       "reason": "timing-guard: отмена таймера/подписки: обработчик мог быть снят хостом или гонкой; пример: aiCmSafeBottomObserver.disconnect();"
-    },
-    {
-      "file": "utils/debug.js",
-      "category": "helper-self-logging",
-      "lines": [
-        13,
-        36,
-        60,
-        67,
-        89,
-        110,
-        113,
-        121,
-        122,
-        129,
-        137,
-        184,
-        194,
-        218,
-        236
-      ],
-      "reason": "helper-self-logging: диагностика самого хелпера: debugLog не может логировать собственную недоступность; пример: if (typeof window !== 'undefined') window.__aiCmDebugLogs = !!v;"
-    },
-    {
-      "file": "utils/export-emit-pipeline.js",
-      "category": "best-effort-guard",
-      "lines": [
-        692,
-        749
-      ],
-      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: store[latchKey(service, convId)] = 1;"
-    },
-    {
-      "file": "utils/export-emit-pipeline.js",
-      "category": "cleanup-guard",
-      "lines": [
-        711
-      ],
-      "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete store[latchKey(service, convId)];"
-    },
-    {
-      "file": "utils/export-emit-pipeline.js",
-      "category": "local-helper-guard",
-      "lines": [
-        1544
-      ],
-      "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: onMessageDedupe(role, res.removedBlocks);"
-    },
-    {
-      "file": "utils/gemini-batchexecute-parser.js",
-      "category": "best-effort-guard",
-      "lines": [
-        440
-      ],
-      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var arr = turn[2][0][4][0][4]; if (!Array.isArray(arr)) return out; for"
-    },
-    {
-      "file": "utils/gemini-batchexecute-parser.js",
-      "category": "defensive-assignment",
-      "lines": [
-        980,
-        1062
-      ],
-      "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: lastDrTexts = extractDrTexts(realTurns);"
-    },
-    {
-      "file": "utils/gemini-batchexecute-parser.js",
-      "category": "feature-detect",
-      "lines": [
-        880
-      ],
-      "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var box = (Array.isArray(turn[3]) && Array.isArray(turn[3][0]) && Array."
-    },
-    {
-      "file": "utils/gemini-batchexecute-parser.js",
-      "category": "guard-clause",
-      "lines": [
-        355,
-        366
-      ],
-      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (Array.isArray(t) && Array.isArray(t[1]) && typeof t[1][1] === 'strin"
-    },
-    {
-      "file": "utils/gemini-batchexecute-parser.js",
-      "category": "logging-guard",
-      "lines": [
-        95
-      ],
-      "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: console.log('[AI CM][batchexecute] segment parse fail ' + where + ': ' +"
-    },
-    {
-      "file": "utils/gemini-batchexecute-parser.js",
-      "category": "noop-guard",
-      "lines": [
-        1099
-      ],
-      "reason": "noop-guard: единственный no-op — штатный выход из цикла/функции без восстановления; пример: bytes = new TextEncoder().encode(raw);"
     },
     {
       "file": "utils/gemini-intercept-logic.js",

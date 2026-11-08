@@ -32,13 +32,13 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
 const Logic = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
-const Pipeline = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const Pipeline = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 // Ph2: utils/archive-import.ts — ES-модуль; фасад берём его default-экспортом.
 const Archive = require('../helpers/load-esm.js').loadEsm('utils/archive-import.ts');
 const CORE_GEMINI = require('../helpers/gemini-intercept-source.js').geminiSource;
 const CORE_CONTENT = require('../helpers/content-source.js').contentSource;
 const OPTIONS_SRC = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
-const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
+const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
 
 // Рез по балансу фигурных скобок: fnSource-стиль затягивает комментарии следующей функции.
 function fnDecl(src, name) {
@@ -426,8 +426,8 @@ describe('T1-fix#3: doAutoExportDownload — файл из объединённ�
       aiCmDumpTurnsSnapshot: function () { },
       aiCmCancelDeferredHistWrite: function () { },
       debugLog: function (lvl, msg) { logs.push(String(msg)); },
-      swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.js (его нет в песочнице)
-      swallowSoft: function () { },   // Step E.2c-B2b-3c (swallowSoft): канал B — тот же хелпер utils/debug.js, вне песочницы.
+      swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.ts (его нет в песочнице)
+      swallowSoft: function () { },   // Step E.2c-B2b-3c (swallowSoft): канал B — тот же хелпер utils/debug.ts, вне песочницы.
       console: { error: function () { } },
       ModelConfig: { getModel: function () { return { name: 'Gemini 2.0 Flash' }; } },
       chrome: { storage: { session: { set: function () { }, remove: function () { } } } },

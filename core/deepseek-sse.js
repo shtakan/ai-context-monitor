@@ -58,7 +58,7 @@
 // parseSSE/consumeSseResponse/ingestModelSettings (fn-передачи в D.7).
 //
 // Порядок подключения (core/background.js, registerSafe 'ai-cm-deepseek-intercept-v11',
-// document_start, world MAIN): utils/debug.js -> core/deepseek-diag.js ->
+// document_start, world MAIN): utils/debug.ts -> core/deepseek-diag.js ->
 // core/deepseek-netsync.js -> core/deepseek-refetch.js -> core/deepseek-parse.js ->
 // core/deepseek-conv.js -> core/deepseek-emit.js -> core/deepseek-net.js ->
 // core/deepseek-ingest.js -> ЭТОТ ФАЙЛ -> core/deepseek-intercept.js.

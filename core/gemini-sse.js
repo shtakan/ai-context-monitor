@@ -37,7 +37,7 @@
 // PUBLIC API: window.AiCmGeminiSse = { __bind, installNetworkHooks }. Врапперы анонимны и
 // наружу не отдаются: ядру нужна только установка.
 //
-// debugLog остаётся «голым» глобалом из utils/debug.js — как в остальных модулях кластера.
+// debugLog остаётся «голым» глобалом из utils/debug.ts — как в остальных модулях кластера.
 
 (function () {
   if (typeof window !== 'undefined' && window.AiCmGeminiSse) return;

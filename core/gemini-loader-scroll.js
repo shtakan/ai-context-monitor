@@ -22,7 +22,7 @@
  * файл, общего лексического скоупа с ядром у него нет). Свойства объектов, ключи
  * литералов и локальные имена не тронуты.
  *
- * ПОРЯДОК ПОДКЛЮЧЕНИЯ: utils/debug.js, utils/gemini-batchexecute-parser.js,
+ * ПОРЯДОК ПОДКЛЮЧЕНИЯ: utils/debug.ts, utils/gemini-batchexecute-parser.ts,
  * utils/gemini-intercept-logic.js, core/gemini-hidden-scroll.js, core/gemini-diag.js,
  * core/gemini-rpc.js, core/gemini-parse.js, core/gemini-sse.js,
  * core/pagination/pagination.js, ЭТОТ ФАЙЛ, core/gemini-intercept.js — см. js[] в
@@ -947,7 +947,7 @@
       // loader-reentry (v2.0.17): точка входа автозапуска. Печатается ДО проверки латча —
       // видно и повторный вход (sinceLastRunMs >= 0), и вход, который латч сейчас скипнет.
       // Гейт тот же, что у соседних строк файла: debugLog('log', …) — 'log' молчит, пока
-      // aiCmDebugLogs/DEBUG не включён (utils/debug.js:55-71).
+      // aiCmDebugLogs/DEBUG не включён (utils/debug.ts:55-71).
       debugLog('log', '[AI CM][Gemini][loader] auto-start-reentry convId=' +
         String(convId || 'null') +
         ' sinceLastRunMs=' + String(typeof loaderRunAtMap[convId] === 'number' ? (Date.now() - loaderRunAtMap[convId]) : -1) +

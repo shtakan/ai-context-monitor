@@ -100,7 +100,7 @@ function makeStand(convId, debug) {
   const { window } = dom;
   window.TextDecoder = TextDecoder;
   if (debug !== false) window.sessionStorage.setItem('aiCmDebug', '1');
-  // Step E.2c-B2c-1 (aiCmDiagWarn): канал B из utils/debug.js — вне песочницы (как swallowSoft в B2b-3c).
+  // Step E.2c-B2c-1 (aiCmDiagWarn): канал B из utils/debug.ts — вне песочницы (как swallowSoft в B2b-3c).
   // Гейт повторён по контракту хелпера (sessionStorage.aiCmDebug / window.__aiCmDebugLogs),
   // поэтому прогоны с debug=false по-прежнему молчат, а под гейтом строка доезжает до logs.
   window.aiCmDiagWarn = (tag, message, detail) => {

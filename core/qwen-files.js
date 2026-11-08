@@ -120,7 +120,7 @@
     try { return JSON.parse(raw); } catch (eBd) { return null; }
   }
 
-  // Диагностика: канал B (utils/debug.js) — bare console.warn запрещён стражем
+  // Диагностика: канал B (utils/debug.ts) — bare console.warn запрещён стражем
   // tests/no-bare-console-warn.test.js. Тег получает префикс qwen-files-.
   function qfDiag(tag, fields) {
     try {

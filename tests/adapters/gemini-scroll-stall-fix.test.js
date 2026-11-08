@@ -99,7 +99,7 @@ const V53_COMMENT_LINES = [
 
 /**
  * Загрузка core/gemini-hidden-scroll.js в отдельный vm-контекст — как это делает реальный
- * content script (IIFE, зависимости через __bind, debugLog — глобальная функция utils/debug.js).
+ * content script (IIFE, зависимости через __bind, debugLog — глобальная функция utils/debug.ts).
  * document и getComputedStyle подменяются моком конкретного теста.
  */
 function loadHidden(doc, log) {

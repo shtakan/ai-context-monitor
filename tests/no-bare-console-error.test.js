@@ -2,7 +2,7 @@
  * Задача 1.9 (финальный пин): запрет bare `console.error(...)` в production-исходниках.
  *
  * Контракт проекта: единственная точка вывода — обёртка `debugLog(level, ...)`
- * (utils/debug.js): 'error'/'warn' печатаются всегда, 'log'/'info'/'debug' — под флагом
+ * (utils/debug.ts): 'error'/'warn' печатаются всегда, 'log'/'info'/'debug' — под флагом
  * «Подробные логи». Прямой `console.error` обходит и ring-буфер, и единый формат строк,
  * поэтому здесь — source-level пин против рецидива.
  *
@@ -10,7 +10,7 @@
  *   - комментарии (// и /* ... *\/) игнорируются;
  *   - строковые литералы ('...', "...", `...`) игнорируются;
  *   - содержимое аргументов `console.error` значения не имеет — важен сам вызов;
- *   - utils/debug.js — белый список (сам модуль-обёртка владеет console.*).
+ *   - utils/debug.ts — белый список (сам модуль-обёртка владеет console.*).
  *
  * Падение (сообщение): `bare console.error в <file>:<line>`.
  */
@@ -22,7 +22,7 @@ const SCAN_DIRS = ['core', 'adapters'];
 
 // Белый список: модуль-обёртка — единственный легальный владелец console.*
 // (в SCAN_DIRS он не входит, запись сохранена как явный контракт).
-const WHITELIST = new Set(['utils/debug.js']);
+const WHITELIST = new Set(['utils/debug.ts']);
 
 function toRel(p) {
   return path.relative(ROOT, p).split(path.sep).join('/');
@@ -285,13 +285,13 @@ describe('1.9: пин no-bare-console-error (core/ + adapters/)', () => {
     expect(hits[0].line).toBe(5);
   });
 
-  test('белый список: utils/debug.js разрешён (сам модуль-обёртка)', () => {
-    expect(WHITELIST.has('utils/debug.js')).toBe(true);
-    const debugPath = path.join(ROOT, 'utils', 'debug.js');
+  test('белый список: utils/debug.ts разрешён (сам модуль-обёртка)', () => {
+    expect(WHITELIST.has('utils/debug.ts')).toBe(true);
+    const debugPath = path.join(ROOT, 'utils', 'debug.ts');
     expect(scanFile(debugPath)).toHaveLength(0);
     // сканируемые каталоги белый список не пересекают
     for (const d of SCAN_DIRS) {
-      expect(listJsFiles(path.join(ROOT, d)).map(toRel)).not.toContain('utils/debug.js');
+      expect(listJsFiles(path.join(ROOT, d)).map(toRel)).not.toContain('utils/debug.ts');
     }
   });
 

@@ -661,7 +661,7 @@ function updateStaleWarning(state, tabHost, tabPath) {
 }
 
 // O-35 (ДИАГНОСТИКА, только измерение): печать строки попапа под гейтом aiCmDebug.
-// Канон utils/debug.js:aiCmDiagLine, если он подключён (в options.html debug.js нет —
+// Канон utils/debug.ts:aiCmDiagLine, если он подключён (в options.html debug.js нет —
 // та же семантика гейта реализована локально, ровно как в utils/export-text-builders.js:144).
 // Гейт выключен → ни одной строки; на показатели попапа функция не влияет.
 function aiCmPopupDiagLine(tag, fields) {

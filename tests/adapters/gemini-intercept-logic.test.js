@@ -416,7 +416,7 @@ describe('Gemini С„РёРєСЃ РїРµСЂРІРѕРіРѕ РїСЂРѕРј
 
 describe('Gemini СЃР°РЅР°С†РёСЏ Рё РґРµРґСѓРї С„РёРЅР°Р»СЊРЅРѕРіРѕ messages (sanitizeFinalMessages)', () => {
   function helpers() {
-    const parser = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-batchexecute-parser.js');
+    const parser = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-batchexecute-parser.ts');
     return {
       isThinkingAssistant: function (s) { return parser.isThinkingAssistant(s); },
       stripLeadingThinking: function (s) { return parser.stripLeadingThinking(s); }

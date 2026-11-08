@@ -138,7 +138,7 @@ import { setIntervalVisible } from '../utils/intercept-common.ts';
 
   // ---- O-27/O-32 (ДИАГНОСТИКА, только измерение): точки записи базы и сброса состояния ----
   // Гейт — aiCmDebug: sessionStorage 'aiCmDebug' === '1' или чекбокс «Подробные логи»
-  // (utils/debug.js: aiCmDiagOn/aiCmDiagLine/aiCmDiagDocKind, тот же MAIN-мир).
+  // (utils/debug.ts: aiCmDiagOn/aiCmDiagLine/aiCmDiagDocKind, тот же MAIN-мир).
   // Функции только ЧИТАЮТ turns/счётчики/threadId и печатают строку: база, эмит,
   // baseComplete и байты экспорта не меняются. В срез-песочницах тестов этих хелперов
   // нет — вызовы в пиннутых функциях защищены typeof-гардом.
@@ -480,7 +480,7 @@ import { setIntervalVisible } from '../utils/intercept-common.ts';
   // тестов вырезают функции по имени/балансу скобок (tests/diag-o27-o32-instrumentation.test.js
   // GSA_FNS) и вызов необъявленного хелпера дал бы ReferenceError вместо прежнего поведения.
   // Здесь только чтение уже построенного снимка под гейтом aiCmDebug (aiCmDiagLine,
-  // utils/debug.js): detail, база, threadId и байты эмита не меняются; гейт выключен → ни
+  // utils/debug.ts): detail, база, threadId и байты эмита не меняются; гейт выключен → ни
   // одной строки. Возврат функции прежний (undefined) — контракт emitDetail 1:1.
   //
   // O-32 (ДИАГНОСТИКА, только измерение): тот же вызов печатает ОТПЕЧАТОК ТРЕДА —
@@ -924,7 +924,7 @@ import { setIntervalVisible } from '../utils/intercept-common.ts';
   var folwrRunLastVerdict = {}; // threadAuthKey -> причина подавления последнего прогона
   var folwrGainSeenAtMap = {};  // threadAuthKey -> ts последнего РЕАЛЬНОГО прироста базы
 
-  // Диагностика под гейтом aiCmDebug (utils/debug.js: aiCmDiagOn/aiCmDiagLine, MAIN-мир):
+  // Диагностика под гейтом aiCmDebug (utils/debug.ts: aiCmDiagOn/aiCmDiagLine, MAIN-мир):
   // одна строка на попытку прогона — path / threadId / sincePrevRunMs / gained / verdict.
   // В срез-песочницах тестов хелперов может не быть — typeof-гард: нет хелпера, нет строки.
   function gsaDiagLoopGuard(path, tid, key, sincePrevRunMs, gained, verdict, reason) {

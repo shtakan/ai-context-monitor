@@ -1,7 +1,7 @@
 /**
  * O-42 (P1): АГЕНТНЫЙ КОНВЕРТ соседнего расширения Better DeepSeek (tool-continuation) —
  * прочь из OFF-пути экспорта. НОВЫЙ ТУМБЛЕР НЕ ЗАВОДИТСЯ: та же единственная точка и тот же
- * OFF-путь, что у O-20/O-40 — utils/export-emit-pipeline.js:sanitizeEmitMessages, OFF-путь
+ * OFF-путь, что у O-20/O-40 — utils/export-emit-pipeline.ts:sanitizeEmitMessages, OFF-путь
  * тумблера aiCmIncludeHiddenInExport (ON-путь = сырой режим, конверт не трогает вовсе).
  *
  * ИЗМЕРЕНИЕ (живой артефакт владельца ai-context-monitor-deepseek-DeepSeek-R1-2026-09-21-10-19.json,
@@ -27,15 +27,15 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 
 const ROOT = path.join(__dirname, '..');
 const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
-const PIPELINE_SRC = read('utils/export-emit-pipeline.js');
-// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+const PIPELINE_SRC = read('utils/export-emit-pipeline.ts');
+// R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
-const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
 const OPTIONS_JS = read('options/options.js');
 const OPTIONS_HTML = read('options/options.html');
 const ru = JSON.parse(read('_locales/ru/messages.json'));
@@ -200,7 +200,7 @@ function fnBody(src, name) {
   return '';
 }
 
-// Канонический гейт диагностики: РЕАЛЬНЫЕ aiCmDiagOn/aiCmDiagLine из utils/debug.js (как в
+// Канонический гейт диагностики: РЕАЛЬНЫЕ aiCmDiagOn/aiCmDiagLine из utils/debug.ts (как в
 // контент-скрипте) — для пина «байты выхода при гейте вкл/выкл идентичны» и «O-42 молчит».
 const DIAG_PREFIX = '[AI CM][diag] ';
 const DEBUG_API = new Function(

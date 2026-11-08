@@ -118,7 +118,7 @@
 
   function soft(e, tag) {
     if (typeof swallowSoft === 'function') { swallowSoft(e, tag); return; }
-    // source-песочницы тестов грузят файл без utils/debug.js — тогда молчим:
+    // source-песочницы тестов грузят файл без utils/debug.ts — тогда молчим:
     // консольный канал в MAIN-мире принадлежит aiCmDiagWarn (канал B, под гейтом).
     if (typeof aiCmDiagWarn !== 'function') return;
     // eslint-disable-next-line no-restricted-syntax
@@ -185,7 +185,7 @@
    *
    * КОНТРАКТ. Только чтение уже полученного текста; ни одного нового события,
    * ни записи в storage. Строка идёт под гейтом: sessionStorage 'aiCmDebug' === '1'
-   * (utils/debug.js подключён к этому скрипту — core/background.js:343), а в
+   * (utils/debug.ts подключён к этому скрипту — core/background.js:343), а в
    * source-песочницах тестов aiCmDiagLine нет — там гейт читается напрямую.
    * ================================================================== */
 

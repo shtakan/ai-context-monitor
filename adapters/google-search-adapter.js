@@ -203,7 +203,7 @@ class GoogleSearchAdapter extends BaseAdapter {
       }
 
       // O-45 (ДИАГНОСТИКА, только измерение): структура ПЕРВОГО найденного код-блока Gemini.
-      // Гейт — aiCmDebug (utils/debug.js: aiCmDiagOn/aiCmDiagLine, тот же ISOLATED-мир).
+      // Гейт — aiCmDebug (utils/debug.ts: aiCmDiagOn/aiCmDiagLine, тот же ISOLATED-мир).
       // Печатается ОДИН раз на блок (антиспам: extractMessages зовётся в цикле оценки токенов),
       // только ЧИТАЕТ DOM: извлечение текста, байты экспорта, пороги и латчи не меняются.
       // В срез-песочницах тестов хелперов гейта нет — вызовы защищены typeof-гардом.

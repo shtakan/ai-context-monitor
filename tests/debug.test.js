@@ -1,8 +1,8 @@
 /**
- * Юнит-тесты utils/debug.js — канонического гейта/логгера проекта.
+ * Юнит-тесты utils/debug.ts — канонического гейта/логгера проекта.
  *
  * ПОЧЕМУ ИСХОДНИК ГРУЗИТСЯ ЧЕРЕЗ eval, А НЕ require:
- * utils/debug.js — ESM-модуль (R1, Ph2), но в MAIN-мире он всё ещё исполняется как
+ * utils/debug.ts — ESM-модуль (R1, Ph2), но в MAIN-мире он всё ещё исполняется как
  * classic-скрипт: 8 регистраций world:'MAIN' грузят dist/utils/debug.js — артефакт,
  * который build.mjs (writeDebugClassic) выводит из этого же исходника, снимая
  * export-префиксы. Поэтому тест исполняет не модуль, а его classic-срез из
@@ -26,14 +26,14 @@ const { createInstrumenter } = require('istanbul-lib-instrument');
 
 const { loadAsClassic } = require('./helpers/load-esm.js');
 
-const DEBUG_PATH = path.join(__dirname, '..', 'utils', 'debug.js');
+const DEBUG_PATH = path.join(__dirname, '..', 'utils', 'debug.ts');
 // Classic-срез ESM-модуля: тот же текст, что сборка кладёт в dist/utils/debug.js
 // для MAIN-регистраций (loadAsClassic снимает export-префиксы объявлений).
-const DEBUG_SRC = loadAsClassic('utils/debug.js');
+const DEBUG_SRC = loadAsClassic('utils/debug.ts');
 
 // Контракт-страховка: срез обязан быть classic-скриптом без import/export.
 if (/^\s*(export|import)\b/m.test(DEBUG_SRC)) {
-  throw new Error('loadAsClassic не снял ESM-синтаксис с utils/debug.js');
+  throw new Error('loadAsClassic не снял ESM-синтаксис с utils/debug.ts');
 }
 
 // Экспорт-хвост ТОЛЬКО для теста. В файле его нет и быть не должно — добавляется
@@ -61,7 +61,7 @@ const EXPORT_TAIL = `
 // Перед исполнением исходник инструментируется istanbul (тот же инструментатор, что несёт
 // Jest): глобального __coverage__ у рантайма jest для НЕ-модульного (eval) кода нет, поэтому
 // счётчики этого файла иначе не попали бы в отчёт покрытия. Инструментируется ТОЛЬКО
-// тестовый экземпляр — боевой utils/debug.js не меняется.
+// тестовый экземпляр — боевой utils/debug.ts не меняется.
 if (!globalThis.__coverage__) globalThis.__coverage__ = {};
 const instrumenter = createInstrumenter({
   coverageVariable: '__coverage__',
@@ -142,7 +142,7 @@ afterEach(() => {
 // =====================================================================================
 // __aiCmSetDebugLogs — флаг отладки и window-зеркало
 // =====================================================================================
-describe('utils/debug.js: __aiCmSetDebugLogs — флаг и window-зеркало', () => {
+describe('utils/debug.ts: __aiCmSetDebugLogs — флаг и window-зеркало', () => {
   test('true включает флаг и зеркалит window.__aiCmDebugLogs', () => {
     Api.setDebugLogs(true);
     expect(window.__aiCmDebugLogs).toBe(true);
@@ -161,7 +161,7 @@ describe('utils/debug.js: __aiCmSetDebugLogs — флаг и window-зеркал
 // =====================================================================================
 // __aiCmStringifyArg — приведение аргумента лога к строке
 // =====================================================================================
-describe('utils/debug.js: __aiCmStringifyArg', () => {
+describe('utils/debug.ts: __aiCmStringifyArg', () => {
   test('строка возвращается как есть (без кавычек и JSON.stringify)', () => {
     expect(Api.stringifyArg('простой текст')).toBe('простой текст');
     expect(Api.stringifyArg('')).toBe('');
@@ -216,7 +216,7 @@ describe('utils/debug.js: __aiCmStringifyArg', () => {
 // =====================================================================================
 // Ring-буфер: __aiCmPushLogRing / __aiCmGetLogRing
 // =====================================================================================
-describe('utils/debug.js: ring-буфер логов (≤200 строк, FIFO)', () => {
+describe('utils/debug.ts: ring-буфер логов (≤200 строк, FIFO)', () => {
   test('push добавляет строку в массив; getLogRing отдаёт накопленное', () => {
     Api.pushLogRing('первая');
     Api.pushLogRing('вторая');
@@ -261,7 +261,7 @@ describe('utils/debug.js: ring-буфер логов (≤200 строк, FIFO)',
 // =====================================================================================
 // debugLog — уровни и гейт
 // =====================================================================================
-describe('utils/debug.js: debugLog — warn/error всегда, log/info только при DEBUG', () => {
+describe('utils/debug.ts: debugLog — warn/error всегда, log/info только при DEBUG', () => {
   test("level='error' → console.error вызывается ВСЕГДА (даже при выключенном DEBUG)", () => {
     Api.setDebugLogs(false);
     Api.debugLog('error', 'провал', { code: 1 });
@@ -346,7 +346,7 @@ describe('utils/debug.js: debugLog — warn/error всегда, log/info тол�
 // =====================================================================================
 // aiCmDiagOn — единый гейт инструментирования
 // =====================================================================================
-describe('utils/debug.js: aiCmDiagOn — гейт aiCmDebug', () => {
+describe('utils/debug.ts: aiCmDiagOn — гейт aiCmDebug', () => {
   test("sessionStorage.getItem('aiCmDebug') === '1' → true", () => {
     window.sessionStorage.setItem('aiCmDebug', '1');
     delete window.__aiCmDebugLogs;
@@ -403,7 +403,7 @@ describe('utils/debug.js: aiCmDiagOn — гейт aiCmDebug', () => {
 // =====================================================================================
 // aiCmDiagDocKind — тип документа для логов сброса состояния
 // =====================================================================================
-describe('utils/debug.js: aiCmDiagDocKind — captcha / chat / search', () => {
+describe('utils/debug.ts: aiCmDiagDocKind — captcha / chat / search', () => {
   function setLocation(href, hostname) {
     Object.defineProperty(globalThis, 'location', {
       value: { href: href, hostname: hostname, host: hostname },
@@ -500,7 +500,7 @@ describe('utils/debug.js: aiCmDiagDocKind — captcha / chat / search', () => {
 // =====================================================================================
 // aiCmDiagHead — голова строки/базы одной строкой
 // =====================================================================================
-describe('utils/debug.js: aiCmDiagHead — превью значения', () => {
+describe('utils/debug.ts: aiCmDiagHead — превью значения', () => {
   test('undefined/null → «(пусто)»', () => {
     expect(Api.diagHead(undefined)).toBe('(пусто)');
     expect(Api.diagHead(null)).toBe('(пусто)');
@@ -559,7 +559,7 @@ describe('utils/debug.js: aiCmDiagHead — превью значения', () =>
 // =====================================================================================
 // aiCmDiagStack — источник вызова
 // =====================================================================================
-describe('utils/debug.js: aiCmDiagStack — кадры стека', () => {
+describe('utils/debug.ts: aiCmDiagStack — кадры стека', () => {
   test('skip=0 пропускает 1 кадр (сам вызов) и НЕ содержит собственных кадров aiCmDiag', () => {
     const st = Api.diagStack(0);
     expect(typeof st).toBe('string');
@@ -609,7 +609,7 @@ describe('utils/debug.js: aiCmDiagStack — кадры стека', () => {
 // =====================================================================================
 // aiCmDiagLine — печать строки диагностики
 // =====================================================================================
-describe('utils/debug.js: aiCmDiagLine — печать под гейтом', () => {
+describe('utils/debug.ts: aiCmDiagLine — печать под гейтом', () => {
   test('гейт выключен → return false, console.log НЕ вызывается', () => {
     window.sessionStorage.clear();
     delete window.__aiCmDebugLogs;
@@ -661,7 +661,7 @@ describe('utils/debug.js: aiCmDiagLine — печать под гейтом', ()
 // =====================================================================================
 // aiCmDiagDownload / aiCmDiagDownloadBlocked — единые точки лога скачивания
 // =====================================================================================
-describe('utils/debug.js: aiCmDiagDownload', () => {
+describe('utils/debug.ts: aiCmDiagDownload', () => {
   beforeEach(() => {
     setLocation({ href: 'https://chat.qwen.ai/c/abc', hostname: 'chat.qwen.ai' });
   });
@@ -744,7 +744,7 @@ describe('utils/debug.js: aiCmDiagDownload', () => {
   });
 });
 
-describe('utils/debug.js: aiCmDiagDownloadBlocked', () => {
+describe('utils/debug.ts: aiCmDiagDownloadBlocked', () => {
   beforeEach(() => {
     setLocation({ href: 'https://www.google.com/sorry/index', hostname: 'www.google.com' });
   });
@@ -810,7 +810,7 @@ describe('utils/debug.js: aiCmDiagDownloadBlocked', () => {
 // =====================================================================================
 // swallow(error, tag) — Step E.2a: молчаливый catch → диагностируемый, поток не меняется
 // =====================================================================================
-describe('utils/debug.js: swallow — тонкая обёртка над debugLog(error)', () => {
+describe('utils/debug.ts: swallow — тонкая обёртка над debugLog(error)', () => {
   test('пишет строку с тегом в ring и в console.error ВСЕГДА (DEBUG выключен)', () => {
     Api.setDebugLogs(false);
     expect(Api.swallow(new Error('boom'), 'deepseek:parseSSELines')).toBeUndefined();
@@ -861,16 +861,16 @@ describe('utils/debug.js: swallow — тонкая обёртка над debugLo
 });
 
 // =====================================================================================
-// R1 (Ph2): дублей больше нет. utils/debug.js переведён на ESM, поэтому SW импортирует
+// R1 (Ph2): дублей больше нет. utils/debug.ts переведён на ESM, поэтому SW импортирует
 // debugLog/swallow статическим import, а не несёт собственную копию логики. Один expect
 // на весь контракт: гейт правила 3 (behavior-only) считает source-пины поштучно.
 // =====================================================================================
-describe('core/background.js: хелперы канала A приходят из utils/debug.js (R1)', () => {
+describe('core/background.js: хелперы канала A приходят из utils/debug.ts (R1)', () => {
   const BG_SRC = fs.readFileSync(path.join(__dirname, '..', 'core', 'background.js'), 'utf8');
 
-  test('импорт вместо дублей: debugLog/swallow/флаг DEBUG живут только в utils/debug.js', () => {
+  test('импорт вместо дублей: debugLog/swallow/флаг DEBUG живут только в utils/debug.ts', () => {
     expect({
-      importLine: BG_SRC.includes("import { debugLog, swallow } from '../utils/debug.js';"),
+      importLine: BG_SRC.includes("import { debugLog, swallow } from '../utils/debug.ts';"),
       noLocalDebugLog: !BG_SRC.includes('function debugLog(level)'),
       noLocalSwallow: !BG_SRC.includes('function swallow(error, tag)'),
       noDebugFlag: !BG_SRC.includes('var DEBUG = false;')

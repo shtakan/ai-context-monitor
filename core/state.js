@@ -206,7 +206,7 @@ var autoExportPctBySite = {};    // siteName -> число 1..100; undefined = �
 // этим латчем не затрагивается: SPA-возврат по-прежнему видит fired и не пишет второй файл.
 //
 // Читатель ОДИН — отправка state в чистый гейт (core/export-manager.js:maybeAutoExport →
-// utils/export-emit-pipeline.js:shouldSkipAutoExport, поле gsaNetworkCompleteLatch). Латч
+// utils/export-emit-pipeline.ts:shouldSkipAutoExport, поле gsaNetworkCompleteLatch). Латч
 // взводится/читается ТОЛЬКО в ISOLATED-мире (core/state.js — общий лексический скоуп
 // контент-скриптов); MAIN-мир перехватчика к этому объекту доступа не имеет и иметь не должен.
 var aiCmGsaNetworkCompleteLatch = Object.create(null);  // 'site|threadId' -> 1
@@ -297,7 +297,7 @@ function aiCmLatchRemove(service, convId) {
 }
 
 // ========== v2.0 (этап 1/3): UMD-экспорт модуля ==========
-// Паттерн как у utils/export-emit-pipeline.js: window.<Api> + module.exports.
+// Паттерн как у utils/export-emit-pipeline.ts: window.<Api> + module.exports.
 // Рабочий путь ничего не импортирует: content-скрипты манифеста делят один
 // глобальный лексический скоуп, поэтому объявления выше видны всем модулям и
 // content.js по прежним именам. Api — для инструментов, отладки и тестов.

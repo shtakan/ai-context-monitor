@@ -1,14 +1,14 @@
-// utils/debug.js — единый флаг отладки и обёртка-логгер для AI Context Monitor
+// utils/debug.ts — единый флаг отладки и обёртка-логгер для AI Context Monitor
 // v31: DEBUG управляется чекбоксом «Подробные логи» (ключ aiCmDebugLogs в chrome.storage.local).
 // По умолчанию ВЫКЛ: скрываются [gemini-autoscroll], [gemini-base-diag], token-diag-scan,
 // content-trace EMIT/DRAW и прочие v4x-логи. Всегда остаются (console.log напрямую):
 // версия расширения, инициализация адаптеров, «база полной истории», логи экспорта.
 // console.warn и console.error видны ВСЕГДА, независимо от флага.
-var DEBUG = false;
+var DEBUG: boolean = false;
 
 // v31: сеттер флага (вызывается из content.js при загрузке ключа и по onChanged;
 // в MAIN-мире перехватчики получают значение через событие 'ai-cm-debug-logs').
-export function __aiCmSetDebugLogs(v) {
+export function __aiCmSetDebugLogs(v: unknown): void {
   DEBUG = !!v;
   try { if (typeof window !== 'undefined') window.__aiCmDebugLogs = !!v; } catch (e) { }
 }
@@ -16,10 +16,10 @@ export function __aiCmSetDebugLogs(v) {
 // Ring-буфер логов (≤200 строк) для дампа диагностики. console.* НЕ затрагивается.
 // Каждая строка, проходящая через debugLog, дополнительно пишется в ring текущего мира
 // (у перехватчика MAIN-мир и у content.js ISOLATED-мир — отдельные буферы).
-var __aiCmLogRing = [];
-var __aiCmLogRingMax = 200;
+var __aiCmLogRing: string[] = [];
+var __aiCmLogRingMax: number = 200;
 
-export function __aiCmStringifyArg(a) {
+export function __aiCmStringifyArg(a: unknown): string {
   if (typeof a === 'string') return a;
   try {
     var s = JSON.stringify(a);
@@ -29,7 +29,7 @@ export function __aiCmStringifyArg(a) {
   } catch (e) { return String(a); }
 }
 
-export function __aiCmPushLogRing(line) {
+export function __aiCmPushLogRing(line: string): void {
   try {
     __aiCmLogRing.push(line);
     if (__aiCmLogRing.length > __aiCmLogRingMax) __aiCmLogRing.shift();
@@ -37,7 +37,7 @@ export function __aiCmPushLogRing(line) {
 }
 
 // Копия ring-буфера текущего мира (для дампа диагностики).
-export function __aiCmGetLogRing() {
+export function __aiCmGetLogRing(): string[] {
   try { return __aiCmLogRing.slice(); } catch (e) { return []; }
 }
 
@@ -52,7 +52,7 @@ export function __aiCmGetLogRing() {
  *   - 'warn' и 'error' → выводятся ВСЕГДА (сигнал реальной проблемы, не спам)
  *   - 'log' / 'info' / 'debug' → выводятся ТОЛЬКО при DEBUG === true
  */
-export function debugLog(level) {
+export function debugLog(level: string, ...rest: unknown[]): void {
   var args = Array.prototype.slice.call(arguments, 1);
   try {
     var line = args.map(__aiCmStringifyArg).join(' ');
@@ -73,18 +73,18 @@ export function debugLog(level) {
 /**
  * ЕДИНАЯ точка молчаливого catch → диагностируемого (Step E.2a, П.5/П.6).
  * Тонкая обёртка над debugLog('error', …): строка идёт в ring ≤200 И в console.error —
- * ВСЕГДА, как любой 'error' (utils/debug.js:61-64). Поток управления НЕ меняется:
+ * ВСЕГДА, как любой 'error' (utils/debug.ts:61-64). Поток управления НЕ меняется:
  * возврат undefined, исключение не пробрасывается, catch остаётся заглушкой.
  * Дедуп/счётчики/троттлинг здесь НЕ живут (отложено на E.2c).
- * typeof-гард обязателен: срез-песочницы тестов грузят исходники БЕЗ utils/debug.js,
+ * typeof-гард обязателен: срез-песочницы тестов грузят исходники БЕЗ utils/debug.ts,
  * и прямой вызов debugLog там бросил бы ReferenceError — т.е. убил бы исходный catch.
  * @param {any} error пойманное исключение
  * @param {string} tag контекст точки вида '<domain>:<function>' ('deepseek:parseSSELines')
  * @returns {void}
  */
-export function swallow(error, tag) {
+export function swallow(error: unknown, tag?: string): void {
   try {
-    if (typeof debugLog !== 'function') return;   // песочница без utils/debug.js: тихо и без броска
+    if (typeof debugLog !== 'function') return;   // песочница без utils/debug.ts: тихо и без броска
     debugLog('error', '[swallow][' + (tag || 'unlabeled') + ']', error);
   } catch (eSwallow) { /* сам логгер не должен бросать: swallow безопасен всегда */ }
 }
@@ -103,7 +103,7 @@ export function swallow(error, tag) {
 //   - вызовы в чужом коде защищены typeof-гардом, поэтому срез-песочницы тестов без
 //     этих хелперов видят прежнее поведение 1:1.
 // =============================================================================
-export function aiCmDiagOn() {
+export function aiCmDiagOn(): boolean {
   try {
     if (typeof sessionStorage !== 'undefined' && sessionStorage &&
       sessionStorage.getItem('aiCmDebug') === '1') return true;
@@ -115,7 +115,7 @@ export function aiCmDiagOn() {
 }
 
 // Тип документа для логов сброса состояния: captcha / chat / search / unknown.
-export function aiCmDiagDocKind() {
+export function aiCmDiagDocKind(): AiCmDiagDocKind {
   var href = '';
   var host = '';
   try { href = String((typeof location !== 'undefined' && location && location.href) || ''); } catch (eHref) { }
@@ -140,7 +140,7 @@ export function aiCmDiagDocKind() {
 }
 
 // Первые n символов (по умолчанию 100) базы/тела ОДНОЙ строкой; пустое — явно.
-export function aiCmDiagHead(v, n) {
+export function aiCmDiagHead(v: unknown, n?: number): string {
   try {
     var lim = (typeof n === 'number' && n > 0) ? n : 100;
     if (v === undefined || v === null) return '(пусто)';
@@ -153,7 +153,7 @@ export function aiCmDiagHead(v, n) {
 }
 
 // Источник вызова (dev-режим/подробные логи): верхние кадры стека одной строкой.
-export function aiCmDiagStack(skip) {
+export function aiCmDiagStack(skip?: number): string {
   try {
     var st = String((new Error()).stack || '');
     if (!st) return '';
@@ -170,11 +170,11 @@ export function aiCmDiagStack(skip) {
 }
 
 // Печать строки диагностики: tag + key=value… Только под гейтом aiCmDebug.
-export function aiCmDiagLine(tag, fields) {
+export function aiCmDiagLine(tag: string, fields?: DiagFields): boolean {
   if (!aiCmDiagOn()) return false;
   try {
     var parts = [];
-    var f = fields || {};
+    var f: DiagFields = fields || {};
     for (var k in f) {
       if (!Object.prototype.hasOwnProperty.call(f, k)) continue;
       var v = f[k];
@@ -187,9 +187,9 @@ export function aiCmDiagLine(tag, fields) {
 
 // ЕДИНАЯ точка лога скачивания: триггер, имя файла (пустое — словом «пустое»),
 // первые 100 символов базы, длина, URL документа, threadId, источник вызова.
-export function aiCmDiagDownload(trigger, content, fileName, extra) {
+export function aiCmDiagDownload(trigger: string, content: unknown, fileName: unknown, extra?: DiagFields): boolean {
   if (!aiCmDiagOn()) return false;
-  var e = extra || {};
+  var e: DiagFields = extra || {};
   var url = '';
   try { url = String((typeof location !== 'undefined' && location && location.href) || ''); } catch (eUrl) { }
   return aiCmDiagLine('download', {
@@ -211,9 +211,9 @@ export function aiCmDiagDownload(trigger, content, fileName, extra) {
 // живой артефакт `f.txt`); reason=empty-name — имя файла пустое/не задано (живой путь
 // автоэкспорта на captcha-странице). Строка — только под гейтом aiCmDebug; reason идёт
 // ПЕРВЫМ полем, поэтому в логе всегда читается `download-blocked reason=<причина>`.
-export function aiCmDiagDownloadBlocked(trigger, content, fileName, reason, extra) {
+export function aiCmDiagDownloadBlocked(trigger: string, content: unknown, fileName: unknown, reason: string, extra?: DiagFields): boolean {
   if (!aiCmDiagOn()) return false;
-  var e = extra || {};
+  var e: DiagFields = extra || {};
   var url = '';
   try { url = String((typeof location !== 'undefined' && location && location.href) || ''); } catch (eUrlB) { }
   return aiCmDiagLine('download-blocked', {
@@ -238,7 +238,7 @@ try { if (typeof window !== 'undefined') window.__aiCmSwallow = swallow; } catch
 // =============================================================================
 // Step E.2c-A: канал B — «мягкие» события (swallowSoft / aiCmDiagWarn).
 //
-// Почему хелперы в ХВОСТЕ файла, а не рядом с swallow (utils/debug.js:85): любая
+// Почему хелперы в ХВОСТЕ файла, а не рядом с swallow (utils/debug.ts:85): любая
 // вставка выше сдвинула бы номера строк catch, запинутые построчно в
 // tests/fixtures/catch-whitelist.json (13, 36, 60, 67, 89, 110, 113, 121, 122, 129,
 // 137, 184, 194, 218, 236). Страж tests/catch-hygiene.test.js сверяет дерево с этим
@@ -250,18 +250,18 @@ try { if (typeof window !== 'undefined') window.__aiCmSwallow = swallow; } catch
 
 /**
  * Мягкий перехват (Step E.2c-A, канал B): ошибка, которую НЕ эскалируем.
- * Отличие от swallow (utils/debug.js:85): console.error не вызывается НИКОГДА.
+ * Отличие от swallow (utils/debug.ts:85): console.error не вызывается НИКОГДА.
  *   - ring-буфер: строка пишется ВСЕГДА (единственный безусловный канал);
  *   - консоль: только под гейтом aiCmDiagOn(), через aiCmDiagLine('swallow-soft', …).
  * Поток управления не меняется: возврат undefined, исключение не пробрасывается.
- * typeof-гард обязателен — срез-песочницы тестов грузят исходники БЕЗ utils/debug.js,
+ * typeof-гард обязателен — срез-песочницы тестов грузят исходники БЕЗ utils/debug.ts,
  * и прямой вызов хелперов там бросил бы ReferenceError, т.е. убил бы исходный catch.
  * Дедуп/счётчики/троттлинг здесь НЕ живут (отложено на E.2d).
  * @param {any} error пойманное исключение
  * @param {string} tag контекст точки вида '<domain>:<function>' ('deepseek:parseSSELines')
  * @returns {void}
  */
-export function swallowSoft(error, tag) {
+export function swallowSoft(error: any, tag?: string): void {
   var label = tag || 'unlabeled';
   var msg = '';
   try { msg = (error && error.message) ? String(error.message) : String(error); } catch (eSoftMsg) { msg = '(нечитаемая ошибка)'; }
@@ -269,7 +269,7 @@ export function swallowSoft(error, tag) {
     if (typeof __aiCmPushLogRing === 'function') __aiCmPushLogRing('[swallow-soft][' + label + '] ' + msg);
   } catch (eSoftRing) { return undefined; }
   try {
-    if (typeof aiCmDiagLine !== 'function') return;   // песочница без utils/debug.js: тихо и без броска
+    if (typeof aiCmDiagLine !== 'function') return;   // песочница без utils/debug.ts: тихо и без броска
     aiCmDiagLine('swallow-soft', { tag: label, err: error });
   } catch (eSoftDiag) { return undefined; }
 }
@@ -277,7 +277,7 @@ export function swallowSoft(error, tag) {
 /**
  * Warn-уровень канала B (Step E.2c-A): сохраняет уровень warn для отладочной сессии,
  * но НЕ эскалирует его в chrome://extensions/errors вне гейта — в отличие от
- * debugLog('warn', …), который печатается всегда (utils/debug.js:61-64).
+ * debugLog('warn', …), который печатается всегда (utils/debug.ts:61-64).
  *   - ring-буфер: строка пишется ВСЕГДА;
  *   - консоль: ровно один console.warn под гейтом aiCmDiagOn(); вне гейта — ничего.
  * Возврат undefined, исключение не пробрасывается, typeof-гард как у swallowSoft.
@@ -286,7 +286,7 @@ export function swallowSoft(error, tag) {
  * @param {any} [detail] необязательная деталь (уходит вторым аргументом console.warn)
  * @returns {void}
  */
-export function aiCmDiagWarn(tag, message, detail) {
+export function aiCmDiagWarn(tag: string, message?: unknown, detail?: unknown): void {
   var label = tag || 'unlabeled';
   var text = (message === undefined || message === null) ? '' : String(message);
   try {
@@ -305,3 +305,17 @@ export function aiCmDiagWarn(tag, message, detail) {
 // tests/catch-hygiene.test.js (его whitelist в этом шаге не обновляется), поэтому сбой
 // экспорта фиксируется в ring — правило канала B: не бросаем и не эскалируем.
 try { if (typeof window !== 'undefined') window.__aiCmSwallowSoft = swallowSoft; } catch (eSoftExport) { __aiCmPushLogRing('[swallow-soft-export] ' + eSoftExport); }
+
+
+// ---------------------------------------------------------------------------
+// TypeScript-контракт модуля. Только типы: в рантайм и в classic-артефакт
+// (dist/utils/debug.js) они не попадают — esbuild стирает их до обёртки.
+// ---------------------------------------------------------------------------
+/** Уровни debugLog: 'log' | 'info' | 'debug' | 'warn' | 'error'. */
+export type DebugLogLevel = 'log' | 'info' | 'debug' | 'warn' | 'error';
+/** Тип документа для диагностики сброса состояния (aiCmDiagDocKind). */
+export type AiCmDiagDocKind = 'captcha' | 'chat' | 'search';
+/** Поля диагностической строки: aiCmDiagLine / aiCmDiagDownload / aiCmDiagDownloadBlocked. */
+export type DiagFields = Record<string, unknown>;
+/** Форма диагностических хелперов и их window-зеркал (__aiCmSwallow / __aiCmSwallowSoft). */
+export type DiagFn = (error: unknown, tag?: string) => void;

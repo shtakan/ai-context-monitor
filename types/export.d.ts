@@ -1,6 +1,6 @@
 /**
  * Типы экспортного конвейера (utils/export-text-builders.js,
- * utils/export-emit-pipeline.js, core/export-manager.js).
+ * utils/export-emit-pipeline.ts, core/export-manager.js).
  *
  * Модуль самодостаточен: импортов нет — по прецеденту types/message.d.ts каждый
  * тип читается независимо. Это ДЕКЛАРАЦИИ предметной области, а не рантайм:
@@ -10,14 +10,14 @@
 /**
  * Формат файла экспорта. Ровно три значения, которые понимает селектор
  * автоэкспорта (core/export-manager.js:882-883) и нормализатор
- * normExportFmt (utils/export-emit-pipeline.js:159-161:
+ * normExportFmt (utils/export-emit-pipeline.ts:159-161:
  * 'md' | 'json', всё остальное → 'txt').
  */
 export type ExportFormat = 'txt' | 'md' | 'json';
 
 /**
  * Метка достоверности источника файла (Two-Tier, v89).
- * Классификатор sourceTierOf (utils/export-emit-pipeline.js:368-375)
+ * Классификатор sourceTierOf (utils/export-emit-pipeline.ts:368-375)
  * возвращает РОВНО эти три латинских литерала:
  *   архив > 0 и live > 0 → '[MERGED: ARCHIVE+LIVE]';
  *   архив > 0, live = 0  → '[ARCHIVE]';
@@ -35,7 +35,7 @@ export type ExportSourceTier =
  * Сообщение в экспортной форме.
  *
  * Нормализованная форма (normalizeExportMessages,
- * utils/export-emit-pipeline.js:609-630): role 'user' | 'assistant' после
+ * utils/export-emit-pipeline.ts:609-630): role 'user' | 'assistant' после
  * приведения 'human' → 'user', text берётся из text || content, пустые
  * отбрасываются. Поля id/reasoning/hiddenReasoning едут рядом с text и в сам
  * текст не входят (O-7); hiddenReasoning попадает в файл только при включённом
@@ -156,7 +156,7 @@ export interface ExportBuildersApi {
 }
 
 /**
- * Публичный API utils/export-emit-pipeline.js (window.AiCmExportEmitPipeline)
+ * Публичный API utils/export-emit-pipeline.ts (window.AiCmExportEmitPipeline)
  * в объёме, который читают вызывающие: генерация имён файлов и классификатор
  * яруса источника. Остальные методы доступны через index-signature, пока
  * типизация пайплайна не входит в scope Фазы 1.
@@ -179,7 +179,7 @@ export interface ExportPipelineApi {
     taken?: unknown
   ): string;
 
-  /** sourceTierOf (utils/export-emit-pipeline.js:368) возвращает один из трёх литералов. */
+  /** sourceTierOf (utils/export-emit-pipeline.ts:368) возвращает один из трёх литералов. */
   sourceTierOf(state?: unknown): string;
 
   [key: string]: any;

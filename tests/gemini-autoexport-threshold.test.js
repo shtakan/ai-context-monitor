@@ -13,7 +13,7 @@
  * срезанным триггером НЕ ставится (поздний честный экспорт остаётся возможен).
  *
  * Здесь три слоя пинов:
- *   1) ЧИСТЫЙ ГЕЙТ (utils/export-emit-pipeline.js: shouldSkipBaseCompleteTrigger);
+ *   1) ЧИСТЫЙ ГЕЙТ (utils/export-emit-pipeline.ts: shouldSkipBaseCompleteTrigger);
  *   2) ЖИВОЙ ХАРНЕСС: РЕАЛЬНЫЙ core/export-manager.js загружен целиком, слушатель
  *      'ai-cm-loader-state' перехвачен, события loader-stop прогоняются по-настоящему
  *      (реальные maybeAutoExport → doAutoExportDownload → имена/байты);
@@ -28,7 +28,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const H = require('./helpers/content-source.js');
 
@@ -182,8 +182,8 @@ function loadManager(over) {
     aiCmCancelDeferredHistWrite: function () { },
     aiCmFlushDeferredHistWrite: function () { },
     debugLog: function (lvl, msg) { logs.push(String(msg)); },
-    swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.js (его нет в песочнице)
-    swallowSoft: function () { },   // Step E.2c-B2b-3c (swallowSoft): канал B — тот же хелпер utils/debug.js, вне песочницы.
+    swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.ts (его нет в песочнице)
+    swallowSoft: function () { },   // Step E.2c-B2b-3c (swallowSoft): канал B — тот же хелпер utils/debug.ts, вне песочницы.
     console: { error: function () { }, log: function () { }, warn: function () { } },
     ModelConfig: { getModel: function () { return { name: 'Gemini 2.5 Flash' }; } },
     aiCmAutoExportBasePendingLog: function () { },
@@ -379,7 +379,7 @@ describe('O-36 D3 (source-пины): гейт стоит перед файром
   });
 
   test('R-пин: shouldSkipAutoExport не переписан (тот же порядок причин)', function () {
-    const gate = fnDecl(fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8'), 'shouldSkipAutoExport');
+    const gate = fnDecl(fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8'), 'shouldSkipAutoExport');
     expect(gate).toContain('threshold');                      // (страховка от пустого реза)
     ['not-enabled', 'no-pct', 'not-complete', 'base-pending', 'below-threshold-hysteresis',
       'below-threshold-unreliable', 'below-threshold', 'already-fired'].forEach(function (reason) {

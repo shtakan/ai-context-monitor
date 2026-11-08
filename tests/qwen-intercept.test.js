@@ -27,9 +27,9 @@ const { TextEncoder } = require('util');
 
 const ROOT = path.join(__dirname, '..');
 const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'qwen-intercept.js'), 'utf8');
-// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+// R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
-const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
 const { loadAsClassic } = require('./helpers/load-esm.js');
 // Ph2: stream-frames.js — ESM; перехватчик исполняется с втянутыми импортами.
 const QWEN_CLASSIC = loadAsClassic('core/qwen-intercept.js');

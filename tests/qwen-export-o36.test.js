@@ -26,7 +26,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
 const H = require('./helpers/content-source.js');
@@ -417,8 +417,8 @@ describe('O-36 D1: имя файла qwen без префикса [LOW CONFIDENC
       aiCmDumpTurnsSnapshot: function () { },
       aiCmCancelDeferredHistWrite: function () { },
       debugLog: function (lvl, msg) { logs.push(String(msg)); },
-      swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.js (его нет в песочнице)
-      swallowSoft: function () { },   // Step E.2c-B2b-3c (swallowSoft): канал B — тот же хелпер utils/debug.js, вне песочницы.
+      swallow: function () { },   // E.2a.2b.3: хелпер из utils/debug.ts (его нет в песочнице)
+      swallowSoft: function () { },   // Step E.2c-B2b-3c (swallowSoft): канал B — тот же хелпер utils/debug.ts, вне песочницы.
       console: { error: function () { } },
       ModelConfig: { getModel: function () { return { name: 'Qwen3.8-Max' }; } },
       buildHistoryMessages: function () {

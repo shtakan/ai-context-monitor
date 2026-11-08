@@ -23,6 +23,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { readModuleSource } = require('./read-module-source');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 
@@ -191,7 +192,8 @@ function collectFiles(file, seen, all) {
   if (seen.has(key)) return '';
   seen.add(key);
   if (all) all.push(key);
-  const src = stripEsmExports(inlineEsmImports(stripCjsTail(fs.readFileSync(abs, 'utf8')), abs));
+  // .ts-модули нужно типизировать/снимать типы, иначе в песочницу уезжает `export interface`.
+  const src = stripEsmExports(inlineEsmImports(stripCjsTail(readModuleSource(abs)), abs));
   const dir = path.dirname(abs);
   const deps = [];
   const re = /require\((['"])([^'"]+)\1\)/g;

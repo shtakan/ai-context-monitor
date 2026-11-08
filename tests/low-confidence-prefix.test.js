@@ -8,7 +8,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 
 const contentSrc = require('./helpers/content-source.js').contentSource;
 

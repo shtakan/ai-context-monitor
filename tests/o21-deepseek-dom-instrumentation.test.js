@@ -17,10 +17,10 @@
  *      sourceSelected/reason; маркер SCOPED по сайту — чужие сайты строку не получают;
  *   4. БАЙТЫ ПОВЕДЕНИЯ ПРЕЖНИЕ: messages/роли/hiddenReasoning из extractMessages() при
  *      включённом и выключенном гейте идентичны (инструментирование — только чтение);
- *   5. печать идёт каноническим хелпером utils/debug.js:aiCmDiagLine — не своим форматом.
+ *   5. печать идёт каноническим хелпером utils/debug.ts:aiCmDiagLine — не своим форматом.
  *
  * Песочницы берут РЕАЛЬНЫЕ aiCmDiagOn/aiCmDiagLine. Адаптер грузится в JSDOM вместе с
- * настоящим utils/debug.js (как в content_scripts манифеста), поэтому гейт, канал печати и
+ * настоящим utils/debug.ts (как в content_scripts манифеста), поэтому гейт, канал печати и
  * адаптер делят ОДИН глобальный мир — ровно как в браузере.
  */
 
@@ -36,14 +36,14 @@ if (typeof global.TextDecoder === 'undefined') global.TextDecoder = utilEnc.Text
 const { JSDOM, VirtualConsole } = require('jsdom');
 
 const ROOT = path.join(__dirname, '..');
-// R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
+// R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
-const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
+const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
 const ADAPTER_DIR = path.join(ROOT, 'adapters');
 const ADAPTER_SRC = fs.readFileSync(path.join(ADAPTER_DIR, 'deepseek-adapter.js'), 'utf8');
 const BASE_ADAPTER_SRC = fs.readFileSync(path.join(ADAPTER_DIR, 'base-adapter.js'), 'utf8');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 
 const PREFIX = '[AI CM][diag] ';
 const TAG_EXTRACT = PREFIX + 'o21-dom-extract';
@@ -94,7 +94,7 @@ const DOM_HTML_INJECTED = DOM_HTML.replace(
 );
 
 /**
- * Грузит реальные base-adapter + deepseek-adapter в JSDOM вместе с настоящим utils/debug.js.
+ * Грузит реальные base-adapter + deepseek-adapter в JSDOM вместе с настоящим utils/debug.ts.
  * Гейт выставляется ДО первого вызова extractMessages(); лог конструктора отбрасывается.
  */
 function loadAdapter(opts) {
@@ -107,7 +107,7 @@ function loadAdapter(opts) {
   const logs = [];
   // Канал печати канонического aiCmDiagLine — console.log ТОГО ЖЕ мира (как в браузере).
   dom.window.console.log = function (m) { logs.push(String(m)); };
-  // Настоящий utils/debug.js целиком: даёт и debugLog, и канонические aiCmDiagOn/aiCmDiagLine.
+  // Настоящий utils/debug.ts целиком: даёт и debugLog, и канонические aiCmDiagOn/aiCmDiagLine.
   dom.window.eval(DEBUG_SRC);
   dom.window.eval(BASE_ADAPTER_SRC + '\n' + ADAPTER_SRC + '\nwindow.DeepSeekAdapter = DeepSeekAdapter;');
   if (o.gate === 'session') dom.window.sessionStorage.setItem('aiCmDebug', '1');

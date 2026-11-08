@@ -18,7 +18,7 @@
  *       re-check-пути (loader-stop / base-complete 0→1 / tape-restore) берут autoExportLastPct,
  *       который на новом документе = −1 (resetConversationState);
  *   (в) гейт автоэкспорта на странице без чата проверял ТОЛЬКО enabled/percentage/
- *       baseComplete|baseSeen/порог/латч (utils/export-emit-pipeline.js:
+ *       baseComplete|baseSeen/порог/латч (utils/export-emit-pipeline.ts:
  *       shouldSkipAutoExport) — ни признака чат-страницы, ни непустой базы, ни msgs≥1.
  *
  * Фикс O-27:
@@ -40,12 +40,12 @@
 const fs = require('fs');
 const path = require('path');
 
-const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.js');
 
 const ROOT = path.join(__dirname, '..');
 const CONTENT = require('./helpers/content-source.js').contentSource;
-const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
+const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
 const INTERCEPT = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');
 const FOLWR_FIXTURE = fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'google-folwr-open.html'), 'utf8');
 

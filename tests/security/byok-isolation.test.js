@@ -357,7 +357,7 @@ describe('Шаг A.1 / P4: O3-латч читается/пишется/сним�
     expect(CONTENT_SRC).toContain('await aiCmLatchCacheReady()');
   });
 
-  test('SW: get/set/remove/get-all работают, ключ латча тот же, что у контента (utils/export-emit-pipeline.js)', async () => {
+  test('SW: get/set/remove/get-all работают, ключ латча тот же, что у контента (utils/export-emit-pipeline.ts)', async () => {
     const bg = loadBackground({ session: { [firedKey]: 1, 'aiCmThr:c1': [90], [SESSION_KEY]: 'k' } });
 
     // get: взведённый чат и «чужой» чат того же сервиса.
@@ -367,7 +367,7 @@ describe('Шаг A.1 / P4: O3-латч читается/пишется/сним�
     // set: ключ ровно как firedSessionKey() контента, значение ровно 1 (инвариант === 1).
     const setResp = await bg.send({ type: 'aiCm-latch-set', service: 'deepseek', convId: 'c9' });
     expect(setResp).toEqual({ ok: true });
-    const P = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+    const P = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
     expect(bg.storage.sessionStore[P.firedSessionKey('deepseek', 'c9')]).toBe(1);
     expect(await bg.send({ type: 'aiCm-latch-get', service: 'deepseek', convId: 'c9' })).toEqual({ fired: true });
 

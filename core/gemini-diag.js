@@ -19,7 +19,7 @@
 // копии формулы. Связное ядро (network/parser/pagination/loader) живёт там же.
 //
 // Порядок подключения (core/background.js, registerSafe для перехватчика Gemini,
-// document_start, world MAIN): utils/debug.js -> utils-парсеры -> hidden-scroll ->
+// document_start, world MAIN): utils/debug.ts -> utils-парсеры -> hidden-scroll ->
 // ЭТОТ ФАЙЛ -> core/gemini-intercept.js. Экспорт: window.AiCmGeminiDiag + module.exports.
 // =============================================================================
 

@@ -21,7 +21,7 @@ const fs = require('fs');
 const path = require('path');
 
 const P = require('../core/qwen-pagination.js');
-const Gate = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
+const Gate = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 
 const INTERCEPT_SRC = fs.readFileSync(path.join(__dirname, '..', 'core', 'qwen-intercept.js'), 'utf8');
 

@@ -357,7 +357,7 @@
           }
         } catch (eFiles) { turnFiles = []; turnFilePool = null; }
         // v30/v31: текст хода и роли собираем через чистый сетевой парсер
-        // (utils/gemini-batchexecute-parser.js): вычищаем $AXzLiR-токены и сегменты «мышления»,
+        // (utils/gemini-batchexecute-parser.ts): вычищаем $AXzLiR-токены и сегменты «мышления»,
         // разделяем вопрос пользователя и ответ модели, сохраняем таблицы.
         var segs = [];
         if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser) {
