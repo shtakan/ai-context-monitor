@@ -929,8 +929,8 @@
       "file": "core/gemini-intercept.js",
       "category": "debug-instrumentation",
       "lines": [
-        840,
-        849
+        676,
+        685
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: debugLog('log', '[gemini-files] ' + String(tag || '') + ' ' + JSON.strin"
     },
@@ -938,8 +938,8 @@
       "file": "core/gemini-intercept.js",
       "category": "event-guard",
       "lines": [
-        305,
-        1053
+        181,
+        876
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
     },
@@ -947,8 +947,8 @@
       "file": "core/gemini-intercept.js",
       "category": "guard-clause",
       "lines": [
-        900,
-        968
+        725,
+        791
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -956,7 +956,7 @@
       "file": "core/gemini-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        1461
+        1185
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: setTimeout(function () { maybeStartLoader(); }, 1000);"
     },

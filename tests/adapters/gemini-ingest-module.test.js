@@ -156,7 +156,7 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
     expect(api.extractTurnTs([[], ['c_x'], [], [], [123]])).toBe(0);
   });
 
-  test('R-D №3: форвардеры ядра стоят в тех же точках подстановки (241/329/374/458/459)', () => {
+  test('R-D №3: форвардеры ядра стоят в тех же точках подстановки (122/195/233/305/306)', () => {
     Object.keys(FORWARDER_DEF).forEach((n) => {
       expect(CORE).toContain(FORWARDER_DEF[n]);
     });
@@ -165,9 +165,9 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
     // Phase 3, шаг 5: +6 — ядро обёрнуто в with (aiCmGeminiState) (guard, открывающая
     // строка и баннер вместо блока объявлений R1), объявления состояния уехали в
     // core/gemini-state.js, поэтому якоря сдвинулись на шесть строк вниз.
-    expect(linesOf(CORE, 'ingest: aiCmIngestFwd,')).toEqual([241, 374, 459]);
-    expect(linesOf(CORE, 'handleOuter: aiCmHandleOuterFwd,')).toEqual([329]);
-    expect(linesOf(CORE, 'emitBaseSnapshot: aiCmEmitBaseSnapshotFwd,')).toEqual([458]);
+    expect(linesOf(CORE, 'ingest: aiCmIngestFwd,')).toEqual([122, 233, 306]);
+    expect(linesOf(CORE, 'handleOuter: aiCmHandleOuterFwd,')).toEqual([195]);
+    expect(linesOf(CORE, 'emitBaseSnapshot: aiCmEmitBaseSnapshotFwd,')).toEqual([305]);
 
     // алиасы ядра заполняются из модуля сразу после __bind — форвардер обязан быть
     // подставлен ДО того, как ранние блоки начнут звать ingest (иначе null-вызов)

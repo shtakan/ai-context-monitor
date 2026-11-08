@@ -1,108 +1,5 @@
-// v69 (единый источник правды полноты): полнота базы определяется ОДНИМ оракулом —
-//   completenessOracle: (серверный курсор пагинации исчерпан, подтверждён probe) И
-//   (firstMsgHash базы == firstMsgHash первой страницы сервера). DOM-эвристики
-//   (scrollEngaged/topReached/hide-applied) больше НЕ взводят baseComplete — только
-//   диагностические логи. Watchdog после каждого data-complete делает probe первой
-//   страницы; несовпадение firstMsgHash → дозапуск лоадера (≤3 ретраев). Фикс бага
-//   «холодное открытие → неполная история без ручного скролла»: полнота перестала
-//   зависеть от нескольких независимых эвристик.
 
-// core/gemini-intercept.js  (v26 = v25 + пол (floor) через sessionStorage, чтобы индикатор
-// не падал после F5/переоткрытия, когда загрузочный снапшот содержит меньше ходов, чем живая сессия;
-// floor сохраняется при каждом EMIT с historyFullByQuiet=true, восстанавливается при загрузке)
-// Перехватчик Gemini в МИРЕ САЙТА (world: "MAIN"), document_start. Регистрация — background.js.
-// В этом шаге меняется ТОЛЬКО этот файл. content.js (v1.18) / background / manifest / адаптеры / model-config — НЕ ТРОГАТЬ.
-//
-// v18 (фикс запуска тихой пагинации): в v17 при добавлении сброса чата была потеряна строка
-//   `pendingCursor = extractCursor(turns);` в handleOuter. Из-за этого extractCursor (которая находит
-//   opaque-курсор в ответе — рентген его видел: turn1 len=305 "tCt4BAee…") НИКОГДА не вызывалась,
-//   pendingCursor всегда оставался null, и тихий цикл не стартовал → всегда фолбэк на автоскролл →
-//   недетерминированная полная история → разница % между переключением чата и F5.
-//   Фикс: добавлена одна строка в handleOuter после рентгена. Теперь pendingCursor заполняется реальным
-//   курсором из ответа, тихий цикл стартует и идёт по цепочке курсоров, собирая полную историю детерминированно
-//   (без автоскролла). Это должно устранить разницу переключение/F5, потому что оба сценария будут собирать
-//   историю по серверным курсорам, а не по DOM-скроллу.
-//
-// v17 (фикс «перекрёстного накопления» между чатами): Gemini — SPA, переключение чатов идёт без
-//   перезагрузки страницы через history.pushState/replaceState (+popstate). Накопители перехватчика
-//   (turnsMap/attachSeen/attachTokens/счётчики/флаги) раньше жили всю жизнь страницы и перетекали из чата A
-//   в чат B при переключении → индикатор стартовал на B с чужим багажом (завышенное первое показание).
-//   Теперь: оборачиваем pushState/replaceState, слушаем popstate; при смене convId в /app/<id> вызываем
-//   resetForNewConversation() — чистим накопители и диспатчим 'ai-cm-conversation-changed' для виджета.
-//   Сброс срабатывает ТОЛЬКО при смене id чата (не на любой pushState), поэтому внутри одного чата ничего
-//   не моргает. При полной загрузке (F5/закладка) скрипт и так стартует чистым — логика закрывает именно SPA-зазор.
-//   Метаданные сайта (заголовки/at) НЕ сбрасываем — они валидны для любого чата; convId для активного запроса
-//   берётся из location.pathname в getConvId(), поэтому virtual-f5 автоматически бьёт в новый чат.
-//
-// v19: детерминированная полная история при SPA-переключении. При переключении чата сайт не всегда шлёт
-//   загрузочный hNvQHb (пассивный снимок), поэтому тихая пагинация раньше стартовала недетерминированно.
-//   Когда пассивного снимка нет, vf5-ответ содержит opaque-курсор (pendingCursor), но блок запуска
-//   пагинации проверял !fromVirtualF5 — поэтому курсор игнорировался, и база оставалась vf5-хвостом
-//   с неполными вложениями (наблюдено 37.8% при переключении против 41.7% после F5).
-//   Теперь: в ingest добавлен отдельный блок для fromVirtualF5 — если история ещё не собрана
-//   (!historyFullByQuiet), тихий цикл не активен (!quietActive) и в ответе есть курсор (pendingCursor),
-//   запускаем paginateLoop. quietDecisionMade взводится сразу, чтобы пассивная ветка не стартовала
-//   второй параллельный цикл при задержке пассивного ответа. Это закрывает лотерею: vf5 сам доберёт
-//   старшее по курсору.
-//
-// v20: гард по convId на пассивную ловлю hNvQHb + защита автоскролла в переходном окне.
-//   При переключении чата ответ на запрос старого чата может прийти после resetForNewConversation()
-//   и лечь в базу нового чата (лишний ход, чужие вложения, завышенный процент). Vf5 этой болезнью
-//   не страдает (строит запрос по getConvId из текущего location), но пассивная ловля (fetch/XHR)
-//   вызывает ingest без проверки convId. Теперь: из тела запроса извлекаем reqConvId (двойной
-//   JSON.parse: decode f.req → outer[0][0][1] → inner-строка → slots[0] без 'c_'), сохраняем
-//   в замыкании/this.__aiCm, в обработчике ответа перед ingest сравниваем с currentConvId;
-//   при несовпадении ответ игнорируется целиком. Дополнительно: флаг autoScrollBlocked запрещает
-//   автоскролл после сброса чата, пока не придёт первый валидный (гарднутый) снимок нового чата;
-//   таймаут 5000 мс принудительно снимает блокировку, чтобы индикатор не завис на 0% при кешевом
-//   роутинге без сети.
-//
-// v21: закрытие слепоты fetch-гарда для Request-объектов. В v20 тело запроса извлекалось только
-//   из init.body (строка); когда запрос — Request-объект (input instanceof Request), bodyStr
-//   оставался '', convIdFromBody('') → '', и null-деградация пропускала чужой ответ.
-//   Теперь: клонируем Request и читаем тело клона через .text() параллельно originalFetch
-//   (не задерживая сетевой запрос); результат в reqConvIdPromise всегда резолвится строкой
-//   (catch → ''). В обработчике ответа гард ждёт reqConvIdPromise.then() перед ingest.
-//   Добавлен точный диагностический лог «гард слеп» с путём/input/init.body/cloneTextLen.
-//
-// v25: пересборка ветки при realtime-vf5. При vf5 после действий пользователя
-//   (activeRefresh с rebuild=true) turnsMap сбрасывается перед обработкой vf5-блока,
-//   и ветка собирается заново одной цепочкой — без «солянки» из старых+новых ходов.
-//   Стоп-кран: если vf5-блок не содержит курсора (extractCursor=null) — пересборка
-//   отменяется, поведение остаётся прежним (докидывание поверх).
-//   Досбор хвоста после тихой пагинации (finishQuiet→activeRefresh) идёт c
-//   rebuild=false, сохраняя текущее поведение.
-//
-// v59 (фикс кросс-чат загрязнения): convEpoch/capturedConvId — тег КАЖДОГО запроса,
-//   чей ответ идёт в ingest, фиксируется В МОМЕНТ ОТПРАВКИ (vf5/pag — captureReqTag,
-//   passive fetch/XHR — issuedAtConvId + issuedAtEpoch), а при обработке ответа
-//   сравнивается с ТЕКУЩИМ getConvId()/convEpoch. Не совпало → НЕ ингестировать,
-//   лог '[AI CM][ingest] drop stale-conv reqConv=... curConv=... src=...'.
-//   Раньше vf5/pag ингестили без тега вообще (утечка src=vf5: ходы старого чата
-//   ложились в базу нового после SPA-перехода), passive-гард сравнивал только convId.
-//   Epoch инкрементируется в resetForNewConversation (сброс базы на SPA-смене
-//   выполняется синхронно в pushState/replaceState-обёртках — ДО прилёта старых
-//   ответов). Не ломает: дедуп turnsMap по messageId, reachedStart-гейты,
-//   скролл-подтверждение, пороги/бейджи/trim.
-//
-// v60 (disjoint-reset, смена сеанса/аккаунта): stale-conv v59 сравнивает только convId,
-//   который при смене аккаунта Google на том же сайте НЕ меняется — merge-by-id
-//   (vf5, passive-снапшоты, rebuild vf5 с курсором) подмешивал ходы чужого сеанса.
-//   Контентный критерий: в путях vf5/passive (НЕ pag — страницы пагинации легитимно
-//   не пересекаются с базой) перед merge, если turnsMap непуст и входящий снапшот
-//   имеет НОЛЬ пересечений id с turnsMap — считать сменой сеанса: полный сброс базы
-//   + convEpoch++, лог '[AI CM][session] disjoint-reset convId=... src=...', затем
-//   ingest как новую базу. Пересечение ненулевое — прежний merge-by-id без изменений.
 
-// v24: подавление ложной кнопки «Ошибки» на плитке расширения (chrome://extensions).
-//   Причина: обёртка window.fetch подменяет оригинал, поэтому ЛЮБОЙ fetch страницы создаёт
-//   промис внутри нашей обёртки. Когда чужой запрос страницы отклоняется без обработчика
-//   (Failed to fetch при навигации/переключении/обрыве стрима), браузер видит unhandled
-//   rejection и, поскольку промис создан в обёртке, приписывает ошибку расширению.
-//   Решение: (1) тихий .catch на промисе originalFetch — снимает unhandled-сигнал для
-//   чужих прерванных запросов, не меняя поведения страницы; (2) устранение висячего
-//   Promise.reject(err) в onRejected нашей цепочки .then (замена на пустую функцию),
-//   который создавал вторичный висячий reject-промис со стеком обёртки.
 
 (function () {
   if (window.__aiCmGeminiInterceptInstalled) return;
@@ -115,16 +12,7 @@
   }
   with (aiCmGeminiState) {
 
-  // ===== v2.0 (Phase 3 step 5): ЯДРО СОСТОЯНИЯ (ВЫНЕСЕНО В core/gemini-state.js) =====
-  // Все объявления состояния (101 имя: сетевые оригиналы, turns-база, пагинация, оракул,
-  // лоадер, архив, оверлей, активность, эпоха чата) живут в модуле и читаются/пишутся здесь
-  // через `with (aiCmGeminiState)` — те же имена, та же переменная, без теневых копий.
 
-  // ===== v2.0 (этап 2/3): кластер скрытого скролла вынесен в core/gemini-hidden-scroll.js =====
-  // Модуль подключён в core/background.js ПЕРЕД этим файлом и отдаёт свой API на window.
-  // Состояние ядра передаём геттерами/сеттерами (см. ниже) — модуль и ядро работают с
-  // одними и теми же переменными, а не с копиями. Алиасы сохраняют прежние имена,
-  // поэтому все вызовы внутри ядра (loadFullHistoryInvisibly, finishQuiet, ingest) не тронуты.
   var aiCmHiddenScroll = (typeof window !== 'undefined' && window.AiCmGeminiHiddenScroll) || null;
   var findScrollContainer = null;
   var scheduleAutoScroll = null;
@@ -155,9 +43,6 @@
     findScrollContainer = aiCmHiddenScroll.findScrollContainer;
     scheduleAutoScroll = aiCmHiddenScroll.scheduleAutoScroll;
   } else {
-    // Модуль не подключён (например, у уже установленного расширения Chrome не
-    // перечитал содержимое registration с тем же id). Лога не глушим, но и не падаем:
-    // лоадер сам обрабатывает no-scroller, поэтому деградация мягкая.
     debugLog('log', '[gemini-intercept] core/gemini-hidden-scroll.js не подключён — ' +
       'скрытый скролл и автостарт лоадера недоступны (проверьте регистрацию content script)');
     findScrollContainer = function () { return null; };
@@ -192,10 +77,6 @@
     aiCmEnsureColdWindow = aiCmGeminiDiag.aiCmEnsureColdWindow;
     aiCmColdStartIngestLog = aiCmGeminiDiag.aiCmColdStartIngestLog;
   } else {
-    // Модуль не подключён (у уже установленного расширения Chrome остался прежний
-    // registration с тем же id: MV3 не перечитывает js[] под существующим id).
-    // Деградация мягкая: диагностика выключается, функциональные пути не задеты —
-    // отпечатки ходов и счётчики сканирования считаются в ядре.
     debugLog('log', '[gemini-intercept] core/gemini-diag.js не подключён — ' +
       'диагностика токенов и логи холодного старта недоступны (проверьте регистрацию content script)');
     diagCanScan = function () { return false; };
@@ -266,11 +147,6 @@
     buildActiveBody = aiCmGeminiRpc.buildActiveBody;
     buildActiveUrl = aiCmGeminiRpc.buildActiveUrl;
   } else {
-    // Модуль не подключён (у уже установленного расширения Chrome остался прежний
-    // registration с прежним id: MV3 не перечитывает js[] под существующим id).
-    // Деградация мягкая: опознание RPC и метаданные запроса выключаются, но ядро
-    // остаётся рабочим — ingest-путь и лоадер живут без этого кластера, а пагинация
-    // и так защищена гейтом no-meta (lastAtEncoded/lastBaseUrl/lastHeaders пусты).
     debugLog('log', '[gemini-intercept] core/gemini-rpc.js не подключён — ' +
       'опознание RPC и метаданные запроса недоступны (проверьте регистрацию content script)');
     isHistoryRpc = function () { return false; };
@@ -307,16 +183,6 @@
       return slug;
     };
   }
-  // ===== v2.0 (Phase 3 step 6): кластер парсеров кадра вынесен в core/gemini-parse.js =====
-  // Модуль подключён в core/background.js ПЕРЕД этим файлом и отдаёт свой API на window.
-  // Уехала группа «входные байты → ходы»: parseByBytes/parseByLines/parseBatchExecute вместе с
-  // tolerant-salvage обрезанного кадра (isTurnLikeSpan/noteJsonChild/closeTruncatedJson/
-  // unescapeJsonLiteralPrefix/extractTruncatedInner/handleSalvagedOuter/salvagePartialFrame).
-  // Оркестрация хода (handleOuter) ОСТАЛАСЬ здесь и инжектируется модулю: парсеры лишь зовут её,
-  // когда кадр разобран. Живое состояние отдаём геттерами/сеттерами, а не значениями:
-  // lastFrameParseFail читают ingest и диагностика ядра, а четыре флага полноты
-  // (historyFullByQuiet/reachedStart/quietDecisionMade/quietIncompleteNoStart) читает и пишет
-  // оркестрация пагинации в ядре — копии значений разошлись бы с оригиналом.
   var aiCmGeminiParse = (typeof window !== 'undefined' && window.AiCmGeminiParse) || null;
   var parseByBytes = null;
   var parseByLines = null;
@@ -329,8 +195,6 @@
       handleOuter: aiCmHandleOuterFwd,
       // lastFrameParseFail — читает ingest (O-48) и диагностика: сеттер обязателен.
       get lastFrameParseFail() { return lastFrameParseFail; }, set lastFrameParseFail(v) { lastFrameParseFail = v; },
-      // Флаги полноты: их читает и пишет оркестрация в ядре, а трогает — только
-      // handleSalvagedOuter, когда откатывает полноту на восстановленном (обрезанном) кадре.
       get historyFullByQuiet() { return historyFullByQuiet; }, set historyFullByQuiet(v) { historyFullByQuiet = v; },
       get reachedStart() { return reachedStart; }, set reachedStart(v) { reachedStart = v; },
       get quietDecisionMade() { return quietDecisionMade; }, set quietDecisionMade(v) { quietDecisionMade = v; },
@@ -342,11 +206,6 @@
     handleSalvagedOuter = aiCmGeminiParse.handleSalvagedOuter;
     salvagePartialFrame = aiCmGeminiParse.salvagePartialFrame;
   } else {
-    // Модуль не подключён (у уже установленного расширения Chrome остался прежний registration
-    // с прежним id: MV3 не перечитывает js[] под существующим id). Деградация мягкая — без
-    // падений, но парсинг кадров при этом выключен ЦЕЛИКОМ (не только tolerant-salvage):
-    // parseBatchExecute отдаёт пустой список ходов, и ingest получает 0 ходов. Увидели это
-    // сообщение в консоли — перезагрузите расширение (или поднимите id в core/background.js).
     debugLog('log', '[gemini-intercept] core/gemini-parse.js не подключён — ' +
       'парсинг кадров batchexecute недоступен (проверьте регистрацию content script)');
     parseByBytes = function () { };
@@ -403,23 +262,11 @@
     });
     installNetworkHooks = aiCmGeminiSse.installNetworkHooks;
   } else {
-    // Модуль не подключён (у уже установленного расширения Chrome остался прежний
-    // registration с прежним id: MV3 не перечитывает js[] под существующим id).
-    // Деградация мягкая: страница работает как обычно, но пассивные снимки (fetch/XHR)
-    // в ingest не попадают — история собирается активными путями (vf5/пагинация/лоадер).
     debugLog('log', '[gemini-intercept] core/gemini-sse.js не подключён — ' +
       'перехват сети (fetch/XHR) недоступен, пассивные снимки не ингестятся (проверьте регистрацию content script)');
     installNetworkHooks = function () { };
   }
 
-  // ===== v2.0 (Phase 3 step 10): кластер пагинации подключён из core/pagination/pagination.js =====
-  // Модуль отдан в js[] core/background.js ПОСЛЕ core/gemini-sse.js и ПЕРЕД этим файлом.
-  // Функции приходят значениями (декларации ядра хойстятся — bind выполняется ниже их
-  // объявлений, а ссылки на них в теле __bind разрешаются на момент вызова). Состояние —
-  // геттерами/сеттерами: почти каждая переменная читается и пишется вне кластера (ingest,
-  // rontgenPagination, notifyLoaderState, loadFullHistoryInvisibly, emitBaseSnapshot),
-  // поэтому копия значения разошлась бы с оригиналом ровно там, где ошибается полнота.
-  // ro-хватает геттера: кластер их не пишет (проверено tools/analyze-pagination-bind.js).
   var aiCmGeminiPagination = (typeof window !== 'undefined' && window.AiCmGeminiPagination) || null;
   var classifyOpaque = null;
   var edges8 = null;
@@ -525,10 +372,6 @@
     runCompletenessWatchdog = aiCmGeminiPagination.runCompletenessWatchdog;
     finishWatchdogDecision = aiCmGeminiPagination.finishWatchdogDecision;
   } else {
-    // Модуль не подключён (у уже установленного расширения Chrome остался прежний
-    // registration с прежним id: MV3 не перечитывает js[] под существующим id). Деградация
-    // мягкая: докачивание полной истории и контроль полноты выключены, активные пути
-    // (vf5/лоадер скрытого скролла) продолжают собирать базу как обычно.
     debugLog('log', '[gemini-intercept] core/pagination/pagination.js не подключён — ' +
       'тихая пагинация и контроль полноты (probe/watchdog) недоступны (проверьте регистрацию content script)');
     classifyOpaque = function () { return false; };
@@ -646,10 +489,6 @@
     maybeStartLoader = aiCmGeminiLoaderScroll.maybeStartLoader;
     loadFullHistoryInvisibly = aiCmGeminiLoaderScroll.loadFullHistoryInvisibly;
   } else {
-    // Модуль не подключён (у уже установленного расширения Chrome остался прежний
-    // registration с прежним id: MV3 не перечитывает js[] под существующим id). Деградация
-    // заметная: скрытый доскролл полной истории и его автозапуск выключены — база
-    // собирается активными путями (vf5 / тихая пагинация) без докрутки до начала чата.
     debugLog('log', '[gemini-intercept] core/gemini-loader-scroll.js не подключён — ' +
       'скрытый доскролл полной истории и его автозапуск недоступны (проверьте регистрацию content script)');
     maybeStartLoader = function () { };
@@ -815,9 +654,6 @@
     emitBaseSnapshot = aiCmGeminiIngest.emitBaseSnapshot;
     mergeRestoredTurns = aiCmGeminiIngest.mergeRestoredTurns;
   } else {
-    // Модуль не подключён (у уже установленного расширения Chrome остался прежний
-    // registration с прежним id: MV3 не перечитывает js[] под существующим id).
-    // Деградация заметная: приём снимков базы выключен целиком, в консоли внятный лог.
     debugLog('log', '[gemini-intercept] core/gemini-ingest.js не подключён — ' +
       'приём снимков базы и выход снимка недоступны (проверьте регистрацию content script)');
     ingest = function () { };
@@ -848,9 +684,7 @@
   // (в MAIN-мире chrome.storage недоступен — как в остальных перехватчиках)
   try { window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDebugLogs(!!(ev && ev.detail)); }); } catch (e) { }
 
-  // ===== v2.0 (Phase 3 step 5): накопители вложений и база turns — в core/gemini-state.js =====
 
-  // ===== v2.0 (Phase 3 step 5): счётчики диагностики, рентген id и автоскролл — в core/gemini-state.js =====
 
   // ===== v2.0 (Phase 3 step 5): тихая пагинация и головной курсор — в core/gemini-state.js =====
   // ===== v2.0 (Phase 3 step 5): retain-last-good, счётчик базы и floor-confirmed — в core/gemini-state.js =====
@@ -874,12 +708,7 @@
   function aiCmDiagHash6(id, text) { return aiCmGeminiOracle ? aiCmGeminiOracle.aiCmDiagHash6(id, text) : undefined; }
   function aiCmDiagTurnEdge(turns, which) { return aiCmGeminiOracle ? aiCmGeminiOracle.aiCmDiagTurnEdge(turns, which) : undefined; }
   function aiCmOrderedTurns() { return aiCmGeminiOracle ? aiCmGeminiOracle.aiCmOrderedTurns() : undefined; }
-  // ===== v2.0 (Phase 3 step 5): поколение курсора и счётчики пагинации — в core/gemini-state.js =====
-  // ===== v2.0 (Phase 3 step 5): 1177-эскалация, clean-end и парс-фейлы — в core/gemini-state.js =====
-  // ===== v2.0 (Phase 3 step 5): виртуальный F5, активность vf5 и блокировка автоскролла — в core/gemini-state.js =====
 
-  // ===== v2.0 (Phase 3 step 5): карты лоадера и кэш-лента — в core/gemini-state.js =====
-  // ===== v2.0 (Phase 3 step 5): состояние архива T1 — в core/gemini-state.js =====
 
   // ===== v2.0 (Phase 3 step 13.3): ОРАКУЛ ПОЛНОТЫ (ВЫНЕСЕН В core/gemini-oracle.js) =====
   // Здесь была notifyLoaderState (v42/v53/v78) с вложенным stableCheck74: состояние
@@ -889,10 +718,6 @@
   // Логика сюда НЕ возвращается: правки оракула — в модуле.
 
 
-  // ---- v27/vXX: пол (floor) через localStorage с версионированием по PARSER_VERSION ----
-  // Ключ включает версию парсера; при несовпадении версии сохранённый пол игнорируется
-  // и перезаписывается. Реализация вынесена в utils/gemini-intercept-logic.js.
-  // parserVersion — в core/gemini-state.js (Phase 3, шаг 5); значение уточняется ниже.
   try {
     if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser && window.GeminiBatchexecuteParser.PARSER_VERSION) {
       parserVersion = window.GeminiBatchexecuteParser.PARSER_VERSION;
@@ -926,8 +751,6 @@
   }
   currentConvId = getConvId(); // v17: состояние — в core/gemini-state.js (Phase 3, шаг 5)
 
-  // ===== v2.0 (Phase 3 step 5): epoch чата и флаги базы — в core/gemini-state.js =====
-  // v59: тег запроса — convId/epoch на момент ОТПРАВКИ (привязка ответа к запросу)
   function captureReqTag() { return { conv: getConvId(), epoch: convEpoch }; }
   // v59: гард при обработке ответа — тег запроса vs ТЕКУЩИЙ convId/epoch.
   // Не совпало → НЕ ингестировать (ответ уходил для другого чата/эпохи).
@@ -1090,10 +913,6 @@
       set scrollRecentUntil(v) { scrollRecentUntil = v; }
     });
   } else {
-    // Модуль не подключён (у уже установленного расширения Chrome остался прежний
-    // registration с прежним id: MV3 не перечитывает js[] под существующим id).
-    // Деградация заметная: SPA-смена чата не сбрасывает состояние и не перезапускает
-    // лоадер — база двух чатов смешалась бы. Ровно поэтому id обязан смениться.
     debugLog('log', '[gemini-intercept] core/gemini-spa-lifecycle.js не подключён — ' +
       'SPA-смена чата не сбрасывает состояние и не перезапускает лоадер (проверьте регистрацию content script)');
   }
@@ -1107,69 +926,15 @@
   // (serverFirstHash / dbFirstHash), поэтому живут в модуле, а не в диагностике; снимок
   // забирает объединённую базу через aiCmBaseExportInfo. Логика сюда НЕ возвращается.
 
-  // ===== v2.0 (Phase 3, шаг 1): СТРУКТУРНЫЕ ПРЕДИКАТЫ И PAYLOAD (ВЫНЕСЕНЫ В core/gemini-payload.js) =====
-  // Здесь были фильтры мусора (isIdLike/isFileLike/isUrlLike/isTokenLike/isMimeLike,
-  // UI_BLACKLIST, isJunk, isThinking), структурный сбор вложений (collectAttachmentUrls,
-  // collectAttachments), сбор текста хода (collectContent), карта структуры (structureMap)
-  // и скелет непарсящейся страницы (buildJsonSkeleton). Модуль подключён в js[] ПЕРЕД
-  // core/gemini-ingest.js: ingest получает четыре сборщика связкой, ядро — алиасом
-  // aiCmPayload. Логика сюда НЕ возвращается: правки предикатов — в core/gemini-payload.js.
-
-  // ================= приватный рентген id хода =================
-  // ===== v2.0 (Phase 3 step 12): firstRc+logIdmap перенесено в core/gemini-ingest.js =====
-  // ================================================================
-
-  // ===== v2.0 (Phase 3 step 12): ingestAttachments перенесено в core/gemini-ingest.js =====
-
-  // ===== v2.0 (Phase 3 step 12): extract* перенесено в core/gemini-ingest.js =====
 
 
-  // ===== v2.0 (Phase 3 step 12): handleOuter перенесено в core/gemini-ingest.js =====
 
-  // ===== v2.0 (Phase 3 step 12): rontgenPagination перенесено в core/gemini-ingest.js =====
-  // ===== v2.0 (Phase 3 step 10): кластер пагинации вынесен в core/pagination/pagination.js =====
-  // Здесь были extractCursor/classifyOpaque(+Wide)/findCursors/edges8/
-  // refreshMinOrderTracking (core:1461-1570), paginateLoop (2612-2992), finishQuiet
-  // (2993-3035), runCompletenessProbe (3037-3196), runCompletenessWatchdog
-  // (3198-3275) и finishWatchdogDecision (3277-3310). Модуль подключён в
-  // core/background.js ПЕРЕД этим файлом, связка (__bind + алиасы) — в блоке выше
-  // (сразу после блока core/gemini-sse.js). Логика сюда НЕ возвращается: правки
-  // пагинации — в модуле.
 
-  // ===== v2.0 (Phase 3 step 6): кластер парсеров кадра вынесен в core/gemini-parse.js =====
-  // Здесь были parseByBytes/parseByLines/parseBatchExecute и tolerant-salvage обрезанного кадра
-  // (isTurnLikeSpan/noteJsonChild/closeTruncatedJson/unescapeJsonLiteralPrefix/
-  // extractTruncatedInner/handleSalvagedOuter/salvagePartialFrame). Модуль подключён в
-  // core/background.js ПЕРЕД этим файлом, связка (__bind + алиасы) — в блоке выше (сразу после
-  // блока core/gemini-rpc.js). Логика сюда НЕ возвращается: правки парсеров — в модуле.
 
-  // ================= v4y: ЛОАДЕР ПОЛНОЙ ИСТОРИИ (ВЫНЕСЕН В gemini-loader-scroll.js) =================
-  // Тело кластера — баннер-описание, константы окна скролла и капа ретраев, пороги
-  // вовлечения/скрытия/паузы, loadFullHistoryInvisibly со всеми вложенными помощниками,
-  // ожидание сигнала «старшая история», автозапуск по открытию чата, слушатель возврата
-  // видимости и консольный хэндл ручного запуска — живёт в модуле, подключение ниже.
-  // Логика сюда НЕ возвращается: любые правки лоадера делаются в core/gemini-loader-scroll.js.
-  // Сводное состояние прогона (loaderState и т.д.) вынесено в core/gemini-state.js: его
-  // читают и пишут само ядро и пагинация, поэтому модуль получает живые геттеры/сеттеры.
 
-  // ================= v75/v80: видимость БЕЗ скрытия DOM чата (фикс O1) =================
-  // Грубое скрытие контейнера (opacity/display/visibility) ломало виртуализацию Gemini.
-  // Прозрачный оверлей v75 оставлял пользователя свидетелем страховочного скролла:
-  // чисто-белый (opacity=0 скроллера в v78-fallback) и «начало чата» (unhide до возврата
-  // позиции). v80 (стандарт v1.14.0): НЕПРОЗРАЧНЫЙ overlay на body под тему сервиса —
-  // фон + спиннер + подпись «Загрузка истории…», класс ai-cm-*. Корневые элементы чата
-  // НЕ трогаются вовсе — виртуализация продолжает рендерить старшие окна; скроллер не
-  // скрывается. Снятие: после loader-stop + восстановления позиции + двух rAF; безусловно
-  // — на visibilitychange/pagehide/conv-switch. safety-timeout не нужен — скрывать нечего.
-  // ===== v2.0 (Phase 3 step 13.1): ОВЕРЛЕЙ (ВЫНЕСЕН В core/gemini-overlay.js) =====
-  // Тела кластера — определение хоста, палитра под тему сервиса, наблюдатель темы,
-  // постановка/снятие оверлея, страховка видимости и слушатели pagehide/visibilitychange —
-  // живут в модуле, подключение ниже. Логика сюда НЕ возвращается: правки оверлея
-  // делаются в core/gemini-overlay.js.
-  // Состояние (aiCmScrollOverlay/aiCmOverlaySeq/aiCmRerunOverlayTimer) вынесено вместе с
-  // ядром в core/gemini-state.js: его читают и пишут пагинация, лоадер и скрытый скролл,
-  // поэтому модуль получает два нужных ему имени ЖИВЫМИ геттерами/сеттерами, а не копиями.
-  // Третье имя (aiCmRerunOverlayTimer) модулю не нужно вовсе — им распоряжается пагинация.
+
+
+
   var aiCmGeminiOverlay = (typeof window !== 'undefined' && window.AiCmGeminiOverlay) || null;
 
   // Форвардеры — ИМЕННО function declaration: объявления хойстятся, поэтому все прежние
@@ -1195,20 +960,9 @@
       set aiCmOverlaySeq(v) { aiCmOverlaySeq = v; }
     });
   } else {
-    // Модуль не подключён (у уже установленного расширения Chrome остался прежний
-    // registration с прежним id: MV3 не перечитывает js[] под существующим id).
-    // Деградация мягкая: оверлея нет, но ядро, лоадер и пагинация работают как обычно.
     debugLog('log', '[gemini-intercept] core/gemini-overlay.js не подключён — оверлей загрузки истории недоступен');
   }
 
-  // ===== v2.0 (Phase 3, шаг 4): АКТИВНЫЙ vf5-ДОЗАПРОС + EMIT-ОБЁРТКА (ВЫНЕСЕНЫ В core/gemini-active-refresh.js) =====
-  // Здесь были activeRefresh (активный POST на /app/<conv> последними at/url/headers)
-  // и sanitizeMessagesForEmit (дедуп массива на выходе эмита). Тела живут ВНУТРИ
-  // `with (D)` BIND-зоны модуля; связка — сразу за форвардерами, на месте прежнего
-  // объявления. Состояние (activeDisabled/activeBusy/loggedActiveStatus и
-  // lastAtEncoded/lastBaseUrl/lastHeaders) — в core/gemini-state.js: его переписывает
-  // resetForNewConversation и захват сайтметы — модуль получает rw-пары и ro-геттеры.
-  // Снапшот (emitBaseSnapshot) уехал ещё в шаге 12, buildDetail в Gemini-ядре не было.
   var aiCmGeminiActiveRefresh = (typeof window !== 'undefined' && window.AiCmGeminiActiveRefresh) || null;
 
   // Форвардеры — ИМЕННО function declaration: объявления хойстятся, поэтому чужие
@@ -1254,11 +1008,7 @@
   // дошла до начала (reachedStart), а активности не было последние 60с.
   // ===== v2.0 (Phase 3 step 12): shouldPollVf5 перенесено в core/gemini-ingest.js =====
 
-  // ===== v2.0 (Phase 3 step 12): startRefreshObserver перенесено в core/gemini-ingest.js =====
 
-  // ===== v2.0 (Phase 3, шаг 4): sanitizeMessagesForEmit перенесено в core/gemini-active-refresh.js =====
-  // Дедуп и его поведение не изменились: тело в модуле, форвардер — выше, на месте
-  // прежней связки, поэтому __bind ingest и архива видят функцию как раньше.
 
   // ================= единый эмит снимка базы =================
   // ===== v2.0 (Phase 3 step 13.2): АРХИВ (ВЫНЕСЕН В core/gemini-archive.js) =====
@@ -1323,10 +1073,6 @@
       set tapeWasUsedInThisColdStart(v) { tapeWasUsedInThisColdStart = v; }
     });
   } else {
-    // Модуль не подключён (у уже установленного расширения Chrome остался прежний
-    // registration с прежним id: MV3 не перечитывает js[] под существующим id).
-    // Деградация мягкая: архивного яруса нет, база собирается живыми путями
-    // (vf5/пагинация/лоадер), гейты полноты работают как до T1.
     debugLog('log', '[gemini-intercept] core/gemini-archive.js не подключён — архивный ярус недоступен');
   }
   // ===== v2.0 (Phase 3 step 13.3): ОРАКУЛ ПОЛНОТЫ (ВЫНЕСЕН В core/gemini-oracle.js) =====
@@ -1396,31 +1142,15 @@
       get lastBaseTextLen() { return lastBaseTextLen; }
     });
   } else {
-    // Модуль не подключён (у уже установленного расширения Chrome остался прежний
-    // registration с прежним id: MV3 не перечитывает js[] под существующим id).
-    // Деградация мягкая: оракул полноты молчит (floor-confirmed и loader-stable-stop не
-    // взводятся, снапшот ходов пуст), база собирается живыми путями, но полнота
-    // подтверждается только ветками ingest/пагинации.
     debugLog('log', '[gemini-intercept] core/gemini-oracle.js не подключён — оракул полноты недоступен');
   }
 
-  // ===== v2.0 (Phase 3 step 12): emitBaseSnapshot перенесено в core/gemini-ingest.js =====
 
   // v52: stream-alias — при поступлении снапшота (passive/vf5) стримовские записи с временным
   // rc_*-id (pageMode='stream') замещаются снапшотными r_*-id того же turnId+role (FIFO по order).
   // ===== v2.0 (Phase 3 step 12): applyStreamAliases перенесено в core/gemini-ingest.js =====
 
-  // ================= ingest =================
-  // ===== v2.0 (Phase 3 step 12): ingest перенесено в core/gemini-ingest.js =====
 
-  // ===== v2.0 (Phase 3 step 9): SSE-кластер (перехват сети) вынесен в core/gemini-sse.js =====
-  // Здесь были подмена window.fetch (batchexecute: rememberSiteMeta на запросе, гард stale-conv
-  // по convId/эпохе на ответе, stream-ingest, DIAG_TOKENS-скан, тихий catch) и подмена
-  // OriginalXHR.prototype.open/setRequestHeader/send (тот же набор ветвей). Модуль подключён
-  // ПЕРЕД этим файлом, связка (__bind + алиас) — в блоке выше, сразу после блока
-  // core/gemini-parse.js. Вызов ниже сохраняет прежнее МЕСТО установки врапперов, поэтому и
-  // момент установки, и порядок патчей относительно остальных слушателей ядра не менялись.
-  // Логика сюда НЕ возвращается: правки перехвата сети — в модуле.
   installNetworkHooks();
 
   // ===== v2.0 (Phase 3 step 13.2): АРХИВ (ВЫНЕСЕН В core/gemini-archive.js) =====
@@ -1434,11 +1164,7 @@
   // v4x: при чтении ленты повторно применяем sanitizeFinalMessages к каждому ходу.
   // ===== v2.0 (Phase 3 step 12): sanitizeRestoredTurn перенесено в core/gemini-ingest.js =====
 
-  // ===== v2.0 (Phase 3 step 12): mergeRestoredTurns перенесено в core/gemini-ingest.js =====
 
-  // ===== v2.0 (Phase 3 step 2): ДАМП ДИАГНОСТИКИ (ВЫНЕСЕН В core/gemini-diag-dump.js) =====
-  // Мост ai-cm-diag-request/response живёт в модуле (внутри `with (D)`), там же его правки;
-  // связка — геттеры: turnsMap/lastOrderedIds/lastFailedSkeleton переприсваиваются в ядре.
   var aiCmGeminiDiagDump = (typeof window !== 'undefined' && window.AiCmGeminiDiagDump) || null;
   if (aiCmGeminiDiagDump) {
     aiCmGeminiDiagDump.__bind({
@@ -1456,8 +1182,6 @@
   // игнорируется с внятным логом, а не бросает ReferenceError.
   // Логика сюда НЕ возвращается: правки моста — в модуле.
 
-  // v4y: холодное открытие (F5 на /app/<id>) → автозапуск лоадера полной истории.
-  // Скроллер может появиться позже — poll внутри loadFullHistoryInvisibly до 10с.
   try { setTimeout(function () { maybeStartLoader(); }, 1000); } catch (e) { }
 
   debugLog('log', '[gemini-intercept] перехватчик Gemini v28 установлен (структурный сбор вложений v23 + фикс курсора + сброс при смене чата + тихая пагинация из vf5 + гард пассивки по convId (fetch Request-объекты тоже) + защита автоскролла + virtual-f5 + historyComplete в emit + подавление чужих unhandled fetch + пересборка ветки при realtime-vf5 + пол (floor) через localStorage + диагностика opaque-кандидатов + сохранение/восстановление ленты через content.js)');
