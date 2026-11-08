@@ -949,10 +949,18 @@
     tapeWasUsedInThisColdStart = false; // v62: новая эпоха — кэш прошлой ленты больше не считается
     vf5OverlapSinceLoaderStart = false; // v62: новая эпоха — vf5-overlap прошлой ленты не считается
     isLowConfidenceBase = false; // v63: новая эпоха — low-confidence прошлой ленты не считается
-    turnsMap = {};
-    attachSeen = {};
+    // Phase 3 (D3-regression): сброс МУТАЦИЕЙ, а не пересозданием объектов. turnsMap/attachSeen/
+    // attachBreak экспортирует core/gemini-state.js через window.AiCmGeminiState ПО ССЫЛКЕ —
+    // присваивание свежего литерала подменяло бы ссылку только в объекте-состоянии, а держатели
+    // старого объекта (модули через bind, снапшоты диагностики) продолжали бы писать в него:
+    // новая карта оставалась пустой и бейдж не рос. delete по ключам сохраняет идентичность.
+    Object.keys(turnsMap).forEach(function (k) { delete turnsMap[k]; });
+    Object.keys(attachSeen).forEach(function (k) { delete attachSeen[k]; });
     attachTokens = 0;
-    attachBreak = { imgTokens: 0, docTokens: 0, imgCount: 0, docCount: 0 };
+    attachBreak.imgTokens = 0;
+    attachBreak.docTokens = 0;
+    attachBreak.imgCount = 0;
+    attachBreak.docCount = 0;
     // Вложения принадлежат ОДНОМУ разговору: очередь и тексты не переезжают
     // в следующий чат (epoch модуля отбрасывает ответы, пришедшие после сброса).
     try {
@@ -983,8 +991,8 @@
     minOrderSeen = Infinity; // v73
     lastBaseCount = -1; // v74
     lastBaseCountChangeAt = 0; // v74
-    oracleIncompleteSeen = {}; // v1.6 (D15): сброс при смене чата
-    oracleRerunUsedMap = {};   // v1.6 (D15)
+    Object.keys(oracleIncompleteSeen).forEach(function (k) { delete oracleIncompleteSeen[k]; }); // v1.6 (D15): сброс при смене чата (мутация: объект экспортирован по ссылке)
+    Object.keys(oracleRerunUsedMap).forEach(function (k) { delete oracleRerunUsedMap[k]; });   // v1.6 (D15)
     // v1.6 (D19): покинутый чат снимается с «уже восстановлено» — при SPA-возврате
     // лента обязана ре-мержиться (база=тейп∪сеть, голова истинная, пол не ниже сети).
     // Внутри одного непрерывного визита гард остаётся (skip reason=already-restored).
@@ -993,7 +1001,7 @@
     // архив обязан ре-мержиться в новую базу), сами данные архива по convId не теряем —
     // они приходят от content.js и ключуются convId.
     archiveMergedMap.clear();
-    // T1 (v1.16): база этого чата очищена (turnsMap={}) → признак «архив применён»
+    // T1 (v1.16): база этого чата очищена (turnsMap опустошён) → признак «архив применён»
     // снимается, иначе при SPA-возврате архив не сможет повторно взвести
     // archive-complete (вердикт переоценится в emitBaseSnapshot после ре-мержа).
     try {
@@ -1014,11 +1022,16 @@
     nativeEscalationFor = null; // v1.16 (1177-BYPASS): смена чата — маркер эскалации снимается
     quietPaginated = false;
     quietDecisionMade = false;
-    // v68: сброс счётчиков прогона пагинации при смене чата (conv-changed → перезапуск лоадера)
+    // v68: сброс счётчиков прогона пагинации при смене чата (conv-changed → перезапуск лоадера).
+    // Phase 3 (D3-regression): счётчики копируются в СУЩЕСТВУЮЩИЙ paginationRun — объект
+    // экспортирован из core/gemini-state.js по ссылке, пересоздание рвало бы связку.
     if (typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.resetPaginationCounters) {
-      paginationRun = window.GeminiInterceptLogic.resetPaginationCounters(paginationRun);
+      var __prReset = window.GeminiInterceptLogic.resetPaginationCounters(paginationRun) || { pageCount: 0, startTs: 0 };
+      paginationRun.pageCount = __prReset.pageCount || 0;
+      paginationRun.startTs = __prReset.startTs || 0;
     } else {
-      paginationRun = { pageCount: 0, startTs: 0 };
+      paginationRun.pageCount = 0;
+      paginationRun.startTs = 0;
     }
     quietIncompleteNoStart = false;  // v1.13.1
     lastCycleEndedHidden = false;    // v1.13.1

@@ -231,3 +231,152 @@ describe('O-38: resetConversationState НЕ сбрасывает once-латч',
     expect(state.aiCmAutoExportFiredOnce[site + '|' + cid]).toBe(1);
   });
 });
+
+// ===== O-38 (3): РЕАЛЬНЫЙ D14-блок core/widget.js — SPA-вход в экспортированный чат =====
+// Дефект (Phase 3): resetConversationState() снимал латчи для ЛЮБОГО SPA-входа, включая
+// возврат в уже экспортированный чат → повторный файл того же разговора. Гейт выше
+// (once-латч) спасал не всегда: латч L1/session снимался ДО гейта, а diag/иные читатели
+// видят именно autoExportFired. Теперь D14 не снимает латчи, если once-латч site|convId
+// взведён (тот же признак, что и у aiCmSiteConvFired в core/content.js).
+describe('O-38 (3): SPA-переход в тот же экспортированный чат — второй файр запрещён', () => {
+  const { moduleSource } = require('./helpers/content-source.js');
+  const WIDGET_SRC = moduleSource('core/widget.js');
+  const D14_START = "var cidD14 = getCurrentConvId() || '';";
+  const D14_END = '} catch (eD14c) { }';
+  const CONTENT_SRC = moduleSource('core/content.js');
+
+  // Реальный aiCmSiteConvFired() из core/content.js — единственный читатель once-латча,
+  // который вызывает D14 (имя латча в resetConversationState не появляется: инвариант O-43).
+  function fnDecl(src, name) {
+    const start = src.indexOf('function ' + name + '(');
+    expect(start).toBeGreaterThan(-1);
+    let depth = 0;
+    for (let i = src.indexOf('{', start); i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}') { depth--; if (depth === 0) return src.slice(start, i + 1); }
+    }
+    throw new Error('unbalanced declaration: ' + name);
+  }
+
+  const SITE_CONV_FIRED_SRC = fnDecl(CONTENT_SRC, 'aiCmSiteConvFired');
+
+  // Срез тела `try { … } catch (eD14c) { }` из настоящего resetConversationState.
+  function d14Source() {
+    const i = WIDGET_SRC.indexOf(D14_START);
+    expect(i).toBeGreaterThan(-1);
+    const j = WIDGET_SRC.indexOf(D14_END, i);
+    expect(j).toBeGreaterThan(i);
+    // `try {` восстанавливаем сами: срез начинается с тела try, а кончается его catch.
+    return 'try {\n' + WIDGET_SRC.slice(i, j + D14_END.length);
+  }
+
+  function makeCtx(state, pipeline, cid, overrides) {
+    const ctx = {
+      getCurrentConvId: function () { return cid; },
+      currentAdapter: { siteName: 'qwen' },
+      AiCmExportEmitPipeline: pipeline,
+      window: { AiCmExportEmitPipeline: pipeline },
+      autoExportFired: state.autoExportFired,
+      aiCmAutoExportFiredOnce: state.aiCmAutoExportFiredOnce,
+      sessionFiredCache: {},
+      latchRemoveCalls: [],
+      logs: [],
+      aiCmLatchRemove: function (site, conv) { ctx.latchRemoveCalls.push(site + '|' + conv); },
+      debugLog: function (lvl, msg) { ctx.logs.push(msg); }
+    };
+    return Object.assign(ctx, overrides || {});
+  }
+
+  function runD14(ctx) {
+    const fn = new Function('ctx', 'with (ctx) { var aiCmSiteConvFired = ' + SITE_CONV_FIRED_SRC + ';\n' + d14Source() + ' }');
+    fn(ctx);
+    return ctx;
+  }
+
+  test('уже экспортирован: L1 + session-латч переживают SPA-вход, гейт → already-fired', () => {
+    const { state, pipeline } = buildSandbox();
+    const site = 'qwen';
+    const cid = '7fec9bd3';
+
+    // Первый файл (doAutoExportDownload): взводим L1-латч и once-латч
+    pipeline.markAutoExportFired(state.autoExportFired, site, cid);
+    state.aiCmAutoExportFiredOnce[site + '|' + cid] = 1;
+
+    const ctx = makeCtx(state, pipeline, cid);
+    const sessionKey = pipeline.firedSessionKey(site, cid);
+    ctx.sessionFiredCache[sessionKey] = 1;
+
+    runD14(ctx); // SPA-переход в ТОТ ЖЕ чат
+
+    // латчи НЕ сняты (до фикса эти три ожидания падали)
+    expect(pipeline.getAutoExportFired(state.autoExportFired, site, cid)).toBe(true);
+    expect(state.aiCmAutoExportFiredOnce[site + '|' + cid]).toBe(1);
+    expect(ctx.sessionFiredCache[sessionKey]).toBe(1);
+    expect(ctx.latchRemoveCalls).toEqual([]);
+    expect(ctx.logs.join('\n')).toContain('latch kept reason=already-exported');
+
+    // повторного файра быть не может: гейт видит взведённый латч
+    const fired = pipeline.getAutoExportFired(state.autoExportFired, site, cid) ||
+      (state.aiCmAutoExportFiredOnce[site + '|' + cid] === 1);
+    const v = pipeline.shouldSkipAutoExport({
+      enabled: true, percentage: 95, threshold: 90,
+      baseComplete: true, baseSeen: true, loaderRunning: false,
+      fired: fired, isGemini: false, domBaseTrusted: true, site: site
+    });
+    expect(v.skip).toBe(true);
+    expect(v.reason).toBe('already-fired');
+  });
+
+  test('двойной SPA-вход подряд — латчи не снимаются ни на одном входе', () => {
+    const { state, pipeline } = buildSandbox();
+    const site = 'qwen';
+    const cid = '7fec9bd3';
+
+    pipeline.markAutoExportFired(state.autoExportFired, site, cid);
+    state.aiCmAutoExportFiredOnce[site + '|' + cid] = 1;
+
+    const ctx = makeCtx(state, pipeline, cid);
+    runD14(ctx);
+    runD14(ctx);
+
+    expect(pipeline.getAutoExportFired(state.autoExportFired, site, cid)).toBe(true);
+    expect(ctx.latchRemoveCalls).toEqual([]);
+  });
+
+  test('неэкспортированный чат: прежняя семантика D14 сохранена — латчи снимаются', () => {
+    const { state, pipeline } = buildSandbox();
+    const site = 'qwen';
+    const cid = 'conv-new';
+    const other = 'conv-prev';
+
+    // взведён латч ДРУГОГО чата — его трогать нельзя
+    pipeline.markAutoExportFired(state.autoExportFired, site, other);
+    state.aiCmAutoExportFiredOnce[site + '|' + other] = 1;
+    // целевой чат: in-memory латч выставлен (эмулируем состояние до сброса)
+    pipeline.markAutoExportFired(state.autoExportFired, site, cid);
+
+    const ctx = makeCtx(state, pipeline, cid);
+    const sessionKey = pipeline.firedSessionKey(site, cid);
+    ctx.sessionFiredCache[sessionKey] = 1;
+
+    runD14(ctx); // SPA-вход в чат, который ещё НЕ экспортировали
+
+    expect(pipeline.getAutoExportFired(state.autoExportFired, site, cid)).toBe(false);
+    expect(ctx.sessionFiredCache[sessionKey]).toBeUndefined();
+    expect(ctx.latchRemoveCalls).toEqual([site + '|' + cid]);
+    // чужой (уже экспортированный) чат не тронут
+    expect(pipeline.getAutoExportFired(state.autoExportFired, site, other)).toBe(true);
+  });
+
+  test('source-pin: D14 сверяется с once-латчём и сохраняет пином m13 строку сброса', () => {
+    const src = d14Source();
+    // resetConversationState НЕ упоминает имя латча (инвариант O-43: сбросом не снимается),
+    // признак приходит из aiCmSiteConvFired() (core/content.js) под typeof-гардом.
+    expect(src).not.toContain('aiCmAutoExportFiredOnce');
+    expect(src).toContain('aiCmSiteConvFired');
+    expect(src).toContain('latch kept reason=already-exported');
+    expect(src).toContain('P14.resetAutoExportFired(autoExportFired, siteD14, cidD14);');
+    // хелпер — настоящий: единственный читатель once-латча по site|convId
+    expect(SITE_CONV_FIRED_SRC).toContain("aiCmAutoExportFiredOnce[site + '|' + cid] === 1");
+  });
+});

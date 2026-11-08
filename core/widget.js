@@ -316,18 +316,29 @@ function resetConversationState() {
           (cidD14 || '(threadId)'));
       }
     } else if (P14 && typeof P14.resetAutoExportFired === 'function') {
-      P14.resetAutoExportFired(autoExportFired, siteD14, cidD14);
-      // v1.14.1 (O3): session-латч целевого conv снимаем синхронно с L1 — семантика
-      // D14 «новый вход = один новый fired» сохраняется и для другой вкладки.
-      // Шаг A.1 (security): снятие идёт через SW-канал aiCmLatchRemove (прямой
-      // chrome.storage.session из контент-скрипта убран), кэш вкладки правим сразу.
-      try {
-        if (P14.firedSessionKey) {
-          aiCmLatchRemove(siteD14, cidD14);
-          var pkD14 = P14.firedSessionKey(siteD14, cidD14);
-          if (pkD14 && typeof sessionFiredCache === 'object' && sessionFiredCache) delete sessionFiredCache[pkD14];
-        }
-      } catch (eO3D14) { }
+      // Phase 3 (O-38-regression): SPA-вход в УЖЕ экспортированный чат латчи не снимает.
+      // Признак — once-латч 'site|convId' (взводится в doAutoExportDownload при успешном
+      // файле): снятие латча на входе давало повторный файл того же разговора. Читаем его
+      // готовым хелпером aiCmSiteConvFired() из core/content.js — так имя латча в этом сбросе
+      // не появляется (инвариант tests/o43-gsa-autoexport-race.test.js:435). typeof-гард — как
+      // у прочих межмодульных вызовов: срез-песочницы тестов без content.js видят прежнее поведение.
+      var alreadyExportedD14 = (typeof aiCmSiteConvFired === 'function') ? aiCmSiteConvFired() : 0;
+      if (alreadyExportedD14) {
+        debugLog('log', '[AI CM][auto-export] latch kept reason=already-exported convId=' + (cidD14 || '(threadId)'));
+      } else {
+        P14.resetAutoExportFired(autoExportFired, siteD14, cidD14);
+        // v1.14.1 (O3): session-латч целевого conv снимаем синхронно с L1 — семантика
+        // D14 «новый вход = один новый fired» сохраняется и для другой вкладки.
+        // Шаг A.1 (security): снятие идёт через SW-канал aiCmLatchRemove (прямой
+        // chrome.storage.session из контент-скрипта убран), кэш вкладки правим сразу.
+        try {
+          if (P14.firedSessionKey) {
+            aiCmLatchRemove(siteD14, cidD14);
+            var pkD14 = P14.firedSessionKey(siteD14, cidD14);
+            if (pkD14 && typeof sessionFiredCache === 'object' && sessionFiredCache) delete sessionFiredCache[pkD14];
+          }
+        } catch (eO3D14) { }
+      }
     } else if (cidD14) {
       delete autoExportFired[cidD14];
     }
