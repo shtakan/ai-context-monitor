@@ -1,12 +1,12 @@
 /**
- * Юнит-тесты сборки plain-text «эталона» (utils/buildReferenceText.js).
+ * Юнит-тесты сборки plain-text «эталона» (utils/buildReferenceText.ts).
  * Покрывают: порядок сообщений, разделитель ровно одной пустой строкой,
  * LF-переводы, отсутствие BOM и консервативную зачистку markdown-разметки:
  * заголовки, списки, жирность/курсив, цитаты, разделители "---",
  * ссылки, обратные кавычки.
  */
 
-const buildReferenceText = require('../helpers/load-esm.js').loadEsm('utils/buildReferenceText.js');
+const buildReferenceText = require('../helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
 
 describe('buildReferenceText — порядок и содержимое', () => {
   test('сообщения идут строго по порядку исходного массива', () => {

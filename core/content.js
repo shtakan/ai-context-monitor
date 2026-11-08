@@ -1,6 +1,6 @@
-// ESM (Roadmap Ph2): сборка втягивает utils/platform.js в тот же бандл контент-скрипта,
+// ESM (Roadmap Ph2): сборка втягивает utils/platform.ts в тот же бандл контент-скрипта,
 // поэтому aiCmIsFirefox() остаётся в общей области видимости (как и до перевода на ESM).
-import { aiCmIsFirefox } from '../utils/platform.js';
+import { aiCmIsFirefox } from '../utils/platform.ts';
 // R1 (Roadmap Ph2): utils/debug.js переведён на ESM — хелперы диагностики втягиваются
 // сборкой статическим import'ом в общую область видимости content-бандла (раньше модуль
 // грузился отдельным classic-скриптом из manifest.content_scripts).
@@ -1774,7 +1774,7 @@ function logTextProbe(label, text) {
 function requestExactTokens(fullText, modelId) {
   if (!isExtensionValid()) return;
   // Firefox: BYOK выключен в SW (AMO) — точный счёт недоступен. Движок определяется по
-  // схеме URL расширения (utils/platform.js), а не по `typeof browser`: Chrome 148+ его
+  // схеме URL расширения (utils/platform.ts), а не по `typeof browser`: Chrome 148+ его
   // тоже выставляет, и прежняя проверка молча выключала точный подсчёт на Chrome.
   if (aiCmIsFirefox() || !exactCountEnabled || !geminiApiKey) { netServerTokens = 0; return; }
   if (!fullText) { netServerTokens = 0; return; }

@@ -20,9 +20,9 @@
 /**
  * Определяет движок по схеме URL расширения: moz-extension:// → Firefox.
  * Не бросает: при недоступном runtime/getURL возвращает false.
- * @returns {boolean} true — расширение запущено в Gecko (Firefox).
+ * @returns true — расширение запущено в Gecko (Firefox).
  */
-export function aiCmIsFirefox() {
+export function aiCmIsFirefox(): boolean {
   try {
     var api = (typeof browser !== 'undefined' && browser && browser.runtime) ? browser
       : (typeof chrome !== 'undefined' && chrome && chrome.runtime) ? chrome : null;

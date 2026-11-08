@@ -22,7 +22,7 @@
  *      (resp.clone().text()), внутри блока folwr/folif; поля и вердикт — по контракту.
  *
  * Стенд: РЕАЛЬНЫЙ файл core/google-search-intercept.js + РЕАЛЬНЫЕ utils/debug.js,
- * utils/google-search-folwr-parser.js и utils/intercept-common.js в jsdom — порядок и
+ * utils/google-search-folwr-parser.js и utils/intercept-common.ts в jsdom — порядок и
  * способ загрузки ровно как в core/background.js:155 (MAIN-мир, классические скрипты в
  * одном глобальном скоупе; поэтому исходники исполняются непрямым eval, а не new Function).
  * «Сервер» — подменённый window.fetch; диаг-строки ловятся на console.log.

@@ -4,7 +4,7 @@
 // Это не зависит от manifest и не ломает существующую инжекцию content.js.
 // ESM (Roadmap Ph2): статические import'ы втягиваются сборкой в тот же бандл SW, поэтому
 // в рантайме aiCmIsFirefox() и хелперы utils/debug.js остаются в общей области видимости бандла.
-import { aiCmIsFirefox } from '../utils/platform.js';
+import { aiCmIsFirefox } from '../utils/platform.ts';
 // R1 (Ph2): логику debugLog/swallow больше не дублируем — utils/debug.js переведён на ESM,
 // и esbuild вшивает модуль в бандл SW (ring-буфер + гейт DEBUG приходят вместе с ним).
 import { debugLog, swallow } from '../utils/debug.js';
@@ -1018,7 +1018,7 @@ function handleCountTokens(message, sender) {
   // отправляет текст диалога на generativelanguage.googleapis.com. Гейт стоит на
   // единственном входе в цепочку (сообщение COUNT_TOKENS): до fetch в
   // handleCountTokensRun дело не доходит. Движок определяем по схеме URL расширения
-  // (utils/platform.js): Chrome 148+ тоже выставляет глобал `browser`, поэтому
+  // (utils/platform.ts): Chrome 148+ тоже выставляет глобал `browser`, поэтому
   // прежняя typeof-проверка ложно отвечала 'byok-disabled-firefox' на Chrome.
   if (aiCmIsFirefox()) {
     return Promise.resolve({ ok: false, reason: 'byok-disabled-firefox' });

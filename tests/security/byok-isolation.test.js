@@ -33,7 +33,7 @@ const ROOT = path.join(__dirname, '..', '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const BG_SRC = read('core/background.js');
-// Ph2, шаг 3: в background.js есть статический import (utils/platform.js). Для текст-пинов
+// Ph2, шаг 3: в background.js есть статический import (utils/platform.ts). Для текст-пинов
 // выше нужен сырой исходник, а для vm — loadAsClassic(): import развёрнут в IIFE зависимости,
 // как в собранном SW.
 const BG_CLASSIC = require('../helpers/load-esm.js').loadAsClassic('core/background.js');

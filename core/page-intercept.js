@@ -54,7 +54,7 @@
 //   Promise.reject(err) в onRejected пассивной ловли снимка (замена на пустую функцию).
 
 // ESM (Roadmap Ph2): setIntervalVisible втягивается сборкой в MAIN-бандл перехватчика.
-import { setIntervalVisible } from '../utils/intercept-common.js';
+import { setIntervalVisible } from '../utils/intercept-common.ts';
 // ESM (Roadmap Ph2): парсер ChatGPT — тоже ES-модуль; window.ChatGPTConversationParser
 // больше не публикуется, именованные экспорты втягиваются сборкой (esbuild) в этот же
 // MAIN-бандл.

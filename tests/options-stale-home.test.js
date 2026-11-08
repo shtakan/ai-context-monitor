@@ -16,7 +16,7 @@
  *     hostname/pathname активной вкладки в updateStaleWarning.
  */
 
-const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.js');
+const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
 
 const DOM_IDS = [
   'stat-site', 'stat-model', 'stat-tokens', 'stat-limit', 'stat-percent',

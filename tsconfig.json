@@ -15,12 +15,14 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "allowImportingTsExtensions": true,
     "types": []
   },
   "include": [
     "types/**/*.d.ts",
     "types/**/*.ts",
     "utils/**/*.js",
+    "utils/**/*.ts",
     "utils/platform-globals.d.ts",
     "adapters/**/*.js",
     "core/content.js",

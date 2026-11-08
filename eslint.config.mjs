@@ -220,10 +220,10 @@ export default [
   //    browser/webextensions-глобали из секции 2 продолжают действовать
   //    (languageOptions.globals мержатся, только sourceType заменяется).
   //    Список точечный: по мере расширения пилота сюда добавляются файлы.
-  //    Ph2, шаг 3: utils/platform.js переведён на export, его потребители —
+  //    Ph2, шаг 3: utils/platform.ts переведён на export, его потребители —
   //    core/background.js, core/content.js, options/options.js — на статический
   //    import, поэтому все четыре файла здесь.
-  //    Ph2, шаг 4: utils/intercept-common.js переведён на export, а четыре
+  //    Ph2, шаг 4: utils/intercept-common.ts переведён на export, а четыре
   //    MAIN-перехватчика импортируют setIntervalVisible статически; их сборка —
   //    отдельные IIFE-бандлы (build.mjs, mainInterceptOptions).
   //    Ph2, шаг stream-frames: utils/stream-frames.js — ESM (frames/normalizeUsage/
@@ -231,19 +231,19 @@ export default [
   //    потребитель core/qwen-intercept.js тоже переведён на статический import и
   //    собирается отдельным IIFE-бандлом.
   //    Ph2, шаг debug.js: utils/debug.js — настоящий ESM (R1 закрыт), поэтому его
-  //    импортируют core/background.js, core/content.js и utils/intercept-common.js.
+  //    импортируют core/background.js, core/content.js и utils/intercept-common.ts.
   //    Для 8 MAIN-регистраций сборка выводит classic-артефакт dist/utils/debug.js.
   // ---------------------------------------------------------------------------
   {
     files: [
       'utils/markdown.js',
-      'utils/buildReferenceText.js',
+      'utils/buildReferenceText.ts',
       'utils/export-text-builders.js',
-      'utils/platform.js',
-      'utils/intercept-common.js',
+      'utils/platform.ts',
+      'utils/intercept-common.ts',
       'utils/stream-frames.js',
       // R1 (Ph2): utils/debug.js переведён на ESM — его импортируют
-      // core/background.js, core/content.js и utils/intercept-common.js.
+      // core/background.js, core/content.js и utils/intercept-common.ts.
       'utils/debug.js',
       // Ph2, шаг tokenizer.js: модуль переведён на ESM (UMD-хвост снят) и
       // втягивается import'ом из core/content.js.

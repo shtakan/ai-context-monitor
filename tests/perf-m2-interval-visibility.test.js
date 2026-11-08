@@ -3,7 +3,7 @@
  * M2 (QUALITY_AUDIT): страховочные setInterval в перехватчиках не должны
  * поллить в скрытой вкладке.
  *
- * Гард реализован в utils/intercept-common.js::setIntervalVisible (tick только
+ * Гард реализован в utils/intercept-common.ts::setIntervalVisible (tick только
  * при document.visibilityState === 'visible'), перехватчики используют его через
  * `var aiCmPoll = setIntervalVisible`. Здесь проверяется поведение гарда:
  * фейковые таймеры + подмена visibilityState — как в проде, без чтения исходника.

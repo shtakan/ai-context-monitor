@@ -48,7 +48,7 @@ const LIVE_ANSWER = FIX.liveTurn.answer;            // обрыв на «…DEFA
 const FULL_ANSWER = FIX.netHistoryFull.data.biz_data.chat_messages[1].fragments[1].content;
 const NET_TAIL = FULL_ANSWER.slice(LIVE_ANSWER.length);   // хвост, которого live не видел
 const THINK = FIX.liveTurn.think;
-// Тело файла собирает РЕАЛЬНЫЙ сборщик (utils/buildReferenceText.js) — он чистит разметку
+// Тело файла собирает РЕАЛЬНЫЙ сборщик (utils/buildReferenceText.ts) — он чистит разметку
 // построчно, поэтому на уровне ФАЙЛА проверяем устойчивые фразы, а байтовые пины — на EMIT.
 const NET_ONLY_PHRASE = 'примените описанные паттерны.';  // конец хвоста кольца (live его не видел)
 const NET_ONLY_PHRASE2 = 'если worker неактивен';

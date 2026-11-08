@@ -24,22 +24,29 @@
 import { swallowSoft } from './debug.js';
 
 /**
- * Опции setIntervalVisible.
- * @typedef {Object} VisibleIntervalOptions
- * @property {boolean} [skipWhenHidden] false — выполнять тик даже в скрытой вкладке
- *   (явный обход гарда); иначе тик только при document.visibilityState === 'visible'.
+ * Опции setIntervalVisible (локально для этого модуля, см. types/ — там
+ * объявляются только кросс-файловые глобалы).
  */
+export interface VisibleIntervalOptions {
+  /** false — выполнять тик даже в скрытой вкладке (явный обход гарда);
+   *  иначе тик только при document.visibilityState === 'visible'. */
+  skipWhenHidden?: boolean;
+}
 
 /**
  * setInterval с гардом видимости. opts.skipWhenHidden === false — принудительно
  * выполнять тик даже в скрытой вкладке (явный обход гарда). Бросок тика
  * проглатывается через swallowSoft и не ломает интервал / страницу.
- * @param {() => void} fn Тик интервала.
- * @param {number} ms Период в миллисекундах.
- * @param {VisibleIntervalOptions} [opts] Опции гарда видимости.
- * @returns {ReturnType<typeof setInterval>} Идентификатор интервала для clearInterval.
+ * @param fn Тик интервала.
+ * @param ms Период в миллисекундах.
+ * @param opts Опции гарда видимости.
+ * @returns Идентификатор интервала для clearInterval.
  */
-export function setIntervalVisible(fn, ms, opts) {
+export function setIntervalVisible(
+  fn: () => void,
+  ms: number,
+  opts?: VisibleIntervalOptions
+): ReturnType<typeof setInterval> {
   var id = setInterval(function () {
     try {
       if (opts && opts.skipWhenHidden === false) {

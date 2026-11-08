@@ -4,13 +4,13 @@
 // прежняя проверка `typeof browser !== 'undefined'` стала истинной и на Chrome:
 // options.js прятал секции API-ключа, background.js отвечал 'byok-disabled-firefox',
 // content.js молча уходил в эвристику. Единственный надёжный признак — схема URL
-// расширения (moz-extension:// у Firefox, chrome-extension:// у Chrome), см. utils/platform.js.
+// расширения (moz-extension:// у Firefox, chrome-extension:// у Chrome), см. utils/platform.ts.
 //
 // Сьют пиннит обе стороны: Chrome с алиасом `browser` → BYOK-UI виден, реальный
 // Firefox → секции по-прежнему скрыты и флаг точного подсчёта сброшен.
-// Ph2, шаг 3: utils/platform.js — ESM-модуль, поэтому require() его не возьмёт;
+// Ph2, шаг 3: utils/platform.ts — ESM-модуль, поэтому require() его не возьмёт;
 // грузим через тот же load-esm.js, что и остальные пилотные модули.
-const { aiCmIsFirefox } = require('./helpers/load-esm.js').loadEsmModule('utils/platform.js');
+const { aiCmIsFirefox } = require('./helpers/load-esm.js').loadEsmModule('utils/platform.ts');
 
 /* =====================================================================================
  * 1. aiCmIsFirefox(): чистая функция
@@ -208,7 +208,7 @@ describe('options.js: BYOK-UI по движку (Chrome 148+ больше не �
   beforeEach(() => {
     document.body.innerHTML = '';
     setupOptionsDom();
-    window.buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.js');
+    window.buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
     window.AiCmExportBuilders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
   });
 

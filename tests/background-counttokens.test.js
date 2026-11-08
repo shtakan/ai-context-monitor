@@ -7,7 +7,7 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.js'), 'utf8');
-// Ph2, шаг 3: background.js импортирует utils/platform.js статически, поэтому в песочницу
+// Ph2, шаг 3: background.js импортирует utils/platform.ts статически, поэтому в песочницу
 // подаём loadAsClassic(): import развёрнут в IIFE зависимости, как в собранном SW.
 // Схема getURL ниже — chrome-extension://, т.е. движок определяется как Chrome.
 const BG_CLASSIC = require('./helpers/load-esm.js').loadAsClassic('core/background.js');

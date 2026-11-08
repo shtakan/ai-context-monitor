@@ -25,16 +25,18 @@
  * Сообщение источника для эталона: читается только текстовое поле.
  * По форме совместимо с Message/ExportMessage (types/message.d.ts,
  * types/export.d.ts), но требует лишь text.
- * @typedef {Object} ReferenceMessage
- * @property {string|null} [text] Текст сообщения; null/undefined → ''.
  */
+export interface ReferenceMessage {
+  /** Текст сообщения; null/undefined → ''. */
+  text?: string | null;
+}
 
 /**
  * Инлайн-зачистка одной строки (после построчных правил).
- * @param {string} s Строка после cleanLine.
- * @returns {string} Строка без ссылок, жирности, курсива и обратных кавычек.
+ * @param s Строка после cleanLine.
+ * @returns Строка без ссылок, жирности, курсива и обратных кавычек.
  */
-function cleanInline(s) {
+function cleanInline(s: string): string {
   // Ссылки [text](url) -> text (url без пробелов и скобок)
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '$1');
   // Жирность: двойные маркеры ** и __
@@ -50,10 +52,10 @@ function cleanInline(s) {
 
 /**
  * Построчные правила: только маркеры в самом начале строки.
- * @param {string|null|undefined} line Сырая строка сообщения.
- * @returns {string} Строка без ведущих маркеров заголовка, цитаты и списка.
+ * @param line Сырая строка сообщения.
+ * @returns Строка без ведущих маркеров заголовка, цитаты и списка.
  */
-function cleanLine(line) {
+function cleanLine(line: string | null | undefined): string {
   var s = String(line == null ? '' : line);
   // Заголовки: "# " ... "###### "
   s = s.replace(/^#{1,6}\s+/, '');
@@ -67,12 +69,12 @@ function cleanLine(line) {
 /**
  * Зачистка текста одного сообщения: построчные правила + инлайн-разметка.
  * Строки-разделители "---" удаляются целиком.
- * @param {string|null|undefined} text Текст сообщения.
- * @returns {string} Очищенный текст (LF, без завершающих переводов строк).
+ * @param text Текст сообщения.
+ * @returns Очищенный текст (LF, без завершающих переводов строк).
  */
-function cleanText(text) {
+function cleanText(text: string): string {
   var lines = String(text).split('\n');
-  var out = [];
+  var out: string[] = [];
   for (var i = 0; i < lines.length; i++) {
     var line = lines[i];
     var trimmed = line.trim();
@@ -85,15 +87,16 @@ function cleanText(text) {
 
 /**
  * Собирает plain-text «эталон» из сообщений снимка.
- * @param {ReferenceMessage[]|null|undefined} messages Сообщения в порядке исходного массива.
- * @returns {string} Текст сообщений, разделённых ровно одной пустой строкой (LF, без BOM).
+ * @param messages Сообщения в порядке исходного массива.
+ * @returns Текст сообщений, разделённых ровно одной пустой строкой (LF, без BOM).
  */
-export function buildReferenceText(messages) {
+export function buildReferenceText(
+  messages?: ReferenceMessage[] | null
+): string {
   var list = Array.isArray(messages) ? messages : [];
-  var parts = [];
+  var parts: string[] = [];
   for (var i = 0; i < list.length; i++) {
-    /** @type {ReferenceMessage} */
-    var msg = list[i] || {};
+    var msg: ReferenceMessage = list[i] || {};
     parts.push(cleanText(msg.text == null ? '' : msg.text));
   }
   return parts.join('\n\n');

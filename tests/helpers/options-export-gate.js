@@ -110,7 +110,7 @@ function setupChrome(opts) {
 }
 
 function loadOptions() {
-  // Ph2, шаг 3: у options.js статический import (utils/platform.js), поэтому require
+  // Ph2, шаг 3: у options.js статический import (utils/platform.ts), поэтому require
   // в CJS-jest невозможен — load-options.js разворачивает import и исполняет скрипт
   // заново на каждом вызове, так что попап переисполняется без require.cache/resetModules.
   require('./load-options.js').loadOptions();
@@ -127,7 +127,7 @@ function openOptionsExportGate(opts) {
     window.AiCmExportBuilders = require('./load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
   }
   if (!window.buildReferenceText) {
-    window.buildReferenceText = require('./load-esm.js').loadEsm('utils/buildReferenceText.js');
+    window.buildReferenceText = require('./load-esm.js').loadEsm('utils/buildReferenceText.ts');
   }
   setupDom();
   setupChrome(opts);

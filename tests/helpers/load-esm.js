@@ -7,10 +7,11 @@
  * их esbuild, который разрешает статические import/export сам. Тестам нужен тот
  * же граф, но без сборки, поэтому хелпер повторяет шаг разрешения графа вручную:
  * статический import разворачивается в IIFE зависимости, export-обёртки
- * снимаются, default-экспорт возвращается наружу. Никаких npm-зависимостей —
- * только fs/path и new Function.
+ * снимаются, default-экспорт возвращается наружу. Из зависимостей — только
+ * fs/path и esbuild (снимает типы с `.ts`-исходников, см.
+ * tests/helpers/read-module-source.js), исполнение — new Function.
  *
- *   loadEsm('utils/buildReferenceText.js')            → default-экспорт модуля
+ *   loadEsm('utils/buildReferenceText.ts')            → default-экспорт модуля
  *   loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders')
  *                                                      → публичное API, которое
  *                                                        модуль кладёт в window
@@ -19,8 +20,8 @@
  *                                                        для new Function(...)
  */
 
-const fs = require('fs');
 const path = require('path');
+const { readModuleSource } = require('./read-module-source');
 
 const ROOT = path.join(__dirname, '..', '..');
 
@@ -39,7 +40,7 @@ function collectNamedExports(source) {
 
 function inlineModule(relPath, asNamespace) {
   const file = path.join(ROOT, relPath);
-  const source = fs.readFileSync(file, 'utf8');
+  const source = readModuleSource(file);
   const dir = path.posix.dirname(relPath.replace(/\\/g, '/'));
   const named = collectNamedExports(source);
 

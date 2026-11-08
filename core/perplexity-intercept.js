@@ -13,7 +13,7 @@
 //   usage НЕТ — токены считаются эвристикой на стороне расширения.
 
 // ESM (Roadmap Ph2): setIntervalVisible втягивается сборкой в MAIN-бандл перехватчика.
-import { setIntervalVisible } from '../utils/intercept-common.js';
+import { setIntervalVisible } from '../utils/intercept-common.ts';
 // ESM (Roadmap Ph2): парсер Perplexity — тоже ES-модуль; window.parsePerplexityThread больше нет,
 // именованные экспорты втягиваются сборкой (esbuild) в этот же MAIN-бандл.
 import { parsePerplexityThread, stripPerplexityHistoryTruncation } from '../utils/perplexity-parser.js';

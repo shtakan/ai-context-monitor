@@ -63,7 +63,7 @@
  *       four ESM interceptors (page / claude / perplexity / google-search) are
  *       built as their OWN IIFE bundles into dist/core/<name>.js: a MAIN-world
  *       script is registered by path and cannot carry `import`/`export`, while
- *       the interceptor source now imports utils/intercept-common.js.
+ *       the interceptor source now imports utils/intercept-common.ts.
  *       chrome.scripting.registerContentScripts still points at the same path,
  *       so the js[] registration in core/background.js does not change shape.
  * The root manifest.json / options/options.html stay legacy on purpose: they are
@@ -167,7 +167,7 @@ function readJSON(relPath) {
 // Ph2: utils/gemini-intercept-logic.js из этого списка ушёл — модуль переведён на ESM,
 // и core/background.js втягивает его статическим import'ом (esbuild кладёт его в тот же
 // бандл SW); для MAIN-регистрации ниже выводится classic-артефакт. Так же раньше ушёл
-// utils/platform.js (Ph2, шаг 3).
+// utils/platform.ts (Ph2, шаг 3).
 const BACKGROUND_PRELUDE = [
   // v2.0.37 (PDF): SW-брокер pdf.js вшивается в бандл статически.
   'core/pdf-parser.js',
@@ -193,7 +193,7 @@ const MAIN_INTERCEPTS = [
 /**
  * Ph2, шаг debug.js: модуль переведён на ESM (R1), поэтому подменять его
  * синтезированной гранью больше не нужно — esbuild втягивает utils/debug.js в
- * MAIN-бандл по настоящему статическому import'у из utils/intercept-common.js.
+ * MAIN-бандл по настоящему статическому import'у из utils/intercept-common.ts.
  * Прежний debugSoftFacadePlugin удалён вместе с причиной своего существования.
  */
 
@@ -247,9 +247,9 @@ function contentEntry(manifest) {
   if (!Array.isArray(js) || js.length === 0) {
     fail('manifest.json: content_scripts[0].js is missing or empty');
   }
-  // ESM-пилот (Roadmap Ph2): utils/buildReferenceText.js больше не отдельный
+  // ESM-пилот (Roadmap Ph2): utils/buildReferenceText.ts больше не отдельный
   // content script — его втягивает esbuild по import из utils/export-text-builders.js.
-  // utils/platform.js теперь импортирует core/content.js (шаг 3), поэтому в списке
+  // utils/platform.ts теперь импортирует core/content.js (шаг 3), поэтому в списке
   // конкатенации ему тоже не место. Фильтр держит SSOT устойчивым, даже если строку
   // случайно вернут в манифест.
   // R1 (Ph2): utils/debug.js переведён на ESM и втягивается import'ом из
@@ -275,8 +275,8 @@ function contentEntry(manifest) {
   // конкатенации не берём; строка из манифеста удалена.
   return js.filter(function (rel) {
     return (
-      rel !== 'utils/buildReferenceText.js' &&
-      rel !== 'utils/platform.js' &&
+      rel !== 'utils/buildReferenceText.ts' &&
+      rel !== 'utils/platform.ts' &&
       rel !== 'utils/debug.js' &&
       rel !== 'utils/tokenizer.js' &&
       rel !== 'utils/model-config.js' &&
@@ -326,16 +326,16 @@ function htmlScriptEntry(htmlPath) {
 
 /** options entry — <script src> order in options/options.html */
 function optionsEntry() {
-  // ESM-пилот (Roadmap Ph2): utils/buildReferenceText.js втягивается import'ом
+  // ESM-пилот (Roadmap Ph2): utils/buildReferenceText.ts втягивается import'ом
   // из utils/export-text-builders.js, поэтому тег <script> из options.html убран.
-  // utils/platform.js втягивается import'ом из options/options.js (шаг 3) — его тег
+  // utils/platform.ts втягивается import'ом из options/options.js (шаг 3) — его тег
   // тоже удалён. utils/export-text-builders.js — ESM: и options.html-тег, и строка
   // конкатенации убраны, модуль втягивается import'ом из options/options.js.
   // Ph2, шаг archive-import.js: модуль ESM — его втягивает статический import из
   // options/options.js, поэтому и options.html-тег, и строка конкатенации убраны.
   // Фильтр — страховка SSOT: теги не должны вернуться в разметку.
   return htmlScriptEntry('options/options.html').filter(function (rel) {
-    return rel !== 'utils/buildReferenceText.js' && rel !== 'utils/platform.js' &&
+    return rel !== 'utils/buildReferenceText.ts' && rel !== 'utils/platform.ts' &&
       rel !== 'utils/export-text-builders.js' && rel !== 'utils/archive-import.js';
   });
 }
@@ -800,7 +800,7 @@ function entryPath(name) {
  * ".build/entry-*.js".
  * ESM-пилот (Roadmap Ph2): print/print.js's '../utils/markdown.js' is already
  * entry-relative and stays as is; utils/export-text-builders.js's
- * './buildReferenceText.js' becomes '../utils/buildReferenceText.js'.
+ * './buildReferenceText.ts' becomes '../utils/buildReferenceText.ts'.
  */
 function rebaseImportSpecifiers(src, sourceRel) {
   const dir = path.posix.dirname(String(sourceRel).replace(/\\/g, '/'));
@@ -1364,7 +1364,7 @@ function watchFiles(entries) {
   // Ph2: MAIN-перехватчики собираются отдельно, а intercept-common втягивается
   // в каждый из них — оба набора обязаны триггерить watcher.
   for (const r of MAIN_INTERCEPTS) files.add(abs(r));
-  files.add(abs('utils/intercept-common.js'));
+  files.add(abs('utils/intercept-common.ts'));
   // Whole trees copied verbatim (icons/, _locales/, docs/screenshots/): watch the
   // directory itself, so a newly added or renamed file inside one rebuilds too.
   for (const r of ASSET_DIRS) files.add(abs(r));

@@ -6,7 +6,7 @@
  * в downloadBlob (mock URL.createObjectURL).
  */
 
-const buildReferenceText = require('../helpers/load-esm.js').loadEsm('utils/buildReferenceText.js');
+const buildReferenceText = require('../helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
 
 function setupDom() {
   const ids = [

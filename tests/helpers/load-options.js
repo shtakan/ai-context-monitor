@@ -4,7 +4,7 @@
  * ESM-пилот (Roadmap Ph2), шаг 3: загрузка options/options.js в Jest.
  *
  * options/options.js начинается со статического `import { aiCmIsFirefox } from
- * '../utils/platform.js'`, поэтому обычный `require('../options/options.js')`
+ * '../utils/platform.ts'`, поэтому обычный `require('../options/options.js')`
  * падает в CJS-режиме jest: "Cannot use import statement outside a module".
  * Хелпер повторяет шаг сборки (build.mjs + esbuild): load-esm.js разворачивает
  * статический import в IIFE зависимости, после чего исходник исполняется как

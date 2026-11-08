@@ -1,6 +1,6 @@
-// ESM (Roadmap Ph2): сборка втягивает utils/platform.js в тот же options-бандл, поэтому
+// ESM (Roadmap Ph2): сборка втягивает utils/platform.ts в тот же options-бандл, поэтому
 // aiCmIsFirefox() остаётся в общей области видимости страницы (отдельный <script> убран).
-import { aiCmIsFirefox } from '../utils/platform.js';
+import { aiCmIsFirefox } from '../utils/platform.ts';
 // ESM (Roadmap Ph2): utils/export-text-builders.js переведён на ES-модуль — тег <script>
 // из options/options.html удалён, модуль втягивается этим import'ом в options-бандл.
 import AiCmExportBuilders from '../utils/export-text-builders.js';
@@ -34,7 +34,7 @@ const exactCountCheckbox = document.getElementById('exact-count');
 const exactCountWarningEl = document.getElementById('exact-count-warning');
 // Firefox-сборка (AMO): BYOK выключен в SW (core/background.js), поэтому UI не должен
 // предлагать мёртвую функцию — обе секции скрываются, флаг точного подсчёта сбрасывается.
-// Движок определяем по схеме URL расширения (utils/platform.js): Chrome 148+ тоже
+// Движок определяем по схеме URL расширения (utils/platform.ts): Chrome 148+ тоже
 // выставляет глобал `browser`, поэтому typeof-проверка ложно отключала BYOK на Chrome.
 var aiCmByokUiDisabled = aiCmIsFirefox();
 const versionEl = document.querySelector('.version');

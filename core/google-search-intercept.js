@@ -16,7 +16,7 @@
 //     (см. activateThread/absorbForeignSnapshot).
 
 // ESM (Roadmap Ph2): setIntervalVisible втягивается сборкой в MAIN-бандл перехватчика.
-import { setIntervalVisible } from '../utils/intercept-common.js';
+import { setIntervalVisible } from '../utils/intercept-common.ts';
 (function () {
   if (window.__aiCmGoogleSearchInterceptInstalled) return;
   window.__aiCmGoogleSearchInterceptInstalled = true;

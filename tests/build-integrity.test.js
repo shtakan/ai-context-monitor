@@ -31,7 +31,7 @@ const BUILD_DIR = path.join(ROOT, '.build');
 
 jest.setTimeout(120000);
 
-/** `/* ==== utils/platform.js ==== *\/` — the delimiter build.mjs emits. */
+/** `/* ==== utils/platform.ts ==== *\/` — the delimiter build.mjs emits. */
 const MARKER_RE = /^\/\* ==== (.+?) ==== \*\/$/;
 
 function entryFile(name) {
@@ -151,7 +151,7 @@ describe('build-integrity: generated entry files', () => {
     // options.js — тоже.
     // export-обёрток в конкатенации по-прежнему нет.
     if (name === 'options' || name === 'content' || name === 'background') {
-      expect(text).toContain("import { aiCmIsFirefox } from '../utils/platform.js';");
+      expect(text).toContain("import { aiCmIsFirefox } from '../utils/platform.ts';");
       expect(text).not.toContain('module.exports = { aiCmIsFirefox');
       if (name !== 'background') {
         expect(text).toContain("import AiCmExportBuilders from '../utils/export-text-builders.js';");

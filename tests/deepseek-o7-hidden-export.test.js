@@ -48,7 +48,7 @@ const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
-const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.js');
+const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
 
 const ROOT = path.join(__dirname, '..');
 const read = function (rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); };

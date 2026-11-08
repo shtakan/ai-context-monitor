@@ -349,7 +349,7 @@ describe('T1: options.js — импорт архива и индикатор и�
     setupDom();
     // Ph2 (ESM): модуль втягивается import'ом из options.js — глобал больше не нужен.
     window.AiCmExportBuilders = require('../helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
-    window.buildReferenceText = require('../helpers/load-esm.js').loadEsm('utils/buildReferenceText.js');
+    window.buildReferenceText = require('../helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
     mock = createChromeMock({});
     global.chrome = mock.chrome;
     mod = require('../helpers/load-options.js').loadOptions();

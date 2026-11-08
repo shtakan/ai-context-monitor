@@ -11,7 +11,7 @@
 //   Ответ ассистента приходит только через completion.
 
 // ESM (Roadmap Ph2): setIntervalVisible втягивается сборкой в MAIN-бандл перехватчика.
-import { setIntervalVisible } from '../utils/intercept-common.js';
+import { setIntervalVisible } from '../utils/intercept-common.ts';
 (function () {
   if (window.__aiCmClaudeInterceptInstalled) return;
   window.__aiCmClaudeInterceptInstalled = true;

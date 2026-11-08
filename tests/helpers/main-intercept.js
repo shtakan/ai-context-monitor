@@ -2,29 +2,31 @@
 /**
  * Ph2: тестовый мост для MAIN-перехватчиков, перешедших на ESM.
  *
- * Перехватчики и utils/intercept-common.js теперь содержат top-level import,
+ * Перехватчики и utils/intercept-common.ts теперь содержат top-level import,
  * поэтому их нельзя просто прочитать и выполнить как classic-скрипт: Node
  * (require) и прямой eval упадут на `import`. Сборка решает это esbuild'ом
  * (build.mjs, mainInterceptOptions), а тестам нужен эквивалент без сборки:
+ * типы `.ts`-исходников снимает tests/helpers/read-module-source.js (тот же
+ * esbuild.transformSync), поэтому в new Function уходит уже чистый JS.
  *
- *   - commonSource()     — intercept-common.js без import'а debug.js; вместо
+ *   - commonSource()     — intercept-common.ts без import'а debug.js; вместо
  *                          него — мост в window.__aiCmSwallowSoft (тот же
  *                          контракт, что у debugSoftFacadePlugin в build.mjs);
  *   - interceptSource()  — commonSource() + исходник перехватчика без его
- *                          import'а intercept-common.js, одной classic-областью;
+ *                          import'а intercept-common.ts, одной classic-областью;
  *   - loadCommon()       — namespace { setIntervalVisible } для юнит-теста.
  *
  * Тесты, которым нужны только строковые пины по исходнику, продолжают читать
  * файл напрямую — import для них просто текст.
  */
-const fs = require('fs');
 const path = require('path');
+const { readModuleSource } = require('./read-module-source');
 
 const ROOT = path.join(__dirname, '..', '..');
-const COMMON_REL = 'utils/intercept-common.js';
+const COMMON_REL = 'utils/intercept-common.ts';
 
 function read(relPath) {
-  return fs.readFileSync(path.join(ROOT, relPath), 'utf8').replace(/^\uFEFF/, '');
+  return readModuleSource(path.join(ROOT, relPath)).replace(/^\uFEFF/, '');
 }
 
 /** export default / export {…} / export перед function|var|let|const|class. */
@@ -36,7 +38,7 @@ function stripExports(src) {
 }
 
 /**
- * intercept-common.js без import'а: swallowSoft смотрит в window-зеркало
+ * intercept-common.ts без import'а: swallowSoft смотрит в window-зеркало
  * debug.js, как и в собранном MAIN-бандле (см. build.mjs, debugSoftFacadePlugin).
  */
 function commonSource() {
@@ -87,7 +89,7 @@ function parserBridge() {
 /** commonSource() + перехватчик без import'а, одна classic-область видимости. */
 function interceptSource(relPath) {
   let src = read(relPath).replace(
-    /^[ \t]*import\s*\{[^}]*\}\s*from\s*['"][^'"]*intercept-common\.js['"];?[ \t]*$/m,
+    /^[ \t]*import\s*\{[^}]*\}\s*from\s*['"][^'"]*intercept-common\.ts['"];?[ \t]*$/m,
     ''
   ).replace(
     /^[ \t]*import\s*\{[^}]*\}\s*from\s*['"][^'"]*perplexity-parser\.js['"];?[ \t]*$/m,

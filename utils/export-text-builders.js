@@ -10,7 +10,7 @@
  * импортирует у себя), а также named-экспортами реализаций.
  * Поведение функций НЕ менялось — перенесено из options/options.js.
  */
-import { buildReferenceText } from './buildReferenceText.js';
+import { buildReferenceText } from './buildReferenceText.ts';
 import { aiCmDiagDownload, aiCmDiagDownloadBlocked } from './debug.js';
 
 /** @typedef {import('../types/export').ExportFormat} ExportFormat */

@@ -19,7 +19,7 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.js'), 'utf8');
-// Ph2, шаг 3: background.js начинается со статического import'а utils/platform.js,
+// Ph2, шаг 3: background.js начинается со статического import'а utils/platform.ts,
 // поэтому в vm-песочницу подаём не сырой исходник, а loadAsClassic(): тот разворачивает
 // import в IIFE зависимости — ровно тот граф, который esbuild кладёт в бандл SW.
 // getURL мока отдаёт chrome-extension://, как в Chrome.
@@ -168,7 +168,7 @@ describe('M-7: options.js — ключ пишется только в chrome.sto
   beforeEach(() => {
     document.body.innerHTML = '';
     setupOptionsDom();
-    window.buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.js');
+    window.buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
     window.AiCmExportBuilders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
   });
 

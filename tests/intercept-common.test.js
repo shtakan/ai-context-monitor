@@ -1,12 +1,12 @@
 /**
- * R2 (audit-волна 1): setIntervalVisible из utils/intercept-common.js —
+ * R2 (audit-волна 1): setIntervalVisible из utils/intercept-common.ts —
  * visibility-гард для страховочных интервалов MAIN-перехватчиков.
  * Тик при 'visible', skip при 'hidden', обход гарда через
  * opts.skipWhenHidden === false, возврат id и очистка clearInterval.
  */
 const { loadCommon } = require('./helpers/main-intercept.js');
 
-// Ph2: intercept-common.js — ESM; тестовый мост подставляет swallowSoft,
+// Ph2: intercept-common.ts — ESM; тестовый мост подставляет swallowSoft,
 // делегирующий в window-зеркало debug.js (как и сборка, build.mjs).
 const { setIntervalVisible } = loadCommon();
 
@@ -20,7 +20,7 @@ function setVisibility(state) {
   });
 }
 
-describe('utils/intercept-common.js — setIntervalVisible', () => {
+describe('utils/intercept-common.ts — setIntervalVisible', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     // сброс на дефолт, чтобы тесты не зависели от порядка
