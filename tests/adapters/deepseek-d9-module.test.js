@@ -739,8 +739,8 @@ describe('Step D.9: core/deepseek-sse.js — контракт модуля SSE (
 
     // release.yml: счётчик MAIN-world файлов равен факту (37 = 5 бандлов + 32 модулей/ядер)
     const yml = DS.readSource('.github/workflows/release.yml');
-    expect((yml.match(/40 MAIN-world/g) || [])).toHaveLength(2);
-    expect(yml).not.toContain('39 MAIN-world');
+    expect((yml.match(/41 MAIN-world/g) || [])).toHaveLength(2);
+    expect(yml).not.toContain('40 MAIN-world');
 
     // размеры: ядро 1657 → 1218, модуль 702 (пины D.7/D.8/D.9; D.10 добавил 39 строк,
     // D.11 — форвардер filesMessageHasRefs, его строка в __bind и правка шапки: +5 строк ядра;

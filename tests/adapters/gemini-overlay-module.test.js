@@ -43,6 +43,8 @@ const readFile = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const SRC = require(path.join(ROOT, 'tests/helpers/gemini-intercept-source.js'));
 const CONC = SRC.geminiSource;
 const CORE = readFile('core/gemini-intercept.js');
+/** Phase 3, шаг 5: объявления состояния ядра — здесь, ядро читает их через with. */
+const STATE = readFile('core/gemini-state.js');
 const MOD = readFile('core/gemini-overlay.js');
 
 const EXPORTED = ['aiCmSetScrollOverlay', 'forceRestoreVisibility'];
@@ -103,12 +105,14 @@ function runForwarder(name, args, overlayApi) {
   return ctx.out;
 }
 
-describe('Phase 3 шаг 13.1: A-пины — состояние оверлея осталось в ЯДРЕ', () => {
-  test('A1: три переменные состояния объявлены в ядре байт-в-байт и НЕ перенесены в модуль', () => {
-    CORE_STATE.forEach((lit) => expect(CORE).toContain(lit));
-    // строки состояния стоят ОДНИМ блоком сразу перед баннером выноса
-    const at = CORE.indexOf(CORE_STATE[0]);
-    expect(CORE.slice(at, at + CORE_STATE.join('\n').length)).toBe(CORE_STATE.join('\n'));
+describe('Phase 3 шаг 13.1: A-пины — состояние оверлея живёт в ядре состояния (шаг 5)', () => {
+  test('A1: три переменные состояния объявлены в core/gemini-state.js байт-в-байт и НЕ перенесены в модуль', () => {
+    // Phase 3, шаг 5: тройка переехала в core/gemini-state.js байт-в-байт
+    CORE_STATE.forEach((lit) => expect(STATE).toContain(lit));
+    CORE_STATE.forEach((lit) => expect(CORE).not.toContain(lit));
+    // строки состояния стоят ОДНИМ блоком (соседние объявления не вклинились)
+    const at = STATE.indexOf(CORE_STATE[0]);
+    expect(STATE.slice(at, at + CORE_STATE.join('\n').length)).toBe(CORE_STATE.join('\n'));
     // модуль ни одну из них не объявляет: иначе появилась бы ВТОРАЯ переменная, и ядро
     // (лоадер/пагинация) читало бы старую — снятие оверлея перестало бы работать
     ['aiCmScrollOverlay', 'aiCmOverlaySeq', 'aiCmRerunOverlayTimer'].forEach((n) => {
@@ -133,7 +137,7 @@ describe('Phase 3 шаг 13.1: A-пины — состояние оверлея 
     expect(block).not.toContain('aiCmRerunOverlayTimer');
     // связка идёт ПОСЛЕ объявления состояния: геттеры замкнуты на инициализированные
     // переменные, а не на undefined-на-момент-hoisting
-    expect(CORE.indexOf('aiCmGeminiOverlay.__bind(')).toBeGreaterThan(CORE.indexOf(CORE_STATE[1]));
+    expect(CONC.indexOf('aiCmGeminiOverlay.__bind(')).toBeGreaterThan(CONC.indexOf(CORE_STATE[1]));
   });
 
   test('A3: модуль обращается к ядру РОВНО по контракту — ни одного свободного имени', () => {
@@ -316,12 +320,12 @@ describe('Phase 3 шаг 13.1: D-пины — API, гигиена, деград�
 });
 
 describe('Phase 3 шаг 13.1: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v16, модуль перед ядром, -v13 снят', () => {
+  test('S1: регистрация в core/background.js — id -v17, модуль перед ядром, -v13 снят', () => {
     const bg = readFile('core/background.js');
-    expect(bg).toContain("'ai-cm-gemini-intercept-v16'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v17'");
     expect(bg).toContain("'core/gemini-overlay.js'");
     // js[] собран ровно в этом порядке: … loader-scroll → files → ingest → overlay → ядро
-    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-active-refresh.js', 'core/gemini-intercept.js'");
+    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-active-refresh.js', 'core/gemini-state.js', 'core/gemini-intercept.js'");
     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при своей загрузке
     expect(bg.indexOf("'core/gemini-ingest.js'")).toBeLessThan(bg.indexOf("'core/gemini-overlay.js'"));
     expect(bg.indexOf("'core/gemini-overlay.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
@@ -331,7 +335,7 @@ describe('Phase 3 шаг 13.1: S-пины проводки модуля', () => 
     expect(bg).toContain("'ai-cm-gemini-intercept-v9'");
     expect(bg).toContain("'ai-cm-gemini-intercept-v8'");
     // лог регистрации бампнут вместе с id
-    expect(bg).toContain('(v16) зарегистрирован');
+    expect(bg).toContain('(v17) зарегистрирован');
     expect(bg).not.toContain('(v11) зарегистрирован');
   });
 

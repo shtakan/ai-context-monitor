@@ -72,6 +72,17 @@
  * 3 ro-геттера). В ядре остались только hoisted-форвардеры, поэтому чужие __bind-блоки
  * (пагинация, ingest, SPA-фолбэк, архив) и прежние вызовы читают те же имена, что и раньше.
  *
+ * Phase 3 (шаг 5): ядро состояния (Кластер 6 — 101 var: сетевые оригиналы, turns-база,
+ * пагинация, оракул, лоадер, архив, оверлей, активность, эпоха чата) вынесено в
+ * core/gemini-state.js и добавлено в MODULES тем же порядком, что и в js[] core/background.js
+ * (active-refresh -> gemini-state -> ядро). Объявления перенесены БАЙТ-В-БАЙТ и лежат
+ * внутри IIFE модуля, а экспортируются одним объектом window.AiCmGeminiState. Ядро
+ * обёрнуто в `with (aiCmGeminiState) { … }`, поэтому свободные имена состояния резолвятся
+ * в свойства этого объекта — та же переменная, без теневых копий и без D.-префиксов.
+ * Песочницам пин-тестов новые имена не нужны: они режут тела функций и передают их в
+ * `with (ctx)`, а литералы объявлений теперь ищутся в gemini-state.js (src.geminiSource
+ * по-прежнему содержит их — конкатенация идёт в порядке инъекции).
+ *
  * ВАЖНО: перенос кода обязан быть БАЙТОВЫМ, включая ведущие отступы, и рабочие
  * файлы обязаны остаться в LF. Часть пин-тестов ищет литералы с ведущими
  * пробелами ("  function finishQuiet(...)", "\n  });",
@@ -101,6 +112,8 @@ const ROOT = path.join(__dirname, '..', '..');
 // pagination и ingest), поэтому песочницы gemini-floor-confirmed / gemini-floor-self-heal /
 // gemini-collapse-guard / o48-gemini-parse-fail-salvage режут тела ОТСЮДА и исполняют их
 // в `with (ctx)` без ключа D — ни один ассерт этих пинов не менялся.
+// Phase 3 step 5: core/gemini-state.js идёт после active-refresh и перед ядром — как в js[].
+// Ядро читает/пишет его имена через `with (window.AiCmGeminiState)` (см. шапку выше).
 // Phase 3 step 2: core/gemini-diag-dump.js идёт после oracle и перед ядром — как в js[].
 // Мост дампа (ai-cm-diag-request/response) перенесён БЕЗ префикса D: тело лежит внутри
 // `with (D)`, а три имени состояния приходят геттерами из bind-узла ядра.
@@ -119,7 +132,8 @@ const MODULES = [
   'core/gemini-oracle.js',
   'core/gemini-diag-dump.js',
   'core/gemini-spa-lifecycle.js',
-  'core/gemini-active-refresh.js'
+  'core/gemini-active-refresh.js',
+  'core/gemini-state.js'
 ];
 const INTERCEPT_JS = 'core/gemini-intercept.js';
 

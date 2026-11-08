@@ -48,6 +48,8 @@ const readFile = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const SRC = require(path.join(ROOT, 'tests/helpers/gemini-intercept-source.js'));
 const CONC = SRC.geminiSource;
 const CORE = readFile('core/gemini-intercept.js');
+/** Phase 3, шаг 5: объявления состояния ядра — здесь, ядро читает их через with. */
+const STATE = readFile('core/gemini-state.js');
 const MOD = readFile('core/gemini-archive.js');
 /** Phase 3, шаг 4: сюда уехала точка выхода vf5 (activeRefresh). */
 const ACTIVE = SRC.moduleSource('core/gemini-active-refresh.js');
@@ -152,9 +154,11 @@ function loadModule() {
   return { pageWindow, ctx, api: pageWindow.AiCmGeminiArchive };
 }
 
-describe('Phase 3 шаг 13.2: A-пины — состояние архива осталось в ЯДРЕ', () => {
-  test('A1: 11 переменных состояния объявлены в ядре байт-в-байт и НЕ перенесены в модуль', () => {
-    CORE_STATE.forEach((lit) => expect(CORE).toContain(lit));
+describe('Phase 3 шаг 13.2: A-пины — состояние архива живёт в ядре состояния (шаг 5)', () => {
+  test('A1: 11 переменных состояния объявлены в core/gemini-state.js байт-в-байт и НЕ перенесены в модуль', () => {
+    // Phase 3, шаг 5: объявления перенесены в core/gemini-state.js байт-в-байт
+    CORE_STATE.forEach((lit) => expect(STATE).toContain(lit));
+    CORE_STATE.forEach((lit) => expect(CORE).not.toContain(lit));
     const names = CONTRACT.filter(([, kind]) => kind === 'ro' || kind === 'rw').map(([n]) => n);
     expect(names).toHaveLength(11);
     names.forEach((n) => {
@@ -185,7 +189,7 @@ describe('Phase 3 шаг 13.2: A-пины — состояние архива о
     });
     // связка идёт ПОСЛЕ объявления состояния: геттеры замкнуты на инициализированные
     // переменные, а не на undefined-на-момент-hoisting
-    expect(CORE.indexOf('aiCmGeminiArchive.__bind(')).toBeGreaterThan(CORE.indexOf(CORE_STATE[0]));
+    expect(CONC.indexOf('aiCmGeminiArchive.__bind(')).toBeGreaterThan(CONC.indexOf(CORE_STATE[0]));
   });
 
   test('A3: модуль обращается к ядру РОВНО по контракту — ни одного свободного имени', () => {
@@ -532,12 +536,12 @@ describe('Phase 3 шаг 13.2: D-пины — API, размещение связ
 });
 
 describe('Phase 3 шаг 13.2: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v16, модуль между overlay и ядром, -v13 снят', () => {
+  test('S1: регистрация в core/background.js — id -v17, модуль между overlay и ядром, -v13 снят', () => {
     const bg = readFile('core/background.js');
-    expect(bg).toContain("'ai-cm-gemini-intercept-v16'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v17'");
     expect(bg).toContain("'core/gemini-archive.js'");
     // js[] собран ровно в этом порядке: … loader-scroll → files → ingest → overlay → archive → oracle → ядро
-    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-active-refresh.js', 'core/gemini-intercept.js'");
+    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-active-refresh.js', 'core/gemini-state.js', 'core/gemini-intercept.js'");
     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при своей загрузке
     expect(bg.indexOf("'core/gemini-overlay.js'")).toBeLessThan(bg.indexOf("'core/gemini-archive.js'"));
     expect(bg.indexOf("'core/gemini-archive.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
@@ -547,11 +551,11 @@ describe('Phase 3 шаг 13.2: S-пины проводки модуля', () => 
     expect(bg).toContain("'ai-cm-gemini-intercept-v9'");
     expect(bg).toContain("'ai-cm-gemini-intercept-v8'");
     // лог регистрации бампнут вместе с id
-    expect(bg).toContain('(v16) зарегистрирован');
+    expect(bg).toContain('(v17) зарегистрирован');
     expect(bg).not.toContain('(v11) зарегистрирован');
     // лог обязан стоять РЯДОМ со своей регистрацией, а не быть унаследованным текстом
-    expect(bg.indexOf("await registerSafe('ai-cm-gemini-intercept-v16'"))
-      .toBeLessThan(bg.indexOf('(v16) зарегистрирован'));
+    expect(bg.indexOf("await registerSafe('ai-cm-gemini-intercept-v17'"))
+      .toBeLessThan(bg.indexOf('(v17) зарегистрирован'));
   });
 
   test('S2: bind-контракт полон — ни одна зависимость кластера не потеряна', () => {

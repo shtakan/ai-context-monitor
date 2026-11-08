@@ -64,7 +64,7 @@
     "reason": "vm-harness"
   },
   "tests/adapters/gemini-archive-module.test.js": {
-    "count": 44,
+    "count": 45,
     "reason": "vm-harness"
   },
   "tests/adapters/gemini-attachment-architecture.test.js": {
@@ -104,7 +104,7 @@
     "reason": "vm-harness"
   },
   "tests/adapters/gemini-oracle-module.test.js": {
-    "count": 39,
+    "count": 40,
     "reason": "vm-harness"
   },
   "tests/adapters/gemini-overlay-gate.test.js": {
@@ -112,7 +112,7 @@
     "reason": "vm-harness"
   },
   "tests/adapters/gemini-overlay-module.test.js": {
-    "count": 34,
+    "count": 35,
     "reason": "vm-harness"
   },
   "tests/adapters/gemini-overlay-ui-timeout.test.js": {

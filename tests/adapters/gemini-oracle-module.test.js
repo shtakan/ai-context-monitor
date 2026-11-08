@@ -55,6 +55,8 @@ const readFile = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const SRC = require(path.join(ROOT, 'tests/helpers/gemini-intercept-source.js'));
 const CONC = SRC.geminiSource;
 const CORE = readFile('core/gemini-intercept.js');
+/** Phase 3, шаг 5: объявления состояния ядра — здесь, ядро читает их через with. */
+const STATE = readFile('core/gemini-state.js');
 const MOD = readFile('core/gemini-oracle.js');
 const CONTRACT = require(path.join(ROOT, 'tools/oracle-bind-contract.js'));
 
@@ -251,9 +253,12 @@ function liveState() {
   return live;
 }
 
-describe('Phase 3 шаг 13.3: A-пины — состояние оракула осталось в ЯДРЕ', () => {
-  test('A1: переменные состояния объявлены в ядре байт-в-байт и НЕ перенесены в модуль', () => {
-    CORE_STATE.forEach((lit) => expect(CORE).toContain(lit));
+describe('Phase 3 шаг 13.3: A-пины — состояние оракула живёт в ядре состояния (шаг 5)', () => {
+  test('A1: переменные состояния объявлены в core/gemini-state.js байт-в-байт и НЕ перенесены в модуль', () => {
+    // Phase 3, шаг 5: объявления живут в core/gemini-state.js байт-в-байт…
+    CORE_STATE.forEach((lit) => expect(STATE).toContain(lit));
+    // …и в ядре их больше нет: иначе появилась бы ВТОРАЯ переменная состояния
+    CORE_STATE.forEach((lit) => expect(CORE).not.toContain(lit));
     const names = CONTRACT.map(([n]) => n);
     expect(names).toHaveLength(32);
     names.forEach((n) => {
@@ -284,11 +289,11 @@ describe('Phase 3 шаг 13.3: A-пины — состояние оракула 
     fn.forEach((n) => expect(block).toContain(n + ': ' + n + ','));
     // связка идёт ПОСЛЕ объявления состояния: геттеры замкнуты на инициализированные
     // переменные, а не на undefined-на-момент-hoisting
-    expect(CORE.indexOf('aiCmGeminiOracle.__bind(')).toBeGreaterThan(CORE.indexOf(CORE_STATE[0]));
-    // таймер debounce объявлен В ЯДРЕ (строка выше связки) — иначе геттер/сеттер ссылались
-    // бы на необъявленное имя и бросали ReferenceError
-    expect(lineOf(CORE, 'var floorConfirmDebounceTimer = null;'))
-      .toBeLessThan(lineOf(CORE, 'aiCmGeminiOracle.__bind('));
+    // оба имени теперь в core/gemini-state.js, и модуль состояния грузится ДО ядра:
+    // в конкатенации объявления идут выше связки, геттеры замкнуты на живые значения
+    expect(CONC.indexOf('aiCmGeminiOracle.__bind(')).toBeGreaterThan(CONC.indexOf(CORE_STATE[0]));
+    expect(CONC.indexOf('var floorConfirmDebounceTimer = null;'))
+      .toBeLessThan(CONC.indexOf('aiCmGeminiOracle.__bind('));
   });
 
   test('A4: вердикт и таймер из модуля доходят до ЖИВЫХ переменных ядра (rw вживую)', () => {
@@ -636,12 +641,12 @@ describe('Phase 3 шаг 13.3: D-пины — API, размещение связ
 });
 
 describe('Phase 3 шаг 13.3: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v16, модуль между archive и ядром, -v13 снят', () => {
+  test('S1: регистрация в core/background.js — id -v17, модуль между archive и ядром, -v13 снят', () => {
     const bg = readFile('core/background.js');
-    expect(bg).toContain("'ai-cm-gemini-intercept-v16'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v17'");
     expect(bg).toContain("'core/gemini-oracle.js'");
     // js[] собран ровно в этом порядке: … files → overlay → archive → oracle → ядро
-    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-active-refresh.js', 'core/gemini-intercept.js'");
+    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-active-refresh.js', 'core/gemini-state.js', 'core/gemini-intercept.js'");
     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при своей загрузке
     expect(bg.indexOf("'core/gemini-archive.js'")).toBeLessThan(bg.indexOf("'core/gemini-oracle.js'"));
     expect(bg.indexOf("'core/gemini-oracle.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
@@ -650,10 +655,10 @@ describe('Phase 3 шаг 13.3: S-пины проводки модуля', () => 
     expect(bg).toContain("'ai-cm-gemini-intercept-v10'");
     expect(bg).toContain("'ai-cm-gemini-intercept-v9'");
     // лог регистрации бампнут вместе с id и стоит рядом со своей регистрацией
-    expect(bg).toContain('(v16) зарегистрирован');
+    expect(bg).toContain('(v17) зарегистрирован');
     expect(bg).not.toContain('(v11) зарегистрирован');
-    expect(bg.indexOf("await registerSafe('ai-cm-gemini-intercept-v16'"))
-      .toBeLessThan(bg.indexOf('(v16) зарегистрирован'));
+    expect(bg.indexOf("await registerSafe('ai-cm-gemini-intercept-v17'"))
+      .toBeLessThan(bg.indexOf('(v17) зарегистрирован'));
     // release.yml держит счётчик MAIN-world файлов равным факту (27 → 28; Step D.2 —
     // модуль сетевого дозапроса DeepSeek core/deepseek-netsync.js добавлен в js[];
     // 28 → 29 — Step D.3, кластер REFETCH/URL-гигиены core/deepseek-refetch.js;
@@ -663,8 +668,8 @@ describe('Phase 3 шаг 13.3: S-пины проводки модуля', () => 
     // 32 → 33 — Step D.7, кластер NETWORK core/deepseek-net.js;
     // 33 → 34 — Step D.8, кластер INGEST core/deepseek-ingest.js)
     const yml = readFile('.github/workflows/release.yml');
-    expect((yml.match(/40 MAIN-world/g) || [])).toHaveLength(2);
-    expect(yml).not.toContain('39 MAIN-world');
+    expect((yml.match(/41 MAIN-world/g) || [])).toHaveLength(2);
+    expect(yml).not.toContain('40 MAIN-world');
   });
 
   test('S2: bind-контракт полон — 32 имени (10 fn + 10 rw + 12 ro), ни одной потерянной привязки', () => {
