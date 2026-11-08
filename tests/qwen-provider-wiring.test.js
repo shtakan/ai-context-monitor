@@ -140,7 +140,7 @@ describe('O-35/O-53/R2: core/background.js — регистрация перех
   });
 
   test('R-пин: шесть существующих регистраций не тронуты', function () {
-    ['ai-cm-page-intercept', 'ai-cm-gemini-intercept-v15', 'ai-cm-deepseek-intercept-v12',
+    ['ai-cm-page-intercept', 'ai-cm-gemini-intercept-v16', 'ai-cm-deepseek-intercept-v12',
       'ai-cm-claude-intercept', 'ai-cm-perplexity-intercept',
       'ai-cm-google-search-intercept'].forEach(function (id) {
       expect(background).toContain("ids.indexOf('" + id + "') === -1");
@@ -182,7 +182,7 @@ describe('O-35/O-53/R2: core/background.js — регистрация перех
     // На шаге 3 (Phase 3) в js[] ДОБАВЛЕН core/gemini-spa-lifecycle.js (перед ядром) и id
     // сменён -v14 → -v15: без модуля SPA-смена чата не сбрасывает состояние и не
     // перезапускает лоадер — база двух чатов смешалась бы.
-    expect(background).toContain("js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-parse.js', 'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-intercept.js']");
+    expect(background).toContain("js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-parse.js', 'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-active-refresh.js', 'core/gemini-intercept.js']");
     // Step D.1 (декомпозиция DeepSeek): в js[] ДОБАВЛЕН core/deepseek-diag.js (перед
     // ядром) и id сменён -v2 → -v3: без бампа id у уже установленного расширения Chrome
     // остался бы прежний registration, js[] не перечитался бы, и ядро жило бы без модуля —

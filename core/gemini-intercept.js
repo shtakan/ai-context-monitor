@@ -1364,57 +1364,52 @@
     debugLog('log', '[gemini-intercept] core/gemini-overlay.js не подключён — оверлей загрузки истории недоступен');
   }
 
+  // ===== v2.0 (Phase 3, шаг 4): АКТИВНЫЙ vf5-ДОЗАПРОС + EMIT-ОБЁРТКА (ВЫНЕСЕНЫ В core/gemini-active-refresh.js) =====
+  // Здесь были activeRefresh (активный POST на /app/<conv> последними at/url/headers)
+  // и sanitizeMessagesForEmit (дедуп массива на выходе эмита). Тела живут ВНУТРИ
+  // `with (D)` BIND-зоны модуля; связка — сразу за форвардерами, на месте прежнего
+  // объявления. Состояние (activeDisabled/activeBusy/loggedActiveStatus и
+  // lastAtEncoded/lastBaseUrl/lastHeaders) остаётся ЗДЕСЬ: его переписывает
+  // resetForNewConversation и захват сайтметы — модуль получает rw-пары и ro-геттеры.
+  // Снапшот (emitBaseSnapshot) уехал ещё в шаге 12, buildDetail в Gemini-ядре не было.
+  var aiCmGeminiActiveRefresh = (typeof window !== 'undefined' && window.AiCmGeminiActiveRefresh) || null;
 
-
-
-
-
-
-
-
+  // Форвардеры — ИМЕННО function declaration: объявления хойстятся, поэтому чужие
+  // __bind-блоки (пагинация, ingest, SPA-фолбэк, архив) и вызовы из ядра не тронуты.
   function activeRefresh(reason, rebuild) {
-    if (activeDisabled || activeBusy) return;
-    var convId = getConvId();
-    // v59: тег запроса на момент отправки — гард при обработке ответа
-    var reqTagVf5 = captureReqTag();
-    if (!convId || !lastAtEncoded || !lastBaseUrl || !lastHeaders) {
-      if (!loggedActiveStatus) { loggedActiveStatus = true; debugLog('log', '[gemini-virtual-f5] активный запрос отложен: нет convId/at/url/заголовков пока'); }
-      return;
-    }
-    activeBusy = true;
-    var headers = {};
-    for (var k in lastHeaders) headers[k] = lastHeaders[k];
-    originalFetch(buildActiveUrl(), {
-      method: 'POST',
-      headers: headers,
-      body: buildActiveBody(),
-      credentials: 'include'
-    })
-      .then(function (resp) {
-        if (!loggedActiveStatus) {
-          loggedActiveStatus = true;
-          debugLog('log', '[gemini-virtual-f5] первый активный запрос: статус ' + (resp ? resp.status : 'none') + ' (convId=' + convId + ', ' + reason + ')');
-        }
-        if (!resp || !resp.ok) {
-          activeDisabled = true;
-          debugLog('log', '[gemini-virtual-f5] не прошёл (статус ' + (resp ? resp.status : 'none') +
-            ') → остаёмся на пассиве+DOM');
-          return null;
-        }
-        return resp.text();
-      })
-      .then(function (txt) {
-        if (!txt) return;
-        // v59: ответ vf5, уходивший для старого чата (SPA-переход до прибытия), не ингестируем
-        if (isStaleReqTag(reqTagVf5, 'vf5')) return;
-        aiCmIngestFwd(txt, { emitOnlyIfAdded: true, fromVirtualF5: true, rebuild: rebuild });
-      })
-      .catch(function (err) {
-        if (!loggedActiveStatus) loggedActiveStatus = true;
-        activeDisabled = true;
-        debugLog('log', '[gemini-virtual-f5] ошибка активного запроса: ' + err + ' → остаёмся на пассиве+DOM');
-      })
-      .finally(function () { activeBusy = false; });
+    return aiCmGeminiActiveRefresh ? aiCmGeminiActiveRefresh.activeRefresh(reason, rebuild) : undefined;
+  }
+  function sanitizeMessagesForEmit(messages) {
+    return aiCmGeminiActiveRefresh ? aiCmGeminiActiveRefresh.sanitizeMessagesForEmit(messages) : messages;
+  }
+
+  if (aiCmGeminiActiveRefresh) {
+    aiCmGeminiActiveRefresh.__bind({
+      // fn (8): функции и значения ядра — декларации хойстятся.
+      getConvId: getConvId,
+      captureReqTag: captureReqTag,
+      isStaleReqTag: isStaleReqTag,
+      buildActiveUrl: buildActiveUrl,
+      buildActiveBody: buildActiveBody,
+      originalFetch: originalFetch,
+      aiCmIngestFwd: aiCmIngestFwd,
+      debugLog: debugLog,
+      // rw (3): живое состояние — get + set, иначе запись модуля молча теряется.
+      get activeDisabled() { return activeDisabled; },
+      set activeDisabled(v) { activeDisabled = v; },
+      get activeBusy() { return activeBusy; },
+      set activeBusy(v) { activeBusy = v; },
+      get loggedActiveStatus() { return loggedActiveStatus; },
+      set loggedActiveStatus(v) { loggedActiveStatus = v; },
+      // ro (3): захват сайтметы переприсваивает эти имена — сеттера нет.
+      get lastAtEncoded() { return lastAtEncoded; },
+      get lastBaseUrl() { return lastBaseUrl; },
+      get lastHeaders() { return lastHeaders; }
+    });
+  } else {
+    // Модуль не подключён (старый registration под прежним id: MV3 не перечитывает js[]).
+    // Деградация мягкая: дозапрос отложен навсегда (пассив+DOM), эмит без дедупа.
+    debugLog('log', '[gemini-intercept] core/gemini-active-refresh.js не подключён — активный vf5-дозапрос недоступен');
   }
 
   // v40: обёртка над чистой логикой shouldPollVf5 (utils/gemini-intercept-logic.js).
@@ -1424,19 +1419,9 @@
 
   // ===== v2.0 (Phase 3 step 12): startRefreshObserver перенесено в core/gemini-ingest.js =====
 
-  // v1.5.2: строгий дедуп финального массива сообщений БЕЗ thinking-эвристик.
-  // isThinkingAssistant/stripLeadingThinking уже применены в parser только к
-  // fallback-пути (collectTurnText) — канонический ответ здесь НЕ трогаем, чтобы не
-  // удалить английский ответ, начинающийся с "I'm …".
-  function sanitizeMessagesForEmit(messages) {
-    if (typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.sanitizeFinalMessages) {
-      return window.GeminiInterceptLogic.sanitizeFinalMessages(messages, {
-        isThinkingAssistant: function () { return false; },
-        stripLeadingThinking: function (s) { return s; }
-      });
-    }
-    return messages;
-  }
+  // ===== v2.0 (Phase 3, шаг 4): sanitizeMessagesForEmit перенесено в core/gemini-active-refresh.js =====
+  // Дедуп и его поведение не изменились: тело в модуле, форвардер — выше, на месте
+  // прежней связки, поэтому __bind ingest и архива видят функцию как раньше.
 
   // ================= единый эмит снимка базы =================
   // ===== v2.0 (Phase 3 step 13.2): АРХИВ (ВЫНЕСЕН В core/gemini-archive.js) =====

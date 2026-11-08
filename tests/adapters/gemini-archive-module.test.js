@@ -49,6 +49,8 @@ const SRC = require(path.join(ROOT, 'tests/helpers/gemini-intercept-source.js'))
 const CONC = SRC.geminiSource;
 const CORE = readFile('core/gemini-intercept.js');
 const MOD = readFile('core/gemini-archive.js');
+/** Phase 3, шаг 4: сюда уехала точка выхода vf5 (activeRefresh). */
+const ACTIVE = SRC.moduleSource('core/gemini-active-refresh.js');
 const CONTRACT = require(path.join(ROOT, 'tools/archive-bind-contract.js'));
 
 /** Функции, которые модуль отдаёт наружу (порядок — как в Api). */
@@ -530,12 +532,12 @@ describe('Phase 3 шаг 13.2: D-пины — API, размещение связ
 });
 
 describe('Phase 3 шаг 13.2: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v15, модуль между overlay и ядром, -v13 снят', () => {
+  test('S1: регистрация в core/background.js — id -v16, модуль между overlay и ядром, -v13 снят', () => {
     const bg = readFile('core/background.js');
-    expect(bg).toContain("'ai-cm-gemini-intercept-v15'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v16'");
     expect(bg).toContain("'core/gemini-archive.js'");
     // js[] собран ровно в этом порядке: … loader-scroll → files → ingest → overlay → archive → oracle → ядро
-    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-intercept.js'");
+    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-active-refresh.js', 'core/gemini-intercept.js'");
     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при своей загрузке
     expect(bg.indexOf("'core/gemini-overlay.js'")).toBeLessThan(bg.indexOf("'core/gemini-archive.js'"));
     expect(bg.indexOf("'core/gemini-archive.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
@@ -545,11 +547,11 @@ describe('Phase 3 шаг 13.2: S-пины проводки модуля', () => 
     expect(bg).toContain("'ai-cm-gemini-intercept-v9'");
     expect(bg).toContain("'ai-cm-gemini-intercept-v8'");
     // лог регистрации бампнут вместе с id
-    expect(bg).toContain('(v15) зарегистрирован');
+    expect(bg).toContain('(v16) зарегистрирован');
     expect(bg).not.toContain('(v11) зарегистрирован');
     // лог обязан стоять РЯДОМ со своей регистрацией, а не быть унаследованным текстом
-    expect(bg.indexOf("await registerSafe('ai-cm-gemini-intercept-v15'"))
-      .toBeLessThan(bg.indexOf('(v15) зарегистрирован'));
+    expect(bg.indexOf("await registerSafe('ai-cm-gemini-intercept-v16'"))
+      .toBeLessThan(bg.indexOf('(v16) зарегистрирован'));
   });
 
   test('S2: bind-контракт полон — ни одна зависимость кластера не потеряна', () => {
@@ -609,11 +611,14 @@ describe('Phase 3 шаг 13.2: S-пины проводки модуля', () => 
     // 109 строк предикатов ниже неё — 1421; Phase 3 (SPA-жизненный цикл, шаг 3) заменил
     // 54 строки диапазона 1204-1257 на 43 строки блока подключения и убрал объявление
     // loaderBadgeTimer выше неё — 1410.
+    // Phase 3 (шаг 4) увёл сам вызов в core/gemini-active-refresh.js (строка 95 модуля),
+    // поэтому хвост считается по модулю, а связка архива по-прежнему НИЖЕ связки кластера.
     // Пин держит ФАКТ:
     // следующий перенос кода выше этой точки снова потребует ревью строки, а не пройдёт молча.
     const VF5_TAIL = 'aiCmIngestFwd(txt, { emitOnlyIfAdded: true, fromVirtualF5: true, rebuild: rebuild });';
-    const hits = CORE.split('\n').reduce((acc, l, i) => (l.indexOf(VF5_TAIL) !== -1 ? acc.concat(i + 1) : acc), []);
-    expect(hits).toEqual([1410]);
-    expect(lineOf(CORE, 'aiCmGeminiArchive.__bind(')).toBeGreaterThan(1410);
+    const hits = ACTIVE.split('\n').reduce((acc, l, i) => (l.indexOf(VF5_TAIL) !== -1 ? acc.concat(i + 1) : acc), []);
+    expect(hits).toEqual([95]);
+    expect(lineOf(CORE, 'aiCmGeminiArchive.__bind('))
+      .toBeGreaterThan(lineOf(CORE, 'aiCmGeminiActiveRefresh.__bind('));
   });
 });

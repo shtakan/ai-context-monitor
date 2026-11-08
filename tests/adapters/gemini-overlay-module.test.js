@@ -316,12 +316,12 @@ describe('Phase 3 шаг 13.1: D-пины — API, гигиена, деград�
 });
 
 describe('Phase 3 шаг 13.1: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v15, модуль перед ядром, -v13 снят', () => {
+  test('S1: регистрация в core/background.js — id -v16, модуль перед ядром, -v13 снят', () => {
     const bg = readFile('core/background.js');
-    expect(bg).toContain("'ai-cm-gemini-intercept-v15'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v16'");
     expect(bg).toContain("'core/gemini-overlay.js'");
     // js[] собран ровно в этом порядке: … loader-scroll → files → ingest → overlay → ядро
-    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-intercept.js'");
+    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-active-refresh.js', 'core/gemini-intercept.js'");
     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при своей загрузке
     expect(bg.indexOf("'core/gemini-ingest.js'")).toBeLessThan(bg.indexOf("'core/gemini-overlay.js'"));
     expect(bg.indexOf("'core/gemini-overlay.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
@@ -331,7 +331,7 @@ describe('Phase 3 шаг 13.1: S-пины проводки модуля', () => 
     expect(bg).toContain("'ai-cm-gemini-intercept-v9'");
     expect(bg).toContain("'ai-cm-gemini-intercept-v8'");
     // лог регистрации бампнут вместе с id
-    expect(bg).toContain('(v15) зарегистрирован');
+    expect(bg).toContain('(v16) зарегистрирован');
     expect(bg).not.toContain('(v11) зарегистрирован');
   });
 

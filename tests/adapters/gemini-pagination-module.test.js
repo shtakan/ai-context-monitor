@@ -163,12 +163,12 @@ describe('Phase 3 шаг 10: D-пины маршрутов записи базы
 });
 
 describe('Phase 3 шаг 10: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v15 (Phase 3, шаг 2: дамп диагностики), модуль перед ядром, -v13 в unregister', () => {
+  test('S1: регистрация в core/background.js — id -v16 (Phase 3, шаг 2: дамп диагностики), модуль перед ядром, -v13 в unregister', () => {
     const bg = readFile('core/background.js');
     expect(bg).toContain("'ai-cm-gemini-intercept-v6'");
-    expect(bg).toContain("'ai-cm-gemini-intercept-v15'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v16'");
     expect(bg).toContain("'core/pagination/pagination.js'");
-    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-intercept.js'");
+    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-active-refresh.js', 'core/gemini-intercept.js'");
     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при загрузке
     expect(bg.indexOf("'core/pagination/pagination.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
     // MV3 не перечитывает js[] под существующим id — прежний id обязан быть снят

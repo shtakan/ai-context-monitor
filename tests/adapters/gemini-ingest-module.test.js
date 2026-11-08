@@ -60,6 +60,9 @@ const CORE = readFile('core/gemini-intercept.js');
 const MOD = readFile('core/gemini-ingest.js');
 const ARCH = readFile('core/gemini-archive.js');
 const PAG = readFile('core/pagination/pagination.js');
+/** Phase 3, шаг 4: сюда уехала точка выхода vf5 (activeRefresh). */
+const ACTIVE = require(path.join(ROOT, 'tests/helpers/gemini-intercept-source.js'))
+  .moduleSource('core/gemini-active-refresh.js');
 
 /** 16 экспортов модуля — в порядке `Fn.<имя> = <имя>;` (core/gemini-ingest.js:1231-1246). */
 const EXPORTED = [
@@ -183,7 +186,10 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
     expect(ingestBind).not.toContain('emitBaseSnapshot: emitBaseSnapshot,');
 
     // хвостовая точка выхода vf5 — ровно один вызов, ровно с этими опциями
-    expect(CORE.match(new RegExp(VF5_TAIL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))).toHaveLength(1);
+    // Phase 3 (шаг 4): вызов уехал вместе с activeRefresh в core/gemini-active-refresh.js —
+    // в ядре его больше нет, в модуле он ровно один; пин держит оба факта.
+    expect(CORE.match(new RegExp(VF5_TAIL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))).toBeNull();
+    expect(ACTIVE.match(new RegExp(VF5_TAIL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))).toHaveLength(1);
     // план называет 1941 (до-выносом ядро); после выноса ingest — 1784; после выноса
     // кластера оверлея (Phase 3 step 13.1: −143 строки диапазона 1597-1739 и +39 строк
     // блока подключения ВЫШЕ этой точки) — 1680; после выноса оракула (Phase 3 step 13.3:
@@ -196,7 +202,9 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
     // выше по файлу снова потребовал ревью строки, а не прошёл незамеченным.
     // Phase 3 (SPA-жизненный цикл, шаг 3) заменил 54 строки диапазона 1204-1257 на 43 строки
     // блока подключения и убрал объявление loaderBadgeTimer выше неё — 1410.
-    expect(linesOf(CORE, VF5_TAIL)).toEqual([1410]);
+    expect(linesOf(CORE, VF5_TAIL)).toEqual([]);
+    // модуль: тело activeRefresh, строка 95 (ядро 1410 больше не существует)
+    expect(linesOf(ACTIVE, VF5_TAIL)).toEqual([95]);
   });
 
   test('R-D №4: счётчик emitBaseSnapshot() — ядро 1, конкатенация 9', () => {
@@ -253,18 +261,18 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
 });
 
 describe('Phase 3 шаг 12: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v15, gemini-files перед ingest, -v13 снят', () => {
+  test('S1: регистрация в core/background.js — id -v16, gemini-files перед ingest, -v13 снят', () => {
     const bg = readFile('core/background.js');
-    expect(bg).toContain("'ai-cm-gemini-intercept-v15'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v16'");
     expect(bg).toContain("'core/gemini-ingest.js'");
     // js[] собран ровно в этом порядке: sse → pagination → loader-scroll → files → ingest → ядро
-    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-intercept.js'");
+    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-active-refresh.js', 'core/gemini-intercept.js'");
     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при загрузке
     expect(bg.indexOf("'core/gemini-files.js'")).toBeLessThan(bg.indexOf("'core/gemini-ingest.js'"));
     expect(bg.indexOf("'core/gemini-loader-scroll.js'")).toBeLessThan(bg.indexOf("'core/gemini-ingest.js'"));
     expect(bg.indexOf("'core/gemini-ingest.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
     // MV3 не перечитывает js[] под существующим id — прежний id обязан быть снят
-    expect(bg).toContain("'ai-cm-gemini-intercept-v11', 'ai-cm-gemini-intercept-v12', 'ai-cm-gemini-intercept-v13', 'ai-cm-gemini-intercept-v14']");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v11', 'ai-cm-gemini-intercept-v12', 'ai-cm-gemini-intercept-v13', 'ai-cm-gemini-intercept-v14', 'ai-cm-gemini-intercept-v15']");
   });
 
   test('S2: bind-контракт полон — 72 имени переданы ядром и все 72 используются модулем', () => {

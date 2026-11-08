@@ -304,22 +304,28 @@ async function ensureInterceptor() {
     // history.pushState/replaceState, popstate и document-scroll). Модуль грузится ПЕРЕД
     // ядром, ядро связывает его в прежнем месте установки патчей. Без модуля SPA-переход
     // не сбрасывает состояние и не перезапускает лоадер — база двух чатов смешалась бы.
-    if (ids.indexOf('ai-cm-gemini-intercept-v15') === -1) {
+    // Phase 3 (активный vf5-дозапрос + emit-обёртка, шаг 4): бамп -v15 → -v16 — добавлен
+    // core/gemini-active-refresh.js (activeRefresh: активный POST на /app/<conv> последними
+    // at/url/headers и стыковка ответа с ingest через aiCmIngestFwd(fromVirtualF5); плюс
+    // sanitizeMessagesForEmit — дедуп массива на выходе эмита). Модуль грузится ПЕРЕД
+    // ядром, ядро связывает его на месте прежнего объявления. Без модуля дозапрос отложен
+    // навсегда (пассив+DOM усечён до видимого окна), а эмит уходит без дедупа.
+    if (ids.indexOf('ai-cm-gemini-intercept-v16') === -1) {
       // Снимаем регистрации прежних id: они остались в профиле после обновления и
       // несли бы старый js[] (без hidden-scroll/diag/rpc/parse/sse) параллельно с новым пучком.
       // Прежних id может не быть (чистая установка) — поэтому тихий catch без диагностики.
       try {
-        await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-gemini-intercept', 'ai-cm-gemini-intercept-v2', 'ai-cm-gemini-intercept-v3', 'ai-cm-gemini-intercept-v4', 'ai-cm-gemini-intercept-v5', 'ai-cm-gemini-intercept-v6', 'ai-cm-gemini-intercept-v7', 'ai-cm-gemini-intercept-v8', 'ai-cm-gemini-intercept-v9', 'ai-cm-gemini-intercept-v10', 'ai-cm-gemini-intercept-v11', 'ai-cm-gemini-intercept-v12', 'ai-cm-gemini-intercept-v13', 'ai-cm-gemini-intercept-v14'] });
+        await chrome.scripting.unregisterContentScripts({ ids: ['ai-cm-gemini-intercept', 'ai-cm-gemini-intercept-v2', 'ai-cm-gemini-intercept-v3', 'ai-cm-gemini-intercept-v4', 'ai-cm-gemini-intercept-v5', 'ai-cm-gemini-intercept-v6', 'ai-cm-gemini-intercept-v7', 'ai-cm-gemini-intercept-v8', 'ai-cm-gemini-intercept-v9', 'ai-cm-gemini-intercept-v10', 'ai-cm-gemini-intercept-v11', 'ai-cm-gemini-intercept-v12', 'ai-cm-gemini-intercept-v13', 'ai-cm-gemini-intercept-v14', 'ai-cm-gemini-intercept-v15'] });
       } catch (eUnregGemini) { }
-      await registerSafe('ai-cm-gemini-intercept-v15', {
-        id: 'ai-cm-gemini-intercept-v15',
+      await registerSafe('ai-cm-gemini-intercept-v16', {
+        id: 'ai-cm-gemini-intercept-v16',
         matches: ['https://gemini.google.com/*', 'https://aistudio.google.com/*'],
-        js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-parse.js', 'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-intercept.js'],
+        js: ['utils/debug.js', 'utils/gemini-batchexecute-parser.js', 'utils/gemini-intercept-logic.js', 'core/gemini-hidden-scroll.js', 'core/gemini-diag.js', 'core/gemini-rpc.js', 'core/gemini-parse.js', 'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-active-refresh.js', 'core/gemini-intercept.js'],
         runAt: 'document_start',
         world: 'MAIN',
         allFrames: false
       });
-      console.log('AI Context Monitor: перехватчик Gemini (v15) зарегистрирован (мир сайта, document_start)');
+      console.log('AI Context Monitor: перехватчик Gemini (v16) зарегистрирован (мир сайта, document_start)');
     }
 
     // перехватчик DeepSeek (v2: новый id, чтобы Chrome гарантированно перезагрузил

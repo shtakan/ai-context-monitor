@@ -65,6 +65,13 @@
  * source-level пин-тесты читают функции оттуда, где они теперь живут, не меняя
  * ни одного ассерта.
  *
+ * Phase 3 (шаг 4): активный vf5-дозапрос activeRefresh и emit-обёртка
+ * sanitizeMessagesForEmit вынесены в core/gemini-active-refresh.js и добавлены в MODULES
+ * тем же порядком, что и в js[] core/background.js (spa-lifecycle -> active-refresh -> ядро).
+ * Тела лежат внутри `with (D)` и получают состояние ядра связкой (8 fn значением, 3 rw-пары,
+ * 3 ro-геттера). В ядре остались только hoisted-форвардеры, поэтому чужие __bind-блоки
+ * (пагинация, ingest, SPA-фолбэк, архив) и прежние вызовы читают те же имена, что и раньше.
+ *
  * ВАЖНО: перенос кода обязан быть БАЙТОВЫМ, включая ведущие отступы, и рабочие
  * файлы обязаны остаться в LF. Часть пин-тестов ищет литералы с ведущими
  * пробелами ("  function finishQuiet(...)", "\n  });",
@@ -111,7 +118,8 @@ const MODULES = [
   'core/gemini-archive.js',
   'core/gemini-oracle.js',
   'core/gemini-diag-dump.js',
-  'core/gemini-spa-lifecycle.js'
+  'core/gemini-spa-lifecycle.js',
+  'core/gemini-active-refresh.js'
 ];
 const INTERCEPT_JS = 'core/gemini-intercept.js';
 

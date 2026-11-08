@@ -615,8 +615,11 @@ describe('Phase 3 шаг 13.3: D-пины — API, размещение связ
     expect(hooks).toBeGreaterThan(oracleBind);
     // ниже поздних алиасов (> 782) и ниже точки выхода vf5 (1446) — иначе в модуль уехал бы null
     expect(oracleBind).toBeGreaterThan(782);
-    const VF5_TAIL = 'aiCmIngestFwd(txt, { emitOnlyIfAdded: true, fromVirtualF5: true, rebuild: rebuild });';
-    expect(oracleBind).toBeGreaterThan(lineOf(CORE, VF5_TAIL));
+    // Phase 3 (шаг 4): точка выхода vf5 уехала в core/gemini-active-refresh.js вместе с
+    // activeRefresh — в ядре её нет, поэтому пин держит порядок связок: связка кластера
+    // активного дозапроса обязана стоять ВЫШЕ связки оракула (иначе оракул получил бы null).
+    expect(lineOf(CORE, 'aiCmGeminiActiveRefresh.__bind(')).toBeGreaterThan(0);
+    expect(oracleBind).toBeGreaterThan(lineOf(CORE, 'aiCmGeminiActiveRefresh.__bind('));
     // баннеры-указатели на месте бывших диапазонов: секция форвардеров, notifyLoaderState,
     // отпечатки+снимок, мост и сам блок подключения
     expect((CORE.match(/Phase 3 step 13\.3\): ОРАКУЛ ПОЛНОТЫ \(ВЫНЕСЕН/g) || [])).toHaveLength(5);
@@ -633,12 +636,12 @@ describe('Phase 3 шаг 13.3: D-пины — API, размещение связ
 });
 
 describe('Phase 3 шаг 13.3: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v15, модуль между archive и ядром, -v13 снят', () => {
+  test('S1: регистрация в core/background.js — id -v16, модуль между archive и ядром, -v13 снят', () => {
     const bg = readFile('core/background.js');
-    expect(bg).toContain("'ai-cm-gemini-intercept-v15'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v16'");
     expect(bg).toContain("'core/gemini-oracle.js'");
     // js[] собран ровно в этом порядке: … files → overlay → archive → oracle → ядро
-    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-intercept.js'");
+    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-active-refresh.js', 'core/gemini-intercept.js'");
     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при своей загрузке
     expect(bg.indexOf("'core/gemini-archive.js'")).toBeLessThan(bg.indexOf("'core/gemini-oracle.js'"));
     expect(bg.indexOf("'core/gemini-oracle.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
@@ -647,10 +650,10 @@ describe('Phase 3 шаг 13.3: S-пины проводки модуля', () => 
     expect(bg).toContain("'ai-cm-gemini-intercept-v10'");
     expect(bg).toContain("'ai-cm-gemini-intercept-v9'");
     // лог регистрации бампнут вместе с id и стоит рядом со своей регистрацией
-    expect(bg).toContain('(v15) зарегистрирован');
+    expect(bg).toContain('(v16) зарегистрирован');
     expect(bg).not.toContain('(v11) зарегистрирован');
-    expect(bg.indexOf("await registerSafe('ai-cm-gemini-intercept-v15'"))
-      .toBeLessThan(bg.indexOf('(v15) зарегистрирован'));
+    expect(bg.indexOf("await registerSafe('ai-cm-gemini-intercept-v16'"))
+      .toBeLessThan(bg.indexOf('(v16) зарегистрирован'));
     // release.yml держит счётчик MAIN-world файлов равным факту (27 → 28; Step D.2 —
     // модуль сетевого дозапроса DeepSeek core/deepseek-netsync.js добавлен в js[];
     // 28 → 29 — Step D.3, кластер REFETCH/URL-гигиены core/deepseek-refetch.js;
@@ -660,8 +663,8 @@ describe('Phase 3 шаг 13.3: S-пины проводки модуля', () => 
     // 32 → 33 — Step D.7, кластер NETWORK core/deepseek-net.js;
     // 33 → 34 — Step D.8, кластер INGEST core/deepseek-ingest.js)
     const yml = readFile('.github/workflows/release.yml');
-    expect((yml.match(/39 MAIN-world/g) || [])).toHaveLength(2);
-    expect(yml).not.toContain('38 MAIN-world');
+    expect((yml.match(/40 MAIN-world/g) || [])).toHaveLength(2);
+    expect(yml).not.toContain('39 MAIN-world');
   });
 
   test('S2: bind-контракт полон — 32 имени (10 fn + 10 rw + 12 ro), ни одной потерянной привязки', () => {
