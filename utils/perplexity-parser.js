@@ -52,6 +52,70 @@ export function parsePerplexityThread(json) {
     return undefined;
   }
 
+  /**
+   * Признак загруженного в Perplexity вложения: S3-хост ppl-ai-file-upload, путь /attachments/.
+   * Такие элементы приходят и в entry.attachments, и в web_results (цитаты картинок),
+   * но веб-источниками не являются.
+   * @param {any} url Адрес элемента.
+   * @returns {boolean} true для вложения пользователя.
+   */
+  function isAttachmentUrl(url) {
+    if (typeof url !== 'string' || !url) return false;
+    return url.indexOf('ppl-ai-file-upload') !== -1 && url.indexOf('/attachments/') !== -1;
+  }
+
+  /**
+   * Признак изображения среди вложений (расширение файла в пути без query/hash).
+   * @param {string} url Адрес вложения.
+   * @returns {boolean} true для картинки.
+   */
+  function isImageAttachment(url) {
+    if (!isAttachmentUrl(url)) return false;
+    var path = String(url).split('#')[0].split('?')[0];
+    return /\.(jpe?g|png|gif|webp|bmp|svg|avif)$/i.test(path);
+  }
+
+  /**
+   * Адрес без query/hash: подписанные X-Amz-параметры истекают и не должны попадать в экспорт.
+   * @param {string} url Адрес вложения.
+   * @returns {string} Адрес без query и hash.
+   */
+  function stripUrlQuery(url) {
+    return String(url).split('#')[0].split('?')[0];
+  }
+
+  /**
+   * Адреса изображений пользователя из entry.attachments (порядок сохраняется, дубли убираются).
+   * web_results сюда не входят: цитата картинки из прошлого сообщения не принадлежит текущему.
+   * @param {any} entry Запись треда.
+   * @returns {string[]} Адреса без query/hash.
+   */
+  function collectEntryImages(entry) {
+    var out = [];
+    var atts = getTrim(entry, 'attachments');
+    if (!Array.isArray(atts)) return out;
+    for (var a = 0; a < atts.length; a++) {
+      var att = atts[a];
+      var url = '';
+      if (typeof att === 'string') url = att;
+      else if (att && typeof att === 'object') url = getTrim(att, 'url') || getTrim(att, 'src') || '';
+      if (!isImageAttachment(url)) continue;
+      var clean = stripUrlQuery(url);
+      if (out.indexOf(clean) === -1) out.push(clean);
+    }
+    return out;
+  }
+
+  /**
+   * Базовое имя файла из адреса вложения.
+   * @param {string} url Адрес без query/hash.
+   * @returns {string} Имя файла.
+   */
+  function basenameOf(url) {
+    var parts = String(url || '').split('/');
+    return parts[parts.length - 1] || '';
+  }
+
   var model = '';
   var pieces = [];
   var ids = [];
@@ -77,13 +141,24 @@ export function parsePerplexityThread(json) {
 
       var entryId = threadUrlSlug || ('entry' + i);
 
-      // Сообщение пользователя
+      // Сообщение пользователя. Картинки-вложения этого запроса помечаются
+      // [Image: src] там же, где в UI нарисованы чипы вложений — под текстом.
+      var entryImages = collectEntryImages(entry);
       if (queryStr && typeof queryStr === 'string' && queryStr.trim()) {
-        pieces.push(queryStr.trim());
+        var userText = queryStr.trim();
+        for (var im = 0; im < entryImages.length; im++) {
+          userText += '\n[Image: ' + entryImages[im] + ']';
+        }
+        pieces.push(userText);
         ids.push(entryId + '_user');
         count++;
-        lastText = queryStr.trim();
-        messages.push({ role: 'user', text: queryStr.trim() });
+        lastText = userText;
+        messages.push({ role: 'user', text: userText });
+      }
+
+      var entryImageNames = [];
+      for (var inm = 0; inm < entryImages.length; inm++) {
+        entryImageNames.push(basenameOf(entryImages[inm]));
       }
 
       // Сообщение ассистента: сбор из блоков
@@ -136,6 +211,11 @@ export function parsePerplexityThread(json) {
                 if (!wr || typeof wr !== 'object') continue;
                 var wrName = getTrim(wr, 'name') || '';
                 var wrSnippet = getTrim(wr, 'snippet') || '';
+                var wrUrl = getTrim(wr, 'url');
+                // Загруженные картинки — не веб-источники: их метка стоит в сообщении
+                // пользователя, поэтому [source] сюда не попадает.
+                if (isAttachmentUrl(wrUrl)) continue;
+                if (!wrUrl && wrName && !wrSnippet && entryImageNames.indexOf(basenameOf(String(wrName))) !== -1) continue;
                 if (wrName || wrSnippet) {
                   var wrText = (wrName ? wrName + ': ' : '') + (wrSnippet || '');
                   if (wrText.trim()) assistantTextParts.push('[source] ' + wrText.trim());

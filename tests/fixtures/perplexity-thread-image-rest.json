@@ -1,0 +1,14 @@
+{
+  "entries": [
+    {
+      "query_str": "Синтетический вопрос с картинкой (REST)?",
+      "display_model": "turbo",
+      "user_selected_model": "turbo",
+      "thread_url_slug": "synthetic-image-rest-1",
+      "attachments": [
+        "https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/900001/00000000-0000-4000-8000-000000000001/image.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=TEST-SIGNATURE"
+      ],
+      "text": "[{\"step_type\":\"INITIAL_QUERY\",\"content\":{\"query\":\"Синтетический вопрос с картинкой (REST)?\"}},{\"step_type\":\"ASI_TOOL_INPUT\",\"content\":{}},{\"step_type\":\"ASI_TOOL_OUTPUT\",\"content\":{}},{\"step_type\":\"FINAL\",\"content\":{\"goal_id\":\"synthetic-goal\",\"answer\":\"{\\\"answer\\\":\\\"Ответ из REST-снимка.\\\",\\\"web_results\\\":[{\\\"name\\\":\\\"image.jpg\\\",\\\"snippet\\\":\\\"\\\",\\\"timestamp\\\":\\\"\\\",\\\"url\\\":\\\"https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/900001/00000000-0000-4000-8000-000000000001/image.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=TEST-SIGNATURE\\\",\\\"meta_data\\\":{\\\"file_uuid\\\":\\\"00000000-0000-4000-8000-000000000001\\\"}}]}\",\"started_at\":1,\"query_started_us\":1}}]"
+    }
+  ]
+}

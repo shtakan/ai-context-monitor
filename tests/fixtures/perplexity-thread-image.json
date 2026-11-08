@@ -1,0 +1,78 @@
+{
+  "entries": [
+    {
+      "query_str": "Синтетический вопрос с картинкой?",
+      "display_model": "turbo",
+      "user_selected_model": "turbo",
+      "thread_url_slug": "synthetic-image-1",
+      "attachments": [
+        "https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/900001/00000000-0000-4000-8000-000000000001/image.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=TEST-SIGNATURE",
+        "https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/900001/00000000-0000-4000-8000-000000000001/image.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=TEST-SIGNATURE-2"
+      ],
+      "blocks": [
+        {
+          "intended_usage": "workflow_root",
+          "workflow_block": {
+            "steps": [
+              {
+                "items": [
+                  {
+                    "type": "WORKFLOW_ITEM_TEXT",
+                    "payload": {
+                      "text_payload": {
+                        "text": "Ответ с картинкой. [1]"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "intended_usage": "web_results",
+          "web_result_block": {
+            "web_results": [
+              {
+                "name": "image.jpg",
+                "snippet": "",
+                "url": "https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/900001/00000000-0000-4000-8000-000000000001/image.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=TEST-SIGNATURE"
+              },
+              {
+                "name": "Источник примера",
+                "snippet": "Сниппет примера.",
+                "url": "https://example.com/1"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "query_str": "Синтетический вопрос без картинки?",
+      "display_model": "turbo",
+      "thread_url_slug": "synthetic-image-2",
+      "blocks": [
+        {
+          "intended_usage": "workflow_root",
+          "workflow_block": {
+            "steps": [
+              {
+                "items": [
+                  {
+                    "type": "WORKFLOW_ITEM_TEXT",
+                    "payload": {
+                      "text_payload": {
+                        "text": "Ответ без картинки."
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
