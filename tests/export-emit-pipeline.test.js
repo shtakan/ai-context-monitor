@@ -687,7 +687,7 @@ describe('D18: unionTurnsById (tape-save не уменьшает тейп)', () 
 
 // —— v1.6 (D19): SPA-возврат — ре-merge ленты после conv-switch ——
 describe('D19: SPA-возврат и ре-merge ленты (cacheRestoredMap/tapeRestoreSeen)', () => {
-  const GL = require('./helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
+  const GL = require('./helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.ts');
 
   // Тейп: 62 хода = 124 сообщения (cachedMsgs=124); сеть отдаёт хвостовое окно
   // 40 ходов (80 msgs) — старшие ходы есть только в тейпе.

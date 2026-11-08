@@ -1,5 +1,5 @@
 /**
- * РўРµСЃС‚С‹ С‡РёСЃС‚РѕР№ Р»РѕРіРёРєРё РїРµСЂРµС…РІР°С‚С‡РёРєР° Gemini (utils/gemini-intercept-logic.js).
+ * РўРµСЃС‚С‹ С‡РёСЃС‚РѕР№ Р»РѕРіРёРєРё РїРµСЂРµС…РІР°С‚С‡РёРєР° Gemini (utils/gemini-intercept-logic.ts).
  * РџРѕРєСЂС‹РІР°СЋС‚ РґРІР° РєР»Р°СЃСЃР° Р±Р°РіРѕРІ:
  *   (Р°) РїРѕР» (floor): РєР»СЋС‡ РІРєР»СЋС‡Р°РµС‚ PARSER_VERSION вЂ” РїСЂРё СЃРјРµРЅРµ РІРµСЂСЃРёРё СЃРѕС…СЂР°РЅС‘РЅРЅРѕРµ
  *       РёРіРЅРѕСЂРёСЂСѓРµС‚СЃСЏ Рё РїРµСЂРµР·Р°РїРёСЃС‹РІР°РµС‚СЃСЏ; РїРѕР» РЅРµ РїСЂРёРјРµРЅСЏРµС‚СЃСЏ РїСЂРё baseComplete=true.
@@ -46,7 +46,7 @@ const {
   shouldHideScroller,
   updateProbeMetaRetain,
   probeTerminalGate
-} = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
+} = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.ts');
 
 function makeStorage() {
   const map = {};
@@ -1152,11 +1152,11 @@ describe('D16: shouldHideScroller (bootstrap короткого контейне
 // ===== H12 (A5b): scrollProofAllowsComplete удалён — циркулярный оракул полноты =====
 describe('H12 (A5b): scrollProofAllowsComplete отсутствует в экспорте GeminiInterceptLogic', () => {
   test('(б) функции нет в экспорте модуля и в исходнике utils', () => {
-    const apiH12 = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
+    const apiH12 = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.ts');
     expect(apiH12.scrollProofAllowsComplete).toBeUndefined();
     expect(Object.prototype.hasOwnProperty.call(apiH12, 'scrollProofAllowsComplete')).toBe(false);
     const logicSrc = require('fs').readFileSync(
-      require('path').join(__dirname, '..', '..', 'utils', 'gemini-intercept-logic.js'), 'utf8');
+      require('path').join(__dirname, '..', '..', 'utils', 'gemini-intercept-logic.ts'), 'utf8');
     expect(logicSrc).not.toContain('scrollProofAllowsComplete');
   });
 
@@ -1293,7 +1293,7 @@ describe('H9b: updateProbeMetaRetain (retained last-good: шаг сломан/з
   });
 
   test('(е) поле экспортировано в API (рядом с fallbackProbeReady)', () => {
-    const apiH9b = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
+    const apiH9b = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.ts');
     expect(typeof apiH9b.updateProbeMetaRetain).toBe('function');
     expect(typeof apiH9b.fallbackProbeReady).toBe('function');
   });
@@ -1343,7 +1343,7 @@ describe('H10 probeTerminalGate (below-floor / pb-error)', () => {
   });
 
   test('(з) поле экспортировано в API', () => {
-    const apiH10 = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
+    const apiH10 = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.ts');
     expect(typeof apiH10.probeTerminalGate).toBe('function');
   });
 });

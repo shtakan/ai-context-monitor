@@ -12,7 +12,7 @@
 const {
   isBardErrorPage,
   paginateErrorRetryDecision,
-} = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
+} = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.ts');
 
 // Реальная вложенность payload: outer = [wrb-кортеж, ["di",…], …], ходы — outer[0][2].
 const ERROR_PAGE_1177 = [

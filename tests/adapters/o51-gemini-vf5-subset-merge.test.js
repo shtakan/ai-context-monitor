@@ -8,7 +8,7 @@
  * нового хода: reason `full-rebuild-vf5-no-cursor` (core/gemini-intercept.js:4430 прежней
  * нумерации). Форма и «полная история» неразличимы — различает только пересечение множеств id.
  *
- * Фикс: content-критерий «снапшот ⊆ база» (`isSubsetIds` в utils/gemini-intercept-logic.js),
+ * Фикс: content-критерий «снапшот ⊆ база» (`isSubsetIds` в utils/gemini-intercept-logic.ts),
  * при котором пересборка ЗАПРЕЩЕНА и идёт stable merge (merge-by-id: база сохраняется
  * целиком, ходы снапшота, которых в базе нет, добавляются из его хвоста). Плюс страховка
  * уровня вызова в ingest (модуль логики стар/недоступен) и честный reason в merge-decision.
@@ -29,7 +29,7 @@
  *      критерий не подменён счётным сравнением длины.
  *
  * Тесты исполняют РЕАЛЬНЫЙ код core/gemini-intercept.js (извлечённый блок решателя
- * `disjointGuardSrc … refreshMinOrderTracking`) и РЕАЛЬНЫЙ модуль utils/gemini-intercept-logic.js
+ * `disjointGuardSrc … refreshMinOrderTracking`) и РЕАЛЬНЫЙ модуль utils/gemini-intercept-logic.ts
  * — не копии логики. НЕ ТРОГАЕТСЯ: tolerant-salvage O-48, единая точка сбора O-49,
  * символьный срез O-50, санация O-20/O-40/O-42, D-O41, badge-метрика O-47, CHANGELOG/версия.
  */
@@ -38,9 +38,9 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
 const CORE = require('../helpers/gemini-intercept-source.js').geminiSource;
-const LOGIC_PATH = path.join(ROOT, 'utils', 'gemini-intercept-logic.js');
+const LOGIC_PATH = path.join(ROOT, 'utils', 'gemini-intercept-logic.ts');
 const LOGIC_SRC = fs.readFileSync(LOGIC_PATH, 'utf8');
-const LOGIC = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
+const LOGIC = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.ts');
 
 if (typeof window !== 'undefined') window.GeminiInterceptLogic = LOGIC;
 

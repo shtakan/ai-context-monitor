@@ -32,7 +32,7 @@ const CONTENT = require('./helpers/content-source.js').contentSource;
 const INTERCEPT = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');
 const HYBRID = fs.readFileSync(path.join(ROOT, 'core', 'hybrid-tail.js'), 'utf8');
 const BASE_HANDLER = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.js'), 'utf8');
-const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.js');
+const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.ts');
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 
 // Рез по балансу фигурных скобок (как в tests/gsa-o31-thread-segmentation.test.js).
@@ -382,7 +382,7 @@ describe('O-32 (4): единый канонический ключ во всех
   });
 
   test('парсер: mergeTurnsByKey/ById дедуплицируют по каноническому ключу', () => {
-    const src = fs.readFileSync(path.join(ROOT, 'utils', 'google-search-folwr-parser.js'), 'utf8');
+    const src = fs.readFileSync(path.join(ROOT, 'utils', 'google-search-folwr-parser.ts'), 'utf8');
     expect(fnDecl(src, 'mergeTurnsByKey')).toContain('var key = canonicalTurnKeyOf(t);');
     expect(fnDecl(src, 'mergeTurnsById')).toContain('var key = canonicalTurnKeyOf(t);');
     expect(INTERCEPT).toContain('mergeTurnsMonotone');

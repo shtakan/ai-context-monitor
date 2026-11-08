@@ -29,72 +29,111 @@
  */
 
 /**
- * Ход переписки folwr: вопрос и ответ (любой из них может отсутствовать).
- * @typedef {Object} FolwrTurn
- * @property {string} id Идентификатор хода (jsuid из разметки либо синтетический 'idxN').
- * @property {string|null} userText Вопрос пользователя; null — вопрос не найден.
- * @property {string|null} assistantText Ответ ассистента; null — ответ не найден.
+ * Ход переписки folwr: вопрос и ответ (любая часть может отсутствовать).
  */
+export interface FolwrTurn {
+  /** Идентификатор хода (jsuid из разметки либо синтетический 'idxN'). */
+  id: string;
+  /** Текст вопроса; null — вопрос не найден. */
+  userText: string | null;
+  /** Текст ответа; null — ответ не найден. */
+  assistantText: string | null;
+}
 
-/**
- * Сообщение для базы/экспорта; по форме совместимо с Message (types/message.d.ts).
- * @typedef {Object} FolwrMessage
- * @property {string} role Роль автора: user/assistant.
- * @property {string} text Текст сообщения.
- */
+/** Сообщение для базы/экспорта; по форме совместимо с Message (types/message.d.ts). */
+export interface FolwrMessage {
+  /** Роль автора сообщения: user / assistant. */
+  role: string;
+  /** Текст сообщения. */
+  text: string;
+}
 
-/**
- * Результат разбора снимка folwr.
- * @typedef {Object} FolwrParseResult
- * @property {string} threadId Идентификатор треда (data-session-thread-id) либо ''.
- * @property {FolwrTurn[]} turns Ходы в document-порядке.
- * @property {FolwrMessage[]} messages Плоский список сообщений user/assistant.
- * @property {string} text Склейка текстов сообщений через '\n'.
- * @property {number} count Число сообщений в messages.
- */
+/** Результат разбора снимка folwr (открытие диалога и догрузка страниц). */
+export interface FolwrParseResult {
+  /** Идентификатор диалога из разметки; пустая строка, если не найден. */
+  threadId: string;
+  /** Разобранные ходы переписки. */
+  turns: FolwrTurn[];
+  /** Плоский список сообщений для базы/экспорта. */
+  messages: FolwrMessage[];
+  /** Весь текст диалога, склеенный через перевод строки. */
+  text: string;
+  /** Количество сообщений (messages.length). */
+  count: number;
+}
 
-/**
- * Вид страницы продолжения диалога.
- * @typedef {'http-error'|'empty-body'|'cursor-repeat'|'no-new-turns'|'new-turns'} FolwrContinuationKind
- */
+/** Вид страницы продолжения: что именно вернул сервер. */
+export type FolwrContinuationKind = 'http-error' | 'empty-body' | 'cursor-repeat' | 'no-new-turns' | 'new-turns';
 
-/**
- * Классификация страницы продолжения: можно ли считать историю полной.
- * @typedef {Object} FolwrContinuation
- * @property {FolwrContinuationKind} kind Вид исхода запроса.
- * @property {boolean} complete true — истории больше нет, базу можно объявить полной.
- * @property {boolean} canContinue true — имеет смысл запрашивать следующую страницу.
- * @property {number} status HTTP-статус (0, если неизвестен).
- * @property {boolean} ok Признак успешного запроса.
- * @property {number} bodyLength Длина тела ответа в байтах.
- * @property {number} newTurns Сколько НОВЫХ ходов дал ответ.
- * @property {string|null} cursor Полученный курсор продолжения.
- * @property {boolean} cursorRepeated Курсор совпал с отправленным.
- * @property {string} log Готовая строка лога.
- */
+/** Классификация страницы продолжения: можно ли считать историю полной. */
+export interface FolwrContinuation {
+  /** Вид страницы. */
+  kind: FolwrContinuationKind;
+  /** true — история собрана целиком. */
+  complete: boolean;
+  /** true — имеет смысл запрашивать следующую страницу. */
+  canContinue: boolean;
+  /** HTTP-статус ответа (0, если запрос не состоялся). */
+  status: number;
+  /** true — запрос завершился успешно. */
+  ok: boolean;
+  /** Длина тела ответа в символах. */
+  bodyLength: number;
+  /** Сколько новых ходов принесла страница. */
+  newTurns: number;
+  /** Курсор продолжения со страницы; null — курсора нет. */
+  cursor: string | null;
+  /** true — сервер вернул тот же курсор, что мы отправляли. */
+  cursorRepeated: boolean;
+  /** Человекочитаемая строка для лога. */
+  log: string;
+}
 
-/**
- * Утилиты разбора Google Search (window-зеркало и ES-модуль).
- * @typedef {Object} GoogleFolwrUtilsApi
- * @property {typeof countTurnContainers} countTurnContainers Счётчик turn-контейнеров.
- * @property {typeof extractTurnsFromDocument} extractTurnsFromDocument Ходы из живого DOM.
- * @property {typeof mergeTurnsByKey} mergeTurnsByKey Слияние по каноническому ключу.
- * @property {typeof extractContinuationToken} extractContinuationToken Курсор продолжения.
- * @property {typeof mergeTurnsById} mergeTurnsById Слияние по id.
- * @property {typeof mergeTurnsMonotone} mergeTurnsMonotone Монотонное слияние.
- * @property {typeof classifyFolwrContinuation} classifyFolwrContinuation Классификация страницы.
- * @property {typeof canonicalTurnKeyOf} canonicalTurnKeyOf Канонический ключ хода.
- * @property {typeof canonicalAnswerBody} canonicalAnswerBody Тело ответа без обёртки.
- * @property {typeof canonicalizeTurnForThread} canonicalizeTurnForThread Каноническая форма хода.
- * @property {typeof normalizeTurnKeyPart} normalizeTurnKeyPart Нормализация части ключа.
- * @property {typeof turnIdentityParts} turnIdentityParts Части идентичности хода (вопрос, тело).
- * @property {typeof bodiesPrefixCompatible} bodiesPrefixCompatible Совместимость тел по префиксу.
- * @property {typeof dedupeTurns} dedupeTurns Дедуп списка ходов без переписывания объектов.
- * @property {typeof renderCodeBlock} renderCodeBlock Рендер код-блока фенсом.
- * @property {typeof answerTextOf} answerTextOf Текст контент-узла ответа.
- * @property {typeof answerDomNodes} answerDomNodes Отбор контент-узлов DOM.
- * @property {typeof isCodeBlockElement} isCodeBlockElement Признак код-блока.
- */
+/** Вход классификатора продолжения: сжатый итог запроса «догрузить ещё». */
+export interface FolwrContinuationInput {
+  /** Успешен ли запрос. */
+  ok?: boolean;
+  /** HTTP-статус ответа. */
+  status?: number | null;
+  /** Длина тела ответа. */
+  bodyLength?: number;
+  /** Сколько новых ходов принесла страница. */
+  newTurns?: number;
+  /** Курсор, полученный со страницы. */
+  cursor?: string | null;
+  /** Курсор, который мы отправляли. */
+  sentCursor?: string | null;
+}
+
+/** Нормализованные части идентичности хода (сверка базовой записи и сети). */
+export interface FolwrTurnIdentity {
+  /** Нормализованный текст вопроса. */
+  u: string;
+  /** Нормализованный текст ответа. */
+  a: string;
+}
+
+/** Публичный API, который модуль кладёт в window.GoogleFolwrUtils. */
+export interface GoogleFolwrUtilsApi {
+  countTurnContainers: typeof countTurnContainers;
+  extractTurnsFromDocument: typeof extractTurnsFromDocument;
+  mergeTurnsByKey: typeof mergeTurnsByKey;
+  extractContinuationToken: typeof extractContinuationToken;
+  mergeTurnsById: typeof mergeTurnsById;
+  mergeTurnsMonotone: typeof mergeTurnsMonotone;
+  classifyFolwrContinuation: typeof classifyFolwrContinuation;
+  canonicalTurnKeyOf: typeof canonicalTurnKeyOf;
+  canonicalAnswerBody: typeof canonicalAnswerBody;
+  canonicalizeTurnForThread: typeof canonicalizeTurnForThread;
+  normalizeTurnKeyPart: typeof normalizeTurnKeyPart;
+  turnIdentityParts: typeof turnIdentityParts;
+  bodiesPrefixCompatible: typeof bodiesPrefixCompatible;
+  dedupeTurns: typeof dedupeTurns;
+  renderCodeBlock: typeof renderCodeBlock;
+  answerTextOf: typeof answerTextOf;
+  answerDomNodes: typeof answerDomNodes;
+  isCodeBlockElement: typeof isCodeBlockElement;
+}
 
 /**
  * Декодирует HTML-сущности: именованные (&quot;, &amp;, …) и числовые (&#123;).
@@ -272,7 +311,7 @@ function classOf(el) {
  * @param {any} el Проверяемый узел.
  * @returns {boolean} true — pre/code либо класс …code-block….
  */
-function isCodeLikeNode(el) {
+function isCodeLikeNode(el: any): boolean {
   if (!el || !el.tagName) return false;
   var tag = String(el.tagName).toUpperCase();
   return tag === 'PRE' || tag === 'CODE' || /code-?block/i.test(classOf(el));
@@ -287,7 +326,7 @@ function isCodeLikeNode(el) {
  * @param {any} el Код-контейнер.
  * @returns {string} Код без сервисной обвязки; '' для узла без DOM-API.
  */
-function codeTextOf(el) {
+function codeTextOf(el: any): string {
   if (!el || typeof el.cloneNode !== 'function') return '';
   var clone;
   try { clone = el.cloneNode(true); } catch (e) { return ''; }
@@ -336,7 +375,7 @@ function codeTextOf(el) {
  * @param {any} el Код-контейнер.
  * @returns {any} Узел, из которого читается текст кода.
  */
-function codeBodyElement(el) {
+function codeBodyElement(el: any): any {
   try {
     var inner = el.querySelectorAll ? el.querySelectorAll('pre, code') : null;
     if (inner && inner.length) return inner[inner.length - 1];
@@ -354,7 +393,7 @@ function codeBodyElement(el) {
  * @param {string|null|undefined} [langHint] Явная метка языка, если известна.
  * @returns {string} Метка языка либо '' (без метки).
  */
-function detectCodeLang(el, langHint) {
+function detectCodeLang(el: any, langHint?: string | null): string {
   if (langHint != null && CODE_LANG_RE.test(String(langHint).trim())) return String(langHint).trim();
   var attrNames = ['code-lang', 'data-lang', 'data-code-lang'];
   try {
@@ -390,7 +429,7 @@ function detectCodeLang(el, langHint) {
  * @param {any} el Проверяемый узел.
  * @returns {boolean} true — узел рендерится фенсом.
  */
-export function isCodeBlockElement(el) {
+export function isCodeBlockElement(el: any): boolean {
   if (!el || !el.tagName) return false;
   var tag = String(el.tagName).toUpperCase();
   if (/code-?block/i.test(classOf(el))) return true;
@@ -409,7 +448,7 @@ export function isCodeBlockElement(el) {
  * @param {string|null|undefined} [langHint] Явная метка языка.
  * @returns {string} Фенс с кодом; '' для пустого кода.
  */
-export function renderCodeBlock(node, langHint) {
+export function renderCodeBlock(node: any, langHint?: string | null): string {
   if (!node) return '';
   var body = codeBodyElement(node);
   var text = codeTextOf(body);
@@ -429,7 +468,7 @@ export function renderCodeBlock(node, langHint) {
  * @param {any} node Контент-узел ответа.
  * @returns {string} Текст узла без краевых пробелов.
  */
-export function answerTextOf(node) {
+export function answerTextOf(node: any): string {
   if (!node) return '';
   if (isCodeBlockElement(node)) return renderCodeBlock(node);
   if (typeof node.cloneNode !== 'function') return '';
@@ -472,7 +511,7 @@ export function answerTextOf(node) {
  * @param {any} root Корень поиска (документ живого DOM).
  * @returns {any[]} Контент-узлы без вложенных дублей.
  */
-export function answerDomNodes(root) {
+export function answerDomNodes(root?: any): any[] {
   var doc = root || (typeof document !== 'undefined' ? document : null);
   if (!doc || typeof doc.querySelectorAll !== 'function') return [];
   var nodes = doc.querySelectorAll('.n6owBd.awi2gc, ' + CODE_CONTAINER_SEL);
@@ -505,7 +544,7 @@ var FOREIGN_QUESTION_RE = /^Вы сказали:\s*"/;
  * @param {any} node Проверяемый узел.
  * @returns {string} Текст узла либо ''.
  */
-function nodeText(node) {
+function nodeText(node: any): string {
   try { return (node.textContent || '').trim(); } catch (e) { return ''; }
 }
 
@@ -671,7 +710,7 @@ function readThreadId(doc) {
  * @param {string} htmlText HTML-снимок страницы folwr.
  * @returns {FolwrParseResult} Результат разбора; пустой результат для не-строки.
  */
-export function parseGoogleFolwrOpen(htmlText) {
+export function parseGoogleFolwrOpen(htmlText: string): FolwrParseResult {
   var turns = [];
   var messages = [];
 
@@ -807,7 +846,7 @@ export function parseGoogleFolwrOpen(htmlText) {
  * @param {string} htmlText HTML-снимок.
  * @returns {number} Количество ходов (0 при ошибке разбора).
  */
-export function countTurnContainers(htmlText) {
+export function countTurnContainers(htmlText: string): number {
   if (!htmlText || typeof htmlText !== 'string') return 0;
   try {
     var doc = new DOMParser().parseFromString(htmlText, 'text/html');
@@ -822,7 +861,7 @@ export function countTurnContainers(htmlText) {
  * @param {any} doc Документ живого DOM.
  * @returns {FolwrTurn[]} Ходы в document-порядке.
  */
-export function extractTurnsFromDocument(doc) {
+export function extractTurnsFromDocument(doc: any): FolwrTurn[] {
   if (!doc || typeof doc.querySelectorAll !== 'function') return [];
   var turns = [];
   try {
@@ -884,7 +923,7 @@ export function extractTurnsFromDocument(doc) {
  * @param {string} htmlText HTML-снимок ответа folwr.
  * @returns {string|null} Курсор либо null, если его нет.
  */
-export function extractContinuationToken(htmlText) {
+export function extractContinuationToken(htmlText: string): string | null {
   if (!htmlText || typeof htmlText !== 'string') return null;
   try {
     var doc = new DOMParser().parseFromString(htmlText, 'text/html');
@@ -923,7 +962,7 @@ export function extractContinuationToken(htmlText) {
  * @param {string|null|undefined} s Часть ключа (userText или тело ответа).
  * @returns {string} Нормализованная строка.
  */
-export function normalizeTurnKeyPart(s) {
+export function normalizeTurnKeyPart(s: unknown): string {
   return String(s == null ? '' : s)
     .toLowerCase()
     .replace(/\u00a0/g, ' ')
@@ -1001,7 +1040,7 @@ function answerWrapperParts(text) {
  * @param {string|null|undefined} text Текст ответа.
  * @returns {string} Тело ответа.
  */
-export function canonicalAnswerBody(text) {
+export function canonicalAnswerBody(text: unknown): string {
   var wrapper = answerWrapperParts(text);
   if (wrapper) return wrapper.body;
   var s = String(text == null ? '' : text);
@@ -1029,7 +1068,7 @@ export function canonicalAnswerBody(text) {
  * @param {FolwrTurn|null|undefined} turn Ход переписки.
  * @returns {{u: string, a: string}} Вопрос и тело (обе части нормализованы).
  */
-export function turnIdentityParts(turn) {
+export function turnIdentityParts(turn: FolwrTurn | null | undefined): FolwrTurnIdentity {
   if (!turn) return { u: '', a: '' };
   var wrapper = answerWrapperParts(turn.assistantText);
   var u = normalizeTurnKeyPart(turn.userText);
@@ -1043,7 +1082,7 @@ export function turnIdentityParts(turn) {
  * @param {FolwrTurn|null|undefined} turn Ход переписки.
  * @returns {string} Ключ вида 'q||a'; '' для пустого хода.
  */
-export function canonicalTurnKeyOf(turn) {
+export function canonicalTurnKeyOf(turn: FolwrTurn | null | undefined): string {
   if (!turn) return '';
   var parts = turnIdentityParts(turn);
   return parts.u + '||' + parts.a;
@@ -1058,7 +1097,7 @@ export function canonicalTurnKeyOf(turn) {
  * @param {FolwrTurn|null|undefined} turn Ход переписки.
  * @returns {FolwrTurn|null} Ход канонической формы (идемпотентно).
  */
-export function canonicalizeTurnForThread(turn) {
+export function canonicalizeTurnForThread(turn: FolwrTurn | null | undefined): FolwrTurn | null | undefined {
   if (!turn) return turn;
   var question = (turn.userText == null) ? '' : String(turn.userText).trim();
   if (!question) {
@@ -1125,7 +1164,7 @@ var PREFIX_FUZZY_RATIO = 0.8;
  * @param {string|null|undefined} b Тело B (нормализованное).
  * @returns {boolean} true — тела принадлежат одному ответу разной полноты.
  */
-export function bodiesPrefixCompatible(a, b) {
+export function bodiesPrefixCompatible(a: unknown, b: unknown): boolean {
   var x = String(a == null ? '' : a);
   var y = String(b == null ? '' : b);
   if (!x || !y) return false;
@@ -1258,7 +1297,7 @@ function reindexTurnKey(byKey, turns, at) {
  * @param {FolwrTurn[]|null|undefined} extraTurns Дополнительные (новые) ходы.
  * @returns {FolwrTurn[]} Слитый список в порядке базы.
  */
-export function mergeTurnsById(baseTurns, extraTurns) {
+export function mergeTurnsById(baseTurns: FolwrTurn[], extraTurns: FolwrTurn[]): FolwrTurn[] {
   baseTurns = Array.isArray(baseTurns) ? baseTurns : [];
   extraTurns = Array.isArray(extraTurns) ? extraTurns : [];
   var byId = {};
@@ -1302,7 +1341,7 @@ export function mergeTurnsById(baseTurns, extraTurns) {
  * @param {FolwrTurn[]|null|undefined} extraTurns Дополнительные ходы.
  * @returns {FolwrTurn[]} Слитый список.
  */
-export function mergeTurnsMonotone(baseTurns, extraTurns) {
+export function mergeTurnsMonotone(baseTurns: FolwrTurn[], extraTurns: FolwrTurn[]): FolwrTurn[] {
   return mergeTurnsById(baseTurns, extraTurns);
 }
 
@@ -1318,7 +1357,7 @@ export function mergeTurnsMonotone(baseTurns, extraTurns) {
  * @param {FolwrTurn[]|null|undefined} extraTurns Ходы DOM-добора.
  * @returns {FolwrTurn[]} Слитый список без дублей.
  */
-export function mergeTurnsByKey(baseTurns, extraTurns) {
+export function mergeTurnsByKey(baseTurns: FolwrTurn[], extraTurns: FolwrTurn[]): FolwrTurn[] {
   baseTurns = Array.isArray(baseTurns) ? baseTurns : [];
   extraTurns = Array.isArray(extraTurns) ? extraTurns : [];
   /** @type {Object<string, number>} */
@@ -1357,7 +1396,7 @@ export function mergeTurnsByKey(baseTurns, extraTurns) {
  * @param {FolwrTurn[]|null|undefined} turns Ходы треда.
  * @returns {FolwrTurn[]} Список без дублей (порядок первых вхождений).
  */
-export function dedupeTurns(turns) {
+export function dedupeTurns(turns: FolwrTurn[]): FolwrTurn[] {
   var list = Array.isArray(turns) ? turns : [];
   /** @type {Object<string, number>} */
   var byKey = {};
@@ -1402,7 +1441,7 @@ export function dedupeTurns(turns) {
  * @param {{ok?: boolean, status?: number|null, bodyLength?: number, newTurns?: number, cursor?: string|null, sentCursor?: string|null}} input Результат запроса.
  * @returns {FolwrContinuation} Вид исхода и признаки complete/canContinue.
  */
-export function classifyFolwrContinuation(input) {
+export function classifyFolwrContinuation(input: FolwrContinuationInput | null): FolwrContinuation {
   var i = input || {};
   var ok = i.ok === true;
   var status = (i.status == null) ? 0 : i.status;

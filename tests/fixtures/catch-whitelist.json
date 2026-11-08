@@ -7,7 +7,7 @@
     "adapters"
   ],
   "definition": "Молчаливый catch = тело после вырезания комментариев содержит только пробелы, ИЛИ ровно один no-op (void 0; / return; / continue; / break;). Комментарий-только тело тоже молчаливое (комментарии маскируются в пробелы).",
-  "totalEntries": 424,
+  "totalEntries": 416,
   "groups": [
     {
       "file": "adapters/claude-adapter.js",
@@ -1579,49 +1579,6 @@
         715
       ],
       "reason": "timing-guard: отмена таймера/подписки: обработчик мог быть снят хостом или гонкой; пример: aiCmSafeBottomObserver.disconnect();"
-    },
-    {
-      "file": "utils/gemini-intercept-logic.js",
-      "category": "logging-guard",
-      "lines": [
-        1194
-      ],
-      "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: console.warn('[AI CM][thresholds] битые aiCmProactiveThresholds → дефолт"
-    },
-    {
-      "file": "utils/gemini-intercept-logic.js",
-      "category": "parse-guard",
-      "lines": [
-        1487,
-        1491
-      ],
-      "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: metaS += JSON.stringify(a0m[mi]);"
-    },
-    {
-      "file": "utils/google-search-folwr-parser.js",
-      "category": "container-drop",
-      "lines": [
-        306,
-        460
-      ],
-      "reason": "container-drop: контейнер уже откреплён от DOM (SPA-навигация) — снимать нечего; пример: var junk = clone.querySelectorAll('script, style, button, svg'); for (va"
-    },
-    {
-      "file": "utils/google-search-folwr-parser.js",
-      "category": "dom-read-guard",
-      "lines": [
-        343,
-        665
-      ],
-      "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: var inner = el.querySelectorAll ? el.querySelectorAll('pre, code') : nul"
-    },
-    {
-      "file": "utils/google-search-folwr-parser.js",
-      "category": "guard-clause",
-      "lines": [
-        365
-      ],
-      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: for (var a = 0; a < attrNames.length; a++) { var v = (el && el.getAttrib"
     }
   ]
 }

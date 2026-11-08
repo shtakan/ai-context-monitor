@@ -49,7 +49,7 @@ import '../utils/gemini-batchexecute-parser.ts';
 // adapters/google-search-adapter.js в ISOLATED-мире. Для MAIN-мира
 // (chrome.scripting не умеет import) build.mjs выводит classic-артефакт
 // того же модуля в dist/utils/google-search-folwr-parser.js.
-import '../utils/google-search-folwr-parser.js';
+import '../utils/google-search-folwr-parser.ts';
 
 (function () {
   let v = 'unknown';

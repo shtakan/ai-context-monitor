@@ -17,7 +17,7 @@
  *   е) core реально вызывает хелпер.
  */
 
-const GIL = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
+const GIL = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.ts');
 
 describe('Gemini v1.14.1 SHRINK-GUARD: decideRestoredMerge не даёт сжать базу', () => {
   test('входящий длиннее → replace', () => {

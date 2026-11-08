@@ -22,7 +22,7 @@
  *      (resp.clone().text()), внутри блока folwr/folif; поля и вердикт — по контракту.
  *
  * Стенд: РЕАЛЬНЫЙ файл core/google-search-intercept.js + РЕАЛЬНЫЕ utils/debug.ts,
- * utils/google-search-folwr-parser.js и utils/intercept-common.ts в jsdom — порядок и
+ * utils/google-search-folwr-parser.ts и utils/intercept-common.ts в jsdom — порядок и
  * способ загрузки ровно как в core/background.js:155 (MAIN-мир, классические скрипты в
  * одном глобальном скоупе; поэтому исходники исполняются непрямым eval, а не new Function).
  * «Сервер» — подменённый window.fetch; диаг-строки ловятся на console.log.
@@ -35,7 +35,7 @@ const ROOT = path.join(__dirname, '..', '..');
 const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');
 // R1 (Ph2): utils/debug.ts — ESM-модуль; песочнице нужен classic-срез.
 const DEBUG_SRC = require('../helpers/load-esm.js').loadAsClassic('utils/debug.ts');
-const PARSER_SRC = require('../helpers/load-esm.js').loadAsClassic('utils/google-search-folwr-parser.js');
+const PARSER_SRC = require('../helpers/load-esm.js').loadAsClassic('utils/google-search-folwr-parser.ts');
 // Ph2: перехватчик — ESM; мост втягивает intercept-common в тот же classic-исходник.
 const MAIN_SRC = require('../helpers/main-intercept.js').interceptSource('core/google-search-intercept.js');
 // Живой артефакт базы GSA (4 сообщения / 2 хода, threadId SYNTHETIC-THREAD-1).

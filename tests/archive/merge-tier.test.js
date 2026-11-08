@@ -1,6 +1,6 @@
 /**
  * T1 (v1.16): первый ярус как данные — same-conv-union архивных ходов и
- * авторитет архива для пола (utils/gemini-intercept-logic.js).
+ * авторитет архива для пола (utils/gemini-intercept-logic.ts).
  *
  * Инварианты:
  *   - same-conv-union: пересечение архив×живая база схлопывается по id И по
@@ -13,7 +13,7 @@
  *     архив меньше сохранённого пола НЕ опускает пол.
  */
 
-const Logic = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
+const Logic = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.ts');
 
 function msgs(list) {
   return list.map((m) => ({ id: m[0], role: m[1], text: m[2] }));

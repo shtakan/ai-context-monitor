@@ -292,7 +292,7 @@ function contentEntry(manifest) {
       // import из core/content.js (window-зеркало для адаптера GSA в ISOLATED-мире),
       // а для MAIN-регистрации ai-cm-google-search-intercept ниже выводится
       // classic-артефакт. Как строку конкатенации не берём; строка из манифеста удалена.
-      rel !== 'utils/google-search-folwr-parser.js' &&
+      rel !== 'utils/google-search-folwr-parser.ts' &&
       // Ph2, шаг export-emit-pipeline.js: модуль ESM — его втягивает статический
       // import из core/content.js (единый скоуп бандла: AiCmExportEmitPipeline делят
       // core/export-manager.js, core/base-handler.js и core/content.js). MAIN-регистраций
@@ -553,7 +553,7 @@ async function writeParserClassic() {
 
 // Ph2, шаг google-search-folwr-parser.js: ESM-исходник и путь, под которым его ждёт
 // MAIN-регистрация ai-cm-google-search-intercept в core/background.js.
-const GSA_PARSER_SOURCE = 'utils/google-search-folwr-parser.js';
+const GSA_PARSER_SOURCE = 'utils/google-search-folwr-parser.ts';
 const GSA_PARSER_CLASSIC = 'utils/google-search-folwr-parser.js';
 
 /**
@@ -593,7 +593,7 @@ async function writeGsaParserClassic() {
 
 // Ph2, шаг gemini-intercept-logic.js: ESM-исходник и путь, под которым его ждёт
 // 21-скриптовая MAIN-регистрация ai-cm-gemini-intercept-v18 в core/background.js.
-const GEMINI_LOGIC_SOURCE = 'utils/gemini-intercept-logic.js';
+const GEMINI_LOGIC_SOURCE = 'utils/gemini-intercept-logic.ts';
 const GEMINI_LOGIC_CLASSIC = 'utils/gemini-intercept-logic.js';
 
 /**

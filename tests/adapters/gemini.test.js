@@ -50,7 +50,7 @@ describe('Gemini batchexecute parser', () => {
 
   // ---- v52: stream-ingest walker'ы (фикстуры из probe-логов, урезаны до 300 символов) ----
   describe('Gemini stream walkers', () => {
-    const L = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
+    const L = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.ts');
 
     // I4z33b — user turn: [[[["me",1,["117554108543990917097", ...]]]]] (probe-sample)
     const userInner = JSON.stringify([

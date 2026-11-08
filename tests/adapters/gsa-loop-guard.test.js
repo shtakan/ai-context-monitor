@@ -23,7 +23,7 @@
  *
  * Исполняются РЕАЛЬНЫЕ функции перехватчика (срез по балансу скобок + `with (ctx)`,
  * песочница — tests/adapters/helpers/gsa-loop-sandbox.js). Источник правды базы —
- * РЕАЛЬНЫЙ парсер utils/google-search-folwr-parser.js (не моки).
+ * РЕАЛЬНЫЙ парсер utils/google-search-folwr-parser.ts (не моки).
  */
 
 const path = require('path');

@@ -7,7 +7,7 @@
  *   - битое сохранённое значение / битый ввод → фолбэк [70,85,95] + console.warn;
  *   - валидный ввод сохраняется в chrome.storage.local;
  *   - внешний onChanged обновляет поля (если не в фокусе).
- * Плюс покрытие валидатора/чтения utils/gemini-intercept-logic.js (та же цепочка).
+ * Плюс покрытие валидатора/чтения utils/gemini-intercept-logic.ts (та же цепочка).
  */
 
 const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
@@ -213,8 +213,8 @@ describe('options.js — проактивные пороги (S2: aiCmProactiveT
   });
 });
 
-describe('utils/gemini-intercept-logic.js — normalize/getProactiveThresholds (S2)', () => {
-  const L = require('./helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
+describe('utils/gemini-intercept-logic.ts — normalize/getProactiveThresholds (S2)', () => {
+  const L = require('./helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.ts');
 
   test('normalizeProactiveThresholds: валидные и битые значения', () => {
     expect(L.normalizeProactiveThresholds([60, 80, 90])).toEqual([60, 80, 90]);

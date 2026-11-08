@@ -17,7 +17,7 @@ const HELPERS = require('./helpers/content-source.js');
 
 const WIDGET_SRC = HELPERS.moduleSource('core/widget.js');
 const BG_SRC = HELPERS.readSource('core/background.js');
-const GIL_SRC = HELPERS.readSource('utils/gemini-intercept-logic.js');
+const GIL_SRC = HELPERS.readSource('utils/gemini-intercept-logic.ts');
 
 function extractFn(src, name) {
   const marker = 'function ' + name + '(';
@@ -216,10 +216,10 @@ describe('v2.0.13: неприкосновенные пути (do-not-touch)', ()
       "}");
   });
 
-  test('автоэкспорт: дефолт порогов в gemini-intercept-logic.js не менялся', () => {
-    expect(GIL_SRC).toContain('var PROACTIVE_THRESHOLDS = [70, 85, 95];');
-    expect(GIL_SRC).toContain('function getProactiveThresholds()');
-    expect(GIL_SRC).toContain('function pickProactiveThreshold(pct, firedSet, thresholds)');
+  test('автоэкспорт: дефолт порогов в gemini-intercept-logic.ts не менялся', () => {
+    expect(GIL_SRC).toContain('export var PROACTIVE_THRESHOLDS: number[] = [70, 85, 95];');
+    expect(GIL_SRC).toContain('function getProactiveThresholds(): Promise<number[]>');
+    expect(GIL_SRC).toContain('function pickProactiveThreshold(pct: number, firedSet: any, thresholds: number[] | null | undefined)');
   });
 
   test('новых ключей storage нет: кольцо читает существующий aiCmProactiveThresholds', () => {

@@ -39,7 +39,7 @@ const PRINT_SRC = fs.readFileSync(path.join(ROOT, 'print', 'print.js'), 'utf8');
 const OPTIONS_SRC = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
 const CONTENT = require('./helpers/content-source.js').contentSource;
 
-const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.js');
+const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.ts');
 
 // Рез по балансу фигурных скобок (как в tests/gsa-o27-captcha-base-guard.test.js).
 function fnDecl(src, name) {

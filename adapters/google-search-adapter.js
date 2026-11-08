@@ -52,7 +52,7 @@ function gsaFolwrUtils() {
   } catch (e) { }
   try {
     if (typeof require === 'function') {
-      var mod = require('../utils/google-search-folwr-parser.js');
+      var mod = require('../utils/google-search-folwr-parser.ts');
       if (mod && typeof mod.answerTextOf === 'function' && typeof mod.answerDomNodes === 'function') {
         return mod;
       }

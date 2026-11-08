@@ -15,21 +15,596 @@
  *      merge по id без сброса.
  */
 
+// =====================================================================================
+// Типы (Ph2: TS-миграция). Снимки состояния, которые передаёт core, и результаты решений.
+// Все входные поля необязательны: вызывающий код собирает их частично.
+// =====================================================================================
+
+/** Запись пола (floor): монотонная граница уже известной истории диалога. */
+export interface FloorRecord {
+  /** Сколько сообщений было известно на момент записи. */
+  count?: number;
+  /** Эффективная длина текста истории. */
+  effectiveLen?: number;
+  /** Время записи (Date.now()). */
+  ts?: number;
+  /** Версия парсера, которой сделана запись. */
+  version?: string;
+  /** Источник записи (для диагностики). */
+  source?: string;
+}
+
+/** Минимальный контракт хранилища (localStorage и тестовые двойники). */
+export interface FloorStorage {
+  getItem?: (key: string) => string | null;
+  setItem?: (key: string, value: string) => void;
+}
+
+/** Итог разрешения пола для текущего рендера. */
+export interface FloorResolution {
+  /** Длина, по которой судим о полноте. */
+  effectiveLen: number;
+  /** true — пол поднял границу выше фактической. */
+  floorApplied: boolean;
+  /** Значение пола. */
+  floorValue: number;
+}
+
+/** Вход вердикта самолечения пола (stale floor после чистого конца загрузки). */
+export interface SelfHealFloorOpts {
+  /** Загрузка закончилась чисто (без ошибок и обрывов). */
+  cleanEnd?: boolean;
+  /** Текущий курсор продолжения. */
+  pendingCursor?: any;
+  /** Сеть молчит достаточно долго. */
+  quietActive?: boolean;
+  /** На странице ошибка. */
+  pageError?: any;
+  /** Загрузчик ещё работает. */
+  loaderRunning?: boolean;
+  /** Архив ещё не применён. */
+  archivePending?: boolean;
+  /** Сообщений в базе. */
+  baseCount?: number;
+  /** Сообщений по полу. */
+  floorCount?: number;
+  /** Длина по полу. */
+  floorLen?: number;
+  /** Доказанная длина истории. */
+  provenLen?: number;
+  /** Достигнуто начало истории. */
+  reachedStart?: boolean;
+  /** Сколько подтверждений стабильности уже получено. */
+  confirmations?: number;
+}
+
+/** Вердикт самолечения пола. */
+export interface SelfHealFloorVerdict {
+  /** true — пол нужно понизить. */
+  lower: boolean;
+  /** Причина решения. */
+  reason: string;
+  /** Новое значение count. */
+  count?: number;
+  /** Новая эффективная длина. */
+  effectiveLen?: number;
+  /** Прежнее значение пола. */
+  floorWas?: number;
+  /** Источник новой записи. */
+  source?: string;
+  /** Достигнуто начало истории. */
+  reachedStart?: boolean;
+}
+
+/** Вход решения о полной пересборке карты ходов. */
+export interface FullRebuildOpts {
+  /** Пейлоад пришёл из виртуального F5. */
+  fromVirtualF5?: boolean;
+  /** Предыдущая сборка была полной. */
+  wasFull?: boolean;
+  /** В пейлоаде есть курсор продолжения. */
+  hasCursor?: boolean;
+  /** Идентификаторы уже известных ходов. */
+  existingIds?: string[];
+  /** Идентификаторы ходов из пейлоада. */
+  incomingIds?: string[];
+}
+
+/** Вход решения о сбросе при несовпадении наборов id. */
+export interface DisjointResetOpts {
+  /** Источник пейлоада (для лога). */
+  src?: string;
+  /** Известные идентификаторы. */
+  existingIds?: string[];
+  /** Идентификаторы из пейлоада. */
+  incomingIds?: string[];
+  /** Диалог пейлоада. */
+  incomingConvId?: string;
+  /** Текущий диалог. */
+  currentConvId?: string;
+}
+
+/** Счётчики порядка ходов при постраничной загрузке. */
+export interface PaginationOrderState {
+  /** Текущий счётчик order. */
+  orderCounter?: number;
+  /** Курсор для вставки более старых страниц. */
+  prependCursor?: number;
+}
+
+/** Ход/сообщение в порядке выдачи (id + служебные поля порядка). */
+export interface TurnItem {
+  /** Идентификатор сообщения. */
+  id?: string;
+  /** Идентификатор хода. */
+  turnId?: string | null;
+  /** Идентификатор ответа r1 (цепочка сервера). */
+  r1?: string | null;
+  /** Порядковый номер. */
+  order?: number;
+  /** Роль автора. */
+  role?: string;
+  /** Текст сообщения. */
+  text?: string;
+  /** true — запись из архива. */
+  archive?: boolean;
+}
+
+/** Одна страница истории в порядке загрузки. */
+export interface PageInput {
+  /** Ходы страницы. */
+  turns?: TurnItem[];
+  /** Режим страницы: older — более старые ходы. */
+  mode?: string;
+}
+
+/** Результат упорядочивания: ok=false — порядок не доказан, ids — fallback. */
+export interface OrderResult {
+  /** true — порядок восстановлен по цепочке r1. */
+  ok: boolean;
+  /** Идентификаторы в восстановленном порядке. */
+  ids: string[];
+}
+
+/** Результат порядка экспорта. */
+export interface ExportOrderResult {
+  /** Идентификаторы в порядке экспорта. */
+  ids: string[];
+  /** Способ упорядочивания: chain-r1 | arrival | order-sort. */
+  mode: string;
+}
+
+/** Ход, восстановленный из ленты (tape). */
+export interface RestoredTurnItem {
+  /** Идентификатор сообщения. */
+  id?: string | number;
+  /** Роль автора. */
+  role?: string;
+  /** Текст сообщения. */
+  text?: string;
+  /** Идентификатор ответа r1. */
+  r1?: string | null;
+  /** Идентификатор хода. */
+  turnId?: string | null;
+}
+
+/** Результат слияния сетевых ходов с восстановленными из ленты. */
+export interface MergeRestoredResult {
+  /** Итоговый список ходов. */
+  items: TurnItem[];
+  /** Сколько восстановленных ходов не нашлось в сети. */
+  missingCount: number;
+}
+
+/** Вход решения о следующем шаге постраничной загрузки. */
+export interface PaginateStepState {
+  /** Есть курсор продолжения. */
+  hasCursor?: boolean;
+  /** Сколько страниц уже загружено. */
+  pages?: number;
+  /** Сколько времени прошло с начала загрузки. */
+  elapsedMs?: number;
+  /** Сколько ходов добавила последняя страница. */
+  added?: number;
+  /** Последняя страница — пустой скелет. */
+  failedSkeleton?: any;
+}
+
+/** Пределы постраничной загрузки. */
+export interface PaginateCaps {
+  /** Предел страниц. */
+  pageCap?: number;
+  /** Предел времени в мс. */
+  timeCapMs?: number;
+}
+
+/** Вердикт шага постраничной загрузки. */
+export interface PaginateStepVerdict {
+  /** Действие: continue | complete | cap. */
+  action: 'continue' | 'complete' | 'cap';
+  /** Причина решения. */
+  reason: string;
+  /** Достигнуто начало истории. */
+  reachedStart: boolean;
+  /** База считается полной. */
+  baseComplete: boolean;
+  /** Предупреждение для лога. */
+  warn: string;
+}
+
+/** Вход оракула полноты истории. */
+export interface OracleState {
+  /** Курсор продолжения исчерпан. */
+  cursorExhausted?: boolean;
+  /** Хеш первого сообщения в базе. */
+  dbFirstHash?: string;
+  /** Хеш первого сообщения с сервера. */
+  serverFirstHash?: string;
+}
+
+/** Вердикт оракула полноты. */
+export interface OracleVerdict {
+  /** true — история собрана целиком. */
+  complete: boolean;
+  /** Причина решения. */
+  reason: string;
+  /** true — стоит повторить проверку. */
+  retry: boolean;
+}
+
+/** Хелперы санитайзера финальных сообщений. */
+export interface SanitizeHelpers {
+  /** true — assistant-сообщение является мыслями/служебкой. */
+  isThinkingAssistant?: (text: string) => boolean;
+  /** Срезать ведущий блок мыслей. */
+  stripLeadingThinking?: (text: string) => string;
+}
+
+/** Сообщение после санитайза. */
+export interface SanitizedMessage {
+  /** Роль автора: user | assistant. */
+  role: string;
+  /** Очищенный текст. */
+  text: string;
+  /** Идентификатор сообщения (если был). */
+  id?: string;
+}
+
+/** Состояние детектора готовности DOM. */
+export interface DomReadinessState {
+  /** Последние замеры scrollHeight (до 3). */
+  samples: number[];
+  /** true — готовность уже подтверждена по числу элементов. */
+  readyByElements: boolean;
+}
+
+/** Вердикт готовности DOM к автоскроллу. */
+export interface ReadinessVerdict {
+  /** true — можно скроллить. */
+  ready: boolean;
+  /** Причина решения. */
+  reason: string;
+  /** Замеры scrollHeight. */
+  samples: number[];
+}
+
+/** Предыдущий замер дерева сообщений. */
+export interface TrimProbe {
+  /** Максимальное виденное число сообщений. */
+  maxCount?: number;
+  /** Идентификаторы головных сообщений. */
+  firstIds?: string[];
+  /** Подозрение на обрезку головы. */
+  suspectPending?: boolean;
+}
+
+/** Текущий снимок дерева сообщений. */
+export interface TrimSnapshot {
+  /** Число сообщений сейчас. */
+  count?: number;
+  /** Идентификаторы сообщений сейчас. */
+  messageIds?: string[];
+  /** История считается полной. */
+  historyComplete?: boolean;
+}
+
+/** Вердикт обрезки головы истории. */
+export interface TrimVerdict {
+  /** Есть подозрение на обрезку. */
+  suspect: boolean;
+  /** Обрезка подтверждена. */
+  confirmed: boolean;
+  /** Потеряна голова истории. */
+  lostHead: boolean;
+}
+
+/** Вход решения об опросе vf5. */
+export interface Vf5PollState {
+  /** База загружена полностью. */
+  baseComplete?: boolean;
+  /** Достигнуто начало истории. */
+  reachedStart?: boolean;
+  /** Время последней активности (Date.now()). */
+  lastActivityAt?: number;
+}
+
+/** Вход решения о скрытии скроллера. */
+export interface ScrollHideState {
+  /** Текущая высота прокрутки. */
+  scrollH?: number;
+  /** Минимальная высота, при которой скроллер прячем. */
+  minHideH?: number;
+  /** Старая история уже была замечена. */
+  olderHistorySeen?: boolean;
+  /** Достигнуто начало истории. */
+  reachedStart?: boolean;
+  /** Оракул не подтвердил полноту. */
+  oracleIncomplete?: boolean;
+}
+
+/** Вердикт скрытия скроллера. */
+export interface HideVerdict {
+  /** true — скроллер можно прятать. */
+  hide: boolean;
+  /** true — короткий бутстрап без истории. */
+  bootstrapShort: boolean;
+}
+
+/** Вход подтверждения полноты скроллом. */
+export interface ConfirmScrollState {
+  /** Верх списка достигнут. */
+  topReached?: boolean;
+  /** Пользователь реально скроллил. */
+  scrollEngaged?: boolean;
+  /** В этом холодном старте использовалась лента. */
+  tapeWasUsedInThisColdStart?: boolean;
+  /** С момента старта загрузчика было перекрытие vf5. */
+  vf5OverlapSinceLoaderStart?: boolean;
+  /** Число сообщений. */
+  msgCount?: number;
+  /** Длина текста истории. */
+  textLength?: number;
+}
+
+/** Вердикт подтверждения полноты скроллом. */
+export interface ConfirmScrollVerdict {
+  /** true — полноту можно подтвердить. */
+  allowed: boolean;
+  /** true — подтверждение слабое. */
+  lowConfidence: boolean;
+  /** Причина решения. */
+  reason: string;
+}
+
+/** Ход, извлечённый из стрим-кадра. */
+export interface StreamTurn {
+  /** Роль в терминах стрима: me | model. */
+  role: 'me' | 'model';
+  /** Идентификатор сообщения. */
+  id: string;
+  /** Идентификатор хода; null — не найден. */
+  turnId: string | null;
+  /** Текст сообщения. */
+  text: string;
+}
+
+/** Метаданные проверочного запроса (probe). */
+export interface ProbeMeta {
+  /** Закодированный AT-заголовок. */
+  atEncoded?: string;
+  /** Базовый URL запроса. */
+  baseUrl?: string;
+  /** Заголовки запроса. */
+  headers?: any;
+  /** Диалог запроса. */
+  conv?: string;
+  /** Время последнего обновления. */
+  ts?: number;
+}
+
+/** Вход гейта терминальности probe. */
+export interface ProbeTerminalState {
+  /** Сообщений по полу. */
+  floorCount?: number;
+  /** Сообщений в базе. */
+  baseCount?: number;
+  /** Ошибка protobuf-ответа. */
+  pbError?: any;
+}
+
+/** Блокирующий вердикт гейта терминальности probe. */
+export interface ProbeTerminalBlock {
+  /** Всегда true: дальнейшие шаги запрещены. */
+  block: true;
+  /** Причина блокировки. */
+  reason: string;
+}
+
+/** Вход guard'а схлопывания истории. */
+export interface CollapseGuardState {
+  /** Текущая высота прокрутки. */
+  scrollH?: number;
+  /** Максимальная виденная высота прокрутки. */
+  maxScrollHSeen?: number;
+  /** Сообщений в базе. */
+  baseCount?: number;
+  /** Сообщений по полу. */
+  floorCount?: number;
+}
+
+/** Вердикт guard'а схлопывания. */
+export interface CollapseVerdict {
+  /** true — история схлопнулась. */
+  collapsed: boolean;
+}
+
+/** Вход проверки недоверенного верха истории. */
+export interface UntrustedTopState {
+  /** Сообщений по полу. */
+  floorCount?: number;
+  /** Был курсор продолжения. */
+  hadCursor?: boolean;
+  /** История росла за сессию. */
+  anyGrowth?: boolean;
+  /** Максимальная виденная высота прокрутки. */
+  maxScrollHSeen?: number;
+  /** Высота вьюпорта. */
+  viewportH?: number;
+}
+
+/** Вердикт недоверенного верха истории. */
+export interface UntrustedTopBlock {
+  /** Всегда true: верх недоверенный. */
+  untrusted: true;
+  /** Причина решения. */
+  reason: string;
+}
+
+/** Вход проверки поломки шага пагинации. */
+export interface PagStepState {
+  /** Сколько ходов добавила страница. */
+  added?: number;
+  /** Следующий курсор. */
+  nextCursor?: any;
+  /** Последняя страница — пустой скелет. */
+  failedSkeleton?: any;
+  /** Сколько непрозрачных курсоров-кандидатов найдено. */
+  opaqueCandidates?: number;
+}
+
+/** Решение о слиянии восстановленного хода с сетевым. */
+export interface RestoredMergeDecision {
+  /** true — сетевую запись заменить восстановленной. */
+  replace: boolean;
+  /** Идентификатор r1 после решения. */
+  r1: string | null;
+  /** Идентификатор хода после решения. */
+  turnId: string | null;
+}
+
+/** Вход решений по странице ошибки при пагинации. */
+export interface PaginateErrorState {
+  /** Страница является ошибкой. */
+  errPage?: boolean;
+  /** Есть курсор продолжения. */
+  hasCursor?: boolean;
+  /** Сколько ходов добавила страница. */
+  added?: number;
+  /** Сколько повторов уже было. */
+  retries?: number;
+  /** Предел повторов. */
+  cap?: number;
+  /** Загрузчик ещё работает. */
+  loaderRunning?: boolean;
+  /** Нативная эскалация уже использовалась. */
+  nativeEscalationUsed?: boolean;
+}
+
+/** Вердикт повтора страницы ошибки. */
+export interface PaginateRetryVerdict {
+  /** true — повторить запрос. */
+  retry: boolean;
+  /** Пауза перед повтором, мс. */
+  backoffMs: number;
+}
+
+/** Вердикт эскалации на нативную пагинацию. */
+export interface PaginateEscalationVerdict {
+  /** true — перейти на нативную пагинацию. */
+  escalate: boolean;
+  /** Причина решения. */
+  reason: string;
+}
+
+/** Сообщение архива (для сверки с сетью). */
+export interface ArchiveMessage {
+  /** Идентификатор сообщения. */
+  id?: string | number | null;
+  /** Роль автора. */
+  role?: string;
+  /** Текст сообщения. */
+  text?: string | null;
+  /** Альтернативное поле текста у старых записей архива. */
+  content?: string | null;
+}
+
+/** Ход, добавленный из архива в список сети. */
+export interface ArchiveItem {
+  /** Идентификатор сообщения. */
+  id?: string;
+  /** Идентификатор хода. */
+  turnId?: string | null;
+  /** Идентификатор r1 (у архивных записей нет). */
+  r1?: string | null;
+  /** Порядковый номер (отрицательный — до сетевых). */
+  order?: number;
+  /** Роль автора. */
+  role?: string;
+  /** Текст сообщения. */
+  text?: string;
+}
+
+/** Результат слияния сетевых ходов с архивом. */
+export interface ArchiveMergeResult {
+  /** Итоговый список ходов. */
+  items: ArchiveItem[];
+  /** Сколько ходов добавлено. */
+  addedCount: number;
+  /** Сколько дублей отброшено. */
+  duplicateCount: number;
+}
+
+/** Живое состояние загрузки при проверке полноты архива. */
+export interface ArchiveLiveState {
+  /** Загрузчик ещё работает. */
+  loaderRunning?: boolean;
+  /** Загрузчик закончил. */
+  loaderDone?: boolean;
+  /** История выросла за пределы архива. */
+  grewBeyondArchive?: boolean;
+  /** Диалог активен. */
+  active?: boolean;
+}
+
+/** Вход вердикта полноты архива. */
+export interface ArchiveCompleteOpts {
+  /** Диалог, к которому относится архив. */
+  archiveConvId?: string;
+  /** Текущий диалог. */
+  currentConvId?: string;
+  /** Сообщений в архиве. */
+  archiveCount?: number;
+  /** Сообщений в базе. */
+  baseCount?: number;
+  /** Сообщений по полу. */
+  floorCount?: number;
+  /** Живое состояние загрузки. */
+  live?: ArchiveLiveState | null;
+}
+
+/** Вердикт полноты архива. */
+export interface ArchiveCompleteVerdict {
+  /** true — архив можно считать полным. */
+  complete: boolean;
+  /** Причина решения. */
+  reason: string;
+}
+
 var FLOOR_KEY_PREFIX = 'ai-cm-gemini-floor';
 
-export function floorStorageKey(convId, parserVersion) {
+export function floorStorageKey(convId: string, parserVersion: string | null | undefined): string {
   return FLOOR_KEY_PREFIX + '-' + (parserVersion || '') + '-' + convId;
 }
 
 // ---- v4x: версионирование restored-ленты (ключ + версия внутри записи) ----
 var TAPE_KEY_PREFIX = 'ai-cm-gemini-tape';
 
-export function tapeStorageKey(convId, parserVersion) {
+export function tapeStorageKey(convId: string, parserVersion: string | null | undefined): string {
   return TAPE_KEY_PREFIX + '-' + (parserVersion || '') + '-' + convId;
 }
 
 // Версия записи ленты (meta.version). Пустая строка — старая запись без версии.
-export function tapeVersionOf(entry) {
+export function tapeVersionOf(entry: any): string {
   if (entry && entry.meta && typeof entry.meta.version === 'string') return entry.meta.version;
   return '';
 }
@@ -44,7 +619,7 @@ var TAPE_ORDER_VERSION = 2;
 // Лента принимается при точном совпадении версии записи с текущей версией парсера.
 // meta.orderVersion НЕ проверяется — контент тейпа сливается по id, порядок
 // пересчитывается из r1-графа (старые повёрнутые тейпы безопасны).
-export function shouldAcceptTape(entry, parserVersion) {
+export function shouldAcceptTape(entry: any, parserVersion: string | null | undefined): boolean {
   if (!parserVersion) return false;
   return tapeVersionOf(entry) === parserVersion;
 }
@@ -73,7 +648,7 @@ function parseFloor(raw, parserVersion) {
   } catch (e) { return null; }
 }
 
-export function loadFloor(convId, parserVersion, storage) {
+export function loadFloor(convId: string, parserVersion: string | null | undefined, storage: FloorStorage | null | undefined): FloorRecord | null {
   if (!storage || !convId) return null;
   try {
     var raw = storage.getItem(floorStorageKey(convId, parserVersion));
@@ -82,7 +657,7 @@ export function loadFloor(convId, parserVersion, storage) {
   } catch (e) { return null; }
 }
 
-export function saveFloor(convId, parserVersion, count, effectiveLen, storage) {
+export function saveFloor(convId: string, parserVersion: string | null | undefined, count: number, effectiveLen: number, storage: FloorStorage | null | undefined): void {
   if (!storage || !convId) return;
   var key = floorStorageKey(convId, parserVersion);
   var existing = loadFloor(convId, parserVersion, storage);
@@ -97,7 +672,7 @@ export function saveFloor(convId, parserVersion, count, effectiveLen, storage) {
 // Применение пола: только как защита от просадки при НЕполной загрузке (baseComplete=false).
 // При baseComplete=true возвращаем фактический textLen — пол НЕ применяется.
 // Причина отсутствия/нулевого пола (для лога «ожидаемых=0» в expectedTurnsFromStorage).
-export function diagnoseFloorAbsence(convId, parserVersion, storage) {
+export function diagnoseFloorAbsence(convId: string, parserVersion: string | null | undefined, storage: FloorStorage | null | undefined): string {
   if (!storage) return 'no-storage';
   if (!convId) return 'no-conv';
   var raw = null;
@@ -109,7 +684,7 @@ export function diagnoseFloorAbsence(convId, parserVersion, storage) {
   return 'ok';
 }
 
-export function resolveFloor(textLen, count, savedFloor, baseComplete) {
+export function resolveFloor(textLen: number, count: number, savedFloor: FloorRecord | null, baseComplete: boolean): FloorResolution {
   if (!savedFloor || baseComplete) {
     return { effectiveLen: textLen, floorApplied: false, floorValue: 0 };
   }
@@ -124,7 +699,7 @@ export function resolveFloor(textLen, count, savedFloor, baseComplete) {
 }
 
 // Пол обновляем только когда база полная и тихая пагинация дошла до начала (курсора нет).
-export function shouldSaveFloor(baseComplete, reachedStart) {
+export function shouldSaveFloor(baseComplete: boolean, reachedStart: boolean): boolean {
   return !!(baseComplete && reachedStart);
 }
 
@@ -153,7 +728,7 @@ export function shouldSaveFloor(baseComplete, reachedStart) {
 //
 // o = { cleanEnd, pendingCursor, quietActive, pageError, loaderRunning, archivePending,
 //       baseCount, floorCount, floorLen, provenLen, reachedStart, confirmations }.
-export function selfHealFloorVerdict(opts) {
+export function selfHealFloorVerdict(opts: SelfHealFloorOpts | null): SelfHealFloorVerdict {
   var o = opts || {};
   var baseCount = (typeof o.baseCount === 'number' && o.baseCount > 0) ? o.baseCount : 0;
   var floorCount = (typeof o.floorCount === 'number' && o.floorCount > 0) ? o.floorCount : 0;
@@ -184,7 +759,7 @@ export function selfHealFloorVerdict(opts) {
 // selfHealFloorVerdict (или из уже доказанной clean-end ветки лоадера, где повтор
 // зафиксирован collapse-ретраем) — то есть понижение всегда опирается на доказанный
 // чистый конец истории. saveFloor этим путём НЕ подменяется и не меняется.
-export function writeSelfHealedFloor(convId, parserVersion, count, effectiveLen, source, storage) {
+export function writeSelfHealedFloor(convId: string, parserVersion: string | null | undefined, count: number, effectiveLen: number, source: string | null | undefined, storage: FloorStorage | null | undefined): FloorRecord | null {
   if (!storage || !convId) return null;
   if (typeof count !== 'number' || !(count > 0)) return null;
   var len = (typeof effectiveLen === 'number' && effectiveLen > 0) ? effectiveLen : 0;
@@ -204,7 +779,7 @@ export function writeSelfHealedFloor(convId, parserVersion, count, effectiveLen,
 // Content-критерий, а не счётный: усечённый/виртуализированный vf5-ответ без курсора
 // (36 → 20 ходов, живой прогон 2026-09-25) и «полная история» неразличимы по форме —
 // различает только пересечение множеств id. Ход без id подмножеством не подтверждается.
-export function isSubsetIds(incomingIds, existingIds) {
+export function isSubsetIds(incomingIds: any[] | null | undefined, existingIds: any[] | null | undefined): boolean {
   var incoming = Array.isArray(incomingIds) ? incomingIds : [];
   var existing = Array.isArray(existingIds) ? existingIds : [];
   if (!incoming.length || !existing.length) return false;
@@ -223,7 +798,7 @@ export function isSubsetIds(incomingIds, existingIds) {
 // продолжения) И только если снапшот приносит хоть что-то новое: пересборка по
 // подмножеству не добавила бы ни одного хода, зато уничтожила бы накопленные (O-51).
 // Вызов без existingIds/incomingIds сохраняет прежний контракт (только vf5-критерий).
-export function shouldFullRebuild(opts) {
+export function shouldFullRebuild(opts: FullRebuildOpts | null): boolean {
   opts = opts || {};
   if (!(opts.fromVirtualF5 && opts.wasFull && !opts.hasCursor)) return false;
   if (opts.existingIds || opts.incomingIds) {
@@ -239,7 +814,7 @@ export function shouldFullRebuild(opts) {
 // id с базой → полный сброс перед merge (иначе merge-by-id подмешает чужие ходы:
 // convId при смене аккаунта не меняется, stale-conv слеп).
 // opts = { src, existingIds, incomingIds, incomingConvId, currentConvId }.
-export function shouldDisjointReset(opts) {
+export function shouldDisjointReset(opts: DisjointResetOpts | null): boolean {
   opts = opts || {};
   var src = opts.src || '';
   if (src !== 'vf5' && src !== 'passive') return false;
@@ -273,7 +848,7 @@ export function shouldDisjointReset(opts) {
 
 // Назначение order для одной страницы. mode = 'older' (более старая страница, prepend)
 // или 'fresh' (passive/vf5, append). state = { orderCounter, prependCursor }.
-export function assignPageOrders(pageLen, mode, state) {
+export function assignPageOrders(pageLen: number, mode: string, state: PaginationOrderState | null): number[] {
   state = state || { orderCounter: 0, prependCursor: -1 };
   var orders = [];
   for (var i = 0; i < pageLen; i++) {
@@ -287,7 +862,7 @@ export function assignPageOrders(pageLen, mode, state) {
 // Модель итогового порядка: страницы в порядке прибытия, дедуп по id
 // (первая встреча id побеждает), затем сортировка по order.
 // r1 (указатель на более старый ход) сохраняется для самопроверки в тестах.
-export function orderPages(pages) {
+export function orderPages(pages: PageInput[]): TurnItem[] {
   var seen = {};
   var state = { orderCounter: 0, prependCursor: -1 };
   var ordered = [];
@@ -318,7 +893,7 @@ export function orderPages(pages) {
 // items = [{ id, turnId, r1, order, role }]. Возвращает { ok, ids }.
 // ok=false когда у РАЗНЫХ turn'ов одинаковый order (недетерминированное прибытие) —
 // тогда вызывающий пробует r1-цепочку как fallback.
-export function orderByArrival(items) {
+export function orderByArrival(items: TurnItem[]): OrderResult {
   var turns = {};   // turnId -> { order, msgs }
   var i, it, tk;
 
@@ -371,7 +946,7 @@ export function orderByArrival(items) {
 // → old→new (самый старый получает минимальный порядок). Внутри хода user перед assistant.
 // pageMsgs = [{ id, turnId, r1, role }]. Возвращает { ok, ids }: ok=false/цепочка рвётся —
 // ids = текущий порядок страницы (фолбэк).
-export function orderPageByR1(pageMsgs) {
+export function orderPageByR1(pageMsgs: TurnItem[]): OrderResult {
   var turns = {};
   var r1Targets = {};
   var i, it, tk;
@@ -444,7 +1019,7 @@ export function orderPageByR1(pageMsgs) {
 //   - цепочка от head по r1 (new→old), затем reverse → old→new.
 //   - внутри turnId user ПЕРЕД assistant.
 // Если r1 в ленте нет — fallback: разворот порядка появления turn'ов (лента new→old).
-export function orderRestoredTape(tapeMsgs) {
+export function orderRestoredTape(tapeMsgs: TurnItem[]): string[] {
   function turnKeyOf(id) {
     return String(id == null ? '' : id).replace(/_(user|assistant)$/, '');
   }
@@ -549,7 +1124,7 @@ export function orderRestoredTape(tapeMsgs) {
 // Подсчёт r1-инверсий в финальном порядке среди сетевых ходов.
 // finalItems = [{ id, turnId, r1 }] в порядке old→new. r1 = сосед СТАРШЕ.
 // Инверсия: ход с r1=R стоит РАНЬШЕ R (старший R должен идти раньше).
-export function countR1Inversions(finalItems) {
+export function countR1Inversions(finalItems: TurnItem[]): number {
   var pos = {};
   var i, it, tk;
   for (i = 0; i < finalItems.length; i++) {
@@ -572,7 +1147,7 @@ export function countR1Inversions(finalItems) {
 // ---- v38: разворот сырой страницы (new→old) в хронологический порядок (old→new) ----
 // Эквивалент обхода с конца в handleOuter (core/gemini-intercept.js). Внутри одного хода
 // user перед assistant. Не мутирует вход; возвращает новый массив сообщений [{id,turnId,role,...}].
-export function reverseRawTurnPage(rawMsgs) {
+export function reverseRawTurnPage(rawMsgs: TurnItem[]): TurnItem[] {
   var arr = [];
   for (var i = 0; i < rawMsgs.length; i++) arr.push(rawMsgs[i]);
   arr.reverse();
@@ -608,7 +1183,7 @@ export function reverseRawTurnPage(rawMsgs) {
 // помечаются read-only»). Порядок ВНУТРИ архива — собственный (order вливания), затем
 // идёт прежний порядок остальной базы (mode сохраняется: chain-r1/arrival/order-sort).
 // Чаты без архива: ни одного item.archive → прежний результат байтово.
-export function orderExportMessages(orderItems) {
+export function orderExportMessages(orderItems: TurnItem[]): ExportOrderResult {
   try {
     var archItems = [];
     var restItems = [];
@@ -666,7 +1241,7 @@ function orderExportMessagesBase(orderItems) {
 // incomplete (oracleIncompleteSeen[convId]) и ре-ран ещё не использован (rerunUsed
 // не задан) — разрешаем ОДИН повторный прогон лоадера. После ре-рана флаг снят →
 // повторных обходов нет (цикла нет). Холодное открытие без incomplete — как прежде.
-export function shouldBypassCacheComplete(seenFlags, rerunUsed, convId) {
+export function shouldBypassCacheComplete(seenFlags: any, rerunUsed: any, convId: string): boolean {
   if (!convId) return false;
   if (!(seenFlags && seenFlags[convId])) return false; // incomplete не было — байтово как прежде
   if (rerunUsed && rerunUsed[convId]) return false;    // ре-ран уже использован — не циклиться
@@ -679,7 +1254,7 @@ export function shouldBypassCacheComplete(seenFlags, rerunUsed, convId) {
 // для коротких чатов БЕЗ признаков старшей истории (все ходы в экране).
 // state = { scrollH, minHideH, olderHistorySeen, reachedStart, oracleIncomplete }.
 // Возвращает { hide, bootstrapShort }.
-export function shouldHideScroller(state) {
+export function shouldHideScroller(state: ScrollHideState | null): HideVerdict {
   var h = (state && typeof state.scrollH === 'number') ? state.scrollH : 0;
   var minH = (state && typeof state.minHideH === 'number') ? state.minHideH : 8000;
   var older = !!(state && state.olderHistorySeen);
@@ -698,7 +1273,7 @@ export function shouldHideScroller(state) {
 // final = M + reverse(W). Внутри хода user перед assistant.
 // items = [{ id, turnId, r1, order, role }]. Возвращает { ok, ids }.
 // ok=false только когда head-кандидатов 0 (цикл); иначе ok=true.
-export function orderByR1Chain(items) {
+export function orderByR1Chain(items: TurnItem[]): OrderResult {
   var turns = {};      // turnId -> { next, msgs: [messages], order }
   var r1Targets = {};  // значения r1 (id СТАРШИХ соседей)
   var i, it, tk;
@@ -836,7 +1411,7 @@ export function orderByR1Chain(items) {
 // пересчитывается из r1-графа (orderExportMessages → chain-r1); restored-узлы с
 // r1=null — головы своих сегментов, старший сегмент докладывается ПЕРЕД основной
 // цепью (правило старшего сегмента, orderByR1Chain).
-export function mergeRestoredTurns(networkItems, restoredTurns) {
+export function mergeRestoredTurns(networkItems: TurnItem[], restoredTurns: RestoredTurnItem[]): MergeRestoredResult {
   var netIds = {};
   var i, it, rt;
   for (i = 0; i < networkItems.length; i++) {
@@ -874,7 +1449,7 @@ export function mergeRestoredTurns(networkItems, restoredTurns) {
 // buildJsonSkeleton (core/gemini-intercept.js) сериализует непарсящуюся страницу
 // как {arr:N, items:[числа/массивы/строки]}. protobuf-страница (inner не строка)
 // содержит только числа/массивы и НЕ содержит ни одной строки-текста хода.
-export function isProtobufSkeleton(skel) {
+export function isProtobufSkeleton(skel: any): boolean {
   if (!skel || typeof skel !== 'object') return false;
   var hasString = false;
   var hasArray = false;
@@ -889,7 +1464,7 @@ export function isProtobufSkeleton(skel) {
 
 // Эффективный reachedStart: пагинация дошла до начала ТОЛЬКО если флаг взведён,
 // последний шаг добавил ходов И не упёрся в protobuf-страницу (0 ходов).
-export function effectiveReachedStart(reachedStart, added, failedSkeleton) {
+export function effectiveReachedStart(reachedStart: boolean, added: number, failedSkeleton: any): boolean {
   if (!reachedStart) return false;
   if (!added || added <= 0) return false;
   if (isProtobufSkeleton(failedSkeleton)) return false;
@@ -898,7 +1473,7 @@ export function effectiveReachedStart(reachedStart, added, failedSkeleton) {
 
 // Мерджим restored-ленту, пока пагинация НЕ дошла до начала (reachedStart=false),
 // НЕЗАВИСИМО от baseComplete/historyFullByQuiet.
-export function shouldMergeRestoredTurns(reachedStart) {
+export function shouldMergeRestoredTurns(reachedStart: boolean): boolean {
   return reachedStart !== true;
 }
 
@@ -922,7 +1497,7 @@ var MIN_TEXT_LEN_FOR_FALLBACK = 500;
 //      ИЛИ textLength >= MIN_TEXT_LEN_FOR_FALLBACK) → allowed=true, lowConfidence=true
 //      (экспорт разрешён, имя файла получает префикс [LOW CONFIDENCE]_);
 //   3) иначе — allowed=false (холодный старт с мусорной passive-базой: не подтверждать).
-export function canConfirmByScroll(state) {
+export function canConfirmByScroll(state: ConfirmScrollState | null): ConfirmScrollVerdict {
   var top = !!(state && state.topReached === true); // v65: физический верх обязателен
   var engaged = !!(state && state.scrollEngaged === true); // v66: скрытый скролл вовлечён
   var tape = !!(state && state.tapeWasUsedInThisColdStart);
@@ -943,8 +1518,8 @@ export function canConfirmByScroll(state) {
 // Страховочные потолки одного прогона: не более 25 страниц ИЛИ 60 секунд.
 // При достижении потолка цикл завершается как НЕполный (warn), baseComplete/reachedStart
 // НЕ взводятся: полнота определяется ТОЛЬКО исчерпанием серверного continuation-курсора.
-export var DEFAULT_PAGINATE_PAGE_CAP = 25;
-export var DEFAULT_PAGINATE_TIME_CAP_MS = 60000;
+export var DEFAULT_PAGINATE_PAGE_CAP: number = 25;
+export var DEFAULT_PAGINATE_TIME_CAP_MS: number = 60000;
 
 // Решение о следующем шаге пагинации. state = {
 //   hasCursor: bool,     // в последнем ответе есть continuation-курсор
@@ -955,7 +1530,7 @@ export var DEFAULT_PAGINATE_TIME_CAP_MS = 60000;
 // }
 // caps = { pageCap, timeCapMs } (опционально, по умолчанию DEFAULT_*).
 // Возвращает { action: 'continue'|'complete'|'cap', reason, reachedStart, baseComplete, warn }.
-export function paginateStepDecision(state, caps) {
+export function paginateStepDecision(state: PaginateStepState | null, caps: PaginateCaps | null): PaginateStepVerdict {
   caps = caps || {};
   var pageCap = (typeof caps.pageCap === 'number' && caps.pageCap > 0) ? caps.pageCap : DEFAULT_PAGINATE_PAGE_CAP;
   var timeCapMs = (typeof caps.timeCapMs === 'number' && caps.timeCapMs > 0) ? caps.timeCapMs : DEFAULT_PAGINATE_TIME_CAP_MS;
@@ -985,7 +1560,7 @@ export function paginateStepDecision(state, caps) {
 
 // v68: счётчики прогона пагинации, сбрасываемые при смене чата (conv-changed → перезапуск
 // лоадера). prev не обязателен; возвращает нулевое состояние прогона.
-export function resetPaginationCounters(prev) {
+export function resetPaginationCounters(prev?: any): { pageCount: number; startTs: number } {
   return { pageCount: 0, startTs: 0 };
 }
 
@@ -995,7 +1570,7 @@ export function resetPaginationCounters(prev) {
 // DOM-эвристики (scrollEngaged/topReached/hide-applied) НЕ участвуют в решении — только
 // диагностические логи. state = { cursorExhausted, dbFirstHash, serverFirstHash }.
 // Возвращает { complete, reason, retry }; retry=true → дозапуск лоадера (≤3 ретраев).
-export function completenessOracle(state) {
+export function completenessOracle(state: OracleState | null): OracleVerdict {
   var cursorExhausted = !!(state && state.cursorExhausted === true);
   var dbFirstHash = (state && typeof state.dbFirstHash === 'string') ? state.dbFirstHash : '';
   var serverFirstHash = (state && typeof state.serverFirstHash === 'string') ? state.serverFirstHash : '';
@@ -1018,7 +1593,7 @@ export function completenessOracle(state) {
 //   - строгий дедуп assistant: подряд идущие с одинаковым text (или id) схлопываются;
 //   - дедуп user: повтор id хода (та же страница/восстановление) и подряд идущие
 //     с одинаковым text — второй вопрос того же хода.
-export function sanitizeFinalMessages(messages, helpers) {
+export function sanitizeFinalMessages(messages: any[] | null | undefined, helpers: SanitizeHelpers | null): SanitizedMessage[] {
   helpers = helpers || {};
   var isTA = (typeof helpers.isThinkingAssistant === 'function') ? helpers.isThinkingAssistant : function () { return false; };
   var strip = (typeof helpers.stripLeadingThinking === 'function') ? helpers.stripLeadingThinking : function (s) { return s; };
@@ -1050,7 +1625,7 @@ export function sanitizeFinalMessages(messages, helpers) {
       if (id !== null && prev.id !== null && id === prev.id) continue;
       if (text === prev.text) continue;
     }
-    var rec = { role: role, text: text };
+    var rec: SanitizedMessage = { role: role, text: text };
     if (id !== null) rec.id = id;
     out.push(rec);
     prev = rec;
@@ -1060,7 +1635,7 @@ export function sanitizeFinalMessages(messages, helpers) {
 
 // ---- v4x: детектор готовности DOM перед автоскроллом ----
 // Создаёт чистое состояние замера. state.samples — последние (до 3) значения scrollHeight.
-export function newDomReadiness() {
+export function newDomReadiness(): DomReadinessState {
   return { samples: [], readyByElements: false };
 }
 
@@ -1068,7 +1643,7 @@ export function newDomReadiness() {
 // Возвращает { ready, reason, samples }. ready=true когда:
 //   - элементов истории > 10 (появление минимального числа элементов), ИЛИ
 //   - 3 последних замера scrollHeight различаются меньше чем на 100px (стабилизация).
-export function advanceReadiness(state, scrollHeight, elementCount, expected) {
+export function advanceReadiness(state: DomReadinessState | null, scrollHeight: number, elementCount: number, expected: number): ReadinessVerdict {
   state = state || newDomReadiness();
   if (elementCount > 10 && elementCount === expected) {
     state.readyByElements = true;
@@ -1094,7 +1669,7 @@ export function advanceReadiness(state, scrollHeight, elementCount, expected) {
 // actualTurns — ходов видно после скролла (из DOM или storage/сети);
 // expectedTurns — ожидаемое число ходов (из сети или прошлого замера/пола);
 // retryCount/maxRetry — счётчик и лимит ретраев.
-export function shouldRetryAutoscroll(actualTurns, expectedTurns, retryCount, maxRetry) {
+export function shouldRetryAutoscroll(actualTurns: number, expectedTurns: number, retryCount: number, maxRetry: number): boolean {
   if (!expectedTurns || expectedTurns <= 0) return false;
   if (retryCount >= maxRetry) return false;
   return actualTurns < expectedTurns;
@@ -1110,7 +1685,7 @@ export function shouldRetryAutoscroll(actualTurns, expectedTurns, retryCount, ma
 //   реально отрезана сервером). suspect — впервые увиденная обрезка; confirmed —
 //   два последовательных срабатывания подряд (suspectPending ставит вызывающий код).
 var TRIM_HEAD_IDS_N = 10;
-export function detectTrimState(prevProbe, snapshot) {
+export function detectTrimState(prevProbe: TrimProbe | null, snapshot: TrimSnapshot | null): TrimVerdict {
   var res = { suspect: false, confirmed: false, lostHead: false };
   try {
     if (!snapshot || !Array.isArray(snapshot.messageIds)) return res;
@@ -1141,7 +1716,7 @@ export function detectTrimState(prevProbe, snapshot) {
 // Активностью считаются: DOM-мутации, пассивный batchexecute-снимок, смена чата.
 // Любое такое событие обновляет lastActivityAt и немедленно возобновляет поллинг.
 // state = { baseComplete, reachedStart, lastActivityAt }; nowMs — текущее время (мс).
-export function shouldPollVf5(state, nowMs) {
+export function shouldPollVf5(state: Vf5PollState | null, nowMs: number): boolean {
   state = state || {};
   var baseComplete = !!state.baseComplete;
   var reachedStart = !!state.reachedStart;
@@ -1157,12 +1732,12 @@ export function shouldPollVf5(state, nowMs) {
 // вызывающий код (SW, ключ 'aiCmThr:'+convId); здесь никакой мутируемой стейт не
 // хранится. thresholds — опциональный кастомный список (low<medium<high);
 // по умолчанию PROACTIVE_THRESHOLDS.
-export var PROACTIVE_THRESHOLDS = [70, 85, 95];
+export var PROACTIVE_THRESHOLDS: number[] = [70, 85, 95];
 
 // S2: валидация настроенных порогов (options 'aiCmProactiveThresholds').
 // Требования: ровно три числа 1–100 в строго возрастающем порядке (low<medium<high).
 // Возвращает нормализованный массив чисел или null (битое значение).
-export function normalizeProactiveThresholds(v) {
+export function normalizeProactiveThresholds(v: any): number[] | null {
   try {
     if (!Array.isArray(v) || v.length < 3) return null;
     var out = [];
@@ -1179,7 +1754,7 @@ export function normalizeProactiveThresholds(v) {
 // S2: чтение настраиваемых порогов из chrome.storage.local ('aiCmProactiveThresholds').
 // Возвращает Promise<массив>: валидное значение — как есть; битое/отсутствующее или
 // недоступный storage — дефолт [70,85,95] (SW получает синхронный фолбэк на дефолт).
-export function getProactiveThresholds() {
+export function getProactiveThresholds(): Promise<number[]> {
   if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local ||
       typeof chrome.storage.local.get !== 'function') {
     return Promise.resolve(PROACTIVE_THRESHOLDS);
@@ -1200,7 +1775,7 @@ export function getProactiveThresholds() {
   } catch (e) { return Promise.resolve(PROACTIVE_THRESHOLDS); }
 }
 
-export function pickProactiveThreshold(pct, firedSet, thresholds) {
+export function pickProactiveThreshold(pct: number, firedSet: any, thresholds: number[] | null | undefined): number | null {
   if (typeof pct !== 'number' || !isFinite(pct)) return null;
   var list = (thresholds && thresholds.length === 3) ? thresholds : PROACTIVE_THRESHOLDS;
   var t = null;
@@ -1283,7 +1858,7 @@ function streamCollectText(node, seen, out) {
 
 // I4z33b: ход пользователя. Ищем узел-тройку с ролью 'me', id — первая строка-идентификатор
 // (числовой «постоянный» или c_/r_), текст — все не-junk строки в поддереве тройки.
-export function extractStreamUserTurn(raw) {
+export function extractStreamUserTurn(raw: string): StreamTurn | null {
   try {
     var fr = streamLastFrame(raw, { I4z33b: 1 });
     if (!fr) return null;
@@ -1313,7 +1888,7 @@ export function extractStreamUserTurn(raw) {
 
 // Bsxleb (и подобные): ход модели. Entry = массив с E[0]='c_<hex>'; id хода — последний
 // rc_*/r_* в поддереве entry, текст — не-junk строки entry.
-export function extractStreamModelTurn(raw) {
+export function extractStreamModelTurn(raw: string): StreamTurn | null {
   try {
     var fr = streamLastFrame(raw, { Bsxleb: 1 });
     if (!fr) return null;
@@ -1345,7 +1920,7 @@ export function extractStreamModelTurn(raw) {
 // v1.14.1 (FB-PROBE): fallback-top может объявлять полноту ТОЛЬКО при доступности
 // серверного probe (v73): нужны метаданные последнего history-запроса (at/baseUrl/headers)
 // И широкая экстракция курсора из последнего ответа. Без любого из них — false.
-export function fallbackProbeReady(meta, wideCur) {
+export function fallbackProbeReady(meta: ProbeMeta | null, wideCur: string | null | undefined): boolean {
   return Boolean(meta && meta.atEncoded && meta.baseUrl && meta.headers && wideCur);
 }
 
@@ -1362,7 +1937,7 @@ export function fallbackProbeReady(meta, wideCur) {
 // входящий снапшот без обязательных полей (atEncoded/baseUrl/headers) не принимается —
 // мусор не может опустить retained. prev/incoming — объекты { atEncoded, baseUrl, headers }
 // (core добавляет conv/ts-обвязку; функция их не читает и не трогает).
-export function updateProbeMetaRetain(prev, incoming, stepOk) {
+export function updateProbeMetaRetain(prev: ProbeMeta | null, incoming: ProbeMeta | null, stepOk: boolean): ProbeMeta | null {
   if (!stepOk) return prev;
   if (!incoming || !incoming.atEncoded || !incoming.baseUrl || !incoming.headers) return prev;
   return incoming;
@@ -1379,7 +1954,7 @@ export function updateProbeMetaRetain(prev, incoming, stepOk) {
 // Отдельно: pb-ответ-ОШИБКА (error-страница Bard, битый-парс-путь) → complete по
 // не-данным запрещён (e292 это НЕ лечит — там данные; гейт закрывает сломанный парс).
 // state = { floorCount, baseCount, pbError }. Возвращает { block:true, reason } | null.
-export function probeTerminalGate(state) {
+export function probeTerminalGate(state: ProbeTerminalState | null): ProbeTerminalBlock | null {
   var floorCount = (state && typeof state.floorCount === 'number') ? state.floorCount : 0;
   var baseCount = (state && typeof state.baseCount === 'number') ? state.baseCount : 0;
   if (floorCount > 0 && baseCount < floorCount) {
@@ -1397,7 +1972,7 @@ export function probeTerminalGate(state) {
 // при base=80 < floor=124 → stable-stop оракул взвёл baseComplete на УСЕЧЁННОЙ базе.
 // Признак коллапса: высота упала значительно ниже максимума прогона (floor порог
 // 3000px отсекает фоновые перерисовки), при этом база не добрала сохранённый пол.
-export function collapseGuardVerdict(state) {
+export function collapseGuardVerdict(state: CollapseGuardState | null): CollapseVerdict {
   var h = (state && typeof state.scrollH === 'number') ? state.scrollH : 0;
   var maxSeen = (state && typeof state.maxScrollHSeen === 'number') ? state.maxScrollHSeen : 0;
   var baseCount = (state && typeof state.baseCount === 'number') ? state.baseCount : 0;
@@ -1416,7 +1991,7 @@ export function collapseGuardVerdict(state) {
 // maxScrollHSeen не превысил вьюпорт+400) => физический верх НЕ подтверждён.
 // state = { floorCount, hadCursor, anyGrowth, maxScrollHSeen, viewportH }.
 // Возвращает { untrusted: true, reason } при недостоверном top, иначе null.
-export function untrustedTopVerdict(state) {
+export function untrustedTopVerdict(state: UntrustedTopState | null): UntrustedTopBlock | null {
   var floorCount = (state && typeof state.floorCount === 'number') ? state.floorCount : 0;
   var hadCursor = !!(state && state.hadCursor);
   var anyGrowth = !!(state && state.anyGrowth);
@@ -1435,7 +2010,7 @@ export function untrustedTopVerdict(state) {
 // циркулярная последняя «живая» страница: её serverFirstHash нельзя использовать как
 // независимое подтверждение scroll-top-proof. state = { added, nextCursor,
 // failedSkeleton, opaqueCandidates }. Возвращает true при «шаг сломан».
-export function pagStepBroken(state) {
+export function pagStepBroken(state: PagStepState | null): boolean {
   // state обязан быть измеренным шагом (added — число). null/{} — не шаг → false.
   if (!state || typeof state.added !== 'number') return false;
   var added = state.added;
@@ -1452,7 +2027,7 @@ export function pagStepBroken(state) {
 // Ответы сервера для старых чатов бывают обрезанными («РЕНТГЕН ОБОРВАВШЕГО ШАГА»),
 // и безгардовое замещение сжимало базу (textLen 147811→124495 при том же числе ходов).
 // Входящий текст короче → restored-текст сохраняется, дозаполняются только r1/turnId.
-export function decideRestoredMerge(prev, incoming) {
+export function decideRestoredMerge(prev: TurnItem | null, incoming: TurnItem | null): RestoredMergeDecision {
   var oldLen = ((prev && prev.text) || '').length;
   var newLen = ((incoming && incoming.text) || '').length;
   if (newLen >= oldLen) return { replace: true, r1: null, turnId: null };
@@ -1472,7 +2047,7 @@ export function decideRestoredMerge(prev, incoming) {
 // как «старших страниц больше нет»: континуационный курсор прошлого окна жив, и шаг
 // пагинации нужно повторить (см. paginateErrorRetryDecision / paginateLoop в core).
 // outer — первый массив ответа [[["wrb.fr","hNvQHb",<inner>,...],...],...].
-export function isBardErrorPage(outer) {
+export function isBardErrorPage(outer: any): boolean {
   try {
     if (!Array.isArray(outer) || !Array.isArray(outer[0])) return false;
     var inner = outer[0][2];
@@ -1503,7 +2078,7 @@ export function isBardErrorPage(outer) {
 //   added: number,     // ходов добавил ответ (ошибка => 0)
 //   retries: number    // сколько ретраев этого окна уже выполнено (0..N)
 // }. Возвращает { retry, backoffMs } — ретраить окно с растущей паузой, не более 3 раз.
-export function paginateErrorRetryDecision(state) {
+export function paginateErrorRetryDecision(state: PaginateErrorState | null): PaginateRetryVerdict {
   var cap = 3;
   var errPage = !!(state && state.errPage === true);
   var hasCursor = !!(state && state.hasCursor);
@@ -1529,7 +2104,7 @@ export function paginateErrorRetryDecision(state) {
 //   - escalate=true, reason='err1177-exhausted' → немедленный рестарт лоадера;
 //   - escalate=false — причиной (not-ready / loader-running / native-escalation-used) →
 //     тихий цикл завершается as-is (никаких вечных циклов: на один чат эскалация 1 раз).
-export function paginateErrorEscalation(state) {
+export function paginateErrorEscalation(state: PaginateErrorState | null): PaginateEscalationVerdict {
   state = state || {};
   var cap = (state && typeof state.cap === 'number' && state.cap > 0) ? state.cap : 3;
   var errPage = !!(state && state.errPage === true);
@@ -1549,7 +2124,7 @@ export function paginateErrorEscalation(state) {
 // ошибки-страницы темп снижается (1200мс + глубина), чтобы не раздражать сервер дальше.
 // depth — номер окна от хвоста (0 = первое продолжение), errSeen — была ли в этом прогоне
 // ошибка-страница. Возвращает задержку в мс перед следующим запросом окна (0 = без паузы).
-export function paginatePaceDelayMs(depth, errSeen) {
+export function paginatePaceDelayMs(depth: number, errSeen: boolean): number {
   if (!errSeen) return 0;
   var d = (typeof depth === 'number' && depth > 0) ? depth : 0;
   return 1200 + Math.min(d, 8) * 75;
@@ -1581,7 +2156,7 @@ function isShortHexMarker(s) {
   if (s.length >= 40) return false;
   return /^[0-9a-fA-F]+$/.test(s);
 }
-export function classifyOpaque(s) {
+export function classifyOpaque(s: any): boolean {
   if (typeof s !== 'string') return false;
   if (s.length < 40 || s.length > 2000) return false;
   if (!/^[A-Za-z0-9+\/]+={0,2}$/.test(s)) return false;
@@ -1607,7 +2182,7 @@ function startsWithMimeType(s) {
 }
 // Широкий классификатор (16..2000, '=' допустим в любой позиции) — для rest-метаданных
 // и для строк inner-зоны при wide-экстракции.
-export function classifyOpaqueWide(s) {
+export function classifyOpaqueWide(s: any): boolean {
   if (typeof s !== 'string') return false;
   if (s.length < 16 || s.length > 2000) return false; // H17: 8→16 (MIME len=9..15 → false)
   if (!/^[A-Za-z0-9+/=]+$/.test(s)) return false;
@@ -1619,7 +2194,7 @@ export function classifyOpaqueWide(s) {
 // Узкая экстракция из parsed-inner (turns): opaque-кандидаты по всему поддереву turns
 // (включая turns[1] — слот континуационного токена), приоритет — длиннейший; при
 // равенстве длин — последний в порядке обхода (как было до H13).
-export function extractCursor(turns) {
+export function extractCursor(turns: any): string | null {
   var c = [];
   (function collect(n) {
     if (c.length > 8) return;
@@ -1635,7 +2210,7 @@ export function extractCursor(turns) {
 // JSON.parse → массив (turns; слот курсора turns[1]). Зона 2 — rest: outer[0].slice(3).
 // Приоритет — длиннейший кандидат, прошедший classifyOpaqueWide; зоны обходятся
 // inner→rest (при равенстве длин выигрывает найденный раньше — из inner).
-export function extractCursorWide(outer) {
+export function extractCursorWide(outer: any): string | null {
   var best = null;
   function scanWideZone(zone) {
     (function walkW(n) {
@@ -1678,7 +2253,7 @@ export function extractCursorWide(outer) {
 
 // Ключ контента хода: роль + схлопнутый текст. Нужен как вторичный ключ
 // дедупа (id архива и id живого хода одного и того же сообщения не совпадают).
-export function archiveContentKey(m) {
+export function archiveContentKey(m: ArchiveMessage | null): string {
   var role = (m && m.role === 'user') ? 'user' : 'assistant';
   var text = String((m && (m.text != null ? m.text : m.content)) || '').replace(/\s+/g, ' ').trim();
   return role + '\u0000' + text;
@@ -1706,7 +2281,7 @@ function archiveTurnId(m, index) {
  * @param {Array} archiveMessages — нормализованные архивные ходы ({id,role,text})
  * @returns {{items:Array, addedCount:number, duplicateCount:number}}
  */
-export function archiveMergeTurns(networkItems, archiveMessages) {
+export function archiveMergeTurns(networkItems: ArchiveMessage[], archiveMessages: ArchiveMessage[]): ArchiveMergeResult {
   var net = Array.isArray(networkItems) ? networkItems : [];
   var arch = Array.isArray(archiveMessages) ? archiveMessages : [];
   var seenIds = {};
@@ -1747,7 +2322,7 @@ export function archiveMergeTurns(networkItems, archiveMessages) {
  * понижение запрещено (HWM). Возвращает запись для записи пола или null, когда
  * менять нечего (архив не выше прежнего пола / оба пусты).
  */
-export function archiveFloorRecord(existingFloor, archiveCount, archiveTextLen) {
+export function archiveFloorRecord(existingFloor: FloorRecord | null, archiveCount: number, archiveTextLen: number): FloorRecord | null {
   var prevCount = (existingFloor && typeof existingFloor.count === 'number' && existingFloor.count > 0) ? existingFloor.count : 0;
   var prevLen = (existingFloor && typeof existingFloor.effectiveLen === 'number' && existingFloor.effectiveLen > 0) ? existingFloor.effectiveLen : 0;
   var archCount = (typeof archiveCount === 'number' && archiveCount > 0) ? archiveCount : 0;
@@ -1783,7 +2358,7 @@ export function archiveFloorRecord(existingFloor, archiveCount, archiveTextLen) 
  * вызовов, которые снимок живого яруса не передают.
  * Иначе — { complete:false, reason } и путь остаётся за существующими гейтами.
  */
-export function archiveCompleteVerdict(opts) {
+export function archiveCompleteVerdict(opts: ArchiveCompleteOpts | null): ArchiveCompleteVerdict {
   var o = opts || {};
   var archConv = String(o.archiveConvId || '');
   var curConv = String(o.currentConvId || '');

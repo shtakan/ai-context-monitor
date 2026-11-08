@@ -12,7 +12,7 @@
  * присвоением doneReason='top'; scroll-top-proof-ветка (a) в paginateLoop отсутствует.
  */
 
-const GIL = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
+const GIL = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.ts');
 
 const coreSrc = require('../helpers/gemini-intercept-source.js').geminiSource;
 

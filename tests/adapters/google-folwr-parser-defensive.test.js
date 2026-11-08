@@ -1,5 +1,5 @@
 /**
- * utils/google-search-folwr-parser.js — защитные ветки и фолбэки.
+ * utils/google-search-folwr-parser.ts — защитные ветки и фолбэки.
  *
  * Карта задачи 1.1 (code coverage ≥80%): дополняет tests/adapters/google-folwr-open.test.js
  * ровно теми путями, которые не встречаются в живом счастливом пути парсера:
@@ -15,7 +15,7 @@
  * Гейты/поведение не меняются: тесты только вызывают публичные хелперы парсера.
  */
 
-const P = require('../helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.js');
+const P = require('../helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.ts');
 
 function turnHtml(id, question, answer) {
   return '<div class="CKgc1d" data-scope-id="turn" jsuid="' + id + '">' +

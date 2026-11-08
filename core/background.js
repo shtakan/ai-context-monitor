@@ -90,7 +90,7 @@ try {
 // Ph2 (ESM): входит в бандл статическим import'ом (importScripts запрещён: API воркера;
 // гейт — verifyDist/verifyFirefoxDist). Тот же файл публикует window/self-зеркало, поэтому
 // core/gemini-*.js в MAIN-мире грузят его classic-артефактом и читают window.GeminiInterceptLogic.
-import { getProactiveThresholds, pickProactiveThreshold } from '../utils/gemini-intercept-logic.js';
+import { getProactiveThresholds, pickProactiveThreshold } from '../utils/gemini-intercept-logic.ts';
 
 // v52: дубликаты регистраций после перезагрузки расширения гасим здесь:
 // при "Duplicate script ID" снимаем старую и регистрируем заново.

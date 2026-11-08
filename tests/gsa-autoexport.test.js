@@ -617,7 +617,7 @@ describe('регрессионный контур v1.18: запрещённые 
   });
 
   test('классификатор GSA не изменён (те же kind-вердикты)', () => {
-    const { classifyFolwrContinuation } = require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.js');
+    const { classifyFolwrContinuation } = require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.ts');
     expect(classifyFolwrContinuation({ ok: true, status: 200, bodyLength: 30, newTurns: 0, cursor: 'C1', sentCursor: 'C1' }))
       .toMatchObject({ kind: 'cursor-repeat', complete: true, canContinue: false });
     expect(classifyFolwrContinuation({ ok: true, status: 200, bodyLength: 4200, newTurns: 0, cursor: null, sentCursor: 'C1' }))
@@ -625,7 +625,7 @@ describe('регрессионный контур v1.18: запрещённые 
   });
 
   test('H9/H10-гейты и пол (gemini-intercept-logic) не тронуты', () => {
-    const Logic = require('./helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
+    const Logic = require('./helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.ts');
     expect(typeof Logic.resolveFloor).toBe('function');
     expect(typeof Logic.shouldSaveFloor).toBe('function');
     expect(Logic.shouldSaveFloor(true, true)).toBe(true);

@@ -17,7 +17,7 @@
  * исходный код, а не копию логики.
  */
 
-const GIL = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
+const GIL = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.ts');
 
 const coreSrc = require('../helpers/gemini-intercept-source.js').geminiSource;
 

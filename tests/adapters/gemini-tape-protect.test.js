@@ -80,11 +80,11 @@ function baseCtx(overrides) {
     baseSize: function () { return Object.keys(ctx.turnsMap).length; },
     window: {
       GeminiInterceptLogic: {
-        // сигнатура как в utils/gemini-intercept-logic.js: shouldFullRebuild
+        // сигнатура как в utils/gemini-intercept-logic.ts: shouldFullRebuild
         shouldFullRebuild: function (opts) {
           return !!(opts.fromVirtualF5 && opts.wasFull && !opts.hasCursor);
         },
-        // сигнатура как в utils/gemini-intercept-logic.js: shouldDisjointReset
+        // сигнатура как в utils/gemini-intercept-logic.ts: shouldDisjointReset
         shouldDisjointReset: function () { return ctx.disjointResetDecision; }
       }
     }

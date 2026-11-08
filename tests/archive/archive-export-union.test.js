@@ -31,7 +31,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
-const Logic = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
+const Logic = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.ts');
 const Pipeline = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 // Ph2: utils/archive-import.ts — ES-модуль; фасад берём его default-экспортом.
 const Archive = require('../helpers/load-esm.js').loadEsm('utils/archive-import.ts');
@@ -618,7 +618,7 @@ describe('T1-fix#3: проводка (source-level)', () => {
     expect(Logic.archiveFloorRecord(null, ARCHIVE_MSGS, 100))
       .toEqual({ count: ARCHIVE_MSGS, effectiveLen: 100, source: 'archive' });
     ['probeTerminalGate', 'untrustedTopVerdict', 'pagStepBroken', 'collapseGuardVerdict'].forEach((name) => {
-      expect(fnDecl(fs.readFileSync(path.join(ROOT, 'utils', 'gemini-intercept-logic.js'), 'utf8'), name).toLowerCase())
+      expect(fnDecl(fs.readFileSync(path.join(ROOT, 'utils', 'gemini-intercept-logic.ts'), 'utf8'), name).toLowerCase())
         .not.toContain('archive');
     });
     // оракул архива по-прежнему гейтится снимком live (T1-fix#1/#2 не ослаблены)
@@ -648,7 +648,7 @@ describe('T1-fix#4: порядок объединённой базы (архив
   const MAIN4_SCOPE = 'with (ctx) { ' + fnDecl(CORE_GEMINI, 'aiCmBuildBaseMessages') +
     ' return aiCmBuildBaseMessages; }';
   const makeMain4 = new Function('ctx', MAIN4_SCOPE); // ctx → сама функция из core
-  const LOGIC_SRC4 = fs.readFileSync(path.join(ROOT, 'utils', 'gemini-intercept-logic.js'), 'utf8');
+  const LOGIC_SRC4 = fs.readFileSync(path.join(ROOT, 'utils', 'gemini-intercept-logic.ts'), 'utf8');
 
   function env4(map) {
     // Phase 3 step 13.2: то же, что в env выше — тела уехали в core/gemini-archive.js,

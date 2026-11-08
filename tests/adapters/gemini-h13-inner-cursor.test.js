@@ -6,7 +6,7 @@
  * (outer[0].slice(3)) и inner не видела вовсе → контрольный probe объявлял терминальным
  * ответ, НЁСШИЙ живой курсор (oracle=complete reason=probe-terminal на усечённой базе).
  *
- * Фикс (канон — utils/gemini-intercept-logic.js, в core — делегация + inline-дубль):
+ * Фикс (канон — utils/gemini-intercept-logic.ts, в core — делегация + inline-дубль):
  *   1) classifyOpaque: потолок 600→2000 (токены 705/849 реальны; фильтры мусора
  *      image/png-строк и не-b64 сохранены);
  *   2) extractCursorWide: зоны скана — inner (outer[0][2] → JSON.parse → turns) ПЕРВОЙ,
@@ -21,7 +21,7 @@
  * 16 символов (только [0-9a-fA-F]) — НЕ континуационный токен. [0-9a-fA-F] ⊂ b64-алфавита,
  * поэтому classifyOpaqueWide (8..2000) классифицировал его как opaque → ложный
  * cursorFound=yes → бесконечный цикл probe-non-terminal. Фикс (только в каноне
- * utils/gemini-intercept-logic.js, core НЕ тронут): hex-строка длиной < 40 → false
+ * utils/gemini-intercept-logic.ts, core НЕ тронут): hex-строка длиной < 40 → false
  * в обоих классификаторах (isShortHexMarker).
  *
  * H17 (mime-garbage): e292-диагностика — inner-зона терминального шага пагинации несёт
@@ -33,7 +33,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const GIL = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
+const GIL = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.ts');
 const coreSrc = require('../helpers/gemini-intercept-source.js').geminiSource;
 
 // ---- фикстуры e292: токены в форме реальных континуационных токенов tC…Ag== ----
@@ -91,7 +91,7 @@ describe('H13: classifyOpaque (потолок 600→2000)', () => {
 // e292: probe-ответ несёт в inner (turns[1]) служебный hex-маркер 16 символов — НЕ
 // континуационный токен; раньше classifyOpaqueWide (8..2000, [0-9a-fA-F] ⊂ b64-алфавита)
 // давал true → ложный cursorFound=yes → цикл probe-non-terminal. Правило фикса (только
-// utils/gemini-intercept-logic.js): строка из ТОЛЬКО hex-символов длиной < 40 → false.
+// utils/gemini-intercept-logic.ts): строка из ТОЛЬКО hex-символов длиной < 40 → false.
 const HEX16_LOWER = '3f8a9c2b7d1e0a4f'; // ровно 16 hex-символов
 const HEX16_UPPER = '3F8A9C2B7D1E0A4F';
 const HEX16_MIXED = '3f8A9c2B7d1E0a4F';
@@ -152,7 +152,7 @@ describe('H15: hex-маркеры (16 символов) → НЕ opaque (оба 
 // вложений "image/png" (len=9). '/' допустим в b64-алфавите, длина 9 попадала в wide
 // 8..2000 → раньше classifyOpaqueWide давал true → wide-курсор = MIME-мусор → ложный
 // cursorFound=yes на ответе БЕЗ курсора → цикл probe-non-terminal. Правила фикса
-// (только utils/gemini-intercept-logic.js, core НЕ тронут): MIME-префикс
+// (только utils/gemini-intercept-logic.ts, core НЕ тронут): MIME-префикс
 // (image/ video/ audio/ application/ text/) → false; нижняя граница wide 8→16
 // (b64-подобный мусор 8..15 → false). Реальные токены 705/849 и hex-маркеры
 // 16..39 (H15) не задеты.
@@ -522,7 +522,7 @@ describe('H13: retained H9b фиксирует inner-курсор на здор�
     expect(typeof GIL.extractCursor).toBe('function');
     expect(typeof GIL.extractCursorWide).toBe('function');
     const logicSrc = fs.readFileSync(
-      path.join(__dirname, '..', '..', 'utils', 'gemini-intercept-logic.js'), 'utf8');
+      path.join(__dirname, '..', '..', 'utils', 'gemini-intercept-logic.ts'), 'utf8');
     expect(logicSrc).toContain('extractCursorWide: extractCursorWide');
     expect(logicSrc).toContain('classifyOpaque: classifyOpaque');
   });

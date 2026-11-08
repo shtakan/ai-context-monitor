@@ -1,6 +1,6 @@
 /**
  * Тесты функции извлечения полной HTML-истории Google Search AI (GET /async/folwr).
- * Проверяет изолированный хелпер utils/google-search-folwr-parser.js.
+ * Проверяет изолированный хелпер utils/google-search-folwr-parser.ts.
  */
 
 const {
@@ -14,7 +14,7 @@ const {
   canonicalTurnKeyOf,
   canonicalizeTurnForThread,
   classifyFolwrContinuation
-} = require('../helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.js');
+} = require('../helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.ts');
 const fs = require('fs');
 const path = require('path');
 

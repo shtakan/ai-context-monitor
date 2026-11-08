@@ -1,8 +1,8 @@
 /**
- * v54: юнит-тесты чистой функции detectTrimState (utils/gemini-intercept-logic.js) —
+ * v54: юнит-тесты чистой функции detectTrimState (utils/gemini-intercept-logic.ts) —
  * детектор обрезки истории в Gemini для спасательного pre-trim экспорта.
  */
-const L = require('./helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
+const L = require('./helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.ts');
 
 describe('detectTrimState (v54: детектор обрезки истории Gemini)', () => {
   const mkIds = (n, off = 0) => Array.from({ length: n }, (_, i) => 'id-' + String(off + i).padStart(3, '0'));

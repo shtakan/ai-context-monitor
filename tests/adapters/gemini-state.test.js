@@ -19,7 +19,7 @@
  * ссылки, снятые ДО вызова, обязаны остаться теми же объектами, но опустеть.
  */
 
-const GIL = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
+const GIL = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.ts');
 
 const CORE_GEMINI = require('../helpers/gemini-intercept-source.js').geminiSource;
 

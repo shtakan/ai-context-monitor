@@ -24,7 +24,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
-const Logic = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
+const Logic = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.ts');
 const Pipeline = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const CORE_GEMINI = require('../helpers/gemini-intercept-source.js').geminiSource;
 const CORE_CONTENT = require('../helpers/content-source.js').contentSource;
@@ -233,7 +233,7 @@ describe('T1-fix#2: проводка гейтов (source-level)', () => {
 
   test('H9/H10-гейты и HWM-пол архива не тронуты', () => {
     ['probeTerminalGate', 'untrustedTopVerdict', 'pagStepBroken', 'collapseGuardVerdict'].forEach((name) => {
-      expect(fnDecl(fs.readFileSync(path.join(ROOT, 'utils', 'gemini-intercept-logic.js'), 'utf8'), name).toLowerCase())
+      expect(fnDecl(fs.readFileSync(path.join(ROOT, 'utils', 'gemini-intercept-logic.ts'), 'utf8'), name).toLowerCase())
         .not.toContain('archive');
     });
     // HWM: архив поднимает пол и никогда не опускает (поведение archiveFloorRecord 1:1)

@@ -270,11 +270,11 @@ export default [
       // Ph2, шаг gemini-intercept-logic.js: модуль переведён на ESM (UMD-хвост снят) и
       // втягивается статическим import'ом из core/background.js; для MAIN-регистрации
       // v12 build.mjs выводит classic-артефакт dist/utils/gemini-intercept-logic.js.
-      'utils/gemini-intercept-logic.js',
+      'utils/gemini-intercept-logic.ts',
       // Ph2, шаг google-search-folwr-parser.js: модуль переведён на ESM (UMD-хвост
       // снят) и втягивается side-effect import'ом из core/content.js; для MAIN-мира
       // build.mjs выводит classic-артефакт dist/utils/google-search-folwr-parser.js.
-      'utils/google-search-folwr-parser.js',
+      'utils/google-search-folwr-parser.ts',
       // Ph2, шаг export-emit-pipeline.js: модуль переведён на ESM (UMD-хвост снят)
       // и втягивается в content-бандл статическим import'ом из core/content.js;
       // MAIN-регистрации у него нет, classic-артефакт не выводится.

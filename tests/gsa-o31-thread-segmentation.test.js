@@ -119,7 +119,7 @@ function interceptCtx(over) {
     console: { log: function () { } },
     debugLog: function (lvl, msg) { logs.push(String(msg)); },
     window: {
-      GoogleFolwrUtils: require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.js'),
+      GoogleFolwrUtils: require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.ts'),
       dispatchEvent: function (ev) { events.push(ev.detail); }
     }
   };

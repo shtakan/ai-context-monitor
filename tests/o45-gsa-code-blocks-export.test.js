@@ -8,7 +8,7 @@
  * «Скопировать код в буфер обмена».
  *
  * Корень (инспекция, read-only): в ОТБОРЕ контент-узлов ответа код-контейнеров не было вовсе
- * (utils/google-search-folwr-parser.js:gatherAnswerContentNodes брал только .n6owBd.awi2gc,
+ * (utils/google-search-folwr-parser.ts:gatherAnswerContentNodes брал только .n6owBd.awi2gc,
  * table, [role=heading], h2-h4, ul/ol/li), а generic-ветка assignContentToTurns читала
  * textContent — код вне чанка терялся, код внутри чанка схлопывался бы в одну строку и
  * потерял бы маркеры языка. Потеря на ОТБОРЕ узлов, не в санации.
@@ -37,7 +37,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.js');
+const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.ts');
 
 const ROOT = path.join(__dirname, '..');
 const CONTENT = require('./helpers/content-source.js').contentSource;

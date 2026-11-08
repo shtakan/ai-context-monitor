@@ -15,7 +15,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
-const Logic = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
+const Logic = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.ts');
 // Ph2: utils/archive-import.ts — ES-модуль (UMD-хвост снят).
 const AI = require('../helpers/load-esm.js').loadEsm('utils/archive-import.ts');
 
@@ -30,7 +30,7 @@ function fnSource(src, name) {
   expect(start).toBeGreaterThan(-1);
   // до следующей функции/закрытия IIFE — достаточно длинный срез для проверки тела
   const rest = src.slice(start);
-  // Ph2 (ESM): top-level объявления utils/gemini-intercept-logic.js больше не вложены
+  // Ph2 (ESM): top-level объявления utils/gemini-intercept-logic.ts больше не вложены
   // в IIFE (нулевой отступ, с 'export '), но core/gemini-*.js по-прежнему держат функции
   // внутри IIFE. Поэтому ищем оба стиля и берём ближайшую границу.
   const tail = rest.slice(10);
@@ -169,13 +169,13 @@ describe('T1: H9/H10-гейты НЕ ослаблены архивом', () => {
 
   test('source-level: тела H9/H10-гейтов не знают про архив (архив их не подменяет)', () => {
     ['probeTerminalGate', 'untrustedTopVerdict', 'pagStepBroken', 'collapseGuardVerdict'].forEach((name) => {
-      const body = fnSource(fs.readFileSync(path.join(ROOT, 'utils', 'gemini-intercept-logic.js'), 'utf8'), name);
+      const body = fnSource(fs.readFileSync(path.join(ROOT, 'utils', 'gemini-intercept-logic.ts'), 'utf8'), name);
       expect(body.toLowerCase()).not.toContain('archive');
     });
   });
 
   test('source-level: archive-complete — ОТДЕЛЬНАЯ функция, а не правка существующих', () => {
-    const src = fs.readFileSync(path.join(ROOT, 'utils', 'gemini-intercept-logic.js'), 'utf8');
+    const src = fs.readFileSync(path.join(ROOT, 'utils', 'gemini-intercept-logic.ts'), 'utf8');
     expect(src).toContain('function archiveCompleteVerdict(');
     expect(src).toContain('archiveCompleteVerdict: archiveCompleteVerdict');
     // существенные прежние экспорты на месте (контракт модуля не сужен)
