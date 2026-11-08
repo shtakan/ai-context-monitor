@@ -140,7 +140,7 @@ describe('O-35/O-53/R2: core/background.js — регистрация перех
   });
 
   test('R-пин: шесть существующих регистраций не тронуты', function () {
-    ['ai-cm-page-intercept', 'ai-cm-gemini-intercept-v17', 'ai-cm-deepseek-intercept-v12',
+    ['ai-cm-page-intercept', 'ai-cm-gemini-intercept-v18', 'ai-cm-deepseek-intercept-v12',
       'ai-cm-claude-intercept', 'ai-cm-perplexity-intercept',
       'ai-cm-google-search-intercept'].forEach(function (id) {
       expect(background).toContain("ids.indexOf('" + id + "') === -1");

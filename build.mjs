@@ -441,7 +441,7 @@ async function writeDebugClassic() {
 }
 
 // Ph2, шаг gemini-batchexecute-parser.js: ESM-исходник и путь, под которым его ждут
-// регистрации world:'MAIN' в core/background.js (регистрация ai-cm-gemini-intercept-v17).
+// регистрации world:'MAIN' в core/background.js (регистрация ai-cm-gemini-intercept-v18).
 const PARSER_SOURCE = 'utils/gemini-batchexecute-parser.js';
 const PARSER_CLASSIC = 'utils/gemini-batchexecute-parser.js';
 
@@ -511,7 +511,7 @@ async function writeGsaParserClassic() {
 }
 
 // Ph2, шаг gemini-intercept-logic.js: ESM-исходник и путь, под которым его ждёт
-// 21-скриптовая MAIN-регистрация ai-cm-gemini-intercept-v17 в core/background.js.
+// 21-скриптовая MAIN-регистрация ai-cm-gemini-intercept-v18 в core/background.js.
 const GEMINI_LOGIC_SOURCE = 'utils/gemini-intercept-logic.js';
 const GEMINI_LOGIC_CLASSIC = 'utils/gemini-intercept-logic.js';
 
@@ -520,7 +520,7 @@ const GEMINI_LOGIC_CLASSIC = 'utils/gemini-intercept-logic.js';
  *
  * Логика переведена на ESM (Roadmap Ph2) и входит в бандл SW статическим import'ом
  * из core/background.js. Но тот же путь перечислен в js[] MAIN-регистрации
- * (ai-cm-gemini-intercept-v17), а chrome.scripting грузит classic-скрипты, где
+ * (ai-cm-gemini-intercept-v18), а chrome.scripting грузит classic-скрипты, где
  * import/export недопустимы. Снимаем префиксы объявлений и заворачиваем тело в IIFE:
  * до миграции файл был самовызывающейся функцией и держал ~90 внутренних имён вне
  * общего скоупа MAIN-мира, где рядом живут 19 других classic-скриптов.

@@ -878,10 +878,10 @@ describe('R2: протокол ожидания и сброс', function () {
 });
 
 describe('R2: связка с перехватчиком/background', function () {
-  test('background регистрирует gemini-files перед ingest, версия v17', function () {
+  test('background регистрирует gemini-files перед ingest, версия v18', function () {
     const bg = read('core/background.js');
     expect(bg).toContain("'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js'");
-    expect(bg).toContain("'ai-cm-gemini-intercept-v17'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v18'");
   });
 
   test('дренаж очереди разрешён для gemini', function () {

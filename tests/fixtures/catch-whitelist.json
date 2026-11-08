@@ -1,6 +1,6 @@
 {
   "schema": "ai-cm/catch-whitelist@1",
-  "generatedFrom": "192ea34",
+  "generatedFrom": "a19cfe1",
   "scope": [
     "core",
     "utils",
@@ -111,9 +111,9 @@
       "file": "core/background.js",
       "category": "debug-instrumentation",
       "lines": [
-        545,
-        1190,
-        1208
+        549,
+        1194,
+        1212
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: chrome.action.setBadgeText({ text: '', tabId: tabIdR }); debugLog('log',"
     },
@@ -121,7 +121,7 @@
       "file": "core/background.js",
       "category": "defensive-assignment",
       "lines": [
-        1109
+        1113
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: errText = await response.text();"
     },
@@ -129,7 +129,7 @@
       "file": "core/background.js",
       "category": "guard-clause",
       "lines": [
-        921
+        925
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: for (var k in (all || {})) { if (k.indexOf(AI_CM_FIRED_SESSION_PREFIX) ="
     },
@@ -142,13 +142,13 @@
         82,
         84,
         87,
-        324,
-        374,
-        461,
-        478,
-        662,
-        736,
-        738
+        328,
+        378,
+        465,
+        482,
+        666,
+        740,
+        742
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: void chrome.runtime.lastError;"
     },
@@ -929,8 +929,8 @@
       "file": "core/gemini-intercept.js",
       "category": "debug-instrumentation",
       "lines": [
-        638,
-        647
+        155,
+        957
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: debugLog('log', '[gemini-files] ' + String(tag || '') + ' ' + JSON.strin"
     },
@@ -938,8 +938,8 @@
       "file": "core/gemini-intercept.js",
       "category": "event-guard",
       "lines": [
-        163,
-        838
+        64,
+        342
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
     },
@@ -947,8 +947,8 @@
       "file": "core/gemini-intercept.js",
       "category": "guard-clause",
       "lines": [
-        687,
-        753
+        191,
+        257
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -956,7 +956,7 @@
       "file": "core/gemini-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        1147
+        1159
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: setTimeout(function () { maybeStartLoader(); }, 1000);"
     },

@@ -156,7 +156,7 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
     expect(api.extractTurnTs([[], ['c_x'], [], [], [123]])).toBe(0);
   });
 
-  test('R-D №3: форвардеры ядра стоят в тех же точках подстановки (116/175/209/277/278)', () => {
+  test('R-D №3: форвардеры ядра стоят в тех же точках подстановки (529/571/593/651/652)', () => {
     Object.keys(FORWARDER_DEF).forEach((n) => {
       expect(CORE).toContain(FORWARDER_DEF[n]);
     });
@@ -168,9 +168,12 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
     // Phase 3, шаг 6b: -38 — из ядра удалены 13 мёртвых алиасов (объявления,
     // присваивания и заглушки в ветках else) выше этих якорей, поэтому все три
     // точки ушли вверх.
-    expect(linesOf(CORE, 'ingest: aiCmIngestFwd,')).toEqual([116, 209, 278]);
-    expect(linesOf(CORE, 'handleOuter: aiCmHandleOuterFwd,')).toEqual([175]);
-    expect(linesOf(CORE, 'emitBaseSnapshot: aiCmEmitBaseSnapshotFwd,')).toEqual([277]);
+    // Phase 3, шаг 14: все 15 связок __bind собраны в единую секцию перед
+    // installNetworkHooks() — якоря rpc/sse/pagination уехали вниз и стоят подряд
+    // (529/593/652). Пересчитаны по факту: сама проводка форвардеров не менялась.
+    expect(linesOf(CORE, 'ingest: aiCmIngestFwd,')).toEqual([529, 593, 652]);
+    expect(linesOf(CORE, 'handleOuter: aiCmHandleOuterFwd,')).toEqual([571]);
+    expect(linesOf(CORE, 'emitBaseSnapshot: aiCmEmitBaseSnapshotFwd,')).toEqual([651]);
 
     // алиасы ядра заполняются из модуля сразу после __bind — форвардер обязан быть
     // подставлен ДО того, как ранние блоки начнут звать ingest (иначе null-вызов)
@@ -269,9 +272,9 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
 });
 
 describe('Phase 3 шаг 12: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v17, gemini-files перед ingest, -v13 снят', () => {
+  test('S1: регистрация в core/background.js — id -v18, gemini-files перед ingest, -v13 снят', () => {
     const bg = readFile('core/background.js');
-    expect(bg).toContain("'ai-cm-gemini-intercept-v17'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v18'");
     expect(bg).toContain("'core/gemini-ingest.js'");
     // js[] собран ровно в этом порядке: sse → pagination → loader-scroll → files → ingest → ядро
     expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-active-refresh.js', 'core/gemini-state.js', 'core/gemini-intercept.js'");
@@ -280,7 +283,8 @@ describe('Phase 3 шаг 12: S-пины проводки модуля', () => {
     expect(bg.indexOf("'core/gemini-loader-scroll.js'")).toBeLessThan(bg.indexOf("'core/gemini-ingest.js'"));
     expect(bg.indexOf("'core/gemini-ingest.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
     // MV3 не перечитывает js[] под существующим id — прежний id обязан быть снят
-    expect(bg).toContain("'ai-cm-gemini-intercept-v11', 'ai-cm-gemini-intercept-v12', 'ai-cm-gemini-intercept-v13', 'ai-cm-gemini-intercept-v14', 'ai-cm-gemini-intercept-v15', 'ai-cm-gemini-intercept-v16']");
+    // Phase 3, шаг 14: бамп -v17 → -v18, поэтому в unregister добавлен -v17.
+    expect(bg).toContain("'ai-cm-gemini-intercept-v11', 'ai-cm-gemini-intercept-v12', 'ai-cm-gemini-intercept-v13', 'ai-cm-gemini-intercept-v14', 'ai-cm-gemini-intercept-v15', 'ai-cm-gemini-intercept-v16', 'ai-cm-gemini-intercept-v17']");
   });
 
   test('S2: bind-контракт полон — 72 имени переданы ядром и все 72 используются модулем', () => {

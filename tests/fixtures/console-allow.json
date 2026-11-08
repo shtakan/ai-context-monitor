@@ -30,7 +30,7 @@
       "file": "core/background.js",
       "category": "a-class-critical",
       "lines": [
-        490
+        494
       ],
       "reason": "A-class: registerContentScripts failure is critical; not migrated"
     },

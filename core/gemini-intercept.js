@@ -12,42 +12,9 @@
   }
   with (aiCmGeminiState) {
 
-
   var aiCmHiddenScroll = (typeof window !== 'undefined' && window.AiCmGeminiHiddenScroll) || null;
   var findScrollContainer = null;
   var scheduleAutoScroll = null;
-  if (aiCmHiddenScroll) {
-    aiCmHiddenScroll.__bind({
-      // Функции ядра (декларации хойстятся — значения доступны на момент bind).
-      getConvId: getConvId,
-      loadFloor: loadFloor,
-      sleep: sleep,
-      baseSize: baseSize,
-      aiCmSetScrollOverlay: aiCmSetScrollOverlay,
-      // Живое состояние ядра: геттеры/сеттеры, чтобы чтение и запись модуля
-      // видели ОДНИ И ТЕ ЖЕ переменные IIFE (не копии значений).
-      get autoScrollStarted() { return autoScrollStarted; }, set autoScrollStarted(v) { autoScrollStarted = v; },
-      get autoScrollBlocked() { return autoScrollBlocked; }, set autoScrollBlocked(v) { autoScrollBlocked = v; },
-      get conversationOpenedAt() { return conversationOpenedAt; }, set conversationOpenedAt(v) { conversationOpenedAt = v; },
-      get DOM_READY_MAX_WAIT() { return DOM_READY_MAX_WAIT; },
-      get MIN_HISTORY_ELEMENTS() { return MIN_HISTORY_ELEMENTS; },
-      get pendingCursor() { return pendingCursor; }, set pendingCursor(v) { pendingCursor = v; },
-      get quietActive() { return quietActive; }, set quietActive(v) { quietActive = v; },
-      get parserVersion() { return parserVersion; }, set parserVersion(v) { parserVersion = v; },
-      get cacheRestoredMap() { return cacheRestoredMap; },
-      // v86 (ro): состояние полноты базы для гейта подавления оверлея автоскролла.
-      // Только чтение — модуль их не пишет, источник правды остаётся в ядре.
-      get historyFullByQuiet() { return historyFullByQuiet; },
-      get reachedStart() { return reachedStart; },
-    });
-    findScrollContainer = aiCmHiddenScroll.findScrollContainer;
-    scheduleAutoScroll = aiCmHiddenScroll.scheduleAutoScroll;
-  } else {
-    debugLog('log', '[gemini-intercept] core/gemini-hidden-scroll.js не подключён — ' +
-      'скрытый скролл и автостарт лоадера недоступны (проверьте регистрацию content script)');
-    findScrollContainer = function () { return null; };
-    scheduleAutoScroll = function () { };
-  }
   // ===== v2.0 (Phase 3 step 1): кластер диагностики вынесен в core/gemini-diag.js =====
   // Модуль подключён в core/background.js ПЕРЕД этим файлом и отдаёт свой API на window.
   // Уехали ТОЛЬКО диагностические функции (DIAG_TOKENS-сканер и логи холодного старта):
@@ -61,30 +28,6 @@
   var diagScanResponse = null;
   var aiCmEnsureColdWindow = null;
   var aiCmColdStartIngestLog = null;
-  if (aiCmGeminiDiag) {
-    aiCmGeminiDiag.__bind({
-      // Функции ядра (декларации хойстятся — значения доступны на момент bind).
-      getConvId: getConvId,
-      aiCmOrderedTurns: aiCmOrderedTurns,
-      aiCmDiagTurnEdge: aiCmDiagTurnEdge,
-      // Живое состояние ядра: геттеры/сеттеры, чтобы чтение и запись модуля
-      // видели ОДНИ И ТЕ ЖЕ переменные IIFE (не копии значений).
-      get convEpoch() { return convEpoch; },
-    });
-    diagCanScan = aiCmGeminiDiag.diagCanScan;
-    diagIsStream = aiCmGeminiDiag.diagIsStream;
-    diagScanResponse = aiCmGeminiDiag.diagScanResponse;
-    aiCmEnsureColdWindow = aiCmGeminiDiag.aiCmEnsureColdWindow;
-    aiCmColdStartIngestLog = aiCmGeminiDiag.aiCmColdStartIngestLog;
-  } else {
-    debugLog('log', '[gemini-intercept] core/gemini-diag.js не подключён — ' +
-      'диагностика токенов и логи холодного старта недоступны (проверьте регистрацию content script)');
-    diagCanScan = function () { return false; };
-    diagIsStream = function () { return false; };
-    diagScanResponse = function () { };
-    aiCmEnsureColdWindow = function () { };
-    aiCmColdStartIngestLog = function () { };
-  }
   // ===== v2.0 (Phase 3 step 5): кластер RPC вынесен в core/gemini-rpc.js =====
   // Модуль подключён в core/background.js ПЕРЕД этим файлом и отдаёт свой API на window.
   // Уехали ДВЕ группы, объединённые темой RPC: (A) опознание ingest/stream-запросов
@@ -109,48 +52,6 @@
   var buildActiveBodyWith = null;
   var buildActiveBody = null;
   var buildActiveUrl = null;
-  if (aiCmGeminiRpc) {
-    aiCmGeminiRpc.__bind({
-      // Функции ядра (декларации хойстятся — значения доступны на момент bind).
-      getConvId: getConvId,
-      ingest: aiCmIngestFwd,
-      // Живое состояние ядра: геттеры/сеттеры, чтобы чтение и запись модуля
-      // видели ОДНИ И ТЕ ЖЕ переменные IIFE (не копии значений).
-      get activeSeq() { return activeSeq; }, set activeSeq(v) { activeSeq = v; },
-      get lastAtEncoded() { return lastAtEncoded; }, set lastAtEncoded(v) { lastAtEncoded = v; },
-      get lastBaseUrl() { return lastBaseUrl; }, set lastBaseUrl(v) { lastBaseUrl = v; },
-      get lastHeaders() { return lastHeaders; }, set lastHeaders(v) { lastHeaders = v; },
-      get lastReqId() { return lastReqId; }, set lastReqId(v) { lastReqId = v; },
-    });
-    isHistoryRpc = aiCmGeminiRpc.isHistoryRpc;
-    isIngestRpc = aiCmGeminiRpc.isIngestRpc;
-    streamRpcidOf = aiCmGeminiRpc.streamRpcidOf;
-    isStreamIngestRpc = aiCmGeminiRpc.isStreamIngestRpc;
-    provisionalStreamIngest = aiCmGeminiRpc.provisionalStreamIngest;
-    captureHeadersFromInit = aiCmGeminiRpc.captureHeadersFromInit;
-    convIdFromBody = aiCmGeminiRpc.convIdFromBody;
-    shadowCursorFromRest = aiCmGeminiRpc.shadowCursorFromRest;
-    rememberSiteMeta = aiCmGeminiRpc.rememberSiteMeta;
-    buildActiveBodyWith = aiCmGeminiRpc.buildActiveBodyWith;
-    buildActiveBody = aiCmGeminiRpc.buildActiveBody;
-    buildActiveUrl = aiCmGeminiRpc.buildActiveUrl;
-  } else {
-    debugLog('log', '[gemini-intercept] core/gemini-rpc.js не подключён — ' +
-      'опознание RPC и метаданные запроса недоступны (проверьте регистрацию content script)');
-    isHistoryRpc = function () { return false; };
-    isIngestRpc = function () { return false; };
-    streamRpcidOf = function () { return ''; };
-    isStreamIngestRpc = function () { return false; };
-    provisionalStreamIngest = function () { return 0; };
-    captureHeadersFromInit = function () { return {}; };
-    convIdFromBody = function () { return ''; };
-    shadowCursorFromRest = function () { return null; };
-    rememberSiteMeta = function () { };
-    captureModelSlugFromBody = function () { return ''; };
-    buildActiveBodyWith = function () { return ''; };
-    buildActiveBody = function () { return ''; };
-    buildActiveUrl = function () { return ''; };
-  }
   // v2.0.20: слаг модели из тела сети → content.js. Этот файл исполняется в MAIN world
   // (core/background.js: world:'MAIN'), а detectedModelSlug — переменная ИЗОЛИРОВАННОГО мира
   // (core/state.js:87, пишется core/content.js:686 и core/widget.js:192): напрямую из MAIN world
@@ -169,27 +70,6 @@
   var parseByBytes = null;
   var parseByLines = null;
   var parseBatchExecute = null;
-  if (aiCmGeminiParse) {
-    aiCmGeminiParse.__bind({
-      // handleOuter — функция ядра (декларация хойстится: значение доступно на момент bind).
-      handleOuter: aiCmHandleOuterFwd,
-      // lastFrameParseFail — читает ingest (O-48) и диагностика: сеттер обязателен.
-      get lastFrameParseFail() { return lastFrameParseFail; }, set lastFrameParseFail(v) { lastFrameParseFail = v; },
-      get historyFullByQuiet() { return historyFullByQuiet; }, set historyFullByQuiet(v) { historyFullByQuiet = v; },
-      get reachedStart() { return reachedStart; }, set reachedStart(v) { reachedStart = v; },
-      get quietDecisionMade() { return quietDecisionMade; }, set quietDecisionMade(v) { quietDecisionMade = v; },
-      get quietIncompleteNoStart() { return quietIncompleteNoStart; }, set quietIncompleteNoStart(v) { quietIncompleteNoStart = v; },
-    });
-    parseByBytes = aiCmGeminiParse.parseByBytes;
-    parseByLines = aiCmGeminiParse.parseByLines;
-    parseBatchExecute = aiCmGeminiParse.parseBatchExecute;
-  } else {
-    debugLog('log', '[gemini-intercept] core/gemini-parse.js не подключён — ' +
-      'парсинг кадров batchexecute недоступен (проверьте регистрацию content script)');
-    parseByBytes = function () { };
-    parseByLines = function () { };
-    parseBatchExecute = function () { return []; };
-  }
 
   // ===== v2.0 (Phase 3 step 9): SSE-кластер (перехват сети) вынесен в core/gemini-sse.js =====
   // Модуль подключён в core/background.js ПЕРЕД этим файлом и отдаёт свой API на window.
@@ -203,45 +83,6 @@
   // оригиналом. Алиас installNetworkHooks сохраняет прежнее МЕСТО установки врапперов.
   var aiCmGeminiSse = (typeof window !== 'undefined' && window.AiCmGeminiSse) || null;
   var installNetworkHooks = null;
-  if (aiCmGeminiSse) {
-    aiCmGeminiSse.__bind({
-      // Функции ядра (декларации хойстятся — значения доступны на момент bind).
-      ingest: aiCmIngestFwd,
-      getConvId: getConvId,
-      // Алиасы соседних модулей (rpc/diag): к этому моменту уже назначены выше.
-      isHistoryRpc: isHistoryRpc,
-      isIngestRpc: isIngestRpc,
-      convIdFromBody: convIdFromBody,
-      captureHeadersFromInit: captureHeadersFromInit,
-      rememberSiteMeta: rememberSiteMeta,
-      captureModelSlugFromBody: captureModelSlugFromBody,
-      isStreamIngestRpc: isStreamIngestRpc,
-      streamRpcidOf: streamRpcidOf,
-      provisionalStreamIngest: provisionalStreamIngest,
-      diagCanScan: diagCanScan,
-      diagIsStream: diagIsStream,
-      diagScanResponse: diagScanResponse,
-      // Оригиналы сети, снятые ядром в начале его IIFE: модуль патчит ими прототипы.
-      originalFetch: originalFetch,
-      OriginalXHR: OriginalXHR,
-      originalXHROpen: originalXHROpen,
-      originalXHRSend: originalXHRSend,
-      originalSetHeader: originalSetHeader,
-      // Живое состояние ядра: геттеры/сеттеры, чтобы чтение и запись модуля
-      // видели ОДНИ И ТЕ ЖЕ переменные IIFE (не копии значений).
-      get currentConvId() { return currentConvId; },
-      get convEpoch() { return convEpoch; },
-      get autoScrollBlocked() { return autoScrollBlocked; }, set autoScrollBlocked(v) { autoScrollBlocked = v; },
-      get autoScrollUnblockTimer() { return autoScrollUnblockTimer; }, set autoScrollUnblockTimer(v) { autoScrollUnblockTimer = v; },
-      get diagScannedCount() { return diagScannedCount; }, set diagScannedCount(v) { diagScannedCount = v; },
-      get DIAG_MAX_SCANNED() { return DIAG_MAX_SCANNED; },
-    });
-    installNetworkHooks = aiCmGeminiSse.installNetworkHooks;
-  } else {
-    debugLog('log', '[gemini-intercept] core/gemini-sse.js не подключён — ' +
-      'перехват сети (fetch/XHR) недоступен, пассивные снимки не ингестятся (проверьте регистрацию content script)');
-    installNetworkHooks = function () { };
-  }
 
   var aiCmGeminiPagination = (typeof window !== 'undefined' && window.AiCmGeminiPagination) || null;
   var classifyOpaque = null;
@@ -253,105 +94,6 @@
   var refreshMinOrderTracking = null;
   var paginateLoop = null;
   var runCompletenessProbe = null;
-  if (aiCmGeminiPagination) {
-    aiCmGeminiPagination.__bind({
-      // Функции ядра.
-      originalFetch: originalFetch,
-      scheduleAutoScroll: scheduleAutoScroll,
-      shadowCursorFromRest: shadowCursorFromRest,
-      buildActiveBodyWith: buildActiveBodyWith,
-      buildActiveUrl: buildActiveUrl,
-      parseBatchExecute: parseBatchExecute,
-      loadFloor: loadFloor,
-      getConvId: getConvId,
-      captureReqTag: captureReqTag,
-      isStaleReqTag: isStaleReqTag,
-      baseSize: baseSize,
-      aiCmDiagHash6: aiCmDiagHash6,
-      aiCmDiagTurnEdge: aiCmDiagTurnEdge,
-      aiCmOrderedTurns: aiCmOrderedTurns,
-      aiCmSetScrollOverlay: aiCmSetScrollOverlay,
-      maybeStartLoader: aiCmMaybeStartLoaderFwd,
-      activeRefresh: activeRefresh,
-      aiCmArchiveTierApply: aiCmArchiveTierApply,
-      emitBaseSnapshot: aiCmEmitBaseSnapshotFwd,
-      ingest: aiCmIngestFwd,
-      // Живое состояние: геттеры/сеттеры.
-      get quietActive() { return quietActive; }, set quietActive(v) { quietActive = v; },
-      get historyFullByQuiet() { return historyFullByQuiet; }, set historyFullByQuiet(v) { historyFullByQuiet = v; },
-      get reachedStart() { return reachedStart; }, set reachedStart(v) { reachedStart = v; },
-      get reachedStartByScroll() { return reachedStartByScroll; }, set reachedStartByScroll(v) { reachedStartByScroll = v; },
-      get quietPaginated() { return quietPaginated; }, set quietPaginated(v) { quietPaginated = v; },
-      get quietDecisionMade() { return quietDecisionMade; }, set quietDecisionMade(v) { quietDecisionMade = v; },
-      get quietIncompleteNoStart() { return quietIncompleteNoStart; }, set quietIncompleteNoStart(v) { quietIncompleteNoStart = v; },
-      get lastCycleEndedHidden() { return lastCycleEndedHidden; }, set lastCycleEndedHidden(v) { lastCycleEndedHidden = v; },
-      get pendingCursor() { return pendingCursor; }, set pendingCursor(v) { pendingCursor = v; },
-      get lastHeadToken() { return lastHeadToken; }, set lastHeadToken(v) { lastHeadToken = v; },
-      get lastGoodWideCur() { return lastGoodWideCur; }, set lastGoodWideCur(v) { lastGoodWideCur = v; },
-      get lastGoodProbeMeta() { return lastGoodProbeMeta; }, set lastGoodProbeMeta(v) { lastGoodProbeMeta = v; },
-      get lastOlderNonPagAddAt() { return lastOlderNonPagAddAt; }, set lastOlderNonPagAddAt(v) { lastOlderNonPagAddAt = v; },
-      get minOrderSeen() { return minOrderSeen; }, set minOrderSeen(v) { minOrderSeen = v; },
-      get cursorEpoch() { return cursorEpoch; }, set cursorEpoch(v) { cursorEpoch = v; },
-      get olderHistorySeen() { return olderHistorySeen; }, set olderHistorySeen(v) { olderHistorySeen = v; },
-      get loggedMultiCursor() { return loggedMultiCursor; }, set loggedMultiCursor(v) { loggedMultiCursor = v; },
-      get lastPagStepBroken() { return lastPagStepBroken; }, set lastPagStepBroken(v) { lastPagStepBroken = v; },
-      get pagErrorRetries() { return pagErrorRetries; }, set pagErrorRetries(v) { pagErrorRetries = v; },
-      get quietErrStreak() { return quietErrStreak; }, set quietErrStreak(v) { quietErrStreak = v; },
-      get nativeEscalationFor() { return nativeEscalationFor; }, set nativeEscalationFor(v) { nativeEscalationFor = v; },
-      get quietEndedClean() { return quietEndedClean; }, set quietEndedClean(v) { quietEndedClean = v; },
-      get lastHeaders() { return lastHeaders; }, set lastHeaders(v) { lastHeaders = v; },
-      get lastAtEncoded() { return lastAtEncoded; }, set lastAtEncoded(v) { lastAtEncoded = v; },
-      get lastBaseUrl() { return lastBaseUrl; }, set lastBaseUrl(v) { lastBaseUrl = v; },
-      get aiCmRerunOverlayTimer() { return aiCmRerunOverlayTimer; }, set aiCmRerunOverlayTimer(v) { aiCmRerunOverlayTimer = v; },
-      // Только чтение: кластер не присваивает (ro) — сеттер не нужен.
-      get turnsMap() { return turnsMap; },
-      get lastBaseTextLen() { return lastBaseTextLen; },
-      get lastCursorSource() { return lastCursorSource; },
-      get serverFirstHash() { return serverFirstHash; },
-      get completenessWatchdogRetries() { return completenessWatchdogRetries; },
-      get watchdogFiredMap() { return watchdogFiredMap; },
-      get PAGINATE_CAP() { return PAGINATE_CAP; },
-      get PAGINATE_TIME_CAP_MS() { return PAGINATE_TIME_CAP_MS; },
-      get paginationRun() { return paginationRun; },
-      get lastPaginateOpaqueCandidates() { return lastPaginateOpaqueCandidates; },
-      get lastPaginateOuter() { return lastPaginateOuter; },
-      get lastAllStrings() { return lastAllStrings; },
-      get lastFailedSkeleton() { return lastFailedSkeleton; },
-      get lastHnvPageError() { return lastHnvPageError; },
-      get PAGINATE_ERROR_RETRY_CAP() { return PAGINATE_ERROR_RETRY_CAP; },
-      get PAGINATE_ERROR_BACKOFF_MS() { return PAGINATE_ERROR_BACKOFF_MS; },
-      get lastFrameParseFail() { return lastFrameParseFail; },
-      get nativeEscalationUsedMap() { return nativeEscalationUsedMap; },
-      get loaderDoneMap() { return loaderDoneMap; },
-      get loaderRunningFor() { return loaderRunningFor; },
-      get oracleIncompleteSeen() { return oracleIncompleteSeen; },
-      get parserVersion() { return parserVersion; },
-      get tapeWasUsedInThisColdStart() { return tapeWasUsedInThisColdStart; },
-      get loaderState() { return loaderState; },
-      get aiCmScrollOverlay() { return aiCmScrollOverlay; },
-    });
-    classifyOpaque = aiCmGeminiPagination.classifyOpaque;
-    edges8 = aiCmGeminiPagination.edges8;
-    walkOpaque = aiCmGeminiPagination.walkOpaque;
-    findCursors = aiCmGeminiPagination.findCursors;
-    extractCursor = aiCmGeminiPagination.extractCursor;
-    extractCursorWide = aiCmGeminiPagination.extractCursorWide;
-    refreshMinOrderTracking = aiCmGeminiPagination.refreshMinOrderTracking;
-    paginateLoop = aiCmGeminiPagination.paginateLoop;
-    runCompletenessProbe = aiCmGeminiPagination.runCompletenessProbe;
-  } else {
-    debugLog('log', '[gemini-intercept] core/pagination/pagination.js не подключён — ' +
-      'тихая пагинация и контроль полноты (probe/watchdog) недоступны (проверьте регистрацию content script)');
-    classifyOpaque = function () { return false; };
-    edges8 = function (s) { return String(s); };
-    walkOpaque = function () { };
-    findCursors = function (node, out) { if (out) out.length = 0; };
-    extractCursor = function () { return null; };
-    extractCursorWide = function () { return null; };
-    refreshMinOrderTracking = function () { };
-    paginateLoop = function () { };
-    runCompletenessProbe = function () { };
-  }
 
   // ===== v2.0 (Phase 3 step 11): кластер лоадера подключён из core/gemini-loader-scroll.js =====
   // Модуль идёт в js[] core/background.js ПОСЛЕ core/pagination/pagination.js и ПЕРЕД этим
@@ -371,92 +113,6 @@
   var aiCmGeminiLoaderScroll = (typeof window !== 'undefined' && window.AiCmGeminiLoaderScroll) || null;
   var maybeStartLoader = null;
   function aiCmMaybeStartLoaderFwd() { return maybeStartLoader ? maybeStartLoader() : undefined; }
-  if (aiCmGeminiLoaderScroll) {
-    aiCmGeminiLoaderScroll.__bind({
-      // Функции ядра.
-      aiCmArchiveFor: aiCmArchiveFor,
-      aiCmArchiveLiveProven: aiCmArchiveLiveProven,
-      aiCmDiagTurnEdge: aiCmDiagTurnEdge,
-      aiCmLiveTurnCount: aiCmLiveTurnCount,
-      aiCmOrderedTurns: aiCmOrderedTurns,
-      aiCmSetScrollOverlay: aiCmSetScrollOverlay,
-      baseSize: baseSize,
-      extractCursorWide: extractCursorWide,
-      findScrollContainer: findScrollContainer,
-      getConvId: getConvId,
-      loadFloor: loadFloor,
-      notifyLoaderState: notifyLoaderState,
-      paginateLoop: paginateLoop,
-      runCompletenessProbe: runCompletenessProbe,
-      saveFloor: saveFloor,
-      selfHealFloor: selfHealFloor,
-      sleep: sleep,
-      // Живое состояние: геттеры/сеттеры.
-      get aiCmOverlaySeq() { return aiCmOverlaySeq; },
-      set aiCmOverlaySeq(v) { aiCmOverlaySeq = v; },
-      get aiCmScrollOverlay() { return aiCmScrollOverlay; },
-      set aiCmScrollOverlay(v) { aiCmScrollOverlay = v; },
-      get collapseRetries() { return collapseRetries; },
-      set collapseRetries(v) { collapseRetries = v; },
-      get historyFullByQuiet() { return historyFullByQuiet; },
-      set historyFullByQuiet(v) { historyFullByQuiet = v; },
-      get isLowConfidenceBase() { return isLowConfidenceBase; },
-      set isLowConfidenceBase(v) { isLowConfidenceBase = v; },
-      get lastCleanEndBaseCount() { return lastCleanEndBaseCount; },
-      set lastCleanEndBaseCount(v) { lastCleanEndBaseCount = v; },
-      get lastCycleEndedHidden() { return lastCycleEndedHidden; },
-      set lastCycleEndedHidden(v) { lastCycleEndedHidden = v; },
-      get lastLoaderDoneReason() { return lastLoaderDoneReason; },
-      set lastLoaderDoneReason(v) { lastLoaderDoneReason = v; },
-      get loaderRetryUsedMap() { return loaderRetryUsedMap; },
-      set loaderRetryUsedMap(v) { loaderRetryUsedMap = v; },
-      get loaderRunningFor() { return loaderRunningFor; },
-      set loaderRunningFor(v) { loaderRunningFor = v; },
-      get loaderState() { return loaderState; },
-      set loaderState(v) { loaderState = v; },
-      get pendingCursor() { return pendingCursor; },
-      set pendingCursor(v) { pendingCursor = v; },
-      get quietActive() { return quietActive; },
-      set quietActive(v) { quietActive = v; },
-      get quietDecisionMade() { return quietDecisionMade; },
-      set quietDecisionMade(v) { quietDecisionMade = v; },
-      get quietIncompleteNoStart() { return quietIncompleteNoStart; },
-      set quietIncompleteNoStart(v) { quietIncompleteNoStart = v; },
-      get reachedStart() { return reachedStart; },
-      set reachedStart(v) { reachedStart = v; },
-      get vf5OverlapSinceLoaderStart() { return vf5OverlapSinceLoaderStart; },
-      set vf5OverlapSinceLoaderStart(v) { vf5OverlapSinceLoaderStart = v; },
-      // Только чтение: кластер эти имена не присваивает (ro) — сеттер не нужен.
-      get cacheRestoredMap() { return cacheRestoredMap; },
-      get cursorEpoch() { return cursorEpoch; },
-      get lastAtEncoded() { return lastAtEncoded; },
-      get lastBaseCountChangeAt() { return lastBaseCountChangeAt; },
-      get lastBaseTextLen() { return lastBaseTextLen; },
-      get lastBaseUrl() { return lastBaseUrl; },
-      get lastGoodProbeMeta() { return lastGoodProbeMeta; },
-      get lastGoodWideCur() { return lastGoodWideCur; },
-      get lastHeaders() { return lastHeaders; },
-      get lastHnvPageError() { return lastHnvPageError; },
-      get lastOlderNonPagAddAt() { return lastOlderNonPagAddAt; },
-      get lastPaginateOuter() { return lastPaginateOuter; },
-      get loaderDoneMap() { return loaderDoneMap; },
-      get nativeEscalationFor() { return nativeEscalationFor; },
-      get olderHistorySeen() { return olderHistorySeen; },
-      get oracleIncompleteSeen() { return oracleIncompleteSeen; },
-      get oracleRerunUsedMap() { return oracleRerunUsedMap; },
-      get parserVersion() { return parserVersion; },
-      get quietEndedClean() { return quietEndedClean; },
-      get serverFirstHash() { return serverFirstHash; },
-      get tapeWasUsedInThisColdStart() { return tapeWasUsedInThisColdStart; },
-    });
-    maybeStartLoader = aiCmGeminiLoaderScroll.maybeStartLoader;
-  } else {
-    debugLog('log', '[gemini-intercept] core/gemini-loader-scroll.js не подключён — ' +
-      'скрытый доскролл полной истории и его автозапуск недоступны (проверьте регистрацию content script)');
-    maybeStartLoader = function () { };
-  }
-
-
 
   // ===== v2.0 (Phase 3 step 12): ingest-кластер подключён из core/gemini-ingest.js =====
   // Объявления кластера удалены из ядра; их место занял объект связи ниже.
@@ -491,162 +147,12 @@
   function aiCmIngestFwd(raw, opts) { return ingest ? ingest(raw, opts) : undefined; }
   function aiCmHandleOuterFwd(outer, out_, src) { return handleOuter ? handleOuter(outer, out_, src) : undefined; }
   function aiCmEmitBaseSnapshotFwd() { return emitBaseSnapshot ? emitBaseSnapshot() : undefined; }
-  if (aiCmGeminiIngest) {
-    aiCmGeminiIngest.__bind({
-      // Функции ядра (значением).
-      buildJsonSkeleton: aiCmPayload.buildJsonSkeleton,
-      getConvId: getConvId,
-      structureMap: aiCmPayload.structureMap,
-      collectAttachments: aiCmPayload.collectAttachments,
-      collectContent: aiCmPayload.collectContent,
-      activeRefresh: activeRefresh,
-      aiCmArchiveTierApply: aiCmArchiveTierApply,
-      sanitizeMessagesForEmit: sanitizeMessagesForEmit,
-      loadFloor: loadFloor,
-      saveFloor: saveFloor,
-      baseSize: baseSize,
-      aiCmDiagHash6: aiCmDiagHash6,
-      noteBaseCountChange: noteBaseCountChange,
-      // Поздние алиасы: var ... = null, дозаполнены блоками ранних модулей.
-      extractCursor: extractCursor,
-      classifyOpaque: classifyOpaque,
-      edges8: edges8,
-      walkOpaque: walkOpaque,
-      aiCmEnsureColdWindow: aiCmEnsureColdWindow,
-      parseBatchExecute: parseBatchExecute,
-      maybeStartLoader: maybeStartLoader,
-      refreshMinOrderTracking: refreshMinOrderTracking,
-      aiCmColdStartIngestLog: aiCmColdStartIngestLog,
-      paginateLoop: paginateLoop,
-      scheduleAutoScroll: scheduleAutoScroll,
-      // Живое состояние: геттеры/сеттеры.
-      get attachSeen() { return attachSeen; },
-      set attachSeen(v) { attachSeen = v; },
-      get attachBreak() { return attachBreak; },
-      set attachBreak(v) { attachBreak = v; },
-      get attachTokens() { return attachTokens; },
-      set attachTokens(v) { attachTokens = v; },
-      get lastHnvPageError() { return lastHnvPageError; },
-      set lastHnvPageError(v) { lastHnvPageError = v; },
-      get lastFailedSkeleton() { return lastFailedSkeleton; },
-      set lastFailedSkeleton(v) { lastFailedSkeleton = v; },
-      get loggedRontgen() { return loggedRontgen; },
-      set loggedRontgen(v) { loggedRontgen = v; },
-      get lastPaginateOuter() { return lastPaginateOuter; },
-      set lastPaginateOuter(v) { lastPaginateOuter = v; },
-      get pendingCursor() { return pendingCursor; },
-      set pendingCursor(v) { pendingCursor = v; },
-      get lastCursorSource() { return lastCursorSource; },
-      set lastCursorSource(v) { lastCursorSource = v; },
-      get cursorEpoch() { return cursorEpoch; },
-      set cursorEpoch(v) { cursorEpoch = v; },
-      get olderHistorySeen() { return olderHistorySeen; },
-      set olderHistorySeen(v) { olderHistorySeen = v; },
-      get historyFullByQuiet() { return historyFullByQuiet; },
-      set historyFullByQuiet(v) { historyFullByQuiet = v; },
-      get reachedStart() { return reachedStart; },
-      set reachedStart(v) { reachedStart = v; },
-      get quietIncompleteNoStart() { return quietIncompleteNoStart; },
-      set quietIncompleteNoStart(v) { quietIncompleteNoStart = v; },
-      get quietDecisionMade() { return quietDecisionMade; },
-      set quietDecisionMade(v) { quietDecisionMade = v; },
-      get lastPaginateOpaqueCandidates() { return lastPaginateOpaqueCandidates; },
-      set lastPaginateOpaqueCandidates(v) { lastPaginateOpaqueCandidates = v; },
-      get lastAllStrings() { return lastAllStrings; },
-      set lastAllStrings(v) { lastAllStrings = v; },
-      get loggedStructure() { return loggedStructure; },
-      set loggedStructure(v) { loggedStructure = v; },
-      get lastVf5ActivityAt() { return lastVf5ActivityAt; },
-      set lastVf5ActivityAt(v) { lastVf5ActivityAt = v; },
-      get lastActiveAt() { return lastActiveAt; },
-      set lastActiveAt(v) { lastActiveAt = v; },
-      get quietActive() { return quietActive; },
-      set quietActive(v) { quietActive = v; },
-      get turnsMap() { return turnsMap; },
-      set turnsMap(v) { turnsMap = v; },
-      get lastOrderedIds() { return lastOrderedIds; },
-      set lastOrderedIds(v) { lastOrderedIds = v; },
-      get lastBaseTextLen() { return lastBaseTextLen; },
-      set lastBaseTextLen(v) { lastBaseTextLen = v; },
-      get isLowConfidenceBase() { return isLowConfidenceBase; },
-      set isLowConfidenceBase(v) { isLowConfidenceBase = v; },
-      get loggedErr() { return loggedErr; },
-      set loggedErr(v) { loggedErr = v; },
-      get lastIngestParseFail() { return lastIngestParseFail; },
-      set lastIngestParseFail(v) { lastIngestParseFail = v; },
-      get vf5OverlapSinceLoaderStart() { return vf5OverlapSinceLoaderStart; },
-      set vf5OverlapSinceLoaderStart(v) { vf5OverlapSinceLoaderStart = v; },
-      get convEpoch() { return convEpoch; },
-      set convEpoch(v) { convEpoch = v; },
-      get tapeWasUsedInThisColdStart() { return tapeWasUsedInThisColdStart; },
-      set tapeWasUsedInThisColdStart(v) { tapeWasUsedInThisColdStart = v; },
-      get orderCounter() { return orderCounter; },
-      set orderCounter(v) { orderCounter = v; },
-      get prependCursor() { return prependCursor; },
-      set prependCursor(v) { prependCursor = v; },
-      get reachedStartByScroll() { return reachedStartByScroll; },
-      set reachedStartByScroll(v) { reachedStartByScroll = v; },
-      get serverFirstHash() { return serverFirstHash; },
-      set serverFirstHash(v) { serverFirstHash = v; },
-      get lastHeadToken() { return lastHeadToken; },
-      set lastHeadToken(v) { lastHeadToken = v; },
-      get lastGoodWideCur() { return lastGoodWideCur; },
-      set lastGoodWideCur(v) { lastGoodWideCur = v; },
-      get lastGoodProbeMeta() { return lastGoodProbeMeta; },
-      set lastGoodProbeMeta(v) { lastGoodProbeMeta = v; },
-      get quietPaginated() { return quietPaginated; },
-      set quietPaginated(v) { quietPaginated = v; },
-      get lastCycleEndedHidden() { return lastCycleEndedHidden; },
-      set lastCycleEndedHidden(v) { lastCycleEndedHidden = v; },
-      get loggedOk() { return loggedOk; },
-      set loggedOk(v) { loggedOk = v; },
-      get loggedAttach() { return loggedAttach; },
-      set loggedAttach(v) { loggedAttach = v; },
-      // Только чтение: кластер эти имена не присваивает — сеттер не нужен.
-      get idmapCalls() { return idmapCalls; },
-      get scrollRecentUntil() { return scrollRecentUntil; },
-      get loaderRunningFor() { return loaderRunningFor; },
-      get loaderDoneMap() { return loaderDoneMap; },
-      get lastFrameParseFail() { return lastFrameParseFail; },
-      get loaderRetryUsedMap() { return loaderRetryUsedMap; },
-      get parserVersion() { return parserVersion; },
-    });
-    ingest = aiCmGeminiIngest.ingest;
-    handleOuter = aiCmGeminiIngest.handleOuter;
-    emitBaseSnapshot = aiCmGeminiIngest.emitBaseSnapshot;
-    mergeRestoredTurns = aiCmGeminiIngest.mergeRestoredTurns;
-  } else {
-    debugLog('log', '[gemini-intercept] core/gemini-ingest.js не подключён — ' +
-      'приём снимков базы и выход снимка недоступны (проверьте регистрацию content script)');
-    ingest = function () { };
-    handleOuter = function () { };
-    emitBaseSnapshot = function () { };
-    mergeRestoredTurns = function () { };
-  }
   // v2.0 (Gemini files): модуль скачивания вложений. Биндим ПОСЛЕ ingest-кластера:
   // emitSnapshot — форвардер окончательного снимка (модуль зовёт его после текста
   // файла), originalFetch — нативный fetch MAIN-мира, getConvId — граница чата.
-  if (aiCmGeminiFiles && typeof aiCmGeminiFiles.__bind === 'function') {
-    try {
-      aiCmGeminiFiles.__bind({
-        emitSnapshot: aiCmEmitBaseSnapshotFwd,
-        getConvId: getConvId,
-        originalFetch: originalFetch,
-        diagLine: function (tag, fields) {
-          try {
-            debugLog('log', '[gemini-files] ' + String(tag || '') + ' ' + JSON.stringify(fields || {}));
-          } catch (eDiagGF) { }
-        }
-      });
-    } catch (eBindGF) {
-      debugLog('log', '[gemini-intercept] gemini-files __bind не удался: ' + (eBindGF && eBindGF.message || eBindGF));
-    }
-  }
   // v33: флаг «Подробные логи» транслируется из content.js (ISOLATED) через CustomEvent
   // (в MAIN-мире chrome.storage недоступен — как в остальных перехватчиках)
   try { window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDebugLogs(!!(ev && ev.detail)); }); } catch (e) { }
-
-
 
   // ===== v2.0 (Phase 3 step 5): тихая пагинация и головной курсор — в core/gemini-state.js =====
   // ===== v2.0 (Phase 3 step 5): retain-last-good, счётчик базы и floor-confirmed — в core/gemini-state.js =====
@@ -671,14 +177,12 @@
   function aiCmDiagTurnEdge(turns, which) { return aiCmGeminiOracle ? aiCmGeminiOracle.aiCmDiagTurnEdge(turns, which) : undefined; }
   function aiCmOrderedTurns() { return aiCmGeminiOracle ? aiCmGeminiOracle.aiCmOrderedTurns() : undefined; }
 
-
   // ===== v2.0 (Phase 3 step 13.3): ОРАКУЛ ПОЛНОТЫ (ВЫНЕСЕН В core/gemini-oracle.js) =====
   // Здесь была notifyLoaderState (v42/v53/v78) с вложенным stableCheck74: состояние
   // лоадера наружу по convId (событие ai-cm-loader-state), loader-stable-stop, ветка
   // O-48 parse-fail, clean-end-подтверждение и самоунижение устаревшего пола. Тело живёт
   // в core/gemini-oracle.js, вызов из checkConvChange идёт через форвардер выше.
   // Логика сюда НЕ возвращается: правки оракула — в модуле.
-
 
   try {
     if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser && window.GeminiBatchexecuteParser.PARSER_VERSION) {
@@ -853,31 +357,6 @@
   // + 1 ro-геттер (loaderDoneMap: тело только удаляет ключ). loaderBadgeTimer уехал вместе
   // с телом — объявления в ядре больше нет, теневой копии нет.
   var aiCmGeminiSpaLifecycle = (typeof window !== 'undefined' && window.AiCmGeminiSpaLifecycle) || null;
-  if (aiCmGeminiSpaLifecycle) {
-    aiCmGeminiSpaLifecycle.__bind({
-      // fn: функции ядра, которые зовут тела модуля — передаются значением (хойстятся или
-      // дозаполнены выше: maybeStartLoader — поздний алиас лоадера, его связка стоит выше).
-      activeRefresh: activeRefresh,
-      baseSize: baseSize,
-      forceRestoreVisibility: forceRestoreVisibility,
-      getConvId: getConvId,
-      maybeStartLoader: maybeStartLoader,
-      notifyLoaderState: notifyLoaderState,
-      resetForNewConversation: resetForNewConversation,
-      // ro: тело только удаляет ключ — мутация по ссылке видна ядру, сеттер не нужен.
-      get loaderDoneMap() { return loaderDoneMap; },
-      // rw: живое состояние, которое тела ПЕРЕЗАПИСЫВАЮТ (get + set).
-      get currentConvId() { return currentConvId; },
-      set currentConvId(v) { currentConvId = v; },
-      get loaderRunningFor() { return loaderRunningFor; },
-      set loaderRunningFor(v) { loaderRunningFor = v; },
-      get scrollRecentUntil() { return scrollRecentUntil; },
-      set scrollRecentUntil(v) { scrollRecentUntil = v; }
-    });
-  } else {
-    debugLog('log', '[gemini-intercept] core/gemini-spa-lifecycle.js не подключён — ' +
-      'SPA-смена чата не сбрасывает состояние и не перезапускает лоадер (проверьте регистрацию content script)');
-  }
 
   function baseSize() { return Object.keys(turnsMap).length; }
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
@@ -887,15 +366,6 @@
   // и регистрация window.__aiCmGeminiTurnsSnapshot. Отпечатки питают H9-гейт полноты
   // (serverFirstHash / dbFirstHash), поэтому живут в модуле, а не в диагностике; снимок
   // забирает объединённую базу через aiCmBaseExportInfo. Логика сюда НЕ возвращается.
-
-
-
-
-
-
-
-
-
 
   var aiCmGeminiOverlay = (typeof window !== 'undefined' && window.AiCmGeminiOverlay) || null;
 
@@ -910,21 +380,6 @@
     return aiCmGeminiOverlay ? aiCmGeminiOverlay.forceRestoreVisibility(reason) : undefined;
   }
 
-  if (aiCmGeminiOverlay) {
-    aiCmGeminiOverlay.__bind({
-      // Функции ядра (декларации хойстятся — значения доступны на момент bind).
-      getConvId: getConvId,
-      // Живое состояние ядра: геттеры/сеттеры, чтобы чтение и запись модуля
-      // видели ОДНИ И ТЕ ЖЕ переменные IIFE (не копии значений).
-      get aiCmScrollOverlay() { return aiCmScrollOverlay; },
-      set aiCmScrollOverlay(v) { aiCmScrollOverlay = v; },
-      get aiCmOverlaySeq() { return aiCmOverlaySeq; },
-      set aiCmOverlaySeq(v) { aiCmOverlaySeq = v; }
-    });
-  } else {
-    debugLog('log', '[gemini-intercept] core/gemini-overlay.js не подключён — оверлей загрузки истории недоступен');
-  }
-
   var aiCmGeminiActiveRefresh = (typeof window !== 'undefined' && window.AiCmGeminiActiveRefresh) || null;
 
   // Форвардеры — ИМЕННО function declaration: объявления хойстятся, поэтому чужие
@@ -936,41 +391,10 @@
     return aiCmGeminiActiveRefresh ? aiCmGeminiActiveRefresh.sanitizeMessagesForEmit(messages) : messages;
   }
 
-  if (aiCmGeminiActiveRefresh) {
-    aiCmGeminiActiveRefresh.__bind({
-      // fn (8): функции и значения ядра — декларации хойстятся.
-      getConvId: getConvId,
-      captureReqTag: captureReqTag,
-      isStaleReqTag: isStaleReqTag,
-      buildActiveUrl: buildActiveUrl,
-      buildActiveBody: buildActiveBody,
-      originalFetch: originalFetch,
-      aiCmIngestFwd: aiCmIngestFwd,
-      debugLog: debugLog,
-      // rw (3): живое состояние — get + set, иначе запись модуля молча теряется.
-      get activeDisabled() { return activeDisabled; },
-      set activeDisabled(v) { activeDisabled = v; },
-      get activeBusy() { return activeBusy; },
-      set activeBusy(v) { activeBusy = v; },
-      get loggedActiveStatus() { return loggedActiveStatus; },
-      set loggedActiveStatus(v) { loggedActiveStatus = v; },
-      // ro (3): захват сайтметы переприсваивает эти имена — сеттера нет.
-      get lastAtEncoded() { return lastAtEncoded; },
-      get lastBaseUrl() { return lastBaseUrl; },
-      get lastHeaders() { return lastHeaders; }
-    });
-  } else {
-    // Модуль не подключён (старый registration под прежним id: MV3 не перечитывает js[]).
-    // Деградация мягкая: дозапрос отложен навсегда (пассив+DOM), эмит без дедупа.
-    debugLog('log', '[gemini-intercept] core/gemini-active-refresh.js не подключён — активный vf5-дозапрос недоступен');
-  }
-
   // v40: обёртка над чистой логикой shouldPollVf5 (utils/gemini-intercept-logic.js).
   // Не планировать следующий vf5, когда история полная (baseComplete) и тихая пагинация
   // дошла до начала (reachedStart), а активности не было последние 60с.
   // ===== v2.0 (Phase 3 step 12): shouldPollVf5 перенесено в core/gemini-ingest.js =====
-
-
 
   // ================= единый эмит снимка базы =================
   // ===== v2.0 (Phase 3 step 13.2): АРХИВ (ВЫНЕСЕН В core/gemini-archive.js) =====
@@ -1001,6 +425,612 @@
   function aiCmLiveTurnCount(arch) { return aiCmGeminiArchive ? aiCmGeminiArchive.aiCmLiveTurnCount(arch) : baseSize(); }
   function aiCmArchiveTierApply() { return aiCmGeminiArchive ? aiCmGeminiArchive.aiCmArchiveTierApply() : undefined; }
   function aiCmBaseExportInfo() { return aiCmGeminiArchive ? aiCmGeminiArchive.aiCmBaseExportInfo() : null; }
+
+  // ===== v2.0 (Phase 3 step 13.3): ОРАКУЛ ПОЛНОТЫ (ВЫНЕСЕН В core/gemini-oracle.js) =====
+  // Тела оракула — stableFloorConfirm/noteBaseCountChange (floor-confirmed + debounce),
+  // notifyLoaderState со вложенным stableCheck74 (loader-stable-stop, O-48 parse-fail,
+  // clean-end, самоунижение пола), отпечатки aiCmDiagHash6/aiCmDiagTurnEdge/aiCmOrderedTurns
+  // и мост ai-cm-turns-snap-request — живут в модуле, подключение ниже.
+  // Состав объекта связи — tools/oracle-bind-contract.js: 10 функций значением, 10 имён
+  // с геттером и сеттером (оракул переприсваивает вердикты полноты и таймер debounce),
+  // 12 только на чтение (в том числе lastHnvPageError и lastBaseTextLen: их typeof-гарды
+  // в stableCheck74 обязаны видеть живое значение, иначе pageError/provenLen деградируют).
+  // Форвардеры и var aiCmGeminiOracle объявлены ВЫШЕ (строка ~866) — до первого вызова
+  // notifyLoaderState из checkConvChange, поэтому здесь остаётся только связка.
+  // Блок стоит НИЖЕ строки 782 намеренно: emitBaseSnapshot — ПОЗДНИЙ алиас
+  // (`var ... = null`), его дозаполняет блок ingest (770-771); выше в модуль уехал бы null.
+
+  // v52: stream-alias — при поступлении снапшота (passive/vf5) стримовские записи с временным
+  // rc_*-id (pageMode='stream') замещаются снапшотными r_*-id того же turnId+role (FIFO по order).
+  // ===== v2.0 (Phase 3 step 12): applyStreamAliases перенесено в core/gemini-ingest.js =====
+
+  // ===========================================================================================
+  // Phase 3, шаг 14: ЕДИНАЯ ТОЧКА СВЯЗКИ (единственный исполняемый bind-блок ядра).
+  // Здесь собраны все 15 связок «ядро → вынесенный модуль», которые раньше были разбросаны
+  // по файлу между объявлениями состояния и читались только сверху вниз. Контракт порядка
+  // задан в ОДНОМ месте — порядком вызовов внутри секции:
+  //   hidden-scroll → diag → rpc → parse → sse → pagination → loader-scroll → ingest →
+  //   files → spa-lifecycle → overlay → active-refresh → archive → oracle → diag-dump.
+  // Порядок не косметический: связки передают не только функции (объявления хойстятся), но и
+  // ПОЗДНИЕ АЛИАСЫ — `var ... = null`, которые заполняются связками выше по секции:
+  //   findScrollContainer, scheduleAutoScroll, isHistoryRpc…buildActiveUrl, parseBatchExecute,
+  //   classifyOpaque…runCompletenessProbe, maybeStartLoader, extractCursorWide, paginateLoop,
+  //   emitBaseSnapshot, refreshMinOrderTracking, aiCmArchiveFor…aiCmBaseExportInfo.
+  // Циклы держат форвардеры-декларации выше по файлу (aiCmIngestFwd, aiCmHandleOuterFwd,
+  // aiCmEmitBaseSnapshotFwd, aiCmMaybeStartLoaderFwd, aiCmArchiveFor…): они проксируют в
+  // модуль уже после связки, поэтому null в модуль не уезжает.
+  // Ветки else НЕ удалены: мягкая деградация — часть контракта (старый registration под
+  // прежним id в MV3 не перечитывает js[] — ядро обязано жить без модуля), а тексты логов
+  // и форма заглушек закреплены тестами tests/adapters/gemini-*-module.test.js.
+  // ===========================================================================================
+
+  if (aiCmHiddenScroll) {
+    aiCmHiddenScroll.__bind({
+      // Функции ядра (декларации хойстятся — значения доступны на момент bind).
+      getConvId: getConvId,
+      loadFloor: loadFloor,
+      sleep: sleep,
+      baseSize: baseSize,
+      aiCmSetScrollOverlay: aiCmSetScrollOverlay,
+      // Живое состояние ядра: геттеры/сеттеры, чтобы чтение и запись модуля
+      // видели ОДНИ И ТЕ ЖЕ переменные IIFE (не копии значений).
+      get autoScrollStarted() { return autoScrollStarted; }, set autoScrollStarted(v) { autoScrollStarted = v; },
+      get autoScrollBlocked() { return autoScrollBlocked; }, set autoScrollBlocked(v) { autoScrollBlocked = v; },
+      get conversationOpenedAt() { return conversationOpenedAt; }, set conversationOpenedAt(v) { conversationOpenedAt = v; },
+      get DOM_READY_MAX_WAIT() { return DOM_READY_MAX_WAIT; },
+      get MIN_HISTORY_ELEMENTS() { return MIN_HISTORY_ELEMENTS; },
+      get pendingCursor() { return pendingCursor; }, set pendingCursor(v) { pendingCursor = v; },
+      get quietActive() { return quietActive; }, set quietActive(v) { quietActive = v; },
+      get parserVersion() { return parserVersion; }, set parserVersion(v) { parserVersion = v; },
+      get cacheRestoredMap() { return cacheRestoredMap; },
+      // v86 (ro): состояние полноты базы для гейта подавления оверлея автоскролла.
+      // Только чтение — модуль их не пишет, источник правды остаётся в ядре.
+      get historyFullByQuiet() { return historyFullByQuiet; },
+      get reachedStart() { return reachedStart; },
+    });
+    findScrollContainer = aiCmHiddenScroll.findScrollContainer;
+    scheduleAutoScroll = aiCmHiddenScroll.scheduleAutoScroll;
+  } else {
+    debugLog('log', '[gemini-intercept] core/gemini-hidden-scroll.js не подключён — ' +
+      'скрытый скролл и автостарт лоадера недоступны (проверьте регистрацию content script)');
+    findScrollContainer = function () { return null; };
+    scheduleAutoScroll = function () { };
+  }
+
+  if (aiCmGeminiDiag) {
+    aiCmGeminiDiag.__bind({
+      // Функции ядра (декларации хойстятся — значения доступны на момент bind).
+      getConvId: getConvId,
+      aiCmOrderedTurns: aiCmOrderedTurns,
+      aiCmDiagTurnEdge: aiCmDiagTurnEdge,
+      // Живое состояние ядра: геттеры/сеттеры, чтобы чтение и запись модуля
+      // видели ОДНИ И ТЕ ЖЕ переменные IIFE (не копии значений).
+      get convEpoch() { return convEpoch; },
+    });
+    diagCanScan = aiCmGeminiDiag.diagCanScan;
+    diagIsStream = aiCmGeminiDiag.diagIsStream;
+    diagScanResponse = aiCmGeminiDiag.diagScanResponse;
+    aiCmEnsureColdWindow = aiCmGeminiDiag.aiCmEnsureColdWindow;
+    aiCmColdStartIngestLog = aiCmGeminiDiag.aiCmColdStartIngestLog;
+  } else {
+    debugLog('log', '[gemini-intercept] core/gemini-diag.js не подключён — ' +
+      'диагностика токенов и логи холодного старта недоступны (проверьте регистрацию content script)');
+    diagCanScan = function () { return false; };
+    diagIsStream = function () { return false; };
+    diagScanResponse = function () { };
+    aiCmEnsureColdWindow = function () { };
+    aiCmColdStartIngestLog = function () { };
+  }
+
+  if (aiCmGeminiRpc) {
+    aiCmGeminiRpc.__bind({
+      // Функции ядра (декларации хойстятся — значения доступны на момент bind).
+      getConvId: getConvId,
+      ingest: aiCmIngestFwd,
+      // Живое состояние ядра: геттеры/сеттеры, чтобы чтение и запись модуля
+      // видели ОДНИ И ТЕ ЖЕ переменные IIFE (не копии значений).
+      get activeSeq() { return activeSeq; }, set activeSeq(v) { activeSeq = v; },
+      get lastAtEncoded() { return lastAtEncoded; }, set lastAtEncoded(v) { lastAtEncoded = v; },
+      get lastBaseUrl() { return lastBaseUrl; }, set lastBaseUrl(v) { lastBaseUrl = v; },
+      get lastHeaders() { return lastHeaders; }, set lastHeaders(v) { lastHeaders = v; },
+      get lastReqId() { return lastReqId; }, set lastReqId(v) { lastReqId = v; },
+    });
+    isHistoryRpc = aiCmGeminiRpc.isHistoryRpc;
+    isIngestRpc = aiCmGeminiRpc.isIngestRpc;
+    streamRpcidOf = aiCmGeminiRpc.streamRpcidOf;
+    isStreamIngestRpc = aiCmGeminiRpc.isStreamIngestRpc;
+    provisionalStreamIngest = aiCmGeminiRpc.provisionalStreamIngest;
+    captureHeadersFromInit = aiCmGeminiRpc.captureHeadersFromInit;
+    convIdFromBody = aiCmGeminiRpc.convIdFromBody;
+    shadowCursorFromRest = aiCmGeminiRpc.shadowCursorFromRest;
+    rememberSiteMeta = aiCmGeminiRpc.rememberSiteMeta;
+    buildActiveBodyWith = aiCmGeminiRpc.buildActiveBodyWith;
+    buildActiveBody = aiCmGeminiRpc.buildActiveBody;
+    buildActiveUrl = aiCmGeminiRpc.buildActiveUrl;
+  } else {
+    debugLog('log', '[gemini-intercept] core/gemini-rpc.js не подключён — ' +
+      'опознание RPC и метаданные запроса недоступны (проверьте регистрацию content script)');
+    isHistoryRpc = function () { return false; };
+    isIngestRpc = function () { return false; };
+    streamRpcidOf = function () { return ''; };
+    isStreamIngestRpc = function () { return false; };
+    provisionalStreamIngest = function () { return 0; };
+    captureHeadersFromInit = function () { return {}; };
+    convIdFromBody = function () { return ''; };
+    shadowCursorFromRest = function () { return null; };
+    rememberSiteMeta = function () { };
+    captureModelSlugFromBody = function () { return ''; };
+    buildActiveBodyWith = function () { return ''; };
+    buildActiveBody = function () { return ''; };
+    buildActiveUrl = function () { return ''; };
+  }
+
+  if (aiCmGeminiParse) {
+    aiCmGeminiParse.__bind({
+      // handleOuter — функция ядра (декларация хойстится: значение доступно на момент bind).
+      handleOuter: aiCmHandleOuterFwd,
+      // lastFrameParseFail — читает ingest (O-48) и диагностика: сеттер обязателен.
+      get lastFrameParseFail() { return lastFrameParseFail; }, set lastFrameParseFail(v) { lastFrameParseFail = v; },
+      get historyFullByQuiet() { return historyFullByQuiet; }, set historyFullByQuiet(v) { historyFullByQuiet = v; },
+      get reachedStart() { return reachedStart; }, set reachedStart(v) { reachedStart = v; },
+      get quietDecisionMade() { return quietDecisionMade; }, set quietDecisionMade(v) { quietDecisionMade = v; },
+      get quietIncompleteNoStart() { return quietIncompleteNoStart; }, set quietIncompleteNoStart(v) { quietIncompleteNoStart = v; },
+    });
+    parseByBytes = aiCmGeminiParse.parseByBytes;
+    parseByLines = aiCmGeminiParse.parseByLines;
+    parseBatchExecute = aiCmGeminiParse.parseBatchExecute;
+  } else {
+    debugLog('log', '[gemini-intercept] core/gemini-parse.js не подключён — ' +
+      'парсинг кадров batchexecute недоступен (проверьте регистрацию content script)');
+    parseByBytes = function () { };
+    parseByLines = function () { };
+    parseBatchExecute = function () { return []; };
+  }
+
+  if (aiCmGeminiSse) {
+    aiCmGeminiSse.__bind({
+      // Функции ядра (декларации хойстятся — значения доступны на момент bind).
+      ingest: aiCmIngestFwd,
+      getConvId: getConvId,
+      // Алиасы соседних модулей (rpc/diag): к этому моменту уже назначены выше.
+      isHistoryRpc: isHistoryRpc,
+      isIngestRpc: isIngestRpc,
+      convIdFromBody: convIdFromBody,
+      captureHeadersFromInit: captureHeadersFromInit,
+      rememberSiteMeta: rememberSiteMeta,
+      captureModelSlugFromBody: captureModelSlugFromBody,
+      isStreamIngestRpc: isStreamIngestRpc,
+      streamRpcidOf: streamRpcidOf,
+      provisionalStreamIngest: provisionalStreamIngest,
+      diagCanScan: diagCanScan,
+      diagIsStream: diagIsStream,
+      diagScanResponse: diagScanResponse,
+      // Оригиналы сети, снятые ядром в начале его IIFE: модуль патчит ими прототипы.
+      originalFetch: originalFetch,
+      OriginalXHR: OriginalXHR,
+      originalXHROpen: originalXHROpen,
+      originalXHRSend: originalXHRSend,
+      originalSetHeader: originalSetHeader,
+      // Живое состояние ядра: геттеры/сеттеры, чтобы чтение и запись модуля
+      // видели ОДНИ И ТЕ ЖЕ переменные IIFE (не копии значений).
+      get currentConvId() { return currentConvId; },
+      get convEpoch() { return convEpoch; },
+      get autoScrollBlocked() { return autoScrollBlocked; }, set autoScrollBlocked(v) { autoScrollBlocked = v; },
+      get autoScrollUnblockTimer() { return autoScrollUnblockTimer; }, set autoScrollUnblockTimer(v) { autoScrollUnblockTimer = v; },
+      get diagScannedCount() { return diagScannedCount; }, set diagScannedCount(v) { diagScannedCount = v; },
+      get DIAG_MAX_SCANNED() { return DIAG_MAX_SCANNED; },
+    });
+    installNetworkHooks = aiCmGeminiSse.installNetworkHooks;
+  } else {
+    debugLog('log', '[gemini-intercept] core/gemini-sse.js не подключён — ' +
+      'перехват сети (fetch/XHR) недоступен, пассивные снимки не ингестятся (проверьте регистрацию content script)');
+    installNetworkHooks = function () { };
+  }
+
+  if (aiCmGeminiPagination) {
+    aiCmGeminiPagination.__bind({
+      // Функции ядра.
+      originalFetch: originalFetch,
+      scheduleAutoScroll: scheduleAutoScroll,
+      shadowCursorFromRest: shadowCursorFromRest,
+      buildActiveBodyWith: buildActiveBodyWith,
+      buildActiveUrl: buildActiveUrl,
+      parseBatchExecute: parseBatchExecute,
+      loadFloor: loadFloor,
+      getConvId: getConvId,
+      captureReqTag: captureReqTag,
+      isStaleReqTag: isStaleReqTag,
+      baseSize: baseSize,
+      aiCmDiagHash6: aiCmDiagHash6,
+      aiCmDiagTurnEdge: aiCmDiagTurnEdge,
+      aiCmOrderedTurns: aiCmOrderedTurns,
+      aiCmSetScrollOverlay: aiCmSetScrollOverlay,
+      maybeStartLoader: aiCmMaybeStartLoaderFwd,
+      activeRefresh: activeRefresh,
+      aiCmArchiveTierApply: aiCmArchiveTierApply,
+      emitBaseSnapshot: aiCmEmitBaseSnapshotFwd,
+      ingest: aiCmIngestFwd,
+      // Живое состояние: геттеры/сеттеры.
+      get quietActive() { return quietActive; }, set quietActive(v) { quietActive = v; },
+      get historyFullByQuiet() { return historyFullByQuiet; }, set historyFullByQuiet(v) { historyFullByQuiet = v; },
+      get reachedStart() { return reachedStart; }, set reachedStart(v) { reachedStart = v; },
+      get reachedStartByScroll() { return reachedStartByScroll; }, set reachedStartByScroll(v) { reachedStartByScroll = v; },
+      get quietPaginated() { return quietPaginated; }, set quietPaginated(v) { quietPaginated = v; },
+      get quietDecisionMade() { return quietDecisionMade; }, set quietDecisionMade(v) { quietDecisionMade = v; },
+      get quietIncompleteNoStart() { return quietIncompleteNoStart; }, set quietIncompleteNoStart(v) { quietIncompleteNoStart = v; },
+      get lastCycleEndedHidden() { return lastCycleEndedHidden; }, set lastCycleEndedHidden(v) { lastCycleEndedHidden = v; },
+      get pendingCursor() { return pendingCursor; }, set pendingCursor(v) { pendingCursor = v; },
+      get lastHeadToken() { return lastHeadToken; }, set lastHeadToken(v) { lastHeadToken = v; },
+      get lastGoodWideCur() { return lastGoodWideCur; }, set lastGoodWideCur(v) { lastGoodWideCur = v; },
+      get lastGoodProbeMeta() { return lastGoodProbeMeta; }, set lastGoodProbeMeta(v) { lastGoodProbeMeta = v; },
+      get lastOlderNonPagAddAt() { return lastOlderNonPagAddAt; }, set lastOlderNonPagAddAt(v) { lastOlderNonPagAddAt = v; },
+      get minOrderSeen() { return minOrderSeen; }, set minOrderSeen(v) { minOrderSeen = v; },
+      get cursorEpoch() { return cursorEpoch; }, set cursorEpoch(v) { cursorEpoch = v; },
+      get olderHistorySeen() { return olderHistorySeen; }, set olderHistorySeen(v) { olderHistorySeen = v; },
+      get loggedMultiCursor() { return loggedMultiCursor; }, set loggedMultiCursor(v) { loggedMultiCursor = v; },
+      get lastPagStepBroken() { return lastPagStepBroken; }, set lastPagStepBroken(v) { lastPagStepBroken = v; },
+      get pagErrorRetries() { return pagErrorRetries; }, set pagErrorRetries(v) { pagErrorRetries = v; },
+      get quietErrStreak() { return quietErrStreak; }, set quietErrStreak(v) { quietErrStreak = v; },
+      get nativeEscalationFor() { return nativeEscalationFor; }, set nativeEscalationFor(v) { nativeEscalationFor = v; },
+      get quietEndedClean() { return quietEndedClean; }, set quietEndedClean(v) { quietEndedClean = v; },
+      get lastHeaders() { return lastHeaders; }, set lastHeaders(v) { lastHeaders = v; },
+      get lastAtEncoded() { return lastAtEncoded; }, set lastAtEncoded(v) { lastAtEncoded = v; },
+      get lastBaseUrl() { return lastBaseUrl; }, set lastBaseUrl(v) { lastBaseUrl = v; },
+      get aiCmRerunOverlayTimer() { return aiCmRerunOverlayTimer; }, set aiCmRerunOverlayTimer(v) { aiCmRerunOverlayTimer = v; },
+      // Только чтение: кластер не присваивает (ro) — сеттер не нужен.
+      get turnsMap() { return turnsMap; },
+      get lastBaseTextLen() { return lastBaseTextLen; },
+      get lastCursorSource() { return lastCursorSource; },
+      get serverFirstHash() { return serverFirstHash; },
+      get completenessWatchdogRetries() { return completenessWatchdogRetries; },
+      get watchdogFiredMap() { return watchdogFiredMap; },
+      get PAGINATE_CAP() { return PAGINATE_CAP; },
+      get PAGINATE_TIME_CAP_MS() { return PAGINATE_TIME_CAP_MS; },
+      get paginationRun() { return paginationRun; },
+      get lastPaginateOpaqueCandidates() { return lastPaginateOpaqueCandidates; },
+      get lastPaginateOuter() { return lastPaginateOuter; },
+      get lastAllStrings() { return lastAllStrings; },
+      get lastFailedSkeleton() { return lastFailedSkeleton; },
+      get lastHnvPageError() { return lastHnvPageError; },
+      get PAGINATE_ERROR_RETRY_CAP() { return PAGINATE_ERROR_RETRY_CAP; },
+      get PAGINATE_ERROR_BACKOFF_MS() { return PAGINATE_ERROR_BACKOFF_MS; },
+      get lastFrameParseFail() { return lastFrameParseFail; },
+      get nativeEscalationUsedMap() { return nativeEscalationUsedMap; },
+      get loaderDoneMap() { return loaderDoneMap; },
+      get loaderRunningFor() { return loaderRunningFor; },
+      get oracleIncompleteSeen() { return oracleIncompleteSeen; },
+      get parserVersion() { return parserVersion; },
+      get tapeWasUsedInThisColdStart() { return tapeWasUsedInThisColdStart; },
+      get loaderState() { return loaderState; },
+      get aiCmScrollOverlay() { return aiCmScrollOverlay; },
+    });
+    classifyOpaque = aiCmGeminiPagination.classifyOpaque;
+    edges8 = aiCmGeminiPagination.edges8;
+    walkOpaque = aiCmGeminiPagination.walkOpaque;
+    findCursors = aiCmGeminiPagination.findCursors;
+    extractCursor = aiCmGeminiPagination.extractCursor;
+    extractCursorWide = aiCmGeminiPagination.extractCursorWide;
+    refreshMinOrderTracking = aiCmGeminiPagination.refreshMinOrderTracking;
+    paginateLoop = aiCmGeminiPagination.paginateLoop;
+    runCompletenessProbe = aiCmGeminiPagination.runCompletenessProbe;
+  } else {
+    debugLog('log', '[gemini-intercept] core/pagination/pagination.js не подключён — ' +
+      'тихая пагинация и контроль полноты (probe/watchdog) недоступны (проверьте регистрацию content script)');
+    classifyOpaque = function () { return false; };
+    edges8 = function (s) { return String(s); };
+    walkOpaque = function () { };
+    findCursors = function (node, out) { if (out) out.length = 0; };
+    extractCursor = function () { return null; };
+    extractCursorWide = function () { return null; };
+    refreshMinOrderTracking = function () { };
+    paginateLoop = function () { };
+    runCompletenessProbe = function () { };
+  }
+
+  if (aiCmGeminiLoaderScroll) {
+    aiCmGeminiLoaderScroll.__bind({
+      // Функции ядра.
+      aiCmArchiveFor: aiCmArchiveFor,
+      aiCmArchiveLiveProven: aiCmArchiveLiveProven,
+      aiCmDiagTurnEdge: aiCmDiagTurnEdge,
+      aiCmLiveTurnCount: aiCmLiveTurnCount,
+      aiCmOrderedTurns: aiCmOrderedTurns,
+      aiCmSetScrollOverlay: aiCmSetScrollOverlay,
+      baseSize: baseSize,
+      extractCursorWide: extractCursorWide,
+      findScrollContainer: findScrollContainer,
+      getConvId: getConvId,
+      loadFloor: loadFloor,
+      notifyLoaderState: notifyLoaderState,
+      paginateLoop: paginateLoop,
+      runCompletenessProbe: runCompletenessProbe,
+      saveFloor: saveFloor,
+      selfHealFloor: selfHealFloor,
+      sleep: sleep,
+      // Живое состояние: геттеры/сеттеры.
+      get aiCmOverlaySeq() { return aiCmOverlaySeq; },
+      set aiCmOverlaySeq(v) { aiCmOverlaySeq = v; },
+      get aiCmScrollOverlay() { return aiCmScrollOverlay; },
+      set aiCmScrollOverlay(v) { aiCmScrollOverlay = v; },
+      get collapseRetries() { return collapseRetries; },
+      set collapseRetries(v) { collapseRetries = v; },
+      get historyFullByQuiet() { return historyFullByQuiet; },
+      set historyFullByQuiet(v) { historyFullByQuiet = v; },
+      get isLowConfidenceBase() { return isLowConfidenceBase; },
+      set isLowConfidenceBase(v) { isLowConfidenceBase = v; },
+      get lastCleanEndBaseCount() { return lastCleanEndBaseCount; },
+      set lastCleanEndBaseCount(v) { lastCleanEndBaseCount = v; },
+      get lastCycleEndedHidden() { return lastCycleEndedHidden; },
+      set lastCycleEndedHidden(v) { lastCycleEndedHidden = v; },
+      get lastLoaderDoneReason() { return lastLoaderDoneReason; },
+      set lastLoaderDoneReason(v) { lastLoaderDoneReason = v; },
+      get loaderRetryUsedMap() { return loaderRetryUsedMap; },
+      set loaderRetryUsedMap(v) { loaderRetryUsedMap = v; },
+      get loaderRunningFor() { return loaderRunningFor; },
+      set loaderRunningFor(v) { loaderRunningFor = v; },
+      get loaderState() { return loaderState; },
+      set loaderState(v) { loaderState = v; },
+      get pendingCursor() { return pendingCursor; },
+      set pendingCursor(v) { pendingCursor = v; },
+      get quietActive() { return quietActive; },
+      set quietActive(v) { quietActive = v; },
+      get quietDecisionMade() { return quietDecisionMade; },
+      set quietDecisionMade(v) { quietDecisionMade = v; },
+      get quietIncompleteNoStart() { return quietIncompleteNoStart; },
+      set quietIncompleteNoStart(v) { quietIncompleteNoStart = v; },
+      get reachedStart() { return reachedStart; },
+      set reachedStart(v) { reachedStart = v; },
+      get vf5OverlapSinceLoaderStart() { return vf5OverlapSinceLoaderStart; },
+      set vf5OverlapSinceLoaderStart(v) { vf5OverlapSinceLoaderStart = v; },
+      // Только чтение: кластер эти имена не присваивает (ro) — сеттер не нужен.
+      get cacheRestoredMap() { return cacheRestoredMap; },
+      get cursorEpoch() { return cursorEpoch; },
+      get lastAtEncoded() { return lastAtEncoded; },
+      get lastBaseCountChangeAt() { return lastBaseCountChangeAt; },
+      get lastBaseTextLen() { return lastBaseTextLen; },
+      get lastBaseUrl() { return lastBaseUrl; },
+      get lastGoodProbeMeta() { return lastGoodProbeMeta; },
+      get lastGoodWideCur() { return lastGoodWideCur; },
+      get lastHeaders() { return lastHeaders; },
+      get lastHnvPageError() { return lastHnvPageError; },
+      get lastOlderNonPagAddAt() { return lastOlderNonPagAddAt; },
+      get lastPaginateOuter() { return lastPaginateOuter; },
+      get loaderDoneMap() { return loaderDoneMap; },
+      get nativeEscalationFor() { return nativeEscalationFor; },
+      get olderHistorySeen() { return olderHistorySeen; },
+      get oracleIncompleteSeen() { return oracleIncompleteSeen; },
+      get oracleRerunUsedMap() { return oracleRerunUsedMap; },
+      get parserVersion() { return parserVersion; },
+      get quietEndedClean() { return quietEndedClean; },
+      get serverFirstHash() { return serverFirstHash; },
+      get tapeWasUsedInThisColdStart() { return tapeWasUsedInThisColdStart; },
+    });
+    maybeStartLoader = aiCmGeminiLoaderScroll.maybeStartLoader;
+  } else {
+    debugLog('log', '[gemini-intercept] core/gemini-loader-scroll.js не подключён — ' +
+      'скрытый доскролл полной истории и его автозапуск недоступны (проверьте регистрацию content script)');
+    maybeStartLoader = function () { };
+  }
+
+  if (aiCmGeminiIngest) {
+    aiCmGeminiIngest.__bind({
+      // Функции ядра (значением).
+      buildJsonSkeleton: aiCmPayload.buildJsonSkeleton,
+      getConvId: getConvId,
+      structureMap: aiCmPayload.structureMap,
+      collectAttachments: aiCmPayload.collectAttachments,
+      collectContent: aiCmPayload.collectContent,
+      activeRefresh: activeRefresh,
+      aiCmArchiveTierApply: aiCmArchiveTierApply,
+      sanitizeMessagesForEmit: sanitizeMessagesForEmit,
+      loadFloor: loadFloor,
+      saveFloor: saveFloor,
+      baseSize: baseSize,
+      aiCmDiagHash6: aiCmDiagHash6,
+      noteBaseCountChange: noteBaseCountChange,
+      // Поздние алиасы: var ... = null, дозаполнены блоками ранних модулей.
+      extractCursor: extractCursor,
+      classifyOpaque: classifyOpaque,
+      edges8: edges8,
+      walkOpaque: walkOpaque,
+      aiCmEnsureColdWindow: aiCmEnsureColdWindow,
+      parseBatchExecute: parseBatchExecute,
+      maybeStartLoader: maybeStartLoader,
+      refreshMinOrderTracking: refreshMinOrderTracking,
+      aiCmColdStartIngestLog: aiCmColdStartIngestLog,
+      paginateLoop: paginateLoop,
+      scheduleAutoScroll: scheduleAutoScroll,
+      // Живое состояние: геттеры/сеттеры.
+      get attachSeen() { return attachSeen; },
+      set attachSeen(v) { attachSeen = v; },
+      get attachBreak() { return attachBreak; },
+      set attachBreak(v) { attachBreak = v; },
+      get attachTokens() { return attachTokens; },
+      set attachTokens(v) { attachTokens = v; },
+      get lastHnvPageError() { return lastHnvPageError; },
+      set lastHnvPageError(v) { lastHnvPageError = v; },
+      get lastFailedSkeleton() { return lastFailedSkeleton; },
+      set lastFailedSkeleton(v) { lastFailedSkeleton = v; },
+      get loggedRontgen() { return loggedRontgen; },
+      set loggedRontgen(v) { loggedRontgen = v; },
+      get lastPaginateOuter() { return lastPaginateOuter; },
+      set lastPaginateOuter(v) { lastPaginateOuter = v; },
+      get pendingCursor() { return pendingCursor; },
+      set pendingCursor(v) { pendingCursor = v; },
+      get lastCursorSource() { return lastCursorSource; },
+      set lastCursorSource(v) { lastCursorSource = v; },
+      get cursorEpoch() { return cursorEpoch; },
+      set cursorEpoch(v) { cursorEpoch = v; },
+      get olderHistorySeen() { return olderHistorySeen; },
+      set olderHistorySeen(v) { olderHistorySeen = v; },
+      get historyFullByQuiet() { return historyFullByQuiet; },
+      set historyFullByQuiet(v) { historyFullByQuiet = v; },
+      get reachedStart() { return reachedStart; },
+      set reachedStart(v) { reachedStart = v; },
+      get quietIncompleteNoStart() { return quietIncompleteNoStart; },
+      set quietIncompleteNoStart(v) { quietIncompleteNoStart = v; },
+      get quietDecisionMade() { return quietDecisionMade; },
+      set quietDecisionMade(v) { quietDecisionMade = v; },
+      get lastPaginateOpaqueCandidates() { return lastPaginateOpaqueCandidates; },
+      set lastPaginateOpaqueCandidates(v) { lastPaginateOpaqueCandidates = v; },
+      get lastAllStrings() { return lastAllStrings; },
+      set lastAllStrings(v) { lastAllStrings = v; },
+      get loggedStructure() { return loggedStructure; },
+      set loggedStructure(v) { loggedStructure = v; },
+      get lastVf5ActivityAt() { return lastVf5ActivityAt; },
+      set lastVf5ActivityAt(v) { lastVf5ActivityAt = v; },
+      get lastActiveAt() { return lastActiveAt; },
+      set lastActiveAt(v) { lastActiveAt = v; },
+      get quietActive() { return quietActive; },
+      set quietActive(v) { quietActive = v; },
+      get turnsMap() { return turnsMap; },
+      set turnsMap(v) { turnsMap = v; },
+      get lastOrderedIds() { return lastOrderedIds; },
+      set lastOrderedIds(v) { lastOrderedIds = v; },
+      get lastBaseTextLen() { return lastBaseTextLen; },
+      set lastBaseTextLen(v) { lastBaseTextLen = v; },
+      get isLowConfidenceBase() { return isLowConfidenceBase; },
+      set isLowConfidenceBase(v) { isLowConfidenceBase = v; },
+      get loggedErr() { return loggedErr; },
+      set loggedErr(v) { loggedErr = v; },
+      get lastIngestParseFail() { return lastIngestParseFail; },
+      set lastIngestParseFail(v) { lastIngestParseFail = v; },
+      get vf5OverlapSinceLoaderStart() { return vf5OverlapSinceLoaderStart; },
+      set vf5OverlapSinceLoaderStart(v) { vf5OverlapSinceLoaderStart = v; },
+      get convEpoch() { return convEpoch; },
+      set convEpoch(v) { convEpoch = v; },
+      get tapeWasUsedInThisColdStart() { return tapeWasUsedInThisColdStart; },
+      set tapeWasUsedInThisColdStart(v) { tapeWasUsedInThisColdStart = v; },
+      get orderCounter() { return orderCounter; },
+      set orderCounter(v) { orderCounter = v; },
+      get prependCursor() { return prependCursor; },
+      set prependCursor(v) { prependCursor = v; },
+      get reachedStartByScroll() { return reachedStartByScroll; },
+      set reachedStartByScroll(v) { reachedStartByScroll = v; },
+      get serverFirstHash() { return serverFirstHash; },
+      set serverFirstHash(v) { serverFirstHash = v; },
+      get lastHeadToken() { return lastHeadToken; },
+      set lastHeadToken(v) { lastHeadToken = v; },
+      get lastGoodWideCur() { return lastGoodWideCur; },
+      set lastGoodWideCur(v) { lastGoodWideCur = v; },
+      get lastGoodProbeMeta() { return lastGoodProbeMeta; },
+      set lastGoodProbeMeta(v) { lastGoodProbeMeta = v; },
+      get quietPaginated() { return quietPaginated; },
+      set quietPaginated(v) { quietPaginated = v; },
+      get lastCycleEndedHidden() { return lastCycleEndedHidden; },
+      set lastCycleEndedHidden(v) { lastCycleEndedHidden = v; },
+      get loggedOk() { return loggedOk; },
+      set loggedOk(v) { loggedOk = v; },
+      get loggedAttach() { return loggedAttach; },
+      set loggedAttach(v) { loggedAttach = v; },
+      // Только чтение: кластер эти имена не присваивает — сеттер не нужен.
+      get idmapCalls() { return idmapCalls; },
+      get scrollRecentUntil() { return scrollRecentUntil; },
+      get loaderRunningFor() { return loaderRunningFor; },
+      get loaderDoneMap() { return loaderDoneMap; },
+      get lastFrameParseFail() { return lastFrameParseFail; },
+      get loaderRetryUsedMap() { return loaderRetryUsedMap; },
+      get parserVersion() { return parserVersion; },
+    });
+    ingest = aiCmGeminiIngest.ingest;
+    handleOuter = aiCmGeminiIngest.handleOuter;
+    emitBaseSnapshot = aiCmGeminiIngest.emitBaseSnapshot;
+    mergeRestoredTurns = aiCmGeminiIngest.mergeRestoredTurns;
+  } else {
+    debugLog('log', '[gemini-intercept] core/gemini-ingest.js не подключён — ' +
+      'приём снимков базы и выход снимка недоступны (проверьте регистрацию content script)');
+    ingest = function () { };
+    handleOuter = function () { };
+    emitBaseSnapshot = function () { };
+    mergeRestoredTurns = function () { };
+  }
+
+  if (aiCmGeminiFiles && typeof aiCmGeminiFiles.__bind === 'function') {
+    try {
+      aiCmGeminiFiles.__bind({
+        emitSnapshot: aiCmEmitBaseSnapshotFwd,
+        getConvId: getConvId,
+        originalFetch: originalFetch,
+        diagLine: function (tag, fields) {
+          try {
+            debugLog('log', '[gemini-files] ' + String(tag || '') + ' ' + JSON.stringify(fields || {}));
+          } catch (eDiagGF) { }
+        }
+      });
+    } catch (eBindGF) {
+      debugLog('log', '[gemini-intercept] gemini-files __bind не удался: ' + (eBindGF && eBindGF.message || eBindGF));
+    }
+  }
+
+  if (aiCmGeminiSpaLifecycle) {
+    aiCmGeminiSpaLifecycle.__bind({
+      // fn: функции ядра, которые зовут тела модуля — передаются значением (хойстятся или
+      // дозаполнены выше: maybeStartLoader — поздний алиас лоадера, его связка стоит выше).
+      activeRefresh: activeRefresh,
+      baseSize: baseSize,
+      forceRestoreVisibility: forceRestoreVisibility,
+      getConvId: getConvId,
+      maybeStartLoader: maybeStartLoader,
+      notifyLoaderState: notifyLoaderState,
+      resetForNewConversation: resetForNewConversation,
+      // ro: тело только удаляет ключ — мутация по ссылке видна ядру, сеттер не нужен.
+      get loaderDoneMap() { return loaderDoneMap; },
+      // rw: живое состояние, которое тела ПЕРЕЗАПИСЫВАЮТ (get + set).
+      get currentConvId() { return currentConvId; },
+      set currentConvId(v) { currentConvId = v; },
+      get loaderRunningFor() { return loaderRunningFor; },
+      set loaderRunningFor(v) { loaderRunningFor = v; },
+      get scrollRecentUntil() { return scrollRecentUntil; },
+      set scrollRecentUntil(v) { scrollRecentUntil = v; }
+    });
+  } else {
+    debugLog('log', '[gemini-intercept] core/gemini-spa-lifecycle.js не подключён — ' +
+      'SPA-смена чата не сбрасывает состояние и не перезапускает лоадер (проверьте регистрацию content script)');
+  }
+
+  if (aiCmGeminiOverlay) {
+    aiCmGeminiOverlay.__bind({
+      // Функции ядра (декларации хойстятся — значения доступны на момент bind).
+      getConvId: getConvId,
+      // Живое состояние ядра: геттеры/сеттеры, чтобы чтение и запись модуля
+      // видели ОДНИ И ТЕ ЖЕ переменные IIFE (не копии значений).
+      get aiCmScrollOverlay() { return aiCmScrollOverlay; },
+      set aiCmScrollOverlay(v) { aiCmScrollOverlay = v; },
+      get aiCmOverlaySeq() { return aiCmOverlaySeq; },
+      set aiCmOverlaySeq(v) { aiCmOverlaySeq = v; }
+    });
+  } else {
+    debugLog('log', '[gemini-intercept] core/gemini-overlay.js не подключён — оверлей загрузки истории недоступен');
+  }
+
+  if (aiCmGeminiActiveRefresh) {
+    aiCmGeminiActiveRefresh.__bind({
+      // fn (8): функции и значения ядра — декларации хойстятся.
+      getConvId: getConvId,
+      captureReqTag: captureReqTag,
+      isStaleReqTag: isStaleReqTag,
+      buildActiveUrl: buildActiveUrl,
+      buildActiveBody: buildActiveBody,
+      originalFetch: originalFetch,
+      aiCmIngestFwd: aiCmIngestFwd,
+      debugLog: debugLog,
+      // rw (3): живое состояние — get + set, иначе запись модуля молча теряется.
+      get activeDisabled() { return activeDisabled; },
+      set activeDisabled(v) { activeDisabled = v; },
+      get activeBusy() { return activeBusy; },
+      set activeBusy(v) { activeBusy = v; },
+      get loggedActiveStatus() { return loggedActiveStatus; },
+      set loggedActiveStatus(v) { loggedActiveStatus = v; },
+      // ro (3): захват сайтметы переприсваивает эти имена — сеттера нет.
+      get lastAtEncoded() { return lastAtEncoded; },
+      get lastBaseUrl() { return lastBaseUrl; },
+      get lastHeaders() { return lastHeaders; }
+    });
+  } else {
+    // Модуль не подключён (старый registration под прежним id: MV3 не перечитывает js[]).
+    // Деградация мягкая: дозапрос отложен навсегда (пассив+DOM), эмит без дедупа.
+    debugLog('log', '[gemini-intercept] core/gemini-active-refresh.js не подключён — активный vf5-дозапрос недоступен');
+  }
 
   if (aiCmGeminiArchive) {
     aiCmGeminiArchive.__bind({
@@ -1037,19 +1067,7 @@
   } else {
     debugLog('log', '[gemini-intercept] core/gemini-archive.js не подключён — архивный ярус недоступен');
   }
-  // ===== v2.0 (Phase 3 step 13.3): ОРАКУЛ ПОЛНОТЫ (ВЫНЕСЕН В core/gemini-oracle.js) =====
-  // Тела оракула — stableFloorConfirm/noteBaseCountChange (floor-confirmed + debounce),
-  // notifyLoaderState со вложенным stableCheck74 (loader-stable-stop, O-48 parse-fail,
-  // clean-end, самоунижение пола), отпечатки aiCmDiagHash6/aiCmDiagTurnEdge/aiCmOrderedTurns
-  // и мост ai-cm-turns-snap-request — живут в модуле, подключение ниже.
-  // Состав объекта связи — tools/oracle-bind-contract.js: 10 функций значением, 10 имён
-  // с геттером и сеттером (оракул переприсваивает вердикты полноты и таймер debounce),
-  // 12 только на чтение (в том числе lastHnvPageError и lastBaseTextLen: их typeof-гарды
-  // в stableCheck74 обязаны видеть живое значение, иначе pageError/provenLen деградируют).
-  // Форвардеры и var aiCmGeminiOracle объявлены ВЫШЕ (строка ~866) — до первого вызова
-  // notifyLoaderState из checkConvChange, поэтому здесь остаётся только связка.
-  // Блок стоит НИЖЕ строки 782 намеренно: emitBaseSnapshot — ПОЗДНИЙ алиас
-  // (`var ... = null`), его дозаполняет блок ingest (770-771); выше в модуль уехал бы null.
+
   if (aiCmGeminiOracle) {
     aiCmGeminiOracle.__bind({
       // fn (10): функции ядра — передаются значением (декларации хойстятся).
@@ -1107,11 +1125,15 @@
     debugLog('log', '[gemini-intercept] core/gemini-oracle.js не подключён — оракул полноты недоступен');
   }
 
-
-  // v52: stream-alias — при поступлении снапшота (passive/vf5) стримовские записи с временным
-  // rc_*-id (pageMode='stream') замещаются снапшотными r_*-id того же turnId+role (FIFO по order).
-  // ===== v2.0 (Phase 3 step 12): applyStreamAliases перенесено в core/gemini-ingest.js =====
-
+  if (aiCmGeminiDiagDump) {
+    aiCmGeminiDiagDump.__bind({
+      get turnsMap() { return turnsMap; },
+      get lastOrderedIds() { return lastOrderedIds; },
+      get lastFailedSkeleton() { return lastFailedSkeleton; }
+    });
+  } else {
+    debugLog('log', '[gemini-intercept] core/gemini-diag-dump.js не подключён — дамп диагностики недоступен');
+  }
 
   installNetworkHooks();
 
@@ -1126,17 +1148,7 @@
   // v4x: при чтении ленты повторно применяем sanitizeFinalMessages к каждому ходу.
   // ===== v2.0 (Phase 3 step 12): sanitizeRestoredTurn перенесено в core/gemini-ingest.js =====
 
-
   var aiCmGeminiDiagDump = (typeof window !== 'undefined' && window.AiCmGeminiDiagDump) || null;
-  if (aiCmGeminiDiagDump) {
-    aiCmGeminiDiagDump.__bind({
-      get turnsMap() { return turnsMap; },
-      get lastOrderedIds() { return lastOrderedIds; },
-      get lastFailedSkeleton() { return lastFailedSkeleton; }
-    });
-  } else {
-    debugLog('log', '[gemini-intercept] core/gemini-diag-dump.js не подключён — дамп диагностики недоступен');
-  }
 
   // ===== v2.0 (Phase 3 step 13.3): ОРАКУЛ ПОЛНОТЫ (ВЫНЕСЕН В core/gemini-oracle.js) =====
   // Здесь был слушатель ai-cm-turns-snap-request (мост дампов экспорта в ISOLATED-мир).
