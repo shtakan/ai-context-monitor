@@ -791,6 +791,10 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
   // (baseComplete=true не даёт сработать правилу перехода неполная→полная).
   if (emitConvId && emitConvId !== lastSnapConvId) {
     maxTokenCount = 0;
+    // v2.0.35: строгое удержание процента (см. badge-strict-hold в processAndSend) не
+    // перетекает из ПРОШЛОГО разговора: сброс монотонного максимума без сброса
+    // lastPercentage держал бы в новом чате процент старого.
+    lastPercentage = -1;
     lastSnapConvId = emitConvId;
     debugLog('log', '[content-trace] v37: новый convId снимка → maxTokenCount=0 (' + emitConvId.slice(0, 8) + ')');
   }
@@ -2733,6 +2737,11 @@ function processAndSend() {
         });
       }
     } catch (eMetricSrc) { }
+    // v2.0.35 (Gemini): строгий монотонный бейдж. Пока база не дособрана
+    // (baseComplete !== true), процент не имеет права падать — пересборка базы
+    // показывала 7% после 9%. Единственное ДОКАЗАННОЕ снижение — сброс храповика
+    // O-32 (ветка C ниже, база с дублями): его удержание не переписывает.
+    var aiCmRatchetResetByDom = false;
     if (metricServerTokens > 0) {
       // точное число из countTokens авторитетно — не удерживаем завышенную эвристику
       // (у AI Studio в metricServerTokens приходит счётчик шапки чата — он тоже авторитетен)
@@ -2760,10 +2769,27 @@ function processAndSend() {
       // (tokenEstimate < maxTokenCount): на здоровом росте поведение не меняется.
       maxTokenCount = tokenEstimate;
       lastBounded = false;
+      aiCmRatchetResetByDom = true;
     } else if (useMonotonic) {
       if (tokenEstimate > maxTokenCount) maxTokenCount = tokenEstimate;
     } else {
       maxTokenCount = tokenEstimate;
+    }
+    // v2.0.35 (Gemini): СТРОГОЕ удержание бейджа. На неполной базе новое значение меньше
+    // прошлого процента НЕ принимается: храповик поднимается до порога прошлого процента,
+    // поэтому виджет и попап видят одну и ту же пару pct/tokens. Точное серверное число
+    // (metricServerTokens) и сброс храповика O-32 — доказанные снижения, их не переписываем.
+    if (typeof aiCmRatchetResetByDom === 'boolean' && aiCmRatchetResetByDom === false &&
+        baseComplete !== true && metricServerTokens === 0 &&
+        typeof lastPercentage === 'number' && lastPercentage > 0 && displayLimit > 0) {
+      var strictHoldTokens = Math.ceil((lastPercentage * displayLimit) / 100);
+      if (maxTokenCount < strictHoldTokens) {
+        // % нового значения считается до подъёма — только для честной строки лога.
+        var strictNewPct = Math.round((maxTokenCount / displayLimit) * 1000) / 10;
+        debugLog('log', '[content-trace] badge-strict-hold: baseComplete=0, прошлый pct=' + lastPercentage +
+          ' > новый ' + strictNewPct + ' — бейдж держит ' + lastPercentage + '% (база не дособрана)');
+        maxTokenCount = strictHoldTokens;
+      }
     }
     const percentage = displayLimit > 0 ? Math.round((maxTokenCount / displayLimit) * 1000) / 10 : 0;
     const hasChanged = percentage !== lastPercentage;

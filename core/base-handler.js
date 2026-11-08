@@ -411,6 +411,75 @@ function aiCmExportFilesThenNetSync(convId, cb, netTimeoutMs) {
     next();
   }, 2000);
 }
+// ===== v2.0.35: AI Studio — ожидание очереди файлов ПЕРЕД записью файла =====
+// Живой дефект приёмки: автоэкспорт AI Studio срабатывал (base-complete) раньше, чем
+// MAIN-мир (core/aistudio-files.js) догружал текст вложений — ResolveDriveResource
+// отдаёт только Drive file id, — и в файл уходила заглушка вместо `[FILE: <имя>]`.
+// Очередь спрашиваем у модуля страницы напрямую: pending > 0 → откладываем файр на шаг
+// 500 мс и перепроверяем (суммарно не дольше 5000 мс), затем пишем файл по актуальному
+// снимку. Пока ждём — повторные триггеры не плодят файлы (per-cid реестр таймеров).
+// Гейт узкий: только siteName === 'aistudio'; дренаж DeepSeek/Qwen (выше) не тронут.
+var AI_CM_AISTUDIO_DRAIN_STEP_MS = 500;
+var AI_CM_AISTUDIO_DRAIN_CAP_MS = 5000;
+var aiCmAistudioDrainTimers = Object.create(null);
+var aiCmAistudioDrainDeadlines = Object.create(null);
+
+function aiCmAistudioFilesApi() {
+  try {
+    if (typeof window === 'undefined') return null;
+    // Очередь публикует MAIN-мир (core/aistudio-files.js), в types/ её нет
+    // (types/ — запрещённая зона правки), поэтому доступ к Window — через any-каст
+    // (прецедент: core/background.js:176). Псевдоним из тикета (AiCmAiStudioFiles,
+    // с большой S) читается первым: имя могло быть закреплено в проде раньше.
+    var w = /** @type {any} */ (window);
+    return w.AiCmAiStudioFiles || w.AiCmAistudioFiles || null;
+  } catch (e) { return null; }
+}
+function aiCmAistudioFilesPending() {
+  var api = aiCmAistudioFilesApi();
+  if (!api || typeof api.pending !== 'function') return 0;
+  try {
+    var n = api.pending();
+    return (typeof n === 'number' && n > 0) ? n : 0;
+  } catch (e) { return 0; }
+}
+// true — файр отложен (повторный вход придёт по таймеру), false — можно писать файл.
+function aiCmFilesDrainDefer(cid, percentage, reason, netSynced) {
+  try {
+    if (typeof currentAdapter === 'undefined' || !currentAdapter || currentAdapter.siteName !== 'aistudio') return false;
+    var pending = aiCmAistudioFilesPending();
+    var key = String(cid || '');
+    if (pending <= 0) { delete aiCmAistudioDrainDeadlines[key]; return false; }
+    var now = Date.now();
+    if (!aiCmAistudioDrainDeadlines[key]) aiCmAistudioDrainDeadlines[key] = now + AI_CM_AISTUDIO_DRAIN_CAP_MS;
+    if (aiCmAistudioDrainTimers[key]) {
+      debugLog('log', '[AI CM][auto-export] files-drain: файр уже ждёт очередь файлов convId=' + key + ' pending=' + pending);
+      return true;
+    }
+    if (now >= aiCmAistudioDrainDeadlines[key]) {
+      // Потолок ожидания: догрузка не успела — пишем файл, чтобы не потерять экспорт
+      // (поздний ре-эмит снимка придёт следующим проходом).
+      delete aiCmAistudioDrainDeadlines[key];
+      debugLog('log', '[AI CM][auto-export] files-drain: потолок ожидания — пишем файл convId=' + key + ' pending=' + pending);
+      return false;
+    }
+    debugLog('log', '[AI CM][auto-export] files-drain: ждём очередь файлов convId=' + key +
+      ' pending=' + pending + ' step=' + AI_CM_AISTUDIO_DRAIN_STEP_MS + 'ms');
+    aiCmAistudioDrainTimers[key] = setTimeout(function () {
+      delete aiCmAistudioDrainTimers[key];
+      try {
+        // any-каст: types/core-globals.d.ts объявляет doAutoExportDownload с 3
+        // параметрами, а фактическая функция принимает 4 (netSynced) — types/ не
+        // правим (запрещённая зона), поэтому вызов идёт через локальный any.
+        var redo = (typeof doAutoExportDownload === 'function') ? /** @type {any} */ (doAutoExportDownload) : null;
+        if (redo) redo(cid, percentage, reason, netSynced);
+      } catch (eRe) {
+        debugLog('log', '[AI CM][auto-export] files-drain: повторный вход упал: ' + ((eRe && eRe.message) || eRe));
+      }
+    }, AI_CM_AISTUDIO_DRAIN_STEP_MS);
+    return true;
+  } catch (e) { return false; }
+}
 // ================= конец Step D.10 =================
 
 // ========== v2.0 (этап 1/3): UMD-экспорт модуля ==========
@@ -439,6 +508,7 @@ function aiCmExportFilesThenNetSync(convId, cb, netTimeoutMs) {
   Api.aiCmLogFilesDrain = aiCmLogFilesDrain;              // Step D.10 (A-лайт)
   Api.aiCmExportFilesDrainThen = aiCmExportFilesDrainThen;    // Step D.10 (A-лайт)
   Api.aiCmExportFilesThenNetSync = aiCmExportFilesThenNetSync; // Step D.10 (A-лайт)
+  Api.aiCmFilesDrainDefer = aiCmFilesDrainDefer;               // v2.0.35 (задержка файлов)
   Api.aiCmDumpTurnsSnapshot = aiCmDumpTurnsSnapshot;
   Api.scheduleStaleCheck = scheduleStaleCheck;
   if (typeof module !== 'undefined' && module.exports) module.exports = Api;

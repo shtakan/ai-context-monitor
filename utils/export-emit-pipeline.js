@@ -157,6 +157,11 @@ export function extractConvIdFromUrl(pathname) {
     // chatgpt.com: /c/<uuid>
     var mC = p.match(/\/c\/([A-Za-z0-9_-]+)/);
     if (mC) return mC[1];
+    // perplexity.ai: /session/<uuid> — новая живая форма диалога (v2.0.35). id — hex
+    // с дефисами (8+ символов); без этого правила convId был '' и автоэкспорт молча
+    // выходил на «if (!cid) return;» при зелёных гейтах.
+    var mPss = p.match(/\/session\/([0-9a-f-]{8,})/);
+    if (mPss) return mPss[1];
     // perplexity.ai: /search/<id> — живой URL диалога (v1.19.1, M-11). Только
     // id-подобный сегмент 8+ символов: короткий хвост /search/... не id.
     var mPs = p.match(/\/search\/([A-Za-z0-9_-]{8,})/);

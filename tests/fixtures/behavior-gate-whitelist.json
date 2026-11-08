@@ -179,6 +179,10 @@
     "count": 8,
     "reason": "legacy-pin"
   },
+  "tests/aistudio-export-drain.test.js": {
+    "count": 9,
+    "reason": "static-linter"
+  },
   "tests/archive/archive-oracle.test.js": {
     "count": 4,
     "reason": "legacy-pin"
@@ -390,6 +394,10 @@
   "tests/perplexity-empty-thread-recovery.test.js": {
     "count": 2,
     "reason": "legacy-pin"
+  },
+  "tests/perplexity-session-url.test.js": {
+    "count": 5,
+    "reason": "static-linter"
   },
   "tests/perplexity-sniff-slug-gate-m12.test.js": {
     "count": 8,

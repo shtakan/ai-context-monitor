@@ -70,7 +70,7 @@
       "file": "adapters/perplexity-adapter.js",
       "category": "debug-instrumentation",
       "lines": [
-        103
+        106
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (this._lastNetworkModel) { if (!this._modelLogSent) { this._modelLogS"
     },
@@ -305,9 +305,9 @@
       "category": "best-effort-guard",
       "lines": [
         603,
-        2430,
-        2570,
-        3561
+        2434,
+        2574,
+        3587
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cyrDiag = (t.match(/[а-яёА-ЯЁ]/g) || []).length; var cyrillicPct = t"
     },
@@ -315,7 +315,7 @@
       "file": "core/content.js",
       "category": "cleanup-guard",
       "lines": [
-        2155
+        2159
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: if (aiCmBadgeHoldTimer) return; aiCmBadgeHoldTimer = setTimeout(function"
     },
@@ -324,40 +324,40 @@
       "category": "debug-instrumentation",
       "lines": [
         727,
-        1119,
-        1225,
-        1230,
-        1233,
-        1236,
-        1238,
-        1239,
+        1123,
+        1229,
+        1234,
+        1237,
         1240,
-        1259,
-        1261,
-        1266,
-        1301,
-        1308,
-        1316,
-        1319,
-        1379,
-        1387,
-        1389,
-        1394,
-        1401,
-        1407,
-        1425,
-        1430,
-        1436,
-        1438,
-        1443,
-        2030,
-        2394,
-        2581,
-        2605,
-        2614,
-        3445,
+        1242,
+        1243,
+        1244,
+        1263,
+        1265,
+        1270,
+        1305,
+        1312,
+        1320,
+        1323,
+        1383,
+        1391,
+        1393,
+        1398,
+        1405,
+        1411,
+        1429,
+        1434,
+        1440,
+        1442,
+        1447,
+        2034,
+        2398,
+        2585,
+        2609,
+        2618,
         3471,
-        3473
+        3497,
+        3499
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
     },
@@ -365,8 +365,8 @@
       "file": "core/content.js",
       "category": "defensive-assignment",
       "lines": [
-        837,
-        846
+        841,
+        850
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: aiCmPartialSoftByConv[softKey63] = (detail.partialSoft === true);"
     },
@@ -374,7 +374,7 @@
       "file": "core/content.js",
       "category": "dom-read-guard",
       "lines": [
-        2066
+        2070
       ],
       "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: var info = aiCmSourceInfo(); aiCmSourceLabelNow = info ? info.label : ''"
     },
@@ -382,12 +382,12 @@
       "file": "core/content.js",
       "category": "event-guard",
       "lines": [
-        1107,
-        1116,
-        2523,
-        2546,
-        3427,
-        3433
+        1111,
+        1120,
+        2527,
+        2550,
+        3453,
+        3459
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
     },
@@ -395,7 +395,7 @@
       "file": "core/content.js",
       "category": "feature-detect",
       "lines": [
-        2735
+        2739
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var metricSrc = baseComplete ? 'base-complete' : (lastBounded ? 'base-fl"
     },
@@ -411,13 +411,13 @@
         717,
         743,
         778,
-        891,
-        1065,
-        2104,
-        2831,
-        2893,
-        2910,
-        2994
+        895,
+        1069,
+        2108,
+        2857,
+        2919,
+        2936,
+        3020
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -428,7 +428,7 @@
         79,
         341,
         411,
-        3063
+        3089
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.runtime.sendMessage({ type: 'BADGE_RESET' }).catch(function () {"
     },
@@ -437,7 +437,7 @@
       "category": "local-helper-guard",
       "lines": [
         338,
-        3246
+        3272
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmCancelDeferredHistWrite('');"
     },
@@ -445,7 +445,7 @@
       "file": "core/content.js",
       "category": "parse-guard",
       "lines": [
-        3507
+        3533
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof AiCmExportBuilders !== 'undefined') ? AiCmExportB"
     },
@@ -699,7 +699,7 @@
       "lines": [
         254,
         1078,
-        1924
+        1932
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof aiCmDiagLine === 'function' && typeof aiCmDiagOn === 'functio"
     },
@@ -708,7 +708,7 @@
       "category": "defensive-assignment",
       "lines": [
         911,
-        1753
+        1761
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: aiCmIncludeHiddenInExport = !!(data && data.aiCmIncludeHiddenInExport =="
     },
@@ -716,7 +716,7 @@
       "file": "core/export-manager.js",
       "category": "feature-detect",
       "lines": [
-        1893
+        1901
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var BdiagDl = (typeof AiCmExportBuilders !== 'undefined') ? AiCmExportBu"
     },
@@ -746,7 +746,7 @@
       "category": "local-helper-guard",
       "lines": [
         477,
-        1798
+        1806
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmLatchCacheReady();"
     },
@@ -1365,8 +1365,8 @@
       "file": "core/perplexity-intercept.js",
       "category": "event-guard",
       "lines": [
-        264,
-        279
+        267,
+        282
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
     },
@@ -1374,9 +1374,9 @@
       "file": "core/perplexity-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        275,
-        277,
-        278
+        278,
+        280,
+        281
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkConvChange();"
     },
@@ -1385,8 +1385,8 @@
       "category": "parse-guard",
       "lines": [
         114,
-        175,
-        491
+        178,
+        528
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: raw = decodeURIComponent(raw);"
     },
@@ -1627,8 +1627,8 @@
       "file": "utils/export-emit-pipeline.js",
       "category": "best-effort-guard",
       "lines": [
-        687,
-        744
+        692,
+        749
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: store[latchKey(service, convId)] = 1;"
     },
@@ -1636,7 +1636,7 @@
       "file": "utils/export-emit-pipeline.js",
       "category": "cleanup-guard",
       "lines": [
-        706
+        711
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete store[latchKey(service, convId)];"
     },
@@ -1644,7 +1644,7 @@
       "file": "utils/export-emit-pipeline.js",
       "category": "local-helper-guard",
       "lines": [
-        1539
+        1544
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: onMessageDedupe(role, res.removedBlocks);"
     },

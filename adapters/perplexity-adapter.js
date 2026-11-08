@@ -50,15 +50,18 @@ class PerplexityAdapter extends BaseAdapter {
   }
 
   /**
-   * Находимся ли мы на диалоге perplexity.ai (хост + префикс /search/ или /thread/).
+   * Находимся ли мы на диалоге perplexity.ai (хост + префикс /search/, /thread/
+   * или новый /session/).
    * @returns {boolean}
    */
   isOnDialogPage() {
     try {
       var host = window.location.hostname;
       var path = window.location.pathname;
+      // v2.0.35: /session/<uuid> — живая форма диалога на приёмке; без неё адаптер
+      // считал страницу не-диалогом (бейдж «—», автоэкспорт не взводился).
       var result = (host === 'www.perplexity.ai' || host === 'perplexity.ai') &&
-        (path.indexOf('/search/') === 0 || path.indexOf('/thread/') === 0);
+        (path.indexOf('/search/') === 0 || path.indexOf('/thread/') === 0 || path.indexOf('/session/') === 0);
       debugLog('debug', '[PerplexityAdapter] isOnDialogPage: ' + result);
       return result;
     } catch (error) {

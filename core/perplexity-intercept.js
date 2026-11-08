@@ -147,7 +147,10 @@ import { parsePerplexityThread, stripPerplexityHistoryTruncation } from '../util
       var parts = location.pathname.split('/');
       if (parts.length >= 3) {
         var type = parts[1];
-        if (type === 'search' || type === 'thread') return parts.slice(2).join('/');
+        // v2.0.35: у Perplexity появился третий тип живого URL — /session/<uuid>
+        // (id — hex + дефисы). Симптом приёмки: onDialogPage=1, но convId='' →
+        // бейдж/история/автоэкспорт молча выходили на «нет slug — не тред».
+        if (type === 'search' || type === 'thread' || type === 'session') return parts.slice(2).join('/');
       }
       return '';
     } catch (e) { return ''; }
@@ -169,7 +172,7 @@ import { parsePerplexityThread, stripPerplexityHistoryTruncation } from '../util
       if (!urlStr) return '';
       var path = String(urlStr);
       try { path = new URL(String(urlStr), location.href).pathname; } catch (eU) { path = String(urlStr); }
-      var m = path.match(/\/(?:search|thread|rest\/thread|api\/thread)\/([^\/?#]+)/);
+      var m = path.match(/\/(?:search|thread|session|rest\/thread|rest\/session|api\/thread)\/([^\/?#]+)/);
       if (!m) return '';
       var raw = m[1];
       try { raw = decodeURIComponent(raw); } catch (eD) { }
@@ -241,7 +244,7 @@ import { parsePerplexityThread, stripPerplexityHistoryTruncation } from '../util
     if (historyUrlTemplate) return false;
     var url = String(urlStr || '');
     if (!hasFullHistoryParams(url)) return false;
-    var m = url.match(/\/(?:search|thread|rest\/thread|api\/thread)\/([^\/?#]+)/);
+    var m = url.match(/\/(?:search|thread|session|rest\/thread|rest\/session|api\/thread)\/([^\/?#]+)/);
     if (!m) return false;
     // id-сегмент → {slug}: заменяем ровно совпавший фрагмент пути, хвост URL (query) сохраняем
     historyUrlTemplate = normalizeHistoryUrl(url.slice(0, m.index) + m[0].slice(0, m[0].length - m[1].length) + '{slug}' + url.slice(m.index + m[0].length));
@@ -390,6 +393,31 @@ import { parsePerplexityThread, stripPerplexityHistoryTruncation } from '../util
     }
   }
 
+  // M-12 (fallback, v2.0.35): «нет slug страницы» больше не приговор. На живом
+  // /session/<uuid> путь страницы может не отдать id в известной форме (SPA-переход,
+  // иной шаблон ссылки), но страница при этом ЖИВАЯ — ходы отрисованы в DOM. Тогда
+  // принадлежность снимка проверяем по DOM: есть сообщения → эмит разрешён; пусто →
+  // прежнее поведение (не эмитим, чужой снимок не перерисовывает бейдж).
+  // Селекторы широкие и «якорные»: тело любого хода Perplexity рендерит в контейнерах
+  // с классом prose; data-testid — запасные якоря ответов.
+  var PERPLEXITY_DOM_MESSAGE_SELECTORS = [
+    '[data-testid="answer"]',
+    '[data-testid="copilot-answer"]',
+    '[class*="prose"]'
+  ];
+  function aiCmPerplexityDomMessageCount() {
+    try {
+      if (typeof document === 'undefined' || !document || typeof document.querySelectorAll !== 'function') return 0;
+      var best = 0;
+      for (var i = 0; i < PERPLEXITY_DOM_MESSAGE_SELECTORS.length; i++) {
+        var n = 0;
+        try { n = document.querySelectorAll(PERPLEXITY_DOM_MESSAGE_SELECTORS[i]).length; } catch (eQ) { n = 0; }
+        if (n > best) best = n;
+      }
+      return best;
+    } catch (e) { return 0; }
+  }
+
   function processHistoryData(data, url, source) {
     if (!data) return;
     // M-12: гейт «снимок принадлежит текущей странице» — ДО любых мутаций состояния
@@ -397,17 +425,26 @@ import { parsePerplexityThread, stripPerplexityHistoryTruncation } from '../util
     // не должен ни эмититься в бейдж/историю, ни уводить за собой виртуальный F5.
     // M-14: единственное, что берётся у отклонённого снимка, — АДРЕС полного набора (шаблон),
     // и только пока шаблон не выучен; данные снимка и состояние не трогаются.
-    if (!currentConvId) {
+    var domMsgs = aiCmPerplexityDomMessageCount();
+    if (!currentConvId && domMsgs <= 0) {
       debugLog('log', '[perplexity-intercept] сниффинг (' + source + '): нет slug страницы — не тред, снимок не эмитим (' + url + ')');
       learnTemplateFromRejectedUrl(url); // M-14: у отклонённого снимка берём только адрес полного набора
       return;
     }
-    var sniffSlug = snapshotSlug(data, url);
-    if (sniffSlug !== currentConvId) {
-      debugLog('log', '[perplexity-intercept] сниффинг (' + source + '): чужой снимок (slug=' +
-        (sniffSlug || '(не определён)') + ' != slug страницы ' + currentConvId + ') — пропуск, URL: ' + url);
-      learnTemplateFromRejectedUrl(url); // M-14: у отклонённого снимка берём только адрес полного набора
-      return;
+    if (!currentConvId) {
+      // M-12 fallback: slug страницы не извлекается, но сообщения в DOM есть — сверять
+      // нечего (identity страницы неизвестна), поэтому снимок принимаем: без эмита
+      // на /session/ бейдж и история остаются пустыми навсегда.
+      debugLog('log', '[perplexity-intercept] сниффинг (' + source + '): нет slug страницы, но в DOM ' + domMsgs + ' сообщ. — эмит разрешён (M-12 fallback)');
+    }
+    if (currentConvId) {
+      var sniffSlug = snapshotSlug(data, url);
+      if (sniffSlug !== currentConvId) {
+        debugLog('log', '[perplexity-intercept] сниффинг (' + source + '): чужой снимок (slug=' +
+          (sniffSlug || '(не определён)') + ' != slug страницы ' + currentConvId + ') — пропуск, URL: ' + url);
+        learnTemplateFromRejectedUrl(url); // M-14: у отклонённого снимка берём только адрес полного набора
+        return;
+      }
     }
     console.log('[perplexity-intercept] сниффинг: снимок истории пойман (' + source + '), URL: ' + url);
     if (bootstrapTimer) { clearTimeout(bootstrapTimer); bootstrapTimer = null; }

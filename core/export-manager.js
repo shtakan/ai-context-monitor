@@ -1613,6 +1613,14 @@ function aiCmAutoExportStartDownload(content, file, fmt) {
 // не может ни задвоить файл, ни потерять латч; при недоступной сети поведение прежнее.
 function doAutoExportDownload(cid, percentage, reason, netSynced) {
   try {
+    // v2.0.35: файл не пишем, пока MAIN-мир догружает текст вложений в снимок
+    // (иначе в нём заглушка вместо содержимого). Ожидание очереди — общий хелпер
+    // base-handler (рядом с дренажом DeepSeek/Qwen, загружен раньше этого модуля):
+    // на платформах без очереди он отвечает false сразу. Гейт платформы живёт в
+    // хелпере, поэтому в этом файле нет ни одного упоминания конкретной площадки.
+    var filesApiD = (typeof window !== 'undefined' && window.AiCmBaseHandler) ? window.AiCmBaseHandler : null;
+    if (filesApiD && typeof filesApiD.aiCmFilesDrainDefer === 'function' &&
+        filesApiD.aiCmFilesDrainDefer(cid, percentage, reason, netSynced)) return;
     // O-16: живой SSE-стрим DeepSeek → файл по НЕДОПИСАННОЙ memory-базе не пишем:
     // откладываем (дебаунс) до конца потока. При потолке отложек буфер флашится и
     // запись идёт по актуальному состоянию (латч fired ставит обычный путь ниже).
