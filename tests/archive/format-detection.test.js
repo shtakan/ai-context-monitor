@@ -1,6 +1,6 @@
 /**
  * T1 (v1.16): первый ярус — определение формата архива, ключи хранилища и ярлыки
- * источника (utils/archive-import.js).
+ * источника (utils/archive-import.ts).
  *
  * Проверяется контракт импорта:
  *   - detectArchiveFormat распознаёт все 4 поддерживаемых экспорта и НЕ угадывает
@@ -14,8 +14,8 @@ const path = require('path');
 const fs = require('fs');
 const { loadEsm } = require('../helpers/load-esm.js');
 
-// Ph2: utils/archive-import.js — ES-модуль (UMD-хвост снят).
-const AI = loadEsm('utils/archive-import.js');
+// Ph2: utils/archive-import.ts — ES-модуль (UMD-хвост снят).
+const AI = loadEsm('utils/archive-import.ts');
 
 const FIXTURES = path.join(__dirname, '..', 'fixtures', 'archive');
 function loadFixture(name) {

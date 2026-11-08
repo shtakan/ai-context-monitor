@@ -1,5 +1,5 @@
 /**
- * T1 (v1.16): парсеры четырёх архивов (utils/archive-import.js).
+ * T1 (v1.16): парсеры четырёх архивов (utils/archive-import.ts).
  *
  * Фикстуры — синтетические, но повторяют реальные формы экспортов:
  *   tests/fixtures/archive/gemini-takeout.json         (Google Takeout MyActivity)
@@ -23,9 +23,9 @@ const { loadEsm, loadEsmModule } = require('../helpers/load-esm.js');
 // В браузере их функции инжектит options.js в archive-import через deps; ресолверы
 // archive-import умеют и page-глобал (3-й уровень) — тест ставит его ниже, как в прежнем
 // контракте страницы.
-const ChatGPTParser = loadEsmModule('utils/chatgpt-conversation-parser.js');
+const ChatGPTParser = loadEsmModule('utils/chatgpt-conversation-parser.ts');
 const PerplexityParser = loadEsmModule('utils/perplexity-parser.ts');
-const AI = loadEsm('utils/archive-import.js');
+const AI = loadEsm('utils/archive-import.ts');
 
 function installPageGlobals() {
   window.ChatGPTConversationParser = ChatGPTParser;

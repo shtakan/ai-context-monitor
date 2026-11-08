@@ -49,7 +49,7 @@ const optionsJs = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf
 const contentSourceMap = require('./helpers/content-source.js');
 const printJs = fs.readFileSync(path.join(ROOT, 'print', 'print.js'), 'utf8');
 const printClassic = require('./helpers/load-esm.js').loadAsClassic('print/print.js');
-const exportBuildersJs = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.js'), 'utf8');
+const exportBuildersJs = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.ts'), 'utf8');
 const i18nApplySrc = fs.readFileSync(path.join(ROOT, 'options', 'i18n-apply.js'), 'utf8');
 // M-4.4: страницы, локализованные тем же механизмом.
 const privacyHtml = fs.readFileSync(path.join(ROOT, 'privacy', 'privacy.html'), 'utf8');
@@ -68,7 +68,7 @@ const DYNAMIC_SOURCES = contentSourceMap.SOURCES.map(function (rel) {
 }).concat([
   ['options/options.js', optionsJs],
   ['print/print.js', printJs],
-  ['utils/export-text-builders.js', exportBuildersJs]
+  ['utils/export-text-builders.ts', exportBuildersJs]
 ]);
 
 // M-4.5 (аудит 1.7): строки Chrome-уведомлений объявлены в core/background.js. В DYNAMIC_SOURCES

@@ -156,7 +156,7 @@ describe('BYOK-sync: options.js — без ключа флаг точного п
     document.body.innerHTML = '';
     setupOptionsDom();
     window.buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
-    window.AiCmExportBuilders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+    window.AiCmExportBuilders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
   });
 
   afterEach(() => {

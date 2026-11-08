@@ -14,7 +14,7 @@
  * (чистка в сборщиках) остаётся и идемпотентна.
  *
  * Исполняется РЕАЛЬНЫЙ adapters/qwen-adapter.js в песочнице jsdom + РЕАЛЬНЫЕ сборщики
- * (utils/export-text-builders.js) и токен-оценка (utils/tokenizer.ts).
+ * (utils/export-text-builders.ts) и токен-оценка (utils/tokenizer.ts).
  *
  * Обновление 2026-09-26 (план замены qwen-селекторов, живой DOM-снимок 26.09.26): фикстура
  * больше НЕ синтетическая `data-message-id`-разметка, а живая форма снимка — реплики это
@@ -27,7 +27,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const Tokenizer = require('./helpers/load-esm.js').loadEsm('utils/tokenizer.ts');
 
 const ROOT = path.join(__dirname, '..');
@@ -284,7 +284,7 @@ describe('O-37 O-36.2: границы фикса (source-пины)', () => {
     expect(QWEN_SRC).toContain('AiCmExportBuilders.aiCmDropContainerMessages');
     // Ph2: хелпер берётся биндингом общего скоупа (import в core/content.js); CJS require-фолбэк
     // удалён — ESM-модуль не require-ится, в бандл он попадает через esbuild.
-    expect(QWEN_SRC).not.toContain("require('../utils/export-text-builders.js')");
+    expect(QWEN_SRC).not.toContain("require('../utils/export-text-builders.ts')");
     expect(QWEN_SRC).toContain('_dropContainerNodes(messages)');
     // ни одной копии правила контейнера внутри адаптера (пороги/minContained/coverMin)
     expect(QWEN_SRC).not.toContain('minContained');

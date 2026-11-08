@@ -20,7 +20,7 @@
  *   2. chatgpt-conversations — ChatGPT conversations.json: массив диалогов
  *                              {conversation_id, title, create_time, update_time,
  *                               mapping{id:{parent,children,message}}}. Порядок
- *                              ходов берётся у utils/chatgpt-conversation-parser.js
+ *                              ходов берётся у utils/chatgpt-conversation-parser.ts
  *                              (orderChatGPTMapping) — своя линеаризация НЕ дублируется.
  *   3. claude-conversations  — Claude conversations.json: массив
  *                              {uuid, name, created_at, updated_at,
@@ -44,102 +44,168 @@
  * используется страницей настроек для импорта).
  */
 
-/**
- * Идентификатор поддержанного формата архива (types/archive-import.d.ts:ArchiveFormat);
- * значения FORMATS, они же meta.format / record.format.
- * @typedef {import('../types/archive-import').ArchiveFormat} ArchiveFormat
- */
+import type {
+  ArchiveFormat,
+  ArchiveImportMessage,
+  ArchiveStoredRecord,
+  ArchiveSourceRecord,
+  ArchiveImportApi,
+  ArchiveImportOptions,
+  ArchiveImportPlan,
+  ArchiveParseResult
+} from '../types/archive-import';
 
-/**
- * Нормализованный ход архивного диалога (types/archive-import.d.ts:ArchiveImportMessage).
- * @typedef {import('../types/archive-import').ArchiveImportMessage} ArchiveImportMessage
- */
+// ------------------------------------------------------------ типы ----
+/** Диалог после finalizeConversation — форма, которую ждут buildArchiveRecord и план импорта. */
+export interface FinalizedConversation {
+  /** Идентификатор разговора ('' — не найден). */
+  convId: string;
+  /** Сервис, выведенный из формата. */
+  service: string;
+  /** Формат источника (FORMATS.*). */
+  format: string;
+  /** Заголовок (фолбэк — первые 80 символов первого user-хода). */
+  title: string;
+  /** Время последнего хода, мс (0 — неизвестно). */
+  updatedAt: number;
+  /** Нормализованные ходы. */
+  messages: ArchiveImportMessage[];
+  /** Число принятых ходов. */
+  count: number;
+  /** Суммарная длина текстов ходов. */
+  textLen: number;
+}
 
-/**
- * Запись первого яруса для chrome.storage.local
- * (types/archive-import.d.ts:ArchiveStoredRecord), ключ archiveStorageKey(convId).
- * @typedef {import('../types/archive-import').ArchiveStoredRecord} ArchiveStoredRecord
- */
+/** Итог одного парсера формата: диалоги и честные счётчики пропусков. */
+export interface ArchiveParseOutcome {
+  conversations: FinalizedConversation[];
+  skippedNoConvId: number;
+  skippedEmpty: number;
+  /** Код ошибки парсера (нет у gemini/claude-веток). */
+  error?: string;
+}
 
-/**
- * Запись-индикатор источника (types/archive-import.d.ts:ArchiveSourceRecord),
- * ключ convSourceStorageKey(convId).
- * @typedef {import('../types/archive-import').ArchiveSourceRecord} ArchiveSourceRecord
- */
+/** Инъекция зависимостей фасада парсинга (логгер и резолверы внешних парсеров). */
+export interface ArchiveDeps {
+  /** Логгер аномалий «пол > msgs». */
+  warn?: (msg: string) => void;
+  /** Линеаризация mapping ChatGPT. */
+  orderChatGPTMapping?: (mapping: any) => string[];
+  /** Санатор текста ChatGPT. */
+  sanitizeChatGPTText?: (s: any) => string;
+  /** Разбор треда Perplexity. */
+  parsePerplexityThread?: (thread: any) => any;
+}
 
-/**
- * План записи импорта (types/archive-import.d.ts:ArchiveImportPlan):
- * принятые записи, отброшенные с причинами и суммарный размер принятых.
- * @typedef {import('../types/archive-import').ArchiveImportPlan} ArchiveImportPlan
- */
+/** Аномалия «пол > msgs» (LOW-3): агрегат `full` длиннее суммы отдельных ходов. */
+export interface FullTextAnomaly {
+  convId: string;
+  code: string;
+  fullLen: number;
+  msgsLen: number;
+  over: number;
+  msgCount: number;
+}
 
-/**
- * Опции бюджетов импорта (types/archive-import.d.ts:ArchiveImportOptions).
- * @typedef {import('../types/archive-import').ArchiveImportOptions} ArchiveImportOptions
- */
+/** Черновик записи источника до вычисления ярлыка. */
+export interface SourceRecordDraft {
+  kind: 'archive' | 'live';
+  service: string;
+  format: string;
+  count: number;
+  textLen: number;
+  importedAt: number;
+  label?: string;
+  fileName?: string;
+}
 
-/**
- * Результат разбора архива (types/archive-import.d.ts:ArchiveParseResult).
- * @typedef {import('../types/archive-import').ArchiveParseResult} ArchiveParseResult
- */
+// ------------------------------------------ структуры четырёх форматов ----
+/** Activity-запись Google Takeout (Gemini Apps). */
+export interface GeminiActivityRecord {
+  title?: string;
+  description?: string;
+  titleUrl?: string;
+  title_url?: string;
+  time?: string;
+  header?: string;
+  response?: string;
+  answer?: string;
+  details?: GeminiActivityDetail[];
+  [key: string]: unknown;
+}
 
-/**
- * Диалог после finalizeConversation — форма, которую ждут buildArchiveRecord и
- * план импорта (messages уже нормализованы, счётчики согласованы).
- * @typedef {Object} FinalizedConversation
- * @property {string} convId Идентификатор разговора ('' — не найден).
- * @property {string} service Сервис, выведенный из формата.
- * @property {string} format Формат источника (FORMATS.*).
- * @property {string} title Заголовок (фолбэк — первые 80 символов первого user-хода).
- * @property {number} updatedAt Время последнего хода, мс (0 — неизвестно).
- * @property {ArchiveImportMessage[]} messages Нормализованные ходы.
- * @property {number} count Число принятых ходов.
- * @property {number} textLen Суммарная длина текстов ходов.
- */
+/** Деталь activity-записи (name/value). */
+export interface GeminiActivityDetail {
+  name?: string;
+  value?: string;
+  [key: string]: unknown;
+}
 
-/**
- * Итог одного парсера формата: диалоги и честные счётчики пропусков.
- * @typedef {Object} ArchiveParseOutcome
- * @property {Array<any>} conversations Разобранные диалоги (FinalizedConversation).
- * @property {number} skippedNoConvId Записи без convId (в архив не попадают).
- * @property {number} skippedEmpty Записи без пригодных ходов.
- * @property {string} [error] Код ошибки парсера (нет у gemini/claude-веток).
- */
+/** Файл Takeout: массив записей или {items:[…]}. */
+export interface GeminiTakeoutFile {
+  items: GeminiActivityRecord[];
+}
 
-/**
- * Инъекция зависимостей фасада парсинга: логгер аномалий и резолверы внешних
- * парсеров (в тестах подменяются без глобалов/require).
- * @typedef {Object} ArchiveDeps
- * @property {(msg: string) => void} [warn] Логгер аномалий «пол > msgs».
- * @property {Function} [orderChatGPTMapping] Линеаризация mapping ChatGPT.
- * @property {(s: string) => string} [sanitizeChatGPTText] Санатор текста ChatGPT.
- * @property {Function} [parsePerplexityThread] Разбор треда Perplexity.
- */
+/** Блок контента Claude-экспорта. */
+export interface ClaudeContentBlock {
+  type?: string;
+  text?: string;
+  [key: string]: unknown;
+}
 
-/**
- * Аномалия «пол > msgs» (LOW-3): агрегат `full` длиннее суммы отдельных ходов.
- * @typedef {Object} FullTextAnomaly
- * @property {string} convId Идентификатор разговора ('' — не найден).
- * @property {string} code Код аномалии ('full-longer-than-messages').
- * @property {number} fullLen Длина агрегата.
- * @property {number} msgsLen Суммарная длина ходов.
- * @property {number} over Превышение (fullLen − msgsLen).
- * @property {number} msgCount Число исходных записей ходов.
- */
+/** Ход Claude-экспорта. */
+export interface ClaudeExportMessage {
+  uuid?: string;
+  sender?: string;
+  text?: string;
+  content?: ClaudeContentBlock[];
+  created_at?: string;
+  [key: string]: unknown;
+}
 
-/**
- * Черновик записи источника до вычисления ярлыка: label добавляется
- * describeSource сразу после сборки (поэтому здесь он необязателен).
- * @typedef {Object} SourceRecordDraft
- * @property {'archive'|'live'} kind Ярус источника.
- * @property {string} service Имя сервиса ('' — не задано).
- * @property {string} format Формат архива (у live-записи '').
- * @property {number} count Число ходов.
- * @property {number} textLen Суммарная длина текста.
- * @property {number} importedAt Время импорта, мс (у live-записи 0).
- * @property {string} [label] Человекочитаемый ярлык (describeSource).
- * @property {string} [fileName] Имя исходного файла, если было передано.
- */
+/** Диалог Claude-экспорта (conversations.json). */
+export interface ClaudeExportConversation {
+  uuid?: string;
+  id?: string;
+  name?: string;
+  title?: string;
+  created_at?: string;
+  updated_at?: string;
+  chat_messages?: ClaudeExportMessage[];
+  [key: string]: unknown;
+}
+
+/** Диалог ChatGPT-экспорта (conversations.json). */
+export interface ChatGPTExportConversation {
+  conversation_id?: string;
+  id?: string;
+  title?: string;
+  create_time?: number | string;
+  update_time?: number | string;
+  mapping?: Record<string, any>;
+  [key: string]: unknown;
+}
+
+/** Тред Perplexity-экспорта. */
+export interface PerplexityThreadRecord {
+  id?: string;
+  slug?: string;
+  title?: string;
+  entries?: any[];
+  updated_at?: number | string;
+  [key: string]: unknown;
+}
+
+/** Элемент Perplexity-экспорта: {thread, entries[,…]}. */
+export interface PerplexityExportItem {
+  thread?: PerplexityThreadRecord;
+  entries?: any[];
+  id?: string;
+  slug?: string;
+  title?: string;
+  updated_at?: number | string;
+  [key: string]: unknown;
+}
 
 /** @type {string} Префикс ключа записи первого яруса в chrome.storage.local. */
 var ARCHIVE_KEY_PREFIX = 'aiCmArchive:';
@@ -147,9 +213,9 @@ var ARCHIVE_KEY_PREFIX = 'aiCmArchive:';
 var CONV_SOURCE_KEY_PREFIX = 'aiCmConvSource:';
 
 /** @type {'archive'} Ярус источника: импортированный архив. */
-var SOURCE_ARCHIVE = 'archive';
+var SOURCE_ARCHIVE: 'archive' = 'archive';
 /** @type {'live'} Ярус источника: сеть/DOM текущего чата. */
-var SOURCE_LIVE = 'live';
+var SOURCE_LIVE: 'live' = 'live';
 
 /** @type {number} Версия схемы архивной записи. */
 var ARCHIVE_RECORD_VERSION = 1;
@@ -165,17 +231,17 @@ var FORMATS = {
   CHATGPT_CONVERSATIONS: 'chatgpt-conversations',
   CLAUDE_CONVERSATIONS: 'claude-conversations',
   PERPLEXITY_THREADS: 'perplexity-threads'
-};
+} as const;
 
 /** @type {Record<string, string>} Формат → имя сервиса (gemini/chatgpt/claude/perplexity). */
-var SERVICE_BY_FORMAT = {};
+var SERVICE_BY_FORMAT: Record<string, string> = {};
 SERVICE_BY_FORMAT[FORMATS.GEMINI_TAKEOUT] = 'gemini';
 SERVICE_BY_FORMAT[FORMATS.CHATGPT_CONVERSATIONS] = 'chatgpt';
 SERVICE_BY_FORMAT[FORMATS.CLAUDE_CONVERSATIONS] = 'claude';
 SERVICE_BY_FORMAT[FORMATS.PERPLEXITY_THREADS] = 'perplexity';
 
 /** @type {Record<string, string>} Формат → человекочитаемый ярлык (describeSource). */
-var FORMAT_LABEL = {};
+var FORMAT_LABEL: Record<string, string> = {};
 FORMAT_LABEL[FORMATS.GEMINI_TAKEOUT] = 'Gemini Takeout';
 FORMAT_LABEL[FORMATS.CHATGPT_CONVERSATIONS] = 'ChatGPT conversations.json';
 FORMAT_LABEL[FORMATS.CLAUDE_CONVERSATIONS] = 'Claude export';
@@ -204,7 +270,7 @@ var MAX_ARCHIVE_SIZE = 50 * 1024 * 1024; // 50 МБ
  * @param {string|number|null|undefined} convId Идентификатор разговора.
  * @returns {string} 'aiCmArchive:<convId>' (null/undefined → пустой хвост).
  */
-export function archiveStorageKey(convId) {
+export function archiveStorageKey(convId: string | number | null | undefined): string {
   return ARCHIVE_KEY_PREFIX + String(convId == null ? '' : convId);
 }
 /**
@@ -212,7 +278,7 @@ export function archiveStorageKey(convId) {
  * @param {string|number|null|undefined} convId Идентификатор разговора.
  * @returns {string} 'aiCmConvSource:<convId>' (null/undefined → пустой хвост).
  */
-export function convSourceStorageKey(convId) {
+export function convSourceStorageKey(convId: string | number | null | undefined): string {
   return CONV_SOURCE_KEY_PREFIX + String(convId == null ? '' : convId);
 }
 
@@ -222,7 +288,7 @@ export function convSourceStorageKey(convId) {
  * @param {string|null|undefined} v Сырой текст.
  * @returns {string} Нормализованный текст; '' — вход не строка.
  */
-export function normalizeText(v) {
+export function normalizeText(v: string | null | undefined): string {
   if (typeof v !== 'string') return '';
   return v.replace(/\r\n?/g, '\n').replace(/[ \t]+$/gm, '').trim();
 }
@@ -232,7 +298,7 @@ export function normalizeText(v) {
  * @param {unknown} v Сырое значение (приводится к строке).
  * @returns {string} Однострочный текст без краевых пробелов.
  */
-export function collapseWs(v) {
+export function collapseWs(v: unknown): string {
   return String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
 }
 
@@ -242,7 +308,7 @@ export function collapseWs(v) {
  * @param {unknown} s Значение, от которого считается хеш.
  * @returns {string} Ровно 6 hex-символов (последние 6 разрядов djb2).
  */
-export function hash6(s) {
+export function hash6(s: unknown): string {
   var str = String(s == null ? '' : s);
   var h = 5381;
   for (var i = 0; i < str.length; i++) {
@@ -259,7 +325,7 @@ export function hash6(s) {
  * @param {string|null|undefined} role Сырая роль из экспорта.
  * @returns {'user'|'assistant'|''} Роль архива; '' — system/tool/неизвестная.
  */
-export function normalizeRole(role) {
+export function normalizeRole(role: string | null | undefined): 'user' | 'assistant' | '' {
   var r = collapseWs(role).toLowerCase();
   if (r === 'user' || r === 'human' || r === 'me' || r === 'prompt' || r === 'you') return 'user';
   if (r === 'assistant' || r === 'model' || r === 'bot' || r === 'ai' || r === 'gpt' || r === 'gemini' || r === 'claude') return 'assistant';
@@ -272,7 +338,7 @@ export function normalizeRole(role) {
  * @param {string|number|null|undefined} v Сырое время (ISO-строка или эпоха).
  * @returns {number} Время в мс; 0 — распарсить не удалось.
  */
-export function toMs(v) {
+export function toMs(v: string | number | null | undefined): number {
   if (typeof v === 'number' && isFinite(v)) {
     // ChatGPT/Claude отдают секунды (create_time), архивы Perplexity — мс.
     return v > 1e12 ? Math.round(v) : Math.round(v * 1000);
@@ -296,7 +362,7 @@ export function toMs(v) {
  * @param {any} json Разобранный JSON файла архива.
  * @returns {Array<any>} Диалоги в порядке файла; [] — вход непригоден.
  */
-export function arrayifyConversations(json) {
+export function arrayifyConversations(json: any): any[] {
   if (Array.isArray(json)) return json;
   if (!json || typeof json !== 'object') return [];
   if (Array.isArray(json.conversations)) return json.conversations;
@@ -312,11 +378,11 @@ export function arrayifyConversations(json) {
  * @param {{orderChatGPTMapping?: Function}} [deps] Инъекция зависимостей (тесты/страница).
  * @returns {Function|null} Функция линеаризации mapping; null — парсер недоступен.
  */
-export function resolveOrderChatGPTMapping(deps) {
+export function resolveOrderChatGPTMapping(deps?: ArchiveDeps): ((mapping: any) => string[]) | null {
   if (deps && typeof deps.orderChatGPTMapping === 'function') return deps.orderChatGPTMapping;
   try {
     if (typeof require === 'function') {
-      var m = require('./chatgpt-conversation-parser.js');
+      var m = require('./chatgpt-conversation-parser.ts');
       if (m && typeof m.orderChatGPTMapping === 'function') return m.orderChatGPTMapping;
     }
   } catch (eR) { }
@@ -335,11 +401,11 @@ export function resolveOrderChatGPTMapping(deps) {
  * @param {{sanitizeChatGPTText?: (s: string) => string}} [deps] Инъекция зависимостей.
  * @returns {(s: string) => string} Санатор текста (никогда не null).
  */
-export function resolveSanitizeChatGPT(deps) {
+export function resolveSanitizeChatGPT(deps?: ArchiveDeps): (s: any) => string {
   if (deps && typeof deps.sanitizeChatGPTText === 'function') return deps.sanitizeChatGPTText;
   try {
     if (typeof require === 'function') {
-      var m = require('./chatgpt-conversation-parser.js');
+      var m = require('./chatgpt-conversation-parser.ts');
       if (m && typeof m.sanitizeChatGPTText === 'function') return m.sanitizeChatGPTText;
     }
   } catch (eR) { }
@@ -357,7 +423,7 @@ export function resolveSanitizeChatGPT(deps) {
  * @param {{parsePerplexityThread?: Function}} [deps] Инъекция зависимостей.
  * @returns {Function|null} Функция разбора треда Perplexity; null — парсер недоступен.
  */
-export function resolveParsePerplexityThread(deps) {
+export function resolveParsePerplexityThread(deps?: ArchiveDeps): ((thread: any) => any) | null {
   if (deps && typeof deps.parsePerplexityThread === 'function') return deps.parsePerplexityThread;
   try {
     if (typeof require === 'function') {
@@ -380,7 +446,7 @@ export function resolveParsePerplexityThread(deps) {
  * @param {number} ordinal Позиция в диалоге (для детерминированного id).
  * @returns {ArchiveImportMessage|null} null — роль/текст непригодны (system/tool/пусто).
  */
-export function normalizeMessage(raw, ordinal) {
+export function normalizeMessage(raw: any, ordinal: number): ArchiveImportMessage | null {
   if (!raw || typeof raw !== 'object') return null;
   var role = normalizeRole(raw.role != null ? raw.role : raw.sender);
   if (!role) return null;
@@ -399,7 +465,7 @@ export function normalizeMessage(raw, ordinal) {
  * @param {Record<string, any>} conv Диалог из парсера формата.
  * @returns {FinalizedConversation} Диалог, готовый к записи/плану импорта.
  */
-export function finalizeConversation(conv) {
+export function finalizeConversation(conv: any): FinalizedConversation {
   var messages = [];
   var textLen = 0;
   var raw = (conv && Array.isArray(conv.messages)) ? conv.messages : [];
@@ -435,7 +501,7 @@ export function finalizeConversation(conv) {
  * @returns {boolean} true — titleUrl ведёт на gemini.google.com/app/<convId>
  *   либо header равен 'Gemini Apps'.
  */
-export function looksLikeGeminiActivity(item) {
+export function looksLikeGeminiActivity(item: any): boolean {
   if (!item || typeof item !== 'object') return false;
   var url = String(item.titleUrl || item.title_url || '');
   if (/gemini\.google\.com\/app\//.test(url)) return true;
@@ -449,7 +515,7 @@ export function looksLikeGeminiActivity(item) {
  * @param {any} json Разобранный JSON файла архива.
  * @returns {ArchiveFormat|null} Формат архива; null — не распознан.
  */
-export function detectArchiveFormat(json) {
+export function detectArchiveFormat(json: any): ArchiveFormat | null {
   var items = arrayifyConversations(json);
   if (!items.length) return null;
   var limit = Math.min(items.length, 20);
@@ -469,7 +535,7 @@ export function detectArchiveFormat(json) {
  * @param {ArchiveFormat|string} format Формат архива.
  * @returns {string} Ключ сервиса ('gemini'|'chatgpt'|'claude'|'perplexity'); '' — неизвестен.
  */
-export function serviceOfFormat(format) {
+export function serviceOfFormat(format: ArchiveFormat | string): string {
   return SERVICE_BY_FORMAT[format] || '';
 }
 
@@ -486,7 +552,7 @@ export function serviceOfFormat(format) {
  * @param {Record<string, any>|null|undefined} m Сырой ход.
  * @returns {string} Нормализованный текст; '' — пусто/непригодно.
  */
-export function messageTextOf(m) {
+export function messageTextOf(m: any): string {
   if (!m || typeof m !== 'object') return '';
   return normalizeText(m.text != null ? m.text : m.content);
 }
@@ -496,7 +562,7 @@ export function messageTextOf(m) {
  * @param {Record<string, any>} conv Диалог из архива.
  * @returns {Array<any>} Сырые ходы; [] — ходов нет.
  */
-export function aggregateMessageList(conv) {
+export function aggregateMessageList(conv: any): any[] {
   if (Array.isArray(conv.messages)) return conv.messages;
   if (Array.isArray(conv.chat_messages)) return conv.chat_messages;   // Claude export
   if (Array.isArray(conv.entries)) return conv.entries;               // Perplexity export
@@ -508,7 +574,7 @@ export function aggregateMessageList(conv) {
  * @param {Record<string, any>|null|undefined} conv Запись диалога.
  * @returns {FullTextAnomaly|null} Описание аномалии; null — согласовано/неприменимо.
  */
-export function detectFullTextAnomaly(conv) {
+export function detectFullTextAnomaly(conv: any): FullTextAnomaly | null {
   if (!conv || typeof conv !== 'object') return null;
   if (typeof conv.full !== 'string') return null;
   var fullText = normalizeText(conv.full);
@@ -532,7 +598,7 @@ export function detectFullTextAnomaly(conv) {
  * @param {any} json Разобранный JSON архива.
  * @returns {FullTextAnomaly[]} Найденные аномалии в порядке файла.
  */
-export function collectFullTextAnomalies(json) {
+export function collectFullTextAnomalies(json: any): FullTextAnomaly[] {
   var items = arrayifyConversations(json);
   var out = [];
   for (var i = 0; i < items.length; i++) {
@@ -549,8 +615,8 @@ export function collectFullTextAnomalies(json) {
  * @param {{warn?: (msg: string) => void}} [deps] Инъекция логгера.
  * @returns {FullTextAnomaly[]} Найденные аномалии (для отчёта/тестов).
  */
-export function reportFullTextAnomalies(json, deps) {
-  var d = deps || {};
+export function reportFullTextAnomalies(json: any, deps?: ArchiveDeps): FullTextAnomaly[] {
+  var d: ArchiveDeps = deps || {};
   var warn = (typeof d.warn === 'function') ? d.warn
     : ((typeof console !== 'undefined' && console && typeof console.warn === 'function')
       ? function (msg) { console.warn(msg); } : null);
@@ -572,7 +638,7 @@ export function reportFullTextAnomalies(json, deps) {
  * @param {string|null|undefined} url Ссылка из titleUrl.
  * @returns {string} convId; '' — ссылка не диалоговая.
  */
-export function extractConvIdFromUrl(url) {
+export function extractConvIdFromUrl(url: string | null | undefined): string {
   var m = String(url == null ? '' : url).match(/\/app\/(?!prompts(?:\/|$)|new(?:\/|$)|apikey(?:\/|$))([A-Za-z0-9_-]+)/);
   return m ? m[1] : '';
 }
@@ -588,7 +654,7 @@ var GEMINI_RESPONSE_DETAIL = /^(response|answer|ответ|ответ модел
  * @param {Record<string, any>} rec Activity-запись Google Takeout.
  * @returns {string} Текст промпта; '' — пусто.
  */
-export function geminiActivityUserText(rec) {
+export function geminiActivityUserText(rec: GeminiActivityRecord): string {
   var title = normalizeText(rec.title != null ? rec.title : rec.description);
   if (!title) return '';
   return normalizeText(title.replace(GEMINI_PROMPT_PREFIX, ''));
@@ -600,7 +666,7 @@ export function geminiActivityUserText(rec) {
  * @param {Record<string, any>} rec Activity-запись Google Takeout.
  * @returns {string} Текст ответа; '' — ответа нет.
  */
-export function geminiActivityAssistantText(rec) {
+export function geminiActivityAssistantText(rec: GeminiActivityRecord): string {
   var direct = normalizeText(rec.response != null ? rec.response : rec.answer);
   if (direct) return direct;
   var details = rec.details;
@@ -621,7 +687,7 @@ export function geminiActivityAssistantText(rec) {
  * @param {any} json Разобранный JSON файла Takeout.
  * @returns {ArchiveParseOutcome} Диалоги и счётчики пропусков.
  */
-export function parseGeminiTakeout(json) {
+export function parseGeminiTakeout(json: any): ArchiveParseOutcome {
   var items = Array.isArray(json) ? json : ((json && Array.isArray(json.items)) ? json.items : []);
   var order = [];
   var byConv = {};
@@ -669,7 +735,7 @@ export function parseGeminiTakeout(json) {
  * @returns {ArchiveParseOutcome} Диалоги и счётчики пропусков;
  *   error='chatgpt-parser-unavailable' — резолверы недоступны.
  */
-export function parseChatGPTArchive(json, deps) {
+export function parseChatGPTArchive(json: any, deps?: ArchiveDeps): ArchiveParseOutcome {
   var orderFn = resolveOrderChatGPTMapping(deps);
   if (!orderFn) return { conversations: [], error: 'chatgpt-parser-unavailable', skippedNoConvId: 0, skippedEmpty: 0 };
   var sanitize = resolveSanitizeChatGPT(deps);
@@ -725,7 +791,7 @@ export function parseChatGPTArchive(json, deps) {
  * @param {Record<string, any>} msg Сырой ход Claude-экспорта.
  * @returns {string} Нормализованный текст; '' — текста нет.
  */
-export function claudeMessageText(msg) {
+export function claudeMessageText(msg: ClaudeExportMessage): string {
   var parts = [];
   if (Array.isArray(msg.content)) {
     for (var i = 0; i < msg.content.length; i++) {
@@ -751,7 +817,7 @@ export function claudeMessageText(msg) {
  * @param {any} json Разобранный JSON экспорта Claude.
  * @returns {ArchiveParseOutcome} Диалоги и счётчики пропусков.
  */
-export function parseClaudeArchive(json) {
+export function parseClaudeArchive(json: any): ArchiveParseOutcome {
   var items = arrayifyConversations(json);
   var out = [];
   var skippedNoConvId = 0;
@@ -797,7 +863,7 @@ export function parseClaudeArchive(json) {
  * @returns {ArchiveParseOutcome} Диалоги и счётчики пропусков;
  *   error='perplexity-parser-unavailable' — резолвер недоступен.
  */
-export function parsePerplexityArchive(json, deps) {
+export function parsePerplexityArchive(json: any, deps?: ArchiveDeps): ArchiveParseOutcome {
   var parseThread = resolveParsePerplexityThread(deps);
   if (!parseThread) return { conversations: [], error: 'perplexity-parser-unavailable', skippedNoConvId: 0, skippedEmpty: 0 };
   var items = arrayifyConversations(json);
@@ -843,7 +909,7 @@ export function parsePerplexityArchive(json, deps) {
  * @param {ArchiveDeps} [deps] Инъекция логгера/парсеров.
  * @returns {ArchiveParseResult} Итог разбора: ok/format/service/error и счётчики.
  */
-export function parseArchive(json, deps) {
+export function parseArchive(json: any, deps?: ArchiveDeps): ArchiveParseResult {
   // LOW-3: аномалия «пол > msgs» логируется на КАЖДОМ разборе архива —
   // импорт не падает, но расхождение агрегата и ходов не замалчивается.
   reportFullTextAnomalies(json, deps);
@@ -877,7 +943,7 @@ export function parseArchive(json, deps) {
  * @param {ArchiveDeps} [deps] Инъекция логгера/парсеров.
  * @returns {ArchiveParseResult} error='invalid-json' — файл не JSON.
  */
-export function parseArchiveText(text, deps) {
+export function parseArchiveText(text: string | null | undefined, deps?: ArchiveDeps): ArchiveParseResult {
   var json = null;
   try {
     json = JSON.parse(String(text == null ? '' : text));
@@ -894,7 +960,7 @@ export function parseArchiveText(text, deps) {
  * @param {{importedAt?: number, fileName?: string}} [extra] Метаданные импорта.
  * @returns {ArchiveStoredRecord} Нормализованная запись первого яруса.
  */
-export function buildArchiveRecord(conversation, extra) {
+export function buildArchiveRecord(conversation: any, extra?: { importedAt?: number; fileName?: string }): ArchiveStoredRecord {
   var conv = finalizeConversation(conversation);
   var x = extra || {};
   return {
@@ -918,10 +984,10 @@ export function buildArchiveRecord(conversation, extra) {
  * @param {{fileName?: string}} [extra] Метаданные импорта.
  * @returns {ArchiveSourceRecord} Запись-индикатор (label вычислен describeSource).
  */
-export function buildConvSourceRecord(archiveRecord, extra) {
+export function buildConvSourceRecord(archiveRecord: any, extra?: { fileName?: string }): ArchiveSourceRecord {
   var r = archiveRecord || {};
   var x = extra || {};
-  var rec = {
+  var rec: SourceRecordDraft = {
     kind: SOURCE_ARCHIVE,
     service: String(r.service || ''),
     format: String(r.format || ''),
@@ -931,7 +997,7 @@ export function buildConvSourceRecord(archiveRecord, extra) {
   };
   rec.label = describeSource(rec);
   if (x.fileName) rec.fileName = String(x.fileName);
-  return /** @type {ArchiveSourceRecord} */ (rec);
+  return rec as ArchiveSourceRecord;
 }
 
 /**
@@ -939,9 +1005,9 @@ export function buildConvSourceRecord(archiveRecord, extra) {
  * @param {{service?: string, count?: number, textLen?: number}} [extra] Данные живого чата.
  * @returns {ArchiveSourceRecord} Запись-индикатор live-источника.
  */
-export function buildLiveSourceRecord(extra) {
+export function buildLiveSourceRecord(extra?: { service?: string; count?: number; textLen?: number }): ArchiveSourceRecord {
   var x = extra || {};
-  var rec = {
+  var rec: SourceRecordDraft = {
     kind: SOURCE_LIVE,
     service: String(x.service || ''),
     format: '',
@@ -950,7 +1016,7 @@ export function buildLiveSourceRecord(extra) {
     importedAt: 0
   };
   rec.label = describeSource(rec);
-  return /** @type {ArchiveSourceRecord} */ (rec);
+  return rec as ArchiveSourceRecord;
 }
 
 /**
@@ -958,7 +1024,7 @@ export function buildLiveSourceRecord(extra) {
  * @param {SourceRecordDraft|null|undefined} record Запись источника (draft или полная).
  * @returns {string} Ярлык: 'архив: <формат> · N сообщ.' / 'live (сеть/DOM)' / '—'.
  */
-export function describeSource(record) {
+export function describeSource(record: SourceRecordDraft | null | undefined): string {
   if (!record || typeof record !== 'object') return '—';
   if (record.kind === SOURCE_LIVE) return 'live (сеть/DOM)';
   if (record.kind !== SOURCE_ARCHIVE) return '—';
@@ -972,7 +1038,7 @@ export function describeSource(record) {
  * @param {SourceRecordDraft|null|undefined} record Запись источника.
  * @returns {string} '📦 архив' / '⚡ live' / '' — источник не определён.
  */
-export function sourceBadge(record) {
+export function sourceBadge(record: SourceRecordDraft | null | undefined): string {
   if (!record || typeof record !== 'object') return '';
   if (record.kind === SOURCE_ARCHIVE) return '📦 архив';
   if (record.kind === SOURCE_LIVE) return '⚡ live';
@@ -985,7 +1051,7 @@ export function sourceBadge(record) {
  * @param {string|null|undefined} convId Идентификатор разговора.
  * @returns {boolean} true — convId записи совпадает с переданным.
  */
-export function isArchiveRecordFor(record, convId) {
+export function isArchiveRecordFor(record: any, convId: string | null | undefined): boolean {
   if (!record || typeof record !== 'object') return false;
   if (!convId) return false;
   return String(record.convId || '') === String(convId);
@@ -997,7 +1063,7 @@ export function isArchiveRecordFor(record, convId) {
  * @param {any} rec Запись для chrome.storage.local.
  * @returns {number} Длина JSON-строки; Infinity — циклическая/битая структура.
  */
-export function recordBytes(rec) {
+export function recordBytes(rec: unknown): number {
   try { return JSON.stringify(rec).length; } catch (e) { return Infinity; }
 }
 
@@ -1008,7 +1074,7 @@ export function recordBytes(rec) {
  * @param {ArchiveImportOptions} [opts] Лимиты и метаданные файла.
  * @returns {ArchiveImportPlan} accepted/skipped и суммарный размер в байтах.
  */
-export function planArchiveImport(conversations, opts) {
+export function planArchiveImport(conversations: any[], opts?: ArchiveImportOptions): ArchiveImportPlan {
   var o = opts || {};
   var perConv = (typeof o.maxConversationBytes === 'number') ? o.maxConversationBytes : MAX_CONVERSATION_BYTES;
   var total = (typeof o.maxTotalBytes === 'number') ? o.maxTotalBytes : MAX_TOTAL_BYTES;
@@ -1045,13 +1111,7 @@ export function planArchiveImport(conversations, opts) {
   return { accepted: accepted, skipped: skipped, bytes: used };
 }
 
-/**
- * Публичный API модуля — default-экспорт Api (options/options.js берёт
- * его целиком через шов aiCmArchiveApi); именованные export function —
- * для точечных импортов.
- * @type {import('../types/archive-import').ArchiveImportApi}
- */
-var Api = {
+var Api: ArchiveImportApi = {
   ARCHIVE_KEY_PREFIX: ARCHIVE_KEY_PREFIX,
   CONV_SOURCE_KEY_PREFIX: CONV_SOURCE_KEY_PREFIX,
   ARCHIVE_RECORD_VERSION: ARCHIVE_RECORD_VERSION,

@@ -143,9 +143,9 @@ describe('build-integrity: generated entry files', () => {
       expect(/^\s*export\b/m.test(text)).toBe(false);
       return;
     }
-    // Ph2, шаг 2: utils/export-text-builders.js — ESM-модуль; он импортирует
+    // Ph2, шаг 2: utils/export-text-builders.ts — ESM-модуль; он импортирует
     // buildReferenceText уже ВНУТРИ себя, а в entry входит как
-    // import AiCmExportBuilders from '../utils/export-text-builders.js'
+    // import AiCmExportBuilders from '../utils/export-text-builders.ts'
     // (спецификатор перебазирован из core|options/ в .build/, см. rebaseImportSpecifiers).
     // Ph2, шаг 3: background.js импортирует platform статически, content.js и
     // options.js — тоже.
@@ -154,7 +154,7 @@ describe('build-integrity: generated entry files', () => {
       expect(text).toContain("import { aiCmIsFirefox } from '../utils/platform.ts';");
       expect(text).not.toContain('module.exports = { aiCmIsFirefox');
       if (name !== 'background') {
-        expect(text).toContain("import AiCmExportBuilders from '../utils/export-text-builders.js';");
+        expect(text).toContain("import AiCmExportBuilders from '../utils/export-text-builders.ts';");
       }
       expect(/^[ \t]*export\b/m.test(text)).toBe(false);
       return;

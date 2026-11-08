@@ -169,7 +169,7 @@ describe('M-7: options.js — ключ пишется только в chrome.sto
     document.body.innerHTML = '';
     setupOptionsDom();
     window.buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
-    window.AiCmExportBuilders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+    window.AiCmExportBuilders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
   });
 
   afterEach(() => {

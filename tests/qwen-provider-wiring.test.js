@@ -9,7 +9,7 @@
  *   3) core/content.js: ветка Qwen + КРИТИЧНЫЙ запрет «Qwen НЕ в isGeminiSvc»
  *      (иначе стримовый usage Qwen перезаписывался бы countTokens BYOK);
  *   4) utils/model-config.ts: qwen3.8-max + qwen3.7-plus (1M) + дефолт сайта qwen;
- *   5) utils/export-text-builders.js: [REASONING]/[ANSWER] из отдельного поля reasoning,
+ *   5) utils/export-text-builders.ts: [REASONING]/[ANSWER] из отдельного поля reasoning,
  *      байтовый инвариант для платформ без reasoning.
  *
  * Тесты только ЧИТАЮТ реальные файлы проекта (стиль manifest-smoke / version-hygiene).
@@ -27,7 +27,7 @@ const background = read('core/background.js');
 const content = read('core/content.js');
 const modelConfigRaw = read('utils/model-config.ts');
 const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.ts');
-const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 
 // Рез по балансу фигурных скобок (конвенция сьюта): тело функции до парной скобки.
 function fnDecl(src, name) {
@@ -95,7 +95,7 @@ describe('O-35: manifest.json — Qwen добавлен, прежние серв
     expect(js).not.toContain('utils/model-config.ts');
     // Ph2, шаг export-text-builders.js: модуль переведён на ESM и втягивается import'ом из
     // core/content.js — отдельным classic-скриптом в манифесте он больше не грузится.
-    expect(js).not.toContain('utils/export-text-builders.js');
+    expect(js).not.toContain('utils/export-text-builders.ts');
   });
 
   test('version/инварианты: 2.0.44 (бамп — отдельным релизным коммитом), MV3 и один content_script не тронуты', function () {

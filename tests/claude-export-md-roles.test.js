@@ -1,7 +1,7 @@
 /**
  * FIX (Claude → md): ВСЕ ХОДЫ ПОЛЬЗОВАТЕЛЯ, А НЕ ТОЛЬКО role='user'.
  *
- * Дефект: utils/export-text-builders.js:buildMdFromHistory() выбирал заголовок хода
+ * Дефект: utils/export-text-builders.ts:buildMdFromHistory() выбирал заголовок хода
  * бинарно — `msg.role === 'user'` → '## Пользователь', ИНАЧЕ '## Ассистент'. Парсер
  * истории Claude (core/claude-intercept.js:1065 и его тест-близнец
  * tests/helpers/parse-claude-conversation.js) кладёт ход пользователя ролью 'human',
@@ -40,11 +40,11 @@
 const fs = require('fs');
 const path = require('path');
 
-const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const { parseClaudeConversation } = require('./helpers/parse-claude-conversation');
 
 const ROOT = path.join(__dirname, '..');
-const BUILDERS_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.js'), 'utf8');
+const BUILDERS_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.ts'), 'utf8');
 const CLAUDE_INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'claude-intercept.js'), 'utf8');
 
 const CLAUDE_FIXTURE = JSON.parse(
@@ -387,7 +387,7 @@ describe('Claude md roles D3: live-цепочка адаптера (role=human) 
     const pipelineSrc = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.js'), 'utf8');
     expect(pipelineSrc)
       .toContain("var norm = { role: (m.role === 'user' || m.role === 'human') ? 'user' : 'assistant', text: text };");
-    // Защита от ПРЯМОЙ подачи 'human' в сборщик (utils/export-text-builders.js:300) — прежняя.
+    // Защита от ПРЯМОЙ подачи 'human' в сборщик (utils/export-text-builders.ts:300) — прежняя.
     expect(BUILDERS_SRC).toContain("(msg.role === 'user' || msg.role === 'human')");
     // Копия поля reasoning (O-39) в обеих ветках — байтово прежняя.
     expect(BASE_HANDLER_SRC).toContain("if (typeof mp.reasoning === 'string' && mp.reasoning) msg.reasoning = mp.reasoning;");
@@ -518,7 +518,7 @@ const ROLE_MARKERS = [
   'claude-role-network',    // core/export-manager.js:aiCmCollectExportSource (сеть)
   'claude-role-adapter',    // core/export-manager.js:aiCmCollectExportSource (DOM-адаптер)
   'claude-role-normalize',  // utils/export-emit-pipeline.js:normalizeExportMessages
-  'claude-role-builder'     // utils/export-text-builders.js:buildMdFromHistory
+  'claude-role-builder'     // utils/export-text-builders.ts:buildMdFromHistory
 ];
 
 // Ходы Claude в живом контуре: вопрос парсера приходит ролью 'human' (см. D1/D3/D4).
@@ -745,7 +745,7 @@ describe('Claude md roles R6/R7: диаг-маркеры ролей — толь
     expect(normalize.indexOf("aiCmDiagLine('claude-role-normalize'"))
       .toBeGreaterThan(normalize.indexOf("var norm = { role: (m.role === 'user' || m.role === 'human')"));
 
-    // (4) utils/export-text-builders.js:buildMdFromHistory — ПЕРЕД условием mdMarked, внутри
+    // (4) utils/export-text-builders.ts:buildMdFromHistory — ПЕРЕД условием mdMarked, внутри
     // цикла ходов (там доступны и msg.role, и mdMarked); логика заголовка не тронута.
     const builder = fnDecl(BUILDERS_SRC, 'buildMdFromHistory');
     expect(builder).toContain("aiCmDiagLine('claude-role-builder', { msgRole: msg.role, mdMarked: mdMarked });");

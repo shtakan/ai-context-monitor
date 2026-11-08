@@ -23,7 +23,7 @@
  * Исполняются РЕАЛЬНЫЕ функции: shouldSkipAutoExport (utils/export-emit-pipeline.js),
  * maybeAutoExport + aiCmAutoExportStartDownload + doAutoExportDownload + aiCmWriteAutoExportFile
  * + aiCmAutoExportBasePendingLog (core/export-manager.js), канонический aiCmDiagLine
- * (utils/debug.js) и реальные сборщики байтов (utils/export-text-builders.js).
+ * (utils/debug.js) и реальные сборщики байтов (utils/export-text-builders.ts).
  *
  * НЕ ТРОГАЕТСЯ (пины R1–R6 ниже): байты и маски всех форматов (buildAutoExportFileName, O-11),
  * латч и реестр имён, сегментация базы GSA (O-31), гарды O-27 (shouldSkipGsaPageGuard,
@@ -36,7 +36,7 @@ const fs = require('fs');
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
-const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const { contentSource: CONTENT } = require('./helpers/content-source.js');
 
 const ROOT = path.join(__dirname, '..');
@@ -45,7 +45,7 @@ const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'u
 // R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
 const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
-const BUILDERS_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.js'), 'utf8');
+const BUILDERS_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.ts'), 'utf8');
 
 // Рез по балансу фигурных скобок (конвенция сьюта: tests/gsa-autoexport.test.js, tests/chatgpt-o1-badge-hold.test.js).
 function fnDecl(src, name) {
@@ -160,7 +160,7 @@ function o33(over) {
       location: { hostname: 'chatgpt.com' },
       AiCmExportEmitPipeline: P,
       AiCmExportBuilders: {
-        // РЕАЛЬНЫЕ сборщики байтов (utils/export-text-builders.js) — байты файла не подменяются
+        // РЕАЛЬНЫЕ сборщики байтов (utils/export-text-builders.ts) — байты файла не подменяются
         buildTxtFromHistory: Builders.buildTxtFromHistory,
         buildMdFromHistory: Builders.buildMdFromHistory,
         buildJsonFromHistory: Builders.buildJsonFromHistory,

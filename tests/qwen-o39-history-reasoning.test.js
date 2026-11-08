@@ -62,7 +62,7 @@
  *          ветки responseType, try/catch вокруг тела обработчика, fetch-хук прежний
  *          (кроме поля transport в диагностике).
  *
- * НЕ ТРОГАЕТСЯ: core/export-manager.js, core/base-handler.js, utils/export-text-builders.js
+ * НЕ ТРОГАЕТСЯ: core/export-manager.js, core/base-handler.js, utils/export-text-builders.ts
  * (только чтение источника), adapters/qwen-adapter.js (scope O-41), тесты прочих платформ.
  */
 
@@ -70,7 +70,7 @@ const fs = require('fs');
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
-const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 
 const ROOT = path.join(__dirname, '..');
 const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'qwen-intercept.js'), 'utf8');

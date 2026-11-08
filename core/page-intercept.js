@@ -63,7 +63,7 @@ import {
   orderChatGPTMapping,
   sanitizeChatGPTText,
   shouldResetConversationOnNav
-} from '../utils/chatgpt-conversation-parser.js';
+} from '../utils/chatgpt-conversation-parser.ts';
 (function () {
   if (window.__aiCmInterceptInstalled) return;
   window.__aiCmInterceptInstalled = true;
@@ -130,7 +130,7 @@ import {
     // ai-cm-conversation-changed не диспатчится, а виджет/бейдж держат остаточные
     // значения (прежний предикат отвечал false на newId=''). Для валидных переходов
     // (непустой новый id) решение 1:1 прежнему.
-    // Ph2: решение приходит ESM-импортом (utils/chatgpt-conversation-parser.js).
+    // Ph2: решение приходит ESM-импортом (utils/chatgpt-conversation-parser.ts).
     var shouldReset = shouldResetConversationOnNav(currentConvId, newId);
     if (shouldReset) {
       currentConvId = newId;

@@ -16,8 +16,8 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
 const Logic = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
-// Ph2: utils/archive-import.js — ES-модуль (UMD-хвост снят).
-const AI = require('../helpers/load-esm.js').loadEsm('utils/archive-import.js');
+// Ph2: utils/archive-import.ts — ES-модуль (UMD-хвост снят).
+const AI = require('../helpers/load-esm.js').loadEsm('utils/archive-import.ts');
 
 const CORE_CONTENT = require('../helpers/content-source.js').contentSource;
 const CORE_GEMINI = require('../helpers/gemini-intercept-source.js').geminiSource;
@@ -251,10 +251,10 @@ describe('T1: проводка ISOLATED → MAIN и запрет внешних 
     expect(OPTIONS_HTML).toContain('id="stat-source"');
     // Ph2 (ESM): тег <script> убран — модуль втягивается import'ом из options.js
     // (проводка проверяется поведением ниже: jsdom-импорт архива зовёт API модуля).
-    expect(OPTIONS_HTML).not.toContain('../utils/archive-import.js');
+    expect(OPTIONS_HTML).not.toContain('../utils/archive-import.ts');
     // Ph2 (ESM): парсер ChatGPT — ES-модуль, втягивается import'ом из options.js
     // (в HTML скрипт-тега больше нет; проводка проверяется поведением ниже).
-    expect(OPTIONS_HTML).not.toContain('../utils/chatgpt-conversation-parser.js');
+    expect(OPTIONS_HTML).not.toContain('../utils/chatgpt-conversation-parser.ts');
     // Ph2 (ESM): парсер Perplexity — ES-модуль, втягивается import'ом из options.js.
     expect(OPTIONS_HTML).not.toContain('../utils/perplexity-parser.ts');
   });
@@ -263,7 +263,7 @@ describe('T1: проводка ISOLATED → MAIN и запрет внешних 
     expect(MANIFEST).not.toContain('archive');
     const m = JSON.parse(MANIFEST);
     expect(m.version).toBe('2.0.44');
-    expect(m.content_scripts[0].js).not.toContain('utils/archive-import.js');
+    expect(m.content_scripts[0].js).not.toContain('utils/archive-import.ts');
     // 10 — прежние 9 + chat.qwen.ai (O-35); архив в хосты так и не добавлен
     expect(m.host_permissions.length).toBe(10);
     expect(m.host_permissions).toContain('https://gemini.google.com/*');
@@ -348,7 +348,7 @@ describe('T1: options.js — импорт архива и индикатор и�
     document.body.innerHTML = '';
     setupDom();
     // Ph2 (ESM): модуль втягивается import'ом из options.js — глобал больше не нужен.
-    window.AiCmExportBuilders = require('../helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+    window.AiCmExportBuilders = require('../helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
     window.buildReferenceText = require('../helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
     mock = createChromeMock({});
     global.chrome = mock.chrome;
@@ -489,9 +489,9 @@ describe('LOW-1: потолок MAX_ARCHIVE_SIZE при импорте архи�
     delete global.chrome;
   });
 
-  test('MAX_ARCHIVE_SIZE — константа 50 МБ в utils/archive-import.js и в API', () => {
+  test('MAX_ARCHIVE_SIZE — константа 50 МБ в utils/archive-import.ts и в API', () => {
     expect(AI.MAX_ARCHIVE_SIZE).toBe(50 * 1024 * 1024);
-    const src = fs.readFileSync(path.join(ROOT, 'utils', 'archive-import.js'), 'utf8');
+    const src = fs.readFileSync(path.join(ROOT, 'utils', 'archive-import.ts'), 'utf8');
     expect(src).toContain('var MAX_ARCHIVE_SIZE = 50 * 1024 * 1024;');
   });
 

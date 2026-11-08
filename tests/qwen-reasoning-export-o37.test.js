@@ -10,7 +10,7 @@
  *     hiddenReasoning (core/qwen-intercept.js:449-453), а в DOM-базе — полем захвата
  *     hiddenReasoning (adapters/qwen-adapter.js:217); попап-строка показывает СЕРВЕРНЫЙ usage
  *     (qwenUsage.reasoningTokens), поэтому она есть независимо от экспорта;
- *   - рендер экспорта (utils/export-text-builders.js:messageTextWithReasoning) читает ТОЛЬКО
+ *   - рендер экспорта (utils/export-text-builders.ts:messageTextWithReasoning) читает ТОЛЬКО
  *     поле reasoning, которого у сообщения сервиса без сети нет («поле, которое сообщение не
  *     заполняет»);
  *   - и главное: до рендера сообщения пересобираются в {role,text} (точка сбора экспорта,
@@ -30,7 +30,7 @@ const fs = require('fs');
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
-const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const { contentSource: CONTENT } = require('./helpers/content-source.js');
 
 const ROOT = path.join(__dirname, '..');
@@ -313,10 +313,10 @@ describe('O-37 C: чистые функции (splitReasoningSections / applyRea
 // =====================================================================================
 describe('O-37 C: проводка (source-пины)', () => {
   test('сборщики: маркерный путь читает reasoning, иначе поле захвата; база текста — как у рендера', () => {
-    const fn = fnDecl(fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.js'), 'utf8'), 'reasoningOfMessageForExport');
+    const fn = fnDecl(fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.ts'), 'utf8'), 'reasoningOfMessageForExport');
     expect(fn).toContain('reasoningOfMessage(msg)');
     expect(fn).toContain("typeof msg.hiddenReasoning === 'string'");
-    expect(fnDecl(fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.js'), 'utf8'), 'markersMessageTextWithReasoning'))
+    expect(fnDecl(fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.ts'), 'utf8'), 'markersMessageTextWithReasoning'))
       .toContain('withReasoningSections(messageTextForMarkers(msg)');
     expect(Builders.aiCmReasoningOfMessageForExport({ hiddenReasoning: REASONING }, true)).toBe(REASONING);
     expect(Builders.aiCmReasoningOfMessageForExport({ hiddenReasoning: REASONING }, false)).toBe('');

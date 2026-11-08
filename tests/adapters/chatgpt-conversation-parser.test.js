@@ -1,4 +1,4 @@
-// Ph2: utils/chatgpt-conversation-parser.js — ES-модуль; именованные экспорты берём
+// Ph2: utils/chatgpt-conversation-parser.ts — ES-модуль; именованные экспорты берём
 // настоящим ESM-лоадером сьюта (module.exports больше нет).
 const {
     getConvIdFromPath,
@@ -6,7 +6,7 @@ const {
     orderChatGPTMapping,
     sanitizeChatGPTText,
     parseChatGPTConversation
-} = require('../helpers/load-esm.js').loadEsmModule('utils/chatgpt-conversation-parser.js');
+} = require('../helpers/load-esm.js').loadEsmModule('utils/chatgpt-conversation-parser.ts');
 
 describe('ChatGPT навигация /c/<id>', () => {
     it('извлекает id чата из пути', () => {

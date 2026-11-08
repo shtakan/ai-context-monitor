@@ -19,14 +19,14 @@
  * Исполняются РЕАЛЬНЫЕ функции: shouldSkipAutoExport (utils/export-emit-pipeline.js),
  * maybeAutoExport → doAutoExportDownload → aiCmWriteAutoExportFile (core/export-manager.js),
  * aiCmAutoExportTrustedBase + aiCmAutoExportTrustedBaseDiag (core/content.js), канонический
- * aiCmDiagLine (utils/debug.js) и реальные сборщики байтов (utils/export-text-builders.js).
+ * aiCmDiagLine (utils/debug.js) и реальные сборщики байтов (utils/export-text-builders.ts).
  */
 
 const fs = require('fs');
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
-const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const { contentSource: CONTENT } = require('./helpers/content-source.js');
 
 const ROOT = path.join(__dirname, '..');

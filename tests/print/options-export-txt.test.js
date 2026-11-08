@@ -72,7 +72,7 @@ function loadOptions() {
 beforeEach(() => {
   document.body.innerHTML = '';
   window.buildReferenceText = buildReferenceText;
-  window.AiCmExportBuilders = require('../helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+  window.AiCmExportBuilders = require('../helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
   global.URL.createObjectURL = jest.fn(function () { return 'blob:mock'; });
   global.URL.revokeObjectURL = jest.fn();
 });

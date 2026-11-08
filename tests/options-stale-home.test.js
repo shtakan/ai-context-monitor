@@ -108,7 +108,7 @@ beforeEach(() => {
   document.body.innerHTML = '';
   setupDom();
   window.buildReferenceText = buildReferenceText;
-  window.AiCmExportBuilders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+  window.AiCmExportBuilders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
   global.chrome = createChromeMock({}).chrome; // дефолт; гейт-тесты переопределяют ниже
 });
 

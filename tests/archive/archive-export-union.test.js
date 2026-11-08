@@ -33,8 +33,8 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..', '..');
 const Logic = require('../helpers/load-esm.js').loadEsmModule('utils/gemini-intercept-logic.js');
 const Pipeline = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
-// Ph2: utils/archive-import.js — ES-модуль; фасад берём его default-экспортом.
-const Archive = require('../helpers/load-esm.js').loadEsm('utils/archive-import.js');
+// Ph2: utils/archive-import.ts — ES-модуль; фасад берём его default-экспортом.
+const Archive = require('../helpers/load-esm.js').loadEsm('utils/archive-import.ts');
 const CORE_GEMINI = require('../helpers/gemini-intercept-source.js').geminiSource;
 const CORE_CONTENT = require('../helpers/content-source.js').contentSource;
 const OPTIONS_SRC = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');

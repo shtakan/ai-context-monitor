@@ -12,7 +12,7 @@
  *       тело начинается XSSI-префиксом `)]}'` при отсутствии полезного payload (разбор в 0
  *       непустых ходов). Легитимное тело — в т.ч. начинающееся тем же префиксом, но с
  *       ходами, — пишется байтово прежним путём;
- *   (2) пост-гард в ЕДИНСТВЕННОЙ точке скачивания (`utils/export-text-builders.js:
+ *   (2) пост-гард в ЕДИНСТВЕННОЙ точке скачивания (`utils/export-text-builders.ts:
  *       downloadBlob`, через неё идёт и `aiCmAutoExportStartDownload`): файл не выдаётся и
  *       печатается `[AI CM][diag] download-blocked reason=xssi-prefix|empty-name`, если
  *       первые байты контента начинаются с `)]}'` ИЛИ имя файла пустое/не задано. Отказ
@@ -34,7 +34,7 @@ const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/google-sear
 const CONTENT = require('./helpers/content-source.js').contentSource;
 
 const INTERCEPT = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');
-const BUILDERS_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.js'), 'utf8');
+const BUILDERS_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.ts'), 'utf8');
 // R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
 const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.js');
@@ -450,7 +450,7 @@ beforeEach(() => {
 
 afterEach(() => { jest.restoreAllMocks(); });
 
-function loadBuilders() { return require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders'); }
+function loadBuilders() { return require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders'); }
 function diagLines() { return logs.filter(function (l) { return l.indexOf('[AI CM][diag]') === 0; }); }
 function blobText(blob) {
   return new Promise(function (resolve) {

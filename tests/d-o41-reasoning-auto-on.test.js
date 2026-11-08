@@ -14,7 +14,7 @@
  *      и делал бы явный OFF физически недостижимым; ON у них — include, как прежде;
  *   4. у остальных сервисов (Gemini/Perplexity/ChatGPT/Claude/GSA) авто-ON работает как в D-O41;
  *   5. точка применения — ДО единственной точки выхода рендера (withReasoningSections,
- *      utils/export-text-builders.js:48): OFF-зачистка S1–S5 (O-7) исполняется РОВНО при
+ *      utils/export-text-builders.ts:48): OFF-зачистка S1–S5 (O-7) исполняется РОВНО при
  *      эффективном OFF;
  *   6. UI: tooltip тумблера в options + обеих локалях.
  *
@@ -49,7 +49,7 @@ const fs = require('fs');
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
-const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 
 const ROOT = path.join(__dirname, '..');
 const read = function (rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); };

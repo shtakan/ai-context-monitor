@@ -12,7 +12,7 @@
  * tests/helpers/read-module-source.js), исполнение — new Function.
  *
  *   loadEsm('utils/buildReferenceText.ts')            → default-экспорт модуля
- *   loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders')
+ *   loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders')
  *                                                      → публичное API, которое
  *                                                        модуль кладёт в window
  *   loadAsClassic('print/print.js')                    → исходник с уже

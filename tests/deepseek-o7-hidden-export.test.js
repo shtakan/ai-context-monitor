@@ -47,7 +47,7 @@ const fs = require('fs');
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
-const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
 
 const ROOT = path.join(__dirname, '..');
@@ -1210,7 +1210,7 @@ describe('O-7 R3: регресс-контур O-11/O-31/O-27/O-33/O-15…O-20 н
     expect(EXPORT_MGR_SRC).toContain("reason: 'base-pending',");
     expect(EXPORT_MGR_SRC).toContain('function aiCmAutoExportStartDownload(content, file, fmt)');
     // O-27: пост-гард единственной точки скачивания живёт в сборщиках экспорта
-    expect(read('utils/export-text-builders.js')).toContain('function downloadBlockReason');
+    expect(read('utils/export-text-builders.ts')).toContain('function downloadBlockReason');
   });
 
   test('«не трогать»: маска имён экспорта, пороги, уведомления и прочие форматы не переписаны', () => {

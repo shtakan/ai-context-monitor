@@ -1,11 +1,11 @@
 // tests/claude-md-roles-live-check.js
 // READ-ONLY замер корня дефекта «Claude md: все ходы → ## Ассистент».
-// Не коммитить. Ничего не мутирует: только читает utils/export-text-builders.js.
+// Не коммитить. Ничего не мутирует: только читает utils/export-text-builders.ts.
 const fs = require('fs');
 const path = require('path');
 
 // Читаем buildMdFromHistory
-const buildersPath = path.join(__dirname, '../utils/export-text-builders.js');
+const buildersPath = path.join(__dirname, '../utils/export-text-builders.ts');
 const buildersCode = fs.readFileSync(buildersPath, 'utf-8');
 
 // 1. Проверяем условие user/human в md-пути

@@ -11,7 +11,7 @@
  *      разбором пары секций из текста);
  *   2) OFF-путь санации (sanitizeEmitMessages) режет секции в тексте до части [ANSWER]
  *      и снимает hidden-поля — но поле reasoning ему неизвестно и остаётся;
- *   3) сборщики файла (utils/export-text-builders.js:messageTextWithReasoning) видят
+ *   3) сборщики файла (utils/export-text-builders.ts:messageTextWithReasoning) видят
  *      msg.reasoning и БЕЗУСЛОВНО дописывают секции заново.
  * Итог: тумблер OFF, а [REASONING] в файле есть.
  *
@@ -49,7 +49,7 @@ const fs = require('fs');
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
-const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 
 const ROOT = path.join(__dirname, '..');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');

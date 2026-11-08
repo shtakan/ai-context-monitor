@@ -142,10 +142,10 @@ function dropLocalRequires(src) {
 /**
  * ESM-импорты в склеиваемом Function-body (ESM-миграция Roadmap Ph2).
  *
- * После перевода utils/export-text-builders.js на `import { buildReferenceText }`
+ * После перевода utils/export-text-builders.ts на `import { buildReferenceText }`
  * его исходник не парсится как классический скрипт: `import` внутри Function-body —
  * SyntaxError. А файл реально въезжает в песочницу: adapters/qwen-adapter.js:429
- * делает `require('../utils/export-text-builders.js')`, а collectFiles() вклеивает
+ * делает `require('../utils/export-text-builders.ts')`, а collectFiles() вклеивает
  * исходник зависимости целиком. Поэтому named-import переписываем в CJS-эквивалент:
  * привязки берём из namespace-объекта модуля через tests/helpers/load-esm.js
  * (он разворачивает ESM без babel). Спецификатор резолвится от каталога самого

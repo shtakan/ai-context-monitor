@@ -254,8 +254,8 @@ describe('P-sync: голые ветки /app/ в archive-import и gemini-interc
   const CANON = '/\\/app\\/(?!prompts(?:\\/|$)|new(?:\\/|$)|apikey(?:\\/|$))([A-Za-z0-9_-]+)/';
   const LEGACY = '/\\/app\\/([A-Za-z0-9_-]+)/';
 
-  test('P-sync-1: utils/archive-import.js несёт каноничную форму, голой нет', () => {
-    const src = fs.readFileSync(path.join(__dirname, '..', 'utils', 'archive-import.js'), 'utf8');
+  test('P-sync-1: utils/archive-import.ts несёт каноничную форму, голой нет', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'utils', 'archive-import.ts'), 'utf8');
     expect(src).toContain(CANON);
     expect(src).not.toContain(LEGACY);
   });

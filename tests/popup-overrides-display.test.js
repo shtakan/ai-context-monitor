@@ -388,7 +388,7 @@ describe('H19: options — поле «Лимит контекста» = % от �
       jest.resetModules();
       document.body.innerHTML = '';
       setupDom();
-      window.AiCmExportBuilders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+      window.AiCmExportBuilders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
       window.buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
     });
 

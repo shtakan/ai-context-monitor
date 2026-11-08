@@ -124,7 +124,7 @@ function loadOptions() {
 function openOptionsExportGate(opts) {
   document.body.innerHTML = '';
   if (!window.AiCmExportBuilders) {
-    window.AiCmExportBuilders = require('./load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+    window.AiCmExportBuilders = require('./load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
   }
   if (!window.buildReferenceText) {
     window.buildReferenceText = require('./load-esm.js').loadEsm('utils/buildReferenceText.ts');

@@ -24,7 +24,7 @@ const path = require('path');
 
 const P = require('../core/qwen-pagination.js');
 const Gate = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
-const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 
 const ROOT = path.join(__dirname, '..');
 function read(rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); }

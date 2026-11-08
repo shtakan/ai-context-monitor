@@ -22,12 +22,12 @@ import { Tokenizer } from '../utils/tokenizer.ts';
 // объявления import хойстятся, поэтому второй импорт в них не нужен (и был бы
 // дублирующим объявлением имени в одном модуле).
 import { ModelConfig } from '../utils/model-config.ts';
-// ESM (Roadmap Ph2): utils/export-text-builders.js переведён на ES-модуль и втягивается
+// ESM (Roadmap Ph2): utils/export-text-builders.ts переведён на ES-модуль и втягивается
 // этим import'ом в общий бандл контент-скрипта (строка из manifest.content_scripts удалена).
 // Идентификатор AiCmExportBuilders намеренно тот же: его разделяют core/export-manager.js,
 // adapters/qwen-adapter.js и сам core/content.js, склеенные в ТОТ ЖЕ модуль, — объявления
 // import хойстятся, поэтому второй импорт в них не нужен (и был бы дублирующим именем).
-import AiCmExportBuilders from '../utils/export-text-builders.js';
+import AiCmExportBuilders from '../utils/export-text-builders.ts';
 // ESM (Roadmap Ph2): utils/export-emit-pipeline.js переведён на ES-модуль (UMD-хвост
 // снят), строка из manifest.content_scripts удалена. Идентификатор AiCmExportEmitPipeline
 // намеренно тот же: его разделяют core/export-manager.js, core/base-handler.js,

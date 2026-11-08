@@ -27,7 +27,7 @@ const fs = require('fs');
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
-const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
 const H = require('./helpers/content-source.js');
 
@@ -149,7 +149,7 @@ describe('O-36 D2: txt qwen — маркеры USER:/ASSISTANT: перед ка�
     }
         // Ph2: window.buildReferenceText удалён из контракта — путь рендера ровно один,
     // поэтому нормализация null → '' ниже фиксирует только контракт buildTxtFromHistory.
-    const src = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.js'), 'utf8');
+    const src = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.ts'), 'utf8');
     expect(fnDecl(src, 'renderReferenceText')).toContain('return buildReferenceText(list);');
     expect(fnDecl(src, 'buildTxtFromHistory')).toContain("return (out === null) ? '' : out;");
   });
@@ -288,7 +288,7 @@ describe('O-36 D2.1: txt qwen — маркеры идут по репликам,
   });
 
   test('source-пин: явный цикл и Array.isArray в рендерере (структура, а не только байты)', function () {
-    const src = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.js'), 'utf8');
+    const src = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.ts'), 'utf8');
     const fn = fnDecl(src, 'renderReferenceTextWithRoleMarkers');
     expect(fn).toContain('var src = Array.isArray(list) ? list : [];');
     expect(fn).toContain('for (var i = 0; i < src.length; i++)');

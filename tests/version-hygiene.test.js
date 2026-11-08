@@ -326,7 +326,7 @@ describe('R-1: футер options рендерит версию из маниф�
     document.body.innerHTML = '';
     setupDom();
     window.buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
-    window.AiCmExportBuilders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+    window.AiCmExportBuilders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
   });
 
   afterEach(function () {

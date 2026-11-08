@@ -12,7 +12,7 @@
  * уровне вкладки и переживают навигацию в ней же.
  *
  * Фикс (две точки, каждая — существующий механизм сброса):
- *   1) utils/chatgpt-conversation-parser.js:shouldResetConversationOnNav — решение для
+ *   1) utils/chatgpt-conversation-parser.ts:shouldResetConversationOnNav — решение для
  *      НАВИГАЦИИ (надмножество прежнего предиката: смена контекста, включая ПОТЕРЮ id);
  *      core/page-intercept.js:checkConvChange использует его;
  *   2) core/content.js:aiCmResetStaleStateOnChatlessChatGptUrl — холодный вход на URL без
@@ -32,7 +32,7 @@
  *      сбрасывает (контракт O-22), но бейдж-сброс не дублирует;
  *   R3 пины проводки и границ: export-manager.js/tokenizer.js/manifest.json не тронуты.
  *
- * Исполняются РЕАЛЬНЫЕ функции: utils/chatgpt-conversation-parser.js
+ * Исполняются РЕАЛЬНЫЕ функции: utils/chatgpt-conversation-parser.ts
  * (getConvIdFromPath/shouldResetConversationOnNav — для MAIN и для прежнего предиката),
  * utils/export-emit-pipeline.js (extractConvIdFromUrl — id со стороны ISOLATED, как в
  * content.js:getCurrentConvId), core/page-intercept.js (getConvId/resetForNewConversation/
@@ -51,15 +51,15 @@ const fs = require('fs');
 const path = require('path');
 
 const H = require('./helpers/content-source.js');
-// Ph2: utils/chatgpt-conversation-parser.js — ES-модуль; тест берёт его именованные
+// Ph2: utils/chatgpt-conversation-parser.ts — ES-модуль; тест берёт его именованные
 // экспорты через настоящий ESM-лоадер (никакого module.exports/window-хоста больше нет).
-const PARSER = require('./helpers/load-esm.js').loadEsmModule('utils/chatgpt-conversation-parser.js');
+const PARSER = require('./helpers/load-esm.js').loadEsmModule('utils/chatgpt-conversation-parser.ts');
 const Pipeline = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
 
 const ROOT = path.join(__dirname, '..');
 const CONTENT = H.contentSource;                                  // модули + content.js (единый скоуп)
 const WIDGET_SRC = H.moduleSource('core/widget.js');
-const PARSER_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'chatgpt-conversation-parser.js'), 'utf8');
+const PARSER_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'chatgpt-conversation-parser.ts'), 'utf8');
 const PAGE_SRC = fs.readFileSync(path.join(ROOT, 'core', 'page-intercept.js'), 'utf8');
 const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.js'), 'utf8');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
@@ -622,14 +622,14 @@ describe('O-34 R3: пины проводки и границ', () => {
 
   test('R3: новое решение живёт ровно в двух точках (парсер + перехватчик), дублей нет', () => {
     const files = [
-      'utils/chatgpt-conversation-parser.js', 'core/page-intercept.js', 'core/content.js',
+      'utils/chatgpt-conversation-parser.ts', 'core/page-intercept.js', 'core/content.js',
       'core/widget.js', 'core/state.js', 'core/export-manager.js', 'utils/export-emit-pipeline.js',
       'utils/tokenizer.ts', 'manifest.json'
     ];
     const withSymbol = files.filter(function (rel) {
       return fs.readFileSync(path.join(ROOT, rel), 'utf8').indexOf('shouldResetConversationOnNav') !== -1;
     });
-    expect(withSymbol).toEqual(['utils/chatgpt-conversation-parser.js', 'core/page-intercept.js']);
+    expect(withSymbol).toEqual(['utils/chatgpt-conversation-parser.ts', 'core/page-intercept.js']);
     const withHelper = files.filter(function (rel) {
       return fs.readFileSync(path.join(ROOT, rel), 'utf8').indexOf('aiCmResetStaleStateOnChatlessChatGptUrl') !== -1;
     });

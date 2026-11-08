@@ -6,7 +6,7 @@
  */
 
 const { parsePerplexityThread } = require('../helpers/parse-perplexity-thread');
-const Builders = require('../helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+const Builders = require('../helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const fs = require('fs');
 const path = require('path');
 

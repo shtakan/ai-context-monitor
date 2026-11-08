@@ -13,11 +13,25 @@
 import { buildReferenceText } from './buildReferenceText.ts';
 import { aiCmDiagDownload, aiCmDiagDownloadBlocked } from './debug.js';
 
-/** @typedef {import('../types/export').ExportFormat} ExportFormat */
-/** @typedef {import('../types/export').ExportMessage} ExportMessage */
-/** @typedef {import('../types/export').ExportHistory} ExportHistory */
-/** @typedef {import('../types/export').ExportSourceTier} ExportSourceTier */
-/** @typedef {import('../types/export').ExportBuildersApi} ExportBuildersApi */
+import type {
+  ExportMessage,
+  ExportHistory,
+  ExportBuildersApi
+} from '../types/export';
+
+/** Опции диагностического скачивания (extra попадает в диагностический лог). */
+export interface DiagOptions {
+  trigger?: string;
+  extra?: Record<string, unknown>;
+}
+
+/** Опции сборщиков текста (платформа влияет на шапку md/json). */
+export interface BuildOptions {
+  platform?: string;
+}
+
+/** Причина блокировки скачивания (downloadBlockReason). */
+export type DownloadBlockReason = 'xssi-prefix' | 'empty-name';
 
 // M-4.2: пользовательские строки рендеримого md-документа (шапка и роли) берутся из
 // _locales через chrome.i18n.getMessage (ключи export_md_*). chrome.i18n недоступен
@@ -30,7 +44,7 @@ import { aiCmDiagDownload, aiCmDiagDownloadBlocked } from './debug.js';
  * @param {string|string[]} [substitutions] подстановки
  * @returns {string} локализованная строка
  */
-function aiCmI18nMessage(key, fallback, substitutions) {
+function aiCmI18nMessage(key: string, fallback: string, substitutions?: string | string[]): string {
   try {
     if (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.getMessage === 'function') {
       var message = substitutions ? chrome.i18n.getMessage(key, substitutions) : chrome.i18n.getMessage(key);
@@ -64,7 +78,7 @@ var ANSWER_SECTION_TAG = '[ANSWER]';
  * @param {ExportMessage} msg сообщение истории
  * @returns {string} секция рассуждений
  */
-function reasoningOfMessage(msg) {
+function reasoningOfMessage(msg: ExportMessage | null | undefined): string {
   if (!msg || typeof msg !== 'object') return '';
   var r = msg.reasoning;
   return (typeof r === 'string') ? r : '';
@@ -75,7 +89,7 @@ function reasoningOfMessage(msg) {
  * @param {string} reasoning текст рассуждений
  * @returns {string} текст с секциями
  */
-export function withReasoningSections(text, reasoning) {
+export function withReasoningSections(text: string, reasoning: string): string {
   var t = (typeof text === 'string') ? text : '';
   var r = (typeof reasoning === 'string') ? reasoning : '';
   if (!r) return t;
@@ -87,7 +101,7 @@ export function withReasoningSections(text, reasoning) {
  * @param {ExportMessage} msg сообщение истории
  * @returns {string} текст сообщения
  */
-export function messageTextWithReasoning(msg) {
+export function messageTextWithReasoning(msg: ExportMessage | null | undefined): string {
   if (!msg || typeof msg !== 'object') return '';
   return withReasoningSections(msg.text, reasoningOfMessage(msg));
 }
@@ -113,7 +127,7 @@ export function messageTextWithReasoning(msg) {
  * @param {boolean} useHidden брать скрытые поля
  * @returns {string} секция рассуждений
  */
-export function reasoningOfMessageForExport(msg, useHidden) {
+export function reasoningOfMessageForExport(msg: ExportMessage | null | undefined, useHidden?: boolean): string {
   var r = reasoningOfMessage(msg);
   if (r) return r;
   if (useHidden !== true || !msg || typeof msg !== 'object') return '';
@@ -125,7 +139,7 @@ export function reasoningOfMessageForExport(msg, useHidden) {
  * @param {boolean} useHidden брать скрытые поля
  * @returns {string} текст с маркерами роли
  */
-export function markersMessageTextWithReasoning(msg, useHidden) {
+export function markersMessageTextWithReasoning(msg: ExportMessage | null | undefined, useHidden?: boolean): string {
   return withReasoningSections(messageTextForMarkers(msg),
     reasoningOfMessageForExport(msg, useHidden));
 }
@@ -150,7 +164,7 @@ var TXT_ROLE_MARKER_SITES = ['qwen'];
  * @param {ExportHistory} history история экспорта
  * @returns {boolean} нужны ли маркеры роли
  */
-export function isTxtRoleMarkerHistory(history) {
+export function isTxtRoleMarkerHistory(history: ExportHistory | null | undefined): boolean {
   try {
     var site = String((history && history.site) || '').toLowerCase();
     return TXT_ROLE_MARKER_SITES.indexOf(site) !== -1;
@@ -161,7 +175,7 @@ export function isTxtRoleMarkerHistory(history) {
  * @param {string} role роль сообщения
  * @returns {string} маркер роли
  */
-export function txtRoleMarker(role) {
+export function txtRoleMarker(role: string): string {
   return (role === 'user') ? 'USER:' : 'ASSISTANT:';
 }
 /** O-36 (R2): метка роли в md-экспорте qwen — как в нативном экспорте Qwen Studio
@@ -172,7 +186,7 @@ export function txtRoleMarker(role) {
  * @param {string} role роль сообщения
  * @returns {string} маркер роли
  */
-export function mdRoleMarker(role) {
+export function mdRoleMarker(role: string): string {
   return (role === 'user') ? '### USER' : '### ASSISTANT';
 }
 
@@ -207,7 +221,7 @@ var CONTAINER_COVER_MIN = 0.8;
  * @param {ExportMessage} msg сообщение истории
  * @returns {string} текст сообщения
  */
-export function messageTextForMarkers(msg) {
+export function messageTextForMarkers(msg: ExportMessage | null | undefined): string {
   if (!msg || typeof msg !== 'object') return '';
   if (typeof msg.text === 'string' && msg.text) return msg.text;
   if (typeof msg.content === 'string') return msg.content;
@@ -220,7 +234,7 @@ export function messageTextForMarkers(msg) {
  * @param {ExportMessage[]} list сообщения истории
  * @returns {ExportMessage[]} сообщения без контейнеров
  */
-export function dropContainerMessages(list) {
+export function dropContainerMessages(list: ExportMessage[]): ExportMessage[] {
   var src = Array.isArray(list) ? list : [];
   var texts = [];
   for (var t = 0; t < src.length; t++) texts.push(messageTextForMarkers(src[t]));
@@ -258,7 +272,7 @@ export function dropContainerMessages(list) {
  * @param {number} totalCount всего сообщений
  * @returns {boolean} удалось ли напечатать
  */
-export function diagTxtRoleStructure(list, totalCount) {
+export function diagTxtRoleStructure(list: ExportMessage[], totalCount?: number): boolean {
   if (!diagOn()) return false;
   try {
     var kept = Array.isArray(list) ? list.length : -1;
@@ -289,7 +303,7 @@ export function diagTxtRoleStructure(list, totalCount) {
  * @param {Array} list сообщения истории
  * @returns {string} текст
  */
-function renderReferenceText(list) {
+function renderReferenceText(list: ExportMessage[]): string {
   return buildReferenceText(list);
 }
 /** O-36 (D2/D2.1): тот же «эталон», но с маркером роли перед КАЖДЫМ сообщением;
@@ -302,11 +316,11 @@ function renderReferenceText(list) {
  * @param {Array} list сообщения истории
  * @returns {string|null} текст или null
  */
-function renderReferenceTextWithRoleMarkers(list) {
+function renderReferenceTextWithRoleMarkers(list: ExportMessage[]): string | null {
   var src = Array.isArray(list) ? list : [];
   var parts = [];
   for (var i = 0; i < src.length; i++) {
-    var m = src[i] || {};
+    var m = src[i] || ({} as ExportMessage);
     var text = renderReferenceText([{ role: m.role, text: messageTextForMarkers(m) }]);
     if (text === null) return null;
     if (!String(text).trim()) continue;   // пустой реплике маркер не положен (висячих нет)
@@ -323,7 +337,7 @@ function renderReferenceTextWithRoleMarkers(list) {
  * @param {ExportHistory} history история экспорта
  * @returns {string} txt-экспорт
  */
-export function buildTxtFromHistory(history) {
+export function buildTxtFromHistory(history: ExportHistory): string {
   var hist = history || {};
   var site = (typeof hist.site === 'string') ? hist.site : '';
   var messages = (history && Array.isArray(history.messages)) ? history.messages : [];
@@ -341,7 +355,7 @@ export function buildTxtFromHistory(history) {
   var forTxt = kept.map(function (m) {
     var text = marked ? markersMessageTextWithReasoning(m, true) : messageTextWithReasoning(m);
     if (!m || typeof m !== 'object' || text === m.text) return m;
-    var copy = {};
+    var copy = {} as ExportMessage;
     for (var k in m) {
       if (Object.prototype.hasOwnProperty.call(m, k)) copy[k] = m[k];
     }
@@ -374,7 +388,7 @@ export function buildTxtFromHistory(history) {
  * @param {ExportHistory} history история экспорта
  * @returns {{tokens: number, limit: number, percent: number}} согласованный снимок
  */
-function exportTokenSnapshot(history) {
+function exportTokenSnapshot(history: ExportHistory): { tokens: number; limit: number; percent: number } {
   var h = history || {};
   var tokens = (typeof h.tokens === 'number') ? h.tokens : 0;
   var limit = (typeof h.limit === 'number') ? h.limit : 0;
@@ -391,7 +405,7 @@ function exportTokenSnapshot(history) {
  * @param {string} platform платформа
  * @returns {string} markdown-экспорт
  */
-export function buildMdFromHistory(history, platform) {
+export function buildMdFromHistory(history: ExportHistory, platform?: string): string {
   var h = history || {};
   var site = (typeof h.site === 'string') ? h.site : '';
   var lines = [];
@@ -429,7 +443,7 @@ export function buildMdFromHistory(history, platform) {
   var messages = Array.isArray(h.messages) ? h.messages : [];
   if (mdMarked) messages = dropContainerMessages(messages);
   for (var i = 0; i < messages.length; i++) {
-    var msg = messages[i] || {};
+    var msg = messages[i] || ({} as ExportMessage);
     // Claude md (ДИАГНОСТИКА — только измерение под гейтом aiCmDebug): роль хода и вердикт
     // маркерного пути ПЕРЕД выбором заголовка (## Пользователь / ## Ассистент / ### USER…).
     // Канонический хелпер utils/debug.js:aiCmDiagLine; в popup/options его нет, гейт выключен
@@ -463,7 +477,7 @@ export function buildMdFromHistory(history, platform) {
  * @param {string} platform платформа
  * @returns {string} json-экспорт
  */
-export function buildJsonFromHistory(history, platform) {
+export function buildJsonFromHistory(history: ExportHistory, platform?: string): string {
   var h = history || {};
   // json — данные снимка: значения берутся из истории как есть (их согласованность
   // обеспечивает export-manager одним снимком). Пересчёт здесь менял бы байты
@@ -498,7 +512,7 @@ var DIAG_PREFIX = '[AI CM][diag]';
  * Включена ли диагностика.
  * @returns {boolean} включена ли диагностика
  */
-export function diagOn() {
+export function diagOn(): boolean {
   try {
     if (typeof sessionStorage !== 'undefined' && sessionStorage &&
       sessionStorage.getItem('aiCmDebug') === '1') return true;
@@ -506,7 +520,7 @@ export function diagOn() {
   try {
     // Флаг «Подробные логи» пишет __aiCmSetDebugLogs (utils/debug.js) в глобальный объект
     // страницы; читаем через globalThis — модуль больше не держит window-зеркала.
-    var gRoot = /** @type {any} */ (globalThis);
+    var gRoot = globalThis as any;
     if (gRoot && gRoot.__aiCmDebugLogs === true) return true;
   } catch (eWin) { }
   return false;
@@ -517,7 +531,7 @@ export function diagOn() {
  * @param {number} n длина среза
  * @returns {string} срез значения
  */
-export function diagHead(v, n) {
+export function diagHead(v: unknown, n?: number): string {
   try {
     var lim = (typeof n === 'number' && n > 0) ? n : 100;
     if (v === undefined || v === null) return '';
@@ -532,7 +546,7 @@ export function diagHead(v, n) {
  * Стек вызовов для диагностики.
  * @returns {string} стек вызовов
  */
-function diagStack() {
+function diagStack(): string {
   try {
     var lines = String((new Error()).stack || '').split('\n');
     var out = [];
@@ -554,7 +568,7 @@ function diagStack() {
  * @param {*} [extra] доп. поля
  * @returns {boolean} удалось ли напечатать
  */
-export function diagDownload(trigger, content, fileName, extra) {
+export function diagDownload(trigger: string, content: string, fileName: string, extra?: Record<string, unknown>): boolean {
   try {
     if (typeof aiCmDiagDownload === 'function') return aiCmDiagDownload(trigger, content, fileName, extra);
   } catch (eGlobal) { }
@@ -596,7 +610,7 @@ var XSSI_PREFIX_LEN = 4;
  * @param {string} content содержимое файла
  * @returns {boolean} есть ли XSSI-префикс
  */
-function startsWithXssiPrefix(content) {
+function startsWithXssiPrefix(content: string): boolean {
   try {
     if (content === undefined || content === null) return false;
     var s = String(content);
@@ -613,7 +627,7 @@ function startsWithXssiPrefix(content) {
  * @param {string} fileName имя файла
  * @returns {'xssi-prefix'|'empty-name'|null} причина блокировки
  */
-export function downloadBlockReason(content, fileName) {
+export function downloadBlockReason(content: string, fileName: string): DownloadBlockReason | null {
   if (startsWithXssiPrefix(content)) return 'xssi-prefix';
   if (fileName === undefined || fileName === null || String(fileName).trim() === '') return 'empty-name';
   return null;
@@ -630,7 +644,7 @@ export function downloadBlockReason(content, fileName) {
  * @param {*} [extra] доп. поля
  * @returns {boolean} удалось ли напечатать
  */
-export function diagDownloadBlocked(trigger, content, fileName, reason, extra) {
+export function diagDownloadBlocked(trigger: string, content: string, fileName: string, reason: string, extra?: Record<string, unknown>): boolean {
   try {
     if (typeof aiCmDiagDownloadBlocked === 'function') {
       return aiCmDiagDownloadBlocked(trigger, content, fileName, reason, extra);
@@ -668,7 +682,7 @@ export function diagDownloadBlocked(trigger, content, fileName, reason, extra) {
  * @param {*} [extra] доп. поля
  * @returns {boolean} успех скачивания
  */
-export function downloadBlob(content, fileName, mimeType, trigger, extra) {
+export function downloadBlob(content: string, fileName: string, mimeType: string, trigger?: string, extra?: Record<string, unknown>): boolean {
   var ex = extra || {};
   var blockReason = downloadBlockReason(content, fileName);
   if (blockReason) {
@@ -698,8 +712,7 @@ export function downloadBlob(content, fileName, mimeType, trigger, extra) {
   return true;
 }
 
-/** @type {ExportBuildersApi} публичное API модуля */
-var Api = {
+var Api: ExportBuildersApi = {
   buildTxtFromHistory: buildTxtFromHistory,
   buildMdFromHistory: buildMdFromHistory,
   buildJsonFromHistory: buildJsonFromHistory,

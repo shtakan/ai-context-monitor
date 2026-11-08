@@ -1,21 +1,21 @@
 // ESM (Roadmap Ph2): сборка втягивает utils/platform.ts в тот же options-бандл, поэтому
 // aiCmIsFirefox() остаётся в общей области видимости страницы (отдельный <script> убран).
 import { aiCmIsFirefox } from '../utils/platform.ts';
-// ESM (Roadmap Ph2): utils/export-text-builders.js переведён на ES-модуль — тег <script>
+// ESM (Roadmap Ph2): utils/export-text-builders.ts переведён на ES-модуль — тег <script>
 // из options/options.html удалён, модуль втягивается этим import'ом в options-бандл.
-import AiCmExportBuilders from '../utils/export-text-builders.js';
-// ESM (Roadmap Ph2): utils/archive-import.js переведён на ES-модуль — тег <script>
+import AiCmExportBuilders from '../utils/export-text-builders.ts';
+// ESM (Roadmap Ph2): utils/archive-import.ts переведён на ES-модуль — тег <script>
 // из options/options.html удалён, модуль втягивается этим import'ом в options-бандл
 // (публичный API модуля — default-экспорт, как у export-text-builders выше).
-import AiCmArchiveImport from '../utils/archive-import.js';
+import AiCmArchiveImport from '../utils/archive-import.ts';
 // ESM (Roadmap Ph2): utils/perplexity-parser.ts переведён на ES-модуль — тег <script>
 // из options/options.html удалён. Архив Perplexity разбирается инъекцией парсера в
 // archive-import (window.parsePerplexityThread больше не публикуется).
 import { parsePerplexityThread } from '../utils/perplexity-parser.ts';
-// ESM (Roadmap Ph2): utils/chatgpt-conversation-parser.js переведён на ES-модуль — тег
+// ESM (Roadmap Ph2): utils/chatgpt-conversation-parser.ts переведён на ES-модуль — тег
 // <script> из options/options.html удалён. Архив ChatGPT разбирается инъекцией парсера в
 // archive-import (window.ChatGPTConversationParser больше не публикуется).
-import { orderChatGPTMapping, sanitizeChatGPTText } from '../utils/chatgpt-conversation-parser.js';
+import { orderChatGPTMapping, sanitizeChatGPTText } from '../utils/chatgpt-conversation-parser.ts';
 
 console.log('AI Context Monitor: Настройки загружены');
 

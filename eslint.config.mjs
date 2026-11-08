@@ -238,7 +238,7 @@ export default [
     files: [
       'utils/markdown.ts',
       'utils/buildReferenceText.ts',
-      'utils/export-text-builders.js',
+      'utils/export-text-builders.ts',
       'utils/platform.ts',
       'utils/intercept-common.ts',
       'utils/stream-frames.ts',
@@ -251,15 +251,15 @@ export default [
       // Ph2, шаг model-config.ts: модуль переведён на ESM (UMD-хвост снят) и
       // втягивается import'ом из core/content.js.
       'utils/model-config.ts',
-      // Ph2, шаг archive-import.js: модуль переведён на ESM (UMD-хвост снят) и
+      // Ph2, шаг archive-import.ts: модуль переведён на ESM (UMD-хвост снят) и
       // втягивается import'ом из options/options.js.
-      'utils/archive-import.js',
+      'utils/archive-import.ts',
       // Ph2, шаг perplexity-parser.ts: модуль переведён на ESM (UMD-хвост снят) и
       // втягивается import'ами из core/perplexity-intercept.js и options/options.js.
       'utils/perplexity-parser.ts',
-      // Ph2, шаг chatgpt-conversation-parser.js: модуль переведён на ESM (UMD-хвост
+      // Ph2, шаг chatgpt-conversation-parser.ts: модуль переведён на ESM (UMD-хвост
       // снят) и втягивается import'ами из core/page-intercept.js и options/options.js.
-      'utils/chatgpt-conversation-parser.js',
+      'utils/chatgpt-conversation-parser.ts',
       // Ph2, шаг gemini-batchexecute-parser.js: модуль переведён на ESM (UMD-хвост
       // снят) и втягивается side-effect import'ом из core/content.js; для MAIN-мира
       // build.mjs выводит classic-артефакт dist/utils/gemini-batchexecute-parser.js.

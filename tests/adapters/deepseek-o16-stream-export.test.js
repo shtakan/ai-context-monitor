@@ -11,7 +11,7 @@
  * (ReadableStream: чанки подаются вручную) + РЕАЛЬНЫЕ maybeAutoExport/doAutoExportDownload
  * из core/export-manager.js в песочнице `with(ctx)` (как tests/autoexport-settings-m13),
  * где ctx.window === jsdom-window: CustomEvent-мост probe/flush говорит с живым
- * перехватчиком, а тело файла собирают реальные сборщики utils/export-text-builders.js.
+ * перехватчиком, а тело файла собирают реальные сборщики utils/export-text-builders.ts.
  *
  * Проверки:
  *  1) воспроизведение дефекта: терминальный чанк (quasi_status FINISHED) приходит ДО
@@ -31,7 +31,7 @@ const path = require('path');
 const { JSDOM, VirtualConsole } = require('jsdom');
 
 const P = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
-const Builders = require('../helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+const Builders = require('../helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const CONTENT = require('../helpers/content-source.js').contentSource;
 
 const ROOT = path.join(__dirname, '..', '..');

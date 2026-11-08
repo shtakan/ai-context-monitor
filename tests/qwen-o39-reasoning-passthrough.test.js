@@ -13,7 +13,7 @@
  *       не-Gemini ветка строила {role,text} из messages[p] и теряла mp.reasoning
  *       (O-39: строка копирования `if (typeof mp.reasoning === 'string' && mp.reasoning)`);
  *       ветка Gemini/AI Studio не тронута (идёт через пайплайн prepareExportMessages).
- * Точка ВЫХОДА (единая) — рендер utils/export-text-builders.js: рендерер читает ТОЛЬКО поле
+ * Точка ВЫХОДА (единая) — рендер utils/export-text-builders.ts: рендерер читает ТОЛЬКО поле
  * message.reasoning, поэтому фикс сделан на путях ЗАПИСИ базы, а не расширением рендерера
  * (source-пин S4: в withReasoningSections нет ни одного упоминания hiddenReasoning).
  *
@@ -46,7 +46,7 @@
  * (core/content.js:664-675), поэтому поля reasoning у чужих платформ там нет — это и
  * воспроизводят моки R1/R2 (снимок без reasoning).
  *
- * НЕ ТРОГАЕТСЯ: core/export-manager.js, core/base-handler.js, utils/export-text-builders.js —
+ * НЕ ТРОГАЕТСЯ: core/export-manager.js, core/base-handler.js, utils/export-text-builders.ts —
  * только чтение источника; поведение прочих платформ (байты) — R-пины.
  */
 
@@ -54,12 +54,12 @@ const fs = require('fs');
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
-const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 
 const ROOT = path.join(__dirname, '..');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 const BASE_HANDLER_SRC = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.js'), 'utf8');
-const BUILDERS_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.js'), 'utf8');
+const BUILDERS_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.ts'), 'utf8');
 // D7: РЕАЛЬНЫЙ utils/debug.js (канонический гейт aiCmDebug) — только для пина «диагностика
 // под гейтом»: в прочих пинах он не подключается вовсе (прежнее поведение песочницы 1:1).
 // R1 (Ph2): utils/debug.js — ESM-модуль, поэтому песочнице нужен classic-срез без
@@ -329,7 +329,7 @@ describe('O-39 D3: DOM-фолбэк (роль в адаптере отсутст
 });
 
 // =====================================================================================
-// D4: ТОЧКА ВЫХОДА — РЕНДЕР (utils/export-text-builders.js)
+// D4: ТОЧКА ВЫХОДА — РЕНДЕР (utils/export-text-builders.ts)
 // =====================================================================================
 describe('O-39 D4: рендер собирает секции из поля reasoning', () => {
   test('D4 withReasoningSections: [REASONING] + [ANSWER] из чистых аргументов', () => {
@@ -583,7 +583,7 @@ describe('O-39 D6: стадия формирования базы (content.js) �
 // =====================================================================================
 describe('O-39 D7: диагностика только под гейтом aiCmDebug, байты выхода от гейта не зависят', () => {
   // FLAKE-D7: md-сборщик пишет «Дата экспорта» из new Date().toISOString() в момент сборки
-  // (utils/export-text-builders.js:281). offMd и onMd собираются в РАЗНЫЕ моменты, поэтому на
+  // (utils/export-text-builders.ts:281). offMd и onMd собираются в РАЗНЫЕ моменты, поэтому на
   // границе миллисекунды строки расходятся и байтовое сравнение падает (~1 из N прогонов).
   // Фейковые таймеры фиксируют системное время — сравнение onMd/offMd детерминировано.
   beforeEach(() => {

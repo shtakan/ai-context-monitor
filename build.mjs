@@ -248,7 +248,7 @@ function contentEntry(manifest) {
     fail('manifest.json: content_scripts[0].js is missing or empty');
   }
   // ESM-пилот (Roadmap Ph2): utils/buildReferenceText.ts больше не отдельный
-  // content script — его втягивает esbuild по import из utils/export-text-builders.js.
+  // content script — его втягивает esbuild по import из utils/export-text-builders.ts.
   // utils/platform.ts теперь импортирует core/content.js (шаг 3), поэтому в списке
   // конкатенации ему тоже не место. Фильтр держит SSOT устойчивым, даже если строку
   // случайно вернут в манифест.
@@ -263,10 +263,10 @@ function contentEntry(manifest) {
   // Ph2, шаг perplexity-parser.ts: модуль ESM — его втягивают статические import'ы
   // core/perplexity-intercept.js (MAIN-бандл) и options/options.js; как строку
   // конкатенации content-скрипта не берём.
-  // Ph2, шаг chatgpt-conversation-parser.js: модуль ESM — его втягивают статические
+  // Ph2, шаг chatgpt-conversation-parser.ts: модуль ESM — его втягивают статические
   // import'ы core/page-intercept.js (MAIN-бандл) и options/options.js; как строку
   // конкатенации не берём.
-  // Ph2, шаг export-text-builders.js: модуль ESM — его втягивает статический import из
+  // Ph2, шаг export-text-builders.ts: модуль ESM — его втягивает статический import из
   // core/content.js (единый скоуп бандла: AiCmExportBuilders делят core/export-manager.js,
   // adapters/qwen-adapter.js и core/content.js); строка из манифеста удалена.
   // Ph2, шаг gemini-batchexecute-parser.js: модуль ESM — его втягивает side-effect
@@ -280,9 +280,9 @@ function contentEntry(manifest) {
       rel !== 'utils/debug.js' &&
       rel !== 'utils/tokenizer.ts' &&
       rel !== 'utils/model-config.ts' &&
-      rel !== 'utils/export-text-builders.js' &&
+      rel !== 'utils/export-text-builders.ts' &&
       rel !== 'utils/perplexity-parser.ts' &&
-      rel !== 'utils/chatgpt-conversation-parser.js' &&
+      rel !== 'utils/chatgpt-conversation-parser.ts' &&
       rel !== 'utils/gemini-batchexecute-parser.js' &&
       // Ph2, шаг gemini-dom-parser.ts: модуль ESM — его втягивает статический
       // import из core/hybrid-tail.js (ISOLATED-мир). MAIN-регистраций у парсера
@@ -327,16 +327,16 @@ function htmlScriptEntry(htmlPath) {
 /** options entry — <script src> order in options/options.html */
 function optionsEntry() {
   // ESM-пилот (Roadmap Ph2): utils/buildReferenceText.ts втягивается import'ом
-  // из utils/export-text-builders.js, поэтому тег <script> из options.html убран.
+  // из utils/export-text-builders.ts, поэтому тег <script> из options.html убран.
   // utils/platform.ts втягивается import'ом из options/options.js (шаг 3) — его тег
-  // тоже удалён. utils/export-text-builders.js — ESM: и options.html-тег, и строка
+  // тоже удалён. utils/export-text-builders.ts — ESM: и options.html-тег, и строка
   // конкатенации убраны, модуль втягивается import'ом из options/options.js.
-  // Ph2, шаг archive-import.js: модуль ESM — его втягивает статический import из
+  // Ph2, шаг archive-import.ts: модуль ESM — его втягивает статический import из
   // options/options.js, поэтому и options.html-тег, и строка конкатенации убраны.
   // Фильтр — страховка SSOT: теги не должны вернуться в разметку.
   return htmlScriptEntry('options/options.html').filter(function (rel) {
     return rel !== 'utils/buildReferenceText.ts' && rel !== 'utils/platform.ts' &&
-      rel !== 'utils/export-text-builders.js' && rel !== 'utils/archive-import.js';
+      rel !== 'utils/export-text-builders.ts' && rel !== 'utils/archive-import.ts';
   });
 }
 
@@ -799,7 +799,7 @@ function entryPath(name) {
  * directory to the entry directory — exactly the path esbuild resolves from
  * ".build/entry-*.js".
  * ESM-пилот (Roadmap Ph2): print/print.js's '../utils/markdown.ts' is already
- * entry-relative and stays as is; utils/export-text-builders.js's
+ * entry-relative and stays as is; utils/export-text-builders.ts's
  * './buildReferenceText.ts' becomes '../utils/buildReferenceText.ts'.
  */
 function rebaseImportSpecifiers(src, sourceRel) {

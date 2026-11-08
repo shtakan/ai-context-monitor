@@ -21,23 +21,79 @@
 // MAIN-регистрации). Теперь модуль втягивается статическим import'ом.
 import { swallowSoft } from './debug.js';
 
-/**
- * Ход, извлечённый из ChatGPT mapping. Текст лежит в content (не в text),
- * поэтому Message/ExportMessage из types/ совместимы лишь по смыслу role/текста.
- * @typedef {Object} ChatGptExtractedMessage
- * @property {string} role Роль автора: user/assistant (system/tool отфильтрованы).
- * @property {string} content Санированный текст сообщения.
- */
+/** Роль автора хода в ChatGPT mapping. */
+export type ChatGptRole = 'user' | 'assistant' | 'system' | 'tool';
 
-/**
- * Результат разбора полного ChatGPT-разговора.
- * @typedef {Object} ChatGptConversationResult
- * @property {ChatGptExtractedMessage[]} messages Ходы в хронологическом порядке.
- * @property {string} model Модель разговора (фолбэк — CHATGPT_DEFAULT_MODEL).
- * @property {number} tokens Значение json.tokens (0, если его нет).
- */
+/** Ход, извлечённый из ChatGPT mapping (текст лежит в content, не в text). */
+export interface Message {
+  /** Роль автора: user/assistant (system/tool отфильтрованы). */
+  role: 'user' | 'assistant';
+  /** Санированный текст сообщения. */
+  content: string;
+}
 
-/** @type {string} Модель по умолчанию, если в разговоре нет model_slug. */
+/** Автор хода в mapping ChatGPT. */
+export interface ChatGptAuthor {
+  role?: string;
+  name?: string | null;
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+/** Объектный part контента (audio_transcription и т.п.). */
+export interface ChatGptContentPart {
+  text?: string;
+  [key: string]: unknown;
+}
+
+/** Контент хода: parts — строки или объекты с text. */
+export interface ChatGptContent {
+  content_type?: string;
+  parts?: Array<string | ChatGptContentPart>;
+  [key: string]: unknown;
+}
+
+/** Сообщение внутри узла mapping. */
+export interface ChatGptMappingMessage {
+  id?: string;
+  author?: ChatGptAuthor;
+  create_time?: number | null;
+  content?: ChatGptContent;
+  [key: string]: unknown;
+}
+
+/** Узел mapping: parent/children задают хронологию диалога. */
+export interface ChatGptMappingNode {
+  id?: string;
+  parent?: string | null;
+  children?: string[];
+  message?: ChatGptMappingMessage | null;
+  [key: string]: unknown;
+}
+
+/** Разобранный JSON разговора ChatGPT (conversation endpoint). */
+export interface ChatGptConversationJson {
+  conversation_id?: string;
+  title?: string;
+  create_time?: number | null;
+  update_time?: number | null;
+  mapping?: Record<string, ChatGptMappingNode>;
+  model_slug?: string;
+  tokens?: number;
+  [key: string]: unknown;
+}
+
+/** Результат разбора полного ChatGPT-разговора. */
+export interface ChatGptConversationResult {
+  /** Ходы в хронологическом порядке. */
+  messages: Message[];
+  /** Модель разговора (фолбэк — CHATGPT_DEFAULT_MODEL). */
+  model: string;
+  /** Значение json.tokens (0, если его нет). */
+  tokens: number;
+}
+
+/** Модель по умолчанию, если в разговоре нет model_slug. */
 var CHATGPT_DEFAULT_MODEL = 'gpt-4o';
 
 // ---- 1. Навигация /c/<id> ----
@@ -47,7 +103,7 @@ var CHATGPT_DEFAULT_MODEL = 'gpt-4o';
  * @param {string|null|undefined} pathname Путь страницы (обычно location.pathname).
  * @returns {string} id разговора или '' (нет совпадения / путь не строка).
  */
-export function getConvIdFromPath(pathname) {
+export function getConvIdFromPath(pathname: string | null | undefined): string {
   try {
     var m = String(pathname || '').match(/\/c\/([A-Za-z0-9_-]+)/);
     return m ? m[1] : '';
@@ -62,7 +118,7 @@ export function getConvIdFromPath(pathname) {
  * @param {string|null|undefined} newId Новый id разговора.
  * @returns {boolean} true — появился другой непустой id.
  */
-export function shouldResetChatConversation(prevId, newId) {
+export function shouldResetChatConversation(prevId: string | null | undefined, newId: string | null | undefined): boolean {
   if (!newId) return false;
   return prevId !== newId;
 }
@@ -78,7 +134,7 @@ export function shouldResetChatConversation(prevId, newId) {
  * @param {string|null|undefined} newId Новый id разговора.
  * @returns {boolean} true — контекст разговора изменился (сравнение нормализованных строк).
  */
-export function shouldResetConversationOnNav(prevId, newId) {
+export function shouldResetConversationOnNav(prevId: string | null | undefined, newId: string | null | undefined): boolean {
   var p = (prevId == null) ? '' : String(prevId);
   var n = (newId == null) ? '' : String(newId);
   return p !== n;
@@ -94,7 +150,7 @@ export function shouldResetConversationOnNav(prevId, newId) {
  * @param {string} s Сырой текст ответа.
  * @returns {string} Текст без маркеров; двойные пробелы схлопнуты.
  */
-export function sanitizeChatGPTText(s) {
+export function sanitizeChatGPTText(s: any): string {
   if (typeof s !== 'string') return s;
   return String(s)
     // PUA entity: заменяем токен на «видимый» текст (2-й элемент массива ["тип","видимый","описание"]).
@@ -131,7 +187,7 @@ export function sanitizeChatGPTText(s) {
  * @param {Record<string, any>|null|undefined} mapping Объект mapping разговора.
  * @returns {string[]} Ключи mapping в хронологическом порядке (голова = первый user).
  */
-export function orderChatGPTMapping(mapping) {
+export function orderChatGPTMapping(mapping: any): string[] {
   var keys = Object.keys(mapping || {});
   if (!keys.length) return [];
 
@@ -223,7 +279,7 @@ export function orderChatGPTMapping(mapping) {
  * @param {any} json Сырой ответ ChatGPT (mapping/model_slug/tokens).
  * @returns {ChatGptConversationResult} Ходы, модель и счётчик токенов.
  */
-export function parseChatGPTConversation(json) {
+export function parseChatGPTConversation(json: any): ChatGptConversationResult {
   var messages = [];
   var model = '';
   var tokens = 0;

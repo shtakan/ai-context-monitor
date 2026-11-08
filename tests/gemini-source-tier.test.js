@@ -28,7 +28,7 @@ const fs = require('fs');
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
-const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
+const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
 
 const ROOT = path.join(__dirname, '..');
@@ -123,7 +123,7 @@ describe('Two-Tier D7: md Gemini — метка отдельным блоком 
   });
 
   test('D7b: qwen md с меткой → метки нет, байты как без метки', function () {
-    // Флейк: шапка md несёт `new Date().toISOString()` (utils/export-text-builders.js:290),
+    // Флейк: шапка md несёт `new Date().toISOString()` (utils/export-text-builders.ts:290),
     // а тест сравнивает ДВА независимых вызова. Переход через границу миллисекунды/секунды
     // между ними менял строку даты → падение «раз в N прогонов». Время фиксируем.
     jest.useFakeTimers();
