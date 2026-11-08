@@ -53,6 +53,14 @@ const EXPORTED = [
   'runCompletenessWatchdog', 'finishWatchdogDecision',
 ];
 
+// Phase 3, шаг 6b: ядро перестало заводить четыре мёртвых алиаса этих функций
+// (classifyOpaqueWide / finishQuiet / runCompletenessWatchdog / finishWatchdogDecision —
+// вызовов в ядре 0). Модуль их по-прежнему отдаёт в API (см. S5/S6), но в ветке else
+// ядро больше не обязано ставить им заглушки — проверяем только реально взятые имена.
+const CORE_BOUND = EXPORTED.filter((n) => [
+  'classifyOpaqueWide', 'finishQuiet', 'runCompletenessWatchdog', 'finishWatchdogDecision',
+].indexOf(n) === -1);
+
 /** Вырезает `function <name>(…) { … }` по балансу скобок. */
 function fnSource(src, name) {
   const i = src.indexOf('function ' + name + '(');
@@ -223,16 +231,16 @@ describe('Phase 3 шаг 10: S-пины проводки модуля', () => {
     expect(shadows).toEqual([]);
   });
 
-  test('S4: без модуля ядро деградирует мягко — внятный лог и 13 заглушек', () => {
+  test('S4: без модуля ядро деградирует мягко — внятный лог и 9 заглушек', () => {
     const start = CORE.indexOf("debugLog('log', '[gemini-intercept] core/pagination/pagination.js не подключён");
     expect(start).toBeGreaterThan(-1);
     // ветка else заканчивается на её собственном закрывающем `}` (двухотступном)
     const elseBranch = CORE.slice(start, CORE.indexOf('\n  }\n', start));
     expect(elseBranch).toContain('core/pagination/pagination.js не подключён');
-    // каждая из 13 функций объявлена в ветке else — иначе вызов был бы ReferenceError
-    const missing = EXPORTED.filter((n) => !new RegExp('\\n\\s+' + n + '\\s*=\\s*function').test(elseBranch));
+    // каждая из 9 функций, взятых ядром, объявлена в ветке else — иначе был бы ReferenceError
+    const missing = CORE_BOUND.filter((n) => !new RegExp('\\n\\s+' + n + '\\s*=\\s*function').test(elseBranch));
     expect(missing).toEqual([]);
-    // и ветка ограничена заглушками: 2 строки комментария + лог + 13 присваиваний
+    // и ветка ограничена заглушками: 2 строки комментария + лог + 9 присваиваний
     expect(elseBranch.split('\n').length).toBeLessThan(25);
     expect(elseBranch).not.toContain('throw');
   });

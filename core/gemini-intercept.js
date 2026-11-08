@@ -97,18 +97,12 @@
   // переменных читает и восстанавливает не только кластер, поэтому копией их отдавать нельзя.
   var aiCmGeminiRpc = (typeof window !== 'undefined' && window.AiCmGeminiRpc) || null;
   var isHistoryRpc = null;
-  var isConversationFeedRpc = null;
   var isIngestRpc = null;
-  var extractRpcIdsFromUrl = null;
   var streamRpcidOf = null;
   var isStreamIngestRpc = null;
-  var streamGetLogic = null;
   var provisionalStreamIngest = null;
   var captureHeadersFromInit = null;
-  var parseAtFromBody = null;
-  var parseReqIdFromUrl = null;
   var convIdFromBody = null;
-  var diagCursorFromBody = null;
   var shadowCursorFromRest = null;
   var rememberSiteMeta = null;
   var captureModelSlugFromBody = null;
@@ -129,18 +123,12 @@
       get lastReqId() { return lastReqId; }, set lastReqId(v) { lastReqId = v; },
     });
     isHistoryRpc = aiCmGeminiRpc.isHistoryRpc;
-    isConversationFeedRpc = aiCmGeminiRpc.isConversationFeedRpc;
     isIngestRpc = aiCmGeminiRpc.isIngestRpc;
-    extractRpcIdsFromUrl = aiCmGeminiRpc.extractRpcIdsFromUrl;
     streamRpcidOf = aiCmGeminiRpc.streamRpcidOf;
     isStreamIngestRpc = aiCmGeminiRpc.isStreamIngestRpc;
-    streamGetLogic = aiCmGeminiRpc.streamGetLogic;
     provisionalStreamIngest = aiCmGeminiRpc.provisionalStreamIngest;
     captureHeadersFromInit = aiCmGeminiRpc.captureHeadersFromInit;
-    parseAtFromBody = aiCmGeminiRpc.parseAtFromBody;
-    parseReqIdFromUrl = aiCmGeminiRpc.parseReqIdFromUrl;
     convIdFromBody = aiCmGeminiRpc.convIdFromBody;
-    diagCursorFromBody = aiCmGeminiRpc.diagCursorFromBody;
     shadowCursorFromRest = aiCmGeminiRpc.shadowCursorFromRest;
     rememberSiteMeta = aiCmGeminiRpc.rememberSiteMeta;
     buildActiveBodyWith = aiCmGeminiRpc.buildActiveBodyWith;
@@ -150,18 +138,12 @@
     debugLog('log', '[gemini-intercept] core/gemini-rpc.js не подключён — ' +
       'опознание RPC и метаданные запроса недоступны (проверьте регистрацию content script)');
     isHistoryRpc = function () { return false; };
-    isConversationFeedRpc = function () { return false; };
     isIngestRpc = function () { return false; };
-    extractRpcIdsFromUrl = function () { return ''; };
     streamRpcidOf = function () { return ''; };
     isStreamIngestRpc = function () { return false; };
-    streamGetLogic = function () { return null; };
     provisionalStreamIngest = function () { return 0; };
     captureHeadersFromInit = function () { return {}; };
-    parseAtFromBody = function () { return ''; };
-    parseReqIdFromUrl = function () { return 0; };
     convIdFromBody = function () { return ''; };
-    diagCursorFromBody = function () { };
     shadowCursorFromRest = function () { return null; };
     rememberSiteMeta = function () { };
     captureModelSlugFromBody = function () { return ''; };
@@ -187,8 +169,6 @@
   var parseByBytes = null;
   var parseByLines = null;
   var parseBatchExecute = null;
-  var handleSalvagedOuter = null;
-  var salvagePartialFrame = null;
   if (aiCmGeminiParse) {
     aiCmGeminiParse.__bind({
       // handleOuter — функция ядра (декларация хойстится: значение доступно на момент bind).
@@ -203,16 +183,12 @@
     parseByBytes = aiCmGeminiParse.parseByBytes;
     parseByLines = aiCmGeminiParse.parseByLines;
     parseBatchExecute = aiCmGeminiParse.parseBatchExecute;
-    handleSalvagedOuter = aiCmGeminiParse.handleSalvagedOuter;
-    salvagePartialFrame = aiCmGeminiParse.salvagePartialFrame;
   } else {
     debugLog('log', '[gemini-intercept] core/gemini-parse.js не подключён — ' +
       'парсинг кадров batchexecute недоступен (проверьте регистрацию content script)');
     parseByBytes = function () { };
     parseByLines = function () { };
     parseBatchExecute = function () { return []; };
-    handleSalvagedOuter = function () { };
-    salvagePartialFrame = function () { return 0; };
   }
 
   // ===== v2.0 (Phase 3 step 9): SSE-кластер (перехват сети) вынесен в core/gemini-sse.js =====
@@ -273,14 +249,10 @@
   var walkOpaque = null;
   var findCursors = null;
   var extractCursor = null;
-  var classifyOpaqueWide = null;
   var extractCursorWide = null;
   var refreshMinOrderTracking = null;
   var paginateLoop = null;
-  var finishQuiet = null;
   var runCompletenessProbe = null;
-  var runCompletenessWatchdog = null;
-  var finishWatchdogDecision = null;
   if (aiCmGeminiPagination) {
     aiCmGeminiPagination.__bind({
       // Функции ядра.
@@ -363,14 +335,10 @@
     walkOpaque = aiCmGeminiPagination.walkOpaque;
     findCursors = aiCmGeminiPagination.findCursors;
     extractCursor = aiCmGeminiPagination.extractCursor;
-    classifyOpaqueWide = aiCmGeminiPagination.classifyOpaqueWide;
     extractCursorWide = aiCmGeminiPagination.extractCursorWide;
     refreshMinOrderTracking = aiCmGeminiPagination.refreshMinOrderTracking;
     paginateLoop = aiCmGeminiPagination.paginateLoop;
-    finishQuiet = aiCmGeminiPagination.finishQuiet;
     runCompletenessProbe = aiCmGeminiPagination.runCompletenessProbe;
-    runCompletenessWatchdog = aiCmGeminiPagination.runCompletenessWatchdog;
-    finishWatchdogDecision = aiCmGeminiPagination.finishWatchdogDecision;
   } else {
     debugLog('log', '[gemini-intercept] core/pagination/pagination.js не подключён — ' +
       'тихая пагинация и контроль полноты (probe/watchdog) недоступны (проверьте регистрацию content script)');
@@ -379,14 +347,10 @@
     walkOpaque = function () { };
     findCursors = function (node, out) { if (out) out.length = 0; };
     extractCursor = function () { return null; };
-    classifyOpaqueWide = function () { return false; };
     extractCursorWide = function () { return null; };
     refreshMinOrderTracking = function () { };
     paginateLoop = function () { };
-    finishQuiet = function () { };
     runCompletenessProbe = function () { };
-    runCompletenessWatchdog = function () { };
-    finishWatchdogDecision = function () { };
   }
 
   // ===== v2.0 (Phase 3 step 11): кластер лоадера подключён из core/gemini-loader-scroll.js =====
@@ -406,7 +370,6 @@
   // поэтому прямое `maybeStartLoader: maybeStartLoader` зафиксировало бы null.
   var aiCmGeminiLoaderScroll = (typeof window !== 'undefined' && window.AiCmGeminiLoaderScroll) || null;
   var maybeStartLoader = null;
-  var loadFullHistoryInvisibly = null; // ядро его не вызывает: консольный хэндл ставит сам модуль
   function aiCmMaybeStartLoaderFwd() { return maybeStartLoader ? maybeStartLoader() : undefined; }
   if (aiCmGeminiLoaderScroll) {
     aiCmGeminiLoaderScroll.__bind({
@@ -487,7 +450,6 @@
       get tapeWasUsedInThisColdStart() { return tapeWasUsedInThisColdStart; },
     });
     maybeStartLoader = aiCmGeminiLoaderScroll.maybeStartLoader;
-    loadFullHistoryInvisibly = aiCmGeminiLoaderScroll.loadFullHistoryInvisibly;
   } else {
     debugLog('log', '[gemini-intercept] core/gemini-loader-scroll.js не подключён — ' +
       'скрытый доскролл полной истории и его автозапуск недоступны (проверьте регистрацию content script)');
