@@ -194,7 +194,9 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
     // Пин держит ФАКТ, чтобы
     // «уехавший» вызов был виден, а не молча остался зелёным, и чтобы следующий перенос кода
     // выше по файлу снова потребовал ревью строки, а не прошёл незамеченным.
-    expect(linesOf(CORE, VF5_TAIL)).toEqual([1421]);
+    // Phase 3 (SPA-жизненный цикл, шаг 3) заменил 54 строки диапазона 1204-1257 на 43 строки
+    // блока подключения и убрал объявление loaderBadgeTimer выше неё — 1410.
+    expect(linesOf(CORE, VF5_TAIL)).toEqual([1410]);
   });
 
   test('R-D №4: счётчик emitBaseSnapshot() — ядро 1, конкатенация 9', () => {
@@ -251,18 +253,18 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
 });
 
 describe('Phase 3 шаг 12: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v14, gemini-files перед ingest, -v13 снят', () => {
+  test('S1: регистрация в core/background.js — id -v15, gemini-files перед ingest, -v13 снят', () => {
     const bg = readFile('core/background.js');
-    expect(bg).toContain("'ai-cm-gemini-intercept-v14'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v15'");
     expect(bg).toContain("'core/gemini-ingest.js'");
     // js[] собран ровно в этом порядке: sse → pagination → loader-scroll → files → ingest → ядро
-    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-intercept.js'");
+    expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-intercept.js'");
     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при загрузке
     expect(bg.indexOf("'core/gemini-files.js'")).toBeLessThan(bg.indexOf("'core/gemini-ingest.js'"));
     expect(bg.indexOf("'core/gemini-loader-scroll.js'")).toBeLessThan(bg.indexOf("'core/gemini-ingest.js'"));
     expect(bg.indexOf("'core/gemini-ingest.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
     // MV3 не перечитывает js[] под существующим id — прежний id обязан быть снят
-    expect(bg).toContain("'ai-cm-gemini-intercept-v11', 'ai-cm-gemini-intercept-v12', 'ai-cm-gemini-intercept-v13']");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v11', 'ai-cm-gemini-intercept-v12', 'ai-cm-gemini-intercept-v13', 'ai-cm-gemini-intercept-v14']");
   });
 
   test('S2: bind-контракт полон — 72 имени переданы ядром и все 72 используются модулем', () => {

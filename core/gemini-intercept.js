@@ -1016,7 +1016,6 @@
   // из-за чего лоадер молчал. Критерий запуска — только convId + идемпотентность за сессию.
   var loaderDoneMap = {};   // convId → true (один запуск на чат за сессию страницы)
   var loaderRunningFor = null;
-  var loaderBadgeTimer = null; // v4z: отложенный фолбэк бейджа после смены чата
   var oracleIncompleteSeen = {}; // v1.6 (D15): convId → true — оракул сказал incomplete (для обхода cache-complete)
   var oracleRerunUsedMap = {};   // v1.6 (D15): convId → true — единственный ре-ран лоадера уже использован
   // v30.6: convId, для которых в текущей сессии принята кэш-лента (ai-cm-restored-history).
@@ -1201,60 +1200,50 @@
     try { window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); } catch (e) { }
   }
 
-  function checkConvChange() {
-    var newId = getConvId();
-    if (newId !== currentConvId) {
-      var oldId = currentConvId;
-      currentConvId = newId;
-      try { forceRestoreVisibility('conv-switch'); } catch (eVis70) { swallowSoft(eVis70, 'gemini:checkConvChange-visibility-restore'); } // v70: SPA-переход не оставляет скрытый контейнер
-      resetForNewConversation();
-      // v4z: инвалидация done-флага покинутого чата — при возврате лоадер обязан
-      // перезапуститься (DOM уничтожен, «already-done» переживать навигацию не должен)
-      try { delete loaderDoneMap[oldId]; } catch (e) { }
-      if (loaderRunningFor === oldId) { loaderRunningFor = null; notifyLoaderState(oldId, false); }
-      // v4z: SPA-переход на /app/<id> → автозапуск лоадера полной истории нового чата
-      try { maybeStartLoader(); } catch (e) { swallowSoft(e, 'gemini:checkConvChange-loader-start'); }
-      // v4z: фолбэк бейджа — если история за 3с не пришла (badge-recv после возврата
-      // отсутствует), форсируем существующий virtual-F5/activeRefresh
-      if (loaderBadgeTimer) { clearTimeout(loaderBadgeTimer); loaderBadgeTimer = null; }
-      loaderBadgeTimer = setTimeout(function () {
-        loaderBadgeTimer = null;
-        if (getConvId() !== newId || !newId) return;
-        if (baseSize() > 0) return;
-        debugLog('log', '[AI CM][Gemini][loader] fallback-refresh convId=' + newId);
-        try { activeRefresh('фолбэк бейджа после смены чата', false); } catch (e) { swallowSoft(e, 'gemini:checkConvChange-badge-refresh'); }
-      }, 3000);
-    }
+  // ===== v2.0 (Phase 3, шаг 3): SPA-ЖИЗНЕННЫЙ ЦИКЛ ЧАТА (ВЫНЕСЕН В core/gemini-spa-lifecycle.js) =====
+  // Здесь были checkConvChange (сравнение свежего convId с текущим: сброс состояния,
+  // инвалидация done-флага покинутого чата, автозапуск лоадера нового чата и 3-секундный
+  // фолбэк бейджа) и перехваты, которые взводят детектор: history.pushState /
+  // history.replaceState, window 'popstate' и document 'scroll' (scrollRecentUntil).
+  // Тела живут ВНУТРИ `with (D)` BIND-зоны модуля и обращаются к состоянию ядра по
+  // контракту __bind (как оракул/ingest/пагинация); связка стоит ровно на месте прежнего
+  // кода, поэтому момент установки патчей history не изменился.
+  // resetForNewConversation, getConvId, captureReqTag/isStaleReqTag и состояние
+  // (currentConvId, convEpoch, loaderDoneMap, loaderRunningFor, scrollRecentUntil)
+  // ОСТАЛИСЬ в ядре: их читают/пишут ingest, сетевые хуки, лоадер, пагинация и оракул.
+  // Контракт: 7 fn значением + 3 rw-пары (currentConvId, loaderRunningFor, scrollRecentUntil)
+  // + 1 ro-геттер (loaderDoneMap: тело только удаляет ключ). loaderBadgeTimer уехал вместе
+  // с телом — объявления в ядре больше нет, теневой копии нет.
+  var aiCmGeminiSpaLifecycle = (typeof window !== 'undefined' && window.AiCmGeminiSpaLifecycle) || null;
+  if (aiCmGeminiSpaLifecycle) {
+    aiCmGeminiSpaLifecycle.__bind({
+      // fn: функции ядра, которые зовут тела модуля — передаются значением (хойстятся или
+      // дозаполнены выше: maybeStartLoader — поздний алиас лоадера, его связка стоит выше).
+      activeRefresh: activeRefresh,
+      baseSize: baseSize,
+      forceRestoreVisibility: forceRestoreVisibility,
+      getConvId: getConvId,
+      maybeStartLoader: maybeStartLoader,
+      notifyLoaderState: notifyLoaderState,
+      resetForNewConversation: resetForNewConversation,
+      // ro: тело только удаляет ключ — мутация по ссылке видна ядру, сеттер не нужен.
+      get loaderDoneMap() { return loaderDoneMap; },
+      // rw: живое состояние, которое тела ПЕРЕЗАПИСЫВАЮТ (get + set).
+      get currentConvId() { return currentConvId; },
+      set currentConvId(v) { currentConvId = v; },
+      get loaderRunningFor() { return loaderRunningFor; },
+      set loaderRunningFor(v) { loaderRunningFor = v; },
+      get scrollRecentUntil() { return scrollRecentUntil; },
+      set scrollRecentUntil(v) { scrollRecentUntil = v; }
+    });
+  } else {
+    // Модуль не подключён (у уже установленного расширения Chrome остался прежний
+    // registration с прежним id: MV3 не перечитывает js[] под существующим id).
+    // Деградация заметная: SPA-смена чата не сбрасывает состояние и не перезапускает
+    // лоадер — база двух чатов смешалась бы. Ровно поэтому id обязан смениться.
+    debugLog('log', '[gemini-intercept] core/gemini-spa-lifecycle.js не подключён — ' +
+      'SPA-смена чата не сбрасывает состояние и не перезапускает лоадер (проверьте регистрацию content script)');
   }
-
-  try {
-    var origPush = history.pushState;
-    if (origPush) {
-      history.pushState = function () {
-        var r = origPush.apply(this, arguments);
-        try { checkConvChange(); } catch (e) { }
-        return r;
-      };
-    }
-    var origReplace = history.replaceState;
-    if (origReplace) {
-      history.replaceState = function () {
-        var r = origReplace.apply(this, arguments);
-        try { checkConvChange(); } catch (e) { }
-        return r;
-      };
-    }
-    window.addEventListener('popstate', function () { try { checkConvChange(); } catch (e) { } });
-    // LOW-4 (аудит перед релизом): passive:true — обработчик только ЗАПИСЫВАЕТ время
-    // скролла (scrollRecentUntil) и никогда не вызывает preventDefault, поэтому браузер
-    // не обязан ждать его завершения перед прокруткой (нет scroll-jank). capture:true
-    // сохранён: скролл контейнера ленты не всплывает до document — фаза захвата
-    // единственная точка, где событие здесь видно.
-    document.addEventListener('scroll', function () {
-      scrollRecentUntil = Date.now() + 2000;
-    }, { capture: true, passive: true });
-  } catch (e) { }
-  // =====================================================================
 
   function baseSize() { return Object.keys(turnsMap).length; }
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }

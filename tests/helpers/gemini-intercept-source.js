@@ -51,6 +51,14 @@
  * поэтому новых песочниц шаг не добавляет, а существующие пины находят перенесённые
  * функции в конкатенации по прежним именам.
  * Скрипты одного registerContentScripts-пакета исполняются в одном мировом
+ * Phase 3 (шаг 3): детектор смены чата checkConvChange и перехваты навигации
+ * (history.pushState/replaceState, popstate, document-scroll) вынесены в
+ * core/gemini-spa-lifecycle.js и добавлены в MODULES тем же порядком, что и в js[]
+ * core/background.js (diag-dump -> spa-lifecycle -> ядро). Ядро зовёт __bind в прежнем
+ * месте установки патчей. Тела лежат внутри `with (D)` и адресуют состояние ядра через
+ * контракт (7 fn значением, 3 rw-пары, 1 ro-геттер); resetForNewConversation остался в
+ * ядре — его ~70 переменных читают ingest/лоадер/пагинация. Теневых копий нет:
+ * loaderBadgeTimer переехал целиком.
  * глобальном лексическом скоупе: объявления модуля видны gemini-intercept.js
  * (и наоборот) по прежним именам, без импортов и префиксов. Поэтому
  * конкатенация исходников в этом порядке — тот же текст, что и в браузере, и
@@ -102,7 +110,8 @@ const MODULES = [
   'core/gemini-overlay.js',
   'core/gemini-archive.js',
   'core/gemini-oracle.js',
-  'core/gemini-diag-dump.js'
+  'core/gemini-diag-dump.js',
+  'core/gemini-spa-lifecycle.js'
 ];
 const INTERCEPT_JS = 'core/gemini-intercept.js';
 

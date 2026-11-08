@@ -809,8 +809,8 @@ describe('Step D.8: core/deepseek-ingest.js — контракт модуля IN
     expect(bg).not.toContain('(v10) зарегистрирован');
     // release.yml: счётчик MAIN-world файлов равен факту (37 = 5 бандлов + 32 модулей/ядер)
     const yml = DS.readSource('.github/workflows/release.yml');
-    expect((yml.match(/38 MAIN-world/g) || [])).toHaveLength(2);
-    expect(yml).not.toContain('37 MAIN-world');
+    expect((yml.match(/39 MAIN-world/g) || [])).toHaveLength(2);
+    expect(yml).not.toContain('38 MAIN-world');
     // модуль: UTF-8 без BOM, LF, хвостовой \n; каркас
     const buf = fs.readFileSync(path.join(DS.ROOT, 'core/deepseek-ingest.js'));
     expect(buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF).toBe(false);

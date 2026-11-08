@@ -1,6 +1,6 @@
 {
   "schema": "ai-cm/catch-whitelist@1",
-  "generatedFrom": "b675169",
+  "generatedFrom": "192ea34",
   "scope": [
     "core",
     "utils",
@@ -111,9 +111,9 @@
       "file": "core/background.js",
       "category": "debug-instrumentation",
       "lines": [
-        528,
-        1173,
-        1191
+        534,
+        1179,
+        1197
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: chrome.action.setBadgeText({ text: '', tabId: tabIdR }); debugLog('log',"
     },
@@ -121,7 +121,7 @@
       "file": "core/background.js",
       "category": "defensive-assignment",
       "lines": [
-        1092
+        1098
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: errText = await response.text();"
     },
@@ -129,7 +129,7 @@
       "file": "core/background.js",
       "category": "guard-clause",
       "lines": [
-        904
+        910
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: for (var k in (all || {})) { if (k.indexOf(AI_CM_FIRED_SESSION_PREFIX) ="
     },
@@ -142,13 +142,13 @@
         82,
         84,
         87,
-        307,
-        357,
-        444,
-        461,
-        645,
-        719,
-        721
+        313,
+        363,
+        450,
+        467,
+        651,
+        725,
+        727
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: void chrome.runtime.lastError;"
     },
@@ -773,7 +773,7 @@
         73,
         75
       ],
-      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь (дамп — не гейт полноты); пример: window.dispatchEvent(new CustomEvent('ai-cm-diag-response', { detail: response }));"
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var turnDump = []; var mapKeys = Object.keys(turnsMap); for (var di = 0;"
     },
     {
       "file": "core/gemini-diag.js",
@@ -927,14 +927,6 @@
     },
     {
       "file": "core/gemini-intercept.js",
-      "category": "cleanup-guard",
-      "lines": [
-        1213
-      ],
-      "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete loaderDoneMap[oldId];"
-    },
-    {
-      "file": "core/gemini-intercept.js",
       "category": "debug-instrumentation",
       "lines": [
         834,
@@ -947,8 +939,7 @@
       "category": "event-guard",
       "lines": [
         299,
-        1201,
-        1256
+        1200
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
     },
@@ -956,8 +947,8 @@
       "file": "core/gemini-intercept.js",
       "category": "guard-clause",
       "lines": [
-        1051,
-        1121
+        1050,
+        1120
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -965,12 +956,9 @@
       "file": "core/gemini-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        1235,
-        1243,
-        1247,
-        1650
+        1639
       ],
-      "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkConvChange();"
+      "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: setTimeout(function () { maybeStartLoader(); }, 1000);"
     },
     {
       "file": "core/gemini-loader-scroll.js",
@@ -1122,6 +1110,32 @@
         68
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: u = decodeURIComponent(url);"
+    },
+    {
+      "file": "core/gemini-spa-lifecycle.js",
+      "category": "cleanup-guard",
+      "lines": [
+        75
+      ],
+      "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete loaderDoneMap[oldId];"
+    },
+    {
+      "file": "core/gemini-spa-lifecycle.js",
+      "category": "event-guard",
+      "lines": [
+        119
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: var origPush = history.pushState; if (origPush) { history.pushState = fu"
+    },
+    {
+      "file": "core/gemini-spa-lifecycle.js",
+      "category": "local-helper-guard",
+      "lines": [
+        98,
+        106,
+        110
+      ],
+      "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkConvChange();"
     },
     {
       "file": "core/gemini-sse.js",
@@ -1485,7 +1499,7 @@
       "lines": [
         334
       ],
-      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var cidD14 = getCurrentConvId() || ''; var P14 = (typeof window !== 'und"
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var cidD14 = getCurrentConvId() || ''; var P14 = (typeof AiCmExportEmitP"
     },
     {
       "file": "core/widget.js",
