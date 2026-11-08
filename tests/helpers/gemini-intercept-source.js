@@ -86,6 +86,9 @@ const ROOT = path.join(__dirname, '..', '..');
 // pagination и ingest), поэтому песочницы gemini-floor-confirmed / gemini-floor-self-heal /
 // gemini-collapse-guard / o48-gemini-parse-fail-salvage режут тела ОТСЮДА и исполняют их
 // в `with (ctx)` без ключа D — ни один ассерт этих пинов не менялся.
+// Phase 3 step 2: core/gemini-diag-dump.js идёт после oracle и перед ядром — как в js[].
+// Мост дампа (ai-cm-diag-request/response) перенесён БЕЗ префикса D: тело лежит внутри
+// `with (D)`, а три имени состояния приходят геттерами из bind-узла ядра.
 const MODULES = [
   'core/gemini-hidden-scroll.js',
   'core/gemini-diag.js',
@@ -98,7 +101,8 @@ const MODULES = [
   'core/gemini-ingest.js',
   'core/gemini-overlay.js',
   'core/gemini-archive.js',
-  'core/gemini-oracle.js'
+  'core/gemini-oracle.js',
+  'core/gemini-diag-dump.js'
 ];
 const INTERCEPT_JS = 'core/gemini-intercept.js';
 

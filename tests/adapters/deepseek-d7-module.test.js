@@ -617,8 +617,8 @@ describe('Step D.7: core/deepseek-net.js — контракт модуля NETWO
     expect(bg).toContain('перехватчик DeepSeek v12 зарегистрирован');
     // release.yml: счётчик MAIN-world файлов равен факту (37 = 5 бандлов + 32 модулей/ядер)
     const yml = DS.readSource('.github/workflows/release.yml');
-    expect((yml.match(/37 MAIN-world/g) || [])).toHaveLength(2);
-    expect(yml).not.toContain('36 MAIN-world');
+    expect((yml.match(/38 MAIN-world/g) || [])).toHaveLength(2);
+    expect(yml).not.toContain('37 MAIN-world');
     // модуль: UTF-8 без BOM, LF, хвостовой \n; каркас
     const buf = require('fs').readFileSync(require('path').join(DS.ROOT, 'core/deepseek-net.js'));
     expect(buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF).toBe(false);

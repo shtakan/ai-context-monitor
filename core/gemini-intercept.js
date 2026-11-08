@@ -1625,42 +1625,19 @@
 
   // ===== v2.0 (Phase 3 step 12): mergeRestoredTurns перенесено в core/gemini-ingest.js =====
 
-  // ================= ДАМП ДИАГНОСТИКИ =================
-  // content.js (ISOLATED-мир) диспатчит 'ai-cm-diag-request'; перехватчик (MAIN-мир)
-  // отвечает 'ai-cm-diag-response' с полным состоянием порядка/логов.
-  try {
-    window.addEventListener('ai-cm-diag-request', function () {
-      try {
-        var turnDump = [];
-        var mapKeys = Object.keys(turnsMap);
-        for (var di = 0; di < mapKeys.length; di++) {
-          var dk = mapKeys[di];
-          var dRec = turnsMap[dk];
-          turnDump.push({
-            id: dk,
-            order: dRec.order,
-            pageMode: dRec.pageMode || '',
-            r1: dRec.r1 || null,
-            role: dRec.role,
-            preview: String(dRec.text || '').slice(0, 60).replace(/\s+/g, ' ')
-          });
-        }
-        var orderedPreviews = [];
-        for (var op = 0; op < lastOrderedIds.length; op++) {
-          var oid = lastOrderedIds[op];
-          var oRec = turnsMap[oid];
-          orderedPreviews.push((oRec ? (oRec.role + '|') : '?|') + (oRec ? String(oRec.text || '').slice(0, 60).replace(/\s+/g, ' ') : oid));
-        }
-        var response = {
-          logsIntercept: (typeof __aiCmGetLogRing === 'function') ? __aiCmGetLogRing() : [],
-          turns: turnDump,
-          orderedPreviews: orderedPreviews,
-          failedPageSkeleton: lastFailedSkeleton || null
-        };
-        window.dispatchEvent(new CustomEvent('ai-cm-diag-response', { detail: response }));
-      } catch (e) { }
+  // ===== v2.0 (Phase 3 step 2): ДАМП ДИАГНОСТИКИ (ВЫНЕСЕН В core/gemini-diag-dump.js) =====
+  // Мост ai-cm-diag-request/response живёт в модуле (внутри `with (D)`), там же его правки;
+  // связка — геттеры: turnsMap/lastOrderedIds/lastFailedSkeleton переприсваиваются в ядре.
+  var aiCmGeminiDiagDump = (typeof window !== 'undefined' && window.AiCmGeminiDiagDump) || null;
+  if (aiCmGeminiDiagDump) {
+    aiCmGeminiDiagDump.__bind({
+      get turnsMap() { return turnsMap; },
+      get lastOrderedIds() { return lastOrderedIds; },
+      get lastFailedSkeleton() { return lastFailedSkeleton; }
     });
-  } catch (e) { }
+  } else {
+    debugLog('log', '[gemini-intercept] core/gemini-diag-dump.js не подключён — дамп диагностики недоступен');
+  }
 
   // ===== v2.0 (Phase 3 step 13.3): ОРАКУЛ ПОЛНОТЫ (ВЫНЕСЕН В core/gemini-oracle.js) =====
   // Здесь был слушатель ai-cm-turns-snap-request (мост дампов экспорта в ISOLATED-мир).

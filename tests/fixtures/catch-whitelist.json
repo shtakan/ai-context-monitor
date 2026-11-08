@@ -767,6 +767,15 @@
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.addEventListener('ai-cm-cache-refresh', function (ev) { if (!D) {"
     },
     {
+      "file": "core/gemini-diag-dump.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        73,
+        75
+      ],
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь (дамп — не гейт полноты); пример: window.dispatchEvent(new CustomEvent('ai-cm-diag-response', { detail: response }));"
+    },
+    {
       "file": "core/gemini-diag.js",
       "category": "debug-instrumentation",
       "lines": [
@@ -929,9 +938,7 @@
       "category": "debug-instrumentation",
       "lines": [
         834,
-        843,
-        1661,
-        1663
+        843
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: debugLog('log', '[gemini-files] ' + String(tag || '') + ' ' + JSON.strin"
     },
@@ -961,7 +968,7 @@
         1235,
         1243,
         1247,
-        1673
+        1650
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkConvChange();"
     },
