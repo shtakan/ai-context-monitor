@@ -15,7 +15,7 @@
 // =============================================================================
 
 // Ph2: парсер ответа Gemini — ES-модуль; esbuild втягивает его статическим import'ом.
-import { extractGeminiResponse } from '../utils/gemini-dom-parser.js';
+import { extractGeminiResponse } from '../utils/gemini-dom-parser.ts';
 
 function normalize(s) { return (s || '').toLowerCase().replace(/[^a-zа-яё0-9]+/g, ''); }
 function stripMd(s) {
@@ -49,7 +49,7 @@ function nodeIsBase(node, skel) {
   }
   return false;
 }
-// Gemini: DOM-хвост собираем через чистый парсер utils/gemini-dom-parser.js,
+// Gemini: DOM-хвост собираем через чистый парсер utils/gemini-dom-parser.ts,
 // чтобы исключить блоки мышления и включить HTML-таблицы как markdown.
 function shouldUseGeminiDomParser() {
   try {

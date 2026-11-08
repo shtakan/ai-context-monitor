@@ -7,7 +7,7 @@
     "adapters"
   ],
   "definition": "Молчаливый catch = тело после вырезания комментариев содержит только пробелы, ИЛИ ровно один no-op (void 0; / return; / continue; / break;). Комментарий-только тело тоже молчаливое (комментарии маскируются в пробелы).",
-  "totalEntries": 473,
+  "totalEntries": 470,
   "groups": [
     {
       "file": "adapters/claude-adapter.js",
@@ -1751,30 +1751,6 @@
         1099
       ],
       "reason": "noop-guard: единственный no-op — штатный выход из цикла/функции без восстановления; пример: bytes = new TextEncoder().encode(raw);"
-    },
-    {
-      "file": "utils/gemini-dom-parser.js",
-      "category": "best-effort-guard",
-      "lines": [
-        63
-      ],
-      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var v = el.getAttribute ? el.getAttribute(names[i]) : null; if (v) out +"
-    },
-    {
-      "file": "utils/gemini-dom-parser.js",
-      "category": "container-drop",
-      "lines": [
-        162
-      ],
-      "reason": "container-drop: контейнер уже откреплён от DOM (SPA-навигация) — снимать нечего; пример: clone.querySelectorAll('script, style, button, svg').forEach(function (x"
-    },
-    {
-      "file": "utils/gemini-dom-parser.js",
-      "category": "dom-read-guard",
-      "lines": [
-        106
-      ],
-      "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: label += ' ' + (el.textContent || '');"
     },
     {
       "file": "utils/gemini-intercept-logic.js",

@@ -24,7 +24,7 @@ const { loadEsm, loadEsmModule } = require('../helpers/load-esm.js');
 // archive-import умеют и page-глобал (3-й уровень) — тест ставит его ниже, как в прежнем
 // контракте страницы.
 const ChatGPTParser = loadEsmModule('utils/chatgpt-conversation-parser.js');
-const PerplexityParser = loadEsmModule('utils/perplexity-parser.js');
+const PerplexityParser = loadEsmModule('utils/perplexity-parser.ts');
 const AI = loadEsm('utils/archive-import.js');
 
 function installPageGlobals() {

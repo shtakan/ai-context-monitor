@@ -64,7 +64,7 @@
  */
 const CONTENT = require('./helpers/content-source.js').contentSource;
 const WIDGET = require('./helpers/content-source.js').moduleSource('core/widget.js');
-const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.js');
+const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.ts');
 
 // Хелпер swallowSoft из utils/debug.js в eval-песочнице отсутствует (как в tests/widget-inapp-theme-h24.test.js:33).
 global.swallowSoft = function () { };
@@ -348,7 +348,7 @@ describe('P3 (путь чтения): порог Claude читается из cl
     s.syncGet([key], (d) => { v = d[key]; }); // core/content.js:1158: chrome.storage.sync.get([safePctKey()], ...)
     s.api.setSafePct((typeof v === 'number' && v > 0) ? v : null); // core/content.js:1160
     expect(s.api.getSafePct()).toBe(40);
-    // utils/model-config.js:323-327: claude-sonnet-4-6 capExempt, contextLimit 500000
+    // utils/model-config.ts:323-327: claude-sonnet-4-6 capExempt, contextLimit 500000
     expect(ModelConfig.getEffectiveLimit('claude-sonnet-4-6')).toBe(500000);
     expect(s.api.computeEffectiveLimit('claude-sonnet-4-6')).toBe(200000);
   });

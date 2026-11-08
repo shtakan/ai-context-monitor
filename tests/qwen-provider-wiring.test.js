@@ -1,6 +1,6 @@
 /**
  * O-35: проводка провайдера Qwen — manifest.json, core/background.js, core/content.js,
- * utils/model-config.js и контракт reasoning в сборщиках экспорта.
+ * utils/model-config.ts и контракт reasoning в сборщиках экспорта.
  *
  * Здесь ЧЕТЫРЕ независимых блока:
  *   1) R-пины: объявления шести существующих перехватчиков и их пути байтово прежние;
@@ -8,7 +8,7 @@
  *      перехватчика в MAIN-мире в core/background.js);
  *   3) core/content.js: ветка Qwen + КРИТИЧНЫЙ запрет «Qwen НЕ в isGeminiSvc»
  *      (иначе стримовый usage Qwen перезаписывался бы countTokens BYOK);
- *   4) utils/model-config.js: qwen3.8-max + qwen3.7-plus (1M) + дефолт сайта qwen;
+ *   4) utils/model-config.ts: qwen3.8-max + qwen3.7-plus (1M) + дефолт сайта qwen;
  *   5) utils/export-text-builders.js: [REASONING]/[ANSWER] из отдельного поля reasoning,
  *      байтовый инвариант для платформ без reasoning.
  *
@@ -25,8 +25,8 @@ const manifest = JSON.parse(read('manifest.json'));
 const manifestRaw = read('manifest.json');
 const background = read('core/background.js');
 const content = read('core/content.js');
-const modelConfigRaw = read('utils/model-config.js');
-const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.js');
+const modelConfigRaw = read('utils/model-config.ts');
+const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
 
 // Рез по балансу фигурных скобок (конвенция сьюта): тело функции до парной скобки.
@@ -90,9 +90,9 @@ describe('O-35: manifest.json — Qwen добавлен, прежние серв
     // Ph2, шаг tokenizer.js: модуль переведён на ESM и втягивается import'ом из
     // core/content.js — отдельным classic-скриптом в манифесте он больше не грузится.
     expect(js).not.toContain('utils/tokenizer.ts');
-    // Ph2, шаг model-config.js: модуль переведён на ESM и втягивается import'ом из
+    // Ph2, шаг model-config.ts: модуль переведён на ESM и втягивается import'ом из
     // core/content.js — отдельным classic-скриптом в манифесте он больше не грузится.
-    expect(js).not.toContain('utils/model-config.js');
+    expect(js).not.toContain('utils/model-config.ts');
     // Ph2, шаг export-text-builders.js: модуль переведён на ESM и втягивается import'ом из
     // core/content.js — отдельным classic-скриптом в манифесте он больше не грузится.
     expect(js).not.toContain('utils/export-text-builders.js');
@@ -222,7 +222,7 @@ describe('O-35/O-53/R2: core/background.js — регистрация перех
     // пустой либо live-обрезанной.
     expect(background).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-ingest.js', 'core/deepseek-files.js', 'core/deepseek-sse.js', 'core/deepseek-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'core/claude-intercept.js']");
-    // Ph2: utils/perplexity-parser.js — ES-модуль, втягивается import'ом внутри перехватчика.
+    // Ph2: utils/perplexity-parser.ts — ES-модуль, втягивается import'ом внутри перехватчика.
     expect(background).toContain("js: ['utils/debug.js', 'core/perplexity-intercept.js']");
     expect(background).toContain("js: ['utils/debug.js', 'utils/google-search-folwr-parser.js', 'core/google-search-intercept.js']");
   });
@@ -259,7 +259,7 @@ describe('O-35: core/content.js — ветка Qwen и запрет на countTo
   });
 });
 
-describe('O-35: utils/model-config.js — модель Qwen', function () {
+describe('O-35: utils/model-config.ts — модель Qwen', function () {
   test('qwen3.8-max: 1M (live-verified 2026-10-04) и провайдер Qwen', function () {
     const rec = ModelConfig.models['qwen3.8-max'];
     expect(rec).toBeTruthy();

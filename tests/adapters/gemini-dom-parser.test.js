@@ -1,11 +1,11 @@
 /**
- * Тесты чистого DOM-парсера ответа Gemini (utils/gemini-dom-parser.js).
+ * Тесты чистого DOM-парсера ответа Gemini (utils/gemini-dom-parser.ts).
  * Проверяет: мышление (свёрнутые/скрытые блоки) исключается из извлечённого текста,
  * таблицы конвертируются в markdown-строки и попадают в текст, count > 0.
  */
 
 const { loadEsmModule } = require('../helpers/load-esm.js');
-const { extractGeminiResponse } = loadEsmModule('utils/gemini-dom-parser.js');
+const { extractGeminiResponse } = loadEsmModule('utils/gemini-dom-parser.ts');
 
 describe('Gemini DOM-парсер ответа (extractGeminiResponse)', () => {
   function buildFixture() {

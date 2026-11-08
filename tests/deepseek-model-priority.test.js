@@ -20,7 +20,7 @@ const path = require('path');
 
 const DS = require('./helpers/deepseek-intercept-source.js');
 const INTERCEPT = require(path.join(DS.ROOT, DS.INTERCEPT_JS));
-const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.js');
+const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.ts');
 
 const resolve = INTERCEPT.resolveNetworkModelSlug;
 

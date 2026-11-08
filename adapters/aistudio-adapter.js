@@ -137,7 +137,7 @@ class AistudioAdapter extends GeminiAdapter {
     } catch (error) {
       debugLog('error', '[AistudioAdapter] Ошибка чтения модели из сети:', error);
     }
-    // Фолбэк прежний (ключ есть в utils/model-config.js, окно 128k): сеть ещё не говорила.
+    // Фолбэк прежний (ключ есть в utils/model-config.ts, окно 128k): сеть ещё не говорила.
     return 'gemini-3.1-pro';
   }
 

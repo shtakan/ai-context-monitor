@@ -8,10 +8,10 @@ import AiCmExportBuilders from '../utils/export-text-builders.js';
 // из options/options.html удалён, модуль втягивается этим import'ом в options-бандл
 // (публичный API модуля — default-экспорт, как у export-text-builders выше).
 import AiCmArchiveImport from '../utils/archive-import.js';
-// ESM (Roadmap Ph2): utils/perplexity-parser.js переведён на ES-модуль — тег <script>
+// ESM (Roadmap Ph2): utils/perplexity-parser.ts переведён на ES-модуль — тег <script>
 // из options/options.html удалён. Архив Perplexity разбирается инъекцией парсера в
 // archive-import (window.parsePerplexityThread больше не публикуется).
-import { parsePerplexityThread } from '../utils/perplexity-parser.js';
+import { parsePerplexityThread } from '../utils/perplexity-parser.ts';
 // ESM (Roadmap Ph2): utils/chatgpt-conversation-parser.js переведён на ES-модуль — тег
 // <script> из options/options.html удалён. Архив ChatGPT разбирается инъекцией парсера в
 // archive-import (window.ChatGPTConversationParser больше не публикуется).

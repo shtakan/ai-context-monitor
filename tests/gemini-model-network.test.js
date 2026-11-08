@@ -2,7 +2,7 @@
  * v2.0.20: имя модели Gemini берётся из СЕТИ и приоритетнее DOM.
  *   D1 core/gemini-rpc.js:captureModelSlugFromBody — чистый разбор тела запроса/ответа
  *      (batch-execute, SSE-кадры): gemini-<версия>-<flash|pro|ultra>[-lite].
- *   D2 utils/model-config.js:resolveModelId — авто-регистрация НОВОГО слаг-а: запись
+ *   D2 utils/model-config.ts:resolveModelId — авто-регистрация НОВОГО слаг-а: запись
  *      создаётся, когда словарь слаг ещё не покрывает (Pro → 128 000, Flash/Flash Lite →
  *      1 048 576), существующие ключи не подменяются.
  *   D3 core/content.js:resolveCurrentModel — лестница попап → сеть (rawSnapshot) → DOM
@@ -21,7 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 const Rpc = require('../core/gemini-rpc.js');
-const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.js');
+const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.ts');
 
 const CONTENT = fs.readFileSync(path.join(__dirname, '..', 'core', 'content.js'), 'utf8');
 

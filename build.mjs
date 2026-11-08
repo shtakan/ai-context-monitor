@@ -258,9 +258,9 @@ function contentEntry(manifest) {
   // остаётся ради SSOT-порядка; фильтр держит сборку устойчивой.
   // Ph2, шаг tokenizer.js: модуль тоже ESM — его втягивает статический import из
   // core/content.js, из списка конкатенации исключён по той же причине.
-  // Ph2, шаг model-config.js: модуль ESM — его втягивает статический import из
+  // Ph2, шаг model-config.ts: модуль ESM — его втягивает статический import из
   // core/content.js; из манифеста строка удалена, фильтр держит SSOT устойчивым.
-  // Ph2, шаг perplexity-parser.js: модуль ESM — его втягивают статические import'ы
+  // Ph2, шаг perplexity-parser.ts: модуль ESM — его втягивают статические import'ы
   // core/perplexity-intercept.js (MAIN-бандл) и options/options.js; как строку
   // конкатенации content-скрипта не берём.
   // Ph2, шаг chatgpt-conversation-parser.js: модуль ESM — его втягивают статические
@@ -279,15 +279,15 @@ function contentEntry(manifest) {
       rel !== 'utils/platform.ts' &&
       rel !== 'utils/debug.js' &&
       rel !== 'utils/tokenizer.ts' &&
-      rel !== 'utils/model-config.js' &&
+      rel !== 'utils/model-config.ts' &&
       rel !== 'utils/export-text-builders.js' &&
-      rel !== 'utils/perplexity-parser.js' &&
+      rel !== 'utils/perplexity-parser.ts' &&
       rel !== 'utils/chatgpt-conversation-parser.js' &&
       rel !== 'utils/gemini-batchexecute-parser.js' &&
-      // Ph2, шаг gemini-dom-parser.js: модуль ESM — его втягивает статический
+      // Ph2, шаг gemini-dom-parser.ts: модуль ESM — его втягивает статический
       // import из core/hybrid-tail.js (ISOLATED-мир). MAIN-регистраций у парсера
       // нет, поэтому classic-артефакт не выводится; как строку конкатенации не берём.
-      rel !== 'utils/gemini-dom-parser.js' &&
+      rel !== 'utils/gemini-dom-parser.ts' &&
       // Ph2, шаг google-search-folwr-parser.js: модуль ESM — его втягивает side-effect
       // import из core/content.js (window-зеркало для адаптера GSA в ISOLATED-мире),
       // а для MAIN-регистрации ai-cm-google-search-intercept ниже выводится

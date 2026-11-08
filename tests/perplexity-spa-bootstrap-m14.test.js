@@ -347,7 +347,7 @@ describe('M-14 (г): маркеры источника и неприкоснов
     expect(require('./helpers/content-source.js').contentSource).toContain('флаг enabled отсутствует — автоэкспорт выключен');
     expect(read('core/page-intercept.js')).toContain('if (expectedConvId && expectedConvId !== currentConvId) {');
     expect(read('core/deepseek-intercept.js')).toContain('if (resp && resp.ok && guardCheck(historyConvId)) {');
-    ['core/perplexity-intercept.js', 'utils/perplexity-parser.js', 'tests/perplexity-sniff-slug-gate-m12.test.js']
+    ['core/perplexity-intercept.js', 'utils/perplexity-parser.ts', 'tests/perplexity-sniff-slug-gate-m12.test.js']
       .forEach(function (rel) { expect(fs.existsSync(path.join(__dirname, '..', rel))).toBe(true); });
   });
 });

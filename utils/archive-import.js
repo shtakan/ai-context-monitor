@@ -28,7 +28,7 @@
  *   4. perplexity-threads    — Perplexity export: массив
  *                              {thread:{id,slug,title,...}, entries:[...]}.
  *                              Разбор записей делегируется
- *                              utils/perplexity-parser.js (parsePerplexityThread).
+ *                              utils/perplexity-parser.ts (parsePerplexityThread).
  *
  * РОЛИ: 'human'/'user'/'me'/'prompt' → user; 'assistant'/'model'/'bot'/'ai' → assistant.
  * ПРОЧЕЕ: system/tool-ходы и записи без convId в архив НЕ попадают (счётчик
@@ -361,7 +361,7 @@ export function resolveParsePerplexityThread(deps) {
   if (deps && typeof deps.parsePerplexityThread === 'function') return deps.parsePerplexityThread;
   try {
     if (typeof require === 'function') {
-      var m = require('./perplexity-parser.js');
+      var m = require('./perplexity-parser.ts');
       if (m && typeof m.parsePerplexityThread === 'function') return m.parsePerplexityThread;
     }
   } catch (eR) { }

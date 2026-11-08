@@ -248,15 +248,15 @@ export default [
       // Ph2, шаг tokenizer.js: модуль переведён на ESM (UMD-хвост снят) и
       // втягивается import'ом из core/content.js.
       'utils/tokenizer.ts',
-      // Ph2, шаг model-config.js: модуль переведён на ESM (UMD-хвост снят) и
+      // Ph2, шаг model-config.ts: модуль переведён на ESM (UMD-хвост снят) и
       // втягивается import'ом из core/content.js.
-      'utils/model-config.js',
+      'utils/model-config.ts',
       // Ph2, шаг archive-import.js: модуль переведён на ESM (UMD-хвост снят) и
       // втягивается import'ом из options/options.js.
       'utils/archive-import.js',
-      // Ph2, шаг perplexity-parser.js: модуль переведён на ESM (UMD-хвост снят) и
+      // Ph2, шаг perplexity-parser.ts: модуль переведён на ESM (UMD-хвост снят) и
       // втягивается import'ами из core/perplexity-intercept.js и options/options.js.
-      'utils/perplexity-parser.js',
+      'utils/perplexity-parser.ts',
       // Ph2, шаг chatgpt-conversation-parser.js: модуль переведён на ESM (UMD-хвост
       // снят) и втягивается import'ами из core/page-intercept.js и options/options.js.
       'utils/chatgpt-conversation-parser.js',
@@ -264,9 +264,9 @@ export default [
       // снят) и втягивается side-effect import'ом из core/content.js; для MAIN-мира
       // build.mjs выводит classic-артефакт dist/utils/gemini-batchexecute-parser.js.
       'utils/gemini-batchexecute-parser.js',
-      // Ph2, шаг gemini-dom-parser.js: модуль переведён на ESM (UMD-хвост снят) и
+      // Ph2, шаг gemini-dom-parser.ts: модуль переведён на ESM (UMD-хвост снят) и
       // втягивается import'ом из core/hybrid-tail.js.
-      'utils/gemini-dom-parser.js',
+      'utils/gemini-dom-parser.ts',
       // Ph2, шаг gemini-intercept-logic.js: модуль переведён на ESM (UMD-хвост снят) и
       // втягивается статическим import'ом из core/background.js; для MAIN-регистрации
       // v12 build.mjs выводит classic-артефакт dist/utils/gemini-intercept-logic.js.

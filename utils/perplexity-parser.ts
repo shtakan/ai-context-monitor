@@ -1,7 +1,7 @@
 /**
  * Чистая функция парсинга истории Perplexity (GET треда).
  * ESM-модуль (Roadmap Ph2): потребители импортируют именованные экспорты
- *   import { parsePerplexityThread } from './perplexity-parser.js' (core/perplexity-intercept.js,
+ *   import { parsePerplexityThread } from './perplexity-parser.ts' (core/perplexity-intercept.js,
  *   options/options.js, тесты).
  * Источник ассистентских сообщений: entry.blocks (workflow/web_results) и, при
  * их отсутствии, fallback entry.text — живой REST /rest/thread/{slug} отдаёт
@@ -10,44 +10,129 @@
 
 import { swallowSoft } from './debug.js';
 
-/**
- * Сообщение истории Perplexity.
- * @typedef {Object} PerplexityThreadMessage
- * @property {string} role Роль автора: user/assistant.
- * @property {string} text Текст сообщения.
- */
+/** Роль автора сообщения в истории Perplexity. */
+export type PerplexityRole = 'user' | 'assistant';
+
+/** Сообщение истории Perplexity. */
+export interface PerplexityThreadMessage {
+  /** Роль автора: user/assistant. */
+  role: PerplexityRole;
+  /** Текст сообщения. */
+  text: string;
+}
 
 /**
- * Результат parsePerplexityThread.
- * @typedef {Object} PerplexityThreadResult
- * @property {string} text Все куски через перевод строки.
- * @property {number} count Число собранных сообщений.
- * @property {string} lastText Текст последнего собранного сообщения.
- * @property {string} modelSlug Модель из display_model/user_selected_model.
- * @property {string[]} pieces Куски в порядке следования.
- * @property {string[]} ids Идентификаторы кусков (entryId_user / entryId_assistant).
- * @property {PerplexityThreadMessage[]} messages Сообщения {role, text}.
- * @property {string} model Дубликат modelSlug (совместимость).
+ * Вложение записи треда: строка-адрес либо объект с адресом в url/src.
+ * Приходит и в entry.attachments, и в web_results (см. isAttachmentUrl).
  */
+export interface PerplexityAttachment {
+  url?: string;
+  src?: string;
+}
+
+/** Источник web_result_block (name/snippet/url) — цитата в блоке ответа. */
+export interface PerplexityWebResult {
+  name?: string;
+  snippet?: string;
+  url?: string;
+}
+
+/** Блок ответа ассистента: workflow_block (шаги) и/или web_result_block (источники). */
+export interface PerplexityBlock {
+  workflow_block?: PerplexityWorkflowBlock;
+  web_result_block?: PerplexityWebResultBlock;
+}
+
+/** workflow_block: шаги пайплайна, у шага — items с payload.text_payload.text. */
+export interface PerplexityWorkflowBlock {
+  steps?: PerplexityWorkflowStep[];
+}
+
+/** Шаг workflow-пайплайна. */
+export interface PerplexityWorkflowStep {
+  items?: PerplexityWorkflowItem[];
+}
+
+/** Элемент шага; ассистентский текст несёт type WORKFLOW_ITEM_TEXT. */
+export interface PerplexityWorkflowItem {
+  type?: string;
+  payload?: { text_payload?: { text?: string } };
+}
+
+/** web_result_block: источники ответа. */
+export interface PerplexityWebResultBlock {
+  web_results?: PerplexityWebResult[];
+}
+
+/**
+ * Запись треда в REST-ответе GET /rest/thread/{slug}: поле читается терпимо
+ * (ключи с пробелами, лишние поля игнорируются).
+ */
+export interface PerplexityThreadEntry {
+  query_str?: string;
+  display_model?: string;
+  user_selected_model?: string;
+  thread_url_slug?: string;
+  attachments?: Array<PerplexityAttachment | string>;
+  blocks?: PerplexityBlock[];
+  /** JSON-строка массива шагов (REST-ответ без blocks). */
+  text?: string;
+  [key: string]: unknown;
+}
+
+/** Тело REST-ответа истории: { entries: [...] }. */
+export interface PerplexityThreadPayload {
+  entries?: PerplexityThreadEntry[];
+  [key: string]: unknown;
+}
+
+/**
+ * Кадр SSE-потока Perplexity: сервер отдаёт data: {blocks:[...]} теми же блоками,
+ * что и REST-запись треда, поэтому типизируется общей частью.
+ */
+export interface PerplexitySseFrame {
+  blocks?: PerplexityBlock[];
+  [key: string]: unknown;
+}
+
+/** Результат parsePerplexityThread. */
+export interface PerplexityThreadResult {
+  /** Все куски через перевод строки. */
+  text: string;
+  /** Число собранных сообщений. */
+  count: number;
+  /** Текст последнего собранного сообщения. */
+  lastText: string;
+  /** Модель из display_model/user_selected_model. */
+  modelSlug: string;
+  /** Куски в порядке следования. */
+  pieces: string[];
+  /** Идентификаторы кусков (entryId_user / entryId_assistant). */
+  ids: string[];
+  /** Сообщения {role, text}. */
+  messages: PerplexityThreadMessage[];
+  /** Дубликат modelSlug (совместимость). */
+  model: string;
+}
 
 /**
  * Разбор JSON истории Perplexity в сообщения: user — query_str, assistant — блоки
  * workflow/web_results, а при их отсутствии fallback entry.text (FINAL-шаг → answer).
- * @param {any} json Распарсенный JSON ответа истории Perplexity.
- * @returns {PerplexityThreadResult} Куски, сообщения, модель и счётчики.
+ * @param json Распарсенный JSON ответа истории Perplexity (REST-тред или его кадр SSE).
  */
-export function parsePerplexityThread(json) {
+export function parsePerplexityThread(json: unknown): PerplexityThreadResult {
   /**
    * Чтение поля с учётом пробелов в ключах объекта.
-   * @param {any} obj Объект ответа.
-   * @param {string} name Имя поля (сравнивается после trim).
-   * @returns {any} Значение поля или undefined.
+   * @param obj Объект ответа.
+   * @param name Имя поля (сравнивается после trim).
+   * @returns Значение поля или undefined.
    */
-  function getTrim(obj, name) {
+  function getTrim(obj: unknown, name: string): any {
     if (!obj || typeof obj !== 'object') return undefined;
-    var keys = Object.keys(obj);
+    var rec = obj as Record<string, unknown>;
+    var keys = Object.keys(rec);
     for (var i = 0; i < keys.length; i++) {
-      if (keys[i].trim() === name) return obj[keys[i]];
+      if (keys[i].trim() === name) return rec[keys[i]];
     }
     return undefined;
   }
@@ -56,20 +141,20 @@ export function parsePerplexityThread(json) {
    * Признак загруженного в Perplexity вложения: S3-хост ppl-ai-file-upload, путь /attachments/.
    * Такие элементы приходят и в entry.attachments, и в web_results (цитаты картинок),
    * но веб-источниками не являются.
-   * @param {any} url Адрес элемента.
-   * @returns {boolean} true для вложения пользователя.
+   * @param url Адрес элемента.
+   * @returns true для вложения пользователя.
    */
-  function isAttachmentUrl(url) {
+  function isAttachmentUrl(url: unknown): boolean {
     if (typeof url !== 'string' || !url) return false;
     return url.indexOf('ppl-ai-file-upload') !== -1 && url.indexOf('/attachments/') !== -1;
   }
 
   /**
    * Признак изображения среди вложений (расширение файла в пути без query/hash).
-   * @param {string} url Адрес вложения.
-   * @returns {boolean} true для картинки.
+   * @param url Адрес вложения.
+   * @returns true для картинки.
    */
-  function isImageAttachment(url) {
+  function isImageAttachment(url: string): boolean {
     if (!isAttachmentUrl(url)) return false;
     var path = String(url).split('#')[0].split('?')[0];
     return /\.(jpe?g|png|gif|webp|bmp|svg|avif)$/i.test(path);
@@ -77,20 +162,20 @@ export function parsePerplexityThread(json) {
 
   /**
    * Адрес без query/hash: подписанные X-Amz-параметры истекают и не должны попадать в экспорт.
-   * @param {string} url Адрес вложения.
-   * @returns {string} Адрес без query и hash.
+   * @param url Адрес вложения.
+   * @returns Адрес без query и hash.
    */
-  function stripUrlQuery(url) {
+  function stripUrlQuery(url: string): string {
     return String(url).split('#')[0].split('?')[0];
   }
 
   /**
    * Адреса изображений пользователя из entry.attachments (порядок сохраняется, дубли убираются).
    * web_results сюда не входят: цитата картинки из прошлого сообщения не принадлежит текущему.
-   * @param {any} entry Запись треда.
-   * @returns {string[]} Адреса без query/hash.
+   * @param entry Запись треда.
+   * @returns Адреса без query/hash.
    */
-  function collectEntryImages(entry) {
+  function collectEntryImages(entry: unknown): string[] {
     var out = [];
     var atts = getTrim(entry, 'attachments');
     if (!Array.isArray(atts)) return out;
@@ -108,20 +193,20 @@ export function parsePerplexityThread(json) {
 
   /**
    * Базовое имя файла из адреса вложения.
-   * @param {string} url Адрес без query/hash.
-   * @returns {string} Имя файла.
+   * @param url Адрес без query/hash.
+   * @returns Имя файла.
    */
-  function basenameOf(url) {
+  function basenameOf(url: string): string {
     var parts = String(url || '').split('/');
     return parts[parts.length - 1] || '';
   }
 
   var model = '';
-  var pieces = [];
-  var ids = [];
+  var pieces: string[] = [];
+  var ids: string[] = [];
   var count = 0;
   var lastText = '';
-  var messages = [];
+  var messages: PerplexityThreadMessage[] = [];
 
   try {
     var entries = getTrim(json, 'entries');
@@ -314,10 +399,10 @@ export function parsePerplexityThread(json) {
  * v2.0.34: Perplexity дописывает в адрес истории limit=20&offset=0&from_first=false —
  * это урезанный снимок (последние 20 записей). Для шаблона полной истории такие
  * параметры выкидываем, остальные (with_parent_info и т.п.) и #hash сохраняем.
- * @param {string|null|undefined} urlStr Адрес истории Perplexity.
- * @returns {string} Адрес без limit/offset/from_first, с сохранёнными прочими параметрами и #hash.
+ * @param urlStr Адрес истории Perplexity.
+ * @returns Адрес без limit/offset/from_first, с сохранёнными прочими параметрами и #hash.
  */
-export function stripPerplexityHistoryTruncation(urlStr) {
+export function stripPerplexityHistoryTruncation(urlStr: string | null | undefined): string {
   var src = String(urlStr || '');
   if (!src) return src;
   var hash = '';

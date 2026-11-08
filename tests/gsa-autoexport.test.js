@@ -382,7 +382,7 @@ describe('F4/F5: doAutoExportDownload GSA (реальный код)', () => {
 // F7: модель снапшота для site=google_search — ОДНА точка (resolveCurrentModel)
 // =====================================================================================
 describe('F7: заполнение модели снапшота GSA (реальный resolveCurrentModel)', () => {
-  const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.js');
+  const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.ts');
   const SCOPE = 'with (ctx) { ' + fnDecl(CONTENT, 'resolveCurrentModel') +
     ' return { run: resolveCurrentModel }; }';
   const makeResolve = new Function('ctx', SCOPE);

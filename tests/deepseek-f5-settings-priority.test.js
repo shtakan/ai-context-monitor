@@ -28,7 +28,7 @@ if (typeof global.TextEncoder === 'undefined') global.TextEncoder = util.TextEnc
 if (typeof global.TextDecoder === 'undefined') global.TextDecoder = util.TextDecoder;
 
 const INTERCEPT_SRC = require('./helpers/deepseek-intercept-source.js').deepseekSource;
-const MODEL_CONFIG = require('./helpers/load-esm.js').loadEsm('utils/model-config.js');
+const MODEL_CONFIG = require('./helpers/load-esm.js').loadEsm('utils/model-config.ts');
 
 const V4_FLASH = 'deepseek-v4.1-flash';
 const R1 = 'deepseek-r1';

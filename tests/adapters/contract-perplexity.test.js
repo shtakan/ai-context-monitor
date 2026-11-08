@@ -16,7 +16,7 @@ const fs = require('fs');
 const path = require('path');
 const { loadAdapter, REPO_ROOT } = require('../helpers/adapter-harness');
 const { openOptionsExportGate, defaultState } = require('../helpers/options-export-gate');
-const { stripPerplexityHistoryTruncation } = require('../helpers/load-esm.js').loadEsmModule('utils/perplexity-parser.js');
+const { stripPerplexityHistoryTruncation } = require('../helpers/load-esm.js').loadEsmModule('utils/perplexity-parser.ts');
 
 jest.setTimeout(5000);
 

@@ -242,7 +242,7 @@ describe('O-35: QwenAdapter — detectModel', function () {
   });
 
   // S-ПИН (одна точка правки): в detectModel не осталось ни одного захардкоженного слага —
-  // фолбэк возвращает null, а имя модели приходит из таблицы utils/model-config.js.
+  // фолбэк возвращает null, а имя модели приходит из таблицы utils/model-config.ts.
   test('SOURCE: detectModel не возвращает захардкоженный слаг', function () {
     const m = /detectModel\(\)\s*\{([\s\S]*?)\n  \}/.exec(QWEN_SRC);
     expect(m).not.toBeNull();
@@ -251,7 +251,7 @@ describe('O-35: QwenAdapter — detectModel', function () {
   });
 
   // DOM-половина резолвер-цепочки: ярлык актуальной веб-модели обязан отдавать ТОЧНЫЙ слаг
-  // ('qwen3.7-plus'), который есть ключом в utils/model-config.js — иначе core/content.js
+  // ('qwen3.7-plus'), который есть ключом в utils/model-config.ts — иначе core/content.js
   // (resolveCurrentModel) не распознаёт сигнал и подставляет дефолт сайта.
   // ВАЖНО (честность пина): разметка ниже подобрана под ЖИВОЙ набор селекторов detectModel
   // (первый — '[class*="model"] [class*="name"]'). Пин держит ЛОГИКУ «ярлык → слаг», а НЕ
@@ -263,7 +263,7 @@ describe('O-35: QwenAdapter — detectModel', function () {
     document.body.innerHTML = '<div class="model-picker"><span class="model-name-text">Qwen3.7-Plus</span></div>';
     const slug = loadAdapter().detectModel();
     expect(slug).toBe('qwen3.7-plus');
-    const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.js');
+    const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.ts');
     const id = ModelConfig.resolveModelId(slug);
     expect(id).toBe('qwen3.7-plus');
     expect(ModelConfig.getModel(id).name).toBe('Qwen3.7-Plus');

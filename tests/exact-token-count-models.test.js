@@ -1,11 +1,11 @@
 // Тесты: точный подсчёт токенов — миграция на живые API-id (09.2026).
 const path = require('path');
 const fs = require('fs');
-const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.js');
+const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.ts');
 
 const ROOT = path.join(__dirname, '..');
 const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.js'), 'utf8');
-const MC_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'model-config.js'), 'utf8');
+const MC_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'model-config.ts'), 'utf8');
 
 function extractCandidates() {
   const m = BG_SRC.match(/var rawCandidates = \[([^\]]+)\]/);

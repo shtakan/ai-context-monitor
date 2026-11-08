@@ -64,7 +64,7 @@ function commonSource() {
 }
 
 /**
- * Ph2: импорт utils/perplexity-parser.js в перехватчике — статический ESM-импорт.
+ * Ph2: импорт utils/perplexity-parser.ts в перехватчике — статический ESM-импорт.
  * В classic-eval его разворачивать не нужно: тесты этих перехватчиков подменяют парсер
  * через window.parsePerplexityThread (мок снимка), поэтому мост смотрит в тот же
  * window-глобал, что и до миграции. Нет глобала — пустой результат ровно как раньше.
@@ -92,7 +92,7 @@ function interceptSource(relPath) {
     /^[ \t]*import\s*\{[^}]*\}\s*from\s*['"][^'"]*intercept-common\.ts['"];?[ \t]*$/m,
     ''
   ).replace(
-    /^[ \t]*import\s*\{[^}]*\}\s*from\s*['"][^'"]*perplexity-parser\.js['"];?[ \t]*$/m,
+    /^[ \t]*import\s*\{[^}]*\}\s*from\s*['"][^'"]*perplexity-parser\.ts['"];?[ \t]*$/m,
     parserBridge()
   );
   src = stripExports(src);

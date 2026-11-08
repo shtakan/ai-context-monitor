@@ -17,7 +17,7 @@
  * (формула и дефолты прежние).
  */
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.js');
-const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/perplexity-parser.js');
+const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/perplexity-parser.ts');
 const { readSource } = require('./helpers/content-source.js');
 
 const CONTENT = readSource('core/content.js');
@@ -73,7 +73,7 @@ const PERP_ANSWER_2 = 'Второй ответ Perplexity.';
 const PERP_MODEL = 'sonar-pro';
 
 // ФИКСТУРА Perplexity-снапшота: JSON треда в форме REST /rest/thread/{slug} (блоки
-// workflow_block), прогнанный через РЕАЛЬНЫЙ парсер utils/perplexity-parser.js —
+// workflow_block), прогнанный через РЕАЛЬНЫЙ парсер utils/perplexity-parser.ts —
 // pieces/ids/messages/count 1:1 с тем, что уходит в EMIT ai-cm-full-history.
 function workflowEntry(slug, query, answer) {
   return {

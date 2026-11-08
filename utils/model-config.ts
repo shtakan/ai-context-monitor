@@ -1,40 +1,78 @@
-// utils/model-config.js  (рабочая версия + авто-генерация Gemini-ключей из данных сети = пункт b)
+// utils/model-config.ts  (рабочая версия + авто-генерация Gemini-ключей из данных сети = пункт b)
 // В этом шаге меняется ТОЛЬКО этот файл. content.js / gemini-intercept.js / background.js /
 // manifest / адаптеры — НЕ ТРОГАТЬ. Правка аддитивна: цикл в конце только ДОБАВЛЯЕТ ключи
 // (проверка "если ключа нет"), существующие не меняет → поведение для уже замаппленных slug
 // не меняется, цифра не трогается (окно/порог те же), меняется только подпись имени в кружке.
 
-/**
- * Запись модели в реестре (types/model.d.ts:ModelRecord).
- * @typedef {import('../types/model').ModelRecord} ModelRecord
- */
-
-/**
- * Каталог моделей: канонический id → запись (types/model.d.ts:ModelCatalog).
- * @typedef {import('../types/model').ModelCatalog} ModelCatalog
- */
-
-/**
- * Дефолтная модель по имени сайта (types/model.d.ts:SiteDefaults).
- * @typedef {import('../types/model').SiteDefaults} SiteDefaults
- */
+// TS-миграция (батч 3): запись каталога, каталог и дефолты сайтов описаны
+// интерфейсами types/model.d.ts (ModelRecord / ModelCatalog / SiteDefaults) —
+// раньше те же формы держались JSDoc-typedef'ами, теперь это проверяется tsc.
+import type { ModelCatalog, ModelRecord, SiteDefaults } from '../types/model';
 
 /**
  * Семейный дефолт веб-UI Gemini (ModelConfig.familyDefaults): ключ семьи →
  * модель и окно контекста (без номера версии — v49).
- * @typedef {Object} FamilyDefault
- * @property {string} modelId Каноническое имя модели ('3.1 Pro', '3.6 Flash', …).
- * @property {number} contextLimit Окно семейства в токенах.
  */
+export interface FamilyDefault {
+  /** Каноническое имя модели ('3.1 Pro', '3.6 Flash', …). */
+  modelId: string;
+  /** Окно семейства в токенах. */
+  contextLimit: number;
+}
+
+/**
+ * Сырое значение поля попапа: строка/число из UI, null — поля нет,
+ * undefined — поля не передали вовсе.
+ */
+export type RawSettingValue = string | number | null | undefined;
+
+/**
+ * Контракт реестра моделей (utils/model-config.ts). Форма закрепляет и данные
+ * (каталог/дефолты/порог), и публичные методы: core/content.js вызывает их при
+ * каждом пересчёте бейджа, поэтому имена и сигнатуры — часть контракта.
+ */
+export interface ModelConfig {
+  /** Общий потолок окна: действующий лимит = min(contextLimit, это значение). */
+  EFFECTIVE_CAP_DEFAULT: number;
+  /** Каталог моделей: канонический id → запись. */
+  models: ModelCatalog;
+  /** Дефолтная модель по имени сайта: сайт → ключ каталога. */
+  siteDefaults: SiteDefaults;
+  /** Семейные дефолты веб-UI Gemini: семья → модель и окно. */
+  familyDefaults: Record<string, FamilyDefault>;
+  /** Запись модели по каноническому ключу; null — ключа в каталоге нет. */
+  getModel(modelId: string): ModelRecord | null;
+  /** Дефолтная модель сайта (по умолчанию — 'gpt-5.5'). */
+  getDefaultModel(site: string): string;
+  /** Окно контекста модели из каталога; 128000 — если ключ неизвестен. */
+  getContextLimit(modelId: string): number;
+  /** Действующий порог деградации бейджа (capExempt → реальное окно). */
+  getEffectiveLimit(modelId: string): number;
+  /** Канонический id из значения дропдауна «Модель»; null — «Авто». */
+  resolvePopupModelId(raw: RawSettingValue): string | null;
+  /** Процент от Авто-порога из поля «Лимит контекста»; null — «Авто». */
+  resolveLimitPct(raw: RawSettingValue): number | null;
+  /** Действующий лимит, урезанный процентом от Авто-порога. */
+  applyLimitPct(effectiveLimit: number, pct: number | null | undefined): number;
+  /** Отображаемый лимит модели с учётом процента попапа. */
+  computeDisplayLimit(modelId: string, pct: number | null | undefined): number;
+  /** Модель семейного дефолта Gemini по семье и варианту (v49). */
+  getFamilyDefaultModelId(fam: string, variant?: string): string | null;
+  /** Приводит сырое имя/slug модели к каноническому ключу каталога. */
+  resolveModelId(raw: string | null | undefined): string | null;
+  /** Процент занятого контекста для бейджа (округление до 0.1, потолок 100). */
+  calculatePercentage(usedTokens: number, contextLimit: number): number;
+  /** API-id модели для Google countTokens (токенизатор у Gemini общий). */
+  getGeminiApiModelId(modelId: string | null | undefined): string;
+}
 
 // ESM (Roadmap Ph2): модуль больше не UMD — потребители (core/content.js) тянут
 // ModelConfig статическим import'ом, поэтому сборка вшивает его в бандл сама, а
 // отдельного classic-скрипта в manifest.content_scripts больше нет.
 /** Реестр моделей: каталог, дефолты сайтов и вычисление действующего лимита. */
-export const ModelConfig = {
-  /** Общий потолок окна: действующий лимит = min(contextLimit, это значение). @type {number} */
+export const ModelConfig: ModelConfig = {
+  /** Общий потолок окна: действующий лимит = min(contextLimit, это значение). */
   EFFECTIVE_CAP_DEFAULT: 128000,
-  /** @type {ModelCatalog} */
   models: {
     // ---- OpenAI: текущая линейка 2026-10 ----
     // Окна взяты с официальной страницы моделей OpenAI (platform.openai.com/docs/models).
@@ -535,7 +573,7 @@ export const ModelConfig = {
    * @param {string} modelId Канонический ключ каталога (либо его нормализованная форма).
    * @returns {ModelRecord|null} Запись модели; null — ключа в каталоге нет.
    */
-  getModel(modelId) {
+  getModel(modelId: string): ModelRecord | null {
     return this.models[modelId] || null;
   },
   /**
@@ -543,7 +581,7 @@ export const ModelConfig = {
    * @param {string} site Имя сайта: chatgpt / gemini / deepseek / claude / …
    * @returns {string} Ключ каталога ModelCatalog.
    */
-  getDefaultModel(site) {
+  getDefaultModel(site: string): string {
     return this.siteDefaults[site] || 'gpt-5.5';
   },
   /**
@@ -551,7 +589,7 @@ export const ModelConfig = {
    * @param {string} modelId Канонический ключ каталога.
    * @returns {number} contextLimit записи; 128000 — если ключ неизвестен.
    */
-  getContextLimit(modelId) {
+  getContextLimit(modelId: string): number {
     const model = this.getModel(modelId);
     return model ? model.contextLimit : 128000;
   },
@@ -565,7 +603,7 @@ export const ModelConfig = {
    * @param {string} modelId
    * @returns {number}
    */
-  getEffectiveLimit(modelId) {
+  getEffectiveLimit(modelId: string): number {
     const model = this.getModel(modelId);
     if (!model) return this.EFFECTIVE_CAP_DEFAULT;
     // v13: opt-out из общего потолка — только для ключей с реальным окном > EFFECTIVE_CAP_DEFAULT
@@ -582,7 +620,7 @@ export const ModelConfig = {
    * @param {string|null|undefined} raw Сырое значение выбора попапа.
    * @returns {string|null} Ключ каталога; null — режим «Авто».
    */
-  resolvePopupModelId(raw) {
+  resolvePopupModelId(raw: RawSettingValue): string | null {
     if (raw == null) return null;
     const s = String(raw).trim();
     if (!s || s.toLowerCase() === 'auto') return null;
@@ -596,7 +634,7 @@ export const ModelConfig = {
    * @param {string|number|null|undefined} raw Сырое значение поля ('' / null → Авто).
    * @returns {number|null} 1…100; null — Авто (поле пустое).
    */
-  resolveLimitPct(raw) {
+  resolveLimitPct(raw: RawSettingValue): number | null {
     if (raw == null) return null;
     const s = String(raw).trim();
     if (!s) return null;
@@ -612,7 +650,7 @@ export const ModelConfig = {
    * @param {number|null|undefined} pct Процент 1…100; не число/≤0 — лимит не меняется.
    * @returns {number} Лимит в токенах (минимум 1).
    */
-  applyLimitPct(effectiveLimit, pct) {
+  applyLimitPct(effectiveLimit: number, pct: number | null | undefined): number {
     if (typeof pct !== 'number' || !(pct > 0)) return effectiveLimit;
     return Math.max(1, Math.round(pct / 100 * effectiveLimit));
   },
@@ -622,7 +660,7 @@ export const ModelConfig = {
    * @param {number|null|undefined} pct Процент 1…100 (null — Авто).
    * @returns {number} displayLimit в токенах.
    */
-  computeDisplayLimit(modelId, pct) {
+  computeDisplayLimit(modelId: string, pct: number | null | undefined): number {
     return this.applyLimitPct(this.getEffectiveLimit(modelId), pct);
   },
   // v49: канонический ключ по семье(±варианту) без номера версии (DOM-сигнал v48).
@@ -635,7 +673,7 @@ export const ModelConfig = {
    * @param {string} [variant] Вариант из UI («Lite», «Расширенная», «Extended»).
    * @returns {string|null} Имя модели семейства; null — семьи нет в familyDefaults.
    */
-  getFamilyDefaultModelId(fam, variant) {
+  getFamilyDefaultModelId(fam: string, variant?: string): string | null {
     const famK = String(fam || '').toLowerCase().replace(/[^a-z]/g, '');
     const varK = String(variant || '').toLowerCase();
     const isLite = /lite/.test(varK);
@@ -653,14 +691,14 @@ export const ModelConfig = {
    * @param {string|null|undefined} raw Сырое имя модели (slug из сети, DOM-ярлык, API-id).
    * @returns {string|null} Ключ ModelCatalog; null — совпадений нет.
    */
-  resolveModelId(raw) {
+  resolveModelId(raw: string | null | undefined): string | null {
     if (!raw) return null;
     /**
      * Нормализация имени: нижний регистр, пробелы/подчёркивания/точки/слэши → дефис.
      * @param {string} s Сырое имя.
      * @returns {string} Нормализованная форма ключа.
      */
-    const norm = function (s) {
+    const norm = function (s: string): string {
       return String(s).toLowerCase().replace(/[\s_./]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
     };
     const nRaw = norm(raw);
@@ -718,7 +756,7 @@ export const ModelConfig = {
    * @param {number} contextLimit Действующий лимит контекста.
    * @returns {number} Процент 0…100 (0 — лимит не положителен).
    */
-  calculatePercentage(usedTokens, contextLimit) {
+  calculatePercentage(usedTokens: number, contextLimit: number): number {
     if (contextLimit <= 0) return 0;
     const percentage = (usedTokens / contextLimit) * 100;
     return Math.min(100, Math.round(percentage * 10) / 10);
@@ -733,7 +771,7 @@ export const ModelConfig = {
    * @param {string|null|undefined} modelId Ключ каталога либо сырой slug.
    * @returns {string} Валидный API-id; 'gemini-flash-latest' — фолбэк.
    */
-  getGeminiApiModelId(modelId) {
+  getGeminiApiModelId(modelId: string | null | undefined): string {
     // Детект-слаги, которые уже являются валидными API-id — пропускать как есть (passthrough)
     var passthrough = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3-flash'];
     if (passthrough.indexOf(modelId) !== -1) return modelId;

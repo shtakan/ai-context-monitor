@@ -9,14 +9,14 @@
 //   История треда: загружается через fetch или XHR (точный URL неизвестен).
 //     Ответ JSON: { entries: [...], thread_metadata: {...}, ... }
 //     КЛЮЧИ МОГУТ БЫТЬ С ПРОБЕЛАМИ ("entries ", "thread_metadata " и т.д. на всех уровнях).
-//   Парсинг делегирован в parsePerplexityThread (utils/perplexity-parser.js, ESM-импорт).
+//   Парсинг делегирован в parsePerplexityThread (utils/perplexity-parser.ts, ESM-импорт).
 //   usage НЕТ — токены считаются эвристикой на стороне расширения.
 
 // ESM (Roadmap Ph2): setIntervalVisible втягивается сборкой в MAIN-бандл перехватчика.
 import { setIntervalVisible } from '../utils/intercept-common.ts';
 // ESM (Roadmap Ph2): парсер Perplexity — тоже ES-модуль; window.parsePerplexityThread больше нет,
 // именованные экспорты втягиваются сборкой (esbuild) в этот же MAIN-бандл.
-import { parsePerplexityThread, stripPerplexityHistoryTruncation } from '../utils/perplexity-parser.js';
+import { parsePerplexityThread, stripPerplexityHistoryTruncation } from '../utils/perplexity-parser.ts';
 (function () {
   if (window.__aiCmPerplexityInterceptInstalled) return;
   window.__aiCmPerplexityInterceptInstalled = true;
@@ -231,7 +231,7 @@ import { parsePerplexityThread, stripPerplexityHistoryTruncation } from '../util
 
   // v2.0.34: шаблон истории не должен закреплять урезанный адрес Perplexity
   // (limit=20&offset=0&from_first=false) — иначе bootstrap тянет лишь последние 20 записей.
-  // Чистая функция живёт в utils/perplexity-parser.js (ESM-импорт, см. шапку файла).
+  // Чистая функция живёт в utils/perplexity-parser.ts (ESM-импорт, см. шапку файла).
   function normalizeHistoryUrl(urlStr) {
     return stripPerplexityHistoryTruncation(String(urlStr || ''));
   }

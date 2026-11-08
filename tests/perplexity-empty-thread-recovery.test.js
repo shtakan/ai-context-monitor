@@ -4,7 +4,7 @@
  * bootstrap Accept=json на свежем треде получает HTML/RSC → вечный латч bootstrapAcceptJsonFailed.
  * Фикс: (1) ветка !url в activeRefresh вызывает bootstrapSnapshot и снимает loggedActiveStatus;
  * (2) латч заменён retry-автоматом 2с/4с/8с (3 ретрая) по образцу scheduleActiveRetry.
- * «НЕ трогать»: gemini-intercept.js, content.js, claude-intercept.js, perplexity-parser.js,
+ * «НЕ трогать»: gemini-intercept.js, content.js, claude-intercept.js, perplexity-parser.ts,
  * manifest.json, utils/.
  */
 const fs = require('fs');
@@ -254,8 +254,8 @@ describe('НЕ трогать: маркеры неизменности оста�
     const s = require('./helpers/content-source.js').contentSource;
     expect(s).toContain("aiCmFlushDeferredHistWrite(cid79, 'base-complete')");
   });
-  test('claude-intercept.js и perplexity-parser.js на месте', () => {
+  test('claude-intercept.js и perplexity-parser.ts на месте', () => {
     expect(fs.readFileSync(path.join(root, 'core', 'claude-intercept.js'), 'utf8').length).toBeGreaterThan(0);
-    expect(fs.readFileSync(path.join(root, 'utils', 'perplexity-parser.js'), 'utf8').length).toBeGreaterThan(0);
+    expect(fs.readFileSync(path.join(root, 'utils', 'perplexity-parser.ts'), 'utf8').length).toBeGreaterThan(0);
   });
 });

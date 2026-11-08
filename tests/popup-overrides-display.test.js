@@ -7,13 +7,13 @@
  *       «Заполнение» и цвета виджета считаются от displayLimit;
  *   (в) валидация: pct вне 1–100 (2000) → фолбэк 100 = как Авто, пусто → Авто;
  *   (г) дефолтный путь (Автоопределение + пустое поле/100) байтово идентичен прежнему.
- * Чистые функции — utils/model-config.js (resolvePopupModelId / resolveLimitPct /
+ * Чистые функции — utils/model-config.ts (resolvePopupModelId / resolveLimitPct /
  * applyLimitPct / computeDisplayLimit); пин-тесты — core/content.js и options/*.
  */
 
 const fs = require('fs');
 const path = require('path');
-const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.js');
+const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.ts');
 
 // v2.0 (этап 1/3): исходник контент-скрипта — модули + content.js в порядке manifest.json
 // (tests/helpers/content-source.js). Резолв источника, не ассерты.
@@ -116,7 +116,7 @@ describe('H19 (б): computeDisplayLimit — unit-тесты оверрайдов
 });
 
 // =====================================================================================
-// Защитные ветки utils/model-config.js (карта задачи 1.1: branches ≥80%).
+// Защитные ветки utils/model-config.ts (карта задачи 1.1: branches ≥80%).
 // Поведение существующих ключей не меняется — проверяются фолбэки и границы.
 // =====================================================================================
 describe('model-config — защитные ветки дефолтов и лимитов', () => {
