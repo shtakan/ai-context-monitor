@@ -2,7 +2,7 @@
  * O-35 (инспекция 2026-09-19, пункты C/D/B/A): ПИНЫ ГЕЙТ-ИЗМЕРЕНИЯ И МЕХАНИЗМОВ.
  *
  * Здесь ровно две группы:
- *   1) РАНТАЙМ (реальные core/qwen-intercept.js + utils/stream-frames.js на jsdom-стенде,
+ *   1) РАНТАЙМ (реальные core/qwen-intercept.js + utils/stream-frames.ts на jsdom-стенде,
  *      реальный core/widget.js updateWidget): строки qwen-sse / qwen-spa / qwen-badge
  *      печатаются ТОЛЬКО под гейтом aiCmDebug, идут через канон utils/debug.js:aiCmDiagLine
  *      и НЕ меняют байты выхода (G1/G2);

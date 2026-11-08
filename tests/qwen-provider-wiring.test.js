@@ -83,13 +83,13 @@ describe('O-35: manifest.json — Qwen добавлен, прежние серв
     // Перехватчик Qwen в content_scripts НЕ дублируется: он ставится программно в MAIN-мир
     // через registerContentScripts (тот же паттерн, что у шести существующих перехватчиков).
     expect(js).not.toContain('core/qwen-intercept.js');
-    expect(js).not.toContain('utils/stream-frames.js');
+    expect(js).not.toContain('utils/stream-frames.ts');
     // Ph2: utils/debug.js стал ESM-модулем и вшивается в content-бандл через import
     // из core/content.js — отдельным <script> в манифесте он больше не грузится (R1).
     expect(js).not.toContain('utils/debug.js');
     // Ph2, шаг tokenizer.js: модуль переведён на ESM и втягивается import'ом из
     // core/content.js — отдельным classic-скриптом в манифесте он больше не грузится.
-    expect(js).not.toContain('utils/tokenizer.js');
+    expect(js).not.toContain('utils/tokenizer.ts');
     // Ph2, шаг model-config.js: модуль переведён на ESM и втягивается import'ом из
     // core/content.js — отдельным classic-скриптом в манифесте он больше не грузится.
     expect(js).not.toContain('utils/model-config.js');
@@ -109,8 +109,8 @@ describe('O-35/O-53/R2: core/background.js — регистрация перех
   test('новый id зарегистрирован с MAIN-миром и document_start', function () {
     const m = /id: 'ai-cm-qwen-intercept-v4',[\s\S]*?matches: \['https:\/\/chat\.qwen\.ai\/\*'\],[\s\S]*?js: \[([^\]]*)\],[\s\S]*?runAt: 'document_start',[\s\S]*?world: 'MAIN'/.exec(background);
     expect(m).not.toBeNull();
-    // Ph2: utils/stream-frames.js — ESM-модуль, esbuild вшивает его в core/qwen-intercept.js.
-    expect(m[1]).not.toContain('utils/stream-frames.js');
+    // Ph2: utils/stream-frames.ts — ESM-модуль, esbuild вшивает его в core/qwen-intercept.js.
+    expect(m[1]).not.toContain('utils/stream-frames.ts');
     // O-53: модуль пагинации едет ПЕРЕД перехватчиком (перехватчик читает window.AiCmQwenPagination).
     expect(m[1]).toContain('core/qwen-pagination.js');
     // R2: модуль вложений — ПЕРЕД перехватчиком: он объявляет window.AiCmQwenFiles при
@@ -356,7 +356,7 @@ describe('O-35: КРИТЕРИЙ ЖИВОЙ ПРИЁМКИ Qwen (эталон т
   });
 
   test('tokenizer.js не тронут (BYOK-путь считает только Gemini-сервисы)', function () {
-    const tokenizer = read('utils/tokenizer.js');
+    const tokenizer = read('utils/tokenizer.ts');
     expect(tokenizer).not.toContain('qwen');
   });
 });

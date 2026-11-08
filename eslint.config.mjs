@@ -208,7 +208,7 @@ export default [
   },
 
   // ---------------------------------------------------------------------------
-  // 6. ESM-пилот (commit 0ca3434, Roadmap Ph2). `utils/markdown.js` и
+  // 6. ESM-пилот (commit 0ca3434, Roadmap Ph2). `utils/markdown.ts` и
   //    `print/print.js` переведены на import/export, но секции 2 описывают
   //    utils/**/*.js и print/**/*.js как `sourceType: 'script'` — без этого
   //    override парсер падал: «'import' and 'export' may appear only with
@@ -226,7 +226,7 @@ export default [
   //    Ph2, шаг 4: utils/intercept-common.ts переведён на export, а четыре
   //    MAIN-перехватчика импортируют setIntervalVisible статически; их сборка —
   //    отдельные IIFE-бандлы (build.mjs, mainInterceptOptions).
-  //    Ph2, шаг stream-frames: utils/stream-frames.js — ESM (frames/normalizeUsage/
+  //    Ph2, шаг stream-frames: utils/stream-frames.ts — ESM (frames/normalizeUsage/
   //    mergeUsage + эталонные framesManual/splitJsonObjects), его единственный
   //    потребитель core/qwen-intercept.js тоже переведён на статический import и
   //    собирается отдельным IIFE-бандлом.
@@ -236,18 +236,18 @@ export default [
   // ---------------------------------------------------------------------------
   {
     files: [
-      'utils/markdown.js',
+      'utils/markdown.ts',
       'utils/buildReferenceText.ts',
       'utils/export-text-builders.js',
       'utils/platform.ts',
       'utils/intercept-common.ts',
-      'utils/stream-frames.js',
+      'utils/stream-frames.ts',
       // R1 (Ph2): utils/debug.js переведён на ESM — его импортируют
       // core/background.js, core/content.js и utils/intercept-common.ts.
       'utils/debug.js',
       // Ph2, шаг tokenizer.js: модуль переведён на ESM (UMD-хвост снят) и
       // втягивается import'ом из core/content.js.
-      'utils/tokenizer.js',
+      'utils/tokenizer.ts',
       // Ph2, шаг model-config.js: модуль переведён на ESM (UMD-хвост снят) и
       // втягивается import'ом из core/content.js.
       'utils/model-config.js',

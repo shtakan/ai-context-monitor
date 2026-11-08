@@ -22,7 +22,7 @@
  * КОНСТРУКЦИЯ (R-D, без выдуманных чисел):
  *   • правило читается РЕАЛЬНОЙ функцией core/content.js:aiCmMetricServerTokens (исполняется);
  *   • вердикт бейджа считается РЕАЛЬНЫМИ байтами тернарника из core/content.js (берётся из
- *     источника регуляркой, исполняется через new Function) и РЕАЛЬНЫМ utils/tokenizer.js;
+ *     источника регуляркой, исполняется через new Function) и РЕАЛЬНЫМ utils/tokenizer.ts;
  *   • ingest снимка считается РЕАЛЬНОЙ строкой `netServerTokens = detail.serverTokens || 0;`.
  *   Так пины держат не пересказ, а те самые байты продакшна: правка любого из трёх звеньев
  *   (перехватчик → ingest → метрика) роняет соответствующий пин.
@@ -34,7 +34,7 @@
 const fs = require('fs');
 const path = require('path');
 // Ph2: tokenizer.js — ES-модуль (CJS require по нему больше не разрешается).
-const Tokenizer = require('./helpers/load-esm.js').loadEsm('utils/tokenizer.js');
+const Tokenizer = require('./helpers/load-esm.js').loadEsm('utils/tokenizer.ts');
 const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.js');
 const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.js');
 const H = require('./helpers/content-source.js');

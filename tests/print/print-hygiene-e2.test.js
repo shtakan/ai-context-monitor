@@ -81,7 +81,7 @@ function makeChrome(opts) {
 // Загрузка реального print.js в текущий jsdom-window. Скрипт — IIFE без module.exports,
 // поэтому все браузерные глобалы подставляем явно. setTimeout/clearTimeout берём у
 // текущего window: под jest fake timers это фейковые таймеры, которые двигает advance.
-// print.html подключает utils/markdown.js ДО print.js: без window.MarkdownRenderer
+// print.html подключает utils/markdown.ts ДО print.js: без window.MarkdownRenderer
 // waitForRenderer крутит опрос вечно (страница так и не печатает). В песочнице ставим
 // стаб-рендерер — экранирование+абзацы, достаточное для проверок гигиены печати.
 function installRendererStub() {

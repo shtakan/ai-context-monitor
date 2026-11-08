@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-// Ph2: utils/tokenizer.js — ES-модуль, поэтому CJS require('...') больше не работает
+// Ph2: utils/tokenizer.ts — ES-модуль, поэтому CJS require('...') больше не работает
 // (SyntaxError на `export`). Грузим его тем же резолвером графа, что и остальной ESM-пилот.
-const Tokenizer = require('./helpers/load-esm.js').loadEsm('utils/tokenizer.js');
+const Tokenizer = require('./helpers/load-esm.js').loadEsm('utils/tokenizer.ts');
 
 // Служебные и смысловые слова разной длины — имитация типового русского чата.
 // Средняя длина кириллической серии ≈6.4 буквы (как в живом чате калибровки 161025 кир / ~25 тыс. слов).
@@ -106,7 +106,7 @@ describe('Tokenizer — ГЛОБАЛЬНАЯ кириллическая кали
   });
 
   test('калибровка ГЛОБАЛЬНА: фолбэк content.js использует тот же делитель, ceil по прогону снят', () => {
-    const tkSrc = fs.readFileSync(path.join(__dirname, '..', 'utils', 'tokenizer.js'), 'utf8');
+    const tkSrc = fs.readFileSync(path.join(__dirname, '..', 'utils', 'tokenizer.ts'), 'utf8');
     // per-run Math.ceil для кириллицы больше не существует (корень завышения ×1.99)
     expect(tkSrc).not.toContain('Math.ceil(cyrillicCount /');
     expect(tkSrc).toContain('tokens += cyrillicCount / CYRILLIC_CHARS_PER_TOKEN;');

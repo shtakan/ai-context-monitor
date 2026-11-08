@@ -14,7 +14,7 @@
  * (чистка в сборщиках) остаётся и идемпотентна.
  *
  * Исполняется РЕАЛЬНЫЙ adapters/qwen-adapter.js в песочнице jsdom + РЕАЛЬНЫЕ сборщики
- * (utils/export-text-builders.js) и токен-оценка (utils/tokenizer.js).
+ * (utils/export-text-builders.js) и токен-оценка (utils/tokenizer.ts).
  *
  * Обновление 2026-09-26 (план замены qwen-селекторов, живой DOM-снимок 26.09.26): фикстура
  * больше НЕ синтетическая `data-message-id`-разметка, а живая форма снимка — реплики это
@@ -28,7 +28,7 @@ const fs = require('fs');
 const path = require('path');
 
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.js', 'AiCmExportBuilders');
-const Tokenizer = require('./helpers/load-esm.js').loadEsm('utils/tokenizer.js');
+const Tokenizer = require('./helpers/load-esm.js').loadEsm('utils/tokenizer.ts');
 
 const ROOT = path.join(__dirname, '..');
 const BASE_SRC = fs.readFileSync(path.join(ROOT, 'adapters', 'base-adapter.js'), 'utf8');

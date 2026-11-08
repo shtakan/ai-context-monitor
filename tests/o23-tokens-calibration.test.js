@@ -13,7 +13,7 @@
  *      бейдж-виджет берёт netServerTokens, а без него — Tokenizer.estimateDialogTokens
  *      (content.js:1950/2453). Фикс: aiCmEstimateTokensTilde() — Tokenizer.countTokens,
  *      а упрощённая эвристика осталась только фолбэком И получила языковую ветвь.
- *   2) utils/tokenizer.js:countTokens делил кириллицу на 4.0 (как латиницу) —
+ *   2) utils/tokenizer.ts:countTokens делил кириллицу на 4.0 (как латиницу) —
  *      систематическая НЕДООЦЕНКА русского; промежуточный фикс — делитель 1.8.
  *   3) ГЛОБАЛЬНАЯ перекалибровка 24-10: делитель 1.8 ОТМЕНЁН. Живые замеры API countTokens:
  *      112 854 симв → 29 517 ток. (0.2615 ток/симв) и 216 881 симв (161 025 кир.) → 63 713 ток.
@@ -42,10 +42,10 @@
 const fs = require('fs');
 const path = require('path');
 // Ph2: tokenizer.js стал ES-модулем — CJS require('...') на нём бросает SyntaxError.
-const Tokenizer = require('./helpers/load-esm.js').loadEsm('utils/tokenizer.js');
+const Tokenizer = require('./helpers/load-esm.js').loadEsm('utils/tokenizer.ts');
 
 const CONTENT_SRC = fs.readFileSync(path.join(__dirname, '..', 'core', 'content.js'), 'utf8');
-const TOKENIZER_SRC = fs.readFileSync(path.join(__dirname, '..', 'utils', 'tokenizer.js'), 'utf8');
+const TOKENIZER_SRC = fs.readFileSync(path.join(__dirname, '..', 'utils', 'tokenizer.ts'), 'utf8');
 
 // =====================================================================================
 // Записанные пары O-23 (handoff, верхний блок)
@@ -149,7 +149,7 @@ describe('O-23 D: три измеренные пары воспроизводя�
 // =====================================================================================
 // F-пины: что закрывает калибровка 3.3 (и где граница)
 // =====================================================================================
-describe('O-23 F: калибровка кириллицы 3.3 (utils/tokenizer.js:countTokens)', () => {
+describe('O-23 F: калибровка кириллицы 3.3 (utils/tokenizer.ts:countTokens)', () => {
   test('F3 (P3): оценка входит в ±10% от serverTokens = 105217', () => {
     const est = tilder(P3_TEXT, 0);                 // измерено: 98959 (relErr 5.95%)
     expect(relErr(est, PAIRS.P3.serverTokens)).toBeLessThanOrEqual(0.10);

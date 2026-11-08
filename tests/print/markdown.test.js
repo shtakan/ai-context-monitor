@@ -1,10 +1,10 @@
 /**
- * Юнит-тесты markdown-конвертера для печатной формы (utils/markdown.js).
+ * Юнит-тесты markdown-конвертера для печатной формы (utils/markdown.ts).
  * Покрывают: таблицы, code-блоки, списки (включая «- **Метка**: текст»),
  * экранирование HTML, заголовки и инлайн-разметку.
  */
 
-const MarkdownRenderer = require('../helpers/load-esm.js').loadEsm('utils/markdown.js');
+const MarkdownRenderer = require('../helpers/load-esm.js').loadEsm('utils/markdown.ts');
 
 describe('MarkdownRenderer.render — таблицы', () => {
   test('превращает markdown-таблицу в HTML-таблицу', () => {
@@ -124,7 +124,7 @@ describe('MarkdownRenderer.render — заголовки и инлайн', () =>
 });
 
 // =====================================================================================
-// Карта задачи 1.1: добивание branches utils/markdown.js (H3–H6, пустая таблица,
+// Карта задачи 1.1: добивание branches utils/markdown.ts (H3–H6, пустая таблица,
 // не-строка, пустой URL, подчёркивание, прерывание параграфа блоком).
 // =====================================================================================
 describe('MarkdownRenderer.render — заголовки H3–H6', () => {

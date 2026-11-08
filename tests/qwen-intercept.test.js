@@ -1,7 +1,7 @@
 /**
  * O-35: core/qwen-intercept.js — MAIN-world перехватчик chat.qwen.ai.
  *
- * Стенд: РЕАЛЬНЫЙ файл перехватчика в jsdom + реальный utils/stream-frames.js;
+ * Стенд: РЕАЛЬНЫЙ файл перехватчика в jsdom + реальный utils/stream-frames.ts;
  * «сервер» — подменённый window.fetch, отдающий SSE-фикстуру спеки провайдера
  * (экспорт чата ai-context-monitor-deepseek-DeepSeek-R1-2026-09-18-17-53.txt).
  *

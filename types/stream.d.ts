@@ -1,5 +1,5 @@
 /**
- * Типы stream-analyzer-каркаса (utils/stream-frames.js, O-35).
+ * Типы stream-analyzer-каркаса (utils/stream-frames.ts, O-35).
  *
  * Модуль самодостаточен: импортов нет. Формы выведены из фактических функций
  * frames()/normalizeUsage()/mergeUsage(); это декларации, рантайм не меняется.
@@ -9,10 +9,10 @@
  * Один кадр потока (frames/framesManual).
  *
  * SSE-ветка отдаёт { event, data }, где event — значение 'event:' либо null,
- * если строка 'data:' пришла без предшествующего event (utils/stream-frames.js:199-209).
+ * если строка 'data:' пришла без предшествующего event (utils/stream-frames.ts:199-209).
  * Не-SSE-ветка отдаёт кадры без поля event (только { data }): тело копится
  * целиком, затем JSON-массив разбивается на элементы либо склейка {...}{...}
- * режется splitJsonObjects (utils/stream-frames.js:176-186). Поэтому event
+ * режется splitJsonObjects (utils/stream-frames.ts:176-186). Поэтому event
  * опционален, а не обязателен.
  */
 export interface StreamFrame {
@@ -24,7 +24,7 @@ export interface StreamFrame {
 }
 
 /**
- * Нормализованный usage (normalizeUsage, utils/stream-frames.js:350-363).
+ * Нормализованный usage (normalizeUsage, utils/stream-frames.ts:350-363).
  *
  * Единая форма для провайдеров: input/output/total/reasoning/cached.
  * Каждое поле — number | null: null означает «провайдер не дал число»
@@ -48,7 +48,7 @@ export interface Usage {
 }
 
 /**
- * utils/stream-frames.js — ESM-модуль (Roadmap Ph2). Типы экспортов выводятся
+ * utils/stream-frames.ts — ESM-модуль (Roadmap Ph2). Типы экспортов выводятся
  * из JSDoc самого модуля (tsconfig: allowJs + checkJs); здесь — только контракт
  * вызывающего: frames(res) читает Response-подобный поток и отдаёт кадры,
  * normalizeUsage/mergeUsage нормализуют и сливают usage.

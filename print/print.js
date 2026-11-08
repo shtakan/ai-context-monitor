@@ -13,7 +13,7 @@
  *      и вызываем window.print() — ровно ОДИН раз за жизненный цикл страницы;
  *      пользователь сохраняет PDF штатным диалогом Chrome.
  */
-import MarkdownRenderer from '../utils/markdown.js';
+import MarkdownRenderer from '../utils/markdown.ts';
 
 (function () {
   'use strict';

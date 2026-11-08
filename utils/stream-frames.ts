@@ -37,15 +37,28 @@
  * @module utils/stream-frames
  */
 
+import type { StreamFrame, Usage } from '../types/stream';
+
+/** Response-подобный вход frames(): только заголовки и поток тела. */
+export interface FramesResponse {
+  headers?: { get(name: string): string | null } | null;
+  body?: { getReader(): { read(): Promise<{ done: boolean; value?: unknown }> } } | null;
+}
+
+/** Контракт потокового декодера кадров: TextDecoder либо встроенный UTF-8 декодер. */
+export interface FrameDecoder {
+  text(v: unknown, stream?: boolean): string;
+  flush(): string;
+}
+
 // Резать склейку {...}{...} на отдельные объекты (не-SSE фолбэк). Тот же алгоритм, что в
 // исходном каркасе: глубина фигурных скобок + корректный учёт строк/экранирования.
 /**
  * Режет склейку {...}{...} на отдельные JSON-объекты (не-SSE фолбэк).
- * @param {string|null|undefined} s Склейка объектов.
- * @returns {string[]} Объекты в порядке следования; '' для пустого входа.
+ * Возвращает объекты в порядке следования; [] для пустого входа.
  */
-export function splitJsonObjects(s) {
-  var out = [], depth = 0, start = -1, inStr = false, esc = false;
+export function splitJsonObjects(s: string | null | undefined): string[] {
+  var out: string[] = [], depth = 0, start = -1, inStr = false, esc = false;
   var str = String(s == null ? '' : s);
   for (var i = 0; i < str.length; i++) {
     var c = str.charAt(i);
@@ -65,8 +78,8 @@ export function splitJsonObjects(s) {
 // Декодер тела: глобальный TextDecoder (браузер, worker, Node 18+). Если его нет
 // (jsdom-стенды jest, урезанные песочницы), работает ВСТРОЕННЫЙ потоковый UTF-8 декодер
 // ниже — поэтому модуль не тянет Node-модуль 'util' и остаётся чистым ESM без require.
-/** @type {any} Глобальный TextDecoder либо null (тогда — встроенный декодер). */
-var TEXT_DECODER = (function () {
+/** Глобальный TextDecoder либо null (тогда — встроенный декодер). */
+var TEXT_DECODER: typeof TextDecoder | null = (function (): typeof TextDecoder | null {
   try { if (typeof TextDecoder !== 'undefined') return TextDecoder; } catch (eG) { }
   return null;
 })();
@@ -79,42 +92,42 @@ var TEXT_DECODER = (function () {
 // Возвращает { text(v, stream), flush() } — один контракт для обеих веток frames().
 /**
  * Единый потоковый декодер кадров: TextDecoder либо встроенный UTF-8 декодер.
- * @returns {{text: (v: any, stream?: boolean) => string, flush: () => string}} Контракт декодера.
  */
-function makeDecodeStream() {
-  var dec = null;
+function makeDecodeStream(): FrameDecoder {
+  var dec: TextDecoder | null = null;
   if (TEXT_DECODER) {
     try { dec = new TEXT_DECODER(); } catch (eNew) { dec = null; }
   }
   if (dec) {
     return {
-      text: function (v, stream) { return dec.decode(v, { stream: stream === true }); },
-      flush: function () { return dec.decode(); }
+      text: function (v: unknown, stream?: boolean): string { return dec.decode(v as BufferSource, { stream: stream === true }); },
+      flush: function (): string { return dec.decode(); }
     };
   }
 
-  var pending = [];   // байты незавершённой UTF-8 последовательности
+  var pending: number[] = [];   // байты незавершённой UTF-8 последовательности
 
-  function asBytes(v) {
+  function asBytes(v: unknown): ArrayLike<number> | null {
     try {
       if (typeof v === 'string') return null;
-      if (v && typeof v.length === 'number') return v;
-      if (v && typeof v.byteLength === 'number') return new Uint8Array(v);
+      var src = v as { length?: number; byteLength?: number } | null;
+      if (src && typeof src.length === 'number') return src as ArrayLike<number>;
+      if (src && typeof src.byteLength === 'number') return new Uint8Array(v as ArrayBufferLike);
     } catch (eB) { }
     return null;
   }
   // Ожидаемая длина последовательности по ведущему байту (1 — ASCII/невалидный).
-  function seqLen(b) {
+  function seqLen(b: number): number {
     if (b < 0x80) return 1;
     if (b >= 0xC2 && b <= 0xDF) return 2;
     if (b >= 0xE0 && b <= 0xEF) return 3;
     if (b >= 0xF0 && b <= 0xF4) return 4;
     return 1;
   }
-  function decodeNative(v) {
+  function decodeNative(v: unknown): string {
     var b = asBytes(v);
     if (!b) return String(v);
-    var bytes = pending.length ? pending.concat(Array.prototype.slice.call(b)) : Array.prototype.slice.call(b);
+    var bytes: number[] = pending.length ? pending.concat(Array.prototype.slice.call(b)) : Array.prototype.slice.call(b);
     pending = [];
     var out = '';
     var i = 0;
@@ -124,7 +137,7 @@ function makeDecodeStream() {
         pending = bytes.slice(i);
         break;
       }
-      var cp;
+      var cp: number;
       if (n === 1) cp = bytes[i];
       else if (n === 2) cp = ((bytes[i] & 0x1F) << 6) | (bytes[i + 1] & 0x3F);
       else if (n === 3) cp = ((bytes[i] & 0x0F) << 12) | ((bytes[i + 1] & 0x3F) << 6) | (bytes[i + 2] & 0x3F);
@@ -162,12 +175,10 @@ function makeDecodeStream() {
 // Резак склейки берётся из замыкания модуля, декодер потока приходит АРГУМЕНТОМ (это ровно
 // те две вещи, которые прежняя фабрика передавала сгенерированному коду параметрами).
 /**
- * Нативный async-генератор кадров (ES2018-литерал, не ESM): SSE — построчно, не-SSE — целиком.
- * @param {{headers?: {get(name: string): string|null}|null, body?: {getReader(): {read(): Promise<{done: boolean, value?: unknown}>}}|null}|null} res Response-подобный объект.
- * @param {{text: (v: any, stream?: boolean) => string, flush: () => string}} dec Декодер потока.
- * @returns {AsyncGenerator<import('../types/stream').StreamFrame, void, unknown>} Кадры потока.
+ * Нативный async-генератор кадров (ES2018-литерал): SSE — построчно, не-SSE — целиком.
+ * res — Response-подобный объект, dec — декодер потока.
  */
-async function* framesNative(res, dec) {
+async function* framesNative(res: FramesResponse | null, dec: FrameDecoder): AsyncGenerator<StreamFrame, void, unknown> {
   var ct = '';
   try { if (res && res.headers && typeof res.headers.get === 'function') ct = String(res.headers.get('content-type') || '').toLowerCase(); } catch (eCt) { ct = ''; }
   var isSSE = ct.indexOf('event-stream') !== -1;
@@ -226,18 +237,24 @@ async function* framesNative(res, dec) {
 // кадра/конца. Хвост без '\n' кладётся в очередь ПОСЛЕДНИМ кадром, поэтому порядок
 // «хвост → done» соблюдён (ровно этот случай ловился пробой на этапе разработки).
 /**
- * Ручной pull-итератор кадров (ES5-эталон паритета): очередь кадров + ожидающие next().
- * @param {any} res Response-подобный объект.
- * @returns {any} Итератор кадров с next() и Symbol.asyncIterator.
+ * Итератор кадров ручной ветки: next() отдаёт голову очереди либо ждёт следующий кадр/конец.
  */
-export function framesManual(res) {
-  var queue = [];
-  var waiters = [];
-  var failure = null;         // ошибка чтения — отдаётся первым же ожидающим
+export interface ManualFrameIterator {
+  next(): Promise<{ value?: StreamFrame; done: boolean }>;
+  [Symbol.asyncIterator](): ManualFrameIterator;
+}
+
+/**
+ * Ручной pull-итератор кадров (ES5-эталон паритета): очередь кадров + ожидающие next().
+ */
+export function framesManual(res: FramesResponse | null): ManualFrameIterator {
+  var queue: StreamFrame[] = [];
+  var waiters: Array<{ resolve: (r: { value?: StreamFrame; done: boolean }) => void; reject: (e: unknown) => void }> = [];
+  var failure: unknown = null;         // ошибка чтения — отдаётся первым же ожидающим
   var started = false;
   var finishedRead = false;   // чтение тела завершено (очередь может быть ещё не пуста)
 
-  function wake() {
+  function wake(): void {
     while (waiters.length) {
       if (queue.length) { waiters.shift().resolve({ value: queue.shift(), done: false }); continue; }
       if (failure) { waiters.shift().reject(failure); continue; }
@@ -245,9 +262,9 @@ export function framesManual(res) {
       return;                                        // кадра ещё нет — ждём дальше
     }
   }
-  function push(frame) { queue.push(frame); wake(); }
+  function push(frame: StreamFrame): void { queue.push(frame); wake(); }
 
-  function run() {
+  function run(): Promise<void> {
     var ct = '';
     try {
       if (res && res.headers && typeof res.headers.get === 'function') {
@@ -320,7 +337,7 @@ export function framesManual(res) {
     return readLines();
   }
 
-  var it = {};
+  var it = {} as ManualFrameIterator;
   it.next = function () {
     if (queue.length) return Promise.resolve({ value: queue.shift(), done: false });
     if (failure) return Promise.reject(failure);
@@ -343,57 +360,52 @@ export function framesManual(res) {
 // Декодер создаётся ОДИН раз при инициализации модуля — ровно как в прежней фабрике, которой
 // он передавался аргументом, и не создаётся заново на каждый вызов frames(). Семантика
 // сохранена 1:1 (один экземпляр на модуль); ручная ветка по-прежнему делает свой декодер в run().
-/** @type {{text: (v: any, stream?: boolean) => string, flush: () => string}} Декодер модуля (один на файл). */
-var framesDecodeStream = makeDecodeStream();
+/** Декодер модуля (один на файл). */
+var framesDecodeStream: FrameDecoder = makeDecodeStream();
 /**
  * Кадры потока: нативная async-функция-генератор с декодером модуля.
- * @param {any} res Response-подобный объект.
- * @returns {AsyncGenerator<import('../types/stream').StreamFrame, void, unknown>} Кадры потока.
  */
-export function frames(res) { return framesNative(res, framesDecodeStream); }
+export function frames(res: FramesResponse | null): AsyncGenerator<StreamFrame, void, unknown> {
+  return framesNative(res, framesDecodeStream);
+}
 
 // ─────────────── Нормализация usage ───────────────
 // Первое ЧИСЛОВОЕ значение из кандидатов (0 — валидное число, undefined/null/строки — нет).
 /**
  * Первое ЧИСЛОВОЕ значение из кандидатов (0 — валидное число).
- * @param {...any} args Кандидаты значений.
- * @returns {number|null} Первое число либо null.
  */
-function num() {
-  for (var i = 0; i < arguments.length; i++) {
-    if (typeof arguments[i] === 'number') return arguments[i];
+function num(...args: unknown[]): number | null {
+  for (var i = 0; i < args.length; i++) {
+    if (typeof args[i] === 'number') return args[i] as number;
   }
   return null;
 }
 /**
  * Безопасное чтение поля объекта (не бросает на null/примитивах).
- * @param {any} obj Объект-источник.
- * @param {string} key Имя поля.
- * @returns {any} Значение поля либо undefined.
  */
-function pick(obj, key) {
-  try { return (obj && typeof obj === 'object') ? obj[key] : undefined; } catch (e) { return undefined; }
+function pick(obj: unknown, key: string): unknown {
+  try { return (obj && typeof obj === 'object') ? (obj as Record<string, unknown>)[key] : undefined; } catch (e) { return undefined; }
 }
 
 /**
  * Нормализация usage разных провайдеров к единой форме.
  * Qwen: input_tokens/output_tokens/total_tokens + output_tokens_details.reasoning_tokens
  * + prompt_tokens_details.cached_tokens (спека провайдера, экспорт чата 2026-09-18).
- * @param {any} u Сырой usage провайдера.
- * @returns {import('../types/stream').Usage|null} Нормализованный usage; null — не объект.
+ * Возвращает нормализованный usage либо null, если вход не объект.
  */
-export function normalizeUsage(u) {
+export function normalizeUsage(u: unknown): Usage | null {
   if (!u || typeof u !== 'object') return null;
+  var src = u as Record<string, unknown>;
   return {
-    input: num(u.input_tokens, u.prompt_tokens, u.promptTokenCount),
-    output: num(u.output_tokens, u.completion_tokens, u.candidatesTokenCount),
-    total: num(u.total_tokens, u.totalTokenCount),
-    reasoning: num(pick(u.output_tokens_details, 'reasoning_tokens'),
-      pick(u.completion_tokens_details, 'reasoning_tokens'),
-      u.thoughtsTokenCount),
-    cached: num(pick(u.prompt_tokens_details, 'cached_tokens'),
-      u.cache_read_input_tokens,
-      u.cachedContentTokenCount)
+    input: num(src.input_tokens, src.prompt_tokens, src.promptTokenCount),
+    output: num(src.output_tokens, src.completion_tokens, src.candidatesTokenCount),
+    total: num(src.total_tokens, src.totalTokenCount),
+    reasoning: num(pick(src.output_tokens_details, 'reasoning_tokens'),
+      pick(src.completion_tokens_details, 'reasoning_tokens'),
+      src.thoughtsTokenCount),
+    cached: num(pick(src.prompt_tokens_details, 'cached_tokens'),
+      src.cache_read_input_tokens,
+      src.cachedContentTokenCount)
   };
 }
 
@@ -402,21 +414,17 @@ export function normalizeUsage(u) {
  * чанке: сумма 63+174+337+553+884 даёт 2011 — неверно, верно последнее значение 884).
  * cumulative !== true → суммирование полей (OpenAI/Claude: usage приходит частями).
  * null-поля next не затирают уже собранное.
- * @param {any} prev Собранный usage (null — ещё ничего не собрано).
- * @param {any} next Новый usage из кадра.
- * @param {boolean} [cumulative] true — перезапись, иначе суммирование.
- * @returns {any} Слитый usage.
  */
-export function mergeUsage(prev, next, cumulative) {
+export function mergeUsage(prev: Usage | null, next: Usage | null, cumulative?: boolean): Usage | null {
   if (!next) return prev;
   if (!prev) {
-    var copy = {};
+    var copy = {} as Usage;
     for (var k0 in next) {
       if (Object.prototype.hasOwnProperty.call(next, k0)) copy[k0] = next[k0];
     }
     return copy;
   }
-  var out = {};
+  var out = {} as Usage;
   for (var k1 in prev) {
     if (Object.prototype.hasOwnProperty.call(prev, k1)) out[k1] = prev[k1];
   }

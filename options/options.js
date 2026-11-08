@@ -1005,7 +1005,7 @@ exportTxtBtn && exportTxtBtn.addEventListener('click', function () {
 
 // ========== ЭКСПОРТ PDF: ПЕЧАТНАЯ ФОРМА ==========
 // Кнопка «Сохранить .pdf» открывает print/print.html с id активной вкладки.
-// Страница сама рендерит историю (utils/markdown.js) и вызывает window.print(),
+// Страница сама рендерит историю (utils/markdown.ts) и вызывает window.print(),
 // а пользователь сохраняет PDF штатным диалогом Chrome («Сохранить как PDF»).
 exportPdfBtn && exportPdfBtn.addEventListener('click', function () {
   if (exportPdfBtn.disabled) return;

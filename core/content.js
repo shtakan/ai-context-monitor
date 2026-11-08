@@ -7,14 +7,14 @@ import { aiCmIsFirefox } from '../utils/platform.ts';
 import { __aiCmSetDebugLogs, __aiCmGetLogRing, debugLog, swallow, swallowSoft, aiCmDiagOn,
   aiCmDiagDocKind, aiCmDiagHead, aiCmDiagStack, aiCmDiagLine, aiCmDiagWarn,
   aiCmDiagDownload, aiCmDiagDownloadBlocked } from '../utils/debug.js';
-// ESM (Roadmap Ph2): utils/tokenizer.js переведён на ES-модуль и втягивается этим
+// ESM (Roadmap Ph2): utils/tokenizer.ts переведён на ES-модуль и втягивается этим
 // import'ом в общий бандл контент-скрипта; отдельного classic-скрипта в
 // manifest.content_scripts больше нет. Идентификатор Tokenizer сохранён намеренно:
 // калибровка O-23 и её пины (tests/tokenizer-cyrillic-calibration.test.js,
 // tests/o23-tokens-calibration.test.js, tests/o47-qwen-badge-metric.test.js) адресуют
 // оценку именно через Tokenizer.*. Фолбэк «песочница без Tokenizer» ниже остаётся:
 // срезанные функции тестируются и без модуля (new Function без привязки).
-import { Tokenizer } from '../utils/tokenizer.js';
+import { Tokenizer } from '../utils/tokenizer.ts';
 // ESM (Roadmap Ph2): utils/model-config.js переведён на ES-модуль и втягивается этим
 // import'ом в общий бандл контент-скрипта (в manifest.content_scripts отдельного
 // classic-скрипта больше нет). Идентификатор ModelConfig намеренно тот же: его
@@ -571,7 +571,7 @@ function aiCmGsaResetStaleStateOnChatlessDoc() {
 
 // O-23 (F5, фикс корня 1): tokens~ в трассе badge-recv считался упрощённой эвристикой
 // Math.round(text.length / 4) — для кириллицы это систематическая НЕДООЦЕНКА. Источник истины —
-// Tokenizer.countTokens (языково-зависимый, utils/tokenizer.js); упрощённая эвристика остаётся
+// Tokenizer.countTokens (языково-зависимый, utils/tokenizer.ts); упрощённая эвристика остаётся
 // ТОЛЬКО фолбэком для песочниц без Tokenizer и сама получает языковую ветвь: кириллица ÷3.3
 // (глобальная калибровка O-23 по живым замерам 112854 симв → 29517 ток. и 216881 → 63713 ток.;
 // коэффициент обязан совпадать с Tokenizer.CYRILLIC_CHARS_PER_TOKEN — пин-тест калибровки),
@@ -608,7 +608,7 @@ function aiCmEstimateTokensTilde(text, attachTokens) {
 // v2.3 (B2): ЕДИНЫЙ канонический эстиматор токенов диалога — единственная точка,
 // через которую считает и бейдж (processAndSend / GET_STATS через
 // Tokenizer.estimateDialogTokens), и трасса badge-recv. Внутри — тот же
-// Tokenizer.countTokens (кириллица ÷3.3 по O-23, см. utils/tokenizer.js) плюс
+// Tokenizer.countTokens (кириллица ÷3.3 по O-23, см. utils/tokenizer.ts) плюс
 // служебные 4 токена на ход. Латинская эвристика Math.round(length / 4) из боевых
 // путей убрана: на русском тексте она систематически занижала оценку, из-за чего
 // бейдж показывал заниженный процент (B2). Фолбэк для песочниц без Tokenizer —

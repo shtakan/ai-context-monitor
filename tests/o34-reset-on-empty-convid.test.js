@@ -44,7 +44,7 @@
  *
  * НЕ ТРОГАЕТСЯ (пины R3): прежний предикат shouldResetChatConversation (его контракт
  * закреплён tests/adapters/chatgpt-conversation-parser.test.js и сохранён 1:1),
- * utils/tokenizer.js, core/export-manager.js, manifest.json.
+ * utils/tokenizer.ts, core/export-manager.js, manifest.json.
  */
 
 const fs = require('fs');
@@ -63,7 +63,7 @@ const PARSER_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'chatgpt-conversatio
 const PAGE_SRC = fs.readFileSync(path.join(ROOT, 'core', 'page-intercept.js'), 'utf8');
 const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.js'), 'utf8');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
-const TOKENIZER_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'tokenizer.js'), 'utf8');
+const TOKENIZER_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'tokenizer.ts'), 'utf8');
 
 // Рез по балансу фигурных скобок (конвенция сьюта: tests/o33-autoexport-base-pending.test.js).
 function fnDecl(src, name) {
@@ -624,7 +624,7 @@ describe('O-34 R3: пины проводки и границ', () => {
     const files = [
       'utils/chatgpt-conversation-parser.js', 'core/page-intercept.js', 'core/content.js',
       'core/widget.js', 'core/state.js', 'core/export-manager.js', 'utils/export-emit-pipeline.js',
-      'utils/tokenizer.js', 'manifest.json'
+      'utils/tokenizer.ts', 'manifest.json'
     ];
     const withSymbol = files.filter(function (rel) {
       return fs.readFileSync(path.join(ROOT, rel), 'utf8').indexOf('shouldResetConversationOnNav') !== -1;
@@ -636,7 +636,7 @@ describe('O-34 R3: пины проводки и границ', () => {
     expect(withHelper).toEqual(['core/content.js']);
   });
 
-  test('R3: utils/tokenizer.js и core/export-manager.js не тронуты; manifest.json не менялся', () => {
+  test('R3: utils/tokenizer.ts и core/export-manager.js не тронуты; manifest.json не менялся', () => {
     [TOKENIZER_SRC, MGR_SRC].forEach(function (src) {
       expect(src).not.toContain('shouldResetConversationOnNav');
       expect(src).not.toContain('aiCmResetStaleStateOnChatlessChatGptUrl');

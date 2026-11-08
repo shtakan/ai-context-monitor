@@ -1,5 +1,5 @@
 /**
- * O-35: utils/stream-frames.js — КАРКАС stream-analyzer.js, ESM-модуль (Roadmap Ph2).
+ * O-35: utils/stream-frames.ts — КАРКАС stream-analyzer.js, ESM-модуль (Roadmap Ph2).
  * (frames / normalizeUsage / mergeUsage + эталонные framesManual / splitJsonObjects).
  * Источник: экспорт чата ai-context-monitor-deepseek-DeepSeek-R1-2026-09-18-17-53.txt
  * («stream-analyzer.js»).
@@ -22,10 +22,10 @@ const { TextEncoder } = require('util');   // jsdom-окружение не да
 const { loadEsmModule } = require('./helpers/load-esm.js');
 
 const ROOT = path.join(__dirname, '..');
-const SRC = fs.readFileSync(path.join(ROOT, 'utils', 'stream-frames.js'), 'utf8');
+const SRC = fs.readFileSync(path.join(ROOT, 'utils', 'stream-frames.ts'), 'utf8');
 // Ph2: модуль — ESM, require() его не берёт; грузим тем же приёмом, что прод-код
 // (tests/helpers/load-esm.js: fs + new Function, без babel и новых зависимостей).
-const SF = loadEsmModule('utils/stream-frames.js');
+const SF = loadEsmModule('utils/stream-frames.ts');
 const { frames, normalizeUsage, mergeUsage, framesManual, splitJsonObjects } = SF;
 
 // ---------- фейковый ReadableStream-ответ (jsdom без ReadableStream) ----------
@@ -72,7 +72,7 @@ function loadWithoutTextDecoder() {
   const saved = globalThis.TextDecoder;
   try {
     delete globalThis.TextDecoder;
-    return loadEsmModule('utils/stream-frames.js');
+    return loadEsmModule('utils/stream-frames.ts');
   } finally {
     if (had) globalThis.TextDecoder = saved;
     else delete globalThis.TextDecoder;
@@ -99,8 +99,8 @@ function responseOfChunks(chunks, contentType) {
 
 describe('O-35: stream-frames.js — ESM-модуль (Roadmap Ph2)', () => {
   test('исходник — ESM: inline export есть, UMD-хвоста нет, генератор — один литерал', () => {
-    expect(SRC).toContain('export function frames(res)');
-    expect(SRC).toContain('export function normalizeUsage(u)');
+    expect(SRC).toContain('export function frames(res: FramesResponse | null)');
+    expect(SRC).toContain('export function normalizeUsage(u: unknown)');
     expect(SRC).not.toContain('module.exports');
     expect(SRC).not.toContain('window.aiCmStreamFrames');
     // Литерал = строка КОДА вида: async function* name(...). Нативная реализация —

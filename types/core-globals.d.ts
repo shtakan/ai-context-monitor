@@ -61,7 +61,7 @@ declare let countTokensPending: any;
 declare function importScripts(...urls: string[]): void;
 
 // --- utils-глобали общего скоупа ----------------------------------------------
-// utils/model-config.js (строка 6) и utils/tokenizer.js (строка 13) объявляют
+// utils/model-config.js (строка 6) и utils/tokenizer.ts (строка 13) объявляют
 // const в общем скоупе; module.exports — только для Node-ветки тестов.
 
 /** utils/model-config.js: реестр моделей (computeDisplayLimit, resolveModelId, getModel и др.). */
@@ -78,7 +78,7 @@ declare const ModelConfig: {
   getGeminiApiModelId(modelId: string): string;
 };
 
-// Ph2, шаг tokenizer.js: utils/tokenizer.js переведён на ES-модуль (UMD-хвост снят),
+// Ph2, шаг tokenizer.js: utils/tokenizer.ts переведён на ES-модуль (UMD-хвост снят),
 // отдельного classic-скрипта в манифесте больше нет — глобального Tokenizer в рантайме
 // не существует. Его единственный потребитель core/content.js получает объект статическим
 // import'ом, поэтому глобальное объявление здесь снято: типы и рантайм совпадают.

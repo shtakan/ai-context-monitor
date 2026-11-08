@@ -7,7 +7,7 @@
  * TypeScript не знает из коробки:
  *
  *   1. require() — CommonJS-загрузчик, которым utils/*.js подтягивают соседей в Node-ветке;
- *   2. модуль 'util' — фолбэк TextDecoder для jsdom-стендов (utils/stream-frames.js:75);
+ *   2. модуль 'util' — фолбэк TextDecoder для jsdom-стендов (utils/stream-frames.ts:75);
  *   3. chrome.* — WebExtension API, доступный из контент-скрипта;
  *   4. window.<...> — глобалы, которые utils/*.js публикуют друг для друга.
  *
@@ -95,7 +95,7 @@ interface Window {
   AiCmExportEmitPipeline?: import('./export').ExportPipelineApi;
   /** utils/buildReferenceText.js */
   buildReferenceText?: any;
-  /** utils/markdown.js */
+  /** utils/markdown.ts */
   MarkdownRenderer?: any;
   /** utils/gemini-intercept-logic.js */
   GeminiInterceptLogic?: any;

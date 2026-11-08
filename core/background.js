@@ -442,10 +442,10 @@ async function ensureInterceptor() {
     // Модуль идёт ПЕРЕД перехватчиком: он объявляет window.AiCmQwenFiles при загрузке, а
     // qwen-intercept делает __bind/читает секции уже синхронно. Старый -v2 остаётся в профиле
     // после обновления и нёс бы прежний js[] (без модуля) параллельно — двойной инжект.
-    // Ph2: id бампнут -v3 → -v4 — utils/stream-frames.js переведён на ESM и больше НЕ отдельный
+    // Ph2: id бампнут -v3 → -v4 — utils/stream-frames.ts переведён на ESM и больше НЕ отдельный
     // script: esbuild вшивает его в core/qwen-intercept.js (build.mjs, mainInterceptOptions),
     // поэтому путь удалён из js[]. Прежние id ссылались бы на отсутствующий в dist файл
-    // utils/stream-frames.js — chrome.scripting не инжектит пакет частично (упал бы весь
+    // utils/stream-frames.ts — chrome.scripting не инжектит пакет частично (упал бы весь
     // перехватчик), поэтому старые регистрации снимаются. Пакет теперь: debug.js → пагинация →
     // вложения → qwen-intercept (один IIFE-бандл).
     // Своих запросов перехватчик истории не делает, КРОМЕ цикла пагинации O-53: он
@@ -455,7 +455,7 @@ async function ensureInterceptor() {
     // files[].url — предподписанные CDN, cookie им не нужны, а ACAO у CDN только на chat.qwen.ai.
     if (ids.indexOf('ai-cm-qwen-intercept-v4') === -1) {
       // Снимаем ВСЕ прежние регистрации: они остались в профиле после обновления и несли бы
-      // старый js[] (с отдельным utils/stream-frames.js) параллельно с новым пучком — двойной
+      // старый js[] (с отдельным utils/stream-frames.ts) параллельно с новым пучком — двойной
       // инжект, а в Ph2 ещё и битый пакет (файла больше нет в dist).
       // Прежних id может не быть (чистая установка) — поэтому тихий catch без диагностики.
       try {

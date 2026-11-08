@@ -19,7 +19,7 @@
  *     перехватывается уже уходящий запрос страницы, поэтому все её заголовки/куки/антибот
  *     остаются родными (ровно этот путь рекомендован спекой как «самый надёжный»).
  *
- * РАЗБОР SSE — через utils/stream-frames.js (ESM-модуль frames/normalizeUsage/mergeUsage,
+ * РАЗБОР SSE — через utils/stream-frames.ts (ESM-модуль frames/normalizeUsage/mergeUsage,
  * вшит в этот бандл статическим import'ом — Ph2);
  * формат [REASONING]/[ANSWER] — тот же контракт, что у DeepSeek (deepseek-intercept.js:543).
  *
@@ -54,7 +54,7 @@
  * (build.mjs, mainInterceptOptions). Отдельным script'ом из js[] он больше не грузится, поэтому
  * ленивого разрешения через window нет: функции доступны статически.
  */
-import { frames as framesApi, normalizeUsage, mergeUsage } from '../utils/stream-frames.js';
+import { frames as framesApi, normalizeUsage, mergeUsage } from '../utils/stream-frames.ts';
 (function () {
   if (window.__aiCmQwenInterceptInstalled) return;
   window.__aiCmQwenInterceptInstalled = true;
@@ -605,7 +605,7 @@ import { frames as framesApi, normalizeUsage, mergeUsage } from '../utils/stream
     return out || fallbackAnswer;
   }
   // usage хода истории (спека: usage{input_tokens,output_tokens}) — та же нормализация, что у
-  // кадров стрима (utils/stream-frames.js:normalizeUsage); её null — читаем измеренные поля сами.
+  // кадров стрима (utils/stream-frames.ts:normalizeUsage); её null — читаем измеренные поля сами.
   function historyUsageOf(node) {
     var raw = (node && node.usage && typeof node.usage === 'object') ? node.usage : null;
     if (!raw) return null;
@@ -1763,7 +1763,7 @@ import { frames as framesApi, normalizeUsage, mergeUsage } from '../utils/stream
 
   diagLine('installed', { chat: String(currentChatId || '').slice(0, 8) });
   console.log('[qwen-intercept] перехватчик Qwen установлен (только нативные запросы страницы, ' +
-    'SSE через utils/stream-frames.js, usage кумулятивный → последний кадр, ' +
+    'SSE через utils/stream-frames.ts, usage кумулятивный → последний кадр, ' +
     'фазы thinking_summary(REPLACE)/answer(APPEND), фолбэк — DOM-адаптер, ' +
     'O-39: JSON-история GET /api/v*N*/chats/{id} через resp.clone().json() (fetch) ' +
     'и XMLHttpRequest loadend (XHR/jQuery); ' +

@@ -29,7 +29,7 @@
  * serve both engines.
  *
  * Phase 3 step 1 (print): print/print.html is the last legacy page that pulled
- * global scripts from the source tree (options/i18n-apply.js, utils/markdown.js,
+ * global scripts from the source tree (options/i18n-apply.js, utils/markdown.ts,
  * print/print.js), which forced the whole legacy tree into the release ZIP. It
  * is now a fourth entry point. Two layout notes, both deliberate:
  *   - the page stays at dist/print/print.html, because the popup opens exactly
@@ -93,7 +93,7 @@
  * carry a real `import` and let esbuild pull that module into the same bundle
  * (print/print.js → markdown, options|content.js → platform, export-text-builders
  * → buildReferenceText, MAIN-перехватчики → intercept-common, core/qwen-intercept.js
- * → utils/stream-frames.js, core/background.js + core/content.js → utils/debug.js).
+ * → utils/stream-frames.ts, core/background.js + core/content.js → utils/debug.js).
  * utils/debug.js остаётся в js[] MAIN-регистраций (парсеры пакета — classic-скрипты
  * без import), поэтому для них дополнительно выводится classic-артефакт dist/.
  * The imported
@@ -178,8 +178,8 @@ const BACKGROUND_PRELUDE = [
 // собирается отдельным IIFE в тот же путь dist/core/<name>.js, на который
 // продолжает указывать js[] в core/background.js.
 // Ph2, шаг stream-frames: core/qwen-intercept.js тоже ESM — он импортирует
-// utils/stream-frames.js, поэтому esbuild вшивает модуль кадров прямо в
-// dist/core/qwen-intercept.js. Из js[] путь utils/stream-frames.js удалён
+// utils/stream-frames.ts, поэтому esbuild вшивает модуль кадров прямо в
+// dist/core/qwen-intercept.js. Из js[] путь utils/stream-frames.ts удалён
 // (см. registration id -v4 в core/background.js): копировать нечего, а старый
 // путь в dist больше не существует.
 const MAIN_INTERCEPTS = [
@@ -278,7 +278,7 @@ function contentEntry(manifest) {
       rel !== 'utils/buildReferenceText.ts' &&
       rel !== 'utils/platform.ts' &&
       rel !== 'utils/debug.js' &&
-      rel !== 'utils/tokenizer.js' &&
+      rel !== 'utils/tokenizer.ts' &&
       rel !== 'utils/model-config.js' &&
       rel !== 'utils/export-text-builders.js' &&
       rel !== 'utils/perplexity-parser.js' &&
@@ -346,11 +346,11 @@ function optionsEntry() {
  * scripts become one bundle and the page stops referencing the source layout.
  */
 function printEntry() {
-  // ESM-пилот (Roadmap Ph2): utils/markdown.js больше не тег <script> печатной
+  // ESM-пилот (Roadmap Ph2): utils/markdown.ts больше не тег <script> печатной
   // страницы — его втягивает esbuild по import из print/print.js. Фильтр держит
   // SSOT устойчивым, даже если тег случайно вернут в разметку.
   return htmlScriptEntry('print/print.html').filter(function (rel) {
-    return rel !== 'utils/markdown.js';
+    return rel !== 'utils/markdown.ts';
   });
 }
 
@@ -798,7 +798,7 @@ function entryPath(name) {
  * above the source tree. Rebase every static import specifier from the source
  * directory to the entry directory — exactly the path esbuild resolves from
  * ".build/entry-*.js".
- * ESM-пилот (Roadmap Ph2): print/print.js's '../utils/markdown.js' is already
+ * ESM-пилот (Roadmap Ph2): print/print.js's '../utils/markdown.ts' is already
  * entry-relative and stays as is; utils/export-text-builders.js's
  * './buildReferenceText.ts' becomes '../utils/buildReferenceText.ts'.
  */
@@ -1345,7 +1345,7 @@ function entryFilesPlugin() {
           contents: await fsp.readFile(args.path, 'utf8'),
           loader: loaderForFile(args.path),
           // ESM-пилот: entry-*.js физически лежат в .build/, поэтому относительные
-          // импорты (print.js -> ../utils/markdown.js) резолвятся от корня репо.
+          // импорты (print.js -> ../utils/markdown.ts) резолвятся от корня репо.
           resolveDir: BUILD_DIR,
           watchFiles: watchFiles(entries),
         };

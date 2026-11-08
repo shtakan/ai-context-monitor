@@ -137,9 +137,9 @@ describe('build-integrity: generated entry files', () => {
   it.each(Object.keys(EXPECTED))('%s: entry is a concatenation, not an import chain', (name) => {
     const text = fs.readFileSync(entryFile(name), 'utf8');
     // ESM-пилот (Roadmap Ph2): print/print.js — первый ESM-модуль, его статический
-    // import втягивает utils/markdown.js в граф esbuild; это осознанное исключение.
+    // import втягивает utils/markdown.ts в граф esbuild; это осознанное исключение.
     if (name === 'print') {
-      expect(text).toMatch(/^import MarkdownRenderer from '\.\.\/utils\/markdown\.js';$/m);
+      expect(text).toMatch(/^import MarkdownRenderer from '\.\.\/utils\/markdown\.ts';$/m);
       expect(/^\s*export\b/m.test(text)).toBe(false);
       return;
     }

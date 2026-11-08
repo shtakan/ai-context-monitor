@@ -7,7 +7,7 @@
     "adapters"
   ],
   "definition": "Молчаливый catch = тело после вырезания комментариев содержит только пробелы, ИЛИ ровно один no-op (void 0; / return; / continue; / break;). Комментарий-только тело тоже молчаливое (комментарии маскируются в пробелы).",
-  "totalEntries": 475,
+  "totalEntries": 473,
   "groups": [
     {
       "file": "adapters/claude-adapter.js",
@@ -1818,22 +1818,6 @@
         365
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: for (var a = 0; a < attrNames.length; a++) { var v = (el && el.getAttrib"
-    },
-    {
-      "file": "utils/stream-frames.js",
-      "category": "guard-clause",
-      "lines": [
-        103
-      ],
-      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof v === 'string') return null; if (v && typeof v.length === 'nu"
-    },
-    {
-      "file": "utils/stream-frames.js",
-      "category": "parse-guard",
-      "lines": [
-        70
-      ],
-      "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: if (typeof TextDecoder !== 'undefined') return TextDecoder;"
     }
   ]
 }

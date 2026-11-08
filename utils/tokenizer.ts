@@ -26,23 +26,17 @@
 // слово из 6 букв — 6/1.8 = 3.33 → 4 токена (+20%), короткие слова — до +100%.
 // Поэтому кириллица теперь копит дробь, а округление делается ОДИН раз в конце countTokens.
 // Арифметика и пины — tests/tokenizer-cyrillic-calibration.test.js (+ O-23).
-/**
- * Класс символа для эвристики countTokens (выбор правила «символов на токен»).
- * @typedef {'cyrillic'|'cjk'|'latin'|'digit'|'space'|'punctuation'|'other'} CharType
- */
+/** Класс символа для эвристики countTokens (выбор правила «символов на токен»). */
+type CharType = 'cyrillic' | 'cjk' | 'latin' | 'digit' | 'space' | 'punctuation' | 'other';
 
-/** @type {number} Калибровка O-23: символов на токен для кириллицы. */
+/** Калибровка O-23: символов на токен для кириллицы. */
 const CYRILLIC_CHARS_PER_TOKEN = 3.3;
 
 export const Tokenizer = {
   CYRILLIC_CHARS_PER_TOKEN: CYRILLIC_CHARS_PER_TOKEN,
 
-  /**
-   * Определяет тип символа.
-   * @param {string} char Один символ текста.
-   * @returns {CharType} Класс символа для выбора эвристики.
-   */
-  _getCharType(char) {
+  /** Определяет класс символа для выбора эвристики. */
+  _getCharType(char: string): CharType {
     if (/[а-яёА-ЯЁ]/.test(char)) return 'cyrillic';
     if (/[\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]/.test(char)) return 'cjk';
     if (/[a-zA-Z]/.test(char)) return 'latin';
@@ -52,12 +46,8 @@ export const Tokenizer = {
     return 'other';
   },
 
-  /**
-   * Приблизительный подсчёт токенов в тексте.
-   * @param {string} text - текст для оценки
-   * @returns {number} - приблизительное количество токенов
-   */
-  countTokens(text) {
+  /** Приблизительный подсчёт токенов в тексте. */
+  countTokens(text: string): number {
     if (!text || text.length === 0) return 0;
     
     let tokens = 0;
@@ -140,13 +130,10 @@ export const Tokenizer = {
   // countTokensFast удалён в v1.1 — дублировал логику countTokens и не вызывался нигде.
 
   /**
-   * Оценивает токены в диалоге с учётом структуры чата.
-   * Учитывает накладные расходы на форматирование сообщений.
-   * @param {string} dialogText - полный текст диалога
-   * @param {number} [messageCount=1] - количество сообщений
-   * @returns {number} - токены текста плюс накладные расходы на форматирование
+   * Оценивает токены в диалоге с учётом структуры чата:
+   * текст плюс накладные расходы на форматирование сообщений.
    */
-  estimateDialogTokens(dialogText, messageCount = 1) {
+  estimateDialogTokens(dialogText: string, messageCount: number = 1): number {
     const textTokens = this.countTokens(dialogText);
     
     // Накладные расходы на форматирование чата (~4 токена на сообщение)
@@ -163,23 +150,13 @@ export const Tokenizer = {
 // по-прежнему единственный источник калибровки; named-экспорты ниже — те же функции,
 // для новых потребителей, которым не нужен namespace.
 
-/**
- * Приблизительный подсчёт токенов в тексте (named-экспорт, делегирует Tokenizer.countTokens).
- * @param {string} text - текст для оценки
- * @returns {number} - приблизительное количество токенов
- */
-export function countTokens(text) {
+/** Приблизительный подсчёт токенов (named-экспорт, делегирует Tokenizer.countTokens). */
+export function countTokens(text: string): number {
   return Tokenizer.countTokens(text);
 }
 
-/**
- * Токены диалога с накладными расходами на форматирование сообщений
- * (named-экспорт, делегирует Tokenizer.estimateDialogTokens).
- * @param {string} dialogText - полный текст диалога
- * @param {number} [messageCount=1] - количество сообщений
- * @returns {number} - токены текста плюс накладные расходы
- */
-export function estimateDialogTokens(dialogText, messageCount = 1) {
+/** Токены диалога с накладными расходами (named-экспорт, делегирует Tokenizer.estimateDialogTokens). */
+export function estimateDialogTokens(dialogText: string, messageCount: number = 1): number {
   return Tokenizer.estimateDialogTokens(dialogText, messageCount);
 }
 

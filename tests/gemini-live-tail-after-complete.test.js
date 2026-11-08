@@ -33,7 +33,7 @@
 'use strict';
 
 const loadEsmHelper = require('./helpers/load-esm.js');
-const Tokenizer = loadEsmHelper.loadEsm('utils/tokenizer.js');
+const Tokenizer = loadEsmHelper.loadEsm('utils/tokenizer.ts');
 const GEMINI_LIMIT = 128000; // ModelConfig.getEffectiveLimit('gemini-search-default')
 
 // Публичное API модуля (window.AiCmHybridTail): сборка ставит его сама.
