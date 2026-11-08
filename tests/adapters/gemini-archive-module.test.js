@@ -621,7 +621,9 @@ describe('Phase 3 шаг 13.2: S-пины проводки модуля', () => 
     // следующий перенос кода выше этой точки снова потребует ревью строки, а не пройдёт молча.
     const VF5_TAIL = 'aiCmIngestFwd(txt, { emitOnlyIfAdded: true, fromVirtualF5: true, rebuild: rebuild });';
     const hits = ACTIVE.split('\n').reduce((acc, l, i) => (l.indexOf(VF5_TAIL) !== -1 ? acc.concat(i + 1) : acc), []);
-    expect(hits).toEqual([95]);
+    // Фикс получателя нативного fetch (originalFetch.call(window, …)) добавил
+    // 6 строк выше точки выхода — 95 → 101.
+    expect(hits).toEqual([101]);
     expect(lineOf(CORE, 'aiCmGeminiArchive.__bind('))
       .toBeGreaterThan(lineOf(CORE, 'aiCmGeminiActiveRefresh.__bind('));
   });

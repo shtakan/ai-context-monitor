@@ -122,14 +122,23 @@ function computeTailFromDom() {
 function aiCmTailMetricBase(fallback) {
   return (typeof aiCmMetricBaseText === 'function') ? aiCmMetricBaseText(fallback) : fallback;
 }
+// ФИКС РЕГРЕССИИ «бейдж Gemini замирает после обмена репликами».
+//   `baseComplete` (state.js: baseComplete ← detail.historyComplete ← historyFullByQuiet) — это
+// вердикт о ПОЛНОТЕ ЗАГРУЖЕННОЙ ИСТОРИИ (тихая пагинация + oracle на момент загрузки), а НЕ о
+// текущем состоянии разговора. Новый ход после отправки сообщения приходит ТОЛЬКО в DOM:
+// Gemini стримит ответ вне перехваченных batchexecute-RPC, а активный vf5-дозапрос в
+// core/gemini-active-refresh.js падал с Illegal invocation (починен там же) → `turnsMap`
+// до перезагрузки новых ходов не получает.
+//   Пока при baseComplete здесь возвращалась РОВНО база, каждый dom-emit после ответа отдавал
+// прежние цифры → `o22-histkey-dedup histKey=<count>|<len> verdict=dedup-skip` → бейдж держал
+// значение загрузки (живой лог 2026-11-08: 44.8% / 57 387 токенов) до F5.
+//   Теперь ОГРАНИЧЕННЫЙ (bounded) DOM-хвост — сообщения НОВЕЕ последнего сообщения базы —
+// учитывается и при полной базе. Двойного счёта нет по построению: хвост начинается там, где
+// найдена граница базы (`stopFound` в computeTailFromDom), т.е. это ровно новые ходы.
+// Инварианты O-32 сохранены: неполный (unbounded) DOM базу не подменяет, пустой хвост не
+// добавляет ничего, `baseSeen=false` по-прежнему отдаёт пустую строку.
 function getEffectiveText() {
   if (baseSeen && baseText) {
-    if (baseComplete) {
-      lastBounded = true; // источник = сеть, стабилен → монотонный максимум безвреден
-      // v1.18 (E-2.3): текст метрик (pct/токены/бейдж) — РОВНО схлопнутая база текущего
-      // снимка (выход prepareExportMessages), тот же массив, что уходит в файл экспорта.
-      return aiCmTailMetricBase(baseText);
-    }
     var tail = computeTailFromDom();
     var sig = (tail.sel || '') + '|' + (tail.bounded ? '1' : '0');
     if (sig !== lastTailSig) {
@@ -140,7 +149,8 @@ function getEffectiveText() {
         debugLog('log', '[hybrid-tail] ' + tail.diag);
       }
     }
-    lastBounded = tail.bounded;
+    // источник базы = сеть, он стабилен → монотонный максимум безвреден (прежнее значение).
+    lastBounded = baseComplete ? true : tail.bounded;
     if (!tail.text) return aiCmTailMetricBase(baseText); // хвоста нет — метрики по канонической базе
     if (tail.bounded) return aiCmTailMetricBase(baseText) + '\n' + tail.text;
     // DOM неполон: его видимый кусок НЕ заменяет базу (было `return tail.text`).
@@ -150,7 +160,8 @@ function getEffectiveText() {
 }
 function getEffectiveCount(fallbackCount) {
   if (baseSeen && baseText) {
-    if (baseComplete) return baseCount;
+    // Счётчик меряется тем же правилом, что и текст (см. комментарий выше) —
+    // bounded-хвост новее базы это новые ходы разговора, а не дрейф DOM.
     var tail = computeTailFromDom();
     if (!tail.count) return baseCount;
     if (tail.bounded) return baseCount + tail.count;

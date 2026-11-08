@@ -69,7 +69,13 @@
     activeBusy = true;
     var headers = {};
     for (var k in lastHeaders) headers[k] = lastHeaders[k];
-    originalFetch(buildActiveUrl(), {
+    // ФИКС РЕГРЕССИИ «бейдж замирает после обмена»: нативный fetch — операция Window с
+    // brand-check. Вызов свободной функцией (`originalFetch(url, init)`, this === undefined)
+    // бросает TypeError: Failed to execute 'fetch' on 'Window': Illegal invocation — живой лог
+    // 2026-11-08 15:37:25.809 поймал ровно это, после чего .catch взводил activeDisabled=true,
+    // и активный дозапрос базы умирал до перезагрузки страницы. Получатель обязан быть window.
+    var fetchHost = (typeof window !== 'undefined' && window) ? window : globalThis;
+    originalFetch.call(fetchHost, buildActiveUrl(), {
       method: 'POST',
       headers: headers,
       body: buildActiveBody(),

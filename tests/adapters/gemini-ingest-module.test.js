@@ -207,7 +207,9 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
     // блока подключения и убрал объявление loaderBadgeTimer выше неё — 1410.
     expect(linesOf(CORE, VF5_TAIL)).toEqual([]);
     // модуль: тело activeRefresh, строка 95 (ядро 1410 больше не существует)
-    expect(linesOf(ACTIVE, VF5_TAIL)).toEqual([95]);
+    // Фикс получателя нативного fetch добавил выше неё шесть строк
+    // (originalFetch.call(window, …) — Illegal invocation) — 95 → 101.
+    expect(linesOf(ACTIVE, VF5_TAIL)).toEqual([101]);
   });
 
   test('R-D №4: счётчик emitBaseSnapshot() — ядро 1, конкатенация 9', () => {
