@@ -2382,6 +2382,26 @@ export function isEmptyExportText(text) {
 }
 
 /**
+ * S5-исключение: ассистентский ход с ПУСТЫМ текстом, но НЕПУСТЫМ полем reasoning
+ * (цепочкой размышлений) — не машинный мусор, а ход, у которого текст ответа не
+ * сохранился (Firefox: live-ход финализировался с пустым answer, секции
+ * [REASONING]…[ANSWER] урезаны до пустой части [ANSWER]) — размышление и есть
+ * содержимое хода, поэтому S5 его не снимает. Роль обязательна: user-ход без
+ * текста по-прежнему снимается. hidden-поля захвата не в счёт: stripHiddenFields
+ * снимает hiddenReasoning ДО S5, и OFF-путь O-7 намеренно его исключает.
+ * @param {Object} message сообщение
+ * @returns {boolean} true — ход остаётся в экспорте
+ */
+function isReasoningOnlyAssistantTurn(message) {
+  try {
+    if (!message || typeof message !== 'object') return false;
+    if (message.role !== 'assistant') return false;
+    var reasoning = (typeof message.reasoning === 'string') ? message.reasoning : '';
+    return reasoning.trim() !== '';
+  } catch (e) { return false; }
+}
+
+/**
  * Копия собственных полей сообщения с ЗАМЕНЁННЫМ текстом (вход не мутируется).
  * @param {ExportMessage} message сообщение
  * @param {string} text новый текст
@@ -2496,8 +2516,9 @@ export function sanitizeEmitMessages(messages) {
         if (reason !== null) { skipped.push(reason); }
         else { m = copyMessageWithText(m, sanitizeInjectedUserText(text)); sanitized++; }
       }
-      // S5: после S3/S4 текста не осталось — сообщения в экспорте нет.
-      if (isEmptyExportText((typeof m.text === 'string') ? m.text : '')) { dropped++; continue; }
+      // S5: после S3/S4 текста не осталось — сообщения в экспорте нет. Исключение —
+      // ассистентский ход с непустым reasoning (см. isReasoningOnlyAssistantTurn).
+      if (isEmptyExportText((typeof m.text === 'string') ? m.text : '') && !isReasoningOnlyAssistantTurn(m)) { dropped++; continue; }
       out.push(m);
     }
   } catch (e) {

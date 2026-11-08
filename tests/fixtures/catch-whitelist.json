@@ -607,7 +607,7 @@
       "file": "core/deepseek-netsync.js",
       "category": "debug-instrumentation",
       "lines": [
-        201
+        212
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof diagMark === 'function' && typeof diagOn === 'function' && di"
     },
@@ -615,7 +615,7 @@
       "file": "core/deepseek-netsync.js",
       "category": "event-guard",
       "lines": [
-        279
+        290
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.addEventListener('ai-cm-deepseek-net-sync', function (ev) { try {"
     },
@@ -623,7 +623,7 @@
       "file": "core/deepseek-netsync.js",
       "category": "timing-guard",
       "lines": [
-        223
+        234
       ],
       "reason": "timing-guard: отмена таймера/подписки: обработчик мог быть снят хостом или гонкой; пример: clearTimeout(timer);"
     },

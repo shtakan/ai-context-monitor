@@ -114,6 +114,8 @@
   // Per-turn выбор текста: EQUAL → live (байт-в-байт то же); MIDDLE-HOLE*/TAIL-CUT → сетевой
   // (он полнее: live потерял середину/хвост — сигнатура O-18); LIVE-EXTRA/DIFF-OTHER → live
   // (сеть короче либо различие не классифицировано — молча не заменяем); ONE-SIDE → live.
+  // LIVE-ANSWER-EMPTY (Firefox): live-ход финализировался с ПУСТЫМ answer (гонка пустого
+  // ответа), а сетевой снимок несёт непустой ответ — сетевой текст хода НЕ затирается.
   function exportComposeTurns() {
     var verdicts = {};
     var bump = function (v) { verdicts[v] = (verdicts[v] || 0) + 1; };
@@ -124,6 +126,15 @@
         id = ids[i]; t = turnsMap[id]; lv = liveTurns[id];
         if (!t) continue;
         if (!lv) { bump('ONE-SIDE'); continue; }                    // ход только из сети
+        // Firefox: live-ход финализировался с пустым answer (гонка пустого ответа), а
+        // сетевой снимок ответ нёс — сетевой текст хода не затираем (LIVE-ANSWER-EMPTY).
+        // Пробельный answer ответом не считается: пустая строка и одни пробелы — одно и то же.
+        if (String(lv.answer || '').trim() === '' && String(t.answer || '').trim() !== '') {
+          bump('LIVE-ANSWER-EMPTY');
+          console.log('[deepseek-intercept] экспорт: ход ' + String(id).slice(0, 8) +
+            ' — live answer пуст, но сетевой ответ непустой (LIVE-ANSWER-EMPTY), берём сеть');
+          continue;                                                  // остаётся сетевой текст
+        }
         v = diagVerdict(lv.text, t.text);                            // lt=live, nt=net
         bump(v.verdict);
         if (v.verdict === 'MIDDLE-HOLE' || v.verdict === 'MIDDLE-HOLE-PARTIAL' || v.verdict === 'TAIL-CUT') {

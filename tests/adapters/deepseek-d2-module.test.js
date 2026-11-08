@@ -132,7 +132,10 @@ const MOVED_BLOCKS = [
     sig: '  function exportComposeTurns() {',
     // Step E.2c-B2b-2 (swallowSoft): тот же catch переведён на канал B —
     // `swallowSoft(e, 'deepseek:exportComposeTurns')`; pin пересчитан по новой версии.
-    sha: '68761c0fcdae4a10bba8036d65b98f6322a28f8770bc708eff466d23f8a6142f'
+    // FIX-FIREFOX-LIVE-ANSWER-EMPTY: перед diagVerdict добавлена ветка «live answer пуст,
+    // сетевой — нет» (вердикт LIVE-ANSWER-EMPTY, сетевой текст не затирается); pin
+    // пересчитан по новой версии.
+    sha: 'a278133cf485899d45a8e14e826af3827df4f738309db24d75f8cb971e0f2e42'
   },
   {
     name: 'applyExportNetSnapshot', mode: 'func', start: '  // Приёмка сетевого снимка в режиме экспорта:',
