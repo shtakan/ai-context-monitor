@@ -34,6 +34,20 @@
       "/node_modules/",
       "/\\.kilo/"
     ],
+    "moduleFileExtensions": [
+      "js",
+      "mjs",
+      "cjs",
+      "jsx",
+      "ts",
+      "tsx",
+      "json",
+      "node"
+    ],
+    "transform": {
+      "\\.[cm]?jsx?$": "babel-jest",
+      "\\.tsx?$": "<rootDir>/tools/jest-esbuild-transform.js"
+    },
     "collectCoverage": false,
     "verbose": true
   }

@@ -14,6 +14,9 @@
 //   3. Никаких `.eslintrc*`/`.eslintignore` — только flat config (v9).
 
 import globals from 'globals';
+// esbuild уже devDep сборки; здесь он нужен, чтобы линт видел JS в .ts-файлах
+// (см. блок для `**/*.ts` в конце конфига).
+import * as esbuild from 'esbuild';
 
 // Единый набор правил для всех линтуемых исходников.
 //
@@ -292,5 +295,45 @@ export default [
     languageOptions: {
       sourceType: 'module',
     },
+  },
+  // ---------------------------------------------------------------------------
+  // Шаг 1 TS-миграции: `.ts`/`.tsx`-исходники.
+  //
+  // Отдельного TS-парсера в зависимостях нет (`@typescript-eslint/parser` не
+  // ставился): AST для правил даёт предпроцессор на esbuild — тот же инструмент,
+  // что собирает бандлы, поэтому новый слой не появляется. Предпроцессор стирает
+  // типы, и дальше файл разбирается обычным espree.
+  //
+  // Сдвиг колонок после стирания типов безопасен: `--fix` в проекте не
+  // используется (контракт №2 выше), а сообщения и так non-blocking.
+  //
+  // Глобалы — объединение browser/webextensions/node: декларации в `types/`
+  // описывают и контент-скрипт, и service worker.
+  // ---------------------------------------------------------------------------
+  {
+    files: ['**/*.ts', '**/*.tsx'],
+    processor: {
+      preprocess(text, filename) {
+        const { code } = esbuild.transformSync(text, {
+          loader: filename.endsWith('.tsx') ? 'tsx' : 'ts',
+          format: 'esm',
+          target: 'es2020',
+          sourcefile: filename,
+        });
+        return [code];
+      },
+      postprocess(messageLists) {
+        return messageLists.flat();
+      },
+    },
+    languageOptions: {
+      sourceType: 'module',
+      globals: {
+        ...globals.browser,
+        ...globals.webextensions,
+        ...globals.node,
+      },
+    },
+    rules: {},
   },
 ];

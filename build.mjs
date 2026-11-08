@@ -415,10 +415,79 @@ const ASSET_TREES = ['_locales', 'docs/screenshots'];
 
 const BACKGROUND_SRC = 'core/background.js';
 
+/* ------------------------------------------------------------------ *
+ * Classic artifacts from ES modules (TypeScript migration, step 1)
+ *
+ * dist/utils/{debug,gemini-batchexecute-parser,google-search-folwr-parser,
+ * gemini-intercept-logic}.js are loaded by chrome.scripting as classic scripts,
+ * where `import`/`export` are syntax errors. They used to be derived by two
+ * regexes: strip the `export` prefixes, then glue the body into a hand-written
+ * `(function () { ... })();`.
+ *
+ * Both steps are now esbuild.transform({ loader: 'ts', format: 'iife' }): it
+ * understands every declaration form (`export function/const/class/type`), cannot
+ * silently miss a new one, and produces the same single-scope result. The one
+ * thing transform() never does is resolve imports, so the import line itself is
+ * still removed by a regex before the transform.
+ *
+ * The same path already handles `.ts` sources, so a future TypeScript module gets
+ * its classic artifact without a second code path.
+ * ------------------------------------------------------------------ */
+
+// Extension -> esbuild loader, shared by the classic artifacts (transform) and the
+// generated entry files (onLoad). Step 1 of the TS migration: `.ts`/`.tsx` inputs
+// must be parsed as TypeScript instead of failing on type annotations.
+const LOADERS = {
+  '.ts': 'ts',
+  '.tsx': 'tsx',
+  '.mts': 'ts',
+  '.cts': 'ts',
+};
+
+/** esbuild loader for a file path; unknown extensions keep the historical 'js'. */
+function loaderForFile(file) {
+  return LOADERS[path.extname(file).toLowerCase()] || 'js';
+}
+
+// The import directive esbuild.transform cannot resolve: it would be rewritten into
+// `require(...)`, and `require` does not exist in the MAIN world.
+const IMPORT_LINE_RE = /^[ \t]*import\s[^\n]*\bfrom\s*['"][^'"]+['"];?[ \t]*$/gm;
+
+// Namespace the debug classic artifact publishes into globalThis (see classicIife).
+const DEBUG_CLASSIC_NS = '__aiCmDebugClassic';
+
+/**
+ * Render one classic artifact: `export` declarations removed, body wrapped in an
+ * IIFE - both by esbuild, see the section comment above.
+ *
+ * `globalName` is for modules whose consumers rely on bare global identifiers
+ * (utils/debug.js): the namespace is published into `globalThis`, so `swallowSoft`
+ * keeps resolving from the parser artifacts exactly as it did while the file still
+ * had top-level function declarations.
+ */
+async function classicIife(src, label, globalName) {
+  const out = await esbuild.transform(src, {
+    loader: 'ts',
+    format: 'iife',
+    target: 'es2020',
+    ...(globalName ? { globalName } : {}),
+  });
+  let code = out.code.trimEnd() + '\n';
+  if (globalName) code += '\nObject.assign(globalThis, ' + globalName + ');\n';
+  if (/\bimport\s*\(|\brequire\s*\(/.test(code)) {
+    fail(label + ': classic artifact still calls require() (unresolved import)');
+  }
+  return code;
+}
 // R1 (Ph2): ESM-исходник debug.js и путь, под которым его ждут runtime-регистрации.
 const DEBUG_SOURCE = 'utils/debug.js';
 const DEBUG_CLASSIC = 'utils/debug.js';
 
+/**
+ * Update (TypeScript migration, step 1): the artifact is now an esbuild IIFE whose
+ * namespace is published into `globalThis`, so the bare identifiers MAIN-world
+ * consumers rely on (`swallowSoft` and friends) keep resolving as before.
+ */
 /**
  * dist/utils/debug.js: classic-артефакт того же модуля.
  *
@@ -430,7 +499,7 @@ const DEBUG_CLASSIC = 'utils/debug.js';
  */
 async function writeDebugClassic() {
   const src = fs.readFileSync(abs(DEBUG_SOURCE), 'utf8').replace(/^\uFEFF/, '');
-  const classic = src.replace(/^export\s+(?=(?:async\s+)?function\b)/gm, '');
+  const classic = await classicIife(src, DEBUG_CLASSIC, DEBUG_CLASSIC_NS);
   if (/^\s*(?:import|export)\b/m.test(classic)) {
     fail(DEBUG_CLASSIC + ': classic-артефакт всё ещё содержит import/export');
   }
@@ -446,6 +515,13 @@ const PARSER_SOURCE = 'utils/gemini-batchexecute-parser.js';
 const PARSER_CLASSIC = 'utils/gemini-batchexecute-parser.js';
 
 /**
+ * Update (TypeScript migration, step 1): the `export` prefixes and the
+ * `(function () {` wrapper are no longer produced by regexes - `classicIife()`
+ * derives both with esbuild.transform({ loader: 'ts', format: 'iife' }). The
+ * import line is still stripped by a regex, because transform() never
+ * resolves imports.
+ */
+/**
  * dist/utils/gemini-batchexecute-parser.js: classic-артефакт того же модуля.
  *
  * Парсер переведён на ESM (Roadmap Ph2), но его грузит 21-скриптовая MAIN-регистрация
@@ -460,16 +536,15 @@ const PARSER_CLASSIC = 'utils/gemini-batchexecute-parser.js';
  */
 async function writeParserClassic() {
   const src = fs.readFileSync(abs(PARSER_SOURCE), 'utf8').replace(/^\uFEFF/, '');
-  const body = src
-    .replace(/^[ \t]*import\s[^\n]*\bfrom\s*['"][^'"]+['"];?[ \t]*$/gm, '')
-    .replace(/^[ \t]*export\s+(?=(?:async\s+)?(?:function|var|let|const|class)\b)/gm, '');
-  if (/^\s*(?:import|export)\b/m.test(body)) {
+  // transform() never resolves imports, so the import line is the only piece
+  // still stripped by a regex; export declarations and the IIFE come from esbuild.
+  const classic = await classicIife(src.replace(IMPORT_LINE_RE, ''), PARSER_CLASSIC);
+  if (/^\s*(?:import|export)\b/m.test(classic)) {
     fail(PARSER_CLASSIC + ': classic-артефакт всё ещё содержит import/export');
   }
-  if (!/window\.GeminiBatchexecuteParser\s*=/.test(body)) {
+  if (!/window\.GeminiBatchexecuteParser\s*=/.test(classic)) {
     fail(PARSER_CLASSIC + ': самовызывающаяся обёртка не публикует window.GeminiBatchexecuteParser');
   }
-  const classic = '(function () {\n' + body.trim() + '\n})();\n';
   const to = path.join(DIST, PARSER_CLASSIC);
   await fsp.mkdir(path.dirname(to), { recursive: true });
   await fsp.writeFile(to, classic, 'utf8');
@@ -481,6 +556,13 @@ async function writeParserClassic() {
 const GSA_PARSER_SOURCE = 'utils/google-search-folwr-parser.js';
 const GSA_PARSER_CLASSIC = 'utils/google-search-folwr-parser.js';
 
+/**
+ * Update (TypeScript migration, step 1): the `export` prefixes and the
+ * `(function () {` wrapper are no longer produced by regexes - `classicIife()`
+ * derives both with esbuild.transform({ loader: 'ts', format: 'iife' }). The
+ * import line is still stripped by a regex, because transform() never
+ * resolves imports.
+ */
 /**
  * dist/utils/google-search-folwr-parser.js: classic-артефакт того же модуля.
  *
@@ -494,16 +576,15 @@ const GSA_PARSER_CLASSIC = 'utils/google-search-folwr-parser.js';
  */
 async function writeGsaParserClassic() {
   const src = fs.readFileSync(abs(GSA_PARSER_SOURCE), 'utf8').replace(/^\uFEFF/, '');
-  const body = src
-    .replace(/^[ \t]*import\s[^\n]*\bfrom\s*['"][^'"]+['"];?[ \t]*$/gm, '')
-    .replace(/^[ \t]*export\s+(?=(?:async\s+)?(?:function|var|let|const|class)\b)/gm, '');
-  if (/^\s*(?:import|export)\b/m.test(body)) {
+  // transform() never resolves imports, so the import line is the only piece
+  // still stripped by a regex; export declarations and the IIFE come from esbuild.
+  const classic = await classicIife(src.replace(IMPORT_LINE_RE, ''), GSA_PARSER_CLASSIC);
+  if (/^\s*(?:import|export)\b/m.test(classic)) {
     fail(GSA_PARSER_CLASSIC + ': classic-артефакт всё ещё содержит import/export');
   }
-  if (!/window\.GoogleFolwrUtils\s*=/.test(body)) {
+  if (!/window\.GoogleFolwrUtils\s*=/.test(classic)) {
     fail(GSA_PARSER_CLASSIC + ': самовызывающаяся обёртка не публикует window.GoogleFolwrUtils');
   }
-  const classic = '(function () {\n' + body.trim() + '\n})();\n';
   const to = path.join(DIST, GSA_PARSER_CLASSIC);
   await fsp.mkdir(path.dirname(to), { recursive: true });
   await fsp.writeFile(to, classic, 'utf8');
@@ -515,6 +596,13 @@ async function writeGsaParserClassic() {
 const GEMINI_LOGIC_SOURCE = 'utils/gemini-intercept-logic.js';
 const GEMINI_LOGIC_CLASSIC = 'utils/gemini-intercept-logic.js';
 
+/**
+ * Update (TypeScript migration, step 1): the `export` prefixes and the
+ * `(function () {` wrapper are no longer produced by regexes - `classicIife()`
+ * derives both with esbuild.transform({ loader: 'ts', format: 'iife' }). The
+ * import line is still stripped by a regex, because transform() never
+ * resolves imports.
+ */
 /**
  * dist/utils/gemini-intercept-logic.js: classic-артефакт того же модуля.
  *
@@ -531,16 +619,15 @@ const GEMINI_LOGIC_CLASSIC = 'utils/gemini-intercept-logic.js';
  */
 async function writeGeminiLogicClassic() {
   const src = fs.readFileSync(abs(GEMINI_LOGIC_SOURCE), 'utf8').replace(/^\uFEFF/, '');
-  const body = src
-    .replace(/^[ \t]*import\s[^\n]*\bfrom\s*['"][^'"]+['"];?[ \t]*$/gm, '')
-    .replace(/^[ \t]*export\s+(?=(?:async\s+)?(?:function|var|let|const|class)\b)/gm, '');
-  if (/^\s*(?:import|export)\b/m.test(body)) {
+  // transform() never resolves imports, so the import line is the only piece
+  // still stripped by a regex; export declarations and the IIFE come from esbuild.
+  const classic = await classicIife(src.replace(IMPORT_LINE_RE, ''), GEMINI_LOGIC_CLASSIC);
+  if (/^\s*(?:import|export)\b/m.test(classic)) {
     fail(GEMINI_LOGIC_CLASSIC + ': classic-артефакт всё ещё содержит import/export');
   }
-  if (!/window\.GeminiInterceptLogic\s*=/.test(body)) {
+  if (!/window\.GeminiInterceptLogic\s*=/.test(classic)) {
     fail(GEMINI_LOGIC_CLASSIC + ': самовызывающаяся обёртка не публикует window.GeminiInterceptLogic');
   }
-  const classic = '(function () {\n' + body.trim() + '\n})();\n';
   const to = path.join(DIST, GEMINI_LOGIC_CLASSIC);
   await fsp.mkdir(path.dirname(to), { recursive: true });
   await fsp.writeFile(to, classic, 'utf8');
@@ -1246,15 +1333,17 @@ function entryFilesPlugin() {
         return {};
       });
 
-      build.onLoad({ filter: /[\\/]\.build[\\/]entry-[^\\/]+\.js$/ }, async (args) => {
-        const name = path.basename(args.path).replace(/^entry-/, '').replace(/\.js$/, '');
+      // The loader follows the extension: step 1 of the TS migration lets an entry
+      // built from .ts sources parse as TypeScript instead of failing on annotations.
+      build.onLoad({ filter: /[\\/]\.build[\\/]entry-[^\\/]+\.(?:[cm]?[jt]sx?)$/ }, async (args) => {
+        const name = path.basename(args.path).replace(/^entry-/, '').replace(/\.(?:[cm]?[jt]sx?)$/, '');
         const entries = collectEntries();
         if (!entries[name]) {
           fail(`generated entry "${rel(args.path)}" has no SSOT list for bundle "${name}"`);
         }
         return {
           contents: await fsp.readFile(args.path, 'utf8'),
-          loader: 'js',
+          loader: loaderForFile(args.path),
           // ESM-пилот: entry-*.js физически лежат в .build/, поэтому относительные
           // импорты (print.js -> ../utils/markdown.js) резолвятся от корня репо.
           resolveDir: BUILD_DIR,

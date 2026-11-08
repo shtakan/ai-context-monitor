@@ -52,6 +52,9 @@ tools/*
 !tools/overlay-bind-contract.js
 !tools/archive-bind-contract.js
 !tools/oracle-bind-contract.js
+# Jest-трансформер для TS (Шаг 1 миграции) — это конфиг, а не одноразовый скрипт:
+# он должен быть в git, иначе package.json ссылается на несуществующий файл в CI.
+!tools/jest-esbuild-transform.js
 tools/key.pem
 # Прежний шаблон `tools/` (без внутреннего слэша) ловил каталог tools на ЛЮБОЙ
 # глубине; root-anchored `tools/*` этого не делает, поэтому вложенный служебный
