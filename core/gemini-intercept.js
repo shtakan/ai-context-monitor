@@ -657,6 +657,23 @@
   // алиасов дозаполняются блоками ранних модулей — только к этому месту все они живые.
   // Состояние передаётся ЖИВЫМИ геттерами/сеттерами: кластер пишет в эти переменные,
   // и при передаче копией (обычным свойством) ядро читало бы устаревшее значение.
+  // Phase 3 (payload, шаг 1): структурные предикаты и хелперы payload вынесены в
+  // core/gemini-payload.js. Модуль ЧИСТЫЙ (без состояния и без __bind), поэтому связка
+  // ingest-модуля — просто ссылки на функции, а не контракт с геттерами.
+  var aiCmGeminiPayload = (typeof window !== 'undefined' && window.AiCmGeminiPayload) || null;
+  // Мягкая деградация: у профиля мог остаться прежний registration (MV3 не перечитывает
+  // js[] под тем же id) — тогда модуля нет. Заглушки повторяют форму контракта, чтобы
+  // __bind ingest не упал на чтении свойства null, а снимок деградировал заметно.
+  if (!aiCmGeminiPayload) {
+    debugLog('log', '[gemini-intercept] core/gemini-payload.js не подключён — ' +
+      'структурные предикаты и сборщики payload недоступны (проверьте регистрацию content script)');
+  }
+  var aiCmPayload = aiCmGeminiPayload || {
+    buildJsonSkeleton: function () { return null; },
+    structureMap: function () { },
+    collectAttachments: function () { },
+    collectContent: function () { }
+  };
   var aiCmGeminiIngest = (typeof window !== 'undefined' && window.AiCmGeminiIngest) || null;
   var aiCmGeminiFiles = (typeof window !== 'undefined' && window.AiCmGeminiFiles) || null;
   var ingest = null;
@@ -670,11 +687,11 @@
   if (aiCmGeminiIngest) {
     aiCmGeminiIngest.__bind({
       // Функции ядра (значением).
-      buildJsonSkeleton: buildJsonSkeleton,
+      buildJsonSkeleton: aiCmPayload.buildJsonSkeleton,
       getConvId: getConvId,
-      structureMap: structureMap,
-      collectAttachments: collectAttachments,
-      collectContent: collectContent,
+      structureMap: aiCmPayload.structureMap,
+      collectAttachments: aiCmPayload.collectAttachments,
+      collectContent: aiCmPayload.collectContent,
       activeRefresh: activeRefresh,
       aiCmArchiveTierApply: aiCmArchiveTierApply,
       sanitizeMessagesForEmit: sanitizeMessagesForEmit,
@@ -1248,124 +1265,22 @@
   // (serverFirstHash / dbFirstHash), поэтому живут в модуле, а не в диагностике; снимок
   // забирает объединённую базу через aiCmBaseExportInfo. Логика сюда НЕ возвращается.
 
-  // ---- фильтры мусора ----
-
-  // ---- фильтры мусора ----
-  function isIdLike(s) { return typeof s === 'string' && /^(c_|r_|rc_|fbb[0-9a-f]|[0-9a-f]{16})/.test(s); }
-  function isFileLike(s) { return typeof s === 'string' && /\.(pdf|png|jpe?g|gif|docx?|txt|webp|csv|xlsx?)(\b|$)/i.test(s); }
-  function isUrlLike(s) { return typeof s === 'string' && /^https?:\/\//i.test(s); }
-  function isTokenLike(s) { return typeof s === 'string' && /^\$?AVuib/.test(s); }
-  function isMimeLike(s) { return typeof s === 'string' && /^(image|application|video|audio)\//i.test(s); }
-  var UI_BLACKLIST = {
-    'DE': 1, 'ru': 1, 'mk': 1, 'generic': 1, 'personal_context': 1, 'google': 1,
-    'Ищу в интернете': 1, 'Персональный контекст': 1, 'Google Search': 1, 'true': 1, 'false': 1
-  };
-  function isJunk(s) {
-    if (typeof s !== 'string') return true;
-    if (s.length === 0) return true;
-    if (UI_BLACKLIST[s]) return true;
-    return isIdLike(s) || isFileLike(s) || isUrlLike(s) || isTokenLike(s) || isMimeLike(s);
-  }
-  function isThinking(s) {
-    if (typeof s !== 'string' || s.length < 30) return false;
-    var cyr = 0, lat = 0;
-    for (var i = 0; i < s.length; i++) {
-      var c = s.charCodeAt(i);
-      if (c >= 0x0400 && c <= 0x04FF) cyr++;
-      else if ((c >= 65 && c <= 90) || (c >= 97 && c <= 122)) lat++;
-    }
-    if (cyr > 0) return false;
-    if (lat < 30) return false;
-    return s.indexOf('**') !== -1;
-  }
+  // ===== v2.0 (Phase 3, шаг 1): СТРУКТУРНЫЕ ПРЕДИКАТЫ И PAYLOAD (ВЫНЕСЕНЫ В core/gemini-payload.js) =====
+  // Здесь были фильтры мусора (isIdLike/isFileLike/isUrlLike/isTokenLike/isMimeLike,
+  // UI_BLACKLIST, isJunk, isThinking), структурный сбор вложений (collectAttachmentUrls,
+  // collectAttachments), сбор текста хода (collectContent), карта структуры (structureMap)
+  // и скелет непарсящейся страницы (buildJsonSkeleton). Модуль подключён в js[] ПЕРЕД
+  // core/gemini-ingest.js: ingest получает четыре сборщика связкой, ядро — алиасом
+  // aiCmPayload. Логика сюда НЕ возвращается: правки предикатов — в core/gemini-payload.js.
 
   // ================= приватный рентген id хода =================
   // ===== v2.0 (Phase 3 step 12): firstRc+logIdmap перенесено в core/gemini-ingest.js =====
   // ================================================================
 
-  // ---- v2.0: структурный сбор вложений Gemini (сигнатура из снятого payload) ----
-  // Узел: [null, type, name, imgCdn, null, token, null, [thumb, download, upload],
-  //        1, [sec, nanos], null, mime, ...], type: 1=image, 10=docx, 11=pdf.
-  // В отличие от старой эвристики НЕ требуем node[3] и префикс "$AVuibg":
-  // у документов node[3]=null, а opaque-токен теперь "$AfW07I…". MIME — главный
-  // признак; type держим справочно и как допуск для документов без MIME.
-  // Рекурсивно обходим дерево — не привязываемся к жёсткому пути.
-  function collectAttachmentUrls(v, out) {
-    if (typeof v === 'string') { if (v) out.push(v); return; }
-    if (!Array.isArray(v)) return;
-    for (var i = 0; i < v.length; i++) collectAttachmentUrls(v[i], out);
-  }
-  function collectAttachments(node, localSeen, items) {
-    if (!Array.isArray(node)) return;
-    var name = (typeof node[2] === 'string') ? node[2] : '';
-    var mime = (typeof node[11] === 'string') ? node[11] : '';
-    var type = (typeof node[1] === 'number') ? node[1] : 0;
-    var token = (typeof node[5] === 'string') ? node[5] : '';
-    var img = (typeof node[3] === 'string') ? node[3] : '';
-    // проверяем: является ли этот массив блоком вложения?
-    if (name && mime && /^(image|application|video|audio)\//.test(mime) &&
-      (type === 1 || type === 10 || type === 11) &&
-      (!token || /^\$?A[Vf]/.test(token))) {
-      var urls = [];
-      collectAttachmentUrls(node[7], urls);
-      var dl = '';
-      for (var u = 0; u < urls.length; u++) {
-        if (urls[u].indexOf('contribution.usercontent.google.com/download') !== -1) { dl = urls[u]; break; }
-      }
-      var seenKey = token || name;
-      if (!localSeen.has(seenKey)) {
-        localSeen.add(seenKey);
-        items.push({ name: name, mime: mime, type: type, token: token, img: img, dl: dl, urls: urls });
-      }
-      return; // блок вложения — лист, не идём глубже
-    }
-    // иначе рекурсивно обходим детей
-    for (var i = 0; i < node.length; i++) {
-      if (Array.isArray(node[i])) collectAttachments(node[i], localSeen, items);
-    }
-  }
   // ===== v2.0 (Phase 3 step 12): ingestAttachments перенесено в core/gemini-ingest.js =====
 
-  // ---- рекурсивный сбор текста хода ----
-  function collectContent(node, out) {
-    if (typeof node === 'string') {
-      if (!isJunk(node) && !isThinking(node) && !isMimeLike(node)) out.push(node);
-      return;
-    }
-    if (!Array.isArray(node)) return;
-    for (var k = 0; k < node.length; k++) collectContent(node[k], out);
-  }
-  function structureMap(node, depth, out, counter) {
-    if (counter.n >= 40) return;
-    if (typeof node === 'string') {
-      var kind = isJunk(node) ? 'junk' : (isThinking(node) ? 'think' : 'TEXT');
-      out.push(depth + ':' + node.length + ':' + kind); counter.n++; return;
-    }
-    if (!Array.isArray(node)) return;
-    for (var i = 0; i < node.length; i++) structureMap(node[i], depth + 1, out, counter);
-  }
   // ===== v2.0 (Phase 3 step 12): extract* перенесено в core/gemini-ingest.js =====
 
-  // Скелет непарсящейся страницы: рекурсивно до глубины 6.
-  // массив → {"arr": <len>, "items": [...]}; строка → "s<len>: <до 30 символов>";
-  // число/булевы/null — как есть. items ограничены 8 элементами для компактности.
-  function buildJsonSkeleton(node, depth) {
-    if (node === null || node === undefined) return null;
-    var t = typeof node;
-    if (t === 'string') return 's' + node.length + ': ' + node.slice(0, 30);
-    if (t === 'number' || t === 'boolean') return node;
-    if (Array.isArray(node)) {
-      var items = [];
-      if (depth < 6) {
-        var cap = Math.min(node.length, 8);
-        for (var i = 0; i < cap; i++) {
-          items.push(buildJsonSkeleton(node[i], depth + 1));
-        }
-      }
-      return { arr: node.length, items: items };
-    }
-    return null;
-  }
 
   // ===== v2.0 (Phase 3 step 12): handleOuter перенесено в core/gemini-ingest.js =====
 

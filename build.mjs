@@ -441,14 +441,14 @@ async function writeDebugClassic() {
 }
 
 // Ph2, шаг gemini-batchexecute-parser.js: ESM-исходник и путь, под которым его ждут
-// регистрации world:'MAIN' в core/background.js (регистрация ai-cm-gemini-intercept-v12).
+// регистрации world:'MAIN' в core/background.js (регистрация ai-cm-gemini-intercept-v13).
 const PARSER_SOURCE = 'utils/gemini-batchexecute-parser.js';
 const PARSER_CLASSIC = 'utils/gemini-batchexecute-parser.js';
 
 /**
  * dist/utils/gemini-batchexecute-parser.js: classic-артефакт того же модуля.
  *
- * Парсер переведён на ESM (Roadmap Ph2), но его грузит 16-скриптовая MAIN-регистрация
+ * Парсер переведён на ESM (Roadmap Ph2), но его грузит 17-скриптовая MAIN-регистрация
  * через chrome.scripting: путь резолвится в файл, а classic-скрипт не может содержать
  * import/export. Снять префиксы объявлений и строку импорта (swallowSoft в MAIN-мире
  * даёт classic-артефакт utils/debug.js — он первый в js[]), затем завернуть тело в
@@ -511,7 +511,7 @@ async function writeGsaParserClassic() {
 }
 
 // Ph2, шаг gemini-intercept-logic.js: ESM-исходник и путь, под которым его ждёт
-// 16-скриптовая MAIN-регистрация ai-cm-gemini-intercept-v12 в core/background.js.
+// 17-скриптовая MAIN-регистрация ai-cm-gemini-intercept-v13 в core/background.js.
 const GEMINI_LOGIC_SOURCE = 'utils/gemini-intercept-logic.js';
 const GEMINI_LOGIC_CLASSIC = 'utils/gemini-intercept-logic.js';
 
@@ -520,7 +520,7 @@ const GEMINI_LOGIC_CLASSIC = 'utils/gemini-intercept-logic.js';
  *
  * Логика переведена на ESM (Roadmap Ph2) и входит в бандл SW статическим import'ом
  * из core/background.js. Но тот же путь перечислен в js[] MAIN-регистрации
- * (ai-cm-gemini-intercept-v12), а chrome.scripting грузит classic-скрипты, где
+ * (ai-cm-gemini-intercept-v13), а chrome.scripting грузит classic-скрипты, где
  * import/export недопустимы. Снимаем префиксы объявлений и заворачиваем тело в IIFE:
  * до миграции файл был самовызывающейся функцией и держал ~90 внутренних имён вне
  * общего скоупа MAIN-мира, где рядом живут 15 других classic-скриптов.
