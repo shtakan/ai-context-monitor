@@ -15,7 +15,7 @@
  * только в DOM (Gemini стримит ответ вне перехваченных batchexecute-RPC, а активный
  * vf5-дозапрос падал с Illegal invocation → activeDisabled=true). Но
  * `getEffectiveText()` при `baseComplete=true` возвращал РОВНО `baseText`, а
- * `getEffectiveCount()` — `baseCount` (core/hybrid-tail.js), поэтому DOM-emit после ответа
+ * `getEffectiveCount()` — `baseCount` (core/hybrid-tail.ts), поэтому DOM-emit после ответа
  * давал те же цифры → дедуп → бейдж замерзал до перезагрузки (F5 ингестит новые ходы в базу).
  *
  * ЧТО ПИНУЕТСЯ: при полной базе ОГРАНИЧЕННЫЙ (bounded) DOM-хвост — сообщения НОВЕЕ
@@ -24,7 +24,7 @@
  * сохраняются: неполный (unbounded) DOM базу не подменяет, пустой DOM не добавляет ничего.
  *
  * ПРАВИЛО 3 (Behavior-Only Tests): тест НЕ читает исходники продукта. Модуль берётся через
- * своё публичное API (`window.AiCmHybridTail`, его ставит сам core/hybrid-tail.js), а
+ * своё публичное API (`window.AiCmHybridTail`, его ставит сам core/hybrid-tail.ts), а
  * свободные переменные контент-скриптов (база/адаптер/логгер) кладутся в глобальный скоуп —
  * ровно так они и видны модулю в браузере. Вход теста — DOM-фикстура и снимок базы, выход —
  * текст/счётчик метрик и пересчёт ISOLATED.
@@ -37,7 +37,7 @@ const Tokenizer = loadEsmHelper.loadEsm('utils/tokenizer.ts');
 const GEMINI_LIMIT = 128000; // ModelConfig.getEffectiveLimit('gemini-search-default')
 
 // Публичное API модуля (window.AiCmHybridTail): сборка ставит его сама.
-const Hybrid = loadEsmHelper.loadEsmGlobal('core/hybrid-tail.js', 'AiCmHybridTail');
+const Hybrid = loadEsmHelper.loadEsmGlobal('core/hybrid-tail.ts', 'AiCmHybridTail');
 
 // Свободные переменные общего лексического скоупа контент-скриптов, которыми живёт модуль.
 const SCOPE_KEYS = [

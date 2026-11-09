@@ -76,11 +76,12 @@
 'use strict';
 
 const fs = require('fs');
+const { readCore } = require('../helpers/core-src.js');
 const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..', '..');
-const readFile = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+const readFile = (rel) => readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8'));
 
 /** Число непересекающихся вхождений подстроки. */
 const countOf = (haystack, needle) => haystack.split(needle).length - 1;

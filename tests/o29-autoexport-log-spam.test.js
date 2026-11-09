@@ -10,14 +10,14 @@
  *
  * Корень и фикс (точки):
  *   1. core/state.ts — латч aiCmAutoExportLastLogState (family → сигнатура последней печати);
- *   2. core/export-manager.js — aiCmAutoExportLogOnChange (читатель/писатель латча) +
+ *   2. core/export-manager.ts — aiCmAutoExportLogOnChange (читатель/писатель латча) +
  *      aiCmAutoExportLogFiredBit (бит латча O-38 в сигнатуре) + гейт в aiCmGsaAutoExportSkipLog;
  *   3. core/widget.ts — тот же гейт у строки 'latch kept reason=spa-entry' (family 'spa-entry').
  * Семейства раздельные намеренно: обе строки печатаются в ОДНОМ DRAW-цикле, поэтому один
  * общий ключ не гасил бы чередование A/B/A/B — спам остался бы.
  *
  * Исполняются РЕАЛЬНЫЕ функции: resetConversationState (core/widget.ts), maybeAutoExport +
- * aiCmAutoExportConvId + aiCmGsaProbeRunningFor + aiCmGsaAutoExportSkipLog (core/export-manager.js),
+ * aiCmAutoExportConvId + aiCmGsaProbeRunningFor + aiCmGsaAutoExportSkipLog (core/export-manager.ts),
  * хелперы O-29, канонический debugLog (utils/debug.ts) под гейтом aiCmDebug и чистый гейт
  * shouldSkipAutoExport (utils/export-emit-pipeline.ts).
  *
@@ -28,6 +28,8 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
@@ -35,7 +37,7 @@ const { contentSource: CONTENT, readSource } = require('./helpers/content-source
 
 const ROOT = path.join(__dirname, '..');
 const WIDGET_SRC = readSource('core/widget.ts');
-const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const MGR_SRC = read('core/export-manager.ts');
 const STATE_SRC = readSource('core/state.ts');
 // R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).

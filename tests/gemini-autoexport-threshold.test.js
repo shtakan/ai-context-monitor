@@ -14,7 +14,7 @@
  *
  * Здесь три слоя пинов:
  *   1) ЧИСТЫЙ ГЕЙТ (utils/export-emit-pipeline.ts: shouldSkipBaseCompleteTrigger);
- *   2) ЖИВОЙ ХАРНЕСС: РЕАЛЬНЫЙ core/export-manager.js загружен целиком, слушатель
+ *   2) ЖИВОЙ ХАРНЕСС: РЕАЛЬНЫЙ core/export-manager.ts загружен целиком, слушатель
  *      'ai-cm-loader-state' перехвачен, события loader-stop прогоняются по-настоящему
  *      (реальные maybeAutoExport → doAutoExportDownload → имена/байты);
  *   3) SOURCE/R-пины: место гейта, сохранённые литералы fired-строк, нетронутые
@@ -26,6 +26,8 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
@@ -33,7 +35,7 @@ const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-te
 const H = require('./helpers/content-source.js');
 
 const ROOT = path.join(__dirname, '..');
-const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const MGR_SRC = read('core/export-manager.ts');
 const CONTENT = H.contentSource;   // state/widget/base-handler/hybrid-tail/export-manager + content.js
 
 const CID = 'e292103e4b521dae';                 // живой convId Gemini из fixture H21
@@ -115,7 +117,7 @@ describe('O-36 D3 (чистый гейт): shouldSkipBaseCompleteTrigger', funct
 });
 
 // =====================================================================================
-// 2) ЖИВОЙ ХАРНЕСС: реальный core/export-manager.js + перехваченный loader-state
+// 2) ЖИВОЙ ХАРНЕСС: реальный core/export-manager.ts + перехваченный loader-state
 // =====================================================================================
 /**
  * Загрузка РЕАЛЬНОГО модуля целиком в песочницу состояния контент-скрипта.

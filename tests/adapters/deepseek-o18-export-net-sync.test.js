@@ -9,9 +9,9 @@
  * текущего чата запрашивается по сети, если снимок сети пуст или старше последнего
  * завершённого хода; таймаут 3 с; при неудаче/пустой сети — прежний live-путь.
  *
- * Стенд: РЕАЛЬНЫЙ core/deepseek-intercept.js (MAIN) + РЕАЛЬНЫЙ core/base-handler.js
+ * Стенд: РЕАЛЬНЫЙ core/deepseek-intercept.js (MAIN) + РЕАЛЬНЫЙ core/base-handler.ts
  * (ISOLATED-мост aiCmExportNetSyncThen) в одном jsdom-окне + РЕАЛЬНЫЙ doAutoExportDownload
- * из core/export-manager.js в срез-песочнице (как tests/adapters/deepseek-o16-stream-export).
+ * из core/export-manager.ts в срез-песочнице (как tests/adapters/deepseek-o16-stream-export).
  *
  * Проверки:
  *  1) netSnapshot=null + live-ход → дозапрос выполнен, ФАЙЛ ИЗ СЕТИ (полный текст);
@@ -25,6 +25,8 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('../helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 const { JSDOM, VirtualConsole } = require('jsdom');
 
@@ -36,8 +38,8 @@ const ROOT = path.join(__dirname, '..', '..');
 // Step D.1: ядро декомпозировано — диагностика уехала в core/deepseek-diag.js, поэтому
 // стенд грузит КОНКАТЕНАЦИЮ модулей + ядра (как js[] одного registration в браузере).
 const INTERCEPT_SRC = require('../helpers/deepseek-intercept-source.js').deepseekSource;
-const BASE_HANDLER_SRC = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.js'), 'utf8');
-const EXPORT_MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const BASE_HANDLER_SRC = read('core/base-handler.ts');
+const EXPORT_MGR_SRC = read('core/export-manager.ts');
 // Фикстура: сырьё прогона 19-12 (tools/fixtures, gitignored) либо синтезированный эквивалент.
 const O18 = require('../helpers/o18-fixture.js');
 const FIX = O18.scenarios;
@@ -221,7 +223,7 @@ function makeExportSandbox(stand, over) {
     aiCmExportBaseSource: function () { return null; },
     aiCmDumpTurnsSnapshot: function () { },
     aiCmCancelDeferredHistWrite: function () { },
-    // O-18 (фаза 2): РЕАЛЬНЫЙ ISOLATED-мост из core/base-handler.js (тот же jsdom-мир)
+    // O-18 (фаза 2): РЕАЛЬНЫЙ ISOLATED-мост из core/base-handler.ts (тот же jsdom-мир)
     aiCmExportNetSyncThen: w.AiCmBaseHandler.aiCmExportNetSyncThen,
     aiCmExportNetSyncSite: w.AiCmBaseHandler.aiCmExportNetSyncSite,
     aiCmNetSyncInFlight: {},

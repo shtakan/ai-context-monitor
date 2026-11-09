@@ -47,6 +47,7 @@
 'use strict';
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
 const os = require('os');
 const path = require('path');
 
@@ -363,7 +364,7 @@ describe('Step E.2b.1: страж молчаливых catch — whitelist', () 
     // (тела непустые) и не требует их удаления — сосуществование проверяем
     // пофайлово: у каждого catch с logSegmentParseFail тело непустое.
     const rel = 'utils/gemini-batchexecute-parser.ts';
-    const raw = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    const raw = readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8'));
     expect(raw).toContain('function logSegmentParseFail');
     expect(raw).toContain('[AI CM][batchexecute] segment parse fail ');
     expect(raw).toContain("logSegmentParseFail(e, 'handleOuter')");

@@ -38,6 +38,8 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
@@ -268,15 +270,15 @@ describe('Claude md roles R2: site=qwen — прежние маркеры ### US
 // D3/D4/R3-R5: LIVE-ЦЕПОЧКА buildHistoryMessages → buildMdFromHistory
 // =====================================================================================
 // Второй контур дефекта: даже с фиксом сборщика (D1/D2) роль хода НОРМАЛИЗУЕТСЯ upstream —
-// aiCmCollectExportSource (core/export-manager.js) и aiCmDedupeExportSource
-// (core/base-handler.js) строили role бинарно `=== 'user' ? 'user' : 'assistant'`, поэтому
+// aiCmCollectExportSource (core/export-manager.ts) и aiCmDedupeExportSource
+// (core/base-handler.ts) строили role бинарно `=== 'user' ? 'user' : 'assistant'`, поэтому
 // 'human' парсера Claude умирал ДО buildMdFromHistory. Пины ниже гонят РЕАЛЬНЫЕ функции обоих
 // модулей в одном лексическом скоупе (как в браузере) — ровно выражение buildHistoryMessages.
 // =====================================================================================
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
-const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
-const BASE_HANDLER_SRC = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.js'), 'utf8');
+const MGR_SRC = read('core/export-manager.ts');
+const BASE_HANDLER_SRC = read('core/base-handler.ts');
 
 const COLLECT_SRC = MGR_SRC.slice(
   MGR_SRC.indexOf('function sanitizeGeminiText(s)'),
@@ -373,13 +375,13 @@ describe('Claude md roles D3: live-цепочка адаптера (role=human) 
   });
 
   test('D3 source-пины трёх точек нормализации upstream (+ защита сборщика не сдвинута)', () => {
-    // (1) core/base-handler.js:aiCmDedupeExportSource — не-Gemini ветка.
+    // (1) core/base-handler.ts:aiCmDedupeExportSource — не-Gemini ветка.
     expect(BASE_HANDLER_SRC)
       .toContain("var msg = { role: (mp.role === 'user' || mp.role === 'human') ? 'user' : 'assistant', text: (typeof mp.text === 'string') ? mp.text : '' };");
-    // (2) core/export-manager.js:aiCmCollectExportSource — сетевая ветка.
+    // (2) core/export-manager.ts:aiCmCollectExportSource — сетевая ветка.
     expect(MGR_SRC)
       .toContain("var msg = { role: (r === 'user' || r === 'human') ? 'user' : 'assistant', text: sanitizeGeminiText(texts[i]) };");
-    // (3) core/export-manager.js:aiCmCollectExportSource — предикат «роль есть» (иначе Claude
+    // (3) core/export-manager.ts:aiCmCollectExportSource — предикат «роль есть» (иначе Claude
     // уходил бы фолбэком чередования и терял настоящие роли ходов).
     expect(MGR_SRC)
       .toContain("if (raw[k] && (raw[k].role === 'user' || raw[k].role === 'assistant' || raw[k].role === 'human')) { hasRoles = true; break; }");
@@ -514,9 +516,9 @@ const DEBUG_API = new Function(
   ' return { on: aiCmDiagOn, line: aiCmDiagLine };')();
 
 const ROLE_MARKERS = [
-  'claude-role-dedupe',     // core/base-handler.js:aiCmDedupeExportSource
-  'claude-role-network',    // core/export-manager.js:aiCmCollectExportSource (сеть)
-  'claude-role-adapter',    // core/export-manager.js:aiCmCollectExportSource (DOM-адаптер)
+  'claude-role-dedupe',     // core/base-handler.ts:aiCmDedupeExportSource
+  'claude-role-network',    // core/export-manager.ts:aiCmCollectExportSource (сеть)
+  'claude-role-adapter',    // core/export-manager.ts:aiCmCollectExportSource (DOM-адаптер)
   'claude-role-normalize',  // utils/export-emit-pipeline.ts:normalizeExportMessages
   'claude-role-builder'     // utils/export-text-builders.ts:buildMdFromHistory
 ];
@@ -722,13 +724,13 @@ describe('Claude md roles R6/R7: диаг-маркеры ролей — толь
   });
 
   test('R6 source-пины: четыре точки инструментированы, имя и МЕСТО маркера не сдвинуты', () => {
-    // (1) core/base-handler.js:aiCmDedupeExportSource — строка диаг ПОСЛЕ нормализации роли.
+    // (1) core/base-handler.ts:aiCmDedupeExportSource — строка диаг ПОСЛЕ нормализации роли.
     const dedupe = fnDecl(BASE_HANDLER_SRC, 'aiCmDedupeExportSource');
     expect(dedupe).toContain("aiCmDiagLine('claude-role-dedupe', { site: site, mpRole: mp.role, normalizedRole: msg.role });");
     expect(dedupe.indexOf("aiCmDiagLine('claude-role-dedupe'"))
       .toBeGreaterThan(dedupe.indexOf("var msg = { role: (mp.role === 'user' || mp.role === 'human')"));
 
-    // (2) core/export-manager.js:aiCmCollectExportSource — сеть ПОСЛЕ нормализации, адаптер
+    // (2) core/export-manager.ts:aiCmCollectExportSource — сеть ПОСЛЕ нормализации, адаптер
     // ПОСЛЕ normalizeExportMessages; предикат hasRoles байтово прежний.
     const collect = fnDecl(MGR_SRC, 'aiCmCollectExportSource');
     expect(collect).toContain("aiCmDiagLine('claude-role-network', { r: r, normalizedRole: msg.role });");

@@ -16,6 +16,7 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./core-src.js');
 const path = require('path');
 
 const { stripTypesKeepComments } = require('./read-module-source.js');
@@ -25,9 +26,9 @@ const ROOT = path.join(__dirname, '..', '..');
 const MODULES = [
   'core/state.ts',
   'core/widget.ts',
-  'core/base-handler.js',
-  'core/hybrid-tail.js',
-  'core/export-manager.js'
+  'core/base-handler.ts',
+  'core/hybrid-tail.ts',
+  'core/export-manager.ts'
 ];
 const CONTENT_JS = 'core/content.js';
 
@@ -39,18 +40,24 @@ const SOURCES = MODULES.concat([CONTENT_JS]);
  * и как код (песочницы `new Function`), поэтому типы снимаются, а комментарии
  * остаются — текст совпадает с до-миграционным.
  */
-const TS_EXECUTABLE = new Set(['core/state.ts', 'core/widget.ts']);
+const TS_EXECUTABLE = new Set([
+  'core/state.ts',
+  'core/widget.ts',
+  'core/base-handler.ts',
+  'core/hybrid-tail.ts',
+  'core/export-manager.ts'
+]);
 
 /** Исходник файла: для мигрированных `.ts` — в исполнимой форме. */
 function readSource(rel) {
-  const source = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+  const source = readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8'));
   if (!TS_EXECUTABLE.has(rel)) return source;
   return stripTypesKeepComments(source, rel);
 }
 
 /** Исходник в «исполнимой» форме: любые `.ts` отдаются без типов. */
 function readExecutable(rel) {
-  const source = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+  const source = readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8'));
   if (!/\.tsx?$/.test(rel)) return source;
   return stripTypesKeepComments(source, rel);
 }

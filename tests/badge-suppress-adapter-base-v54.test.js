@@ -26,6 +26,8 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 const H = require('./helpers/content-source.js');
 
@@ -37,7 +39,7 @@ const STATE_SRC = H.moduleSource('core/state.ts');
 // R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
 const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
-const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const MGR_SRC = read('core/export-manager.ts');
 const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
 
 const RU_MESSAGES = JSON.parse(fs.readFileSync(path.join(ROOT, '_locales', 'ru', 'messages.json'), 'utf8'));

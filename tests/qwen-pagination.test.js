@@ -9,7 +9,7 @@
  *   5) pageStepDecision / assignPageOrders — решение о шаге и порядок ходов;
  *   6) emitSnapshot / recordTurn — снимок собирается по order, а не по порядку добавления (O-54);
  *   7) гейт автоэкспорта держит Qwen до конца пагинации (O-54);
- *   8) предикат неполноты базы — только Qwen, в core/export-manager.js (O-54);
+ *   8) предикат неполноты базы — только Qwen, в core/export-manager.ts (O-54);
  *   9) O-55: публичный курсорный путь — старая страница вливается в НАЧАЛО истории,
  *      а перекрытие adopted-ходов не разрезает блок страницы.
  *
@@ -18,6 +18,8 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(__dirname, '..', rel), 'utf8')); };
 const path = require('path');
 
 const P = require('../core/qwen-pagination.js');
@@ -546,8 +548,8 @@ describe('O-54: гейт автоэкспорта — Qwen ждёт конца �
   });
 });
 
-describe('O-54: предикат неполноты базы — только Qwen (core/export-manager.js)', function () {
-  const MGR_SRC = fs.readFileSync(path.join(__dirname, '..', 'core', 'export-manager.js'), 'utf8');
+describe('O-54: предикат неполноты базы — только Qwen (core/export-manager.ts)', function () {
+  const MGR_SRC = read('core/export-manager.ts');
 
   function incomplete(site, baseSeen, baseComplete, partialSoft) {
     const ctx = {};
@@ -786,7 +788,7 @@ describe('O-55: регрессы R1 (живой ход в конец) и R2 (д�
 
 // ===== П1: отсутствие курсора не означает конец истории =====
 describe('П1: no-cursor не объявляет историю полной', function () {
-  const MGR_SRC = fs.readFileSync(path.join(__dirname, '..', 'core', 'export-manager.js'), 'utf8');
+  const MGR_SRC = read('core/export-manager.ts');
 
   // Реальный pqFinish из исходника: причина → аргумент снимка (complete/partial/partialSoft).
   function makeFinishStore() {

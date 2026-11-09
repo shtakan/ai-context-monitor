@@ -21,7 +21,7 @@
 //   strip /$AXzLiR[A-Za-z0-9+\/=\s]+/g, точную строку "File attachment was not previously
 //   registered" и /\[cite:\s*\d+\]/g. Здесь — делегирование к парсеру с локальным фолбэком
 //   на случай, если парсер ещё не загрузился.
-function sanitizeGeminiText(s) {
+function sanitizeGeminiText(s: string): string {
   if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser && window.GeminiBatchexecuteParser.sanitizeGeminiText) {
     return window.GeminiBatchexecuteParser.sanitizeGeminiText(s);
   }
@@ -41,7 +41,7 @@ function sanitizeGeminiText(s) {
 // aiCmHistory. Ветки базы (lastBaseTexts/baseText/aiCmBasePrepared), serverTokens, turnsMap,
 // бейдж и поля tokens/percent/limit НЕ тронуты — серверная правда контекста не пересчитывается.
 // Чистые функции санации — utils/export-emit-pipeline.ts (sanitizeEmitMessages).
-var aiCmSanitizeSkipLogged = {};
+var aiCmSanitizeSkipLogged: Record<string, number> = {};
 // ===== O-7: тумблер «Включать reasoning и инъекции DeepSeek++ в экспорт» =====
 // aiCmIncludeHiddenInExport (chrome.storage.local, default ВЫКЛ). Решение владельца
 // (P1=a, P2=OFF): OFF = в файл идут ТОЛЬКО вопросы и ответы — секции [REASONING]…[ANSWER]…
@@ -52,14 +52,14 @@ var aiCmSanitizeSkipLogged = {};
 // бейдж и латчи от положения тумблера НЕ зависят: секции остаются в базе, hidden живёт
 // отдельным полем захвата, урезание — только на выходе экспорта. Значение грузит
 // loadExportHiddenSetting().
-var aiCmIncludeHiddenInExport = false;
-function aiCmSanitizeDebugOn() {
+var aiCmIncludeHiddenInExport: boolean = false;
+function aiCmSanitizeDebugOn(): boolean {
   // Тот же флаг, что у диагностики DeepSeek (core/deepseek-intercept.js, SECTION 13).
   try { return sessionStorage.getItem('aiCmDebug') === '1'; } catch (e) { return false; }
 }
 // Одна строка на ПРИЧИНУ пропуска за страницу: санация вызывается на каждый снимок/запись
 // истории, без антиспама лог повторялся бы на каждом ходе.
-function aiCmLogSanitizeSkip(reasons) {
+function aiCmLogSanitizeSkip(reasons: string[] | null | undefined): void {
   if (!reasons || !reasons.length) return;
   if (!aiCmSanitizeDebugOn()) return;
   for (var i = 0; i < reasons.length; i++) {
@@ -78,7 +78,7 @@ function aiCmLogSanitizeSkip(reasons) {
 // (Node/срез-песочницы тестов) или гейт выключен → ни одной строки. Читаются только уже
 // посчитанные значения; сам вызов в точке входа защищён typeof-гардом, поэтому песочницы
 // без этого хелпера видят прежнее поведение.
-function aiCmEmitEntryDiag(branch, inMsgs, outMsgs, effectiveOn) {
+function aiCmEmitEntryDiag(branch: string, inMsgs: unknown, outMsgs: unknown, effectiveOn?: boolean): boolean {
   try {
     if (typeof aiCmDiagLine !== 'function') return false;
     // D-O41: hidden — ЭФФЕКТИВНОЕ значение тумблера (авто-ON при reasoning в источнике виден
@@ -110,7 +110,7 @@ function aiCmEmitEntryDiag(branch, inMsgs, outMsgs, effectiveOn) {
 // (S1–S5, O-20, O-40, O-42) — ни одного нового байта. Пайплайна нет (отладочный контекст,
 // срез-песочницы) → ровно пользовательское значение: поведение прежнее 1:1, ни одной новой
 // ветки не исполняется. Функция только читает: массивы/сообщения не меняются.
-function aiCmHiddenExportEffectiveOn(messages) {
+function aiCmHiddenExportEffectiveOn(messages: AiCmExportMessage[]): boolean {
   var userOn = (typeof aiCmIncludeHiddenInExport !== 'undefined') && aiCmIncludeHiddenInExport === true;
   try {
     var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
@@ -137,7 +137,7 @@ function aiCmHiddenExportEffectiveOn(messages) {
 // (сырой режим) у Gemini/Perplexity/ChatGPT/Claude/GSA, но у Qwen/DeepSeek OFF остаётся
 // force-exclude; OFF без reasoning = прежний OFF-путь у всех. Выбор ветки по-прежнему ОДИН,
 // санация не переписана.
-function aiCmSanitizeEmitUserTexts(messages) {
+function aiCmSanitizeEmitUserTexts(messages: AiCmExportMessage[]): AiCmExportMessage[] {
   try {
     var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
     if (!P || typeof P.sanitizeEmitMessages !== 'function') {
@@ -183,7 +183,7 @@ function aiCmSanitizeEmitUserTexts(messages) {
 // buildHistoryMessages(), aiCmWriteCurrentHistory() и doAutoExportDownload().
 // v12 (O-18, фаза 2): чаты, для которых сетевой дозапрос истории уже выполняется, —
 // защита от параллельных триггеров автоэкспорта (повторный вход после дозапроса).
-var aiCmNetSyncInFlight = {};
+var aiCmNetSyncInFlight: Record<string, number> = {};
 // ===== O-37 (C): REASONING СЕРВИСА БЕЗ СЕТИ — В РЕНДЕР ЭКСПОРТА =====
 // Живой факт (21:59, chat=4cf29053): стрим дал размышление (qwen-stream-end reasoningFrames=2
 // reasoningLen=214, usage reasoning=68, строка reasoning в попапе есть), а в txt/md секции
@@ -200,12 +200,12 @@ var aiCmNetSyncInFlight = {};
 // разбором пары секций из текста хода (сетевая база). Нормализация — ЧИСТАЯ функция пайплайна
 // (applyReasoningExportFields), идёт ПО МЕСТУ и ДО единственной точки санации; прочие платформы
 // не задеты вовсе: предикат сайта false → массив не трогается (байты прежние 1:1).
-function aiCmReasoningExportSite() {
+function aiCmReasoningExportSite(): boolean {
   try { return !!(currentAdapter && currentAdapter.siteName === 'qwen'); } catch (eRes) { return false; }
 }
 // Тонкая обёртка точки сбора: флаг сайта + чистый хелпер пайплайна. Хелпера нет (срез-
 // песочница) → массив не тронут; сайт не тот → хелпер возвращается сразу (0 изменений).
-function aiCmPrepareReasoningForExport(messages) {
+function aiCmPrepareReasoningForExport(messages: AiCmExportMessage[]): AiCmExportMessage[] {
   try {
     var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
     if (!P || typeof P.applyReasoningExportFields !== 'function') return messages;
@@ -213,7 +213,7 @@ function aiCmPrepareReasoningForExport(messages) {
   } catch (ePrep) { swallowSoft(ePrep, 'export:aiCmPrepareReasoningForExport'); }
   return messages;
 }
-function aiCmCollectExportSource() {
+function aiCmCollectExportSource(): AiCmExportMessage[] {
   var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
   var texts = lastBaseTexts || [];
   // O-37 (C): хелпер нормализации reasoning берём typeof-гардом ОДИН раз (он объявлен рядом,
@@ -259,7 +259,7 @@ function aiCmCollectExportSource() {
         var dm = lastDetailMessages[i] || {};
         var r = dm.role || '';
         // FIX (Claude md): 'human' (парсер Claude) нормализуется в 'user' ровно как 'user'.
-        var msg = { role: (r === 'user' || r === 'human') ? 'user' : 'assistant', text: sanitizeGeminiText(texts[i]) };
+        var msg: AiCmExportMessage = { role: (r === 'user' || r === 'human') ? 'user' : 'assistant', text: sanitizeGeminiText(texts[i]) };
         // Claude md (ДИАГНОСТИКА — только измерение под гейтом aiCmDebug): роль сетевого снимка
         // и роль после нормализации. Маркер claude-role-* SCOPED по сайту (currentAdapter):
         // живой замер идёт по Claude-цепочке, чужие сайты строку этого маркера не получают.
@@ -362,7 +362,7 @@ function aiCmCollectExportSource() {
 //                          больше локального снимка → прежний путь 1:1;
 //   { blocked:true, ... }— в базе ТОЛЬКО архив: файл писать нельзя (латч fired не ставим);
 //   { msgs:[...], ... }  — сообщения объединённой базы (архив + live).
-function aiCmExportBaseSource(convId, localMsgs) {
+function aiCmExportBaseSource(convId: string | null, localMsgs: AiCmExportMessage[]): AiCmBaseSource | null {
   try {
     var site = (currentAdapter && currentAdapter.siteName) || '';
     var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
@@ -413,7 +413,7 @@ function aiCmExportBaseSource(convId, localMsgs) {
 // классификация чистой функцией пайплайна (sourceTierOf): архив+live / только архив / только live.
 // undefined — не Gemini (метка Gemini-ярусов у прочих сервисов смысла не имеет, а лишний байт в их
 // файлах запрещён), моста нет или MAIN не ответил: сборщики тогда не добавляют ни одного байта.
-function aiCmGetSourceTier() {
+function aiCmGetSourceTier(): string | undefined {
   try {
     if (!(currentAdapter && currentAdapter.siteName === 'gemini')) return undefined;
     if (typeof aiCmGeminiTurnsSnapshotSync !== 'function') return undefined;
@@ -428,14 +428,14 @@ function aiCmGetSourceTier() {
   } catch (eTier) { swallow(eTier, 'export:aiCmGetSourceTier'); }
 }
 
-function autoExportPerSiteKey(siteName) { return 'aiCmAutoExportPct_' + (siteName || ''); }
-function loadAutoExportPerSitePct() {
+function autoExportPerSiteKey(siteName: string): string { return 'aiCmAutoExportPct_' + (siteName || ''); }
+function loadAutoExportPerSitePct(): void {
   try {
     if (!isExtensionValid() || !chrome.storage || !chrome.storage.local) return;
     var site = (currentAdapter && currentAdapter.siteName) || '';
     if (!site) return;
     var key = autoExportPerSiteKey(site);
-    chrome.storage.local.get([key], function (data) {
+    chrome.storage.local.get([key], function (data: AiCmStorageData) {
       try {
         var raw = data && data[key];
         var n = parseInt(raw, 10);
@@ -455,8 +455,8 @@ function loadAutoExportPerSitePct() {
 // идут через aiCmLatchSet/aiCmLatchRemove. Гидратация асинхронная, поэтому
 // aiCmLatchCacheReady() дожидается её в initialize() ДО tryInit() — иначе первая проверка
 // вердикта (maybeAutoExport не async и синхронна) успела бы пройти по пустому кэшу.
-var sessionFiredCache = {};
-var aiCmLatchReadyPromise = null;
+var sessionFiredCache: Record<string, any> = {};
+var aiCmLatchReadyPromise: Promise<any> | null = null;
 function aiCmLatchCacheReady() {
   if (aiCmLatchReadyPromise) return aiCmLatchReadyPromise;
   aiCmLatchReadyPromise = Promise.resolve()
@@ -483,8 +483,8 @@ try { aiCmLatchCacheReady(); } catch (eO3init) { }
 // база успевает дозреть, а латч aiCmLateCheckByConv[cid] остаётся взведённым между попытками.
 var AI_CM_LATE_RETRY_MAX = 3;
 var AI_CM_LATE_RETRY_MS = 2000;
-var aiCmLateRetryByConv = {};
-function aiCmScheduleLateAutoExportRetry(cid) {
+var aiCmLateRetryByConv: Record<string, number> = {};
+function aiCmScheduleLateAutoExportRetry(cid: string | null): boolean {
   try {
     if (!cid) return false;
     var used = aiCmLateRetryByConv[cid] || 0;
@@ -502,7 +502,7 @@ function aiCmScheduleLateAutoExportRetry(cid) {
     return true;
   } catch (eSch) { swallowSoft(eSch, 'export:scheduleLateRetry'); return false; }
 }
-function aiCmTryLateAutoExport(cid) {
+function aiCmTryLateAutoExport(cid: string | null): void {
   try {
     if (!cid || !aiCmLateCheckByConv[cid]) return;
     if (baseComplete !== true) return;          // база ещё не полная — ждём дальше
@@ -596,7 +596,7 @@ function geminiDetectTrim(
 // Латч preTrimExportFired ставится сразу (одна попытка-цепочка на чат); инварианты
 // полноты как у автоэкспорта: baseComplete && лоадер не бежит && курсор ушёл.
 // Если не готово — ретрай ≤5 раз по 2с. autoExportFired НЕ трогаем.
-function maybeTrimExport(cid) {
+function maybeTrimExport(cid: string | null): void {
   try {
     if (!cid || preTrimExportFired[cid]) return;
     preTrimExportFired[cid] = 1; // одноразовый латч, независим от autoExportFired
@@ -628,7 +628,7 @@ function maybeTrimExport(cid) {
     debugLog('error', '[AI CM][auto-export] error:', e);
   }
 }
-function aiCmCancelDeferredHistWrite(cid) {
+function aiCmCancelDeferredHistWrite(cid?: string | null): void {
   try {
     if (!aiCmPendingHistWrite) return;
     if (cid && aiCmPendingHistWrite.convId !== cid) return;
@@ -664,7 +664,7 @@ function aiCmCancelDeferredHistWrite(cid) {
 // При baseComplete=1 вызов ниже не делает НИЧЕГО: байты снимка прежние (сравнение
 // «до/после» — R3), у прочих платформ поведение 1:1 (объединённая база — только Gemini).
 // =============================================================================
-function aiCmUnionFileMessages(cid, localMsgs, isLowConfidence) {
+function aiCmUnionFileMessages(cid: string | null, localMsgs: AiCmExportMessage[], isLowConfidence: boolean): AiCmExportMessage[] {
   try {
     if (isLowConfidence !== true) return localMsgs;
     if (typeof aiCmExportBaseSource !== 'function') return localMsgs;
@@ -687,7 +687,7 @@ function aiCmUnionFileMessages(cid, localMsgs, isLowConfidence) {
 // aiCmWriteCurrentHistory БЕЗ изменения логики: по нему же считает histKey/pct ресинк
 // метрик (content.js:aiCmResyncMetricsAfterFlush), иначе UI остаётся на устаревшем срезе
 // (101 msgs), пока в историю уже записаны 120.
-function aiCmCurrentBaseSnapshot(cid) {
+function aiCmCurrentBaseSnapshot(cid?: string | null): AiCmExportMessage[] | null {
   try {
     var cidSnap = cid || lastEmitConvId || getCurrentConvId() || '';
     var msgs = (typeof aiCmCollectExportSource === 'function') ? aiCmCollectExportSource() : null;
@@ -702,7 +702,7 @@ function aiCmCurrentBaseSnapshot(cid) {
     return msgs;
   } catch (eSnap) { swallowSoft(eSnap, 'export:currentBaseSnapshot'); return null; }
 }
-function aiCmWriteCurrentHistory() {
+function aiCmWriteCurrentHistory(): void {
   try {
     if (!isExtensionValid() || !baseSeen || !baseText) return;
     var cid = lastEmitConvId || getCurrentConvId() || '';
@@ -746,12 +746,12 @@ function aiCmWriteCurrentHistory() {
       sourceTier: (typeof aiCmGetSourceTier === 'function') ? aiCmGetSourceTier() : undefined,
       messages: msgsWrite
     };
-    var histPatch = { aiCmHistory: histSnapshot };
+    var histPatch: Record<string, any> = { aiCmHistory: histSnapshot };
     histPatch['aiCmHistory:' + window.location.hostname] = aiCmHostHistoryRecord(histSnapshot);
     chrome.storage.local.set(histPatch);
   } catch (e) { debugLog('log', '[AI CM][export] silent-catch aiCmWriteCurrentHistory: ' + (e && e.message || e)); }
 }
-function aiCmFlushDeferredHistWrite(cid, reason) {
+function aiCmFlushDeferredHistWrite(cid: string | null, reason: string): void {
   try {
     var p = aiCmPendingHistWrite;
     if (!p) return;
@@ -780,12 +780,12 @@ function aiCmFlushDeferredHistWrite(cid, reason) {
     aiCmWriteCurrentHistory();
   } catch (e) { debugLog('log', '[AI CM][export] silent-catch aiCmFlushDeferredHistWrite: ' + (e && e.message || e)); }
 }
-function aiCmScheduleDeferredHistWrite(cid) {
+function aiCmScheduleDeferredHistWrite(cid: string | null): void {
   try {
     aiCmCancelDeferredHistWrite(); // один отложенный снапшот за сессию — свежий важнее
     debugLog('log', '[AI CM][export] deferred until base-complete convId=' + cid +
       ' loader=' + !!aiCmLoaderRunningByConv[cid] + ' baseComplete=' + baseComplete);
-    var p = { convId: cid, timer: null };
+    var p: any = { convId: cid, timer: null };
     function fireDeferredTimeout() {
       if (aiCmPendingHistWrite !== p) return;
       // v1.13.1: при скрытой вкладке «как есть» НЕ экспортируем — переносим deferred.
@@ -852,10 +852,10 @@ function aiCmScheduleDeferredHistWrite(cid) {
 }
 
 
-function loadAutoExportSettings() {
+function loadAutoExportSettings(): void {
   try {
     if (!isExtensionValid() || !chrome.storage || !chrome.storage.local) return;
-    chrome.storage.local.get(['aiCmAutoExport', 'aiCmAutoExportPct', 'aiCmAutoExportFmt'], function (data) {
+    chrome.storage.local.get(['aiCmAutoExport', 'aiCmAutoExportPct', 'aiCmAutoExportFmt'], function (data: AiCmStorageData) {
       try {
         data = data || {};
         // v1.19.2 (M-13c): НОРМАЛИЗАЦИЯ ФЛАГА — нет БУЛЕВА enabled в загруженном объекте →
@@ -886,7 +886,7 @@ function loadAutoExportSettings() {
       }
     });
     try {
-      chrome.storage.onChanged.addListener(function (changes, areaName) {
+      chrome.storage.onChanged.addListener(function (changes: AiCmStorageChanges, areaName: string) {
         if (areaName !== 'local') return;
         if (changes.aiCmAutoExport || changes.aiCmAutoExportPct || changes.aiCmAutoExportFmt) {
           loadAutoExportSettings();
@@ -902,16 +902,16 @@ function loadAutoExportSettings() {
 // чтение настроек автоэкспорта (loadAutoExportSettings) не тронуто ни строкой — его
 // сигнатура, набор ключей и строка нормализации флага запинены (M-13). Default ВЫКЛ:
 // отсутствие ключа/не-булево значение — тот же текущий экспорт, что и раньше.
-function loadExportHiddenSetting() {
+function loadExportHiddenSetting(): void {
   try {
     if (!isExtensionValid() || !chrome.storage || !chrome.storage.local) return;
-    chrome.storage.local.get(['aiCmIncludeHiddenInExport'], function (data) {
+    chrome.storage.local.get(['aiCmIncludeHiddenInExport'], function (data: AiCmStorageData) {
       try {
         aiCmIncludeHiddenInExport = !!(data && data.aiCmIncludeHiddenInExport === true);
       } catch (eParse7) { }
     });
     try {
-      chrome.storage.onChanged.addListener(function (changes, areaName) {
+      chrome.storage.onChanged.addListener(function (changes: AiCmStorageChanges, areaName: string) {
         if (areaName !== 'local') return;
         if (changes.aiCmIncludeHiddenInExport) {
           aiCmIncludeHiddenInExport = (changes.aiCmIncludeHiddenInExport.newValue === true);
@@ -926,7 +926,7 @@ function loadExportHiddenSetting() {
 // convId автоэкспорта. У GSA надёжного id в URL нет (extractConvIdFromUrl → ''), поэтому
 // идентификатором разговора служит threadId снапшота (detail.threadId → lastThreadId):
 // он попадает и в ключ латча (site+convId), и в диагностику. Прочие сервисы — URL-id 1:1.
-function aiCmAutoExportConvId() {
+function aiCmAutoExportConvId(): string {
   try {
     var urlCid = getCurrentConvId() || '';
     var site = (currentAdapter && currentAdapter.siteName) || '';
@@ -949,7 +949,7 @@ function aiCmAutoExportConvId() {
 // чистится, когда threadId снаффнутого DOM отличается от треда последнего сброса.
 // Смена «пусто → тред» на холодном входе — тоже смена (state.js: прежнее состояние
 // документа права на файл не даёт, ср. O-27/c). Сброс идемпотентен.
-function aiCmGsaNetworkCompleteReset(threadId) {
+function aiCmGsaNetworkCompleteReset(threadId?: string | null): boolean {
   try {
     var tid = (threadId === undefined || threadId === null) ? '' : String(threadId);
     var prev = (typeof aiCmGsaNetworkCompleteThreadId === 'string') ? aiCmGsaNetworkCompleteThreadId : null;
@@ -965,7 +965,7 @@ function aiCmGsaNetworkCompleteReset(threadId) {
 }
 // Взвод: ид — ровно тот же, что у читателя и у латча fired (aiCmAutoExportConvId), чтобы
 // ключ не разъехался при пустом detail.threadId; fallback — threadId снимка.
-function aiCmGsaNetworkCompleteSet(threadId) {
+function aiCmGsaNetworkCompleteSet(threadId?: string | null): boolean {
   try {
     var site = (currentAdapter && currentAdapter.siteName) || '';
     if (site !== 'google_search') return false;
@@ -979,7 +979,7 @@ function aiCmGsaNetworkCompleteSet(threadId) {
 }
 // Чтение: true — по этому разговору сеть ОДНАЖДЫ отдала полную историю (и с тех пор
 // вердикт не регрессировал по-настоящему: последующие эмиты с historyComplete=0 не считаются).
-function aiCmGsaNetworkCompleteIs(site, cid) {
+function aiCmGsaNetworkCompleteIs(site: string, cid: string | null): boolean {
   try {
     if (site !== 'google_search') return false; // прочие сервисы латч не читают вовсе
     if (!cid) return false;
@@ -990,17 +990,17 @@ function aiCmGsaNetworkCompleteIs(site, cid) {
 // v1.18 (F5): состояние probe-полноты GSA (MAIN → ISOLATED, CustomEvent
 // 'ai-cm-gsa-probe-state'). Нужно ТОЛЬКО для ярлыка причины skip: probe-running,
 // пока вердикта классификатора ещё нет. Сам вердикт полноты — baseComplete (один).
-var /** @type {Record<string, number>} */ aiCmGsaProbeByThread = {};    // threadId -> 1 (probe в полёте)
+var aiCmGsaProbeByThread: Record<string, number> = {};    // threadId -> 1 (probe в полёте)
 var aiCmGsaProbeRunning = false;  // последнее состояние (фолбэк для пустого convId)
 window.addEventListener('ai-cm-gsa-probe-state', function (/** @type {CustomEvent} */ ev) {
   try {
-    var d = ev && ev.detail;
+    var d = ev && (ev as any).detail;
     if (!d) return;
     aiCmGsaProbeRunning = d.running === true;
     if (d.threadId) aiCmGsaProbeByThread[d.threadId] = aiCmGsaProbeRunning ? 1 : 0;
   } catch (eGsaProbe) { }
 });
-function aiCmGsaProbeRunningFor(cid) {
+function aiCmGsaProbeRunningFor(cid: string | null): boolean {
   try {
     if (cid && typeof aiCmGsaProbeByThread[cid] !== 'undefined') return aiCmGsaProbeByThread[cid] === 1;
     return aiCmGsaProbeRunning === true;
@@ -1014,7 +1014,7 @@ function aiCmGsaProbeRunningFor(cid) {
 // family → сигнатура); здесь — читатель/писатель. Только логи: вердикт гейта, латчи fired,
 // пороги и байты файла не затрагиваются.
 function aiCmAutoExportLogOnChange(family, key) { // family/key: string (JSDoc-типы вне сигнатуры: fnDecl-хелпер тестов балансирует скобки и {…} в сигнатуре ломает срез)
-  var self = /** @type {any} */ (aiCmAutoExportLogOnChange);
+  var self: any = aiCmAutoExportLogOnChange;
   try {
     var f = String(family || '');
     var k = (key === undefined || key === null) ? '' : String(key);
@@ -1035,7 +1035,7 @@ function aiCmAutoExportLogOnChange(family, key) { // family/key: string (JSDoc-�
 // же причина печатается снова РОВНО ОДИН раз (первый skip после fired). Функция только ЧИТАЕТ
 // существующие латчи (O-38 once-латч + in-memory autoExportFired по ключу 'site|convId'),
 // ничего не пишет и ни на что не влияет.
-function aiCmAutoExportLogFiredBit(site, cid) {
+function aiCmAutoExportLogFiredBit(site: string, cid: string | null): number {
   try {
     var c = (cid === undefined || cid === null) ? '' : String(cid);
     if (!c) return 0;
@@ -1049,7 +1049,7 @@ function aiCmAutoExportLogFiredBit(site, cid) {
 // not-complete в общем пути: не чаще 1 раза на разговор для причин отсутствия полноты.
 // O-29: остальные причины (already-fired, below-threshold) — тоже не чаще 1 раза, но по
 // правилу «на смену состояния»: сигнатура = разговор + причина + бит латча fired.
-function aiCmGsaAutoExportSkipLog(reason, cid, percentage) {
+function aiCmGsaAutoExportSkipLog(reason: string, cid: string | null, percentage: number): void {
   try {
     if (reason === 'not-complete' || reason === 'probe-running') {
       var k = 'gsa:' + cid;
@@ -1095,12 +1095,12 @@ function aiCmGsaAutoExportSkipLog(reason, cid, percentage) {
 // отвечает только в MAIN-мире chat.deepseek.com.
 var AI_CM_DS_STREAM_DEFER_MS = 800;    // дебаунс отложенного автоэкспорта
 var AI_CM_DS_STREAM_DEFER_MAX = 150;   // ≈2 мин; дальше буфер флашим принудительно
-var aiCmDsStreamDeferByConv = {};      // cid -> число отложек
-var aiCmDsStreamDeferLogged = {};      // cid -> 1 (антиспам строки defer)
-var aiCmDsStreamFlushLogged = {};      // cid -> 1 (антиспам строки stream-flush)
+var aiCmDsStreamDeferByConv: Record<string, number> = {};      // cid -> число отложек
+var aiCmDsStreamDeferLogged: Record<string, number> = {};      // cid -> 1 (антиспам строки defer)
+var aiCmDsStreamFlushLogged: Record<string, number> = {};      // cid -> 1 (антиспам строки stream-flush)
 
 // Синхронный запрос состояния живого SSE-потока DeepSeek (MAIN-мир перехватчика).
-function aiCmDeepseekStreamProbe() {
+function aiCmDeepseekStreamProbe(): any {
   try {
     var resp = null;
     var h = function (ev) { resp = ev.detail; };
@@ -1111,7 +1111,7 @@ function aiCmDeepseekStreamProbe() {
   } catch (e) { return null; }
 }
 // Активен ли стрим ИМЕННО этого чата. Прочие сервисы/чаты → false (поведение 1:1).
-function aiCmDeepseekStreamActiveFor(cid) {
+function aiCmDeepseekStreamActiveFor(cid: string | null): boolean {
   try {
     if (((currentAdapter && currentAdapter.siteName) || '') !== 'deepseek') return false;
     var snap = aiCmDeepseekStreamProbe();
@@ -1121,7 +1121,7 @@ function aiCmDeepseekStreamActiveFor(cid) {
   } catch (e) { return false; }
 }
 // Принудительный сброс незакрытого SSE-буфера DeepSeek в memory-базу (ручной экспорт).
-function aiCmFlushLiveStreamForExport(cid) {
+function aiCmFlushLiveStreamForExport(cid: string | null): boolean {
   try {
     if (!aiCmDeepseekStreamActiveFor(cid)) return false;
     window.dispatchEvent(new CustomEvent('ai-cm-deepseek-stream-flush'));
@@ -1133,7 +1133,7 @@ function aiCmFlushLiveStreamForExport(cid) {
   } catch (e) { return false; }
 }
 // Гейт автоэкспорта: стрим жив → файл НЕ пишем, откладываем дебаунсом. true = отложено.
-function aiCmDeferAutoExportOnLiveStream(cid, percentage) {
+function aiCmDeferAutoExportOnLiveStream(cid: string | null, percentage: number): boolean {
   try {
     if (!cid) return false;
     if (!aiCmDeepseekStreamActiveFor(cid)) return false;
@@ -1170,7 +1170,7 @@ var aiCmAutoExportSkipReasonState = { reason: '' };
 // O-33: печать причины base-pending каноническим aiCmDiagLine под гейтом aiCmDebug
 // (прецедент O-27/O-32, utils/debug.ts). Гейт выключен → НИ ОДНОЙ строки; функция только
 // читает уже посчитанные значения и на поведение/байты файла не влияет никогда.
-function aiCmAutoExportBasePendingLog(cid, percentage) {
+function aiCmAutoExportBasePendingLog(cid: string | null, percentage: number): void {
   try {
     if (typeof aiCmDiagLine !== 'function') return;
     var site = (typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName) || '';
@@ -1210,7 +1210,7 @@ function aiCmAutoExportBasePendingLog(cid, percentage) {
 //   - ни одна ветка/порог/латч не тронуты: вызов стоит перед единственным return'ом
 //     «skip» и перед вызовом doAutoExportDownload, ничего не возвращает и не меняет.
 // =============================================================================
-function aiCmAutoExportDecisionDiag(percentage, verdictSkip, reason) {
+function aiCmAutoExportDecisionDiag(percentage: number, verdictSkip: boolean, reason?: string): boolean {
   try {
     if (typeof aiCmDiagLine !== 'function') return false;
     var site = (typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName) || '';
@@ -1260,11 +1260,11 @@ function aiCmAutoExportDecisionDiag(percentage, verdictSkip, reason) {
 // разрешён с [LOW CONFIDENCE]_. Предикат сайта живёт здесь, рядом с остальными:
 // в emit-пайплайн имена платформ не проникают (пин O-37). Прочие сайты — всегда false.
 // 4-й аргумент аддитивен: старый 3-аргументный вызов (partialSoft === undefined) → true.
-function aiCmHistoryPaginationIncomplete(site, baseSeen, baseComplete, partialSoft) {
+function aiCmHistoryPaginationIncomplete(site: string, baseSeen: boolean, baseComplete: boolean, partialSoft?: boolean): boolean {
   return site === 'qwen' && baseSeen === true && baseComplete !== true && partialSoft !== true;
 }
 
-function maybeAutoExport(percentage) {
+function maybeAutoExport(percentage: number): void {
   try {
     var s = autoExportSettings;
     if (!s || s.enabled !== true) return;
@@ -1544,7 +1544,7 @@ function maybeAutoExport(percentage) {
 // порог, что и первый; сам maybeAutoExport и его гейты/порядок НЕ тронуты (запинованы).
 // typeof-гарды: в срез-песочницах тестов части состояния может не быть — фолбэк 90, как у
 // глобального пути 1:1.
-function aiCmEffectiveAutoExportThreshold(siteName) {
+function aiCmEffectiveAutoExportThreshold(siteName: string): number {
   try {
     var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
     var s = (typeof autoExportSettings === 'object' && autoExportSettings) ? autoExportSettings : null;
@@ -1581,7 +1581,7 @@ var aiCmAutoExportNamesUsed = Object.create(null);
 //   3) только после этого стартует скачивание.
 // Байты файла, маска имени, формат и гейты не изменяются: сюда приходит уже собранный
 // content. Возвращает ИТОГОВОЕ имя файла (его печатает fired-строка).
-function aiCmAutoExportStartDownload(content, file, fmt) {
+function aiCmAutoExportStartDownload(content: string, file: string, fmt: string): string {
   var Pdl = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
   var used = (typeof aiCmAutoExportNamesUsed === 'object' && aiCmAutoExportNamesUsed)
     ? aiCmAutoExportNamesUsed : null;
@@ -1611,7 +1611,7 @@ function aiCmAutoExportStartDownload(content, file, fmt) {
 // (дозапрос делает перехватчик DeepSeek; здесь только ожидание с таймаутом 3 с).
 // Латч autoExportFired и прочие гейты стоят ПОСЛЕ дозапроса, поэтому повторный вход
 // не может ни задвоить файл, ни потерять латч; при недоступной сети поведение прежнее.
-function doAutoExportDownload(cid, percentage, reason, netSynced) {
+function doAutoExportDownload(cid: string | null, percentage: number, reason: string, netSynced?: boolean): void {
   try {
     // v2.0.35: файл не пишем, пока MAIN-мир догружает текст вложений в снимок
     // (иначе в нём заглушка вместо содержимого). Ожидание очереди — общий хелпер
@@ -1956,7 +1956,7 @@ function doAutoExportDownload(cid, percentage, reason, netSynced) {
 // может уже не прийти, а раньше стрельнуть помешал skip reason=loader-running.
 window.addEventListener('ai-cm-loader-state', function (/** @type {CustomEvent} */ ev) {
   try {
-    var d = ev && ev.detail;
+    var d = ev && (ev as any).detail;
     if (!d || !d.convId) return;
     // v95 (FALSE-CURSOR-LIVE, зеркало v94): сервер УЖЕ подтвердил полноту снапшота
     // (reachedStart + historyFullByQuiet/baseComplete) — pendingCursor в этом состоянии
@@ -2081,7 +2081,7 @@ window.addEventListener('ai-cm-loader-state', function (/** @type {CustomEvent} 
 // без флага решение принимают прежние три латча — поведение 1:1.
 // Функции объявлены в конце модуля (function-декларации хойстятся в общий скоуп контент-скрипта):
 // вставка выше сдвинула бы строки, построчно закреплённые tests/fixtures/catch-whitelist.json.
-function aiCmAutoExportFiredInStorage(cid) {
+function aiCmAutoExportFiredInStorage(cid: string | null): boolean {
   try {
     if (!cid) return false;
     // O-59 адресован qwen: только там SPA-возврат пересобирает виджет, оставляя тот же чат.
@@ -2092,7 +2092,7 @@ function aiCmAutoExportFiredInStorage(cid) {
   } catch (e) { swallowSoft(e, 'export:autoexport-fired-storage-read'); return false; }
 }
 
-function aiCmAutoExportMarkFiredInStorage(cid, reason) {
+function aiCmAutoExportMarkFiredInStorage(cid: string | null, reason: string): boolean {
   try {
     // pre-trim — спасательный экспорт перед обрезкой: латч ему не положен (та же семантика,
     // что у блока латчей в doAutoExportDownload) — иначе поздний честный файл был бы запрещён.
@@ -2111,7 +2111,7 @@ function aiCmAutoExportMarkFiredInStorage(cid, reason) {
 // глобальный лексический скоуп, поэтому объявления выше видны всем модулям и
 // content.js по прежним именам. Api — для инструментов, отладки и тестов.
 (function () {
-  var Api = {};
+  var Api: any = {};
   Api.sanitizeGeminiText = sanitizeGeminiText;
   Api.aiCmCollectExportSource = aiCmCollectExportSource;
   Api.aiCmExportBaseSource = aiCmExportBaseSource;
@@ -2149,3 +2149,29 @@ function aiCmAutoExportMarkFiredInStorage(cid, reason) {
   if (typeof module !== 'undefined' && module.exports) module.exports = Api;
   if (typeof window !== 'undefined') window.AiCmExportManager = Api;
 })();
+
+// ========== Core Wave 2: типы модуля (EOF-блок) ==========
+// Структуры экспорта и chrome.storage. Хвост файла: аннотации выше не сдвигают
+// строки, поэтому line-числа catch-whitelist и source-пины тестов прежние.
+// AiCmExportMessage/AiCmHashMap объявлены в core/base-handler.ts (оба файла —
+// classic-скрипты, объявления глобальны) и здесь только используются.
+
+/** Источник базы файла автоэкспорта (T1-fix#3): null — прежний путь 1:1. */
+interface AiCmBaseSource {
+  blocked: boolean;
+  reason?: string;
+  msgs?: AiCmExportMessage[];
+  baseCount?: number;
+  liveCount?: number;
+  archiveCount?: number;
+}
+
+/** Снимок chrome.storage.local: ключи читаются по имени, значения — из storage. */
+interface AiCmStorageData {
+  [key: string]: any;
+}
+
+/** Объект chrome.storage.onChanged: ключ → { oldValue, newValue }. */
+interface AiCmStorageChanges {
+  [key: string]: { oldValue?: any; newValue?: any };
+}

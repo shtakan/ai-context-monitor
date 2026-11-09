@@ -7,23 +7,25 @@
  * уже есть и публикуется как window.AiCmAistudioFiles.pending() (счётчик незавершённых
  * загрузок + отложенный ре-эмит снимка).
  *
- * Контракт фикса (core/base-handler.js, рядом с дренажом DeepSeek/Qwen):
+ * Контракт фикса (core/base-handler.ts, рядом с дренажом DeepSeek/Qwen):
  *   1. aiCmFilesDrainDefer() — узкий гейт siteName === 'aistudio'; pending <= 0 →
  *      сразу пишем файл (поведение всех прочих сайтов не меняется);
  *   2. pending > 0 → файр откладывается на 500 мс и перепроверяется, повторные триггеры
  *      не плодят файлы (per-cid реестр таймеров);
  *   3. общий потолок ожидания 5000 мс: не дождались — пишем файл, чтобы не потерять экспорт;
- *   4. вызов стоит ПЕРВОЙ строкой doAutoExportDownload (core/export-manager.js) под
+ *   4. вызов стоит ПЕРВОЙ строкой doAutoExportDownload (core/export-manager.ts) под
  *      typeof-гардом, без слова aistudio в самом менеджере (R1: чужая платформа не
  *      проникает в проводку); срез-песочницы тестов без хелпера видят прежнее
  *      поведение 1:1; дренаж DeepSeek/Qwen не тронут.
  */
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const CONTENT = require('./helpers/content-source.js').contentSource;
-const EXPORT_MANAGER_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const EXPORT_MANAGER_SRC = read('core/export-manager.ts');
 const AISTUDIO_FILES_SRC = fs.readFileSync(path.join(ROOT, 'core', 'aistudio-files.js'), 'utf8');
 
 // Рез по балансу фигурных скобок (как в tests/autoexport-export-isolation-e1.test.js).

@@ -9,7 +9,7 @@
  *
  * Стенд: РЕАЛЬНЫЙ core/deepseek-intercept.js в jsdom с УПРАВЛЯЕМЫМ телом ответа
  * (ReadableStream: чанки подаются вручную) + РЕАЛЬНЫЕ maybeAutoExport/doAutoExportDownload
- * из core/export-manager.js в песочнице `with(ctx)` (как tests/autoexport-settings-m13),
+ * из core/export-manager.ts в песочнице `with(ctx)` (как tests/autoexport-settings-m13),
  * где ctx.window === jsdom-window: CustomEvent-мост probe/flush говорит с живым
  * перехватчиком, а тело файла собирают реальные сборщики utils/export-text-builders.ts.
  *
@@ -27,6 +27,8 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('../helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 const { JSDOM, VirtualConsole } = require('jsdom');
 
@@ -38,7 +40,7 @@ const ROOT = path.join(__dirname, '..', '..');
 // Step D.1: ядро декомпозировано — диагностика уехала в core/deepseek-diag.js, поэтому
 // стенд грузит КОНКАТЕНАЦИЮ модулей + ядра (как js[] одного registration в браузере).
 const INTERCEPT_SRC = require('../helpers/deepseek-intercept-source.js').deepseekSource;
-const EXPORT_MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const EXPORT_MGR_SRC = read('core/export-manager.ts');
 
 // Рез по балансу фигурных скобок (стиль tests/autoexport-settings-m13.test.js).
 function fnDecl(src, name) {

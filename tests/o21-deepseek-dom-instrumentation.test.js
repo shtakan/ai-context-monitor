@@ -13,7 +13,7 @@
  *      skipNoRealContent, сэмпл классов первых ТРЁХ узлов и детекцию инъекций соседа
  *      (маркеры BetterDeepSeek/BDS:/better-deepseek/bds- в первых 50 КБ HTML);
  *   3. строка `[AI CM][diag] o21-source-select` печатается в ЕДИНОЙ точке выбора источника
- *      базы (core/export-manager.js:aiCmCollectExportSource) и несёт domMsgs/netMsgs/
+ *      базы (core/export-manager.ts:aiCmCollectExportSource) и несёт domMsgs/netMsgs/
  *      sourceSelected/reason; маркер SCOPED по сайту — чужие сайты строку не получают;
  *   4. БАЙТЫ ПОВЕДЕНИЯ ПРЕЖНИЕ: messages/роли/hiddenReasoning из extractMessages() при
  *      включённом и выключенном гейте идентичны (инструментирование — только чтение);
@@ -25,6 +25,8 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 // jsdom-окружение jest не даёт TextEncoder/TextDecoder — без полифилла require('jsdom')
@@ -46,7 +48,7 @@ const BASE_ADAPTER_SRC = readModuleSource(path.join(ADAPTER_DIR, 'base-adapter.t
 // Для source-пинов ниже нужен исходник как есть на диске: транспиляция переформатирует
 // литералы и добавляет `__publicField(...)` для объявленных полей класса.
 const ADAPTER_RAW = fs.readFileSync(path.join(ADAPTER_DIR, 'deepseek-adapter.ts'), 'utf8');
-const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const MGR_SRC = read('core/export-manager.ts');
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 
 const PREFIX = '[AI CM][diag] ';
@@ -225,10 +227,10 @@ describe('O-21: байты поведения прежние (инструмен
 });
 
 // =====================================================================================
-// (2) Выбор источника базы DOM vs network: core/export-manager.js:aiCmCollectExportSource
+// (2) Выбор источника базы DOM vs network: core/export-manager.ts:aiCmCollectExportSource
 // =====================================================================================
 //
-// Песочница точки входа: РЕАЛЬНЫЕ функции core/export-manager.js (sanitizeGeminiText →
+// Песочница точки входа: РЕАЛЬНЫЕ функции core/export-manager.ts (sanitizeGeminiText →
 // aiCmSanitizeEmitUserTexts → aiCmCollectExportSource) с каноническими aiCmDiagOn/aiCmDiagLine
 // (границы и набор — как в O-40-сьюте, где эта песочница уже проверена).
 const DEBUG_API = new Function(

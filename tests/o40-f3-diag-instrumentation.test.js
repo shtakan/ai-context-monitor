@@ -29,7 +29,7 @@
  *       обеспечен прогоном полного сьюта и не переписанными ожиданиями.
  *
  * Маркеры (полные имена, ищутся по префиксу '[AI CM][diag] '):
- *   o40-emit-entry — точка входа aiCmSanitizeEmitUserTexts (core/export-manager.js):
+ *   o40-emit-entry — точка входа aiCmSanitizeEmitUserTexts (core/export-manager.ts):
  *                    hidden=on|off, branch=includeHiddenExportBlocks|sanitizeEmitMessages|
  *                    no-pipeline, msgsIn, msgsOut;
  *   o40-emit-msg   — sanitizeEmitMessages (utils/export-emit-pipeline.ts) на КАЖДОЕ сообщение:
@@ -43,6 +43,8 @@
  * F1-F6, точка входа и байты прочих входов не менялись (R-пины ниже).
  */
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
@@ -51,7 +53,7 @@ const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/build
 
 const ROOT = path.join(__dirname, '..');
 const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
-const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const MGR_SRC = read('core/export-manager.ts');
 // R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
 const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
@@ -322,7 +324,7 @@ const EMIT_INPUT = [
 ];
 
 /**
- * Песочница точки входа: РЕАЛЬНЫЕ функции core/export-manager.js (sanitizeGeminiText →
+ * Песочница точки входа: РЕАЛЬНЫЕ функции core/export-manager.ts (sanitizeGeminiText →
  * aiCmSanitizeEmitUserTexts → aiCmCollectExportSource). Канонические aiCmDiagOn/aiCmDiagLine
  * НЕ объявляются локально — разрешаются из общего глобального мира (как в контент-скрипте),
  * поэтому гейт и запись строк идут тем же каналом, что у пайплайна.

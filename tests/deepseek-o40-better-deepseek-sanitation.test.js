@@ -45,11 +45,13 @@
  *
  * Точка применения — та же, что у O-20: чистая функция sanitizeEmitMessages() пайплайна
  * (utils/export-emit-pipeline.ts), вызываемая ЕДИНСТВЕННОЙ точкой сбора aiCmCollectExportSource()
- * в core/export-manager.js через aiCmSanitizeEmitUserTexts(); гейтинг — только OFF-путь
+ * в core/export-manager.ts через aiCmSanitizeEmitUserTexts(); гейтинг — только OFF-путь
  * тумблера aiCmIncludeHiddenInExport (ON-путь — сырой режим, обходит и O-20, и O-40).
  * Токены/проценты не пересчитываются (паритет O-20).
  */
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
@@ -58,7 +60,7 @@ const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/build
 
 const ROOT = path.join(__dirname, '..');
 const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
-const EXPORT_MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const EXPORT_MGR_SRC = read('core/export-manager.ts');
 
 const ARTIFACT = 'deepseek-565a7cd8-2026-09-20_11-40.txt';
 const BDS_OPEN = '<BetterDeepSeek>';
@@ -99,16 +101,16 @@ const F1 = [
   "adapters/perplexity-adapter.ts",
   "core/",
   "core/background.js",
-  "core/base-handler.js",
+  "core/base-handler.ts",
   "core/claude-intercept.js",
   "core/content.js",
   "core/deepseek-intercept.js",
   // --- артефакт, строки 26-50 ---
-  "core/export-manager.js",
+  "core/export-manager.ts",
   "core/gemini-hidden-scroll.js",
   "core/gemini-intercept.js",
   "core/google-search-intercept.js",
-  "core/hybrid-tail.js",
+  "core/hybrid-tail.ts",
   "core/page-intercept.js",
   "core/perplexity-intercept.js",
   "core/state.js",
@@ -1157,16 +1159,16 @@ const F5 = '<original_task>' + '\n' + [
   "adapters/perplexity-adapter.ts",
   "core/",
   "core/background.js",
-  "core/base-handler.js",
+  "core/base-handler.ts",
   "core/claude-intercept.js",
   "core/content.js",
   "core/deepseek-intercept.js",
   // --- артефакт, строки 1024-1048 ---
-  "core/export-manager.js",
+  "core/export-manager.ts",
   "core/gemini-hidden-scroll.js",
   "core/gemini-intercept.js",
   "core/google-search-intercept.js",
-  "core/hybrid-tail.js",
+  "core/hybrid-tail.ts",
   "core/page-intercept.js",
   "core/perplexity-intercept.js",
   "core/state.js",
@@ -1362,16 +1364,16 @@ const F6 = '<original_task>' + '\n' + [
   "adapters/perplexity-adapter.ts",
   "core/",
   "core/background.js",
-  "core/base-handler.js",
+  "core/base-handler.ts",
   "core/claude-intercept.js",
   "core/content.js",
   "core/deepseek-intercept.js",
   // --- артефакт, строки 1248-1272 ---
-  "core/export-manager.js",
+  "core/export-manager.ts",
   "core/gemini-hidden-scroll.js",
   "core/gemini-intercept.js",
   "core/google-search-intercept.js",
-  "core/hybrid-tail.js",
+  "core/hybrid-tail.ts",
   "core/page-intercept.js",
   "core/perplexity-intercept.js",
   "core/state.js",
@@ -2020,7 +2022,7 @@ describe('O-40 (R): байтовые регрессии', () => {
 });
 
 // =====================================================================================
-// Песочница РЕАЛЬНОЙ общей точки эмита core/export-manager.js (тот же приём, что в
+// Песочница РЕАЛЬНОЙ общей точки эмита core/export-manager.ts (тот же приём, что в
 // tests/export-sanitize.test.js): один вызов = один снимок страницы.
 // =====================================================================================
 function makeEmitter(opts) {

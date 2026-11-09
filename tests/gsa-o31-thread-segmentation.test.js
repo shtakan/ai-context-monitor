@@ -27,6 +27,8 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
@@ -366,7 +368,7 @@ describe('O-31 (в): регрессионный контур', () => {
     });
     const o11 = fs.readFileSync(path.join(ROOT, 'tests/gsa-autoexport-o11-name-collision.test.js'), 'utf8');
     expect(o11).toContain('-2');                             // пин «два файра за минуту → -2»
-    expect(fs.readFileSync(path.join(ROOT, 'core/export-manager.js'), 'utf8'))
+    expect(read('core/export-manager.ts'))
       .toContain('function aiCmAutoExportStartDownload(');
   });
 });

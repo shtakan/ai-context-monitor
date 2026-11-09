@@ -16,6 +16,8 @@
  * строка при sessionStorage aiCmDebug=1 (без спама).
  */
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
@@ -24,8 +26,8 @@ const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/build
 
 const ROOT = path.join(__dirname, '..');
 const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
-const EXPORT_MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
-const BASE_HANDLER_SRC = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.js'), 'utf8');
+const EXPORT_MGR_SRC = read('core/export-manager.ts');
+const BASE_HANDLER_SRC = read('core/base-handler.ts');
 const PRINT_JS = fs.readFileSync(path.join(ROOT, 'print', 'print.js'), 'utf8');
 const PRINT_CLASSIC = require('./helpers/load-esm.js').loadAsClassic('print/print.js');
 
@@ -92,7 +94,7 @@ function block(src, startMarker, endMarker) {
   return sliceSource(src, startMarker, endMarker);
 }
 
-// Песочница с РЕАЛЬНОЙ общей точкой эмита core/export-manager.js
+// Песочница с РЕАЛЬНОЙ общей точкой эмита core/export-manager.ts
 // (sanitizeGeminiText → O-20-хелперы → aiCmCollectExportSource). Один makeEmitter = одна
 // «страница»: антиспам-карта причин живёт внутри песочницы и между вызовами сохраняется.
 function makeEmitter(opts) {
@@ -235,7 +237,7 @@ describe('O-20 (2): sanitizeEmitMessages — только role=user', () => {
 });
 
 // =====================================================================================
-// (3) Проводка: общая точка эмита core/export-manager.js
+// (3) Проводка: общая точка эмита core/export-manager.ts
 // =====================================================================================
 describe('O-20 (3): aiCmCollectExportSource — единая точка эмита', () => {
   test('сетевой снимок: user санирован, assistant и база байтово (токены не пересчитываются)', () => {
@@ -270,7 +272,7 @@ describe('O-20 (3): aiCmCollectExportSource — единая точка эмит
     expect(fnSrc).toContain('return aiCmSanitizeEmitUserTexts(out);');
     expect(fnSrc).toContain('if (norm.length > 0 && hasRoles) return aiCmSanitizeEmitUserTexts(norm);');
     expect(fnSrc.match(/aiCmSanitizeEmitUserTexts\(/g).length).toBe(3);
-    // база buildHistoryMessages (пин E-2 в core/base-handler.js) не переписана — дедуп на месте
+    // база buildHistoryMessages (пин E-2 в core/base-handler.ts) не переписана — дедуп на месте
     expect(BASE_HANDLER_SRC).toContain('return aiCmDedupeExportSource(aiCmCollectExportSource()).messages;');
   });
 });

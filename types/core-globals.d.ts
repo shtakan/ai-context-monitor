@@ -1,9 +1,10 @@
 /**
  * Ambient-контракт общего лексического скоупа content-скриптов (шаг 5 Фазы 1).
  *
- * core/*.js — классические скрипты манифеста MV3 (content_scripts[0].js), они делят
- * ОДИН глобальный лексический скоуп: объявления из core/state.ts, core/widget.ts,
- * core/base-handler.js, core/hybrid-tail.js, core/export-manager.js и utils-глобали
+ * core/*.js (content.js, background.js, page-intercept.js) — классические скрипты
+ * манифеста MV3 (content_scripts[0].js); core/*.ts (state, widget, base-handler,
+ * hybrid-tail, export-manager) вливаются в тот же бандл. Все они делят ОДИН
+ * глобальный лексический скоуп: объявления из этих файлов и utils-глобали
  * (ModelConfig, Tokenizer) видны соседям по имени. TypeScript при allowJs+checkJs
  * компилирует каждый файл изолированно и такие имена не видит (TS2304). Этот файл
  * описывает ШВУ между модулями, не меняя ни байта рантайма:
@@ -15,7 +16,7 @@
  *
  * ПРАВИЛО НЕДУБЛИРОВАНИЯ: имена, объявленные В САМОМ файле-владельце (self-declared,
  * например aiCmAdapterBaseCount/aiCmAdapterBaseSeen в content.js или countTokensPending
- * в state.js/background.js), здесь НЕ декларируются — TS видит их объявления напрямую.
+ * в state.ts/background.js), здесь НЕ декларируются — TS видит их объявления напрямую.
  * ИСКЛЮЧЕНИЕ — core/content.js после ESM-пилота (Ph2, шаг 3): файл начинается со
  * статического import'а, поэтому TS считает его модулем и его top-level объявления
  * больше не попадают в общий скоуп; для соседей они объявлены в секции ниже.
@@ -26,7 +27,7 @@
 // --- core/content.js: ESM-пилот (Roadmap Ph2, шаг 3) ---------------------------
 // core/content.js импортирует utils/platform.js, поэтому TypeScript компилирует его как
 // модуль: top-level function/var перестают быть глобалами общего скоупа, и
-// core/widget.ts, core/base-handler.js, core/export-manager.js получают TS2304.
+// core/widget.ts, core/base-handler.ts, core/export-manager.ts получают TS2304.
 // Рантайм не меняется: build.mjs втягивает платформу в тот же бандл esbuild, и в
 // content.js всё по-прежнему живёт в одной области видимости (это же пиннит
 // tests/build-integrity.test.js). Объявления ниже — шов для соседей по бандлу.
@@ -98,28 +99,10 @@ declare const AiCmExportBuilders: import('./export').ExportBuildersApi;
  */
 declare const AiCmExportEmitPipeline: import('./export').ExportPipelineApi;
 
-// --- core/base-handler.js: кросс-модульные функции ----------------------------
-
-/** Канонический текст базы (prepareExportMessages текущего снимка); typeof-гард у читателей. */
-declare function aiCmMetricBaseText(fallback: string): string;
-
-/** base-handler.js: история из последнего принятого снимка сети ([{role,text}]). */
-declare function buildHistoryMessages(): Array<{ role: string; text: string; [k: string]: unknown }>;
-
-/**
- * base-handler.js (Step D.10, A-лайт): полная цепочка перед композицией файла —
- * дождаться текста вложений (до 2000 мс) → сетевой дозапрос истории (O-18) → колбэк.
- * Старый порядок «сеть → файл» сохранён: ожидание вложений добавлено ПЕРЕД ним.
- * typeof-гард у читателей (content.js/export-manager.js) — в срез-песочницах без
- * этой функции вызов деградирует до aiCmExportNetSyncThen.
- */
-declare function aiCmExportFilesThenNetSync(
-  convId: string | null,
-  cb: (() => void) | null,
-  netTimeoutMs?: number
-): void;
-
-// --- core/hybrid-tail.js: кросс-модульные функции ----------------------------
+// --- core/hybrid-tail.ts: кросс-модульные функции ----------------------------
+// hybrid-tail.ts начинается с top-level import'а (utils/gemini-dom-parser.ts), поэтому TS
+// считает его модулем: top-level имена не попадают в общий скоуп конкатенации, и для
+// соседей (content.js, export-manager.ts) они объявлены здесь.
 
 /** Нормализация строки для сравнения скелетов (lowercase + сжатие разделителей). */
 declare function normalize(s: string): string;
@@ -127,112 +110,26 @@ declare function normalize(s: string): string;
 /** Снятие markdown-разметки (ссылки, код). */
 declare function stripMd(s: string): string;
 
-/** hybrid-tail.js: поиск узлов сообщений в DOM. */
+/** hybrid-tail.ts: поиск узлов сообщений в DOM. */
 declare function findMessageNodes(): { nodes: Element[]; sel: string };
 
-/** hybrid-tail.js: эффективный полный текст диалога (база + DOM-хвост). */
+/** hybrid-tail.ts: эффективный полный текст диалога (база + DOM-хвост). */
 declare function getEffectiveText(): string;
 
-/** hybrid-tail.js: эффективное число сообщений (база + DOM-хвост). */
+/** hybrid-tail.ts: эффективное число сообщений (база + DOM-хвост). */
 declare function getEffectiveCount(fallbackCount: number): number;
 
-// --- core/export-manager.js: кросс-модульные функции -------------------------
-
-/** Автоэкспорт при достижении порога; typeof-гард у читателей. */
-declare function maybeAutoExport(percentage: number): void;
-
-/** export-manager.js: единая точка сбора сообщений файла (санация O-20/O-40/O-42, роли O-39). */
-declare function aiCmCollectExportSource(): Array<{ role: string; text: string; reasoning?: string }> | null;
-
-/** export-manager.js: Санация текста Gemini перед экспортом. */
-declare function sanitizeGeminiText(s: string): string;
-
-/** export-manager.js: снимок Gemini-тёрнов для экспортной базы (convId/messages/...). */
-declare function aiCmGeminiTurnsSnapshotSync(): unknown | null;
-
-/**
- * export-manager.js: Two-Tier (v89) — метка достоверности источника файла по сводке
- * объединённой базы ('[MERGED: ARCHIVE+LIVE]' / '[ARCHIVE]' / '[BEST-EFFORT: LIVE CAPTURE]').
- * undefined — не Gemini, моста нет или MAIN не ответил; typeof-гард у читателей.
- */
-declare function aiCmGetSourceTier(): string | undefined;
-
-/** export-manager.js: сетевая синхронизация перед экспортом — сайт или null. */
-declare function aiCmExportNetSyncSite(): string | null;
-
-/** export-manager.js: сетевая синхронизация перед экспортом — колбэк по завершении. */
-declare function aiCmExportNetSyncThen(convId: string | null, cb: (() => void) | null, timeoutMs?: number): void;
-
 // --- Швы между core-модулями: остальные кросс-файловые имена ------------------
-// base-handler.js (используется content.js/export-manager.js)
-declare function aiCmHostHistoryRecord(snapshot: unknown): unknown;
-declare function aiCmLogIntraDedupe(role: string, blocks: unknown): void;
-declare function aiCmDedupeExportSource(
-  messages: Array<{ role?: string; text?: string; id?: unknown; [k: string]: unknown }>
-): { messages: Array<{ role?: string; text?: string; id?: unknown; [k: string]: unknown }>; removed: number };
-declare function aiCmLogDedupeRemoved(removed: number): void;
-declare function aiCmPreparedText(messages: unknown[]): string;
-declare function aiCmDiagHash6(id: string, text: string): string;
-declare function aiCmDumpTurnsSnapshot(tag: string, cid: string | null, msgs: unknown[]): void;
-declare function aiCmLogNetSyncResult(convId: string | null, info: unknown): void;
-declare function scheduleStaleCheck(): void;
-declare let lastDedupeLogSig: string | null;
-declare let aiCmBasePrepared: Array<{ role?: string; text?: string; id?: unknown; [k: string]: unknown }> | null;
-declare let aiCmNetSyncSeq: number;
 
-// hybrid-tail.js (используется content.js/export-manager.js)
+// hybrid-tail.ts (используется content.js/export-manager.ts)
 declare function nodeIsBase(node: Element, skel: string): boolean;
 declare function shouldUseGeminiDomParser(): boolean;
 declare function computeTailFromDom(): { text: string; count: number; bounded: boolean; sel: string; diag: unknown };
 declare function aiCmTailMetricBase(fallback: string): string;
 
-// export-manager.js (используется content.js/widget.js/base-handler.js)
-declare function aiCmSanitizeDebugOn(): boolean;
-declare function aiCmEmitEntryDiag(...args: unknown[]): void;
-declare function aiCmHiddenExportEffectiveOn(messages: unknown[]): boolean;
-declare function aiCmSanitizeEmitUserTexts(messages: unknown[]): unknown[];
-declare function aiCmReasoningExportSite(): string | null;
-declare function aiCmPrepareReasoningForExport(messages: unknown[]): unknown[];
-declare function aiCmExportBaseSource(convId: string | null, localMsgs: unknown[]): unknown;
-declare function autoExportPerSiteKey(siteName: string): string;
-declare function loadAutoExportPerSitePct(): void;
-declare function aiCmTryLateAutoExport(cid: string): void;
-declare function detectTrimStateFallback(prevProbe: unknown, snapshot: unknown): unknown;
-declare function geminiDetectTrim(detail: unknown): unknown;
-declare function maybeTrimExport(cid: string): void;
-declare function aiCmCancelDeferredHistWrite(cid: string | null): void;
-declare function aiCmUnionFileMessages(cid: string, localMsgs: unknown[], isLowConfidence?: boolean): unknown[];
-declare function aiCmWriteCurrentHistory(): void;
-declare function aiCmCurrentBaseSnapshot(cid: string | null): unknown[] | null;
-declare function aiCmScheduleLateAutoExportRetry(cid: string): boolean;
+// core/content.js (используется widget.ts/export-manager.ts/base-handler.ts)
 declare function aiCmResyncMetricsAfterFlush(cid: string, reason?: string): boolean;
-declare function aiCmFlushDeferredHistWrite(cid: string, reason?: string): void;
-declare function aiCmScheduleDeferredHistWrite(cid: string): void;
-declare function loadAutoExportSettings(): void;
-declare function loadExportHiddenSetting(): void;
-declare function aiCmAutoExportConvId(): string;
-declare function aiCmGsaNetworkCompleteReset(threadId?: string | null): boolean;
-declare function aiCmGsaNetworkCompleteSet(threadId?: string | null): boolean;
-declare function aiCmGsaNetworkCompleteIs(site: string, cid: string | null): boolean;
-declare function aiCmGsaProbeRunningFor(cid: string | null): boolean;
-declare function aiCmAutoExportLogOnChange(family: string, key: string): boolean;
-declare function aiCmAutoExportLogFiredBit(site: string, cid: string | null): number;
-declare function aiCmGsaAutoExportSkipLog(reason: string, cid: string | null): void;
-declare function aiCmDeepseekStreamProbe(): void;
-declare function aiCmDeepseekStreamActiveFor(cid: string | null): boolean;
-declare function aiCmFlushLiveStreamForExport(cid: string): void;
-declare function aiCmDeferAutoExportOnLiveStream(cid: string, percentage: number): void;
-declare function aiCmAutoExportBasePendingLog(cid: string | null, percentage: number): void;
-declare function aiCmAutoExportDecisionDiag(...args: unknown[]): void;
-declare function aiCmEffectiveAutoExportThreshold(siteName: string): number;
-declare function aiCmAutoExportStartDownload(content: string, file: string, fmt: string): void;
-declare function doAutoExportDownload(cid: string, percentage: number, reason: string): void;
-/** Шаг A.1 (security): карта session-латча ('aiCmFired:service|convId' → 1); читается из widget.js. */
-declare let sessionFiredCache: Record<string, number>;
-/** Шаг A.1 (security): дожидается гидратации sessionFiredCache из SW; читается из content.js. */
-declare function aiCmLatchCacheReady(): Promise<Record<string, number>>;
 
-// content.js (используется widget.js/export-manager.js/base-handler.js)
 declare function aiCmI18nMessage(key: string, fallback: string, substitutions?: unknown[]): string;
 declare function aiCmEstimateTokensTilde(text: string, attachTokens?: number): number;
 declare function aiCmMetricServerTokens(svc: string | null): number;
@@ -281,7 +178,6 @@ declare function aiCmDiagWarn(tag: string, message: string, detail?: unknown): v
 declare function aiCmDiagDownload(trigger: string, content: unknown, fileName: string, extra?: unknown): boolean;
 declare function aiCmDiagDownloadBlocked(trigger: string, content: unknown, fileName: string, reason: string, extra?: unknown): boolean;
 declare function __aiCmSetDebugLogs(v: boolean): void;
-declare const aiCmIncludeHiddenInExport: boolean;
 
 // Window-поля: трассировка/UMD-глобали (прецедент types/globals.d.ts — any до Фазы 3).
 // Файл — НЕ module (нет import/export), поэтому interface Window объявляется напрямую

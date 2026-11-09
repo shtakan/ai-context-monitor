@@ -5,7 +5,7 @@
  * DeepSeek++ в экспорт» (chrome.storage.local aiCmIncludeHiddenInExport, default OFF)
  * в txt/md Qwen всё равно попадали секции [REASONING]…[ANSWER]….
  *
- * Корень (порядок внутри core/export-manager.js:aiCmCollectExportSource):
+ * Корень (порядок внутри core/export-manager.ts:aiCmCollectExportSource):
  *   1) aiCmPrepareReasoningForExport(out) → applyReasoningExportFields ДО санации переводит
  *      размышление хода в ОТДЕЛЬНОЕ поле reasoning (из поля захвата hiddenReasoning или
  *      разбором пары секций из текста);
@@ -15,7 +15,7 @@
  *      msg.reasoning и БЕЗУСЛОВНО дописывают секции заново.
  * Итог: тумблер OFF, а [REASONING] в файле есть.
  *
- * Фикс (core/export-manager.js, сразу ПОСЛЕ prepareReasoning(out)): на OFF-пути и только
+ * Фикс (core/export-manager.ts, сразу ПОСЛЕ prepareReasoning(out)): на OFF-пути и только
  * для сайта, чей DESIGN-источник — DOM-адаптер (aiCmReasoningExportSite() → qwen), поле
  * reasoning снимается с сообщений точки сбора (служебные hidden-поля и так снимает OFF-путь
  * санации). Тогда OFF-файл = вопросы и ответы, ON-файл = секции на месте.
@@ -46,13 +46,15 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 
 const ROOT = path.join(__dirname, '..');
-const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const MGR_SRC = read('core/export-manager.ts');
 
 const REASONING = 'Пользователь здоровается и просит короткий ответ без лишних деталей. ' +
   'Отвечу приветствием и предложу помощь — этого достаточно.';
@@ -86,7 +88,7 @@ function normStamp(s) {
 }
 
 // =====================================================================================
-// Песочница: РЕАЛЬНЫЙ core/export-manager.js-регион (sanitizeGeminiText →
+// Песочница: РЕАЛЬНЫЙ core/export-manager.ts-регион (sanitizeGeminiText →
 // aiCmSanitizeEmitUserTexts → aiCmReasoningExportSite/aiCmPrepareReasoningForExport →
 // aiCmCollectExportSource) + переключатель тумблера (в песочнице переменная локальна).
 // Приём взят из tests/deepseek-o7-hidden-export.test.js.

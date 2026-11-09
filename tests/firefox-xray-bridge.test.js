@@ -26,10 +26,11 @@
 'use strict';
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 /** Переводы строк/отступы не должны ломать пины: сравниваем нормализованный текст. */
 const squash = (s) => s.replace(/\s+/g, ' ');
 
@@ -40,13 +41,13 @@ const CATCH_BODY = 'catch (eBd) { return null; }';
 const BRIDGES = [
   {
     event: 'ai-cm-deepseek-net-sync',
-    from: 'core/base-handler.js',
+    from: 'core/base-handler.ts',
     payload: ['requestId: reqId, convId: convId, timeoutMs: cap'],
     key: 'convId'
   },
   {
     event: 'ai-cm-deepseek-files-drain',
-    from: 'core/base-handler.js',
+    from: 'core/base-handler.ts',
     payload: ['requestId: reqId, timeoutMs: cap'],
     key: 'requestId'
   },
@@ -78,7 +79,7 @@ const BRIDGES = [
   },
   {
     event: 'ai-cm-auto-export-fired',
-    from: 'core/export-manager.js',
+    from: 'core/export-manager.ts',
     payload: ["convId: cid, site: siteNameD || '', reason: reason || ''"],
     key: 'reason'
   }

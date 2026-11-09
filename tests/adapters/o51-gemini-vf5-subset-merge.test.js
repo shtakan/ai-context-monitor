@@ -34,6 +34,7 @@
  * символьный срез O-50, санация O-20/O-40/O-42, D-O41, badge-метрика O-47, CHANGELOG/версия.
  */
 const fs = require('fs');
+const { readCore } = require('../helpers/core-src.js');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
@@ -307,7 +308,7 @@ describe('O-51 (S/R1): source-пины проводки и инвентарь р
   });
 
   test('R1: инвентарь — пины O-48 (16), O-49 (15), O-50 (10) в файлах не тронуты', () => {
-    const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
     const o48 = read('tests/adapters/o48-gemini-parse-fail-salvage.test.js');
     const o49 = read('tests/adapters/o49-gemini-deepresearch-lowconfidence.test.js');
     const o50 = read('tests/adapters/o50-gemini-char-frame-slice.test.js');
@@ -323,6 +324,6 @@ describe('O-51 (S/R1): source-пины проводки и инвентарь р
     expect(parse).toContain('raw.slice(pos, end)');
     expect(parse).toContain('framingStrictScore(utf8Try).score > charFit.score');
     // O-49: единая точка сбора на пути записи снимка не переписана
-    expect(read('core/export-manager.js')).toContain('aiCmCollectExportSource');
+    expect(read('core/export-manager.ts')).toContain('aiCmCollectExportSource');
   });
 });

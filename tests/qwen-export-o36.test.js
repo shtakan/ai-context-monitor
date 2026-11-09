@@ -24,6 +24,8 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
@@ -35,7 +37,7 @@ const ROOT = path.join(__dirname, '..');
 const CONTENT = H.contentSource;                                                    // модули + content.js (единый скоуп)
 const CONTENT_ONLY = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
 const OPTIONS_SRC = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
-const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const MGR_SRC = read('core/export-manager.ts');
 
 // Рез по балансу фигурных скобок (конвенция сьюта: tests/gsa-autoexport.test.js).
 function fnDecl(src, name) {

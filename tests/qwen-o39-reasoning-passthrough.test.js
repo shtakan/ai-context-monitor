@@ -4,12 +4,12 @@
  * Дефект: reasoning есть в стриме (qwen-stream-end reasoningFrames > 0) и строкой в попапе,
  * но в txt/md-экспорте Qwen секции [REASONING] нет. Корень найден и исправлен в рабочей копии:
  * сообщения ПЕРЕСОБИРАЮТСЯ на пути записи базы, и поле reasoning терялось в ДВУХ точках:
- *   (1) core/export-manager.js:aiCmCollectExportSource —
+ *   (1) core/export-manager.ts:aiCmCollectExportSource —
  *       сетевая ветка строила {role,text} из lastDetailMessages[i] и теряла dm.reasoning
  *       (O-39: строка копирования `if (typeof dm.reasoning === 'string' && dm.reasoning)`);
  *       DOM-фолбэк чередования ролей строил {role,text} из norm[n2] и терял служебные поля
  *       (O-39: обход for-in копирует ВСЕ ключи кроме role/text с hasOwnProperty-фильтром);
- *   (2) core/base-handler.js:aiCmDedupeExportSource —
+ *   (2) core/base-handler.ts:aiCmDedupeExportSource —
  *       не-Gemini ветка строила {role,text} из messages[p] и теряла mp.reasoning
  *       (O-39: строка копирования `if (typeof mp.reasoning === 'string' && mp.reasoning)`);
  *       ветка Gemini/AI Studio не тронута (идёт через пайплайн prepareExportMessages).
@@ -19,7 +19,7 @@
  *
  * R-D-контур (правило §0: пины на КАЖДЫЙ путь записи базы + точка выхода):
  *   D1 — сетевая ветка точки сбора (Qwen): поле reasoning снимка доезжает до выхода массивом;
- *   D2 — не-Gemini ветка дедупа (core/base-handler.js): поле reasoning доезжает до выхода;
+ *   D2 — не-Gemini ветка дедупа (core/base-handler.ts): поле reasoning доезжает до выхода;
  *   D3 — DOM-фолбэк чередования ролей (Qwen, baseSeen=false, роль в адаптере отсутствует):
  *        поле захвата hiddenReasoning доезжает до выхода объекта-сообщения;
  *   D4 — точка выхода: рендер отдаёт [REASONING] и [ANSWER] (чистая функция + сборщики);
@@ -46,19 +46,21 @@
  * (core/content.js:664-675), поэтому поля reasoning у чужих платформ там нет — это и
  * воспроизводят моки R1/R2 (снимок без reasoning).
  *
- * НЕ ТРОГАЕТСЯ: core/export-manager.js, core/base-handler.js, utils/export-text-builders.ts —
+ * НЕ ТРОГАЕТСЯ: core/export-manager.ts, core/base-handler.ts, utils/export-text-builders.ts —
  * только чтение источника; поведение прочих платформ (байты) — R-пины.
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 
 const ROOT = path.join(__dirname, '..');
-const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
-const BASE_HANDLER_SRC = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.js'), 'utf8');
+const MGR_SRC = read('core/export-manager.ts');
+const BASE_HANDLER_SRC = read('core/base-handler.ts');
 const BUILDERS_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.ts'), 'utf8');
 // D7: РЕАЛЬНЫЙ utils/debug.ts (канонический гейт aiCmDebug) — только для пина «диагностика
 // под гейтом»: в прочих пинах он не подключается вовсе (прежнее поведение песочницы 1:1).
@@ -88,7 +90,7 @@ const ANSWER = 'Привет! Чем помочь?';
 const SECTIONED = '[REASONING]\n' + REASONING + '\n\n[ANSWER]\n' + ANSWER;
 const QUESTION = 'привет';
 
-// РЕАЛЬНЫЙ регион core/export-manager.js: sanitizeGeminiText → aiCmSanitizeEmitUserTexts →
+// РЕАЛЬНЫЙ регион core/export-manager.ts: sanitizeGeminiText → aiCmSanitizeEmitUserTexts →
 // O-37/O-39-хелперы → aiCmCollectExportSource (границы — как в O-37-сьюте).
 const COLLECT_SRC = MGR_SRC.slice(
   MGR_SRC.indexOf('function sanitizeGeminiText(s)'),
@@ -100,7 +102,7 @@ const COLLECT_SRC = MGR_SRC.slice(
  * aiCmDedupeExportSource (base-handler) в одном скоупе — ровно как в браузере, где модули
  * делят глобальный лексический скоуп. Выход наружу:
  *   collect(texts, detail) — сетевой/DOM путь точки сбора;
- *   dedupe(messages)       — путь схлопывания базы (core/base-handler.js);
+ *   dedupe(messages)       — путь схлопывания базы (core/base-handler.ts);
  *   history(texts, detail) — ТО ЖЕ выражение, что в buildHistoryMessages (collect → dedupe);
  *   setBase(texts, detail) — прямая запись базы (стадия формирования content.js, пин D6);
  *   sanitize(s)            — РЕАЛЬНЫЙ sanitizeGeminiText песочницы (стадия формирования D6);
@@ -206,7 +208,7 @@ function netInputWithReasoning() {
 }
 
 // =====================================================================================
-// D1/D5: СЕТЕВАЯ ВЕТКА ТОЧКИ СБОРА (core/export-manager.js) + СКВОЗНОЙ ФАЙЛ
+// D1/D5: СЕТЕВАЯ ВЕТКА ТОЧКИ СБОРА (core/export-manager.ts) + СКВОЗНОЙ ФАЙЛ
 // =====================================================================================
 describe('O-39 D1: сетевая ветка точки сбора — dm.reasoning доезжает до выхода', () => {
   test('D1 Qwen: объект выхода несёт ключ reasoning со строкой снимка', () => {
@@ -245,7 +247,7 @@ describe('O-39 D1: сетевая ветка точки сбора — dm.reason
 });
 
 // =====================================================================================
-// D2: НЕ-GEMINI ВЕТКА ДЕДУПА (core/base-handler.js)
+// D2: НЕ-GEMINI ВЕТКА ДЕДУПА (core/base-handler.ts)
 // =====================================================================================
 describe('O-39 D2: не-Gemini ветка дедупа — mp.reasoning сохраняется', () => {
   test('D2 Qwen: выход дедупа сохраняет поле reasoning (и оно доходит до файла)', () => {

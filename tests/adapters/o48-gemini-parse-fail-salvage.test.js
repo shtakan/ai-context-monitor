@@ -21,6 +21,8 @@
  * clean-end-stable (кроме добавленной parse-fail-ветки), версия/CHANGELOG.
  */
 const fs = require('fs');
+const { readCore } = require('../helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 const { TextEncoder, TextDecoder } = require('util');
 
@@ -361,7 +363,7 @@ describe('O-48 (D3): reason=parse-fail в оракуле — не first-hash-mis
 
 describe('O-48 (D1): честная маркировка [LOW CONFIDENCE] не снята', () => {
   test('parse-fail-путь не взводит baseComplete; 60s-таймаут и префикс целы', () => {
-    const exportSrc = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+    const exportSrc = read('core/export-manager.ts');
     const optionsSrc = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
     // асимметрия «как есть» при baseComplete=0 → isLowConfidenceBase=true (O-48 ничего не меняет)
     expect(exportSrc).toContain('if (baseComplete !== true) {');

@@ -6,13 +6,14 @@
 // загрузки, а без хелпера остаётся прежняя заглушка.
 
 const fs = require('fs');
+const { readCore } = require('../helpers/core-src.js');
 const path = require('path');
 const vm = require('vm');
 const { TextDecoder, TextEncoder } = require('util');
 const { DecompressionStream } = require('stream/web');
 
 const ROOT = path.join(__dirname, '..', '..');
-const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const PARSER_SRC = require('../helpers/load-esm.js').loadAsClassic('utils/gemini-batchexecute-parser.ts');
 
 const PDF_TEXT = 'PDF-текст';

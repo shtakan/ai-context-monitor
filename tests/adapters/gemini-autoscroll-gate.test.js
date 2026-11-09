@@ -10,7 +10,7 @@
  *
  * ЧТО СДЕЛАНО. В core/gemini-hidden-scroll.js латч `aiCmFiredByConv` заводится локально
  * и навешивается на тот же window-CustomEvent `ai-cm-auto-export-fired`, что диспатчит
- * core/export-manager.js:1796 (detail.convId). У лоадера свой латч в своём IIFE, этому
+ * core/export-manager.ts:1796 (detail.convId). У лоадера свой латч в своём IIFE, этому
  * модулю он не виден — поэтому слушатель свой, формат события общий. Гейт стоит:
  *   1) первым шагом `autoScrollCollect()` — fired ДО старта → `skip reason=export-fired`;
  *   2) в начале каждой итерации внутреннего цикла скролла — fired ВО ВРЕМЯ прогона →
@@ -35,11 +35,12 @@
 'use strict';
 
 const fs = require('fs');
+const { readCore } = require('../helpers/core-src.js');
 const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..', '..');
-const readFile = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+const readFile = (rel) => readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8'));
 
 const HIDDEN_REL = 'core/gemini-hidden-scroll.js';
 const HIDDEN = readFile(HIDDEN_REL);

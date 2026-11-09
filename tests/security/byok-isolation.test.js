@@ -339,7 +339,7 @@ describe('Шаг A.1 / P4: O3-латч читается/пишется/сним�
   const firedKey = FIRED_PREFIX + 'gemini|c1';
 
   test('контент: обёртки aiCm-latch-* вместо chrome.storage.session, кэш гидрируется из SW (R1)', () => {
-    const exportManager = read('core/export-manager.js');
+    const exportManager = read('core/export-manager.ts');
     const widget = read('core/widget.ts');
     const state = read('core/state.ts');
     // Именно ОБРАЩЕНИЕ к API, а не упоминание в комментариях-пояснениях Шага A.1

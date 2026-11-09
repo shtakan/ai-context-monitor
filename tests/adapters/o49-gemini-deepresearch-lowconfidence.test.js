@@ -26,13 +26,15 @@
  * R4 (O-48: [LOW CONFIDENCE]_ + tolerant-salvage не тронуты).
  */
 const fs = require('fs');
+const { readCore } = require('../helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const P = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 
 const ROOT = path.join(__dirname, '..', '..');
-const EXPORT_MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
-const BASE_HANDLER_SRC = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.js'), 'utf8');
+const EXPORT_MGR_SRC = read('core/export-manager.ts');
+const BASE_HANDLER_SRC = read('core/base-handler.ts');
 
 // E.2a.2b.4b: хелпер swallow из utils/debug.ts (его нет в eval-песочнице: срез
 // исполняется через new Function/eval; в MAIN-инжекте debug.js идёт первым).
@@ -110,9 +112,9 @@ function unionSnapshot(base) {
 }
 
 // ---------------------------------------------------------------------------------
-// Песочница РЕАЛЬНОГО пути записи снимка: core/export-manager.js (sanitizeGeminiText →
+// Песочница РЕАЛЬНОГО пути записи снимка: core/export-manager.ts (sanitizeGeminiText →
 // aiCmCollectExportSource → aiCmExportBaseSource → aiCmUnionFileMessages →
-// aiCmWriteCurrentHistory) + core/base-handler.js (aiCmDedupeExportSource,
+// aiCmWriteCurrentHistory) + core/base-handler.ts (aiCmDedupeExportSource,
 // buildHistoryMessages) в одном лексическом скоупе — как в браузере.
 // ---------------------------------------------------------------------------------
 function makeWriteSandbox(opts) {

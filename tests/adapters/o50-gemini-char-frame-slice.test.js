@@ -29,17 +29,19 @@
  *   И2 поведение таймаута не изменилось: снимок истории пишется, `[LOW CONFIDENCE]_`-маркировка
  *      (aiCmLowConfidenceByConv) прежняя, строка `deferred-timeout(60s), exporting as-is` цела.
  *
- * Тесты исполняют РЕАЛЬНЫЕ тела core/gemini-intercept.js и core/export-manager.js (конвенция
+ * Тесты исполняют РЕАЛЬНЫЕ тела core/gemini-intercept.js и core/export-manager.ts (конвенция
  * fnDecl + песочница `with`), а не копии логики. НЕ ТРОГАЕТСЯ: tolerant-salvage O-48, единая
  * точка сбора O-49, санация O-20/O-40/O-42, D-O41, badge-метрика O-47, CHANGELOG/версия.
  */
 const fs = require('fs');
+const { readCore } = require('../helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 const { TextEncoder, TextDecoder } = require('util');
 
 const ROOT = path.join(__dirname, '..', '..');
 const SRC = require('../helpers/gemini-intercept-source.js').geminiSource;
-const EXPORT_MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const EXPORT_MGR_SRC = read('core/export-manager.ts');
 
 function fnDecl(src, name) {
   const start = src.indexOf('function ' + name + '(');

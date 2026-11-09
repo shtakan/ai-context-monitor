@@ -28,9 +28,9 @@
     "core/content.js",
     "core/widget.ts",
     "core/state.ts",
-    "core/base-handler.js",
-    "core/hybrid-tail.js",
-    "core/export-manager.js",
+    "core/base-handler.ts",
+    "core/hybrid-tail.ts",
+    "core/export-manager.ts",
     "core/background.js",
     "core/page-intercept.js"
   ],

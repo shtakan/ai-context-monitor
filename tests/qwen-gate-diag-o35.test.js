@@ -22,6 +22,7 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
 const path = require('path');
 const { TextEncoder } = require('util');
 const H = require('./helpers/content-source.js');
@@ -29,7 +30,7 @@ const H = require('./helpers/content-source.js');
 const ROOT = path.join(__dirname, '..');
 const CONTENT = H.contentSource;
 const WIDGET_SRC = H.moduleSource('core/widget.ts');
-const BASE_HANDLER_SRC = H.moduleSource('core/base-handler.js');
+const BASE_HANDLER_SRC = H.moduleSource('core/base-handler.ts');
 const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'qwen-intercept.js'), 'utf8');
 // R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
@@ -295,7 +296,7 @@ describe('O-35 C: qwen-spa — событие смены разговора до
         ? require('./helpers/gemini-intercept-source.js').geminiSource
         : (rel === 'core/deepseek-intercept.js'
           ? require('./helpers/deepseek-intercept-source.js').deepseekSource
-          : fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+          : readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')));
       expect(src).toContain("window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'))");
     });
   });

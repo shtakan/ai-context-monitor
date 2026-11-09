@@ -16,7 +16,7 @@
  *   3. сети не было вовсе → доверия нет, base-pending остаётся.
  * Плюс: доверие привязано к чату (карта по ключу convId/пути), сброс в resetConversationState
  * и защита прочих платформ (qwen/остальные вердикты не сдвинулись, признак не проник в
- * core/export-manager.js и utils/export-emit-pipeline.ts).
+ * core/export-manager.ts и utils/export-emit-pipeline.ts).
  *
  * КАК ЗАПУСКАЕМ. Группа 1 — реальный предикат core/content.js (aiCmAutoExportTrustedBase +
  * его диагностика) в `with (ctx)`-песочнице + реальный гейт utils/export-emit-pipeline.ts.
@@ -26,6 +26,8 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('../helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const P = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
@@ -34,7 +36,7 @@ const { contentSource: CONTENT, readSource } = require('../helpers/content-sourc
 const ROOT = path.join(__dirname, '..', '..');
 const CONTENT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
 const WIDGET_SRC = readSource('core/widget.ts');
-const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const MGR_SRC = read('core/export-manager.ts');
 const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
 
 // Рез по балансу фигурных скобок (конвенция сьюта).

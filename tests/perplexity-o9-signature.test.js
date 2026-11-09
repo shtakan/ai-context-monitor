@@ -21,8 +21,8 @@ const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/perplexity-
 const { readSource } = require('./helpers/content-source.js');
 
 const CONTENT = readSource('core/content.js');
-const BASE_HANDLER = readSource('core/base-handler.js');
-const EXPORT_MGR = readSource('core/export-manager.js');
+const BASE_HANDLER = readSource('core/base-handler.ts');
+const EXPORT_MGR = readSource('core/export-manager.ts');
 
 const PERP_CID = 'perplexity-thread-9f2c';
 const DS_CID = 'deepseek-spa-o17';

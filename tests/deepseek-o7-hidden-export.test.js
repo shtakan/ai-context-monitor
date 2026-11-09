@@ -44,6 +44,7 @@
  * и ось site пинится отдельно — tests/d-o41-reasoning-auto-on.test.js (Q1–Q4, R1–R3).
  */
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
@@ -51,11 +52,11 @@ const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-te
 const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
 
 const ROOT = path.join(__dirname, '..');
-const read = function (rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); };
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 
 const PIPELINE_SRC = read('utils/export-emit-pipeline.ts');
-const EXPORT_MGR_SRC = read('core/export-manager.js');
-const BASE_HANDLER_SRC = read('core/base-handler.js');
+const EXPORT_MGR_SRC = read('core/export-manager.ts');
+const BASE_HANDLER_SRC = read('core/base-handler.ts');
 const CONTENT_SRC = require('./helpers/content-source.js').contentSource;
 const ADAPTER_SRC = require('./helpers/read-module-source.js').readModuleSource('adapters/deepseek-adapter.ts');
 const BASE_ADAPTER_SRC = require('./helpers/read-module-source.js').readModuleSource('adapters/base-adapter.ts');
@@ -348,7 +349,7 @@ function oracleOffExport(messages) {
 }
 
 // =====================================================================================
-// Песочница: РЕАЛЬНАЯ единая точка выхода экспорта (core/export-manager.js)
+// Песочница: РЕАЛЬНАЯ единая точка выхода экспорта (core/export-manager.ts)
 // =====================================================================================
 function sliceSource(src, startMarker, endMarker) {
   const start = src.indexOf(startMarker);

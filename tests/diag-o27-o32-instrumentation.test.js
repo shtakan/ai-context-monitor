@@ -22,6 +22,8 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
@@ -33,7 +35,7 @@ const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts
 // с сырым файлом. Песочница (makeDiag) по-прежнему получает classic-срез.
 const DEBUG_RAW = fs.readFileSync(path.join(ROOT, 'utils', 'debug.ts'), 'utf8');
 const BUILDERS_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.ts'), 'utf8');
-const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const MGR_SRC = read('core/export-manager.ts');
 const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');
 const PRINT_SRC = fs.readFileSync(path.join(ROOT, 'print', 'print.js'), 'utf8');
 const OPTIONS_SRC = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');

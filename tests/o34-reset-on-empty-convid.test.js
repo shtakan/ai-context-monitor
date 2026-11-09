@@ -44,10 +44,12 @@
  *
  * НЕ ТРОГАЕТСЯ (пины R3): прежний предикат shouldResetChatConversation (его контракт
  * закреплён tests/adapters/chatgpt-conversation-parser.test.js и сохранён 1:1),
- * utils/tokenizer.ts, core/export-manager.js, manifest.json.
+ * utils/tokenizer.ts, core/export-manager.ts, manifest.json.
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const H = require('./helpers/content-source.js');
@@ -62,7 +64,7 @@ const WIDGET_SRC = H.moduleSource('core/widget.ts');
 const PARSER_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'chatgpt-conversation-parser.ts'), 'utf8');
 const PAGE_SRC = fs.readFileSync(path.join(ROOT, 'core', 'page-intercept.js'), 'utf8');
 const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.js'), 'utf8');
-const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const MGR_SRC = read('core/export-manager.ts');
 const TOKENIZER_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'tokenizer.ts'), 'utf8');
 
 // Рез по балансу фигурных скобок (конвенция сьюта: tests/o33-autoexport-base-pending.test.js).
@@ -623,20 +625,20 @@ describe('O-34 R3: пины проводки и границ', () => {
   test('R3: новое решение живёт ровно в двух точках (парсер + перехватчик), дублей нет', () => {
     const files = [
       'utils/chatgpt-conversation-parser.ts', 'core/page-intercept.js', 'core/content.js',
-      'core/widget.ts', 'core/state.ts', 'core/export-manager.js', 'utils/export-emit-pipeline.ts',
+      'core/widget.ts', 'core/state.ts', 'core/export-manager.ts', 'utils/export-emit-pipeline.ts',
       'utils/tokenizer.ts', 'manifest.json'
     ];
     const withSymbol = files.filter(function (rel) {
-      return fs.readFileSync(path.join(ROOT, rel), 'utf8').indexOf('shouldResetConversationOnNav') !== -1;
+      return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')).indexOf('shouldResetConversationOnNav') !== -1;
     });
     expect(withSymbol).toEqual(['utils/chatgpt-conversation-parser.ts', 'core/page-intercept.js']);
     const withHelper = files.filter(function (rel) {
-      return fs.readFileSync(path.join(ROOT, rel), 'utf8').indexOf('aiCmResetStaleStateOnChatlessChatGptUrl') !== -1;
+      return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')).indexOf('aiCmResetStaleStateOnChatlessChatGptUrl') !== -1;
     });
     expect(withHelper).toEqual(['core/content.js']);
   });
 
-  test('R3: utils/tokenizer.ts и core/export-manager.js не тронуты; manifest.json не менялся', () => {
+  test('R3: utils/tokenizer.ts и core/export-manager.ts не тронуты; manifest.json не менялся', () => {
     [TOKENIZER_SRC, MGR_SRC].forEach(function (src) {
       expect(src).not.toContain('shouldResetConversationOnNav');
       expect(src).not.toContain('aiCmResetStaleStateOnChatlessChatGptUrl');

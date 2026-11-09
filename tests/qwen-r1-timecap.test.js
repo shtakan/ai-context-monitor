@@ -20,6 +20,7 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
 const path = require('path');
 
 const P = require('../core/qwen-pagination.js');
@@ -30,7 +31,7 @@ const ROOT = path.join(__dirname, '..');
 const { stripTypesKeepComments } = require('./helpers/read-module-source.js');
 
 function read(rel) {
-  const src = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+  const src = readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8'));
   return /\.tsx?$/.test(rel) ? stripTypesKeepComments(src, rel) : src;
 }
 const PAGINATION_SRC = read('core/qwen-pagination.js');
@@ -38,7 +39,7 @@ const INTERCEPT_SRC = read('core/qwen-intercept.js');
 const STATE_SRC = read('core/state.ts');
 const WIDGET_SRC = read('core/widget.ts');
 const CONTENT_SRC = read('core/content.js');
-const MGR_SRC = read('core/export-manager.js');
+const MGR_SRC = read('core/export-manager.ts');
 
 // Рез по балансу фигурных скобок (конвенция сьюта: tests/qwen-pagination.test.js).
 function fnDecl(src, name) {
@@ -86,7 +87,7 @@ describe('R1: truth table SOFT_PARTIAL_REASONS', function () {
   });
 });
 
-describe('R1: предикат неполноты с 4-м аргументом (core/export-manager.js)', function () {
+describe('R1: предикат неполноты с 4-м аргументом (core/export-manager.ts)', function () {
   const fn = new Function('ctx',
     'with (ctx) { ' + fnDecl(MGR_SRC, 'aiCmHistoryPaginationIncomplete') +
     '\n return aiCmHistoryPaginationIncomplete; }')({});
@@ -256,7 +257,7 @@ describe('R1: source-пины пайплайна (классификация →
     expect(iWrite).toBeGreaterThan(iClose);          // запись ПОСЛЕ закрытия if (emitConvId)
   });
 
-  test('core/export-manager.js — 4-й аргумент предиката и qwen-ветка lowConfD', function () {
+  test('core/export-manager.ts — 4-й аргумент предиката и qwen-ветка lowConfD', function () {
     expect(MGR_SRC).toContain('function aiCmHistoryPaginationIncomplete(site, baseSeen, baseComplete, partialSoft) {');
     expect(MGR_SRC).toContain("return site === 'qwen' && baseSeen === true && baseComplete !== true && partialSoft !== true;");
     expect(MGR_SRC).toContain('aiCmHistoryPaginationIncomplete(siteName, baseSeen === true, baseComplete === true,');

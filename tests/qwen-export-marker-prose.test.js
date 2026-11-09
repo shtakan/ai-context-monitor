@@ -22,6 +22,8 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
@@ -29,7 +31,7 @@ const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-te
 
 const ROOT = path.join(__dirname, '..');
 const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
-const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const MGR_SRC = read('core/export-manager.ts');
 
 // Рез по балансу фигурных скобок (конвенция сьюта).
 function fnDecl(src, name) {
@@ -46,7 +48,7 @@ function fnDecl(src, name) {
   throw new Error('unbalanced declaration: ' + name);
 }
 
-// Песочница точки сбора экспорта: РЕАЛЬНЫЙ регион core/export-manager.js (конвенция
+// Песочница точки сбора экспорта: РЕАЛЬНЫЙ регион core/export-manager.ts (конвенция
 // tests/qwen-reasoning-export-o37.test.js). Только ЧТЕНИЕ кода менеджера — он не меняется.
 function makeEmitter(opts) {
   const o = opts || {};

@@ -19,7 +19,7 @@
  *     рендера, независимо от того, что оно было и в тексте, и в поле снимка.
  *
  * Фикс: единая нормализация на выходе точки сбора (utils/export-emit-pipeline.ts:
- * applyReasoningExportFields, гейт — флаг сайта из core/export-manager.js): размышление
+ * applyReasoningExportFields, гейт — флаг сайта из core/export-manager.ts): размышление
  * переезжает в ОТДЕЛЬНОЕ поле reasoning (из поля захвата или разбором пары секций
  * splitReasoningSections) ДО санации, а рендер маркерного пути (qwen) собирает секции
  * [REASONING]/[ANSWER] контрактом O-35. Нет размышления — нет секции (норма). Прочие
@@ -27,6 +27,8 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
@@ -35,7 +37,7 @@ const { contentSource: CONTENT, readSource } = require('./helpers/content-source
 
 const ROOT = path.join(__dirname, '..');
 const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
-const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const MGR_SRC = read('core/export-manager.ts');
 const CONTENT_ONLY = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
 const WIDGET_SRC = readSource('core/widget.ts');
 const OPTIONS_SRC = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
@@ -63,7 +65,7 @@ const SECTIONED = '[REASONING]\n' + REASONING + '\n\n[ANSWER]\n' + ANSWER;
 const CID = '4cf29053-7f1e-4c6a-9f2b-0f4a1c2d3e4f';
 
 // ---------------------------------------------------------------------------------
-// Песочница точки сбора экспорта: РЕАЛЬНЫЙ core/export-manager.js-регион
+// Песочница точки сбора экспорта: РЕАЛЬНЫЙ core/export-manager.ts-регион
 // (sanitizeGeminiText → aiCmSanitizeEmitUserTexts → O-37/C-хелперы → aiCmCollectExportSource).
 // ---------------------------------------------------------------------------------
 function makeEmitter(opts) {
@@ -337,7 +339,7 @@ describe('O-37 C: проводка (source-пины)', () => {
     expect(fnDecl(MGR_SRC, 'aiCmReasoningExportSite')).toContain("currentAdapter.siteName === 'qwen'");
     // D-O41 (пересмотр 2026-09-25): единственное ИМЯ платформы в коде пайплайна — пара
     // force-exclude сервисов в чистой effectiveReasoningToggle (Qwen/DeepSeek). Прочие
-    // предикаты сайта остаются в core/export-manager.js. Комментарии не считаем: пинится код.
+    // предикаты сайта остаются в core/export-manager.ts. Комментарии не считаем: пинится код.
     const code = PIPELINE_SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
     expect((code.match(/qwen/g) || []).length).toBe(1);
     expect(code).not.toContain('Qwen');

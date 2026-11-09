@@ -39,6 +39,7 @@
  * срез O-50, санация O-20/O-40/O-42, D-O41, badge-метрика O-47, CHANGELOG/версия.
  */
 const fs = require('fs');
+const { readCore } = require('../helpers/core-src.js');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
@@ -345,7 +346,7 @@ describe('O-51b (R1/R2): регресс цел, легитимные сброс�
   });
 
   test('R1 (S-пины): проводка id-свидетельства в ingest и инвентарь пинов O-48…O-52', () => {
-    const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
     const ingest = fnDecl(CORE, 'ingest');
 
     // единая точка извлечения id: трейс и критерий питаются одними массивами
@@ -389,6 +390,6 @@ describe('O-51b (R1/R2): регресс цел, легитимные сброс�
     expect(parse).toContain('var end = pos + n; if (end > bytes.length) end = bytes.length;'); // O-48
     expect(parse).toContain('raw.slice(pos, end)');                                             // O-50
     expect(parse).toContain('extractJsonPayload');                                              // O-52
-    expect(read('core/export-manager.js')).toContain('aiCmCollectExportSource');                // O-49
+    expect(read('core/export-manager.ts')).toContain('aiCmCollectExportSource');                // O-49
   });
 });

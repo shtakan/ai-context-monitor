@@ -565,7 +565,7 @@ describe('O-42 (R): байтовые регрессии', () => {
     expect(block).not.toContain('aiCmDiagOn');
     expect(block).not.toContain('chrome.');
     expect(block).not.toContain('document.');
-    // своя ветка OFF/ON пайплайну не нужна: выбор делает core/export-manager.js по тому же ключу
+    // своя ветка OFF/ON пайплайну не нужна: выбор делает core/export-manager.ts по тому же ключу
     expect(fnBody(PIPELINE_SRC, 'sanitizeEmitMessages')).not.toContain('aiCmIncludeHiddenInExport');
     expect(P.toolContinuationForms.length).toBe(4);
   });

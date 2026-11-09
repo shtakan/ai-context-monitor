@@ -19,13 +19,15 @@
 'use strict';
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const H = require('./helpers/content-source.js');
 
 const ROOT = H.ROOT;
 const CONTENT = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
-const MGR = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const MGR = read('core/export-manager.ts');
 
 const CID = 'c-metrics-resync';
 
@@ -225,7 +227,7 @@ describe('v95 metrics-resync: вызов стоит сразу после deferr
 // v98 (EXTRAPOLATION-GATE): масштаб эвристики по netEffectiveLen разрешён ТОЛЬКО на полной базе.
 //
 // Живой дефект: после F5 бейдж «скакал» 35.8% → 35.2% на одном и том же треде. Механизм:
-// на неполной базе getEffectiveText (core/hybrid-tail.js) отдаёт КАНОНИЧЕСКИЙ ПОЛ базы, а
+// на неполной базе getEffectiveText (core/hybrid-tail.ts) отдаёт КАНОНИЧЕСКИЙ ПОЛ базы, а
 // netEffectiveLen приходит из ПОЛНОГО сетевого снимка — доля netEffectiveLen/fullText.length
 // раздувала эвристику на промежуточном проходе (maxTokenCount монотонно вверх, useMonotonic
 // при baseSeen && baseCount>0), а первая же ПОЛНАЯ база перезаписывала максимум вниз

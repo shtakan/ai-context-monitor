@@ -950,7 +950,7 @@ describe('E-2.3 (а): метрики и экспорт считаются по �
     expect(LISTENER_SRC).toContain("baseText = texts18.join('\\n');");
     expect(CONTENT_SRC).toContain('if (ded18.removed > 0 && netEffectiveLen > baseText.length) netEffectiveLen = baseText.length;');
     // текст метрик читается из того же подготовленного массива, а не из второй копии базы.
-    // O-32: в core/hybrid-tail.js вызов идёт через typeof-гард aiCmTailMetricBase → тот же
+    // O-32: в core/hybrid-tail.ts вызов идёт через typeof-гард aiCmTailMetricBase → тот же
     // aiCmMetricBaseText(fallback) (пол базы), иначе — сам baseText (срез-песочницы тестов).
     expect(CONTENT_SRC).toContain('function aiCmTailMetricBase(fallback) {');
     expect(CONTENT_SRC).toContain('aiCmMetricBaseText(fallback) : fallback;');

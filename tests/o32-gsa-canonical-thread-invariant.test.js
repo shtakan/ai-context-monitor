@@ -25,13 +25,15 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const { contentSource: CONTENT, readSource } = require('./helpers/content-source.js');
 const INTERCEPT = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');
-const HYBRID = fs.readFileSync(path.join(ROOT, 'core', 'hybrid-tail.js'), 'utf8');
-const BASE_HANDLER = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.js'), 'utf8');
+const HYBRID = read('core/hybrid-tail.ts');
+const BASE_HANDLER = read('core/base-handler.ts');
 const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.ts');
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 

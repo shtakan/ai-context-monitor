@@ -19,7 +19,7 @@
 // M-8: TTL-метка per-host записи истории. Глобальный ключ 'aiCmHistory' пишется прежней
 // формой (сам snapshot, без ts) — его семантика не меняется; поле ts аддитивно только
 // для 'aiCmHistory:<host>'. По ts core/background.js удаляет записи старше 30 дней.
-function aiCmHostHistoryRecord(snapshot) {
+function aiCmHostHistoryRecord(snapshot: AiCmHashMap): AiCmHashMap {
   var rec = Object.assign({}, snapshot);
   rec.ts = Date.now();
   return rec;
@@ -29,7 +29,7 @@ function aiCmHostHistoryRecord(snapshot) {
 // ОДИН ход и отрендеренный текст, и сырой markdown-блок ('### ROLE& OBJECTIVE') — чистую
 // функцию dedupeIntraMessage зовёт пайплайн (prepareExportMessages) на КАЖДОЕ сообщение ДО
 // меж-сообщенческого dedupeMessages. Лог ниже — гейт сервиса + антиспам по подписи снимка.
-function aiCmLogIntraDedupe(role, blocks) {
+function aiCmLogIntraDedupe(role: string, blocks: number): void {
   if (!(blocks > 0)) return;
   var sig = 'intra|' + (baseCount || 0) + '|' + (baseText ? baseText.length : 0);
   if (sig === lastDedupeLogSig) return;
@@ -42,7 +42,7 @@ function aiCmLogIntraDedupe(role, blocks) {
 // содержать первое вхождение. Чистые функции — utils/export-emit-pipeline.ts
 // (dedupeIntraMessage → dedupeMessages, порядок задан prepareExportMessages); здесь
 // только гейт сервиса (прочие адаптеры не трогаем) и лог внутри-сообщенческих удалений.
-function aiCmDedupeExportSource(messages) {
+function aiCmDedupeExportSource(messages: AiCmExportMessage[]): AiCmDedupeResult {
   try {
     var site = (currentAdapter && currentAdapter.siteName) || '';
     // O-32 (google_search): схлопывание на выходе сбора базы — РАБОЧЕЕ, а не no-op.
@@ -72,7 +72,7 @@ function aiCmDedupeExportSource(messages) {
         var mp = messages[p] || {};
         // FIX (Claude md): ход пользователя парсера Claude приходит ролью 'human' —
         // нормализуем её в 'user' здесь же, у входа в md (см. buildMdFromHistory).
-        var msg = { role: (mp.role === 'user' || mp.role === 'human') ? 'user' : 'assistant', text: (typeof mp.text === 'string') ? mp.text : '' };
+        var msg: AiCmExportMessage = { role: (mp.role === 'user' || mp.role === 'human') ? 'user' : 'assistant', text: (typeof mp.text === 'string') ? mp.text : '' };
         // Claude md (ДИАГНОСТИКА — только измерение под гейтом aiCmDebug): роль хода на входе
         // точки и после нормализации. Маркер claude-role-* SCOPED по сайту: живой замер идёт по
         // Claude-цепочке, а на прочих сайтах роль хода — не предмет этого маркера (чужие строки
@@ -104,15 +104,15 @@ function aiCmDedupeExportSource(messages) {
 }
 // v1.18 (E-2): лог схлопывания печатаем ОДИН раз на снимок базы (сигнатура count|textLen),
 // а не на каждый processAndSend.
-var lastDedupeLogSig = null;
-function aiCmLogDedupeRemoved(removed) {
+var lastDedupeLogSig: string | null = null;
+function aiCmLogDedupeRemoved(removed: number): void {
   if (!(removed > 0)) return;
   var sig = baseCount + '|' + (baseText ? baseText.length : 0);
   if (sig === lastDedupeLogSig) return;
   lastDedupeLogSig = sig;
   debugLog('log', '[AI CM][gemini] dedupe removed=' + removed);
 }
-function buildHistoryMessages() {
+function buildHistoryMessages(): AiCmExportMessage[] {
   // v81: поведение для Gemini побитово прежнее (detail.messages/lastBaseTexts — приоритет);
   // для не-Gemini добавлен источник DOM-адаптера с нормализацией и чередованием.
   // E-2: собранный массив схлопывается от дублей (Gemini/AI Studio) ПЕРЕД потребителями —
@@ -127,21 +127,21 @@ function buildHistoryMessages() {
 // intra → inter → cross-raw → гигиена остатков разметки). baseText/baseCount — производные
 // ЭТОГО массива, в файл уходит та же база (lastBaseTexts → aiCmCollectExportSource →
 // buildHistoryMessages). Второй копии базы и второго вердикта дедупа НЕ существует.
-var aiCmBasePrepared = null; // [{role,text,id}] | null — схлопнутая база последнего снимка
-function aiCmPreparedText(messages) {
+var aiCmBasePrepared: AiCmExportMessage[] | null = null; // [{role,text,id}] | null — схлопнутая база последнего снимка
+function aiCmPreparedText(messages: AiCmExportMessage[] | null): string {
   var src = Array.isArray(messages) ? messages : [];
   var out = [];
   for (var i = 0; i < src.length; i++) out.push(String((src[i] && src[i].text) || ''));
   return out.join('\n');
 }
 // Текст метрик (getEffectiveText → pct/токены/бейдж) — РОВНО схлопнутая база, не её копия.
-function aiCmMetricBaseText(fallback) {
+function aiCmMetricBaseText(fallback: string): string {
   if (Array.isArray(aiCmBasePrepared) && aiCmBasePrepared.length > 0) return aiCmPreparedText(aiCmBasePrepared);
   return fallback;
 }
 // ================= v61diag: диагностика холодного старта (ТОЛЬКО логи, логика не тронута) =================
 // FNV-1a 32-bit от id||text → 6 hex-символов (отпечаток хода для сравнения краёв ленты).
-function aiCmDiagHash6(id, text) {
+function aiCmDiagHash6(id: string, text: string): string {
   try {
     var s = String(id || '') + '\u0000' + String(text || '');
     var h = 0x811c9dc5;
@@ -153,9 +153,9 @@ function aiCmDiagHash6(id, text) {
   } catch (e) { return '000000'; }
 }
 // Синхронный запрос сводки turnsMap у MAIN-перехватчика (Gemini) через CustomEvent-мост.
-function aiCmGeminiTurnsSnapshotSync() {
+function aiCmGeminiTurnsSnapshotSync(): AiCmTurnsSnapshot | null {
   try {
-    var resp = null;
+    var resp: any = null;
     var h = function (ev) { resp = ev.detail; };
     window.addEventListener('ai-cm-turns-snap-response', h, { once: true });
     window.dispatchEvent(new CustomEvent('ai-cm-turns-snap-request'));
@@ -172,7 +172,7 @@ function aiCmGeminiTurnsSnapshotSync() {
 // перехватчика) — экспорт идёт ПРЕЖНИМ live-путём, байты файла не меняются.
 // Мост — те же window-CustomEvent, что у probe/flush O-16 (изоляция миров не нарушена).
 var aiCmNetSyncSeq = 0;
-function aiCmExportNetSyncSite() {
+function aiCmExportNetSyncSite(): boolean {
   try {
     return (typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName === 'deepseek');
   } catch (eSite) { return false; }
@@ -181,14 +181,14 @@ function aiCmExportNetSyncSite() {
 // модуль (Step D.10, core/deepseek-files.js), Qwen — core/qwen-files.js (R2). Протокол
 // ожидания общий: имена событий ai-cm-deepseek-files-* исторические, поэтому различается
 // только сайт — экспорт получает шанс дождаться текста вложения до композиции файла.
-function aiCmFilesDrainSite() {
+function aiCmFilesDrainSite(): boolean {
   try {
     if (typeof currentAdapter === 'undefined' || !currentAdapter) return false;
     var site = currentAdapter.siteName;
     return site === 'deepseek' || site === 'qwen' || site === 'aistudio' || site === 'gemini';
   } catch (eSiteF) { return false; }
 }
-function aiCmExportNetSyncThen(convId, cb, timeoutMs) {
+function aiCmExportNetSyncThen(convId: string | null, cb: ((info: AiCmNetSyncInfo) => void) | null, timeoutMs?: number): void {
   var cap = (typeof timeoutMs === 'number' && timeoutMs > 0) ? timeoutMs : 3000;
   var done = false;
   var timer = null;
@@ -222,7 +222,7 @@ function aiCmExportNetSyncThen(convId, cb, timeoutMs) {
 }
 // Маркер в логе: видно КАЖДЫЙ экспорт DeepSeek — был ли дозапрос, чем закончился, какой
 // текст пошёл в файл (verdicts) и сколько ходов пришло из live.
-function aiCmLogNetSyncResult(convId, info) {
+function aiCmLogNetSyncResult(convId: string | null, info: AiCmNetSyncInfo): void {
   try {
     var v = info && info.verdicts ? JSON.stringify(info.verdicts) : '{}';
     var line = '[AI CM][net-sync] convId=' + String(convId || '').slice(0, 8) +
@@ -238,7 +238,7 @@ function aiCmLogNetSyncResult(convId, info) {
 // ================= конец O-18 (фаза 2) =================
 
 // Дамп turnsMap в момент экспорта: авто-fired и ручной (md/txt).
-function aiCmDumpTurnsSnapshot(tag, cid, msgs) {
+function aiCmDumpTurnsSnapshot(tag: string, cid: string | null, msgs: AiCmExportMessage[]): void {
   try {
     var snap = aiCmGeminiTurnsSnapshotSync();
     var msgsN = (snap && snap.msgs) || 0;
@@ -287,7 +287,7 @@ function aiCmDumpTurnsSnapshot(tag, cid, msgs) {
 // stale у qwen не имеет права стирать посчитанное число: подпись бейджа при непустой базе
 // адаптера остаётся числом, а неполнота источника отмечается меткой в тултипе
 // (core/widget.js:498). Здесь поведение самого сторожа не меняется.
-function scheduleStaleCheck() {
+function scheduleStaleCheck(): void {
   if (!isExtensionValid()) return;
   try { clearTimeout(staleTimer); } catch (e) { }
   stale = false;
@@ -317,7 +317,7 @@ function scheduleStaleCheck() {
 // turnsMap: состав/байты уже снятой базы от него не меняются, а «дождались» и «не дождались»
 // различимы в логе. Мост — те же window-CustomEvent, что у probe/flush O-16 и net-sync O-18.
 var aiCmFilesDrainSeq = 0;
-function aiCmFilesQueuePending() {
+function aiCmFilesQueuePending(): number {
   var pending = -1;
   var handler = null;
   try {
@@ -341,7 +341,7 @@ function aiCmFilesQueuePending() {
 }
 // Маркер в логе: видно КАЖДЫЙ экспорт DeepSeek — ждали ли очередь, чем закончилось ожидание
 // и сколько файлов осталось в полёте к моменту записи файла.
-function aiCmLogFilesDrain(convId, info) {
+function aiCmLogFilesDrain(convId: string | null, info: AiCmFilesDrainInfo): void {
   try {
     var line = '[AI CM][file-queue] convId=' + String(convId || '').slice(0, 8) +
       ' ok=' + (info && info.ok === true ? 1 : 0) +
@@ -354,7 +354,7 @@ function aiCmLogFilesDrain(convId, info) {
     debugLog('log', '[AI CM][file-queue] log failed: ' + ((eLog && eLog.message) || eLog));
   }
 }
-function aiCmExportFilesDrainThen(convId, cb, timeoutMs) {
+function aiCmExportFilesDrainThen(convId: string | null, cb: ((info: AiCmFilesDrainInfo) => void) | null, timeoutMs?: number): void {
   var cap = (typeof timeoutMs === 'number' && timeoutMs > 0) ? timeoutMs : 2000;
   var pending = aiCmFilesQueuePending();
   if (pending <= 0) {
@@ -399,7 +399,7 @@ function aiCmExportFilesDrainThen(convId, cb, timeoutMs) {
 // Полная цепочка экспорта DeepSeek: дождаться текста вложений (A-лайт) → сетевой дозапрос
 // истории (O-18) → композиция файла. Старый порядок «сеть → файл» сохранён, ожидание
 // вложений добавлено ПЕРЕД ним: текст вложения нужен той же базе, что уйдёт в файл.
-function aiCmExportFilesThenNetSync(convId, cb, netTimeoutMs) {
+function aiCmExportFilesThenNetSync(convId: string | null, cb: (() => void) | null, netTimeoutMs?: number): void {
   var next = function () {
     try { if (cb) cb(); } catch (eCb) { swallowSoft(eCb, 'base-handler:filesThenNet-callback'); }
   };
@@ -424,18 +424,18 @@ var AI_CM_AISTUDIO_DRAIN_CAP_MS = 5000;
 var aiCmAistudioDrainTimers = Object.create(null);
 var aiCmAistudioDrainDeadlines = Object.create(null);
 
-function aiCmAistudioFilesApi() {
+function aiCmAistudioFilesApi(): any {
   try {
     if (typeof window === 'undefined') return null;
     // Очередь публикует MAIN-мир (core/aistudio-files.js), в types/ её нет
     // (types/ — запрещённая зона правки), поэтому доступ к Window — через any-каст
     // (прецедент: core/background.js:176). Псевдоним из тикета (AiCmAiStudioFiles,
     // с большой S) читается первым: имя могло быть закреплено в проде раньше.
-    var w = /** @type {any} */ (window);
+    var w: any = (window as any);
     return w.AiCmAiStudioFiles || w.AiCmAistudioFiles || null;
   } catch (e) { return null; }
 }
-function aiCmAistudioFilesPending() {
+function aiCmAistudioFilesPending(): number {
   var api = aiCmAistudioFilesApi();
   if (!api || typeof api.pending !== 'function') return 0;
   try {
@@ -444,7 +444,7 @@ function aiCmAistudioFilesPending() {
   } catch (e) { return 0; }
 }
 // true — файр отложен (повторный вход придёт по таймеру), false — можно писать файл.
-function aiCmFilesDrainDefer(cid, percentage, reason, netSynced) {
+function aiCmFilesDrainDefer(cid: string | null, percentage: number, reason: string, netSynced: boolean): boolean {
   try {
     if (typeof currentAdapter === 'undefined' || !currentAdapter || currentAdapter.siteName !== 'aistudio') return false;
     var pending = aiCmAistudioFilesPending();
@@ -488,7 +488,7 @@ function aiCmFilesDrainDefer(cid, percentage, reason, netSynced) {
 // глобальный лексический скоуп, поэтому объявления выше видны всем модулям и
 // content.js по прежним именам. Api — для инструментов, отладки и тестов.
 (function () {
-  var Api = {};
+  var Api: any = {};
   Api.aiCmHostHistoryRecord = aiCmHostHistoryRecord;
   Api.aiCmLogIntraDedupe = aiCmLogIntraDedupe;
   Api.aiCmDedupeExportSource = aiCmDedupeExportSource;
@@ -514,3 +514,71 @@ function aiCmFilesDrainDefer(cid, percentage, reason, netSynced) {
   if (typeof module !== 'undefined' && module.exports) module.exports = Api;
   if (typeof window !== 'undefined') window.AiCmBaseHandler = Api;
 })();
+
+// ========== Core Wave 2: типы модуля (EOF-блок) ==========
+// Общие структуры волны живут здесь, в базовом модуле кластера: base-handler и
+// export-manager — оба classic-скрипты (нет import/export), поэтому их объявления
+// глобальны и видны друг другу. Типы вынесены в хвост файла, чтобы аннотации не
+// сдвигали строки выше (line-числа catch-whitelist и source-пины тестов прежние).
+
+/** Разреженная карта произвольных значений (снимок истории, verdicts, patch-объекты). */
+interface AiCmHashMap {
+  [key: string]: any;
+}
+
+/** Сообщение экспорта: роль/текст + необязательное reasoning и служебные поля захвата. */
+interface AiCmExportMessage {
+  role?: string;
+  text?: string;
+  reasoning?: string;
+  id?: unknown;
+  [key: string]: any;
+}
+
+/** Выход схлопывания базы (E-2): сообщения + число удалённых. */
+interface AiCmDedupeResult {
+  messages: AiCmExportMessage[];
+  removed: number;
+}
+
+/** Сводка turnsMap, которую отдаёт MAIN-перехватчик (диагностика и ярусы источника). */
+interface AiCmTurnsSnapshot {
+  convId?: string;
+  messages?: AiCmExportMessage[] | null;
+  archiveCount?: number;
+  liveCount?: number;
+  baseMsgs?: number;
+  msgs?: number;
+  firstMsgHash?: string;
+  lastMsgHash?: string;
+  firstText?: string;
+  lastText?: string;
+  baseComplete?: boolean | null;
+  reachedStart?: boolean | null;
+  confirmedByScroll?: boolean | null;
+  scrollEngaged?: boolean;
+  [key: string]: any;
+}
+
+/** Ответ моста O-18 (сетевой дозапрос истории перед экспортом). */
+interface AiCmNetSyncInfo {
+  ok?: boolean;
+  reason?: string;
+  refetched?: boolean;
+  netTurns?: number;
+  liveTurns?: number;
+  verdicts?: unknown;
+  requestId?: string;
+  [key: string]: any;
+}
+
+/** Ответ моста Step D.10 / R2 (очередь текста вложений перед композицией файла). */
+interface AiCmFilesDrainInfo {
+  ok?: boolean;
+  reason?: string;
+  drained?: boolean;
+  pending?: number;
+  waitedMs?: number;
+  requestId?: string;
+  [key: string]: any;
+}

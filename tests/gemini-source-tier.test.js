@@ -25,6 +25,8 @@
 'use strict';
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
@@ -32,7 +34,7 @@ const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-te
 const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/buildReferenceText.ts');
 
 const ROOT = path.join(__dirname, '..');
-const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const MGR_SRC = read('core/export-manager.ts');
 const CONTENT_ONLY = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
 
 const MERGED = '[MERGED: ARCHIVE+LIVE]';

@@ -14,6 +14,7 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('../helpers/core-src.js');
 const path = require('path');
 const vm = require('vm');
 const { TextDecoder } = require('util');
@@ -329,10 +330,10 @@ describe('AI Studio: вложения в снимке истории', () => {
 });
 
 describe('AI Studio: статические пины проводки', () => {
-  const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+  const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 
   test('base-handler признаёт aistudio сайтом очереди файлов', () => {
-    expect(read('core/base-handler.js'))
+    expect(read('core/base-handler.ts'))
       .toContain("site === 'deepseek' || site === 'qwen' || site === 'aistudio'");
   });
 

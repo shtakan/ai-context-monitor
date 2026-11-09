@@ -22,17 +22,19 @@
  *
  * Исполняются РЕАЛЬНЫЕ функции: shouldSkipAutoExport (utils/export-emit-pipeline.ts),
  * maybeAutoExport + aiCmAutoExportStartDownload + doAutoExportDownload + aiCmWriteAutoExportFile
- * + aiCmAutoExportBasePendingLog (core/export-manager.js), канонический aiCmDiagLine
+ * + aiCmAutoExportBasePendingLog (core/export-manager.ts), канонический aiCmDiagLine
  * (utils/debug.ts) и реальные сборщики байтов (utils/export-text-builders.ts).
  *
  * НЕ ТРОГАЕТСЯ (пины R1–R6 ниже): байты и маски всех форматов (buildAutoExportFileName, O-11),
  * латч и реестр имён, сегментация базы GSA (O-31), гарды O-27 (shouldSkipGsaPageGuard,
  * isGarbageBody, пост-гард downloadBlob: xssi-prefix/empty-name), пороги 70/85/95, щит O-1
  * (core/content.js:1647), Gemini baseComplete/архив/лоадер, адаптеры Claude/Perplexity,
- * тихий `if (!cid) return;` в core/export-manager.js.
+ * тихий `if (!cid) return;` в core/export-manager.ts.
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
@@ -41,7 +43,7 @@ const { contentSource: CONTENT } = require('./helpers/content-source.js');
 
 const ROOT = path.join(__dirname, '..');
 const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
-const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const MGR_SRC = read('core/export-manager.ts');
 // R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
 const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
@@ -376,7 +378,7 @@ describe('O-33 R1: файр после сетевого снимка не изм
   test('файр: текст из buildHistoryMessages, имя из buildAutoExportFileName, латч ставится', () => {
     const h = fireHarness(false);
     expect(h.downloads).toHaveLength(1);
-    expect(h.latchKeys()).toEqual([P.latchKey('chatgpt', CID)]);        // латч core/export-manager.js:1027-1029
+    expect(h.latchKeys()).toEqual([P.latchKey('chatgpt', CID)]);        // латч core/export-manager.ts:1027-1029
     expect(h.logs.join('\n')).toContain('[AI CM][auto-export] fired convId=' + CID);
     // второй вход в тот же чат — already-fired (семантика прежняя)
     h.run(96);

@@ -94,6 +94,7 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./core-src.js');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
@@ -141,7 +142,7 @@ const INTERCEPT_JS = 'core/gemini-intercept.js';
 const SOURCES = MODULES.concat([INTERCEPT_JS]);
 
 function readSource(rel) {
-  return fs.readFileSync(path.join(ROOT, rel), 'utf8');
+  return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8'));
 }
 
 /** Исходник одного модуля по имени файла ('gemini-hidden-scroll.js' или с 'core/'). */

@@ -17,12 +17,14 @@
  * меняются (поле не передано → поведение 1:1, пины O-33 зелёные).
  *
  * Исполняются РЕАЛЬНЫЕ функции: shouldSkipAutoExport (utils/export-emit-pipeline.ts),
- * maybeAutoExport → doAutoExportDownload → aiCmWriteAutoExportFile (core/export-manager.js),
+ * maybeAutoExport → doAutoExportDownload → aiCmWriteAutoExportFile (core/export-manager.ts),
  * aiCmAutoExportTrustedBase + aiCmAutoExportTrustedBaseDiag (core/content.js), канонический
  * aiCmDiagLine (utils/debug.ts) и реальные сборщики байтов (utils/export-text-builders.ts).
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
@@ -31,7 +33,7 @@ const { contentSource: CONTENT, readSource } = require('./helpers/content-source
 
 const ROOT = path.join(__dirname, '..');
 const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
-const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const MGR_SRC = read('core/export-manager.ts');
 const WIDGET_SRC = readSource('core/widget.ts');
 const CONTENT_ONLY = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
 // R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без

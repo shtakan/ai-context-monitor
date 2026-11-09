@@ -22,7 +22,7 @@
  *   S1 — чистая точка правила: hasReasoningInSource/effectiveReasoningToggle в пайплайне
  *        (формула пересмотра — в одной чистой функции, третьим аргументом site);
  *   S2 — проводка: ЕДИНСТВЕННАЯ точка чтения тумблера aiCmHiddenExportEffectiveOn
- *        (core/export-manager.js) передаёт site из currentAdapter; её зовут точка санации и
+ *        (core/export-manager.ts) передаёт site из currentAdapter; её зовут точка санации и
  *        точка сбора; OFF-литералы и OFF-путь S1–S5 не переписаны;
  *   S3 — таблицы истинности обеих чистых функций (включая ось site);
  *   Q1 — Qwen + reasoning + OFF → файл БЕЗ [REASONING] (0 секций, только вопрос и ответ);
@@ -46,17 +46,18 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 
 const ROOT = path.join(__dirname, '..');
-const read = function (rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); };
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 
-const MGR_SRC = read('core/export-manager.js');
+const MGR_SRC = read('core/export-manager.ts');
 const PIPELINE_SRC = read('utils/export-emit-pipeline.ts');
-const BASE_HANDLER_SRC = read('core/base-handler.js');
+const BASE_HANDLER_SRC = read('core/base-handler.ts');
 const OPTIONS_HTML = read('options/options.html');
 const I18N_APPLY_SRC = read('options/i18n-apply.js');
 const ru = JSON.parse(read('_locales/ru/messages.json'));
@@ -99,7 +100,7 @@ function countOccurrences(s, needle) {
 }
 
 // =====================================================================================
-// Песочница: РЕАЛЬНЫЙ регион core/export-manager.js (sanitizeGeminiText →
+// Песочница: РЕАЛЬНЫЙ регион core/export-manager.ts (sanitizeGeminiText →
 // aiCmHiddenExportEffectiveOn → aiCmSanitizeEmitUserTexts → O-37/C-хелперы →
 // aiCmCollectExportSource) + переключатель тумблера (в песочнице переменная локальна).
 // Приём — как в tests/qwen-o7-reasoning-toggle.test.js / deepseek-o7-hidden-export.test.js.

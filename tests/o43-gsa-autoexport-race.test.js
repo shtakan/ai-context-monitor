@@ -15,7 +15,7 @@
  * aiCmGsaNetworkCompleteLatch). Взвод — приём сетевого снимка с detail.historyComplete===true
  * (core/content.js, слушатель 'ai-cm-full-history'); НЕ снимается эмитами historyComplete=0;
  * сброс — только на смене треда (core/widget.ts:resetConversationState по data-session-thread-id);
- * чтение — core/export-manager.js:maybeAutoExport → state.gsaNetworkCompleteLatch →
+ * чтение — core/export-manager.ts:maybeAutoExport → state.gsaNetworkCompleteLatch →
  * utils/export-emit-pipeline.ts:shouldSkipAutoExport.
  *
  * НЕ ТРОГАЕТСЯ (пины R ниже): mergeTurns/applyTurns, пороги и гистерезис −10 п.п., имена и
@@ -23,12 +23,14 @@
  * шести платформ при отсутствии поля, GSA threadId-сегментация (O-31) и captcha-гард (O-27).
  *
  * Исполняются РЕАЛЬНЫЕ функции: shouldSkipAutoExport (utils/export-emit-pipeline.ts),
- * aiCmGsaNetworkCompleteReset/Set/Is + maybeAutoExport (core/export-manager.js),
+ * aiCmGsaNetworkCompleteReset/Set/Is + maybeAutoExport (core/export-manager.ts),
  * resetConversationState (core/widget.ts) — в песочнице с РЕАЛЬНЫМ объектом состояния
  * (require core/state.ts), как в browser'е (общий лексический скоуп контент-скриптов).
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
@@ -37,7 +39,7 @@ const HELPER = require('./helpers/content-source.js');
 
 const ROOT = HELPER.ROOT;
 const CONTENT = HELPER.contentSource;
-const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const MGR_SRC = read('core/export-manager.ts');
 const WIDGET_SRC = HELPER.readSource('core/widget.ts');
 const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');
 
@@ -421,9 +423,9 @@ describe('O-43 R2: прежние контуры не тронуты', () => {
     expect(INTERCEPT_SRC).toContain("absorbForeignSnapshot(tid, turns, historyComplete)");
     expect(INTERCEPT_SRC).toContain("'foreign-not-applied'");
     // латч O-43 — только ISOLATED-мир (state.js/export-manager.js/content.js)
-    const iso = ['core/state.ts', 'core/widget.ts', 'core/export-manager.js', 'core/content.js'];
+    const iso = ['core/state.ts', 'core/widget.ts', 'core/export-manager.ts', 'core/content.js'];
     for (const rel of iso) {
-      expect(fs.readFileSync(path.join(ROOT, rel), 'utf8')).toContain('aiCmGsaNetworkComplete');
+      expect(readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8'))).toContain('aiCmGsaNetworkComplete');
     }
   });
 
@@ -434,7 +436,7 @@ describe('O-43 R2: прежние контуры не тронуты', () => {
     expect(reset.indexOf('latch kept reason=spa-entry')).toBeGreaterThan(iGsa);
     expect((reset.match(/aiCmAutoExportFiredOnce/g) || []).length).toBe(0); // O-38-латч сбросом не снимается
     expect(fnDecl(MGR_SRC, 'maybeAutoExport')).toContain('aiCmAutoExportFiredOnce[siteName + \'|\' + cid] === 1');
-    // count = 1 (core/export-manager.js + core/state.ts объявление проверяем отдельно ниже)
+    // count = 1 (core/export-manager.ts + core/state.ts объявление проверяем отдельно ниже)
     expect((MGR_SRC.match(/function aiCmGsaNetworkCompleteReset\(/g) || []).length).toBe(1);
   });
 });

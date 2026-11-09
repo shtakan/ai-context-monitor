@@ -162,7 +162,7 @@
       "reason": "timing-guard: отмена таймера/подписки: обработчик мог быть снят хостом или гонкой; пример: clearTimeout(timer);"
     },
     {
-      "file": "core/base-handler.js",
+      "file": "core/base-handler.ts",
       "category": "debug-instrumentation",
       "lines": [
         236,
@@ -171,7 +171,7 @@
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var v = info && info.verdicts ? JSON.stringify(info.verdicts) : '{}'; va"
     },
     {
-      "file": "core/base-handler.js",
+      "file": "core/base-handler.ts",
       "category": "logging-guard",
       "lines": [
         201
@@ -179,7 +179,7 @@
       "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: aiCmLogNetSyncResult(convId, info || {});"
     },
     {
-      "file": "core/base-handler.js",
+      "file": "core/base-handler.ts",
       "category": "timing-guard",
       "lines": [
         199,
@@ -678,7 +678,7 @@
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof val !== 'string' || !val) return; sseResyncRing.push({ op: (o"
     },
     {
-      "file": "core/export-manager.js",
+      "file": "core/export-manager.ts",
       "category": "best-effort-guard",
       "lines": [
         1001
@@ -686,7 +686,7 @@
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var d = ev && ev.detail; if (!d) return; aiCmGsaProbeRunning = d.running"
     },
     {
-      "file": "core/export-manager.js",
+      "file": "core/export-manager.ts",
       "category": "cleanup-guard",
       "lines": [
         637
@@ -694,7 +694,7 @@
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: if (!aiCmPendingHistWrite) return; if (cid && aiCmPendingHistWrite.convI"
     },
     {
-      "file": "core/export-manager.js",
+      "file": "core/export-manager.ts",
       "category": "debug-instrumentation",
       "lines": [
         254,
@@ -704,7 +704,7 @@
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof aiCmDiagLine === 'function' && typeof aiCmDiagOn === 'functio"
     },
     {
-      "file": "core/export-manager.js",
+      "file": "core/export-manager.ts",
       "category": "defensive-assignment",
       "lines": [
         911,
@@ -713,7 +713,7 @@
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: aiCmIncludeHiddenInExport = !!(data && data.aiCmIncludeHiddenInExport =="
     },
     {
-      "file": "core/export-manager.js",
+      "file": "core/export-manager.ts",
       "category": "feature-detect",
       "lines": [
         1901
@@ -721,7 +721,7 @@
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var BdiagDl = (typeof AiCmExportBuilders !== 'undefined') ? AiCmExportBu"
     },
     {
-      "file": "core/export-manager.js",
+      "file": "core/export-manager.ts",
       "category": "guard-clause",
       "lines": [
         469,
@@ -733,7 +733,7 @@
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (used && file) used[file] = 1;"
     },
     {
-      "file": "core/export-manager.js",
+      "file": "core/export-manager.ts",
       "category": "host-api-guard",
       "lines": [
         895,
@@ -742,7 +742,7 @@
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.storage.onChanged.addListener(function (changes, areaName) { if ("
     },
     {
-      "file": "core/export-manager.js",
+      "file": "core/export-manager.ts",
       "category": "local-helper-guard",
       "lines": [
         477,
@@ -751,7 +751,7 @@
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmLatchCacheReady();"
     },
     {
-      "file": "core/export-manager.js",
+      "file": "core/export-manager.ts",
       "category": "logging-guard",
       "lines": [
         69
@@ -1235,7 +1235,7 @@
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var u = new URL(rawUrl, location.href); var a = u.searchParams.get('auth"
     },
     {
-      "file": "core/hybrid-tail.js",
+      "file": "core/hybrid-tail.ts",
       "category": "defensive-assignment",
       "lines": [
         40
@@ -1243,7 +1243,7 @@
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: id = (node.getAttribute && node.getAttribute('data-message-id')) || '';"
     },
     {
-      "file": "core/hybrid-tail.js",
+      "file": "core/hybrid-tail.ts",
       "category": "guard-clause",
       "lines": [
         57

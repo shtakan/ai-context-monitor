@@ -62,11 +62,13 @@
  *          ветки responseType, try/catch вокруг тела обработчика, fetch-хук прежний
  *          (кроме поля transport в диагностике).
  *
- * НЕ ТРОГАЕТСЯ: core/export-manager.js, core/base-handler.js, utils/export-text-builders.ts
+ * НЕ ТРОГАЕТСЯ: core/export-manager.ts, core/base-handler.ts, utils/export-text-builders.ts
  * (только чтение источника), adapters/qwen-adapter.ts (scope O-41), тесты прочих платформ.
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
@@ -80,8 +82,8 @@ const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts
 const { loadAsClassic } = require('./helpers/load-esm.js');
 // Ph2: stream-frames.js — ESM; перехватчик исполняется с втянутыми импортами.
 const QWEN_CLASSIC = loadAsClassic('core/qwen-intercept.js');
-const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
-const BASE_HANDLER_SRC = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.js'), 'utf8');
+const MGR_SRC = read('core/export-manager.ts');
+const BASE_HANDLER_SRC = read('core/base-handler.ts');
 
 // Рез по балансу фигурных скобок (конвенция сьюта: tests/qwen-o39-reasoning-passthrough.test.js).
 function fnDecl(src, name) {

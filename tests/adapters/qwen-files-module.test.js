@@ -17,12 +17,13 @@
 'use strict';
 
 const fs = require('fs');
+const { readCore } = require('../helpers/core-src.js');
 const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..', '..');
 const MODULE_SRC = fs.readFileSync(path.join(ROOT, 'core', 'qwen-files.js'), 'utf8');
-const read = function (rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); };
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 
 const CHAT = 'chat-1';
 const URL_MD = 'https://cdn.qwenlm.ai/u1/f1_%D0%9F%D1%80%D0%BE%D1%82%D0%BE%D0%BA%D0%BE%D0%BB.md?key=JWT.SIGNATURE';
@@ -527,9 +528,9 @@ describe('R2: qfReset на SPA-переходе', function () {
 describe('R2: source-пины связки (перехватчик, регистрация, экспорт)', function () {
   const intercept = read('core/qwen-intercept.js');
   const background = read('core/background.js');
-  const baseHandler = read('core/base-handler.js');
+  const baseHandler = read('core/base-handler.ts');
   const content = read('core/content.js');
-  const exportManager = read('core/export-manager.js');
+  const exportManager = read('core/export-manager.ts');
 
   test('parseQwenHistory отдаёт вложения, applyHistoryPayload ставит их в очередь', function () {
     expect(intercept).toContain('function historyFilesOf(node)');

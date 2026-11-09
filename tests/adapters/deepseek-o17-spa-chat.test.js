@@ -31,6 +31,8 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('../helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 const { JSDOM, VirtualConsole } = require('jsdom');
 
@@ -198,7 +200,7 @@ function makeStand(startUrl, opts) {
     counts: () => events.map((d) => d.count),
     texts: () => ((events[events.length - 1] || {}).messageTexts) || [],
     msgs: () => (((events[events.length - 1] || {}).messages) || []).map((m, i) => ({ role: m.role, text: events[events.length - 1].messageTexts[i] })),
-    // мост сводки turnsMap (aiCmDumpTurnsSnapshot в core/base-handler.js)
+    // мост сводки turnsMap (aiCmDumpTurnsSnapshot в core/base-handler.ts)
     turnsSnap: function () {
       let resp = null;
       const h = (ev) => { resp = ev.detail; };
@@ -365,7 +367,7 @@ describe('O-17: DeepSeek — SPA-чат без перезагрузки', () => 
     // живой лог O-17: «snapshot-at-manual msgs=0 firstText=""» читался как пустой turnsMap,
     // хотя база была собрана — DeepSeek не отвечал на мост сводки (мост был Gemini-only),
     // а фолбэк дампа подставляет msgs только когда передан массив (ручной путь передаёт null).
-    const Api = require('../../core/base-handler.js');
+    const Api = require('../../core/base-handler.ts');
     const lines = [];
     const prev = {
       window: global.window, debugLog: global.debugLog,
@@ -443,7 +445,7 @@ describe('O-17: DeepSeek — SPA-чат без перезагрузки', () => 
 describe('O-17: поведение O-15/O-16 сохранено, прочие сервисы не затронуты', () => {
   test('defer до base-complete остаётся; as-is — только аварийный 60s-таймаут', () => {
     const contentSrc = require('../helpers/content-source.js').contentSource;
-    const exportSrc = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+    const exportSrc = read('core/export-manager.ts');
     expect(contentSrc).toContain('if (baseComplete !== true) return;');                  // late re-check
     expect(exportSrc).toContain('if (baseComplete !== true) return;');                   // aiCmTryLateAutoExport
     expect(exportSrc).toContain("if (reason !== 'timeout' && !(baseComplete === true && !aiCmLoaderRunningByConv[p.convId])) return;");

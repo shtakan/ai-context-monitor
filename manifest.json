@@ -66,9 +66,9 @@
     "adapters/qwen-adapter.ts",
     "core/state.ts",
     "core/widget.ts",
-    "core/base-handler.js",
-    "core/hybrid-tail.js",
-    "core/export-manager.js",
+    "core/base-handler.ts",
+    "core/hybrid-tail.ts",
+    "core/export-manager.ts",
     "core/content.js"
   ],
   "run_at": "document_idle"

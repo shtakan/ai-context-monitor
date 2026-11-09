@@ -35,6 +35,8 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
@@ -47,7 +49,7 @@ const WIDGET_SRC = H.moduleSource('core/widget.ts');
 global.swallow = function () { };
 // Step E.2c-B2b-3b (swallowSoft): канал B из utils/debug.ts — вне eval-песочницы так же, как swallow.
 global.swallowSoft = function () { };
-const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const MGR_SRC = read('core/export-manager.ts');
 const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
 const BUILDERS_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-text-builders.ts'), 'utf8');
 // R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
@@ -487,7 +489,7 @@ describe('O-1 R3: автоэкспорт не тронут', () => {
       // Phase 3: ядро читается через concat-хелпер, прочие перехватчики — с диска
       const src = rel === 'core/gemini-intercept.js'
         ? require('./helpers/gemini-intercept-source.js').geminiSource
-        : fs.readFileSync(path.join(ROOT, rel), 'utf8');
+        : readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8'));
       expect(src).not.toContain('aiCmBadgeHold');
       expect(src).not.toContain('AI_CM_BADGE_HOLD');
     });

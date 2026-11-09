@@ -38,6 +38,7 @@
  * CHANGELOG/версия.
  */
 const fs = require('fs');
+const { readCore } = require('../helpers/core-src.js');
 const path = require('path');
 const { TextEncoder, TextDecoder } = require('util');
 
@@ -300,7 +301,7 @@ describe('O-52 (R3): регресс O-48 (legacy-байтовая разметк
   });
 
   test('R3: решение по базе O-51 и инвентарь пинов O-48/O-49/O-50 целы', () => {
-    const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
     const ingest = fnDecl(SRC, 'ingest');
     expect(ingest).toContain('if (fullRebuildFromVf5 && incomingIsSubsetOfBase) fullRebuildFromVf5 = false;');
     expect(ingest).toContain("reason = 'vf5-subset-no-reset'");
@@ -310,6 +311,6 @@ describe('O-52 (R3): регресс O-48 (legacy-байтовая разметк
     expect((o48.match(/^\s*test\(/gm) || []).length).toBe(16);
     expect((o49.match(/^\s*test\(/gm) || []).length).toBe(15);
     expect((o50.match(/^\s*test\(/gm) || []).length).toBe(10);
-    expect(read('core/export-manager.js')).toContain('aiCmCollectExportSource');
+    expect(read('core/export-manager.ts')).toContain('aiCmCollectExportSource');
   });
 });

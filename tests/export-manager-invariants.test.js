@@ -35,20 +35,22 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 
 const ROOT = path.join(__dirname, '..');
-const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+const MGR_SRC = read('core/export-manager.ts');
 const LOADER_REL = 'core/gemini-loader-scroll.js';
 const LOADER_SRC = fs.readFileSync(path.join(ROOT, LOADER_REL), 'utf8');
 
 const CID = 'e292103e4b521dae'; // живой convId Gemini из fixture H21 (тот же, что в gemini-autoexport-threshold.test.js)
 
 /**
- * РЕАЛЬНЫЙ core/export-manager.js целиком в песочнице состояния контент-скрипта.
+ * РЕАЛЬНЫЙ core/export-manager.ts целиком в песочнице состояния контент-скрипта.
  * window — фейковый (перехватываем addEventListener/dispatchEvent и downloadBlob),
  * пайплайн и сборщики — настоящие. Состояние — ровно то, что в проде живёт в
  * core/state.ts и core/gemini-intercept.js (имена и формы совпадают).

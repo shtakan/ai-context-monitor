@@ -12,6 +12,7 @@
 'use strict';
 
 const fs = require('fs');
+const { readCore } = require('../helpers/core-src.js');
 const path = require('path');
 const vm = require('vm');
 const zlib = require('zlib');
@@ -23,7 +24,7 @@ const ROOT = path.join(__dirname, '..', '..');
 const MODULE_SRC = fs.readFileSync(path.join(ROOT, 'core', 'gemini-files.js'), 'utf8');
 const PARSER_SRC = require('../helpers/load-esm.js').loadAsClassic('utils/gemini-batchexecute-parser.ts');
 const INGEST_SRC = fs.readFileSync(path.join(ROOT, 'core', 'gemini-ingest.js'), 'utf8');
-const read = function (rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); };
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 
 /** Вырезает `function <name>(…) { … }` по балансу скобок (для чистых хелперов). */
 function fnSource(src, name) {
@@ -891,7 +892,7 @@ describe('R2: связка с перехватчиком/background', function (
   });
 
   test('дренаж очереди разрешён для gemini', function () {
-    expect(read('core/base-handler.js')).toContain("site === 'gemini'");
+    expect(read('core/base-handler.ts')).toContain("site === 'gemini'");
   });
 });
 

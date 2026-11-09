@@ -17,24 +17,24 @@
 // Ph2: парсер ответа Gemini — ES-модуль; esbuild втягивает его статическим import'ом.
 import { extractGeminiResponse } from '../utils/gemini-dom-parser.ts';
 
-function normalize(s) { return (s || '').toLowerCase().replace(/[^a-zа-яё0-9]+/g, ''); }
-function stripMd(s) {
+function normalize(s: string): string { return (s || '').toLowerCase().replace(/[^a-zа-яё0-9]+/g, ''); }
+function stripMd(s: string): string {
   if (!s) return '';
   return s.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/`+/g, '');
 }
-var MSG_SELECTORS = [
+var MSG_SELECTORS: string[] = [
   '[data-message-author-role]',
   '[data-message-id]',
   '.user-query, .model-response, .query-text, .response-content, [data-role="user"], [data-role="model"]'
 ];
-function findMessageNodes() {
+function findMessageNodes(): AiCmTailNodeSet {
   for (var i = 0; i < MSG_SELECTORS.length; i++) {
     var nodes = document.querySelectorAll(MSG_SELECTORS[i]);
     if (nodes && nodes.length > 0) return { nodes: Array.prototype.slice.call(nodes), sel: MSG_SELECTORS[i] };
   }
   return { nodes: [], sel: '(none)' };
 }
-function nodeIsBase(node, skel) {
+function nodeIsBase(node: Element, skel: string): boolean {
   if (baseIdSet && baseIdSet.size > 0) {
     var id = '';
     try { id = (node.getAttribute && node.getAttribute('data-message-id')) || ''; } catch (e) { }
@@ -51,13 +51,13 @@ function nodeIsBase(node, skel) {
 }
 // Gemini: DOM-хвост собираем через чистый парсер utils/gemini-dom-parser.ts,
 // чтобы исключить блоки мышления и включить HTML-таблицы как markdown.
-function shouldUseGeminiDomParser() {
+function shouldUseGeminiDomParser(): boolean {
   try {
     if (currentAdapter && currentAdapter.siteName === 'gemini') return true;
   } catch (e) { }
   return false;
 }
-function computeTailFromDom() {
+function computeTailFromDom(): AiCmTail {
   var found = findMessageNodes();
   var nodes = found.nodes;
   if (!baseSeen || !baseText) return { text: '', count: 0, bounded: false, sel: found.sel, diag: 'нет базы' };
@@ -119,7 +119,7 @@ function computeTailFromDom() {
 // O-32: канонический текст метрик неполной базы — ровно схлопнутая база (aiCmMetricBaseText,
 // core/base-handler.js). Хелпер объявлен в общем лексическом скоупе контент-скриптов; в
 // срез-песочницах тестов его может не быть — typeof-гард, значение то же (baseText).
-function aiCmTailMetricBase(fallback) {
+function aiCmTailMetricBase(fallback: string): string {
   return (typeof aiCmMetricBaseText === 'function') ? aiCmMetricBaseText(fallback) : fallback;
 }
 // ФИКС РЕГРЕССИИ «бейдж Gemini замирает после обмена репликами».
@@ -137,7 +137,7 @@ function aiCmTailMetricBase(fallback) {
 // найдена граница базы (`stopFound` в computeTailFromDom), т.е. это ровно новые ходы.
 // Инварианты O-32 сохранены: неполный (unbounded) DOM базу не подменяет, пустой хвост не
 // добавляет ничего, `baseSeen=false` по-прежнему отдаёт пустую строку.
-function getEffectiveText() {
+function getEffectiveText(): string {
   if (baseSeen && baseText) {
     var tail = computeTailFromDom();
     var sig = (tail.sel || '') + '|' + (tail.bounded ? '1' : '0');
@@ -158,7 +158,7 @@ function getEffectiveText() {
   }
   return '';
 }
-function getEffectiveCount(fallbackCount) {
+function getEffectiveCount(fallbackCount: number): number {
   if (baseSeen && baseText) {
     // Счётчик меряется тем же правилом, что и текст (см. комментарий выше) —
     // bounded-хвост новее базы это новые ходы разговора, а не дрейф DOM.
@@ -176,7 +176,7 @@ function getEffectiveCount(fallbackCount) {
 // глобальный лексический скоуп, поэтому объявления выше видны всем модулям и
 // content.js по прежним именам. Api — для инструментов, отладки и тестов.
 (function () {
-  var Api = {};
+  var Api: any = {};
   Api.normalize = normalize;
   Api.stripMd = stripMd;
   Api.MSG_SELECTORS = MSG_SELECTORS;
@@ -190,3 +190,21 @@ function getEffectiveCount(fallbackCount) {
   if (typeof module !== 'undefined' && module.exports) module.exports = Api;
   if (typeof window !== 'undefined') window.AiCmHybridTail = Api;
 })();
+
+// ========== Core Wave 2: типы модуля (EOF-блок) ==========
+// Хвост DOM-хвоста гибрида. Возвращаемые структуры `findMessageNodes`/`computeTailFromDom`
+// объявлены здесь, чтобы аннотации не сдвигали строки выше: line-числа catch-whitelist
+// (tests/fixtures/catch-whitelist.json) и source-пины тестов остаются прежними.
+interface AiCmTailNodeSet {
+  nodes: any[];
+  sel: string;
+}
+
+/** Результат computeTailFromDom: текст хвоста, число узлов, граница базы и диагностика. */
+interface AiCmTail {
+  text: string;
+  count: number;
+  bounded: boolean;
+  sel: string;
+  diag: string;
+}

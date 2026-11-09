@@ -45,6 +45,7 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./core-src.js');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
@@ -69,7 +70,7 @@ const INTERCEPT_JS = 'core/deepseek-intercept.js';
 const SOURCES = MODULES.concat([INTERCEPT_JS]);
 
 function readSource(rel) {
-  const text = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+  const text = readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8'));
   // Рабочая копия на Windows может быть CRLF (eol=lf в .gitattributes гарантирует LF
   // только в индексе/блобах) — нормализуем к LF, чтобы склейка была байт-стабильной.
   return text.replace(/\r\n/g, '\n');

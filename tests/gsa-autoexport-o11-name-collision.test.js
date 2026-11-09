@@ -23,6 +23,8 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
@@ -202,7 +204,7 @@ describe('O-11: два автоэкспорта GSA в одну минуту —
       maxTokenCount: 1000,
       sessionFiredCache: {},
       autoExportFired: {},
-      aiCmAutoExportNamesUsed: {}, // O-11: реестр занятых имён (как в core/export-manager.js)
+      aiCmAutoExportNamesUsed: {}, // O-11: реестр занятых имён (как в core/export-manager.ts)
       aiCmCursorLiveByConv: {},
       aiCmDumpTurnsSnapshot: function () { },
       aiCmCancelDeferredHistWrite: function () { },
@@ -351,7 +353,7 @@ describe('O-11-2: два файра разных чатов в одну мину
       autoExportLastConvId: '',
       autoExportLastPct: -1,
       autoExportFired: {},
-      aiCmAutoExportNamesUsed: {}, // O-11: реестр занятых имён (как в core/export-manager.js)
+      aiCmAutoExportNamesUsed: {}, // O-11: реестр занятых имён (как в core/export-manager.ts)
       notCompleteLogged: {},
       sessionFiredCache: {},
       aiCmGsaProbeByThread: {},
@@ -469,7 +471,7 @@ describe('O-11-2: пины единственной точки старта ск
 
   const single = fnDecl(CONTENT, 'aiCmAutoExportStartDownload');
   const body = fnDecl(CONTENT, 'doAutoExportDownload');
-  const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
+  const MGR_SRC = read('core/export-manager.ts');
   const GSA_SRC = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');
   const GSA_ADAPTER_SRC = fs.readFileSync(path.join(ROOT, 'adapters', 'google-search-adapter.ts'), 'utf8');
 

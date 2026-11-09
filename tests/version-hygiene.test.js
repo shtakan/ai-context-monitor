@@ -15,10 +15,11 @@
  * Код расширения, локали, экспорт и workflow не изменяются — здесь только чтение.
  */
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const read = function (rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); };
+const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 
 const manifest = JSON.parse(read('manifest.json'));
 const pkg = JSON.parse(read('package.json'));

@@ -70,8 +70,19 @@ function splitCjsTail(source) {
   return { head: source.slice(0, at + 1), tail: tail.slice(1) };
 }
 
+/**
+ * UMD-хвост ВНУТРИ IIFE (`(function () { ... module.exports = Api; })();` в
+ * core/base-handler.ts и др.) splitCjsTail не отделяет — он ищет только
+ * top-level `\nif (typeof module`. Для таких classic-скриптов esbuild принимает
+ * `module` за CommonJS и оборачивает файл в __commonJS с `export default` — такой
+ * текст не парсится в `new Function`. Поэтому типы снимает TypeScript-API
+ * (stripTypesKeepComments): он сохраняет комментарии, исходную форму и UMD-хвост.
+ */
+const INDENTED_UMD = /^[ \t]+if \(typeof module !== 'undefined' && module\.exports\)/m;
+
 /** Снимает TS-типы и восстанавливает исходную форму import/export. */
 function stripTypes(source, file) {
+  if (INDENTED_UMD.test(source)) return stripTypesKeepComments(source, file);
   const parts = splitCjsTail(source);
   const code = loadEsbuild().transformSync(parts.head, {
     loader: file.endsWith('.tsx') ? 'tsx' : 'ts',
