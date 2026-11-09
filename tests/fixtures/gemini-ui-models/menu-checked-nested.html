@@ -1,0 +1,17 @@
+<!--
+  Фрагмент меню, где aria-checked="true" стоит НА ПОТОМКЕ пункта (галочка внутри
+  строки), а у самого пункта роль role="menuitem". Это второй поддерживаемый
+  вариант разметки: probeGeminiUiMenuChecked проверяет и собственный атрибут,
+  и it.querySelector('[aria-checked="true"]').
+  Ожидание: "3.1 Pro" (текст пункта без мусора от галочки).
+-->
+<div class="model-menu" role="menu" aria-label="Выбор модели">
+  <div class="item" role="menuitem">
+    <span class="check" aria-checked="false"></span>
+    <span class="label">2.5 Pro</span>
+  </div>
+  <div class="item" role="menuitem">
+    <span class="check" aria-checked="true">✓</span>
+    <span class="label">3.1 Pro</span>
+  </div>
+</div>

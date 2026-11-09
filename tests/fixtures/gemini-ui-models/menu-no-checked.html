@@ -1,0 +1,11 @@
+<!--
+  Негативный кейс меню: пункты с распознаваемым текстом есть, но НИ ОДИН не
+  помечен aria-checked="true" (меню ещё не отрисовало состояние выбора).
+  Ожидание probeGeminiUiMenuChecked: "" — вызывающий код обязан уйти на кнопку
+  композера / сетевой снимок, а не угадывать по первому пункту.
+-->
+<div class="model-menu" role="menu" aria-label="Выбор модели">
+  <button type="button" role="menuitemradio" aria-checked="false">3.6 Flash</button>
+  <button type="button" role="menuitemradio" aria-checked="false">3.1 Pro</button>
+  <button type="button" role="option" aria-checked="false">2.5 Flash Lite</button>
+</div>

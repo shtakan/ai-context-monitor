@@ -145,7 +145,6 @@ declare function applyDebugLogs(v: unknown): void;
 declare function aiCmDispatchContentReady(): void;
 declare function getCurrentConvId(): string | null;
 declare function aiCmAssignAdapterByHost(): BaseAdapter | null;
-declare function detectSelectedModelFromDom(snapModelId: string | null): { modelId: string | null; fam: string | null; variant: string | null };
 declare function resolveCurrentModel(): { modelId: string | null; fam: string | null; variant: string | null };
 declare function geminiParserVersion(): string;
 declare function getAccountIndex(): string;

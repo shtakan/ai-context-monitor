@@ -50,6 +50,14 @@ import '../utils/gemini-batchexecute-parser.ts';
 // (chrome.scripting не умеет import) build.mjs выводит classic-артефакт
 // того же модуля в dist/utils/google-search-folwr-parser.js.
 import '../utils/google-search-folwr-parser.ts';
+// T1 (часть 1, docs/QUALITY_AUDIT.md): логика определения ВЫБРАННОЙ в UI модели Gemini
+// (v47–v50: regexp, checked-пункт меню [aria-checked], кнопка композера, семейный
+// резолвер) вынесена в чистый ES-модуль utils/gemini-ui-model.ts с DI — document,
+// ModelConfig и кэш «последнее точное имя по семейству» передаются аргументами,
+// поэтому слой покрыт unit-тестами (tests/adapters/gemini-ui-model.test.js).
+// Модуль втягивается этим статическим import'ом в контент-бандл; MAIN-регистраций
+// и classic-артефакта у него нет (в manifest.content_scripts не добавляется).
+import * as GeminiUiModel from '../utils/gemini-ui-model.ts';
 
 (function () {
   let v = 'unknown';
@@ -1584,101 +1592,13 @@ function startObserving(): void {
   // выбранной модели меняет её текст (childList/characterData) → пересчёт pct.
 }
 // ========== ОПРЕДЕЛЕНИЕ МОДЕЛИ (v47: UI-приоритет + 3 слоя фолбэка) ==========
-// v47: бейдж/попап/лимит должны считать от модели, ВЫБРАННОЙ в UI Gemini, а не от
-// модели, писавшей последний ответ (снимок/тэйп). Сигналы по убыванию точности:
-//  (1) checked-пункт открытого меню моделей ([aria-checked="true"]) — точная версия;
-//  (2) текст кнопки выбора модели в композере — версия+семейство или только семейство
-//      (тогда берём последнюю известную точную версию этого семейства);
-//  нет сигнала / не распознан → фолбэк на прежнюю цепочку: снимок сети → DOM-адаптер.
-const GEMINI_UI_MODEL_RE = /(?:gemini\s*)?(\d+(?:[.,]\d+)?)?\s*(ultra|pro|flash)(?:\s+(?:lite|расширенн[аяый]|extended|fast))?/i;
+// T1 (часть 1): логика UI-детектора Gemini (регэксп, checked-пункт меню, кнопка
+// композера, семейный резолвер) вынесена в utils/gemini-ui-model.ts — чистый модуль
+// с DI (document/ModelConfig/кэш передаются аргументами) и jest-пинами
+// (tests/adapters/gemini-ui-model.test.js). Здесь остаются только кэш «последнее
+// точное имя по семейству» и вызов детектора в resolveCurrentModel ниже.
 const geminiUiModelByFamily: Record<string, string> = {}; // 'pro'|'flash'|'ultra' -> последнее точное имя из UI
 let lastModelSourceSig: string = '';
-
-function extractUiModelText(text: string): string {
-  const t = String(text || '').replace(/\s+/g, ' ').trim();
-  if (!t || t.length > 60) return '';
-  const m = t.match(GEMINI_UI_MODEL_RE);
-  if (!m) return '';
-  // страховка от ложных срабатываний: нужна версия ИЛИ слово gemini
-  if (!m[1] && !/gemini/i.test(t)) return '';
-  return m[0].trim();
-}
-
-function probeGeminiUiMenuChecked(): string {
-  const items = document.querySelectorAll('[role="menuitemradio"], [role="menuitem"], [role="option"]');
-  for (var i = 0; i < items.length; i++) {
-    var it = items[i];
-    if (it.getAttribute('aria-checked') !== 'true' && !it.querySelector('[aria-checked="true"]')) continue;
-    const name = extractUiModelText(it.textContent);
-    if (name) return name;
-  }
-  return '';
-}
-
-// v48: нормализация слитного текста кнопки («ProРасширенный» → «Pro Расширенный»)
-function normalizeUiModelText(text: string): string {
-  return String(text || '')
-    .replace(/([a-zа-яё])([A-ZА-ЯЁ])/g, '$1 $2')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-// v49: семья(+вариант без версии) → канонический ключ. Приоритет точной версии:
-//  (a) кэш точного имени из открытого меню (geminiUiModelByFamily);
-//  (b) точная версия из сетевого снимка (snapModelId), если семья совпадает с DOM-семьёй;
-//  (c) семейный дефолт ModelConfig (реальная линейка веб-UI, не 3.7-анонс).
-// Род варианта не важен («Расширенный» == «Расширенная»).
-function resolveFamilyVariantId(fam: string, variant: string, snapModelId: string | null): string | null {
-  // (a)
-  const cached = geminiUiModelByFamily[fam];
-  if (cached) {
-    const cachedId = ModelConfig.resolveModelId(cached);
-    if (cachedId) return cachedId;
-  }
-  // (b) сетевой снимок честен («3.6 Flash» / «3.1 Pro») — берём, если семья совпадает
-  if (snapModelId) {
-    const snapName = (ModelConfig.getModel(snapModelId) && ModelConfig.getModel(snapModelId).name) || '';
-    const snapFam = snapName.match(/ultra|pro|flash/i);
-    if (snapFam && snapFam[0].toLowerCase() === fam) return snapModelId;
-  }
-  // (c) реальный семейный дефолт веб-UI («3.6 Flash», «3.1 Pro», «3.5 Flash Lite»)
-  const defId = ModelConfig.getFamilyDefaultModelId && ModelConfig.getFamilyDefaultModelId(fam, variant);
-  if (defId) return defId;
-  // страховочный фолбэк — всё же сетевая версия
-  return snapModelId || '';
-}
-
-function probeGeminiUiButton(snapModelId: string | null): string | null {
-  // v48: реальный DOM Gemini — BUTTON.input-area-switch, текст слитный
-  // («ProРасширенный», «FlashРасширенный», «Flash»). Кнопки нет → ''.
-  const btn = document.querySelector('button.input-area-switch');
-  if (!btn || !btn.textContent) return '';
-  const text = normalizeUiModelText(btn.textContent);
-  const m = text.match(GEMINI_UI_MODEL_RE);
-  if (!m) return '';
-  const famM = m[0].match(/ultra|pro|flash/i);
-  if (!famM) return '';
-  const fam = famM[0].toLowerCase();
-  if (m[1]) { // версия есть прямо в кнопке — точное имя, обновляем кэш
-    geminiUiModelByFamily[fam] = m[0].trim();
-    return m[0].trim();
-  }
-  // только семья(+вариант): приоритеты v49 (кэш меню → снимок → семейный дефолт)
-  const varM = m[0].match(/lite|расширенн[а-яё]*|extended|fast/i);
-  return resolveFamilyVariantId(fam, varM ? varM[0] : '', snapModelId);
-}
-
-function detectSelectedModelFromDom(snapModelId: string | null): string {
-  // меню открыто — самый точный сигнал, обновляем кэш «последняя по семейству»
-  const fromMenu = probeGeminiUiMenuChecked();
-  if (fromMenu) {
-    const famM = fromMenu.match(/ultra|pro|flash/i);
-    if (famM) geminiUiModelByFamily[famM[0].toLowerCase()] = fromMenu;
-    return fromMenu;
-  }
-  return probeGeminiUiButton(snapModelId) || '';
-}
-
 function resolveCurrentModel(): string {
   // v47: приоритет — выбранная в UI модель; фолбэк — снимок/тэйп/адаптер/дефолт.
   const rawFromNet = detectedModelSlug || '';
@@ -1687,7 +1607,13 @@ function resolveCurrentModel(): string {
   try {
     if ((window.location.hostname || '').indexOf('gemini.google.com') !== -1) {
       // v49: передаём сетевую версию — приоритет (b) для DOM-сигнала без номера версии
-      uiRaw = detectSelectedModelFromDom(snapNetId) || '';
+      // T1: UI-слой живёт в utils/gemini-ui-model.ts — DI: документ, реестр моделей
+      // и общий кэш семьи передаются аргументами (модуль втянут import'ом выше).
+      uiRaw = GeminiUiModel.detectSelectedModelFromDom({
+        document: document,
+        modelConfig: ModelConfig,
+        cache: geminiUiModelByFamily
+      }, snapNetId) || '';
     }
   } catch (e) { uiRaw = ''; }
   const uiResolved = uiRaw ? ModelConfig.resolveModelId(uiRaw) : null;

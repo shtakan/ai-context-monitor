@@ -1,0 +1,11 @@
+<!--
+  Кнопка выбора модели в композере Gemini (v48–v50): BUTTON.input-area-switch.
+  Реальный DOM отдаёт слитный текст без пробела на границе слов —
+  "ProРасширенный" (род варианта варьируется: Расширенный/Расширенная).
+  Ожидание probeGeminiUiButton: версии в тексте нет → normalizeUiModelText
+  вставляет пробел, семейство "pro" + вариант "расширенн*" уходят в
+  resolveFamilyVariantId (кэш меню → снимок сети → семейный дефолт ModelConfig).
+-->
+<div class="input-area-container">
+  <button type="button" class="input-area-switch" aria-label="Выбор модели">ProРасширенный</button>
+</div>

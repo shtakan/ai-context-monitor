@@ -284,6 +284,10 @@ export default [
       // и втягивается в content-бандл статическим import'ом из core/content.js;
       // MAIN-регистрации у него нет, classic-артефакт не выводится.
       'utils/export-emit-pipeline.ts',
+      // Ph2/T1: utils/gemini-ui-model.ts — ESM с named-экспортами; втягивается
+      // статическим import'ом из core/content.ts (UI-детектор модели Gemini).
+      // MAIN-регистраций нет, classic-артефакт не выводится.
+      'utils/gemini-ui-model.ts',
       // Потребитель core/hybrid-tail.ts получает top-level import, поэтому тоже
       // разбирается как module. Файл остаётся частью конкатенации content-бандла.
       'core/hybrid-tail.ts',

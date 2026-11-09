@@ -1,0 +1,17 @@
+<!--
+  Фрагмент открытого меню выбора модели Gemini (v47/v49).
+  Выбранная модель помечена aria-checked="true" НА САМОМ пункте списка
+  (role="menuitemradio"); остальные пункты — aria-checked="false".
+  Ожидание probeGeminiUiMenuChecked: "3.6 Flash" (не первый пункт, а именно checked).
+-->
+<div class="model-menu" role="menu" aria-label="Выбор модели">
+  <button type="button" role="menuitemradio" aria-checked="false">
+    <span class="label">2.5 Pro</span>
+  </button>
+  <button type="button" role="menuitemradio" aria-checked="true">
+    <span class="label">3.6 Flash</span>
+  </button>
+  <button type="button" role="menuitemradio" aria-checked="false">
+    <span class="label">2.5 Flash</span>
+  </button>
+</div>

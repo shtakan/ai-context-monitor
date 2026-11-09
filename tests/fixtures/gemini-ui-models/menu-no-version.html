@@ -1,0 +1,9 @@
+<!--
+  Негативный кейс меню: checked-пункт содержит ТОЛЬКО семейство ("Pro") без
+  номера версии и без слова gemini. extractUiModelText обязан отбросить такой
+  текст (страховка от ложных срабатываний), поэтому probe возвращает "".
+-->
+<div class="model-menu" role="menu" aria-label="Выбор модели">
+  <button type="button" role="menuitemradio" aria-checked="false">Flash</button>
+  <button type="button" role="menuitemradio" aria-checked="true">Pro</button>
+</div>
