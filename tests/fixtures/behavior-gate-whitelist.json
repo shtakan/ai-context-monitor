@@ -227,6 +227,10 @@
     "count": 14,
     "reason": "legacy-pin"
   },
+  "tests/claude-settle-after-spa-switch.test.js": {
+    "count": 4,
+    "reason": "legacy-pin"
+  },
   "tests/claude-emit-handshake-h23.test.js": {
     "count": 10,
     "reason": "legacy-pin"

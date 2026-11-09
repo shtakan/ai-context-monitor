@@ -367,9 +367,19 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
         try {
           var mSend = String(url).match(/\/chat_conversations\/([0-9a-fA-F-]{8,})/);
           if (mSend) sendConvId = mSend[1];
+          // v66: адрес снимка учим из САМОГО completion-POST. После SPA-смены чата
+          // resetForNewConversation() обнуляет lastHistoryUrl, а пассивного GET нового
+          // чата до ответа может не быть — и гейт «нет URL» ниже глушил весь settle-цикл
+          // (живой прогон 2026-11-09: settle target есть, дальше no-url до F5).
+          var orgAt = String(url).indexOf('/api/organizations/');
+          if (orgAt !== -1) {
+            var convAt = String(url).indexOf('/chat_conversations/', orgAt);
+            if (convAt !== -1) lastOrgPrefix = String(url).slice(orgAt, convAt + '/chat_conversations/'.length);
+          }
         } catch (eM3) { swallow(eM3, 'claude:capturePostBody-convid'); }
         traceLog('post-send state convIdUrl=' + String(sendConvId || '-').slice(0, 8) +
-          ' lastHistoryConvId=' + String(currentConvId || '-').slice(0, 8));
+          ' lastHistoryConvId=' + String(currentConvId || '-').slice(0, 8) +
+          ' orgPrefix=' + (lastOrgPrefix ? 1 : 0));
         if (sendConvId && !postSendTimer) {
           var urlConvAtSched = sendConvId; settle_target_uuid = ''; // v61: цель settle — только из тела ЭТОГО POST
           postSendTimer = setTimeout(function () {
@@ -380,7 +390,10 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
                 traceLog('post-send refresh=skipped(reason=convId-changed)');
                 return;
               }
-              if (refreshBusy || !lastHistoryUrl) {
+              // v66: гейт «нет URL» проверяет ОБА источника — activeRefresh умеет
+              // построить адрес из lastOrgPrefix + currentConvId, поэтому ретейн
+              // lastHistoryUrl (обнуляется при смене чата) не обязателен.
+              if (refreshBusy || (!lastHistoryUrl && !lastOrgPrefix)) {
                 traceLog('post-send refresh=skipped(reason=' + (refreshBusy ? 'busy' : 'no-url') + ')');
                 return;
               }
@@ -1288,7 +1301,9 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       if (lastHistoryUrl && urlConv === currentConvId) {
         baseUrl = lastHistoryUrl;
       } else if (lastOrgPrefix) {
-        baseUrl = lastOrgPrefix + currentConvId + '?tree=True';
+        // v66: тот же адрес, что у страницы/бутстрапа — ?tree=True одного мало:
+        // без rendering_mode=messages снимок приходит другой формы (и может быть меньше базы).
+        baseUrl = lastOrgPrefix + currentConvId + '?tree=True&rendering_mode=messages&render_all_tools=true&consistency=eventual';
         lastHistoryUrl = baseUrl;
         refreshSource = 'built';
       } else {
@@ -1763,7 +1778,9 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       }
       traceLog('settle attempt=' + att + '/' + SETTLE_DELAYS.length + ' at=+' + SETTLE_DELAYS[att - 1] +
         ' target=' + settleShort(settle_target_uuid) + ' convId=' + settleShort(settle_conv_id));
-      if (refreshBusy || !lastHistoryUrl) {
+      // v66: как и в post-send гейте — адрес снимка может быть построен из lastOrgPrefix
+      // (lastHistoryUrl обнуляется при смене чата, и без этого все попытки settle шли no-url).
+      if (refreshBusy || (!lastHistoryUrl && !lastOrgPrefix)) {
         traceLog('settle attempt=' + att + ' refresh=skipped reason=' + (refreshBusy ? 'busy' : 'no-url'));
       } else {
         activeRefresh('settle-' + att);

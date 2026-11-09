@@ -192,10 +192,10 @@
       "file": "core/claude-intercept.js",
       "category": "best-effort-guard",
       "lines": [
-        454,
-        667,
-        717,
-        1449
+        467,
+        680,
+        730,
+        1464
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: hdrs.forEach(function (hv, hk) { var hkl = String(hk).toLowerCase(); if"
     },
@@ -206,7 +206,7 @@
         124,
         210,
         304,
-        459
+        472
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: delete internalFetchUrls[u];"
     },
@@ -218,9 +218,9 @@
         24,
         141,
         264,
-        767,
-        806,
-        900
+        780,
+        819,
+        913
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (window.__aiCmDebugLogs) console.info('[AI CM][Claude][trace] ' + msg"
     },
@@ -231,14 +231,14 @@
         217,
         219,
         243,
-        463,
-        834,
-        1079,
-        1121,
-        1226,
-        1446,
-        1649,
-        1669
+        476,
+        847,
+        1092,
+        1134,
+        1239,
+        1461,
+        1664,
+        1684
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: st = response.status;"
     },
@@ -246,12 +246,12 @@
       "file": "core/claude-intercept.js",
       "category": "event-guard",
       "lines": [
-        529,
-        565,
-        1192,
-        1213,
-        1217,
-        1220
+        542,
+        578,
+        1205,
+        1226,
+        1230,
+        1233
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
     },
@@ -259,7 +259,7 @@
       "file": "core/claude-intercept.js",
       "category": "feature-detect",
       "lines": [
-        1672
+        1687
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var blen = -1; try { blen = (typeof xhr.responseText === 'string') ? xhr"
     },
@@ -267,9 +267,9 @@
       "file": "core/claude-intercept.js",
       "category": "guard-clause",
       "lines": [
-        1421,
-        1453,
-        1481
+        1436,
+        1468,
+        1496
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof Uint8Array !== 'undefined' && body instanceof Uint8Array) ret"
     },
@@ -277,9 +277,9 @@
       "file": "core/claude-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        552,
-        560,
-        564
+        565,
+        573,
+        577
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkConvChange();"
     },
