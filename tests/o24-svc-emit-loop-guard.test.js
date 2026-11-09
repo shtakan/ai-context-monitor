@@ -2,7 +2,7 @@
  * O-24 (F6): ЗАЦИКЛЕННЫЙ svc-emit ПОСЛЕ already-fired — гарды холостого processAndSend.
  *
  * ДЕФЕКТ (измерение 2026-09-22, read-only): точка инициации — дебаунс MutationObserver
- * (core/content.js, startObserving), триггер — DOM-мутации вне расширения при НЕИЗМЕННОЙ
+ * (core/content.ts, startObserving), триггер — DOM-мутации вне расширения при НЕИЗМЕННОЙ
  * базе (histKey стабилен). Повторного эмита ai-cm-full-history нет (дедуп истории работает),
  * шум = дорогие холостые прогоны processAndSend() (токенизация, виджет, SW) с каденсом 1–2 с.
  * Функциональное гашение корректно (already-fired + дедуп истории); проблема — ресурсная
@@ -10,7 +10,7 @@
  * #ai-context-widget, а observer наблюдает document.body{subtree,characterData} — виджет
  * взводил следующий проход собственным обновлением.
  *
- * ФИКС (core/content.js): (1) aiCmIsWidgetNode + фильтр в hasNewText (target и addedNodes);
+ * ФИКС (core/content.ts): (1) aiCmIsWidgetNode + фильтр в hasNewText (target и addedNodes);
  * (2) aiCmDomTextSig = длина РЕАЛЬНОГО DOM-текста | длина эффективного текста — та же формула,
  * что у канала v55 ai-cm-dom-emit-request (общая переменная aiCmLastDomEmitSig, привязка к
  * convId через aiCmLastDomEmitConvId). v96 (баг 34.6%): первое слагаемое — DOM, а НЕ baseCount
@@ -32,7 +32,7 @@
  *   R6/R7/R8 — исходники: точки фикса, единственность писателя sig, байты канала v55,
  *        гейт диагностики, проводка aiCmLastDomEmitConvId в state.js.
  *
- * Стенд: РЕАЛЬНЫЙ core/content.js (startObserving + aiCmIsWidgetNode + aiCmDomTextSig,
+ * Стенд: РЕАЛЬНЫЙ core/content.ts (startObserving + aiCmIsWidgetNode + aiCmDomTextSig,
  * вырезанные из источника по балансу скобок) в реальном jsdom с внешним лексическим
  * контекстом — вместо переписывания логики в тесте.
  */

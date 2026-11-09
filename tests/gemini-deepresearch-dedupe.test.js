@@ -8,7 +8,7 @@
  *   1) чистая функция Utils/gemini-batchexecute-parser → utils/export-emit-pipeline.ts:
  *      dedupeMessages(messages) — схлопывание сообщений с одинаковой ролью и идентичным
  *      нормализованным текстом (trim + схлоп пробелов), ПЕРВОЕ вхождение побеждает;
- *   2) core/content.js — слушатель ai-cm-full-history схлопывает базу ДО потребителей
+ *   2) core/content.ts — слушатель ai-cm-full-history схлопывает базу ДО потребителей
  *      (baseText/baseCount/lastBaseTexts/lastDetailMessages), поэтому badge/pct, экспорт
  *      .txt/.md/.json и print видят одну и ту же схлопнутую историю;
  *   3) лог '[AI CM][gemini] dedupe removed=N' при N>0 (один раз на снимок базы).
@@ -35,7 +35,7 @@
  * 'dedupe removed=' + 'intra-dedupe removed='.
  *
  * Тесты гоняют РЕАЛЬНЫЙ код: чистую функцию из пайплайна и РЕАЛЬНОЕ тело слушателя
- * core/content.js (конвенция collapse-guard / tape-protect — песочница с `with`).
+ * core/content.ts (конвенция collapse-guard / tape-protect — песочница с `with`).
  */
 const fs = require('fs');
 const path = require('path');
@@ -452,7 +452,7 @@ describe('E-2.2: сырые копии промпта между сообщен�
   });
 });
 
-// ---------- песочница реального слушателя ai-cm-full-history (core/content.js) ----------
+// ---------- песочница реального слушателя ai-cm-full-history (core/content.ts) ----------
 const LISTENER_SRC = CONTENT_SRC.slice(
   CONTENT_SRC.indexOf("window.addEventListener('ai-cm-full-history'"),
   CONTENT_SRC.indexOf('// H23: гонка «ответ истории раньше слушателя»')
@@ -467,7 +467,7 @@ function extractBlock(src, startMarker, endMarker) {
 }
 
 const HELPERS_SRC = [
-  // Один непрерывный отрезок core/content.js: aiCmLogIntraDedupe → aiCmDedupeExportSource →
+  // Один непрерывный отрезок core/content.ts: aiCmLogIntraDedupe → aiCmDedupeExportSource →
   // aiCmLogDedupeRemoved → buildHistoryMessages (все видят друг друга как в модуле).
   extractBlock(CONTENT_SRC, 'function aiCmLogIntraDedupe(role, blocks)', '// ================= v61diag'),
   extractBlock(CONTENT_SRC, 'function sanitizeGeminiText(s)', 'function aiCmCollectExportSource()'),
@@ -481,7 +481,7 @@ function makeListenerCtx(overrides) {
     setTimeout: function () { return 0; },
     clearTimeout: function () { },
     Date: Date,
-    // переменные модуля core/content.js, к которым обращается слушатель
+    // переменные модуля core/content.ts, к которым обращается слушатель
     maxTokenCount: 0,
     lastSnapConvId: '',
     lastEmitConvId: '',
@@ -529,7 +529,7 @@ function makeListenerCtx(overrides) {
     AiCmExportEmitPipeline: P,
     aiCmGeminiTurnsSnapshotSync: function () { return null; },
     aiCmDiagHash6: function () { return '000000'; },
-    // O-23/B2: канонический эстиматор живёт в core/content.js и в частичный скоуп песочницы
+    // O-23/B2: канонический эстиматор живёт в core/content.ts и в частичный скоуп песочницы
     // не попадает; trace badge-recv от него зависит. Значение здесь не проверяется —
     // достаточно байтово совместимой формы вызова (text, attach, count).
     aiCmCanonicalTokens: function (t, a, n) { return Math.ceil(String(t || '').length / 4) + (a || 0) + (n || 0) * 4; },
@@ -581,7 +581,7 @@ function makeListenerCtx(overrides) {
 }
 
 // В песочнице `with (ctx)` идентификатор window — обычное свойство ctx, а не глобальный
-// объект jsdom. Хелперы core/content.js читают пайплайн как window.AiCmExportEmitPipeline,
+// объект jsdom. Хелперы core/content.ts читают пайплайн как window.AiCmExportEmitPipeline,
 // поэтому кладём объект и в глобальный window (в page-контексте они совпадают).
 function injectIntoGlobalWindow(ctx) {
   try {
@@ -815,7 +815,7 @@ describe('E-2.1 (2): слушатель — внутри-сообщенческ�
   });
 });
 
-describe('E-2 (3): точка врезки в core/content.js', () => {
+describe('E-2 (3): точка врезки в core/content.ts', () => {
   test('слушатель схлопывает базу ДО processAndSend и зовёт логгер', () => {
     expect(LISTENER_SRC).toContain('var ded18 = aiCmDedupeExportSource(preDedupe18);');
     expect(LISTENER_SRC).toContain('baseText = texts18.join(\'\\n\');');
@@ -945,7 +945,7 @@ describe('E-2.3 (а): метрики и экспорт считаются по �
     expect(ctx.netEffectiveLen).toBe(FLOOR_LEN);
   });
 
-  test('врезка E-2.3 в core/content.js: единый массив + масштаб по схлопнутой базе', () => {
+  test('врезка E-2.3 в core/content.ts: единый массив + масштаб по схлопнутой базе', () => {
     expect(LISTENER_SRC).toContain('aiCmBasePrepared = prepared18;');
     expect(LISTENER_SRC).toContain("baseText = texts18.join('\\n');");
     expect(CONTENT_SRC).toContain('if (ded18.removed > 0 && netEffectiveLen > baseText.length) netEffectiveLen = baseText.length;');

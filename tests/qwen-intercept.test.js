@@ -281,7 +281,7 @@ describe('O-35 (D1–D5): разбор живого SSE-стрима Qwen', func
     expect(d.qwenUsage.reasoningTokens).toBe(USAGE_REF.output_tokens_details.reasoning_tokens);
     // O-47: само серверное число (usage.input) в detail НЕ публикуется. У Qwen это
     // КУМУЛЯТИВНЫЙ счётчик API-потребления, а не размер текущего контекста: badge/pct
-    // считаются только эвристикой tokens~ (core/content.js:aiCmMetricServerTokens).
+    // считаются только эвристикой tokens~ (core/content.ts:aiCmMetricServerTokens).
     // Число не потеряно — оно осталось в диагностике перехватчика ('emit'/'qwen-sse').
     expect(d.serverTokens).toBeUndefined();
     expect(d.qwenUsage.inputTokens).toBe(USAGE_REF.input_tokens);

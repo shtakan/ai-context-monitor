@@ -529,7 +529,7 @@ describe('R2: source-пины связки (перехватчик, регист
   const intercept = read('core/qwen-intercept.js');
   const background = read('core/background.js');
   const baseHandler = read('core/base-handler.ts');
-  const content = read('core/content.js');
+  const content = read('core/content.ts');
   const exportManager = read('core/export-manager.ts');
 
   test('parseQwenHistory отдаёт вложения, applyHistoryPayload ставит их в очередь', function () {

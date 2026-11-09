@@ -257,7 +257,7 @@ describe('O-35: QwenAdapter — detectModel', function () {
   });
 
   // DOM-половина резолвер-цепочки: ярлык актуальной веб-модели обязан отдавать ТОЧНЫЙ слаг
-  // ('qwen3.7-plus'), который есть ключом в utils/model-config.ts — иначе core/content.js
+  // ('qwen3.7-plus'), который есть ключом в utils/model-config.ts — иначе core/content.ts
   // (resolveCurrentModel) не распознаёт сигнал и подставляет дефолт сайта.
   // ВАЖНО (честность пина): разметка ниже подобрана под ЖИВОЙ набор селекторов detectModel
   // (первый — '[class*="model"] [class*="name"]'). Пин держит ЛОГИКУ «ярлык → слаг», а НЕ

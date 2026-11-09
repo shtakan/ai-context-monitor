@@ -8,12 +8,12 @@
  * вердикта полноты — сетевой эмит с historyComplete=true (probe-классификатор folwr:
  * kind=cursor-repeat|no-new-turns) перекрывается последующими эмитами ТОГО ЖЕ треда с
  * historyComplete=0 (handshake-переэмит + повторный open-путь после probe), поэтому
- * переменная baseComplete (core/content.js) снова false, а гейт автоэкспорта снова даёт
+ * переменная baseComplete (core/content.ts) снова false, а гейт автоэкспорта снова даёт
  * not-complete. Delay-N-ms и гейт «histSource=network» этого не лечат.
  *
  * РЕШЕНИЕ: монотонный латч сетевой полноты — 'site|threadId' → 1 (core/state.ts:
  * aiCmGsaNetworkCompleteLatch). Взвод — приём сетевого снимка с detail.historyComplete===true
- * (core/content.js, слушатель 'ai-cm-full-history'); НЕ снимается эмитами historyComplete=0;
+ * (core/content.ts, слушатель 'ai-cm-full-history'); НЕ снимается эмитами historyComplete=0;
  * сброс — только на смене треда (core/widget.ts:resetConversationState по data-session-thread-id);
  * чтение — core/export-manager.ts:maybeAutoExport → state.gsaNetworkCompleteLatch →
  * utils/export-emit-pipeline.ts:shouldSkipAutoExport.
@@ -423,7 +423,7 @@ describe('O-43 R2: прежние контуры не тронуты', () => {
     expect(INTERCEPT_SRC).toContain("absorbForeignSnapshot(tid, turns, historyComplete)");
     expect(INTERCEPT_SRC).toContain("'foreign-not-applied'");
     // латч O-43 — только ISOLATED-мир (state.js/export-manager.js/content.js)
-    const iso = ['core/state.ts', 'core/widget.ts', 'core/export-manager.ts', 'core/content.js'];
+    const iso = ['core/state.ts', 'core/widget.ts', 'core/export-manager.ts', 'core/content.ts'];
     for (const rel of iso) {
       expect(readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8'))).toContain('aiCmGsaNetworkComplete');
     }

@@ -287,7 +287,7 @@ describe('O-37 O36.2-R: контейнеров нет — байты прежн�
 describe('O-37 O-36.2: границы фикса (source-пины)', () => {
   test('адаптер переиспользует ОБЩИЙ хелпер и не дублирует пороги правила', function () {
     expect(QWEN_SRC).toContain('AiCmExportBuilders.aiCmDropContainerMessages');
-    // Ph2: хелпер берётся биндингом общего скоупа (import в core/content.js); CJS require-фолбэк
+    // Ph2: хелпер берётся биндингом общего скоупа (import в core/content.ts); CJS require-фолбэк
     // удалён — ESM-модуль не require-ится, в бандл он попадает через esbuild.
     expect(QWEN_SRC).not.toContain("require('../utils/export-text-builders.ts')");
     expect(QWEN_SRC).toContain('_dropContainerNodes(messages)');

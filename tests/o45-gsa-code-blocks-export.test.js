@@ -320,7 +320,7 @@ describe('O-45 R1: прежние контуры GSA не тронуты', () =>
   });
 
   test('R1 (O-43): сетевой латч полноты объявлен и читается только в ISOLATED-мире', () => {
-    ['core/state.ts', 'core/widget.ts', 'core/export-manager.ts', 'core/content.js'].forEach(function (rel) {
+    ['core/state.ts', 'core/widget.ts', 'core/export-manager.ts', 'core/content.ts'].forEach(function (rel) {
       expect(readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8'))).toContain('aiCmGsaNetworkComplete');
     });
     expect(STATE_SRC).toContain('var aiCmGsaNetworkCompleteLatch = Object.create(null);');

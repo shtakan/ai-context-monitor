@@ -289,7 +289,7 @@ export default [
       'core/hybrid-tail.ts',
       'print/print.js',
       'core/background.js',
-      'core/content.js',
+      'core/content.ts',
       'core/page-intercept.js',
       'core/claude-intercept.js',
       'core/perplexity-intercept.js',

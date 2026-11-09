@@ -141,7 +141,7 @@ function loadManager(over) {
     }
   };
   Object.assign(ctx, o.ctx || {});
-  // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.js;
+  // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.ts;
   // срез-песочница получает тот же объект биндингом общего скоупа (window-зеркало прежнее).
   if (ctx.window && ctx.window.AiCmExportBuilders) ctx.AiCmExportBuilders = ctx.window.AiCmExportBuilders;
   new Function('ctx', 'with (ctx) { ' + MGR_SRC + '\n }')(ctx);
@@ -332,7 +332,7 @@ function runGate(stmt, over) {
   const ctx = { convId: 'conv-x', doneReason: 'max', after: false };
   ctx.__afterGate = function () { ctx.after = true; };
   Object.assign(ctx, over || {});
-  // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.js;
+  // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.ts;
   // срез-песочница получает тот же объект биндингом общего скоупа (window-зеркало прежнее).
   if (ctx.window && ctx.window.AiCmExportBuilders) ctx.AiCmExportBuilders = ctx.window.AiCmExportBuilders;
   new Function('ctx', 'with (ctx) { while (true) {\n' + stmt + '\n__afterGate(); break; } }')(ctx);

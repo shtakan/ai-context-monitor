@@ -815,7 +815,7 @@ describe('v2.1: дедуп ходов/вложений и метрика без 
   });
 
   test('B1/D3: частичное наличие файлов — в метрику идёт только доля неотрендеренного пула', function () {
-    const content = read('core/content.js');
+    const content = read('core/content.ts');
     // оба пути метрики (бейдж и GET_STATS) используют ОДИН хелпер
     expect(content.split('var attachAdd = aiCmAttachPendingTokens(fullText, netAttachTokens, netAttachBreak);').length - 1).toBe(1);
     expect(content.split('var attachAddM = aiCmAttachPendingTokens(fullText, netAttachTokens, netAttachBreak);').length - 1).toBe(1);

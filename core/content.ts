@@ -57,7 +57,7 @@ import '../utils/google-search-folwr-parser.ts';
   console.log('AI Context Monitor v' + v + ' — индикатор заполнения контекста (ChatGPT, Gemini, DeepSeek, Claude, Perplexity, Google Search AI)');
 })();
 // Проверка валидности контекста расширения
-function isExtensionValid() {
+function isExtensionValid(): boolean {
   try {
     return !!chrome.runtime?.id;
   } catch (e) {
@@ -70,7 +70,7 @@ function isExtensionValid() {
 // (jsdom-тесты, изолированные песочницы, отладочный контекст) → возвращается прежний
 // русский литерал: внешний вид без локали байтово прежний. $1..$9 в сообщении локали
 // подставляются переданными substitutions (как в chrome.i18n.getMessage(key, [...])).
-function aiCmI18nMessage(key, fallback, substitutions) {
+function aiCmI18nMessage(key: string, fallback: string, substitutions?: unknown[]): string {
   try {
     if (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.getMessage === 'function') {
       var message = substitutions ? chrome.i18n.getMessage(key, substitutions) : chrome.i18n.getMessage(key);
@@ -105,14 +105,14 @@ function aiCmI18nMessage(key, fallback, substitutions) {
 //   remove(convId)
 //   cleanup()
 // Бэкенд — chrome.storage.local; сигнатуры позволяют заменить на IndexedDB без переписывания вызывающего кода.
-const STORAGE_PREFIX = 'ai-cm-gemini-tape-';
-const STORAGE_INDEX_PREFIX = 'ai-cm-gemini-index-';
-const MAX_DIALOGUES = 50;
-const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 дней
+const STORAGE_PREFIX: string = 'ai-cm-gemini-tape-';
+const STORAGE_INDEX_PREFIX: string = 'ai-cm-gemini-index-';
+const MAX_DIALOGUES: number = 50;
+const MAX_AGE_MS: number = 30 * 24 * 60 * 60 * 1000; // 30 дней
 
 // Версия логики парсинга Gemini (PARSER_VERSION из utils/gemini-batchexecute-parser.ts).
 // Ключ ленты включает версию: протухшие записи другой версии не читаются и не мигрируются.
-function geminiParserVersion() {
+function geminiParserVersion(): string {
   try {
     if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser && window.GeminiBatchexecuteParser.PARSER_VERSION) {
       return window.GeminiBatchexecuteParser.PARSER_VERSION;
@@ -122,13 +122,13 @@ function geminiParserVersion() {
 }
 // v34: индекс аккаунта из /u/N в URL — в ключе хранилища, чтобы ленты разных
 // аккаунтов (один и тот же convId теоретически возможен) не смешивались.
-function getAccountIndex() {
+function getAccountIndex(): string {
   try {
     var m = location.pathname.match(/\/u\/(\d+)\//);
     return m ? m[1] : '0';
   } catch (e) { return '0'; }
 }
-function geminiTapeKey(convId) {
+function geminiTapeKey(convId: string): string {
   return STORAGE_PREFIX + geminiParserVersion() + '-u' + getAccountIndex() + '-' + convId;
 }
 
@@ -186,7 +186,7 @@ var GeminiTapeStore = {
 
   remove: function (convId) {
     if (!isExtensionValid() || !convId) return Promise.resolve();
-    return new Promise(function (resolve) {
+    return new Promise<void>(function (resolve) {
       // v34: ключ ленты теперь включает версию/аккаунт — удаляем по фактическому ключу
       chrome.storage.local.remove([geminiTapeKey(convId), STORAGE_INDEX_PREFIX + convId], function () {
         resolve();
@@ -196,7 +196,7 @@ var GeminiTapeStore = {
 
   cleanup: function () {
     if (!isExtensionValid()) return Promise.resolve();
-    return new Promise(function (resolve) {
+    return new Promise<void>(function (resolve) {
       chrome.storage.local.get(null, function (all) {
         var now = Date.now();
         var entries = [];
@@ -230,7 +230,7 @@ var GeminiTapeStore = {
 
   // вспомогательное: метка времени в индексе
   _touchIndex: function (convId) {
-    return new Promise(function (resolve) {
+    return new Promise<void>(function (resolve) {
       var kv = {};
       kv[STORAGE_INDEX_PREFIX + convId] = { ts: Date.now() };
       chrome.storage.local.set(kv, function () { resolve(); });
@@ -254,7 +254,7 @@ var GeminiTapeStore = {
 // local — удалён вместе с константами имён; SW теперь отвечает на этот тип только флагом.
 // Контракт `geminiApiKey` ниже прежний: страховка перед COUNT_TOKENS (сам ключ для сети
 // читает SW); хранит не значение, а сентинел наличия '1'/'' (см. aiCmByokFlag).
-function aiCmSwByokHasKey() {
+function aiCmSwByokHasKey(): Promise<boolean> {
   return aiCmSwAsk({ type: 'aiCm-get-byok-key' }).then(function (resp) {
     return !!(resp && resp.hasKey);
   }).catch(function () { return false; });
@@ -264,7 +264,7 @@ function aiCmSwByokHasKey() {
 // трогаем), а теперь хранит только ФАКТ наличия ключа: сентинел '1'/'' ведёт себя как
 // true/false и сохраняет типизацию tsc. BYOK-sync: ключа нет — снимаем и флаг точного счёта
 // в рантайме (галочка в local переживает перезапуск браузера), storage не трогаем.
-function aiCmByokFlag(hasKey) {
+function aiCmByokFlag(hasKey: boolean): string {
   if (!hasKey) exactCountEnabled = false;
   return hasKey ? '1' : '';
 }
@@ -293,7 +293,7 @@ function aiCmByokFlag(hasKey) {
 
 // v55 (SPA): трекаем convId на content-стороне; при смене — лог, отмена висящего
 // deferred-таймера старого разговора и сброс бейджа таба в SW.
-var aiCmLastSeenConvId = getCurrentConvId() || '';
+var aiCmLastSeenConvId: string = getCurrentConvId() || '';
 // O-35 (ДИАГНОСТИКА, только измерение): метка времени последнего сброса по сигналу смены
 // разговора. Нужна строке qwen-adapter («сколько прошло от сброса до пересъёма базы»).
 // Ничего кроме собственного числа не хранит и ни на что не влияет.
@@ -403,7 +403,7 @@ window.addEventListener('ai-cm-conversation-changed', function () {
 // (getConvIdFromPath), тогда как у Gemini /app/<id> появляется после редиректа, у GSA и
 // Claude/DeepSeek/Perplexity id в URL не является признаком «разговор есть» — их поведение
 // остаётся байтово прежним (как и щит O-1, скоуп которого тоже chatgpt).
-function aiCmResetStaleStateOnChatlessChatGptUrl() {
+function aiCmResetStaleStateOnChatlessChatGptUrl(): boolean {
   try {
     if (!currentAdapter || currentAdapter.siteName !== 'chatgpt') return false;
     if (getCurrentConvId()) return false; // в URL есть /c/<id> — это разговор, сбрасывать нечего
@@ -417,7 +417,7 @@ function aiCmResetStaleStateOnChatlessChatGptUrl() {
   }
 }
   // v30.8: сигнал лоадера «скроллер скрыт/восстановлен» — для заморозки бейджа
-  window.addEventListener('ai-cm-loader-freeze', function (/** @type {CustomEvent} */ ev) {
+  window.addEventListener('ai-cm-loader-freeze', function (/** @type {CustomEvent} */ ev: CustomEvent) {
     try {
       aiCmLoaderFreeze = !!(ev.detail && ev.detail.on);
       // v30.9: на разморозке рисуем накопленное значение сразу — новый badge-update может не прийти
@@ -472,7 +472,7 @@ window.addEventListener('ai-cm-dom-emit-request', function () {
 
 // ===== O-31: сегментация базы по разговору (Google Search AI) =====
 // threadId живого DOM — «какой разговор открыт сейчас» (атрибут GSA; на прочих сайтах '').
-function aiCmDomThreadId() {
+function aiCmDomThreadId(): string | null {
   try {
     var el = document.querySelector('[data-session-thread-id]');
     if (!el) return '';
@@ -485,7 +485,7 @@ function aiCmDomThreadId() {
 // разговора после SPA-переключения) в базу не применяется: ни baseCount/baseText (pct),
 // ни lastBaseTexts (экспорт), ни счётчики svc-emit-trace. Нет threadId/нет DOM-атрибута —
 // прежнее поведение.
-function aiCmSnapshotIsCurrentThread(emitThreadId, domThreadId) {
+function aiCmSnapshotIsCurrentThread(emitThreadId: string | null, domThreadId: string | null): boolean {
   if (!emitThreadId) return true;
   if (!domThreadId) return true;
   return String(emitThreadId) === String(domThreadId);
@@ -496,7 +496,7 @@ function aiCmSnapshotIsCurrentThread(emitThreadId, domThreadId) {
 // в DOM ([data-session-thread-id]) ИЛИ в DOM есть чат-контейнер (turn/aimfl). Сервисная
 // страница Google (captcha / «подозрительный трафик» /sorry) не содержит ни того, ни
 // другого — там база/pct прошлого документа права на файл не дают.
-function aiCmGsaChatPageMarker() {
+function aiCmGsaChatPageMarker(): boolean {
   try {
     if (typeof aiCmDomThreadId === 'function' && aiCmDomThreadId()) return true;
     if (document.querySelector('[data-scope-id="turn"]')) return true;
@@ -516,8 +516,8 @@ function aiCmGsaChatPageMarker() {
 // (captcha/чат/поиск) и причину сброса/несброса под гейтом aiCmDebug. Строки «несброс»
 // с антиспамом (одна на комбинацию причин за страницу), «сброс» — всегда (событие редкое).
 // Поведение не меняется: функция только читает уже посчитанное состояние.
-var aiCmGsaDiagNoResetLogged = {};
-function aiCmGsaDiagState(point, verdict, reason, extra) {
+var aiCmGsaDiagNoResetLogged: Record<string, number> = {};
+function aiCmGsaDiagState(point: string, verdict: string, reason: string, extra?: Record<string, unknown>) {
   try {
     var doc = (typeof aiCmDiagDocKind === 'function') ? aiCmDiagDocKind() : 'unknown';
     if (verdict === 'no-reset') {
@@ -545,7 +545,7 @@ function aiCmGsaDiagState(point, verdict, reason, extra) {
     return true;
   } catch (eDiagState) { return false; }
 }
-function aiCmGsaResetStaleStateOnChatlessDoc() {
+function aiCmGsaResetStaleStateOnChatlessDoc(): boolean {
   try {
     if (!currentAdapter || currentAdapter.siteName !== 'google_search') return false;
     if (typeof document === 'undefined' || document.readyState !== 'complete') {
@@ -577,7 +577,7 @@ function aiCmGsaResetStaleStateOnChatlessDoc() {
 // коэффициент обязан совпадать с Tokenizer.CYRILLIC_CHARS_PER_TOKEN — пин-тест калибровки),
 // остальное ÷4. Для ASCII-текста фолбэк байтово равен прежнему Math.round(length/4) —
 // регресс-пин R1 (tests/o23-tokens-calibration.test.js).
-function aiCmEstimateTokensTilde(text, attachTokens) {
+function aiCmEstimateTokensTilde(text: string, attachTokens?: number): number {
   var t = (typeof text === 'string') ? text : '';
   var attach = (typeof attachTokens === 'number' && attachTokens > 0) ? attachTokens : 0;
   var TK = (typeof Tokenizer !== 'undefined') ? Tokenizer : null;
@@ -613,7 +613,7 @@ function aiCmEstimateTokensTilde(text, attachTokens) {
 // путей убрана: на русском тексте она систематически занижала оценку, из-за чего
 // бейдж показывал заниженный процент (B2). Фолбэк для песочниц без Tokenizer —
 // языковая ветвь aiCmEstimateTokensTilde (та же ÷3.3 на кириллице).
-function aiCmCanonicalTokens(text, attachTokens, messageCount) {
+function aiCmCanonicalTokens(text: string, attachTokens?: number, messageCount?: number): number {
   var attach = (typeof attachTokens === 'number' && attachTokens > 0) ? attachTokens : 0;
   var msgs = (typeof messageCount === 'number' && messageCount > 0) ? messageCount : 0;
   if (typeof Tokenizer !== 'undefined' && Tokenizer &&
@@ -634,7 +634,7 @@ function aiCmCanonicalTokens(text, attachTokens, messageCount) {
 // только токены реально отрендеренных файлов (по числу секций и весам
 // attachBreak), остаток добавляется к оценке. Секций нет — весь пул, как раньше;
 // отрендерены все — добавка 0 (двойного счёта нет).
-function aiCmAttachPendingTokens(fullText, attachTokens, attachBreak) {
+function aiCmAttachPendingTokens(fullText: string, attachTokens?: number, attachBreak?: any): number {
   var pool = (typeof attachTokens === 'number' && attachTokens > 0) ? attachTokens : 0;
   if (pool <= 0) return 0;
   var text = (typeof fullText === 'string') ? fullText : '';
@@ -655,7 +655,7 @@ function aiCmAttachPendingTokens(fullText, attachTokens, attachBreak) {
 // → window.dispatchEvent) в переменную этого мира (core/state.js:87). Несёт то же значение, что
 // detail.modelSlug в ai-cm-full-history, но приходит на КАЖДЫЙ сетевой ответ и раньше снимка.
 // Место в лестнице resolveCurrentModel (popupModelId → rawSnapshot → uiRaw): ниже попапа, выше DOM.
-window.addEventListener('ai-cm-model-slug', function (/** @type {CustomEvent} */ ev) {
+window.addEventListener('ai-cm-model-slug', function (/** @type {CustomEvent} */ ev: CustomEvent) {
   var md = ev && ev.detail;
   if (md && typeof md.slug === 'string' && md.slug) {
     detectedModelSlug = md.slug;
@@ -677,11 +677,11 @@ window.addEventListener('ai-cm-model-slug', function (/** @type {CustomEvent} */
 // ПРИНЯТИЯ базы (слушатель ai-cm-full-history ниже либо adapter-запись базы) и
 // склеивается дебаунсом 500 мс: серия мутаций DOM/эмитов не даёт ложного файра, пока
 // база не стабилизировалась. Гейты baseComplete/латча остаются в maybeAutoExport.
-var AI_CM_AUTOEXPORT_DEBOUNCE_MS = 500;
+var AI_CM_AUTOEXPORT_DEBOUNCE_MS: number = 500;
 var autoExportDebounceTimer = null;
-var autoExportDebouncePct = -1;
-var autoExportDebounceCid = '';
-function aiCmScheduleAutoExport(percentage) {
+var autoExportDebouncePct: number = -1;
+var autoExportDebounceCid: string = '';
+function aiCmScheduleAutoExport(percentage: number): void {
   try {
     if (!autoExportSettings || autoExportSettings.enabled !== true) return;
     if (typeof percentage !== 'number' || !isFinite(percentage) || percentage < 0) return;
@@ -707,7 +707,7 @@ function aiCmScheduleAutoExport(percentage) {
     swallowSoft(eSched, 'content:autoexport-schedule');
   }
 }
-window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} */ ev) {
+window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} */ ev: CustomEvent) {
   // O-22 (ИЗМЕРЕНИЕ-2): маркер ПЕРВОЙ строки колбэка слушателя — ДО блока v81 Step1
   // и ДО вставок O-22 (блоки A–G2). Только диагностика под гейтом aiCmDebug.
   try {
@@ -1090,13 +1090,13 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
 // GSA-handshake). Гейты автоэкспорта (baseComplete/latch) не затронуты: ре-эмит идёт
 // обычным путём слушателя выше, отдельного триггера экспорта не появляется.
 // =============================================================================
-var AI_CM_H23_SITES = ['claude'];
-var aiCmContentReadySent = false;
+var AI_CM_H23_SITES: string[] = ['claude'];
+var aiCmContentReadySent: boolean = false;
 var aiCmRequestEmitTimer = null;
-function aiCmH23Site() {
+function aiCmH23Site(): boolean {
   try { return !!currentAdapter && AI_CM_H23_SITES.indexOf(currentAdapter.siteName) !== -1; } catch (e) { return false; }
 }
-function aiCmDispatchContentReady() {
+function aiCmDispatchContentReady(): void {
   if (aiCmContentReadySent) return;
   if (!aiCmH23Site()) return; // прочие сервисы — байтово прежнее поведение
   // Гард байтовой идентичности рабочего пути: если первый снимок УЖЕ дошёл до слушателя
@@ -1125,7 +1125,7 @@ function aiCmDispatchContentReady() {
 
 // ===== v2.0 (этап 1/3): widget.js ← THEME_CONFIGS, getServiceKey =====
 
-function getCurrentConvId() {
+function getCurrentConvId(): string | null {
   try {
     // v81: обобщено на 6 сервисов через utils/export-emit-pipeline.ts:
     // Gemini /app/<id> и claude /chat/<uuid> сохранены 1:1; добавлены ветки
@@ -1154,7 +1154,7 @@ function getCurrentConvId() {
 // aistudio — отдельной веткой ПЕРЕД gemini: разметка реплик у AI Studio иная
 // (ms-cmark-node + user-chunk), GeminiAdapter там находит 0 сообщений
 // (adapters/aistudio-adapter.ts наследует его контракт и _cleanText).
-function aiCmAssignAdapterByHost() {
+function aiCmAssignAdapterByHost(): BaseAdapter | null {
   const hostname = window.location.hostname;
   if (hostname.includes('chatgpt.com')) {
     currentAdapter = new ChatGPTAdapter();
@@ -1179,7 +1179,7 @@ function aiCmAssignAdapterByHost() {
 }
 // O-35 (ДИАГНОСТИКА, только измерение): текст исключения одной строкой (имя + сообщение) —
 // для строк qwen-init «throw». Только читает поле уже пойманной ошибки.
-function aiCmQwenInitErrText(e) {
+function aiCmQwenInitErrText(e: any): string {
   try { return String((e && e.name) ? (e.name + ': ' + (e.message || '')) : e); } catch (eQiErr) { return '(read-error)'; }
 }
 // O-35 (ДИАГНОСТИКА, только измерение): qwen-init — ЕДИНАЯ точка строк ИНИЦИАЛИЗАЦИИ контура.
@@ -1195,7 +1195,7 @@ function aiCmQwenInitErrText(e) {
 // строки и ни одного лишнего чтения. Ничего не пишет в состояние/storage/DOM и не меняет
 // байты выхода; строки — только для qwen. Вызовы защищены try/catch, поэтому срез-песочницы
 // тестов без этого хелпера видят прежнее поведение 1:1.
-function aiCmQwenInitDiag(event, fields) {
+function aiCmQwenInitDiag(event: string, fields?: Record<string, unknown>): boolean {
   try {
     if (typeof aiCmDiagLine !== 'function') return false;
     if (typeof currentAdapter === 'undefined' || !currentAdapter) return false;
@@ -1223,7 +1223,7 @@ function aiCmQwenInitDiag(event, fields) {
 // (content.js:history-write source=adapter) и снимок aiCmState → попап и кнопки ручного
 // экспорта оживают. Контур уже поднят → штатный processAndSend() с той же адаптерной ветвью.
 // Ничего не делает для прочих платформ (их SPA-путь не меняется).
-function aiCmQwenSpaReshoot() {
+function aiCmQwenSpaReshoot(): boolean {
   try {
     if (!currentAdapter || currentAdapter.siteName !== 'qwen') {
       try { aiCmQwenInitDiag('reshoot-exit', { ret: 0, branch: 'not-qwen' }); } catch (eQi1) { }
@@ -1293,7 +1293,7 @@ function aiCmQwenSpaReshoot() {
 // он снимает DOM адаптера и convId ТЕКУЩЕГО документа, а повторная запись истории того же чата
 // отсекается lastHistoryWroteKey (histKey = 'adapter|<msgs>').
 // Диагностика — тот же канал/гейт (aiCmQwenInitDiag → qwen-init), каждый вызов под try/catch.
-function aiCmQwenTerminalReshoot() {
+function aiCmQwenTerminalReshoot(): boolean {
   if (isInitialized) return false;                  // контур поднят — терминалу нечего делать
   var termMsgs = -1;                                // -1: фолбэк недоступен; -2: адаптер бросил
   try {
@@ -1313,7 +1313,7 @@ function aiCmQwenTerminalReshoot() {
   processAndSend();                                 // ровно один проход (гард решает, писать ли базу)
   return true;
 }
-async function initialize() {
+async function initialize(): Promise<void> {
   try {
     aiCmAssignAdapterByHost();
     if (!currentAdapter) {
@@ -1399,13 +1399,13 @@ async function initialize() {
     throw eInitialize;
   }
 }
-async function tryInit() {
+async function tryInit(): Promise<void> {
   try {
     if (isInitialized) {
       try { aiCmQwenInitDiag('tryinit-skip', { reason: 'already-initialized' }); } catch (eQi11) { }
       return;
     }
-    let found = findMessageNodes();
+    let found: any = findMessageNodes();
     // O-35 (ДИАГНОСТИКА, только измерение): вход КАЖДОГО вызова — сколько узлов дал общий
     // селектор ДО фолбэка и какой путь позвал (src: initialize / сетевой EMIT / reshoot / лесенка).
     try { aiCmQwenInitDiag('tryinit-enter', { nodes: found.nodes.length, sel: found.sel, src: (typeof aiCmDiagStack === 'function') ? aiCmDiagStack(1) : '' }); } catch (eQi12) { }
@@ -1458,7 +1458,7 @@ async function tryInit() {
 // гард baseCount|длина эффективного текста гасит повтор при НЕИЗМЕННОЙ базе; (3) гард
 // работает только для чата, у которого латч автоэкспорта уже взведён (aiCmAutoExportFiredOnce,
 // site|convId) — до первого fired поведение прежнее.
-var AI_CM_WIDGET_ELEMENT_ID = 'ai-context-widget';
+var AI_CM_WIDGET_ELEMENT_ID: string = 'ai-context-widget';
 
 // Узел принадлежит (или является) виджету расширения. Проверка нужна и для узлов, уже
 // снятых со страницы: вне observer характерData-мутация виджета приходит с target внутри
@@ -1466,7 +1466,7 @@ var AI_CM_WIDGET_ELEMENT_ID = 'ai-context-widget';
 // ВАЖНО: containment проверяется только «виджет содержит узел» (w.contains(el) / w === el).
 // Обратное (el.contains(w)) означало бы «узел — ПРЕДОК виджета» и ложно относило бы к
 // виджету весь document.body (виджет вставлен прямо в body).
-function aiCmIsWidgetNode(node) {
+function aiCmIsWidgetNode(node: any): boolean {
   try {
     if (!node) return false;
     var el = (node.nodeType === 1) ? node : node.parentElement;
@@ -1482,14 +1482,14 @@ function aiCmIsWidgetNode(node) {
 // «замереть» (baseCount не меняется), а в DOM уже новый пузырь: гард O-24 обязан это
 // увидеть, иначе переотправка блокируется и метрики/экспорт замирают. Узлы берём тем же
 // MSG_SELECTORS, что и hybrid-tail (узлы виджета расширения под них не попадают — O-24 цел).
-function aiCmDomRealTextLen() {
+function aiCmDomRealTextLen(): number {
   try {
     var found = (typeof findMessageNodes === 'function') ? findMessageNodes() : null;
     var nodes = (found && found.nodes) ? found.nodes : [];
     var sum = 0;
     for (var i = 0; i < nodes.length; i++) {
       // nodes — Element[] по контракту findMessageNodes; innerText живёт на HTMLElement
-      var el = /** @type {HTMLElement} */ (nodes[i]);
+      var el: any = /** @type {HTMLElement} */ (nodes[i]);
       var raw = el.innerText || el.textContent || '';
       sum += String(raw).trim().length;
     }
@@ -1503,7 +1503,7 @@ function aiCmDomRealTextLen() {
 // v96 (баг 34.6%): первое слагаемое — DOM, а не baseCount из сети: сетевой счётчик замирает
 // вместе с сетью и глушил легитимный DOM-догон. Оба слагаемых — целые числа: '|' обязателен
 // (иначе 12|34 и 1|234 склеятся в одно).
-function aiCmDomTextSig() {
+function aiCmDomTextSig(): string {
   var eff = '';
   if (baseSeen && baseText) {
     try { eff = getEffectiveText() || ''; } catch (eSig) { eff = ''; }
@@ -1514,7 +1514,7 @@ function aiCmDomTextSig() {
 // Латч O-38 для ТЕКУЩЕГО чата: 'site|convId' → 1. Взведён → автоэкспорт этого разговора
 // уже состоялся в этой сессии страницы (или SPA-возврат в него). Пустой convId = «чата нет»
 // (GSA без id в URL) — не латчим: поведение прежнее.
-function aiCmSiteConvFired() {
+function aiCmSiteConvFired(): boolean {
   try {
     if (typeof aiCmAutoExportFiredOnce !== 'object' || !aiCmAutoExportFiredOnce) return false;
     var cid = (typeof getCurrentConvId === 'function') ? (getCurrentConvId() || '') : '';
@@ -1525,7 +1525,7 @@ function aiCmSiteConvFired() {
 }
 
 // ========== НАБЛЮДЕНИЕ ==========
-function startObserving() {
+function startObserving(): void {
   if (observer) observer.disconnect();
   let mutationCount = 0;
   observer = new MutationObserver((mutations) => {
@@ -1591,10 +1591,10 @@ function startObserving() {
 //      (тогда берём последнюю известную точную версию этого семейства);
 //  нет сигнала / не распознан → фолбэк на прежнюю цепочку: снимок сети → DOM-адаптер.
 const GEMINI_UI_MODEL_RE = /(?:gemini\s*)?(\d+(?:[.,]\d+)?)?\s*(ultra|pro|flash)(?:\s+(?:lite|расширенн[аяый]|extended|fast))?/i;
-const geminiUiModelByFamily = {}; // 'pro'|'flash'|'ultra' -> последнее точное имя из UI
-let lastModelSourceSig = '';
+const geminiUiModelByFamily: Record<string, string> = {}; // 'pro'|'flash'|'ultra' -> последнее точное имя из UI
+let lastModelSourceSig: string = '';
 
-function extractUiModelText(text) {
+function extractUiModelText(text: string): string {
   const t = String(text || '').replace(/\s+/g, ' ').trim();
   if (!t || t.length > 60) return '';
   const m = t.match(GEMINI_UI_MODEL_RE);
@@ -1604,7 +1604,7 @@ function extractUiModelText(text) {
   return m[0].trim();
 }
 
-function probeGeminiUiMenuChecked() {
+function probeGeminiUiMenuChecked(): string {
   const items = document.querySelectorAll('[role="menuitemradio"], [role="menuitem"], [role="option"]');
   for (var i = 0; i < items.length; i++) {
     var it = items[i];
@@ -1616,7 +1616,7 @@ function probeGeminiUiMenuChecked() {
 }
 
 // v48: нормализация слитного текста кнопки («ProРасширенный» → «Pro Расширенный»)
-function normalizeUiModelText(text) {
+function normalizeUiModelText(text: string): string {
   return String(text || '')
     .replace(/([a-zа-яё])([A-ZА-ЯЁ])/g, '$1 $2')
     .replace(/\s+/g, ' ')
@@ -1628,7 +1628,7 @@ function normalizeUiModelText(text) {
 //  (b) точная версия из сетевого снимка (snapModelId), если семья совпадает с DOM-семьёй;
 //  (c) семейный дефолт ModelConfig (реальная линейка веб-UI, не 3.7-анонс).
 // Род варианта не важен («Расширенный» == «Расширенная»).
-function resolveFamilyVariantId(fam, variant, snapModelId) {
+function resolveFamilyVariantId(fam: string, variant: string, snapModelId: string | null): string | null {
   // (a)
   const cached = geminiUiModelByFamily[fam];
   if (cached) {
@@ -1648,7 +1648,7 @@ function resolveFamilyVariantId(fam, variant, snapModelId) {
   return snapModelId || '';
 }
 
-function probeGeminiUiButton(snapModelId) {
+function probeGeminiUiButton(snapModelId: string | null): string | null {
   // v48: реальный DOM Gemini — BUTTON.input-area-switch, текст слитный
   // («ProРасширенный», «FlashРасширенный», «Flash»). Кнопки нет → ''.
   const btn = document.querySelector('button.input-area-switch');
@@ -1668,7 +1668,7 @@ function probeGeminiUiButton(snapModelId) {
   return resolveFamilyVariantId(fam, varM ? varM[0] : '', snapModelId);
 }
 
-function detectSelectedModelFromDom(snapModelId) {
+function detectSelectedModelFromDom(snapModelId: string | null): string {
   // меню открыто — самый точный сигнал, обновляем кэш «последняя по семейству»
   const fromMenu = probeGeminiUiMenuChecked();
   if (fromMenu) {
@@ -1679,7 +1679,7 @@ function detectSelectedModelFromDom(snapModelId) {
   return probeGeminiUiButton(snapModelId) || '';
 }
 
-function resolveCurrentModel() {
+function resolveCurrentModel(): string {
   // v47: приоритет — выбранная в UI модель; фолбэк — снимок/тэйп/адаптер/дефолт.
   const rawFromNet = detectedModelSlug || '';
   const snapNetId = rawFromNet ? ModelConfig.resolveModelId(rawFromNet) : null;
@@ -1751,7 +1751,7 @@ function resolveCurrentModel() {
   return modelId;
 }
 // ========== BYOK: запрос точных токенов через countTokens API ==========
-function logTextProbe(label, text) {
+function logTextProbe(label: string, text: string): void {
   if (!text) return;
   var totalLen = text.length;
   var normText = normalize(text);
@@ -1771,7 +1771,7 @@ function logTextProbe(label, text) {
   console.log('[text-probe] ' + label + ' totalLen=' + totalLen + ' skelLen=' + skelLen + ' кусковБаза=' + baseHits + ' кусковНеБаза=' + nonBase);
 }
 
-function requestExactTokens(fullText, modelId) {
+function requestExactTokens(fullText: string, modelId: string | null): void {
   if (!isExtensionValid()) return;
   // Firefox: BYOK выключен в SW (AMO) — точный счёт недоступен. Движок определяется по
   // схеме URL расширения (utils/platform.ts), а не по `typeof browser`: Chrome 148+ его
@@ -1858,7 +1858,7 @@ function requestExactTokens(fullText, modelId) {
   });
 }
 
-function loadByokSettings() {
+function loadByokSettings(): void {
   if (!isExtensionValid()) return;
   // M-7: флаг точного подсчёта остаётся в chrome.storage.local, ключ — в session за SW.
   chrome.storage.local.get(['ai_cm_exact_token_count'], function (data) {
@@ -1896,7 +1896,7 @@ function loadByokSettingsAsync() {
 // 'aiCm-byok-key-changed' — session-хранилище из вкладки больше не наблюдается
 // (storage.onChanged по session недоступен), а кэш ключа надо перечитать,
 // иначе страница будет считать токены стёртым/старым ключом до перезагрузки.
-function aiCmByokKeyInvalidate() {
+function aiCmByokKeyInvalidate(): void {
   aiCmByokKeyPromise = null;
   try {
     if (!isExtensionValid()) return;
@@ -1913,7 +1913,7 @@ function aiCmByokKeyInvalidate() {
   } catch (eByokInv) { swallowSoft(eByokInv, 'content:aiCmByokKeyInvalidate'); }
 }
 
-function loadByokCache() {
+function loadByokCache(): void {
   if (!isExtensionValid()) return;
   var currentConvId = getCurrentConvId();
   if (!currentConvId) return;
@@ -1936,15 +1936,15 @@ function loadByokCache() {
 // внешних fetch нет. Ходы архива передаются в MAIN-мир событием
 // 'ai-cm-archive-restore' (паттерн tape-restore); запись источника
 // (aiCmConvSource:<convId>, ярлык считается на импорте) — для попапа и виджета.
-var AI_ARCHIVE_PREFIX = 'aiCmArchive:';
-var AI_CONV_SOURCE_PREFIX = 'aiCmConvSource:';
+var AI_ARCHIVE_PREFIX: string = 'aiCmArchive:';
+var AI_CONV_SOURCE_PREFIX: string = 'aiCmConvSource:';
 
 // ===== v2.0 (этап 1/3): state.js ← aiCmConvSourceByConv, aiCmArchiveLoadStarted, aiCmArchiveRestoredDispatched, aiCmArchiveCountByConv, aiCmSourceLabelNow =====
 
 // T1-fix#2 (v1.16.2): count архива ЭТОГО чата (0 — архива нет/не прочитан). Нужен гейту
 // автоэкспорта: архивные ходы лежат в той же базе, поэтому baseCount <= archiveMsgs
 // означает «база состоит ТОЛЬКО из архива» — живая история ещё не влилась.
-function aiCmArchiveCountFor(convId) {
+function aiCmArchiveCountFor(convId: string): number {
   try { return (convId && aiCmArchiveCountByConv[convId]) || 0; } catch (eAcf) { return 0; }
 }
 
@@ -1955,13 +1955,13 @@ function aiCmArchiveCountFor(convId) {
 // посчитанного messageCount — без дополнительного прохода extractMessages()). Нужен, чтобы
 // отличить «живой ярус из адаптера» (baseSeen=false: у qwen после F5/SPA сети нет вовсе)
 // от «данных нет совсем». Сбрасывается сигналом смены разговора.
-var aiCmAdapterBaseCount = 0;
-function aiCmAdapterBaseSeen() {
+var aiCmAdapterBaseCount: number = 0;
+function aiCmAdapterBaseSeen(): boolean {
   return (!baseSeen) && ((typeof aiCmAdapterBaseCount === 'number' && aiCmAdapterBaseCount > 0) ||
     (typeof baseCount === 'number' && baseCount > 0) ||
     (Array.isArray(lastBaseTexts) && lastBaseTexts.length > 0));
 }
-function aiCmSourceInfo() {
+function aiCmSourceInfo(): AiCmSourceInfo | null {
   var cid = getCurrentConvId() || '';
   var rec = cid ? aiCmConvSourceByConv[cid] : null;
   if (rec && rec.kind === 'archive') {
@@ -1981,7 +1981,7 @@ function aiCmSourceInfo() {
   return null;
 }
 
-function aiCmLoadArchiveTier(convId, reason) {
+function aiCmLoadArchiveTier(convId: string, reason: string): void {
   if (!convId || !isExtensionValid()) return;
   try {
     var archKey = AI_ARCHIVE_PREFIX + convId;
@@ -2043,14 +2043,14 @@ function aiCmLoadArchiveTier(convId, reason) {
 
 // Индикатор источника: строка в панели виджета (создаётся динамически — разметка
 // виджета и её тема не меняются) + ярлык для тултипа.
-function aiCmUpdateSourceIndicator() {
+function aiCmUpdateSourceIndicator(): void {
   try {
     var info = aiCmSourceInfo();
     aiCmSourceLabelNow = info ? info.label : '';
     if (!widgetElement) return;
     var panel = widgetElement.querySelector('.ai-widget-panel');
     if (!panel) return;
-    var /** @type {HTMLElement|null} */ el = /** @type {HTMLElement|null} */ (panel.querySelector('.ai-cm-source'));
+    var /** @type {HTMLElement|null} */ el: HTMLElement | null = /** @type {HTMLElement|null} */ (panel.querySelector('.ai-cm-source'));
     // M-4.2: строка источника — ключ content_source_label (фолбэк — прежний русский)
     var want = aiCmSourceLabelNow
       ? aiCmI18nMessage('content_source_label', 'Источник: ' + aiCmSourceLabelNow, [aiCmSourceLabelNow])
@@ -2085,16 +2085,16 @@ function aiCmUpdateSourceIndicator() {
 // Одноразовость на документ (aiCmBadgeHoldSpent) сохранена; SPA-держание — отдельный
 // механизм (badgeSuppressed/resetConversationState) и этим щитом не перевзводится.
 // Скоуп: только chatgpt; прочие сервисы — байтово прежние.
-var AI_CM_BADGE_HOLD_FALLBACK_MS = 10000; // жёсткий фолбэк щита: сеть/перехватчик молчат
-var aiCmBadgeHoldUntil = 0;
-var aiCmBadgeHoldSpent = false; // щит уже отработал (запись базы или фолбэк) — второй раз не взводим
+var AI_CM_BADGE_HOLD_FALLBACK_MS: number = 10000; // жёсткий фолбэк щита: сеть/перехватчик молчат
+var aiCmBadgeHoldUntil: number = 0;
+var aiCmBadgeHoldSpent: boolean = false; // щит уже отработал (запись базы или фолбэк) — второй раз не взводим
 var aiCmBadgeHoldTimer = null;
 
 // O-1 (диагностика, только измерение): взвод/отпускание щита каноническим хелпером
 // utils/debug.ts — под гейтом aiCmDebug. reason=armed|armed-empty-convid|released-baseSeen|
 // released-fallback. Гейт выключен → ни одной новой строки (aiCmDiagLine возвращает false,
 // console не трогается), поведение щита то же. typeof-гард — срез-песочницы тестов.
-function aiCmBadgeHoldDiag(reason) {
+function aiCmBadgeHoldDiag(reason: string): void {
   try {
     if (typeof aiCmDiagLine !== 'function') return;
     aiCmDiagLine('badge-hold', {
@@ -2112,7 +2112,7 @@ function aiCmBadgeHoldDiag(reason) {
 // reveal=true — снятие по таймеру: виджет надо вернуть и перерисовать (DRAW в этот момент
 // мог не случиться вовсе). При отпускании по записи базы рисовать не нужно: DRAW, который
 // и позвал гейт, сам пойдёт в updateWidget и покажет виджет.
-function aiCmBadgeHoldRelease(reason, reveal) {
+function aiCmBadgeHoldRelease(reason: string, reveal?: boolean): boolean {
   try {
     if (aiCmBadgeHoldSpent) return false;
     aiCmBadgeHoldSpent = true;
@@ -2128,7 +2128,7 @@ function aiCmBadgeHoldRelease(reason, reveal) {
 }
 
 // Истинно, пока бейдж держится: первой записи базы на этом документе ещё нет.
-function aiCmBadgeHoldActive() {
+function aiCmBadgeHoldActive(): boolean {
   try {
     if (aiCmBadgeHoldSpent) return false;
     if (!currentAdapter || currentAdapter.siteName !== 'chatgpt') return false;
@@ -2148,7 +2148,7 @@ function aiCmBadgeHoldActive() {
 
 // Фолбэк щита: сеть/перехватчик молчат → снимаем щит, возвращаем виджет и перерисовываем
 // по DOM-базе (прежнее поведение). Виджет не может остаться скрытым навсегда.
-function aiCmArmBadgeHoldFallback() {
+function aiCmArmBadgeHoldFallback(): void {
   try {
     if (aiCmBadgeHoldTimer) return;
     aiCmBadgeHoldTimer = setTimeout(function () {
@@ -2171,7 +2171,7 @@ function aiCmArmBadgeHoldFallback() {
 // Прочие сервисы НЕ тронуты: у DeepSeek serverTokens остаётся авторитетным (O-23), у Gemini —
 // счёт BYOK countTokens (O-35). Функция только ЧИТАЕТ netServerTokens: значение остаётся как
 // было, чтобы диагностическая строка ingest'а («serverTokens=N») не врала.
-function aiCmMetricServerTokens(svc, text) {
+function aiCmMetricServerTokens(svc: string | null, text: string): number {
   if (svc === 'qwen') return 0;
   // v2.0.32 (AI Studio): студия показывает собственный счётчик промпта в шапке чата, и он
   // авторитетнее всего остального — включает системные инструкции, схемы инструментов и всю
@@ -2222,7 +2222,7 @@ function aiCmMetricServerTokens(svc, text) {
 //
 // @param {string} [text] — текст, для которого запрошена метрика (processAndSend/GET_STATS).
 // @returns {number} точные токены API для этого текста; 0 — точного значения нет.
-function aiCmExactTokensFor(text) {
+function aiCmExactTokensFor(text: string): number {
   if (!exactCountEnabled || !geminiApiKey) return 0;
   if (!text) return 0;
   var cached = (typeof lastCountTokensCache === 'number' && lastCountTokensCache > 0) ? lastCountTokensCache : 0;
@@ -2266,7 +2266,7 @@ function aiCmExactTokensFor(text) {
 // @param {string} svc — сервис (getServiceKey/currentAdapter.siteName).
 // @param {string} text — текст, для которого считается метрика (полный текст диалога).
 // @returns {boolean} true — эвристике запрещено писать бейдж в этом проходе.
-function aiCmHeuristicHoldForByok(svc, text) {
+function aiCmHeuristicHoldForByok(svc: string | null, text: string): boolean {
   if (!exactCountEnabled || !geminiApiKey) return false;
   if (svc !== 'gemini' && svc !== 'aistudio' && svc !== 'google_search') return false;
   if (!text) return false;
@@ -2287,7 +2287,7 @@ function aiCmHeuristicHoldForByok(svc, text) {
 // Хелпер считает histKey по ТОМУ ЖЕ массиву, что ушёл в запись (aiCmCurrentBaseSnapshot
 // — единая точка сбора + добор объединённой базой), принудительно принимает финальную
 // базу (только рост: просадка счётчика запрещена) и один раз пересчитывает pct/бейдж.
-function aiCmResyncMetricsAfterFlush(cid, reason) {
+function aiCmResyncMetricsAfterFlush(cid: string, reason?: string): boolean {
   try {
     if (baseSeen !== true) return false;
     if (typeof aiCmCurrentBaseSnapshot !== 'function') return false;
@@ -2357,7 +2357,7 @@ function aiCmResyncMetricsAfterFlush(cid, reason) {
   } catch (eRs) { swallowSoft(eRs, 'content:metrics-resync'); return false; }
 }
 
-function processAndSend() {
+function processAndSend(): void {
   if (!currentAdapter) return;
 
   // O-27 (c): на не-чат документе GSA (captcha/«подозрительный трафик») база/pct прошлого
@@ -3073,8 +3073,8 @@ document.addEventListener('visibilitychange', function () {
 // opt-in chrome-уведомления. Латч «один раз на разговор» живёт в SW
 // (chrome.storage.session, ключ 'aiCmThr:'+convId) — content-сторона только шлёт pct.
 // Флаг aiCmProactive (дефолт ON) читаем из chrome.storage.local (кэш + onChanged).
-var aiCmProactiveEnabled = true;
-function aiCmLoadProactiveFlag() {
+var aiCmProactiveEnabled: boolean = true;
+function aiCmLoadProactiveFlag(): void {
   try {
     if (!isExtensionValid() || !chrome.storage || !chrome.storage.local) return;
     chrome.storage.local.get(['aiCmProactive'], function (data) {
@@ -3091,7 +3091,7 @@ function aiCmLoadProactiveFlag() {
     debugLog('error', '[AI CM][thresholds] load flag error:', e);
   }
 }
-function sendThresholdPct(pct) {
+function sendThresholdPct(pct: number): void {
   try {
     if (!isExtensionValid() || !aiCmProactiveEnabled) return;
     if (typeof pct !== 'number' || !(pct >= 0)) return;
@@ -3161,7 +3161,7 @@ loadExportHiddenSetting();
 // `baseComplete` здесь НЕ подменяется: признак сетевой полноты остаётся своим
 // (гейты лоадера/оракула/бейджа читают его по прежнему смыслу).
 // =============================================================================
-function aiCmQwenExportBaseTrusted() {
+function aiCmQwenExportBaseTrusted(): boolean {
   try {
     return !!((currentAdapter && currentAdapter.siteName === 'qwen') && adapterBaseSeen === true);
   } catch (eQbt) { return false; }
@@ -3185,7 +3185,7 @@ function aiCmQwenExportBaseTrusted() {
 // причина base-pending не возвращается, дальше решают порог и латч fired (повторных файров
 // нет). Порядок причин и вердикты прочих сайтов не меняются вовсе (поле в гейт не уходит).
 // =============================================================================
-function aiCmAutoExportTrustedBase() {
+function aiCmAutoExportTrustedBase(): boolean {
   try {
     // Правило qwen (O-37/D1): DOM-адаптер — DESIGN-источник, сети у qwen не будет.
     if (currentAdapter && currentAdapter.siteName === 'qwen' && adapterBaseSeen === true) return true;
@@ -3207,7 +3207,7 @@ function aiCmAutoExportTrustedBase() {
 // выключен → ни одной строки. Вызывается из единственной точки старта скачивания
 // автоэкспорта (core/export-manager.js) через typeof-гард — в срез-песочницах тестов,
 // где хелпера нет, вызова не происходит вовсе (поведение 1:1).
-function aiCmAutoExportTrustedBaseDiag(trigger, cid, percentage) {
+function aiCmAutoExportTrustedBaseDiag(trigger: string, cid: string | null, percentage?: number): boolean {
   try {
     if (typeof aiCmDiagLine !== 'function') return false;
     if (!aiCmAutoExportTrustedBase()) return false;
@@ -3394,7 +3394,7 @@ if (isExtensionValid()) {
 // ========== ЭКСПОРТ ДИАГНОСТИКИ ==========
 // popup шлёт {type:'aiCmDiag'}. content.js (ISOLATED) дёргает MAIN-перехватчик через
 // window.dispatchEvent('ai-cm-diag-request') и ждёт 'ai-cm-diag-response'.
-function handleAiCmDiag(sendResponse) {
+function handleAiCmDiag(sendResponse: (response?: unknown) => void): void {
   var intercepted = null;
   var timer = null;
 
@@ -3453,7 +3453,7 @@ function handleAiCmDiag(sendResponse) {
   try { window.dispatchEvent(new CustomEvent('ai-cm-diag-request')); } catch (e) { }
 }
 // ========== v31: ФЛАГ «ПОДРОБНЫЕ ЛОГИ» (aiCmDebugLogs, по умолчанию ВЫКЛ) ==========
-function applyDebugLogs(v) {
+function applyDebugLogs(v: unknown): void {
   __aiCmSetDebugLogs(v);
   // транслируем в MAIN-мир перехватчикам (у них свой debug.js)
   try { window.dispatchEvent(new CustomEvent('ai-cm-debug-logs', { detail: !!v })); } catch (e) { }
@@ -3658,7 +3658,7 @@ if (isExtensionValid()) {
 // ============================================================================================
 
 /** Разбор detail моста: строка JSON → объект, объект → как есть, мусор → null. */
-function aiCmBridgeDetail(ev) {
+function aiCmBridgeDetail(ev: any) {
   var raw = (ev && ev.detail !== undefined) ? ev.detail : null;
   if (typeof raw !== 'string') return raw || null;
   try { return JSON.parse(raw); } catch (eBd) { return null; }
@@ -3669,11 +3669,11 @@ function aiCmBridgeDetail(ev) {
 /** @type {{ msgs: Array<{role: string, text: string}>, count: number, ts: number, href: string, historyComplete?: boolean } | null} */
 var aiCmNetMsgsAistudio = null;
 // Последний promptTokenCount AI Studio: точный размер контекста (0 — ещё не приходил).
-var aiCmNetCountAistudio = 0;
+var aiCmNetCountAistudio: number = 0;
 // v2.0.32: слаг модели AI Studio из тела GenerateContent ('' — сеть ещё не называла модель).
 // Зачем отдельная переменная: detectedModelSlug — общий для всех сервисов и сбрасывается
 // чужим сайтом/навигацией, а кэшу истории и адаптеру нужно именно «модель этого чата».
-var aiCmNetModelSlugAistudio = '';
+var aiCmNetModelSlugAistudio: string = '';
 // v2.0.34 (fix base-pending): признак «сеть отдала ПОЛНУЮ историю этого чата».
 // Карта по ключу чата (см. aiCmNetReadyKey), а не boolean: доверие обязано не перетекать
 // в другой разговор и сбрасываться в resetConversationState. Почему не baseSeen: ось
@@ -3682,14 +3682,14 @@ var aiCmNetModelSlugAistudio = '';
 // поэтому общую ось не трогаем (R1). Читает ровно один предикат —
 // aiCmAutoExportTrustedBase (ветка aistudio); пишет — aiCmIngestAistudioNet.
 /** @type {Record<string, boolean>} */
-var aiCmNetReadyAistudio = {};
+var aiCmNetReadyAistudio: Record<string, any> = {};
 
 /**
  * Ключ готовности сети AI Studio: convId текущего чата (в браузере всегда есть),
  * а в срезах-песочницах без getCurrentConvId — путь '/prompts/<id>'.
  * @returns {string}
  */
-function aiCmNetReadyKey() {
+function aiCmNetReadyKey(): string {
   try {
     var cid = (typeof getCurrentConvId === 'function') ? (getCurrentConvId() || '') : '';
     if (cid) return cid;
@@ -3700,7 +3700,7 @@ function aiCmNetReadyKey() {
 }
 
 /** Сброс признака полноты сети AI Studio (вызов из resetConversationState). */
-function aiCmNetReadyAistudioReset() {
+function aiCmNetReadyAistudioReset(): boolean {
   try {
     if (!aiCmNetReadyAistudio || typeof aiCmNetReadyAistudio !== 'object') return false;
     for (var k in aiCmNetReadyAistudio) {
@@ -3714,7 +3714,7 @@ function aiCmNetReadyAistudioReset() {
     return false;
   }
 }
-function aiCmIsAistudioHost() {
+function aiCmIsAistudioHost(): boolean {
   try {
     return String((window.location && window.location.hostname) || '').indexOf('aistudio.google.com') !== -1;
   } catch (eAih) {
@@ -3746,18 +3746,18 @@ function aiCmIsAistudioHost() {
 // Метки счётчика в шапке. Русские метки записаны escape-последовательностями: это НЕ
 // пользовательские строки интерфейса (M-4.2 их справедливо запрещает), а шаблоны распознавания
 // текста, который рисует сам AI Studio в русской локали — они не переводятся и не фолбэкаются.
-var AI_CM_AISTUDIO_TOKENS_LABELS = [
+var AI_CM_AISTUDIO_TOKENS_LABELS: string[] = [
   'tokens', 'token',
   '\u0442\u043e\u043a\u0435\u043d\u043e\u0432', // «токенов»
   '\u0442\u043e\u043a\u0435\u043d\u0430',       // «токена»
   '\u0442\u043e\u043a\u0435\u043d'              // «токен»
 ];
 // Кэш последнего прочитанного значения шапки (троттлинг обхода поддерева заголовка).
-var aiCmAistudioNativeTs = 0;
-var aiCmAistudioNativeValue = 0;
+var aiCmAistudioNativeTs: number = 0;
+var aiCmAistudioNativeValue: number = 0;
 
 /** «9,637» / «1.234.567» / «9 637» → число; проценты и мусор → 0. */
-function aiCmAistudioParseCount(s) {
+function aiCmAistudioParseCount(s: string): number {
   var raw = String(s == null ? '' : s).replace(/[\u00a0\u202f]/g, ' ').trim();
   if (!raw) return 0;
   // Тысячи группируются по три разряда; «1.2»/«0,5» (проценты) под это правило не попадают.
@@ -3770,7 +3770,7 @@ function aiCmAistudioParseCount(s) {
 }
 
 /** Число токенов внутри блока: пара «метка + соседнее число» либо текст «N tokens». */
-function aiCmAistudioTokensInBox(box) {
+function aiCmAistudioTokensInBox(box: Element): number {
   if (!box || typeof box.querySelectorAll !== 'function') return 0;
   var nodes = box.querySelectorAll('*');
   var limit = nodes.length > 400 ? 400 : nodes.length;
@@ -3805,7 +3805,7 @@ function aiCmAistudioTokensInBox(box) {
  * (не AI Studio, библиотека промптов, ещё не отрисовано).
  * @returns {number}
  */
-function aiCmAistudioNativePromptTokens() {
+function aiCmAistudioNativePromptTokens(): number {
   try {
     if (!aiCmIsAistudioHost()) return 0;
     // Троттлинг: processAndSend зовётся на каждую мутацию ленты, а здесь обход поддерева
@@ -3823,7 +3823,7 @@ function aiCmAistudioNativePromptTokens() {
 }
 
 /** Один проход поиска нативного счётчика (без троттлинга — для тестов и троттлера). */
-function aiCmAistudioNativeProbe() {
+function aiCmAistudioNativeProbe(): number {
   try {
     if (!aiCmIsAistudioHost()) return 0;
     var h1 = document.querySelector('h1');
@@ -3862,18 +3862,18 @@ function aiCmAistudioNativeProbe() {
  * только что восстановленный снимок стирался бы до первого замера.
  * ============================================================================================ */
 
-var AI_CM_AISTUDIO_CACHE_PREFIX = 'ai_cm_aistudio_history_';
-var AI_CM_AISTUDIO_CACHE_VERSION = 1;
+var AI_CM_AISTUDIO_CACHE_PREFIX: string = 'ai_cm_aistudio_history_';
+var AI_CM_AISTUDIO_CACHE_VERSION: number = 1;
 // Ключ, который записали/восстановили последним: сброс при смене чата удаляет именно его.
-var aiCmAistudioCacheKeyLast = '';
+var aiCmAistudioCacheKeyLast: string = '';
 // High-water mark кэша: ключ + максимальный count, который УЖЕ лежит в sessionStorage.
 // Зачем: кэш хранит ПИК истории. Живой UpdatePrompt после F5 приходит с коллапсированной
 // лентой (2 хода) и без этого отметчика перезаписал бы снимок из 6 ходов — ровно то,
 // из-за чего бейдж и показывал «2 узла».
-var aiCmAistudioPeakKey = '';
-var aiCmAistudioPeakCount = 0;
+var aiCmAistudioPeakKey: string = '';
+var aiCmAistudioPeakCount: number = 0;
 
-function aiCmAistudioSessionStorage() {
+function aiCmAistudioSessionStorage(): Storage | null {
   try {
     return (typeof sessionStorage !== 'undefined') ? sessionStorage : null;
   } catch (eSs) {
@@ -3883,7 +3883,7 @@ function aiCmAistudioSessionStorage() {
 }
 
 /** pathname из абсолютного href (SPA-гард тот же, что у адаптера); иначе — как есть. */
-function aiCmAistudioPathOf(href) {
+function aiCmAistudioPathOf(href: string): string {
   var s = String(href || '');
   if (!s) return '';
   try {
@@ -3894,7 +3894,7 @@ function aiCmAistudioPathOf(href) {
 }
 
 /** Ключ кэша текущего (или переданного) разговора. */
-function aiCmAistudioCacheKey(href) {
+function aiCmAistudioCacheKey(href?: string): string {
   var h = String(href || (window.location && window.location.href) || '');
   var p = aiCmAistudioPathOf(h);
   var m = /\/prompts\/([^\/?#]+)/.exec(p);
@@ -3903,7 +3903,7 @@ function aiCmAistudioCacheKey(href) {
 }
 
 /** Пик для ключа: при смене разговора отметка обнуляется (кэш у каждого свой). */
-function aiCmAistudioPeakOf(key) {
+function aiCmAistudioPeakOf(key: string): number {
   if (key !== aiCmAistudioPeakKey) {
     aiCmAistudioPeakKey = key;
     aiCmAistudioPeakCount = 0;
@@ -3912,7 +3912,7 @@ function aiCmAistudioPeakOf(key) {
 }
 
 /** Запись снимка в sessionStorage; ошибки хранилища (quota/private) — не фатальны. */
-function aiCmAistudioHistoryCacheSave() {
+function aiCmAistudioHistoryCacheSave(): boolean {
   try {
     if (!aiCmNetMsgsAistudio || !Array.isArray(aiCmNetMsgsAistudio.msgs)
       || aiCmNetMsgsAistudio.msgs.length === 0) return false;
@@ -3943,7 +3943,7 @@ function aiCmAistudioHistoryCacheSave() {
 }
 
 /** Восстановление кэша текущего разговора в тот же ingest, что и живая сеть. */
-function aiCmAistudioHistoryCacheRestore() {
+function aiCmAistudioHistoryCacheRestore(): boolean {
   try {
     if (!aiCmIsAistudioHost()) return false;
     var ss = aiCmAistudioSessionStorage();
@@ -3987,7 +3987,7 @@ function aiCmAistudioHistoryCacheRestore() {
 }
 
 /** Сброс кэша предыдущего разговора при смене чата (вызов из resetConversationState). */
-function aiCmAistudioHistoryCacheClear() {
+function aiCmAistudioHistoryCacheClear(): boolean {
   try {
     if (!aiCmIsAistudioHost()) return false;
     var prev = aiCmAistudioCacheKeyLast;
@@ -4027,7 +4027,7 @@ function aiCmAistudioHistoryCacheClear() {
  * @param {Array<{role: string, text?: string, content?: string}>|null} list — extractMessages()
  * @returns {boolean} true, если снимок записан
  */
-function aiCmAistudioDomCacheSave(list) {
+function aiCmAistudioDomCacheSave(list: any[]): boolean {
   try {
     if (!aiCmIsAistudioHost()) return false;
     if (!Array.isArray(list) || list.length === 0) return false;
@@ -4072,7 +4072,7 @@ function aiCmAistudioDomCacheSave(list) {
  * @param {object|null} detail
  * @returns {boolean}
  */
-function aiCmIngestAistudioNet(detail) {
+function aiCmIngestAistudioNet(detail: any): boolean {
   if (!detail) return false;
   var changed = false;
   if (detail.kind === 'count') {
@@ -4097,7 +4097,7 @@ function aiCmIngestAistudioNet(detail) {
       // если у хода был только файл — пустой USER: без секций недопустим.
       if (m.text.length === 0 && sections.length === 0) continue;
       /** @type {any} */
-      var rec = { role: (m.role === 'assistant' || m.role === 'model') ? 'assistant' : 'user', text: m.text };
+      var rec: any = { role: (m.role === 'assistant' || m.role === 'model') ? 'assistant' : 'user', text: m.text };
       if (sections) rec.sections = sections;
       if (Array.isArray(m.files) && m.files.length > 0) rec.files = m.files;
       msgs.push(rec);
@@ -4197,31 +4197,31 @@ aiCmAistudioHistoryCacheRestore();
 // content-стримы с литералами Tj/TJ, поэтому при пустом результате мост всё
 // равно пробует Port, а pdf-aborted остаётся последним средством.
 // [pdf-bridge:start]
-var aiCmPdfBridgeStarted = false;
-var aiCmPdfJobs = {};
-var aiCmPdfLocalReady = false;
-var AI_CM_PDF_SRC = 'ai-cm-pdf';
-var AI_CM_PDF_LOCAL_SRC = 'ai-cm-pdf-local';
-var AI_CM_PDF_MAX_BYTES = 10 * 1024 * 1024;
-var AI_CM_PDF_MAX_CHUNKS = 64;
-var AI_CM_PDF_CHUNK_MAX = 1024 * 1024;
-var AI_CM_PDF_PORT_RETRY = 1;
-var AI_CM_PDF_RETRY_DELAY_MS = 250;
-var AI_CM_PDF_LOCAL_MAX_BYTES = 5 * 1024 * 1024;
-var AI_CM_PDF_LOCAL_TIMEOUT_MS = 12000;
-var AI_CM_PDF_LOCAL_READY_WAIT_MS = 1200;
+var aiCmPdfBridgeStarted: boolean = false;
+var aiCmPdfJobs: Record<string, AiCmPdfJob> = {};
+var aiCmPdfLocalReady: boolean = false;
+var AI_CM_PDF_SRC: string = 'ai-cm-pdf';
+var AI_CM_PDF_LOCAL_SRC: string = 'ai-cm-pdf-local';
+var AI_CM_PDF_MAX_BYTES: number = 10 * 1024 * 1024;
+var AI_CM_PDF_MAX_CHUNKS: number = 64;
+var AI_CM_PDF_CHUNK_MAX: number = 1024 * 1024;
+var AI_CM_PDF_PORT_RETRY: number = 1;
+var AI_CM_PDF_RETRY_DELAY_MS: number = 250;
+var AI_CM_PDF_LOCAL_MAX_BYTES: number = 5 * 1024 * 1024;
+var AI_CM_PDF_LOCAL_TIMEOUT_MS: number = 12000;
+var AI_CM_PDF_LOCAL_READY_WAIT_MS: number = 1200;
 
-function aiCmPdfLog(tag, err) {
+function aiCmPdfLog(tag: string, err: unknown): void {
   if (typeof debugLog === 'function') debugLog('warn', '[AI CM][pdf] ' + tag, err);
 }
 
-function aiCmPdfDetail(ev) {
+function aiCmPdfDetail(ev: any) {
   var raw = (ev && ev.detail !== undefined) ? ev.detail : null;
   if (typeof raw !== 'string') return (raw && typeof raw === 'object') ? raw : null;
   try { return JSON.parse(raw); } catch (eParse) { aiCmPdfLog('detail', eParse); return null; }
 }
 
-function aiCmPdfB64(u8) {
+function aiCmPdfB64(u8: Uint8Array): string {
   var bin = '';
   var step = 0x8000;
   for (var i = 0; i < u8.length; i += step) {
@@ -4230,7 +4230,7 @@ function aiCmPdfB64(u8) {
   try { return btoa(bin); } catch (eB64) { aiCmPdfLog('btoa', eB64); return ''; }
 }
 
-function aiCmPdfAnnounceReady() {
+function aiCmPdfAnnounceReady(): void {
   try {
     window.dispatchEvent(new CustomEvent('ai-cm-pdf-ready', { detail: JSON.stringify({ enabled: true }) }));
   } catch (eReady) { aiCmPdfLog('ready', eReady); }
@@ -4238,14 +4238,14 @@ function aiCmPdfAnnounceReady() {
 
 // Firefox определяем по UA: chrome.runtime есть и там, но offscreen-хоста нет, а
 // event page засыпает — значит локальный разбор для него основной путь.
-function aiCmPdfIsFirefox() {
+function aiCmPdfIsFirefox(): boolean {
   try {
     if (typeof navigator === 'undefined' || !navigator) return false;
     return String(navigator.userAgent || '').indexOf('Firefox/') !== -1;
   } catch (eUa) { aiCmPdfLog('ua', eUa); return false; }
 }
 
-function aiCmPdfConcat(job) {
+function aiCmPdfConcat(job: AiCmPdfJob): Uint8Array | null {
   if (!job || !job.parts || job.got <= 0 || job.size <= 0) return null;
   var out = new Uint8Array(job.size);
   var at = 0;
@@ -4258,7 +4258,7 @@ function aiCmPdfConcat(job) {
   return at === job.size ? out : null;
 }
 
-function aiCmPdfClearJobTimers(job) {
+function aiCmPdfClearJobTimers(job: AiCmPdfJob): void {
   if (!job || typeof job !== 'object') return;
   var keys = ['retryTimer', 'localTimer', 'localReadyTimer'];
   for (var i = 0; i < keys.length; i++) {
@@ -4271,7 +4271,7 @@ function aiCmPdfClearJobTimers(job) {
   job.localBytes = null;
 }
 
-function aiCmPdfDeliver(id, res) {
+function aiCmPdfDeliver(id: string, res: any): void {
   var job = aiCmPdfJobs[id];
   delete aiCmPdfJobs[id];
   aiCmPdfClearJobTimers(job);
@@ -4294,7 +4294,7 @@ function aiCmPdfDeliver(id, res) {
   } catch (eEvent) { aiCmPdfLog('result-event', eEvent); }
 }
 
-function aiCmPdfDropPort(job) {
+function aiCmPdfDropPort(job: AiCmPdfJob): void {
   if (!job || typeof job !== 'object') return;
   if (job.retryTimer !== null && job.retryTimer !== undefined) {
     clearTimeout(job.retryTimer);
@@ -4308,7 +4308,7 @@ function aiCmPdfDropPort(job) {
 
 // Порт умер. Порядок эскалации: один реконнект (лечит просыпание SW), затем
 // локальный разбор в странице, и только если он уже был — pdf-aborted.
-function aiCmPdfAfterPort(id, reason, retryable) {
+function aiCmPdfAfterPort(id: string, reason: string, retryable: boolean): void {
   var job = aiCmPdfJobs[id];
   if (!job) return;
   aiCmPdfDropPort(job);
@@ -4329,7 +4329,7 @@ function aiCmPdfAfterPort(id, reason, retryable) {
   aiCmPdfLocalStart(id);
 }
 
-function aiCmPdfLocalSend(id) {
+function aiCmPdfLocalSend(id: string): void {
   var job = aiCmPdfJobs[id];
   if (!job || !job.localBytes) return;
   if (job.localReadyTimer !== null && job.localReadyTimer !== undefined) {
@@ -4351,7 +4351,7 @@ function aiCmPdfLocalSend(id) {
   }
 }
 
-function aiCmPdfLocalStart(id) {
+function aiCmPdfLocalStart(id: string): void {
   var job = aiCmPdfJobs[id];
   if (!job) return;
   if (job.localTried === true || job.localPending === true) return;
@@ -4386,7 +4386,7 @@ function aiCmPdfLocalStart(id) {
   }, AI_CM_PDF_LOCAL_READY_WAIT_MS);
 }
 
-function aiCmPdfAfterLocal(id, res) {
+function aiCmPdfAfterLocal(id: string, res: any): void {
   var job = aiCmPdfJobs[id];
   if (!job) return;
   if (job.localTimer !== null && job.localTimer !== undefined) {
@@ -4413,7 +4413,7 @@ function aiCmPdfAfterLocal(id, res) {
   aiCmPdfDeliver(id, { ok: false, reason: 'pdf-aborted' });
 }
 
-function aiCmPdfPortAttempt(id, attempt) {
+function aiCmPdfPortAttempt(id: string, attempt: number): void {
   var job = aiCmPdfJobs[id];
   if (!job) return;
   if (typeof chrome === 'undefined' || !chrome.runtime || typeof chrome.runtime.connect !== 'function') {
@@ -4461,7 +4461,7 @@ function aiCmPdfPortAttempt(id, attempt) {
   }
 }
 
-function aiCmPdfDispatch(id) {
+function aiCmPdfDispatch(id: string): void {
   var job = aiCmPdfJobs[id];
   if (!job || job.sent) return;
   job.sent = true;
@@ -4472,7 +4472,7 @@ function aiCmPdfDispatch(id) {
   aiCmPdfPortAttempt(id, 0);
 }
 
-function aiCmPdfOnMessage(ev) {
+function aiCmPdfOnMessage(ev: MessageEvent): void {
   if (!ev || ev.source !== window) return;
   var data = ev.data;
   if (!data || data.source !== AI_CM_PDF_SRC) return;
@@ -4507,7 +4507,7 @@ function aiCmPdfOnMessage(ev) {
   if (job.total > 0 && job.got >= job.total) aiCmPdfDispatch(id);
 }
 
-function aiCmPdfAbortAll() {
+function aiCmPdfAbortAll(): void {
   var ids = Object.keys(aiCmPdfJobs);
   for (var i = 0; i < ids.length; i++) {
     var job = aiCmPdfJobs[ids[i]];
@@ -4520,14 +4520,14 @@ function aiCmPdfAbortAll() {
   }
 }
 
-function aiCmPdfOnCancel(ev) {
+function aiCmPdfOnCancel(ev: any): void {
   var detail = aiCmPdfDetail(ev);
   var id = (detail && typeof detail.id === 'string') ? detail.id : '';
   if (!id) return;
   aiCmPdfDeliver(id, { ok: false, reason: 'pdf-aborted' });
 }
 
-function aiCmPdfOnLocalResult(ev) {
+function aiCmPdfOnLocalResult(ev: any): void {
   var detail = aiCmPdfDetail(ev);
   var id = (detail && typeof detail.id === 'string') ? detail.id : '';
   if (!id) return;
@@ -4536,7 +4536,7 @@ function aiCmPdfOnLocalResult(ev) {
   aiCmPdfAfterLocal(id, detail);
 }
 
-function aiCmPdfOnLocalReady() {
+function aiCmPdfOnLocalReady(): void {
   aiCmPdfLocalReady = true;
   var ids = Object.keys(aiCmPdfJobs);
   for (var i = 0; i < ids.length; i++) {
@@ -4545,7 +4545,7 @@ function aiCmPdfOnLocalReady() {
   }
 }
 
-function aiCmPdfBridgeStart() {
+function aiCmPdfBridgeStart(): void {
   if (aiCmPdfBridgeStarted) return;
   // Без chrome.runtime в этом контексте моста нет: MAIN не должен получить
   // 'ready' и обязан остаться на прежней ветке заглушки.
@@ -4562,3 +4562,40 @@ function aiCmPdfBridgeStart() {
 
 aiCmPdfBridgeStart();
 // [pdf-bridge:end]
+
+// ========== Core Wave 3: типы модуля (EOF-блок) ==========
+// Главный content-скрипт (Core Wave 3). Блок стоит в самом конце файла:
+// аннотации в сигнатурах выше не сдвигают ни одной строки кода, поэтому
+// номера строк catch-whitelist (tests/fixtures/catch-whitelist.json) и
+// source-пины тестов остаются прежними. readCore()/readExecutable()
+// (tests/helpers/*) снимают типы ровно до до-миграционного текста.
+//
+// Единственное исключение — маркер конца pdf-моста строкой выше: он лежит
+// в trivia над этим блоком и снимается вместе с ним. Поэтому
+// tests/adapters/firefox-pdf-fallback.test.js режет СЫРОЙ файл по маркерам,
+// а типы снимает уже со среза.
+
+/** Источник базы текущего чата для попапа/индикатора. */
+interface AiCmSourceInfo {
+  kind: string;
+  label: string;
+}
+
+/** Задача pdf-моста (window.postMessage -> Port/local, сборка чанков). */
+interface AiCmPdfJob {
+  total: number;
+  parts: Uint8Array[];
+  got: number;
+  size: number;
+  port: any;
+  sent: boolean;
+  maxChars: number;
+  attempt: number;
+  portEverStarted: boolean;
+  localTried: boolean;
+  localPending: boolean;
+  retryTimer: any;
+  localTimer: any;
+  localReadyTimer: any;
+  localBytes: Uint8Array | null;
+}

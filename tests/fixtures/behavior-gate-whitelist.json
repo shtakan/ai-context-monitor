@@ -4,7 +4,7 @@
     "reason": "legacy-pin"
   },
   "tests/adapters/aistudio-export-block.test.js": {
-    "count": 9,
+    "count": 5,
     "reason": "legacy-pin"
   },
   "tests/adapters/aistudio-files-drain.test.js": {
@@ -14,14 +14,6 @@
   "tests/adapters/aistudio-files-module.test.js": {
     "count": 1,
     "reason": "vm-harness"
-  },
-  "tests/adapters/aistudio-history-cache.test.js": {
-    "count": 1,
-    "reason": "legacy-pin"
-  },
-  "tests/adapters/aistudio-native-tokens.test.js": {
-    "count": 1,
-    "reason": "legacy-pin"
   },
   "tests/adapters/chatgpt-adapter-revive.test.js": {
     "count": 6,
@@ -204,7 +196,7 @@
     "reason": "vm-harness"
   },
   "tests/badge-suppress-adapter-base-v54.test.js": {
-    "count": 13,
+    "count": 4,
     "reason": "legacy-pin"
   },
   "tests/build-integrity.test.js": {
@@ -212,7 +204,7 @@
     "reason": "static-linter"
   },
   "tests/byok-exactcount-sync.test.js": {
-    "count": 5,
+    "count": 3,
     "reason": "vm-harness"
   },
   "tests/byok-session.test.js": {
@@ -344,7 +336,7 @@
     "reason": "legacy-pin"
   },
   "tests/o23-tokens-calibration.test.js": {
-    "count": 14,
+    "count": 9,
     "reason": "legacy-pin"
   },
   "tests/o29-autoexport-log-spam.test.js": {
@@ -420,7 +412,7 @@
     "reason": "legacy-pin"
   },
   "tests/qwen-autoexport-trusted-base-o37.test.js": {
-    "count": 9,
+    "count": 7,
     "reason": "legacy-pin"
   },
   "tests/qwen-container-drop-o37.test.js": {
@@ -432,7 +424,7 @@
     "reason": "legacy-pin"
   },
   "tests/qwen-export-o36.test.js": {
-    "count": 12,
+    "count": 7,
     "reason": "legacy-pin"
   },
   "tests/qwen-gate-diag-o35.test.js": {

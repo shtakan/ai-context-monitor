@@ -12,12 +12,13 @@
 // только в этот момент), а content.js трактует exactCountEnabled как false в рантайме,
 // не трогая storage.
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
 const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const OPTIONS_HTML = fs.readFileSync(path.join(ROOT, 'options', 'options.html'), 'utf8');
-const CONTENT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+const CONTENT_SRC = readCore('core/content.ts');
 const RU = JSON.parse(fs.readFileSync(path.join(ROOT, '_locales', 'ru', 'messages.json'), 'utf8'));
 const EN = JSON.parse(fs.readFileSync(path.join(ROOT, '_locales', 'en', 'messages.json'), 'utf8'));
 
@@ -245,7 +246,7 @@ describe('BYOK-sync: options.html / локали — подсказка под �
 });
 
 /* =====================================================================================
- * 3. core/content.js — пустой ключ делает exactCountEnabled ложным в рантайме
+ * 3. core/content.ts — пустой ключ делает exactCountEnabled ложным в рантайме
  * ===================================================================================== */
 
 function extractFunction(src, name) {
@@ -270,13 +271,13 @@ describe('BYOK-sync: content.js — без ключа флаг точного с
 
     const noKey = { exactCountEnabled: true };
     vm.createContext(noKey);
-    vm.runInContext(fnSrc, noKey, { filename: 'core/content.js#aiCmByokFlag' });
+    vm.runInContext(fnSrc, noKey, { filename: 'core/content.ts#aiCmByokFlag' });
     expect(noKey.aiCmByokFlag(false)).toBe('');
     expect(noKey.exactCountEnabled).toBe(false);
 
     const withKey = { exactCountEnabled: true };
     vm.createContext(withKey);
-    vm.runInContext(fnSrc, withKey, { filename: 'core/content.js#aiCmByokFlag' });
+    vm.runInContext(fnSrc, withKey, { filename: 'core/content.ts#aiCmByokFlag' });
     expect(withKey.aiCmByokFlag(true)).toBe('1');
     expect(withKey.exactCountEnabled).toBe(true);
   });

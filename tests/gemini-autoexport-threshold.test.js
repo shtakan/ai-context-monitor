@@ -203,7 +203,7 @@ function loadManager(over) {
     }
   };
   Object.assign(ctx, o.ctx || {});
-  // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.js;
+  // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.ts;
   // срез-песочница получает тот же объект биндингом общего скоупа (window-зеркало прежнее).
   if (ctx.window && ctx.window.AiCmExportBuilders) ctx.AiCmExportBuilders = ctx.window.AiCmExportBuilders;
   // extra — добавка к тексту модуля в ТОМ ЖЕ скоупе (нужно P1-пинам: планировщик живёт

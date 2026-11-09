@@ -292,7 +292,7 @@ describe('F4/F5: doAutoExportDownload GSA (реальный код)', () => {
       }
     };
     Object.assign(ctx, over || {});
-    // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.js;
+    // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.ts;
     // срез-песочница получает тот же объект биндингом общего скоупа (window-зеркало прежнее).
     if (ctx.window && ctx.window.AiCmExportBuilders) ctx.AiCmExportBuilders = ctx.window.AiCmExportBuilders;
     return { ctx: ctx, downloads: downloads, logs: logs, api: makeContent(ctx) };
@@ -405,7 +405,7 @@ describe('F7: заполнение модели снапшота GSA (реаль
       window: { location: { hostname: 'www.google.com' } }
     };
     Object.assign(ctx, over || {});
-    // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.js;
+    // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.ts;
     // срез-песочница получает тот же объект биндингом общего скоупа (window-зеркало прежнее).
     if (ctx.window && ctx.window.AiCmExportBuilders) ctx.AiCmExportBuilders = ctx.window.AiCmExportBuilders;
     return ctx;
@@ -493,7 +493,7 @@ describe('F2/F5/F6: реальный maybeAutoExport GSA (тихий вызов 
       window: { AiCmExportEmitPipeline: P }
     };
     Object.assign(ctx, over || {});
-    // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.js;
+    // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.ts;
     // срез-песочница получает тот же объект биндингом общего скоупа (window-зеркало прежнее).
     if (ctx.window && ctx.window.AiCmExportBuilders) ctx.AiCmExportBuilders = ctx.window.AiCmExportBuilders;
     return { ctx: ctx, logs: logs, fired: fired, run: makeRun(ctx).run };

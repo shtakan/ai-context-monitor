@@ -744,7 +744,7 @@ describe('Step D.10: source-пины связки (ingest -> files -> kernel -> 
   const kernel = DS.readSource('core/deepseek-intercept.js');
   const bg = DS.readSource('core/background.js');
   const baseHandler = DS.readSource('core/base-handler.ts');
-  const content = DS.readSource('core/content.js');
+  const content = DS.readSource('core/content.ts');
   const exporter = DS.readSource('core/export-manager.ts');
 
   test('S1: ingest зовёт модуль в ACCEPT-ветке, но ПОСЛЕ turnsMap и ДО emitBaseSnapshot', () => {

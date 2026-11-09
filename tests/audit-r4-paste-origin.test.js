@@ -1,7 +1,7 @@
 /**
  * Аудит-волна 1 / R4 + Шаг A.2 (v53-A2): origin-контракт paste-capture.
  *
- * Отправитель (core/content.js, ISOLATED) и приёмник (core/claude-intercept.js,
+ * Отправитель (core/content.ts, ISOLATED) и приёмник (core/claude-intercept.js,
  * MAIN) живут в ОДНОМ окне, поэтому канал обязан быть same-origin:
  *   - отправитель: targetOrigin = location.origin с гардом пустого/'null'
  *     значения (fallback '/'); window.origin (легаси-алиас) в non-HTTP/opaque

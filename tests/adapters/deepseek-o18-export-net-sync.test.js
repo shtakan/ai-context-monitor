@@ -234,7 +234,7 @@ function makeExportSandbox(stand, over) {
     chrome: { storage: { session: { remove: function () { }, set: function () { } }, local: { get: function () { } } } }
   };
   Object.assign(ctx, over || {});
-  // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.js;
+  // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.ts;
   // срез-песочница получает тот же объект биндингом общего скоупа (window-зеркало прежнее).
   if (ctx.window && ctx.window.AiCmExportBuilders) ctx.AiCmExportBuilders = ctx.window.AiCmExportBuilders;
   const api = new Function('ctx', SCOPE)(ctx);

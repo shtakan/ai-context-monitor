@@ -232,7 +232,7 @@ describe('O-26 (1): вербатим-дамп usage при загрузке ис
 // ======================= 2) счётчики netMsgs/domMsgs в svc-emit-trace =======================
 
 describe('O-26 (2): счётчики netMsgs/domMsgs в trace-строке svc-emit', () => {
-  const contentSrc = require('./helpers/content-source.js').readSource('core/content.js');
+  const contentSrc = require('./helpers/content-source.js').readSource('core/content.ts');
 
   // Тело trace-блока как оно есть в content.js: от чтения siteName до закрытия if.
   function traceRegion() {

@@ -777,19 +777,19 @@ describe('Claude md roles R6/R7: диаг-маркеры ролей — толь
 // =====================================================================================
 // Корень остатка дефекта: пять точек нормализации ролей (buildMdFromHistory,
 // aiCmDedupeExportSource, aiCmCollectExportSource ×2, normalizeExportMessages) стоят НИЖЕ
-// записи сетевой базы. Пока сама запись (core/content.js, регион v1.18 E-2) пересчитывала
+// записи сетевой базы. Пока сама запись (core/content.ts, регион v1.18 E-2) пересчитывала
 // роль бинарно `r18 === 'user'`, 'human' парсера Claude умирал в 'assistant' ДО них: в
 // lastDetailMessages сетевого снимка лежал уже 'assistant' (live: dm.role=assistant для всех
 // ходов), и ни одна из пяти точек не могла восстановить роль — все ходы шли под '## Ассистент'.
 // Пины ниже гонят РЕАЛЬНЫЙ путь целиком: parseHistory + emitSnapshot (core/claude-intercept.js)
-// → дословный регион записи базы (core/content.js) → aiCmCollectExportSource +
+// → дословный регион записи базы (core/content.ts) → aiCmCollectExportSource +
 // aiCmDedupeExportSource + buildHistoryMessages → buildMdFromHistory.
 // =====================================================================================
 
-const CONTENT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+const CONTENT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'content.ts'), 'utf8');
 
 // Дословный срез записи сетевого снимка/базы: `if (texts.length > 0) {` … до baseIdSet —
-// ровно тот код, что исполняет боевой слушатель ai-cm-full-history (core/content.js).
+// ровно тот код, что исполняет боевой слушатель ai-cm-full-history (core/content.ts).
 const BASE_WRITE_SRC = (function () {
   const start = CONTENT_SRC.indexOf('  if (texts.length > 0) {');
   const end = CONTENT_SRC.indexOf('  baseIdSet = new Set();', start);
@@ -851,7 +851,7 @@ function snapshotFromRaw(raw) {
 
 /**
  * Шаги 2-3 (снимок → запись базы → collect → dedupe → buildHistoryMessages): РЕАЛЬНЫЙ регион
- * записи базы core/content.js + РЕАЛЬНЫЕ aiCmCollectExportSource/aiCmDedupeExportSource/
+ * записи базы core/content.ts + РЕАЛЬНЫЕ aiCmCollectExportSource/aiCmDedupeExportSource/
  * buildHistoryMessages в одном лексическом скоупе (как в браузере).
  * opts.baseWriteSrc — подмена среза (мутационный пин D6); opts.aiCmDiagLine/console — диаг-пины.
  */

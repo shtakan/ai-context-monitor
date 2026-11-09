@@ -35,7 +35,7 @@
  * aistudio.google.com СОЗНАТЕЛЬНО НЕ добавлялся в v63 (его перехватывала ветка host.includes('google.com')
  *   → 'google_search'; ключа 'aistudio' не было в THEME_CONFIGS, поэтому ветка переключила бы палитру
  *   виджета на chatgpt-зелёную #10a37f через гард core/widget.ts:435 и сделала бы достижимыми 4 ветки
- *   `=== 'aistudio'` в core/content.js) — это была ОТДЕЛЬНАЯ задача с живой приёмкой.
+ *   `=== 'aistudio'` в core/content.ts) — это была ОТДЕЛЬНАЯ задача с живой приёмкой.
  * --- v64 (Fix-aistudio-servicekey): эта отдельная задача выполнена (m00001) ---
  *   (1) core/widget.ts, getServiceKey(): Перед `if (host.includes('google.com'))` добавлена ветка
  *       `if (host.includes('aistudio.google.com')) return 'aistudio';` ⇒ safePctKey() даёт
@@ -47,8 +47,8 @@
  *       (undefined), значение однократно копируется из 'ai_cm_safe_pct_google_search' (старый ключ
  *       НЕ удаляется). Явный «Авто» пишет null — это НЕ пусто, поэтому миграция не воскрешает снятый
  *       порог. Функции: AI_CM_SAFE_PCT_MIGRATIONS / aiCmSafePctMigrationSource /
- *       aiCmSafePctMigrationValue (чистая) / aiCmMigrateSafePct; вызов — core/content.js initialize.
- *   (4) core/content.js: 4 прежние «спящие» ветки `=== 'aistudio'` НЕЙТРАЛИЗОВАНЫ до строгого
+ *       aiCmSafePctMigrationValue (чистая) / aiCmMigrateSafePct; вызов — core/content.ts initialize.
+ *   (4) core/content.ts: 4 прежние «спящие» ветки `=== 'aistudio'` НЕЙТРАЛИЗОВАНЫ до строгого
  *       'gemini' (v28 tape-restore, v82 D8.3 retry, isGeminiLike, v81 2.4 isGeminiS24): до появления
  *       ключа AI Studio ходил туда как 'google_search' и в них не входил, т.е. поведение байтово
  *       прежнее. isGeminiSvc (BYOK) НЕ тронут — пины qwen-gate-diag-o35/qwen-provider-wiring живы.
@@ -57,9 +57,9 @@
  *   (5 ключей THEME_CONFIGS, 8 host.includes в getServiceKey).
  * ШАГ 2 (qwen, read-only — сцепления НЕТ): qwen-intercept не публикует serverTokens (O-47,
  *   core/qwen-intercept.js:932-941), поэтому netServerTokens на chat.qwen.ai = 0 и
- *   aiCmMetricServerTokens (core/content.js:1917-1920) возвращает 0 и ДО, и ПОСЛЕ правки;
+ *   aiCmMetricServerTokens (core/content.ts:1917-1920) возвращает 0 и ДО, и ПОСЛЕ правки;
  *   прочие гейты content.js сравнивают currentAdapter.siteName, а не getServiceKey().
- *   core/content.js и core/qwen-intercept.js НЕ тронуты.
+ *   core/content.ts и core/qwen-intercept.js НЕ тронуты.
  * THEME_CONFIGS в v63 не тронут (было ровно 4 ключа) — S-2/P6; в v64 ключей стало 5 (добавлен 'aistudio').
  */
 const CONTENT = require('./helpers/content-source.js').contentSource;
@@ -345,8 +345,8 @@ describe('P3 (путь чтения): порог Claude читается из cl
     const key = s.api.safePctKey();
     expect(key).toBe('ai_cm_safe_pct_claude');
     let v;
-    s.syncGet([key], (d) => { v = d[key]; }); // core/content.js:1158: chrome.storage.sync.get([safePctKey()], ...)
-    s.api.setSafePct((typeof v === 'number' && v > 0) ? v : null); // core/content.js:1160
+    s.syncGet([key], (d) => { v = d[key]; }); // core/content.ts:1158: chrome.storage.sync.get([safePctKey()], ...)
+    s.api.setSafePct((typeof v === 'number' && v > 0) ? v : null); // core/content.ts:1160
     expect(s.api.getSafePct()).toBe(40);
     // utils/model-config.ts:323-327: claude-sonnet-4-6 capExempt, contextLimit 500000
     expect(ModelConfig.getEffectiveLimit('claude-sonnet-4-6')).toBe(500000);
@@ -360,7 +360,7 @@ describe('P3 (путь чтения): порог Claude читается из cl
   });
 
   test('источник чтения keyed динамически: content.js читает storage по safePctKey()', () => {
-    // core/content.js:1158-1160 — ключ чтения не литерал, а safePctKey()
+    // core/content.ts:1158-1160 — ключ чтения не литерал, а safePctKey()
     expect(CONTENT).toContain('chrome.storage.sync.get([safePctKey()], (d) => {');
     expect(CONTENT).toContain('const v = d[safePctKey()];');
     expect(CONTENT).toContain("safePct = (typeof v === 'number' && v > 0) ? v : null;");
@@ -380,7 +380,7 @@ describe('P4 (изоляция): Claude и ChatGPT не делят порог', 
     expect('ai_cm_safe_pct_chatgpt' in s.store.writes[0]).toBe(false);
   });
 
-  test('onChanged по chatgpt-ключу не трогает safePct на claude.ai (core/content.js:2962-2968)', () => {
+  test('onChanged по chatgpt-ключу не трогает safePct на claude.ai (core/content.ts:2962-2968)', () => {
     const s = pctSandbox('claude.ai', { ai_cm_safe_pct_claude: 40 });
     s.api.setSafePct(40);
     const sk = s.api.safePctKey();
@@ -477,7 +477,7 @@ describe('P6 (гард отсутствующего ключа): нет TypeErro
 });
 
 // =====================================================================================
-// P7 — диагностика (источник: core/content.js:2157 svc + :2227-2241 gsa-metric-src site)
+// P7 — диагностика (источник: core/content.ts:2157 svc + :2227-2241 gsa-metric-src site)
 // =====================================================================================
 describe('P7 (диагностика): site в gsa-metric-src питается getServiceKey()', () => {
   test('источник: svc = getServiceKey(), а site: svc в объекте gsa-metric-src', () => {
@@ -692,7 +692,7 @@ describe('R3 (изоляция v63): perplexity / qwen / chatgpt не делят
     const key = s.api.safePctKey();
     expect(key).toBe('ai_cm_safe_pct_qwen');
     let v;
-    s.syncGet([key], (d) => { v = d[key]; }); // core/content.js:1158 — sync.get([safePctKey()])
+    s.syncGet([key], (d) => { v = d[key]; }); // core/content.ts:1158 — sync.get([safePctKey()])
     s.api.setSafePct((typeof v === 'number' && v > 0) ? v : null);
     expect(s.api.getSafePct()).toBe(40);
     const sk = s.api.safePctKey();

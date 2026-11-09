@@ -228,11 +228,11 @@ describe('R1: 5 сервисов не сломаны convId-фиксом', () =>
   });
 });
 
-// —— S-1: ВСЕ копии ветки /app/ в core/content.js синхронизированы с каноничной ——
+// —— S-1: ВСЕ копии ветки /app/ в core/content.ts синхронизированы с каноничной ——
 // Каноничная — utils/export-emit-pipeline.ts : extractConvIdFromUrl. Локальные копии
 // (фолбэк getCurrentConvId, tape-restore v28, retry D8, JSON-дамп Ctrl+Shift+D) обязаны
 // нести тот же lookahead: иначе одна из них снова вернёт 'prompts'.
-describe('S-1: копии ветки /app/ в core/content.js синхронизированы', () => {
+describe('S-1: копии ветки /app/ в core/content.ts синхронизированы', () => {
   const CANON = '/\\/app\\/(?!prompts(?:\\/|$)|new(?:\\/|$)|apikey(?:\\/|$))([A-Za-z0-9_-]+)/';
   const LEGACY = '/\\/app\\/([A-Za-z0-9_-]+)/';
 
@@ -241,8 +241,8 @@ describe('S-1: копии ветки /app/ в core/content.js синхрониз
     expect(src).toContain(CANON);
   });
 
-  test('ни одной голой копии в core/content.js; ровно 4 синхронизированные', () => {
-    const src = fs.readFileSync(path.join(__dirname, '..', 'core', 'content.js'), 'utf8');
+  test('ни одной голой копии в core/content.ts; ровно 4 синхронизированные', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'core', 'content.ts'), 'utf8');
     expect(src).not.toContain(LEGACY);
     expect(src.split(CANON).length - 1).toBe(4);
   });
@@ -440,7 +440,7 @@ describe('гистерезис D5 и сброс autoExportLastPct D6', () => {
 
 // —— v82 (D7): autoExportLastPct обновляется только из достоверного источника ——
 describe('гейт достоверности pct (D7)', () => {
-  // имитация гейта присвоения из maybeAutoExport (core/content.js)
+  // имитация гейта присвоения из maybeAutoExport (core/content.ts)
   function d7Assign(autoExportLastPct, percentage, baseSeen, isGemini) {
     if (baseSeen === true || isGemini === true) return percentage; // присвоение
     return autoExportLastPct;                                     // прежнее значение
@@ -492,7 +492,7 @@ describe('гейт достоверности pct (D7)', () => {
 });
 
 // —— v82 (D8): повторный tape-restore при стабилизации account index ——
-describe('tape-restore retry (D8)', () => {  // имитация state-машины D8 (core/content.js): guard restoredTapeLoaded + кэш idx
+describe('tape-restore retry (D8)', () => {  // имитация state-машины D8 (core/content.ts): guard restoredTapeLoaded + кэш idx
   function d8Sim(pathnameSeq) {
     const state = { restoredTapeLoaded: false, idx: {}, loads: 0, keyLog: [] };
     const acct = (p) => (p.match(/\/u\/(\d+)\//) || [])[1] || '0';

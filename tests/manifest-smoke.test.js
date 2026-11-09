@@ -128,7 +128,7 @@ describe('LOW-2: manifest.json — smoke-тест состава ключей (C
     expect(manifest.background.service_worker).toBe('core/background.js');
     expect(manifest.action.default_popup).toBe('options/options.html');
     expect(manifest.content_scripts).toHaveLength(1);
-    expect(manifest.content_scripts[0].js).toContain('core/content.js');
+    expect(manifest.content_scripts[0].js).toContain('core/content.ts');
     // архив-импорт — страница настроек (chrome.storage), НЕ content_script
     expect(manifest.content_scripts[0].js).not.toContain('utils/archive-import.js');
   });

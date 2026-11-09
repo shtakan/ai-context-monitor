@@ -35,7 +35,7 @@ const H = require('./helpers/content-source.js');
 
 const ROOT = path.join(__dirname, '..');
 const CONTENT = H.contentSource;                                                    // модули + content.js (единый скоуп)
-const CONTENT_ONLY = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+const CONTENT_ONLY = readCore('core/content.ts');
 const OPTIONS_SRC = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
 const MGR_SRC = read('core/export-manager.ts');
 
@@ -317,7 +317,7 @@ describe('O-36 D1: имя файла qwen без префикса [LOW CONFIDENC
     return lowConfPrefix + 'ai-context-monitor-' + site + '-' + model + '-' + (stamp || STAMP) + '.txt';
   }
 
-  /** Реальный aiCmQwenExportBaseTrusted из core/content.js в песочнице состояния. */
+  /** Реальный aiCmQwenExportBaseTrusted из core/content.ts в песочнице состояния. */
   function runBaseTrusted(over) {
     const ctx = {
       currentAdapter: (over && over.adapter !== undefined) ? over.adapter : { siteName: 'qwen' },
@@ -443,7 +443,7 @@ describe('O-36 D1: имя файла qwen без префикса [LOW CONFIDENC
       }
     };
     Object.assign(ctx, over || {});
-    // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.js;
+    // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.ts;
     // срез-песочница получает тот же объект биндингом общего скоупа (window-зеркало прежнее).
     if (ctx.window && ctx.window.AiCmExportBuilders) ctx.AiCmExportBuilders = ctx.window.AiCmExportBuilders;
     return { ctx: ctx, downloads: downloads, logs: logs, api: makeContent(ctx) };

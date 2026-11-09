@@ -1,7 +1,7 @@
 /**
  * v2.0 (этап 1/3): карта исходников контент-скрипта.
  *
- * core/content.js декомпозирован на 5 модулей. Порядок в MODULES — ровно порядок
+ * core/content.ts декомпозирован на 5 модулей. Порядок в MODULES — ровно порядок
  * <script> в manifest.json (content_scripts[0].js): модули идут ПЕРЕД content.js.
  *
  * Классические content-скрипты манифеста исполняются в одном изолированном мире и
@@ -30,7 +30,7 @@ const MODULES = [
   'core/hybrid-tail.ts',
   'core/export-manager.ts'
 ];
-const CONTENT_JS = 'core/content.js';
+const CONTENT_JS = 'core/content.ts';
 
 /** Пути (от корня репозитория) всех файлов контент-скрипта в порядке manifest.json. */
 const SOURCES = MODULES.concat([CONTENT_JS]);
@@ -45,7 +45,8 @@ const TS_EXECUTABLE = new Set([
   'core/widget.ts',
   'core/base-handler.ts',
   'core/hybrid-tail.ts',
-  'core/export-manager.ts'
+  'core/export-manager.ts',
+  'core/content.ts'
 ]);
 
 /** Исходник файла: для мигрированных `.ts` — в исполнимой форме. */

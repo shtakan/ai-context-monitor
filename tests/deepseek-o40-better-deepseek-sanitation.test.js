@@ -103,7 +103,7 @@ const F1 = [
   "core/background.js",
   "core/base-handler.ts",
   "core/claude-intercept.js",
-  "core/content.js",
+  "core/content.ts",
   "core/deepseek-intercept.js",
   // --- артефакт, строки 26-50 ---
   "core/export-manager.ts",
@@ -1161,7 +1161,7 @@ const F5 = '<original_task>' + '\n' + [
   "core/background.js",
   "core/base-handler.ts",
   "core/claude-intercept.js",
-  "core/content.js",
+  "core/content.ts",
   "core/deepseek-intercept.js",
   // --- артефакт, строки 1024-1048 ---
   "core/export-manager.ts",
@@ -1366,7 +1366,7 @@ const F6 = '<original_task>' + '\n' + [
   "core/background.js",
   "core/base-handler.ts",
   "core/claude-intercept.js",
-  "core/content.js",
+  "core/content.ts",
   "core/deepseek-intercept.js",
   // --- артефакт, строки 1248-1272 ---
   "core/export-manager.ts",

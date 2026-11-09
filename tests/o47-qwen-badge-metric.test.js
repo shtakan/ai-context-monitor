@@ -20,8 +20,8 @@
  *        счётчик не-Qwen сервисов правилом не задет.
  *
  * КОНСТРУКЦИЯ (R-D, без выдуманных чисел):
- *   • правило читается РЕАЛЬНОЙ функцией core/content.js:aiCmMetricServerTokens (исполняется);
- *   • вердикт бейджа считается РЕАЛЬНЫМИ байтами тернарника из core/content.js (берётся из
+ *   • правило читается РЕАЛЬНОЙ функцией core/content.ts:aiCmMetricServerTokens (исполняется);
+ *   • вердикт бейджа считается РЕАЛЬНЫМИ байтами тернарника из core/content.ts (берётся из
  *     источника регуляркой, исполняется через new Function) и РЕАЛЬНЫМ utils/tokenizer.ts;
  *   • ingest снимка считается РЕАЛЬНОЙ строкой `netServerTokens = detail.serverTokens || 0;`.
  *   Так пины держат не пересказ, а те самые байты продакшна: правка любого из трёх звеньев
@@ -72,7 +72,7 @@ const BASE_TEXT = QUESTION + '\n' + ANSWER;
 const BASE_COUNT = 2;
 
 // =====================================================================================
-// ЗВЕНО 1: правило метрики — РЕАЛЬНАЯ функция core/content.js (исполняется).
+// ЗВЕНО 1: правило метрики — РЕАЛЬНАЯ функция core/content.ts (исполняется).
 // =====================================================================================
 function metricRule() {
   const decl = fnDecl(CONTENT, 'aiCmMetricServerTokens');
@@ -114,7 +114,7 @@ function badgeTokens(site, ingestedServerTokens, fullText, countForTokens) {
 function tokensTilde(fullText, countForTokens) {
   return Tokenizer.estimateDialogTokens(fullText, countForTokens);
 }
-/** pct бейджа — формула core/content.js, лимит берётся реальным ModelConfig. */
+/** pct бейджа — формула core/content.ts, лимит берётся реальным ModelConfig. */
 function pctOf(tokens, modelId) {
   const displayLimit = ModelConfig.computeDisplayLimit(modelId, null);
   return { pct: Math.round((tokens / displayLimit) * 1000) / 10, displayLimit: displayLimit };

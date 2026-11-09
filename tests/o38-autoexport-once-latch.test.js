@@ -237,15 +237,15 @@ describe('O-38: resetConversationState НЕ сбрасывает once-латч',
 // возврат в уже экспортированный чат → повторный файл того же разговора. Гейт выше
 // (once-латч) спасал не всегда: латч L1/session снимался ДО гейта, а diag/иные читатели
 // видят именно autoExportFired. Теперь D14 не снимает латчи, если once-латч site|convId
-// взведён (тот же признак, что и у aiCmSiteConvFired в core/content.js).
+// взведён (тот же признак, что и у aiCmSiteConvFired в core/content.ts).
 describe('O-38 (3): SPA-переход в тот же экспортированный чат — второй файр запрещён', () => {
   const { moduleSource } = require('./helpers/content-source.js');
   const WIDGET_SRC = moduleSource('core/widget.ts');
   const D14_START = "var cidD14 = getCurrentConvId() || '';";
   const D14_END = '} catch (eD14c) { }';
-  const CONTENT_SRC = moduleSource('core/content.js');
+  const CONTENT_SRC = moduleSource('core/content.ts');
 
-  // Реальный aiCmSiteConvFired() из core/content.js — единственный читатель once-латча,
+  // Реальный aiCmSiteConvFired() из core/content.ts — единственный читатель once-латча,
   // который вызывает D14 (имя латча в resetConversationState не появляется: инвариант O-43).
   function fnDecl(src, name) {
     const start = src.indexOf('function ' + name + '(');
@@ -371,7 +371,7 @@ describe('O-38 (3): SPA-переход в тот же экспортирован
   test('source-pin: D14 сверяется с once-латчём и сохраняет пином m13 строку сброса', () => {
     const src = d14Source();
     // resetConversationState НЕ упоминает имя латча (инвариант O-43: сбросом не снимается),
-    // признак приходит из aiCmSiteConvFired() (core/content.js) под typeof-гардом.
+    // признак приходит из aiCmSiteConvFired() (core/content.ts) под typeof-гардом.
     expect(src).not.toContain('aiCmAutoExportFiredOnce');
     expect(src).toContain('aiCmSiteConvFired');
     expect(src).toContain('latch kept reason=already-exported');

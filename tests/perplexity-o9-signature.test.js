@@ -20,7 +20,7 @@ const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipe
 const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/perplexity-parser.ts');
 const { readSource } = require('./helpers/content-source.js');
 
-const CONTENT = readSource('core/content.js');
+const CONTENT = readSource('core/content.ts');
 const BASE_HANDLER = readSource('core/base-handler.ts');
 const EXPORT_MGR = readSource('core/export-manager.ts');
 

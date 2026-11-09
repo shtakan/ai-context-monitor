@@ -5,12 +5,12 @@
  *   D2 utils/model-config.ts:resolveModelId — авто-регистрация НОВОГО слаг-а: запись
  *      создаётся, когда словарь слаг ещё не покрывает (Pro → 128 000, Flash/Flash Lite →
  *      1 048 576), существующие ключи не подменяются.
- *   D3 core/content.js:resolveCurrentModel — лестница попап → сеть (rawSnapshot) → DOM
+ *   D3 core/content.ts:resolveCurrentModel — лестница попап → сеть (rawSnapshot) → DOM
  *      (uiRaw): ручной выбор пользователя не перебивается сетью (H19), но при
  *      «Автоопределении» сеть по-прежнему впереди DOM — дропдаун часто без номера
  *      версии, а сеть называет модель полностью.
  *   D4 мост между мирами: core/gemini-intercept.js (MAIN world) шлёт событие
- *      ai-cm-model-slug, core/content.js (изолированный мир) пишет detectedModelSlug —
+ *      ai-cm-model-slug, core/content.ts (изолированный мир) пишет detectedModelSlug —
  *      прямая запись переменной из MAIN world не видна (см. регрессионный запрет в D4).
  *   D5 (v2.0.21) выбор модели из МАССИВА слаг-ов: в теле ответа перечислены несколько
  *      моделей (['gemini-3-flash','gemini-3.6-flash','gemini-2.5-flash-lite']) и первой
@@ -23,7 +23,7 @@ const path = require('path');
 const Rpc = require('../core/gemini-rpc.js');
 const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.ts');
 
-const CONTENT = fs.readFileSync(path.join(__dirname, '..', 'core', 'content.js'), 'utf8');
+const CONTENT = fs.readFileSync(path.join(__dirname, '..', 'core', 'content.ts'), 'utf8');
 
 describe('D1: captureModelSlugFromBody — слаг модели из тела сети', () => {
   test('flash-lite из тела ответа → полный слаг (lite не отрезается до flash)', () => {

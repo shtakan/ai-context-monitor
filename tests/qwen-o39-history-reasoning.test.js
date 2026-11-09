@@ -828,7 +828,7 @@ describe('O-39 R5: регресс-контур O-37/O-38/O-11/O-31 исполн�
     expect(typeof P.applyReasoningExportFields).toBe('function');        // O-37/O-39
     expect(typeof P.shouldSkipAutoExport).toBe('function');              // O-11/O-38
     expect(typeof P.latchKey).toBe('function');                          // O-11
-    const content = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+    const content = fs.readFileSync(path.join(ROOT, 'core', 'content.ts'), 'utf8');
     expect(content).toContain('function aiCmSnapshotIsCurrentThread(');  // O-31
   });
 });

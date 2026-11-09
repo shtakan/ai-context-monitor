@@ -5,8 +5,9 @@
  *
  * Пин-тесты ищут в исходнике и код (`var aiCmSanitizeSkipLogged = {};`), и
  * комментарии, и режут функции по балансу скобок. После перевода
- * core/base-handler, core/hybrid-tail и core/export-manager на TypeScript
- * сырой текст содержит аннотации и EOF-блоки интерфейсов, поэтому для ЭТИХ трёх
+ * core/base-handler, core/hybrid-tail, core/export-manager и core/content на
+ * TypeScript сырой текст содержит аннотации и EOF-блоки интерфейсов, поэтому для
+ * ЭТИХ четырёх
  * модулей отдаётся текст, равный прежнему (до миграции): `stripTypesKeepComments`
  * снимает типы, СОХРАНЯЯ комментарии и модульный формат (UMD-хвост
  * `module.exports = Api` остаётся как был).
@@ -23,7 +24,8 @@ const ROOT = path.join(__dirname, '..', '..');
 const STRIPPED = new Set([
   'core/base-handler.ts',
   'core/hybrid-tail.ts',
-  'core/export-manager.ts'
+  'core/export-manager.ts',
+  'core/content.ts'
 ]);
 
 /**

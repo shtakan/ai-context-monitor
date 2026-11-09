@@ -69,7 +69,7 @@
     "core/base-handler.ts",
     "core/hybrid-tail.ts",
     "core/export-manager.ts",
-    "core/content.js"
+    "core/content.ts"
   ],
   "run_at": "document_idle"
     }

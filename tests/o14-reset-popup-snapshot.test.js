@@ -3,7 +3,7 @@
  *
  * Механизм бага (инспекция): core/widget.ts resetConversationState() чистил только
  * состояние виджета, но не chrome.storage.local → ключи aiCmState / aiCmState:<host>
- * (пишет core/content.js при badge-update) оставались с данными СТАРОГО чата; читатель
+ * (пишет core/content.ts при badge-update) оставались с данными СТАРОГО чата; читатель
  * попапа (options/options.js, chrome.storage.onChanged) обрабатывал только newValue —
  * removed игнорировался, экран держал последний снимок.
  *
@@ -131,8 +131,8 @@ describe('O-14 D1: структурный пин — remove живёт в resetC
   test('D1: в конце resetConversationState удаляются ровно aiCmState и aiCmState:<host>', () => {
     const decl = fnDecl(WIDGET_SRC, 'resetConversationState');
     expect(decl).toContain("chrome.storage.local.remove(['aiCmState', 'aiCmState:' + window.location.hostname])");
-    // host берётся из того же источника, что в записи core/content.js (statePatch-ключ)
-    const contentSrc = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+    // host берётся из того же источника, что в записи core/content.ts (statePatch-ключ)
+    const contentSrc = fs.readFileSync(path.join(ROOT, 'core', 'content.ts'), 'utf8');
     expect(contentSrc).toContain("statePatch['aiCmState:' + window.location.hostname] = stateSnapshot;");
     // никакой другой чистки storage в resetConversationState не появилось
     expect(decl.match(/storage\.local\.remove/g)).toHaveLength(1);

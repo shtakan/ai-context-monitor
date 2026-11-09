@@ -21,7 +21,7 @@
  *            виджета) при гейте вкл/выкл идентичны.
  *
  * Исполняются РЕАЛЬНЫЕ функции: условие супрессии и блок записи базы — текстом из
- * core/content.js (не литералами теста), updateWidget — из core/widget.ts, канонический
+ * core/content.ts (не литералами теста), updateWidget — из core/widget.ts, канонический
  * aiCmDiagLine + гейт — из utils/debug.ts.
  */
 
@@ -33,7 +33,7 @@ const H = require('./helpers/content-source.js');
 
 const ROOT = path.join(__dirname, '..');
 const CONTENT = H.contentSource;                                    // модули + content.js (единый скоуп)
-const CONTENT_ONLY = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+const CONTENT_ONLY = readCore('core/content.ts');
 const WIDGET_SRC = H.moduleSource('core/widget.ts');
 const STATE_SRC = H.moduleSource('core/state.ts');
 // R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без

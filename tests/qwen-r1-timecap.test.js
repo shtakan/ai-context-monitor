@@ -38,7 +38,7 @@ const PAGINATION_SRC = read('core/qwen-pagination.js');
 const INTERCEPT_SRC = read('core/qwen-intercept.js');
 const STATE_SRC = read('core/state.ts');
 const WIDGET_SRC = read('core/widget.ts');
-const CONTENT_SRC = read('core/content.js');
+const CONTENT_SRC = read('core/content.ts');
 const MGR_SRC = read('core/export-manager.ts');
 
 // Рез по балансу фигурных скобок (конвенция сьюта: tests/qwen-pagination.test.js).
@@ -247,7 +247,7 @@ describe('R1: source-пины пайплайна (классификация →
     expect(WIDGET_SRC).toContain('try { aiCmPartialSoftByConv = {}; } catch (eResetPs63) { }');
   });
 
-  test('core/content.js — запись по detail.chatId вне if (emitConvId)', function () {
+  test('core/content.ts — запись по detail.chatId вне if (emitConvId)', function () {
     expect(CONTENT_SRC).toContain('var softKey63 = detail.chatId || emitConvId ||');
     expect(CONTENT_SRC).toContain('aiCmPartialSoftByConv[softKey63] = (detail.partialSoft === true);');
     // Qwen не отдаёт convId: ключ обязан начинаться с chatId, иначе ветка не исполнится
@@ -282,7 +282,7 @@ describe('R1: авто-дорога doAutoExportDownload — qwen soft-final д�
       currentAdapter: { siteName: 'qwen' },
       autoExportSettings: { fmt: 'txt', enabled: true, pct: 90 },
       aiCmLowConfidenceByConv: {},
-      // R1: реестр мягкого финала (в бою его заводит core/state.ts и пишет core/content.js)
+      // R1: реестр мягкого финала (в бою его заводит core/state.ts и пишет core/content.ts)
       aiCmPartialSoftByConv: {},
       baseSeen: true,
       baseComplete: false,             // soft-final: honest=false, полноты нет
@@ -323,7 +323,7 @@ describe('R1: авто-дорога doAutoExportDownload — qwen soft-final д�
       }
     };
     Object.assign(ctx, over || {});
-    // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.js;
+    // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.ts;
     // срез-песочница получает тот же объект биндингом общего скоупа (window-зеркало прежнее).
     if (ctx.window && ctx.window.AiCmExportBuilders) ctx.AiCmExportBuilders = ctx.window.AiCmExportBuilders;
     return { ctx: ctx, downloads: downloads, logs: logs, api: makeContent(ctx) };

@@ -13,7 +13,7 @@
  *       то есть baseComplete мог быть взведён по мусору;
  *   (б) pct/lastPercentage — ПАМЯТЬ ЭКЗЕМПЛЯРА (core/state.ts: lastPercentage, maxTokenCount,
  *       autoExportLastPct; sessionStorage не используется), но сам pct в момент файра
- *       ПЕРЕСЧИТЫВАЕТСЯ в DRAW (core/content.js: `percentage = maxTokenCount / displayLimit`)
+ *       ПЕРЕСЧИТЫВАЕТСЯ в DRAW (core/content.ts: `percentage = maxTokenCount / displayLimit`)
  *       от базы/текста текущего документа и передаётся в maybeAutoExport(percentage);
  *       re-check-пути (loader-stop / base-complete 0→1 / tape-restore) берут autoExportLastPct,
  *       который на новом документе = −1 (resetConversationState);

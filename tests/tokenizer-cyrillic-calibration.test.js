@@ -111,7 +111,7 @@ describe('Tokenizer — ГЛОБАЛЬНАЯ кириллическая кали
     expect(tkSrc).not.toContain('Math.ceil(cyrillicCount /');
     expect(tkSrc).toContain('tokens += cyrillicCount / CYRILLIC_CHARS_PER_TOKEN;');
     // фолбэк aiCmEstimateTokensTilde (песочницы без Tokenizer) обязан нести тот же коэффициент
-    const contentSrc = fs.readFileSync(path.join(__dirname, '..', 'core', 'content.js'), 'utf8');
+    const contentSrc = fs.readFileSync(path.join(__dirname, '..', 'core', 'content.ts'), 'utf8');
     expect(contentSrc).toContain('Math.ceil(cyr / ' + Tokenizer.CYRILLIC_CHARS_PER_TOKEN + ')');
     expect(contentSrc).not.toContain('Math.ceil(cyr / 1.8)');
   });

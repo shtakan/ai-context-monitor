@@ -10,22 +10,23 @@
  * в том же чате это 1 560 токенов, то есть в шесть раз меньше шапки, и бейдж расходился
  * с самой студией. Поэтому при наличии шапки бейдж берёт её число.
  *
- * ЧТО ТЕСТИРУЕТСЯ. Вырезанный из core/content.js участок от `var AI_CM_AISTUDIO_TOKENS_LABELS`
+ * ЧТО ТЕСТИРУЕТСЯ. Вырезанный из core/content.ts участок от `var AI_CM_AISTUDIO_TOKENS_LABELS`
  * до конца aiCmAistudioNativeProbe: разбор числа, поиск пары «число + метка» в блоке
  * заголовка, фолбэк по тексту «N tokens», защита от длинных блоков (лента реплик),
  * троттлинг (processAndSend зовётся на каждую мутацию) и гейт по хосту.
  */
 
 const fs = require('fs');
+const { readCore } = require('../helpers/core-src.js');
 const path = require('path');
 
-const CONTENT_SRC = fs.readFileSync(path.join(__dirname, '..', '..', 'core', 'content.js'), 'utf8');
+const CONTENT_SRC = readCore('core/content.ts');
 const START_MARK = 'var AI_CM_AISTUDIO_TOKENS_LABELS';
 const END_TEXT = '* AI Studio: кэш разобранной истории';
 
 function extractSection() {
   const from = CONTENT_SRC.indexOf(START_MARK);
-  if (from < 0) throw new Error('native tokens section not found in core/content.js');
+  if (from < 0) throw new Error('native tokens section not found in core/content.ts');
   const endText = CONTENT_SRC.indexOf(END_TEXT, from);
   if (endText < 0) throw new Error('end of native tokens section not found');
   // Режем перед открывающим комментарием следующего раздела (иначе остался бы незакрытый /*).
@@ -165,7 +166,7 @@ describe('content.js: нативный счётчик токенов AI Studio �
  * адаптеры не должны измениться)
  * ------------------------------------------------------------------ */
 
-/** Вырезать функцию из core/content.js по балансу фигурных скобок. */
+/** Вырезать функцию из core/content.ts по балансу фигурных скобок. */
 function extractFunction(name) {
   const head = 'function ' + name + '(';
   const from = CONTENT_SRC.indexOf(head);

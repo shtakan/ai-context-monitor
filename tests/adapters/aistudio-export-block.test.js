@@ -18,9 +18,9 @@
  * и защита прочих платформ (qwen/остальные вердикты не сдвинулись, признак не проник в
  * core/export-manager.ts и utils/export-emit-pipeline.ts).
  *
- * КАК ЗАПУСКАЕМ. Группа 1 — реальный предикат core/content.js (aiCmAutoExportTrustedBase +
+ * КАК ЗАПУСКАЕМ. Группа 1 — реальный предикат core/content.ts (aiCmAutoExportTrustedBase +
  * его диагностика) в `with (ctx)`-песочнице + реальный гейт utils/export-emit-pipeline.ts.
- * Группа 2 — реальный срез core/content.js от `var aiCmNetMsgsAistudio` до восстановления
+ * Группа 2 — реальный срез core/content.ts от `var aiCmNetMsgsAistudio` до восстановления
  * кэша (тот же приём, что в tests/adapters/aistudio-history-cache.test.js): проверяем, что
  * флаг взводится РОВНО полным снимком текущего пути.
  */
@@ -34,7 +34,7 @@ const P = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pip
 const { contentSource: CONTENT, readSource } = require('../helpers/content-source.js');
 
 const ROOT = path.join(__dirname, '..', '..');
-const CONTENT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+const CONTENT_SRC = readCore('core/content.ts');
 const WIDGET_SRC = readSource('core/widget.ts');
 const MGR_SRC = read('core/export-manager.ts');
 const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');

@@ -28,7 +28,7 @@
  *      состояний и индикаторов «загрузка» не введено.
  *
  * Исполняются РЕАЛЬНЫЕ функции: utils/debug.ts (канонический aiCmDiagLine + гейт),
- * core/content.js (щит: aiCmBadgeHoldDiag/Release/Active/ArmBadgeHoldFallback),
+ * core/content.ts (щит: aiCmBadgeHoldDiag/Release/Active/ArmBadgeHoldFallback),
  * core/widget.ts (updateWidget — единственная печать badge-update, createWidget,
  * resetConversationState). DRAW-исполнитель воспроизводит ветвление processAndSend
  * (badgeSuppressed → loaderFreeze → щит → updateWidget), порядок ветвей пинится тестом.
@@ -156,7 +156,7 @@ function makeO1(over) {
   // РЕАЛЬНЫЙ updateWidget (core/widget.ts) — единственная печать badge-update
   new Function('ctx', 'with (ctx) { ' + fnDecl(WIDGET_SRC, 'updateWidget') +
     '\n ctx.updateWidget = updateWidget; }')(ctx);
-  // РЕАЛЬНЫЙ щит (core/content.js)
+  // РЕАЛЬНЫЙ щит (core/content.ts)
   const api = makeHold(ctx);
   // РЕАЛЬНЫЙ канонический хелпер печатает только под гейтом aiCmDebug
   jest.spyOn(console, 'log').mockImplementation(function (m) { consoleLogs.push(String(m)); });

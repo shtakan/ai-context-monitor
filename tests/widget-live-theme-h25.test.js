@@ -163,7 +163,7 @@ afterEach(() => {
 // =====================================================================================
 // H25 (1) БАГ-СЦЕНАРИЙ live: Claude, живой переключатель темы, атрибуты НЕ мутируют
 // =====================================================================================
-describe('H25: живой перекрас палитры виджета при смене in-app темы без reload (core/content.js)', () => {
+describe('H25: живой перекрас палитры виджета при смене in-app темы без reload (core/content.ts)', () => {
   describe('а) Claude live: тёмная тема без мутации атрибутов → перекрас ≤5с', () => {
     const HTML_CLS = 'cds-root h-screen antialiased scroll-smooth';
     const BODY_CLS = 'bg-surface-1 text-primary font-sans min-h-screen chat-ui-core';
@@ -399,7 +399,7 @@ describe('H25: живой перекрас палитры виджета при 
   // =====================================================================================
   // H25 (6) СТРУКТУРНЫЕ ПИНЫ: вызовы, интервал, гард
   // =====================================================================================
-  describe('е) структурные пины core/content.js', () => {
+  describe('е) структурные пины core/content.ts', () => {
     const refreshSrc = extractFn(CONTENT, 'aiCmRefreshThemeIfNeeded');
     const pollSrc = extractFn(CONTENT, 'aiCmStartThemePoll');
     const updateSrc = extractFn(CONTENT, 'updateWidget');

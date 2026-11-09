@@ -18,7 +18,7 @@
  *
  * Исполняются РЕАЛЬНЫЕ функции: shouldSkipAutoExport (utils/export-emit-pipeline.ts),
  * maybeAutoExport → doAutoExportDownload → aiCmWriteAutoExportFile (core/export-manager.ts),
- * aiCmAutoExportTrustedBase + aiCmAutoExportTrustedBaseDiag (core/content.js), канонический
+ * aiCmAutoExportTrustedBase + aiCmAutoExportTrustedBaseDiag (core/content.ts), канонический
  * aiCmDiagLine (utils/debug.ts) и реальные сборщики байтов (utils/export-text-builders.ts).
  */
 
@@ -35,7 +35,7 @@ const ROOT = path.join(__dirname, '..');
 const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
 const MGR_SRC = read('core/export-manager.ts');
 const WIDGET_SRC = readSource('core/widget.ts');
-const CONTENT_ONLY = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+const CONTENT_ONLY = readCore('core/content.ts');
 // R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
 const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
@@ -176,7 +176,7 @@ function stand(over) {
       }
     }
   };
-    // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.js;
+    // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.ts;
     // срез-песочница получает тот же объект биндингом общего скоупа (window-зеркало прежнее).
     if (ctx.window && ctx.window.AiCmExportBuilders) ctx.AiCmExportBuilders = ctx.window.AiCmExportBuilders;
   const api = makeScope(ctx);

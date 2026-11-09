@@ -25,7 +25,7 @@
  *   D4 — точка выхода: рендер отдаёт [REASONING] и [ANSWER] (чистая функция + сборщики);
  *   D5 — сквозной путь файла: collect → dedupe (ровно выражение buildHistoryMessages) →
  *        buildTxtFromHistory/buildMdFromHistory Qwen: секция [REASONING] в файле;
- *   D6 — СТАДИЯ ФОРМИРОВАНИЯ БАЗЫ (core/content.js:720-760): снимок пересобирается как
+ *   D6 — СТАДИЯ ФОРМИРОВАНИЯ БАЗЫ (core/content.ts:720-760): снимок пересобирается как
  *        {role,text,id} (поле reasoning на этой стадии теряется — исходный корень дефекта),
  *        но размышление доезжает до файла ЧЕРЕЗ СЕКЦИИ текста (нормализация
  *        applyReasoningExportFields на выходе точки сбора). D1/D5 кормят точку сбора
@@ -43,7 +43,7 @@
  * гейтится сайтом (в отличие от O-37-нормализации, у которой гейт aiCmReasoningExportSite),
  * а рендер платформу не различает вовсе. Байтовый инвариант шести платформ держится ФОРМОЙ
  * снимка: content.js при непустой сети пересобирает lastDetailMessages как {role,text,id}
- * (core/content.js:664-675), поэтому поля reasoning у чужих платформ там нет — это и
+ * (core/content.ts:664-675), поэтому поля reasoning у чужих платформ там нет — это и
  * воспроизводят моки R1/R2 (снимок без reasoning).
  *
  * НЕ ТРОГАЕТСЯ: core/export-manager.ts, core/base-handler.ts, utils/export-text-builders.ts —
@@ -167,7 +167,7 @@ function makeBaseWriter(opts) {
       ctx.lastDetailMessages = detail || null;
       return ctx.__history();
     },
-    /** Прямая запись базы (ровно присваивания стадии формирования core/content.js). */
+    /** Прямая запись базы (ровно присваивания стадии формирования core/content.ts). */
     setBase: function (texts, detail) {
       ctx.lastBaseTexts = texts || [];
       ctx.lastDetailMessages = detail || null;
@@ -283,7 +283,7 @@ describe('O-39 D2: не-Gemini ветка дедупа — mp.reasoning сохр
       .toBe(SECTIONED);
     // и НЕ появляется из реального снимка: у прочих платформ поля reasoning в
     // lastDetailMessages нет — content.js пересобирает снимок как {role,text,id}
-    // (core/content.js:664-675), R1-мок это же и проверяет.
+    // (core/content.ts:664-675), R1-мок это же и проверяет.
     const w = makeBaseWriter({ site: 'deepseek', baseSeen: true });
     const inp = netInputNoReasoning();
     expect(Object.prototype.hasOwnProperty.call(w.collect(inp.texts, inp.detail)[1], 'reasoning')).toBe(false);
@@ -476,12 +476,12 @@ describe('O-39 S: пины проводки', () => {
 });
 
 // =====================================================================================
-// D6: СТАДИЯ ФОРМИРОВАНИЯ БАЗЫ (core/content.js:720-760) — ЖИВОЙ ПУТЬ ЦЕЛИКОМ
+// D6: СТАДИЯ ФОРМИРОВАНИЯ БАЗЫ (core/content.ts:720-760) — ЖИВОЙ ПУТЬ ЦЕЛИКОМ
 // =====================================================================================
 // D1/D5 кормят точку сбора синтетическим снимком, у которого поле reasoning УЖЕ есть.
 // В браузере снимок приходит из detail перехватчика и ПЕРЕСОБИРАЕТСЯ на записи базы:
 //   detail.messages → preDedupe18 {role,text,id} → aiCmDedupeExportSource → texts18/msgs18
-//   → lastBaseTexts/lastDetailMessages (core/content.js:720-760).
+//   → lastBaseTexts/lastDetailMessages (core/content.ts:720-760).
 // На этой стадии поле reasoning теряется (в msgs18 попадают только role/text/id) — это и есть
 // «этап формирования» из корня дефекта. Инвариант пина: размышление ВСЁ РАВНО доезжает до
 // файла — через ПАРУ СЕКЦИЙ в тексте хода (нормализация applyReasoningExportFields на выходе
@@ -498,7 +498,7 @@ function detailWithSections() {
   };
 }
 
-/** Точная копия стадии формирования core/content.js:720-760 (preDedupe18 → dedupe → msgs18). */
+/** Точная копия стадии формирования core/content.ts:720-760 (preDedupe18 → dedupe → msgs18). */
 function formLiveBase(w, detail) {
   const texts = detail.messageTexts;
   const ids = detail.messageIds;

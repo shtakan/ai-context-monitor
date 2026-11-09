@@ -1,7 +1,7 @@
 /**
  * H22 (live 2026-09-09): Gemini переведён в in-app тёмную тему (Настройки → Тема) — страница
  * чёрная, а виджет остался СВЕТЛЫМ (белый круг, тёмные цифры 35.0%): палитра не следовала за
- * темой сервиса. Причина: и виджет (core/content.js isDarkMode → applyNativeStyles), и оверлей
+ * темой сервиса. Причина: и виджет (core/content.ts isDarkMode → applyNativeStyles), и оверлей
  * (core/gemini-intercept.js aiCmOverlayTheme) знали только prefers-color-scheme, а Gemini
  * выражает свою тему классом body.theme-host.dark-theme (CSS: gemini-dom-sample.html:75
  * `:where(.theme-host):where(.dark-theme)`), который `classList.contains('dark')` НЕ ловит.
@@ -152,7 +152,7 @@ afterEach(() => {
   document.documentElement.style.backgroundColor = '';
 });
 
-describe('H22: виджет следует in-app теме Gemini (core/content.js)', () => {
+describe('H22: виджет следует in-app теме Gemini (core/content.ts)', () => {
   describe('а) баг-сценарий: in-app тёмная тема Gemini → тёмная палитра', () => {
     it('body.theme-host.dark-theme при prefers-color-scheme=light → isDark=true, палитра gemini.dark', () => {
       const p = paletteFor('gemini.google.com', false, { bodyClass: 'theme-host dark-theme' });
@@ -223,7 +223,7 @@ describe('H22: виджет следует in-app теме Gemini (core/content.
     });
   });
 
-  describe('г) пересчёт при смене темы (структурные пины core/content.js)', () => {
+  describe('г) пересчёт при смене темы (структурные пины core/content.ts)', () => {
     it('наблюдатель атрибутов html/body остаётся, добавлен matchMedia change', () => {
       expect(CONTENT).toContain("themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });");
       expect(CONTENT).toContain("themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });");

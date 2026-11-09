@@ -17,7 +17,7 @@
  *      сообщений, чем отдаёт DOM, храповик сбрасывается к текущей оценке.
  *
  * Исполняются РЕАЛЬНЫЕ байты исходников (конвенция сьюта): парсер — как модуль,
- * ветвление maxTokenCount — срезом core/content.js через new Function.
+ * ветвление maxTokenCount — срезом core/content.ts через new Function.
  */
 
 'use strict';
@@ -28,7 +28,7 @@ const path = require('path');
 const H = require('./helpers/content-source.js');
 
 const ROOT = H.ROOT;
-const CONTENT = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+const CONTENT = fs.readFileSync(path.join(ROOT, 'core', 'content.ts'), 'utf8');
 const INTERCEPT = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');
 const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.ts');
 

@@ -85,7 +85,7 @@ describe('H21: fixture-сессия логов — fired ДО already-fired', ()
   });
 });
 
-describe('H21: пин порядка в core/content.js', () => {
+describe('H21: пин порядка в core/content.ts', () => {
   const src = CORE;
 
   test('латч fired пишется и логируется ДО любого последующего already-fired', () => {

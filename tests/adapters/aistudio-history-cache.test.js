@@ -14,23 +14,24 @@
  *     виртуализированных узлов, поэтому пик нельзя взять «когда-нибудь потом».
  * Кэш хранит ПИК: запись меньшего count не перезаписывает большую (high-water mark).
  *
- * Тестируется вырезанный из core/content.js участок (как и остальные тесты проекта
+ * Тестируется вырезанный из core/content.ts участок (как и остальные тесты проекта
  * грузят срезы main-перехватчика): от `var aiCmNetMsgsAistudio` до вызова
  * восстановления на инициализации. Окно подменено (нужен hostname aistudio.google.com),
  * хранилище — настоящее window.sessionStorage из jsdom, хелперы — заглушки.
  */
 
 const fs = require('fs');
+const { readCore } = require('../helpers/core-src.js');
 const path = require('path');
 
-const CONTENT_SRC = fs.readFileSync(path.join(__dirname, '..', '..', 'core', 'content.js'), 'utf8');
+const CONTENT_SRC = readCore('core/content.ts');
 const START_MARK = 'var aiCmNetMsgsAistudio = null;';
 const END_MARK = 'aiCmAistudioHistoryCacheRestore();';
 
 function extractCacheSection() {
   const from = CONTENT_SRC.indexOf(START_MARK);
   const to = CONTENT_SRC.indexOf(END_MARK, from);
-  if (from < 0 || to < 0) throw new Error('cache section not found in core/content.js');
+  if (from < 0 || to < 0) throw new Error('cache section not found in core/content.ts');
   return CONTENT_SRC.slice(from, to + END_MARK.length);
 }
 

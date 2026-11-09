@@ -353,7 +353,7 @@ describe('O-22 (F4): source-пины единой точки и сохранно
       expect(INTERCEPT_SRC).toContain("site: '" + site + "'");
     });
     // слушательские маркеры O-22 (o22-listener-entry / o22-call725) — на ISOLATED-стороне
-    const CONTENT = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+    const CONTENT = fs.readFileSync(path.join(ROOT, 'core', 'content.ts'), 'utf8');
     expect(CONTENT).toContain('o22-listener-entry');
     expect(CONTENT).toContain('o22-call725');
     expect(CONTENT).toContain('o22-histkey-dedup');

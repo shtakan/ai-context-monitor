@@ -12,7 +12,7 @@
  * aiCmNetRawCount / aiCmNetRawCountUsed. Изменился сырой счётчик — histKey снимается (null),
  * чтобы следующий processAndSend не отсеялся дедупом и пересчитал pct.
  *
- * Здесь исполняется ВЫРЕЗАННЫЙ из core/content.js реальный текст функции (конвенция репозитория:
+ * Здесь исполняется ВЫРЕЗАННЫЙ из core/content.ts реальный текст функции (конвенция репозитория:
  * тест гоняет исходник, а не копию логики) — tests/helpers/content-source.js.
  */
 
@@ -26,7 +26,7 @@ const path = require('path');
 const H = require('./helpers/content-source.js');
 
 const ROOT = H.ROOT;
-const CONTENT = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+const CONTENT = readCore('core/content.ts');
 const MGR = read('core/export-manager.ts');
 
 const CID = 'c-metrics-resync';
@@ -234,7 +234,7 @@ describe('v95 metrics-resync: вызов стоит сразу после deferr
 // (`maxTokenCount = tokenEstimate`, ветка baseComplete === true). Итог — видимый скачок вниз.
 //
 // Правило: числитель и знаменатель масштаба должны относиться к ОДНОЙ базе ⇒ масштабировать
-// можно только при baseComplete === true. Исполняются РЕАЛЬНЫЕ байты core/content.js
+// можно только при baseComplete === true. Исполняются РЕАЛЬНЫЕ байты core/content.ts
 // (срез по маркерам + new Function, конвенция сьюта), не пересказ логики.
 // =====================================================================================
 // v2.3 (B1): вложения добавляются долей пула через aiCmAttachPendingTokens — это и есть

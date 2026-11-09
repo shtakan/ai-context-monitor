@@ -287,7 +287,7 @@ describe('Шаг A.1 / P2: контент-скрипты не ходят в chro
 
 describe('Шаг A.1 / P3: контент получает из SW только boolean-флаг наличия ключа BYOK', () => {
   test('content.js не читает ключ: нет aiCmReadByokKey, legacy-констант и обращения к session', () => {
-    const contentJs = read('core/content.js');
+    const contentJs = read('core/content.ts');
     // Residual-security (Qwen Coder 2026-10-14, «Высокий приоритет 1»): прежний
     // aiCmReadByokKey вытягивал ЗНАЧЕНИЕ ключа ответом { key } и имел legacy-фолбэк на
     // plaintext в local — удалён целиком вместе с AI_CM_BYOK_LEGACY_KEYS.

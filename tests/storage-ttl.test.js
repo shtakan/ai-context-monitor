@@ -1,11 +1,11 @@
-// M-8 (фаза 3, первая задача): TTL per-host истории — core/background.js + core/content.js.
+// M-8 (фаза 3, первая задача): TTL per-host истории — core/background.js + core/content.ts.
 //
 // Аудит: записи 'aiCmHistory:<host>' (chrome.storage.local, per-host) не имели срока
 // жизни — хранилище росло неограниченно месяцами. Контур:
 //   * core/background.js — prune перебирает ключи 'aiCmHistory:*' и удаляет записи с ts
 //     старше TTL (30 дней); вызов на chrome.runtime.onStartup и chrome.runtime.onInstalled,
 //     ленивый вызов при записи того же ключа (chrome.storage.onChanged, area=local);
-//   * core/content.js — каждая запись 'aiCmHistory:<host>' несёт аддитивное поле
+//   * core/content.ts — каждая запись 'aiCmHistory:<host>' несёт аддитивное поле
 //     ts = Date.now(); глобальный ключ 'aiCmHistory' пишется ПРЕЖНЕЙ формой (не трогаем).
 //
 // Сьют грузит РЕАЛЬНЫЙ core/background.js в vm-песочницу (как background-counttokens.test.js),
@@ -264,7 +264,7 @@ describe('M-8: prune TTL истории — core/background.js', () => {
   });
 });
 
-describe('M-8: запись истории несёт ts — core/content.js', () => {
+describe('M-8: запись истории несёт ts — core/content.ts', () => {
   test('все per-host записи идут через aiCmHostHistoryRecord (3 точки)', () => {
     const writes = CONTENT_SRC.match(
       /histPatch\w*\['aiCmHistory:' \+ window\.location\.hostname\] = aiCmHostHistoryRecord\(histSnapshot\w*\);/g

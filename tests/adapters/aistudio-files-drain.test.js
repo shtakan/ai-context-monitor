@@ -352,7 +352,7 @@ describe('AI Studio: статические пины проводки', () => {
   });
 
   test('content сохраняет sections в снимке', () => {
-    expect(read('core/content.js')).toContain('if (sections) rec.sections = sections;');
+    expect(read('core/content.ts')).toContain('if (sections) rec.sections = sections;');
   });
 
   test('перехватчик спрашивает секции и прокидывает токен', () => {

@@ -8,7 +8,7 @@
  *   (в) валидация: pct вне 1–100 (2000) → фолбэк 100 = как Авто, пусто → Авто;
  *   (г) дефолтный путь (Автоопределение + пустое поле/100) байтово идентичен прежнему.
  * Чистые функции — utils/model-config.ts (resolvePopupModelId / resolveLimitPct /
- * applyLimitPct / computeDisplayLimit); пин-тесты — core/content.js и options/*.
+ * applyLimitPct / computeDisplayLimit); пин-тесты — core/content.ts и options/*.
  */
 
 const fs = require('fs');

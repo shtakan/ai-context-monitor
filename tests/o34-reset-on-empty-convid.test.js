@@ -15,7 +15,7 @@
  *   1) utils/chatgpt-conversation-parser.ts:shouldResetConversationOnNav — решение для
  *      НАВИГАЦИИ (надмножество прежнего предиката: смена контекста, включая ПОТЕРЮ id);
  *      core/page-intercept.js:checkConvChange использует его;
- *   2) core/content.js:aiCmResetStaleStateOnChatlessChatGptUrl — холодный вход на URL без
+ *   2) core/content.ts:aiCmResetStaleStateOnChatlessChatGptUrl — холодный вход на URL без
  *      /c/<id> (гейт chatgpt) сам зовёт resetConversationState + BADGE_RESET; вызов стоит
  *      в initialize() после выбора адаптера и ДО создания виджета.
  *
@@ -36,8 +36,8 @@
  * (getConvIdFromPath/shouldResetConversationOnNav — для MAIN и для прежнего предиката),
  * utils/export-emit-pipeline.ts (extractConvIdFromUrl — id со стороны ISOLATED, как в
  * content.js:getCurrentConvId), core/page-intercept.js (getConvId/resetForNewConversation/
- * checkConvChange), слушатель 'ai-cm-conversation-changed' из core/content.js,
- * core/content.js:aiCmResetStaleStateOnChatlessChatGptUrl, core/widget.ts
+ * checkConvChange), слушатель 'ai-cm-conversation-changed' из core/content.ts,
+ * core/content.ts:aiCmResetStaleStateOnChatlessChatGptUrl, core/widget.ts
  * (resetConversationState — единственный механизм сброса состояния, updateWidget —
  * единственная печать badge-update). Стрелки MAIN→ISOLATED идут через реальный CustomEvent
  * jsdom: harness диспатчит событие из настоящего resetForNewConversation.
@@ -82,7 +82,7 @@ function fnDecl(src, name) {
   throw new Error('unbalanced declaration: ' + name);
 }
 
-// Анонимный слушатель 'ai-cm-conversation-changed' (core/content.js) — второе плечо сброса.
+// Анонимный слушатель 'ai-cm-conversation-changed' (core/content.ts) — второе плечо сброса.
 function listenerFnSrc() {
   const marker = "window.addEventListener('ai-cm-conversation-changed', function () {";
   const start = CONTENT.indexOf(marker);
@@ -125,7 +125,7 @@ const NAV_SCOPE = 'with (ctx) { ' +
 const makeNavApi = new Function('ctx', NAV_SCOPE);
 
 // =====================================================================================
-// ISOLATED-мир: РЕАЛЬНЫЙ слушатель смены разговора (core/content.js)
+// ISOLATED-мир: РЕАЛЬНЫЙ слушатель смены разговора (core/content.ts)
 // =====================================================================================
 const LISTENER_FN = listenerFnSrc();
 const makeListenerFn = new Function('ctx', 'with (ctx) { var fn = ' + LISTENER_FN + '; return fn; }');
@@ -251,7 +251,7 @@ function makeDraw(over) {
   };
   new Function('ctx', DRAW_SCOPE)(ctx);
   function draw(percentage, tokens) {
-    // ветвление processAndSend (core/content.js): SPA-супрессия → freeze лоадера → updateWidget
+    // ветвление processAndSend (core/content.ts): SPA-супрессия → freeze лоадера → updateWidget
     if (ctx.badgeSuppressed && !ctx.baseSeen && !ctx.adapterBaseSeen) return;
     if (ctx.aiCmLoaderFreeze) return;
     ctx.updateWidget(percentage, tokens, 128000, 128000, 128000, 'GPT-5', null);
@@ -344,7 +344,7 @@ function makeSpa(startConvId, startPath, over) {
 }
 
 // =====================================================================================
-// Холодный вход: РЕАЛЬНЫЙ aiCmResetStaleStateOnChatlessChatGptUrl (core/content.js)
+// Холодный вход: РЕАЛЬНЫЙ aiCmResetStaleStateOnChatlessChatGptUrl (core/content.ts)
 // =====================================================================================
 const CHATLESS_SCOPE = 'with (ctx) { ' +
   fnDecl(CONTENT, 'aiCmResetStaleStateOnChatlessChatGptUrl') +
@@ -624,7 +624,7 @@ describe('O-34 R3: пины проводки и границ', () => {
 
   test('R3: новое решение живёт ровно в двух точках (парсер + перехватчик), дублей нет', () => {
     const files = [
-      'utils/chatgpt-conversation-parser.ts', 'core/page-intercept.js', 'core/content.js',
+      'utils/chatgpt-conversation-parser.ts', 'core/page-intercept.js', 'core/content.ts',
       'core/widget.ts', 'core/state.ts', 'core/export-manager.ts', 'utils/export-emit-pipeline.ts',
       'utils/tokenizer.ts', 'manifest.json'
     ];
@@ -635,7 +635,7 @@ describe('O-34 R3: пины проводки и границ', () => {
     const withHelper = files.filter(function (rel) {
       return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')).indexOf('aiCmResetStaleStateOnChatlessChatGptUrl') !== -1;
     });
-    expect(withHelper).toEqual(['core/content.js']);
+    expect(withHelper).toEqual(['core/content.ts']);
   });
 
   test('R3: utils/tokenizer.ts и core/export-manager.ts не тронуты; manifest.json не менялся', () => {
@@ -647,7 +647,7 @@ describe('O-34 R3: пины проводки и границ', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
     const js = manifest.content_scripts[0].js;
     expect(js).not.toContain('core/page-intercept.js');   // MAIN-перехватчик — программная регистрация
-    expect(js[js.length - 1]).toBe('core/content.js');     // порядок контент-скриптов прежний
+    expect(js[js.length - 1]).toBe('core/content.ts');     // порядок контент-скриптов прежний
     // парсер и перехватчик едут ОДНИМ пакетом: Ph2 — esbuild втягивает парсер в
     // MAIN-бандл перехватчика статическим import'ом, отдельной строки js[] больше нет.
     expect(BG_SRC).toContain("js: ['utils/debug.js', 'core/page-intercept.js']");

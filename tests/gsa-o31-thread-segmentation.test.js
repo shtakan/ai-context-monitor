@@ -11,7 +11,7 @@
  * треда к активной базе; checkThreadSwitch сбрасывал накопитель только в ветке «кэша
  * нет» (core/google-search-intercept.js:843-852 старой нумерации). А content.js принимал
  * любой снимок: lastBaseTexts = detail.messageTexts без сверки с открытым разговором
- * (core/content.js:394), поэтому чужой снимок подменял и базу (pct), и файл экспорта.
+ * (core/content.ts:394), поэтому чужой снимок подменял и базу (pct), и файл экспорта.
  *
  * Фикс (две точки):
  *   1) перехватчик MAIN-мира сегментирует базу по threadId: isForeignThread /

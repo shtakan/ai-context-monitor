@@ -35,7 +35,7 @@ const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/build
 
 const ROOT = path.join(__dirname, '..');
 const MGR_SRC = read('core/export-manager.ts');
-const CONTENT_ONLY = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+const CONTENT_ONLY = fs.readFileSync(path.join(ROOT, 'core', 'content.ts'), 'utf8');
 
 const MERGED = '[MERGED: ARCHIVE+LIVE]';
 const ARCHIVE = '[ARCHIVE]';

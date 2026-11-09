@@ -41,7 +41,7 @@ const BASE_HANDLER_SRC = read('core/base-handler.ts');
 global.swallow = function () { };
 // Step E.2c-B2b-3b (swallowSoft): канал B из utils/debug.ts — вне eval-песочницы так же, как swallow.
 global.swallowSoft = function () { };
-const CONTENT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
+const CONTENT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'content.ts'), 'utf8');
 const OPTIONS_SRC = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
 const GEMINI_SRC = require('../helpers/gemini-intercept-source.js').geminiSource;
 

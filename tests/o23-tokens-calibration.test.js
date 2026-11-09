@@ -9,7 +9,7 @@
  *
  * КОРНИ (измерены в этой сессии):
  *   1) трасса badge-recv считала tokens~ упрощённой латинской эвристикой
- *      Math.round(text.length / 4) + attachTokens (core/content.js) — при этом сам
+ *      Math.round(text.length / 4) + attachTokens (core/content.ts) — при этом сам
  *      бейдж-виджет берёт netServerTokens, а без него — Tokenizer.estimateDialogTokens
  *      (content.js:1950/2453). Фикс: aiCmEstimateTokensTilde() — Tokenizer.countTokens,
  *      а упрощённая эвристика осталась только фолбэком И получила языковую ветвь.
@@ -40,11 +40,12 @@
  */
 
 const fs = require('fs');
+const { readCore } = require('./helpers/core-src.js');
 const path = require('path');
 // Ph2: tokenizer.js стал ES-модулем — CJS require('...') на нём бросает SyntaxError.
 const Tokenizer = require('./helpers/load-esm.js').loadEsm('utils/tokenizer.ts');
 
-const CONTENT_SRC = fs.readFileSync(path.join(__dirname, '..', 'core', 'content.js'), 'utf8');
+const CONTENT_SRC = readCore('core/content.ts');
 const TOKENIZER_SRC = fs.readFileSync(path.join(__dirname, '..', 'utils', 'tokenizer.ts'), 'utf8');
 
 // =====================================================================================
@@ -61,10 +62,10 @@ function legacyTilde(text, attachTokens) {
   return Math.round(String(text || '').length / 4) + (attachTokens || 0);
 }
 
-// Боевой хелпер из core/content.js — извлекается ИЗ ИСХОДНИКА, логика не копируется.
+// Боевой хелпер из core/content.ts — извлекается ИЗ ИСХОДНИКА, логика не копируется.
 function helperSource() {
   const start = CONTENT_SRC.indexOf('function aiCmEstimateTokensTilde(');
-  if (start < 0) throw new Error('aiCmEstimateTokensTilde не найден в core/content.js');
+  if (start < 0) throw new Error('aiCmEstimateTokensTilde не найден в core/content.ts');
   const end = CONTENT_SRC.indexOf('\n}', start);
   if (end < 0) throw new Error('не найден конец aiCmEstimateTokensTilde');
   return CONTENT_SRC.slice(start, end + 2);

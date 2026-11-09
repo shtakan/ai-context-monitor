@@ -25,7 +25,7 @@
     "utils/**/*.ts",
     "utils/platform-globals.d.ts",
     "adapters/**/*.ts",
-    "core/content.js",
+    "core/content.ts",
     "core/widget.ts",
     "core/state.ts",
     "core/base-handler.ts",

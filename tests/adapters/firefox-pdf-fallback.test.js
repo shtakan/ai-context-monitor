@@ -6,7 +6,7 @@
  * старте, и Port вкладки рвётся посреди разбора — мост отдавал pdf-aborted при
  * живых байтах (5 МБ уже в странице).
  *
- * ЧТО ПИНУЕТСЯ. Мост core/content.js (секция между маркерами [pdf-bridge:start]
+ * ЧТО ПИНУЕТСЯ. Мост core/content.ts (секция между маркерами [pdf-bridge:start]
  * и [pdf-bridge:end]) исполняется в vm-песочнице вместе с настоящим
  * core/pdf-bytes.js, поэтому проверяется не текст, а поведение:
  *
@@ -40,13 +40,14 @@
  */
 
 const fs = require('fs');
+const { stripTypesKeepComments } = require('../helpers/read-module-source.js');
 const path = require('path');
 const vm = require('vm');
 const zlib = require('zlib');
 const { DecompressionStream: RealDecompressionStream } = require('stream/web');
 
 const ROOT = path.join(__dirname, '..', '..');
-const CONTENT_PATH = path.join(ROOT, 'core', 'content.js');
+const CONTENT_PATH = path.join(ROOT, 'core', 'content.ts');
 const BYTES_PATH = path.join(ROOT, 'core', 'pdf-bytes.js');
 const BROKER_PATH = path.join(ROOT, 'core', 'pdf-parser.js');
 const PARSER_PATH = path.join(ROOT, 'utils', 'gemini-batchexecute-parser.ts');
@@ -57,13 +58,15 @@ const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 
   '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 const FIREFOX_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0';
 
-/** Секция моста из боевого core/content.js (маркеры — часть контракта). */
+/** Секция моста из боевого core/content.ts (маркеры — часть контракта). */
 function readBridgeSource() {
+  // Маркеры живут в trivia над EOF-блоком типов, поэтому режем СЫРОЙ файл:
+  // типы снимаем со среза — участок исполняется в песочнице new Function.
   const src = fs.readFileSync(CONTENT_PATH, 'utf8');
   const a = src.indexOf(START_MARK);
   const b = src.indexOf(END_MARK);
-  if (a < 0 || b <= a) throw new Error('в core/content.js нет маркеров ' + START_MARK + ' / ' + END_MARK);
-  return src.slice(a + START_MARK.length, b);
+  if (a < 0 || b <= a) throw new Error('в core/content.ts нет маркеров ' + START_MARK + ' / ' + END_MARK);
+  return stripTypesKeepComments(src.slice(a + START_MARK.length, b), 'core/content.ts');
 }
 
 function FakeCustomEvent(type, init) {
@@ -586,6 +589,7 @@ describe('A2: резервный разбор PDF в странице (Firefox p
   });
 
   test('S1: маркеры моста и константы ретрая/лимита зафиксированы в source', () => {
+    // Маркеры — часть контракта СЫРОГО файла (в stripped-тексте их съедает trivia).
     const src = fs.readFileSync(CONTENT_PATH, 'utf8');
     expect(src).toContain(START_MARK);
     expect(src).toContain(END_MARK);

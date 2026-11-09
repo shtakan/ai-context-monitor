@@ -28,7 +28,7 @@
  * НЕ ТРОГАЕТСЯ (пины R1–R6 ниже): байты и маски всех форматов (buildAutoExportFileName, O-11),
  * латч и реестр имён, сегментация базы GSA (O-31), гарды O-27 (shouldSkipGsaPageGuard,
  * isGarbageBody, пост-гард downloadBlob: xssi-prefix/empty-name), пороги 70/85/95, щит O-1
- * (core/content.js:1647), Gemini baseComplete/архив/лоадер, адаптеры Claude/Perplexity,
+ * (core/content.ts:1647), Gemini baseComplete/архив/лоадер, адаптеры Claude/Perplexity,
  * тихий `if (!cid) return;` в core/export-manager.ts.
  */
 
@@ -172,7 +172,7 @@ function o33(over) {
       }
     }
   };
-    // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.js;
+    // ESM (Roadmap Ph2): сборщики экспорта — статический import core/content.ts;
     // срез-песочница получает тот же объект биндингом общего скоупа (window-зеркало прежнее).
     if (ctx.window && ctx.window.AiCmExportBuilders) ctx.AiCmExportBuilders = ctx.window.AiCmExportBuilders;
   const api = makeO33(ctx);

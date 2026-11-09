@@ -83,7 +83,7 @@ function fakeWindow(hasHelper) {
       if (i >= 0) list.splice(i, 1);
     },
     dispatchEvent: function (ev) {
-      // role of core/content.js: ai-cm-pdf-hello → ai-cm-pdf-ready
+      // role of core/content.ts: ai-cm-pdf-hello → ai-cm-pdf-ready
       if (ev && ev.type === 'ai-cm-pdf-hello') {
         const ready = new ev.constructor('ai-cm-pdf-ready', { detail: '{"enabled":true}' });
         (listeners['ai-cm-pdf-ready'] || []).slice().forEach(function (fn) { fn(ready); });

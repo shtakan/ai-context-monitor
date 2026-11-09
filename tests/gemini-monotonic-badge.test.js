@@ -6,7 +6,7 @@
  * только при baseComplete || lastBounded || (baseSeen && baseCount > 0), поэтому в
  * «слепой» фазе (пустая база, свежий разговор) падение проходило.
  *
- * Контракт фикса (core/content.js, processAndSend): после выбора maxTokenCount и ДО
+ * Контракт фикса (core/content.ts, processAndSend): после выбора maxTokenCount и ДО
  * расчёта percentage — удержание: если baseComplete !== true, серверных токенов нет и
  * прошлый процент > 0, maxTokenCount не опускается ниже порога прошлого процента.
  * НЕ переписываются: точное серверное число (metricServerTokens > 0) и сброс храповика

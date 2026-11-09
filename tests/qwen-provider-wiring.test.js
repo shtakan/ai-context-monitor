@@ -1,12 +1,12 @@
 /**
- * O-35: проводка провайдера Qwen — manifest.json, core/background.js, core/content.js,
+ * O-35: проводка провайдера Qwen — manifest.json, core/background.js, core/content.ts,
  * utils/model-config.ts и контракт reasoning в сборщиках экспорта.
  *
  * Здесь ЧЕТЫРЕ независимых блока:
  *   1) R-пины: объявления шести существующих перехватчиков и их пути байтово прежние;
  *   2) проводка Qwen (host_permissions + matches + адаптер в content_scripts; регистрация
  *      перехватчика в MAIN-мире в core/background.js);
- *   3) core/content.js: ветка Qwen + КРИТИЧНЫЙ запрет «Qwen НЕ в isGeminiSvc»
+ *   3) core/content.ts: ветка Qwen + КРИТИЧНЫЙ запрет «Qwen НЕ в isGeminiSvc»
  *      (иначе стримовый usage Qwen перезаписывался бы countTokens BYOK);
  *   4) utils/model-config.ts: qwen3.8-max + qwen3.7-plus (1M) + дефолт сайта qwen;
  *   5) utils/export-text-builders.ts: [REASONING]/[ANSWER] из отдельного поля reasoning,
@@ -25,7 +25,7 @@ const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROO
 const manifest = JSON.parse(read('manifest.json'));
 const manifestRaw = read('manifest.json');
 const background = read('core/background.js');
-const content = read('core/content.js');
+const content = read('core/content.ts');
 const modelConfigRaw = read('utils/model-config.ts');
 const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
@@ -75,27 +75,27 @@ describe('O-35: manifest.json — Qwen добавлен, прежние серв
       'adapters/chatgpt-adapter.ts', 'adapters/gemini-adapter.ts', 'adapters/deepseek-adapter.ts',
       'adapters/google-search-adapter.ts', 'adapters/claude-adapter.ts',
       'adapters/perplexity-adapter.ts',
-      'core/content.js'].forEach(function (p) {
+      'core/content.ts'].forEach(function (p) {
       expect(js).toContain(p);
     });
     // Ph2: utils/export-emit-pipeline.ts стал ESM-модулем и вшивается в content-бандл
-    // статическим import'ом из core/content.js — отдельной строки в манифесте больше нет.
+    // статическим import'ом из core/content.ts — отдельной строки в манифесте больше нет.
     expect(js).not.toContain('utils/export-emit-pipeline.ts');
     // Перехватчик Qwen в content_scripts НЕ дублируется: он ставится программно в MAIN-мир
     // через registerContentScripts (тот же паттерн, что у шести существующих перехватчиков).
     expect(js).not.toContain('core/qwen-intercept.js');
     expect(js).not.toContain('utils/stream-frames.ts');
     // Ph2: utils/debug.ts стал ESM-модулем и вшивается в content-бандл через import
-    // из core/content.js — отдельным <script> в манифесте он больше не грузится (R1).
+    // из core/content.ts — отдельным <script> в манифесте он больше не грузится (R1).
     expect(js).not.toContain('utils/debug.ts');
     // Ph2, шаг tokenizer.js: модуль переведён на ESM и втягивается import'ом из
-    // core/content.js — отдельным classic-скриптом в манифесте он больше не грузится.
+    // core/content.ts — отдельным classic-скриптом в манифесте он больше не грузится.
     expect(js).not.toContain('utils/tokenizer.ts');
     // Ph2, шаг model-config.ts: модуль переведён на ESM и втягивается import'ом из
-    // core/content.js — отдельным classic-скриптом в манифесте он больше не грузится.
+    // core/content.ts — отдельным classic-скриптом в манифесте он больше не грузится.
     expect(js).not.toContain('utils/model-config.ts');
     // Ph2, шаг export-text-builders.js: модуль переведён на ESM и втягивается import'ом из
-    // core/content.js — отдельным classic-скриптом в манифесте он больше не грузится.
+    // core/content.ts — отдельным classic-скриптом в манифесте он больше не грузится.
     expect(js).not.toContain('utils/export-text-builders.ts');
   });
 
@@ -229,7 +229,7 @@ describe('O-35/O-53/R2: core/background.js — регистрация перех
   });
 });
 
-describe('O-35: core/content.js — ветка Qwen и запрет на countTokens BYOK', function () {
+describe('O-35: core/content.ts — ветка Qwen и запрет на countTokens BYOK', function () {
   test('адаптер Qwen выбирается по hostname chat.qwen.ai', function () {
     expect(content).toContain("} else if (hostname.includes('chat.qwen.ai')) {");
     expect(content).toContain('currentAdapter = new QwenAdapter();');
