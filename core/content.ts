@@ -631,22 +631,22 @@ function aiCmCanonicalTokens(text: string, attachTokens?: number, messageCount?:
 // Раньше при наличии любой секции [FILE: …] сбрасывался ВЕСЬ пул netAttachTokens,
 // поэтому файл, который ещё качался, не попадал в метрику вовсе (D3: один файл
 // уже отрендерен, второй висит — пул обнулялся). Теперь из пула вычитаются
-// только токены реально отрендеренных файлов (по числу секций и весам
-// attachBreak), остаток добавляется к оценке. Секций нет — весь пул, как раньше;
-// отрендерены все — добавка 0 (двойного счёта нет).
+// только токены отрендеренных файлов с ТЕЛОМ: «[FILE: имя]» + '\n' + текст.
+// Метки «[FILE: имя (размер)]», «[FILE: имя — …]» и «[IMAGE: имя]» — label-only:
+// содержимого в тексте нет, поэтому их вес 2500/516 из пула НЕ вычитается.
 function aiCmAttachPendingTokens(fullText: string, attachTokens?: number, attachBreak?: any): number {
   var pool = (typeof attachTokens === 'number' && attachTokens > 0) ? attachTokens : 0;
   if (pool <= 0) return 0;
   var text = (typeof fullText === 'string') ? fullText : '';
-  var imgRendered = (text.match(/\[IMAGE: /g) || []).length;
-  var docRendered = (text.match(/\[FILE: /g) || []).length;
-  if (imgRendered === 0 && docRendered === 0) return pool;
+  var hasSections = (text.indexOf('[FILE: ') !== -1) || (text.indexOf('[IMAGE: ') !== -1);
+  if (!hasSections) return pool;
   var br = (attachBreak && typeof attachBreak === 'object') ? attachBreak : {};
   var imgTotal = (typeof br.imgCount === 'number' && br.imgCount > 0) ? br.imgCount : 0;
   var docTotal = (typeof br.docCount === 'number' && br.docCount > 0) ? br.docCount : 0;
   var total = imgTotal + docTotal;
   if (total <= 0) return 0; // дробление неизвестно: секции уже в тексте — не добавляем
-  var done = Math.min(imgRendered, imgTotal) + Math.min(docRendered, docTotal);
+  var docRendered = (text.match(/(?:^|\n\n)\[FILE: (?!.* — )(?!.* \([\d.,]+ ?(?:B|KB|MB|GB|Б)\)\])[^\]\n]*\]/g) || []).length;
+  var done = Math.min(docRendered, docTotal);
   if (done >= total) return 0;
   return Math.round(pool * (total - done) / total);
 }

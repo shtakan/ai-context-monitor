@@ -25,6 +25,7 @@ const MODULE_SRC = fs.readFileSync(path.join(ROOT, 'core', 'gemini-files.js'), '
 const PARSER_SRC = require('../helpers/load-esm.js').loadAsClassic('utils/gemini-batchexecute-parser.ts');
 const INGEST_SRC = fs.readFileSync(path.join(ROOT, 'core', 'gemini-ingest.js'), 'utf8');
 const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
+const CONTENT_SRC = read('core/content.ts');
 
 /** Вырезает `function <name>(…) { … }` по балансу скобок (для чистых хелперов). */
 function fnSource(src, name) {
@@ -815,15 +816,15 @@ describe('v2.1: дедуп ходов/вложений и метрика без 
   });
 
   test('B1/D3: частичное наличие файлов — в метрику идёт только доля неотрендеренного пула', function () {
-    const content = read('core/content.ts');
-    // оба пути метрики (бейдж и GET_STATS) используют ОДИН хелпер
-    expect(content.split('var attachAdd = aiCmAttachPendingTokens(fullText, netAttachTokens, netAttachBreak);').length - 1).toBe(1);
-    expect(content.split('var attachAddM = aiCmAttachPendingTokens(fullText, netAttachTokens, netAttachBreak);').length - 1).toBe(1);
-    // прежнего двоичного гейта «есть [FILE: → пул целиком в ноль» больше нет
-    expect(content).not.toContain("indexOf('[FILE:') === -1");
-    expect(content).not.toMatch(/(^|\n)\s*tokenEstimate \+= netAttachTokens;/);
 
-    const pending = new Function('return (' + fnSource(content, 'aiCmAttachPendingTokens') + ');')();
+    // оба пути метрики (бейдж и GET_STATS) используют ОДИН хелпер
+    expect(CONTENT_SRC.split('var attachAdd = aiCmAttachPendingTokens(fullText, netAttachTokens, netAttachBreak);').length - 1).toBe(1);
+    expect(CONTENT_SRC.split('var attachAddM = aiCmAttachPendingTokens(fullText, netAttachTokens, netAttachBreak);').length - 1).toBe(1);
+    // прежнего двоичного гейта «есть [FILE: → пул целиком в ноль» больше нет
+    expect(CONTENT_SRC).not.toContain("indexOf('[FILE:') === -1");
+    expect(CONTENT_SRC).not.toMatch(/(^|\n)\s*tokenEstimate \+= netAttachTokens;/);
+
+    const pending = new Function('return (' + fnSource(CONTENT_SRC, 'aiCmAttachPendingTokens') + ');')();
 
     // все файлы отрендерены — добавки нет (двойного счёта нет)
     expect(pending('Вопрос\n\n[FILE: a.txt]\nтело\n\n[FILE: b.txt]\nтело', 2860, { imgCount: 0, docCount: 2 })).toBe(0);
@@ -953,6 +954,25 @@ describe('v2.8: крупное вложение в секции — только
       note: 'application/pdf, 10 Б, текст не получен', reason: 'pdf-no-text'
     });
     expect(section).toBe('\n\n[FILE: scan.pdf — application/pdf, 10 Б, текст не получен: pdf-no-text]');
+  });
+
+  test('v2.9: метка капа (label-only) не списывает вес вложения из пула', function () {
+
+    const pending = new Function('return (' + fnSource(CONTENT_SRC, 'aiCmAttachPendingTokens') + ');')();
+    const h = makeHarness();
+    const cap = h.Fn.constants.sectionTextCap;
+    // крупный файл: в тексте только метка «[FILE: имя (размер)]», тела нет
+    const big = h.Fn.sectionOf({ name: 'gemini-e1020dba.md', ok: true, text: 'x'.repeat(cap + 1), size: 1572864 });
+    const small = h.Fn.sectionOf({ name: 'notes.md', ok: true, text: 'hello' });
+    expect(big).not.toContain('x'.repeat(10));
+
+    // живая приёмка: текст базы 62010 + пул вложений 29476 = 91486, а не 62010
+    const bigOnly = { imgTokens: 0, docTokens: 29476, imgCount: 0, docCount: 1 };
+    expect(62010 + pending('Вопрос' + big, 29476, bigOnly)).toBe(91486);
+    // маленькое вложение вшито телом, крупное — только метка → половина пула
+    expect(pending('Вопрос' + big + small, 5000, { imgTokens: 0, docTokens: 5000, imgCount: 0, docCount: 2 })).toBe(2500);
+    // оба вшиты телом — добавки нет
+    expect(pending('Вопрос' + small + small, 5000, { imgTokens: 0, docTokens: 5000, imgCount: 0, docCount: 2 })).toBe(0);
   });
 });
 
