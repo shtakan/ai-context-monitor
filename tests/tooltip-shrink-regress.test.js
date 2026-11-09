@@ -1,5 +1,5 @@
 /**
- * Регресс #26 «тултип схлопывается по ширине» — закрывается в core/widget.js
+ * Регресс #26 «тултип схлопывается по ширине» — закрывается в core/widget.ts
  * (подбатч 3, UI-аудит #8, регресс после 6e51838).
  *
  * Диагноз (НЕ перепроверяется, зафиксирован): `.ai-widget-tooltip` — shrink-to-fit
@@ -14,7 +14,7 @@
  *   #3 `overflow-wrap: break-word` вместо `anywhere` — токены переносятся, но min-content
  *                                  не обнуляется (задокументированное отличие от `anywhere`).
  *
- * Пины читают РЕАЛЬНЫЙ `core/widget.js` (конвенция H11/H22/H24/H25) и режут правило из
+ * Пины читают РЕАЛЬНЫЙ `core/widget.ts` (конвенция H11/H22/H24/H25) и режут правило из
  * инлайн `<style>` по точному селектору; строки CSS в тесте не дублируются, все числа
  * извлекаются из исходника. Пин `tests/tooltip-persist-reflow.test.js` (D#8, строка 118)
  * обновлён осознанно: требование («токены переносятся») сохранено, средство переноса
@@ -25,7 +25,7 @@
  */
 const HELPERS = require('./helpers/content-source.js');
 
-const WIDGET_SRC = HELPERS.moduleSource('core/widget.js');
+const WIDGET_SRC = HELPERS.moduleSource('core/widget.ts');
 
 /** Тело CSS-правила по точному селектору (' {') — первое совпадение, до парной '}'. */
 function ruleBody(src, selector) {
@@ -110,7 +110,7 @@ describe('Регресс #26 — границы правки не расшире
     expect(occurrences(WIDGET_SRC, 'white-space: nowrap')).toBe(0);
   });
 
-  test('R#10: overflow-wrap объявлен в core/widget.js ровно один раз — только в правиле тултипа', () => {
+  test('R#10: overflow-wrap объявлен в core/widget.ts ровно один раз — только в правиле тултипа', () => {
     expect(occurrences(WIDGET_SRC, 'overflow-wrap')).toBe(1);
     expect(occurrences(WIDGET_SRC, 'overflow-wrap: anywhere')).toBe(0);
     expect(occurrences(WIDGET_SRC, 'overflow-wrap: break-word')).toBe(1);

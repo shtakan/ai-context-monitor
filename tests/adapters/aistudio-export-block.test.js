@@ -29,11 +29,11 @@ const fs = require('fs');
 const path = require('path');
 
 const P = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
-const { contentSource: CONTENT } = require('../helpers/content-source.js');
+const { contentSource: CONTENT, readSource } = require('../helpers/content-source.js');
 
 const ROOT = path.join(__dirname, '..', '..');
 const CONTENT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
-const WIDGET_SRC = fs.readFileSync(path.join(ROOT, 'core', 'widget.js'), 'utf8');
+const WIDGET_SRC = readSource('core/widget.ts');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
 

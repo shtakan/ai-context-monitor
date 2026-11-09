@@ -1,14 +1,14 @@
 /**
  * O-14 (Low, фикс): попап не должен показывать старый снимок после RESET.
  *
- * Механизм бага (инспекция): core/widget.js resetConversationState() чистил только
+ * Механизм бага (инспекция): core/widget.ts resetConversationState() чистил только
  * состояние виджета, но не chrome.storage.local → ключи aiCmState / aiCmState:<host>
  * (пишет core/content.js при badge-update) оставались с данными СТАРОГО чата; читатель
  * попапа (options/options.js, chrome.storage.onChanged) обрабатывал только newValue —
  * removed игнорировался, экран держал последний снимок.
  *
  * Контур O-14:
- *   A (core/widget.js): в конце resetConversationState() удаляются РОВНО aiCmState и
+ *   A (core/widget.ts): в конце resetConversationState() удаляются РОВНО aiCmState и
  *     aiCmState:<host> (тот же host, что в записи content.js); aiCmHistory*, sync-ключи,
  *     selectedModel/customLimit не трогаются.
  *   B (options/options.js): ветка removed для aiCmState/aiCmState:<host> → showNoData(...)
@@ -28,7 +28,8 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const WIDGET_SRC = fs.readFileSync(path.join(ROOT, 'core', 'widget.js'), 'utf8');
+const H = require('./helpers/content-source.js');
+const WIDGET_SRC = H.readSource('core/widget.ts');
 const OPTIONS_SRC = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
 
 const HOST = 'chatgpt.com';
@@ -64,7 +65,7 @@ function liveState() {
 }
 
 // =====================================================================================
-// A. core/widget.js — resetConversationState удаляет ровно снимок попапа
+// A. core/widget.ts — resetConversationState удаляет ровно снимок попапа
 // =====================================================================================
 
 // Резолвер расширения в песочнице читается из того же скоупа, что и chrome

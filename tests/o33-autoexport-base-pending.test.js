@@ -104,7 +104,7 @@ function o33(over) {
     msgs: (o.msgs || DOM_MSGS).slice()
   };
   const ctx = {
-    // ---- состояние (core/state.js) ----
+    // ---- состояние (core/state.ts) ----
     autoExportSettings: { enabled: (o.enabled !== undefined) ? o.enabled : true, pct: (o.threshold !== undefined) ? o.threshold : THRESH_LIVE, fmt: 'txt' },
     autoExportPctBySite: {},
     autoExportLastConvId: '',

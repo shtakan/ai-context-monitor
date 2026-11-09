@@ -12,7 +12,7 @@
  *   #22 нет иерархии в тултипе → .ai-widget-tt-primary/secondary/sep + span-обёртка
  *       строк в updateWidget (первые 3 — primary, дальше secondary, линейка перед i===3).
  *
- * Пины читают РЕАЛЬНЫЙ core/widget.js тем же приёмом, что tests/panel-overflow-contrast.test.js
+ * Пины читают РЕАЛЬНЫЙ core/widget.ts тем же приёмом, что tests/panel-overflow-contrast.test.js
  * (ruleBody по селектору + extractFn по имени). D = пин находки, R = защита чужого поведения.
  * Существующие пины не ослаблялись; существующий пин сборки тултипа
  * (tests/tooltip-persist-reflow.test.js) переведён на новую форму сборки (#22,
@@ -21,7 +21,7 @@
  */
 const HELPERS = require('./helpers/content-source.js');
 
-const WIDGET_SRC = HELPERS.moduleSource('core/widget.js');
+const WIDGET_SRC = HELPERS.moduleSource('core/widget.ts');
 
 /** Число вхождений подстроки. */
 function occurrences(src, sub) {

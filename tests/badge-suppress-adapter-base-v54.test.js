@@ -21,7 +21,7 @@
  *            виджета) при гейте вкл/выкл идентичны.
  *
  * Исполняются РЕАЛЬНЫЕ функции: условие супрессии и блок записи базы — текстом из
- * core/content.js (не литералами теста), updateWidget — из core/widget.js, канонический
+ * core/content.js (не литералами теста), updateWidget — из core/widget.ts, канонический
  * aiCmDiagLine + гейт — из utils/debug.ts.
  */
 
@@ -32,8 +32,8 @@ const H = require('./helpers/content-source.js');
 const ROOT = path.join(__dirname, '..');
 const CONTENT = H.contentSource;                                    // модули + content.js (единый скоуп)
 const CONTENT_ONLY = fs.readFileSync(path.join(ROOT, 'core', 'content.js'), 'utf8');
-const WIDGET_SRC = H.moduleSource('core/widget.js');
-const STATE_SRC = H.moduleSource('core/state.js');
+const WIDGET_SRC = H.moduleSource('core/widget.ts');
+const STATE_SRC = H.moduleSource('core/state.ts');
 // R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
 const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
@@ -164,7 +164,7 @@ describe('v54 D: гейт badge-suppress — читаемое состояние
     expect(SUPPRESS_COND).toBe('badgeSuppressed && !baseSeen && !adapterBaseSeen');
     // гейт сервис-независим: своей ветки по платформе у него нет и не появилось
     expect(SUPPRESS_DECL).not.toContain('siteName');
-    // взвод badgeSuppressed — единственная точка, core/widget.js:resetConversationState
+    // взвод badgeSuppressed — единственная точка, core/widget.ts:resetConversationState
     expect(fnDecl(WIDGET_SRC, 'resetConversationState')).toContain('badgeSuppressed = true;');
     // взвод baseSeen — единственная точка, приём сетевого снимка (ai-cm-full-history)
     expect((CONTENT_ONLY.match(/baseSeen = true;/g) || [])).toHaveLength(1);

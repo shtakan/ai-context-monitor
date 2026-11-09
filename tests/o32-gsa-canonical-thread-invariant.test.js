@@ -28,7 +28,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const CONTENT = require('./helpers/content-source.js').contentSource;
+const { contentSource: CONTENT, readSource } = require('./helpers/content-source.js');
 const INTERCEPT = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');
 const HYBRID = fs.readFileSync(path.join(ROOT, 'core', 'hybrid-tail.js'), 'utf8');
 const BASE_HANDLER = fs.readFileSync(path.join(ROOT, 'core', 'base-handler.js'), 'utf8');
@@ -493,7 +493,7 @@ describe('O-32 (6): монотонный максимум включён при 
     expect(CONTENT).toContain("var metricSrc = baseComplete ? 'base-complete' : (lastBounded ? 'base-floor+dom-tail' : 'base-floor');");
     expect(CONTENT).toContain("note: (!baseComplete && baseCount > 0) ? 'incomplete-canonical-floor' : ''");
     // лог только на смену состояния (урок O-29): антиспам-сигнатура объявлена в state.js
-    const STATE = fs.readFileSync(path.join(ROOT, 'core', 'state.js'), 'utf8');
+    const STATE = readSource('core/state.ts');
     expect(STATE).toContain('let lastMetricSig = null;');
     expect(CONTENT).toContain('metricSig !== lastMetricSig');
     expect(CONTENT).toContain('lastMetricSig = metricSig;');

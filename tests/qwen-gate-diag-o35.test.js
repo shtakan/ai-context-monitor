@@ -3,7 +3,7 @@
  *
  * Здесь ровно две группы:
  *   1) РАНТАЙМ (реальные core/qwen-intercept.js + utils/stream-frames.ts на jsdom-стенде,
- *      реальный core/widget.js updateWidget): строки qwen-sse / qwen-spa / qwen-badge
+ *      реальный core/widget.ts updateWidget): строки qwen-sse / qwen-spa / qwen-badge
  *      печатаются ТОЛЬКО под гейтом aiCmDebug, идут через канон utils/debug.ts:aiCmDiagLine
  *      и НЕ меняют байты выхода (G1/G2);
  *   2) SOURCE-ПИНЫ механизмов, чтобы вердикты отчёта были привязаны к строкам:
@@ -28,7 +28,7 @@ const H = require('./helpers/content-source.js');
 
 const ROOT = path.join(__dirname, '..');
 const CONTENT = H.contentSource;
-const WIDGET_SRC = H.moduleSource('core/widget.js');
+const WIDGET_SRC = H.moduleSource('core/widget.ts');
 const BASE_HANDLER_SRC = H.moduleSource('core/base-handler.js');
 const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'qwen-intercept.js'), 'utf8');
 // R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
@@ -535,7 +535,7 @@ describe('O-35 D: плейсхолдер «—» ставит ветка stale, 
     expect(WIDGET_SRC).toContain('(typeof lastBaseTexts !== \'undefined\' && lastBaseTexts && lastBaseTexts.length > 0) ||');
     expect(WIDGET_SRC).toContain('(typeof adapterBaseSeen !== \'undefined\' && adapterBaseSeen === true));');
     // норма stale зафиксирована комментарием на трёх точках (D1)
-    expect(fs.readFileSync(path.join(ROOT, 'core', 'state.js'), 'utf8')).toContain('систематичен');
+    expect(H.readSource('core/state.ts')).toContain('систематичен');
     expect(BASE_HANDLER_SRC).toContain('СИСТЕМАТИЧЕСКОЕ');
     expect(WIDGET_SRC).toContain('систематическое состояние');
   });
@@ -635,7 +635,7 @@ describe('O-35 B (после O-47): проводка серверного usage 
     expect(INTERCEPT_SRC).toContain('qwenUsage: {');
     // content.js доводит поле до общего скоупа контент-скрипта (state.js:netQwenUsage)…
     expect(CONTENT).toContain('netQwenUsage = (detail.qwenUsage && typeof detail.qwenUsage === \'object\') ? detail.qwenUsage : null;');
-    expect(fs.readFileSync(path.join(ROOT, 'core', 'state.js'), 'utf8')).toContain('let netQwenUsage = null;');
+    expect(H.readSource('core/state.ts')).toContain('let netQwenUsage = null;');
     // …а виджет читает его напрямую (как stale/baseSeen/baseCount) — подпись updateWidget прежняя
     expect(WIDGET_SRC).toContain('netQwenUsage.outputTokens');
     expect(WIDGET_SRC).toContain('netQwenUsage.reasoningTokens');

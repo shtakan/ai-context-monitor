@@ -42,7 +42,7 @@ const H = require('./helpers/content-source.js');
 const ROOT = path.join(__dirname, '..');
 const CONTENT = H.contentSource;
 const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'qwen-intercept.js'), 'utf8');
-const WIDGET_SRC = fs.readFileSync(path.join(ROOT, 'core', 'widget.js'), 'utf8');
+const WIDGET_SRC = H.readSource('core/widget.ts');
 
 // =====================================================================================
 // Рез по балансу фигурных скобок (конвенция сьюта).

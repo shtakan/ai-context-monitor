@@ -295,8 +295,8 @@ describe('1.9: пин no-bare-console-error (core/ + adapters/)', () => {
     }
   });
 
-  test('НЕ трогать: комментарий core/state.js:162 не считается вызовом', () => {
-    const stateSrc = fs.readFileSync(path.join(ROOT, 'core', 'state.js'), 'utf8');
+  test('НЕ трогать: комментарий core/state.ts:162 не считается вызовом', () => {
+    const stateSrc = fs.readFileSync(path.join(ROOT, 'core', 'state.ts'), 'utf8');
     // v96: строка сдвинулась на +7 из-за новых счётчиков сети (aiCmNetRawCount/Used)
     const lineComment = stateSrc.split('\n')[161];
     expect(lineComment).toContain('console.error');

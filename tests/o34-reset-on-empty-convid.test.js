@@ -37,7 +37,7 @@
  * utils/export-emit-pipeline.ts (extractConvIdFromUrl — id со стороны ISOLATED, как в
  * content.js:getCurrentConvId), core/page-intercept.js (getConvId/resetForNewConversation/
  * checkConvChange), слушатель 'ai-cm-conversation-changed' из core/content.js,
- * core/content.js:aiCmResetStaleStateOnChatlessChatGptUrl, core/widget.js
+ * core/content.js:aiCmResetStaleStateOnChatlessChatGptUrl, core/widget.ts
  * (resetConversationState — единственный механизм сброса состояния, updateWidget —
  * единственная печать badge-update). Стрелки MAIN→ISOLATED идут через реальный CustomEvent
  * jsdom: harness диспатчит событие из настоящего resetForNewConversation.
@@ -58,7 +58,7 @@ const Pipeline = require('./helpers/load-esm.js').loadEsmModule('utils/export-em
 
 const ROOT = path.join(__dirname, '..');
 const CONTENT = H.contentSource;                                  // модули + content.js (единый скоуп)
-const WIDGET_SRC = H.moduleSource('core/widget.js');
+const WIDGET_SRC = H.moduleSource('core/widget.ts');
 const PARSER_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'chatgpt-conversation-parser.ts'), 'utf8');
 const PAGE_SRC = fs.readFileSync(path.join(ROOT, 'core', 'page-intercept.js'), 'utf8');
 const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.js'), 'utf8');
@@ -129,7 +129,7 @@ const LISTENER_FN = listenerFnSrc();
 const makeListenerFn = new Function('ctx', 'with (ctx) { var fn = ' + LISTENER_FN + '; return fn; }');
 
 // =====================================================================================
-// Состояние контент-скрипта: РЕАЛЬНЫЙ resetConversationState (core/widget.js)
+// Состояние контент-скрипта: РЕАЛЬНЫЙ resetConversationState (core/widget.ts)
 // =====================================================================================
 const RESET_SCOPE = 'with (ctx) { ' + fnDecl(WIDGET_SRC, 'resetConversationState') +
   '\n return { reset: resetConversationState }; }';
@@ -623,7 +623,7 @@ describe('O-34 R3: пины проводки и границ', () => {
   test('R3: новое решение живёт ровно в двух точках (парсер + перехватчик), дублей нет', () => {
     const files = [
       'utils/chatgpt-conversation-parser.ts', 'core/page-intercept.js', 'core/content.js',
-      'core/widget.js', 'core/state.js', 'core/export-manager.js', 'utils/export-emit-pipeline.ts',
+      'core/widget.ts', 'core/state.ts', 'core/export-manager.js', 'utils/export-emit-pipeline.ts',
       'utils/tokenizer.ts', 'manifest.json'
     ];
     const withSymbol = files.filter(function (rel) {

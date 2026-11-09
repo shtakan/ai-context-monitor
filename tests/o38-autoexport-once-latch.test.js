@@ -23,7 +23,7 @@ const path = require('path');
 
 // ===== Песочница state.js (общий скоуп контент-скрипта) =====
 function buildSandbox() {
-  const state = require('../core/state.js');
+  const state = require('../core/state.ts');
   const pipeline = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 
   // Сброс состояния песочницы
@@ -232,7 +232,7 @@ describe('O-38: resetConversationState НЕ сбрасывает once-латч',
   });
 });
 
-// ===== O-38 (3): РЕАЛЬНЫЙ D14-блок core/widget.js — SPA-вход в экспортированный чат =====
+// ===== O-38 (3): РЕАЛЬНЫЙ D14-блок core/widget.ts — SPA-вход в экспортированный чат =====
 // Дефект (Phase 3): resetConversationState() снимал латчи для ЛЮБОГО SPA-входа, включая
 // возврат в уже экспортированный чат → повторный файл того же разговора. Гейт выше
 // (once-латч) спасал не всегда: латч L1/session снимался ДО гейта, а diag/иные читатели
@@ -240,7 +240,7 @@ describe('O-38: resetConversationState НЕ сбрасывает once-латч',
 // взведён (тот же признак, что и у aiCmSiteConvFired в core/content.js).
 describe('O-38 (3): SPA-переход в тот же экспортированный чат — второй файр запрещён', () => {
   const { moduleSource } = require('./helpers/content-source.js');
-  const WIDGET_SRC = moduleSource('core/widget.js');
+  const WIDGET_SRC = moduleSource('core/widget.ts');
   const D14_START = "var cidD14 = getCurrentConvId() || '';";
   const D14_END = '} catch (eD14c) { }';
   const CONTENT_SRC = moduleSource('core/content.js');

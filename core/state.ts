@@ -20,32 +20,32 @@
 // литералы байтово прежние (декомпозиция, а не переписывание).
 // =============================================================================
 
-let currentAdapter = null;
-let observer = null;
-let isInitialized = false;
-let lastPercentage = -1;
-let updateTimer = null;
-let widgetElement = null;
-let lastWidgetData = null;
-let badgeSuppressed = false; // v1.8.1: true после RESET — до первого снимка нового чата бейдж не рисуем
-let maxTokenCount = 0;
-let restoredTapeLoaded = false; // v28: флаг однократного восстановления ленты при загрузке чата
-let restoreDone = false; // v30: флаг завершения восстановления — разрешает сохранение ленты только после restore
-let cacheRefreshPlanned = {}; // v30.6: convId → true — планирование уточнения после кэша один раз на чат за сессию
-let tapeRestoreSeen = {}; // v77: convId → true — лента для этого чата уже восстановлена в этой сессии страницы (O2)
-var aiCmTapeAccountIdx = {}; // v82 (D8): convId → account index на момент последнего tape load
-var aiCmRestoredDispatched = {}; // v82 (D9-A): convId → true — ai-cm-restored-history уже диспатчен (page-session)
+let currentAdapter: BaseAdapter | null = null;
+let observer: MutationObserver | null = null;
+let isInitialized: boolean = false;
+let lastPercentage: number = -1;
+let updateTimer: ReturnType<typeof setTimeout> | null = null;
+let widgetElement: HTMLElement | null = null;
+let lastWidgetData: AiCmWidgetData | null = null;
+let badgeSuppressed: boolean = false; // v1.8.1: true после RESET — до первого снимка нового чата бейдж не рисуем
+let maxTokenCount: number = 0;
+let restoredTapeLoaded: boolean = false; // v28: флаг однократного восстановления ленты при загрузке чата
+let restoreDone: boolean = false; // v30: флаг завершения восстановления — разрешает сохранение ленты только после restore
+let cacheRefreshPlanned: Record<string, boolean> = {}; // v30.6: convId → true — планирование уточнения после кэша один раз на чат за сессию
+let tapeRestoreSeen: Record<string, boolean> = {}; // v77: convId → true — лента для этого чата уже восстановлена в этой сессии страницы (O2)
+var aiCmTapeAccountIdx: Record<string, string> = {}; // v82 (D8): convId → account index на момент последнего tape load
+var aiCmRestoredDispatched: Record<string, boolean> = {}; // v82 (D9-A): convId → true — ai-cm-restored-history уже диспатчен (page-session)
 // ========== ГИБРИД: БАЗА (сеть) + ХВОСТ (DOM по кэшу базы) ==========
-let baseText = '';
-let baseCount = 0;
-let baseSeen = false;
+let baseText: string = '';
+let baseCount: number = 0;
+let baseSeen: boolean = false;
 // v96 (баг 34.6%, дедуп-заморозка): счётчик СЕТЕВОГО снимка ДО дедупликации (detail.count).
 // Дедуп E-2 схлопывает базу (120 → 101), поэтому baseCount после приёма может снова стать
 // прежним (101), хотя сеть принесла новые ходы: histKey не меняется и метрики замирают.
 // Пара «принятый сырой / учтённый» даёт ресинку (content.js:aiCmResyncMetricsAfterFlush)
 // отличить новый сетевой снимок от повторного.
-let aiCmNetRawCount = 0;      // detail.count последнего принятого снимка (ДО схлопки)
-let aiCmNetRawCountUsed = -1; // detail.count, учтённый последним ресинком метрик
+let aiCmNetRawCount: number = 0;      // detail.count последнего принятого снимка (ДО схлопки)
+let aiCmNetRawCountUsed: number = -1; // detail.count, учтённый последним ресинком метрик
 // O-35 (v54, фикс badge-suppress): «база принята по convId» для DOM-адаптера — брат-флаг
 // baseSeen (сеть). У qwen после F5/SPA-входа сети нет вовсе: базу снимает DOM-адаптер, и
 // пишет её тот же проход processAndSend (history-write source=adapter). Без этого флага
@@ -56,81 +56,81 @@ let aiCmNetRawCountUsed = -1; // detail.count, учтённый последни
 // никаких таймеров, async-путей и вторых писателей. СБРОС — только вместе с badgeSuppressed
 // в resetConversationState() (сброс не является взводом). Читатели: гейт SPA-супрессии
 // (content.js:processAndSend) и D1 (widget.js:updateWidget — число не подменяется на «—»).
-let adapterBaseSeen = false;
-let baseComplete = false; // сеть дала ПОЛНУЮ историю (тихая пагинация) → индикатор берёт число из базы, не из DOM
-let lastBounded = false;  // последний DOM-хвост нашёл границу (стабильный источник для монотонного максимума)
-let lastTailSig = null;
-let lastBaseSig = null;   // антиспам: сигнатура последней печати «📥 база полной истории»
-let lastEmitSig = null;   // антиспам: сигнатура последней печати «[content-trace] EMIT принят»
-let lastDrawSig = null;   // антиспам: сигнатура последней печати «[content-trace] DRAW»
-let lastHybridTailSig = null; // антиспам: последняя напечатанная строка «[hybrid-tail]»
-let lastMetricSig = null;  // O-32: антиспам строки gsa-metric-src (источник/режим значения бейджа) — печать на смену состояния
+let adapterBaseSeen: boolean = false;
+let baseComplete: boolean = false; // сеть дала ПОЛНУЮ историю (тихая пагинация) → индикатор берёт число из базы, не из DOM
+let lastBounded: boolean = false;  // последний DOM-хвост нашёл границу (стабильный источник для монотонного максимума)
+let lastTailSig: string | null = null;
+let lastBaseSig: string | null = null;   // антиспам: сигнатура последней печати «📥 база полной истории»
+let lastEmitSig: string | null = null;   // антиспам: сигнатура последней печати «[content-trace] EMIT принят»
+let lastDrawSig: string | null = null;   // антиспам: сигнатура последней печати «[content-trace] DRAW»
+let lastHybridTailSig: string | null = null; // антиспам: последняя напечатанная строка «[hybrid-tail]»
+let lastMetricSig: string | null = null;  // O-32: антиспам строки gsa-metric-src (источник/режим значения бейджа) — печать на смену состояния
 // v30.5: антиспам для skip reason=not-complete — печатаем не чаще 1 раза на convId,
 // пока не пришла полная база. Сбрасывается вместе с fired при смене чата.
-let notCompleteLogged = {};
+let notCompleteLogged: Record<string, number> = {};
 // v30.8: заморозка бейджа на время скрытой загрузки лоадером Gemini
-var aiCmLoaderFreeze = false;
-let baseIdSet = null;
-var lastBaseIds = [];
-var lastBaseTexts = [];
-let baseSkelSet = null;
-let baseAnchors = null;
-var ANCHOR_MIN = 40; // let-семантика (было const): UMD-сеттер ниже присваивает это имя; читатели — только число
+var aiCmLoaderFreeze: boolean = false;
+let baseIdSet: Set<string> | null = null;
+var lastBaseIds: string[] = [];
+var lastBaseTexts: string[] = [];
+let baseSkelSet: Set<string> | null = null;
+let baseAnchors: string[] | null = null;
+var ANCHOR_MIN: number = 40; // let-семантика (было const): UMD-сеттер ниже присваивает это имя; читатели — только число
 // ========== САМОДИАГНОСТИКА: флаг stale (интеграция могла устареть) ==========
 // O-35 (D1, норма): stale = «сетевого снимка нет 12с», а НЕ авария. У qwen после F5/SPA
 // сети нет вовсе (живой источник — DOM-адаптер), поэтому stale там систематичен: число на
 // бейдже при непустой базе адаптера НЕ подменяется на «—» (core/widget.js:498), неполнота
 // источника помечается меткой в тултипе. «—» остаётся ровно там, где базы нет совсем.
-let stale = false;      // сетевого снимка нет 12с, хотя диалог с сообщениями в DOM есть
-let staleTimer = null;
+let stale: boolean = false;      // сетевого снимка нет 12с, хотя диалог с сообщениями в DOM есть
+let staleTimer: ReturnType<typeof setTimeout> | null = null;
 // ========== ЭКСПОРТ ИСТОРИИ (aiCmHistory) ==========
 // Роли сообщений берём из detail.messages перехватчика (если есть);
 // иначе — фолбэк: первое сообщение user, далее чередование user/assistant.
-let lastDetailMessages = null; // [{role,text}] из последнего detail.messages (или null)
-let lastHistoryWroteKey = null; // сигнатура 'baseCount|textLen' последней записи aiCmHistory
-let lastThreadId = null; // threadId последнего применённого снимка Google (для сброса при SPA-возврате)
+let lastDetailMessages: AiCmDetailMessage[] | null = null; // [{role,text}] из последнего detail.messages (или null)
+let lastHistoryWroteKey: string | null = null; // сигнатура 'baseCount|textLen' последней записи aiCmHistory
+let lastThreadId: string | null = null; // threadId последнего применённого снимка Google (для сброса при SPA-возврате)
 
 // ========== ДЕТЕКТОР МОДЕЛИ (сеть) ==========
-let detectedModelSlug = '';
-let lastResolvedModelId = null;
+let detectedModelSlug: string = '';
+let lastResolvedModelId: string | null = null;
 // v47: имя модели СНИМКА (сеть/тэйп/адаптер) — для экспорта, который остаётся
 // привязан к модели, писавшей ответы, а не к выбранной в UI.
-let lastSnapshotModelName = '';
+let lastSnapshotModelName: string = '';
 // ========== ВЛОЖЕНИЯ (Gemini; для ChatGPT = 0, нейтрально) ==========
-let netAttachTokens = 0;
-let netAttachBreak = null;
+let netAttachTokens: number = 0;
+let netAttachBreak: AiCmAttachBreak | null = null;
 // ========== СЕРВЕРНЫЙ ЧИСЛИТЕЛЬ (DeepSeek accumulated_token_usage; для ChatGPT/Gemini = 0) ==========
-let netServerTokens = 0;
+let netServerTokens: number = 0;
 // O-35 (B1): серверный usage Qwen из стрима (detail.qwenUsage: output/reasoning/total) —
 // отдельные строки тултипа бейджа. Поле НЕ участвует в pct/токенах: это только индикация.
-let netQwenUsage = null;
-let netEffectiveLen = 0;
+let netQwenUsage: AiCmQwenUsage | null = null;
+let netEffectiveLen: number = 0;
 // ========== BYOK: точный подсчёт токенов через Gemini countTokens API ==========
 // M-7: ключ Google AI Studio хранится ТОЛЬКО в chrome.storage.session
 // ('aiCmApiKeySession') — в память сессии браузера, на диск не пишется. Доступ
 // контент-скриптам открыт в background.js (chrome.storage.session.setAccessLevel).
-let exactCountEnabled = false;
-let geminiApiKey = '';
-let lastCountTokensText = '';
-let lastCountTokensCache = 0;
+let exactCountEnabled: boolean = false;
+let geminiApiKey: string = '';
+let lastCountTokensText: string = '';
+let lastCountTokensCache: number = 0;
 // Шаг 2: convId, в котором получен точный ответ countTokens. Авторитет точного числа для метрики
 // привязан к чату (aiCmExactTokensFor, core/content.js): пока ответ API действует для текущего
 // convId, эвристика tokens~ не перезаписывает maxTokenCount/percentage.
-let lastCountTokensConvId = '';
+let lastCountTokensConvId: string = '';
 // Шаг 4 (фикс «скачка» бейджа): текст, для которого countTokens ОТКАЗАЛ (ошибка/таймаут/нет
 // ответа SW). Пока текст тот же, эвристика снова допустима — иначе при исчерпанной квоте,
 // отозванном ключе или сети бейдж «замёрз» бы на держании (aiCmHeuristicHoldForByok).
-let lastCountTokensErrorText = '';
-let countTokensTimer = null;
-let /** @type {boolean|Map<unknown, unknown>} */ countTokensPending = false; // защита от повторного запроса пока предыдущий в полёте; JSDoc: имя перекрывается картой Map в core/background.js:538 (разные миры)
+let lastCountTokensErrorText: string = '';
+let countTokensTimer: ReturnType<typeof setTimeout> | null = null;
+let countTokensPending: boolean | Map<unknown, unknown> = false; // защита от повторного запроса пока предыдущий в полёте; JSDoc: имя перекрывается картой Map в core/background.js:538 (разные миры)
 
 // ========== БЕЗОПАСНЫЙ ПОРОГ (регулятор; определения целиком, со стрелками) ==========
-let safePct = null;
+let safePct: number | null = null;
 // H19: оверрайды попапа (chrome.storage.sync) — раньше писались и НЕ читались.
-let popupRawModel = null;  // сырое selectedModel из попапа ('auto' = Автоопределение)
-let popupRawPct = null;    // сырое customLimit из попапа («Лимит контекста» = % от Авто)
-let popupModelId = null;   // канонический id выбранной модели; null = Автоопределение
-let popupLimitPct = null;  // 1..100; null = Авто (поле пустое)
+let popupRawModel: string | null = null;  // сырое selectedModel из попапа ('auto' = Автоопределение)
+let popupRawPct: number | null = null;    // сырое customLimit из попапа («Лимит контекста» = % от Авто)
+let popupModelId: string | null = null;   // канонический id выбранной модели; null = Автоопределение
+let popupLimitPct: number | null = null;  // 1..100; null = Авто (поле пустое)
 
 // v55: DOM-догон — локальный пересчёт токенов по запросу перехватчика Gemini
 // ('ai-cm-dom-emit-request' после тихого дебаунса DOM-мутаций ~2.5с, т.е. когда
@@ -141,35 +141,35 @@ let popupLimitPct = null;  // 1..100; null = Авто (поле пустое)
 // пересчёт только при (baseComplete || lastBounded) — иначе монотонный максимум
 // мог бы быть затёрт DOM-оценкой. Дедуп с последующим сетевым снапшотом даёт
 // существующий монотонный максимум (двойного роста быть не должно).
-var aiCmLastDomEmitSig = null;
+var aiCmLastDomEmitSig: string | null = null;
 // O-24 (F6): чат, которому принадлежит aiCmLastDomEmitSig выше. Сигнатура привязана к
 // разговору: смена convId сбрасывает её, поэтому SPA-возврат в тот же чат видит СВОЮ
 // сигнатуру (как и O-38-латч по site|convId), а переход в другой чат — пустую.
-var aiCmLastDomEmitConvId = null;
+var aiCmLastDomEmitConvId: string | null = null;
 
-let lastEmitConvId = ''; // v34: convId последнего принятого снимка (гард экспорта)
-let lastSnapConvId = ''; // v37: convId последнего снимка для сброса монотонного максимума
+let lastEmitConvId: string = ''; // v34: convId последнего принятого снимка (гард экспорта)
+let lastSnapConvId: string = ''; // v37: convId последнего снимка для сброса монотонного максимума
 
-var aiCmConvSourceByConv = {};          // convId → запись источника (для попапа/виджета)
-var aiCmArchiveLoadStarted = {};        // convId → true — чтение архива уже запущено (page-session)
-var aiCmArchiveRestoredDispatched = {}; // convId → true — ai-cm-archive-restore уже диспатчен
-var aiCmArchiveCountByConv = {};        // T1-fix#2 (v1.16.2): convId → count архивных ходов (гейт экспорта)
-var aiCmSourceLabelNow = '';            // ярлык источника для тултипа виджета
+var aiCmConvSourceByConv: Record<string, AiCmConvSource | null> = {};          // convId → запись источника (для попапа/виджета)
+var aiCmArchiveLoadStarted: Record<string, boolean> = {};        // convId → true — чтение архива уже запущено (page-session)
+var aiCmArchiveRestoredDispatched: Record<string, boolean> = {}; // convId → true — ai-cm-archive-restore уже диспатчен
+var aiCmArchiveCountByConv: Record<string, number> = {};        // T1-fix#2 (v1.16.2): convId → count архивных ходов (гейт экспорта)
+var aiCmSourceLabelNow: string = '';            // ярлык источника для тултипа виджета
 
 // ========== v1.8: АВТОЭКСПОРТ ЧАТА ПРИ ПОРОГЕ ==========
 // Настройки: aiCmAutoExport / aiCmAutoExportPct / aiCmAutoExportFmt (chrome.storage.local).
 // Сборка текста — тем же сборщиком, что использует ручная кнопка выбранного формата
 // (utils/export-text-builders.js). Без флага консоль тихая; ошибки — console.error.
-var autoExportSettings = { enabled: false, pct: 90, fmt: 'txt' };
+var autoExportSettings: AiCmAutoExportSettings = { enabled: false, pct: 90, fmt: 'txt' };
 // v1.19.2 (M-13c): антиспам строки «флаг enabled отсутствует» — одна строка на эпизод
 // (loadAutoExportSettings вызывается и на старте, и на каждый onChanged этих трёх ключей).
-var aiCmAutoExportFlagMissingLogged = false;
-var autoExportFired = {};        // convId -> 1 (один раз на чат)
+var aiCmAutoExportFlagMissingLogged: boolean = false;
+var autoExportFired: AiCmLatchMap = {};        // convId -> 1 (один раз на чат)
 // O-38: модульный латч «один раз на чат» — переживает resetConversationState (SPA-возврат
 // в уже экспортированный чат). В отличие от autoExportFired/sessionFiredCache, этот латч
 // НЕ сбрасывается на смене чата: второй вход в тот же чат в пределах сессии страницы
 // видит fired и не экспортирует повторно. F5/новый instance — пуст (прежнее поведение).
-var aiCmAutoExportFiredOnce = Object.create(null);  // 'site|convId' -> 1
+var aiCmAutoExportFiredOnce: AiCmLatchMap = Object.create(null);  // 'site|convId' -> 1
 // O-29 (лог-спам автоэкспорта GSA): состояние ПОСЛЕДНЕЙ напечатанной лог-строки автоэкспорта —
 // family (семейство строки: 'spa-entry' витрины GSA / 'gsa-skip' причины skip) → сигнатура
 // состояния (разговор + причина + бит латча O-38). Печать — только на СМЕНУ сигнатуры
@@ -177,12 +177,12 @@ var aiCmAutoExportFiredOnce = Object.create(null);  // 'site|convId' -> 1
 // Семейства раздельные намеренно: пара «latch kept reason=spa-entry» / «skip reason=…»
 // печатается в ОДНОМ DRAW-цикле, поэтому один общий ключ на обе строки не гасил бы
 // чередование A/B/A/B — спам остался бы.
-var aiCmAutoExportLastLogState = Object.create(null);  // family -> сигнатура последней печати
+var aiCmAutoExportLastLogState: Record<string, string> = Object.create(null);  // family -> сигнатура последней печати
 // S2: per-site порог автоэкспорта: ключ 'aiCmAutoExportPct_<siteName>' (например
 // aiCmAutoExportPct_chatgpt) переопределяет глобальный aiCmAutoExportPct для этого
 // сайта. Кэш заполняется асинхронно (initialize + onChanged); запись отсутствует →
 // в maybeAutoExport фолбэк на глобальный порог.
-var autoExportPctBySite = {};    // siteName -> число 1..100; undefined = фолбэк на глобальный
+var autoExportPctBySite: Record<string, number> = {};    // siteName -> число 1..100; undefined = фолбэк на глобальный
 
 // ========== O-43: МОНОТОННЫЙ ЛАТЧ СЕТЕВОЙ ПОЛНОТЫ GSA ==========
 // Живой дефект (измерен O-43, GSA под гейтом aiCmDebug): файл автоэкспорта уходил по
@@ -209,43 +209,43 @@ var autoExportPctBySite = {};    // siteName -> число 1..100; undefined = �
 // utils/export-emit-pipeline.ts:shouldSkipAutoExport, поле gsaNetworkCompleteLatch). Латч
 // взводится/читается ТОЛЬКО в ISOLATED-мире (core/state.js — общий лексический скоуп
 // контент-скриптов); MAIN-мир перехватчика к этому объекту доступа не имеет и иметь не должен.
-var aiCmGsaNetworkCompleteLatch = Object.create(null);  // 'site|threadId' -> 1
-var aiCmGsaNetworkCompleteThreadId = null;              // threadId, для которого латч был сброшен последним
+var aiCmGsaNetworkCompleteLatch: AiCmLatchMap = Object.create(null);  // 'site|threadId' -> 1
+var aiCmGsaNetworkCompleteThreadId: string | null = null;              // threadId, для которого латч был сброшен последним
 
-var autoExportLastConvId = '';   // сброс fired при смене чата
+var autoExportLastConvId: string = '';   // сброс fired при смене чата
 // v42: convId → 1, пока лоадер Gemini (MAIN-мир) бежит по этому чату; канал — ai-cm-loader-state
-var aiCmLoaderRunningByConv = {};
-var autoExportLastPct = -1;      // v42: последний pct для однократного re-check на стопе лоадера
+var aiCmLoaderRunningByConv: AiCmLatchMap = {};
+var autoExportLastPct: number = -1;      // v42: последний pct для однократного re-check на стопе лоадера
 // v52: отложенная запись aiCmHistory (питает ручной экспорт попапа из chrome.storage.local).
 // Если в момент снимка лоадер Gemini ещё бежит ИЛИ база не полная — не пишем сразу,
 // иначе попап может скачать частичную историю (дыра в середине). Одноразово ждём
 // события (baseComplete && !loader), таймаут-фолбэк 20с → пишем как есть.
-var aiCmPendingHistWrite = null; // { convId, timer }
+var aiCmPendingHistWrite: AiCmPendingHistWrite | null = null; // { convId, timer }
 // v53: курсор продолжения лоадера Gemini по convId на момент стопа (из ai-cm-loader-state
 // detail.pendingCursor). Пока курсор жив — автоэкспорт НЕ стреляет (даже при baseComplete).
-var aiCmCursorLiveByConv = {};
+var aiCmCursorLiveByConv: Record<string, boolean | number> = {};
 // v1.13.1: convId → 1 — база подтверждённо полная (baseComplete при reachedStart=true от
 // перехватчика Gemini). До подтверждения deferred-запись истории висит и НЕ флашится по
 // loader-stop; фолбэк — «счётчик стабилен при видимой вкладке» (таймаут defer при visible).
-var aiCmBaseConfirmedByConv = {};
+var aiCmBaseConfirmedByConv: AiCmLatchMap = {};
 // v63: convId → true — база подтверждена только sanity-фолбэком (low confidence);
 // читается при записи histSnapshot (поле isLowConfidenceBase → префикс имени файла).
-var aiCmLowConfidenceByConv = {};
+var aiCmLowConfidenceByConv: Record<string, boolean | number> = {};
 // R1: convId → true — база Qwen неполная, но продолжать нечем (soft-final: time-cap/
 // page-cap/no-gain). Автоэкспорт разрешён, имя файла получает префикс [LOW CONFIDENCE]_.
 // Классификация причин живёт в core/qwen-pagination.js; сюда доезжает только булев.
-var aiCmPartialSoftByConv = {};
+var aiCmPartialSoftByConv: Record<string, boolean> = {};
 // v53: convId → 1 — «ждём поздний re-check, когда база впервые станет полной».
 // Одноразовый: гасится после фактического re-check (см. aiCmTryLateAutoExport).
-var aiCmLateCheckByConv = {};
+var aiCmLateCheckByConv: AiCmLatchMap = {};
 // v54: детектор обрезки истории в Gemini + спасательный pre-trim экспорт.
 // trimProbe[cid] = { maxCount, firstIds, suspectPending } — эталон последнего ПОЛНОГО
 // снимка (обновляется только при detail.historyComplete === true).
-var trimProbe = {};
-var preTrimExportFired = {};     // v54: cid -> 1 — pre-trim экспорт один раз на чат; Независим от autoExportFired
-var trimRetryByConv = {};        // v54: cid -> счётчик ретраев инвариантов полноты (≤5 по 2с)
+var trimProbe: Record<string, AiCmTrimProbeEntry> = {};
+var preTrimExportFired: AiCmLatchMap = {};     // v54: cid -> 1 — pre-trim экспорт один раз на чат; Независим от autoExportFired
+var trimRetryByConv: Record<string, number> = {};        // v54: cid -> счётчик ретраев инвариантов полноты (≤5 по 2с)
 // N первых id снимка для сравнения голов детектором обрезки (синхронно с util).
-var TRIM_HEAD_IDS_N = 10;
+var TRIM_HEAD_IDS_N: number = 10;
 
 // ========== Шаг A.1 (security): обёртки SW-каналов ==========
 // Lite-IPC поверх chrome.runtime.sendMessage (SW — единственный владелец
@@ -256,13 +256,13 @@ var TRIM_HEAD_IDS_N = 10;
 // Без extension-контекста (срезы-песочницы тестов) промис резолвится нейтрально,
 // исключений наружу не летит — конвенция сьюта «частичный скоуп сохраняет
 // прежнее поведение 1:1».
-let aiCmSwAlive = function () {
+let aiCmSwAlive: () => boolean = function () {
   try { return typeof chrome !== 'undefined' && !!chrome.runtime && typeof chrome.runtime.sendMessage === 'function'; } catch (eAlive) { return false; }
 };
 
 // Запрос к SW с ожиданием ОТВЕТА (sendResponse-канал). Никогда не reject-ит:
 // ошибка/недоступный SW → null (вызывающие трактуют как «данных нет»).
-function aiCmSwAsk(payload) {
+function aiCmSwAsk(payload: unknown): Promise<any> {
   return new Promise(function (resolve) {
     try {
       if (!aiCmSwAlive()) { resolve(null); return; }
@@ -277,7 +277,7 @@ function aiCmSwAsk(payload) {
 
 // Гидратация локальной карты session-латча (sessionFiredCache): отдаёт SW, только
 // ключи префикса 'aiCmFired:' → {ключ: 1}. Эквивалент прежнего storage.session.get(null).
-function aiCmLatchGetAll() {
+function aiCmLatchGetAll(): Promise<Record<string, number>> {
   return aiCmSwAsk({ type: 'aiCm-latch-get-all' }).then(function (resp) {
     return (resp && typeof resp === 'object' && resp.map) ? resp.map : {};
   }).catch(function () { return {}; });
@@ -285,12 +285,12 @@ function aiCmLatchGetAll() {
 
 // Запись/снятие латча в session-хранилище (владелец — SW). Контракт прежний:
 // value = 1 у взведённого ключа; remove снимает ключ (delete autoExportFired-семантика).
-function aiCmLatchSet(service, convId) {
+function aiCmLatchSet(service: string, convId: string): Promise<boolean> {
   return aiCmSwAsk({ type: 'aiCm-latch-set', service: String(service || ''), convId: String(convId || '') })
     .then(function (resp) { return !!(resp && resp.ok); })
     .catch(function () { return false; });
 }
-function aiCmLatchRemove(service, convId) {
+function aiCmLatchRemove(service: string, convId: string): Promise<boolean> {
   return aiCmSwAsk({ type: 'aiCm-latch-remove', service: String(service || ''), convId: String(convId || '') })
     .then(function (resp) { return !!(resp && resp.ok); })
     .catch(function () { return false; });
@@ -302,7 +302,7 @@ function aiCmLatchRemove(service, convId) {
 // глобальный лексический скоуп, поэтому объявления выше видны всем модулям и
 // content.js по прежним именам. Api — для инструментов, отладки и тестов.
 (function () {
-  var Api = {};
+  const Api: AiCmState = {};
   Object.defineProperty(Api, 'currentAdapter', { enumerable: true,
     get: function () { return currentAdapter; },
     set: function (value) { currentAdapter = value; } });
@@ -593,3 +593,76 @@ function aiCmLatchRemove(service, convId) {
   if (typeof module !== 'undefined' && module.exports) module.exports = Api;
   if (typeof window !== 'undefined') window.AiCmState = Api;
 })();
+
+// ===== Типы общего реестра (Core Wave 1) =====
+// Классические content-скрипты делят один лексический скоуп, поэтому объявления ниже
+// читаются и пишутся соседями (content.js, widget.ts, base-handler.js, hybrid-tail.js,
+// export-manager.js). Реальные типы живут здесь, в types/core-globals.d.ts остаются
+// только швы для имён, которыми владеют другие файлы.
+interface AiCmTurnRecord {
+  role?: string;
+  text?: string;
+  id?: string;
+  reasoning?: string;
+  r1?: string;
+  turnId?: string;
+  [key: string]: unknown;
+}
+/** turnsMap: ходы по id/спискам сообщений (форма MAIN-мира и снапшотов истории). */
+type AiCmTurnsMap = Record<string, AiCmTurnRecord | AiCmTurnRecord[]>;
+/** Латчи «один раз»: ключ 'site|convId' / 'site|threadId' → 1. */
+type AiCmLatchMap = Record<string, number>;
+interface AiCmAttachBreak {
+  imgTokens: number;
+  docTokens: number;
+  imgCount: number;
+  docCount: number;
+}
+interface AiCmQwenUsage {
+  outputTokens?: number;
+  reasoningTokens?: number;
+  total?: number;
+}
+/** Последние данные виджета (кэш для отложенного рендера). */
+interface AiCmWidgetData {
+  percentage: number;
+  tokenEstimate: number;
+  effectiveLimit: number;
+  contextLimit: number;
+  displayLimit: number;
+  modelName: string;
+  attachBreak: AiCmAttachBreak | null;
+}
+interface AiCmDetailMessage {
+  role?: string;
+  text?: string;
+  id?: unknown;
+  reasoning?: string;
+  r1?: unknown;
+  turnId?: unknown;
+  [key: string]: unknown;
+}
+interface AiCmAutoExportSettings {
+  enabled: boolean;
+  pct: number;
+  fmt: string;
+}
+interface AiCmPendingHistWrite {
+  convId: string;
+  timer: ReturnType<typeof setTimeout>;
+}
+interface AiCmTrimProbeEntry {
+  maxCount?: number;
+  firstIds?: string[];
+  suspectPending?: number;
+}
+interface AiCmConvSource {
+  kind: string;
+  label: string;
+  format?: string;
+  count?: number;
+}
+/** UMD-зеркало AiCmState: аксессоры реестра по имени. */
+interface AiCmState {
+  [name: string]: unknown;
+}

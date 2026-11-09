@@ -27,11 +27,16 @@ const Gate = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-p
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 
 const ROOT = path.join(__dirname, '..');
-function read(rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); }
+const { stripTypesKeepComments } = require('./helpers/read-module-source.js');
+
+function read(rel) {
+  const src = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+  return /\.tsx?$/.test(rel) ? stripTypesKeepComments(src, rel) : src;
+}
 const PAGINATION_SRC = read('core/qwen-pagination.js');
 const INTERCEPT_SRC = read('core/qwen-intercept.js');
-const STATE_SRC = read('core/state.js');
-const WIDGET_SRC = read('core/widget.js');
+const STATE_SRC = read('core/state.ts');
+const WIDGET_SRC = read('core/widget.ts');
 const CONTENT_SRC = read('core/content.js');
 const MGR_SRC = read('core/export-manager.js');
 
@@ -235,7 +240,7 @@ describe('R1: source-пины пайплайна (классификация →
     expect(INTERCEPT_SRC).toContain('partialSoft: complete ? false : (s.partialSoft === true),');
   });
 
-  test('core/state.js + core/widget.js — реестр по разговору и сброс при смене чата', function () {
+  test('core/state.ts + core/widget.ts — реестр по разговору и сброс при смене чата', function () {
     expect(STATE_SRC).toContain('var aiCmPartialSoftByConv = {};');
     expect(STATE_SRC).toContain("Object.defineProperty(Api, 'aiCmPartialSoftByConv', { enumerable: true,");
     expect(WIDGET_SRC).toContain('try { aiCmPartialSoftByConv = {}; } catch (eResetPs63) { }');
@@ -276,7 +281,7 @@ describe('R1: авто-дорога doAutoExportDownload — qwen soft-final д�
       currentAdapter: { siteName: 'qwen' },
       autoExportSettings: { fmt: 'txt', enabled: true, pct: 90 },
       aiCmLowConfidenceByConv: {},
-      // R1: реестр мягкого финала (в бою его заводит core/state.js и пишет core/content.js)
+      // R1: реестр мягкого финала (в бою его заводит core/state.ts и пишет core/content.js)
       aiCmPartialSoftByConv: {},
       baseSeen: true,
       baseComplete: false,             // soft-final: honest=false, полноты нет

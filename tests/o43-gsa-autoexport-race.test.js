@@ -11,10 +11,10 @@
  * переменная baseComplete (core/content.js) снова false, а гейт автоэкспорта снова даёт
  * not-complete. Delay-N-ms и гейт «histSource=network» этого не лечат.
  *
- * РЕШЕНИЕ: монотонный латч сетевой полноты — 'site|threadId' → 1 (core/state.js:
+ * РЕШЕНИЕ: монотонный латч сетевой полноты — 'site|threadId' → 1 (core/state.ts:
  * aiCmGsaNetworkCompleteLatch). Взвод — приём сетевого снимка с detail.historyComplete===true
  * (core/content.js, слушатель 'ai-cm-full-history'); НЕ снимается эмитами historyComplete=0;
- * сброс — только на смене треда (core/widget.js:resetConversationState по data-session-thread-id);
+ * сброс — только на смене треда (core/widget.ts:resetConversationState по data-session-thread-id);
  * чтение — core/export-manager.js:maybeAutoExport → state.gsaNetworkCompleteLatch →
  * utils/export-emit-pipeline.ts:shouldSkipAutoExport.
  *
@@ -24,21 +24,21 @@
  *
  * Исполняются РЕАЛЬНЫЕ функции: shouldSkipAutoExport (utils/export-emit-pipeline.ts),
  * aiCmGsaNetworkCompleteReset/Set/Is + maybeAutoExport (core/export-manager.js),
- * resetConversationState (core/widget.js) — в песочнице с РЕАЛЬНЫМ объектом состояния
- * (require core/state.js), как в browser'е (общий лексический скоуп контент-скриптов).
+ * resetConversationState (core/widget.ts) — в песочнице с РЕАЛЬНЫМ объектом состояния
+ * (require core/state.ts), как в browser'е (общий лексический скоуп контент-скриптов).
  */
 
 const fs = require('fs');
 const path = require('path');
 
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
-const STATE = require('../core/state.js');
+const STATE = require('../core/state.ts');
 const HELPER = require('./helpers/content-source.js');
 
 const ROOT = HELPER.ROOT;
 const CONTENT = HELPER.contentSource;
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
-const WIDGET_SRC = fs.readFileSync(path.join(ROOT, 'core', 'widget.js'), 'utf8');
+const WIDGET_SRC = HELPER.readSource('core/widget.ts');
 const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');
 
 // Рез по балансу фигурных скобок (как в tests/gsa-autoexport.test.js).
@@ -63,7 +63,7 @@ const TID2 = 'O43-THREAD-B';
 // =====================================================================================
 // Песочница 1: РЕАЛЬНЫЙ латч + РЕАЛЬНЫЕ писатель/читатель (export-manager.js) + РЕАЛЬНЫЙ
 // сброс (widget.js). Состояние объявляется ВНУТРИ песочницы и отдаётся наружу через
-// Object.defineProperty-аксессоры — ровно как в core/state.js. Так воспроизводится общий
+// Object.defineProperty-аксессоры — ровно как в core/state.ts. Так воспроизводится общий
 // лексический скоуп контент-скриптов: если положить состояние в ctx, with-скоуп перекроет
 // лексическую привязку, и присваивание внутри среза уйдёт в ctx (а хелпер прочтёт
 // лексическую переменную) — «слот сброса» перестал бы обновляться, чего в браузере нет.
@@ -156,7 +156,7 @@ function contentState(over) {
 
 beforeEach(function () {
   // Латч живёт в песочнице каждого теста (как в новом instance контент-скрипта), но STATE
-  // из core/state.js — модульный singleton прогона: чистим его карту для D4 (гейт читает
+  // из core/state.ts — модульный singleton прогона: чистим его карту для D4 (гейт читает
   // именно её), чтобы порядок тестов не влиял на вердикт.
   for (const k in STATE.aiCmGsaNetworkCompleteLatch) delete STATE.aiCmGsaNetworkCompleteLatch[k];
 });
@@ -421,7 +421,7 @@ describe('O-43 R2: прежние контуры не тронуты', () => {
     expect(INTERCEPT_SRC).toContain("absorbForeignSnapshot(tid, turns, historyComplete)");
     expect(INTERCEPT_SRC).toContain("'foreign-not-applied'");
     // латч O-43 — только ISOLATED-мир (state.js/export-manager.js/content.js)
-    const iso = ['core/state.js', 'core/widget.js', 'core/export-manager.js', 'core/content.js'];
+    const iso = ['core/state.ts', 'core/widget.ts', 'core/export-manager.js', 'core/content.js'];
     for (const rel of iso) {
       expect(fs.readFileSync(path.join(ROOT, rel), 'utf8')).toContain('aiCmGsaNetworkComplete');
     }
@@ -434,7 +434,7 @@ describe('O-43 R2: прежние контуры не тронуты', () => {
     expect(reset.indexOf('latch kept reason=spa-entry')).toBeGreaterThan(iGsa);
     expect((reset.match(/aiCmAutoExportFiredOnce/g) || []).length).toBe(0); // O-38-латч сбросом не снимается
     expect(fnDecl(MGR_SRC, 'maybeAutoExport')).toContain('aiCmAutoExportFiredOnce[siteName + \'|\' + cid] === 1');
-    // count = 1 (core/export-manager.js + core/state.js объявление проверяем отдельно ниже)
+    // count = 1 (core/export-manager.js + core/state.ts объявление проверяем отдельно ниже)
     expect((MGR_SRC.match(/function aiCmGsaNetworkCompleteReset\(/g) || []).length).toBe(1);
   });
 });
@@ -474,8 +474,8 @@ describe('O-43: точки взвода и чтения (единственны�
     expect(mgr.slice(0, iGsa)).not.toContain('gsaNetworkLatch =');
   });
 
-  test('латч объявлен в core/state.js и экспортирован (UMD Api)', function () {
-    const stateSrc = fs.readFileSync(path.join(ROOT, 'core', 'state.js'), 'utf8');
+  test('латч объявлен в core/state.ts и экспортирован (UMD Api)', function () {
+    const stateSrc = HELPER.readSource('core/state.ts');
     expect(stateSrc).toContain('var aiCmGsaNetworkCompleteLatch = Object.create(null);');
     expect(stateSrc).toContain("Object.defineProperty(Api, 'aiCmGsaNetworkCompleteLatch'");
     expect(typeof STATE.aiCmGsaNetworkCompleteLatch).toBe('object');

@@ -6,7 +6,7 @@
  *   #2 доступность индикатора (WCAG 2.2 AA 2.1.1 / 2.4.7 / 4.1.2): role/tabindex/aria,
  *      Enter+Space, Escape, клик вне панели, focus-visible, доступное имя с процентом.
  *
- * Тела функций и константы берутся из РЕАЛЬНОГО core/widget.js и исполняются в песочнице
+ * Тела функций и константы берутся из РЕАЛЬНОГО core/widget.ts и исполняются в песочнице
  * (конвенция H11/H22/H24/H25). D-пин — дефект: падает на коде до фикса (извлечение
  * функции/константы не находит её вовсе). R-пин — регресс: падает при поломке соседнего
  * поведения (позиция без коллизии, 8 токенов темы, тихий путь H25, разметка стрелок).
@@ -20,7 +20,7 @@ const path = require('path');
 const HELPERS = require('./helpers/content-source.js');
 
 const ROOT = HELPERS.ROOT;
-const WIDGET_SRC = HELPERS.moduleSource('core/widget.js');
+const WIDGET_SRC = HELPERS.moduleSource('core/widget.ts');
 const EN = JSON.parse(fs.readFileSync(path.join(ROOT, '_locales', 'en', 'messages.json'), 'utf8'));
 const RU = JSON.parse(fs.readFileSync(path.join(ROOT, '_locales', 'ru', 'messages.json'), 'utf8'));
 

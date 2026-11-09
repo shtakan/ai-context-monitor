@@ -14,14 +14,14 @@
  *      break-word переносит токены, не меняя min-content).
  *      Вертикальный flip (как у панели) сознательно НЕ реализуется.
  *
- * Пины читают РЕАЛЬНЫЙ core/widget.js (конвенция H11/H22/H24/H25) и режут правила из
+ * Пины читают РЕАЛЬНЫЙ core/widget.ts (конвенция H11/H22/H24/H25) и режут правила из
  * инлайн <style> по имени селектора, а не дублируют строки CSS в себе. H25-инвариант
  * («applyNativeStyles пишет ровно 8 токенов --w-*») остаётся зелёным без правок:
  * новых токенов не вводили, поэтому ни одна проверка не ослаблена.
  */
 const HELPERS = require('./helpers/content-source.js');
 
-const WIDGET_SRC = HELPERS.moduleSource('core/widget.js');
+const WIDGET_SRC = HELPERS.moduleSource('core/widget.ts');
 
 /** Тело CSS-правила по точному селектору (' {') — первое совпадение, до парной '}'. */
 function ruleBody(src, selector) {
@@ -55,7 +55,7 @@ function occurrences(src, needle) {
   return src.split(needle).length - 1;
 }
 
-// Зафиксировано ДО правки (CSS-only): 12 вызовов addEventListener( в core/widget.js.
+// Зафиксировано ДО правки (CSS-only): 12 вызовов addEventListener( в core/widget.ts.
 const ADD_EVENT_LISTENER_BASELINE = 12;
 
 const TOOLTIP_SEL = '.ai-widget-tooltip';
@@ -120,7 +120,7 @@ describe('UI-аудит #8 — тултип не выходит за viewport (R
     expect(tooltip).toContain('overflow-wrap: break-word');
   });
 
-  test('R#8: white-space: nowrap не встречается в core/widget.js ни разу', () => {
+  test('R#8: white-space: nowrap не встречается в core/widget.ts ни разу', () => {
     expect(WIDGET_SRC).not.toContain('white-space: nowrap');
     expect(occurrences(WIDGET_SRC, 'white-space: nowrap')).toBe(0);
   });
@@ -169,7 +169,7 @@ describe('R-пины подбатча: правило тултипа не осл
 });
 
 describe('Токен-инвариант подбатча — новых --w-* токенов не вводили (H25)', () => {
-  test('R: в core/widget.js нет ни одной подстроки --w-panel', () => {
+  test('R: в core/widget.ts нет ни одной подстроки --w-panel', () => {
     expect(WIDGET_SRC).not.toContain('--w-panel');
     expect(occurrences(WIDGET_SRC, '--w-panel')).toBe(0);
   });

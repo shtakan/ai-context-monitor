@@ -30,7 +30,8 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..', '..');
-const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+const CONTENT_HELPER = require('../helpers/content-source.js');
+const read = (rel) => CONTENT_HELPER.readSource(rel);
 
 const BG_SRC = read('core/background.js');
 // Ph2, шаг 3: в background.js есть статический import (utils/platform.ts). Для текст-пинов
@@ -339,8 +340,8 @@ describe('Шаг A.1 / P4: O3-латч читается/пишется/сним�
 
   test('контент: обёртки aiCm-latch-* вместо chrome.storage.session, кэш гидрируется из SW (R1)', () => {
     const exportManager = read('core/export-manager.js');
-    const widget = read('core/widget.js');
-    const state = read('core/state.js');
+    const widget = read('core/widget.ts');
+    const state = read('core/state.ts');
     // Именно ОБРАЩЕНИЕ к API, а не упоминание в комментариях-пояснениях Шага A.1
     // (почему обращения больше нет): код отделяем маской комментариев/литералов.
     [exportManager, widget, state].forEach((src) => {

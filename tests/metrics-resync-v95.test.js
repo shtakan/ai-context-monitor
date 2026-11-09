@@ -211,13 +211,13 @@ describe('v95 metrics-resync: вызов стоит сразу после deferr
     // и строго до схлопывания базы дедупликатором
     const iDedup = CONTENT.indexOf('baseCount = texts18.length;');
     expect(iDedup).toBeGreaterThan(iRaw);
-    // объявление + UMD-доступ (конвенция core/state.js) и обнуление при сбросе чата
-    const state = H.readSource('core/state.js');
+    // объявление + UMD-доступ (конвенция core/state.ts) и обнуление при сбросе чата
+    const state = H.readSource('core/state.ts');
     expect(state).toContain('let aiCmNetRawCount = 0;');
     expect(state).toContain('let aiCmNetRawCountUsed = -1;');
     expect(state).toContain("Object.defineProperty(Api, 'aiCmNetRawCount',");
     expect(state).toContain("Object.defineProperty(Api, 'aiCmNetRawCountUsed',");
-    expect(H.readSource('core/widget.js')).toContain('aiCmNetRawCountUsed = -1;');
+    expect(H.readSource('core/widget.ts')).toContain('aiCmNetRawCountUsed = -1;');
   });
 });
 

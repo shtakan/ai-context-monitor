@@ -8,14 +8,14 @@
  *      эффективный контраст текста падал ниже 4.5:1 → opacity: 1 + явный
  *      color: var(--w-tooltip-text) (общие токены тултипа НЕ трогаются).
  *
- * Пины читают РЕАЛЬНЫЙ core/widget.js (конвенция H11/H22/H24/H25) и режут правила из
+ * Пины читают РЕАЛЬНЫЙ core/widget.ts (конвенция H11/H22/H24/H25) и режут правила из
  * инлайн <style> по имени селектора, а не дублируют строки в себе. H25-инвариант
  * («applyNativeStyles пишет ровно 8 токенов --w-*») остаётся зелёным без правок:
  * новых токенов не вводили, поэтому ни одна проверка не ослаблена.
  */
 const HELPERS = require('./helpers/content-source.js');
 
-const WIDGET_SRC = HELPERS.moduleSource('core/widget.js');
+const WIDGET_SRC = HELPERS.moduleSource('core/widget.ts');
 
 /** Тело CSS-правила по точному селектору (' {') — первое совпадение, до парной '}'. */
 function ruleBody(src, selector) {
@@ -116,7 +116,7 @@ describe('UI-аудит #11 — контраст подсказки .ai-cm-hint 
 });
 
 describe('Токен-инвариант подбатча — новых --w-* токенов не вводили (H25)', () => {
-  test('R: в core/widget.js нет ни одной подстроки --w-panel (и вообще новых токенов панели)', () => {
+  test('R: в core/widget.ts нет ни одной подстроки --w-panel (и вообще новых токенов панели)', () => {
     expect(WIDGET_SRC).not.toContain('--w-panel');
   });
 

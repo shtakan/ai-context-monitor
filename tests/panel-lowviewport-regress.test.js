@@ -15,14 +15,14 @@
  * её ищет существующий пин tests/panel-overflow-contrast.test.js:55, поэтому НИ ОДИН
  * существующий тест не правился и не ослаблялся.
  *
- * Пины читают РЕАЛЬНЫЙ core/widget.js через tests/helpers/content-source.js
+ * Пины читают РЕАЛЬНЫЙ core/widget.ts через tests/helpers/content-source.js
  * (конвенция H11/H22/H24/H25): правило вырезается по селектору, функции — по балансу
  * скобок, числа (min, резерв, потолок, отступ панели) извлекаются ИЗ САМОГО ИСХОДНИКА.
  * Поэтому пин №1 не даст через полгода молча удалить вторую декларацию.
  */
 const HELPERS = require('./helpers/content-source.js');
 
-const WIDGET_SRC = HELPERS.moduleSource('core/widget.js');
+const WIDGET_SRC = HELPERS.moduleSource('core/widget.ts');
 const PANEL_SELECTOR = '.ai-widget-panel';
 
 /** Базовые числа ДО правки (зафиксированы до неё), чтобы поймать добавление рантайма. */

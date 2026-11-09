@@ -51,7 +51,7 @@ const CID = 'e292103e4b521dae'; // живой convId Gemini из fixture H21 (т
  * РЕАЛЬНЫЙ core/export-manager.js целиком в песочнице состояния контент-скрипта.
  * window — фейковый (перехватываем addEventListener/dispatchEvent и downloadBlob),
  * пайплайн и сборщики — настоящие. Состояние — ровно то, что в проде живёт в
- * core/state.js и core/gemini-intercept.js (имена и формы совпадают).
+ * core/state.ts и core/gemini-intercept.js (имена и формы совпадают).
  */
 function loadManager(over) {
   const o = over || {};

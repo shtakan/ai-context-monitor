@@ -19,7 +19,7 @@
 // берёт локальный резолвер вида `(typeof aiCmI18nMessage === 'function') ? ... : фолбэк`
 // (иначе ReferenceError в песочнице, а не прежняя русская строка).
 
-function safePctKey() { return 'ai_cm_safe_pct_' + getServiceKey(); }
+function safePctKey(): string { return 'ai_cm_safe_pct_' + getServiceKey(); }
 // v2.0.13: границы зон кольца берутся из НАСТРОЕННЫХ порогов (options →
 // chrome.storage.local 'aiCmProactiveThresholds' = [low, medium, high]), а не из жёстких
 // 50/80. Кольцо трёхзонное, поэтому зон ровно две: low (зелёный → жёлтый) и high
@@ -27,8 +27,8 @@ function safePctKey() { return 'ai_cm_safe_pct_' + getServiceKey(); }
 // Пороги не заданы или битые → дефолт [70, 85, 95] ⇒ границы 70/95 (прежнее поведение
 // «из коробки»). Гарды typeof: тела функций регрессия режет из исходника и исполняет в
 // песочнице без соседних хелперов.
-var aiCmRingThresholds = null;
-function aiCmRingBounds() {
+var aiCmRingThresholds: any = null;
+function aiCmRingBounds(): [number, number] {
   var raw = (typeof aiCmRingThresholds !== 'undefined') ? aiCmRingThresholds : null;
   if (raw && typeof raw === 'object' && raw.length === 3) {
     var a = parseInt(raw[0], 10), b = parseInt(raw[1], 10), c = parseInt(raw[2], 10);
@@ -39,7 +39,7 @@ function aiCmRingBounds() {
   }
   return [70, 95];
 }
-function zoneColor(p) {
+function zoneColor(p: number): string {
   const bounds = (typeof aiCmRingBounds === 'function') ? aiCmRingBounds() : [70, 95];
   if (p < bounds[0]) return '#22c55e';
   if (p < bounds[1]) return '#eab308';
@@ -48,22 +48,22 @@ function zoneColor(p) {
 // H19: активный % от Авто. Приоритет: порог виджета (per-service, точнее) →
 // порог попапа (глобальный) → Авто (null). Дефолтный путь (оба null) и поле «100»
 // (по определению = как Авто) — байтово прежние (в т.ч. текст панели/тултипа).
-function aiCmActivePct() {
+function aiCmActivePct(): number | null {
   if (typeof safePct === 'number' && safePct > 0) return safePct;
   if (typeof popupLimitPct === 'number' && popupLimitPct > 0 && popupLimitPct !== 100) return popupLimitPct;
   return null;
 }
-function computeEffectiveLimit(modelId) {
+function computeEffectiveLimit(modelId: string | null): number {
   return ModelConfig.computeDisplayLimit(modelId, aiCmActivePct());
 }
 // H19: чтение/применение оверрайдов попапа. changed=false (ничего не сохранено) →
 // никаких перерисовок — дефолтный путь байтово идентичен.
-function aiCmSetPopupOverrides(rawModel, rawPct) {
+function aiCmSetPopupOverrides(rawModel: any, rawPct: any): void {
   popupRawModel = (rawModel === undefined) ? null : rawModel;
   popupRawPct = (rawPct === undefined) ? null : rawPct;
   aiCmRefreshPopupOverrides();
 }
-function aiCmRefreshPopupOverrides() {
+function aiCmRefreshPopupOverrides(): void {
   const m = ModelConfig.resolvePopupModelId(popupRawModel);
   const p = ModelConfig.resolveLimitPct(popupRawPct);
   const changed = (m !== popupModelId) || (p !== popupLimitPct);
@@ -75,7 +75,7 @@ function aiCmRefreshPopupOverrides() {
   updatePanel();
   if (isInitialized) processAndSend();
 }
-function aiCmLoadPopupOverrides() {
+function aiCmLoadPopupOverrides(): void {
   try {
     if (!isExtensionValid() || !chrome.storage || !chrome.storage.sync) return;
     chrome.storage.sync.get(['selectedModel', 'customLimit'], function (d) {
@@ -83,12 +83,12 @@ function aiCmLoadPopupOverrides() {
     });
   } catch (e) { debugLog('log', '[model-detect] H19 popup-override load error: ' + (e && e.message || e)); }
 }
-function updatePanel() {
+function updatePanel(): void {
   if (!widgetElement) return;
   // M-4.2: строки панели — из _locales (content_*); в песочницах без хелпера — фолбэк.
   const i18n = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key, fallback) { return fallback; };
   const status = widgetElement.querySelector('.ai-cm-limit-text');
-  const /** @type {HTMLInputElement} */ input = widgetElement.querySelector('.ai-cm-input');
+  const input = widgetElement.querySelector<HTMLInputElement>('.ai-cm-input');
   if (!status) return;
   const effLim = lastWidgetData ? lastWidgetData.effectiveLimit : 0;
   const pct = aiCmActivePct();
@@ -101,7 +101,7 @@ function updatePanel() {
     if (input) input.value = '';
   }
 }
-function snapCurrentPct() {
+function snapCurrentPct(): void {
   const eff = lastWidgetData ? lastWidgetData.effectiveLimit : 0;
   const t = lastWidgetData ? lastWidgetData.tokenEstimate : 0;
   if (!eff || !t || t <= 0) return;
@@ -110,7 +110,7 @@ function snapCurrentPct() {
   updatePanel();
   processAndSend();
 }
-function setSafePctFromInput(v) {
+function setSafePctFromInput(v: string): void {
   const n = parseFloat(v);
   if (isNaN(n) || n <= 0) { resetSafePct(); return; }
   safePct = Math.round(n * 10) / 10;
@@ -118,15 +118,15 @@ function setSafePctFromInput(v) {
   updatePanel();
   processAndSend();
 }
-function resetSafePct() {
+function resetSafePct(): void {
   safePct = null;
   if (isExtensionValid()) { try { chrome.storage.sync.set({ [safePctKey()]: null }); } catch (e) { swallowSoft(e, 'widget:resetSafePct'); } }
   updatePanel();
   processAndSend();
 }
-function stepSafePct(delta) {
+function stepSafePct(delta: number): void {
   if (!widgetElement) return;
-  const /** @type {HTMLInputElement} */ input = widgetElement.querySelector('.ai-cm-input');
+  const input = widgetElement.querySelector<HTMLInputElement>('.ai-cm-input');
   if (!input) return;
   let cur = parseFloat(input.value);
   if (isNaN(cur)) cur = 100;
@@ -166,7 +166,7 @@ function aiCmSafePctMigrationValue(own, legacy) {
 // Контракт: false — миграция для этого сервиса НЕ применяется, ни storage-обращений, ни
 // колбэка (вызывающая сторона читает порог сама); true — миграция запущена, и onDone
 // вызовется РОВНО ОДИН РАЗ: с числом (миграция выполнена) либо null (мигрировать нечего).
-function aiCmMigrateSafePct(onDone) {
+function aiCmMigrateSafePct(onDone: (value: number | null) => void): boolean {
   const cb = (typeof onDone === 'function') ? onDone : function () { };
   let done = false;
   const finish = function (value) { if (done) return; done = true; cb(value); };
@@ -193,7 +193,7 @@ function aiCmMigrateSafePct(onDone) {
 }
 
 // ========== v1.18/v1.22: сброс состояния виджета при смене чата в SPA ==========
-function resetConversationState() {
+function resetConversationState(): void {
   // O-27/O-32 (диагностика, только измерение): тип документа (captcha/чат/поиск) и
   // источник вызова (кто именно сбросил состояние). Гейт — aiCmDebug (utils/debug.ts);
   // поведение/сброс не меняются.
@@ -346,7 +346,7 @@ function resetConversationState() {
   stale = false; // сбрасываем флаг устаревшей интеграции
   scheduleStaleCheck(); // фиксируем момент смены диалога для 12с-проверки
   if (widgetElement) {
-    const /** @type {SVGElement|null} */ circle = widgetElement.querySelector('.ai-widget-fill');
+    const circle = widgetElement.querySelector<SVGElement>('.ai-widget-fill');
     const pt = widgetElement.querySelector('.ai-widget-text');
     const tt = widgetElement.querySelector('.ai-widget-tooltip');
     if (circle) {
@@ -417,7 +417,7 @@ function resetConversationState() {
 }
 
 // ========== ДИЗАЙН-КОНФИГУРАЦИЯ ==========
-const THEME_CONFIGS = {
+const THEME_CONFIGS: Record<string, AiCmThemeConfig> = {
   chatgpt: {
     font: 'Söhne, Inter, -apple-system, BlinkMacSystemFont, sans-serif',
     light: { bgTrack: '#f0f0f0', bgFill: '#10a37f', text: '#212121', tooltipBg: '#ffffff', tooltipText: '#212121', shadow: '0 2px 6px rgba(0,0,0,0.08), 0 0 1px rgba(0,0,0,0.1)', border: '1px solid #e5e5e5' },
@@ -449,7 +449,7 @@ const THEME_CONFIGS = {
 };
 // AI Studio — ОТДЕЛЬНОЙ веткой ПЕРЕД `host.includes('google.com')`: иначе aistudio.google.com
 // попадает в google-ветку и делит per-service порог виджета (safePctKey) с Google Search.
-function getServiceKey() {
+function getServiceKey(): string {
   const host = window.location.hostname;
   if (host.includes('chatgpt.com')) return 'chatgpt';
   if (host.includes('deepseek.com')) return 'deepseek';
@@ -472,7 +472,7 @@ function getServiceKey() {
 // Правило паритета H22 НЕ меняется: СВЕТЛЫЙ фон никогда не понижает до light (светлые страницы
 // всех шести сервисов байтово прежние — решает matchMedia, последний фолбэк).
 // Возврат: 'dark' | 'light' | null (null → прежняя цепочка).
-function aiCmInAppTheme() {
+function aiCmInAppTheme(): 'dark' | 'light' | null {
   try {
     const root = document.documentElement;
     const body = document.body;
@@ -497,7 +497,7 @@ function aiCmInAppTheme() {
     return null;
   } catch (e) { return null; }
 }
-function isDarkMode() {
+function isDarkMode(): boolean {
   const htmlClass = document.documentElement.classList;
   const bodyClass = document.body.classList;
   const dataTheme = document.documentElement.getAttribute('data-theme') || document.body.getAttribute('data-theme');
@@ -519,10 +519,10 @@ function isDarkMode() {
 // ПРИМЕНЁННОЙ темой виджета. Запись делает сам applyNativeStyles, поэтому быстрый путь H22
 // (themeObserver на класс-токены Gemini + matchMedia) остаётся байтово прежним.
 // Гард тихого пути: при неизменной теме — НИ ОДНОЙ style-записи (никаких applyNativeStyles-вызовов).
-let aiCmWidgetAppliedTheme = null; // true=dark, false=light, null=палитра ещё не применялась
-let aiCmThemePollTimer = null;
+let aiCmWidgetAppliedTheme: boolean | null = null; // true=dark, false=light, null=палитра ещё не применялась
+let aiCmThemePollTimer: ReturnType<typeof setInterval> | null = null;
 const AI_CM_THEME_POLL_MS = 5000;
-function applyNativeStyles(container) {
+function applyNativeStyles(container: HTMLElement): void {
   const serviceKey = getServiceKey();
   const isDark = isDarkMode();
   const config = THEME_CONFIGS[serviceKey] || THEME_CONFIGS.chatgpt;
@@ -540,7 +540,7 @@ function applyNativeStyles(container) {
 // H25: перекрас виджета ТОЛЬКО при фактической смене темы (isDarkMode() ≠ применённая палитра).
 // Возврат true — палитра переприменена. Байтово тихий путь: при неизменной теме функция не
 // пишет ни одного style-свойства и не вызывает applyNativeStyles.
-function aiCmRefreshThemeIfNeeded() {
+function aiCmRefreshThemeIfNeeded(): boolean {
   try {
     const el = widgetElement;
     if (!el) return false;
@@ -554,7 +554,7 @@ function aiCmRefreshThemeIfNeeded() {
   } catch (eTh25) { return false; }
 }
 // H25: страховочный опрос — тема сервиса может смениться без мутации атрибутов и без смены темы ОС.
-function aiCmStartThemePoll() {
+function aiCmStartThemePoll(): void {
   aiCmStopThemePoll();
   aiCmThemePollTimer = setInterval(function () {
     if (!widgetElement || (typeof widgetElement.isConnected === 'boolean' && !widgetElement.isConnected)) {
@@ -564,7 +564,7 @@ function aiCmStartThemePoll() {
     aiCmRefreshThemeIfNeeded();
   }, AI_CM_THEME_POLL_MS);
 }
-function aiCmStopThemePoll() {
+function aiCmStopThemePoll(): void {
   if (aiCmThemePollTimer) { clearInterval(aiCmThemePollTimer); aiCmThemePollTimer = null; }
 }
 
@@ -576,7 +576,7 @@ function aiCmStopThemePoll() {
 // индикатора «загрузка» не вводится (тултип — прежний content_widget_loading).
 // Показ — ровно в updateWidget (первый расчёт уже разложен по circle/text/tooltip)
 // либо по таймауту-фолбэку из content.js (сеть молчит → прежнее поведение).
-function aiCmRevealWidget() {
+function aiCmRevealWidget(): void {
   try {
     if (!widgetElement) return;
     if (widgetElement.style.display === 'none') widgetElement.style.display = '';
@@ -607,13 +607,13 @@ let aiCmSafeBottomTimer = null;
 let aiCmSafeBottomRafPending = false;
 let aiCmSafeBottomLastRunAt = 0;
 
-function aiCmWidgetHostEl(container) {
+function aiCmWidgetHostEl(container: HTMLElement | null): HTMLElement | null {
   if (container) return container;
   return (typeof document !== 'undefined' && document && document.getElementById) ? document.getElementById('ai-context-widget') : null;
 }
 
 // Чистое вычисление (без записи в DOM) — его же прогоняют D-пины на подменённых rect.
-function aiCmComputeWidgetSafeBottom(container) {
+function aiCmComputeWidgetSafeBottom(container: HTMLElement | null): number {
   const vh = (typeof window !== 'undefined' && typeof window.innerHeight === 'number') ? window.innerHeight : 0;
   if (!(vh > 0)) return AI_CM_SAFE_BOTTOM_DEFAULT;
   const host = aiCmWidgetHostEl(container);
@@ -621,7 +621,7 @@ function aiCmComputeWidgetSafeBottom(container) {
   if (typeof document !== 'undefined' && document && typeof document.querySelectorAll === 'function') {
     const controls = document.querySelectorAll(AI_CM_BOTTOM_CONTROL_SELECTOR);
     for (let i = 0; i < controls.length; i++) {
-      const /** @type {HTMLElement} */ el = /** @type {HTMLElement} */ (controls[i]);
+      const el = controls[i] as HTMLElement;
       if (host && el !== host && host.contains && host.contains(el)) continue; // внутри виджета — не хост-контрол
       if (!el.offsetParent) continue;                                          // скрыт/снят с отрисовки
       const rect = (typeof el.getBoundingClientRect === 'function') ? el.getBoundingClientRect() : null;
@@ -636,7 +636,7 @@ function aiCmComputeWidgetSafeBottom(container) {
   return Math.max(AI_CM_SAFE_BOTTOM_MIN, capped);
 }
 
-function aiCmUpdateWidgetSafeBottom(container) {
+function aiCmUpdateWidgetSafeBottom(container: HTMLElement | null): number {
   const px = aiCmComputeWidgetSafeBottom(container);
   const host = aiCmWidgetHostEl(container);
   try {
@@ -680,7 +680,7 @@ function aiCmSafeBottomSchedule() {
 
 // Идемпотентно (п.1.6): один сторож на документ — повторный createWidget не плодит ни
 // наблюдателя, ни слушателей; контейнер сменился — прежний сторож гасится.
-function aiCmStartWidgetSafeBottomWatch(container) {
+function aiCmStartWidgetSafeBottomWatch(container: HTMLElement | null): void {
   if (!container || typeof document === 'undefined' || !document.body) return;
   if (aiCmSafeBottomWatchContainer === container && aiCmSafeBottomObserver) return;
   aiCmStopWidgetSafeBottomWatch();
@@ -700,7 +700,7 @@ function aiCmStartWidgetSafeBottomWatch(container) {
   aiCmUpdateWidgetSafeBottom(container);
 }
 
-function aiCmStopWidgetSafeBottomWatch() {
+function aiCmStopWidgetSafeBottomWatch(): void {
   if (aiCmSafeBottomTimer !== null) { clearTimeout(aiCmSafeBottomTimer); aiCmSafeBottomTimer = null; }
   aiCmSafeBottomRafPending = false;
   if (aiCmSafeBottomObserver) {
@@ -718,7 +718,7 @@ function aiCmStopWidgetSafeBottomWatch() {
 
 // Смена SPA-страницы/чата (resetConversationState): сторож старой страницы гасим и
 // взводим заново на текущий виджет — в новой вёрстке хост-контролы другие.
-function aiCmRestartWidgetSafeBottomWatch() {
+function aiCmRestartWidgetSafeBottomWatch(): void {
   aiCmStopWidgetSafeBottomWatch();
   if (widgetElement) aiCmStartWidgetSafeBottomWatch(widgetElement);
 }
@@ -728,16 +728,16 @@ function aiCmRestartWidgetSafeBottomWatch() {
 // панель связана с индикатором через aria-controls/aria-expanded (пп.2.1-2.7).
 let aiCmWidgetA11yBound = false;
 
-function aiCmWidgetCircleEl() {
+function aiCmWidgetCircleEl(): Element | null {
   return (widgetElement && typeof widgetElement.querySelector === 'function') ? widgetElement.querySelector('.ai-widget-circle') : null;
 }
-function aiCmWidgetPanelEl() {
+function aiCmWidgetPanelEl(): Element | null {
   return (widgetElement && typeof widgetElement.querySelector === 'function') ? widgetElement.querySelector('.ai-widget-panel') : null;
 }
 
 // Единственный путь открытия/закрытия панели: класс .open и aria-expanded меняются
 // вместе (п.2.4), при открытии фокус уходит в поле панели (п.2.7).
-function aiCmSetWidgetPanelOpen(open, restoreFocus) {
+function aiCmSetWidgetPanelOpen(open: boolean, restoreFocus?: boolean): boolean {
   const panel = aiCmWidgetPanelEl();
   const circle = aiCmWidgetCircleEl();
   if (!panel || !circle) return false;
@@ -747,21 +747,21 @@ function aiCmSetWidgetPanelOpen(open, restoreFocus) {
   circle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
   if (isOpen) {
     updatePanel();
-    const /** @type {HTMLInputElement|null} */ input = (typeof widgetElement.querySelector === 'function') ? /** @type {HTMLInputElement} */ (widgetElement.querySelector('.ai-cm-input')) : null;
+    const input = (typeof widgetElement.querySelector === 'function') ? widgetElement.querySelector<HTMLInputElement>('.ai-cm-input') : null;
     if (input && typeof input.focus === 'function') { try { input.focus(); } catch (eA11yFocusIn) { } }
-  } else if (restoreFocus === true && typeof /** @type {HTMLElement} */ (circle).focus === 'function') {
-    try { /** @type {HTMLElement} */ (circle).focus(); } catch (eA11yFocusOut) { }
+  } else if (restoreFocus === true && typeof (circle as HTMLElement).focus === 'function') {
+    try { (circle as HTMLElement).focus(); } catch (eA11yFocusOut) { }
   }
   return isOpen;
 }
 
-function aiCmToggleWidgetPanel(restoreFocus) {
+function aiCmToggleWidgetPanel(restoreFocus?: boolean): void {
   const panel = aiCmWidgetPanelEl();
   if (!panel) return;
   aiCmSetWidgetPanelOpen(!panel.classList.contains('open'), restoreFocus);
 }
 
-function aiCmWidgetA11yKeydown(e) {
+function aiCmWidgetA11yKeydown(e: KeyboardEvent): void {
   if (!e || !widgetElement) return;
   const panel = aiCmWidgetPanelEl();
   if (!panel || !panel.classList.contains('open')) return;
@@ -770,11 +770,11 @@ function aiCmWidgetA11yKeydown(e) {
   aiCmSetWidgetPanelOpen(false, true); // п.2.5: закрыть и вернуть фокус на индикатор
 }
 
-function aiCmWidgetA11yDocClick(e) {
+function aiCmWidgetA11yDocClick(e: MouseEvent): void {
   if (!e || !widgetElement) return;
   const panel = aiCmWidgetPanelEl();
   if (!panel || !panel.classList.contains('open')) return;
-  const target = e.target;
+  const target = e.target as Element | null;
   // Клик внутри виджета (индикатор/панель) — не «вне панели»: переключение делает сам
   // индикатор, иначе один и тот же клик закрывал бы и тут же открывал панель.
   if (target && typeof target.closest === 'function' && target.closest('#ai-context-widget')) return;
@@ -784,7 +784,7 @@ function aiCmWidgetA11yDocClick(e) {
   aiCmSetWidgetPanelOpen(false, false);
 }
 
-function aiCmBindWidgetA11y() {
+function aiCmBindWidgetA11y(): void {
   if (aiCmWidgetA11yBound) return;
   if (typeof document === 'undefined' || !document || typeof document.addEventListener !== 'function') return;
   aiCmWidgetA11yBound = true;
@@ -797,7 +797,7 @@ function aiCmBindWidgetA11y() {
 // П.2.3: доступное имя — «{app}: {pct}% контекста использовано, {status}»; статус по тем
 // же границам зон, что у zoneColor (v2.0.13: настроенные пороги, дефолт 70/95).
 // Строки — только _locales (content_a11y_*).
-function aiCmSetWidgetA11yLabel(circleEl, percentage) {
+function aiCmSetWidgetA11yLabel(circleEl: Element | null, percentage: number): void {
   if (!circleEl || typeof circleEl.setAttribute !== 'function') return;
   const i18n = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key, fallback) { return fallback; };
   const pct = (typeof percentage === 'number' && isFinite(percentage)) ? percentage : 0;
@@ -813,11 +813,11 @@ function aiCmSetWidgetA11yLabel(circleEl, percentage) {
 // НЕ видит utils/gemini-intercept-logic.js (его нет в manifest.json content_scripts),
 // поэтому читает chrome.storage.local сам — та же модель, что у aiCmLoadProactiveFlag в
 // core/content.js. Гарды typeof: в изолированных песочницах регрессии chrome нет вовсе.
-function aiCmRepaintRing() {
+function aiCmRepaintRing(): void {
   if (typeof widgetElement === 'undefined' || !widgetElement) return;
   var data = (typeof lastWidgetData !== 'undefined' && lastWidgetData) ? lastWidgetData : null;
   if (!data || typeof data.percentage !== 'number' || !isFinite(data.percentage)) return;
-  var /** @type {SVGElement|null} */ fill = widgetElement.querySelector('.ai-widget-fill');
+  var fill = widgetElement.querySelector<SVGElement>('.ai-widget-fill');
   if (fill && fill.style) fill.style.stroke = zoneColor(data.percentage);
   try {
     if (typeof aiCmSetWidgetA11yLabel === 'function') {
@@ -825,7 +825,7 @@ function aiCmRepaintRing() {
     }
   } catch (eRingA11y) { }
 }
-function aiCmLoadRingThresholds() {
+function aiCmLoadRingThresholds(): void {
   if (typeof chrome === 'undefined' || !chrome || !chrome.storage || !chrome.storage.local) return;
   try {
     chrome.storage.local.get(['aiCmProactiveThresholds'], function (res) {
@@ -837,7 +837,7 @@ function aiCmLoadRingThresholds() {
     // Флаг «подписка взведена» живёт на самой функции, а не в модульной переменной: тела
     // функций регрессия режет из исходника и исполняет в песочнице без соседних объявлений
     // (модульный флаг там либо ReferenceError, либо протечка между песочницами).
-    var /** @type {any} */ selfRing = aiCmLoadRingThresholds;
+    var selfRing: any = aiCmLoadRingThresholds;
     if (chrome.storage.onChanged && !selfRing.aiCmBound) {
       selfRing.aiCmBound = true;
       chrome.storage.onChanged.addListener(function (changes, areaName) {
@@ -851,7 +851,7 @@ function aiCmLoadRingThresholds() {
 }
 
 // ========== ВИДЖЕТ (со стрелками ▲▼) ==========
-function createWidget() {
+function createWidget(): void {
   if (document.getElementById('ai-context-widget')) return;
   // M-4.2: строки разметки виджета — из _locales (ключи content_*); в изолированной
   // песочнице регрессии хелпера локали нет — остаются прежние русские литералы.
@@ -879,7 +879,7 @@ function createWidget() {
     // то же и идут одним путём: класс .open и aria-expanded меняются вместе, фокус при
     // открытии уезжает в .ai-cm-input, при закрытии — обратно на индикатор.
     circleEl.addEventListener('click', () => aiCmToggleWidgetPanel(true));
-    circleEl.addEventListener('keydown', (/** @type {KeyboardEvent} */ e) => {
+    circleEl.addEventListener('keydown', (e: KeyboardEvent) => {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
         e.preventDefault(); // Space на кнопке не должен прокручивать страницу
         aiCmToggleWidgetPanel(true);
@@ -899,7 +899,7 @@ function createWidget() {
   } catch (eWidgetCritical) { }
   if (snapBtn) snapBtn.addEventListener('click', snapCurrentPct);
   if (autoBtn) autoBtn.addEventListener('click', resetSafePct);
-  if (inputEl) inputEl.addEventListener('change', (/** @type {Event} */ e) => setSafePctFromInput((/** @type {HTMLInputElement} */ (e.target)).value));
+  if (inputEl) inputEl.addEventListener('change', (e: Event) => setSafePctFromInput((e.target as HTMLInputElement).value));
   if (upBtn) upBtn.addEventListener('click', () => stepSafePct(+1));
   if (dnBtn) dnBtn.addEventListener('click', () => stepSafePct(-1));
   updatePanel();
@@ -919,7 +919,7 @@ function createWidget() {
   aiCmStartThemePoll(); // H25: медленный дубль-страховка (атрибутов и matchMedia может не хватить)
   processAndSend();
 }
-function updateWidget(percentage, tokens, effectiveLimit, contextLimit, displayLimit, modelName, attachBreak) {
+function updateWidget(percentage: number, tokens: number, effectiveLimit: number, contextLimit: number, displayLimit: number, modelName: string, attachBreak?: AiCmAttachBreak | null): void {
   if (!widgetElement) return;
   // T1 (v1.16): строка источника в панели виджета. Вызов защищён try/catch: updateWidget
   // исполняется и в изолированных песочницах (collapse-guard/тесты темы), где хелпера нет —
@@ -927,7 +927,7 @@ function updateWidget(percentage, tokens, effectiveLimit, contextLimit, displayL
   try { aiCmUpdateSourceIndicator(); } catch (eSrcW) { }
   aiCmRefreshThemeIfNeeded(); // H25: каждая отрисовка — дешёвая проверка смены темы (гард тихий)
   debugLog('log', '[AI CM][trace] badge-update pct=' + percentage + '% tokens=' + tokens + ' model=' + modelName);
-  const /** @type {SVGElement} */ circle = /** @type {SVGElement} */ (widgetElement.querySelector('.ai-widget-fill'));
+  const circle = widgetElement.querySelector<SVGElement>('.ai-widget-fill');
   const percentText = widgetElement.querySelector('.ai-widget-text');
   const tooltip = widgetElement.querySelector('.ai-widget-tooltip');
   if (!circle || !percentText) return;
@@ -1053,7 +1053,7 @@ function updateWidget(percentage, tokens, effectiveLimit, contextLimit, displayL
 // глобальный лексический скоуп, поэтому объявления выше видны всем модулям и
 // content.js по прежним именам. Api — для инструментов, отладки и тестов.
 (function () {
-  var Api = {};
+  const Api: AiCmWidgetApi = {} as AiCmWidgetApi;
   Api.safePctKey = safePctKey;
   Api.zoneColor = zoneColor;
   Api.aiCmRingBounds = aiCmRingBounds;
@@ -1100,3 +1100,65 @@ function updateWidget(percentage, tokens, effectiveLimit, contextLimit, displayL
   if (typeof module !== 'undefined' && module.exports) module.exports = Api;
   if (typeof window !== 'undefined') window.AiCmWidget = Api;
 })();
+
+interface AiCmThemePalette {
+  bgTrack: string;
+  bgFill: string;
+  text: string;
+  tooltipBg: string;
+  tooltipText: string;
+  shadow: string;
+  border: string;
+}
+interface AiCmThemeConfig {
+  font: string;
+  light: AiCmThemePalette;
+  dark: AiCmThemePalette;
+}
+
+/** UMD-зеркало AiCmWidget: точки входа модуля (инструменты, отладка, тесты). */
+interface AiCmWidgetApi {
+  safePctKey: typeof safePctKey;
+  zoneColor: typeof zoneColor;
+  aiCmRingBounds: typeof aiCmRingBounds;
+  aiCmRepaintRing: typeof aiCmRepaintRing;
+  aiCmSetRingThresholds: (raw?: any) => void;
+  aiCmLoadRingThresholds: typeof aiCmLoadRingThresholds;
+  aiCmActivePct: typeof aiCmActivePct;
+  computeEffectiveLimit: typeof computeEffectiveLimit;
+  aiCmSetPopupOverrides: typeof aiCmSetPopupOverrides;
+  aiCmRefreshPopupOverrides: typeof aiCmRefreshPopupOverrides;
+  aiCmLoadPopupOverrides: typeof aiCmLoadPopupOverrides;
+  updatePanel: typeof updatePanel;
+  snapCurrentPct: typeof snapCurrentPct;
+  setSafePctFromInput: typeof setSafePctFromInput;
+  resetSafePct: typeof resetSafePct;
+  stepSafePct: typeof stepSafePct;
+  AI_CM_SAFE_PCT_MIGRATIONS: typeof AI_CM_SAFE_PCT_MIGRATIONS;
+  aiCmSafePctMigrationSource: typeof aiCmSafePctMigrationSource;
+  aiCmSafePctMigrationValue: typeof aiCmSafePctMigrationValue;
+  aiCmMigrateSafePct: typeof aiCmMigrateSafePct;
+  resetConversationState: typeof resetConversationState;
+  THEME_CONFIGS: typeof THEME_CONFIGS;
+  getServiceKey: typeof getServiceKey;
+  aiCmInAppTheme: typeof aiCmInAppTheme;
+  isDarkMode: typeof isDarkMode;
+  aiCmWidgetAppliedTheme: typeof aiCmWidgetAppliedTheme;
+  aiCmThemePollTimer: typeof aiCmThemePollTimer;
+  AI_CM_THEME_POLL_MS: typeof AI_CM_THEME_POLL_MS;
+  applyNativeStyles: typeof applyNativeStyles;
+  aiCmRefreshThemeIfNeeded: typeof aiCmRefreshThemeIfNeeded;
+  aiCmStartThemePoll: typeof aiCmStartThemePoll;
+  aiCmStopThemePoll: typeof aiCmStopThemePoll;
+  aiCmComputeWidgetSafeBottom: typeof aiCmComputeWidgetSafeBottom;
+  aiCmUpdateWidgetSafeBottom: typeof aiCmUpdateWidgetSafeBottom;
+  aiCmStartWidgetSafeBottomWatch: typeof aiCmStartWidgetSafeBottomWatch;
+  aiCmStopWidgetSafeBottomWatch: typeof aiCmStopWidgetSafeBottomWatch;
+  aiCmRestartWidgetSafeBottomWatch: typeof aiCmRestartWidgetSafeBottomWatch;
+  aiCmSetWidgetA11yLabel: typeof aiCmSetWidgetA11yLabel;
+  aiCmSetWidgetPanelOpen: typeof aiCmSetWidgetPanelOpen;
+  aiCmToggleWidgetPanel: typeof aiCmToggleWidgetPanel;
+  createWidget: typeof createWidget;
+  aiCmRevealWidget: typeof aiCmRevealWidget;
+  updateWidget: typeof updateWidget;
+}

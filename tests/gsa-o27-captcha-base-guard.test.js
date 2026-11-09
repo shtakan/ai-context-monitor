@@ -11,7 +11,7 @@
  *       только «turns.length > 0»: тело с контейнером без содержимого (или пустой payload)
  *       проходило дальше, а снимок помечался ПОЛНОЙ (historyComplete по умолчанию true) —
  *       то есть baseComplete мог быть взведён по мусору;
- *   (б) pct/lastPercentage — ПАМЯТЬ ЭКЗЕМПЛЯРА (core/state.js: lastPercentage, maxTokenCount,
+ *   (б) pct/lastPercentage — ПАМЯТЬ ЭКЗЕМПЛЯРА (core/state.ts: lastPercentage, maxTokenCount,
  *       autoExportLastPct; sessionStorage не используется), но сам pct в момент файра
  *       ПЕРЕСЧИТЫВАЕТСЯ в DRAW (core/content.js: `percentage = maxTokenCount / displayLimit`)
  *       от базы/текста текущего документа и передаётся в maybeAutoExport(percentage);

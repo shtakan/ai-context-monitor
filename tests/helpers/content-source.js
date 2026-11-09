@@ -18,11 +18,13 @@
 const fs = require('fs');
 const path = require('path');
 
+const { stripTypesKeepComments } = require('./read-module-source.js');
+
 const ROOT = path.join(__dirname, '..', '..');
 
 const MODULES = [
-  'core/state.js',
-  'core/widget.js',
+  'core/state.ts',
+  'core/widget.ts',
   'core/base-handler.js',
   'core/hybrid-tail.js',
   'core/export-manager.js'
@@ -32,17 +34,36 @@ const CONTENT_JS = 'core/content.js';
 /** Пути (от корня репозитория) всех файлов контент-скрипта в порядке manifest.json. */
 const SOURCES = MODULES.concat([CONTENT_JS]);
 
+/**
+ * Модули Core Wave 1, ставшие `.ts`: их читают и как текст (source-level пины),
+ * и как код (песочницы `new Function`), поэтому типы снимаются, а комментарии
+ * остаются — текст совпадает с до-миграционным.
+ */
+const TS_EXECUTABLE = new Set(['core/state.ts', 'core/widget.ts']);
+
+/** Исходник файла: для мигрированных `.ts` — в исполнимой форме. */
 function readSource(rel) {
-  return fs.readFileSync(path.join(ROOT, rel), 'utf8');
+  const source = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+  if (!TS_EXECUTABLE.has(rel)) return source;
+  return stripTypesKeepComments(source, rel);
 }
 
-/** Исходник одного модуля по имени файла ('widget.js' или 'core/widget.js'). */
+/** Исходник в «исполнимой» форме: любые `.ts` отдаются без типов. */
+function readExecutable(rel) {
+  const source = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+  if (!/\.tsx?$/.test(rel)) return source;
+  return stripTypesKeepComments(source, rel);
+}
+
+/** Исходник одного модуля по имени файла ('widget.ts' или 'core/widget.ts'). */
 function moduleSource(name) {
   const rel = name.indexOf('/') === -1 ? 'core/' + name : name;
-  return readSource(rel);
+  return readExecutable(rel);
 }
 
 /** Конкатенация модулей + content.js в порядке manifest.json (единый скоуп). */
-const contentSource = SOURCES.map(readSource).join('\n');
+const contentSource = SOURCES.map(readExecutable).join('\n');
 
-module.exports = { ROOT, MODULES, CONTENT_JS, SOURCES, readSource, moduleSource, contentSource };
+module.exports = {
+  ROOT, MODULES, CONTENT_JS, SOURCES, readSource, readExecutable, moduleSource, contentSource
+};

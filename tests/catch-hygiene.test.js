@@ -3,7 +3,7 @@
  *
  * ─── DESIGN REVIEW ────────────────────────────────────────────────────────────
  * ГРАНИЦЫ СКАНИРОВАНИЯ:  core/, utils/, adapters/ — *.js везде; в adapters/
- *   ещё и *.ts (шаг 2 миграции TypeScript: adapters/*.js → adapters/*.ts).
+ *   и core/ ещё и *.ts (адаптеры — шаг 2 миграции, core/state+widget — Core Wave 1).
  *   utils/*.ts в область НЕ добавлены: их перевод (аппендикс v129) страж не
  *   расширял, и здесь сохраняется прежняя область, иначе записи whitelist по
  *   адаптерам стали бы «мёртвыми» (правило б), а utils дал бы 58 новых unlisted.
@@ -167,15 +167,16 @@ function listJsFiles(dir, exts) {
  * Расширения, которые страж читает в каталоге `d`.
  *
  * `.js` — историческая область (core/, utils/, adapters/).
- * `.ts` — ТОЛЬКО adapters/: шаг 2 миграции TypeScript переименовал 9 адаптеров,
- * и без второго расширения их молчаливые catch выпали бы из стража, а записи
- * whitelist по адаптерам стали бы «мёртвыми» (правило б).
+ * `.ts` — adapters/ (шаг 2 миграции) и core/ (Core Wave 1: state.ts, widget.ts):
+ * без второго расширения их молчаливые catch выпали бы из стража, а записи
+ * whitelist по этим файлам стали бы «мёртвыми» (правило б).
  * utils/*.ts намеренно НЕ добавлены: перевод utils отдельным аппендиксом v129
  * не расширял область стража (там был только *.js), и расширение области —
- * отдельная задача, а не побочный эффект миграции адаптеров.
+ * отдельная задача, а не побочный эффект миграции.
  */
 function extsForDir(d) {
-  return path.basename(d) === 'adapters' ? ['.js', '.ts'] : ['.js'];
+  const base = path.basename(d);
+  return base === 'adapters' || base === 'core' ? ['.js', '.ts'] : ['.js'];
 }
 
 /**
@@ -420,7 +421,7 @@ describe('Step E.2b.1: страж молчаливых catch — whitelist', () 
 
 describe('Step E.2b.1: страж молчаливых catch — позитивный контроль', () => {
   test('PC1: инъекция пустого catch в РЕАЛЬНЫЙ core/-файл валит страж (в памяти, байты не тронуты)', () => {
-    const rel = 'core/state.js';
+    const rel = 'core/state.ts';
     const abs = path.join(ROOT, rel);
     const before = fs.readFileSync(abs);
     const raw = before.toString('utf8');

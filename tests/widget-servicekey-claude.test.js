@@ -3,15 +3,15 @@
  * в `return 'chatgpt'` ⇒ safePctKey() давал 'ai_cm_safe_pct_chatgpt' ⇒ per-service порог
  * виджета Claude читался/писался по ЧУЖОМУ ключу ChatGPT (порог и displayLimit Claude
  * считались из ключа ChatGPT).
- *   Источник дефекта: PROJECT_HANDOFF.md, Секция 4 п.1 (core/widget.js:360-367);
+ *   Источник дефекта: PROJECT_HANDOFF.md, Секция 4 п.1 (core/widget.ts:360-367);
  *   живой лог 18:10:14: 'gsa-metric-src site=chatgpt' в одном прогоне с site=claude.
  *
  * Правка A′ (ровно 2 строки, замена 1-в-1, номера строк не сдвигаются):
- *   (1) core/widget.js:366  `return 'chatgpt';`
+ *   (1) core/widget.ts:366  `return 'chatgpt';`
  *         → `return host.includes('claude.ai') ? 'claude' : 'chatgpt';`
- *   (2) core/widget.js:435  `const config = THEME_CONFIGS[serviceKey];`
+ *   (2) core/widget.ts:435  `const config = THEME_CONFIGS[serviceKey];`
  *         → `const config = THEME_CONFIGS[serviceKey] || THEME_CONFIGS.chatgpt;`
- *   Гард (2) обязателен: в THEME_CONFIGS нет ключа 'claude' (core/widget.js:338-359),
+ *   Гард (2) обязателен: в THEME_CONFIGS нет ключа 'claude' (core/widget.ts:338-359),
  *   без него `config.dark` на claude.ai дал бы TypeError. Значения THEME_CONFIGS не менялись.
  *
  * Конвенция H11/H22/H24: тела функций/константы берутся из РЕАЛЬНЫХ исходников
@@ -27,20 +27,20 @@
  *   P7 диагностика: 'gsa-metric-src' site питается getServiceKey() → claude.ai = 'claude'
  *
  * --- v63 (Fix-getServiceKey-expand): расширение на perplexity.ai и chat.qwen.ai ---
- * Правка A′ (1 строка, замена 1-в-1 на ТОЙ ЖЕ строке core/widget.js:366, номера не сдвигаются):
+ * Правка A′ (1 строка, замена 1-в-1 на ТОЙ ЖЕ строке core/widget.ts:366, номера не сдвигаются):
  *   хвост стал цепочкой
  *   `return host.includes('perplexity.ai') ? 'perplexity' : host.includes('chat.qwen.ai') ? 'qwen'
  *    : host.includes('claude.ai') ? 'claude' : 'chatgpt';`
  * ⇒ safePctKey() даёт 'ai_cm_safe_pct_perplexity' / 'ai_cm_safe_pct_qwen' (прежде — чужой ключ ChatGPT).
  * aistudio.google.com СОЗНАТЕЛЬНО НЕ добавлялся в v63 (его перехватывала ветка host.includes('google.com')
  *   → 'google_search'; ключа 'aistudio' не было в THEME_CONFIGS, поэтому ветка переключила бы палитру
- *   виджета на chatgpt-зелёную #10a37f через гард core/widget.js:435 и сделала бы достижимыми 4 ветки
+ *   виджета на chatgpt-зелёную #10a37f через гард core/widget.ts:435 и сделала бы достижимыми 4 ветки
  *   `=== 'aistudio'` в core/content.js) — это была ОТДЕЛЬНАЯ задача с живой приёмкой.
  * --- v64 (Fix-aistudio-servicekey): эта отдельная задача выполнена (m00001) ---
- *   (1) core/widget.js, getServiceKey(): Перед `if (host.includes('google.com'))` добавлена ветка
+ *   (1) core/widget.ts, getServiceKey(): Перед `if (host.includes('google.com'))` добавлена ветка
  *       `if (host.includes('aistudio.google.com')) return 'aistudio';` ⇒ safePctKey() даёт
  *       'ai_cm_safe_pct_aistudio' (свой ключ, а не google_search).
- *   (2) core/widget.js, THEME_CONFIGS: добавлен ключ `aistudio` — палитра БАЙТОВО равна google_search
+ *   (2) core/widget.ts, THEME_CONFIGS: добавлен ключ `aistudio` — палитра БАЙТОВО равна google_search
  *       (light #f1f3f4/#1a73e8/#3c4043, dark #3c4043/#8ab4f8/#e8eaed, font "Google Sans"), т.к. до правки
  *       AI Studio получал ровно её. Внешний вид не меняется ⇒ P-aistudio-1b прежний.
  *   (3) Миграция порога: при первом чтении, если 'ai_cm_safe_pct_aistudio' в storage ОТСУТСТВУЕТ
@@ -63,7 +63,7 @@
  * THEME_CONFIGS в v63 не тронут (было ровно 4 ключа) — S-2/P6; в v64 ключей стало 5 (добавлен 'aistudio').
  */
 const CONTENT = require('./helpers/content-source.js').contentSource;
-const WIDGET = require('./helpers/content-source.js').moduleSource('core/widget.js');
+const WIDGET = require('./helpers/content-source.js').moduleSource('core/widget.ts');
 const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.ts');
 
 // Хелпер swallowSoft из utils/debug.ts в eval-песочнице отсутствует (как в tests/widget-inapp-theme-h24.test.js:33).
@@ -230,7 +230,7 @@ function paletteFor(hostname, prefersDark, domOpts) {
 }
 
 // =====================================================================================
-// Песочница 3 (v64): миграция per-service порога — реальные тела core/widget.js
+// Песочница 3 (v64): миграция per-service порога — реальные тела core/widget.ts
 // =====================================================================================
 function migrationSandbox(hostname, initialSync) {
   const listeners = [];
@@ -269,7 +269,7 @@ afterEach(() => {
 });
 
 // =====================================================================================
-// P1 — формат ключа (источник: проектный дефект, safePctKey core/widget.js:22)
+// P1 — формат ключа (источник: проектный дефект, safePctKey core/widget.ts:22)
 // =====================================================================================
 describe('P1 (формат ключа): claude.ai → serviceKey claude и per-service ключ claude', () => {
   test('claude.ai: getServiceKey() === "claude" (а не фолбэк "chatgpt")', () => {
@@ -305,7 +305,7 @@ describe('P1 (формат ключа): claude.ai → serviceKey claude и per-s
 });
 
 // =====================================================================================
-// P2 — путь записи (источник: setSafePctFromInput, core/widget.js:113-120)
+// P2 — путь записи (источник: setSafePctFromInput, core/widget.ts:113-120)
 // =====================================================================================
 describe('P2 (путь записи): порог, выставленный на claude.ai, пишется в claude-ключ', () => {
   test('setSafePctFromInput("50") → sync.set({ ai_cm_safe_pct_claude: 50 })', () => {
@@ -320,7 +320,7 @@ describe('P2 (путь записи): порог, выставленный на 
   test('snapCurrentPct ("Снять текущий %") пишет в claude-ключ, а не в chatgpt-ключ', () => {
     const s = pctSandbox('claude.ai');
     s.api.setLastWidgetData({ effectiveLimit: 500000, tokenEstimate: 100000 });
-    s.api.snapCurrentPct(); // core/widget.js:104-112
+    s.api.snapCurrentPct(); // core/widget.ts:104-112
     expect(s.api.getSafePct()).toBe(20); // 100000/500000*1000 = 200 → /10 = 20
     expect(s.store.writes.length).toBe(1);
     expect(s.store.writes[0]).toEqual({ ai_cm_safe_pct_claude: 20 });
@@ -330,7 +330,7 @@ describe('P2 (путь записи): порог, выставленный на 
   test('resetSafePct ("Авто") обнуляет именно claude-ключ', () => {
     const s = pctSandbox('claude.ai', { ai_cm_safe_pct_claude: 40 });
     s.api.setSafePct(40);
-    s.api.resetSafePct(); // core/widget.js:121-126
+    s.api.resetSafePct(); // core/widget.ts:121-126
     expect(s.api.getSafePct()).toBe(null);
     expect(s.store.writes[0]).toEqual({ ai_cm_safe_pct_claude: null });
   });
@@ -400,7 +400,7 @@ describe('P4 (изоляция): Claude и ChatGPT не делят порог', 
     expect(s.api.getSafePct()).toBe(55);
   });
 
-  test('ring-onChanged (core/widget.js:748-756) гейтнут на aiCmProactiveThresholds и игнорирует safePct-ключи', () => {
+  test('ring-onChanged (core/widget.ts:748-756) гейтнут на aiCmProactiveThresholds и игнорирует safePct-ключи', () => {
     const s = pctSandbox('claude.ai');
     s.api.loadRingThresholds(); // реальный aiCmLoadRingThresholds взводит подписку в ЭТОЙ же песочнице
     const listeners = s.listeners;
@@ -444,7 +444,7 @@ describe('P5 (non-regression палитры): claude.ai даёт палитру 
 });
 
 // =====================================================================================
-// P6 — гард отсутствующего ключа (источник: core/widget.js:435 + отсутствие 'claude' в THEME_CONFIGS)
+// P6 — гард отсутствующего ключа (источник: core/widget.ts:435 + отсутствие 'claude' в THEME_CONFIGS)
 // =====================================================================================
 describe('P6 (гард отсутствующего ключа): нет TypeError, когда ключа нет в THEME_CONFIGS', () => {
   test('в THEME_CONFIGS ДЕЙСТВИТЕЛЬНО нет ключа claude → гард несущий', () => {
@@ -538,7 +538,7 @@ describe('P8 (v63: perplexity.ai / chat.qwen.ai): per-service serviceKey и кл
     expect(s.api.getServiceKey()).toBe('aistudio');
     expect(s.api.safePctKey()).toBe('ai_cm_safe_pct_aistudio');
     expect(s.api.safePctKey()).not.toBe('ai_cm_safe_pct_google_search');
-    // v64: ключ 'aistudio' ЕСТЬ в THEME_CONFIGS — иначе гард core/widget.js:435 дал бы chatgpt-палитру
+    // v64: ключ 'aistudio' ЕСТЬ в THEME_CONFIGS — иначе гард core/widget.ts:435 дал бы chatgpt-палитру
     const THEME = new Function('return ' + extractConstObject(WIDGET, 'THEME_CONFIGS'))();
     expect(THEME.aistudio).toBeDefined();
     expect(WIDGET).toContain("host.includes('aistudio.google.com')");
@@ -734,7 +734,7 @@ describe('S (структура v63): правка в одной точке, THE
 // =====================================================================================
 // Структурные пины самой правки A′ (ровно 2 строки, 1-в-1)
 // =====================================================================================
-describe("Правка A′: ровно две строки core/widget.js, прочие ветки байтово не тронуты", () => {
+describe("Правка A′: ровно две строки core/widget.ts, прочие ветки байтово не тронуты", () => {
   test('getServiceKey: хвост v63 (perplexity → qwen → claude → chatgpt) и отсутствие голого фолбэка', () => {
     const fnSrc = extractFn(WIDGET, 'getServiceKey');
     expect(fnSrc).toContain("return host.includes('perplexity.ai') ? 'perplexity' : host.includes('chat.qwen.ai') ? 'qwen' : host.includes('claude.ai') ? 'claude' : 'chatgpt';");

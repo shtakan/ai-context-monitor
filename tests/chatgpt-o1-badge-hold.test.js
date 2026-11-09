@@ -29,7 +29,7 @@
  *
  * Исполняются РЕАЛЬНЫЕ функции: utils/debug.ts (канонический aiCmDiagLine + гейт),
  * core/content.js (щит: aiCmBadgeHoldDiag/Release/Active/ArmBadgeHoldFallback),
- * core/widget.js (updateWidget — единственная печать badge-update, createWidget,
+ * core/widget.ts (updateWidget — единственная печать badge-update, createWidget,
  * resetConversationState). DRAW-исполнитель воспроизводит ветвление processAndSend
  * (badgeSuppressed → loaderFreeze → щит → updateWidget), порядок ветвей пинится тестом.
  */
@@ -40,7 +40,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const H = require('./helpers/content-source.js');
 const CONTENT = H.contentSource;
-const WIDGET_SRC = H.moduleSource('core/widget.js');
+const WIDGET_SRC = H.moduleSource('core/widget.ts');
 
 // E.2a.2b.4b: хелпер swallow из utils/debug.ts (его нет в eval-песочнице: срез
 // исполняется через new Function/eval; в MAIN-инжекте debug.js идёт первым).
@@ -151,7 +151,7 @@ function makeO1(over) {
     window: window
   };
 
-  // РЕАЛЬНЫЙ updateWidget (core/widget.js) — единственная печать badge-update
+  // РЕАЛЬНЫЙ updateWidget (core/widget.ts) — единственная печать badge-update
   new Function('ctx', 'with (ctx) { ' + fnDecl(WIDGET_SRC, 'updateWidget') +
     '\n ctx.updateWidget = updateWidget; }')(ctx);
   // РЕАЛЬНЫЙ щит (core/content.js)

@@ -372,7 +372,7 @@ describe('O-36 D3 (source-пины): гейт стоит перед файром
     expect(trim).not.toContain('shouldSkipBaseCompleteTrigger');
     expect(trim).not.toContain('aiCmEffectiveAutoExportThreshold');
     expect(trim).toContain("doAutoExportDownload(cid, pct, 'pre-trim');");
-    const STATE_SRC = fs.readFileSync(path.join(ROOT, 'core', 'state.js'), 'utf8');
+    const STATE_SRC = H.readSource('core/state.ts');
     expect(STATE_SRC).toContain('var preTrimExportFired = {};');   // латч спасательного пути жив
     // и «threshold»-путь по-прежнему гейтится ОДНИМ shouldSkipAutoExport (не тронут)
     expect(fnDecl(MGR_SRC, 'maybeAutoExport')).toContain('P.shouldSkipAutoExport({');

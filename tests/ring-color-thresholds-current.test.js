@@ -10,12 +10,12 @@
  *         те же границы у доступного имени и неприкосновенность уведомлений/бейджа/
  *         автоэкспорта (их пороги НЕ унифицировались — только кольцо).
  *
- * Тела функций берутся из реального core/widget.js и исполняются в песочнице (конвенция
+ * Тела функций берутся из реального core/widget.ts и исполняются в песочнице (конвенция
  * H11/H22/H24/H25), поэтому отсутствие chrome/соседних хелперов проверяется по-настоящему.
  */
 const HELPERS = require('./helpers/content-source.js');
 
-const WIDGET_SRC = HELPERS.moduleSource('core/widget.js');
+const WIDGET_SRC = HELPERS.moduleSource('core/widget.ts');
 const BG_SRC = HELPERS.readSource('core/background.js');
 const GIL_SRC = HELPERS.readSource('utils/gemini-intercept-logic.ts');
 

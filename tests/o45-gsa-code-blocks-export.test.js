@@ -40,14 +40,14 @@ const path = require('path');
 const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/google-search-folwr-parser.ts');
 
 const ROOT = path.join(__dirname, '..');
-const CONTENT = require('./helpers/content-source.js').contentSource;
+const { contentSource: CONTENT, readSource } = require('./helpers/content-source.js');
 const { readModuleSource } = require('./helpers/read-module-source.js');
 const BASE_SRC = readModuleSource(path.join(ROOT, 'adapters', 'base-adapter.ts'))
   .replace(/if \(typeof module[\s\S]*$/, '');
 const ADAPTER_SRC = readModuleSource(path.join(ROOT, 'adapters', 'google-search-adapter.ts'));
 const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
-const STATE_SRC = fs.readFileSync(path.join(ROOT, 'core', 'state.js'), 'utf8');
+const STATE_SRC = readSource('core/state.ts');
 
 // =====================================================================================
 // Фикстуры (формы измерены в живом DOM GSA)
@@ -318,7 +318,7 @@ describe('O-45 R1: прежние контуры GSA не тронуты', () =>
   });
 
   test('R1 (O-43): сетевой латч полноты объявлен и читается только в ISOLATED-мире', () => {
-    ['core/state.js', 'core/widget.js', 'core/export-manager.js', 'core/content.js'].forEach(function (rel) {
+    ['core/state.ts', 'core/widget.ts', 'core/export-manager.js', 'core/content.js'].forEach(function (rel) {
       expect(fs.readFileSync(path.join(ROOT, rel), 'utf8')).toContain('aiCmGsaNetworkComplete');
     });
     expect(STATE_SRC).toContain('var aiCmGsaNetworkCompleteLatch = Object.create(null);');

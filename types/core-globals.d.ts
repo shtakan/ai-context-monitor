@@ -2,13 +2,13 @@
  * Ambient-контракт общего лексического скоупа content-скриптов (шаг 5 Фазы 1).
  *
  * core/*.js — классические скрипты манифеста MV3 (content_scripts[0].js), они делят
- * ОДИН глобальный лексический скоуп: объявления из core/state.js, core/widget.js,
+ * ОДИН глобальный лексический скоуп: объявления из core/state.ts, core/widget.ts,
  * core/base-handler.js, core/hybrid-tail.js, core/export-manager.js и utils-глобали
  * (ModelConfig, Tokenizer) видны соседям по имени. TypeScript при allowJs+checkJs
  * компилирует каждый файл изолированно и такие имена не видит (TS2304). Этот файл
  * описывает ШВУ между модулями, не меняя ни байта рантайма:
  *
- *   1. state-переменные из core/state.js (реестр + UMD-зеркало AiCmState);
+ *   1. state-переменные из core/state.ts (реестр + UMD-зеркало AiCmState);
  *   2. кросс-модульные функции соседних core-модулей (widget, base-handler, hybrid-tail, export-manager);
  *   3. utils-глобали общего скоупа (ModelConfig, Tokenizer);
  *   4. importScripts — MV3 service worker (core/background.js).
@@ -26,7 +26,7 @@
 // --- core/content.js: ESM-пилот (Roadmap Ph2, шаг 3) ---------------------------
 // core/content.js импортирует utils/platform.js, поэтому TypeScript компилирует его как
 // модуль: top-level function/var перестают быть глобалами общего скоупа, и
-// core/widget.js, core/base-handler.js, core/export-manager.js получают TS2304.
+// core/widget.ts, core/base-handler.js, core/export-manager.js получают TS2304.
 // Рантайм не меняется: build.mjs втягивает платформу в тот же бандл esbuild, и в
 // content.js всё по-прежнему живёт в одной области видимости (это же пиннит
 // tests/build-integrity.test.js). Объявления ниже — шов для соседей по бандлу.
@@ -51,9 +51,6 @@ declare function aiCmNetReadyAistudioReset(): boolean;
 
 /** Сброс кэша предыдущего разговора AI Studio при смене чата. */
 declare function aiCmAistudioHistoryCacheClear(): boolean;
-
-/** core/state.js: защита от повторного COUNT_TOKENS, пока предыдущий в полёте. */
-declare let countTokensPending: any;
 
 // --- Service Worker (MV3) ----------------------------------------------------
 
@@ -95,36 +92,11 @@ declare const AiCmExportBuilders: import('./export').ExportBuildersApi;
 /**
  * utils/export-emit-pipeline.ts (Ph2: ESM) — публичный API пайплайна экспорта.
  * В бандле это ESM-биндинг, который втягивает core/content.js; core/export-manager.js,
- * core/base-handler.js и core/widget.js склеены в тот же модуль (import хойстится),
+ * core/base-handler.js и core/widget.ts склеены в тот же модуль (import хойстится),
  * поэтому второго import'а в них нет — объявление закрывает их типы. В срезах-песочницах
  * биндинга нет: потребители резолвят его через typeof-гард.
  */
 declare const AiCmExportEmitPipeline: import('./export').ExportPipelineApi;
-
-// --- core/widget.js: кросс-модульные функции ---------------------------------
-
-/** Идентификатор сервиса по URL ('chatgpt' | 'deepseek' | 'gemini' | 'google_search' | ...). */
-declare function getServiceKey(): string;
-
-/** core/widget.js: полный сброс conversation-state (таймеры, виджет, кэши). */
-declare function resetConversationState(): void;
-
-/** core/widget.js: перерисовка виджета (создаёт при отсутствии). */
-declare function updateWidget(
-  percentage: number,
-  tokens: number,
-  effectiveLimit: number,
-  contextLimit: number,
-  displayLimit: number,
-  modelName: string,
-  attachBreak?: { imgTokens: number; docTokens: number; imgCount: number; docCount: number } | null
-): void;
-
-/** core/widget.js: создание DOM-виджета. */
-declare function createWidget(): void;
-
-/** core/widget.js: тема виджета (chatgpt/deepseek/gemini/google_search). */
-declare const THEME_CONFIGS: Record<string, { font: string; light: Record<string, string>; dark: Record<string, string> }>;
 
 // --- core/base-handler.js: кросс-модульные функции ----------------------------
 
@@ -191,226 +163,6 @@ declare function aiCmExportNetSyncSite(): string | null;
 /** export-manager.js: сетевая синхронизация перед экспортом — колбэк по завершении. */
 declare function aiCmExportNetSyncThen(convId: string | null, cb: (() => void) | null, timeoutMs?: number): void;
 
-// --- core/state.js: реестр state-переменных ----------------------------------
-// Классические let/var из core/state.js (строки 23–229), читаемые соседями.
-// Типы — по факту инициализации в state.js: null => T | null; {} => Record.
-
-/** Текущий адаптер сайта (adapters/base-adapter.js). */
-declare let currentAdapter: BaseAdapter | null;
-/** MutationObserver диалога. */
-declare let observer: MutationObserver | null;
-/** Флаг первичной инициализации content.js. */
-declare let isInitialized: boolean;
-/** Последний показанный процент. */
-declare let lastPercentage: number;
-/** Таймер отложенного обновления виджета. */
-declare let updateTimer: ReturnType<typeof setTimeout> | null;
-/** Корневой элемент виджета. */
-declare let widgetElement: HTMLElement | null;
-/** Последние данные виджета (кэш для отложенного рендера). */
-declare let lastWidgetData: {
-  percentage: number;
-  tokenEstimate: number;
-  effectiveLimit: number;
-  contextLimit: number;
-  displayLimit: number;
-  modelName: string;
-  attachBreak: { imgTokens: number; docTokens: number; imgCount: number; docCount: number } | null;
-} | null;
-/** Подавление badge-обновлений до первого снимка нового чата (v1.8.1). */
-declare let badgeSuppressed: boolean;
-/** Максимум токенов, посчитанный по базе/сети. */
-declare let maxTokenCount: number;
-/** Флаг однократного восстановления ленты при загрузке чата (v28). */
-declare let restoredTapeLoaded: boolean;
-/** Флаг завершения восстановления — разрешает сохранение ленты (v30). */
-declare let restoreDone: boolean;
-/** convId → true — планирование уточнения после кэша (v30.6). */
-declare let cacheRefreshPlanned: Record<string, boolean>;
-/** convId → true — лента чата уже восстановлена в сессии страницы (v77/O2). */
-declare let tapeRestoreSeen: Record<string, boolean>;
-/** convId → account index на момент последнего tape load (v82/D8; строка — getAccountIndex()). */
-declare let aiCmTapeAccountIdx: Record<string, string>;
-/** convId → true — ai-cm-restored-history уже диспатчен (v82/D9-A). */
-declare let aiCmRestoredDispatched: Record<string, boolean>;
-/** Сводный текст базы. */
-declare let baseText: string;
-/** Число сообщений базы. */
-declare let baseCount: number;
-/** v96 (баг 34.6%): detail.count последнего принятого снимка — ДО дедупликации. */
-declare let aiCmNetRawCount: number;
-/** v96: detail.count, учтённый последним ресинком метрик (0 = ещё не учтён). */
-declare let aiCmNetRawCountUsed: number;
-/** База хоть раз получена (сеть). */
-declare let baseSeen: boolean;
-/** «База принята по convId» для DOM-адаптера (O-35, брат-флаг baseSeen). */
-declare let adapterBaseSeen: boolean;
-/** База получена полностью (сеть, без тихой пагинации). */
-declare let baseComplete: boolean;
-/** Последний DOM-хвост нашёл границу (монотонный максимум). */
-declare let lastBounded: boolean;
-/** Антиспам: сигнатура последней печати «[hybrid-tail]». */
-declare let lastTailSig: string | null;
-/** Антиспам: сигнатура последней печати «📥 база полной истории». */
-declare let lastBaseSig: string | null;
-/** Антиспам: сигнатура последней печати «[content-trace] EMIT принят». */
-declare let lastEmitSig: string | null;
-/** Антиспам: сигнатура последней печати «[content-trace] DRAW». */
-declare let lastDrawSig: string | null;
-/** Антиспам: последняя напечатанная строка «[hybrid-tail]». */
-declare let lastHybridTailSig: string | null;
-/** O-32: антиспам строки gsa-metric-src. */
-declare let lastMetricSig: string | null;
-/** Антиспам skip reason=not-complete — один раз на convId (v30.5). */
-declare let notCompleteLogged: Record<string, number>;
-/** Заморозка бейджа на время скрытой загрузки лоадером Gemini (v30.8). */
-declare let aiCmLoaderFreeze: boolean;
-/** Множество id сообщений базы. */
-declare let baseIdSet: Set<string> | null;
-/** id сообщений базы последнего снимка. */
-declare let lastBaseIds: string[];
-/** Тексты сообщений базы последнего снимка (единый источник экспорта). */
-declare let lastBaseTexts: string[];
-/** Множество скелетов сообщений базы. */
-declare let baseSkelSet: Set<string> | null;
-/** Массив якорей базы (обрезки скелетов). */
-declare let baseAnchors: string[] | null;
-/** Признак устаревания базы (сетевого снимка нет 12с). */
-declare let stale: boolean;
-/** Таймер отложенной проверки устаревания. */
-declare let staleTimer: ReturnType<typeof setTimeout> | null;
-/** [{role,text}] из последнего detail.messages (или null). */
-declare let lastDetailMessages: Array<{
-  role?: string;
-  text?: string;
-  id?: unknown;
-  reasoning?: string;
-  r1?: unknown;
-  turnId?: unknown;
-  [k: string]: unknown;
-}> | null;
-/** Сигнатура 'baseCount|textLen' последней записи aiCmHistory. */
-declare let lastHistoryWroteKey: string | null;
-/** threadId последнего применённого снимка Google (сброс при SPA-возврате). */
-declare let lastThreadId: string | null;
-/** Slug модели, определённый по DOM/сети. */
-declare let detectedModelSlug: string;
-/** Последний id модели, разрешённый из сети. */
-declare let lastResolvedModelId: string | null;
-/** v47: имя модели СНИМКА (сеть/тэйп/адаптер). */
-declare let lastSnapshotModelName: string;
-/** Вложения: токены из сети (Gemini). */
-declare let netAttachTokens: number;
-/** Вложения: признак обрыва (частичная догрузка). */
-declare let netAttachBreak: { imgTokens: number; docTokens: number; imgCount: number; docCount: number } | null;
-/** Server-side токены (DeepSeek accumulated_token_usage). */
-declare let netServerTokens: number;
-/** O-35 (B1): серверный usage Qwen из стрима (output/reasoning/total). */
-declare let netQwenUsage: { outputTokens?: number; reasoningTokens?: number; total?: number } | null;
-/** Эффективная длина последнего сетевого расчёта. */
-declare let netEffectiveLen: number;
-/** Включён ли точный подсчёт (countTokens API). */
-declare let exactCountEnabled: boolean;
-/** Gemini API-ключ (BYOK, M-7 — только chrome.storage.session). */
-declare let geminiApiKey: string;
-/** Последний текст точного подсчёта (dedupe-ключ). */
-declare let lastCountTokensText: string;
-/** Кэш точного подсчёта (последнее число токенов). */
-declare let lastCountTokensCache: number;
-/** Шаг 2: convId, в котором получен точный ответ countTokens (авторитет точного числа для метрики; '' — авторитета нет). */
-declare let lastCountTokensConvId: string;
-/** Шаг 4: текст, для которого countTokens отказал (снимает держание эвристики; '' — отказа нет). */
-declare let lastCountTokensErrorText: string;
-/** Таймер дебаунса точного подсчёта. */
-declare let countTokensTimer: ReturnType<typeof setTimeout> | null;
-/** Safe-percentage (порог виджета; null = Авто). */
-declare let safePct: number | null;
-/** H19: сырое selectedModel из попапа ('auto' = Автоопределение). */
-declare let popupRawModel: string | null;
-/** H19: сырое customLimit из попапа. */
-declare let popupRawPct: number | null;
-/** H19: канонический id выбранной модели; null = Автоопределение. */
-declare let popupModelId: string | null;
-/** H19: 1..100; null = Авто (поле пустое). */
-declare let popupLimitPct: number | null;
-/** v55: сигнатура последнего DOM-эмита. */
-declare let aiCmLastDomEmitSig: string | null;
-/** O-24 (F6): чат, которому принадлежит aiCmLastDomEmitSig. */
-declare let aiCmLastDomEmitConvId: string | null;
-/** v34: convId последнего принятого снимка (гард экспорта). */
-declare let lastEmitConvId: string;
-/** v37: convId последнего снимка (сброс монотонного максимума). */
-declare let lastSnapConvId: string;
-/** convId → запись источника (для попапа/виджета). */
-declare let aiCmConvSourceByConv: Record<string, { kind: string; label: string; format?: string; count?: number } | null>;
-/** convId → true — чтение архива уже запущено (page-session). */
-declare let aiCmArchiveLoadStarted: Record<string, boolean>;
-/** convId → true — ai-cm-archive-restore уже диспатчен. */
-declare let aiCmArchiveRestoredDispatched: Record<string, boolean>;
-/** T1-fix#2 (v1.16.2): convId → count архивных ходов (гейт экспорта). */
-declare let aiCmArchiveCountByConv: Record<string, number>;
-/** Ярлык источника для тултипа виджета. */
-declare let aiCmSourceLabelNow: string;
-/** v1.8: настройки автоэкспорта (aiCmAutoExport/aiCmAutoExportPct/aiCmAutoExportFmt). */
-declare let autoExportSettings: { enabled: boolean; pct: number; fmt: string };
-/** M-13c: антиспам строки «флаг enabled отсутствует». */
-declare let aiCmAutoExportFlagMissingLogged: boolean;
-/** convId → 1 — автоэкспорт один раз на чат. */
-declare let autoExportFired: Record<string, number>;
-/** O-38: модульный латч «один раз на чат» ('site|convId' → 1); переживает resetConversationState. */
-declare let aiCmAutoExportFiredOnce: Record<string, number>;
-/** O-29: family → сигнатура последней напечатанной лог-строки автоэкспорта. */
-declare let aiCmAutoExportLastLogState: Record<string, string>;
-/** S2: per-site порог автоэкспорта (siteName → 1..100). */
-declare let autoExportPctBySite: Record<string, number>;
-/** O-43: монотонный латч сетевой полноты GSA ('site|threadId' → 1). */
-declare let aiCmGsaNetworkCompleteLatch: Record<string, number>;
-/** O-43: threadId, для которого латч был сброшен последним. */
-declare let aiCmGsaNetworkCompleteThreadId: string | null;
-/** Сброс fired при смене чата. */
-declare let autoExportLastConvId: string;
-/** v42: convId → 1, пока лоадер Gemini бежит по чату. */
-declare let aiCmLoaderRunningByConv: Record<string, number>;
-/** v42: последний pct для однократного re-check на стопе лоадера. */
-declare let autoExportLastPct: number;
-/** v52: отложенная запись aiCmHistory ({convId, timer}) или null. */
-declare let aiCmPendingHistWrite: { convId: string; timer: ReturnType<typeof setTimeout> } | null;
-/** v53: convId → true — курсор лоадера жив (автоэкспорт не стреляет). */
-declare let aiCmCursorLiveByConv: Record<string, boolean | number>;
-/** v1.13.1: convId → 1 — база подтверждённо полная (reachedStart=true). */
-declare let aiCmBaseConfirmedByConv: Record<string, number>;
-/** v63: convId → true/1 — база подтверждена (sanity-фолбэк без proof = true; reachedStart = 1). */
-declare let aiCmLowConfidenceByConv: Record<string, boolean | number>;
-/** R1: chatId → true — Qwen-база неполная, но soft-final (time-cap/page-cap/no-gain); префикс [LOW CONFIDENCE]_. */
-declare let aiCmPartialSoftByConv: Record<string, boolean>;
-/** v53: convId → true — ждём поздний re-check (гасится после фактического re-check). */
-declare let aiCmLateCheckByConv: Record<string, number>;
-/** v54: trimProbe[cid] = {maxCount, firstIds, suspectPending} — эталон последнего ПОЛНОГО снимка. */
-declare let trimProbe: Record<string, unknown>;
-/** v54: cid → 1 — pre-trim экспорт один раз на чат. */
-declare let preTrimExportFired: Record<string, number>;
-/** v54: счётчик ретраев инвариантов полноты (≤5 по 2с). */
-declare let trimRetryByConv: Record<string, number>;
-
-/** Минимум символов для якоря (state.js; в state.js — const, здесь let для UMD-сеттера). */
-declare let ANCHOR_MIN: number;
-
-/** N первых id снимка для сравнения голов трим-детектора (state.js). */
-declare let TRIM_HEAD_IDS_N: number;
-
-// --- core/state.js: Шаг A.1 (security) — обёртки SW-каналов --------------------
-// Кросс-файловые чтения: aiCmLatchGetAll вызывается из IIFE гидратации
-// core/export-manager.js, aiCmSwAsk — из core/content.js. state.js их объявляет
-// у себя (общий лексический скоуп), здесь — только швы для изолированной проверки.
-/** Запрос к SW с ожиданием ответа (sendResponse-канал); null при недоступном канале. */
-declare function aiCmSwAsk(payload: unknown): Promise<any>;
-/** Карта session-латча от SW ('aiCm-latch-get-all') → {ключ: 1}; {} при ошибке. */
-declare function aiCmLatchGetAll(): Promise<Record<string, number>>;
-/** Взведение латча в session-хранилище (владелец — SW) → ok. */
-declare function aiCmLatchSet(service: string, convId: string): Promise<boolean>;
-/** Снятие латча в session-хранилище (владелец — SW) → ok. */
-declare function aiCmLatchRemove(service: string, convId: string): Promise<boolean>;
-
 // --- Швы между core-модулями: остальные кросс-файловые имена ------------------
 // base-handler.js (используется content.js/export-manager.js)
 declare function aiCmHostHistoryRecord(snapshot: unknown): unknown;
@@ -433,45 +185,6 @@ declare function nodeIsBase(node: Element, skel: string): boolean;
 declare function shouldUseGeminiDomParser(): boolean;
 declare function computeTailFromDom(): { text: string; count: number; bounded: boolean; sel: string; diag: unknown };
 declare function aiCmTailMetricBase(fallback: string): string;
-
-// widget.js (используется content.js/export-manager.js)
-declare function safePctKey(): string;
-declare function aiCmRingBounds(): [number, number];
-declare function zoneColor(p: number): string;
-declare function aiCmActivePct(): number | null;
-declare function computeEffectiveLimit(modelId: string | null): number;
-declare function aiCmSetPopupOverrides(rawModel: unknown, rawPct: unknown): void;
-declare function aiCmRefreshPopupOverrides(): void;
-declare function aiCmLoadPopupOverrides(): void;
-declare function updatePanel(): void;
-declare function snapCurrentPct(): void;
-declare function setSafePctFromInput(v: unknown): void;
-declare function resetSafePct(): void;
-declare function stepSafePct(delta: number): void;
-/**
- * core/widget.js: однократная миграция per-service порога safePct.
- * false — миграции для текущего сервиса нет (вызывающая сторона читает порог сама);
- * true — миграция запущена, onDone вызовется ровно один раз (число либо null).
- */
-declare function aiCmMigrateSafePct(onDone: (value: number | null) => void): boolean;
-declare function aiCmInAppTheme(): 'dark' | 'light' | null;
-declare function isDarkMode(): boolean;
-declare function applyNativeStyles(container: HTMLElement): void;
-declare function aiCmRefreshThemeIfNeeded(): boolean;
-declare function aiCmStartThemePoll(): void;
-declare function aiCmStopThemePoll(): void;
-declare function aiCmRevealWidget(): void;
-declare function aiCmComputeWidgetSafeBottom(container: HTMLElement | null): number;
-declare function aiCmUpdateWidgetSafeBottom(container: HTMLElement | null): number;
-declare function aiCmStartWidgetSafeBottomWatch(container: HTMLElement | null): void;
-declare function aiCmStopWidgetSafeBottomWatch(): void;
-declare function aiCmRestartWidgetSafeBottomWatch(): void;
-declare function aiCmSetWidgetPanelOpen(open: boolean, restoreFocus?: boolean): boolean;
-declare function aiCmToggleWidgetPanel(restoreFocus?: boolean): void;
-declare function aiCmBindWidgetA11y(): void;
-declare function aiCmSetWidgetA11yLabel(circleEl: Element | null, percentage: number): void;
-declare function aiCmRepaintRing(): void;
-declare function aiCmLoadRingThresholds(): void;
 
 // export-manager.js (используется content.js/widget.js/base-handler.js)
 declare function aiCmSanitizeDebugOn(): boolean;

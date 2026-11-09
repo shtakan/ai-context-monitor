@@ -15,7 +15,7 @@
  * того текста, для которого получено. Латч — тройка
  * lastCountTokensText/lastCountTokensCache/lastCountTokensConvId
  * (пишется ТОЛЬКО успешным ответом API либо восстановлением из chrome.storage.local;
- * чистится сменой чата в core/widget.js, сменой ключа в aiCmByokKeyInvalidate и ошибкой
+ * чистится сменой чата в core/widget.ts, сменой ключа в aiCmByokKeyInvalidate и ошибкой
  * countTokens — иначе бейдж «замёрз» бы на последнем точном числе при исчерпанной квоте).
  *   S1 — латч совпал и ingest обнулил netServerTokens → метрика = точные токены API;
  *   S2 — латч совпал при живом серверном счётчике → всё равно точные токены API;
@@ -323,8 +323,8 @@ describe('Шаг 4: при BYOK без точного числа эвристи�
     expect(iClear).toBeLessThan(iErr);
     expect(req.slice(req.indexOf('lastCountTokensCache = response.totalTokens;'), iErr)).toContain("lastCountTokensErrorText = '';");
     // сброс чата и смена ключа/настроек не оставляют отметку прошлого текста
-    expect(H.moduleSource('widget.js')).toContain("lastCountTokensErrorText = '';");
-    expect(H.moduleSource('state.js')).toContain('let lastCountTokensErrorText');
+    expect(H.moduleSource('widget.ts')).toContain("lastCountTokensErrorText = '';");
+    expect(H.moduleSource('state.ts')).toContain('let lastCountTokensErrorText');
     expect(CONTENT.split("lastCountTokensErrorText = '';").length - 1).toBeGreaterThanOrEqual(3);
   });
 });

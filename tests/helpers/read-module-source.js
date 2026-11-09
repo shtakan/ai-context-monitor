@@ -117,6 +117,120 @@ function stripTypes(source, file) {
   return out + (parts.tail ? '\n' + parts.tail : '');
 }
 
+let typescriptApi = null;
+
+/** Загружает TypeScript один раз (уже в devDependencies — новых зависимостей нет). */
+function loadTypescript() {
+  if (!typescriptApi) typescriptApi = require('typescript');
+  return typescriptApi;
+}
+
+/**
+ * Снимает TS-типы, СОХРАНЯЯ комментарии и исходную форму кода.
+ *
+ * Нужен source-level пин-тестам: они ищут в исходнике и код (`let netQwenUsage = null;`),
+ * и комментарии («систематичен»), а esbuild комментарии выбрасывает. `ts.transpileModule`
+ * с `removeComments: false` оставляет их на месте; аннотации при этом удаляются, поэтому
+ * текст остаётся исполняемым в `new Function` и совпадает с прежней (до миграции) формой:
+ * `let x: Type = v;` → `let x = v;`, `fn(a: T)` → `fn(a)`, `as T` и `<T>q` — снимаются.
+ *
+ * Модульный формат не меняется (ESNext): UMD-хвост `module.exports = Api` остаётся как был,
+ * а `import`/`export` (если появятся) не превращаются в `require`.
+ */
+function stripTypesKeepComments(source, file) {
+  const ts = loadTypescript();
+  const sf = ts.createSourceFile(
+    file,
+    source,
+    ts.ScriptTarget.ES2020,
+    true,
+    /\.tsx$/.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+  );
+  const cuts = [];
+  const statements = [];
+  function cut(start, end) {
+    if (end > start) cuts.push([start, end]);
+  }
+  function isFunctionWithReturnType(node) {
+    return (
+      ts.isFunctionDeclaration(node) ||
+      ts.isFunctionExpression(node) ||
+      ts.isArrowFunction(node) ||
+      ts.isMethodDeclaration(node) ||
+      ts.isGetAccessorDeclaration(node) ||
+      ts.isSetAccessorDeclaration(node) ||
+      ts.isConstructorDeclaration(node)
+    );
+  }
+  function visit(node) {
+    // Типы/интерфейсы — чисто декларативные блоки: вырезаем целиком вместе с переводом строки.
+    if (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) {
+      let end = node.end;
+      while (source[end] === '\r' || source[end] === '\n') end += 1;
+      // От fullStart: вместе с JSDoc-комментариями над объявлением (они — trivia).
+      statements.push([node.getFullStart(), end]);
+      return;
+    }
+    if (ts.isVariableDeclaration(node) && node.type) {
+      cut(node.name.end, node.type.end);
+    }
+    if (ts.isParameter(node)) {
+      if (node.questionToken) cut(node.name.end, node.type ? node.type.end : node.questionToken.end);
+      else if (node.type) cut(node.name.end, node.type.end);
+    }
+    if (isFunctionWithReturnType(node) && node.type) {
+      // Двоеточие перед типом возврата не входит в узел типа — идём назад до него.
+      let from = node.type.getStart(sf);
+      while (from > 0 && source[from] !== ':') from -= 1;
+      cut(from, node.type.end);
+    }
+    if (ts.isAsExpression(node) || (ts.isSatisfiesExpression && ts.isSatisfiesExpression(node))) {
+      cut(node.expression.end, node.end);
+    }
+    if (ts.isTypeAssertionExpression(node)) {
+      cut(node.getStart(sf), node.expression.getStart(sf));
+    }
+    if (ts.isNonNullExpression(node)) {
+      cut(node.expression.end, node.end);
+    }
+    const typeArgs = node.typeArguments;
+    if (typeArgs && typeArgs.length) {
+      const owner = node.expression || node.tag;
+      let listEnd = typeof typeArgs.end === 'number'
+        ? typeArgs.end
+        : typeArgs[typeArgs.length - 1].end;
+      // Закрывающая `>` в NodeArray.end не входит — снимаем её отдельно.
+      if (source[listEnd] === '>') listEnd += 1;
+      if (owner) cut(owner.end, listEnd);
+    }
+    ts.forEachChild(node, visit);
+  }
+  ts.forEachChild(sf, visit);
+
+  function mergePlain(ranges) {
+    ranges.sort(function (a, b) { return a[0] - b[0]; });
+    const merged = [];
+    ranges.forEach(function (range) {
+      const last = merged[merged.length - 1];
+      if (last && range[0] <= last[1]) last[1] = Math.max(last[1], range[1]);
+      else merged.push([range[0], range[1]]);
+    });
+    return merged;
+  }
+
+  // Аннотации вырезаются «в никуда», декларативные блоки — целиком, оставляя перевод строки,
+  // чтобы соседние строки не склеились.
+  const edits = mergePlain(cuts)
+    .map(function (r) { return [r[0], r[1], '']; })
+    .concat(mergePlain(statements).map(function (r) { return [r[0], r[1], '\n']; }));
+  edits.sort(function (a, b) { return b[0] - a[0]; });
+  let out = source;
+  edits.forEach(function (e) {
+    out = out.slice(0, e[0]) + e[2] + out.slice(e[1]);
+  });
+  return out;
+}
+
 /** Исходник файла; для `.ts`/`.tsx` — уже без типов. */
 function readModuleSource(file) {
   const source = fs.readFileSync(file, 'utf8');
@@ -124,4 +238,4 @@ function readModuleSource(file) {
   return stripTypes(source, file);
 }
 
-module.exports = { readModuleSource, stripTypes, loadEsbuild };
+module.exports = { readModuleSource, stripTypes, stripTypesKeepComments, loadEsbuild };

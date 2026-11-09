@@ -412,7 +412,7 @@ describe('O-24 (F6): source-пины точек фикса', function () {
     expect(CONTENT).toContain("var AI_CM_WIDGET_ELEMENT_ID = 'ai-context-widget';");
     // константа ровно одна и совпадает с id, который ставит widget.js
     expect((CONTENT.match(/var AI_CM_WIDGET_ELEMENT_ID = 'ai-context-widget';/g) || []).length).toBe(1);
-    expect(H.readSource('core/widget.js')).toContain("container.id = 'ai-context-widget';");
+    expect(H.readSource('core/widget.ts')).toContain("container.id = 'ai-context-widget';");
   });
 
   test('R7: сигнатурный гард стоит МЕЖДУ hasNewText и дебаунсом, дебаунс прежний', function () {
@@ -484,7 +484,7 @@ describe('O-24 (F6): source-пины точек фикса', function () {
   });
 
   test('R10: проводка aiCmLastDomEmitConvId в state.js: объявление + UMD-аксессор', function () {
-    const state = H.readSource('core/state.js');
+    const state = H.readSource('core/state.ts');
     expect(state).toContain('var aiCmLastDomEmitConvId = null;');
     expect(state).toContain("Object.defineProperty(Api, 'aiCmLastDomEmitConvId'");
     // прежняя переменная и её аксессор на месте (регресс канала v55)

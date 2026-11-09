@@ -138,6 +138,7 @@ export default [
   {
     files: [
       'core/**/*.js',
+      'core/**/*.ts',
       'utils/**/*.js',
       'adapters/**/*.ts',
       'options/**/*.js',

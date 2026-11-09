@@ -4,7 +4,7 @@
     "reason": "legacy-pin"
   },
   "tests/adapters/aistudio-export-block.test.js": {
-    "count": 11,
+    "count": 9,
     "reason": "legacy-pin"
   },
   "tests/adapters/aistudio-files-drain.test.js": {
@@ -288,7 +288,7 @@
     "reason": "legacy-pin"
   },
   "tests/gemini-autoexport-threshold.test.js": {
-    "count": 14,
+    "count": 12,
     "reason": "legacy-pin"
   },
   "tests/gemini-deepresearch-dedupe.test.js": {
@@ -336,7 +336,7 @@
     "reason": "static-linter"
   },
   "tests/o14-reset-popup-snapshot.test.js": {
-    "count": 9,
+    "count": 8,
     "reason": "legacy-pin"
   },
   "tests/o21-deepseek-dom-instrumentation.test.js": {
@@ -348,11 +348,11 @@
     "reason": "legacy-pin"
   },
   "tests/o29-autoexport-log-spam.test.js": {
-    "count": 13,
+    "count": 9,
     "reason": "legacy-pin"
   },
   "tests/o32-gsa-canonical-thread-invariant.test.js": {
-    "count": 10,
+    "count": 8,
     "reason": "legacy-pin"
   },
   "tests/o33-autoexport-base-pending.test.js": {
@@ -368,11 +368,11 @@
     "reason": "legacy-pin"
   },
   "tests/o45-gsa-code-blocks-export.test.js": {
-    "count": 11,
+    "count": 9,
     "reason": "legacy-pin"
   },
   "tests/o47-qwen-badge-metric.test.js": {
-    "count": 4,
+    "count": 2,
     "reason": "legacy-pin"
   },
   "tests/options-advanced-section.test.js": {
@@ -420,7 +420,7 @@
     "reason": "legacy-pin"
   },
   "tests/qwen-autoexport-trusted-base-o37.test.js": {
-    "count": 10,
+    "count": 9,
     "reason": "legacy-pin"
   },
   "tests/qwen-container-drop-o37.test.js": {
@@ -436,7 +436,7 @@
     "reason": "legacy-pin"
   },
   "tests/qwen-gate-diag-o35.test.js": {
-    "count": 24,
+    "count": 22,
     "reason": "static-linter"
   },
   "tests/qwen-intercept.test.js": {
@@ -463,25 +463,17 @@
     "count": 42,
     "reason": "legacy-pin"
   },
-  "tests/qwen-r1-timecap.test.js": {
-    "count": 28,
-    "reason": "legacy-pin"
-  },
   "tests/qwen-r4-files-only.test.js": {
     "count": 2,
     "reason": "legacy-pin"
   },
   "tests/qwen-reasoning-export-o37.test.js": {
-    "count": 11,
+    "count": 8,
     "reason": "legacy-pin"
   },
   "tests/qwen-stream-frames.test.js": {
     "count": 6,
     "reason": "legacy-pin"
-  },
-  "tests/security/byok-isolation.test.js": {
-    "count": 21,
-    "reason": "vm-harness"
   },
   "tests/storage-ttl.test.js": {
     "count": 2,
