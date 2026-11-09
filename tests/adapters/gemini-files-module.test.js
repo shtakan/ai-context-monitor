@@ -5,8 +5,9 @@
  * 10=docx, 11=pdf), FIFO-очередь concurrency 2 с дедупом convId|token|name,
  * скачивание через originalFetch с credentials:'include', DOCX-распаковка
  * (DecompressionStream('deflate-raw') → word/document.xml), PDF только
- * мета-секция, изображения — [IMAGE: имя] CDN-URL, кап 200 000 символов на файл,
- * дебаунс-ре-эмит 250 мс и протокол state/drain.
+ * мета-секция, изображения — [IMAGE: имя] CDN-URL, кап чтения 200 000 символов
+ * на файл (в секцию экспорта — не больше 2 000: крупный файл заменяется меткой
+ * с именем и размером), дебаунс-ре-эмит 250 мс и протокол state/drain.
  */
 'use strict';
 
@@ -429,7 +430,7 @@ describe('R2: очередь, дедуп и секции', function () {
     expect(section).toContain('[FILE: c.txt]\nC');
   });
 
-  test('A3: content-length больше прежних 200 КБ не повод для too-large, секция режется капом 100 000', async function () {
+  test('A3: content-length больше прежних 200 КБ не повод для too-large, крупный файл — только метка', async function () {
     const h = makeHarness();
     const ref = h.Fn.collectTurnFiles(turnWith([textNode('big.txt')]))[0];
     h.Fn.gfEnqueueTurnFiles(CHAT, 'u1', [ref]);
@@ -439,13 +440,14 @@ describe('R2: очередь, дедуп и секции', function () {
     h.tick(300);
     const section = h.Fn.gfSectionsFor(CHAT, 'u1');
     expect(section).not.toContain('too-large');
-    // v2.7: два уровня — тело читается до GF_TEXT_CAP (200 000), в секцию
-    // экспорта уходит GF_SECTION_TEXT_CAP (100 000), обрезка видна в шапке.
-    expect(section).toContain('[FILE: big.txt (truncated)]');
-    expect(section).toContain('…[обрезано 100000]');
+    // v2.8: тело читается до GF_TEXT_CAP (200 000), но в секцию крупный файл не
+    // вшивается — остаётся метка с именем и размером, без текста и «обрезано».
+    expect(section).toBe('\n\n[FILE: big.txt (500 KB)]');
+    expect(section).not.toContain('xxxx');
+    expect(section).not.toContain('обрезано');
   });
 
-  test('D2 (A3): DOCX ~500 КБ читается целиком, секция обрезана до 100 000', async function () {
+  test('D2 (A3): DOCX ~500 КБ читается целиком, в секции — метка с размером', async function () {
     const h = makeHarness();
     // 250 000 кириллических символов = 500 000 байт в word/document.xml;
     // level 0 (store) держит тело файла ~500 КБ, чтобы проверялся реальный размер.
@@ -458,14 +460,15 @@ describe('R2: очередь, дедуп и секции', function () {
     h.Fn.gfEnqueueTurnFiles(CHAT, 'u1', [ref]);
     h.fetchCalls[0].resolve(makeRes({ headers: { 'content-length': String(buf.length) }, buffer: ab }));
     const got = await waitFor(function () {
-      return h.Fn.gfSectionsFor(CHAT, 'u1').indexOf('[FILE: huge.docx (truncated)]') >= 0;
+      return /\[FILE: huge\.docx \(\d+(?:\.\d+)? (?:KB|MB)\)\]/.test(h.Fn.gfSectionsFor(CHAT, 'u1'));
     }, 4000);
     expect(got).toBe(true);
     h.tick(300);
     const section = h.Fn.gfSectionsFor(CHAT, 'u1');
     expect(section).not.toContain('too-large');
-    // v2.7: секционный кап 100 000 (fetch-кап тела — 200 000)
-    expect(section).toContain('…[обрезано 100000]');
+    // v2.8: секция — одна метка с размером, текста файла и «обрезано» нет
+    expect(section).not.toContain('Д');
+    expect(section).not.toContain('обрезано');
     expect(h.Fn.gfPendingCount(CHAT)).toBe(0);
   });
 });
@@ -893,30 +896,47 @@ describe('R2: связка с перехватчиком/background', function (
 });
 
 /**
- * v2.7 (живая приёмка 2026-11-09): текст вложения, вшиваемый в СЕКЦИЮ (а значит
- * в текст сообщения и в экспорт), режется до GF_SECTION_TEXT_CAP = 100 000
- * символов. Повторно приложенная выгрузка Gemini (ровно 200 000 символов)
- * вшивалась целиком: файл рос до ~1 МБ, и следующая загрузка обрезала уже его.
- * Обрезка обязана быть ВИДИМОЙ (шапка + хвостовой маркер), иначе потеря тихая.
+ * v2.8 (живая приёмка 2026-11-09): текст вложения, вшиваемый в СЕКЦИЮ (а значит
+ * в текст сообщения и в экспорт), ограничен 2 000 символов. Крупный файл не
+ * вшивается вовсе: остаётся метка `[FILE: имя (размер KB/MB)]` — без текста и
+ * без маркера `…[обрезано N]`. Повторно приложенная выгрузка Gemini больше не
+ * раздувает следующую, а потеря содержимого видна по одной строке с размером.
  */
-describe('v2.7: clamp секции вложения (экспорт не раздувается)', function () {
-  test('constants.sectionTextCap = 100 000', function () {
+describe('v2.8: крупное вложение в секции — только метка с размером', function () {
+  test('constants.sectionTextCap = 2 000', function () {
     const h = makeHarness();
-    expect(h.Fn.constants.sectionTextCap).toBe(100000);
+    expect(h.Fn.constants.sectionTextCap).toBe(2000);
   });
 
-  test('текст сверх капа режется, шапка и хвост помечают обрезку', function () {
+  test('текст сверх капа не вшивается: метка имени и размера, без «обрезано»', function () {
     const h = makeHarness();
     const cap = h.Fn.constants.sectionTextCap;
     const text = 'x'.repeat(cap + 4321);
-    const section = h.Fn.sectionOf({ name: 'gemini-e1020dba.md', ok: true, text: text });
-    const head = '\n\n[FILE: gemini-e1020dba.md (truncated)]\n';
-    const tail = '\n…[обрезано 4321]';
-    expect(section.indexOf(head)).toBe(0);
-    expect(section.slice(-tail.length)).toBe(tail);
-    // в экспорт уходит ровно кап символов, потеря названа числом
-    expect(section.length - head.length - tail.length).toBe(cap);
-    expect(section).not.toContain('x'.repeat(cap + 1));
+    const section = h.Fn.sectionOf({ name: 'gemini-e1020dba.md', ok: true, text: text, size: 1572864 });
+    expect(section).toBe('\n\n[FILE: gemini-e1020dba.md (1.5 MB)]');
+    expect(section).not.toContain('обрезано');
+    expect(section).not.toContain('truncated');
+    expect(section).not.toContain('x'.repeat(10));
+  });
+
+  test('размер без узла/заголовка считается по байтам текста (UTF-8)', function () {
+    const h = makeHarness();
+    const cap = h.Fn.constants.sectionTextCap;
+    // 2001 байт ASCII → 2 KB (округление до одного знака после запятой)
+    const ascii = h.Fn.sectionOf({ name: 'notes.md', ok: true, text: 'x'.repeat(cap + 1) });
+    expect(ascii).toBe('\n\n[FILE: notes.md (2 KB)]');
+    // 2001 кириллический символ = 4002 байта → 3.9 KB
+    const utf = h.Fn.sectionOf({ name: 'ru.md', ok: true, text: 'Д'.repeat(cap + 1) });
+    expect(utf).toBe('\n\n[FILE: ru.md (3.9 KB)]');
+  });
+
+  test('граница капа: ровно 2 000 символов ещё уходят текстом', function () {
+    const h = makeHarness();
+    const cap = h.Fn.constants.sectionTextCap;
+    const text = 'y'.repeat(cap);
+    const section = h.Fn.sectionOf({ name: 'edge.md', ok: true, text: text, size: 4096 });
+    expect(section).toBe('\n\n[FILE: edge.md]\n' + text);
+    expect(section).not.toContain('KB');
   });
 
   test('текст в пределах капа уходит без пометки', function () {

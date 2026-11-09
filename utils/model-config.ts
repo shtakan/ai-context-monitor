@@ -100,6 +100,26 @@ export const ModelConfig: ModelConfig = {
       description: 'GPT-5.6 Terra — окно 1 050 000 (API)',
       // Источник: https://platform.openai.com/docs/models (снят 2026-10-04)
     },
+    // ЖИВАЯ ПРИЁМКА 2026-11-09 (chatgpt.com): сеть отдаёт raw="gpt-6" и
+    // raw="gpt-6-turbo". Без явного ключа resolveModelId не находил совпадения
+    // (ни префикса, ни подстроки) и бейдж падал в siteDefaults ('gpt-5.5').
+    // 'gpt-6-turbo' держим отдельным ключом, чтобы турбо-вариант не схлопывался
+    // префиксом в базовую линейку. Лимит — как у остальных GPT-6 из снимка
+    // 2026-10-04 (своего окна для turbo в документации не заявлено).
+    'gpt-6': {
+      name: 'GPT-6',
+      provider: 'OpenAI',
+      contextLimit: 1050000,
+      description: 'Линейка GPT-6, окно 1 050 000 (API)',
+      // Источник: https://platform.openai.com/docs/models (снят 2026-10-04)
+    },
+    'gpt-6-turbo': {
+      name: 'GPT-6 Turbo',
+      provider: 'OpenAI',
+      contextLimit: 1050000,
+      description: 'GPT-6 Turbo — окно 1 050 000 (API)',
+      // Источник: https://platform.openai.com/docs/models (снят 2026-10-04)
+    },
     'gpt-6-astra': {
       name: 'GPT-6 Astra',
       provider: 'OpenAI',

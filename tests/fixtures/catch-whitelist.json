@@ -795,7 +795,7 @@
       "file": "core/gemini-files.js",
       "category": "best-effort-guard",
       "lines": [
-        199
+        228
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var arr = turn[2][0][4][0][4]; if (!Array.isArray(arr)) return out; for"
     },
@@ -803,11 +803,11 @@
       "file": "core/gemini-files.js",
       "category": "guard-clause",
       "lines": [
-        123,
-        137,
-        445,
-        466,
-        467
+        124,
+        138,
+        472,
+        493,
+        494
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (ctrl) ctrl.abort();"
     },
@@ -815,7 +815,7 @@
       "file": "core/gemini-files.js",
       "category": "parse-guard",
       "lines": [
-        759
+        789
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: if (typeof TextDecoder === 'function') return new TextDecoder('utf-8').d"
     },
