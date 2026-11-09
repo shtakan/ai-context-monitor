@@ -1616,3 +1616,63 @@ v90–v114 (исходные строки 783–2 440, 1 658 строк) — т�
 **Коммит A:** `9c3f9e7` — тело аппендикса v128; SHA проставляется коммитом B (двухшаговый паттерн).
 **SHA4:** `19b8658` (коммит C — синхронизация верхнего блока handoff).
 
+## Аппендикс v129 (2026-11-09): Завершение TS-миграции (utils) и фиксы приёмки
+
+**Дата:** 2026-11-09 (Asia/Yekaterinburg).
+
+**Коммиты:** `<SHA v129>` (коммит A — тело аппендикса), `4b28916` (инфраструктура TypeScript: `build.mjs`, `eslint.config.mjs`, `package.json`, `tools/jest-esbuild-transform.js`), `a970678`, `aa17e6a`, `31069ce`, `e4bee3c`, `e31a981`, `6b88b38` (TS-миграция `utils/` — по коммиту на группу модулей), `7ed4e15` (onfreeze в fetch-обёртках и кап вложений), `3afe6f9` (gpt-6 и вложения).
+
+**Статус:** Фаза 1 (TypeScript) для `utils/` завершена — 100 % модулей на `.ts`. Устранены баги живой приёмки ChatGPT, Claude и Gemini. Сьют 229 suites / 3948 passed / 7 skipped / 0 failed, exit 0.
+
+### Секция 1. Что сделано.
+
+1. **Все модули `utils/` переведены на TypeScript** — синтаксис TS, локальные интерфейсы вместо JSDoc-описаний, типы параметров и возвращаемых значений функций. Каталог: 17 модулей + `utils/platform-globals.d.ts`; файлов `.js` в `utils/` не осталось (`archive-import`, `buildReferenceText`, `chatgpt-conversation-parser`, `debug`, `export-emit-pipeline`, `export-text-builders`, `gemini-batchexecute-parser`, `gemini-dom-parser`, `gemini-intercept-logic`, `google-search-folwr-parser`, `intercept-common`, `markdown`, `model-config`, `perplexity-parser`, `platform`, `stream-frames`, `tokenizer`). Рантайм не изменился: типы снимаются транспиляцией и в браузер не попадают.
+2. **Инфраструктура.** Добавлен esbuild-трансформер для Jest — `tools/jest-esbuild-transform.js` (`esbuild.transformSync`, таблица загрузчиков `.ts` / `.mts` / `.cts` / `.tsx`, CJS-вывод); `.js` остаётся на `babel-jest`, чтобы сохранить hoisting `jest.mock`. `tests/helpers/load-esm.js` научился обрабатывать `.ts`: типы снимаются через `tests/helpers/read-module-source.js` + esbuild, поэтому тесты грузят модули как `loadEsm('utils/buildReferenceText.ts')` и `loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders')`. Сборщик `build.mjs` использует `loader: 'ts'` (`loaderForFile()` выбирает загрузчик по расширению) и `esbuild.transform({ loader: 'ts', format: 'iife' })` для генерации classic IIFE-артефактов в `dist/utils/`: парсеры пакета грузятся `chrome.scripting` как classic-скрипты и второй кодовой ветки не имеют.
+3. **Фиксы приёмки.**
+   - **onfreeze (ChatGPT, Claude).** Chrome синхронно бросает из `fetch()` «Only fetch keepalive is allowed during onfreeze», когда страница уходит в bfcache/freeze. Для перехватчика это ошибка дальнего вызова, и она всплывала из обёртки uncaught. В `utils/intercept-common.ts` добавлены `ONFREEZE_ERROR_RE = /Only fetch keepalive is allowed during onfreeze/i` и `fetchGuarded(orig, thisArg, args)`: гасится ровно этот бросок (диагностика `intercept-common:onfreeze-fetch`), остальные синхронные ошибки пробрасываются как раньше. Подключён в `core/claude-intercept.js` (три места вызова `originalFetch.call(...)`), `core/page-intercept.js`, `core/google-search-intercept.js`, `core/perplexity-intercept.js`, `core/qwen-intercept.js` (`7ed4e15`).
+   - **gpt-6 (ChatGPT).** `utils/model-config.ts` распознаёт `gpt-6` и `gpt-6-turbo` (рядом с `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-sol`): без ключей модель в бейдже и экспорте падала на дефолт. Пин — `tests/chatgpt-gpt6-model-detect.test.js` (`3afe6f9`).
+   - **Вложения (Gemini).** `GF_SECTION_TEXT_CAP = 2000` в `core/gemini-files.js`: текст, вшиваемый в текст сообщения (и дальше в экспорт), ограничен 2 000 символов на файл. Крупный файл в секцию не попадает вовсе — вместо текста и маркера `…[обрезано N]` остаётся только метка `[FILE: name (size KB/MB)]`. Повторно приложенная выгрузка больше не раздувает следующую: потеря содержимого видна сразу.
+
+### Секция 2. Свидетели/факты.
+
+| # | Свидетель | Факт | Источник |
+|---|---|---|---|
+| 1 | Цепочка коммитов | `4b28916` → `a970678` → `aa17e6a` → `31069ce` → `e4bee3c` → `e31a981` → `6b88b38` → `7ed4e15` → `3afe6f9`; каждый TS-коммит правит `build.mjs`, `eslint.config.mjs`, импортёры в `core/` / `adapters/` и пути импортов в тестах (`../utils/x.ts`) | `git log --oneline` |
+| 2 | Каталог `utils/` | 0 файлов `.js`, 18 файлов `.ts` (17 модулей + `platform-globals.d.ts`) | `ls utils/*.js`, `ls utils/*.ts` |
+| 3 | Трансформер Jest | `tools/jest-esbuild-transform.js` — 59 строк, `transformSync` + CJS; `.js` остаётся на `babel-jest` (hoisting `jest.mock` сохранён) | `4b28916`, `tools/jest-esbuild-transform.js` |
+| 4 | Classic IIFE из `.ts` | `build.mjs:469` — `esbuild.transform(src, { loader: 'ts', format: 'iife', ... })`; артефакты `dist/utils/debug.js`, `dist/utils/gemini-batchexecute-parser.js`, `dist/utils/gemini-intercept-logic.js`, `dist/utils/google-search-folwr-parser.js` | `build.mjs`, `dist/utils/` |
+| 5 | onfreeze | `ONFREEZE_ERROR_RE` + `fetchGuarded` в `utils/intercept-common.ts`; на него переведены 5 перехватчиков (claude, page, google-search, perplexity, qwen) | `7ed4e15` (12 файлов, +309/−63) |
+| 6 | gpt-6 | Ключи `gpt-6`, `gpt-6-turbo` в `utils/model-config.ts`; новый пин на 65 строк | `3afe6f9` (5 файлов, +195/−55), `tests/chatgpt-gpt6-model-detect.test.js` |
+| 7 | Вложения | `GF_SECTION_TEXT_CAP = 2000` (`core/gemini-files.js:59`), ветка клампа `core/gemini-files.js:288`, диагностика `sectionTextCap` (`core/gemini-files.js:1268`) | `core/gemini-files.js`, `7ed4e15` |
+| 8 | Сьют | 229 suites / 3948 passed / 7 skipped / 0 failed, exit 0 | `npm test -- --runInBand` |
+| 9 | Живая приёмка | Комментарии-свидетели в коде: «живая приёмка 2026-11-09» у onfreeze, `gpt-6` и капа вложений | `utils/intercept-common.ts`, `utils/model-config.ts`, `core/gemini-files.js` |
+
+### Секция 3. Отклонения от промпта.
+
+1. В список коммитов добавлен `4b28916` — инфраструктурный коммит TS (трансформер Jest, `build.mjs`, `eslint.config.mjs`, `package.json`): без него пункт «добавлен esbuild-трансформер» остаётся без адреса.
+2. Формулировка «`pake-bundle`» из постановки в репозитории не встречается (grep по коду, документации и `dist/` — пусто); R2 сформулирован по факту: кап действует на текст вложения в том виде, в котором он попадает в текст сообщения и в экспорт.
+3. Пин полноты корпуса в `tests/docs-hygiene.test.js` поднят 114 → 115 (плюс строка `+v129` в комментарии-раскладке) — единственное изменение тестового файла.
+4. Верхний блок handoff (коммиты C/D), CHANGELOG и код продукта не правились; тексты аппендиксов v1–v128 не редактировались — вставка только в конец файла.
+
+### Секция 4. Новые residual.
+
+- **R1 (Low) — `core/` и `adapters/` остаются на JSDoc.** Миграция на TypeScript этим аппендиксом закрыта только для `utils/`; остальные каталоги описаны JSDoc-аннотациями, `tsc --noEmit` в гейтах нет. Условие переоткрытия: следующая фаза миграции или появление `.d.ts` под `core/` — тогда проверка типов становится гейтом, а не разовым прогоном.
+- **R2 (Low) — крупные вложения больше не выгружаются в текст целиком.** Ветка клампа (`GF_SECTION_TEXT_CAP = 2000`) отдаёт только метку `[FILE: name (size KB/MB)]` без текста и без маркера «обрезано N» — это by design: потеря содержимого видна сразу, а следующая выгрузка не раздувается на сотни КБ. Условие переоткрытия: если приёмка потребует частичного текста для крупных файлов — вернуть усечение с явным маркером и поднять кап.
+
+### Секция 5. Переопределение residual-точек и Roadmap (тексты аппендиксов выше не редактируются).
+
+- **Roadmap Ф1 (TypeScript) для `utils/` — ЗАКРЫТА.** Все 17 модулей каталога на `.ts`, инфраструктура (esbuild для Jest, `load-esm` для `.ts`, classic-артефакты из TS) на месте, сьют зелёный. Остаток Ф1 по другим каталогам переносится в §4 R1 и закрывается отдельной задачей, а не переоткрытием этой.
+- **Residual v128 не затрагиваются** — правок в `core/gemini-intercept.js` и счётчиков `__bind` этот аппендикс не делает.
+- **Баги живой приёмки** (onfreeze, `gpt-6`, раздувание вложений) закрыты фиксами `7ed4e15` и `3afe6f9`; отдельных residual по ним не заводится.
+
+### Секция 6. Сводка.
+
+1. Сьют 229 suites / 3948 passed / 7 skipped / 0 failed, exit 0; предыдущий зафиксированный прогон — 228 / 3929 / 7 / 0 (v128); прирост +1 сьют / +19 тестов (пин `chatgpt-gpt6-model-detect` и тесты TS-инфраструктуры).
+2. `Версия` 2.0.44 не менялась: манифест поднят релизным коммитом `0a703e3`; `manifest.json` = `package.json` = 2.0.44.
+3. HEAD на момент коммита A: `3afe6f9`; origin/main = `3afe6f9`, ahead 0 (до коммитов A и B).
+4. Верхний блок handoff и аппендиксы v1–v128 не переписывались — вставка только в конец файла; синк верхнего блока — коммитом C.
+
+### Секция 7. Плейсхолдер.
+
+**Коммит A:** `<SHA v129>` — тело аппендикса v129; SHA проставляется коммитом B (двухшаговый паттерн).
+**SHA4:** `<SHA4>` (коммит C — синхронизация верхнего блока handoff; проставляется при его создании).
