@@ -93,7 +93,7 @@ function makeSandbox(options) {
   };
 
   // Диагностика (v2.0.31): перехватчик берёт канал B из utils/debug.ts, если он подключён
-  // (core/background.js: js: ['utils/debug.js', 'core/aistudio-intercept.js']). В песочнице
+  // (core/background.ts: js: ['utils/debug.js', 'core/aistudio-intercept.js']). В песочнице
   // его нет — тесты либо подставляют свой aiCmDiagLine, либо проверяют прямой гейт
   // sessionStorage 'aiCmDebug' === '1'. Ключи добавляются ТОЛЬКО когда заданы: набор
   // аргументов функции-фабрики выводится из этого объекта.

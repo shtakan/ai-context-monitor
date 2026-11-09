@@ -74,7 +74,7 @@ const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'u
  * one list here is what makes a silent prelude reshuffle fail).
  *
  * Ph2, шаг gemini-intercept-logic.ts: модуль ушёл из текстовой склейки в статический
- * import из core/background.js (заодно с уходом из prelude файл перестал быть
+ * import из core/background.ts (заодно с уходом из prelude файл перестал быть
  * classic-скриптом в SW), поэтому в prelude остался только pdf-parser.
  */
 const BACKGROUND_PRELUDE = ['core/pdf-parser.js'];

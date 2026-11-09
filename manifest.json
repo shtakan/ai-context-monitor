@@ -38,7 +38,7 @@
   ],
 
   "background": {
-    "service_worker": "core/background.js"
+    "service_worker": "core/background.ts"
   },
 
   "content_scripts": [

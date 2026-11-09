@@ -2656,7 +2656,7 @@ function processAndSend(): void {
     // ЛЮБУЮ смену текста, включая неполный снимок/переэмит (иначе API молчал, а метрика жила
     // эвристикой). Спама нет по трём причинам: кэш по тексту (lastCountTokensText в
     // requestExactTokens), флаг countTokensPending и дебаунс в SW — scheduleCountTokens,
-    // COUNT_TOKENS_DEBOUNCE_MS, ключ tabId:convId:model + content-hash кэш core/background.js.
+    // COUNT_TOKENS_DEBOUNCE_MS, ключ tabId:convId:model + content-hash кэш core/background.ts.
     const isGeminiSvc = (svc === 'gemini' || svc === 'aistudio' || svc === 'google_search');
     if (isGeminiSvc && exactCountEnabled && geminiApiKey && fullText) {
       requestExactTokens(fullText, modelId);

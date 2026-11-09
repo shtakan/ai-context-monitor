@@ -58,14 +58,14 @@
  *   2b. the copies handed to Chrome are rewritten (manifest.json + options.html)
  *       so the bundles are loaded instead of the legacy global scripts;
  *   2c. the files that Chrome resolves by path at runtime — the MAIN-world
- *       interceptors registered from core/background.js and _locales/ — must
+ *       interceptors registered from core/background.ts and _locales/ — must
  *       exist next to the bundles. Most of them are copied verbatim, but the
  *       four ESM interceptors (page / claude / perplexity / google-search) are
  *       built as their OWN IIFE bundles into dist/core/<name>.js: a MAIN-world
  *       script is registered by path and cannot carry `import`/`export`, while
  *       the interceptor source now imports utils/intercept-common.ts.
  *       chrome.scripting.registerContentScripts still points at the same path,
- *       so the js[] registration in core/background.js does not change shape.
+ *       so the js[] registration in core/background.ts does not change shape.
  * The root manifest.json / options/options.html stay legacy on purpose: they are
  * frozen by the test suite (tests/manifest-smoke.test.js, tests/qwen-provider-wiring.test.js)
  * and are no longer what Chrome loads.
@@ -93,7 +93,7 @@
  * carry a real `import` and let esbuild pull that module into the same bundle
  * (print/print.js → markdown, options|content.js → platform, export-text-builders
  * → buildReferenceText, MAIN-перехватчики → intercept-common, core/qwen-intercept.js
- * → utils/stream-frames.ts, core/background.js + core/content.js → utils/debug.js).
+ * → utils/stream-frames.ts, core/background.ts + core/content.js → utils/debug.js).
  * utils/debug.js остаётся в js[] MAIN-регистраций (парсеры пакета — classic-скрипты
  * без import), поэтому для них дополнительно выводится classic-артефакт dist/.
  * The imported
@@ -165,7 +165,7 @@ function readJSON(relPath) {
 // Firefox event page его не исполняет, и пороги проактивных предупреждений молча
 // падали бы на дефолт (гейт — verifyDist/verifyFirefoxDist).
 // Ph2: utils/gemini-intercept-logic.js из этого списка ушёл — модуль переведён на ESM,
-// и core/background.js втягивает его статическим import'ом (esbuild кладёт его в тот же
+// и core/background.ts втягивает его статическим import'ом (esbuild кладёт его в тот же
 // бандл SW); для MAIN-регистрации ниже выводится classic-артефакт. Так же раньше ушёл
 // utils/platform.ts (Ph2, шаг 3).
 const BACKGROUND_PRELUDE = [
@@ -176,11 +176,11 @@ const BACKGROUND_PRELUDE = [
 // Ph2: MAIN-перехватчики, перешедшие на ESM (intercept-common). Их исходники
 // содержат top-level import, поэтому они не копируются verbatim: каждый
 // собирается отдельным IIFE в тот же путь dist/core/<name>.js, на который
-// продолжает указывать js[] в core/background.js.
+// продолжает указывать js[] в core/background.ts.
 // Ph2, шаг stream-frames: core/qwen-intercept.js тоже ESM — он импортирует
 // utils/stream-frames.ts, поэтому esbuild вшивает модуль кадров прямо в
 // dist/core/qwen-intercept.js. Из js[] путь utils/stream-frames.ts удалён
-// (см. registration id -v4 в core/background.js): копировать нечего, а старый
+// (см. registration id -v4 в core/background.ts): копировать нечего, а старый
 // путь в dist больше не существует.
 const MAIN_INTERCEPTS = [
   'core/page-intercept.js',
@@ -405,7 +405,7 @@ const ASSET_TREES = ['_locales', 'docs/screenshots'];
 /* ------------------------------------------------------------------ *
  * 2b. Runtime-resolved files (Phase 2 step 2)
  *
- * core/background.js is the SSOT for the site-world (world: 'MAIN') content
+ * core/background.ts is the SSOT for the site-world (world: 'MAIN') content
  * scripts it registers programmatically via
  * chrome.scripting.registerContentScripts([... { js: [...] }]) and for the one
  * helper it pulls in with importScripts(). Chrome resolves those paths against
@@ -413,7 +413,7 @@ const ASSET_TREES = ['_locales', 'docs/screenshots'];
  * Deriving the list from background.js keeps it in sync automatically.
  * ------------------------------------------------------------------ */
 
-const BACKGROUND_SRC = 'core/background.js';
+const BACKGROUND_SRC = 'core/background.ts';
 
 /* ------------------------------------------------------------------ *
  * Classic artifacts from ES modules (TypeScript migration, step 1)
@@ -510,7 +510,7 @@ async function writeDebugClassic() {
 }
 
 // Ph2, шаг gemini-batchexecute-parser.js: ESM-исходник и путь, под которым его ждут
-// регистрации world:'MAIN' в core/background.js (регистрация ai-cm-gemini-intercept-v18).
+// регистрации world:'MAIN' в core/background.ts (регистрация ai-cm-gemini-intercept-v18).
 const PARSER_SOURCE = 'utils/gemini-batchexecute-parser.ts';
 const PARSER_CLASSIC = 'utils/gemini-batchexecute-parser.js';
 
@@ -552,7 +552,7 @@ async function writeParserClassic() {
 }
 
 // Ph2, шаг google-search-folwr-parser.js: ESM-исходник и путь, под которым его ждёт
-// MAIN-регистрация ai-cm-google-search-intercept в core/background.js.
+// MAIN-регистрация ai-cm-google-search-intercept в core/background.ts.
 const GSA_PARSER_SOURCE = 'utils/google-search-folwr-parser.ts';
 const GSA_PARSER_CLASSIC = 'utils/google-search-folwr-parser.js';
 
@@ -592,7 +592,7 @@ async function writeGsaParserClassic() {
 }
 
 // Ph2, шаг gemini-intercept-logic.js: ESM-исходник и путь, под которым его ждёт
-// 21-скриптовая MAIN-регистрация ai-cm-gemini-intercept-v18 в core/background.js.
+// 21-скриптовая MAIN-регистрация ai-cm-gemini-intercept-v18 в core/background.ts.
 const GEMINI_LOGIC_SOURCE = 'utils/gemini-intercept-logic.ts';
 const GEMINI_LOGIC_CLASSIC = 'utils/gemini-intercept-logic.js';
 
@@ -607,7 +607,7 @@ const GEMINI_LOGIC_CLASSIC = 'utils/gemini-intercept-logic.js';
  * dist/utils/gemini-intercept-logic.js: classic-артефакт того же модуля.
  *
  * Логика переведена на ESM (Roadmap Ph2) и входит в бандл SW статическим import'ом
- * из core/background.js. Но тот же путь перечислен в js[] MAIN-регистрации
+ * из core/background.ts. Но тот же путь перечислен в js[] MAIN-регистрации
  * (ai-cm-gemini-intercept-v18), а chrome.scripting грузит classic-скрипты, где
  * import/export недопустимы. Снимаем префиксы объявлений и заворачиваем тело в IIFE:
  * до миграции файл был самовызывающейся функцией и держал ~90 внутренних имён вне
@@ -637,7 +637,7 @@ async function writeGeminiLogicClassic() {
 /**
  * Paths Chrome resolves itself at runtime: `js[]` of the scripting registrations
  * plus `importScripts()` in the service worker. These are the RUNTIME spellings
- * (always `.js` — core/background.js is the runtime contract and the build never
+ * (always `.js` — core/background.ts is the runtime contract and the build never
  * rewrites it); `scriptSourcePath()` resolves the on-disk source for each one.
  */
 function runtimeRegisteredFiles() {
@@ -715,7 +715,7 @@ async function copyRuntimeScript(sourceRel, toAbs) {
 const REWIRED_SERVICE_WORKER = 'background.js';
 const REWIRED_CONTENT_SCRIPTS = ['content.js'];
 // Firefox fallback (dist-firefox only): name the bundle, never the legacy source —
-// dist/ does not contain core/background.js.
+// dist/ does not contain core/background.ts.
 // v2.0.37 (PDF): в Firefox нет offscreen API, поэтому pdf.js-хост грузится прямо
 // в event page как classic-скрипты (Worker там доступен). Chrome исполняет те же
 // файлы в parser/offscreen.html, а они попадают в dist/ как обычные ассеты.
@@ -730,7 +730,7 @@ const FIREFOX_BACKGROUND_SCRIPTS = [
 // dist/manifest.json (Chrome) остаётся байт-в-байт прежним.
 const FIREFOX_MIN_VERSION = '140.0';
 // BYOK: единственный сетевой хост, торчащий из Firefox-пакета. В Firefox BYOK выключен
-// (гейт в core/background.js), поэтому разрешение снимается из dist-firefox/manifest.json:
+// (гейт в core/background.ts), поэтому разрешение снимается из dist-firefox/manifest.json:
 // заявленный data_collection_permissions: none подтверждается отсутствием доступа к Google.
 const BYOK_HOST = 'https://generativelanguage.googleapis.com/*';
 const REWIRED_OPTIONS_SCRIPT = '../options.js';
@@ -1020,7 +1020,7 @@ async function copyAssets() {
     // ai-cm-google-search-intercept); classic-артефакт выводит writeGsaParserClassic ниже.
     if (r === GSA_PARSER_CLASSIC) continue;
     // Ph2: utils/gemini-intercept-logic.js — та же история (Gemini MAIN-регистрация
-    // v12); ESM-исходник уходит в бандл SW статическим import'ом из core/background.js,
+    // v12); ESM-исходник уходит в бандл SW статическим import'ом из core/background.ts,
     // а classic-артефакт для MAIN-мира выводит writeGeminiLogicClassic ниже.
     if (r === GEMINI_LOGIC_CLASSIC) continue;
     // TS migration, step 1: the runtime registration keeps its `.js` name while
@@ -1194,7 +1194,7 @@ async function verifyDist() {
   }
   // Один статический бандл: importScripts() — API воркера, а в Firefox event page его
   // нет, поэтому рантайм-загрузка в поставке запрещена (utils/gemini-intercept-logic.js
-  // вшит на сборке статическим import'ом из core/background.js). Гейт держит тот же
+  // вшит на сборке статическим import'ом из core/background.ts). Гейт держит тот же
   // инвариант в обоих пакетах.
   const bgSource = await fsp.readFile(path.join(DIST, REWIRED_SERVICE_WORKER), 'utf8');
   if (/\bimportScripts\s*\(/.test(bgSource)) {

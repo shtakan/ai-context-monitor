@@ -1,11 +1,11 @@
 /**
- * O-35: проводка провайдера Qwen — manifest.json, core/background.js, core/content.ts,
+ * O-35: проводка провайдера Qwen — manifest.json, core/background.ts, core/content.ts,
  * utils/model-config.ts и контракт reasoning в сборщиках экспорта.
  *
  * Здесь ЧЕТЫРЕ независимых блока:
  *   1) R-пины: объявления шести существующих перехватчиков и их пути байтово прежние;
  *   2) проводка Qwen (host_permissions + matches + адаптер в content_scripts; регистрация
- *      перехватчика в MAIN-мире в core/background.js);
+ *      перехватчика в MAIN-мире в core/background.ts);
  *   3) core/content.ts: ветка Qwen + КРИТИЧНЫЙ запрет «Qwen НЕ в isGeminiSvc»
  *      (иначе стримовый usage Qwen перезаписывался бы countTokens BYOK);
  *   4) utils/model-config.ts: qwen3.8-max + qwen3.7-plus (1M) + дефолт сайта qwen;
@@ -24,7 +24,7 @@ const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROO
 
 const manifest = JSON.parse(read('manifest.json'));
 const manifestRaw = read('manifest.json');
-const background = read('core/background.js');
+const background = read('core/background.ts');
 const content = read('core/content.ts');
 const modelConfigRaw = read('utils/model-config.ts');
 const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.ts');
@@ -106,7 +106,7 @@ describe('O-35: manifest.json — Qwen добавлен, прежние серв
   });
 });
 
-describe('O-35/O-53/R2: core/background.js — регистрация перехватчика Qwen в MAIN-мире', function () {
+describe('O-35/O-53/R2: core/background.ts — регистрация перехватчика Qwen в MAIN-мире', function () {
   test('новый id зарегистрирован с MAIN-миром и document_start', function () {
     const m = /id: 'ai-cm-qwen-intercept-v4',[\s\S]*?matches: \['https:\/\/chat\.qwen\.ai\/\*'\],[\s\S]*?js: \[([^\]]*)\],[\s\S]*?runAt: 'document_start',[\s\S]*?world: 'MAIN'/.exec(background);
     expect(m).not.toBeNull();

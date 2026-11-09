@@ -4,7 +4,7 @@
  * AI Studio: сквозная связка «перехватчик → модуль вложений → дренаж».
  *
  * Один vm-контекст, в котором сначала грузится core/aistudio-intercept.js,
- * затем core/aistudio-files.js — ровно тот порядок, что в core/background.js
+ * затем core/aistudio-files.js — ровно тот порядок, что в core/background.ts
  * (plan-aistudio-files.md §8). Так проверяется ленивый __bind: перехватчик
  * обязан привязать модуль при первом обращении, а не на загрузке.
  *
@@ -338,7 +338,7 @@ describe('AI Studio: статические пины проводки', () => {
   });
 
   test('background регистрирует модуль после перехватчика', () => {
-    const bg = read('core/background.js');
+    const bg = read('core/background.ts');
     expect(bg).toContain("'ai-cm-aistudio-intercept-v2'");
     expect(bg).toContain("unregisterContentScripts({ ids: ['ai-cm-aistudio-intercept'] })");
     expect(bg).toContain("'core/aistudio-files.js'");

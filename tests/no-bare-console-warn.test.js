@@ -11,7 +11,7 @@
  *      страж console.error намеренно НЕ ловит (tests/no-bare-console-error.test.js:261).
  *      Лексер стирает ключ-литерал, поэтому форма ловится по виду `console[…] (`, см. WARN_PATTERNS.
  *   2. Ловится и динамический уровень `console[level]` — иначе сам логгер (utils/debug.ts:62,69)
- *      был бы невидим для стража. SW-дубля debugLog в core/background.js больше нет:
+ *      был бы невидим для стража. SW-дубля debugLog в core/background.ts больше нет:
  *      Ph2 перевёл utils/debug.ts на ESM и SW импортирует его (R1).
  *   3. utils/debug.ts не «белый список целиком», а ЯВНО сканируемый файл: его сайты внесены
  *      в allow-list поимённо (иначе «владелец console.*» оказался бы непроверяемым).
@@ -47,7 +47,7 @@ function listJsFiles(dir) {
     if (entry.isDirectory()) {
       if (entry.name === 'node_modules') continue;
       out.push(...listJsFiles(full));
-    } else if (entry.isFile() && entry.name.endsWith('.js')) {
+    } else if (entry.isFile() && (entry.name.endsWith('.js') || entry.name.endsWith('.ts'))) {
       out.push(full);
     }
   }

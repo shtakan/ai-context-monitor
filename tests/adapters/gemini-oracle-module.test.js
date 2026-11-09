@@ -31,7 +31,7 @@
  *     модуля не перетирает API; без связки слушатель не бросает, а логирует.
  *
  *   S (проводка) — модуль реально подключён и связан с ядром:
- *     S1  регистрация в core/background.js: id -v11, модуль в js[] строго между archive
+ *     S1  регистрация в core/background.ts: id -v11, модуль в js[] строго между archive
  *         и ядром, -v10 в unregister (MV3 не перечитывает js[] под уже зарегистрированным id);
  *     S2  bind-контракт полон: 32 имени (10 fn + 10 rw + 12 ro) переданы ядром в блоке
  *         __bind ровно с теми видами связи, а два typeof-гарда тела обязаны быть привязаны;
@@ -642,8 +642,8 @@ describe('Phase 3 шаг 13.3: D-пины — API, размещение связ
 });
 
 describe('Phase 3 шаг 13.3: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v18, модуль между archive и ядром, -v13 снят', () => {
-    const bg = readFile('core/background.js');
+  test('S1: регистрация в core/background.ts — id -v18, модуль между archive и ядром, -v13 снят', () => {
+    const bg = readFile('core/background.ts');
     expect(bg).toContain("'ai-cm-gemini-intercept-v18'");
     expect(bg).toContain("'core/gemini-oracle.js'");
     // js[] собран ровно в этом порядке: … files → overlay → archive → oracle → ядро

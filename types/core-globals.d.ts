@@ -12,7 +12,7 @@
  *   1. state-переменные из core/state.ts (реестр + UMD-зеркало AiCmState);
  *   2. кросс-модульные функции соседних core-модулей (widget, base-handler, hybrid-tail, export-manager);
  *   3. utils-глобали общего скоупа (ModelConfig, Tokenizer);
- *   4. importScripts — MV3 service worker (core/background.js).
+ *   4. importScripts — MV3 service worker (core/background.ts).
  *
  * ПРАВИЛО НЕДУБЛИРОВАНИЯ: имена, объявленные В САМОМ файле-владельце (self-declared,
  * например aiCmAdapterBaseCount/aiCmAdapterBaseSeen в content.js или countTokensPending
@@ -55,7 +55,7 @@ declare function aiCmAistudioHistoryCacheClear(): boolean;
 
 // --- Service Worker (MV3) ----------------------------------------------------
 
-/** MV3 service worker: доступен в core/background.js для подключения перехватчиков. */
+/** MV3 service worker: доступен в core/background.ts для подключения перехватчиков. */
 declare function importScripts(...urls: string[]): void;
 
 // --- utils-глобали общего скоупа ----------------------------------------------

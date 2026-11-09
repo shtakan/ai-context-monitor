@@ -122,7 +122,7 @@ let lastCountTokensConvId: string = '';
 // отозванном ключе или сети бейдж «замёрз» бы на держании (aiCmHeuristicHoldForByok).
 let lastCountTokensErrorText: string = '';
 let countTokensTimer: ReturnType<typeof setTimeout> | null = null;
-let countTokensPending: boolean | Map<unknown, unknown> = false; // защита от повторного запроса пока предыдущий в полёте; JSDoc: имя перекрывается картой Map в core/background.js:538 (разные миры)
+let countTokensPending: boolean | Map<unknown, unknown> = false; // защита от повторного запроса пока предыдущий в полёте; JSDoc: имя перекрывается картой Map в core/background.ts:538 (разные миры)
 
 // ========== БЕЗОПАСНЫЙ ПОРОГ (регулятор; определения целиком, со стрелками) ==========
 let safePct: number | null = null;

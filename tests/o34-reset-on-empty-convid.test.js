@@ -63,7 +63,7 @@ const CONTENT = H.contentSource;                                  // модул�
 const WIDGET_SRC = H.moduleSource('core/widget.ts');
 const PARSER_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'chatgpt-conversation-parser.ts'), 'utf8');
 const PAGE_SRC = fs.readFileSync(path.join(ROOT, 'core', 'page-intercept.js'), 'utf8');
-const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.js'), 'utf8');
+const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.ts'), 'utf8');
 const MGR_SRC = read('core/export-manager.ts');
 const TOKENIZER_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'tokenizer.ts'), 'utf8');
 

@@ -160,7 +160,7 @@ export default [
   //    chrome.* как в webextensions, плюс serviceworker-глобали.
   // ---------------------------------------------------------------------------
   {
-    files: ['core/background.js'],
+    files: ['core/background.ts'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'script',
@@ -226,7 +226,7 @@ export default [
   //    (languageOptions.globals мержатся, только sourceType заменяется).
   //    Список точечный: по мере расширения пилота сюда добавляются файлы.
   //    Ph2, шаг 3: utils/platform.ts переведён на export, его потребители —
-  //    core/background.js, core/content.js, options/options.js — на статический
+  //    core/background.ts, core/content.js, options/options.js — на статический
   //    import, поэтому все четыре файла здесь.
   //    Ph2, шаг 4: utils/intercept-common.ts переведён на export, а четыре
   //    MAIN-перехватчика импортируют setIntervalVisible статически; их сборка —
@@ -236,7 +236,7 @@ export default [
   //    потребитель core/qwen-intercept.js тоже переведён на статический import и
   //    собирается отдельным IIFE-бандлом.
   //    Ph2, шаг debug.js: utils/debug.js — настоящий ESM (R1 закрыт), поэтому его
-  //    импортируют core/background.js, core/content.js и utils/intercept-common.ts.
+  //    импортируют core/background.ts, core/content.js и utils/intercept-common.ts.
   //    Для 8 MAIN-регистраций сборка выводит classic-артефакт dist/utils/debug.js.
   // ---------------------------------------------------------------------------
   {
@@ -248,7 +248,7 @@ export default [
       'utils/intercept-common.ts',
       'utils/stream-frames.ts',
       // R1 (Ph2): utils/debug.js переведён на ESM — его импортируют
-      // core/background.js, core/content.js и utils/intercept-common.ts.
+      // core/background.ts, core/content.js и utils/intercept-common.ts.
       'utils/debug.ts',
       // Ph2, шаг tokenizer.js: модуль переведён на ESM (UMD-хвост снят) и
       // втягивается import'ом из core/content.js.
@@ -273,7 +273,7 @@ export default [
       // втягивается import'ом из core/hybrid-tail.ts.
       'utils/gemini-dom-parser.ts',
       // Ph2, шаг gemini-intercept-logic.js: модуль переведён на ESM (UMD-хвост снят) и
-      // втягивается статическим import'ом из core/background.js; для MAIN-регистрации
+      // втягивается статическим import'ом из core/background.ts; для MAIN-регистрации
       // v12 build.mjs выводит classic-артефакт dist/utils/gemini-intercept-logic.js.
       'utils/gemini-intercept-logic.ts',
       // Ph2, шаг google-search-folwr-parser.js: модуль переведён на ESM (UMD-хвост
@@ -288,7 +288,7 @@ export default [
       // разбирается как module. Файл остаётся частью конкатенации content-бандла.
       'core/hybrid-tail.ts',
       'print/print.js',
-      'core/background.js',
+      'core/background.ts',
       'core/content.ts',
       'core/page-intercept.js',
       'core/claude-intercept.js',

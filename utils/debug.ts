@@ -245,7 +245,7 @@ try { if (typeof window !== 'undefined') window.__aiCmSwallow = swallow; } catch
 // whitelist ЗАПИСЬ-В-ЗАПИСЬ, а сам whitelist в шаге E.2c-A не обновляется — значит
 // номера строк всех существующих catch обязаны остаться прежними. Побочный плюс:
 // не сдвигаются и строки 62/69, на которые ссылается allow-list стража
-// tests/no-bare-console-warn.test.js. Для core/background.js действует то же правило.
+// tests/no-bare-console-warn.test.js. Для core/background.ts действует то же правило.
 // =============================================================================
 
 /**

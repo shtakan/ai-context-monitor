@@ -18,7 +18,7 @@
 
 // M-8: TTL-метка per-host записи истории. Глобальный ключ 'aiCmHistory' пишется прежней
 // формой (сам snapshot, без ts) — его семантика не меняется; поле ts аддитивно только
-// для 'aiCmHistory:<host>'. По ts core/background.js удаляет записи старше 30 дней.
+// для 'aiCmHistory:<host>'. По ts core/background.ts удаляет записи старше 30 дней.
 function aiCmHostHistoryRecord(snapshot: AiCmHashMap): AiCmHashMap {
   var rec = Object.assign({}, snapshot);
   rec.ts = Date.now();
@@ -429,7 +429,7 @@ function aiCmAistudioFilesApi(): any {
     if (typeof window === 'undefined') return null;
     // Очередь публикует MAIN-мир (core/aistudio-files.js), в types/ её нет
     // (types/ — запрещённая зона правки), поэтому доступ к Window — через any-каст
-    // (прецедент: core/background.js:176). Псевдоним из тикета (AiCmAiStudioFiles,
+    // (прецедент: core/background.ts:176). Псевдоним из тикета (AiCmAiStudioFiles,
     // с большой S) читается первым: имя могло быть закреплено в проде раньше.
     var w: any = (window as any);
     return w.AiCmAiStudioFiles || w.AiCmAistudioFiles || null;

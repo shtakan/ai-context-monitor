@@ -84,7 +84,7 @@ describe('LOW-2: manifest.json — smoke-тест состава ключей (C
     // поддерживает и в пакет не кладёт. Firefox-фолбэк /background/scripts
     // (AMO BACKGROUND_SERVICE_WORKER_NOFALLBACK) живёт только в dist-firefox/ —
     // его добавляет build.mjs (шаг 4c).
-    expect(manifest.background.service_worker).toBe('core/background.js');
+    expect(manifest.background.service_worker).toBe('core/background.ts');
     expect(Object.keys(manifest.background)).toEqual(['service_worker']);
     expect('scripts' in manifest.background).toBe(false);
   });
@@ -125,7 +125,7 @@ describe('LOW-2: manifest.json — smoke-тест состава ключей (C
   test('инварианты аудита не тронуты: version, default_locale, background, popup, content_scripts', () => {
     expect(manifest.version).toBe('2.0.44');
     expect(manifest.default_locale).toBe('ru');
-    expect(manifest.background.service_worker).toBe('core/background.js');
+    expect(manifest.background.service_worker).toBe('core/background.ts');
     expect(manifest.action.default_popup).toBe('options/options.html');
     expect(manifest.content_scripts).toHaveLength(1);
     expect(manifest.content_scripts[0].js).toContain('core/content.ts');

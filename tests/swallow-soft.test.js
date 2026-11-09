@@ -7,7 +7,7 @@
  *   D4 — срез-песочница БЕЗ utils/debug.ts: вызов не бросает (typeof-гард);
  *   D5 — aiCmDiagWarn: под гейтом ровно один console.warn, вне гейта — ни одного, ring всегда;
  *   R1 — swallow (utils/debug.ts:85-90) не изменилась: источник байт-в-байт + поведение;
- *   R2 — SW-зеркало в core/background.js: функции есть, console.error в них нет;
+ *   R2 — SW-зеркало в core/background.ts: функции есть, console.error в них нет;
  *   S1 — window.__aiCmSwallowSoft === swallowSoft.
  *
  * Исходник грузится через loadAsClassic: utils/debug.ts — ESM-модуль (R1), а песочница
@@ -22,7 +22,7 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const DEBUG_PATH = path.join(ROOT, 'utils', 'debug.ts');
-const BG_PATH = path.join(ROOT, 'core', 'background.js');
+const BG_PATH = path.join(ROOT, 'core', 'background.ts');
 const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
 const BG_SRC = fs.readFileSync(BG_PATH, 'utf8');
 const DEBUG_LINES = DEBUG_SRC.split('\n');
@@ -82,7 +82,7 @@ function gateOn() {
 }
 
 describe('Step E.2c-A: swallowSoft — канал B', () => {
-  test('A1/A2: хелперы объявлены в utils/debug.ts и в SW-дубле core/background.js', () => {
+  test('A1/A2: хелперы объявлены в utils/debug.ts и в SW-дубле core/background.ts', () => {
     expect(DEBUG_SRC).toContain('function swallowSoft(error, tag) {');
     expect(DEBUG_SRC).toContain('function aiCmDiagWarn(tag, message, detail) {');
     expect(BG_SRC).toContain('function swallowSoft(error, tag) {');
@@ -204,7 +204,7 @@ describe('Step E.2c-A: swallowSoft — канал B', () => {
     expect(consoleLog).toHaveBeenCalledTimes(0);
   });
 
-  test('R2: SW-зеркало в core/background.js — есть оба хелпера, console.error нет', () => {
+  test('R2: SW-зеркало в core/background.ts — есть оба хелпера, console.error нет', () => {
     const swSoft = fnSlice(BG_SRC, 'swallowSoft');
     const swWarn = fnSlice(BG_SRC, 'aiCmDiagWarn');
     expect(swSoft).not.toMatch(/console\s*\.\s*error/);

@@ -742,7 +742,7 @@ describe('Step D.10: A-лайт — состояние очереди и ожи�
 describe('Step D.10: source-пины связки (ingest -> files -> kernel -> export)', () => {
   const ingest = DS.readSource('core/deepseek-ingest.js');
   const kernel = DS.readSource('core/deepseek-intercept.js');
-  const bg = DS.readSource('core/background.js');
+  const bg = DS.readSource('core/background.ts');
   const baseHandler = DS.readSource('core/base-handler.ts');
   const content = DS.readSource('core/content.ts');
   const exporter = DS.readSource('core/export-manager.ts');

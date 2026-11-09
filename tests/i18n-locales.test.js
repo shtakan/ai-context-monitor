@@ -71,11 +71,11 @@ const DYNAMIC_SOURCES = contentSourceMap.SOURCES.map(function (rel) {
   ['utils/export-text-builders.ts', exportBuildersJs]
 ]);
 
-// M-4.5 (аудит 1.7): строки Chrome-уведомлений объявлены в core/background.js. В DYNAMIC_SOURCES
+// M-4.5 (аудит 1.7): строки Chrome-уведомлений объявлены в core/background.ts. В DYNAMIC_SOURCES
 // файл НЕ входит (лексер §7 нашёл бы там диагностические ru-логи), но скану «мёртвых ключей»
 // и пину M-4.5 исходник SW нужен.
-const BACKGROUND_JS = fs.readFileSync(path.join(ROOT, 'core', 'background.js'), 'utf8');
-const USED_KEY_SOURCES = DYNAMIC_SOURCES.concat([['core/background.js', BACKGROUND_JS]]);
+const BACKGROUND_JS = fs.readFileSync(path.join(ROOT, 'core', 'background.ts'), 'utf8');
+const USED_KEY_SOURCES = DYNAMIC_SOURCES.concat([['core/background.ts', BACKGROUND_JS]]);
 
 // Атрибуты разметки, которыми объявляются ключи локали (механика i18n-apply.js).
 const I18N_ATTRS = ['data-i18n', 'data-i18n-placeholder', 'data-i18n-title', 'data-i18n-aria-label'];
@@ -121,7 +121,7 @@ describe('M-4: manifest.json — default_locale ru', () => {
     expect(manifest.permissions).toEqual(['scripting', 'storage', 'notifications', 'offscreen']);
     // 10 — прежние 9 + chat.qwen.ai (O-35); состав хостов проверяется пинами Qwen-проводки
     expect(manifest.host_permissions).toHaveLength(10);
-    expect(manifest.background.service_worker).toBe('core/background.js');
+    expect(manifest.background.service_worker).toBe('core/background.ts');
     expect(manifest.action.default_popup).toBe('options/options.html');
   });
 
@@ -1395,7 +1395,7 @@ describe('M-4.4: локализация privacy/privacy.html и docs/index.html'
 });
 
 /* =====================================================================================
- * 11. M-4.5 (аудит 1.7): строки Chrome-уведомлений (core/background.js) и разделитель
+ * 11. M-4.5 (аудит 1.7): строки Chrome-уведомлений (core/background.ts) и разделитель
  *     списка архивов (options/options.js) берутся из _locales, а не из литералов кода
  * ===================================================================================== */
 

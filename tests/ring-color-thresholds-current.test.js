@@ -16,7 +16,7 @@
 const HELPERS = require('./helpers/content-source.js');
 
 const WIDGET_SRC = HELPERS.moduleSource('core/widget.ts');
-const BG_SRC = HELPERS.readSource('core/background.js');
+const BG_SRC = HELPERS.readSource('core/background.ts');
 const GIL_SRC = HELPERS.readSource('utils/gemini-intercept-logic.ts');
 
 function extractFn(src, name) {

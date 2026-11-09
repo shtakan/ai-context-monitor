@@ -545,7 +545,7 @@ describe('Step D.6: core/deepseek-emit.js — контракт модуля EMIT
     // актуальные значения пинованы в deepseek-d8-module.test.js; здесь проверяется,
     // что модуль D.6 остался в js[] и ядро его читает.
     expect(KERNEL_SRC).toContain('aiCmDeepseekEmit');
-    const bg = DS.readSource('core/background.js');
+    const bg = DS.readSource('core/background.ts');
     expect(bg).toContain("js: ['utils/debug.js', 'core/deepseek-diag.js', 'core/deepseek-netsync.js', 'core/deepseek-refetch.js', 'core/deepseek-parse.js', 'core/deepseek-conv.js', 'core/deepseek-emit.js', 'core/deepseek-net.js', 'core/deepseek-ingest.js', 'core/deepseek-files.js', 'core/deepseek-sse.js', 'core/deepseek-intercept.js']");
     expect(bg).toContain("ids.indexOf('ai-cm-deepseek-intercept-v12') === -1");
     expect(bg).toContain("unregisterContentScripts({ ids: ['ai-cm-deepseek-intercept-v10', 'ai-cm-deepseek-intercept-v11'] })");

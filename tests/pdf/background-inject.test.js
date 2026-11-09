@@ -3,7 +3,7 @@
 // Фикс B: регистрация MAIN-хелпера AiCmPdf (core/pdf-bytes.js) обязана идти
 // ПЕРВОЙ и в собственном try, а после свежей регистрации — самопроверка
 // hello → ready через chrome.scripting.executeScript(world:'MAIN').
-// Тест режет helpers из core/background.js и исполняет их с фейковым chrome:
+// Тест режет helpers из core/background.ts и исполняет их с фейковым chrome:
 // так проверяется и порядок, и реальное поведение, без загрузки всего SW.
 
 const fs = require('fs');
@@ -11,7 +11,7 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..', '..');
-const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.js'), 'utf8');
+const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.ts'), 'utf8');
 
 const START = BG_SRC.indexOf('async function registerSafe');
 const END = BG_SRC.indexOf('async function ensureInterceptor');

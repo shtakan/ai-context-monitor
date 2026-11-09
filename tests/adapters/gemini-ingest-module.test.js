@@ -26,7 +26,7 @@
  *     NOT в модуле нет `D.`-префиксов — связка идёт только через `with (D)`.
  *
  *   S (проводка):
- *     S1  регистрация в core/background.js: id -v8, js[] с ingest строго после
+ *     S1  регистрация в core/background.ts: id -v8, js[] с ingest строго после
  *         loader-scroll и перед ядром, -v7 в unregister (MV3 не перечитывает js[]
  *         под уже зарегистрированным id);
  *     S2  bind-контракт полон: все 72 имени контракта переданы ядром в блоке __bind
@@ -273,8 +273,8 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
 });
 
 describe('Phase 3 шаг 12: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v18, gemini-files перед ingest, -v13 снят', () => {
-    const bg = readFile('core/background.js');
+  test('S1: регистрация в core/background.ts — id -v18, gemini-files перед ingest, -v13 снят', () => {
+    const bg = readFile('core/background.ts');
     expect(bg).toContain("'ai-cm-gemini-intercept-v18'");
     expect(bg).toContain("'core/gemini-ingest.js'");
     // js[] собран ровно в этом порядке: sse → pagination → loader-scroll → files → ingest → ядро

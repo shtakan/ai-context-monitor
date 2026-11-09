@@ -6,7 +6,7 @@
 //     пишет plaintext в chrome.storage.local (spy), пишет в chrome.storage.session;
 //     статус-строка «Ключ: задан / не задан» — по факту session; кнопка «Убрать ключ»
 //     очищает session; прежний plaintext из local переносится в session при открытии;
-//   * core/background.js (vm-песочница, реальный код SW): миграция на onInstalled и
+//   * core/background.ts (vm-песочница, реальный код SW): миграция на onInstalled и
 //     onStartup ([AI CM][byok] migrated plaintext→session), COUNT_TOKENS без ключа в
 //     session → {ok:false, reason:'no-key'} БЕЗ сети, COUNT_TOKENS с ключом в session → сеть;
 //   * source-пины: options.html (hint «до перезапуска браузера» + «Убрать ключ»),
@@ -18,12 +18,12 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
-const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.js'), 'utf8');
+const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.ts'), 'utf8');
 // Ph2, шаг 3: background.js начинается со статического import'а utils/platform.ts,
 // поэтому в vm-песочницу подаём не сырой исходник, а loadAsClassic(): тот разворачивает
 // import в IIFE зависимости — ровно тот граф, который esbuild кладёт в бандл SW.
 // getURL мока отдаёт chrome-extension://, как в Chrome.
-const BG_CLASSIC = require('./helpers/load-esm.js').loadAsClassic('core/background.js');
+const BG_CLASSIC = require('./helpers/load-esm.js').loadAsClassic('core/background.ts');
 const OPTIONS_HTML = fs.readFileSync(path.join(ROOT, 'options', 'options.html'), 'utf8');
 const PRIVACY_HTML = fs.readFileSync(path.join(ROOT, 'privacy', 'privacy.html'), 'utf8');
 
@@ -239,7 +239,7 @@ describe('M-7: options.js — ключ пишется только в chrome.sto
 });
 
 /* =====================================================================================
- * 2. core/background.js — миграция plaintext→session и COUNT_TOKENS из session (vm)
+ * 2. core/background.ts — миграция plaintext→session и COUNT_TOKENS из session (vm)
  * ===================================================================================== */
 
 function loadBackground(opts) {
@@ -329,7 +329,7 @@ function loadBackground(opts) {
   sandbox.globalThis = sandbox;
   sandbox.navigator = { userAgent: 'jest-sw' };
   vm.createContext(sandbox);
-  vm.runInContext(BG_CLASSIC, sandbox, { filename: 'core/background.js' });
+  vm.runInContext(BG_CLASSIC, sandbox, { filename: 'core/background.ts' });
 
   return {
     sandbox,

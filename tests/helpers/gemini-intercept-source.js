@@ -3,23 +3,23 @@
  *
  * core/gemini-intercept.js декомпозирован: кластер скрытого скролла вынесен в
  * core/gemini-hidden-scroll.js. Порядок в MODULES — ровно порядок инъекции в
- * core/background.js (registerSafe 'ai-cm-gemini-intercept', document_start,
+ * core/background.ts (registerSafe 'ai-cm-gemini-intercept', document_start,
  * world 'MAIN'): модули идут ПЕРЕД core/gemini-intercept.js.
  *
  * v2.0 (Phase 3 step 1): кластер диагностики (DIAG_TOKENS-сканер и логи холодного старта) вынесен
- * в core/gemini-diag.js и добавлен в MODULES тем же порядком, что и в js[] core/background.js
+ * в core/gemini-diag.js и добавлен в MODULES тем же порядком, что и в js[] core/background.ts
  * (hidden-scroll -> diag -> ядро). Ядро при отсутствии модуля деградирует мягко, но в браузере
  * он подключён всегда, поэтому конкатенация ниже по-прежнему равна единому скоупу страницы.
  *
  * v2.0 (Phase 3 step 6): кластер парсеров кадра batchexecute (parseByBytes / parseByLines /
  * parseBatchExecute + tolerant-salvage обрезанного кадра) вынесен в core/gemini-parse.js и
- * добавлен в MODULES тем же порядком, что и в js[] core/background.js (rpc -> parse -> ядро).
+ * добавлен в MODULES тем же порядком, что и в js[] core/background.ts (rpc -> parse -> ядро).
  * Парсеры живут в модуле, поэтому fnDecl(...) режет их ОТТУДА; в ядре остались только
  * блок связки (__bind + алиасы) и handleOuter, который модуль получает инжекцией.
  * Песочницы тестов передают модулю его зависимости как ctx.D = ctx (D.<имя> — биндинг).
  *
  * v2.0 (Phase 3 step 9): SSE-кластер (перехват сети — врапперы fetch и XMLHttpRequest) вынесен
- * в core/gemini-sse.js и добавлен в MODULES тем же порядком, что и в js[] core/background.js
+ * в core/gemini-sse.js и добавлен в MODULES тем же порядком, что и в js[] core/background.ts
  * (parse -> sse -> ядро). Модуль не объявляет врапперы на верхнем уровне: ядро получает
  * installNetworkHooks() и зовёт его из прежнего места установки, поэтому конкатенация ниже
  * по-прежнему ставит сетевые патчи ровно один раз и в исходном порядке.
@@ -28,7 +28,7 @@
  * classifyOpaque(+Wide)/findCursors/edges8/refreshMinOrderTracking, paginateLoop, finishQuiet,
  * runCompletenessProbe, runCompletenessWatchdog, finishWatchdogDecision) вынесен в
  * core/pagination/pagination.js и добавлен в MODULES тем же порядком, что и в js[]
- * core/background.js (sse -> pagination -> ядро). Тела функций перенесены БАЙТОВЫМИ, без
+ * core/background.ts (sse -> pagination -> ядро). Тела функций перенесены БАЙТОВЫМИ, без
  * префикса `D.`: объявления лежат внутри `with (D) { … }`, поэтому свободное имя
  * резолвится в with-объект. Именно этим механизмом — и только им — существующие пины
  * исполняют вырезанные тела (`with (ctx)`, без ключа D), поэтому ассерты не менялись ни
@@ -38,7 +38,7 @@
  * SCROLL_PAUSE_HIDDEN_MS, loadFullHistoryInvisibly со вложенными помощниками,
  * LOADER_SIGNAL_WAIT_*, maybeStartLoader, слушатель visibilitychange, консольный хэндл ручного
  * запуска) вынесен в core/gemini-loader-scroll.js и добавлен в MODULES тем же порядком, что и в
- * js[] core/background.js (pagination -> loader-scroll -> ядро). В отличие от шага 10, тела
+ * js[] core/background.ts (pagination -> loader-scroll -> ядро). В отличие от шага 10, тела
  * перенесены с префиксом `D.` (объявления лежат в IIFE-каркасе модуля, а не в `with (D)`),
  * поэтому песочницы, исполняющие вырезанные тела, обязаны получить ключ `D: ctx` (см. выше).
  *
@@ -46,7 +46,7 @@
  * Phase 3 (payload, шаг 1): структурные предикаты и хелперы payload (фильтры мусора,
  * сбор вложений и текста хода, карта структуры, скелет страницы) вынесены в
  * core/gemini-payload.js и добавлены в MODULES тем же порядком, что и в js[]
- * core/background.js (files -> payload -> ingest -> ядро). Тела перенесены БАЙТОВЫМИ.
+ * core/background.ts (files -> payload -> ingest -> ядро). Тела перенесены БАЙТОВЫМИ.
  * Модуль ЧИСТЫЙ: ни состояния ядра, ни объекта связи — ни один его вызов не требует D,
  * поэтому новых песочниц шаг не добавляет, а существующие пины находят перенесённые
  * функции в конкатенации по прежним именам.
@@ -54,7 +54,7 @@
  * Phase 3 (шаг 3): детектор смены чата checkConvChange и перехваты навигации
  * (history.pushState/replaceState, popstate, document-scroll) вынесены в
  * core/gemini-spa-lifecycle.js и добавлены в MODULES тем же порядком, что и в js[]
- * core/background.js (diag-dump -> spa-lifecycle -> ядро). Ядро зовёт __bind в прежнем
+ * core/background.ts (diag-dump -> spa-lifecycle -> ядро). Ядро зовёт __bind в прежнем
  * месте установки патчей. Тела лежат внутри `with (D)` и адресуют состояние ядра через
  * контракт (7 fn значением, 3 rw-пары, 1 ro-геттер); resetForNewConversation остался в
  * ядре — его ~70 переменных читают ingest/лоадер/пагинация. Теневых копий нет:
@@ -67,14 +67,14 @@
  *
  * Phase 3 (шаг 4): активный vf5-дозапрос activeRefresh и emit-обёртка
  * sanitizeMessagesForEmit вынесены в core/gemini-active-refresh.js и добавлены в MODULES
- * тем же порядком, что и в js[] core/background.js (spa-lifecycle -> active-refresh -> ядро).
+ * тем же порядком, что и в js[] core/background.ts (spa-lifecycle -> active-refresh -> ядро).
  * Тела лежат внутри `with (D)` и получают состояние ядра связкой (8 fn значением, 3 rw-пары,
  * 3 ro-геттера). В ядре остались только hoisted-форвардеры, поэтому чужие __bind-блоки
  * (пагинация, ingest, SPA-фолбэк, архив) и прежние вызовы читают те же имена, что и раньше.
  *
  * Phase 3 (шаг 5): ядро состояния (Кластер 6 — 101 var: сетевые оригиналы, turns-база,
  * пагинация, оракул, лоадер, архив, оверлей, активность, эпоха чата) вынесено в
- * core/gemini-state.js и добавлено в MODULES тем же порядком, что и в js[] core/background.js
+ * core/gemini-state.js и добавлено в MODULES тем же порядком, что и в js[] core/background.ts
  * (active-refresh -> gemini-state -> ядро). Объявления перенесены БАЙТ-В-БАЙТ и лежат
  * внутри IIFE модуля, а экспортируются одним объектом window.AiCmGeminiState. Ядро
  * обёрнуто в `with (aiCmGeminiState) { … }`, поэтому свободные имена состояния резолвятся
@@ -99,7 +99,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
 
-// Порядок = порядок js[] в core/background.js для 'ai-cm-gemini-intercept'.
+// Порядок = порядок js[] в core/background.ts для 'ai-cm-gemini-intercept'.
 // utils/* сюда НЕ входят: они не декомпозировались (как и в content-source.js).
 // Phase 3 step 12: core/gemini-ingest.js идёт после loader-scroll и перед ядром — как в js[].
 // Phase 3 step 13.1: core/gemini-overlay.js идёт после ingest и перед ядром — как в js[].

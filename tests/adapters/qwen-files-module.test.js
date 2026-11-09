@@ -527,7 +527,7 @@ describe('R2: qfReset на SPA-переходе', function () {
 
 describe('R2: source-пины связки (перехватчик, регистрация, экспорт)', function () {
   const intercept = read('core/qwen-intercept.js');
-  const background = read('core/background.js');
+  const background = read('core/background.ts');
   const baseHandler = read('core/base-handler.ts');
   const content = read('core/content.ts');
   const exportManager = read('core/export-manager.ts');

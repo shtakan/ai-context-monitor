@@ -1,7 +1,7 @@
 /**
  * Шаг A.1 (security): изоляция BYOK-ключа и O3-латча already-fired в Service Worker.
  *
- * Контекст: до Шага A.1 core/background.js открывал chrome.storage.session ВСЕМ
+ * Контекст: до Шага A.1 core/background.ts открывал chrome.storage.session ВСЕМ
  * контент-скриптам (setAccessLevel 'TRUSTED_AND_UNTRUSTED_CONTEXTS'), поэтому
  * BYOK-ключ ('aiCmApiKeySession') был читаем кодом любого сайта в общей куче
  * контент-скриптов, а кросс-табовый латч O3 читался/писался вкладками напрямую.
@@ -33,11 +33,11 @@ const ROOT = path.join(__dirname, '..', '..');
 const CONTENT_HELPER = require('../helpers/content-source.js');
 const read = (rel) => CONTENT_HELPER.readSource(rel);
 
-const BG_SRC = read('core/background.js');
+const BG_SRC = read('core/background.ts');
 // Ph2, шаг 3: в background.js есть статический import (utils/platform.ts). Для текст-пинов
 // выше нужен сырой исходник, а для vm — loadAsClassic(): import развёрнут в IIFE зависимости,
 // как в собранном SW.
-const BG_CLASSIC = require('../helpers/load-esm.js').loadAsClassic('core/background.js');
+const BG_CLASSIC = require('../helpers/load-esm.js').loadAsClassic('core/background.ts');
 const CONTENT_SRC = require('../helpers/content-source.js').contentSource;
 const MANIFEST = JSON.parse(read('manifest.json'));
 
@@ -94,7 +94,7 @@ function maskNonCode(src) {
 }
 
 /* =====================================================================================
- * Загрузка реального core/background.js в vm-песочницу (тот же приём, что в
+ * Загрузка реального core/background.ts в vm-песочницу (тот же приём, что в
  * tests/byok-session.test.js): все chrome.* API замоканы, вызовы видны тесту.
  * ===================================================================================== */
 
@@ -175,7 +175,7 @@ function loadBackground(opts) {
   sandbox.globalThis = sandbox;
   sandbox.navigator = { userAgent: 'jest-sw' };
   vm.createContext(sandbox);
-  vm.runInContext(BG_CLASSIC, sandbox, { filename: 'core/background.js' });
+  vm.runInContext(BG_CLASSIC, sandbox, { filename: 'core/background.ts' });
 
   return {
     sandbox,
@@ -219,7 +219,7 @@ describe('Шаг A.1 / P1: chrome.storage.session доступен только 
   });
 
   // R-пин (FIX-SETACCESSLEVEL-INVALID-VALUE, аппендикс v54): значение, реально ушедшее
-  // в chrome.storage.session.setAccessLevel (реальный core/background.js в vm-песочнице),
+  // в chrome.storage.session.setAccessLevel (реальный core/background.ts в vm-песочнице),
   // обязано принадлежать allow-list'у Chrome. Пин выше держит «именно TRUSTED_CONTEXTS»
   // по намерению A.1; этот ловит любое значение-мусор, которое Chrome отклоняет
   // TypeError'ом на параметре accessOptions (так и прожил незамеченным TRUSTED_CONTEXTS_ONLY).
@@ -242,7 +242,7 @@ describe('Шаг A.1 / P1: chrome.storage.session доступен только 
 
 describe('Шаг A.1 / P2: контент-скрипты не ходят в chrome.storage.session напрямую', () => {
   // Контент-сборка = все файлы core/, utils/, adapters/ (manifest content_scripts +
-  // runtime-registered MAIN-перехватчики из background.js). core/background.js — SW,
+  // runtime-registered MAIN-перехватчики из background.js). core/background.ts — SW,
   // он и есть владелец session-хранилища; options/ и print/ — extension-страницы
   // (trusted-контекст), их BYOK-путь Шагом A.1 не менялся.
   const contentScriptFiles = [];
@@ -252,7 +252,7 @@ describe('Шаг A.1 / P2: контент-скрипты не ходят в chro
       // страж обязан видеть их исходники, иначе проверка станет вакуумной.
       if (!ent.isFile() || !/\.(js|ts)$/.test(ent.name)) return;
       const rel = dir + '/' + ent.name;
-      if (rel === 'core/background.js') return;
+      if (rel === 'core/background.ts') return;
       contentScriptFiles.push(rel);
     });
   });

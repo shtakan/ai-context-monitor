@@ -31,7 +31,7 @@
     "core/base-handler.ts",
     "core/hybrid-tail.ts",
     "core/export-manager.ts",
-    "core/background.js",
+    "core/background.ts",
     "core/page-intercept.js"
   ],
   "exclude": [

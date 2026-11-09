@@ -24,7 +24,7 @@
  *     API полон, модуль гигиеничен и повторная загрузка не перетирает Api.
  *
  *   S (проводка) — модуль реально подключён и связан с ядром:
- *     S1  регистрация в core/background.js: id -v11 (шаг 13.3), модуль в js[] строго между overlay
+ *     S1  регистрация в core/background.ts: id -v11 (шаг 13.3), модуль в js[] строго между overlay
  *         и ядром, -v10 в unregister (MV3 не перечитывает js[] под уже зарегистрированным id);
  *     S2  bind-контракт полон: все 22 имени контракта переданы ядром и все 22 используются
  *         модулем (регрессия = молчаливый no-op, которого не видит ни один старый пин);
@@ -537,8 +537,8 @@ describe('Phase 3 шаг 13.2: D-пины — API, размещение связ
 });
 
 describe('Phase 3 шаг 13.2: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v18, модуль между overlay и ядром, -v13 снят', () => {
-    const bg = readFile('core/background.js');
+  test('S1: регистрация в core/background.ts — id -v18, модуль между overlay и ядром, -v13 снят', () => {
+    const bg = readFile('core/background.ts');
     expect(bg).toContain("'ai-cm-gemini-intercept-v18'");
     expect(bg).toContain("'core/gemini-archive.js'");
     // js[] собран ровно в этом порядке: … loader-scroll → files → ingest → overlay → archive → oracle → ядро

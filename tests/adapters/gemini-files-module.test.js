@@ -886,7 +886,7 @@ describe('R2: протокол ожидания и сброс', function () {
 
 describe('R2: связка с перехватчиком/background', function () {
   test('background регистрирует gemini-files перед ingest, версия v18', function () {
-    const bg = read('core/background.js');
+    const bg = read('core/background.ts');
     expect(bg).toContain("'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js'");
     expect(bg).toContain("'ai-cm-gemini-intercept-v18'");
   });

@@ -1,28 +1,28 @@
-// M-8 (фаза 3, первая задача): TTL per-host истории — core/background.js + core/content.ts.
+// M-8 (фаза 3, первая задача): TTL per-host истории — core/background.ts + core/content.ts.
 //
 // Аудит: записи 'aiCmHistory:<host>' (chrome.storage.local, per-host) не имели срока
 // жизни — хранилище росло неограниченно месяцами. Контур:
-//   * core/background.js — prune перебирает ключи 'aiCmHistory:*' и удаляет записи с ts
+//   * core/background.ts — prune перебирает ключи 'aiCmHistory:*' и удаляет записи с ts
 //     старше TTL (30 дней); вызов на chrome.runtime.onStartup и chrome.runtime.onInstalled,
 //     ленивый вызов при записи того же ключа (chrome.storage.onChanged, area=local);
 //   * core/content.ts — каждая запись 'aiCmHistory:<host>' несёт аддитивное поле
 //     ts = Date.now(); глобальный ключ 'aiCmHistory' пишется ПРЕЖНЕЙ формой (не трогаем).
 //
-// Сьют грузит РЕАЛЬНЫЙ core/background.js в vm-песочницу (как background-counttokens.test.js),
+// Сьют грузит РЕАЛЬНЫЙ core/background.ts в vm-песочницу (как background-counttokens.test.js),
 // storage-мок — stateful (store/removed), поэтому проверяется исполняемый prune, а не текст.
 const path = require('path');
 const fs = require('fs');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
-const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.js'), 'utf8');
+const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.ts'), 'utf8');
 // Ph2, шаг 3: background.js импортирует utils/platform.ts, поэтому для vm берём
 // loadAsClassic() — import развёрнут в IIFE зависимости, как в собранном SW.
-const BG_CLASSIC = require('./helpers/load-esm.js').loadAsClassic('core/background.js');
+const BG_CLASSIC = require('./helpers/load-esm.js').loadAsClassic('core/background.ts');
 const CONTENT_SRC = require('./helpers/content-source.js').contentSource;
 
 const DAY_MS = 86400000;
-const TTL_MS = 2592000000; // 30 дней — значение пинуется ниже против core/background.js
+const TTL_MS = 2592000000; // 30 дней — значение пинуется ниже против core/background.ts
 
 // === Stateful storage-мок: get(null) отдаёт весь store, remove реально удаляет ===
 function makeStorage(initial) {
@@ -71,7 +71,8 @@ function makeStorage(initial) {
     // Ленивый prune — цепочка области 'local'; область 'session' тесты не трогают.
     localListeners: function () {
       return changedListeners.filter(function (fn) {
-        return String(fn).indexOf("areaName !== 'local'") !== -1;
+        // .ts-исходник проходит через esbuild (normalize кавычек) — форма кавычек не важна.
+        return /areaName\s*!==\s*['"]local['"]/.test(String(fn));
       });
     }
   };
@@ -140,7 +141,7 @@ function loadBackground(storage) {
   sandbox.globalThis = sandbox;
   sandbox.navigator = { userAgent: 'jest-sw' };
   vm.createContext(sandbox);
-  vm.runInContext(BG_CLASSIC, sandbox, { filename: 'core/background.js' });
+  vm.runInContext(BG_CLASSIC, sandbox, { filename: 'core/background.ts' });
   return {
     sandbox,
     listeners,
@@ -176,7 +177,7 @@ function historyFixture(now) {
   };
 }
 
-describe('M-8: prune TTL истории — core/background.js', () => {
+describe('M-8: prune TTL истории — core/background.ts', () => {
   test('константа TTL = 30 дней (2592000000) и вызовы в onStartup/onInstalled', () => {
     expect(TTL_MS).toBe(2592000000);
     expect(BG_SRC).toContain('var AI_CM_HISTORY_TTL_MS = 2592000000;');

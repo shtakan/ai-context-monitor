@@ -865,8 +865,8 @@ describe('utils/debug.ts: swallow — тонкая обёртка над debugLo
 // debugLog/swallow статическим import, а не несёт собственную копию логики. Один expect
 // на весь контракт: гейт правила 3 (behavior-only) считает source-пины поштучно.
 // =====================================================================================
-describe('core/background.js: хелперы канала A приходят из utils/debug.ts (R1)', () => {
-  const BG_SRC = fs.readFileSync(path.join(__dirname, '..', 'core', 'background.js'), 'utf8');
+describe('core/background.ts: хелперы канала A приходят из utils/debug.ts (R1)', () => {
+  const BG_SRC = fs.readFileSync(path.join(__dirname, '..', 'core', 'background.ts'), 'utf8');
 
   test('импорт вместо дублей: debugLog/swallow/флаг DEBUG живут только в utils/debug.ts', () => {
     expect({

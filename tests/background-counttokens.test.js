@@ -1,16 +1,16 @@
-// M-9: гигиена COUNT_TOKENS в core/background.js — таймаут с отменой, debounce, кэш.
-// Сьют грузит РЕАЛЬНЫЙ core/background.js в vm-песочницу (chrome-мок + мок fetch),
+// M-9: гигиена COUNT_TOKENS в core/background.ts — таймаут с отменой, debounce, кэш.
+// Сьют грузит РЕАЛЬНЫЙ core/background.ts в vm-песочницу (chrome-мок + мок fetch),
 // поэтому проверяется исполняемый код SW, а не его текстовый отпечаток.
 const path = require('path');
 const fs = require('fs');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
-const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.js'), 'utf8');
+const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.ts'), 'utf8');
 // Ph2, шаг 3: background.js импортирует utils/platform.ts статически, поэтому в песочницу
 // подаём loadAsClassic(): import развёрнут в IIFE зависимости, как в собранном SW.
 // Схема getURL ниже — chrome-extension://, т.е. движок определяется как Chrome.
-const BG_CLASSIC = require('./helpers/load-esm.js').loadAsClassic('core/background.js');
+const BG_CLASSIC = require('./helpers/load-esm.js').loadAsClassic('core/background.ts');
 
 const CACHE_MAX = 200;
 
@@ -84,7 +84,7 @@ function loadBackground(opts) {
   sandbox.globalThis = sandbox;
   sandbox.navigator = { userAgent: 'jest-sw' };
   vm.createContext(sandbox);
-  vm.runInContext(BG_CLASSIC, sandbox, { filename: 'core/background.js' });
+  vm.runInContext(BG_CLASSIC, sandbox, { filename: 'core/background.ts' });
 
   return {
     sandbox,
@@ -119,7 +119,7 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-describe('M-9: COUNT_TOKENS — таймаут с отменой, debounce, кэш (core/background.js)', () => {
+describe('M-9: COUNT_TOKENS — таймаут с отменой, debounce, кэш (core/background.ts)', () => {
   test('timeout: fetch не резолвится → через 10 с {ok:false, reason:"timeout"} и строка abort', async () => {
     // fetch висит до отмены: уважает signal и реджектит AbortError, как настоящий fetch
     const hanging = jest.fn((url, o) => new Promise((resolve, reject) => {

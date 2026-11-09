@@ -23,7 +23,7 @@
  *
  * Стенд: РЕАЛЬНЫЙ файл core/google-search-intercept.js + РЕАЛЬНЫЕ utils/debug.ts,
  * utils/google-search-folwr-parser.ts и utils/intercept-common.ts в jsdom — порядок и
- * способ загрузки ровно как в core/background.js:155 (MAIN-мир, классические скрипты в
+ * способ загрузки ровно как в core/background.ts:155 (MAIN-мир, классические скрипты в
  * одном глобальном скоупе; поэтому исходники исполняются непрямым eval, а не new Function).
  * «Сервер» — подменённый window.fetch; диаг-строки ловятся на console.log.
  */
@@ -82,7 +82,7 @@ function installStand(opts) {
   jest.spyOn(console, 'log').mockImplementation(function (m) { logs.push(String(m)); });
   jest.spyOn(console, 'warn').mockImplementation(function () { });
 
-  // Порядок core/background.js:155: debug.js → парсер → (intercept-common вшит в
+  // Порядок core/background.ts:155: debug.js → парсер → (intercept-common вшит в
   // MAIN_SRC мостом) → перехватчик.
   loadGlobal(DEBUG_SRC);
   loadGlobal(PARSER_SRC);

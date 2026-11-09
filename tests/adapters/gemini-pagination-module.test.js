@@ -20,7 +20,7 @@
  *     D6  одна точка записи  → прямых присваиваний в turnsMap в модуле нет.
  *
  *   S (проводка) — модуль реально подключён и связан с ядром:
- *     S1  регистрация в core/background.js: id -v10, js[] 14 файлов, модуль ПЕРЕД ядром,
+ *     S1  регистрация в core/background.ts: id -v10, js[] 14 файлов, модуль ПЕРЕД ядром,
  *         -v10 в unregister (MV3 не перечитывает js[] под уже зарегистрированным id);
  *     S2  bind-контракт полон: 71 зависимость передана и все 71 используются
  *         (регрессия = молчаливый no-op, который ни один старый пин не видит);
@@ -172,8 +172,8 @@ describe('Phase 3 шаг 10: D-пины маршрутов записи базы
 });
 
 describe('Phase 3 шаг 10: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v18 (Phase 3, шаг 2: дамп диагностики), модуль перед ядром, -v13 в unregister', () => {
-    const bg = readFile('core/background.js');
+  test('S1: регистрация в core/background.ts — id -v18 (Phase 3, шаг 2: дамп диагностики), модуль перед ядром, -v13 в unregister', () => {
+    const bg = readFile('core/background.ts');
     expect(bg).toContain("'ai-cm-gemini-intercept-v6'");
     expect(bg).toContain("'ai-cm-gemini-intercept-v18'");
     expect(bg).toContain("'core/pagination/pagination.js'");

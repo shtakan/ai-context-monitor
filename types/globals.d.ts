@@ -107,4 +107,11 @@ interface Window {
   parseGoogleFolwrOpen?: any;
   /** utils/google-search-folwr-parser.js */
   GoogleFolwrUtils?: any;
+  /**
+   * core/pdf-parser.js — window.AiCmPdf: хелпер PDF-байтов (fromUrl), к которому
+   * SW обращается через chrome.scripting.executeScript; объявлен после миграции
+   * core/background.ts (Wave 4), где JSDoc-каст `/** @type {any} *\/(window)` перестал
+   * действовать (в .ts он не типизирует выражение).
+   */
+  AiCmPdf?: { fromUrl?: (url: string) => any; ready?: boolean; [key: string]: any };
 }

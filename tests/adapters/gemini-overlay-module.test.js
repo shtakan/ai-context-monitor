@@ -19,7 +19,7 @@
  *     gemini-widget-theme-h22:331-336) режут их из конкатенации и исполняют в песочнице.
  *
  *   S (проводка) — модуль реально подключён и связан с ядром:
- *     S1  регистрация в core/background.js: id -v11 (шаг 13.3), модуль в js[] ПЕРЕД
+ *     S1  регистрация в core/background.ts: id -v11 (шаг 13.3), модуль в js[] ПЕРЕД
  *         ядром, -v10 в unregister (MV3 не перечитывает js[] под уже зарегистрированным id);
  *     S2  bind-контракт полон: все 3 имени контракта переданы ядром и все 3 используются
  *         модулем (регрессия = молчаливый no-op, которого не видит ни один старый пин);
@@ -321,8 +321,8 @@ describe('Phase 3 шаг 13.1: D-пины — API, гигиена, деград�
 });
 
 describe('Phase 3 шаг 13.1: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.js — id -v18, модуль перед ядром, -v13 снят', () => {
-    const bg = readFile('core/background.js');
+  test('S1: регистрация в core/background.ts — id -v18, модуль перед ядром, -v13 снят', () => {
+    const bg = readFile('core/background.ts');
     expect(bg).toContain("'ai-cm-gemini-intercept-v18'");
     expect(bg).toContain("'core/gemini-overlay.js'");
     // js[] собран ровно в этом порядке: … loader-scroll → files → ingest → overlay → ядро

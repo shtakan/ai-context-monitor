@@ -1,4 +1,4 @@
-// core/background.js
+// core/background.ts
 // Service Worker. Ставит перехватчики в МИР САЙТА ДО загрузки страницы
 // (document_start), программно, через registerContentScripts.
 // Это не зависит от manifest и не ломает существующую инжекцию content.js.
@@ -19,7 +19,7 @@ var lastGoodModel = '';
 // bg_notification_* есть в ru и en). chrome.i18n в MV3 SW доступен всегда; фолбэк
 // (юнит-тесты, отладочный контекст) — прежний русский текст, байтово тот же.
 // $1..$9 в сообщении локали подставляются substitutions (placeholders → $1/$2).
-function aiCmI18nMessage(key, fallback, substitutions) {
+function aiCmI18nMessage(key: string, fallback: string, substitutions?: unknown[]) {
   try {
     if (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.getMessage === 'function') {
       var message = substitutions ? chrome.i18n.getMessage(key, substitutions) : chrome.i18n.getMessage(key);
@@ -65,7 +65,7 @@ try {
 // перечитывает ключ через 'aiCm-get-byok-key' (иначе считал бы токены старым ключом).
 try {
   if (chrome.storage && chrome.storage.onChanged && typeof chrome.storage.onChanged.addListener === 'function') {
-    chrome.storage.onChanged.addListener(function (changes, area) {
+    chrome.storage.onChanged.addListener(function (changes: AiCmStorageChanges, area: string) {
       try {
         if (area !== 'session' || !changes || !changes[AI_CM_BYOK_SESSION_KEY]) return;
         chrome.tabs.query({}, function (tabs) {
@@ -516,7 +516,7 @@ if (chrome.runtime.onStartup) {
 }
 ensureInterceptor();
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: AiCmSwMessage, sender: AiCmSwSender, sendResponse: (response?: any) => void) => {
   debugLog('log', 'Получено сообщение в Service Worker:', message);
   // v1.15: dead-code обработчик UPDATE_CONTEXT_INFO удалён — SW эти данные не использует,
   // только логировал раньше под флагом «Подробные логи». Тип-имя разошлось в процессе
@@ -541,7 +541,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'BADGE_RESET') {
     // v55 (SPA): смена разговора в табе — гасим per-tab бейдж старого разговора;
     // актуальный поставит первый сработавший порог нового чата. Без таба-отправителя молчим.
-    var tabIdR = (sender && sender.tab && sender.tab.id != null) ? sender.tab.id : null;
+    var tabIdR: number | null = (sender && sender.tab && sender.tab.id != null) ? sender.tab.id : null;
     if (tabIdR != null && chrome.action && chrome.action.setBadgeText) {
       try {
         chrome.action.setBadgeText({ text: '', tabId: tabIdR });
@@ -632,9 +632,9 @@ function aiCmZoneColorFor(t, thresholds) {
   return '#22c55e';
 }
 
-async function checkThresholds(data, sender) {
+async function checkThresholds(data: AiCmThresholdData, sender: AiCmSwSender) {
   try {
-    var cfg = await new Promise(function (r) {
+    var cfg: any = await new Promise(function (r) {
       chrome.storage.local.get(['aiCmProactive', 'aiCmProactiveNotify'], r);
     });
     if (cfg.aiCmProactive === false) return; // выключен в настройках
@@ -658,7 +658,7 @@ async function checkThresholds(data, sender) {
     if (T == null) return;
 
     // Бейдж — пер-вкладочно, чтобы чужие табы не затирались
-    var tabId = (sender && sender.tab && sender.tab.id != null) ? sender.tab.id : null;
+    var tabId: number | null = (sender && sender.tab && sender.tab.id != null) ? sender.tab.id : null;
     if (tabId != null && chrome.action && chrome.action.setBadgeText) {
       try {
         chrome.action.setBadgeText({ text: String(T), tabId: tabId });
@@ -677,7 +677,7 @@ async function checkThresholds(data, sender) {
         firedArr.push(THRESHOLDS[i]);
       }
     }
-    var patch = {};
+    var patch: AiCmStoragePatch = {};
     patch[latchKey] = firedArr;
     await new Promise(function (r) { chrome.storage.session.set(patch, r); });
 
@@ -724,7 +724,7 @@ async function checkThresholds(data, sender) {
 // Кнопка «Открыть чат»: активируем исходную вкладку чата (id зашит в notifId);
 // если вкладка закрыта — молча выходим. tabs.create не используем: дубликат чата не нужен.
 if (chrome.notifications && chrome.notifications.onButtonClicked) {
-  chrome.notifications.onButtonClicked.addListener(function (notifId) {
+  chrome.notifications.onButtonClicked.addListener(function (notifId: string) {
     try {
       var parts = String(notifId).split('|');
       if (parts[0] !== 'aiCmThr' || parts.length < 3 || parts[1] === '') return;
@@ -1013,7 +1013,7 @@ function scheduleCountTokens(key, payload, debounced) {
   return entry.promise;
 }
 
-function handleCountTokens(message, sender) {
+function handleCountTokens(message: AiCmSwMessage, sender: AiCmSwSender) {
   // Firefox-сборка (AMO): манифест заявляет data_collection_permissions: none, а BYOK
   // отправляет текст диалога на generativelanguage.googleapis.com. Гейт стоит на
   // единственном входе в цепочку (сообщение COUNT_TOKENS): до fetch в
@@ -1050,7 +1050,7 @@ function handleCountTokens(message, sender) {
   return scheduleCountTokens(key, { text: text, model: model }, 0);
 }
 
-async function handleCountTokensRun(run) {
+async function handleCountTokensRun(run: AiCmCountTokensRun) {
   var text = run.text;
   var model = run.model;
   if (!text || text.length === 0) return { totalTokens: 0 };
@@ -1084,7 +1084,7 @@ async function handleCountTokensRun(run) {
     }
 
     try {
-      var fetchOpts = {
+      var fetchOpts: any = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1192,7 +1192,7 @@ try {
     });
   }
 } catch (eDarkGate) { }
-function aiCmHistWinCount(changes, keys) {
+function aiCmHistWinCount(changes: AiCmStorageChanges, keys: string[]) {
   try {
     if (!aiCmHistWinDebugOn) return;
     var now = Date.now();
@@ -1216,7 +1216,7 @@ function aiCmHistWinCount(changes, keys) {
 // и дочищает просрочку, не дожидаясь следующего старта браузера. Реагируем только на
 // запись ключа истории в local: прочие ключи и sync-область sweep не запускают.
 if (chrome.storage && chrome.storage.onChanged && chrome.storage.onChanged.addListener) {
-  chrome.storage.onChanged.addListener(function (changes, areaName) {
+  chrome.storage.onChanged.addListener(function (changes: AiCmStorageChanges, areaName: string) {
     if (areaName !== 'local' || !changes) return;
     if (changes.aiCmDebugLogs) aiCmHistWinDebugOn = (changes.aiCmDebugLogs.newValue === true);
     var touched = false;
@@ -1232,7 +1232,7 @@ if (chrome.storage && chrome.storage.onChanged && chrome.storage.onChanged.addLi
 // =============================================================================
 // Step E.2c-A: SW-зеркало канала B (swallowSoft / aiCmDiagWarn).
 //
-// importScripts/import в MV3 non-module SW невозможен (см. core/background.js:5),
+// importScripts/import в MV3 non-module SW невозможен (см. core/background.ts:5),
 // поэтому контракт канала B повторяется здесь локально, с двумя отличиями SW:
 //   - ring-буфера в SW нет (нет и __aiCmPushLogRing) — «всегда в ring» неприменимо,
 //     поэтому шаг (а) в SW ОТСУТСТВУЕТ, а не подменён другим логом;
@@ -1256,10 +1256,58 @@ function swallowSoft(error, tag) {
   } catch (eSoftSw) { return undefined; }
 }
 
+// Сигнатуры swallowSoft/aiCmDiagWarn байтово пинуются tests/swallow-soft.test.js,
+// поэтому типы даны отдельной overload-декларацией (esbuild её стирает в сборке).
+function aiCmDiagWarn(tag: string, message?: string, detail?: any): void;
 function aiCmDiagWarn(tag, message, detail) {
   try {
     if (typeof debugLog !== 'function') return;
     if (!aiCmHistWinDebugOn) return;
     debugLog('warn', '[AI CM][warn][' + (tag || 'unlabeled') + '] ' + message, detail);
   } catch (eWarnSw) { return undefined; }
+}
+
+// =============================================================================
+// Wave 4 (TS-миграция SW): типы границы Service Worker.
+//
+// `chrome` в проекте объявлен как `any` (types/globals.d.ts: @types/chrome не
+// подключается), поэтому типизируются только структуры, пересекающие границу SW:
+// сообщения content-скриптов, отправитель, storage.onChanged и payload
+// COUNT_TOKENS. Аннотации стоят инлайн в сигнатурах — без новых строк, чтобы не
+// сдвигать номера catch/console, запинутые в tests/fixtures/*.json и в
+// tests/no-bare-console-warn.test.js. Объявления — в хвосте по той же причине.
+// =============================================================================
+interface AiCmSwMessage {
+  type?: string;
+  data?: AiCmThresholdData;
+  text?: string;
+  model?: string;
+  convId?: string | number;
+  [key: string]: any;
+}
+
+interface AiCmThresholdData {
+  pct?: number;
+  convId?: string | number;
+}
+
+interface AiCmSwSender {
+  id?: string;
+  url?: string;
+  tab?: { id?: number | null; windowId?: number | null };
+}
+
+interface AiCmStorageChange {
+  oldValue?: any;
+  newValue?: any;
+}
+
+type AiCmStorageChanges = Record<string, AiCmStorageChange | undefined>;
+
+type AiCmStoragePatch = Record<string, unknown>;
+
+interface AiCmCountTokensRun {
+  text: string;
+  model: string;
+  debounced?: number;
 }

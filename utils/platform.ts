@@ -11,7 +11,7 @@
  * (в WebExtensions API это `api.runtime.getURL`; запасная ветка api.getURL — для моков).
  *
  * ГДЕ ЖИВЁТ. ESM-модуль (Roadmap Ph2): экспортирует aiCmIsFirefox() статически, потребители
- * (core/background.js, core/content.js, options/options.js) импортируют её. Сборка
+ * (core/background.ts, core/content.js, options/options.js) импортируют её. Сборка
  * (build.mjs) втягивает модуль в общий бандл через esbuild, поэтому в рантайме расширения
  * он по-прежнему исполняется в одной области видимости с потребителями, а не отдельным
  * <script>/content_script. tests/helpers/load-esm.js повторяет этот шаг для jest (CJS).

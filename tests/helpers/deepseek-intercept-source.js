@@ -22,7 +22,7 @@
  * ingestHistory: приёмка авторитетного снимка history_messages, сборка turnsMap по
  * ходам, детектор усечения цепочки с тихим дозапросом, режимы MERGE/export-sync) —
  * в core/deepseek-ingest.js (шаг D.8).
- * Порядок в MODULES — ровно порядок инъекции в core/background.js (registerSafe
+ * Порядок в MODULES — ровно порядок инъекции в core/background.ts (registerSafe
  * 'ai-cm-deepseek-intercept-v12', document_start, world 'MAIN'): модули идут ПЕРЕД
  * core/deepseek-intercept.js.
  *
@@ -50,7 +50,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
 
-// Порядок = порядок js[] в core/background.js для 'ai-cm-deepseek-intercept-v11'.
+// Порядок = порядок js[] в core/background.ts для 'ai-cm-deepseek-intercept-v11'.
 // utils/debug.ts сюда НЕ входит: он не декомпозировался (как и в content-source.js).
 const MODULES = [
   'core/deepseek-diag.js',

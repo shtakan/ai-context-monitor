@@ -32,7 +32,7 @@ const toggleApiKeyBtn = document.getElementById('toggle-api-key');
 const exactCountCheckbox = document.getElementById('exact-count');
 // BYOK-sync: подсказка «ключ не найден» под чекбоксом точного подсчёта.
 const exactCountWarningEl = document.getElementById('exact-count-warning');
-// Firefox-сборка (AMO): BYOK выключен в SW (core/background.js), поэтому UI не должен
+// Firefox-сборка (AMO): BYOK выключен в SW (core/background.ts), поэтому UI не должен
 // предлагать мёртвую функцию — обе секции скрываются, флаг точного подсчёта сбрасывается.
 // Движок определяем по схеме URL расширения (utils/platform.ts): Chrome 148+ тоже
 // выставляет глобал `browser`, поэтому typeof-проверка ложно отключала BYOK на Chrome.
