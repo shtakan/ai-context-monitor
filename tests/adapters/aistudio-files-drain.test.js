@@ -345,7 +345,7 @@ describe('AI Studio: статические пины проводки', () => {
   });
 
   test('адаптер дописывает секции после _cleanText (оба пути)', () => {
-    const src = read('adapters/aistudio-adapter.js');
+    const src = read('adapters/aistudio-adapter.ts');
     const hits = src.split('this._cleanText(rec.text) + sections;').length - 1;
     expect(hits).toBe(2);
   });

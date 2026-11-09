@@ -18,7 +18,7 @@
  *   loadAdapter(adapterFile, options?) → { Adapter, Ctor, sandbox }
  *   loadSource(file, options?)         → { sandbox, value, ctor }
  *
- * options: { baseFile='adapters/base-adapter.js', document, location, returnExpr, exportsName, strict }
+ * options: { baseFile='adapters/base-adapter.ts', document, location, returnExpr, exportsName, strict }
  */
 
 const fs = require('fs');
@@ -67,7 +67,7 @@ function stripCjsTail(src) {
  * Срезает комментарии (строчные — до конца строки, и блочные) из исходника, НЕ трогая
  * содержимое строковых литералов. Нужен замку №2 (см. ниже): он ищет ВЫЗОВЫ
  * `aiCm*(` текстово, и упоминание имени в комментарии — не вызов. Живой случай:
- * adapters/google-search-adapter.js:206 — фраза «Гейт — aiCm…» внутри комментария,
+ * adapters/google-search-adapter.ts:206 — фраза «Гейт — aiCm…» внутри комментария,
  * из-за которой адаптер отказывался грузиться (Plan §«google-search»).
  *
  * Посимвольный проход, а не regex: наивный `replace(/\/\/.*$/gm, …)` режет строки со
@@ -145,7 +145,7 @@ function dropLocalRequires(src) {
  *
  * После перевода utils/export-text-builders.ts на `import { buildReferenceText }`
  * его исходник не парсится как классический скрипт: `import` внутри Function-body —
- * SyntaxError. А файл реально въезжает в песочницу: adapters/qwen-adapter.js:429
+ * SyntaxError. А файл реально въезжает в песочницу: adapters/qwen-adapter.ts:429
  * делает `require('../utils/export-text-builders.ts')`, а collectFiles() вклеивает
  * исходник зависимости целиком. Поэтому named-import переписываем в CJS-эквивалент:
  * привязки берём из namespace-объекта модуля через tests/helpers/load-esm.js
@@ -211,7 +211,7 @@ function collectFiles(file, seen, all) {
 
 /**
  * Блочные теги: на их границах `innerText` ставит перевод строки — как в браузере и как
- * это делает структурный фолбэк `_innerTextFallback` (adapters/qwen-adapter.js:227-252).
+ * это делает структурный фолбэк `_innerTextFallback` (adapters/qwen-adapter.ts:227-252).
  * Набор совпадает с `QWEN_BLOCK_TAGS` того же файла: тест обязан проверять ту же
  * семантику текста, что увидит пользователь, иначе пины многострочности ничего не стоят.
  */
@@ -228,7 +228,7 @@ const INNER_TEXT_BLOCK_TAGS = {
  * Отрисовка текста в семантике браузерного `innerText` (без CSS-видимости и схлопывания
  * пробелов — они тестам не нужны): текст-узлы как есть, `<br>` → '\n', границы блочных
  * элементов и комментарии-маркеры снятых узлов (`ai-cm-qwen-cut`,
- * adapters/qwen-adapter.js: `_removeKeepingCut`) → '\n'. Крайние '\n' срезаются, чтобы
+ * adapters/qwen-adapter.ts: `_removeKeepingCut`) → '\n'. Крайние '\n' срезаются, чтобы
  * для плоского текста `innerText === textContent` (это и проверяет харнесс-тест).
  *
  * ПОЧЕМУ НЕ `return this.textContent`: у реплик Qwen каждая строка ответа — отдельный
@@ -431,7 +431,7 @@ function loadSource(files, options) {
 
 /**
  * Загружает адаптер: base-adapter.js первым (как в manifest.json), затем сам адаптер.
- * @param {string} adapterFile напр. 'adapters/qwen-adapter.js'
+ * @param {string} adapterFile напр. 'adapters/qwen-adapter.ts'
  * @param {object} [options] { baseFile, document, location, exportExpr, returnExpr, exportsName }
  * @returns {{Adapter: object, Ctor: Function, sandbox: object}} Adapter — экземпляр
  *
@@ -440,7 +440,7 @@ function loadSource(files, options) {
  */
 function loadAdapter(adapterFile, options) {
   const opts = options || {};
-  const baseFile = opts.baseFile || 'adapters/base-adapter.js';
+  const baseFile = opts.baseFile || 'adapters/base-adapter.ts';
   const res = loadSource([baseFile, adapterFile], {
     document: opts.document,
     location: opts.location,

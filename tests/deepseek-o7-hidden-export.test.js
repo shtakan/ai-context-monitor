@@ -57,8 +57,8 @@ const PIPELINE_SRC = read('utils/export-emit-pipeline.ts');
 const EXPORT_MGR_SRC = read('core/export-manager.js');
 const BASE_HANDLER_SRC = read('core/base-handler.js');
 const CONTENT_SRC = require('./helpers/content-source.js').contentSource;
-const ADAPTER_SRC = read('adapters/deepseek-adapter.js');
-const BASE_ADAPTER_SRC = read('adapters/base-adapter.js');
+const ADAPTER_SRC = require('./helpers/read-module-source.js').readModuleSource('adapters/deepseek-adapter.ts');
+const BASE_ADAPTER_SRC = require('./helpers/read-module-source.js').readModuleSource('adapters/base-adapter.ts');
 // Step D.1: source-пины читают конкатенацию модулей + ядра (как js[] в браузере).
 const INTERCEPT_SRC = require('./helpers/deepseek-intercept-source.js').deepseekSource;
 const OPTIONS_JS = read('options/options.js');
@@ -1159,7 +1159,7 @@ describe('O-7 capture: hidden-пометки в базе', () => {
 
   test('прочие адаптеры платформ hidden-захват не получили (минимально необходимое изменение)', () => {
     ['chatgpt', 'gemini', 'claude', 'perplexity', 'google-search'].forEach(function (name) {
-      const src = read('adapters/' + name + '-adapter.js');
+      const src = read('adapters/' + name + '-adapter.ts');
       expect([name, src.indexOf('hiddenReasoning')]).toEqual([name, -1]);
     });
   });

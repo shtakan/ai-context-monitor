@@ -40,8 +40,12 @@ const ROOT = path.join(__dirname, '..');
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
 const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
 const ADAPTER_DIR = path.join(ROOT, 'adapters');
-const ADAPTER_SRC = fs.readFileSync(path.join(ADAPTER_DIR, 'deepseek-adapter.js'), 'utf8');
-const BASE_ADAPTER_SRC = fs.readFileSync(path.join(ADAPTER_DIR, 'base-adapter.js'), 'utf8');
+const { readModuleSource } = require('./helpers/read-module-source.js');
+const ADAPTER_SRC = readModuleSource(path.join(ADAPTER_DIR, 'deepseek-adapter.ts'));
+const BASE_ADAPTER_SRC = readModuleSource(path.join(ADAPTER_DIR, 'base-adapter.ts'));
+// Для source-пинов ниже нужен исходник как есть на диске: транспиляция переформатирует
+// литералы и добавляет `__publicField(...)` для объявленных полей класса.
+const ADAPTER_RAW = fs.readFileSync(path.join(ADAPTER_DIR, 'deepseek-adapter.ts'), 'utf8');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 
@@ -361,19 +365,19 @@ describe('O-21: строка o21-source-select в точке выбора ист
 // =====================================================================================
 describe('O-21: source-пины инструментирования', () => {
   test('печать идёт каноном aiCmDiagLine (своего формата/консоли нет)', () => {
-    expect(ADAPTER_SRC).toContain("aiCmDiagLine('o21-dom-extract'");
+    expect(ADAPTER_RAW).toContain("aiCmDiagLine('o21-dom-extract'");
     expect(MGR_SRC).toContain("aiCmDiagLine('o21-source-select'");
     // ни одного собственного console.* в блоках O-21
-    expect(ADAPTER_SRC).not.toContain("console.log('[AI CM][o21");
+    expect(ADAPTER_RAW).not.toContain("console.log('[AI CM][o21");
     expect(MGR_SRC).not.toContain("console.log('[AI CM][o21");
   });
 
   test('гейт — канонический aiCmDiagOn, а НЕ несуществующий window.aiCmDebug', () => {
-    expect(ADAPTER_SRC).toContain("(typeof aiCmDiagOn === 'function') ? aiCmDiagOn() : false");
+    expect(ADAPTER_RAW).toContain("(typeof aiCmDiagOn === 'function') ? aiCmDiagOn() : false");
     expect(MGR_SRC).toContain("typeof aiCmDiagOn === 'function' && aiCmDiagOn()");
     // «мёртвый» гейт window.aiCmDebug не заведён нигде в проекте: он не выставляется ни одним
     // файлом, поэтому инструментирование по нему молчало бы всегда (отвергнутая версия).
-    expect(ADAPTER_SRC).not.toContain('window.aiCmDebug');
+    expect(ADAPTER_RAW).not.toContain('window.aiCmDebug');
     expect(MGR_SRC).not.toContain('window.aiCmDebug');
   });
 
@@ -395,12 +399,12 @@ describe('O-21: source-пины инструментирования', () => {
   test('границы правки: логика извлечения/выбора источника не переписана', () => {
     // extractMessages по-прежнему решает ОДНИМ предикатом (не разложен на early-return),
     // а выбор источника — прежним pickExportSource: O-21 не добавил ни одной ветки выбора.
-    expect(ADAPTER_SRC).toContain(
+    expect(ADAPTER_RAW).toContain(
       'if (content && content.length > 0 && role !== \'unknown\' && this._hasRealContent(content)) {'
     );
     expect(MGR_SRC).toContain('P.pickExportSource(baseSeen === true, texts.length > 0)');
     // новые счётчики живут ТОЛЬКО в адаптере DeepSeek — прочие адаптеры не тронуты
-    expect(fs.readFileSync(path.join(ADAPTER_DIR, 'gemini-adapter.js'), 'utf8')).not.toContain('o21-');
-    expect(ADAPTER_SRC).not.toContain('netMsgs');
+    expect(fs.readFileSync(path.join(ADAPTER_DIR, 'gemini-adapter.ts'), 'utf8')).not.toContain('o21-');
+    expect(ADAPTER_RAW).not.toContain('netMsgs');
   });
 });

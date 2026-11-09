@@ -329,7 +329,7 @@ describe('O-26 (2): счётчики netMsgs/domMsgs в trace-строке svc-e
     expect(pipe).not.toContain('netMsgs');
     expect(pipe).not.toContain('domMsgs');
     expect(manifest).not.toContain('netMsgs');
-    expect(fs.readFileSync(path.join(ROOT, 'adapters', 'gemini-adapter.js'), 'utf8')).not.toContain('domMsgs');
-    expect(fs.readFileSync(path.join(ROOT, 'adapters', 'deepseek-adapter.js'), 'utf8')).not.toContain('netMsgs');
+    expect(fs.readFileSync(path.join(ROOT, 'adapters', 'gemini-adapter.ts'), 'utf8')).not.toContain('domMsgs');
+    expect(fs.readFileSync(path.join(ROOT, 'adapters', 'deepseek-adapter.ts'), 'utf8')).not.toContain('netMsgs');
   });
 });

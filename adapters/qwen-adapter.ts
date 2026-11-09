@@ -68,18 +68,19 @@ const QWEN_CUT_MARKER = 'ai-cm-qwen-cut';
  */
 
 /**
- * Сообщение в форме адаптера (types/adapter.d.ts).
- * @typedef {import('../types/adapter').ExtractedMessage} QwenExtractedMessage
- */
-
-/**
- * Функция отбрасывания узлов-контейнеров из utils/export-text-builders.js
+ * Функция отбрасывания узлов-контейнеров из utils/export-text-builders.ts
  * (aiCmDropContainerMessages). Резолвится лениво, пороги живут в aiCmContainerRules.
- * @typedef {function(Array<T>): Array<T>} QwenContainerDrop
- * @template T
  */
+type QwenContainerDrop<T> = (messages: T[]) => T[];
 
 class QwenAdapter extends BaseAdapter {
+  /** Селекторы узлов сообщений: первый непустой набор выигрывает. */
+  _messageSelectors: string[];
+  /** Блок размышлений (панель thinking внутри узла реплики). */
+  _reasoningSelectors: string;
+  /** Служебные узлы интерфейса, чей текст сообщением не является. */
+  _noiseSelectors: string;
+
   constructor() {
     super();
     this.siteName = 'qwen';
@@ -138,17 +139,15 @@ class QwenAdapter extends BaseAdapter {
 
   /**
    * Блочные теги для структурного фолбэка innerText (перевод строки после элемента).
-   * @returns {Record<string, boolean>}
    */
-  static get _BLOCK_TAGS() {
+  static get _BLOCK_TAGS(): Record<string, boolean> {
     return QWEN_BLOCK_TAGS;
   }
 
   /**
    * Живой признак ввода Qwen (подтверждён сниффером: textarea «Спросить Qwen»).
-   * @returns {boolean}
    */
-  _hasComposer() {
+  _hasComposer(): boolean {
     try {
       return !!document.querySelector('textarea[placeholder*="Qwen"], textarea[placeholder*="qwen"]') ||
         !!document.querySelector('textarea[placeholder*="Спросить"], textarea[placeholder*="Ask"]');
@@ -158,9 +157,8 @@ class QwenAdapter extends BaseAdapter {
   /**
    * Находимся ли мы на странице чата Qwen: хост qwen.ai И (поле ввода ИЛИ узлы реплик
    * ИЛИ адрес вида /c/<id>). Иначе адаптер не считается активным.
-   * @returns {boolean}
    */
-  isOnDialogPage() {
+  isOnDialogPage(): boolean {
     try {
       if (!/chat\.qwen\.ai$/i.test(String(location.hostname || '')) &&
         String(location.hostname || '').indexOf('qwen.ai') === -1) return false;
@@ -171,9 +169,8 @@ class QwenAdapter extends BaseAdapter {
   /**
    * Узлы сообщений: первый непустой набор кандидатов (точные классы — первым, см. шапку),
    * с отсевом обёрток turn-selection. Пусто, если не отрисовано ни одной реплики.
-   * @returns {Element[]}
    */
-  _messageNodes() {
+  _messageNodes(): Element[] {
     for (let i = 0; i < this._messageSelectors.length; i++) {
       const nodes = this._safeQuerySelectorAll(this._messageSelectors[i]);
       if (nodes && nodes.length > 0) return this._dropTurnOnlyNodes(Array.prototype.slice.call(nodes));
@@ -188,10 +185,8 @@ class QwenAdapter extends BaseAdapter {
    * класс-независимый барьер (страховка на случай смены класса обёртки): узлом-обёрткой
    * считается ТОЛЬКО тот, чей класс содержит `select-turn`, — реальные реплики
    * (`.qwen-chat-message.qwen-chat-message-user/assistant`) не содержат его никогда.
-   * @param {Element[]} nodes
-   * @returns {Element[]}
    */
-  _dropTurnOnlyNodes(nodes) {
+  _dropTurnOnlyNodes(nodes: Element[]): Element[] {
     return nodes.filter(function (el) {
       const cls = String((el && el.className) || '').toLowerCase();
       return cls.indexOf('select-turn') === -1;
@@ -203,10 +198,8 @@ class QwenAdapter extends BaseAdapter {
    * Живой браузер: `innerText` — 1:1 с тем, что видит пользователь (многострочность).
    * jsdom/срез: `innerText` не реализован → структурный фолбэк (тот же принцип: перевод
    * строки после блочного элемента), затем ОДНА нормализация для обоих путей.
-   * @param {Element & {innerText?: string}} element
-   * @returns {string}
    */
-  _readableText(element) {
+  _readableText(element: Element & {innerText?: string}): string {
     try {
       if (!element) return '';
       let raw = '';
@@ -221,14 +214,12 @@ class QwenAdapter extends BaseAdapter {
   /**
    * Структурный фолбэк innerText (jsdom/срез, где innerText не реализован): обход дерева,
    * перевод строки вокруг блочных элементов и на маркере среза; <br> — перевод строки.
-   * @param {Element} root
-   * @returns {string}
    */
-  _innerTextFallback(root) {
+  _innerTextFallback(root: Element): string {
     try {
       let out = '';
       const block = QWEN_BLOCK_TAGS;
-      const walk = function (/** @type {Node} */ node) {
+      const walk = function (node: Node) {
         const type = node.nodeType;
         if (type === 3) { out += node.nodeValue || ''; return; }
         if (type === 8) {                       // маркер снятого служебного узла → разделитель
@@ -237,7 +228,7 @@ class QwenAdapter extends BaseAdapter {
         }
         if (type !== 1) return;
         // nodeType === 1 — элемент, у него есть tagName (у Node в общем случае нет).
-        const tag = String(/** @type {Element} */ (/** @type {unknown} */ (node)).tagName || '').toUpperCase();
+        const tag = String(((node as unknown) as Element).tagName || '').toUpperCase();
         if (tag === 'BR') { out += '\n'; return; }
         // Блок начинается с новой строки (если текст уже есть) и ею же заканчивается — так
         // разделяются соседние <p>/<div> и не склеиваются текст-узел и следующий блок.
@@ -256,10 +247,8 @@ class QwenAdapter extends BaseAdapter {
    * Схлопывание — осознанный компромисс: пустые строки верстки (`\n\n` между абзацами) не
    * размножаются, многострочность и границы блоков при этом сохраняются (дефект textContent
    * был в ПОТЕРЕ переводов строк, а не в их количестве).
-   * @param {string} text
-   * @returns {string}
    */
-  _normalizeLines(text) {
+  _normalizeLines(text: string): string {
     try {
       return String(text == null ? '' : text)
         .replace(/\r\n?/g, '\n')
@@ -273,10 +262,8 @@ class QwenAdapter extends BaseAdapter {
    * Снятие служебного узла с сохранением границы: на месте узла остаётся маркер-комментарий,
    * который `_innerTextFallback` превращает в перевод строки. Без маркера соседние текст-узлы
    * склеились бы («привет» + снятая кнопка + «как дела» → «приветкак дела»).
-   * @param {NodeList|Element[]} nodes
-   * @returns {void}
    */
-  _removeKeepingCut(nodes) {
+  _removeKeepingCut(nodes: NodeListOf<Element>|Element[]): void {
     Array.prototype.slice.call(nodes).forEach(function (el) {
       try {
         if (el.parentNode) el.parentNode.insertBefore(document.createComment(QWEN_CUT_MARKER), el);
@@ -287,12 +274,10 @@ class QwenAdapter extends BaseAdapter {
 
   /**
    * Текст узла БЕЗ служебных элементов и БЕЗ блока размышлений (многострочность сохранена).
-   * @param {Element} element
-   * @returns {string}
    */
-  _textWithoutReasoning(element) {
+  _textWithoutReasoning(element: Element): string {
     try {
-      const clone = /** @type {Element} */ (element.cloneNode(true));
+      const clone = (element.cloneNode(true) as Element);
       this._removeKeepingCut(clone.querySelectorAll(this._noiseSelectors));
       this._removeKeepingCut(clone.querySelectorAll(this._reasoningSelectors));
       return this._readableText(clone);
@@ -301,10 +286,8 @@ class QwenAdapter extends BaseAdapter {
 
   /**
    * Служебная шапка свёрнутой панели («Завершено размышление», «Thinking… 3s») — не текст.
-   * @param {string} text
-   * @returns {string}
    */
-  _stripReasoningHeader(text) {
+  _stripReasoningHeader(text: string): string {
     try {
       var s = String(text == null ? '' : text).trim();
       // Маркер панели в НАЧАЛЕ текста (у Qwen — «Завершено размышление», у англ. UI —
@@ -318,24 +301,22 @@ class QwenAdapter extends BaseAdapter {
   /**
    * Текст панели размышлений реплики (сама панель либо вложенные think-узлы), без шапки,
    * без карточек инструментов; части склеены пустой строкой.
-   * @param {Element} element
-   * @returns {string}
    */
-  _reasoningText(element) {
+  _reasoningText(element: Element): string {
     try {
       if (!element) return '';
-      /** @type {Node[]} */
-      const nodes = [];
+
+      const nodes: Node[] = [];
       if (typeof element.matches === 'function' && element.matches(this._reasoningSelectors)) {
         nodes.push(element);
       } else if (typeof element.querySelectorAll === 'function') {
         const found = element.querySelectorAll(this._reasoningSelectors);
         for (let i = 0; i < found.length; i++) nodes.push(found[i]);
       }
-      /** @type {string[]} */
-      const parts = [];
+
+      const parts: string[] = [];
       for (let j = 0; j < nodes.length; j++) {
-        const node = /** @type {Element} */ (/** @type {unknown} */ (nodes[j]));
+        const node = ((nodes[j] as unknown) as Element);
         // Guard карточек инструментов (план замены, п. 3): текст карточки — служебный шум,
         // размышлением не является. Селекторы уже несут `:not([class*="tool-status-card"])`,
         // здесь — второй барьер (страховка от смены класса обёртки карточки).
@@ -351,12 +332,10 @@ class QwenAdapter extends BaseAdapter {
    * Служебная карточка инструмента Qwen (не панель размышления) — по классу узла.
    * Вызывается только для элементов (узлы панели размышлений), поэтому className читаем
    * у узла как у Element.
-   * @param {Node} node
-   * @returns {boolean}
    */
-  _isToolStatusCard(node) {
+  _isToolStatusCard(node: Node): boolean {
     try {
-      const el = /** @type {Element} */ (/** @type {unknown} */ (node));
+      const el = ((node as unknown) as Element);
       const cls = String((node && el.className) || '').toLowerCase();
       return cls.indexOf('tool-status-card') !== -1;
     } catch (e) { return false; }
@@ -370,10 +349,8 @@ class QwenAdapter extends BaseAdapter {
    * Возвращаем string, а не литеральный union 'user'|'assistant': пока тип узкий,
    * tsc (TS2367) счёл бы вызовы и сверку ролей в extractMessages заведомо ложными.
    * TODO: уточнить тип в шаге 5 (контракт ролей адаптера).
-   * @param {Element} element
-   * @returns {string}
    */
-  _detectRole(element) {
+  _detectRole(element: Element): string {
     try {
       const cls = String(element.className || '').toLowerCase();
       if (cls.indexOf('qwen-chat-message-user') !== -1) return 'user';
@@ -396,16 +373,14 @@ class QwenAdapter extends BaseAdapter {
    * адаптера, но к моменту extractMessages он уже загружен (общий ISOLATED-мир контент-скриптов).
    * Хелпера нет (Node/срез-песочница) → массив возвращается КАК ЕСТЬ: поведение 1:1, никакой
    * второй копии правил здесь нет.
-   * @param {(QwenExtractedMessage & {hiddenReasoning?: string})[]} messages
-   * @returns {(QwenExtractedMessage & {hiddenReasoning?: string})[]}
    */
-  _dropContainerNodes(messages) {
+  _dropContainerNodes(messages: (Message & {hiddenReasoning?: string})[]): (Message & {hiddenReasoning?: string})[] {
     try {
       // Хелпер приходит из общего модуля без типовой информации (function(Array<any>)),
       // поэтому на границе он стирается до unknown: конкретный тип массива ходов
       // проверяет сам _dropContainerNodes по сигнатуре.
-      var drop = /** @type {QwenContainerDrop<unknown>|null} */ (this._containerDrop());
-      if (typeof drop === 'function') return /** @type {(QwenExtractedMessage & {hiddenReasoning?: string})[]} */ (/** @type {unknown} */ (drop(messages)));
+      var drop = (this._containerDrop() as QwenContainerDrop<unknown>|null);
+      if (typeof drop === 'function') return ((drop(messages) as unknown) as (Message & {hiddenReasoning?: string})[]);
     } catch (eDrop) { swallow(eDrop, 'adapter:qwen:dropContainerNodes'); }
     return messages;
   }
@@ -416,9 +391,8 @@ class QwenAdapter extends BaseAdapter {
    * в общий скоуп content-бандла (тот же модуль, что и остальные core/*.js); фолбэк на
    * window — для песочниц, где адаптер исполняется как сырой текст (new Function).
    * Node-путь (require) удалён вместе с UMD-хвостом сборщиков.
-   * @returns {QwenContainerDrop<unknown>|null}
    */
-  _containerDrop() {
+  _containerDrop(): QwenContainerDrop<unknown>|null {
     try {
       if (typeof AiCmExportBuilders !== 'undefined' && AiCmExportBuilders &&
         typeof AiCmExportBuilders.aiCmDropContainerMessages === 'function') {
@@ -440,9 +414,8 @@ class QwenAdapter extends BaseAdapter {
    * Пустые и «технические» тексты (артефакт свёрнутой панели) пропускаются; текст панели
    * размышлений у assistant-хода уходит в hiddenReasoning, а не в content. Метод
    * stateless — пересъём без перезагрузки (см. комментарий O-35 C в теле).
-   * @returns {QwenExtractedMessage[]}
    */
-  extractMessages() {
+  extractMessages(): Message[] {
     // O-35 C (ФИКС, пункт «в»): пересъём БЕЗ F5. Метод stateless: ни кэша, ни латча
     // «одного раза на документ» здесь нет — каждый вызов заново обходит узлы DOM. Поэтому
     // SPA-смена разговора (content.js: aiCmQwenSpaReshoot после сигнала
@@ -450,11 +423,10 @@ class QwenAdapter extends BaseAdapter {
     // открытие: перезагрузка страницы для повторного extractMessages() не нужна.
     try {
       /**
-       * Поле hiddenReasoning нет в контракте ExtractedMessage (types/adapter.d.ts — форма
-       * {role, content}), поэтому элементы накопления расширяют его на поле захвата reasoning.
-       * @type {(QwenExtractedMessage & {hiddenReasoning?: string})[]}
+       * Поля hiddenReasoning нет в интерфейсе Message (форма {role, content}), поэтому
+       * элементы накопления расширяют его на поле захвата reasoning.
        */
-      const messages = [];
+      const messages: (Message & { hiddenReasoning?: string })[] = [];
       const nodes = this._messageNodes();
       for (let i = 0; i < nodes.length; i++) {
         const element = nodes[i];
@@ -462,8 +434,8 @@ class QwenAdapter extends BaseAdapter {
         const content = this._textWithoutReasoning(element);
         if (!content || content.length === 0) continue;
         if (!/[0-9A-Za-z\u00C0-\u024F\u0400-\u04FF\u4E00-\u9FFF]/.test(content)) continue;   // «.» свёрнутой панели
-        /** @type {QwenExtractedMessage & {hiddenReasoning?: string}} */
-        const msg = { role, content };
+
+        const msg: Message & {hiddenReasoning?: string} = { role, content };
         if (role === 'assistant') {
           const reasoning = this._reasoningText(element);
           if (reasoning) msg.hiddenReasoning = reasoning;
@@ -493,9 +465,8 @@ class QwenAdapter extends BaseAdapter {
   /**
    * Полный текст диалога: содержимое ходов, склеенное переводом строки.
    * Явное переопределение базового (у Qwen путь отбора узлов свой).
-   * @returns {string}
    */
-  getFullDialogText() {
+  getFullDialogText(): string {
     try {
       return this.extractMessages().map(msg => msg.content).join('\n');
     } catch (e) { return ''; }
@@ -504,9 +475,8 @@ class QwenAdapter extends BaseAdapter {
   /**
    * Модель из UI. Живой id /chats/new — qwen3.8-max, но это НЕ дефолт: если в разметке
    * модели нет — возвращаем null («не определена»), как base-adapter.js:88-90.
-   * @returns {string|null}
    */
-  detectModel() {
+  detectModel(): string|null {
     try {
       const selectors = ['[class*="model"] [class*="name"]', '[class*="model-select"]', '[class*="modelName"]'];
       for (let i = 0; i < selectors.length; i++) {

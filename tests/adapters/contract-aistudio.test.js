@@ -6,7 +6,7 @@
  * добавлен класс user-chunk, у ответа модели его нет. Отсюда контракт адаптера:
  * 1 user + 1 assistant → ровно 2 сообщения, порядок реплик сохранён.
  *
- * Исполняется РЕАЛЬНЫЙ adapters/aistudio-adapter.js в песочнице харнесса, поверх
+ * Исполняется РЕАЛЬНЫЙ adapters/aistudio-adapter.ts в песочнице харнесса, поверх
  * настоящего jsdom-документа (querySelectorAll/closest работают как в браузере).
  * gemini-adapter.js грузится ПЕРЕД aistudio, как в manifest.json: AistudioAdapter
  * наследует GeminiAdapter.
@@ -20,9 +20,9 @@ const AISTUDIO_LOC = {
 };
 
 const ADAPTER_FILES = [
-  'adapters/base-adapter.js',
-  'adapters/gemini-adapter.js',
-  'adapters/aistudio-adapter.js'
+  'adapters/base-adapter.ts',
+  'adapters/gemini-adapter.ts',
+  'adapters/aistudio-adapter.ts'
 ];
 
 function loadAistudio(doc) {

@@ -47,9 +47,33 @@ function loadEsbuild() {
   return esbuildApi;
 }
 
+/**
+ * Отделяет UMD-хвост классического скрипта от тела (adapters/*.ts).
+ *
+ * Адаптеры остаются classic-скриптами и заканчиваются блоком
+ * `if (typeof module !== 'undefined' && module.exports) { module.exports = X; }`.
+ * Для esbuild это признак CommonJS: в формате esm он оборачивает ВЕСЬ файл в
+ * `var require_x = __commonJS(...)` и добавляет `export default require_x();`.
+ * В песочнице `new Function` такой `export` не парсится («Unexpected token
+ * 'export'»), а обёртка __commonJS ломает общую лексическую область, на которой
+ * держится наследование адаптеров от BaseAdapter.
+ *
+ * Поэтому хвост на время транспиляции откладывается и возвращается как был:
+ * типы снимаются с тела, CJS-хвост остаётся последним блоком файла и дальше
+ * снимается вызывающим (stripCjsTail в tests/helpers/adapter-harness.js).
+ */
+function splitCjsTail(source) {
+  const at = source.lastIndexOf("\nif (typeof module");
+  if (at === -1) return { head: source, tail: '' };
+  const tail = source.slice(at);
+  if (tail.indexOf('module.exports') === -1) return { head: source, tail: '' };
+  return { head: source.slice(0, at + 1), tail: tail.slice(1) };
+}
+
 /** Снимает TS-типы и восстанавливает исходную форму import/export. */
 function stripTypes(source, file) {
-  const code = loadEsbuild().transformSync(source, {
+  const parts = splitCjsTail(source);
+  const code = loadEsbuild().transformSync(parts.head, {
     loader: file.endsWith('.tsx') ? 'tsx' : 'ts',
     format: 'esm',
     target: 'es2020',
@@ -90,7 +114,7 @@ function stripTypes(source, file) {
       .join(', ') + '};\n';
   }
   if (defaults.length) out += '\nexport default ' + defaults[0] + ';\n';
-  return out;
+  return out + (parts.tail ? '\n' + parts.tail : '');
 }
 
 /** Исходник файла; для `.ts`/`.tsx` — уже без типов. */

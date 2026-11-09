@@ -4,7 +4,7 @@
  * DOM-контракт вакуумный по дизайну; §п.8-B отложен до сбора снимков.
  *
  * Почему так. Рабочий путь захвата Claude — сетевой перехватчик (core/claude-intercept.js,
- * 95 671 Б) плюс архив: adapters/claude-adapter.js:71-76 НАМЕРЕННО возвращает пустой массив
+ * 95 671 Б) плюс архив: adapters/claude-adapter.ts:71-76 НАМЕРЕННО возвращает пустой массив
  * («Запасной DOM-парсинг: всегда пустой (основной источник — сеть)»), потому что разметка
  * claude.ai нестабильна (React, нет data-testid). Пин держит ПРИОРИТЕТ intercept-пути:
  * если кто-то начнёт реализовывать DOM-путь и сломает этот приоритет (или уронит контракт
@@ -25,7 +25,7 @@ const DOM_SNAPSHOT =
 
 describe('§п.8-A: ClaudeAdapter — C-zero (DOM пуст по дизайну, приоритет — intercept)', function () {
   test('C-zero: extractMessages() возвращает [] — DOM-путь отключён намеренно', function () {
-    const res = loadAdapter('adapters/claude-adapter.js', {
+    const res = loadAdapter('adapters/claude-adapter.ts', {
       exportExpr: 'ClaudeAdapter',
       document: {
         querySelector: function () { return null; },
@@ -54,7 +54,7 @@ describe('§п.8-A: ClaudeAdapter — C-zero (DOM пуст по дизайну, 
   });
 
   test('v2.0.34: stub-лог extractMessages — debug и один раз на разговор', function () {
-    const res = loadAdapter('adapters/claude-adapter.js', {
+    const res = loadAdapter('adapters/claude-adapter.ts', {
       exportExpr: 'ClaudeAdapter',
       location: { hostname: 'claude.ai', pathname: '/chat/conv-a' }
     });

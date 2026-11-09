@@ -127,7 +127,7 @@ function buildSnapshotDom() {
 }
 
 function qwen() {
-  return loadAdapter('adapters/qwen-adapter.js', { document: document, location: loc, exportExpr: 'QwenAdapter' });
+  return loadAdapter('adapters/qwen-adapter.ts', { document: document, location: loc, exportExpr: 'QwenAdapter' });
 }
 
 suite('§п.8-A: QwenAdapter — контракт на живом DOM-снимке 2026-09-26', function () {

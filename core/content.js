@@ -25,7 +25,7 @@ import { ModelConfig } from '../utils/model-config.ts';
 // ESM (Roadmap Ph2): utils/export-text-builders.ts переведён на ES-модуль и втягивается
 // этим import'ом в общий бандл контент-скрипта (строка из manifest.content_scripts удалена).
 // Идентификатор AiCmExportBuilders намеренно тот же: его разделяют core/export-manager.js,
-// adapters/qwen-adapter.js и сам core/content.js, склеенные в ТОТ ЖЕ модуль, — объявления
+// adapters/qwen-adapter.ts и сам core/content.js, склеенные в ТОТ ЖЕ модуль, — объявления
 // import хойстятся, поэтому второй импорт в них не нужен (и был бы дублирующим именем).
 import AiCmExportBuilders from '../utils/export-text-builders.ts';
 // ESM (Roadmap Ph2): utils/export-emit-pipeline.ts переведён на ES-модуль (UMD-хвост
@@ -46,7 +46,7 @@ import '../utils/gemini-batchexecute-parser.ts';
 // ESM (Roadmap Ph2): utils/google-search-folwr-parser.js переведён на ES-модуль.
 // Именованных потребителей в content-скрипте нет, нужен его побочный эффект —
 // window-зеркало (window.GoogleFolwrUtils): из него читает
-// adapters/google-search-adapter.js в ISOLATED-мире. Для MAIN-мира
+// adapters/google-search-adapter.ts в ISOLATED-мире. Для MAIN-мира
 // (chrome.scripting не умеет import) build.mjs выводит classic-артефакт
 // того же модуля в dist/utils/google-search-folwr-parser.js.
 import '../utils/google-search-folwr-parser.ts';
@@ -1153,7 +1153,7 @@ function getCurrentConvId() {
 // Qwen читают эти строки как есть).
 // aistudio — отдельной веткой ПЕРЕД gemini: разметка реплик у AI Studio иная
 // (ms-cmark-node + user-chunk), GeminiAdapter там находит 0 сообщений
-// (adapters/aistudio-adapter.js наследует его контракт и _cleanText).
+// (adapters/aistudio-adapter.ts наследует его контракт и _cleanText).
 function aiCmAssignAdapterByHost() {
   const hostname = window.location.hostname;
   if (hostname.includes('chatgpt.com')) {
@@ -1216,7 +1216,7 @@ function aiCmQwenInitDiag(event, fields) {
 // O-35 (C, фикс): адаптерный пересъём базы по НОВОМУ convId после сигнала смены разговора.
 // Аналог bootstrapSnapshot у Claude (claude-intercept.js:553) / Perplexity (perplexity-
 // intercept.js:270), но на ISOLATED-стороне: у qwen сетевого снимка после F5/SPA нет вовсе,
-// живой источник — adapters/qwen-adapter.js: extractMessages() вызывается ЗАНОВО (кэша/латча
+// живой источник — adapters/qwen-adapter.ts: extractMessages() вызывается ЗАНОВО (кэша/латча
 // в адаптере нет), а не ждёт перезагрузку страницы. Контур «спал» (isInitialized=false, потому
 // что initialize/tryInit отработали на прежнем документе, а DOM нового чата отрисовался позже)
 // → tryInit с ретраями: он находит узлы, ставит isInitialized=true, пишет базу адаптера
@@ -1274,7 +1274,7 @@ function aiCmQwenSpaReshoot() {
 // O-35 (B2-терминал, ФИКС): терминальный шаг реактивации qwen — «DOM отрисовался позже
 // лесенки». Вызывается РОВНО один раз, из последнего таймера aiCmQwenSpaReshoot (6000 мс).
 // Что делает: снимает ТЕКУЩУЮ DOM-базу адаптера тем же вызовом, что и F5-путь
-// (extractMessages(); кэша/латча в адаптере нет — см. adapters/qwen-adapter.js:155-185),
+// (extractMessages(); кэша/латча в адаптере нет — см. adapters/qwen-adapter.ts:155-185),
 // фиксирует её размер в aiCmAdapterBaseCount (по нему aiCmAdapterBaseSeen() даёт вердикт
 // «адаптерная база готова»; aiCmAdapterBaseCount заполняется в processAndSend ТОЛЬКО ниже
 // гарда, поэтому без этой фиксации новый пропускной путь гарда был бы недостижим), и делает
@@ -3638,7 +3638,7 @@ if (isExtensionValid()) {
 // 'count' — точный размер контекста из usage ответа GenerateContent
 // (data[0][last][2][0], promptTokenCount).
 //
-// ЗАЧЕМ. AI Studio считался ТОЛЬКО по DOM (adapters/aistudio-adapter.js): длинные
+// ЗАЧЕМ. AI Studio считался ТОЛЬКО по DOM (adapters/aistudio-adapter.ts): длинные
 // ответы виртуализированы, часть реплик в разметку не попадает, а токены были
 // эвристикой. Сеть даёт (а) полную историю хода и (б) серверный счётчик — ровно те
 // два значения, которыми живут бейдж/pct/экспорт.
@@ -3665,7 +3665,7 @@ function aiCmBridgeDetail(ev) {
 }
 
 // Последняя сетевая история AI Studio: { msgs: [{role,text}], count, ts }.
-// Читается adapters/aistudio-adapter.js через window.__aiCmNetMsgs (тот же ISOLATED-мир).
+// Читается adapters/aistudio-adapter.ts через window.__aiCmNetMsgs (тот же ISOLATED-мир).
 /** @type {{ msgs: Array<{role: string, text: string}>, count: number, ts: number, href: string, historyComplete?: boolean } | null} */
 var aiCmNetMsgsAistudio = null;
 // Последний promptTokenCount AI Studio: точный размер контекста (0 — ещё не приходил).

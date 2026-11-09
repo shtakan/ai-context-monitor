@@ -16,7 +16,7 @@ const { loadAdapter } = require('./adapter-harness');
 const QWEN_LOCATION = { hostname: 'chat.qwen.ai', pathname: '/' };
 
 function loadQwen(documentImpl) {
-  return loadAdapter('adapters/qwen-adapter.js', {
+  return loadAdapter('adapters/qwen-adapter.ts', {
     document: documentImpl,
     location: QWEN_LOCATION,
     exportExpr: 'QwenAdapter'

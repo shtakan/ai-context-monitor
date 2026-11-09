@@ -111,11 +111,15 @@ export default [
   //    прогон). В нём esbuild переписывает глобалы через `with`, и eslint в
   //    strict-режиме падал с 13 `Parsing error: 'with' in strict mode` на
   //    локальной машине, где dist-firefox уже собран (Lint #266).
+  //    `.build/**` — промежуточные entry-файлы build.mjs (шаг 0): с миграцией
+  //    adapters/ на TypeScript они конкатенируют `.ts` и содержат `interface`,
+  //    то есть это уже не валидный JS-текст, а вход esbuild (в .gitignore).
   // ---------------------------------------------------------------------------
   {
     ignores: [
       'dist/**',
       'dist-firefox/**',
+      '.build/**',
       'node_modules/**',
       'coverage/**',
       'tools/_*',
@@ -135,7 +139,7 @@ export default [
     files: [
       'core/**/*.js',
       'utils/**/*.js',
-      'adapters/**/*.js',
+      'adapters/**/*.ts',
       'options/**/*.js',
       'print/**/*.js',
     ],

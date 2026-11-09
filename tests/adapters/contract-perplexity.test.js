@@ -4,7 +4,7 @@
  * DOM-контракт вакуумный по дизайну; §п.8-B отложен до сбора снимков.
  *
  * Почему так. Рабочий путь захвата Perplexity — сетевой перехватчик
- * (core/perplexity-intercept.js, 29 815 Б) плюс архив: adapters/perplexity-adapter.js:72-76
+ * (core/perplexity-intercept.js, 29 815 Б) плюс архив: adapters/perplexity-adapter.ts:72-76
  * НАМЕРЕННО возвращает пустой массив («Запасной DOM-парсинг: всегда пустой (основной источник —
  * сеть)»). Пин держит ПРИОРИТЕТ intercept-пути: если кто-то начнёт реализовывать DOM-путь и
  * сломает этот приоритет (или уронит контракт адаптера), тест падает. Невакуумность обеспечена
@@ -26,7 +26,7 @@ const DOM_SNAPSHOT =
 
 describe('§п.8-A: PerplexityAdapter — C-zero (DOM пуст по дизайну, приоритет — intercept)', function () {
   test('C-zero: extractMessages() возвращает [] — DOM-путь отключён намеренно', function () {
-    const res = loadAdapter('adapters/perplexity-adapter.js', {
+    const res = loadAdapter('adapters/perplexity-adapter.ts', {
       exportExpr: 'PerplexityAdapter',
       document: {
         querySelector: function () { return null; },
@@ -55,7 +55,7 @@ describe('§п.8-A: PerplexityAdapter — C-zero (DOM пуст по дизайн
   });
 
   test('v2.0.34: stub-лог extractMessages — debug и один раз на разговор', function () {
-    const res = loadAdapter('adapters/perplexity-adapter.js', {
+    const res = loadAdapter('adapters/perplexity-adapter.ts', {
       exportExpr: 'PerplexityAdapter',
       location: { hostname: 'www.perplexity.ai', pathname: '/search/conv-a' }
     });

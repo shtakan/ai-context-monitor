@@ -6,17 +6,10 @@
  * new Function() песочницами тестов), поэтому типы подключены JSDoc-ссылкой import().
  */
 
-/**
- * Сообщение в форме адаптера (types/adapter.d.ts).
- *
- * Имя с префиксом сайта — НЕ по вкусу, а по необходимости: файлы адаптеров не
- * являются модулями (обычные скрипты, склеиваемые исходником), поэтому при allowJs
- * все typedef-имена попадают в одну общую область и одноимённые дают TS2300.
- * Настоящее имя типа хранится в types/adapter.d.ts, здесь только ссылка на него.
- * @typedef {import('../types/adapter').ExtractedMessage} GeminiExtractedMessage
- */
-
 class GeminiAdapter extends BaseAdapter {
+  /** Модель по умолчанию (наследуется AistudioAdapter). */
+  defaultModel: string;
+
   constructor() {
     super();
     this.siteName = 'gemini';
@@ -26,9 +19,8 @@ class GeminiAdapter extends BaseAdapter {
 
   /**
    * Находимся ли мы на диалоге (контейнер диалога ИЛИ поле ввода).
-   * @returns {boolean}
    */
-  isOnDialogPage() {
+  isOnDialogPage(): boolean {
     try {
       const hasMessages = document.querySelector('.conversation-container') !== null;
       const hasInput = document.querySelector('rich-textarea, .input-area') !== null;
@@ -44,12 +36,11 @@ class GeminiAdapter extends BaseAdapter {
   /**
    * Ходы диалога: сперва по turn-контейнерам, при пустом результате — общий запасной
    * отбор по классам/дата-атрибутам роли. При ошибке — пустой массив.
-   * @returns {GeminiExtractedMessage[]}
    */
-  extractMessages() {
+  extractMessages(): Message[] {
     try {
-      /** @type {GeminiExtractedMessage[]} */
-      const messages = [];
+
+      const messages: Message[] = [];
 
       const turnContainers = document.querySelectorAll('turn-container, .turn-container, [data-turn]');
 
@@ -110,9 +101,8 @@ class GeminiAdapter extends BaseAdapter {
 
   /**
    * Модель: из DOM (.model-name и т.п.), затем localStorage, затем this.defaultModel.
-   * @returns {string}
    */
-  detectModel() {
+  detectModel(): string {
     try {
       const modelIndicator = document.querySelector('.model-name, .current-model, [aria-label*="model"]');
 
@@ -139,10 +129,8 @@ class GeminiAdapter extends BaseAdapter {
 
   /**
    * Нормализация текста хода (схлопывание пробелов и пустых строк).
-   * @param {string} text
-   * @returns {string}
    */
-  _cleanText(text) {
+  _cleanText(text: string): string {
     if (!text) return '';
     return text
       .replace(/\s+/g, ' ')

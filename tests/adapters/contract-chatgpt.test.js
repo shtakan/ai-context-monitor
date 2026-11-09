@@ -89,7 +89,7 @@ const suite = suiteSkipped ? describe.skip : describe;
 const ctest = suiteSkipped ? test.skip : test;
 
 function chatgpt() {
-  return loadAdapter('adapters/chatgpt-adapter.js', {
+  return loadAdapter('adapters/chatgpt-adapter.ts', {
     document: document,
     location: loc,
     exportExpr: 'ChatGPTAdapter'
@@ -240,7 +240,7 @@ suite('§п.8-B: ChatGPTAdapter — контракт на живом DOM-сни�
   });
 
   ctest('CH7 (source-пин): нормализация unknown → user не вернулась', function () {
-    const src = fs.readFileSync(path.join(__dirname, '..', '..', 'adapters', 'chatgpt-adapter.js'), 'utf8');
+    const src = fs.readFileSync(path.join(__dirname, '..', '..', 'adapters', 'chatgpt-adapter.ts'), 'utf8');
 
     // корень дефекта fd64838 — именно эта нормализация; сейчас узел ПРОПУСКАЕТСЯ
     expect(src).toContain("if (role === 'unknown') continue;");

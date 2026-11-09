@@ -39,10 +39,6 @@
     "count": 3,
     "reason": "vm-harness"
   },
-  "tests/adapters/deepseek-o15-pairing.test.js": {
-    "count": 2,
-    "reason": "legacy-pin"
-  },
   "tests/adapters/deepseek-o16-stream-export.test.js": {
     "count": 4,
     "reason": "legacy-pin"
@@ -256,7 +252,7 @@
     "reason": "legacy-pin"
   },
   "tests/deepseek-o7-hidden-export.test.js": {
-    "count": 50,
+    "count": 48,
     "reason": "legacy-pin"
   },
   "tests/deepseek-usage-dump.test.js": {
@@ -340,7 +336,7 @@
     "reason": "legacy-pin"
   },
   "tests/o21-deepseek-dom-instrumentation.test.js": {
-    "count": 15,
+    "count": 14,
     "reason": "legacy-pin"
   },
   "tests/o23-tokens-calibration.test.js": {
@@ -368,7 +364,7 @@
     "reason": "legacy-pin"
   },
   "tests/o45-gsa-code-blocks-export.test.js": {
-    "count": 20,
+    "count": 11,
     "reason": "legacy-pin"
   },
   "tests/o47-qwen-badge-metric.test.js": {
@@ -416,7 +412,7 @@
     "reason": "static-linter"
   },
   "tests/qwen-adapter.test.js": {
-    "count": 18,
+    "count": 17,
     "reason": "legacy-pin"
   },
   "tests/qwen-autoexport-trusted-base-o37.test.js": {
@@ -424,7 +420,7 @@
     "reason": "legacy-pin"
   },
   "tests/qwen-container-drop-o37.test.js": {
-    "count": 22,
+    "count": 21,
     "reason": "legacy-pin"
   },
   "tests/qwen-export-marker-prose.test.js": {

@@ -6,14 +6,6 @@
  * new Function()/eval песочницами тестов), поэтому типы подключены JSDoc-ссылкой import().
  */
 
-/**
- * Сообщение в форме адаптера (types/adapter.d.ts).
- *
- * Имя с префиксом — по необходимости: файлы адаптеров не являются модулями, поэтому
- * при allowJs все typedef-имена попадают в одну общую область (одноимённые → TS2300).
- * @typedef {import('../types/adapter').ExtractedMessage} DeepSeekExtractedMessage
- */
-
 class DeepSeekAdapter extends BaseAdapter {
   constructor() {
     super();
@@ -23,9 +15,8 @@ class DeepSeekAdapter extends BaseAdapter {
 
   /**
  * Находимся ли мы на странице диалога: есть узлы ds-message ИЛИ поле ввода.
- * @returns {boolean}
  */
-isOnDialogPage() {
+isOnDialogPage(): boolean {
     const hasMessages = document.querySelectorAll('div[class*="ds-message"]').length > 0;
     const hasInput = document.querySelector('textarea') !== null;
     return hasMessages || hasInput;
@@ -47,10 +38,8 @@ isOnDialogPage() {
   }
   /**
    * Признак панели размышлений: класс узла, вложенный think-узел либо маркер в начале текста.
-   * @param {Element} element
-   * @returns {boolean}
    */
-  _hasThinkMarker(element) {
+  _hasThinkMarker(element: Element): boolean {
     try {
       if (!element) return false;
       const cls = String(element.className || '');
@@ -62,10 +51,8 @@ isOnDialogPage() {
   }
   /**
    * Узел markdown-рендера ответа (сам узел либо вложенный .ds-markdown), иначе null.
-   * @param {Element} element
-   * @returns {Element|null}
    */
-  _answerMarkdown(element) {
+  _answerMarkdown(element: Element): Element|null {
     try {
       if (!element) return null;
       if (String(element.className || '').includes('ds-markdown')) return element;
@@ -76,10 +63,8 @@ isOnDialogPage() {
   // Узел — ТОЛЬКО панель размышлений (ответа в нём нет): сообщением хода не является.
   /**
    * Узел — только панель размышлений (ответа в нём нет): сообщением хода не является.
-   * @param {Element} element
-   * @returns {boolean}
    */
-  _isReasoningOnly(element) {
+  _isReasoningOnly(element: Element): boolean {
     try {
       if (!element) return false;
       if (this._answerMarkdown(element)) return false;
@@ -88,10 +73,8 @@ isOnDialogPage() {
   }
   /**
    * Находится ли узел внутри панели размышлений (сам think-класс либо ближайший think-предок).
-   * @param {Element} element
-   * @returns {boolean}
    */
-  _isInsideReasoning(element) {
+  _isInsideReasoning(element: Element): boolean {
     try {
       if (!element) return false;
       if (/ds-think|think-content|ds-reason/i.test(String(element.className || ''))) return true;
@@ -100,12 +83,10 @@ isOnDialogPage() {
   }
   /**
    * Текст элемента БЕЗ панелей размышлений и служебных кнопок/иконок.
-   * @param {Element} element
-   * @returns {string}
    */
-  _textWithoutReasoning(element) {
+  _textWithoutReasoning(element: Element): string {
     try {
-      const clone = /** @type {Element} */ (element.cloneNode(true));
+      const clone = (element.cloneNode(true) as Element);
       Array.prototype.slice.call(clone.querySelectorAll(this._thinkSelector())).forEach(el => el.remove());
       clone.querySelectorAll('button, svg, [class*="avatar"], [class*="icon"], [class*="toolbar"]')
         .forEach(el => el.remove());
@@ -122,10 +103,8 @@ isOnDialogPage() {
   // Служебная шапка свёрнутой панели («DeepThink · 12 с», «Размышления:», «Thought for 3s») —
   /**
    * Снимает служебную шапку панели в начале текста («DeepThink · 12 с», «Размышления:»).
-   * @param {string} text
-   * @returns {string}
    */
-  _stripReasoningHeader(text) {
+  _stripReasoningHeader(text: string): string {
     try {
       const s = String(text == null ? '' : text).trim();
       return s.replace(
@@ -137,14 +116,12 @@ isOnDialogPage() {
   /**
    * Текст панели размышлений узла (сама панель либо вложенные think-узлы),
    * склеенный пустой строкой; пустые/служебные части отброшены.
-   * @param {Element} element
-   * @returns {string}
    */
-  _reasoningText(element) {
+  _reasoningText(element: Element): string {
     try {
       if (!element) return '';
-      /** @type {Node[]} */
-      const nodes = [];
+
+      const nodes: Node[] = [];
       if (this._isInsideReasoning(element)) {
         nodes.push(element);
       } else if (typeof element.querySelectorAll === 'function') {
@@ -164,19 +141,15 @@ isOnDialogPage() {
   /**
    * Есть ли в тексте реальные символы (буква/цифра), а не только артефакт интерфейса
    * вроде «.» свёрнутой панели.
-   * @param {string} text
-   * @returns {boolean}
    */
-  _hasRealContent(text) {
+  _hasRealContent(text: string): boolean {
     return /[0-9A-Za-z\u00C0-\u024F\u0400-\u04FF\u4E00-\u9FFF]/.test(String(text == null ? '' : text));
   }
   /**
    * Первый дочерний узел с текстом, годный как текст хода (без avatar/button/icon,
    * без панелей размышлений), иначе null.
-   * @param {Element} element
-   * @returns {Element|null}
    */
-  _firstContentChild(element) {
+  _firstContentChild(element: Element): Element|null {
     try {
       const candidates = element.querySelectorAll(
         'div:not([class*="avatar"]):not([class*="button"]):not([class*="icon"])'
@@ -199,10 +172,8 @@ isOnDialogPage() {
    * «ожить», если _detectRole снова начнёт отдавать 'unknown'. Тип string оставляет
    * гейт живым и типизирует функцию честно — она отдаёт произвольную строку роли.
    * TODO: уточнить тип в шаге 5 (контракт ролей адаптера).
-   * @param {Element} element
-   * @returns {string}
    */
-  _detectRole(element) {
+  _detectRole(element: Element): string {
     const classes = element.className || '';
     if (classes.includes('d29f3d7d')) return 'user';
     if (classes.includes('ds-markdown') || classes.includes('ds-assistant-message')) return 'assistant';
@@ -219,10 +190,8 @@ isOnDialogPage() {
   /**
    * Текст хода: markdown-абзацы ответа построчно, иначе первый текстовый узел
    * пузыря без панелей размышлений.
-   * @param {Element} element
-   * @returns {string}
    */
-  _extractText(element) {
+  _extractText(element: Element): string {
     // Ответ ассистента — markdown-рендер (абзацы построчно; панель размышлений внутри
     // того же пузыря в текст не входит).
     const markdown = this._answerMarkdown(element);
@@ -243,17 +212,15 @@ isOnDialogPage() {
    * Узлы-панели reasoning сообщениями НЕ являются: их текст переносится в
    * hiddenReasoning ближайшего assistant-хода (висячий — предыдущего, иначе
    * последнего). Возвращает пустой массив при ошибке.
-   * @returns {DeepSeekExtractedMessage[]}
    */
-  extractMessages() {
+  extractMessages(): Message[] {
     try {
       /**
-       * Накопленные ходы. Поля hiddenReasoning нет в контракте ExtractedMessage
-       * (types/adapter.d.ts — форма {role, content}), поэтому элементы здесь
-       * расширяют её на поле захвата reasoning.
-       * @type {(DeepSeekExtractedMessage & {hiddenReasoning?: string})[]}
+       * Накопленные ходы. Поля hiddenReasoning нет в интерфейсе Message
+       * (форма {role, content}), поэтому элементы здесь расширяют его
+       * на поле захвата reasoning.
        */
-      const messages = [];
+      const messages: (Message & { hiddenReasoning?: string })[] = [];
       const messageElements = document.querySelectorAll('div[class*="ds-message"]');
       // ===== O-21 (ДИАГНОСТИКА, только измерение): усечение DOM-экстрактора DeepSeek =====
       // Живой симптом: под соседним расширением (Better DeepSeek) DOM отдавал msgs=3 при
@@ -318,7 +285,7 @@ isOnDialogPage() {
         const role = this._detectRole(element);
         const content = this._extractText(element);
         if (content && content.length > 0 && role !== 'unknown' && this._hasRealContent(content)) {
-          const msg = { role, content };
+          const msg: Message & { hiddenReasoning?: string } = { role, content };
           // O-7: hidden-захват reasoning — рядом с текстом, в content НЕ входит.
           if (role === 'assistant') {
             const ownReasoning = this._reasoningText(element);
@@ -379,18 +346,16 @@ isOnDialogPage() {
 
   /**
    * Полный текст диалога: содержимое ходов, склеенное переводом строки.
-   * @returns {string}
    */
-  getFullDialogText() {
+  getFullDialogText(): string {
     return this.extractMessages().map(msg => msg.content).join('\n');
   }
 
   /**
    * Модель: DeepThink (R1) по aria-pressed, затем UI-селекторы, затем localStorage,
    * иначе 'deepseek-v3'.
-   * @returns {string}
    */
-  detectModel() {
+  detectModel(): string {
     try {
       // Проверяем активность DeepThink (R1) по aria-pressed
       const deepThinkBtn = document.querySelector(
@@ -413,7 +378,7 @@ isOnDialogPage() {
           // по строке даёт Element (TS2339). Тег уже проверен выше, поэтому
           // сужаем форму узла до SELECT — поведение рантайма не меняется.
           let text = el.tagName === 'SELECT'
-            ? (/** @type {HTMLSelectElement} */ (el).options[/** @type {HTMLSelectElement} */ (el).selectedIndex]?.text || '')
+            ? ((el as HTMLSelectElement).options[(el as HTMLSelectElement).selectedIndex]?.text || '')
             : el.textContent.trim();
           if (text) {
             debugLog('log', '[DeepSeekAdapter] Модель из UI:', text);

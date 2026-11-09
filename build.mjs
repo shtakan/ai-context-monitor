@@ -268,7 +268,7 @@ function contentEntry(manifest) {
   // конкатенации не берём.
   // Ph2, шаг export-text-builders.ts: модуль ESM — его втягивает статический import из
   // core/content.js (единый скоуп бандла: AiCmExportBuilders делят core/export-manager.js,
-  // adapters/qwen-adapter.js и core/content.js); строка из манифеста удалена.
+  // adapters/qwen-adapter.ts и core/content.js); строка из манифеста удалена.
   // Ph2, шаг gemini-batchexecute-parser.js: модуль ESM — его втягивает side-effect
   // import из core/content.js (нужно window-зеркало для core/export-manager.js и
   // PARSER_VERSION), а для MAIN-мира ниже выводится classic-артефакт. Как строку

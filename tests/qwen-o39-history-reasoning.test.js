@@ -63,7 +63,7 @@
  *          (кроме поля transport в диагностике).
  *
  * НЕ ТРОГАЕТСЯ: core/export-manager.js, core/base-handler.js, utils/export-text-builders.ts
- * (только чтение источника), adapters/qwen-adapter.js (scope O-41), тесты прочих платформ.
+ * (только чтение источника), adapters/qwen-adapter.ts (scope O-41), тесты прочих платформ.
  */
 
 const fs = require('fs');

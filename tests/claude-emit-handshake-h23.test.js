@@ -188,9 +188,9 @@ describe('H23 (d) пины контракта (каналы только CustomE
     expect(CONTENT_SRC).toContain('if (!aiCmH23Site()) return; // прочие сервисы — байтово прежнее поведение');
     // handshake-событие H23 объявлено ТОЛЬКО в claude-intercept.js (MAIN) и content.js
     const others = ['core/gemini-intercept.js', 'core/deepseek-intercept.js', 'core/perplexity-intercept.js',
-      'core/google-search-intercept.js', 'core/page-intercept.js', 'adapters/gemini-adapter.js',
-      'adapters/chatgpt-adapter.js', 'adapters/deepseek-adapter.js', 'adapters/perplexity-adapter.js',
-      'adapters/google-search-adapter.js', 'adapters/claude-adapter.js'];
+      'core/google-search-intercept.js', 'core/page-intercept.js', 'adapters/gemini-adapter.ts',
+      'adapters/chatgpt-adapter.ts', 'adapters/deepseek-adapter.ts', 'adapters/perplexity-adapter.ts',
+      'adapters/google-search-adapter.ts', 'adapters/claude-adapter.ts'];
     others.forEach(function (rel) {
       // Phase 3: ядро читается через concat-хелпер, прочие перехватчики/адаптеры — с диска
       const src = rel === 'core/gemini-intercept.js'

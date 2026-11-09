@@ -16,12 +16,6 @@
  * new Function() песочницами тестов), поэтому типы подключены JSDoc-ссылкой import().
  */
 
-/**
- * Имя с префиксом сайта — по необходимости: файлы адаптеров не являются модулями,
- * поэтому при allowJs все typedef-имена попадают в одну общую область.
- * @typedef {import('../types/adapter').ExtractedMessage} AistudioExtractedMessage
- */
-
 class AistudioAdapter extends GeminiAdapter {
   constructor() {
     super();
@@ -32,9 +26,8 @@ class AistudioAdapter extends GeminiAdapter {
 
   /**
    * Находимся ли мы на диалоге: признак — узлы реплик ms-cmark-node.
-   * @returns {boolean}
    */
-  isOnDialogPage() {
+  isOnDialogPage(): boolean {
     try {
       const hasMessageNodes = document.querySelector('ms-cmark-node') !== null;
       debugLog('log', `[AistudioAdapter] isOnDialogPage: ${hasMessageNodes}`);
@@ -58,9 +51,8 @@ class AistudioAdapter extends GeminiAdapter {
    * Ходы диалога: все ms-cmark-node.v3-font-body, кроме вложенных в другой
    * ms-cmark-node (иначе текст реплики попал бы в счёт дважды — родитель и ребёнок).
    * Роль: класс user-chunk → 'user', иначе — 'assistant'.
-   * @returns {AistudioExtractedMessage[]}
    */
-  extractMessages() {
+  extractMessages(): Message[] {
     try {
       // Сеть главнее DOM: полная история из $rpc (включая виртуализированные ходы).
       // DOM остаётся фолбэком — как у Claude/Perplexity, где сеть и есть источник.
@@ -70,8 +62,8 @@ class AistudioAdapter extends GeminiAdapter {
         return netMessages;
       }
 
-      /** @type {AistudioExtractedMessage[]} */
-      const messages = [];
+
+      const messages: Message[] = [];
 
       const nodes = document.querySelectorAll('ms-cmark-node.v3-font-body');
 
@@ -125,9 +117,8 @@ class AistudioAdapter extends GeminiAdapter {
    * ПОЧЕМУ НЕ DOM. Индикатор модели в панели Run settings не имеет стабильного класса, а
    * текстовая догадка по «Gemini <версия> <семейство>» ловила бы упоминания модели в самой
    * реплике и подписывала чат чужой моделью. Сеть — единственный недвусмысленный источник.
-   * @returns {string}
    */
-  detectModel() {
+  detectModel(): string {
     try {
       const slug = (typeof window !== 'undefined') ? window.__aiCmNetModelSlug : '';
       if (typeof slug === 'string' && slug) {
@@ -149,9 +140,8 @@ class AistudioAdapter extends GeminiAdapter {
    * Снимок принимается только для ТЕКУЩЕГО пути (SPA: AI Studio меняет /prompts/<id>
    * без перезагрузки) — иначе история прошлого разговора питала бы счётчик нового.
    * Нет снимка/путь не тот → [] и обычный DOM-парсинг.
-   * @returns {AistudioExtractedMessage[]}
    */
-  _netMessages() {
+  _netMessages(): Message[] {
     try {
       const raw = (typeof window !== 'undefined') ? window.__aiCmNetMsgs : null;
       if (!raw || !Array.isArray(raw.msgs) || raw.msgs.length === 0) return [];
@@ -162,11 +152,11 @@ class AistudioAdapter extends GeminiAdapter {
         try { therePath = new URL(there).pathname; } catch (eUrl) { therePath = there; }
         if (therePath && here && therePath !== here) return [];
       }
-      /** @type {AistudioExtractedMessage[]} */
-      const messages = [];
+
+      const messages: Message[] = [];
       Array.prototype.forEach.call(raw.msgs, (m) => {
         // sections/files не входят в ambient-тип __aiCmNetMsgs (types/ не трогаем).
-        const rec = /** @type {any} */ (m);
+        const rec = (m as any);
         if (!rec || typeof rec.text !== 'string') return;
         const sections = (typeof rec.sections === 'string') ? rec.sections : '';
         // Секции дописываются ПОСЛЕ _cleanText: иначе он схлопнет переводы
@@ -187,9 +177,8 @@ class AistudioAdapter extends GeminiAdapter {
    * ленты DOM короче уже виденного снимка. core/content.js пишет пик в
    * ai_cm_aistudio_history_<convId> ({ v, href, msgs, count, ... }) — читаем его
    * только для ТЕКУЩЕГО пути (SPA-гард, как у _netMessages) и только как фолбэк.
-   * @returns {AistudioExtractedMessage[]}
    */
-  _domPeakMessages() {
+  _domPeakMessages(): Message[] {
     try {
       const storage = (typeof sessionStorage !== 'undefined' && sessionStorage)
         ? sessionStorage
@@ -209,12 +198,12 @@ class AistudioAdapter extends GeminiAdapter {
         try { therePath = new URL(there).pathname; } catch (eUrl) { therePath = there; }
         if (therePath && here && therePath !== here) return [];
       }
-      /** @type {AistudioExtractedMessage[]} */
-      const messages = [];
+
+      const messages: Message[] = [];
       Array.prototype.forEach.call(cached.msgs, (msg) => {
         // Пик истории — тот же формат, что и сетевой снимок: sections/files
         // не входят в ambient-тип, поэтому локальный any-каст.
-        const rec = /** @type {any} */ (msg);
+        const rec = (msg as any);
         if (!rec || typeof rec.text !== 'string') return;
         const sections = (typeof rec.sections === 'string') ? rec.sections : '';
         const content = this._cleanText(rec.text) + sections;
@@ -231,14 +220,12 @@ class AistudioAdapter extends GeminiAdapter {
   /**
    * Текст узла реплики. innerText предпочтителен (видимый текст, как в браузере);
    * textContent — фолбэк для окружений без innerText (jsdom, песочницы тестов).
-   * @param {Element} node
-   * @returns {string}
    */
-  _readNodeText(node) {
+  _readNodeText(node: Element): string {
     try {
       // innerText объявлен только у HTMLElement, а JSDoc-тип параметра — Element
       // (node приходит из querySelectorAll по ms-cmark-node): приводим тип, не меняя рантайм.
-      const inner = (/** @type {HTMLElement} */ (node)).innerText;
+      const inner = ((node as HTMLElement)).innerText;
       if (typeof inner === 'string' && inner.length > 0) return inner;
       return typeof node.textContent === 'string' ? node.textContent : '';
     } catch (error) {
@@ -249,10 +236,8 @@ class AistudioAdapter extends GeminiAdapter {
 
   /**
    * Вложенный ли узел: у него есть предок ms-cmark-node (текст уже учтён предком).
-   * @param {Element} node
-   * @returns {boolean}
    */
-  _isNestedNode(node) {
+  _isNestedNode(node: Element): boolean {
     try {
       const parent = node && node.parentElement;
       if (!parent || typeof parent.closest !== 'function') return false;
@@ -265,10 +250,8 @@ class AistudioAdapter extends GeminiAdapter {
 
   /**
    * Реплика пользователя? В AI Studio её единственный признак — класс user-chunk.
-   * @param {Element} node
-   * @returns {boolean}
    */
-  _isUserChunk(node) {
+  _isUserChunk(node: Element): boolean {
     try {
       return !!(node && node.classList && node.classList.contains('user-chunk'));
     } catch (error) {

@@ -4,18 +4,10 @@
 // new Function()/eval песочницами тестов), поэтому типы подключены JSDoc-ссылкой import().
 
 /**
- * Сообщение в форме адаптера (types/adapter.d.ts).
- *
- * Имя с префиксом — по необходимости: файлы адаптеров не являются модулями, поэтому
- * при allowJs все typedef-имена попадают в одну общую область (одноимённые → TS2300).
- * @typedef {import('../types/adapter').ExtractedMessage} GoogleSearchExtractedMessage
- */
-
-/**
  * Узлы ответа, которые вернёт парсер: ровно то, что later-код умеет обходить
  * (for по длине + gsaAnswerText от Element).
- * @typedef {NodeList|Element[]} GsaAnswerNodes
  */
+type GsaAnswerNodes = NodeListOf<Element> | Element[];
 
 // Единственный источник правды — utils/google-search-folwr-parser.js (renderCodeBlock /
 // answerTextOf / answerDomNodes): сетевой путь, DOM-добор перехватчика и DOM-путь адаптера
@@ -29,10 +21,13 @@
 /**
  * Используемая поверхность общего хелпера рендера ответов AI-режима
  * (в бою — window.GoogleFolwrUtils; см. строки проверок выше).
- * @typedef {object} GsaFolwrUtils
- * @property {function(Element): string} answerTextOf текст узла ответа общим рендером
- * @property {function(Document|Element): GsaAnswerNodes} answerDomNodes узлы ответа
  */
+interface GsaFolwrUtils {
+  /** Текст узла ответа общим рендером парсера. */
+  answerTextOf(el: Element): string;
+  /** Узлы ответа общим отбором парсера. */
+  answerDomNodes(root: Document | Element): GsaAnswerNodes;
+}
 
 /**
  * Ленивый резолв общего хелпера рендера ответов AI-режима: общий мир, затем
@@ -40,9 +35,8 @@
  *
  * TODO: уточнить тип в шаге 5 (форма window.GoogleFolwrUtils без @types: сейчас
  * она any в types/globals.d.ts — здесь сузили до используемой поверхности).
- * @returns {GsaFolwrUtils|null}
  */
-function gsaFolwrUtils() {
+function gsaFolwrUtils(): GsaFolwrUtils | null {
   try {
     if (typeof window !== 'undefined' && window.GoogleFolwrUtils &&
         typeof window.GoogleFolwrUtils.answerTextOf === 'function' &&
@@ -66,16 +60,14 @@ function gsaFolwrUtils() {
 /**
  * Текст узла ответа общим рендером парсера (код-окна → ```lang … ```); без хелпера —
  * прежний textContent клона без script/style/button/svg.
- * @param {Element} el
- * @returns {string}
  */
-function gsaAnswerText(el) {
+function gsaAnswerText(el: Element): string {
   var util = gsaFolwrUtils();
   if (util) {
     try { return String(util.answerTextOf(el) || ''); } catch (e) { swallowSoft(e, 'adapter:google-search:answerText'); }
   }
   try {
-    var clone = /** @type {Element} */ (el.cloneNode(true));
+    var clone = (el.cloneNode(true) as Element);
     clone.querySelectorAll('script, style, button, svg').forEach(function(n) { n.remove(); });
     return String(clone.textContent || '');
   } catch (e2) { return ''; }
@@ -84,10 +76,8 @@ function gsaAnswerText(el) {
 /**
  * Узлы ответа общим отбором парсера (чанки прозы + самостоятельные код-окна между
  * ними); без хелпера — только чанки .n6owBd.awi2gc, как раньше.
- * @param {Document|Element} root
- * @returns {GsaAnswerNodes}
  */
-function gsaAnswerNodes(root) {
+function gsaAnswerNodes(root: Document | Element): GsaAnswerNodes {
   var util = gsaFolwrUtils();
   if (util) {
     try {
@@ -99,6 +89,13 @@ function gsaAnswerNodes(root) {
 }
 
 class GoogleSearchAdapter extends BaseAdapter {
+  /** Последняя модель из сетевого ответа (событие ai-cm-full-history). */
+  _lastNetworkModel: string;
+  /** Антиспам: последнее N в «Извлечено N сообщений». */
+  _lastExtractedCount: number | null;
+  /** O-45 (диагностика): антиспам строки структуры код-блока. */
+  _lastCodeBlockSig: string | null;
+
   constructor() {
     super();
     this.siteName = 'google_search';
@@ -114,7 +111,7 @@ class GoogleSearchAdapter extends BaseAdapter {
           // detail есть только у CustomEvent, а addEventListener типизирует аргумент
           // как Event (TS2339) — сужаем форму через промежуточную переменную, сохраняя
           // прежнюю null-защиту (событие без detail обязано остаться безопасным).
-          var evt = /** @type {CustomEvent} */ (ev);
+          var evt = (ev as CustomEvent);
           var detail = evt && evt.detail;
           if (detail && detail.modelSlug) {
             self._lastNetworkModel = detail.modelSlug;
@@ -129,9 +126,8 @@ class GoogleSearchAdapter extends BaseAdapter {
   /**
    * Находимся ли мы на странице диалога AI-режима: есть turn-контейнеры,
    * блок ответа aimfl или поле ввода.
-   * @returns {boolean}
    */
-  isOnDialogPage() {
+  isOnDialogPage(): boolean {
     var hasTurns = document.querySelector('[data-scope-id="turn"]') !== null;
     var hasAimfl = document.querySelector('[data-subtree="aimfl"]') !== null;
     var hasInput = document.querySelector('textarea, [contenteditable="true"]') !== null;
@@ -143,9 +139,8 @@ class GoogleSearchAdapter extends BaseAdapter {
   /**
    * Ходы диалога: вопрос из заголовка turn'а, ответ — блоки ответа, отнесённые к
    * тому же turn'у. Пустые вопросы/ответы пропускаются; при ошибке — пустой массив.
-   * @returns {GoogleSearchExtractedMessage[]}
    */
-  extractMessages() {
+  extractMessages(): Message[] {
     try {
       var turns = document.querySelectorAll('[data-scope-id="turn"]');
       if (!turns || turns.length === 0) {
@@ -154,8 +149,8 @@ class GoogleSearchAdapter extends BaseAdapter {
       }
 
       // Собираем вопросы из h2.iMqumd внутри turn'ов
-      /** @type {(string|null)[]} */
-      var questions = [];
+
+      var questions: (string|null)[] = [];
       for (var i = 0; i < turns.length; i++) {
         var h2 = turns[i].querySelector('h2.iMqumd');
         var qText = null;
@@ -172,8 +167,8 @@ class GoogleSearchAdapter extends BaseAdapter {
       }
 
       // Распределяем блоки .n6owBd.awi2gc по turn'ам
-      /** @type {string[][]} */
-      var answerBlocks = [];
+
+      var answerBlocks: string[][] = [];
       for (var ti = 0; ti < turns.length; ti++) {
         answerBlocks[ti] = [];
       }
@@ -195,7 +190,7 @@ class GoogleSearchAdapter extends BaseAdapter {
         }
         if (assignedIdx >= 0 && assignedIdx < turns.length) {
           // gsaAnswerNodes отдаёт NodeList|Element[] — узлы ответа всегда элементы.
-          var blockText = gsaAnswerText(/** @type {Element} */ (/** @type {unknown} */ (block))).trim();
+          var blockText = gsaAnswerText(((block as unknown) as Element)).trim();
           if (blockText) {
             answerBlocks[assignedIdx].push(blockText);
           }
@@ -243,8 +238,8 @@ class GoogleSearchAdapter extends BaseAdapter {
       } catch (eCodeBlock) { }
 
       // Собираем ответы
-      /** @type {(string|null)[]} */
-      var answers = [];
+
+      var answers: (string|null)[] = [];
       for (var ti3 = 0; ti3 < turns.length; ti3++) {
         var joined = answerBlocks[ti3].length > 0 ? answerBlocks[ti3].join('\n\n') : null;
         // Фолбэк: [data-subtree="aimfl"] по индексу
@@ -259,8 +254,8 @@ class GoogleSearchAdapter extends BaseAdapter {
       }
 
       // Формируем сообщения: user → assistant, по порядку
-      /** @type {GoogleSearchExtractedMessage[]} */
-      var messages = [];
+
+      var messages: Message[] = [];
       for (var k = 0; k < Math.min(questions.length, answers.length); k++) {
         if (questions[k]) {
           messages.push({ role: 'user', content: questions[k] });
@@ -284,18 +279,16 @@ class GoogleSearchAdapter extends BaseAdapter {
 
   /**
    * Полный текст диалога: содержимое ходов, склеенное переводом строки.
-   * @returns {string}
    */
-  getFullDialogText() {
+  getFullDialogText(): string {
     return this.extractMessages().map(function(msg) { return msg.content; }).join('\n');
   }
 
   /**
    * Модель: ТОЛЬКО из сети (активный/пассивный ответ, detail.modelSlug), иначе ''.
    * DOM-догадка сознательно не возвращается — см. комментарий в теле метода.
-   * @returns {string}
    */
-  detectModel() {
+  detectModel(): string {
     // Модель берём ТОЛЬКО из сети (активный/пассивный ответ, detail.modelSlug).
     // Дефект: раньше фолбэк отдавал DOM-догадку gemini-2.5-flash, хотя в сети
     // ходит 1.5-pro/1.5-flash. Для GSA 2.5-flash не возвращаем никогда.

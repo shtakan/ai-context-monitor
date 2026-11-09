@@ -25,7 +25,7 @@ if (typeof global.TextDecoder === 'undefined') global.TextDecoder = TextDecoder;
 
 const ROOT = path.join(__dirname, '..');
 const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'perplexity-intercept.js'), 'utf8');
-const ADAPTER_SRC = fs.readFileSync(path.join(ROOT, 'adapters', 'perplexity-adapter.js'), 'utf8');
+const ADAPTER_SRC = fs.readFileSync(path.join(ROOT, 'adapters', 'perplexity-adapter.ts'), 'utf8');
 const { interceptSource } = require('./helpers/main-intercept.js');
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 

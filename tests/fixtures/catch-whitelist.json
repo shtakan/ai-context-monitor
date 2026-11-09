@@ -10,92 +10,92 @@
   "totalEntries": 416,
   "groups": [
     {
-      "file": "adapters/claude-adapter.js",
+      "file": "adapters/claude-adapter.ts",
       "category": "debug-instrumentation",
       "lines": [
-        103
+        99
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (this._lastNetworkModel) { if (!this._modelLogSent) { this._modelLogS"
     },
     {
-      "file": "adapters/claude-adapter.js",
+      "file": "adapters/claude-adapter.ts",
       "category": "event-guard",
       "lines": [
-        48
+        47
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.addEventListener('ai-cm-full-history', function (ev) { var evt ="
     },
     {
-      "file": "adapters/deepseek-adapter.js",
+      "file": "adapters/deepseek-adapter.ts",
       "category": "feature-detect",
       "lines": [
-        290
+        257
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: const o21Markers = ['BetterDeepSeek', 'BDS:', 'better-deepseek', 'bds-']"
     },
     {
-      "file": "adapters/deepseek-adapter.js",
+      "file": "adapters/deepseek-adapter.ts",
       "category": "local-helper-guard",
       "lines": [
-        371
+        338
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmDiagLine('o21-dom-extract', { site: this.siteName || 'deepseek', tot"
     },
     {
-      "file": "adapters/google-search-adapter.js",
+      "file": "adapters/google-search-adapter.ts",
       "category": "debug-instrumentation",
       "lines": [
-        243
+        238
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof aiCmDiagOn === 'function' && aiCmDiagOn() && typeof aiCmDiagL"
     },
     {
-      "file": "adapters/google-search-adapter.js",
+      "file": "adapters/google-search-adapter.ts",
       "category": "event-guard",
       "lines": [
-        125
+        122
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.addEventListener('ai-cm-full-history', function (ev) { var evt ="
     },
     {
-      "file": "adapters/google-search-adapter.js",
+      "file": "adapters/google-search-adapter.ts",
       "category": "guard-clause",
       "lines": [
-        52,
-        60
+        46,
+        54
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GoogleFolwrUtils && typeof w"
     },
     {
-      "file": "adapters/perplexity-adapter.js",
+      "file": "adapters/perplexity-adapter.ts",
       "category": "debug-instrumentation",
       "lines": [
-        106
+        102
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (this._lastNetworkModel) { if (!this._modelLogSent) { this._modelLogS"
     },
     {
-      "file": "adapters/perplexity-adapter.js",
+      "file": "adapters/perplexity-adapter.ts",
       "category": "event-guard",
       "lines": [
-        48
+        47
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.addEventListener('ai-cm-full-history', function (ev) { var evt ="
     },
     {
-      "file": "adapters/qwen-adapter.js",
+      "file": "adapters/qwen-adapter.ts",
       "category": "container-drop",
       "lines": [
-        283
+        270
       ],
       "reason": "container-drop: контейнер уже откреплён от DOM (SPA-навигация) — снимать нечего; пример: if (el.parentNode) el.parentNode.insertBefore(document.createComment(QWE"
     },
     {
-      "file": "adapters/qwen-adapter.js",
+      "file": "adapters/qwen-adapter.ts",
       "category": "guard-clause",
       "lines": [
-        427,
-        433
+        401,
+        407
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof AiCmExportBuilders !== 'undefined' && AiCmExportBuilders && t"
     },

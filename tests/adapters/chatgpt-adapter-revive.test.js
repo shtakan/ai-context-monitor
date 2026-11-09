@@ -8,7 +8,7 @@
  * селекторы (.markdown, assistant-message, model-response, data-message-author-role,
  * data-virtualized-turn-content) на ТОМ ЖЕ DOM дали 0 совпадений.
  *
- * Корень дефекта, который эти пины закрывают: adapters/chatgpt-adapter.js имел один
+ * Корень дефекта, который эти пины закрывают: adapters/chatgpt-adapter.ts имел один
  * плоский селектор '.whitespace-pre-wrap, .markdown' (оба матчили только user) и
  * нормализацию `role === 'unknown' ? 'user' : role`, то есть ЗАПИСЫВАЛ ответ ассистента
  * в базу как реплику пользователя. Пины C-1/C-2 требуют, чтобы 'unknown' НЕ попадал
@@ -18,19 +18,24 @@
  * adapter-harness.js — тот же исходник, что уезжает в бандл, без браузера. Живой
  * приёмки здесь нет (прецедент contract-*): снимок вписан в JSON ниже, руками.
  * JSON лежит ЗДЕСЬ, а не в tests/fixtures/: приёмка требует ровно два изменённых файла
- * (M adapters/chatgpt-adapter.js + A этот файл).
+ * (M adapters/chatgpt-adapter.ts + A этот файл).
  */
 
 const fs = require('fs');
 const path = require('path');
 const { loadAdapter } = require('../helpers/adapter-harness');
 
-const ADAPTER_REL = 'adapters/chatgpt-adapter.js';
-const BASE_REL = 'adapters/base-adapter.js';
+const ADAPTER_REL = 'adapters/chatgpt-adapter.ts';
+const BASE_REL = 'adapters/base-adapter.ts';
 const ADAPTER_PATH = path.join(__dirname, '..', '..', ADAPTER_REL);
 const BASE_PATH = path.join(__dirname, '..', '..', BASE_REL);
 const ADAPTER_SRC = fs.readFileSync(ADAPTER_PATH, 'utf8');
 const BASE_SRC = fs.readFileSync(BASE_PATH, 'utf8');
+// Для песочницы — те же файлы без TS-аннотаций: new Function не разбирает типы.
+// Пины выше/ниже работают с сырым текстом, поведение — со стрипленым.
+const { readModuleSource } = require('../helpers/read-module-source.js');
+const ADAPTER_EXEC_SRC = readModuleSource(ADAPTER_REL);
+const BASE_EXEC_SRC = readModuleSource(BASE_REL);
 
 const loc = { hostname: 'chatgpt.com', pathname: '/c/68f1c2a0-live-snapshot-2026-10-13' };
 
@@ -191,7 +196,7 @@ function reviveWithOpenGate() {
   const factory = new Function(
     'document', 'location', 'debugLog', 'console', 'swallowSoft',
     'aiCmDiagWarn', 'aiCmDiagOn', 'aiCmDiagLine',
-    BASE_SRC + '\n' + ADAPTER_SRC + '\nreturn ChatGPTAdapter;'
+    BASE_EXEC_SRC + '\n' + ADAPTER_EXEC_SRC + '\nreturn ChatGPTAdapter;'
   );
   const Ctor = factory(
     document, loc, function () { }, console,

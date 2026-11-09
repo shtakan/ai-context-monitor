@@ -41,9 +41,10 @@ const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/google-sear
 
 const ROOT = path.join(__dirname, '..');
 const CONTENT = require('./helpers/content-source.js').contentSource;
-const BASE_SRC = fs.readFileSync(path.join(ROOT, 'adapters', 'base-adapter.js'), 'utf8')
+const { readModuleSource } = require('./helpers/read-module-source.js');
+const BASE_SRC = readModuleSource(path.join(ROOT, 'adapters', 'base-adapter.ts'))
   .replace(/if \(typeof module[\s\S]*$/, '');
-const ADAPTER_SRC = fs.readFileSync(path.join(ROOT, 'adapters', 'google-search-adapter.js'), 'utf8');
+const ADAPTER_SRC = readModuleSource(path.join(ROOT, 'adapters', 'google-search-adapter.ts'));
 const INTERCEPT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');
 const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
 const STATE_SRC = fs.readFileSync(path.join(ROOT, 'core', 'state.js'), 'utf8');

@@ -38,7 +38,7 @@ const { loadAsClassic } = require('./helpers/load-esm.js');
 // Ph2: stream-frames.js — ESM; перехватчик исполняется с втянутыми импортами.
 const QWEN_CLASSIC = loadAsClassic('core/qwen-intercept.js');
 const OPTIONS_SRC = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
-const ADAPTER_SRC = fs.readFileSync(path.join(ROOT, 'adapters', 'qwen-adapter.js'), 'utf8');
+const ADAPTER_SRC = fs.readFileSync(path.join(ROOT, 'adapters', 'qwen-adapter.ts'), 'utf8');
 // ru-словарь M-4.2: песочницы виджета получают ТОЧНО ТУ ЖЕ подстановку, что chrome.i18n
 // в браузере (иначе строки тултипа проверялись бы по фолбэку без подстановок).
 const RU_MESSAGES = JSON.parse(fs.readFileSync(path.join(ROOT, '_locales', 'ru', 'messages.json'), 'utf8'));
@@ -677,7 +677,8 @@ describe('O-35 A: счётчик msgs привязан к convId и URL на к�
 
   test('A: счётчик — это выход extractMessages() → buildHistoryMessages() адаптера', function () {
     expect(CONTENT).toContain('var msgsS24 = buildHistoryMessages();');
-    expect(ADAPTER_SRC).toContain('const messages = [];');
+    // TS-аннотация массива не должна ломать пин: допускаем `: <тип>` перед `=`.
+    expect(ADAPTER_SRC).toMatch(/const messages(: [^=]+?)? = \[\];/);
     expect(ADAPTER_SRC).toContain('[QwenAdapter] Извлечено ${messages.length} сообщений');
     // один проход по узлам: кандидаты селекторов — первый непустой набор
     expect(ADAPTER_SRC).toContain('_messageNodes()');

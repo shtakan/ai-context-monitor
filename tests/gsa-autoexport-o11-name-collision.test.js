@@ -471,7 +471,7 @@ describe('O-11-2: пины единственной точки старта ск
   const body = fnDecl(CONTENT, 'doAutoExportDownload');
   const MGR_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.js'), 'utf8');
   const GSA_SRC = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');
-  const GSA_ADAPTER_SRC = fs.readFileSync(path.join(ROOT, 'adapters', 'google-search-adapter.js'), 'utf8');
+  const GSA_ADAPTER_SRC = fs.readFileSync(path.join(ROOT, 'adapters', 'google-search-adapter.ts'), 'utf8');
 
   test('точка: консультация реестра → СИНХРОННЫЙ резерв имени → старт скачивания', () => {
     const iConsult = single.indexOf('Pdl.isFileNameTaken(used, file)');

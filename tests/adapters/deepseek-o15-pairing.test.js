@@ -324,8 +324,11 @@ describe('O-15: DeepSeek live-экспорт — парность ходов и 
 
   test('живой DOM-адаптер: роли не сбиты, reasoning не отдельное сообщение, без «.»', () => {
     const dom = new JSDOM(DOM_HTML, { url: 'https://chat.deepseek.com/a/chat/s/convO15', runScripts: 'dangerously', virtualConsole: new VirtualConsole() });
-    const baseSrc = fs.readFileSync(path.join(ADAPTER_DIR, 'base-adapter.js'), 'utf8');
-    const adapterSrc = fs.readFileSync(path.join(ADAPTER_DIR, 'deepseek-adapter.js'), 'utf8');
+    // Адаптеры — классические скрипты на TS: перед eval типы снимаются (esbuild),
+    // иначе jsdom получает синтаксис, которого не понимает.
+    const { readModuleSource } = require('../helpers/read-module-source.js');
+    const baseSrc = readModuleSource('adapters/base-adapter.ts');
+    const adapterSrc = readModuleSource('adapters/deepseek-adapter.ts');
     dom.window.eval('var debugLog = function () {};\n' + baseSrc + '\n' + adapterSrc + '\nwindow.DeepSeekAdapter = DeepSeekAdapter;');
     const adapter = new dom.window.DeepSeekAdapter();
     const msgs = adapter.extractMessages();

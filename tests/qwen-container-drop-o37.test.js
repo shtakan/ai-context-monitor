@@ -8,12 +8,12 @@
  * (чистка жила ТОЛЬКО на выходе экспорта — dropContainerMessages, O-36/D2.1, — то есть база,
  * бейдж и токен-оценка оставались раздутыми).
  *
- * Фикс: та же чистка исполняется ВНУТРИ adapters/qwen-adapter.js:extractMessages ОБЩИМ хелпером
+ * Фикс: та же чистка исполняется ВНУТРИ adapters/qwen-adapter.ts:extractMessages ОБЩИМ хелпером
  * сборщиков (aiCmDropContainerMessages / aiCmContainerRules) — логика не дублируется, хелпер
  * резолвится лениво (файл сборщиков подключён в manifest.json ПОСЛЕ адаптера). Вторая ступень
  * (чистка в сборщиках) остаётся и идемпотентна.
  *
- * Исполняется РЕАЛЬНЫЙ adapters/qwen-adapter.js в песочнице jsdom + РЕАЛЬНЫЕ сборщики
+ * Исполняется РЕАЛЬНЫЙ adapters/qwen-adapter.ts в песочнице jsdom + РЕАЛЬНЫЕ сборщики
  * (utils/export-text-builders.ts) и токен-оценка (utils/tokenizer.ts).
  *
  * Обновление 2026-09-26 (план замены qwen-селекторов, живой DOM-снимок 26.09.26): фикстура
@@ -31,10 +31,15 @@ const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-te
 const Tokenizer = require('./helpers/load-esm.js').loadEsm('utils/tokenizer.ts');
 
 const ROOT = path.join(__dirname, '..');
-const BASE_SRC = fs.readFileSync(path.join(ROOT, 'adapters', 'base-adapter.js'), 'utf8');
-const QWEN_SRC = fs.readFileSync(path.join(ROOT, 'adapters', 'qwen-adapter.js'), 'utf8');
-const ADAPTER_FILES = ['chatgpt-adapter.js', 'gemini-adapter.js', 'deepseek-adapter.js',
-  'google-search-adapter.js', 'claude-adapter.js', 'perplexity-adapter.js'];
+const { readModuleSource } = require('./helpers/read-module-source.js');
+const BASE_SRC = readModuleSource(path.join(ROOT, 'adapters', 'base-adapter.ts'));
+// Источник для source-пинов — как есть на диске: типы в пинах не участвуют,
+// а транспиляция (esbuild) переформатирует литералы и объявления полей.
+const QWEN_SRC = fs.readFileSync(path.join(ROOT, 'adapters', 'qwen-adapter.ts'), 'utf8');
+// Источник для песочницы — без TS-аннотаций (new Function не понимает типы).
+const QWEN_EXEC_SRC = readModuleSource(path.join(ROOT, 'adapters', 'qwen-adapter.ts'));
+const ADAPTER_FILES = ['chatgpt-adapter.ts', 'gemini-adapter.ts', 'deepseek-adapter.ts',
+  'google-search-adapter.ts', 'claude-adapter.ts', 'perplexity-adapter.ts'];
 
 const FAKE_LOCATION = { hostname: 'chat.qwen.ai', pathname: '/c/cda86f26-0155-4243-a134-777d909a936b' };
 
@@ -47,7 +52,7 @@ function loadAdapter(opts) {
   const o = opts || {};
   const sandbox = new Function('document', 'location', 'debugLog', 'console', 'window', 'AiCmExportBuilders',
     BASE_SRC.replace(/if \(typeof module[\s\S]*$/, '') + '\n' +
-    QWEN_SRC.replace(/if \(typeof module[\s\S]*$/, '') + '\nreturn QwenAdapter;');
+    QWEN_EXEC_SRC.replace(/if \(typeof module[\s\S]*$/, '') + '\nreturn QwenAdapter;');
   const win = (o.noWindow === true) ? undefined
     : ((o.window !== undefined) ? o.window : { AiCmExportBuilders: Builders });
   // o.builders === null → биндинга нет; по умолчанию — общий хелпер, как в бандле контента.

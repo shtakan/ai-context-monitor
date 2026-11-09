@@ -588,8 +588,9 @@ interface Window {
   AiCmExportManager?: any;
 }
 
-// Интерсепторы и парсеры — Фаза 3 (ambient any по прецеденту types/globals.d.ts)
+// Интерсепторы и парсеры — Фаза 3 (ambient any по прецеденту types/globals.d.ts).
+// Адаптеры (GoogleSearchAdapter, QwenAdapter, …) здесь больше НЕ объявляются: шаг 2
+// миграции TypeScript перевёл adapters/*.js в adapters/*.ts, и классы теперь реальные
+// глобальные объявления скриптовой области — ambient-зеркало давало TS2451.
 declare const GeminiDomParser: any;
 declare const GeminiInterceptLogic: any;
-declare const GoogleSearchAdapter: any;
-declare const QwenAdapter: any;

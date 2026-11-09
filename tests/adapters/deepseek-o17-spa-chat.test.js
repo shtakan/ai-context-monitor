@@ -489,7 +489,7 @@ describe('O-17: поведение O-15/O-16 сохранено, прочие с
     const contentSrc = require('../helpers/content-source.js').contentSource;
     expect(contentSrc).not.toContain('baseEmptyAuthoritative');
     expect(contentSrc).not.toContain('turnsSnapshot');
-    expect(fs.readFileSync(path.join(ROOT, 'adapters', 'deepseek-adapter.js'), 'utf8')).not.toContain('baseEmptyAuthoritative');
-    expect(fs.readFileSync(path.join(ROOT, 'adapters', 'gemini-adapter.js'), 'utf8')).not.toContain('historyUrlForConv');
+    expect(fs.readFileSync(path.join(ROOT, 'adapters', 'deepseek-adapter.ts'), 'utf8')).not.toContain('baseEmptyAuthoritative');
+    expect(fs.readFileSync(path.join(ROOT, 'adapters', 'gemini-adapter.ts'), 'utf8')).not.toContain('historyUrlForConv');
   });
 });

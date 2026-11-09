@@ -7,14 +7,6 @@
  */
 
 /**
- * Сообщение в форме адаптера (types/adapter.d.ts).
- *
- * Имя с префиксом — по необходимости: файлы адаптеров не являются модулями, поэтому
- * при allowJs все typedef-имена попадают в одну общую область (одноимённые → TS2300).
- * @typedef {import('../types/adapter').ExtractedMessage} ChatGPTExtractedMessage
- */
-
-/**
  * Локализованная подпись ассистента. ChatGPT рендерит её СКРЫТЫМ заголовком
  * `<h4 class="sr-only …">` внутри блока ответа: визуально его нет, но textContent его
  * видит, и подпись утекает в начало content (ru «ChatGPT сказал:», en «ChatGPT said:»,
@@ -24,6 +16,21 @@
 const CHATGPT_ANSWER_PREFIX_RE = /^\s*(?:ChatGPT сказал|ChatGPT said|ChatGPT sagte):\s*/;
 
 class ChatGPTAdapter extends BaseAdapter {
+  /** Селекторы ходов и реплик (см. комментарий в конструкторе). */
+  _turnSelectors: string[];
+  _userSelectors: string[];
+  _assistantSelectors: string[];
+  /** Маркеры роли по className (живой снимок 2026-10-13). */
+  _userRoleMarkers: string[];
+  _legacyUserRoleMarkers: string[];
+  _assistantRoleMarkers: string[];
+  /** Легаси-селекторы содержимого (уровень 4). */
+  allContentSelectors: string;
+  /** Антиспам строки «модель определена» в консоли. */
+  _modelDetectLogged: boolean;
+  /** Счётчики последнего отбора (часть возврата _findMessageElements). */
+  _lastTurnStats: { turns: number; users: number; assistants: number; skippedUnknown: number; looseUsers: number };
+
   constructor() {
     super();
     this.siteName = 'chatgpt';
@@ -58,18 +65,14 @@ class ChatGPTAdapter extends BaseAdapter {
 
     // Счётчики последнего отбора. Наружу не торчат и считаются ВСЕГДА (они — часть
     // возврата _findMessageElements), а печатает их extractMessages только под гейтом.
-    /** @type {{turns: number, users: number, assistants: number, skippedUnknown: number, looseUsers: number}} */
     this._lastTurnStats = { turns: 0, users: 0, assistants: 0, skippedUnknown: 0, looseUsers: 0 };
   }
 
   /**
    * Есть ли в className узла хоть один из маркеров (подстрока — как в исходной версии:
    * хеш-суффиксы Tailwind являются частью того же класса-токена).
-   * @param {string} className
-   * @param {string[]} markers
-   * @returns {boolean}
    */
-  _markerHit(className, markers) {
+  _markerHit(className: string, markers: string[]): boolean {
     const cls = String(className || '');
     if (!cls) return false;
     for (let i = 0; i < markers.length; i++) {
@@ -83,10 +86,8 @@ class ChatGPTAdapter extends BaseAdapter {
    * (в исходной версии маркер жил именно на предке) или внутри своего поддерева.
    * Служит и определению роли, и ИСКЛЮЧЕНИЮ обёрток: узел, внутри которого лежит
    * реплика пользователя, ответом быть не может (иначе в ответ попал бы и вопрос).
-   * @param {Element} element
-   * @returns {boolean}
    */
-  _hasUserMarker(element) {
+  _hasUserMarker(element: Element): boolean {
     if (!element) return false;
     if (this._markerHit(element.className, this._userRoleMarkers)) return true;
     if (this._markerHit(element.className, this._legacyUserRoleMarkers)) return true;
@@ -103,10 +104,8 @@ class ChatGPTAdapter extends BaseAdapter {
   /**
    * Первая непустая реплика пользователя внутри узла. Кандидаты — по порядку
    * `_userSelectors`: первый непустой набор выигрывает (форма донора qwen-adapter.js).
-   * @param {Document|Element} scope
-   * @returns {Element|null}
    */
-  _firstUserNode(scope) {
+  _firstUserNode(scope: Document|Element): Element|null {
     for (let i = 0; i < this._userSelectors.length; i++) {
       const found = scope.querySelectorAll(this._userSelectors[i]);
       for (let j = 0; j < found.length; j++) {
@@ -119,11 +118,8 @@ class ChatGPTAdapter extends BaseAdapter {
   /**
    * Структурный фолбэк: самый длинный текстовый узел поддерева, не являющийся репликой
    * пользователя и не содержащий её.
-   * @param {Element} scope
-   * @param {Element|null} userEl
-   * @returns {Element|null}
    */
-  _longestTextNode(scope, userEl) {
+  _longestTextNode(scope: Element, userEl: Element|null): Element|null {
     const nodes = scope.querySelectorAll('*');
     let best = null;
     let bestLen = 0;
@@ -148,11 +144,8 @@ class ChatGPTAdapter extends BaseAdapter {
    * Уровень 2 (структурный) — самый длинный текстовый узел хода ПОСЛЕ реплики; он
    * включается, только если реплика пользователя найдена (иначе роль ответа угадывалась
    * бы длиной, а это тот же дефект, что и нормализация 'unknown' → 'user').
-   * @param {Element} turn
-   * @param {Element|null} userEl
-   * @returns {Element|null}
    */
-  _assistantInTurn(turn, userEl) {
+  _assistantInTurn(turn: Element, userEl: Element|null): Element|null {
     let best = null;
     let bestLen = 0;
     for (let i = 0; i < this._assistantSelectors.length; i++) {
@@ -179,11 +172,10 @@ class ChatGPTAdapter extends BaseAdapter {
    * только если живой отбор не дал ничего: на новых сборках он дал бы дубли.
    * Роль 'unknown' в результат НЕ попадает — исходная нормализация 'unknown' → 'user'
    * и была корнем дефекта (ответ записывался в базу как реплика пользователя).
-   * @returns {{role: string, element: Element}[]}
    */
-  _findMessageElements() {
-    /** @type {{role: string, element: Element}[]} */
-    const found = [];
+  _findMessageElements(): {role: string, element: Element}[] {
+
+    const found: {role: string, element: Element}[] = [];
     const stats = { turns: 0, users: 0, assistants: 0, skippedUnknown: 0, looseUsers: 0 };
 
     const turnNodes = document.querySelectorAll(this._turnSelectors[0]);
@@ -243,10 +235,8 @@ class ChatGPTAdapter extends BaseAdapter {
    * Возвращаем string, а не литеральный union 'user'|'assistant': пока тип узкий, tsc
    * (TS2367) счёл бы сверку `role === 'unknown'` в extractMessages заведомо ложной, а она —
    * живой детектор дрейфа разметки. TODO: уточнить тип в шаге 5 (контракт ролей адаптера).
-   * @param {Element} element
-   * @returns {string}
    */
-  _detectRole(element) {
+  _detectRole(element: Element): string {
     const classAttr = String(element.className || '');
     // Порядок исходной версии сохранён: markdown-рендер — ответ ассистента.
     if (classAttr.indexOf('markdown') !== -1) return 'assistant';
@@ -264,10 +254,8 @@ class ChatGPTAdapter extends BaseAdapter {
    * Заменяет `clone.textContent`, который склеивал абзацы БЕЗ разделителя («первыйвторой»)
    * и тем самым ломал формат многострочного ответа. trim — только на краях результата:
    * значимые переводы строк ВНУТРИ текста сохраняются.
-   * @param {Element} root
-   * @returns {string}
    */
-  _blockText(root) {
+  _blockText(root: Element): string {
     let out = '';
     const BLOCK = {
       P: 1, DIV: 1, LI: 1, TR: 1, SECTION: 1, ARTICLE: 1, HEADER: 1, FOOTER: 1, MAIN: 1,
@@ -291,10 +279,8 @@ class ChatGPTAdapter extends BaseAdapter {
   /**
    * Текст хода. markdown-рендер (легаси-разметка) — абзацы построчно. Иначе — клон без
    * кнопок/svg (как в исходной версии) и структурная нормализация блочных границ.
-   * @param {Element} element
-   * @returns {string}
    */
-  _extractText(element) {
+  _extractText(element: Element): string {
     const classAttr = String(element.className || '');
     if (classAttr.indexOf('markdown') !== -1) {
       const paragraphs = element.querySelectorAll('p');
@@ -307,7 +293,7 @@ class ChatGPTAdapter extends BaseAdapter {
         return lines.join('\n').trim();
       }
     }
-    const clone = /** @type {Element} */ (element.cloneNode(true));
+    const clone = (element.cloneNode(true) as Element);
     clone.querySelectorAll('button, [role="button"], svg').forEach(el => el.remove());
     return this._blockText(clone);
   }
@@ -317,13 +303,12 @@ class ChatGPTAdapter extends BaseAdapter {
    * отбрасываются, а роль 'unknown' (легаси-узел не опознан) ПРОПУСКАЕТСЯ: нормализации
    * 'unknown' → 'user' больше нет — это и был корень дефекта. Диагностика — ТОЛЬКО под
    * гейтом (typeof-гард: в срез-песочницах тестов хелперов гейта может не быть).
-   * @returns {ChatGPTExtractedMessage[]}
    */
-  extractMessages() {
+  extractMessages(): Message[] {
     const diagOn = (typeof aiCmDiagOn === 'function') ? aiCmDiagOn() : false;
     const elements = this._findMessageElements();
-    /** @type {ChatGPTExtractedMessage[]} */
-    const messages = [];
+
+    const messages: Message[] = [];
     for (let i = 0; i < elements.length; i++) {
       const role = elements[i].role;
       // Срез подписи — ЗДЕСЬ, а не в _extractText: тот же _extractText зовётся при ОТБОРЕ
@@ -365,9 +350,8 @@ class ChatGPTAdapter extends BaseAdapter {
   /**
    * Полный текст диалога: содержимое ходов, склеенное переводом строки.
    * Явное переопределение базового (у ChatGPT свой путь отбора узлов).
-   * @returns {string}
    */
-  getFullDialogText() {
+  getFullDialogText(): string {
     const messages = this.extractMessages();
     return messages.map(msg => msg.content).join('\n');
   }
@@ -375,9 +359,8 @@ class ChatGPTAdapter extends BaseAdapter {
   /**
    * Находимся ли мы на странице диалога: есть ход ([data-turn-key]) либо реплика
    * пользователя (в т.ч. хвост без атрибута) либо легаси-узел содержимого.
-   * @returns {boolean}
    */
-  isOnDialogPage() {
+  isOnDialogPage(): boolean {
     if (document.querySelector(this._turnSelectors.join(', '))) return true;
     if (document.querySelector(this._userSelectors.join(', '))) return true;
     return document.querySelector(this.allContentSelectors) !== null;
@@ -390,9 +373,8 @@ class ChatGPTAdapter extends BaseAdapter {
   /**
    * Имя модели из шапки/селектора; если шапка показывает только бренд — null
    * (не захардкоженное имя), иначе модель возьмётся из сети/дефолта.
-   * @returns {string|null}
    */
-  detectModel() {
+  detectModel(): string|null {
     if (this._modelDetectLogged === undefined) this._modelDetectLogged = false;
     let found = null;
     try {
@@ -408,7 +390,7 @@ class ChatGPTAdapter extends BaseAdapter {
       for (let i = 0; i < selectors.length && !found; i++) {
         // innerText есть только у HTMLElement, а querySelectorAll по строке даёт Element
         // (TS2339). Уточняем форму узла: селекторы здесь кнопки/ссылки шапки.
-        const els = /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(selectors[i]));
+        const els = (document.querySelectorAll(selectors[i]) as NodeListOf<HTMLElement>);
         for (let j = 0; j < els.length; j++) {
           const txt = (els[j].innerText || els[j].textContent || '').trim();
           const m = txt.match(re);

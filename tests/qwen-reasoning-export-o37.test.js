@@ -8,7 +8,7 @@
  * Корень (шаг 1, инспекция; подтверждён чтением кода):
  *   - текст thinking summary живёт в СЕТЕВОМ снимке полями detail.messages[].reasoning и
  *     hiddenReasoning (core/qwen-intercept.js:449-453), а в DOM-базе — полем захвата
- *     hiddenReasoning (adapters/qwen-adapter.js:217); попап-строка показывает СЕРВЕРНЫЙ usage
+ *     hiddenReasoning (adapters/qwen-adapter.ts:217); попап-строка показывает СЕРВЕРНЫЙ usage
  *     (qwenUsage.reasoningTokens), поэтому она есть независимо от экспорта;
  *   - рендер экспорта (utils/export-text-builders.ts:messageTextWithReasoning) читает ТОЛЬКО
  *     поле reasoning, которого у сообщения сервиса без сети нет («поле, которое сообщение не

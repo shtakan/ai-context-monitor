@@ -247,7 +247,9 @@ describe('Шаг A.1 / P2: контент-скрипты не ходят в chro
   const contentScriptFiles = [];
   ['core', 'utils', 'adapters'].forEach((dir) => {
     fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true }).forEach((ent) => {
-      if (!ent.isFile() || !ent.name.endsWith('.js')) return;
+      // .js и .ts: adapters/ и utils/ переведены на TypeScript (шаг 2 миграции),
+      // страж обязан видеть их исходники, иначе проверка станет вакуумной.
+      if (!ent.isFile() || !/\.(js|ts)$/.test(ent.name)) return;
       const rel = dir + '/' + ent.name;
       if (rel === 'core/background.js') return;
       contentScriptFiles.push(rel);

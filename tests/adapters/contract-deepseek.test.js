@@ -59,7 +59,7 @@ if (!artifactsAvailable) {
 /** Инстанс РЕАЛЬНОГО адаптера в jsdom-окне (тот же путь загрузки, что у живого O-15 теста). */
 function loadDs(html, url) {
   const dom = new JSDOM(html, { url: url || 'https://chat.deepseek.com/a/chat/s/convP8' });
-  const res = loadAdapter('adapters/deepseek-adapter.js', {
+  const res = loadAdapter('adapters/deepseek-adapter.ts', {
     document: dom.window.document,
     location: dom.window.location,
     // у файла нет CJS-хвоста (класс объявлен в области IIFE бандла) — забираем имя класса

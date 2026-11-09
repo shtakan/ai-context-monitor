@@ -94,7 +94,7 @@ const suite = suiteSkipped ? describe.skip : describe;
 const gtest = suiteSkipped ? test.skip : test;
 
 function gsa() {
-  return loadAdapter('adapters/google-search-adapter.js', {
+  return loadAdapter('adapters/google-search-adapter.ts', {
     document: document,
     location: loc,
     exportExpr: 'GoogleSearchAdapter'

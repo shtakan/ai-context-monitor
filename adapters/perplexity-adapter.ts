@@ -1,6 +1,6 @@
 /**
- * Адаптер для Claude (claude.ai).
- * Основной источник данных — сетевой перехватчик (core/claude-intercept.js).
+ * Адаптер для Perplexity (perplexity.ai).
+ * Основной источник данных — сетевой перехватчик (core/perplexity-intercept.js).
  * DOM-адаптер — запасной (страховка).
  *
  * Типизация (шаг 4 Фазы 1): формы — из types/adapter.d.ts. Литеральный `import type`
@@ -8,22 +8,21 @@
  * new Function() песочницами тестов), поэтому типы подключены JSDoc-ссылкой import().
  */
 
-/**
- * Сообщение в форме адаптера (types/adapter.d.ts).
- *
- * Имя с префиксом сайта — НЕ по вкусу, а по необходимости: файлы адаптеров не
- * являются модулями (обычные скрипты, склеиваемые исходником), поэтому при allowJs
- * все typedef-имена попадают в одну общую область и одноимённые дают TS2300.
- * Настоящее имя типа хранится в types/adapter.d.ts, здесь только ссылка на него.
- * @typedef {import('../types/adapter').ExtractedMessage} ClaudeExtractedMessage
- */
+class PerplexityAdapter extends BaseAdapter {
+  /** Модель по умолчанию (фолбэк detectModel). */
+  defaultModel: string;
+  /** Последняя модель из сетевого ответа (событие ai-cm-full-history). */
+  _lastNetworkModel: string;
+  /** Антиспам строки «модель из сети» в консоли. */
+  _modelLogSent: boolean;
+  /** Разговор, для которого уже пояснили пустой DOM (v2.0.34). */
+  _stubLogConvId: string;
 
-class ClaudeAdapter extends BaseAdapter {
   constructor() {
     super();
-    this.siteName = 'claude';
-    this.defaultModel = 'claude-sonnet-4-6';
-    debugLog('debug', '[ClaudeAdapter] Инициализирован');
+    this.siteName = 'perplexity';
+    this.defaultModel = 'turbo';
+    debugLog('debug', '[PerplexityAdapter] Инициализирован');
 
     // Последняя модель из сетевого ответа (заполняется событием из перехватчика)
     this._lastNetworkModel = '';
@@ -39,9 +38,9 @@ class ClaudeAdapter extends BaseAdapter {
           // detail есть только у CustomEvent, а addEventListener типизирует аргумент
           // как Event (TS2339) — сужаем форму через промежуточную переменную, сохраняя
           // прежнюю null-защиту (событие без detail обязано остаться безопасным).
-          var evt = /** @type {CustomEvent} */ (ev);
+          var evt = (ev as CustomEvent);
           var detail = evt && evt.detail;
-          if (detail && detail.modelSlug && self.siteName === 'claude') {
+          if (detail && detail.modelSlug && self.siteName === 'perplexity') {
             self._lastNetworkModel = detail.modelSlug;
           }
         });
@@ -50,29 +49,30 @@ class ClaudeAdapter extends BaseAdapter {
   }
 
   /**
-   * Находимся ли мы на диалоге claude.ai (хост + префикс пути /chat/).
-   * @returns {boolean}
+   * Находимся ли мы на диалоге perplexity.ai (хост + префикс /search/, /thread/
+   * или новый /session/).
    */
-  isOnDialogPage() {
+  isOnDialogPage(): boolean {
     try {
       var host = window.location.hostname;
       var path = window.location.pathname;
-      var result = host === 'claude.ai' && path.indexOf('/chat/') === 0;
-      debugLog('debug', '[ClaudeAdapter] isOnDialogPage: ' + result);
+      // v2.0.35: /session/<uuid> — живая форма диалога на приёмке; без неё адаптер
+      // считал страницу не-диалогом (бейдж «—», автоэкспорт не взводился).
+      var result = (host === 'www.perplexity.ai' || host === 'perplexity.ai') &&
+        (path.indexOf('/search/') === 0 || path.indexOf('/thread/') === 0 || path.indexOf('/session/') === 0);
+      debugLog('debug', '[PerplexityAdapter] isOnDialogPage: ' + result);
       return result;
     } catch (error) {
-      debugLog('error', '[ClaudeAdapter] Ошибка в isOnDialogPage:', error);
+      debugLog('error', '[PerplexityAdapter] Ошибка в isOnDialogPage:', error);
       return false;
     }
   }
 
   /**
    * Запасной DOM-парсинг: всегда пустой (основной источник — сеть).
-   * @returns {ClaudeExtractedMessage[]}
    */
-  extractMessages() {
-    // Запасной DOM-парсинг. Селекторы claude.ai нестабильны (React, нет data-testid).
-    // Основной источник — сеть (core/claude-intercept.js).
+  extractMessages(): Message[] {
+    // Запасной DOM-парсинг. Основной источник — сеть (core/perplexity-intercept.js).
     // v2.0.34: пустой массив — штатное поведение, поэтому debug и один раз на разговор.
     var stubConvId = '';
     try {
@@ -81,22 +81,21 @@ class ClaudeAdapter extends BaseAdapter {
     } catch (eStub) { stubConvId = ''; }
     if (stubConvId !== this._stubLogConvId) {
       this._stubLogConvId = stubConvId;
-      debugLog('debug', '[ClaudeAdapter] extractMessages: возвращаю пустой массив (основной источник — сеть)');
+      debugLog('debug', '[PerplexityAdapter] extractMessages: возвращаю пустой массив (основной источник — сеть)');
     }
     return [];
   }
 
   /**
    * Модель: сначала последняя из сети (точнее), иначе this.defaultModel.
-   * @returns {string}
    */
-  detectModel() {
+  detectModel(): string {
     try {
       // Модель из последнего сетевого ответа (наиболее точный источник)
       if (this._lastNetworkModel) {
         if (!this._modelLogSent) {
           this._modelLogSent = true;
-          debugLog('debug', '[ClaudeAdapter] модель из сети: ' + this._lastNetworkModel);
+          debugLog('debug', '[PerplexityAdapter] модель из сети: ' + this._lastNetworkModel);
         }
         return this._lastNetworkModel;
       }
@@ -107,10 +106,8 @@ class ClaudeAdapter extends BaseAdapter {
 
   /**
    * Нормализация текста хода (схлопывание пробелов и пустых строк).
-   * @param {string} text
-   * @returns {string}
    */
-  _cleanText(text) {
+  _cleanText(text: string): string {
     if (!text) return '';
     return text
       .replace(/\s+/g, ' ')

@@ -69,11 +69,11 @@ describe('O-35: manifest.json — Qwen добавлен, прежние серв
 
   test('content_scripts.js: qwen-adapter.js подключён, прежние пути сохранены', function () {
     const js = manifest.content_scripts[0].js;
-    expect(js).toContain('adapters/qwen-adapter.js');
-    ['adapters/base-adapter.js',
-      'adapters/chatgpt-adapter.js', 'adapters/gemini-adapter.js', 'adapters/deepseek-adapter.js',
-      'adapters/google-search-adapter.js', 'adapters/claude-adapter.js',
-      'adapters/perplexity-adapter.js',
+    expect(js).toContain('adapters/qwen-adapter.ts');
+    ['adapters/base-adapter.ts',
+      'adapters/chatgpt-adapter.ts', 'adapters/gemini-adapter.ts', 'adapters/deepseek-adapter.ts',
+      'adapters/google-search-adapter.ts', 'adapters/claude-adapter.ts',
+      'adapters/perplexity-adapter.ts',
       'core/content.js'].forEach(function (p) {
       expect(js).toContain(p);
     });
@@ -236,7 +236,7 @@ describe('O-35: core/content.js — ветка Qwen и запрет на countTo
 
   test('R-пин: ветки шести существующих сервисов байтово прежние', function () {
     expect(content).toContain("if (hostname.includes('chatgpt.com')) {");
-    // aistudio вынесен в собственный адаптер (adapters/aistudio-adapter.js) — из
+    // aistudio вынесен в собственный адаптер (adapters/aistudio-adapter.ts) — из
     // gemini-ветки он ушёл; остальной текст веток байтово прежний.
     expect(content).toContain("} else if (hostname.includes('aistudio.google.com')) {\n    currentAdapter = new AistudioAdapter();");
     expect(content).toContain("} else if (hostname.includes('gemini.google.com')) {");
@@ -380,7 +380,7 @@ describe('O-35 (G3): R-D на каждый путь записи базы Qwen',
   });
 
   test('путь DOM-фолбэка: адаптер отдаёт тексты, пустой DOM — пустой массив (не «мусорный» снимок)', function () {
-    expect(read('adapters/qwen-adapter.js')).toContain('getFullDialogText()');
+    expect(read('adapters/qwen-adapter.ts')).toContain('getFullDialogText()');
     // фолбэк активируется ТОЛЬКО когда чтение тела не выполнено — тело страницы не тронуто
     expect(intercept).toContain("diagLine('stream-skip', { reason: 'clone-failed', fallback: 'dom' });");
     expect(intercept).toContain("diagLine('stream-skip', { reason: 'no-reader', fallback: 'dom' });");

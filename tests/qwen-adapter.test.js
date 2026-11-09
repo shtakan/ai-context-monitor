@@ -1,5 +1,5 @@
 /**
- * O-35: adapters/qwen-adapter.js — DOM-фолбэк chat.qwen.ai.
+ * O-35: adapters/qwen-adapter.ts — DOM-фолбэк chat.qwen.ai.
  *
  * Адаптер включается, когда живой SSE-снимок недоступен (clone() не удался, стрим оборвался,
  * открыт готовый чат): он даёт базу текстов/ходов, чтобы бейдж и экспорт не пустели.
@@ -24,8 +24,13 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const BASE_SRC = fs.readFileSync(path.join(ROOT, 'adapters', 'base-adapter.js'), 'utf8');
-const QWEN_SRC = fs.readFileSync(path.join(ROOT, 'adapters', 'qwen-adapter.js'), 'utf8');
+const { readModuleSource } = require('./helpers/read-module-source.js');
+const BASE_SRC = readModuleSource(path.join(ROOT, 'adapters', 'base-adapter.ts'));
+// Источник для source-пинов — как есть на диске: типы в пинах не участвуют,
+// а транспиляция (esbuild) переформатирует литералы и объявления полей.
+const QWEN_SRC = fs.readFileSync(path.join(ROOT, 'adapters', 'qwen-adapter.ts'), 'utf8');
+// Источник для песочницы — без TS-аннотаций (new Function не понимает типы).
+const QWEN_EXEC_SRC = readModuleSource(path.join(ROOT, 'adapters', 'qwen-adapter.ts'));
 
 // jsdom не даёт менять origin через replaceState → location подставляется объектом
 // (hostname+pathname читает адаптер; живой браузер даёт то же самое).
@@ -44,7 +49,7 @@ function loadAdapter() {
   const sandbox = new Function(
     'document', 'location', 'debugLog', 'console',
     BASE_SRC.replace(/if \(typeof module[\s\S]*$/, '') + '\n' +
-    QWEN_SRC.replace(/if \(typeof module[\s\S]*$/, '') + '\nreturn QwenAdapter;'
+    QWEN_EXEC_SRC.replace(/if \(typeof module[\s\S]*$/, '') + '\nreturn QwenAdapter;'
   );
   const QwenAdapterClass = sandbox(document, FAKE_LOCATION, debugLog, console);
   return new QwenAdapterClass();
@@ -244,7 +249,8 @@ describe('O-35: QwenAdapter — detectModel', function () {
   // S-ПИН (одна точка правки): в detectModel не осталось ни одного захардкоженного слага —
   // фолбэк возвращает null, а имя модели приходит из таблицы utils/model-config.ts.
   test('SOURCE: detectModel не возвращает захардкоженный слаг', function () {
-    const m = /detectModel\(\)\s*\{([\s\S]*?)\n  \}/.exec(QWEN_SRC);
+    // Сигнатура с TS-аннотацией возврата: detectModel(): string|null {
+    const m = /detectModel\(\)[^{]*\{([\s\S]*?)\n  \}/.exec(QWEN_SRC);
     expect(m).not.toBeNull();
     expect(m[1]).toContain('return null;');
     expect(m[1]).not.toMatch(/return\s+'qwen[0-9.]*-[a-z]+'/i);
@@ -274,7 +280,7 @@ describe('O-35: QwenAdapter — detectModel', function () {
   // 504 763 байта, 239 просканированных узлов): в реальной разметке НЕТ ни одного класса со
   // словом 'model' и НЕТ ни слага, ни человеческого ярлыка. Значит DOM-путь физически не мог
   // назвать модель, и «Qwen3.8-Max» в виджете приходил ТОЛЬКО из фолбэка-фабрикации
-  // (adapters/qwen-adapter.js detectModel). Отсюда вывод: правка-алиас в resolveModelId
+  // (adapters/qwen-adapter.ts detectModel). Отсюда вывод: правка-алиас в resolveModelId
   // (вариант A) этот симптом НЕ лечит — чинить надо источник подстановки.
   //
   // §п.8-A (Fix-qwen-p5-ci-guard): в CI каталог tools/ gitignored → снимка нет, и слепой
@@ -312,7 +318,8 @@ describe('O-39-план замены (qwen-селекторы): source-пины 
   test('data-* путь определения роли удалён, класс-токен — первым', function () {
     expect(QWEN_SRC).not.toContain("element.getAttribute('data-message-role')");
     expect(QWEN_SRC).not.toContain("element.getAttribute('data-role')");
-    const body = QWEN_SRC.slice(QWEN_SRC.indexOf('_detectRole(element)'));
+    // Анкер без аннотации параметра: и `(element)`, и `(element: Element)`.
+    const body = QWEN_SRC.slice(QWEN_SRC.indexOf('_detectRole(element'));
     expect(body.indexOf("cls.indexOf('qwen-chat-message-user')"))
       .toBeLessThan(body.indexOf('return \'user\';'));
     expect(body).toContain("cls.indexOf('qwen-chat-message-assistant')");

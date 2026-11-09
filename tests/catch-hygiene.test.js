@@ -2,7 +2,11 @@
  * Step E.2b.1 — Jest-страж: запрет НОВЫХ молчаливых catch в боевом коде.
  *
  * ─── DESIGN REVIEW ────────────────────────────────────────────────────────────
- * ГРАНИЦЫ СКАНИРОВАНИЯ:  core/, utils/, adapters/ (только *.js, рекурсивно).
+ * ГРАНИЦЫ СКАНИРОВАНИЯ:  core/, utils/, adapters/ — *.js везде; в adapters/
+ *   ещё и *.ts (шаг 2 миграции TypeScript: adapters/*.js → adapters/*.ts).
+ *   utils/*.ts в область НЕ добавлены: их перевод (аппендикс v129) страж не
+ *   расширял, и здесь сохраняется прежняя область, иначе записи whitelist по
+ *   адаптерам стали бы «мёртвыми» (правило б), а utils дал бы 58 новых unlisted.
  *   Вне области: dist/, node_modules/, tests/, tools/, .git/ — страж не
  *   распространяется на сгенерированный бандл, тестовые файлы и одноразовые
  *   скрипты. R3 фиксирует это поведением, а не комментарием.
@@ -145,17 +149,33 @@ function maskNonCode(src) {
   return out.join('');
 }
 
-function listJsFiles(dir) {
+function listJsFiles(dir, exts) {
+  const allowed = exts || ['.js'];
   const out = [];
   if (!fs.existsSync(dir)) return out;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       if (entry.name === 'node_modules') continue;
-      out.push(...listJsFiles(full));
-    } else if (entry.isFile() && entry.name.endsWith('.js')) out.push(full);
+      out.push(...listJsFiles(full, allowed));
+    } else if (entry.isFile() && allowed.some((e) => entry.name.endsWith(e))) out.push(full);
   }
   return out;
+}
+
+/**
+ * Расширения, которые страж читает в каталоге `d`.
+ *
+ * `.js` — историческая область (core/, utils/, adapters/).
+ * `.ts` — ТОЛЬКО adapters/: шаг 2 миграции TypeScript переименовал 9 адаптеров,
+ * и без второго расширения их молчаливые catch выпали бы из стража, а записи
+ * whitelist по адаптерам стали бы «мёртвыми» (правило б).
+ * utils/*.ts намеренно НЕ добавлены: перевод utils отдельным аппендиксом v129
+ * не расширял область стража (там был только *.js), и расширение области —
+ * отдельная задача, а не побочный эффект миграции адаптеров.
+ */
+function extsForDir(d) {
+  return path.basename(d) === 'adapters' ? ['.js', '.ts'] : ['.js'];
 }
 
 /**
@@ -218,7 +238,7 @@ function scanSource(rel, raw) {
 function collectSilentCatches(root, dirs) {
   const found = [];
   for (const d of (dirs || SCAN_DIRS)) {
-    for (const f of listJsFiles(path.join(root, d))) {
+    for (const f of listJsFiles(path.join(root, d), extsForDir(d))) {
       const rel = path.relative(root, f).split(path.sep).join('/');
       found.push(...scanSource(rel, fs.readFileSync(f, 'utf8')));
     }

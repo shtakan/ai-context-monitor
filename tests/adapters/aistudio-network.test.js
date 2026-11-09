@@ -7,7 +7,7 @@
  *   • 'history' — ходы диалога: ответ UpdatePrompt/CreatePrompt (`data[13][0]`) и
  *                 тело запроса GenerateContent (`data[1]`);
  *   • 'count'   — точный размер контекста из usage ответа GenerateContent.
- * Плюс adapters/aistudio-adapter.js, который обязан предпочесть сеть DOM-фолбэку.
+ * Плюс adapters/aistudio-adapter.ts, который обязан предпочесть сеть DOM-фолбэку.
  *
  * ОТКУДА ФОРМАТЫ. Фикстуры собраны по живому захвату AI Studio (октябрь 2026, чат
  * /prompts/1sLNDy3E1UDKpOyYVg1kcWCk6PvB70rOS, 3 хода):
@@ -1088,9 +1088,9 @@ describe('core/aistudio-intercept.js: модель чата из тела зап
  * ------------------------------------------------------------------ */
 
 const ADAPTER_FILES = [
-  'adapters/base-adapter.js',
-  'adapters/gemini-adapter.js',
-  'adapters/aistudio-adapter.js'
+  'adapters/base-adapter.ts',
+  'adapters/gemini-adapter.ts',
+  'adapters/aistudio-adapter.ts'
 ];
 
 function loadAistudio(doc, location) {
