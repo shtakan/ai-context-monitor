@@ -634,6 +634,12 @@ async function writeGeminiLogicClassic() {
   return GEMINI_LOGIC_CLASSIC;
 }
 
+/**
+ * Paths Chrome resolves itself at runtime: `js[]` of the scripting registrations
+ * plus `importScripts()` in the service worker. These are the RUNTIME spellings
+ * (always `.js` — core/background.js is the runtime contract and the build never
+ * rewrites it); `scriptSourcePath()` resolves the on-disk source for each one.
+ */
 function runtimeRegisteredFiles() {
   const src = fs.readFileSync(abs(BACKGROUND_SRC), 'utf8');
   const out = new Set();
@@ -647,6 +653,55 @@ function runtimeRegisteredFiles() {
     fail(`${BACKGROUND_SRC}: no registerContentScripts js[] / importScripts path found`);
   }
   return [...out].sort();
+}
+
+/**
+ * TS migration, step 1: the on-disk source of a runtime-registered script.
+ *
+ * The registered `.js` path stays the runtime name, but the source behind it may
+ * have been renamed to `.ts`. The listed `.js` wins while it exists (so a build
+ * cannot silently switch file while both are present); otherwise its `.ts`
+ * sibling is used. Returns null when neither exists.
+ */
+function scriptSourcePath(listed) {
+  const r = String(listed).replace(/\\/g, '/');
+  if (fs.existsSync(abs(r))) return r;
+  if (/\.js$/i.test(r)) {
+    const ts = r.replace(/\.js$/i, '.ts');
+    if (fs.existsSync(abs(ts))) return ts;
+  }
+  return null;
+}
+
+/**
+ * Copy one runtime-registered classic script into dist/.
+ *
+ * A `.js` source is copied byte-for-byte (unchanged behaviour). A `.ts` source is
+ * type-stripped into the `.js` artifact the runtime registration asks for — a
+ * verbatim copy would ship annotations the browser cannot execute. The output has
+ * to stay a classic script (top-level scope, no module syntax): these files run
+ * next to each other in the MAIN world and publish globals, so bundling them here
+ * would hide those globals. ESM sources belong in a bundle (writeDebugClassic et al.).
+ */
+async function copyRuntimeScript(sourceRel, toAbs) {
+  const loader = loaderForFile(sourceRel);
+  if (loader === 'js') {
+    await fsp.copyFile(abs(sourceRel), toAbs);
+    return;
+  }
+  const src = await fsp.readFile(abs(sourceRel), 'utf8');
+  const out = await esbuild.transform(src.replace(/^\uFEFF/, ''), {
+    loader,
+    target: 'es2020',
+  });
+  const text = out.code.trimEnd() + '\n';
+  if (/^\s*(?:import|export)\b/m.test(text) || /\brequire\s*\(/.test(text)) {
+    fail(
+      `${sourceRel}: runtime-registered script must stay classic, but the ` +
+        'type-stripped output still contains module syntax — bundle it instead of copying'
+    );
+  }
+  await fsp.writeFile(toAbs, text, 'utf8');
 }
 
 /* ------------------------------------------------------------------ *
@@ -813,15 +868,48 @@ function rebaseImportSpecifiers(src, sourceRel) {
   );
 }
 
+/**
+ * TS migration, step 1 (adapters): the source actually concatenated for one entry.
+ *
+ * The SSOTs (manifest.json and the pages' <script src> lists) may name either the
+ * `.ts` source directly or the historical `.js` name of a source that has since
+ * been renamed. A listed `.js` wins while it still exists — nothing switches under
+ * the SSOT's feet while both files are present — and once it is gone its `.ts`
+ * sibling is used, so a rename cannot break the build before the SSOT catches up.
+ */
+function resolveEntrySource(listed) {
+  const r = String(listed).replace(/\\/g, '/');
+  if (fs.existsSync(abs(r))) return r;
+  if (/\.js$/i.test(r)) {
+    const ts = r.replace(/\.js$/i, '.ts');
+    if (fs.existsSync(abs(ts))) return ts;
+  }
+  fail(`entry "${listed}" is referenced by the SSOT but does not exist: ${abs(r)}`);
+}
+
+/**
+ * esbuild loader for a generated entry file. The file keeps its `.js` name (the
+ * entry filename is part of the build contract, and the bundles stay `<name>.js`),
+ * but as soon as ONE concatenated source is TypeScript the whole entry must be
+ * parsed as TS — otherwise the type annotations are a syntax error. Entries made
+ * of plain `.js` sources keep the `js` loader, so no current bundle changes.
+ */
+function entryLoader(entryRelPaths) {
+  for (const listed of entryRelPaths) {
+    const loader = loaderForFile(resolveEntrySource(listed));
+    if (loader !== 'js') return loader;
+  }
+  return 'js';
+}
+
 function renderEntry(entryRelPaths) {
   const parts = [];
   let bytes = 0;
-  for (const r of entryRelPaths) {
-    const file = abs(r);
-    if (!fs.existsSync(file)) {
-      fail(`entry "${r}" is referenced by the SSOT but does not exist: ${file}`);
-    }
-    let src = fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '');
+  for (const listed of entryRelPaths) {
+    // The marker names the file that was actually read: an entry resolved from a
+    // `.ts` source reports `.ts`, so "markers mirror the SSOT" stays honest.
+    const r = resolveEntrySource(listed);
+    let src = fs.readFileSync(abs(r), 'utf8').replace(/^\uFEFF/, '');
     src = rebaseImportSpecifiers(src, r);
     if (!src.endsWith('\n')) src += '\n';
     parts.push(`/* ==== ${r} ==== */\n${src}`);
@@ -935,14 +1023,17 @@ async function copyAssets() {
     // v12); ESM-исходник уходит в бандл SW статическим import'ом из core/background.js,
     // а classic-артефакт для MAIN-мира выводит writeGeminiLogicClassic ниже.
     if (r === GEMINI_LOGIC_CLASSIC) continue;
-    const from = abs(r);
-    if (!fs.existsSync(from)) {
+    // TS migration, step 1: the runtime registration keeps its `.js` name while
+    // the source it points at may be `.ts`; the dist artifact is still `<name>.js`.
+    const source = scriptSourcePath(r);
+    if (!source) {
       fail(`"${r}" is registered at runtime by ${BACKGROUND_SRC} but does not exist`);
     }
-    const to = path.join(DIST, r);
+    const toRel = source.replace(/\.ts$/i, '.js');
+    const to = path.join(DIST, toRel);
     await fsp.mkdir(path.dirname(to), { recursive: true });
-    await fsp.copyFile(from, to);
-    copied.push(r);
+    await copyRuntimeScript(source, to);
+    copied.push(toRel);
   }
   copied.push(await writeDebugClassic());
   copied.push(await writeParserClassic());
@@ -1333,8 +1424,9 @@ function entryFilesPlugin() {
         return {};
       });
 
-      // The loader follows the extension: step 1 of the TS migration lets an entry
-      // built from .ts sources parse as TypeScript instead of failing on annotations.
+      // Step 1 of the TS migration: the entry file keeps its `.build/entry-<name>.js`
+      // name, but an entry that concatenated at least one `.ts` source has to be
+      // parsed as TypeScript; `entryLoader()` derives that from the source list.
       build.onLoad({ filter: /[\\/]\.build[\\/]entry-[^\\/]+\.(?:[cm]?[jt]sx?)$/ }, async (args) => {
         const name = path.basename(args.path).replace(/^entry-/, '').replace(/\.(?:[cm]?[jt]sx?)$/, '');
         const entries = collectEntries();
@@ -1343,7 +1435,7 @@ function entryFilesPlugin() {
         }
         return {
           contents: await fsp.readFile(args.path, 'utf8'),
-          loader: loaderForFile(args.path),
+          loader: entryLoader(entries[name]),
           // ESM-пилот: entry-*.js физически лежат в .build/, поэтому относительные
           // импорты (print.js -> ../utils/markdown.ts) резолвятся от корня репо.
           resolveDir: BUILD_DIR,
@@ -1358,9 +1450,14 @@ function entryFilesPlugin() {
 function watchFiles(entries) {
   const files = new Set([abs('manifest.json')]);
   for (const r of ASSET_FILES) files.add(abs(r));
-  for (const list of Object.values(entries)) for (const r of list) files.add(abs(r));
-  // runtime-registered files are copied verbatim, so a change must rebuild too
-  for (const r of runtimeRegisteredFiles()) files.add(abs(r));
+  for (const list of Object.values(entries)) {
+    // Watch the file that was actually read: a `.js` listed in the SSOT may resolve
+    // to its `.ts` sibling during the TS migration (step 1).
+    for (const r of list) files.add(abs(resolveEntrySource(r)));
+  }
+  // runtime-registered files are copied (TS sources type-stripped), so a change
+  // must rebuild too — watch the resolved source, not the runtime `.js` spelling
+  for (const r of runtimeRegisteredFiles()) files.add(abs(scriptSourcePath(r) || r));
   // Ph2: MAIN-перехватчики собираются отдельно, а intercept-common втягивается
   // в каждый из них — оба набора обязаны триггерить watcher.
   for (const r of MAIN_INTERCEPTS) files.add(abs(r));
@@ -1471,7 +1568,7 @@ async function main() {
   await fsp.mkdir(BUILD_DIR, { recursive: true });
   console.log('[build] entries derived from SSOTs:');
   for (const [name, list] of Object.entries(entries)) console.log(`  ${name} <- ${list.length} file(s)`);
-  console.log(`  runtime-registered <- ${runtimeRegisteredFiles().length} file(s) (copied verbatim; MAIN intercepts bundled)`);
+  console.log(`  runtime-registered <- ${runtimeRegisteredFiles().length} file(s) (copied; .ts sources type-stripped; MAIN intercepts bundled)`);
   console.log(`[build] generated entry files: ${rel(BUILD_DIR)}/entry-<name>.js`);
 
   if (WATCH) {
