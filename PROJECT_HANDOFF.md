@@ -1676,3 +1676,69 @@ v90–v114 (исходные строки 783–2 440, 1 658 строк) — т�
 
 **Коммит A:** `6040ef5` — тело аппендикса v129; SHA проставляется коммитом B (двухшаговый паттерн).
 **SHA4:** `9ead62c` (коммит C — синхронизация верхнего блока handoff; проставляется при его создании).
+
+## Аппендикс v130 (2026-11-09): Миграция адаптеров на TS и фикс Claude
+
+**Дата:** 2026-11-09 (Asia/Yekaterinburg).
+
+**Коммиты:** `<SHA v130>` (коммит A — тело аппендикса), `311adf4` (подготовка сборщика: `build.mjs`), `065b423` (адаптеры на TypeScript), `7f9c678` (фикс Claude: live-обновление бейджа после SPA-переходов).
+
+**Статус:** Адаптеры (9 файлов) переведены на TypeScript. Сборщик умеет читать `.ts`-источники и собирать `.js` для `dist`, не меняя имён артефактов. Устранён баг с задержкой бейджа в Claude при SPA-переходах. Сьют 230 suites / 3950 passed / 7 skipped / 0 failed, exit 0.
+
+### Секция 1. Что сделано.
+
+1. **Инфраструктура сборщика (`311adf4`, `build.mjs` +115/−18).** Три функции задают правило «`.js`-имя — рантайм-контракт, `.ts`-файл — источник»:
+   - `scriptSourcePath(listed)` — источник для скриптов, которые Chrome резолвит сам (`js[]` регистраций `scripting` и `importScripts()` в service worker): зарегистрированный `.js` побеждает, пока существует; иначе берётся `.ts`-сосед. Иначе `null`.
+   - `copyRuntimeScript(sourceRel, toAbs)` — `.js` копируется байт-в-байт (поведение не изменилось), `.ts` снимается типами через `esbuild.transform(src, { loader, target: 'es2020' })` в `.js`-артефакт; если после снятия типов в тексте остаются `import`/`export`/`require`, сборка падает (`runtime-registered script must stay classic`), потому что эти файлы живут рядом в MAIN world и публикуют глобалы.
+   - `resolveEntrySource(listed)` + `entryLoader(entryRelPaths)` — то же правило для склейки entry: имяentry остаётся `.js` (часть контракта бандла), но если хотя бы один склеенный источник — TypeScript, весь entry парсится TS-загрузчиком; entry из чистых `.js` остаётся на `js`-загрузчике.
+   `manifest.json` после миграции перечисляет адаптеры уже как `.ts` (`adapters/base-adapter.ts` … `adapters/qwen-adapter.ts`) — SSOT называет источник, а не артефакт.
+2. **`types/adapter-globals.d.ts` очищен от амбиентных объявлений.** До миграции там жили `declare class BaseAdapter` и `declare class AistudioAdapter` — они были нужны, потому что адаптеры не модули (грузятся отдельными файлами `manifest.json` и склеиваются исходником в `new Function()`/`eval`-песочницах тестов). После перевода на TS `class BaseAdapter` в `adapters/base-adapter.ts` и `class AistudioAdapter` в `adapters/aistudio-adapter.ts` сами стали глобальными объявлениями, а амбиентные копии давали `TS2300 (duplicate identifier)` — удалены. Форма публичного контракта по-прежнему в `types/adapter.d.ts` (`Adapter`), интерфейсы `Message` / `Adapter` / `ExtractOptions` объявлены в `adapters/base-adapter.ts`. Файл сохранён маркером фазы: сюда вернётся объявление, если какой-то адаптер придётся сделать модулем.
+3. **Адаптеры (`065b423`): 9 файлов переписаны на TS-классы с интерфейсами** — `base-adapter.ts` (165 строк), `aistudio-adapter.ts` (267), `chatgpt-adapter.ts` (415), `claude-adapter.ts` (113), `deepseek-adapter.ts` (406), `gemini-adapter.ts` (139), `google-search-adapter.ts` (297), `perplexity-adapter.ts` (116), `qwen-adapter.ts` (498); всего 2 416 строк. JSDoc-аннотации заменены на типы параметров и возвращаемых значений, `base-adapter.js` (138 строк) удалён, его место занял `base-adapter.ts`. Рантайм не изменился: типы снимаются транспиляцией/сборкой и в браузер не попадают. Тем же коммитом обновлены `core/content.js`, `build.mjs`, `eslint.config.mjs`, `manifest.json` и пути импортов в тестах адаптеров.
+4. **Фикс Claude (`7f9c678`).** Причина: после SPA-смены чата `resetForNewConversation()` обнуляет `lastHistoryUrl`, а пассивного GET нового чата до ответа может не быть — гейт «нет URL» (`!lastHistoryUrl`) глушил весь settle-цикл (живой прогон 2026-11-09: settle target есть, дальше `no-url` до F5). Что изменено в `core/claude-intercept.js`:
+   - `lastOrgPrefix` теперь учится из САМОГО completion-POST: из `url` вырезается срез от `/api/organizations/` до `/chat_conversations/` включительно; в trace добавлен флаг `orgPrefix=`.
+   - `activeRefresh` при отсутствии `lastHistoryUrl` строит адрес из `lastOrgPrefix` + `currentConvId` в канонической форме: `?tree=True&rendering_mode=messages&render_all_tools=true&consistency=eventual` (прежний `?tree=True` давал снимок другой формы и мог быть меньше базы).
+   - Оба гейта — post-send (`post-send refresh=skipped`) и settle (`settle attempt=…`) — проверяют оба источника: `!lastHistoryUrl && !lastOrgPrefix` вместо `!lastHistoryUrl`. Бейдж обновляется в реальном времени после SPA-переходов без F5.
+   - Новый пин `tests/claude-settle-after-spa-switch.test.js` (227 строк) фиксирует поведение.
+
+### Секция 2. Свидетели/факты.
+
+| # | Свидетель | Факт | Источник |
+|---|---|---|---|
+| 1 | `git show --stat 311adf4` | `build.mjs` +115/−18: `scriptSourcePath`, `copyRuntimeScript`, `resolveEntrySource`, `entryLoader` | git |
+| 2 | `git show --stat 065b423` | 9 адаптеров `.js` → `.ts` (+ `core/content.js`, `build.mjs`, `eslint.config.mjs`, `manifest.json`, тесты) | git |
+| 3 | `ls adapters/` | 9 файлов `.ts`, 0 файлов `.js`; 2 416 строк суммарно | файл |
+| 4 | `types/adapter-globals.d.ts` | Амбиентные `declare class` удалены — после TS-перевода они давали `TS2300 (duplicate identifier)` | файл |
+| 5 | `npm run build` | exit 0; `dist/ verified: 52 .js files (5 bundles + 47 runtime-registered)`; `dist/content.js` — 666 393 B из 15 исходников (788 616 B) | отчёт сборки |
+| 6 | `git show --stat 7f9c678` | 4 файла, +281/−33: `core/claude-intercept.js` (25 строк), новый пин (227 строк) | git |
+| 7 | `npx jest tests/docs-hygiene.test.js` | 28/28 passed, exit 0 | отчёт DSH |
+| 8 | `npm test -- --runInBand` | 230 suites / 3950 passed / 7 skipped / 0 failed, exit 0 | отчёт DSH |
+| 9 | Живая приёмка | Бейдж Claude обновляется без F5 после SPA-перехода; свидетели в коде — комментарии `v66` в `core/claude-intercept.js` | живой прогон 2026-11-09 |
+
+### Секция 3. Отклонения от промпта.
+
+1. Пин полноты корпуса в `tests/docs-hygiene.test.js` поднят 115 → 116, комментарий-раскладка приведён к «116 = 100 в архиве + 16 в активном (v115–v130)» с добавленной строкой `+v130` — единственное изменение тестового файла.
+2. Версия `2.0.44` не менялась: `manifest.json` = `package.json` = `2.0.44`.
+3. Верхний блок handoff (коммиты C/D и его счётчики), `CHANGELOG`, код продукта и `docs/REGRESSION-LEDGER.md` не правились; тексты аппендиксов v1–v129 не редактировались — вставка только в конец файла.
+4. По существу отклонений нет.
+
+### Секция 4. Новые residual.
+
+- **R1 (Low) — `core/` остаётся на `.js`/JSDoc.** 46 файлов каталога описаны JSDoc-аннотациями, `tsc --noEmit` в гейтах нет. Перевод `.ts` в `core/` — следующая задача Фазы 1: из каталога в будущем выделяются `state.ts` / `widget.ts` и др., сейчас ни одного `.ts` в `core/` нет. Условие переоткрытия: старт миграции `core/` — тогда проверка типов становится гейтом, а не разовым прогоном.
+
+### Секция 5. Переопределение residual-точек и Roadmap (тексты аппендиксов выше не редактируются).
+
+- **Roadmap Ф1 (TypeScript) продвинулась: `utils/` и `adapters/` готовы.** В v129 Ф1 была закрыта для `utils/` (17 модулей), этим аппендиксом — для `adapters/` (9 файлов). Остаток Ф1 — `core/` — переносится в §4 R1 и закрывается отдельной задачей, а не переоткрытием этой.
+- **Residual v129 R1 (уточнён):** в v129 он звучал как «`core/` и `adapters/` остаются на JSDoc»; `adapters/` этим аппендиксом закрыт, формулировка сужена до `core/` (§4 R1).
+- **Residual v129 R2 (кап вложений Gemini) не затрагивается** — правок в `core/gemini-files.js` этот аппендикс не делает.
+
+### Секция 6. Сводка.
+
+1. Сьют 230 suites / 3950 passed / 7 skipped / 0 failed, exit 0; предыдущий зафиксированный прогон — 229 / 3948 / 7 / 0 (v129); прирост +1 сьют / +2 теста (пин `claude-settle-after-spa-switch`).
+2. Версия `2.0.44` не менялась: `manifest.json` = `package.json` = `2.0.44`.
+3. HEAD на момент коммита A: `7f9c678`; origin/main = `7f9c678`, ahead 0 (до коммитов A и B).
+4. Верхний блок handoff и аппендиксы v1–v129 не переписывались — вставка только в конец файла; синк верхнего блока — коммитом C.
+
+### Секция 7. Плейсхолдер.
+
+**Коммит A:** `<SHA v130>` — тело аппендикса v130; SHA проставляется коммитом B (двухшаговый паттерн).
+**SHA4:** `<SHA4>` (коммит C — синхронизация верхнего блока handoff; проставляется при его создании).
