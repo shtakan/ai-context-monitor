@@ -16,7 +16,7 @@
 //     (см. activateThread/absorbForeignSnapshot).
 
 // ESM (Roadmap Ph2): setIntervalVisible втягивается сборкой в MAIN-бандл перехватчика.
-import { setIntervalVisible } from '../utils/intercept-common.ts';
+import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
 (function () {
   if (window.__aiCmGoogleSearchInterceptInstalled) return;
   window.__aiCmGoogleSearchInterceptInstalled = true;
@@ -1562,7 +1562,8 @@ import { setIntervalVisible } from '../utils/intercept-common.ts';
     var isOpenFolwr = url.indexOf('/async/folwr') !== -1;
 
     var promise;
-    try { promise = origFetch.apply(this, arguments); } catch (e) { return Promise.reject(e); }
+    // onfreeze: синхронный бросок нативного fetch гасится в fetchGuarded
+    try { promise = fetchGuarded(origFetch, this, arguments); } catch (e) { return Promise.reject(e); }
 
     // v1.24: детект антилимита на ЛЮБОМ перехваченном ответе (страницы или нашем):
     // status 429 или итоговый URL содержит /sorry/ → cooldown собственных запросов.

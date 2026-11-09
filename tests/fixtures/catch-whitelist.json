@@ -1,6 +1,6 @@
 {
   "schema": "ai-cm/catch-whitelist@1",
-  "generatedFrom": "a19cfe1",
+  "generatedFrom": "6b88b38",
   "scope": [
     "core",
     "utils",
@@ -237,8 +237,8 @@
         1121,
         1226,
         1446,
-        1646,
-        1666
+        1649,
+        1669
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: st = response.status;"
     },
@@ -259,7 +259,7 @@
       "file": "core/claude-intercept.js",
       "category": "feature-detect",
       "lines": [
-        1669
+        1672
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var blen = -1; try { blen = (typeof xhr.responseText === 'string') ? xhr"
     },
@@ -269,9 +269,9 @@
       "lines": [
         1421,
         1453,
-        1480
+        1481
       ],
-      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (m.full && internalFetchUrls[m.full]) { return originalFetch.call(thi"
+      "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof Uint8Array !== 'undefined' && body instanceof Uint8Array) ret"
     },
     {
       "file": "core/claude-intercept.js",
@@ -795,7 +795,7 @@
       "file": "core/gemini-files.js",
       "category": "best-effort-guard",
       "lines": [
-        190
+        199
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var arr = turn[2][0][4][0][4]; if (!Array.isArray(arr)) return out; for"
     },
@@ -803,11 +803,11 @@
       "file": "core/gemini-files.js",
       "category": "guard-clause",
       "lines": [
-        114,
-        128,
-        428,
-        449,
-        450
+        123,
+        137,
+        445,
+        466,
+        467
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (ctrl) ctrl.abort();"
     },
@@ -815,7 +815,7 @@
       "file": "core/gemini-files.js",
       "category": "parse-guard",
       "lines": [
-        739
+        759
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: if (typeof TextDecoder === 'function') return new TextDecoder('utf-8').d"
     },
@@ -1183,7 +1183,7 @@
       "category": "debug-instrumentation",
       "lines": [
         25,
-        1624
+        1625
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDeb"
     },
@@ -1192,7 +1192,7 @@
       "category": "defensive-assignment",
       "lines": [
         159,
-        1631
+        1632
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: lastFolwrOpenUrl = url;"
     },
@@ -1403,9 +1403,9 @@
       "file": "core/qwen-intercept.js",
       "category": "best-effort-guard",
       "lines": [
-        119,
-        208,
-        366
+        120,
+        209,
+        367
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: iterator.return();"
     },
@@ -1413,12 +1413,12 @@
       "file": "core/qwen-intercept.js",
       "category": "debug-instrumentation",
       "lines": [
-        73,
-        76,
-        143,
-        1598,
-        1630,
-        1642
+        74,
+        77,
+        144,
+        1600,
+        1632,
+        1644
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: for (var i = 0; i < diagRing.length; i++) printDiag(diagRing[i][0], diag"
     },
@@ -1426,8 +1426,8 @@
       "file": "core/qwen-intercept.js",
       "category": "event-guard",
       "lines": [
-        1679,
-        1709
+        1681,
+        1711
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); dis"
     },
@@ -1435,8 +1435,8 @@
       "file": "core/qwen-intercept.js",
       "category": "guard-clause",
       "lines": [
-        156,
-        163
+        157,
+        164
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof input === 'string') return input; if (input && typeof input.u"
     },
@@ -1444,7 +1444,7 @@
       "file": "core/qwen-intercept.js",
       "category": "host-api-guard",
       "lines": [
-        101
+        102
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: if (typeof sessionStorage !== 'undefined' && sessionStorage && sessionSt"
     },
@@ -1452,9 +1452,9 @@
       "file": "core/qwen-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        1696,
-        1704,
-        1708
+        1698,
+        1706,
+        1710
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkChatChange();"
     },
@@ -1462,7 +1462,7 @@
       "file": "core/qwen-intercept.js",
       "category": "logging-guard",
       "lines": [
-        137
+        138
       ],
       "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: var f = fields || {}; diagLineCount++; if (typeof aiCmDiagLine === 'func"
     },
@@ -1470,8 +1470,8 @@
       "file": "core/qwen-intercept.js",
       "category": "parse-guard",
       "lines": [
-        193,
-        201
+        194,
+        202
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var m = /[?&]chat_id=([^&]+)/.exec(url); if (m) return decodeURIComponen"
     },

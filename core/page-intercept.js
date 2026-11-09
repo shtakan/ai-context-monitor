@@ -54,7 +54,7 @@
 //   Promise.reject(err) в onRejected пассивной ловли снимка (замена на пустую функцию).
 
 // ESM (Roadmap Ph2): setIntervalVisible втягивается сборкой в MAIN-бандл перехватчика.
-import { setIntervalVisible } from '../utils/intercept-common.ts';
+import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
 // ESM (Roadmap Ph2): парсер ChatGPT — тоже ES-модуль; window.ChatGPTConversationParser
 // больше не публикуется, именованные экспорты втягиваются сборкой (esbuild) в этот же
 // MAIN-бандл.
@@ -516,7 +516,9 @@ import {
     }
 
     var responsePromise;
-    try { responsePromise = originalFetch.apply(this, arguments); }
+    // onfreeze: синхронный бросок нативного fetch гасится в fetchGuarded
+    // (rejected promise уже с тихим catch — консоль не показывает uncaught)
+    try { responsePromise = fetchGuarded(originalFetch, this, arguments); }
     catch (e) { return Promise.reject(e); }
 
     // v14: тихий catch — снимает ложный unhandled rejection для чужих прерванных запросов

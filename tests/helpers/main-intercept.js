@@ -102,7 +102,9 @@ function interceptSource(relPath) {
 /** Загрузка namespace'а intercept-common для юнит-теста (аналог loadEsmModule). */
 function loadCommon() {
   return new Function(
-    commonSource() + '\nreturn { setIntervalVisible: setIntervalVisible };'
+    commonSource() +
+    '\nreturn { setIntervalVisible: setIntervalVisible, fetchGuarded: fetchGuarded, ' +
+    'isOnFreezeError: isOnFreezeError, ONFREEZE_ERROR_RE: ONFREEZE_ERROR_RE };'
   )();
 }
 

@@ -27,8 +27,10 @@
  *   • пока очередь не пуста, gfPendingCount()>0 и база не объявляется полной.
  *
  * Лимиты: 200 000 символов текста на файл (A3: жёсткого лимита 200 КБ по
- * content-length больше нет — тело читается потоком до капа), 2 000 000 на чат,
- * таймаут запроса 15 с.
+ * content-length больше нет — тело читается потоком до капа), 100 000 символов
+ * текста на файл в СЕКЦИИ экспорта (v2.7: шапка `[FILE: имя (truncated)]` +
+ * маркер `…[обрезано N]`, чтобы повторно приложенная выгрузка не раздувала
+ * следующую), 2 000 000 на чат, таймаут запроса 15 с.
  *
  * Контракт связки: только __bind(deps) из core/gemini-intercept.js.
  *   emitSnapshot — форвардер emitBaseSnapshot;
@@ -47,6 +49,13 @@
   var GF_CONCURRENCY = 2;
   var GF_TEXT_CAP = 200000;
   var GF_TOTAL_CAP = 2000000;
+  // v2.7 (живая приёмка 2026-11-09): текст, который вшивается в ТЕКСТ СООБЩЕНИЯ
+  // (и дальше в экспорт), режется жёстче тела — 100 000 символов на файл.
+  // Повторно приложенный экспорт .md (200 000 символов, ровно GF_TEXT_CAP)
+  // вшивался в выгрузку целиком: файл раздувался до ~1 МБ, а Gemini при
+  // повторной загрузке обрезал его молча. Обрезка видна в секции: шапка
+  // `[FILE: имя (truncated)]` + хвостовой маркер `…[обрезано N]`.
+  var GF_SECTION_TEXT_CAP = 100000;
   var GF_TIMEOUT_MS = 15000;
   var GF_EMIT_DEBOUNCE_MS = 250;
   var GF_DRAIN_TIMEOUT_MS = 6000;
@@ -246,7 +255,15 @@
       return '\n\n[IMAGE: ' + name + ']' + (url ? ' ' + url : '');
     }
     if (rec && rec.ok === true && gfStr(rec.text)) {
-      return '\n\n[FILE: ' + name + ']\n' + rec.text;
+      var body = gfStr(rec.text);
+      if (body.length > GF_SECTION_TEXT_CAP) {
+        // v2.7: секция не тянет в экспорт весь текст файла — шапка помечает
+        // обрезку, хвост называет, сколько символов не попало в выгрузку.
+        var dropped = body.length - GF_SECTION_TEXT_CAP;
+        return '\n\n[FILE: ' + name + ' (truncated)]\n' +
+          body.slice(0, GF_SECTION_TEXT_CAP) + '\n…[обрезано ' + dropped + ']';
+      }
+      return '\n\n[FILE: ' + name + ']\n' + body;
     }
     if (rec && gfStr(rec.note)) {
       // v2.0.37 (fix A): note содержит «текст не получен», но без reason метка не
@@ -493,7 +510,10 @@
           if (!step || step.done) { finish(false); return; }
           try { out += dec.decode(step.value, { stream: true }); } catch (eDec) { gfDiag('text-decode-error', {}); }
           if (out.length >= GF_TEXT_CAP) {
-            truncated = out.length > GF_TEXT_CAP;
+            // v2.7 (граница капа): чанк, попавший РОВНО на GF_TEXT_CAP, раньше
+            // оставлял truncated=false, хотя reader уже отменён и хвост тела
+            // потерян (живой ди-агностик: chars=200000 truncated=false).
+            truncated = true;
             out = out.slice(0, GF_TEXT_CAP);
             try { if (typeof reader.cancel === 'function') reader.cancel(); } catch (eCancel) { gfDiag('reader-cancel-error', {}); }
             finish(false);
@@ -1210,6 +1230,7 @@
   Fn.constants = {
     concurrency: GF_CONCURRENCY,
     textCap: GF_TEXT_CAP,
+    sectionTextCap: GF_SECTION_TEXT_CAP,
     totalCap: GF_TOTAL_CAP,
     timeoutMs: GF_TIMEOUT_MS,
     emitDebounceMs: GF_EMIT_DEBOUNCE_MS,

@@ -11,7 +11,7 @@
 //   Ответ ассистента приходит только через completion.
 
 // ESM (Roadmap Ph2): setIntervalVisible втягивается сборкой в MAIN-бандл перехватчика.
-import { setIntervalVisible } from '../utils/intercept-common.ts';
+import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
 (function () {
   if (window.__aiCmClaudeInterceptInstalled) return;
   window.__aiCmClaudeInterceptInstalled = true;
@@ -1475,7 +1475,8 @@ import { setIntervalVisible } from '../utils/intercept-common.ts';
     // v34: внутренние fetch по path вложений — не события страницы
     try {
       if (m.full && internalFetchUrls[m.full]) {
-        return originalFetch.call(this, input, init);
+        // onfreeze: синхронный бросок нативного fetch гасится в fetchGuarded
+        return fetchGuarded(originalFetch, this, [input, init]);
       }
     } catch (e) {}
 
@@ -1519,7 +1520,8 @@ import { setIntervalVisible } from '../utils/intercept-common.ts';
     }
 
     if (!isHistory && !isCompletion) {
-      var p = originalFetch.call(this, input, init);
+      // onfreeze: синхронный бросок нативного fetch гасится в fetchGuarded
+      var p = fetchGuarded(originalFetch, this, [input, init]);
       observeUpload(_mth, m.full, p); // v39: upload-кандидаты (любой метод/origin)
       if (p && typeof p.catch === 'function') p.catch(function () {});
       return p;
@@ -1546,7 +1548,8 @@ import { setIntervalVisible } from '../utils/intercept-common.ts';
       } catch (eOrg) { swallow(eOrg, 'claude:fetch-org-prefix'); }
     }
 
-    var fetchPromise = originalFetch.call(this, input, init);
+    // onfreeze: синхронный бросок нативного fetch гасится в fetchGuarded
+    var fetchPromise = fetchGuarded(originalFetch, this, [input, init]);
     observeUpload(_mth, m.full, fetchPromise); // v39: upload-кандидаты (история/completion тоже наблюдаем)
 
     // Ветвь A: история (GET, /chat_conversations/)

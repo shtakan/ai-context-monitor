@@ -55,6 +55,7 @@
  * ленивого разрешения через window нет: функции доступны статически.
  */
 import { frames as framesApi, normalizeUsage, mergeUsage } from '../utils/stream-frames.ts';
+import { fetchGuarded } from '../utils/intercept-common.ts';
 (function () {
   if (window.__aiCmQwenInterceptInstalled) return;
   window.__aiCmQwenInterceptInstalled = true;
@@ -1535,7 +1536,8 @@ import { frames as framesApi, normalizeUsage, mergeUsage } from '../utils/stream
       }
 
       var promise;
-      try { promise = originalFetch.apply(this, arguments); } catch (eCall) { return Promise.reject(eCall); }
+      // onfreeze: синхронный бросок нативного fetch гасится в fetchGuarded
+      try { promise = fetchGuarded(originalFetch, this, arguments); } catch (eCall) { return Promise.reject(eCall); }
       // Тихий catch — снимаем ложный unhandled rejection для чужих прерванных запросов
       // (Failed to fetch при навигации/обрыве стрима), не меняя поведения страницы.
       if (promise && typeof promise.catch === 'function') promise.catch(function () { });

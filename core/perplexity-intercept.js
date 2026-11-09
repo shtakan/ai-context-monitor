@@ -13,7 +13,7 @@
 //   usage НЕТ — токены считаются эвристикой на стороне расширения.
 
 // ESM (Roadmap Ph2): setIntervalVisible втягивается сборкой в MAIN-бандл перехватчика.
-import { setIntervalVisible } from '../utils/intercept-common.ts';
+import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
 // ESM (Roadmap Ph2): парсер Perplexity — тоже ES-модуль; window.parsePerplexityThread больше нет,
 // именованные экспорты втягиваются сборкой (esbuild) в этот же MAIN-бандл.
 import { parsePerplexityThread, stripPerplexityHistoryTruncation } from '../utils/perplexity-parser.ts';
@@ -552,7 +552,8 @@ import { parsePerplexityThread, stripPerplexityHistoryTruncation } from '../util
       console.log("[perplexity-intercept] diag: same-host GET", url.slice(0, 140));
     }
 
-    var fetchPromise = originalFetch.apply(this, arguments);
+    // onfreeze: синхронный бросок нативного fetch гасится в fetchGuarded
+    var fetchPromise = fetchGuarded(originalFetch, this, arguments);
 
     if (shouldSniff) {
       fetchPromise.then(function (resp) { if (!resp || !resp.ok) return; sniffResponseText(resp, url, 'fetch'); }).catch(function () {});

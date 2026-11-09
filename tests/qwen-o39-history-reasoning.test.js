@@ -1166,7 +1166,10 @@ describe('O-39-B X-S1: source-пины XHR-транспорта (fetch-ветк�
     expect(fetchRegion).toContain("diagTag('qwen-history', { ts: Date.now(), event: 'skip-request', reason: 'other-chat', url: url });");
     expect(fetchRegion).toContain('consumeHistory(resp, histMeta);');
     expect(fetchRegion).toContain("diagTag('qwen-history', { ts: Date.now(), event: 'skip', reason: 'http', status: resp ? resp.status : 'none', url: histMeta.url || '' });");
-    expect(fetchRegion).toContain('try { promise = originalFetch.apply(this, arguments); } catch (eCall) { return Promise.reject(eCall); }');
+    // onfreeze (живая приёмка 2026-11-09): вызов нативного fetch идёт через
+    // fetchGuarded (utils/intercept-common.ts), пин — форма фолбэка: бросок →
+    // rejected promise, как и раньше.
+    expect(fetchRegion).toContain('try { promise = fetchGuarded(originalFetch, this, arguments); } catch (eCall) { return Promise.reject(eCall); }');
     // consumeHistory (fetch-ветка чтения тела) байтово прежний.
     const consume = fnDecl(INTERCEPT_SRC, 'consumeHistory');
     expect(consume).toContain('clone = resp.clone();');

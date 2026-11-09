@@ -14,8 +14,8 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const zlib = require('zlib');
-const { TextDecoder } = require('util');
-const { DecompressionStream } = require('stream/web');
+const { TextDecoder, TextEncoder } = require('util');
+const { DecompressionStream, ReadableStream } = require('stream/web');
 const timers = require('timers');
 
 const ROOT = path.join(__dirname, '..', '..');
@@ -429,7 +429,7 @@ describe('R2: очередь, дедуп и секции', function () {
     expect(section).toContain('[FILE: c.txt]\nC');
   });
 
-  test('A3: content-length больше прежних 200 КБ не повод для too-large, текст режется капом', async function () {
+  test('A3: content-length больше прежних 200 КБ не повод для too-large, секция режется капом 100 000', async function () {
     const h = makeHarness();
     const ref = h.Fn.collectTurnFiles(turnWith([textNode('big.txt')]))[0];
     h.Fn.gfEnqueueTurnFiles(CHAT, 'u1', [ref]);
@@ -439,11 +439,13 @@ describe('R2: очередь, дедуп и секции', function () {
     h.tick(300);
     const section = h.Fn.gfSectionsFor(CHAT, 'u1');
     expect(section).not.toContain('too-large');
-    expect(section).toContain('[FILE: big.txt]');
-    expect(section).toContain('…[обрезано 5]');
+    // v2.7: два уровня — тело читается до GF_TEXT_CAP (200 000), в секцию
+    // экспорта уходит GF_SECTION_TEXT_CAP (100 000), обрезка видна в шапке.
+    expect(section).toContain('[FILE: big.txt (truncated)]');
+    expect(section).toContain('…[обрезано 100000]');
   });
 
-  test('D2 (A3): DOCX ~500 КБ читается целиком, текст секции обрезан до капа', async function () {
+  test('D2 (A3): DOCX ~500 КБ читается целиком, секция обрезана до 100 000', async function () {
     const h = makeHarness();
     // 250 000 кириллических символов = 500 000 байт в word/document.xml;
     // level 0 (store) держит тело файла ~500 КБ, чтобы проверялся реальный размер.
@@ -456,13 +458,14 @@ describe('R2: очередь, дедуп и секции', function () {
     h.Fn.gfEnqueueTurnFiles(CHAT, 'u1', [ref]);
     h.fetchCalls[0].resolve(makeRes({ headers: { 'content-length': String(buf.length) }, buffer: ab }));
     const got = await waitFor(function () {
-      return h.Fn.gfSectionsFor(CHAT, 'u1').indexOf('[FILE: huge.docx]') >= 0;
+      return h.Fn.gfSectionsFor(CHAT, 'u1').indexOf('[FILE: huge.docx (truncated)]') >= 0;
     }, 4000);
     expect(got).toBe(true);
     h.tick(300);
     const section = h.Fn.gfSectionsFor(CHAT, 'u1');
     expect(section).not.toContain('too-large');
-    expect(section).toContain('…[обрезано 50000]');
+    // v2.7: секционный кап 100 000 (fetch-кап тела — 200 000)
+    expect(section).toContain('…[обрезано 100000]');
     expect(h.Fn.gfPendingCount(CHAT)).toBe(0);
   });
 });
@@ -886,5 +889,87 @@ describe('R2: связка с перехватчиком/background', function (
 
   test('дренаж очереди разрешён для gemini', function () {
     expect(read('core/base-handler.js')).toContain("site === 'gemini'");
+  });
+});
+
+/**
+ * v2.7 (живая приёмка 2026-11-09): текст вложения, вшиваемый в СЕКЦИЮ (а значит
+ * в текст сообщения и в экспорт), режется до GF_SECTION_TEXT_CAP = 100 000
+ * символов. Повторно приложенная выгрузка Gemini (ровно 200 000 символов)
+ * вшивалась целиком: файл рос до ~1 МБ, и следующая загрузка обрезала уже его.
+ * Обрезка обязана быть ВИДИМОЙ (шапка + хвостовой маркер), иначе потеря тихая.
+ */
+describe('v2.7: clamp секции вложения (экспорт не раздувается)', function () {
+  test('constants.sectionTextCap = 100 000', function () {
+    const h = makeHarness();
+    expect(h.Fn.constants.sectionTextCap).toBe(100000);
+  });
+
+  test('текст сверх капа режется, шапка и хвост помечают обрезку', function () {
+    const h = makeHarness();
+    const cap = h.Fn.constants.sectionTextCap;
+    const text = 'x'.repeat(cap + 4321);
+    const section = h.Fn.sectionOf({ name: 'gemini-e1020dba.md', ok: true, text: text });
+    const head = '\n\n[FILE: gemini-e1020dba.md (truncated)]\n';
+    const tail = '\n…[обрезано 4321]';
+    expect(section.indexOf(head)).toBe(0);
+    expect(section.slice(-tail.length)).toBe(tail);
+    // в экспорт уходит ровно кап символов, потеря названа числом
+    expect(section.length - head.length - tail.length).toBe(cap);
+    expect(section).not.toContain('x'.repeat(cap + 1));
+  });
+
+  test('текст в пределах капа уходит без пометки', function () {
+    const h = makeHarness();
+    const section = h.Fn.sectionOf({ name: 'small.md', ok: true, text: 'hello' });
+    expect(section).toBe('\n\n[FILE: small.md]\nhello');
+  });
+
+  test('мета-секция «текст не получен» не меняется', function () {
+    const h = makeHarness();
+    const section = h.Fn.sectionOf({
+      name: 'scan.pdf', ok: false,
+      note: 'application/pdf, 10 Б, текст не получен', reason: 'pdf-no-text'
+    });
+    expect(section).toBe('\n\n[FILE: scan.pdf — application/pdf, 10 Б, текст не получен: pdf-no-text]');
+  });
+});
+
+/**
+ * v2.7: граница капа ПОТОКОВОГО чтения тела. Раньше чанк, попавший ровно на
+ * GF_TEXT_CAP, оставлял truncated=false (живой ди-агностик: chars=200000
+ * truncated=false), хотя reader уже отменён и хвост тела потерян.
+ */
+describe('v2.7: граница капа тела вложения (truncated)', function () {
+  function readTextCapped() {
+    const capSrc = fnSource(MODULE_SRC, 'gfCapText');
+    const readSrc = fnSource(MODULE_SRC, 'gfReadTextCapped');
+    return new Function(
+      'GF_TEXT_CAP', 'gfDiag', 'gfStr', 'TextDecoder',
+      'var gfCapText = (' + capSrc + ');\nreturn (' + readSrc + ');'
+    )(200000, function () { }, function (v) { return typeof v === 'string' ? v : ''; }, TextDecoder);
+  }
+
+  function streamOf(text) {
+    return new ReadableStream({
+      start: function (c) {
+        c.enqueue(new TextEncoder().encode(text));
+        c.close();
+      }
+    });
+  }
+
+  test('ровно GF_TEXT_CAP символов помечаются truncated=true', async function () {
+    const read = readTextCapped();
+    const out = await read({ body: streamOf('y'.repeat(200000)) });
+    expect(out.text.length).toBe(200000);
+    expect(out.truncated).toBe(true);
+  });
+
+  test('тело короче капа помечается truncated=false', async function () {
+    const read = readTextCapped();
+    const out = await read({ body: streamOf('y'.repeat(199999)) });
+    expect(out.text.length).toBe(199999);
+    expect(out.truncated).toBe(false);
   });
 });
