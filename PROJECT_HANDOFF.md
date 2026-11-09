@@ -1747,7 +1747,7 @@ v90–v114 (исходные строки 783–2 440, 1 658 строк) — т�
 
 **Дата:** 2026-11-09 (Asia/Yekaterinburg).
 
-**Коммиты:** `<SHA v131>` (коммит A — тело аппендикса), `311adf4` (сборщик: `build.mjs` читает `.ts`-источники), `065b423` (адаптеры на TypeScript), `7f9c678` (фикс Claude: бейдж после SPA-перехода), `97dec03` (Core Wave 1: `state`, `widget`), `f064163` (Core Wave 2: `base-handler`, `hybrid-tail`, `export-manager`), `d5becc6` (Core Wave 3: `content`), `9544602` (Core Wave 4: `background`, service worker), `b7b7895` (фикс метрики Gemini при label-only вложении).
+**Коммиты:** `5942e9c` (коммит A — тело аппендикса), `311adf4` (сборщик: `build.mjs` читает `.ts`-источники), `065b423` (адаптеры на TypeScript), `7f9c678` (фикс Claude: бейдж после SPA-перехода), `97dec03` (Core Wave 1: `state`, `widget`), `f064163` (Core Wave 2: `base-handler`, `hybrid-tail`, `export-manager`), `d5becc6` (Core Wave 3: `content`), `9544602` (Core Wave 4: `background`, service worker), `b7b7895` (фикс метрики Gemini при label-only вложении).
 
 **Статус:** Миграция `adapters/` и `core/` (ISOLATED-мир и service worker) на TypeScript завершена: все 7 файлов ядра и 9 адаптеров — `.ts`. Переведено 26 483 строки TS-исходников (`utils/` 13 350 + `adapters/` 2 416 + `core/` 10 717), с `types/` — 27 516. Обнаружен и исправлен баг с падением метрики на 19 % при `GF_SECTION_TEXT_CAP`: вложение с обрезанным телом списывало полный вес пула из бейджа. Сьют 230 suites / 3951 passed / 7 skipped / 0 failed, exit 0.
 
@@ -1808,5 +1808,5 @@ v90–v114 (исходные строки 783–2 440, 1 658 строк) — т�
 
 ### Секция 7. Плейсхолдер.
 
-**Коммит A:** `<SHA v131>` — тело аппендикса v131; SHA проставляется коммитом B (двухшаговый паттерн).
+**Коммит A:** `5942e9c` — тело аппендикса v131; SHA проставляется коммитом B (двухшаговый паттерн).
 **SHA4:** `<SHA4>` (коммит C — синхронизация верхнего блока handoff; проставляется при его создании).
