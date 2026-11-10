@@ -119,7 +119,7 @@
     lastTurnDoneAt = 0;
     resetStreamState(); if (typeof resetFiles === 'function') resetFiles();   // D.10: файловый кэш вложений (deepseek-files.js) не переезжает в следующий чат
     console.log('[deepseek-intercept] смена чата → состояние перехватчика сброшено (convId=' + (currentConvId || '(не чат)') + ')');
-    try { window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); } catch (e) { }
+    try { window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); } catch (e) { /* ignore */ }
     scheduleHistoryRefetch();
   }
 
@@ -136,7 +136,7 @@
     if (origPush) {
       history.pushState = function () {
         var r = origPush.apply(this, arguments);
-        try { checkConvChange(); } catch (e) { }
+        try { checkConvChange(); } catch (e) { /* ignore */ }
         return r;
       };
     }
@@ -144,12 +144,12 @@
     if (origReplace) {
       history.replaceState = function () {
         var r = origReplace.apply(this, arguments);
-        try { checkConvChange(); } catch (e) { }
+        try { checkConvChange(); } catch (e) { /* ignore */ }
         return r;
       };
     }
-    window.addEventListener('popstate', function () { try { checkConvChange(); } catch (e) { } });
-  } catch (e) { }
+    window.addEventListener('popstate', function () { try { checkConvChange(); } catch (e) { /* ignore */ } });
+  } catch (e) { /* ignore */ }
 
       Fn.getConvId = getConvId;
       Fn.resetForNewConversation = resetForNewConversation;

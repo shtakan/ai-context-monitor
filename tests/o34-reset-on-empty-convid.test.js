@@ -109,7 +109,7 @@ const listeners = [];
 
 afterEach(() => {
   listeners.splice(0).forEach(function (l) {
-    try { window.removeEventListener('ai-cm-conversation-changed', l); } catch (e) { }
+    try { window.removeEventListener('ai-cm-conversation-changed', l); } catch (e) { /* ignore */ }
   });
   document.body.innerHTML = '';
 });

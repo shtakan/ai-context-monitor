@@ -138,8 +138,8 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  try { delete global.aiCmDiagOn; } catch (e1) { }
-  try { delete global.aiCmDiagLine; } catch (e2) { }
+  try { delete global.aiCmDiagOn; } catch (e1) { /* ignore */ }
+  try { delete global.aiCmDiagLine; } catch (e2) { /* ignore */ }
 });
 
 beforeEach(() => {
@@ -155,8 +155,8 @@ afterEach(() => {
 
 function gateOn() { window.sessionStorage.setItem('aiCmDebug', '1'); }
 function gateOff() {
-  try { window.sessionStorage.removeItem('aiCmDebug'); } catch (eS) { }
-  try { delete window.__aiCmDebugLogs; } catch (eW) { }
+  try { window.sessionStorage.removeItem('aiCmDebug'); } catch (eS) { /* ignore */ }
+  try { delete window.__aiCmDebugLogs; } catch (eW) { /* ignore */ }
 }
 
 /** Все диаг-строки текущего прогона (только префикс канонического хелпера). */

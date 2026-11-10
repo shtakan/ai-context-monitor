@@ -161,7 +161,7 @@ describe('Gemini thinking-run: голые продолжения и систем
       'Ещё один кусок ответа.'
     ]);
     const out = [];
-    try { collectTurnText(turn[3], out); } catch (e) { }
+    try { collectTurnText(turn[3], out); } catch (e) { /* ignore */ }
     const text = out.join('\n');
     expect(text).not.toContain('File attachment');
     expect(text).toContain('Реальный ответ модели.');

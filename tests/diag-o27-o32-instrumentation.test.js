@@ -88,7 +88,7 @@ describe('O-27/O-32: downloadBlob — гейт aiCmDebug, поля строки 
     jest.spyOn(console, 'log').mockImplementation(function (m) { logs.push(String(m)); });
     global.URL.createObjectURL = jest.fn(function (blob) { blobs.push(blob); return 'blob:mock'; });
     global.URL.revokeObjectURL = jest.fn();
-    try { window.sessionStorage.removeItem('aiCmDebug'); } catch (e) { }
+    try { window.sessionStorage.removeItem('aiCmDebug'); } catch (e) { /* ignore */ }
     window.__aiCmDebugLogs = false;
   });
 

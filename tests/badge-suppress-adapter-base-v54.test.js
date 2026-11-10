@@ -150,12 +150,12 @@ function diagLines() {
 }
 
 beforeEach(function () {
-  try { sessionStorage.removeItem('aiCmDebug'); } catch (e) { }
+  try { sessionStorage.removeItem('aiCmDebug'); } catch (e) { /* ignore */ }
 });
 
 afterEach(function () {
   jest.restoreAllMocks();
-  try { sessionStorage.removeItem('aiCmDebug'); } catch (e) { }
+  try { sessionStorage.removeItem('aiCmDebug'); } catch (e) { /* ignore */ }
 });
 
 // =====================================================================================

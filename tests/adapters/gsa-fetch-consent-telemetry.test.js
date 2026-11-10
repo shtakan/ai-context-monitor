@@ -122,13 +122,13 @@ function fetchUrl(url) {
 }
 
 beforeEach(function () {
-  try { sessionStorage.removeItem('aiCmDebug'); } catch (e) { }
+  try { sessionStorage.removeItem('aiCmDebug'); } catch (e) { /* ignore */ }
   window.__aiCmDebugLogs = false;
 });
 
 afterEach(function () {
   jest.restoreAllMocks();
-  try { sessionStorage.removeItem('aiCmDebug'); } catch (e) { }
+  try { sessionStorage.removeItem('aiCmDebug'); } catch (e) { /* ignore */ }
   window.__aiCmDebugLogs = false;
 });
 

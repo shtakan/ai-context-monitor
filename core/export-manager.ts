@@ -1636,13 +1636,13 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
     // ожидания он не попадёт в файл). Дренажные хелперы берём с UMD-зеркала base-handler
     // (window.AiCmBaseHandler), потому что в types/ они не объявлены, а bare-имена дали бы
     // tsc TS2304. typeof-гарды сохранены: срез-песочницы тестов видят прежнее поведение 1:1.
-    var filesApiD = (typeof window !== 'undefined' && window.AiCmBaseHandler) ? window.AiCmBaseHandler : null;
-    var filesDrainSiteD = (filesApiD && typeof filesApiD.aiCmFilesDrainSite === 'function')
-      ? filesApiD.aiCmFilesDrainSite() === true : false;
+    var filesApiD2 = (typeof window !== 'undefined' && window.AiCmBaseHandler) ? window.AiCmBaseHandler : null;
+    var filesDrainSiteD = (filesApiD2 && typeof filesApiD2.aiCmFilesDrainSite === 'function')
+      ? filesApiD2.aiCmFilesDrainSite() === true : false;
     var netSyncSiteD = (typeof aiCmExportNetSyncSite === 'function') ? aiCmExportNetSyncSite() : false;
     if (netSynced !== true && (filesDrainSiteD || netSyncSiteD) &&
         (typeof aiCmExportFilesThenNetSync === 'function' || typeof aiCmExportNetSyncThen === 'function' ||
-         (filesApiD && typeof filesApiD.aiCmExportFilesDrainThen === 'function'))) {
+         (filesApiD2 && typeof filesApiD2.aiCmExportFilesDrainThen === 'function'))) {
       if (!aiCmNetSyncInFlight[cid]) {
         aiCmNetSyncInFlight[cid] = 1;
         var selfSync = function () {
@@ -1654,8 +1654,8 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
             aiCmExportFilesThenNetSync(cid, selfSync);
           } else if (netSyncSiteD && typeof aiCmExportNetSyncThen === 'function') {
             aiCmExportNetSyncThen(cid, selfSync);
-          } else if (filesApiD && typeof filesApiD.aiCmExportFilesDrainThen === 'function') {
-            filesApiD.aiCmExportFilesDrainThen(cid, selfSync, 6000);
+          } else if (filesApiD2 && typeof filesApiD2.aiCmExportFilesDrainThen === 'function') {
+            filesApiD2.aiCmExportFilesDrainThen(cid, selfSync, 6000);
           } else {
             selfSync();
           }

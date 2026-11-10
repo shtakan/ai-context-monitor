@@ -209,12 +209,12 @@ beforeAll(function () {
 });
 
 beforeEach(function () {
-  try { sessionStorage.removeItem('aiCmDebug'); } catch (e) { }
+  try { sessionStorage.removeItem('aiCmDebug'); } catch (e) { /* ignore */ }
 });
 
 afterEach(function () {
   jest.restoreAllMocks();
-  try { sessionStorage.removeItem('aiCmDebug'); } catch (e) { }
+  try { sessionStorage.removeItem('aiCmDebug'); } catch (e) { /* ignore */ }
 });
 
 describe('O-35 (D7): детект URL Qwen, приоритет над openai-совместимым', function () {

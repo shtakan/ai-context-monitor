@@ -233,7 +233,7 @@ describe('gemini-scroll-stall-fix (v1.17)', () => {
       expect(HIDDEN).toContain('if (sh <= ch + 50) continue;');
       expect(HIDDEN).toContain('if (!(ch > 0)) continue;');
       expect(HIDDEN).toContain("el.closest('infinite-scroller.chat-history, [class*=\"chat-history\"]')");
-      expect(HIDDEN).toContain("try { hay = el.tagName + ' ' + el.className + ' ' + el.id; } catch (e) { }");
+      expect(HIDDEN).toContain("try { hay = el.tagName + ' ' + el.className + ' ' + el.id; } catch (e) { /* ignore */ }");
       // v88: generic best-fallback удалён, а не просто переставлен
       expect(HIDDEN).not.toContain('bestH');
       expect(HIDDEN).not.toContain('if (best) return best;');

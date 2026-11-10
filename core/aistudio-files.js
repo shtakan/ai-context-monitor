@@ -108,7 +108,7 @@
     try {
       if (typeof aiCmDiagLine === 'function') { aiCmDiagLine('aistudio-files-' + tag, fields); return; }
       if (D && typeof D.diagLine === 'function') D.diagLine('files-' + tag, fields);
-    } catch (eD) { }
+    } catch (eD) { /* ignore */ }
   }
 
   function afWarn(tag, msg, e) {

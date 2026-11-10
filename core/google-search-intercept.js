@@ -22,7 +22,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
   window.__aiCmGoogleSearchInterceptInstalled = true;
 
   // v31: флаг «Подробные логи» транслируется из content.js (ISOLATED) через CustomEvent
-  try { window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDebugLogs(!!(ev && ev.detail)); }); } catch (e) {}
+  try { window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDebugLogs(!!(ev && ev.detail)); }); } catch (e) { /* ignore */ }
 
   var MAX_CACHE_ENTRIES = 10;
 
@@ -156,7 +156,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
         if (u.length > maxLen) maxLen = u.length;
         if (a.length > maxLen) maxLen = a.length;
       }
-    } catch (eShape) { }
+    } catch (eShape) { /* ignore */ }
     return 'turns=' + n + ' empty=' + empty + ' userLen=' + userLen +
       ' asstLen=' + asstLen + ' maxLen=' + maxLen;
   }
@@ -251,7 +251,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
           sentCursor: sentCursor
         });
       }
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
     if (!cls) {
       cls = {
         kind: 'no-classifier', complete: false, canContinue: false,
@@ -287,7 +287,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
         var v = el.getAttribute('data-session-thread-id');
         return v ? v.trim() : '';
       }
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
     return '';
   }
 
@@ -386,7 +386,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
         var k = window.GoogleFolwrUtils.canonicalTurnKeyOf(turn);
         if (typeof k === 'string' && k) return k;
       }
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
     return gsaTurnKeyOfLocal(turn);
   }
 
@@ -502,7 +502,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
           domTid: readDomThreadId() || ''
         });
       }
-    } catch (eNetFin) { }
+    } catch (eNetFin) { /* ignore */ }
     try {
       if (typeof aiCmDiagLine === 'function') {
         var fpKeys = [];
@@ -538,10 +538,10 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
           activeTid: baseThreadId || ''
         });
       }
-    } catch (eFp) { }
+    } catch (eFp) { /* ignore */ }
     try {
       window.dispatchEvent(new CustomEvent('ai-cm-full-history', { detail: detail }));
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
   }
 
   // ---- v1.27 (O-31): сегментация сетевой базы по разговору (threadId) ----
@@ -722,7 +722,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
           return p;
         }
       }
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
     var turns = parseTurns(htmlText);
     var messages = messagesFromTurns(turns);
     return {
@@ -824,7 +824,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
           }
           commentQuestions.push(foundB);
         }
-      } catch (e) { }
+      } catch (e) { /* ignore */ }
       var cqi = 0;
       for (var bi2 = 0; bi2 < result.length; bi2++) {
         if (!result[bi2].userText && cqi < commentQuestions.length && commentQuestions[cqi]) {
@@ -875,7 +875,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
         if (folifQuestion || folifAnswer) {
           result.push({ id: 'folif_' + Date.now(), userText: folifQuestion, assistantText: folifAnswer });
         }
-      } catch (e) { }
+      } catch (e) { /* ignore */ }
     }
 
     return result;
@@ -889,7 +889,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       var u = new URL(rawUrl, location.href);
       var a = u.searchParams.get('authuser');
       if (a != null && a !== '') return a;
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
     try {
       return new URL(location.href).searchParams.get('authuser') || '';
     } catch (e) { return ''; }
@@ -1206,7 +1206,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
         if (el.scrollHeight > el.clientHeight + 50) return el;
         el = el.parentElement;
       }
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
     return null;
   }
 
@@ -1324,7 +1324,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       window.dispatchEvent(new CustomEvent('ai-cm-gsa-probe-state', {
         detail: { running: running === true, threadId: tid || '' }
       }));
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
   }
 
   function probeFolwrCompleteness(startUrl, startTurns, tid, firstCursor, gainedIn) {
@@ -1622,14 +1622,14 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
               }
             }).catch(function () { });
           }
-        } catch (e) { }
+        } catch (e) { /* ignore */ }
         return resp;
       }, function () { });
     }
 
     // GET /async/folwr — полная история
     if (isOpenFolwr && method !== 'POST') {
-      try { lastFolwrOpenUrl = url; } catch (e) { }
+      try { lastFolwrOpenUrl = url; } catch (e) { /* ignore */ }
       promise.then(function (resp) {
         if (resp && resp.ok) {
           resp.clone().text().then(function (txt) {

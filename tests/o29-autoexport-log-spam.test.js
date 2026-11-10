@@ -274,7 +274,7 @@ function o29(over) {
 }
 
 beforeEach(() => {
-  try { window.sessionStorage.removeItem('aiCmDebug'); } catch (e) { }
+  try { window.sessionStorage.removeItem('aiCmDebug'); } catch (e) { /* ignore */ }
 });
 
 // =====================================================================================

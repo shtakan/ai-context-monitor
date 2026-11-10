@@ -131,7 +131,7 @@ function makeStand(debug) {
     dumpLines: () => logs.filter((l) => l.indexOf('[ai-cm-debug][O26]') !== -1),
     turnLines: () => logs.filter((l) => l.indexOf('[ai-cm-debug][O26][turn]') !== -1),
     headerLines: () => logs.filter((l) => l.indexOf('[ai-cm-debug][O26][usage]') !== -1),
-    close: () => { try { window.close(); } catch (e) { } }
+    close: () => { try { window.close(); } catch (e) { /* ignore */ } }
   };
 }
 

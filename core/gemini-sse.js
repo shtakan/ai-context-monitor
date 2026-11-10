@@ -53,7 +53,7 @@
     if (typeof D.originalFetch === 'function') {
       window.fetch = function (input, init) {
         var url = '';
-        try { url = (typeof input === 'string') ? input : (input && input.url) || ''; } catch (e) { }
+        try { url = (typeof input === 'string') ? input : (input && input.url) || ''; } catch (e) { /* ignore */ }
 
         // v21: диагностические метки для лога «гард слеп»
         var diagInputType = (typeof input === 'string') ? 'url-string' : ((typeof Request !== 'undefined' && input instanceof Request) ? 'Request' : 'other');
@@ -66,7 +66,7 @@
             if (typeof Request !== 'undefined' && input instanceof Request) {
               input.clone().text().then(function (t) { D.rememberSiteMeta(url, hdrs, t); }).catch(function () { });
             } else if (init && typeof init.body === 'string') { bodyStr = init.body; }
-          } catch (e) { }
+          } catch (e) { /* ignore */ }
           D.rememberSiteMeta(url, hdrs, bodyStr);
         }
 
@@ -120,7 +120,7 @@
                   D.provisionalStreamIngest(t, D.streamRpcidOf(url));
                 }).catch(function () { });
               }
-            } catch (e) { }
+            } catch (e) { /* ignore */ }
             return resp;
           }, function () { /* тихо */ });
         }
@@ -158,7 +158,7 @@
                   });
                 }).catch(function () { });
               }
-            } catch (e) { }
+            } catch (e) { /* ignore */ }
             return resp;
           }, function () { /* v24: тихо — не создаём висячий Promise.reject */ });
         }
@@ -167,7 +167,7 @@
           try {
             if (!resp || !resp.ok) return;
             var ct = '';
-            try { ct = resp.headers.get('content-type') || ''; } catch (e) { }
+            try { ct = resp.headers.get('content-type') || ''; } catch (e) { /* ignore */ }
             if (!D.diagCanScan(url, ct)) return;
             if (D.diagScannedCount < D.DIAG_MAX_SCANNED) {
               D.diagScannedCount++;
@@ -178,7 +178,7 @@
             resp.clone().text().then(function (txt) {
               D.diagScanResponse(txt, url, isStream);
             }).catch(function () { });
-          } catch (e) { }
+          } catch (e) { /* ignore */ }
           return resp;
         }, function () { });
         return promise;
@@ -188,12 +188,12 @@
     // ---- подмена XHR (v21: гард по convId, без изменений относительно v20) ----
     if (D.originalXHROpen && D.originalXHRSend) {
       D.OriginalXHR.prototype.open = function (method, url) {
-        try { this.__aiCm = { method: String(method).toUpperCase(), url: String(url), headers: {} }; } catch (e) { }
+        try { this.__aiCm = { method: String(method).toUpperCase(), url: String(url), headers: {} }; } catch (e) { /* ignore */ }
         return D.originalXHROpen.apply(this, arguments);
       };
       if (D.originalSetHeader) {
         D.OriginalXHR.prototype.setRequestHeader = function (k, v) {
-          try { if (this.__aiCm) this.__aiCm.headers[k] = v; } catch (e) { }
+          try { if (this.__aiCm) this.__aiCm.headers[k] = v; } catch (e) { /* ignore */ }
           return D.originalSetHeader.apply(this, arguments);
         };
       }
@@ -270,7 +270,7 @@
             try {
               if (self2.status >= 200 && self2.status < 300 && self2.responseText) {
                 var ct2 = '';
-                try { ct2 = self2.getResponseHeader('content-type') || ''; } catch (e) { }
+                try { ct2 = self2.getResponseHeader('content-type') || ''; } catch (e) { /* ignore */ }
                 if (D.diagCanScan(url, ct2)) {
                   if (D.diagScannedCount < D.DIAG_MAX_SCANNED) {
                     D.diagScannedCount++;
@@ -281,9 +281,9 @@
                   D.diagScanResponse(self2.responseText, url, isStream2);
                 }
               }
-            } catch (e) { }
+            } catch (e) { /* ignore */ }
           });
-        } catch (e) { }
+        } catch (e) { /* ignore */ }
         return D.originalXHRSend.apply(this, arguments);
       };
     }

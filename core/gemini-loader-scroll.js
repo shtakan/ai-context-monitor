@@ -111,7 +111,7 @@
 
       debugLog('log', '[AI CM][Gemini][loader] start convId=' + convId + ' scrollH=' + sc.height());
       var prevSmooth = '';
-      if (sc.mode === 'el') { try { prevSmooth = sc.el.style.scrollBehavior; sc.el.style.scrollBehavior = 'auto'; } catch (e) { } }
+      if (sc.mode === 'el') { try { prevSmooth = sc.el.style.scrollBehavior; sc.el.style.scrollBehavior = 'auto'; } catch (e) { /* ignore */ } }
       var hiddenEl = null;
       var savedTop = sc.top();
       // v80 (O1): расстояние-до-низа ВЬЮПОРТА на момент ПЕРВОГО скролла (захват в
@@ -149,11 +149,11 @@
         D.loaderState.scrollEngaged = true;
         D.loaderState.hideApplied = true;
         // v30.8: сообщаем content.js — бейдж замораживается на время скрытой загрузки
-        try { window.dispatchEvent(new CustomEvent('ai-cm-loader-freeze', { detail: { on: true } })); } catch (e2) { }
+        try { window.dispatchEvent(new CustomEvent('ai-cm-loader-freeze', { detail: { on: true } })); } catch (e2) { /* ignore */ }
       }
       function __restoreLoader() {
         // v30.8: разморозка бейджа при любом выходе из лоадера (включая finally)
-        try { window.dispatchEvent(new CustomEvent('ai-cm-loader-freeze', { detail: { on: false } })); } catch (eF) { }
+        try { window.dispatchEvent(new CustomEvent('ai-cm-loader-freeze', { detail: { on: false } })); } catch (eF) { /* ignore */ }
         // v80 (O1): позиция сохраняется как «прокрутка от низа вьюпорта», захваченная в
         // __applyHide (перед первым скроллом). Для холодного открытия/F5/SPA-входа
         // (старт в низу) восстановление = ровно низ чата, независимо от дрейфа clientH;
@@ -163,7 +163,7 @@
           try {
             var sn = (sc && sc.height() > 0) ? sc : D.findScrollContainer();
             if (sn && sn.height() > 0 && distBottomRest80 <= sn.height() - sn.client()) sn.setTop(Math.max(0, sn.height() - sn.client() - distBottomRest80));
-          } catch (eR80) { }
+          } catch (eR80) { /* ignore */ }
         }
         // v109: гейт мислокации — restore только если оверлей ещё НАШ (снят извне: UI-предел,
         // base-complete-early/тейп/force-restore/чужой прогон) — иначе позицию не трогаем.
@@ -181,7 +181,7 @@
         try {
           requestAnimationFrame(function () { requestAnimationFrame(__overlayOff80); });
         } catch (eRaf80) { __overlayOff80(); }
-        if (sc.mode === 'el') { try { sc.el.style.scrollBehavior = prevSmooth; } catch (e) { } }
+        if (sc.mode === 'el') { try { sc.el.style.scrollBehavior = prevSmooth; } catch (e) { /* ignore */ } }
         // v30.4: возврат позиции на свеже-запрошенном скроллере; повтор через 250мс —
         // после пере-якорения списка Gemini. v80: к сохранённой позиции, не жёстко в низ.
         function kickBack() {
@@ -422,12 +422,12 @@
             (function (el75) {
               try {
                 requestAnimationFrame(function () {
-                  try { el75.scrollTop = 0; } catch (eS1) { }
+                  try { el75.scrollTop = 0; } catch (eS1) { /* ignore */ }
                   // v4z: синтетический scroll — подталкиваем IntersectionObserver-пагинацию
-                  try { el75.dispatchEvent(new Event('scroll')); } catch (eS2) { }
-                  try { el75.scrollTop = el75.scrollHeight; debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' quiet-frame-applied h=' + el75.scrollHeight + ' top=' + el75.scrollTop + ' convId=' + convId); } catch (eS3) { } // возврат вниз ДО отрисовки кадра
+                  try { el75.dispatchEvent(new Event('scroll')); } catch (eS2) { /* ignore */ }
+                  try { el75.scrollTop = el75.scrollHeight; debugLog('log', '[AI CM][Gemini][loader] iter ' + iter + ' quiet-frame-applied h=' + el75.scrollHeight + ' top=' + el75.scrollTop + ' convId=' + convId); } catch (eS3) { /* ignore */ } // возврат вниз ДО отрисовки кадра
                 });
-              } catch (eRaf) { }
+              } catch (eRaf) { /* ignore */ }
             })(sc.el);
             await sleepUntilFired(SCROLL_PAUSE_HIDDEN_MS, convId);
             // v90.1 (fired-after-await): fired взведён — выходим, не доходя до чтения h/no-growth.
@@ -866,7 +866,7 @@
               debugLog('log', '[AI CM][completeness] fallback-top probe-start' +
                 ' convId=' + convId + ' msgs=' + baseNowD14 + ' floor=' + floorCountD14b);
               D.runCompletenessProbe(fbHash, fbWideCur, { onTerminal: function () {
-                try { delete D.oracleIncompleteSeen[convId]; } catch (eFbO) { }
+                try { delete D.oracleIncompleteSeen[convId]; } catch (eFbO) { /* ignore */ }
                 try {
                   window.dispatchEvent(new CustomEvent('ai-cm-loader-state', { detail: {
                     convId: convId,
@@ -875,7 +875,7 @@
                     baseComplete: true,
                     reachedStart: true
                   } }));
-                } catch (eFbD) { }
+                } catch (eFbD) { /* ignore */ }
               } });
             } catch (eD14x) { swallow(eD14x, 'gemini:loader-fallback-complete'); }
           }
@@ -972,8 +972,8 @@
           bypassD15 = window.GeminiInterceptLogic.shouldBypassCacheComplete(D.oracleIncompleteSeen, D.oracleRerunUsedMap, convId);
         }
         if (bypassD15) {
-          try { delete D.oracleIncompleteSeen[convId]; } catch (eB1) { } // флаг снят — повторных обходов нет
-          try { D.oracleRerunUsedMap[convId] = true; } catch (eB2) { }   // маркер «один ре-ран использован»
+          try { delete D.oracleIncompleteSeen[convId]; } catch (eB1) { /* ignore */ } // флаг снят — повторных обходов нет
+          try { D.oracleRerunUsedMap[convId] = true; } catch (eB2) { /* ignore */ }   // маркер «один ре-ран использован»
           debugLog('log', '[AI CM][Gemini][loader] cache-complete bypass reason=oracle-incomplete convId=' + convId);
           // продолжаем к запуску лоадера ниже (не return)
         } else {
@@ -1035,7 +1035,7 @@
           ' pendingCursor=' + (D.pendingCursor ? '1' : '0') +
           ' cacheRestored=' + (D.cacheRestoredMap.has(convId) ? '1' : '0') +
           ' floor=' + __floorMs + ' tries=' + tries);
-      } catch (eRs) { }
+      } catch (eRs) { /* ignore */ }
       D.loaderDoneMap[convId] = true;
       loaderRunAtMap[convId] = Date.now(); // loader-reentry (v2.0.17): время последнего реального старта
       D.loaderRunningFor = convId;
@@ -1048,7 +1048,7 @@
         // внутренние ошибки лоадер уже залогировал сам — тихо и без дублей.
         if (D.loaderRunningFor === convId) D.loaderRunningFor = null;
         D.notifyLoaderState(convId, false);
-        try { debugLog('log', '[AI CM][Gemini][loader] promise rejected convId=' + convId + ' err=' + (e && e.message || e)); } catch (eL) { }
+        try { debugLog('log', '[AI CM][Gemini][loader] promise rejected convId=' + convId + ' err=' + (e && e.message || e)); } catch (eL) { /* ignore */ }
       });
     }
     tick();
@@ -1121,13 +1121,13 @@
         }
       }
     } catch (eVis) {
-      try { debugLog('error', '[AI CM][loader] resume-on-visible error:', eVis); } catch (e2) { }
+      try { debugLog('error', '[AI CM][loader] resume-on-visible error:', eVis); } catch (e2) { /* ignore */ }
     }
   });
 
   // ---------- F: консольный хэндл ручного запуска ----------
   // Ручной запуск из консоли — тот же код, что и автозапуск.
-  try { window.__aiCmGeminiLoadFullHistory = loadFullHistoryInvisibly; } catch (e) { }
+  try { window.__aiCmGeminiLoadFullHistory = loadFullHistoryInvisibly; } catch (e) { /* ignore */ }
 
   var Api = {
     __bind: __bind,

@@ -235,7 +235,7 @@ function makeStand(convId, historyBody) {
     window,
     events,
     lastDetail: () => events[events.length - 1],
-    close: () => { try { window.close(); } catch (e) { } }
+    close: () => { try { window.close(); } catch (e) { /* ignore */ } }
   };
 }
 

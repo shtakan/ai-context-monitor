@@ -278,7 +278,7 @@
             if (!rCurH9b && next) rCurH9b = next;
             if (!rCurH9b && lastHeadToken) rCurH9b = lastHeadToken;
             if (rCurH9b) lastGoodWideCur = { conv: __pagLoopConv || '', cur: rCurH9b, ts: Date.now() };
-          } catch (eRwH9b) { }
+          } catch (eRwH9b) { /* ignore */ }
           try {
             if (typeof window !== 'undefined' && window.GeminiInterceptLogic &&
                 typeof window.GeminiInterceptLogic.updateProbeMetaRetain === 'function') {
@@ -286,7 +286,7 @@
               var rUpdH9b = window.GeminiInterceptLogic.updateProbeMetaRetain(lastGoodProbeMeta, rMetaH9b, true);
               if (rUpdH9b) lastGoodProbeMeta = rUpdH9b;
             }
-          } catch (eRmH9b) { }
+          } catch (eRmH9b) { /* ignore */ }
         }
         // v1.15 (BUG «холодное открытие без полной истории»): страница вернула ОШИБКУ Bard
         // (inner не строка / BardErrorInfo, см. isBardErrorPage) — это НЕ конец истории.
@@ -353,16 +353,16 @@
         if (__esc1177 && __esc1177.escalate === true) {
           var __escConv = getConvId();
           quietActive = false; // тихий цикл сворачиваем — дальше рулит лоадер (нативный скролл)
-          try { quietIncompleteNoStart = false; } catch (eEscQ) { }
-          try { nativeEscalationUsedMap[__escConv] = true; } catch (eEscM) { }
-          try { nativeEscalationFor = __escConv; } catch (eEscF) { }
+          try { quietIncompleteNoStart = false; } catch (eEscQ) { /* ignore */ }
+          try { nativeEscalationUsedMap[__escConv] = true; } catch (eEscM) { /* ignore */ }
+          try { nativeEscalationFor = __escConv; } catch (eEscF) { /* ignore */ }
           debugLog('log', '[AI CM][1177-bypass] escalate-native-scroll reason=' + (__esc1177.reason || 'err1177') +
             ' convId=' + (__escConv || '(none)') + ' msgs=' + totalNow +
             ' errRetries=' + pagErrorRetries + '/' + PAGINATE_ERROR_RETRY_CAP +
             ' — старшие окна доберёт нативный скролл сайта (обход 1177)');
           // лоадер обязан перезапуститься, минуя латчи already-done / cache-complete
-          try { delete loaderDoneMap[__escConv]; } catch (eEscL) { }
-          try { oracleIncompleteSeen[__escConv] = true; } catch (eEscO) { }
+          try { delete loaderDoneMap[__escConv]; } catch (eEscL) { /* ignore */ }
+          try { oracleIncompleteSeen[__escConv] = true; } catch (eEscO) { /* ignore */ }
           try { maybeStartLoader(); } catch (eEscS) { swallowSoft(eEscS, 'gemini:paginateLoop-native-escalation-loader'); }
           return;
         }
@@ -612,8 +612,8 @@
       // v1.6 (D14): оракул авторитетнее кэш-эвристики — снимаем латч loaderDoneMap,
       // иначе maybeStartLoader упрётся в skip reason=already-done (cache-complete от
       // tape-restore) и страховочный скролл/прогон полноты не перезапустится.
-      try { delete loaderDoneMap[convId]; } catch (eD14p) { }
-      try { oracleIncompleteSeen[convId] = true; } catch (eD15i) { } // v1.6 (D15): флаг для обхода cache-complete
+      try { delete loaderDoneMap[convId]; } catch (eD14p) { /* ignore */ }
+      try { oracleIncompleteSeen[convId] = true; } catch (eD15i) { /* ignore */ } // v1.6 (D15): флаг для обхода cache-complete
       debugLog('log', '[AI CM][completeness] latch-cleared for rerun convId=' + convId);
       // v80 (O1-C): ре-ран лоадера (D14/D15) — тоже ПОД оверлеем: закрываем экран заранее,
       // чтобы между loader-stop и повторным hide-apply не мелькал чат. Разоружение — если
@@ -634,7 +634,7 @@
             if (aiCmScrollOverlay && !loaderRunningFor) aiCmSetScrollOverlay(false, 'rerun-overlay-disarm');
           }, 4000);
         }
-      } catch (eO80) { }
+      } catch (eO80) { /* ignore */ }
       try { maybeStartLoader(); } catch (eR) { swallowSoft(eR, 'gemini:probeIncomplete-loader-restart'); } // латч loaderDoneMap гейтирует повторный прогон
     }
     // H9b (retain-last-good): retained — ТОЛЬКО вход запроса probe (complete решается
@@ -659,7 +659,7 @@
         lastHeaders = lastGoodProbeMeta.headers || lastHeaders;
         debugLog('log', '[AI CM][completeness] probe retained-meta convId=' + (getConvId() || '(none)'));
       }
-    } catch (eRmH9bp) { }
+    } catch (eRmH9bp) { /* ignore */ }
     if (!wideCur) { probeIncomplete('no-wide-cursor'); return; }
     if (!lastAtEncoded || !lastBaseUrl || !lastHeaders) { probeIncomplete('no-meta'); return; }
     var reqTagP = captureReqTag();
@@ -676,7 +676,7 @@
         lastAtEncoded = __pMetaSavedH9b.a;
         lastBaseUrl = __pMetaSavedH9b.b;
         lastHeaders = __pMetaSavedH9b.h;
-      } catch (eRsH9b) { }
+      } catch (eRsH9b) { /* ignore */ }
       __pMetaSavedH9b = null;
     }
     pFetchPromH9b
@@ -750,7 +750,7 @@
           // сброс, чтобы не перетекать в следующий цикл/чат (прочие сбросы — смена чата).
           lastGoodWideCur = null;
           lastGoodProbeMeta = null;
-          if (optsP && typeof optsP.onTerminal === 'function') { try { optsP.onTerminal(); } catch (eCbt) { } }
+          if (optsP && typeof optsP.onTerminal === 'function') { try { optsP.onTerminal(); } catch (eCbt) { /* ignore */ } }
         } else {
           probeIncomplete('probe-non-terminal newOlder=' + newOlder + ' cursorFound=' + (pCursorWide ? 'yes' : 'no'));
         }

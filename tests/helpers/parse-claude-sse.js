@@ -38,7 +38,7 @@ function parseClaudeSSE(raw) {
       if (data.type === 'message_stop') {
         stopped = true;
       }
-    } catch (e) {}
+    } catch (e) { /* ignore */ }
   }
 
   return { model: model, text: textParts.join(''), stopped: stopped, rateLimit5h: rateLimit5h };

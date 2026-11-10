@@ -104,7 +104,7 @@ const MOVED_BLOCKS = [
     // (i всё равно переинициализируется в 0). Прецедент переснятия пина: 5159d21 / 7fde37a.
     name: 'collectHeaders+stripCacheParams', start: '  // ===== СЕКЦИЯ 10B: ХЕЛПЕРЫ ДЛЯ MERGE-ДОЗАПРОСА =====',
     sigs: ['  function collectHeaders(input, init) {', '  function stripCacheParams(url) {'],
-    sha: '75c322a1b848fc5da7a67e9fd474bd30936e001fb427b6e561da0d951ca975a7'
+    sha: '225d68f040d58dfab5a57afaa412916bd63b2c67a58be9bf46fbe2fb1b4d80c4'
   },
   {
     name: 'historyUrlForConv', start: '  // URL пригоден для дозапроса, только если он про историю И про ЭТОТ чат.',
@@ -142,7 +142,7 @@ const MOVED_BLOCKS = [
     sigs: ['  function scheduleHistoryRefetch() {'],
     // Step E.2c-B2b-2 (swallowSoft): тот же catch переведён на канал B —
     // `swallowSoft(e, 'deepseek:scheduleHistoryRefetch')`; pin пересчитан по новой версии.
-    sha: 'eb14f21ec06057a2262e49703b3866e203c1889e43e38548456bd87ceee76398'
+    sha: '92a86cc37afe95365d4d4722184e4a17c427e79e412ccc0591217c8564ba74b9'
   }
 ];
 

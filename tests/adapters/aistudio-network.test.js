@@ -103,7 +103,6 @@ function makeSandbox(options) {
   const argNames = Object.keys(ctx);
   const argValues = argNames.map(function (k) { return ctx[k]; });
   const source = opts.source === undefined ? SOURCE : opts.source;
-  // eslint-disable-next-line no-new-func
   const factory = Function.apply(null, argNames.concat([source + '\nreturn window.AiCmAistudioIntercept;\n']));
   const api = factory.apply(null, argValues);
 

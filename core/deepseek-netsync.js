@@ -209,7 +209,7 @@
             count: turns, textLen: '(вне области)'
           });
         }
-      } catch (eO22s1467) { }
+      } catch (eO22s1467) { /* ignore */ }
       emitBaseSnapshot(Math.max(lastBaseServerTokens || 0, sseRealtimeFinalTokens || 0), sseModelType || lastBaseChatMode);
       res.ok = turns > 0; res.reason = 'merged';
       console.log('[deepseek-intercept] экспорт: сетевой дозапрос применён — ходов в базе=' + turns +
@@ -231,7 +231,7 @@
     function reply(status) {
       if (done) return;
       done = true;
-      try { clearTimeout(timer); } catch (eT) { }
+      try { clearTimeout(timer); } catch (eT) { /* ignore */ }
       try {
         window.dispatchEvent(new CustomEvent('ai-cm-deepseek-net-sync-done', {
           detail: {
@@ -287,7 +287,7 @@
         exportNetSync(d.requestId, d.convId || currentConvId || getConvId() || '', d.timeoutMs);
       } catch (eNs) { swallowSoft(eNs, 'deepseek:netSyncBridge'); }
     });
-  } catch (eNetBridge) { }
+  } catch (eNetBridge) { /* ignore */ }
 
       Fn.liveTurnRecord = liveTurnRecord;
       Fn.netSyncNeeded = netSyncNeeded;

@@ -260,7 +260,7 @@ beforeEach(() => {
 
 afterEach(() => {
   if (activeSandbox && activeSandbox.api && activeSandbox.api.stopWatch) {
-    try { activeSandbox.api.stopWatch(); } catch (eCleanup) { }
+    try { activeSandbox.api.stopWatch(); } catch (eCleanup) { /* ignore */ }
   }
   activeSandbox = null;
   document.body.innerHTML = '';

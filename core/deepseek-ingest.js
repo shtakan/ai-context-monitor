@@ -194,7 +194,7 @@
                   count: Object.keys(turnsMap).length, textLen: '(вне области)'
                 });
               }
-            } catch (eO22s560) { }
+            } catch (eO22s560) { /* ignore */ }
             emitBaseSnapshot(lastBaseServerTokens, lastBaseChatMode);
           }
         }
@@ -362,7 +362,7 @@
             count: Object.keys(turnsMap).length, textLen: '(вне области)'
           });
         }
-      } catch (eO22s692) { }
+      } catch (eO22s692) { /* ignore */ }
       // Step D.10 (Вариант B): ПРИНЯТУЮ цепочку отдаём файловому модулю — он заводит
       // ходы-заглушки для сообщений из одних вложений, ставит файлы в FIFO-очередь и
       // возвращает уже скачанные тексты в ТОЛЬКО ЧТО пересобранный turnsMap (повторный

@@ -75,12 +75,12 @@
                   ((document.body && document.body.className) || '');
         if (/(^|\s)dark-theme(\s|$)/.test(cls)) dark = true;
         else if (/(^|\s)light-theme(\s|$)/.test(cls)) dark = false;
-      } catch (eTh0) { }
+      } catch (eTh0) { /* ignore */ }
       if (dark === null) {
         try {
           var hostElG = document.querySelector('.theme-host.dark-theme, .theme-host.light-theme');
           if (hostElG) dark = hostElG.classList.contains('dark-theme');
-        } catch (eTh0b) { }
+        } catch (eTh0b) { /* ignore */ }
       }
       if (dark === null) {
         try {
@@ -93,7 +93,7 @@
             var isTransparentG = (mG[4] !== undefined && parseFloat(mG[4]) === 0);
             if (!isTransparentG && (0.2126 * (+mG[1]) + 0.7152 * (+mG[2]) + 0.0722 * (+mG[3])) < 100) { dark = true; break; }
           }
-        } catch (eTh1) { }
+        } catch (eTh1) { /* ignore */ }
       }
     } else {
       try {
@@ -104,7 +104,7 @@
           var isTransparent = (m[4] !== undefined && parseFloat(m[4]) === 0);
           if (!isTransparent) dark = (0.2126 * (+m[1]) + 0.7152 * (+m[2]) + 0.0722 * (+m[3])) < 100;
         }
-      } catch (eTh1b) { }
+      } catch (eTh1b) { /* ignore */ }
     }
     if (dark === null) {
       try { dark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); } catch (eTh2) { dark = false; }
@@ -124,7 +124,7 @@
       if (sp) { sp.style.borderColor = th.ring; sp.style.borderTopColor = th.fg; }
       var lb = D.aiCmScrollOverlay.querySelector('.ai-cm-loader-label');
       if (lb) lb.style.color = th.fg;
-    } catch (eAt) { }
+    } catch (eAt) { /* ignore */ }
   }
   function aiCmWatchOverlayTheme(on) {
     try {
@@ -136,7 +136,7 @@
         if (document.body) obs.observe(document.body, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
         // H22: тема сервиса может жить на элементе-хосте .theme-host — следим и за ним
         var hostElW = null;
-        try { hostElW = document.querySelector('.theme-host'); } catch (eQw) { }
+        try { hostElW = document.querySelector('.theme-host'); } catch (eQw) { /* ignore */ }
         if (hostElW && hostElW !== document.documentElement && hostElW !== document.body) {
           obs.observe(hostElW, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
         }
@@ -150,7 +150,7 @@
         }
         aiCmOverlayThemeWatcher = null;
       }
-    } catch (eWt) { }
+    } catch (eWt) { /* ignore */ }
   }
   function aiCmSetScrollOverlay(on, reason, expectSeq) {
     try {
@@ -187,7 +187,7 @@
         aiCmWatchOverlayTheme(false); // H22: наблюдатель темы больше не нужен
         debugLog('log', '[AI CM][visibility] overlay-off reason=' + reason + ' convId=' + (D.getConvId() || '(none)'));
       }
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
   }
   // v70-совместимость: страховка видимости теперь только снимает оверлей
   // (SPA conv-switch, pagehide, visibilitychange). Скрытия DOM больше нет — таймер не нужен.
@@ -196,12 +196,12 @@
   }
   try {
     window.addEventListener('pagehide', function () { forceRestoreVisibility('pagehide'); });
-  } catch (ePh) { }
+  } catch (ePh) { /* ignore */ }
   try {
     // v80 (O1): безусловное снятие оверлея при любом изменении видимости вкладки —
     // оверлей не должен переживать уход со страницы/блокировку экрана.
     document.addEventListener('visibilitychange', function () { forceRestoreVisibility('visibilitychange'); });
-  } catch (eVc80) { }
+  } catch (eVc80) { /* ignore */ }
 
   var Api = {
     __bind: __bind,

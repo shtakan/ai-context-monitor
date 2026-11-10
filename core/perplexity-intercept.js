@@ -22,7 +22,7 @@ import { parsePerplexityThread, stripPerplexityHistoryTruncation } from '../util
   window.__aiCmPerplexityInterceptInstalled = true;
 
   // v31: флаг «Подробные логи» транслируется из content.js (ISOLATED) через CustomEvent
-  try { window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDebugLogs(!!(ev && ev.detail)); }); } catch (e) {}
+  try { window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDebugLogs(!!(ev && ev.detail)); }); } catch (e) { /* ignore */ }
 
   console.log('[perplexity-intercept] parser available: ' + typeof parsePerplexityThread);
 
@@ -111,7 +111,7 @@ import { parsePerplexityThread, stripPerplexityHistoryTruncation } from '../util
       if (typeof a === 'string') { raw = a; }
       else if (a && typeof a.url === 'string') { raw = a.url; }
       else if (a) { raw = String(a); }
-      try { raw = new URL(raw, location.href).href; } catch (e) { }
+      try { raw = new URL(raw, location.href).href; } catch (e) { /* ignore */ }
       return raw;
     } catch (e) { return ''; }
   }
@@ -175,7 +175,7 @@ import { parsePerplexityThread, stripPerplexityHistoryTruncation } from '../util
       var m = path.match(/\/(?:search|thread|session|rest\/thread|rest\/session|api\/thread)\/([^\/?#]+)/);
       if (!m) return '';
       var raw = m[1];
-      try { raw = decodeURIComponent(raw); } catch (eD) { }
+      try { raw = decodeURIComponent(raw); } catch (eD) { /* ignore */ }
       return String(raw).trim();
     } catch (e) { return ''; }
   }
@@ -264,7 +264,7 @@ import { parsePerplexityThread, stripPerplexityHistoryTruncation } from '../util
     clearActiveRetry(); // v31: при смене convId страховой интервал очищается
     if (bootstrapTimer) { clearTimeout(bootstrapTimer); bootstrapTimer = null; }
     debugLog('log', '[perplexity-intercept] смена треда → состояние сброшено (slug=' + (currentConvId || '(не тред)') + ')');
-    try { window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); } catch (e) {}
+    try { window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); } catch (e) { /* ignore */ }
     bootstrapTimer = setTimeout(function () { bootstrapSnapshot(); }, 1500);
   }
 
@@ -275,11 +275,11 @@ import { parsePerplexityThread, stripPerplexityHistoryTruncation } from '../util
 
   try {
     var origPush = history.pushState;
-    if (origPush) { history.pushState = function () { var r = origPush.apply(this, arguments); try { checkConvChange(); } catch (e) {} return r; }; }
+    if (origPush) { history.pushState = function () { var r = origPush.apply(this, arguments); try { checkConvChange(); } catch (e) { /* ignore */ } return r; }; }
     var origReplace = history.replaceState;
-    if (origReplace) { history.replaceState = function () { var r = origReplace.apply(this, arguments); try { checkConvChange(); } catch (e) {} return r; }; }
-    window.addEventListener('popstate', function () { try { checkConvChange(); } catch (e) {} });
-  } catch (e) {}
+    if (origReplace) { history.replaceState = function () { var r = origReplace.apply(this, arguments); try { checkConvChange(); } catch (e) { /* ignore */ } return r; }; }
+    window.addEventListener('popstate', function () { try { checkConvChange(); } catch (e) { /* ignore */ } });
+  } catch (e) { /* ignore */ }
 
   // ---- bootstrap ----
   function bootstrapSnapshot() {
@@ -525,7 +525,7 @@ import { parsePerplexityThread, stripPerplexityHistoryTruncation } from '../util
       if (method === 'GET' && isPerplexityUrl(url) && !isExcludedUrl(url) && url.indexOf(guardToken) === -1) {
         xhr.addEventListener('loadend', function () {
           var respUrl = this.responseURL;
-          try { respUrl = new URL(respUrl || url, location.href).href; } catch (e) {}
+          try { respUrl = new URL(respUrl || url, location.href).href; } catch (e) { /* ignore */ }
           console.log("[perplexity-intercept] diag: XHR same-host GET", (respUrl || url).slice(0, 140));
           try {
             var data = JSON.parse(xhr.responseText);

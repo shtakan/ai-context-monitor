@@ -459,7 +459,7 @@ async function renderPdfForm(history) {
     return document.getElementById('print-content').innerHTML;
   } finally {
     jest.useRealTimers();
-    try { delete window.MarkdownRenderer; } catch (e) { }
+    try { delete window.MarkdownRenderer; } catch (e) { /* ignore */ }
   }
 }
 
@@ -485,8 +485,8 @@ beforeEach(() => {
 
 afterEach(() => {
   document.body.innerHTML = '';
-  try { delete window.MarkdownRenderer; } catch (e) { }
-  try { delete window.print; } catch (e) { }
+  try { delete window.MarkdownRenderer; } catch (e) { /* ignore */ }
+  try { delete window.print; } catch (e) { /* ignore */ }
 });
 
 /* =====================================================================================

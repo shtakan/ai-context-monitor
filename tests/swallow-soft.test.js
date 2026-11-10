@@ -63,7 +63,7 @@ beforeEach(() => {
   consoleError = jest.spyOn(console, 'error').mockImplementation(function () { });
   globalThis.__aiCmLogRing = [];
   delete globalThis.__aiCmDebugLogs;
-  try { window.sessionStorage.clear(); } catch (e) { }
+  try { window.sessionStorage.clear(); } catch (e) { /* ignore */ }
   Api.setDebugLogs(false);
 });
 
@@ -73,12 +73,12 @@ afterEach(() => {
   consoleError.mockRestore();
   globalThis.__aiCmLogRing = [];
   delete globalThis.__aiCmDebugLogs;
-  try { window.sessionStorage.clear(); } catch (e) { }
+  try { window.sessionStorage.clear(); } catch (e) { /* ignore */ }
   Api.setDebugLogs(false);
 });
 
 function gateOn() {
-  try { window.sessionStorage.setItem('aiCmDebug', '1'); } catch (e) { }
+  try { window.sessionStorage.setItem('aiCmDebug', '1'); } catch (e) { /* ignore */ }
 }
 
 describe('Step E.2c-A: swallowSoft — канал B', () => {

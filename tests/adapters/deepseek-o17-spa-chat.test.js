@@ -216,7 +216,7 @@ function makeStand(startUrl, opts) {
     }),
     history: (cached) => window.fetch(historyUrl(CID, cached), { headers: { Authorization: 'Bearer t' } }),
     spa: () => window.history.pushState({}, '', '/a/chat/s/' + CID),
-    close: () => { try { window.close(); } catch (e) { } }
+    close: () => { try { window.close(); } catch (e) { /* ignore */ } }
   };
 }
 

@@ -343,6 +343,20 @@ export default [
         ...globals.node,
       },
     },
-    rules: {},
+    // `no-empty` для .ts выключен ОСОЗНАННО (chore-cleanup пустых блоков):
+    // preprocess стирает типы через esbuild, а esbuild вырезает и обычные
+    // комментарии — до линтера доходят только legal-комментарии `/*! … */`.
+    // Поэтому заглушка `/* ignore */` внутри блока до правила НЕ доходит, и
+    // правило флагало блоки, которые в исходнике уже задокументированы
+    // комментарием (пример: core/content.ts:2675, core/export-manager.ts:1430).
+    // Глушить это inline-директивой тоже нельзя — она вырезается тем же
+    // preprocess. Молчаливые catch в core//adapters/ (включая .ts) независимо
+    // держит Jest-гейт tests/catch-hygiene.test.js, а пустые блоки .js-исходников
+    // закрыты комментарием `/* ignore */` и правилом ниже.
+    // Включить обратно — вместе с переводом processora на comment-preserving
+    // транспиляцию (ts.transpileModule с removeComments:false).
+    rules: {
+      'no-empty': 'off',
+    },
   },
 ];

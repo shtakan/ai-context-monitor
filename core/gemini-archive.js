@@ -487,7 +487,7 @@
       debugLog('log', '[AI CM][Gemini][cache-refresh] уточнение после кэша convId=' + (current || want || '(none)'));
       D.activeRefresh('уточнение после кэша');
     });
-  } catch (e) { }
+  } catch (e) { /* ignore */ }
 
   var Api = {
     __bind: __bind,

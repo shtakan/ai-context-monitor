@@ -72,7 +72,7 @@
       resetForNewConversation();
       // v4z: инвалидация done-флага покинутого чата — при возврате лоадер обязан
       // перезапуститься (DOM уничтожен, «already-done» переживать навигацию не должен)
-      try { delete loaderDoneMap[oldId]; } catch (e) { }
+      try { delete loaderDoneMap[oldId]; } catch (e) { /* ignore */ }
       if (loaderRunningFor === oldId) { loaderRunningFor = null; notifyLoaderState(oldId, false); }
       // v4z: SPA-переход на /app/<id> → автозапуск лоадера полной истории нового чата
       try { maybeStartLoader(); } catch (e) { swallowSoft(e, 'gemini:checkConvChange-loader-start'); }
@@ -95,7 +95,7 @@
     if (origPush) {
       history.pushState = function () {
         var r = origPush.apply(this, arguments);
-        try { checkConvChange(); } catch (e) { }
+        try { checkConvChange(); } catch (e) { /* ignore */ }
         return r;
       };
     }
@@ -103,11 +103,11 @@
     if (origReplace) {
       history.replaceState = function () {
         var r = origReplace.apply(this, arguments);
-        try { checkConvChange(); } catch (e) { }
+        try { checkConvChange(); } catch (e) { /* ignore */ }
         return r;
       };
     }
-    window.addEventListener('popstate', function () { try { checkConvChange(); } catch (e) { } });
+    window.addEventListener('popstate', function () { try { checkConvChange(); } catch (e) { /* ignore */ } });
     // LOW-4 (аудит перед релизом): passive:true — обработчик только ЗАПИСЫВАЕТ время
     // скролла (scrollRecentUntil) и никогда не вызывает preventDefault, поэтому браузер
     // не обязан ждать его завершения перед прокруткой (нет scroll-jank). capture:true
@@ -116,7 +116,7 @@
     document.addEventListener('scroll', function () {
       scrollRecentUntil = Date.now() + 2000;
     }, { capture: true, passive: true });
-  } catch (e) { }
+  } catch (e) { /* ignore */ }
 
       Fn.checkConvChange = checkConvChange;
     }

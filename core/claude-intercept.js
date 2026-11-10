@@ -17,11 +17,11 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
   window.__aiCmClaudeInterceptInstalled = true;
 
   // v31: флаг «Подробные логи» транслируется из content.js (ISOLATED) через CustomEvent
-  try { window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDebugLogs(!!(ev && ev.detail)); }); } catch (e) {}
+  try { window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDebugLogs(!!(ev && ev.detail)); }); } catch (e) { /* ignore */ }
 
   // v36: trace-логи для диагностики регрессий (видны ТОЛЬКО при флаге «Подробные логи»)
   function traceLog(msg) {
-    try { if (window.__aiCmDebugLogs) console.info('[AI CM][Claude][trace] ' + msg); } catch (e) {}
+    try { if (window.__aiCmDebugLogs) console.info('[AI CM][Claude][trace] ' + msg); } catch (e) { /* ignore */ }
   }
 
   var originalFetch = window.fetch;
@@ -121,7 +121,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
   var internalFetchUrls = {};
   function markInternalUrl(u) {
     internalFetchUrls[u] = true;
-    setTimeout(function () { try { delete internalFetchUrls[u]; } catch (e) {} }, 60000);
+    setTimeout(function () { try { delete internalFetchUrls[u]; } catch (e) { /* ignore */ } }, 60000);
   }
   // v34-C: скан тел запросов на предмет pasted-текста
   var PASTED_TEXT_FIELDS = ['extracted_text', 'preview_text', 'text_content', 'content_text', 'pasted_text', 'paste', 'text', 'content', 'body', 'value', 'contents'];
@@ -138,7 +138,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       if (val.file_kind) {
         try {
           debugLog('log', '[AI CM][Claude][pasted] req-keys keys=' + Object.keys(val).join('|'));
-        } catch (e) {}
+        } catch (e) { /* ignore */ }
       }
       for (var fi = 0; fi < PASTED_TEXT_FIELDS.length; fi++) {
         var fv = null;
@@ -214,9 +214,9 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
   function decompressProbe(url, u8) {
     // v44-A1: след старта probe — всегда
     var dLen = -1;
-    try { dLen = (u8 && typeof u8.byteLength === 'number') ? u8.byteLength : ((u8 && u8.length) || -1); } catch (eLen) {}
+    try { dLen = (u8 && typeof u8.byteLength === 'number') ? u8.byteLength : ((u8 && u8.length) || -1); } catch (eLen) { /* ignore */ }
     var ctorS = '';
-    try { ctorS = Object.prototype.toString.call(u8).replace(/^\[object /, '').replace(/\]$/, '').slice(0, 40); } catch (eCt) {}
+    try { ctorS = Object.prototype.toString.call(u8).replace(/^\[object /, '').replace(/\]$/, '').slice(0, 40); } catch (eCt) { /* ignore */ }
     traceLog('decomp-start url=' + String(url).slice(0, 160) + ' len=' + dLen + ' ctor=' + ctorS);
     try {
       // v45-A3: тело меньше 64 байт (или слишком большое) — all-failed без попыток
@@ -240,7 +240,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
             .then(function (text) {
               try {
                 var prev = '';
-                try { prev = (String(text).match(/[\x20-\x7E\u00A0-\uD7FF\uE000-\uFFFD]{4,}/g) || []).join('|').slice(0, 150); } catch (eP) {}
+                try { prev = (String(text).match(/[\x20-\x7E\u00A0-\uD7FF\uE000-\uFFFD]{4,}/g) || []).join('|').slice(0, 150); } catch (eP) { /* ignore */ }
                 if (prev) {
                   traceLog('body-decomp url=' + String(url).slice(0, 160) +
                     ' format=' + fmt + ' ok=1 outLen=' + text.length + ' preview=' + prev);
@@ -261,7 +261,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
                       debugLog('log', '[AI CM][Claude][pasted] req-attach name=' + dName +
                         ' size=' + dSize + ' textLen=' + dText.length);
                     }
-                  } catch (eDA) {}
+                  } catch (eDA) { /* ignore */ }
                 } else {
                   setTimeout(function () { tryNext(idx + 1); }, 0);
                 }
@@ -323,7 +323,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
           var v = pairs[pi].substring(eq + 1);
           try {
             v = decodeURIComponent(v.replace(/\+/g, ' '));
-          } catch (e2) {}
+          } catch (e2) { /* ignore */ }
           if (v.charAt(0) === '{' || v.charAt(0) === '[') {
             try { roots.push(JSON.parse(v)); } catch (e3) { swallow(e3, 'claude:processPostBody-json-parse'); }
           }
@@ -464,16 +464,16 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
                 if (hkl === 'content-type') hCt = String(hv);
                 else if (hkl === 'content-encoding') hCe = String(hv);
               });
-            } catch (eF2) {}
+            } catch (eF2) { /* ignore */ }
           }
         }
         traceLog('req-headers url=' + String(url).slice(0, 160) +
           ' ct=' + hCt.slice(0, 60) + ' ce=' + hCe.slice(0, 60));
-      } catch (eH) {}
+      } catch (eH) { /* ignore */ }
       var diag = '';
       if (kind === 'other') {
         var ctorName = '';
-        try { ctorName = Object.prototype.toString.call(body).replace(/^\[object /, '').replace(/\]$/, '').slice(0, 40); } catch (eC) {}
+        try { ctorName = Object.prototype.toString.call(body).replace(/^\[object /, '').replace(/\]$/, '').slice(0, 40); } catch (eC) { /* ignore */ }
         diag = ' bodyCtor=' + (ctorName || '?') + ' inputIsRequest=' + inputIsRequest;
         // v42: решающая диагностика бинарных тел
         var prev = binaryPreview(body);
@@ -539,7 +539,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     clearActiveRetry(); // v31: при смене convId страховой интервал очищается
     if (bootstrapTimer) { clearTimeout(bootstrapTimer); bootstrapTimer = null; }
     debugLog('log', '[claude-intercept] смена чата → состояние сброшено (convId=' + (currentConvId || '(не чат)') + ')');
-    try { window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); } catch (e) {}
+    try { window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); } catch (e) { /* ignore */ }
     // v36: колбэк таймера обёрнут — бросок был бы uncaught
     bootstrapTimer = setTimeout(function () {
       try { bootstrapSnapshot(); } catch (bsErr) { debugLog('error', '[AI CM][Claude][error] bootstrap timer (SPA): ' + bsErr.message); }
@@ -562,7 +562,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     if (origPush) {
       history.pushState = function () {
         var r = origPush.apply(this, arguments);
-        try { checkConvChange(); } catch (e) {}
+        try { checkConvChange(); } catch (e) { /* ignore */ }
         return r;
       };
     }
@@ -570,12 +570,12 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     if (origReplace) {
       history.replaceState = function () {
         var r = origReplace.apply(this, arguments);
-        try { checkConvChange(); } catch (e) {}
+        try { checkConvChange(); } catch (e) { /* ignore */ }
         return r;
       };
     }
-    window.addEventListener('popstate', function () { try { checkConvChange(); } catch (e) {} });
-  } catch (e) {}
+    window.addEventListener('popstate', function () { try { checkConvChange(); } catch (e) { /* ignore */ } });
+  } catch (e) { /* ignore */ }
 
   // ---- bootstrap: активный запрос снимка при загрузке (сервер рендерит HTML без fetch) ----
   function bootstrapSnapshot() {
@@ -677,7 +677,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       var w = pa.image_width || pa.width;
       var h = pa.image_height || pa.height;
       if (w && h) return Math.ceil((w * h) / 750);
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
     return 1500;
   }
 
@@ -727,7 +727,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     try {
       var now = Date.now();
       while (pasteQueue.length && now - pasteQueue[0].ts > PASTE_TTL_MS) pasteQueue.shift();
-    } catch (eP) {}
+    } catch (eP) { /* ignore */ }
   }
   function utf8ByteLen(s) {
     try { return new TextEncoder().encode(s).length; } catch (eE) { return -1; }
@@ -777,7 +777,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
           debugLog('log', '[AI CM][Claude][pasted] paste-recv len=' + d.text.length + ' queueSize=' + pasteQueue.length);
         } catch (e2) { swallow(e2, 'claude:paste-message-listener'); }
       });
-    } catch (eM) {}
+    } catch (eM) { /* ignore */ }
   }
   function scheduleFileTextFetch(f, fileName) {
     var uuid = f.file_uuid || '';
@@ -816,7 +816,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
         ' utf16=[' + qU16.join(',') + ']' +
         ' queue=[' + qLens.join(',') + ']' +
         ' file_kind=' + pasteKind);
-    } catch (ePC) {}
+    } catch (ePC) { /* ignore */ }
     var ptext = takePastedFromQueue(uuid, pasteSize);
     if (ptext) {
       fileTextCacheInsert(uuid, ptext);
@@ -844,7 +844,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
         fileFetchInFlight[uuid] = false;
         if (!r || !r.ok) { fileTextCacheInsert(uuid, null); logPastedDebug(f, uuid, 0, 'http-' + (r ? r.status : 'none')); return; }
         var ct = '';
-        try { ct = (r.headers && r.headers.get('content-type')) || ''; } catch (e) { }
+        try { ct = (r.headers && r.headers.get('content-type')) || ''; } catch (e) { /* ignore */ }
         return r.clone().text().then(function (body) {
           var ctLower = String(ct).toLowerCase();
           var trimmed = String(body || '').trim();
@@ -910,7 +910,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
         reEmitPending = false;
         try { reEmitWithFileText(fileName); } catch (eSR) { debugLog('error', '[AI CM][Claude][error] scheduleReEmit: ' + eSR.message); }
       }, 50);
-    } catch (eS) {}
+    } catch (eS) { /* ignore */ }
   }
 
   // Встраивает вложения из msg.files/attachments в разобранные сообщения (мутирует parsed).
@@ -1089,7 +1089,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
         var nodeKeys = '';
         try {
           nodeKeys = Object.keys(msg || {}).slice(0, 20).map(function (s) { return String(s).slice(0, 40); }).join('|');
-        } catch (eNK) {}
+        } catch (eNK) { /* ignore */ }
         traceLog('parse-node kind=user textLen=' + text.length +
           ' attach=' + (filesN + atts.length) +
           ' keys=' + nodeKeys +
@@ -1131,7 +1131,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     lastHistoryRaw = data;
     lastHistoryRawConvId = currentConvId; // v48: привязка raw-снимка к чату
     var amStats = { extrasBlocks: 0, histAttachCount: 0 };
-    try { amStats = applyMessageFiles(parsed, messages, seenLocal) || amStats; } catch (eAM2) {}
+    try { amStats = applyMessageFiles(parsed, messages, seenLocal) || amStats; } catch (eAM2) { /* ignore */ }
     // v53-4: сводка парса — на каком проходе умножение видно сразу
     traceLog('parse-summary msgs=' + parsed.count +
       ' rawLen=' + (parsed.text || '').length +
@@ -1202,7 +1202,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
         validEmitConvId = parsed.convId || currentConvId;
         validEmitCount = parsed.count;
       }
-    } catch (e) {}
+    } catch (e) { /* ignore */ }
   }
 
   // ---- H23: ре-эмит ретейна по handshake (гонка «ответ истории раньше слушателя») ----
@@ -1223,20 +1223,20 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       ' convId=' + (lastEmitDetailConvId || '-') + ' textLen=' + ((lastEmitDetail.text || '').length));
     console.log('[claude-intercept] ' + String.fromCodePoint(0x21BA) + ' ре-эмит снимка по ' + reason +
       ': ' + (lastEmitDetail.count || 0) + ' сообщений');
-    try { window.dispatchEvent(new CustomEvent('ai-cm-full-history', { detail: lastEmitDetail })); } catch (e) {}
+    try { window.dispatchEvent(new CustomEvent('ai-cm-full-history', { detail: lastEmitDetail })); } catch (e) { /* ignore */ }
   }
   try {
     window.addEventListener('ai-cm-content-ready', function () { reEmitLastSnapshot('content-ready'); });
-  } catch (eCr) {}
+  } catch (eCr) { /* ignore */ }
   try {
     window.addEventListener('ai-cm-request-emit', function () { reEmitLastSnapshot('request-emit'); });
-  } catch (eRe) {}
+  } catch (eRe) { /* ignore */ }
 
   // ---- обработка ответа истории ----
   function handleHistoryResponse(response, when, expectedConvId) {
     var copy = response.clone();
     var st = 0;
-    try { st = response.status; } catch (e) {}
+    try { st = response.status; } catch (e) { /* ignore */ }
     // v37: читаем ТЕКСТ клона (не json()) — видны status и bodyLen; тело не потребляется дважды
     copy.text().then(function (rawText) {
       var bodyLen = (rawText || '').length;
@@ -1433,7 +1433,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       if (body && body.buffer instanceof ArrayBuffer && typeof body.byteLength === 'number') {
         return new Uint8Array(body.buffer, body.byteOffset || 0, body.byteLength);
       }
-    } catch (e) {}
+    } catch (e) { /* ignore */ }
     return null;
   }
   function binaryPreview(body) {
@@ -1458,14 +1458,14 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       promise.then(function (resp) {
         try {
           var cl = '-';
-          try { cl = (resp && resp.headers && resp.headers.get('content-length')) || '-'; } catch (e1) {}
+          try { cl = (resp && resp.headers && resp.headers.get('content-length')) || '-'; } catch (e1) { /* ignore */ }
           traceLog('upload-candidate ' + method + ' ' + String(url).slice(0, 120) +
             ' status=' + (resp ? resp.status : 'none') + ' bodyLen=' + cl);
-        } catch (e2) {}
+        } catch (e2) { /* ignore */ }
       }).catch(function () {
         traceLog('upload-candidate ' + method + ' ' + String(url).slice(0, 120) + ' status=error');
       });
-    } catch (e) {}
+    } catch (e) { /* ignore */ }
   }
 
   // ---- перехват fetch ----
@@ -1493,7 +1493,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
         // onfreeze: синхронный бросок нативного fetch гасится в fetchGuarded
         return fetchGuarded(originalFetch, this, [input, init]);
       }
-    } catch (e) {}
+    } catch (e) { /* ignore */ }
 
     // v34-C: тела POST на /api/ сканируем на pasted-текст (оригинал не потребляем)
     try { capturePostBody(input, init); } catch (e) { swallow(e, 'claude:fetch-capture-entry'); }
@@ -1661,7 +1661,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
             var diagX = '';
             if (kind === 'other') {
               var ctorNameX = '';
-              try { ctorNameX = Object.prototype.toString.call(bodyValue).replace(/^\[object /, '').replace(/\]$/, '').slice(0, 40); } catch (eC2) {}
+              try { ctorNameX = Object.prototype.toString.call(bodyValue).replace(/^\[object /, '').replace(/\]$/, '').slice(0, 40); } catch (eC2) { /* ignore */ }
               diagX = ' bodyCtor=' + (ctorNameX || '?') + ' inputIsRequest=0';
               // v42: решающая диагностика бинарных тел
               var prevX = binaryPreview(bodyValue);
@@ -1681,10 +1681,10 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
               xhr.addEventListener('loadend', function () {
                 try {
                   var blen = -1;
-                  try { blen = (typeof xhr.responseText === 'string') ? xhr.responseText.length : -1; } catch (eR) {}
+                  try { blen = (typeof xhr.responseText === 'string') ? xhr.responseText.length : -1; } catch (eR) { /* ignore */ }
                   traceLog('upload-candidate ' + method + ' ' + url.slice(0, 120) +
                     ' status=' + (xhr.status || 'none') + ' bodyLen=' + blen);
-                } catch (eL) {}
+                } catch (eL) { /* ignore */ }
               });
             }
           }

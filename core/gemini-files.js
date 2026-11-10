@@ -121,7 +121,7 @@
     try {
       if (D && typeof D.getConvId === 'function') return gfStr(D.getConvId());
       if (D && typeof D.currentChatId === 'string') return D.currentChatId;
-    } catch (eConv) { }
+    } catch (eConv) { /* ignore */ }
     return '';
   }
 
@@ -135,7 +135,7 @@
     try {
       if (typeof aiCmDiagLine === 'function') { aiCmDiagLine('gemini-files-' + tag, fields); return; }
       if (D && typeof D.diagLine === 'function') D.diagLine('files-' + tag, fields);
-    } catch (eDiag) { }
+    } catch (eDiag) { /* ignore */ }
   }
 
   function gfWarn(tag, msg, e) {
@@ -225,7 +225,7 @@
         var ref = gfRefFromNode(arr[i]);
         if (ref) { ref.pos = i; out.push(ref); }
       }
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
     return out;
   }
 
@@ -469,7 +469,7 @@
   function gfHeader(res, name) {
     try {
       if (res && res.headers && typeof res.headers.get === 'function') return gfStr(res.headers.get(name));
-    } catch (eH) { }
+    } catch (eH) { /* ignore */ }
     return '';
   }
 
@@ -490,8 +490,8 @@
         var p = res.body.cancel();
         if (p && typeof p.catch === 'function') p.catch(function () { });
       }
-    } catch (eCancel) { }
-    try { if (ctrl) ctrl.abort(); } catch (eAbort) { }
+    } catch (eCancel) { /* ignore */ }
+    try { if (ctrl) ctrl.abort(); } catch (eAbort) { /* ignore */ }
   }
 
   function gfCapText(text) {
@@ -786,7 +786,7 @@
   function gfUtf8(b) {
     try {
       if (typeof TextDecoder === 'function') return new TextDecoder('utf-8').decode(b);
-    } catch (eTd) { }
+    } catch (eTd) { /* ignore */ }
     var s = '';
     for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
     return s;

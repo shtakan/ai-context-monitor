@@ -201,7 +201,7 @@ function makeO1(over) {
 }
 
 beforeEach(() => {
-  try { window.sessionStorage.removeItem('aiCmDebug'); } catch (e) { }
+  try { window.sessionStorage.removeItem('aiCmDebug'); } catch (e) { /* ignore */ }
   window.__aiCmDebugLogs = false;
 });
 

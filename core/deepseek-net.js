@@ -193,7 +193,7 @@
           if (this.__aiCmDs && this.__aiCmDs.headers) {
             this.__aiCmDs.headers[name] = value;
           }
-        } catch (e) { }
+        } catch (e) { /* ignore */ }
         return originalSetRequestHeader.apply(this, arguments);
       };
     }

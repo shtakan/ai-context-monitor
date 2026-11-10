@@ -110,7 +110,7 @@ const MOVED_BLOCKS = [
     name: 'XHR-хук', zone: 'bind',
     start: '  if (originalXHROpen && originalXHRSend) {',
     end: '    }\n  }\n  Fn.__bind = __bind;',
-    sha: '5c335815b90d0f0a43bba2176dd9c1ea4a09a0ae297eb6f82b6dbca996541257'
+    sha: '70a3d433d9bae2fd7a92814bc9130f089c5297c2337a0b469c1aec5a609b85dd'
   }
 ];
 

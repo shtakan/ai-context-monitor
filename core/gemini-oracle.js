@@ -117,7 +117,7 @@
       historyFullByQuiet = true;
       reachedStart = true;
       quietIncompleteNoStart = false;
-      try { delete oracleIncompleteSeen[convIdFc]; } catch (eFcO) { }
+      try { delete oracleIncompleteSeen[convIdFc]; } catch (eFcO) { /* ignore */ }
       debugLog('log', '[AI CM][completeness] oracle=complete reason=floor-confirmed convId=' + convIdFc +
         ' msgs=' + lastBaseCount + ' floor=' + floorFc.count);
       try { emitBaseSnapshot(); } catch (eFcE) { swallowSoft(eFcE, 'gemini:stableFloorConfirm-emit'); }
@@ -131,7 +131,7 @@
     try {
       if (floorConfirmDebounceTimer) { clearTimeout(floorConfirmDebounceTimer); floorConfirmDebounceTimer = null; }
       floorConfirmDebounceTimer = setTimeout(stableFloorConfirm, 5500);
-    } catch (eFcT) { }
+    } catch (eFcT) { /* ignore */ }
   }
 
       // ---- loader-state + loader-stable-stop (v42/v53/v74/v78) ----
@@ -268,7 +268,7 @@
             historyFullByQuiet = true;
             reachedStart = true;
             quietIncompleteNoStart = false;
-            try { delete oracleIncompleteSeen[convId]; } catch (eD15s) { } // v1.6 (D15): успешный stable-stop — флаг снят
+            try { delete oracleIncompleteSeen[convId]; } catch (eD15s) { /* ignore */ } // v1.6 (D15): успешный stable-stop — флаг снят
             debugLog('log', '[AI CM][completeness] oracle=complete reason=loader-stable-stop convId=' + convId +
               ' msgs=' + lastBaseCount + ' floor=' + floorCount78);
             try { emitBaseSnapshot(); } catch (eEs74) { swallowSoft(eEs74, 'gemini:stableCheck74-emit'); }
@@ -354,7 +354,7 @@
         };
       };
     }
-  } catch (e) { }
+  } catch (e) { /* ignore */ }
 
       // ---- v61diag: синхронный мост к content.js (ISOLATED) ----
   // v61diag: синхронный мост — content.js (ISOLATED) запрашивает сводку turnsMap
@@ -365,9 +365,9 @@
       try {
         var diagSnap = (typeof window.__aiCmGeminiTurnsSnapshot === 'function') ? window.__aiCmGeminiTurnsSnapshot() : null;
         window.dispatchEvent(new CustomEvent('ai-cm-turns-snap-response', { detail: diagSnap }));
-      } catch (e) { }
+      } catch (e) { /* ignore */ }
     });
-  } catch (e) { }
+  } catch (e) { /* ignore */ }
 
       Fn.noteBaseCountChange = noteBaseCountChange;
       Fn.notifyLoaderState = notifyLoaderState;

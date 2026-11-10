@@ -99,7 +99,7 @@ const MOVED_BLOCKS = [
     end: '  // v11 (O-17): сводка turnsMap',
     // Step E.2c-B2b-2 (swallowSoft): тот же catch переведён на канал B —
     // `swallowSoft(e, 'deepseek:emitBaseSnapshot')`; pin пересчитан по новой версии.
-    sha: 'e7db6c82baf331be14ee150c50545602399bab9f06e090b3a5ebf654847788a0'
+    sha: '404e23fc8fa145198396b755f8be056ee124abac061feadc05eeb4277b035f0f'
   },
   {
     name: 'clipTurnText + turnsSnapshot', zone: 'bind',
@@ -111,7 +111,7 @@ const MOVED_BLOCKS = [
     name: 'мост turns-snap', zone: 'bind',
     start: "  try {\n    window.addEventListener('ai-cm-turns-snap-request'",
     end: '      Fn.buildDispatchSignature = buildDispatchSignature;',
-    sha: '86b138620d0b39aad4d1917d4345dd8392268a27c76433be7d386b3534ad6511'
+    sha: 'c4fc8b5c925c059d81e6696bed93879adbed9108611bf15e8533dff1dea799d8'
   }
 ];
 

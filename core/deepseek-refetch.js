@@ -96,7 +96,7 @@
           h[keys[i]] = src[keys[i]];
         }
       }
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
     return h;
   }
 
@@ -176,7 +176,7 @@
 
   // Таймер-дозапрос после смены чата (если сайт не прислал историю сам)
   function scheduleHistoryRefetch() {
-    try { clearTimeout(historyRefetchTimer); } catch (e) { }
+    try { clearTimeout(historyRefetchTimer); } catch (e) { /* ignore */ }
     historyRefetchTimer = setTimeout(function () {
       try {
         if (currentConvId && currentConvId !== lastLoadedConvId && lastAuthHeaders && (lastAuthHeaders.Authorization || lastAuthHeaders.authorization)) {

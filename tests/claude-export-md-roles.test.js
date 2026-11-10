@@ -575,8 +575,8 @@ describe('Claude md roles R6/R7: диаг-маркеры ролей — толь
   });
 
   afterAll(() => {
-    try { delete global.aiCmDiagOn; } catch (e1) { }
-    try { delete global.aiCmDiagLine; } catch (e2) { }
+    try { delete global.aiCmDiagOn; } catch (e1) { /* ignore */ }
+    try { delete global.aiCmDiagLine; } catch (e2) { /* ignore */ }
   });
 
   beforeEach(() => {
@@ -585,8 +585,8 @@ describe('Claude md roles R6/R7: диаг-маркеры ролей — толь
   });
 
   afterEach(() => {
-    try { window.sessionStorage.removeItem('aiCmDebug'); } catch (eS) { }
-    try { window.__aiCmDebugLogs = false; } catch (eW) { }
+    try { window.sessionStorage.removeItem('aiCmDebug'); } catch (eS) { /* ignore */ }
+    try { window.__aiCmDebugLogs = false; } catch (eW) { /* ignore */ }
   });
 
   test('R6 гейт включён: напечатаны все пять маркеров, значения human→user, байты md не тронуты', () => {
@@ -1010,8 +1010,8 @@ describe('Claude md roles R9/R10: диаг-маркеры claude-role-* на С�
   });
 
   afterAll(() => {
-    try { delete global.aiCmDiagOn; } catch (e1) { }
-    try { delete global.aiCmDiagLine; } catch (e2) { }
+    try { delete global.aiCmDiagOn; } catch (e1) { /* ignore */ }
+    try { delete global.aiCmDiagLine; } catch (e2) { /* ignore */ }
   });
 
   beforeEach(() => {
@@ -1020,8 +1020,8 @@ describe('Claude md roles R9/R10: диаг-маркеры claude-role-* на С�
   });
 
   afterEach(() => {
-    try { window.sessionStorage.removeItem('aiCmDebug'); } catch (eS) { }
-    try { window.__aiCmDebugLogs = false; } catch (eW) { }
+    try { window.sessionStorage.removeItem('aiCmDebug'); } catch (eS) { /* ignore */ }
+    try { window.__aiCmDebugLogs = false; } catch (eW) { /* ignore */ }
   });
 
   /** Один прогон СЫРОЙ цепочки Claude + md; строки обоих каналов — наружу. */

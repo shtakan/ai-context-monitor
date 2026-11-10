@@ -590,7 +590,7 @@ function injectIntoGlobalWindow(ctx) {
       window.__aiCmEmitChannelSeen = true;
       window.__aiCmTraceSeq = 1;
     }
-  } catch (e) { }
+  } catch (e) { /* ignore */ }
 }
 
 function runListener(ctx, detail) {

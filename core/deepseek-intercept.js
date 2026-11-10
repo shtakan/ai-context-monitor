@@ -209,7 +209,7 @@ function __aiCmDeepseekResolveModelSlug(signals) {
 }
 
 if (typeof window !== 'undefined') {
-  try { window.__aiCmDeepseekResolveModelSlug = __aiCmDeepseekResolveModelSlug; } catch (eWin) { }
+  try { window.__aiCmDeepseekResolveModelSlug = __aiCmDeepseekResolveModelSlug; } catch (eWin) { /* ignore */ }
 }
 
 (function () {
@@ -217,7 +217,7 @@ if (typeof window !== 'undefined') {
   window.__aiCmDeepseekInterceptInstalled = true;
 
   // v31: флаг «Подробные логи» транслируется из content.js (ISOLATED) через CustomEvent
-  try { window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDebugLogs(!!(ev && ev.detail)); }); } catch (e) {}
+  try { window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDebugLogs(!!(ev && ev.detail)); }); } catch (e) { /* ignore */ }
 
   var originalFetch = window.fetch;
   var OriginalXHR = window.XMLHttpRequest;
@@ -302,7 +302,7 @@ if (typeof window !== 'undefined') {
   // базы не глушится, даже если convId в URL не изменился.
   try {
     window.addEventListener('ai-cm-conversation-changed', function () { lastDispatchSig = null; });
-  } catch (eO22rs) { }
+  } catch (eO22rs) { /* ignore */ }
   // E3 (2026-10-11): модуль D.9 сообщил о ПЕРВОМ захвате активной конфигурации (пусто → значение) — ядро пересчитывает slug ходов и публикует снимок заново.
   window.addEventListener('ai-cm-deepseek-settings-captured', __aiCmDeepseekReemitAfterSettings);
   // ===== Step D.6: K2 (EMIT) вынесен в core/deepseek-emit.js =====
@@ -518,7 +518,7 @@ if (typeof window !== 'undefined') {
           count: Object.keys(turnsMap).length, textLen: '(вне области)'
         });
       }
-    } catch (eO22s1172) { }
+    } catch (eO22s1172) { /* ignore */ }
     var em = emitBaseSnapshot(serverTokens, chatMode);
     if (!loggedRealtime) {
       loggedRealtime = true;
@@ -620,7 +620,7 @@ if (typeof window !== 'undefined') {
         navType: getNavigationType()
       });
     };
-  } catch (e) { } var __aiCmIngestCtx = false; var __aiCmIngestHistoryFwd = ingestHistory; ingestHistory = function (jsonBody) { var __aiCmIngestPrev = __aiCmIngestCtx; __aiCmIngestCtx = true; try { return __aiCmIngestHistoryFwd(jsonBody); } finally { __aiCmIngestCtx = __aiCmIngestPrev; } }; if (typeof window !== 'undefined') window.addEventListener('ai-cm-deepseek-model-settings', function (ev) { var d = ev && ev.detail; if (d && d.isDefault === true && d.enabled === true) { sseConfigModelType = d.modelType; sseConfigIsDefault = true; sseConfigEnabled = true; } else { sseConfigModelType = null; sseConfigIsDefault = null; sseConfigEnabled = null; } });
+  } catch (e) { /* ignore */ } var __aiCmIngestCtx = false; var __aiCmIngestHistoryFwd = ingestHistory; ingestHistory = function (jsonBody) { var __aiCmIngestPrev = __aiCmIngestCtx; __aiCmIngestCtx = true; try { return __aiCmIngestHistoryFwd(jsonBody); } finally { __aiCmIngestCtx = __aiCmIngestPrev; } }; if (typeof window !== 'undefined') window.addEventListener('ai-cm-deepseek-model-settings', function (ev) { var d = ev && ev.detail; if (d && d.isDefault === true && d.enabled === true) { sseConfigModelType = d.modelType; sseConfigIsDefault = true; sseConfigEnabled = true; } else { sseConfigModelType = null; sseConfigIsDefault = null; sseConfigEnabled = null; } }); // eslint-disable-line no-func-assign
   // ===== Step D.1: кластер диагностики вынесен в core/deepseek-diag.js =====
   // Здесь были СЕКЦИИ 13/13D/13B: диагностический дамп снапшота (isDebugEnabled /
   // getNavigationType / determineState / dumpHistorySnapshot с маркерами o22-dispatch),

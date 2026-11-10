@@ -40,7 +40,7 @@
 
   function tagInfo(el) {
     var cn = '';
-    try { cn = String(el.className || '').trim().split(/\s+/).slice(0, 2).join('.'); } catch (e) { }
+    try { cn = String(el.className || '').trim().split(/\s+/).slice(0, 2).join('.'); } catch (e) { /* ignore */ }
     return el.tagName.toLowerCase() + (cn ? '.' + cn : '');
   }
 
@@ -78,7 +78,7 @@
       var sh = el.scrollHeight, ch = el.clientHeight, hay = '';
       if (!(ch > 0)) continue; // v88: скелет-обёртка (ch=0) — не скролл-контейнер
       if (sh <= ch + 50) continue; if (!el.closest('infinite-scroller.chat-history, [class*="chat-history"]')) continue;
-      try { hay = el.tagName + ' ' + el.className + ' ' + el.id; } catch (e) { }
+      try { hay = el.tagName + ' ' + el.className + ' ' + el.id; } catch (e) { /* ignore */ }
       if (HINT.test(hay)) { if (!hinted || sh > hinted.height()) hinted = makeScroller(el); }
     }
     if (hinted) return hinted;
@@ -162,14 +162,14 @@
       var target = (sc.mode === 'el') ? sc.el : window;
       try {
         target.dispatchEvent(new WheelEvent('wheel', { deltaY: -1200, deltaMode: 0, bubbles: true, cancelable: true }));
-      } catch (e) { }
-      try { target.dispatchEvent(new Event('scroll', { bubbles: true })); } catch (e) { }
-    } catch (e) { }
+      } catch (e) { /* ignore */ }
+      try { target.dispatchEvent(new Event('scroll', { bubbles: true })); } catch (e) { /* ignore */ }
+    } catch (e) { /* ignore */ }
   }
 
   async function settleBottom(sc) {
     for (var i = 0; i < AUTO_SETTLE_TRIES; i++) {
-      try { sc.setTop(sc.height()); } catch (e) { }
+      try { sc.setTop(sc.height()); } catch (e) { /* ignore */ }
       await D.sleep(AUTO_SETTLE_WAIT);
     }
   }
@@ -248,7 +248,7 @@
           ' msgs=' + D.baseSize() + ' (hide и принудительный скролл отключены, v75)');
         return;
       }
-    } catch (eCache75) { }
+    } catch (eCache75) { /* ignore */ }
     // v33: контейнер, скрытый на время автоскролла (дозагрузка невидима для пользователя)
     var hiddenEl = null;
     var __ovShownAt = 0; // v86: момент подъёма оверлея (0 = не поднимали) — окно удержания 3с
@@ -287,7 +287,7 @@
       var expectedTurns = expectedTurnsFromStorage();
       var openedMs = Date.now() - D.conversationOpenedAt;
       var prevSmooth = '';
-      if (sc.mode === 'el') { try { prevSmooth = sc.el.style.scrollBehavior; sc.el.style.scrollBehavior = 'auto'; } catch (e) { } }
+      if (sc.mode === 'el') { try { prevSmooth = sc.el.style.scrollBehavior; sc.el.style.scrollBehavior = 'auto'; } catch (e) { /* ignore */ } }
 
       // v33→v75: контейнер НЕ прячем — только прозрачный оверлей (DOM чата не трогается);
       // восстановление — после цикла и в catch.
@@ -353,7 +353,7 @@
         }
 
         var scrollMs = Date.now() - scrollStartAt;
-        if (sc.mode === 'el') { try { sc.el.style.scrollBehavior = prevSmooth; } catch (e) { } }
+        if (sc.mode === 'el') { try { sc.el.style.scrollBehavior = prevSmooth; } catch (e) { /* ignore */ } }
         __restoreAutoscrollVisibility();
         debugLog('log', '[gemini-autoscroll] конец: элементов=' + finalElems + ' scrollH=' + finalH +
           ' время_скролла=' + scrollMs + 'ms retry=' + retry + ' (ходов ' + startSize + '→' + finalSize +

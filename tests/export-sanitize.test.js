@@ -388,7 +388,7 @@ async function renderPdfForm(history) {
     return document.getElementById('print-content').innerHTML;
   } finally {
     jest.useRealTimers();
-    try { delete window.MarkdownRenderer; } catch (e) { }
+    try { delete window.MarkdownRenderer; } catch (e) { /* ignore */ }
   }
 }
 

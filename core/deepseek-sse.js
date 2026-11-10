@@ -160,7 +160,7 @@
       var snap = streamStateSnapshot();
       snap.reason = reason || '';
       window.dispatchEvent(new CustomEvent('ai-cm-deepseek-stream-state', { detail: snap }));
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
   }
   // v10 (O-16): НОВЫЙ поток начинается здесь — только тут буфер обнуляется целиком.
   // Поля ЗАПРОСА (prompt/parent_message_id/thinking_enabled) выставлены обёрткой fetch
@@ -241,7 +241,7 @@
         if (!drop) break;
         sseResyncChars -= (drop.v || '').length;
       }
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
   }
   function streamUnknownPush(type, content) {
     try {
@@ -258,7 +258,7 @@
         }
       }
       diagMark('frag-unknown-type', { type: String(type || '').slice(0, 32), len: val.length });
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
     return null;
   }
   // Последняя ВАЛИДНАЯ граница — последний фрагмент, чьё имя типа из белого списка.
@@ -599,7 +599,7 @@
         window.dispatchEvent(new CustomEvent('ai-cm-deepseek-stream-probe-response', {
           detail: streamStateSnapshot()
         }));
-      } catch (eProbe) { }
+      } catch (eProbe) { /* ignore */ }
     });
     window.addEventListener('ai-cm-deepseek-stream-flush', function () {
       try {
@@ -609,7 +609,7 @@
         }
       } catch (eFlush) { swallowSoft(eFlush, 'deepseek:streamFlushBridge'); }
     });
-  } catch (eStreamBridge) { }
+  } catch (eStreamBridge) { /* ignore */ }
 
 
   function parseSSE(text) {
@@ -658,7 +658,7 @@
     var buf = '';
     function pump() {
       if (!sameConv()) {
-        try { reader.cancel(); } catch (eC) { }
+        try { reader.cancel(); } catch (eC) { /* ignore */ }
         endSseStream();
         return Promise.resolve();
       }

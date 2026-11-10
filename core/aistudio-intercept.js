@@ -121,7 +121,6 @@
     // source-песочницы тестов грузят файл без utils/debug.ts — тогда молчим:
     // консольный канал в MAIN-мире принадлежит aiCmDiagWarn (канал B, под гейтом).
     if (typeof aiCmDiagWarn !== 'function') return;
-    // eslint-disable-next-line no-restricted-syntax
     aiCmDiagWarn('aistudio-intercept', tag + ': ' + ((e && e.message) ? e.message : String(e)));
   }
 

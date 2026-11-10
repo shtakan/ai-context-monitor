@@ -158,7 +158,7 @@ function makeStand(convId) {
     last: () => events[events.length - 1],
     texts: () => ((events[events.length - 1] || {}).messageTexts) || [],
     roles: () => (((events[events.length - 1] || {}).messages) || []).map((m) => m.role),
-    close: () => { try { window.close(); } catch (e) { } }
+    close: () => { try { window.close(); } catch (e) { /* ignore */ } }
   };
 }
 

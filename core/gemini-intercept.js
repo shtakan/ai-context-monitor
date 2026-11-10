@@ -61,7 +61,7 @@
     captureModelSlugFromBody = function (str) {
       var slug = aiCmGeminiRpc.captureModelSlugFromBody(str);
       if (slug) {
-        try { window.dispatchEvent(new CustomEvent('ai-cm-model-slug', { detail: { slug: slug } })); } catch (e) { }
+        try { window.dispatchEvent(new CustomEvent('ai-cm-model-slug', { detail: { slug: slug } })); } catch (e) { /* ignore */ }
       }
       return slug;
     };
@@ -152,7 +152,7 @@
   // файла), originalFetch — нативный fetch MAIN-мира, getConvId — граница чата.
   // v33: флаг «Подробные логи» транслируется из content.js (ISOLATED) через CustomEvent
   // (в MAIN-мире chrome.storage недоступен — как в остальных перехватчиках)
-  try { window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDebugLogs(!!(ev && ev.detail)); }); } catch (e) { }
+  try { window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDebugLogs(!!(ev && ev.detail)); }); } catch (e) { /* ignore */ }
 
   // ===== v2.0 (Phase 3 step 5): тихая пагинация и головной курсор — в core/gemini-state.js =====
   // ===== v2.0 (Phase 3 step 5): retain-last-good, счётчик базы и floor-confirmed — в core/gemini-state.js =====
@@ -188,7 +188,7 @@
     if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser && window.GeminiBatchexecuteParser.PARSER_VERSION) {
       parserVersion = window.GeminiBatchexecuteParser.PARSER_VERSION;
     }
-  } catch (e) { }
+  } catch (e) { /* ignore */ }
   function loadFloor(convId) {
     if (typeof window === 'undefined' || !window.GeminiInterceptLogic) return null;
     return window.GeminiInterceptLogic.loadFloor(convId, parserVersion, localStorage);
@@ -254,7 +254,7 @@
     // в следующий чат (epoch модуля отбрасывает ответы, пришедшие после сброса).
     try {
       if (aiCmGeminiFiles && typeof aiCmGeminiFiles.gfReset === 'function') aiCmGeminiFiles.gfReset(getConvId());
-    } catch (eResetGF) { }
+    } catch (eResetGF) { /* ignore */ }
     orderCounter = 0;
     prependCursor = -1;
     loggedOk = false;
@@ -339,7 +339,7 @@
       }
     }, 5000);
     debugLog('log', '[gemini-intercept] смена чата → состояние перехватчика сброшено (convId=' + (currentConvId || '(не чат)') + ')');
-    try { window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); } catch (e) { }
+    try { window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); } catch (e) { /* ignore */ }
   }
 
   // ===== v2.0 (Phase 3, шаг 3): SPA-ЖИЗНЕННЫЙ ЦИКЛ ЧАТА (ВЫНЕСЕН В core/gemini-spa-lifecycle.js) =====
@@ -954,7 +954,7 @@
         diagLine: function (tag, fields) {
           try {
             debugLog('log', '[gemini-files] ' + String(tag || '') + ' ' + JSON.stringify(fields || {}));
-          } catch (eDiagGF) { }
+          } catch (eDiagGF) { /* ignore */ }
         }
       });
     } catch (eBindGF) {
@@ -1156,7 +1156,7 @@
   // игнорируется с внятным логом, а не бросает ReferenceError.
   // Логика сюда НЕ возвращается: правки моста — в модуле.
 
-  try { setTimeout(function () { maybeStartLoader(); }, 1000); } catch (e) { }
+  try { setTimeout(function () { maybeStartLoader(); }, 1000); } catch (e) { /* ignore */ }
 
   debugLog('log', '[gemini-intercept] перехватчик Gemini v28 установлен (структурный сбор вложений v23 + фикс курсора + сброс при смене чата + тихая пагинация из vf5 + гард пассивки по convId (fetch Request-объекты тоже) + защита автоскролла + virtual-f5 + historyComplete в emit + подавление чужих unhandled fetch + пересборка ветки при realtime-vf5 + пол (floor) через localStorage + диагностика opaque-кандидатов + сохранение/восстановление ленты через content.js)');
   } // закрывает with (aiCmGeminiState)

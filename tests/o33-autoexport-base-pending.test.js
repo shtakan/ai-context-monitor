@@ -212,7 +212,7 @@ function o33(over) {
 }
 
 beforeEach(() => {
-  try { window.sessionStorage.removeItem('aiCmDebug'); } catch (e) { }
+  try { window.sessionStorage.removeItem('aiCmDebug'); } catch (e) { /* ignore */ }
 });
 afterEach(() => jest.restoreAllMocks());
 

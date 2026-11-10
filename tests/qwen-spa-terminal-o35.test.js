@@ -135,7 +135,7 @@ beforeEach(function () {
 afterEach(function () {
   jest.useRealTimers();
   jest.restoreAllMocks();
-  try { sessionStorage.removeItem('aiCmDebug'); } catch (e) { }
+  try { sessionStorage.removeItem('aiCmDebug'); } catch (e) { /* ignore */ }
 });
 
 // =====================================================================================

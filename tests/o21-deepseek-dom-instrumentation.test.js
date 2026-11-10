@@ -252,8 +252,8 @@ const makeEmitterFn = new Function('ctx', EMITTER_SCOPE);
 
 function gateOn() { window.sessionStorage.setItem('aiCmDebug', '1'); }
 function gateOff() {
-  try { window.sessionStorage.removeItem('aiCmDebug'); } catch (eS) { }
-  try { delete window.__aiCmDebugLogs; } catch (eW) { }
+  try { window.sessionStorage.removeItem('aiCmDebug'); } catch (eS) { /* ignore */ }
+  try { delete window.__aiCmDebugLogs; } catch (eW) { /* ignore */ }
 }
 
 function diagLines() {

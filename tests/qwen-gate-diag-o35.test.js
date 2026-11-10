@@ -156,13 +156,13 @@ beforeAll(function () {
 });
 
 beforeEach(function () {
-  try { sessionStorage.removeItem('aiCmDebug'); } catch (e) { }
+  try { sessionStorage.removeItem('aiCmDebug'); } catch (e) { /* ignore */ }
 });
 
 afterEach(function () {
   jest.restoreAllMocks();
-  try { delete window.aiCmDiagLine; } catch (e) { }
-  try { sessionStorage.removeItem('aiCmDebug'); } catch (e) { }
+  try { delete window.aiCmDiagLine; } catch (e) { /* ignore */ }
+  try { sessionStorage.removeItem('aiCmDebug'); } catch (e) { /* ignore */ }
 });
 
 // =====================================================================================

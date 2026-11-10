@@ -129,7 +129,7 @@
           convId: (typeof getConvId === 'function') ? (getConvId() || currentConvId || '') : (currentConvId || '')
         });
       }
-    } catch (eO22fn) { }
+    } catch (eO22fn) { /* ignore */ }
     serverTokens = (typeof serverTokens === 'number' && serverTokens > 0) ? serverTokens : 0;
     chatMode = chatMode || '';
     // O-22 (ФИКС F4): payload-точный гард ПОВТОРНОГО диспатча — единая точка для ВСЕХ сайтов
@@ -152,7 +152,7 @@
             sigLen: dispatchSig.length
           });
         }
-      } catch (eO22skip) { }
+      } catch (eO22skip) { /* ignore */ }
       return lastDispatchResult;
     }
     lastBaseServerTokens = serverTokens;   // v11 (O-17): для ре-эмита при полноте 0→1
@@ -256,13 +256,13 @@
     window.addEventListener('ai-cm-turns-snap-request', function () {
       try {
         window.dispatchEvent(new CustomEvent('ai-cm-turns-snap-response', { detail: turnsSnapshot() }));
-      } catch (eTurnsResp) { }
+      } catch (eTurnsResp) { /* ignore */ }
       // O-18 (ИЗМЕРЕНИЕ): этот мост экспортёр дёргает в ОБЕИХ точках записи файла
       // (snapshot-at-fired / snapshot-at-manual) — здесь снимаем per-turn сравнение
       // live vs network и дамп колец. Только чтение + console.log под флагом aiCmDebug.
-      try { diagExportHook('turns-snap-request'); } catch (eDiagExp) { }
+      try { diagExportHook('turns-snap-request'); } catch (eDiagExp) { /* ignore */ }
     });
-  } catch (eTurnsBridge) { }
+  } catch (eTurnsBridge) { /* ignore */ }
 
       Fn.buildDispatchSignature = buildDispatchSignature;
       Fn.emitBaseSnapshot = emitBaseSnapshot;

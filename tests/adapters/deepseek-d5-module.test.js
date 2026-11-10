@@ -85,7 +85,7 @@ const MOVED_BLOCKS = [
     sigs: ['  function resetForNewConversation() {'],
     // D.10-фикс: строка resetStreamState дополнена вызовом resetFiles() (сброс файлового
     // кэша между чатами) — хэш пересчитан, остальные строки блока байтово прежние.
-    sha: '83d4a9f64c9cdb27a45cebbe534dbd1c74cf1590c748994d316deea0529ef632'
+    sha: '24630b13f6f27be05631997152f044591808483d227cc63318ace7569f820b7a'
   },
   {
     name: 'checkConvChange', start: '  function checkConvChange() {',
@@ -96,7 +96,7 @@ const MOVED_BLOCKS = [
     name: 'патчи pushState/replaceState/popstate', start: '  try {\n    var origPush',
     sigs: ["    window.addEventListener('popstate',"],
     // блок дословно совпадает с ядром 6c899fd 320-338
-    sha: '187de08f974c28b28bf537e49ff78820143ea8a16b47758f1df49bf2eab85c50'
+    sha: 'd70d4086ae853185c8e89fdd12151c027a6f7259c801f6a34aa0184ebb04ea8d'
   }
 ];
 
@@ -115,7 +115,7 @@ const BODY_MARKERS = [
   "    if (newId !== currentConvId) {",
   "    diagResetForConv('conv-change', lastDiagConvId);",
   "    history.pushState = function () {",
-  "    window.addEventListener('popstate', function () { try { checkConvChange(); } catch (e) { } });",
+  "    window.addEventListener('popstate', function () { try { checkConvChange(); } catch (e) { /* ignore */ } });",
   '  // ===== СЕКЦИЯ 3: CONV ID + ДЕТЕКТОР СМЕНЫ ЧАТА'
 ];
 

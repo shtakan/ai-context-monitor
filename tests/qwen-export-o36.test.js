@@ -57,7 +57,7 @@ function fnDecl(src, name) {
 // Ручной экспорт (options.js) собирает «эталон» реальным сборщиком, а имя — шаблоном
 // ai-context-monitor-<site>-<model>-<stamp> с префиксом по hist.isLowConfidenceBase.
 beforeAll(function () { window.buildReferenceText = buildReferenceText; });
-afterAll(function () { try { delete window.buildReferenceText; } catch (e) { } });
+afterAll(function () { try { delete window.buildReferenceText; } catch (e) { /* ignore */ } });
 
 // =====================================================================================
 // D2: маркеры ролей в txt-экспорте qwen

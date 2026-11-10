@@ -80,7 +80,7 @@
     var r1 = (Array.isArray(t) && Array.isArray(t[1]) && typeof t[1][1] === 'string') ? t[1][1] : '';
     var rc = firstRc(t);
     var ts = 0;
-    try { if (Array.isArray(t) && Array.isArray(t[1]) && typeof t[1][0] === 'number' && t[1][0] > 1000000000) ts = t[1][0]; } catch (e) { }
+    try { if (Array.isArray(t) && Array.isArray(t[1]) && typeof t[1][0] === 'number' && t[1][0] > 1000000000) ts = t[1][0]; } catch (e) { /* ignore */ }
     // v1.6 (D15a-2): preview — первые 40 символов текста хода (для поиска «Составь промт…» по id)
     var txt = String(preview || '').replace(/\s+/g, ' ').slice(0, 40);
     debugLog('log', '[gemini-idmap] src=' + src + ' ts=' + ts + ' r0=' + (r0 ? r0.slice(0, 6) : '-') + ' r1=' + (r1 ? r1.slice(0, 6) : '-') +
@@ -195,7 +195,7 @@
         debugLog('log', '[gemini-skeleton] сохранён src=' + src + ' (turns не массив)');
         return;
       }
-      if (!loggedRontgen) { loggedRontgen = true; try { rontgenPagination(outer, turns); } catch (e) { } }
+      if (!loggedRontgen) { loggedRontgen = true; try { rontgenPagination(outer, turns); } catch (e) { /* ignore */ } }
       // сохраняем outer для дампа в paginateLoop (диагностика формата курсора)
       lastPaginateOuter = outer;
       // v18: извлекаем opaque-курсор из ответа и сохраняем в pendingCursor для запуска тихой пагинации.
@@ -285,7 +285,7 @@
               if (Array.isArray(node)) for (var ri = 0; ri < node.length; ri++) walkRest(node[ri]);
             })(restDiag[rdi]);
           }
-        } catch (eRd) { }
+        } catch (eRd) { /* ignore */ }
       } catch (e) { lastPaginateOpaqueCandidates = null; }
       if (DEBUG_STRUCTURE && !loggedStructure) {
         loggedStructure = true;
@@ -329,7 +329,7 @@
       // по возрастанию order (assignPageOrders) итог был «старые→новые»;
       // внутри хода user стоит раньше assistant → получает меньший order.
       for (var i = realTurns.length - 1; i >= 0; i--) {
-        var t = realTurns[i];
+        var t = realTurns[i]; // eslint-disable-line no-redeclare
         if (!Array.isArray(t)) continue;
         var localSeen = new Set(); var items = [];
         collectAttachments(t, localSeen, items);
@@ -395,7 +395,7 @@
               if (segs[pv] && segs[pv].text) { previewTxt = segs[pv].text; break; }
             }
             logIdmap(t, src, (segs && segs.length) ? segs.map(function (x) { return (x && x.text) ? x.text.length : 0; }).reduce(function (a, b) { return a + b; }, 0) : 0, previewTxt);
-          } catch (e) { }
+          } catch (e) { /* ignore */ }
         }
         if (anyNonEmpty) { _nonEmpty++; }
         else { _empty++; _skippedIds.push(turnId); }
@@ -465,7 +465,7 @@
         for (var i = 0; i < mutations.length; i++) {
           var m = mutations[i];
           var tgt = m.target;
-          try { if (tgt && tgt.closest && tgt.closest('#ai-context-widget')) continue; } catch (e) { }
+          try { if (tgt && tgt.closest && tgt.closest('#ai-context-widget')) continue; } catch (e) { /* ignore */ }
           if (m.type === 'characterData') { hasNew = true; break; }
           if (m.type === 'childList') {
             for (var j = 0; j < m.addedNodes.length; j++) {
@@ -493,7 +493,7 @@
               loaderRunningFor !== convIdDe &&
               !quietActive &&
               document.visibilityState === 'visible') {
-            try { window.dispatchEvent(new CustomEvent('ai-cm-dom-emit-request')); } catch (eDe) { }
+            try { window.dispatchEvent(new CustomEvent('ai-cm-dom-emit-request')); } catch (eDe) { /* ignore */ }
           }
           if (!shouldPollVf5(now)) {
             debugLog('log', '[gemini-virtual-f5] vf5-поллер в тишине — полная история без активности 60с, пропускаю');
@@ -654,7 +654,7 @@
             // не должны давать вторую копию.
             if (fileSections) mtext = stripAttachmentSections(mtext) + fileSections;
           }
-        } catch (eSec) { }
+        } catch (eSec) { /* ignore */ }
       }
       messages.push({ role: (tm.role === 'user') ? 'user' : 'assistant', text: mtext, id: ids[mi] });
     }
@@ -963,7 +963,7 @@
     var preservePagination = !!opts.preservePagination;
     var src = srcOverride || (fromVirtualF5 ? 'vf5' : (fromActivePaginate ? 'pag' : 'passive'));
     if (src === 'passive') lastVf5ActivityAt = Date.now(); // v40: пассивный batchexecute — активность
-    try { aiCmEnsureColdWindow(); } catch (e) { } // v61diag: окно холодного старта (первый ingest или рост convEpoch)
+    try { aiCmEnsureColdWindow(); } catch (e) { /* ignore */ } // v61diag: окно холодного старта (первый ingest или рост convEpoch)
     // cold-debug (баг «холодное открытие без полной истории»): снапшот флагов ДО парсинга —
     // что перехватчик ПОЛУЧИЛ (rawLen) и в каком состоянии стейт-машина принимает решение.
     if (typeof raw === 'string' && raw.indexOf('hNvQHb') !== -1) {
@@ -979,7 +979,7 @@
           ' quietActive=' + (quietActive ? '1' : '0') +
           ' loaderRunning=' + (loaderRunningFor === __cdCid ? 'this' : (loaderRunningFor || 'none')) +
           ' doneMap=' + (__cdCid && loaderDoneMap[__cdCid] ? '1' : '0'));
-      } catch (eCd1) { }
+      } catch (eCd1) { /* ignore */ }
     }
     var wasFull = historyFullByQuiet;
     // O-48 (D2): курсор продолжения сохраняется ДО парса. Парс страницы (handleOuter)
@@ -1031,7 +1031,7 @@
           debugLog('log', '[AI CM][cold-debug] empty-hNvQHb src=' + src + ' rawLen=' + raw.length +
             ' convId=' + (getConvId() || '(none)') +
             ' raw=' + JSON.stringify(raw.slice(0, 400)));
-        } catch (eEh) { }
+        } catch (eEh) { /* ignore */ }
       }
       if (!preTurns && !loggedErr) { loggedErr = true; debugLog('log', '[gemini-intercept] batchexecute распознан, но ходов не найдено'); }
       return 0;
@@ -1368,7 +1368,7 @@
       debugLog('log', '[AI CM][ingest] new-turns +' + added + ' convId=' + (getConvId() || '(none)') + ' src=' + src + ' total=' + baseSize());
     }
     // v61diag: cold-start лог каждого ingest в первые 60с окна (края входящего снапшота)
-    try { aiCmColdStartIngestLog(src, pageSeq, added, pageSeq.length > 0 && diagOverlap === pageSeq.length); } catch (e) { }
+    try { aiCmColdStartIngestLog(src, pageSeq, added, pageSeq.length > 0 && diagOverlap === pageSeq.length); } catch (e) { /* ignore */ }
     if (shouldEmit) em = emitBaseSnapshot();
     var emCount = em ? em.count : baseSize();
     var emLen = em ? em.textLen : 0;
@@ -1472,7 +1472,7 @@
     }
     debugLog('log', '[gemini-restore] merged ' + missing.length + ' missing ids (version=' + parserVersion + ')');
     // v61diag: tape-мердж учитывается в окне холодного старта как src=tape
-    try { aiCmEnsureColdWindow(); aiCmColdStartIngestLog('tape', missing, missing.length, false); } catch (e) { }
+    try { aiCmEnsureColdWindow(); aiCmColdStartIngestLog('tape', missing, missing.length, false); } catch (e) { /* ignore */ }
     try { emitBaseSnapshot(); } catch (e) { swallowSoft(e, 'gemini:mergeRestoredTurns-emit'); }
   }
 

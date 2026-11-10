@@ -140,7 +140,7 @@ const MOVED_BLOCKS = [
   {
     name: 'applyExportNetSnapshot', mode: 'func', start: '  // Приёмка сетевого снимка в режиме экспорта:',
     sig: '  function applyExportNetSnapshot(json, convId) {',
-    sha: 'c043516337f911a62bc6b16d75e2ffe9423f50dc40fa4e1f1511c431a2bc3552'
+    sha: 'accb51c5b4b5514c704a99bbf7ef51b1aac390f35ec77363314f27c373668e84'
   },
   {
     // FIX-NETSYNC-FETCH-BINDING (хотфикс после D.8): вызов дозапроса стал
@@ -156,19 +156,19 @@ const MOVED_BLOCKS = [
     // `swallowSoft(eD, 'deepseek:exportNetSync-reply')`; pin пересчитан по новой версии.
     // Step E.2c-B2c-1 (aiCmDiagWarn): сетевой дозапрос не удался (строка 254) переведён на
     // `aiCmDiagWarn('deepseek:exportNetSync', …)`; pin пересчитан по новой версии.
-    sha: '3eecfec8bc9d284810b6fa0ec3034bd8699bbda201c04f80884380bde1b82ecb'
+    sha: '4be1c7ecc81cc1bcc7090c3ced060938cbbeadec8cc61953ca80bb5d3e4ef355'
   },
   {
     // Step E.2a.1 (swallow): молчаливый catch тела слушателя моста (строка 266) стал
     // диагностируемым — `swallow(eNs, 'deepseek:netSyncBridge')`; сам мост, порядок
     // слушателей и таймаут не менялись.
     name: 'bridge', mode: 'range', start: "  try {\n    window.addEventListener('ai-cm-deepseek-net-sync'",
-    end: '  } catch (eNetBridge) { }',
+    end: '  } catch (eNetBridge) { /* ignore */ }',
     // Step E.2c-B2b-2 (swallowSoft): тот же catch переведён на канал B —
     // `swallowSoft(eNs, 'deepseek:netSyncBridge')`; pin пересчитан по новой версии.
     // v2.0.29 (Xray/Firefox): detail моста ISOLATED→MAIN стал СТРОКОЙ JSON, а MAIN
     // разбирает его `aiCmBridgeDetail(ev)`; pin пересчитан по новой версии.
-    sha: '9d4fc737db386233800bede3e9715d66818b0479822ca2b259ae9f33237feb17'
+    sha: '39bba2a5805b5ee15423a51b75b70afeb5e6a7124fc4efe5c1f8a11cf6f19853'
   }
 ];
 

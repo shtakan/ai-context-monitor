@@ -69,7 +69,7 @@ import {
   window.__aiCmInterceptInstalled = true;
 
   // v31: флаг «Подробные логи» транслируется из content.js (ISOLATED) через CustomEvent
-  try { window.addEventListener('ai-cm-debug-logs', function (/** @type {CustomEvent} */ ev) { __aiCmSetDebugLogs(!!(ev && ev.detail)); }); } catch (e) {}
+  try { window.addEventListener('ai-cm-debug-logs', function (/** @type {CustomEvent} */ ev) { __aiCmSetDebugLogs(!!(ev && ev.detail)); }); } catch (e) { /* ignore */ }
 
   var originalFetch = window.fetch;
   if (typeof originalFetch !== 'function') return;
@@ -118,7 +118,7 @@ import {
     loggedAttach = false;
     activeRetryCount = 0;
     debugLog('log', '[ai-cm-intercept] смена чата → состояние перехватчика сброшено (convId=' + (currentConvId || '(не чат)') + ')');
-    try { window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); } catch (e) { }
+    try { window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); } catch (e) { /* ignore */ }
     scheduleSwitchRefetch();
     scheduleFallback(currentConvId, 2000);
   }
@@ -143,7 +143,7 @@ import {
     if (origPush) {
       history.pushState = function () {
         var r = origPush.apply(this, arguments);
-        try { checkConvChange(); } catch (e) { }
+        try { checkConvChange(); } catch (e) { /* ignore */ }
         return r;
       };
     }
@@ -151,12 +151,12 @@ import {
     if (origReplace) {
       history.replaceState = function () {
         var r = origReplace.apply(this, arguments);
-        try { checkConvChange(); } catch (e) { }
+        try { checkConvChange(); } catch (e) { /* ignore */ }
         return r;
       };
     }
-    window.addEventListener('popstate', function () { try { checkConvChange(); } catch (e) { } });
-  } catch (e) { }
+    window.addEventListener('popstate', function () { try { checkConvChange(); } catch (e) { /* ignore */ } });
+  } catch (e) { /* ignore */ }
   // ============================================================================================
 
   // ---- v12: извлечь convId из URL бэкенд-запроса (для проверки гонки) ----
@@ -169,11 +169,11 @@ import {
   }
 
   function urlOf(input) {
-    try { if (typeof input === 'string') return input; if (input && input.url) return input.url; } catch (e) { }
+    try { if (typeof input === 'string') return input; if (input && input.url) return input.url; } catch (e) { /* ignore */ }
     return '';
   }
   function methodOf(input, init) {
-    try { if (init && init.method) return String(init.method).toUpperCase(); if (input && input.method) return String(input.method).toUpperCase(); } catch (e) { }
+    try { if (init && init.method) return String(init.method).toUpperCase(); if (input && input.method) return String(input.method).toUpperCase(); } catch (e) { /* ignore */ }
     return 'GET';
   }
   function tail(url) {
@@ -269,7 +269,7 @@ import {
           if (!isImage && parts[i].asset_pointer) isImage = true;
           if (!isImage) {
             // вложения могут иметь content_type с 'image' или быть картинкой-мультиформатом
-            try { if (parts[i].content_type && typeof parts[i].content_type === 'string') isImage = true; } catch (e) { }
+            try { if (parts[i].content_type && typeof parts[i].content_type === 'string') isImage = true; } catch (e) { /* ignore */ }
           }
           if (isImage) {
             var imgKey = key + '_' + i;
@@ -346,7 +346,7 @@ import {
           serverTokens: 0
         }
       }));
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
   }
   function handleSnapshot(response, when, expectedConvId) {
     var copy = response.clone();
@@ -467,7 +467,7 @@ import {
   }
 
   function scheduleFallback(convId, delay) {
-    try { clearTimeout(fallbackTimer); } catch (e) { }
+    try { clearTimeout(fallbackTimer); } catch (e) { /* ignore */ }
     fallbackTimer = setTimeout(function () {
       if (!convId) return;
       fallbackSnapshot(convId);
@@ -476,7 +476,7 @@ import {
 
   // ---- v13: switch-refetch — покрывает случай, когда сайт не ходит в сеть при SPA-переключении ----
   function scheduleSwitchRefetch() {
-    try { clearTimeout(switchRefetchTimer); } catch (e) { }
+    try { clearTimeout(switchRefetchTimer); } catch (e) { /* ignore */ }
     switchRefetchTimer = setTimeout(function () {
       try {
         if (currentConvId && currentConvId !== lastLoadedConvId && lastHeaders && hasAuth(lastHeaders)) {

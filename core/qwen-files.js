@@ -126,7 +126,7 @@
     try {
       if (typeof aiCmDiagLine === 'function') { aiCmDiagLine('qwen-files-' + tag, fields); return; }
       if (D && typeof D.diagLine === 'function') D.diagLine('files-' + tag, fields);
-    } catch (eDiag) { }
+    } catch (eDiag) { /* ignore */ }
   }
 
   function qfWarn(tag, msg, e) {
@@ -368,7 +368,7 @@
   function qfHeader(res, name) {
     try {
       if (res && res.headers && typeof res.headers.get === 'function') return qfStr(res.headers.get(name));
-    } catch (eH) { }
+    } catch (eH) { /* ignore */ }
     return '';
   }
 

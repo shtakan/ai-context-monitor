@@ -95,7 +95,7 @@ function parseByBytes(raw, out, src) {
     pos = end;
     if (pos < bytes.length && bytes[pos] === 0x0A) pos++;
     if (payloadStr.indexOf('hNvQHb') !== -1) {
-      try { handleOuter(JSON.parse(payloadStr), out, src); } catch (e) { }
+      try { handleOuter(JSON.parse(payloadStr), out, src); } catch (e) { /* ignore */ }
     }
   }
 }
@@ -108,7 +108,7 @@ function parseByLines(raw, out, src) {
     var c0 = ln.charAt(0);
     if (c0 !== '[' && c0 !== '{') continue;
     if (ln.indexOf('hNvQHb') === -1) continue;
-    try { handleOuter(JSON.parse(ln), out, src); } catch (e) { }
+    try { handleOuter(JSON.parse(ln), out, src); } catch (e) { /* ignore */ }
   }
 }
 

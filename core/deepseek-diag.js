@@ -63,7 +63,7 @@
       if (entries && entries.length > 0) {
         return entries[0].type || '';
       }
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
     return '';
   }
 
@@ -235,7 +235,7 @@
     try {
       arr.push(item);
       while (arr.length > max) arr.shift();
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
   }
   function diagStat(t) {
     if (t === null || t === undefined) return '(none)';
@@ -278,7 +278,7 @@
       if (fd === N.length && N === L.slice(0, N.length)) {
         out.verdict = 'LIVE-EXTRA'; out.lost = L.length - N.length; return out;
       }
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
     out.verdict = 'DIFF-OTHER';
     return out;
   }
@@ -317,7 +317,7 @@
       rec.lastText = txt;
       rec.len = txt.length;
       rec.hash = diagHash6(txt);
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
   }
 
   function __bind(d) {
@@ -328,12 +328,12 @@
   function determineState() {
     var navType = getNavigationType();
     var convPrefix = '';
-    try { convPrefix = (currentConvId || '').slice(0, 8); } catch (e) { }
+    try { convPrefix = (currentConvId || '').slice(0, 8); } catch (e) { /* ignore */ }
     var visitedKey = '';
     var wasVisited = false;
     if (convPrefix) {
       visitedKey = 'aiCmVisited:' + convPrefix;
-      try { wasVisited = sessionStorage.getItem(visitedKey) === '1'; } catch (e) { }
+      try { wasVisited = sessionStorage.getItem(visitedKey) === '1'; } catch (e) { /* ignore */ }
     }
 
     if (navType === 'reload' || navType === 'back_forward') {
@@ -343,7 +343,7 @@
       return { state: 'after_f5', reason: 'sessionStorage marker found for ' + convPrefix, navType: navType };
     }
     if (convPrefix) {
-      try { sessionStorage.setItem(visitedKey, '1'); } catch (e) { }
+      try { sessionStorage.setItem(visitedKey, '1'); } catch (e) { /* ignore */ }
     }
     return { state: 'open', reason: 'first visit (nav=' + (navType || 'unknown') + ', convId=' + convPrefix + ')', navType: navType };
   }
@@ -449,7 +449,7 @@
         try { line = JSON.stringify(rec); } catch (eSer) { line = '(несериализуемо)'; }
         console.log('[ai-cm-debug][O26][turn] ' + line);
       }
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
   }
 
   function dumpHistorySnapshot(state, stateReason, ctx) {
@@ -458,7 +458,7 @@
       ctx = ctx || {};
       var nowTs = Date.now();
       var convPrefix = '';
-      try { convPrefix = (currentConvId || '').slice(0, 8); } catch (e) { }
+      try { convPrefix = (currentConvId || '').slice(0, 8); } catch (e) { /* ignore */ }
 
       // Виджет-процент из DOM
       var widgetPercent = null;
@@ -474,7 +474,7 @@
             widgetPercentSource = 'dom';
           }
         }
-      } catch (e) { }
+      } catch (e) { /* ignore */ }
 
       // Модель — по последнему ходу по order (упорядоченный turnsMap)
       var lastModel = '';
@@ -639,7 +639,7 @@
         var c = (typeof f.content === 'string') ? f.content : '';
         out.push({ i: i, type: String(f.type || ''), len: c.length, hash: diagHash6(c) });
       }
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
     return out;
   }
   function diagMark(kind, data) {
@@ -653,7 +653,7 @@
       m.frags = diagFragState();
       diagPushRing(diagMarks, m, DIAG_MARK_MAX);
       console.log('[ai-cm-debug][O18][mark] ' + JSON.stringify(m));
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
   }
   // Запись чанка SSE в кольцо + детектор СЖАТИЯ уже собранного контента (прямая улика потери).
   function diagChunkRecord(path, op, val, before, after) {
@@ -713,7 +713,7 @@
           ' types=' + JSON.stringify(entry.types) + ' shrink=' + JSON.stringify(shrink) +
           ' before=' + JSON.stringify(before) + ' after=' + JSON.stringify(after));
       }
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
   }
   // Сырой ответ history_messages: сводка + состав фрагментов по каждому сообщению.
   function diagHistRecord(json, src) {
@@ -763,7 +763,7 @@
         ' chatMessages=' + rec.chatMessages + ' is_empty=' + rec.isEmpty +
         ' current=' + rec.currentMessageId + ' rawLen=' + rec.rawLen + ' frags=' + rec.fragTotal +
         ' refetchDone=' + (historyRefetchDone === true ? 1 : 0));
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
   }
   // Снимок NETWORK-текста по ходам: ровно то, что принятый ingestHistory положил в turnsMap.
   function diagSnapshotNetTurns(reason) {
@@ -782,7 +782,7 @@
       }
       diagNetTurns = { conv: (currentConvId || '').slice(0, 8), t: Date.now(), reason: String(reason || ''), order: order, map: map };
       console.log('[ai-cm-debug][O18][net] snapshot reason=' + reason + ' turns=' + order.length + ' lens=' + lens.join(','));
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
   }
   function diagDumpRings(trigger) {
     try {
@@ -882,7 +882,7 @@
       diagSseRing = []; diagHistRing = []; diagMarks = [];
       diagLiveTurns = {}; diagLiveOrder = []; diagNetTurns = null; diagEnrich = [];
       diagOps = { APPEND: 0, SET: 0, other: 0 };
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
   }
   // Ручной дамп из консоли: window.__aiCmDebug.dumpDeepSeekO18('tag')
   try {
@@ -917,7 +917,7 @@
       }
       return { frags: sseFragments.length, types: sseFragmentTypes.join(',') };
     };
-  } catch (e) { }
+  } catch (e) { /* ignore */ }
 
       // ---- экспорт: все 26 функций кластера (16 из них ядро зовёт форвардерами) ----
       Fn.isDebugEnabled = isDebugEnabled;

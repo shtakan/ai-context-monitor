@@ -71,10 +71,10 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       // способом, что у шести существующих перехватчиков (claude-intercept.js:18 и др.) —
       // иначе aiCmDiagOn() в MAIN-мире не увидел бы чекбокс «Подробные логи» и канонический
       // принтер молчал бы при включённом гейте. Поведение продукта не меняется.
-      try { if (typeof __aiCmSetDebugLogs === 'function') __aiCmSetDebugLogs(!!(ev && ev.detail)); } catch (eCanon) { }
+      try { if (typeof __aiCmSetDebugLogs === 'function') __aiCmSetDebugLogs(!!(ev && ev.detail)); } catch (eCanon) { /* ignore */ }
       flushDiagRing();
     });
-  } catch (eGate) { }
+  } catch (eGate) { /* ignore */ }
 
   var originalFetch = window.fetch;
 
@@ -99,7 +99,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     try {
       if (typeof sessionStorage !== 'undefined' && sessionStorage &&
         sessionStorage.getItem('aiCmDebug') === '1') return true;
-    } catch (eSess) { }
+    } catch (eSess) { /* ignore */ }
     return DEBUG_LOGS === true;
   }
   var DIAG_RING_MAX = 50;
@@ -117,7 +117,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     try {
       diagRing.push([fullTag, fields]);
       if (diagRing.length > DIAG_RING_MAX) diagRing.shift();
-    } catch (eRing) { }
+    } catch (eRing) { /* ignore */ }
   }
   function printDiag(fullTag, fields) {
     try {
@@ -135,13 +135,13 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         parts.push(k + '=' + ((v === undefined || v === null) ? '(нет)' : String(v)));
       }
       console.log('[AI CM][diag] ' + fullTag + ' ' + parts.join(' '));
-    } catch (ePrint) { }
+    } catch (ePrint) { /* ignore */ }
   }
   function flushDiagRing() {
     if (!diagOn()) { diagRing = []; return; }
     try {
       for (var i = 0; i < diagRing.length; i++) printDiag(diagRing[i][0], diagRing[i][1]);
-    } catch (eFlush) { }
+    } catch (eFlush) { /* ignore */ }
     diagRing = [];
   }
   // URL документа одной строкой (диагностика точек смены чата/записи базы).
@@ -154,14 +154,14 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     try {
       if (typeof input === 'string') return input;
       if (input && typeof input.url === 'string') return input.url;
-    } catch (eUrl) { }
+    } catch (eUrl) { /* ignore */ }
     return '';
   }
   function methodOf(init, input) {
     try {
       if (init && init.method) return String(init.method).toUpperCase();
       if (input && typeof input.method === 'string') return String(input.method).toUpperCase();
-    } catch (eM) { }
+    } catch (eM) { /* ignore */ }
     return 'GET';
   }
   // Qwen-эндпоинт: /api/v2/chat/completions (версия — любая v<N>).
@@ -191,7 +191,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     try {
       var m = QWEN_HISTORY_RE.exec(String(url || ''));
       if (m && m[1]) return decodeURIComponent(m[1]);
-    } catch (eQh) { }
+    } catch (eQh) { /* ignore */ }
     return '';
   }
 
@@ -199,14 +199,14 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     try {
       var m = /[?&]chat_id=([^&]+)/.exec(url);
       if (m) return decodeURIComponent(m[1]);
-    } catch (eQ) { }
+    } catch (eQ) { /* ignore */ }
     return '';
   }
   function chrOf(url) {
     try {
       var m = /\/c\/([A-Za-z0-9_-]+)/.exec(String(location.pathname || ''));
       if (m) return m[1];
-    } catch (eC) { }
+    } catch (eC) { /* ignore */ }
     return '';
   }
   // Текущий чат: id из пути /c/<id> (SPA-адрес) либо из query последнего запроса страницы.
@@ -364,7 +364,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         // у итератора вызывается return(), тело не «течёт» зря (страница читает свой клон).
         if (sse === null || (sse && sse.ended)) {
           stopped = true;
-          if (typeof iterator.return === 'function') { try { iterator.return(); } catch (eRet) { } }
+          if (typeof iterator.return === 'function') { try { iterator.return(); } catch (eRet) { /* ignore */ } }
           return;
         }
         return step();
@@ -1597,7 +1597,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
             if (!this.__aiCmQwenHistHeaders) this.__aiCmQwenHistHeaders = {};
             this.__aiCmQwenHistHeaders[String(name)] = String(value);
           }
-        } catch (eXHdr) { }
+        } catch (eXHdr) { /* ignore */ }
         return origXHRSetHeader.apply(this, arguments);
       };
       XMLHttpRequest.prototype.open = function (method, url) {
@@ -1629,7 +1629,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
               this.__aiCmQwenHist = { chatId: xChatId || currentChatId || '', url: xUrl, method: xMethod };
             }
           }
-        } catch (eXOpen) { }
+        } catch (eXOpen) { /* ignore */ }
         return origXHROpen.apply(this, arguments);
       };
       XMLHttpRequest.prototype.send = function () {
@@ -1641,7 +1641,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
               try { consumeHistoryXhr(xSelf, xMeta); } catch (eXLoad) { swallow(eXLoad, 'qwen:xhr-loadend-history'); }
             });
           }
-        } catch (eXSend) { }
+        } catch (eXSend) { /* ignore */ }
         return origXHRSend.apply(this, arguments);
       };
     }
@@ -1678,7 +1678,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       try {
         window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));
         dispatched = 1;
-      } catch (eDispatch) { }
+      } catch (eDispatch) { /* ignore */ }
       // O-35 (ДИАГНОСТИКА, только измерение): qwen-spa — хук смены разговора в MAIN-мире.
       // dispatched=1 — событие ушло в ISOLATED (ISOLATED-сторона отвечает строками
       // conv-changed-recv / reset-done / reshoot, затем qwen-adapter с sinceSpaResetMs>=0).
@@ -1695,7 +1695,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     if (origPushState) {
       history.pushState = function () {
         var r = origPushState.apply(this, arguments);
-        try { checkChatChange(); } catch (eP) { }
+        try { checkChatChange(); } catch (eP) { /* ignore */ }
         return r;
       };
     }
@@ -1703,12 +1703,12 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     if (origReplaceState) {
       history.replaceState = function () {
         var r = origReplaceState.apply(this, arguments);
-        try { checkChatChange(); } catch (eR) { }
+        try { checkChatChange(); } catch (eR) { /* ignore */ }
         return r;
       };
     }
-    window.addEventListener('popstate', function () { try { checkChatChange(); } catch (ePop) { } });
-  } catch (eHist) { }
+    window.addEventListener('popstate', function () { try { checkChatChange(); } catch (ePop) { /* ignore */ } });
+  } catch (eHist) { /* ignore */ }
 
   // ===== R2: связка с модулем вложений (core/qwen-files.js) =====
   // Ядро отдаёт модулю два форвардера (emitSnapshot/diagLine) и три геттера

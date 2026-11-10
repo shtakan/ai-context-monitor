@@ -70,9 +70,9 @@
           failedPageSkeleton: lastFailedSkeleton || null
         };
         window.dispatchEvent(new CustomEvent('ai-cm-diag-response', { detail: response }));
-      } catch (e) { }
+      } catch (e) { /* ignore */ }
     });
-  } catch (e) { }
+  } catch (e) { /* ignore */ }
 
     }
   }

@@ -94,7 +94,7 @@
           idx = pos + kw.length;
         }
       }
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
   }
 
   function aiCmEnsureColdWindow() {
@@ -103,7 +103,7 @@
     coldStartWindowStart = Date.now();
     coldStartConvId = D.getConvId();
     coldStartSourcesSeen = [];
-    if (coldStartEndTimer) { try { clearTimeout(coldStartEndTimer); } catch (e) { } coldStartEndTimer = null; }
+    if (coldStartEndTimer) { try { clearTimeout(coldStartEndTimer); } catch (e) { /* ignore */ } coldStartEndTimer = null; }
     coldStartEndTimer = setTimeout(function () {
       var turns = D.aiCmOrderedTurns();
       var fe = D.aiCmDiagTurnEdge(turns, 'first');

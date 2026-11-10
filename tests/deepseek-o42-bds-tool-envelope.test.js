@@ -214,8 +214,8 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  try { delete global.aiCmDiagOn; } catch (e1) { }
-  try { delete global.aiCmDiagLine; } catch (e2) { }
+  try { delete global.aiCmDiagOn; } catch (e1) { /* ignore */ }
+  try { delete global.aiCmDiagLine; } catch (e2) { /* ignore */ }
 });
 
 /** Пять прочих платформ: тексты без форм конверта и без инъекций соседей (байтово прежние). */
@@ -539,9 +539,9 @@ describe('O-42 (R): байтовые регрессии', () => {
       ]);
       expect(JSON.stringify(quiet)).toBe(JSON.stringify(envOnly));
     } finally {
-      if (prevLine === undefined) { try { delete global.aiCmDiagLine; } catch (e1) { } }
+      if (prevLine === undefined) { try { delete global.aiCmDiagLine; } catch (e1) { /* ignore */ } }
       else global.aiCmDiagLine = prevLine;
-      if (prevOn === undefined) { try { delete global.aiCmDiagOn; } catch (e2) { } }
+      if (prevOn === undefined) { try { delete global.aiCmDiagOn; } catch (e2) { /* ignore */ } }
       else global.aiCmDiagOn = prevOn;
     }
   });
@@ -573,8 +573,8 @@ describe('O-42 (R): байтовые регрессии', () => {
   test('R13: байты выхода при гейте aiCmDebug вкл/выкл идентичны; O-42 молчит и под гейтом', () => {
     const spy = jest.spyOn(console, 'log').mockImplementation(() => { });
     const gateOff = () => {
-      try { window.sessionStorage.removeItem('aiCmDebug'); } catch (eS) { }
-      try { delete window.__aiCmDebugLogs; } catch (eW) { }
+      try { window.sessionStorage.removeItem('aiCmDebug'); } catch (eS) { /* ignore */ }
+      try { delete window.__aiCmDebugLogs; } catch (eW) { /* ignore */ }
     };
     const gateOn = () => { window.sessionStorage.setItem('aiCmDebug', '1'); };
     const msgs = () => measuredMessages().concat([{ role: 'user', text: 'Настоящий вопрос.', id: 'real' }]);

@@ -50,7 +50,7 @@
     if (!url || url.indexOf('batchexecute') === -1) return false;
     if (url.indexOf('hNvQHb') !== -1) return false; // история уже обрабатывается isHistoryRpc
     var u = url;
-    try { u = decodeURIComponent(url); } catch (e) { }
+    try { u = decodeURIComponent(url); } catch (e) { /* ignore */ }
     return u.indexOf('/app/') !== -1;
   }
 
@@ -65,7 +65,7 @@
       if (m) {
         try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
       }
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
     return '';
   }
 
@@ -86,7 +86,7 @@
     try {
       if (typeof window !== 'undefined' && window.GeminiInterceptLogic && window.GeminiInterceptLogic.extractStreamUserTurn) return window.GeminiInterceptLogic;
       if (typeof self !== 'undefined' && self.GeminiInterceptLogic && self.GeminiInterceptLogic.extractStreamUserTurn) return self.GeminiInterceptLogic;
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
     return null;
   }
 
@@ -124,7 +124,7 @@
       if (typeof Request !== 'undefined' && input instanceof Request && input.headers && typeof input.headers.forEach === 'function') {
         input.headers.forEach(function (v, k) { h[k] = v; });
       }
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
     try {
       if (init && init.headers) {
         var hh = init.headers;
@@ -132,7 +132,7 @@
         else if (Array.isArray(hh)) { for (var i = 0; i < hh.length; i++) if (hh[i] && hh[i][0]) h[hh[i][0]] = hh[i][1]; }
         else if (typeof hh === 'object') { for (var k in hh) h[k] = hh[k]; }
       }
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
     return h;
   }
 
@@ -188,7 +188,7 @@
           ' b64=' + (/^[A-Za-z0-9+/=]+$/.test(diagCur) ? 'yes' : 'no') +
           ' convId=' + (D.getConvId() || '(none)'));
       }
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
   }
 
   // v72diag: кандидат курсора из rest оборвавшего шага (base64, len>=40, вне turns)

@@ -105,7 +105,6 @@ function helperBody(rel) {
 }
 
 function helperOf(rel) {
-  // eslint-disable-next-line no-new-func
   return new Function('return (' + helperBody(rel) + ');')();
 }
 

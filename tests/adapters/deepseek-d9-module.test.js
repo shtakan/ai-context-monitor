@@ -136,7 +136,7 @@ const MOVED_BLOCKS = [
     end: '  function streamKnownType(t) {',
     // Step E.2c-B2b-2 (swallowSoft): тот же catch переведён на канал B —
     // `swallowSoft(eSettings, 'deepseek:ingestModelSettings')`; pin пересчитан по новой версии.
-    sha: 'ade80925ba90cec648dd551a3531a179880f98f0a7fcbd6497b5433576477ed3'
+    sha: '82e5ef9d692b9bc0a654d35d26a1df7dadb92beef0ce652759cf4684d8c06084'
   },
   {
     name: 'спан 5 BIND-часть (514-520) streamKnownType/streamTypeShape', zone: 'bind',
@@ -154,7 +154,7 @@ const MOVED_BLOCKS = [
     // `swallowSoft(e, 'deepseek:streamResync')`; pin пересчитан по новой версии.
     // Step E.2c-B2c-1 (aiCmDiagWarn): внутри спана ещё один канал-B сайт переведён на
     // `aiCmDiagWarn('deepseek:streamResync', …)` (ресинк, строка 301); pin пересчитан.
-    sha: '345fd59016234385206e21effd41a8534e77136343d081be0e59f7d6e224f68a'
+    sha: 'b5f985e4938e790a6aaf6058b6594fa28bd5366a3a89828df90dc3b0dc7c8af7'
   },
   {
     // Step E.2a.1 (swallow): два молчаливых catch стали диагностируемыми — JSON.parse
@@ -166,13 +166,13 @@ const MOVED_BLOCKS = [
     // Step E.2c-B2b-2 (swallowSoft): те же два catch переведены на канал B —
     // `swallowSoft(e, 'deepseek:parseSSELines')` / `swallowSoft(eFlush, 'deepseek:streamFlushBridge')`;
     // pin пересчитан по новой версии.
-    sha: 'fd85f5377696679011986218ac88ee86ecfe0a5aa1f6dbbd4b1623b5c32c6bdb'
+    sha: 'b3960c8aac8f8793e11b80071df4161a665d8baaf08323d38c1f0176d05f2362'
   },
   {
     name: 'спан 10 (1065-1136) parseSSE + consumeSseResponse', zone: 'bind',
     start: '  function parseSSE(text) {',
     end: '      // Экспорт тел, которые ядро зовёт по прежним именам (9 форвардеров).',
-    sha: 'a590a2669070e4d807909f1ac81d052b59d8d6cedd67fef7d2fdc04e82b6570f'
+    sha: '193a3f48f180f9725d713131f42364fe97248879098529c04996a13f62786bf8'
   }
 ];
 

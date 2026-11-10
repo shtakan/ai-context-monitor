@@ -168,7 +168,7 @@ function makeStand(convId) {
       body: JSON.stringify({ prompt: 'Привет', chat_session_id: convId, thinking_enabled: true })
     }),
     last: () => emits[emits.length - 1],
-    close: () => { try { window.close(); } catch (e) { } }
+    close: () => { try { window.close(); } catch (e) { /* ignore */ } }
   };
 }
 
