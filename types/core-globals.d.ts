@@ -177,6 +177,7 @@ declare function aiCmDiagWarn(tag: string, message: string, detail?: unknown): v
 declare function aiCmDiagDownload(trigger: string, content: unknown, fileName: string, extra?: unknown): boolean;
 declare function aiCmDiagDownloadBlocked(trigger: string, content: unknown, fileName: string, reason: string, extra?: unknown): boolean;
 declare function __aiCmSetDebugLogs(v: boolean): void;
+declare function __aiCmGetLogRing(): string[];
 
 // Window-поля: трассировка/UMD-глобали (прецедент types/globals.d.ts — any до Фазы 3).
 // Файл — НЕ module (нет import/export), поэтому interface Window объявляется напрямую
@@ -194,6 +195,8 @@ interface Window {
   AiCmBaseHandler?: any;
   AiCmHybridTail?: any;
   AiCmExportManager?: any;
+  /** core/gemini-diag-dump.ts: UMD-зеркало дампа диагностики (MAIN-мир). */
+  AiCmGeminiDiagDump?: any;
 }
 
 // Интерсепторы и парсеры — Фаза 3 (ambient any по прецеденту types/globals.d.ts).

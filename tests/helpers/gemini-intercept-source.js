@@ -115,9 +115,9 @@ const ROOT = path.join(__dirname, '..', '..');
 // в `with (ctx)` без ключа D — ни один ассерт этих пинов не менялся.
 // Phase 3 step 5: core/gemini-state.js идёт после active-refresh и перед ядром — как в js[].
 // Ядро читает/пишет его имена через `with (window.AiCmGeminiState)` (см. шапку выше).
-// Phase 3 step 2: core/gemini-diag-dump.js идёт после oracle и перед ядром — как в js[].
-// Мост дампа (ai-cm-diag-request/response) перенесён БЕЗ префикса D: тело лежит внутри
-// `with (D)`, а три имени состояния приходят геттерами из bind-узла ядра.
+// Phase 3 step 2: core/gemini-diag-dump.ts идёт после oracle и перед ядром — как в js[].
+// Spike (Вариант А): `with (D)` в мосте дампа (ai-cm-diag-request/response) снят, три
+// имени состояния префиксованы явно: D.turnsMap / D.lastOrderedIds / D.lastFailedSkeleton.
 const MODULES = [
   'core/gemini-hidden-scroll.js',
   'core/gemini-diag.js',
@@ -131,7 +131,7 @@ const MODULES = [
   'core/gemini-overlay.js',
   'core/gemini-archive.js',
   'core/gemini-oracle.js',
-  'core/gemini-diag-dump.js',
+  'core/gemini-diag-dump.ts',
   'core/gemini-spa-lifecycle.js',
   'core/gemini-active-refresh.js',
   'core/gemini-state.js'

@@ -767,13 +767,13 @@
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.addEventListener('ai-cm-cache-refresh', function (ev) { if (!D) {"
     },
     {
-      "file": "core/gemini-diag-dump.js",
+      "file": "core/gemini-diag-dump.ts",
       "category": "debug-instrumentation",
       "lines": [
-        73,
-        75
+        85,
+        87
       ],
-      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var turnDump = []; var mapKeys = Object.keys(turnsMap); for (var di = 0;"
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var turnDump = []; var mapKeys = Object.keys(D.turnsMap); for (var di = 0;"
     },
     {
       "file": "core/gemini-diag.js",
