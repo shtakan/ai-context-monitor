@@ -175,22 +175,30 @@ describe('v95 metrics-resync: pct/histKey по финальному срезу',
 });
 
 describe('v95 metrics-resync: вызов стоит сразу после deferred-флаша (source-pin)', () => {
-  test('P1: в обработчике loader-stop ресинк идёт ПОСЛЕ aiCmFlushDeferredHistWrite', () => {
-    const iFlush = MGR.indexOf("aiCmFlushDeferredHistWrite(d.convId, 'loader-stop')");
-    expect(iFlush).toBeGreaterThan(-1);
-    const iResync = MGR.indexOf("aiCmResyncMetricsAfterFlush(d.convId, 'loader-stop')", iFlush);
-    expect(iResync).toBeGreaterThan(iFlush);
-    // только при подтверждённой полноте: вызов внутри ветки aiCmBaseConfirmedByConv === 1
-    const iGate = MGR.lastIndexOf('aiCmBaseConfirmedByConv[d.convId] === 1', iFlush);
+  test('P1: в обработчике loader-stop ресинк идёт ДО aiCmFlushDeferredHistWrite (R1)', () => {
+    // v2.6 (R1, Шаг 3): порядок инвертирован — файл/панель обязаны получить снимок метрики
+    // ПОСЛЕ пересчёта. Прежний порядок (flush → resync) фиксировал устаревший снимок:
+    // живой замер R1 — 81 токен между шапкой файла и бейджем сразу после F5.
+    const iResync = MGR.indexOf("aiCmResyncMetricsAfterFlush(d.convId, 'loader-stop')");
+    expect(iResync).toBeGreaterThan(-1);
+    const iFlush = MGR.indexOf("aiCmFlushDeferredHistWrite(d.convId, 'loader-stop')", iResync);
+    expect(iFlush).toBeGreaterThan(iResync);
+    // и флаш ровно один (дубликата «до ресинка» не осталось)
+    expect(MGR.split("aiCmFlushDeferredHistWrite(d.convId, 'loader-stop')").length - 1).toBe(1);
+    // только при подтверждённой полноте: оба вызова внутри ветки aiCmBaseConfirmedByConv === 1
+    const iGate = MGR.lastIndexOf('aiCmBaseConfirmedByConv[d.convId] === 1', iResync);
     expect(iGate).toBeGreaterThan(-1);
-    expect(iGate).toBeLessThan(iFlush);
+    expect(iGate).toBeLessThan(iResync);
   });
 
-  test('P2: после base-complete (0→1) ресинк идёт сразу после флаша', () => {
-    const iFlush = CONTENT.indexOf("aiCmFlushDeferredHistWrite(cid79, 'base-complete')");
-    expect(iFlush).toBeGreaterThan(-1);
-    const iResync = CONTENT.indexOf("aiCmResyncMetricsAfterFlush(cid79, 'base-complete')", iFlush);
-    expect(iResync).toBeGreaterThan(iFlush);
+  test('P2: после base-complete (0→1) ресинк идёт ДО флаша истории (тот же порядок R1)', () => {
+    const iResync = CONTENT.indexOf("aiCmResyncMetricsAfterFlush(cid79, 'base-complete')");
+    expect(iResync).toBeGreaterThan(-1);
+    const iFlush = CONTENT.indexOf("aiCmFlushDeferredHistWrite(cid79, 'base-complete')", iResync);
+    expect(iFlush).toBeGreaterThan(iResync);
+    // ресинк по-прежнему до автоэкспорта (v2.5 D2): файл берёт готовый снимок
+    const iExport = CONTENT.indexOf('maybeAutoExport(freshPct79)', iFlush);
+    expect(iExport).toBeGreaterThan(iFlush);
   });
 
   test('P3: единая точка снимка — aiCmWriteCurrentHistory не собирает базу вручную', () => {
@@ -237,18 +245,17 @@ describe('v95 metrics-resync: вызов стоит сразу после deferr
 // можно только при baseComplete === true. Исполняются РЕАЛЬНЫЕ байты core/content.ts
 // (срез по маркерам + new Function, конвенция сьюта), не пересказ логики.
 // =====================================================================================
-// v2.3 (B1): вложения добавляются долей пула через aiCmAttachPendingTokens — это и есть
-// конечная точка среза масштабирования (раньше здесь стоял безусловный += netAttachTokens).
-const NET_ATTACH_TAIL = 'if (attachAdd > 0) tokenEstimate += attachAdd;';
+// v2.3 (B1): вложения добавляются долей пула через aiCmAttachPendingTokens — теперь это
+// внутренняя точка ЕДИНОГО расчёта (v2.6/R1: aiCmTokenSnapshot), её и исполняет пин.
+const NET_ATTACH_LINE = 'var attachAdd = aiCmAttachPendingTokens(text, attach, attachBreak);';
+// Гейт масштаба живёт в ОДНОМ месте: если он появится/пропадёт в одном из путей — расхождение.
+const SCALE_GATE = 'baseComplete === true) && serverTokens === 0';
 
-/** Срез масштабирования tokenEstimate из processAndSend — реальными байтами исходника. */
-function metricScaleSnippet() {
-  const draw = sliceFunction(CONTENT, 'processAndSend');
-  const iStart = draw.indexOf('let tokenEstimate = metricServerTokens > 0');
-  expect(iStart).toBeGreaterThan(-1);
-  const iEnd = draw.indexOf(NET_ATTACH_TAIL, iStart);
-  expect(iEnd).toBeGreaterThan(iStart);
-  return draw.slice(iStart, iEnd + NET_ATTACH_TAIL.length);
+/** Срез единой точки расчёта — РЕАЛЬНЫЕ байты aiCmTokenSnapshot (v2.6/R1). */
+function snapshotSnippet() {
+  const src = sliceFunction(CONTENT, 'aiCmTokenSnapshot');
+  expect(src.indexOf(SCALE_GATE)).toBeGreaterThan(-1);
+  return src;
 }
 
 /** Срез ветвления maxTokenCount (перезапись/монотонный максимум) из processAndSend. */
@@ -263,23 +270,24 @@ function metricMaxBranch() {
   return draw.slice(iStart, iEnd);
 }
 
-/** Прогон реального среза масштабирования; возвращает итоговый tokenEstimate. */
-function runScale(o) {
+/** Прогон РЕАЛЬНОГО aiCmTokenSnapshot в песочнице; возвращает его результат. */
+function runSnapshot(o) {
   const ctx = {
-    metricServerTokens: o.metricServerTokens || 0,
-    netEffectiveLen: o.netEffectiveLen,
-    fullText: o.fullText,
-    countForTokens: 1,
-    netAttachTokens: 0,
-    netAttachBreak: null,
-    aiCmAttachPendingTokens: function () { return 0; },
+    getServiceKey: function () { return o.svc || 'gemini'; },
+    currentAdapter: { siteName: o.svc || 'gemini' },
+    aiCmMetricServerTokens: function () { return o.serverTokens || 0; },
+    aiCmCanonicalTokens: function () { return o.raw; },
+    aiCmAttachPendingTokens: function () { return o.attachAdd || 0; },
+    aiCmAistudioNativePromptTokens: function () { return 0; },
     baseComplete: o.baseComplete === true,
-    Tokenizer: {
-      estimateDialogTokens: function () { return o.raw; }
-    }
+    netEffectiveLen: o.netEffectiveLen,
+    resolveCurrentModel: function () { return 'gemini-2.5-pro'; },
+    lastResolvedModelId: 'gemini-2.5-pro',
+    computeEffectiveLimit: function () { return 1000000; }
   };
-  return new Function('ctx', 'with (ctx) { ' + metricScaleSnippet() +
-    '\nreturn tokenEstimate; }')(ctx);
+  const snap = new Function('ctx', 'with (ctx) { ' + snapshotSnippet() +
+    '\nreturn aiCmTokenSnapshot; }')(ctx);
+  return snap(o.fullText, 1, 0, null);
 }
 
 /** Прогон реального ветвления maxTokenCount; возвращает итоговый maxTokenCount. */
@@ -301,31 +309,37 @@ const FULL_TEXT = 'я'.repeat(400000);            // канонический п
 const NET_LEN = 408000;                          // сеть: полный снимок на 2% длиннее
 
 describe('v98: масштаб по netEffectiveLen только при baseComplete === true', () => {
-  test('D1: baseComplete=0 (неполная база) — tokenEstimate НЕ умножается и не «взлетает»', () => {
-    const est = runScale({ raw: RAW_ESTIMATE, fullText: FULL_TEXT, netEffectiveLen: NET_LEN, baseComplete: false });
+  test('D1: baseComplete=0 (неполная база) — tokens НЕ умножаются и не «взлетают»', () => {
+    const snap = runSnapshot({ raw: RAW_ESTIMATE, fullText: FULL_TEXT, netEffectiveLen: NET_LEN, baseComplete: false });
+    const est = snap.tokens;
     // до правки здесь было Math.round(100000 * 1.02) = 102000 (раздувание на промежуточном проходе)
     expect(est).toBe(RAW_ESTIMATE);
     expect(est).toBeLessThan(Math.round(RAW_ESTIMATE * 1.001));
     expect(est).toBeLessThan(Math.round(RAW_ESTIMATE * (NET_LEN / FULL_TEXT.length)));
+    // percent считается от того же числа и того же лимита — расхождения «число/круг» нет
+    expect(snap.percent).toBe(Math.round((est / snap.limit) * 1000) / 10);
   });
 
   test('D2: baseComplete=1 (полная база) — масштаб по-прежнему применяется', () => {
-    const est = runScale({ raw: RAW_ESTIMATE, fullText: FULL_TEXT, netEffectiveLen: NET_LEN, baseComplete: true });
+    const est = runSnapshot({ raw: RAW_ESTIMATE, fullText: FULL_TEXT, netEffectiveLen: NET_LEN, baseComplete: true }).tokens;
     expect(est).toBe(Math.round(RAW_ESTIMATE * (NET_LEN / FULL_TEXT.length)));
     expect(est).toBeGreaterThan(RAW_ESTIMATE);
   });
 
   test('D3: контроль — пол и текст одной базы (netEffectiveLen ≤ fullText.length) не масштабируются', () => {
-    expect(runScale({ raw: RAW_ESTIMATE, fullText: FULL_TEXT, netEffectiveLen: FULL_TEXT.length, baseComplete: true }))
+    expect(runSnapshot({ raw: RAW_ESTIMATE, fullText: FULL_TEXT, netEffectiveLen: FULL_TEXT.length, baseComplete: true }).tokens)
       .toBe(RAW_ESTIMATE);
-    expect(runScale({ raw: RAW_ESTIMATE, fullText: FULL_TEXT, netEffectiveLen: NET_LEN, baseComplete: false }))
+    expect(runSnapshot({ raw: RAW_ESTIMATE, fullText: FULL_TEXT, netEffectiveLen: NET_LEN, baseComplete: false }).tokens)
       .toBe(RAW_ESTIMATE);
   });
 
-  test('D4: серверный/точный счётчик (metricServerTokens>0) масштабом не трогается ни при какой базе', () => {
-    expect(runScale({ raw: RAW_ESTIMATE, fullText: FULL_TEXT, netEffectiveLen: NET_LEN, baseComplete: true, metricServerTokens: 1234 }))
+  test('D4: серверный/точный счётчик (serverTokens>0) масштабом не трогается ни при какой базе', () => {
+    expect(runSnapshot({ raw: RAW_ESTIMATE, fullText: FULL_TEXT, netEffectiveLen: NET_LEN, baseComplete: true, serverTokens: 1234 }).tokens)
       .toBe(1234);
-    expect(runScale({ raw: RAW_ESTIMATE, fullText: FULL_TEXT, netEffectiveLen: NET_LEN, baseComplete: false, metricServerTokens: 1234 }))
+    expect(runSnapshot({ raw: RAW_ESTIMATE, fullText: FULL_TEXT, netEffectiveLen: NET_LEN, baseComplete: false, serverTokens: 1234 }).tokens)
+      .toBe(1234);
+    // и серверное число остаётся видимым потребителю как serverTokens (O-47: гейт Qwen выше)
+    expect(runSnapshot({ raw: RAW_ESTIMATE, fullText: FULL_TEXT, netEffectiveLen: NET_LEN, baseComplete: true, serverTokens: 1234 }).serverTokens)
       .toBe(1234);
   });
 
@@ -342,15 +356,18 @@ describe('v98: масштаб по netEffectiveLen только при baseCompl
       .toBe(35800);
   });
 
-  test('D6: source-пин — гейт стоит в ОБЕИХ точках метрики (бейдж и GET_STATS попапа)', () => {
-    const guarded = CONTENT.split('baseComplete === true && metricServerTokens === 0 && netEffectiveLen > 0').length - 1;
-    expect(guarded).toBe(2);                                 // processAndSend + GET_STATS
+  test('D6: source-пин — гейт стоит в ЕДИНОЙ точке расчёта, а её зовут ОБА пути (бейдж и панель)', () => {
+    // v2.6 (R1): прежние два независимых среза схлопнуты в одну функцию aiCmTokenSnapshot;
+    // гейт масштаба обязан остаться ровно один (иначе пути снова разойдутся).
+    expect(CONTENT.split(SCALE_GATE).length - 1).toBe(1);
+    expect(CONTENT.split('aiCmTokenSnapshot(').length - 1).toBe(3);   // объявление + бейдж + панель
     // неохраняемой формы (масштаб без вердикта полноты) в исходнике не осталось
     expect(CONTENT).not.toContain('if (metricServerTokens === 0 && netEffectiveLen > 0');
-    expect(metricScaleSnippet()).toContain('if (baseComplete === true && metricServerTokens === 0');
     // масштаб идёт ДО добавки доли вложений (вложения добавляются к готовому числу)
-    const draw = sliceFunction(CONTENT, 'processAndSend');
-    expect(draw.indexOf('if (baseComplete === true && metricServerTokens === 0'))
-      .toBeLessThan(draw.indexOf(NET_ATTACH_TAIL));
+    const snap = snapshotSnippet();
+    expect(snap.indexOf(SCALE_GATE)).toBeLessThan(snap.indexOf(NET_ATTACH_LINE));
+    // и сама единая точка не читает сырое поле снимка сети: только site-гейт метрики
+    expect(snap).not.toContain('netServerTokens');
+    expect(snap).toContain('serverTokens = aiCmMetricServerTokens(svc, text)');
   });
 });

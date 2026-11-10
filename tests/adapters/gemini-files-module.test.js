@@ -817,9 +817,17 @@ describe('v2.1: дедуп ходов/вложений и метрика без 
 
   test('B1/D3: частичное наличие файлов — в метрику идёт только доля неотрендеренного пула', function () {
 
-    // оба пути метрики (бейдж и GET_STATS) используют ОДИН хелпер
-    expect(CONTENT_SRC.split('var attachAdd = aiCmAttachPendingTokens(fullText, netAttachTokens, netAttachBreak);').length - 1).toBe(1);
-    expect(CONTENT_SRC.split('var attachAddM = aiCmAttachPendingTokens(fullText, netAttachTokens, netAttachBreak);').length - 1).toBe(1);
+    // v2.6 (R1): оба пути метрики (бейдж и GET_STATS) зовут ОДНУ функцию aiCmTokenSnapshot,
+    // а внутри неё — единственный вызов хелпера пула: прибавка считается ровно один раз.
+    expect([
+      CONTENT_SRC.split('aiCmTokenSnapshot(').length - 1,                                      // объявление + 2 пути
+      CONTENT_SRC.split('var attachAdd = aiCmAttachPendingTokens(text, attach, attachBreak);').length - 1
+    ]).toEqual([3, 1]);
+    // прежних двух копий (по одной на путь) больше нет
+    expect(
+      CONTENT_SRC.split('var attachAdd = aiCmAttachPendingTokens(fullText, netAttachTokens, netAttachBreak);').length - 1 +
+      CONTENT_SRC.split('var attachAddM = aiCmAttachPendingTokens(fullText, netAttachTokens, netAttachBreak);').length - 1
+    ).toBe(0);
     // прежнего двоичного гейта «есть [FILE: → пул целиком в ноль» больше нет
     expect(CONTENT_SRC).not.toContain("indexOf('[FILE:') === -1");
     expect(CONTENT_SRC).not.toMatch(/(^|\n)\s*tokenEstimate \+= netAttachTokens;/);

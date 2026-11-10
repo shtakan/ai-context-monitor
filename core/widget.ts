@@ -243,6 +243,10 @@ function resetConversationState(): void {
   if (typeof aiCmAistudioHistoryCacheClear === 'function') { aiCmAistudioHistoryCacheClear(); }
   lastBounded = false;
   maxTokenCount = 0;
+  // v2.6 (R1): снимок метрики принадлежит разговору — сбрасывается вместе с максимумом, иначе
+  // панель/шапка экспорта нового чата прочли бы tokens-снимок прошлого. typeof-гард — прежний
+  // прецедент срез-песочниц тестов (как у aiCmAistudioHistoryCacheClear выше).
+  if (typeof lastTokensSnapshot !== 'undefined') lastTokensSnapshot = null;
   baseIdSet = null;
   baseSkelSet = null;
   baseAnchors = null;

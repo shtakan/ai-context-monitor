@@ -295,12 +295,17 @@ describe('1.9: пин no-bare-console-error (core/ + adapters/)', () => {
     }
   });
 
-  test('НЕ трогать: комментарий core/state.ts:162 не считается вызовом', () => {
+  test('НЕ трогать: комментарий core/state.ts не считается вызовом console.error', () => {
     const stateSrc = fs.readFileSync(path.join(ROOT, 'core', 'state.ts'), 'utf8');
-    // v96: строка сдвинулась на +7 из-за новых счётчиков сети (aiCmNetRawCount/Used)
-    const lineComment = stateSrc.split('\n')[161];
-    expect(lineComment).toContain('console.error');
-    expect(lineComment.trim().startsWith('//')).toBe(true);
+    // v2.6 (R1): номер строки не пинуется жёстко — вставки (снимок метрики lastTokensSnapshot)
+    // его сдвигают. Ищем САМ комментарий по содержанию и требуем, чтобы он был комментарием:
+    // прежняя суть пина (лексер не считает комментарий вызовом) сохранена и стала устойчивее.
+    const lines = stateSrc.split('\n');
+    const commentIdx = lines.findIndex(function (l) {
+      return l.indexOf('console.error') !== -1 && l.trim().indexOf('//') === 0;
+    });
+    expect(commentIdx).toBeGreaterThanOrEqual(0);
+    expect(lines[commentIdx]).toContain('console.error');
     expect(findBareConsoleError(maskNonCode(stateSrc))).toHaveLength(0);
   });
 });

@@ -98,17 +98,27 @@ function ingestOf(detail) {
 }
 
 // =====================================================================================
-// ЗВЕНО 3: вердикт бейджа — РЕАЛЬНЫЙ тернарник content.js (исполняется) + реальный Tokenizer.
+// ЗВЕНО 3: вердикт бейджа — РЕАЛЬНЫЙ байт решения content.ts (исполняется) + реальный Tokenizer.
+// v2.6 (R1): решение живёт в ЕДИНОЙ точке aiCmTokenSnapshot (а не двумя тернарниками в
+// processAndSend/GET_STATS), поэтому пин расширен: байт решения обязан быть РОВНО один, а
+// зовущих его путей метрики — ровно два (бейдж и панель). Исполняем те же байты продакшна.
 // =====================================================================================
-const DECISION_NEEDLE = 'metricServerTokens > 0 ? metricServerTokens : Tokenizer.estimateDialogTokens(fullText, countForTokens)';
-const DECISION_RE = /metricServerTokens > 0 \? metricServerTokens : Tokenizer\.estimateDialogTokens\(fullText, countForTokens\)/;
-const DECISION_SRC = (DECISION_RE.exec(CONTENT) || [])[0];
-expect(DECISION_SRC).toBe(DECISION_NEEDLE);          // исполняем ровно байты продакшна
+const DECISION_NEEDLE = 'var tokens = serverTokens > 0 ? serverTokens : aiCmCanonicalTokens(text, 0, msgs);';
+const DECISION_HITS = CONTENT.split(DECISION_NEEDLE).length - 1;
+expect(DECISION_HITS).toBe(1);                        // исполняем ровно байты продакшна, и они одни
+const DECISION_SRC = DECISION_NEEDLE;
+/** РЕАЛЬНАЯ каноническая функция content.ts (эвристика Tokenizer + вложения), собираем один раз. */
+const CANONICAL_FN = (function () {
+  const decl = fnDecl(CONTENT, 'aiCmCanonicalTokens');
+  return new Function('Tokenizer', 'swallowSoft', 'aiCmEstimateTokensTilde',
+    'return (function () { ' + decl + '\n return aiCmCanonicalTokens; })();')(
+    Tokenizer, function () {}, function () { return 0; });
+})();
 function badgeTokens(site, ingestedServerTokens, fullText, countForTokens) {
   const metric = metricOf(site, ingestedServerTokens);
-  const decide = new Function('metricServerTokens', 'Tokenizer', 'fullText', 'countForTokens',
-    'return (' + DECISION_SRC + ');');
-  return decide(metric, Tokenizer, fullText, countForTokens);
+  const decide = new Function('serverTokens', 'aiCmCanonicalTokens', 'text', 'msgs',
+    DECISION_SRC + '\n return tokens;');
+  return decide(metric, CANONICAL_FN, fullText, countForTokens);
 }
 /** tokens~ того же текста (эталон эвристики; то, чем обязан быть badge Qwen). */
 function tokensTilde(fullText, countForTokens) {
@@ -176,11 +186,14 @@ describe('O-47 B: badge/pct Qwen — только tokens~ (эвристика) �
     expect(INTERCEPT_SRC).toContain("serverTokens: serverTokens,");          // строки 'emit'/'qwen-sse'
     // ЗВЕНО 2 (ingest) — байты, которые исполняет пин выше
     expect(CONTENT).toContain(INGEST_LINE);
-    // ЗВЕНО 3 (метрика): правило в ОДНОЙ функции, зовётся на ОБОИХ путях метрики
+    // ЗВЕНО 3 (метрика): правило в ОДНОЙ точке — aiCmTokenSnapshot, её и зовут ОБА пути.
     expect(fnDecl(CONTENT, 'aiCmMetricServerTokens')).toContain("if (svc === 'qwen') return 0;");
-    expect((CONTENT.split(DECISION_NEEDLE).length - 1)).toBe(2);            // processAndSend + GET_STATS
+    expect(DECISION_HITS).toBe(1);                                           // единственная точка решения
+    expect((CONTENT.split(DECISION_NEEDLE).length - 1)).toBe(1);            // processAndSend + GET_STATS зовут снимок
     const calls = CONTENT.match(/aiCmMetricServerTokens\(/g) || [];
-    expect(calls.length).toBe(3);                                            // объявление + 2 пути метрики
+    expect(calls.length).toBe(2);                                            // объявление + снимок
+    const snapCalls = CONTENT.match(/aiCmTokenSnapshot\(/g) || [];
+    expect(snapCalls.length).toBe(3);                                        // объявление + бейдж + панель
     // авторитетная ветка бейджа и метка лога тоже читают метрику, а не сырое поле
     expect(CONTENT).toContain('if (metricServerTokens > 0) {');
     expect(CONTENT).toContain("(metricServerTokens > 0 ? ' · serverTokens' : '')");

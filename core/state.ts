@@ -29,6 +29,17 @@ let widgetElement: HTMLElement | null = null;
 let lastWidgetData: AiCmWidgetData | null = null;
 let badgeSuppressed: boolean = false; // v1.8.1: true после RESET — до первого снимка нового чата бейдж не рисуем
 let maxTokenCount: number = 0;
+// v2.6 (R1): ЕДИНЫЙ снимок метрики токенов — { tokens, percent, limit } в той связке, в которой
+// их зафиксировал бейдж. Источник истины для ВСЕХ потребителей числа контекста:
+//   • бейдж — core/content.ts:processAndSend ПИШЕТ его ровно в точке фиксации
+//     maxTokenCount/percentage (единственный писатель);
+//   • панель — GET_STATS читает tokens/percent из снимка, а не пересчитывает max(...);
+//   • шапка файла экспорта — core/export-manager.ts:aiCmWriteAutoExportFile и
+//     aiCmWriteCurrentHistory берут tokens/limit/percent из него же.
+// Прямое чтение maxTokenCount потребителями и было причиной R1 (81 токен между счётчиком панели
+// файла и бейджем сразу после F5: панель считала Math.max(tokenEstimate, maxTokenCount)).
+// Обнуляется вместе с maxTokenCount при сбросе чата — снимок чужого разговора не перетекает.
+let lastTokensSnapshot: { tokens: number; percent: number; limit: number } | null = null;
 let restoredTapeLoaded: boolean = false; // v28: флаг однократного восстановления ленты при загрузке чата
 let restoreDone: boolean = false; // v30: флаг завершения восстановления — разрешает сохранение ленты только после restore
 let cacheRefreshPlanned: Record<string, boolean> = {}; // v30.6: convId → true — планирование уточнения после кэша один раз на чат за сессию
@@ -330,6 +341,9 @@ function aiCmLatchRemove(service: string, convId: string): Promise<boolean> {
   Object.defineProperty(Api, 'maxTokenCount', { enumerable: true,
     get: function () { return maxTokenCount; },
     set: function (value) { maxTokenCount = value; } });
+  Object.defineProperty(Api, 'lastTokensSnapshot', { enumerable: true,
+    get: function () { return lastTokensSnapshot; },
+    set: function (value) { lastTokensSnapshot = value; } });
   Object.defineProperty(Api, 'restoredTapeLoaded', { enumerable: true,
     get: function () { return restoredTapeLoaded; },
     set: function (value) { restoredTapeLoaded = value; } });

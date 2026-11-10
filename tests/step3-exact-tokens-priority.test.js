@@ -125,14 +125,20 @@ describe('Шаг 3: точный ответ API countTokens приоритетн
   });
 
   test('S6: source-пины — оба пути метрики передают текст, попап уважает точный счётчик', () => {
-    // 1 объявление + 2 вызова на ОБОИХ путях метрики (processAndSend и GET_STATS).
-    expect(CONTENT.split('aiCmMetricServerTokens(').length - 1).toBe(3);
-    expect(CONTENT).toContain('aiCmMetricServerTokens(svc, fullText)');
-    expect(CONTENT).toContain('aiCmMetricServerTokens(currentAdapter.siteName, fullText)');
-    // Попап: при точном счётчике монотонный max() эвристики его не поднимает.
-    expect(CONTENT).toContain(
-      'const displayTokens = metricServerTokens > 0 ? tokenEstimate : Math.max(tokenEstimate, maxTokenCount);'
-    );
+    // v2.6 (R1): 1 объявление + 1 точка расчёта (aiCmTokenSnapshot) вместо двух путей:
+    // и бейдж (processAndSend), и попап (GET_STATS) зовут ЕДИНУЮ функцию.
+    expect(CONTENT.split('aiCmMetricServerTokens(').length - 1).toBe(2);
+    expect(CONTENT).toContain('aiCmMetricServerTokens(svc, text)');
+    expect(CONTENT.split('aiCmTokenSnapshot(').length - 1).toBe(3);   // объявление + 2 пути
+    // Попап больше не «дотягивает» эвристику до максимума: число берётся из снимка бейджа,
+    // поэтому монотонный max() снят целиком (Math.max с этими именами в коде не осталось).
+    expect(CONTENT).toContain('var displayTokens = (snapStats && typeof snapStats.tokens === \'number\') ? snapStats.tokens : tokenSnapStats.tokens;');
+    // исполняемой формы max() больше нет (упоминание осталось только в комментарии-объяснении)
+    expect(CONTENT).not.toContain('const displayTokens = metricServerTokens > 0 ? tokenEstimate');
+    expect(CONTENT).not.toContain(': Math.max(tokenEstimate, maxTokenCount);');
+    // и точный ответ API по-прежнему авторитетен внутри единой точки: серверное число
+    // не перебивается эвристикой (первая ветка тернарника — serverTokens).
+    expect(fnDecl(CONTENT, 'aiCmTokenSnapshot')).toContain('var tokens = serverTokens > 0 ? serverTokens : aiCmCanonicalTokens(text, 0, msgs);');
   });
 
   test('S7 (Шаг 2): ответ API для текущего convId не перебивается эвристикой на новом тексте', () => {

@@ -620,7 +620,12 @@ function maybeTrimExport(cid: string | null): void {
       return;
     }
     var dispLimit = computeEffectiveLimit(lastResolvedModelId);
-    var pct = dispLimit > 0 ? Math.round((maxTokenCount / dispLimit) * 1000) / 10 : 0;
+    // v2.6 (R1): percent шапки/имени файла берётся из ЕДИНОГО снимка метрики (его пишет бейдж в
+    // core/content.ts:processAndSend). Прямое чтение maxTokenCount давало расхождение file↔badge
+    // (81 токен сразу после F5). typeof-гард — срез-песочницы тестов без state.ts.
+    var snapTrim = (typeof lastTokensSnapshot !== 'undefined' && lastTokensSnapshot) ? lastTokensSnapshot : null;
+    var trimTokens = (snapTrim && typeof snapTrim.tokens === 'number') ? snapTrim.tokens : maxTokenCount;
+    var pct = dispLimit > 0 ? Math.round((trimTokens / dispLimit) * 1000) / 10 : 0;
     doAutoExportDownload(cid, pct, 'pre-trim');
     debugLog('log', '[AI CM][auto-export] fired reason=pre-trim convId=' + cid +
       ' msgs=' + (baseCount || 0) + ' lostHead=1.');
@@ -708,7 +713,16 @@ function aiCmWriteCurrentHistory(): void {
     var cid = lastEmitConvId || getCurrentConvId() || '';
     var mid = lastResolvedModelId;
     var dispLimit = computeEffectiveLimit(mid);
-    var pct = dispLimit > 0 ? Math.round((maxTokenCount / dispLimit) * 1000) / 10 : 0;
+    // v2.6 (R1): tokens/limit/percent снимка истории — из ЕДИНОГО снимка метрики, который
+    // зафиксировал бейдж (core/content.ts:processAndSend). Так файл, панель и круг показывают
+    // одну связку чисел; прямое чтение maxTokenCount давало расхождение 81 токен (R1).
+    // typeof-гард: срез-песочницы тестов, где state.ts не подключён (снимка нет — фолбэк прежний).
+    var snapR1Hist = (typeof lastTokensSnapshot !== 'undefined' && lastTokensSnapshot) ? lastTokensSnapshot : null;
+    var histTokens = (snapR1Hist && typeof snapR1Hist.tokens === 'number') ? snapR1Hist.tokens : maxTokenCount;
+    var histLimit = (snapR1Hist && snapR1Hist.limit > 0) ? snapR1Hist.limit : dispLimit;
+    var histPct = (snapR1Hist && typeof snapR1Hist.percent === 'number')
+      ? snapR1Hist.percent
+      : (histLimit > 0 ? Math.round((histTokens / histLimit) * 1000) / 10 : 0);
     // O-49: сообщения снимка — ИЗ ЕДИНОЙ ТОЧКИ СБОРА (aiCmCollectExportSource: санация
     // O-20/O-40/O-42 + нормализация ролей O-39) со схлопкой E-2 — тот же массив, что уходит
     // в файл автоэкспорта. Прямой buildHistoryMessages остаётся фолбэком ровно для двух
@@ -731,9 +745,9 @@ function aiCmWriteCurrentHistory(): void {
       convId: lastEmitConvId,
       site: (currentAdapter && currentAdapter.siteName) || '',
       model: lastSnapshotModelName || (mid ? (ModelConfig.getModel(mid)?.name || mid) : ''),
-      tokens: maxTokenCount,
-      limit: dispLimit,
-      percent: pct,
+      tokens: histTokens,
+      limit: histLimit,
+      percent: histPct,
       updatedAt: Date.now(),
       // v1.14.1: живой флаг вместо липкого — префикс [LOW CONFIDENCE]_ только пока
       // baseComplete !== true; после 0→1 липкий aiCmLowConfidenceByConv больше не лепит
@@ -1807,13 +1821,24 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
         // Фикс C: шапка файла берёт ТОТ ЖЕ эффективный лимит, что бейдж и pct
         // (вариант «200k», автолимит модели), а не жёсткий 0 — иначе «Токены: 0 / 0».
         // typeof-страховка: в unit-песочницах core/widget.js не подключён.
-        var dispLimitAuto = (typeof computeEffectiveLimit === 'function') ? computeEffectiveLimit(lastResolvedModelId) : 0;
+        // v2.6 (R1): tokens/percent/limit — из ЕДИНОГО снимка метрики (state.ts:lastTokensSnapshot),
+        // который зафиксировал бейдж, поэтому шапка файла не может разойтись с кругом и панелью
+        // (было: 81 токен между файлом и бейджем сразу после F5). Снимка нет (срез-песочница или
+        // экспорт до первого прохода метрики) — прежние значения maxTokenCount/percentage.
+        var snapR1Auto = (typeof lastTokensSnapshot !== 'undefined' && lastTokensSnapshot) ? lastTokensSnapshot : null;
+        var dispLimitAuto = (snapR1Auto && snapR1Auto.limit > 0)
+          ? snapR1Auto.limit
+          : ((typeof computeEffectiveLimit === 'function') ? computeEffectiveLimit(lastResolvedModelId) : 0);
         // v2.5 (Фикс D2): tokens, limit и percent — из ОДНОГО снимка. Глобальный
         // percentage мог быть посчитан до финального flush/resync; если он не
         // сходится с round(tokens/limit*100), пересчитываем из этих же tokens/limit,
         // чтобы шапка «112753 / 128000 (73.6%)» не противоречила сама себе.
-        var snapTokens = (typeof maxTokenCount === 'number') ? maxTokenCount : 0;
-        var snapPercent = (typeof percentage === 'number') ? percentage : 0;
+        var snapTokens = (snapR1Auto && typeof snapR1Auto.tokens === 'number')
+          ? snapR1Auto.tokens
+          : ((typeof maxTokenCount === 'number') ? maxTokenCount : 0);
+        var snapPercent = (snapR1Auto && typeof snapR1Auto.percent === 'number')
+          ? snapR1Auto.percent
+          : ((typeof percentage === 'number') ? percentage : 0);
         if (dispLimitAuto > 0) {
           var snapCalc = Math.round(snapTokens / dispLimitAuto * 1000) / 10;
           if (snapCalc !== snapPercent) snapPercent = snapCalc;
@@ -1981,12 +2006,15 @@ window.addEventListener('ai-cm-loader-state', function (/** @type {CustomEvent} 
     // v1.13.1: при неподтверждённой базе deferred НЕ флашится — висит до base-complete
     // (либо видимого таймаута «счётчик стабилен»).
     if (aiCmBaseConfirmedByConv[d.convId] === 1) {
-      aiCmFlushDeferredHistWrite(d.convId, 'loader-stop'); // v52: флаш отложенной записи истории
-      // v95 (METRICS-SYNC): после флаша история содержит ФИНАЛЬНЫЙ срез, а histKey/pct
-      // content.js могли остаться на предыдущем (устаревшем) — принудительный пересчёт.
+      // v2.6 (R1, Шаг 3): СНАЧАЛА пересчёт метрик на финальном срезе истории, ЗАТЕМ флаш записи.
+      // Прежний порядок (flush → resync) оставлял файл/панель на УСТАРЕВШЕМ снимке токенов:
+      // aiCmWriteCurrentHistory фиксировал maxTokenCount ДО того, как resync пересчитал бейдж по
+      // финальному histKey, — отсюда расхождение R1 (81 токен между файлом и бейджем после F5).
+      // Теперь запись истории и шапка экспорта читают lastTokensSnapshot УЖЕ после resync.
       if (typeof aiCmResyncMetricsAfterFlush === 'function') {
         aiCmResyncMetricsAfterFlush(d.convId, 'loader-stop');
       }
+      aiCmFlushDeferredHistWrite(d.convId, 'loader-stop'); // v52: флаш отложенной записи истории
     } else {
       debugLog('log', '[AI CM][export] deferred kept reason=base-unconfirmed convId=' + d.convId +
         ' baseComplete=' + (d.baseComplete === true ? '1' : '0') +

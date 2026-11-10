@@ -16,6 +16,10 @@
  * `const percentage = displayLimit > 0 …`, вызов updateWidget(percentage, maxTokenCount, …).
  */
 const CONTENT = require('./helpers/content-source.js').contentSource;
+const { readSource } = require('./helpers/content-source.js');
+const fs = require('fs');
+const path = require('path');
+const ROOT = require('./helpers/content-source.js').ROOT;
 
 // Рез функции по балансу фигурных скобок (как в tests/o32-gsa-spa-inflation.test.js).
 function sliceFunction(src, name) {
@@ -171,5 +175,77 @@ describe('пины контракта (строки, которые нельзя
     const iHold = BRANCH.indexOf('strictHoldTokens');
     const iChainEnd = BRANCH.lastIndexOf('maxTokenCount = tokenEstimate;');
     expect(iHold).toBeGreaterThan(iChainEnd);
+  });
+});
+
+// =====================================================================================
+// v2.6 (R1) D5/D6: ЕДИНЫЙ снимок метрики. Живой дефект R1 — 81 токен между счётчиком
+// панели файла и бейджем сразу после F5: панель считала Math.max(эвристика, максимум),
+// а шапка файла читала maxTokenCount напрямую, при этом флаш истории шёл ДО ресинка метрик.
+// Фикс: число считается в ОДНОЙ функции (aiCmTokenSnapshot), фиксируется в
+// state.ts:lastTokensSnapshot в ОДНОЙ точке и оттуда читается панелью и шапкой файла.
+// Пины ниже — расширение (D5: одна точка записи; D6: значение виджета до ветвления + wiring).
+// =====================================================================================
+describe('v2.6 (R1) D5/D6: снимок метрики фиксируется ОДИН раз и до ветвления', () => {
+  const COMMIT = 'lastTokensSnapshot = { tokens: maxTokenCount, percent: percentage, limit: displayLimit };';
+
+  test('D5: одна точка записи снимка — после percentage и после строгого удержания', () => {
+    // единственная запись во всём контент-скрипте: иначе панель и файл разойдутся с бейджем
+    expect(CONTENT.split(COMMIT).length - 1).toBe(1);
+    const draw = sliceFunction(CONTENT, 'processAndSend');
+    const iCommit = draw.indexOf(COMMIT);
+    expect(iCommit).toBeGreaterThan(-1);
+    // maxTokenCount/percentage уже окончательны: запись идёт после lastPercentage и после
+    // блока строгого удержания (иначе снимок зафиксировал бы доисправочное число)
+    expect(iCommit).toBeGreaterThan(draw.indexOf('lastPercentage = percentage;'));
+    expect(draw.lastIndexOf('strictHoldTokens', iCommit)).toBeLessThan(iCommit);
+    // и до расчёта числа не пишется: запись ровно одна на проход
+    expect(draw.split(COMMIT).length - 1).toBe(1);
+  });
+
+  test('D6: значение виджета пишется ДО ветвления — любая ветка видит посчитанное число', () => {
+    const draw = sliceFunction(CONTENT, 'processAndSend');
+    const iWidget = draw.indexOf('lastWidgetData = {');
+    const iCascade = draw.indexOf('var badgeSuppressActive');
+    expect(iWidget).toBeGreaterThan(-1);
+    expect(iCascade).toBeGreaterThan(iWidget);
+    // копий значения в ветках больше нет (прежние две записи удалены)
+    expect(draw.split('lastWidgetData = {').length - 1).toBe(1);
+    // все «держащие» ветки на месте: супрессия SPA, заморозка лоадера, щит O-1, BYOK
+    ['[content-trace] badge-suppress', '[content-trace] badge-freeze', '[content-trace] byok-hold']
+      .forEach(function (marker) { expect(draw).toContain(marker); });
+    expect(draw).toContain('} else if (aiCmBadgeHoldActive()) {');
+    // и на разморозке лоадера слушатель по-прежнему рисует накопленное значение
+    expect(CONTENT).toContain('if (!aiCmLoaderFreeze && lastWidgetData) {');
+    expect(CONTENT).toContain('updateWidget(d.percentage, d.tokenEstimate, d.effectiveLimit, d.contextLimit, d.displayLimit, d.modelName, d.attachBreak);');
+  });
+
+  test('D6: state.ts объявляет снимок и зеркалит в UMD; сбросы чата его гасят', () => {
+    const state = fs.readFileSync(path.join(ROOT, 'core', 'state.ts'), 'utf8');
+    expect(state).toContain('let lastTokensSnapshot: { tokens: number; percent: number; limit: number } | null = null;');
+    expect(state).toContain("Object.defineProperty(Api, 'lastTokensSnapshot',");
+    // сброс разговора (widget) и смена convId/base-complete (content) обнуляют снимок:
+    // иначе панель/файл нового чата прочли бы число предыдущего
+    expect(readSource('core/widget.ts')).toContain("if (typeof lastTokensSnapshot !== 'undefined') lastTokensSnapshot = null;");
+    // 1 сброс разговора (widget.ts) + 2 сброса в content.ts (смена convId и 0→1 base-complete)
+    expect(CONTENT.split("if (typeof lastTokensSnapshot !== 'undefined') lastTokensSnapshot = null;").length - 1).toBe(3);
+  });
+
+  test('D6: шапка файла экспорта берёт tokens/percent/limit из снимка, а не из maxTokenCount напрямую', () => {
+    const mgr = readSource('core/export-manager.ts');
+    const iAuto = mgr.indexOf('function aiCmWriteAutoExportFile(');
+    const iNext = mgr.indexOf('\nfunction ', iAuto + 10);
+    const body = mgr.slice(iAuto, iNext);
+    expect(body).toContain("var snapR1Auto = (typeof lastTokensSnapshot !== 'undefined' && lastTokensSnapshot) ? lastTokensSnapshot : null;");
+    expect(body).toContain("var snapTokens = (snapR1Auto && typeof snapR1Auto.tokens === 'number')");
+    expect(body).toContain("var snapPercent = (snapR1Auto && typeof snapR1Auto.percent === 'number')");
+    expect(body).toContain('tokens: snapTokens,');
+    // история записи (aiCmWriteCurrentHistory) — тот же снимок
+    const iHist = mgr.indexOf('function aiCmWriteCurrentHistory(');
+    const histBody = mgr.slice(iHist, mgr.indexOf('\nfunction ', iHist + 10));
+    expect(histBody).toContain("var histTokens = (snapR1Hist && typeof snapR1Hist.tokens === 'number') ? snapR1Hist.tokens : maxTokenCount;");
+    expect(histBody).toContain('tokens: histTokens,');
+    // и ни один путь не пишет в шапку сырой maxTokenCount, минуя снимок
+    expect(body).not.toContain('var snapTokens = (typeof maxTokenCount === \'number\') ? maxTokenCount : 0;');
   });
 });

@@ -245,9 +245,15 @@ describe('O-23 R: регресс байтов tokens~ (serverTokens = 0)', () =>
   test('R5: бейдж авторитетен по serverTokens на ОБОИХ путях (updateWidget и GET_STATS)', () => {
     // O-47: оба пути берут счётчик через site-гейт aiCmMetricServerTokens (у Qwen он 0 —
     // usage.input не размер контекста); для остальных сервисов значение прежнее (serverTokens).
-    const ternary = 'metricServerTokens > 0 ? metricServerTokens : Tokenizer.estimateDialogTokens(';
-    const hits = CONTENT_SRC.split(ternary).length - 1;
-    expect(hits).toBe(2);
+    // v2.6 (R1): решение теперь в ЕДИНОЙ функции aiCmTokenSnapshot — серверный счётчик
+    // авторитетен ровно в одном месте, а бейдж и панель зовут эту функцию (два пути).
+    const decision = 'var tokens = serverTokens > 0 ? serverTokens : aiCmCanonicalTokens(text, 0, msgs);';
+    expect(CONTENT_SRC.split(decision).length - 1).toBe(1);
+    const snapCalls = CONTENT_SRC.match(/aiCmTokenSnapshot\(/g) || [];
+    expect(snapCalls.length).toBe(3);            // объявление + processAndSend + GET_STATS
+    // и оба пути действительно читают серверное число из снимка, а не вычисляют эвристику сами
+    expect(CONTENT_SRC.split('const metricServerTokens = tokenSnap.serverTokens;').length - 1).toBe(1);
+    expect(CONTENT_SRC).toContain('var tokenSnapStats = aiCmTokenSnapshot(');
     // т.е. при наличии серверного usage отображаемое значение = serverTokens ровно (0% отклонения)
     for (const p of Object.values(PAIRS)) {
       expect(relErr(p.serverTokens, p.serverTokens)).toBe(0);

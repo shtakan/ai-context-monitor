@@ -659,6 +659,49 @@ function aiCmAttachPendingTokens(fullText: string, attachTokens?: number, attach
   return Math.round(pool * (total - done) / total);
 }
 
+// v2.6 (R1): ЕДИНЫЙ расчёт метрики токенов диалога. Единственное место, где складываются
+// серверный счётчик (aiCmMetricServerTokens), канонический эстиматор (aiCmCanonicalTokens →
+// Tokenizer.estimateDialogTokens), масштаб по effectiveLen (только на ПОЛНОЙ базе) и доля пула
+// неотрендеренных вложений (aiCmAttachPendingTokens). Оба пути метрики — бейдж
+// (processAndSend) и панель (GET_STATS) — берут число ОТСЮДА, поэтому расхождение R1
+// (81 токен между счётчиком панели файла и бейджем сразу после F5) закрывается на корне, а не
+// подгонкой одного из путей. Функция ЧИСТАЯ: только читает состояние, никуда не пишет; запись
+// снимка (state.js:lastTokensSnapshot) — в точке фиксации maxTokenCount/percentage.
+function aiCmTokenSnapshot(baseText: string, baseCount: number, attach?: number, attachBreak?: any): { tokens: number; percent: number; limit: number; serverTokens: number } {
+  var text = (typeof baseText === 'string') ? baseText : '';
+  var msgs = (typeof baseCount === 'number' && baseCount > 0) ? baseCount : 0;
+  // svc — тот же ключ сервиса, что у processAndSend (getServiceKey), а не siteName адаптера:
+  // гейты Qwen (0 серверных токенов) и AI Studio (счётчик шапки) смотрят ровно на него.
+  var svc = (typeof getServiceKey === 'function')
+    ? getServiceKey()
+    : ((typeof currentAdapter !== 'undefined' && currentAdapter) ? currentAdapter.siteName : null);
+  var serverTokens = aiCmMetricServerTokens(svc, text);
+  var tokens = serverTokens > 0 ? serverTokens : aiCmCanonicalTokens(text, 0, msgs);
+  // Поднятый полом effectiveLen (Gemini): доля применима ТОЛЬКО к полной базе — netEffectiveLen
+  // относится к полному сетевому снимку, а text при baseComplete=false — канонический пол базы
+  // (v98: иначе бейдж «взлетал» до перезаписи полной базой).
+  if ((typeof baseComplete !== 'undefined' && baseComplete === true) && serverTokens === 0 &&
+      (typeof netEffectiveLen === 'number') && netEffectiveLen > 0 &&
+      text.length > 0 && netEffectiveLen > text.length) {
+    tokens = Math.round(tokens * (netEffectiveLen / text.length));
+  }
+  // v2.3 (B1): секции [FILE: …]/[IMAGE: …] уже посчитаны эстиматором в составе text —
+  // добавляется ТОЛЬКО доля пула неотрендеренных вложений (см. aiCmAttachPendingTokens).
+  var attachAdd = aiCmAttachPendingTokens(text, attach, attachBreak);
+  if (attachAdd > 0) tokens += attachAdd;
+  // v2.0.32: счётчик шапки AI Studio считает промпт целиком (вложения в нём уже есть) —
+  // вычитаем ровно ту же добавку, иначе метрика складывала бы их дважды.
+  if (svc === 'aistudio' && typeof aiCmAistudioNativePromptTokens === 'function' && aiCmAistudioNativePromptTokens() > 0 && attachAdd > 0) {
+    tokens -= attachAdd;
+  }
+  var modelId = (typeof resolveCurrentModel === 'function')
+    ? resolveCurrentModel()
+    : ((typeof lastResolvedModelId === 'string' && lastResolvedModelId) ? lastResolvedModelId : '');
+  var limit = (typeof computeEffectiveLimit === 'function') ? computeEffectiveLimit(modelId) : 0;
+  var percent = limit > 0 ? Math.round((tokens / limit) * 1000) / 10 : 0;
+  return { tokens: tokens, percent: percent, limit: limit, serverTokens: serverTokens };
+}
+
 // v2.0.20: слаг модели из сети. Мост из MAIN world (core/gemini-intercept.js:captureModelSlugFromBody
 // → window.dispatchEvent) в переменную этого мира (core/state.js:87). Несёт то же значение, что
 // detail.modelSlug в ai-cm-full-history, но приходит на КАЖДЫЙ сетевой ответ и раньше снимка.
@@ -799,6 +842,9 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
   // (baseComplete=true не даёт сработать правилу перехода неполная→полная).
   if (emitConvId && emitConvId !== lastSnapConvId) {
     maxTokenCount = 0;
+    // v2.6 (R1): снимок метрики принадлежит разговору — гасим вместе с максимумом, иначе панель
+    // и шапка файла нового чата прочли бы tokens/limit предыдущего (typeof-гард — срез-песочницы).
+    if (typeof lastTokensSnapshot !== 'undefined') lastTokensSnapshot = null;
     // v2.0.35: строгое удержание процента (см. badge-strict-hold в processAndSend) не
     // перетекает из ПРОШЛОГО разговора: сброс монотонного максимума без сброса
     // lastPercentage держал бы в новом чате процент старого.
@@ -827,6 +873,9 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
   var completeTransition79 = (newBaseComplete && !baseComplete); // v79: фиксируем переход 0→1 ДО перезаписи
   if (newBaseComplete && !baseComplete) {
     maxTokenCount = 0;
+    // v2.6 (R1): добиваем любой пик, накопленный DOM-путём, — снимок метрики снимается вместе
+    // с максимумом, чтобы потребители не увидели число до перезаписи полной базой.
+    if (typeof lastTokensSnapshot !== 'undefined') lastTokensSnapshot = null;
   }
   baseComplete = newBaseComplete;
   // O-43 (корень дефекта): baseComplete — ПЕРЕМЕННАЯ вердикта, и она РЕГРЕССИРУЕТ: тот же тред
@@ -1049,12 +1098,15 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
         // v83: если deferred-запись aiCmHistory ещё висит (loader-stop был при
         // base-unconfirmed) — флашим сразу при подтверждении полноты 0→1, не ждём 60s.
         // Гарды внутри flush сами требуют baseComplete && !loaderRunning.
-        try { aiCmFlushDeferredHistWrite(cid79, 'base-complete'); } catch (eF79) { swallowSoft(eF79, 'content:full-history-flush-deferred'); }
-        // v95 (METRICS-SYNC): флаш записал финальный срез — histKey/pct пересчитываем
-        // по нему же, иначе бейдж/запись остаются на устаревшем снимке (101 вместо 120).
+        // v95 (METRICS-SYNC): histKey/pct пересчитываем на финальном срезе, иначе бейдж/запись
+        // остаются на устаревшем снимке (101 вместо 120).
+        // v2.6 (R1, Шаг 3): СНАЧАЛА ресинк метрик, ЗАТЕМ флаш — как и в loader-stop
+        // (core/export-manager.ts). Иначе aiCmWriteCurrentHistory фиксирует lastTokensSnapshot/
+        // maxTokenCount ДО пересчёта и файл расходится с бейджем (живой замер R1: 81 токен).
         // v2.5 (Фикс D2): ресинк идёт ДО автоэкспорта — файл обязан получить тот же
         // tokens/percent, что и бейдж, а не срез, снятый до финального flush.
         try { aiCmResyncMetricsAfterFlush(cid79, 'base-complete'); } catch (eRs79) { swallowSoft(eRs79, 'content:metrics-resync-flush'); }
+        try { aiCmFlushDeferredHistWrite(cid79, 'base-complete'); } catch (eF79) { swallowSoft(eF79, 'content:full-history-flush-deferred'); }
         var freshPct79 = (typeof lastPercentage === 'number' && lastPercentage >= 0) ? lastPercentage : autoExportLastPct;
         if (aiCmLateCheckByConv[cid79]) {
           aiCmTryLateAutoExport(cid79);
@@ -2591,38 +2643,20 @@ function processAndSend(): void {
     // O-47: серверный счётчик для метрики ЭТОГО сервиса. У Qwen он всегда 0 (usage.input —
     // кумулятив API-потребления, а не размер контекста; см. aiCmMetricServerTokens), поэтому
     // pct/badge Qwen считаются ТОЛЬКО эвристикой tokens~. Прочие сервисы — прежний приоритет.
+    // v2.6 (R1): число считается ТОЛЬКО через aiCmTokenSnapshot — тот же вызов, что у панели
+    // (GET_STATS). Серверный счётчик, эстиматор, масштаб effectiveLen и доля неотрендеренных
+    // вложений складываются в одной функции, поэтому бейдж, панель и шапка файла не расходятся.
     // Шаг 3: text передаётся, чтобы точный ответ BYOK для этого текста перебивал эвристику.
-    const metricServerTokens = aiCmMetricServerTokens(svc, fullText);
+    const tokenSnap = aiCmTokenSnapshot(fullText, countForTokens, netAttachTokens, netAttachBreak);
+    const metricServerTokens = tokenSnap.serverTokens;
     // Шаг 4 (фикс «скачка» 25.9% → 23.1%): точного числа для ЭТОГО текста ещё нет (кэш не
     // восстановлен / другой чат / ответ API в пути) — эвристике запрещено писать бейдж в этом
     // проходе. Гейт сервис-узкий и уважает отказ API (см. aiCmHeuristicHoldForByok).
-    // v2.0.32 (AI Studio): шапка чата главнее и сети, и эвристики — поэтому нативный счётчик
-    // отдаёт сам aiCmMetricServerTokens (строка выше), а здесь остались ПРЕЖНИЕ строки без
-    // изменений: гейт масштабирования и запись максимума срабатывают ровно как при серверном
-    // числе. Остальные сервисы этой ветки не касаются (см. гейт svc === 'aistudio').
+    // v2.0.32 (AI Studio): шапка чата главнее и сети, и эвристики — нативный счётчик отдаёт сам
+    // aiCmMetricServerTokens внутри снимка, поэтому ветки максимума ниже срабатывают ровно как
+    // при серверном числе.
     const byokHeuristicHold = aiCmHeuristicHoldForByok(svc, fullText);
-    let tokenEstimate = metricServerTokens > 0 ? metricServerTokens : Tokenizer.estimateDialogTokens(fullText, countForTokens);
-    // Поднятый полом effectiveLen (Gemini): если сеть дала effectiveLen > длины текста — масштабируем оценку.
-    // v98 (фикс «скачка» бейджа после F5: 35.8% → 35.2%): масштабирование разрешено ТОЛЬКО на
-    // ПОЛНОЙ базе. netEffectiveLen относится к полному сетевому снимку, а fullText при
-    // baseComplete=false — канонический пол базы (core/hybrid-tail.js:getEffectiveText), поэтому
-    // доля netEffectiveLen/fullText.length раздувала эвристику на промежуточном проходе: бейдж
-    // «взлетал» до перезаписи полной базой ниже (`maxTokenCount = tokenEstimate`). Экстраполяция
-    // корректна только тогда, когда длина и текст относятся к ОДНОЙ базе.
-    if (baseComplete === true && metricServerTokens === 0 && netEffectiveLen > 0 && fullText && fullText.length > 0 && netEffectiveLen > fullText.length) {
-      tokenEstimate = Math.round(tokenEstimate * (netEffectiveLen / fullText.length));
-    }
-    // v2.3 (B1): секции [FILE: …]/[IMAGE: …] уже посчитаны каноническим эстиматором
-    // в составе fullText. Добавляем ТОЛЬКО долю пула, приходящуюся на неотрендеренные
-    // вложения (раньше при первой же секции пул сбрасывался целиком и висящий файл
-    // не учитывался вовсе).
-    var attachAdd = aiCmAttachPendingTokens(fullText, netAttachTokens, netAttachBreak);
-    if (attachAdd > 0) tokenEstimate += attachAdd;
-    // v2.0.32: счётчик шапки AI Studio считает промпт целиком, вложения в нём уже есть —
-    // иначе метрика складывала бы их дважды. Вычитаем ровно ту же добавку (B1).
-    if (svc === 'aistudio' && typeof aiCmAistudioNativePromptTokens === 'function' && aiCmAistudioNativePromptTokens() > 0 && attachAdd > 0) {
-      tokenEstimate -= attachAdd;
-    }
+    let tokenEstimate = tokenSnap.tokens;
     const contextLimit = ModelConfig.getContextLimit(modelId);
     const effectiveLimit = ModelConfig.getEffectiveLimit(modelId);
     const displayLimit = computeEffectiveLimit(modelId);
@@ -2720,6 +2754,19 @@ function processAndSend(): void {
     const percentage = displayLimit > 0 ? Math.round((maxTokenCount / displayLimit) * 1000) / 10 : 0;
     const hasChanged = percentage !== lastPercentage;
     lastPercentage = percentage;
+    // v2.6 (R1, Шаг 2): ЕДИНСТВЕННАЯ запись снимка метрики — именно здесь, после строгого
+    // удержания бейджа, когда maxTokenCount и percentage окончательны. Все потребители числа
+    // (панель GET_STATS, шапка файла экспорта в core/export-manager.ts) читают tokens/percent/
+    // limit ТОЛЬКО из этого снимка: расхождение R1 (81 токен между счётчиком панели файла и
+    // бейджем сразу после F5) закрывается на корне, а не подгонкой одного из путей.
+    lastTokensSnapshot = { tokens: maxTokenCount, percent: percentage, limit: displayLimit };
+    // v2.6 (R1, Шаг 5): значение накапливается ДО ветвления, поэтому его видит ЛЮБАЯ ветка
+    // (SPA-супрессия, щит O-1 badgeHold, заморозка лоадера, BYOK-держание): разморозка лоадера
+    // и снятие щита рисуют последнее посчитанное число, даже если проход не дошёл до updateWidget.
+    lastWidgetData = {
+      percentage, tokenEstimate: maxTokenCount, effectiveLimit, contextLimit, displayLimit,
+      modelName: ModelConfig.getModel(modelId)?.name || modelId, attachBreak: netAttachBreak
+    };
     // O-35 (v54, фикс badge-suppress): супрессия держится ТОЛЬКО пока база нового convId не
     // принята — сетью (baseSeen) ИЛИ DOM-адаптером (adapterBaseSeen; у qwen после F5/SPA сети
     // нет вовсе, базу пишет history-write source=adapter). Вердикт считается один раз и уходит
@@ -2731,17 +2778,15 @@ function processAndSend(): void {
       debugLog('log', '[content-trace] badge-suppress: пропуск updateWidget до первого снимка нового convId');
     } else if (aiCmLoaderFreeze) {
       // v30.9: во время скрытой загрузки молча копим последнее значение (без updateWidget);
-      // на разморозке слушатель ai-cm-loader-freeze отрисует его принудительно.
-      lastWidgetData = {
-        percentage, tokenEstimate: maxTokenCount, effectiveLimit, contextLimit, displayLimit,
-        modelName: ModelConfig.getModel(modelId)?.name || modelId, attachBreak: netAttachBreak
-      };
+      // на разморозке слушатель ai-cm-loader-freeze отрисует его принудительно (lastWidgetData
+      // заполнен выше — ветка только не рисует).
       debugLog('log', '[content-trace] badge-freeze: скрытая загрузка лоадера — значение накоплено, виджет держится');
     } else if (aiCmBadgeHoldActive()) {
       // O-1: первой записи базы ChatGPT на этом документе ещё нет — бейдж держим (виджет
       // скрыт с создания): не показываем ни placeholder «—», ни заниженную DOM-оценку после
       // F5 (в т.ч. при пустом convId). Отпускание — записью базы ИЛИ фолбэком
-      // AI_CM_BADGE_HOLD_FALLBACK_MS (aiCmArmBadgeHoldFallback).
+      // AI_CM_BADGE_HOLD_FALLBACK_MS (aiCmArmBadgeHoldFallback → aiCmBadgeHoldRelease(reason, true)
+      // → processAndSend), то есть рисование гарантировано и на снятии щита.
     } else if (byokHeuristicHold) {
       // Шаг 4: BYOK включён, но точного числа для ЭТОГО текста ещё нет — updateWidget не зовём:
       // бейдж держит предыдущее значение (на свежей странице — плейсхолдер «—»), а не завышенную
@@ -2749,10 +2794,6 @@ function processAndSend(): void {
       debugLog('log', '[content-trace] byok-hold: точного числа для текста ещё нет — бейдж держим');
     } else {
       updateWidget(percentage, maxTokenCount, effectiveLimit, contextLimit, displayLimit, ModelConfig.getModel(modelId)?.name || modelId, netAttachBreak);
-      lastWidgetData = {
-        percentage, tokenEstimate: maxTokenCount, effectiveLimit, contextLimit, displayLimit,
-        modelName: ModelConfig.getModel(modelId)?.name || modelId, attachBreak: netAttachBreak
-      };
     }
     // O-35 (ДИАГНОСТИКА, только измерение): qwen-badge — вердикт ветви отрисовки бейджа.
     // reason=draw — updateWidget выполнился (процент ушёл в круг/подпись); reason=spa-suppress —
@@ -3271,34 +3312,21 @@ if (isExtensionValid()) {
         const fullText = effective ? effective : currentAdapter.getFullDialogText();
         const countForTokens = effective ? getEffectiveCount(messages.length) : messages.length;
         const modelId = resolveCurrentModel();
-        // O-47: тот же счётчик, что у бейджа (processAndSend) — попап и круг не расходятся;
-        // у Qwen эффективно 0 → tokens~. Шаг 3: text — чтобы точный ответ BYOK был авторитетен;
-        // Шаг 2: aiCmExactTokensFor сам решает по convId — эвристика не перебьёт ответ API.
-        const metricServerTokens = aiCmMetricServerTokens(currentAdapter.siteName, fullText);
-        // v2.0.32: у AI Studio нативный счётчик шапки отдаёт сам aiCmMetricServerTokens,
-        // поэтому здесь ПРЕЖНИЕ строки: оба пути метрики (бейдж и попап) видят одно число.
-        let tokenEstimate = metricServerTokens > 0 ? metricServerTokens : Tokenizer.estimateDialogTokens(fullText, countForTokens);
-        if (baseComplete === true && metricServerTokens === 0 && netEffectiveLen > 0 && fullText && fullText.length > 0 && netEffectiveLen > fullText.length) {
-          tokenEstimate = Math.round(tokenEstimate * (netEffectiveLen / fullText.length));
-        }
-        // v2.3 (B1): тот же расчёт, что у бейджа — добавляется только доля пула
-        // неотрендеренных вложений (см. aiCmAttachPendingTokens).
-        var attachAddM = aiCmAttachPendingTokens(fullText, netAttachTokens, netAttachBreak);
-        if (attachAddM > 0) tokenEstimate += attachAddM;
-        // v2.0.32: вложения уже внутри счётчика шапки AI Studio — вычитаем ту же добавку.
-        if (currentAdapter.siteName === 'aistudio' && typeof aiCmAistudioNativePromptTokens === 'function' && aiCmAistudioNativePromptTokens() > 0 && attachAddM > 0) {
-          tokenEstimate -= attachAddM;
-        }
-        // Шаг 3: точный счётчик (API BYOK / серверный) авторитетен — монотонный max() эвристики
-        // его не поднимает, иначе попап перезаписывал бы ответ API оценкой tokens~ и расходился
-        // с бейджем (тот делает ровно то же: `if (metricServerTokens > 0) maxTokenCount = tokenEstimate`).
-        // max() остаётся только на эвристическом пути (Qwen, сервис без серверных чисел) — прежнее
-        // поведение «не падать при SPA».
-        const displayTokens = metricServerTokens > 0 ? tokenEstimate : Math.max(tokenEstimate, maxTokenCount);
+        // v2.6 (R1): панель считает число ТЕМ ЖЕ aiCmTokenSnapshot, что и бейдж, а при наличии
+        // зафиксированного снимка (state.ts:lastTokensSnapshot) отдаёт ровно его tokens/percent.
+        // Прежний Math.max(tokenEstimate, maxTokenCount) и был источником расхождения R1
+        // (81 токен: панель показывала свежую оценку, бейдж — удержанный максимум).
+        var tokenSnapStats = aiCmTokenSnapshot(fullText, countForTokens, netAttachTokens, netAttachBreak);
+        var snapStats = (typeof lastTokensSnapshot !== 'undefined' && lastTokensSnapshot) ? lastTokensSnapshot : null;
+        var displayTokens = (snapStats && typeof snapStats.tokens === 'number') ? snapStats.tokens : tokenSnapStats.tokens;
         const contextLimit = ModelConfig.getContextLimit(modelId);
         const effectiveLimit = ModelConfig.getEffectiveLimit(modelId);
         const displayLimit = computeEffectiveLimit(modelId);
-        const percent = displayLimit > 0 ? Math.round((displayTokens / displayLimit) * 1000) / 10 : 0;
+        // percent — из того же снимка: круг бейджа, подпись панели и шапка файла показывают
+        // одну связку tokens/percent/limit, пересчёт «на лету» больше не расходится с бейджем.
+        var percent = (snapStats && typeof snapStats.percent === 'number')
+          ? snapStats.percent
+          : (displayLimit > 0 ? Math.round((displayTokens / displayLimit) * 1000) / 10 : 0);
         sendResponse({
           data: {
             site: currentAdapter.siteName,

@@ -606,9 +606,18 @@ describe('O-35 B (после O-47): проводка серверного usage 
 
   test('B: шаг 2 — content.js принимает снимок, а метрика читает site-гейт (у Qwen 0)', function () {
     expect(CONTENT).toContain('netServerTokens = detail.serverTokens || 0;');
-    // O-47: обе точки расчёта pct читают счётчик МЕТРИКИ (aiCmMetricServerTokens), не сырое поле
-    const hits = CONTENT.match(/let tokenEstimate = metricServerTokens > 0 \? metricServerTokens : Tokenizer\.estimateDialogTokens\(/g) || [];
-    expect(hits.length).toBe(2);
+    // O-47 + R1: расчёт числа ОДИН — aiCmTokenSnapshot: метрика (site-гейт) внутри себя решает
+    // serverTokens vs эвристика, а обе точки потребления (бейдж processAndSend и панель
+    // GET_STATS) берут число из этой функции. Прежние два тернарника схлопнуты в один байт.
+    const hits = CONTENT.match(/var tokens = serverTokens > 0 \? serverTokens : aiCmCanonicalTokens\(text, 0, msgs\);/g) || [];
+    expect(hits.length).toBe(1);
+    // единственная точка расчёта зовётся РОВНО из двух путей метрики (+ её объявление)
+    const snapCalls = CONTENT.match(/aiCmTokenSnapshot\(/g) || [];
+    expect(snapCalls.length).toBe(3);
+    // и сама точка читает метрику, а не сырое поле снимка
+    const decl = fnDecl(CONTENT, 'aiCmTokenSnapshot');
+    expect(decl).toContain('aiCmMetricServerTokens(svc, text)');
+    expect(decl).not.toContain('netServerTokens');
   });
 
   test('B: шаг 3 — бейдж: серверный счётчик авторитетен (кроме Qwen) и сбрасывает максимум', function () {

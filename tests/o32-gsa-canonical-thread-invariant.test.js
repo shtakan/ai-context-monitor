@@ -500,6 +500,22 @@ describe('O-32 (6): монотонный максимум включён при 
     expect(CONTENT).toContain('metricSig !== lastMetricSig');
     expect(CONTENT).toContain('lastMetricSig = metricSig;');
   });
+
+  test('R5/D6 (v2.6): панель и бейдж читают ОДИН снимок числа — корень R1 закрыт', () => {
+    // канонический поток GSA: число диалога считается в ЕДИНОЙ точке (aiCmTokenSnapshot),
+    // поэтому «каноническая идентичность хода» и число бейджа не могут разойтись.
+    expect(CONTENT.split('aiCmTokenSnapshot(').length - 1).toBe(3);   // объявление + бейдж + панель
+    // и фиксируется оно ОДИН раз — после окончательных maxTokenCount/percentage
+    expect(CONTENT.split('lastTokensSnapshot = { tokens: maxTokenCount, percent: percentage, limit: displayLimit };').length - 1).toBe(1);
+    // панель (GET_STATS) отдаёт ровно зафиксированное число, а не собственный пересчёт:
+    expect(CONTENT).toContain("var snapStats = (typeof lastTokensSnapshot !== 'undefined' && lastTokensSnapshot) ? lastTokensSnapshot : null;");
+    expect(CONTENT).toContain("var displayTokens = (snapStats && typeof snapStats.tokens === 'number') ? snapStats.tokens : tokenSnapStats.tokens;");
+    expect(CONTENT).toContain("var percent = (snapStats && typeof snapStats.percent === 'number')");
+    expect(CONTENT).toContain('? snapStats.percent');
+    // прежнего «попап не регрессирует» через max() больше нет (иначе R1 вернётся ростом)
+    expect(CONTENT).not.toContain('const displayTokens = metricServerTokens > 0 ? tokenEstimate');
+    expect(CONTENT).not.toContain(': Math.max(tokenEstimate, maxTokenCount);');
+  });
 });
 
 // =====================================================================================
