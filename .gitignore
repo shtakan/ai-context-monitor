@@ -52,6 +52,11 @@ tools/*
 !tools/overlay-bind-contract.js
 !tools/archive-bind-contract.js
 !tools/oracle-bind-contract.js
+# §8: реальные сетевые дампы Claude/Perplexity для контрактных тестов адаптеров.
+# Обезличены (author_*/токены/источники вырезаны), но обязаны ехать в git — иначе
+# contract-*-network.test.js в чистом клоне уходят в skip и контракт не проверяется.
+!tools/claude-network-dump.json
+!tools/perplexity-network-dump.json
 # Jest-трансформер для TS (Шаг 1 миграции) — это конфиг, а не одноразовый скрипт:
 # он должен быть в git, иначе package.json ссылается на несуществующий файл в CI.
 !tools/jest-esbuild-transform.js

@@ -1,0 +1,26 @@
+{
+  "source": "live-network",
+  "captured_at": "2026-11-10T04:14:43.942Z",
+  "method": "GET",
+  "url": "https://www.perplexity.ai/rest/thread/{thread_slug}?with_parent_info=true&supported_block_use_cases=true",
+  "status": 200,
+  "note": "Real GET /rest/thread/{slug} response captured from perplexity.ai (logged-in Free account, model turbo). Trimmed to the fields consumed by parsePerplexityThread; author_name/author_username/author_id/avatar, read_write_token and web sources were removed as non-contractual and personal data.",
+  "body": {
+    "status": "success",
+    "entries": [
+      {
+        "uuid": "190e659c-cf75-485f-8707-4036b7771f40",
+        "query_str": "Reply with the single word: contract.",
+        "display_model": "turbo",
+        "user_selected_model": "turbo",
+        "thread_url_slug": "46fbc9cd-426a-4ff8-a890-ff3ea557fbe8",
+        "thread_title": "Reply with the single word: contract.",
+        "mode": "copilot",
+        "search_focus": "internet",
+        "step_type": "FINAL",
+        "status": "completed",
+        "text": "[{\"step_type\": \"INITIAL_QUERY\", \"content\": {\"goal_id\": null, \"query\": \"Reply with the single word: contract.\"}, \"uuid\": \"\"}, {\"step_type\": \"FINAL\", \"content\": {\"goal_id\": null, \"answer\": \"{\\\"answer\\\": \\\"contract\\\", \\\"chunks\\\": [\\\"contract\\\"], \\\"structured_answer\\\": [], \\\"web_results\\\": []}\", \"started_at\": null, \"query_started_us\": null}, \"uuid\": \"\"}]"
+      }
+    ]
+  }
+}

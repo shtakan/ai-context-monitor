@@ -1,0 +1,128 @@
+{
+  "source": "live-network",
+  "captured_at": "2026-11-10T04:10:50.268Z",
+  "method": "GET",
+  "url": "https://claude.ai/api/organizations/{org_id}/chat_conversations/{conversation_id}?tree=True&rendering_mode=messages&render_all_tools=true",
+  "status": 200,
+  "note": "Real GET /chat_conversations response captured from claude.ai (Free plan, Haiku). Organization and conversation UUIDs kept as-is (non-personal); unrelated conversations dropped.",
+  "body": {
+    "uuid": "49fa2a6d-60a4-4f98-a65f-1d715a8562b7",
+    "name": "Single word reply: contract",
+    "summary": "",
+    "model": "claude-haiku-5-5",
+    "created_at": "2026-11-10T04:08:01.488401Z",
+    "updated_at": "2026-11-10T04:08:43.960274Z",
+    "settings": {
+      "enabled_web_search": true,
+      "paprika_mode": "auto",
+      "enabled_monkeys_in_a_barrel": true,
+      "chat_memory_mode": "enabled",
+      "tool_search_mode": "auto",
+      "preview_feature_uses_artifacts": true,
+      "enabled_turmeric": true,
+      "thinking_mode": "auto",
+      "effort_level": "medium"
+    },
+    "is_starred": false,
+    "is_archived": false,
+    "is_wiggle_enabled": true,
+    "workspace_upgraded": false,
+    "is_multiplayer": false,
+    "effective_thinking_mode": "auto",
+    "is_temporary": false,
+    "platform": "CLAUDE_AI",
+    "current_leaf_message_uuid": "01a1c3a4-d637-73d4-bbfd-d1a40cd928b7",
+    "chat_messages": [
+      {
+        "uuid": "01a1c3a4-3243-727a-b4a9-fee8e349f9a5",
+        "text": "",
+        "content": [
+          {
+            "citations": [],
+            "start_timestamp": "2026-11-10T04:08:01.696271Z",
+            "stop_timestamp": "2026-11-10T04:08:01.696271Z",
+            "text": "Reply with the single word: contract.Reply with the single word: contract.",
+            "type": "text"
+          }
+        ],
+        "sender": "human",
+        "index": 0,
+        "created_at": "2026-11-10T04:08:01.696539Z",
+        "updated_at": "2026-11-10T04:08:01.696539Z",
+        "truncated": false,
+        "attachments": [],
+        "files": [],
+        "sync_sources": [],
+        "parent_message_uuid": "00000000-0000-4000-8000-000000000000"
+      },
+      {
+        "uuid": "01a1c3a4-3243-749f-a3b9-068afb891b56",
+        "text": "",
+        "content": [
+          {
+            "citations": [],
+            "start_timestamp": "2026-11-10T04:08:01.942806Z",
+            "stop_timestamp": "2026-11-10T04:08:02.090440Z",
+            "text": "contract",
+            "type": "text"
+          }
+        ],
+        "sender": "assistant",
+        "index": 1,
+        "created_at": "2026-11-10T04:08:02.098057Z",
+        "updated_at": "2026-11-10T04:08:02.098057Z",
+        "truncated": false,
+        "stop_reason": "end_turn",
+        "attachments": [],
+        "files": [],
+        "sync_sources": [],
+        "parent_message_uuid": "01a1c3a4-3243-727a-b4a9-fee8e349f9a5"
+      },
+      {
+        "uuid": "01a1c3a4-d637-7a1e-91c9-39aae1af55e9",
+        "text": "",
+        "content": [
+          {
+            "citations": [],
+            "start_timestamp": "2026-11-10T04:08:43.578650Z",
+            "stop_timestamp": "2026-11-10T04:08:43.578650Z",
+            "text": "Reply with the single word: contract.",
+            "type": "text"
+          }
+        ],
+        "sender": "human",
+        "index": 2,
+        "created_at": "2026-11-10T04:08:43.578926Z",
+        "updated_at": "2026-11-10T04:08:43.578926Z",
+        "truncated": false,
+        "attachments": [],
+        "files": [],
+        "sync_sources": [],
+        "parent_message_uuid": "01a1c3a4-3243-749f-a3b9-068afb891b56"
+      },
+      {
+        "uuid": "01a1c3a4-d637-73d4-bbfd-d1a40cd928b7",
+        "text": "",
+        "content": [
+          {
+            "citations": [],
+            "start_timestamp": "2026-11-10T04:08:43.949544Z",
+            "stop_timestamp": "2026-11-10T04:08:43.954302Z",
+            "text": "contract",
+            "type": "text"
+          }
+        ],
+        "sender": "assistant",
+        "index": 3,
+        "created_at": "2026-11-10T04:08:43.960274Z",
+        "updated_at": "2026-11-10T04:08:43.960274Z",
+        "truncated": false,
+        "stop_reason": "end_turn",
+        "attachments": [],
+        "files": [],
+        "sync_sources": [],
+        "parent_message_uuid": "01a1c3a4-d637-7a1e-91c9-39aae1af55e9"
+      }
+    ]
+  }
+}
