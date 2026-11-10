@@ -662,7 +662,7 @@ function aiCmAttachPendingTokens(fullText: string, attachTokens?: number, attach
 // v2.0.20: слаг модели из сети. Мост из MAIN world (core/gemini-intercept.js:captureModelSlugFromBody
 // → window.dispatchEvent) в переменную этого мира (core/state.js:87). Несёт то же значение, что
 // detail.modelSlug в ai-cm-full-history, но приходит на КАЖДЫЙ сетевой ответ и раньше снимка.
-// Место в лестнице resolveCurrentModel (popupModelId → rawSnapshot → uiRaw): ниже попапа, выше DOM.
+// Место в лестнице resolveCurrentModel (попап → uiRaw(DOM) → rawSnapshot): ниже попапа, выше DOM/дефолта; «Авто» уступает сети.
 window.addEventListener('ai-cm-model-slug', function (/** @type {CustomEvent} */ ev: CustomEvent) {
   var md = ev && ev.detail;
   if (md && typeof md.slug === 'string' && md.slug) {
@@ -1600,7 +1600,7 @@ function startObserving(): void {
 const geminiUiModelByFamily: Record<string, string> = {}; // 'pro'|'flash'|'ultra' -> последнее точное имя из UI
 let lastModelSourceSig: string = '';
 function resolveCurrentModel(): string {
-  // v47: приоритет — выбранная в UI модель; фолбэк — снимок/тэйп/адаптер/дефолт.
+  // v2.0.33: лестница — попап → DOM(uiRaw) → сеть; «Авто» не резолвится и уступает сети.
   const rawFromNet = detectedModelSlug || '';
   const snapNetId = rawFromNet ? ModelConfig.resolveModelId(rawFromNet) : null;
   let uiRaw = '';
@@ -1617,7 +1617,7 @@ function resolveCurrentModel(): string {
     }
   } catch (e) { uiRaw = ''; }
   const uiResolved = uiRaw ? ModelConfig.resolveModelId(uiRaw) : null;
-  if (uiRaw && !uiResolved) uiRaw = ''; // сигнал есть, но не распознан → фолбэк
+  if (uiRaw && !uiResolved) uiRaw = ''; // «Авто»/нераспознанный UI-сигнал → фолбэк на сеть/DOM
 
   const rawFromDom = (rawFromNet || uiRaw) ? '' : (currentAdapter.detectModel() || '');
   const rawSnapshot = rawFromNet || rawFromDom || '';
@@ -1629,12 +1629,12 @@ function resolveCurrentModel(): string {
   }
 
   // H19: явный выбор модели в дропдауне попапа авторитетен для лимита и токенизации.
-  // Лестница: попап → сеть → DOM. «Автоопределение» (popupModelId === null/'') уступает
-  // снимку, поэтому v2.0.20 работает как задумано, а ручной выбор пользователя не
-  // перебивается сетью (иначе дропдаун молча расходится с бейджем и лимитом).
-  const raw = popupModelId || rawSnapshot || uiRaw || '';
+  // Лестница: попап → DOM(UI) → сеть. «Автоопределение» (popupModelId === null/'')
+  // уступает явному UI-сигналу, а если UI показывает «Авто» — уступает сети, поэтому
+  // ручной выбор пользователя не перебивается сетью, а «Авто» не подставляет ложный слаг.
+  const raw = popupModelId || uiRaw || rawSnapshot || '';
   // Источник raw для path/source: та же лестница приоритетов (без повторов).
-  const rawSrc = popupModelId ? 'попап' : (rawSnapshot ? (rawFromNet ? 'сеть' : 'DOM') : (uiRaw ? 'dom' : ''));
+  const rawSrc = popupModelId ? 'попап' : (uiRaw ? 'dom' : (rawSnapshot ? (rawFromNet ? 'сеть' : 'DOM') : ''));
   let modelId = raw ? ModelConfig.resolveModelId(raw) : null;
   let path;
   if (modelId) {
@@ -1647,7 +1647,7 @@ function resolveCurrentModel(): string {
   // model:"…"), и имя модели снапшота оставалось пустым → сегмент модели в имени файла
   // автоэкспорта падал в фолбэк 'model'. Заполняем ОДНОЙ точкой ЗДЕСЬ — ровно той моделью,
   // что показывает badge-update: ModelConfig.getModel(modelId)?.name, где modelId идёт по
-  // пути попап → сеть → DOM → дефолт сайта ('gemini-search-default' = «Gemini (Search AI)»).
+  // пути попап → DOM → сеть → дефолт сайта ('gemini-search-default' = «Gemini (Search AI)»).
   // Для прочих сайтов (в т.ч. Gemini) поведение прежнее — присваивание не выполняется.
   if (!snapModelId && currentAdapter && currentAdapter.siteName === 'google_search') {
     lastSnapshotModelName = ModelConfig.getModel(modelId)?.name || modelId;

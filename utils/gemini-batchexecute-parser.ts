@@ -318,10 +318,25 @@ function extractUserQuestion(turn: any): string {
 }
 
 // ---- модель/id/ts ----
-/** @type {RegExp} Имя модели Gemini в строке хода. */
-var MODEL_NAME_RE = /^\s*(?:Gemini\s*[\d.]?|\d+(?:\.\d+)?\s+(?:Flash|Pro|Ultra|Gemini))/i;
 /**
- * Имя модели хода (первая короткая строка, похожая на "Gemini 2.5 Pro").
+ * Имя модели Gemini — ВСЯ строка, не префикс: «Gemini 3.1 Pro», «3.6 Flash Lite».
+ * Якорь `$` обязателен: раньше префиксное совпадение принимало имена файлов
+ * автоэкспорта («…-gemini-3.1-Pro-2026.md») за модель, и бейдж «Авто» скатывался
+ * в чужой слаг (петля «имя файла → модель → имя следующего файла»).
+ * @type {RegExp}
+ */
+var MODEL_NAME_RE = /^\s*(?:Gemini\s+(?:\d+(?:\.\d+)*\s+)?|\d+(?:\.\d+)*\s+)(?:Flash|Pro|Ultra)(?:\s+(?:Lite|Расширенн[а-яё]*|Extended))?\s*$/i;
+/**
+ * Строка не похожа на имя файла/дату автоэкспорта (расширение, дата -20xx-).
+ * @param {string} s Кандидат в имя модели (уже trimmed).
+ * @returns {boolean} true — это файл/дата, а не модель.
+ */
+function looksLikeFileOrDate(s: string): boolean {
+  return /\.(?:md|pdf|txt|json)$/i.test(s) || /-20\d\d-/.test(s);
+}
+/**
+ * Имя модели хода: первая короткая ЦЕЛАЯ строка вида "Gemini 2.5 Pro".
+ * Нераспознанный кандидат НЕ подменяется дефолтом — возвращается ''.
  * @param {any} node Узел хода.
  * @returns {string} Имя модели или ''.
  */
@@ -330,7 +345,9 @@ function extractModelName(node: any): string {
   (function walk(n) {
     if (found) return;
     if (typeof n === 'string') {
-      if (n.length < 60 && n.indexOf('\n') < 0 && MODEL_NAME_RE.test(n)) { found = n.trim(); return; }
+      var s = n.trim();
+      if (s.length < 60 && s.indexOf('\n') < 0 && !looksLikeFileOrDate(s) &&
+        MODEL_NAME_RE.test(s)) { found = s; return; }
     } else if (Array.isArray(n)) { for (var i = 0; i < n.length; i++) { walk(n[i]); if (found) return; } }
   })(node);
   return found || '';

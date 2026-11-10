@@ -116,14 +116,14 @@
     }
   }
 
-      // ---- extract*: регулярка модели и извлечение id/ts/rc хода ----
-  var MODEL_NAME_RE = /^\s*(?:Gemini\s*[\d.]?|\d+(?:\.\d+)?\s+(?:Flash|Pro|Ultra|Gemini))/i;
+  // v2.0.33: модель — вся строка (якорь $); имя файла/дата (20xx) моделью не считаются.
+  var MODEL_NAME_RE = /^\s*(?:Gemini\s+(?:\d+(?:\.\d+)*\s+)?|\d+(?:\.\d+)*\s+)(?:Flash|Pro|Ultra)(?:\s+(?:Lite|Расширенн[а-яё]*|Extended))?\s*$/i;
   function extractModelName(node) {
     var found = null;
     (function walk(n) {
       if (found) return;
       if (typeof n === 'string') {
-        if (n.length < 60 && n.indexOf('\n') < 0 && MODEL_NAME_RE.test(n)) { found = n.trim(); return; }
+        if (n.length < 60 && n.indexOf('\n') < 0 && !/\.(?:md|pdf|txt|json)$/i.test(n.trim()) && !/-20\d\d-/.test(n) && MODEL_NAME_RE.test(n)) { found = n.trim(); return; }
       } else if (Array.isArray(n)) { for (var i = 0; i < n.length; i++) { walk(n[i]); if (found) return; } }
     })(node);
     return found || '';

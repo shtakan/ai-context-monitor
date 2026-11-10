@@ -3,19 +3,23 @@
  *
  * Модуль: utils/gemini-ui-model.ts — бывшие приватные функции core/content.ts
  * (GEMINI_UI_MODEL_RE, normalizeUiModelText, extractUiModelText,
- * probeGeminiUiMenuChecked, resolveFamilyVariantId, probeGeminiUiButton,
- * detectSelectedModelFromDom), вынесенные в чистый ES-модуль с DI: документ, реестр
- * моделей (порт ModelConfig) и кэш «последнее точное имя по семейству» приходят
- * аргументами. Здесь документ — jsdom-инстанс jest, реестр — управляемая заглушка,
- * поэтому проверяется именно логика слоя, без content-бандла и chrome.*.
+ * probeGeminiUiMenuChecked, probeGeminiUiPickerPrimaryText, resolveFamilyVariantId,
+ * probeGeminiUiButton, detectSelectedModelFromDom), вынесенные в чистый ES-модуль
+ * с DI: документ, реестр моделей (порт ModelConfig) и кэш «последнее точное имя по
+ * семейству» приходят аргументами. Здесь документ — jsdom-инстанс jest, реестр —
+ * управляемая заглушка, поэтому проверяется именно логика слоя, без content-бандла
+ * и chrome.*.
  *
- * Что пинится (лестница v47–v50):
+ * Что пинится (лестница v47–v2.0.33):
  *   1) регэксп модели и нормализация слитного текста кнопки ("ProРасширенный");
  *   2) extractUiModelText: длина ≤ 60, нужна версия ИЛИ слово gemini, иначе "";
  *   3) меню: aria-checked на пункте ИЛИ на потомке; без checked — "";
  *   4) кнопка: точная версия → имя как есть + обновление кэша; семейство без
  *      версии → кэш меню → сетевой снимок → семейный дефолт ModelConfig;
- *   5) detectSelectedModelFromDom: меню приоритетнее кнопки, меню обновляет кэш.
+ *   5) новый пикер `.picker-primary-text`: явная модель → имя/резолвер семьи,
+ *      «Авто»/«Auto» → GEMINI_UI_AUTO_NAME (не слаг!), служебный текст → "";
+ *   6) detectSelectedModelFromDom: меню → пикер → кнопка; «Авто» не падает на
+ *      старую кнопку и не выдумывает модель.
  *
  * Известная особенность (пинится намеренно, НЕ «исправляется»): в
  * GEMINI_UI_MODEL_RE хвост варианта — /расширенн[аяый]/, т.е. ровно один символ,
@@ -177,6 +181,14 @@ describe('Gemini UI model: probeGeminiUiMenuChecked (aria-checked)', () => {
     const doc = mount('<div class="chat"><p>Привет</p></div>');
     expect(ui.probeGeminiUiMenuChecked(doc)).toBe('');
   });
+
+  it('checked-пункт «Авто» → метка режима, а не выдуманная модель', function () {
+    const doc = mount('<div role="menu">' +
+      '<button type="button" role="menuitemradio" aria-checked="false">3.6 Flash</button>' +
+      '<button type="button" role="menuitemradio" aria-checked="true">Авто</button>' +
+      '</div>');
+    expect(ui.probeGeminiUiMenuChecked(doc)).toBe(ui.GEMINI_UI_AUTO_NAME);
+  });
 });
 
 describe('Gemini UI model: resolveFamilyVariantId (приоритеты v49)', () => {
@@ -213,6 +225,54 @@ describe('Gemini UI model: resolveFamilyVariantId (приоритеты v49)', (
     const deps = makeDeps(mount(''), config, {});
     expect(ui.resolveFamilyVariantId(deps, 'flash', '', 'gemini-3.1-pro')).toBe('gemini-3.1-pro');
     expect(ui.resolveFamilyVariantId(deps, 'flash', '', null)).toBe('');
+  });
+});
+
+describe('Gemini UI model: probeGeminiUiPickerPrimaryText (.picker-primary-text)', () => {
+  function pickerHtml(text) {
+    return '<button type="button" class="model-picker" aria-haspopup="menu">' +
+      '<span class="picker-primary-text">' + text + '</span></button>';
+  }
+
+  it('точная версия из нового пикера возвращается как есть и обновляет кэш семьи', function () {
+    const config = makeConfig({ defaults: { flash: 'gemini-3.6-flash' } });
+    const deps = makeDeps(mount(pickerHtml('Gemini 3.6 Flash')), config, {});
+    expect(ui.probeGeminiUiPickerPrimaryText(deps, null)).toBe('Gemini 3.6 Flash');
+    expect(deps.cache.flash).toBe('Gemini 3.6 Flash');
+    expect(config.calls.def.length).toBe(0);
+  });
+
+  it('семейство без версии («Flash», «Flash Lite») → семейный резолвер', function () {
+    const config = makeConfig({ defaults: { flash: 'gemini-3.6-flash' } });
+    const deps = makeDeps(mount(pickerHtml('Flash')), config, {});
+    expect(ui.probeGeminiUiPickerPrimaryText(deps, null)).toBe('gemini-3.6-flash');
+    expect(config.calls.def[0][0]).toBe('flash');
+    // точной версии нет — кэш не обновляется
+    expect(deps.cache).toEqual({});
+
+    const depsLite = makeDeps(mount(pickerHtml('Flash Lite')), makeConfig({
+      defaults: { flash: 'gemini-3.5-flash-lite' }
+    }), {});
+    expect(ui.probeGeminiUiPickerPrimaryText(depsLite, null)).toBe('gemini-3.5-flash-lite');
+  });
+
+  it('«Авто»/«Auto» → метка режима, кэш и семейный дефолт не трогаются', function () {
+    expect(ui.isAutoUiModelText('Авто')).toBe(true);
+    expect(ui.isAutoUiModelText('Auto')).toBe(true);
+    expect(ui.isAutoUiModelText('Automatic')).toBe(false);
+    for (const auto of ['Авто', 'Auto']) {
+      const config = makeConfig({ defaults: { flash: 'gemini-3.6-flash' } });
+      const deps = makeDeps(mount(pickerHtml(auto)), config, {});
+      expect(ui.probeGeminiUiPickerPrimaryText(deps, null)).toBe(ui.GEMINI_UI_AUTO_NAME);
+      expect(deps.cache).toEqual({});
+      expect(config.calls.def.length).toBe(0);
+    }
+  });
+
+  it('служебная подпись и пустой пикер → "" (фолбэк на другие слои)', function () {
+    expect(ui.probeGeminiUiPickerPrimaryText(makeDeps(mount(pickerHtml('Выбрать модель'))), null)).toBe('');
+    expect(ui.probeGeminiUiPickerPrimaryText(makeDeps(mount(pickerHtml(''))), null)).toBe('');
+    expect(ui.probeGeminiUiPickerPrimaryText(makeDeps(mount('<div class="chat"></div>')), null)).toBe('');
   });
 });
 
@@ -269,6 +329,22 @@ describe('Gemini UI model: detectSelectedModelFromDom', () => {
     const deps = makeDeps(doc, config, {});
     expect(ui.detectSelectedModelFromDom(deps, null)).toBe('3.6 Flash');
     expect(deps.cache.flash).toBe('3.6 Flash');
+  });
+
+  it('новый пикер приоритетнее старой кнопки композера', function () {
+    const doc = mount('<span class="picker-primary-text">3.6 Flash</span>' + fixture('button-flash.html'));
+    const config = makeConfig({ defaults: { flash: 'gemini-3.6-flash' } });
+    const deps = makeDeps(doc, config, {});
+    expect(ui.detectSelectedModelFromDom(deps, null)).toBe('3.6 Flash');
+    expect(deps.cache.flash).toBe('3.6 Flash');
+    expect(config.calls.def.length).toBe(0); // до кнопки/дефолта не дошли
+  });
+
+  it('«Авто» в пикере: метка режима, на старую кнопку не падаем', function () {
+    const doc = mount('<span class="picker-primary-text">Авто</span>' + fixture('button-flash.html'));
+    const deps = makeDeps(doc, makeConfig({ defaults: { flash: 'gemini-3.6-flash' } }), {});
+    expect(ui.detectSelectedModelFromDom(deps, null)).toBe(ui.GEMINI_UI_AUTO_NAME);
+    expect(deps.cache).toEqual({});
   });
 
   it('при закрытом меню (нет checked) падает на кнопку композера', function () {

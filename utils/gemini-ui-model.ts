@@ -71,6 +71,16 @@ export interface GeminiUiModelDeps {
 export const GEMINI_UI_MODEL_RE: RegExp =
   /(?:gemini\s*)?(\d+(?:[.,]\d+)?)?\s*(ultra|pro|flash)(?:\s+(?:lite|расширенн[аяый]|extended|fast))?/i;
 
+/**
+ * Метка режима «Авто» (в UI выбрано автоопределение модели, конкретная модель не
+ * названа). Это НЕ id каталога: core/content.ts видит, что UI-сигнала о конкретной
+ * модели нет, и не подставляет вместо неё ложный сетевой слаг (петля имени файла).
+ */
+export const GEMINI_UI_AUTO_NAME = 'Gemini (Авто)';
+
+/** Признак режима «Авто» в тексте нового пикера/меню («Авто», «Auto»). */
+const GEMINI_UI_AUTO_RE: RegExp = /(?:^|[^a-zа-яё])(?:авто|auto)(?:[^a-zа-яё]|$)/i;
+
 /** Семейство модели по имени: 'ultra'|'pro'|'flash' ('' — не найдено). */
 function modelFamilyOf(name: string): string {
   const m = String(name || '').match(/ultra|pro|flash/i);
@@ -106,6 +116,52 @@ export function extractUiModelText(text: string): string {
 }
 
 /**
+ * Текст UI означает режим «Авто» (выбрано автоопределение, а не модель).
+ * @param text Сырой/нормализованный текст пикера либо пункта меню.
+ */
+export function isAutoUiModelText(text: string): boolean {
+  return GEMINI_UI_AUTO_RE.test(String(text || ''));
+}
+
+/**
+ * Новый пикер модели — `.picker-primary-text` (пришёл на смену кнопке композера).
+ *
+ * Gemini заменил кнопку композера пикером, чей основной текст показывает выбранный
+ * РЕЖИМ: «Авто»/«Auto» либо конкретную модель («3.6 Flash», «Gemini 3.1 Pro»).
+ * Явная модель (семейство ultra|pro|flash) → имя как есть + кэш семьи (точная
+ * версия) или семейный резолвер (только семья). Нет явного семейства → это «Авто»:
+ * возвращаем GEMINI_UI_AUTO_NAME, чтобы вызывающий код не выдумывал модель.
+ * Посторонняя подпись («Выбрать модель») и пустой узел → '' (фолбэк на другие слои).
+ */
+export function probeGeminiUiPickerPrimaryText(
+  deps: GeminiUiModelDeps,
+  snapModelId: string | null
+): string {
+  const nodes = deps.document.querySelectorAll('.picker-primary-text');
+  for (let i = 0; i < nodes.length; i++) {
+    const text = normalizeUiModelText(nodes[i].textContent);
+    if (!text || text.length > 60) continue;
+    if (isAutoUiModelText(text)) return GEMINI_UI_AUTO_NAME;
+    // Подпись пикера — короткий ярлык выбора; версию/префикс gemini не требуем
+    // («3.6 Flash» и просто «Flash» — валидные состояния пикера).
+    const name = extractUiModelText(text);
+    const m = (name || text).match(GEMINI_UI_MODEL_RE);
+    const fam = m ? modelFamilyOf(m[0]) : '';
+    if (m && fam) {
+      if (m[1]) { // точная версия в пикере — обновляем кэш семьи
+        deps.cache[fam] = m[0].trim();
+        return m[0].trim();
+      }
+      const varM = m[0].match(/lite|расширенн[а-яё]*|extended|fast/i);
+      return resolveFamilyVariantId(deps, fam, varM ? varM[0] : '', snapModelId) || '';
+    }
+    // Пикер называет только «Gemini» (без версии/семейства) — это режим «Авто».
+    if (/gemini/i.test(text)) return GEMINI_UI_AUTO_NAME;
+  }
+  return '';
+}
+
+/**
  * Слой (1): имя модели из checked-пункта открытого меню.
  *
  * Ищем среди [role="menuitemradio"|"menuitem"|"option"] элемент, у которого
@@ -117,6 +173,8 @@ export function probeGeminiUiMenuChecked(doc: Document): string {
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
     if (it.getAttribute('aria-checked') !== 'true' && !it.querySelector('[aria-checked="true"]')) continue;
+    // Выбран «Авто» — это режим, а не модель: отдаём метку, чтобы не выдумывать слаг.
+    if (isAutoUiModelText(normalizeUiModelText(it.textContent))) return GEMINI_UI_AUTO_NAME;
     const name = extractUiModelText(it.textContent);
     if (name) return name;
   }
@@ -186,9 +244,12 @@ export function probeGeminiUiButton(deps: GeminiUiModelDeps, snapModelId: string
 /**
  * Точка входа: имя модели, выбранной в UI Gemini ('' — UI-сигнала нет).
  *
- * Меню открыто → это самый точный сигнал, кэш «последняя по семейству» обновляется;
- * иначе — кнопка композера. Решение о фолбэке на сеть/DOM-адаптер принимает
- * вызывающий код (core/content.ts:resolveCurrentModel), а не этот модуль.
+ * (1) Меню открыто → самый точный сигнал (точная версия), кэш «последняя по
+ * семейству» обновляется. (2) Иначе — основной текст нового пикера
+ * `.picker-primary-text`: явная модель («3.6 Flash») побеждает; «Авто» отдаётся
+ * меткой GEMINI_UI_AUTO_NAME и НЕ превращается в слаг. (3) Иначе — старая кнопка
+ * композера. Решение о фолбэке на сеть/DOM-адаптер принимает вызывающий код
+ * (core/content.ts:resolveCurrentModel), а не этот модуль.
  */
 export function detectSelectedModelFromDom(deps: GeminiUiModelDeps, snapModelId: string | null): string {
   const fromMenu = probeGeminiUiMenuChecked(deps.document);
@@ -197,5 +258,7 @@ export function detectSelectedModelFromDom(deps: GeminiUiModelDeps, snapModelId:
     if (fam) deps.cache[fam] = fromMenu;
     return fromMenu;
   }
+  const fromPicker = probeGeminiUiPickerPrimaryText(deps, snapModelId);
+  if (fromPicker) return fromPicker;
   return probeGeminiUiButton(deps, snapModelId) || '';
 }
