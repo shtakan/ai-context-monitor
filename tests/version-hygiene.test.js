@@ -3,7 +3,7 @@
  *
  * Пины source-level (стиль manifest-smoke.test.js / docs-hygiene.test.js) — только чтение:
  *  1) manifest.version === версия ВЕРХНЕЙ записи CHANGELOG.md (парсинг реального файла,
- *     формат Keep a Changelog: «## [x.y.z] - YYYY-MM-DD»); версия — строго литерал 2.1.0,
+ *     формат Keep a Changelog: «## [x.y.z] - YYYY-MM-DD»); версия — строго литерал 2.1.1,
  *     чтобы пин не «съезжал» молча вслед за манифестом;
  *  2) package.json === package-lock.json (root + packages[""]) === manifest.json;
  *  3) место вывода версии согласовано с манифестом: футер docs/index.html
@@ -55,11 +55,11 @@ describe('R-1: manifest.version синхронизирован с верхней
     expect(manifest.version).toBe(topEntry.version);
   });
 
-  test('manifest.version === 2.1.0 (литерал: пин не следует за манифестом молча)', () => {
-    expect(manifest.version).toBe('2.1.0');
+  test('manifest.version === 2.1.1 (литерал: пин не следует за манифестом молча)', () => {
+    expect(manifest.version).toBe('2.1.1');
     expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(topEntry.version).toBe('2.1.0');
-    expect(topEntry.date).toBe('2026-11-09');
+    expect(topEntry.version).toBe('2.1.1');
+    expect(topEntry.date).toBe('2026-11-10');
   });
 
   test('версия монотонна: старшая компонента не ниже прежней (1.18.0)', () => {
@@ -73,13 +73,13 @@ describe('R-1: manifest.version синхронизирован с верхней
     expect(greater).toBe(true);
   });
 
-  test('CHANGELOG: прежние записи не переписаны; новая 2.1.0 стоит выше 2.0.43, а та — выше 2.0.42, а та — выше 2.0.39, а та — выше 2.0.38, а та — выше 2.0.37, а та — выше 2.0.36, а та — выше 2.0.35, а та — выше 2.0.34, а та — выше 2.0.33, а та — выше 2.0.32, а та — выше 2.0.31, а та — выше 2.0.29, а та — выше 2.0.14, а та — выше 2.0.13, а та — выше 2.0.12, а та — выше 2.0.9, а та — выше 2.0.8, а та — выше 2.0.7, а та — выше 2.0.6, а та — выше 2.0.5, а та — выше 2.0.4, а та — выше 2.0.3, а та — выше 2.0.2, а та — выше 2.0.1, а та — выше 2.0.0, а та — выше 1.19.3 (M-14)', () => {
+  test('CHANGELOG: прежние записи не переписаны; новая 2.1.1 стоит выше 2.0.43, а та — выше 2.0.42, а та — выше 2.0.39, а та — выше 2.0.38, а та — выше 2.0.37, а та — выше 2.0.36, а та — выше 2.0.35, а та — выше 2.0.34, а та — выше 2.0.33, а та — выше 2.0.32, а та — выше 2.0.31, а та — выше 2.0.29, а та — выше 2.0.14, а та — выше 2.0.13, а та — выше 2.0.12, а та — выше 2.0.9, а та — выше 2.0.8, а та — выше 2.0.7, а та — выше 2.0.6, а та — выше 2.0.5, а та — выше 2.0.4, а та — выше 2.0.3, а та — выше 2.0.2, а та — выше 2.0.1, а та — выше 2.0.0, а та — выше 1.19.3 (M-14)', () => {
     const headings = changelog.split(/\r?\n/).filter(function (l) { return l.indexOf('## [') === 0; });
     expect(headings.filter(function (h) { return h.indexOf('## [1.19.3] - 2026-09-13') === 0; }).length).toBe(1);
     expect(headings.filter(function (h) { return h.indexOf('## [1.19.2] - 2026-09-13') === 0; }).length).toBe(1);
     expect(headings.filter(function (h) { return h.indexOf('## [1.19.1] - 2026-09-13') === 0; }).length).toBe(1);
     expect(headings.filter(function (h) { return h.indexOf('## [1.18.0] - 2026-09-12') === 0; }).length).toBe(1);
-    const iNew = headings.findIndex(function (h) { return h.indexOf('## [2.1.0]') === 0; });
+    const iNew = headings.findIndex(function (h) { return h.indexOf('## [2.1.1]') === 0; });
     const iV2043 = headings.findIndex(function (h) { return h.indexOf('## [2.0.43]') === 0; });
     const iV2042 = headings.findIndex(function (h) { return h.indexOf('## [2.0.42]') === 0; });
     const iV2039 = headings.findIndex(function (h) { return h.indexOf('## [2.0.39]') === 0; });
@@ -107,7 +107,7 @@ describe('R-1: manifest.version синхронизирован с верхней
     const iM14 = headings.findIndex(function (h) { return h.indexOf('## [1.19.3]') === 0; });
     const iM12 = headings.findIndex(function (h) { return h.indexOf('## [1.19.2]') === 0; });
     const iPrev = headings.findIndex(function (h) { return h.indexOf('## [1.19.1]') === 0; });
-    expect(iNew).toBeGreaterThanOrEqual(0);                  // запись v2.1.0 на месте
+    expect(iNew).toBeGreaterThanOrEqual(0);                  // запись v2.1.1 на месте
     expect(iV2039).toBeGreaterThanOrEqual(0);                // запись v2.0.39 не переписана
     expect(iV2038).toBeGreaterThanOrEqual(0);                // запись v2.0.38 не переписана
     expect(iV2037).toBeGreaterThanOrEqual(0);                // запись v2.0.37 не переписана
@@ -120,7 +120,7 @@ describe('R-1: manifest.version синхронизирован с верхней
     expect(iV2014).toBeGreaterThanOrEqual(0);                // запись v2.0.14 не переписана
     expect(iV2013).toBeGreaterThanOrEqual(0);                // запись v2.0.13 не переписана
     expect(iV2012).toBeGreaterThanOrEqual(0);                // запись v2.0.12 не переписана
-    expect(iNew).toBeLessThan(iV2043);                       // 2.1.0 выше 2.0.43
+    expect(iNew).toBeLessThan(iV2043);                       // 2.1.1 выше 2.0.43
     expect(iV2043).toBeLessThan(iV2042);                     // 2.0.43 выше 2.0.42
     expect(iV2042).toBeLessThan(iV2039);                     // 2.0.42 выше 2.0.39
     expect(iV2039).toBeLessThan(iV2038);                     // 2.0.39 выше 2.0.38
@@ -131,7 +131,7 @@ describe('R-1: manifest.version синхронизирован с верхней
     expect(iV2034).toBeLessThan(iV2033);                     // 2.0.34 выше 2.0.33
     expect(iV2033).toBeLessThan(iV2032);                     // 2.0.33 выше 2.0.32
     expect(iV2032).toBeLessThan(iV2029);                     // 2.0.32 выше 2.0.29
-    expect(iNew).toBeLessThan(iV2029);                       // 2.1.0 выше 2.0.29 (транзитивно)
+    expect(iNew).toBeLessThan(iV2029);                       // 2.1.1 выше 2.0.29 (транзитивно)
     expect(iV2029).toBeLessThan(iV2014);                     // 2.0.29 выше 2.0.14
     expect(iV2014).toBeLessThan(iV2013);                     // 2.0.14 выше 2.0.13
     expect(iV2013).toBeLessThan(iV2012);                     // 2.0.13 выше 2.0.12
