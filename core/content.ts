@@ -758,6 +758,24 @@ function aiCmScheduleAutoExport(percentage: number): void {
     swallowSoft(eSched, 'content:autoexport-schedule');
   }
 }
+// v83 (MCP-синк, автоэкспорт): заказ сетевого снимка Qwen — тот же MAIN→ISOLATED мост,
+// что и ai-cm-full-history. Пока заказ открыт (start без end), снимок метрики и автоэкспорт
+// не публикуются: Qwen отдаёт базу адаптером раньше, чем приходит история, и файл успевал
+// записаться по завышенному DOM-счёту (218k), после чего пришедший сетевой счёт (92k)
+// блокировался гистерезисом порога. typeof-гард — срез-песочницы без core/state.ts.
+window.addEventListener('ai-cm-qwen-history-pending', function (/** @type {CustomEvent} */ ev: CustomEvent) {
+  try {
+    var pd = ev && ev.detail;
+    if (!pd) return;
+    var pendSite = String(pd.site || 'qwen');
+    if (String(pd.phase || '') === 'end') {
+      if (typeof aiCmNetSnapshotPendingEnd === 'function') aiCmNetSnapshotPendingEnd(pendSite);
+    } else if (typeof aiCmNetSnapshotPendingStart === 'function') {
+      aiCmNetSnapshotPendingStart(pendSite);
+    }
+  } catch (eQwenPend) { swallowSoft(eQwenPend, 'content:qwen-history-pending'); }
+});
+
 window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} */ ev: CustomEvent) {
   // O-22 (ИЗМЕРЕНИЕ-2): маркер ПЕРВОЙ строки колбэка слушателя — ДО блока v81 Step1
   // и ДО вставок O-22 (блоки A–G2). Только диагностика под гейтом aiCmDebug.
@@ -878,6 +896,10 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
     if (typeof lastTokensSnapshot !== 'undefined') lastTokensSnapshot = null;
   }
   baseComplete = newBaseComplete;
+  // v83: снимок сети применён — заказ на снимок закрыт (страховка, если MAIN потерял 'end').
+  if (typeof aiCmNetSnapshotPendingEnd === 'function') {
+    aiCmNetSnapshotPendingEnd((currentAdapter && currentAdapter.siteName) || '');
+  }
   // O-43 (корень дефекта): baseComplete — ПЕРЕМЕННАЯ вердикта, и она РЕГРЕССИРУЕТ: тот же тред
   // после полного снимка (historyComplete=true от probe-классификатора) получает от
   // перехватчика ещё эмиты с historyComplete=false (handshake-переэмит + повторный open-путь
@@ -2759,7 +2781,16 @@ function processAndSend(): void {
     // (панель GET_STATS, шапка файла экспорта в core/export-manager.ts) читают tokens/percent/
     // limit ТОЛЬКО из этого снимка: расхождение R1 (81 токен между счётчиком панели файла и
     // бейджем сразу после F5) закрывается на корне, а не подгонкой одного из путей.
-    lastTokensSnapshot = { tokens: maxTokenCount, percent: percentage, limit: displayLimit };
+    // v83 (MCP-синк): пока сетевой снимок заказан и не вернулся, метрику НЕ публикуем —
+    // иначе потребитель (шапка файла pre-trim, панель) прочитает DOM-число до сети.
+    // Снимок пишется на первом же проходе processAndSend после прихода сети (0→1 переход
+    // выше уже обнулил предыдущее значение).
+    var aiCmSnapPending83 = (typeof aiCmNetSnapshotPending === 'function')
+      ? aiCmNetSnapshotPending((currentAdapter && currentAdapter.siteName) || '')
+      : false;
+    if (!aiCmSnapPending83) {
+      lastTokensSnapshot = { tokens: maxTokenCount, percent: percentage, limit: displayLimit };
+    }
     // v2.6 (R1, Шаг 5): значение накапливается ДО ветвления, поэтому его видит ЛЮБАЯ ветка
     // (SPA-супрессия, щит O-1 badgeHold, заморозка лоадера, BYOK-держание): разморозка лоадера
     // и снятие щита рисуют последнее посчитанное число, даже если проход не дошёл до updateWidget.

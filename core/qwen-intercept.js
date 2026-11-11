@@ -594,16 +594,62 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     if (!first) return { text: '', occurrences: 0 };
     return { text: firstWithText || thinkingTextOf(first), occurrences: occurrences };
   }
+  // MCP-СИНК (v83): Qwen держит tool-call'ы не в `content`, а в `extras` (`tool_call`/
+  // `tool_result`/`mcp_call` и их варианты). DOM-адаптер читает те же результаты из скрытых
+  // панелей `.qwen-mcp-tool-call-panel`, поэтому без этого сеть теряла вклад инструментов
+  // (92k против 218k DOM при реальных ~126k). Разбор защитный: берутся любые строковые и
+  // числовые payload-значения, а служебная обвязка (id/status/phase/…) отбрасывается — она
+  // не является текстом и дала бы недетерминированный шум.
+  var TOOL_EXTRA_KEYS = ['tool_call', 'toolCall', 'tool_calls', 'toolCalls', 'tool_result',
+    'toolResult', 'tool_results', 'toolResults', 'mcp_call', 'mcpCall', 'mcp_tool_call',
+    'mcpToolCall', 'function_call', 'functionCall'];
+  var TOOL_EXTRA_SKIP = { status: 1, phase: 1, id: 1, tool_call_id: 1, call_id: 1,
+    created_at: 1, timestamp: 1, ts: 1, type: 1, role: 1 };
+  function collectToolPayloadText(value, parts, depth) {
+    if (value == null || depth > 6) return;
+    if (typeof value === 'string') {
+      var s = value.trim();
+      if (s && /[0-9A-Za-z\u00C0-\u024F\u0400-\u04FF\u4E00-\u9FFF]/.test(s)) parts.push(s);
+      return;
+    }
+    if (typeof value === 'number') { parts.push(String(value)); return; }
+    if (Array.isArray(value)) {
+      for (var i = 0; i < value.length; i++) collectToolPayloadText(value[i], parts, depth + 1);
+      return;
+    }
+    if (typeof value !== 'object') return;
+    for (var key in value) {
+      if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
+      if (TOOL_EXTRA_SKIP[key] === 1) continue;
+      collectToolPayloadText(value[key], parts, depth + 1);
+    }
+  }
+  // Текст tool-вклада узла/элемента extras (пусто — инструментов нет).
+  function toolExtrasTextOf(node) {
+    if (!node || typeof node !== 'object') return '';
+    var extras = node.extras || node.extra || null;
+    if (!extras || typeof extras !== 'object') return '';
+    var parts = [];
+    for (var i = 0; i < TOOL_EXTRA_KEYS.length; i++) {
+      var v = extras[TOOL_EXTRA_KEYS[i]];
+      if (v != null) collectToolPayloadText(v, parts, 0);
+    }
+    return parts.join('\n');
+  }
   // Ответ хода истории: не-thinking элементы content_list клеятся APPEND (как delta.content SSE).
   function historyAnswerOf(list) {
-    var out = '', fallbackAnswer = '';
+    var out = '', fallbackAnswer = '', toolText = '';
     for (var i = 0; i < list.length; i++) {
       var item = list[i];
       if (!item || typeof item !== 'object') continue;
       if (item.phase === PHASE_THINKING || item.phase === 'thinking') continue;
       if (typeof item.content === 'string' && item.content) { if (item.phase === 'answer') out += item.content; else fallbackAnswer += item.content; }
+      // MCP-синк: tool-call'ы элемента content_list тоже уходят в текст хода.
+      var toolItem = (typeof toolExtrasTextOf === 'function') ? toolExtrasTextOf(item) : '';
+      if (toolItem) toolText += (toolText ? '\n' : '') + toolItem;
     }
-    return out || fallbackAnswer;
+    var answer = out || fallbackAnswer;
+    return answer ? (toolText ? (answer + '\n' + toolText) : answer) : toolText;
   }
   // usage хода истории (спека: usage{input_tokens,output_tokens}) — та же нормализация, что у
   // кадров стрима (utils/stream-frames.ts:normalizeUsage); её null — читаем измеренные поля сами.
@@ -697,6 +743,10 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       var text = historyAnswerOf(list);
       if (!text && typeof node.content === 'string') text = node.content;
       if (!text && typeof node.text === 'string') text = node.text;
+      // MCP-синк: tool-results УРОВНЯ СООБЩЕНИЯ (extras узла, не content_list). Дубликат
+      // (тот же текст уже пришёл из элементов списка) не добавляется повторно.
+      var nodeTools = (typeof toolExtrasTextOf === 'function') ? toolExtrasTextOf(node) : '';
+      if (nodeTools && text.indexOf(nodeTools) === -1) text = text ? (text + '\n' + nodeTools) : nodeTools;
       var id = historyMessageId(node, role);
       var dedupeKey = id || (role + '\u0000' + text + '\u0000' + (nodeReasoning || thinking.text));
       if (seen[dedupeKey] === 1) { duplicates++; continue; }   // первое вхождение побеждает
@@ -926,6 +976,20 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     return { added: created.length, foreign: false };
   }
 
+  // ---- v83 (MCP-синк): заказ сетевого снимка (MAIN → ISOLATED) ----
+  // Пока ответ истории в полёте, ISOLATED-контур ОБЯЗАН ждать сеть: автоэкспорт и публикация
+  // снимка метрики по DOM-базе до ответа давали файл 218k, а пришедший корректный счёт 92k
+  // после этого резался below-threshold-hysteresis — второй экспорт не случался (12:33:02.891,
+  // baseComplete=0). 'end' шлётся на КАЖДОМ выходе consume*, в т.ч. на ошибках: сигнал
+  // «заказ закрыт» не должен теряться (в content.ts есть ещё и TTL-страховка).
+  function emitHistoryPending(phase, chatId, url) {
+    try {
+      window.dispatchEvent(new CustomEvent('ai-cm-qwen-history-pending', {
+        detail: { site: 'qwen', phase: phase, chatId: String(chatId || ''), url: String(url || '') }
+      }));
+    } catch (ePend) { swallow(ePend, 'qwen:history-pending'); }
+  }
+
   // ---- O-39: чтение истории — ТОЛЬКО через clone() (тело страницы не трогаем) ----
   // Тело истории — JSON: resp.clone().json() (эквивалент потоковой ветки с clone()): страница
   // читает свой ответ, мы — свой клон. Сбой clone()/json() — тихий фолбэк на DOM-базу.
@@ -933,6 +997,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     var clone = null;
     try { clone = resp.clone(); } catch (eClone) { clone = null; }
     if (!clone) {
+      emitHistoryPending('end', meta.chatId, meta.url);
       diagTag('qwen-history', { ts: Date.now(), event: 'skip', reason: 'clone-failed', url: meta.url || '' });
       return;
     }
@@ -944,10 +1009,15 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       }
     } catch (eJson) { parsedPromise = null; }
     if (!parsedPromise || typeof parsedPromise.then !== 'function') {
+      emitHistoryPending('end', meta.chatId, meta.url);
       diagTag('qwen-history', { ts: Date.now(), event: 'skip', reason: 'no-json', url: meta.url || '' });
       return;
     }
     Promise.resolve(parsedPromise).then(function (payload) {
+      // v83: ответ пришёл — снимаем заказ ДО применения снимка, чтобы ISOLATED-контур
+      // успел пересчитать метрику на этом же проходе (иначе снимок публиковался бы
+      // только следующим внешним вызовом processAndSend).
+      emitHistoryPending('end', meta.chatId, meta.url);
       try {
         applyHistoryPayload(payload, meta);
       } catch (eApply) {
@@ -957,6 +1027,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         });
       }
     }, function (eRead) {
+      emitHistoryPending('end', meta.chatId, meta.url);
       diagTag('qwen-history', {
         ts: Date.now(), event: 'skip', reason: 'json-error', url: meta.url || '',
         err: String(eRead && eRead.message || eRead).slice(0, 80)
@@ -1532,6 +1603,8 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
           // O-53: заголовки исходного запроса страницы — для реплея старых страниц
           // (source/version/anti-bot; cookies добавит credentials:'include').
           histMeta.headers = collectRequestHeaders(input, init);
+          // v83: заказ снимка открыт ДО ухода запроса — экспорт обязан ждать ответ.
+          emitHistoryPending('start', histMeta.chatId, histMeta.url);
         }
       }
 
@@ -1562,14 +1635,18 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
             if (!resp || !resp.ok) {
               diagLine('response-skip', { reason: 'http', status: resp ? resp.status : 'none' });
               diagTag('qwen-history', { ts: Date.now(), event: 'skip', reason: 'http', status: resp ? resp.status : 'none', url: histMeta.url || '' });
+              emitHistoryPending('end', histMeta.chatId, histMeta.url);
               return resp;
             }
             if (isFullHistoryUrl(histMeta.url)) noteNativeFullHistory(histMeta.chatId); consumeHistory(resp, histMeta);
           } catch (eResp) {
+            emitHistoryPending('end', histMeta.chatId, histMeta.url);
             diagLine('response-error', { err: String(eResp && eResp.message || eResp).slice(0, 80) });
           }
           return resp;
-        }, function () { /* тихо: не создаём висячий Promise.reject */ });
+        }, function () { /* тихо: не создаём висячий Promise.reject */
+          emitHistoryPending('end', histMeta.chatId, histMeta.url);
+        });
       }
 
       return promise;
@@ -1637,7 +1714,10 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
           var xMeta = this.__aiCmQwenHist;
           if (xMeta) {
             var xSelf = this;
+            emitHistoryPending('start', xMeta.chatId, xMeta.url);
             xSelf.addEventListener('loadend', function () {
+              // v83: снимаем заказ до применения снимка — метрика пересчитывается на нём же.
+              emitHistoryPending('end', xMeta.chatId, xMeta.url);
               try { consumeHistoryXhr(xSelf, xMeta); } catch (eXLoad) { swallow(eXLoad, 'qwen:xhr-loadend-history'); }
             });
           }

@@ -57,6 +57,12 @@ const QWEN_BLOCK_TAGS = {
 /** Маркер-комментарий на месте снятого служебного узла (граница текста не теряется). */
 const QWEN_CUT_MARKER = 'ai-cm-qwen-cut';
 
+/**
+ * Запись журнала временного снятия узла с живого DOM: чем сняли и куда вернуть.
+ * Живой узел снимается на время одного замера текста и возвращается в `finally`.
+ */
+type QwenDetached = { node: Element; parent: Node; marker: Comment; next: Node|null };
+
 /*
  * Типизация (шаг 4 Фазы 1): формы — из types/adapter.d.ts. Литеральный `import type`
  * невозможен: файл — классический скрипт контента (manifest.json) плюс склейка исходника
@@ -80,6 +86,12 @@ class QwenAdapter extends BaseAdapter {
   _reasoningSelectors: string;
   /** Служебные узлы интерфейса, чей текст сообщением не является. */
   _noiseSelectors: string;
+  /**
+   * Панели MCP-инструментов Qwen: результаты tool-call'ов (например, `read_text_file`).
+   * Это РЕАЛЬНЫЙ расход контекста модели, хотя панель по умолчанию скрыта (`display:none`),
+   * поэтому её текст снимается отдельно — см. `_textWithoutReasoning`.
+   */
+  _mcpPanelSelectors: string;
 
   constructor() {
     super();
@@ -135,6 +147,11 @@ class QwenAdapter extends BaseAdapter {
     this._noiseSelectors = 'button, svg, textarea, [class*="toolbar"], [class*="action"],' +
       ' [class*="footer"], [class*="input"], [class*="avatar"], [class*="icon"], [class*="copy"],' +
       ' [class*="tool-status-card"]';
+
+    // MCP-панели: класс подтверждён живой разметкой (`.qwen-mcp-tool-call-panel`); широкий
+    // фолбэк — страховка на смену префикса. Пустой набор недопустим: панель MCP — это
+    // единственный DOM-источник tool-results, которые сеть отдаёт в `extras`.
+    this._mcpPanelSelectors = '.qwen-mcp-tool-call-panel, [class*="mcp-tool-call-panel"]';
   }
 
   /**
@@ -262,6 +279,7 @@ class QwenAdapter extends BaseAdapter {
    * Снятие служебного узла с сохранением границы: на месте узла остаётся маркер-комментарий,
    * который `_innerTextFallback` превращает в перевод строки. Без маркера соседние текст-узлы
    * склеились бы («привет» + снятая кнопка + «как дела» → «приветкак дела»).
+   * Для ЖИВОГО узла использовать `_detachJournal` (с возвратом), здесь — клоны MCP-панелей.
    */
   _removeKeepingCut(nodes: NodeListOf<Element>|Element[]): void {
     Array.prototype.slice.call(nodes).forEach(function (el) {
@@ -273,15 +291,100 @@ class QwenAdapter extends BaseAdapter {
   }
 
   /**
-   * Текст узла БЕЗ служебных элементов и БЕЗ блока размышлений (многострочность сохранена).
+   * Снятие узлов с ЖИВОГО DOM на время замера: узел уходит, на его месте остаётся
+   * маркер-комментарий, а запись журнала позволяет вернуть узел ровно на прежнее место.
+   */
+  _detachJournal(nodes: NodeListOf<Element>|Element[], journal: QwenDetached[]): void {
+    Array.prototype.slice.call(nodes).forEach(function (el: Element) {
+      try {
+        const parent = el.parentNode;
+        if (!parent) return;
+        const marker = document.createComment(QWEN_CUT_MARKER);
+        parent.insertBefore(marker, el);
+        journal.push({ node: el, parent: parent, marker: marker, next: el.nextSibling });
+        el.remove();
+      } catch (eDetach) { swallowSoft(eDetach, 'adapter:qwen:mcp-detach'); }
+    });
+  }
+
+  /** Возврат узлов из журнала в обратном порядке (вложенные — раньше объемлющих). */
+  _restoreJournal(journal: QwenDetached[]): void {
+    for (let i = journal.length - 1; i >= 0; i--) {
+      const rec = journal[i];
+      try {
+        if (rec.marker && rec.marker.parentNode) rec.marker.parentNode.removeChild(rec.marker);
+        if (rec.next && rec.next.parentNode === rec.parent) rec.parent.insertBefore(rec.node, rec.next);
+        else rec.parent.appendChild(rec.node);
+      } catch (eRestore) { swallowSoft(eRestore, 'adapter:qwen:mcp-restore'); }
+    }
+  }
+
+  /**
+   * Верхнеуровневые MCP-панели реплики в порядке документа: вложенные совпадения
+   * отбрасываются (иначе текст одной панели считался бы дважды).
+   */
+  _mcpPanelsOf(element: Element): Element[] {
+    const out: Element[] = [];
+    try {
+      const found = element.querySelectorAll(this._mcpPanelSelectors);
+      for (let i = 0; i < found.length; i++) {
+        const el = found[i];
+        let nested = false;
+        for (let j = 0; j < out.length; j++) {
+          if (out[j].contains(el)) { nested = true; break; }
+        }
+        if (!nested) out.push(el);
+      }
+    } catch (ePanels) { swallowSoft(ePanels, 'adapter:qwen:mcp-panels'); }
+    return out;
+  }
+
+  /**
+   * Текст MCP-панели (tool-call/tool-result). Панель обычно скрыта, поэтому у скрытого узла
+   * берётся структурный фолбэк (innerText оффскрин-узла не отрендерен и теряет границы строк);
+   * видимая (раскрытая пользователем) панель читается живым innerText.
+   */
+  _mcpPanelText(panel: Element): string {
+    try {
+      if (!panel) return '';
+      const rendered = (typeof panel.getClientRects === 'function') && panel.getClientRects().length > 0;
+      if (rendered) return this._normalizeLines(this._readableText(panel));
+      const copy = panel.cloneNode(true) as Element;
+      this._removeKeepingCut(copy.querySelectorAll(this._noiseSelectors));
+      return this._normalizeLines(this._innerTextFallback(copy));
+    } catch (e) { return ''; }
+  }
+
+  /**
+   * Текст узла БЕЗ служебных элементов, БЕЗ блока размышлений и БЕЗ MCP-панелей
+   * (многострочность сохранена), плюс текст самих MCP-панелей в конце хода.
+   *
+   * Почему БЕЗ detached-клона (MCP-синк, v83): у detached-узла `innerText` деградирует к
+   * `textContent` и приносит текст скрытых `display:none` элементов — счётчик завышался
+   * (218k против реальных ~126k). Теперь шум и размышления снимаются с ЖИВОГО узла, а
+   * `innerText` читается с отрендеренной ветки — ровно то, что видит пользователь.
+   * MCP-панели снимаются первыми и добавляются отдельно: они скрыты, но их содержимое
+   * (результаты tool-call'ов) реально уходит в контекст модели.
    */
   _textWithoutReasoning(element: Element): string {
+    if (!element) return '';
+    const journal: QwenDetached[] = [];
     try {
-      const clone = (element.cloneNode(true) as Element);
-      this._removeKeepingCut(clone.querySelectorAll(this._noiseSelectors));
-      this._removeKeepingCut(clone.querySelectorAll(this._reasoningSelectors));
-      return this._readableText(clone);
+      const panels = this._mcpPanelsOf(element);
+      const parts: string[] = [];
+      for (let i = 0; i < panels.length; i++) {
+        const part = this._mcpPanelText(panels[i]);
+        if (part) parts.push(part);
+      }
+      this._detachJournal(panels, journal);
+      this._detachJournal(element.querySelectorAll(this._noiseSelectors), journal);
+      this._detachJournal(element.querySelectorAll(this._reasoningSelectors), journal);
+      const body = this._readableText(element);
+      const mcp = parts.join('\n');
+      if (!mcp) return body;
+      return body ? (body + '\n' + mcp) : mcp;
     } catch (e) { return ''; }
+    finally { this._restoreJournal(journal); }
   }
 
   /**

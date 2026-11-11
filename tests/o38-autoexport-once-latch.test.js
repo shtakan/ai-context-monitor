@@ -380,3 +380,175 @@ describe('O-38 (3): SPA-переход в тот же экспортирован
     expect(SITE_CONV_FIRED_SRC).toContain("aiCmAutoExportFiredOnce[site + '|' + cid] === 1");
   });
 });
+
+// ===== v83 (MCP-синк): автоэкспорт ждёт завершения сетевого снимка =====
+//
+// Гонка (из диагноза DSH): 12:33:02.891 автоэкспорт выгрузил DOM-основу 218k при
+// baseComplete=0, пока ответ истории Qwen был ещё в полёте; пришедшая сеть дала 92k,
+// и повторный файл был срезан гистерезисом порога. Латч fired при этом не ставится —
+// после приёма снимка processAndSend → maybeAutoExport проходит заново.
+describe('v83: автоэкспорт не стреляет до baseComplete=1 (заказ сетевого снимка)', () => {
+  const { readCore } = require('./helpers/core-src.js');
+  const state = require('../core/state.ts');
+  const PIPE = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
+  const MGR = readCore('core/export-manager.ts');
+
+  const CID = '7fec9bd3-1111-4222-8333-444455556666';
+  const ADAPTER_MSGS = [
+    { role: 'user', content: 'прочитай PROJECT_HANDOFF.md' },
+    { role: 'assistant', content: 'Прочитал, файл большой.\nread_text_file /PROJECT_HANDOFF.md\n# PROJECT_HANDOFF — 4032 passed' }
+  ];
+
+  // Срез по балансу скобок: тело целевой функции из исходника export-manager.
+  function fnDecl(src, name) {
+    const at = src.indexOf('function ' + name + '(');
+    if (at < 0) throw new Error('fn not found: ' + name);
+    const open = src.indexOf('{', at);
+    let depth = 0;
+    for (let i = open; i < src.length; i += 1) {
+      if (src[i] === '{') depth += 1;
+      else if (src[i] === '}') {
+        depth -= 1;
+        if (depth === 0) return src.slice(at, i + 1);
+      }
+    }
+    throw new Error('fn unbalanced: ' + name);
+  }
+
+  const RUNNER = new Function('ctx',
+    'with (ctx) { ' + fnDecl(MGR, 'aiCmAutoExportConvId') + '\n' + fnDecl(MGR, 'maybeAutoExport') +
+    '\nreturn { run: maybeAutoExport }; }');
+
+  function makeCtx(over) {
+    const o = over || {};
+    const downloads = [];
+    const gateCalls = [];
+    const logs = [];
+    const ctx = {
+      autoExportSettings: { enabled: true, pct: 30, fmt: 'txt' },
+      autoExportPctBySite: {},
+      autoExportLastConvId: '',
+      autoExportLastPct: -1,
+      autoExportFired: {},
+      aiCmAutoExportFiredOnce: {},
+      sessionFiredCache: {},
+      notCompleteLogged: {},
+      aiCmNetPendingLogged: state.aiCmNetPendingLogged,
+      aiCmLoaderRunningByConv: {},
+      aiCmCursorLiveByConv: {},
+      aiCmArchiveCountFor: function () { return 0; },
+      aiCmAutoExportSkipReasonState: { reason: '' },
+      baseSeen: true,
+      baseComplete: o.baseComplete === true,
+      baseCount: 2,
+      baseText: '',
+      lastBaseTexts: [],
+      lastEmitConvId: CID,
+      lastThreadId: '',
+      lastResolvedModelId: 'qwen3.8-max',
+      maxTokenCount: 81672,
+      currentAdapter: { siteName: 'qwen', extractMessages: function () { return ADAPTER_MSGS; } },
+      getCurrentConvId: function () { return CID; },
+      buildHistoryMessages: function () { return ADAPTER_MSGS; },
+      aiCmGsaChatPageMarker: function () { return false; },
+      debugLog: function (lvl, msg) { logs.push(String(msg)); },
+      swallow: function () {},
+      swallowSoft: function () {},
+      console: { log: function () {}, error: function () {}, warn: function () {} },
+      window: { location: { hostname: 'chat.qwen.ai' } },
+      aiCmNetSnapshotPending: state.aiCmNetSnapshotPending,
+      aiCmNetSnapshotPendingStart: state.aiCmNetSnapshotPendingStart,
+      aiCmNetSnapshotPendingEnd: state.aiCmNetSnapshotPendingEnd,
+      doAutoExportDownload: function (cid, pct, reason) {
+        downloads.push({ cid: cid, pct: pct, reason: reason });
+      },
+      AiCmExportEmitPipeline: o.pipeline || {
+        effectiveAutoExportThreshold: function (pct) { return pct; },
+        resolveAutoExportConvId: function (site, cid) { return cid; },
+        shouldSkipAutoExport: function (s) {
+          gateCalls.push(s);
+          return { skip: false, reason: null, resetFired: false };
+        },
+        getAutoExportFired: function () { return false; },
+        isFiredInSession: function () { return false; },
+        resetAutoExportFired: function () {},
+        firedSessionKey: function () { return ''; }
+      }
+    };
+    return {
+      ctx: ctx,
+      downloads: downloads,
+      gateCalls: gateCalls,
+      logs: logs,
+      run: RUNNER(ctx)
+    };
+  }
+
+  beforeEach(() => {
+    state.aiCmNetPendingAtBySite = {};
+    state.aiCmNetPendingLogged = {};
+    state.AI_CM_NET_PENDING_TTL_MS = 10000;
+  });
+
+  test('сетевой снимок в полёте: гейт не вызывается, файла нет, латч fired не взведён', () => {
+    const h = makeCtx({ baseComplete: false });
+    state.aiCmNetSnapshotPendingStart('qwen');
+
+    h.run.run(63.8);
+
+    expect(h.gateCalls).toEqual([]);
+    expect(h.downloads).toEqual([]);
+    expect(h.ctx.autoExportFired).toEqual({});
+    expect(h.logs.join('\n')).toContain('skip reason=network-pending');
+    expect(h.logs.join('\n')).toContain('baseComplete=0');
+  });
+
+  test('снимок принят (end), но полноты нет: реальный гейт даёт not-complete — файла нет', () => {
+    const h = makeCtx({ baseComplete: false, pipeline: PIPE });
+    state.aiCmNetSnapshotPendingStart('qwen');
+    state.aiCmNetSnapshotPendingEnd('qwen');
+
+    h.run.run(63.8);
+
+    expect(h.gateCalls).toEqual([]);
+    expect(h.downloads).toEqual([]);
+    expect(h.logs.join('\n')).toContain('skip reason=not-complete');
+    expect(h.logs.join('\n')).not.toContain('network-pending');
+  });
+
+  test('baseComplete=1 и снимок снят: гейт видит baseComplete=true, файл разрешён', () => {
+    const h = makeCtx({ baseComplete: true });
+    state.aiCmNetSnapshotPendingStart('qwen');
+    state.aiCmNetSnapshotPendingEnd('qwen');
+
+    h.run.run(63.8);
+
+    expect(h.gateCalls.length).toBe(1);
+    expect(h.gateCalls[0].baseComplete).toBe(true);
+    expect(h.gateCalls[0].fired).toBe(false);
+    expect(h.gateCalls[0].site).toBe('qwen');
+    expect(h.downloads.length).toBe(1);
+    expect(h.downloads[0].reason).toBe('threshold');
+    expect(h.downloads[0].pct).toBe(63.8);
+  });
+
+  test('заказ снимка живёт не дольше TTL: протухший заказ не блокирует экспорт', () => {
+    state.aiCmNetSnapshotPendingStart('qwen');
+    expect(state.aiCmNetSnapshotPending('qwen')).toBe(true);
+
+    state.aiCmNetPendingAtBySite.qwen = Date.now() - state.AI_CM_NET_PENDING_TTL_MS - 1;
+
+    expect(state.aiCmNetSnapshotPending('qwen')).toBe(false);
+    expect(state.aiCmNetPendingAtBySite.qwen).toBeUndefined();
+  });
+
+  test('source-pin: гейт сетевого снимка стоит ДО shouldSkipAutoExport и снимает заказ', () => {
+    const src = fnDecl(MGR, 'maybeAutoExport');
+    const guardAt = src.indexOf('skip reason=network-pending');
+    const gateAt = src.indexOf('P.shouldSkipAutoExport(');
+    expect(guardAt).toBeGreaterThan(-1);
+    expect(gateAt).toBeGreaterThan(guardAt);
+    expect(src).toContain('aiCmNetSnapshotPending(siteName)');
+    expect(src).toContain('baseComplete === true ? \'1\' : \'0\'');
+  });
+});

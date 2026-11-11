@@ -235,6 +235,36 @@ var aiCmPendingHistWrite: AiCmPendingHistWrite | null = null; // { convId, timer
 // v53: курсор продолжения лоадера Gemini по convId на момент стопа (из ai-cm-loader-state
 // detail.pendingCursor). Пока курсор жив — автоэкспорт НЕ стреляет (даже при baseComplete).
 var aiCmCursorLiveByConv: Record<string, boolean | number> = {};
+// v83 (MCP-синк): «сетевой снимок заказан, ответа ещё нет» — ключ — площадка.
+// MAIN-перехватчик Qwen шлёт ai-cm-qwen-history-pending {phase:'start'|'end'}; пока заказ
+// открыт, автоэкспорт и публикация снимка метрики ЖДУТ сеть: файл, записанный по DOM-базе
+// до прихода сети (218k вместо 92k), поздним корректным экспортом уже не переписывался
+// (гейт below-threshold-hysteresis). TTL — страховка от потерянного события.
+var aiCmNetPendingAtBySite: Record<string, number> = {};
+var AI_CM_NET_PENDING_TTL_MS: number = 10000;
+// Антиспам строки skip reason=network-pending (ключ — convId), как notCompleteLogged.
+var aiCmNetPendingLogged: Record<string, number> = {};
+
+function aiCmNetSnapshotPendingStart(site: string): void {
+  var key = String(site || '').trim();
+  if (!key) return;
+  aiCmNetPendingAtBySite[key] = Date.now();
+}
+
+function aiCmNetSnapshotPendingEnd(site: string): void {
+  var key = String(site || '').trim();
+  if (key) delete aiCmNetPendingAtBySite[key];
+}
+
+function aiCmNetSnapshotPending(site: string): boolean {
+  var key = String(site || '').trim();
+  if (!key) return false;
+  var at = aiCmNetPendingAtBySite[key];
+  if (!at) return false;
+  if (Date.now() - Number(at) < AI_CM_NET_PENDING_TTL_MS) return true;
+  delete aiCmNetPendingAtBySite[key];
+  return false;
+}
 // v1.13.1: convId → 1 — база подтверждённо полная (baseComplete при reachedStart=true от
 // перехватчика Gemini). До подтверждения deferred-запись истории висит и НЕ флашится по
 // loader-stop; фолбэк — «счётчик стабилен при видимой вкладке» (таймаут defer при visible).
@@ -563,6 +593,23 @@ function aiCmLatchRemove(service: string, convId: string): Promise<boolean> {
   Object.defineProperty(Api, 'aiCmCursorLiveByConv', { enumerable: true,
     get: function () { return aiCmCursorLiveByConv; },
     set: function (value) { aiCmCursorLiveByConv = value; } });
+  // v83 (MCP-синк): заказ сетевого снимка — для тестов гонки автоэкспорта.
+  // Функции-объявления только на чтение (TS2630), реестр и TTL — по имени.
+  Object.defineProperty(Api, 'aiCmNetPendingAtBySite', { enumerable: true,
+    get: function () { return aiCmNetPendingAtBySite; },
+    set: function (value) { aiCmNetPendingAtBySite = value; } });
+  Object.defineProperty(Api, 'aiCmNetPendingLogged', { enumerable: true,
+    get: function () { return aiCmNetPendingLogged; },
+    set: function (value) { aiCmNetPendingLogged = value; } });
+  Object.defineProperty(Api, 'AI_CM_NET_PENDING_TTL_MS', { enumerable: true,
+    get: function () { return AI_CM_NET_PENDING_TTL_MS; },
+    set: function (value) { AI_CM_NET_PENDING_TTL_MS = value; } });
+  Object.defineProperty(Api, 'aiCmNetSnapshotPendingStart', { enumerable: true,
+    get: function () { return aiCmNetSnapshotPendingStart; } });
+  Object.defineProperty(Api, 'aiCmNetSnapshotPendingEnd', { enumerable: true,
+    get: function () { return aiCmNetSnapshotPendingEnd; } });
+  Object.defineProperty(Api, 'aiCmNetSnapshotPending', { enumerable: true,
+    get: function () { return aiCmNetSnapshotPending; } });
   Object.defineProperty(Api, 'aiCmBaseConfirmedByConv', { enumerable: true,
     get: function () { return aiCmBaseConfirmedByConv; },
     set: function (value) { aiCmBaseConfirmedByConv = value; } });

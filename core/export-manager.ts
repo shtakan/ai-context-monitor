@@ -601,7 +601,11 @@ function maybeTrimExport(cid: string | null): void {
     if (!cid || preTrimExportFired[cid]) return;
     preTrimExportFired[cid] = 1; // одноразовый латч, независим от autoExportFired
     var ready = baseComplete === true &&
-      !aiCmLoaderRunningByConv[cid] && !aiCmCursorLiveByConv[cid];
+      !aiCmLoaderRunningByConv[cid] && !aiCmCursorLiveByConv[cid] &&
+      // v83 (MCP-синк): пока сетевой снимок заказан, pre-trim тоже не стреляет —
+      // шапка файла должна считаться по полному счёту, а не по DOM-оценке до сети.
+      !((typeof aiCmNetSnapshotPending === 'function') &&
+        aiCmNetSnapshotPending((currentAdapter && currentAdapter.siteName) || ''));
     if (!ready) {
       var n = trimRetryByConv[cid] || 0;
       if (n >= 5) {
@@ -1308,6 +1312,19 @@ function maybeAutoExport(percentage: number): void {
     // pct прошлого чата (D5b) и гистерезис (v44, не трогаем) удаляет латч.
     if (baseSeen === true || siteName === 'gemini') {
       autoExportLastPct = percentage; // v42: запоминаем для re-check после стопа лоадера
+    }
+    // v83 (MCP-синк, корень гонки): сетевой снимок этого чата ЗАКАЗАН, но ещё не вернулся.
+    // Автоэкспорт по DOM-базе запрещён: файл 218k выгружался раньше сети (12:33:02.891,
+    // baseComplete=0), а пришедший корректный счёт 92k после этого резался гистерезисом
+    // порога — второй экспорт не случался. Латч fired не ставится; после приёма снимка
+    // слушатель ai-cm-full-history заново вызывает processAndSend → maybeAutoExport.
+    if (typeof aiCmNetSnapshotPending === 'function' && aiCmNetSnapshotPending(siteName)) {
+      if (!aiCmNetPendingLogged[cid]) {
+        aiCmNetPendingLogged[cid] = 1;
+        debugLog('log', '[AI CM][auto-export] skip reason=network-pending convId=' + cid +
+          ' pct=' + percentage + ' baseComplete=' + (baseComplete === true ? '1' : '0'));
+      }
+      return;
     }
     // v81 (2.5): гейты автоэкспорта вынесены в чистую shouldSkipAutoExport
     // (utils/export-emit-pipeline.ts); для Gemini порядок и смысл гейтов 1:1 прежние

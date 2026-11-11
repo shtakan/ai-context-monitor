@@ -159,6 +159,10 @@
     "count": 24,
     "reason": "vm-harness"
   },
+  "tests/adapters/qwen-mcp-sync.test.js": {
+    "count": 11,
+    "reason": "vm-harness"
+  },
   "tests/archive/archive-export-gate.test.js": {
     "count": 4,
     "reason": "static-linter"

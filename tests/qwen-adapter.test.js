@@ -337,13 +337,16 @@ describe('O-39-план замены (qwen-селекторы): source-пины 
     expect(QWEN_SRC).toContain('_dropTurnOnlyNodes');
   });
 
-  test('дефект текста: textContent реплики больше не источник, многострочность через _readableText', function () {
-    expect(QWEN_SRC).toContain('_readableText(clone)');
-    expect(QWEN_SRC).toContain('element.innerText');
-    expect(QWEN_SRC).toContain('_innerTextFallback');
+  test('дефект текста: textContent реплики больше не источник, innerText — с ЖИВОГО узла', function () {
+    // v83 (MCP-синк): detached clone давал textContent-подобный текст (скрытые display:none
+    // панели попадали в счёт: 218k против реальных ~126k). Читаем innerText ОТРЕНДЕРЕННОГО
+    // узла; служебные/thinking узлы временно отсоединяются журналом и возвращаются.
+    expect(QWEN_SRC).toContain('_readableText(element)');
+    expect(QWEN_SRC).not.toContain('_readableText(clone)');
+    expect(QWEN_SRC).toContain('_detachJournal');
+    expect(QWEN_SRC).toContain('_restoreJournal');
     // снятие служебных узлов оставляет маркер-границу (иначе соседний текст склеивается)
-    expect(QWEN_SRC).toContain('_removeKeepingCut(clone.querySelectorAll(this._noiseSelectors))');
-    expect(QWEN_SRC).toContain('QWEN_CUT_MARKER');
+    expect(QWEN_SRC).toContain('_removeKeepingCut(copy.querySelectorAll(this._noiseSelectors))');
     expect(QWEN_SRC).not.toContain('clone.textContent');
   });
 });
