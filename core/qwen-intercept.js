@@ -437,6 +437,8 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       existing.reasoning = s.reasoning;
       existing.text = composeTurnText(s.answer, s.reasoning);
       existing.userKey = existing.userKey || userKey;
+      // v97: вклад extras пересчитывается вместе с текстом (диагностика; на метрику не влияет).
+      if (typeof s.toolChars === 'number') existing.toolChars = s.toolChars;
       // R4: повторное применение той же страницы не должно оставлять на ходе флаг
       // «только вложение», если настоящий ответ уже пришёл.
       existing.filesOnly = (s.filesOnly === true && !s.answer && !s.reasoning);
@@ -491,7 +493,9 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       answer: s.answer,
       reasoning: s.reasoning,
       text: composeTurnText(s.answer, s.reasoning),
-      filesOnly: s.filesOnly === true
+      filesOnly: s.filesOnly === true,
+      // v97 (диагностика qwen-mcp-diag): 0 — ход собран из SSE (extras там не читаются).
+      toolChars: (typeof s.toolChars === 'number') ? s.toolChars : 0
     };
     turns.push(added);
     return { turn: added, created: true };
@@ -637,7 +641,9 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     return parts.join('\n');
   }
   // Ответ хода истории: не-thinking элементы content_list клеятся APPEND (как delta.content SSE).
-  function historyAnswerOf(list) {
+  // stats (опционально, ТОЛЬКО диагностика qwen-mcp-diag): toolChars — сколько символов хода
+  // пришло из extras (tool-текст вместе с его внутренними разделителями).
+  function historyAnswerOf(list, stats) {
     var out = '', fallbackAnswer = '', toolText = '';
     for (var i = 0; i < list.length; i++) {
       var item = list[i];
@@ -649,6 +655,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       if (toolItem) toolText += (toolText ? '\n' : '') + toolItem;
     }
     var answer = out || fallbackAnswer;
+    if (stats && typeof stats === 'object') stats.toolChars = toolText.length;
     return answer ? (toolText ? (answer + '\n' + toolText) : answer) : toolText;
   }
   // usage хода истории (спека: usage{input_tokens,output_tokens}) — та же нормализация, что у
@@ -723,6 +730,40 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
    * messages[] — ходы role user/assistant в порядке появления; повтор узла с тем же id
    * отбрасывается (первое вхождение побеждает — спека O-39 п.5).
    */
+  // v98 (диагностика, ТОЛЬКО измерение): форма payload истории — ищем, где лежит tool-текст.
+  // Агрегаты по content_list: фазы, типы/длины не-answer/thinking контента и ключи extras.
+  // Нужны, чтобы отличить ОТСУТСТВИЕ tool-текста в сети от его потери при разборе.
+  function qwenPayloadShapeOf(nodes) {
+    var phases = {}, keysSeen = {}, otherChars = 0, otherItems = 0, extrasNodes = 0, extrasChars = 0;
+    var samples = [];
+    for (var i = 0; i < nodes.length; i++) {
+      var node = nodes[i];
+      if (!node || typeof node !== 'object' || node.offChain === true || node.role !== 'assistant') continue;
+      for (var nk in node) {
+        if (!Object.prototype.hasOwnProperty.call(node, nk)) continue;
+        keysSeen[nk] = 1;
+      }
+      var list = contentListOf(node) || [];
+      for (var j = 0; j < list.length; j++) {
+        var item = list[j];
+        if (!item || typeof item !== 'object') continue;
+        var ph = (typeof item.phase === 'string' && item.phase) ? item.phase : '(none)';
+        phases[ph] = (phases[ph] || 0) + 1;
+        if (ph === PHASE_THINKING || ph === 'thinking' || ph === 'answer') continue;
+        otherItems++;
+        var c = item.content;
+        var kind = Array.isArray(c) ? 'array' : typeof c;
+        var len = (typeof c === 'string') ? c.length : (c && typeof c === 'object' ? JSON.stringify(c).length : 0);
+        otherChars += len;
+        var exk = '';
+        if (item.extras && typeof item.extras === 'object') exk = Object.keys(item.extras).join('+');
+        if (samples.length < 10) samples.push(ph + ':' + kind + ':' + len + ':extras=' + (exk || '-'));
+      }
+      var ex = toolExtrasTextOf(node);
+      if (ex) { extrasNodes++; extrasChars += ex.length; }
+    }
+    return { phases: phases, keysSeen: keysSeen, otherChars: otherChars, otherItems: otherItems, extrasNodes: extrasNodes, extrasChars: extrasChars, samples: samples };
+  }
   function parseQwenHistory(payload) {
     var nodes = [], chain = false, fullParsed = (typeof qwenParseFullChain === 'function') ? qwenParseFullChain(payload) : null;
     if (fullParsed && fullParsed.nodes && fullParsed.nodes.length) { nodes = fullParsed.nodes; chain = true; } else { try { walkHistoryMessages(payload, nodes, 0, []); } catch (eWalk) { nodes = []; } }
@@ -740,13 +781,20 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       var list = contentListOf(node) || [];
       var thinking = historyThinkingOf(list); var nodeReasoning = (typeof qwenReasoningOf === 'function') ? qwenReasoningOf(node) : '';
       if (thinking.occurrences > 1) thinkingDuplicates++;
-      var text = historyAnswerOf(list);
+      // Диагностика qwen-mcp-diag: сколько символов хода дал tool-вклад extras. Счётчик
+      // пополняется здесь же, где текст собирается, — иначе пришлось бы угадывать по подстроке.
+      var toolStats = { toolChars: 0 };
+      var text = historyAnswerOf(list, toolStats);
       if (!text && typeof node.content === 'string') text = node.content;
       if (!text && typeof node.text === 'string') text = node.text;
       // MCP-синк: tool-results УРОВНЯ СООБЩЕНИЯ (extras узла, не content_list). Дубликат
       // (тот же текст уже пришёл из элементов списка) не добавляется повторно.
       var nodeTools = (typeof toolExtrasTextOf === 'function') ? toolExtrasTextOf(node) : '';
-      if (nodeTools && text.indexOf(nodeTools) === -1) text = text ? (text + '\n' + nodeTools) : nodeTools;
+      if (nodeTools && text.indexOf(nodeTools) === -1) {
+        // '\n' перед вставкой — часть tool-вклада (разделитель extras), тоже считаем.
+        toolStats.toolChars += nodeTools.length + (toolStats.toolChars > 0 ? 1 : 0);
+        text = text ? (text + '\n' + nodeTools) : nodeTools;
+      }
       var id = historyMessageId(node, role);
       var dedupeKey = id || (role + '\u0000' + text + '\u0000' + (nodeReasoning || thinking.text));
       if (seen[dedupeKey] === 1) { duplicates++; continue; }   // первое вхождение побеждает
@@ -762,10 +810,26 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         parentId: (typeof node.parent_id === 'string') ? node.parent_id
           : ((typeof node.parentId === 'string') ? node.parentId : ''),
         // R2: вложения хода. Уходят в core/qwen-files.js уже на recordTurn (ниже).
-        files: historyFilesOf(node)
+        files: historyFilesOf(node),
+        // v97 (диагностика qwen-mcp-diag): символы tool-вклада extras в тексте хода.
+        toolChars: toolStats.toolChars
       });
     }
     if (!chatId) chatId = findHistoryChatId(payload, 0, []) || ((payload && payload.data && payload.data.id) || '');
+    try {
+      var shape = qwenPayloadShapeOf(nodes);
+      var phParts = [];
+      for (var phKey in shape.phases) { if (Object.prototype.hasOwnProperty.call(shape.phases, phKey)) phParts.push(phKey + '=' + shape.phases[phKey]); }
+      var keyParts = [];
+      for (var kk in shape.keysSeen) { if (Object.prototype.hasOwnProperty.call(shape.keysSeen, kk)) keyParts.push(kk); }
+      diagTag('qwen-payload-shape', {
+        ts: Date.now(), nodes: nodes.length, messages: messages.length, chain: chain ? 1 : 0,
+        phases: phParts.join(',') || '(none)', keys: keyParts.join('+') || '(none)',
+        otherItems: shape.otherItems, otherChars: shape.otherChars,
+        extrasNodes: shape.extrasNodes, extrasChars: shape.extrasChars,
+        samples: (shape.samples.join('|') || '(none)').slice(0, 500)
+      });
+    } catch (eShape) { swallow(eShape, 'qwen:payload-shape'); }
     return {
       chatId: chatId,
       messages: messages,
@@ -869,7 +933,9 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         answerFrames: msg.text ? 1 : 0,
         ended: true,
         finished: true,
-        filesOnly: filesOnly
+        filesOnly: filesOnly,
+        // v97 (диагностика qwen-mcp-diag): вклад extras в текст этого хода.
+        toolChars: msg.toolChars || 0
       });
       // R2/R4: вложения хода — в очередь core/qwen-files.js. Ключ — userKey ИМЕННО
       // этого хода (rec.turn.userKey): emitSnapshot достаёт пользовательский блок
@@ -1251,6 +1317,28 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       responseId: s.responseId || '',
       chatId: s.chatId || ''
     };
+    // v97 (ДИАГНОСТИКА, только измерение): qwen-mcp-diag — сколько текста дали tool-extras,
+    // сколько сообщений в снимке и какова длина каждого хода, куда extras попали. Нужен, чтобы
+    // отличить потерю extras (ветка A) от короткого среза resync (ветка B) по ЖИВЫМ числам.
+    try {
+      var diagTurnLens = [], diagExtrasChars = 0;
+      for (var dm = 0; dm < sortedTurns.length; dm++) {
+        var dmt = sortedTurns[dm];
+        var dmtTool = (dmt && typeof dmt.toolChars === 'number' && dmt.toolChars > 0) ? dmt.toolChars : 0;
+        if (!dmtTool) continue;
+        diagExtrasChars += dmtTool;
+        diagTurnLens.push(String(dmt.order) + ':' + String((dmt.text || '').length) + '+' + String(dmtTool));
+      }
+      diagLine('mcp-diag', {
+        msgs: detail.messages.length,
+        turns: sortedTurns.length,
+        extrasTurns: diagTurnLens.length,
+        extrasChars: diagExtrasChars,
+        share: detail.text.length ? (Math.round(diagExtrasChars * 1000 / detail.text.length) / 10) : 0,
+        textLen: detail.text.length,
+        lens: diagTurnLens.length ? diagTurnLens.join(',') : '(none)'
+      });
+    } catch (eMcpDiag) { swallow(eMcpDiag, 'qwen:mcp-diag'); }
     try {
       window.dispatchEvent(new CustomEvent('ai-cm-full-history', { detail: detail }));
       dispatchSig = sig;

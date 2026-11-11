@@ -340,18 +340,21 @@ class QwenAdapter extends BaseAdapter {
   }
 
   /**
-   * Текст MCP-панели (tool-call/tool-result). Панель обычно скрыта, поэтому у скрытого узла
-   * берётся структурный фолбэк (innerText оффскрин-узла не отрендерен и теряет границы строк);
-   * видимая (раскрытая пользователем) панель читается живым innerText.
+   * Текст MCP-панели (tool-call/tool-result). Панель обычно свёрнута: у неё видна только шапка,
+   * поэтому getClientRects() непустой, а живой innerText содержит шапку без скрытого payload.
+   * Структурный фолбэк клона (innerText оффскрин-узла деградирует к textContent) читает тело
+   * целиком. Берём более длинный вариант: раскрытая панель остаётся байт-в-байт, свёрнутая
+   * не теряет результаты tool-call'ов (live-чат: 480 769 символов в 5 верхнеуровневых панелях).
    */
   _mcpPanelText(panel: Element): string {
     try {
       if (!panel) return '';
       const rendered = (typeof panel.getClientRects === 'function') && panel.getClientRects().length > 0;
-      if (rendered) return this._normalizeLines(this._readableText(panel));
+      const live = rendered ? this._normalizeLines(this._readableText(panel)) : '';
       const copy = panel.cloneNode(true) as Element;
       this._removeKeepingCut(copy.querySelectorAll(this._noiseSelectors));
-      return this._normalizeLines(this._innerTextFallback(copy));
+      const fallback = this._normalizeLines(this._innerTextFallback(copy));
+      return (fallback.length > live.length) ? fallback : live;
     } catch (e) { return ''; }
   }
 
@@ -531,12 +534,46 @@ class QwenAdapter extends BaseAdapter {
        */
       const messages: (Message & { hiddenReasoning?: string })[] = [];
       const nodes = this._messageNodes();
+      // v98 (диагностика, только измерение): по одному узлу — textContent/innerText,
+      // число MCP-панелей, их textContent и прочитанный текст, длина content и вердикт
+      // фильтров. Цель — объяснить расхождение суммы DOM и базы адаптера (646k/228k,
+      // 88 узлов/86 сообщений) по КАЖДОМУ узлу, включая отброшенные. Печать только при
+      // включённых подробных логах; на поведение и байты не влияет.
+      let diagOn = false;
+      try {
+        diagOn = (typeof window !== 'undefined' && !!window &&
+          (window as unknown as {__aiCmDebugLogs?: boolean}).__aiCmDebugLogs === true) ||
+          (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('aiCmDebug') === '1');
+      } catch (eDiagFlag) { swallowSoft(eDiagFlag, 'adapter:qwen:node-diag-flag'); }
+      const diagRows: (string|number)[][] = [];
+      let sumTC = 0, sumIT = 0, sumPanelRaw = 0, sumPanelRead = 0;
       for (let i = 0; i < nodes.length; i++) {
         const element = nodes[i];
         const role = this._detectRole(element);
+        let tc = 0, it = 0, pn = 0, panelRaw = 0, panelRead = 0;
+        if (diagOn) {
+          try {
+            tc = (element.textContent || '').length;
+            it = (typeof (element as Element & {innerText?: string}).innerText === 'string')
+              ? String((element as Element & {innerText?: string}).innerText).length : 0;
+            const panels = this._mcpPanelsOf(element);
+            pn = panels.length;
+            for (let pj = 0; pj < panels.length; pj++) {
+              panelRaw += (panels[pj].textContent || '').length;
+              panelRead += this._mcpPanelText(panels[pj]).length;
+            }
+            sumTC += tc; sumIT += it; sumPanelRaw += panelRaw; sumPanelRead += panelRead;
+          } catch (eNodeDiag) { swallowSoft(eNodeDiag, 'adapter:qwen:node-diag'); }
+        }
         const content = this._textWithoutReasoning(element);
-        if (!content || content.length === 0) continue;
-        if (!/[0-9A-Za-z\u00C0-\u024F\u0400-\u04FF\u4E00-\u9FFF]/.test(content)) continue;   // «.» свёрнутой панели
+        if (!content || content.length === 0) {
+          if (diagOn) diagRows.push([i, role === 'user' ? 'u' : 'a', tc, it, pn, panelRaw, panelRead, 0, 'empty']);
+          continue;
+        }
+        if (!/[0-9A-Za-z\u00C0-\u024F\u0400-\u04FF\u4E00-\u9FFF]/.test(content)) {
+          if (diagOn) diagRows.push([i, role === 'user' ? 'u' : 'a', tc, it, pn, panelRaw, panelRead, content.length, 'noalnum']);
+          continue;   // «.» свёрнутой панели
+        }
 
         const msg: Message & {hiddenReasoning?: string} = { role, content };
         if (role === 'assistant') {
@@ -544,7 +581,9 @@ class QwenAdapter extends BaseAdapter {
           if (reasoning) msg.hiddenReasoning = reasoning;
         }
         messages.push(msg);
+        if (diagOn) diagRows.push([i, role === 'user' ? 'u' : 'a', tc, it, pn, panelRaw, panelRead, content.length, 'kept']);
       }
+      const beforeDrop = messages.slice();
       // O-36.2 (ФИКС, см. шапку файла): контейнер-узлы снимаются ЗДЕСЬ, до базы/бейджа/файла —
       // общим правилом сборщиков (логика не дублируется). Массив базы остаётся ОДНИМ объектом
       // (in-place), поэтому счётчик, лог и потребители (buildHistoryMessages → экспорт) видят
@@ -557,6 +596,30 @@ class QwenAdapter extends BaseAdapter {
       }
       if (messages.length > 0) {
         debugLog('log', `[QwenAdapter] Извлечено ${messages.length} сообщений, контейнеров отброшено: ${droppedContainers}, роли: ${messages.map(m => String(m.role).substring(0, 4)).join(', ')}`);
+      }
+      if (diagOn) {
+        try {
+          // Кто именно отброшен на второй ступени (dropContainerMessages): индекс в
+          // beforeDrop, длина content и первые 60 символов. Без этого нельзя сказать,
+          // ушли ли ходы с панелями (гипотеза 407 248 ≈ 422 460) или что-то другое.
+          const droppedRows: (string|number)[][] = [];
+          for (let mi = 0; mi < beforeDrop.length; mi++) {
+            if (keptNodes.indexOf(beforeDrop[mi]) === -1) {
+              const body = String(beforeDrop[mi].content || '');
+              droppedRows.push([mi, body.length, body.slice(0, 60).replace(/[\r\n\t]+/g, ' ')]);
+            }
+          }
+          let sumKept = 0;
+          for (let mk = 0; mk < messages.length; mk++) sumKept += messages[mk].content.length;
+          console.log('[QwenAdapter][node-diag] ' + JSON.stringify({
+            nodes: nodes.length,
+            beforeDrop: beforeDrop.length,
+            afterDrop: messages.length,
+            sumTC, sumIT, sumPanelRaw, sumPanelRead, sumKept,
+            rows: diagRows,
+            dropped: droppedRows
+          }));
+        } catch (eDumpDiag) { swallowSoft(eDumpDiag, 'adapter:qwen:node-diag-dump'); }
       }
       return messages;
     } catch (error) {

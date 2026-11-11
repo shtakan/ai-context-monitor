@@ -105,6 +105,9 @@ export type Message = ExportMessage;
 /** Источник файла (v82/D2): 'network' — база перехвата, 'adapter' — DOM-адаптер. */
 export type ExportSourceKind = 'network' | 'adapter';
 
+/** Канонический источник базы (v1.9/qwen): 'dom' — сообщения адаптера, 'net' — срез перехвата. */
+export type CanonicalSourceKind = 'dom' | 'net';
+
 /** Вердикт resolveExportSource (T1-fix#3): что делать с файлом. */
 export type ExportSourceAction = 'block' | 'union' | 'local';
 
@@ -511,6 +514,32 @@ export function notCompleteReason(state: Record<string, unknown> | null): string
  */
 export function pickExportSource(hasBaseSeen: unknown, hasNetworkTexts: unknown): ExportSourceKind {
   return (hasBaseSeen === true) ? 'network' : 'adapter';
+}
+
+/**
+ * v1.9 (qwen, канонический источник): выбрать ОДИН массив сообщений для метрики и файла.
+ * DOM-адаптер отдаёт полный текст MCP-панелей (480k+ символов), которых нет в сетевом
+ * payload qwen; сеть при этом может содержать все ходы и reasoning. Канонический DOM
+ * принимается только при ПОЛНОМ покрытии: непустой, не меньше сети минус два пустых
+ * placeholder-узла (live: 86 против 88) и не короче сетевого текста. Иначе — сеть.
+ * Чистая функция: никаких DOM/состояний, только числа.
+ * @param {*} domCount число DOM-сообщений
+ * @param {*} netCount число сетевых сообщений
+ * @param {*} domLen длина DOM-текста в символах
+ * @param {*} netLen длина сетевого текста в символах
+ * @returns {'dom'|'net'} канонический источник
+ */
+export function pickCanonicalSource(domCount: unknown, netCount: unknown, domLen: unknown, netLen: unknown): CanonicalSourceKind {
+  const dc = (typeof domCount === 'number' && domCount > 0) ? domCount : 0;
+  const nc = (typeof netCount === 'number' && netCount > 0) ? netCount : 0;
+  const dl = (typeof domLen === 'number' && domLen > 0) ? domLen : 0;
+  const nl = (typeof netLen === 'number' && netLen > 0) ? netLen : 0;
+  if (dc === 0) return 'net';
+  // Два пустых user-узла (live qwen: rows 48/50) не считаются потерей покрытия.
+  if (nc > 0 && dc < nc - 2) return 'net';
+  // Короткий DOM (reasoning остался только в сети) не должен уронить метрику.
+  if (nl > 0 && dl < nl) return 'net';
+  return 'dom';
 }
 
 /**
@@ -2859,6 +2888,7 @@ export var Api = {
   shouldSkipBaseCompleteTrigger: shouldSkipBaseCompleteTrigger,
   effectiveAutoExportThreshold: effectiveAutoExportThreshold,
   pickExportSource: pickExportSource,
+  pickCanonicalSource: pickCanonicalSource,
   resolveExportSource: resolveExportSource,
   // Two-Tier (v89): метка достоверности источника файла — чистая функция наружу
   // (её зовёт core/export-manager.js:aiCmGetSourceTier).

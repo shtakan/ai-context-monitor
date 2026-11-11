@@ -164,6 +164,43 @@ describe('Two-Tier D8: json — аддитивное поле, undefined не д
   });
 });
 
+describe('v1.9 D9: src метрики (dom|net|max) в шапке md и в json', function () {
+  test('D9a: md — строка metric-src после токенов, до метки/тела', function () {
+    const md = Builders.buildMdFromHistory({
+      site: 'qwen', tokens: 218334, limit: 1000000, percent: 21.8, src: 'max', messages: MESSAGES
+    });
+    const iSrc = md.indexOf('metric-src: max');
+    expect(iSrc).toBeGreaterThan(-1);
+    expect(md.slice(0, iSrc)).toContain('Токены');
+    expect(md.indexOf('вопрос')).toBeGreaterThan(iSrc);
+  });
+
+  test('D9b: md без src — прежние байты (аддитивность)', function () {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-10-22T12:00:00Z'));
+    try {
+      const withSrc = Builders.buildMdFromHistory({
+        site: 'qwen', tokens: 218334, limit: 1000000, percent: 21.8, src: 'max', messages: MESSAGES
+      });
+      const without = Builders.buildMdFromHistory({
+        site: 'qwen', tokens: 218334, limit: 1000000, percent: 21.8, messages: MESSAGES
+      });
+      // Единственная разница — строка src; всё остальное (дата, шапка, тело) байт-в-байт.
+      expect(withSrc.replace('metric-src: max\n', '')).toBe(without);
+      expect(without.indexOf('metric-src')).toBe(-1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('D9c: json — аддитивное поле src, undefined ключа не добавляет', function () {
+    const withSrc = JSON.parse(Builders.buildJsonFromHistory({ site: 'qwen', tokens: 1, src: 'dom', messages: MESSAGES }));
+    expect(withSrc.src).toBe('dom');
+    const without = JSON.parse(Builders.buildJsonFromHistory({ site: 'qwen', tokens: 1, messages: MESSAGES }));
+    expect(Object.prototype.hasOwnProperty.call(without, 'src')).toBe(false);
+  });
+});
+
 describe('Two-Tier S1–S3: source-пины проводки', function () {
   test('S1: чистая функция классификации экспортирована в Api пайплайна', function () {
     expect(typeof P.sourceTierOf).toBe('function');

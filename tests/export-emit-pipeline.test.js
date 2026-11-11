@@ -380,6 +380,22 @@ describe('re-check 0→1 видит применённую базу; выбор 
     expect(P.pickExportSource(true, false)).toBe('network'); // сеть — единственный источник
     expect(P.pickExportSource(false, false)).toBe('adapter');
   });
+
+  // v1.9 (canonical, qwen): один массив на метрику и файл. DOM принимается только
+  // при полном покрытии: 86/88 (два пустых placeholder-узла), длина не меньше сети.
+  test('pickCanonicalSource: полное DOM-покрытие → dom, частичное/короткое → net', () => {
+    expect(P.pickCanonicalSource(86, 88, 661388, 268503)).toBe('dom');
+    expect(P.pickCanonicalSource(88, 88, 1000, 0)).toBe('dom');
+    expect(P.pickCanonicalSource(86, 88, 661388, 0)).toBe('dom');
+    // live partial: 50 из 88 узлов, 591 488 символов — сеть полнее по ходам.
+    expect(P.pickCanonicalSource(50, 88, 591488, 268503)).toBe('net');
+    // DOM короче сети (reasoning остался только в payload) — не роняем метрику.
+    expect(P.pickCanonicalSource(86, 88, 200000, 268503)).toBe('net');
+    expect(P.pickCanonicalSource(0, 88, 0, 268503)).toBe('net');
+    expect(P.pickCanonicalSource(null, null, null, null)).toBe('net');
+    // Граница ровно netCount-2: 86 при 88 — полное покрытие.
+    expect(P.pickCanonicalSource(85, 88, 661388, 268503)).toBe('net');
+  });
 });
 
 // —— v82 (D5/D6): гистерезис только по сетевому pct; сброс pct при смене чата ——

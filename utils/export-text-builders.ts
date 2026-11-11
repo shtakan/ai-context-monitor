@@ -428,6 +428,11 @@ export function buildMdFromHistory(history: ExportHistory, platform?: string): s
   } else {
     lines.push(aiCmI18nMessage('export_md_tokens', 'Токены: ' + tokens + ' / ' + limit + ' (' + percent + '%)', [String(tokens), String(limit), String(percent)]));
   }
+  // v1.9 (qwen): источник зафиксированного числа — отдельной ASCII-строкой сразу под
+  // токенами (dom|net|max|server|hold). Ключ аддитивный: у прочих сервисов src нет →
+  // ни одного нового байта. Локализуемое сообщение не заводим: это машинная метка,
+  // а русский литерал сломал бы гейт i18n-locales (EXPORT_HEADER_LITERALS).
+  if (typeof h.src === 'string' && h.src) lines.push('metric-src: ' + h.src);
   lines.push('');
   // Two-Tier (v89): метка достоверности источника — отдельным блоком сразу после шапки,
   // только Gemini и только когда метка есть в истории (см. aiCmGetSourceTier).
@@ -489,6 +494,9 @@ export function buildJsonFromHistory(history: ExportHistory, platform?: string):
     tokens: (typeof h.tokens === 'number') ? h.tokens : 0,
     limit: (typeof h.limit === 'number') ? h.limit : 0,
     percent: (typeof h.percent === 'number') ? h.percent : 0,
+    // v1.9 (qwen): аддитивное поле источника числа. undefined → JSON.stringify ключ НЕ
+    // добавляет, байты прежних платформ не меняются.
+    src: h.src,
     // Two-Tier (v89): аддитивное поле метаданных. undefined → JSON.stringify ключ НЕ
     // добавляет, поэтому у прочих платформ и у Gemini без метки байты прежние.
     sourceTier: h.sourceTier,

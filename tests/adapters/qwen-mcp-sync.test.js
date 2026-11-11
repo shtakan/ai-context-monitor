@@ -187,6 +187,13 @@ async function networkAssistantText(opts) {
   new Function('window', 'self', DEBUG_SRC)(window, window);
   const events = [];
   const pending = [];
+  const diag = [];
+  if (o.captureDiag) {
+    // v97: qwen-mcp-diag живёт за тем же diagOn-гейтом, что и остальные строки.
+    window.sessionStorage.setItem('aiCmDebug', '1');
+    window.__aiCmDebugLogs = true;
+    window.aiCmDiagLine = function (tag, fields) { diag.push({ tag: tag, fields: fields }); };
+  }
   window.addEventListener('ai-cm-full-history', function (ev) { events.push(ev.detail); });
   window.addEventListener('ai-cm-qwen-history-pending', function (ev) { pending.push(ev.detail); });
 
@@ -203,7 +210,7 @@ async function networkAssistantText(opts) {
   const detail = events[events.length - 1];
   const assistant = (detail.messages || []).filter(function (m) { return m.role === 'assistant'; });
   expect(assistant.length).toBe(1);
-  return { text: assistant[0].text, detail: detail, pending: pending, events: events };
+  return { text: assistant[0].text, detail: detail, pending: pending, events: events, diag: diag };
 }
 
 beforeEach(function () {
@@ -213,6 +220,10 @@ beforeEach(function () {
 afterEach(function () {
   jest.restoreAllMocks();
   document.body.innerHTML = '';
+  // v97: глобальный diag-хук не должен протекать в соседние тесты.
+  try { delete window.aiCmDiagLine; } catch (e) { void e; }
+  try { window.sessionStorage.removeItem('aiCmDebug'); } catch (e) { void e; }
+  try { window.__aiCmDebugLogs = false; } catch (e) { void e; }
 });
 
 describe('v83: Qwen MCP tool-results — DOM и сеть считают одинаково', function () {
@@ -269,6 +280,24 @@ describe('v83: Qwen MCP tool-results — DOM и сеть считают один
     expect(bare).toBe(ANSWER);
   });
 
+  test('S8 (v1.9 canonical): свёрнутая панель с client rects читает скрытый payload, а не только шапку', function () {
+    document.body.innerHTML = domFixture();
+    const panel = document.querySelector('.qwen-mcp-tool-call-panel');
+    expect(panel).not.toBe(null);
+    // Живой Qwen: панель свёрнута, шапка видна (getClientRects непустой), тело — display:none.
+    // innerText при этом отдаёт только шапку, а старый код возвращал её и терял ~200k символов.
+    panel.getClientRects = function () { return [{ width: 200, height: 20 }]; };
+    Object.defineProperty(panel, 'innerText', {
+      configurable: true,
+      get: function () { return TOOL_CALL_LINES[0]; }
+    });
+    const adapter = loadAdapter();
+    const assistant = adapter.extractMessages().filter(function (m) { return m.role === 'assistant'; });
+    expect(assistant.length).toBe(1);
+    expect(assistant[0].content).toContain(TOOL_TEXT);
+    expect(assistant[0].content).toContain(TOOL_CALL_LINES[0]);
+  });
+
   test('S6: source-пины точки правки (сеть читает extras, DOM читает живой innerText)', function () {
     expect(INTERCEPT_SRC).toContain('TOOL_EXTRA_KEYS');
     expect(INTERCEPT_SRC).toContain('function toolExtrasTextOf(');
@@ -281,5 +310,29 @@ describe('v83: Qwen MCP tool-results — DOM и сеть считают один
     expect(QWEN_SRC).toContain('_detachJournal');
     expect(QWEN_SRC).toContain('_restoreJournal');
     expect(QWEN_SRC).toContain('_readableText(element)');
+  });
+
+  test('S3b (v97): extras с tool_result — длины сети и DOM равны ПО СИМВОЛАМ', async function () {
+    const net = await networkAssistantText();
+    const dom = domAssistantText();
+    // Символьное равенство — первично: токен-эвристика нелинейна (utils/tokenizer.ts:33),
+    // поэтому паритет источников проверяем до счёта токенов.
+    expect(net.text.length).toBe(dom.length);
+    expect(net.text).toBe(dom);
+  });
+
+  test('S7 (v97): qwen-mcp-diag печатает число extras, их сумму и длину хода', async function () {
+    const net = await networkAssistantText({ captureDiag: true });
+    const line = net.diag.filter(function (d) { return d.tag === 'qwen-mcp-diag'; }).pop();
+    expect(line).toBeTruthy();
+    const f = line.fields;
+    expect(f.extrasTurns).toBe(1);                       // один ход с tool-extras
+    expect(f.extrasChars).toBeGreaterThan(TOOL_TEXT.length); // tool_call + tool_result
+    expect(f.msgs).toBe(net.detail.messages.length);
+    expect(f.textLen).toBe(net.detail.text.length);
+    // lens: "<order>:<turnLen>+<toolChars>" — длина хода с tool-текстом видна в строке лога.
+    expect(f.lens).toMatch(/^\d+:\d+\+\d+$/);
+    const m = f.lens.match(/^(\d+):(\d+)\+(\d+)$/);
+    expect(Number(m[3])).toBe(f.extrasChars);
   });
 });

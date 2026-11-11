@@ -934,6 +934,7 @@ function buildJsonText(hist) {
     tokens: (hist && typeof hist.tokens === 'number') ? hist.tokens : 0,
     limit: (hist && typeof hist.limit === 'number') ? hist.limit : 0,
     percent: (hist && typeof hist.percent === 'number') ? hist.percent : 0,
+    src: (hist && hist.src) || undefined,
     messages: (hist && Array.isArray(hist.messages)) ? hist.messages : []
   }, null, 2);
 }
@@ -1364,6 +1365,7 @@ if (typeof module !== 'undefined' && module.exports) {
     isChatHome: isChatHome,
     buildArchiveStoragePatch: buildArchiveStoragePatch,
     aiCmImportArchiveFiles: aiCmImportArchiveFiles,
-    formatArchiveReport: formatArchiveReport
+    formatArchiveReport: formatArchiveReport,
+    buildJsonText: buildJsonText
   };
 }

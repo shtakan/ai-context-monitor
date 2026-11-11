@@ -506,7 +506,7 @@ describe('O-32 (6): монотонный максимум включён при 
     // поэтому «каноническая идентичность хода» и число бейджа не могут разойтись.
     expect(CONTENT.split('aiCmTokenSnapshot(').length - 1).toBe(3);   // объявление + бейдж + панель
     // и фиксируется оно ОДИН раз — после окончательных maxTokenCount/percentage
-    expect(CONTENT.split('lastTokensSnapshot = { tokens: maxTokenCount, percent: percentage, limit: displayLimit };').length - 1).toBe(1);
+    expect(CONTENT.split('lastTokensSnapshot = { tokens: maxTokenCount, percent: percentage, limit: displayLimit, src: aiCmMetricValueSrc };').length - 1).toBe(1);
     // панель (GET_STATS) отдаёт ровно зафиксированное число, а не собственный пересчёт:
     expect(CONTENT).toContain("var snapStats = (typeof lastTokensSnapshot !== 'undefined' && lastTokensSnapshot) ? lastTokensSnapshot : null;");
     expect(CONTENT).toContain("var displayTokens = (snapStats && typeof snapStats.tokens === 'number') ? snapStats.tokens : tokenSnapStats.tokens;");

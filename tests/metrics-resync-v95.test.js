@@ -27,6 +27,7 @@ const H = require('./helpers/content-source.js');
 
 const ROOT = H.ROOT;
 const CONTENT = readCore('core/content.ts');
+const WIDGET = read('core/widget.ts');
 const MGR = read('core/export-manager.ts');
 
 const CID = 'c-metrics-resync';
@@ -113,6 +114,29 @@ describe('v95 metrics-resync: pct/histKey по финальному срезу',
     expect(r.ctx.lastHistoryWroteKey).toBe('101|6');
     expect(r.sent).toEqual([]);
     expect(r.logs.join('\n')).toContain('metrics-resync skip reason=shrink');
+  });
+
+  test('R9 (v1.9): 88→88, длина 568620→249856 — короткий срез НЕ принимается, бейдж не падает', () => {
+    // Живой замер 6eed4c3f: та же база 88 сообщений, но joined.length упал
+    // 268 503 → 249 856; гард по msgs.length такой случай не видел. Здесь 88→88
+    // и база длиной 568 620 символов (белый шум экспортного контента не нужен —
+    // проверяется именно длина базы), срез — 88 сообщений общей длиной ~249 856.
+    const list = [];
+    const per = Math.floor((249856 - 87) / 88);
+    for (let i = 0; i < 88; i++) list.push({ role: i % 2 ? 'assistant' : 'user', text: 'x'.repeat(per) });
+    const base = 'x'.repeat(568620);
+    const r = runResync({
+      msgs: list,
+      reason: 'base-complete',
+      ctx: { baseCount: 88, baseText: base, lastHistoryWroteKey: '88|568620' }
+    });
+    expect(r.ret).toBe(false);                       // срез НЕ принят
+    expect(r.ctx.baseCount).toBe(88);                // база не подменена коротким срезом
+    expect(r.ctx.baseText.length).toBe(568620);      // принятая длина сохранена
+    expect(r.sent).toEqual([]);                      // processAndSend не звался → бейдж не просел
+    const logs = r.logs.join('\n');
+    expect(logs).toContain('metrics-resync skip reason=shrink-length');
+    expect(logs).toContain('prevLen=568620');
   });
 
   test('R4: чужой convId — ресинк не применяется', () => {
@@ -298,7 +322,12 @@ function runMaxBranch(o) {
     baseComplete: o.baseComplete === true,
     useMonotonic: o.useMonotonic === true,
     tokenEstimate: o.tokenEstimate,
-    maxTokenCount: o.maxTokenCount
+    maxTokenCount: o.maxTokenCount,
+    // v1.9: срез ветвления читает только эти два поля; непереданные → typeof-гард
+    // оставляет прежнюю безусловную перезапись (D5/gemini).
+    aiCmHwKeep: o.aiCmHwKeep,
+    aiCmMetricValueSrc: o.aiCmMetricValueSrc,
+    svc: o.svc || 'gemini'
   };
   return new Function('ctx', 'with (ctx) { ' + metricMaxBranch() +
     '\nreturn maxTokenCount; }')(ctx);
@@ -354,6 +383,54 @@ describe('v98: масштаб по netEffectiveLen только при baseCompl
     // и на неполной базе тот же проход НЕ роняет максимум вниз (скачка посреди загрузки нет)
     expect(runMaxBranch({ baseComplete: false, useMonotonic: true, tokenEstimate: finalEst, maxTokenCount: 35800 }))
       .toBe(35800);
+  });
+
+  test('D7 (v1.9): qwen high-water — короткий net-срез не роняет уже измеренный длинный текст', () => {
+    const body = sliceFunction(CONTENT, 'aiCmQwenHighWaterTrack') + '\n' +
+      sliceFunction(CONTENT, 'aiCmQwenHighWaterKeep');
+    const ctx = { aiCmTokenHighWater: null, swallowSoft: function () { } };
+    const api = new Function('ctx', 'with (ctx) { ' + body +
+      '\nreturn { track: aiCmQwenHighWaterTrack, keep: aiCmQwenHighWaterKeep }; }')(ctx);
+    // DOM-проход: 661 388 символов → 218 334 токена (живой замер 6eed4c3f)
+    api.track(CID, 661388, 218334, 'dom');
+    expect(api.keep(CID, 249856)).toBe(218334);      // сеть короче → отдаём high-water
+    expect(ctx.aiCmTokenHighWater.len).toBe(661388);
+    expect(ctx.aiCmTokenHighWater.src).toBe('dom');
+    // чужой чат не наследует максимум
+    expect(api.keep('other', 249856)).toBe(0);
+    // текущий текст длиннее — слияние не нужно, берётся текущее число
+    expect(api.keep(CID, 700000)).toBe(0);
+    // максимум обновляется только при РОСТЕ длины (токены не сравниваются)
+    api.track(CID, 700000, 230000, 'net');
+    expect(api.keep(CID, 249856)).toBe(230000);
+    expect(ctx.aiCmTokenHighWater.tokens).toBe(230000);
+  });
+
+  test('D8 (v1.9): qwen baseComplete уступает high-water; gemini перезаписывается как раньше', () => {
+    const qwen = runMaxBranch({
+      baseComplete: true, useMonotonic: true, tokenEstimate: 92197,
+      maxTokenCount: 218334, aiCmHwKeep: 218334, aiCmMetricValueSrc: 'net', svc: 'qwen'
+    });
+    expect(qwen).toBe(218334);                       // 92 197 не затирает измеренные 218 334
+    expect(runMaxBranch({
+      baseComplete: true, useMonotonic: true, tokenEstimate: 92197,
+      maxTokenCount: 218334, aiCmHwKeep: 0, aiCmMetricValueSrc: 'net', svc: 'qwen'
+    })).toBe(92197);                                 // нет более длинного текста → числа сети
+    expect(runMaxBranch({
+      baseComplete: true, useMonotonic: true, tokenEstimate: 35100, maxTokenCount: 35800
+    })).toBe(35100);                                 // D5/gemini: безусловная перезапись
+  });
+
+  test('D9 (v1.9): сброс чата гасит canonical-источник и emergency high-water', () => {
+    // v37: смена convId в content.ts сбрасывает оба поля рядом с maxTokenCount.
+    const hwReset = CONTENT.indexOf("if (typeof aiCmTokenHighWater !== 'undefined') aiCmTokenHighWater = null;");
+    const srcReset = CONTENT.indexOf("aiCmBaseSource = '';", hwReset);
+    expect(hwReset).toBeGreaterThan(-1);
+    expect(srcReset).toBeGreaterThan(hwReset);
+    expect(srcReset - hwReset).toBeLessThan(400);
+    // resetConversationState (core/widget.ts) — второй путь сброса при SPA-переходе.
+    expect(WIDGET).toContain('aiCmTokenHighWater = null;');
+    expect(WIDGET).toContain("aiCmBaseSource = '';");
   });
 
   test('D6: source-пин — гейт стоит в ЕДИНОЙ точке расчёта, а её зовут ОБА пути (бейдж и панель)', () => {

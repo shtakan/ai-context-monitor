@@ -116,6 +116,9 @@ export interface ExportHistory {
   /** Процент заполнения. */
   percent?: number;
 
+  /** v1.9 (qwen): источник числа (dom|net|max|server|hold) — печатается в md/json. */
+  src?: string;
+
   /** Two-Tier-метка; печатается только для site === 'gemini'. */
   sourceTier?: string;
 

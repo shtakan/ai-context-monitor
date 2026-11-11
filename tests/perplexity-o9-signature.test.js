@@ -227,6 +227,21 @@ describe('O-9-подпись: Perplexity snapshot-at-manual печатает р�
       .toEqual(['user', 'assistant', 'user', 'assistant']);
     expect(h.sent.length).toBe(1);                       // ручной экспорт ответил ровно один раз
   });
+
+  test('src ручного снимка — из lastTokensSnapshot (та же метка, что у бейджа/истории)', () => {
+    const h = perplexityCtx({
+      lastTokensSnapshot: { tokens: 4321, percent: 3.4, limit: 200000, src: 'dom' }
+    });
+    const resp = h.run();
+    expect(resp.data.src).toBe('dom');
+  });
+
+  test('без зафиксированного снимка src отсутствует (JSON ключ не появляется)', () => {
+    const h = perplexityCtx();
+    const resp = h.run();
+    expect(resp.data.src).toBeUndefined();
+    expect(JSON.parse(JSON.stringify(resp.data))).not.toHaveProperty('src');
+  });
 });
 
 // =====================================================================================

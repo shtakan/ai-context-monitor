@@ -39,7 +39,18 @@ let maxTokenCount: number = 0;
 // Прямое чтение maxTokenCount потребителями и было причиной R1 (81 токен между счётчиком панели
 // файла и бейджем сразу после F5: панель считала Math.max(tokenEstimate, maxTokenCount)).
 // Обнуляется вместе с maxTokenCount при сбросе чата — снимок чужого разговора не перетекает.
-let lastTokensSnapshot: { tokens: number; percent: number; limit: number } | null = null;
+let lastTokensSnapshot: { tokens: number; percent: number; limit: number; src?: string } | null = null;
+// v1.9 (qwen): high-water по ДЛИНЕ текста. Сеть qwen не приносит tool_result в payload
+// (живой замер: extrasNodes=0), а DOM-адаптер отдаёт полный текст MCP-панелей — полный
+// сетевой срез поэтому ЗАКОННО короче уже измеренного DOM-текста. Храним максимум длины
+// вместе с числом токенов и источником; сравнение — по символам, не по токенам
+// (эвристика нелинейна: utils/tokenizer.ts:33). max привязан к convId и сбрасывается
+// при смене чата вместе с остальным состоянием.
+let aiCmTokenHighWater: { convId: string; len: number; tokens: number; src: string } | null = null;
+// v1.9 (canonical): источник базового массива текущего чата — 'dom' (сообщения адаптера с
+// MCP-панелями) или 'net' (срез перехвата). Метрика, панель и тело файла читают ОДИН массив;
+// src уходит в diag/JSON. Сбрасывается на смене чата вместе с baseText/lastBaseTexts.
+var aiCmBaseSource: string = '';
 let restoredTapeLoaded: boolean = false; // v28: флаг однократного восстановления ленты при загрузке чата
 let restoreDone: boolean = false; // v30: флаг завершения восстановления — разрешает сохранение ленты только после restore
 let cacheRefreshPlanned: Record<string, boolean> = {}; // v30.6: convId → true — планирование уточнения после кэша один раз на чат за сессию
@@ -374,6 +385,12 @@ function aiCmLatchRemove(service: string, convId: string): Promise<boolean> {
   Object.defineProperty(Api, 'lastTokensSnapshot', { enumerable: true,
     get: function () { return lastTokensSnapshot; },
     set: function (value) { lastTokensSnapshot = value; } });
+  Object.defineProperty(Api, 'aiCmTokenHighWater', { enumerable: true,
+    get: function () { return aiCmTokenHighWater; },
+    set: function (value) { aiCmTokenHighWater = value; } });
+  Object.defineProperty(Api, 'aiCmBaseSource', { enumerable: true,
+    get: function () { return aiCmBaseSource; },
+    set: function (value) { aiCmBaseSource = value; } });
   Object.defineProperty(Api, 'restoredTapeLoaded', { enumerable: true,
     get: function () { return restoredTapeLoaded; },
     set: function (value) { restoredTapeLoaded = value; } });

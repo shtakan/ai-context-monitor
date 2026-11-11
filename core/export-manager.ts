@@ -752,6 +752,9 @@ function aiCmWriteCurrentHistory(): void {
       tokens: histTokens,
       limit: histLimit,
       percent: histPct,
+      // v1.9 (qwen): источник зафиксированного числа (dom|net|max|server|hold) — шапка
+      // файла показывает его рядом с токенами. У прочих сервисов ключ отсутствует.
+      src: (snapR1Hist && snapR1Hist.src) ? snapR1Hist.src : undefined,
       updatedAt: Date.now(),
       // v1.14.1: живой флаг вместо липкого — префикс [LOW CONFIDENCE]_ только пока
       // baseComplete !== true; после 0→1 липкий aiCmLowConfidenceByConv больше не лепит
@@ -1866,6 +1869,8 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
           tokens: snapTokens,
           limit: dispLimitAuto,
           percent: snapPercent,
+          // v1.9 (qwen): тот же источник, что у бейджа/панели (lastTokensSnapshot.src).
+          src: (snapR1Auto && snapR1Auto.src) ? snapR1Auto.src : undefined,
           // Two-Tier (v89): метка источника — из ОБЪЕДИНЁННОЙ базы в момент сборки файла;
           // сборщики TXT/MD ставят её первой строкой/блоком только для Gemini.
           // typeof-гард — как у снимка истории выше (срез-песочницы тестов).

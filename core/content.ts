@@ -812,6 +812,56 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
   } catch (eO22b) { }
   const detail = ev && ev.detail;
   if (!detail || !detail.text) return;
+  // v98 (диагностика, ТОЛЬКО измерение): независимый замер DOM на том же эмите — сумма
+  // innerText реплик + textContent скрытых MCP-панелей. Нужен, чтобы сравнить сетевой текст
+  // с живым DOM в СИМВОЛАХ (max по токенам запрещён — эвристика нелинейна).
+  try {
+    var domNodes = document.querySelectorAll('.qwen-chat-message');
+    if (domNodes && domNodes.length) {
+      var domInner = 0, domAll = 0;
+      var domDiagOn = (typeof aiCmDiagLine === 'function');
+      var domRows: (string|number)[][] = [];
+      var domSel = '.qwen-mcp-tool-call-panel, [class*="mcp-tool-call-panel"]';
+      for (var di = 0; di < domNodes.length; di++) {
+        var dn = domNodes[di] as HTMLElement;
+        var dnTc = (dn.textContent || '').length;
+        var dnIt = (typeof dn.innerText === 'string') ? dn.innerText.length : 0;
+        domInner += dnIt;
+        domAll += dnTc;
+        if (domDiagOn) {
+          // v98 (диагностика): по одному узлу — сколько текста в textContent, сколько
+          // видит innerText, сколько внутри MCP-панелей. Нужно, чтобы сопоставить
+          // 88 узлов DOM с 86 сообщениями адаптера и найти потерянные ходы с панелями.
+          var dnPanels = dn.querySelectorAll(domSel);
+          var dnPanelLen = 0;
+          for (var dnp = 0; dnp < dnPanels.length; dnp++) dnPanelLen += (dnPanels[dnp].textContent || '').length;
+          domRows.push([di, dnTc, dnIt, dnPanels.length, dnPanelLen]);
+        }
+      }
+      if (typeof aiCmDiagLine === 'function') {
+        var domPanels = document.querySelectorAll(domSel);
+        var panelAll = 0;
+        for (var dp = 0; dp < domPanels.length; dp++) panelAll += (domPanels[dp].textContent || '').length;
+        // Верхнеуровневые панели (вложенные не считаем дважды) — сопоставимо с
+        // sumPanelRaw адаптера, который тоже снимает только верхний уровень.
+        var domTop: Element[] = [];
+        for (var dt = 0; dt < domPanels.length; dt++) {
+          var dtTop = true;
+          for (var dq = 0; dq < domPanels.length; dq++) {
+            if (dq !== dt && domPanels[dq].contains(domPanels[dt])) { dtTop = false; break; }
+          }
+          if (dtTop) domTop.push(domPanels[dt]);
+        }
+        var panelTopLen = 0;
+        for (var dtt = 0; dtt < domTop.length; dtt++) panelTopLen += (domTop[dtt].textContent || '').length;
+        aiCmDiagLine('qwen-dom-diag', {
+          ts: Date.now(), msgs: domNodes.length, innerLen: domInner, textAllLen: domAll,
+          panels: domPanels.length, panelLen: panelAll, withPanels: domInner + panelAll,
+          panelTop: domTop.length, panelTopLen: panelTopLen, rows: domRows
+        });
+      }
+    }
+  } catch (eDomDiag) { swallowSoft(eDomDiag, 'content:qwen-dom-diag'); }
   // O-31: база/pct/экспорт — ТОЛЬКО по ходам текущего разговора (threadId).
   // Снимок чужого треда отбрасывается ЦЕЛИКОМ: он не сбрасывает и не подменяет базу
   // текущего разговора. typeof-гард — слушатель исполняется и в source-песочницах
@@ -860,6 +910,11 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
   // (baseComplete=true не даёт сработать правилу перехода неполная→полная).
   if (emitConvId && emitConvId !== lastSnapConvId) {
     maxTokenCount = 0;
+    // v1.9 (qwen): high-water длины текста принадлежит разговору — иначе длинный чат
+    // удерживал бы число для нового (сброс вместе с maxTokenCount).
+    if (typeof aiCmTokenHighWater !== 'undefined') aiCmTokenHighWater = null;
+    // v1.9 (canonical): источник базы принадлежит разговору — не перетекает в новый чат.
+    aiCmBaseSource = '';
     // v2.6 (R1): снимок метрики принадлежит разговору — гасим вместе с максимумом, иначе панель
     // и шапка файла нового чата прочли бы tokens/limit предыдущего (typeof-гард — срез-песочницы).
     if (typeof lastTokensSnapshot !== 'undefined') lastTokensSnapshot = null;
@@ -890,10 +945,20 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
   const newBaseComplete = !!detail.historyComplete;
   var completeTransition79 = (newBaseComplete && !baseComplete); // v79: фиксируем переход 0→1 ДО перезаписи
   if (newBaseComplete && !baseComplete) {
-    maxTokenCount = 0;
-    // v2.6 (R1): добиваем любой пик, накопленный DOM-путём, — снимок метрики снимается вместе
-    // с максимумом, чтобы потребители не увидели число до перезаписи полной базой.
-    if (typeof lastTokensSnapshot !== 'undefined') lastTokensSnapshot = null;
+    // v1.9 (qwen, ветка C): ОТМЕНА решения v1.8-fix «вместо max-merge» — для qwen
+    // DOM-текст содержит MCP-панели, которых НЕТ в сетевом payload (живой замер:
+    // extrasNodes=0, сеть 249 856 симв. против DOM 661 388). Обнуление здесь
+    // выбрасывало уже измеренный длинный текст и роняло бейдж 218k → 92k. Максимум
+    // НЕ обнуляем; слияние делает ветка baseComplete в processAndSend по ДЛИНЕ
+    // текста (не по токенам), с high-water per convId.
+    // Прочие сервисы сохраняют прежнее поведение v1.8-fix байт-в-байт.
+    var keepQwenHw79 = (currentAdapter && currentAdapter.siteName === 'qwen');
+    if (!keepQwenHw79) {
+      maxTokenCount = 0;
+      // v2.6 (R1): добиваем любой пик, накопленный DOM-путём, — снимок метрики снимается вместе
+      // с максимумом, чтобы потребители не увидели число до перезаписи полной базой.
+      if (typeof lastTokensSnapshot !== 'undefined') lastTokensSnapshot = null;
+    }
   }
   baseComplete = newBaseComplete;
   // v83: снимок сети применён — заказ на снимок закрыт (страховка, если MAIN потерял 'end').
@@ -1027,11 +1092,60 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
     // файле ~32 тыс. символов вместо ~40 тыс.). Без схлопывания (removed=0) пол не трогаем.
     if (ded18.removed > 0 && netEffectiveLen > baseText.length) netEffectiveLen = baseText.length;
     aiCmLogDedupeRemoved(ded18.removed);
+    // v1.9 (canonical, qwen): сетевой payload qwen не содержит tool_result (живой замер:
+    // extrasNodes=0), а DOM-адаптер отдаёт полный текст MCP-панелей (live: 661 388 против
+    // 268 503 симв.). При ПОЛНОМ покрытии DOM (86/88 узлов, длина не меньше сети) база
+    // заменяется ОДНИМ DOM-массивом: он питает и метрику (aiCmBasePrepared), и файл
+    // (lastBaseTexts/lastDetailMessages) — шапка и тело больше не расходятся. Иначе
+    // остаётся сеть. max/high-water ниже — только аварийный гард, не источник.
+    aiCmBaseSource = 'net';
+    try {
+      if (currentAdapter && currentAdapter.siteName === 'qwen' &&
+          typeof currentAdapter.extractMessages === 'function' &&
+          typeof AiCmExportEmitPipeline !== 'undefined' &&
+          typeof AiCmExportEmitPipeline.normalizeExportMessages === 'function' &&
+          typeof AiCmExportEmitPipeline.pickCanonicalSource === 'function') {
+        var netBaseLenCanon = baseText.length;
+        var rawDomCanon = currentAdapter.extractMessages();
+        var domNormCanon = AiCmExportEmitPipeline.normalizeExportMessages(rawDomCanon);
+        var domTextsCanon = [];
+        var canonDomMsgs = [];
+        var domIdsCanon = [];
+        for (var dcCanon = 0; dcCanon < domNormCanon.length; dcCanon++) {
+          var dmCanon = domNormCanon[dcCanon];
+          if (!dmCanon) continue;
+          var dtCanon = String(dmCanon.text == null ? '' : dmCanon.text);
+          domTextsCanon.push(dtCanon);
+          domIdsCanon.push('dom-' + dcCanon);
+          canonDomMsgs.push({ role: (dmCanon.role === 'user') ? 'user' : 'assistant', text: dtCanon, id: 'dom-' + dcCanon });
+        }
+        var domTextCanon = domTextsCanon.join('\n');
+        var canonPick = AiCmExportEmitPipeline.pickCanonicalSource(
+          canonDomMsgs.length, texts18.length, domTextCanon.length, netBaseLenCanon);
+        if (canonPick === 'dom') {
+          aiCmBasePrepared = canonDomMsgs;
+          lastBaseTexts = domTextsCanon;
+          lastBaseIds = domIdsCanon;
+          lastDetailMessages = canonDomMsgs;
+          baseCount = canonDomMsgs.length;
+          baseText = domTextCanon;
+          aiCmBaseSource = 'dom';
+        }
+        if (typeof aiCmDiagLine === 'function') {
+          aiCmDiagLine('qwen-canonical', {
+            ts: Date.now(), cid: emitConvId || '', pick: canonPick,
+            domCount: canonDomMsgs.length, netCount: texts18.length,
+            domLen: domTextCanon.length, netLen: netBaseLenCanon, src: aiCmBaseSource
+          });
+        }
+      }
+    } catch (eCanon) { swallowSoft(eCanon, 'content:qwen-canonical'); }
   } else {
     // нет сетевых текстов — схлопнутой базы у снимка нет: метрики идут прежним путём
     // (getEffectiveText → baseText), чужая/прошлая база не подставляется.
     aiCmBasePrepared = null;
     lastDetailMessages = Array.isArray(detail.messages) ? detail.messages : null;
+    aiCmBaseSource = '';
   }
   baseIdSet = new Set();
   for (var i = 0; i < lastBaseIds.length; i++) { var s = String(lastBaseIds[i]).trim(); if (s) baseIdSet.add(s); }
@@ -2321,6 +2435,13 @@ function aiCmResyncMetricsAfterFlush(cid: string, reason?: string): boolean {
     // иначе дедуп ниже сравнивал бы несравнимое и ресинк либо не срабатывал, либо дублировал запись.
     var newKey = msgs.length + '|' + joined.length;
     var sameCount = (msgs.length === prevCount);
+    // v97/v1.9: длина УЖЕ ПРИНЯТОЙ базы против длины финального среза. Гард по msgs.length
+    // (выше) не видит случай «столько же сообщений, но текст короче» — именно так терялся
+    // вклад MCP-панелей (живой замер: 268 503 → 249 856 при 88→88). Ниже короткий срез
+    // отклоняется; diag фиксирует факт и вердикт shrink-length.
+    var prevLen = (typeof baseText === 'string') ? baseText.length : 0;
+    var newLen = joined.length;
+    var shrinkLength = prevLen > 0 && newLen < prevLen;
     // v96 (баг 34.6%): пропуск — только если не изменились НИ histKey, НИ счётчик ДО дедупликации.
     var canSkip = sameCount && (newKey === lastHistoryWroteKey) && rawUnchanged;
     try {
@@ -2328,12 +2449,24 @@ function aiCmResyncMetricsAfterFlush(cid: string, reason?: string): boolean {
         aiCmDiagLine('o22-metrics-resync', {
           ts: Date.now(), convId: cid, reason: reason || '(none)',
           finalMsgs: msgs.length, prevMsgs: prevCount,
+          prevLen: prevLen, newLen: newLen,
           histKey: newKey, lastKey: (typeof lastHistoryWroteKey !== 'undefined') ? lastHistoryWroteKey : undefined,
           rawMsgs: rawCount, prevRawMsgs: prevRaw,
-          verdict: canSkip ? 'skip' : (rawUnchanged ? 'resync' : 'resync-raw')
+          verdict: shrinkLength ? 'shrink-length' : (canSkip ? 'skip' : (rawUnchanged ? 'resync' : 'resync-raw'))
         });
       }
     } catch (eRsD) { swallowSoft(eRsD, 'content:metrics-resync-diag'); }
+    if (shrinkLength) {
+      // v1.9 (ветка B): гард по ДЛИНЕ, симметричный гарду по msgs.length выше. Живой
+      // замер 6eed4c3f: сеть принесла те же 88 сообщений, но joined.length упал
+      // 268 503 → 249 856 — выпали MCP-результаты, и принятый короткий срез замораживал
+      // бейдж/шапку файла на 92 197 токенов. Короткий срез не принимаем: остаётся уже
+      // измеренная база, а бейдж не проседает (следующая реальная запись сравнит живой
+      // histKey с прежним ключом и пересчитает метрику).
+      debugLog('log', '[AI CM][export] metrics-resync skip reason=shrink-length convId=' + cid +
+        ' prevLen=' + prevLen + ' newLen=' + newLen);
+      return false;
+    }
     if (canSkip) {
       debugLog('log', '[AI CM][export] metrics-resync skip reason=same convId=' + cid + ' histKey=' + newKey);
       return false; // срез уже финальный
@@ -2341,6 +2474,21 @@ function aiCmResyncMetricsAfterFlush(cid: string, reason?: string): boolean {
     baseCount = msgs.length;
     lastBaseTexts = texts;
     baseText = joined;
+    // v1.9 (canonical): ресинк пишет ТОТ ЖЕ массив, что читают метрика (aiCmBasePrepared)
+    // и файл (lastDetailMessages) — иначе после ресинка шапка/тело снова разъедутся.
+    var resyncMsgs = [];
+    var resyncIds = [];
+    for (var rmi = 0; rmi < msgs.length; rmi++) {
+      var rm = msgs[rmi] || {};
+      var rt = texts[rmi];
+      var rid = (rm.id != null) ? String(rm.id) : '';
+      resyncIds.push(rid);
+      resyncMsgs.push({ role: (rm.role === 'user') ? 'user' : 'assistant', text: rt, id: rid });
+    }
+    aiCmBasePrepared = resyncMsgs;
+    lastDetailMessages = resyncMsgs;
+    lastBaseIds = resyncIds;
+    if (typeof aiCmBaseSource !== 'undefined' && !aiCmBaseSource) aiCmBaseSource = 'net';
     // Ключ фиксирует ИМЕННО записанный срез: устаревшая (короткая) база его не сдвинет,
     // а следующая реальная запись снова сравнит живой histKey с этим ключом.
     // v96 (баг 34.6%): сырой счётчик вырос, а дедуп вернул ПРЕЖНИЙ срез (histKey совпал) —
@@ -2355,6 +2503,31 @@ function aiCmResyncMetricsAfterFlush(cid: string, reason?: string): boolean {
     processAndSend(); // пересчёт pct по финальной базе + перерисовка бейджа
     return true;
   } catch (eRs) { swallowSoft(eRs, 'content:metrics-resync'); return false; }
+}
+
+// v1.9 (ветка C, qwen): high-water по ДЛИНЕ ТЕКСТА. Сеть qwen не несёт tool_result в
+// payload (локальные tool-вызовы приходят только служебными строками, extrasNodes=0), а
+// DOM-адаптер отдаёт полный текст MCP-панелей. Поэтому полный сетевой срез может быть
+// ЗАКОННО короче уже измеренного DOM-текста; сравнение ведём по символам, max по токенам
+// запрещён (эвристика нелинейна: utils/tokenizer.ts:33). Запись — максимум длины в рамках
+// convId; чтение возвращает токены более длинного текста, только если текущий короче.
+function aiCmQwenHighWaterTrack(cid: string, textLen: number, tokens: number, src: string): void {
+  try {
+    if (!cid || !(textLen > 0) || !(tokens > 0)) return;
+    if (!aiCmTokenHighWater || aiCmTokenHighWater.convId !== cid) {
+      aiCmTokenHighWater = { convId: cid, len: textLen, tokens: tokens, src: src };
+      return;
+    }
+    if (textLen > aiCmTokenHighWater.len) {
+      aiCmTokenHighWater.len = textLen;
+      aiCmTokenHighWater.tokens = tokens;
+      aiCmTokenHighWater.src = src;
+    }
+  } catch (eHw) { swallowSoft(eHw, 'content:qwen-high-water-track'); }
+}
+function aiCmQwenHighWaterKeep(cid: string, textLen: number): number {
+  if (!cid || !aiCmTokenHighWater || aiCmTokenHighWater.convId !== cid) return 0;
+  return (aiCmTokenHighWater.len > textLen) ? aiCmTokenHighWater.tokens : 0;
 }
 
 function processAndSend(): void {
@@ -2679,6 +2852,23 @@ function processAndSend(): void {
     // при серверном числе.
     const byokHeuristicHold = aiCmHeuristicHoldForByok(svc, fullText);
     let tokenEstimate = tokenSnap.tokens;
+    // v1.9 (qwen, ветка C): high-water по длине текста и источник числа для diag/шапки.
+    // Track копит максимум ДЛИНЫ (не токенов) в рамках convId; слияние ниже — только qwen.
+    var aiCmMetricConvId = (typeof getCurrentConvId === 'function') ? (getCurrentConvId() || '') : '';
+    var aiCmFullLen = fullText ? fullText.length : 0;
+    if (svc === 'qwen' && typeof aiCmQwenHighWaterTrack === 'function') {
+      // v1.9 (canonical): источником текста для гарда служит КАНОНИЧЕСКАЯ база, а не
+      // слепое 'net при baseComplete' — иначе DOM 661k и сеть 268k спорят друг с другом.
+      var aiCmTrackSrc = (typeof aiCmBaseSource !== 'undefined' && aiCmBaseSource) ? aiCmBaseSource : (baseComplete ? 'net' : 'dom');
+      aiCmQwenHighWaterTrack(aiCmMetricConvId, aiCmFullLen, tokenEstimate, aiCmTrackSrc);
+    }
+    var aiCmHwKeep = (svc === 'qwen' && typeof aiCmQwenHighWaterKeep === 'function')
+      ? aiCmQwenHighWaterKeep(aiCmMetricConvId, aiCmFullLen) : 0;
+    // v1.9 (canonical): база — DOM, значит и число 'dom', хотя сетевой снимок полный.
+    // max срабатывает только как аварийный гард на укоротившейся базе.
+    var aiCmMetricValueSrc = (typeof aiCmBaseSource !== 'undefined' && aiCmBaseSource === 'dom')
+      ? 'dom'
+      : (baseComplete ? ((aiCmHwKeep > tokenEstimate) ? 'max' : 'net') : 'dom');
     const contextLimit = ModelConfig.getContextLimit(modelId);
     const effectiveLimit = ModelConfig.getEffectiveLimit(modelId);
     const displayLimit = computeEffectiveLimit(modelId);
@@ -2699,12 +2889,17 @@ function processAndSend(): void {
     // уже посчитанные значения, байты/пороги/латчи не меняются.
     try {
       var metricSrc = baseComplete ? 'base-complete' : (lastBounded ? 'base-floor+dom-tail' : 'base-floor');
-      var metricSig = [metricSrc, baseCount, (fullText ? fullText.length : 0), tokenEstimate, baseSeen ? 1 : 0].join('|');
+      var metricSig = [metricSrc, aiCmMetricValueSrc, baseCount, (fullText ? fullText.length : 0), tokenEstimate, baseSeen ? 1 : 0].join('|');
       if (typeof aiCmDiagLine === 'function' && metricSig !== lastMetricSig) {
         lastMetricSig = metricSig;
         aiCmDiagLine('gsa-metric-src', {
           site: svc,
           src: metricSrc,
+          // v1.9: источник САМОГО числа (dom|net|max|server|hold) — обязан совпадать
+          // с тем, что уйдёт в lastTokensSnapshot.src и в шапку файла.
+          valueSrc: aiCmMetricValueSrc,
+          baseSrc: (typeof aiCmBaseSource !== 'undefined') ? aiCmBaseSource : '',
+          hwLen: (typeof aiCmTokenHighWater !== 'undefined' && aiCmTokenHighWater) ? aiCmTokenHighWater.len : 0,
           note: (!baseComplete && baseCount > 0) ? 'incomplete-canonical-floor' : '',
           msgs: baseCount,
           countForTokens: countForTokens,
@@ -2728,14 +2923,27 @@ function processAndSend(): void {
       // точное число из countTokens авторитетно — не удерживаем завышенную эвристику
       // (у AI Studio в metricServerTokens приходит счётчик шапки чата — он тоже авторитетен)
       maxTokenCount = tokenEstimate;
+      aiCmMetricValueSrc = 'server';
     } else if (byokHeuristicHold) {
+      aiCmMetricValueSrc = 'hold';
       // Шаг 4: точного числа для текста ещё нет — максимум НЕ двигаем (эвристика молчит);
       // бейдж держит предыдущее значение до ответа countTokens (см. ветвление отрисовки).
     } else if (baseComplete === true) {
       // v1.8-fix: новый ПОЛНЫЙ сетевой снапшот ЗАМЕНЯЕТ значение базы и сбрасывает
       // монотонный максимум — случайная инфляция (двойной учёт вложений и т.п.)
       // самолечится следующим доверенным снапшотом вместо max-merge.
-      maxTokenCount = tokenEstimate;
+      // v1.9 (qwen, ветка C): для qwen это решение ОТМЕНЕНО. Сетевой payload qwen не
+      // содержит tool_result (extrasNodes=0 в живом замере), поэтому полный сетевой срез
+      // короче уже измеренного DOM-текста с MCP-панелями (249 856 против 661 388 симв.).
+      // Слияние — по ДЛИНЕ текста (high-water per convId), не по токенам: эвристика
+      // нелинейна (utils/tokenizer.ts:33), max по токенам запрещён. Прочие сервисы
+      // (включая D5-пин gemini) сохраняют безусловную перезапись байт-в-байт.
+      if (typeof aiCmHwKeep === 'number' && aiCmHwKeep > tokenEstimate) {
+        maxTokenCount = aiCmHwKeep;
+        if (typeof aiCmMetricValueSrc !== 'undefined') aiCmMetricValueSrc = 'max';
+      } else {
+        maxTokenCount = tokenEstimate;
+      }
     } else if ((typeof baseSeen !== 'undefined') && baseSeen === true &&
       (typeof baseCount === 'number') && baseCount > 0 &&
       (typeof aiCmDomListS1 !== 'undefined') && aiCmDomListS1 &&
@@ -2752,10 +2960,13 @@ function processAndSend(): void {
       maxTokenCount = tokenEstimate;
       lastBounded = false;
       aiCmRatchetResetByDom = true;
+      aiCmMetricValueSrc = 'dom';
     } else if (useMonotonic) {
       if (tokenEstimate > maxTokenCount) maxTokenCount = tokenEstimate;
+      else aiCmMetricValueSrc = 'max'; // удержан прежний максимум — он и есть источник
     } else {
       maxTokenCount = tokenEstimate;
+      aiCmMetricValueSrc = 'dom';
     }
     // v2.0.35 (Gemini): СТРОГОЕ удержание бейджа. На неполной базе новое значение меньше
     // прошлого процента НЕ принимается: храповик поднимается до порога прошлого процента,
@@ -2771,6 +2982,7 @@ function processAndSend(): void {
         debugLog('log', '[content-trace] badge-strict-hold: baseComplete=0, прошлый pct=' + lastPercentage +
           ' > новый ' + strictNewPct + ' — бейдж держит ' + lastPercentage + '% (база не дособрана)');
         maxTokenCount = strictHoldTokens;
+        aiCmMetricValueSrc = 'hold';
       }
     }
     const percentage = displayLimit > 0 ? Math.round((maxTokenCount / displayLimit) * 1000) / 10 : 0;
@@ -2789,7 +3001,9 @@ function processAndSend(): void {
       ? aiCmNetSnapshotPending((currentAdapter && currentAdapter.siteName) || '')
       : false;
     if (!aiCmSnapPending83) {
-      lastTokensSnapshot = { tokens: maxTokenCount, percent: percentage, limit: displayLimit };
+      // v1.9: src — ИСТОЧНИК зафиксированного числа (dom|net|max|server|hold). Панель и
+      // шапка файла читают его вместе с tokens, поэтому расхождение источника исключено.
+      lastTokensSnapshot = { tokens: maxTokenCount, percent: percentage, limit: displayLimit, src: aiCmMetricValueSrc };
     }
     // v2.6 (R1, Шаг 5): значение накапливается ДО ветвления, поэтому его видит ЛЮБАЯ ветка
     // (SPA-супрессия, щит O-1 badgeHold, заморозка лоадера, BYOK-держание): разморозка лоадера
@@ -3274,7 +3488,7 @@ if (isExtensionValid()) {
       // сеть, ONE-SIDE → live + маркер). Не дождались/сети нет → прежний live-путь БЕЗ
       // изменения байтов файла; isLowConfidenceBase и порядок [REASONING]/[ANSWER] не тронуты.
       var replyManualExport = function () {
-        var manualSnapshot = /** @type {{host: string, convId: string, site: string, model: string, tokens: number, limit: number, percent: number, updatedAt: number, isLowConfidenceBase: boolean, sourceTier?: string, messages: Array<{role?: string, text?: string}>}} */
+        var manualSnapshot = /** @type {{host: string, convId: string, site: string, model: string, tokens: number, limit: number, percent: number, src?: string, updatedAt: number, isLowConfidenceBase: boolean, sourceTier?: string, messages: Array<{role?: string, text?: string}>}} */
           ({
             host: window.location.hostname,
             convId: curCidExp,
@@ -3283,6 +3497,9 @@ if (isExtensionValid()) {
             tokens: maxTokenCount,
             limit: computeEffectiveLimit(lastResolvedModelId),
             percent: pctExp,
+            // v1.9 (qwen): источник числа (dom|net|max|server|hold) — тот же снимок,
+            // что у бейджа/истории. Без него ручной MD/JSON терял metric-src/src.
+            src: (typeof lastTokensSnapshot !== 'undefined' && lastTokensSnapshot && lastTokensSnapshot.src) ? lastTokensSnapshot.src : undefined,
             updatedAt: Date.now(),
             // v1.14.1: живой флаг — ручной as-is экспорт при baseComplete=0 получает
             // префикс [LOW CONFIDENCE]_ (options.js:378), после base-complete — без префикса.

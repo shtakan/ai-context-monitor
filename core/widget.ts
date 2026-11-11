@@ -215,6 +215,10 @@ function resetConversationState(): void {
   // v96 (баг 34.6%): сырой счётчик снимка (detail.count ДО дедупликации) не перетекает в другой чат
   aiCmNetRawCount = 0;
   aiCmNetRawCountUsed = -1;
+  // v1.9 (qwen): high-water длины текста принадлежит разговору — не перетекает в другой чат.
+  aiCmTokenHighWater = null;
+  // v1.9 (canonical): источник базы (dom|net) тоже принадлежит текущему разговору.
+  aiCmBaseSource = '';
   baseComplete = false;
   // O-43: смена треда — ЕДИНСТВЕННЫЙ сброс монотонного латча сетевой полноты GSA
   // ('site|threadId' → 1, core/state.js). Внутри одного разговора латч не снимается ничем
