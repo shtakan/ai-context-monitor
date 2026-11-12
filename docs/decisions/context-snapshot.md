@@ -270,6 +270,44 @@ I3c:  JSON: messages.map(m => m.text).join('\n') === canonicalBody
 
 ---
 
+## A1 (S2.4). Канонический `convId` снимка: GSA
+
+**Статус:** принято 2026-11-12 · **Коммиты:** S2.1 `0bffbd7`, S2.1a `9a96e7e`.
+
+Канонический `convId` снимка — первый непустой из:
+
+```ts
+aiCmAutoExportConvId() || getCurrentConvId() || ''
+```
+
+- Для GSA это `lastThreadId`: URL-id у GSA пустой по определению, поэтому прежний
+  `getCurrentConvId()` давал `''`.
+- Для остальных сайтов значение не меняется: `aiCmAutoExportConvId()` совпадает с
+  `getCurrentConvId()`.
+
+**Причина.** Латч ставится ключом `'google_search|' + aiCmAutoExportConvId()`
+(`core/export-manager.ts`, `aiCmGsaNetworkCompleteSet`), а снимок читал `getCurrentConvId()`.
+Для GSA это `''`, поэтому ключ получался `'google_search|'`, и
+`aiCmGsaNetworkCompleteIs(site, '')` всегда возвращал `false`.
+
+**Следствие для `[ctx-snap]`.** Формат не менялся: те же 8 полей, а при отсутствии
+канонического тела — прежний маркер `skip|no-canonical-body`. На GSA изменилось только
+**значение** первого поля — было пусто, стало `lastThreadId`. DoD4 относится к формату
+строки, а не к значению `convId`.
+
+**Ранняя загрузка GSA.** Пока `lastThreadId` ещё `null`, `convId` остаётся `''` — как раньше;
+деградации нет.
+
+**Приёмка.** GSA: `convId = 8bTpaveuJtWckdUP46iumAo`;
+`[ctx-snap] 8bTpaveuJtWckdUP46iumAo|max|12288|40097|32|0|71210c76:40097|0`.
+Gemini без изменений: `e1020dbabcfa5a02 | net | 96465 | 75.4 | partial=false | baseComplete=true`.
+
+**Отложено до S3.** `partial` на GSA остался `true`: в приёмочном треде `historyComplete=0`.
+Переход `partial -> false` при `historyComplete=1` доказывается живой приёмкой на треде
+с полной историей; это барьер S3.
+
+---
+
 ## 8. DoD
 
 1. Ни один потребитель не пересчитывает `percent` и не берёт число из живых переменных — поведенческий тест
