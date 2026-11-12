@@ -1,18 +1,5 @@
 # Changelog
 
-## [Unreleased]
-
-### Changed
-- **S1.3 (inv-i3): единый канонический массив для файла и снимка.** `[ctx-snap]` и экспорт MD/JSON строятся из одного тела: `body.messages` — канонический массив, `body.text` — `canonicalBodyText(body.messages)`.
-  - Qwen: контейнерные сообщения отбрасываются один раз (в `aiCmCanonicalizeMessages`), порядок и поля (`id`, `reasoning` и др.) сохраняются.
-  - Reasoning-секции добавляются один раз: `[REASONING]\n<r>\n\n[ANSWER]\n<t>`; если `<r>` уже входит в текст, текст не меняется.
-  - Байты MD: после шапки блоки `### USER`/`### ASSISTANT` + текст, соединённые `\n`, дают ровно `body.text`.
-  - Байты JSON: `messages.map(m => m.text).join('\n')` дают тот же `body.text`; `chars`/`msgs`/`bodyHash` снимка совпадают с этим телом.
-  - Схема JSON, шапка MD и `percent` не изменены. Gemini union-путь (`srcTag === 'base-union'`) намеренно остаётся вне канонизации до S3.
-
-### Notes
-- Счётчики сьюта: 242 suites / 4083 passed / 7 skipped / 0 failed.
-
 ## [2.1.1] - 2026-11-10
 
 ### Fixed
