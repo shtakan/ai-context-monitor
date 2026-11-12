@@ -2155,6 +2155,75 @@ function aiCmAutoExportMarkFiredInStorage(cid: string | null, reason: string): b
   } catch (e) { swallowSoft(e, 'export:autoexport-fired-storage-write'); return false; }
 }
 
+// ========== S1.3 (inv-i3): канонический массив и тело снимка из одного массива ==========
+// Один вход для файла и снимка: файл (md/json/txt) и [ctx-snap] строятся из ТЕЛА, чей
+// массив уже прошёл контейнер-чистку и reasoning-композицию. Иначе drop/canonicalBody
+// применялись бы в разных местах и chars/msgs/bodyHash расходились бы с текстом файла.
+//
+// Функции объявлены в конце модуля (function-декларации хойстятся в общий скоуп
+// контент-скрипта): вставка выше сдвинула бы строки, построчно закреплённые
+// tests/fixtures/catch-whitelist.json. canonicalBody — ESM-биндинг core/content.ts в том
+// же бандле (тот же приём, что canonicalBodyText в core/base-handler.ts:130).
+var lastCanonList = null;
+var lastCanonConv = '';
+var lastCanonSite = '';
+var lastCanonBody = null;
+
+function aiCmCanonicalizeMessages(list, site) {
+  var src = Array.isArray(list) ? list : [];
+  var B = (typeof AiCmExportBuilders !== 'undefined' && AiCmExportBuilders) ? AiCmExportBuilders : null;
+  var kept = src;
+  // Qwen: узлы-контейнеры отбрасываются РОВНО один раз, до нумерации/рендера.
+  if (site === 'qwen' && B && typeof B.aiCmDropContainerMessages === 'function') {
+    var dropped = B.aiCmDropContainerMessages(src);
+    if (Array.isArray(dropped)) kept = dropped;
+  }
+  var out = [];
+  for (var i = 0; i < kept.length; i++) {
+    var m = kept[i] || {};
+    var rawText = (typeof m.text === 'string') ? m.text : ((m.text == null) ? '' : String(m.text));
+    var reasoning = '';
+    if (B && typeof B.aiCmReasoningOfMessageForExport === 'function') {
+      var r = B.aiCmReasoningOfMessageForExport(m);
+      if (typeof r === 'string') reasoning = r;
+    } else if (typeof m.reasoning === 'string') {
+      reasoning = m.reasoning;
+    }
+    var text = rawText;
+    if (B && typeof B.aiCmWithReasoningSections === 'function') {
+      var composed = B.aiCmWithReasoningSections(rawText, reasoning);
+      if (typeof composed === 'string') text = composed;
+    }
+    // Object.assign: id/reasoning/прочие поля едут рядом с text —
+    // схема JSON не меняется, меняется только текст сообщения.
+    var copy = Object.assign({}, m);
+    copy.role = (m.role === 'user' || m.role === 'human') ? 'user' : 'assistant';
+    copy.text = String(text == null ? '' : text);
+    out.push(copy);
+  }
+  return out;
+}
+
+function aiCmBuildCanonicalBody(convId) {
+  var list = (typeof getEffectiveMessages === 'function') ? getEffectiveMessages() : null;
+  if (!list && typeof buildHistoryMessages === 'function') list = buildHistoryMessages();
+  if (!list || !list.length) return null;
+  var site = (typeof currentAdapter !== 'undefined' && currentAdapter) ? currentAdapter.siteName : '';
+  // Мемо: тот же массив + чат + сайт → тот же объект body (идентичность messages).
+  if (lastCanonList === list && lastCanonConv === convId && lastCanonSite === site) {
+    return lastCanonBody;
+  }
+  var msgs = aiCmCanonicalizeMessages(list, site);
+  // @ts-ignore — canonicalBody живёт в общем скоупе бандла (import core/content.ts);
+  // в jest-песочнице инжектируется аргументом new Function.
+  var body = (typeof canonicalBody === 'function') ? canonicalBody(convId || '', msgs) : null;
+  lastCanonList = list;
+  lastCanonConv = convId;
+  lastCanonSite = site;
+  lastCanonBody = body;
+  return body;
+}
+
 // ========== v2.0 (этап 1/3): UMD-экспорт модуля ==========
 // Паттерн как у utils/export-emit-pipeline.ts: window.<Api> + module.exports.
 // Рабочий путь ничего не импортирует: content-скрипты манифеста делят один

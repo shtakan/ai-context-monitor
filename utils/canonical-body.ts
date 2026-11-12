@@ -33,6 +33,19 @@ export interface AiCmCanonicalBody {
 }
 
 /**
+ * S1.3 (inv-i3): кэш канонического тела по ССЫЛКЕ на массив сообщений.
+ *
+ * Ключ — сам массив (WeakMap не держит базу живой дольше её владельца), значение —
+ * последний convId и готовое тело. Тот же массив + тот же чат отдают ТОТ ЖЕ объект
+ * body (идентичность сохраняет body.messages и экономит проход по ~650 КБ на Qwen);
+ * другой convId — пересчёт, иначе bodyHash перестал бы зависеть от чата
+ * (tests/inv-s1-2-snapshot-body.test.js:194). Не-массивы не кэшируются: у них нет
+ * стабильной ссылки, и слабый ключ был бы мусорным.
+ */
+var canonicalBodyCache: WeakMap<object, { convId: string; body: AiCmCanonicalBody }> | null =
+  (typeof WeakMap === 'function') ? new WeakMap() : null;
+
+/**
  * Канонический текст: тексты сообщений в исходном порядке через '\n'.
  * null/undefined-текст даёт пустую строку; не-массив — пустое тело.
  * @param list Массив сообщений (может быть null/undefined).
@@ -75,19 +88,28 @@ export function canonicalBody(
   list: AiCmCanonicalMessage[] | null | undefined
 ): AiCmCanonicalBody {
   var src: AiCmCanonicalMessage[] = Array.isArray(list) ? list : [];
+  var cid = String(convId == null ? '' : convId);
+  if (Array.isArray(list) && canonicalBodyCache) {
+    var cached = canonicalBodyCache.get(src);
+    if (cached && cached.convId === cid) return cached.body;
+  }
   var text = canonicalBodyText(src);
-  var seed: string[] = [String(convId == null ? '' : convId), '\u0000'];
+  var seed: string[] = [cid, '\u0000'];
   for (var i = 0; i < src.length; i++) {
     var m = src[i] || {};
     seed.push(String(m.role == null ? '' : m.role), '\u0000', String(m.text == null ? '' : m.text), '\u0001');
   }
   var hash = fnv1a32(seed.join(''));
   var chars = text.length;
-  return {
+  var body: AiCmCanonicalBody = {
     messages: src,
     text: text,
     chars: chars,
     msgs: src.length,
     bodyHash: hash + ':' + chars
   };
+  if (Array.isArray(list) && canonicalBodyCache) {
+    canonicalBodyCache.set(src, { convId: cid, body: body });
+  }
+  return body;
 }

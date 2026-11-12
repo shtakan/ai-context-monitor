@@ -323,6 +323,10 @@
     "count": 31,
     "reason": "legacy-pin"
   },
+  "tests/inv-i3-canonical-messages.test.js": {
+    "count": 1,
+    "reason": "vm-harness"
+  },
   "tests/manifest-smoke.test.js": {
     "count": 8,
     "reason": "legacy-pin"

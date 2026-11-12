@@ -195,14 +195,31 @@ function getEffectiveCount(fallbackCount: number): number {
 //   null — канонического тела нет: baseText без подготовленного массива или пустая база.
 //   Тело снимка (content.js) публикуется только если canonicalBodyText(result) совпал
 //   с getEffectiveText() побайтово; это проверяет tests/inv-s1-2-snapshot-body.test.js.
+// S1.3 (inv-i3): мемоизация по (baseRef, tailText, bounded). Возвращается ТОТ ЖЕ массив,
+//   а не новый base.concat(tail): иначе WeakMap-кэш canonicalBody промахивается каждый
+//   проход и тело пересчитывается даже при неизменном DOM (~650 КБ на Qwen).
+var lastEffMsgsBaseRef: AiCmExportMessage[] | null = null;
+var lastEffMsgsTailText = '';
+var lastEffMsgsBounded = false;
+var lastEffMsgsResult: AiCmExportMessage[] | null = null;
+
 function getEffectiveMessages(): AiCmExportMessage[] | null {
   if (!baseSeen || !baseText) return null;
   var base: AiCmExportMessage[] | null = (typeof aiCmBasePrepared !== 'undefined' &&
     Array.isArray(aiCmBasePrepared) && aiCmBasePrepared.length > 0) ? aiCmBasePrepared : null;
   if (!base) return null;
   var tail = computeTailFromDom();
-  if (tail.text && tail.bounded) return base.concat(tail.messages);
-  return base;
+  var tailText = (tail.text && tail.bounded) ? tail.text : '';
+  if (lastEffMsgsBaseRef === base && lastEffMsgsTailText === tailText &&
+      lastEffMsgsBounded === !!tail.bounded) {
+    return lastEffMsgsResult;
+  }
+  var result = tailText ? base.concat(tail.messages) : base;
+  lastEffMsgsBaseRef = base;
+  lastEffMsgsTailText = tailText;
+  lastEffMsgsBounded = !!tail.bounded;
+  lastEffMsgsResult = result;
+  return result;
 }
 
 // ========== v2.0 (этап 1/3): UMD-экспорт модуля ==========
