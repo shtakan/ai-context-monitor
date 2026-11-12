@@ -3020,7 +3020,8 @@ function processAndSend(): void {
       // S2.1 (ADR-001): кандидат собирается ОДИН раз и фиксируется через commit-хелпер —
       // lastTokensSnapshot остаётся единственной точкой записи снимка (core/state.ts).
       var ctxSnapBodyOk = !!(body && body.text === effective);
-      var ctxSnapConvId = (typeof getCurrentConvId === 'function' ? getCurrentConvId() : '') || '';
+      var ctxSnapConvId = (typeof aiCmAutoExportConvId === 'function' ? (aiCmAutoExportConvId() || '') : '')
+        || (typeof getCurrentConvId === 'function' ? (getCurrentConvId() || '') : '');
       var ctxSnapSite = (currentAdapter && currentAdapter.siteName) || '';
       // O-43: сетевая полнота GSA — монотонный латч export-manager.ts:aiCmGsaNetworkCompleteIs.
       var aiCmCtxSnapBodyTrusted = aiCmAutoExportTrustedBase() === true

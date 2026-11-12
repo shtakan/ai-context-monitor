@@ -19,10 +19,12 @@
  * и `new Function` упал бы на TS-аннотациях. readExecutable снимает типы и интерфейсы,
  * поэтому песочница исполняет ровно те три функции, что и браузер.
  */
-const { readExecutable } = require('./helpers/content-source.js');
+const { readExecutable, contentSource: CONTENT } = require('./helpers/content-source.js');
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 
 const STATE = readExecutable('core/state.ts');
+const GSA = 'google_search';
+const TID = 'S2-1A-THREAD';
 
 // Рез по балансу фигурных скобок (тот же приём, что в tests/perplexity-o9-signature.test.js).
 function fnDecl(src, name) {
@@ -134,17 +136,42 @@ test('commit: смена любого поля сигнатуры → новый
   });
 });
 
+test('S2.1a: writer снимка берёт canonical convId автоэкспорта (GSA threadId)', () => {
+  const start = CONTENT.indexOf('var ctxSnapConvId = (typeof aiCmAutoExportConvId');
+  expect(start).toBeGreaterThan(-1);
+  const decl = CONTENT.slice(start, CONTENT.indexOf('var ctxSnapSite', start));
+  expect(decl).toContain("(aiCmAutoExportConvId() || '')");
+  expect(decl).toContain("(getCurrentConvId() || '')");
+  expect(CONTENT).not.toContain("var ctxSnapConvId = (typeof getCurrentConvId === 'function' ? getCurrentConvId() : '') || '';");
+});
+
+test('S2.1a: GSA resolve и latch дают partial=false при canonical convId', () => {
+  expect(P.latchKey(GSA, TID)).toBe(GSA + '|' + TID);
+  expect(P.resolveAutoExportConvId(GSA, '', TID)).toBe(TID);
+  expect(P.resolveAutoExportConvId(GSA, '', '')).toBe('');
+
+  const latch = {};
+  latch[GSA + '|' + TID] = 1;
+  expect(latch[GSA + '|' + TID] === 1).toBe(true);
+  expect(api.partial(false, latch[GSA + '|' + TID] === 1)).toBe(false);
+  expect(api.partial(false, latch[GSA + '|' + 'other-thread'] === 1)).toBe(true);
+});
+
 test('consent: aiCmSnapshotPartial согласован с shouldSkipAutoExport на готовых состояниях', () => {
-  // Колонки: baseComplete / baseSeen / domBaseTrusted / gsaNetworkCompleteLatch.
+  // Колонки: baseComplete / baseSeen / domBaseTrusted / gsa / cid.
+  const latch = {};
+  latch[GSA + '|' + TID] = 1;
   const rows = [
-    { baseComplete: false, baseSeen: false, domBaseTrusted: false, gsa: false, partial: 1, skip: true },
-    { baseComplete: false, baseSeen: true, domBaseTrusted: false, gsa: false, partial: 1, skip: true },
-    { baseComplete: true, baseSeen: true, domBaseTrusted: false, gsa: false, partial: 0, skip: false },
-    { baseComplete: false, baseSeen: true, domBaseTrusted: true, gsa: false, partial: 0, skip: false },
-    { baseComplete: false, baseSeen: false, domBaseTrusted: false, gsa: true, partial: 0, skip: false }
+    { baseComplete: false, baseSeen: false, domBaseTrusted: false, gsa: false, cid: '', partial: 1, skip: true },
+    { baseComplete: false, baseSeen: true, domBaseTrusted: false, gsa: false, cid: '', partial: 1, skip: true },
+    { baseComplete: true, baseSeen: true, domBaseTrusted: false, gsa: false, cid: '', partial: 0, skip: false },
+    { baseComplete: false, baseSeen: true, domBaseTrusted: true, gsa: false, cid: '', partial: 0, skip: false },
+    { baseComplete: false, baseSeen: false, domBaseTrusted: false, gsa: true, cid: TID, partial: 0, skip: false },
+    { baseComplete: false, baseSeen: false, domBaseTrusted: false, gsa: true, cid: 'other-thread', partial: 1, skip: true }
   ];
   rows.forEach((row) => {
-    const partial = api.partial(row.baseComplete, row.domBaseTrusted || row.gsa);
+    const gsaComplete = row.gsa === true && row.cid === TID && latch[GSA + '|' + TID] === 1;
+    const partial = api.partial(row.baseComplete, row.domBaseTrusted || gsaComplete);
     expect(partial ? 1 : 0).toBe(row.partial);
     const verdict = P.shouldSkipAutoExport({
       enabled: true,
@@ -157,7 +184,7 @@ test('consent: aiCmSnapshotPartial согласован с shouldSkipAutoExport 
       baseComplete: row.baseComplete,
       baseSeen: row.baseSeen,
       domBaseTrusted: row.domBaseTrusted,
-      gsaNetworkCompleteLatch: row.gsa
+      gsaNetworkCompleteLatch: gsaComplete
     });
     expect(verdict.skip).toBe(row.skip);
   });
