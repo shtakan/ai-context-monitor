@@ -2838,8 +2838,13 @@ function processAndSend(): void {
     // S1.2 (ADR-001, §2): тело снимка — те же сообщения, из которых построен effective.
     // canonicalBody считается один раз за проход; публикуется он ниже только при побайтовом
     // совпадении body.text === effective (иначе снимок остаётся без аддитивных полей).
+    // S1.3 (inv-i3): тело строит aiCmBuildCanonicalBody — тот же канонический массив, что
+    // уходит в файл (drop/reasoning применяются один раз, в core/export-manager.ts), а не
+    // сырой getEffectiveMessages(); canonicalBody остаётся фолбэком для песочниц/старых сборок.
     const bodyMsgs = getEffectiveMessages();
-    const body = bodyMsgs ? canonicalBody((typeof getCurrentConvId === 'function' ? getCurrentConvId() : '') || '', bodyMsgs) : null;
+    const body = (bodyMsgs && typeof aiCmBuildCanonicalBody === 'function')
+      ? aiCmBuildCanonicalBody(getCurrentConvId() || '')
+      : (bodyMsgs ? canonicalBody(getCurrentConvId() || '', bodyMsgs) : null);
 
     // O-47: серверный счётчик для метрики ЭТОГО сервиса. У Qwen он всегда 0 (usage.input —
     // кумулятив API-потребления, а не размер контекста; см. aiCmMetricServerTokens), поэтому
@@ -3553,6 +3558,15 @@ if (isExtensionValid()) {
               manualSnapshot.isLowConfidenceBase === true);
           }
         } catch (eO49m) { debugLog('log', '[AI CM][export] silent-catch replyManualExport(O-49 union): ' + (eO49m && eO49m.message || eO49m)); }
+        // S1.3 (inv-i3): файл ручного экспорта строится из ТОГО ЖЕ канонического массива, что
+        // и тело снимка ([ctx-snap]) — drop контейнеров и reasoning применяются один раз.
+        // Union-путь (isLowConfidenceBase=true) НЕ заменяем: объединение архив+live остаётся
+        // известным partial-исключением до S3, иначе тело файла разойдётся с эффективным текстом.
+        if (manualSnapshot.isLowConfidenceBase !== true &&
+            typeof aiCmBuildCanonicalBody === 'function') {
+          var canonManual = aiCmBuildCanonicalBody(curCidExp);
+          if (canonManual && canonManual.messages.length) manualSnapshot.messages = canonManual.messages;
+        }
         sendResponse({ data: manualSnapshot });
       };
       // R2: площадки с очередью вложений (DeepSeek — свой модуль, Qwen — core/qwen-files.js)

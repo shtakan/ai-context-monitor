@@ -327,6 +327,10 @@
     "count": 1,
     "reason": "vm-harness"
   },
+  "tests/inv-i3-export-body-equality.test.js": {
+    "count": 1,
+    "reason": "vm-harness"
+  },
   "tests/manifest-smoke.test.js": {
     "count": 8,
     "reason": "legacy-pin"

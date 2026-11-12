@@ -1776,6 +1776,15 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
       msgs = baseSrc.msgs;
       srcTag = 'base-union';
     }
+    // S1.3 (inv-i3): обычный (не-union) автоэкспорт строится из ТОГО ЖЕ канонического массива,
+    // что и тело снимка [ctx-snap]. Gemini union (srcTag='base-union') НЕ заменяем: объединение
+    // архив+live остаётся известным partial-исключением до S3 — иначе body.text !== effective
+    // и снимок потеряет chars/msgs/bodyHash.
+    if (baseSeen === true && srcTag !== 'base-union' &&
+        typeof aiCmBuildCanonicalBody === 'function') {
+      var canonAuto = aiCmBuildCanonicalBody(cid);
+      if (canonAuto && canonAuto.messages && canonAuto.messages.length) msgs = canonAuto.messages;
+    }
     // v1.19 (E-1): паспорт in-memory истории стреляющей вкладки. convId — lastEmitConvId
     // (та же запись EMIT, что питает бейдж и pct); у GSA url-id нет — историю адресует
     // threadId; прочие сервисы — convId из URL.
