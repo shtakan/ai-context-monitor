@@ -102,8 +102,7 @@ function aiCmDedupeExportSource(messages: AiCmExportMessage[]): AiCmDedupeResult
   } catch (eDed) { swallow(eDed, 'base-handler:dedupeExportSource'); }
   return { messages: messages, removed: 0 };
 }
-// v1.18 (E-2): лог схлопывания печатаем ОДИН раз на снимок базы (сигнатура count|textLen),
-// а не на каждый processAndSend.
+// v1.18 (E-2): лог схлопывания печатаем ОДИН раз на снимок базы (сигнатура count|textLen), а не на каждый processAndSend.
 var lastDedupeLogSig: string | null = null;
 function aiCmLogDedupeRemoved(removed: number): void {
   if (!(removed > 0)) return;
@@ -122,13 +121,14 @@ function buildHistoryMessages(): AiCmExportMessage[] {
   // повторный прогон чистой подготовки идемпотентен — второго вердикта дедупа нет.
   return aiCmDedupeExportSource(aiCmCollectExportSource()).messages;
 }
-// v1.18 (E-2.3): ЕДИНЫЙ источник правды для метрик и файла экспорта. Схлопнутая база
-// текущего снимка живёт ОДНИМ массивом — выходом prepareExportMessages (нормализация →
+// v1.18 (E-2.3): ЕДИНЫЙ источник правды для метрик и файла экспорта. Схлопнутая база текущего снимка живёт ОДНИМ массивом — выходом prepareExportMessages (нормализация →
 // intra → inter → cross-raw → гигиена остатков разметки). baseText/baseCount — производные
 // ЭТОГО массива, в файл уходит та же база (lastBaseTexts → aiCmCollectExportSource →
 // buildHistoryMessages). Второй копии базы и второго вердикта дедупа НЕ существует.
 var aiCmBasePrepared: AiCmExportMessage[] | null = null; // [{role,text,id}] | null — схлопнутая база последнего снимка
 function aiCmPreparedText(messages: AiCmExportMessage[] | null): string {
+  // @ts-ignore — canonicalBodyText живёт в общем скоупе бандла (import в core/content.ts)
+  if (typeof canonicalBodyText === 'function') return canonicalBodyText(messages);
   var src = Array.isArray(messages) ? messages : [];
   var out = [];
   for (var i = 0; i < src.length; i++) out.push(String((src[i] && src[i].text) || ''));

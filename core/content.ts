@@ -1,6 +1,7 @@
 // ESM (Roadmap Ph2): сборка втягивает utils/platform.ts в тот же бандл контент-скрипта,
 // поэтому aiCmIsFirefox() остаётся в общей области видимости (как и до перевода на ESM).
 import { aiCmIsFirefox } from '../utils/platform.ts';
+import { canonicalBodyText } from '../utils/canonical-body.ts';
 // R1 (Roadmap Ph2): utils/debug.ts переведён на ESM — хелперы диагностики втягиваются
 // сборкой статическим import'ом в общую область видимости content-бандла (раньше модуль
 // грузился отдельным classic-скриптом из manifest.content_scripts).
@@ -58,7 +59,6 @@ import '../utils/google-search-folwr-parser.ts';
 // Модуль втягивается этим статическим import'ом в контент-бандл; MAIN-регистраций
 // и classic-артефакта у него нет (в manifest.content_scripts не добавляется).
 import * as GeminiUiModel from '../utils/gemini-ui-model.ts';
-
 (function () {
   let v = 'unknown';
   try { v = chrome.runtime.getManifest().version; } catch (e) { v = 'unknown'; }
@@ -1085,7 +1085,7 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
     lastDetailMessages = msgs18;
     baseCount = texts18.length;
     // baseText — производное ТОГО ЖЕ массива (texts18 собраны из prepared18), а не вторая база.
-    baseText = texts18.join('\n');
+    baseText = texts18.join('\n'); if (typeof canonicalBodyText === 'function') baseText = canonicalBodyText(prepared18);
     // v1.18 (E-2.3): сетевой effectiveLen (пол/длина) описывает ДО-схлопнутый текст. Когда
     // база схлопнута, масштаб оценки токенов берётся по САМОЙ базе — иначе бейдж/pct считались
     // бы по второй (несхлопнутой) копии, которую в файл уже не кладут (live: pct 10.7% при
@@ -2430,7 +2430,7 @@ function aiCmResyncMetricsAfterFlush(cid: string, reason?: string): boolean {
       var mi = /** @type {any} */ (msgs[i]);
       texts.push(String((mi && mi.text) || ''));
     }
-    var joined = texts.join('\n');
+    var joined = texts.join('\n'); if (typeof canonicalBodyText === 'function') joined = canonicalBodyText(msgs);
     // histKey — ТА ЖЕ форма, что у штатной записи истории (content.js: baseCount + '|' + baseText.length),
     // иначе дедуп ниже сравнивал бы несравнимое и ресинк либо не срабатывал, либо дублировал запись.
     var newKey = msgs.length + '|' + joined.length;
