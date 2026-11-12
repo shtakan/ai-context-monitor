@@ -187,7 +187,7 @@ describe('пины контракта (строки, которые нельзя
 // Пины ниже — расширение (D5: одна точка записи; D6: значение виджета до ветвления + wiring).
 // =====================================================================================
 describe('v2.6 (R1) D5/D6: снимок метрики фиксируется ОДИН раз и до ветвления', () => {
-  const COMMIT = 'lastTokensSnapshot = (body && body.text === effective)';
+  const COMMIT = 'lastTokensSnapshot = aiCmCommitContextSnapshot(';
 
   test('D5: одна точка записи снимка — после percentage и после строгого удержания', () => {
     // единственная запись во всём контент-скрипте: иначе панель и файл разойдутся с бейджем
@@ -222,7 +222,7 @@ describe('v2.6 (R1) D5/D6: снимок метрики фиксируется О
 
   test('D6: state.ts объявляет снимок и зеркалит в UMD; сбросы чата его гасят', () => {
     const state = fs.readFileSync(path.join(ROOT, 'core', 'state.ts'), 'utf8');
-    expect(state).toContain('let lastTokensSnapshot: { tokens: number; percent: number; limit: number; src?: string; chars?: number; msgs?: number; bodyHash?: string; baseComplete?: boolean } | null = null;');
+    expect(state).toContain('let lastTokensSnapshot: AiCmContextSnapshot | null = null;');
     expect(state).toContain("Object.defineProperty(Api, 'lastTokensSnapshot',");
     // сброс разговора (widget) и смена convId/base-complete (content) обнуляют снимок:
     // иначе панель/файл нового чата прочли бы число предыдущего

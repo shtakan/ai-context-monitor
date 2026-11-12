@@ -3017,14 +3017,41 @@ function processAndSend(): void {
       // S1.2: аддитивные поля тела (chars/msgs/bodyHash/baseComplete) — ТОЛЬКО из тела, чей
       // текст побайтово равен effective. Иначе снимок пишется без них (старые потребители
       // видят ровно tokens/percent/limit/src, как раньше).
-      lastTokensSnapshot = (body && body.text === effective)
-        ? { tokens: maxTokenCount, percent: percentage, limit: displayLimit, src: aiCmMetricValueSrc,
-            chars: body.chars, msgs: body.msgs, bodyHash: body.bodyHash, baseComplete: baseComplete === true }
-        : { tokens: maxTokenCount, percent: percentage, limit: displayLimit, src: aiCmMetricValueSrc };
-      // ADR-001 §2: одна строка [ctx-snap] на смену сигнатуры (антиспам — как lastMetricSig).
-      // Порядок полей: convId|src|tokens|chars|msgs|attach|bodyHash|baseComplete.
+      // S2.1 (ADR-001): кандидат собирается ОДИН раз и фиксируется через commit-хелпер —
+      // lastTokensSnapshot остаётся единственной точкой записи снимка (core/state.ts).
       var ctxSnapBodyOk = !!(body && body.text === effective);
       var ctxSnapConvId = (typeof getCurrentConvId === 'function' ? getCurrentConvId() : '') || '';
+      var ctxSnapSite = (currentAdapter && currentAdapter.siteName) || '';
+      // O-43: сетевая полнота GSA — монотонный латч export-manager.ts:aiCmGsaNetworkCompleteIs.
+      var aiCmCtxSnapBodyTrusted = aiCmAutoExportTrustedBase() === true
+        || (typeof aiCmGsaNetworkCompleteIs === 'function'
+          && aiCmGsaNetworkCompleteIs(ctxSnapSite, ctxSnapConvId) === true);
+      var aiCmCtxSnapPartial = aiCmSnapshotPartial(baseComplete === true, aiCmCtxSnapBodyTrusted);
+      var aiCmCtxSnapCandidate: AiCmContextSnapshot = {
+        convId: ctxSnapConvId,
+        capturedAt: Date.now(),
+        site: ctxSnapSite,
+        model: modelId,
+        modelName: ModelConfig.getModel(modelId)?.name || modelId,
+        src: aiCmMetricValueSrc as AiCmContextSnapshot['src'],
+        tokens: maxTokenCount,
+        percent: percentage,
+        limit: displayLimit,
+        effectiveLimit: effectiveLimit,
+        contextLimit: contextLimit,
+        attachBreak: netAttachBreak || null,
+        partial: aiCmCtxSnapPartial
+      };
+      if (ctxSnapBodyOk) {
+        aiCmCtxSnapCandidate.chars = body.chars;
+        aiCmCtxSnapCandidate.msgs = body.msgs;
+        aiCmCtxSnapCandidate.bodyHash = body.bodyHash;
+        aiCmCtxSnapCandidate.baseComplete = baseComplete === true;
+      }
+      if (aiCmCtxSnapPartial) aiCmCtxSnapCandidate.partialReason = 'incomplete';
+      lastTokensSnapshot = aiCmCommitContextSnapshot(lastTokensSnapshot, aiCmCtxSnapCandidate);
+      // ADR-001 §2: одна строка [ctx-snap] на смену сигнатуры (антиспам — как lastMetricSig).
+      // Порядок полей: convId|src|tokens|chars|msgs|attach|bodyHash|baseComplete.
       var ctxSnapSig = ctxSnapBodyOk
         ? [ctxSnapConvId, aiCmMetricValueSrc, maxTokenCount, body.chars, body.msgs,
             netAttachTokens, body.bodyHash, (baseComplete === true) ? 1 : 0].join('|')

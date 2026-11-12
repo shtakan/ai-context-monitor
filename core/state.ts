@@ -39,7 +39,7 @@ let maxTokenCount: number = 0;
 // Прямое чтение maxTokenCount потребителями и было причиной R1 (81 токен между счётчиком панели
 // файла и бейджем сразу после F5: панель считала Math.max(tokenEstimate, maxTokenCount)).
 // Обнуляется вместе с maxTokenCount при сбросе чата — снимок чужого разговора не перетекает.
-let lastTokensSnapshot: { tokens: number; percent: number; limit: number; src?: string; chars?: number; msgs?: number; bodyHash?: string; baseComplete?: boolean } | null = null;
+let lastTokensSnapshot: AiCmContextSnapshot | null = null;
 // v1.9 (qwen): high-water по ДЛИНЕ текста. Сеть qwen не приносит tool_result в payload
 // (живой замер: extrasNodes=0), а DOM-адаптер отдаёт полный текст MCP-панелей — полный
 // сетевой срез поэтому ЗАКОННО короче уже измеренного DOM-текста. Храним максимум длины
@@ -697,6 +697,34 @@ interface AiCmAttachBreak {
   imgCount: number;
   docCount: number;
 }
+/**
+ * S2.1 (ADR-001): контракт снимка контекста.
+ * Один снимок — один читатель: запись только в content.ts:processAndSend через
+ * aiCmCommitContextSnapshot, чтение только через aiCmReadContextSnapshot.
+ * Потребители (бейдж, панель, история, экспорт) НЕ пересчитывают tokens/percent.
+ */
+interface AiCmContextSnapshot {
+  convId: string;
+  capturedAt: number;
+  site: string;
+  model: string;
+  modelName: string;
+  src: 'dom' | 'net' | 'max' | 'server' | 'hold';
+  tokens: number;
+  percent: number;
+  limit: number;
+  effectiveLimit: number;
+  contextLimit: number;
+  attachBreak?: AiCmAttachBreak | null;
+  chars?: number;
+  msgs?: number;
+  bodyHash?: string;
+  baseComplete?: boolean;
+  partial: boolean;
+  partialReason?: 'incomplete';
+  stale?: boolean;
+  ageMs?: number;
+}
 interface AiCmQwenUsage {
   outputTokens?: number;
   reasoningTokens?: number;
@@ -744,4 +772,59 @@ interface AiCmConvSource {
 /** UMD-зеркало AiCmState: аксессоры реестра по имени. */
 interface AiCmState {
   [name: string]: unknown;
+}
+
+// ===== S2.1 (ADR-001): чистые хелперы контракта снимка =====
+// Без импортов и побочных эффектов: доступны из content.ts в общем classic-script scope.
+
+/**
+ * Снимок частичный, пока база не признана полной ни одним достоверным источником
+ * (baseComplete из сети/сервера ИЛИ доверенная DOM-база). Предикат ЧИСТЫЙ: порог,
+ * fired и enabled кодирует shouldSkipAutoExport (utils/export-emit-pipeline.ts),
+ * поэтому consent-тест сравнивает именно его, а не shouldSkipAutoExport.
+ */
+function aiCmSnapshotPartial(baseComplete: boolean, domBaseTrusted: boolean): boolean {
+  return !(baseComplete === true || domBaseTrusted === true);
+}
+
+/**
+ * Единственная точка фиксации снимка: возвращает prev, если сигнатура не изменилась
+ * (тогда capturedAt остаётся прежним — «тот же снимок»), иначе next.
+ * Сигнатура шире лог-сигнатуры [ctx-snap]: site/model/baseComplete входят в неё, иначе
+ * объект замирал бы при смене имени модели (класс BUG-02) или baseComplete при том же
+ * счётчике (Qwen: src=dom, partial=false, tokens те же).
+ */
+function aiCmCommitContextSnapshot(
+  prev: AiCmContextSnapshot | null,
+  next: AiCmContextSnapshot
+): AiCmContextSnapshot {
+  if (!prev) return next;
+  var same = prev.convId === next.convId
+    && prev.site === next.site
+    && prev.model === next.model
+    && prev.src === next.src
+    && prev.tokens === next.tokens
+    && prev.percent === next.percent
+    && prev.limit === next.limit
+    && prev.partial === next.partial
+    && (prev.baseComplete === true) === (next.baseComplete === true)
+    && (prev.bodyHash || '') === (next.bodyHash || '');
+  return same ? prev : next;
+}
+
+/**
+ * Читатель снимка: ВСЕГДА копия (потребитель не может испортить источник), ageMs/stale
+ * выводятся из capturedAt. Пустой convId совместим с любым снимком; непустой чужой — null.
+ */
+function aiCmReadContextSnapshot(convId?: string): AiCmContextSnapshot | null {
+  var snap = (typeof lastTokensSnapshot !== 'undefined' && lastTokensSnapshot)
+    ? lastTokensSnapshot : null;
+  if (!snap) return null;
+  var asked = typeof convId === 'string' ? convId : '';
+  if (asked && snap.convId && asked !== snap.convId) return null;
+  var copy: AiCmContextSnapshot = Object.assign({}, snap);
+  copy.ageMs = (typeof copy.capturedAt === 'number' && copy.capturedAt > 0
+    && copy.capturedAt <= Date.now()) ? Date.now() - copy.capturedAt : 0;
+  copy.stale = snap.stale === true;
+  return copy;
 }
