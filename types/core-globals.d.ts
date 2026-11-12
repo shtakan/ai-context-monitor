@@ -119,12 +119,15 @@ declare function getEffectiveText(): string;
 /** hybrid-tail.ts: эффективное число сообщений (база + DOM-хвост). */
 declare function getEffectiveCount(fallbackCount: number): number;
 
+/** hybrid-tail.ts: сообщения, из которых строится ровно getEffectiveText(); null — канонического тела нет. */
+declare function getEffectiveMessages(): AiCmExportMessage[] | null;
+
 // --- Швы между core-модулями: остальные кросс-файловые имена ------------------
 
 // hybrid-tail.ts (используется content.js/export-manager.ts)
 declare function nodeIsBase(node: Element, skel: string): boolean;
 declare function shouldUseGeminiDomParser(): boolean;
-declare function computeTailFromDom(): { text: string; count: number; bounded: boolean; sel: string; diag: unknown };
+declare function computeTailFromDom(): { text: string; count: number; bounded: boolean; sel: string; messages: AiCmExportMessage[]; diag: unknown };
 declare function aiCmTailMetricBase(fallback: string): string;
 
 // core/content.js (используется widget.ts/export-manager.ts/base-handler.ts)

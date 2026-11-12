@@ -39,7 +39,7 @@ let maxTokenCount: number = 0;
 // Прямое чтение maxTokenCount потребителями и было причиной R1 (81 токен между счётчиком панели
 // файла и бейджем сразу после F5: панель считала Math.max(tokenEstimate, maxTokenCount)).
 // Обнуляется вместе с maxTokenCount при сбросе чата — снимок чужого разговора не перетекает.
-let lastTokensSnapshot: { tokens: number; percent: number; limit: number; src?: string } | null = null;
+let lastTokensSnapshot: { tokens: number; percent: number; limit: number; src?: string; chars?: number; msgs?: number; bodyHash?: string; baseComplete?: boolean } | null = null;
 // v1.9 (qwen): high-water по ДЛИНЕ текста. Сеть qwen не приносит tool_result в payload
 // (живой замер: extrasNodes=0), а DOM-адаптер отдаёт полный текст MCP-панелей — полный
 // сетевой срез поэтому ЗАКОННО короче уже измеренного DOM-текста. Храним максимум длины
@@ -87,6 +87,7 @@ let lastEmitSig: string | null = null;   // антиспам: сигнатура
 let lastDrawSig: string | null = null;   // антиспам: сигнатура последней печати «[content-trace] DRAW»
 let lastHybridTailSig: string | null = null; // антиспам: последняя напечатанная строка «[hybrid-tail]»
 let lastMetricSig: string | null = null;  // O-32: антиспам строки gsa-metric-src (источник/режим значения бейджа) — печать на смену состояния
+let lastCtxSnapSig: string | null = null; // S1.2 (ADR-001): антиспам строки [ctx-snap] — печать на смену сигнатуры
 // v30.5: антиспам для skip reason=not-complete — печатаем не чаще 1 раза на convId,
 // пока не пришла полная база. Сбрасывается вместе с fired при смене чата.
 let notCompleteLogged: Record<string, number> = {};

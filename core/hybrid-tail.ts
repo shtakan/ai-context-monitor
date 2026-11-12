@@ -60,10 +60,10 @@ function shouldUseGeminiDomParser(): boolean {
 function computeTailFromDom(): AiCmTail {
   var found = findMessageNodes();
   var nodes = found.nodes;
-  if (!baseSeen || !baseText) return { text: '', count: 0, bounded: false, sel: found.sel, diag: 'нет базы' };
-  if (nodes.length === 0) return { text: '', count: 0, bounded: false, sel: found.sel, diag: 'селектор не дал узлов: ' + found.sel };
+  if (!baseSeen || !baseText) return { text: '', count: 0, bounded: false, sel: found.sel, messages: [], diag: 'нет базы' };
+  if (nodes.length === 0) return { text: '', count: 0, bounded: false, sel: found.sel, messages: [], diag: 'селектор не дал узлов: ' + found.sel };
   if ((!baseIdSet || baseIdSet.size === 0) && (!baseSkelSet || baseSkelSet.size === 0)) {
-    return { text: '', count: 0, bounded: false, sel: found.sel, diag: 'кэш базы пуст → фолбэк по базе' };
+    return { text: '', count: 0, bounded: false, sel: found.sel, messages: [], diag: 'кэш базы пуст → фолбэк по базе' };
   }
 
   var tailNodes = [];
@@ -77,6 +77,7 @@ function computeTailFromDom(): AiCmTail {
   }
 
   var pieces = [];
+  var tailMessages: AiCmExportMessage[] = [];
   for (var j = 0; j < tailNodes.length; j++) {
     var txt = '';
     if (shouldUseGeminiDomParser()) {
@@ -90,13 +91,31 @@ function computeTailFromDom(): AiCmTail {
     } else {
       txt = (tailNodes[j].innerText || tailNodes[j].textContent || '').trim();
     }
-    if (txt) pieces.push(txt);
+    if (txt) {
+      pieces.push(txt);
+      // S1.2: роль хвоста для канонического тела. Приоритет — явный атрибут
+      // (Claude/Gemini-разметка), иначе класс узла запроса; всё прочее — ответ.
+      var tailRole = '';
+      try {
+        tailRole = (tailNodes[j].getAttribute && tailNodes[j].getAttribute('data-message-author-role')) || '';
+      } catch (eRole) { tailRole = ''; }
+      if (!tailRole) {
+        var tailIsUser = false;
+        try {
+          tailIsUser = !!(tailNodes[j].matches && tailNodes[j].matches('.user-query,.query-text')) ||
+            !!(tailNodes[j].querySelector && tailNodes[j].querySelector('.user-query,.query-text'));
+        } catch (eUser) { tailIsUser = false; }
+        tailRole = tailIsUser ? 'user' : 'assistant';
+      }
+      tailMessages.push({ role: tailRole, text: txt });
+    }
   }
   return {
     text: pieces.join('\n'),
     count: tailNodes.length,
     bounded: stopFound,
     sel: found.sel,
+    messages: tailMessages,
     diag: 'sel=' + found.sel + ' узлов=' + nodes.length +
       ' стоп=' + (stopFound ? ('@' + stopAt) : 'нет(все в окне — новые)') +
       ' хвост=' + tailNodes.length + ' bdd=' + (stopFound ? 'да' : 'нет')
@@ -169,6 +188,22 @@ function getEffectiveCount(fallbackCount: number): number {
   }
   return fallbackCount;
 }
+// S1.2 (ADR-001): сообщения, из которых строится РОВНО getEffectiveText().
+//   База — подготовленный схлопнутый массив (aiCmBasePrepared, core/base-handler.ts),
+//   тот же, чей текст печатает aiCmMetricBaseText. Хвост добавляется только когда
+//   getEffectiveText его учитывает (непустой и bounded); иначе — ровно база.
+//   null — канонического тела нет: baseText без подготовленного массива или пустая база.
+//   Тело снимка (content.js) публикуется только если canonicalBodyText(result) совпал
+//   с getEffectiveText() побайтово; это проверяет tests/inv-s1-2-snapshot-body.test.js.
+function getEffectiveMessages(): AiCmExportMessage[] | null {
+  if (!baseSeen || !baseText) return null;
+  var base: AiCmExportMessage[] | null = (typeof aiCmBasePrepared !== 'undefined' &&
+    Array.isArray(aiCmBasePrepared) && aiCmBasePrepared.length > 0) ? aiCmBasePrepared : null;
+  if (!base) return null;
+  var tail = computeTailFromDom();
+  if (tail.text && tail.bounded) return base.concat(tail.messages);
+  return base;
+}
 
 // ========== v2.0 (этап 1/3): UMD-экспорт модуля ==========
 // Паттерн как у utils/export-emit-pipeline.ts: window.<Api> + module.exports.
@@ -187,6 +222,7 @@ function getEffectiveCount(fallbackCount: number): number {
   Api.aiCmTailMetricBase = aiCmTailMetricBase;
   Api.getEffectiveText = getEffectiveText;
   Api.getEffectiveCount = getEffectiveCount;
+  Api.getEffectiveMessages = getEffectiveMessages;
   if (typeof module !== 'undefined' && module.exports) module.exports = Api;
   if (typeof window !== 'undefined') window.AiCmHybridTail = Api;
 })();
@@ -207,4 +243,6 @@ interface AiCmTail {
   bounded: boolean;
   sel: string;
   diag: string;
+  /** S1.2: сообщения хвоста (только для непустого txt); роль — user/assistant. */
+  messages: AiCmExportMessage[];
 }

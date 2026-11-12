@@ -1,7 +1,7 @@
 // ESM (Roadmap Ph2): сборка втягивает utils/platform.ts в тот же бандл контент-скрипта,
 // поэтому aiCmIsFirefox() остаётся в общей области видимости (как и до перевода на ESM).
 import { aiCmIsFirefox } from '../utils/platform.ts';
-import { canonicalBodyText } from '../utils/canonical-body.ts';
+import { canonicalBody, canonicalBodyText } from '../utils/canonical-body.ts';
 // R1 (Roadmap Ph2): utils/debug.ts переведён на ESM — хелперы диагностики втягиваются
 // сборкой статическим import'ом в общую область видимости content-бандла (раньше модуль
 // грузился отдельным classic-скриптом из manifest.content_scripts).
@@ -2835,6 +2835,12 @@ function processAndSend(): void {
       requestExactTokens(fullText, modelId);
     }
 
+    // S1.2 (ADR-001, §2): тело снимка — те же сообщения, из которых построен effective.
+    // canonicalBody считается один раз за проход; публикуется он ниже только при побайтовом
+    // совпадении body.text === effective (иначе снимок остаётся без аддитивных полей).
+    const bodyMsgs = getEffectiveMessages();
+    const body = bodyMsgs ? canonicalBody((typeof getCurrentConvId === 'function' ? getCurrentConvId() : '') || '', bodyMsgs) : null;
+
     // O-47: серверный счётчик для метрики ЭТОГО сервиса. У Qwen он всегда 0 (usage.input —
     // кумулятив API-потребления, а не размер контекста; см. aiCmMetricServerTokens), поэтому
     // pct/badge Qwen считаются ТОЛЬКО эвристикой tokens~. Прочие сервисы — прежний приоритет.
@@ -3003,7 +3009,25 @@ function processAndSend(): void {
     if (!aiCmSnapPending83) {
       // v1.9: src — ИСТОЧНИК зафиксированного числа (dom|net|max|server|hold). Панель и
       // шапка файла читают его вместе с tokens, поэтому расхождение источника исключено.
-      lastTokensSnapshot = { tokens: maxTokenCount, percent: percentage, limit: displayLimit, src: aiCmMetricValueSrc };
+      // S1.2: аддитивные поля тела (chars/msgs/bodyHash/baseComplete) — ТОЛЬКО из тела, чей
+      // текст побайтово равен effective. Иначе снимок пишется без них (старые потребители
+      // видят ровно tokens/percent/limit/src, как раньше).
+      lastTokensSnapshot = (body && body.text === effective)
+        ? { tokens: maxTokenCount, percent: percentage, limit: displayLimit, src: aiCmMetricValueSrc,
+            chars: body.chars, msgs: body.msgs, bodyHash: body.bodyHash, baseComplete: baseComplete === true }
+        : { tokens: maxTokenCount, percent: percentage, limit: displayLimit, src: aiCmMetricValueSrc };
+      // ADR-001 §2: одна строка [ctx-snap] на смену сигнатуры (антиспам — как lastMetricSig).
+      // Порядок полей: convId|src|tokens|chars|msgs|attach|bodyHash|baseComplete.
+      var ctxSnapBodyOk = !!(body && body.text === effective);
+      var ctxSnapConvId = (typeof getCurrentConvId === 'function' ? getCurrentConvId() : '') || '';
+      var ctxSnapSig = ctxSnapBodyOk
+        ? [ctxSnapConvId, aiCmMetricValueSrc, maxTokenCount, body.chars, body.msgs,
+            netAttachTokens, body.bodyHash, (baseComplete === true) ? 1 : 0].join('|')
+        : 'skip|no-canonical-body';
+      if (ctxSnapSig !== lastCtxSnapSig) {
+        lastCtxSnapSig = ctxSnapSig;
+        debugLog('log', ctxSnapBodyOk ? ('[ctx-snap] ' + ctxSnapSig) : '[ctx-snap] skip reason=no-canonical-body');
+      }
     }
     // v2.6 (R1, Шаг 5): значение накапливается ДО ветвления, поэтому его видит ЛЮБАЯ ветка
     // (SPA-супрессия, щит O-1 badgeHold, заморозка лоадера, BYOK-держание): разморозка лоадера
