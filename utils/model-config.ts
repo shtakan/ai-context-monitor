@@ -443,6 +443,13 @@ export const ModelConfig: ModelConfig = {
       description: 'Claude Haiku 4.5 — веб-окно и API-окно 200K',
       // Источник: https://platform.claude.com/docs/en/models/overview (снят 2026-10-04)
     },
+    'claude-haiku-5-5': {
+      name: 'Claude Haiku 5.5',
+      provider: 'Anthropic',
+      contextLimit: 1000000,
+      capExempt: true,
+      description: 'Claude Haiku 5.5 — веб-окно 1M (docs Anthropic, 2026-11-12; окно тарифа Free не проверено)'
+    },
     'claude-3-5-sonnet': {
       name: 'Claude 3.5 Sonnet',
       provider: 'Anthropic',
