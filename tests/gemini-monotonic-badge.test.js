@@ -164,8 +164,8 @@ describe('Gemini: строгое удержание бейджа на непол
 describe('пины контракта (строки, которые нельзя сдвинуть)', () => {
   test('useMonotonic и updateWidget сохранены байтово', () => {
     expect(CONTENT).toContain('const useMonotonic = baseComplete || lastBounded || (baseSeen && baseCount > 0);');
-    expect(CONTENT).toContain(
-      'updateWidget(percentage, maxTokenCount, effectiveLimit, contextLimit, displayLimit, ModelConfig.getModel(modelId)?.name || modelId, netAttachBreak);');
+    expect(CONTENT).toContain('updateWidget(badgeData.percentage, badgeData.tokenEstimate, badgeData.effectiveLimit,');
+    expect(CONTENT).toContain('badgeData.contextLimit, badgeData.displayLimit, badgeData.modelName, badgeData.attachBreak);');
     expect(CONTENT).toContain('const percentage = displayLimit > 0 ? Math.round((maxTokenCount / displayLimit) * 1000) / 10 : 0;');
   });
 
@@ -205,18 +205,18 @@ describe('v2.6 (R1) D5/D6: снимок метрики фиксируется О
 
   test('D6: значение виджета пишется ДО ветвления — любая ветка видит посчитанное число', () => {
     const draw = sliceFunction(CONTENT, 'processAndSend');
-    const iWidget = draw.indexOf('lastWidgetData = {');
+    const iWidget = draw.indexOf('lastWidgetData = badgeData;');
     const iCascade = draw.indexOf('var badgeSuppressActive');
     expect(iWidget).toBeGreaterThan(-1);
     expect(iCascade).toBeGreaterThan(iWidget);
     // копий значения в ветках больше нет (прежние две записи удалены)
-    expect(draw.split('lastWidgetData = {').length - 1).toBe(1);
+    expect(draw.split('lastWidgetData = badgeData;').length - 1).toBe(1);
     // все «держащие» ветки на месте: супрессия SPA, заморозка лоадера, щит O-1, BYOK
     ['[content-trace] badge-suppress', '[content-trace] badge-freeze', '[content-trace] byok-hold']
       .forEach(function (marker) { expect(draw).toContain(marker); });
     expect(draw).toContain('} else if (aiCmBadgeHoldActive()) {');
     // и на разморозке лоадера слушатель по-прежнему рисует накопленное значение
-    expect(CONTENT).toContain('if (!aiCmLoaderFreeze && lastWidgetData) {');
+    expect(CONTENT).toContain('if (!aiCmLoaderFreeze && unfreezeData) {');
     expect(CONTENT).toContain('updateWidget(d.percentage, d.tokenEstimate, d.effectiveLimit, d.contextLimit, d.displayLimit, d.modelName, d.attachBreak);');
   });
 

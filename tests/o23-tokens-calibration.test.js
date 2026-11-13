@@ -250,10 +250,11 @@ describe('O-23 R: регресс байтов tokens~ (serverTokens = 0)', () =>
     const decision = 'var tokens = serverTokens > 0 ? serverTokens : aiCmCanonicalTokens(text, 0, msgs);';
     expect(CONTENT_SRC.split(decision).length - 1).toBe(1);
     const snapCalls = CONTENT_SRC.match(/aiCmTokenSnapshot\(/g) || [];
-    expect(snapCalls.length).toBe(3);            // объявление + processAndSend + GET_STATS
+    expect(snapCalls.length).toBe(2);            // S2.2: объявление + processAndSend; GET_STATS — маппер
     // и оба пути действительно читают серверное число из снимка, а не вычисляют эвристику сами
     expect(CONTENT_SRC.split('const metricServerTokens = tokenSnap.serverTokens;').length - 1).toBe(1);
-    expect(CONTENT_SRC).toContain('var tokenSnapStats = aiCmTokenSnapshot(');
+    expect(CONTENT_SRC).toContain('var statsPatch = aiCmStatePatchFromSnapshot(aiCmReadContextSnapshot());');
+    expect(CONTENT_SRC).not.toContain('var tokenSnapStats = aiCmTokenSnapshot(');
     // т.е. при наличии серверного usage отображаемое значение = serverTokens ровно (0% отклонения)
     for (const p of Object.values(PAIRS)) {
       expect(relErr(p.serverTokens, p.serverTokens)).toBe(0);

@@ -193,7 +193,7 @@ describe('O-47 B: badge/pct Qwen — только tokens~ (эвристика) �
     const calls = CONTENT.match(/aiCmMetricServerTokens\(/g) || [];
     expect(calls.length).toBe(2);                                            // объявление + снимок
     const snapCalls = CONTENT.match(/aiCmTokenSnapshot\(/g) || [];
-    expect(snapCalls.length).toBe(3);                                        // объявление + бейдж + панель
+    expect(snapCalls.length).toBe(2);                                        // объявление + бейдж
     // авторитетная ветка бейджа и метка лога тоже читают метрику, а не сырое поле
     expect(CONTENT).toContain('if (metricServerTokens > 0) {');
     expect(CONTENT).toContain("(metricServerTokens > 0 ? ' · serverTokens' : '')");

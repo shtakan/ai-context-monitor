@@ -129,10 +129,10 @@ describe('Шаг 3: точный ответ API countTokens приоритетн
     // и бейдж (processAndSend), и попап (GET_STATS) зовут ЕДИНУЮ функцию.
     expect(CONTENT.split('aiCmMetricServerTokens(').length - 1).toBe(2);
     expect(CONTENT).toContain('aiCmMetricServerTokens(svc, text)');
-    expect(CONTENT.split('aiCmTokenSnapshot(').length - 1).toBe(3);   // объявление + 2 пути
+    expect(CONTENT.split('aiCmTokenSnapshot(').length - 1).toBe(2);   // объявление + бейдж
     // Попап больше не «дотягивает» эвристику до максимума: число берётся из снимка бейджа,
     // поэтому монотонный max() снят целиком (Math.max с этими именами в коде не осталось).
-    expect(CONTENT).toContain('var displayTokens = (snapStats && typeof snapStats.tokens === \'number\') ? snapStats.tokens : tokenSnapStats.tokens;');
+    expect(CONTENT).toContain('var statsPatch = aiCmStatePatchFromSnapshot(aiCmReadContextSnapshot());');
     // исполняемой формы max() больше нет (упоминание осталось только в комментарии-объяснении)
     expect(CONTENT).not.toContain('const displayTokens = metricServerTokens > 0 ? tokenEstimate');
     expect(CONTENT).not.toContain(': Math.max(tokenEstimate, maxTokenCount);');
@@ -313,7 +313,7 @@ describe('Шаг 4: при BYOK без точного числа эвристи�
     const drawHoldCode = drawHold.split('\n').filter(function (l) { return l.trim().indexOf('//') !== 0; }).join('\n');
     expect(drawHoldCode).not.toContain('updateWidget');
     expect(drawHoldCode).not.toContain('lastWidgetData');
-    expect(draw.indexOf('updateWidget(percentage, maxTokenCount, effectiveLimit')).toBeGreaterThan(iDrawHold);
+    expect(draw.indexOf('updateWidget(badgeData.percentage')).toBeGreaterThan(iDrawHold);
     expect(draw.indexOf('aiCmScheduleAutoExport(percentage);')).toBeGreaterThan(iDrawHold);
   });
 

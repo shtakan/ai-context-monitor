@@ -613,7 +613,7 @@ describe('O-35 B (после O-47): проводка серверного usage 
     expect(hits.length).toBe(1);
     // единственная точка расчёта зовётся РОВНО из двух путей метрики (+ её объявление)
     const snapCalls = CONTENT.match(/aiCmTokenSnapshot\(/g) || [];
-    expect(snapCalls.length).toBe(3);
+    expect(snapCalls.length).toBe(2);
     // и сама точка читает метрику, а не сырое поле снимка
     const decl = fnDecl(CONTENT, 'aiCmTokenSnapshot');
     expect(decl).toContain('aiCmMetricServerTokens(svc, text)');

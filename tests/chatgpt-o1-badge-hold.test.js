@@ -450,7 +450,7 @@ describe('O-1 R2: SPA-держание (conv-changed) не тронуто', () =
     const iSuppIf = draw.indexOf('if (badgeSuppressActive) {');
     const iFreeze = draw.indexOf('} else if (aiCmLoaderFreeze) {');
     const iHold = draw.indexOf('} else if (aiCmBadgeHoldActive()) {');
-    const iUpd = draw.indexOf('updateWidget(percentage, maxTokenCount, effectiveLimit');
+    const iUpd = draw.indexOf('updateWidget(badgeData.percentage, badgeData.tokenEstimate, badgeData.effectiveLimit');
     expect(iSupp).toBeGreaterThan(-1);
     expect(iSuppIf).toBeGreaterThan(iSupp);
     expect(iFreeze).toBeGreaterThan(iSuppIf);

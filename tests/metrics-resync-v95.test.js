@@ -437,7 +437,7 @@ describe('v98: масштаб по netEffectiveLen только при baseCompl
     // v2.6 (R1): прежние два независимых среза схлопнуты в одну функцию aiCmTokenSnapshot;
     // гейт масштаба обязан остаться ровно один (иначе пути снова разойдутся).
     expect(CONTENT.split(SCALE_GATE).length - 1).toBe(1);
-    expect(CONTENT.split('aiCmTokenSnapshot(').length - 1).toBe(3);   // объявление + бейдж + панель
+    expect(CONTENT.split('aiCmTokenSnapshot(').length - 1).toBe(2);   // объявление + бейдж
     // неохраняемой формы (масштаб без вердикта полноты) в исходнике не осталось
     expect(CONTENT).not.toContain('if (metricServerTokens === 0 && netEffectiveLen > 0');
     // масштаб идёт ДО добавки доли вложений (вложения добавляются к готовому числу)

@@ -501,17 +501,19 @@ describe('O-32 (6): монотонный максимум включён при 
     expect(CONTENT).toContain('lastMetricSig = metricSig;');
   });
 
-  test('R5/D6 (v2.6): панель и бейдж читают ОДИН снимок числа — корень R1 закрыт', () => {
+  test('R5/D6 (S2.2): панель и бейдж читают ОДИН снимок числа — корень R1 закрыт', () => {
     // канонический поток GSA: число диалога считается в ЕДИНОЙ точке (aiCmTokenSnapshot),
     // поэтому «каноническая идентичность хода» и число бейджа не могут разойтись.
-    expect(CONTENT.split('aiCmTokenSnapshot(').length - 1).toBe(3);   // объявление + бейдж + панель
+    // S2.2: снимок пишется один раз (commit), а оба потребителя читают его через чистые
+    // мапперы — aiCmTokenSnapshot в GET_STATS больше не зовётся.
+    expect(CONTENT.split('aiCmTokenSnapshot(').length - 1).toBe(2);   // объявление + бейдж
     // и фиксируется оно ОДИН раз — после окончательных maxTokenCount/percentage
     expect(CONTENT.split('lastTokensSnapshot = aiCmCommitContextSnapshot(').length - 1).toBe(1);
     // панель (GET_STATS) отдаёт ровно зафиксированное число, а не собственный пересчёт:
-    expect(CONTENT).toContain("var snapStats = (typeof lastTokensSnapshot !== 'undefined' && lastTokensSnapshot) ? lastTokensSnapshot : null;");
-    expect(CONTENT).toContain("var displayTokens = (snapStats && typeof snapStats.tokens === 'number') ? snapStats.tokens : tokenSnapStats.tokens;");
-    expect(CONTENT).toContain("var percent = (snapStats && typeof snapStats.percent === 'number')");
-    expect(CONTENT).toContain('? snapStats.percent');
+    expect(CONTENT).toContain('var statsPatch = aiCmStatePatchFromSnapshot(aiCmReadContextSnapshot());');
+    expect(CONTENT).toContain("tokenCount: (typeof statsPatch.tokenEstimate === 'number') ? statsPatch.tokenEstimate : null,");
+    expect(CONTENT).toContain("percentage: (typeof statsPatch.percentage === 'number') ? statsPatch.percentage : null,");
+    expect(CONTENT).not.toContain('var tokenSnapStats = aiCmTokenSnapshot(');
     // прежнего «попап не регрессирует» через max() больше нет (иначе R1 вернётся ростом)
     expect(CONTENT).not.toContain('const displayTokens = metricServerTokens > 0 ? tokenEstimate');
     expect(CONTENT).not.toContain(': Math.max(tokenEstimate, maxTokenCount);');

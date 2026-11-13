@@ -386,6 +386,12 @@ function aiCmLatchRemove(service: string, convId: string): Promise<boolean> {
   Object.defineProperty(Api, 'lastTokensSnapshot', { enumerable: true,
     get: function () { return lastTokensSnapshot; },
     set: function (value) { lastTokensSnapshot = value; } });
+  // S2.2 (ADR-001): чистые мапперы снимка. Потребители берут данные бейджа/панели/попапа
+  // только отсюда — без арифметики и без подстановки нулей при null-снимке.
+  Object.defineProperty(Api, 'aiCmWidgetDataFromSnapshot', { enumerable: true,
+    get: function () { return aiCmWidgetDataFromSnapshot; } });
+  Object.defineProperty(Api, 'aiCmStatePatchFromSnapshot', { enumerable: true,
+    get: function () { return aiCmStatePatchFromSnapshot; } });
   Object.defineProperty(Api, 'aiCmTokenHighWater', { enumerable: true,
     get: function () { return aiCmTokenHighWater; },
     set: function (value) { aiCmTokenHighWater = value; } });
@@ -785,6 +791,44 @@ interface AiCmState {
  */
 function aiCmSnapshotPartial(baseComplete: boolean, domBaseTrusted: boolean): boolean {
   return !(baseComplete === true || domBaseTrusted === true);
+}
+
+/**
+ * S2.2 (ADR-001): единственный маппер снимка → данные бейджа/панели. Поля 1:1,
+ * БЕЗ арифметики: tokens/percent/limit посчитаны один раз при фиксации снимка
+ * (core/content.ts:670-703) и здесь только переименовываются. null-снимок → null:
+ * потребитель обязан НЕ рисовать число (ни 0, ни «0.0 %»), а не подставлять дефолт.
+ */
+function aiCmWidgetDataFromSnapshot(snap: AiCmContextSnapshot | null): AiCmWidgetData | null {
+  if (!snap) return null;
+  return {
+    percentage: snap.percent,
+    tokenEstimate: snap.tokens,
+    effectiveLimit: snap.effectiveLimit,
+    contextLimit: snap.contextLimit,
+    displayLimit: snap.limit,
+    modelName: snap.modelName,
+    attachBreak: snap.attachBreak || null
+  };
+}
+
+/**
+ * S2.2 (ADR-001): патч состояния попапа из того же снимка (те же 7 полей, без
+ * пересчёта). null-снимок → {}: нули не подставляются, решение об удалении
+ * устаревших ключей aiCmState принимает вызывающий.
+ */
+function aiCmStatePatchFromSnapshot(snap: AiCmContextSnapshot | null): Partial<AiCmWidgetData> {
+  var d = aiCmWidgetDataFromSnapshot(snap);
+  if (!d) return {};
+  return {
+    percentage: d.percentage,
+    tokenEstimate: d.tokenEstimate,
+    displayLimit: d.displayLimit,
+    effectiveLimit: d.effectiveLimit,
+    contextLimit: d.contextLimit,
+    modelName: d.modelName,
+    attachBreak: d.attachBreak
+  };
 }
 
 /**

@@ -822,7 +822,7 @@ describe('v2.1: дедуп ходов/вложений и метрика без 
     expect([
       CONTENT_SRC.split('aiCmTokenSnapshot(').length - 1,                                      // объявление + 2 пути
       CONTENT_SRC.split('var attachAdd = aiCmAttachPendingTokens(text, attach, attachBreak);').length - 1
-    ]).toEqual([3, 1]);
+    ]).toEqual([2, 1]);
     // прежних двух копий (по одной на путь) больше нет
     expect(
       CONTENT_SRC.split('var attachAdd = aiCmAttachPendingTokens(fullText, netAttachTokens, netAttachBreak);').length - 1 +

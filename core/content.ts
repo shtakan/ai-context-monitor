@@ -428,9 +428,12 @@ function aiCmResetStaleStateOnChatlessChatGptUrl(): boolean {
   window.addEventListener('ai-cm-loader-freeze', function (/** @type {CustomEvent} */ ev: CustomEvent) {
     try {
       aiCmLoaderFreeze = !!(ev.detail && ev.detail.on);
-      // v30.9: на разморозке рисуем накопленное значение сразу — новый badge-update может не прийти
-      if (!aiCmLoaderFreeze && lastWidgetData) {
-        const d = lastWidgetData;
+      // v30.9: на разморозке рисуем значение сразу — новый badge-update может не прийти.
+      // S2.2 (ADR-001): источник — снимок через чистый маппер, не lastWidgetData: при null-снимке
+      // числа нет, виджет остаётся как был (плейсхолдер «—» рисует core/widget.ts).
+      var unfreezeData = aiCmWidgetDataFromSnapshot(aiCmReadContextSnapshot());
+      if (!aiCmLoaderFreeze && unfreezeData) {
+        const d = unfreezeData;
         updateWidget(d.percentage, d.tokenEstimate, d.effectiveLimit, d.contextLimit, d.displayLimit, d.modelName, d.attachBreak);
         debugLog('log', '[content-trace] badge-unfreeze: виджет обновлён pct=' + d.percentage);
       }
@@ -3062,13 +3065,12 @@ function processAndSend(): void {
         debugLog('log', ctxSnapBodyOk ? ('[ctx-snap] ' + ctxSnapSig) : '[ctx-snap] skip reason=no-canonical-body');
       }
     }
-    // v2.6 (R1, Шаг 5): значение накапливается ДО ветвления, поэтому его видит ЛЮБАЯ ветка
-    // (SPA-супрессия, щит O-1 badgeHold, заморозка лоадера, BYOK-держание): разморозка лоадера
-    // и снятие щита рисуют последнее посчитанное число, даже если проход не дошёл до updateWidget.
-    lastWidgetData = {
-      percentage, tokenEstimate: maxTokenCount, effectiveLimit, contextLimit, displayLimit,
-      modelName: ModelConfig.getModel(modelId)?.name || modelId, attachBreak: netAttachBreak
-    };
+    // S2.2 (ADR-001): данные бейджа — ТОЛЬКО из зафиксированного снимка (коммит выше).
+    // lastWidgetData теперь производное снимка: null-снимок → null, поэтому ни одна ветка
+    // (разморозка лоадера, пересоздание виджета) не дорисовывает число из прошлого рендера.
+    var badgeSnap = aiCmReadContextSnapshot();
+    var badgeData = aiCmWidgetDataFromSnapshot(badgeSnap);
+    lastWidgetData = badgeData;
     // O-35 (v54, фикс badge-suppress): супрессия держится ТОЛЬКО пока база нового convId не
     // принята — сетью (baseSeen) ИЛИ DOM-адаптером (adapterBaseSeen; у qwen после F5/SPA сети
     // нет вовсе, базу пишет history-write source=adapter). Вердикт считается один раз и уходит
@@ -3094,8 +3096,11 @@ function processAndSend(): void {
       // бейдж держит предыдущее значение (на свежей странице — плейсхолдер «—»), а не завышенную
       // эвристику. Точное значение отрисует ответ countTokens через processAndSend.
       debugLog('log', '[content-trace] byok-hold: точного числа для текста ещё нет — бейдж держим');
-    } else {
-      updateWidget(percentage, maxTokenCount, effectiveLimit, contextLimit, displayLimit, ModelConfig.getModel(modelId)?.name || modelId, netAttachBreak);
+    } else if (badgeData) {
+      // S2.2: единственный источник чисел — снимок; при null-снимке updateWidget не зовём,
+      // чтобы не стереть текущий рендер и не напечатать 0/«0.0 %».
+      updateWidget(badgeData.percentage, badgeData.tokenEstimate, badgeData.effectiveLimit,
+        badgeData.contextLimit, badgeData.displayLimit, badgeData.modelName, badgeData.attachBreak);
     }
     // O-35 (ДИАГНОСТИКА, только измерение): qwen-badge — вердикт ветви отрисовки бейджа.
     // reason=draw — updateWidget выполнился (процент ушёл в круг/подпись); reason=spa-suppress —
@@ -3135,29 +3140,38 @@ function processAndSend(): void {
       debugLog('log', `📊 ${ModelConfig.getModel(modelId)?.name || modelId}: ${maxTokenCount} / ${displayLimit.toLocaleString()} (${tag}) · окно ${contextLimit.toLocaleString()} · ${percentage}%` + (netAttachTokens > 0 ? ` · вложения≈${netAttachTokens}` : '') + (metricServerTokens > 0 ? ' · serverTokens' : '') + (baseComplete ? ' · по базе' : ''));
     }
 
-    // Снапшот для попапа в chrome.storage.local
+    // Снапшот для попапа в chrome.storage.local.
+    // S2.2 (ADR-001): числа — только из снимка через aiCmStatePatchFromSnapshot. При null-снимке
+    // ключи aiCmState УДАЛЯЮТСЯ: options.js (S2.3, не правим) на removed-событие показывает «—»,
+    // тогда как записанный null дал бы percent||0 → «0 %».
     if (isExtensionValid()) {
       try {
+        var stateNumbers = aiCmStatePatchFromSnapshot(badgeSnap);
         // v31: пишем также per-host ключ aiCmState:<host> — глобальный ключ затирается чужим табом/хостом
-        var stateSnapshot = {
-          host: window.location.hostname,
-          site: currentAdapter.siteName,
-          model: ModelConfig.getModel(modelId)?.name || modelId,
-          tokens: maxTokenCount,
-          limit: displayLimit,
-          percent: percentage,
-          updatedAt: Date.now(),
-          stale: stale,
-          // v2.0.34: размер сетевого снимка. Попап включает ручной экспорт и при пустом DOM,
-          // если сеть отдала реплики (Claude/Perplexity: extractMessages() === [] по дизайну).
-          netBaseMsgs: lastBaseTexts.length,
-          // T1 (v1.16): источник первого/второго яруса для индикатора в попапе
-          sourceKind: (function () { try { var si = aiCmSourceInfo(); return si ? si.kind : ''; } catch (eSi) { return ''; } })(),
-          sourceLabel: (function () { try { var si2 = aiCmSourceInfo(); return si2 ? si2.label : ''; } catch (eSi2) { return ''; } })()
-        };
-        var statePatch = { aiCmState: stateSnapshot };
-        statePatch['aiCmState:' + window.location.hostname] = stateSnapshot;
-        chrome.storage.local.set(statePatch);
+        var hostStateKey = 'aiCmState:' + window.location.hostname;
+        if (typeof stateNumbers.percentage === 'number' && typeof stateNumbers.tokenEstimate === 'number') {
+          var stateSnapshot = {
+            host: window.location.hostname,
+            site: currentAdapter.siteName,
+            model: stateNumbers.modelName,
+            tokens: stateNumbers.tokenEstimate,
+            limit: stateNumbers.displayLimit,
+            percent: stateNumbers.percentage,
+            updatedAt: Date.now(),
+            stale: stale,
+            // v2.0.34: размер сетевого снимка. Попап включает ручной экспорт и при пустом DOM,
+            // если сеть отдала реплики (Claude/Perplexity: extractMessages() === [] по дизайну).
+            netBaseMsgs: lastBaseTexts.length,
+            // T1 (v1.16): источник первого/второго яруса для индикатора в попапе
+            sourceKind: (function () { try { var si = aiCmSourceInfo(); return si ? si.kind : ''; } catch (eSi) { return ''; } })(),
+            sourceLabel: (function () { try { var si2 = aiCmSourceInfo(); return si2 ? si2.label : ''; } catch (eSi2) { return ''; } })()
+          };
+          var statePatch = { aiCmState: stateSnapshot };
+          statePatch['aiCmState:' + window.location.hostname] = stateSnapshot;
+          chrome.storage.local.set(statePatch);
+        } else {
+          chrome.storage.local.remove(['aiCmState', hostStateKey]);
+        }
       } catch (e) { swallowSoft(e, 'content:processAndSend-state-write'); }
     }
     // Экспорт истории: пишем aiCmHistory только когда история реально изменилась (baseCount или textLen).
@@ -3622,32 +3636,20 @@ if (isExtensionValid()) {
     if (message.type === 'GET_STATS') {
       if (currentAdapter && (isInitialized || (baseSeen && baseComplete))) {
         const messages = currentAdapter.extractMessages();
-        const effective = getEffectiveText();
-        const fullText = effective ? effective : currentAdapter.getFullDialogText();
-        const countForTokens = effective ? getEffectiveCount(messages.length) : messages.length;
         const modelId = resolveCurrentModel();
-        // v2.6 (R1): панель считает число ТЕМ ЖЕ aiCmTokenSnapshot, что и бейдж, а при наличии
-        // зафиксированного снимка (state.ts:lastTokensSnapshot) отдаёт ровно его tokens/percent.
-        // Прежний Math.max(tokenEstimate, maxTokenCount) и был источником расхождения R1
-        // (81 токен: панель показывала свежую оценку, бейдж — удержанный максимум).
-        var tokenSnapStats = aiCmTokenSnapshot(fullText, countForTokens, netAttachTokens, netAttachBreak);
-        var snapStats = (typeof lastTokensSnapshot !== 'undefined' && lastTokensSnapshot) ? lastTokensSnapshot : null;
-        var displayTokens = (snapStats && typeof snapStats.tokens === 'number') ? snapStats.tokens : tokenSnapStats.tokens;
-        const contextLimit = ModelConfig.getContextLimit(modelId);
-        const effectiveLimit = ModelConfig.getEffectiveLimit(modelId);
-        const displayLimit = computeEffectiveLimit(modelId);
-        // percent — из того же снимка: круг бейджа, подпись панели и шапка файла показывают
-        // одну связку tokens/percent/limit, пересчёт «на лету» больше не расходится с бейджем.
-        var percent = (snapStats && typeof snapStats.percent === 'number')
-          ? snapStats.percent
-          : (displayLimit > 0 ? Math.round((displayTokens / displayLimit) * 1000) / 10 : 0);
+        // S2.2 (ADR-001): панель НЕ считает число сама — читает зафиксированный снимок
+        // через чистый маппер. Null-снимок → tokenCount/contextLimit/percentage = null:
+        // потребитель обязан показать «—», а не 0/«0.0 %». messageCount остаётся живым.
+        var statsPatch = aiCmStatePatchFromSnapshot(aiCmReadContextSnapshot());
         sendResponse({
           data: {
             site: currentAdapter.siteName,
-            modelName: ModelConfig.getModel(modelId)?.name || modelId,
-            tokenCount: displayTokens,
-            contextLimit: effectiveLimit,
-            percentage: percent,
+            modelName: (typeof statsPatch.modelName === 'string' && statsPatch.modelName)
+              ? statsPatch.modelName
+              : (ModelConfig.getModel(modelId)?.name || modelId),
+            tokenCount: (typeof statsPatch.tokenEstimate === 'number') ? statsPatch.tokenEstimate : null,
+            contextLimit: (typeof statsPatch.effectiveLimit === 'number') ? statsPatch.effectiveLimit : null,
+            percentage: (typeof statsPatch.percentage === 'number') ? statsPatch.percentage : null,
             messageCount: messages.length
           }
         });
@@ -3827,9 +3829,12 @@ if (isExtensionValid()) {
         aiCmStopThemePoll(); // H25: виджета нет — опрос темы больше не нужен
       } else {
         createWidget();
-        if (lastWidgetData) {
-          updateWidget(lastWidgetData.percentage, lastWidgetData.tokenEstimate,
-            lastWidgetData.effectiveLimit, lastWidgetData.contextLimit, lastWidgetData.displayLimit, lastWidgetData.modelName, lastWidgetData.attachBreak);
+        // S2.2 (ADR-001): пересозданный виджет получает числа только из снимка; при null-снимке
+        // updateWidget не зовём — плейсхолдер «—» остаётся, число не дорисовывается.
+        var recreateData = aiCmWidgetDataFromSnapshot(aiCmReadContextSnapshot());
+        if (recreateData) {
+          updateWidget(recreateData.percentage, recreateData.tokenEstimate,
+            recreateData.effectiveLimit, recreateData.contextLimit, recreateData.displayLimit, recreateData.modelName, recreateData.attachBreak);
         }
       }
     }
