@@ -3014,7 +3014,14 @@ function processAndSend(): void {
     var aiCmSnapPending83 = (typeof aiCmNetSnapshotPending === 'function')
       ? aiCmNetSnapshotPending((currentAdapter && currentAdapter.siteName) || '')
       : false;
-    if (!aiCmSnapPending83) {
+    // S2.2 (empty-chat): пустой чат — не измерение. Снимок прошлого разговора снимаем ДО
+    // чтения badgeSnap: aiCmReadContextSnapshot('') совместим с ЛЮБЫМ снимком
+    // (core/state.ts:868), иначе потребители получат числа покинутого чата.
+    // Предикат структурный — «нечего мерить» (нет текста, вложений и сообщений),
+    // а не «tokens === 0»: 0.0% у крошечного чата — легитимное измерение.
+    var ctxSnapNoPayload = !fullText && !(netAttachTokens > 0) && !(countForTokens > 0);
+    if (ctxSnapNoPayload && typeof lastTokensSnapshot !== 'undefined') lastTokensSnapshot = null;
+    if (!aiCmSnapPending83 && !ctxSnapNoPayload) {
       // v1.9: src — ИСТОЧНИК зафиксированного числа (dom|net|max|server|hold). Панель и
       // шапка файла читают его вместе с tokens, поэтому расхождение источника исключено.
       // S1.2: аддитивные поля тела (chars/msgs/bodyHash/baseComplete) — ТОЛЬКО из тела, чей

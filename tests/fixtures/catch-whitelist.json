@@ -1,6 +1,6 @@
 {
   "schema": "ai-cm/catch-whitelist@1",
-  "generatedFrom": "6b88b38",
+  "generatedFrom": "ab41184",
   "scope": [
     "core",
     "utils",
@@ -307,7 +307,7 @@
         614,
         2610,
         2750,
-        3860
+        3867
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cyrDiag = (t.match(/[а-яёА-ЯЁ]/g) || []).length; var cyrillicPct = t"
     },
@@ -355,9 +355,9 @@
         2761,
         2785,
         2794,
-        3741,
-        3767,
-        3769
+        3748,
+        3774,
+        3776
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
     },
@@ -386,8 +386,8 @@
         1319,
         2703,
         2726,
-        3723,
-        3729
+        3730,
+        3736
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
     },
@@ -414,10 +414,10 @@
         1042,
         1268,
         2225,
-        3131,
-        3202,
-        3219,
-        3303
+        3138,
+        3209,
+        3226,
+        3310
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -428,7 +428,7 @@
         87,
         349,
         419,
-        3372
+        3379
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.runtime.sendMessage({ type: 'BADGE_RESET' }).catch(function () {"
     },
@@ -437,7 +437,7 @@
       "category": "local-helper-guard",
       "lines": [
         346,
-        3555
+        3562
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmCancelDeferredHistWrite('');"
     },
@@ -445,7 +445,7 @@
       "file": "core/content.ts",
       "category": "parse-guard",
       "lines": [
-        3803
+        3810
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof AiCmExportBuilders !== 'undefined') ? AiCmExportB"
     },
@@ -683,7 +683,7 @@
       "lines": [
         1022
       ],
-      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var d = ev && ev.detail; if (!d) return; aiCmGsaProbeRunning = d.running"
+      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var d = ev && (ev as any).detail; if (!d) return; aiCmGsaProbeRunning ="
     },
     {
       "file": "core/export-manager.ts",
@@ -739,7 +739,7 @@
         916,
         941
       ],
-      "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.storage.onChanged.addListener(function (changes, areaName) { if ("
+      "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.storage.onChanged.addListener(function (changes: AiCmStorageChang"
     },
     {
       "file": "core/export-manager.ts",
@@ -773,7 +773,7 @@
         85,
         87
       ],
-      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var turnDump = []; var mapKeys = Object.keys(D.turnsMap); for (var di = 0;"
+      "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var turnDump = []; var mapKeys = Object.keys(D.turnsMap); for (var di ="
     },
     {
       "file": "core/gemini-diag.js",
@@ -1551,7 +1551,7 @@
       "lines": [
         858
       ],
-      "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: var selfRing = aiCmLoadRingThresholds; if (chrome.storage.onChanged && !"
+      "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: var selfRing: any = aiCmLoadRingThresholds; if (chrome.storage.onChanged"
     },
     {
       "file": "core/widget.ts",
