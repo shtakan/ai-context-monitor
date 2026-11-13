@@ -357,8 +357,14 @@ describe('O-22 (F4): source-пины единой точки и сохранно
     expect(CONTENT).toContain('o22-listener-entry');
     expect(CONTENT).toContain('o22-call725');
     expect(CONTENT).toContain('o22-histkey-dedup');
-    // ISOLATED-дедуп storage не тронут (окрестность content.js:1760)
-    expect(CONTENT).toContain("var histKey = baseCount + '|' + (baseText ? baseText.length : 0);");
+    // BUG-D (act-gsa-turn-order): в histKey GSA добавлена метка порядка '|o2' (oldest-first).
+    // После реверса count/textLen не меняются, и запись исправленного снимка уходила бы в
+    // dedup-skip — в storage остался бы старый reversed-снимок. Остальные сайты — прежний ключ.
+    expect(CONTENT).toContain(
+      "var histSite = (currentAdapter && currentAdapter.siteName) || '';\n" +
+      "      var histKey = baseCount + '|' + (baseText ? baseText.length : 0) +\n" +
+      "        (histSite === 'google_search' ? '|o2' : '');"
+    );
     expect(CONTENT).toContain('verdict: (histKey !== lastHistoryWroteKey) ? \'write\' : \'dedup-skip\'');
   });
 

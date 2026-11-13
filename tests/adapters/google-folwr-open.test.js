@@ -256,10 +256,11 @@ describe('Google Search AI folwr-open parser', () => {
       expect(countTurnContainers(html)).toBe(2);
     });
 
-    it('extractTurnsFromDocument извлекает ходы из живого DOM', () => {
+    it('extractTurnsFromDocument извлекает ходы из живого DOM (oldest-first)', () => {
+      // BUG-D: живой DOM тоже new→old — t2 (новее) стоит первым, как в реальной странице.
       const doc = new DOMParser().parseFromString(
-        turnHtml('t1', 'Первый вопрос', 'Первый ответ') +
-        turnHtml('t2', 'Второй вопрос', 'Второй ответ'),
+        turnHtml('t2', 'Второй вопрос', 'Второй ответ') +
+        turnHtml('t1', 'Первый вопрос', 'Первый ответ'),
         'text/html'
       );
       const turns = extractTurnsFromDocument(doc);

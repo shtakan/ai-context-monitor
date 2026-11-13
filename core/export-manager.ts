@@ -749,6 +749,9 @@ function aiCmWriteCurrentHistory(): void {
       convId: lastEmitConvId,
       site: (currentAdapter && currentAdapter.siteName) || '',
       model: lastSnapshotModelName || (mid ? (ModelConfig.getModel(mid)?.name || mid) : ''),
+      // BUG-D (act-gsa-turn-order): порядок сообщений снимка — 2 = oldest-first (после реверса
+      // GSA-парсера). options.js не предлагает экспорт GSA-снимку без этой метки.
+      msgOrder: 2,
       tokens: histTokens,
       limit: histLimit,
       percent: histPct,

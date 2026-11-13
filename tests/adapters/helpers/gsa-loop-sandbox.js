@@ -69,6 +69,8 @@ const SCOPE_FNS = [
   'segmentTurnsOf',
   'activateThread',
   'absorbForeignSnapshot',
+  // BUG-D: направление слияния ходов — нужен applyTurns нарезки (иначе ReferenceError)
+  'unionTurnsByDirection',
   'applyTurns',
   // гард прогонов на тред (предмет задачи «петля GSA»)
   'gsaDiagLoopGuard',

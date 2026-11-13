@@ -594,7 +594,10 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     if (turns && turns.length > 0) {
       var mergeFn = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.mergeTurnsById) ||
         function (a, b) { return a.concat(b); };
-      var segTurns = mergeFn(segmentTurnsOf(tid), turns);
+      // BUG-D: порядок ходов в сегменте чужого разговора не гарантирован (снимок может
+      // прийти не хронологически) — дописываем в конец, как и раньше. Активная база здесь
+      // не трогается: при возврате в тред сегмент пересобирается со своим DOM.
+      var segTurns = unionTurnsByDirection(mergeFn, turns, segmentTurnsOf(tid), 'append');
       var segMsgs = messagesFromTurns(segTurns);
       cacheSet(tid, {
         turns: segTurns,
@@ -1015,9 +1018,20 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     return true;
   }
 
+  // BUG-D (act-gsa-turn-order): НАПРАВЛЕНИЕ слияния ходов. Парсер отдаёт ходы oldest-first,
+  // база тоже oldest-first, поэтому место incoming зависит от того, что оно из себя представляет:
+  //   'prepend' — incoming СТАРШЕ базы (следующая страница пагинации, добор из DOM);
+  //   'append'  — incoming НОВЕЕ базы (живой ход, окно открытия, чужой снимок).
+  // Литерал обязателен в каждом прод-вызове (grep-пин: applyTurns без него не вызывается);
+  // отсутствие литерала трактуется как 'append' — прежнее поведение легаси-песочниц тестов.
+  function unionTurnsByDirection(fn, incoming, base, direction) {
+    return direction === 'prepend' ? fn(incoming, base) : fn(base, incoming);
+  }
+
   // Применяет готовые turns к базе + эмит (единая точка для folwr-open и пагинации).
   // bodyText — СЫРОЕ тело ответа (O-27): по нему решается, что тело — форма мусора.
-  function applyTurns(turns, tid, historyComplete, bodyText) {
+  // direction — см. unionTurnsByDirection: куда встаёт incoming относительно lastFullTurns.
+  function applyTurns(turns, tid, historyComplete, bodyText, direction) {
     if (!turns || turns.length === 0) {
       if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('applyTurns', turns, 'reject-empty', tid, { complete: (historyComplete === true) ? 1 : 0 });
       return;
@@ -1054,7 +1068,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     // ровно одно представление, поэтому повторный снимок того же треда базу не раздувает.
     var unionFn = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.mergeTurnsMonotone) ||
       function (a, b) { return a.concat(b); };
-    lastFullTurns = unionFn(lastFullTurns, turns);
+    lastFullTurns = unionTurnsByDirection(unionFn, turns, lastFullTurns, direction);
     lastFullMessages = messagesFromTurns(lastFullTurns);
     seedSeenKeys(lastFullTurns);
     lastFullSnapshot = buildDetail(lastFullTurns, lastFullMessages, tid, historyComplete);
@@ -1152,7 +1166,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
           var txt = page.txt;
           var parsed = parseWithParser(txt);
           var before = merged.length;
-          merged = mergeFn(merged, parsed.turns);
+          merged = unionTurnsByDirection(mergeFn, parsed.turns, merged, 'prepend');
           var gained = merged.length - before;
           added += gained;
           var cursor = extractToken(txt);
@@ -1162,7 +1176,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
             ' raw(' + txt.length + 'B): ' + diagPreview(txt));
           if (gained > 0) {
             if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('pagination', merged, 'submit', tid, { page: pages, gained: gained, kind: pageInfo.cls.kind, cursor: (cursor ? cursor.slice(0, 12) : 'нет') });
-            applyTurns(merged, tid, false, txt);
+            applyTurns(merged, tid, false, txt, 'prepend');
             accountGain();
           } else if (typeof gsaDiagBaseWrite === 'function') {
             gsaDiagBaseWrite('pagination', parsed.turns, 'skip-no-gain', tid, { page: pages, gained: 0, kind: pageInfo.cls.kind, cursor: (cursor ? cursor.slice(0, 12) : 'нет') });
@@ -1284,7 +1298,8 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
               // (buildDetail: historyComplete !== false), и baseComplete взводился по
               // добору из DOM — гейт автоэкспорта видел «полную» историю там, где её никто
               // не подтверждал. Явный false: база растёт, вердикт полноты не выдумывается.
-              applyTurns(mergeFn(lastFullTurns, domTurns), tid, false);
+              // BUG-D: страница пагинации СТАРШЕ базы → добор встаёт в голову.
+              applyTurns(unionTurnsByDirection(mergeFn, domTurns, lastFullTurns, 'prepend'), tid, false, undefined, 'prepend');
               stalls = 0;
             } else {
               stalls++;
@@ -1373,7 +1388,10 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       activeFolwrInFlight[key] = false;
       if (complete) {
         if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('probe', merged, 'submit-final', tid, { complete: 1, addedTotal: addedTotal, steps: steps, reason: reason });
-        applyTurns(merged.length > 0 ? merged : lastFullTurns, tid, true, lastBody);
+        // BUG-D: probe завершает прогон ХРОНОЛОГИЧЕСКИМ merged (он начинался с startTurns и
+        // наращивался догрузками в голову) — он и есть голова базы; ходы, которых в merged нет
+        // (живой ход, пришедший пока probe шёл), остаются в хвосте.
+        applyTurns(merged.length > 0 ? merged : lastFullTurns, tid, true, lastBody, 'prepend');
       } else if (typeof gsaDiagBaseWrite === 'function') {
         gsaDiagBaseWrite('probe', merged, 'skip-incomplete', tid, { complete: 0, addedTotal: addedTotal, steps: steps, reason: reason });
       }
@@ -1428,7 +1446,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
           lastBody = txt; // O-27: тело шага probe — вход проверки формы мусора
           var parsed = parseWithParser(txt);
           var before = merged.length;
-          merged = mergeFn(merged, parsed.turns);
+          merged = unionTurnsByDirection(mergeFn, parsed.turns, merged, 'prepend');
           var added = merged.length - before;
           addedTotal += added;
           var next = extractToken(txt);
@@ -1440,7 +1458,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
             ' всего=' + merged.length + ' raw(' + txt.length + 'B): ' + diagPreview(txt));
           if (added > 0) {
             if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('probe', merged, 'submit', tid, { step: steps, added: added, kind: pageInfo.cls.kind, cursor: (next ? next.slice(0, 12) : 'нет') });
-            applyTurns(merged, tid, false, txt);
+            applyTurns(merged, tid, false, txt, 'prepend');
             accountGain();
           } else if (typeof gsaDiagBaseWrite === 'function') {
             gsaDiagBaseWrite('probe', parsed.turns, 'skip-no-gain', tid, { step: steps, added: 0, kind: pageInfo.cls.kind, cursor: (next ? next.slice(0, 12) : 'нет') });
@@ -1663,7 +1681,12 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
                   var dopasbor = 0;
                   if (domTurnCount > folwrTurnCount && domTurns.length > 0) {
                     var mergeFn = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.mergeTurnsByKey) || function (a, b) { return a.concat(b); };
-                    mergedTurns = mergeFn(baseTurns, domTurns);
+                    // BUG-D: досбор идёт В ГОЛОВУ и работает при допущении «DOM = весь тред»:
+                    // domTurns хронологичны и содержат весь видимый тред, baseTurns — их
+                    // подмножество (счётчик DOM больше). Живой ход, который уже есть в DOM, но
+                    // ещё не попал в снимок folwr, оказывается в ХВОСТЕ (он новее всех ходов
+                    // снимка), а не теряется и не уезжает в старый конец.
+                    mergedTurns = unionTurnsByDirection(mergeFn, domTurns, baseTurns, 'prepend');
                     dopasbor = mergedTurns.length - baseTurns.length;
                   }
                   // v1.5.2+ «ПОЛНАЯ» только при «курсора нет И folwr>=DOM».
@@ -1680,7 +1703,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
                   if (emittedThreadId === tid && lastFullTurns.length > mergedTurns.length) {
                     var unionFn = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.mergeTurnsById) ||
                       function (a, b) { return a.concat(b); };
-                    mergedTurns = unionFn(lastFullTurns, mergedTurns);
+                    mergedTurns = unionTurnsByDirection(unionFn, mergedTurns, lastFullTurns, 'append');
                     console.log('[ai-cm-google-search] база сжата — сохранён максимум (' +
                       mergedTurns.length + ' ходов)');
                   }
@@ -1692,7 +1715,9 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
                   // Прирост считается ДО записи: applyTurns присваивает lastFullTurns новый
                   // массив, поэтому после вызова разницу уже не измерить.
                   var openGained = mergedTurns.length - lastFullTurns.length;
-                  applyTurns(mergedTurns, tid, historyComplete, txt);
+                  // BUG-D: окно открытия — это ХВОСТ треда (свежайшая страница), поэтому оно
+                  // дописывается в конец уже накопленной базы, а не подменяет её голову.
+                  applyTurns(mergedTurns, tid, historyComplete, txt, 'append');
 
                   // v1.5.2: антиспам — печатаем folwr-open только при изменении сигнатуры.
                   var sig = [baseTurns.length, folwrTurnCount, domTurnCount, dopasbor,

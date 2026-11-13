@@ -820,6 +820,11 @@ export function parseGoogleFolwrOpen(htmlText: string): FolwrParseResult {
     }
   }
 
+  // BUG-D (act-gsa-turn-order): документ GSA-экспорта идёт new→old (первый блок — новейший
+  // ответ). Единственная точка правды порядка — здесь: дальше turns/messages/text уже
+  // oldest-first, и все слияния (mergeTurnsById/Monotone) дописывают новый ход в хвост.
+  turns.reverse();
+
   // Собрать messages + text
   for (var t = 0; t < turns.length; t++) {
     var t2 = turns[t];
@@ -859,7 +864,7 @@ export function countTurnContainers(htmlText: string): number {
 /**
  * Извлекает ходы из ЖИВОГО DOM (для досбора, когда folwr отдал меньше ходов).
  * @param {any} doc Документ живого DOM.
- * @returns {FolwrTurn[]} Ходы в document-порядке.
+ * @returns {FolwrTurn[]} Ходы в хронологическом порядке (oldest-first).
  */
 export function extractTurnsFromDocument(doc: any): FolwrTurn[] {
   if (!doc || typeof doc.querySelectorAll !== 'function') return [];
@@ -913,6 +918,9 @@ export function extractTurnsFromDocument(doc: any): FolwrTurn[] {
       });
     }
   } catch (e) { swallowSoft(e, 'gsa-utils:extractTurnsFromDocument'); }
+  // BUG-D: DOM-порядок тоже new→old — разворачиваем здесь же, чтобы функция не отдавала
+  // наружу ходы в другом порядке, чем parseGoogleFolwrOpen.
+  turns.reverse();
   return turns;
 }
 

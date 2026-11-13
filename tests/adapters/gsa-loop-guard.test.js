@@ -55,6 +55,12 @@ const TURNS_9_10 = [
   turn('t9', 'Вопрос 9', 'Ответ 9'),
   turn('t10', 'Вопрос 10', 'Ответ 10')
 ];
+// BUG-D: страница досбора старшей истории — фолwr-пагинация идёт ВГЛУБЬ треда,
+// поэтому её ходы старше базы и встают в голову.
+const TURNS_OLDER_2 = [
+  turn('t0a', 'Вопрос 0a', 'Ответ 0a'),
+  turn('t0b', 'Вопрос 0b', 'Ответ 0b')
+];
 
 // Сторож асинхронных провалов песочницы: ошибка внутри .then() цепочки прогона видна только
 // так — промис-цепочка никуда не возвращается из followFolwrPagination и ловится её
@@ -449,7 +455,7 @@ describe('Петля GSA D4: смена треда внутри backfill', () =>
 // R1: легитимный прогон после окна ≥ 2 с → start, база растёт
 // =====================================================================================
 describe('Петля GSA R1: легитимный прогон после окна', () => {
-  test('через 2.5 с прогон стартует, страница с новыми ходами растит базу 8 → 10', async () => {
+  test('через 2.5 с прогон стартует, страница с досбором истории растит базу 8 → 10', async () => {
     const now = 1700002000000;
     const spy = jest.spyOn(Date, 'now').mockReturnValue(now);
     try {
@@ -460,16 +466,18 @@ describe('Петля GSA R1: легитимный прогон после окн
       await settle(h);
       expect(h.api.lastFullTurns).toHaveLength(8);
 
-      // 2.5 с спустя: сайт отдал страницу с ходами 9–10 (легитимный досбор истории).
+      // 2.5 с спустя: сайт отдал страницу с ходами старше базы (легитимный досбор истории).
+      // BUG-D: такой добор встаёт в ГОЛОВУ, база остаётся old→new.
       spy.mockReturnValue(now + 2500);
       h.ctx.parseWithParser = function () {
-        return { turns: TURNS_9_10, messages: [], count: 2, text: '', threadId: TID_A };
+        return { turns: TURNS_OLDER_2, messages: [], count: 2, text: '', threadId: TID_A };
       };
       h.api.followFolwrPagination(FOLWR_URL, TURNS_8, TID_A, 'CURSOR-2', 0);
       await settle(h);
 
       expect(h.api.lastFullTurns).toHaveLength(10);
-      expect(h.api.lastFullTurns.map(function (t) { return t.id; }).slice(-2)).toEqual(['t9', 't10']);
+      expect(h.api.lastFullTurns.map(function (t) { return t.id; })).toEqual(
+        ['t0a', 't0b', 't1', 't2', 't3', 't4', 't5', 't6', 't7', 't8']);
       const gate = diagLines(h.sink, 'gsa-loop-guard');
       expect(gate[1]).toContain('verdict=start');
       expect(gate[1]).toContain('sincePrevRunMs=2500');
@@ -594,7 +602,7 @@ describe('Петля GSA S1–S3: source-пины', () => {
     expect(atGuard).toBeLessThan(atScroll);
     // O-32-пин (tests/o32-gsa-canonical-thread-invariant.test.js) держится: DOM-добор
     // полноту НЕ выдумывает.
-    expect(vs).toContain('applyTurns(mergeFn(lastFullTurns, domTurns), tid, false);');
+    expect(vs).toContain("applyTurns(unionTurnsByDirection(mergeFn, domTurns, lastFullTurns, 'prepend'), tid, false, undefined, 'prepend');");
   });
 
   test('S3: диаг-строки — ровно три точки, все под typeof-гардом aiCmDiagLine', async () => {

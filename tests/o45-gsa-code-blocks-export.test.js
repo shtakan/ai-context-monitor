@@ -303,9 +303,10 @@ describe('O-45 R1: прежние контуры GSA не тронуты', () =>
   test('R1 (O-31): сегментация по threadId перехватчика на месте; парсер читает threadId', () => {
     expect(INTERCEPT_SRC).toContain('function isForeignThread(tid)');
     expect(INTERCEPT_SRC).toContain('absorbForeignSnapshot(tid, turns, historyComplete)');
-    const two = TID + turnHead('t1', 'Первый вопрос') + '<div class="n6owBd awi2gc">Первый ответ</div>' +
-      turnHead('t2', 'Второй вопрос') +
-      '<div class="n6owBd awi2gc">Код:</div><pre><code class="language-python">' + PY_CODE + '</code></pre>';
+    // BUG-D: реальный GSA-экспорт идёт new→old — документ собираем в том же порядке.
+    const two = TID + turnHead('t2', 'Второй вопрос') +
+      '<div class="n6owBd awi2gc">Код:</div><pre><code class="language-python">' + PY_CODE + '</code></pre>' +
+      turnHead('t1', 'Первый вопрос') + '<div class="n6owBd awi2gc">Первый ответ</div>';
     const parsed = Parser.parseGoogleFolwrOpen(two);
     expect(parsed.threadId).toBe('O45-THREAD');
     expect(parsed.messages[1].text).toBe('Первый ответ');            // код второго хода не приклеен к первому

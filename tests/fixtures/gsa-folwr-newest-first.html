@@ -1,0 +1,24 @@
+<!--
+  BUG-D (act-gsa-turn-order): форма реального GSA-экспорта «Ответ в режиме ИИ».
+  Документ идёт new→old: первый блок — НОВЕЙШИЙ ответ (у него нет h2, вместо вопроса —
+  эхо «Ответ в режиме ИИ, исходный запрос: …»), старший ход обрезан ровно на
+  «Быстрые ответы из интернета:». Тело настоящего дампа — 3.28 МБ, здесь урезано до ~2 КБ;
+  коммитится только эта форма, не тело.
+-->
+<div><div><div data-session-thread-id="GSA-REAL-SHAPE-1" style="display:none"></div>
+<div>
+<div class="CKgc1d" data-scope-id="turn" jsuid="turn-newest">
+  <div class="n6owBd awi2gc">Ответ в режиме ИИ, исходный запрос: "Как настроить резервное копирование?"</div>
+  <div class="n6owBd awi2gc">Для резервного копирования подойдёт rsync. Пример: rsync -av /data /backup — синхронизирует каталог целиком.</div>
+</div>
+<div class="CKgc1d" data-scope-id="turn" jsuid="turn-2"><h2 class="iMqumd">Вы сказали: "Как настроить резервное копирование?"</h2></div>
+<div class="n6owBd awi2gc">Для резервного копирования нужны два компонента: утилита синхронизации и расписание запуска.</div>
+<div class="n6owBd awi2gc"><strong>Шаги:</strong></div>
+<ul>
+  <li>Выберите каталог для копий.</li>
+  <li>Настройте cron или systemd-таймер.</li>
+  <li>Проверьте восстановление из копии.</li>
+</ul>
+<div class="CKgc1d" data-scope-id="turn" jsuid="turn-1"><h2 class="iMqumd">Вы сказали: "Что такое rsync?"</h2></div>
+<div class="n6owBd awi2gc">rsync — утилита синхронизации файлов и каталогов. Быстрые ответы из интернета:</div>
+</div></div></div>

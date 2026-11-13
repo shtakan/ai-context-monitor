@@ -208,6 +208,7 @@ const GSA_FNS = [
   'segmentTurnsOf',
   'activateThread',
   'absorbForeignSnapshot',
+  'unionTurnsByDirection',
   'applyTurns',
   'mergeStreamTurns',
   'mergeTurns',

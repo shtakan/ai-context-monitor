@@ -94,6 +94,7 @@ const SCOPE_FNS = [
   'segmentTurnsOf',
   'activateThread',
   'absorbForeignSnapshot',
+  'unionTurnsByDirection',
   'applyTurns',
   'mergeStreamTurns',
   'mergeTurns',
@@ -275,14 +276,14 @@ describe('R-D (б): XSSI-тело `)]}\'\\n[""]\\n` — база не пишет
 
   test('source-пины: сырое тело доезжает до ОБОИХ писателей на всех сетевых путях', () => {
     // open / pagination / probe-step / probe-finish — через applyTurns с телом
-    expect(INTERCEPT).toContain('applyTurns(mergedTurns, tid, historyComplete, txt);');
-    expect((INTERCEPT.match(/applyTurns\(merged, tid, false, txt\);/g) || []).length).toBe(2);
-    expect(INTERCEPT).toContain('applyTurns(merged.length > 0 ? merged : lastFullTurns, tid, true, lastBody);');
+    expect(INTERCEPT).toContain("applyTurns(mergedTurns, tid, historyComplete, txt, 'append');");
+    expect((INTERCEPT.match(/applyTurns\(merged, tid, false, txt, 'prepend'\);/g) || []).length).toBe(2);
+    expect(INTERCEPT).toContain("applyTurns(merged.length > 0 ? merged : lastFullTurns, tid, true, lastBody, 'prepend');");
     // passive folwr/folif и XHR — через mergeTurns с телом
     expect(INTERCEPT).toContain('mergeTurns(parsed.turns, isFull, parsed.threadId, txt);');
     expect(INTERCEPT).toContain('mergeTurns(parsed.turns, isFullXhr, parsed.threadId, txt);');
     // DOM-добор (scroll-backfill) тела не имеет — форма мусора там не решается
-    expect(INTERCEPT).toContain('applyTurns(mergeFn(lastFullTurns, domTurns), tid, false);');
+    expect(INTERCEPT).toContain("applyTurns(unionTurnsByDirection(mergeFn, domTurns, lastFullTurns, 'prepend'), tid, false, undefined, 'prepend');");
     // обе точки приёма базы выходят ДО записи; форма мусора — отдельная причина
     expect(fnDecl(INTERCEPT, 'applyTurns')).toContain('if (isGarbageBody(bodyText, turns))');
     expect(fnDecl(INTERCEPT, 'mergeTurns')).toContain('if (isGarbageBody(bodyText, newTurns))');

@@ -104,6 +104,7 @@ const SCOPE_FNS = [
   'segmentTurnsOf',
   'activateThread',
   'absorbForeignSnapshot',
+  'unionTurnsByDirection',
   'applyTurns',
   'mergeStreamTurns',
   'mergeTurns',
@@ -351,7 +352,7 @@ describe('O-32 (3): полнота доказана вердиктом, а не 
     expect(h.api.buildDetail(wrappedTurns(), undefined, TID, true).historyComplete).toBe(true);
     // DOM-добор базы не доказывает полноту истории
     const dom = fnDecl(INTERCEPT, 'virtualScrollBackfill');
-    expect(dom).toContain('applyTurns(mergeFn(lastFullTurns, domTurns), tid, false);');
+    expect(dom).toContain("applyTurns(unionTurnsByDirection(mergeFn, domTurns, lastFullTurns, 'prepend'), tid, false, undefined, 'prepend');");
   });
 
   test('content.js: baseComplete — единственная точка вердикта, дефолта нет', () => {
@@ -374,8 +375,9 @@ describe('O-32 (4): единый канонический ключ во всех
     expect(fnDecl(INTERCEPT, 'mergeStreamTurns')).toContain('var key = gsaTurnKey(t);');
     // сырая пара (userText||assistantText) как ключ дедупа больше НЕ используется
     expect(INTERCEPT).not.toContain("seenKeys[(lastFullTurns[i].userText || '') + '||' + (lastFullTurns[i].assistantText || '')]");
-    // applyTurns — монотонное слияние «накопитель ∪ снимок» (база не подменяется куском)
-    expect(fnDecl(INTERCEPT, 'applyTurns')).toContain('lastFullTurns = unionFn(lastFullTurns, turns)');
+    // applyTurns — монотонное слияние «накопитель ∪ снимок» (база не подменяется куском),
+    // BUG-D: направление — обязательный аргумент (append = incoming новее базы)
+    expect(fnDecl(INTERCEPT, 'applyTurns')).toContain('lastFullTurns = unionTurnsByDirection(unionFn, turns, lastFullTurns, direction)');
     expect(fnDecl(INTERCEPT, 'applyTurns')).toContain('mergeTurnsMonotone');
     // источник правды ключа — единый парсер
     expect(fnDecl(INTERCEPT, 'gsaTurnKey')).toContain('canonicalTurnKeyOf');

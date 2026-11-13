@@ -3189,7 +3189,13 @@ function processAndSend(): void {
     var currentConvB = getCurrentConvId() || '';
     if (isExtensionValid() && baseSeen && lastBaseTexts.length > 0 &&
         !(emitConvA && currentConvB && emitConvA !== currentConvB)) {
-      var histKey = baseCount + '|' + (baseText ? baseText.length : 0);
+      // BUG-D (act-gsa-turn-order): для GSA в ключ входит метка порядка 'o2' (oldest-first).
+      // После реверса парсера count/textLen не меняются, и без метки запись исправленного
+      // снимка ушла бы в dedup-skip — в chrome.storage остался бы старый reversed-снимок.
+      // Для остальных сайтов ключ байт-в-байт прежний (site !== 'google_search').
+      var histSite = (currentAdapter && currentAdapter.siteName) || '';
+      var histKey = baseCount + '|' + (baseText ? baseText.length : 0) +
+        (histSite === 'google_search' ? '|o2' : '');
       // O-22 (диагностика, только измерение): КАЖДАЯ проверка дедуп-ключа baseCount|textLen.
       // verdict=write — ключ новый, запись пойдёт; verdict=dedup-skip — запись пропущена.
       // Путь export-manager.js:395 эту проверку НЕ проходит — гипотеза F4-b.
@@ -3232,6 +3238,9 @@ function processAndSend(): void {
             site: currentAdapter.siteName,
             // v47: экспорт НЕ переводим на UI-модель — здесь остаётся модель снимка
             model: lastSnapshotModelName || (ModelConfig.getModel(modelId)?.name || modelId),
+            // BUG-D (act-gsa-turn-order): порядок ходов в снимке — oldest-first (msgOrder:2);
+            // по этой метке options.js отличает исправленный снимок GSA от старого reversed.
+            msgOrder: 2,
             tokens: maxTokenCount,
             limit: displayLimit,
             percent: percentage,

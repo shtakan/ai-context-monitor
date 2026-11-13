@@ -828,6 +828,16 @@ try {
 // ========== ЭКСПОРТ ИСТОРИИ ==========
 var cachedHistory = null;
 var currentTabHost = '';
+// BUG-D (act-gsa-turn-order): снимок GSA, записанный ДО фикса порядка, хранит ходы new→old.
+// Экспорт такого снимка дал бы перевёрнутый файл, поэтому он не предлагается к экспорту,
+// пока страница не обновлена (новый content script пишет снимок с msgOrder:2).
+// site проверяется по РЕАЛЬНОМУ значению адаптера ('google_search', см.
+// adapters/google-search-adapter.ts:101), а не по константе гарда.
+var historyOrderStale = false;
+
+function isStaleGsaSnapshot(hist) {
+  return !!(hist && hist.site === 'google_search' && hist.msgOrder !== 2);
+}
 
 function getActiveTabHost(cb) {
   try {
@@ -853,7 +863,13 @@ function updateExportButtons() {
   // структура готова, но запись истории могла ещё не доехать. netBaseMsgs > 0 разблокирует.
   var netMsgs = (cachedState && cachedState.host === currentTabHost &&
     typeof cachedState.netBaseMsgs === 'number') ? cachedState.netBaseMsgs : 0;
-  if (!enabled && netMsgs > 0) enabled = true;
+  // BUG-D: для GSA netBaseMsgs сам экспорт НЕ разблокирует — нужно доказательство, что
+  // страницу уже обслуживает исправленный content script: снимок с msgOrder:2. Иначе через
+  // этот путь можно было бы обойти гейт старого reversed-снимка.
+  var gsaHost = !!(cachedState && cachedState.host === currentTabHost && cachedState.site === 'google_search');
+  var gsaOrderOk = !!(cachedHistory && cachedHistory.site === 'google_search' && cachedHistory.msgOrder === 2);
+  var orderBlocked = historyOrderStale || (gsaHost && !gsaOrderOk);
+  if (!enabled && netMsgs > 0 && !orderBlocked) enabled = true;
   exportMdBtn.disabled = !enabled;
   exportJsonBtn.disabled = !enabled;
   exportPdfBtn.disabled = !enabled;
@@ -867,6 +883,10 @@ function updateExportButtons() {
         : (cachedState ? cachedState.updatedAt : 0);
       var exportAt = formatTime(hintAt);
       exportHintEl.textContent = aiCmI18nMessage('options_ready_to_export', 'Готово к экспорту · данные от ' + exportAt, [exportAt]);
+    } else if (orderBlocked) {
+      // BUG-D: старый GSA-снимок (new→old) — просим обновить страницу, а не «откройте сайт»:
+      // после перезагрузки content script запишет снимок в правильном порядке.
+      exportHintEl.textContent = aiCmI18nMessage('options_reload_page', 'Обновите страницу');
     } else {
       exportHintEl.textContent = aiCmI18nMessage('options_open_supported_site', 'Откройте поддерживаемый сайт');
     }
@@ -888,6 +908,9 @@ function refreshExportState() {
       if (!hist && data.aiCmHistory && data.aiCmHistory.host === host) {
         hist = data.aiCmHistory;
       }
+      // BUG-D: гейт порядка — ПОСЛЕ fallback на глобальный ключ (иначе он обходил бы проверку).
+      historyOrderStale = isStaleGsaSnapshot(hist);
+      if (historyOrderStale) hist = null;
       cachedHistory = hist;
       updateExportButtons();
     });
@@ -1076,7 +1099,11 @@ try {
     if (!hist) return;
     // host активной вкладки мог не успеть обновиться — перезапрашиваем
     getActiveTabHost(function () {
-      if (hist.host === currentTabHost) cachedHistory = hist;
+      if (hist.host === currentTabHost) {
+        // BUG-D: тот же гейт порядка, что в refreshExportState — старый GSA-снимок не кэшируем.
+        historyOrderStale = isStaleGsaSnapshot(hist);
+        cachedHistory = historyOrderStale ? null : hist;
+      }
       updateExportButtons();
     });
   });
