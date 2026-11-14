@@ -195,7 +195,7 @@ interface AiCmContextSnapshot {
 | **I2a** | `tokens == countTokens(body) + 4*msgs + attach + system` | `inv-i2-body-reproducible.test.js`, эвристические провайдеры |
 | **I2b** | `r1 == r2` и `abs(r)/tokens < 0.35` для одного чата (r — остаток, §2/D5) | тот же файл, серверные провайдеры |
 | **I3** | тело файла == каноническое тело | см. ниже, `inv-i3-export-body-equality.test.js`, `inv-i3-manual-md-json.test.js` |
-| **I4** | экспорт неполной базы только как `partial` с меткой | `inv-i4-partial-barrier.test.js` |
+| **I4** | экспорт неполной базы только как `partial` с меткой | **проверен 2026-11-14:** `inv-i4-partial-barrier.test.js` (13 сценариев); живая приёмка — MD 17-57 и JSON 17-59 (метки при `partial`), DeepSeek 18-07 (меток нет при полном снимке); барьер живьём не наблюдается — см. §9 |
 | **I5** | `src` обязателен и доезжает до файла (`metric-src:` / `"src"`) | `inv-i5-src-propagation.test.js` |
 | **I6** | смена чата гасит снимок и high-water | `inv-i6-conv-switch.test.js` |
 
@@ -253,8 +253,11 @@ I3c:  JSON: messages.map(m => m.text).join('\n') === canonicalBody
 2. **Один снимок и один читатель**: `core/content.ts:2922–3014`, `:3041–3067`, `:3085–3103`,
    `:3465–3533`, `:3556–3591`, `core/widget.ts:826`, `core/export-manager.ts:626–633`, `:1848–1879`,
    `utils/export-text-builders.ts:391–400`, `options/options.js:927–947`, `types/export.d.ts:103`.
-3. **Барьер `partial`**: `core/export-manager.ts:599–608`, `:1518`, `:1648–1705`, `:1830–1894`, `:2115`,
-   `utils/export-text-builders.ts:408–505`, `options/options.js:898–910`.
+3. **Барьер `partial`** — выполнено в S2.3 (`2b62aee`): барьер `core/export-manager.ts:1669–1679`;
+   отложенный писатель `:721–722`, `:778–780`; авто-файл `:1907–1926`; MD-метки
+   `utils/export-text-builders.ts:436–442`; JSON `:512–513`; сетевой писатель `core/content.ts:3237`,
+   `:3260–3262`; адаптерный `:3350–3356`; ручной ответ `:3605`, `:3628–3630`;
+   ручной JSON `options/options.js:950`.
 4. **Привязка к чату и снятие high-water**: `core/state.ts:42`,`:49`, `core/widget.ts:196–274`,
    `core/content.ts:2508–2531`, `:3000–3007`.
 5. **Единый JSON-сборщик ручного экспорта**: `options/options.js:927–947`, `utils/export-text-builders.ts:485–505`.
@@ -316,7 +319,7 @@ Gemini без изменений: `e1020dbabcfa5a02 | net | 96465 | 75.4 | parti
 3. Реальная приёмка: анонимизированная пара Qwen в `tests/fixtures/export/` (skip-if-absent для живой) —
    `snapshot.tokens` воспроизводится из тела файла, `bodyHash` совпадает.
 4. Строка `ctx-snap` в точке записи содержит `tokens, chars, msgs, attachAdd, bodyHash, src, baseComplete`.
-5. `partial`-экспорт помечен в теле файла (MD и JSON) и заблокирован для автоэкспорта.
+5. `partial`-экспорт помечен в теле файла (MD и JSON) и заблокирован для автоэкспорта — **подтверждено 2026-11-14 (S2.3):** unit c1–c4 + живая приёмка 17-57/17-59, негатив 18-07.
 6. Нет регрессий: полный сьют на HEAD `b6859a5` = 238 suites / 4058 passed / 7 skipped,
    `npx tsc --noEmit` = 0, `npm run lint:baseline` = 0.
 7. `CHANGELOG.md` содержит запись об изменении значений `text` в JSON для чатов с контейнерами.
@@ -340,6 +343,12 @@ Gemini без изменений: `e1020dbabcfa5a02 | net | 96465 | 75.4 | parti
   (у этих сервисов нет серверного счётчика — `perplexity-intercept.js:365`, `claude-intercept.js:1192`).
 - **Граница источников после BUG-G: сеть — состав, DOM — `userText`, эхо — валидатор.** Сеть — источник *состава* ходов (какие ходы есть, их порядок, `assistantText`); DOM — источник **только** `userText` для ходов, пришедших без user-части (`resolveUserQuestionForTurn`); эхо — валидатор пары, не источник текста.
 - `fillMissingUserText` — fill-only по каноническому ключу: `assistantText` и состав ходов не меняются; чужой формат DOM — fail-safe (пропуск, не догадка); реплика, отсутствующая и в сети, и в DOM, не восстанавливается (остаточный риск BUG-H).
+- **Граница наблюдаемости барьера `partial`.** Барьер — второй рубеж: при `partial = true`
+  более ранний гейт полноты (`not-complete`, у GSA `probe-running`) останавливает автоэкспорт
+  до `doAutoExportDownload`, поэтому `skip reason=partial` живьём не возникает и не должен.
+  Доказательство — unit c1–c4 (`tests/inv-i4-partial-barrier.test.js`, 13 сценариев); живой
+  инвариант — «пока снимок частичный, файл автоэкспорта не появляется». Переход
+  `partial → false` на GSA — барьер S3 (§A1).
 - **D1–D6 и нумерация §7 не меняются; новых шагов в §7 не появляется.**
 
 ---
