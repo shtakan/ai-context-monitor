@@ -160,7 +160,7 @@ interface AiCmContextSnapshot {
   capturedAt: number;        // ms epoch; потребители печатают возраст, но не пересчитывают
   site: string;              // qwen | deepseek | gemini | aistudio | claude | perplexity | gsa
   model: string;
-  src: 'dom' | 'net' | 'max' | 'server';   // ОБЯЗАТЕЛЕН (I5)
+  src: 'dom' | 'net' | 'server';   // ОБЯЗАТЕЛЕН (I5); исторические файлы могут содержать `max`/`hold`, новые значения не производятся
   tokens: number;            // единственное авторитетное число
   percent: number;           // round(tokens / limit * 10) / 10, считается ТОЛЬКО здесь
   limit: number;             // computeEffectiveLimit(modelId)
@@ -183,7 +183,7 @@ interface AiCmContextSnapshot {
 - **Читатель один** — `aiCmReadContextSnapshot()`: возвращает снимок только если `convId` совпал, иначе `null`.
   Все потребители (бейдж, панель, попап, оба экспорта) читают **только** его; ни один не пересчитывает `percent`.
 - **Событие** `aiCmContextCommitted(snapshot)` — единственный триггер автоэкспорта; таймеры-пересчёты убираются.
-- Гашение при смене чата — там, где уже гасится снимок (`core/widget.ts:196–274`, `core/state.ts:42`), плюс high-water того же чата.
+- Гашение при смене чата — там, где уже гасится снимок (`core/widget.ts:196–274`, `core/state.ts:42`); high-water удалён, привязка — канонический `convId`: одна формула `aiCmCanonicalConvId()` на запись и чтение.
 
 ---
 
@@ -195,9 +195,9 @@ interface AiCmContextSnapshot {
 | **I2a** | `tokens == countTokens(body) + 4*msgs + attach + system` | `inv-i2-body-reproducible.test.js`, эвристические провайдеры |
 | **I2b** | `r1 == r2` и `abs(r)/tokens < 0.35` для одного чата (r — остаток, §2/D5) | тот же файл, серверные провайдеры |
 | **I3** | тело файла == каноническое тело | см. ниже, `inv-i3-export-body-equality.test.js`, `inv-i3-manual-md-json.test.js` |
-| **I4** | экспорт неполной базы только как `partial` с меткой | **проверен 2026-11-14:** `inv-i4-partial-barrier.test.js` (13 сценариев); живая приёмка — MD 17-57 и JSON 17-59 (метки при `partial`), DeepSeek 18-07 (меток нет при полном снимке); барьер живьём не наблюдается — см. §9 |
+| **I4** | экспорт неполной базы только как `partial` с меткой | **подтверждён 2026-11-14:** `inv-i4-partial-barrier.test.js` (13 сценариев); живая приёмка — MD 17-57 и JSON 17-59 (метки при `partial`), DeepSeek 18-07 (меток нет при полном снимке); барьер живьём сработал на qwen — см. §9 |
 | **I5** | `src` обязателен и доезжает до файла (`metric-src:` / `"src"`) | `inv-i5-src-propagation.test.js` |
-| **I6** | смена чата гасит снимок и high-water | `inv-i6-conv-switch.test.js` |
+| **I6** | снимок принадлежит одному чату, чужой не читается; high-water удалён | `tests/inv-i6-conv-switch.test.js` (8 сценариев); **проверен 2026-11-14:** 19:23:14.097 уход e1020dba→f47e2edd, reset, в кружке «—»; 19:23:15.206 первый снимок нового чата 18 msgs / 8779 / 6.9 %; 19:23:28.030 возврат; 19:23:30.920 первый снимок e1020dba — свои числа; 0 badge-update с числом чужого чата; stale=0 во всех строках трёх логов; keep-snap того же чата переживает внутренний reset |
 
 Определения I3 (одна функция рендера тела на оба формата):
 
@@ -258,8 +258,7 @@ I3c:  JSON: messages.map(m => m.text).join('\n') === canonicalBody
    `utils/export-text-builders.ts:436–442`; JSON `:512–513`; сетевой писатель `core/content.ts:3237`,
    `:3260–3262`; адаптерный `:3350–3356`; ручной ответ `:3605`, `:3628–3630`;
    ручной JSON `options/options.js:950`.
-4. **Привязка к чату и снятие high-water**: `core/state.ts:42`,`:49`, `core/widget.ts:196–274`,
-   `core/content.ts:2508–2531`, `:3000–3007`.
+4. **Привязка к чату и снятие high-water** — выполнено в S4 (3e452ec): `core/state.ts:42` (`lastTokensSnapshot`), `:723` (`stale`), `:845` (`commit`), `:886` (`canonical`), `:898` (`reader`); `core/widget.ts:196–280` (reset; keep-snap `:216`, `:258`, `:280`); `core/content.ts:2971` (единственный вызов commit), `:2998` (badge), `:434`, `:3159`, `:3273`, `:3529`, `:3616`, `:3808` (читатели); `core/export-manager.ts:722`, `:1674`, `:1911` (читатели с canonical); `tests/inv-i6-conv-switch.test.js` (8 сценариев).
 5. **Единый JSON-сборщик ручного экспорта**: `options/options.js:927–947`, `utils/export-text-builders.ts:485–505`.
 6. **Пин-гигиена, фикстуры, mutation-check**: `tools/mutation-check.js`, пины из плана
    (`tests/o23-tokens-calibration.test.js:250–253`, `tests/o47-qwen-badge-metric.test.js:190–201`,
@@ -315,7 +314,7 @@ Gemini без изменений: `e1020dbabcfa5a02 | net | 96465 | 75.4 | parti
 
 1. Ни один потребитель не пересчитывает `percent` и не берёт число из живых переменных — поведенческий тест
    из §4 (снимок `1000 / 1 000 000 / 7.7` печатается везде как `1000` и `7.7`).
-2. I1–I6 зелёные; каждая мутация соответствующего фикса роняет свой тест.
+2. I1–I6 зелёные; I6 существует и проверен (2026-11-14, см. §4); каждая мутация соответствующего фикса роняет свой тест.
 3. Реальная приёмка: анонимизированная пара Qwen в `tests/fixtures/export/` (skip-if-absent для живой) —
    `snapshot.tokens` воспроизводится из тела файла, `bodyHash` совпадает.
 4. Строка `ctx-snap` в точке записи содержит `tokens, chars, msgs, attachAdd, bodyHash, src, baseComplete`.
@@ -343,12 +342,17 @@ Gemini без изменений: `e1020dbabcfa5a02 | net | 96465 | 75.4 | parti
   (у этих сервисов нет серверного счётчика — `perplexity-intercept.js:365`, `claude-intercept.js:1192`).
 - **Граница источников после BUG-G: сеть — состав, DOM — `userText`, эхо — валидатор.** Сеть — источник *состава* ходов (какие ходы есть, их порядок, `assistantText`); DOM — источник **только** `userText` для ходов, пришедших без user-части (`resolveUserQuestionForTurn`); эхо — валидатор пары, не источник текста.
 - `fillMissingUserText` — fill-only по каноническому ключу: `assistantText` и состав ходов не меняются; чужой формат DOM — fail-safe (пропуск, не догадка); реплика, отсутствующая и в сети, и в DOM, не восстанавливается (остаточный риск BUG-H).
-- **Граница наблюдаемости барьера `partial`.** Барьер — второй рубеж: при `partial = true`
-  более ранний гейт полноты (`not-complete`, у GSA `probe-running`) останавливает автоэкспорт
-  до `doAutoExportDownload`, поэтому `skip reason=partial` живьём не возникает и не должен.
-  Доказательство — unit c1–c4 (`tests/inv-i4-partial-barrier.test.js`, 13 сценариев); живой
-  инвариант — «пока снимок частичный, файл автоэкспорта не появляется». Переход
-  `partial → false` на GSA — барьер S3 (§A1).
+- **Граница наблюдаемости барьера `partial`.** На GSA барьер недостижим: раньше срабатывает
+  `probe-running` (лог `1794666576356`, 19:27:20). На qwen барьер сработал живьём:
+  19:13:50.387 `verdict=fire reason=threshold` → `[auto-export] skip reason=partial
+  partialReason=incomplete`; 19:13:50.845 перекоммит с `baseComplete=1`; 19:13:51.457 `fired`
+  `qwen-1bfcdd77-2026-11-14_19-13.md`, 51.4 %.
+- **Принятый риск: окно сбора не покрывает пошаговую досборку qwen/Gemini.** Следствия: (а) `stale`
+  живьём не наблюдался, покрытие только unit (`inv-i4` (e): смена `bodyHash` → `stale`, тот же → `incomplete`);
+  (б) первый замер после возврата публикуется по недособранной базе — 19:23:30.984 58 496 / 45.7 %
+  (160 msgs, attach 0, неверное имя модели) → 19:23:39.704 96 236 / 75.2 % → 19:23:45.631 96 521 / 75.4 %,
+  ≈8.7 с. Критерий эскалации: если первый замер даст число **выше** фактического или продержится >15 с —
+  заводить дефект и решать, какую строку §4 слить.
 - **D1–D6 и нумерация §7 не меняются; новых шагов в §7 не появляется.**
 
 ---
