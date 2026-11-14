@@ -49,8 +49,10 @@ function fnDecl(src, name) {
   throw new Error('inv-i3-projection: unbalanced declaration: ' + name);
 }
 
-// Цепочка проекции 1:1 с aiCmCollectExportSource: O-37-нормализация reasoning →
-// эффективный тумблер → санация; aiCmCanonicalizeMessages — вход (канонический массив).
+// Цепочка проекции: эффективный тумблер → (OFF) снятие reasoning/hiddenReasoning у всех
+// сайтов → единственная точка санации. O-37-разложения text→reasoning здесь НЕТ: вход —
+// канонический массив, он уже в файловой форме (секции в text + поле reasoning).
+// aiCmCanonicalizeMessages — вход (канонический массив).
 const FN_NAMES = [
   'aiCmHiddenExportEffectiveOn',
   'aiCmSanitizeEmitUserTexts',
@@ -129,6 +131,34 @@ function mdBodyTexts(md) {
 
 function countOf(text, sub) {
   return String(text).split(sub).length - 1;
+}
+
+/**
+ * Текстовые блоки MD после шапки для НЕ-маркерных сайтов (deepseek/прочие):
+ * роли идут заголовками '## …', тело — до следующего заголовка. Нужен, чтобы
+ * сравнить тело MD с JSON-текстом там, где нет '### USER'/'### ASSISTANT'.
+ */
+function mdBodiesGeneric(md) {
+  const isHeader = function (line) { return /^## /.test(line); };
+  const lines = String(md).split('\n');
+  const blocks = [];
+  let cur = null;
+  for (let i = 0; i < lines.length; i++) {
+    if (isHeader(lines[i])) {
+      if (cur) blocks.push(cur);
+      cur = [];
+      continue;
+    }
+    if (cur) cur.push(lines[i]);
+  }
+  if (cur) blocks.push(cur);
+  return blocks.map(function (block) {
+    let s = 0;
+    let e = block.length;
+    while (s < e && block[s] === '') s++;
+    while (e > s && block[e - 1] === '') e--;
+    return block.slice(s, e).join('\n');
+  });
 }
 
 function stripDates(text) {
@@ -269,11 +299,20 @@ describe('inv-i3 (S5.1): проекция «канонический масси�
       { role: 'assistant', text: 'Ответ', hiddenReasoning: 'Скрытое рассуждение' }];
     const proj = canonApi.project(withHidden, 'qwen');
     expect(proj.mode).toBe('projected');
-    expect(proj.messages[1].reasoning).toBe('Скрытое рассуждение');
+    // ON раскрывает hiddenReasoning В ТЕКСТ секциями файла (includeHiddenExportBlocks) и НЕ
+    // синтезирует поле reasoning: повторное O-37-разложение разъезжало MD и JSON.
+    expect(proj.messages[1].reasoning).toBeUndefined();
     expect(proj.messages[1].hiddenReasoning).toBeUndefined();
-    // Секции в файле собирает сборщик из поля reasoning (ON — сырой режим).
-    const md = Builders.buildMdFromHistory(histFor(proj.messages, { bodyProjection: proj.mode }), 'qwen');
+    expect(proj.messages[1].text).toContain('[REASONING]\nСкрытое рассуждение\n\n[ANSWER]\nОтвет');
+    const hist = histFor(proj.messages, { bodyProjection: proj.mode });
+    const md = Builders.buildMdFromHistory(hist, 'qwen');
     expect(mdBodyTexts(md).join('\n')).toContain('[REASONING]\nСкрытое рассуждение');
+    const json = JSON.parse(Builders.buildJsonFromHistory(hist, 'qwen'));
+    // MD и JSON одного массива: секции уже в text, сборщику нечего переклеивать.
+    expect(json.messages.map(function (m) { return m.text; }).join('\n'))
+      .toBe(mdBodyTexts(md).join('\n'));
+    expect(json.messages[1].reasoning).toBeUndefined();
+    expect(json.messages[1].hiddenReasoning).toBeUndefined();
   });
 
   test('(5) авто (threshold и base-complete) == ручной путь: один массив проекции и одно тело', function () {
@@ -387,9 +426,11 @@ describe('inv-i3 (S5.1): проекция «канонический масси�
     expect(off.messages[0].text).toContain('о2');
 
     const on = makeProjection({ site: 'qwen', userOn: true }).project(src, 'qwen');
-    // ON не теряет ни одного фрагмента (нормализация O-37 может перенести первую пару в поле).
+    // ON не теряет ни одного фрагмента: секции остаются в text, разложения в поле reasoning нет.
+    expect(on.mode).toBe('');
     ['р1', 'р2', 'о1', 'о2'].forEach(function (frag) {
-      expect(on.messages[0].text + '\n' + (on.messages[0].reasoning || '')).toContain(frag);
+      expect(on.messages[0].text).toContain(frag);
+      expect(on.messages[0].reasoning).toBeUndefined();
     });
   });
 
@@ -469,5 +510,117 @@ describe('inv-i3 (S5.1): проекция «канонический масси�
     const plainJson = Builders.buildJsonFromHistory(histFor(proj.messages), 'qwen');
     const projJson = Builders.buildJsonFromHistory(withSrc, 'qwen');
     expect(projJson.length - plainJson.length).toBe(',\n  "bodyProjection": true'.length);
+  });
+
+  test('(14a) qwen ON: секции уже в text, поля reasoning нет — mode пуст, метки/ключа нет, MD==JSON', function () {
+    const api = makeProjection({ site: 'qwen', userOn: true });
+    const src = [
+      { role: 'user', text: 'Вопрос' },
+      { role: 'assistant', text: '[REASONING]\nДумал так\n\n[ANSWER]\nОтвет' }
+    ];
+    const proj = api.project(src, 'qwen');
+    expect(proj.mode).toBe('');
+    expect(proj.messages).toBe(src);                 // тот же массив: ни одного нового байта
+    const hist = histFor(proj.messages, { bodyProjection: proj.mode });
+    const md = Builders.buildMdFromHistory(hist, 'qwen');
+    const json = JSON.parse(Builders.buildJsonFromHistory(hist, 'qwen'));
+    expect(md).not.toContain(LABEL);                 // ON без скрытых полей — метки нет
+    expect('bodyProjection' in json).toBe(false);    // ключа авто-JSON тоже нет
+    expect(countOf(mdBodyTexts(md).join('\n'), '[REASONING]')).toBe(1);
+    expect(json.messages.map(function (m) { return m.text; }).join('\n'))
+      .toBe(mdBodyTexts(md).join('\n'));
+  });
+
+  test('(14b) qwen OFF на том же входе: 0 секций, метка есть, MD==JSON', function () {
+    const api = makeProjection({ site: 'qwen', userOn: false });
+    const src = [
+      { role: 'user', text: 'Вопрос' },
+      { role: 'assistant', text: '[REASONING]\nДумал так\n\n[ANSWER]\nОтвет' }
+    ];
+    const proj = api.project(src, 'qwen');
+    expect(proj.mode).toBe('projected');
+    expect(countOf(JSON.stringify(proj.messages), '[REASONING]')).toBe(0);
+    expect(countOf(JSON.stringify(proj.messages), '[ANSWER]')).toBe(0);
+    const hist = histFor(proj.messages, { bodyProjection: proj.mode });
+    const md = Builders.buildMdFromHistory(hist, 'qwen');
+    const json = JSON.parse(Builders.buildJsonFromHistory(hist, 'qwen'));
+    expect(md.split('\n').filter(function (l) { return l === LABEL; })).toHaveLength(1);
+    expect(json.bodyProjection).toBe(true);
+    expect(countOf(md, '[REASONING]')).toBe(0);
+    expect(json.messages.map(function (m) { return m.text; }).join('\n'))
+      .toBe(mdBodyTexts(md).join('\n'));
+  });
+
+  test('(14c) ON + hiddenReasoning: тело меняется, метка уместна, MD==JSON', function () {
+    const api = makeProjection({ site: 'qwen', userOn: true });
+    const src = [
+      { role: 'user', text: 'Вопрос' },
+      { role: 'assistant', text: '[REASONING]\nПервое рассуждение\n\n[ANSWER]\nПервый ответ', reasoning: 'Первое рассуждение' },
+      { role: 'user', text: 'Ещё вопрос' },
+      { role: 'assistant', text: 'Второй ответ', hiddenReasoning: 'Скрытое рассуждение' }
+    ];
+    const proj = api.project(src, 'qwen');
+    expect(proj.mode).toBe('projected');
+    expect(proj.messages[1].text).toBe('[REASONING]\nПервое рассуждение\n\n[ANSWER]\nПервый ответ');
+    expect(proj.messages[3].text).toBe('[REASONING]\nСкрытое рассуждение\n\n[ANSWER]\nВторой ответ');
+    expect(proj.messages[3].hiddenReasoning).toBeUndefined();
+    const hist = histFor(proj.messages, { bodyProjection: proj.mode });
+    const md = Builders.buildMdFromHistory(hist, 'qwen');
+    const json = JSON.parse(Builders.buildJsonFromHistory(hist, 'qwen'));
+    expect(md.split('\n').filter(function (l) { return l === LABEL; })).toHaveLength(1);
+    expect(json.bodyProjection).toBe(true);
+    expect(json.messages.map(function (m) { return m.text; }).join('\n'))
+      .toBe(mdBodyTexts(md).join('\n'));
+  });
+
+  test('(14d) авто-путь и union проецируются ровно как ручной (ON и OFF)', function () {
+    [true, false].forEach(function (userOn) {
+      const api = makeProjection({ site: 'qwen', userOn: userOn });
+      const canon = api.canon(RAW_QWEN, 'qwen');
+      const auto = api.project(Canonical.canonicalBody(CONV_ID, canon).messages, 'qwen');
+      const sb = manualSandbox({ canon: canon, api: api, baseComplete: true });
+      runSlice(MANUAL_CODE, sb.ctx);
+      expect(sb.resp).toHaveLength(1);
+      expect(sb.resp[0].data.messages).toEqual(auto.messages);
+      expect(sb.resp[0].data.bodyProjection).toBe(auto.mode);
+
+      const unionRaw = [
+        { role: 'user', text: 'Архивный вопрос' },
+        { role: 'assistant', text: 'Архивный ответ' },
+        { role: 'user', text: 'Живой вопрос' },
+        { role: 'assistant', text: 'Живой ответ', reasoning: 'Живое рассуждение' }
+      ];
+      const unionAuto = api.project(api.canon(unionRaw, 'qwen'), 'qwen');
+      const sbU = manualSandbox({ api: api, baseComplete: false, union: unionRaw, snapshot: { partial: true } });
+      runSlice(MANUAL_CODE, sbU.ctx);
+      expect(sbU.resp).toHaveLength(1);
+      expect(sbU.resp[0].data.messages).toEqual(unionAuto.messages);
+      expect(sbU.resp[0].data.bodyProjection).toBe(unionAuto.mode);
+    });
+  });
+
+  test('(14e) deepseek OFF, живая форма: поле reasoning + секции в text — 0 [REASONING], поля нет, метка есть, MD==JSON', function () {
+    const api = makeProjection({ site: 'deepseek', userOn: false });
+    // Живая форма сетевого источника: секции уже в text И продублированы полем reasoning.
+    const src = [
+      { role: 'user', text: 'Вопрос' },
+      { role: 'assistant', text: '[REASONING]\nДумал так\n\n[ANSWER]\nОтвет', reasoning: 'Думал так' }
+    ];
+    const proj = api.project(src, 'deepseek');
+    expect(proj.mode).toBe('projected');
+    expect(proj.messages[1].reasoning).toBeUndefined();
+    expect(proj.messages[1].text).toBe('Ответ');
+    expect(countOf(JSON.stringify(proj.messages), '[REASONING]')).toBe(0);
+    expect(countOf(JSON.stringify(proj.messages), '[ANSWER]')).toBe(0);
+
+    const hist = histFor(proj.messages, { bodyProjection: proj.mode, site: 'deepseek' });
+    const md = Builders.buildMdFromHistory(hist, 'deepseek');
+    const json = JSON.parse(Builders.buildJsonFromHistory(hist, 'deepseek'));
+    expect(md.split('\n').filter(function (l) { return l === LABEL; })).toHaveLength(1);
+    expect(json.bodyProjection).toBe(true);
+    // Раньше поле reasoning переклеивало [REASONING] в MD (messageTextWithReasoning) —
+    // теперь тело MD байт-в-байт равно JSON-тексту.
+    expect(countOf(md, '[REASONING]')).toBe(0);
+    expect(mdBodiesGeneric(md).join('\n')).toBe(json.messages.map(function (m) { return m.text; }).join('\n'));
   });
 });

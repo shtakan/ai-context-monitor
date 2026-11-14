@@ -2280,12 +2280,22 @@ function aiCmBuildCanonicalBody(convId) {
 // ========== S5.1 (I3, ADR-001): проекция «канонический массив → массив файла» ==========
 // ОДНА функция на четыре точки применения (ручной/авто × обычный/union). Снимок ([ctx-snap],
 // bodyHash) и метрика (tokens/limit/percent/src/partial) сюда не входят: на входе только
-// массив сообщений файла. Цепочка 1:1 с aiCmCollectExportSource: O-37-нормализация reasoning →
-// эффективное значение тумблера (aiCmHiddenExportEffectiveOn) → снятие поля reasoning у qwen
-// при эффективном OFF (O-7) → единственная точка санации aiCmSanitizeEmitUserTexts.
-// Канонический массив не мутируется: сначала копии сообщений, дальше работа только с копиями.
-// mode='projected' — ТОЛЬКО при фактическом изменении тела (длина массива, text или поле
-// reasoning построчно); иначе mode='' и ТОТ ЖЕ объект массива (ни одного нового байта).
+// массив сообщений файла. Канонический массив УЖЕ несёт файловые секции: aiCmCanonicalizeMessages
+// сложил reasoning в text и оставил поле reasoning, поэтому O-37-разложение text→reasoning
+// здесь НЕ повторяется (его делают точки сбора/канонизации; повтор разъезжал MD и JSON).
+// ON — единственное преобразование: скрытые поля захвата (их имена знает только конвейер
+// utils/export-emit-pipeline.ts) раскрываются секциями файла через aiCmSanitizeEmitUserTexts
+// (includeHiddenExportBlocks, guard text.indexOf(reasoning)===-1). OFF — снятие поля reasoning
+// у ВСЕХ сайтов с эффективным OFF (aiCmHiddenExportEffectiveOn: qwen/deepseek — force-exclude,
+// прочие при reasoning — авто-ON), иначе рендер (utils/export-text-builders.ts:
+// messageTextWithReasoning) переклеил бы секции [REASONING] в MD из поля reasoning, а JSON
+// отдал бы text без секций — MD != JSON. Скрытые поля захвата снимает сама санация в ОБЕИХ
+// ветках (OFF — stripHiddenFields, ON — includeHiddenExportBlocks), поэтому этот модуль их
+// по именам не трогает (пин O-7). Текст чистит единственная точка санации
+// aiCmSanitizeEmitUserTexts (sanitizeEmitMessages -> stripReasoningSections). Канонический
+// массив не мутируется: сначала копии сообщений, дальше работа только с копиями.
+// mode='projected' — ТОЛЬКО при фактическом изменении тела (длина массива или любое поле
+// сообщения); иначе mode='' и ТОТ ЖЕ объект массива (ни одного нового байта).
 function aiCmProjectFileMessages(msgs, site) {
   var src = Array.isArray(msgs) ? msgs : [];
   var copies = [];
@@ -2293,31 +2303,38 @@ function aiCmProjectFileMessages(msgs, site) {
     var m = src[i];
     copies.push((m && typeof m === 'object') ? Object.assign({}, m) : m);
   }
-  var prepared = (typeof aiCmPrepareReasoningForExport === 'function')
-    ? aiCmPrepareReasoningForExport(copies) : copies;
   var userOn = (typeof aiCmIncludeHiddenInExport !== 'undefined') && aiCmIncludeHiddenInExport === true;
   var hiddenEffective = (typeof aiCmHiddenExportEffectiveOn === 'function')
-    ? aiCmHiddenExportEffectiveOn(prepared) : userOn;
-  // O-7: у qwen эффективный OFF снимает поле reasoning ДО санации — иначе сборщики
-  // безусловно вернули бы секции [REASONING] в файл.
-  if (!hiddenEffective && typeof aiCmReasoningExportSite === 'function' && aiCmReasoningExportSite()) {
-    for (var r = 0; r < prepared.length; r++) {
-      if (prepared[r] && typeof prepared[r] === 'object') delete prepared[r].reasoning;
+    ? aiCmHiddenExportEffectiveOn(copies) : userOn;
+  // O-7/D-O41: эффективный OFF снимает поле reasoning у КАЖДОГО сайта (не только qwen):
+  // иначе deepseek-OFF оставлял reasoning в теле, и MD-рендер возвращал секции в файл.
+  if (!hiddenEffective) {
+    for (var r = 0; r < copies.length; r++) {
+      if (copies[r] && typeof copies[r] === 'object') delete copies[r].reasoning;
     }
   }
   var out = (typeof aiCmSanitizeEmitUserTexts === 'function')
-    ? aiCmSanitizeEmitUserTexts(prepared) : prepared;
-  if (!Array.isArray(out)) out = prepared;
+    ? aiCmSanitizeEmitUserTexts(copies) : copies;
+  if (!Array.isArray(out)) out = copies;
   var changed = (out.length !== src.length);
   if (!changed) {
     for (var j = 0; j < src.length; j++) {
       var a = src[j] || {};
       var b = out[j] || {};
-      var at = (typeof a.text === 'string') ? a.text : ((a.text == null) ? '' : String(a.text));
-      var bt = (typeof b.text === 'string') ? b.text : ((b.text == null) ? '' : String(b.text));
-      var ar = (typeof a.reasoning === 'string') ? a.reasoning : '';
-      var br = (typeof b.reasoning === 'string') ? b.reasoning : '';
-      if (at !== bt || ar !== br) { changed = true; break; }
+      var ka = Object.keys(a);
+      var kb = Object.keys(b);
+      // Сравнение по ВСЕМ полям без перечисления имён: тело изменено, если санация
+      // сняла/добавила/переписала любое поле (текст, reasoning, служебные захваты).
+      if (ka.length !== kb.length) { changed = true; break; }
+      for (var k = 0; k < ka.length; k++) {
+        var f = ka[k];
+        var va = a[f];
+        var vb = b[f];
+        var sa = (typeof va === 'string') ? va : JSON.stringify(va === undefined ? null : va);
+        var sb = (typeof vb === 'string') ? vb : JSON.stringify(vb === undefined ? null : vb);
+        if (sa !== sb) { changed = true; break; }
+      }
+      if (changed) break;
     }
   }
   if (!changed) return { messages: src, mode: '' };
