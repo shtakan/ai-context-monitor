@@ -371,8 +371,8 @@ describe('O-32 (4): единый канонический ключ во всех
     expect(fnDecl(INTERCEPT, 'applySnapshot')).toContain('seedSeenKeys(lastFullTurns)');
     expect(fnDecl(INTERCEPT, 'applyTurns')).toContain('seedSeenKeys(lastFullTurns)');
     expect(fnDecl(INTERCEPT, 'mergeTurns')).toContain('seedSeenKeys(lastFullTurns)');
-    expect(fnDecl(INTERCEPT, 'mergeTurns')).toContain('var key2 = gsaTurnKey(nt);');
-    expect(fnDecl(INTERCEPT, 'mergeStreamTurns')).toContain('var key = gsaTurnKey(t);');
+    expect(fnDecl(INTERCEPT, 'mergeTurns')).toContain('upgradeTurnsByKey(');
+    expect(fnDecl(INTERCEPT, 'mergeStreamTurns')).toContain('upgradeTurnsByKey(');
     // сырая пара (userText||assistantText) как ключ дедупа больше НЕ используется
     expect(INTERCEPT).not.toContain("seenKeys[(lastFullTurns[i].userText || '') + '||' + (lastFullTurns[i].assistantText || '')]");
     // applyTurns — монотонное слияние «накопитель ∪ снимок» (база не подменяется куском),

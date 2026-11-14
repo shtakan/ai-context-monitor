@@ -631,18 +631,12 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
 
   // ---- слияние стрим-ходов с полной базой (без уменьшения) ----
   function mergeStreamTurns(streamTurns, threadId) {
-    var merged = [];
-    var seen = {};
-    function addTurn(t) {
-      // O-32: ключ дедупа — канонический (форма текста хода не важна): стрим-ход и ход базы,
-      // описанные разными формами одного и того же ответа, больше не удваивают базу.
-      var key = gsaTurnKey(t);
-      if (key !== '||' && seen[key]) return;
-      seen[key] = true;
-      merged.push({ id: (t && t.id) || ('x' + merged.length), userText: t ? t.userText : null, assistantText: t ? t.assistantText : null });
-    }
-    for (var i = 0; i < lastFullTurns.length; i++) addTurn(lastFullTurns[i]);
-    for (var j = 0; j < streamTurns.length; j++) addTurn(streamTurns[j]);
+    // BUG-F: неполная ветка сливается по КАНОНИЧЕСКОМУ ключу с ПОВЫШЕНИЕМ формы: стрим-ход
+    // того же вопроса в A-only форме больше не отбрасывается как «уже виденный» дубль, а
+    // замещает бедную форму на месте (id и байты assistantText — богатой формы).
+    var upgradeTurnsByKey = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.mergeTurnsByKey) ||
+      function (a, b) { return a.concat(b); };
+    var merged = upgradeTurnsByKey(lastFullTurns, streamTurns);
     // O-32 (фикс C): префикс-совместимые формы одного хода схлопываются до записи в кэш.
     lastFullTurns = dedupeTurnsForCache(merged);
     seedSeenKeys(lastFullTurns);
@@ -692,15 +686,12 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       lastFullTurns = newTurns.slice();
       seedSeenKeys(lastFullTurns);
     } else {
-      for (var j = 0; j < newTurns.length; j++) {
-        var nt = newTurns[j];
-        var key2 = gsaTurnKey(nt);
-        if (key2 === '||') continue;
-        if (!seenKeys[key2]) {
-          seenKeys[key2] = true;
-          lastFullTurns.push(nt);
-        }
-      }
+      // BUG-F: неполная ветка сливается по КАНОНИЧЕСКОМУ ключу с ПОВЫШЕНИЕМ формы:
+      // A-only эхо-ход того же вопроса больше не отбрасывается как «уже виденный» дубль,
+      // а замещается полной формой на месте (id и байты assistantText — богатой формы).
+      var upgradeTurnsByKey = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.mergeTurnsByKey) ||
+        function (a, b) { return a.concat(b); };
+      lastFullTurns = upgradeTurnsByKey(lastFullTurns, newTurns);
     }
     // O-32 (фикс C): база и её кэш-сегмент не содержат дублей — включая префикс-совместимые
     // формы одного ответа (прерванный стрим / маркеры цитат). Дедуп ДО сборки messages:

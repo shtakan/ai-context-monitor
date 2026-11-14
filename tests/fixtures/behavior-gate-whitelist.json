@@ -311,6 +311,10 @@
     "count": 1,
     "reason": "legacy-pin"
   },
+  "tests/gsa-f-merge-upgrade.test.js": {
+    "count": 1,
+    "reason": "legacy-pin"
+  },
   "tests/gsa-o27-captcha-base-guard.test.js": {
     "count": 6,
     "reason": "legacy-pin"
