@@ -727,7 +727,7 @@ interface AiCmContextSnapshot {
   bodyHash?: string;
   baseComplete?: boolean;
   partial: boolean;
-  partialReason?: 'incomplete';
+  partialReason?: 'incomplete' | 'stale' | 'shrank';
   stale?: boolean;
   ageMs?: number;
 }
@@ -851,6 +851,7 @@ function aiCmCommitContextSnapshot(
     && prev.percent === next.percent
     && prev.limit === next.limit
     && prev.partial === next.partial
+    && prev.partialReason === next.partialReason
     && (prev.baseComplete === true) === (next.baseComplete === true)
     && (prev.bodyHash || '') === (next.bodyHash || '');
   return same ? prev : next;

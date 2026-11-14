@@ -433,6 +433,13 @@ export function buildMdFromHistory(history: ExportHistory, platform?: string): s
   // ни одного нового байта. Локализуемое сообщение не заводим: это машинная метка,
   // а русский литерал сломал бы гейт i18n-locales (EXPORT_HEADER_LITERALS).
   if (typeof h.src === 'string' && h.src) lines.push('metric-src: ' + h.src);
+  // S2.3 (ADR-001, I4): частичный снимок помечается в ТЕЛЕ файла машинными ASCII-строками —
+  // ключ i18n не заводим (_locales вне скоупа), локализуемый литерал сломал бы гейт
+  // EXPORT_HEADER_LITERALS. Полный снимок → ни одного нового байта (ср. гейт по src выше).
+  if (h.partial === true) {
+    lines.push('metric-partial: 1');
+    lines.push('metric-partial-reason: ' + (h.partialReason || 'incomplete'));
+  }
   lines.push('');
   // Two-Tier (v89): метка достоверности источника — отдельным блоком сразу после шапки,
   // только Gemini и только когда метка есть в истории (см. aiCmGetSourceTier).
@@ -500,6 +507,10 @@ export function buildJsonFromHistory(history: ExportHistory, platform?: string):
     // Two-Tier (v89): аддитивное поле метаданных. undefined → JSON.stringify ключ НЕ
     // добавляет, поэтому у прочих платформ и у Gemini без метки байты прежние.
     sourceTier: h.sourceTier,
+    // S2.3 (ADR-001, I4): аддитивные метки частичности в теле json. undefined (полный
+    // снимок) → JSON.stringify ключ НЕ добавляет, байты прежних платформ не меняются.
+    partial: (h.partial === true) ? true : undefined,
+    partialReason: (h.partial === true) ? (h.partialReason || 'incomplete') : undefined,
     messages: Array.isArray(h.messages) ? h.messages : []
   }, null, 2);
 }

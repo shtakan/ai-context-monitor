@@ -3231,6 +3231,11 @@ function processAndSend(): void {
           }
         } catch (eQadN) { }
         try {
+          // S2.3 (ADR-001, I4): частичность берём из ЕДИНОГО снимка — того же читателя,
+          // что использует барьер автоэкспорта. typeof-гард: срез-песочницы без state.ts
+          // видят null → меток нет (байты прежние).
+          var snapPartNet = (typeof aiCmReadContextSnapshot === 'function')
+            ? aiCmReadContextSnapshot(emitConvA || lastEmitConvId || '') : null;
           // v31: дублируем в per-host ключ aiCmHistory:<host> (перезапись, без накопления)
           var histSnapshot = {
             host: window.location.hostname,
@@ -3250,6 +3255,11 @@ function processAndSend(): void {
             // T1 (v1.16): источник истории — архив (первый ярус) или live (сеть/DOM)
             sourceKind: (function () { try { var si = aiCmSourceInfo(); return si ? si.kind : ''; } catch (eSi) { return ''; } })(),
             sourceLabel: (function () { try { var si2 = aiCmSourceInfo(); return si2 ? si2.label : ''; } catch (eSi2) { return ''; } })(),
+            // S2.3 (I4): метки частичности в payload/теле файла; при partial !== true
+            // ключи не появляются (undefined → JSON.stringify их отбрасывает).
+            partial: (snapPartNet && snapPartNet.partial === true) ? true : undefined,
+            partialReason: (snapPartNet && snapPartNet.partial === true)
+              ? ((snapPartNet.partialReason) || 'incomplete') : undefined,
             messages: buildHistoryMessages()
           };
           var histPatch = { aiCmHistory: histSnapshot };
@@ -3332,6 +3342,21 @@ function processAndSend(): void {
           };
           var histPatchS24 = { aiCmHistory: histSnapshotS24 };
           histPatchS24['aiCmHistory:' + window.location.hostname] = aiCmHostHistoryRecord(histSnapshotS24);
+          // S2.3 (ADR-001, I4): метки частичности — из ЕДИНОГО снимка (тот же читатель и cid,
+          // что у барьера/сетевого пути). Дописываем аддитивно через Object.assign: при
+          // partial !== true объекта нет — ключи не появляются, storage-байты прежние.
+          // (Литерал выше не расширяем: source-пин окна адаптерной ветки O-35 держит запись
+          // aiCmHistory:<host> в пределах 3400 символов от cidS24.)
+          var snapPartAd = (typeof aiCmReadContextSnapshot === 'function')
+            ? aiCmReadContextSnapshot(cidS24) : null;
+          if (snapPartAd && snapPartAd.partial === true) {
+            var partFieldsAd = {
+              partial: true,
+              partialReason: (snapPartAd.partialReason || 'incomplete')
+            };
+            Object.assign(histSnapshotS24, partFieldsAd);
+            Object.assign(histPatchS24['aiCmHistory:' + window.location.hostname], partFieldsAd);
+          }
           chrome.storage.local.set(histPatchS24);
         }
       }
@@ -3575,7 +3600,11 @@ if (isExtensionValid()) {
       // сеть, ONE-SIDE → live + маркер). Не дождались/сети нет → прежний live-путь БЕЗ
       // изменения байтов файла; isLowConfidenceBase и порядок [REASONING]/[ANSWER] не тронуты.
       var replyManualExport = function () {
-        var manualSnapshot = /** @type {{host: string, convId: string, site: string, model: string, tokens: number, limit: number, percent: number, src?: string, updatedAt: number, isLowConfidenceBase: boolean, sourceTier?: string, messages: Array<{role?: string, text?: string}>}} */
+        // S2.3 (ADR-001, I4): ручной файл (MD/JSON) несёт те же метки, что и авто-путь —
+        // из того же снимка. typeof-гард: срез-песочницы без state.ts → меток нет.
+        var snapPartMan = (typeof aiCmReadContextSnapshot === 'function')
+          ? aiCmReadContextSnapshot(curCidExp) : null;
+        var manualSnapshot = /** @type {{host: string, convId: string, site: string, model: string, tokens: number, limit: number, percent: number, src?: string, updatedAt: number, isLowConfidenceBase: boolean, sourceTier?: string, partial?: boolean, partialReason?: 'incomplete' | 'stale' | 'shrank', messages: Array<{role?: string, text?: string}>}} */
           ({
             host: window.location.hostname,
             convId: curCidExp,
@@ -3595,6 +3624,10 @@ if (isExtensionValid()) {
             // снимка. undefined у прочих сервисов/без моста → в storage ключ не появляется,
             // файл и ручной экспорт байтово прежние.
             sourceTier: (typeof aiCmGetSourceTier === 'function') ? aiCmGetSourceTier() : undefined,
+            // S2.3 (I4): частичность ручного файла; при partial !== true ключи не появляются.
+            partial: (snapPartMan && snapPartMan.partial === true) ? true : undefined,
+            partialReason: (snapPartMan && snapPartMan.partial === true)
+              ? ((snapPartMan.partialReason) || 'incomplete') : undefined,
             messages: buildHistoryMessages()
           });
         // O-36 (D1): у сервиса без сети (qwen) база подтверждена записью DOM-адаптера —

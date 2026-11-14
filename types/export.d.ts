@@ -122,6 +122,15 @@ export interface ExportHistory {
   /** Two-Tier-метка; печатается только для site === 'gemini'. */
   sourceTier?: string;
 
+  /**
+   * S2.3 (ADR-001): снимок частичный — файл (MD/JSON) несёт метки в теле, автоэкспорт
+   * не стартует. Полей ровно два и оба аддитивные; полный снимок меток не добавляет.
+   */
+  partial?: boolean;
+
+  /** S2.3 (ADR-001): причина частичности (словарь расширяется только здесь). */
+  partialReason?: 'incomplete' | 'stale' | 'shrank';
+
   /** Сообщения снимка. */
   messages?: ExportMessage[];
 }

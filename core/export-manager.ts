@@ -715,6 +715,11 @@ function aiCmWriteCurrentHistory(): void {
   try {
     if (!isExtensionValid() || !baseSeen || !baseText) return;
     var cid = lastEmitConvId || getCurrentConvId() || '';
+    // S2.3 (ADR-001): частичность — только из ЕДИНОГО снимка (его же читает барьер),
+    // не пересчитываем: снимок единственный владелец partial/partialReason.
+    // typeof-гард: срез-песочницы без state.ts получают null → меток нет (байты прежние).
+    var snapPartHist = (typeof aiCmReadContextSnapshot === 'function')
+      ? aiCmReadContextSnapshot(cid || '') : null;
     var mid = lastResolvedModelId;
     var dispLimit = computeEffectiveLimit(mid);
     // v2.6 (R1): tokens/limit/percent снимка истории — из ЕДИНОГО снимка метрики, который
@@ -768,6 +773,11 @@ function aiCmWriteCurrentHistory(): void {
       // typeof-гард — прецедент срез-песочниц тестов (как у aiCmUnionFileMessages): там, где
       // хелпер не включён в срез, метка просто отсутствует — байты прежние.
       sourceTier: (typeof aiCmGetSourceTier === 'function') ? aiCmGetSourceTier() : undefined,
+      // S2.3 (ADR-001): метки частичности в storage-снимке (его читает options при ручном
+      // экспорте). undefined у полного снимка → ключей нет, прежние снимки байтово те же.
+      partial: (snapPartHist && snapPartHist.partial === true) ? true : undefined,
+      partialReason: (snapPartHist && snapPartHist.partial === true)
+        ? ((snapPartHist.partialReason) || 'incomplete') : undefined,
       messages: msgsWrite
     };
     var histPatch: Record<string, any> = { aiCmHistory: histSnapshot };
@@ -1650,6 +1660,23 @@ function aiCmAutoExportStartDownload(content: string, file: string, fmt: string)
 // не может ни задвоить файл, ни потерять латч; при недоступной сети поведение прежнее.
 function doAutoExportDownload(cid: string | null, percentage: number, reason: string, netSynced?: boolean): void {
   try {
+    // S2.3 (ADR-001, I4, D4): БАРЬЕР частичного снимка — единственная точка, до files-drain
+    // и до сетевого дозапроса. Пока снимок partial, автоэкспорт не стартует: файл не
+    // пишется, а латч fired (он ниже) не выставляется, поэтому после «дозревания» базы
+    // обычный путь сработает как раньше. pre-trim идёт мимо гейта: это независимый
+    // одноразовый экспорт по обрезке. Fail-open: читателя снимка нет (срез-песочницы)
+    // или чтение бросило — поведение прежнее, файл пишется.
+    if (reason !== 'pre-trim') {
+      var snapPartD = null;
+      try {
+        snapPartD = (typeof aiCmReadContextSnapshot === 'function') ? aiCmReadContextSnapshot(cid || '') : null;
+      } catch (ePart) { snapPartD = null; }
+      if (snapPartD && snapPartD.partial === true) {
+        debugLog('log', '[AI CM][auto-export] skip reason=partial convId=' + cid +
+          ' partialReason=' + ((snapPartD.partialReason) || 'incomplete'));
+        return;
+      }
+    }
     // v2.0.35: файл не пишем, пока MAIN-мир догружает текст вложений в снимок
     // (иначе в нём заглушка вместо содержимого). Ожидание очереди — общий хелпер
     // base-handler (рядом с дренажом DeepSeek/Qwen, загружен раньше этого модуля):
@@ -1875,6 +1902,10 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
           var snapCalc = Math.round(snapTokens / dispLimitAuto * 1000) / 10;
           if (snapCalc !== snapPercent) snapPercent = snapCalc;
         }
+        // S2.3 (ADR-001): частичность — из того же читателя, что у барьера (единственный
+        // владелец partial/partialReason). typeof-гард — прецедент срез-песочниц тестов.
+        var snapPartAuto = (typeof aiCmReadContextSnapshot === 'function')
+          ? aiCmReadContextSnapshot(cid || '') : null;
         var hist = {
           site: (currentAdapter && currentAdapter.siteName) || '',
           model: ModelConfig.getModel(lastResolvedModelId || '')?.name || '',
@@ -1887,6 +1918,12 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
           // сборщики TXT/MD ставят её первой строкой/блоком только для Gemini.
           // typeof-гард — как у снимка истории выше (срез-песочницы тестов).
           sourceTier: (typeof aiCmGetSourceTier === 'function') ? aiCmGetSourceTier() : undefined,
+          // S2.3 (ADR-001): метки частичности в ТЕЛЕ авто-файла. Читатель тот же, что у
+          // барьера (единственный владелец partial/partialReason), а не пересчёт.
+          // typeof-гард: срез-песочницы без state.ts → ключей нет (байты прежние).
+          partial: (snapPartAuto && snapPartAuto.partial === true) ? true : undefined,
+          partialReason: (snapPartAuto && snapPartAuto.partial === true)
+            ? ((snapPartAuto.partialReason) || 'incomplete') : undefined,
           messages: msgs
         };
         var content = (fmt === 'md')

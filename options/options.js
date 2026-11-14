@@ -958,6 +958,10 @@ function buildJsonText(hist) {
     limit: (hist && typeof hist.limit === 'number') ? hist.limit : 0,
     percent: (hist && typeof hist.percent === 'number') ? hist.percent : 0,
     src: (hist && hist.src) || undefined,
+    // S2.3 (ADR-001): ручной файл тоже несёт метки частичности — те же два ключа, что у
+    // автоэкспорта. Полный снимок → undefined, JSON.stringify ключ НЕ добавляет (байты прежние).
+    partial: (hist && hist.partial === true) ? true : undefined,
+    partialReason: (hist && hist.partial === true) ? ((hist.partialReason) || 'incomplete') : undefined,
     messages: (hist && Array.isArray(hist.messages)) ? hist.messages : []
   }, null, 2);
 }
