@@ -954,8 +954,9 @@ function buildJsonText(hist) {
   // авто-пути (core/export-manager.ts:1933-1939); метка siteLabels остаётся только в MD-шапке
   // (getPlatform выше) — решение «MD/TXT-шапки в S5 не меняем». sourceTier/partial приходят
   // из снимка и печатаются сборщиком (utils/export-text-builders.ts:492-516).
+  var h = hist || cachedHistory;
   return AiCmExportBuilders
-    ? AiCmExportBuilders.buildJsonFromHistory(hist || cachedHistory, (hist && hist.site) || 'AI Chat')
+    ? AiCmExportBuilders.buildJsonFromHistory(h, (h && h.site) || 'AI Chat')
     : '';
 }
 

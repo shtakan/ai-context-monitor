@@ -233,7 +233,7 @@ describe('inv-i3 (S5): MD и JSON одного нажатия — один ка�
     const mod = loadPopup();
     const hist = {
       site: 'gemini', model: 'Gemini 2.5 Pro',
-      tokens: 12000, limit: 1000000, percent: 1.2, src: 'net', sourceTier: 'net',
+      tokens: 12000, limit: 1000000, percent: 1.2, src: 'net', sourceTier: '[BEST-EFFORT: LIVE CAPTURE]',
       messages: [
         { role: 'user', text: 'Вопрос' },
         { role: 'assistant', text: 'Ответ' }
@@ -241,13 +241,14 @@ describe('inv-i3 (S5): MD и JSON одного нажатия — один ка�
     };
     const json = JSON.parse(mod.buildJsonText(hist));
     expect(json.platform).toBe('gemini');            // сырой ключ сайта
-    expect(json.sourceTier).toBe('net');
+    expect(json.sourceTier).toBe('[BEST-EFFORT: LIVE CAPTURE]');
     expect(json.src).toBe('net');
 
     const md = mod.buildMdText(hist);
     const headerLine = md.split('\n').filter(function (line) { return /^Платформа: /.test(line); })[0];
     expect(headerLine).toBe('Платформа: Gemini');    // метка siteLabels — только в MD
     expect(md).toContain('metric-src: net');
+    expect(md).toContain('[BEST-EFFORT: LIVE CAPTURE]');   // ярус из того же снимка
     expect(md).not.toContain('Платформа: gemini');
     // JSON чужой метки не несёт
     expect(JSON.stringify(json.platform)).not.toContain('Gemini');

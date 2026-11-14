@@ -9,8 +9,9 @@
 
 'use strict';
 
-const { openOptionsExportGate } = require('./helpers/options-export-gate');
+const { openOptionsExportGate, setupDom, setupChrome } = require('./helpers/options-export-gate');
 const { loadOptions } = require('./helpers/load-options.js');
+const { loadEsmGlobal } = require('./helpers/load-esm.js');
 
 function loadExportModule() {
   openOptionsExportGate({ history: null });
@@ -37,5 +38,23 @@ describe('v1.9: src в ручном JSON-экспорте', function () {
       site: 'qwen', tokens: 1, limit: 100, percent: 1, messages: []
     }));
     expect(Object.prototype.hasOwnProperty.call(json, 'src')).toBe(false);
+  });
+
+  test('без аргумента platform берётся из того же cachedHistory', function () {
+    document.body.innerHTML = '';
+    setupDom();
+    setupChrome({
+      host: 'gemini.google.com',
+      tabUrl: 'https://gemini.google.com/app/x',
+      history: {
+        site: 'gemini', host: 'gemini.google.com', model: 'Gemini 2.5 Pro',
+        tokens: 1, limit: 100, percent: 1,
+        messages: [{ role: 'user', text: 'привет' }]
+      }
+    });
+    window.AiCmExportBuilders = loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
+    const mod = loadOptions();
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+    expect(JSON.parse(mod.buildJsonText()).platform).toBe('gemini');
   });
 });
