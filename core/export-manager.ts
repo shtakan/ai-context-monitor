@@ -1781,10 +1781,8 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
         (reason === 'pre-trim' ? '-pretrim' : '') + '.' + fmt;
     }
     var msgs = buildHistoryMessages();
-    // v82 (D3): защита от частичного выстрела — сеть ожидалась (baseSeen=true),
-    // но сетевые тексты пусты → skip БЕЗ установки латча (поздний корректный
-    // экспорт останется возможен). Для Gemini путь до этого не доходит:
-    // гейт лоадера гарантирует применение базы до fired (поведение 1:1).
+    // v82 (D3): сеть ожидалась (baseSeen=true), но тексты пусты → skip БЕЗ установки латча
+    // (поздний корректный экспорт останется возможен); Gemini до этого не доходит — гейт лоадера.
     if (baseSeen === true && lastBaseTexts.length === 0) {
       debugLog('log', '[AI CM][auto-export] skip reason=source-mismatch convId=' + cid +
         ' baseSeen=1 networkTexts=0');
@@ -1796,6 +1794,7 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
     // поздний re-check: ни один из них не может выгрузить одну архивную часть.
     var baseSrc = aiCmExportBaseSource(cid, msgs);
     var srcTag = 'local'; // какой массив реально уходит в файл
+    var autoProj = '';    // S5.1 (I3): режим проекции тела файла ('' | 'projected')
     if (baseSrc && baseSrc.blocked === true) {
       debugLog('log', '[AI CM][auto-export] skip reason=archive-pending-live convId=' + cid +
         ' baseMsgs=' + baseSrc.baseCount + ' liveMsgs=' + baseSrc.liveCount +
@@ -1808,15 +1807,16 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
         ' liveMsgs=' + baseSrc.liveCount + ' archiveMsgs=' + baseSrc.archiveCount);
       msgs = baseSrc.msgs;
       srcTag = 'base-union';
+      if (typeof aiCmProjectFileMessages === 'function') { var projU = aiCmProjectFileMessages(msgs, (currentAdapter && currentAdapter.siteName) || ''); msgs = projU.messages; autoProj = projU.mode; }
     }
-    // S1.3 (inv-i3): обычный (не-union) автоэкспорт строится из ТОГО ЖЕ канонического массива,
-    // что и тело снимка [ctx-snap]. Gemini union (srcTag='base-union') НЕ заменяем: объединение
-    // архив+live остаётся известным partial-исключением до S3 — иначе body.text !== effective
-    // и снимок потеряет chars/msgs/bodyHash.
+    // S1.3 (inv-i3): обычный автоэкспорт — из ТОГО ЖЕ канонического массива, что и [ctx-snap];
+    // Gemini union (srcTag='base-union') не заменяем: объединение архив+live — partial-исключение
+    // до S3 (иначе body.text !== effective и снимок потеряет chars/msgs/bodyHash).
     if (baseSeen === true && srcTag !== 'base-union' &&
         typeof aiCmBuildCanonicalBody === 'function') {
       var canonAuto = aiCmBuildCanonicalBody(cid);
       if (canonAuto && canonAuto.messages && canonAuto.messages.length) msgs = canonAuto.messages;
+      if (typeof aiCmProjectFileMessages === 'function') { var projA = aiCmProjectFileMessages(msgs, (currentAdapter && currentAdapter.siteName) || ''); msgs = projA.messages; autoProj = projA.mode; }
     }
     // v1.19 (E-1): паспорт in-memory истории стреляющей вкладки. convId — lastEmitConvId
     // (та же запись EMIT, что питает бейдж и pct); у GSA url-id нет — историю адресует
@@ -1927,7 +1927,7 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
           // typeof-гард: срез-песочницы без state.ts → ключей нет (байты прежние).
           partial: (snapPartAuto && snapPartAuto.partial === true) ? true : undefined,
           partialReason: (snapPartAuto && snapPartAuto.partial === true)
-            ? ((snapPartAuto.partialReason) || 'incomplete') : undefined,
+            ? ((snapPartAuto.partialReason) || 'incomplete') : undefined, bodyProjection: autoProj || undefined,
           messages: msgs
         };
         var content = (fmt === 'md')
@@ -2277,6 +2277,53 @@ function aiCmBuildCanonicalBody(convId) {
   return body;
 }
 
+// ========== S5.1 (I3, ADR-001): проекция «канонический массив → массив файла» ==========
+// ОДНА функция на четыре точки применения (ручной/авто × обычный/union). Снимок ([ctx-snap],
+// bodyHash) и метрика (tokens/limit/percent/src/partial) сюда не входят: на входе только
+// массив сообщений файла. Цепочка 1:1 с aiCmCollectExportSource: O-37-нормализация reasoning →
+// эффективное значение тумблера (aiCmHiddenExportEffectiveOn) → снятие поля reasoning у qwen
+// при эффективном OFF (O-7) → единственная точка санации aiCmSanitizeEmitUserTexts.
+// Канонический массив не мутируется: сначала копии сообщений, дальше работа только с копиями.
+// mode='projected' — ТОЛЬКО при фактическом изменении тела (длина массива, text или поле
+// reasoning построчно); иначе mode='' и ТОТ ЖЕ объект массива (ни одного нового байта).
+function aiCmProjectFileMessages(msgs, site) {
+  var src = Array.isArray(msgs) ? msgs : [];
+  var copies = [];
+  for (var i = 0; i < src.length; i++) {
+    var m = src[i];
+    copies.push((m && typeof m === 'object') ? Object.assign({}, m) : m);
+  }
+  var prepared = (typeof aiCmPrepareReasoningForExport === 'function')
+    ? aiCmPrepareReasoningForExport(copies) : copies;
+  var userOn = (typeof aiCmIncludeHiddenInExport !== 'undefined') && aiCmIncludeHiddenInExport === true;
+  var hiddenEffective = (typeof aiCmHiddenExportEffectiveOn === 'function')
+    ? aiCmHiddenExportEffectiveOn(prepared) : userOn;
+  // O-7: у qwen эффективный OFF снимает поле reasoning ДО санации — иначе сборщики
+  // безусловно вернули бы секции [REASONING] в файл.
+  if (!hiddenEffective && typeof aiCmReasoningExportSite === 'function' && aiCmReasoningExportSite()) {
+    for (var r = 0; r < prepared.length; r++) {
+      if (prepared[r] && typeof prepared[r] === 'object') delete prepared[r].reasoning;
+    }
+  }
+  var out = (typeof aiCmSanitizeEmitUserTexts === 'function')
+    ? aiCmSanitizeEmitUserTexts(prepared) : prepared;
+  if (!Array.isArray(out)) out = prepared;
+  var changed = (out.length !== src.length);
+  if (!changed) {
+    for (var j = 0; j < src.length; j++) {
+      var a = src[j] || {};
+      var b = out[j] || {};
+      var at = (typeof a.text === 'string') ? a.text : ((a.text == null) ? '' : String(a.text));
+      var bt = (typeof b.text === 'string') ? b.text : ((b.text == null) ? '' : String(b.text));
+      var ar = (typeof a.reasoning === 'string') ? a.reasoning : '';
+      var br = (typeof b.reasoning === 'string') ? b.reasoning : '';
+      if (at !== bt || ar !== br) { changed = true; break; }
+    }
+  }
+  if (!changed) return { messages: src, mode: '' };
+  return { messages: out, mode: 'projected' };
+}
+
 // ========== v2.0 (этап 1/3): UMD-экспорт модуля ==========
 // Паттерн как у utils/export-emit-pipeline.ts: window.<Api> + module.exports.
 // Рабочий путь ничего не импортирует: content-скрипты манифеста делят один
@@ -2287,6 +2334,7 @@ function aiCmBuildCanonicalBody(convId) {
   Api.sanitizeGeminiText = sanitizeGeminiText;
   Api.aiCmCollectExportSource = aiCmCollectExportSource;
   Api.aiCmExportBaseSource = aiCmExportBaseSource;
+  Api.aiCmProjectFileMessages = aiCmProjectFileMessages;   // S5.1 (I3): проекция тела файла
   Api.aiCmGetSourceTier = aiCmGetSourceTier;   // Two-Tier (v89): метка достоверности источника
   Api.aiCmUnionFileMessages = aiCmUnionFileMessages;   // O-49: добор объединённой базой при low-confidence
   Api.autoExportPerSiteKey = autoExportPerSiteKey;

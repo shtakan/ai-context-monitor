@@ -3577,18 +3577,18 @@ if (isExtensionValid()) {
         // массива — drop контейнеров и reasoning применяются РОВНО один раз, на этапе массива,
         // поэтому MD-тело и JSON-тело одного нажатия равны (tests/inv-i3-manual-md-json.test.js).
         if (manualSnapshot.isLowConfidenceBase === true) {
-          // Union-путь (объединение архив+live): канонизируем сам массив объединения. MD-тело
-          // при этом НЕ меняется — drop/reasoning идемпотентны; меняется только JSON: он
-          // перестаёт быть сырым текстом и становится равен MD. Файл остаётся исключением
-          // ТОЛЬКО из I3a (тело файла ≠ тело снимка, помечено partial), а не из I3c'.
+          // Union-путь (объединение архив+live): канонизируем сам массив объединения, затем
+          // применяем проекцию файла (S5.1); файл остаётся исключением только из I3a (partial).
           if (typeof aiCmCanonicalizeMessages === 'function') {
             manualSnapshot.messages = aiCmCanonicalizeMessages(manualSnapshot.messages,
               manualSnapshot.site || '');
           }
+          if (typeof aiCmProjectFileMessages === 'function') { var projMU = aiCmProjectFileMessages(manualSnapshot.messages, manualSnapshot.site || ''); manualSnapshot.messages = projMU.messages; var snapProjU = manualSnapshot as typeof manualSnapshot & { bodyProjection?: string }; snapProjU.bodyProjection = projMU.mode; }
         } else if (typeof aiCmBuildCanonicalBody === 'function') {
-          // Обычный чат: массив файла = массив тела снимка ([ctx-snap]) — одна и та же сущность.
+          // Обычный чат: массив файла = массив тела снимка ([ctx-snap]); проекция — только файл.
           var canonManual = aiCmBuildCanonicalBody(curCidExp);
           if (canonManual && canonManual.messages.length) manualSnapshot.messages = canonManual.messages;
+          if (typeof aiCmProjectFileMessages === 'function') { var projMn = aiCmProjectFileMessages(manualSnapshot.messages, manualSnapshot.site || ''); manualSnapshot.messages = projMn.messages; var snapProjM = manualSnapshot as typeof manualSnapshot & { bodyProjection?: string }; snapProjM.bodyProjection = projMn.mode; }
         }
         sendResponse({ data: manualSnapshot });
       };

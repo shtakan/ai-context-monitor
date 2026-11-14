@@ -332,6 +332,13 @@ function renderReferenceTextWithRoleMarkers(list: ExportMessage[]): string | nul
 // txt «эталон»: тот же buildReferenceText, что использует кнопка «Сохранить .txt»
 // (O-36/D2: для qwen — с маркерами ролей; O-36/D2.1: у qwen дополнительно снимается
 // контейнер-склейка DOM-адаптера, см. блок выше).
+/** S5.1 (I3): аддитивное поле проекции файла; ExportHistory не меняем (типы — вне задачи). */
+type ExportHistoryProjected = ExportHistory & { bodyProjection?: string };
+/** Применена ли документированная проекция файла (S5.1). */
+function isProjected(history: ExportHistory): boolean {
+  return (history as ExportHistoryProjected).bodyProjection === 'projected';
+}
+
 /**
  * Собирает txt-экспорт истории.
  * @param {ExportHistory} history история экспорта
@@ -374,7 +381,12 @@ export function buildTxtFromHistory(history: ExportHistory): string {
   // Прочие платформы и undefined-метка → ни одного нового байта (гейт по site). Пустое тело
   // (null-рендерер или нуль сообщений) метка НЕ оживляет: файла нет, как и прежде — иначе
   // файл из одной метки обошёл бы гейт empty-text автоэкспорта.
-  if (site === 'gemini' && hist.sourceTier && out) out = hist.sourceTier + '\n\n' + out;
+  var prefix = '';
+  if (site === 'gemini' && hist.sourceTier) prefix = hist.sourceTier + '\n\n';
+  // S5.1 (I3): метка применённой проекции — первой строкой тела; при наличии sourceTier-метки
+  // (выше) — сразу под ней. mode='' → prefix пуст, ни одного нового байта.
+  if (isProjected(hist)) prefix += '[AI-CM projection: applied]\n\n';
+  if (prefix && out) out = prefix + out;
   return (out === null) ? '' : out;   // рендерер недоступен → прежний пустой файл
 }
 
@@ -432,7 +444,13 @@ export function buildMdFromHistory(history: ExportHistory, platform?: string): s
   // токенами (dom|net|max|server|hold). Ключ аддитивный: у прочих сервисов src нет →
   // ни одного нового байта. Локализуемое сообщение не заводим: это машинная метка,
   // а русский литерал сломал бы гейт i18n-locales (EXPORT_HEADER_LITERALS).
-  if (typeof h.src === 'string' && h.src) lines.push('metric-src: ' + h.src);
+  if (typeof h.src === 'string' && h.src) {
+    lines.push('metric-src: ' + h.src);
+    // S5.1 (I3): метка ПРИМЕНЁННОЙ проекции файла — сразу под metric-src. Строка машинная,
+    // ASCII (локализуемый литерал сломал бы гейт i18n-locales/EXPORT_HEADER_LITERALS);
+    // нейтральна к причине — reasoning и/или инъекции видны только в aiCmDiagLine.
+    if (isProjected(h)) lines.push('[AI-CM projection: applied]');
+  }
   // S2.3 (ADR-001, I4): частичный снимок помечается в ТЕЛЕ файла машинными ASCII-строками —
   // ключ i18n не заводим (_locales вне скоупа), локализуемый литерал сломал бы гейт
   // EXPORT_HEADER_LITERALS. Полный снимок → ни одного нового байта (ср. гейт по src выше).
@@ -441,6 +459,10 @@ export function buildMdFromHistory(history: ExportHistory, platform?: string): s
     lines.push('metric-partial-reason: ' + (h.partialReason || 'incomplete'));
   }
   lines.push('');
+  // S5.1 (I3): строки metric-src нет → метка проекции идёт сразу после шапки (после пустой строки).
+  if (isProjected(h) && !(typeof h.src === 'string' && h.src)) {
+    lines.push('[AI-CM projection: applied]');
+  }
   // Two-Tier (v89): метка достоверности источника — отдельным блоком сразу после шапки,
   // только Gemini и только когда метка есть в истории (см. aiCmGetSourceTier).
   // Прочие платформы и undefined-метка → байты прежние (гейт по site).
@@ -511,6 +533,9 @@ export function buildJsonFromHistory(history: ExportHistory, platform?: string):
     // снимок) → JSON.stringify ключ НЕ добавляет, байты прежних платформ не меняются.
     partial: (h.partial === true) ? true : undefined,
     partialReason: (h.partial === true) ? (h.partialReason || 'incomplete') : undefined,
+    // S5.1 (I3): аддитивный ключ применённой проекции файла. undefined (mode='') →
+    // JSON.stringify ключ НЕ добавляет, байты прежних платформ не меняются.
+    bodyProjection: isProjected(h) ? true : undefined,
     messages: Array.isArray(h.messages) ? h.messages : []
   }, null, 2);
 }
