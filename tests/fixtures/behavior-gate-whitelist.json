@@ -307,6 +307,10 @@
     "count": 17,
     "reason": "legacy-pin"
   },
+  "tests/gsa-e-tail-question-merge.test.js": {
+    "count": 1,
+    "reason": "legacy-pin"
+  },
   "tests/gsa-o27-captcha-base-guard.test.js": {
     "count": 6,
     "reason": "legacy-pin"

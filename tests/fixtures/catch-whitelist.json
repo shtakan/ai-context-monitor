@@ -1173,8 +1173,8 @@
       "file": "core/google-search-intercept.js",
       "category": "cleanup-guard",
       "lines": [
-        830,
-        881
+        833,
+        884
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: var tgReB = /<!--TgQPHd\\|[\\s\\S]*?-->/g; var tgMatchB; while ((tgMatchB ="
     },
@@ -1183,7 +1183,7 @@
       "category": "debug-instrumentation",
       "lines": [
         25,
-        1643
+        1649
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDeb"
     },
@@ -1192,7 +1192,7 @@
       "category": "defensive-assignment",
       "lines": [
         159,
-        1650
+        1656
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: lastFolwrOpenUrl = url;"
     },
@@ -1201,7 +1201,7 @@
       "category": "dom-read-guard",
       "lines": [
         290,
-        1223
+        1229
       ],
       "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: var el = document.querySelector('[data-session-thread-id]'); if (el) { v"
     },
@@ -1210,7 +1210,7 @@
       "category": "event-guard",
       "lines": [
         544,
-        1342
+        1348
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-full-history', { detail: det"
     },
@@ -1222,7 +1222,7 @@
         389,
         505,
         541,
-        728
+        731
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (window.GoogleFolwrUtils && window.GoogleFolwrUtils.classifyFolwrCont"
     },
@@ -1230,7 +1230,7 @@
       "file": "core/google-search-intercept.js",
       "category": "parse-guard",
       "lines": [
-        895
+        898
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var u = new URL(rawUrl, location.href); var a = u.searchParams.get('auth"
     },

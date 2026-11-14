@@ -598,6 +598,9 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       // прийти не хронологически) — дописываем в конец, как и раньше. Активная база здесь
       // не трогается: при возврате в тред сегмент пересобирается со своим DOM.
       var segTurns = unionTurnsByDirection(mergeFn, turns, segmentTurnsOf(tid), 'append');
+      // BUG-E: хвост «разорванного» последнего хода (эхо-ответ + вопрос отдельно) чистится
+      // ДО записи сегмента: иначе при возврате в тред сегмент вернёт вопрос после ответа.
+      segTurns = dedupeTurnsForCache(segTurns);
       var segMsgs = messagesFromTurns(segTurns);
       cacheSet(tid, {
         turns: segTurns,
@@ -1069,6 +1072,9 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     var unionFn = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.mergeTurnsMonotone) ||
       function (a, b) { return a.concat(b); };
     lastFullTurns = unionTurnsByDirection(unionFn, turns, lastFullTurns, direction);
+    // BUG-E: та же чистка хвоста, что у mergeTurns/mergeStreamTurns: снимок-окно после
+    // SPA-возврата склеивает «разорванный» последний ход ДО сборки messages.
+    lastFullTurns = dedupeTurnsForCache(lastFullTurns);
     lastFullMessages = messagesFromTurns(lastFullTurns);
     seedSeenKeys(lastFullTurns);
     lastFullSnapshot = buildDetail(lastFullTurns, lastFullMessages, tid, historyComplete);
@@ -1714,6 +1720,8 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
                   if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('open', mergedTurns, 'submit', tid, { parsed: baseTurns.length, folwrContainers: folwrTurnCount, domContainers: domTurnCount, dopasbor: dopasbor, complete: historyComplete ? 1 : 0, cursor: (folwrCursor ? folwrCursor.slice(0, 12) : 'нет'), bodyLen: (txt ? txt.length : 0) });
                   // Прирост считается ДО записи: applyTurns присваивает lastFullTurns новый
                   // массив, поэтому после вызова разницу уже не измерить.
+                  // BUG-E: и ДО чистки dedupeTurnsForCache внутри applyTurns — openGained это
+                  // диагностика прироста, а не счётчик финальной базы (она может стать меньше).
                   var openGained = mergedTurns.length - lastFullTurns.length;
                   // BUG-D: окно открытия — это ХВОСТ треда (свежайшая страница), поэтому оно
                   // дописывается в конец уже накопленной базы, а не подменяет её голову.

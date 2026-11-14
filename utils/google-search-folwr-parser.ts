@@ -1399,6 +1399,77 @@ export function mergeTurnsByKey(baseTurns: FolwrTurn[], extraTurns: FolwrTurn[])
 // записи: иначе раздутая база переживает навигацию и бейдж остаётся завышенным.
 // Объекты ходов не копируются и не переписываются (id и лишние поля сохраняются);
 // префикс-совместимые дубли схлопываются, побеждает более полная форма.
+// =====================================================================================
+// BUG-E (gsa-late-question): ХВОСТ «РАЗОРВАННОГО» ПОСЛЕДНЕГО ХОДА
+// =====================================================================================
+// Живой дефект (GSA, SPA-возврат 2026-11-14, тред 8bTpaveuJtWckdUP46iumAo): последний
+// обмен приходит двумя ходами — «только assistant» с ЭХОМ вопроса внутри текста
+// («Ответ в режиме ИИ, исходный запрос: "Q" A») и «только user» с вопросом, либо
+// наоборот. findPrefixCompatibleIndex требует ОБЕ части хода (u и a), поэтому склейки
+// нет: вопрос остаётся в хвосте ПОСЛЕ своего ответа (11-52: 35 сообщений, …A A U;
+// в базе при этом эхо-ответ лежал дважды — 36 сообщений / textLen 43797).
+// Правило узкое и только для ДВУХ последних ходов; текст ответа не переписывается:
+//   (1) у одной стороны пуст assistantText, вопрос другой стороны стоит побайтово сразу
+//       после wrapperPrefix текста ответа (эхо без тела) → ход {id ответа, вопрос, ответ};
+//   (2) оба assistantText строго равны побайтово, userText ровно у одной стороны →
+//       её userText + assistantText как есть, id/позиция первого хода.
+// Текст ответа не срезается и не пересобирается: байты assistantText, канонические
+// ключи и направления слияний (BUG-D) остаются прежними.
+/** @type {number} Минимальная длина вопроса (в байтах) для правила хвоста-эха. */
+var TAIL_QUESTION_MIN = 12;
+
+/**
+ * Эхо-вопрос в тексте ответа: questionText стоит побайтово сразу после wrapperPrefix.
+ * @param {string|null|undefined} assistantText Текст ответа (возможно с обёрткой-вопросом).
+ * @param {string|null|undefined} questionText Текст вопроса.
+ * @returns {boolean} true — ответ является эхом этого вопроса без тела.
+ */
+function tailEchoQuestion(assistantText, questionText) {
+  var q = String(questionText == null ? '' : questionText);
+  if (q.length < TAIL_QUESTION_MIN) return false;
+  var echo = String(assistantText == null ? '' : assistantText);
+  var prefix = wrapperPrefix(echo);
+  if (!prefix) return false;
+  var rest = echo.slice(prefix.length).replace(/^["»”'\u00ab\u201c\u2018\s]+/, '');
+  return rest.indexOf(q) === 0;
+}
+
+/**
+ * Склейка хвоста «разорванного» последнего хода (не более 3 итераций).
+ * @param {FolwrTurn[]} turns Ходы треда.
+ * @returns {FolwrTurn[]} Ходы с одним ходом на последний обмен.
+ */
+function foldTailTurns(turns: FolwrTurn[]): FolwrTurn[] {
+  var out = turns;
+  for (var iter = 0; iter < 3; iter++) {
+    if (out.length < 2) break;
+    var first = out[out.length - 2];
+    var second = out[out.length - 1];
+    if (!first || !second) break;
+    var firstA = (first.assistantText == null) ? '' : String(first.assistantText);
+    var secondA = (second.assistantText == null) ? '' : String(second.assistantText);
+    var firstU = (first.userText == null) ? '' : String(first.userText);
+    var secondU = (second.userText == null) ? '' : String(second.userText);
+    // (2) одна и та же эхо-форма ответа у двух ходов; вопрос — ровно у одной стороны.
+    if (firstA && secondA && firstA === secondA && ((firstU ? 1 : 0) + (secondU ? 1 : 0) === 1)) {
+      out[out.length - 2] = { id: first.id, userText: firstU || secondU, assistantText: firstA };
+      out.pop();
+      continue;
+    }
+    // (1) вопрос отдельным ходом + эхо-ответ без тела (или наоборот).
+    var folded = null;
+    if (!firstA && firstU && secondA && (!secondU || secondU === firstU) && tailEchoQuestion(secondA, firstU)) {
+      folded = { id: second.id, userText: firstU, assistantText: secondA };
+    } else if (!secondA && secondU && firstA && (!firstU || firstU === secondU) && tailEchoQuestion(firstA, secondU)) {
+      folded = { id: first.id, userText: secondU, assistantText: firstA };
+    }
+    if (!folded) break;
+    out[out.length - 2] = folded;
+    out.pop();
+  }
+  return out;
+}
+
 /**
  * Дедуп списка ходов: одинаковые и префикс-совместимые ходы схлопываются.
  * @param {FolwrTurn[]|null|undefined} turns Ходы треда.
@@ -1426,7 +1497,9 @@ export function dedupeTurns(turns: FolwrTurn[]): FolwrTurn[] {
       reindexTurnKey(byKey, out, at);
     }
   }
-  return out;
+  // BUG-E: хвост «разорванного» последнего хода склеивается ПОСЛЕ основного дедупа —
+  // только на двух последних ходах, текст ответа не переписывается.
+  return foldTailTurns(out);
 }
 
 // ---- v1.17: классификация страницы ПРОДОЛЖЕНИЯ по СОДЕРЖИМОМУ, а не по длине ----

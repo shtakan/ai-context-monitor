@@ -83,6 +83,8 @@ const SCOPE_FNS = [
   'gsaTurnKeyOfLocal',
   'gsaTurnKey',
   'seedSeenKeys',
+  // BUG-E: хвост «разорванного» хода чистится и в applyTurns/absorbForeignSnapshot.
+  'dedupeTurnsForCache',
   'isRawXssiPayload',
   'isUsableTurn',
   'hasUsableTurns',
