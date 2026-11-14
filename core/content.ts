@@ -3573,12 +3573,20 @@ if (isExtensionValid()) {
               manualSnapshot.isLowConfidenceBase === true);
           }
         } catch (eO49m) { debugLog('log', '[AI CM][export] silent-catch replyManualExport(O-49 union): ' + (eO49m && eO49m.message || eO49m)); }
-        // S1.3 (inv-i3): файл ручного экспорта строится из ТОГО ЖЕ канонического массива, что
-        // и тело снимка ([ctx-snap]) — drop контейнеров и reasoning применяются один раз.
-        // Union-путь (isLowConfidenceBase=true) НЕ заменяем: объединение архив+live остаётся
-        // известным partial-исключением до S3, иначе тело файла разойдётся с эффективным текстом.
-        if (manualSnapshot.isLowConfidenceBase !== true &&
-            typeof aiCmBuildCanonicalBody === 'function') {
+        // S1.3 (inv-i3) + S5 (I3c'): файл ручного экспорта строится из ОДНОГО канонического
+        // массива — drop контейнеров и reasoning применяются РОВНО один раз, на этапе массива,
+        // поэтому MD-тело и JSON-тело одного нажатия равны (tests/inv-i3-manual-md-json.test.js).
+        if (manualSnapshot.isLowConfidenceBase === true) {
+          // Union-путь (объединение архив+live): канонизируем сам массив объединения. MD-тело
+          // при этом НЕ меняется — drop/reasoning идемпотентны; меняется только JSON: он
+          // перестаёт быть сырым текстом и становится равен MD. Файл остаётся исключением
+          // ТОЛЬКО из I3a (тело файла ≠ тело снимка, помечено partial), а не из I3c'.
+          if (typeof aiCmCanonicalizeMessages === 'function') {
+            manualSnapshot.messages = aiCmCanonicalizeMessages(manualSnapshot.messages,
+              manualSnapshot.site || '');
+          }
+        } else if (typeof aiCmBuildCanonicalBody === 'function') {
+          // Обычный чат: массив файла = массив тела снимка ([ctx-snap]) — одна и та же сущность.
           var canonManual = aiCmBuildCanonicalBody(curCidExp);
           if (canonManual && canonManual.messages.length) manualSnapshot.messages = canonManual.messages;
         }

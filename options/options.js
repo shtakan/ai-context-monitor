@@ -948,22 +948,15 @@ function getPlatform(hist) {
 }
 
 function buildJsonText(hist) {
-  hist = hist || cachedHistory;
-  var exportedAt = new Date().toISOString();
-  return JSON.stringify({
-    platform: getPlatform(hist),
-    model: (hist && hist.model) || '',
-    exportedAt: exportedAt,
-    tokens: (hist && typeof hist.tokens === 'number') ? hist.tokens : 0,
-    limit: (hist && typeof hist.limit === 'number') ? hist.limit : 0,
-    percent: (hist && typeof hist.percent === 'number') ? hist.percent : 0,
-    src: (hist && hist.src) || undefined,
-    // S2.3 (ADR-001): ручной файл тоже несёт метки частичности — те же два ключа, что у
-    // автоэкспорта. Полный снимок → undefined, JSON.stringify ключ НЕ добавляет (байты прежние).
-    partial: (hist && hist.partial === true) ? true : undefined,
-    partialReason: (hist && hist.partial === true) ? ((hist.partialReason) || 'incomplete') : undefined,
-    messages: (hist && Array.isArray(hist.messages)) ? hist.messages : []
-  }, null, 2);
+  // S5 (I3c', ADR-001): JSON одного нажатия собирает ТОТ ЖЕ общий сборщик, что у автоэкспорта —
+  // один канонический массив, одна схема и один порядок ключей. Своей сборки объекта здесь нет.
+  // С 2.1.2 platform в JSON — СЫРОЙ ключ сайта (google_search/aistudio/chatgpt...), как у
+  // авто-пути (core/export-manager.ts:1933-1939); метка siteLabels остаётся только в MD-шапке
+  // (getPlatform выше) — решение «MD/TXT-шапки в S5 не меняем». sourceTier/partial приходят
+  // из снимка и печатаются сборщиком (utils/export-text-builders.ts:492-516).
+  return AiCmExportBuilders
+    ? AiCmExportBuilders.buildJsonFromHistory(hist || cachedHistory, (hist && hist.site) || 'AI Chat')
+    : '';
 }
 
 function buildMdText(hist) {
@@ -1397,6 +1390,8 @@ if (typeof module !== 'undefined' && module.exports) {
     buildArchiveStoragePatch: buildArchiveStoragePatch,
     aiCmImportArchiveFiles: aiCmImportArchiveFiles,
     formatArchiveReport: formatArchiveReport,
-    buildJsonText: buildJsonText
+    buildJsonText: buildJsonText,
+    // S5 (I3c'): MD-дорога того же нажатия нужна тесту на равенство тел MD/JSON.
+    buildMdText: buildMdText
   };
 }
