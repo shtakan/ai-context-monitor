@@ -206,9 +206,13 @@ canonicalBody(messages) = messages.map(m => m.text).join('\n')      // = тел�
 I3a:  snapshot.chars === canonicalBody.length
 I3b:  тело MD после шапки, минус маркеры ролей === canonicalBody
 I3c:  JSON: messages.map(m => m.text).join('\n') === canonicalBody
+I3c′: MD-тело ручного экспорта === JSON-тело того же нажатия
+      (оба строятся из одного массива; см. ниже)
 ```
 
 Побайтовое равенство **файлов** не требуется и недостижимо (шапка, маркеры, BOM у TXT) — требуется равенство тела.
+
+**Область I3a (уточнено S5).** `I3a` проверяется только на канонических снимках. Исключение — union-путь ручного экспорта (`isLowConfidenceBase === true`): массив файла там — объединение архива и live, поэтому тело файла ≠ телу снимка, и файл остаётся помеченным `partial`. Но `I3b` и `I3c′` держатся и на этом пути: массив канонизируется ровно один раз (`aiCmCanonicalizeMessages`, `core/content.ts:3576–3591`), поэтому MD-тело равно JSON-телу одного нажатия. Доказано `tests/inv-i3-manual-md-json.test.js` (5 сценариев: qwen + контейнер + reasoning, `partial`, low-confidence union, gemini `sourceTier`, идемпотентность на каноническом входе).
 
 Дополнительно — **поведенческое** доказательство отсутствия пересчёта (без чтения исходников; правило
 «Behavior-Only Tests» в `docs/COORDINATION-RULES.md`):
@@ -240,6 +244,9 @@ I3c:  JSON: messages.map(m => m.text).join('\n') === canonicalBody
 - Публиковать число из живых переменных (`lastPercentage`, `lastWidgetData`) — они становятся производными от снимка.
 - Вводить монотонность как источник числа (high-water, храповик, hold) — только как следствие `bodyHash`.
 - Импортировать базу заново в билдере (`drop`/`reasoning`/маркеры на этапе рендера, а не на этапе массива).
+
+Защитный проход билдеров (`utils/export-text-builders.ts:408`, `:492–516`) на каноническом входе **тождественен**: `withReasoningSections` не дублирует секцию, если текст уже её содержит (`:92–98`), drop контейнеров для qwen идемпотентен. Это не второй источник правды, а страховка: все вызовы (авто `core/export-manager.ts:1812–1820`, ручной `core/content.ts:3576–3591`) несут канонический массив, поэтому повторного применения нет — доказано `tests/inv-i3-manual-md-json.test.js` (кейс v). Source-пины `tests/qwen-export-o36.test.js:300–301` держат сам защитный проход и не переписывались.
+
 - Требовать абсолютного I2 для серверных провайдеров.
 - Писать автоэкспорт при `partial` без метки или с меткой только в имени файла.
 
@@ -259,7 +266,7 @@ I3c:  JSON: messages.map(m => m.text).join('\n') === canonicalBody
    `:3260–3262`; адаптерный `:3350–3356`; ручной ответ `:3605`, `:3628–3630`;
    ручной JSON `options/options.js:950`.
 4. **Привязка к чату и снятие high-water** — выполнено в S4 (3e452ec): `core/state.ts:42` (`lastTokensSnapshot`), `:723` (`stale`), `:845` (`commit`), `:886` (`canonical`), `:898` (`reader`); `core/widget.ts:196–280` (reset; keep-snap `:216`, `:258`, `:280`); `core/content.ts:2971` (единственный вызов commit), `:2998` (badge), `:434`, `:3159`, `:3273`, `:3529`, `:3616`, `:3808` (читатели); `core/export-manager.ts:722`, `:1674`, `:1911` (читатели с canonical); `tests/inv-i6-conv-switch.test.js` (8 сценариев).
-5. **Единый JSON-сборщик ручного экспорта**: `options/options.js:927–947`, `utils/export-text-builders.ts:485–505`.
+5. **Единый JSON-сборщик ручного экспорта** — выполнено в S5 (`0195009`): `options/options.js:944–974` (`buildJsonText` делегирует `AiCmExportBuilders.buildJsonFromHistory`; `getPlatform` остался только для MD), `utils/export-text-builders.ts:492–516`; в `core/content.ts:3576–3591` массив union-пути канонизируется один раз. С 2.1.2 `platform` в JSON — **сырой ключ сайта** (`google_search`, `aistudio`, `chatgpt`…), как в авто-пути (`core/export-manager.ts:1933–1939`); исторические ручные JSON могут содержать метку — это допустимо, как `max`/`hold` в поле `src`.
 6. **Пин-гигиена, фикстуры, mutation-check**: `tools/mutation-check.js`, пины из плана
    (`tests/o23-tokens-calibration.test.js:250–253`, `tests/o47-qwen-badge-metric.test.js:190–201`,
    `tests/gemini-monotonic-badge.test.js:239–241`, `tests/gemini-source-tier.test.js:168–190`,
@@ -319,14 +326,14 @@ Gemini без изменений: `e1020dbabcfa5a02 | net | 96465 | 75.4 | parti
    `snapshot.tokens` воспроизводится из тела файла, `bodyHash` совпадает.
 4. Строка `ctx-snap` в точке записи содержит `tokens, chars, msgs, attachAdd, bodyHash, src, baseComplete`.
 5. `partial`-экспорт помечен в теле файла (MD и JSON) и заблокирован для автоэкспорта — **подтверждено 2026-11-14 (S2.3):** unit c1–c4 + живая приёмка 17-57/17-59, негатив 18-07.
-6. Нет регрессий: полный сьют на HEAD `b6859a5` = 238 suites / 4058 passed / 7 skipped,
-   `npx tsc --noEmit` = 0, `npm run lint:baseline` = 0.
+6. Нет регрессий: полный сьют на HEAD `0195009` = 253 suites / 4175 passed / 7 skipped,
+   `npx tsc --noEmit` = 0 (вывод пуст), `npx eslint .` = 0 errors / 0 warnings.
 7. `CHANGELOG.md` содержит запись об изменении значений `text` в JSON для чатов с контейнерами.
 8. Оба живых бага класса занесены строками в `docs/REGRESSION-LEDGER.md` (симптом → корень → файл с пином):
    `12:33` (218 334 в шапке против 92 197 у бейджа) и `18:44` (дельта 537).
 9. Живая приёмка — только на сборке `node build.mjs` + «Обновить расширение в chrome://extensions».
    Папка `Downloads` источником приёмки не является, тесты на исходниках приёмку не заменяют.
-10. Базлайн после реализации: `238 suites / 4058 passed / 7 skipped` (измерено 2026-11-11 на `f13ad8e`)
+10. Базлайн после реализации: `253 suites / 4175 passed / 7 skipped` (измерено 2026-11-14 на `0195009`)
     либо выше; падение числа тестов без объяснения — блокер.
 
 ---
