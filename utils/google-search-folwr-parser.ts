@@ -129,6 +129,9 @@ export interface GoogleFolwrUtilsApi {
   turnIdentityParts: typeof turnIdentityParts;
   bodiesPrefixCompatible: typeof bodiesPrefixCompatible;
   dedupeTurns: typeof dedupeTurns;
+  // BUG-G: вопрос A-only хода из DOM-пузыря и fill-only добор userText по каноническому ключу.
+  resolveUserQuestionForTurn: typeof resolveUserQuestionForTurn;
+  fillMissingUserText: typeof fillMissingUserText;
   renderCodeBlock: typeof renderCodeBlock;
   answerTextOf: typeof answerTextOf;
   answerDomNodes: typeof answerDomNodes;
@@ -882,6 +885,10 @@ export function extractTurnsFromDocument(doc: any): FolwrTurn[] {
         var raw = (h2.textContent || '').trim();
         var m = raw.match(/^Вы сказали:\s*"([\s\S]*)"$/);
         q = m ? m[1].trim() : raw;
+      } else {
+        // BUG-G: h2 нет (A-only ход) — вопрос остался только в DOM-пузыре пользователя.
+        // Эхо h3.iMqumd внутри хода валидирует пару; без пары вопрос не угадывается.
+        q = resolveUserQuestionForTurn(doc, turnsArr[i]);
       }
       questions.push(q);
     }
@@ -918,9 +925,11 @@ export function extractTurnsFromDocument(doc: any): FolwrTurn[] {
       });
     }
   } catch (e) { swallowSoft(e, 'gsa-utils:extractTurnsFromDocument'); }
-  // BUG-D: DOM-порядок тоже new→old — разворачиваем здесь же, чтобы функция не отдавала
-  // наружу ходы в другом порядке, чем parseGoogleFolwrOpen.
-  turns.reverse();
+  // BUG-G (замер 2026-11-14, тред 8bTpaveuJtWckdUP46iumAo): в живом DOM 21 контейнер
+  // [data-scope-id="turn"], document order ХРОНОЛОГИЧЕСКИЙ (c[0] — вопрос «deepseek fall down»,
+  // c[20] — последний ход). Прежний reverse() разворачивал уже правильный порядок и уводил
+  // свежий DOM-ход в голову треда. Реверс остаётся только у сетевого снимка folwr (:826):
+  // он приходит new→old.
   return turns;
 }
 
@@ -1039,6 +1048,80 @@ function answerWrapperParts(text) {
   var body = tail.replace(/^["»”']{0,2}/, '').replace(/^[\s.,:;-]+/, '');
   if (!body) return null;
   return { question: question, body: body };
+}
+
+// =====================================================================================
+// BUG-G: A-only ход GSA — пользовательская реплика есть только в DOM-пузыре, а в
+// контейнере хода остался один h3.iMqumd с эхом-обёрткой («Ответ в режиме ИИ, исходный
+// запрос: "Q"»). Эхо — ТОЛЬКО валидатор пары: сам userText из него не синтезируется
+// (состав ходов остаётся сетевым, вопрос берётся из текста пузыря).
+// =====================================================================================
+/**
+ * Вопрос из эха-обёртки h3.iMqumd контейнера хода (между открывающей и ПОСЛЕДНЕЙ кавычкой).
+ * @param {any} turnEl Контейнер хода.
+ * @returns {string|null} Вопрос эха; null — обёртки нет либо после кавычки остался текст.
+ */
+function extractEchoQuestion(turnEl) {
+  try {
+    if (!turnEl || typeof turnEl.querySelector !== 'function') return null;
+    var h3 = turnEl.querySelector('h3.iMqumd');
+    if (!h3) return null;
+    var raw = String(h3.textContent == null ? '' : h3.textContent).trim();
+    var prefix = wrapperPrefix(raw);
+    if (!prefix) return null;
+    var rest = raw.slice(prefix.length);
+    var close = rest.lastIndexOf('"');
+    if (close === -1) return null;
+    // Цельная обёртка: после закрывающей кавычки только пробелы, иначе это не эхо.
+    if (rest.slice(close + 1).replace(/\s+/g, '').length > 0) return null;
+    var q = rest.slice(0, close).trim();
+    return q || null;
+  } catch (e) { return null; }
+}
+
+/**
+ * Снимает обрамляющие кавычки (прямые, типографские, «ёлочки») и пробелы.
+ * @param {string|null|undefined} text Текст кандидата.
+ * @returns {string} Текст без обрамляющих кавычек.
+ */
+function stripBubbleQuotes(text) {
+  return String(text == null ? '' : text)
+    .trim()
+    .replace(/^["'«»„“”‘’]+/, '')
+    .replace(/["'«»„“”‘’]+$/, '')
+    .trim();
+}
+
+/**
+ * Вопрос A-only хода из DOM-пузыря пользователя по эхо-валидации h3.iMqumd.
+ * Кандидаты — листовые span вне контейнеров ходов; нормализация — normalizeTurnKeyPart.
+ * @param {any} doc Документ живого DOM.
+ * @param {any} turnEl Контейнер хода без h2.iMqumd.
+ * @returns {string|null} Текст пузыря без кавычек; null — пары нет или кандидатов не ровно один.
+ */
+export function resolveUserQuestionForTurn(doc: any, turnEl: any): string | null {
+  try {
+    if (!doc || typeof doc.querySelectorAll !== 'function') return null;
+    var echoQ = extractEchoQuestion(turnEl);
+    if (!echoQ) return null;
+    var want = normalizeTurnKeyPart(echoQ);
+    if (!want) return null;
+    var spans = doc.querySelectorAll('span');
+    var found: string | null = null;
+    for (var i = 0; i < spans.length; i++) {
+      var el = spans[i];
+      if (!el || !el.textContent) continue;
+      // Кандидат — ЛИСТОВОЙ span: обёртки-дубли (span внутри span) дают один лист, а не два.
+      if (el.children && el.children.length > 0) continue;
+      // Реплики внутри контейнеров ходов — не пузырь: это уже разобранный вопрос хода.
+      if (typeof el.closest === 'function' && el.closest('[data-scope-id="turn"]')) continue;
+      var text = stripBubbleQuotes(el.textContent);
+      if (!text || normalizeTurnKeyPart(text) !== want) continue;
+      if (found !== null) return null;   // два кандидата — пара неоднозначна, добора нет
+      found = text;
+    }
+    return found;
+  } catch (e) { return null; }
 }
 
 // Тело ответа без сервисной обёртки. Обычный текст (обёртки нет) возвращается БАЙТОВО тем
@@ -1384,14 +1467,74 @@ export function mergeTurnsByKey(baseTurns: FolwrTurn[], extraTurns: FolwrTurn[])
       return;
     }
     var richer = hasKey ? isBetterTurn(t, out[at]) : isFullerTurn(t, out[at]);
+    // BUG-G: вопрос, уже добытый для хода, повышением формы не теряется — переносится.
+    var prevUserText = out[at].userText;
     if (richer) {
       out[at] = turnRecord(t, out[at].id);
+      if (!out[at].userText && prevUserText) out[at].userText = prevUserText;
+      reindexTurnKey(byKey, out, at);
+    }
+    // BUG-G (fill-only): пустой userText заполняется вопросом совпавшего по ключу хода.
+    // assistantText/id остаются байтово прежними, новых ходов не появляется.
+    if (!out[at].userText && t.userText) {
+      out[at] = { id: out[at].id, userText: t.userText, assistantText: out[at].assistantText };
+      delete byKey[key];
       reindexTurnKey(byKey, out, at);
     }
   }
   for (var i = 0; i < baseTurns.length; i++) add(baseTurns[i]);
   for (var j = 0; j < extraTurns.length; j++) add(extraTurns[j]);
   return out;
+}
+
+// BUG-G: УЗКИЙ ДОБОР userText (A-only ход). Никаких новых ходов: состав базы — из сети, а
+// вопрос существующего хода с ПУСТЫМ userText берётся из DOM-добора по каноническому ключу.
+// Порядок, длина, id и байты assistantText не меняются; два разных текста на ключ → пропуск.
+/**
+ * Заполняет пустые userText ходов базы вопросами DOM-добора (по каноническому ключу).
+ * @param {FolwrTurn[]|null|undefined} baseTurns Ходы базы (состав — из сети).
+ * @param {FolwrTurn[]|null|undefined} extraTurns Ходы DOM-добора.
+ * @returns {FolwrTurn[]} База с заполненными вопросами; ходы не добавляются.
+ */
+export function fillMissingUserText(baseTurns: FolwrTurn[] | null | undefined,
+  extraTurns: FolwrTurn[] | null | undefined): FolwrTurn[] {
+  if (!Array.isArray(baseTurns) || baseTurns.length === 0) {
+    return Array.isArray(baseTurns) ? baseTurns : [];
+  }
+  if (!Array.isArray(extraTurns) || extraTurns.length === 0) return baseTurns;
+  /** @type {Object<string, string>} */
+  var byKey = {};
+  /** @type {Object<string, boolean>} */
+  var ambiguous = {};
+  for (var i = 0; i < extraTurns.length; i++) {
+    var t = extraTurns[i];
+    if (!t || !t.userText) continue;
+    var key = canonicalTurnKeyOf(t);
+    if (key === '||' || ambiguous[key]) continue;
+    if (Object.prototype.hasOwnProperty.call(byKey, key)) {
+      if (byKey[key] !== t.userText) {
+        // Два РАЗНЫХ вопроса на один ключ — пара неоднозначна, ход не заполняется.
+        delete byKey[key];
+        ambiguous[key] = true;
+      }
+      continue;
+    }
+    byKey[key] = t.userText;
+  }
+  var out = [];
+  var filled = false;
+  for (var j = 0; j < baseTurns.length; j++) {
+    var turn = baseTurns[j];
+    var fill = null;
+    if (turn && !turn.userText) {
+      var ownKey = canonicalTurnKeyOf(turn);
+      if (ownKey !== '||' && Object.prototype.hasOwnProperty.call(byKey, ownKey)) fill = byKey[ownKey];
+    }
+    if (!fill) { out.push(turn); continue; }
+    out.push({ id: turn.id, userText: fill, assistantText: turn.assistantText });
+    filled = true;
+  }
+  return filled ? out : baseTurns;
 }
 
 // O-32 (фикс C): ЧИСТКА ГОТОВОГО СПИСКА ХОДОВ перед записью в кэш треда.
@@ -1587,6 +1730,10 @@ if (typeof window !== 'undefined') {
     turnIdentityParts: turnIdentityParts,
     bodiesPrefixCompatible: bodiesPrefixCompatible,
     dedupeTurns: dedupeTurns,
+    // BUG-G: A-only ход — вопрос из DOM-пузыря (эхо-валидация) и узкий fill-only добор
+    // userText по каноническому ключу; повторной копии алгоритма у адаптера/перехватчика нет.
+    resolveUserQuestionForTurn: resolveUserQuestionForTurn,
+    fillMissingUserText: fillMissingUserText,
     // O-45: общий рендер код-блоков (```lang … ```) и отбор узлов DOM-пути —
     // переиспользуются адаптером (adapters/google-search-adapter.js) и тестами.
     renderCodeBlock: renderCodeBlock,

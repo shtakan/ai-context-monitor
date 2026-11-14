@@ -44,6 +44,15 @@ function snapshotHtml(turnsNewToOld) {
     turnsNewToOld.map(turnHtml).join('') + '</div></div>';
 }
 
+// Живой DOM: переданные ходы идут в document order как есть. Замер 2026-11-14 (тред
+// 8bTpaveuJtWckdUP46iumAo): 21 контейнер [data-scope-id="turn"], document order
+// ХРОНОЛОГИЧЕСКИЙ (c[0] — вопрос «deepseek fall down»), поэтому DOM-фикстура — old→new.
+function docHtml(turnsInDocumentOrder) {
+  return '<div><div data-session-thread-id="' + TID + '" style="display:none"></div>' +
+    '<div data-container-id="synth"></div><div>' +
+    turnsInDocumentOrder.map(turnHtml).join('') + '</div></div>';
+}
+
 function docFrom(html) {
   return new DOMParser().parseFromString(html, 'text/html');
 }
@@ -144,9 +153,10 @@ describe('BUG-D: порядок ходов GSA old→new', () => {
     const baseTurns = Parser.parseGoogleFolwrOpen(snapshotHtml(snapIds.map(turnObj))).turns;
     expect(baseTurns).toHaveLength(17);
 
-    // DOM: живой ход новее всех и уже отрисован (снимок ещё без него).
+    // DOM: document order хронологический — t1 … t17, затем живой ход (он новее всех и уже
+    // отрисован, снимок ещё без него); live стоит последним в самой странице, не в голове.
     const domTurns = Parser.extractTurnsFromDocument(
-      docFrom(snapshotHtml([turnObj('live')].concat(snapIds.map(turnObj)))));
+      docFrom(docHtml(snapIds.slice().reverse().map(turnObj).concat([turnObj('live')]))));
     expect(domTurns).toHaveLength(18);
 
     // Ровно open-путь: DOM = весь тред → добор в голову, окно открытия — в хвост.

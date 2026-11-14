@@ -629,6 +629,33 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     if (threadId) cacheSet(threadId, { turns: lastFullTurns, messages: lastFullMessages, snapshot: lastFullSnapshot });
   }
 
+  // ---- BUG-G: узкий добор userText из живого DOM-пузыря ----
+  // A-only ход: сеть отдала ход без вопроса (userText=null), вопрос остался в DOM-пузыре
+  // пользователя рядом с эхом h3.iMqumd. Добор ТОЛЬКО заполняет пустые userText уже
+  // имеющихся ходов по каноническому ключу: состав, порядок, id и байты assistantText —
+  // из сети, новых ходов не появляется. Чужой тред / нет документа / бросил разбор — skip.
+  function fillUserTextFromLiveDom(turns, threadId) {
+    if (!Array.isArray(turns) || turns.length === 0) return turns;
+    var need = false;
+    for (var i = 0; i < turns.length; i++) {
+      if (turns[i] && !turns[i].userText) { need = true; break; }
+    }
+    if (!need) return turns;
+    try {
+      if (typeof document === 'undefined' || !document) return turns;
+      var utils = (typeof window !== 'undefined' && window) ? window.GoogleFolwrUtils : null;
+      if (!utils || typeof utils.extractTurnsFromDocument !== 'function' ||
+        typeof utils.fillMissingUserText !== 'function') return turns;
+      // Чужой тред в DOM источником не является; неизвестный tid с любой стороны — не повод
+      // пропускать (живой DOM того же окна), различающиеся известные — повод.
+      var domTid = (typeof readDomThreadId === 'function') ? readDomThreadId() : '';
+      if (threadId && domTid && threadId !== domTid) return turns;
+      var domTurns = utils.extractTurnsFromDocument(document);
+      if (!Array.isArray(domTurns) || domTurns.length === 0) return turns;
+      return utils.fillMissingUserText(turns, domTurns);
+    } catch (e) { return turns; }
+  }
+
   // ---- слияние стрим-ходов с полной базой (без уменьшения) ----
   function mergeStreamTurns(streamTurns, threadId) {
     // BUG-F: неполная ветка сливается по КАНОНИЧЕСКОМУ ключу с ПОВЫШЕНИЕМ формы: стрим-ход
@@ -639,6 +666,11 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     var merged = upgradeTurnsByKey(lastFullTurns, streamTurns);
     // O-32 (фикс C): префикс-совместимые формы одного хода схлопываются до записи в кэш.
     lastFullTurns = dedupeTurnsForCache(merged);
+    // BUG-G: A-only ход — вопрос из DOM-пузыря (fill-only по ключу, состав — из сети).
+    // typeof-гард: тестовые песочницы вырезают mergeTurns без этого хелпера.
+    if (typeof fillUserTextFromLiveDom === 'function') {
+      lastFullTurns = fillUserTextFromLiveDom(lastFullTurns, threadId || currentThreadId || emittedThreadId);
+    }
     seedSeenKeys(lastFullTurns);
     lastFullMessages = messagesFromTurns(lastFullTurns);
     lastFullSnapshot = buildDetail(lastFullTurns, lastFullMessages, threadId || currentThreadId || emittedThreadId);
@@ -697,6 +729,10 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     // формы одного ответа (прерванный стрим / маркеры цитат). Дедуп ДО сборки messages:
     // иначе счётчик сообщений и textLen остаются раздутыми.
     lastFullTurns = dedupeTurnsForCache(lastFullTurns);
+    // BUG-G: A-only ход — вопрос из DOM-пузыря (fill-only по ключу, состав — из сети).
+    if (typeof fillUserTextFromLiveDom === 'function') {
+      lastFullTurns = fillUserTextFromLiveDom(lastFullTurns, threadId);
+    }
     seedSeenKeys(lastFullTurns);
     lastFullMessages = messagesFromTurns(lastFullTurns);
     if (lastFullTurns.length > 0) {
@@ -1703,6 +1739,12 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
                     mergedTurns = unionTurnsByDirection(unionFn, mergedTurns, lastFullTurns, 'append');
                     console.log('[ai-cm-google-search] база сжата — сохранён максимум (' +
                       mergedTurns.length + ' ходов)');
+                  }
+
+                  // BUG-G: A-only ход — вопрос из DOM-пузыря (эхо-валидация) узким fill-only
+                  // добором по каноническому ключу ДО записи базы; досбор выше не меняется.
+                  if (window.GoogleFolwrUtils && typeof window.GoogleFolwrUtils.fillMissingUserText === 'function') {
+                    mergedTurns = window.GoogleFolwrUtils.fillMissingUserText(mergedTurns, domTurns);
                   }
 
                   // O-27/O-32 (диагностика): путь записи — folwr-open (GET /async/folwr):

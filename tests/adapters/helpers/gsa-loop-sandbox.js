@@ -50,7 +50,9 @@ function fnDecl(src, name) {
 // резолвит X из `with (ctx)` и затёр бы РЕАЛЬНУЮ функцию песочницы.
 const API_FNS = [
   'applyTurns', 'buildDetail', 'followFolwrPagination',
-  'folwrRunPermit', 'beginFolwrRun', 'endFolwrRun', 'markFolwrRunGain', 'gsaDiagLoopGuard'
+  'folwrRunPermit', 'beginFolwrRun', 'endFolwrRun', 'markFolwrRunGain', 'gsaDiagLoopGuard',
+  // BUG-G: поведение добора вопроса A-only хода проверяется на РЕАЛЬНЫХ функциях
+  'mergeTurns', 'fillUserTextFromLiveDom', 'messagesFromTurns'
 ];
 
 const SCOPE_FNS = [
@@ -74,6 +76,10 @@ const SCOPE_FNS = [
   // BUG-D: направление слияния ходов — нужен applyTurns нарезки (иначе ReferenceError)
   'unionTurnsByDirection',
   'applyTurns',
+  // BUG-G: mergeTurns зовёт добор вопроса из живого DOM (fillUserTextFromLiveDom)
+  'mergeTurns',
+  'mergeStreamTurns',
+  'fillUserTextFromLiveDom',
   // гард прогонов на тред (предмет задачи «петля GSA»)
   'gsaDiagLoopGuard',
   'folwrRunSince',
@@ -91,7 +97,8 @@ const SCOPE_FNS = [
 
 const STATE_ACCESSORS = [
   'folwrRunAtMap', 'folwrNoGainMap', 'folwrRunLiveMap', 'folwrRunLastVerdict',
-  'folwrGainSeenAtMap', 'vsActive', 'lastFullTurns', 'baseThreadId', 'currentThreadId'
+  'folwrGainSeenAtMap', 'vsActive', 'lastFullTurns', 'lastFullMessages', 'lastFullSnapshot',
+  'baseThreadId', 'currentThreadId'
 ];
 
 const SCOPE_DECLS = [

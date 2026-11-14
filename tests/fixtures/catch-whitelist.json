@@ -45,7 +45,7 @@
       "file": "adapters/google-search-adapter.ts",
       "category": "debug-instrumentation",
       "lines": [
-        238
+        248
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof aiCmDiagOn === 'function' && aiCmDiagOn() && typeof aiCmDiagL"
     },
@@ -53,7 +53,7 @@
       "file": "adapters/google-search-adapter.ts",
       "category": "event-guard",
       "lines": [
-        122
+        124
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.addEventListener('ai-cm-full-history', function (ev) { var evt ="
     },
@@ -61,8 +61,8 @@
       "file": "adapters/google-search-adapter.ts",
       "category": "guard-clause",
       "lines": [
-        46,
-        54
+        48,
+        56
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GoogleFolwrUtils && typeof w"
     },
@@ -1173,8 +1173,8 @@
       "file": "core/google-search-intercept.js",
       "category": "cleanup-guard",
       "lines": [
-        824,
-        875
+        860,
+        911
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: var tgReB = /<!--TgQPHd\\|[\\s\\S]*?-->/g; var tgMatchB; while ((tgMatchB ="
     },
@@ -1183,7 +1183,7 @@
       "category": "debug-instrumentation",
       "lines": [
         25,
-        1640
+        1676
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: window.addEventListener('ai-cm-debug-logs', function (ev) { __aiCmSetDeb"
     },
@@ -1192,7 +1192,7 @@
       "category": "defensive-assignment",
       "lines": [
         159,
-        1647
+        1683
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: lastFolwrOpenUrl = url;"
     },
@@ -1201,7 +1201,7 @@
       "category": "dom-read-guard",
       "lines": [
         290,
-        1220
+        1256
       ],
       "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: var el = document.querySelector('[data-session-thread-id]'); if (el) { v"
     },
@@ -1210,7 +1210,7 @@
       "category": "event-guard",
       "lines": [
         544,
-        1339
+        1375
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-full-history', { detail: det"
     },
@@ -1222,7 +1222,7 @@
         389,
         505,
         541,
-        722
+        758
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (window.GoogleFolwrUtils && window.GoogleFolwrUtils.classifyFolwrCont"
     },
@@ -1230,7 +1230,7 @@
       "file": "core/google-search-intercept.js",
       "category": "parse-guard",
       "lines": [
-        889
+        925
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var u = new URL(rawUrl, location.href); var a = u.searchParams.get('auth"
     },

@@ -257,10 +257,12 @@ describe('Google Search AI folwr-open parser', () => {
     });
 
     it('extractTurnsFromDocument извлекает ходы из живого DOM (oldest-first)', () => {
-      // BUG-D: живой DOM тоже new→old — t2 (новее) стоит первым, как в реальной странице.
+      // BUG-G (замер 2026-11-14, тред 8bTpaveuJtWckdUP46iumAo): в живом DOM 21 контейнер
+      // [data-scope-id="turn"], document order ХРОНОЛОГИЧЕСКИЙ (c[0] — вопрос «deepseek fall down»),
+      // поэтому фикстура идёт t1 (старше) → t2 — как в реальной странице.
       const doc = new DOMParser().parseFromString(
-        turnHtml('t2', 'Второй вопрос', 'Второй ответ') +
-        turnHtml('t1', 'Первый вопрос', 'Первый ответ'),
+        turnHtml('t1', 'Первый вопрос', 'Первый ответ') +
+        turnHtml('t2', 'Второй вопрос', 'Второй ответ'),
         'text/html'
       );
       const turns = extractTurnsFromDocument(doc);

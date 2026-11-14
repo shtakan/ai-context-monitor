@@ -27,6 +27,8 @@ interface GsaFolwrUtils {
   answerTextOf(el: Element): string;
   /** Узлы ответа общим отбором парсера. */
   answerDomNodes(root: Document | Element): GsaAnswerNodes;
+  /** BUG-G: вопрос A-only хода из DOM-пузыря (эхо h3.iMqumd — валидатор пары). */
+  resolveUserQuestionForTurn?(doc: Document, turnEl: Element): string | null;
 }
 
 /**
@@ -162,6 +164,14 @@ class GoogleSearchAdapter extends BaseAdapter {
           if (match) {
             qText = match[1].trim();
           } else { qText = raw; }
+        } else {
+          // BUG-G: A-only ход — h2.iMqumd нет, вопрос остался только в DOM-пузыре.
+          // Берём его общим хелпером парсера (своей копии алгоритма адаптер не держит,
+          // как и у отбора/рендера узлов ответа); без хелпера — прежнее null.
+          var util = gsaFolwrUtils();
+          if (util && typeof util.resolveUserQuestionForTurn === 'function') {
+            try { qText = util.resolveUserQuestionForTurn(document, turns[i]); } catch (e) { qText = null; }
+          }
         }
         questions.push(qText);
       }
