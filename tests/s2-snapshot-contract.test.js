@@ -78,11 +78,12 @@ test('reader: без снимка → null (и по любому convId)', () =>
   expect(api.read('conv-a')).toBeNull();
 });
 
-test('reader: чужой непустой convId → null; пустой/совпадающий → копия снимка', () => {
+test('reader (I6): чужой/пустой/несовпадающий convId → null; совпадающий → копия снимка', () => {
   const snap = snapshot();
   api.set(snap);
   expect(api.read('conv-b')).toBeNull();
-  expect(api.read('')).not.toBeNull();
+  expect(api.read('')).toBeNull();          // I6: лазейка '' закрыта
+  expect(api.read()).toBeNull();            // без аргумента — никогда
   expect(api.read('conv-a')).not.toBeNull();
   const copy = api.read('conv-a');
   expect(copy).not.toBe(snap);
@@ -90,6 +91,10 @@ test('reader: чужой непустой convId → null; пустой/совп
   expect(copy.tokens).toBe(1000);
   expect(copy.percent).toBe(10);
   expect(api.get()).toBe(snap);
+  // I6: снимок с convId === '' не читается даже при совпадающем asked
+  api.set(snapshot({ convId: '' }));
+  expect(api.read('')).toBeNull();
+  expect(api.read('conv-a')).toBeNull();
 });
 
 test('reader: копия не мутирует источник; ageMs≥0, capturedAt<=0 → 0', () => {
@@ -137,9 +142,14 @@ test('commit: смена любого поля сигнатуры → новый
 });
 
 test('S2.1a: writer снимка берёт canonical convId автоэкспорта (GSA threadId)', () => {
-  const start = CONTENT.indexOf('var ctxSnapConvId = (typeof aiCmAutoExportConvId');
+  const start = CONTENT.indexOf('var ctxSnapConvId = (typeof aiCmCanonicalConvId');
   expect(start).toBeGreaterThan(-1);
   const decl = CONTENT.slice(start, CONTENT.indexOf('var ctxSnapSite', start));
+  // I6: одна формула чата для записи и чтения — aiCmCanonicalConvId();
+  // автоэкспорт/GSA-threadId остаётся внутри неё, а не дублируется на точке записи.
+  expect(decl).toContain('(typeof aiCmCanonicalConvId === \'function\')');
+  expect(decl).toContain('? (aiCmCanonicalConvId() || \'\')');
+  // fallback только для срезов-песочниц: автоэкспорт, затем getCurrentConvId
   expect(decl).toContain("(aiCmAutoExportConvId() || '')");
   expect(decl).toContain("(getCurrentConvId() || '')");
   expect(CONTENT).not.toContain("var ctxSnapConvId = (typeof getCurrentConvId === 'function' ? getCurrentConvId() : '') || '';");

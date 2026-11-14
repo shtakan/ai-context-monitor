@@ -147,6 +147,9 @@ declare function handleAiCmDiag(sendResponse: (response?: unknown) => void): boo
 declare function applyDebugLogs(v: unknown): void;
 declare function aiCmDispatchContentReady(): void;
 declare function getCurrentConvId(): string | null;
+// S4/I6: канонический id чата для снимка метрики — ОДНА формула на запись и чтение
+// (core/state.ts: aiCmCanonicalConvId = aiCmAutoExportConvId() || getCurrentConvId() || '').
+declare function aiCmCanonicalConvId(): string;
 declare function aiCmAssignAdapterByHost(): BaseAdapter | null;
 declare function resolveCurrentModel(): { modelId: string | null; fam: string | null; variant: string | null };
 declare function geminiParserVersion(): string;

@@ -1,19 +1,17 @@
 /**
- * v2.0.35 (приёмка Фазы 3, шаг 3): Gemini — строгий монотонный бейдж.
+ * S4 / D3 (ADR-001 §7 п.4): Gemini — число = ТЕКУЩЕЕ измерение канонического тела.
  *
- * Живой дефект: при пересборке базы истории (baseComplete ещё false) новый расчёт
- * токенов оказывался НИЖЕ прошлого, и бейдж падал 9% → 7% → 5%. useMonotonic включался
- * только при baseComplete || lastBounded || (baseSeen && baseCount > 0), поэтому в
- * «слепой» фазе (пустая база, свежий разговор) падение проходило.
+ * История: v2.0.35 удерживала бейдж на неполной базе (9% → 7% не принималось), затем
+ * O-32 сбрасывала храповик на раздутой базе. D3 снимает монотонность как ИСТОЧНИК числа:
+ * `maxTokenCount = tokenEstimate` — единственное присваивание, падение процента при
+ * неполной (но канонической) базе разрешено и является целевым поведением.
  *
- * Контракт фикса (core/content.ts, processAndSend): после выбора maxTokenCount и ДО
- * расчёта percentage — удержание: если baseComplete !== true, серверных токенов нет и
- * прошлый процент > 0, maxTokenCount не опускается ниже порога прошлого процента.
- * НЕ переписываются: точное серверное число (metricServerTokens > 0) и сброс храповика
- * O-32 (база с дублями, ветка C) — это доказанные снижения.
+ * Окно сбора (loader / GSA-probe / net-snapshot / нет bodyHash) число не двигает не
+ * удержанием, а публикацией: aiCmCommitContextSnapshot возвращает prev со stale+ageMs
+ * (см. tests/inv-i4-partial-barrier.test.js и tests/inv-i6-conv-switch.test.js).
  *
- * Пины, которые нельзя сдвинуть байтово: строка useMonotonic,
- * `const percentage = displayLimit > 0 …`, вызов updateWidget(percentage, maxTokenCount, …).
+ * Пины, которые нельзя сдвинуть байтово: `const percentage = displayLimit > 0 …`,
+ * вызов updateWidget(percentage, maxTokenCount, …); useMonotonic и badge-strict-hold удалены.
  */
 const CONTENT = require('./helpers/content-source.js').contentSource;
 const { readSource } = require('./helpers/content-source.js');
@@ -36,13 +34,13 @@ function sliceFunction(src, name) {
   throw new Error('unterminated ' + name);
 }
 
-/** Срез ветвления maxTokenCount + удержание (до строки percentage). */
+/** Срез присваивания числа (D3): единственный `maxTokenCount = tokenEstimate;` … percentage. */
 function metricMaxBranch() {
   const draw = sliceFunction(CONTENT, 'processAndSend');
-  const iAnchor = draw.indexOf('// точное число из countTokens авторитетно');
-  expect(iAnchor).toBeGreaterThan(-1);
-  const iStart = draw.lastIndexOf('if (metricServerTokens > 0) {', iAnchor);
+  const iStart = draw.indexOf('maxTokenCount = tokenEstimate;');
   expect(iStart).toBeGreaterThan(-1);
+  expect(draw.indexOf('useMonotonic')).toBe(-1);
+  expect(draw.indexOf('badge-strict-hold')).toBe(-1);
   const iEnd = draw.indexOf('const percentage = displayLimit > 0', iStart);
   expect(iEnd).toBeGreaterThan(iStart);
   return draw.slice(iStart, iEnd);
@@ -82,46 +80,43 @@ function runMaxBranch(o) {
   return ctx;
 }
 
-describe('Gemini: строгое удержание бейджа на неполной базе', () => {
-  test('baseComplete=false: 9% → 7% НЕ принимается, бейдж держит 9%', () => {
+describe('Gemini (D3): число — текущее измерение, падение разрешено', () => {
+  test('baseComplete=false: 9% → 7% ПРИНИМАЕТСЯ (D3, не регресс)', () => {
     const ctx = runMaxBranch({
       baseComplete: false, lastPercentage: 9, displayLimit: 100000,
       tokenEstimate: 7000, maxTokenCount: 7000
     });
-    expect(ctx.maxTokenCount).toBe(9000); // порог прошлого процента: 9% от 100000
-    expect(pctOf(ctx)).toBe(9);
-    expect(ctx.logs.some(function (m) { return m.indexOf('badge-strict-hold') !== -1; })).toBe(true);
+    expect(ctx.maxTokenCount).toBe(7000);
+    expect(pctOf(ctx)).toBe(7);
+    expect(ctx.logs.some(function (m) { return m.indexOf('badge-strict-hold') !== -1; })).toBe(false);
   });
 
-  test('падение серией проходов: 9% → 7% → 5% держится на 9% до baseComplete', () => {
+  test('падение серией: 9% → 7% → 5%, затем полная база — то же измерение', () => {
     const limit = 200000;
-    // проход 1: 9% принят (первый бейдж)
     let ctx = runMaxBranch({
       baseComplete: false, lastPercentage: -1, displayLimit: limit,
       tokenEstimate: 18000, maxTokenCount: 0
     });
     expect(pctOf(ctx)).toBe(9);
-    // проход 2: свежий расчёт 7% — удержание
     ctx = runMaxBranch({
       baseComplete: false, lastPercentage: 9, displayLimit: limit,
       tokenEstimate: 14000, maxTokenCount: 14000
     });
-    expect(pctOf(ctx)).toBe(9);
-    // проход 3: 5% — держим те же 9%
+    expect(pctOf(ctx)).toBe(7);
     ctx = runMaxBranch({
-      baseComplete: false, lastPercentage: 9, displayLimit: limit,
+      baseComplete: false, lastPercentage: 7, displayLimit: limit,
       tokenEstimate: 10000, maxTokenCount: 10000
     });
-    expect(pctOf(ctx)).toBe(9);
-    // проход 4: база дособрана → авторитетен полный расчёт, падение разрешено
+    expect(pctOf(ctx)).toBe(5);
+    // полная база — то же текущее измерение, без «догоняющего» максимума
     ctx = runMaxBranch({
-      baseComplete: true, lastPercentage: 9, displayLimit: limit,
+      baseComplete: true, lastPercentage: 5, displayLimit: limit,
       tokenEstimate: 10000, maxTokenCount: 10000
     });
     expect(pctOf(ctx)).toBe(5);
   });
 
-  test('рост процента на неполной базе проходит как раньше (9% → 11%)', () => {
+  test('рост процента проходит так же безусловно (9% → 11%)', () => {
     const ctx = runMaxBranch({
       baseComplete: false, lastPercentage: 9, displayLimit: 100000,
       tokenEstimate: 11000, maxTokenCount: 11000
@@ -130,7 +125,7 @@ describe('Gemini: строгое удержание бейджа на непол
     expect(pctOf(ctx)).toBe(11);
   });
 
-  test('новый разговор (lastPercentage=-1/0): удержания нет — бейдж с нуля', () => {
+  test('новый разговор (lastPercentage=-1/0): бейдж с нуля, как и раньше', () => {
     [-1, 0].forEach(function (prev) {
       const ctx = runMaxBranch({
         baseComplete: false, lastPercentage: prev, displayLimit: 100000,
@@ -141,17 +136,17 @@ describe('Gemini: строгое удержание бейджа на непол
     });
   });
 
-  test('O-32 (база с дублями, ветка C): доказанное снижение не переписывается', () => {
+  test('O-32 (база с дублями): храповик не спасает — число = текущая оценка', () => {
     const ctx = runMaxBranch({
       baseComplete: false, lastBounded: true, baseSeen: true, baseCount: 10, domMsgs: 6,
       lastPercentage: 95, displayLimit: 100000,
       tokenEstimate: 5658, maxTokenCount: 11475
     });
-    expect(ctx.maxTokenCount).toBe(5658); // сброс храповика сильнее удержания
+    expect(ctx.maxTokenCount).toBe(5658);
     expect(ctx.lastBounded).toBe(false);
   });
 
-  test('точное серверное число (metricServerTokens>0) авторитетно — удержание молчит', () => {
+  test('точное серверное число (metricServerTokens>0) авторитетно', () => {
     const ctx = runMaxBranch({
       metricServerTokens: 5000, baseComplete: false, lastPercentage: 9, displayLimit: 100000,
       tokenEstimate: 5000, maxTokenCount: 9000
@@ -162,19 +157,20 @@ describe('Gemini: строгое удержание бейджа на непол
 });
 
 describe('пины контракта (строки, которые нельзя сдвинуть)', () => {
-  test('useMonotonic и updateWidget сохранены байтово', () => {
-    expect(CONTENT).toContain('const useMonotonic = baseComplete || lastBounded || (baseSeen && baseCount > 0);');
+  test('useMonotonic удалён, updateWidget и percentage сохранены байтово', () => {
+    expect(CONTENT).not.toContain('const useMonotonic');
+    expect(CONTENT).not.toContain('badge-strict-hold');
     expect(CONTENT).toContain('updateWidget(badgeData.percentage, badgeData.tokenEstimate, badgeData.effectiveLimit,');
     expect(CONTENT).toContain('badgeData.contextLimit, badgeData.displayLimit, badgeData.modelName, badgeData.attachBreak);');
     expect(CONTENT).toContain('const percentage = displayLimit > 0 ? Math.round((maxTokenCount / displayLimit) * 1000) / 10 : 0;');
   });
 
-  test('удержание стоит МЕЖДУ цепочкой и расчётом percentage, с guard на lastPercentage', () => {
-    expect(BRANCH).toContain("typeof lastPercentage === 'number' && lastPercentage > 0");
-    expect(BRANCH).toContain('var strictHoldTokens = Math.ceil((lastPercentage * displayLimit) / 100);');
-    const iHold = BRANCH.indexOf('strictHoldTokens');
-    const iChainEnd = BRANCH.lastIndexOf('maxTokenCount = tokenEstimate;');
-    expect(iHold).toBeGreaterThan(iChainEnd);
+  test('между цепочкой и percentage нет удержания — только присваивание измерения', () => {
+    expect(BRANCH).not.toContain('lastPercentage');
+    expect(BRANCH).not.toContain('strictHoldTokens');
+    const iAssign = BRANCH.indexOf('maxTokenCount = tokenEstimate;');
+    expect(iAssign).toBeGreaterThan(-1);
+    expect(BRANCH.indexOf('if (metricServerTokens > 0) {', iAssign)).toBeGreaterThan(iAssign);
   });
 });
 
@@ -189,16 +185,15 @@ describe('пины контракта (строки, которые нельзя
 describe('v2.6 (R1) D5/D6: снимок метрики фиксируется ОДИН раз и до ветвления', () => {
   const COMMIT = 'lastTokensSnapshot = aiCmCommitContextSnapshot(';
 
-  test('D5: одна точка записи снимка — после percentage и после строгого удержания', () => {
+  test('D5: одна точка записи снимка — после percentage и без удержания', () => {
     // единственная запись во всём контент-скрипте: иначе панель и файл разойдутся с бейджем
     expect(CONTENT.split(COMMIT).length - 1).toBe(1);
     const draw = sliceFunction(CONTENT, 'processAndSend');
     const iCommit = draw.indexOf(COMMIT);
     expect(iCommit).toBeGreaterThan(-1);
-    // maxTokenCount/percentage уже окончательны: запись идёт после lastPercentage и после
-    // блока строгого удержания (иначе снимок зафиксировал бы доисправочное число)
+    // maxTokenCount/percentage уже окончательны: запись идёт после lastPercentage
     expect(iCommit).toBeGreaterThan(draw.indexOf('lastPercentage = percentage;'));
-    expect(draw.lastIndexOf('strictHoldTokens', iCommit)).toBeLessThan(iCommit);
+    expect(draw.slice(0, iCommit)).not.toContain('strictHoldTokens');
     // и до расчёта числа не пишется: запись ровно одна на проход
     expect(draw.split(COMMIT).length - 1).toBe(1);
   });
@@ -220,15 +215,22 @@ describe('v2.6 (R1) D5/D6: снимок метрики фиксируется О
     expect(CONTENT).toContain('updateWidget(d.percentage, d.tokenEstimate, d.effectiveLimit, d.contextLimit, d.displayLimit, d.modelName, d.attachBreak);');
   });
 
-  test('D6: state.ts объявляет снимок и зеркалит в UMD; сбросы чата его гасят', () => {
+  test('D6/I6: state.ts объявляет снимок и зеркалит в UMD; reset гасит только чужой', () => {
     const state = fs.readFileSync(path.join(ROOT, 'core', 'state.ts'), 'utf8');
     expect(state).toContain('let lastTokensSnapshot: AiCmContextSnapshot | null = null;');
     expect(state).toContain("Object.defineProperty(Api, 'lastTokensSnapshot',");
-    // сброс разговора (widget) и смена convId/base-complete (content) обнуляют снимок:
-    // иначе панель/файл нового чата прочли бы число предыдущего
-    expect(readSource('core/widget.ts')).toContain("if (typeof lastTokensSnapshot !== 'undefined') lastTokensSnapshot = null;");
-    // 1 сброс разговора (widget.ts) + 2 сброса в content.ts (смена convId и 0→1 base-complete)
-    expect(CONTENT.split("if (typeof lastTokensSnapshot !== 'undefined') lastTokensSnapshot = null;").length - 1).toBe(3);
+    // widget-reset: снимок и процент гасятся ТОЛЬКО при чужом/пустом canonical convId
+    const widget = readSource('core/widget.ts');
+    expect(widget).toContain('var aiCmResetKeepSnap = !!(aiCmResetCid');
+    expect(widget).toContain("if (!aiCmResetKeepSnap && typeof lastTokensSnapshot !== 'undefined') lastTokensSnapshot = null;");
+    expect(widget).toContain("if (!aiCmResetKeepSnap) lastPercentage = -1;");
+    // content.ts: условный сброс при смене convId + безусловные сбросы chatless-документа
+    // и «нет тела» (это не сброс чата, а отсутствие снимка)
+    expect(CONTENT).toContain('lastTokensSnapshot.convId !== aiCmSnapConvNow');
+    // безусловный сброс остался только у chatless-документа (O-27c); «нет тела» гасит снимок
+    // отдельным гейтом ctxSnapNoPayload
+    expect(CONTENT.split("if (typeof lastTokensSnapshot !== 'undefined') lastTokensSnapshot = null;").length - 1).toBe(1);
+    expect(CONTENT).toContain("if (ctxSnapNoPayload && typeof lastTokensSnapshot !== 'undefined') lastTokensSnapshot = null;");
   });
 
   test('D6: шапка файла экспорта берёт tokens/percent/limit из снимка, а не из maxTokenCount напрямую', () => {

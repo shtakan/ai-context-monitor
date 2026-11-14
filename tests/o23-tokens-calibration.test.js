@@ -253,7 +253,9 @@ describe('O-23 R: регресс байтов tokens~ (serverTokens = 0)', () =>
     expect(snapCalls.length).toBe(2);            // S2.2: объявление + processAndSend; GET_STATS — маппер
     // и оба пути действительно читают серверное число из снимка, а не вычисляют эвристику сами
     expect(CONTENT_SRC.split('const metricServerTokens = tokenSnap.serverTokens;').length - 1).toBe(1);
-    expect(CONTENT_SRC).toContain('var statsPatch = aiCmStatePatchFromSnapshot(aiCmReadContextSnapshot());');
+    // S4 (I6): читатель GET_STATS получает канонический convId — путь «без аргумента» закрыт
+    expect(CONTENT_SRC).toContain('var statsPatch = aiCmStatePatchFromSnapshot(aiCmReadContextSnapshot(\n' +
+      "          (typeof aiCmCanonicalConvId === 'function') ? aiCmCanonicalConvId() : ''));");
     expect(CONTENT_SRC).not.toContain('var tokenSnapStats = aiCmTokenSnapshot(');
     // т.е. при наличии серверного usage отображаемое значение = serverTokens ровно (0% отклонения)
     for (const p of Object.values(PAIRS)) {

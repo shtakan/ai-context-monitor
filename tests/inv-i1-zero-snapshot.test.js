@@ -5,9 +5,9 @@
  * lastTokensSnapshot вовсе — иначе потребитель (бейдж, панель GET_STATS, попап,
  * шапка файла экспорта) печатает 0 / «0.0 %» для чата, которого ещё нет.
  * Снимок ПРОШЛОГО разговора при этом обязан сниматься ДО чтения badgeSnap:
- * aiCmReadContextSnapshot('') совместим с ЛЮБЫМ снимком (core/state.ts:868),
- * поэтому после навигации в новый пустой чат потребители получили бы числа
- * покинутого чата.
+ * снимок принадлежит ровно одному чату (I6, core/state.ts:aiCmCanonicalConvId),
+ * поэтому после навигации в новый пустой чат потребители не получили бы числа
+ * покинутого чата: чтение идёт с каноническим convId, а не без аргумента.
  *
  * Гейт СТРУКТУРНЫЙ — «нечего мерить», а не «tokens === 0»: у крошечного чата
  * 0.0 % — легитимное измерение (кейс 3), и гейт не смотрит на body (кейс 4).
@@ -184,7 +184,8 @@ describe('S2.2 empty-chat: пустой чат не публикует нуле�
     api.set(oldSnapshot());
     api.run(makeCtx());
     expect(api.get()).toBeNull();
-    expect(api.read()).toBeNull();
+    expect(api.read('conv-new')).toBeNull();
+    expect(api.read()).toBeNull(); // I6: без аргумента снимок не отдаётся никогда
     // Потребители: ни числа, ни нулей — пустой патч.
     expect(MAPPERS.patch(api.read())).toEqual({});
     expect(MAPPERS.widget(api.read())).toBeNull();
@@ -194,6 +195,7 @@ describe('S2.2 empty-chat: пустой чат не публикует нуле�
     api.set(oldSnapshot());
     api.run(makeCtx({ aiCmNetSnapshotPending: function () { return true; } }));
     expect(api.get()).toBeNull();
+    expect(api.read('conv-new')).toBeNull();
     expect(api.read()).toBeNull();
   });
 
@@ -207,7 +209,8 @@ describe('S2.2 empty-chat: пустой чат не публикует нуле�
       maxTokenCount: 1,
       percentage: 0
     }));
-    const snap = api.read();
+    expect(api.read()).toBeNull();
+    const snap = api.read('conv-new');
     expect(snap).not.toBeNull();
     expect(snap.tokens).toBe(1);
     expect(snap.percent).toBe(0);
@@ -223,7 +226,8 @@ describe('S2.2 empty-chat: пустой чат не публикует нуле�
       maxTokenCount: 42,
       percentage: 0.1
     }));
-    const snap = api.read();
+    expect(api.read()).toBeNull();
+    const snap = api.read('conv-new');
     expect(snap).not.toBeNull();
     expect(snap.tokens).toBe(42);
   });

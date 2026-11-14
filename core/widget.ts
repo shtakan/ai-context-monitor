@@ -209,14 +209,18 @@ function resetConversationState(): void {
     });
   }
   debugLog('log', '[content-trace] RESET виджета seq=' + (++window.__aiCmTraceSeq || (window.__aiCmTraceSeq = 1)) + ' t=' + Date.now());
+  // S4/I6: снимок и процент принадлежат КОНКРЕТНОМУ чату. Если опубликованный снимок
+  // относится к текущему чату (canonical convId совпал), reset его НЕ стирает — иначе бейдж
+  // мигал бы «—» на каждом внутреннем пересбросе того же разговора. Чужой снимок гасится.
+  var aiCmResetCid = (typeof aiCmCanonicalConvId === 'function') ? (aiCmCanonicalConvId() || '') : '';
+  var aiCmResetKeepSnap = !!(aiCmResetCid && typeof lastTokensSnapshot !== 'undefined'
+    && lastTokensSnapshot && lastTokensSnapshot.convId && lastTokensSnapshot.convId === aiCmResetCid);
   baseText = '';
   baseCount = 0;
   baseSeen = false;
   // v96 (баг 34.6%): сырой счётчик снимка (detail.count ДО дедупликации) не перетекает в другой чат
   aiCmNetRawCount = 0;
   aiCmNetRawCountUsed = -1;
-  // v1.9 (qwen): high-water длины текста принадлежит разговору — не перетекает в другой чат.
-  aiCmTokenHighWater = null;
   // v1.9 (canonical): источник базы (dom|net) тоже принадлежит текущему разговору.
   aiCmBaseSource = '';
   baseComplete = false;
@@ -247,10 +251,11 @@ function resetConversationState(): void {
   if (typeof aiCmAistudioHistoryCacheClear === 'function') { aiCmAistudioHistoryCacheClear(); }
   lastBounded = false;
   maxTokenCount = 0;
-  // v2.6 (R1): снимок метрики принадлежит разговору — сбрасывается вместе с максимумом, иначе
-  // панель/шапка экспорта нового чата прочли бы tokens-снимок прошлого. typeof-гард — прежний
-  // прецедент срез-песочниц тестов (как у aiCmAistudioHistoryCacheClear выше).
-  if (typeof lastTokensSnapshot !== 'undefined') lastTokensSnapshot = null;
+  // v2.6 (R1) + S4/I6: снимок метрики принадлежит разговору — чужой снимок гасится, иначе
+  // панель/шапка экспорта нового чата прочли бы tokens-снимок прошлого. Снимок ТОГО ЖЕ чата
+  // переживает reset (иначе переход внутри чата давал бы «—»). typeof-гард — прецедент
+  // срез-песочниц тестов (как у aiCmAistudioHistoryCacheClear выше).
+  if (!aiCmResetKeepSnap && typeof lastTokensSnapshot !== 'undefined') lastTokensSnapshot = null;
   baseIdSet = null;
   baseSkelSet = null;
   baseAnchors = null;
@@ -271,7 +276,8 @@ function resetConversationState(): void {
   lastCountTokensCache = 0;
   lastCountTokensConvId = ''; // Шаг 2: авторитет точного числа принадлежит чату — при смене чата снят
   lastCountTokensErrorText = ''; // Шаг 4: отказ API относился к тексту прошлого чата
-  lastPercentage = -1;
+  // I6: процент прошлого разговора не держим; процент того же чата reset не сбрасывает.
+  if (!aiCmResetKeepSnap) lastPercentage = -1;
   lastResolvedModelId = null;
   lastSnapshotModelName = ''; // v47: модель снимка тоже сбрасывается при смене чата
   restoredTapeLoaded = false; // v28: разрешаем повторное восстановление при смене чата

@@ -179,7 +179,10 @@ function snapshot(over) {
  */
 function makeSnapshotApi() {
   return new Function(loadEsm.loadAsClassic('core/state.ts') +
-    '\nreturn { read: aiCmReadContextSnapshot, commit: aiCmCommitContextSnapshot, set: function (s) { lastTokensSnapshot = s; } };')();
+    '\nreturn { read: aiCmReadContextSnapshot, commit: aiCmCommitContextSnapshot,' +
+    ' set: function (s) { lastTokensSnapshot = s; },' +
+    ' pendingStart: aiCmNetSnapshotPendingStart, pendingEnd: aiCmNetSnapshotPendingEnd,' +
+    ' loader: function (cid, v) { aiCmLoaderRunningByConv[cid] = v; } };')();
 }
 
 const SCOPE = 'with (ctx) { ' +
@@ -349,18 +352,46 @@ describe('S2.3 inv-i4: барьер partial (ADR-001)', function () {
     expect(Object.prototype.hasOwnProperty.call(JSON.parse(jsonFull), 'partial')).toBe(false);
   });
 
-  test('(e) сигнатура коммита: смена partialReason коммитит новый снимок', function () {
+  test('(e) сигнатура коммита: reason нормализуется, stale даёт только окно сбора', function () {
     const api = makeSnapshotApi();
     api.set(snapshot({ partial: true, partialReason: 'incomplete' }));
     const prev = api.read(CONV_ID);
 
     expect(api.commit(prev, Object.assign({}, prev))).toBe(prev);   // тот же снимок
-    const next = Object.assign({}, prev, { partialReason: 'stale' });
-    expect(api.commit(prev, next)).toBe(next);                     // смена reason — новый снимок
-    expect(api.commit(prev, next).partialReason).toBe('stale');
-    // аддитивность: тело/счётчики не пересчитываются сменой reason
-    expect(api.commit(prev, next).bodyHash).toBe(prev.bodyHash);
-    expect(api.commit(prev, next).tokens).toBe(prev.tokens);
+    // окно закрыто: 'stale' как вход НЕ производится — reason нормализуется в 'incomplete',
+    // а сигнатура после нормализации совпадает с prev (тот же объект).
+    const norm = api.commit(prev, Object.assign({}, prev, { partialReason: 'stale' }));
+    expect(norm).toBe(prev);
+    expect(norm.partialReason).toBe('incomplete');
+
+    // окно сбора: коммит не принимается — копия prev со stale по bodyHash и reason='stale'
+    const held = makeSnapshotApi();
+    held.set(snapshot({ partial: true, partialReason: 'incomplete', bodyHash: 'aa:1', tokens: 2593 }));
+    const hp = held.read(CONV_ID);
+    held.pendingStart('qwen');
+    const changed = Object.assign({}, hp, { bodyHash: 'bb:2', tokens: 9999, percent: 99 });
+    const copy = held.commit(hp, changed);
+    expect(copy).not.toBe(hp);
+    expect(copy).not.toBe(changed);
+    expect(copy.stale).toBe(true);
+    expect(copy.partial).toBe(true);
+    expect(copy.partialReason).toBe('stale');
+    // число в окне стоит: тело/счётчики прежние
+    expect(copy.bodyHash).toBe('aa:1');
+    expect(copy.tokens).toBe(2593);
+
+    // окно сбора, bodyHash тот же → stale=false, reason='incomplete'
+    const same = held.commit(hp, Object.assign({}, hp, { tokens: 9999 }));
+    expect(same.stale).toBe(false);
+    expect(same.partialReason).toBe('incomplete');
+    expect(same.tokens).toBe(2593);
+    held.pendingEnd('qwen');
+
+    // окно закрыто: падение разрешено и принимается новым снимком (D3)
+    const lower = held.commit(hp, Object.assign({}, hp, { tokens: 1000, percent: 0.1, bodyHash: 'cc:3' }));
+    expect(lower).not.toBe(hp);
+    expect(lower.tokens).toBe(1000);
+    expect(lower.partialReason).toBe('incomplete');
   });
 
   // --- S2.3 (I4): ПРОВОДКА partial/partialReason во ВСЕ писатели истории -----------------

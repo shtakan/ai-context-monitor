@@ -490,12 +490,17 @@ describe('O-32 (5): неполная база держит каноническ�
 // =====================================================================================
 // (6) content.js: источник/режим значения бейджа
 // =====================================================================================
-describe('O-32 (6): монотонный максимум включён при неполной базе, источник виден в логе', () => {
-  test('source-пин: useMonotonic учитывает канонический пол неполной базы', () => {
-    expect(CONTENT).toContain('const useMonotonic = baseComplete || lastBounded || (baseSeen && baseCount > 0);');
+describe('O-32 (6): число = текущее измерение (D3), источник виден в логе', () => {
+  test('source-пин: useMonotonic удалён, есть единственное присваивание текущей оценки', () => {
+    expect(CONTENT).not.toContain('useMonotonic');
+    expect(CONTENT).toContain('maxTokenCount = tokenEstimate;');
+    expect(CONTENT).toContain("var aiCmMetricValueSrc = (typeof aiCmBaseSource !== 'undefined' && aiCmBaseSource)");
     expect(CONTENT).toContain("aiCmDiagLine('gsa-metric-src'");
     expect(CONTENT).toContain("var metricSrc = baseComplete ? 'base-complete' : (lastBounded ? 'base-floor+dom-tail' : 'base-floor');");
     expect(CONTENT).toContain("note: (!baseComplete && baseCount > 0) ? 'incomplete-canonical-floor' : ''");
+    // в диагностике источник значения, но нет полей удалённого храповика
+    expect(CONTENT).toContain('valueSrc: aiCmMetricValueSrc,');
+    expect(CONTENT).not.toContain('hwLen:');
     // лог только на смену состояния (урок O-29): антиспам-сигнатура объявлена в state.js
     const STATE = readSource('core/state.ts');
     expect(STATE).toContain('let lastMetricSig = null;');
@@ -512,7 +517,9 @@ describe('O-32 (6): монотонный максимум включён при 
     // и фиксируется оно ОДИН раз — после окончательных maxTokenCount/percentage
     expect(CONTENT.split('lastTokensSnapshot = aiCmCommitContextSnapshot(').length - 1).toBe(1);
     // панель (GET_STATS) отдаёт ровно зафиксированное число, а не собственный пересчёт:
-    expect(CONTENT).toContain('var statsPatch = aiCmStatePatchFromSnapshot(aiCmReadContextSnapshot());');
+    expect(CONTENT).toContain("var statsPatch = aiCmStatePatchFromSnapshot(aiCmReadContextSnapshot(");
+    expect(CONTENT).toContain("(typeof aiCmCanonicalConvId === 'function') ? aiCmCanonicalConvId() : ''));");
+    expect(CONTENT).not.toContain('aiCmReadContextSnapshot()');
     expect(CONTENT).toContain("tokenCount: (typeof statsPatch.tokenEstimate === 'number') ? statsPatch.tokenEstimate : null,");
     expect(CONTENT).toContain("percentage: (typeof statsPatch.percentage === 'number') ? statsPatch.percentage : null,");
     expect(CONTENT).not.toContain('var tokenSnapStats = aiCmTokenSnapshot(');

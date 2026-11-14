@@ -49,13 +49,15 @@ function sliceFunction(src, name) {
   throw new Error('unterminated ' + name + ' @' + open);
 }
 
-/** Срез ветвления maxTokenCount (перезапись/монотонный максимум) из processAndSend. */
+/**
+ * Срез присваивания числа (S4/D3): от единственного `maxTokenCount = tokenEstimate;`
+ * через серверный источник и O-32-релиз до расчёта percentage. Монотонного максимума нет.
+ */
 function metricMaxBranch() {
   const draw = sliceFunction(CONTENT, 'processAndSend');
-  const iAnchor = draw.indexOf('// точное число из countTokens авторитетно');
-  expect(iAnchor).toBeGreaterThan(-1);
-  const iStart = draw.lastIndexOf('if (metricServerTokens > 0) {', iAnchor);
+  const iStart = draw.indexOf('maxTokenCount = tokenEstimate;');
   expect(iStart).toBeGreaterThan(-1);
+  expect(draw.indexOf('useMonotonic')).toBe(-1);
   const iEnd = draw.indexOf('const percentage = displayLimit > 0', iStart);
   expect(iEnd).toBeGreaterThan(iStart);
   return draw.slice(iStart, iEnd);
@@ -149,48 +151,50 @@ describe('O-32 (A): префикс-совместимые тела одного 
 });
 
 describe('O-32 (C): сброс храповика на раздутой базе и чистая запись в кэш', () => {
-  test('D2: неполная база заявляет БОЛЬШЕ сообщений, чем DOM → maxTokenCount сброшен', () => {
+  test('D2 (D3): неполная база заявляет БОЛЬШЕ сообщений, чем DOM → число = текущая оценка', () => {
     // живой SPA-возврат: база с дублями (12 сообщений) при 6 реальных в DOM,
-    // бейдж держит раздутые 11475 токенов, честная оценка канонической базы — 5658
+    // бейдж держал раздутые 11475 токенов, честная оценка канонической базы — 5658.
+    // D3: число — текущее измерение, прошлый максимум источником больше не является.
     const ctx = runMaxBranch({
       baseComplete: false, baseSeen: true, baseCount: 12, domMsgs: 6,
-      useMonotonic: true, tokenEstimate: 5658, maxTokenCount: 11475, lastBounded: true
+      tokenEstimate: 5658, maxTokenCount: 11475, lastBounded: true
     });
     expect(ctx.maxTokenCount).toBe(5658);
     expect(ctx.maxTokenCount).toBeLessThan(11475);
-    // храповик снят: следующий проход снова мерит источник с нуля
+    // DOM-граница снята: следующий проход снова мерит источник с нуля
     expect(ctx.lastBounded).toBeFalsy();
   });
 
-  test('R1: тред без дублей (DOM = Net) — максимум работает как раньше (храповик держит)', () => {
+  test('R1 (D3): тред без дублей (DOM = Net) — падение до текущего измерения разрешено', () => {
     const ctx = runMaxBranch({
       baseComplete: false, baseSeen: true, baseCount: 6, domMsgs: 6,
-      useMonotonic: true, tokenEstimate: 35100, maxTokenCount: 35800
+      tokenEstimate: 35100, maxTokenCount: 35800
     });
-    expect(ctx.maxTokenCount).toBe(35800);               // вниз не роняем: поведение v98 сохранено
+    expect(ctx.maxTokenCount).toBe(35100);               // 35.8% → 35.2%: D3, не регресс
   });
 
-  test('R1: рост не блокируется — максимум по-прежнему поднимается', () => {
+  test('R1 (D3): рост принимается безусловно', () => {
     const ctx = runMaxBranch({
       baseComplete: false, baseSeen: true, baseCount: 6, domMsgs: 4,
-      useMonotonic: true, tokenEstimate: 36000, maxTokenCount: 35800
+      tokenEstimate: 36000, maxTokenCount: 35800
     });
     expect(ctx.maxTokenCount).toBe(36000);
   });
 
-  test('R1: полная база перезаписывает максимум без участия новой ветки', () => {
+  test('R1 (D3): полная база тоже берёт текущее измерение', () => {
     const ctx = runMaxBranch({
       baseComplete: true, baseSeen: true, baseCount: 12, domMsgs: 6,
-      useMonotonic: true, tokenEstimate: 35100, maxTokenCount: 35800
+      tokenEstimate: 35100, maxTokenCount: 35800
     });
-    expect(ctx.maxTokenCount).toBe(35100);               // v98/baseComplete-ветка не тронута
+    expect(ctx.maxTokenCount).toBe(35100);
   });
 
-  test('source-пин: гейт сброса стоит в ветвлении metrics и опирается на DOM-базу', () => {
+  test('source-пин: единственное присваивание числа + O-32-релиз по DOM-базе', () => {
     const branch = metricMaxBranch();
     expect(branch).toContain('baseCount > aiCmDomListS1.length');
     expect(branch).toContain('maxTokenCount = tokenEstimate;');
     expect(branch).toContain('lastBounded = false;');
+    expect(branch).not.toContain('useMonotonic');
     // дубли отсекаются ДО записи в кэш на всех трёх точках записи
     expect(sliceFunction(INTERCEPT, 'dedupeTurnsForCache')).toContain('dedupeTurns');
     expect(sliceFunction(INTERCEPT, 'applySnapshot')).toContain('dedupeTurnsForCache(rawTurns)');

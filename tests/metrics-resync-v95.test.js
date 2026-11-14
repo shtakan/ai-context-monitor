@@ -282,13 +282,16 @@ function snapshotSnippet() {
   return src;
 }
 
-/** Срез ветвления maxTokenCount (перезапись/монотонный максимум) из processAndSend. */
+/**
+ * Срез присваивания числа из processAndSend (S4/D3): единственная строка
+ * `maxTokenCount = tokenEstimate;` + серверный источник + O-32-релиз до расчёта percent.
+ * Монотонного максимума и high-water в срезе больше нет.
+ */
 function metricMaxBranch() {
   const draw = sliceFunction(CONTENT, 'processAndSend');
-  const iAnchor = draw.indexOf('// точное число из countTokens авторитетно');
-  expect(iAnchor).toBeGreaterThan(-1);
-  const iStart = draw.lastIndexOf('if (metricServerTokens > 0) {', iAnchor);
+  const iStart = draw.indexOf('maxTokenCount = tokenEstimate;');
   expect(iStart).toBeGreaterThan(-1);
+  expect(draw.indexOf('useMonotonic')).toBe(-1);
   const iEnd = draw.indexOf('const percentage = displayLimit > 0', iStart);
   expect(iEnd).toBeGreaterThan(iStart);
   return draw.slice(iStart, iEnd);
@@ -372,65 +375,64 @@ describe('v98: масштаб по netEffectiveLen только при baseCompl
       .toBe(1234);
   });
 
-  test('D5: при baseComplete=1 перезапись maxTokenCount идёт НОВЫМ (немасштабированным) значением', () => {
-    // сценарий F5: предыдущий проход неполной базы удержал раздутое 35800, полная база даёт 35100
+  test('D5 (D3): maxTokenCount = текущее измерение при любой полноте базы', () => {
+    // сценарий F5: предыдущий проход оставил 35800, текущее каноническое тело даёт 35100
     const finalEst = 35100;
-    const rewritten = runMaxBranch({
-      baseComplete: true, useMonotonic: true, tokenEstimate: finalEst, maxTokenCount: 35800
-    });
-    expect(rewritten).toBe(finalEst);                       // безусловная перезапись (не max-merge)
-    expect(rewritten).toBeLessThan(35800);                  // 35.8% → 35.2%: это и есть целевое поведение
-    // и на неполной базе тот же проход НЕ роняет максимум вниз (скачка посреди загрузки нет)
-    expect(runMaxBranch({ baseComplete: false, useMonotonic: true, tokenEstimate: finalEst, maxTokenCount: 35800 }))
-      .toBe(35800);
+    expect(runMaxBranch({ baseComplete: true, tokenEstimate: finalEst, maxTokenCount: 35800 }))
+      .toBe(finalEst);                                      // безусловная перезапись, не max-merge
+    expect(runMaxBranch({ baseComplete: true, tokenEstimate: finalEst, maxTokenCount: 35800 }))
+      .toBeLessThan(35800);                                 // 35.8% → 35.2%: целевое поведение D3
+    // D3: неполная база больше НЕ держит прошлый максимум — число тоже текущее
+    expect(runMaxBranch({ baseComplete: false, tokenEstimate: finalEst, maxTokenCount: 35800 }))
+      .toBe(finalEst);
+    // и рост принимается так же безусловно
+    expect(runMaxBranch({ baseComplete: false, tokenEstimate: 40000, maxTokenCount: 35800 }))
+      .toBe(40000);
+    // серверное число авторитетно и помечает источник 'server' (само число — из снимка)
+    expect(runMaxBranch({ metricServerTokens: 1234, tokenEstimate: 35100, maxTokenCount: 35800 }))
+      .toBe(35100);
   });
 
-  test('D7 (v1.9): qwen high-water — короткий net-срез не роняет уже измеренный длинный текст', () => {
-    const body = sliceFunction(CONTENT, 'aiCmQwenHighWaterTrack') + '\n' +
-      sliceFunction(CONTENT, 'aiCmQwenHighWaterKeep');
-    const ctx = { aiCmTokenHighWater: null, swallowSoft: function () { } };
-    const api = new Function('ctx', 'with (ctx) { ' + body +
-      '\nreturn { track: aiCmQwenHighWaterTrack, keep: aiCmQwenHighWaterKeep }; }')(ctx);
-    // DOM-проход: 661 388 символов → 218 334 токена (живой замер 6eed4c3f)
-    api.track(CID, 661388, 218334, 'dom');
-    expect(api.keep(CID, 249856)).toBe(218334);      // сеть короче → отдаём high-water
-    expect(ctx.aiCmTokenHighWater.len).toBe(661388);
-    expect(ctx.aiCmTokenHighWater.src).toBe('dom');
-    // чужой чат не наследует максимум
-    expect(api.keep('other', 249856)).toBe(0);
-    // текущий текст длиннее — слияние не нужно, берётся текущее число
-    expect(api.keep(CID, 700000)).toBe(0);
-    // максимум обновляется только при РОСТЕ длины (токены не сравниваются)
-    api.track(CID, 700000, 230000, 'net');
-    expect(api.keep(CID, 249856)).toBe(230000);
-    expect(ctx.aiCmTokenHighWater.tokens).toBe(230000);
+  test('D7 (D3): high-water по длине текста удалён — короткий срез даёт своё число', () => {
+    // Живой замер 6eed4c3f: DOM 661 388 символов → 218 334 токена; затем сеть дала
+    // короткий срез 249 856 символов. Раньше high-water держал 218 334; теперь число —
+    // измерение текущего канонического тела, даже если оно меньше.
+    expect(CONTENT).not.toContain('function aiCmQwenHighWaterTrack(');
+    expect(CONTENT).not.toContain('function aiCmQwenHighWaterKeep(');
+    expect(CONTENT).not.toContain('aiCmTokenHighWater');
+    expect(runMaxBranch({ baseComplete: false, tokenEstimate: 92197, maxTokenCount: 218334 }))
+      .toBe(92197);
   });
 
-  test('D8 (v1.9): qwen baseComplete уступает high-water; gemini перезаписывается как раньше', () => {
-    const qwen = runMaxBranch({
-      baseComplete: true, useMonotonic: true, tokenEstimate: 92197,
-      maxTokenCount: 218334, aiCmHwKeep: 218334, aiCmMetricValueSrc: 'net', svc: 'qwen'
-    });
-    expect(qwen).toBe(218334);                       // 92 197 не затирает измеренные 218 334
+  test('D8 (D3): qwen и gemini одинаково берут текущее измерение (high-water нет)', () => {
+    // Прежний qwen-путь «baseComplete уступает high-water» удалён: 92 197 — это измерение
+    // текущего тела, а 218 334 — прошлое число, которое больше не источник истины.
     expect(runMaxBranch({
-      baseComplete: true, useMonotonic: true, tokenEstimate: 92197,
-      maxTokenCount: 218334, aiCmHwKeep: 0, aiCmMetricValueSrc: 'net', svc: 'qwen'
-    })).toBe(92197);                                 // нет более длинного текста → числа сети
+      baseComplete: true, tokenEstimate: 92197, maxTokenCount: 218334,
+      aiCmMetricValueSrc: 'net', svc: 'qwen'
+    })).toBe(92197);
     expect(runMaxBranch({
-      baseComplete: true, useMonotonic: true, tokenEstimate: 35100, maxTokenCount: 35800
-    })).toBe(35100);                                 // D5/gemini: безусловная перезапись
+      baseComplete: true, tokenEstimate: 35100, maxTokenCount: 35800
+    })).toBe(35100);
+    // значение из снимка сервера не подменяется прошлым максимумом и у qwen
+    expect(runMaxBranch({
+      metricServerTokens: 92197, tokenEstimate: 92197, maxTokenCount: 218334, svc: 'qwen'
+    })).toBe(92197);
   });
 
-  test('D9 (v1.9): сброс чата гасит canonical-источник и emergency high-water', () => {
-    // v37: смена convId в content.ts сбрасывает оба поля рядом с maxTokenCount.
-    const hwReset = CONTENT.indexOf("if (typeof aiCmTokenHighWater !== 'undefined') aiCmTokenHighWater = null;");
-    const srcReset = CONTENT.indexOf("aiCmBaseSource = '';", hwReset);
-    expect(hwReset).toBeGreaterThan(-1);
-    expect(srcReset).toBeGreaterThan(hwReset);
-    expect(srcReset - hwReset).toBeLessThan(400);
+  test('D9 (D3): сброс чата гасит canonical-источник; high-water больше нет ни в одном пути', () => {
+    // v37: смена convId в content.ts сбрасывает maxTokenCount и aiCmBaseSource рядом.
+    const maxReset = CONTENT.indexOf('maxTokenCount = 0;', CONTENT.indexOf('v37'));
+    expect(maxReset).toBeGreaterThan(-1);
+    const srcReset = CONTENT.indexOf("aiCmBaseSource = '';", maxReset);
+    expect(srcReset).toBeGreaterThan(maxReset);
+    expect(srcReset - maxReset).toBeLessThan(400);
+    // второго (emergency) поля-храповика нет ни в content.ts, ни в widget-reset
+    expect(CONTENT).not.toContain('aiCmTokenHighWater');
+    expect(WIDGET).not.toContain('aiCmTokenHighWater');
     // resetConversationState (core/widget.ts) — второй путь сброса при SPA-переходе.
-    expect(WIDGET).toContain('aiCmTokenHighWater = null;');
     expect(WIDGET).toContain("aiCmBaseSource = '';");
+    expect(WIDGET).toContain('lastPercentage = -1;');
   });
 
   test('D6: source-пин — гейт стоит в ЕДИНОЙ точке расчёта, а её зовут ОБА пути (бейдж и панель)', () => {

@@ -132,7 +132,10 @@ describe('Шаг 3: точный ответ API countTokens приоритетн
     expect(CONTENT.split('aiCmTokenSnapshot(').length - 1).toBe(2);   // объявление + бейдж
     // Попап больше не «дотягивает» эвристику до максимума: число берётся из снимка бейджа,
     // поэтому монотонный max() снят целиком (Math.max с этими именами в коде не осталось).
-    expect(CONTENT).toContain('var statsPatch = aiCmStatePatchFromSnapshot(aiCmReadContextSnapshot());');
+    // S4/I6: попап читает снимок ТОЛЬКО по каноническому convId (безаргументного чтения нет)
+    expect(CONTENT).toContain("var statsPatch = aiCmStatePatchFromSnapshot(aiCmReadContextSnapshot(");
+    expect(CONTENT).toContain("(typeof aiCmCanonicalConvId === 'function') ? aiCmCanonicalConvId() : ''));");
+    expect(CONTENT).not.toContain('aiCmReadContextSnapshot()');
     // исполняемой формы max() больше нет (упоминание осталось только в комментарии-объяснении)
     expect(CONTENT).not.toContain('const displayTokens = metricServerTokens > 0 ? tokenEstimate');
     expect(CONTENT).not.toContain(': Math.max(tokenEstimate, maxTokenCount);');
@@ -289,30 +292,26 @@ describe('Шаг 4: при BYOK без точного числа эвристи�
     expect(buildHold({ lastCountTokensErrorText: 'ДИАЛОГ-1' })('gemini', 'ДИАЛОГ-2')).toBe(true);
   });
 
-  test('S13: ветка держания в processAndSend стоит ДО эвристики и не пишет в бейдж', () => {
+  test('S13 (D3): держание осталось ТОЛЬКО у отрисовки; число пишется безусловно', () => {
     const draw = fnDecl(CONTENT, 'processAndSend');
     const GATE = 'const byokHeuristicHold = aiCmHeuristicHoldForByok(svc, fullText);';
     expect(draw).toContain(GATE);
     const iGate = draw.indexOf(GATE);
-    // ровно две ветки держания: максимум (метрика) и отрисовка (updateWidget)
-    expect(CONTENT.split('} else if (byokHeuristicHold) {').length - 1).toBe(2);
-    const iMetricHold = draw.indexOf('} else if (byokHeuristicHold) {', iGate);
-    expect(iMetricHold).toBeGreaterThan(iGate);
-    const metricHold = branchBody(draw, iMetricHold);
-    // код ветки без комментариев: иначе считались бы упоминания в пояснении фикса
-    const metricHoldCode = metricHold.split('\n').filter(function (l) { return l.trim().indexOf('//') !== 0; }).join('\n');
-    expect(metricHoldCode).not.toContain('maxTokenCount');       // эвристика максимум не двигает
-    expect(metricHoldCode).not.toContain('tokenEstimate =');
-    // эвристические ветви максимума (baseComplete/useMonotonic/else) остались ПОСЛЕ держания
-    expect(draw.indexOf('} else if (baseComplete === true) {', iMetricHold)).toBeGreaterThan(iMetricHold);
-    expect(draw.indexOf('const percentage = displayLimit', iMetricHold)).toBeGreaterThan(iMetricHold);
+    // S4/D3: метрической ветки держания больше нет — во всём content.ts она одна (отрисовка)
+    expect(CONTENT.split('} else if (byokHeuristicHold) {').length - 1).toBe(1);
+    // число присваивается ДО отрисовки и не зависит от держания: единственное присваивание
+    const iMetric = draw.indexOf('maxTokenCount = tokenEstimate;');
+    expect(iMetric).toBeGreaterThan(iGate);
+    expect(draw.indexOf('const percentage = displayLimit', iMetric)).toBeGreaterThan(iMetric);
+    expect(draw.slice(iGate, iMetric)).not.toContain('else if (byokHeuristicHold)');
     // ветка отрисовки: после щита O-1 и до updateWidget, без единой записи в виджет
-    const iDrawHold = draw.indexOf('} else if (byokHeuristicHold) {', iMetricHold + 1);
+    const iDrawHold = draw.indexOf('} else if (byokHeuristicHold) {', iGate);
     expect(iDrawHold).toBeGreaterThan(draw.indexOf('} else if (aiCmBadgeHoldActive()) {'));
     const drawHold = branchBody(draw, iDrawHold);
     const drawHoldCode = drawHold.split('\n').filter(function (l) { return l.trim().indexOf('//') !== 0; }).join('\n');
     expect(drawHoldCode).not.toContain('updateWidget');
     expect(drawHoldCode).not.toContain('lastWidgetData');
+    expect(drawHoldCode).not.toContain('maxTokenCount');
     expect(draw.indexOf('updateWidget(badgeData.percentage')).toBeGreaterThan(iDrawHold);
     expect(draw.indexOf('aiCmScheduleAutoExport(percentage);')).toBeGreaterThan(iDrawHold);
   });

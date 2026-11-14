@@ -431,7 +431,8 @@ function aiCmResetStaleStateOnChatlessChatGptUrl(): boolean {
       // v30.9: на разморозке рисуем значение сразу — новый badge-update может не прийти.
       // S2.2 (ADR-001): источник — снимок через чистый маппер, не lastWidgetData: при null-снимке
       // числа нет, виджет остаётся как был (плейсхолдер «—» рисует core/widget.ts).
-      var unfreezeData = aiCmWidgetDataFromSnapshot(aiCmReadContextSnapshot());
+      var unfreezeData = aiCmWidgetDataFromSnapshot(aiCmReadContextSnapshot(
+        (typeof aiCmCanonicalConvId === 'function') ? aiCmCanonicalConvId() : ''));
       if (!aiCmLoaderFreeze && unfreezeData) {
         const d = unfreezeData;
         updateWidget(d.percentage, d.tokenEstimate, d.effectiveLimit, d.contextLimit, d.displayLimit, d.modelName, d.attachBreak);
@@ -908,23 +909,23 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
   }
   lastEmitConvId = emitConvId;
   badgeSuppressed = false; // v1.8.1: пришёл первый валидный снимок нового чата — бейдж снова обновляется
-  // v37: смена чата по convId из снимка — сбрасываем монотонный максимум токенов.
-  // Без этого после SPA-переключения бейдж держит старые pct/tokens предыдущего чата
-  // (baseComplete=true не даёт сработать правилу перехода неполная→полная).
+  // v37/I6 (S4): convId снимка — идентификатор ЧАТА, а не повод для сброса на каждый эмит.
+  // Снимок принадлежит ровно одному чату: гасим его, только если опубликованный снимок
+  // принадлежит ДРУГОМУ чату. Поздний threadId GSA в пределах того же разговора снимок
+  // не стирает (иначе бейдж показывал бы «—» в том же чате).
   if (emitConvId && emitConvId !== lastSnapConvId) {
     maxTokenCount = 0;
-    // v1.9 (qwen): high-water длины текста принадлежит разговору — иначе длинный чат
-    // удерживал бы число для нового (сброс вместе с maxTokenCount).
-    if (typeof aiCmTokenHighWater !== 'undefined') aiCmTokenHighWater = null;
     // v1.9 (canonical): источник базы принадлежит разговору — не перетекает в новый чат.
     aiCmBaseSource = '';
-    // v2.6 (R1): снимок метрики принадлежит разговору — гасим вместе с максимумом, иначе панель
-    // и шапка файла нового чата прочли бы tokens/limit предыдущего (typeof-гард — срез-песочницы).
-    if (typeof lastTokensSnapshot !== 'undefined') lastTokensSnapshot = null;
-    // v2.0.35: строгое удержание процента (см. badge-strict-hold в processAndSend) не
-    // перетекает из ПРОШЛОГО разговора: сброс монотонного максимума без сброса
-    // lastPercentage держал бы в новом чате процент старого.
-    lastPercentage = -1;
+    var aiCmSnapConvNow = (typeof aiCmCanonicalConvId === 'function')
+      ? (aiCmCanonicalConvId() || '') : emitConvId;
+    if (typeof lastTokensSnapshot !== 'undefined' && lastTokensSnapshot &&
+        lastTokensSnapshot.convId && aiCmSnapConvNow &&
+        lastTokensSnapshot.convId !== aiCmSnapConvNow) {
+      lastTokensSnapshot = null;
+      // v2.0.35/I6: процент прошлого разговора не должен держать бейдж нового.
+      lastPercentage = -1;
+    }
     lastSnapConvId = emitConvId;
     debugLog('log', '[content-trace] v37: новый convId снимка → maxTokenCount=0 (' + emitConvId.slice(0, 8) + ')');
   }
@@ -2508,31 +2509,6 @@ function aiCmResyncMetricsAfterFlush(cid: string, reason?: string): boolean {
   } catch (eRs) { swallowSoft(eRs, 'content:metrics-resync'); return false; }
 }
 
-// v1.9 (ветка C, qwen): high-water по ДЛИНЕ ТЕКСТА. Сеть qwen не несёт tool_result в
-// payload (локальные tool-вызовы приходят только служебными строками, extrasNodes=0), а
-// DOM-адаптер отдаёт полный текст MCP-панелей. Поэтому полный сетевой срез может быть
-// ЗАКОННО короче уже измеренного DOM-текста; сравнение ведём по символам, max по токенам
-// запрещён (эвристика нелинейна: utils/tokenizer.ts:33). Запись — максимум длины в рамках
-// convId; чтение возвращает токены более длинного текста, только если текущий короче.
-function aiCmQwenHighWaterTrack(cid: string, textLen: number, tokens: number, src: string): void {
-  try {
-    if (!cid || !(textLen > 0) || !(tokens > 0)) return;
-    if (!aiCmTokenHighWater || aiCmTokenHighWater.convId !== cid) {
-      aiCmTokenHighWater = { convId: cid, len: textLen, tokens: tokens, src: src };
-      return;
-    }
-    if (textLen > aiCmTokenHighWater.len) {
-      aiCmTokenHighWater.len = textLen;
-      aiCmTokenHighWater.tokens = tokens;
-      aiCmTokenHighWater.src = src;
-    }
-  } catch (eHw) { swallowSoft(eHw, 'content:qwen-high-water-track'); }
-}
-function aiCmQwenHighWaterKeep(cid: string, textLen: number): number {
-  if (!cid || !aiCmTokenHighWater || aiCmTokenHighWater.convId !== cid) return 0;
-  return (aiCmTokenHighWater.len > textLen) ? aiCmTokenHighWater.tokens : 0;
-}
-
 function processAndSend(): void {
   if (!currentAdapter) return;
 
@@ -2866,38 +2842,18 @@ function processAndSend(): void {
     // при серверном числе.
     const byokHeuristicHold = aiCmHeuristicHoldForByok(svc, fullText);
     let tokenEstimate = tokenSnap.tokens;
-    // v1.9 (qwen, ветка C): high-water по длине текста и источник числа для diag/шапки.
-    // Track копит максимум ДЛИНЫ (не токенов) в рамках convId; слияние ниже — только qwen.
-    var aiCmMetricConvId = (typeof getCurrentConvId === 'function') ? (getCurrentConvId() || '') : '';
-    var aiCmFullLen = fullText ? fullText.length : 0;
-    if (svc === 'qwen' && typeof aiCmQwenHighWaterTrack === 'function') {
-      // v1.9 (canonical): источником текста для гарда служит КАНОНИЧЕСКАЯ база, а не
-      // слепое 'net при baseComplete' — иначе DOM 661k и сеть 268k спорят друг с другом.
-      var aiCmTrackSrc = (typeof aiCmBaseSource !== 'undefined' && aiCmBaseSource) ? aiCmBaseSource : (baseComplete ? 'net' : 'dom');
-      aiCmQwenHighWaterTrack(aiCmMetricConvId, aiCmFullLen, tokenEstimate, aiCmTrackSrc);
-    }
-    var aiCmHwKeep = (svc === 'qwen' && typeof aiCmQwenHighWaterKeep === 'function')
-      ? aiCmQwenHighWaterKeep(aiCmMetricConvId, aiCmFullLen) : 0;
-    // v1.9 (canonical): база — DOM, значит и число 'dom', хотя сетевой снимок полный.
-    // max срабатывает только как аварийный гард на укоротившейся базе.
-    var aiCmMetricValueSrc = (typeof aiCmBaseSource !== 'undefined' && aiCmBaseSource === 'dom')
-      ? 'dom'
-      : (baseComplete ? ((aiCmHwKeep > tokenEstimate) ? 'max' : 'net') : 'dom');
+    // S4 (ADR-001 §7 п.4 / D3): число — ТЕКУЩЕЕ измерение канонического тела. Монотонного
+    // максимума и high-water по длине текста больше нет: укоротившаяся (но каноническая)
+    // база даёт меньшее число — это D3, а не регресс. aiCmMetricValueSrc — только ИСТОЧНИК
+    // числа для diag/шапки файла (dom|net|server), а не режим удержания.
+    var aiCmMetricValueSrc = (typeof aiCmBaseSource !== 'undefined' && aiCmBaseSource)
+      ? aiCmBaseSource : (baseComplete ? 'net' : 'dom');
     const contextLimit = ModelConfig.getContextLimit(modelId);
     const effectiveLimit = ModelConfig.getEffectiveLimit(modelId);
     const displayLimit = computeEffectiveLimit(modelId);
-    // Монотонный максимум удерживается, когда источник стабилен —
-    // EITHER сеть дала полную историю (baseComplete) ИЛИ найденная DOM-граница (lastBounded).
-    // O-32: при НЕПОЛНОЙ базе источником значения служит каноническая база (core/hybrid-tail.js:
-    // getEffectiveText при baseComplete=false отдаёт пол базы, а не частичную DOM-выборку),
-    // поэтому такой источник тоже стабилен и заслуживает монотонного максимума: осцилляция
-    // DOM-выборки (SPA-возврат, вытеснение старых узлов сервисом) больше не роняет бейдж
-    // 4.4% → 0.6% на том же треде. Раньше: `useMonotonic = baseComplete || lastBounded` —
-    // неполная база без видимой границы перезаписывала максимум на каждом проходе.
-    const useMonotonic = baseComplete || lastBounded || (baseSeen && baseCount > 0);
-    // O-32 (ДИАГНОСТИКА, только измерение): ИСТОЧНИК и РЕЖИМ значения бейджа одним маркером —
+    // O-32 (ДИАГНОСТИКА, только измерение): ИСТОЧНИК значения бейджа одним маркером —
     // видно, каким путём получено число (полная база / канонический пол базы + DOM-хвост /
-    // канонический пол базы / DOM-адаптер) и удерживался ли монотонный максимум. Печать —
+    // канонический пол базы / DOM-адаптер). Печать —
     // каноническим хелпером utils/debug.ts под гейтом aiCmDebug и ТОЛЬКО на смену состояния
     // (сигнатура src|msgs|textLen|tokens|percentage — урок O-29 про лог-спам); читаются только
     // уже посчитанные значения, байты/пороги/латчи не меняются.
@@ -2909,11 +2865,10 @@ function processAndSend(): void {
         aiCmDiagLine('gsa-metric-src', {
           site: svc,
           src: metricSrc,
-          // v1.9: источник САМОГО числа (dom|net|max|server|hold) — обязан совпадать
+          // S4: источник САМОГО числа (dom|net|server) — обязан совпадать
           // с тем, что уйдёт в lastTokensSnapshot.src и в шапку файла.
           valueSrc: aiCmMetricValueSrc,
           baseSrc: (typeof aiCmBaseSource !== 'undefined') ? aiCmBaseSource : '',
-          hwLen: (typeof aiCmTokenHighWater !== 'undefined' && aiCmTokenHighWater) ? aiCmTokenHighWater.len : 0,
           note: (!baseComplete && baseCount > 0) ? 'incomplete-canonical-floor' : '',
           msgs: baseCount,
           countForTokens: countForTokens,
@@ -2921,83 +2876,31 @@ function processAndSend(): void {
           baseComplete: baseComplete ? 1 : 0,
           baseSeen: baseSeen ? 1 : 0,
           lastBounded: lastBounded ? 1 : 0,
-          useMonotonic: useMonotonic ? 1 : 0,
           tokens: tokenEstimate,
           baseTextLen: baseText ? baseText.length : 0,
           threadId: lastThreadId || ''
         });
       }
     } catch (eMetricSrc) { }
-    // v2.0.35 (Gemini): строгий монотонный бейдж. Пока база не дособрана
-    // (baseComplete !== true), процент не имеет права падать — пересборка базы
-    // показывала 7% после 9%. Единственное ДОКАЗАННОЕ снижение — сброс храповика
-    // O-32 (ветка C ниже, база с дублями): его удержание не переписывает.
-    var aiCmRatchetResetByDom = false;
+    // S4 (D3): единственное присваивание числа — ТЕКУЩАЯ оценка канонического тела.
+    // Приоритет источников прежний: точное серверное число авторитетно, иначе — эвристика
+    // по effective-тексту (DOM или сеть). Прошлых максимумов maxTokenCount не хранит;
+    // при byokHeuristicHold бейдж держит предыдущий рисунок (см. ветвление отрисовки ниже),
+    // но само число всё равно равно текущему измерению.
+    maxTokenCount = tokenEstimate;
     if (metricServerTokens > 0) {
       // точное число из countTokens авторитетно — не удерживаем завышенную эвристику
       // (у AI Studio в metricServerTokens приходит счётчик шапки чата — он тоже авторитетен)
-      maxTokenCount = tokenEstimate;
       aiCmMetricValueSrc = 'server';
-    } else if (byokHeuristicHold) {
-      aiCmMetricValueSrc = 'hold';
-      // Шаг 4: точного числа для текста ещё нет — максимум НЕ двигаем (эвристика молчит);
-      // бейдж держит предыдущее значение до ответа countTokens (см. ветвление отрисовки).
-    } else if (baseComplete === true) {
-      // v1.8-fix: новый ПОЛНЫЙ сетевой снапшот ЗАМЕНЯЕТ значение базы и сбрасывает
-      // монотонный максимум — случайная инфляция (двойной учёт вложений и т.п.)
-      // самолечится следующим доверенным снапшотом вместо max-merge.
-      // v1.9 (qwen, ветка C): для qwen это решение ОТМЕНЕНО. Сетевой payload qwen не
-      // содержит tool_result (extrasNodes=0 в живом замере), поэтому полный сетевой срез
-      // короче уже измеренного DOM-текста с MCP-панелями (249 856 против 661 388 симв.).
-      // Слияние — по ДЛИНЕ текста (high-water per convId), не по токенам: эвристика
-      // нелинейна (utils/tokenizer.ts:33), max по токенам запрещён. Прочие сервисы
-      // (включая D5-пин gemini) сохраняют безусловную перезапись байт-в-байт.
-      if (typeof aiCmHwKeep === 'number' && aiCmHwKeep > tokenEstimate) {
-        maxTokenCount = aiCmHwKeep;
-        if (typeof aiCmMetricValueSrc !== 'undefined') aiCmMetricValueSrc = 'max';
-      } else {
-        maxTokenCount = tokenEstimate;
-      }
-    } else if ((typeof baseSeen !== 'undefined') && baseSeen === true &&
+    }
+    // O-32 (фикс C, НЕ про число): на раздутой базе (сеть заявляет больше сообщений, чем
+    // реально отдаёт DOM) снимаем DOM-границу, чтобы следующий проход снова мерил источник
+    // с нуля. Это про сборку канонического текста; монотонности здесь больше нет.
+    if ((typeof baseSeen !== 'undefined') && baseSeen === true &&
       (typeof baseCount === 'number') && baseCount > 0 &&
       (typeof aiCmDomListS1 !== 'undefined') && aiCmDomListS1 &&
-      aiCmDomListS1.length > 0 && baseCount > aiCmDomListS1.length &&
-      tokenEstimate < maxTokenCount) {
-      // O-32 (фикс C): СБРОС ХРАПОВИКА на раздутой базе. Сеть не доказала полноту
-      // (baseComplete=false), но заявляет БОЛЬШЕ сообщений, чем реально отдаёт DOM:
-      // признак базы с дублями (одна пара «вопрос+ответ» вошла двумя формами тела).
-      // Храповик удерживал это завышение навсегда — бейдж залипал на 9% вместо 4.4%.
-      // Сбрасываем максимум к текущей оценке (она посчитана по канонической базе —
-      // core/hybrid-tail.js: пол базы, без дублей) и снимаем DOM-границу (lastBounded),
-      // чтобы следующий проход снова мерил источник с нуля. Срабатывает ТОЛЬКО вниз
-      // (tokenEstimate < maxTokenCount): на здоровом росте поведение не меняется.
-      maxTokenCount = tokenEstimate;
+      aiCmDomListS1.length > 0 && baseCount > aiCmDomListS1.length) {
       lastBounded = false;
-      aiCmRatchetResetByDom = true;
-      aiCmMetricValueSrc = 'dom';
-    } else if (useMonotonic) {
-      if (tokenEstimate > maxTokenCount) maxTokenCount = tokenEstimate;
-      else aiCmMetricValueSrc = 'max'; // удержан прежний максимум — он и есть источник
-    } else {
-      maxTokenCount = tokenEstimate;
-      aiCmMetricValueSrc = 'dom';
-    }
-    // v2.0.35 (Gemini): СТРОГОЕ удержание бейджа. На неполной базе новое значение меньше
-    // прошлого процента НЕ принимается: храповик поднимается до порога прошлого процента,
-    // поэтому виджет и попап видят одну и ту же пару pct/tokens. Точное серверное число
-    // (metricServerTokens) и сброс храповика O-32 — доказанные снижения, их не переписываем.
-    if (typeof aiCmRatchetResetByDom === 'boolean' && aiCmRatchetResetByDom === false &&
-        baseComplete !== true && metricServerTokens === 0 &&
-        typeof lastPercentage === 'number' && lastPercentage > 0 && displayLimit > 0) {
-      var strictHoldTokens = Math.ceil((lastPercentage * displayLimit) / 100);
-      if (maxTokenCount < strictHoldTokens) {
-        // % нового значения считается до подъёма — только для честной строки лога.
-        var strictNewPct = Math.round((maxTokenCount / displayLimit) * 1000) / 10;
-        debugLog('log', '[content-trace] badge-strict-hold: baseComplete=0, прошлый pct=' + lastPercentage +
-          ' > новый ' + strictNewPct + ' — бейдж держит ' + lastPercentage + '% (база не дособрана)');
-        maxTokenCount = strictHoldTokens;
-        aiCmMetricValueSrc = 'hold';
-      }
     }
     const percentage = displayLimit > 0 ? Math.round((maxTokenCount / displayLimit) * 1000) / 10 : 0;
     const hasChanged = percentage !== lastPercentage;
@@ -3014,9 +2917,9 @@ function processAndSend(): void {
     var aiCmSnapPending83 = (typeof aiCmNetSnapshotPending === 'function')
       ? aiCmNetSnapshotPending((currentAdapter && currentAdapter.siteName) || '')
       : false;
-    // S2.2 (empty-chat): пустой чат — не измерение. Снимок прошлого разговора снимаем ДО
-    // чтения badgeSnap: aiCmReadContextSnapshot('') совместим с ЛЮБЫМ снимком
-    // (core/state.ts:868), иначе потребители получат числа покинутого чата.
+    // S2.2 (empty-chat) + S4/I6: пустой чат — не измерение. Снимок снимаем ДО чтения
+    // badgeSnap; второй барьер — сам читатель: он требует равенства convId
+    // (core/state.ts:aiCmReadContextSnapshot), поэтому числа покинутого чата не пройдут.
     // Предикат структурный — «нечего мерить» (нет текста, вложений и сообщений),
     // а не «tokens === 0»: 0.0% у крошечного чата — легитимное измерение.
     var ctxSnapNoPayload = !fullText && !(netAttachTokens > 0) && !(countForTokens > 0);
@@ -3030,8 +2933,12 @@ function processAndSend(): void {
       // S2.1 (ADR-001): кандидат собирается ОДИН раз и фиксируется через commit-хелпер —
       // lastTokensSnapshot остаётся единственной точкой записи снимка (core/state.ts).
       var ctxSnapBodyOk = !!(body && body.text === effective);
-      var ctxSnapConvId = (typeof aiCmAutoExportConvId === 'function' ? (aiCmAutoExportConvId() || '') : '')
-        || (typeof getCurrentConvId === 'function' ? (getCurrentConvId() || '') : '');
+      // I6 (S4): ОДНА формула чата для записи и чтения снимка — aiCmCanonicalConvId()
+      // (core/state.ts). Fallback — только для срезов-песочниц без этого хелпера.
+      var ctxSnapConvId = (typeof aiCmCanonicalConvId === 'function')
+        ? (aiCmCanonicalConvId() || '')
+        : ((typeof aiCmAutoExportConvId === 'function' ? (aiCmAutoExportConvId() || '') : '')
+          || (typeof getCurrentConvId === 'function' ? (getCurrentConvId() || '') : ''));
       var ctxSnapSite = (currentAdapter && currentAdapter.siteName) || '';
       // O-43: сетевая полнота GSA — монотонный латч export-manager.ts:aiCmGsaNetworkCompleteIs.
       var aiCmCtxSnapBodyTrusted = aiCmAutoExportTrustedBase() === true
@@ -3060,7 +2967,20 @@ function processAndSend(): void {
         aiCmCtxSnapCandidate.baseComplete = baseComplete === true;
       }
       if (aiCmCtxSnapPartial) aiCmCtxSnapCandidate.partialReason = 'incomplete';
+      var aiCmSnapPrevAnomaly = (typeof lastTokensSnapshot !== 'undefined') ? lastTokensSnapshot : null;
       lastTokensSnapshot = aiCmCommitContextSnapshot(lastTokensSnapshot, aiCmCtxSnapCandidate);
+      // S4 (D3): падение больше 10 п.п. при ПРИНЯТОМ коммите — не ошибка (число = текущее
+      // измерение канонического тела), но повод для ОДНОЙ диагностической строки. В [ctx-snap]
+      // и в шапку файла она не попадает: это content-trace, а не метрика.
+      // Принятость видна по идентичности: freeze отдаёт копию prev, дедуп — сам prev.
+      if (aiCmSnapPrevAnomaly && aiCmSnapPrevAnomaly.convId === aiCmCtxSnapCandidate.convId
+        && lastTokensSnapshot === aiCmCtxSnapCandidate
+        && (aiCmSnapPrevAnomaly.percent - aiCmCtxSnapCandidate.percent) > 10) {
+        debugLog('log', '[content-trace] badge-shrink-anomaly: pct ' + aiCmSnapPrevAnomaly.percent
+          + '→' + aiCmCtxSnapCandidate.percent + ' tokens ' + aiCmSnapPrevAnomaly.tokens
+          + '→' + aiCmCtxSnapCandidate.tokens + ' bodyHash ' + (aiCmSnapPrevAnomaly.bodyHash || '-')
+          + '→' + (aiCmCtxSnapCandidate.bodyHash || '-'));
+      }
       // ADR-001 §2: одна строка [ctx-snap] на смену сигнатуры (антиспам — как lastMetricSig).
       // Порядок полей: convId|src|tokens|chars|msgs|attach|bodyHash|baseComplete.
       var ctxSnapSig = ctxSnapBodyOk
@@ -3075,7 +2995,8 @@ function processAndSend(): void {
     // S2.2 (ADR-001): данные бейджа — ТОЛЬКО из зафиксированного снимка (коммит выше).
     // lastWidgetData теперь производное снимка: null-снимок → null, поэтому ни одна ветка
     // (разморозка лоадера, пересоздание виджета) не дорисовывает число из прошлого рендера.
-    var badgeSnap = aiCmReadContextSnapshot();
+    var badgeSnap = aiCmReadContextSnapshot(
+      (typeof aiCmCanonicalConvId === 'function') ? aiCmCanonicalConvId() : '');
     var badgeData = aiCmWidgetDataFromSnapshot(badgeSnap);
     lastWidgetData = badgeData;
     // O-35 (v54, фикс badge-suppress): супрессия держится ТОЛЬКО пока база нового convId не
@@ -3235,7 +3156,8 @@ function processAndSend(): void {
           // что использует барьер автоэкспорта. typeof-гард: срез-песочницы без state.ts
           // видят null → меток нет (байты прежние).
           var snapPartNet = (typeof aiCmReadContextSnapshot === 'function')
-            ? aiCmReadContextSnapshot(emitConvA || lastEmitConvId || '') : null;
+            ? aiCmReadContextSnapshot((typeof aiCmCanonicalConvId === 'function')
+              ? aiCmCanonicalConvId() : (emitConvA || lastEmitConvId || '')) : null;
           // v31: дублируем в per-host ключ aiCmHistory:<host> (перезапись, без накопления)
           var histSnapshot = {
             host: window.location.hostname,
@@ -3348,7 +3270,8 @@ function processAndSend(): void {
           // (Литерал выше не расширяем: source-пин окна адаптерной ветки O-35 держит запись
           // aiCmHistory:<host> в пределах 3400 символов от cidS24.)
           var snapPartAd = (typeof aiCmReadContextSnapshot === 'function')
-            ? aiCmReadContextSnapshot(cidS24) : null;
+            ? aiCmReadContextSnapshot((typeof aiCmCanonicalConvId === 'function')
+              ? aiCmCanonicalConvId() : cidS24) : null;
           if (snapPartAd && snapPartAd.partial === true) {
             var partFieldsAd = {
               partial: true,
@@ -3603,7 +3526,8 @@ if (isExtensionValid()) {
         // S2.3 (ADR-001, I4): ручной файл (MD/JSON) несёт те же метки, что и авто-путь —
         // из того же снимка. typeof-гард: срез-песочницы без state.ts → меток нет.
         var snapPartMan = (typeof aiCmReadContextSnapshot === 'function')
-          ? aiCmReadContextSnapshot(curCidExp) : null;
+          ? aiCmReadContextSnapshot((typeof aiCmCanonicalConvId === 'function')
+            ? aiCmCanonicalConvId() : curCidExp) : null;
         var manualSnapshot = /** @type {{host: string, convId: string, site: string, model: string, tokens: number, limit: number, percent: number, src?: string, updatedAt: number, isLowConfidenceBase: boolean, sourceTier?: string, partial?: boolean, partialReason?: 'incomplete' | 'stale' | 'shrank', messages: Array<{role?: string, text?: string}>}} */
           ({
             host: window.location.hostname,
@@ -3689,7 +3613,8 @@ if (isExtensionValid()) {
         // S2.2 (ADR-001): панель НЕ считает число сама — читает зафиксированный снимок
         // через чистый маппер. Null-снимок → tokenCount/contextLimit/percentage = null:
         // потребитель обязан показать «—», а не 0/«0.0 %». messageCount остаётся живым.
-        var statsPatch = aiCmStatePatchFromSnapshot(aiCmReadContextSnapshot());
+        var statsPatch = aiCmStatePatchFromSnapshot(aiCmReadContextSnapshot(
+          (typeof aiCmCanonicalConvId === 'function') ? aiCmCanonicalConvId() : ''));
         sendResponse({
           data: {
             site: currentAdapter.siteName,
@@ -3880,7 +3805,8 @@ if (isExtensionValid()) {
         createWidget();
         // S2.2 (ADR-001): пересозданный виджет получает числа только из снимка; при null-снимке
         // updateWidget не зовём — плейсхолдер «—» остаётся, число не дорисовывается.
-        var recreateData = aiCmWidgetDataFromSnapshot(aiCmReadContextSnapshot());
+        var recreateData = aiCmWidgetDataFromSnapshot(aiCmReadContextSnapshot(
+          (typeof aiCmCanonicalConvId === 'function') ? aiCmCanonicalConvId() : ''));
         if (recreateData) {
           updateWidget(recreateData.percentage, recreateData.tokenEstimate,
             recreateData.effectiveLimit, recreateData.contextLimit, recreateData.displayLimit, recreateData.modelName, recreateData.attachBreak);

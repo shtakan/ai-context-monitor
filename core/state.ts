@@ -40,13 +40,8 @@ let maxTokenCount: number = 0;
 // файла и бейджем сразу после F5: панель считала Math.max(tokenEstimate, maxTokenCount)).
 // Обнуляется вместе с maxTokenCount при сбросе чата — снимок чужого разговора не перетекает.
 let lastTokensSnapshot: AiCmContextSnapshot | null = null;
-// v1.9 (qwen): high-water по ДЛИНЕ текста. Сеть qwen не приносит tool_result в payload
-// (живой замер: extrasNodes=0), а DOM-адаптер отдаёт полный текст MCP-панелей — полный
-// сетевой срез поэтому ЗАКОННО короче уже измеренного DOM-текста. Храним максимум длины
-// вместе с числом токенов и источником; сравнение — по символам, не по токенам
-// (эвристика нелинейна: utils/tokenizer.ts:33). max привязан к convId и сбрасывается
-// при смене чата вместе с остальным состоянием.
-let aiCmTokenHighWater: { convId: string; len: number; tokens: number; src: string } | null = null;
+// S4 (ADR-001 §7 п.4 / D3): high-water по длине текста удалён. Число метрики — всегда
+// ТЕКУЩЕЕ измерение канонического тела; монотонного максимума прошлых тел больше нет.
 // v1.9 (canonical): источник базового массива текущего чата — 'dom' (сообщения адаптера с
 // MCP-панелями) или 'net' (срез перехвата). Метрика, панель и тело файла читают ОДИН массив;
 // src уходит в diag/JSON. Сбрасывается на смене чата вместе с baseText/lastBaseTexts.
@@ -392,9 +387,6 @@ function aiCmLatchRemove(service: string, convId: string): Promise<boolean> {
     get: function () { return aiCmWidgetDataFromSnapshot; } });
   Object.defineProperty(Api, 'aiCmStatePatchFromSnapshot', { enumerable: true,
     get: function () { return aiCmStatePatchFromSnapshot; } });
-  Object.defineProperty(Api, 'aiCmTokenHighWater', { enumerable: true,
-    get: function () { return aiCmTokenHighWater; },
-    set: function (value) { aiCmTokenHighWater = value; } });
   Object.defineProperty(Api, 'aiCmBaseSource', { enumerable: true,
     get: function () { return aiCmBaseSource; },
     set: function (value) { aiCmBaseSource = value; } });
@@ -715,7 +707,7 @@ interface AiCmContextSnapshot {
   site: string;
   model: string;
   modelName: string;
-  src: 'dom' | 'net' | 'max' | 'server' | 'hold';
+  src: 'dom' | 'net' | 'server';
   tokens: number;
   percent: number;
   limit: number;
@@ -832,17 +824,46 @@ function aiCmStatePatchFromSnapshot(snap: AiCmContextSnapshot | null): Partial<A
 }
 
 /**
- * Единственная точка фиксации снимка: возвращает prev, если сигнатура не изменилась
- * (тогда capturedAt остаётся прежним — «тот же снимок»), иначе next.
- * Сигнатура шире лог-сигнатуры [ctx-snap]: site/model/baseComplete входят в неё, иначе
- * объект замирал бы при смене имени модели (класс BUG-02) или baseComplete при том же
+ * Единственная точка фиксации снимка (ADR-001 §7 п.4 / D3 в уточнённой редакции).
+ *
+ * Три исхода:
+ *  1) у кандидата нет convId — снимок неопознанного чата НЕ коммитится (читатель его всё
+ *     равно не отдаст: требуется равенство asked === snap.convId); другой convId —
+ *     прежний снимок не наследуется, кандидат нового чата публикуется как первый;
+ *  2) ОКНО СБОРА (идёт лоадер, GSA-проба, заказан сетевой снимок или у кандидата нет
+ *     канонического тела): коммит НЕ принимается — возвращается КОПИЯ prev с пересчитанным
+ *     stale по bodyHash. Число в окне стоит, ageMs растёт (читатель выводит его из
+ *     capturedAt прежнего снимка). partial=true: в окне сбора файл честно говорит
+ *     partialReason=stale либо incomplete;
+ *  3) окно закрыто — коммит принимается целиком, stale снимается. Падение процента при
+ *     принятом коммите РАЗРЕШЕНО: это D3, а не регресс (монотонности больше нет).
+ *
+ * Сигнатура сравнения шире лог-сигнатуры [ctx-snap]: site/model/baseComplete входят в неё,
+ * иначе объект замирал бы при смене имени модели (класс BUG-02) или baseComplete при том же
  * счётчике (Qwen: src=dom, partial=false, tokens те же).
  */
 function aiCmCommitContextSnapshot(
   prev: AiCmContextSnapshot | null,
   next: AiCmContextSnapshot
 ): AiCmContextSnapshot {
+  if (!next.convId) return prev;
   if (!prev) return next;
+  if (prev.convId !== next.convId) return next;
+  var collecting = (typeof aiCmLoaderRunningByConv !== 'undefined' && aiCmLoaderRunningByConv
+      && aiCmLoaderRunningByConv[next.convId])
+    || (typeof aiCmGsaProbeRunningFor === 'function' && aiCmGsaProbeRunningFor(next.convId) === true)
+    || (typeof aiCmNetSnapshotPending === 'function' && aiCmNetSnapshotPending(next.site) === true)
+    || !next.bodyHash;
+  if (collecting) {
+    var held: AiCmContextSnapshot = Object.assign({}, prev);
+    held.stale = !!(prev.bodyHash && next.bodyHash && prev.bodyHash !== next.bodyHash);
+    held.partial = true;
+    held.partialReason = held.stale ? 'stale' : 'incomplete';
+    return held;
+  }
+  next.stale = false;
+  if (next.partial) next.partialReason = 'incomplete';
+  else delete next.partialReason;
   var same = prev.convId === next.convId
     && prev.site === next.site
     && prev.model === next.model
@@ -858,15 +879,28 @@ function aiCmCommitContextSnapshot(
 }
 
 /**
+ * I6 (ADR-001 §7 п.4): единственный канонический идентификатор чата — одна формула на
+ * запись и чтение снимка. Приоритет: convId пайплайна автоэкспорта (у GSA это threadId из
+ * DOM, data-session-thread-id), затем id из URL. Пустая строка — чат ещё не опознан.
+ */
+function aiCmCanonicalConvId(): string {
+  var cid = '';
+  if (typeof aiCmAutoExportConvId === 'function') cid = aiCmAutoExportConvId() || '';
+  if (!cid && typeof getCurrentConvId === 'function') cid = getCurrentConvId() || '';
+  return cid || '';
+}
+
+/**
  * Читатель снимка: ВСЕГДА копия (потребитель не может испортить источник), ageMs/stale
- * выводятся из capturedAt. Пустой convId совместим с любым снимком; непустой чужой — null.
+ * выводятся из capturedAt. Снимок принадлежит ровно одному чату: нет спрошенного convId,
+ * нет convId у снимка или они разные — null (обе прежние лазейки сняты, I6).
  */
 function aiCmReadContextSnapshot(convId?: string): AiCmContextSnapshot | null {
   var snap = (typeof lastTokensSnapshot !== 'undefined' && lastTokensSnapshot)
     ? lastTokensSnapshot : null;
   if (!snap) return null;
   var asked = typeof convId === 'string' ? convId : '';
-  if (asked && snap.convId && asked !== snap.convId) return null;
+  if (!asked || !snap.convId || asked !== snap.convId) return null;
   var copy: AiCmContextSnapshot = Object.assign({}, snap);
   copy.ageMs = (typeof copy.capturedAt === 'number' && copy.capturedAt > 0
     && copy.capturedAt <= Date.now()) ? Date.now() - copy.capturedAt : 0;

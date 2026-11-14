@@ -719,7 +719,8 @@ function aiCmWriteCurrentHistory(): void {
     // не пересчитываем: снимок единственный владелец partial/partialReason.
     // typeof-гард: срез-песочницы без state.ts получают null → меток нет (байты прежние).
     var snapPartHist = (typeof aiCmReadContextSnapshot === 'function')
-      ? aiCmReadContextSnapshot(cid || '') : null;
+      ? aiCmReadContextSnapshot((typeof aiCmCanonicalConvId === 'function')
+        ? aiCmCanonicalConvId() : (cid || '')) : null;
     var mid = lastResolvedModelId;
     var dispLimit = computeEffectiveLimit(mid);
     // v2.6 (R1): tokens/limit/percent снимка истории — из ЕДИНОГО снимка метрики, который
@@ -1669,7 +1670,9 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
     if (reason !== 'pre-trim') {
       var snapPartD = null;
       try {
-        snapPartD = (typeof aiCmReadContextSnapshot === 'function') ? aiCmReadContextSnapshot(cid || '') : null;
+        snapPartD = (typeof aiCmReadContextSnapshot === 'function')
+          ? aiCmReadContextSnapshot((typeof aiCmCanonicalConvId === 'function')
+            ? aiCmCanonicalConvId() : (cid || '')) : null;
       } catch (ePart) { snapPartD = null; }
       if (snapPartD && snapPartD.partial === true) {
         debugLog('log', '[AI CM][auto-export] skip reason=partial convId=' + cid +
@@ -1905,7 +1908,8 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
         // S2.3 (ADR-001): частичность — из того же читателя, что у барьера (единственный
         // владелец partial/partialReason). typeof-гард — прецедент срез-песочниц тестов.
         var snapPartAuto = (typeof aiCmReadContextSnapshot === 'function')
-          ? aiCmReadContextSnapshot(cid || '') : null;
+          ? aiCmReadContextSnapshot((typeof aiCmCanonicalConvId === 'function')
+            ? aiCmCanonicalConvId() : (cid || '')) : null;
         var hist = {
           site: (currentAdapter && currentAdapter.siteName) || '',
           model: ModelConfig.getModel(lastResolvedModelId || '')?.name || '',
