@@ -1156,7 +1156,7 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
   baseSkelSet = new Set();
   baseAnchors = [];
   for (var t = 0; t < lastBaseTexts.length; t++) {
-    var sk = normalize(stripMd(lastBaseTexts[t]));
+    var sk = aiCmTailSkel(lastBaseTexts[t]);
     if (sk) { baseSkelSet.add(sk); if (sk.length >= ANCHOR_MIN) baseAnchors.push(sk); }
   }
   lastTailSig = null;

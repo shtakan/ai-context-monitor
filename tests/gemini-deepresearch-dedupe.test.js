@@ -471,7 +471,10 @@ const HELPERS_SRC = [
   // aiCmLogDedupeRemoved → buildHistoryMessages (все видят друг друга как в модуле).
   extractBlock(CONTENT_SRC, 'function aiCmLogIntraDedupe(role, blocks)', '// ================= v61diag'),
   extractBlock(CONTENT_SRC, 'function sanitizeGeminiText(s)', 'function aiCmCollectExportSource()'),
-  extractBlock(CONTENT_SRC, 'function normalize(s)', 'var MSG_SELECTORS = [')
+  extractBlock(CONTENT_SRC, 'function normalize(s)', 'var MSG_SELECTORS = ['),
+  // BUG-C: content.js строит baseSkelSet скелетом хвоста (aiCmTailSkel) — в песочницу
+  // тянем все три хелпера одним непрерывным отрезком hybrid-tail (A/E/D-скелет).
+  extractBlock(CONTENT_SRC, 'function aiCmStripAttachmentSections(', 'function computeTailFromDom(')
 ].join('\n');
 
 function makeListenerCtx(overrides) {

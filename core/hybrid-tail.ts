@@ -57,6 +57,46 @@ function shouldUseGeminiDomParser(): boolean {
   } catch (e) { }
   return false;
 }
+// ---- BUG-C (A): двусторонний скелет хвоста ----
+// Ход базы и его узел в DOM приходят в РАЗНОЙ форме: секции вложений
+// ('\n\n[FILE: …]' / '\n\n[IMAGE: …]') дописываются к тексту базы при эмиссии, а лента
+// рендерит то же вложение своей карточкой. Сравнение «как есть» расходится, граница базы
+// не находится, и ход, уже лежащий в базе, попадает в хвост (двойной счёт).
+// Источник формы — core/gemini-ingest.js:908-920 (stripAttachmentSections, байтово тот же
+// алгоритм: идём с конца и отрезаем последнюю секцию, пока они есть). Копия, а не вызов:
+// скелет должен считаться в одной форме и для базы, и для DOM в этом же модуле.
+function aiCmStripAttachmentSections(text: string): string {
+  var s = (text == null) ? '' : String(text);
+  var at = s.length;
+  while (at > 0) {
+    var f = s.lastIndexOf('\n\n[FILE: ', at - 1);
+    var im = s.lastIndexOf('\n\n[IMAGE: ', at - 1);
+    var cut = (f > im) ? f : im;
+    if (cut === -1) break;
+    s = s.slice(0, cut);
+    at = cut;
+  }
+  return s;
+}
+// UI-хром ленты: превью вложения отдельной строкой ('image_x.png Ещё 2/1') — в базе такой
+// строки нет, поэтому она ломала скелет узла. Снимается ЦЕЛАЯ строка и только при полном
+// совпадении с шаблоном: обычный текст, где имя файла стоит внутри фразы, не режется.
+function aiCmStripChromeLines(text: string): string {
+  var RE_CHROME = /^\s*image_[^\s]+\.(png|jpe?g|webp|gif)(\s+Ещё\s+\d+(?:\/\d+)?)?\s*$/;
+  var s = (text == null) ? '' : String(text);
+  if (!s) return '';
+  var lines = s.split('\n');
+  var kept: string[] = [];
+  for (var i = 0; i < lines.length; i++) {
+    if (!RE_CHROME.test(lines[i])) kept.push(lines[i]);
+  }
+  if (kept.length === lines.length) return s;
+  return kept.join('\n').trim();
+}
+// Скелет хвоста: ОДНА форма сравнения для базы и для DOM (A + E + прежние normalize/stripMd).
+function aiCmTailSkel(text: string): string {
+  return normalize(stripMd(aiCmStripChromeLines(aiCmStripAttachmentSections(text))));
+}
 function computeTailFromDom(): AiCmTail {
   var found = findMessageNodes();
   var nodes = found.nodes;
@@ -71,12 +111,11 @@ function computeTailFromDom(): AiCmTail {
   var stopFound = false;
   for (var k = nodes.length - 1; k >= 0; k--) {
     var raw = nodes[k].innerText || nodes[k].textContent || '';
-    var skel = normalize(raw);
+    var skel = aiCmTailSkel(raw);
     if (nodeIsBase(nodes[k], skel)) { stopFound = true; stopAt = k; break; }
     if (skel.length > 0) tailNodes.unshift(nodes[k]);
   }
 
-  var pieces = [];
   var tailMessages: AiCmExportMessage[] = [];
   for (var j = 0; j < tailNodes.length; j++) {
     var txt = '';
@@ -91,8 +130,10 @@ function computeTailFromDom(): AiCmTail {
     } else {
       txt = (tailNodes[j].innerText || tailNodes[j].textContent || '').trim();
     }
+    // BUG-C (E): UI-хром ленты снимается с узла ДО сравнения с базой и до склейки —
+    // строка-превью вложения иначе протекала и в метрики, и в тело снимка.
+    txt = aiCmStripChromeLines(txt);
     if (txt) {
-      pieces.push(txt);
       // S1.2: роль хвоста для канонического тела. Приоритет — явный атрибут
       // (Claude/Gemini-разметка), иначе класс узла запроса; всё прочее — ответ.
       var tailRole = '';
@@ -110,15 +151,43 @@ function computeTailFromDom(): AiCmTail {
       tailMessages.push({ role: tailRole, text: txt });
     }
   }
+  // BUG-C (D): отбрасывание совпавшего ПРЕФИКСА хвоста.
+  //   Граница базы в DOM может быть найдена не на последнем её ходе: перерисовка ленты
+  //   теряет data-message-id, кэш скелетов отстаёт — тогда за границей оказываются ходы,
+  //   которые в базе УЖЕ есть, и getEffectiveText()/getEffectiveMessages() считают их
+  //   дважды. Режем ровно префикс: пока первый элемент хвоста совпал по скелету с одним из
+  //   последних K сообщений базы — это дубль, а не новый ход. K ≤ длины хвоста, поэтому
+  //   сверяются только те ходы базы, которые физически могли попасть за границу.
+  //   Скелеты короче minSkel (< ANCHOR_MIN) не участвуют: короткая реплика («да», «спасибо»)
+  //   совпала бы с чем угодно и вычеркнула настоящий новый ход.
+  var baseMsgs: AiCmExportMessage[] | null = (typeof aiCmBasePrepared !== 'undefined' &&
+    Array.isArray(aiCmBasePrepared) && aiCmBasePrepared.length > 0) ? aiCmBasePrepared : null;
+  if (baseMsgs) {
+    var minSkel = (typeof ANCHOR_MIN === 'number') ? ANCHOR_MIN : 40;
+    var kBase = Math.min(baseMsgs.length, tailMessages.length);
+    var knownKeys: string[] = [];
+    for (var b = baseMsgs.length - kBase; b < baseMsgs.length; b++) {
+      var bMsg = baseMsgs[b];
+      var bKey = aiCmTailSkel(String((bMsg && bMsg.text) || ''));
+      if (bKey && bKey.length >= minSkel) knownKeys.push(bKey);
+    }
+    while (tailMessages.length && knownKeys.indexOf(aiCmTailSkel(tailMessages[0].text)) !== -1) {
+      tailMessages.shift();
+    }
+  }
+  // Текст хвоста строится ИЗ тех же сообщений, что уходят в messages: тело снимка
+  // (canonicalBodyText) и getEffectiveText() остаются побайтово равны.
+  var tailTexts: string[] = [];
+  for (var q = 0; q < tailMessages.length; q++) tailTexts.push(tailMessages[q].text);
   return {
-    text: pieces.join('\n'),
-    count: tailNodes.length,
+    text: tailTexts.join('\n'),
+    count: tailMessages.length,
     bounded: stopFound,
     sel: found.sel,
     messages: tailMessages,
     diag: 'sel=' + found.sel + ' узлов=' + nodes.length +
       ' стоп=' + (stopFound ? ('@' + stopAt) : 'нет(все в окне — новые)') +
-      ' хвост=' + tailNodes.length + ' bdd=' + (stopFound ? 'да' : 'нет')
+      ' хвост=' + tailMessages.length + ' bdd=' + (stopFound ? 'да' : 'нет')
   };
 }
 // Если сеть дала полную историю (baseComplete) — индикатор берёт число ИЗ БАЗЫ (baseText), а НЕ из DOM.
@@ -235,6 +304,9 @@ function getEffectiveMessages(): AiCmExportMessage[] | null {
   Api.findMessageNodes = findMessageNodes;
   Api.nodeIsBase = nodeIsBase;
   Api.shouldUseGeminiDomParser = shouldUseGeminiDomParser;
+  Api.aiCmStripAttachmentSections = aiCmStripAttachmentSections;
+  Api.aiCmStripChromeLines = aiCmStripChromeLines;
+  Api.aiCmTailSkel = aiCmTailSkel;
   Api.computeTailFromDom = computeTailFromDom;
   Api.aiCmTailMetricBase = aiCmTailMetricBase;
   Api.getEffectiveText = getEffectiveText;

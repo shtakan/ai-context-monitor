@@ -110,6 +110,13 @@ declare function normalize(s: string): string;
 /** Снятие markdown-разметки (ссылки, код). */
 declare function stripMd(s: string): string;
 
+/**
+ * hybrid-tail.ts: скелет текста для сверки базы и DOM — normalize(stripMd(stripChrome(stripAttach(x)))).
+ * Вложения ([FILE:]/[IMAGE:]) снимаются с базы, UI-хром ленты — с DOM, поэтому скелет хода
+ * совпадает в обеих формах (BUG-C); им же строится кэш baseSkelSet в content.js.
+ */
+declare function aiCmTailSkel(text: string): string;
+
 /** hybrid-tail.ts: поиск узлов сообщений в DOM. */
 declare function findMessageNodes(): { nodes: Element[]; sel: string };
 
