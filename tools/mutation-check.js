@@ -9,6 +9,9 @@
  * finally block (byte-for-byte). No git stash, no commits, no writes outside the
  * working copy and %TEMP%.
  *
+ * Baseline: owning test must be green BEFORE the mutation, otherwise ERROR (no false KILLED).
+ * Postflight: after restore the same tests are run together and must be green, otherwise exit 2.
+ *
  * Usage:
  *   node tools/mutation-check.js              # M1..M7 (M8 is deferred to S6.2)
  *   node tools/mutation-check.js --only M8    # run a deferred mutation explicitly
@@ -76,7 +79,7 @@ const MUTATIONS = [
     anchor: '2890',
     test: 'tests/o32-gsa-canonical-thread-invariant.test.js',
     find: '    maxTokenCount = tokenEstimate;',
-    replace: '    maxTokenCount = 0;',
+    replace: '    maxTokenCount = Math.max(maxTokenCount, tokenEstimate);',
   },
   {
     id: 'M6',
@@ -168,6 +171,17 @@ function pad(value, width) {
   return s.length >= width ? s : s + ' '.repeat(width - s.length);
 }
 
+function runJest(tests) {
+  const list = Array.isArray(tests) ? tests : [tests];
+  const res = spawnSync(process.execPath, [JEST_BIN].concat(list, ['--runInBand', '--silent', '--ci']), {
+    cwd: ROOT,
+    encoding: 'utf8',
+    timeout: TIMEOUT_MS,
+    env: Object.assign({}, process.env, { CI: '1', FORCE_COLOR: '0' }),
+  });
+  return res; // вызывающий смотрит res.error и res.status
+}
+
 function runMutation(m) {
   const abs = path.join(ROOT, m.file);
   const original = fs.readFileSync(abs);
@@ -175,6 +189,11 @@ function runMutation(m) {
   const occurrences = originalText.split(m.find).length - 1;
   if (occurrences !== 1) {
     return { status: 'ERROR', detail: 'anchor found ' + occurrences + ' time(s), expected 1' };
+  }
+
+  const base = runJest(m.test);
+  if (base.error || base.status !== 0) {
+    return { status: 'ERROR', detail: 'baseline red (jest exit ' + (base.error ? 'spawn' : base.status) + ')' };
   }
 
   const stamp = crypto.createHash('sha1')
@@ -189,12 +208,7 @@ function runMutation(m) {
   let result;
   try {
     fs.writeFileSync(abs, originalText.replace(m.find, m.replace), 'utf8');
-    const res = spawnSync(process.execPath, [JEST_BIN, m.test, '--runInBand', '--silent', '--ci'], {
-      cwd: ROOT,
-      encoding: 'utf8',
-      timeout: TIMEOUT_MS,
-      env: Object.assign({}, process.env, { CI: '1', FORCE_COLOR: '0' }),
-    });
+    const res = runJest(m.test);
     if (res.error) {
       result = { status: 'ERROR', detail: String(res.error.message || res.error) };
     } else if (res.status === 0) {
@@ -265,6 +279,15 @@ function main() {
   if (dirty) {
     console.error('postflight: working copies dirty after restore:\n' + dirty);
     return 2;
+  }
+
+  const testsRun = [...new Set(selected.map((m) => m.test))];
+  if (!dirty && testsRun.length) {
+    const after = runJest(testsRun);
+    if (after.error || after.status !== 0) {
+      console.error('postflight: restored tree is red (jest exit ' + (after.error ? 'spawn' : after.status) + ')');
+      return 2;
+    }
   }
 
   const deferred = MUTATIONS.filter((m) => m.deferred && !selected.includes(m));
