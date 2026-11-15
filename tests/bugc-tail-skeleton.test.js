@@ -13,11 +13,14 @@
  * ФИКС (три части, ровно они и пинуются):
  *   A. двусторонний скелет aiCmTailSkel = normalize(stripMd(stripChrome(stripAttach(x)))):
  *      вложения снимаются с базы, UI-хром — с DOM, сравнение идёт в одной форме;
- *   D. после сборки tail совпавший ПРЕФИКС отбрасывается: пока первый элемент хвоста
- *      по скелету равен одному из последних K сообщений базы (K ≤ длины хвоста,
- *      скелеты короче ANCHOR_MIN не участвуют) — это дубль, а не новый ход;
+ *   D. после сборки tail совпавший СУФФИКС отбрасывается ПОЗИЦИОННО (BUG-C-2): для
+ *      cand = maxCand…1 первые cand ходов хвоста сверяются с ПОСЛЕДНИМИ cand ходами
+ *      базы — роль + скелет + длина ≥ ANCHOR_MIN у каждого элемента; повторная отправка
+ *      того же длинного текста, которого в базе ещё нет, не вычёркивается;
  *   E. UI-хром снимается с каждого узла хвоста до склейки — он не протекает ни в
- *      метрики, ни в тело снимка.
+ *      метрики, ни в тело снимка. Имена вложений базы (aiCmAttachmentNames) применяются
+ *      ТОЛЬКО к скелету: карточка файла ленты ('report.pdf 1.2 MB') сверяется с секцией
+ *      базы ('[FILE: report.pdf …]'), а тело настоящего нового хода не меняется.
  *
  * ПРАВИЛО 3 (Behavior-Only Tests): тесты НЕ читают исходники продукта. Модуль берётся
  * через своё публичное API (window.AiCmHybridTail), utils/canonical-body.ts — через
@@ -92,8 +95,14 @@ function renderFeed(msgs) {
   });
 }
 
-function skels(msgs) {
-  return new Set(msgs.map(function (m) { return Hybrid.aiCmTailSkel(m.text); }));
+/**
+ * Скелеты хода с именами вложений базы (BUG-C-2): content.js считает имена один раз по
+ * текстам всей базы и с ними же строит baseSkelSet — хелпер повторяет это, иначе кэш базы
+ * был бы в другой форме, чем скелет узла.
+ */
+function skels(msgs, names) {
+  const nm = names || Hybrid.aiCmAttachmentNames(textsOf(msgs).join('\n'));
+  return new Set(msgs.map(function (m) { return Hybrid.aiCmTailSkel(m.text, nm); }));
 }
 
 function installScope(over) {
@@ -145,11 +154,12 @@ describe('BUG-C (A): скелет базы и DOM совпадает в одно
   test('(b) aiCmTailSkel(база) === aiCmTailSkel(DOM) — user (файл) и assistant (картинка+файл)', function () {
     const domUser = DOM_BASE[2];
     const domAssistant = DOM_BASE[3];
+    const names = Hybrid.aiCmAttachmentNames(textsOf(BASE_PREPARED).join('\n'));
 
     // user: в базе дописана секция файла, в DOM — чистый текст хода.
-    expect(Hybrid.aiCmTailSkel(BASE_PREPARED[2].text)).toBe(Hybrid.aiCmTailSkel(domUser.text));
+    expect(Hybrid.aiCmTailSkel(BASE_PREPARED[2].text, names)).toBe(Hybrid.aiCmTailSkel(domUser.text, names));
     // assistant: в базе секции IMAGE/FILE, в DOM — строка карточки файла + chrome-превью.
-    expect(Hybrid.aiCmTailSkel(BASE_PREPARED[3].text)).toBe(Hybrid.aiCmTailSkel(domAssistant.text));
+    expect(Hybrid.aiCmTailSkel(BASE_PREPARED[3].text, names)).toBe(Hybrid.aiCmTailSkel(domAssistant.text, names));
     // контроль: без нормализации текст РАЗНЫЙ, т.е. пинуется именно скелет, а не равенство текстов.
     expect(BASE_PREPARED[3].text).not.toBe(domAssistant.text);
   });
@@ -188,8 +198,8 @@ describe('BUG-C (D): совпавший префикс хвоста отбрас
   test('(d) D-only: нераспознанная строка карточки в DOM-ходе базы — дубля нет, новый ход на месте', function () {
     // Скелетный кэш отстал: последнего хода базы в нём ещё нет, id в DOM перевыпущены.
     // Поэтому граница базы находится на предпоследнем ходе, а последний ход базы
-    // оказывается в хвосте. Спасает только D: строка 'report.pdf 1.2 MB' есть и в базе,
-    // и в DOM (её не снимают ни A, ни E), поэтому скелеты совпадают.
+    // оказывается в хвосте. Спасает только D: скелеты хвоста и конца базы совпадают
+    // (BUG-C-2: карточку файла снимает уже A — по имени вложения базы).
     renderFeed([
       DOM_BASE[0], DOM_BASE[1], DOM_BASE[2],
       { id: 'a2', kind: 'model-response', text: A2_DOM },
@@ -251,5 +261,115 @@ describe('BUG-C (E): UI-хром ленты не протекает в хвос�
     expect(Hybrid.getEffectiveText()).toBe(BASE_TEXT + '\n' + tailTurn);
     expect(tail.text.split('\n').filter(function (l) { return /^\s*image_/.test(l); })).toEqual([]);
     expect(Canonical.canonicalBodyText(messages)).toBe(Hybrid.getEffectiveText());
+  });
+});
+
+// ---- BUG-C-2: позиционный суффикс D + хром по именам вложений базы ------------------
+// Пины (g)-(i) — остатки BUG-C: прежний D искал скелет хвоста во МНОЖЕСТВЕ скелетов базы
+// и вычёркивал как дубль любой повтор, включая новый ход с тем же длинным текстом; карточка
+// файла ленты не снималась, если в базе то же вложение записано секцией.
+const LONG_P = 'Объясни, пожалуйста, как считается процент использования контекста и почему он врёт';
+const LONG_ANS1 = 'Процент считается по базе сети, а не по видимому куску ленты, поэтому скролл его не меняет.';
+const LONG_ANS2 = 'Коротко: индикатор берёт базу, а хвост добавляется только после проверки границы базы.';
+
+describe('BUG-C-2 (D): суффикс хвоста сверяется с КОНЦОМ базы позиционно', () => {
+  test('(g) повторная отправка того же длинного вопроса не вычёркивается', function () {
+    const BASE_G = [
+      { id: 'gu1', role: 'user', text: U1 },
+      { id: 'ga1', role: 'assistant', text: A1 },
+      { id: 'gp', role: 'user', text: LONG_P },
+      { id: 'gans1', role: 'assistant', text: LONG_ANS1 }
+    ];
+    const BASE_G_TEXT = Canonical.canonicalBodyText(BASE_G);
+    expect(Hybrid.aiCmTailSkel(LONG_P).length).toBeGreaterThanOrEqual(40);
+
+    renderFeed([
+      { id: 'nu1', kind: 'user-query', text: U1 },
+      { id: 'na1', kind: 'model-response', text: A1 },
+      { id: 'np1', kind: 'user-query', text: LONG_P },
+      { id: 'nans1', kind: 'model-response', text: LONG_ANS1 },
+      { id: 'np2', kind: 'user-query', text: LONG_P },
+      { id: 'nans2', kind: 'model-response', text: LONG_ANS2 }
+    ]);
+    const scope = installScope({
+      baseText: BASE_G_TEXT,
+      baseCount: BASE_G.length,
+      baseIdSet: new Set(['old-1', 'old-2', 'old-3', 'old-4']),
+      baseSkelSet: skels(BASE_G.slice(0, 2)),
+      baseAnchors: [],
+      aiCmBasePrepared: BASE_G
+    });
+
+    const tail = Hybrid.computeTailFromDom();
+    expect(tail.bounded).toBe(true);
+    expect(tail.count).toBe(2);
+    expect(tail.messages.map(function (m) { return m.text; })).toEqual([LONG_P, LONG_ANS2]);
+
+    const messages = Hybrid.getEffectiveMessages();
+    expect(messages.length).toBe(BASE_G.length + 2);
+    expect(textsOf(messages).slice(BASE_G.length)).toEqual([LONG_P, LONG_ANS2]);
+    // Повтор есть и в базе, и в хвосте — тело снимка честно считает его дважды.
+    expect(occurrences(Hybrid.getEffectiveText(), LONG_P)).toBe(2);
+    expect(Canonical.canonicalBodyText(messages)).toBe(Hybrid.getEffectiveText());
+    expect(scope.aiCmBasePrepared).toBe(BASE_G);
+  });
+});
+
+describe('BUG-C-2 (A+B): карточка файла ленты сверяется по имени вложения базы', () => {
+  test('(h) DOM-строка «report.pdf 1.2 MB» — хром базы: хвост пуст, тело снимка = база', function () {
+    const BODY_H = 'Файл с расчётами собран: в нём три листа и сводная таблица по кварталам отчёта.';
+    const BASE_H = [
+      { id: 'hu1', role: 'user', text: U1 },
+      { id: 'ha1', role: 'assistant', text: A1 },
+      { id: 'hu2', role: 'user', text: U2 },
+      { id: 'ha2', role: 'assistant', text: BODY_H + SEC_FILE }
+    ];
+    const BASE_H_TEXT = Canonical.canonicalBodyText(BASE_H);
+    const names = Hybrid.aiCmAttachmentNames(textsOf(BASE_H).join('\n'));
+    expect(names).toEqual(['report.pdf']);
+    // Без имён карточка не хром: скелет ленты (BODY + карточка) ≠ скелет базы (BODY);
+    // с именами она снимается целиком и скелеты совпадают.
+    expect(Hybrid.aiCmTailSkel(BODY_H + '\n' + CARD_LINE)).not.toBe(Hybrid.aiCmTailSkel(BODY_H));
+    expect(Hybrid.aiCmTailSkel(BODY_H + '\n' + CARD_LINE, names)).toBe(Hybrid.aiCmTailSkel(BASE_H[3].text, names));
+
+    renderFeed([
+      { id: 'hu1', kind: 'user-query', text: U1 },
+      { id: 'ha1', kind: 'model-response', text: A1 },
+      { id: 'hu2', kind: 'user-query', text: U2 },
+      { id: 'ha2', kind: 'model-response', text: BODY_H + '\n' + CARD_LINE }
+    ]);
+    installScope({
+      baseText: BASE_H_TEXT,
+      baseCount: BASE_H.length,
+      baseIdSet: new Set(['old-1', 'old-2', 'old-3', 'old-4']),
+      baseSkelSet: skels(BASE_H),
+      baseAnchors: [],
+      aiCmBasePrepared: BASE_H
+    });
+
+    const tail = Hybrid.computeTailFromDom();
+    expect(tail.bounded).toBe(true);
+    expect(tail.count).toBe(0);
+    expect(tail.messages.length).toBe(0);
+    expect(Hybrid.getEffectiveText()).toBe(BASE_H_TEXT);
+    expect(Hybrid.getEffectiveCount(BASE_H.length)).toBe(BASE_H.length);
+  });
+});
+
+describe('BUG-C-2 (D): реальный дубль конца базы всё ещё отбрасывается', () => {
+  test('(i) лента = вся база, кэш скелетов без последних двух сообщений → хвост пуст', function () {
+    renderFeed(DOM_BASE);
+    installScope({
+      baseIdSet: new Set(['old-1', 'old-2', 'old-3', 'old-4']),
+      baseSkelSet: skels(BASE_PREPARED.slice(0, 2)),
+      baseAnchors: []
+    });
+
+    const tail = Hybrid.computeTailFromDom();
+    expect(tail.bounded).toBe(true);
+    expect(tail.count).toBe(0);
+    expect(tail.messages.length).toBe(0);
+    expect(Hybrid.getEffectiveText()).toBe(BASE_TEXT);
+    expect(Hybrid.getEffectiveCount(BASE_COUNT)).toBe(BASE_COUNT);
   });
 });

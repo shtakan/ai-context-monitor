@@ -1153,10 +1153,10 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
   }
   baseIdSet = new Set();
   for (var i = 0; i < lastBaseIds.length; i++) { var s = String(lastBaseIds[i]).trim(); if (s) baseIdSet.add(s); }
-  baseSkelSet = new Set();
-  baseAnchors = [];
+  // BUG-C-2: имена вложений базы — один раз до цикла (карточка файла ленты = секция базы).
+  baseSkelSet = new Set(); baseAnchors = []; var baseSkelNames = aiCmAttachmentNames(lastBaseTexts.join('\n'));
   for (var t = 0; t < lastBaseTexts.length; t++) {
-    var sk = aiCmTailSkel(lastBaseTexts[t]);
+    var sk = aiCmTailSkel(lastBaseTexts[t], baseSkelNames);
     if (sk) { baseSkelSet.add(sk); if (sk.length >= ANCHOR_MIN) baseAnchors.push(sk); }
   }
   lastTailSig = null;

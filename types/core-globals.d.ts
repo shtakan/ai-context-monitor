@@ -111,11 +111,21 @@ declare function normalize(s: string): string;
 declare function stripMd(s: string): string;
 
 /**
+ * hybrid-tail.ts: имена вложений базы из секций `[FILE: …]` / `[IMAGE: …]`.
+ * Из имени снимаются размер и хвостовая скобка («report.pdf (1.2 МБ)» → «report.pdf»),
+ * дубли не повторяются. Нужны, чтобы карточка файла в ленте снималась как хром
+ * по имени вложения базы (BUG-C-2).
+ */
+declare function aiCmAttachmentNames(text: string): string[];
+
+/**
  * hybrid-tail.ts: скелет текста для сверки базы и DOM — normalize(stripMd(stripChrome(stripAttach(x)))).
  * Вложения ([FILE:]/[IMAGE:]) снимаются с базы, UI-хром ленты — с DOM, поэтому скелет хода
  * совпадает в обеих формах (BUG-C); им же строится кэш baseSkelSet в content.js.
+ * `names` — имена вложений базы (aiCmAttachmentNames): по ним снимается ещё и карточка
+ * файла в ленте («report.pdf 1.2 MB»), иначе ход ленты не совпал бы со скелетом базы (BUG-C-2).
  */
-declare function aiCmTailSkel(text: string): string;
+declare function aiCmTailSkel(text: string, names?: string[]): string;
 
 /** hybrid-tail.ts: поиск узлов сообщений в DOM. */
 declare function findMessageNodes(): { nodes: Element[]; sel: string };

@@ -408,7 +408,7 @@ describe('O-32 (5): неполная база держит каноническ�
   const HYBRID_SCOPE = 'with (ctx) { ' +
     blockDecl(HYBRID, 'var MSG_SELECTORS = [', '];') + '\n' +
     ['normalize', 'stripMd', 'findMessageNodes', 'nodeIsBase', 'shouldUseGeminiDomParser',
-      'aiCmStripAttachmentSections', 'aiCmStripChromeLines', 'aiCmTailSkel',
+      'aiCmStripAttachmentSections', 'aiCmAttachmentNames', 'aiCmStripChromeLines', 'aiCmTailSkel',
       'aiCmTailMetricBase', 'computeTailFromDom', 'getEffectiveText', 'getEffectiveCount']
       .map((n) => fnDecl(HYBRID, n)).join('\n') +
     '\n return { text: getEffectiveText, count: getEffectiveCount }; }';

@@ -81,21 +81,54 @@ function aiCmStripAttachmentSections(text: string): string {
 // UI-хром ленты: превью вложения отдельной строкой ('image_x.png Ещё 2/1') — в базе такой
 // строки нет, поэтому она ломала скелет узла. Снимается ЦЕЛАЯ строка и только при полном
 // совпадении с шаблоном: обычный текст, где имя файла стоит внутри фразы, не режется.
-function aiCmStripChromeLines(text: string): string {
+// BUG-C-2 (B): кроме статического шаблона, хром снимается по ИМЕНАМ вложений базы: лента
+// печатает карточку файла строкой 'report.pdf 1.2 MB', которой в базе нет (там секция
+// '[FILE: report.pdf (1.2 МБ)]'). Строка снимается, только если она НАЧИНАЕТСЯ с имени из
+// names и весь остаток — размер и/или «Ещё N»; строка, равная имени, остаётся (без цифр это
+// обычный текст). Префикс сравнивается строкой, а не regexp по имени.
+function aiCmStripChromeLines(text: string, names?: string[]): string {
   var RE_CHROME = /^\s*image_[^\s]+\.(png|jpe?g|webp|gif)(\s+Ещё\s+\d+(?:\/\d+)?)?\s*$/;
+  var RE_REST = /^(?:\s*(?:\d+(?:[.,]\d+)?\s*(?:B|KB|MB|GB|КБ|МБ|ГБ|байт[а-яё]*)|Ещё\s+\d+(?:\/\d+)?))+\s*$/i;
   var s = (text == null) ? '' : String(text);
   if (!s) return '';
   var lines = s.split('\n');
   var kept: string[] = [];
   for (var i = 0; i < lines.length; i++) {
-    if (!RE_CHROME.test(lines[i])) kept.push(lines[i]);
+    var drop = RE_CHROME.test(lines[i]);
+    if (!drop && names && names.length > 0) {
+      for (var n = 0; n < names.length; n++) {
+        var nm = names[n];
+        if (!nm || lines[i].indexOf(nm) !== 0) continue;
+        var rest = lines[i].slice(nm.length);
+        if (rest && RE_REST.test(rest)) { drop = true; break; }
+      }
+    }
+    if (!drop) kept.push(lines[i]);
   }
   if (kept.length === lines.length) return s;
   return kept.join('\n').trim();
 }
+// BUG-C-2 (A): имена вложений, дописанных к текстам базы ('\n\n[FILE: report.pdf (1.2 МБ)]',
+// '\n\n[IMAGE: image_x.png] …'). Из имени снимается размер в скобках и размер без скобок;
+// дубли не повторяются. Имена применяются только к скелету: тело настоящего нового хода
+// не меняется (см. computeTailFromDom).
+function aiCmAttachmentNames(text: string): string[] {
+  var s = (text == null) ? '' : String(text);
+  var out: string[] = [];
+  var re = /\[(?:FILE|IMAGE):\s*([^\]\n]+)\]/g;
+  var m: RegExpExecArray | null;
+  while ((m = re.exec(s)) !== null) {
+    var name = String((m && m[1]) || '').trim();
+    name = name.replace(/\s*\([^)]*\)\s*$/, '');
+    name = name.replace(/\s+\d+(?:[.,]\d+)?\s*(?:B|KB|MB|GB|КБ|МБ|ГБ|байт[а-яё]*)$/i, '');
+    name = name.trim();
+    if (name && out.indexOf(name) === -1) out.push(name);
+  }
+  return out;
+}
 // Скелет хвоста: ОДНА форма сравнения для базы и для DOM (A + E + прежние normalize/stripMd).
-function aiCmTailSkel(text: string): string {
-  return normalize(stripMd(aiCmStripChromeLines(aiCmStripAttachmentSections(text))));
+function aiCmTailSkel(text: string, names?: string[]): string {
+  return normalize(stripMd(aiCmStripChromeLines(aiCmStripAttachmentSections(text), names)));
 }
 function computeTailFromDom(): AiCmTail {
   var found = findMessageNodes();
@@ -106,12 +139,26 @@ function computeTailFromDom(): AiCmTail {
     return { text: '', count: 0, bounded: false, sel: found.sel, messages: [], diag: 'кэш базы пуст → фолбэк по базе' };
   }
 
+  // BUG-C-2 (D): база и её имена вложений считаются ОДИН раз до обхода узлов: имена нужны
+  // скелету каждого узла, иначе карточка файла ленты ('report.pdf 1.2 MB') расходится с базой,
+  // где та же строка записана секцией ('\n\n[FILE: report.pdf (1.2 МБ)]').
+  var baseMsgs: AiCmExportMessage[] | null = (typeof aiCmBasePrepared !== 'undefined' &&
+    Array.isArray(aiCmBasePrepared) && aiCmBasePrepared.length > 0) ? aiCmBasePrepared : null;
+  var baseNames: string[] = [];
+  if (baseMsgs) {
+    var baseTextsAll: string[] = [];
+    for (var bm = 0; bm < baseMsgs.length; bm++) {
+      baseTextsAll.push(String((baseMsgs[bm] && baseMsgs[bm].text) || ''));
+    }
+    baseNames = aiCmAttachmentNames(baseTextsAll.join('\n'));
+  }
+
   var tailNodes = [];
   var stopAt = -1;
   var stopFound = false;
   for (var k = nodes.length - 1; k >= 0; k--) {
     var raw = nodes[k].innerText || nodes[k].textContent || '';
-    var skel = aiCmTailSkel(raw);
+    var skel = aiCmTailSkel(raw, baseNames);
     if (nodeIsBase(nodes[k], skel)) { stopFound = true; stopAt = k; break; }
     if (skel.length > 0) tailNodes.unshift(nodes[k]);
   }
@@ -151,29 +198,44 @@ function computeTailFromDom(): AiCmTail {
       tailMessages.push({ role: tailRole, text: txt });
     }
   }
-  // BUG-C (D): отбрасывание совпавшего ПРЕФИКСА хвоста.
-  //   Граница базы в DOM может быть найдена не на последнем её ходе: перерисовка ленты
-  //   теряет data-message-id, кэш скелетов отстаёт — тогда за границей оказываются ходы,
-  //   которые в базе УЖЕ есть, и getEffectiveText()/getEffectiveMessages() считают их
-  //   дважды. Режем ровно префикс: пока первый элемент хвоста совпал по скелету с одним из
-  //   последних K сообщений базы — это дубль, а не новый ход. K ≤ длины хвоста, поэтому
-  //   сверяются только те ходы базы, которые физически могли попасть за границу.
-  //   Скелеты короче minSkel (< ANCHOR_MIN) не участвуют: короткая реплика («да», «спасибо»)
-  //   совпала бы с чем угодно и вычеркнула настоящий новый ход.
-  var baseMsgs: AiCmExportMessage[] | null = (typeof aiCmBasePrepared !== 'undefined' &&
-    Array.isArray(aiCmBasePrepared) && aiCmBasePrepared.length > 0) ? aiCmBasePrepared : null;
+  // BUG-C-2 (D): отбрасывание совпавшего хвоста ПОЗИЦИОННО.
+  //   Граница базы в DOM может быть найдена не на последнем её ходе (перерисовка ленты теряет
+  //   data-message-id, кэш скелетов отстаёт) — тогда за границей оказываются ходы, которые в
+  //   базе УЖЕ есть, и getEffectiveText()/getEffectiveMessages() считают их дважды.
+  //   Совпавший участок — это КОНЕЦ базы, а не «любой префикс хвоста»: повторная отправка
+  //   того же длинного текста, которого в базе ещё нет (новый ход), не вычёркивается —
+  //   прежний поиск по множеству скелетов вычёркивал и её.
+  //   Позиционно: для cand = maxCand…1 сверяем первые cand ходов хвоста с ПОСЛЕДНИМИ cand
+  //   ходами базы — роль, скелет и длина ≥ ANCHOR_MIN у каждого элемента. Короткие реплики
+  //   не участвуют: «да»/«спасибо» совпали бы с чем угодно и вычеркнули настоящий новый ход
+  //   (принятое ограничение: участок с короткой репликой не сворачивается).
   if (baseMsgs) {
     var minSkel = (typeof ANCHOR_MIN === 'number') ? ANCHOR_MIN : 40;
-    var kBase = Math.min(baseMsgs.length, tailMessages.length);
-    var knownKeys: string[] = [];
-    for (var b = baseMsgs.length - kBase; b < baseMsgs.length; b++) {
-      var bMsg = baseMsgs[b];
-      var bKey = aiCmTailSkel(String((bMsg && bMsg.text) || ''));
-      if (bKey && bKey.length >= minSkel) knownKeys.push(bKey);
+    var maxCand = Math.min(baseMsgs.length, tailMessages.length);
+    var tailSkels: string[] = [];
+    for (var ts = 0; ts < maxCand; ts++) {
+      tailSkels.push(aiCmTailSkel(tailMessages[ts].text, baseNames));
     }
-    while (tailMessages.length && knownKeys.indexOf(aiCmTailSkel(tailMessages[0].text)) !== -1) {
-      tailMessages.shift();
+    var baseSkels: string[] = [];
+    var baseFrom = baseMsgs.length - maxCand;
+    for (var bs = 0; bs < maxCand; bs++) {
+      var bMsg = baseMsgs[baseFrom + bs];
+      baseSkels.push(aiCmTailSkel(String((bMsg && bMsg.text) || ''), baseNames));
     }
+    var drop = 0;
+    for (var cand = maxCand; cand >= 1; cand--) {
+      var aligned = true;
+      for (var ci = 0; ci < cand; ci++) {
+        var bAligned = baseMsgs[baseFrom + (maxCand - cand) + ci];
+        var bRole = (bAligned && bAligned.role === 'user') ? 'user' : 'assistant';
+        var tRole = (tailMessages[ci].role === 'user') ? 'user' : 'assistant';
+        var tailSkel = tailSkels[ci];
+        if (tRole !== bRole || tailSkel !== baseSkels[maxCand - cand + ci] ||
+            tailSkel.length < minSkel) { aligned = false; break; }
+      }
+      if (aligned) { drop = cand; break; }
+    }
+    if (drop > 0) tailMessages = tailMessages.slice(drop);
   }
   // Текст хвоста строится ИЗ тех же сообщений, что уходят в messages: тело снимка
   // (canonicalBodyText) и getEffectiveText() остаются побайтово равны.
@@ -305,6 +367,7 @@ function getEffectiveMessages(): AiCmExportMessage[] | null {
   Api.nodeIsBase = nodeIsBase;
   Api.shouldUseGeminiDomParser = shouldUseGeminiDomParser;
   Api.aiCmStripAttachmentSections = aiCmStripAttachmentSections;
+  Api.aiCmAttachmentNames = aiCmAttachmentNames;
   Api.aiCmStripChromeLines = aiCmStripChromeLines;
   Api.aiCmTailSkel = aiCmTailSkel;
   Api.computeTailFromDom = computeTailFromDom;
