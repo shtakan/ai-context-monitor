@@ -6,30 +6,31 @@
 ## 1. Репозиторий
 
 - workspace: ai-context-monitor-clean
-- branch: main; HEAD: `9d117b4` (docs S5.1); origin/main: `9d117b4`; ahead: 0; behind: 0
+- branch: main; HEAD: `fb7b00c` (test S6) + `75a495f` (docs S6) + `chore(state)`; origin/main: совпадает после пуша; ahead: 0; behind: 0
 - version: `2.1.1` (manifest.json, package.json); дата: 2026-11-12
 
-## 2. Метрики (финальный прогон 2026-11-14, после последнего коммита)
+## 2. Метрики (финальный прогон 2026-11-15, после последнего коммита)
 
-- build: exit 0; `dist/content.js` 721 227 B, sha256 `9edfe91e8c587b683a6eabe40f2f33c6d577501f7a39844a22ed734e2d872395`; собран 2026-11-14 22:14 (+05:00)
-- tests: 254 suites / 4194 passed / 7 skipped / 0 failed (полный `npm test`) — `254/4194/7/0`
+- build: exit 0; `dist/content.js` 721 227 B, sha256 `9edfe91e8c587b683a6eabe40f2f33c6d577501f7a39844a22ed734e2d872395`; не менялся (собран 2026-11-14 22:14 (+05:00))
+- tests: 254 suites / 4195 passed / 7 skipped / 0 failed (полный `npm test`) — `254/4195/7/0`
 - tsc: exit 0, вывод пуст (`npx tsc --noEmit`)
-- lint: зелёный (`npx eslint .`: 0 errors, 0 warnings, 2026-11-14)
+- lint: зелёный (`npx eslint .`: 0 errors, 0 warnings, 2026-11-15)
+- mutation: 8 KILLED / 0 SURVIVED / 0 ERROR (`npm run test:mutation`, exit 0, 2026-11-15)
 
 ## 3. Текущая задача
 
-- ID: `S5.1` — slug `export-projection` — принят 2026-11-14 (`e4150ec`, docs `9d117b4`)
-- приёмка (живая, владелец, 2026-11-14, 4 файла OFF/ON MD+JSON, 10/10 PASS): qwen OFF 35 796 / 3.6 %, 10 сообщений, метка + bodyProjection, структурных [REASONING] 0; ON 35 796 / 3.6 %, 10 сообщений, без метки/ключа, 7 секций; deepseek OFF 38 115 / 3.8 %, 68 сообщений, метка + bodyProjection, 0 секций; ON 38 115 / 3.8 %, 68 сообщений, без метки/ключа, 19 секций; MD == JSON в обоих режимах; deepseek перепроверен после расширения OFF-снятия reasoning на все сайты
-- факт: «канонический массив → массив файла» вынесен в одну функцию `aiCmProjectFileMessages` (`core/export-manager.ts:2296`) и применён в 4 точках (ручной/авто × обычный/union); снимок, метрика и `bodyHash` не тронуты. Проекция не повторяет O-37-разложение text→reasoning: вход уже несёт секции в `text`; ON — только раскрытие скрытых полей через санацию (иначе метка/`bodyProjection` появлялись при неизменном теле); OFF — снятие поля `reasoning` у ВСЕХ сайтов с эффективным OFF (qwen/deepseek — force-exclude, прочие при reasoning — авто-ON), текст режет `stripReasoningSections`; метка — только при фактическом отличии тела
-- приёмка (гейты, 2026-11-14): `254/4194/7/0`, `tsc` 0 (пусто), `eslint` 0/0; пины body-equality, manual-md-json, qwen-o7/o36/o37, deepseek-o7/o40/o42, d-o41, inv-i4 не сдвинулись (проверено полным сьютом)
-- тест: `tests/inv-i3-export-projection.test.js` — 18 сценариев (OFF/ON, авто==ручной, union+partial, Gemini/GSA байт-в-байт, O-20, идемпотентность, неизменность bodyHash, позиция метки; ON без метки при неизменном теле, qwen OFF на том же входе, ON+скрытый reasoning, авто/union == ручной, deepseek OFF с живой формой «reasoning + секции в text»)
-- следующий шаг: `S6` — пин-гигиена, фикстуры, mutation-check (ADR-001 §7 п.6), затем BUG-C
+- ID: `S6.2` — slug `pins-hygiene` — принят 2026-11-15; S6.1 `7df339c`, S6.1b `d9f88df`, S6.2 `fb7b00c`
+- приёмка (S6): 8 пинов = 8 мутаций; `npm run test:mutation` → 8 KILLED / 0 SURVIVED / 0 ERROR, exit 0 (2026-11-15)
+- факт: 8-й пин `inv-i3` — `FN_NAMES` проекции несёт только реально вызываемые имена; `aiCmReasoningExportSite` и `aiCmPrepareReasoningForExport` убраны (их зовёт только `aiCmCollectExportSource`), M8 убивается `ReferenceError` в песочнице; поведение OFF и `[REASONING]` без `[ANSWER]` зафиксировано сценарием 14f, не исправлено (ADR §9)
+- гейты (2026-11-15): `254/4195/7/0`, `tsc` 0 (пусто), `eslint` 0/0; ADR §7 п.6 — 8 мутаций и фактические диапазоны 8 пинов
+- тест: `tests/inv-i3-export-projection.test.js` — 19 сценариев (13 базовых + 14a–14f; 14f — OFF и `[REASONING]` без `[ANSWER]`, текущее поведение)
+- следующий шаг: `BUG-C`
 
 ## 4. Открытые задачи (≤5)
 
 | ID | что | статус | следующий шаг |
 |---|---|---|---|
-| `ADR-001 / S2–S6` | один снимок и читатель; `src`; барьер `partial`; проекция файла; далее S6 (фикстуры, пины, mutation-check) | S5.1 принят 2026-11-14; следующий S6 | S6 (пины, фикстуры, mutation-check), затем BUG-C |
+| `ADR-001 / S2–S6` | один снимок и читатель; `src`; барьер `partial`; проекция файла; S6 — пины, фикстуры, mutation-check | S6 принят 2026-11-15; следующий BUG-C | BUG-C |
 | `BUG-02` | Qwen: нераспознанная модель подменяется `siteDefaults.qwen` → в файле «Qwen3.7-Plus» вместо выбранной | наблюдение 2026-11-12 | решить в S3: не подставлять дефолт молча |
 | `BUG-C` | Gemini дублирует последние ходы — первая копия с `[IMAGE: ...]` и markdown (`gemini-e1020dba-2026-11-12_20-06.md:2488-2535`), вторая без `[IMAGE:]`, без разметки, с артефактами «Ещё 2»/«Ещё 1» (`2550-2589`); дедуп live-tail не срабатывает, т.к. тексты копий различаются. Класс: нет общего инварианта порядка/роли для 5 адаптеров | открыт 2026-11-12; D/E/F/G закрыты | после S6 |
 | `BUG-H` | GSA: вопрос хода 17 «API DeepSeek полностью восстановлен» (35 B) отсутствует и в сети, и в DOM (ни `h2.iMqumd`, ни пузыря) — только в эхе ответа; рядом пара «неудачная перегенерация (`Что-то пошло не так`, 72 B) → повтор» с дублем вопроса 103 B. Тред `8bTpaveuJtWckdUP46iumAo` | наблюдение 2026-11-14 (DevTools) | решить: эхо как источник либо зафиксировать как ограничение GSA |
@@ -48,7 +49,7 @@
 - Процесс: `CHANGELOG.md` меняется только вместе с bump (`## [Unreleased]` запрещён); `tsc --noEmit` вне CI-гейтов (`PROJECT_HANDOFF.md:930`) — регрессии не ловятся автоматически.
 - `partial=false` на GSA при `historyComplete=1` не доказан — живая проверка S3. Барьер S2.3 метит и блокирует; adapter-путь `core/content.ts` (`histSnapshotS24`) теперь несёт `partial` (`2b62aee`) — прежний риск закрыт, остаётся живая проверка S3.
 - Пустой GSA-чат: кнопка экспорта выключена с hint «Обновите страницу» (`gsaHost && !gsaOrderOk`), хотя обновлять нечего; попап пишет «Откройте поддерживаемый сайт» (`showNoData`) — косметика, кандидат в S3.
-- `stripReasoningSections` режет только пары `[REASONING]`/`[ANSWER]`; структурный reasoning-only блок в OFF теоретически уцелеет (в живом OFF не наблюдался).
+- `stripReasoningSections` режет только пары `[REASONING]`/`[ANSWER]`; структурный блок без `[ANSWER]` в OFF уцелевает и даёт `mode=''` без метки (пин 14f; ADR §9, принято 2026-11-15).
 - O-20/O-40/O-42 живьём не проверяются (DeepSeek++ удалён, ToS-риск блокировки чата); принятый риск, покрытие — только unit/fixture (`deepseek-o40-*`, `deepseek-o42-*`, O-20 в `tests/inv-i3-export-projection.test.js`).
 
 ## 7. Что смотреть (не читать целиком)
