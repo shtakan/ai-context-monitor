@@ -216,7 +216,7 @@ I3c′: MD-тело ручного экспорта === JSON-тело того �
 
 ### Проекция экспорта (S5.1)
 
-Единственная функция `aiCmProjectFileMessages(msgs, site)` (`core/export-manager.ts:2289`) применяется в четырёх точках и только к массиву файла: ручной union (`core/content.ts:3586`), ручной обычный (`core/content.ts:3591`), авто union (`core/export-manager.ts:1810`), авто обычный (`core/export-manager.ts:1819`). Цепочка 1:1 с `aiCmCollectExportSource`: O-37-нормализация reasoning → эффективное значение тумблера (`aiCmHiddenExportEffectiveOn`) → снятие поля `reasoning` у qwen при эффективном OFF (O-7) → единственная точка санации `aiCmSanitizeEmitUserTexts`. Канонический массив не мутируется (сначала копии сообщений), поэтому `lastCanonBody`/`bodyHash` и снимок не меняются.
+Единственная функция `aiCmProjectFileMessages(msgs, site)` (`core/export-manager.ts:2299`) применяется в четырёх точках и только к массиву файла: ручной union (`core/content.ts:3586`), ручной обычный (`core/content.ts:3591`), авто union (`core/export-manager.ts:1810`), авто обычный (`core/export-manager.ts:1819`). Цепочка: копии сообщений (`:2300–2305`) → `aiCmHiddenExportEffectiveOn` (`:2307–2308`) → при эффективном OFF снятие поля `reasoning` у ВСЕХ сайтов (`:2309–2315`) → `aiCmSanitizeEmitUserTexts` (`:2316–2317`) → сравнение `changed` по всем полям (`:2319–2339`) → `mode=''` и ТОТ ЖЕ массив (`:2340`). O-37-разложения text→reasoning в проекции НЕТ (`:2280–2298`). Канонический массив не мутируется (сначала копии сообщений), поэтому `lastCanonBody`/`bodyHash` и снимок не меняются.
 
 Два режима: `mode=''` — тело не изменилось, возвращается ТОТ ЖЕ объект массива (ни одного нового байта); `mode='projected'` — тело фактически изменилось (длина массива, `text` или поле `reasoning` построчно). Метка нейтральна к причине (reasoning и/или инъекции — только в `aiCmDiagLine`): MD — ASCII-строка `[AI-CM projection: applied]` сразу под `metric-src:` (`utils/export-text-builders.ts:452`), а без `src` — после шапки (`:463–464`); TXT — первой строкой тела, при `sourceTier` — сразу под ней (`:388`); JSON — аддитивный ключ `"bodyProjection": true` (`:538`). При `mode=''` — ни одного нового байта.
 
@@ -224,7 +224,7 @@ I3c′: MD-тело ручного экспорта === JSON-тело того �
 
 **D-O41 (авто-ON) — свойство проекции, не снимка.** Эффективное значение тумблера (`aiCmHiddenExportEffectiveOn`) входит только в проекцию файла; бейдж, панель, шапка и `[ctx-snap]` по-прежнему читают канонические данные. OFF-файл при наличии reasoning в источнике исключён из I3a/I3c′ буквально, но равен проекции, и MD == JSON на нём сохраняется.
 
-Покрытие: `tests/inv-i3-export-projection.test.js` (13 сценариев: OFF/ON на одном источнике, qwen/deepseek OFF без секций и поля reasoning, ON с секциями, авто == ручной, base-union с `partial`, Gemini/GSA байт-в-байт, O-20-фикстура, несколько секций в одном сообщении, метка при `projected` и её отсутствие при `''`, идемпотентность, неизменность канонического массива и `bodyHash`, позиция метки в MD/TXT).
+Покрытие: `tests/inv-i3-export-projection.test.js` (19 сценариев: 13 базовых + 14a–14f — OFF/ON на одном источнике, qwen/deepseek OFF без секций и поля reasoning, ON с секциями, авто == ручной, base-union с `partial`, Gemini/GSA байт-в-байт, O-20-фикстура, несколько секций в одном сообщении, метка при `projected` и её отсутствие при `''`, идемпотентность, неизменность канонического массива и `bodyHash`, позиция метки в MD/TXT; 14f — reasoning-only без `[ANSWER]`, текущее поведение).
 
 Дополнительно — **поведенческое** доказательство отсутствия пересчёта (без чтения исходников; правило
 «Behavior-Only Tests» в `docs/COORDINATION-RULES.md`):
@@ -279,15 +279,18 @@ I3c′: MD-тело ручного экспорта === JSON-тело того �
    ручной JSON `options/options.js:950`.
 4. **Привязка к чату и снятие high-water** — выполнено в S4 (3e452ec): `core/state.ts:42` (`lastTokensSnapshot`), `:723` (`stale`), `:845` (`commit`), `:886` (`canonical`), `:898` (`reader`); `core/widget.ts:196–280` (reset; keep-snap `:216`, `:258`, `:280`); `core/content.ts:2971` (единственный вызов commit), `:2998` (badge), `:434`, `:3159`, `:3273`, `:3529`, `:3616`, `:3808` (читатели); `core/export-manager.ts:722`, `:1674`, `:1911` (читатели с canonical); `tests/inv-i6-conv-switch.test.js` (8 сценариев).
 5. **Единый JSON-сборщик ручного экспорта** — выполнено в S5 (`0195009`): `options/options.js:944–974` (`buildJsonText` делегирует `AiCmExportBuilders.buildJsonFromHistory`; `getPlatform` остался только для MD), `utils/export-text-builders.ts:492–516`; в `core/content.ts:3576–3591` массив union-пути канонизируется один раз. С 2.1.2 `platform` в JSON — **сырой ключ сайта** (`google_search`, `aistudio`, `chatgpt`…), как в авто-пути (`core/export-manager.ts:1933–1939`); исторические ручные JSON могут содержать метку — это допустимо, как `max`/`hold` в поле `src`.
-6. **Пин-гигиена, фикстуры, mutation-check**: `tools/mutation-check.js`, пины из плана
-   (`tests/o23-tokens-calibration.test.js:250–253`, `tests/o47-qwen-badge-metric.test.js:190–201`,
-   `tests/gemini-monotonic-badge.test.js:239–241`, `tests/gemini-source-tier.test.js:168–190`,
-   `tests/o32-gsa-canonical-thread-invariant.test.js:510`,`:494`, `tests/o14-reset-popup-snapshot.test.js:131–136`,
-   `tests/badge-suppress-adapter-base-v54.test.js:321–323`).
-
-Мутация обязана ронять инвариантный тест: preflight `git status --porcelain -- <file>`, копия в `%TEMP%\ai-cm-mut\<hash>`,
-`git show HEAD:<file>`, прогон (ожидается `exit != 0`), восстановление в `finally`.
-`git stash` не использовать: при конфликте на Windows дерево теряет состояние.
+6. **Пин-гигиена, фикстуры, mutation-check**: `tools/mutation-check.js` (tracked, `npm run test:mutation`) —
+   8 мутаций против 8 пинов: `tests/o23-tokens-calibration.test.js:250–255`,
+   `tests/o47-qwen-badge-metric.test.js:190–201`, `tests/gemini-monotonic-badge.test.js:236–245`,
+   `tests/gemini-source-tier.test.js:167–176`, `tests/o32-gsa-canonical-thread-invariant.test.js:494–509`
+   и `:511`, `tests/o14-reset-popup-snapshot.test.js:131–139`,
+   `tests/badge-suppress-adapter-base-v54.test.js:318–325`,
+   `tests/inv-i3-export-projection.test.js:56–61` и сценарий 14f.
+   Протокол: preflight `git status --porcelain -- <file>` + побайтовое равенство HEAD; baseline-прогон
+   владеющего теста обязателен (красный baseline → ERROR, не KILLED); подмена ровно одного вхождения;
+   ожидается `exit != 0`; восстановление в `finally` с побайтовой сверкой; после цикла — общий прогон
+   задействованных тестов на восстановленном дереве; `git stash` не использовать.
+   Приёмка 2026-11-15: 8 KILLED / 0 SURVIVED / 0 ERROR.
 
 ---
 
@@ -338,14 +341,14 @@ Gemini без изменений: `e1020dbabcfa5a02 | net | 96465 | 75.4 | parti
    `snapshot.tokens` воспроизводится из тела файла, `bodyHash` совпадает.
 4. Строка `ctx-snap` в точке записи содержит `tokens, chars, msgs, attachAdd, bodyHash, src, baseComplete`.
 5. `partial`-экспорт помечен в теле файла (MD и JSON) и заблокирован для автоэкспорта — **подтверждено 2026-11-14 (S2.3):** unit c1–c4 + живая приёмка 17-57/17-59, негатив 18-07.
-6. Нет регрессий: полный сьют на HEAD `e22c894` = 253 suites / 4176 passed / 7 skipped,
+6. Нет регрессий: полный сьют = 254 suites / 4195 passed / 7 skipped / 0 failed (измерено 2026-11-15 на `fb7b00c`),
    `npx tsc --noEmit` = 0 (вывод пуст), `npx eslint .` = 0 errors / 0 warnings.
 7. `CHANGELOG.md` содержит запись об изменении значений `text` в JSON для чатов с контейнерами.
 8. Оба живых бага класса занесены строками в `docs/REGRESSION-LEDGER.md` (симптом → корень → файл с пином):
    `12:33` (218 334 в шапке против 92 197 у бейджа) и `18:44` (дельта 537).
 9. Живая приёмка — только на сборке `node build.mjs` + «Обновить расширение в chrome://extensions».
    Папка `Downloads` источником приёмки не является, тесты на исходниках приёмку не заменяют.
-10. Базлайн после реализации: `253 suites / 4176 passed / 7 skipped` (измерено 2026-11-14 на `e22c894`)
+10. Базлайн после реализации: `254 suites / 4195 passed / 7 skipped / 0 failed` (измерено 2026-11-15 на `fb7b00c`)
     либо выше; падение числа тестов без объяснения — блокер.
 
 ---
@@ -373,6 +376,7 @@ Gemini без изменений: `e1020dbabcfa5a02 | net | 96465 | 75.4 | parti
   ≈8.7 с. Критерий эскалации: если первый замер даст число **выше** фактического или продержится >15 с —
   заводить дефект и решать, какую строку §4 слить.
 - **Принятый риск: O-20/O-40/O-42 живьём не проверяются** (расширение DeepSeek++ удалено, ToS-риск блокировки чата). Покрытие — только unit/fixture: `tests/deepseek-o40-better-deepseek-sanitation.test.js`, `tests/deepseek-o42-bds-tool-envelope.test.js`, O-20-фикстура в `tests/inv-i3-export-projection.test.js`; обход санации в живом чате не проверялся.
+- **OFF и `[REASONING]` без `[ANSWER]` (принято 2026-11-15).** `stripReasoningSections` режет только пары `[REASONING]`…`[ANSWER]`; структурный блок без `[ANSWER]` проходит насквозь. В OFF такой ход уцелеет в файле, проекция даст `mode=''` — метки не будет, «OFF = 0 структурных секций» нарушится молча. Живьём не наблюдалось: `composeTurnText` всегда пишет пару, пусть и с пустым `[ANSWER]`. Поведение зафиксировано тестом 14f (`tests/inv-i3-export-projection.test.js`). Резать хвост от `[REASONING]` до конца текста — отдельное изменение поведения (кандидат в BUG-*). Критерий эскалации: структурная секция в живом OFF-файле → BUG.
 - **D1–D6 и нумерация §7 не меняются; новых шагов в §7 не появляется.**
 
 ---
