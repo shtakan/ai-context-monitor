@@ -6,22 +6,22 @@
 ## 1. Репозиторий
 
 - workspace: ai-context-monitor-clean
-- branch: main; HEAD: `38cf1f9` (chore(state) BUG-C); origin/main: `38cf1f9`; ahead: 0; behind: 0
+- branch: main; HEAD: `14fb0b5` (docs(adr) BUG-C-2), сверху `chore(state)` BUG-C-2; origin/main: `38cf1f9`; ahead: 4; behind: 0
 - version: `2.1.1` (manifest.json, package.json); дата: 2026-11-12
 
 ## 2. Метрики (финальный прогон 2026-11-15, после последнего коммита)
 
-- build: exit 0 (`node build.mjs --clean` + `node build.mjs`); `dist/content.js` 723 348 B, sha256 `5b596e5a174e0b4592de1d399808bbc6c8de2d2d9805ee8c2c292ccd8a3debf4`
-- tests: 255 suites / 4201 passed / 7 skipped / 0 failed (полный `npm test`) — `255/4201/7/0`
+- build: exit 0 (`node build.mjs --clean` + `node build.mjs`); `dist/content.js` 725 785 B, sha256 `f8963afb19c0d29ac0c6d2c087a589fe10fac4ed1b2f99d562f3b7d440d3ac49`
+- tests: 255 suites / 4204 passed / 7 skipped / 0 failed (полный `npm test`) — `255/4204/7/0`
 - tsc: exit 0, вывод пуст (`npx tsc --noEmit`); lint: 0 errors / 0 warnings (`npx eslint .`)
 - mutation: 8 KILLED / 0 SURVIVED / 0 ERROR (`npm run test:mutation`, exit 0, 2026-11-15)
 
 ## 3. Текущая задача
 
-- ID: `BUG-C` — принят 2026-11-15; фикс `bdfbdc3`; ADR §9
-- приёмка (2026-11-15, тред `e1020dba`): 159 сообщений, `countForTokens=159`, `textLen=218492=baseTextLen`, хвост=0, стоп=@19, «Ещё N»=0
-- токены: 95 692 / 74.8 % (было 96 521 / 75.4 %)
-- остатки → `BUG-C-2`, затем `REL-01`
+- ID: `BUG-C-2` — принят 2026-11-15; фикс `3e48b1a`; ADR §9
+- D сверяет хвост с КОНЦОМ базы позиционно (роль + скелет ≥ `ANCHOR_MIN` на каждый элемент); повторная отправка того же длинного текста не вычёркивается
+- хром снимается и по именам вложений базы (`aiCmAttachmentNames`), имена — только к скелету; пины `tests/bugc-tail-skeleton.test.js` (a)–(i)
+- следующий шаг: `REL-01` — CHANGELOG 2.1.2, черновик `C:\Users\oleg\Desktop\s13-changelog-draft.md`
 
 ## 4. Открытые задачи (≤5)
 
@@ -29,7 +29,7 @@
 |---|---|---|---|
 | `ADR-001 / S2–S6` | один снимок и читатель; `src`; барьер `partial`; проекция файла; S6 — пины, фикстуры, mutation-check | S6 принят 2026-11-15; следующий BUG-C | BUG-C |
 | `BUG-02` | Qwen: нераспознанная модель подменяется `siteDefaults.qwen` → в файле «Qwen3.7-Plus» вместо выбранной | наблюдение 2026-11-12 | решить в S3: не подставлять дефолт молча |
-| `BUG-C` | Gemini дублирует последние ходы — первая копия с `[IMAGE: ...]` и markdown (`gemini-e1020dba-2026-11-12_20-06.md:2488-2535`), вторая без `[IMAGE:]`, без разметки, с артефактами «Ещё 2»/«Ещё 1» (`2550-2589`); дедуп live-tail не срабатывает, т.к. тексты копий различаются. Класс: нет общего инварианта порядка/роли для 5 адаптеров | принят 2026-11-15; `bdfbdc3`; ADR §9; остатки → BUG-C-2 | ACT BUG-C-2, затем REL-01 |
+| `BUG-C` | Gemini дублирует последние ходы — первая копия с `[IMAGE: ...]` и markdown (`gemini-e1020dba-2026-11-12_20-06.md:2488-2535`), вторая без `[IMAGE:]`, без разметки, с артефактами «Ещё 2»/«Ещё 1» (`2550-2589`); дедуп live-tail не срабатывает, т.к. тексты копий различаются. Класс: нет общего инварианта порядка/роли для 5 адаптеров | остатки закрыты 2026-11-15 (`bdfbdc3` + `3e48b1a`); ADR §9 | REL-01 |
 | `BUG-H` | GSA: вопрос хода 17 «API DeepSeek полностью восстановлен» (35 B) отсутствует и в сети, и в DOM (ни `h2.iMqumd`, ни пузыря) — только в эхе ответа; рядом пара «неудачная перегенерация (`Что-то пошло не так`, 72 B) → повтор» с дублем вопроса 103 B. Тред `8bTpaveuJtWckdUP46iumAo` | наблюдение 2026-11-14 (DevTools) | решить: эхо как источник либо зафиксировать как ограничение GSA |
 | `REL-01` | CHANGELOG для S1.x отложен до выпуска 2.1.2: гейты не пропускают `## [Unreleased]` | черновик: `C:\Users\oleg\Desktop\s13-changelog-draft.md` | релизный шаг: bump + перенос текста |
 
