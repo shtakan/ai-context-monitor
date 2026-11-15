@@ -6,15 +6,14 @@
 ## 1. Репозиторий
 
 - workspace: ai-context-monitor-clean
-- branch: main; HEAD: `fb7b00c` (test S6) + `75a495f` (docs S6) + `chore(state)`; origin/main: совпадает после пуша; ahead: 0; behind: 0
+- branch: main; HEAD: `bdfbdc3` (fix BUG-C) + `9973fa2` (docs BUG-C) + `chore(state)`; origin/main: `8804df6` (пуш не выполнялся); ahead: 3; behind: 0
 - version: `2.1.1` (manifest.json, package.json); дата: 2026-11-12
 
 ## 2. Метрики (финальный прогон 2026-11-15, после последнего коммита)
 
-- build: exit 0; `dist/content.js` 721 227 B, sha256 `9edfe91e8c587b683a6eabe40f2f33c6d577501f7a39844a22ed734e2d872395`; не менялся (собран 2026-11-14 22:14 (+05:00))
-- tests: 254 suites / 4195 passed / 7 skipped / 0 failed (полный `npm test`) — `254/4195/7/0`
-- tsc: exit 0, вывод пуст (`npx tsc --noEmit`)
-- lint: зелёный (`npx eslint .`: 0 errors, 0 warnings, 2026-11-15)
+- build: exit 0 (`node build.mjs --clean` + `node build.mjs`); `dist/content.js` 723 348 B, sha256 `5b596e5a174e0b4592de1d399808bbc6c8de2d2d9805ee8c2c292ccd8a3debf4`
+- tests: 255 suites / 4201 passed / 7 skipped / 0 failed (полный `npm test`) — `255/4201/7/0`
+- tsc: exit 0, вывод пуст (`npx tsc --noEmit`); lint: 0 errors / 0 warnings (`npx eslint .`)
 - mutation: 8 KILLED / 0 SURVIVED / 0 ERROR (`npm run test:mutation`, exit 0, 2026-11-15)
 
 ## 3. Текущая задача
@@ -24,7 +23,7 @@
 - факт: 8-й пин `inv-i3` — `FN_NAMES` проекции несёт только реально вызываемые имена; `aiCmReasoningExportSite` и `aiCmPrepareReasoningForExport` убраны (их зовёт только `aiCmCollectExportSource`), M8 убивается `ReferenceError` в песочнице; поведение OFF и `[REASONING]` без `[ANSWER]` зафиксировано сценарием 14f, не исправлено (ADR §9)
 - гейты (2026-11-15): `254/4195/7/0`, `tsc` 0 (пусто), `eslint` 0/0; ADR §7 п.6 — 8 мутаций и фактические диапазоны 8 пинов
 - тест: `tests/inv-i3-export-projection.test.js` — 19 сценариев (13 базовых + 14a–14f; 14f — OFF и `[REASONING]` без `[ANSWER]`, текущее поведение)
-- следующий шаг: `BUG-C`
+- следующий шаг: живая приёмка `BUG-C` (тред `e1020dba`: 159 сообщений, последние 4 хода по одному разу, без «Ещё»)
 
 ## 4. Открытые задачи (≤5)
 
@@ -32,7 +31,7 @@
 |---|---|---|---|
 | `ADR-001 / S2–S6` | один снимок и читатель; `src`; барьер `partial`; проекция файла; S6 — пины, фикстуры, mutation-check | S6 принят 2026-11-15; следующий BUG-C | BUG-C |
 | `BUG-02` | Qwen: нераспознанная модель подменяется `siteDefaults.qwen` → в файле «Qwen3.7-Plus» вместо выбранной | наблюдение 2026-11-12 | решить в S3: не подставлять дефолт молча |
-| `BUG-C` | Gemini дублирует последние ходы — первая копия с `[IMAGE: ...]` и markdown (`gemini-e1020dba-2026-11-12_20-06.md:2488-2535`), вторая без `[IMAGE:]`, без разметки, с артефактами «Ещё 2»/«Ещё 1» (`2550-2589`); дедуп live-tail не срабатывает, т.к. тексты копий различаются. Класс: нет общего инварианта порядка/роли для 5 адаптеров | открыт 2026-11-12; D/E/F/G закрыты | после S6 |
+| `BUG-C` | Gemini дублирует последние ходы — первая копия с `[IMAGE: ...]` и markdown (`gemini-e1020dba-2026-11-12_20-06.md:2488-2535`), вторая без `[IMAGE:]`, без разметки, с артефактами «Ещё 2»/«Ещё 1» (`2550-2589`); дедуп live-tail не срабатывает, т.к. тексты копий различаются. Класс: нет общего инварианта порядка/роли для 5 адаптеров | закрыт 2026-11-15; `bdfbdc3`; ADR §9 | живая приёмка (e1020dba, 159 сообщений) |
 | `BUG-H` | GSA: вопрос хода 17 «API DeepSeek полностью восстановлен» (35 B) отсутствует и в сети, и в DOM (ни `h2.iMqumd`, ни пузыря) — только в эхе ответа; рядом пара «неудачная перегенерация (`Что-то пошло не так`, 72 B) → повтор» с дублем вопроса 103 B. Тред `8bTpaveuJtWckdUP46iumAo` | наблюдение 2026-11-14 (DevTools) | решить: эхо как источник либо зафиксировать как ограничение GSA |
 | `REL-01` | CHANGELOG для S1.x отложен до выпуска 2.1.2: гейты не пропускают `## [Unreleased]` | черновик: `C:\Users\oleg\Desktop\s13-changelog-draft.md` | релизный шаг: bump + перенос текста |
 
