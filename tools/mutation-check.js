@@ -13,7 +13,7 @@
  * Postflight: after restore the same tests are run together and must be green, otherwise exit 2.
  *
  * Usage:
- *   node tools/mutation-check.js              # M1..M7 (M8 is deferred to S6.2)
+ *   node tools/mutation-check.js              # M1..M8
  *   node tools/mutation-check.js --only M8    # run a deferred mutation explicitly
  *   node tools/mutation-check.js --only M1,M3
  *   node tools/mutation-check.js --list
@@ -116,7 +116,6 @@ const MUTATIONS = [
     // After the S6.2 prune the sandbox no longer defines it -> ReferenceError -> KILLED.
     find: 'function aiCmProjectFileMessages(msgs, site) {',
     replace: 'function aiCmProjectFileMessages(msgs, site) {\n  var __m8Pruned = aiCmPrepareReasoningForExport;',
-    deferred: 'S6.2',
   },
 ];
 

@@ -56,8 +56,6 @@ function fnDecl(src, name) {
 const FN_NAMES = [
   'aiCmHiddenExportEffectiveOn',
   'aiCmSanitizeEmitUserTexts',
-  'aiCmReasoningExportSite',
-  'aiCmPrepareReasoningForExport',
   'aiCmCanonicalizeMessages',
   'aiCmProjectFileMessages'
 ];
@@ -622,5 +620,17 @@ describe('inv-i3 (S5.1): проекция «канонический масси�
     // теперь тело MD байт-в-байт равно JSON-тексту.
     expect(countOf(md, '[REASONING]')).toBe(0);
     expect(mdBodiesGeneric(md).join('\n')).toBe(json.messages.map(function (m) { return m.text; }).join('\n'));
+  });
+
+  test('(14f) OFF и [REASONING] без [ANSWER]: текущее поведение — mode пуст, текст как есть', function () {
+    const api = makeProjection({ site: 'qwen', userOn: false });
+    const src = [{ role: 'assistant', text: '[REASONING]\nchain' }];
+    const canon = api.canon(src, 'qwen');
+    const proj = api.project(canon, 'qwen');
+    expect(proj.mode).toBe('');
+    expect(proj.messages).toBe(canon);              // тот же массив, не копия
+    expect(proj.messages[0].text).toBe('[REASONING]\nchain');
+    expect(P.stripReasoningSections('[REASONING]\nchain')).toBe('[REASONING]\nchain');
+    // дыра принята ADR §9 (2026-11-15); это фиксация текущего поведения, НЕ фикс
   });
 });
