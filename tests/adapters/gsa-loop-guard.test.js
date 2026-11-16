@@ -347,7 +347,10 @@ describe('Петля GSA D2: окно привязано к треду, а не 
       expect(afterA[0]).toContain('verdict=start');
 
       // SPA-переход на тред B, прогон B — стартует (окно своё, тред другой).
+      // BUG-K: DOM-атрибут переезжает вместе с разговором — иначе прогон B был бы
+      // чужеродным для страницы и его закрыл бы гард isForeignThread.
       h.api.setThread(TID_B);
+      h.state.domTid = TID_B;
       spy.mockReturnValue(now + 300);
       h.api.followFolwrPagination(FOLWR_URL, TURNS_8, TID_B, 'CURSOR-B', 0);
       await settle(h);
@@ -359,6 +362,7 @@ describe('Петля GSA D2: окно привязано к треду, а не 
       // Возврат на тред A в пределах 2 с от ЕГО прогона — ПОДАВЛЕН: окно A не обнулилось
       // прогоном B (гард не сбрасывает словарь на смене треда).
       h.api.setThread(TID_A);
+      h.state.domTid = TID_A;
       spy.mockReturnValue(now + 600);
       h.api.followFolwrPagination(FOLWR_URL, TURNS_8, TID_A, 'CURSOR-A', 0);
       await settle(h);

@@ -1121,6 +1121,13 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     // /async/folwr того же треда внутри окна прогон не стартует.
     var gate = beginFolwrRun('pagination', tid, key, { gained: (typeof gainedIn === 'number') ? gainedIn : 0 });
     if (!gate.permit) return;
+    // BUG-K: чужой тред (поздний хвост после SPA/F5) пагинацию не продолжает — прогон
+    // закрывается сразу, окно не остаётся занятым, база чужого треда не растёт.
+    if (isForeignThread(tid)) {
+      endFolwrRun(key);
+      debugLog('log', '[ai-cm-google-search] пагинация чужого треда подавлена: threadId=' + tid);
+      return;
+    }
     var merged = Array.isArray(startTurns) ? startTurns.slice() : [];
     var mergeFn = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.mergeTurnsById) ||
       function (a, b) { return a.concat(b); };
@@ -1382,6 +1389,13 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     var gateKey = threadAuthKey(tid, startUrl);
     var gate = beginFolwrRun('probe', tid, gateKey, { gained: (typeof gainedIn === 'number') ? gainedIn : 0 });
     if (!gate.permit) return;
+    // BUG-K: чужой тред probe не запускает и не взводит probe-running (флаг ставится ДО
+    // emitProbeState(true)); прогон закрывается, probedTids не сжигается.
+    if (isForeignThread(tid)) {
+      endFolwrRun(gateKey);
+      debugLog('log', '[ai-cm-google-search] probe чужого треда подавлен: threadId=' + tid);
+      return;
+    }
     if (probedTids[tid]) {
       endFolwrRun(gateKey);
       debugLog('log', '[ai-cm-google-search] probe пропущен: уже выполнялся для threadId=' + tid);
@@ -1728,8 +1742,11 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
               try {
                 var parsed = parseWithParser(txt);
                 var tid = parsed.threadId || readDomThreadId();
+                // BUG-K: принадлежность ответа активному разговору решается ОДИН раз — до
+                // любых решений о приросте/хвосте (снимок чужого треда базу не меняет).
+                var foreignOpen = isForeignThread(tid);
                 // v1.27 (O-31): чужой ответ не подменяет активный разговор даже своим tid
-                if (tid && !isForeignThread(tid)) currentThreadId = tid;
+                if (tid && !foreignOpen) currentThreadId = tid;
                 if (parsed && parsed.turns && parsed.turns.length > 0) {
                   // v1.5.2: полнота folwr vs DOM. Сравниваем счётчик turn-контейнеров
                   // снимка folwr с числом turn-контейнеров в живом DOM. Если DOM больше —
@@ -1797,15 +1814,25 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
                     orderMatched = orderedTurns.matched;
                   }
 
-                  // O-27/O-32 (диагностика): путь записи — folwr-open (GET /async/folwr):
-                  // распарсено, контейнеры folwr/DOM, досбор, курсор, вердикт ПОЛНАЯ.
                   var openKey = threadAuthKey(tid, url);
-                  if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('open', mergedTurns, 'submit', tid, { parsed: baseTurns.length, folwrContainers: folwrTurnCount, domContainers: domTurnCount, dopasbor: dopasbor, complete: historyComplete ? 1 : 0, cursor: (folwrCursor ? folwrCursor.slice(0, 12) : 'нет'), bodyLen: (txt ? txt.length : 0), order: orderVerdict, orderMatched: orderMatched });
                   // Прирост считается ДО записи: applyTurns присваивает lastFullTurns новый
                   // массив, поэтому после вызова разницу уже не измерить.
                   // BUG-E: и ДО чистки dedupeTurnsForCache внутри applyTurns — openGained это
                   // диагностика прироста, а не счётчик финальной базы (она может стать меньше).
-                  var openGained = mergedTurns.length - lastFullTurns.length;
+                  // BUG-K: у чужого треда прироста НЕТ — 24−5 это разница с чужим снимком, а не
+                  // рост базы; иначе гард снимал окно и хвост стартовал повторно.
+                  var openGained = foreignOpen ? 0 : mergedTurns.length - lastFullTurns.length;
+                  // BUG-K: прирост чужого треда не зачитывается, гард окна не консультируется.
+                  // Проверка foreignOpen стоит ДО markFolwrRunGain/folwrRunPermit.
+                  if (!foreignOpen && openGained > 0) markFolwrRunGain(openKey);
+                  var openGate = (!foreignOpen && openGained > 0)
+                    ? folwrRunPermit('open', tid, openKey, { gained: openGained, growthPriority: true, recordNoGain: false })
+                    : null;
+                  var openTailAllowed = !(openGate && !openGate.permit);
+                  // O-27/O-32 (диагностика): путь записи — folwr-open (GET /async/folwr):
+                  // распарсено, контейнеры folwr/DOM, досбор, курсор, вердикт ПОЛНАЯ,
+                  // принадлежность треду (foreign) и решение о хвосте (tail).
+                  if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('open', mergedTurns, 'submit', tid, { parsed: baseTurns.length, folwrContainers: folwrTurnCount, domContainers: domTurnCount, dopasbor: dopasbor, complete: historyComplete ? 1 : 0, cursor: (folwrCursor ? folwrCursor.slice(0, 12) : 'нет'), bodyLen: (txt ? txt.length : 0), order: orderVerdict, orderMatched: orderMatched, foreign: foreignOpen ? 1 : 0, tail: (folwrCursor && openTailAllowed && !foreignOpen) ? 'start' : 'skip', gained: openGained });
                   // BUG-D: окно открытия — это ХВОСТ треда (свежайшая страница), поэтому оно
                   // дописывается в конец уже накопленной базы, а не подменяет её голову.
                   applyTurns(mergedTurns, tid, historyComplete, txt, 'append');
@@ -1829,18 +1856,15 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
                   // Петля GSA (High): дорогой хвост открытия (пагинация курсором / probe)
                   // стартует только при свободном окне треда. Приём данных выше (applyTurns)
                   // гардом НЕ гейтится — потерять ходы он не может по построению.
-                  if (openGained > 0) markFolwrRunGain(openKey);
-                  var openGate = (openGained > 0)
-                    ? folwrRunPermit('open', tid, openKey, { gained: openGained, growthPriority: true, recordNoGain: false })
-                    : null;
-                  var openTailAllowed = !(openGate && !openGate.permit);
+                  // BUG-K: решение openGate/openTailAllowed принято выше — ДО записи базы и
+                  // едино для диагностики, гарда и запуска хвоста.
                   if (!openTailAllowed) {
                     debugLog('log', '[ai-cm-google-search] хвост открытия (пагинация/probe) подавлен гардом петли: threadId=' + tid);
                   }
 
                   // v1.26: если распарсено == DOM-контейнеров и курсор есть — тихий probe
                   // полноты (без скролла). Иначе — прежняя пагинация курсором.
-                  if (folwrCursor && openTailAllowed) {
+                  if (folwrCursor && openTailAllowed && !foreignOpen) {
                     if (baseTurns.length === domTurnCount) {
                       probeFolwrCompleteness(url, mergedTurns, tid, folwrCursor, openGained, domTurns);
                     } else {
