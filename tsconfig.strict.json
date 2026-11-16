@@ -16,7 +16,8 @@
     "utils/archive-import.ts",
     "utils/chatgpt-conversation-parser.ts",
     "utils/stream-frames.ts",
-    "utils/gemini-batchexecute-parser.ts"
+    "utils/gemini-batchexecute-parser.ts",
+    "utils/google-search-folwr-parser.ts"
   ],
   "exclude": [
     "node_modules",

@@ -145,7 +145,7 @@ export interface GoogleFolwrUtilsApi {
  * @param {string} s Разметка или текст с сущностями.
  * @returns {string} Текст с раскрытыми сущностями; '' для пустого входа.
  */
-function decodeEntities(s) {
+function decodeEntities(s: string): string {
   if (!s) return '';
   var out = String(s);
   out = out.replace(new RegExp('&' + 'quot;', 'g'), '"');
@@ -175,7 +175,7 @@ var FENCE_RE = /(`{3,})[\s\S]*?\1/g;
  * @param {(seg: string) => string} fn Обработчик сегмента вне фенса.
  * @returns {string} Текст с обработанными сегментами.
  */
-function mapOutsideFences(s, fn) {
+function mapOutsideFences(s: string | null | undefined, fn: (seg: string) => string): string {
   var str = String(s == null ? '' : s);
   var out = '';
   var last = 0;
@@ -193,7 +193,7 @@ function mapOutsideFences(s, fn) {
  * @param {string} seg Сегмент разметки (вне фенса).
  * @returns {string} Текст без тегов в одну строку.
  */
-function stripTagsSeg(seg) {
+function stripTagsSeg(seg: string): string {
   return String(seg)
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
@@ -208,7 +208,7 @@ function stripTagsSeg(seg) {
  * @param {string} html Разметка с возможными фенсами.
  * @returns {string} Текст без тегов и краевых пробелов.
  */
-function stripTags(html) {
+function stripTags(html: string): string {
   if (!html) return '';
   return mapOutsideFences(html, stripTagsSeg).replace(/^\s+/, '').replace(/\s+$/, '');
 }
@@ -218,7 +218,7 @@ function stripTags(html) {
  * @param {string} seg Сегмент разметки (вне фенса).
  * @returns {string} Текст: строки обрезаны по краям, пустые серии схлопнуты.
  */
-function sanitizeAssistantSeg(seg) {
+function sanitizeAssistantSeg(seg: string): string {
   return String(seg)
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
@@ -238,7 +238,7 @@ function sanitizeAssistantSeg(seg) {
  * @param {string} s Текст ответа (возможно с разметкой).
  * @returns {string} Очищенный текст; '' для пустого входа.
  */
-function sanitizeAssistant(s) {
+function sanitizeAssistant(s: string): string {
   if (!s) return '';
   return mapOutsideFences(s, sanitizeAssistantSeg).replace(/^\s+/, '').replace(/\s+$/, '');
 }
@@ -249,8 +249,8 @@ function sanitizeAssistant(s) {
  * @param {any} cellEl Ячейка th/td.
  * @returns {string} Текст ячейки.
  */
-function tableCellText(cellEl) {
-  var clone = cellEl.cloneNode(true);
+function tableCellText(cellEl: Element): string {
+  var clone = cellEl.cloneNode(true) as Element;
   clone.querySelectorAll('script, style, button, svg').forEach(function (el) { el.remove(); });
   return stripTags(decodeEntities(clone.innerHTML)).trim();
 }
@@ -261,7 +261,7 @@ function tableCellText(cellEl) {
  * @param {any} tableEl Элемент table.
  * @returns {string} Строки таблицы через '\n'; '' для пустой таблицы.
  */
-function tableToMarkdown(tableEl) {
+function tableToMarkdown(tableEl: Element): string {
   var rows = tableEl.querySelectorAll('tr');
   var lines = [];
   for (var r = 0; r < rows.length; r++) {
@@ -281,8 +281,8 @@ function tableToMarkdown(tableEl) {
  * @param {any} el Проверяемый элемент.
  * @returns {boolean} true — это заголовок вопроса, а не контент ответа.
  */
-function isQuestionHeading(el) {
-  return el.tagName === 'H2' && el.className && String(el.className).indexOf('iMqumd') !== -1;
+function isQuestionHeading(el: Element): boolean {
+  return el.tagName === 'H2' && Boolean(el.className) && String(el.className).indexOf('iMqumd') !== -1;
 }
 
 // ---- O-45: КОД-БЛОКИ (окна кода) в ответе ----
@@ -306,7 +306,7 @@ var CODE_LANG_RE = /^[A-Za-z][A-Za-z0-9+#._-]{0,19}$/;
  * @param {any} el Проверяемый узел.
  * @returns {string} Классы через пробел.
  */
-function classOf(el) {
+function classOf(el: Element | null | undefined): string {
   try { return String((el && el.className) || ''); } catch (e) { return ''; }
 }
 
@@ -560,7 +560,7 @@ function nodeText(node: any): string {
  * @param {any} node Проверяемый узел.
  * @returns {boolean} true — узел начинает блок связанных запросов.
  */
-function isWebSearchChipNode(node) {
+function isWebSearchChipNode(node: Node): boolean {
   return WEB_SEARCH_CHIP_RE.test(nodeText(node));
 }
 
@@ -570,7 +570,7 @@ function isWebSearchChipNode(node) {
  * @param {any} node Проверяемый узел.
  * @returns {boolean} true — узел не относится к ответу модели.
  */
-function isForeignQuestionNode(node) {
+function isForeignQuestionNode(node: Node): boolean {
   return FOREIGN_QUESTION_RE.test(nodeText(node));
 }
 
@@ -583,8 +583,8 @@ function isForeignQuestionNode(node) {
  * @param {any} liEl Элемент li.
  * @returns {string} Markdown-строка пункта; '' для пустого пункта.
  */
-function listItemToMarkdown(liEl) {
-  var clone = liEl.cloneNode(true);
+function listItemToMarkdown(liEl: Element): string {
+  var clone = liEl.cloneNode(true) as Element;
   clone.querySelectorAll('script, style, button, svg').forEach(function (el) { el.remove(); });
   var label = null;
   var b = clone.querySelector('strong, b');
@@ -603,7 +603,7 @@ function listItemToMarkdown(liEl) {
  * @param {any} listEl Элемент списка.
  * @returns {string} Текст списка; '' для пустого списка.
  */
-function listToText(listEl) {
+function listToText(listEl: Element): string {
   var items = listEl.querySelectorAll('li');
   var lines = [];
   for (var r = 0; r < items.length; r++) {
@@ -623,9 +623,9 @@ function listToText(listEl) {
  * @param {any} doc Документ снимка folwr.
  * @returns {any[]} Узлы без вложенных дублей; заголовки вопросов исключены.
  */
-function gatherAnswerContentNodes(doc) {
+function gatherAnswerContentNodes(doc: Document): Element[] {
   var raw = doc.querySelectorAll('.n6owBd.awi2gc, table, [role="heading"], h2, h3, h4, ul, ol, li, [role="list"], [role="listitem"], ' + CODE_CONTAINER_SEL);
-  var out = [];
+  var out: Element[] = [];
   for (var i = 0; i < raw.length; i++) {
     var el = raw[i];
     if (isQuestionHeading(el)) continue;
@@ -650,9 +650,9 @@ function gatherAnswerContentNodes(doc) {
  * @param {any[]} contentNodes Контент-узлы ответа в document-порядке.
  * @returns {string[][]} Части ответа по индексу хода.
  */
-function assignContentToTurns(turnsArr, contentNodes) {
-  var answers = [];
-  var skipAfterChip = [];
+function assignContentToTurns(turnsArr: Element[], contentNodes: Element[]): string[][] {
+  var answers: string[][] = [];
+  var skipAfterChip: boolean[] = [];
   for (var ti = 0; ti < turnsArr.length; ti++) { answers[ti] = []; skipAfterChip[ti] = false; }
 
   for (var n = 0; n < contentNodes.length; n++) {
@@ -699,7 +699,7 @@ function assignContentToTurns(turnsArr, contentNodes) {
  * @param {any} doc Документ снимка folwr.
  * @returns {string} Идентификатор треда либо ''.
  */
-function readThreadId(doc) {
+function readThreadId(doc: Document): string {
   try {
     var el = doc.querySelector('[data-session-thread-id]');
     if (el) {
@@ -716,8 +716,8 @@ function readThreadId(doc) {
  * @returns {FolwrParseResult} Результат разбора; пустой результат для не-строки.
  */
 export function parseGoogleFolwrOpen(htmlText: string): FolwrParseResult {
-  var turns = [];
-  var messages = [];
+  var turns: FolwrTurn[] = [];
+  var messages: FolwrMessage[] = [];
 
   if (!htmlText || typeof htmlText !== 'string') {
     return { threadId: '', turns: turns, messages: messages, text: '', count: 0 };
@@ -895,7 +895,7 @@ export function extractTurnsFromDocument(doc: any): FolwrTurn[] {
       questions.push(q);
     }
 
-    var answers = [];
+    var answers: string[][] = [];
     for (var t = 0; t < turnsArr.length; t++) answers[t] = [];
     // O-45: тот же отбор, что у сетевого пути — чанки прозы + САМОСТОЯТЕЛЬНЫЕ код-окна между
     // ними (answerDomNodes); текст узла — общим хелпером answerTextOf (код → ```lang … ```).
@@ -961,7 +961,7 @@ export interface FolwrTurnOrderResult {
  * @param {string|null|undefined} id Идентификатор хода.
  * @returns {boolean} true — id синтетический либо пустой.
  */
-function isSyntheticTurnId(id): boolean {
+function isSyntheticTurnId(id: string | null | undefined): boolean {
   var s = String(id == null ? '' : id);
   if (!s) return true;
   return s.indexOf('idx') === 0 || s.indexOf('folif_') === 0;
@@ -974,7 +974,7 @@ function isSyntheticTurnId(id): boolean {
  * @param {FolwrTurn[]} domTurns Ходы живого DOM в хронологическом порядке.
  * @returns {number} Индекс в domTurns; -1 — соответствия нет.
  */
-function domRankOfTurn(turn, domTurns): number {
+function domRankOfTurn(turn: FolwrTurn | null | undefined, domTurns: FolwrTurn[]): number {
   if (!turn) return -1;
   var i;
   var id = String(turn.id == null ? '' : turn.id);
@@ -1096,7 +1096,7 @@ export function normalizeTurnKeyPart(s: unknown): string {
  * @param {string|null|undefined} tail Текст после закрывающей кавычки обёртки.
  * @returns {boolean} true — тело ответа непустое.
  */
-function isAnswerWrapperTail(tail) {
+function isAnswerWrapperTail(tail: string | null | undefined): boolean {
   var t = String(tail == null ? '' : tail);
   // Вызывающий уже снял ЗАКРЫВАЮЩУЮ кавычку обёртки; здесь допускаем её повтор
   // (двойные кавычки «""») и короткую служебную связку («: », «. », « — ») перед телом.
@@ -1116,7 +1116,7 @@ var QUESTION_ASK_RE = /^(?:в\s+)?(?:ответ(?:е)?(?:\s+на\s+вопрос)
  * @param {string|null|undefined} text Текст ответа.
  * @returns {string|null} Префикс либо null, если обёртки нет.
  */
-function wrapperPrefix(text) {
+function wrapperPrefix(text: string | null | undefined): string | null {
   var s = String(text == null ? '' : text);
   var head = s.slice(0, 96);
   var at = head.indexOf(':');
@@ -1132,7 +1132,7 @@ function wrapperPrefix(text) {
  * @param {string|null|undefined} text Текст ответа.
  * @returns {{question: string, body: string}|null} Вопрос обёртки и тело ответа.
  */
-function answerWrapperParts(text) {
+function answerWrapperParts(text: unknown): { question: string; body: string } | null {
   var s = String(text == null ? '' : text);
   var prefix = wrapperPrefix(s);
   if (!prefix) return null;
@@ -1159,7 +1159,7 @@ function answerWrapperParts(text) {
  * @param {any} turnEl Контейнер хода.
  * @returns {string|null} Вопрос эха; null — обёртки нет либо после кавычки остался текст.
  */
-function extractEchoQuestion(turnEl) {
+function extractEchoQuestion(turnEl: Element): string | null {
   try {
     if (!turnEl || typeof turnEl.querySelector !== 'function') return null;
     var h3 = turnEl.querySelector('h3.iMqumd');
@@ -1182,7 +1182,7 @@ function extractEchoQuestion(turnEl) {
  * @param {string|null|undefined} text Текст кандидата.
  * @returns {string} Текст без обрамляющих кавычек.
  */
-function stripBubbleQuotes(text) {
+function stripBubbleQuotes(text: string | null | undefined): string {
   return String(text == null ? '' : text)
     .trim()
     .replace(/^["'«»„“”‘’]+/, '')
@@ -1309,7 +1309,7 @@ export function canonicalizeTurnForThread(turn: FolwrTurn | null | undefined): F
  * @param {FolwrTurn|null|undefined} current Текущая сохранённая форма.
  * @returns {boolean} true — candidate богаче.
  */
-function isBetterTurn(candidate, current) {
+function isBetterTurn(candidate: FolwrTurn | null | undefined, current: FolwrTurn | null | undefined): boolean {
   if (!current) return true;
   var la = String((candidate && candidate.assistantText) || '').length;
   var lb = String((current && current.assistantText) || '').length;
@@ -1323,7 +1323,7 @@ function isBetterTurn(candidate, current) {
  * @param {string} idFallback Идентификатор, если у хода его нет.
  * @returns {FolwrTurn} Запись хода.
  */
-function turnRecord(t, idFallback) {
+function turnRecord(t: FolwrTurn | null | undefined, idFallback: string): FolwrTurn {
   return {
     id: (t && t.id != null) ? t.id : idFallback,
     userText: (t && t.userText) || null,
@@ -1372,7 +1372,7 @@ export function bodiesPrefixCompatible(a: unknown, b: unknown): boolean {
  * @param {FolwrTurn|null|undefined} current Текущая сохранённая форма.
  * @returns {boolean} true — тело кандидата полнее.
  */
-function isFullerTurn(candidate, current) {
+function isFullerTurn(candidate: FolwrTurn | null | undefined, current: FolwrTurn | null | undefined): boolean {
   var la = turnIdentityParts(candidate).a.length;
   var lb = turnIdentityParts(current).a.length;
   if (la !== lb) return la > lb;
@@ -1401,7 +1401,7 @@ var PARAGRAPH_PERMUTATION_MIN = 2;
  * @param {FolwrTurn|null|undefined} turn Ход переписки.
  * @returns {string[]} Нормализованные абзацы в порядке текста.
  */
-function answerBodyParagraphs(turn) {
+function answerBodyParagraphs(turn: FolwrTurn | null | undefined): string[] {
   var wrapper = answerWrapperParts(turn && turn.assistantText);
   var body = wrapper ? wrapper.body : canonicalAnswerBody(turn && turn.assistantText);
   var lines = String(body == null ? '' : body).split(String.fromCharCode(10));
@@ -1428,7 +1428,7 @@ function answerBodyParagraphs(turn) {
  * @param {FolwrTurn|null|undefined} bTurn Ход B.
  * @returns {boolean} true — тела различаются только порядком абзацев.
  */
-function bodiesParagraphPermutation(aTurn, bTurn) {
+function bodiesParagraphPermutation(aTurn: FolwrTurn | null | undefined, bTurn: FolwrTurn | null | undefined): boolean {
   var pa = answerBodyParagraphs(aTurn);
   var pb = answerBodyParagraphs(bTurn);
   if (pa.length < PARAGRAPH_PERMUTATION_MIN || pa.length !== pb.length) return false;
@@ -1446,7 +1446,7 @@ function bodiesParagraphPermutation(aTurn, bTurn) {
  * @param {FolwrTurn|null|undefined} turn Проверяемый ход.
  * @returns {number} Индекс совместимого хода либо -1.
  */
-function findPrefixCompatibleIndex(turns, turn) {
+function findPrefixCompatibleIndex(turns: FolwrTurn[], turn: FolwrTurn | null | undefined): number {
   var parts = turnIdentityParts(turn);
   if (!parts.u || !parts.a) return -1;
   for (var i = 0; i < turns.length; i++) {
@@ -1468,7 +1468,7 @@ function findPrefixCompatibleIndex(turns, turn) {
  * @param {number} at Индекс изменённого хода.
  * @returns {void}
  */
-function reindexTurnKey(byKey, turns, at) {
+function reindexTurnKey(byKey: Record<string, number>, turns: FolwrTurn[], at: number): void {
   var k;
   for (k in byKey) { if (byKey[k] === at) delete byKey[k]; }
   var key = canonicalTurnKeyOf(turns[at]);
@@ -1489,11 +1489,11 @@ function reindexTurnKey(byKey, turns, at) {
 export function mergeTurnsById(baseTurns: FolwrTurn[], extraTurns: FolwrTurn[]): FolwrTurn[] {
   baseTurns = Array.isArray(baseTurns) ? baseTurns : [];
   extraTurns = Array.isArray(extraTurns) ? extraTurns : [];
-  var byId = {};
+  var byId: Record<string, number> = {};
   /** @type {Object<string, number>} */
-  var byKey = {};
-  var out = [];
-  function add(t) {
+  var byKey: Record<string, number> = {};
+  var out: FolwrTurn[] = [];
+  function add(t: FolwrTurn | null | undefined): void {
     if (!t) return;
     var id = (t.id != null) ? String(t.id) : ('x' + out.length);
     var key = canonicalTurnKeyOf(t);
@@ -1550,9 +1550,9 @@ export function mergeTurnsByKey(baseTurns: FolwrTurn[], extraTurns: FolwrTurn[])
   baseTurns = Array.isArray(baseTurns) ? baseTurns : [];
   extraTurns = Array.isArray(extraTurns) ? extraTurns : [];
   /** @type {Object<string, number>} */
-  var byKey = {};
-  var out = [];
-  function add(t) {
+  var byKey: Record<string, number> = {};
+  var out: FolwrTurn[] = [];
+  function add(t: FolwrTurn | null | undefined): void {
     if (!t) return;
     var key = canonicalTurnKeyOf(t);
     if (key === '||') return;
@@ -1604,14 +1604,14 @@ export function fillMissingUserText(baseTurns: FolwrTurn[] | null | undefined,
   }
   if (!Array.isArray(extraTurns) || extraTurns.length === 0) return baseTurns;
   /** @type {Object<string, string>} */
-  var byKey = {};
+  var byKey: Record<string, string> = {};
   /** @type {Object<string, boolean>} */
-  var ambiguous = {};
+  var ambiguous: Record<string, boolean> = {};
   // BUG-H: второй индекс — каноническое ТЕЛО ответа → вопрос. Пустое тело не индексируется.
   /** @type {Object<string, string>} */
-  var byAnswer = {};
+  var byAnswer: Record<string, string> = {};
   /** @type {Object<string, boolean>} */
-  var ambiguousAnswer = {};
+  var ambiguousAnswer: Record<string, boolean> = {};
   for (var i = 0; i < extraTurns.length; i++) {
     var t = extraTurns[i];
     if (!t || !t.userText) continue;
@@ -1639,7 +1639,7 @@ export function fillMissingUserText(baseTurns: FolwrTurn[] | null | undefined,
     }
     byKey[key] = t.userText;
   }
-  var out = [];
+  var out: FolwrTurn[] = [];
   var filled = false;
   for (var j = 0; j < baseTurns.length; j++) {
     var turn = baseTurns[j];
@@ -1692,7 +1692,7 @@ var TAIL_QUESTION_MIN = 12;
  * @param {string|null|undefined} questionText Текст вопроса.
  * @returns {boolean} true — ответ является эхом этого вопроса без тела.
  */
-function tailEchoQuestion(assistantText, questionText) {
+function tailEchoQuestion(assistantText: string | null | undefined, questionText: string | null | undefined): boolean {
   var q = String(questionText == null ? '' : questionText);
   if (q.length < TAIL_QUESTION_MIN) return false;
   var echo = String(assistantText == null ? '' : assistantText);
@@ -1746,8 +1746,8 @@ function foldTailTurns(turns: FolwrTurn[]): FolwrTurn[] {
 export function dedupeTurns(turns: FolwrTurn[]): FolwrTurn[] {
   var list = Array.isArray(turns) ? turns : [];
   /** @type {Object<string, number>} */
-  var byKey = {};
-  var out = [];
+  var byKey: Record<string, number> = {};
+  var out: FolwrTurn[] = [];
   for (var i = 0; i < list.length; i++) {
     var t = list[i];
     if (!t) continue;
@@ -1801,8 +1801,8 @@ export function classifyFolwrContinuation(input: FolwrContinuationInput | null):
   var cursorRepeated = !!(cursor && sentCursor && cursor === sentCursor);
 
   /** @type {FolwrContinuationKind} */
-  var kind;
-  var complete, canContinue;
+  var kind: FolwrContinuationKind;
+  var complete: boolean, canContinue: boolean;
   if (!ok) {
     kind = 'http-error'; complete = false; canContinue = false;
   } else if (bodyLength === 0) {
