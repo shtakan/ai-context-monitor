@@ -448,7 +448,8 @@ export function fileRefFromNode(n: any): GeminiFileRef | null {
  * @returns {GeminiFileRef[]} Нормализованные вложения (пусто, если их нет).
  */
 export function collectTurnFiles(turn: any): GeminiFileRef[] {
-  var out = [];
+  // Элементный тип явный: out наполняется в цикле, без аннотации — TS7034.
+  var out: GeminiFileRef[] = [];
   try {
     var arr = turn[2][0][4][0][4];
     if (!Array.isArray(arr)) return out;
@@ -634,6 +635,9 @@ export function registerTurnFileOwner(turn: any, convId: string, turnId: string,
   if (!own) return 0;
   var all = collectTurnFiles(turn);
   var pool = filePoolForConv(convId, true);
+  // filePoolForConv(..., create=true) заводит реестр, поэтому null недостижим;
+  // guard только сужает тип, исход — тот же «пустой результат», что при пустом пуле.
+  if (!pool) return 0;
   if (!all.length) {
     if (pool && pool.turns[own]) delete pool.turns[own];
     return 0;
@@ -665,16 +669,21 @@ export function registerTurnFileOwner(turn: any, convId: string, turnId: string,
  */
 function previousPoolTurn(pool: GeminiFilePool, rec: GeminiFilePoolTurn, all: GeminiFileRef[]): GeminiFilePoolTurn | null {
   var ids = Object.keys(pool.turns);
-  var chrono = null;
+  // Аннотации явные: при `= null` без типа TS выводит «эволюционирующий» тип и теряет
+  // сужение свойств. refs объявлен опциональным, а сужение по `cand.refs`/`reg.refs`
+  // не переносится на переменную, поэтому длину пула держим рядом с записью.
+  var chrono: GeminiFilePoolTurn | null = null;
+  var chronoLen = 0;
   var i;
   for (i = 0; i < ids.length; i++) {
     if (ids[i] === rec.turnId) continue;
     var cand = pool.turns[ids[i]];
     if (!cand || !Array.isArray(cand.refs)) continue;
     if (!isTurnBefore(cand, rec)) continue;
-    if (!chrono || isTurnBefore(chrono, cand)) chrono = cand;
+    if (!chrono || isTurnBefore(chrono, cand)) { chrono = cand; chronoLen = cand.refs.length; }
   }
-  var donor = null;
+  var donor: GeminiFilePoolTurn | null = null;
+  var donorLen = 0;
   for (i = 0; i < ids.length; i++) {
     if (ids[i] === rec.turnId) continue;
     var reg = pool.turns[ids[i]];
@@ -683,9 +692,9 @@ function previousPoolTurn(pool: GeminiFilePool, rec: GeminiFilePoolTurn, all: Ge
     // Строгий префикс: пул-«донор» короче текущего и совпадает с началом.
     if (!len || len >= all.length) continue;
     if (poolSharedPrefixLen(reg.refs, all) !== len) continue;
-    if (!donor || len > donor.refs.length) donor = reg;
+    if (!donor || len > donorLen) { donor = reg; donorLen = len; }
   }
-  if (donor && (!chrono || donor.refs.length > chrono.refs.length)) return donor;
+  if (donor && (!chrono || donorLen > chronoLen)) return donor;
   return chrono;
 }
 
@@ -704,7 +713,8 @@ function previousPoolTurn(pool: GeminiFilePool, rec: GeminiFilePoolTurn, all: Ge
 function poolDelta(prevRefs: GeminiFileRef[], all: GeminiFileRef[]): GeminiFileRef[] {
   var k = poolSharedPrefixLen(prevRefs, all);
   if (k === prevRefs.length || k === all.length) return all.slice(k);
-  var spent = {};
+  // Мультимножество ключей «имя|размер»: string-ключи, значения — счётчики.
+  var spent: Record<string, number> = {};
   var i;
   for (i = 0; i < prevRefs.length; i++) {
     var pk = fileRefIdentityKey(prevRefs[i]);
@@ -736,13 +746,13 @@ function poolDelta(prevRefs: GeminiFileRef[], all: GeminiFileRef[]): GeminiFileR
  */
 export function assignPoolOwners(turns: Array<{ id: string, refs: GeminiFileRef[] }>): Array<{ id: string, own: GeminiFileRef[] }> {
   var list = Array.isArray(turns) ? turns : [];
-  var out = [];
-  var prevPool = [];
+  var out: Array<{ id: string, own: GeminiFileRef[] }> = [];
+  var prevPool: GeminiFileRef[] = [];
   for (var i = 0; i < list.length; i++) {
     var item = list[i];
     if (!item) continue;
     var pool = Array.isArray(item.refs) ? item.refs : [];
-    var own = [];
+    var own: GeminiFileRef[] = [];
     if (pool.length) {
       own = prevPool.length ? poolDelta(prevPool, pool) : pool.slice(0);
       prevPool = pool;
@@ -769,6 +779,9 @@ export function collectTurnFilesForOwner(turn: any, convId: string, ownerId: str
   if (!own) return all;
   if (!all.length) return [];
   var pool = filePoolForConv(convId, true);
+  // Как и в registerTurnFileOwner: реестр заводится (create=true), null недостижим;
+  // без реестра дельта невычислима — отдаём весь пул, как в ветке «нет предшественника».
+  if (!pool) return all;
   var rec = pool.turns[own];
   if (!rec) {
     // Ход ещё не проходил предварительную регистрацию — регистрируем на месте.
@@ -781,7 +794,8 @@ export function collectTurnFilesForOwner(turn: any, convId: string, ownerId: str
   if (fileOwnerOrder(order) >= 0) rec.order = fileOwnerOrder(order);
   var prev = previousPoolTurn(pool, rec, all);
   if (!prev) return all;
-  return poolDelta(prev.refs, all);
+  // refs опционален в типе записи, но previousPoolTurn отбирает только Array.isArray(refs).
+  return poolDelta(prev.refs || [], all);
 }
 
 /**
@@ -970,7 +984,7 @@ export function extractDrTexts(realTurns: any[]): GeminiDrTexts {
   var res = { planText: '', reportText: '' };
   try {
     if (!Array.isArray(realTurns)) return res;
-    var cands = [];
+    var cands: string[] = [];
     for (var i = 0; i < realTurns.length; i++) collectDrStrings(realTurns[i], cands, DR_REPORT_MIN_LEN, 0);
     var best = '';
     for (var j = 0; j < cands.length; j++) {
@@ -980,7 +994,7 @@ export function extractDrTexts(realTurns: any[]): GeminiDrTexts {
     }
     if (best) res.reportText = ctText(best);
     // план: строки 60..report.length-1 (прочувствуем не-report)
-    var pc = [];
+    var pc: string[] = [];
     for (var k = 0; k < realTurns.length; k++) collectDrStrings(realTurns[k], pc, DR_PLAN_MIN_LEN, 0);
     var pbest = '';
     for (var q = 0; q < pc.length; q++) {
@@ -1170,7 +1184,7 @@ function parseByLines(raw: string, out: GeminiTurnEntry[]): void {
  * @returns {GeminiHistoryResult} Сообщения, модель, оценка токенов, текст и счётчик.
  */
 export function parseGeminiHistory(raw: string): GeminiHistoryResult {
-  var parsed = [];
+  var parsed: GeminiTurnEntry[] = [];
   parseByBytes(raw, parsed);
   if (!parsed.length) parseByLines(raw, parsed);
 

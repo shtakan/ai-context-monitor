@@ -22,8 +22,8 @@
 - живая приёмка 2.1.2 (тред `e1020dba`): 165 сообщений, 99 229 / 77.5 %, «Ещё N» — 0, карточек файла нет
 - `RELEASE_CHECKLIST.md` — архив с 2026-11-16; гейт P0/P1 — в STANDARDS-MATRIX
 - `options/options.js` в checkJs + JSDoc: 21 аннотация DOM-элементов (20 const + `section`), 63 TS2339 закрыты; 3 присваивания `value` обёрнуты в `String()` (сеттер и так приводит к строке); пин `tests/options-checkjs.test.js`; `npx tsc --noEmit` exit 0
-- `tsconfig.strict.json` (strict: `types/**` + `adapters/**/*.ts` + B1 `utils/{debug,model-config,perplexity-parser,archive-import}.ts` + B2 `utils/{chatgpt-conversation-parser,stream-frames}.ts`): adapters 11 → 0, B1 16 → 0, B2 38 → 0; `npx tsc -p tsconfig.strict.json` exit 0; пин `tests/strict-config.test.js` (четыре файла B1 + два файла B2 в `include`); основной `tsconfig.json` не ужесточён (`strict: false`)
-- следующий шаг: **B2 закрыт (0)** — `chatgpt-conversation-parser`+`stream-frames`; следующий B3 `gemini-batchexecute-parser` = 40; затем B4 `google-search-folwr-parser` = 99; B5 `export-emit-pipeline` = 144; B6 `gemini-intercept-logic` = 176; затем core (780); затем `@types/chrome` + контракты сообщений
+- `tsconfig.strict.json` (strict: `types/**` + `adapters/**/*.ts` + B1 `utils/{debug,model-config,perplexity-parser,archive-import}.ts` + B2 `utils/{chatgpt-conversation-parser,stream-frames}.ts` + B3 `utils/gemini-batchexecute-parser.ts`): adapters 11 → 0, B1 16 → 0, B2 38 → 0, B3 40 → 0; `npx tsc -p tsconfig.strict.json` exit 0; пин `tests/strict-config.test.js` (четыре файла B1 + два файла B2 + файл B3 в `include`); основной `tsconfig.json` не ужесточён (`strict: false`)
+- следующий шаг: **B3 закрыт (0)** — `gemini-batchexecute-parser`; следующий B4 `google-search-folwr-parser` = 99; затем B5 `export-emit-pipeline` = 144; B6 `gemini-intercept-logic` = 176; затем core (780); затем `@types/chrome` + контракты сообщений
 - релиз 2.1.3 — после quality-трека (CHANGELOG + 15 точек версии + tag + AMO), по решению владельца
 
 ## 4. Открытые задачи (≤5)
