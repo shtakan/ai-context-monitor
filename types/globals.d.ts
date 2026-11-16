@@ -8,12 +8,14 @@
  *
  *   1. require() — CommonJS-загрузчик, которым utils/*.js подтягивают соседей в Node-ветке;
  *   2. модуль 'util' — фолбэк TextDecoder для jsdom-стендов (utils/stream-frames.ts:75);
- *   3. chrome.* — WebExtension API, доступный из контент-скрипта;
+ *   3. chrome.* — WebExtension API, доступный из контент-скрипта (shim-файл
+ *      `types/chrome-any.d.ts`; chrome-прогон `tsconfig.chrome.json` берёт
+ *      реальные типы `@types/chrome` и shim исключает);
  *   4. window.<...> — глобалы, которые utils/*.js публикуют друг для друга.
  *
- * @types/node и @types/chrome на шаге 3 НЕ устанавливаются (вне scope), поэтому внешние
- * API объявлены как any. Это описание ШВА между мирами (браузер расширения / Node),
- * а не типизация логики: сама логика utils/ типизируется JSDoc-аннотациями в файлах.
+ * @types/node в проект не подключён, поэтому внешние API объявлены как any. Это
+ * описание ШВА между мирами (браузер расширения / Node), а не типизация логики:
+ * сама логика utils/ типизируется JSDoc-аннотациями в файлах.
  */
 
 // --- Node-глобали -----------------------------------------------------------
@@ -45,13 +47,16 @@ declare module 'util' {
 
 // --- WebExtension API -------------------------------------------------------
 
-/** chrome.* доступен из контент-скрипта; без @types/chrome объявлен как any. */
-declare const chrome: any;
+/**
+ * chrome.* объявлен в отдельном shim-файле `types/chrome-any.d.ts` как any:
+ * main/strict-прогоны идут без `@types/chrome`, а chrome-прогон
+ * (`tsconfig.chrome.json`) этот shim исключает и видит реальные типы пакета.
+ */
 
 /**
  * browser.* — WebExtension API движка Gecko (Firefox). В Chrome/Safari этого глобала нет,
  * поэтому код проверяет движок через `typeof browser !== 'undefined'` (BYOK-гейт
- * Firefox-сборки). Объявлен как any по той же причине, что и chrome: @types/chrome нет.
+ * Firefox-сборки). Объявлен как any: типы Gecko-API в проект не подключены.
  */
 declare const browser: any;
 

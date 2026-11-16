@@ -1,0 +1,34 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["chrome"],
+    "noEmit": true,
+    "declaration": false,
+    "emitDeclarationOnly": false
+  },
+  "include": [
+    "types/**/*.d.ts",
+    "types/**/*.ts",
+    "utils/**/*.js",
+    "utils/**/*.ts",
+    "utils/platform-globals.d.ts",
+    "adapters/**/*.ts",
+    "options/options.js",
+    "core/content.ts",
+    "core/widget.ts",
+    "core/state.ts",
+    "core/base-handler.ts",
+    "core/hybrid-tail.ts",
+    "core/export-manager.ts",
+    "core/background.ts",
+    "core/gemini-diag-dump.ts",
+    "core/page-intercept.js"
+  ],
+  "exclude": [
+    "node_modules",
+    "tests",
+    "docs",
+    "deepseek_test",
+    "types/chrome-any.d.ts"
+  ]
+}
