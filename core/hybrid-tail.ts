@@ -214,7 +214,7 @@ function computeTailFromDom(): AiCmTail {
     var maxCand = Math.min(baseMsgs.length, tailMessages.length);
     var tailSkels: string[] = [];
     for (var ts = 0; ts < maxCand; ts++) {
-      tailSkels.push(aiCmTailSkel(tailMessages[ts].text, baseNames));
+      tailSkels.push(aiCmTailSkel(tailMessages[ts].text || '', baseNames));
     }
     var baseSkels: string[] = [];
     var baseFrom = baseMsgs.length - maxCand;
@@ -240,7 +240,7 @@ function computeTailFromDom(): AiCmTail {
   // Текст хвоста строится ИЗ тех же сообщений, что уходят в messages: тело снимка
   // (canonicalBodyText) и getEffectiveText() остаются побайтово равны.
   var tailTexts: string[] = [];
-  for (var q = 0; q < tailMessages.length; q++) tailTexts.push(tailMessages[q].text);
+  for (var q = 0; q < tailMessages.length; q++) tailTexts.push(tailMessages[q].text || '');
   return {
     text: tailTexts.join('\n'),
     count: tailMessages.length,

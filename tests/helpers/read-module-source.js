@@ -174,6 +174,18 @@ function stripTypesKeepComments(source, file) {
     );
   }
   function visit(node) {
+    // Ambient-объявления (`declare function ...`) — тоже декларативные блоки: в рантайме
+    // их нет. Без этой ветки `declare` доживал до new Function/eval и давал SyntaxError.
+    if (
+      node.parent === sf &&
+      node.modifiers &&
+      node.modifiers.some(function (m) { return m.kind === ts.SyntaxKind.DeclareKeyword; })
+    ) {
+      let end = node.end;
+      while (source[end] === '\r' || source[end] === '\n') end += 1;
+      statements.push([node.getFullStart(), end]);
+      return;
+    }
     // Типы/интерфейсы — чисто декларативные блоки: вырезаем целиком вместе с переводом строки.
     if (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) {
       let end = node.end;

@@ -127,7 +127,7 @@ function buildHistoryMessages(): AiCmExportMessage[] {
 // buildHistoryMessages). Второй копии базы и второго вердикта дедупа НЕ существует.
 var aiCmBasePrepared: AiCmExportMessage[] | null = null; // [{role,text,id}] | null — схлопнутая база последнего снимка
 function aiCmPreparedText(messages: AiCmExportMessage[] | null): string {
-  // @ts-ignore — canonicalBodyText живёт в общем скоупе бандла (import в core/content.ts)
+  // canonicalBodyText живёт в общем скоупе бандла (import в core/content.ts); тип — EOF-блок.
   if (typeof canonicalBodyText === 'function') return canonicalBodyText(messages);
   var src = Array.isArray(messages) ? messages : [];
   var out = [];
@@ -156,7 +156,7 @@ function aiCmDiagHash6(id: string, text: string): string {
 function aiCmGeminiTurnsSnapshotSync(): AiCmTurnsSnapshot | null {
   try {
     var resp: any = null;
-    var h = function (ev) { resp = ev.detail; };
+    var h = function (ev: Event) { resp = (ev as CustomEvent).detail; };
     window.addEventListener('ai-cm-turns-snap-response', h, { once: true });
     window.dispatchEvent(new CustomEvent('ai-cm-turns-snap-request'));
     window.removeEventListener('ai-cm-turns-snap-response', h);
@@ -174,7 +174,7 @@ function aiCmGeminiTurnsSnapshotSync(): AiCmTurnsSnapshot | null {
 var aiCmNetSyncSeq = 0;
 function aiCmExportNetSyncSite(): boolean {
   try {
-    return (typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName === 'deepseek');
+    return (typeof currentAdapter !== 'undefined' && !!currentAdapter && currentAdapter.siteName === 'deepseek');
   } catch (eSite) { return false; }
 }
 // R2 (Qwen): площадки, у которых в MAIN-мире есть ОЧЕРЕДЬ текста вложений. DeepSeek — свой
@@ -191,9 +191,9 @@ function aiCmFilesDrainSite(): boolean {
 function aiCmExportNetSyncThen(convId: string | null, cb: ((info: AiCmNetSyncInfo) => void) | null, timeoutMs?: number): void {
   var cap = (typeof timeoutMs === 'number' && timeoutMs > 0) ? timeoutMs : 3000;
   var done = false;
-  var timer = null;
-  var handler = null;
-  function finish(info) {
+  var timer: ReturnType<typeof setTimeout> | null = null;
+  var handler: ((ev: Event) => void) | null = null;
+  function finish(info: AiCmNetSyncInfo): void {
     if (done) return;
     done = true;
     if (timer) { try { clearTimeout(timer); } catch (eT) { } timer = null; }
@@ -204,8 +204,8 @@ function aiCmExportNetSyncThen(convId: string | null, cb: ((info: AiCmNetSyncInf
   try {
     if (!convId) { finish({ ok: false, reason: 'no-conv' }); return; }
     var reqId = 'netsync-' + Date.now() + '-' + (++aiCmNetSyncSeq);
-    handler = function (ev) {
-      var d = ev && ev.detail;
+    handler = function (ev: Event) {
+      var d = ev ? (ev as CustomEvent).detail : null;
       if (!d || String(d.requestId || '') !== reqId) return;
       finish(d);
     };
@@ -256,14 +256,14 @@ function aiCmDumpTurnsSnapshot(tag: string, cid: string | null, msgs: AiCmExport
     if (!msgsN && Array.isArray(msgs) && msgs.length > 0) {
       // фолбэк: перехватчик недоступен (не Gemini) — считаем по экспортируемым сообщениям
       msgsN = msgs.length;
-      firstHash = aiCmDiagHash6('', msgs[0] && msgs[0].text);
-      lastHash = aiCmDiagHash6('', msgs[msgs.length - 1] && msgs[msgs.length - 1].text);
+      firstHash = aiCmDiagHash6('', (msgs[0] && msgs[0].text) || '');
+      lastHash = aiCmDiagHash6('', (msgs[msgs.length - 1] && msgs[msgs.length - 1].text) || '');
       firstText = String((msgs[0] && msgs[0].text) || '').slice(0, 80).replace(/\s+/g, ' ');
       lastText = String((msgs[msgs.length - 1] && msgs[msgs.length - 1].text) || '').slice(0, 80).replace(/\s+/g, ' ');
     }
     if (bc === null) bc = (baseComplete === true);
     if (rs === null || cbs === null) {
-      var conf = (aiCmBaseConfirmedByConv[cid] === 1);
+      var conf = (aiCmBaseConfirmedByConv[String(cid)] === 1);
       if (rs === null) rs = conf;
       if (cbs === null) cbs = conf;
     }
@@ -289,7 +289,7 @@ function aiCmDumpTurnsSnapshot(tag: string, cid: string | null, msgs: AiCmExport
 // (core/widget.js:498). Здесь поведение самого сторожа не меняется.
 function scheduleStaleCheck(): void {
   if (!isExtensionValid()) return;
-  try { clearTimeout(staleTimer); } catch (e) { }
+  try { clearTimeout(staleTimer ?? undefined); } catch (e) { }
   stale = false;
   staleTimer = setTimeout(function () {
     staleTimer = null;
@@ -319,22 +319,22 @@ function scheduleStaleCheck(): void {
 var aiCmFilesDrainSeq = 0;
 function aiCmFilesQueuePending(): number {
   var pending = -1;
-  var handler = null;
+  var handler: ((ev: Event) => void) | null = null;
   try {
     if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return 0;
-    handler = function (ev) {
-      var d = ev && ev.detail;
+    handler = function (ev: Event) {
+      var d = (ev as CustomEvent).detail;
       if (d && typeof d.pending === 'number') pending = d.pending;
     };
     window.addEventListener('ai-cm-deepseek-files-state-response', handler);
     window.dispatchEvent(new CustomEvent('ai-cm-deepseek-files-state-request'));
   } catch (eState) {
-    debugLog('log', '[AI CM][file-queue] state bridge: ' + ((eState && eState.message) || eState));
+    debugLog('log', '[AI CM][file-queue] state bridge: ' + aiCmErrText(eState));
   } finally {
     try {
       if (handler) window.removeEventListener('ai-cm-deepseek-files-state-response', handler);
     } catch (eOff) {
-      debugLog('log', '[AI CM][file-queue] state listener off: ' + ((eOff && eOff.message) || eOff));
+      debugLog('log', '[AI CM][file-queue] state listener off: ' + aiCmErrText(eOff));
     }
   }
   return pending;
@@ -351,7 +351,7 @@ function aiCmLogFilesDrain(convId: string | null, info: AiCmFilesDrainInfo): voi
       ' waitedMs=' + ((info && info.waitedMs) || 0);
     debugLog('log', line);
   } catch (eLog) {
-    debugLog('log', '[AI CM][file-queue] log failed: ' + ((eLog && eLog.message) || eLog));
+    debugLog('log', '[AI CM][file-queue] log failed: ' + aiCmErrText(eLog));
   }
 }
 function aiCmExportFilesDrainThen(convId: string | null, cb: ((info: AiCmFilesDrainInfo) => void) | null, timeoutMs?: number): void {
@@ -363,21 +363,21 @@ function aiCmExportFilesDrainThen(convId: string | null, cb: ((info: AiCmFilesDr
     return;
   }
   var done = false;
-  var timer = null;
-  var handler = null;
+  var timer: ReturnType<typeof setTimeout> | null = null;
+  var handler: ((ev: Event) => void) | null = null;
   var startedAt = Date.now();
-  function finish(info) {
+  function finish(info: AiCmFilesDrainInfo): void {
     if (done) return;
     done = true;
-    if (timer) { try { clearTimeout(timer); } catch (eT) { debugLog('log', '[AI CM][file-queue] timer off: ' + ((eT && eT.message) || eT)); } timer = null; }
-    if (handler) { try { window.removeEventListener('ai-cm-deepseek-files-drain-done', handler); } catch (eR) { debugLog('log', '[AI CM][file-queue] listener off: ' + ((eR && eR.message) || eR)); } handler = null; }
+    if (timer) { try { clearTimeout(timer); } catch (eT) { debugLog('log', '[AI CM][file-queue] timer off: ' + aiCmErrText(eT)); } timer = null; }
+    if (handler) { try { window.removeEventListener('ai-cm-deepseek-files-drain-done', handler); } catch (eR) { debugLog('log', '[AI CM][file-queue] listener off: ' + aiCmErrText(eR)); } handler = null; }
     aiCmLogFilesDrain(convId, info || {});
     try { if (cb) cb(info || {}); } catch (eCb) { swallowSoft(eCb, 'base-handler:filesDrain-finish-callback'); }
   }
   try {
     var reqId = 'files-' + Date.now() + '-' + (++aiCmFilesDrainSeq);
-    handler = function (ev) {
-      var d = ev && ev.detail;
+    handler = function (ev: Event) {
+      var d = ev ? (ev as CustomEvent).detail : null;
       if (!d || String(d.requestId || '') !== reqId) return;
       finish(d);
     };
@@ -431,7 +431,10 @@ function aiCmAistudioFilesApi(): any {
     // (types/ — запрещённая зона правки), поэтому доступ к Window — через any-каст
     // (прецедент: core/background.ts:176). Псевдоним из тикета (AiCmAiStudioFiles,
     // с большой S) читается первым: имя могло быть закреплено в проде раньше.
-    var w: any = (window as any);
+    var w = window as unknown as {
+      AiCmAiStudioFiles?: { pending?: () => number } | null;
+      AiCmAistudioFiles?: { pending?: () => number } | null;
+    };
     return w.AiCmAiStudioFiles || w.AiCmAistudioFiles || null;
   } catch (e) { return null; }
 }
@@ -474,7 +477,7 @@ function aiCmFilesDrainDefer(cid: string | null, percentage: number, reason: str
         var redo = (typeof doAutoExportDownload === 'function') ? /** @type {any} */ (doAutoExportDownload) : null;
         if (redo) redo(cid, percentage, reason, netSynced);
       } catch (eRe) {
-        debugLog('log', '[AI CM][auto-export] files-drain: повторный вход упал: ' + ((eRe && eRe.message) || eRe));
+        debugLog('log', '[AI CM][auto-export] files-drain: повторный вход упал: ' + aiCmErrText(eRe));
       }
     }, AI_CM_AISTUDIO_DRAIN_STEP_MS);
     return true;
@@ -582,3 +585,19 @@ interface AiCmFilesDrainInfo {
   requestId?: string;
   [key: string]: any;
 }
+
+/**
+ * Текст ошибки из catch-переменной (unknown) для диагностического лога: message у Error,
+ * иначе String(e) — ровно тот же текст, что давала прежняя конкатенация `(e && e.message) || e`.
+ */
+function aiCmErrText(e: unknown): string {
+  var m = (e as { message?: string } | null) && (e as { message?: string }).message;
+  return String(m || e);
+}
+
+/**
+ * canonicalBodyText — бандл-скоуп, не глобаль проекта: в core/content.ts это `import`
+ * (модуль), поэтому bare-обращение в classic-скрипте типом не покрыто. Объявление только
+ * типовое (declare), рантайм-резолв прежний — общий лексический скоуп собранного бандла.
+ */
+declare function canonicalBodyText(list: AiCmExportMessage[] | null | undefined): string;

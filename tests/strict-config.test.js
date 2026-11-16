@@ -1,12 +1,12 @@
 /**
  * strict-config: the strict TS gate is pinned.
  *
- * `tsconfig.strict.json` is the incremental strict-typing track: `types/**`,
- * the TypeScript adapters and the leaf `utils/*.ts` batches (B1 + B2 + B3 + B4 + B5 + B6) that are
- * already clean. The strict run stays a small, reviewable batch while the main
- * `tsconfig.json` keeps `strict: false` for the rest of the tree (utils/, core/,
- * options/, JS files). Widening `include` here without cleaning the new batch
- * turns the gate red; relaxing `strict` makes the track meaningless.
+ * `tsconfig.strict.json` is the incremental strict-typing track: `types/**`, the
+ * TypeScript adapters, the leaf `utils/*.ts` batches (B1 + B2 + B3 + B4 + B5 + B6) and
+ * the eight `core/*.ts` files of batch B7 that are already clean. The strict run stays
+ * a small, reviewable batch while the main `tsconfig.json` keeps `strict: false` for
+ * the rest of the tree (options/, JS files). Widening `include` here without cleaning
+ * the new batch turns the gate red; relaxing `strict` makes the track meaningless.
  * Both regressions are caught below.
  */
 
@@ -53,7 +53,7 @@ function readTsconfig(file) {
   return JSON.parse(stripJsonComments(raw));
 }
 
-describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5/B6 strict gate)', () => {
+describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5/B6 + core B7 strict gate)', () => {
   test('exists and extends the main tsconfig', () => {
     expect(fs.existsSync(path.join(ROOT, 'tsconfig.strict.json'))).toBe(true);
     const cfg = readTsconfig('tsconfig.strict.json');
@@ -68,7 +68,7 @@ describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5/B6 strict gate)'
     expect(cfg.compilerOptions.emitDeclarationOnly).toBe(false);
   });
 
-  test('include covers types, adapters and the B1/B2/B3/B4/B5/B6 utils batch only', () => {
+  test('include covers types, adapters, the B1/B2/B3/B4/B5/B6 utils batch and the eight B7 core files', () => {
     const cfg = readTsconfig('tsconfig.strict.json');
     expect(cfg.include).toContain('adapters/**/*.ts');
     expect(cfg.include).toContain('types/**/*.d.ts');
@@ -83,13 +83,23 @@ describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5/B6 strict gate)'
       'utils/google-search-folwr-parser.ts',
       'utils/export-emit-pipeline.ts',
       'utils/gemini-intercept-logic.ts',
+      'core/content.ts',
+      'core/widget.ts',
+      'core/state.ts',
+      'core/base-handler.ts',
+      'core/hybrid-tail.ts',
+      'core/export-manager.ts',
+      'core/background.ts',
+      'core/gemini-diag-dump.ts',
     ]) {
       expect(cfg.include).toContain(file);
     }
-    // Only the clean B1/B2/B3/B4/B5 leaves are in scope: no globs over the rest of utils/core.
+    // Only the clean B1–B7 files are in scope: no globs over the rest of utils/core.
     expect(cfg.include.some((p) => /^(utils|core)\//.test(p) && !p.endsWith('.ts'))).toBe(false);
-    expect(cfg.include.some((p) => p.startsWith('core/'))).toBe(false);
+    // B7 is exactly the eight core entry points — adding a ninth pulls an unclean file in.
+    expect(cfg.include.filter((p) => p.startsWith('core/'))).toHaveLength(8);
     expect(cfg.include).not.toContain('utils/**/*.ts');
+    expect(cfg.include).not.toContain('core/**/*.ts');
   });
 
   test('main tsconfig stays non-strict', () => {

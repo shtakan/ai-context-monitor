@@ -323,9 +323,9 @@ describe('O-9-подпись: source-пины правки', () => {
     const dump = fnDecl(BASE_HANDLER, 'aiCmDumpTurnsSnapshot');
     expect(dump).toContain('var snap = aiCmGeminiTurnsSnapshotSync();');
     expect(dump).toContain('if (!msgsN && Array.isArray(msgs) && msgs.length > 0) {');
-    expect(dump).toContain("firstHash = aiCmDiagHash6('', msgs[0] && msgs[0].text);");
+    expect(dump).toContain("firstHash = aiCmDiagHash6('', (msgs[0] && msgs[0].text) || '');");
     expect(dump).toContain('if (bc === null) bc = (baseComplete === true);');
-    expect(dump).toContain('var conf = (aiCmBaseConfirmedByConv[cid] === 1);');
+    expect(dump).toContain('var conf = (aiCmBaseConfirmedByConv[String(cid)] === 1);');
   });
 
   test('автоэкспорт (snapshot-at-fired) не тронут: дамп получает сообщения файла', () => {

@@ -314,7 +314,7 @@ function aiCmSwAsk(payload: unknown): Promise<any> {
   return new Promise(function (resolve) {
     try {
       if (!aiCmSwAlive()) { resolve(null); return; }
-      chrome.runtime.sendMessage(payload, function (resp) {
+      chrome.runtime.sendMessage(payload, function (resp: unknown) {
         var err = null;
         try { err = chrome.runtime.lastError; } catch (eLe) { err = null; }
         resolve(err ? null : (resp || null));
@@ -845,7 +845,7 @@ function aiCmStatePatchFromSnapshot(snap: AiCmContextSnapshot | null): Partial<A
 function aiCmCommitContextSnapshot(
   prev: AiCmContextSnapshot | null,
   next: AiCmContextSnapshot
-): AiCmContextSnapshot {
+): AiCmContextSnapshot | null {
   if (!next.convId) return prev;
   if (!prev) return next;
   if (prev.convId !== next.convId) return next;

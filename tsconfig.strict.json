@@ -19,7 +19,15 @@
     "utils/gemini-batchexecute-parser.ts",
     "utils/google-search-folwr-parser.ts",
     "utils/export-emit-pipeline.ts",
-    "utils/gemini-intercept-logic.ts"
+    "utils/gemini-intercept-logic.ts",
+    "core/content.ts",
+    "core/widget.ts",
+    "core/state.ts",
+    "core/base-handler.ts",
+    "core/hybrid-tail.ts",
+    "core/export-manager.ts",
+    "core/background.ts",
+    "core/gemini-diag-dump.ts"
   ],
   "exclude": [
     "node_modules",

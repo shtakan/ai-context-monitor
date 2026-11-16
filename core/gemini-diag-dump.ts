@@ -41,11 +41,11 @@
 (function () {
   if (typeof window !== 'undefined' && window.AiCmGeminiDiagDump) return;
   // Зависимости ядра. Заполняется один раз через __bind(...) из core/gemini-intercept.js.
-  var D = null;
+  var D: AiCmGeminiDiagDeps | null = null;
   // Форма публичного API объявлена сразу, чтобы tsc видел поле __bind: значение
   // выдаётся только после связки (Fn.__bind = __bind ниже), до неё наружу не уходит.
-  var Fn = { __bind: null };
-  function __bind(d) {
+  var Fn: { __bind: ((d: AiCmGeminiDiagDeps) => void) | null } = { __bind: null };
+  function __bind(d: AiCmGeminiDiagDeps): void {
     D = d;
 
   // ================= ДАМП ДИАГНОСТИКИ =================
@@ -91,3 +91,21 @@
   if (typeof window !== 'undefined') window.AiCmGeminiDiagDump = Fn;
   if (typeof module !== 'undefined' && module.exports) module.exports = Fn;
 }());
+
+// ========== Типы модуля (EOF-блок) ==========
+// Ход turnsMap, который дамп читает в MAIN-мире; набор полей — ровно то, что печатает
+// диагностика (id приходит ключом, не полем). Интерфейсы только типовые: рантайм прежний.
+interface AiCmGeminiDiagTurn {
+  order?: number;
+  pageMode?: string;
+  r1?: unknown;
+  role?: string;
+  text?: string;
+}
+
+/** Объект связи ядра, который __bind получает от core/gemini-intercept.js. */
+interface AiCmGeminiDiagDeps {
+  turnsMap: Record<string, AiCmGeminiDiagTurn>;
+  lastOrderedIds: string[];
+  lastFailedSkeleton?: string | null;
+}
