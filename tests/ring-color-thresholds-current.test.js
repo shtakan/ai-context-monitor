@@ -206,9 +206,9 @@ describe('v2.0.13: неприкосновенные пути (do-not-touch)', ()
     expect(WIDGET_SRC).toContain('transition: stroke 0.18s ease, stroke-dashoffset 0.4s ease;');
   });
 
-  test('уведомления/бейдж не тронуты: aiCmZoneColorFor и его дефолт байтово прежние', () => {
+  test('уведомления/бейдж не тронуты: тело aiCmZoneColorFor и его дефолт байтово прежние', () => {
     expect(extractFn(BG_SRC, 'aiCmZoneColorFor')).toBe(
-      "function aiCmZoneColorFor(t, thresholds) {\n" +
+      "function aiCmZoneColorFor(t: number, thresholds: number[]): string {\n" +
       "  var thr = (thresholds && thresholds.length === 3) ? thresholds : [70, 85, 95]; // S2: синхронный фолбэк, если storage ещё не загрузился\n" +
       "  if (t >= thr[2]) return '#ef4444';\n" +
       "  if (t >= thr[1]) return '#eab308';\n" +

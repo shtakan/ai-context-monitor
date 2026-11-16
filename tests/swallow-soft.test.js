@@ -85,8 +85,10 @@ describe('Step E.2c-A: swallowSoft — канал B', () => {
   test('A1/A2: хелперы объявлены в utils/debug.ts и в SW-дубле core/background.ts', () => {
     expect(DEBUG_SRC).toContain('function swallowSoft(error, tag) {');
     expect(DEBUG_SRC).toContain('function aiCmDiagWarn(tag, message, detail) {');
-    expect(BG_SRC).toContain('function swallowSoft(error, tag) {');
-    expect(BG_SRC).toContain('function aiCmDiagWarn(tag, message, detail) {');
+    // BG_SRC — сырой .ts (типы видны), DEBUG_SRC — esbuild-вывод (аннотации стёрты):
+    // пин сверяет имена параметров и наличие хелперов, не форму аннотаций.
+    expect(BG_SRC).toContain('function swallowSoft(error: unknown, tag?: string): void {');
+    expect(BG_SRC).toContain('function aiCmDiagWarn(tag: string, message?: string, detail?: unknown) {');
   });
 
   test('D1: console.error не вызывается НИКОГДА (ни вне гейта, ни под гейтом)', () => {

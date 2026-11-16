@@ -68,7 +68,7 @@ try {
     chrome.storage.onChanged.addListener(function (changes: AiCmStorageChanges, area: string) {
       try {
         if (area !== 'session' || !changes || !changes[AI_CM_BYOK_SESSION_KEY]) return;
-        chrome.tabs.query({}, function (tabs) {
+        chrome.tabs.query({}, function (tabs: Array<{ id?: number | null }>) {
           try {
             for (var iT = 0; iT < (tabs || []).length; iT++) {
               if (tabs[iT] && tabs[iT].id != null && chrome.tabs && typeof chrome.tabs.sendMessage === 'function') {
@@ -94,11 +94,11 @@ import { getProactiveThresholds, pickProactiveThreshold } from '../utils/gemini-
 
 // v52: дубликаты регистраций после перезагрузки расширения гасим здесь:
 // при "Duplicate script ID" снимаем старую и регистрируем заново.
-async function registerSafe(id, cfg) {
+async function registerSafe(id: string, cfg: AiCmContentScriptRegistration) {
   try {
     await chrome.scripting.registerContentScripts([cfg]);
   } catch (e) {
-    if (/Duplicate script ID/.test(String(e && e.message))) {
+    if (/Duplicate script ID/.test(String(e instanceof Error ? e.message : e))) {
       await chrome.scripting.unregisterContentScripts({ ids: [id] });
       await chrome.scripting.registerContentScripts([cfg]);
     } else throw e;
@@ -116,13 +116,13 @@ var PDF_HELPER_MATCHES = [
 // Фикс A/B: единственная bare console.warn точка самопроверки PDF-хелпера.
 // Причина видна в консоли SW даже когда регистрация/инжект не удались, а
 // tests/no-bare-console-warn.test.js знает эту строку по allow-list.
-function pdfSelfCheckWarn(reason, detail) {
+function pdfSelfCheckWarn(reason: string, detail?: unknown): void {
   console.warn('AI Context Monitor: PDF-самопроверка не прошла (' + reason + ')', detail || '');
 }
 
 // Регистрация MAIN-хелпера (core/pdf-bytes.js). Отдельный id и js[]: пины
 // тестов фиксируют js[] четырёх провайдерских регистраций.
-async function ensurePdfHelper(ids) {
+async function ensurePdfHelper(ids: string[]) {
   if (ids.indexOf(PDF_HELPER_ID) !== -1) return false;
   await registerSafe(PDF_HELPER_ID, {
     id: PDF_HELPER_ID,
@@ -164,7 +164,7 @@ async function selfCheckPdfHelper() {
       func: function () {
         return new Promise(function (resolve) {
           var settled = false;
-          function finish(ok, reason) {
+          function finish(ok: boolean, reason: string): void {
             if (settled) return;
             settled = true;
             try { clearTimeout(timer); } catch (eT) { }
@@ -206,7 +206,7 @@ async function ensureInterceptor() {
     try {
       existing = await chrome.scripting.getRegisteredContentScripts();
     } catch (e) { existing = []; }
-    var ids = existing.map(function (s) { return s.id; });
+    var ids = existing.map(function (s: { id: string }) { return s.id; });
 
     // Фикс B: PDF-хелпер регистрируем ПЕРВЫМ и в отдельном try. Раньше он был
     // последним в общем try: падение любой регистрации выше оставляло страницы
@@ -529,9 +529,9 @@ chrome.runtime.onMessage.addListener((message: AiCmSwMessage, sender: AiCmSwSend
   }
   if (message.type === 'COUNT_TOKENS') {
     // M-9: sender нужен для debounce-ключа (tabId); текст/модель — из message, как раньше.
-    handleCountTokens(message, sender).then(sendResponse).catch(function (err) {
+    handleCountTokens(message, sender).then(sendResponse).catch(function (err: unknown) {
       debugLog('error', 'COUNT_TOKENS error:', err);
-      sendResponse({ error: err.message || 'unknown_error' });
+      sendResponse({ error: err instanceof Error && err.message ? err.message : 'unknown_error' });
     });
     return true; // асинхронный ответ
   }
@@ -625,7 +625,7 @@ chrome.runtime.onMessage.addListener((message: AiCmSwMessage, sender: AiCmSwSend
 // Пороги [low,medium,high] читаются через getProactiveThresholds() из
 // chrome.storage.local ('aiCmProactiveThresholds', дефолт [70,85,95]).
 // Цвет бейджа — зонный для уровня T: low зелёный, medium жёлтый, high красный.
-function aiCmZoneColorFor(t, thresholds) {
+function aiCmZoneColorFor(t: number, thresholds: number[]): string {
   var thr = (thresholds && thresholds.length === 3) ? thresholds : [70, 85, 95]; // S2: синхронный фолбэк, если storage ещё не загрузился
   if (t >= thr[2]) return '#ef4444';
   if (t >= thr[1]) return '#eab308';
@@ -642,8 +642,8 @@ async function checkThresholds(data: AiCmThresholdData, sender: AiCmSwSender) {
     var pct = (data && typeof data.pct === 'number') ? data.pct : NaN;
     if (!convId || !isFinite(pct)) return;
 
-    var latchKey = 'aiCmThr:' + convId;
-    var ses = await new Promise(function (r) { chrome.storage.session.get([latchKey], r); });
+    const latchKey = 'aiCmThr:' + convId;
+    var ses = await new Promise<Record<string, unknown>>(function (r) { chrome.storage.session.get([latchKey], r); });
     var firedArr = Array.isArray(ses[latchKey]) ? ses[latchKey] : [];
     var firedSet = new Set(firedArr);
 
@@ -730,7 +730,7 @@ if (chrome.notifications && chrome.notifications.onButtonClicked) {
       if (parts[0] !== 'aiCmThr' || parts.length < 3 || parts[1] === '') return;
       var tabId = parseInt(parts[1], 10);
       if (!isFinite(tabId)) return;
-      chrome.tabs.get(tabId, function (tab) {
+      chrome.tabs.get(tabId, function (tab: { windowId?: number | null } | undefined) {
         if (chrome.runtime.lastError || !tab) return;
         try {
           chrome.tabs.update(tabId, { active: true });
@@ -761,7 +761,7 @@ var AI_CM_BYOK_LEGACY_KEYS = [
 ];
 
 // Первое непустое значение среди известных legacy-имён ключа (иначе '').
-function aiCmFirstLegacyByokKey(data) {
+function aiCmFirstLegacyByokKey(data: Record<string, unknown> | null | undefined): string {
   for (var i = 0; i < AI_CM_BYOK_LEGACY_KEYS.length; i++) {
     var v = data ? data[AI_CM_BYOK_LEGACY_KEYS[i]] : null;
     if (typeof v === 'string' && v) return v;
@@ -783,12 +783,12 @@ function aiCmPurgeLegacyByokKeys() {
 function aiCmMigrateByokToSession() {
   try {
     if (!chrome.storage || !chrome.storage.local || typeof chrome.storage.local.get !== 'function') return;
-    chrome.storage.local.get(AI_CM_BYOK_LEGACY_KEYS, function (data) {
+    chrome.storage.local.get(AI_CM_BYOK_LEGACY_KEYS, function (data: Record<string, unknown>) {
       var legacy = aiCmFirstLegacyByokKey(data);
       if (!legacy) return;
       try {
         if (chrome.storage.session && typeof chrome.storage.session.set === 'function') {
-          var patch = {};
+          var patch: AiCmStoragePatch = {};
           patch[AI_CM_BYOK_SESSION_KEY] = legacy;
           chrome.storage.session.set(patch);
         }
@@ -806,7 +806,7 @@ function aiCmSessionByokGet() {
       if (!chrome.storage || !chrome.storage.session || typeof chrome.storage.session.get !== 'function') {
         resolve(''); return;
       }
-      chrome.storage.session.get([AI_CM_BYOK_SESSION_KEY], function (d) {
+      chrome.storage.session.get([AI_CM_BYOK_SESSION_KEY], function (d: Record<string, unknown>) {
         var v = d ? d[AI_CM_BYOK_SESSION_KEY] : '';
         resolve((typeof v === 'string') ? v : '');
       });
@@ -827,14 +827,14 @@ async function aiCmReadByokApiKey() {
       if (!chrome.storage || !chrome.storage.local || typeof chrome.storage.local.get !== 'function') {
         resolve(''); return;
       }
-      chrome.storage.local.get(AI_CM_BYOK_LEGACY_KEYS, function (d) { resolve(aiCmFirstLegacyByokKey(d)); });
+      chrome.storage.local.get(AI_CM_BYOK_LEGACY_KEYS, function (d: Record<string, unknown>) { resolve(aiCmFirstLegacyByokKey(d)); });
     } catch (eLeg) { resolve(''); }
   });
   if (!legacy) return '';
 
   try {
     if (chrome.storage.session && typeof chrome.storage.session.set === 'function') {
-      var patch = {};
+      var patch: AiCmStoragePatch = {};
       patch[AI_CM_BYOK_SESSION_KEY] = legacy;
       chrome.storage.session.set(patch);
     }
@@ -859,14 +859,14 @@ async function aiCmGetByokKeyForContent() {
 // (все siteName: gemini/chatgpt/deepseek/google_search/claude/perplexity/qwen — из
 // [a-zA-Z0-9_-]), поэтому ключи SW и контента совпадают; совпадение пинуется тестом.
 var AI_CM_FIRED_SESSION_PREFIX = 'aiCmFired:';
-function aiCmLatchKey(service, convId) {
+function aiCmLatchKey(service: string, convId?: string | number): string {
   return AI_CM_FIRED_SESSION_PREFIX + String(service == null ? '' : service) + '|' + String(convId == null ? '' : convId);
 }
 
 // Единственный владелец session-хранилища после Шага A.1: контент-скрипты ходят сюда
 // сообщениями 'aiCm-latch-*'. Проверка отправителя — defense-in-depth: свой extension-id
 // и живой таб; внешние/расширения-соседи ответа не получают.
-function aiCmTrustedSender(sender) {
+function aiCmTrustedSender(sender: AiCmSwSender | null | undefined): boolean {
   try {
     if (!sender) return false;
     if (sender.id && chrome.runtime && chrome.runtime.id && sender.id !== chrome.runtime.id) return false;
@@ -874,13 +874,13 @@ function aiCmTrustedSender(sender) {
   } catch (eSnd) { return false; }
 }
 
-function aiCmLatchRead(service, convId) {
+function aiCmLatchRead(service: string, convId?: string | number) {
   return new Promise(function (resolve) {
     try {
       if (!service || !convId) { resolve(false); return; }
       if (!chrome.storage || !chrome.storage.session || typeof chrome.storage.session.get !== 'function') { resolve(false); return; }
       var k = aiCmLatchKey(service, convId);
-      chrome.storage.session.get([k], function (d) {
+      chrome.storage.session.get([k], function (d: Record<string, unknown>) {
         // null/undefined (ключа нет) и любое иное значение, кроме 1, — «не взведён»:
         // семантика isFiredInSession прежняя (=== 1).
         resolve(!!d && d[k] === 1);
@@ -889,17 +889,17 @@ function aiCmLatchRead(service, convId) {
   });
 }
 
-function aiCmLatchWrite(service, convId, fired) {
+function aiCmLatchWrite(service: string, convId: string | number | undefined, fired: boolean) {
   return new Promise(function (resolve) {
     try {
       if (!service || !convId) { resolve(false); return; }
       if (!chrome.storage || !chrome.storage.session) { resolve(false); return; }
       var k = aiCmLatchKey(service, convId);
       var done = false;
-      function finish(ok) { if (!done) { done = true; resolve(ok); } }
+      function finish(ok: boolean): void { if (!done) { done = true; resolve(ok); } }
       if (fired) {
         if (typeof chrome.storage.session.set !== 'function') { resolve(false); return; }
-        var patch = {};
+        var patch: AiCmStoragePatch = {};
         patch[k] = 1; // значение ровно 1 — инвариант isFiredInSession (=== 1)
         chrome.storage.session.set(patch, function () { finish(true); });
       } else {
@@ -916,8 +916,8 @@ function aiCmLatchAllFired() {
   return new Promise(function (resolve) {
     try {
       if (!chrome.storage || !chrome.storage.session || typeof chrome.storage.session.get !== 'function') { resolve({}); return; }
-      chrome.storage.session.get(null, function (all) {
-        var out = {};
+      chrome.storage.session.get(null, function (all: Record<string, unknown>) {
+        var out: Record<string, unknown> = {};
         try {
           for (var k in (all || {})) {
             if (k.indexOf(AI_CM_FIRED_SESSION_PREFIX) === 0) out[k] = all[k];
@@ -952,7 +952,7 @@ var countTokensCache = new Map();
 // FNV-1a 32-бит: дешёвый детерминированный хеш текста. Хранить сам текст в ключе
 // нельзя — кэш из 200 длинных контекстов съел бы память SW; коллизия даёт лишь
 // неверное число токенов, поэтому дополнительно сверяем длину текста.
-function countTokensHash(str) {
+function countTokensHash(str: string): string {
   var h = 0x811c9dc5;
   for (var i = 0; i < str.length; i++) {
     h ^= str.charCodeAt(i);
@@ -961,14 +961,14 @@ function countTokensHash(str) {
   return h.toString(16);
 }
 
-function countTokensCacheGet(model, text) {
+function countTokensCacheGet(model: string, text: string) {
   var key = model + ':' + countTokensHash(text);
   var hit = countTokensCache.get(key);
   if (!hit || hit.len !== text.length) return null;
   return { key: key, tokens: hit.tokens };
 }
 
-function countTokensCacheSet(model, text, tokens) {
+function countTokensCacheSet(model: string, text: string, tokens: number) {
   var key = model + ':' + countTokensHash(text);
   if (countTokensCache.has(key)) countTokensCache.delete(key); // FIFO: перезапись = свежая запись
   countTokensCache.set(key, { tokens: tokens, len: text.length });
@@ -987,7 +987,7 @@ function countTokensCacheSet(model, text, tokens) {
 // при тайпинге используется any (самый дешёвый шов между двумя мирами).
 var /** @type {any} */ countTokensPending = new Map();
 
-function scheduleCountTokens(key, payload, debounced) {
+function scheduleCountTokens(key: string, payload: AiCmCountTokensRun, debounced: number) {
   var entry = countTokensPending.get(key);
   if (entry && entry.timer != null) {
     clearTimeout(entry.timer); // отмена ожидающего запроса окна
@@ -1080,7 +1080,7 @@ async function handleCountTokensRun(run: AiCmCountTokensRun) {
     var abortReason = '';
     var timeoutId = null;
     if (controller) {
-      timeoutId = setTimeout(function () { abortReason = 'timeout'; controller.abort(); }, COUNT_TOKENS_TIMEOUT_MS);
+      timeoutId = setTimeout(function () { abortReason = 'timeout'; if (controller) controller.abort(); }, COUNT_TOKENS_TIMEOUT_MS);
     }
 
     try {
@@ -1119,7 +1119,7 @@ async function handleCountTokensRun(run: AiCmCountTokensRun) {
         console.log(logPrefix + ' abort reason=timeout model=' + cand + ' debounced=' + isDebounced);
         return { ok: false, error: 'timeout', reason: 'timeout', totalTokens: 0, cached: 0, debounced: isDebounced };
       }
-      aiCmDiagWarn('background:handleCountTokensRun', '[count-tokens] модель ' + cand + ' fetch error: ' + fetchError.message);
+      aiCmDiagWarn('background:handleCountTokensRun', '[count-tokens] модель ' + cand + ' fetch error: ' + (fetchError instanceof Error ? fetchError.message : String(fetchError)));
     } finally {
       if (timeoutId != null) clearTimeout(timeoutId);
     }
@@ -1140,13 +1140,13 @@ var AI_CM_HISTORY_TTL_MS = 2592000000; // 30 суток = 30 * 24 * 60 * 60 * 10
 // Просрочена ли запись. ts отсутствует (запись прежней версии либо чужая форма) —
 // НЕ удаляем: «форма записи сохраняется», оснований считать её просроченной нет.
 // Сравнение строгое: ровно 30 дней — ещё живая запись.
-function aiCmHistoryEntryStale(rec, now) {
+function aiCmHistoryEntryStale(rec: AiCmHistoryRecord | null | undefined, now: number): boolean {
   var ts = (rec && typeof rec.ts === 'number') ? rec.ts : null;
   if (ts == null) return false;
   return (now - ts) > AI_CM_HISTORY_TTL_MS;
 }
 
-function aiCmHistoryPruneRemove(stale) {
+function aiCmHistoryPruneRemove(stale: string[]) {
   if (!stale.length) { console.log('[AI CM][storage] prune removed=0'); return; }
   if (!chrome.storage || !chrome.storage.local || typeof chrome.storage.local.remove !== 'function') return;
   chrome.storage.local.remove(stale, function () {
@@ -1159,7 +1159,7 @@ function aiCmHistoryPruneRemove(stale) {
 function aiCmPruneHistory() {
   try {
     if (!chrome.storage || !chrome.storage.local || typeof chrome.storage.local.get !== 'function') return;
-    chrome.storage.local.get(null, function (all) {
+    chrome.storage.local.get(null, function (all: Record<string, unknown>) {
       try {
         var now = Date.now();
         var stale = [];
@@ -1167,7 +1167,7 @@ function aiCmPruneHistory() {
         for (var i = 0; i < keys.length; i++) {
           var key = keys[i];
           if (key.indexOf('aiCmHistory:') !== 0) continue;
-          if (aiCmHistoryEntryStale(all[key], now)) stale.push(key);
+          if (aiCmHistoryEntryStale(all[key] as AiCmHistoryRecord, now)) stale.push(key);
         }
         aiCmHistoryPruneRemove(stale);
       } catch (e) {
@@ -1184,10 +1184,10 @@ function aiCmPruneHistory() {
 // changes/Date.now(): ни storage, ни prune, ни форма записи не меняются. Гейт тот же
 // aiCmDebug, но в SW доступен только чекбокс «Подробные логи» (aiCmDebugLogs).
 var aiCmHistWinDebugOn = false;
-var aiCmHistWin = {};
+var aiCmHistWin: Record<string, { startTs: number; count: number }> = {};
 try {
   if (chrome.storage && chrome.storage.local && typeof chrome.storage.local.get === 'function') {
-    chrome.storage.local.get(['aiCmDebugLogs'], function (d) {
+    chrome.storage.local.get(['aiCmDebugLogs'], function (d: Record<string, unknown>) {
       aiCmHistWinDebugOn = !!(d && d.aiCmDebugLogs === true);
     });
   }
@@ -1203,7 +1203,7 @@ function aiCmHistWinCount(changes: AiCmStorageChanges, keys: string[]) {
       if (!w || (now - w.startTs) > 100) { w = { startTs: now, count: 0 }; }
       w.count++;
       aiCmHistWin[k] = w;
-      var nv = (changes[k] && changes[k].newValue) || {};
+      var nv = (changes[k]?.newValue) || {};
       console.log('[AI CM][diag] o22-hist-onchanged key=' + k + ' ts=' + now +
         ' win100ms=' + w.count + ' convId=' + (nv.convId || '(none)') +
         ' msgs=' + ((nv.messages && nv.messages.length) || 0) +
@@ -1248,7 +1248,7 @@ if (chrome.storage && chrome.storage.onChanged && chrome.storage.onChanged.addLi
 // не сдвигаются строки 13/14, на которые ссылается allow-list стража
 // tests/no-bare-console-warn.test.js.
 // =============================================================================
-function swallowSoft(error, tag) {
+function swallowSoft(error: unknown, tag?: string): void {
   try {
     if (typeof debugLog !== 'function') return;   // срез-песочница без дубля debugLog
     if (!aiCmHistWinDebugOn) return;              // вне гейта SW — тихо
@@ -1259,7 +1259,7 @@ function swallowSoft(error, tag) {
 // Сигнатуры swallowSoft/aiCmDiagWarn байтово пинуются tests/swallow-soft.test.js,
 // поэтому типы даны отдельной overload-декларацией (esbuild её стирает в сборке).
 function aiCmDiagWarn(tag: string, message?: string, detail?: any): void;
-function aiCmDiagWarn(tag, message, detail) {
+function aiCmDiagWarn(tag: string, message?: string, detail?: unknown) {
   try {
     if (typeof debugLog !== 'function') return;
     if (!aiCmHistWinDebugOn) return;
@@ -1310,4 +1310,17 @@ interface AiCmCountTokensRun {
   text: string;
   model: string;
   debounced?: number;
+}
+
+interface AiCmContentScriptRegistration {
+  id: string;
+  matches: string[];
+  js: string[];
+  runAt: string;
+  world: string;
+  allFrames: boolean;
+}
+
+interface AiCmHistoryRecord {
+  ts?: number;
 }

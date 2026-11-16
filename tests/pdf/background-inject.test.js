@@ -9,6 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { stripTypesKeepComments } = require('../helpers/read-module-source.js');
 
 const ROOT = path.join(__dirname, '..', '..');
 const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.ts'), 'utf8');
@@ -16,6 +17,9 @@ const BG_SRC = fs.readFileSync(path.join(ROOT, 'core', 'background.ts'), 'utf8')
 const START = BG_SRC.indexOf('async function registerSafe');
 const END = BG_SRC.indexOf('async function ensureInterceptor');
 const HELPERS_SRC = BG_SRC.slice(START, END);
+// B9: в срезе теперь TS-аннотации (типизация SW). new Function их не парсит,
+// поэтому типы снимаются тем же способом, что и в read-module-source.js.
+const HELPERS_JS = stripTypesKeepComments(HELPERS_SRC, 'core/background.ts');
 
 function makeHelpers(chrome) {
   const warns = [];
@@ -26,7 +30,7 @@ function makeHelpers(chrome) {
   const factory = new Function(
     'chrome',
     'console',
-    HELPERS_SRC + '\nreturn { ensurePdfHelper: ensurePdfHelper, selfCheckPdfHelper: selfCheckPdfHelper };'
+    HELPERS_JS + '\nreturn { ensurePdfHelper: ensurePdfHelper, selfCheckPdfHelper: selfCheckPdfHelper };'
   );
   return { api: factory(chrome, fakeConsole), warns };
 }
