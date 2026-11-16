@@ -176,7 +176,7 @@ export function parsePerplexityThread(json: unknown): PerplexityThreadResult {
    * @returns Адреса без query/hash.
    */
   function collectEntryImages(entry: unknown): string[] {
-    var out = [];
+    var out: string[] = [];
     var atts = getTrim(entry, 'attachments');
     if (!Array.isArray(atts)) return out;
     for (var a = 0; a < atts.length; a++) {
@@ -329,12 +329,13 @@ export function parsePerplexityThread(json: unknown): PerplexityThreadResult {
       if (!assistantPushed) {
         var entryText = getTrim(entry, 'text');
         if (typeof entryText === 'string' && entryText.trim()) {
-          var stepsJson = null;
+          var stepsJson: unknown = null;
           try { stepsJson = JSON.parse(entryText); } catch (e1) { stepsJson = null; }
-          var stepItems = null;
+          var stepItems: unknown[] | null = null;
           if (Array.isArray(stepsJson)) stepItems = stepsJson;
           else if (stepsJson && typeof stepsJson === 'object') {
-            stepItems = Object.keys(stepsJson).map(function (k) { return stepsJson[k]; });
+            var stepsObj = stepsJson as Record<string, unknown>;
+            stepItems = Object.keys(stepsObj).map(function (k) { return stepsObj[k]; });
           }
           var answerText = '';
           if (stepItems) {

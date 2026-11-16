@@ -619,7 +619,7 @@ export function reportFullTextAnomalies(json: any, deps?: ArchiveDeps): FullText
   var d: ArchiveDeps = deps || {};
   var warn = (typeof d.warn === 'function') ? d.warn
     : ((typeof console !== 'undefined' && console && typeof console.warn === 'function')
-      ? function (msg) { console.warn(msg); } : null);
+      ? function (msg: string) { console.warn(msg); } : null);
   var anomalies = collectFullTextAnomalies(json);
   if (warn) {
     for (var i = 0; i < anomalies.length; i++) {
@@ -690,7 +690,14 @@ export function geminiActivityAssistantText(rec: GeminiActivityRecord): string {
 export function parseGeminiTakeout(json: any): ArchiveParseOutcome {
   var items = Array.isArray(json) ? json : ((json && Array.isArray(json.items)) ? json.items : []);
   var order = [];
-  var byConv = {};
+  var byConv: Record<string, {
+    convId: string;
+    service: string;
+    format: string;
+    title: string;
+    updatedAt: number;
+    messages: { role: string; text: string; ts: number }[];
+  }> = {};
   var skippedNoConvId = 0;
   var skippedEmpty = 0;
 

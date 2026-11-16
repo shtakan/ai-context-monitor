@@ -1,12 +1,12 @@
 /**
- * strict-config (stage 0): the strict TS gate for adapters is pinned.
+ * strict-config: the strict TS gate is pinned.
  *
- * `tsconfig.strict.json` is the incremental strict-typing track: only
- * The scope is `types/**` plus the TypeScript adapters, so the strict run
- * stays a small, reviewable batch while the main
+ * `tsconfig.strict.json` is the incremental strict-typing track: `types/**`,
+ * the TypeScript adapters and the leaf `utils/*.ts` batches (B1) that are
+ * already clean. The strict run stays a small, reviewable batch while the main
  * `tsconfig.json` keeps `strict: false` for the rest of the tree (utils/, core/,
  * options/, JS files). Widening `include` here without cleaning the new batch
- * turns the gate red; relaxing `strict` makes the adapters track meaningless.
+ * turns the gate red; relaxing `strict` makes the track meaningless.
  * Both regressions are caught below.
  */
 
@@ -53,7 +53,7 @@ function readTsconfig(file) {
   return JSON.parse(stripJsonComments(raw));
 }
 
-describe('tsconfig.strict.json (adapters strict gate)', () => {
+describe('tsconfig.strict.json (adapters + utils B1 strict gate)', () => {
   test('exists and extends the main tsconfig', () => {
     expect(fs.existsSync(path.join(ROOT, 'tsconfig.strict.json'))).toBe(true);
     const cfg = readTsconfig('tsconfig.strict.json');
@@ -68,11 +68,22 @@ describe('tsconfig.strict.json (adapters strict gate)', () => {
     expect(cfg.compilerOptions.emitDeclarationOnly).toBe(false);
   });
 
-  test('include covers types and adapters only', () => {
+  test('include covers types, adapters and the B1 utils batch only', () => {
     const cfg = readTsconfig('tsconfig.strict.json');
     expect(cfg.include).toContain('adapters/**/*.ts');
     expect(cfg.include).toContain('types/**/*.d.ts');
-    expect(cfg.include.some((p) => /^(utils|core)\//.test(p))).toBe(false);
+    for (const file of [
+      'utils/debug.ts',
+      'utils/model-config.ts',
+      'utils/perplexity-parser.ts',
+      'utils/archive-import.ts',
+    ]) {
+      expect(cfg.include).toContain(file);
+    }
+    // Only the clean B1 leaves are in scope: no globs over the rest of utils/core.
+    expect(cfg.include.some((p) => /^(utils|core)\//.test(p) && !p.endsWith('.ts'))).toBe(false);
+    expect(cfg.include.some((p) => p.startsWith('core/'))).toBe(false);
+    expect(cfg.include).not.toContain('utils/**/*.ts');
   });
 
   test('main tsconfig stays non-strict', () => {

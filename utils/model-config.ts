@@ -801,10 +801,10 @@ export const ModelConfig: ModelConfig = {
   getGeminiApiModelId(modelId: string | null | undefined): string {
     // Детект-слаги, которые уже являются валидными API-id — пропускать как есть (passthrough)
     var passthrough = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3-flash'];
-    if (passthrough.indexOf(modelId) !== -1) return modelId;
+    if (modelId && passthrough.indexOf(modelId) !== -1) return modelId;
     if (!modelId) return 'gemini-flash-latest';
     // Прямые известные ключи -> API id
-    var map = {
+    var map: Record<string, string> = {
       'gemini-2.5-pro': 'gemini-2.5-pro',
       'gemini-2.5-flash': 'gemini-2.5-flash',
       'gemini-search-default': 'gemini-flash-latest', // токенизатор общий, дефолт GSA → стабильная модель
@@ -836,7 +836,7 @@ export const ModelConfig: ModelConfig = {
    * @param {string} f Семейство ('Flash', 'Pro', 'Ultra').
    * @returns {number} Окно контекста в токенах.
    */
-  function win(v, f) { return (v === '1.5' && f === 'Pro') ? 2097152 : 1048576; }
+  function win(v: string, f: string): number { return (v === '1.5' && f === 'Pro') ? 2097152 : 1048576; }
   V.forEach(function (v) {
     F.forEach(function (f) {
       S.forEach(function (s) {

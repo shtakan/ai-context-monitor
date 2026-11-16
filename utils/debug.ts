@@ -63,10 +63,10 @@ export function debugLog(level: string, ...rest: unknown[]): void {
     return;
   }
   // v31: динамическая проверка — флаг может меняться в рантайме из любого мира
-  var enabled = DEBUG;
+  var enabled = DEBUG; var key = level as keyof Console;
   try { if (typeof window !== 'undefined' && window.__aiCmDebugLogs === true) enabled = true; } catch (e) { }
   if (enabled) {
-    (console[level] || console.log).apply(console, args);
+    (console[key] || console.log).apply(console, args);
   }
 }
 

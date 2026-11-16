@@ -9,7 +9,11 @@
   "include": [
     "types/**/*.d.ts",
     "types/**/*.ts",
-    "adapters/**/*.ts"
+    "adapters/**/*.ts",
+    "utils/debug.ts",
+    "utils/model-config.ts",
+    "utils/perplexity-parser.ts",
+    "utils/archive-import.ts"
   ],
   "exclude": [
     "node_modules",
