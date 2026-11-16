@@ -23,7 +23,7 @@
 - `RELEASE_CHECKLIST.md` — архив с 2026-11-16; гейт P0/P1 — в STANDARDS-MATRIX
 - `options/options.js` в checkJs + JSDoc: 21 аннотация DOM-элементов (20 const + `section`), 63 TS2339 закрыты; 3 присваивания `value` обёрнуты в `String()` (сеттер и так приводит к строке); пин `tests/options-checkjs.test.js`; `npx tsc --noEmit` exit 0
 - `tsconfig.strict.json` (strict только `types/**` + `adapters/**/*.ts`): 11 → 0 ошибок, `npx tsc -p tsconfig.strict.json` exit 0; пин `tests/strict-config.test.js`; основной `tsconfig.json` не ужесточён (`strict: false`)
-- следующий шаг: strict `utils/**/*.ts` — 513 ошибок (TS7006 182, TS7053 179, TS7005 59, TS7034 22, TS2345 13), батчами по TS7006/TS7053/TS7005/TS7034; затем core (780); затем `@types/chrome` + контракты сообщений
+- следующий шаг: strict `utils/**/*.ts` — 513 ошибок, батчами по файлам: B1 `debug`+`model-config`+`perplexity-parser`+`archive-import` = 16; B2 `chatgpt-conversation-parser`+`stream-frames` = 38; B3 `gemini-batchexecute-parser` = 40; B4 `google-search-folwr-parser` = 99; B5 `export-emit-pipeline` = 144; B6 `gemini-intercept-logic` = 176; затем core (780); затем `@types/chrome` + контракты сообщений
 - релиз 2.1.3 — после quality-трека (CHANGELOG + 15 точек версии + tag + AMO), по решению владельца
 
 ## 4. Открытые задачи (≤5)
