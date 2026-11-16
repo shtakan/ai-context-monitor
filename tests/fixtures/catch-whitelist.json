@@ -1479,9 +1479,9 @@
       "file": "core/widget.ts",
       "category": "best-effort-guard",
       "lines": [
-        765,
-        767,
-        1033
+        770,
+        772,
+        1038
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: input.focus();"
     },
@@ -1489,7 +1489,7 @@
       "file": "core/widget.ts",
       "category": "cleanup-guard",
       "lines": [
-        412
+        417
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: if (aiCmRequestEmitTimer) clearTimeout(aiCmRequestEmitTimer); aiCmReques"
     },
@@ -1497,7 +1497,7 @@
       "file": "core/widget.ts",
       "category": "debug-instrumentation",
       "lines": [
-        359
+        364
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var cidD14 = getCurrentConvId() || ''; var P14 = (typeof AiCmExportEmitP"
     },
@@ -1505,11 +1505,11 @@
       "file": "core/widget.ts",
       "category": "defensive-assignment",
       "lines": [
-        239,
-        241,
-        243,
-        245,
-        247
+        244,
+        246,
+        248,
+        250,
+        252
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: aiCmPartialSoftByConv = {};"
     },
@@ -1517,8 +1517,8 @@
       "file": "core/widget.ts",
       "category": "dom-read-guard",
       "lines": [
-        840,
-        973
+        845,
+        978
       ],
       "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: aiCmSetWidgetA11yLabel(widgetElement.querySelector('.ai-widget-circle'),"
     },
@@ -1526,8 +1526,8 @@
       "file": "core/widget.ts",
       "category": "event-guard",
       "lines": [
-        711,
-        932
+        716,
+        937
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: if (typeof window !== 'undefined' && window && typeof window.addEventLis"
     },
@@ -1535,13 +1535,13 @@
       "file": "core/widget.ts",
       "category": "guard-clause",
       "lines": [
-        354,
-        385,
-        430,
-        913,
-        992,
-        1024,
-        1061
+        359,
+        390,
+        435,
+        918,
+        997,
+        1029,
+        1066
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof aiCmRevealWidget === 'function') aiCmRevealWidget();"
     },
@@ -1549,7 +1549,7 @@
       "file": "core/widget.ts",
       "category": "host-api-guard",
       "lines": [
-        864
+        869
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: var selfRing: any = aiCmLoadRingThresholds; if (chrome.storage.onChanged"
     },
@@ -1557,7 +1557,7 @@
       "file": "core/widget.ts",
       "category": "local-helper-guard",
       "lines": [
-        941
+        946
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmUpdateSourceIndicator();"
     },
@@ -1565,9 +1565,9 @@
       "file": "core/widget.ts",
       "category": "overlay-guard",
       "lines": [
-        597,
-        658,
-        883
+        602,
+        663,
+        888
       ],
       "reason": "overlay-guard: оверлей/стили: узел мог быть уничтожен хостом между чтением и записью; пример: if (!widgetElement) return; if (widgetElement.style.display === 'none')"
     },
@@ -1575,8 +1575,8 @@
       "file": "core/widget.ts",
       "category": "timing-guard",
       "lines": [
-        721,
-        729
+        726,
+        734
       ],
       "reason": "timing-guard: отмена таймера/подписки: обработчик мог быть снят хостом или гонкой; пример: aiCmSafeBottomObserver.disconnect();"
     }

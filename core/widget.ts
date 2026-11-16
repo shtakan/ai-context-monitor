@@ -54,6 +54,10 @@ function aiCmActivePct(): number | null {
   return null;
 }
 function computeEffectiveLimit(modelId: string | null): number {
+  // strict-core B8: API ждёт string, а null = «Авто». getModel(null) и getModel('') в
+  // utils/model-config.ts идут одной веткой (нет модели → EFFECTIVE_CAP_DEFAULT), поэтому
+  // подстановка '' поведение не меняет; вызов ниже остаётся байтово прежним (пин теста).
+  if (modelId === null) return ModelConfig.computeDisplayLimit('', aiCmActivePct());
   return ModelConfig.computeDisplayLimit(modelId, aiCmActivePct());
 }
 // H19: чтение/применение оверрайдов попапа. changed=false (ничего не сохранено) →
@@ -78,15 +82,15 @@ function aiCmRefreshPopupOverrides(): void {
 function aiCmLoadPopupOverrides(): void {
   try {
     if (!isExtensionValid() || !chrome.storage || !chrome.storage.sync) return;
-    chrome.storage.sync.get(['selectedModel', 'customLimit'], function (d) {
+    chrome.storage.sync.get(['selectedModel', 'customLimit'], function (d: Record<string, unknown> | null | undefined) {
       try { aiCmSetPopupOverrides(d && d.selectedModel, d && d.customLimit); } catch (eA) { swallowSoft(eA, 'widget:loadPopupOverrides-callback'); }
     });
-  } catch (e) { debugLog('log', '[model-detect] H19 popup-override load error: ' + (e && e.message || e)); }
+  } catch (e) { debugLog('log', '[model-detect] H19 popup-override load error: ' + aiCmErrText(e)); }
 }
 function updatePanel(): void {
   if (!widgetElement) return;
   // M-4.2: строки панели — из _locales (content_*); в песочницах без хелпера — фолбэк.
-  const i18n = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key, fallback) { return fallback; };
+  const i18n = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key: string, fallback: string) { return fallback; };
   const status = widgetElement.querySelector('.ai-cm-limit-text');
   const input = widgetElement.querySelector<HTMLInputElement>('.ai-cm-input');
   if (!status) return;
@@ -144,7 +148,7 @@ function stepSafePct(delta: number): void {
 // копируется из старого ключа. Старый ключ НЕ удаляется (у Google Search он свой).
 // Явный сброс в «Авто» пишет null — это НЕ пусто: миграция второй раз не срабатывает и
 // снятый порог не воскресает.
-const AI_CM_SAFE_PCT_MIGRATIONS = { aistudio: 'google_search' };
+const AI_CM_SAFE_PCT_MIGRATIONS: Record<string, string> = { aistudio: 'google_search' };
 
 // Пара ключей миграции для текущего сервиса: { own, legacy } либо null (миграции нет).
 function aiCmSafePctMigrationSource() {
@@ -156,7 +160,7 @@ function aiCmSafePctMigrationSource() {
 
 // Решение миграции (чистая функция, тестируется без storage): значение для записи в свой
 // ключ либо null — «миграция не нужна». own === undefined ⇒ своего ключа ещё нет.
-function aiCmSafePctMigrationValue(own, legacy) {
+function aiCmSafePctMigrationValue(own: unknown, legacy: unknown): number | null {
   if (own !== undefined) return null; // ключ уже есть (в т.ч. null = «Авто») — не трогаем
   if (typeof legacy !== 'number' || !(legacy > 0)) return null;
   return legacy;
@@ -169,12 +173,12 @@ function aiCmSafePctMigrationValue(own, legacy) {
 function aiCmMigrateSafePct(onDone: (value: number | null) => void): boolean {
   const cb = (typeof onDone === 'function') ? onDone : function () { };
   let done = false;
-  const finish = function (value) { if (done) return; done = true; cb(value); };
+  const finish = function (value: number | null) { if (done) return; done = true; cb(value); };
   try {
     const pair = aiCmSafePctMigrationSource();
     if (!pair) return false;
     if (!isExtensionValid()) return false;
-    chrome.storage.sync.get([pair.own, pair.legacy], function (d) {
+    chrome.storage.sync.get([pair.own, pair.legacy], function (d: Record<string, unknown> | null | undefined) {
       try {
         const migrated = aiCmSafePctMigrationValue(d ? d[pair.own] : undefined, d ? d[pair.legacy] : undefined);
         if (typeof migrated !== 'number') { finish(null); return; }
@@ -208,6 +212,7 @@ function resetConversationState(): void {
       src: (typeof aiCmDiagStack === 'function') ? aiCmDiagStack(1) : ''
     });
   }
+  if (typeof window.__aiCmTraceSeq !== 'number') window.__aiCmTraceSeq = 0; // strict-core B8: сужение типа под ++ (семантика прежняя)
   debugLog('log', '[content-trace] RESET виджета seq=' + (++window.__aiCmTraceSeq || (window.__aiCmTraceSeq = 1)) + ' t=' + Date.now());
   // S4/I6: снимок и процент принадлежат КОНКРЕТНОМУ чату. Если опубликованный снимок
   // относится к текущему чату (canonical convId совпал), reset его НЕ стирает — иначе бейдж
@@ -385,7 +390,7 @@ function resetConversationState(): void {
     } catch (eQbReset) { }
     if (tt) {
       // M-4.2: строка загрузки — ключ content_widget_loading (в песочнице без хелпера — фолбэк)
-      const i18n = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key, fallback) { return fallback; };
+      const i18n = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key: string, fallback: string) { return fallback; };
       tt.textContent = i18n('content_widget_loading', 'Загрузка контекста...');
     }
   }
@@ -615,9 +620,9 @@ const AI_CM_SAFE_BOTTOM_THROTTLE_MS = 150;
 // Кандидаты — точки ввода (п.1.2). Всё внутри нашего виджета исключается отдельно.
 const AI_CM_BOTTOM_CONTROL_SELECTOR = 'textarea, [contenteditable=""], [contenteditable="true"], [role="textbox"], button[type="submit"]';
 const AI_CM_SAFE_BOTTOM_LISTEN_OPTS = { capture: true, passive: true };
-let aiCmSafeBottomWatchContainer = null;
-let aiCmSafeBottomObserver = null;
-let aiCmSafeBottomTimer = null;
+let aiCmSafeBottomWatchContainer: HTMLElement | null = null;
+let aiCmSafeBottomObserver: MutationObserver | null = null;
+let aiCmSafeBottomTimer: ReturnType<typeof setTimeout> | null = null;
 let aiCmSafeBottomRafPending = false;
 let aiCmSafeBottomLastRunAt = 0;
 
@@ -687,8 +692,8 @@ function aiCmSafeBottomSchedule() {
   }
   aiCmSafeBottomRafPending = true;
   const raf = (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function')
-    ? function (cb) { window.requestAnimationFrame(cb); }
-    : function (cb) { setTimeout(cb, 16); };
+    ? function (cb: () => void) { window.requestAnimationFrame(cb); }
+    : function (cb: () => void) { setTimeout(cb, 16); };
   raf(function () { aiCmSafeBottomFlush(); });
 }
 
@@ -761,7 +766,7 @@ function aiCmSetWidgetPanelOpen(open: boolean, restoreFocus?: boolean): boolean 
   circle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
   if (isOpen) {
     updatePanel();
-    const input = (typeof widgetElement.querySelector === 'function') ? widgetElement.querySelector<HTMLInputElement>('.ai-cm-input') : null;
+    const input = (widgetElement && typeof widgetElement.querySelector === 'function') ? widgetElement.querySelector<HTMLInputElement>('.ai-cm-input') : null;
     if (input && typeof input.focus === 'function') { try { input.focus(); } catch (eA11yFocusIn) { } }
   } else if (restoreFocus === true && typeof (circle as HTMLElement).focus === 'function') {
     try { (circle as HTMLElement).focus(); } catch (eA11yFocusOut) { }
@@ -813,7 +818,7 @@ function aiCmBindWidgetA11y(): void {
 // Строки — только _locales (content_a11y_*).
 function aiCmSetWidgetA11yLabel(circleEl: Element | null, percentage: number): void {
   if (!circleEl || typeof circleEl.setAttribute !== 'function') return;
-  const i18n = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key, fallback) { return fallback; };
+  const i18n = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key: string, fallback: string) { return fallback; };
   const pct = (typeof percentage === 'number' && isFinite(percentage)) ? percentage : 0;
   const pctLabel = pct.toFixed(1);
   const bounds = (typeof aiCmRingBounds === 'function') ? aiCmRingBounds() : [70, 95];
@@ -842,7 +847,7 @@ function aiCmRepaintRing(): void {
 function aiCmLoadRingThresholds(): void {
   if (typeof chrome === 'undefined' || !chrome || !chrome.storage || !chrome.storage.local) return;
   try {
-    chrome.storage.local.get(['aiCmProactiveThresholds'], function (res) {
+    chrome.storage.local.get(['aiCmProactiveThresholds'], function (res: Record<string, unknown> | null | undefined) {
       aiCmRingThresholds = (res && res.aiCmProactiveThresholds !== undefined) ? res.aiCmProactiveThresholds : null;
       aiCmRepaintRing();
     });
@@ -854,7 +859,7 @@ function aiCmLoadRingThresholds(): void {
     var selfRing: any = aiCmLoadRingThresholds;
     if (chrome.storage.onChanged && !selfRing.aiCmBound) {
       selfRing.aiCmBound = true;
-      chrome.storage.onChanged.addListener(function (changes, areaName) {
+      chrome.storage.onChanged.addListener(function (changes: Record<string, { newValue?: unknown } | undefined>, areaName: string) {
         if (areaName !== 'local' || !changes || !changes.aiCmProactiveThresholds) return;
         // storage.onChanged кладёт сам массив в newValue: перекрас без перезагрузки страницы.
         aiCmRingThresholds = changes.aiCmProactiveThresholds.newValue;
@@ -869,7 +874,7 @@ function createWidget(): void {
   if (document.getElementById('ai-context-widget')) return;
   // M-4.2: строки разметки виджета — из _locales (ключи content_*); в изолированной
   // песочнице регрессии хелпера локали нет — остаются прежние русские литералы.
-  const t = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key, fallback) { return fallback; };
+  const t = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key: string, fallback: string) { return fallback; };
   const container = document.createElement('div');
   container.id = 'ai-context-widget';
   container.replaceChildren(...(function (h) { var d = new DOMParser().parseFromString('<body>' + h + '</body>', 'text/html'); var o = []; for (var n = d.body.firstChild; n; n = n.nextSibling) o.push(document.importNode(n, true)); return o; })(`<style> #ai-context-widget { position: fixed; bottom: var(--acm-safe-bottom, 24px); right: 24px; z-index: 999999; font-family: var(--w-font); user-select: none; --w-radius-s: 6px; --w-radius-m: 8px; --w-radius-l: 10px; --w-space-xs: 4px; --w-space-s: 6px; --w-space-m: 8px; --w-space-l: 10px; --w-space-xl: 12px; --w-type-s: 11px; --w-type-m: 12px; --w-type-l: 13px; } .ai-widget-circle { width: 64px; height: 64px; position: relative; cursor: pointer; background: var(--w-tooltip-bg); border-radius: 50%; box-shadow: var(--w-shadow); border: var(--w-border); display: flex; align-items: center; justify-content: center; transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1); } .ai-widget-circle:hover { transform: scale(1.06); } .ai-widget-circle:focus-visible { outline: 2px solid var(--w-text); outline-offset: 2px; } .ai-widget-circle svg { width: 88%; height: 88%; transform: rotate(-90deg); } .ai-widget-bg { fill: none; stroke: var(--w-bg-track); stroke-width: 7; } .ai-widget-fill { fill: none; stroke: var(--w-bg-fill); stroke-width: 7; stroke-linecap: round; transition: stroke 0.18s ease, stroke-dashoffset 0.4s ease; } .ai-widget-text { position: absolute; font-size: var(--w-type-l); font-weight: 600; color: var(--w-text); letter-spacing: -0.03em; } .ai-widget-tooltip { visibility: hidden; opacity: 0; position: absolute; bottom: 76px; right: 0; width: max-content; box-sizing: border-box; max-width: min(320px, calc(100vw - 48px)); max-height: 40vh; overflow-y: auto; overscroll-behavior: contain; background: var(--w-tooltip-bg); color: var(--w-tooltip-text); padding: 8px 12px; /* #16: tooltip literals stay pinned by tests/tooltip-persist-reflow.test.js */ border-radius: 8px; font-size: 12px; line-height: 1.4; white-space: normal; overflow-wrap: break-word; box-shadow: var(--w-shadow); border: var(--w-border); transition: opacity 0.15s ease, visibility 0s linear 0.3s; } .ai-widget-circle:hover .ai-widget-tooltip { visibility: visible; opacity: 1; transition: opacity 0.15s ease, visibility 0s linear 0s; } #ai-context-widget.ai-panel-open .ai-widget-tooltip { visibility: hidden !important; opacity: 0 !important; transition: none; } .ai-widget-panel { display: none; position: absolute; bottom: 76px; right: 0; background: var(--w-tooltip-bg); color: var(--w-tooltip-text); /* #16: panel padding/radius stay literals (pinned by panel-overflow-contrast, widget-minor-polish) */ padding: 10px; border-radius: 10px; box-shadow: var(--w-shadow); border: var(--w-border); flex-direction: column; /* #16: panel gap stays a pinned literal (panel-overflow-contrast); row gap is moved to the scale above */ gap: 6px; width: min(290px, calc(100vw - 48px)); max-height: calc(100vh - 108px); /* fallback for engines without var()/clamp() support in max-height; declared FIRST on purpose - this literal is pinned by tests/panel-overflow-contrast.test.js (i18n pin M-4.2: no user-facing ru literals here) */ max-height: clamp(130px, calc(100vh - var(--acm-safe-bottom, 24px) - 84px), calc(100vh - 108px)); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(127,127,127,0.5) transparent; box-sizing: border-box; font-size: 12px; line-height: 1.4; z-index: 1000000; white-space: normal; } .ai-widget-panel.open { display: flex; } .ai-cm-limit-text { font-weight: 600; margin-bottom: 2px; } .ai-cm-row { display: flex; align-items: center; gap: var(--w-space-s); } .ai-cm-input { width: 55px; padding: var(--w-space-xs) 2px; text-align: center; border-radius: var(--w-radius-s); border: 1px solid rgba(127,127,127,0.4); background: rgba(127,127,127,0.12); color: inherit; font-family: inherit; font-size: var(--w-type-l); -webkit-appearance: textfield; -moz-appearance: textfield; appearance: textfield; } .ai-cm-input::-webkit-outer-spin-button, .ai-cm-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; } .ai-cm-spin { display: flex; flex-direction: column; margin-left: -2px; } .ai-cm-spin button { cursor: pointer; border: 1px solid rgba(127,127,127,0.4); background: rgba(127,127,127,0.12); color: inherit; font-size: 8px; line-height: 1; padding: 2px 5px; font-family: inherit; } .ai-cm-spin button:first-child { border-radius: 4px 4px 0 0; border-bottom: none; } .ai-cm-spin button:last-child { border-radius: 0 0 4px 4px; } .ai-cm-spin button:hover { background: rgba(127,127,127,0.32); } .ai-cm-spin button:active { background: rgba(127,127,127,0.45); } .ai-cm-spin button:disabled { opacity: 0.38; cursor: default; } .ai-cm-btn { cursor: pointer; border: none; border-radius: var(--w-radius-s); padding: var(--w-space-s) var(--w-space-m); font-size: var(--w-type-m); font-family: inherit; background: rgba(127,127,127,0.18); color: inherit; text-align: left; } .ai-cm-btn:hover { background: rgba(127,127,127,0.32); } .ai-cm-btn:active { background: rgba(127,127,127,0.45); } .ai-cm-btn:focus-visible:not([aria-hidden="true"]), .ai-cm-spin button:focus-visible:not([aria-hidden="true"]) { outline: 2px solid var(--w-text); outline-offset: 2px; } .ai-cm-btn:disabled { opacity: 0.38; cursor: default; } .ai-cm-hint { opacity: 1; color: var(--w-tooltip-text); font-size: 11px; } .ai-widget-tt-primary { font-size: 13px; font-weight: 600; } .ai-widget-tt-secondary { font-size: 11px; } .ai-widget-tt-sep { display: block; height: 1px; background: currentColor; opacity: 0.18; margin: 4px 0; } </style> <div class="ai-widget-circle" tabindex="0" role="button" aria-haspopup="dialog" aria-controls="ai-widget-panel" aria-expanded="false" aria-label="${t('content_a11y_circle_initial', 'Открыть панель порога контекста')}"> <svg viewBox="0 0 100 100"> <defs> <linearGradient id="gemini-gradient" x1="0%" y1="0%" x2="100%" y2="100%"> <stop offset="0%" stop-color="#4285F4" /> <stop offset="50%" stop-color="#9B51E0" /> <stop offset="100%" stop-color="#EA4335" /> </linearGradient> </defs> <circle class="ai-widget-bg" cx="50" cy="50" r="43"/> <circle class="ai-widget-fill" cx="50" cy="50" r="43"/> </svg> <div class="ai-widget-text">—</div> <div class="ai-widget-tooltip">${t('content_widget_loading', 'Загрузка контекста...')}</div> </div> <div class="ai-widget-panel" id="ai-widget-panel"> <div class="ai-cm-limit-text">${t('content_panel_auto_label', 'Авто-порог')}</div> <div class="ai-cm-row"><input type="number" min="1" max="100" step="1" class="ai-cm-input" placeholder="${t('content_panel_placeholder', 'Авто')}"><span class="ai-cm-spin"><button type="button" class="ai-cm-spin-up" tabindex="-1" aria-label="${t('content_panel_spin_up', 'увеличить порог')}">▲</button><button type="button" class="ai-cm-spin-down" tabindex="-1" aria-label="${t('content_panel_spin_down', 'уменьшить порог')}">▼</button></span><span>${t('content_panel_pct_auto', '% от Авто')}</span></div> <div class="ai-cm-row"><button class="ai-cm-btn ai-cm-snap">${t('content_panel_snap_btn', '📌 Текущее = 100%')}</button><button class="ai-cm-btn ai-cm-auto">${t('content_panel_auto_btn', '↺ Авто')}</button></div> <div class="ai-cm-hint">${t('content_panel_hint', 'Порог в % от Авто-порога (оценённой точки, где модель начинает забывать). 100% = как Авто. Меньше = строже: цвета и % считаются от этого порога. Пример: порог 10% → жёлтый, когда Авто≈5%, красный при Авто≈8%.')}</div> </div>`)); // AMO: разметка вставляется узлами (DOMParser), не innerHTML — иначе UNSAFE_VAR_ASSIGNMENT.
@@ -881,7 +886,7 @@ function createWidget(): void {
   try {
     if (typeof aiCmBadgeHoldActive === 'function' && aiCmBadgeHoldActive()) container.style.display = 'none';
   } catch (eHold) { }
-  const circleEl = container.querySelector('.ai-widget-circle');
+  const circleEl = container.querySelector<HTMLElement>('.ai-widget-circle');
   const panelEl = container.querySelector('.ai-widget-panel');
   const snapBtn = container.querySelector('.ai-cm-snap');
   const autoBtn = container.querySelector('.ai-cm-auto');
@@ -993,7 +998,7 @@ function updateWidget(percentage: number, tokens: number, effectiveLimit: number
   if (tooltip) {
     // M-4.2: строки тултипа — из _locales (ключи content_tooltip_*/content_source_*);
     // в изолированной песочнице регрессии хелпера нет — прежние русские литералы.
-    const i18n = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key, fallback) { return fallback; };
+    const i18n = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key: string, fallback: string) { return fallback; };
     const limPct = aiCmActivePct();
     const limLine = (limPct != null)
       ? i18n('content_tooltip_limit_pct', `Предел: ${limPct}% от Авто = ${displayLimit.toLocaleString()} ток`, [String(limPct), displayLimit.toLocaleString()])

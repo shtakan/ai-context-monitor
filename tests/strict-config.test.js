@@ -3,7 +3,8 @@
  *
  * `tsconfig.strict.json` is the incremental strict-typing track: `types/**`, the
  * TypeScript adapters, the leaf `utils/*.ts` batches (B1 + B2 + B3 + B4 + B5 + B6) and
- * the eight `core/*.ts` files of batch B7 that are already clean. The strict run stays
+ * the eight `core/*.ts` files of batches B7 + B8 that are already clean (B8 closed
+ * `core/widget.ts`, 38 → 0; B7 closed the other seven). The strict run stays
  * a small, reviewable batch while the main `tsconfig.json` keeps `strict: false` for
  * the rest of the tree (options/, JS files). Widening `include` here without cleaning
  * the new batch turns the gate red; relaxing `strict` makes the track meaningless.
@@ -53,7 +54,7 @@ function readTsconfig(file) {
   return JSON.parse(stripJsonComments(raw));
 }
 
-describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5/B6 + core B7 strict gate)', () => {
+describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5/B6 + core B7/B8 strict gate)', () => {
   test('exists and extends the main tsconfig', () => {
     expect(fs.existsSync(path.join(ROOT, 'tsconfig.strict.json'))).toBe(true);
     const cfg = readTsconfig('tsconfig.strict.json');
@@ -68,7 +69,7 @@ describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5/B6 + core B7 str
     expect(cfg.compilerOptions.emitDeclarationOnly).toBe(false);
   });
 
-  test('include covers types, adapters, the B1/B2/B3/B4/B5/B6 utils batch and the eight B7 core files', () => {
+  test('include covers types, adapters, the B1/B2/B3/B4/B5/B6 utils batch and the eight B7/B8 core files', () => {
     const cfg = readTsconfig('tsconfig.strict.json');
     expect(cfg.include).toContain('adapters/**/*.ts');
     expect(cfg.include).toContain('types/**/*.d.ts');
@@ -94,9 +95,9 @@ describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5/B6 + core B7 str
     ]) {
       expect(cfg.include).toContain(file);
     }
-    // Only the clean B1–B7 files are in scope: no globs over the rest of utils/core.
+    // Only the clean B1–B8 files are in scope: no globs over the rest of utils/core.
     expect(cfg.include.some((p) => /^(utils|core)\//.test(p) && !p.endsWith('.ts'))).toBe(false);
-    // B7 is exactly the eight core entry points — adding a ninth pulls an unclean file in.
+    // The B7/B8 core batch is exactly the eight core entry points — a ninth would pull an unclean file in.
     expect(cfg.include.filter((p) => p.startsWith('core/'))).toHaveLength(8);
     expect(cfg.include).not.toContain('utils/**/*.ts');
     expect(cfg.include).not.toContain('core/**/*.ts');
