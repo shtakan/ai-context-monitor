@@ -17,6 +17,28 @@ import { parsePerplexityThread } from '../utils/perplexity-parser.ts';
 // archive-import (window.ChatGPTConversationParser больше не публикуется).
 import { orderChatGPTMapping, sanitizeChatGPTText } from '../utils/chatgpt-conversation-parser.ts';
 
+// ---- chrome.storage: локальные формы записей (JSDoc) ----
+// Ключи читаются динамически ('aiCmState:' + host, 'aiCmHistory:' + host), поэтому
+// значение из storage приходит как unknown. Формы описывают только те поля, которые
+// читает страница; все они опциональны — код и раньше проверял их защитно.
+/**
+ * Снимок состояния (`aiCmState`, `aiCmState:<host>`).
+ * @typedef {{ host?: string, updatedAt?: number }} AiCmStateRecord
+ */
+/**
+ * Запись истории (`aiCmHistory`, `aiCmHistory:<host>`).
+ * @typedef {{ host?: string, updatedAt?: number }} AiCmHistoryRecord
+ */
+/**
+ * Запись-источник архива (`aiCmConvSource:<convId>`).
+ * @typedef {{ label?: string, importedAt?: number, fileName?: string }} AiCmSourceRecord
+ */
+/**
+ * Промис-подобный результат chrome.storage без колбэка (легаси-моки тестов).
+ * @typedef {{ then: (onFulfilled: (value: unknown) => void,
+ *   onRejected: (reason: unknown) => void) => unknown }} AiCmThenable
+ */
+
 console.log('AI Context Monitor: Настройки загружены');
 
 const siteEl = document.getElementById('stat-site');
@@ -96,9 +118,12 @@ var siteLabels = {
 };
 
 // Загружаем настройки
-chrome.storage.sync.get(['selectedModel', 'customLimit', 'showWidget'], function (data) {
+chrome.storage.sync.get(['selectedModel', 'customLimit', 'showWidget'], function (
+  /** @type {{ selectedModel?: string, customLimit?: number, showWidget?: boolean }} */ data
+) {
   if (data.selectedModel) modelSelect.value = data.selectedModel;
-  if (data.customLimit) customLimit.value = data.customLimit;
+  // customLimit хранится числом (null — «авто»); сеттер value всё равно приводит к строке.
+  if (data.customLimit) customLimit.value = String(data.customLimit);
   if (data.showWidget !== undefined) showWidget.checked = data.showWidget;
 });
 
@@ -209,6 +234,16 @@ function aiCmSyncExactCountWithByok(hasKey) {
   } catch (eSync) { console.warn('[AI CM][catch] aiCmSyncExactCountWithByok:', eSync); }
 }
 
+// Легаси-моки chrome.storage отдают промис там, где нативный Chrome с колбэком
+// возвращает void: форма результата неизвестна, поэтому проверяем утиную типизацию.
+/**
+ * @param {unknown} value
+ * @returns {value is AiCmThenable}
+ */
+function aiCmIsThenable(value) {
+  return !!value && typeof (/** @type {{ then?: unknown }} */ (value)).then === 'function';
+}
+
 // Загрузка ключа: поле и статус — по факту session. Plaintext прежних версий в
 // local — переходный фолбэк: переносим в session и стираем с диска (ключ не теряем).
 function aiCmLoadByokKey() {
@@ -244,8 +279,9 @@ function aiCmLoadByokKey() {
       } catch (eLeg) { aiCmPopupDiagLine('aiCmLoadByokKey', { err: String(eLeg) }); }
     }
     // Chrome отдаёт промис, если колбэк не передан; колбэк-форма — для прежних моков.
+    /** @type {unknown} */
     var maybePromise = chrome.storage.session.get([AI_CM_BYOK_SESSION_KEY], onSession);
-    if (maybePromise && typeof maybePromise.then === 'function') {
+    if (aiCmIsThenable(maybePromise)) {
       maybePromise.then(onSession, function () {
         if (!handled) {
           handled = true;
@@ -737,9 +773,11 @@ function loadStats() {
 
       // v31: per-host ключ приоритетен; глобальный — только если он про этот же хост
       chrome.storage.local.get(['aiCmState', 'aiCmState:' + tabHost], function (data) {
-        var state = data['aiCmState:' + tabHost] || null;
-        if (!state && data.aiCmState && data.aiCmState.host === tabHost) {
-          state = data.aiCmState;
+        /** @type {AiCmStateRecord|null} */
+        var globalState = data.aiCmState ? /** @type {AiCmStateRecord} */ (data.aiCmState) : null;
+        var state = /** @type {AiCmStateRecord|null} */ (data['aiCmState:' + tabHost] || null);
+        if (!state && globalState && globalState.host === tabHost) {
+          state = globalState;
         }
         if (state) {
           cachedState = state;
@@ -787,10 +825,13 @@ try {
         try {
           if (tab && tab.url) tabHost = new URL(tab.url).hostname;
         } catch (e) { aiCmPopupDiagLine('stats-changed-removed', { err: String(e) }); }
+        /** @type {AiCmStateRecord|null} */
+        var oldSnapshot = changes.aiCmState && changes.aiCmState.oldValue
+          ? /** @type {AiCmStateRecord} */ (changes.aiCmState.oldValue)
+          : null;
         removedForTab = (!tabHost && (!!changes.aiCmState || !!changes['aiCmState:' + tabHost])) ||
           (!!tabHost && (!!changes['aiCmState:' + tabHost] ||
-            (!!changes.aiCmState && !!(changes.aiCmState.oldValue &&
-              changes.aiCmState.oldValue.host === tabHost))));
+            (!!changes.aiCmState && !!(oldSnapshot && oldSnapshot.host === tabHost))));
         if (!removedForTab) return;
         cachedState = null;
         showNoData(aiCmI18nMessage('options_open_supported_site', 'Откройте поддерживаемый сайт'));
@@ -904,9 +945,11 @@ function refreshExportState() {
   getActiveTabHost(function (host) {
     // v31: per-host ключ приоритетен; глобальный — только если он про этот же хост
     chrome.storage.local.get(['aiCmHistory', 'aiCmHistory:' + host], function (data) {
-      var hist = data['aiCmHistory:' + host] || null;
-      if (!hist && data.aiCmHistory && data.aiCmHistory.host === host) {
-        hist = data.aiCmHistory;
+      /** @type {AiCmHistoryRecord|null} */
+      var globalHist = data.aiCmHistory ? /** @type {AiCmHistoryRecord} */ (data.aiCmHistory) : null;
+      var hist = /** @type {AiCmHistoryRecord|null} */ (data['aiCmHistory:' + host] || null);
+      if (!hist && globalHist && globalHist.host === host) {
+        hist = globalHist;
       }
       // BUG-D: гейт порядка — ПОСЛЕ fallback на глобальный ключ (иначе он обходил бы проверку).
       historyOrderStale = isStaleGsaSnapshot(hist);
@@ -1086,11 +1129,14 @@ exportDiagBtn && exportDiagBtn.addEventListener('click', function () {
 try {
   chrome.storage.onChanged.addListener(function (changes, areaName) {
     if (areaName !== 'local') return;
+    /** @type {AiCmHistoryRecord|null} */
     var hist = null;
-    if (changes.aiCmHistory && changes.aiCmHistory.newValue) hist = changes.aiCmHistory.newValue;
+    if (changes.aiCmHistory && changes.aiCmHistory.newValue) {
+      hist = /** @type {AiCmHistoryRecord} */ (changes.aiCmHistory.newValue);
+    }
     for (var key in changes) {
       if (key.indexOf('aiCmHistory:') === 0 && changes[key] && changes[key].newValue) {
-        var v = changes[key].newValue;
+        var v = /** @type {AiCmHistoryRecord} */ (changes[key].newValue);
         if (!hist || (v.updatedAt || 0) > (hist.updatedAt || 0)) hist = v;
       }
     }
@@ -1297,7 +1343,7 @@ function aiCmRenderArchiveList() {
     chrome.storage.local.get(srcKeys, function (data) {
       archiveListEl.textContent = '';
       convIds.forEach(function (cid) {
-        const rec = (data || {})[API.convSourceStorageKey(cid)] || null;
+        const rec = /** @type {AiCmSourceRecord|null} */ ((data || {})[API.convSourceStorageKey(cid)] || null);
         const row = document.createElement('div');
         row.className = 'archive-item';
         const info = document.createElement('span');
