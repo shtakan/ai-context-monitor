@@ -6,13 +6,13 @@
 ## 1. Репозиторий
 
 - workspace: ai-context-monitor-clean
-- branch: main; HEAD: `ded7127` (chore(state): синк HEAD/ahead), сверху `docs(handoff)` аппендикс v136 + `chore(state)` синк; origin/main: `ded7127`; ahead: 2; behind: 0; тег `v2.1.2` → `b36b3c0`
+- branch: main; HEAD: `a6343e3` (chore(ts): strict utils B2); origin/main: `a6343e3`; ahead: 0; behind: 0; тег `v2.1.2` → `b36b3c0`
 - version: `2.1.2` (manifest.json, package.json, package-lock.json, футер docs/index.html); дата: 2026-11-16; опубликовано: GitHub Release `v2.1.2` (ZIP собран CI, `Release ZIP #51`) и AMO 2.1.2 (одобрено 2026-11-16, 0 ошибок / 7 предупреждений)
 
 ## 2. Метрики (финальный прогон 2026-11-16, после последнего коммита)
 
-- build: exit 0 (`node build.mjs --clean` + `node build.mjs`); `dist/content.js` 725 785 B, sha256 `f8963afb19c0d29ac0c6d2c087a589fe10fac4ed1b2f99d562f3b7d440d3ac49`
-- tests: 255 suites / 4204 passed / 7 skipped / 0 failed (полный `npm test`) — `255/4204/7/0`
+- build: exit 0 (`node build.mjs`); `dist/content.js` 730 348 B, sha256 `bc4aca30857f18cfcf15d762da3f4010b35147a1e6cc337ebdffe2e21c2dc32b`
+- tests: 262 suites / 4280 passed / 7 skipped / 0 failed (полный `npm test`) — `262/4280/7/0`
 - tsc: exit 0, вывод пуст (`npx tsc --noEmit`); lint: 0 errors / 0 warnings (`npx eslint .`)
 - mutation: 8 KILLED / 0 SURVIVED / 0 ERROR (`npm run test:mutation`, exit 0, 2026-11-16)
 
