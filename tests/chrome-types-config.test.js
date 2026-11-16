@@ -7,6 +7,11 @@
  * The shim must never leak into the chrome run (it would shadow the package
  * types with `any`), and the main run must never pull `@types/chrome` in (it
  * would light up the whole tree at once instead of batch by batch).
+ *
+ * Track progress: the measurement run started at 28 errors and B12
+ * (`options/options.js`, 17 → 0) leaves 11 — `core/background.ts` 6,
+ * `core/export-manager.ts` 4, `core/content.ts` 1. The options page itself
+ * stays pinned by `tests/options-checkjs.test.js`; `include` is unchanged.
  */
 
 const path = require('node:path');
