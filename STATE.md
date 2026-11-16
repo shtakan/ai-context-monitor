@@ -22,6 +22,7 @@
 - живая приёмка 2.1.2 (тред `e1020dba`): 165 сообщений, 99 229 / 77.5 %, «Ещё N» — 0, карточек файла нет
 - `RELEASE_CHECKLIST.md` — архив с 2026-11-16; гейт P0/P1 — в STANDARDS-MATRIX
 - `options/options.js` в checkJs + JSDoc: 21 аннотация DOM-элементов (20 const + `section`), 63 TS2339 закрыты; 3 присваивания `value` обёрнуты в `String()` (сеттер и так приводит к строке); пин `tests/options-checkjs.test.js`; `npx tsc --noEmit` exit 0
+- следующий шаг: quality-трек `tsconfig.strict.json` — замер 2026-11-16: `adapters/**` 11 ошибок, `utils/**/*.ts` 513 (TS7006 182, TS7053 179, TS7005 59, TS7034 22, TS2345 13), `utils/**/*.js` 0, core 780; начинаем с adapters; затем `@types/chrome` + контракты сообщений; релиз 2.1.3 — после quality-трека
 - следующий шаг: quality-трек `tsconfig.strict.json` для `utils/**`/core (база 879) + `@types/chrome`; затем релиз 2.1.3 (CHANGELOG + 15 точек версии + tag + AMO) — по решению владельца
 
 ## 4. Открытые задачи (≤5)
