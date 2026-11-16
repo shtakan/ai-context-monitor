@@ -6,7 +6,7 @@
 ## 1. Репозиторий
 
 - workspace: ai-context-monitor-clean
-- branch: main; HEAD: `53c911f` (chore(ts): strict core B11); origin/main: `53c911f`; ahead: 0; behind: 0; тег `v2.1.2` → `b36b3c0`
+- branch: main; HEAD: `dda3d3a` (chore(ts): @types/chrome — замер 28 ошибок); origin/main: `53c911f`; ahead: 2 (после docs-синка HEAD); behind: 0; тег `v2.1.2` → `b36b3c0`
 - version: `2.1.2` (manifest.json, package.json, package-lock.json, футер docs/index.html); дата: 2026-11-16; опубликовано: GitHub Release `v2.1.2` (ZIP собран CI, `Release ZIP #51`) и AMO 2.1.2 (одобрено 2026-11-16, 0 ошибок / 7 предупреждений)
 
 ## 2. Метрики (финальный прогон 2026-11-17, после последнего коммита)
