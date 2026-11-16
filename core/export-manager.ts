@@ -1006,9 +1006,11 @@ function aiCmGsaNetworkCompleteReset(threadId?: string | null): boolean {
 }
 // Взвод: ид — ровно тот же, что у читателя и у латча fired (aiCmAutoExportConvId), чтобы
 // ключ не разъехался при пустом detail.threadId; fallback — threadId снимка.
-function aiCmGsaNetworkCompleteSet(threadId?: string | null): boolean {
+function aiCmGsaNetworkCompleteSet(threadId?: string | null, siteOverride?: string | null): boolean {
   try {
-    var site = (currentAdapter && currentAdapter.siteName) || '';
+    // BUG-L: явный сайт с моста — адаптер может быть ещё не назначен в момент complete=1,
+    // и тогда гейт по currentAdapter молча терял взвод латча (поздний open оставлял файл partial).
+    var site = siteOverride || (currentAdapter && currentAdapter.siteName) || '';
     if (site !== 'google_search') return false;
     var tid = (threadId === undefined || threadId === null) ? '' : String(threadId);
     var cid = aiCmAutoExportConvId() || tid;

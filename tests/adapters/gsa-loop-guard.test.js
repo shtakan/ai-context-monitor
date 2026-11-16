@@ -557,12 +557,14 @@ describe('Петля GSA R2: регресс O-27/O-31/O-32/O-43', () => {
     );
   });
 
-  test('O-43: снимок с явным вердиктом полноты не подменяется', () => {
+  test('O-43/BUG-L: явный вердикт полноты монотонен — поздний open его не отменяет', () => {
     const h = loopCtx({});
     const detail = h.api.buildDetail(TURNS_8, null, TID_A, true);
     expect(detail.historyComplete).toBe(true);
-    expect(h.api.buildDetail(TURNS_8, null, TID_A, undefined).historyComplete).toBe(false);
-    expect(h.api.buildDetail(TURNS_8, null, TID_A, false).historyComplete).toBe(false);
+    // BUG-L: probe поставил complete=1 раньше адаптера; поздний open того же треда
+    // с historyComplete=undefined/false больше не откатывает доказанную полноту.
+    expect(h.api.buildDetail(TURNS_8, null, TID_A, undefined).historyComplete).toBe(true);
+    expect(h.api.buildDetail(TURNS_8, null, TID_A, false).historyComplete).toBe(true);
   });
 
   test('капы одного прогона не тронуты (12 страниц / 10 шагов probe / 400 мс)', () => {

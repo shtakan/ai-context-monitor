@@ -234,7 +234,7 @@ describe('O-43 D2: регрессия вердикта полноты латч �
     // единственный путь вердикта полноты — buildDetail. O-32: полнота взводится только
     // ДОКАЗАННЫМ вердиктом (probe-классификатор → applyTurns(..., true)), а не дефолтом
     // `historyComplete !== false`: без вердикта снимок честно объявляется неполным.
-    expect(fnDecl(INTERCEPT_SRC, 'buildDetail')).toContain('historyComplete: historyComplete === true');
+    expect(fnDecl(INTERCEPT_SRC, 'buildDetail')).toMatch(/var complete = historyComplete === true \|\| \(tidKey !== '' && doneReg\[tidKey\] === true\);[\s\S]*historyComplete: complete/);
     const h = contentState({});
     h.set(TID); // эмит кэша треда после activateThread → detail.historyComplete=true
     expect(h.is(GSA, TID)).toBe(true);
@@ -454,7 +454,7 @@ describe('O-43: точки взвода и чтения (единственны�
     expect(CONTENT.slice(iComplete, iSet)).toContain('if (newBaseComplete');
     // вызов ровно один (второе вхождение имени — шапка-комментарий этого файла в content.js)
     expect((CONTENT.match(/aiCmGsaNetworkCompleteSet\(/g) || []).length).toBe(2);
-    expect(fnDecl(MGR_SRC, 'aiCmGsaNetworkCompleteSet')).toContain("if (site !== 'google_search') return false;");
+    expect(fnDecl(MGR_SRC, 'aiCmGsaNetworkCompleteSet')).toMatch(/siteOverride \|\| \(currentAdapter && currentAdapter\.siteName\)[\s\S]*if \(site !== 'google_search'\) return false;/);
   });
 
   test('сброс: только resetConversationState (по факту смены threadId)', function () {

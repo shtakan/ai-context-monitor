@@ -443,6 +443,25 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
   function buildDetail(turns, messages, threadId, historyComplete) {
     if (!messages) messages = messagesFromTurns(turns);
     var messageTexts = messages.map(function (m) { return m.text; });
+    var tidKey = threadId || '';
+    // BUG-L: вердикт полноты МОНОТОНЕН по треду. probe ставит complete=true раньше, чем
+    // content-script назначил адаптер; поздний open-путь того же треда после probe эмитит
+    // historyComplete=false, и раньше это откатывало вердикт (файл уходил partial).
+    // Реестр живёт в замыкании перехватчика (MAIN); срез-песочница без него получает
+    // реестр на самой функции — форма снимка и вердикт те же.
+    var doneReg = (typeof completedTids === 'object' && completedTids) ||
+      (buildDetail.__completedTids || (buildDetail.__completedTids = Object.create(null)));
+    if (historyComplete === true && tidKey) {
+      if (doneReg[tidKey] !== true) {
+        // ограничение размера: не больше 50 тредов, самый старый ключ вытесняется
+        var doneKeys = Object.keys(doneReg);
+        if (doneKeys.length >= 50) {
+          for (var dk = 0; dk < doneKeys.length - 49; dk++) delete doneReg[doneKeys[dk]];
+        }
+      }
+      doneReg[tidKey] = true;
+    }
+    var complete = historyComplete === true || (tidKey !== '' && doneReg[tidKey] === true);
     var messageIds = [];
     for (var i = 0; i < turns.length; i++) {
       var t = turns[i];
@@ -468,7 +487,8 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       // ПОЛНЫМ, и content.js взводил baseComplete=true по неполной базе — гейт автоэкспорта
       // и метрики работали по недоказанной полноте. Теперь true только при явном вердикте
       // (probe-классификатор classifyFolwrContinuation → applyTurns(..., true)).
-      historyComplete: historyComplete === true
+      // BUG-L: и при уже доказанной полноте этого треда (completedTids) — вердикт монотонен.
+      historyComplete: complete
     };
   }
 
@@ -1369,6 +1389,9 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
   // курсор → продолжать тихий цикл (кап 10 шагов). Детальные логи probe — под debugLog.
   var FOLWR_PROBE_MAX_STEPS = 10;
   var probedTids = {}; // v43: гард «один probe на threadId» (handshake-реэмит / собственный probe-запрос не перезапускают probe)
+  // BUG-L: доказанная полнота по треду — вердикт buildDetail не регрессирует поздним open
+  // с historyComplete=0. Размер ограничен (см. buildDetail), ключи — те же threadId.
+  var completedTids = Object.create(null);
 
   // v1.18 (F5): состояние probe-полноты наружу (MAIN → ISOLATED через CustomEvent, как
   // у ai-cm-full-history). Нужен ровно для ярлыка причины skip автоэкспорта: пока probe

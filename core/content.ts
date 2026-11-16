@@ -979,7 +979,11 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
   // (resetConversationState). Это НЕ второй вердикт полноты (классификатор здесь не зовётся):
   // взвод — ровно на том же detail.historyComplete, что и baseComplete выше.
   if (newBaseComplete && typeof aiCmGsaNetworkCompleteSet === 'function') {
-    aiCmGsaNetworkCompleteSet(detail.threadId || '');
+    // BUG-L: сайт передаём явно. На холодном входе probe отдаёт complete=1 раньше,
+    // чем content-script назначил адаптер, и aiCmGsaNetworkCompleteSet по пустому
+    // currentAdapter.siteName молча возвращал false — латч O-43 не взводился.
+    var emitSite = (currentAdapter && currentAdapter.siteName) || ((location.hostname === 'www.google.com') ? 'google_search' : '');
+    aiCmGsaNetworkCompleteSet(detail.threadId || '', emitSite);
   }
   // v1.13.1: подтверждение полноты — baseComplete при reachedStart=true (Gemini);
   // для не-Gemini перехватчиков detail.reachedStart нет — гейт подтверждения не применяется.

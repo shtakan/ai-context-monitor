@@ -125,6 +125,7 @@ function interceptCtx(over) {
     lastFullMessages: [],
     lastFullSnapshot: null,
     seenKeys: {},
+    completedTids: Object.create(null),
     currentThreadId: TID,
     emittedThreadId: '',
     baseThreadId: '',
@@ -357,7 +358,7 @@ describe('O-32 (3): полнота доказана вердиктом, а не 
 
   test('content.js: baseComplete — единственная точка вердикта, дефолта нет', () => {
     expect(CONTENT).toContain('const newBaseComplete = !!detail.historyComplete;');
-    expect(INTERCEPT).toContain('historyComplete: historyComplete === true');
+    expect(INTERCEPT).toMatch(/var complete = historyComplete === true \|\| \(tidKey !== '' && doneReg\[tidKey\] === true\);[\s\S]*historyComplete: complete/);
     expect(INTERCEPT).not.toContain('historyComplete: historyComplete !== false');
   });
 });

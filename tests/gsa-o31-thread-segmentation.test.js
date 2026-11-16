@@ -112,6 +112,7 @@ function interceptCtx(over) {
     lastFullMessages: [],
     lastFullSnapshot: null,
     seenKeys: {},
+    completedTids: Object.create(null),
     currentThreadId: '',
     emittedThreadId: '',
     baseThreadId: '',
@@ -345,7 +346,7 @@ describe('O-31 (в): регрессионный контур', () => {
     // probe-вердикт полноты (F1, O-28) не тронут (O-27: 4-й аргумент — тело шага probe)
     expect(INTERCEPT).toContain("applyTurns(finalTurns.length > 0 ? finalTurns : lastFullTurns, tid, true, lastBody, 'prepend');");
     // O-32: полнота — только доказанная (явный вердикт probe), не дефолт buildDetail
-    expect(INTERCEPT).toContain('historyComplete: historyComplete === true');
+    expect(INTERCEPT).toMatch(/var complete = historyComplete === true \|\| \(tidKey !== '' && doneReg\[tidKey\] === true\);[\s\S]*historyComplete: complete/);
   });
 
   test('O-11: дисамбигуатор «-2» жив (два файра в одну минуту → разные имена)', () => {

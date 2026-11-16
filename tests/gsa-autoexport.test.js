@@ -61,7 +61,7 @@ describe('F1: probe-полнота GSA доходит до гейта одной
     expect(INTERCEPT).toContain("applyTurns(finalTurns.length > 0 ? finalTurns : lastFullTurns, tid, true, lastBody, 'prepend');");
     // O-32: полнота — ДОКАЗАННОЕ свойство: buildDetail взводит historyComplete только при
     // явном вердикте (было `historyComplete !== false` — дефолт полноты для DOM-добора).
-    expect(INTERCEPT).toContain('historyComplete: historyComplete === true');
+    expect(INTERCEPT).toMatch(/var complete = historyComplete === true \|\| \(tidKey !== '' && doneReg\[tidKey\] === true\);[\s\S]*historyComplete: complete/);
     // probe-путь не заводит второго вердикта: классификатор вызывается только в describeFolwrPage
     expect(INTERCEPT).toContain('pageInfo.cls.complete');
     expect(INTERCEPT).toContain('classifyFolwrContinuation');
