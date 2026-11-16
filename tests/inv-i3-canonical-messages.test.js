@@ -32,7 +32,10 @@ const Canonical = loadEsmHelper.loadEsmModule('utils/canonical-body.ts');
 const Builders = loadEsmHelper.loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 
 const EM_PATH = path.join(ROOT, 'core', 'export-manager.ts');
-const EM_SRC = fs.readFileSync(EM_PATH, 'utf8');
+// Срез исполняется через new Function (TS-аннотации он не парсит): типы снимает тот же
+// хелпер, что у tests/helpers/content-source.js, комментарии и порядок строк сохраняются.
+const EM_SRC = require('./helpers/read-module-source.js')
+  .stripTypesKeepComments(fs.readFileSync(EM_PATH, 'utf8'), EM_PATH);
 const SLICE_START = 'var lastCanonList = null;';
 const SLICE_END = '// ========== v2.0 (этап 1/3)';
 

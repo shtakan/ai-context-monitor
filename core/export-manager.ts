@@ -139,7 +139,7 @@ function aiCmHiddenExportEffectiveOn(messages: AiCmExportMessage[]): boolean {
 // санация не переписана.
 function aiCmSanitizeEmitUserTexts(messages: AiCmExportMessage[]): AiCmExportMessage[] {
   try {
-    var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
+    const P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
     if (!P || typeof P.sanitizeEmitMessages !== 'function') {
       // O-40 (диагностика): пайплайна нет — ветка no-pipeline, массив не тронут.
       if (typeof aiCmEmitEntryDiag === 'function') aiCmEmitEntryDiag('no-pipeline', messages, messages);
@@ -338,7 +338,7 @@ function aiCmCollectExportSource(): AiCmExportMessage[] {
       // чтобы служебные поля захвата (например, размышление DOM-адаптера O-35) доехали до файла.
       // Без строкового литерала: обход через for-in с фильтром ключей.
       for (var n2 = 0; n2 < norm.length; n2++) {
-        var fbMsg = { role: (n2 % 2 === 0) ? 'user' : 'assistant', text: norm[n2].text };
+        var fbMsg: AiCmExportMessage = { role: (n2 % 2 === 0) ? 'user' : 'assistant', text: norm[n2].text };
         for (var key in norm[n2]) {
           if (Object.prototype.hasOwnProperty.call(norm[n2], key) && key !== 'role' && key !== 'text') {
             fbMsg[key] = norm[n2][key];
@@ -372,24 +372,24 @@ function aiCmExportBaseSource(convId: string | null, localMsgs: AiCmExportMessag
       ((typeof aiCmGeminiTurnsSnapshotSync === 'function') ? aiCmGeminiTurnsSnapshotSync() : null);
     var hasBridge = !!(snap && typeof snap === 'object');
     // чужая база (SPA-переход между чтением и экспортом) — мост не используем
-    if (hasBridge && snap.convId && convId && String(snap.convId) !== String(convId)) hasBridge = false;
-    var union = (hasBridge && Array.isArray(snap.messages)) ? snap.messages : [];
+    if (hasBridge && snap && snap.convId && convId && String(snap.convId) !== String(convId)) hasBridge = false;
+    var union = (hasBridge && snap && Array.isArray(snap.messages)) ? snap.messages : [];
     var localN = Array.isArray(localMsgs) ? localMsgs.length : 0;
     var verdict = P.resolveExportSource({
       isGemini: true,
       bridge: hasBridge,
-      archiveCount: (hasBridge && typeof snap.archiveCount === 'number') ? snap.archiveCount : 0,
-      liveCount: (hasBridge && typeof snap.liveCount === 'number') ? snap.liveCount : null,
-      baseCount: (hasBridge && typeof snap.baseMsgs === 'number') ? snap.baseMsgs : 0,
+      archiveCount: (hasBridge && snap && typeof snap.archiveCount === 'number') ? snap.archiveCount : 0,
+      liveCount: (hasBridge && snap && typeof snap.liveCount === 'number') ? snap.liveCount : null,
+      baseCount: (hasBridge && snap && typeof snap.baseMsgs === 'number') ? snap.baseMsgs : 0,
       localCount: localN
     });
     if (!verdict || verdict.action === 'local') return null;
     if (verdict.action === 'block') {
       return {
         blocked: true, reason: verdict.reason,
-        baseCount: (hasBridge && typeof snap.baseMsgs === 'number') ? snap.baseMsgs : 0,
-        liveCount: (hasBridge && typeof snap.liveCount === 'number') ? snap.liveCount : 0,
-        archiveCount: (hasBridge && typeof snap.archiveCount === 'number') ? snap.archiveCount : 0
+        baseCount: (hasBridge && snap && typeof snap.baseMsgs === 'number') ? snap.baseMsgs : 0,
+        liveCount: (hasBridge && snap && typeof snap.liveCount === 'number') ? snap.liveCount : 0,
+        archiveCount: (hasBridge && snap && typeof snap.archiveCount === 'number') ? snap.archiveCount : 0
       };
     }
     var out = [];
@@ -401,8 +401,8 @@ function aiCmExportBaseSource(convId: string | null, localMsgs: AiCmExportMessag
     if (out.length <= localN) return null; // объединённая база не больше снимка EMIT — прежний путь
     return {
       blocked: false, msgs: out, baseCount: union.length,
-      liveCount: (typeof snap.liveCount === 'number') ? snap.liveCount : 0,
-      archiveCount: (typeof snap.archiveCount === 'number') ? snap.archiveCount : 0
+      liveCount: (snap && typeof snap.liveCount === 'number') ? snap.liveCount : 0,
+      archiveCount: (snap && typeof snap.archiveCount === 'number') ? snap.archiveCount : 0
     };
   } catch (eEbs) { return null; }
 }
@@ -439,7 +439,7 @@ function loadAutoExportPerSitePct(): void {
       try {
         var raw = data && data[key];
         var n = parseInt(raw, 10);
-        autoExportPctBySite[site] = (!isNaN(n) && n >= 1 && n <= 100) ? n : undefined;
+        (autoExportPctBySite as Record<string, number | undefined>)[site] = (!isNaN(n) && n >= 1 && n <= 100) ? n : undefined;
         debugLog('log', '[AI CM][auto-export] per-site load ' + key + '=' +
           (autoExportPctBySite[site] === undefined ? 'нет (глобальный фолбэк)' : autoExportPctBySite[site]));
       } catch (eParsePs) { swallowSoft(eParsePs, 'export:loadAutoExportPerSitePct'); }
@@ -529,8 +529,8 @@ function aiCmTryLateAutoExport(cid: string | null): void {
 // ISOLATED и window.GeminiInterceptLogic не видит. Копия синхронизирована с утилитой;
 // при наличии window.GeminiInterceptLogic.detectTrimState приоритет у канонической.
 function detectTrimStateFallback(
-  /** @type {{maxCount?: number, firstIds?: string[], suspectPending?: number}|null} */ prevProbe,
-  /** @type {{messageIds?: string[], count?: number, historyComplete?: boolean}|null} */ snapshot
+  prevProbe: AiCmTrimProbeEntry | null,
+  snapshot: AiCmFullHistoryDetail | null
 ) {
   var res = { suspect: false, confirmed: false, lostHead: false };
   try {
@@ -557,7 +557,7 @@ function detectTrimStateFallback(
 // trimProbe обновляется ТОЛЬКО по полному снимку (historyComplete===true); confirmed
 // требует двух последовательных сокращений подряд (suspect → confirmed).
 function geminiDetectTrim(
-  /** @type {{convId?: string, count?: number, messageIds?: string[], historyComplete?: boolean}|null} */ detail
+  detail: AiCmFullHistoryDetail | null
 ) {
   try {
     if (!detail || !Array.isArray(detail.messageIds)) return;
@@ -686,7 +686,7 @@ function aiCmUnionFileMessages(cid: string | null, localMsgs: AiCmExportMessage[
       return union.msgs;
     }
   } catch (eO49u) {
-    debugLog('log', '[AI CM][export] silent-catch aiCmUnionFileMessages: ' + (eO49u && eO49u.message || eO49u));
+    debugLog('log', '[AI CM][export] silent-catch aiCmUnionFileMessages: ' + ((eO49u instanceof Error && eO49u.message) || String(eO49u)));
   }
   return localMsgs;
 }
@@ -784,7 +784,7 @@ function aiCmWriteCurrentHistory(): void {
     var histPatch: Record<string, any> = { aiCmHistory: histSnapshot };
     histPatch['aiCmHistory:' + window.location.hostname] = aiCmHostHistoryRecord(histSnapshot);
     chrome.storage.local.set(histPatch);
-  } catch (e) { debugLog('log', '[AI CM][export] silent-catch aiCmWriteCurrentHistory: ' + (e && e.message || e)); }
+  } catch (e) { debugLog('log', '[AI CM][export] silent-catch aiCmWriteCurrentHistory: ' + ((e instanceof Error && e.message) || String(e))); }
 }
 function aiCmFlushDeferredHistWrite(cid: string | null, reason: string): void {
   try {
@@ -813,13 +813,13 @@ function aiCmFlushDeferredHistWrite(cid: string | null, reason: string): void {
       }
     } catch (eO22e) { }
     aiCmWriteCurrentHistory();
-  } catch (e) { debugLog('log', '[AI CM][export] silent-catch aiCmFlushDeferredHistWrite: ' + (e && e.message || e)); }
+  } catch (e) { debugLog('log', '[AI CM][export] silent-catch aiCmFlushDeferredHistWrite: ' + ((e instanceof Error && e.message) || String(e))); }
 }
-function aiCmScheduleDeferredHistWrite(cid: string | null): void {
+function aiCmScheduleDeferredHistWrite(cid: any): void {
   try {
     aiCmCancelDeferredHistWrite(); // один отложенный снапшот за сессию — свежий важнее
     debugLog('log', '[AI CM][export] deferred until base-complete convId=' + cid +
-      ' loader=' + !!aiCmLoaderRunningByConv[cid] + ' baseComplete=' + baseComplete);
+      ' loader=' + !!aiCmLoaderRunningByConv[String(cid)] + ' baseComplete=' + baseComplete);
     var p: any = { convId: cid, timer: null };
     function fireDeferredTimeout() {
       if (aiCmPendingHistWrite !== p) return;
@@ -843,7 +843,7 @@ function aiCmScheduleDeferredHistWrite(cid: string | null): void {
       }
       // v53: ручной экспорт ждёт base-complete до 60с, затем «как есть» с логом
       debugLog('log', '[AI CM][export] deferred-timeout(60s), exporting as-is convId=' + cid +
-        ' pendingCursor=' + (aiCmCursorLiveByConv[cid] ? '1' : '0') +
+        ' pendingCursor=' + (aiCmCursorLiveByConv[String(cid)] ? '1' : '0') +
         ' baseComplete=' + (baseComplete === true ? '1' : '0'));
       // v64: честная маркировка as-is экспорта — при baseComplete=0 база не подтверждена,
       // histSnapshot получает isLowConfidenceBase=true → v63-префикс [LOW CONFIDENCE]_.
@@ -851,7 +851,7 @@ function aiCmScheduleDeferredHistWrite(cid: string | null): void {
         try {
           aiCmLowConfidenceByConv[cid] = true;
           if (lastEmitConvId && lastEmitConvId !== cid) aiCmLowConfidenceByConv[lastEmitConvId] = true;
-        } catch (eLc64) { debugLog('log', '[AI CM][export] silent-catch aiCmScheduleDeferredHistWrite(fireDeferredTimeout/lowConf): ' + (eLc64 && eLc64.message || eLc64)); }
+        } catch (eLc64) { debugLog('log', '[AI CM][export] silent-catch aiCmScheduleDeferredHistWrite(fireDeferredTimeout/lowConf): ' + ((eLc64 instanceof Error && eLc64.message) || String(eLc64))); }
         debugLog('log', '[AI CM][export] as-is baseComplete=0 → isLowConfidenceBase=true convId=' + cid);
       }
       // O-50 (ДИАГНОСТИКА — только измерение; гейты, порядок, байты и поведение не меняются):
@@ -874,16 +874,16 @@ function aiCmScheduleDeferredHistWrite(cid: string | null): void {
             snapshot: 'write-current-history',
             download: 'absent',
             reason: 'no-download-point-on-timeout-path',
-            fired: (typeof autoExportFired === 'object' && autoExportFired && autoExportFired[cid] === 1) ? 1 : 0,
+            fired: (typeof autoExportFired === 'object' && autoExportFired && autoExportFired[String(cid)] === 1) ? 1 : 0,
             dlNames: (typeof aiCmAutoExportNamesUsed === 'object' && aiCmAutoExportNamesUsed) ? Object.keys(aiCmAutoExportNamesUsed).length : 0
           });
         }
       } catch (eO50d) { }
-      try { aiCmWriteCurrentHistory(); } catch (eW) { debugLog('log', '[AI CM][export] silent-catch aiCmScheduleDeferredHistWrite(fireDeferredTimeout/export): ' + (eW && eW.message || eW)); }
+      try { aiCmWriteCurrentHistory(); } catch (eW) { debugLog('log', '[AI CM][export] silent-catch aiCmScheduleDeferredHistWrite(fireDeferredTimeout/export): ' + ((eW instanceof Error && eW.message) || String(eW))); }
     }
     p.timer = setTimeout(fireDeferredTimeout, 60000);
     aiCmPendingHistWrite = p;
-  } catch (e) { debugLog('log', '[AI CM][export] silent-catch aiCmScheduleDeferredHistWrite: ' + (e && e.message || e)); }
+  } catch (e) { debugLog('log', '[AI CM][export] silent-catch aiCmScheduleDeferredHistWrite: ' + ((e instanceof Error && e.message) || String(e))); }
 }
 
 
@@ -1044,7 +1044,7 @@ var aiCmGsaProbeByThread: Record<string, number> = {};    // threadId -> timesta
 var aiCmGsaProbeRunning = false;  // последнее состояние (фолбэк для пустого convId)
 window.addEventListener('ai-cm-gsa-probe-state', function (/** @type {CustomEvent} */ ev) {
   try {
-    var d = ev && (ev as any).detail;
+    var d = ev && (ev as CustomEvent).detail;
     if (!d) return;
     aiCmGsaProbeRunning = d.running === true;
     if (d.threadId) aiCmGsaProbeByThread[d.threadId] = aiCmGsaProbeRunning ? Date.now() : 0;
@@ -1068,7 +1068,7 @@ function aiCmGsaProbeRunningFor(cid: string | null): boolean {
 // без антиспама), а не на смену состояния. Латч — aiCmAutoExportLastLogState (core/state.js,
 // family → сигнатура); здесь — читатель/писатель. Только логи: вердикт гейта, латчи fired,
 // пороги и байты файла не затрагиваются.
-function aiCmAutoExportLogOnChange(family, key) { // family/key: string (JSDoc-типы вне сигнатуры: fnDecl-хелпер тестов балансирует скобки и {…} в сигнатуре ломает срез)
+function aiCmAutoExportLogOnChange(family: string, key?: string | null) { // family/key: string; типы в сигнатуре (stripTypes снимает аннотации до fnDecl-среза)
   var self: any = aiCmAutoExportLogOnChange;
   try {
     var f = String(family || '');
@@ -1079,7 +1079,7 @@ function aiCmAutoExportLogOnChange(family, key) { // family/key: string (JSDoc-�
       // срез-песочница без общего состояния (core/state.js): латч живёт на самой функции —
       // без глобалов и без протечки состояния между песочницами.
       if (!self.__state) self.__state = Object.create(null);
-      st = self.__state;
+      st = self.__state as Record<string, string>;
     }
     if (st[f] === k) return false;  // та же сигнатура состояния — молчание (O-29)
     st[f] = k;
@@ -1158,7 +1158,7 @@ var aiCmDsStreamFlushLogged: Record<string, number> = {};      // cid -> 1 (ан
 function aiCmDeepseekStreamProbe(): any {
   try {
     var resp = null;
-    var h = function (ev) { resp = ev.detail; };
+    var h = function (ev: Event) { resp = (ev as CustomEvent).detail; };
     window.addEventListener('ai-cm-deepseek-stream-probe-response', h, { once: true });
     window.dispatchEvent(new CustomEvent('ai-cm-deepseek-stream-probe'));
     window.removeEventListener('ai-cm-deepseek-stream-probe-response', h);
@@ -1679,7 +1679,7 @@ function aiCmAutoExportStartDownload(content: string, file: string, fmt: string)
 // (дозапрос делает перехватчик DeepSeek; здесь только ожидание с таймаутом 3 с).
 // Латч autoExportFired и прочие гейты стоят ПОСЛЕ дозапроса, поэтому повторный вход
 // не может ни задвоить файл, ни потерять латч; при недоступной сети поведение прежнее.
-function doAutoExportDownload(cid: string | null, percentage: number, reason: string, netSynced?: boolean): void {
+function doAutoExportDownload(cid: any, percentage: number, reason: string, netSynced?: boolean): void {
   try {
     // S2.3 (ADR-001, I4, D4): БАРЬЕР частичного снимка — единственная точка, до files-drain
     // и до сетевого дозапроса. Пока снимок partial, автоэкспорт не стартует: файл не
@@ -1730,10 +1730,10 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
     if (netSynced !== true && (filesDrainSiteD || netSyncSiteD) &&
         (typeof aiCmExportFilesThenNetSync === 'function' || typeof aiCmExportNetSyncThen === 'function' ||
          (filesApiD2 && typeof filesApiD2.aiCmExportFilesDrainThen === 'function'))) {
-      if (!aiCmNetSyncInFlight[cid]) {
-        aiCmNetSyncInFlight[cid] = 1;
+      if (!aiCmNetSyncInFlight[String(cid)]) {
+        aiCmNetSyncInFlight[String(cid)] = 1;
         var selfSync = function () {
-          delete aiCmNetSyncInFlight[cid];
+          delete aiCmNetSyncInFlight[String(cid)];
           doAutoExportDownload(cid, percentage, reason, true);
         };
         try {
@@ -1747,7 +1747,7 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
             selfSync();
           }
         } catch (eSync) {
-          delete aiCmNetSyncInFlight[cid];
+          delete aiCmNetSyncInFlight[String(cid)];
           selfSync();
         }
         return;
@@ -1756,7 +1756,7 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
       debugLog('log', '[AI CM][auto-export] net-sync уже выполняется convId=' + cid);
       return;
     }
-    var B = (typeof AiCmExportBuilders !== 'undefined') ? AiCmExportBuilders : null;
+    const B = ((typeof AiCmExportBuilders !== 'undefined') ? AiCmExportBuilders : null) as import('../types/export').ExportBuildersApi;
     if (!B) throw new Error('utils/export-text-builders.js не загружен');
     var fmt = (autoExportSettings.fmt === 'md') ? 'md' : ((autoExportSettings.fmt === 'json') ? 'json' : 'txt');
     // v81 (2.6): имя файла — ТОЛЬКО через пайплайн (utils/export-emit-pipeline.ts);
@@ -1769,17 +1769,17 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
     // R1: для Qwen — неполная база + soft-final (time-cap/page-cap/no-gain). Прочие сайты
     // по-прежнему false (пин O-37: qwen-ветка только здесь, имена платформ не в пайплайне).
     var lowConfD = (siteNameD === 'gemini')
-      ? (aiCmLowConfidenceByConv[cid] === true)
+      ? (aiCmLowConfidenceByConv[String(cid)] === true)
       : ((siteNameD === 'google_search') ? (baseComplete !== true)
       : ((siteNameD === 'qwen') ? (baseComplete !== true &&
           typeof aiCmPartialSoftByConv === 'object' && aiCmPartialSoftByConv &&
-          aiCmPartialSoftByConv[cid] === true) : false));
+          aiCmPartialSoftByConv[String(cid)] === true) : false));
     // v1.18 (F7): модель снапшота для имени файла GSA. lastSnapshotModelName заполняется для
     // GSA в resolveCurrentModel (реальная модель: сеть → DOM → дефолт сайта, как у бейджа);
     // фолбэк 'model' в buildGsaExportFileName остаётся ТОЛЬКО при реально пустой модели.
     var gsaModelD = (siteNameD === 'google_search' && typeof lastSnapshotModelName === 'string')
       ? lastSnapshotModelName : '';
-    var file;
+    var file: string;
     // O-11: набор занятых имён — гард коллизии единственного источника имени. Реестр
     // модуля (typeof-гард: в срез-песочницах без него поведение прежнее, имена 1:1).
     var namesUsedD = (typeof aiCmAutoExportNamesUsed === 'object' && aiCmAutoExportNamesUsed)
@@ -1795,7 +1795,7 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
     } else {
       // фолбэк: прежнее имя файла (v54)
       var dFb = new Date();
-      function ap2Fb(n) { return (n < 10 ? '0' : '') + n; }
+      function ap2Fb(n: number): string { return (n < 10 ? '0' : '') + n; }
       file = 'chat-' + String(cid).slice(0, 8) + '-' + dFb.getFullYear() + '-' + ap2Fb(dFb.getMonth() + 1) + '-' + ap2Fb(dFb.getDate()) +
         '_' + ap2Fb(dFb.getHours()) + '-' + ap2Fb(dFb.getMinutes()) +
         (reason === 'pre-trim' ? '-pretrim' : '') + '.' + fmt;
@@ -1858,7 +1858,7 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
       var hostKeyFb = hostFb ? ('aiCmHistory:' + hostFb) : '';
       var readFb = false;
       var fbDone = false;
-      var onHostHistFb = function (data) {
+      var onHostHistFb = function (data: AiCmStorageData | null) {
         if (fbDone) return;
         fbDone = true;
         var rec = (data && typeof data === 'object') ? data[hostKeyFb] : null;
@@ -1889,7 +1889,7 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
     // Provenance-гард: convId истории сверяется с cid стреляющей вкладки, site истории —
     // с currentAdapter.siteName; несовпадение → файл НЕ пишется (кросс-табная/кросс-чатная
     // подмена тела исключена; histSource/histConvId видны в fired-строке).
-    function aiCmWriteAutoExportFile(fileMsgs, histSource, histConvId, histSite) {
+    function aiCmWriteAutoExportFile(fileMsgs: AiCmExportMessage[], histSource: string, histConvId: string, histSite: string) {
       try {
         if ((histSource === 'storage-host' && !histConvId && cid) || (histConvId && cid && String(histConvId) !== String(cid)) ||
             (histSite && siteNameD && String(histSite) !== String(siteNameD))) {
@@ -1948,7 +1948,7 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
           partial: (snapPartAuto && snapPartAuto.partial === true) ? true : undefined,
           partialReason: (snapPartAuto && snapPartAuto.partial === true)
             ? ((snapPartAuto.partialReason) || 'incomplete') : undefined, bodyProjection: autoProj || undefined,
-          messages: msgs
+          messages: msgs as import('../types/export').ExportMessage[]
         };
         var content = (fmt === 'md')
           ? B.buildMdFromHistory(hist, (currentAdapter && currentAdapter.siteName) || 'AI Chat')
@@ -1989,7 +1989,7 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
               }
             } catch (eO3write) { swallowSoft(eO3write, 'export:aiCmWriteAutoExportFile-fired-latch'); }
           } else {
-            autoExportFired[cid] = 1;
+            autoExportFired[String(cid)] = 1;
             // O-38: модульный латч — переживает resetConversationState
             try {
               var siteOnceFb = (currentAdapter && currentAdapter.siteName) || '';
@@ -2021,7 +2021,7 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
         } catch (eDiagDl) { }
         file = aiCmAutoExportStartDownload(content, file, fmt); if (typeof aiCmAutoExportMarkFiredInStorage === 'function') aiCmAutoExportMarkFiredInStorage(cid, reason);
         debugLog('log', '[AI CM][auto-export] fired convId=' + cid + ' pct=' + percentage + ' file=' + file +
-          ' textLen=' + textLen + ' pendingCursor=' + (aiCmCursorLiveByConv[cid] ? '1' : '0') +
+          ' textLen=' + textLen + ' pendingCursor=' + (aiCmCursorLiveByConv[String(cid)] ? '1' : '0') +
           ' baseComplete=' + (baseComplete === true ? '1' : '0') +
           ' histSource=' + histSource + ' histConvId=' + histConvId);
         // v88.1 (D2/D3): fired этого чата — наружу, в MAIN-мир. Загрузчик истории
@@ -2076,7 +2076,7 @@ function doAutoExportDownload(cid: string | null, percentage: number, reason: st
 // может уже не прийти, а раньше стрельнуть помешал skip reason=loader-running.
 window.addEventListener('ai-cm-loader-state', function (/** @type {CustomEvent} */ ev) {
   try {
-    var d = ev && (ev as any).detail;
+    var d = ev && (ev as CustomEvent).detail;
     if (!d || !d.convId) return;
     // v95 (FALSE-CURSOR-LIVE, зеркало v94): сервер УЖЕ подтвердил полноту снапшота
     // (reachedStart + historyFullByQuiet/baseComplete) — pendingCursor в этом состоянии
@@ -2160,7 +2160,7 @@ window.addEventListener('ai-cm-loader-state', function (/** @type {CustomEvent} 
             // in-memory autoExportFired сбрасывается при F5; session-латч (isFiredInSession) и once-латч
             // (aiCmAutoExportFiredOnce) переживают F5/SPA — без них повторный автоэкспорт при F5.
             var siteBc = (currentAdapter && currentAdapter.siteName) || '';
-            var Pbc = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
+            var Pbc = ((typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null)) as import('../types/export').ExportPipelineApi;
             return Pbc.getAutoExportFired(autoExportFired, siteBc, cid) ||
                    (typeof Pbc.isFiredInSession === 'function' ? Pbc.isFiredInSession(sessionFiredCache, siteBc, cid) : false) ||
                    (typeof aiCmAutoExportFiredOnce === 'object' && aiCmAutoExportFiredOnce && aiCmAutoExportFiredOnce[siteBc + '|' + cid] === 1) || (typeof aiCmAutoExportFiredInStorage === 'function' && aiCmAutoExportFiredInStorage(cid));
@@ -2237,12 +2237,12 @@ function aiCmAutoExportMarkFiredInStorage(cid: string | null, reason: string): b
 // контент-скрипта): вставка выше сдвинула бы строки, построчно закреплённые
 // tests/fixtures/catch-whitelist.json. canonicalBody — ESM-биндинг core/content.ts в том
 // же бандле (тот же приём, что canonicalBodyText в core/base-handler.ts:130).
-var lastCanonList = null;
-var lastCanonConv = '';
+var lastCanonList: AiCmExportMessage[] | null = null;
+var lastCanonConv: string | null = '';
 var lastCanonSite = '';
-var lastCanonBody = null;
+var lastCanonBody: AiCmCanonicalBodyView | null = null;
 
-function aiCmCanonicalizeMessages(list, site) {
+function aiCmCanonicalizeMessages(list: AiCmExportMessage[] | null, site: string) {
   var src = Array.isArray(list) ? list : [];
   var B = (typeof AiCmExportBuilders !== 'undefined' && AiCmExportBuilders) ? AiCmExportBuilders : null;
   var kept = src;
@@ -2277,7 +2277,7 @@ function aiCmCanonicalizeMessages(list, site) {
   return out;
 }
 
-function aiCmBuildCanonicalBody(convId) {
+function aiCmBuildCanonicalBody(convId: string | null): any {
   var list = (typeof getEffectiveMessages === 'function') ? getEffectiveMessages() : null;
   if (!list && typeof buildHistoryMessages === 'function') list = buildHistoryMessages();
   if (!list || !list.length) return null;
@@ -2287,7 +2287,7 @@ function aiCmBuildCanonicalBody(convId) {
     return lastCanonBody;
   }
   var msgs = aiCmCanonicalizeMessages(list, site);
-  // @ts-ignore — canonicalBody живёт в общем скоупе бандла (import core/content.ts);
+  // canonicalBody — ESM-биндинг core/content.ts в общем скоупе бандла; тип объявлен в EOF-блоке.
   // в jest-песочнице инжектируется аргументом new Function.
   var body = (typeof canonicalBody === 'function') ? canonicalBody(convId || '', msgs) : null;
   lastCanonList = list;
@@ -2316,7 +2316,7 @@ function aiCmBuildCanonicalBody(convId) {
 // массив не мутируется: сначала копии сообщений, дальше работа только с копиями.
 // mode='projected' — ТОЛЬКО при фактическом изменении тела (длина массива или любое поле
 // сообщения); иначе mode='' и ТОТ ЖЕ объект массива (ни одного нового байта).
-function aiCmProjectFileMessages(msgs, site) {
+function aiCmProjectFileMessages(msgs: AiCmExportMessage[], site: string) {
   var src = Array.isArray(msgs) ? msgs : [];
   var copies = [];
   for (var i = 0; i < src.length; i++) {
@@ -2432,3 +2432,23 @@ interface AiCmStorageData {
 interface AiCmStorageChanges {
   [key: string]: { oldValue?: any; newValue?: any };
 }
+
+/** Детали полного снимка истории (событие ai-cm-full-history) — вход детектора обрезки. */
+interface AiCmFullHistoryDetail {
+  convId?: string;
+  count?: number;
+  messageIds?: string[];
+  historyComplete?: boolean;
+}
+
+/** Тело снимка (utils/canonical-body.ts:AiCmCanonicalBody) в объёме, который читают вызывающие. */
+interface AiCmCanonicalBodyView {
+  messages: AiCmExportMessage[];
+  text: string;
+  chars: number;
+  msgs: number;
+  bodyHash: string;
+}
+
+/** canonicalBody — ESM-биндинг core/content.ts в общем скоупе бандла (в песочницах — аргумент). */
+declare function canonicalBody(convId: string, list: AiCmExportMessage[] | null | undefined): AiCmCanonicalBodyView;

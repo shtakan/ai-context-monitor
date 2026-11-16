@@ -28,7 +28,11 @@ const Hybrid = loadEsmHelper.loadEsmGlobal('core/hybrid-tail.ts', 'AiCmHybridTai
 const Builders = loadEsmHelper.loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 
 const ROOT = path.join(__dirname, '..');
-const EM_SRC = fs.readFileSync(path.join(ROOT, 'core', 'export-manager.ts'), 'utf8');
+// Срез исполняется через new Function (TS-аннотации он не парсит): типы снимает тот же
+// хелпер, что у tests/helpers/content-source.js, комментарии и порядок строк сохраняются.
+const EM_PATH = path.join(ROOT, 'core', 'export-manager.ts');
+const EM_SRC = require('./helpers/read-module-source.js')
+  .stripTypesKeepComments(fs.readFileSync(EM_PATH, 'utf8'), EM_PATH);
 const CONV_ID = 'conv-i3-equality';
 
 // Свободные переменные общего лексического скоупа контент-скриптов.
