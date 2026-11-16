@@ -49,7 +49,7 @@ function fnDecl(src, name) {
 // virtualScrollBackfill-заглушку для пути пагинации): `Api.virtualScrollBackfill = X`
 // резолвит X из `with (ctx)` и затёр бы РЕАЛЬНУЮ функцию песочницы.
 const API_FNS = [
-  'applyTurns', 'buildDetail', 'followFolwrPagination',
+  'applyTurns', 'buildDetail', 'followFolwrPagination', 'probeFolwrCompleteness',
   'folwrRunPermit', 'beginFolwrRun', 'endFolwrRun', 'markFolwrRunGain', 'gsaDiagLoopGuard',
   // BUG-G: поведение добора вопроса A-only хода проверяется на РЕАЛЬНЫХ функциях
   'mergeTurns', 'fillUserTextFromLiveDom', 'messagesFromTurns'
@@ -91,6 +91,8 @@ const SCOPE_FNS = [
   'gsaDiagVs',
   // прогоны
   'followFolwrPagination',
+  'probeFolwrCompleteness',
+  'emitProbeState',
   'findChatScroller',
   'virtualScrollBackfill'
 ];
@@ -111,6 +113,8 @@ const SCOPE_DECLS = [
   'var FOLWR_RUN_MIN_COOLDOWN_MS = 2000;',
   'var FOLWR_NO_GAIN_COOLDOWN_MS = 30000;',
   'var FOLWR_PAGE_DELAY_MS = 400;',
+  'var FOLWR_PROBE_MAX_STEPS = 10;',
+  'var probedTids = {};',
   'var FOLWR_MAX_PAGES = 12;',
   'var VS_MAX_ITERATIONS = 20;',
   'var VS_STEP_WAIT_MS = 800;',

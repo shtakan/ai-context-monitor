@@ -328,7 +328,7 @@
     "reason": "legacy-pin"
   },
   "tests/gsa-turn-order.test.js": {
-    "count": 3,
+    "count": 13,
     "reason": "static-linter"
   },
   "tests/i18n-locales.test.js": {

@@ -343,7 +343,7 @@ describe('O-31 (в): регрессионный контур', () => {
     // живой DOM — источник правды о текущем разговоре
     expect(fnDecl(INTERCEPT, 'isForeignThread')).toContain('tid !== domTid');
     // probe-вердикт полноты (F1, O-28) не тронут (O-27: 4-й аргумент — тело шага probe)
-    expect(INTERCEPT).toContain("applyTurns(merged.length > 0 ? merged : lastFullTurns, tid, true, lastBody, 'prepend');");
+    expect(INTERCEPT).toContain("applyTurns(finalTurns.length > 0 ? finalTurns : lastFullTurns, tid, true, lastBody, 'prepend');");
     // O-32: полнота — только доказанная (явный вердикт probe), не дефолт buildDetail
     expect(INTERCEPT).toContain('historyComplete: historyComplete === true');
   });

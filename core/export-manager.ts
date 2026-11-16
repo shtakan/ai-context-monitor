@@ -989,12 +989,18 @@ function aiCmGsaNetworkCompleteReset(threadId?: string | null): boolean {
     var tid = (threadId === undefined || threadId === null) ? '' : String(threadId);
     var prev = (typeof aiCmGsaNetworkCompleteThreadId === 'string') ? aiCmGsaNetworkCompleteThreadId : null;
     if (prev !== null && prev === tid) return false; // тред не менялся — латч жив (монотонность)
+    var cleared = 0;
     if (typeof aiCmGsaNetworkCompleteLatch === 'object' && aiCmGsaNetworkCompleteLatch) {
       for (var k in aiCmGsaNetworkCompleteLatch) {
         if (Object.prototype.hasOwnProperty.call(aiCmGsaNetworkCompleteLatch, k)) delete aiCmGsaNetworkCompleteLatch[k];
       }
+      cleared = 1;
     }
     aiCmGsaNetworkCompleteThreadId = tid;
+    // O-43 (диагностика): сброс монотонного латча — прежний и новый тред и факт очистки карты.
+    if (typeof aiCmDiagLine === 'function') {
+      aiCmDiagLine('gsa-latch', { point: 'reset', tid: tid, prev: String(prev), cleared: cleared });
+    }
     return true;
   } catch (e) { return false; }
 }
@@ -1009,6 +1015,10 @@ function aiCmGsaNetworkCompleteSet(threadId?: string | null): boolean {
     if (!cid) return false;
     if (typeof aiCmGsaNetworkCompleteLatch !== 'object' || !aiCmGsaNetworkCompleteLatch) return false;
     aiCmGsaNetworkCompleteLatch[site + '|' + cid] = 1;
+    // O-43 (диагностика): взвод монотонного латча — по какому разговору и каким ключом.
+    if (typeof aiCmDiagLine === 'function') {
+      aiCmDiagLine('gsa-latch', { point: 'set', cid: cid, key: site + '|' + cid });
+    }
     return true;
   } catch (e) { return false; }
 }

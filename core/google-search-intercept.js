@@ -1375,7 +1375,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     } catch (e) { /* ignore */ }
   }
 
-  function probeFolwrCompleteness(startUrl, startTurns, tid, firstCursor, gainedIn) {
+  function probeFolwrCompleteness(startUrl, startTurns, tid, firstCursor, gainedIn, domTurnsIn) {
     // Гард прогонов на тред (петля GSA, High): тот же словарь, что и у пагинации/дубля
     // открытия. Подавлённый прогон НЕ взводит probedTids — «не выполнялся» остаётся правдой,
     // и probe своего шанса не теряет.
@@ -1396,6 +1396,17 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       function (a, b) { return a.concat(b); };
     var extractToken = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.extractContinuationToken) ||
       function () { return null; };
+    // BUG-J-2: probe пересобирает merged и пишет его в базу, а сетевой ответ приходит в
+    // сыром порядке снимка (new→old). Выравниваем пересобранный список по живому DOM тем
+    // же хелпером, что и open-путь; состав ходов не меняется, только направление.
+    function normalizeOrder(list) {
+      var dom = Array.isArray(domTurnsIn) ? domTurnsIn : [];
+      if (dom.length === 0) return list;
+      if (window.GoogleFolwrUtils && typeof window.GoogleFolwrUtils.orderTurnsByDom === 'function') {
+        return window.GoogleFolwrUtils.orderTurnsByDom(list, dom).turns;
+      }
+      return list;
+    }
     var steps = 0;
     var addedTotal = 0;
     var accounted = 0; // уже зачтённый прирост базы (markFolwrRunGain — ровно на новых ходах)
@@ -1420,11 +1431,16 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       done = true;
       activeFolwrInFlight[key] = false;
       if (complete) {
-        if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('probe', merged, 'submit-final', tid, { complete: 1, addedTotal: addedTotal, steps: steps, reason: reason });
+        // BUG-J-2: probe ничего не добавил (cursor-repeat) — пересобранный merged несёт
+        // сырой порядок ответа и перезаписывал уже выровненную базу. addedTotal=0 значит,
+        // что новых ходов нет: пишем ТЕКУЩУЮ базу, а не пересборку. При приросте merged
+        // выравнивается по живому DOM (normalizeOrder), затем уходит в базу.
+        var finalTurns = (addedTotal === 0) ? lastFullTurns : normalizeOrder(merged);
+        if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('probe', finalTurns, 'submit-final', tid, { complete: 1, addedTotal: addedTotal, steps: steps, reason: reason });
         // BUG-D: probe завершает прогон ХРОНОЛОГИЧЕСКИМ merged (он начинался с startTurns и
         // наращивался догрузками в голову) — он и есть голова базы; ходы, которых в merged нет
         // (живой ход, пришедший пока probe шёл), остаются в хвосте.
-        applyTurns(merged.length > 0 ? merged : lastFullTurns, tid, true, lastBody, 'prepend');
+        applyTurns(finalTurns.length > 0 ? finalTurns : lastFullTurns, tid, true, lastBody, 'prepend');
       } else if (typeof gsaDiagBaseWrite === 'function') {
         gsaDiagBaseWrite('probe', merged, 'skip-incomplete', tid, { complete: 0, addedTotal: addedTotal, steps: steps, reason: reason });
       }
@@ -1482,6 +1498,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
           merged = unionTurnsByDirection(mergeFn, parsed.turns, merged, 'prepend');
           var added = merged.length - before;
           addedTotal += added;
+          merged = normalizeOrder(merged);
           var next = extractToken(txt);
           var pageInfo = describeFolwrPage(page.resp, txt, added, next, cursor);
           // v1.17: детальный лог ответа страницы продолжения: статус, ok, длина, разбор,
@@ -1806,7 +1823,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
                   // полноты (без скролла). Иначе — прежняя пагинация курсором.
                   if (folwrCursor && openTailAllowed) {
                     if (baseTurns.length === domTurnCount) {
-                      probeFolwrCompleteness(url, mergedTurns, tid, folwrCursor, openGained);
+                      probeFolwrCompleteness(url, mergedTurns, tid, folwrCursor, openGained, domTurns);
                     } else {
                       followFolwrPagination(url, mergedTurns, tid, folwrCursor, openGained);
                     }

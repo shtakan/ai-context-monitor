@@ -280,7 +280,7 @@ describe('R-D (б): XSSI-тело `)]}\'\\n[""]\\n` — база не пишет
     // open / pagination / probe-step / probe-finish — через applyTurns с телом
     expect(INTERCEPT).toContain("applyTurns(mergedTurns, tid, historyComplete, txt, 'append');");
     expect((INTERCEPT.match(/applyTurns\(merged, tid, false, txt, 'prepend'\);/g) || []).length).toBe(2);
-    expect(INTERCEPT).toContain("applyTurns(merged.length > 0 ? merged : lastFullTurns, tid, true, lastBody, 'prepend');");
+    expect(INTERCEPT).toContain("applyTurns(finalTurns.length > 0 ? finalTurns : lastFullTurns, tid, true, lastBody, 'prepend');");
     // passive folwr/folif и XHR — через mergeTurns с телом
     expect(INTERCEPT).toContain('mergeTurns(parsed.turns, isFull, parsed.threadId, txt);');
     expect(INTERCEPT).toContain('mergeTurns(parsed.turns, isFullXhr, parsed.threadId, txt);');

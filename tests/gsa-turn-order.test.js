@@ -504,4 +504,82 @@ describe('BUG-J: выравнивание порядка по живому DOM',
     expect(src).toContain("order: orderVerdict");
     expect(src).toContain('orderMatched: orderMatched');
   });
+
+  // ---- 4.4 BUG-J-2: probe не перезаписывает выровненную open-путём базу ----
+  test('probe после open: cursor-repeat (added=0) сохраняет old→new', async () => {
+    const snapshotHtmlNewToOld = snapshotHtml([1, 2, 3, 4, 5].map(function (n) { return turnObj('t' + n); }));
+    const rawSnapshotTurns = Parser.parseGoogleFolwrOpen(snapshotHtmlNewToOld).turns; // new→old
+    const domTurns = Parser.extractTurnsFromDocument(
+      docFrom(docHtml([1, 2, 3, 4, 5].map(function (n) { return turnObj('t' + n); })))); // old→new
+
+    // Живая последовательность: open уже выровнял базу по DOM, затем probe на повторной
+    // странице (kind=cursor-repeat, +ходов=0) пересобирает merged из сырого ответа new→old.
+    const h = loopCtx({
+      parseWithParser: function () {
+        return { turns: rawSnapshotTurns, messages: [], count: rawSnapshotTurns.length, text: '', threadId: TID };
+      },
+      describeFolwrPage: function () {
+        return { cls: { kind: 'cursor-repeat', complete: true, canContinue: false }, line: 'kind=cursor-repeat +ходов=0' };
+      },
+      window: { fetch: makeFetch(['REPEAT'], FOLWR_URL) }
+    });
+    h.utils.__domTurns = domTurns;
+
+    const ordered = Parser.orderTurnsByDom(rawSnapshotTurns, domTurns);
+    expect(ordered.verdict).toBe('reversed');
+    h.api.applyTurns(ordered.turns, TID, false, 'body', 'append');
+    const expected = ['Вопрос t1', 'Вопрос t2', 'Вопрос t3', 'Вопрос t4', 'Вопрос t5'];
+    expect(h.api.lastFullTurns.map(function (t) { return t.userText; })).toEqual(expected);
+
+    h.api.probeFolwrCompleteness(FOLWR_URL, ordered.turns, TID, 'CURSOR-1', 0, domTurns);
+    await settle(h);
+
+    expect(h.api.lastFullTurns.map(function (t) { return t.userText; })).toEqual(expected);
+    expect(h.api.lastFullMessages[0]).toEqual({ role: 'user', text: 'Вопрос t1' });
+  });
+
+  test('probe добавляет старшую страницу (added>0) → итог old→new по DOM', async () => {
+    const olderPageOldToNew = [turnObj('t0a'), turnObj('t0b')];
+    const domTurns = Parser.extractTurnsFromDocument(docFrom(docHtml([
+      turnObj('t0a'), turnObj('t0b'), turnObj('t1'), turnObj('t2'), turnObj('t3')
+    ])));
+    const h = loopCtx({
+      parseWithParser: function () {
+        return { turns: olderPageOldToNew, messages: [], count: olderPageOldToNew.length, text: '', threadId: TID };
+      },
+      describeFolwrPage: function (resp, txt, added) {
+        return { cls: { kind: 'new-turns', complete: true, canContinue: false }, line: 'kind=new-turns +ходов=' + added };
+      },
+      window: { fetch: makeFetch(['PAGE'], FOLWR_URL) }
+    });
+
+    const base = ['t1', 't2', 't3'].map(turnObj);
+    h.api.applyTurns(base, TID, false, 'body', 'append');
+    h.api.probeFolwrCompleteness(FOLWR_URL, base, TID, 'CURSOR-2', 0, domTurns);
+    await settle(h);
+
+    expect(h.api.lastFullTurns.map(function (t) { return t.userText; })).toEqual(
+      ['Вопрос t0a', 'Вопрос t0b', 'Вопрос t1', 'Вопрос t2', 'Вопрос t3']);
+    expect(h.api.lastFullTurns[0].assistantText).toBe('Ответ t0a');
+  });
+
+  // ---- 4.5 пин исходника probe-пути и диагностики O-43 ----
+  test('пин probe: normalizeOrder и последняя база при addedTotal===0', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'core', 'google-search-intercept.js'), 'utf8');
+    expect(src).toContain('function probeFolwrCompleteness(startUrl, startTurns, tid, firstCursor, gainedIn, domTurnsIn)');
+    expect(src).toContain('probeFolwrCompleteness(url, mergedTurns, tid, folwrCursor, openGained, domTurns)');
+    expect(src).toContain('function normalizeOrder(list)');
+    expect(src).toContain('merged = normalizeOrder(merged);');
+    expect(src).toContain('(addedTotal === 0) ? lastFullTurns : normalizeOrder(merged)');
+    expect(src).toContain("applyTurns(finalTurns.length > 0 ? finalTurns : lastFullTurns, tid, true, lastBody, 'prepend')");
+  });
+
+  test('пин диагностики O-43: gsa-latch point=set/reset', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'core', 'export-manager.ts'), 'utf8');
+    expect(src).toContain("aiCmDiagLine('gsa-latch', { point: 'set', cid: cid, key: site + '|' + cid })");
+    expect(src).toContain("aiCmDiagLine('gsa-latch', { point: 'reset', tid: tid, prev: String(prev), cleared: cleared })");
+    // чтение (Is) строку не печатает — спам-гард
+    const isFn = src.slice(src.indexOf('function aiCmGsaNetworkCompleteIs('));
+    expect(isFn.slice(0, isFn.indexOf('\n}'))).not.toContain('gsa-latch');
+  });
 });
