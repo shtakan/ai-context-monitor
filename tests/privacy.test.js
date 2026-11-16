@@ -8,7 +8,7 @@
  *  2) в документе есть обязательные разделы (BYOK, хранение, отсутствие телеметрии, 6 AI-сайтов);
  *  3) manifest.json содержит homepage_url (не трогая permissions/host_permissions/CSP) и НЕ содержит
  *     служебных ключей `_comment*` (ред. 2: убран warning «Unrecognized manifest key»);
- *     TODO о замене URL и email живёт в RELEASE_CHECKLIST.md, раздел «Публикация (Edge Add-ons)»;
+ *     TODO о замене URL и email — в архиве RELEASE_CHECKLIST.md, раздел «Публикация (Edge Add-ons)»;
  *  4) options.html содержит ссылку на privacy.html с target="_blank" и rel="noopener",
  *     а options.js открывает её через chrome.tabs.create + chrome.runtime.getURL.
  *
@@ -214,11 +214,10 @@ describe('P1: manifest.json — homepage_url без изменения permissio
     expect(manifestRaw).not.toContain('TODO');
   });
 
-  test('TODO перенесён в RELEASE_CHECKLIST.md (если файл существует)', () => {
-    if (!releaseChecklist) return; // файл в .gitignore, на чистом клоне может отсутствовать
-    expect(releaseChecklist).toContain('## Публикация (Edge Add-ons)');
-    expect(releaseChecklist).toMatch(/homepage_url.*github/);
-    expect(releaseChecklist).toMatch(/support@example\.com/);
+  test('RELEASE_CHECKLIST.md архивирован и не применяется как гейт', () => {
+    if (!releaseChecklist) return; // файл может отсутствовать в неполном клоне
+    expect(releaseChecklist).toContain('АРХИВ');
+    expect(releaseChecklist).toContain('не применяется');
   });
 
   test('НЕ трогать: permissions, host_permissions, CSP, MV3', () => {

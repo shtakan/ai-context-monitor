@@ -20,8 +20,8 @@
 
 - ID: `REL-01` — закрыт 2026-11-16: CHANGELOG 2.1.2, 15 точек версии, тег `v2.1.2`, GitHub Release, AMO 2.1.2
 - живая приёмка 2.1.2 (тред `e1020dba`): 165 сообщений, 99 229 / 77.5 %, «Ещё N» — 0, карточек файла нет
-- решение по `RELEASE_CHECKLIST.md` принято 2026-11-16: архив + перенос P0/P1-гейта
-- следующий шаг: архив `RELEASE_CHECKLIST.md` + перенос P0/P1-гейта в `docs/STANDARDS-MATRIX.md` → `options.js` checkJs+JSDoc; GSA-контур (порядок, полнота, probe, A-only) закрыт 2026-11-16
+- `RELEASE_CHECKLIST.md` — архив с 2026-11-16; гейт P0/P1 — в STANDARDS-MATRIX
+- следующий шаг: `options.js` checkJs + JSDoc; GSA-контур (порядок, полнота, probe, A-only) закрыт 2026-11-16
 
 ## 4. Открытые задачи (≤5)
 

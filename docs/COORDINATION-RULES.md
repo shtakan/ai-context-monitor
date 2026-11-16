@@ -158,7 +158,7 @@ Git: branch main, продолжаем цикл
 6. **Аппендикс vN (docs, 4 коммита)** — фиксация релиза.
 7. **Pre-release проверка фильтра ZIP** (перед push): имитация `grep -zvE` на `git ls-files`, подтвердить что T-HIST (`step-*`, `.diff`, `*.txt`, `docs/videos/*.mp4`) исключены.
 
-**В релизный коммит НЕ включаются:** `RELEASE_CHECKLIST.md` (процессный — прецедент v64 §4), `docs/QUALITY_AUDIT.md` (H26 gitignored), `tools/edge-listing-metadata.txt` (gitignored).
+**В релизный коммит НЕ включаются:** `docs/QUALITY_AUDIT.md` (H26 gitignored), `tools/edge-listing-metadata.txt` (gitignored).
 
 **CHANGELOG трогается только в релизном коммите** — не в docs, не в code.
 
