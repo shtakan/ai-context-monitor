@@ -27,7 +27,7 @@ class ChatGPTAdapter extends BaseAdapter {
   /** Легаси-селекторы содержимого (уровень 4). */
   allContentSelectors: string;
   /** Антиспам строки «модель определена» в консоли. */
-  _modelDetectLogged: boolean;
+  _modelDetectLogged = false;
   /** Счётчики последнего отбора (часть возврата _findMessageElements). */
   _lastTurnStats: { turns: number; users: number; assistants: number; skippedUnknown: number; looseUsers: number };
 
@@ -257,14 +257,15 @@ class ChatGPTAdapter extends BaseAdapter {
    */
   _blockText(root: Element): string {
     let out = '';
-    const BLOCK = {
+    const BLOCK: Record<string, number> = {
       P: 1, DIV: 1, LI: 1, TR: 1, SECTION: 1, ARTICLE: 1, HEADER: 1, FOOTER: 1, MAIN: 1,
       H1: 1, H2: 1, H3: 1, H4: 1, H5: 1, H6: 1, PRE: 1, BLOCKQUOTE: 1, TABLE: 1, UL: 1, OL: 1
     };
-    const walk = (node) => {
+    const walk = (node: Node): void => {
       if (node.nodeType === 3) { out += String(node.nodeValue || ''); return; }
       if (node.nodeType !== 1) return; // комментарии и прочее в текст не входят
-      const tag = node.tagName;
+      // nodeType === 1 — элемент, у него есть tagName (у Node в общем случае нет).
+      const tag = (node as Element).tagName;
       if (tag === 'BR') { out += '\n'; return; }
       const isBlock = BLOCK[tag] === 1;
       if (isBlock && out && out.charAt(out.length - 1) !== '\n') out += '\n';
@@ -375,7 +376,6 @@ class ChatGPTAdapter extends BaseAdapter {
    * (не захардкоженное имя), иначе модель возьмётся из сети/дефолта.
    */
   detectModel(): string|null {
-    if (this._modelDetectLogged === undefined) this._modelDetectLogged = false;
     let found = null;
     try {
       const re = /(GPT-[\w.\-]+|Gemini[\s\d.\-A-Za-z]*|DeepSeek[\s\-A-Za-z0-9]*|Claude[\s\d.\-A-Za-z]*|o[134]-[\w.\-]*)/i;

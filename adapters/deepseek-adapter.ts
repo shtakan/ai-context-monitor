@@ -130,7 +130,7 @@ isOnDialogPage(): boolean {
       }
       const parts = [];
       for (let j = 0; j < nodes.length; j++) {
-        const text = this._stripReasoningHeader(nodes[j].textContent);
+        const text = this._stripReasoningHeader(nodes[j].textContent || '');
         if (text && this._hasRealContent(text)) parts.push(text);
       }
       return parts.join('\n\n').trim();
@@ -241,8 +241,8 @@ isOnDialogPage(): boolean {
         skippedEmpty: 0,
         skippedUnknown: 0,
         skippedNoRealContent: 0,
-        classesSample: [],
-        neighborInjections: []
+        classesSample: [] as string[],
+        neighborInjections: [] as string[]
       } : null;
       if (o21Stats) {
         // Детекция инъекций соседа (Better DeepSeek): только наличие маркеров в первых 50 КБ

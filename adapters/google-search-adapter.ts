@@ -267,11 +267,13 @@ class GoogleSearchAdapter extends BaseAdapter {
 
       var messages: Message[] = [];
       for (var k = 0; k < Math.min(questions.length, answers.length); k++) {
-        if (questions[k]) {
-          messages.push({ role: 'user', content: questions[k] });
+        const question = questions[k];
+        if (question) {
+          messages.push({ role: 'user', content: question });
         }
-        if (answers[k]) {
-          messages.push({ role: 'assistant', content: answers[k] });
+        const answer = answers[k];
+        if (answer) {
+          messages.push({ role: 'assistant', content: answer });
         }
       }
 

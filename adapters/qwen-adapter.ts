@@ -222,7 +222,7 @@ class QwenAdapter extends BaseAdapter {
       let raw = '';
       // В живом браузере innerText есть и многострочен; в jsdom/срезе его нет (или он ''),
       // тогда срабатывает проверка typeof ниже и текст идёт через структурный фолбэк.
-      try { raw = element.innerText; } catch (eInner) { raw = ''; }
+      try { raw = element.innerText ?? ''; } catch (eInner) { raw = ''; }
       if (typeof raw !== 'string' || raw.length === 0) raw = this._innerTextFallback(element);
       return this._normalizeLines(raw);
     } catch (e) { return ''; }
@@ -235,7 +235,7 @@ class QwenAdapter extends BaseAdapter {
   _innerTextFallback(root: Element): string {
     try {
       let out = '';
-      const block = QWEN_BLOCK_TAGS;
+      const block: Record<string, boolean> = QWEN_BLOCK_TAGS;
       const walk = function (node: Node) {
         const type = node.nodeType;
         if (type === 3) { out += node.nodeValue || ''; return; }
