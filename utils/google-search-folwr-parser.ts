@@ -1588,8 +1588,11 @@ export function mergeTurnsByKey(baseTurns: FolwrTurn[], extraTurns: FolwrTurn[])
 // BUG-G: УЗКИЙ ДОБОР userText (A-only ход). Никаких новых ходов: состав базы — из сети, а
 // вопрос существующего хода с ПУСТЫМ userText берётся из DOM-добора по каноническому ключу.
 // Порядок, длина, id и байты assistantText не меняются; два разных текста на ключ → пропуск.
+// BUG-H (A-only fill): у хода без вопроса канонический ключ равен '||a', поэтому точного
+// ключа 'q||a' в доборе нет и добор промахивается. Второй индекс — по ТЕЛУ ответа
+// (turnIdentityParts(...).a): тело — общая часть пары 'q||a' и '||a'.
 /**
- * Заполняет пустые userText ходов базы вопросами DOM-добора (по каноническому ключу).
+ * Заполняет пустые userText ходов базы вопросами DOM-добора: точный ключ → тело ответа (A-only).
  * @param {FolwrTurn[]|null|undefined} baseTurns Ходы базы (состав — из сети).
  * @param {FolwrTurn[]|null|undefined} extraTurns Ходы DOM-добора.
  * @returns {FolwrTurn[]} База с заполненными вопросами; ходы не добавляются.
@@ -1604,9 +1607,26 @@ export function fillMissingUserText(baseTurns: FolwrTurn[] | null | undefined,
   var byKey = {};
   /** @type {Object<string, boolean>} */
   var ambiguous = {};
+  // BUG-H: второй индекс — каноническое ТЕЛО ответа → вопрос. Пустое тело не индексируется.
+  /** @type {Object<string, string>} */
+  var byAnswer = {};
+  /** @type {Object<string, boolean>} */
+  var ambiguousAnswer = {};
   for (var i = 0; i < extraTurns.length; i++) {
     var t = extraTurns[i];
     if (!t || !t.userText) continue;
+    var body = turnIdentityParts(t).a;
+    if (body) {
+      if (Object.prototype.hasOwnProperty.call(byAnswer, body)) {
+        if (byAnswer[body] !== t.userText) {
+          // Два РАЗНЫХ вопроса на одно тело ответа — пара неоднозначна, не заполняем.
+          delete byAnswer[body];
+          ambiguousAnswer[body] = true;
+        }
+      } else if (!ambiguousAnswer[body]) {
+        byAnswer[body] = t.userText;
+      }
+    }
     var key = canonicalTurnKeyOf(t);
     if (key === '||' || ambiguous[key]) continue;
     if (Object.prototype.hasOwnProperty.call(byKey, key)) {
@@ -1627,6 +1647,13 @@ export function fillMissingUserText(baseTurns: FolwrTurn[] | null | undefined,
     if (turn && !turn.userText) {
       var ownKey = canonicalTurnKeyOf(turn);
       if (ownKey !== '||' && Object.prototype.hasOwnProperty.call(byKey, ownKey)) fill = byKey[ownKey];
+      // BUG-H: промах по точному ключу → добор по телу ответа (A-only ход, ключ '||a').
+      if (!fill) {
+        var answerBody = turnIdentityParts(turn).a;
+        if (answerBody && Object.prototype.hasOwnProperty.call(byAnswer, answerBody)) {
+          fill = byAnswer[answerBody];
+        }
+      }
     }
     if (!fill) { out.push(turn); continue; }
     out.push({ id: turn.id, userText: fill, assistantText: turn.assistantText });
