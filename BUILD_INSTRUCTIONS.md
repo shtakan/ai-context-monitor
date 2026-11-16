@@ -1,4 +1,4 @@
-# Build instructions — AI Context Monitor 2.0.37
+# Build instructions — AI Context Monitor 2.1.2
 
 Один и тот же исходник собирается в две цели:
 
@@ -73,19 +73,21 @@ cd dist-firefox && tar -a -c -f ../ai-context-monitor-firefox.zip *
 документов (`docs/videos/`, `docs/screenshots/`, `PROJECT_HANDOFF.md`, `CHANGELOG.md`,
 `plan-*.md`, `step-*`), без логов и посторонних `.zip`/`.diff`/`.txt`.
 
-PowerShell из корня репозитория (команда проверена на этом дереве: 88 файлов, посторонних нет):
+PowerShell из корня репозитория (команда проверена на этом дереве: 119 файлов, посторонних нет):
 
 ```powershell
-$inc = '^(build\.mjs|package\.json|package-lock\.json|manifest\.json|tsconfig\.json|eslint\.config\.mjs|LICENSE|README\.md|README\.en\.md|BUILD_INSTRUCTIONS\.md)$|^(core|utils|adapters|options|print|types|icons|_locales|privacy)/'
+$inc = '^(build\.mjs|package\.json|package-lock\.json|manifest\.json|tsconfig\.json|eslint\.config\.mjs|LICENSE|README\.md|README\.en\.md|BUILD_INSTRUCTIONS\.md)$|^(core|utils|adapters|options|print|parser|types|icons|_locales|privacy)/|^docs/index\.html$|^docs/screenshots/'
 $files = git ls-files | Where-Object {
-  $_ -match $inc -and $_ -notmatch '^(docs/)' -and $_ -notmatch '^tests/'
+  $_ -match $inc -and $_ -notmatch '^tests/'
 }
 # список путей пишется с LF: CRLF ломает имена файлов в bsdtar -T
 [System.IO.File]::WriteAllText("$PWD\source-files.txt", (($files -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
-tar -a -c -f source-code-2.0.37.zip -T source-files.txt
+tar -a -c -f source-code-2.1.2.zip -T source-files.txt
 Remove-Item source-files.txt
-tar -tf source-code-2.0.37.zip | Select-String -Pattern 'videos|screenshots|PROJECT_HANDOFF|node_modules|\.zip$'
+tar -tf source-code-2.1.2.zip | Select-String -Pattern 'videos|screenshots|PROJECT_HANDOFF|node_modules|\.zip$'
 ```
+
+`parser/` и `docs/index.html` + `docs/screenshots/` обязательны: `build.mjs` копирует `parser/*.js` как runtime-registered файлы и читает обе docs-цели для `dist/docs/`; без них сборка падает на `verify`.
 
 Последняя строка должна не напечатать ничего: она проверяет, что в пакет не попали видео,
 скриншоты, `PROJECT_HANDOFF.md`, `node_modules/` и посторонние архивы.
