@@ -70,8 +70,9 @@ cd dist-firefox && tar -a -c -f ../ai-context-monitor-firefox.zip *
 ## Пакет исходников для AMO (source code submission)
 
 Пакет собирается из закоммиченных файлов HEAD, без `node_modules/`, без медиа и без служебных
-документов (`docs/videos/`, `docs/screenshots/`, `PROJECT_HANDOFF.md`, `CHANGELOG.md`,
-`plan-*.md`, `step-*`), без логов и посторонних `.zip`/`.diff`/`.txt`.
+документов (`docs/videos/`, `PROJECT_HANDOFF.md`, `CHANGELOG.md`, `plan-*.md`, `step-*`), без
+логов и посторонних `.zip`/`.diff`/`.txt`. Страница помощи и её скриншоты в пакет входят:
+`docs/index.html` и `docs/screenshots/` сборка копирует в `dist/docs/`.
 
 PowerShell из корня репозитория (команда проверена на этом дереве: 119 файлов, посторонних нет):
 
@@ -84,13 +85,13 @@ $files = git ls-files | Where-Object {
 [System.IO.File]::WriteAllText("$PWD\source-files.txt", (($files -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
 tar -a -c -f source-code-2.1.2.zip -T source-files.txt
 Remove-Item source-files.txt
-tar -tf source-code-2.1.2.zip | Select-String -Pattern 'videos|screenshots|PROJECT_HANDOFF|node_modules|\.zip$'
+tar -tf source-code-2.1.2.zip | Select-String -Pattern 'videos|PROJECT_HANDOFF|node_modules|\.zip$'
 ```
 
 `parser/` и `docs/index.html` + `docs/screenshots/` обязательны: `build.mjs` копирует `parser/*.js` как runtime-registered файлы и читает обе docs-цели для `dist/docs/`; без них сборка падает на `verify`.
 
 Последняя строка должна не напечатать ничего: она проверяет, что в пакет не попали видео,
-скриншоты, `PROJECT_HANDOFF.md`, `node_modules/` и посторонние архивы.
+`PROJECT_HANDOFF.md`, `node_modules/` и посторонние архивы.
 
 Проверка воспроизводимости: распаковать пакет в пустой каталог, выполнить `npm ci` и
 `node build.mjs` — полученный `dist-firefox/` должен совпасть с `ai-context-monitor-firefox.zip`
@@ -99,14 +100,15 @@ tar -tf source-code-2.1.2.zip | Select-String -Pattern 'videos|screenshots|PROJE
 ## Проверки (опционально, но так проверялся пакет)
 
 ```bash
-npx jest                 # 208 suites / 3706 passed / 7 skipped
+npx jest                 # 255 suites / 4204 passed / 7 skipped
 npx tsc --noEmit         # exit 0 (JavaScript под checkJs)
 ```
 
 ## Что НЕ входит в пакет исходников и почему
 
-- `docs/videos/` (31 МБ), `docs/screenshots/` (2,7 МБ) — медиа для README/GitHub Pages, к сборке
-  отношения не имеют.
+- `docs/videos/` (31 МБ) — медиа для README/GitHub Pages, к сборке отношения не имеет.
+- `docs/decisions/` — рабочие решения проекта, не исходник (из `docs/` в пакет входят только
+  `index.html` и `screenshots/`, которые сборка копирует в `dist/docs/`).
 - `PROJECT_HANDOFF.md` (1 МБ) — журнал состояния проекта, не исходник.
 - `tests/` (5 МБ) — тестовый набор; ревьюеру для сборки не нужен, но он есть в публичном
   репозитории (`homepage_url` в манифесте).
