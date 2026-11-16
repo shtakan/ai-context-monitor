@@ -24,12 +24,12 @@ const modelEl = document.getElementById('stat-model');
 const tokensEl = document.getElementById('stat-tokens');
 const limitEl = document.getElementById('stat-limit');
 const percentEl = document.getElementById('stat-percent');
-const modelSelect = document.getElementById('model-select');
-const customLimit = document.getElementById('custom-limit');
-const showWidget = document.getElementById('show-widget');
-const apiKeyInput = document.getElementById('api-key');
+const modelSelect = /** @type {HTMLSelectElement|null} */ (document.getElementById('model-select'));
+const customLimit = /** @type {HTMLInputElement|null} */ (document.getElementById('custom-limit'));
+const showWidget = /** @type {HTMLInputElement|null} */ (document.getElementById('show-widget'));
+const apiKeyInput = /** @type {HTMLInputElement|null} */ (document.getElementById('api-key'));
 const toggleApiKeyBtn = document.getElementById('toggle-api-key');
-const exactCountCheckbox = document.getElementById('exact-count');
+const exactCountCheckbox = /** @type {HTMLInputElement|null} */ (document.getElementById('exact-count'));
 // BYOK-sync: подсказка «ключ не найден» под чекбоксом точного подсчёта.
 const exactCountWarningEl = document.getElementById('exact-count-warning');
 // Firefox-сборка (AMO): BYOK выключен в SW (core/background.ts), поэтому UI не должен
@@ -38,10 +38,10 @@ const exactCountWarningEl = document.getElementById('exact-count-warning');
 // выставляет глобал `browser`, поэтому typeof-проверка ложно отключала BYOK на Chrome.
 var aiCmByokUiDisabled = aiCmIsFirefox();
 const versionEl = document.querySelector('.version');
-const exportMdBtn = document.getElementById('export-md');
-const exportJsonBtn = document.getElementById('export-json');
-const exportPdfBtn = document.getElementById('export-pdf');
-const exportTxtBtn = document.getElementById('export-txt');
+const exportMdBtn = /** @type {HTMLButtonElement|null} */ (document.getElementById('export-md'));
+const exportJsonBtn = /** @type {HTMLButtonElement|null} */ (document.getElementById('export-json'));
+const exportPdfBtn = /** @type {HTMLButtonElement|null} */ (document.getElementById('export-pdf'));
+const exportTxtBtn = /** @type {HTMLButtonElement|null} */ (document.getElementById('export-txt'));
 const exportHintEl = document.getElementById('export-hint');
 const staleWarningEl = document.getElementById('stale-warning');
 const exportDiagBtn = document.getElementById('export-diag');
@@ -264,7 +264,7 @@ chrome.storage.local.get(['ai_cm_exact_token_count'], function (data) {
     // и гасим флаг, чтобы старый профиль не оставлял включённую мёртвую галочку.
     // .section в options.css задаёт только margin, но style.display страхует от тем.
     [apiKeyInput, exactCountCheckbox].forEach(function (el) {
-      var section = el && el.closest ? el.closest('.section') : null;
+      var section = /** @type {HTMLElement|null} */ (el && el.closest ? el.closest('.section') : null);
       if (section) { section.hidden = true; section.style.display = 'none'; }
     });
     if (data.ai_cm_exact_token_count) chrome.storage.local.set({ ai_cm_exact_token_count: false });
@@ -319,7 +319,7 @@ showWidget && showWidget.addEventListener('change', function () {
 });
 
 // v31: чекбокс «Подробные логи» (aiCmDebugLogs в chrome.storage.local, по умолчанию ВЫКЛ)
-const debugLogsCheckbox = document.getElementById('debugLogs');
+const debugLogsCheckbox = /** @type {HTMLInputElement|null} */ (document.getElementById('debugLogs'));
 chrome.storage.local.get(['aiCmDebugLogs'], function (data) {
   if (debugLogsCheckbox) debugLogsCheckbox.checked = data.aiCmDebugLogs === true;
 });
@@ -333,7 +333,7 @@ debugLogsCheckbox && debugLogsCheckbox.addEventListener('change', function () {
 // включаются). ON — сырой режим: настройку читает контент-скрипт (единственная точка выхода
 // экспорта), а печатная форма получает уже готовые сообщения — отдельного чтения настройки в
 // print/print.js не требуется.
-const includeHiddenCheckbox = document.getElementById('aiCmIncludeHiddenInExport');
+const includeHiddenCheckbox = /** @type {HTMLInputElement|null} */ (document.getElementById('aiCmIncludeHiddenInExport'));
 chrome.storage.local.get(['aiCmIncludeHiddenInExport'], function (data) {
   if (includeHiddenCheckbox) includeHiddenCheckbox.checked = !!(data && data.aiCmIncludeHiddenInExport === true);
 });
@@ -352,8 +352,8 @@ try {
 
 // Фаза B: проактивные пороги (aiCmProactive / aiCmProactiveNotify, chrome.storage.local).
 // Дефолты: aiCmProactive = ON, aiCmProactiveNotify = OFF.
-const proactiveCheckbox = document.getElementById('aiCmProactive');
-const proactiveNotifyCheckbox = document.getElementById('aiCmProactiveNotify');
+const proactiveCheckbox = /** @type {HTMLInputElement|null} */ (document.getElementById('aiCmProactive'));
+const proactiveNotifyCheckbox = /** @type {HTMLInputElement|null} */ (document.getElementById('aiCmProactiveNotify'));
 chrome.storage.local.get(['aiCmProactive', 'aiCmProactiveNotify'], function (data) {
   if (proactiveCheckbox) proactiveCheckbox.checked = !(data && data.aiCmProactive === false);
   if (proactiveNotifyCheckbox) proactiveNotifyCheckbox.checked = !!(data && data.aiCmProactiveNotify === true);
@@ -381,9 +381,9 @@ try {
 // 'aiCmProactiveThresholds' = [low, medium, high] (1–100, строго возрастают) —
 // chrome.storage.local. Дефолт [70,85,95]. При битом вводе/сохранённом значении —
 // фолбэк на дефолт и лог в консоль.
-const thrLowInput = document.getElementById('aiCmProactiveLow');
-const thrMedInput = document.getElementById('aiCmProactiveMedium');
-const thrHighInput = document.getElementById('aiCmProactiveHigh');
+const thrLowInput = /** @type {HTMLInputElement|null} */ (document.getElementById('aiCmProactiveLow'));
+const thrMedInput = /** @type {HTMLInputElement|null} */ (document.getElementById('aiCmProactiveMedium'));
+const thrHighInput = /** @type {HTMLInputElement|null} */ (document.getElementById('aiCmProactiveHigh'));
 const PROACTIVE_THRESHOLDS_DEFAULT = [70, 85, 95];
 
 // Валидация: три числа 1–100, строго возрастают (low < medium < high).
@@ -510,9 +510,9 @@ exactCountCheckbox && exactCountCheckbox.addEventListener('change', function () 
 // aiCmAutoExport (bool, по умолчанию ВЫКЛ), aiCmAutoExportPct (1–100, по умолчанию 90),
 // aiCmAutoExportFmt ('txt'|'md'|'json', по умолчанию 'txt') — всё в chrome.storage.local.
 // v1.18: фича общая для Gemini и Google Search AI (подпись секции), формат — общий селектор.
-const autoExportCheckbox = document.getElementById('aiCmAutoExport');
-const autoExportPctInput = document.getElementById('aiCmAutoExportPct');
-const autoExportFmtSelect = document.getElementById('aiCmAutoExportFmt');
+const autoExportCheckbox = /** @type {HTMLInputElement|null} */ (document.getElementById('aiCmAutoExport'));
+const autoExportPctInput = /** @type {HTMLInputElement|null} */ (document.getElementById('aiCmAutoExportPct'));
+const autoExportFmtSelect = /** @type {HTMLSelectElement|null} */ (document.getElementById('aiCmAutoExportFmt'));
 
 // v1.18: 'txt' | 'md' | 'json' — битое/чужое значение → 'txt' (прежнее поведение 1:1)
 function normalizeAutoExportFmt(v) {
@@ -537,7 +537,7 @@ function aiCmAutoExportWriteFull() {
   try {
     var pctFull = clampAutoExportPct(autoExportPctInput.value);
     pctFull = (pctFull === null) ? AI_CM_AUTO_EXPORT_PCT_DEFAULT : pctFull;
-    autoExportPctInput.value = pctFull;
+    autoExportPctInput.value = String(pctFull);
     chrome.storage.local.set({
       aiCmAutoExport: autoExportCheckbox.checked === true,
       aiCmAutoExportPct: pctFull,
@@ -555,7 +555,7 @@ try {
       data = data || {};
       if (autoExportCheckbox) autoExportCheckbox.checked = data.aiCmAutoExport === true;
       var pctInit = clampAutoExportPct(data.aiCmAutoExportPct);
-      if (autoExportPctInput) autoExportPctInput.value = (pctInit === null) ? AI_CM_AUTO_EXPORT_PCT_DEFAULT : pctInit;
+      if (autoExportPctInput) autoExportPctInput.value = String((pctInit === null) ? AI_CM_AUTO_EXPORT_PCT_DEFAULT : pctInit);
       if (autoExportFmtSelect) autoExportFmtSelect.value = normalizeAutoExportFmt(data.aiCmAutoExportFmt);
       var needsNormalize = (typeof data.aiCmAutoExport !== 'boolean') ||
         (pctInit === null) ||
@@ -582,7 +582,7 @@ try {
     if (areaName === 'local' && changes.aiCmAutoExportPct && autoExportPctInput &&
         document.activeElement !== autoExportPctInput) {
       var pct = clampAutoExportPct(changes.aiCmAutoExportPct.newValue);
-      autoExportPctInput.value = (pct === null) ? 90 : pct;
+      autoExportPctInput.value = String((pct === null) ? 90 : pct);
     }
   });
 } catch (e) { aiCmPopupDiagLine('autoexport-changed', { err: String(e) }); }
@@ -1113,7 +1113,7 @@ try {
 // Запись: aiCmArchive:<convId> (ходы) + aiCmConvSource:<convId> (ярлык источника для
 // попапа/виджета) в chrome.storage.local. Применяет архив к чату content-скрипт
 // (событие ai-cm-archive-restore в MAIN-мир Gemini-перехватчика).
-const archiveFileInput = document.getElementById('archive-file');
+const archiveFileInput = /** @type {HTMLInputElement|null} */ (document.getElementById('archive-file'));
 const archiveImportBtn = document.getElementById('archive-import');
 const archiveRefreshBtn = document.getElementById('archive-refresh');
 const archiveStatusEl = document.getElementById('archive-status');

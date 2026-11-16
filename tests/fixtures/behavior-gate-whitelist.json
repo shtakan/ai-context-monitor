@@ -518,5 +518,9 @@
   "tests/perf-m1-file-text-cache-lru.test.js": {
     "count": 2,
     "reason": "legacy-pin"
+  },
+  "tests/options-checkjs.test.js": {
+    "count": 2,
+    "reason": "static-linter"
   }
 }
