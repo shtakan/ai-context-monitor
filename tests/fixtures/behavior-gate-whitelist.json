@@ -327,6 +327,10 @@
     "count": 6,
     "reason": "legacy-pin"
   },
+  "tests/gsa-turn-order.test.js": {
+    "count": 3,
+    "reason": "static-linter"
+  },
   "tests/i18n-locales.test.js": {
     "count": 31,
     "reason": "legacy-pin"

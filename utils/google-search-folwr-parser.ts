@@ -132,6 +132,8 @@ export interface GoogleFolwrUtilsApi {
   // BUG-G: вопрос A-only хода из DOM-пузыря и fill-only добор userText по каноническому ключу.
   resolveUserQuestionForTurn: typeof resolveUserQuestionForTurn;
   fillMissingUserText: typeof fillMissingUserText;
+  // BUG-J: выравнивание порядка ходов по живому DOM (old→new) и вердикт для диагностики.
+  orderTurnsByDom: typeof orderTurnsByDom;
   renderCodeBlock: typeof renderCodeBlock;
   answerTextOf: typeof answerTextOf;
   answerDomNodes: typeof answerDomNodes;
@@ -931,6 +933,102 @@ export function extractTurnsFromDocument(doc: any): FolwrTurn[] {
   // свежий DOM-ход в голову треда. Реверс остаётся только у сетевого снимка folwr (:826):
   // он приходит new→old.
   return turns;
+}
+
+// =====================================================================================
+// BUG-J: ВЫРАВНИВАНИЕ ПОРЯДКА ПО ЖИВОМУ DOM
+// =====================================================================================
+// Живой дефект (тред nOX6apueFdSqxc8P2ZzpkQY, F5): при ХОЛОДНОЙ загрузке GSA
+// (`folwr-open`) счётчики снимка и DOM совпали, досбора не было, и в базу ушёл порядок
+// самого снимка — new→old; messages[0] оказался последним ходом. DOM в этот момент уже
+// хронологический (extractTurnsFromDocument, c[0] — самый старый ход), поэтому единственный
+// достоверный эталон порядка — он. Хелпер не двигает состав ходов: только решает, развернуть
+// ли список, и сообщает вердикт для диагностики.
+
+/** Результат выравнивания порядка ходов по живому DOM. */
+export interface FolwrTurnOrderResult {
+  /** Ходы в нормализованном порядке (old→new). */
+  turns: FolwrTurn[];
+  /** 'kept' — порядок уже совпал с DOM, 'reversed' — развёрнут, 'no-evidence' — доказательств нет. */
+  verdict: 'kept' | 'reversed' | 'no-evidence';
+  /** Сколько ходов удалось сопоставить с ходом живого DOM. */
+  matched: number;
+}
+
+/**
+ * Синтетический ли id хода: позиционный 'idxN' и folif-фолбэк идентичностью не считаются —
+ * они зависят от порядка обхода и совпали бы у РАЗНЫХ ходов в двух разных порядках.
+ * @param {string|null|undefined} id Идентификатор хода.
+ * @returns {boolean} true — id синтетический либо пустой.
+ */
+function isSyntheticTurnId(id): boolean {
+  var s = String(id == null ? '' : id);
+  if (!s) return true;
+  return s.indexOf('idx') === 0 || s.indexOf('folif_') === 0;
+}
+
+/**
+ * Ранг хода в живом DOM. Идентичность — по убыванию надёжности: jsuid, затем канонический
+ * CONTENT-ключ (canonicalTurnKeyOf), затем тело ответа (turnIdentityParts + bodiesPrefixCompatible).
+ * @param {FolwrTurn|null|undefined} turn Ход из снимка.
+ * @param {FolwrTurn[]} domTurns Ходы живого DOM в хронологическом порядке.
+ * @returns {number} Индекс в domTurns; -1 — соответствия нет.
+ */
+function domRankOfTurn(turn, domTurns): number {
+  if (!turn) return -1;
+  var i;
+  var id = String(turn.id == null ? '' : turn.id);
+  if (!isSyntheticTurnId(id)) {
+    for (i = 0; i < domTurns.length; i++) {
+      if (domTurns[i] && String(domTurns[i].id == null ? '' : domTurns[i].id) === id) return i;
+    }
+  }
+  var key = canonicalTurnKeyOf(turn);
+  if (key && key !== '||') {
+    for (i = 0; i < domTurns.length; i++) {
+      if (canonicalTurnKeyOf(domTurns[i]) === key) return i;
+    }
+  }
+  var body = turnIdentityParts(turn).a;
+  if (body) {
+    for (i = 0; i < domTurns.length; i++) {
+      var other = turnIdentityParts(domTurns[i]).a;
+      if (other && bodiesPrefixCompatible(body, other)) return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Выравнивает порядок ходов по хронологическому живому DOM: если у сопоставленных ходов
+ * убывающих пар больше, чем возрастающих, список разворачивается. Состав не меняется.
+ * @param {FolwrTurn[]|null|undefined} turns Ходы в проверяемом порядке (обычно new→old).
+ * @param {FolwrTurn[]|null|undefined} domTurns Ходы живого DOM (old→new).
+ * @returns {FolwrTurnOrderResult} Ходы в порядке old→new, вердикт и число сопоставлений.
+ */
+export function orderTurnsByDom(
+  turns: FolwrTurn[] | null | undefined,
+  domTurns: FolwrTurn[] | null | undefined
+): FolwrTurnOrderResult {
+  var list: FolwrTurn[] = Array.isArray(turns) ? turns : [];
+  var dom: FolwrTurn[] = Array.isArray(domTurns) ? domTurns : [];
+  var ranks: number[] = [];
+  var i;
+  for (i = 0; i < list.length; i++) {
+    var rank = domRankOfTurn(list[i], dom);
+    if (rank >= 0) ranks.push(rank);
+  }
+  var matched = ranks.length;
+  // Меньше двух сопоставлений — направление не доказано: список остаётся как есть.
+  if (matched < 2) return { turns: list, verdict: 'no-evidence', matched: matched };
+  var up = 0;
+  var down = 0;
+  for (i = 1; i < ranks.length; i++) {
+    if (ranks[i] > ranks[i - 1]) up++;
+    else if (ranks[i] < ranks[i - 1]) down++;
+  }
+  if (down > up) return { turns: list.slice().reverse(), verdict: 'reversed', matched: matched };
+  return { turns: list, verdict: 'kept', matched: matched };
 }
 
 // Токен продолжения (курсор пагинации) в ответе folwr: атрибут data-mstk на скрытых
@@ -1734,6 +1832,8 @@ if (typeof window !== 'undefined') {
     // userText по каноническому ключу; повторной копии алгоритма у адаптера/перехватчика нет.
     resolveUserQuestionForTurn: resolveUserQuestionForTurn,
     fillMissingUserText: fillMissingUserText,
+    // BUG-J: порядок ходов по живому DOM — эталон направления для open-пути перехватчика.
+    orderTurnsByDom: orderTurnsByDom,
     // O-45: общий рендер код-блоков (```lang … ```) и отбор узлов DOM-пути —
     // переиспользуются адаптером (adapters/google-search-adapter.js) и тестами.
     renderCodeBlock: renderCodeBlock,

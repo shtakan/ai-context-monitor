@@ -32,6 +32,20 @@ describe('источник content.js: живой флаг baseComplete', () => 
     expect(handler).toContain('isLowConfidenceBase: (baseComplete !== true)');
   });
 
+  test('BUG-J: у GSA живой baseComplete уступает partial снимка (и только у GSA)', () => {
+    const handler = contentSrc.slice(contentSrc.indexOf("'aiCmExportCurrent'"));
+    // переопределение стоит ПОСЛЕ присваивания живым baseComplete и ДО qwen-исключения
+    const assignAt = handler.indexOf('isLowConfidenceBase: (baseComplete !== true)');
+    const gsaAt = handler.indexOf(
+      "if (((currentAdapter && currentAdapter.siteName) || '') === 'google_search' && snapPartMan) {");
+    const qwenAt = handler.indexOf('aiCmQwenExportBaseTrusted()');
+    expect(assignAt).toBeGreaterThan(-1);
+    expect(gsaAt).toBeGreaterThan(assignAt);
+    expect(qwenAt).toBeGreaterThan(gsaAt);
+    // выражение — ровно partial снимка, без baseComplete
+    expect(handler).toContain('manualSnapshot.isLowConfidenceBase = (snapPartMan.partial === true);');
+  });
+
   test('баг C: aiCmWriteCurrentHistory больше не читает липкий aiCmLowConfidenceByConv для флага', () => {
     const fn = contentSrc.slice(
       contentSrc.indexOf('function aiCmWriteCurrentHistory()'),
@@ -84,5 +98,54 @@ describe('байтово-идентично (б): baseComplete=1 → префи�
     const after = { isLowConfidenceBase: (true !== true), site: 'deepseek', convId: 'spax1' };
     expect(buildName(before, 'md')).toMatch(/^\[LOW CONFIDENCE\]_/);
     expect(buildName(after, 'md')).not.toMatch(/^\[LOW CONFIDENCE\]_/);
+  });
+});
+
+// ---- BUG-J (4.4): префикс имени файла выровнен с телом у GSA ----
+// Холодная загрузка GSA (`folwr-open`) отдавала тело new→old при baseComplete=1, поэтому
+// живой флаг врал: файл считался достоверным. Теперь для GSA флаг — partial снимка
+// контекста (тот же признак, что у поля partial), прочие сайты видят прежний baseComplete.
+describe('BUG-J: префикс GSA выровнен с телом файла', () => {
+  // Зеркало выражения content.ts: GSA со снимком контекста → partial, иначе живой baseComplete.
+  function manualFlag(site, baseComplete, snapPartMan) {
+    let flag = (baseComplete !== true);
+    if (site === 'google_search' && snapPartMan) flag = (snapPartMan.partial === true);
+    return flag;
+  }
+  function nameFor(flag, site) {
+    return buildName({ site: site, convId: 'abcdefgh12345678', isLowConfidenceBase: flag }, 'md');
+  }
+
+  test('GSA: baseComplete=1, но снимок partial=false → префикса НЕТ', () => {
+    const flag = manualFlag('google_search', true, { partial: false });
+    expect(flag).toBe(false);
+    expect(nameFor(flag, 'google_search')).toMatch(/^google_search-abcdefgh-.*\.md$/);
+    expect(nameFor(flag, 'google_search')).not.toMatch(/^\[LOW CONFIDENCE\]_/);
+  });
+
+  test('GSA: снимок partial=true → префикс ЕСТЬ, даже при baseComplete=1', () => {
+    const flag = manualFlag('google_search', true, { partial: true });
+    expect(flag).toBe(true);
+    expect(nameFor(flag, 'google_search')).toMatch(/^\[LOW CONFIDENCE\]_google_search-abcdefgh-.*\.md$/);
+  });
+
+  test('GSA: без снимка контекста (snapPartMan=null) → прежний живой baseComplete=0', () => {
+    expect(manualFlag('google_search', false, null)).toBe(true);
+    expect(nameFor(true, 'google_search')).toMatch(/^\[LOW CONFIDENCE\]_/);
+  });
+
+  test('Gemini/Qwen: partial=false не понижает живой baseComplete=0 — префикс остаётся', () => {
+    expect(manualFlag('gemini', false, { partial: false })).toBe(true);
+    expect(manualFlag('qwen', false, { partial: false })).toBe(true);
+    expect(nameFor(true, 'gemini')).toMatch(/^\[LOW CONFIDENCE\]_gemini-/);
+    expect(nameFor(true, 'qwen')).toMatch(/^\[LOW CONFIDENCE\]_qwen-/);
+    // и наоборот: baseComplete=1 без partial — чистое имя у не-GSA
+    expect(manualFlag('gemini', true, { partial: false })).toBe(false);
+    expect(nameFor(false, 'gemini')).not.toMatch(/^\[LOW CONFIDENCE\]_/);
+  });
+
+  test('Gemini/Qwen: partial=true байтово не меняет прежнее решение (по-прежнему baseComplete)', () => {
+    expect(manualFlag('gemini', false, { partial: true })).toBe(true);
+    expect(manualFlag('gemini', true, { partial: true })).toBe(false);
   });
 });

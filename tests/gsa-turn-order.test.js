@@ -323,3 +323,185 @@ describe('BUG-D: порядок ходов GSA old→new', () => {
     });
   });
 });
+
+/**
+ * BUG-J (cold load): при холодной загрузке GSA (`folwr-open`) счётчики снимка и DOM совпадают,
+ * досбора нет — и в базу уходил порядок снимка new→old (messages[0] — последний ход).
+ * Живой DOM хронологический, поэтому open-путь выравнивает список по нему до applyTurns.
+ */
+describe('BUG-J: выравнивание порядка по живому DOM', () => {
+  const ORDER = Parser;
+
+  function mk(id, n) {
+    return { id: id, userText: 'Вопрос ' + n, assistantText: 'Ответ ' + n };
+  }
+  function seq(from, to) {
+    const out = [];
+    const step = from <= to ? 1 : -1;
+    for (let n = from; step > 0 ? n <= to : n >= to; n += step) out.push(mk('t' + n, n));
+    return out;
+  }
+  function ids(list) {
+    return list.map(function (x) { return x.id; });
+  }
+
+  // ---- 4.1 юнит: вердикты ----
+  test('keep: снимок уже old→new → verdict kept, массив не копируется', () => {
+    const turns = seq(1, 3);
+    const res = ORDER.orderTurnsByDom(turns, seq(1, 3));
+    expect(res.verdict).toBe('kept');
+    expect(res.matched).toBe(3);
+    expect(ids(res.turns)).toEqual(['t1', 't2', 't3']);
+    expect(res.turns).toBe(turns);
+  });
+
+  test('reverse: снимок new→old против хронологического DOM → verdict reversed', () => {
+    const turns = seq(3, 1);                                  // по-прежнему new→old
+    const res = ORDER.orderTurnsByDom(turns, seq(1, 3));
+    expect(res.verdict).toBe('reversed');
+    expect(res.matched).toBe(3);
+    expect(ids(res.turns)).toEqual(['t1', 't2', 't3']);
+    expect(turns.map(function (t) { return t.id; })).toEqual(['t3', 't2', 't1']);  // исходный не мутирован
+  });
+
+  test('no-evidence: DOM пуст → вердикт no-evidence и исходный массив', () => {
+    const turns = seq(2, 1);
+    const res = ORDER.orderTurnsByDom(turns, []);
+    expect(res.verdict).toBe('no-evidence');
+    expect(res.matched).toBe(0);
+    expect(res.turns).toBe(turns);
+  });
+
+  test('no-evidence: меньше двух сопоставлений (пересечение по одному ходу)', () => {
+    const turns = [mk('t9', 9), mk('t8', 8)];
+    const res = ORDER.orderTurnsByDom(turns, [mk('t1', 1), mk('t9', 9)]);
+    expect(res.verdict).toBe('no-evidence');
+    expect(res.matched).toBe(1);
+    expect(ids(res.turns)).toEqual(['t9', 't8']);
+  });
+
+  test('частичное перекрытие: страница-хвост 6..10 против DOM 1..10 → reversed', () => {
+    const turns = seq(10, 6);                                 // снимок хвоста, new→old
+    const res = ORDER.orderTurnsByDom(turns, seq(1, 10));
+    expect(res.verdict).toBe('reversed');
+    expect(res.matched).toBe(5);                              // ходы 1..5 в снимке отсутствуют
+    expect(ids(res.turns)).toEqual(['t6', 't7', 't8', 't9', 't10']);
+  });
+
+  test('фолбэк 1 — id (jsuid): совпадает, даже если канонический ключ разошёлся', () => {
+    const dom = seq(1, 3);
+    // Тексты разные (ключи не совпадут), id те же — идентичность держится на jsuid.
+    const turns = [
+      { id: 't3', userText: 'Вопрос иначе 3', assistantText: 'Другой ответ 3' },
+      { id: 't2', userText: 'Вопрос иначе 2', assistantText: 'Другой ответ 2' },
+      { id: 't1', userText: 'Вопрос иначе 1', assistantText: 'Другой ответ 1' }
+    ];
+    const res = ORDER.orderTurnsByDom(turns, dom);
+    expect(res.verdict).toBe('reversed');
+    expect(res.matched).toBe(3);
+    expect(ids(res.turns)).toEqual(['t1', 't2', 't3']);
+  });
+
+  test('синтетический idx-id идентичностью не считается (иначе совпал бы у разных ходов)', () => {
+    // id совпадают позиционно (idx0/idx1), а ходы разные: сопоставление обязано идти по ключу.
+    const dom = [mk('z1', 1), mk('z2', 2)];
+    const turns = [{ id: 'idx1', userText: 'Совсем другой вопрос', assistantText: 'Совсем другой ответ' },
+      { id: 'idx0', userText: 'Тоже другой вопрос', assistantText: 'Тоже другой ответ' }];
+    const res = ORDER.orderTurnsByDom(turns, dom);
+    expect(res.verdict).toBe('no-evidence');                  // ни один ход не сопоставлен
+    expect(res.matched).toBe(0);
+  });
+
+  test('фолбэк 2 — канонический ключ при синтетическом id', () => {
+    const dom = seq(1, 3).map(function (t) {
+      return { id: 'z' + t.id, userText: t.userText, assistantText: t.assistantText };
+    });
+    const turns = seq(3, 1).map(function (t) {
+      return { id: 'idx' + t.id, userText: t.userText, assistantText: t.assistantText };
+    });
+    const res = ORDER.orderTurnsByDom(turns, dom);
+    expect(res.verdict).toBe('reversed');
+    expect(res.matched).toBe(3);
+    expect(res.turns.map(function (t) { return t.userText; }))
+      .toEqual(['Вопрос 1', 'Вопрос 2', 'Вопрос 3']);
+  });
+
+  test('фолбэк 3 — тело ответа (префикс) при разных вопросах и синтетическом id', () => {
+    const bodies = [
+      'Уникальный ответ номер один — длинный текст для проверки префикса.',
+      'Уникальный ответ номер два — длинный текст для проверки префикса.',
+      'Уникальный ответ номер три — длинный текст для проверки префикса.'
+    ];
+    const dom = bodies.map(function (b, i) {
+      return { id: 'z' + (i + 1), userText: 'Вопрос ' + (i + 1), assistantText: b };
+    });
+    const turns = [2, 1, 0].map(function (i) {
+      return { id: 'idx' + i, userText: null, assistantText: bodies[i].slice(0, 40) };
+    });
+    const res = ORDER.orderTurnsByDom(turns, dom);
+    expect(res.verdict).toBe('reversed');
+    expect(res.matched).toBe(3);
+    expect(res.turns.map(function (t) { return t.id; })).toEqual(['idx0', 'idx1', 'idx2']);
+  });
+
+  // ---- 4.2 интеграция на РЕАЛЬНОМ парсере + РЕАЛЬНОМ applyTurns ----
+  test('холодная загрузка: без выравнивания база new→old, с выравниванием old→new', async () => {
+    const snapshotOldToNew = snapshotHtml([1, 2, 3, 4, 5].map(function (n) { return turnObj('t' + n); }));
+    const domHtmlOldToNew = docHtml([1, 2, 3, 4, 5].map(function (n) { return turnObj('t' + n); }));
+
+    // Что было до фикса: снимок парсится в new→old и уходит в базу как есть.
+    const raw = loopCtx({});
+    raw.api.applyTurns(Parser.parseGoogleFolwrOpen(snapshotOldToNew).turns, TID, false, 'body', 'append');
+    expect(raw.api.lastFullTurns.map(function (t) { return t.userText; }))
+      .toEqual(['Вопрос t5', 'Вопрос t4', 'Вопрос t3', 'Вопрос t2', 'Вопрос t1']);
+    await settle(raw);
+
+    // После фикса: DOM (old→new) — эталон, список разворачивается ДО записи базы.
+    const h = loopCtx({});
+    const baseTurns = Parser.parseGoogleFolwrOpen(snapshotOldToNew).turns;
+    const domTurns = Parser.extractTurnsFromDocument(docFrom(domHtmlOldToNew));
+    expect(domTurns).toHaveLength(5);
+    const ordered = Parser.orderTurnsByDom(baseTurns, domTurns);
+    expect(ordered.verdict).toBe('reversed');
+    h.api.applyTurns(ordered.turns, TID, false, 'body', 'append');
+
+    expect(h.api.lastFullTurns.map(function (t) { return t.userText; })).toEqual(
+      ['Вопрос t1', 'Вопрос t2', 'Вопрос t3', 'Вопрос t4', 'Вопрос t5']);
+    expect(h.api.lastFullTurns[0].assistantText).toBe('Ответ t1');
+    await settle(h);
+  });
+
+  test('существующая фикстура new→old: после выравнивания тот же old→new', async () => {
+    const html = fs.readFileSync(path.join(__dirname, 'fixtures', 'google-folwr-open.html'), 'utf8');
+    const baseTurns = Parser.parseGoogleFolwrOpen(html).turns;   // new→old
+    const domTurns = baseTurns.slice().reverse();                // живой DOM: old→new
+    const ordered = Parser.orderTurnsByDom(baseTurns, domTurns);
+    expect(ordered.verdict).toBe('reversed');
+    expect(ordered.turns.map(function (t) { return t.userText; }))
+      .toEqual(domTurns.map(function (t) { return t.userText; }));
+
+    const h = loopCtx({});
+    h.api.applyTurns(ordered.turns, TID, false, 'body', 'append');
+    expect(h.api.lastFullTurns.map(function (t) { return t.userText; })).toEqual(
+      domTurns.map(function (t) { return t.userText; }));
+    expect(h.api.lastFullTurns[0].userText).toContain('А если умножить?');
+    await settle(h);
+  });
+
+  // ---- 4.3 пин исходника: вызов ДО applyTurns, без исполнения перехватчика ----
+  test('пин open-пути: orderTurnsByDom вызывается после fillMissingUserText и до applyTurns', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'core', 'google-search-intercept.js'), 'utf8');
+    const fillAt = src.indexOf('fillMissingUserText(mergedTurns, domTurns)');
+    const orderAt = src.indexOf('orderTurnsByDom(mergedTurns, domTurns)');
+    const applyAt = src.indexOf("applyTurns(mergedTurns, tid, historyComplete, txt, 'append')");
+
+    expect(fillAt).toBeGreaterThan(-1);
+    expect(orderAt).toBeGreaterThan(-1);
+    expect(applyAt).toBeGreaterThan(-1);
+    expect(orderAt).toBeGreaterThan(fillAt);
+    expect(orderAt).toBeLessThan(applyAt);
+    // вердикт и число сопоставлений уходят в диагностику записи базы
+    expect(src).toContain("order: orderVerdict");
+    expect(src).toContain('orderMatched: orderMatched');
+  });
+});

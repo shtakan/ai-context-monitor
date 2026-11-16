@@ -1747,10 +1747,24 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
                     mergedTurns = window.GoogleFolwrUtils.fillMissingUserText(mergedTurns, domTurns);
                   }
 
+                  // BUG-J: холодная загрузка — счётчики снимка и DOM совпали, добора нет, и в
+                  // базу уходил порядок самого снимка (new→old): messages[0] — последний ход.
+                  // Живой DOM хронологичен, поэтому выравниваем список по нему ДО записи базы;
+                  // состав ходов хелпер не меняет — только направление. Вердикт и число
+                  // сопоставлений уходят в gsaDiagBaseWrite ниже.
+                  var orderVerdict = 'none';
+                  var orderMatched = 0;
+                  if (window.GoogleFolwrUtils && typeof window.GoogleFolwrUtils.orderTurnsByDom === 'function') {
+                    var orderedTurns = window.GoogleFolwrUtils.orderTurnsByDom(mergedTurns, domTurns);
+                    mergedTurns = orderedTurns.turns;
+                    orderVerdict = orderedTurns.verdict;
+                    orderMatched = orderedTurns.matched;
+                  }
+
                   // O-27/O-32 (диагностика): путь записи — folwr-open (GET /async/folwr):
                   // распарсено, контейнеры folwr/DOM, досбор, курсор, вердикт ПОЛНАЯ.
                   var openKey = threadAuthKey(tid, url);
-                  if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('open', mergedTurns, 'submit', tid, { parsed: baseTurns.length, folwrContainers: folwrTurnCount, domContainers: domTurnCount, dopasbor: dopasbor, complete: historyComplete ? 1 : 0, cursor: (folwrCursor ? folwrCursor.slice(0, 12) : 'нет'), bodyLen: (txt ? txt.length : 0) });
+                  if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('open', mergedTurns, 'submit', tid, { parsed: baseTurns.length, folwrContainers: folwrTurnCount, domContainers: domTurnCount, dopasbor: dopasbor, complete: historyComplete ? 1 : 0, cursor: (folwrCursor ? folwrCursor.slice(0, 12) : 'нет'), bodyLen: (txt ? txt.length : 0), order: orderVerdict, orderMatched: orderMatched });
                   // Прирост считается ДО записи: applyTurns присваивает lastFullTurns новый
                   // массив, поэтому после вызова разницу уже не измерить.
                   // BUG-E: и ДО чистки dedupeTurnsForCache внутри applyTurns — openGained это

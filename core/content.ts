@@ -3554,6 +3554,13 @@ if (isExtensionValid()) {
               ? ((snapPartMan.partialReason) || 'incomplete') : undefined,
             messages: buildHistoryMessages()
           });
+        // BUG-J: у GSA холодная загрузка отдавала порядок new→old, а baseComplete при этом
+        // уже 1 — префикс врал бы вместе с телом файла. Для GSA достоверность ручного файла
+        // определяется partial снимка (тот же источник, что у метки partial выше); прочие
+        // сайты видят БАЙТОВО прежнее живое значение baseComplete (v1.14.1).
+        if (((currentAdapter && currentAdapter.siteName) || '') === 'google_search' && snapPartMan) {
+          manualSnapshot.isLowConfidenceBase = (snapPartMan.partial === true);
+        }
         // O-36 (D1): у сервиса без сети (qwen) база подтверждена записью DOM-адаптера —
         // префикс низкой достоверности ей не полагается (см. aiCmQwenExportBaseTrusted).
         // Прочие сайты: флаг остаётся живым значением baseComplete (байтово прежнее имя).
