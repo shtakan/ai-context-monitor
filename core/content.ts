@@ -141,18 +141,18 @@ function geminiTapeKey(convId: string): string {
 }
 
 var GeminiTapeStore = {
-  load: function (convId) {
+  load: function (convId: string): Promise<AiCmTapeEntry | null> {
     if (!isExtensionValid() || !convId) return Promise.resolve(null);
-    return new Promise(function (resolve) {
+    return new Promise<AiCmTapeEntry | null>(function (resolve) {
       var key = geminiTapeKey(convId);
-      chrome.storage.local.get([key], function (data) {
+      chrome.storage.local.get([key], function (data: Record<string, AiCmTapeEntry | undefined>) {
         var entry = data[key];
         if (!entry) { resolve(null); return; }
         // обновляем ts при каждом обращении
         entry.meta = entry.meta || {};
         entry.meta.ts = Date.now();
         // пишем обновлённый ts обратно (fire-and-forget)
-        var kv = {};
+        var kv: Record<string, AiCmTapeEntry> = {};
         kv[key] = entry;
         chrome.storage.local.set(kv);
         resolve(entry);
@@ -160,7 +160,7 @@ var GeminiTapeStore = {
     });
   },
 
-  save: function (convId, turns, meta) {
+  save: function (convId: string, turns: any[], meta: Record<string, any>) {
     if (!isExtensionValid() || !convId || !turns || !turns.length) return Promise.resolve();
     var self = this;
     meta = meta || {};
@@ -183,7 +183,7 @@ var GeminiTapeStore = {
         debugLog('log', '[AI CM][tape-save] convId=' + convId + ' action=written msgs=' + unionTurns.length +
           (unionTurns.length > turns.length ? ' (union с прежним тейпом ' + existing.length + ')' : ''));
         var record = { turns: unionTurns, meta: meta };
-        var kv = {};
+        var kv: Record<string, AiCmTapeEntry> = {};
         kv[geminiTapeKey(convId)] = record;
         chrome.storage.local.set(kv, function () {
           GeminiTapeStore._touchIndex(convId).then(resolve);
@@ -192,7 +192,7 @@ var GeminiTapeStore = {
     });
   },
 
-  remove: function (convId) {
+  remove: function (convId: string) {
     if (!isExtensionValid() || !convId) return Promise.resolve();
     return new Promise<void>(function (resolve) {
       // v34: ключ ленты теперь включает версию/аккаунт — удаляем по фактическому ключу
@@ -205,14 +205,14 @@ var GeminiTapeStore = {
   cleanup: function () {
     if (!isExtensionValid()) return Promise.resolve();
     return new Promise<void>(function (resolve) {
-      chrome.storage.local.get(null, function (all) {
+      chrome.storage.local.get(null, function (all: Record<string, AiCmTapeEntry | undefined>) {
         var now = Date.now();
         var entries = [];
         for (var k in all) {
           if (k.indexOf(STORAGE_PREFIX) !== 0) continue;
           var convId = k.slice(STORAGE_PREFIX.length);
           var entry = all[k];
-          var ts = (entry && entry.meta && entry.meta.ts) ? entry.meta.ts : 0;
+          var ts = ((entry && entry.meta && entry.meta.ts) ? entry.meta.ts : 0) as number;
           entries.push({ convId: convId, ts: ts });
         }
         // сортируем по ts: самые свежие — первые
@@ -237,9 +237,9 @@ var GeminiTapeStore = {
   },
 
   // вспомогательное: метка времени в индексе
-  _touchIndex: function (convId) {
+  _touchIndex: function (convId: string) {
     return new Promise<void>(function (resolve) {
-      var kv = {};
+      var kv: Record<string, { ts: number }> = {};
       kv[STORAGE_INDEX_PREFIX + convId] = { ts: Date.now() };
       chrome.storage.local.set(kv, function () { resolve(); });
     });
@@ -537,7 +537,7 @@ function aiCmGsaDiagState(point: string, verdict: string, reason: string, extra?
       if (aiCmGsaDiagNoResetLogged[key] === 1) return false;
       aiCmGsaDiagNoResetLogged[key] = 1;
     }
-    var f = {
+    var f: Record<string, unknown> = {
       point: point,
       verdict: verdict,
       reason: reason,
@@ -593,7 +593,7 @@ function aiCmEstimateTokensTilde(text: string, attachTokens?: number): number {
   var t = (typeof text === 'string') ? text : '';
   var attach = (typeof attachTokens === 'number' && attachTokens > 0) ? attachTokens : 0;
   var TK = (typeof Tokenizer !== 'undefined') ? Tokenizer : null;
-  var result;
+  var result: number = 0;
   var tkOk = false;
   if (TK && typeof TK.countTokens === 'function') {
     try { result = TK.countTokens(t) + attach; tkOk = true; } catch (eTk) { swallowSoft(eTk, 'content:aiCmEstimateTokensTilde'); /* ниже — фолбэк */ }
@@ -733,7 +733,7 @@ window.addEventListener('ai-cm-model-slug', function (/** @type {CustomEvent} */
 // склеивается дебаунсом 500 мс: серия мутаций DOM/эмитов не даёт ложного файра, пока
 // база не стабилизировалась. Гейты baseComplete/латча остаются в maybeAutoExport.
 var AI_CM_AUTOEXPORT_DEBOUNCE_MS: number = 500;
-var autoExportDebounceTimer = null;
+var autoExportDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 var autoExportDebouncePct: number = -1;
 var autoExportDebounceCid: string = '';
 function aiCmScheduleAutoExport(percentage: number): void {
@@ -1296,7 +1296,7 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
 // =============================================================================
 var AI_CM_H23_SITES: string[] = ['claude'];
 var aiCmContentReadySent: boolean = false;
-var aiCmRequestEmitTimer = null;
+var aiCmRequestEmitTimer: ReturnType<typeof setTimeout> | null = null;
 function aiCmH23Site(): boolean {
   try { return !!currentAdapter && AI_CM_H23_SITES.indexOf(currentAdapter.siteName) !== -1; } catch (e) { return false; }
 }
@@ -1404,7 +1404,7 @@ function aiCmQwenInitDiag(event: string, fields?: Record<string, unknown>): bool
     if (typeof aiCmDiagLine !== 'function') return false;
     if (typeof currentAdapter === 'undefined' || !currentAdapter) return false;
     if (currentAdapter.siteName !== 'qwen') return false;
-    var f = {
+    var f: Record<string, unknown> = {
       ts: Date.now(),
       event: event,
       initialized: (typeof isInitialized !== 'undefined' && isInitialized === true) ? 1 : 0
@@ -1556,7 +1556,7 @@ async function initialize(): Promise<void> {
       // позже, чем порог на aistudio.google.com успел лечь в 'ai_cm_safe_pct_google_search'.
       // Сервис без миграции → функция вернёт false, и порог читается ровно как раньше.
       const aiCmReadSafePct = () => {
-        chrome.storage.sync.get([safePctKey()], (d) => {
+        chrome.storage.sync.get([safePctKey()], (d: Record<string, unknown>) => {
           const v = d[safePctKey()];
           safePct = (typeof v === 'number' && v > 0) ? v : null;
           updatePanel();
@@ -1574,7 +1574,7 @@ async function initialize(): Promise<void> {
       if (!aiCmSafePctMigrating) aiCmReadSafePct();
     }
     if (isExtensionValid()) {
-      chrome.storage.sync.get(['showWidget'], (data) => {
+      chrome.storage.sync.get(['showWidget'], (data: Record<string, unknown>) => {
         if (data.showWidget !== false) {
           createWidget();
         }
@@ -1741,7 +1741,7 @@ function startObserving(): void {
       if (mutation.type === 'childList') {
         for (const node of mutation.addedNodes) {
           if (aiCmIsWidgetNode(node)) continue; // O-24: узлы виджета не считаем текстом чата
-          if (node.nodeType === 1 && node.textContent?.trim()?.length > 10) return true;
+          if (node.nodeType === 1 && (node.textContent?.trim()?.length ?? 0) > 10) return true;
         }
       }
       return mutation.type === 'characterData';
@@ -1773,7 +1773,7 @@ function startObserving(): void {
       }
       aiCmLastDomEmitSig = sig;
       mutationCount++;
-      clearTimeout(updateTimer);
+      if (updateTimer !== null) clearTimeout(updateTimer);
       const delay = Math.min(800 + (mutationCount * 300), 3000);
       updateTimer = setTimeout(() => {
         mutationCount = 0;
@@ -1815,7 +1815,7 @@ function resolveCurrentModel(): string {
   const uiResolved = uiRaw ? ModelConfig.resolveModelId(uiRaw) : null;
   if (uiRaw && !uiResolved) uiRaw = ''; // «Авто»/нераспознанный UI-сигнал → фолбэк на сеть/DOM
 
-  const rawFromDom = (rawFromNet || uiRaw) ? '' : (currentAdapter.detectModel() || '');
+  const rawFromDom = (rawFromNet || uiRaw) ? '' : (currentAdapter!.detectModel() || '');
   const rawSnapshot = rawFromNet || rawFromDom || '';
   const snapModelId = rawSnapshot ? ModelConfig.resolveModelId(rawSnapshot) : null;
 
@@ -1841,7 +1841,7 @@ function resolveCurrentModel(): string {
   if (modelId) {
     path = rawSrc || 'дефолт';
   } else {
-    modelId = ModelConfig.getDefaultModel(currentAdapter.siteName);
+    modelId = ModelConfig.getDefaultModel(currentAdapter!.siteName);
     path = raw ? ((rawFromNet ? 'сеть' : 'DOM') + '→дефолт(не распознан)') : 'дефолт';
     // BUG-02: путь честно называет, откуда число лимита (siteDefaults), только там, где
     // распознанный слаг показывается в файле/бейдже; прочие сайты — байтово прежний path.
@@ -1936,7 +1936,7 @@ function requestExactTokens(fullText: string, modelId: string | null): void {
   // а netServerTokens пишется только реальными ответами (ingest / COUNT_TOKENS).
 
   // Сбрасываем любой pending дебаунс
-  clearTimeout(countTokensTimer);
+  clearTimeout(countTokensTimer ?? undefined);
 
   // Защита от дублирования: если запрос уже в полёте — не отправляем повторно
   if (countTokensPending) return;
@@ -1950,7 +1950,7 @@ function requestExactTokens(fullText: string, modelId: string | null): void {
     type: 'COUNT_TOKENS',
     text: fullText,
     model: apiModelId
-  }, function (response) {
+  }, function (response: { totalTokens?: number; error?: string }) {
     countTokensPending = /** @type {boolean|Map<unknown, unknown>} */ (false);
     if (response && typeof response.totalTokens === 'number') {
       lastCountTokensText = fullText;
@@ -1998,7 +1998,7 @@ function requestExactTokens(fullText: string, modelId: string | null): void {
 function loadByokSettings(): void {
   if (!isExtensionValid()) return;
   // M-7: флаг точного подсчёта остаётся в chrome.storage.local, ключ — в session за SW.
-  chrome.storage.local.get(['ai_cm_exact_token_count'], function (data) {
+  chrome.storage.local.get(['ai_cm_exact_token_count'], function (data: Record<string, any>) {
     exactCountEnabled = !!data.ai_cm_exact_token_count;
     // Residual-security: у SW спрашиваем только НАЛИЧИЕ ключа (boolean), не значение.
     aiCmSwByokHasKey().then(function (hasKey) {
@@ -2013,7 +2013,7 @@ function loadByokSettings(): void {
 // COUNT_TOKENS без ключа (лишний сетевой путь/фолбэк). Держим модульный промис
 // загрузки ключа и ДОЖИДАЕМСЯ его в initialize() до tryInit(); повторные вызовы
 // внутри одной загрузки переиспользуют готовый промис.
-var aiCmByokKeyPromise = null;
+var aiCmByokKeyPromise: Promise<boolean> | null = null;
 function loadByokSettingsAsync() {
   if (aiCmByokKeyPromise) return aiCmByokKeyPromise;
   aiCmByokKeyPromise = new Promise(function (resolve) {
@@ -2054,7 +2054,7 @@ function loadByokCache(): void {
   if (!isExtensionValid()) return;
   var currentConvId = getCurrentConvId();
   if (!currentConvId) return;
-  chrome.storage.local.get(['ai-cm-byok-cache'], function (data) {
+  chrome.storage.local.get(['ai-cm-byok-cache'], function (data: Record<string, { convId?: string | null; text?: string; count?: number } | undefined>) {
     var entry = data['ai-cm-byok-cache'];
     if (!entry || entry.convId !== currentConvId) return;
     if (!entry.text || typeof entry.count !== 'number' || entry.count <= 0) return;
@@ -2062,7 +2062,7 @@ function loadByokCache(): void {
     lastCountTokensCache = entry.count;
     // Шаг 2: восстановленное значение принадлежит ТЕКУЩЕМУ чату (проверка entry.convId выше) —
     // без этой строки после перезагрузки страницы эвристика перебивала бы валидный кэш.
-    lastCountTokensConvId = currentConvId;
+    lastCountTokensConvId = currentConvId!;
     console.log('[byok-cache] восстановлено точное значение из хранилища: ' + entry.count + ' токенов');
   });
 }
@@ -2123,7 +2123,7 @@ function aiCmLoadArchiveTier(convId: string, reason: string): void {
   try {
     var archKey = AI_ARCHIVE_PREFIX + convId;
     var srcKey = AI_CONV_SOURCE_PREFIX + convId;
-    chrome.storage.local.get([archKey, srcKey], function (data) {
+    chrome.storage.local.get([archKey, srcKey], function (data: Record<string, any>) {
       try {
         if (!isExtensionValid()) return;
         // SPA-переход за время асинхронного чтения — архив чужого чата не применяем
@@ -2174,7 +2174,7 @@ function aiCmLoadArchiveTier(convId: string, reason: string): void {
       } catch (eInner) { swallowSoft(eInner, 'content:aiCmLoadArchiveTier'); }
     });
   } catch (eL) {
-    debugLog('log', '[AI CM][archive-restore] silent-catch load: ' + (eL && eL.message || eL));
+    debugLog('log', '[AI CM][archive-restore] silent-catch load: ' + ((eL instanceof Error && eL.message) || String(eL)));
   }
 }
 
@@ -2225,7 +2225,7 @@ function aiCmUpdateSourceIndicator(): void {
 var AI_CM_BADGE_HOLD_FALLBACK_MS: number = 10000; // жёсткий фолбэк щита: сеть/перехватчик молчат
 var aiCmBadgeHoldUntil: number = 0;
 var aiCmBadgeHoldSpent: boolean = false; // щит уже отработал (запись базы или фолбэк) — второй раз не взводим
-var aiCmBadgeHoldTimer = null;
+var aiCmBadgeHoldTimer: ReturnType<typeof setTimeout> | null = null;
 
 // O-1 (диагностика, только измерение): взвод/отпускание щита каноническим хелпером
 // utils/debug.ts — под гейтом aiCmDebug. reason=armed|armed-empty-convid|released-baseSeen|
@@ -2615,7 +2615,7 @@ function processAndSend(): void {
           debugLog('log', '[AI CM][tape-restore] skip reason=already-restored convId=' + convId +
             ' (per-page session, v77)');
         } else {
-        GeminiTapeStore.load(convId).then(function (entry) {
+        (GeminiTapeStore.load(convId) as Promise<AiCmTapeEntry>).then(function (entry) {
           restoreDone = true; // v30: восстановление завершено — разрешаем сохранение ленты
           // v66: ГАРАНТ записи ленты при baseComplete=1 — полный снимок мог прийти ДО
           // завершения restore (restoreDone=false → путь записи в listener пропущен),
@@ -3119,7 +3119,7 @@ function processAndSend(): void {
             sourceKind: (function () { try { var si = aiCmSourceInfo(); return si ? si.kind : ''; } catch (eSi) { return ''; } })(),
             sourceLabel: (function () { try { var si2 = aiCmSourceInfo(); return si2 ? si2.label : ''; } catch (eSi2) { return ''; } })()
           };
-          var statePatch = { aiCmState: stateSnapshot };
+          var statePatch: Record<string, any> = { aiCmState: stateSnapshot };
           statePatch['aiCmState:' + window.location.hostname] = stateSnapshot;
           chrome.storage.local.set(statePatch);
         } else {
@@ -3209,7 +3209,7 @@ function processAndSend(): void {
               ? ((snapPartNet.partialReason) || 'incomplete') : undefined,
             messages: buildHistoryMessages()
           };
-          var histPatch = { aiCmHistory: histSnapshot };
+          var histPatch: Record<string, any> = { aiCmHistory: histSnapshot };
           histPatch['aiCmHistory:' + window.location.hostname] = aiCmHostHistoryRecord(histSnapshot);
           // v52: гейт ручного экспорта — не пишем частичную историю, пока лоадер бежит
           // или база не полная; одноразовый defer с таймаутом 20с (см. schedule/flush ниже).
@@ -3287,7 +3287,7 @@ function processAndSend(): void {
             isLowConfidenceBase: false,
             messages: msgsS24
           };
-          var histPatchS24 = { aiCmHistory: histSnapshotS24 };
+          var histPatchS24: Record<string, any> = { aiCmHistory: histSnapshotS24 };
           histPatchS24['aiCmHistory:' + window.location.hostname] = aiCmHostHistoryRecord(histSnapshotS24);
           // S2.3 (ADR-001, I4): метки частичности — из ЕДИНОГО снимка (тот же читатель и cid,
           // что у барьера/сетевого пути). Дописываем аддитивно через Object.assign: при
@@ -3349,11 +3349,11 @@ var aiCmProactiveEnabled: boolean = true;
 function aiCmLoadProactiveFlag(): void {
   try {
     if (!isExtensionValid() || !chrome.storage || !chrome.storage.local) return;
-    chrome.storage.local.get(['aiCmProactive'], function (data) {
+    chrome.storage.local.get(['aiCmProactive'], function (data: Record<string, unknown>) {
       aiCmProactiveEnabled = !(data && data.aiCmProactive === false);
     });
     try {
-      chrome.storage.onChanged.addListener(function (changes, areaName) {
+      chrome.storage.onChanged.addListener(function (changes: Record<string, AiCmStorageChange>, areaName: string) {
         if (areaName === 'local' && changes.aiCmProactive) {
           aiCmProactiveEnabled = changes.aiCmProactive.newValue !== false;
         }
@@ -3511,7 +3511,7 @@ function aiCmAutoExportTrustedBaseDiag(trigger: string, cid: string | null, perc
 
 // ========== СЛУШАТЕЛЬ POPUP ==========
 if (isExtensionValid()) {
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message: { type?: string }, sender: unknown, sendResponse: (response?: unknown) => void) => {
     if (message.type === 'aiCmDiag') {
       handleAiCmDiag(sendResponse);
       return true;
@@ -3604,7 +3604,7 @@ if (isExtensionValid()) {
             manualSnapshot.messages = aiCmUnionFileMessages(curCidExp, manualSnapshot.messages,
               manualSnapshot.isLowConfidenceBase === true);
           }
-        } catch (eO49m) { debugLog('log', '[AI CM][export] silent-catch replyManualExport(O-49 union): ' + (eO49m && eO49m.message || eO49m)); }
+        } catch (eO49m) { debugLog('log', '[AI CM][export] silent-catch replyManualExport(O-49 union): ' + ((eO49m instanceof Error && eO49m.message) || String(eO49m))); }
         // S1.3 (inv-i3) + S5 (I3c'): файл ручного экспорта строится из ОДНОГО канонического
         // массива — drop контейнеров и reasoning применяются РОВНО один раз, на этапе массива,
         // поэтому MD-тело и JSON-тело одного нажатия равны (tests/inv-i3-manual-md-json.test.js).
@@ -3679,14 +3679,14 @@ if (isExtensionValid()) {
 // popup шлёт {type:'aiCmDiag'}. content.js (ISOLATED) дёргает MAIN-перехватчик через
 // window.dispatchEvent('ai-cm-diag-request') и ждёт 'ai-cm-diag-response'.
 function handleAiCmDiag(sendResponse: (response?: unknown) => void): void {
-  var intercepted = null;
-  var timer = null;
+  var intercepted: unknown = null;
+  var timer: ReturnType<typeof setTimeout> | null = null;
 
   function finishWithResponse() {
     if (timer) { clearTimeout(timer); timer = null; }
     // метаданные aiCmHistory из chrome.storage.local (если записаны для этого хоста)
     try {
-      chrome.storage.local.get(['aiCmHistory'], function (data) {
+      chrome.storage.local.get(['aiCmHistory'], function (data: Record<string, any>) {
         var h = data.aiCmHistory;
         var sameHost = !!(h && h.host === window.location.hostname);
         var meta = sameHost ? {
@@ -3724,7 +3724,7 @@ function handleAiCmDiag(sendResponse: (response?: unknown) => void): void {
     }
   }
 
-  function onResponse(ev) {
+  function onResponse(ev: CustomEvent) {
     try { intercepted = (ev && ev.detail) || null; } catch (e) { intercepted = null; }
     finishWithResponse();
   }
@@ -3744,10 +3744,10 @@ function applyDebugLogs(v: unknown): void {
 }
 if (isExtensionValid()) {
   try {
-    chrome.storage.local.get(['aiCmDebugLogs'], function (data) {
+    chrome.storage.local.get(['aiCmDebugLogs'], function (data: Record<string, unknown>) {
       applyDebugLogs(data.aiCmDebugLogs === true);
     });
-    chrome.storage.onChanged.addListener(function (changes, areaName) {
+    chrome.storage.onChanged.addListener(function (changes: Record<string, AiCmStorageChange>, areaName: string) {
       if (areaName === 'local' && changes.aiCmDebugLogs) {
         applyDebugLogs(changes.aiCmDebugLogs.newValue === true);
       }
@@ -3834,7 +3834,7 @@ document.addEventListener('keydown', function (e) {
 
 // ========== СЛУШАТЕЛЬ НАСТРОЕК ==========
 if (isExtensionValid()) {
-  chrome.storage.onChanged.addListener((changes) => {
+  chrome.storage.onChanged.addListener((changes: Record<string, AiCmStorageChange>) => {
     if (changes.showWidget) {
       if (changes.showWidget.newValue === false) {
         const widget = document.getElementById('ai-context-widget');
@@ -3875,8 +3875,8 @@ if (isExtensionValid()) {
     } catch (eArcCh) { }
     // H19: оверрайды попапа изменились (другая вкладка/сам попап) — пересчёт display-цепочки
     if (changes.selectedModel || changes.customLimit) {
-      if (changes.selectedModel) popupRawModel = changes.selectedModel.newValue;
-      if (changes.customLimit) popupRawPct = changes.customLimit.newValue;
+      if (changes.selectedModel) popupRawModel = changes.selectedModel.newValue as string | null;
+      if (changes.customLimit) popupRawPct = changes.customLimit.newValue as number | null;
       aiCmRefreshPopupOverrides();
     }
     // S2: per-site порог автоэкспорта изменился (options/иная вкладка) — обновляем
@@ -3888,9 +3888,9 @@ if (isExtensionValid()) {
       }
       if (perSiteChKey) {
         var siteCh = perSiteChKey.slice('aiCmAutoExportPct_'.length);
-        var nvPs = changes[perSiteChKey].newValue;
+        var nvPs = changes[perSiteChKey].newValue as string;
         var nPs = parseInt(nvPs, 10);
-        autoExportPctBySite[siteCh] = (!isNaN(nPs) && nPs >= 1 && nPs <= 100) ? nPs : undefined;
+        (autoExportPctBySite as Record<string, number | undefined>)[siteCh] = (!isNaN(nPs) && nPs >= 1 && nPs <= 100) ? nPs : undefined;
         debugLog('log', '[AI CM][auto-export] per-site onChanged ' + perSiteChKey + '=' +
           (autoExportPctBySite[siteCh] === undefined ? 'нет (глобальный фолбэк)' : autoExportPctBySite[siteCh]));
         if (isInitialized && typeof autoExportLastPct === 'number' && autoExportLastPct >= 0) {
@@ -3955,7 +3955,7 @@ function aiCmBridgeDetail(ev: any) {
 // Последняя сетевая история AI Studio: { msgs: [{role,text}], count, ts }.
 // Читается adapters/aistudio-adapter.ts через window.__aiCmNetMsgs (тот же ISOLATED-мир).
 /** @type {{ msgs: Array<{role: string, text: string}>, count: number, ts: number, href: string, historyComplete?: boolean } | null} */
-var aiCmNetMsgsAistudio = null;
+var aiCmNetMsgsAistudio: AiCmNetMsgsAistudio | null = null;
 // Последний promptTokenCount AI Studio: точный размер контекста (0 — ещё не приходил).
 var aiCmNetCountAistudio: number = 0;
 // v2.0.32: слаг модели AI Studio из тела GenerateContent ('' — сеть ещё не называла модель).
@@ -4405,7 +4405,7 @@ function aiCmIngestAistudioNet(detail: any): boolean {
       aiCmNetMsgsAistudio = {
         msgs: msgs,
         count: msgs.length,
-        ts: shrunk ? prev.ts : ((typeof detail.ts === 'number') ? detail.ts : Date.now()),
+        ts: (shrunk && prev) ? prev.ts : ((typeof detail.ts === 'number') ? detail.ts : Date.now()),
         href: href,
         historyComplete: !shrunk
       };
@@ -4513,7 +4513,7 @@ function aiCmPdfB64(u8: Uint8Array): string {
   var bin = '';
   var step = 0x8000;
   for (var i = 0; i < u8.length; i += step) {
-    bin += String.fromCharCode.apply(null, u8.subarray(i, i + step));
+    bin += String.fromCharCode.apply(null, Array.from(u8.subarray(i, i + step)));
   }
   try { return btoa(bin); } catch (eB64) { aiCmPdfLog('btoa', eB64); return ''; }
 }
@@ -4548,7 +4548,7 @@ function aiCmPdfConcat(job: AiCmPdfJob): Uint8Array | null {
 
 function aiCmPdfClearJobTimers(job: AiCmPdfJob): void {
   if (!job || typeof job !== 'object') return;
-  var keys = ['retryTimer', 'localTimer', 'localReadyTimer'];
+  var keys: Array<'retryTimer' | 'localTimer' | 'localReadyTimer'> = ['retryTimer', 'localTimer', 'localReadyTimer'];
   for (var i = 0; i < keys.length; i++) {
     var timer = job[keys[i]];
     if (timer !== null && timer !== undefined) {
@@ -4708,7 +4708,7 @@ function aiCmPdfPortAttempt(id: string, attempt: number): void {
     aiCmPdfLocalStart(id);
     return;
   }
-  var port = null;
+  var port: AiCmPdfPort;
   try {
     port = chrome.runtime.connect({ name: 'ai-cm-pdf:' + id });
   } catch (ePort) {
@@ -4887,3 +4887,46 @@ interface AiCmPdfJob {
   localReadyTimer: any;
   localBytes: Uint8Array | null;
 }
+
+// ===== strict-core B11: типы швов, которые нельзя выразить JSDoc-аннотацией =====
+/** Последняя сетевая история AI Studio (window.__aiCmNetMsgs): читается adapters/aistudio-adapter.ts. */
+interface AiCmNetMsgsAistudio {
+  msgs: Array<{ role: string; text: string; sections?: string; files?: any[] }>;
+  count: number;
+  ts: number;
+  href: string;
+  historyComplete?: boolean;
+}
+
+/** Запись ленты GeminiTapeStore.load(): {turns, meta} — store живёт в core/state.ts без типов. */
+interface AiCmTapeEntry {
+  turns: any[];
+  meta?: Record<string, unknown>;
+}
+
+/** Элемент chrome.storage.onChanged: старое/новое значение ключа. */
+interface AiCmStorageChange {
+  oldValue?: unknown;
+  newValue?: unknown;
+}
+
+/** Порт pdf-моста (chrome.runtime.connect) — только используемые члены. */
+interface AiCmPdfPort {
+  onMessage: { addListener(cb: (msg: any) => void): void };
+  onDisconnect: { addListener(cb: () => void): void };
+  postMessage(msg: unknown): void;
+  disconnect(): void;
+}
+
+// Кастомные события этого мира: без аугментации addEventListener с явным
+// `ev: CustomEvent` попадает в Event-перегрузку и падает TS2769.
+declare global {
+  interface WindowEventMap {
+    'ai-cm-loader-freeze': CustomEvent;
+    'ai-cm-model-slug': CustomEvent;
+    'ai-cm-qwen-history-pending': CustomEvent;
+    'ai-cm-full-history': CustomEvent;
+    'ai-cm-diag-response': CustomEvent;
+  }
+}
+

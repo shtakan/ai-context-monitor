@@ -9,11 +9,11 @@
 - branch: main; HEAD: `a6343e3` (chore(ts): strict utils B2); origin/main: `a6343e3`; ahead: 0; behind: 0; тег `v2.1.2` → `b36b3c0`
 - version: `2.1.2` (manifest.json, package.json, package-lock.json, футер docs/index.html); дата: 2026-11-16; опубликовано: GitHub Release `v2.1.2` (ZIP собран CI, `Release ZIP #51`) и AMO 2.1.2 (одобрено 2026-11-16, 0 ошибок / 7 предупреждений)
 
-## 2. Метрики (финальный прогон 2026-11-16, после последнего коммита)
+## 2. Метрики (финальный прогон 2026-11-17, после последнего коммита)
 
-- build: exit 0 (`node build.mjs`); `dist/content.js` 730 348 B, sha256 `bc4aca30857f18cfcf15d762da3f4010b35147a1e6cc337ebdffe2e21c2dc32b`
+- build: exit 0 (`node build.mjs`); `dist/content.js` 731 272 B, sha256 `78ac228def04e8445851c9576b18ad9545c0da9eb04af46fd541f1840d34f01b`
 - tests: 262 suites / 4280 passed / 7 skipped / 0 failed (полный `npm test`) — `262/4280/7/0`
-- tsc: exit 0, вывод пуст (`npx tsc --noEmit`); lint: 0 errors / 0 warnings (`npx eslint .`)
+- tsc: exit 0, вывод пуст (`npx tsc --noEmit`); strict: exit 0, 0 ошибок (`npx tsc -p tsconfig.strict.json`); lint: 0 errors / 0 warnings (`npx eslint .`)
 - mutation: 8 KILLED / 0 SURVIVED / 0 ERROR (`npm run test:mutation`, exit 0, 2026-11-16)
 
 ## 3. Текущая задача
@@ -22,9 +22,10 @@
 - живая приёмка 2.1.2 (тред `e1020dba`): 165 сообщений, 99 229 / 77.5 %, «Ещё N» — 0, карточек файла нет
 - `RELEASE_CHECKLIST.md` — архив с 2026-11-16; гейт P0/P1 — в STANDARDS-MATRIX
 - `options/options.js` в checkJs + JSDoc: 21 аннотация DOM-элементов (20 const + `section`), 63 TS2339 закрыты; 3 присваивания `value` обёрнуты в `String()` (сеттер и так приводит к строке); пин `tests/options-checkjs.test.js`; `npx tsc --noEmit` exit 0
-- `tsconfig.strict.json` (strict: `types/**` + `adapters/**/*.ts` + B1 `utils/{debug,model-config,perplexity-parser,archive-import}.ts` + B2 `utils/{chatgpt-conversation-parser,stream-frames}.ts` + B3 `utils/gemini-batchexecute-parser.ts` + B4 `utils/google-search-folwr-parser.ts` + B5 `utils/export-emit-pipeline.ts` + B6 `utils/gemini-intercept-logic.ts` + B7 `core/{content,widget,state,base-handler,hybrid-tail,export-manager,background,gemini-diag-dump}.ts`): adapters 11 → 0, B1 16 → 0, B2 38 → 0, B3 40 → 0, B4 99 → 0, B5 144 → 0, B6 176 → 0, B7 33 → 0, B8 38 → 0, B9 59 → 0 (в B7/B8/B9-файлах 0), B10 77 → 0 (`core/export-manager.ts`; strict 177 → 100); остаток core 100 (только `content.ts`, набор ошибок байт-в-байт прежний) — `npx tsc -p tsconfig.strict.json`, промежуточный гейт (не exit 0); пин `tests/strict-config.test.js` (B1–B10, все 8 core в `include`); основной `tsconfig.json` не ужесточён (`strict: false`)
-- следующий шаг: **B10 закрыт (0)** — `core/export-manager.ts` 77 → 0, общий strict-счётчик 177 → 100: TS18047 ×31 (guard'ы `snap &&`, `const P`/`const B`/cast `Pbc` — новых исходов/веток нет), TS2538 ×12 (`String(cid)` — тот же ключ, `"null"` сохранён; в `fireDeferredTimeout` и `doAutoExportDownload` параметр `cid: any`, чтобы пины исходника не менялись), TS7006 ×17 (типы в сигнатурах: JSDoc в `.ts` не работает), TS2339 ×6 (`e instanceof Error && e.message`), TS7034/TS7005 ×7 (`var file: string`, типизированные memo-переменные S1.3), TS2345 ×2 + TS2322 ×1 + TS7053 ×1; `@ts-ignore` у `canonicalBody` убран — типы в EOF-блоке (`declare`, снимается stripTypes в песочницах). Дальше B11 `core/content.ts` (100 → 0, затем strict exit 0)
-- релиз 2.1.3 — после quality-трека (CHANGELOG + 15 точек версии + tag + AMO), по решению владельца
+- `tsconfig.strict.json` (strict: `types/**` + `adapters/**/*.ts` + B1 `utils/{debug,model-config,perplexity-parser,archive-import}.ts` + B2 `utils/{chatgpt-conversation-parser,stream-frames}.ts` + B3 `utils/gemini-batchexecute-parser.ts` + B4 `utils/google-search-folwr-parser.ts` + B5 `utils/export-emit-pipeline.ts` + B6 `utils/gemini-intercept-logic.ts` + B7 `core/{content,widget,state,base-handler,hybrid-tail,export-manager,background,gemini-diag-dump}.ts`): adapters 11 → 0, B1 16 → 0, B2 38 → 0, B3 40 → 0, B4 99 → 0, B5 144 → 0, B6 176 → 0, B7 33 → 0, B8 38 → 0, B9 59 → 0 (в B7/B8/B9-файлах 0), B10 77 → 0 (`core/export-manager.ts`; strict 177 → 100), B11 100 → 0 (`core/content.ts`) — strict-трек adapters+utils+core закрыт: `npx tsc -p tsconfig.strict.json` exit 0, 0 ошибок; пин `tests/strict-config.test.js` (B1–B11, все 8 core в `include`); основной `tsconfig.json` не ужесточён (`strict: false`)
+- **B10 закрыт (0)** — `core/export-manager.ts` 77 → 0, общий strict-счётчик 177 → 100: TS18047 ×31 (guard'ы `snap &&`, `const P`/`const B`/cast `Pbc` — новых исходов/веток нет), TS2538 ×12 (`String(cid)` — тот же ключ, `"null"` сохранён; в `fireDeferredTimeout` и `doAutoExportDownload` параметр `cid: any`, чтобы пины исходника не менялись), TS7006 ×17 (типы в сигнатурах: JSDoc в `.ts` не работает), TS2339 ×6 (`e instanceof Error && e.message`), TS7034/TS7005 ×7 (`var file: string`, типизированные memo-переменные S1.3), TS2345 ×2 + TS2322 ×1 + TS7053 ×1; `@ts-ignore` у `canonicalBody` убран — типы в EOF-блоке (`declare`, снимается stripTypes в песочницах).
+- **B11 закрыт 2026-11-17** без изменения поведения: `core/content.ts` 100 → 0 (TS7006 ×27, TS18046 ×20, TS7005 ×13, TS7053 ×11, TS7034 ×8, TS2339 ×7, TS2769 ×4, TS2345 ×3, TS2322 ×3, TS18047 ×2, TS2353 ×1, TS2532 ×1); TS2769 ×4 — аугментация `WindowEventMap` в EOF-блоке (не смена API); `!` в `resolveCurrentModel` (`currentAdapter.detectModel/siteName`) — инвариант: вызов только после `aiCmAssignAdapterByHost`, в рантайме удаляется; `@ts-ignore`/`@ts-nocheck`/`as any` в файле — 0
+- следующий шаг: `@types/chrome` + контракты сообщений (отдельный High — меняет ландшафт strict-типов), затем релиз 2.1.3 (CHANGELOG + 15 точек версии + tag + AMO)
 
 ## 4. Открытые задачи (≤5)
 
