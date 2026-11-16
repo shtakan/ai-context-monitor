@@ -18,7 +18,8 @@
     "utils/stream-frames.ts",
     "utils/gemini-batchexecute-parser.ts",
     "utils/google-search-folwr-parser.ts",
-    "utils/export-emit-pipeline.ts"
+    "utils/export-emit-pipeline.ts",
+    "utils/gemini-intercept-logic.ts"
   ],
   "exclude": [
     "node_modules",

@@ -2,7 +2,7 @@
  * strict-config: the strict TS gate is pinned.
  *
  * `tsconfig.strict.json` is the incremental strict-typing track: `types/**`,
- * the TypeScript adapters and the leaf `utils/*.ts` batches (B1 + B2 + B3 + B4 + B5) that are
+ * the TypeScript adapters and the leaf `utils/*.ts` batches (B1 + B2 + B3 + B4 + B5 + B6) that are
  * already clean. The strict run stays a small, reviewable batch while the main
  * `tsconfig.json` keeps `strict: false` for the rest of the tree (utils/, core/,
  * options/, JS files). Widening `include` here without cleaning the new batch
@@ -53,7 +53,7 @@ function readTsconfig(file) {
   return JSON.parse(stripJsonComments(raw));
 }
 
-describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5 strict gate)', () => {
+describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5/B6 strict gate)', () => {
   test('exists and extends the main tsconfig', () => {
     expect(fs.existsSync(path.join(ROOT, 'tsconfig.strict.json'))).toBe(true);
     const cfg = readTsconfig('tsconfig.strict.json');
@@ -68,7 +68,7 @@ describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5 strict gate)', (
     expect(cfg.compilerOptions.emitDeclarationOnly).toBe(false);
   });
 
-  test('include covers types, adapters and the B1/B2/B3/B4/B5 utils batch only', () => {
+  test('include covers types, adapters and the B1/B2/B3/B4/B5/B6 utils batch only', () => {
     const cfg = readTsconfig('tsconfig.strict.json');
     expect(cfg.include).toContain('adapters/**/*.ts');
     expect(cfg.include).toContain('types/**/*.d.ts');
@@ -82,6 +82,7 @@ describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5 strict gate)', (
       'utils/gemini-batchexecute-parser.ts',
       'utils/google-search-folwr-parser.ts',
       'utils/export-emit-pipeline.ts',
+      'utils/gemini-intercept-logic.ts',
     ]) {
       expect(cfg.include).toContain(file);
     }

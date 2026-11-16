@@ -28,16 +28,26 @@ export interface FloorRecord {
   effectiveLen?: number;
   /** Время записи (Date.now()). */
   ts?: number;
-  /** Версия парсера, которой сделана запись. */
-  version?: string;
+  /** Версия парсера, которой сделана запись (null — версия не передавалась). */
+  version?: string | null;
   /** Источник записи (для диагностики). */
   source?: string;
 }
 
+/**
+ * Проверенная запись пола: parseFloor гарантирует, что count/effectiveLen — числа.
+ * Именно её возвращает loadFloor и принимают saveFloor/resolveFloor — инвариант
+ * «пол прочитан и валиден» выражен типом, а не повторными guard'ами на месте.
+ */
+export interface ParsedFloorRecord extends FloorRecord {
+  count: number;
+  effectiveLen: number;
+}
+
 /** Минимальный контракт хранилища (localStorage и тестовые двойники). */
 export interface FloorStorage {
-  getItem?: (key: string) => string | null;
-  setItem?: (key: string, value: string) => void;
+  getItem: (key: string) => string | null;
+  setItem: (key: string, value: string) => void;
 }
 
 /** Итог разрешения пола для текущего рендера. */
@@ -124,12 +134,12 @@ export interface DisjointResetOpts {
   currentConvId?: string;
 }
 
-/** Счётчики порядка ходов при постраничной загрузке. */
+/** Счётчики порядка ходов при постраничной загрузке (in/out-аккумулятор). */
 export interface PaginationOrderState {
   /** Текущий счётчик order. */
-  orderCounter?: number;
+  orderCounter: number;
   /** Курсор для вставки более старых страниц. */
-  prependCursor?: number;
+  prependCursor: number;
 }
 
 /** Ход/сообщение в порядке выдачи (id + служебные поля порядка). */
@@ -625,19 +635,19 @@ export function shouldAcceptTape(entry: any, parserVersion: string | null | unde
 }
 
 // turnId = id без суффикса "_user"/"_assistant" (id = "<turnId>_<role>").
-function restoredTurnKeyOf(id) {
+function restoredTurnKeyOf(id: string | number | null | undefined): string {
   return String(id == null ? '' : id).replace(/_(user|assistant)$/, '');
 }
 
-function restoredRoleOf(m) {
+function restoredRoleOf(m: RestoredTurnItem | null | undefined): string {
   if (m && m.role) return (m.role === 'user') ? 'user' : 'assistant';
-  var id = (m && m.id) || '';
+  var id = String((m && m.id) || '');
   if (/_user$/.test(id)) return 'user';
   if (/_assistant$/.test(id)) return 'assistant';
   return '';
 }
 
-function parseFloor(raw, parserVersion) {
+function parseFloor(raw: string, parserVersion: string | null | undefined): ParsedFloorRecord | null {
   try {
     var f = JSON.parse(raw);
     if (!f || typeof f.count !== 'number' || typeof f.effectiveLen !== 'number') return null;
@@ -648,7 +658,7 @@ function parseFloor(raw, parserVersion) {
   } catch (e) { return null; }
 }
 
-export function loadFloor(convId: string, parserVersion: string | null | undefined, storage: FloorStorage | null | undefined): FloorRecord | null {
+export function loadFloor(convId: string, parserVersion: string | null | undefined, storage: FloorStorage | null | undefined): ParsedFloorRecord | null {
   if (!storage || !convId) return null;
   try {
     var raw = storage.getItem(floorStorageKey(convId, parserVersion));
@@ -684,7 +694,7 @@ export function diagnoseFloorAbsence(convId: string, parserVersion: string | nul
   return 'ok';
 }
 
-export function resolveFloor(textLen: number, count: number, savedFloor: FloorRecord | null, baseComplete: boolean): FloorResolution {
+export function resolveFloor(textLen: number, count: number, savedFloor: ParsedFloorRecord | null, baseComplete: boolean): FloorResolution {
   if (!savedFloor || baseComplete) {
     return { effectiveLen: textLen, floorApplied: false, floorValue: 0 };
   }
@@ -783,7 +793,7 @@ export function isSubsetIds(incomingIds: any[] | null | undefined, existingIds: 
   var incoming = Array.isArray(incomingIds) ? incomingIds : [];
   var existing = Array.isArray(existingIds) ? existingIds : [];
   if (!incoming.length || !existing.length) return false;
-  var seen = {};
+  var seen: Record<string, boolean> = {};
   for (var i = 0; i < existing.length; i++) { if (existing[i]) seen[existing[i]] = true; }
   var hits = 0;
   for (var j = 0; j < incoming.length; j++) {
@@ -834,7 +844,7 @@ export function shouldDisjointReset(opts: DisjointResetOpts | null): boolean {
   for (var le = 0; le < existing.length; le++) { if (existing[le]) liveExisting++; }
   for (var li = 0; li < incoming.length; li++) { if (incoming[li]) liveIncoming++; }
   if (!liveExisting || !liveIncoming) return false;
-  var seen = {};
+  var seen: Record<string, boolean> = {};
   for (var i = 0; i < existing.length; i++) seen[existing[i]] = true;
   for (var j = 0; j < incoming.length; j++) {
     if (incoming[j] && seen[incoming[j]]) return false;
@@ -863,9 +873,9 @@ export function assignPageOrders(pageLen: number, mode: string, state: Paginatio
 // (первая встреча id побеждает), затем сортировка по order.
 // r1 (указатель на более старый ход) сохраняется для самопроверки в тестах.
 export function orderPages(pages: PageInput[]): TurnItem[] {
-  var seen = {};
-  var state = { orderCounter: 0, prependCursor: -1 };
-  var ordered = [];
+  var seen: Record<string, boolean> = {};
+  var state: PaginationOrderState = { orderCounter: 0, prependCursor: -1 };
+  var ordered: TurnItem[] = [];
   for (var i = 0; i < pages.length; i++) {
     var page = pages[i];
     var turns = (page && page.turns) || [];
@@ -883,7 +893,7 @@ export function orderPages(pages: PageInput[]): TurnItem[] {
     }
     if (mode === 'older') state.prependCursor -= pageLen;
   }
-  ordered.sort(function (a, b) { return a.order - b.order; });
+  ordered.sort(function (a, b) { return (a.order || 0) - (b.order || 0); });
   return ordered.map(function (x) { return { id: x.id, text: x.text, role: x.role, r1: x.r1 }; });
 }
 
@@ -894,7 +904,7 @@ export function orderPages(pages: PageInput[]): TurnItem[] {
 // ok=false когда у РАЗНЫХ turn'ов одинаковый order (недетерминированное прибытие) —
 // тогда вызывающий пробует r1-цепочку как fallback.
 export function orderByArrival(items: TurnItem[]): OrderResult {
-  var turns = {};   // turnId -> { order, msgs }
+  var turns: Record<string, { order: number; msgs: TurnItem[] }> = {};   // turnId -> { order, msgs }
   var i, it, tk;
 
   for (i = 0; i < items.length; i++) {
@@ -914,7 +924,7 @@ export function orderByArrival(items: TurnItem[]): OrderResult {
   if (!turnIds.length) return { ok: true, ids: [] };
 
   // детерминированность: разным turn'ам недопустим одинаковый order.
-  var orderOwner = {};
+  var orderOwner: Record<string, string> = {};
   for (i = 0; i < turnIds.length; i++) {
     var o = turns[turnIds[i]].order;
     if (orderOwner[o] !== undefined && orderOwner[o] !== turnIds[i]) {
@@ -927,7 +937,7 @@ export function orderByArrival(items: TurnItem[]): OrderResult {
   turnIds.sort(function (a, b) { return turns[a].order - turns[b].order; });
 
   // раскрываем turn'ы: внутри хода user перед assistant.
-  var ids = [];
+  var ids: string[] = [];
   for (i = 0; i < turnIds.length; i++) {
     var msgs = turns[turnIds[i]].msgs.slice();
     msgs.sort(function (a, b) {
@@ -936,7 +946,10 @@ export function orderByArrival(items: TurnItem[]): OrderResult {
       if (ra !== rb) return ra - rb;
       return (a.order || 0) - (b.order || 0);
     });
-    for (var m = 0; m < msgs.length; m++) ids.push(msgs[m].id);
+    for (var m = 0; m < msgs.length; m++) {
+      var mid = msgs[m].id;
+      if (mid != null) ids.push(mid);
+    }
   }
   return { ok: true, ids: ids };
 }
@@ -947,8 +960,8 @@ export function orderByArrival(items: TurnItem[]): OrderResult {
 // pageMsgs = [{ id, turnId, r1, role }]. Возвращает { ok, ids }: ok=false/цепочка рвётся —
 // ids = текущий порядок страницы (фолбэк).
 export function orderPageByR1(pageMsgs: TurnItem[]): OrderResult {
-  var turns = {};
-  var r1Targets = {};
+  var turns: Record<string, { next: string | null; msgs: TurnItem[] }> = {};
+  var r1Targets: Record<string, boolean> = {};
   var i, it, tk;
 
   for (i = 0; i < pageMsgs.length; i++) {
@@ -964,8 +977,8 @@ export function orderPageByR1(pageMsgs: TurnItem[]): OrderResult {
   var turnIds = Object.keys(turns);
   if (!turnIds.length) return { ok: true, ids: [] };
 
-  function expand(chainTurnIds) {
-    var ids = [];
+  function expand(chainTurnIds: string[]) {
+    var ids: string[] = [];
     for (var c = 0; c < chainTurnIds.length; c++) {
       var msgs = turns[chainTurnIds[c]].msgs.slice();
       msgs.sort(function (a, b) {
@@ -974,15 +987,18 @@ export function orderPageByR1(pageMsgs: TurnItem[]): OrderResult {
         if (ra !== rb) return ra - rb;
         return 0;
       });
-      for (var m = 0; m < msgs.length; m++) ids.push(msgs[m].id);
+      for (var m = 0; m < msgs.length; m++) {
+        var mid = msgs[m].id;
+        if (mid != null) ids.push(mid);
+      }
     }
     return ids;
   }
 
   // фолбэк: текущий порядок страницы (первое появление turn'а), user перед assistant
   function fallbackIds() {
-    var seq = [];
-    var seen = {};
+    var seq: string[] = [];
+    var seen: Record<string, boolean> = {};
     for (var a = 0; a < pageMsgs.length; a++) {
       var mm = pageMsgs[a];
       var mk = (mm && mm.turnId) || (mm && mm.id);
@@ -991,15 +1007,15 @@ export function orderPageByR1(pageMsgs: TurnItem[]): OrderResult {
     return expand(seq);
   }
 
-  var heads = [];
+  var heads: string[] = [];
   for (i = 0; i < turnIds.length; i++) {
     if (!r1Targets[turnIds[i]]) heads.push(turnIds[i]);
   }
   if (heads.length !== 1) return { ok: false, ids: fallbackIds() };
 
-  var chain = [];
-  var seen = {};
-  var cur = heads[0];
+  var chain: string[] = [];
+  var seen: Record<string, boolean> = {};
+  var cur: string | null = heads[0];
   var guard = turnIds.length + 1;
   while (cur && turns[cur] && !seen[cur] && chain.length < guard) {
     seen[cur] = true;
@@ -1020,18 +1036,18 @@ export function orderPageByR1(pageMsgs: TurnItem[]): OrderResult {
 //   - внутри turnId user ПЕРЕД assistant.
 // Если r1 в ленте нет — fallback: разворот порядка появления turn'ов (лента new→old).
 export function orderRestoredTape(tapeMsgs: TurnItem[]): string[] {
-  function turnKeyOf(id) {
+  function turnKeyOf(id: string | number | null | undefined): string {
     return String(id == null ? '' : id).replace(/_(user|assistant)$/, '');
   }
-  function roleOf(m) {
+  function roleOf(m: TurnItem | null | undefined): string {
     if (m && m.role) return (m.role === 'user') ? 'user' : 'assistant';
-    var id = (m && m.id) || '';
+    var id = String((m && m.id) || '');
     if (/_user$/.test(id)) return 'user';
     if (/_assistant$/.test(id)) return 'assistant';
     return '';
   }
-  function expand(turnIds) {
-    var out = [];
+  function expand(turnIds: string[]): string[] {
+    var out: string[] = [];
     for (var i = 0; i < turnIds.length; i++) {
       var msgs = turns[turnIds[i]].msgs.slice();
       msgs.sort(function (a, b) {
@@ -1045,8 +1061,8 @@ export function orderRestoredTape(tapeMsgs: TurnItem[]): string[] {
     return out;
   }
 
-  var turns = {};   // turnKey -> { r1: turnKey|null, msgs: [] }
-  var order = [];   // порядок первого появления turn (new→old)
+  var turns: Record<string, { r1: string | null; msgs: { id: string; role: string }[] }> = {};   // turnKey -> { r1: turnKey|null, msgs: [] }
+  var order: string[] = [];   // порядок первого появления turn (new→old)
   var i, m, tk;
   for (i = 0; i < tapeMsgs.length; i++) {
     m = tapeMsgs[i];
@@ -1069,50 +1085,51 @@ export function orderRestoredTape(tapeMsgs: TurnItem[]): string[] {
 
   if (!hasR1) {
     // fallback: лента без r1 — разворот порядка появления (new→old → old→new).
-    var fb = [];
+    var fb: string[] = [];
     for (i = order.length - 1; i >= 0; i--) fb.push(order[i]);
     return expand(fb);
   }
 
   // head-кандидаты: turnId, не встречающийся как r1 (самый новый).
-  var r1Targets = {};
+  var r1Targets: Record<string, boolean> = {};
   for (i = 0; i < turnIds.length; i++) {
     var rt = turns[turnIds[i]].r1;
     if (rt) r1Targets[rt] = true;
   }
-  var heads = [];
+  var heads: string[] = [];
   for (i = 0; i < turnIds.length; i++) {
     if (!r1Targets[turnIds[i]]) heads.push(turnIds[i]);
   }
   if (!heads.length) {
-    var fbc = [];
+    var fbc: string[] = [];
     for (i = order.length - 1; i >= 0; i--) fbc.push(order[i]);
     return expand(fbc);
   }
 
   // цепочки от head по r1 (new→old)
-  var chains = [];
-  var seen = {};
+  var chains: string[][] = [];
+  var seen: Record<string, boolean> = {};
   for (i = 0; i < heads.length; i++) {
-    var cur = heads[i];
-    var chain = [];
+    var cur: string | null = heads[i];
+    var chain: string[] = [];
     var guard = turnIds.length + 1;
     while (cur && turns[cur] && !seen[cur] && chain.length < guard) {
       seen[cur] = true;
       chain.push(cur);
-      if (!turns[cur].r1) break;
-      if (seen[turns[cur].r1]) { cur = null; break; } // цикл
-      cur = turns[cur].r1;
+      var nx: string | null = turns[cur].r1;
+      if (!nx) break;
+      if (seen[nx]) { cur = null; break; } // цикл
+      cur = nx;
     }
     if (chain.length) chains.push(chain);
   }
 
   // хвосты вне цепочек (по порядку появления, new→old)
-  var extra = [];
+  var extra: string[] = [];
   for (i = 0; i < turnIds.length; i++) { if (!seen[turnIds[i]]) extra.push(turnIds[i]); }
 
   // reverse каждой цепочки → old→new; extra — с конца (old→new)
-  var final = [];
+  var final: string[] = [];
   for (i = 0; i < chains.length; i++) {
     for (var g = chains[i].length - 1; g >= 0; g--) final.push(chains[i][g]);
   }
@@ -1125,7 +1142,7 @@ export function orderRestoredTape(tapeMsgs: TurnItem[]): string[] {
 // finalItems = [{ id, turnId, r1 }] в порядке old→new. r1 = сосед СТАРШЕ.
 // Инверсия: ход с r1=R стоит РАНЬШЕ R (старший R должен идти раньше).
 export function countR1Inversions(finalItems: TurnItem[]): number {
-  var pos = {};
+  var pos: Record<string, number> = {};
   var i, it, tk;
   for (i = 0; i < finalItems.length; i++) {
     it = finalItems[i];
@@ -1139,7 +1156,7 @@ export function countR1Inversions(finalItems: TurnItem[]): number {
     if (!it || !it.r1) continue;
     tk = it.turnId || it.id;
     var rp = pos[it.r1];
-    if (rp !== undefined && pos[tk] !== undefined && pos[tk] < rp) inv++;
+    if (tk && rp !== undefined && pos[tk] !== undefined && pos[tk] < rp) inv++;
   }
   return inv;
 }
@@ -1148,7 +1165,7 @@ export function countR1Inversions(finalItems: TurnItem[]): number {
 // Эквивалент обхода с конца в handleOuter (core/gemini-intercept.js). Внутри одного хода
 // user перед assistant. Не мутирует вход; возвращает новый массив сообщений [{id,turnId,role,...}].
 export function reverseRawTurnPage(rawMsgs: TurnItem[]): TurnItem[] {
-  var arr = [];
+  var arr: TurnItem[] = [];
   for (var i = 0; i < rawMsgs.length; i++) arr.push(rawMsgs[i]);
   arr.reverse();
   // внутри хода user перед assistant (остальные — устойчиво)
@@ -1201,24 +1218,27 @@ export function orderExportMessages(orderItems: TurnItem[]): ExportOrderResult {
       if (ao !== bo) return ao - bo;
       return 0; // при равных order порядок вливания архива сохраняется (stable sort)
     });
-    var ids = [];
-    for (var am = 0; am < archItems.length; am++) ids.push(archItems[am].id);
+    var ids: string[] = [];
+    for (var am = 0; am < archItems.length; am++) {
+      var aid = archItems[am].id;
+      if (aid != null) ids.push(aid);
+    }
     for (var rm = 0; rm < res.ids.length; rm++) ids.push(res.ids[rm]);
     return { ids: ids, mode: res.mode };
   } catch (e) {
-    return { ids: orderItems.filter(function (x) { return x && x.id; }).map(function (x) { return x.id; }), mode: 'order-sort' };
+    return { ids: orderItems.filter(function (x) { return x && x.id; }).map(function (x) { return x.id; }).filter(function (v): v is string { return v != null; }), mode: 'order-sort' };
   }
 }
 
 // Прежнее (до T1-fix#4) тело порядка: r1-цепочка → arrival → сортировка по order.
 // Вынесено без изменений — вызывается ТОЛЬКО из orderExportMessages.
-function orderExportMessagesBase(orderItems) {
+function orderExportMessagesBase(orderItems: TurnItem[]): ExportOrderResult {
   try {
     var r1 = orderByR1Chain(orderItems);
     if (r1.ok && r1.ids.length) return { ids: r1.ids, mode: 'chain-r1' };
     var arr = orderByArrival(orderItems);
     if (arr.ok) return { ids: arr.ids, mode: 'arrival' };
-    var byOrder = [];
+    var byOrder: TurnItem[] = [];
     for (var j = 0; j < orderItems.length; j++) {
       if (orderItems[j] && orderItems[j].id) byOrder.push(orderItems[j]);
     }
@@ -1228,9 +1248,9 @@ function orderExportMessagesBase(orderItems) {
       if (ao !== bo) return ao - bo;
       return String(a.id).localeCompare(String(b.id));
     });
-    return { ids: byOrder.map(function (x) { return x.id; }), mode: 'order-sort' };
+    return { ids: byOrder.map(function (x) { return x.id; }).filter(function (v): v is string { return v != null; }), mode: 'order-sort' };
   } catch (e) {
-    return { ids: orderItems.filter(function (x) { return x && x.id; }).map(function (x) { return x.id; }), mode: 'order-sort' };
+    return { ids: orderItems.filter(function (x) { return x && x.id; }).map(function (x) { return x.id; }).filter(function (v): v is string { return v != null; }), mode: 'order-sort' };
   }
 }
 
@@ -1274,8 +1294,8 @@ export function shouldHideScroller(state: ScrollHideState | null): HideVerdict {
 // items = [{ id, turnId, r1, order, role }]. Возвращает { ok, ids }.
 // ok=false только когда head-кандидатов 0 (цикл); иначе ok=true.
 export function orderByR1Chain(items: TurnItem[]): OrderResult {
-  var turns = {};      // turnId -> { next, msgs: [messages], order }
-  var r1Targets = {};  // значения r1 (id СТАРШИХ соседей)
+  var turns: Record<string, { next: string | null; msgs: TurnItem[]; order: number }> = {};      // turnId -> { next, msgs: [messages], order }
+  var r1Targets: Record<string, boolean> = {};  // значения r1 (id СТАРШИХ соседей)
   var i, it, tk;
 
   for (i = 0; i < items.length; i++) {
@@ -1297,7 +1317,7 @@ export function orderByR1Chain(items: TurnItem[]): OrderResult {
   if (!turnIds.length) return { ok: true, ids: [] };
 
   // head: turn, чей id не является ничьим r1 (самый НОВЫЙ).
-  var heads = [];
+  var heads: string[] = [];
   for (i = 0; i < turnIds.length; i++) {
     if (!r1Targets[turnIds[i]]) heads.push(turnIds[i]);
   }
@@ -1312,9 +1332,9 @@ export function orderByR1Chain(items: TurnItem[]): OrderResult {
   }
 
   // W: обход от head по r1 (newest→oldest), с гардом цикла.
-  var W = [];
-  var seen = {};
-  var cur = head;
+  var W: string[] = [];
+  var seen: Record<string, boolean> = {};
+  var cur: string | null = head;
   var guard = turnIds.length + 1;
   while (cur && turns[cur] && !seen[cur] && W.length < guard) {
     seen[cur] = true;
@@ -1323,7 +1343,7 @@ export function orderByR1Chain(items: TurnItem[]): OrderResult {
   }
 
   // M: ходы не из W, по возрастанию order (старшие страницы).
-  var M = [];
+  var M: string[] = [];
   for (i = 0; i < turnIds.length; i++) {
     if (!seen[turnIds[i]]) M.push(turnIds[i]);
   }
@@ -1340,22 +1360,23 @@ export function orderByR1Chain(items: TurnItem[]): OrderResult {
     if (turns[W[i]].order < minOrderW) minOrderW = turns[W[i]].order;
   }
   // обратные r1-ребра внутри M (кто ссылается на ход как на r1)
-  var childrenM = {};
+  var childrenM: Record<string, string[]> = {};
   for (i = 0; i < M.length; i++) {
     var tkM = M[i];
     var nxM = turns[tkM].next;
     if (nxM && turns[nxM] && !seen[nxM]) { (childrenM[nxM] = childrenM[nxM] || []).push(tkM); }
   }
   // связные компоненты M по r1
-  var seenSeg = {};
-  var segments = [];
+  var seenSeg: Record<string, boolean> = {};
+  var segments: string[][] = [];
   for (i = 0; i < M.length; i++) {
     if (seenSeg[M[i]]) continue;
-    var comp = [];
-    var stack = [M[i]];
+    var comp: string[] = [];
+    var stack: string[] = [M[i]];
     seenSeg[M[i]] = true;
     while (stack.length) {
       var nd = stack.pop();
+      if (nd === undefined) break;
       comp.push(nd);
       var fw = turns[nd].next;
       if (fw && turns[fw] && !seenSeg[fw]) { seenSeg[fw] = true; stack.push(fw); }
@@ -1368,7 +1389,7 @@ export function orderByR1Chain(items: TurnItem[]): OrderResult {
     }
     segments.push(comp);
   }
-  var M_older = []; var M_rest = [];
+  var M_older: string[] = []; var M_rest: string[] = [];
   for (i = 0; i < segments.length; i++) {
     var segMin = Infinity;
     for (var s2 = 0; s2 < segments[i].length; s2++) {
@@ -1382,13 +1403,13 @@ export function orderByR1Chain(items: TurnItem[]): OrderResult {
 
   // final = старший сегмент (old→new по arrival) + reverse(W) (основная цепь old→new)
   // + M_rest (свежий несвязанный остаток).
-  var chain = [];
+  var chain: string[] = [];
   for (i = 0; i < M_older.length; i++) chain.push(M_older[i]);
   for (i = W.length - 1; i >= 0; i--) chain.push(W[i]);
   for (i = 0; i < M_rest.length; i++) chain.push(M_rest[i]);
 
   // раскрываем turn'ы в сообщения (user перед assistant внутри хода)
-  var ids = [];
+  var ids: string[] = [];
   for (i = 0; i < chain.length; i++) {
     var msgs = turns[chain[i]].msgs.slice();
     msgs.sort(function (a, b) {
@@ -1397,7 +1418,10 @@ export function orderByR1Chain(items: TurnItem[]): OrderResult {
       if (ra !== rb) return ra - rb;
       return (a.order || 0) - (b.order || 0);
     });
-    for (var m = 0; m < msgs.length; m++) ids.push(msgs[m].id);
+    for (var m = 0; m < msgs.length; m++) {
+      var mid = msgs[m].id;
+      if (mid != null) ids.push(mid);
+    }
   }
   return { ok: true, ids: ids };
 }
@@ -1412,7 +1436,7 @@ export function orderByR1Chain(items: TurnItem[]): OrderResult {
 // r1=null — головы своих сегментов, старший сегмент докладывается ПЕРЕД основной
 // цепью (правило старшего сегмента, orderByR1Chain).
 export function mergeRestoredTurns(networkItems: TurnItem[], restoredTurns: RestoredTurnItem[]): MergeRestoredResult {
-  var netIds = {};
+  var netIds: Record<string, boolean> = {};
   var i, it, rt;
   for (i = 0; i < networkItems.length; i++) {
     it = networkItems[i];
@@ -1596,12 +1620,14 @@ export function completenessOracle(state: OracleState | null): OracleVerdict {
 export function sanitizeFinalMessages(messages: any[] | null | undefined, helpers: SanitizeHelpers | null): SanitizedMessage[] {
   helpers = helpers || {};
   var isTA = (typeof helpers.isThinkingAssistant === 'function') ? helpers.isThinkingAssistant : function () { return false; };
-  var strip = (typeof helpers.stripLeadingThinking === 'function') ? helpers.stripLeadingThinking : function (s) { return s; };
-  var out = [];
-  var prev = null;
-  var seenUserIds = {};
-  for (var i = 0; i < messages.length; i++) {
-    var m = messages[i];
+  var strip = (typeof helpers.stripLeadingThinking === 'function') ? helpers.stripLeadingThinking : function (s: string) { return s; };
+  var out: SanitizedMessage[] = [];
+  var prev: SanitizedMessage | null = null;
+  var seenUserIds: Record<string, number> = {};
+  // messages по контракту — массив; null/undefined трактуем как пустую историю.
+  var list: any[] = Array.isArray(messages) ? messages : [];
+  for (var i = 0; i < list.length; i++) {
+    var m = list[i];
     if (!m) continue;
     var role = (m.role === 'user') ? 'user' : 'assistant';
     var id = (m.id != null) ? String(m.id) : null;
@@ -1761,7 +1787,7 @@ export function getProactiveThresholds(): Promise<number[]> {
   }
   try {
     return new Promise(function (resolve) {
-      chrome.storage.local.get(['aiCmProactiveThresholds'], function (data) {
+      chrome.storage.local.get(['aiCmProactiveThresholds'], function (data: Record<string, any>) {
         try {
           var raw = (data && typeof data === 'object') ? data.aiCmProactiveThresholds : undefined;
           var t = normalizeProactiveThresholds(raw);
@@ -1797,11 +1823,11 @@ export function pickProactiveThreshold(pct: number, firedSet: any, thresholds: n
 var STREAM_MSGID_RE = /^(rc_[0-9a-f]+|r_[0-9a-f]+)$/;
 var STREAM_TURNID_RE = /^c_[0-9a-f]+$/;
 var STREAM_NUMID_RE = /^[0-9]{10,}$/;
-var STREAM_ROLE_TOKENS = { me: 1, model: 1, user: 1, assistant: 1 };
+var STREAM_ROLE_TOKENS: Record<string, number> = { me: 1, model: 1, user: 1, assistant: 1 };
 
 // Разбор batchexecute-сырца: строки, начинающиеся с '[', содержат фреймы wrb.fr.
-function streamParseFrames(raw) {
-  var frames = [];
+function streamParseFrames(raw: string): { rpcid: string; obj: any }[] {
+  var frames: { rpcid: string; obj: any }[] = [];
   try {
     var lines = String(raw).split('\n');
     for (var i = 0; i < lines.length; i++) {
@@ -1827,7 +1853,7 @@ function streamParseFrames(raw) {
   return frames;
 }
 
-function streamLastFrame(raw, rpcids) {
+function streamLastFrame(raw: string, rpcids: Record<string, number>): { rpcid: string; obj: any } | null {
   var frames = streamParseFrames(raw);
   for (var i = frames.length - 1; i >= 0; i--) {
     if (frames[i].obj != null && rpcids[frames[i].rpcid]) return frames[i];
@@ -1835,7 +1861,7 @@ function streamLastFrame(raw, rpcids) {
   return null;
 }
 
-function streamIsJunkStr(s) {
+function streamIsJunkStr(s: string): boolean {
   if (typeof s !== 'string' || s.length === 0) return true;
   if (s.charAt(0) === '$') return true;                      // внутренние токены ($AVuibg и пр.)
   if (/^[0-9]+$/.test(s)) return true;                        // числа/таймстампы
@@ -1846,7 +1872,7 @@ function streamIsJunkStr(s) {
   return false;
 }
 
-function streamCollectText(node, seen, out) {
+function streamCollectText(node: any, seen: Record<string, number>, out: string[]): void {
   if (out.length > 80) return;
   if (typeof node === 'string') {
     if (!streamIsJunkStr(node) && node.length > 1 && !seen[node]) { seen[node] = 1; out.push(node); }
@@ -1862,15 +1888,15 @@ export function extractStreamUserTurn(raw: string): StreamTurn | null {
   try {
     var fr = streamLastFrame(raw, { I4z33b: 1 });
     if (!fr) return null;
-    var meNode = null;
-    (function walk(n) {
+    var meNode: any[] | null = null;
+    (function walk(n: any) {
       if (meNode || !Array.isArray(n)) return;
       if (n.length > 0 && n[0] === 'me') { meNode = n; return; }
       for (var i = 0; i < n.length; i++) { walk(n[i]); if (meNode) return; }
     })(fr.obj);
     if (!meNode) return null;
-    var id = null;
-    (function walkId(n) {
+    var id: string | null = null;
+    (function walkId(n: any) {
       if (id || Array.isArray(n)) {
         if (Array.isArray(n)) { for (var i = 0; i < n.length; i++) { walkId(n[i]); if (id) return; } }
         return;
@@ -1878,7 +1904,7 @@ export function extractStreamUserTurn(raw: string): StreamTurn | null {
       if (typeof n === 'string' && (STREAM_NUMID_RE.test(n) || STREAM_MSGID_RE.test(n) || STREAM_TURNID_RE.test(n))) id = n;
     })(meNode);
     if (!id) return null;
-    var pieces = [];
+    var pieces: string[] = [];
     streamCollectText(meNode, {}, pieces);
     var text = pieces.join('\n').trim();
     if (!text) return null;
@@ -1892,16 +1918,16 @@ export function extractStreamModelTurn(raw: string): StreamTurn | null {
   try {
     var fr = streamLastFrame(raw, { Bsxleb: 1 });
     if (!fr) return null;
-    var entry = null;
-    (function walk(n) {
+    var entry: any[] | null = null;
+    (function walk(n: any) {
       if (entry || !Array.isArray(n)) return;
       if (n.length > 0 && typeof n[0] === 'string' && STREAM_TURNID_RE.test(n[0])) { entry = n; return; }
       for (var i = 0; i < n.length; i++) { walk(n[i]); if (entry) return; }
     })(fr.obj);
     if (!entry) return null;
     var turnId = entry[0];
-    var msgId = null;
-    (function walkMsg(n) {
+    var msgId: string | null = null;
+    (function walkMsg(n: any) {
       if (!Array.isArray(n)) {
         if (typeof n === 'string' && STREAM_MSGID_RE.test(n)) msgId = n;
         return;
@@ -1909,7 +1935,7 @@ export function extractStreamModelTurn(raw: string): StreamTurn | null {
       for (var i = 0; i < n.length; i++) walkMsg(n[i]);
     })(entry);
     if (!msgId) return null;
-    var pieces = [];
+    var pieces: string[] = [];
     streamCollectText(entry, {}, pieces);
     var text = pieces.join('\n').trim();
     if (!text) return null;
@@ -2151,7 +2177,7 @@ export function paginatePaceDelayMs(depth: number, errSeen: boolean): number {
 // cursorFound=yes → бесконечный цикл probe-non-terminal. Правило: строка из ТОЛЬКО
 // hex-символов длиной < 40 → false. Длинные hex-строки (>= 40) — вне маркерного
 // диапазона, классифицируются как прежде.
-function isShortHexMarker(s) {
+function isShortHexMarker(s: any): boolean {
   if (typeof s !== 'string') return false;
   if (s.length >= 40) return false;
   return /^[0-9a-fA-F]+$/.test(s);
@@ -2175,7 +2201,7 @@ export function classifyOpaque(s: any): boolean {
 //     "application/json" (len=16) ДЛИННЕЕ новой нижней границы, префикс обязателен;
 // (2) нижняя граница 8→16: короткий b64-подобный мусор 8..15 (MIME len=9..15,
 //     обрывки) → false. Реальные токены 705/849 и hex-маркеры 16..39 (H15) не задеты.
-function startsWithMimeType(s) {
+function startsWithMimeType(s: string): boolean {
   return s.indexOf('image/') === 0 || s.indexOf('video/') === 0 ||
     s.indexOf('audio/') === 0 || s.indexOf('application/') === 0 ||
     s.indexOf('text/') === 0;
@@ -2211,8 +2237,8 @@ export function extractCursor(turns: any): string | null {
 // Приоритет — длиннейший кандидат, прошедший classifyOpaqueWide; зоны обходятся
 // inner→rest (при равенстве длин выигрывает найденный раньше — из inner).
 export function extractCursorWide(outer: any): string | null {
-  var best = null;
-  function scanWideZone(zone) {
+  var best: string | null = null;
+  function scanWideZone(zone: any) {
     (function walkW(n) {
       if (typeof n === 'string') {
         if (classifyOpaqueWide(n) && (!best || n.length > best.length)) best = n;
@@ -2260,7 +2286,7 @@ export function archiveContentKey(m: ArchiveMessage | null): string {
 }
 
 // Детерминированный id архивного хода (фолбэк, если архив не дал id).
-function archiveTurnId(m, index) {
+function archiveTurnId(m: ArchiveMessage | null, index: number): string {
   if (m && m.id != null && String(m.id)) return String(m.id);
   var s = archiveContentKey(m);
   var h = 5381;
@@ -2284,8 +2310,8 @@ function archiveTurnId(m, index) {
 export function archiveMergeTurns(networkItems: ArchiveMessage[], archiveMessages: ArchiveMessage[]): ArchiveMergeResult {
   var net = Array.isArray(networkItems) ? networkItems : [];
   var arch = Array.isArray(archiveMessages) ? archiveMessages : [];
-  var seenIds = {};
-  var seenKeys = {};
+  var seenIds: Record<string, boolean> = {};
+  var seenKeys: Record<string, boolean> = {};
   var i, it;
   for (i = 0; i < net.length; i++) {
     it = net[i];
