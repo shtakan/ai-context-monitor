@@ -356,6 +356,7 @@ describe('O-11-2: два файра разных чатов в одну мину
       aiCmAutoExportNamesUsed: {}, // O-11: реестр занятых имён (как в core/export-manager.ts)
       notCompleteLogged: {},
       sessionFiredCache: {},
+      PROBE_TTL_MS: 15000,
       aiCmGsaProbeByThread: {},
       aiCmGsaProbeRunning: false,
       aiCmLoaderRunningByConv: {},

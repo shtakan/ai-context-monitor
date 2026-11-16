@@ -470,6 +470,7 @@ describe('F2/F5/F6: реальный maybeAutoExport GSA (тихий вызов 
       autoExportLastPct: -1,
       notCompleteLogged: {},
       sessionFiredCache: {},
+      PROBE_TTL_MS: 15000,
       aiCmGsaProbeByThread: {},
       aiCmGsaProbeRunning: false,
       aiCmLoaderRunningByConv: {},
@@ -513,7 +514,7 @@ describe('F2/F5/F6: реальный maybeAutoExport GSA (тихий вызов 
   test('baseComplete=0 + probe в полёте → skip probe-running, файла нет', () => {
     const h = gateCtx({
       baseComplete: false,
-      aiCmGsaProbeByThread: (function () { const m = {}; m[TID] = 1; return m; })(),
+      aiCmGsaProbeByThread: (function () { const m = {}; m[TID] = Date.now(); return m; })(),
       aiCmGsaProbeRunning: true
     });
     h.run(95);

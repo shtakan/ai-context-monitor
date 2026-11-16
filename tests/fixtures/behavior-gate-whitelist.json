@@ -327,6 +327,10 @@
     "count": 6,
     "reason": "legacy-pin"
   },
+  "tests/gsa-probe-lifecycle.test.js": {
+    "count": 11,
+    "reason": "static-linter"
+  },
   "tests/gsa-turn-order.test.js": {
     "count": 13,
     "reason": "static-linter"

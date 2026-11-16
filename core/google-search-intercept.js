@@ -1390,6 +1390,12 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     probedTids[tid] = true;
     console.log('[ai-cm-google-search] probe запущен: threadId=' + tid);
     emitProbeState(true, tid); // v1.18: probe в полёте — content.js отличает probe-running от not-complete
+    // BUG-I: busy/fetch-hang не оставляют флаг probe-running навсегда — watchdog завершает
+    // прогон неполным, снимает флаг и разрешает повторный probe на следующем открытии.
+    var PROBE_WATCHDOG_MS = 5000;
+    var watchdog = setTimeout(function () {
+      finish('watchdog-timeout', false);
+    }, PROBE_WATCHDOG_MS);
     var key = gateKey;
     var merged = Array.isArray(startTurns) ? startTurns.slice() : [];
     var mergeFn = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.mergeTurnsById) ||
@@ -1408,6 +1414,8 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       return list;
     }
     var steps = 0;
+    var busyRetries = 0; // BUG-I: ограниченный ретрай занятого ключа вместо «тихого» return
+    var BUSY_RETRY_MAX = 5;
     var addedTotal = 0;
     var accounted = 0; // уже зачтённый прирост базы (markFolwrRunGain — ровно на новых ходах)
     var done = false;
@@ -1429,7 +1437,10 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     function finish(reason, complete) {
       if (done) return;
       done = true;
+      clearTimeout(watchdog);
       activeFolwrInFlight[key] = false;
+      // BUG-I: неполный прогон не сжигает единственный шанс треда — следующий open повторит probe.
+      if (complete !== true) delete probedTids[tid];
       if (complete) {
         // BUG-J-2: probe ничего не добавил (cursor-repeat) — пересобранный merged несёт
         // сырой порядок ответа и перезаписывал уже выровненную базу. addedTotal=0 значит,
@@ -1469,12 +1480,20 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
         finish('cooldown-429-sorry', false);
         return;
       }
-      if (activeFolwrInFlight[key]) return; // не слать параллельно тот же тред
+      if (activeFolwrInFlight[key]) {
+        // BUG-I: busy-ветка раньше делала return без finish — флаг probe-running висел вечно.
+        if (busyRetries >= BUSY_RETRY_MAX) { finish('inflight-suppressed', false); return; }
+        busyRetries++;
+        setTimeout(function () { step(cursor); }, FOLWR_PAGE_DELAY_MS);
+        return;
+      }
+      busyRetries = 0;
       activeFolwrInFlight[key] = true;
       steps++;
       var pageUrl = urlWithMstk(startUrl, cursor);
       window.fetch(pageUrl, { credentials: 'include' })
         .then(function (resp) {
+          if (done) return null; // watchdog уже завершил probe — поздний ответ не пишет базу
           if (isSorryResponse(resp && resp.status, resp && resp.url)) {
             triggerSorryCooldown();
             activeFolwrInFlight[key] = false;

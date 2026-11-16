@@ -138,6 +138,7 @@ function o29(over) {
     getCurrentConvId: function () { return o.urlCid || ''; },   // у GSA URL-id нет
     aiCmDomThreadId: function () { return st.tid; },        // threadId из DOM (GSA)
     aiCmGsaChatPageMarker: function () { return true; },
+    PROBE_TTL_MS: 15000,
     aiCmGsaProbeByThread: {},
     aiCmGsaProbeRunning: false,
     // ---- состояние виджета (resetConversationState) ----
@@ -312,7 +313,7 @@ describe('O-29 D1: GSA skip already-fired — 10 вердиктов одного
 
   test('D4: probe-running (probe в полёте) — 10 вызовов → одна строка', () => {
     const h = o29({ debug: true, baseComplete: false });
-    h.ctx.aiCmGsaProbeByThread[TID] = 1;
+    h.ctx.aiCmGsaProbeByThread[TID] = Date.now();
     h.ctx.aiCmGsaProbeRunning = true;
     for (let i = 0; i < 10; i++) h.run(95);
     expect(h.skipLines('probe-running')).toHaveLength(1);

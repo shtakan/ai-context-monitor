@@ -1035,19 +1035,27 @@ function aiCmGsaNetworkCompleteIs(site: string, cid: string | null): boolean {
 // v1.18 (F5): состояние probe-полноты GSA (MAIN → ISOLATED, CustomEvent
 // 'ai-cm-gsa-probe-state'). Нужно ТОЛЬКО для ярлыка причины skip: probe-running,
 // пока вердикта классификатора ещё нет. Сам вердикт полноты — baseComplete (один).
-var aiCmGsaProbeByThread: Record<string, number> = {};    // threadId -> 1 (probe в полёте)
+// BUG-I: probe-running — это TTL-состояние, а не вечный флаг. Зависший probe (busy/fetch-hang)
+// не должен навсегда удерживать снимок: по истечении TTL флаг считается снятым.
+var PROBE_TTL_MS = 15000;
+var aiCmGsaProbeByThread: Record<string, number> = {};    // threadId -> timestamp запуска (0 = не в полёте)
 var aiCmGsaProbeRunning = false;  // последнее состояние (фолбэк для пустого convId)
 window.addEventListener('ai-cm-gsa-probe-state', function (/** @type {CustomEvent} */ ev) {
   try {
     var d = ev && (ev as any).detail;
     if (!d) return;
     aiCmGsaProbeRunning = d.running === true;
-    if (d.threadId) aiCmGsaProbeByThread[d.threadId] = aiCmGsaProbeRunning ? 1 : 0;
+    if (d.threadId) aiCmGsaProbeByThread[d.threadId] = aiCmGsaProbeRunning ? Date.now() : 0;
   } catch (eGsaProbe) { }
 });
 function aiCmGsaProbeRunningFor(cid: string | null): boolean {
   try {
-    if (cid && typeof aiCmGsaProbeByThread[cid] !== 'undefined') return aiCmGsaProbeByThread[cid] === 1;
+    if (cid) {
+      // BUG-I: неизвестный непустой cid больше не падает в глобальный флаг —
+      // иначе чужой зависший probe удерживал бы снимок другого треда.
+      var v = aiCmGsaProbeByThread[cid];
+      return v > 0 && (Date.now() - v) < PROBE_TTL_MS;
+    }
     return aiCmGsaProbeRunning === true;
   } catch (e) { return false; }
 }

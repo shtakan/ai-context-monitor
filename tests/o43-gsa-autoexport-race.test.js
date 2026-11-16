@@ -309,6 +309,7 @@ describe('O-43 D4/R1: реальный maybeAutoExport — файл по лат�
       autoExportLastPct: -1,
       notCompleteLogged: {},
       sessionFiredCache: {},
+      PROBE_TTL_MS: 15000,
       aiCmGsaProbeByThread: {},
       aiCmGsaProbeRunning: false,
       aiCmLoaderRunningByConv: {},
