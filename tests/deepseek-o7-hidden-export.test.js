@@ -647,7 +647,7 @@ describe('O-7 D2: тумблер OFF — только вопросы и отве
     // тумблер выбирает ВЕТКУ, а не переписывает санацию
     expect(fn).toContain('if (aiCmIncludeHiddenInExport === true) {');
     // OFF-путь = пайплайн: урезание секций → O-20 → снятие hidden (все три — там же)
-    expect(PIPELINE_SRC).toContain('function stripReasoningSections(text)');
+    expect(PIPELINE_SRC).toContain('function stripReasoningSections(text: unknown): string');
     expect(PIPELINE_SRC).toContain('var bare = stripReasoningSections(raw);');
     // единая точка выхода экспорта держит РОВНО 3 обращения к ней (пин O-20 жив)
     const collect = sliceSource(EXPORT_MGR_SRC, 'function aiCmCollectExportSource()', 'function aiCmExportBaseSource(');
@@ -921,9 +921,9 @@ describe('O-7 S3/S4/S5: OFF-путь убирает [TOOL_RESULTS] и XML-выз
   });
 
   test('source-пины: S3/S4/S5 стоят в OFF-пути пайплайна, ON-путь их не вызывает', () => {
-    expect(PIPELINE_SRC).toContain('function isToolResultsOnlyText(text)');
-    expect(PIPELINE_SRC).toContain('function stripToolCallBlocks(text)');
-    expect(PIPELINE_SRC).toContain('function isEmptyExportText(text)');
+    expect(PIPELINE_SRC).toContain('function isToolResultsOnlyText(text: unknown): boolean');
+    expect(PIPELINE_SRC).toContain('function stripToolCallBlocks(text: unknown): string');
+    expect(PIPELINE_SRC).toContain('function isEmptyExportText(text: unknown): boolean');
     expect(PIPELINE_SRC).toContain('if (m.role === \'user\' && isToolResultsOnlyText(raw)) { dropped++; continue; }');
     expect(PIPELINE_SRC).toContain('var cut = stripToolCallBlocks(');
     // полный список тегов — в константе пайплайна
@@ -1196,15 +1196,15 @@ describe('O-7 R3: регресс-контур O-11/O-31/O-27/O-33/O-15…O-20 н
   test('маркеры соседей в коде живы', () => {
     expect(PIPELINE_SRC).toContain('function sanitizeEmitMessages(messages: Message[])');
     expect(PIPELINE_SRC).toContain('function buildAutoExportFileName(spec: ExportFileNameSpec | null | undefined)');
-    expect(PIPELINE_SRC).toContain('function sanitizeInjectedUserText(text)');
+    expect(PIPELINE_SRC).toContain('function sanitizeInjectedUserText(text: unknown): string');
     expect(PIPELINE_SRC).toContain('function shouldSkipGsaPageGuard(state: GsaPageGuardState | null)');
-    expect(PIPELINE_SRC).toContain('function shouldSkipAutoExport(state)');
+    expect(PIPELINE_SRC).toContain('function shouldSkipAutoExport(state: AutoExportGateState | null)');
     expect(PIPELINE_SRC).toContain('function includeHiddenExportBlocks(messages: Message[])');
-    expect(PIPELINE_SRC).toContain('function stripReasoningSections(text)');
+    expect(PIPELINE_SRC).toContain('function stripReasoningSections(text: unknown): string');
     // S3/S4/S5: чистые функции тул-мусора DeepSeek++ (OFF-путь) на месте
-    expect(PIPELINE_SRC).toContain('function isToolResultsOnlyText(text)');
-    expect(PIPELINE_SRC).toContain('function stripToolCallBlocks(text)');
-    expect(PIPELINE_SRC).toContain('function isEmptyExportText(text)');
+    expect(PIPELINE_SRC).toContain('function isToolResultsOnlyText(text: unknown): boolean');
+    expect(PIPELINE_SRC).toContain('function stripToolCallBlocks(text: unknown): string');
+    expect(PIPELINE_SRC).toContain('function isEmptyExportText(text: unknown): boolean');
     // база секций не тронута: перехватчик по-прежнему собирает [REASONING]/[ANSWER] в текст хода
     expect(INTERCEPT_SRC).toContain("var REASONING_TAG = '[REASONING]';");
     expect(INTERCEPT_SRC).toContain("var ANSWER_TAG = '[ANSWER]';");

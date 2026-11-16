@@ -850,7 +850,7 @@ describe('E-2 (3): точка врезки в core/content.ts', () => {
     expect(PIPELINE_SRC.indexOf('var res = dedupeIntraMessage({ role: role, text: text });'))
       .toBeLessThan(PIPELINE_SRC.indexOf('var inter = dedupeMessages(out);'));
     // чистые функции не логируют (логирование вынесено в content.js через callback)
-    const intraSrc = extractBlock(PIPELINE_SRC, 'function dedupeIntraMessage(message: Message | null | undefined)', 'function coreOfBlock(block)');
+    const intraSrc = extractBlock(PIPELINE_SRC, 'function dedupeIntraMessage(message: Message | null | undefined)', 'function coreOfBlock(block: unknown)');
     expect(intraSrc).not.toContain('console.');
   });
 });

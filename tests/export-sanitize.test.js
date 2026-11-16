@@ -197,7 +197,7 @@ describe('O-20 (1): sanitizeInjectedUserText — чистая санация use
   });
 
   test('чистота: в функциях санации нет логирования и обращений к DOM', () => {
-    const pure = block(PIPELINE_SRC, 'function injectedUserTextSkipReason(text)', 'function sanitizeEmitMessages(messages: Message[])') +
+    const pure = block(PIPELINE_SRC, 'function injectedUserTextSkipReason(', 'function sanitizeEmitMessages(messages: Message[])') +
       block(PIPELINE_SRC, 'function sanitizeEmitMessages(messages: Message[])', 'function unionTurnsById(');
     expect(pure).not.toContain('console.');
     expect(pure).not.toContain('document.');

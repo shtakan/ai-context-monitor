@@ -188,8 +188,60 @@ export interface GsaPageGuardDecision {
   reason: string | null;
 }
 
+/**
+ * Вход гейта автоэкспорта shouldSkipAutoExport и порогового триггера O-36.
+ * Поля нарочно не типизированы жёстко: вызывающий (core/export-manager.js)
+ * собирает состояние из настроек и индикатора, а вердикты решаются точечными
+ * проверками (typeof … === 'number'/=== true) внутри гейта — как до типизации.
+ * Расширяет GsaPageGuardState: это же состояние уходит в shouldSkipGsaPageGuard.
+ */
+export interface AutoExportGateState extends GsaPageGuardState {
+  enabled?: unknown;
+  percentage?: unknown;
+  threshold?: unknown;
+  baseComplete?: unknown;
+  baseSeen?: unknown;
+  loaderRunning?: unknown;
+  fired?: unknown;
+  isGemini?: unknown;
+  archiveCount?: unknown;
+  baseCount?: unknown;
+  domBaseTrusted?: unknown;
+  gsaNetworkCompleteLatch?: unknown;
+  historyIncomplete?: unknown;
+  site?: unknown;
+  service?: unknown;
+  chatPageMarker?: unknown;
+  msgCount?: unknown;
+  baseTextLen?: unknown;
+}
+
 /** Колбэк логгера intra-дедупа (export-manager передаёт aiCmLogIntraDedupe). */
 export type MessageDedupeLogger = (role: string, removed: number) => void;
+
+/** Результат отрезания копии из начала секции (cutLeadingCopy). */
+export interface CopyCutResult {
+  text: string;
+  trimmed: boolean;
+}
+
+/** Пара «сырые строки / строки ядра» одного блока (blockLinePair и родня). */
+export interface LinePair {
+  raw: string[];
+  core: string[];
+}
+
+/** Индексы открывающего и закрывающего маркеров конверта O-42. */
+export interface TcPairSpan {
+  open: number;
+  close: number;
+}
+
+/** Разобранные секции хода: reasoning и answer (splitReasoningSections). */
+export interface ReasoningSections {
+  reasoning: string;
+  answer: string;
+}
 
 /**
  * Измеренная форма инъекции Better DeepSeek (таблица BDS_INJECTION_FORMS).
@@ -218,7 +270,7 @@ export type MessageDedupeLogger = (role: string, removed: number) => void;
  * @param {string} s фрагмент
  * @returns {string} безопасный сегмент
  */
-export function safeSeg(s: string): string {
+export function safeSeg(s: unknown): string {
   return String(s == null ? '' : s).replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
@@ -670,8 +722,8 @@ export function shouldSkipGsaPageGuard(state: GsaPageGuardState | null): GsaPage
  * @param {*} state состояние
  * @returns {{skip: boolean, reason: string|null, resetFired: boolean}} вердикт
  */
-export function shouldSkipAutoExport(state) {
-  var s = state || {};
+export function shouldSkipAutoExport(state: AutoExportGateState | null) {
+  var s: AutoExportGateState = state || {};
   if (s.enabled !== true) return { skip: true, reason: 'not-enabled', resetFired: false };
   if (typeof s.percentage !== 'number' || !(s.percentage >= 0)) return { skip: true, reason: 'no-pct', resetFired: false };
   // O-27 (b/c): на не-чат странице GSA (captcha/«подозрительный трафик») база/pct прошлого
@@ -759,8 +811,8 @@ export function shouldSkipAutoExport(state) {
  * @param {*} state состояние
  * @returns {{skip: boolean, reason: string|null, threshold: number}} вердикт
  */
-export function shouldSkipBaseCompleteTrigger(state) {
-  var s = state || {};
+export function shouldSkipBaseCompleteTrigger(state: AutoExportGateState | null) {
+  var s: AutoExportGateState = state || {};
   var threshold = (typeof s.threshold === 'number' && s.threshold >= 1 && s.threshold <= 100) ? s.threshold : 90;
   if (typeof s.percentage !== 'number' || !(s.percentage >= 0)) {
     return { skip: true, reason: 'no-pct', threshold: threshold };
@@ -780,8 +832,8 @@ export function shouldSkipBaseCompleteTrigger(state) {
  * @param {*} perSitePct пороги по сайтам
  * @returns {number} порог
  */
-export function effectiveAutoExportThreshold(globalPct, perSitePct) {
-  function clampPerSite(v) {
+export function effectiveAutoExportThreshold(globalPct: unknown, perSitePct: string | number | null | undefined) {
+  function clampPerSite(v: string): number | null {
     var n = parseInt(v, 10);
     if (isNaN(n)) return null;
     if (n < 1) return 1;
@@ -789,7 +841,7 @@ export function effectiveAutoExportThreshold(globalPct, perSitePct) {
     return n;
   }
   if (perSitePct !== undefined && perSitePct !== null && String(perSitePct).trim() !== '') {
-    var per = clampPerSite(perSitePct);
+    var per = clampPerSite(String(perSitePct));
     if (per != null) return per;
   }
   var g = (typeof globalPct === 'number' && globalPct >= 1 && globalPct <= 100) ? globalPct : null;
@@ -804,7 +856,7 @@ export function effectiveAutoExportThreshold(globalPct, perSitePct) {
  * @param {string} convId id беседы
  * @returns {string} ключ защёлки
  */
-export function latchKey(service, convId) {
+export function latchKey(service: string, convId: unknown): string {
   return safeSeg(service) + '|' + String(convId || '');
 }
 /**
@@ -813,7 +865,7 @@ export function latchKey(service, convId) {
  * @param {string} service сервис
  * @param {string} convId id беседы
  */
-export function markAutoExportFired(store, service, convId) {
+export function markAutoExportFired(store: Record<string, number>, service: string, convId: unknown): void {
   try { store[latchKey(service, convId)] = 1; } catch (e) { }
 }
 /**
@@ -823,7 +875,7 @@ export function markAutoExportFired(store, service, convId) {
  * @param {string} convId id беседы
  * @returns {boolean} сработал ли
  */
-export function getAutoExportFired(store, service, convId) {
+export function getAutoExportFired(store: Record<string, number>, service: string, convId: unknown): boolean {
   try { return store[latchKey(service, convId)] === 1; } catch (e) { return false; }
 }
 /**
@@ -832,7 +884,7 @@ export function getAutoExportFired(store, service, convId) {
  * @param {string} service сервис
  * @param {string} convId id беседы
  */
-export function resetAutoExportFired(store, service, convId) {
+export function resetAutoExportFired(store: Record<string, number>, service: string, convId: unknown): void {
   try { delete store[latchKey(service, convId)]; } catch (e) { }
 }
 
@@ -848,7 +900,7 @@ export var FIRED_SESSION_PREFIX = 'aiCmFired:';
  * @param {string} convId id беседы
  * @returns {string} ключ сессии
  */
-export function firedSessionKey(service, convId) {
+export function firedSessionKey(service: string, convId: unknown): string {
   return FIRED_SESSION_PREFIX + latchKey(service, convId);
 }
 /**
@@ -858,7 +910,7 @@ export function firedSessionKey(service, convId) {
  * @param {string} convId id беседы
  * @returns {boolean} сработал ли
  */
-export function isFiredInSession(sessionMap, service, convId) {
+export function isFiredInSession(sessionMap: Record<string, number> | null | undefined, service: string, convId: unknown): boolean {
   try {
     return !!sessionMap && sessionMap[firedSessionKey(service, convId)] === 1;
   } catch (e) { return false; }
@@ -869,8 +921,8 @@ export function isFiredInSession(sessionMap, service, convId) {
  * @param {string} convId id беседы
  * @returns {Object} патч карты
  */
-export function sessionFiredPatch(service, convId) {
-  var patch = {};
+export function sessionFiredPatch(service: string, convId: unknown): Record<string, number> {
+  var patch: Record<string, number> = {};
   try { patch[firedSessionKey(service, convId)] = 1; } catch (e) { }
   return patch;
 }
@@ -887,7 +939,7 @@ export function sessionFiredPatch(service, convId) {
  * @returns {ExportMessage[]} нормализованные сообщения
  */
 export function normalizeExportMessages(raw: unknown): Message[] {
-  var out = [];
+  var out: Message[] = [];
   try {
     if (!Array.isArray(raw)) return out;
     for (var i = 0; i < raw.length; i++) {
@@ -948,7 +1000,7 @@ export var RE_ANY_SPACE = /[\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000\ufeff]/g
  * @param {string} s текст
  * @returns {string} нормализованный текст
  */
-export function deSpaceAny(s) {
+export function deSpaceAny(s: unknown): string {
   return String(s == null ? '' : s).replace(RE_ANY_SPACE, ' ');
 }
 
@@ -957,7 +1009,7 @@ export function deSpaceAny(s) {
  * @param {string} line строка
  * @returns {string} ядро строки
  */
-export function coreOfLine(line) {
+export function coreOfLine(line: unknown): string {
   try {
     var s = deSpaceAny(line);
     if (RE_CODE_FENCE_LINE.test(s)) return '';
@@ -980,7 +1032,7 @@ export function coreOfLine(line) {
  * @param {string} text текст
  * @returns {string} ядро текста
  */
-export function coreText(text) {
+export function coreText(text: unknown): string {
   try {
     var lines = deSpaceAny(text).split('\n');
     var kept = [];
@@ -1000,7 +1052,7 @@ export function coreText(text) {
  * @param {string} text текст
  * @returns {string} очищенный текст
  */
-export function stripMarkerResidue(text) {
+export function stripMarkerResidue(text: unknown): string {
   try {
     var s = String(text == null ? '' : text);
     if (s.indexOf('#') === -1) return s;
@@ -1032,8 +1084,8 @@ export function stripMarkerResidue(text) {
  * @returns {{messages: ExportMessage[], removed: number}} результат дедупа
  */
 export function dedupeMessages(messages: unknown): DedupeResult {
-  var out = [];
-  var seen = {};
+  var out: Message[] = [];
+  var seen: Record<string, boolean> = {};
   var removed = 0;
   try {
     if (!Array.isArray(messages)) return { messages: out, removed: 0 };
@@ -1073,7 +1125,7 @@ export var INTRA_CORE_MIN_LEN = 20;
  * @param {string} block блок
  * @returns {boolean} сырой ли блок
  */
-export function isRawMarkdownBlock(block) {
+export function isRawMarkdownBlock(block: unknown): boolean {
   try {
     var lines = String(block == null ? '' : block).split('\n');
     for (var i = 0; i < lines.length; i++) {
@@ -1109,7 +1161,7 @@ export function isRawMarkdownBlock(block) {
  * @param {string} text текст
  * @returns {string} нормализованный текст
  */
-export function separateRawBlocks(text) {
+export function separateRawBlocks(text: string): string {
   // Предыдущий символ — НЕ '#' (иначе '### ' распалось бы само на '#' + '## '); пробелы
   // перед заголовком поглощаются, поэтому замена ИДЕМПОТЕНТНА и для '… . ### ROLE'.
   return String(text).replace(/([^#\n])[ \t]*(#{1,6})(?=[ \t])/g, function (all, prev, hashes) {
@@ -1129,7 +1181,7 @@ export function separateRawBlocks(text) {
  * @param {string} block блок
  * @returns {string[]} секции
  */
-export function splitRawSections(block) {
+export function splitRawSections(block: unknown): string[] {
   try {
     var lines = String(block == null ? '' : block).split('\n');
     var out = [];
@@ -1156,7 +1208,7 @@ export function splitRawSections(block) {
  * @param {string} block блок
  * @returns {string} разделитель
  */
-export function sepForSections(block) {
+export function sepForSections(block: unknown): string {
   return /\n{2,}/.test(String(block == null ? '' : block)) ? '\n\n' : '\n';
 }
 
@@ -1172,7 +1224,7 @@ export function sepForSections(block) {
  * @param {string} folded копия
  * @returns {{text: string, trimmed: boolean}|null} остаток или null
  */
-export function cutLeadingCopy(section, folded) {
+export function cutLeadingCopy(section: string, folded: unknown): CopyCutResult | null {
   var lines = String(section).split('\n');
   if (lines.length < 2) return { text: String(section), trimmed: false };
   var head = lines[0];
@@ -1185,7 +1237,8 @@ export function cutLeadingCopy(section, folded) {
     // Тело начинается с копии: границу (конец копии) ищем по её последнему слову.
     var tail = bodyNorm.slice(copyNorm.length).replace(/^\s+/, '');
     if (!tail) return null;
-    var lastWord = copyNorm.split(' ').pop();
+    var words = copyNorm.split(' ');
+    var lastWord = words[words.length - 1];
     var at = body.lastIndexOf(lastWord);
     if (at < 0) return null;
     var rest = body.slice(at + lastWord.length).replace(/^\s+/, '');
@@ -1208,7 +1261,7 @@ export function cutLeadingCopy(section, folded) {
  * @param {string} copyCore ядро копии
  * @returns {number} индекс границы
  */
-export function corePrefixCutIndex(body, copyCore) {
+export function corePrefixCutIndex(body: string, copyCore: string): number {
   try {
     if (!copyCore) return -1;
     // Дешёвый предфильтр: ядро тела обязано НАЧИНАТЬСЯ с ядра копии.
@@ -1235,7 +1288,7 @@ export function corePrefixCutIndex(body, copyCore) {
  * @param {boolean[]} raw сырые блоки
  * @returns {string|null} копия или null
  */
-export function renderedBeforeRaw(blocks, i, raw) {
+export function renderedBeforeRaw(blocks: string[], i: number, raw: boolean[]): string | null {
   for (var b = i - 1; b >= 0; b--) {
     if (b === i || raw[b]) continue;
     if (!coreText(blocks[b])) continue;
@@ -1252,7 +1305,7 @@ export function renderedBeforeRaw(blocks, i, raw) {
  * @param {string} block блок
  * @returns {string} нормализованный блок
  */
-export function normalizeIntraBlock(block) {
+export function normalizeIntraBlock(block: unknown): string {
   return String(block == null ? '' : block).replace(/\s+/g, ' ').trim();
 }
 
@@ -1264,7 +1317,7 @@ export function normalizeIntraBlock(block) {
  * @param {string} b блок B
  * @returns {boolean} похожи ли
  */
-export function intraBlocksSimilar(a, b) {
+export function intraBlocksSimilar(a: unknown, b: unknown): boolean {
   var x = coreText(a);
   var y = coreText(b);
   if (!x || !y) return false;
@@ -1304,19 +1357,19 @@ export function dedupeIntraMessage(message: Message | null | undefined): IntraDe
     var seam = separateRawBlocks(text);
     var blocks = seam.split(/\n{2,}/);
     if (blocks.length < 2) return { text: text, removedBlocks: 0 };
-    var norm = [];
-    var raw = [];
+    var norm: string[] = [];
+    var raw: boolean[] = [];
     var i;
     for (i = 0; i < blocks.length; i++) {
       // E-2.3: «ядро» блока (coreText) — разметка не влияет на сравнение.
       norm.push(coreText(blocks[i]));
       raw.push(isRawMarkdownBlock(blocks[i]));
     }
-    var drop = {};
+    var drop: Record<number, boolean> = {};
     // ВАЖНО: карты «уже видели» без прототипа. Обычный {} наследует Object.prototype,
     // поэтому блок с текстом 'constructor'/'toString' ложно считался дублем (и наоборот,
     // ключ терялся) — история портилась.
-    var seen = Object.create(null);
+    var seen: Record<string, boolean> = Object.create(null);
     // Проход 1: внешне идентичные блоки — побеждает первое вхождение.
     // Порог длины здесь НЕ применяется: точный повтор блока — это дубль при любой
     // длине (короткие блоки «Да.» дважды подряд не совпадают случайно).
@@ -1336,8 +1389,8 @@ export function dedupeIntraMessage(message: Message | null | undefined): IntraDe
     // ВХОЖДЕНИЮ (короткое ядро случайно «содержится» в чужом тексте). Точные совпадения
     // и посекционная чистка (E-2.2) идут ДО этого порога: там сравниваются ядра целиком,
     // и короткие секции-копии — такие же дубли.
-    var seenCore = Object.create(null);
-    var cores = [];
+    var seenCore: Record<string, boolean> = Object.create(null);
+    var cores: string[] = [];
     for (i = 0; i < blocks.length; i++) {
       cores.push(coreOfBlock(blocks[i]));
       if (drop[i] || raw[i] || !norm[i]) continue;
@@ -1347,7 +1400,7 @@ export function dedupeIntraMessage(message: Message | null | undefined): IntraDe
     }
     // Ядро сырого блока дублирует отрендеренный текст? Сравнение по ядру с порогом
     // длины; при minLen=0 порог не применяется (посекционная чистка).
-    function coreDup(core, selfIdx, minLen) {
+    function coreDup(core: string, selfIdx: number, minLen: number): boolean {
       if (!core) return false;
       if (seenCore[core]) return true;
       if (core.length < minLen) return false;
@@ -1370,7 +1423,7 @@ export function dedupeIntraMessage(message: Message | null | undefined): IntraDe
       var folded = renderedBeforeRaw(blocks, i, raw);
       if (folded === null) continue; // отрендеренной копии нет — не пересобираем
       var cutSecs = 0;
-      var keptSecs = [];
+      var keptSecs: string[] = [];
       for (var s = 0; s < secs.length; s++) {
         if (coreDup(coreOfBlock(secs[s]), i, 0)) { cutSecs++; continue; }
         var cut = cutLeadingCopy(secs[s], folded);
@@ -1404,7 +1457,7 @@ export function dedupeIntraMessage(message: Message | null | undefined): IntraDe
       }
     }
     if (removedBlocks === 0) return { text: text, removedBlocks: 0 };
-    var kept = [];
+    var kept: string[] = [];
     for (i = 0; i < blocks.length; i++) { if (!drop[i]) kept.push(blocks[i]); }
     return { text: kept.join('\n\n'), removedBlocks: removedBlocks };
   } catch (e) { swallow(e, 'export-utils:dedupeIntraMessage'); }
@@ -1418,7 +1471,7 @@ export function dedupeIntraMessage(message: Message | null | undefined): IntraDe
  * @param {string} block блок
  * @returns {string} ядро блока
  */
-export function coreOfBlock(block) {
+export function coreOfBlock(block: unknown): string {
   try {
     var lines = String(block == null ? '' : block).split('\n');
     var kept = [];
@@ -1458,7 +1511,7 @@ export var CROSS_RAW_MIN_CHARS = 80;
  * @param {string} block блок
  * @returns {{raw: string[], core: string[]}} пара массивов
  */
-export function blockLinePair(block) {
+export function blockLinePair(block: unknown): LinePair {
   var raw = deSpaceAny(block).split('\n');
   var core = [];
   for (var i = 0; i < raw.length; i++) core.push(coreOfLine(raw[i]));
@@ -1470,7 +1523,7 @@ export function blockLinePair(block) {
  * @param {string[]} core ядра строк
  * @returns {{raw: string[], core: string[]}} пара массивов
  */
-export function trimPairEdges(raw, core) {
+export function trimPairEdges(raw: string[], core: string[]): LinePair {
   var a = 0, b = raw.length;
   while (a < b && !core[a]) a++;
   while (b > a && !core[b - 1]) b--;
@@ -1482,7 +1535,7 @@ export function trimPairEdges(raw, core) {
  * @param {number} n сколько срезать
  * @returns {{raw: string[], core: string[]}} пара массивов
  */
-export function cutPairHead(pair, n) {
+export function cutPairHead(pair: LinePair, n: number): LinePair {
   return trimPairEdges(pair.raw.slice(n), pair.core.slice(n));
 }
 /**
@@ -1491,7 +1544,7 @@ export function cutPairHead(pair, n) {
  * @param {number} n сколько срезать
  * @returns {{raw: string[], core: string[]}} пара массивов
  */
-export function cutPairTail(pair, n) {
+export function cutPairTail(pair: LinePair, n: number): LinePair {
   var k = pair.raw.length - n;
   return trimPairEdges(pair.raw.slice(0, k), pair.core.slice(0, k));
 }
@@ -1500,7 +1553,7 @@ export function cutPairTail(pair, n) {
  * @param {string[]} lines строки
  * @returns {string[]} строки
  */
-export function trimEdgeEmpty(lines) {
+export function trimEdgeEmpty(lines: string[]): string[] {
   var a = lines.slice();
   while (a.length && !a[0]) a.shift();
   while (a.length && !a[a.length - 1]) a.pop();
@@ -1512,7 +1565,7 @@ export function trimEdgeEmpty(lines) {
  * @param {string[]} b последовательность B
  * @returns {boolean} равны ли
  */
-export function seqEqual(a, b) {
+export function seqEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   for (var i = 0; i < a.length; i++) { if (a[i] !== b[i]) return false; }
   return true;
@@ -1523,7 +1576,7 @@ export function seqEqual(a, b) {
  * @param {string[]} longArr длинная
  * @returns {boolean} префикс ли
  */
-export function seqIsPrefix(shortArr, longArr) {
+export function seqIsPrefix(shortArr: string[], longArr: string[]): boolean {
   if (!shortArr.length || shortArr.length >= longArr.length) return false;
   for (var i = 0; i < shortArr.length; i++) { if (shortArr[i] !== longArr[i]) return false; }
   return true;
@@ -1534,7 +1587,7 @@ export function seqIsPrefix(shortArr, longArr) {
  * @param {string[]} longArr длинная
  * @returns {boolean} суффикс ли
  */
-export function seqIsSuffix(shortArr, longArr) {
+export function seqIsSuffix(shortArr: string[], longArr: string[]): boolean {
   if (!shortArr.length || shortArr.length >= longArr.length) return false;
   var off = longArr.length - shortArr.length;
   for (var i = 0; i < shortArr.length; i++) { if (shortArr[i] !== longArr[off + i]) return false; }
@@ -1547,7 +1600,7 @@ export function seqIsSuffix(shortArr, longArr) {
  * @param {string[]} lines строки
  * @returns {boolean} существенна ли копия
  */
-export function crossCopyIsSubstantial(lines) {
+export function crossCopyIsSubstantial(lines: string[]): boolean {
   var ls = trimEdgeEmpty(lines);
   var nonEmpty = 0;
   var chars = 0;
@@ -1728,7 +1781,7 @@ export var VISIBLE_USER_PROMPT_VALUE = '<!-- deepseek-pp-visible-user-prompt:val
  * @param {string} marker маркер
  * @returns {number} число вхождений
  */
-export function countMarker(text, marker) {
+export function countMarker(text: string, marker: string): number {
   var n = 0;
   var at = text.indexOf(marker);
   while (at !== -1) { n++; at = text.indexOf(marker, at + marker.length); }
@@ -1746,7 +1799,7 @@ export function countMarker(text, marker) {
  * @param {string} text текст
  * @returns {'no-markers'|'unpaired-markers'|'multiple-pairs'|'value-only'|null} причина пропуска
  */
-export function injectedUserTextSkipReason(text) {
+export function injectedUserTextSkipReason(text: unknown): 'no-markers' | 'unpaired-markers' | 'multiple-pairs' | 'value-only' | null {
   var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
   var starts = countMarker(s, VISIBLE_USER_PROMPT_START);
   var ends = countMarker(s, VISIBLE_USER_PROMPT_END);
@@ -1767,7 +1820,7 @@ export function injectedUserTextSkipReason(text) {
  * @param {string} text текст
  * @returns {string} очищенный текст
  */
-export function sanitizeInjectedUserText(text) {
+export function sanitizeInjectedUserText(text: unknown): string {
   var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
   if (injectedUserTextSkipReason(s) !== null) return s;
   var from = s.indexOf(VISIBLE_USER_PROMPT_START) + VISIBLE_USER_PROMPT_START.length;
@@ -1848,13 +1901,24 @@ export var BDS_BOM = '\ufeff';
 // тестов) или гейт aiCmDebug выключен → НИ ОДНОЙ строки; читаются только посчитанные
 // значения.
 // -------------------------------------------------------------------------------------
+
+/** Строка диагностики O-40 (o40-bds-line): посчитанные значения одного кандидата. */
+export interface BdsDiagRow {
+  k: number;
+  first: number;
+  pair: number;
+  last: number;
+  form: string;
+  skip: string;
+}
+
 /**
  * Строка диагностики BDS.
  * @param {string} tag тег
  * @param {Object} fields поля
  * @returns {boolean} напечатано ли
  */
-export function bdsDiagLine(tag, fields) {
+export function bdsDiagLine(tag: string, fields: Record<string, unknown>): boolean {
   try {
     if (typeof aiCmDiagLine !== 'function') return false;
     return aiCmDiagLine(tag, fields) !== false;
@@ -1868,7 +1932,7 @@ export function bdsDiagLine(tag, fields) {
  * @param {number} n длина
  * @returns {string} срез
  */
-export function bdsDiagSlice(text, from, n) {
+export function bdsDiagSlice(text: unknown, from: number, n: number): string {
   try {
     var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
     return JSON.stringify((from === 0) ? s.slice(0, n) : s.slice(Math.max(0, s.length - n)));
@@ -1908,7 +1972,7 @@ export var BDS_WRAPPER_ID = 'bds-prompt-wrapper';
  * @param {number} at индекс
  * @returns {boolean} открывающий ли тег
  */
-export function isBdsOpenTagLine(line, at) {
+export function isBdsOpenTagLine(line: string, at: number): boolean {
   if (line === BDS_OPEN_TAG) return true;
   return (at === 0 && line === BDS_BOM + BDS_OPEN_TAG);
 }
@@ -1918,7 +1982,7 @@ export function isBdsOpenTagLine(line, at) {
  * @param {string} line строка
  * @returns {BdsInjectionForm|null} форма или null
  */
-export function bdsFormOfHeadLine(line) {
+export function bdsFormOfHeadLine(line: string) {
   var s = (typeof line === 'string') ? line : '';
   for (var i = 0; i < BDS_INJECTION_FORMS.length; i++) {
     var f = BDS_INJECTION_FORMS[i];
@@ -1933,7 +1997,7 @@ export function bdsFormOfHeadLine(line) {
  * @param {string[]} lines строки
  * @returns {number} индекс
  */
-export function bdsFirstContentLine(lines) {
+export function bdsFirstContentLine(lines: string[]): number {
   for (var i = 0; i < lines.length; i++) { if (String(lines[i]).trim() !== '') return i; }
   return -1;
 }
@@ -1943,7 +2007,7 @@ export function bdsFirstContentLine(lines) {
  * @param {string[]} lines строки
  * @returns {number} индекс
  */
-export function bdsLastContentLine(lines) {
+export function bdsLastContentLine(lines: string[]): number {
   for (var i = lines.length - 1; i >= 0; i--) { if (String(lines[i]).trim() !== '') return i; }
   return -1;
 }
@@ -1958,15 +2022,15 @@ export function bdsLastContentLine(lines) {
  * @param {string} text текст
  * @returns {{text: string, removed: number, forms: string[]}} результат санации
  */
-export function sanitizeBetterDeepSeekText(text) {
+export function sanitizeBetterDeepSeekText(text: unknown) {
   var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
   if (s.indexOf(BDS_OPEN_TAG) === -1) return { text: s, removed: 0, forms: [] };
   var lines = s.split('\n');
-  var drop = {};
-  var forms = [];
+  var drop: Record<number, boolean> = {};
+  var forms: string[] = [];
   // O-40 (диагностика): строки-кандидаты копятся и печатаются ОДНИМ залпом в конце —
   // только тогда в каждой строке есть ИТОГ removed. Хелпера гейта нет — массив не ведётся.
-  var diagRows = (typeof aiCmDiagLine === 'function') ? [] : null;
+  var diagRows: BdsDiagRow[] | null = (typeof aiCmDiagLine === 'function') ? [] : null;
   var firstLine = bdsFirstContentLine(lines);
   var lastLine = bdsLastContentLine(lines);
   for (var k = 0; k < lines.length; k++) {
@@ -2027,7 +2091,7 @@ export function sanitizeBetterDeepSeekText(text) {
     }
   }
   if (!forms.length) return { text: s, removed: 0, forms: [] };
-  var kept = [];
+  var kept: string[] = [];
   for (var m = 0; m < lines.length; m++) { if (!drop[m]) kept.push(lines[m]); }
   return { text: kept.join('\n'), removed: forms.length, forms: forms };
 }
@@ -2126,7 +2190,7 @@ export var TC_ENVELOPE_FORMS = [
  * @param {string} close закрывающий тег
  * @returns {{open: number, close: number}|null} пара или null
  */
-export function tcPairAfter(lines, from, open, close) {
+export function tcPairAfter(lines: string[], from: number, open: string, close: string): TcPairSpan | null {
   for (var i = Math.max(0, from); i < lines.length; i++) {
     if (lines[i] !== open) continue;
     for (var j = i + 1; j < lines.length; j++) { if (lines[j] === close) return { open: i, close: j }; }
@@ -2141,7 +2205,7 @@ export function tcPairAfter(lines, from, open, close) {
  * @param {{open: number, close: number}} pair пара
  * @returns {boolean} целое ли сообщение
  */
-export function tcIsWholeMessagePair(lines, pair) {
+export function tcIsWholeMessagePair(lines: string[], pair: TcPairSpan): boolean {
   var i;
   for (i = 0; i < pair.open; i++) { if (String(lines[i]).trim() !== '') return false; }
   for (i = pair.close + 1; i < lines.length; i++) { if (String(lines[i]).trim() !== '') return false; }
@@ -2153,7 +2217,7 @@ export function tcIsWholeMessagePair(lines, pair) {
  * @param {string[]} lines строки
  * @returns {number} индекс
  */
-export function tcProseAnchorLine(lines) {
+export function tcProseAnchorLine(lines: string[]): number {
   for (var i = 0; i < lines.length; i++) {
     if (String(lines[i]).slice(0, TC_PROSE_ANCHOR.length) === TC_PROSE_ANCHOR) return i;
   }
@@ -2172,15 +2236,15 @@ export function tcProseAnchorLine(lines) {
  * @param {string} text текст
  * @returns {{text: string, removed: number, forms: string[]}} результат санации
  */
-export function sanitizeToolContinuationText(text) {
+export function sanitizeToolContinuationText(text: unknown) {
   var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
   if (s.indexOf(TC_LFR_OPEN) === -1 && s.indexOf(TC_TASK_OPEN) === -1 &&
       s.indexOf(TC_RESULTS_OPEN) === -1 && s.indexOf(TC_PROSE_ANCHOR) === -1) {
     return { text: s, removed: 0, forms: [] };
   }
   var lines = s.split('\n');
-  var drop = {};
-  var forms = [];
+  var drop: Record<number, boolean> = {};
+  var forms: string[] = [];
   // (1) конверт-ход: распознаётся по измеренной строке-якорю (B); спан — от якоря до конца
   // последней распознанной формы (D), т.е. до закрывающего тега результатов.
   var anchor = tcProseAnchorLine(lines);
@@ -2218,7 +2282,7 @@ export function sanitizeToolContinuationText(text) {
     k = lfr.close;
   }
   if (!forms.length) return { text: s, removed: 0, forms: [] };
-  var kept = [];
+  var kept: string[] = [];
   for (var m = 0; m < lines.length; m++) { if (!drop[m]) kept.push(lines[m]); }
   return { text: kept.join('\n'), removed: forms.length, forms: forms };
 }
@@ -2257,7 +2321,7 @@ export var SECTION_ANSWER_TAG = '[ANSWER]';
  * @param {string} text текст
  * @returns {string} текст без рассуждений
  */
-export function stripReasoningSections(text) {
+export function stripReasoningSections(text: unknown): string {
   var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
   // Нет пары — байтово прежний текст (все прочие платформы, обычные ответы).
   if (s.indexOf(SECTION_REASONING_TAG) === -1 || s.indexOf(SECTION_ANSWER_TAG) === -1) return s;
@@ -2323,7 +2387,7 @@ export var REASONING_SECTION_PAIR_RE = /^\s*\[REASONING\]\r?\n([\s\S]*?)\r?\n\r?
  * @param {Object} fields поля
  * @returns {boolean} напечатано ли
  */
-export function diagTag(tag, fields) {
+export function diagTag(tag: string, fields: Record<string, unknown>): boolean {
   try {
     if (typeof aiCmDiagLine !== 'function') return false;
     return aiCmDiagLine(tag, fields) !== false;
@@ -2335,7 +2399,7 @@ export function diagTag(tag, fields) {
  * @param {string} text текст
  * @returns {{reasoning: string, answer: string}} секции
  */
-export function splitReasoningSections(text) {
+export function splitReasoningSections(text: unknown): ReasoningSections {
   var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
   var m = REASONING_SECTION_PAIR_RE.exec(s);
   if (m) return { reasoning: m[1].replace(/\s+$/, ''), answer: m[2] };
@@ -2446,7 +2510,7 @@ export var TOOL_RESULTS_TAIL = 'Continue answering based on the tool results abo
  * @param {string} text текст
  * @returns {boolean} только результаты
  */
-export function isToolResultsOnlyText(text) {
+export function isToolResultsOnlyText(text: unknown): boolean {
   try {
     var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
     var t = s.trim();
@@ -2493,7 +2557,7 @@ export var RE_TOOL_CALL_BLOCK = new RegExp(
  * @param {string} text текст
  * @returns {string} текст без блоков
  */
-export function stripToolCallBlocks(text) {
+export function stripToolCallBlocks(text: unknown): string {
   var s = (typeof text === 'string') ? text : String(text == null ? '' : text);
   if (s.indexOf('<') === -1) return s;                 // быстрый выход: блоков нет
   RE_TOOL_CALL_BLOCK.lastIndex = 0;                    // глобальная регулярка — без утечки состояния
@@ -2507,7 +2571,7 @@ export function stripToolCallBlocks(text) {
  * @param {string} text текст
  * @returns {boolean} пусто ли
  */
-export function isEmptyExportText(text) {
+export function isEmptyExportText(text: unknown): boolean {
   try { return String(text == null ? '' : text).trim() === ''; } catch (e) { return false; }
 }
 
@@ -2522,7 +2586,7 @@ export function isEmptyExportText(text) {
  * @param {Object} message сообщение
  * @returns {boolean} true — ход остаётся в экспорте
  */
-function isReasoningOnlyAssistantTurn(message) {
+function isReasoningOnlyAssistantTurn(message: Message | null | undefined): boolean {
   try {
     if (!message || typeof message !== 'object') return false;
     if (message.role !== 'assistant') return false;
@@ -2581,15 +2645,15 @@ export function copyMessageWithText(message: Message, text: string): Message {
  * @returns {{messages: ExportMessage[], sanitized: number, skipped: string[], dropped: number, bdsRemoved: number, bdsForms: string[], tcRemoved: number, tcForms: string[]}} результат санации
  */
 export function sanitizeEmitMessages(messages: Message[]): SanitizeEmitResult {
-  var out = [];
+  var out: Message[] = [];
   var sanitized = 0;
-  var skipped = [];
+  var skipped: string[] = [];
   var dropped = 0;
   var bdsRemoved = 0;
-  var bdsForms = [];
+  var bdsForms: string[] = [];
   // O-42: измерение конверта tool-continuation (снятые формы), на байты не влияет.
   var tcRemoved = 0;
-  var tcForms = [];
+  var tcForms: string[] = [];
   try {
     var src = Array.isArray(messages) ? messages : [];
     for (var i = 0; i < src.length; i++) {
@@ -2735,6 +2799,8 @@ export function withoutHiddenFields(message: Message): Message {
  * @param {ExportMessage} message сообщение
  * @returns {Object} копия
  */
+export function stripHiddenFields(message: Message): Message;
+export function stripHiddenFields(message: Message | null | undefined): Message | null | undefined;
 export function stripHiddenFields(message: Message | null | undefined): Message | null | undefined {
   if (!message || typeof message !== 'object') return message;
   return hasHiddenFields(message) ? withoutHiddenFields(message) : message;
@@ -2780,7 +2846,7 @@ export function stripHiddenFields(message: Message | null | undefined): Message 
  * @param {ExportMessage[]} messages сообщения
  * @returns {boolean} есть рассуждения
  */
-export function hasReasoningInSource(messages) {
+export function hasReasoningInSource(messages: unknown): boolean {
   var src = Array.isArray(messages) ? messages : [];
   for (var i = 0; i < src.length; i++) {
     var m = src[i];
@@ -2802,7 +2868,7 @@ export function hasReasoningInSource(messages) {
  * @param {string} site сайт
  * @returns {boolean} итоговый тумблер
  */
-export function effectiveReasoningToggle(userToggle, sourceHasReasoning, site) {
+export function effectiveReasoningToggle(userToggle: unknown, sourceHasReasoning: unknown, site?: string): boolean {
   if (userToggle === true) return true;                 // пользовательский ON — как есть
   // D-O41 (пересмотр 2026-09-25): Qwen/DeepSeek — OFF = force-exclude, авто-ON не срабатывает
   // (иначе у сервиса, чьё размышление всегда в источнике, выключить reasoning было бы нельзя).
@@ -2849,9 +2915,9 @@ export function includeHiddenExportBlocks(messages: Message[]): Message[] {
  * @param {*} incoming новые
  * @returns {Array} объединение
  */
-export function unionTurnsById(existing, incoming) {
-  var seen = {};
-  var out = [];
+export function unionTurnsById(existing: Message[] | null | undefined, incoming: Message[] | null | undefined): Message[] {
+  var seen: Record<string, boolean> = {};
+  var out: Message[] = [];
   var i, t;
   for (i = 0; existing && i < existing.length; i++) {
     t = existing[i];

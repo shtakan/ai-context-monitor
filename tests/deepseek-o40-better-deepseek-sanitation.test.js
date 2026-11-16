@@ -1899,7 +1899,7 @@ describe('O-40 (R): байтовые регрессии', () => {
     expect(fnSrc).toContain('sanitizeInjectedUserText(text)');
     const o40Src = PIPELINE_SRC.slice(
       PIPELINE_SRC.indexOf('var BDS_OPEN_TAG'),
-      PIPELINE_SRC.indexOf('function stripReasoningSections(text)')
+      PIPELINE_SRC.indexOf('function stripReasoningSections(text: unknown): string')
     );
     expect(o40Src).not.toContain('console.');
     expect(o40Src).not.toContain('document.');

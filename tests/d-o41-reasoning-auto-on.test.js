@@ -202,8 +202,8 @@ function qwenHistory(n) {
 // =====================================================================================
 describe('D-O41 S1/S3: чистая точка правила в пайплайне', () => {
   test('S1: функции объявлены и отданы наружу; признак читает ТОЛЬКО поле reasoning и секцию', () => {
-    expect(PIPELINE_SRC).toContain('function hasReasoningInSource(messages)');
-    expect(PIPELINE_SRC).toContain('function effectiveReasoningToggle(userToggle, sourceHasReasoning, site)');
+    expect(PIPELINE_SRC).toContain('function hasReasoningInSource(messages: unknown): boolean');
+    expect(PIPELINE_SRC).toContain('function effectiveReasoningToggle(userToggle: unknown, sourceHasReasoning: unknown, site?: string): boolean');
     expect(PIPELINE_SRC).toContain('hasReasoningInSource: hasReasoningInSource,');
     expect(PIPELINE_SRC).toContain('effectiveReasoningToggle: effectiveReasoningToggle,');
     expect(typeof P.hasReasoningInSource).toBe('function');
@@ -315,9 +315,9 @@ describe('D-O41 S2: единственная точка чтения тумбл�
     expect(san).not.toContain('aiCmIncludeHiddenInExport');
     expect(san).not.toContain('effectiveReasoningToggle');
     expect(san).toContain('var bare = stripReasoningSections(raw);');
-    expect(PIPELINE_SRC).toContain('function stripReasoningSections(text)');
-    expect(PIPELINE_SRC).toContain('function isToolResultsOnlyText(text)');
-    expect(PIPELINE_SRC).toContain('function stripToolCallBlocks(text)');
+    expect(PIPELINE_SRC).toContain('function stripReasoningSections(text: unknown): string');
+    expect(PIPELINE_SRC).toContain('function isToolResultsOnlyText(text: unknown): boolean');
+    expect(PIPELINE_SRC).toContain('function stripToolCallBlocks(text: unknown): string');
   });
 });
 

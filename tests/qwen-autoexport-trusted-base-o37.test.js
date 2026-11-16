@@ -486,7 +486,7 @@ describe('O-37 A: проводка и границы (source-пины)', () => {
   test('R-пин границы: второй триггер base-complete (v64) и спасательный pre-trim не тронуты', () => {
     const trigger = fnDecl(PIPELINE_SRC, 'shouldSkipBaseCompleteTrigger');
     expect(trigger).toContain("reason: 'below-threshold-base-complete'");
-    expect(PIPELINE_SRC).toContain('function shouldSkipBaseCompleteTrigger(state)');
+    expect(PIPELINE_SRC).toContain('function shouldSkipBaseCompleteTrigger(state: AutoExportGateState | null)');
     // pre-trim: своя причина файла в единственной точке старта скачивания — прежняя
     expect(MGR_SRC).toContain("reason === 'pre-trim' ? '-pretrim' : ''");
     expect(MGR_SRC).toContain("if (reason !== 'pre-trim') {");
