@@ -191,7 +191,7 @@ export function orderChatGPTMapping(mapping: any): string[] {
   var keys = Object.keys(mapping || {});
   if (!keys.length) return [];
 
-  var byId = {};
+  var byId: Record<string, string> = {};   // nid → ключ mapping
   for (var i = 0; i < keys.length; i++) {
     var k = keys[i];
     var n = mapping[k];
@@ -208,9 +208,9 @@ export function orderChatGPTMapping(mapping: any): string[] {
   }
 
   // children по указателю parent (универсально для ChatGPT)
-  var childrenOf = {};
+  var childrenOf: Record<string, string[]> = {};
   for (var c0 = 0; c0 < keys.length; c0++) childrenOf[keys[c0]] = [];
-  var roots = [];
+  var roots: string[] = [];
   for (var m = 0; m < keys.length; m++) {
     var kk = keys[m];
     var nn = mapping[kk];
@@ -226,7 +226,7 @@ export function orderChatGPTMapping(mapping: any): string[] {
   if (!hasParent) {
     // Нет поля parent: либо children, либо create_time, либо порядок ключей.
     if (hasChildren) {
-      var isChild = {};
+      var isChild: Record<string, boolean> = {};
       for (var c1 = 0; c1 < keys.length; c1++) {
         var n1 = mapping[keys[c1]];
         if (n1 && Array.isArray(n1.children)) {
@@ -255,16 +255,17 @@ export function orderChatGPTMapping(mapping: any): string[] {
     return ca - cb;
   });
 
-  var out = [];
-  var visited = {};
-  function walk(k) {
+  var out: string[] = [];
+  var visited: Record<string, boolean> = {};
+  /** DFS-обход: k — ключ mapping (строкой), visited защищает от повторного входа. */
+  function walk(k: string): void {
     if (!k || visited[k] || mapping[k] === undefined) return;
     visited[k] = true;
     out.push(k);
     var ch = childrenOf[k] || [];
     if (mapping[k] && Array.isArray(mapping[k].children) && mapping[k].children.length) {
       // порядок из mapping.children авторитетен, когда он есть
-      ch = mapping[k].children.map(function (cid) { return byId[String(cid)] || String(cid); });
+      ch = mapping[k].children.map(function (cid: unknown): string { return byId[String(cid)] || String(cid); });
     }
     for (var w = 0; w < ch.length; w++) walk(ch[w]);
   }
@@ -280,7 +281,7 @@ export function orderChatGPTMapping(mapping: any): string[] {
  * @returns {ChatGptConversationResult} Ходы, модель и счётчик токенов.
  */
 export function parseChatGPTConversation(json: any): ChatGptConversationResult {
-  var messages = [];
+  var messages: Message[] = [];
   var model = '';
   var tokens = 0;
 

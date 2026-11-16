@@ -13,7 +13,9 @@
     "utils/debug.ts",
     "utils/model-config.ts",
     "utils/perplexity-parser.ts",
-    "utils/archive-import.ts"
+    "utils/archive-import.ts",
+    "utils/chatgpt-conversation-parser.ts",
+    "utils/stream-frames.ts"
   ],
   "exclude": [
     "node_modules",

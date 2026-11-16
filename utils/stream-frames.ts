@@ -99,9 +99,12 @@ function makeDecodeStream(): FrameDecoder {
     try { dec = new TEXT_DECODER(); } catch (eNew) { dec = null; }
   }
   if (dec) {
+    // dec не null в этой ветке; фиксируем в локальной переменной, потому что в замыканиях
+    // ниже сужение по `dec` (var) не сохраняется — поведение декодера не меняется.
+    var td: TextDecoder = dec;
     return {
-      text: function (v: unknown, stream?: boolean): string { return dec.decode(v as BufferSource, { stream: stream === true }); },
-      flush: function (): string { return dec.decode(); }
+      text: function (v: unknown, stream?: boolean): string { return td.decode(v as BufferSource, { stream: stream === true }); },
+      flush: function (): string { return td.decode(); }
     };
   }
 
@@ -256,9 +259,11 @@ export function framesManual(res: FramesResponse | null): ManualFrameIterator {
 
   function wake(): void {
     while (waiters.length) {
-      if (queue.length) { waiters.shift().resolve({ value: queue.shift(), done: false }); continue; }
-      if (failure) { waiters.shift().reject(failure); continue; }
-      if (finishedRead) { waiters.shift().resolve({ value: undefined, done: true }); continue; }
+      // Элемент гарантирован: длину проверило условие цикла; ветки-обработчика нет.
+      var w = waiters[0];
+      if (queue.length) { waiters.shift(); w.resolve({ value: queue.shift(), done: false }); continue; }
+      if (failure) { waiters.shift(); w.reject(failure); continue; }
+      if (finishedRead) { waiters.shift(); w.resolve({ value: undefined, done: true }); continue; }
       return;                                        // кадра ещё нет — ждём дальше
     }
   }
@@ -274,13 +279,15 @@ export function framesManual(res: FramesResponse | null): ManualFrameIterator {
     var isSSE = ct.indexOf('event-stream') !== -1;
     var reader = (res && res.body && typeof res.body.getReader === 'function') ? res.body.getReader() : null;
     if (!reader) { finishedRead = true; return Promise.resolve(); }
+    // reader не null: тип зафиксирован вне замыканий (в них сужение по `reader` теряется).
+    var rd = reader;
     var dec = makeDecodeStream();
 
     if (!isSSE) {
       // Не-SSE: тело копится ЦЕЛИКОМ, затем JSON-массив либо склейка {...}{...}.
       var all = '';
-      var readAll = function () {
-        return reader.read().then(function (r) {
+      var readAll: () => Promise<void> = function () {
+        return rd.read().then(function (r) {
           if (r && r.done) {
             all += dec.flush();
             var trimmed = all.trim();
@@ -307,9 +314,9 @@ export function framesManual(res: FramesResponse | null): ManualFrameIterator {
     }
 
     var buf = '';
-    var pendingEvent = null;
-    var readLines = function () {
-      return reader.read().then(function (r) {
+    var pendingEvent: string | null = null;
+    var readLines: () => Promise<void> = function () {
+      return rd.read().then(function (r) {
         if (r && r.done) {
           var tail = buf;
           if (tail.charAt(tail.length - 1) === '\r') tail = tail.slice(0, -1);
@@ -419,20 +426,24 @@ export function mergeUsage(prev: Usage | null, next: Usage | null, cumulative?: 
   if (!next) return prev;
   if (!prev) {
     var copy = {} as Usage;
+    // Ключи перебираются как есть (for-in + hasOwnProperty) — набор полей результата не
+    // сужается до литерального списка; индекс приводится к keyof Usage для типизации.
     for (var k0 in next) {
-      if (Object.prototype.hasOwnProperty.call(next, k0)) copy[k0] = next[k0];
+      if (Object.prototype.hasOwnProperty.call(next, k0)) copy[k0 as keyof Usage] = next[k0 as keyof Usage];
     }
     return copy;
   }
   var out = {} as Usage;
   for (var k1 in prev) {
-    if (Object.prototype.hasOwnProperty.call(prev, k1)) out[k1] = prev[k1];
+    if (Object.prototype.hasOwnProperty.call(prev, k1)) out[k1 as keyof Usage] = prev[k1 as keyof Usage];
   }
   for (var k2 in next) {
     if (!Object.prototype.hasOwnProperty.call(next, k2)) continue;
-    var v = next[k2];
+    var key = k2 as keyof Usage;
+    var v = next[key];
     if (v === null || v === undefined) continue;
-    out[k2] = cumulative ? v : ((typeof out[k2] === 'number' ? out[k2] : 0) + v);
+    var prevVal = out[key];
+    out[key] = cumulative ? v : ((typeof prevVal === 'number' ? prevVal : 0) + v);
   }
   return out;
 }
