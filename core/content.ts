@@ -1827,13 +1827,23 @@ function resolveCurrentModel(): string {
   const raw = popupModelId || uiRaw || rawSnapshot || '';
   // Источник raw для path/source: та же лестница приоритетов (без повторов).
   const rawSrc = popupModelId ? 'попап' : (uiRaw ? 'dom' : (rawSnapshot ? (rawFromNet ? 'сеть' : 'DOM') : ''));
-  let modelId = raw ? ModelConfig.resolveModelId(raw) : null;
+  const rawResolvedId = raw ? ModelConfig.resolveModelId(raw) : null;
+  // BUG-02: «сигнал есть, а модели нет в каталоге» — отдельное состояние. Лимиты берутся
+  // из siteDefaults (modelId ниже), а отображаемое имя остаётся распознанным слагом.
+  var site = (currentAdapter && currentAdapter.siteName) || '';
+  var unknownModel = !!raw && !rawResolvedId;
+  let modelId = rawResolvedId;
   let path;
   if (modelId) {
     path = rawSrc || 'дефолт';
   } else {
     modelId = ModelConfig.getDefaultModel(currentAdapter.siteName);
     path = raw ? ((rawFromNet ? 'сеть' : 'DOM') + '→дефолт(не распознан)') : 'дефолт';
+    // BUG-02: путь честно называет, откуда число лимита (siteDefaults), только там, где
+    // распознанный слаг показывается в файле/бейдже; прочие сайты — байтово прежний path.
+    if (unknownModel && (site === 'google_search' || site === 'qwen')) {
+      path = (rawSrc || 'сеть') + '→siteDefaults(вне каталога)';
+    }
   }
   // v1.18 (F7): GSA — сеть может не дать slug вовсе (детектор GSA молчит, если в ответе нет
   // model:"…"), и имя модели снапшота оставалось пустым → сегмент модели в имени файла
@@ -1841,8 +1851,13 @@ function resolveCurrentModel(): string {
   // что показывает badge-update: ModelConfig.getModel(modelId)?.name, где modelId идёт по
   // пути попап → DOM → сеть → дефолт сайта ('gemini-search-default' = «Gemini (Search AI)»).
   // Для прочих сайтов (в т.ч. Gemini) поведение прежнее — присваивание не выполняется.
-  if (!snapModelId && currentAdapter && currentAdapter.siteName === 'google_search') {
-    lastSnapshotModelName = ModelConfig.getModel(modelId)?.name || modelId;
+  // BUG-02: Qwen + распознанный слаг вне каталога — в файл/бейдж идёт САМ слаг (лимит
+  // остаётся дефолтом сайта); без сигнала Qwen по-прежнему ничего не заполняет, а у GSA
+  // и у Qwen с сигналом из каталога — каталожное имя (поведение прежнее).
+  if (currentAdapter && (site === 'google_search' || (site === 'qwen' && unknownModel))) {
+    lastSnapshotModelName = (site === 'qwen')
+      ? String(raw).trim().slice(0, 64)
+      : (ModelConfig.getModel(modelId)?.name || modelId);
   }
   const source = rawSrc === 'попап' ? 'popup' : (rawSrc === 'dom' ? 'dom' : 'snapshot');
   if (modelId !== lastResolvedModelId) {
@@ -2950,7 +2965,13 @@ function processAndSend(): void {
         capturedAt: Date.now(),
         site: ctxSnapSite,
         model: modelId,
-        modelName: ModelConfig.getModel(modelId)?.name || modelId,
+        // BUG-02: для qwen/google_search отображаемое имя — модель снимка (у Qwen со слагом
+        // вне каталога это распознанный слаг, лимит при этом остаётся дефолтом сайта).
+        // Прочие сайты — прежнее выражение байт-в-байт.
+        modelName: ((ctxSnapSite === 'google_search' || ctxSnapSite === 'qwen')
+          && typeof lastSnapshotModelName === 'string' && lastSnapshotModelName)
+          ? lastSnapshotModelName
+          : (ModelConfig.getModel(modelId)?.name || modelId),
         src: aiCmMetricValueSrc as AiCmContextSnapshot['src'],
         tokens: maxTokenCount,
         percent: percentage,

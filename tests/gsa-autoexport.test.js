@@ -439,9 +439,9 @@ describe('F7: заполнение модели снапшота GSA (реаль
 
   test('заполнение — одна точка: дубля модели в doAutoExportDownload нет', () => {
     const body = fnDecl(CONTENT, 'resolveCurrentModel');
-    expect(body).toContain("currentAdapter.siteName === 'google_search'");
-    expect(body).toContain('lastSnapshotModelName = ModelConfig.getModel(modelId)?.name || modelId;');
-    // присваиваний ровно три: сброс при смене чата (v47), slug-ветка (v47), GSA-фолбэк (v1.18 F7)
+    expect(body).toContain("currentAdapter && (site === 'google_search' || (site === 'qwen' && unknownModel))");
+    expect(body).toContain("lastSnapshotModelName = (site === 'qwen')");
+    // присваиваний ровно три: сброс при смене чата (v47), slug-ветка (v47), GSA/слаг-фолбэк (v1.18 F7 + BUG-02)
     expect((CONTENT.match(/^\s*lastSnapshotModelName = /gm) || []).length).toBe(3);
     expect(fnDecl(CONTENT, 'doAutoExportDownload')).not.toContain('lastSnapshotModelName = ModelConfig');
   });
