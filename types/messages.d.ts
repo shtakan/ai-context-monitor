@@ -161,3 +161,134 @@ export type AiCmSwResponseFor<T extends AiCmSwRequest> = AiCmSwResponseMap[T['ty
 export type AiCmSwAskRequest = Extract<AiCmSwRequest, {
   type: 'aiCm-get-byok-key' | 'aiCm-latch-get' | 'aiCm-latch-set' | 'aiCm-latch-remove' | 'aiCm-latch-get-all';
 }>;
+
+// ===== C2: content ↔ popup/options и broadcast content → SW =====
+
+/**
+ * Сообщение, разбираемое onMessage-листенером content-скрипта (core/content.ts:3514).
+ * Первые три канала payload не несут; GET_STATS — ветка чтения снимка метрики,
+ * отправителя в репозитории у неё нет (ветка остаётся ради совместимости).
+ */
+export type AiCmContentRequest =
+  | { type: 'aiCmDiag' }
+  | { type: 'aiCmExportCurrent' }
+  | { type: 'aiCm-byok-key-changed' }
+  | { type: 'GET_STATS' };
+
+/** Метаданные aiCmHistory для дампа диагностики (core/content.ts:3692). */
+export interface AiCmDiagHistoryMeta {
+  host: string;
+  model: string;
+  tokens: number;
+  percent: number;
+  count: number;
+}
+
+/**
+ * Дамп диагностики, который content собирает в ответ на aiCmDiag
+ * (core/content.ts:3712). Поля — ровно то, что строит обработчик.
+ */
+export interface AiCmDiagPayload {
+  /** ISO-время сборки дампа. */
+  generatedAt: string;
+  /** URL страницы в момент дампа. */
+  url: string;
+  /** Копия ring-буфера логов этого мира (types/debug.d.ts: __aiCmGetLogRing). */
+  logsContent: string[];
+  /** Метаданные aiCmHistory; null — для хоста записи нет. */
+  aiCmHistoryMeta: AiCmDiagHistoryMeta | null;
+  /** Превью истории: '<role>|<первые 60 символов>' (core/content.ts:3709). */
+  historyPreviews: string[];
+  /** Ответ MAIN-перехватчика ('ai-cm-diag-response') либо null. */
+  intercept: unknown;
+}
+
+/** Ответ aiCmDiag: конверт ok+diag (core/content.ts:3720). */
+export interface AiCmDiagResponse {
+  ok: true;
+  diag: AiCmDiagPayload;
+}
+
+/**
+ * Ручной снимок текущего разговора — тело ответа content на aiCmExportCurrent
+ * (core/content.ts:3557). Это НЕ проводной конверт: content отвечает
+ * { data: manualSnapshot } (core/content.ts:3625), см. AiCmExportCurrentResponse.
+ */
+export interface AiCmManualSnapshot {
+  host: string;
+  convId: string;
+  site: string;
+  model: string;
+  tokens: number;
+  limit: number;
+  percent: number;
+  /** Источник числа (dom|net|max|server|hold), если он известен. */
+  src?: string;
+  updatedAt: number;
+  isLowConfidenceBase: boolean;
+  sourceTier?: string;
+  partial?: boolean;
+  partialReason?: 'incomplete' | 'stale' | 'shrank';
+  /** Режим проекции файла (S5.1); появляется только после проекции. */
+  bodyProjection?: string;
+  /**
+   * Сообщения файла. Фактически это AiCmExportMessage[] (role/text — строки,
+   * role и text обязательны), поэтому объявленная здесь форма — надмножество.
+   */
+  messages: Array<{ role?: string; text?: string }>;
+}
+
+/** Проводной ответ aiCmExportCurrent: снимок в конверте data (core/content.ts:3625). */
+export interface AiCmExportCurrentResponse {
+  data: AiCmManualSnapshot;
+}
+
+/** Данные панели статистики (core/content.ts:3658); null-поля — снимка ещё нет. */
+export interface AiCmContentStatsPayload {
+  site: string;
+  modelName: string;
+  tokenCount: number | null;
+  contextLimit: number | null;
+  percentage: number | null;
+  messageCount: number;
+}
+
+/** Ответ GET_STATS: data=null — адаптер не готов (core/content.ts:3671). */
+export interface AiCmContentStatsResponse {
+  data: AiCmContentStatsPayload | null;
+}
+
+/** Ответ по типу запроса; void — канал без ответа (aiCm-byok-key-changed). */
+export interface AiCmContentResponseMap {
+  aiCmDiag: AiCmDiagResponse;
+  aiCmExportCurrent: AiCmExportCurrentResponse;
+  'aiCm-byok-key-changed': void;
+  GET_STATS: AiCmContentStatsResponse;
+}
+
+/** Любой ответ content-скрипта (без void-каналов). */
+export type AiCmContentResponse =
+  | AiCmDiagResponse
+  | AiCmExportCurrentResponse
+  | AiCmContentStatsResponse;
+
+/** Ответ, соответствующий конкретному запросу T (ключ — литерал type). */
+export type AiCmContentResponseFor<T extends AiCmContentRequest> = AiCmContentResponseMap[T['type']];
+
+/**
+ * Broadcast content → SW: снимок метрики для бейджа (core/content.ts:3314).
+ * SW сообщение молча игнорирует — здесь описан только отправитель.
+ */
+export interface AiCmBroadcast {
+  type: 'CONTEXT_UPDATE';
+  data: {
+    site: string;
+    model: string;
+    modelName: string;
+    tokenCount: number;
+    contextLimit: number;
+    percentage: number;
+    messageCount: number;
+    timestamp: number;
+  };
+}

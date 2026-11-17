@@ -3322,7 +3322,7 @@ function processAndSend(): void {
           messageCount,
           timestamp: Date.now()
         }
-      }).catch(() => { });
+      } as AiCmBroadcast).catch(() => { });
     }
   } catch (error) {
     debugLog('error', 'Ошибка:', error);
@@ -3511,7 +3511,7 @@ function aiCmAutoExportTrustedBaseDiag(trigger: string, cid: string | null, perc
 
 // ========== СЛУШАТЕЛЬ POPUP ==========
 if (isExtensionValid()) {
-  chrome.runtime.onMessage.addListener((message: { type?: string }, sender: unknown, sendResponse: (response?: unknown) => void) => {
+  chrome.runtime.onMessage.addListener((message: AiCmContentRequest, sender: unknown, sendResponse: (response?: AiCmContentResponse) => void) => {
     if (message.type === 'aiCmDiag') {
       handleAiCmDiag(sendResponse);
       return true;
@@ -3553,7 +3553,7 @@ if (isExtensionValid()) {
         var snapPartMan = (typeof aiCmReadContextSnapshot === 'function')
           ? aiCmReadContextSnapshot((typeof aiCmCanonicalConvId === 'function')
             ? aiCmCanonicalConvId() : curCidExp) : null;
-        var manualSnapshot = /** @type {{host: string, convId: string, site: string, model: string, tokens: number, limit: number, percent: number, src?: string, updatedAt: number, isLowConfidenceBase: boolean, sourceTier?: string, partial?: boolean, partialReason?: 'incomplete' | 'stale' | 'shrank', messages: Array<{role?: string, text?: string}>}} */
+        var manualSnapshot = /** @type {AiCmManualSnapshot} */
           ({
             host: window.location.hostname,
             convId: curCidExp,
@@ -3678,7 +3678,7 @@ if (isExtensionValid()) {
 // ========== ЭКСПОРТ ДИАГНОСТИКИ ==========
 // popup шлёт {type:'aiCmDiag'}. content.js (ISOLATED) дёргает MAIN-перехватчик через
 // window.dispatchEvent('ai-cm-diag-request') и ждёт 'ai-cm-diag-response'.
-function handleAiCmDiag(sendResponse: (response?: unknown) => void): void {
+function handleAiCmDiag(sendResponse: (response?: AiCmDiagResponse) => void): void {
   var intercepted: unknown = null;
   var timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -3709,7 +3709,7 @@ function handleAiCmDiag(sendResponse: (response?: unknown) => void): void {
             historyPreviews.push((msg.role || '?') + '|' + String(msg.text || '').slice(0, 60).replace(/\s+/g, ' '));
           }
         }
-        var diag = {
+        var diag: AiCmDiagPayload = {
           generatedAt: new Date().toISOString(),
           url: window.location.href,
           logsContent: (typeof __aiCmGetLogRing === 'function') ? __aiCmGetLogRing() : [],
@@ -4936,4 +4936,11 @@ type AiCmSwCountTokensRequest = import('../types/messages').AiCmSwCountTokensReq
 type AiCmSwCountTokensResponse = import('../types/messages').AiCmSwCountTokensResponse;
 type AiCmSwThresholdPctRequest = import('../types/messages').AiCmSwThresholdPctRequest;
 type AiCmSwBadgeResetRequest = import('../types/messages').AiCmSwBadgeResetRequest;
+// C2: контракты content ↔ popup/options и broadcast content → SW (types/messages.d.ts).
+type AiCmContentRequest = import('../types/messages').AiCmContentRequest;
+type AiCmContentResponse = import('../types/messages').AiCmContentResponse;
+type AiCmDiagPayload = import('../types/messages').AiCmDiagPayload;
+type AiCmDiagResponse = import('../types/messages').AiCmDiagResponse;
+type AiCmManualSnapshot = import('../types/messages').AiCmManualSnapshot;
+type AiCmBroadcast = import('../types/messages').AiCmBroadcast;
 

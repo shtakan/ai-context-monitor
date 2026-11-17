@@ -1019,7 +1019,7 @@ function getCurrentConvSnapshot(cb) {
       var tab = tabs && tabs[0];
       if (!tab || !tab.id) { cb(null); return; }
       try {
-        chrome.tabs.sendMessage(tab.id, { type: 'aiCmExportCurrent' }, function (resp) {
+        chrome.tabs.sendMessage(tab.id, /** @type {import('../types/messages').AiCmContentRequest} */ ({ type: 'aiCmExportCurrent' }), function (/** @type {import('../types/messages').AiCmExportCurrentResponse | undefined} */ resp) {
           if (chrome.runtime.lastError || !resp || !resp.data) { cb(null); return; }
           cb(resp.data);
         });
@@ -1107,7 +1107,7 @@ exportDiagBtn && exportDiagBtn.addEventListener('click', function () {
       return;
     }
     try {
-      chrome.tabs.sendMessage(tab.id, { type: 'aiCmDiag' }, function (response) {
+      chrome.tabs.sendMessage(tab.id, /** @type {import('../types/messages').AiCmContentRequest} */ ({ type: 'aiCmDiag' }), function (/** @type {import('../types/messages').AiCmDiagResponse | undefined} */ response) {
         var payload;
         if (chrome.runtime.lastError) {
           payload = {

@@ -72,7 +72,7 @@ try {
           try {
             for (var iT = 0; iT < (tabs || []).length; iT++) {
               if (tabs[iT] && tabs[iT].id != null && chrome.tabs && typeof chrome.tabs.sendMessage === 'function') {
-                chrome.tabs.sendMessage(tabs[iT].id, { type: 'aiCm-byok-key-changed' }, function () {
+                chrome.tabs.sendMessage(tabs[iT].id, { type: 'aiCm-byok-key-changed' } as AiCmContentRequest, function () {
                   // Канал к вкладке мог закрыться (навигация/закрытие) — lastError гасим,
                   // иначе Chrome пишет «Unchecked runtime.lastError» в консоль SW.
                   try { void chrome.runtime.lastError; } catch (eLe) { }
@@ -1320,6 +1320,6 @@ interface AiCmHistoryRecord {
   ts?: number;
 }
 
-// C1: контракты границы SW вынесены в types/messages.d.ts (C1). Импорт в хвосте —
+// C1/C2: контракты границ SW и content вынесены в types/messages.d.ts. Импорт в хвосте —
 // чтобы не сдвигать номера строк, запинутые в tests/fixtures/*.json.
-import type { AiCmSwCountTokensResponse, AiCmSwRequest, AiCmSwResponse, AiCmSwSender } from '../types/messages';
+import type { AiCmContentRequest, AiCmSwCountTokensResponse, AiCmSwRequest, AiCmSwResponse, AiCmSwSender } from '../types/messages';

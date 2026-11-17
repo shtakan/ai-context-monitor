@@ -1091,14 +1091,17 @@ async function verify(outputs) {
       continue;
     }
     const text = await fsp.readFile(outfile, 'utf8');
+    // Комментарии не исполняются: JSDoc-типы с import(...) (options.js) иначе
+    // ложно ловятся как dynamic import. Проверяем код без блочных комментариев.
+    const code = text.replace(/\/\*[\s\S]*?\*\//g, '');
     // Content scripts are classic scripts: any import/export is a hard error.
-    if (/^\s*(?:import|export)\b/m.test(text)) {
+    if (/^\s*(?:import|export)\b/m.test(code)) {
       problems.push(`${name}: bundle contains a top-level import/export (must be IIFE)`);
     }
-    if (/\bexport\s*[{(]/.test(text)) {
+    if (/\bexport\s*[{(]/.test(code)) {
       problems.push(`${name}: bundle contains an export list (must be IIFE)`);
     }
-    if (/\bimport\s*\(/.test(text)) {
+    if (/\bimport\s*\(/.test(code)) {
       problems.push(`${name}: bundle contains a dynamic import()`);
     }
     if (SOURCEMAP && !text.includes('sourceMappingURL')) {
