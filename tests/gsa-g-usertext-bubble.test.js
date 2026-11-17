@@ -412,3 +412,46 @@ describe('BUG-G T9: сквозной пин 19-ходового эквивале
   });
 
 });
+
+// BUG-H (приёмка 2.1.4): два контейнера folwr с одним jsuid, но с РАЗНЫМИ вопросами.
+// Раньше mergeTurnsById оставлял только более длинный ответ и терял второй ход вместе
+// с его вопросом: probe финализировал 24 хода в 23 (userLen 7672 → 7569), в экспорте
+// появлялся «ответ без вопроса».
+describe('BUG-H: один jsuid на два разных вопроса — ход и вопрос не теряются', () => {
+  const W = 'Ответ в режиме ИИ, исходный запрос: "';
+  const QAPI = 'API DeepSeek полностью восстановлен';
+  const QSPAM = 'Добрый день. Обнаружил, что все уведомления от deepseek попали в папку "спам".';
+  const AAPI = W + QAPI + '" \u2705 ' + 'API снова отвечает. '.repeat(80);
+  const ASPAM_ECHO = W + QSPAM + '" ';
+  const base = [
+    turn('t1', 'Первый вопрос', 'Первый ответ'),
+    turn('dup', null, AAPI),
+    turn('dup', QSPAM, ASPAM_ECHO),
+  ];
+
+  test('оба хода сохранены, вопрос не потерян, A-only остаётся без userText', () => {
+    const merged = Parser.mergeTurnsById(base, []);
+    expect(merged.length).toBe(3);
+    expect(merged[1].userText).toBeNull();
+    expect(merged[1].assistantText).toBe(AAPI);
+    expect(merged[2].userText).toBe(QSPAM);
+    const userLen = merged.reduce((s, t) => s + (t.userText ? t.userText.length : 0), 0);
+    expect(userLen).toBe('Первый вопрос'.length + QSPAM.length);
+  });
+
+  test('тот же вопрос и более длинный ответ по-прежнему схлопываются', () => {
+    const merged = Parser.mergeTurnsById(
+      [turn('x', 'Вопрос', 'Коротко')],
+      [turn('x', 'Вопрос', 'Гораздо более длинный ответ')]
+    );
+    expect(merged.length).toBe(1);
+    expect(merged[0].assistantText).toBe('Гораздо более длинный ответ');
+  });
+
+  test('повторный merge идемпотентен', () => {
+    const once = Parser.mergeTurnsById(base, []);
+    const twice = Parser.mergeTurnsById(once, []);
+    expect(twice.length).toBe(once.length);
+    expect(twice.map((t) => t.userText)).toEqual(once.map((t) => t.userText));
+  });
+});

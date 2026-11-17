@@ -1503,6 +1503,20 @@ export function mergeTurnsById(baseTurns: FolwrTurn[], extraTurns: FolwrTurn[]):
     // (прерванный стрим / маркеры цитат): это ОДИН ход, побеждает полное тело.
     var at = hasId ? byId[id] : (hasKey ? byKey[key] : findPrefixCompatibleIndex(out, t));
     if (at !== -1) {
+      // BUG-H (2.1.4): один jsuid на ДВА РАЗНЫХ ВОПРОСА — регенерация ответа переиспользовала id
+      // контейнера, но это не дубль одного хода (вопросы разные), а два хода: схлопывание теряло
+      // вопрос и userLen (живой дефект: 24 хода → 23, userLen 7672 → 7569, «ответ без вопроса»).
+      // Разные вопросы И несовместимые тела ⇒ второй ход дописывается и индексируется по своему
+      // ключу (повторное слияние находит его там и не дублирует). Рост/правка ответа того же
+      // вопроса по-прежнему схлопывается до богатейшей формы.
+      var otherParts = turnIdentityParts(out[at]);
+      var parts = turnIdentityParts(t);
+      if (hasId && !hasKey && parts.u && otherParts.u && parts.u !== otherParts.u &&
+        !bodiesPrefixCompatible(otherParts.a, parts.a)) {
+        byKey[key] = out.length;
+        out.push(turnRecord(t, id));
+        return;
+      }
       var richer = (hasId || hasKey) ? isBetterTurn(t, out[at]) : isFullerTurn(t, out[at]);
       if (richer) {
         out[at] = turnRecord(t, out[at].id);
