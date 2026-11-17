@@ -1,11 +1,11 @@
 # AI Context Monitor
 **English** | [Русский](README.md)
 
-A Chrome and Microsoft Edge (Chromium) extension (Manifest V3) that shows in real time how full the AI context window of your conversation is, across six platforms. When a chat grows too long, models start losing details — AI Context Monitor warns you before that happens and can save the whole conversation automatically.
+A Chrome, Microsoft Edge (Chromium) and Firefox extension (Manifest V3) that shows in real time how full the AI context window of your conversation is, across eight platforms. When a chat grows too long, models start losing details — AI Context Monitor warns you before that happens and can save the whole conversation automatically.
 
 ## Manual install
 
-The extension is distributed outside any store (publication in Edge Add-ons is postponed). The main channel is GitHub Releases.
+Chrome and Edge install from GitHub Releases (steps below); Firefox installs from [Mozilla Add-ons](https://addons.mozilla.org/firefox/addon/ai-context-monitor/). Publication in Edge Add-ons is postponed.
 
 1. Download the `ai-context-monitor-v2.1.4.zip` archive from the release page: <https://github.com/shtakan/ai-context-monitor/releases/tag/v2.1.4>
 2. Unpack the archive into any folder.
@@ -14,7 +14,7 @@ The extension is distributed outside any store (publication in Edge Add-ons is p
 
 > **Update**: download the new ZIP and repeat steps 2–4, or click "Reload" on the extension tile on the extensions page.
 
-The extension is fully open source ([source code](../../tree/main)): no store required — you can always build and install it manually from the repository.
+The extension is fully open source ([source code](../../tree/main)): no store required for Chrome/Edge — you can always build and install it manually from the repository.
 
 ## Features
 
@@ -27,6 +27,8 @@ The extension is fully open source ([source code](../../tree/main)): no store re
 - **Optional exact token counting** via the official Gemini `countTokens` API with your own key (BYOK).
 
 ## Install
+
+> **Firefox:** [AI Context Monitor on Mozilla Add-ons](https://addons.mozilla.org/firefox/addon/ai-context-monitor/) — click **"Add to Firefox"**. The steps below are for Chrome/Edge.
 
 1. Download the ZIP from the [Releases](../../releases) page.
 2. Unpack it into any folder.
@@ -46,6 +48,12 @@ Install as an unpacked extension:
 4. Click **Load unpacked** and select the unpacked folder.
 
 Publication in the [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons) store is planned; until then the unpacked install above is the supported Edge path.
+
+## Firefox
+
+[AI Context Monitor on Mozilla Add-ons](https://addons.mozilla.org/firefox/addon/ai-context-monitor/) — click **"Add to Firefox"**. The extension uses Manifest V3 (Firefox 140+); the badge, settings and export work the same as in Chrome/Edge.
+
+For a manual install: `about:debugging` → **This Firefox** → **Load Temporary Add-on** → select `manifest.json` from the unpacked `dist-firefox/`.
 
 ## Quick start
 
