@@ -1,4 +1,4 @@
-# Build instructions — AI Context Monitor 2.1.3
+# Build instructions — AI Context Monitor 2.1.4
 
 Один и тот же исходник собирается в две цели:
 
@@ -83,9 +83,9 @@ $files = git ls-files | Where-Object {
 }
 # список путей пишется с LF: CRLF ломает имена файлов в bsdtar -T
 [System.IO.File]::WriteAllText("$PWD\source-files.txt", (($files -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
-tar -a -c -f source-code-2.1.3.zip -T source-files.txt
+tar -a -c -f source-code-2.1.4.zip -T source-files.txt
 Remove-Item source-files.txt
-tar -tf source-code-2.1.3.zip | Select-String -Pattern 'videos|PROJECT_HANDOFF|node_modules|\.zip$'
+tar -tf source-code-2.1.4.zip | Select-String -Pattern 'videos|PROJECT_HANDOFF|node_modules|\.zip$'
 ```
 
 `parser/` и `docs/index.html` + `docs/screenshots/` обязательны: `build.mjs` копирует `parser/*.js` как runtime-registered файлы и читает обе docs-цели для `dist/docs/`; без них сборка падает на `verify`.
@@ -100,7 +100,7 @@ tar -tf source-code-2.1.3.zip | Select-String -Pattern 'videos|PROJECT_HANDOFF|n
 ## Проверки (опционально, но так проверялся пакет)
 
 ```bash
-npx jest                 # 264 suites / 4313 passed / 7 skipped
+npx jest                 # 265 suites / 4355 passed / 7 skipped
 npx tsc --noEmit         # exit 0 (JavaScript под checkJs)
 ```
 

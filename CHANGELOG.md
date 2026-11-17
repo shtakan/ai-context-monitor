@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.1.4] - 2026-11-17
+
+### Fixed
+- **GSA: полнота пассивного снимка (BUG-M, BUG-P; `7bfc0a5`, `da25743`, `0d4dc1a`)** — вердикт больше не завязан на тип запроса (`isFull`) и на сессионный `mstk`/`AUtEx`: полноту доказывает тишина потока (`SETTLE_MS=1000` на тред, повторный эмит тем же `emitDetail`), а покрытие проверяется по вопросам живого DOM. Дубль вопроса после неудачной генерации (stub `Что-то пошло не так…` + полный ответ, разные `jsuid`) больше не даёт ложный `passive-incomplete:net-lt-dom`. Живая приёмка `rerun5`: SPA-first `8bTpaveu` — 46 (23u/23a), 13 593 (10.6 %), без `[LOW CONFIDENCE]_`, автоэкспорт сработал; `net-lt-dom`/`history-cursor`/`probe 400` — 0.
+- **GSA: порядок folif-тела (BUG-O; `da25743`)** — безусловный `turns.reverse()` заменён на `orderTurnsByDom`: серверное new→old реверсится, клиентский кэш old→new сохраняется, 1 ход — no-op, `no-evidence` — прежнее поведение. SPA-переход `dE_8au` — old→new.
+- **GSA: дубли и потерянные вопросы при DOM-доборе (BUG-N, BUG-H; `74e9de5`)** — DOM-добор только fill-only; `dedupeTurns` переносит `userText`; вопрос A-only хода берётся из обёртки-эха (`canonicalizeTurnForThread` + `wrapperQuestion`). `8bTpaveu` — 46 (23u/23a), 0 дублей, вопрос «API DeepSeek полностью восстановлен» как user ровно 1.
+
+### Notes
+- Счётчики сьюта: 265 suites / 4355 passed / 7 skipped / 0 failed.
+- `dist/content.js` (prod): 314 637 B, sha256 `2b86f83edd96aa4589137642ffdd2682745727a362e61a4f3ce62983de8876fd`.
+
 ## [2.1.3] - 2026-11-17
 
 ### Fixed
