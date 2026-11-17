@@ -382,30 +382,31 @@ function tailRoles(messages, n) {
 }
 
 describe('BUG-G T9: сквозной пин 19-ходового эквивалента треда (реальные байты)', () => {
-  test('A-only 19-й ход: вопрос из DOM-пузыря, 37 сообщений, хвост …U,A, id и байты сети', () => {
+  test('A-only 19-й ход: вопрос из DOM-пузыря, 38 сообщений, хвост …U,A, id и байты сети', () => {
     const h = interceptCtx({ document: aOnlyDoc(Q19) });
     h.api.mergeTurns(BASE18, true);
     expect(h.api.lastFullTurns.length).toBe(18);
-    expect(h.api.lastFullMessages.length).toBe(35);
+    expect(h.api.lastFullMessages.length).toBe(36);
 
     h.api.mergeTurns(BASE19, false);              // 19-й ход пришёл БЕЗ вопроса
 
     const st = msgStats(h.api.lastFullMessages);
     expect(h.api.lastFullTurns.length).toBe(19);
-    expect(st.count).toBe(37);
-    expect(st.userLen).toBe(7374);                 // 7322 + q19 (52)
+    expect(st.count).toBe(38);
+    expect(st.userLen).toBe(7409);                 // 7357 + q19 (52)
     expect(st.asstLen).toBe(35875);
-    expect(h.api.lastFullSnapshot.text.length).toBe(43285);
-    expect(h.api.lastFullSnapshot.count).toBe(37);
+    expect(h.api.lastFullSnapshot.text.length).toBe(43321);
+    expect(h.api.lastFullSnapshot.count).toBe(38);
     expect(tailRoles(h.api.lastFullMessages, 2)).toBe('U,A');
 
     expect(h.api.lastFullTurns[18].id).toBe('net19');       // id хода — сетевой
     expect(h.api.lastFullTurns[18].userText).toBe(Q19);     // вопрос — из пузыря
     expect(h.api.lastFullTurns[18].assistantText).toBe(ECHO); // байты ответа не сдвинуты
-    // A17-эхо (единственный A-only ход базы) свой ключ имеет — чужой вопрос к нему не липнет.
+    // A17-эхо (единственный A-only ход базы) замыкается СВОИМ вопросом из обёртки (BUG-H):
+    // чужой вопрос к нему не липнет, байты ответа прежние.
     const a17 = BASE18.findIndex((t) => !t.userText);
     expect(a17).toBeGreaterThan(-1);
-    expect(h.api.lastFullTurns[a17].userText).toBeNull();
+    expect(h.api.lastFullTurns[a17].userText).toBe(Parser.canonicalizeTurnForThread(BASE18[a17]).userText);
     expect(h.api.lastFullTurns[a17].assistantText).toBe(BASE18[a17].assistantText);
     expect(h.api.lastFullSnapshot.text).not.toContain('Что-то пошло не так');
     expect(h.api.lastFullTurns[0].assistantText).toBe(BASE18[0].assistantText);

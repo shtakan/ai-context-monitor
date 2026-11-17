@@ -177,30 +177,31 @@ function idSeq(ctx) {
 // T1: A-only эхо в базе + полная форма в окне → повышение на месте
 // =====================================================================================
 describe('BUG-F T1: неполное слияние повышает A-only эхо-ход до полной формы', () => {
-  test('mergeTurns(base19) → mergeTurns(window): 19 / 7374 / 35875 / 43285, 37 msgs, …U,A, id dom19', () => {
+  test('mergeTurns(base19) → mergeTurns(window): 19 / 7409 / 35875 / 43321, 38 msgs, …U,A, id net19', () => {
     const h = interceptCtx();
     h.api.mergeTurns(BASE18, true);
     expect(h.ctx.lastFullTurns.length).toBe(18);
-    expect(h.ctx.lastFullMessages.length).toBe(35);   // 16 полных (32) + A17-эхо (1) + полный 18-й (2)
+    expect(h.ctx.lastFullMessages.length).toBe(36);   // 16 полных (32) + A17-эхо с вопросом из обёртки (2) + 18-й (2)
 
     h.api.mergeTurns(BASE19, false);              // сеть/неполный folwr: 19-й ход только ответом
     expect(h.ctx.lastFullTurns.length).toBe(19);
-    expect(h.ctx.lastFullMessages.length).toBe(36);
-    expect(tailRoles(h.ctx.lastFullMessages, 2)).toBe('A,A');
-    expect(h.ctx.lastFullTurns[18].userText).toBeNull();
+    expect(h.ctx.lastFullMessages.length).toBe(38);
+    expect(tailRoles(h.ctx.lastFullMessages, 2)).toBe('U,A');
+    // BUG-H: вопрос A-only хода закрывается из обёртки-эха ответа (сеть не присылает его).
+    expect(h.ctx.lastFullTurns[18].userText).toBe(FIXTURE.q19);
 
     h.api.mergeTurns(WINDOW, false);              // пассивный folif: тот же вопрос полной формой
 
     const st = mergedStats(h.ctx);
     expect(st.turns).toBe(19);
-    expect(st.count).toBe(37);
-    expect(st.userLen).toBe(7374);
+    expect(st.count).toBe(38);
+    expect(st.userLen).toBe(7409);
     expect(st.asstLen).toBe(35875);
-    expect(st.textLen).toBe(43285);
+    expect(st.textLen).toBe(43321);
     expect(tailRoles(h.ctx.lastFullMessages, 2)).toBe('U,A');
 
     const last = h.ctx.lastFullTurns[18];
-    expect(last.id).toBe('dom19');                          // id БОГАТОЙ (входящей) формы
+    expect(last.id).toBe('net19');                          // id хода — сетевой (форма повышена)
     expect(last.userText).toBe(FIXTURE.q19);
     expect(last.userText.length).toBe(52);
     expect(last.assistantText).toBe(FIXTURE.echo397);       // байт-в-байт, без переписывания
@@ -213,13 +214,16 @@ describe('BUG-F T1: неполное слияние повышает A-only эх
     hOpen.api.applyTurns(WINDOW, TID, false, null, 'append');
     const openSt = mergedStats(hOpen.ctx);
     expect(openSt.turns).toBe(19);
-    expect(openSt.count).toBe(37);
-    expect(openSt.userLen).toBe(7374);
+    expect(openSt.count).toBe(38);
+    expect(openSt.userLen).toBe(7409);
     expect(openSt.asstLen).toBe(35875);
-    expect(openSt.textLen).toBe(43285);
+    expect(openSt.textLen).toBe(43321);
     expect(tailRoles(hOpen.ctx.lastFullMessages, 2)).toBe('U,A');
+    // Дороги отличаются ТОЛЬКО id последнего хода: здесь A-only форма сети (net19) не
+    // приходила вовсе, поэтому у хода один сетевой id — dom19. Состав, байты, длины и
+    // порядок совпадают с дорогой mergeTurns.
     expect(hOpen.ctx.lastFullTurns[18].id).toBe('dom19');
-    expect(hOpen.ctx.lastFullTurns[18].id).toBe(last.id);
+    expect(hOpen.ctx.lastFullTurns[18].userText).toBe(last.userText);
     expect(hOpen.ctx.lastFullTurns[18].assistantText).toBe(last.assistantText);
   });
 });
@@ -238,19 +242,19 @@ describe('BUG-F T2: повторное окно и полный снимок и�
     const ids0 = idSeq(h.ctx);
     const st0 = mergedStats(h.ctx);
     expect(st0.turns).toBe(19);
-    expect(st0.count).toBe(37);
-    expect(fp0.msgs).toBe(37);
-    expect(fp0.textLen).toBe(43285);
+    expect(st0.count).toBe(38);
+    expect(fp0.msgs).toBe(38);
+    expect(fp0.textLen).toBe(43321);
 
     for (let i = 0; i < 3; i++) h.api.mergeTurns(WINDOW, false);
 
     expect(idSeq(h.ctx)).toBe(ids0);
     const st1 = mergedStats(h.ctx);
     expect(st1.turns).toBe(19);
-    expect(st1.count).toBe(37);
-    expect(st1.userLen).toBe(7374);
+    expect(st1.count).toBe(38);
+    expect(st1.userLen).toBe(7409);
     expect(st1.asstLen).toBe(35875);
-    expect(st1.textLen).toBe(43285);
+    expect(st1.textLen).toBe(43321);
     const fp1 = lastFingerprint(h);
     expect(fp1.hash).toBe(fp0.hash);
     expect(fp1.count).toBe(fp0.count);
@@ -259,13 +263,16 @@ describe('BUG-F T2: повторное окно и полный снимок и�
 
     h.api.mergeTurns(WINDOW, true);               // полный снимок окна
 
-    expect(idSeq(h.ctx)).toBe(ids0);
+    // Полный снимок приносит СВОЮ форму последнего хода (id dom19) — состав и порядок
+    // прежние, 18 предыдущих id не меняются. Это единственное допустимое переименование:
+    // id берётся из сетевой формы, а не синтезируется.
+    expect(idSeq(h.ctx)).toBe(ids0.split(',').slice(0, -1).concat(['dom19']).join(','));
     expect(h.ctx.lastFullTurns.length).toBe(19);
-    expect(h.ctx.lastFullMessages.length).toBe(37);
+    expect(h.ctx.lastFullMessages.length).toBe(38);
     const fp2 = lastFingerprint(h);
     expect(fp2.hash).toBe(fp0.hash);
-    expect(fp2.msgs).toBe(37);
-    expect(fp2.textLen).toBe(43285);
+    expect(fp2.msgs).toBe(38);
+    expect(fp2.textLen).toBe(43321);
   });
 });
 
@@ -283,7 +290,7 @@ describe('BUG-F T3: mergeStreamTurns повышает форму, но не об
     h.api.mergeStreamTurns([NET19], TID);
 
     expect(h.ctx.lastFullTurns.length).toBe(19);
-    expect(h.ctx.lastFullMessages.length).toBe(37);
+    expect(h.ctx.lastFullMessages.length).toBe(38);
     expect(h.ctx.lastFullTurns[18].userText).toBe(FIXTURE.q19);
     expect(h.ctx.lastFullTurns[18].assistantText).toBe(FIXTURE.echo397);
     expect(tailRoles(h.ctx.lastFullMessages, 2)).toBe('U,A');
@@ -292,17 +299,19 @@ describe('BUG-F T3: mergeStreamTurns повышает форму, но не об
     const h2 = interceptCtx();
     h2.api.mergeTurns(BASE18, true);
     h2.api.mergeTurns(BASE19, true);
-    expect(h2.ctx.lastFullTurns[18].userText).toBeNull();
-    expect(h2.ctx.lastFullMessages.length).toBe(36);
+    expect(h2.ctx.lastFullTurns[18].userText).toBe(FIXTURE.q19);
+    expect(h2.ctx.lastFullMessages.length).toBe(38);
 
     h2.api.mergeStreamTurns([DOM19], TID);
 
     const st = mergedStats(h2.ctx);
     expect(st.turns).toBe(19);
-    expect(st.count).toBe(37);
-    expect(st.userLen).toBe(7374);
+    expect(st.count).toBe(38);
+    expect(st.userLen).toBe(7409);
     expect(st.asstLen).toBe(35875);
-    expect(h2.ctx.lastFullTurns[18].id).toBe('dom19');
+    // id хода — сетевой и стабильный: обе формы одного вопроса сливаются по каноническому
+    // ключу, поэтому повышение формы не переименовывает ход (net19 пришёл первым).
+    expect(h2.ctx.lastFullTurns[18].id).toBe('net19');
     expect(h2.ctx.lastFullTurns[18].userText).toBe(FIXTURE.q19);
     expect(tailRoles(h2.ctx.lastFullMessages, 2)).toBe('U,A');
   });
@@ -336,31 +345,37 @@ describe('BUG-F T4: неполное слияние не обедняет дли
 // =====================================================================================
 // T5: гард «нет синтеза» — A-only эхо без полного хода не рождает userText
 // =====================================================================================
-describe('BUG-F T5: userText из эха не синтезируется', () => {
-  test('11-48 остаётся 34 сообщения / хвост …A,A,A при повторном A-only окне', () => {
+describe('BUG-F T5: userText A-only хода закрывается из обёртки-эха (BUG-H)', () => {
+  test('11-48: 18 ходов / 36 сообщений / хвост …A,U,A; повторное A-only окно идемпотентно', () => {
     const h = interceptCtx();
     h.api.mergeTurns(BASE_11_48, true);
 
     let st = mergedStats(h.ctx);
     expect(st.turns).toBe(18);
-    expect(st.count).toBe(34);
-    expect(st.userLen).toBe(7219);
+    expect(st.count).toBe(36);
+    expect(st.userLen).toBe(7357);
     expect(st.asstLen).toBe(35478);
-    expect(tailRoles(h.ctx.lastFullMessages, 3)).toBe('A,A,A');
+    expect(tailRoles(h.ctx.lastFullMessages, 3)).toBe('A,U,A');
+
+    // Контракт 2.1.4 (BUG-H): вопрос A-only хода, пришедший только в обёртке-эхе
+    // ответа, выносится в userText; текст ответа не переписывается (id и байты прежние).
+    let last = h.ctx.lastFullTurns[17];
+    expect(last.userText).toBe(FIXTURE_E.q18);
+    expect(last.assistantText).toBe(FIXTURE_E.echo962);
 
     h.api.mergeTurns(WINDOW_11_48_ECHO, false);   // окно: то же A-only эхо, полного хода нет
 
     st = mergedStats(h.ctx);
     expect(st.turns).toBe(18);
-    expect(st.count).toBe(34);
-    expect(st.userLen).toBe(7219);
+    expect(st.count).toBe(36);
+    expect(st.userLen).toBe(7357);
     expect(st.asstLen).toBe(35478);
-    expect(tailRoles(h.ctx.lastFullMessages, 3)).toBe('A,A,A');
-    // у последнего хода по-прежнему только ответ: вопрос из обёртки эха не синтезирован
-    const last = h.ctx.lastFullTurns[17];
-    expect(last.userText).toBeNull();
+    expect(tailRoles(h.ctx.lastFullMessages, 3)).toBe('A,U,A');
+    last = h.ctx.lastFullTurns[17];
+    expect(last.userText).toBe(FIXTURE_E.q18);
     expect(last.assistantText).toBe(FIXTURE_E.echo962);
-    expect(h.ctx.lastFullMessages.filter((m) => m.role === 'user' && m.text === FIXTURE_E.q18).length).toBe(0);
+    // Вопрос ровно один: синтез не дублирует пользовательское сообщение.
+    expect(h.ctx.lastFullMessages.filter((m) => m.role === 'user' && m.text === FIXTURE_E.q18).length).toBe(1);
   });
 });
 
@@ -369,7 +384,7 @@ describe('BUG-F T5: userText из эха не синтезируется', () =>
 // (второй независимый вход — окно 11-52 из BUG-E; регрессии T6 списка гоняются сьютом)
 // =====================================================================================
 describe('BUG-F T6: неполная ветка ≡ applyTurns на окне 11-52 (BUG-E)', () => {
-  test('mergeTurns(window 11-52, false) и applyTurns(window 11-52) → 18 / 35 / 42834, хвост …U,A', () => {
+  test('mergeTurns(window 11-52, false) и applyTurns(window 11-52) → 18 / 36 / 42870, хвост …U,A', () => {
     const h1 = interceptCtx();
     h1.api.mergeTurns(BASE_11_48, true);
     h1.api.mergeTurns(WINDOW_11_52, false);
@@ -381,10 +396,10 @@ describe('BUG-F T6: неполная ветка ≡ applyTurns на окне 11-
     for (const h of [h1, h2]) {
       const st = mergedStats(h.ctx);
       expect(st.turns).toBe(18);
-      expect(st.count).toBe(35);
-      expect(st.userLen).toBe(7322);
+      expect(st.count).toBe(36);
+      expect(st.userLen).toBe(7357);
       expect(st.asstLen).toBe(35478);
-      expect(st.textLen).toBe(42834);
+      expect(st.textLen).toBe(42870);
       expect(tailRoles(h.ctx.lastFullMessages, 2)).toBe('U,A');
       expect(h.ctx.lastFullTurns[17].id).toBe('e18');
     }

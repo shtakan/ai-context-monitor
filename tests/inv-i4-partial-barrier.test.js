@@ -394,6 +394,36 @@ describe('S2.3 inv-i4: барьер partial (ADR-001)', function () {
     expect(lower.partialReason).toBe('incomplete');
   });
 
+  test('(e2) сигнатура коммита: missing-user-text — значимая причина, не нормализуется', function () {
+    // BUG-H: причина «ход без вопроса» проходит коммит как есть (не сводится к 'incomplete'),
+    // иначе файл истории теряет честную причину неполноты.
+    const api = makeSnapshotApi();
+    api.set(snapshot({ partial: true, partialReason: 'missing-user-text' }));
+    const prev = api.read(CONV_ID);
+    const next = api.commit(prev, Object.assign({}, prev, { tokens: 3000 }));
+    expect(next).not.toBe(prev);
+    expect(next.partial).toBe(true);
+    expect(next.partialReason).toBe('missing-user-text');
+
+    // окно сбора, bodyHash тот же → причина сохраняется, а не подменяется 'incomplete'
+    const held = makeSnapshotApi();
+    held.set(snapshot({ partial: true, partialReason: 'missing-user-text' }));
+    const hp = held.read(CONV_ID);
+    held.pendingStart('qwen');
+    const kept = held.commit(hp, Object.assign({}, hp, { tokens: 9999 }));
+    expect(kept.stale).toBe(false);
+    expect(kept.partialReason).toBe('missing-user-text');
+    // смена тела в окне сбора по-прежнему даёт 'stale': причина смены тела старше
+    const staled = held.commit(hp, Object.assign({}, hp, { bodyHash: 'bb:2' }));
+    expect(staled.partialReason).toBe('stale');
+    held.pendingEnd('qwen');
+
+    // сборщики файла знают значение: метка видна и в MD, и в JSON
+    const h = { partial: true, partialReason: 'missing-user-text' };
+    expect(Builders.buildMdFromHistory(h, 'Qwen3.8-Max')).toContain('metric-partial-reason: missing-user-text');
+    expect(JSON.parse(Builders.buildJsonFromHistory(h, 'Qwen3.8-Max')).partialReason).toBe('missing-user-text');
+  });
+
   // --- S2.3 (I4): ПРОВОДКА partial/partialReason во ВСЕ писатели истории -----------------
   // Сборщики/барьер проверены выше; здесь — что каждый писатель ДОНОСИТ метки из единого
   // снимка (и не добавляет ключей, когда снимка нет или partial !== true).

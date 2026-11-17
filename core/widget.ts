@@ -229,6 +229,7 @@ function resetConversationState(): void {
   // v1.9 (canonical): источник базы (dom|net) тоже принадлежит текущему разговору.
   aiCmBaseSource = '';
   baseComplete = false;
+  baseCompleteReason = '';
   // O-43: смена треда — ЕДИНСТВЕННЫЙ сброс монотонного латча сетевой полноты GSA
   // ('site|threadId' → 1, core/state.js). Внутри одного разговора латч не снимается ничем
   // (регрессия baseComplete от поздних эмитов с historyComplete=0 его не касается);

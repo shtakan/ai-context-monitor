@@ -168,7 +168,7 @@ describe('C2: types/messages.d.ts — контракты content и broadcast', 
   it('AiCmManualSnapshot: поля снимка и надмножество messages', () => {
     expect(MESSAGES).toContain('export interface AiCmManualSnapshot {');
     expect(MESSAGES).toContain('isLowConfidenceBase: boolean;');
-    expect(MESSAGES).toContain("partialReason?: 'incomplete' | 'stale' | 'shrank';");
+    expect(MESSAGES).toContain("partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text';");
     expect(MESSAGES).toContain('bodyProjection?: string;');
     expect(MESSAGES).toContain('messages: Array<{ role?: string; text?: string }>;');
     // конверт проводного ответа: content отвечает { data: manualSnapshot }, а не снимком

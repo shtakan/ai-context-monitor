@@ -174,23 +174,23 @@ function exportDedupe(ctx) {
 // =====================================================================================
 // T1: 11-52 после SPA — «рваный» хвост склеивается, ответ не переписан
 // =====================================================================================
-describe('BUG-E T1: SPA-возврат — 18 ходов / 35 сообщений, эхо 962 один раз', () => {
+describe('BUG-E T1: SPA-возврат — 18 ходов / 36 сообщений, эхо 962 один раз', () => {
   test('mergeTurns(11-48, true) → mergeTurns(11-52 окно, false): хвост …U,A, байты и ключи сохранены', () => {
     const h = interceptCtx();
     h.api.mergeTurns(BASE_11_48, true);
     expect(h.ctx.lastFullTurns.length).toBe(18);
-    expect(h.ctx.lastFullMessages.length).toBe(34);
-    expect(tailRoles(h.ctx.lastFullMessages, 3)).toBe('A,A,A');
+    expect(h.ctx.lastFullMessages.length).toBe(36);
+    expect(tailRoles(h.ctx.lastFullMessages, 3)).toBe('A,U,A');
     expect(msgStats(h.ctx.lastFullMessages).echo).toBe(1);
 
     h.api.mergeTurns(WINDOW_11_52, false);
 
     const st = mergedStats(h.ctx);
     expect(st.turns).toBe(18);
-    expect(st.count).toBe(35);
-    expect(st.userLen).toBe(7322);
+    expect(st.count).toBe(36);
+    expect(st.userLen).toBe(7357);
     expect(st.asstLen).toBe(35478);
-    expect(st.textLen).toBe(42834);
+    expect(st.textLen).toBe(42870);
     expect(tailRoles(h.ctx.lastFullMessages, 2)).toBe('U,A');
     expect(st.echo).toBe(1);
 
@@ -206,7 +206,7 @@ describe('BUG-E T1: SPA-возврат — 18 ходов / 35 сообщений
     // export-dedupe (E-2: prepareExportMessages) больше не вырезает дубль эха.
     const res = exportDedupe(h.ctx);
     expect(res.removed).toBe(0);
-    expect(res.messages.length).toBe(35);
+    expect(res.messages.length).toBe(36);
   });
 });
 
@@ -220,12 +220,12 @@ describe('BUG-E T2: повторный SPA-возврат идемпотенте
     h.api.mergeTurns(WINDOW_11_52, false);
     const fp = fingerprintOf(h.ctx);
     expect(mergedStats(h.ctx).turns).toBe(18);
-    expect(mergedStats(h.ctx).count).toBe(35);
+    expect(mergedStats(h.ctx).count).toBe(36);
 
     h.api.mergeTurns(WINDOW_11_52, false);
     expect(fingerprintOf(h.ctx)).toBe(fp);
     expect(mergedStats(h.ctx).turns).toBe(18);
-    expect(mergedStats(h.ctx).count).toBe(35);
+    expect(mergedStats(h.ctx).count).toBe(36);
     expect(exportDedupe(h.ctx).removed).toBe(0);
 
     // Полный снимок того же окна (F5/повторный folif) — та же база, тот же отпечаток.
@@ -248,15 +248,15 @@ describe('BUG-E T3: Q-only в хвосте + пришедший эхо-отве�
     const h = interceptCtx();
     h.api.mergeTurns(base, true);
     expect(h.ctx.lastFullTurns.length).toBe(18);
-    expect(h.ctx.lastFullMessages.length).toBe(34);
+    expect(h.ctx.lastFullMessages.length).toBe(35);
 
     h.api.mergeTurns(win, false);
     const st = mergedStats(h.ctx);
     expect(st.turns).toBe(18);
-    expect(st.count).toBe(35);
-    expect(st.userLen).toBe(7322);
+    expect(st.count).toBe(36);
+    expect(st.userLen).toBe(7357);
     expect(st.asstLen).toBe(35478);
-    expect(st.textLen).toBe(42834);
+    expect(st.textLen).toBe(42870);
     expect(tailRoles(h.ctx.lastFullMessages, 2)).toBe('U,A');
 
     const last = h.ctx.lastFullTurns[17];
@@ -305,21 +305,21 @@ describe('BUG-E T5: инвариант 11-48 и пути applyTurns/absorbForeig
     h.api.mergeTurns(BASE_11_48, true);
     const base = mergedStats(h.ctx);
     expect(base.turns).toBe(18);
-    expect(base.count).toBe(34);
-    expect(base.userLen).toBe(7219);
+    expect(base.count).toBe(36);
+    expect(base.userLen).toBe(7357);
     expect(base.asstLen).toBe(35478);
-    expect(base.textLen).toBe(42730);
-    expect(tailRoles(h.ctx.lastFullMessages, 3)).toBe('A,A,A');
+    expect(base.textLen).toBe(42870);
+    expect(tailRoles(h.ctx.lastFullMessages, 3)).toBe('A,U,A');
     expect(h.ctx.lastFullTurns[17].assistantText).toBe(FIXTURE.echo962);
     expect(h.ctx.lastFullTurns[16].assistantText).toBe(FIXTURE.a17);
 
     // Повторный SPA-возврат не добавляет ни хода, ни сообщения.
     h.api.mergeTurns(WINDOW_11_52, false);
     expect(mergedStats(h.ctx).turns).toBe(18);
-    expect(mergedStats(h.ctx).count).toBe(35);
+    expect(mergedStats(h.ctx).count).toBe(36);
     h.api.mergeTurns(WINDOW_11_52, false);
     expect(mergedStats(h.ctx).turns).toBe(18);
-    expect(mergedStats(h.ctx).count).toBe(35);
+    expect(mergedStats(h.ctx).count).toBe(36);
 
     // applyTurns (снимок-окно, направление 'append'): dedupeTurnsForCache ПОСЛЕ union.
     const hApply = interceptCtx();
@@ -327,8 +327,8 @@ describe('BUG-E T5: инвариант 11-48 и пути applyTurns/absorbForeig
     hApply.api.applyTurns(WINDOW_11_52, TID, false, 'body', 'append');
     const stApply = mergedStats(hApply.ctx);
     expect(stApply.turns).toBe(18);
-    expect(stApply.count).toBe(35);
-    expect(stApply.textLen).toBe(42834);
+    expect(stApply.count).toBe(36);
+    expect(stApply.textLen).toBe(42870);
     expect(tailRoles(hApply.ctx.lastFullMessages, 2)).toBe('U,A');
 
     // Чужой сегмент: снимок-окно чистится ДО записи в кэш треда.

@@ -965,6 +965,12 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
     }
   }
   baseComplete = newBaseComplete;
+  // BUG-H/M: причина вердикта базы — из снимка перехватчика (passive-complete /
+  // passive-incomplete:* / missing-user-text). Вердикт не пересчитывается: причина нужна
+  // только чтобы честно пометить partialReason в файле истории.
+  baseCompleteReason = (typeof detail.historyCompleteReason === 'string' && detail.historyCompleteReason)
+    ? detail.historyCompleteReason
+    : (newBaseComplete ? 'complete' : 'incomplete');
   // v83: снимок сети применён — заказ на снимок закрыт (страховка, если MAIN потерял 'end').
   if (typeof aiCmNetSnapshotPendingEnd === 'function') {
     aiCmNetSnapshotPendingEnd((currentAdapter && currentAdapter.siteName) || '');
@@ -2991,7 +2997,13 @@ function processAndSend(): void {
         aiCmCtxSnapCandidate.bodyHash = body.bodyHash;
         aiCmCtxSnapCandidate.baseComplete = baseComplete === true;
       }
-      if (aiCmCtxSnapPartial) aiCmCtxSnapCandidate.partialReason = 'incomplete';
+      if (aiCmCtxSnapPartial) {
+        // BUG-H: ход без вопроса — явная причина неполноты. Прочие неполные базы
+        // сохраняют прежнюю причину 'incomplete'; partial и гейты не ослабляются.
+        aiCmCtxSnapCandidate.partialReason = (baseCompleteReason === 'missing-user-text')
+          ? 'missing-user-text'
+          : 'incomplete';
+      }
       var aiCmSnapPrevAnomaly = (typeof lastTokensSnapshot !== 'undefined') ? lastTokensSnapshot : null;
       lastTokensSnapshot = aiCmCommitContextSnapshot(lastTokensSnapshot, aiCmCtxSnapCandidate);
       // S4 (D3): падение больше 10 п.п. при ПРИНЯТОМ коммите — не ошибка (число = текущее

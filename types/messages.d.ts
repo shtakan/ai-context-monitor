@@ -228,7 +228,7 @@ export interface AiCmManualSnapshot {
   isLowConfidenceBase: boolean;
   sourceTier?: string;
   partial?: boolean;
-  partialReason?: 'incomplete' | 'stale' | 'shrank';
+  partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text';
   /** Режим проекции файла (S5.1); появляется только после проекции. */
   bodyProjection?: string;
   /**

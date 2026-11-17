@@ -198,14 +198,47 @@ function makeFetch(bodies, url) {
   };
 }
 
+// BUG-M: песочница пассивного вердикта полноты и гейта probe. Отдельная от основной,
+// потому что здесь `probeFolwrCompleteness` НЕ нарезается: тест подменяет её заглушкой
+// из ctx и проверяет, запускается ли probe вообще (folif mstk → нет, AUtEx… → да).
+// Всё остальное — тот же лексический скоуп и состояние, что у основной песочницы.
+const PASSIVE_FNS = [
+  'messagesFromTurns', 'gsaTurnKeyOfLocal', 'gsaTurnKey', 'seedSeenKeys', 'dedupeTurnsForCache',
+  'isRawXssiPayload', 'isUsableTurn', 'hasUsableTurns', 'isGarbageBody', 'buildDetail', 'emitDetail',
+  'cacheSet', 'isForeignThread', 'segmentTurnsOf', 'activateThread', 'absorbForeignSnapshot',
+  'unionTurnsByDirection', 'applyTurns', 'mergeStreamTurns', 'mergeTurns', 'gsaProbeAfterPassiveSnapshot'
+];
+
+const PASSIVE_EXPORTS = [
+  'var Api = {};',
+  PASSIVE_FNS.map(function (n) { return 'Api.' + n + ' = ' + n + ';'; }).join('\n'),
+  STATE_ACCESSORS.map(function (n) {
+    return "Object.defineProperty(Api, '" + n + "', { enumerable: true, get: function () { return " + n + '; } });';
+  }).join('\n'),
+  "Object.defineProperty(Api, 'threadCache', { enumerable: true, get: function () { return threadCache; } });",
+  'return Api;'
+];
+
+const PASSIVE_CODE = PASSIVE_FNS.map(function (n) { return fnDecl(INTERCEPT, n); }).join('\n');
+
+const PASSIVE_SCOPE = 'with (ctx) {' +
+  'var __code = ' + JSON.stringify(PASSIVE_CODE) + ';' +
+  'eval(__code);' +
+  SCOPE_DECLS.join(' ') +
+  PASSIVE_EXPORTS.join(' ') + '}';
+
+const makePassiveApi = new Function('ctx', PASSIVE_SCOPE);
+
 module.exports = {
   ROOT: ROOT,
   INTERCEPT: INTERCEPT,
   Parser: Parser,
   fnDecl: fnDecl,
   makeApi: makeApi,
+  makePassiveApi: makePassiveApi,
   makeFetch: makeFetch,
   SCOPE_FNS: SCOPE_FNS,
   API_FNS: API_FNS,
+  PASSIVE_FNS: PASSIVE_FNS,
   SANDBOX_CODE: SANDBOX_CODE
 };

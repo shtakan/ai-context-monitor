@@ -97,7 +97,7 @@
 - MD: `metric-partial: 1` и `metric-partial-reason: <reason>` — отдельными ASCII-строками рядом с `metric-src:`
   (`utils/export-text-builders.ts:435`); локализуемые литералы внутрь файла не годятся (гейт i18n);
 - JSON: `"partial": true`, `"partialReason": "<reason>"`;
-- `<reason>` ∈ `incomplete` (база не полная), `stale` (снимок старше текущего тела), `shrank` (DOM-тело короче последнего снимка);
+- `<reason>` ∈ `incomplete` (база не полная), `stale` (снимок старше текущего тела), `shrank` (DOM-тело короче последнего снимка), `missing-user-text` (в базе есть ход без вопроса — A-only, эхо-вопрос не найден);
 - префикс имени файла (`options/options.js:908`) сохраняется.
 - **Автоэкспорт при `partial === true` не стартует.** Это единственное место, где план прав без оговорок.
 
@@ -168,7 +168,7 @@ interface AiCmContextSnapshot {
   msgs: number;
   baseComplete: boolean;
   partial: boolean;
-  partialReason?: 'incomplete' | 'stale' | 'shrank';
+  partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text';
   k: 4;
   overhead: { messages: number; attach: number; system: number; systemSource: 'none' | 'assumed' | 'measured' | 'included-in-counter' };
   bodyHash: string;          // fnv1a32(convId + '\0' + join(role + '\0' + text + '\1')) + ':' + chars

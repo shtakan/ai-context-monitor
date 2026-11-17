@@ -75,6 +75,10 @@ let aiCmNetRawCountUsed: number = -1; // detail.count, учтённый посл
 // (content.js:processAndSend) и D1 (widget.js:updateWidget — число не подменяется на «—»).
 let adapterBaseSeen: boolean = false;
 let baseComplete: boolean = false; // сеть дала ПОЛНУЮ историю (тихая пагинация) → индикатор берёт число из базы, не из DOM
+// BUG-H: явная причина вердикта базы из detail.historyCompleteReason (passive-complete /
+// passive-incomplete:* / missing-user-text). Сам вердикт не меняет — только честная
+// причина partial в файле истории.
+let baseCompleteReason: string = '';
 let lastBounded: boolean = false;  // последний DOM-хвост нашёл границу (стабильный источник для монотонного максимума)
 let lastTailSig: string | null = null;
 let lastBaseSig: string | null = null;   // антиспам: сигнатура последней печати «📥 база полной истории»
@@ -719,7 +723,7 @@ interface AiCmContextSnapshot {
   bodyHash?: string;
   baseComplete?: boolean;
   partial: boolean;
-  partialReason?: 'incomplete' | 'stale' | 'shrank';
+  partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text';
   stale?: boolean;
   ageMs?: number;
 }
@@ -858,11 +862,15 @@ function aiCmCommitContextSnapshot(
     var held: AiCmContextSnapshot = Object.assign({}, prev);
     held.stale = !!(prev.bodyHash && next.bodyHash && prev.bodyHash !== next.bodyHash);
     held.partial = true;
-    held.partialReason = held.stale ? 'stale' : 'incomplete';
+    held.partialReason = held.stale
+      ? 'stale'
+      : ((next.partial && next.partialReason === 'missing-user-text') ? 'missing-user-text' : 'incomplete');
     return held;
   }
   next.stale = false;
-  if (next.partial) next.partialReason = 'incomplete';
+  // BUG-H: причина 'missing-user-text' — значимая (ход без вопроса), прочие причины
+  // нормализуются как прежде: принятый коммит честно неполон.
+  if (next.partial) next.partialReason = (next.partialReason === 'missing-user-text') ? 'missing-user-text' : 'incomplete';
   else delete next.partialReason;
   var same = prev.convId === next.convId
     && prev.site === next.site

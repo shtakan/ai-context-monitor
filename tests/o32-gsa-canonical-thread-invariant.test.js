@@ -234,8 +234,9 @@ describe('O-32 (2): каноническая база треда не разду
     const last = h.events[h.events.length - 1];
     // звено A: полноты никто не доказывал — дефолт её больше не подставляет
     expect(last.historyComplete).toBe(false);
-    // форма с вопросом внутри обёртки несёт один текст на ход: 3 хода = 3 сообщения
-    expect(fingerprintOf(last).count).toBe(TURNS_A.length);
+    // форма с вопросом внутри обёртки несёт вопрос хода в userText (BUG-H): 3 хода = 6
+    // сообщений — вопрос и ответ, ровно по одному на ход, без дублей.
+    expect(fingerprintOf(last).count).toBe(TURNS_A.length * 2);
   });
 
   test('равенство отпечатков: холодный старт = F5 (сеть с нуля) = SPA-возврат (кэш ∪ сеть)', () => {

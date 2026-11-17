@@ -129,6 +129,8 @@ export interface GoogleFolwrUtilsApi {
   turnIdentityParts: typeof turnIdentityParts;
   bodiesPrefixCompatible: typeof bodiesPrefixCompatible;
   dedupeTurns: typeof dedupeTurns;
+  // BUG-M: настоящий курсор истории (AUtEx…) против сессионного mstk из folif-тела.
+  isHistoryCursor: typeof isHistoryCursor;
   // BUG-G: вопрос A-only хода из DOM-пузыря и fill-only добор userText по каноническому ключу.
   resolveUserQuestionForTurn: typeof resolveUserQuestionForTurn;
   fillMissingUserText: typeof fillMissingUserText;
@@ -1052,6 +1054,23 @@ export function extractContinuationToken(htmlText: string): string | null {
   } catch (e) { return null; }
 }
 
+// Признак НАСТОЯЩЕГО курсора истории («догрузить старые ходы»): токен вида AUtEx…
+// Тело /async/folif ВСЕГДА несёт data-mstk, но это СЕССИОННЫЙ токен диалога, а не курсор
+// истории: запрос folwr с ним отдаёт 400/пустое тело (BUG-M). Поэтому probe разрешён
+// только по курсору истории (open-ответ folwr), а пассивный снимок вердикт не требует.
+/** @type {RegExp} Формат курсора истории folwr. */
+var HISTORY_CURSOR_RE = /^AUtEx/i;
+
+/**
+ * Курсор истории ли это (а не сессионный mstk из folif-тела).
+ * @param {string|null|undefined} token Токен продолжения из тела ответа.
+ * @returns {boolean} true — курсор «догрузить старые ходы».
+ */
+export function isHistoryCursor(token: string | null | undefined): boolean {
+  if (!token || typeof token !== 'string') return false;
+  return HISTORY_CURSOR_RE.test(token.trim());
+}
+
 // =====================================================================================
 // O-32: КАНОНИЧЕСКАЯ ИДЕНТИЧНОСТЬ ХОДА (не зависит от формы текста и от пути)
 // =====================================================================================
@@ -1282,6 +1301,34 @@ export function canonicalTurnKeyOf(turn: FolwrTurn | null | undefined): string {
 // канонической формы возвращается как есть — повторный проход идемпотентен.
 // Формы различаются ТОЛЬКО вопросом: у хода-обёртки его в структуре нет.
 /**
+ * Вопрос из обёртки с учётом КАВЫЧЕК ВНУТРИ вопроса.
+ * `answerWrapperParts` закрывает вопрос на ПЕРВОЙ кавычке: вопрос с цитатой
+ * («в папку "спам"…», BUG-H/8bTpaveu…) обрезался до префикса, и канонизация
+ * создавала дубль хода вместо склейки. Здесь закрывающая кавычка — первая,
+ * после которой начинается тело ответа с новой строки (&quot;\n&quot;), с откатом на
+ * прежний разбор, если такой кавычки нет.
+ * @param {string|null|undefined} text Текст ответа.
+ * @returns {string} Вопрос обёртки либо пустая строка.
+ */
+function wrapperQuestion(text: string | null | undefined): string {
+  var s = String(text == null ? '' : text);
+  var prefix = wrapperPrefix(s);
+  if (!prefix) return '';
+  var rest = s.slice(prefix.length);
+  var firstWs = -1;
+  for (var i = 0; i < rest.length; i++) {
+    if (rest.charAt(i) !== '"') continue;
+    var tail = rest.slice(i + 1);
+    if (!isAnswerWrapperTail(tail)) continue;
+    if (/^[\r\n]/.test(tail)) return rest.slice(0, i).trim();
+    if (firstWs === -1 && /^\s/.test(tail)) firstWs = i;
+  }
+  if (firstWs !== -1) return rest.slice(0, firstWs).trim();
+  var legacy = answerWrapperParts(s);
+  return legacy ? legacy.question : '';
+}
+
+/**
  * Каноническая форма хода: вопрос из обёртки выносится в userText, текст ответа не меняется.
  * @param {FolwrTurn|null|undefined} turn Ход переписки.
  * @returns {FolwrTurn|null} Ход канонической формы (идемпотентно).
@@ -1290,8 +1337,7 @@ export function canonicalizeTurnForThread(turn: FolwrTurn | null | undefined): F
   if (!turn) return turn;
   var question = (turn.userText == null) ? '' : String(turn.userText).trim();
   if (!question) {
-    var wrapper = answerWrapperParts(turn.assistantText);
-    if (wrapper) question = wrapper.question;
+    question = wrapperQuestion(turn.assistantText);
   }
   return {
     id: turn.id,
@@ -1775,7 +1821,17 @@ export function dedupeTurns(turns: FolwrTurn[]): FolwrTurn[] {
     }
     var richer = hasKey ? isBetterTurn(t, out[at]) : isFullerTurn(t, out[at]);
     if (richer) {
-      out[at] = t;
+      // BUG-N: замена формы НЕ теряет уже известный вопрос. Более «богатая» запись может
+      // прийти без userText (DOM-форма с вопросом внутри текста ответа) — тогда переносим
+      // вопрос прежней записи, как это делает mergeTurnsByKey. Копию объекта делаем только
+      // ради переноса вопроса: иначе сохраняем идентичность заменяющей записи (O-32 C-dedupe).
+      var prevUserText = out[at].userText;
+      if (!t.userText && prevUserText) {
+        out[at] = turnRecord(t, out[at].id);
+        out[at].userText = prevUserText;
+      } else {
+        out[at] = t;
+      }
       reindexTurnKey(byKey, out, at);
     }
   }
@@ -1869,6 +1925,8 @@ if (typeof window !== 'undefined') {
     turnIdentityParts: turnIdentityParts,
     bodiesPrefixCompatible: bodiesPrefixCompatible,
     dedupeTurns: dedupeTurns,
+    // BUG-M: probe разрешён только по курсору истории; folif-mstk курсором не считается.
+    isHistoryCursor: isHistoryCursor,
     // BUG-G: A-only ход — вопрос из DOM-пузыря (эхо-валидация) и узкий fill-only добор
     // userText по каноническому ключу; повторной копии алгоритма у адаптера/перехватчика нет.
     resolveUserQuestionForTurn: resolveUserQuestionForTurn,

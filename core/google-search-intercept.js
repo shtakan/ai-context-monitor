@@ -440,8 +440,24 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
   }
 
   // ---- сборка detail снимка ----
-  function buildDetail(turns, messages, threadId, historyComplete) {
+  function buildDetail(turns, messages, threadId, historyComplete, historyCompleteReason) {
     if (!messages) messages = messagesFromTurns(turns);
+    // BUG-H: у хода есть вопрос, если он в userText ИЛИ в обёртке-эхе ответа. Ход без
+    // вопроса (A-only) делает снимок неполным, даже если сеть объявила базу полной.
+    var allHaveQuestion = true;
+    for (var qi = 0; qi < turns.length; qi++) {
+      var qt = turns[qi];
+      var qText = (qt && qt.userText) ? String(qt.userText).trim() : '';
+      if (!qText && qt) {
+        try {
+          var qUtils = (typeof window !== 'undefined' && window) ? window.GoogleFolwrUtils : null;
+          var qCanon = (qUtils && typeof qUtils.canonicalizeTurnForThread === 'function')
+            ? qUtils.canonicalizeTurnForThread(qt) : null;
+          qText = (qCanon && qCanon.userText) ? String(qCanon.userText).trim() : '';
+        } catch (e) { qText = ''; }
+      }
+      if (!qText) { allHaveQuestion = false; break; }
+    }
     var messageTexts = messages.map(function (m) { return m.text; });
     var tidKey = threadId || '';
     // BUG-L: вердикт полноты МОНОТОНЕН по треду. probe ставит complete=true раньше, чем
@@ -451,7 +467,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     // реестр на самой функции — форма снимка и вердикт те же.
     var doneReg = (typeof completedTids === 'object' && completedTids) ||
       (buildDetail.__completedTids || (buildDetail.__completedTids = Object.create(null)));
-    if (historyComplete === true && tidKey) {
+    if (historyComplete === true && tidKey && allHaveQuestion) {
       if (doneReg[tidKey] !== true) {
         // ограничение размера: не больше 50 тредов, самый старый ключ вытесняется
         var doneKeys = Object.keys(doneReg);
@@ -462,6 +478,13 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       doneReg[tidKey] = true;
     }
     var complete = historyComplete === true || (tidKey !== '' && doneReg[tidKey] === true);
+    // BUG-H: baseComplete=1 несовместим с ходом без вопроса (A-only) — вердикт понижается,
+    // причина «missing-user-text» уходит в снимок и в partialReason файла.
+    if (complete && !allHaveQuestion) {
+      complete = false;
+      historyCompleteReason = 'missing-user-text';
+    }
+    var verdictReason = historyCompleteReason || (complete ? 'complete' : 'incomplete');
     var messageIds = [];
     for (var i = 0; i < turns.length; i++) {
       var t = turns[i];
@@ -469,7 +492,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       if (t.assistantText) messageIds.push(t.id + '_assistant');
     }
     var text = messageTexts.join('\n');
-    return {
+    var detail = {
       convId: '',
       threadId: threadId || '',
       text: text,
@@ -490,6 +513,11 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       // BUG-L: и при уже доказанной полноте этого треда (completedTids) — вердикт монотонен.
       historyComplete: complete
     };
+    // BUG-M/H: явная причина вердикта — passive-complete / passive-incomplete:* /
+    // missing-user-text / complete. Поле необязательное: полный вердикт «complete»
+    // не пишется, чтобы байтовый контракт detail не менялся (пин gsa-o31).
+    if (verdictReason !== 'complete') detail.historyCompleteReason = verdictReason;
+    return detail;
   }
 
   // O-43 (ДИАГНОСТИКА, только измерение): ts+msgs+textLen КАЖДОГО сетевого эмита базы —
@@ -728,6 +756,29 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       return;
     }
     activateThread(threadId);
+    // BUG-M: пассивные ходы канонизируются ПЕРЕД сборкой снимка — вопрос из обёртки-эха
+    // ответа становится userText хода (assistantText не меняется; операция идемпотентна).
+    // Делается ПОСЛЕ склейки форм (dedupe/fillUserTextFromLiveDom): иначе «разорванный»
+    // хвост BUG-E (Q-only + A-only) перестаёт склеиваться и база получает дубль. Здесь
+    // закрывается именно тот A-only ход 8bTpaveu… («API DeepSeek…»), у которого вопроса
+    // нет ни в сети, ни в DOM, а есть только эхо в обёртке ответа.
+    function closeEchoQuestions(list) {
+      if (!list || !list.length) return list;
+      var cf = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.canonicalizeTurnForThread) || null;
+      if (!cf) return list;
+      var res = [];
+      for (var li = 0; li < list.length; li++) {
+        var cur = list[li];
+        if (cur && cur.userText) { res.push(cur); continue; }
+        try { res.push(cf(cur)); } catch (e) { res.push(cur); }
+      }
+      return res;
+    }
+    // BUG-M/N: формы НОВОГО списка нормализуются ДО слияния: устаревшая A-only форма
+    // того же хода (эхо без вопроса) иначе не совпадает по ключу с уже канонической
+    // базой и оставляет дубль хода (T4: BASE_11_48.concat([...])). assistantText и id
+    // не меняются, операция идемпотентна.
+    newTurns = closeEchoQuestions(newTurns);
     if (isFull) {
       if (lastFullTurns.length > 0 && newTurns.length < lastFullTurns.length) {
         mergeStreamTurns(newTurns, threadId);
@@ -748,18 +799,61 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     // O-32 (фикс C): база и её кэш-сегмент не содержат дублей — включая префикс-совместимые
     // формы одного ответа (прерванный стрим / маркеры цитат). Дедуп ДО сборки messages:
     // иначе счётчик сообщений и textLen остаются раздутыми.
-    if (typeof gsaBackfillTurnsFromDom === 'function') lastFullTurns = gsaBackfillTurnsFromDom(dedupeTurnsForCache(lastFullTurns), threadId); else lastFullTurns = dedupeTurnsForCache(lastFullTurns);
+    // BUG-N: DOM-добор — ТОЛЬКО fill-only (fillUserTextFromLiveDom ниже). Ходы, состав,
+    // порядок и id — из сети; добора ходов из DOM здесь больше нет (был gsaBackfillTurnsFromDom).
+    lastFullTurns = dedupeTurnsForCache(lastFullTurns);
     // BUG-G: A-only ход — вопрос из DOM-пузыря (fill-only по ключу, состав — из сети).
     if (typeof fillUserTextFromLiveDom === 'function') {
       lastFullTurns = fillUserTextFromLiveDom(lastFullTurns, threadId);
     }
+    // BUG-H: последний шанс для A-only хода — вопрос из обёртки-эха ответа (DOM-пузыря нет).
+    lastFullTurns = closeEchoQuestions(lastFullTurns);
     seedSeenKeys(lastFullTurns);
     if (typeof gsaRejectNoUserText === 'function' && gsaRejectNoUserText(lastFullTurns, threadId, newTurns, isFull)) return; lastFullMessages = messagesFromTurns(lastFullTurns);
+    // BUG-M: полнота ПАССИВНОГО снимка — вердикт по самому снимку, БЕЗ probe. Probe по
+    // folif-телу уходил на folwr с сессионным mstk → HTTP 400 (probe-http-error) и вечный
+    // partial. Условия: нет КУРСОРА ИСТОРИИ, ходов не меньше, чем в живом DOM того же
+    // разговора, и у каждого хода есть вопрос (свой или из обёртки-эха).
+    function passiveVerdict(turns, tid, bodyText) {
+      var netTurns = turns.length;
+      if (isFull !== true) return { complete: false, reason: 'passive-incomplete:stream', netTurns: netTurns, domTurns: 0 };
+      var domTurns = 0;
+      try {
+        if (typeof document !== 'undefined' && document && document.querySelectorAll) {
+          var domTid = (typeof readDomThreadId === 'function') ? (readDomThreadId() || '') : '';
+          // Считаем DOM-ходы, только если открыт тот же разговор. Чужой DOM ничего не
+          // доказывает — тогда сравнивать не с чем (domTurns=0), вердикт даёт состав.
+          if (!tid || !domTid || tid === domTid) {
+            domTurns = document.querySelectorAll('[data-scope-id="turn"]').length || 0;
+          }
+        }
+      } catch (e) { domTurns = 0; }
+      var cursor = null;
+      var pUtils = (typeof window !== 'undefined' && window) ? window.GoogleFolwrUtils : null;
+      try {
+        if (pUtils && typeof pUtils.extractContinuationToken === 'function' && bodyText) {
+          cursor = pUtils.extractContinuationToken(bodyText) || null;
+        }
+      } catch (e) { cursor = null; }
+      var histCursor = false;
+      try {
+        histCursor = !!(pUtils && typeof pUtils.isHistoryCursor === 'function' && pUtils.isHistoryCursor(cursor));
+      } catch (e) { histCursor = false; }
+      if (histCursor) return { complete: false, reason: 'passive-incomplete:history-cursor', netTurns: netTurns, domTurns: domTurns };
+      if (netTurns < domTurns) return { complete: false, reason: 'passive-incomplete:net-lt-dom', netTurns: netTurns, domTurns: domTurns };
+      for (var pi = 0; pi < turns.length; pi++) {
+        var pt = turns[pi];
+        var pq = (pt && pt.userText) ? String(pt.userText).trim() : '';
+        if (!pq) return { complete: false, reason: 'passive-incomplete:missing-user-text', netTurns: netTurns, domTurns: domTurns };
+      }
+      return { complete: true, reason: 'passive-complete', netTurns: netTurns, domTurns: domTurns };
+    }
+    var passive = passiveVerdict(lastFullTurns, threadId, bodyText);
     if (lastFullTurns.length > 0) {
-      lastFullSnapshot = buildDetail(lastFullTurns, lastFullMessages, threadId);
+      lastFullSnapshot = buildDetail(lastFullTurns, lastFullMessages, threadId, passive.complete, passive.reason);
       emittedThreadId = lastFullSnapshot.threadId || '';
       if (emittedThreadId) cacheSet(emittedThreadId, { turns: lastFullTurns, messages: lastFullMessages, snapshot: lastFullSnapshot });
-      if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('mergeTurns', lastFullTurns, 'accept', threadId, { full: (isFull === true) ? 1 : 0, incoming: (newTurns && newTurns.length) || 0, emitted: emittedThreadId || '' });
+      if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('mergeTurns', lastFullTurns, 'accept', threadId, { full: (isFull === true) ? 1 : 0, incoming: (newTurns && newTurns.length) || 0, emitted: emittedThreadId || '', complete: passive.reason, net: passive.netTurns, dom: passive.domTurns });
       emitDetail(lastFullSnapshot);
     } else if (typeof gsaDiagBaseWrite === 'function') {
       gsaDiagBaseWrite('mergeTurns', newTurns, 'accept-empty-base', threadId, { full: (isFull === true) ? 1 : 0, incoming: (newTurns && newTurns.length) || 0 });
@@ -1118,10 +1212,28 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     // ровно одно представление, поэтому повторный снимок того же треда базу не раздувает.
     var unionFn = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.mergeTurnsMonotone) ||
       function (a, b) { return a.concat(b); };
+    // BUG-M/N: формы входящего списка нормализуются ДО слияния — та же точка, что у
+    // mergeTurns: иначе A-only форма хода и её каноническая форма расходятся по ключу.
+    turns = closeEchoQuestions(turns);
     lastFullTurns = unionTurnsByDirection(unionFn, turns, lastFullTurns, direction);
     // BUG-E: та же чистка хвоста, что у mergeTurns/mergeStreamTurns: снимок-окно после
     // SPA-возврата склеивает «разорванный» последний ход ДО сборки messages.
     lastFullTurns = dedupeTurnsForCache(lastFullTurns);
+    // BUG-H: A-only ход без вопроса в сети/DOM — вопрос из обёртки-эха ответа
+    // (идемпотентно, assistantText не меняется). Та же точка, что у mergeTurns.
+    function closeEchoQuestions(list) {
+      if (!list || !list.length) return list;
+      var cf = (window.GoogleFolwrUtils && window.GoogleFolwrUtils.canonicalizeTurnForThread) || null;
+      if (!cf) return list;
+      var res = [];
+      for (var li = 0; li < list.length; li++) {
+        var cur = list[li];
+        if (cur && cur.userText) { res.push(cur); continue; }
+        try { res.push(cf(cur)); } catch (e) { res.push(cur); }
+      }
+      return res;
+    }
+    lastFullTurns = closeEchoQuestions(lastFullTurns);
     lastFullMessages = messagesFromTurns(lastFullTurns);
     seedSeenKeys(lastFullTurns);
     lastFullSnapshot = buildDetail(lastFullTurns, lastFullMessages, tid, historyComplete);
@@ -2003,9 +2115,10 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
   function gsaProbeAfterPassiveSnapshot(isFull, url, turns, tid, bodyText) {
     try {
       if (!tid || typeof probeFolwrCompleteness !== 'function') return;
+      // Пассивный чанк (folif) полным снимком не является — probe по нему не нужен.
+      if (isFull !== true) return;
       if (!(pendingProbeTid && pendingProbeTid === tid)) return;
       if (probedTids[tid]) return;
-      pendingProbeTid = '';
       var cursor = null;
       try {
         var utils = (typeof window !== 'undefined' && window) ? window.GoogleFolwrUtils : null;
@@ -2013,38 +2126,13 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
           cursor = utils.extractContinuationToken(bodyText) || null;
         }
       } catch (e) { swallow(e, 'gsa:probe-cursor'); }
+      // BUG-M: probe — ТОЛЬКО по настоящему курсору истории (open-ответ folwr, AUtEx…).
+      // Пассивный folif всегда несёт сессионный mstk: запрос folwr с ним отдаёт 400 и
+      // превращался в probe-http-error с вечным partial. Вердикт пассива даёт mergeTurns.
+      if (!(utils && typeof utils.isHistoryCursor === 'function' && utils.isHistoryCursor(cursor))) return;
+      pendingProbeTid = '';
       probeFolwrCompleteness(url, turns, tid, cursor, 0, []);
     } catch (e) { swallow(e, 'gsa:probe-passive'); }
-  }
-
-  // BUG-M (1.2): пассивный folif/XHR отдаёт A-only ходы (вопрос живёт только в DOM-пузыре или в
-  // эхе обёртки), из-за чего база уходила с userLen=0 при domMsgs>netMsgs, а экспорт — «4 ответа
-  // / 0 вопросов». Досбор — тем же путём, что open-путь: mergeTurnsByKey по каноническому ключу
-  // (состав ходов не раздувается) + дедуп после слияния; порядок и id остаются сетевыми.
-  function gsaBackfillTurnsFromDom(turns, threadId) {
-    if (!Array.isArray(turns) || turns.length === 0) return turns;
-    var need = false;
-    for (var i = 0; i < turns.length; i++) {
-      if (turns[i] && !turns[i].userText) { need = true; break; }
-    }
-    if (!need) return turns;
-    var domTurns = null;
-    var mergeByKey = null;
-    try {
-      if (typeof document !== 'undefined' && document) {
-        var utils = (typeof window !== 'undefined' && window) ? window.GoogleFolwrUtils : null;
-        if (utils && typeof utils.extractTurnsFromDocument === 'function') {
-          var domTid = (typeof readDomThreadId === 'function') ? readDomThreadId() : '';
-          if (!(threadId && domTid && threadId !== domTid)) {
-            domTurns = utils.extractTurnsFromDocument(document) || null;
-            mergeByKey = (typeof utils.mergeTurnsByKey === 'function') ? utils.mergeTurnsByKey : null;
-          }
-        }
-      }
-    } catch (e) { swallow(e, 'gsa:merge-dom-backfill'); }
-    if (!domTurns || !domTurns.length || !mergeByKey) return turns;
-    var deduped = dedupeTurnsForCache(mergeByKey(turns, domTurns));
-    return (deduped.length > 0) ? deduped : turns;
   }
 
   // BUG-M (1.2), пин 2.1.4: база без ЕДИНОГО вопроса при живых DOM-вопросах не эмитится
