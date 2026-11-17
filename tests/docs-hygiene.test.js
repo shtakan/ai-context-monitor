@@ -339,8 +339,8 @@ describe('O-53: PROJECT_HANDOFF.md — гигиена кодировки и ст
     expect(corpus.match(HIST_MAX_RE_G) || []).toHaveLength(1);
     // Полнота корпуса (аппендексы v118 и эшелон 3): переносы v90–v114 и v115–v128
     // в архив и граница «архив ↔ активный файл» не должны терять ни одного аппендикса.
-    // 123 = 114 в архиве (75 эшелон 1 + 25 эшелон 2 + 14 эшелон 3, v115–v128)
-    //      + 9 в активном (v129–v137);
+    // 124 = 114 в архиве (75 эшелон 1 + 25 эшелон 2 + 14 эшелон 3, v115–v128)
+    //      + 10 в активном (v129–v138);
     // постановка называла 103 — это счёт ДО вставки тела v118 (см. аппендикс v118 §3),
     // затем +v119 (матрица стандартов), +v120 (закрытие документационных residual),
     // +v121 (ESM-миграция, Фаза 2 Roadmap), +v122 (ESM-миграция MAIN-world утилит)
@@ -372,7 +372,9 @@ describe('O-53: PROJECT_HANDOFF.md — гигиена кодировки и ст
     // +v137 (релиз v2.1.3 + quality-трек: GSA BUG-H/I/J/K/L, Qwen BUG-02,
     //        strict TS adapters/utils/core, @types/chrome, контракты сообщений,
     //        options.js checkJs, архив RELEASE_CHECKLIST; тег v2.1.3, AMO 2.1.3),
-    expect((corpus.match(/^## Аппендикс v\d+/gm) || []).length).toBe(123);
+    // +v138 (релиз v2.1.4: GSA BUG-M/N/H/O/P — settle, покрытие вопросов DOM,
+    //        порядок folif по DOM, fill-only добор; тег v2.1.4, Release ZIP #53),
+    expect((corpus.match(/^## Аппендикс v\d+/gm) || []).length).toBe(124);
     // Тест читает ОБА файла (эшелон 3): сумма заголовков по файлам совпадает с общим
     // пином, оба файла непусты, номера версий не дублируются — иначе один аппендикс
     // мог бы «переехать» в архив дважды или потеряться при слиянии. Жёстких пинов
@@ -385,7 +387,7 @@ describe('O-53: PROJECT_HANDOFF.md — гигиена кодировки и ст
     });
     expect(handoff.length).toBeGreaterThan(0);
     expect(archive.length).toBeGreaterThan(0);
-    expect(activeNums.length + archiveNums.length).toBe(123);
+    expect(activeNums.length + archiveNums.length).toBe(124);
     expect(activeNums.length).toBeGreaterThan(0);   // активный файл не пуст аппендиксами
     expect(archiveNums.length).toBeGreaterThan(0);  // архив не пуст аппендиксами
     const allNums = activeNums.concat(archiveNums);

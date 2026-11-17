@@ -1354,3 +1354,51 @@ v90–v114 (исходные строки 783–2 440, 1 658 строк) — т�
 
 **Коммит A:** `1e0776d` — тело аппендикса v137; SHA заполняется коммитом B.
 **SHA4:** `26f5c20` — слот коммита C (синхронизация верхнего блока); заполняется коммитом D.
+
+## Аппендикс v138 (2026-11-17): Релиз v2.1.4 (GSA: BUG-M/N/H/O/P)
+
+**Дата:** 2026-11-17 (Asia/Yekaterinburg).
+
+**Коммиты:** `7bfc0a5` (settle), `74e9de5` (BUG-N/H), `da25743` (BUG-M/O), `0d4dc1a` (BUG-P), `c97122e` (release 2.1.4), `2c11180`/`d2194cc` (state), приёмки `acceptance/2.1.4` (`2.1.4`, `rerun`, `rerun2`, `rerun3`, `rerun4`, `rerun5`).
+
+**Итог:** 2.1.4 опубликован в GitHub Releases; AMO 2.1.4 — пакет готовится, публикация после аппендикса.
+
+### Секция 1. Что сделано.
+
+1. **GSA, полнота пассивного снимка (BUG-M, BUG-P):** `isFull`/`AUtEx` убраны из вердикта; полноту доказывает `SETTLE_MS=1000` на тред (повторный эмит `emitDetail`, `reason=passive-complete`); `domTurns` считается по используемым ходам; BUG-P — покрытие вопросов DOM (дубль вопроса stub+полный ответ не блокирует). Живьём `rerun5`: SPA-first `8bTpaveu` — 46 (23u/23a), 10.6 %, без `partial`, автоэкспорт; F5 46; SPA `A2n8avju` 12 (6u/6a); новый тред 8 (4u/4a); `net-lt-dom`/`history-cursor`/`probe 400` — 0.
+2. **GSA, порядок и состав (BUG-O, BUG-N, BUG-H):** `orderTurnsByDom` вместо безусловного `reverse` (old→new на SPA-кэше, new→old на серверном теле); DOM-добор fill-only, `dedupeTurns` переносит `userText`, A-only вопрос из эха; 0 дублей, 0 пустых user.
+3. **Релиз 2.1.4:** CHANGELOG `[2.1.4]`, 17 файлов (16 по прецеденту + `PROJECT_HANDOFF` L199), тег `v2.1.4` → `d2194cc`, GitHub Release `v2.1.4`, asset `ai-context-monitor-v2.1.4.zip` 3 418 475 B sha256 `5d119b0975f43d3a62255b3599a8b5ce2a2e0c9dda1bdf15477cf1ec79833ac8`, source zips.
+4. **Гейты:** 265 suites / 4355 passed / 7 skipped / 0 failed; tsc ×3 — 0; eslint — 0/0; `build:prod` — `dist/content.js` 314 637 B, sha256 `2b86f83e…`.
+
+### Секция 2. Доказательства.
+
+| # | Проверка | Результат | Источник |
+|---|---|---|---|
+| 1 | `npm test` | 265 suites / 4355 passed / 7 skipped / 0 failed | прогон 2026-11-17 |
+| 2 | `npx tsc --noEmit` | 0 | прогон |
+| 3 | `npx tsc -p tsconfig.strict.json` | 0 | прогон |
+| 4 | `npx tsc -p tsconfig.chrome.json` | 0 | прогон |
+| 5 | `npx eslint .` | 0 errors / 0 warnings | прогон |
+| 6 | `npm run build:prod` | exit 0; `dist/content.js` 314 637 B, sha256 `2b86f83e…`; `manifest 2.1.4` | прогон |
+| 7 | GitHub Release | `v2.1.4` → `d2194cc`, asset `ai-context-monitor-v2.1.4.zip` (3 418 475 B, sha256 `5d119b…`) | Release |
+| 8 | Живая приёмка | `acceptance/2.1.4/rerun5`: SPA-first/F5 46 (23u/23a), SPA 12 (6u/6a), новый тред 8 (4u/4a), `partial` нет | артефакты |
+| 9 | HEAD на момент A | `d2194cc`; origin/main = `d2194cc`, ahead 0 | git |
+
+### Секция 3. Отклонения и ограничения.
+
+1. **Экспорт нового треда `tHr8asn`** не скачан; состав 8 (4u/4a), 3.1 %, `historyComplete=1` подтверждён логом 21:04:29–30.
+2. **Лог 20:59** не сохранён (сохранённый начинается 21:00:28); SPA-first доказан автоэкспортом 20:59 — полный файл без `[LOW CONFIDENCE]_`/`metric-partial`.
+3. **SPA `A2n8avju`** — 12 (6u/6a), а не 8 (4u/4a): в треде был ещё один обмен; состав/порядок/дубли корректны.
+4. **`PROJECT_HANDOFF` L199** был на 2.1.2; в релизный коммит добавлен 17-м файлом (docs-hygiene допускает отставание только на один релиз).
+5. **AMO 2.1.4** — пакет (`dist-firefox` + `tar -a` + source ZIP + `AMO-2.1.4.md`) готовится после аппендикса; публикация — владельцем.
+6. **Пин полноты корпуса** в `tests/docs-hygiene.test.js` поднят 123 → 124 (+v138) в коммите A.
+
+### Секция 4. Сводка.
+
+1. Сьют 265 suites / 4355 passed / 7 skipped / 0 failed, exit 0; `tsc --noEmit` 0; strict 0; chrome 0; `eslint` 0/0.
+2. Версия продукта — 2.1.4 (`manifest.json` = `package.json` = `package-lock.json`); GitHub Release опубликован; AMO — после аппендикса.
+3. HEAD на момент коммита A — `d2194cc`; origin/main = `d2194cc`, ahead 0; пуш A+B одной операцией, затем C+D.
+4. Верхний блок handoff синхронизируется коммитами C/D; аппендиксы v1–v137 не переписываются — вставка в конец файла.
+
+**Коммит A:** `<SHA v138>` — тело аппендикса v138; SHA заполняется коммитом B.
+**SHA4:** `<SHA4>` — слот коммита C (синхронизация верхнего блока); заполняется коммитом D.
