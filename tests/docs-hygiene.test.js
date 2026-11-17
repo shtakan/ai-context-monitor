@@ -290,6 +290,16 @@ describe('M-6: release.yml — руководство в ZIP и контроль
     expect(releaseYml).toContain('README.md в ZIP НЕ включается');
     expect(releaseYml).toContain('docs/index.html');
   });
+
+  // tsconfig.strict.json / tsconfig.chrome.json — dev-конфиги TypeScript, в
+  // пользовательском пакете не нужны (расширение их не грузит). Пин фиксирует
+  // ширину шаблона: голый tsconfig\.json$ пропускал варианты с суффиксом.
+  test('tsconfig.*.json — dev-конфиги, не в ZIP', () => {
+    const line = releaseYml.split(/\r?\n/).filter(function (l) {
+      return l.indexOf('grep -zvE') !== -1;
+    })[0];
+    expect(line).toContain('tsconfig(\\.[a-z][a-z0-9-]*)?\\.json$');
+  });
 });
 
 describe('O-53: PROJECT_HANDOFF.md — гигиена кодировки и статусных чисел', () => {
