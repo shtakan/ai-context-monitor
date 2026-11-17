@@ -1343,6 +1343,7 @@ v90–v114 (исходные строки 783–2 440, 1 658 строк) — т�
 3. **2.1.3 Chrome ZIP** содержал `tsconfig.strict.json`/`tsconfig.chrome.json`; `97b63ec` исправляет шаблон для следующего релиза; AMO-пакет (`dist-firefox`) был чистый; 2.1.3 не перевыпускается.
 4. **SPA-переключение** (BUG-I/L) живьём не повторялось; покрыто пинами `aiCmGsaProbeRunningFor`/`completedTids`/`emitSite`.
 5. **`RELEASE_CHECKLIST.md`** — архив с 2026-11-16; гейт P0/P1 — в `docs/STANDARDS-MATRIX.md`.
+6. **Пин полноты корпуса в `tests/docs-hygiene.test.js` поднят 122 → 123** (+v137) — иначе `docs-hygiene` красный после вставки аппендикса; проверки не ослаблены.
 
 ### Секция 4. Сводка.
 
