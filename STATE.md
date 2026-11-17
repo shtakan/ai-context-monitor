@@ -6,7 +6,7 @@
 ## 1. Репозиторий
 
 - workspace: ai-context-monitor-clean
-- branch: main; HEAD: `97b63ec` (chore(release): tsconfig.*.json вне ZIP); origin/main: `97b63ec`; ahead: 0; behind: 0; тег `v2.1.3` → `1e46a85`, `v2.1.2` → `b36b3c0`
+- branch: main; HEAD: `476eba4` (test(docs-hygiene) corpus 122 → 123), сверху `chore(state)` синк; origin/main: `97b63ec`; ahead: 7; behind: 0; тег `v2.1.3` → `1e46a85`, `v2.1.2` → `b36b3c0`
 - version: `2.1.3` (manifest.json, package.json, package-lock.json, футер docs/index.html); дата: 2026-11-17; опубликовано: GitHub Release `v2.1.3` (ZIP #52) и AMO 2.1.3 (одобрена 2026-11-17, 0 ошибок / 7 предупреждений)
 
 ## 2. Метрики (финальный прогон 2026-11-17, после последнего коммита)
@@ -20,6 +20,7 @@
 
 - ID: `REL-02` — закрыт 2026-11-17: CHANGELOG 2.1.3, 15 точек версии (8 точек вывода + 7 пинов), релизный коммит `189e19f`; тег `v2.1.3` → `1e46a85`; GitHub Release `v2.1.3` (ZIP #52); AMO 2.1.3 одобрена (0 ошибок / 7 предупреждений)
 - post-release: `97b63ec` — `tsconfig.*.json` исключены из Chrome release ZIP (шаблон + пин `docs-hygiene`); AMO-пакет чистый; 2.1.3 не перевыпускается
+- handoff v137 закрыт 2026-11-17: аппендикс v137 + README Qwen; открытых дефектов нет; следующий шаг — по решению владельца
 - живая приёмка 2.1.3 (2026-11-17, артефакты `acceptance/2.1.3`): GSA — 16 сообщений (8u/8a), `partial` отсутствует, 6 437 / 5 %, old→new, имя без `[LOW CONFIDENCE]_`; Qwen — `qwen4-max`, limit 1 000 000, 12 (6u/6a), 25 415 / 2.5 %, `partial` отсутствует; лог: `gsa-latch point=set`, `baseComplete=1`, `badge-update … model=qwen4-max`
 - живая приёмка 2.1.2 (тред `e1020dba`): 165 сообщений, 99 229 / 77.5 %, «Ещё N» — 0, карточек файла нет
 - `RELEASE_CHECKLIST.md` — архив с 2026-11-16; гейт P0/P1 — в STANDARDS-MATRIX
