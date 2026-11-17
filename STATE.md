@@ -6,13 +6,13 @@
 ## 1. Репозиторий
 
 - workspace: ai-context-monitor-clean
-- branch: main; HEAD: `bfe3b2d` (chore(ts): C1 — контракты SW); origin/main: `356acdb`; ahead: 2; behind: 0; тег `v2.1.2` → `b36b3c0`
+- branch: main; HEAD: `f503a9b` (chore(ts): C2 — контракты content/options и broadcast); origin/main: `01b290c`; ahead: 2; behind: 0; тег `v2.1.2` → `b36b3c0`
 - version: `2.1.2` (manifest.json, package.json, package-lock.json, футер docs/index.html); дата: 2026-11-16; опубликовано: GitHub Release `v2.1.2` (ZIP собран CI, `Release ZIP #51`) и AMO 2.1.2 (одобрено 2026-11-16, 0 ошибок / 7 предупреждений)
 
 ## 2. Метрики (финальный прогон 2026-11-17, после последнего коммита)
 
-- build: exit 0 (`node build.mjs`); `dist/content.js` 731 350 B, sha256 `b716dbc6a91a1e8087c2ddfc6c384c20117406f98e33fc18a01399c6ed039602`
-- tests: 264 suites / 4298 passed / 7 skipped / 0 failed (полный `npm test`) — `264/4298/7/0`
+- build: exit 0 (`node build.mjs`); `dist/content.js` 731 058 B, sha256 `3405acba722bb9ca4052b73de730a5c54d6927920eddc5f99973ed1d36dd39cb`
+- tests: 264 suites / 4313 passed / 7 skipped / 0 failed (полный `npm test`) — `264/4313/7/0`
 - tsc: exit 0, вывод пуст (`npx tsc --noEmit`); strict: exit 0, 0 ошибок (`npx tsc -p tsconfig.strict.json`); chrome-tsc: **exit 0, 0 ошибок** (`npx tsc -p tsconfig.chrome.json` — гейт трека; список `artifacts/chrome-tsc-errors.txt` пуст); lint: 0 errors / 0 warnings (`npx eslint .`)
 - mutation: 8 KILLED / 0 SURVIVED / 0 ERROR (`npm run test:mutation`, exit 0, 2026-11-16)
 
@@ -31,7 +31,9 @@
 - **chrome-счётчик 11 → 0**: `npx tsc -p tsconfig.chrome.json` exit 0, 0 ошибок — chrome-трек 28 → 0 закрыт полностью (B12 17 + B13 11)
 - **C1 закрыт 2026-11-17** без изменения поведения: `types/messages.d.ts` — дискриминированный `AiCmSwRequest` (9 вариантов по `type`: COUNT_TOKENS, THRESHOLD_PCT, BADGE_RESET, close-print-tab, aiCm-get-byok-key, aiCm-latch-get/set/remove, aiCm-latch-get-all) + `AiCmSwResponseMap`/`AiCmSwResponse`/`AiCmSwResponseFor<T>`/`AiCmSwAskRequest` (только каналы с ответом; каналы без ответа — `void`); `core/background.ts` — локальный `AiCmSwMessage` с `[key: string]: any` удалён, листенер `(message: AiCmSwRequest, sender: AiCmSwSender, sendResponse: (response?: AiCmSwResponse) => void)`, `handleCountTokens(message: Extract<AiCmSwRequest, { type: 'COUNT_TOKENS' }>, sender): Promise<AiCmSwCountTokensResponse>`; `core/state.ts` — `aiCmSwAsk<T extends AiCmSwAskRequest>(payload: T): Promise<AiCmSwResponseFor<T> | null>` (файл остаётся classic-скриптом: контракт подключён type-алиасами `import('../types/messages')` в хвосте, а не import-строкой); `core/content.ts` — три отправителя типизированы `as`-ассертами (COUNT_TOKENS вместе с колбэк-ответом, THRESHOLD_PCT, BADGE_RESET ×2)
 - C1, что вскрыла сверка инвентаря: `THRESHOLD_PCT.data` несёт `site` (`core/content.ts:3374`), которого не было в SW-форме — поле добавлено в вариант как факт отправителя; `checkThresholds` по-прежнему читает только `pct`/`convId` (локальный `AiCmThresholdData` не тронут). `close-print-tab` полей сверх `type` не несёт (`print/print.js:190`). Импорт `types/messages.d.ts` и type-алиасы стоят в хвостах файлов, поэтому номера строк пинов `tests/fixtures/*.json` не сдвинулись; `@ts-ignore`/`@ts-nocheck`/`as any`/`[key: string]: any` в `background`/`state`/`content` — 0; пин `tests/messages-contract.test.js` (14). Побочно: `tests/helpers/read-module-source.js` теперь снимает и параметры типа (`function f<T …>(…)`) — generic в `aiCmSwAsk` иначе доживал до `new Function` в `tests/inv-i4-partial-barrier.test.js:181` и `tests/inv-i6-conv-switch.test.js:63` (контракт хелпера «текст остаётся исполняемым»)
-- следующий шаг: C2 — типизация content-листенера, отправителей options и broadcast `CONTEXT_UPDATE`; релиз 2.1.3 — после C2 (CHANGELOG + 15 точек версии + tag + AMO)
+- **C2 закрыт 2026-11-17** без изменения поведения: `types/messages.d.ts` — `AiCmContentRequest` (aiCmDiag / aiCmExportCurrent / aiCm-byok-key-changed / GET_STATS), `AiCmDiagPayload` + `AiCmDiagResponse{ok,diag}`, `AiCmManualSnapshot`, `AiCmExportCurrentResponse{data}`, `AiCmContentStatsPayload`/`AiCmContentStatsResponse`, `AiCmContentResponseMap`/`AiCmContentResponse`/`AiCmContentResponseFor<T>`, `AiCmBroadcast` (CONTEXT_UPDATE); `core/content.ts` — листенер `(message: AiCmContentRequest, sender: unknown, sendResponse: (response?: AiCmContentResponse) => void)`, `handleAiCmDiag(response?: AiCmDiagResponse)`, `diag: AiCmDiagPayload`, `manualSnapshot` с `@type`, broadcast `as AiCmBroadcast`; `options/options.js` — оба отправителя в JSDoc-типах `import('../types/messages')…`; `core/background.ts` — `aiCm-byok-key-changed` как `AiCmContentRequest`
+- C2, что вскрыла сверка инвентаря: (1) ответ `aiCmExportCurrent` — конверт `{ data: manualSnapshot }` (`core/content.ts:3625`), а не плоский снимок, поэтому введён `AiCmExportCurrentResponse` (спека 1.4/3.1 ждала плоский union); (2) ветка `GET_STATS` (`core/content.ts:3649`) без отправителя в репозитории — добавлена в `AiCmContentRequest` как факт листенера, иначе tsc сужает `message.type` до `never`; (3) build-гейт ловил `import(` из JSDoc-комментария в `dist/options.js` (esbuild не минифицирует dev-сборку) — `build.mjs` `verify()` теперь проверяет код без блочных комментариев, вывод байт-в-байт тот же; пины `tests/messages-contract.test.js` (29), `@ts-ignore`/`@ts-nocheck`/`as any` в content/background/options — 0
+- следующий шаг: релиз 2.1.3 — CHANGELOG, 15 точек версии, tag, GitHub Release, AMO (High, отдельная сессия)
 
 ## 4. Открытые задачи (≤5)
 
