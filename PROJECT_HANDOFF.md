@@ -1304,3 +1304,52 @@ v90–v114 (исходные строки 783–2 440, 1 658 строк) — т�
 2. Версия продукта — 2.1.2 (`manifest.json` = `package.json` = `package-lock.json`); в этом аппендиксе версия НЕ менялась.
 3. HEAD на момент коммита — `ded7127`; origin/main = `ded7127`, ahead 0.
 4. Верхний блок handoff синхронизирован (строки 7, 199–201, 203), аппендиксы v1–v135 не переписывались — вставка в конец файла.
+
+## Аппендикс v137 (2026-11-17): релиз v2.1.3 + quality-трек
+
+**Дата:** 2026-11-17 (Asia/Yekaterinburg).
+
+**Коммиты:** `189e19f` (release 2.1.3), `35b3027`/`1e46a85`/`bbaa263` (state), `97b63ec` (release ZIP tsconfig), `1c6fb74` (README: Qwen), quality-track (BUG-02/I/J/K/L/H, strict B1–B11, chrome B12–B13, contracts C1–C2, options, архив чек-листа).
+
+**Итог:** 2.1.3 опубликован в GitHub Releases и AMO; quality-трек закрыт.
+
+### Секция 1. Что сделано.
+
+1. **GSA:** `BUG-J` (порядок cold-load), `BUG-I` (probe lifecycle), `BUG-K` (чужой тред), `BUG-L` (монотонный вердикт/латч), `BUG-H` (A-only добор); живая приёмка 2026-11-17: 16 сообщений (8u/8a), `partial` нет, 6 437 / 5 %, old→new, имя без `[LOW CONFIDENCE]_`.
+2. **Qwen:** `BUG-02` — модель вне каталога (`qwen4-max`) показывается своим слагом, лимит 1 000 000; живая приёмка 12 (6u/6a), 25 415 / 2.5 %, `partial` нет.
+3. **Quality:** `tsconfig.strict.json` — adapters + utils + 8 core, 0 ошибок (B1–B11: 11/16/38/40/99/144/176/33/38/59/77/100); `@types/chrome` 0.3.7 + `tsconfig.chrome.json` — 28 → 11 → 0 (B12/B13); контракты сообщений SW + content/options + broadcast (C1/C2); `options/options.js` в checkJs + JSDoc (63 TS2339); `RELEASE_CHECKLIST.md` — архив, гейт P0/P1 в `docs/STANDARDS-MATRIX.md`.
+4. **Релиз 2.1.3:** CHANGELOG `## [2.1.3]`, 15 точек (8 выводов + 7 пинов), тег `v2.1.3` → `1e46a85`, GitHub Release (`Release ZIP #52`), AMO 2.1.3 (0/7); post-release `97b63ec` — `tsconfig.*.json` исключены из Chrome ZIP; AMO-пакет чистый.
+5. **README/docs:** 8 платформ, добавлен Qwen (`chat.qwen.ai`); `docs/index.html` — Google AI Studio + Qwen.
+
+### Секция 2. Доказательства.
+
+| # | Проверка | Результат | Источник |
+|---|---|---|---|
+| 1 | `npm test` | 264 suites / 4314 passed / 7 skipped / 0 failed | прогон 2026-11-17 |
+| 2 | `npx tsc --noEmit` | 0 | прогон |
+| 3 | `npx tsc -p tsconfig.strict.json` | 0 | прогон |
+| 4 | `npx tsc -p tsconfig.chrome.json` | 0 | прогон |
+| 5 | `npx eslint .` | 0 errors / 0 warnings | прогон |
+| 6 | `npm run build:prod` | exit 0; `dist-firefox` minified, `manifest 2.1.3` | прогон |
+| 7 | GitHub Release | `v2.1.3` → `1e46a85`, asset `ai-context-monitor-v2.1.3.zip`, ZIP #52 | Release |
+| 8 | AMO | 2.1.3 одобрена 2026-11-17, 0 ошибок / 7 предупреждений | AMO |
+| 9 | Живая приёмка | `acceptance/2.1.3`: GSA 16 (8u/8a), Qwen 12 (6u/6a) | артефакты |
+| 10 | HEAD на момент A | `1c6fb74`; origin/main = `97b63ec`, ahead 2 (`bbaa263`, `1c6fb74`) | git |
+
+### Секция 3. Отклонения и ограничения.
+
+1. **7 предупреждений AMO** — те же, что у 2.1.2; 0 ошибок, версия опубликована; принято.
+2. **BUG-H (A-only)** — живой тред `nOX6…` удалён владельцем; в доступных тредах A-only не возникает; закрыт по 37 тестам; при повторе — проверить экспортом.
+3. **2.1.3 Chrome ZIP** содержал `tsconfig.strict.json`/`tsconfig.chrome.json`; `97b63ec` исправляет шаблон для следующего релиза; AMO-пакет (`dist-firefox`) был чистый; 2.1.3 не перевыпускается.
+4. **SPA-переключение** (BUG-I/L) живьём не повторялось; покрыто пинами `aiCmGsaProbeRunningFor`/`completedTids`/`emitSite`.
+5. **`RELEASE_CHECKLIST.md`** — архив с 2026-11-16; гейт P0/P1 — в `docs/STANDARDS-MATRIX.md`.
+
+### Секция 4. Сводка.
+
+1. Сьют 264 suites / 4314 passed / 7 skipped / 0 failed, exit 0; `tsc --noEmit` 0; strict 0; chrome 0; `eslint` 0/0.
+2. Версия продукта — 2.1.3 (`manifest.json` = `package.json` = `package-lock.json`); опубликована (GitHub + AMO).
+3. HEAD на момент коммита A — `1c6fb74`; origin/main = `97b63ec`, ahead 2; пуш A+B одной операцией, затем C+D.
+4. Верхний блок handoff синхронизируется коммитами C/D; аппендиксы v1–v136 не переписываются — вставка в конец файла.
+
+**Коммит A:** `<SHA v137>` — тело аппендикса v137; SHA заполняется коммитом B.
+**SHA4:** `<SHA4>` — слот коммита C (синхронизация верхнего блока); заполняется коммитом D.
