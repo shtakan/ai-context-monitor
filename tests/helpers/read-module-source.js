@@ -201,6 +201,15 @@ function stripTypesKeepComments(source, file) {
       if (node.questionToken) cut(node.name.end, node.type ? node.type.end : node.questionToken.end);
       else if (node.type) cut(node.name.end, node.type.end);
     }
+    // Параметры типа (`function f<T extends X>(...)`) — такая же аннотация, как тип
+    // возврата: без этой ветки `<T ...>` доживал до new Function и давал SyntaxError
+    // (нарушение контракта «текст остаётся исполняемым»).
+    if (node.typeParameters && node.typeParameters.length) {
+      const from = node.name ? node.name.end : node.getStart(sf);
+      let listEnd = node.typeParameters.end;
+      if (source[listEnd] === '>') listEnd += 1;
+      cut(from, listEnd);
+    }
     if (isFunctionWithReturnType(node) && node.type) {
       // Двоеточие перед типом возврата не входит в узел типа — идём назад до него.
       let from = node.type.getStart(sf);

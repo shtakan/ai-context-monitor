@@ -310,11 +310,11 @@ let aiCmSwAlive: () => boolean = function () {
 
 // Запрос к SW с ожиданием ОТВЕТА (sendResponse-канал). Никогда не reject-ит:
 // ошибка/недоступный SW → null (вызывающие трактуют как «данных нет»).
-function aiCmSwAsk(payload: unknown): Promise<any> {
-  return new Promise(function (resolve) {
+function aiCmSwAsk<T extends AiCmSwAskRequest>(payload: T): Promise<AiCmSwResponseFor<T> | null> {
+  return new Promise<AiCmSwResponseFor<T> | null>(function (resolve) {
     try {
       if (!aiCmSwAlive()) { resolve(null); return; }
-      chrome.runtime.sendMessage(payload, function (resp: unknown) {
+      chrome.runtime.sendMessage(payload, function (resp: AiCmSwResponseFor<T>) {
         var err = null;
         try { err = chrome.runtime.lastError; } catch (eLe) { err = null; }
         resolve(err ? null : (resp || null));
@@ -907,3 +907,9 @@ function aiCmReadContextSnapshot(convId?: string): AiCmContextSnapshot | null {
   copy.stale = snap.stale === true;
   return copy;
 }
+
+// C1: контракты границы SW (types/messages.d.ts). Алиасы, а не import-строка:
+// state.ts — classic-скрипт в общем скоупе content-скриптов, top-level import
+// превратил бы его в модуль и оторвал от window-глобалов (core/content.ts:266).
+type AiCmSwAskRequest = import('../types/messages').AiCmSwAskRequest;
+type AiCmSwResponseFor<T extends AiCmSwAskRequest> = import('../types/messages').AiCmSwResponseFor<T>;

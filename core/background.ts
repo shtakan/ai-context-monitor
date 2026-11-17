@@ -519,7 +519,7 @@ if (chrome.runtime.onStartup) {
 }
 ensureInterceptor();
 
-chrome.runtime.onMessage.addListener((message: AiCmSwMessage, sender: AiCmSwSender, sendResponse: (response?: any) => void) => {
+chrome.runtime.onMessage.addListener((message: AiCmSwRequest, sender: AiCmSwSender, sendResponse: (response?: AiCmSwResponse) => void) => {
   debugLog('log', 'Получено сообщение в Service Worker:', message);
   // v1.15: dead-code обработчик UPDATE_CONTEXT_INFO удалён — SW эти данные не использует,
   // только логировал раньше под флагом «Подробные логи». Тип-имя разошлось в процессе
@@ -881,7 +881,7 @@ function aiCmTrustedSender(sender: AiCmSwSender | null | undefined): boolean {
   } catch (eSnd) { return false; }
 }
 
-function aiCmLatchRead(service: string, convId?: string | number) {
+function aiCmLatchRead(service: string, convId?: string | number): Promise<boolean> {
   return new Promise(function (resolve) {
     try {
       if (!service || !convId) { resolve(false); return; }
@@ -896,7 +896,7 @@ function aiCmLatchRead(service: string, convId?: string | number) {
   });
 }
 
-function aiCmLatchWrite(service: string, convId: string | number | undefined, fired: boolean) {
+function aiCmLatchWrite(service: string, convId: string | number | undefined, fired: boolean): Promise<boolean> {
   return new Promise(function (resolve) {
     try {
       if (!service || !convId) { resolve(false); return; }
@@ -919,15 +919,15 @@ function aiCmLatchWrite(service: string, convId: string | number | undefined, fi
 
 // Гидратация кэша вкладки (sessionFiredCache в core/export-manager.js): контент больше
 // не читает storage.session целиком, поэтому карту отдаёт SW (только префикс латча).
-function aiCmLatchAllFired() {
+function aiCmLatchAllFired(): Promise<Record<string, number>> {
   return new Promise(function (resolve) {
     try {
       if (!chrome.storage || !chrome.storage.session || typeof chrome.storage.session.get !== 'function') { resolve({}); return; }
       chrome.storage.session.get(null, function (all: Record<string, unknown>) {
-        var out: Record<string, unknown> = {};
+        var out: Record<string, number> = {};
         try {
           for (var k in (all || {})) {
-            if (k.indexOf(AI_CM_FIRED_SESSION_PREFIX) === 0) out[k] = all[k];
+            if (k.indexOf(AI_CM_FIRED_SESSION_PREFIX) === 0) out[k] = all[k] as number;
           }
         } catch (eCopy) { }
         resolve(out);
@@ -994,7 +994,7 @@ function countTokensCacheSet(model: string, text: string, tokens: number) {
 // при тайпинге используется any (самый дешёвый шов между двумя мирами).
 var /** @type {any} */ countTokensPending = new Map();
 
-function scheduleCountTokens(key: string, payload: AiCmCountTokensRun, debounced: number) {
+function scheduleCountTokens(key: string, payload: AiCmCountTokensRun, debounced: number): Promise<AiCmSwCountTokensResponse> {
   var entry = countTokensPending.get(key);
   if (entry && entry.timer != null) {
     clearTimeout(entry.timer); // отмена ожидающего запроса окна
@@ -1020,7 +1020,7 @@ function scheduleCountTokens(key: string, payload: AiCmCountTokensRun, debounced
   return entry.promise;
 }
 
-function handleCountTokens(message: AiCmSwMessage, sender: AiCmSwSender) {
+function handleCountTokens(message: Extract<AiCmSwRequest, { type: 'COUNT_TOKENS' }>, sender: AiCmSwSender): Promise<AiCmSwCountTokensResponse> {
   // Firefox-сборка (AMO): манифест заявляет data_collection_permissions: none, а BYOK
   // отправляет текст диалога на generativelanguage.googleapis.com. Гейт стоит на
   // единственном входе в цепочку (сообщение COUNT_TOKENS): до fetch в
@@ -1057,7 +1057,7 @@ function handleCountTokens(message: AiCmSwMessage, sender: AiCmSwSender) {
   return scheduleCountTokens(key, { text: text, model: model }, 0);
 }
 
-async function handleCountTokensRun(run: AiCmCountTokensRun) {
+async function handleCountTokensRun(run: AiCmCountTokensRun): Promise<AiCmSwCountTokensResponse> {
   var text = run.text;
   var model = run.model;
   if (!text || text.length === 0) return { totalTokens: 0 };
@@ -1279,29 +1279,14 @@ function aiCmDiagWarn(tag: string, message?: string, detail?: unknown) {
 //
 // `chrome` в проекте объявлен как `any` (types/globals.d.ts: @types/chrome не
 // подключается), поэтому типизируются только структуры, пересекающие границу SW:
-// сообщения content-скриптов, отправитель, storage.onChanged и payload
+// сообщения content-скриптов (types/messages.d.ts), отправитель, storage.onChanged и payload
 // COUNT_TOKENS. Аннотации стоят инлайн в сигнатурах — без новых строк, чтобы не
 // сдвигать номера catch/console, запинутые в tests/fixtures/*.json и в
 // tests/no-bare-console-warn.test.js. Объявления — в хвосте по той же причине.
 // =============================================================================
-interface AiCmSwMessage {
-  type?: string;
-  data?: AiCmThresholdData;
-  text?: string;
-  model?: string;
-  convId?: string | number;
-  [key: string]: any;
-}
-
 interface AiCmThresholdData {
   pct?: number;
   convId?: string | number;
-}
-
-interface AiCmSwSender {
-  id?: string;
-  url?: string;
-  tab?: { id?: number | null; windowId?: number | null };
 }
 
 interface AiCmStorageChange {
@@ -1334,3 +1319,7 @@ interface AiCmContentScriptRegistration {
 interface AiCmHistoryRecord {
   ts?: number;
 }
+
+// C1: контракты границы SW вынесены в types/messages.d.ts (C1). Импорт в хвосте —
+// чтобы не сдвигать номера строк, запинутые в tests/fixtures/*.json.
+import type { AiCmSwCountTokensResponse, AiCmSwRequest, AiCmSwResponse, AiCmSwSender } from '../types/messages';

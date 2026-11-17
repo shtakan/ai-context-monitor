@@ -346,7 +346,7 @@ window.addEventListener('ai-cm-conversation-changed', function () {
       try { aiCmCancelDeferredHistWrite(''); } catch (eDw) { }
       // фикс бага B: per-tab бейдж со старого разговора («85») сбрасываем в SW;
       // актуальный поставит первый сработавший порог нового чата (THRESHOLD_PCT).
-      try { chrome.runtime.sendMessage({ type: 'BADGE_RESET' }).catch(function () { }); } catch (eBr) { }
+      try { chrome.runtime.sendMessage({ type: 'BADGE_RESET' } as AiCmSwBadgeResetRequest).catch(function () { }); } catch (eBr) { }
       aiCmLastSeenConvId = newCid;
     }
   } catch (eSpa) { swallowSoft(eSpa, 'content:conversation-changed-outer'); }
@@ -416,7 +416,7 @@ function aiCmResetStaleStateOnChatlessChatGptUrl(): boolean {
     if (!currentAdapter || currentAdapter.siteName !== 'chatgpt') return false;
     if (getCurrentConvId()) return false; // в URL есть /c/<id> — это разговор, сбрасывать нечего
     resetConversationState();
-    try { chrome.runtime.sendMessage({ type: 'BADGE_RESET' }).catch(function () { }); } catch (eBr) { }
+    try { chrome.runtime.sendMessage({ type: 'BADGE_RESET' } as AiCmSwBadgeResetRequest).catch(function () { }); } catch (eBr) { }
     debugLog('log', '[AI CM][spa] O-34: URL без /c/<id> — состояние виджета и бейдж сброшены');
     return true;
   } catch (eChatless) {
@@ -1950,7 +1950,7 @@ function requestExactTokens(fullText: string, modelId: string | null): void {
     type: 'COUNT_TOKENS',
     text: fullText,
     model: apiModelId
-  }, function (response: { totalTokens?: number; error?: string }) {
+  } as AiCmSwCountTokensRequest, function (response: AiCmSwCountTokensResponse) {
     countTokensPending = /** @type {boolean|Map<unknown, unknown>} */ (false);
     if (response && typeof response.totalTokens === 'number') {
       lastCountTokensText = fullText;
@@ -3372,7 +3372,7 @@ function sendThresholdPct(pct: number): void {
     chrome.runtime.sendMessage({
       type: 'THRESHOLD_PCT',
       data: { convId: cid, site: siteName, pct: pct }
-    }).catch(function () { });
+    } as AiCmSwThresholdPctRequest).catch(function () { });
   } catch (e) {
     debugLog('error', '[AI CM][thresholds] send error:', e);
   }
@@ -4929,4 +4929,11 @@ declare global {
     'ai-cm-diag-response': CustomEvent;
   }
 }
+
+// C1: контракты границы SW (types/messages.d.ts). Алиасы в хвосте — аннотации у
+// мест отправки не должны сдвигать номера строк, запинутые в tests/fixtures/*.json.
+type AiCmSwCountTokensRequest = import('../types/messages').AiCmSwCountTokensRequest;
+type AiCmSwCountTokensResponse = import('../types/messages').AiCmSwCountTokensResponse;
+type AiCmSwThresholdPctRequest = import('../types/messages').AiCmSwThresholdPctRequest;
+type AiCmSwBadgeResetRequest = import('../types/messages').AiCmSwBadgeResetRequest;
 
