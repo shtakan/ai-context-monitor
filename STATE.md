@@ -19,6 +19,7 @@
 ## 3. Текущая задача
 
 - ID: `REL-02` — релиз 2.1.3: CHANGELOG 2.1.3, 15 точек версии (8 точек вывода + 7 пинов), релизный коммит `189e19f`; тег/Release/AMO — владелец
+- живая приёмка 2.1.3 (2026-11-17, артефакты `acceptance/2.1.3`): GSA — 16 сообщений (8u/8a), `partial` отсутствует, 6 437 / 5 %, old→new, имя без `[LOW CONFIDENCE]_`; Qwen — `qwen4-max`, limit 1 000 000, 12 (6u/6a), 25 415 / 2.5 %, `partial` отсутствует; лог: `gsa-latch point=set`, `baseComplete=1`, `badge-update … model=qwen4-max`
 - живая приёмка 2.1.2 (тред `e1020dba`): 165 сообщений, 99 229 / 77.5 %, «Ещё N» — 0, карточек файла нет
 - `RELEASE_CHECKLIST.md` — архив с 2026-11-16; гейт P0/P1 — в STANDARDS-MATRIX
 - `options/options.js` в checkJs + JSDoc: 21 аннотация DOM-элементов (20 const + `section`), 63 TS2339 закрыты; 3 присваивания `value` обёрнуты в `String()` (сеттер и так приводит к строке); пин `tests/options-checkjs.test.js`; `npx tsc --noEmit` exit 0
