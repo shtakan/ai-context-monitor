@@ -109,7 +109,19 @@ const SCOPE_FNS = [
   'mergeStreamTurns',
   'mergeTurns',
   'checkThreadSwitch',
-  'gsaDiagTurnsShape'
+  'gsaDiagTurnsShape',
+  'passiveFingerprint',
+  'passiveCursorOf',
+  'passiveHasHistoryCursor',
+  'passiveDomTurns',
+  'passiveVerdictOf',
+  'gsaSettleRow',
+  'gsaSettleCancelTimer',
+  'gsaSettleDrop',
+  'gsaSettleDropAll',
+  'gsaSettleArm',
+  'gsaSettleFlush',
+  'gsaSettleFlushChecked'
 ];
 const SCOPE = 'with (ctx) { ' + SCOPE_FNS.map((n) => fnDecl(INTERCEPT, n)).join('\n') +
   '\n return { ' + SCOPE_FNS.map((n) => n + ': ' + n).join(', ') + ' }; }';
@@ -120,6 +132,10 @@ function interceptCtx(over) {
   const logs = [];
   const ctx = {
     MAX_CACHE_ENTRIES: 10,
+    SETTLE_MS: 1000,
+    SETTLE_MAX_TIDS: 50,
+    gsaSettleRows: Object.create(null),
+    gsaSettleTimers: Object.create(null),
     threadCache: new Map(),
     lastFullTurns: [],
     lastFullMessages: [],

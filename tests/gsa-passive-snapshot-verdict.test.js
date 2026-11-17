@@ -269,3 +269,173 @@ describe('BUG-N: состав пассивного снимка на фикст�
     }
   });
 });
+
+/**
+ * BUG-M (2.1.4, High): признак полноты ПАССИВНОГО снимка — «поток успокоился», а НЕ тип
+ * запроса. Живой путь GSA — только /folif, full=1 не встречается, поэтому прежний гейт
+ * `if (isFull !== true) return 'passive-incomplete:stream'` держал baseComplete в 0 вечно.
+ * Теперь тишина доказывается per-tid debounce: SETTLE_MS (1000) от ПОСЛЕДНЕГО чанка, и по
+ * таймеру снимок переэмитится как полный тем же emitDetail (baseComplete/латч/бейдж/
+ * автоэкспорт обновляются штатно).
+ */
+describe('BUG-M 2.1.4: тишина потока (settle) как признак полноты folif-снимка', function () {
+  function roles(snap) {
+    return {
+      user: snap.messages.filter(function (m) { return m.role === 'user'; }).length,
+      assistant: snap.messages.filter(function (m) { return m.role === 'assistant'; }).length
+    };
+  }
+
+  test('чанк + тишина без роста текста → passive-complete, historyComplete=1, partial нет', function () {
+    const h = harness({ domTid: SPA.threadId, domCount: SPA.turns.length });
+    h.api.mergeTurns(turnsOf(SPA), false, SPA.threadId, FOLIF_BODY);
+    // до срабатывания таймера снимок неполный (baseComplete не взведён)
+    expect(h.api.lastFullSnapshot.historyComplete).toBe(false);
+    expect(h.api.lastFullSnapshot.historyCompleteReason).toBe('passive-incomplete:stream');
+    expect(h.api.gsaSettleRow(SPA.threadId).settled).toBe(false);
+    expect(h.events.length).toBe(1);
+
+    h.api.gsaSettleFlush(SPA.threadId); // таймер сработал, состав не вырос
+
+    const done = h.api.lastFullSnapshot;
+    expect(h.api.gsaSettleRow(SPA.threadId).settled).toBe(true);
+    expect(done.historyComplete).toBe(true);
+    expect(done.historyCompleteReason).toBe('passive-complete');
+    // переэмит тем же emitDetail: второй кадр уже полный
+    expect(h.events.length).toBe(2);
+    expect(h.events[1].historyComplete).toBe(true);
+    expect(h.events[1].count).toBe(8);
+    // partial нет: у полного снимка не остаётся неполной причины
+    expect(String(done.historyCompleteReason || '').indexOf('passive-incomplete')).toBe(-1);
+    expect(h.ctx.probeCalls.length).toBe(0);
+    expect(h.api.threadCache.get(SPA.threadId).snapshot.historyComplete).toBe(true);
+  });
+
+  test('чанк до срабатывания таймера: ни один эмит не взводит baseComplete', function () {
+    const h = harness({ domTid: SPA.threadId, domCount: SPA.turns.length });
+    h.api.mergeTurns(turnsOf(SPA), false, SPA.threadId, FOLIF_BODY);
+    h.api.mergeTurns(turnsOf(SPA).slice(0, 3), false, SPA.threadId, FOLIF_BODY);
+    expect(h.events.length).toBeGreaterThan(0);
+    expect(h.events.every(function (e) { return e.historyComplete !== true; })).toBe(true);
+    expect(h.api.threadCache.get(SPA.threadId).snapshot.historyComplete).toBe(false);
+  });
+
+  test('рост состава после взвода (applyTurns) → тишина не доказана, переэмита нет', function () {
+    const h = harness({ domTid: SPA.threadId, domCount: SPA.turns.length });
+    h.api.mergeTurns(turnsOf(SPA), false, SPA.threadId, FOLIF_BODY);
+    h.api.applyTurns([{ id: 'extra1', userText: 'Ещё вопрос', assistantText: 'Ещё ответ' }], SPA.threadId, false, FOLIF_BODY, 'append');
+    const grown = h.events.length;
+    expect(h.api.lastFullTurns.length).toBe(5);
+
+    h.api.gsaSettleFlush(SPA.threadId); // отпечаток разошёлся с взведённым
+
+    expect(h.events.length).toBe(grown);
+    expect(h.api.lastFullSnapshot.historyComplete).toBe(false);
+    expect(h.api.gsaSettleRow(SPA.threadId).settled).toBe(false);
+  });
+
+  test('AUtEx… + тишина → всё равно не complete (нужен probe, не пассив)', function () {
+    const h = harness({ domTid: SPA.threadId, domCount: SPA.turns.length });
+    h.api.mergeTurns(turnsOf(SPA), false, SPA.threadId, HISTORY_BODY);
+    const before = h.events.length;
+    h.api.gsaSettleFlush(SPA.threadId);
+    expect(h.events.length).toBe(before);
+    expect(h.api.lastFullSnapshot.historyComplete).toBe(false);
+    expect(h.api.lastFullSnapshot.historyCompleteReason).toBe('passive-incomplete:history-cursor');
+  });
+
+  test('domTurns больше netTurns на потоке → net-lt-dom (счёт до любых return)', function () {
+    const h = harness({ domTid: SPA.threadId, domCount: SPA.turns.length + 2 });
+    h.api.mergeTurns(turnsOf(SPA), false, SPA.threadId, FOLIF_BODY);
+    expect(h.api.lastFullSnapshot.historyCompleteReason).toBe('passive-incomplete:net-lt-dom');
+    const before = h.events.length;
+    h.api.gsaSettleFlush(SPA.threadId);
+    expect(h.events.length).toBe(before);
+    expect(h.api.lastFullSnapshot.historyComplete).toBe(false);
+  });
+
+  test('пустой вопрос важнее тишины: missing-user-text, а не passive-complete', function () {
+    const h = harness({ domTid: 'TID_Q', domCount: 0 });
+    const one = [{ id: 'q1', userText: '', assistantText: 'Ответ без вопроса' }];
+    expect(h.api.passiveVerdictOf(one, 'TID_Q', null, true).reason).toBe('passive-incomplete:missing-user-text');
+    // порядок проверок: пустой вопрос перекрывает и «поток»
+    expect(h.api.passiveVerdictOf(one, 'TID_Q', null, false).reason).toBe('passive-incomplete:missing-user-text');
+  });
+
+  test('составы на settled-снимке: 8 (4u/4a), 16 (8u/8a), 46 (23u/23a)', function () {
+    const spa = harness({ domTid: SPA.threadId, domCount: SPA.turns.length });
+    spa.api.mergeTurns(turnsOf(SPA), false, SPA.threadId, FOLIF_BODY);
+    spa.api.gsaSettleFlush(SPA.threadId);
+    expect(spa.api.lastFullSnapshot.count).toBe(8);
+    expect(roles(spa.api.lastFullSnapshot)).toEqual({ user: 4, assistant: 4 });
+
+    // Эквивалент живого SPA-треда 16 (8u/8a): фикстуры нет — 8 разных ходов
+    const eight = [];
+    for (let i = 0; i < 8; i++) eight.push({ id: 'c' + i, userText: 'Вопрос ' + i, assistantText: 'Ответ ' + i });
+    const big = harness({ domTid: 'TID8', domCount: 8 });
+    big.api.mergeTurns(eight, false, 'TID8', FOLIF_BODY);
+    expect(big.api.lastFullSnapshot.historyComplete).toBe(false);
+    big.api.gsaSettleFlush('TID8');
+    expect(big.api.lastFullSnapshot.count).toBe(16);
+    expect(roles(big.api.lastFullSnapshot)).toEqual({ user: 8, assistant: 8 });
+    expect(big.api.lastFullSnapshot.historyComplete).toBe(true);
+
+    const ret = harness({ domTid: RET.threadId, domCount: RET.turns.length });
+    ret.api.mergeTurns(turnsOf(RET), false, RET.threadId, FOLIF_BODY);
+    ret.api.gsaSettleFlush(RET.threadId);
+    expect(ret.api.lastFullSnapshot.count).toBe(46);
+    expect(roles(ret.api.lastFullSnapshot)).toEqual({ user: 23, assistant: 23 });
+    expect(ret.api.lastFullSnapshot.historyComplete).toBe(true);
+  });
+
+  test('таймер: перевзвод от последнего чанка, снятие при смене треда, пропуск чужого DOM', function () {
+    jest.useFakeTimers();
+    try {
+      const h = harness({ domTid: SPA.threadId, domCount: SPA.turns.length });
+      h.api.mergeTurns(turnsOf(SPA), false, SPA.threadId, FOLIF_BODY);
+      expect(h.events.length).toBe(1);
+
+      jest.advanceTimersByTime(400);
+      h.api.mergeTurns(turnsOf(SPA).slice(0, 3), false, SPA.threadId, FOLIF_BODY);
+      expect(h.events.length).toBe(2);
+
+      jest.advanceTimersByTime(700); // 700 мс тишины от последнего чанка — мало
+      expect(h.events.length).toBe(2);
+
+      jest.advanceTimersByTime(400); // 1100 мс — таймер сработал
+      expect(h.events.length).toBe(3);
+      expect(h.events[2].historyComplete).toBe(true);
+      expect(h.api.lastFullSnapshot.historyCompleteReason).toBe('passive-complete');
+
+      // смена треда: незавершённый таймер прежнего треда снимается
+      const h2 = harness({ domTid: 'TID_A', domCount: 1 });
+      h2.api.mergeTurns([{ id: 'a1', userText: 'Вопрос', assistantText: 'Ответ' }], false, 'TID_A', FOLIF_BODY);
+      const marked = h2.events.length;
+      h2.api.activateThread('TID_B');
+      jest.advanceTimersByTime(5000);
+      expect(h2.events.length).toBe(marked);
+
+      // тред перестал быть активным (чужой DOM) — выход без эмита
+      const h3 = harness({ domTid: 'TID_X', domCount: 1 });
+      h3.api.mergeTurns([{ id: 'x1', userText: 'Вопрос', assistantText: 'Ответ' }], false, 'TID_X', FOLIF_BODY);
+      const n3 = h3.events.length;
+      h3.ctx.domTid = 'ДРУГОЙ_ТРЕД';
+      h3.api.gsaSettleFlush('TID_X');
+      expect(h3.events.length).toBe(n3);
+      expect(h3.api.lastFullSnapshot.historyComplete).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('поздний чанк после settle не роняет доказанную полноту (монотонность)', function () {
+    const h = harness({ domTid: SPA.threadId, domCount: SPA.turns.length });
+    h.api.mergeTurns(turnsOf(SPA), false, SPA.threadId, FOLIF_BODY);
+    h.api.gsaSettleFlush(SPA.threadId);
+    expect(h.api.lastFullSnapshot.historyComplete).toBe(true);
+
+    h.api.mergeTurns([{ id: 'n1', userText: 'Новый вопрос', assistantText: 'Новый ответ' }], false, SPA.threadId, FOLIF_BODY);
+    expect(h.api.lastFullSnapshot.historyComplete).toBe(true);
+    expect(h.api.lastFullSnapshot.count).toBe(10);
+  });
+});

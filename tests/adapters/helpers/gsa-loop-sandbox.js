@@ -89,6 +89,11 @@ const SCOPE_FNS = [
   'markFolwrRunGain',
   // диаг-строка гарда виртуального скролла
   'gsaDiagVs',
+  // BUG-M (2.1.4): вердикт полноты пассивного снимка и debounce «тишины» — mergeTurns
+  // больше не считает domTurns сам, а планирует переэмит через эти функции.
+  'passiveFingerprint', 'passiveCursorOf', 'passiveHasHistoryCursor', 'passiveDomTurns',
+  'passiveVerdictOf', 'gsaSettleRow', 'gsaSettleCancelTimer', 'gsaSettleDrop',
+  'gsaSettleDropAll', 'gsaSettleArm', 'gsaSettleFlush', 'gsaSettleFlushChecked',
   // прогоны
   'followFolwrPagination',
   'probeFolwrCompleteness',
@@ -141,7 +146,12 @@ const SCOPE_DECLS = [
   // Мутируемые хелперы песочницы: объявлены ЗДЕСЬ (а не положены в ctx) — присваивание
   // обязано менять ту же привязку, которую читает срез перехватчика.
   'var __domTurns = [];',
-  'var __scroller = null;'
+  'var __scroller = null;',
+  // BUG-M (2.1.4): состояние debounce «тишины» — та же лексическая привязка, что у базы.
+  'var SETTLE_MS = 1000;',
+  'var SETTLE_MAX_TIDS = 50;',
+  'var gsaSettleRows = Object.create(null);',
+  'var gsaSettleTimers = Object.create(null);'
 ];
 
 const SCOPE_EXPORTS = [
@@ -206,7 +216,11 @@ const PASSIVE_FNS = [
   'messagesFromTurns', 'gsaTurnKeyOfLocal', 'gsaTurnKey', 'seedSeenKeys', 'dedupeTurnsForCache',
   'isRawXssiPayload', 'isUsableTurn', 'hasUsableTurns', 'isGarbageBody', 'buildDetail', 'emitDetail',
   'cacheSet', 'isForeignThread', 'segmentTurnsOf', 'activateThread', 'absorbForeignSnapshot',
-  'unionTurnsByDirection', 'applyTurns', 'mergeStreamTurns', 'mergeTurns', 'gsaProbeAfterPassiveSnapshot'
+  'unionTurnsByDirection', 'applyTurns', 'mergeStreamTurns', 'mergeTurns', 'gsaProbeAfterPassiveSnapshot',
+  // BUG-M (2.1.4): признак полноты — «поток успокоился» (per-tid debounce), см. mergeTurns
+  'passiveFingerprint', 'passiveCursorOf', 'passiveHasHistoryCursor', 'passiveDomTurns',
+  'passiveVerdictOf', 'gsaSettleRow', 'gsaSettleCancelTimer', 'gsaSettleDrop',
+  'gsaSettleDropAll', 'gsaSettleArm', 'gsaSettleFlush', 'gsaSettleFlushChecked'
 ];
 
 const PASSIVE_EXPORTS = [

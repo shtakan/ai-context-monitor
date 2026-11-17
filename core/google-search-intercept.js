@@ -619,6 +619,9 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
   function activateThread(tid) {
     tid = tid || '';
     if (tid === baseThreadId) return false;
+    // BUG-M (2.1.4): незавершённые debounce-таймеры «тишины» прежнего треда снимаются вместе
+    // с накопителем — иначе таймер старого треда переэмитил бы его снимок в новый разговор.
+    if (typeof gsaSettleDropAll === 'function') gsaSettleDropAll('thread-switch');
     var prevBaseTid = baseThreadId;
     baseThreadId = tid; pendingProbeTid = (tid && !threadCache.has(tid)) ? tid : '';
     var seg = tid ? threadCache.get(tid) : null;
@@ -727,6 +730,193 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     emitDetail(lastFullSnapshot);
   }
 
+  // ---- BUG-M (2.1.4): «поток успокоился» — признак полноты ПАССИВНОГО снимка ----
+  // Признак полноты folif-снимка больше НЕ завязан на тип запроса: isFull означал «тело из
+  // /folwr», а живой путь GSA — только /folif, поэтому вердикт всегда был
+  // passive-incomplete:stream и baseComplete не взводился никогда (лог 17:54–18:00).
+  // Полноту доказывает ФАКТ тишины: после последнего folif-чанка треда SETTLE_MS не пришло
+  // ни одного нового чанка и снимок не вырос (длина текста/отпечаток состава). До таймера
+  // вердикт — passive-incomplete:stream; по таймеру снимок переэмитится как полный ТЕМ ЖЕ
+  // emitDetail, поэтому baseComplete, латч O-43, бейдж и автоэкспорт обновляются штатным
+  // путём контент-скрипта (правок в core/content.ts не требуется).
+  var SETTLE_MS = 1000;
+  var SETTLE_MAX_TIDS = 50;
+  var gsaSettleRows = Object.create(null);   // tid → отпечаток/курсор/признак тишины
+  var gsaSettleTimers = Object.create(null); // tid → таймер debounce
+
+  // Отпечаток состава: длина текста + число сообщений + fnv1a по текстам сообщений.
+  // Изменение отпечатка после взвода таймера = поток ещё не успокоился (снимок вырос).
+  function passiveFingerprint(turns, messages) {
+    var msgs = Array.isArray(messages) ? messages : messagesFromTurns(Array.isArray(turns) ? turns : []);
+    var textLen = 0;
+    var parts = [];
+    for (var i = 0; i < msgs.length; i++) {
+      var mt = (msgs[i] && msgs[i].text != null) ? String(msgs[i].text) : '';
+      textLen += mt.length;
+      parts.push(mt);
+    }
+    var src = parts.join('\u0001');
+    var h = 0x811c9dc5;
+    for (var c = 0; c < src.length; c++) {
+      h ^= src.charCodeAt(c);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return textLen + ':' + msgs.length + ':' + ('0000000' + h.toString(16)).slice(-8);
+  }
+
+  // Курсор продолжения из тела ответа и признак КУРСОРА ИСТОРИИ (AUtEx…). Probe по такому
+  // телу нужен, пассивный снимок полным не считается.
+  function passiveCursorOf(bodyText) {
+    var cursor = null;
+    try {
+      var pUtils = (typeof window !== 'undefined' && window) ? window.GoogleFolwrUtils : null;
+      if (pUtils && typeof pUtils.extractContinuationToken === 'function' && bodyText) {
+        cursor = pUtils.extractContinuationToken(bodyText) || null;
+      }
+    } catch (e) { cursor = null; }
+    return cursor;
+  }
+
+  function passiveHasHistoryCursor(cursor) {
+    try {
+      var pUtils = (typeof window !== 'undefined' && window) ? window.GoogleFolwrUtils : null;
+      return !!(pUtils && typeof pUtils.isHistoryCursor === 'function' && pUtils.isHistoryCursor(cursor));
+    } catch (e) { return false; }
+  }
+
+  // Число ходов в ЖИВОМ DOM того же разговора. Считается ВСЕГДА — до любых ранних выходов
+  // вердикта: именно этого не хватало, domTurns оставался 0 и сравнение net>=dom не работало.
+  function passiveDomTurns(tid) {
+    var domTurns = 0;
+    try {
+      if (typeof document !== 'undefined' && document && document.querySelectorAll) {
+        var domTid = (typeof readDomThreadId === 'function') ? (readDomThreadId() || '') : '';
+        // Чужой DOM ничего не доказывает — тогда сравнивать не с чем, вердикт даёт состав.
+        if (!tid || !domTid || tid === domTid) {
+          domTurns = document.querySelectorAll('[data-scope-id="turn"]').length || 0;
+        }
+      }
+    } catch (e) { domTurns = 0; }
+    return domTurns;
+  }
+
+  // Вердикт пассивного снимка. Порядок проверок фиксирован (пин 2.1.4): domTurns считается
+  // ДО любых return; затем курсор истории; затем dom больше net; затем пустой вопрос; и
+  // только потом — тишина потока (settled). Тип запроса в вердикте не участвует.
+  function passiveVerdictOf(turns, tid, cursor, settled) {
+    var list = Array.isArray(turns) ? turns : [];
+    var netTurns = list.length;
+    var domTurns = passiveDomTurns(tid);
+    if (passiveHasHistoryCursor(cursor)) return { complete: false, reason: 'passive-incomplete:history-cursor', netTurns: netTurns, domTurns: domTurns };
+    if (netTurns < domTurns) return { complete: false, reason: 'passive-incomplete:net-lt-dom', netTurns: netTurns, domTurns: domTurns };
+    for (var pi = 0; pi < list.length; pi++) {
+      var pt = list[pi];
+      var pq = (pt && pt.userText) ? String(pt.userText).trim() : '';
+      if (!pq) return { complete: false, reason: 'passive-incomplete:missing-user-text', netTurns: netTurns, domTurns: domTurns };
+    }
+    if (settled !== true) return { complete: false, reason: 'passive-incomplete:stream', netTurns: netTurns, domTurns: domTurns };
+    return { complete: true, reason: 'passive-complete', netTurns: netTurns, domTurns: domTurns };
+  }
+
+  function gsaSettleRow(tid) {
+    return (tid && gsaSettleRows[tid]) ? gsaSettleRows[tid] : null;
+  }
+
+  function gsaSettleCancelTimer(tid) {
+    var tm = tid ? gsaSettleTimers[tid] : null;
+    if (!tm) return;
+    try { clearTimeout(tm); } catch (e) { if (typeof swallow === 'function') swallow(e, 'gsa:settle-clear-timer'); }
+    gsaSettleTimers[tid] = null;
+  }
+
+  // Снять накопленный debounce треда (полный folwr-снимок перекрыл поток).
+  function gsaSettleDrop(tid, reason) {
+    if (!tid) return;
+    gsaSettleCancelTimer(tid);
+    if (gsaSettleRows[tid]) delete gsaSettleRows[tid];
+    if (typeof gsaDiagState === 'function') gsaDiagState('settle', 'drop', reason || 'settle-drop', { tid: tid });
+  }
+
+  // Смена активного разговора: незавершённые таймеры чужого треда больше не эмитят.
+  function gsaSettleDropAll(reason) {
+    var ids = Object.keys(gsaSettleRows);
+    for (var i = 0; i < ids.length; i++) {
+      gsaSettleCancelTimer(ids[i]);
+      delete gsaSettleRows[ids[i]];
+    }
+    if (typeof gsaDiagState === 'function' && ids.length > 0) gsaDiagState('settle', 'reset', reason || 'thread-switch', { dropped: ids.length });
+  }
+
+  // Взвод debounce: каждый новый folif-чанк того же треда перевзводит таймер — тишина
+  // отсчитывается от ПОСЛЕДНЕГО чанка, а не от первого.
+  function gsaSettleArm(tid, fp, cursor) {
+    if (!tid) return;
+    var ids = Object.keys(gsaSettleRows);
+    if (ids.length >= SETTLE_MAX_TIDS && !gsaSettleRows[tid]) {
+      for (var i = 0; i < ids.length; i++) {
+        if (ids[i] === tid) continue;
+        gsaSettleCancelTimer(ids[i]);
+        delete gsaSettleRows[ids[i]];
+      }
+    }
+    gsaSettleCancelTimer(tid);
+    gsaSettleRows[tid] = { fp: fp, cursor: cursor || null, settled: false, at: Date.now() };
+    gsaSettleTimers[tid] = setTimeout(function () {
+      gsaSettleTimers[tid] = null;
+      gsaSettleFlush(tid);
+    }, SETTLE_MS);
+    if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('settle', null, 'arm', tid, { fp: fp, ms: SETTLE_MS, cursor: cursor || '' });
+  }
+
+  // Таймер сработал: тишина доказана? Пересчёт вердикта и переэмит снимка как полного.
+  // Таймерный колбэк не должен бросать наружу — ошибка гасится в swallow с меткой.
+  function gsaSettleFlush(tid) {
+    try {
+      gsaSettleFlushChecked(tid);
+    } catch (e) { if (typeof swallow === 'function') swallow(e, 'gsa:settle-flush'); }
+  }
+
+  function gsaSettleFlushChecked(tid) {
+    var row = gsaSettleRow(tid);
+    if (!row || row.settled === true) return;
+    // Сменился тред / тред больше не активен — выход БЕЗ эмита (снимок чужого не публикуем).
+    var stillActive = (tid === baseThreadId) || (tid === currentThreadId) || (tid === emittedThreadId);
+    if (isForeignThread(tid) || !stillActive) {
+      delete gsaSettleRows[tid];
+      if (typeof gsaDiagState === 'function') gsaDiagState('settle', 'skip', 'inactive-thread', { tid: tid, active: baseThreadId || '' });
+      return;
+    }
+    if (!lastFullTurns || lastFullTurns.length === 0) {
+      delete gsaSettleRows[tid];
+      return;
+    }
+    var fpNow = passiveFingerprint(lastFullTurns, lastFullMessages);
+    if (fpNow !== row.fp) {
+      // Снимок вырос после взвода — тишина НЕ доказана: ждём следующий чанк или таймер.
+      gsaSettleArm(tid, fpNow, row.cursor);
+      if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('settle', lastFullTurns, 'grow', tid, { fp: fpNow, prev: row.fp });
+      return;
+    }
+    var verdict = passiveVerdictOf(lastFullTurns, tid, row.cursor, true);
+    if (verdict.complete !== true) {
+      row.settled = true;
+      if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('settle', lastFullTurns, 'not-complete', tid, { reason: verdict.reason, net: verdict.netTurns, dom: verdict.domTurns });
+      return;
+    }
+    var snapshot = buildDetail(lastFullTurns, lastFullMessages, tid, true, verdict.reason);
+    row.settled = true;
+    if (snapshot.historyComplete !== true) {
+      // buildDetail не подтвердил полноту (пустой вопрос) — латч не поднимаем.
+      if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('settle', lastFullTurns, 'latch-refused', tid, { reason: snapshot.historyCompleteReason || '', net: verdict.netTurns, dom: verdict.domTurns });
+      return;
+    }
+    lastFullSnapshot = snapshot;
+    emittedThreadId = snapshot.threadId || '';
+    if (emittedThreadId) cacheSet(emittedThreadId, { turns: lastFullTurns, messages: lastFullMessages, snapshot: snapshot });
+    if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('settle', lastFullTurns, 'accept', tid, { reason: verdict.reason, net: verdict.netTurns, dom: verdict.domTurns, fp: fpNow, emitted: emittedThreadId || '' });
+    emitDetail(snapshot);
+  }
+
   // ---- слияние новых ходов ----
   // tidOfResponse — threadId из ТЕЛА ответа (parseWithParser), если он там есть.
   // bodyText — СЫРОЕ тело ответа (O-27): по нему решается, что тело — форма мусора.
@@ -810,51 +1000,27 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     lastFullTurns = closeEchoQuestions(lastFullTurns);
     seedSeenKeys(lastFullTurns);
     if (typeof gsaRejectNoUserText === 'function' && gsaRejectNoUserText(lastFullTurns, threadId, newTurns, isFull)) return; lastFullMessages = messagesFromTurns(lastFullTurns);
-    // BUG-M: полнота ПАССИВНОГО снимка — вердикт по самому снимку, БЕЗ probe. Probe по
-    // folif-телу уходил на folwr с сессионным mstk → HTTP 400 (probe-http-error) и вечный
-    // partial. Условия: нет КУРСОРА ИСТОРИИ, ходов не меньше, чем в живом DOM того же
-    // разговора, и у каждого хода есть вопрос (свой или из обёртки-эха).
-    function passiveVerdict(turns, tid, bodyText) {
-      var netTurns = turns.length;
-      if (isFull !== true) return { complete: false, reason: 'passive-incomplete:stream', netTurns: netTurns, domTurns: 0 };
-      var domTurns = 0;
-      try {
-        if (typeof document !== 'undefined' && document && document.querySelectorAll) {
-          var domTid = (typeof readDomThreadId === 'function') ? (readDomThreadId() || '') : '';
-          // Считаем DOM-ходы, только если открыт тот же разговор. Чужой DOM ничего не
-          // доказывает — тогда сравнивать не с чем (domTurns=0), вердикт даёт состав.
-          if (!tid || !domTid || tid === domTid) {
-            domTurns = document.querySelectorAll('[data-scope-id="turn"]').length || 0;
-          }
-        }
-      } catch (e) { domTurns = 0; }
-      var cursor = null;
-      var pUtils = (typeof window !== 'undefined' && window) ? window.GoogleFolwrUtils : null;
-      try {
-        if (pUtils && typeof pUtils.extractContinuationToken === 'function' && bodyText) {
-          cursor = pUtils.extractContinuationToken(bodyText) || null;
-        }
-      } catch (e) { cursor = null; }
-      var histCursor = false;
-      try {
-        histCursor = !!(pUtils && typeof pUtils.isHistoryCursor === 'function' && pUtils.isHistoryCursor(cursor));
-      } catch (e) { histCursor = false; }
-      if (histCursor) return { complete: false, reason: 'passive-incomplete:history-cursor', netTurns: netTurns, domTurns: domTurns };
-      if (netTurns < domTurns) return { complete: false, reason: 'passive-incomplete:net-lt-dom', netTurns: netTurns, domTurns: domTurns };
-      for (var pi = 0; pi < turns.length; pi++) {
-        var pt = turns[pi];
-        var pq = (pt && pt.userText) ? String(pt.userText).trim() : '';
-        if (!pq) return { complete: false, reason: 'passive-incomplete:missing-user-text', netTurns: netTurns, domTurns: domTurns };
-      }
-      return { complete: true, reason: 'passive-complete', netTurns: netTurns, domTurns: domTurns };
-    }
-    var passive = passiveVerdict(lastFullTurns, threadId, bodyText);
+    // BUG-M (2.1.4): вердикт полноты пассивного снимка — по самому снимку, БЕЗ probe.
+    // Условия (порядок фиксирован, см. passiveVerdictOf): нет КУРСОРА ИСТОРИИ, ходов не
+    // меньше, чем в живом DOM того же разговора, у каждого хода есть вопрос (свой или из
+    // обёртки-эха), и поток УСПОКОИЛСЯ на этом составе (gsaSettleArm/gsaSettleFlush).
+    // Тип запроса в вердикте не участвует: полный folwr-снимок — не поток, он успокоен по
+    // определению; folif-чанк успокаивается только по таймеру тишины.
+    var passiveCursor = passiveCursorOf(bodyText);
+    var passiveFp = passiveFingerprint(lastFullTurns, lastFullMessages);
+    var settleRowNow = gsaSettleRow(threadId);
+    var streamSettled = (isFull === true) || !!(settleRowNow && settleRowNow.settled === true && settleRowNow.fp === passiveFp);
+    var passive = passiveVerdictOf(lastFullTurns, threadId, passiveCursor, streamSettled);
     if (lastFullTurns.length > 0) {
       lastFullSnapshot = buildDetail(lastFullTurns, lastFullMessages, threadId, passive.complete, passive.reason);
       emittedThreadId = lastFullSnapshot.threadId || '';
       if (emittedThreadId) cacheSet(emittedThreadId, { turns: lastFullTurns, messages: lastFullMessages, snapshot: lastFullSnapshot });
-      if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('mergeTurns', lastFullTurns, 'accept', threadId, { full: (isFull === true) ? 1 : 0, incoming: (newTurns && newTurns.length) || 0, emitted: emittedThreadId || '', complete: passive.reason, net: passive.netTurns, dom: passive.domTurns });
+      if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('mergeTurns', lastFullTurns, 'accept', threadId, { full: (isFull === true) ? 1 : 0, incoming: (newTurns && newTurns.length) || 0, emitted: emittedThreadId || '', complete: passive.reason, settled: streamSettled ? 1 : 0, net: passive.netTurns, dom: passive.domTurns });
       emitDetail(lastFullSnapshot);
+      // Debounce «тишины»: полный снимок его снимает, неполный — перевзводит, доказанный гасит.
+      if (isFull === true) gsaSettleDrop(threadId, 'full-snapshot');
+      else if (passive.complete === true) gsaSettleCancelTimer(threadId);
+      else gsaSettleArm(threadId, passiveFp, passiveCursor);
     } else if (typeof gsaDiagBaseWrite === 'function') {
       gsaDiagBaseWrite('mergeTurns', newTurns, 'accept-empty-base', threadId, { full: (isFull === true) ? 1 : 0, incoming: (newTurns && newTurns.length) || 0 });
     }
