@@ -19,7 +19,7 @@ var lastGoodModel = '';
 // bg_notification_* есть в ru и en). chrome.i18n в MV3 SW доступен всегда; фолбэк
 // (юнит-тесты, отладочный контекст) — прежний русский текст, байтово тот же.
 // $1..$9 в сообщении локали подставляются substitutions (placeholders → $1/$2).
-function aiCmI18nMessage(key: string, fallback: string, substitutions?: unknown[]) {
+function aiCmI18nMessage(key: string, fallback: string, substitutions?: string | string[]) {
   try {
     if (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.getMessage === 'function') {
       var message = substitutions ? chrome.i18n.getMessage(key, substitutions) : chrome.i18n.getMessage(key);
@@ -144,7 +144,10 @@ async function ensurePdfHelper(ids: string[]) {
 async function selfCheckPdfHelper() {
   // Firefox: хелпер живёт в event page, а world:'MAIN' в scripting имеет другую
   // семантику — самопроверку там не запускаем.
-  if (chrome.runtime && typeof chrome.runtime.getBrowserInfo === 'function') return;
+  // getBrowserInfo есть только в runtime Firefox (в @types/chrome поля нет):
+  // локальный тип без наследования и без any, проверка typeof сохранена.
+  var ffRuntime = chrome.runtime as { getBrowserInfo?: () => Promise<unknown> };
+  if (chrome.runtime && typeof ffRuntime.getBrowserInfo === 'function') return;
   if (!chrome.tabs || typeof chrome.tabs.query !== 'function') return;
   if (!chrome.scripting || typeof chrome.scripting.executeScript !== 'function') return;
   var tabs;
@@ -643,7 +646,9 @@ async function checkThresholds(data: AiCmThresholdData, sender: AiCmSwSender) {
     if (!convId || !isFinite(pct)) return;
 
     const latchKey = 'aiCmThr:' + convId;
-    var ses = await new Promise<Record<string, unknown>>(function (r) { chrome.storage.session.get([latchKey], r); });
+    var ses = await new Promise<Record<string, unknown>>(function (resolve) {
+      chrome.storage.session.get([latchKey], function (items: Record<string, unknown>) { resolve(items || {}); });
+    });
     var firedArr = Array.isArray(ses[latchKey]) ? ses[latchKey] : [];
     var firedSet = new Set(firedArr);
 
@@ -679,7 +684,9 @@ async function checkThresholds(data: AiCmThresholdData, sender: AiCmSwSender) {
     }
     var patch: AiCmStoragePatch = {};
     patch[latchKey] = firedArr;
-    await new Promise(function (r) { chrome.storage.session.set(patch, r); });
+    await new Promise<void>(function (resolve) {
+      chrome.storage.session.set(patch, function () { resolve(); });
+    });
 
     // Opt-in уведомление. Tab id зашит в id уведомления ('aiCmThr|<tabId>|<convId>|<T>') —
     // переживает рестарт SW без отдельного стейта. iconUrl — ТОЛЬКО абсолютный URL:
@@ -1312,12 +1319,15 @@ interface AiCmCountTokensRun {
   debounced?: number;
 }
 
+// Поля сужены до литералов: этого достаточно для assignability к
+// chrome.scripting.RegisteredContentScript (RunAt / world), не наследуя чужой тип
+// (в main-сборке chrome — shim `any`, interface extends any невалиден).
 interface AiCmContentScriptRegistration {
   id: string;
   matches: string[];
   js: string[];
-  runAt: string;
-  world: string;
+  runAt: 'document_start' | 'document_end' | 'document_idle';
+  world: 'ISOLATED' | 'MAIN';
   allFrames: boolean;
 }
 

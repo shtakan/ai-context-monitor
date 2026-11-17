@@ -16,6 +16,13 @@
 // литералы байтово прежние (декомпозиция, а не переписывание).
 // =============================================================================
 
+// chrome.storage в MV3 отдаёт промис, только если колбэк не передан; в типах
+// колбэк-ветка возвращает void, поэтому форму результата проверяем утиной
+// типизацией — тот же паттерн, что aiCmIsThenable в options/options.js.
+function aiCmIsThenable(value: unknown): value is PromiseLike<AiCmStorageData | null> {
+  return !!value && typeof (value as { then?: unknown }).then === 'function';
+}
+
 // v31: страховочная чистка перед записью экспорта истории.
 // Единая санация вынесена в utils/gemini-batchexecute-parser.ts (sanitizeGeminiText):
 //   strip /$AXzLiR[A-Za-z0-9+\/=\s]+/g, точную строку "File attachment was not previously
@@ -1873,8 +1880,8 @@ function doAutoExportDownload(cid: any, percentage: number, reason: string, netS
         if (hostKeyFb && typeof chrome !== 'undefined' && chrome && chrome.storage && chrome.storage.local &&
             typeof chrome.storage.local.get === 'function') {
           readFb = true;
-          var maybePromiseFb = chrome.storage.local.get([hostKeyFb], onHostHistFb);
-          if (maybePromiseFb && typeof maybePromiseFb.then === 'function') {
+          var maybePromiseFb: unknown = chrome.storage.local.get([hostKeyFb], onHostHistFb);
+          if (aiCmIsThenable(maybePromiseFb)) {
             maybePromiseFb.then(onHostHistFb, function () { onHostHistFb(null); });
           }
         }

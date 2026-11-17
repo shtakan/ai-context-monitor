@@ -78,7 +78,7 @@ function isExtensionValid(): boolean {
 // (jsdom-тесты, изолированные песочницы, отладочный контекст) → возвращается прежний
 // русский литерал: внешний вид без локали байтово прежний. $1..$9 в сообщении локали
 // подставляются переданными substitutions (как в chrome.i18n.getMessage(key, [...])).
-function aiCmI18nMessage(key: string, fallback: string, substitutions?: unknown[]): string {
+function aiCmI18nMessage(key: string, fallback: string, substitutions?: string | string[]): string {
   try {
     if (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.getMessage === 'function') {
       var message = substitutions ? chrome.i18n.getMessage(key, substitutions) : chrome.i18n.getMessage(key);

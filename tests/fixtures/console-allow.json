@@ -30,7 +30,7 @@
       "file": "core/background.ts",
       "category": "a-class-critical",
       "lines": [
-        494
+        497
       ],
       "reason": "A-class: registerContentScripts failure is critical; not migrated"
     },
