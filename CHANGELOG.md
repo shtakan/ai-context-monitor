@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.1.3] - 2026-11-17
+
+### Fixed
+- **GSA: порядок холодной загрузки (BUG-J, `1418072`/`8661f8d`)** — после F5 (`folwr-open`) экспорт шёл new→old: безусловный `turns.reverse()` в парсере (`utils/google-search-folwr-parser.ts:826-829`) при фактически упорядоченном old→new документе, а `msgOrder:2` ставился без проверки. Порядок теперь проверяется, и шаг probe при `added=0` больше не пересобирает базу из сырого порядка. Живая приёмка 18:35: `messages[0]` — первый вопрос, `messages=10` (5u/5a), имя файла без `[LOW CONFIDENCE]_`.
+- **GSA: lifecycle probe — watchdog, retry, TTL (BUG-I, `0a2c4c2`)** — «окно сбора» держалось на липком глобальном флаге `aiCmGsaProbeRunning`: probe не завершался, снимок удерживался (`partial=true`), бейдж замирал на первом замере. Добавлены watchdog 5 с, busy-retry, сброс `probedTids` и timestamp + TTL 15 с; неизвестный непустой `cid` больше не поднимает глобальный флаг. Приёмка 18:35: `probe завершён` (cursor-repeat), `gsa-latch point=set`, `probeRunning=0`, бейдж 4.3 % обновляется.
+- **GSA: цикл open/pagination чужого треда (BUG-K, `4374c11`)** — после F5 при активном треде `vx_7apaCCcG-zMsPtPfd6A4` запускался цикл открытия и пагинации чужого `8bTpaveuJtWckdUP46iumAo` (24 хода, ответы 3.9 МБ, ~30 с). Для чужого `tid`: `gained=0`, `foreign=1`, `tail=skip` — хвост не стартует. Живая F5: в логе только активный тред, foreign-цикла нет.
+- **GSA: монотонный вердикт полноты и латч O-43 (BUG-L, `ab7bee9`)** — `historyComplete=1` от probe не доживал до content: поздний open с `complete=0` сбрасывал вердикт, JSON уходил `partial=true/incomplete`. Введены `emitSite` на мосту и `completedTids` в MAIN: поздний open получает монотонный `historyComplete=1` и взводит `gsa-latch`. F5: probe `historyComplete=1` → `gsa-latch point=set`; JSON без `partial`, 16 (8u/8a), 5 %.
+- **GSA: вопрос A-only по телу ответа (BUG-H, `205db12`)** — вопрос хода, отсутствующий и в сети, и в DOM (ни `h2.iMqumd`, ни пузыря), восстанавливается из эха ответа (`byAnswer`); 37 целевых тестов. Живой A-only-тред недоступен (удалён владельцем), в доступных тредах A-only не возникает — закрыто по тестам.
+- **Qwen: слаг вне каталога вместо `siteDefaults` (BUG-02, `7e8b64c`)** — нераспознанная модель подменялась на `Qwen3.7-Plus`. Теперь слаг сайта попадает в `model` и бейдж как есть, лимит берётся из `siteDefaults`. Живая приёмка 20:13 на `Qwen4-Max`: `model="qwen4-max"`, `limit=1000000`, бейдж/попап `qwen4-max`.
+
+### Changed
+- **Строгий TypeScript (`tsconfig.strict.json`)** — strict-трек закрыт: `types/**` + `adapters/**/*.ts` + `utils/**/*.ts` + 8 core-файлов (`content`, `widget`, `state`, `base-handler`, `hybrid-tail`, `export-manager`, `background`, `gemini-diag-dump`); `npx tsc -p tsconfig.strict.json` — 0 ошибок (adapters 11 → 0, utils B1–B6 16/38/40/99/144/176 → 0, core B7–B11 33/38/59/77/100 → 0). Поведение не менялось; основной `tsconfig.json` не ужесточён.
+- **`@types/chrome` 0.3.7 + `tsconfig.chrome.json`** — отдельный конфиг (extends main, `types: ["chrome"]`, `noEmit`); chrome-счётчик 28 → 0, main/strict остаются 0 через шим `types/chrome-any.d.ts`.
+- **Контракты сообщений (`types/messages.d.ts`)** — дискриминированные union'ы в обе стороны: SW-запросы (9 вариантов) и ответы (`AiCmSwResponseFor<T>`), content-запросы/ответы (C2: `aiCmDiag`, `aiCmExportCurrent`, `aiCm-byok-key-changed`, `GET_STATS`), broadcast `CONTEXT_UPDATE`; листенеры `core/background.ts`, `core/content.ts`, `options/options.js` типизированы, `[key: string]: any` и `any` в них — 0.
+- **`options/options.js` в checkJs + JSDoc** — 17 → 0 ошибок без изменения поведения: 21 аннотация DOM-элементов, локальные JSDoc-формы записей storage (`AiCmStateRecord`/`AiCmHistoryRecord`/`AiCmSourceRecord`), предикат `aiCmIsThenable` вместо `any`; `@ts-ignore`/`@ts-nocheck`/`as any` — 0.
+- **`RELEASE_CHECKLIST.md` → архив** (с 2026-11-16 не применяется); гейт P0/P1 перенесён в `docs/STANDARDS-MATRIX.md`.
+
+### Notes
+- Счётчики сьюта: 264 suites / 4313 passed / 7 skipped / 0 failed; `npm run test:mutation` — 8 KILLED / 0 SURVIVED / 0 ERROR (2026-11-16).
+- `dist/content.js`: 731 058 B, sha256 `3405acba722bb9ca4052b73de730a5c54d6927920eddc5f99973ed1d36dd39cb`.
+
 ## [2.1.2] - 2026-11-16
 
 ### Added
