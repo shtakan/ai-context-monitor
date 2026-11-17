@@ -1139,7 +1139,7 @@ const LOCAL_SCRIPT_TAG = '<script src="../options/i18n-apply.js"></script>';
 // Бренды, названия платформ и технические вставки-контакты: не переводятся.
 const NOT_TRANSLATED_TEXT = [
   'AI Context Monitor', 'Google Gemini', 'ChatGPT', 'DeepSeek', 'Google AI Search',
-  'Claude', 'Perplexity', 'chrome://extensions', 'shtakanov@gmail.com'
+  'Google AI Studio', 'Qwen', 'Claude', 'Perplexity', 'chrome://extensions', 'shtakanov@gmail.com'
 ];
 
 const CYRILLIC_RE = /[\u0400-\u04FF]/;
