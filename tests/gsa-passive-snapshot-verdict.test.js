@@ -152,7 +152,10 @@ describe('BUG-M: вердикт полноты пассивного снимка
     const h = harness({ domTid: RET.threadId, document: domDoc });
     // Сырых контейнеров 24, но контейнер регенерации — вторая форма того же хода.
     expect(domDoc.querySelectorAll('[data-scope-id="turn"]').length).toBe(24);
-    expect(h.api.passiveDomTurns(RET.threadId)).toBe(23);
+    const dom = h.api.passiveDomTurns(RET.threadId);
+    expect(dom.count).toBe(23);
+    // A-only ход 16 (вопрос только в обёртке-эха) в множество вопросов DOM не входит.
+    expect(dom.questions.length).toBe(22);
     h.api.mergeTurns(turnsOf(RET), true, RET.threadId, FOLIF_BODY);
     expect(h.api.lastFullSnapshot.historyComplete).toBe(true);
     expect(h.api.lastFullSnapshot.historyCompleteReason).toBe('passive-complete');
@@ -471,5 +474,127 @@ describe('BUG-M 2.1.4: тишина потока (settle) как признак 
     h.api.mergeTurns([{ id: 'n1', userText: 'Новый вопрос', assistantText: 'Новый ответ' }], false, SPA.threadId, FOLIF_BODY);
     expect(h.api.lastFullSnapshot.historyComplete).toBe(true);
     expect(h.api.lastFullSnapshot.count).toBe(10);
+  });
+});
+
+/**
+ * BUG-P 2.1.4 (High): признак полноты пассивного снимка — ПОКРЫТИЕ ВОПРОСОВ базы, а не число
+ * DOM-контейнеров. Контейнер второй ФОРМЫ ОТВЕТА на уже известный вопрос (stub «Что-то пошло
+ * не так…» + полный ответ, разные jsuid, тела не prefix-совместимы) — не новый ход: dedupe его
+ * не схлопывает, и прежний счётчик давал net=23 / dom=24 → net-lt-dom навсегда
+ * (historyComplete=0 → partial → [LOW CONFIDENCE]_ → автоэкспорт пропущен).
+ *
+ * Пины: живая форма 23 базы + 24 контейнера (stub 5f + полный ft) → complete, 46 (23u/23a);
+ * новый вопрос в DOM, которого нет в базе → incomplete; A-only DOM-ход → complete;
+ * 24 сырых / 23 используемых → complete; сбой разбора → фолбэк на счётчик; повтор вопроса с
+ * двумя полными ответами, оба есть в базе → complete.
+ */
+describe('BUG-P 2.1.4: полнота по покрытию вопросов, а не по числу контейнеров', function () {
+  const STUB = 'Что-то пошло не так. Искусственному интеллекту не удалось создать ответ.';
+
+  function htmlOfTurn(t, body, id) {
+    const q = t.userText ? String(t.userText) : '';
+    return '<div data-scope-id="turn" jsuid="' + escHtml(id || t.id) + '">' +
+      (q ? '<h2 class="iMqumd">Вы сказали: "' + escHtml(q) + '"</h2>' : '') +
+      '<div data-subtree="aimfl">' + escHtml(body == null ? (t.assistantText || '') : body) + '</div>' +
+      '</div>';
+  }
+
+  function docOf(tid, htmls) {
+    return new DOMParser().parseFromString(
+      '<div><div data-session-thread-id="' + tid + '"></div>' + htmls.join('') + '</div>',
+      'text/html'
+    );
+  }
+
+  test('живая форма: 23 базы + 24 контейнера (stub 5f + полный ft) → complete, 46 (23u/23a)', function () {
+    // Контейнер-двойник: ТОТ ЖЕ вопрос (h2), тело-заглушка другого jsuid — как JRy2Fc_5f/ft.
+    const full = RET.turns[5];
+    const htmls = RET.turns.map(function (t) { return htmlOfTurn(t); })
+      .concat([htmlOfTurn(full, STUB, 'JRy2Fc_5f')]);
+    const domDoc = docOf(RET.threadId, htmls);
+    const h = harness({ domTid: RET.threadId, document: domDoc });
+    expect(domDoc.querySelectorAll('[data-scope-id="turn"]').length).toBe(24);
+
+    const dom = h.api.passiveDomTurns(RET.threadId);
+    // Контейнеров 24 (тела не схлопываются), вопросов — 22 уникальных: двойник не новый
+    // вопрос, а A-only ход 16 (вопрос только в эхе) вопроса не добавляет.
+    expect(dom.count).toBe(24);
+    expect(dom.questions.length).toBe(22);
+
+    h.api.mergeTurns(turnsOf(RET), true, RET.threadId, FOLIF_BODY);
+    const snap = h.api.lastFullSnapshot;
+    expect(snap.historyComplete).toBe(true);
+    expect(snap.historyCompleteReason).toBe('passive-complete');
+    expect(snap.count).toBe(46);
+    expect(snap.messages.filter(function (m) { return m.role === 'user'; }).length).toBe(23);
+    expect(snap.messages.filter(function (m) { return m.role === 'assistant'; }).length).toBe(23);
+    expect(h.ctx.probeCalls.length).toBe(0);
+  });
+
+  test('новый вопрос в DOM, которого нет в базе → incomplete (покрытие не выполнено)', function () {
+    const extra = { id: 'new1', userText: 'Совсем новый вопрос, которого нет в сети', assistantText: 'Ответ на новый вопрос.' };
+    const htmls = RET.turns.map(function (t) { return htmlOfTurn(t); }).concat([htmlOfTurn(extra)]);
+    const h = harness({ domTid: RET.threadId, document: docOf(RET.threadId, htmls) });
+
+    h.api.mergeTurns(turnsOf(RET), true, RET.threadId, FOLIF_BODY);
+    expect(h.api.lastFullSnapshot.historyComplete).toBe(false);
+    expect(h.api.lastFullSnapshot.historyCompleteReason).toBe('passive-incomplete:net-lt-dom');
+    // База не тронута: DOM-ходы в базу не дописываются (fill-only).
+    expect(h.api.lastFullTurns.length).toBe(23);
+  });
+
+  test('A-only DOM-ход (без вопроса) контейнером больше не считается → complete', function () {
+    // 5 контейнеров: 4 хода SPA + A-only двойник первого ответа (эхо-вопрос в теле, без h2).
+    const echoBody = 'Ответ в режиме ИИ, исходный запрос: "' + SPA.turns[0].userText + '"\n\nДругой ответ.';
+    const htmls = SPA.turns.map(function (t) { return htmlOfTurn(t); })
+      .concat([htmlOfTurn({ userText: null }, echoBody, 'aonly1')]);
+    const domDoc = docOf(SPA.threadId, htmls);
+    const h = harness({ domTid: SPA.threadId, document: domDoc });
+    expect(domDoc.querySelectorAll('[data-scope-id="turn"]').length).toBe(5);
+
+    const dom = h.api.passiveDomTurns(SPA.threadId);
+    expect(dom.count).toBe(5);          // контейнеры не схлопнулись
+    expect(dom.questions.length).toBe(4); // вопросов ровно 4 — A-only вопроса не добавляет
+
+    h.api.mergeTurns(turnsOf(SPA), true, SPA.threadId, FOLIF_BODY);
+    expect(h.api.lastFullSnapshot.historyComplete).toBe(true);
+    expect(h.api.lastFullSnapshot.historyCompleteReason).toBe('passive-complete');
+  });
+
+  test('сбой разбора DOM → фолбэк на счётчик (не 0), вердикт прежний', function () {
+    const broken = Object.assign({}, Parser, {
+      extractTurnsFromDocument: function () { throw new Error('разбор сломан'); }
+    });
+    const h = harness({ domTid: SPA.threadId, domCount: SPA.turns.length + 1, window: { GoogleFolwrUtils: broken, dispatchEvent: function () { } } });
+    const dom = h.api.passiveDomTurns(SPA.threadId);
+    expect(dom.count).toBe(5);       // счётчик контейнеров, не 0
+    expect(dom.questions.length).toBe(0);
+    h.api.mergeTurns(turnsOf(SPA), true, SPA.threadId, FOLIF_BODY);
+    expect(h.api.lastFullSnapshot.historyCompleteReason).toBe('passive-incomplete:net-lt-dom');
+
+    // Тот же сбой, но контейнеров не больше состава → прежний счётчик пропускает снимок.
+    const ok = harness({ domTid: SPA.threadId, domCount: SPA.turns.length, window: { GoogleFolwrUtils: broken, dispatchEvent: function () { } } });
+    ok.api.mergeTurns(turnsOf(SPA), true, SPA.threadId, FOLIF_BODY);
+    expect(ok.api.lastFullSnapshot.historyComplete).toBe(true);
+    expect(ok.api.lastFullSnapshot.historyCompleteReason).toBe('passive-complete');
+  });
+
+  test('повтор вопроса с двумя полными ответами, оба есть в базе → complete', function () {
+    const base = turnsOf(RET).slice();
+    const twin = { id: 'twin1', userText: RET.turns[7].userText, assistantText: 'Ответ 8бис. Повторная проверка узла связи завершена успешно.' };
+    base.push(twin);
+    const htmls = base.map(function (t) { return htmlOfTurn(t); });
+    const h = harness({ domTid: RET.threadId, document: docOf(RET.threadId, htmls) });
+    const dom = h.api.passiveDomTurns(RET.threadId);
+    expect(dom.count).toBe(24);
+    expect(dom.questions.length).toBe(22); // twin — тот же вопрос, A-only вопроса не даёт
+
+    h.api.mergeTurns(base, true, RET.threadId, FOLIF_BODY);
+    const snap = h.api.lastFullSnapshot;
+    expect(snap.historyComplete).toBe(true);
+    expect(snap.historyCompleteReason).toBe('passive-complete');
+    // Дубль вопроса не превратился в дубль сообщения: два РАЗНЫХ ответа = два хода.
+    expect(snap.count).toBe(48);
   });
 });

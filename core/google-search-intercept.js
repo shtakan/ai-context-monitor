@@ -788,30 +788,50 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     } catch (e) { return false; }
   }
 
-  // Число ИСПОЛЬЗУЕМЫХ ходов ЖИВОГО DOM того же разговора. Сырые контейнеры
-  // [data-scope-id="turn"] схлопываются тем же каноническим dedupe, что и база: контейнер
-  // ошибки/регенерации — вторая форма того же хода, и без этого net=23 против dom=24
-  // навсегда давал net-lt-dom (BUG-M). Нет живого DOM или разбора — откат на сырой счётчик.
+  // Число ИСПОЛЬЗУЕМЫХ ходов ЖИВОГО DOM того же разговора + МНОЖЕСТВО вопросов этого DOM.
+  // Сырые контейнеры [data-scope-id="turn"] схлопываются тем же каноническим dedupe, что и
+  // база: контейнер ошибки/регенерации — вторая форма того же хода (BUG-M). Но контейнер
+  // может быть и второй ФОРМОЙ ОТВЕТА на тот же вопрос, которую dedupe НЕ схлопывает (тела
+  // не prefix-совместимы: stub «Что-то пошло не так…» + полный ответ, разные jsuid — BUG-P).
+  // Поэтому наружу отдаётся и множество нормализованных вопросов DOM: вердикт судит
+  // ПОКРЫТИЕ вопросов, а не число контейнеров.
+  // В множество входят ТОЛЬКО структурные вопросы контейнера (h2.iMqumd / пузырь вопроса,
+  // то есть extractTurnsFromDocument.userText), ДО канонизации из обёртки-эха: A-only ход без
+  // вопроса вопросом не считается — его вопрос база берёт из эха, и за это отвечает
+  // missing-user-text по базе, а не вердикт по DOM.
+  // Нет живого DOM / нет разбора → count = сырой счётчик, questions = [] (прежний фолбэк).
   function passiveDomTurns(tid) {
+    var info = { count: 0, questions: [] };
     var raw = 0;
     try {
       if (typeof document !== 'undefined' && document && document.querySelectorAll) {
         var domTid = (typeof readDomThreadId === 'function') ? (readDomThreadId() || '') : '';
         // Чужой DOM ничего не доказывает — тогда сравнивать не с чем, вердикт даёт состав.
-        if (tid && domTid && tid !== domTid) return 0;
+        if (tid && domTid && tid !== domTid) return info;
         raw = document.querySelectorAll('[data-scope-id="turn"]').length || 0;
       }
-    } catch (e) { return 0; }
-    if (raw < 2) return raw;
+    } catch (e) { return info; }
+    info.count = raw;
+    if (raw < 2) return info;
     try {
       var dUtils = (typeof window !== 'undefined' && window) ? window.GoogleFolwrUtils : null;
-      if (!dUtils || typeof dUtils.extractTurnsFromDocument !== 'function') return raw;
+      if (!dUtils || typeof dUtils.extractTurnsFromDocument !== 'function') return info;
       var extracted = dUtils.extractTurnsFromDocument(document);
-      if (!Array.isArray(extracted) || extracted.length === 0) return raw;
+      if (!Array.isArray(extracted) || extracted.length === 0) return info;
+      var qOf = (typeof dUtils.turnIdentityParts === 'function') ? dUtils.turnIdentityParts : null;
       var canon = [];
+      var seenQ = Object.create(null);
+      var questions = [];
       for (var di = 0; di < extracted.length; di++) {
         var dt = extracted[di];
         if (!dt) continue;
+        // Вопрос DOM — структурный (есть в контейнере), нормализован той же идентичностью,
+        // что и вопросы базы: иначе формы одного вопроса не совпадут по ключу.
+        if (qOf && dt.userText) {
+          var dqp = qOf(dt);
+          var dq = (dqp && dqp.u) ? dqp.u : '';
+          if (dq && !seenQ[dq]) { seenQ[dq] = 1; questions.push(dq); }
+        }
         // Вопрос из обёртки-эха выносим в userText — иначе формы одного хода не совпадут
         // по каноническому ключу и dedupe не схлопнет контейнер регенерации.
         if (!dt.userText && typeof dUtils.canonicalizeTurnForThread === 'function') {
@@ -820,30 +840,54 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
         }
         canon.push(dt);
       }
+      info.questions = questions;
       var used = (typeof dUtils.dedupeTurns === 'function') ? dUtils.dedupeTurns(canon) : dedupeTurnsForCache(canon);
       var usedCount = Array.isArray(used) ? used.length : 0;
-      if (usedCount > 0 && usedCount <= raw) return usedCount;
-    } catch (e) { return raw; }
-    return raw;
+      if (usedCount > 0 && usedCount <= raw) info.count = usedCount;
+    } catch (e) { return { count: raw, questions: [] }; }
+    return info;
   }
 
-  // Вердикт пассивного снимка. Порядок проверок фиксирован (пин 2.1.4): domTurns считается
-  // ДО любых return; затем dom больше net; затем пустой вопрос; и только потом — тишина
-  // потока (settled). BUG-M: курсор истории/сессионный mstk в вердикте НЕ участвует —
-  // AUtEx… стоит в URL страницы и эхо-повторяется в теле, поэтому «не полон» по нему был
-  // ложным. Probe по такому курсору остаётся в gsaProbeAfterPassiveSnapshot (open-путь).
+  // Вердикт пассивного снимка. Порядок проверок фиксирован (пин 2.1.4): domTurns/domQuestions
+  // считаются ДО любых return; затем — ПОКРЫТИЕ вопросов DOM вопросами базы (BUG-P: контейнер
+  // второй формы ответа на тот же вопрос неполноты не доказывает); затем пустой вопрос; и
+  // только потом — тишина потока (settled). BUG-M: курсор истории/сессионный mstk в вердикте
+  // НЕ участвует — AUtEx… стоит в URL страницы и эхо-повторяется в теле, поэтому «не полон» по
+  // нему был ложным. Probe по такому курсору остаётся в gsaProbeAfterPassiveSnapshot (open-путь).
   function passiveVerdictOf(turns, tid, cursor, settled) {
     var list = Array.isArray(turns) ? turns : [];
     var netTurns = list.length;
-    var domTurns = passiveDomTurns(tid);
-    if (netTurns < domTurns) return { complete: false, reason: 'passive-incomplete:net-lt-dom', netTurns: netTurns, domTurns: domTurns };
+    var dom = passiveDomTurns(tid);
+    var domTurns = (dom && typeof dom.count === 'number') ? dom.count : 0;
+    var domQs = (dom && Array.isArray(dom.questions)) ? dom.questions : [];
+    var domQn = domQs.length;
+    var qUtils = (typeof window !== 'undefined' && window) ? window.GoogleFolwrUtils : null;
+    var qOf = (domQn > 0 && qUtils && typeof qUtils.turnIdentityParts === 'function') ? qUtils.turnIdentityParts : null;
+    if (qOf) {
+      // BUG-P: каждый непустой вопрос живого DOM должен быть вопросом базы. Дубль вопроса
+      // (второй полный ответ на тот же вопрос) покрыт — это и есть complete.
+      var known = Object.create(null);
+      for (var bi = 0; bi < list.length; bi++) {
+        var bp = qOf(list[bi]);
+        var bq = (bp && bp.u) ? bp.u : '';
+        if (bq) known[bq] = 1;
+      }
+      var missingQ = false;
+      for (var qi = 0; qi < domQn; qi++) {
+        if (!known[domQs[qi]]) { missingQ = true; break; }
+      }
+      if (missingQ) return { complete: false, reason: 'passive-incomplete:net-lt-dom', netTurns: netTurns, domTurns: domTurns, domQuestions: domQn };
+    } else if (netTurns < domTurns) {
+      // Фолбэк без разбора DOM: прежний счётчик (не 0) — контейнеры против ходов.
+      return { complete: false, reason: 'passive-incomplete:net-lt-dom', netTurns: netTurns, domTurns: domTurns, domQuestions: domQn };
+    }
     for (var pi = 0; pi < list.length; pi++) {
       var pt = list[pi];
       var pq = (pt && pt.userText) ? String(pt.userText).trim() : '';
-      if (!pq) return { complete: false, reason: 'passive-incomplete:missing-user-text', netTurns: netTurns, domTurns: domTurns };
+      if (!pq) return { complete: false, reason: 'passive-incomplete:missing-user-text', netTurns: netTurns, domTurns: domTurns, domQuestions: domQn };
     }
-    if (settled !== true) return { complete: false, reason: 'passive-incomplete:stream', netTurns: netTurns, domTurns: domTurns };
-    return { complete: true, reason: 'passive-complete', netTurns: netTurns, domTurns: domTurns };
+    if (settled !== true) return { complete: false, reason: 'passive-incomplete:stream', netTurns: netTurns, domTurns: domTurns, domQuestions: domQn };
+    return { complete: true, reason: 'passive-complete', netTurns: netTurns, domTurns: domTurns, domQuestions: domQn };
   }
 
   function gsaSettleRow(tid) {
@@ -928,7 +972,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     var verdict = passiveVerdictOf(lastFullTurns, tid, row.cursor, true);
     if (verdict.complete !== true) {
       row.settled = true;
-      if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('settle', lastFullTurns, 'not-complete', tid, { reason: verdict.reason, net: verdict.netTurns, dom: verdict.domTurns });
+      if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('settle', lastFullTurns, 'not-complete', tid, { reason: verdict.reason, net: verdict.netTurns, dom: verdict.domTurns, domQ: verdict.domQuestions });
       return;
     }
     var snapshot = buildDetail(lastFullTurns, lastFullMessages, tid, true, verdict.reason);
@@ -941,7 +985,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     lastFullSnapshot = snapshot;
     emittedThreadId = snapshot.threadId || '';
     if (emittedThreadId) cacheSet(emittedThreadId, { turns: lastFullTurns, messages: lastFullMessages, snapshot: snapshot });
-    if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('settle', lastFullTurns, 'accept', tid, { reason: verdict.reason, net: verdict.netTurns, dom: verdict.domTurns, fp: fpNow, emitted: emittedThreadId || '' });
+    if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('settle', lastFullTurns, 'accept', tid, { reason: verdict.reason, net: verdict.netTurns, dom: verdict.domTurns, domQ: verdict.domQuestions, fp: fpNow, emitted: emittedThreadId || '' });
     emitDetail(snapshot);
   }
 
@@ -1043,7 +1087,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       lastFullSnapshot = buildDetail(lastFullTurns, lastFullMessages, threadId, passive.complete, passive.reason);
       emittedThreadId = lastFullSnapshot.threadId || '';
       if (emittedThreadId) cacheSet(emittedThreadId, { turns: lastFullTurns, messages: lastFullMessages, snapshot: lastFullSnapshot });
-      if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('mergeTurns', lastFullTurns, 'accept', threadId, { full: (isFull === true) ? 1 : 0, incoming: (newTurns && newTurns.length) || 0, emitted: emittedThreadId || '', complete: passive.reason, settled: streamSettled ? 1 : 0, net: passive.netTurns, dom: passive.domTurns });
+      if (typeof gsaDiagBaseWrite === 'function') gsaDiagBaseWrite('mergeTurns', lastFullTurns, 'accept', threadId, { full: (isFull === true) ? 1 : 0, incoming: (newTurns && newTurns.length) || 0, emitted: emittedThreadId || '', complete: passive.reason, settled: streamSettled ? 1 : 0, net: passive.netTurns, dom: passive.domTurns, domQ: passive.domQuestions });
       emitDetail(lastFullSnapshot);
       // Debounce «тишины»: полный снимок его снимает, неполный — перевзводит, доказанный гасит.
       if (isFull === true) gsaSettleDrop(threadId, 'full-snapshot');
