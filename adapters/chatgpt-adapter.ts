@@ -232,11 +232,11 @@ class ChatGPTAdapter extends BaseAdapter {
    * Роль узла по классу самого узла и класса предков (до 5 уровней вверх) — ЛЕГАСИ-слой
    * (уровень 4), на живой разметке 2026-10-13 не используется.
    *
-   * Возвращаем string, а не литеральный union 'user'|'assistant': пока тип узкий, tsc
-   * (TS2367) счёл бы сверку `role === 'unknown'` в extractMessages заведомо ложной, а она —
-   * живой детектор дрейфа разметки. TODO: уточнить тип в шаге 5 (контракт ролей адаптера).
+   * Возвращает AdapterRole: `'unknown'` — «не опознано», живой детектор дрейфа разметки.
+   * Тип включает 'unknown', поэтому сверка `role === 'unknown'` в extractMessages
+   * остаётся осмысленной (TS2367 не возникает).
    */
-  _detectRole(element: Element): string {
+  _detectRole(element: Element): AdapterRole {
     const classAttr = String(element.className || '');
     // Порядок исходной версии сохранён: markdown-рендер — ответ ассистента.
     if (classAttr.indexOf('markdown') !== -1) return 'assistant';

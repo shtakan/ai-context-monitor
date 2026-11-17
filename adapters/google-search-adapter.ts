@@ -35,8 +35,8 @@ interface GsaFolwrUtils {
  * Ленивый резолв общего хелпера рендера ответов AI-режима: общий мир, затем
  * Node-путь (require), иначе null.
  *
- * TODO: уточнить тип в шаге 5 (форма window.GoogleFolwrUtils без @types: сейчас
- * она any в types/globals.d.ts — здесь сузили до используемой поверхности).
+ * Тип global-а — `GoogleFolwrUtilsApi` из utils/google-search-folwr-parser
+ * (см. types/globals.d.ts); здесь — узкий срез, который реально вызывает адаптер.
  */
 function gsaFolwrUtils(): GsaFolwrUtils | null {
   try {

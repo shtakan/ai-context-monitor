@@ -165,15 +165,15 @@ isOnDialogPage(): boolean {
   /**
    * Роль хода по разметке узла.
    *
-   * Возвращаем string, а не литеральный union 'user'|'assistant': пока тип узкий,
-   * tsc (TS2367) считает проверки `role !== 'unknown'` в extractMessages
-   * (строки 219 и 236) заведомо ложными. Эти проверки — НАМЕРЕННЫЙ детектор дрейфа
-   * предиката (см. комментарий O-21 у них), и удалять их нельзя: они должны
-   * «ожить», если _detectRole снова начнёт отдавать 'unknown'. Тип string оставляет
-   * гейт живым и типизирует функцию честно — она отдаёт произвольную строку роли.
-   * TODO: уточнить тип в шаге 5 (контракт ролей адаптера).
+   * Возвращает AdapterRole (включает 'unknown'), поэтому проверки `role !== 'unknown'`
+   * в extractMessages (строки 219 и 236) остаются осмысленными: это НАМЕРЕННЫЙ детектор
+   * дрейфа предиката (см. комментарий O-21), они должны «ожить», если _detectRole снова
+   * начнёт отдавать 'unknown'.
+   * Тип живёт в types/adapter-globals.d.ts (ambient: адаптеры — не модули).
+   * Значения: 'user' | 'assistant' | 'unknown'; 'unknown' — часть контракта.
+   * Решение по 'unknown' принимает extractMessages (лач/добор), не адаптер.
    */
-  _detectRole(element: Element): string {
+  _detectRole(element: Element): AdapterRole {
     const classes = element.className || '';
     if (classes.includes('d29f3d7d')) return 'user';
     if (classes.includes('ds-markdown') || classes.includes('ds-assistant-message')) return 'assistant';

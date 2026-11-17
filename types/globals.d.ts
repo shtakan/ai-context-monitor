@@ -110,8 +110,8 @@ interface Window {
   GeminiBatchexecuteParser?: any;
   /** utils/google-search-folwr-parser.js */
   parseGoogleFolwrOpen?: any;
-  /** utils/google-search-folwr-parser.js */
-  GoogleFolwrUtils?: any;
+  /** utils/google-search-folwr-parser.js — публичный API парсера (тип — из парсера). */
+  GoogleFolwrUtils?: import('../utils/google-search-folwr-parser').GoogleFolwrUtilsApi;
   /**
    * core/pdf-parser.js — window.AiCmPdf: хелпер PDF-байтов (fromUrl), к которому
    * SW обращается через chrome.scripting.executeScript; объявлен после миграции

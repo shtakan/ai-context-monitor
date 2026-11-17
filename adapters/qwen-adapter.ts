@@ -452,11 +452,11 @@ class QwenAdapter extends BaseAdapter {
    * `qwen-chat-message-assistant`), плюс классы старых сборок как фолбэк. data-* маркеров
    * роли в живом DOM нет (снимок 2026-09-26: `data-message-role`/`data-role` — 0 совпадений);
    * угадывание по позиции/«пузырю» убрано — неверная роль тише не становится.
-   * Возвращаем string, а не литеральный union 'user'|'assistant': пока тип узкий,
-   * tsc (TS2367) счёл бы вызовы и сверку ролей в extractMessages заведомо ложными.
-   * TODO: уточнить тип в шаге 5 (контракт ролей адаптера).
+   * Возвращает AdapterRole (включает 'unknown'): тип не сужает сверку ролей в
+   * extractMessages, поэтому проверки дрейфа разметки остаются живыми.
+   * Тип живёт в types/adapter-globals.d.ts (ambient: адаптеры — не модули).
    */
-  _detectRole(element: Element): string {
+  _detectRole(element: Element): AdapterRole {
     try {
       const cls = String(element.className || '').toLowerCase();
       if (cls.indexOf('qwen-chat-message-user') !== -1) return 'user';
