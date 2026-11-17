@@ -6,19 +6,20 @@
 ## 1. Репозиторий
 
 - workspace: ai-context-monitor-clean
-- branch: main; HEAD: `189e19f` (chore(release) 2.1.3 — CHANGELOG, версия во всех точках вывода, 7 пинов); origin/main: `5224ae8`; ahead: 2; behind: 0; тег `v2.1.2` → `b36b3c0`
-- version: `2.1.3` (manifest.json, package.json, package-lock.json, футер docs/index.html); дата: 2026-11-17; опубликовано: не опубликовано — тег `v2.1.3`, GitHub Release и AMO 2.1.3 у владельца
+- branch: main; HEAD: `97b63ec` (chore(release): tsconfig.*.json вне ZIP); origin/main: `97b63ec`; ahead: 0; behind: 0; тег `v2.1.3` → `1e46a85`, `v2.1.2` → `b36b3c0`
+- version: `2.1.3` (manifest.json, package.json, package-lock.json, футер docs/index.html); дата: 2026-11-17; опубликовано: GitHub Release `v2.1.3` (ZIP #52) и AMO 2.1.3 (одобрена 2026-11-17, 0 ошибок / 7 предупреждений)
 
 ## 2. Метрики (финальный прогон 2026-11-17, после последнего коммита)
 
 - build: exit 0 (`node build.mjs`); `dist/content.js` 731 058 B, sha256 `3405acba722bb9ca4052b73de730a5c54d6927920eddc5f99973ed1d36dd39cb`
-- tests: 264 suites / 4313 passed / 7 skipped / 0 failed (полный `npm test`) — `264/4313/7/0`
+- tests: 264 suites / 4314 passed / 7 skipped / 0 failed (полный `npm test`) — `264/4314/7/0`
 - tsc: exit 0, вывод пуст (`npx tsc --noEmit`); strict: exit 0, 0 ошибок (`npx tsc -p tsconfig.strict.json`); chrome-tsc: **exit 0, 0 ошибок** (`npx tsc -p tsconfig.chrome.json` — гейт трека; список `artifacts/chrome-tsc-errors.txt` пуст); lint: 0 errors / 0 warnings (`npx eslint .`)
 - mutation: 8 KILLED / 0 SURVIVED / 0 ERROR (`npm run test:mutation`, exit 0, 2026-11-16)
 
 ## 3. Текущая задача
 
-- ID: `REL-02` — релиз 2.1.3: CHANGELOG 2.1.3, 15 точек версии (8 точек вывода + 7 пинов), релизный коммит `189e19f`; тег/Release/AMO — владелец
+- ID: `REL-02` — закрыт 2026-11-17: CHANGELOG 2.1.3, 15 точек версии (8 точек вывода + 7 пинов), релизный коммит `189e19f`; тег `v2.1.3` → `1e46a85`; GitHub Release `v2.1.3` (ZIP #52); AMO 2.1.3 одобрена (0 ошибок / 7 предупреждений)
+- post-release: `97b63ec` — `tsconfig.*.json` исключены из Chrome release ZIP (шаблон + пин `docs-hygiene`); AMO-пакет чистый; 2.1.3 не перевыпускается
 - живая приёмка 2.1.3 (2026-11-17, артефакты `acceptance/2.1.3`): GSA — 16 сообщений (8u/8a), `partial` отсутствует, 6 437 / 5 %, old→new, имя без `[LOW CONFIDENCE]_`; Qwen — `qwen4-max`, limit 1 000 000, 12 (6u/6a), 25 415 / 2.5 %, `partial` отсутствует; лог: `gsa-latch point=set`, `baseComplete=1`, `badge-update … model=qwen4-max`
 - живая приёмка 2.1.2 (тред `e1020dba`): 165 сообщений, 99 229 / 77.5 %, «Ещё N» — 0, карточек файла нет
 - `RELEASE_CHECKLIST.md` — архив с 2026-11-16; гейт P0/P1 — в STANDARDS-MATRIX
@@ -50,6 +51,7 @@
 | `BUG-K` | GSA после F5: цикл open/pagination **чужого** треда `8bTpaveuJtWckdUP46iumAo` (24 хода, ответы 3.9 МБ) при активном `vx_7apaCCcG-zMsPtPfd6A4`; `foreign-not-applied`/`pagination-empty`, ~30 с (20:30:51–20:31:24). База не портится, но GSA засыпается запросами; вероятная причина ответа 1835 B «Что-то пошло не так» на open активного треда (20:31:24) | закрыт 2026-11-16 20:57: `4374c11` — чужой tid: `gained=0`, `foreign=1`, `tail=skip`, хвост не стартует. Живая F5: в логе только активный `vx_7apa…`, foreign-цикла нет; probe → `gsa-latch point=set`, JSON без `partial`, 8 (4u/4a), 3.5 % | — |
 | `BUG-L` | GSA: 20:31:35.832 content принял `baseComplete=true` (`content-trace EMIT … baseComplete=true`), но `gsa-latch point=set` не напечатался; поздний open с `complete=0` (35.890) оставил `[ctx-snap] …|0` и JSON `partial=true/incomplete`, хотя probe завершился `historyComplete=1` (35.828). В 18:35 латч взводился. Причина не доказана (скоуп/вызов `aiCmGsaNetworkCompleteSet` или билд) | закрыт 2026-11-16 21:31: `ab7bee9` — `emitSite` на мосту + `completedTids` в MAIN. F5: probe `historyComplete=1` → `gsa-latch point=set`; поздний open `complete=0` получил `historyComplete=1` (монотонность) → повторный `set`; JSON без `partial`, 16 (8u/8a), 5 %, имя без `[LOW CONFIDENCE]_` | — |
 | `REL-01` | CHANGELOG 2.1.2 и версия во всех 15 точках; релиз опубликован | закрыт 2026-11-16: тег/Release/AMO, приёмка 165 / 99 229 / 77.5 % | — |
+| `REL-02` | CHANGELOG 2.1.3, 15 точек версии, тег/Release/AMO | закрыт 2026-11-17: GitHub Release `v2.1.3` (ZIP #52), AMO 2.1.3 одобрена (0/7), живая приёмка GSA/Qwen | — |
 
 ## 5. Последние решения (≤3)
 
