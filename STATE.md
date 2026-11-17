@@ -6,14 +6,14 @@
 ## 1. Репозиторий
 
 - workspace: ai-context-monitor-clean
-- branch: main; HEAD: `7eec547` (chore(ts): chrome-типы B12 — options 17 → 0); origin/main: `53c911f`; ahead: 4 (после docs-синка HEAD); behind: 0; тег `v2.1.2` → `b36b3c0`
+- branch: main; HEAD: `f17c4b4` (chore(state): B12 закрыт — chrome-счётчик 28 → 11); origin/main: `f17c4b4`; ahead: 0; behind: 0; тег `v2.1.2` → `b36b3c0`
 - version: `2.1.2` (manifest.json, package.json, package-lock.json, футер docs/index.html); дата: 2026-11-16; опубликовано: GitHub Release `v2.1.2` (ZIP собран CI, `Release ZIP #51`) и AMO 2.1.2 (одобрено 2026-11-16, 0 ошибок / 7 предупреждений)
 
 ## 2. Метрики (финальный прогон 2026-11-17, после последнего коммита)
 
-- build: exit 0 (`node build.mjs`); `dist/content.js` 731 272 B, sha256 `78ac228def04e8445851c9576b18ad9545c0da9eb04af46fd541f1840d34f01b`
+- build: exit 0 (`node build.mjs`); `dist/content.js` 731 350 B, sha256 `b716dbc6a91a1e8087c2ddfc6c384c20117406f98e33fc18a01399c6ed039602`
 - tests: 263 suites / 4284 passed / 7 skipped / 0 failed (полный `npm test`) — `263/4284/7/0`
-- tsc: exit 0, вывод пуст (`npx tsc --noEmit`); strict: exit 0, 0 ошибок (`npx tsc -p tsconfig.strict.json`); chrome-tsc: exit 2, **11 ошибок** (`npx tsc -p tsconfig.chrome.json`, замер трека — не гейт; 0 в `options/options.js`; список `artifacts/chrome-tsc-errors.txt`); lint: 0 errors / 0 warnings (`npx eslint .`)
+- tsc: exit 0, вывод пуст (`npx tsc --noEmit`); strict: exit 0, 0 ошибок (`npx tsc -p tsconfig.strict.json`); chrome-tsc: **exit 0, 0 ошибок** (`npx tsc -p tsconfig.chrome.json` — гейт трека; список `artifacts/chrome-tsc-errors.txt` пуст); lint: 0 errors / 0 warnings (`npx eslint .`)
 - mutation: 8 KILLED / 0 SURVIVED / 0 ERROR (`npm run test:mutation`, exit 0, 2026-11-16)
 
 ## 3. Текущая задача
@@ -27,8 +27,9 @@
 - **B11 закрыт 2026-11-17** без изменения поведения: `core/content.ts` 100 → 0 (TS7006 ×27, TS18046 ×20, TS7005 ×13, TS7053 ×11, TS7034 ×8, TS2339 ×7, TS2769 ×4, TS2345 ×3, TS2322 ×3, TS18047 ×2, TS2353 ×1, TS2532 ×1); TS2769 ×4 — аугментация `WindowEventMap` в EOF-блоке (не смена API); `!` в `resolveCurrentModel` (`currentAdapter.detectModel/siteName`) — инвариант: вызов только после `aiCmAssignAdapterByHost`, в рантайме удаляется; `@ts-ignore`/`@ts-nocheck`/`as any` в файле — 0
 - `@types/chrome` **0.3.7** подключён отдельным конфигом `tsconfig.chrome.json` (extends main, `compilerOptions.types: ["chrome"]`, `noEmit`, declaration off; include как у main, в `exclude` добавлен `types/chrome-any.d.ts`): main/strict остаются 0 через shim `types/chrome-any.d.ts` (из `types/globals.d.ts:49` `declare const chrome: any` убран, оставлена ссылка); пин `tests/chrome-types-config.test.js` (4)
 - **B12 закрыт 2026-11-17** без изменения поведения: `options/options.js` 17 → 0 (TS2339 ×11 — `host`/`updatedAt` на `unknown` + `label`/`importedAt`/`fileName` на записи архива, TS2322 ×3, TS1345 ×2 + TS2339 ×2 — `then` на `void`/`never`). Решение: локальные JSDoc-формы `AiCmStateRecord`/`AiCmHistoryRecord`/`AiCmSourceRecord` (все поля опциональны — код и раньше читал защитно) + одиночный `unknown`-assertion на границе storage (без `any`/двойных каст); `chrome.storage.*.get(keys, cb)` остался колбэк-формой (промис-перегрузка не нужна), сужение настроек — `@param`-аннотация на generic `T`; `then` легаси-мока — предикат `aiCmIsThenable(value: unknown): value is AiCmThenable` (тот же `typeof .then === 'function'`); `customLimit` → `String(...)` (сеттер `value` и так приводит); `@ts-ignore`/`@ts-nocheck`/`as any` — 0
-- **chrome-счётчик 28 → 11**: `core/background.ts` 6 (TS2322 ×3, TS2769 ×1, TS2339 ×1, TS2345 ×1), `core/export-manager.ts` 4 (TS1345 ×2 + TS2339 ×2), `core/content.ts` 1 (TS2769); в `options/options.js` 0
-- следующий шаг: B13 `core/background.ts` (6: `runAt: string` vs `RunAt`, `aiCmI18nMessage`-аргумент, `browser.runtime.getBrowserInfo`, `"then"`-литерал, колбэк с лишним параметром), затем B14 `core/export-manager.ts` 4 + `core/content.ts` 1 → chrome 0; контракты сообщений (отдельный High — меняет ландшафт strict-типов); релиз 2.1.3 — после chrome/contracts (CHANGELOG + 15 точек версии + tag + AMO)
+- **B13 закрыт 2026-11-17** без изменения поведения, 11 → 0: `core/background.ts` 6 → 0 (TS2769 — `aiCmI18nMessage.substitutions` → `string | string[]`; TS2322 ×2 — `AiCmContentScriptRegistration.runAt/world` сужены до литералов `RunAt`/`World` (без `extends` чужого типа: в main `chrome` — shim `any`); TS2339 — `getBrowserInfo` через локальный тип `{ getBrowserInfo?: () => Promise<unknown> }`, проверка `typeof` сохранена; TS2322/TS2345 — `storage.session.get/set` в Promise с локальным колбэком), `core/export-manager.ts` 4 → 0 (TS1345 ×2 + TS2339 ×2 — результат `storage.local.get` как `unknown` + предикат `aiCmIsThenable(value: unknown): value is PromiseLike<AiCmStorageData | null>`, тот же паттерн, что в options; колбэк остаётся основным путём), `core/content.ts` 1 → 0 (TS2769 — тот же `substitutions`); `@ts-ignore`/`@ts-nocheck`/`as any` — 0; сдвиг строк пинов hygiene обновлён в `tests/fixtures/{catch-whitelist,console-allow}.json`
+- **chrome-счётчик 11 → 0**: `npx tsc -p tsconfig.chrome.json` exit 0, 0 ошибок — chrome-трек 28 → 0 закрыт полностью (B12 17 + B13 11)
+- следующий шаг: контракты сообщений (`types/messages.d.ts` + `chrome.runtime.onMessage`) — отдельный High, меняет ландшафт strict-типов; затем релиз 2.1.3 (CHANGELOG + 15 точек версии + tag + AMO)
 
 ## 4. Открытые задачи (≤5)
 
