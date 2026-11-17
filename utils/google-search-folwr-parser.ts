@@ -827,10 +827,29 @@ export function parseGoogleFolwrOpen(htmlText: string): FolwrParseResult {
     }
   }
 
-  // BUG-D (act-gsa-turn-order): документ GSA-экспорта идёт new→old (первый блок — новейший
-  // ответ). Единственная точка правды порядка — здесь: дальше turns/messages/text уже
-  // oldest-first, и все слияния (mergeTurnsById/Monotone) дописывают новый ход в хвост.
-  turns.reverse();
+  // BUG-O (2.1.4): направление тела folwr — НЕ константа. Серверный экспорт идёт new→old,
+  // а тело треда, созданного в текущей сессии, приходит old→new (живой лог: SPA dE_8au,
+  // экспорт был перевёрнут). Единственный эталон порядка — живой DOM (он хронологический).
+  // При доказанном совпадении ходов выравниваем по нему; без доказательств (нет DOM, <2
+  // сопоставлений, чужой тред) — прежнее поведение: реверс серверного new→old.
+  if (turns.length > 1) {
+    var domOrder = 'no-evidence';
+    try {
+      var liveDoc: any = (typeof document !== 'undefined') ? document : null;
+      if (liveDoc && typeof liveDoc.querySelectorAll === 'function') {
+        var domTid = readThreadId(liveDoc);
+        if (!threadId || !domTid || threadId === domTid) {
+          var domTurns = extractTurnsFromDocument(liveDoc);
+          if (domTurns.length > 0) {
+            var ordered = orderTurnsByDom(turns, domTurns);
+            domOrder = ordered.verdict;
+            if (ordered.verdict !== 'no-evidence') turns = ordered.turns;
+          }
+        }
+      }
+    } catch (e) { swallowSoft(e, 'gsa-utils:parseGoogleFolwrOpen-order'); }
+    if (domOrder === 'no-evidence') turns.reverse();
+  }
 
   // Собрать messages + text
   for (var t = 0; t < turns.length; t++) {

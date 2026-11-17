@@ -6,12 +6,15 @@
  * общей песочницы tests/adapters/helpers/gsa-loop-sandbox.js (makePassiveApi), вход —
  * фикстуры состава 2.1.4, выход — снимок (история/причина/сообщения) и факт запуска probe.
  *
- * Пины (задача 2.1.4, STATE.md §4):
- *  - нет курсора истории + netTurns >= domTurns + у всех ходов есть вопрос →
- *    historyComplete=true, причина `passive-complete`, без probe;
+ * Пины (задача 2.1.4, STATE.md §4, BUG-M/BUG-O):
+ *  - netTurns >= ИСПОЛЬЗУЕМЫХ domTurns + у всех ходов есть вопрос → historyComplete=true,
+ *    причина `passive-complete`, без probe;
  *  - A-only ход без вопроса → `historyComplete=false`, причина `missing-user-text`;
- *  - курсор истории AUtEx… → `passive-incomplete:history-cursor` (probe нужен, пассив — нет);
+ *  - сессионный mstk AUtEx… в пассивном теле — НЕ признак неполноты: после тишины снимок
+ *    полный (BUG-M: токен стоит в URL страницы и эхо-повторяется в теле);
  *  - probe по пассивному снимку запускается ТОЛЬКО с курсором истории (AUtEx…), не с mstk;
+ *  - domTurns считаются после dedupe/canonicalize: 24 контейнера / 23 используемых хода →
+ *    net>=dom проходит (контейнер ошибки/регенерации — вторая форма того же хода);
  *  - вопрос из обёртки-эха становится userText (идемпотентно, assistantText не меняется);
  *  - dedupeTurns не теряет userText при замене формы; mergeTurnsByKey не увеличивает ходы;
  *  - состав: SPA 4 хода / 8 сообщений (4u/4a); возврат 23 хода / 45 (22u/23a) в сети,
@@ -58,6 +61,20 @@ function turnsOf(fixture) {
   return fixture.turns.map(function (t) {
     return { id: t.id, userText: t.userText, assistantText: t.assistantText };
   });
+}
+
+function escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Живой DOM одного хода: контейнер turn + h2-вопрос + aimfl-ответ (форма GSA).
+function domTurnHtml(t) {
+  const q = t.userText ? String(t.userText) : '';
+  return '<div data-scope-id="turn" jsuid="' + t.id + '">' +
+    (q ? '<h2 class="iMqumd">Вы сказали: "' + escHtml(q) + '"</h2>' : '') +
+    '<div data-subtree="aimfl">' + escHtml(t.assistantText || '') + '</div>' +
+    '</div>';
 }
 
 // Тело пассивного folif-снимка: сессионный mstk (не курсор истории).
@@ -113,11 +130,12 @@ describe('BUG-M: вердикт полноты пассивного снимка
     expect(monotone.historyComplete).toBe(true);
   });
 
-  test('курсор истории AUtEx → passive-incomplete:history-cursor (нужен probe, не пассив)', function () {
+  test('AUtEx… в пассивном теле — сессионный mstk, а не «не полон»: снимок complete', function () {
     const h = harness({ domTid: SPA.threadId, domCount: SPA.turns.length });
     h.api.mergeTurns(turnsOf(SPA), true, SPA.threadId, HISTORY_BODY);
-    expect(h.api.lastFullSnapshot.historyComplete).toBe(false);
-    expect(h.api.lastFullSnapshot.historyCompleteReason).toBe('passive-incomplete:history-cursor');
+    expect(h.api.lastFullSnapshot.historyComplete).toBe(true);
+    expect(h.api.lastFullSnapshot.historyCompleteReason).toBe('passive-complete');
+    expect(String(h.api.lastFullSnapshot.historyCompleteReason || '')).not.toContain('history-cursor');
   });
 
   test('netTurns < domTurns → passive-incomplete:net-lt-dom', function () {
@@ -125,6 +143,19 @@ describe('BUG-M: вердикт полноты пассивного снимка
     h.api.mergeTurns(turnsOf(SPA), true, SPA.threadId, FOLIF_BODY);
     expect(h.api.lastFullSnapshot.historyComplete).toBe(false);
     expect(h.api.lastFullSnapshot.historyCompleteReason).toBe('passive-incomplete:net-lt-dom');
+  });
+
+  test('24 сырых контейнера / 23 используемых хода → net>=dom проходит (dedupe как у базы)', function () {
+    const html = '<div><div data-session-thread-id="' + RET.threadId + '"></div>' +
+      RET.turns.map(domTurnHtml).join('') + domTurnHtml(RET.turns[0]) + '</div>';
+    const domDoc = new DOMParser().parseFromString(html, 'text/html');
+    const h = harness({ domTid: RET.threadId, document: domDoc });
+    // Сырых контейнеров 24, но контейнер регенерации — вторая форма того же хода.
+    expect(domDoc.querySelectorAll('[data-scope-id="turn"]').length).toBe(24);
+    expect(h.api.passiveDomTurns(RET.threadId)).toBe(23);
+    h.api.mergeTurns(turnsOf(RET), true, RET.threadId, FOLIF_BODY);
+    expect(h.api.lastFullSnapshot.historyComplete).toBe(true);
+    expect(h.api.lastFullSnapshot.historyCompleteReason).toBe('passive-complete');
   });
 
   test('чужой DOM: снимок не трогает активную базу, а кладётся в свой сегмент', function () {
@@ -334,14 +365,17 @@ describe('BUG-M 2.1.4: тишина потока (settle) как признак 
     expect(h.api.gsaSettleRow(SPA.threadId).settled).toBe(false);
   });
 
-  test('AUtEx… + тишина → всё равно не complete (нужен probe, не пассив)', function () {
+  test('AUtEx… + тишина → complete: probe не требуется, partial не выставляется', function () {
     const h = harness({ domTid: SPA.threadId, domCount: SPA.turns.length });
     h.api.mergeTurns(turnsOf(SPA), false, SPA.threadId, HISTORY_BODY);
+    expect(h.api.lastFullSnapshot.historyComplete).toBe(false);
     const before = h.events.length;
     h.api.gsaSettleFlush(SPA.threadId);
-    expect(h.events.length).toBe(before);
-    expect(h.api.lastFullSnapshot.historyComplete).toBe(false);
-    expect(h.api.lastFullSnapshot.historyCompleteReason).toBe('passive-incomplete:history-cursor');
+    expect(h.events.length).toBe(before + 1);
+    expect(h.events[h.events.length - 1].historyComplete).toBe(true);
+    expect(h.api.lastFullSnapshot.historyComplete).toBe(true);
+    expect(h.api.lastFullSnapshot.historyCompleteReason).toBe('passive-complete');
+    expect(h.ctx.probeCalls.length).toBe(0);
   });
 
   test('domTurns больше netTurns на потоке → net-lt-dom (счёт до любых return)', function () {

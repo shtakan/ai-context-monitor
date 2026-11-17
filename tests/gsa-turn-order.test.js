@@ -583,3 +583,43 @@ describe('BUG-J: выравнивание порядка по живому DOM',
     expect(isFn.slice(0, isFn.indexOf('\n}'))).not.toContain('gsa-latch');
   });
 });
+
+// BUG-O (2.1.4): пассивное тело folif/folwr больше не реверсится безусловно.
+// Направление тела не константа: серверный экспорт new→old, тело треда, созданного в
+// текущей сессии, — old→new. Эталон — живой DOM (хронологический), а при отсутствии
+// доказательств остаётся прежний реверс серверного порядка.
+describe('BUG-O (2.1.4): порядок пассивного тела по живому DOM', function () {
+  afterEach(function () { document.body.innerHTML = ''; });
+
+  function bodyInOrder(ids) { return snapshotHtml(ids.map(function (n) { return turnObj('t' + n); })); }
+  function liveDomOldToNew(ids) { document.body.innerHTML = docHtml(ids.map(function (n) { return turnObj('t' + n); })); }
+
+  test('тело old→new + живой DOM old→new → порядок сохранён, экспорт не перевёрнут', function () {
+    liveDomOldToNew([1, 2, 3]);
+    const parsed = Parser.parseGoogleFolwrOpen(bodyInOrder([1, 2, 3]));
+    expect(parsed.turns.map(function (t) { return t.id; })).toEqual(['t1', 't2', 't3']);
+    expect(parsed.messages[0]).toEqual({ role: 'user', text: 'Вопрос t1' });
+    expect(parsed.messages[parsed.messages.length - 1]).toEqual({ role: 'assistant', text: 'Ответ t3' });
+  });
+
+  test('тело new→old + живой DOM old→new → реверс (серверный экспорт)', function () {
+    liveDomOldToNew([1, 2, 3]);
+    const parsed = Parser.parseGoogleFolwrOpen(bodyInOrder([3, 2, 1]));
+    expect(parsed.turns.map(function (t) { return t.id; })).toEqual(['t1', 't2', 't3']);
+    expect(parsed.messages[0]).toEqual({ role: 'user', text: 'Вопрос t1' });
+    expect(parsed.messages[parsed.messages.length - 1]).toEqual({ role: 'assistant', text: 'Ответ t3' });
+  });
+
+  test('1 ход — порядок не меняется', function () {
+    liveDomOldToNew([1]);
+    const parsed = Parser.parseGoogleFolwrOpen(bodyInOrder([1]));
+    expect(parsed.turns.map(function (t) { return t.id; })).toEqual(['t1']);
+    expect(parsed.count).toBe(2);
+  });
+
+  test('нет доказательств (живой DOM пуст) → прежнее поведение: реверс серверного new→old', function () {
+    document.body.innerHTML = '';
+    const parsed = Parser.parseGoogleFolwrOpen(bodyInOrder([1, 2, 3]));
+    expect(parsed.turns.map(function (t) { return t.id; })).toEqual(['t3', 't2', 't1']);
+  });
+});

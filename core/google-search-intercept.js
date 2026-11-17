@@ -764,8 +764,9 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     return textLen + ':' + msgs.length + ':' + ('0000000' + h.toString(16)).slice(-8);
   }
 
-  // Курсор продолжения из тела ответа и признак КУРСОРА ИСТОРИИ (AUtEx…). Probe по такому
-  // телу нужен, пассивный снимок полным не считается.
+  // Курсор продолжения из тела ответа. BUG-M (2.1.4): AUtEx… в пассивном folif-теле —
+  // СЕССИОННЫЙ mstk (он же стоит в URL страницы и эхо-повторяется в теле), а не курсор
+  // «догрузить старую историю»; вердикт пассивного снимка на него больше не опирается.
   function passiveCursorOf(bodyText) {
     var cursor = null;
     try {
@@ -777,6 +778,9 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     return cursor;
   }
 
+  // Признак настоящего курсора истории. Оставлен ТОЛЬКО как гейт probe (open-путь):
+  // пассивный вердикт его не использует — AUtEx… там означает сессионный mstk, а не
+  // обрезанную историю (ложный passive-incomplete:history-cursor, BUG-M).
   function passiveHasHistoryCursor(cursor) {
     try {
       var pUtils = (typeof window !== 'undefined' && window) ? window.GoogleFolwrUtils : null;
@@ -784,30 +788,54 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     } catch (e) { return false; }
   }
 
-  // Число ходов в ЖИВОМ DOM того же разговора. Считается ВСЕГДА — до любых ранних выходов
-  // вердикта: именно этого не хватало, domTurns оставался 0 и сравнение net>=dom не работало.
+  // Число ИСПОЛЬЗУЕМЫХ ходов ЖИВОГО DOM того же разговора. Сырые контейнеры
+  // [data-scope-id="turn"] схлопываются тем же каноническим dedupe, что и база: контейнер
+  // ошибки/регенерации — вторая форма того же хода, и без этого net=23 против dom=24
+  // навсегда давал net-lt-dom (BUG-M). Нет живого DOM или разбора — откат на сырой счётчик.
   function passiveDomTurns(tid) {
-    var domTurns = 0;
+    var raw = 0;
     try {
       if (typeof document !== 'undefined' && document && document.querySelectorAll) {
         var domTid = (typeof readDomThreadId === 'function') ? (readDomThreadId() || '') : '';
         // Чужой DOM ничего не доказывает — тогда сравнивать не с чем, вердикт даёт состав.
-        if (!tid || !domTid || tid === domTid) {
-          domTurns = document.querySelectorAll('[data-scope-id="turn"]').length || 0;
-        }
+        if (tid && domTid && tid !== domTid) return 0;
+        raw = document.querySelectorAll('[data-scope-id="turn"]').length || 0;
       }
-    } catch (e) { domTurns = 0; }
-    return domTurns;
+    } catch (e) { return 0; }
+    if (raw < 2) return raw;
+    try {
+      var dUtils = (typeof window !== 'undefined' && window) ? window.GoogleFolwrUtils : null;
+      if (!dUtils || typeof dUtils.extractTurnsFromDocument !== 'function') return raw;
+      var extracted = dUtils.extractTurnsFromDocument(document);
+      if (!Array.isArray(extracted) || extracted.length === 0) return raw;
+      var canon = [];
+      for (var di = 0; di < extracted.length; di++) {
+        var dt = extracted[di];
+        if (!dt) continue;
+        // Вопрос из обёртки-эха выносим в userText — иначе формы одного хода не совпадут
+        // по каноническому ключу и dedupe не схлопнет контейнер регенерации.
+        if (!dt.userText && typeof dUtils.canonicalizeTurnForThread === 'function') {
+          var dct = dUtils.canonicalizeTurnForThread(dt);
+          if (dct && dct.userText) dt = dct;
+        }
+        canon.push(dt);
+      }
+      var used = (typeof dUtils.dedupeTurns === 'function') ? dUtils.dedupeTurns(canon) : dedupeTurnsForCache(canon);
+      var usedCount = Array.isArray(used) ? used.length : 0;
+      if (usedCount > 0 && usedCount <= raw) return usedCount;
+    } catch (e) { return raw; }
+    return raw;
   }
 
   // Вердикт пассивного снимка. Порядок проверок фиксирован (пин 2.1.4): domTurns считается
-  // ДО любых return; затем курсор истории; затем dom больше net; затем пустой вопрос; и
-  // только потом — тишина потока (settled). Тип запроса в вердикте не участвует.
+  // ДО любых return; затем dom больше net; затем пустой вопрос; и только потом — тишина
+  // потока (settled). BUG-M: курсор истории/сессионный mstk в вердикте НЕ участвует —
+  // AUtEx… стоит в URL страницы и эхо-повторяется в теле, поэтому «не полон» по нему был
+  // ложным. Probe по такому курсору остаётся в gsaProbeAfterPassiveSnapshot (open-путь).
   function passiveVerdictOf(turns, tid, cursor, settled) {
     var list = Array.isArray(turns) ? turns : [];
     var netTurns = list.length;
     var domTurns = passiveDomTurns(tid);
-    if (passiveHasHistoryCursor(cursor)) return { complete: false, reason: 'passive-incomplete:history-cursor', netTurns: netTurns, domTurns: domTurns };
     if (netTurns < domTurns) return { complete: false, reason: 'passive-incomplete:net-lt-dom', netTurns: netTurns, domTurns: domTurns };
     for (var pi = 0; pi < list.length; pi++) {
       var pt = list[pi];
@@ -2295,7 +2323,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       // BUG-M: probe — ТОЛЬКО по настоящему курсору истории (open-ответ folwr, AUtEx…).
       // Пассивный folif всегда несёт сессионный mstk: запрос folwr с ним отдаёт 400 и
       // превращался в probe-http-error с вечным partial. Вердикт пассива даёт mergeTurns.
-      if (!(utils && typeof utils.isHistoryCursor === 'function' && utils.isHistoryCursor(cursor))) return;
+      if (!passiveHasHistoryCursor(cursor)) return;
       pendingProbeTid = '';
       probeFolwrCompleteness(url, turns, tid, cursor, 0, []);
     } catch (e) { swallow(e, 'gsa:probe-passive'); }
