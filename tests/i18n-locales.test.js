@@ -1287,10 +1287,12 @@ describe('M-4.4: локализация privacy/privacy.html и docs/index.html'
       //   подсчёта, когда ключа в session нет (+1) → словарь 270
       // + AMO P1 (аудит 2.5): privacy_rev6_note — пункт истории редакций rev. 6
       //   (privacy_* — 87, словарь 271)
+      // + Firefox/AMO docs: docs_btn_firefox — кнопка установки из Mozilla Add-ons (+1;
+      //   docs_* — 43, словарь 272)
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('privacy_') === 0; }).length).toBe(87);
-      expect(Object.keys(ru).filter(function (k) { return k.indexOf('docs_') === 0; }).length).toBe(42);
-      expect(Object.keys(ru).length).toBe(271);
-      expect(Object.keys(en).length).toBe(271);
+      expect(Object.keys(ru).filter(function (k) { return k.indexOf('docs_') === 0; }).length).toBe(43);
+      expect(Object.keys(ru).length).toBe(272);
+      expect(Object.keys(en).length).toBe(272);
     });
 
     test('ru-значения M-4.4 байтово равны тексту разметки, en — перевод без кириллицы', () => {

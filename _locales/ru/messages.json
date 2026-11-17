@@ -684,13 +684,16 @@
     "message": "AI Context Monitor"
   },
   "docs_subtitle": {
-    "message": "Chrome-расширение для мониторинга заполнения контекстного окна ИИ-моделей"
+    "message": "Браузерное расширение для мониторинга заполнения контекстного окна ИИ-моделей"
   },
   "docs_btn_download": {
     "message": "Скачать расширение (ZIP)"
   },
   "docs_btn_github": {
     "message": "Проект на GitHub"
+  },
+  "docs_btn_firefox": {
+    "message": "Установить для Firefox"
   },
   "docs_section_how": {
     "message": "Как это работает"

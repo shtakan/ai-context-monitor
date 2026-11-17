@@ -684,13 +684,16 @@
     "message": "AI Context Monitor"
   },
   "docs_subtitle": {
-    "message": "Chrome extension for monitoring how full the context window of AI models is"
+    "message": "Browser extension for monitoring how full the context window of AI models is"
   },
   "docs_btn_download": {
     "message": "Download the extension (ZIP)"
   },
   "docs_btn_github": {
     "message": "Project on GitHub"
+  },
+  "docs_btn_firefox": {
+    "message": "Install for Firefox"
   },
   "docs_section_how": {
     "message": "How it works"
