@@ -6,8 +6,8 @@
 ## 1. Репозиторий
 
 - workspace: ai-context-monitor-clean
-- branch: main; HEAD: `f503a9b` (chore(ts): C2 — контракты content/options и broadcast); origin/main: `01b290c`; ahead: 2; behind: 0; тег `v2.1.2` → `b36b3c0`
-- version: `2.1.2` (manifest.json, package.json, package-lock.json, футер docs/index.html); дата: 2026-11-16; опубликовано: GitHub Release `v2.1.2` (ZIP собран CI, `Release ZIP #51`) и AMO 2.1.2 (одобрено 2026-11-16, 0 ошибок / 7 предупреждений)
+- branch: main; HEAD: `189e19f` (chore(release) 2.1.3 — CHANGELOG, версия во всех точках вывода, 7 пинов); origin/main: `5224ae8`; ahead: 2; behind: 0; тег `v2.1.2` → `b36b3c0`
+- version: `2.1.3` (manifest.json, package.json, package-lock.json, футер docs/index.html); дата: 2026-11-17; опубликовано: не опубликовано — тег `v2.1.3`, GitHub Release и AMO 2.1.3 у владельца
 
 ## 2. Метрики (финальный прогон 2026-11-17, после последнего коммита)
 
@@ -18,7 +18,7 @@
 
 ## 3. Текущая задача
 
-- ID: `REL-01` — закрыт 2026-11-16: CHANGELOG 2.1.2, 15 точек версии, тег `v2.1.2`, GitHub Release, AMO 2.1.2
+- ID: `REL-02` — релиз 2.1.3: CHANGELOG 2.1.3, 15 точек версии (8 точек вывода + 7 пинов), релизный коммит `189e19f`; тег/Release/AMO — владелец
 - живая приёмка 2.1.2 (тред `e1020dba`): 165 сообщений, 99 229 / 77.5 %, «Ещё N» — 0, карточек файла нет
 - `RELEASE_CHECKLIST.md` — архив с 2026-11-16; гейт P0/P1 — в STANDARDS-MATRIX
 - `options/options.js` в checkJs + JSDoc: 21 аннотация DOM-элементов (20 const + `section`), 63 TS2339 закрыты; 3 присваивания `value` обёрнуты в `String()` (сеттер и так приводит к строке); пин `tests/options-checkjs.test.js`; `npx tsc --noEmit` exit 0
@@ -33,7 +33,7 @@
 - C1, что вскрыла сверка инвентаря: `THRESHOLD_PCT.data` несёт `site` (`core/content.ts:3374`), которого не было в SW-форме — поле добавлено в вариант как факт отправителя; `checkThresholds` по-прежнему читает только `pct`/`convId` (локальный `AiCmThresholdData` не тронут). `close-print-tab` полей сверх `type` не несёт (`print/print.js:190`). Импорт `types/messages.d.ts` и type-алиасы стоят в хвостах файлов, поэтому номера строк пинов `tests/fixtures/*.json` не сдвинулись; `@ts-ignore`/`@ts-nocheck`/`as any`/`[key: string]: any` в `background`/`state`/`content` — 0; пин `tests/messages-contract.test.js` (14). Побочно: `tests/helpers/read-module-source.js` теперь снимает и параметры типа (`function f<T …>(…)`) — generic в `aiCmSwAsk` иначе доживал до `new Function` в `tests/inv-i4-partial-barrier.test.js:181` и `tests/inv-i6-conv-switch.test.js:63` (контракт хелпера «текст остаётся исполняемым»)
 - **C2 закрыт 2026-11-17** без изменения поведения: `types/messages.d.ts` — `AiCmContentRequest` (aiCmDiag / aiCmExportCurrent / aiCm-byok-key-changed / GET_STATS), `AiCmDiagPayload` + `AiCmDiagResponse{ok,diag}`, `AiCmManualSnapshot`, `AiCmExportCurrentResponse{data}`, `AiCmContentStatsPayload`/`AiCmContentStatsResponse`, `AiCmContentResponseMap`/`AiCmContentResponse`/`AiCmContentResponseFor<T>`, `AiCmBroadcast` (CONTEXT_UPDATE); `core/content.ts` — листенер `(message: AiCmContentRequest, sender: unknown, sendResponse: (response?: AiCmContentResponse) => void)`, `handleAiCmDiag(response?: AiCmDiagResponse)`, `diag: AiCmDiagPayload`, `manualSnapshot` с `@type`, broadcast `as AiCmBroadcast`; `options/options.js` — оба отправителя в JSDoc-типах `import('../types/messages')…`; `core/background.ts` — `aiCm-byok-key-changed` как `AiCmContentRequest`
 - C2, что вскрыла сверка инвентаря: (1) ответ `aiCmExportCurrent` — конверт `{ data: manualSnapshot }` (`core/content.ts:3625`), а не плоский снимок, поэтому введён `AiCmExportCurrentResponse` (спека 1.4/3.1 ждала плоский union); (2) ветка `GET_STATS` (`core/content.ts:3649`) без отправителя в репозитории — добавлена в `AiCmContentRequest` как факт листенера, иначе tsc сужает `message.type` до `never`; (3) build-гейт ловил `import(` из JSDoc-комментария в `dist/options.js` (esbuild не минифицирует dev-сборку) — `build.mjs` `verify()` теперь проверяет код без блочных комментариев, вывод байт-в-байт тот же; пины `tests/messages-contract.test.js` (29), `@ts-ignore`/`@ts-nocheck`/`as any` в content/background/options — 0
-- следующий шаг: релиз 2.1.3 — CHANGELOG, 15 точек версии, tag, GitHub Release, AMO (High, отдельная сессия)
+- следующий шаг: приёмка 2.1.3 (владелец: `git tag v2.1.3`, GitHub Release, AMO)
 
 ## 4. Открытые задачи (≤5)
 
