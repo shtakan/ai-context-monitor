@@ -1,4 +1,8 @@
 {
+  "tests/big4-gemini-merge.test.js": {
+    "count": 1,
+    "reason": "vm-harness"
+  },
   "tests/a11y-options.test.js": {
     "count": 19,
     "reason": "legacy-pin"

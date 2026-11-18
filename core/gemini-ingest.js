@@ -361,7 +361,7 @@
         // разделяем вопрос пользователя и ответ модели, сохраняем таблицы.
         var segs = [];
         if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser) {
-          try { segs = window.GeminiBatchexecuteParser.splitTurnMessages(t); } catch (e) { segs = []; }
+          try { segs = (typeof aiCmMergeTurnSegments === 'function') ? aiCmMergeTurnSegments(window.GeminiBatchexecuteParser.splitTurnMessages(t)) : window.GeminiBatchexecuteParser.splitTurnMessages(t); } catch (e) { segs = []; }
         }
         if (!segs || !segs.length) {
           // fallback: прежний сбор одним текстом (без ролей)
@@ -1497,3 +1497,23 @@
   Fn.__bind = __bind;
   if (typeof window !== 'undefined') { window.AiCmGeminiIngest = Fn; }
 }());
+
+// BIG-04 (2.1.5): один ход = максимум user + assistant. splitTurnMessages может вернуть
+// несколько assistant-сегментов одного ответа (thinking/слои) — склеиваем подряд идущие
+// сегменты одной роли разделителем '\n\n'. Так 1 ответ = 1 assistant, а не 6.
+function aiCmMergeTurnSegments(segs) {
+  if (!Array.isArray(segs) || !segs.length) return segs;
+  var out = [];
+  for (var i = 0; i < segs.length; i++) {
+    var seg = segs[i];
+    var txt = (seg && seg.text) ? String(seg.text).trim() : '';
+    if (!txt) continue;
+    var role = (seg.role === 'user') ? 'user' : 'assistant';
+    if (out.length && out[out.length - 1].role === role) {
+      out[out.length - 1].text += '\n\n' + txt;
+    } else {
+      out.push({ role: role, text: txt });
+    }
+  }
+  return out;
+}
