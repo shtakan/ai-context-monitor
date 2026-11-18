@@ -737,7 +737,7 @@ export const ModelConfig: ModelConfig = {
     //    подстрочное совпадение шагов 1-3 ниже) — иначе прежний путь решает как раньше и
     //    канонический ключ не подменяется. Окна по семействам: Pro — 128 000 (веб-окно
     //    Gemini Pro), Flash и Flash Lite — 1 048 576 (API-окно линейки Flash).
-    const slugM = /^gemini-([\d.]+)-(flash|pro|ultra)(-lite)?$/i.exec(String(raw).trim());
+    const slugM = /^gemini-([\d.]+)-(flash|pro|ultra|hydrogen)(-lite)?$/i.exec(String(raw).trim());
     const slugLite = !!(slugM && slugM[3]);
     if (slugM && !keys.some(function (k) {
       const nk = norm(k);
@@ -751,7 +751,7 @@ export const ModelConfig: ModelConfig = {
       const lite = !!slugM[3];
       const family = fam.charAt(0).toUpperCase() + fam.slice(1) + (lite ? ' Lite' : '');
       const key = 'gemini-' + ver + '-' + fam + (lite ? '-lite' : '');
-      const contextLimit = (fam === 'pro') ? 128000 : 1048576;
+      const contextLimit = (fam === 'pro' || fam === 'hydrogen') ? 128000 : 1048576;
       this.models[key] = {
         name: 'Gemini ' + ver + ' ' + family,
         provider: 'Google',

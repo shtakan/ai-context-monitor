@@ -120,7 +120,7 @@ class AistudioAdapter extends GeminiAdapter {
    */
   detectModel(): string {
     try {
-      const slug = (typeof window !== 'undefined') ? window.__aiCmNetModelSlug : '';
+      const slug = this._modelSlugFromDom() || ((typeof window !== 'undefined') ? window.__aiCmNetModelSlug : '');
       if (typeof slug === 'string' && slug) {
         debugLog('log', `[AistudioAdapter] Модель из сети: ${slug}`);
         return slug;
@@ -279,6 +279,26 @@ class AistudioAdapter extends GeminiAdapter {
       }
     }
     return out;
+  }
+
+  /**
+   * BIG-17 (2.1.5): модель AI Studio из DOM. В Run settings печатается slug отдельной
+   * строкой (`gemini-4-hydrogen`) под человекочитаемым именем — берём ЛИСТОВОЙ узел,
+   * весь текст которого похож на slug. Сеть остаётся вторым источником.
+   */
+  _modelSlugFromDom(): string {
+    try {
+      const nodes = document.querySelectorAll('span, div');
+      for (let i = 0; i < nodes.length && i < 3000; i++) {
+        const el = nodes[i];
+        if (el.children && el.children.length > 0) continue;
+        const t = String(el.textContent || '').trim();
+        if (!t || t.length > 48) continue;
+        const m = t.match(/^(gemini-[a-z0-9][a-z0-9.-]{1,40})$/i);
+        if (m) return m[1].toLowerCase();
+      }
+    } catch (e) { return ''; }
+    return '';
   }
 }
 

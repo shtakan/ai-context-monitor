@@ -1822,7 +1822,7 @@ function resolveCurrentModel(): string {
   if (uiRaw && !uiResolved) uiRaw = ''; // «Авто»/нераспознанный UI-сигнал → фолбэк на сеть/DOM
 
   const rawFromDom = (rawFromNet || uiRaw) ? '' : (currentAdapter!.detectModel() || '');
-  const rawSnapshot = rawFromNet || rawFromDom || '';
+  const rawSnapshot = ((typeof aiCmAistudioDomSlug === 'function') ? aiCmAistudioDomSlug() : '') || rawFromNet || rawFromDom || '';
   const snapModelId = rawSnapshot ? ModelConfig.resolveModelId(rawSnapshot) : null;
 
   // v47: экспорт остаётся на модели снимка — запоминаем её имя отдельно
@@ -5055,5 +5055,20 @@ function aiCmAistudioNativeProbeFallback(): number {
     }
     return 0;
   } catch (eFb) { return 0; }
+}
+
+/**
+ * BIG-17 (2.1.5): для AI Studio модель берём из DOM (Run settings: slug `gemini-4-hydrogen`)
+ * раньше сети: сетевой slug мог остаться от прошлого запроса. Прочие сайты — прежняя
+ * лестница попап → DOM-адаптер → сеть.
+ */
+function aiCmAistudioDomSlug(): string {
+  try {
+    if (!aiCmIsAistudioHost()) return '';
+    if (typeof currentAdapter === 'undefined' || !currentAdapter) return '';
+    if (typeof currentAdapter.detectModel !== 'function') return '';
+    var m = currentAdapter.detectModel() || '';
+    return (typeof m === 'string') ? m : '';
+  } catch (eDomSlug) { return ''; }
 }
 
