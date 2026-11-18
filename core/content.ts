@@ -5012,6 +5012,7 @@ function aiCmApplyAistudioNetBase(): void {
     // Пины v54 (badge-suppress) считают ровно одно вхождение присваивания baseSeen в content.
     // Скобки сохраняют поведение и не ломают source-пин: это осознанная форма.
     baseSeen = (true);
+    baseComplete = (snap.historyComplete === true);
     stale = false;
   } catch (eBase) { swallowSoft(eBase, 'content:aistudio-net-base'); }
 }
