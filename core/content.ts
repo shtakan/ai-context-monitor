@@ -2969,7 +2969,7 @@ function processAndSend(): void {
       var aiCmCtxSnapBodyTrusted = aiCmAutoExportTrustedBase() === true
         || (typeof aiCmGsaNetworkCompleteIs === 'function'
           && aiCmGsaNetworkCompleteIs(ctxSnapSite, ctxSnapConvId) === true);
-      var aiCmCtxSnapPartial = aiCmSnapshotPartial(baseComplete === true, aiCmCtxSnapBodyTrusted);
+      var aiCmCtxSnapPartial = aiCmSnapshotPartial(baseComplete === true, aiCmCtxSnapBodyTrusted) || (typeof aiCmCtxStopActive === 'function' && aiCmCtxStopActive());
       var aiCmCtxSnapCandidate: AiCmContextSnapshot = {
         convId: ctxSnapConvId,
         capturedAt: Date.now(),
@@ -2998,11 +2998,11 @@ function processAndSend(): void {
         aiCmCtxSnapCandidate.baseComplete = baseComplete === true;
       }
       if (aiCmCtxSnapPartial) {
-        // BUG-H: ход без вопроса — явная причина неполноты. Прочие неполные базы
-        // сохраняют прежнюю причину 'incomplete'; partial и гейты не ослабляются.
-        aiCmCtxSnapCandidate.partialReason = (baseCompleteReason === 'missing-user-text')
-          ? 'missing-user-text'
-          : 'incomplete';
+        // BUG-H: ход без вопроса. BIG-02 (2.1.5): stop имеет приоритет над общей причиной —
+        // файл должен говорить «stopped», а не «incomplete».
+        aiCmCtxSnapCandidate.partialReason = (typeof aiCmCtxStopActive === 'function' && aiCmCtxStopActive())
+          ? 'stopped'
+          : ((baseCompleteReason === 'missing-user-text') ? 'missing-user-text' : 'incomplete');
       }
       var aiCmSnapPrevAnomaly = (typeof lastTokensSnapshot !== 'undefined') ? lastTokensSnapshot : null;
       lastTokensSnapshot = aiCmCommitContextSnapshot(lastTokensSnapshot, aiCmCtxSnapCandidate);
@@ -4955,4 +4955,12 @@ type AiCmDiagPayload = import('../types/messages').AiCmDiagPayload;
 type AiCmDiagResponse = import('../types/messages').AiCmDiagResponse;
 type AiCmManualSnapshot = import('../types/messages').AiCmManualSnapshot;
 type AiCmBroadcast = import('../types/messages').AiCmBroadcast;
+
+// BIG-02 (2.1.5): остановленная генерация считается неполнотой, даже если база «полная».
+// Подпись stop стоит под последним ответом — смотрим хвост текста страницы.
+function aiCmCtxStopActive(): boolean {
+  if (typeof aiCmDetectStopMarker !== 'function') return false;
+  if (typeof document === 'undefined' || !document || !document.body) return false;
+  return aiCmDetectStopMarker(String(document.body.innerText || ''));
+}
 

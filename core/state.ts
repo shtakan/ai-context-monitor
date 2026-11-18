@@ -723,7 +723,7 @@ interface AiCmContextSnapshot {
   bodyHash?: string;
   baseComplete?: boolean;
   partial: boolean;
-  partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text';
+  partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text' | 'stopped' | 'truncated';
   stale?: boolean;
   ageMs?: number;
 }
@@ -828,6 +828,22 @@ function aiCmStatePatchFromSnapshot(snap: AiCmContextSnapshot | null): Partial<A
 }
 
 /**
+ * BIG-02 (2.1.5): детектор остановленной генерации по хвосту текста страницы.
+ * Маркеры — подписи платформ после stop: ChatGPT «You stopped», Claude «Вы остановили
+ * ответ», DeepSeek/Qwen/Gemini «Остановлено». Смотрим только последние 800 символов:
+ * подпись стоит под последним ответом, то есть у нижней границы контента.
+ */
+function aiCmDetectStopMarker(text: string): boolean {
+  if (!text) return false;
+  var tail = String(text).slice(-800).toLowerCase();
+  var markers = ['you stopped', 'вы остановили', 'ответ остановлен', 'остановлено', 'generation stopped'];
+  for (var i = 0; i < markers.length; i++) {
+    if (tail.indexOf(markers[i]) !== -1) return true;
+  }
+  return false;
+}
+
+/**
  * Единственная точка фиксации снимка (ADR-001 §7 п.4 / D3 в уточнённой редакции).
  *
  * Три исхода:
@@ -864,13 +880,18 @@ function aiCmCommitContextSnapshot(
     held.partial = true;
     held.partialReason = held.stale
       ? 'stale'
-      : ((next.partial && next.partialReason === 'missing-user-text') ? 'missing-user-text' : 'incomplete');
+      : ((next.partial && (next.partialReason === 'missing-user-text'
+        || next.partialReason === 'stopped' || next.partialReason === 'truncated'))
+        ? next.partialReason : 'incomplete');
     return held;
   }
   next.stale = false;
-  // BUG-H: причина 'missing-user-text' — значимая (ход без вопроса), прочие причины
-  // нормализуются как прежде: принятый коммит честно неполон.
-  if (next.partial) next.partialReason = (next.partialReason === 'missing-user-text') ? 'missing-user-text' : 'incomplete';
+  // BUG-H: 'missing-user-text' — значимая причина (ход без вопроса).
+  // BIG-02 (2.1.5): 'stopped'/'truncated' — тоже значимые: обрыв ответа должен быть
+  // виден в файле, а не нормализоваться в общий 'incomplete'.
+  if (next.partial) next.partialReason = (next.partialReason === 'missing-user-text'
+    || next.partialReason === 'stopped' || next.partialReason === 'truncated')
+    ? next.partialReason : 'incomplete';
   else delete next.partialReason;
   var same = prev.convId === next.convId
     && prev.site === next.site

@@ -248,7 +248,7 @@ import {
       var node = mapping[key]; var msg = node && node.message;
       if (!msg || !msg.content) continue;
       var role = (msg.author && msg.author.role) ? msg.author.role : '';
-      if (role === 'system') continue;
+      if (role === 'system' || role === 'tool' || (msg.metadata && (msg.metadata.is_tool === true || msg.metadata.tool_name || msg.metadata.tool_call_id))) continue;
       var parts = msg.content.parts;
       if (!Array.isArray(parts)) continue;
       var text = '';

@@ -129,7 +129,7 @@ export interface ExportHistory {
   partial?: boolean;
 
   /** S2.3 (ADR-001): причина частичности (словарь расширяется только здесь). */
-  partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text';
+  partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text' | 'stopped' | 'truncated';
 
   /** Сообщения снимка. */
   messages?: ExportMessage[];

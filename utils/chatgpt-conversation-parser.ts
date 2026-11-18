@@ -300,6 +300,13 @@ export function parseChatGPTConversation(json: any): ChatGptConversationResult {
       if (!msg || !msg.content) continue;
       var role = msg.author && msg.author.role;
       if (role === 'system' || role === 'tool') continue;
+      // BIG-01 (2.1.5): tool-узлы без роли tool (tool_result/tool_use) — не реплики диалога.
+      var nodeMetaTool = msg.metadata || {};
+      if (nodeMetaTool.is_tool === true || nodeMetaTool.tool_name || nodeMetaTool.tool_call_id) continue;
+      var nodeContentType = msg.content && typeof msg.content.content_type === 'string'
+        ? msg.content.content_type : '';
+      if (nodeContentType === 'tool_result' || nodeContentType === 'tool_use'
+        || nodeContentType === 'function_call' || nodeContentType === 'function_result') continue;
       var parts = msg.content.parts || [];
       var contentPieces = [];
       for (var j = 0; j < parts.length; j++) {

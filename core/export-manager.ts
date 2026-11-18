@@ -1958,10 +1958,10 @@ function doAutoExportDownload(cid: any, percentage: number, reason: string, netS
           messages: msgs as import('../types/export').ExportMessage[]
         };
         var content = (fmt === 'md')
-          ? B.buildMdFromHistory(hist, (currentAdapter && currentAdapter.siteName) || 'AI Chat')
+          ? B.buildMdFromHistory(hist, (typeof aiCmPlatformLabelForFile === 'function') ? aiCmPlatformLabelForFile(String((hist && hist.site) || '')) : (String((hist && hist.site) || '') || 'AI Chat'))
           : ((fmt === 'json')
             ? ((typeof B.buildJsonFromHistory === 'function')
-              ? B.buildJsonFromHistory(hist, (currentAdapter && currentAdapter.siteName) || 'AI Chat')
+              ? B.buildJsonFromHistory(hist, (typeof aiCmPlatformLabelForFile === 'function') ? aiCmPlatformLabelForFile(String((hist && hist.site) || '')) : (String((hist && hist.site) || '') || 'AI Chat'))
               : '')
             : B.buildTxtFromHistory(hist));
         if (typeof content !== 'string') content = '';
@@ -2459,3 +2459,16 @@ interface AiCmCanonicalBodyView {
 
 /** canonicalBody — ESM-биндинг core/content.ts в общем скоупе бандла (в песочницах — аргумент). */
 declare function canonicalBody(convId: string, list: AiCmExportMessage[] | null | undefined): AiCmCanonicalBodyView;
+
+// BIG-05 (2.1.5): единая метка платформы для авто- и ручного экспорта.
+// До фикса авто-путь писал сырой id (`Платформа: chatgpt`), ручной — `ChatGPT`.
+// Функция в конце файла: срез-песочницы тестов извлекают aiCmWriteAutoExportFile без неё
+// и падают в фолбэк (typeof-гард), поэтому инвариант «без per-site логики» цел.
+function aiCmPlatformLabelForFile(site: string): string {
+  var labels: { [k: string]: string } = {
+    chatgpt: 'ChatGPT', gemini: 'Gemini', deepseek: 'DeepSeek',
+    google_search: 'Google Search AI', claude: 'Claude',
+    perplexity: 'Perplexity', qwen: 'Qwen'
+  };
+  return labels[site] || site || 'AI Chat';
+}
