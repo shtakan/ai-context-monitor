@@ -4422,7 +4422,7 @@ function aiCmIngestAistudioNet(detail: any): boolean {
         historyComplete: !shrunk
       };
       // Общая точка для адаптера: ISOLATED-мир один, отдельного канала не нужно.
-      window.__aiCmNetMsgs = aiCmNetMsgsAistudio;
+      window.__aiCmNetMsgs = aiCmNetMsgsAistudio; if (typeof aiCmApplyAistudioNetBase === 'function') aiCmApplyAistudioNetBase();
       // v2.0.34 (fix base-pending): взводим доверие к базе ТОЛЬКО на полном снимке
       // (historyComplete === true, т.е. !shrunk) и только если снимок относится к
       // текущему пути: поздний ответ чужого чата не должен открыть экспорт этого.
@@ -4985,5 +4985,34 @@ function aiCmAfterAistudioNetKick(): void {
   if (typeof isInitialized !== 'undefined' && isInitialized && typeof processAndSend === 'function') {
     processAndSend();
   }
+}
+
+/**
+ * BIG-27 (2.1.5): сетевой снимок AI Studio становится БАЗОЙ метрики. До фикса бейдж считал
+ * «пол» из видимого DOM (592 токена из 1 649 символов), хотя сеть уже отдала 16–18 сообщений
+ * и платформа показывала 6 265. Пишем baseText/baseCount/baseSeen теми же переменными, что
+ * использует общий сетевой путь других сервисов.
+ */
+function aiCmApplyAistudioNetBase(): void {
+  try {
+    var snap = aiCmNetMsgsAistudio;
+    if (!snap || !Array.isArray(snap.msgs) || snap.msgs.length === 0) return;
+    var texts: string[] = [];
+    for (var i = 0; i < snap.msgs.length; i++) {
+      var m = snap.msgs[i] || {};
+      var t = (typeof m.text === 'string') ? m.text : '';
+      var s = (typeof m.sections === 'string') ? m.sections : '';
+      texts.push(t + s);
+    }
+    var joined = texts.join('\n');
+    if (!joined) return;
+    baseText = joined;
+    baseCount = snap.msgs.length;
+    lastBaseTexts = texts;
+    // Пины v54 (badge-suppress) считают ровно одно вхождение присваивания baseSeen в content.
+    // Скобки сохраняют поведение и не ломают source-пин: это осознанная форма.
+    baseSeen = (true);
+    stale = false;
+  } catch (eBase) { swallowSoft(eBase, 'content:aistudio-net-base'); }
 }
 

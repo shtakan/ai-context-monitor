@@ -96,7 +96,7 @@ function aiCmDedupeExportSource(messages: AiCmExportMessage[]): AiCmDedupeResult
     // порядок задан prepareExportMessages (единая точка входа пайплайна).
     if (typeof P.prepareExportMessages === 'function') {
       var res18 = P.prepareExportMessages(messages, aiCmLogIntraDedupe);
-      return { messages: res18.messages, removed: res18.removed };
+      return { messages: (site === 'aistudio' && typeof aiCmMergeAssistantRuns === 'function') ? aiCmMergeAssistantRuns(res18.messages) : res18.messages, removed: res18.removed };
     }
     if (typeof P.dedupeMessages === 'function') return P.dedupeMessages(messages);
   } catch (eDed) { swallow(eDed, 'base-handler:dedupeExportSource'); }
@@ -601,3 +601,25 @@ function aiCmErrText(e: unknown): string {
  * типовое (declare), рантайм-резолв прежний — общий лексический скоуп собранного бандла.
  */
 declare function canonicalBodyText(list: AiCmExportMessage[] | null | undefined): string;
+
+/**
+ * BIG-04 (2.1.5): один ответ AI Studio = один assistant-блок. Платформа (и сеть) может
+ * отдать ответ несколькими подряд идущими assistant-сообщениями; на выходе сборки истории
+ * склеиваем их разделителем '\n\n'. Гейт узкий: вызывается только для site === 'aistudio'.
+ */
+function aiCmMergeAssistantRuns(messages: AiCmExportMessage[]): AiCmExportMessage[] {
+  if (!Array.isArray(messages) || messages.length === 0) return messages;
+  var out: AiCmExportMessage[] = [];
+  for (var i = 0; i < messages.length; i++) {
+    var m = messages[i] || ({} as AiCmExportMessage);
+    var role = (m.role === 'user' || m.role === 'human') ? 'user' : 'assistant';
+    var text = (typeof m.text === 'string') ? m.text : '';
+    var prev = out.length ? out[out.length - 1] : null;
+    if (prev && role === 'assistant' && prev.role === 'assistant') {
+      prev.text = prev.text + '\n\n' + text;
+    } else {
+      out.push({ role: role as AiCmExportMessage['role'], text: text });
+    }
+  }
+  return out;
+}
