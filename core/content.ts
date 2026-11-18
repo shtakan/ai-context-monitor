@@ -5027,6 +5027,16 @@ function aiCmApplyAistudioNetBase(): void {
 function aiCmAistudioNativeProbeFallback(): number {
   try {
     if (!aiCmIsAistudioHost()) return 0;
+    // Точный узел счётчика в текущем UI: <span class="… v3-token-count-value …">4,533  tokens</span>.
+    var direct = document.querySelector('.v3-token-count-value');
+    if (direct) {
+      var dt = String(direct.textContent || '').trim();
+      var dm = dt.match(/([\d][\d\s.,]*)\s*tokens?/i);
+      if (dm) {
+        var dn = parseInt(String(dm[1]).replace(/[^\d]/g, ''), 10);
+        if (isFinite(dn) && dn > 0 && dn < 100000000) return dn;
+      }
+    }
     var root = document.querySelector('main') || document.body;
     if (!root) return 0;
     // Новый UI печатает «4,533 tokens» отдельным коротким элементом; классы/иерархия
