@@ -751,7 +751,10 @@ export const ModelConfig: ModelConfig = {
       const lite = !!slugM[3];
       const family = fam.charAt(0).toUpperCase() + fam.slice(1) + (lite ? ' Lite' : '');
       const key = 'gemini-' + ver + '-' + fam + (lite ? '-lite' : '');
-      const contextLimit = (fam === 'pro' || fam === 'hydrogen') ? 128000 : 1048576;
+      // Окно: Pro — 128 000 (веб-тариф Gemini Pro); Flash/Ultra/Hydrogen — API-окно 1 048 576.
+      // Hydrogen: generativeLanguage API `models/gemini-4-hydrogen` → inputTokenLimit 1048576
+      // (снято владельцем 2026-11-18, AI Studio).
+      const contextLimit = (fam === 'pro') ? 128000 : 1048576;
       this.models[key] = {
         name: 'Gemini ' + ver + ' ' + family,
         provider: 'Google',
