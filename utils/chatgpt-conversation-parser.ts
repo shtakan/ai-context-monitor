@@ -174,6 +174,9 @@ export function sanitizeChatGPTText(s: any): string {
     .replace(/\[entity\](?:\[[^\]]*\])+/g, '') // legacy [entity][...]
     .replace(/\[entity\]/g, '')              // одиночный legacy [entity]
     .replace(/\[cite:[^\]]*\]/g, '')         // legacy [cite:...], в т.ч. [cite:turn0searchN]
+    // BIG-01 (2.1.5): сырой маркер файловой цитаты ChatGPT (`fileciteturn0file0L1-L3`)
+    // в тексте ответа — служебный токен, в UI он рендерится как чип, в экспорте не нужен.
+    .replace(/fileciteturn\d+file\d+L\d+-L\d+/g, '')
     .replace(/[ \t]{2,}/g, ' ');
 }
 

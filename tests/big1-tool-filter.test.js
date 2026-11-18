@@ -45,4 +45,15 @@ describe('BIG-01: фильтр tool/file-узлов ChatGPT', () => {
     expect(out.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
     expect(out.messages[1].content).toContain('qwen-test');
   });
+
+  test('сырой маркер fileciteturn… вырезается из текста ответа', () => {
+    const out = Parser.parseChatGPTConversation({
+      model_slug: 'gpt-6',
+      mapping: {
+        u1: node('user', ['Что в файле?']),
+        a1: node('assistant', ['Вот содержимое. fileciteturn0file0L1-L3'])
+      }
+    });
+    expect(out.messages[1].content).toBe('Вот содержимое.');
+  });
 });
