@@ -5029,12 +5029,21 @@ function aiCmAistudioNativeProbeFallback(): number {
     if (!aiCmIsAistudioHost()) return 0;
     var root = document.querySelector('main') || document.body;
     if (!root) return 0;
-    var txt = String((root as HTMLElement).innerText || '').slice(0, 1500);
-    var m = txt.match(/([\d][\d\s.,]{0,12})\s*tokens?\b/i);
-    if (!m) return 0;
-    var num = parseInt(String(m[1]).replace(/[^\d]/g, ''), 10);
-    if (!isFinite(num) || num <= 0 || num > 100000000) return 0;
-    return num;
+    // Новый UI печатает «4,533 tokens» отдельным коротким элементом; классы/иерархия
+    // меняются от сборки к сборке. Ищем ЛИСТОВОЙ узел, весь текст которого — число+tokens.
+    var nodes = root.querySelectorAll ? root.querySelectorAll('*') : [];
+    for (var i = 0; i < nodes.length && i < 4000; i++) {
+      var el = nodes[i];
+      if (el.children && el.children.length > 0) continue;
+      var t = String(el.textContent || '').trim();
+      if (!t || t.length > 24) continue;
+      var m = t.match(/^([\d][\d\s.,]*)\s*tokens?$/i);
+      if (!m) continue;
+      var num = parseInt(String(m[1]).replace(/[^\d]/g, ''), 10);
+      if (!isFinite(num) || num <= 0 || num > 100000000) continue;
+      return num;
+    }
+    return 0;
   } catch (eFb) { return 0; }
 }
 
