@@ -148,9 +148,9 @@ class AistudioAdapter extends GeminiAdapter {
       const here = String((window.location && window.location.pathname) || '');
       const there = String(raw.href || '');
       if (there && typeof URL === 'function') {
-        let therePath = there;
-        try { therePath = new URL(there).pathname; } catch (eUrl) { therePath = there; }
-        if (therePath && here && therePath !== here) return [];
+        let therePath = there; try { therePath = new URL(there).pathname; } catch (eUrl) { therePath = there; }
+        var aiCmNormPromptPath = function (p) { var m = String(p || '').match(/(?:^|\/)prompts\/([A-Za-z0-9_-]+)/); return m ? ('prompts/' + m[1]) : String(p || ''); };
+        if (therePath && here && aiCmNormPromptPath(therePath) !== aiCmNormPromptPath(here)) return [];
       }
 
       const messages: Message[] = [];
@@ -194,9 +194,9 @@ class AistudioAdapter extends GeminiAdapter {
       // Запись обязана относиться к текущему пути, а не к прошлому чату (SPA).
       const there = String(cached.href || '');
       if (there && typeof URL === 'function') {
-        let therePath = there;
-        try { therePath = new URL(there).pathname; } catch (eUrl) { therePath = there; }
-        if (therePath && here && therePath !== here) return [];
+        let therePath = there; try { therePath = new URL(there).pathname; } catch (eUrl) { therePath = there; }
+        var aiCmNormPromptPath = function (p) { var m = String(p || '').match(/(?:^|\/)prompts\/([A-Za-z0-9_-]+)/); return m ? ('prompts/' + m[1]) : String(p || ''); };
+        if (therePath && here && aiCmNormPromptPath(therePath) !== aiCmNormPromptPath(here)) return [];
       }
 
       const messages: Message[] = [];

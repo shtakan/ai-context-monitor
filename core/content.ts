@@ -4452,8 +4452,8 @@ function aiCmIngestAistudioNet(detail: any): boolean {
     ' serverTokens=' + aiCmNetCountAistudio +
     (detail.cached ? ' source=session-cache' : ''));
   // Пересчёт бейджа/pct тем же путём, что и приход сетевого снимка у других сервисов.
-  if (typeof isInitialized !== 'undefined' && isInitialized && typeof processAndSend === 'function') {
-    processAndSend();
+  if (typeof aiCmAfterAistudioNetKick === 'function') {
+    aiCmAfterAistudioNetKick();
   }
   return true;
 }
@@ -4971,5 +4971,19 @@ function aiCmHistoryConvId(): string {
   var cid = (typeof aiCmCanonicalConvId === 'function') ? (aiCmCanonicalConvId() || '') : '';
   if (!cid) cid = (typeof getCurrentConvId === 'function') ? (getCurrentConvId() || '') : '';
   return cid || '';
+}
+
+/**
+ * BIG-26 (2.1.5): сетевой снимок AI Studio приходит ПОЗЖЕ initialize(). На legacy-маршруте
+ * `/prompts/<id>` DOM пуст, поэтому tryInit не выставил isInitialized и processAndSend не
+ * вызывался — бейдж молчал при живых 27 сообщениях в сети. Здесь доводим инициализацию.
+ */
+function aiCmAfterAistudioNetKick(): void {
+  if (typeof isInitialized !== 'undefined' && !isInitialized && typeof tryInit === 'function') {
+    try { tryInit(); } catch (eKick) { swallowSoft(eKick, 'content:aistudio-net-kick'); }
+  }
+  if (typeof isInitialized !== 'undefined' && isInitialized && typeof processAndSend === 'function') {
+    processAndSend();
+  }
 }
 
