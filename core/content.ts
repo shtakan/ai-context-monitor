@@ -2991,10 +2991,10 @@ function processAndSend(): void {
         attachBreak: netAttachBreak || null,
         partial: aiCmCtxSnapPartial
       };
-      if (ctxSnapBodyOk) {
-        aiCmCtxSnapCandidate.chars = body.chars;
-        aiCmCtxSnapCandidate.msgs = body.msgs;
-        aiCmCtxSnapCandidate.bodyHash = body.bodyHash;
+      if (ctxSnapBodyOk || (ctxSnapSite === 'aistudio' && baseSeen === true && baseComplete === true && !!fullText)) {
+        aiCmCtxSnapCandidate.chars = ctxSnapBodyOk ? body.chars : String(fullText).length;
+        aiCmCtxSnapCandidate.msgs = ctxSnapBodyOk ? body.msgs : (countForTokens || baseCount || 0);
+        aiCmCtxSnapCandidate.bodyHash = ctxSnapBodyOk ? body.bodyHash : ((typeof aiCmDiagHash6 === 'function') ? ('ai' + aiCmDiagHash6('aistudio', String(fullText))) : ('len' + String(String(fullText).length)));
         aiCmCtxSnapCandidate.baseComplete = baseComplete === true;
       }
       if (aiCmCtxSnapPartial) {
