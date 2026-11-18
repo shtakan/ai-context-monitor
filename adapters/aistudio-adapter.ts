@@ -59,7 +59,7 @@ class AistudioAdapter extends GeminiAdapter {
       const netMessages = this._netMessages();
       if (netMessages.length > 0) {
         debugLog('log', `[AistudioAdapter] История из сети: ${netMessages.length} сообщений (DOM не читаем)`);
-        return netMessages;
+        return this._mergeAssistantRuns(netMessages);
       }
 
 
@@ -92,9 +92,9 @@ class AistudioAdapter extends GeminiAdapter {
       const peak = this._domPeakMessages();
       if (peak.length > messages.length) {
         debugLog('log', `[AistudioAdapter] DOM короче пика: ${messages.length} < ${peak.length} — берём sessionStorage`);
-        return peak;
+        return this._mergeAssistantRuns(peak);
       }
-      return messages;
+      return this._mergeAssistantRuns(messages);
 
     } catch (error) {
       debugLog('error', '[AistudioAdapter] Ошибка в extractMessages:', error);
@@ -258,6 +258,27 @@ class AistudioAdapter extends GeminiAdapter {
       debugLog('error', '[AistudioAdapter] Ошибка чтения classList:', error);
       return false;
     }
+  }
+
+  /**
+   * BIG-04 (2.1.5): один ответ AI Studio = один assistant-блок.
+   * Платформа рендерит ответ несколькими ms-cmark-node (сегменты/слои) без user между
+   * ними — склеиваем подряд идущие assistant-сообщения разделителем '\n\n'.
+   */
+  _mergeAssistantRuns(messages: Message[]): Message[] {
+    if (!Array.isArray(messages) || messages.length === 0) return messages;
+    const out: Message[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      const m = messages[i];
+      if (!m || typeof m.content !== 'string') continue;
+      const prev = out.length ? out[out.length - 1] : null;
+      if (prev && prev.role === 'assistant' && m.role === 'assistant') {
+        prev.content = prev.content + '\n\n' + m.content;
+      } else {
+        out.push({ role: m.role, content: m.content });
+      }
+    }
+    return out;
   }
 }
 
