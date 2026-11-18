@@ -4127,7 +4127,7 @@ function aiCmAistudioNativeProbe(): number {
   try {
     if (!aiCmIsAistudioHost()) return 0;
     var h1 = document.querySelector('h1');
-    if (!h1) return 0;
+    if (!h1) return (typeof aiCmAistudioNativeProbeFallback === 'function') ? aiCmAistudioNativeProbeFallback() : 0;
     var box = h1.parentElement;
     for (var up = 0; up < 3 && box; up++) {
       var boxLen = String(box.textContent || '').length;
@@ -4141,7 +4141,7 @@ function aiCmAistudioNativeProbe(): number {
   } catch (eNatProbe) {
     swallowSoft(eNatProbe, 'content:aistudio-native-probe');
   }
-  return 0;
+  return (typeof aiCmAistudioNativeProbeFallback === 'function') ? aiCmAistudioNativeProbeFallback() : 0;
 }
 
 /* ============================================================================================
@@ -5015,5 +5015,26 @@ function aiCmApplyAistudioNetBase(): void {
     baseComplete = (snap.historyComplete === true);
     stale = false;
   } catch (eBase) { swallowSoft(eBase, 'content:aistudio-net-base'); }
+}
+
+/**
+ * BIG-27 (2.1.5): запасной путь нативного счётчика AI Studio для нового UI (нет h1 или
+ * заголовок переехал). Платформа печатает «2,752 tokens» под названием чата; берём ПЕРВОЕ
+ * совпадение в верхней части main (до 1 500 символов), чтобы не поймать «tokens» из текста
+ * ответа ниже. Это авторитетное число: включает системные инструкции, thinking и схемы
+ * инструментов, которых в DOM-репликах нет.
+ */
+function aiCmAistudioNativeProbeFallback(): number {
+  try {
+    if (!aiCmIsAistudioHost()) return 0;
+    var root = document.querySelector('main') || document.body;
+    if (!root) return 0;
+    var txt = String((root as HTMLElement).innerText || '').slice(0, 1500);
+    var m = txt.match(/([\d][\d\s.,]{0,12})\s*tokens?\b/i);
+    if (!m) return 0;
+    var num = parseInt(String(m[1]).replace(/[^\d]/g, ''), 10);
+    if (!isFinite(num) || num <= 0 || num > 100000000) return 0;
+    return num;
+  } catch (eFb) { return 0; }
 }
 
