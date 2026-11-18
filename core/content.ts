@@ -3198,7 +3198,7 @@ function processAndSend(): void {
           // v31: дублируем в per-host ключ aiCmHistory:<host> (перезапись, без накопления)
           var histSnapshot = {
             host: window.location.hostname,
-            convId: lastEmitConvId,
+            convId: lastEmitConvId || ((typeof aiCmHistoryConvId === 'function') ? aiCmHistoryConvId() : ''),
             site: currentAdapter.siteName,
             // v47: экспорт НЕ переводим на UI-модель — здесь остаётся модель снимка
             model: lastSnapshotModelName || (ModelConfig.getModel(modelId)?.name || modelId),
@@ -3288,7 +3288,7 @@ function processAndSend(): void {
           } catch (eQadA) { }
           var histSnapshotS24 = {
             host: window.location.hostname,
-            convId: cidS24,
+            convId: cidS24 || ((typeof aiCmHistoryConvId === 'function') ? aiCmHistoryConvId() : ''),
             site: currentAdapter.siteName,
             model: lastSnapshotModelName || (ModelConfig.getModel(modelId)?.name || modelId),
             tokens: maxTokenCount,
@@ -4962,5 +4962,14 @@ function aiCmCtxStopActive(): boolean {
   if (typeof aiCmDetectStopMarker !== 'function') return false;
   if (typeof document === 'undefined' || !document || !document.body) return false;
   return aiCmDetectStopMarker(String(document.body.innerText || ''));
+}
+
+// BIG-03 (2.1.5): идентичность треда для записи истории. До фикса сетевой путь писал
+// aiCmHistory:<host> с convId=(none), и provenance-гард читателя (histConvId !== cid)
+// не срабатывал — треды становились неразличимы. Канонический id приоритетнее URL.
+function aiCmHistoryConvId(): string {
+  var cid = (typeof aiCmCanonicalConvId === 'function') ? (aiCmCanonicalConvId() || '') : '';
+  if (!cid) cid = (typeof getCurrentConvId === 'function') ? (getCurrentConvId() || '') : '';
+  return cid || '';
 }
 
