@@ -24,8 +24,9 @@ function fn(name) {
 }
 
 const api = new Function(
-  fn('aiCmDetectStopMarker') + '\n' + fn('aiCmCommitContextSnapshot') +
-  '\nreturn { stop: aiCmDetectStopMarker, commit: aiCmCommitContextSnapshot };'
+  fn('aiCmDetectStopMarker') + '\n' + fn('aiCmCommitContextSnapshot') + '\n' +
+  fn('aiCmDetectStopMarkerInTexts') +
+  '\nreturn { stop: aiCmDetectStopMarker, stopInTexts: aiCmDetectStopMarkerInTexts, commit: aiCmCommitContextSnapshot };'
 )();
 
 function snap(extra) {
@@ -83,5 +84,18 @@ describe('BIG-02: детектор подписи остановки', () => {
 
   test('маркер в начале длинного текста игнорируется (смотрим хвост)', () => {
     expect(api.stop('You stopped\n' + 'x'.repeat(2000))).toBe(false);
+  });
+
+  test('DeepSeek: маркер в тексте последнего сообщения — true', () => {
+    expect(api.stopInTexts(['обычный ответ', 'Остановлено\n[REASONING]…'])).toBe(true);
+  });
+
+  test('DeepSeek: без маркера в последних сообщениях — false', () => {
+    expect(api.stopInTexts(['обычный ответ', 'ещё ответ', 'продолжение'])).toBe(false);
+  });
+
+  test('DeepSeek: пустой набор текстов — false', () => {
+    expect(api.stopInTexts([])).toBe(false);
+    expect(api.stopInTexts(null)).toBe(false);
   });
 });

@@ -942,3 +942,17 @@ function aiCmReadContextSnapshot(convId?: string): AiCmContextSnapshot | null {
 // превратил бы его в модуль и оторвал от window-глобалов (core/content.ts:266).
 type AiCmSwAskRequest = import('../types/messages').AiCmSwAskRequest;
 type AiCmSwResponseFor<T extends AiCmSwAskRequest> = import('../types/messages').AiCmSwResponseFor<T>;
+
+/**
+ * BIG-02 (2.1.5): stop-маркер в наборе текстов последних сообщений.
+ * DeepSeek пишет «Остановлено» над ответом, а не в хвосте body; поэтому
+ * aiCmDetectStopMarker(body.innerText) его не видит. Проверяем тексты
+ * последних ds-message по одному, без расширения области на весь тред.
+ */
+function aiCmDetectStopMarkerInTexts(texts: string[]): boolean {
+  if (!Array.isArray(texts)) return false;
+  for (var i = 0; i < texts.length; i++) {
+    if (aiCmDetectStopMarker(String(texts[i] || ''))) return true;
+  }
+  return false;
+}

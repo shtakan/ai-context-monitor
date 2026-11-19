@@ -4961,7 +4961,7 @@ type AiCmBroadcast = import('../types/messages').AiCmBroadcast;
 function aiCmCtxStopActive(): boolean {
   if (typeof aiCmDetectStopMarker !== 'function') return false;
   if (typeof document === 'undefined' || !document || !document.body) return false;
-  return aiCmDetectStopMarker(String(document.body.innerText || ''));
+  return aiCmDetectStopMarker(String(document.body.innerText || '')) || aiCmDeepseekStopActive();
 }
 
 // BIG-03 (2.1.5): идентичность треда для записи истории. До фикса сетевой путь писал
@@ -5070,5 +5070,30 @@ function aiCmAistudioDomSlug(): string {
     var m = currentAdapter.detectModel() || '';
     return (typeof m === 'string') ? m : '';
   } catch (eDomSlug) { return ''; }
+}
+
+/**
+ * BIG-02 (2.1.5): DeepSeek показывает «Остановлено» над последним ответом,
+ * а не в хвосте body. Проверяем текст последних трёх ds-message, чтобы
+ * не поймать старую остановку из середины треда.
+ */
+function aiCmDeepseekStopActive(): boolean {
+  try {
+    if (typeof currentAdapter === 'undefined' || !currentAdapter) return false;
+    if (currentAdapter.siteName !== 'deepseek') return false;
+    if (typeof aiCmDetectStopMarkerInTexts !== 'function') return false;
+    var nodes = document.querySelectorAll('div[class*="ds-message"]');
+    if (!nodes || nodes.length === 0) return false;
+    var texts: string[] = [];
+    var from = Math.max(0, nodes.length - 3);
+    for (var i = from; i < nodes.length; i++) {
+      var el = nodes[i];
+      texts.push(String((el as HTMLElement).innerText || el.textContent || ''));
+    }
+    return aiCmDetectStopMarkerInTexts(texts);
+  } catch (eDsStop) {
+    swallowSoft(eDsStop, 'content:deepseek-stop-marker');
+    return false;
+  }
 }
 
