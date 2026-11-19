@@ -133,6 +133,23 @@ describe('E-2 (1): dedupeMessages — чистая функция пайплай
     expect(res.removed).toBe(0);
   });
 
+  test('повторный промпт через ответы — реальные ходы, не дубли', () => {
+    const src = [
+      { id: 'u1', role: 'user', text: 'Пиши сообщение длиной 1%' },
+      { id: 'a1', role: 'assistant', text: 'Ответ один' },
+      { id: 'u2', role: 'user', text: 'Пиши сообщение длиной 1%' },
+      { id: 'a2', role: 'assistant', text: 'Ответ два' },
+      { id: 'u3', role: 'user', text: 'Пиши сообщение длиной 1%' },
+      { id: 'a3', role: 'assistant', text: 'Ответ три' }
+    ];
+    const res = P.dedupeMessages(src);
+    expect(res.removed).toBe(0);
+    expect(res.messages).toHaveLength(6);
+    expect(res.messages.map((m) => m.role)).toEqual([
+      'user', 'assistant', 'user', 'assistant', 'user', 'assistant'
+    ]);
+  });
+
   test('не-массив на входе → пустой результат без исключений', () => {
     expect(P.dedupeMessages(null)).toEqual({ messages: [], removed: 0 });
     expect(() => P.dedupeMessages(undefined)).not.toThrow();

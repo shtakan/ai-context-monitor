@@ -1083,12 +1083,73 @@ export function stripMarkerResidue(text: unknown): string {
  * @param {Array} messages сообщения
  * @returns {{messages: ExportMessage[], removed: number}} результат дедупа
  */
+/**
+ * BIG-04 (2.1.5): есть ли подряд идущие копии user-реплики (Deep Research-форма)?
+ * Только в этом случае меж-сообщенческий дедуп имеет право схлопывать повторы;
+ * одинаковые промпты, разделённые ответами, — легитимные повторные ходы.
+ * @param {Array} messages сообщения
+ * @returns {boolean} true, если найден подряд идущий дубль user-реплики
+ */
+export function hasAdjacentUserCopy(messages: unknown): boolean {
+  try {
+    if (!Array.isArray(messages)) return false;
+    var prevRole = '';
+    var prevCore = '';
+    for (var i = 0; i < messages.length; i++) {
+      var m = messages[i] || {};
+      var role = (m.role === 'user') ? 'user' : 'assistant';
+      var text = (typeof m.text === 'string') ? m.text : '';
+      var core = coreText(text);
+      if (role === 'user' && prevRole === 'user' && core && core === prevCore) return true;
+      prevRole = role;
+      prevCore = core;
+    }
+  } catch (e) { swallow(e, 'export-utils:hasAdjacentUserCopy'); }
+  return false;
+}
+
+/**
+ * BIG-04 (2.1.5): есть ли копии assistant-сообщений (дубль всего хода/истории)?
+ * Нужно для GSA: там дублируется весь источник, а не только user-реплики.
+ * @param {Array} messages сообщения
+ * @returns {boolean} true, если найден дубль assistant-сообщения
+ */
+export function hasDuplicateAssistantCopy(messages: unknown): boolean {
+  try {
+    if (!Array.isArray(messages)) return false;
+    var seen: Record<string, boolean> = {};
+    for (var i = 0; i < messages.length; i++) {
+      var m = messages[i] || {};
+      if (m.role === 'user') continue;
+      var text = (typeof m.text === 'string') ? m.text : '';
+      var core = coreText(text);
+      if (!core) continue;
+      if (Object.prototype.hasOwnProperty.call(seen, core)) return true;
+      seen[core] = true;
+    }
+  } catch (e) { swallow(e, 'export-utils:hasDuplicateAssistantCopy'); }
+  return false;
+}
+
 export function dedupeMessages(messages: unknown): DedupeResult {
   var out: Message[] = [];
   var seen: Record<string, boolean> = {};
   var removed = 0;
   try {
     if (!Array.isArray(messages)) return { messages: out, removed: 0 };
+    // BIG-04 (2.1.5): меж-сообщенческий дедуп нужен только там, где копии промпта
+    // идут подряд (Deep Research: пузырь + карточка плана + узлы шагов) или где
+    // user-реплик больше, чем ответов (размноженные узлы). В обычном диалоге
+    // 1 user : 1 assistant одинаковые промпты — РЕАЛЬНЫЕ повторные ходы,
+    // их терять нельзя (владелец отправил один и тот же текст несколько раз).
+    var usersN = 0;
+    var assistantsN = 0;
+    for (var uc = 0; uc < messages.length; uc++) {
+      var mu = messages[uc] || {};
+      if (mu.role === 'user') usersN++;
+      else assistantsN++;
+    }
+    var allowDedupe = (usersN > assistantsN) || hasAdjacentUserCopy(messages) || hasDuplicateAssistantCopy(messages);
     for (var i = 0; i < messages.length; i++) {
       var m = messages[i] || {};
       var role = (m.role === 'user') ? 'user' : 'assistant';
@@ -1099,7 +1160,7 @@ export function dedupeMessages(messages: unknown): DedupeResult {
       var key = role + '\u0000' + coreText(text);
       // hasOwnProperty (а не truthy-проверка): обычный {} наследует Object.prototype,
       // и текст вида 'toString' ложно считался бы уже виденным.
-      if (Object.prototype.hasOwnProperty.call(seen, key)) { removed++; continue; }
+      if (allowDedupe && Object.prototype.hasOwnProperty.call(seen, key)) { removed++; continue; }
       seen[key] = true;
       var keep: Message = { role: role, text: text };
       // v1.18 (E-2.1): id ходов переносится — иначе набор id базы (baseIdSet) и запись
