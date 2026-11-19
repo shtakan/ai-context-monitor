@@ -64,3 +64,76 @@ describe('BIG-04: склейка сегментов хода Gemini', () => {
     expect(merge([])).toEqual([]);
   });
 });
+
+// BIG-04 (2.1.5): vf5-cursor-continue приносит уже принятую пару с другим r-id.
+// Дедуп по содержимому пары (не по id), но только в хвосте базы.
+const pairDedupe = new Function(
+  fn('aiCmGeminiPairHash') + '\n' + fn('aiCmGeminiPairDedupe') + '\nreturn aiCmGeminiPairDedupe;'
+)();
+
+describe('BIG-04: дедуп пары user+assistant по содержимому (Gemini)', () => {
+  const base = [
+    { id: 'r_prev_u', role: 'user', text: 'Продолжай' },
+    { id: 'r_prev_a', role: 'assistant', text: 'Продолжение ответа' },
+    { id: 'r_ctrl_u', role: 'user', text: 'Контроль 2.1.5: ответь одним словом OK' },
+    { id: 'r_ctrl_a', role: 'assistant', text: 'OK' }
+  ];
+
+  test('копия пары с другим id не добавляется', () => {
+    const incoming = [
+      { id: 'r_prev_u2', role: 'user', text: 'Продолжай' },
+      { id: 'r_prev_a2', role: 'assistant', text: 'Продолжение ответа' },
+      { id: 'r_copy_u', role: 'user', text: 'Контроль 2.1.5: ответь одним словом OK' },
+      { id: 'r_copy_a', role: 'assistant', text: 'OK' }
+    ];
+    const out = pairDedupe(base, incoming);
+    // Всё окно — повторная ингестия: дублируются и «Продолжай», и контроль-пара.
+    expect(out.skipped).toBe(4);
+    expect(out.skip.r_copy_u).toBe(1);
+    expect(out.skip.r_copy_a).toBe(1);
+    expect(out.skip.r_prev_u2).toBe(1);
+    expect(out.skip.r_prev_a2).toBe(1);
+  });
+
+  test('другой ответ — не дубль', () => {
+    const incoming = [
+      { id: 'r_new_u', role: 'user', text: 'Контроль 2.1.5: ответь одним словом OK' },
+      { id: 'r_new_a', role: 'assistant', text: 'OK!' }
+    ];
+    const out = pairDedupe(base, incoming);
+    expect(out.skipped).toBe(0);
+  });
+
+  test('одинаковый вопрос с разными ответами сохраняется', () => {
+    const incoming = [
+      { id: 'r_test_u', role: 'user', text: 'Test.' },
+      { id: 'r_test_a', role: 'assistant', text: 'Systems operational.' }
+    ];
+    const out = pairDedupe(base, incoming);
+    expect(out.skipped).toBe(0);
+  });
+
+  test('вне хвоста базы (старше 16) не дедуплицируется', () => {
+    const old = [
+      { id: 'r_old_u', role: 'user', text: 'Контроль 2.1.5: ответь одним словом OK' },
+      { id: 'r_old_a', role: 'assistant', text: 'OK' }
+    ];
+    const filler = [];
+    for (let i = 0; i < 16; i++) {
+      filler.push({ id: 'f' + i, role: i % 2 ? 'assistant' : 'user', text: 'fill ' + i });
+    }
+    const out = pairDedupe(old.concat(filler), [
+      { id: 'r_re_u', role: 'user', text: 'Контроль 2.1.5: ответь одним словом OK' },
+      { id: 'r_re_a', role: 'assistant', text: 'OK' }
+    ]);
+    expect(out.skipped).toBe(0);
+  });
+
+  test('пустой текст не участвует', () => {
+    const out = pairDedupe(base, [
+      { id: 'e1', role: 'user', text: '   ' },
+      { id: 'e2', role: 'assistant', text: '' }
+    ]);
+    expect(out.skipped).toBe(0);
+  });
+});
