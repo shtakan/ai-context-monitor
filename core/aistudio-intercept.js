@@ -514,6 +514,12 @@
   /** Один компактный console.warn на форму (без текста тела), дедуп по отпечатку. */
   function warnSnapshotMiss(root, reason) {
     try {
+      // BIG-27 (2.1.5): на служебных страницах AI Studio (prompt-access-restricted,
+      // library, apps) история не чатовая — не засоряем chrome://extensions
+      // «ошибками». Диагностика остаётся только на чат-маршрутах /prompts/.
+      var loc = (typeof window !== 'undefined' && window.location) ? window.location : null;
+      var path = (loc && typeof loc.pathname === 'string') ? loc.pathname : '';
+      if (path && path.indexOf('/prompts/') === -1) return;
       var r13 = Array.isArray(root) ? root[13] : undefined;
       var rootLen = Array.isArray(root) ? root.length : 'N/A';
       var r13Desc = Array.isArray(r13) ? ('len' + r13.length) : ((r13 === null || r13 === undefined) ? 'null' : typeof r13);

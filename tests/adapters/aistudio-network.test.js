@@ -994,6 +994,18 @@ describe('core/aistudio-intercept.js: терпимый парсер истори
     expect(line).not.toContain('история лежит');
   });
 
+  test('служебная страница (prompt-access-restricted) не печатает snapshot miss', () => {
+    const sb = makeSandbox({
+      location: {
+        hostname: 'aistudio.google.com',
+        pathname: '/prompt-access-restricted',
+        href: 'https://aistudio.google.com/prompt-access-restricted'
+      }
+    });
+    expect(sb.api.__handlers.parseHistory(DRIVE_OTHER_SHAPE, DRIVE_URL)).toEqual([]);
+    expect(sb.warns).toEqual([]);
+  });
+
   test('найденная история, generate-URL и вызов без url warn не печатают', () => {
     const sb = makeSandbox();
     expect(sb.api.__handlers.parseHistory(HISTORY_BODY, UPDATE_URL)).toHaveLength(6);
