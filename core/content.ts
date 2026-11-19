@@ -4961,7 +4961,7 @@ type AiCmBroadcast = import('../types/messages').AiCmBroadcast;
 function aiCmCtxStopActive(): boolean {
   if (typeof aiCmDetectStopMarker !== 'function') return false;
   if (typeof document === 'undefined' || !document || !document.body) return false;
-  return aiCmDetectStopMarker(String(document.body.innerText || '')) || aiCmDeepseekStopActive();
+  return aiCmDetectStopMarker(String(document.body.innerText || '')) || aiCmDeepseekStopActive() || aiCmQwenStopRecent();
 }
 
 // BIG-03 (2.1.5): идентичность треда для записи истории. До фикса сетевой путь писал
@@ -5095,5 +5095,46 @@ function aiCmDeepseekStopActive(): boolean {
     swallowSoft(eDsStop, 'content:deepseek-stop-marker');
     return false;
   }
+}
+
+/**
+ * BIG-02 (2.1.5): Qwen не пишет «Остановлено» в текст. Кнопка Stop в UI —
+ * `button.stop-button[aria-label="Стоп"]` (сниппет 2026-11-19). Ловим клик
+ * в capture-фазе и помечаем ближайший снимок как stopped.
+ */
+var aiCmQwenStopAt = 0;
+var aiCmQwenStopConv = '';
+
+function aiCmTrackQwenStopClick(ev: Event): void {
+  try {
+    if (typeof currentAdapter === 'undefined' || !currentAdapter || currentAdapter.siteName !== 'qwen') return;
+    var target = ev.target as Element | null;
+    if (!target || typeof target.closest !== 'function') return;
+    var btn = target.closest('button, [role="button"]');
+    if (!btn) return;
+    var label = String((btn.getAttribute('aria-label') || '') + ' ' +
+      (btn.getAttribute('title') || '') + ' ' + (btn.className || ''));
+    if (!/stop-button|стоп|stop/i.test(label)) return;
+    aiCmQwenStopAt = Date.now();
+    aiCmQwenStopConv = (typeof aiCmCanonicalConvId === 'function') ? (aiCmCanonicalConvId() || '') : '';
+  } catch (eStopClick) {
+    swallowSoft(eStopClick, 'content:qwen-stop-click');
+  }
+}
+
+function aiCmQwenStopRecent(): boolean {
+  if (!aiCmQwenStopAt) return false;
+  if (Date.now() - aiCmQwenStopAt > 30000) return false;
+  if (typeof currentAdapter === 'undefined' || !currentAdapter || currentAdapter.siteName !== 'qwen') return false;
+  var cid = (typeof aiCmCanonicalConvId === 'function') ? (aiCmCanonicalConvId() || '') : '';
+  return !aiCmQwenStopConv || !cid || aiCmQwenStopConv === cid;
+}
+
+try {
+  if (typeof document !== 'undefined' && document && typeof document.addEventListener === 'function') {
+    document.addEventListener('click', aiCmTrackQwenStopClick, true);
+  }
+} catch (eStopBind) {
+  swallowSoft(eStopBind, 'content:qwen-stop-listener');
 }
 

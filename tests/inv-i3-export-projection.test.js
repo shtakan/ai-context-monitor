@@ -332,7 +332,7 @@ describe('inv-i3 (S5.1): проекция «канонический масси�
     const popup = loadPopup();
     const autoMd = Builders.buildMdFromHistory(histFor(pThreshold.messages, {
       bodyProjection: pThreshold.mode
-    }), 'qwen');
+    }), 'Qwen');
     expect(stripDates(popup.buildMdText(data))).toBe(stripDates(autoMd));
     // Метрики у путей свои (percent ручного — lastPercentage), тело файла — одно.
     const manualJson = jsonNoDate(popup.buildJsonText(data));

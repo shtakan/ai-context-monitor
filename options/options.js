@@ -114,7 +114,8 @@ var siteLabels = {
   'google_search': 'Google Search AI',
   'deepseek': 'DeepSeek',
   'claude': 'Claude',
-  'perplexity': 'Perplexity'
+  'perplexity': 'Perplexity',
+  'qwen': 'Qwen'
 };
 
 // Загружаем настройки
