@@ -1109,25 +1109,29 @@ export function hasAdjacentUserCopy(messages: unknown): boolean {
 }
 
 /**
- * BIG-04 (2.1.5): есть ли копии assistant-сообщений (дубль всего хода/истории)?
- * Нужно для GSA: там дублируется весь источник, а не только user-реплики.
+ * BIG-04 (2.1.5): массив — точная копия самого себя (GSA-форма: источник
+ * продублирован целиком). Только в этом случае можно схлопывать assistant-копии.
  * @param {Array} messages сообщения
- * @returns {boolean} true, если найден дубль assistant-сообщения
+ * @returns {boolean} true, если вторая половина повторяет первую
  */
-export function hasDuplicateAssistantCopy(messages: unknown): boolean {
+export function isWholeSourceDuplicate(messages: unknown): boolean {
   try {
     if (!Array.isArray(messages)) return false;
-    var seen: Record<string, boolean> = {};
-    for (var i = 0; i < messages.length; i++) {
-      var m = messages[i] || {};
-      if (m.role === 'user') continue;
-      var text = (typeof m.text === 'string') ? m.text : '';
-      var core = coreText(text);
-      if (!core) continue;
-      if (Object.prototype.hasOwnProperty.call(seen, core)) return true;
-      seen[core] = true;
+    var n = messages.length;
+    if (n < 2 || (n % 2) !== 0) return false;
+    var half = n / 2;
+    for (var i = 0; i < half; i++) {
+      var a = messages[i] || {};
+      var b = messages[i + half] || {};
+      var ra = (a.role === 'user') ? 'user' : 'assistant';
+      var rb = (b.role === 'user') ? 'user' : 'assistant';
+      if (ra !== rb) return false;
+      var ta = (typeof a.text === 'string') ? a.text : '';
+      var tb = (typeof b.text === 'string') ? b.text : '';
+      if (coreText(ta) !== coreText(tb)) return false;
     }
-  } catch (e) { swallow(e, 'export-utils:hasDuplicateAssistantCopy'); }
+    return true;
+  } catch (e) { swallow(e, 'export-utils:isWholeSourceDuplicate'); }
   return false;
 }
 
@@ -1149,7 +1153,7 @@ export function dedupeMessages(messages: unknown): DedupeResult {
       if (mu.role === 'user') usersN++;
       else assistantsN++;
     }
-    var allowDedupe = (usersN > assistantsN) || hasAdjacentUserCopy(messages) || hasDuplicateAssistantCopy(messages);
+    var allowDedupe = (usersN > assistantsN) || hasAdjacentUserCopy(messages) || isWholeSourceDuplicate(messages);
     for (var i = 0; i < messages.length; i++) {
       var m = messages[i] || {};
       var role = (m.role === 'user') ? 'user' : 'assistant';

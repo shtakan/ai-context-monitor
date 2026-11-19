@@ -150,6 +150,19 @@ describe('E-2 (1): dedupeMessages — чистая функция пайплай
     ]);
   });
 
+  test('короткий одинаковый ответ на разные вопросы — не дубль', () => {
+    const src = [
+      { id: 'u1', role: 'user', text: 'Ответь одним словом: OK' },
+      { id: 'a1', role: 'assistant', text: 'OK' },
+      { id: 'u2', role: 'user', text: 'Контроль 2.1.5: ответь одним словом OK' },
+      { id: 'a2', role: 'assistant', text: 'OK' }
+    ];
+    const res = P.dedupeMessages(src);
+    expect(res.removed).toBe(0);
+    expect(res.messages).toHaveLength(4);
+    expect(res.messages.map((m) => m.text)).toEqual(['Ответь одним словом: OK', 'OK', 'Контроль 2.1.5: ответь одним словом OK', 'OK']);
+  });
+
   test('не-массив на входе → пустой результат без исключений', () => {
     expect(P.dedupeMessages(null)).toEqual({ messages: [], removed: 0 });
     expect(() => P.dedupeMessages(undefined)).not.toThrow();
