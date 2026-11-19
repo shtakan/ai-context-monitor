@@ -195,7 +195,7 @@
         467,
         680,
         730,
-        1464
+        1462
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: hdrs.forEach(function (hv, hk) { var hkl = String(hk).toLowerCase(); if"
     },
@@ -233,12 +233,12 @@
         243,
         476,
         847,
-        1092,
-        1134,
-        1239,
-        1461,
-        1664,
-        1684
+        1090,
+        1132,
+        1237,
+        1459,
+        1662,
+        1682
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: st = response.status;"
     },
@@ -248,10 +248,10 @@
       "lines": [
         542,
         578,
-        1205,
-        1226,
-        1230,
-        1233
+        1203,
+        1224,
+        1228,
+        1231
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
     },
@@ -259,7 +259,7 @@
       "file": "core/claude-intercept.js",
       "category": "feature-detect",
       "lines": [
-        1687
+        1685
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var blen = -1; try { blen = (typeof xhr.responseText === 'string') ? xhr"
     },
@@ -267,9 +267,9 @@
       "file": "core/claude-intercept.js",
       "category": "guard-clause",
       "lines": [
-        1436,
-        1468,
-        1496
+        1434,
+        1466,
+        1494
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof Uint8Array !== 'undefined' && body instanceof Uint8Array) ret"
     },

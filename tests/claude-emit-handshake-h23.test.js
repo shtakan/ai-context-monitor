@@ -106,7 +106,9 @@ describe('H23 (a) гонка: снимок ушёл ДО регистрации 
     expect(detail.messageTexts).toHaveLength(4);
     expect(detail.text).toContain('Синтетический вопрос номер один');
     expect(detail.text).toContain('Синтетический ответ два с тулзами');
-    expect(detail.text).toContain('[tool: web_search]'); // tool_use → компактный маркер
+    // BIG-01 (2.1.5): tool_use больше не маркируется в теле — маркер не экспортируется.
+    expect(detail.text).not.toContain('[tool:');
+    expect(detail.text).not.toContain('web_search');
     expect(detail.modelSlug).toBe('claude-sonnet-4-6');
   });
 });

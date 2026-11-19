@@ -1095,3 +1095,37 @@ describe('Claude md roles R9/R10: диаг-маркеры claude-role-* на С�
     }, 'Claude'));
   });
 });
+
+// —— BIG-01 (2.1.5): tool_use не попадает в тело экспорта (Claude create_file/present_files) ——
+describe('Claude BIG-01: tool_use не оставляет маркеров в теле', () => {
+  test('create_file/present_files вырезаны, видимый текст сохранён', () => {
+    const raw = {
+      uuid: 'conv-tool-0001',
+      model: 'claude-sonnet-4-6',
+      chat_messages: [
+        {
+          uuid: 'tool-u1',
+          sender: 'human',
+          content: [{ type: 'text', text: 'Сделай HTML-страницу с заголовком CLAUDE-TEST-42' }]
+        },
+        {
+          uuid: 'tool-a1',
+          sender: 'assistant',
+          content: [
+            { type: 'text', text: 'Сделаю файл.' },
+            { type: 'tool_use', name: 'create_file', input: { path: 'claude-test-42.html' } },
+            { type: 'tool_use', name: 'present_files', input: { paths: ['claude-test-42.html'] } },
+            { type: 'text', text: 'Готово.' }
+          ]
+        }
+      ]
+    };
+    const snap = snapshotFromRaw(raw);
+    const text = textsOf(snap.parsed.messages).join('\n');
+    expect(text).not.toContain('[tool:');
+    expect(text).not.toContain('create_file');
+    expect(text).not.toContain('present_files');
+    expect(text).toContain('Сделаю файл.');
+    expect(text).toContain('Готово.');
+  });
+});

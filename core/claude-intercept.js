@@ -1068,13 +1068,11 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
         var b = blocks[j];
         if (!b || typeof b !== 'object') continue;
         // v30: в эталон идёт только видимый диалог — блоки type==="text";
-        // tool_use/tool_result/document/image/thinking пропускаем;
-        // для tool_use вставляем компактный маркер вместо сырого JSON.
+        // BIG-01 (2.1.5): tool_use/tool_result/document/image/thinking пропускаем
+        // целиком. Раньше для tool_use вставлялся маркер `[tool: …]` — он попадал
+        // в тело экспорта (Claude: create_file/present_files, web_search, memory_*).
         if (b.type === 'text' && typeof b.text === 'string') {
           textParts.push(b.text);
-        } else if (b.type === 'tool_use') {
-          var toolName = (b.name && typeof b.name === 'string') ? b.name : 'unknown';
-          textParts.push('[tool: ' + toolName + ']');
         }
       }
 
