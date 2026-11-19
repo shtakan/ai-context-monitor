@@ -219,7 +219,7 @@ describe('C2: core/content.ts — слушатель, diag и broadcast', () => 
   it('manualSnapshot объявлен AiCmManualSnapshot, ответ прежний', () => {
     expect(CONTENT).toContain('var manualSnapshot = /** @type {AiCmManualSnapshot} */');
     expect(CONTENT).toContain("type AiCmManualSnapshot = import('../types/messages').AiCmManualSnapshot;");
-    expect(CONTENT).toContain('sendResponse({ data: manualSnapshot });');
+    expect(CONTENT).toContain('sendResponse({ data: manualSnapshot } as AiCmContentResponse);');
   });
 
   it('нет подавлений типов', () => {

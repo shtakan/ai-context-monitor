@@ -149,7 +149,7 @@ class AistudioAdapter extends GeminiAdapter {
       const there = String(raw.href || '');
       if (there && typeof URL === 'function') {
         let therePath = there; try { therePath = new URL(there).pathname; } catch (eUrl) { therePath = there; }
-        var aiCmNormPromptPath = function (p) { var m = String(p || '').match(/(?:^|\/)prompts\/([A-Za-z0-9_-]+)/); return m ? ('prompts/' + m[1]) : String(p || ''); };
+        var aiCmNormPromptPath = function (p: string) { var m = String(p || '').match(/(?:^|\/)prompts\/([A-Za-z0-9_-]+)/); return m ? ('prompts/' + m[1]) : String(p || ''); };
         if (therePath && here && aiCmNormPromptPath(therePath) !== aiCmNormPromptPath(here)) return [];
       }
 
@@ -195,7 +195,7 @@ class AistudioAdapter extends GeminiAdapter {
       const there = String(cached.href || '');
       if (there && typeof URL === 'function') {
         let therePath = there; try { therePath = new URL(there).pathname; } catch (eUrl) { therePath = there; }
-        var aiCmNormPromptPath = function (p) { var m = String(p || '').match(/(?:^|\/)prompts\/([A-Za-z0-9_-]+)/); return m ? ('prompts/' + m[1]) : String(p || ''); };
+        var aiCmNormPromptPath = function (p: string) { var m = String(p || '').match(/(?:^|\/)prompts\/([A-Za-z0-9_-]+)/); return m ? ('prompts/' + m[1]) : String(p || ''); };
         if (therePath && here && aiCmNormPromptPath(therePath) !== aiCmNormPromptPath(here)) return [];
       }
 

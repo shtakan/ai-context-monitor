@@ -7,7 +7,7 @@ A Chrome, Microsoft Edge (Chromium) and Firefox extension (Manifest V3) that sho
 
 Chrome and Edge install from GitHub Releases (steps below); Firefox installs from [Mozilla Add-ons](https://addons.mozilla.org/firefox/addon/ai-context-monitor/). Publication in Edge Add-ons is postponed.
 
-1. Download the `ai-context-monitor-v2.1.4.zip` archive from the release page: <https://github.com/shtakan/ai-context-monitor/releases/tag/v2.1.4>
+1. Download the `ai-context-monitor-v2.1.5.zip` archive from the release page: <https://github.com/shtakan/ai-context-monitor/releases/tag/v2.1.5>
 2. Unpack the archive into any folder.
 3. **Microsoft Edge**: open `edge://extensions`, enable **Developer mode**, click **Load unpacked** and select the unpacked folder.
 4. **Google Chrome**: open `chrome://extensions` and do the same.
@@ -85,7 +85,7 @@ service worker (core/background.js)
 npm test
 ```
 
-Runs Jest — **as of v2.1.4 (2026-11-17): 265 suites / 4355 tests**, green in CI. The counters are a dated snapshot of the v2.1.4 tree; the live numbers are whatever `npm test` prints as its `Tests: ... total` line. Sanitized fixtures are bundled in `tests/fixtures`. Personal ("live") captured samples are gitignored — tests that require them are skipped automatically when those files are absent.
+Runs Jest — **as of v2.1.5 (2026-11-19): 270 suites / 4388 tests**, green in CI. The counters are a dated snapshot of the v2.1.5 tree; the live numbers are whatever `npm test` prints as its `Tests: ... total` line. Sanitized fixtures are bundled in `tests/fixtures`. Personal ("live") captured samples are gitignored — tests that require them are skipped automatically when those files are absent.
 
 ## Privacy
 

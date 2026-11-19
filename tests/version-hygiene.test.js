@@ -55,11 +55,11 @@ describe('R-1: manifest.version синхронизирован с верхней
     expect(manifest.version).toBe(topEntry.version);
   });
 
-  test('manifest.version === 2.1.4 (литерал: пин не следует за манифестом молча)', () => {
-    expect(manifest.version).toBe('2.1.4');
+  test('manifest.version === 2.1.5 (литерал: пин не следует за манифестом молча)', () => {
+    expect(manifest.version).toBe('2.1.5');
     expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(topEntry.version).toBe('2.1.4');
-    expect(topEntry.date).toBe('2026-11-17');
+    expect(topEntry.version).toBe('2.1.5');
+    expect(topEntry.date).toBe('2026-11-19');
   });
 
   test('версия монотонна: старшая компонента не ниже прежней (1.18.0)', () => {
@@ -79,7 +79,8 @@ describe('R-1: manifest.version синхронизирован с верхней
     expect(headings.filter(function (h) { return h.indexOf('## [1.19.2] - 2026-09-13') === 0; }).length).toBe(1);
     expect(headings.filter(function (h) { return h.indexOf('## [1.19.1] - 2026-09-13') === 0; }).length).toBe(1);
     expect(headings.filter(function (h) { return h.indexOf('## [1.18.0] - 2026-09-12') === 0; }).length).toBe(1);
-    const iNew = headings.findIndex(function (h) { return h.indexOf('## [2.1.4]') === 0; });
+    const iNew = headings.findIndex(function (h) { return h.indexOf('## [2.1.5]') === 0; });
+    const iV214 = headings.findIndex(function (h) { return h.indexOf('## [2.1.4]') === 0; });
     const iV2043 = headings.findIndex(function (h) { return h.indexOf('## [2.0.43]') === 0; });
     const iV2042 = headings.findIndex(function (h) { return h.indexOf('## [2.0.42]') === 0; });
     const iV2039 = headings.findIndex(function (h) { return h.indexOf('## [2.0.39]') === 0; });
@@ -107,7 +108,10 @@ describe('R-1: manifest.version синхронизирован с верхней
     const iM14 = headings.findIndex(function (h) { return h.indexOf('## [1.19.3]') === 0; });
     const iM12 = headings.findIndex(function (h) { return h.indexOf('## [1.19.2]') === 0; });
     const iPrev = headings.findIndex(function (h) { return h.indexOf('## [1.19.1]') === 0; });
-    expect(iNew).toBeGreaterThanOrEqual(0);                  // запись v2.1.4 на месте
+    expect(iNew).toBeGreaterThanOrEqual(0);                  // запись v2.1.5 на месте
+    expect(iV214).toBeGreaterThanOrEqual(0);                 // запись v2.1.4 не переписана
+    expect(iNew).toBeLessThan(iV214);                        // 2.1.5 выше 2.1.4
+    expect(iV214).toBeLessThan(iV2043);                      // 2.1.4 выше 2.0.43
     expect(iV2039).toBeGreaterThanOrEqual(0);                // запись v2.0.39 не переписана
     expect(iV2038).toBeGreaterThanOrEqual(0);                // запись v2.0.38 не переписана
     expect(iV2037).toBeGreaterThanOrEqual(0);                // запись v2.0.37 не переписана

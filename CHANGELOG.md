@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.1.5] - 2026-11-19
+
+### Fixed
+- **DeepSeek: stop/truncated (BUG-02, `6107bf4`)** — `aiCmDeepseekStopActive()` проверяет последние три `ds-message` на «Остановлено»; `metric-partial: 1` + `reason=stopped` доходят до MD/JSON. Живой ретест D пройден.
+- **Qwen: stop и метка (BUG-02/BUG-10, `9c9bc2f`)** — capture-listener на `button.stop-button[aria-label="Стоп"]` (30 с, per `convId`); `'qwen': 'Qwen'` в `siteLabels`. Живой ретест D: `partial: 1`, MD `Платформа: Qwen`.
+- **Claude: tool-маркеры в теле (BUG-01, `5192a60`)** — `parseHistory` больше не вставляет `[tool: …]`; `create_file`/`present_files`/`web_search`/`memory_*` не экспортируются. Ретест A/E/L/D чистый.
+- **Gemini: дубль пары user+assistant (BUG-04, `123913c`)** — `aiCmGeminiPairDedupe()` сверяет пару по содержимому с хвостом базы; vf5-копия с другим `r-id` не добавляется. Ретест L: +1/+1.
+- **Gemini: повторные user-промпты (BUG-04, `a4fdc03`)** — меж-сообщенческий dedupe схлопывает повторы только для Deep Research-формы; одинаковые промпты в обычном диалоге сохраняются. Ретест A: 60U/60A, 0 A+A.
+- **AI Studio: повторный короткий ответ (BUG-04, `3821d59`)** — `OK` на разные вопросы больше не схлопывается dedupe. Ретест L: 7U/7A, `OK` в файле.
+- **AI Studio: шум диагностики (P3, `cfa315d`)** — `snapshot miss` не печатается вне чат-маршрутов `/prompts/` (restricted/library/apps).
+- **AI Studio: legacy-маршрут и метрика (BUG-26/BUG-27)** — `/app/prompts/<id>` и текущий `/prompts/<id>` работают; после Reload расширения метрика восстанавливается (5 697 → 12 375, без `1 136`).
+- **Gemini: модель 4 Hydrogen (BUG-17)** — окно `1 048 576` в бейдже/попапе; порог отображения остаётся настраиваемым (832 %/Авто).
+
+### Notes
+- Финальная приёмка 2.1.5: 8 провайдеров Chrome + Firefox smoke — **OK**; P2/P3 (ChatGPT image-only A+A, Gemini base64/URL drift, GSA F3/F4, DeepSeek C+A, artifact-секция) — цель 2.2.0.
+- Счётчики сьюта: 270 suites / 4 388 passed / 7 skipped / 0 failed.
+
 ## [2.1.4] - 2026-11-17
 
 ### Fixed

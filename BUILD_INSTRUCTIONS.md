@@ -1,4 +1,4 @@
-# Build instructions — AI Context Monitor 2.1.4
+# Build instructions — AI Context Monitor 2.1.5
 
 Один и тот же исходник собирается в две цели:
 
@@ -8,7 +8,7 @@
 | `dist-firefox/` | Firefox 140+ (AMO) | тот же код с Firefox-манифестом (`browser_specific_settings`, без хоста `generativelanguage.googleapis.com`) |
 
 Обе цели создаёт один скрипт `build.mjs` (esbuild, без обфускации). Артефакт для AMO собран
-из `dist-firefox/` в режиме по умолчанию (без `--minify`, sourcemaps включены).
+из `dist-firefox/` в прод-режиме (`npm run build:prod`: minified, без sourcemaps).
 
 ## For AMO reviewers (English)
 
@@ -18,11 +18,10 @@ needed beyond the npm registry, and no build step downloads or generates code.
 
 ```
 npm ci
-node build.mjs
+npm run build:prod
 ```
 
-`node build.mjs` writes `dist/` (Chromium) and `dist-firefox/` (Firefox). The submitted package
-is built from `dist-firefox/`. To reproduce the submitted ZIP from `dist-firefox/`:
+`npm run build:prod` writes `dist/` (Chromium) and `dist-firefox/` (Firefox), minified, without sourcemaps. The submitted package is built from `dist-firefox/`. To reproduce the submitted ZIP from `dist-firefox/`:
 
 ```
 cd dist-firefox
@@ -83,9 +82,9 @@ $files = git ls-files | Where-Object {
 }
 # список путей пишется с LF: CRLF ломает имена файлов в bsdtar -T
 [System.IO.File]::WriteAllText("$PWD\source-files.txt", (($files -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
-tar -a -c -f source-code-2.1.4.zip -T source-files.txt
+tar -a -c -f source-code-2.1.5.zip -T source-files.txt
 Remove-Item source-files.txt
-tar -tf source-code-2.1.4.zip | Select-String -Pattern 'videos|PROJECT_HANDOFF|node_modules|\.zip$'
+tar -tf source-code-2.1.5.zip | Select-String -Pattern 'videos|PROJECT_HANDOFF|node_modules|\.zip$'
 ```
 
 `parser/` и `docs/index.html` + `docs/screenshots/` обязательны: `build.mjs` копирует `parser/*.js` как runtime-registered файлы и читает обе docs-цели для `dist/docs/`; без них сборка падает на `verify`.
@@ -94,13 +93,13 @@ tar -tf source-code-2.1.4.zip | Select-String -Pattern 'videos|PROJECT_HANDOFF|n
 `PROJECT_HANDOFF.md`, `node_modules/` и посторонние архивы.
 
 Проверка воспроизводимости: распаковать пакет в пустой каталог, выполнить `npm ci` и
-`node build.mjs` — полученный `dist-firefox/` должен совпасть с `ai-context-monitor-firefox.zip`
+`npm run build:prod` — полученный `dist-firefox/` должен совпасть с `ai-context-monitor-firefox.zip`
 (пустой diff по содержимому файлов).
 
 ## Проверки (опционально, но так проверялся пакет)
 
 ```bash
-npx jest                 # 265 suites / 4355 passed / 7 skipped
+npx jest                 # 270 suites / 4 388 passed / 7 skipped
 npx tsc --noEmit         # exit 0 (JavaScript под checkJs)
 ```
 

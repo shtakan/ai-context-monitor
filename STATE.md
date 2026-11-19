@@ -6,17 +6,18 @@
 ## 1. Репозиторий
 
 - workspace: ai-context-monitor-clean
-- branch: main; HEAD: `36bca89` (docs README) + `chore(state)` сверху (не запушен); origin/main: `6175e58`; ahead: 2; behind: 0; тег `v2.1.4` → `d2194cc`, `v2.1.3` → `1e46a85`
-- version: `2.1.4` (manifest.json, package.json, package-lock.json, футер docs/index.html, PROJECT_HANDOFF L199); релизный коммит `c97122e`; tag `v2.1.4` → `d2194cc`; GitHub Release опубликован (asset 3 418 475 B sha256 `5d119b…`); AMO 2.1.4 одобрена 2026-11-17 (0 ошибок / 7 предупреждений), видима всем
+- branch: release/2.1.5; HEAD: `cfa315d` + release-коммит `chore(release): 2.1.5` (локально, не запушен); origin/main: `6175e58`; ahead: 22; behind: 0; тег `v2.1.4` → `d2194cc`, `v2.1.3` → `1e46a85`
+- version: `2.1.5` (manifest.json, package.json, package-lock.json, футер docs/index.html, PROJECT_HANDOFF L199); релизный коммит — ожидает публикации; tag `v2.1.5`/GitHub Release/AMO — за владельцем
 
-## 2. Метрики (финальный прогон 2026-11-17, после последнего коммита)
+## 2. Метрики (финальный прогон 2026-11-19, после последнего коммита)
 
-- build: exit 0 (`npm run build:prod`); `dist/content.js` 314 637 B, sha256 `2b86f83edd96aa4589137642ffdd2682745727a362e61a4f3ce62983de8876fd` (prod, проверено на `c97122e`); dev-бандл 733 734 B
-- tests: 265 suites / 4355 passed / 7 skipped / 0 failed (полный `npm test`) — `265/4355/7/0`
-- tsc: exit 0, вывод пуст (`npx tsc --noEmit`); strict: exit 0, 0 ошибок (`npx tsc -p tsconfig.strict.json`); chrome-tsc: **exit 0, 0 ошибок** (`npx tsc -p tsconfig.chrome.json` — гейт трека; список `artifacts/chrome-tsc-errors.txt` пуст); lint: 0 errors / 0 warnings (`npx eslint .`)
-- mutation: 8 KILLED / 0 SURVIVED / 0 ERROR (`npm run test:mutation`, exit 0, 2026-11-16)
+- build: exit 0 (`npm run build:prod`); `dist/content.js` 320 983 B, sha256 `dadbb2ed522928e08a204165128104c9f7aa100e9186e646a43041dc93dd92bd` (prod)
+- tests: 270 suites / 4388 passed / 7 skipped / 0 failed (полный `npm test`) — `270/4388/7/0`
+- tsc: exit 0, вывод пуст (`npx tsc --noEmit`); strict: exit 0, 0 ошибок (`npx tsc -p tsconfig.strict.json`); chrome-tsc: **exit 0, 0 ошибок** (`npx tsc -p tsconfig.chrome.json`); lint: 0 errors (`npx eslint . --quiet`, exit 0)
 
 ## 3. Текущая задача
+
+- **2.1.5 — финальная приёмка пройдена 2026-11-19** (8 провайдеров Chrome + Firefox smoke): GSA, DeepSeek, Qwen, Perplexity, ChatGPT, Gemini, Claude, AI Studio — **OK**. Закрыты BUG-02 (DeepSeek/Qwen stop, `6107bf4`/`9c9bc2f`), BUG-01 (Claude tool, `5192a60`), BUG-04 Gemini (`123913c`/`a4fdc03`) и AI Studio (`3821d59`), BUG-26/27/17 (AI Studio/Gemini), BUG-06 (app launcher); P3 `cfa315d` (шум на restricted). P2/P3 — цель 2.2.0. Счётчики 270/4388/7/0; prod `dist/content.js` 320 983 B sha256 `dadbb2ed…`; ZIP/AMO — `acceptance/2.1.5`.
 
 - ID: `REL-02` — закрыт 2026-11-17: CHANGELOG 2.1.3, 15 точек версии (8 точек вывода + 7 пинов), релизный коммит `189e19f`; тег `v2.1.3` → `1e46a85`; GitHub Release `v2.1.3` (ZIP #52); AMO 2.1.3 одобрена (0 ошибок / 7 предупреждений)
 - post-release: `97b63ec` — `tsconfig.*.json` исключены из Chrome release ZIP (шаблон + пин `docs-hygiene`); AMO-пакет чистый; 2.1.3 не перевыпускается

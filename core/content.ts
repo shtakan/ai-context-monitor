@@ -3634,7 +3634,7 @@ if (isExtensionValid()) {
           if (canonManual && canonManual.messages.length) manualSnapshot.messages = canonManual.messages;
           if (typeof aiCmProjectFileMessages === 'function') { var projMn = aiCmProjectFileMessages(manualSnapshot.messages, manualSnapshot.site || ''); manualSnapshot.messages = projMn.messages; var snapProjM = manualSnapshot as typeof manualSnapshot & { bodyProjection?: string }; snapProjM.bodyProjection = projMn.mode; }
         }
-        sendResponse({ data: manualSnapshot });
+        sendResponse({ data: manualSnapshot } as AiCmContentResponse);
       };
       // R2: площадки с очередью вложений (DeepSeek — свой модуль, Qwen — core/qwen-files.js)
       // дожидаются текста файлов ДО композиции: у Qwen это только дренаж (6000 мс: файлы
@@ -4999,7 +4999,7 @@ function aiCmApplyAistudioNetBase(): void {
     if (!snap || !Array.isArray(snap.msgs) || snap.msgs.length === 0) return;
     var texts: string[] = [];
     for (var i = 0; i < snap.msgs.length; i++) {
-      var m = snap.msgs[i] || {};
+      var m = (snap.msgs[i] || {}) as { text?: string; sections?: string };
       var t = (typeof m.text === 'string') ? m.text : '';
       var s = (typeof m.sections === 'string') ? m.sections : '';
       texts.push(t + s);

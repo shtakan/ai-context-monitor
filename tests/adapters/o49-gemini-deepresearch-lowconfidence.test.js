@@ -221,7 +221,7 @@ describe('O-49 D1: Deep Research + isLowConfidenceBase=true → в снимке/
     expect(manual).toContain("messages: buildHistoryMessages()");       // прежняя сборка сохранена
     expect(manual).toContain('aiCmUnionFileMessages(curCidExp, manualSnapshot.messages');
     expect(manual).toContain('manualSnapshot.isLowConfidenceBase === true');
-    expect(manual).toContain('sendResponse({ data: manualSnapshot });');
+    expect(manual).toContain('sendResponse({ data: manualSnapshot } as AiCmContentResponse);');
   });
 });
 
