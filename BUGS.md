@@ -99,9 +99,19 @@ user-файлов (#30/#32) убраны дедупом. Потери уника
 обновлены на новый вызов (порядок `prepareExportMessages` → `dedupeMessages`
 сохранён).
 
-**Ожидание K6e:** 31 сообщение (33 − 2 дубля user), три assistant-ответа
-сохранены; `partial`/`dedupe:{removedUsers, foldedAssistants}` в файле —
-отдельное решение (схема JSON), не в этом фиксе.
+**K6e (2026-11-20, DSH): BOUNDARIES-FIXED.** Экспорт 31 (15u/16a),
+`roleHash 41f90d7a`, roles `…auuu`→ хвост `aaa`: #29/#30/#31 — три
+assistant (2 885/3 553/3 494), сумма 109 176; `#29_old === #29+#30+#31.join("\n\n")`.
+K1/K2 против 29 — DIFF ожидаемо (29→31).
+
+**Dedupe-маркер.** `manualSnapshot.dedupe` и `buildJsonFromHistory` теперь
+пишут `{input, output, removedUsers, foldedAssistants}` только при изменении
+счёта (33→31: removedUsers=2, foldedAssistants=0); иначе ключ не появляется.
+`partial` не ставится: текст полный, удалены дубли. Регресс:
+`tests/aistudio-export-dedupe.test.js` (4).
+
+**Остаток:** #19/#20 (17 540 + 88, файловый user-дубль) не схлопнут —
+отдельное наблюдение; `partial` для уникальной потери не подтверждён.
 
 **Не виновен:** BUG-12 (роли закрыты: ROLES-FIXED, экспорт — префикс источника).
 

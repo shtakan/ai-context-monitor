@@ -37,6 +37,38 @@ export interface AiCmAistudioSnapshotMessage {
 }
 
 /**
+ * BUG-13: след dedupe для файла. Сравнивает роли источника и выхода:
+ * removedUsers — сколько user-ходов убрано, foldedAssistants — сколько
+ * assistant-сообщений склеено. undefined — счёт не менялся.
+ */
+export function exportDedupeInfo(
+  sourceMessages: Array<{ role?: string }> | null | undefined,
+  outputMessages: Array<{ role?: string }> | null | undefined
+): { input: number; output: number; removedUsers: number; foldedAssistants: number } | undefined {
+  const src = Array.isArray(sourceMessages) ? sourceMessages : [];
+  const out = Array.isArray(outputMessages) ? outputMessages : [];
+  if (src.length === out.length) return undefined;
+  let srcUsers = 0;
+  let srcAssistants = 0;
+  let outUsers = 0;
+  let outAssistants = 0;
+  for (let i = 0; i < src.length; i++) {
+    if (src[i] && src[i].role === 'user') srcUsers++;
+    else srcAssistants++;
+  }
+  for (let j = 0; j < out.length; j++) {
+    if (out[j] && out[j].role === 'user') outUsers++;
+    else outAssistants++;
+  }
+  return {
+    input: src.length,
+    output: out.length,
+    removedUsers: Math.max(0, srcUsers - outUsers),
+    foldedAssistants: Math.max(0, srcAssistants - outAssistants)
+  };
+}
+
+/**
  * Роли и тексты базового снимка AI Studio для экспортной проекции.
  *
  * BUG-12: export-manager берёт роли из lastDetailMessages; без этой синхронизации

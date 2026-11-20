@@ -536,6 +536,9 @@ export function buildJsonFromHistory(history: ExportHistory, platform?: string):
     // S5.1 (I3): аддитивный ключ применённой проекции файла. undefined (mode='') →
     // JSON.stringify ключ НЕ добавляет, байты прежних платформ не меняются.
     bodyProjection: isProjected(h) ? true : undefined,
+    // BUG-13: след dedupe (input/output/removedUsers/foldedAssistants).
+    // undefined → ключ не появляется, байты прежних файлов не меняются.
+    dedupe: h.dedupe,
     messages: Array.isArray(h.messages) ? h.messages : []
   }, null, 2);
 }

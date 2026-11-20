@@ -228,9 +228,16 @@ export interface AiCmManualSnapshot {
   isLowConfidenceBase: boolean;
   sourceTier?: string;
   partial?: boolean;
-  partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text';
+  partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text' | 'stopped' | 'truncated';
   /** Режим проекции файла (S5.1); появляется только после проекции. */
   bodyProjection?: string;
+  /** BUG-13: след dedupe (input/output/removedUsers/foldedAssistants). */
+  dedupe?: {
+    input: number;
+    output: number;
+    removedUsers: number;
+    foldedAssistants: number;
+  };
   /**
    * Сообщения файла. Фактически это AiCmExportMessage[] (role/text — строки,
    * role и text обязательны), поэтому объявленная здесь форма — надмножество.

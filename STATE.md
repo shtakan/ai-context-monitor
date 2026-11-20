@@ -12,12 +12,12 @@
 ## 2. Метрики (финальный прогон 2026-11-19, после последнего коммита)
 
 - build: exit 0 (`npm run build:prod`); `dist/content.js` 320 983 B, sha256 `dadbb2ed522928e08a204165128104c9f7aa100e9186e646a43041dc93dd92bd` (prod)
-- tests: 275 suites / 4437 passed / 7 skipped / 0 failed (полный `npm test`) — `275/4437/7/0`
+- tests: 276 suites / 4441 passed / 7 skipped / 0 failed (полный `npm test`) — `276/4441/7/0`
 - tsc: exit 0, вывод пуст (`npx tsc --noEmit`); strict: exit 0, 0 ошибок (`npx tsc -p tsconfig.strict.json`); chrome-tsc: **exit 0, 0 ошибок** (`npx tsc -p tsconfig.chrome.json`); lint: 0 errors (`npx eslint . --quiet`, exit 0)
 
 ## 3. Текущая задача
 
-- **2.2 — BUG-12 fixed, BUG-13 boundaries fixed (2026-11-20, `feature/2.2`):** контракты; AST-линтер; фикстуры AI Studio; `utils/messages/{canonicalize,reconcile}.ts`; `capture()` + dual-run; `accept-compare`; SITE-RECIPES. **BUG-12 ROLES-FIXED** (`4685c57`). **BUG-13:** triage = DUPLICATE-DEDUPE; `aiCmDedupeExportSource` склеивал assistant **после** dedupe (дубли user исчезали → три ответа становились одним). Фикс: merge сегментов **до** `prepareExportMessages`; 2 регресса (`aistudio-export-boundaries`), source-пины Gemini/O41 обновлены. Ожидание K6e: 31 сообщение (2 дубля user убраны, 3 ответа сохранены), `partial`/dedupe-метки — отдельно. Гейты: jest 275/4437/7, tsc main+strict 0, lint:arch 0, `dist/content.js` 329 097 B sha256 `83e9973f…`.
+- **2.2 — BUG-12 fixed, BUG-13 boundaries+marker fixed (2026-11-20, `feature/2.2`):** контракты; AST-линтер; фикстуры AI Studio; `utils/messages/{canonicalize,reconcile}.ts`; `capture()` + dual-run; `accept-compare`; SITE-RECIPES. **BUG-12 ROLES-FIXED** (`4685c57`). **BUG-13:** triage = DUPLICATE-DEDUPE; merge assistant **до** dedupe (`aiCmDedupeExportSource`), live K6e = BOUNDARIES-FIXED (31, 15u/16a, `roleHash 41f90d7a`, хвост `aaa`, текст 109 176). JSON теперь несёт `dedupe:{input,output,removedUsers,foldedAssistants}` (опционально), `partial` не ставится — текст полный, удалены дубли. Остаток: #19/#20 файловый user-дубль (17 540 + 88) не схлопнут — отдельное наблюдение. Гейты: jest 276/4441/7, tsc main+strict 0, lint:arch 0, `dist/content.js` 329 509 B sha256 `16c9da86…`.
 
 - **2.1.5 — финальная приёмка пройдена 2026-11-19** (8 провайдеров Chrome + Firefox smoke): GSA, DeepSeek, Qwen, Perplexity, ChatGPT, Gemini, Claude, AI Studio — **OK**. Закрыты BUG-02 (DeepSeek/Qwen stop, `6107bf4`/`9c9bc2f`), BUG-01 (Claude tool, `5192a60`), BUG-04 Gemini (`123913c`/`a4fdc03`) и AI Studio (`3821d59`), BUG-26/27/17 (AI Studio/Gemini), BUG-06 (app launcher); P3 `cfa315d` (шум на restricted). P2/P3 — цель 2.2.0. Счётчики 270/4388/7/0; prod `dist/content.js` 320 983 B sha256 `dadbb2ed…`; ZIP/AMO — `acceptance/2.1.5`.
 

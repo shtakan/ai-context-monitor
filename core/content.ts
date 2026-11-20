@@ -3565,7 +3565,7 @@ if (isExtensionValid()) {
         var snapPartMan = (typeof aiCmReadContextSnapshot === 'function')
           ? aiCmReadContextSnapshot((typeof aiCmCanonicalConvId === 'function')
             ? aiCmCanonicalConvId() : curCidExp) : null;
-        var manualSnapshot = /** @type {AiCmManualSnapshot} */
+        var manualSnapshot: AiCmManualSnapshot = /** @type {AiCmManualSnapshot} */
           ({
             host: window.location.hostname,
             convId: curCidExp,
@@ -3634,7 +3634,7 @@ if (isExtensionValid()) {
           if (canonManual && canonManual.messages.length) manualSnapshot.messages = canonManual.messages;
           if (typeof aiCmProjectFileMessages === 'function') { var projMn = aiCmProjectFileMessages(manualSnapshot.messages, manualSnapshot.site || ''); manualSnapshot.messages = projMn.messages; var snapProjM = manualSnapshot as typeof manualSnapshot & { bodyProjection?: string }; snapProjM.bodyProjection = projMn.mode; }
         }
-        sendResponse({ data: manualSnapshot } as AiCmContentResponse);
+        manualSnapshot.dedupe = (typeof exportDedupeInfo === 'function') ? exportDedupeInfo(lastDetailMessages, manualSnapshot.messages) : undefined; sendResponse({ data: manualSnapshot } as AiCmContentResponse);
       };
       // R2: площадки с очередью вложений (DeepSeek — свой модуль, Qwen — core/qwen-files.js)
       // дожидаются текста файлов ДО композиции: у Qwen это только дренаж (6000 мс: файлы
@@ -5142,7 +5142,7 @@ try {
 // осознанно: любая новая строка выше сдвинула бы line-based catch/console
 // whitelists. esbuild/TS хойстят import сами; в песочницах строка снимается,
 // поэтому установка под typeof-гардом.
-import { installAistudioDualRun, aistudioDetailMessages } from './aistudio-dualrun.ts';
+import { installAistudioDualRun, aistudioDetailMessages, exportDedupeInfo } from './aistudio-dualrun.ts';
 
 try {
   if (typeof AistudioAdapter === 'function' && typeof installAistudioDualRun === 'function') {

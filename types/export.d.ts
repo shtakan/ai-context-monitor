@@ -131,6 +131,18 @@ export interface ExportHistory {
   /** S2.3 (ADR-001): причина частичности (словарь расширяется только здесь). */
   partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text' | 'stopped' | 'truncated';
 
+  /**
+   * 2.2/BUG-13: след dedupe в снимке. input/output — сообщений до/после,
+   * removedUsers/foldedAssistants — что именно удалено/склеено. undefined —
+   * dedupe не менял счёт, ключ в JSON не появляется.
+   */
+  dedupe?: {
+    input: number;
+    output: number;
+    removedUsers: number;
+    foldedAssistants: number;
+  };
+
   /** Сообщения снимка. */
   messages?: ExportMessage[];
 }
