@@ -170,11 +170,16 @@ Chrome-temp `f2a294ac-….tmp` (138 955 B, полный md-payload, H1 на ме
 `mime=text/markdown`. Фактический старт один (`aiCmAutoExportStartDownload`
 → `downloadBlob` → один `a.click()`), реестр имён резервирует имя один раз.
 
-**Вероятная причина.** Обрыв/закрытие automation-сессии до финализации
-download-менеджером (payload в temp полный). Код расширения байты не теряет.
-**Триаж (следующий):** повторить в обычном Chrome, вкладку не закрывать ≥10 с,
-проверить `chrome://downloads`; если `.md` появляется — среда, не баг. Если
-повторяется — снять `download trigger`/`download-blocked`/`chrome.downloads`
-события. **Не виновен:** BUG-14 (fired подтверждён) и dedupe-маркер.
+**Вероятная причина (сильная).** Имя temp-файла — UUID + `.tmp`, а не Chrome
+`.crdownload`. Это подпись CDP-перехвата загрузок (`Browser.setDownloadBehavior`
+с `allowAndName`/`eventsEnabled`): браузерный automation-слой сохраняет payload
+под GUID и НЕ переименовывает в исходное имя. Payload полный (138 955 B ≈
+87 070 симв. UTF-8), т.е. расширение отдало корректный файл; финального `.md`
+в такой среде не будет по дизайну стенда.
+**Триаж (следующий):** повторить в обычном Chrome без CDP-перехвата, вкладку
+не закрывать, проверить `chrome://downloads`; ожидание — `.md` появляется.
+Если и там нет — снимать `download trigger`/`download-blocked`/
+`chrome.downloads.onCreated`. **Не виновны:** BUG-14 (fired подтверждён)
+и dedupe-маркер.
 
 
