@@ -6,7 +6,7 @@
 ## 1. Репозиторий
 
 - workspace: ai-context-monitor-clean
-- branch: `feature/2.2`; HEAD: `e9cf41c` + `chore(state)` сверху; origin/main: `4e2916a`; ahead: 10; behind: 0; тег `v2.1.5` → `4e2916a`; тег `v2.1.4` → `d2194cc`, `v2.1.3` → `1e46a85`
+- branch: `feature/2.2`; HEAD: `beca841` + `chore(state)` сверху; origin/main: `4e2916a`; ahead: 12; behind: 0; тег `v2.1.5` → `4e2916a`; тег `v2.1.4` → `d2194cc`, `v2.1.3` → `1e46a85`
 - version: `2.1.5` (manifest.json, package.json, package-lock.json, футер docs/index.html, PROJECT_HANDOFF L199); релизный коммит — ожидает публикации; tag `v2.1.5`/GitHub Release/AMO — за владельцем
 
 ## 2. Метрики (финальный прогон 2026-11-19, после последнего коммита)
@@ -17,7 +17,7 @@
 
 ## 3. Текущая задача
 
-- **2.2 — dual-run AI Studio + правки по живой приёмке (2026-11-20, `feature/2.2`):** контракты `types/{capture,canonical,metrics}.d.ts`; AST-линтер (ADR-002); фикстуры AI Studio + `expected.json`; `utils/messages/{canonicalize,reconcile}.ts`; `capture()` + `core/aistudio-dualrun.ts` (флаг `aiCmV2Messages`, `roleHash`, JSON-строка `v2-messages-json`); `tools/accept-compare.js` (K1/K2, игнор `exportedAt`); `docs/SITE-RECIPES.md`; live-программа переписана на K1–K5. Живая A–D: `verdict=same`, flagoff/after2 канонически равны; **BUG-12** — старый путь AI Studio путает роли после `[FILE:]` (2.2-канон не виновен). Гейты: jest 273/4432/7, tsc main+strict 0, lint:arch 0, `dist/content.js` 328 668 B sha256 `4c3eaf52…`. Блокер включения `messages` по умолчанию — триаж BUG-12.
+- **2.2 — dual-run AI Studio + правки по живой приёмке (2026-11-20, `feature/2.2`):** контракты `types/{capture,canonical,metrics}.d.ts`; AST-линтер (ADR-002); фикстуры AI Studio + `expected.json`; `utils/messages/{canonicalize,reconcile}.ts`; `capture()` + `core/aistudio-dualrun.ts` (флаг `aiCmV2Messages`, `roleHash`, JSON-строка `v2-messages-json`); `tools/accept-compare.js` (K1/K2, игнор `exportedAt`); `docs/SITE-RECIPES.md`; live-программа переписана на K1–K5. Живая A–D: `verdict=same`, flagoff/after2 канонически равны; **BUG-12** — старый путь AI Studio путает роли после `[FILE:]` (2.2-канон не виновен). Гейты: jest 273/4432/7, tsc main+strict 0, lint:arch 0, `dist/content.js` 328 769 B sha256 `6bdbf206…`. Блокер включения `messages` по умолчанию — триаж BUG-12.
 
 - **2.1.5 — финальная приёмка пройдена 2026-11-19** (8 провайдеров Chrome + Firefox smoke): GSA, DeepSeek, Qwen, Perplexity, ChatGPT, Gemini, Claude, AI Studio — **OK**. Закрыты BUG-02 (DeepSeek/Qwen stop, `6107bf4`/`9c9bc2f`), BUG-01 (Claude tool, `5192a60`), BUG-04 Gemini (`123913c`/`a4fdc03`) и AI Studio (`3821d59`), BUG-26/27/17 (AI Studio/Gemini), BUG-06 (app launcher); P3 `cfa315d` (шум на restricted). P2/P3 — цель 2.2.0. Счётчики 270/4388/7/0; prod `dist/content.js` 320 983 B sha256 `dadbb2ed…`; ZIP/AMO — `acceptance/2.1.5`.
 
