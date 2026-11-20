@@ -158,7 +158,7 @@ sha256 `efca1631…`. `auto-export-decision verdict=fire reason=threshold pct=30
 не меняются: маркер печатает только JSON-сборщик. Регресс:
 `tests/aistudio-export-dedupe.test.js` (+3).
 
-## BUG-15 (кандидат, P3) — авто-файл не финализируется в Downloads
+## BUG-15 (CLOSED-ENV, P3) — авто-файл не финализировался в Downloads (CDP)
 
 **Симптом (DSH, 2026-11-20 19:06).** После `fired` в Downloads остался только
 Chrome-temp `f2a294ac-….tmp` (138 955 B, полный md-payload, H1 на месте);
@@ -176,11 +176,14 @@ Chrome-temp `f2a294ac-….tmp` (138 955 B, полный md-payload, H1 на ме
 под GUID и НЕ переименовывает в исходное имя. Payload полный (138 955 B ≈
 87 070 симв. UTF-8), т.е. расширение отдало корректный файл; финального `.md`
 в такой среде не будет по дизайну стенда.
-**Триаж (следующий):** повторить в обычном Chrome без CDP-перехвата, вкладку
-не закрывать, проверить `chrome://downloads`; ожидание — `.md` появляется.
-Если и там нет — снимать `download trigger`/`download-blocked`/
-`chrome.downloads.onCreated`. **Не виновны:** BUG-14 (fired подтверждён)
-и dedupe-маркер.
+**Ретест (2026-11-21, обычный Chrome): DOWNLOAD-OK.** Ручной JSON
+`ai-context-monitor-aistudio-Gemini-3.8-Flash-2026-11-21-09-27.json` и
+авто-MD `aistudio-1fXwxER1-2026-11-21_09-33.md` появились финальными
+файлами; `chrome://downloads` — Complete. Лог:
+`[AI CM][auto-export] fired convId=1fXwxER1… pct=1 file=…09-33.md
+textLen=300 histSource=memory baseComplete=1`, затем `skip reason=already-fired`.
+**Вывод:** причина — CDP `allowAndName`, не расширение. BUG-15 закрыт как
+ENV; код не менялся. **Не виновны:** BUG-14 и dedupe-маркер.
 
 ---
 
@@ -202,5 +205,44 @@ reload — 627 токенов при фактических 3 228 (badge 0.5 % �
 `tests/metrics-seam.test.js` (+ F1-кейс 683/complete → provisional).
 **Живой путь не менялся** (флаг `aiCmV2Metrics` off): это готовность нового
 шва, не поведение 2.1.5. Ретест: T1/T10-ранний → `derived/provisional`.
+
+---
+
+## BUG-17 (кандидат, наблюдение) — AI Studio: тело файла не в текущей базе
+
+**Симптом (live 2026-11-21):** в экспорте 31/15u16a/`aaa` user #26 — 60
+символов (`[FILE: aistudio-…-11-08_19-03.md]`) вместо 22 882; сумма текста
+86 354 вместо 109 176, токены 39 604 (30.9 %) вместо 46 459 (36.3 %).
+
+**Не шов messages:** ON и OFF дают идентичный документ; тот же 86 354 был в
+legacy-экспорте 18:34 (до default-коммита) и в md 09:03. Значит, тела файла
+нет уже в текущем снимке базы/сети, а не потеряно при канонизации.
+
+**Триаж (следующий, отдельно):** открыть тред, заново прикрепить файл,
+дождаться дренажа вложений (`[AI CM][aistudio] files…`), F5 → экспорт:
+ожидание 22 882 + сумма 109 176. Если тело снова 60 — дефект file-drain
+AI Studio, не messages. **Не виновны:** messages default, BUG-13/14,
+dedupe-маркер.
+
+---
+
+## BUG-18 (кандидат, P3) — AI Studio: бейдж держит значение прошлого треда
+
+**Симптом (live 2026-11-21, скрины):** переход в новый чат
+`/prompts/new_chat` — бейдж показывает **30.9 %** от предыдущего треда;
+после первого ответа/второй реплики — 2.4 % (3 080 / 128 000). То есть до
+первого замера нового чата на экране живёт старое число.
+
+**Вероятный корень.** `resetConversationState()` очищает бейдж в `—`, но на
+AI Studio событие `ai-cm-conversation-changed` не диспатчится (его шлют
+deepseek/perplexity/claude/page-intercept, не aistudio-intercept), а
+content-side проверки URL нет. Пока не пришёл первый `ai-cm-aistudio-net`
+с новым convId, `processAndSend` не вызывается — старый DOM-текст остаётся.
+
+**Триаж/фикс (отдельно):** при SPA-переходе на `/prompts/new_chat` (или
+смене convId в URL) вызывать `resetConversationState()`/рисовать `—` до
+первого снимка; варианты — `popstate` + лёгкий URL-вотчер в content.ts или
+эмит `ai-cm-conversation-changed` из aistudio-перехватчика. **Не виновны:**
+messages default, metrics (числа после замера верные), BUG-14.
 
 
