@@ -34,6 +34,7 @@ CI runs the same suite (plus syntax checks and `manifest.json` validation) in [.
 | `tests/aistudio-export-boundaries.test.js` | `core/base-handler.ts` | BUG-13: merge assistant-сегментов идёт **до** dedupe; дубли user не склеивают разные ответы; настоящие подряд идущие сегменты склеиваются |
 | `tests/aistudio-export-dedupe.test.js` | `exportDedupeInfo` + `buildJsonFromHistory` + `aiCmExportDedupeInfoAuto` | BUG-13: `removedUsers`/`foldedAssistants`; ключ `dedupe` только при изменении счёта; авто-JSON получает тот же маркер, гейт платформы — в `content.ts`, не в export-manager |
 | `tests/aistudio-autoexport-schedule.test.js` | `core/content.ts` (`aiCmAfterAistudioNetKick`) | BUG-14: сетевой путь AI Studio планирует автоэкспорт после `processAndSend` со свежим `lastPercentage`; база применяется до kick |
+| `tests/metrics-seam.test.js` | `utils/metrics/{sources,limits,readiness,snapshot}.ts` + `core/metrics-dualrun.ts` | 2.2/фаза 2: native→server→base→dom→estimate; окно 1M ≠ порог 128k; floor никогда не settled; `compare` называет поля; dual-run только AI Studio и только по флагу `aiCmV2Metrics` |
 
 Helpers in `tests/helpers/*` wrap production parsers so tests exercise the exact shipped code.
 

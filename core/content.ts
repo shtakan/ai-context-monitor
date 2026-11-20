@@ -3005,7 +3005,7 @@ function processAndSend(): void {
           : ((baseCompleteReason === 'missing-user-text') ? 'missing-user-text' : 'incomplete');
       }
       var aiCmSnapPrevAnomaly = (typeof lastTokensSnapshot !== 'undefined') ? lastTokensSnapshot : null;
-      lastTokensSnapshot = aiCmCommitContextSnapshot(lastTokensSnapshot, aiCmCtxSnapCandidate);
+      lastTokensSnapshot = aiCmCommitContextSnapshot(lastTokensSnapshot, aiCmCtxSnapCandidate); if (typeof aiCmV2MetricsDualRun === 'function') aiCmV2MetricsDualRun(aiCmCtxSnapCandidate, aiCmV2MetricsProbe(aiCmCtxSnapCandidate, modelId, (svc === 'aistudio' && typeof aiCmAistudioNativePromptTokens === 'function') ? aiCmAistudioNativePromptTokens() : 0, metricServerTokens));
       // S4 (D3): падение больше 10 п.п. при ПРИНЯТОМ коммите — не ошибка (число = текущее
       // измерение канонического тела), но повод для ОДНОЙ диагностической строки. В [ctx-snap]
       // и в шапку файла она не попадает: это content-trace, а не метрика.
@@ -5148,6 +5148,8 @@ try {
 // whitelists. esbuild/TS хойстят import сами; в песочницах строка снимается,
 // поэтому установка под typeof-гардом.
 import { installAistudioDualRun, aistudioDetailMessages, exportDedupeInfo } from './aistudio-dualrun.ts';
+import { aiCmV2MetricsDualRun } from './metrics-dualrun.ts';
+import type { AiCmV2MetricsProbe } from './metrics-dualrun.ts';
 
 try {
   if (typeof AistudioAdapter === 'function' && typeof installAistudioDualRun === 'function') {
@@ -5175,5 +5177,51 @@ function aiCmExportDedupeInfoAuto(sourceMessages: unknown, outputMessages: unkno
   } catch (eDdAuto) {
     return undefined;
   }
+}
+
+/**
+ * 2.2 / фаза 2: probe для dual-run метрики. Читает ТОЛЬКО уже посчитанные
+ * значения этого прохода (candidate) и глобалы контура; ни DOM, ни storage
+ * здесь не трогаются — их снятие осталось в processAndSend.
+ */
+function aiCmV2MetricsProbe(
+  candidate: AiCmContextSnapshot,
+  modelId: string,
+  nativeTokens: number,
+  serverTokens: number
+): AiCmV2MetricsProbe {
+  const complete = candidate.baseComplete === true;
+  const site = (typeof getServiceKey === 'function')
+    ? (getServiceKey() || '')
+    : ((typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName) || '');
+  const windowLimit = (typeof ModelConfig !== 'undefined' && ModelConfig && typeof ModelConfig.getContextLimit === 'function')
+    ? ModelConfig.getContextLimit(modelId)
+    : 0;
+  return {
+    site: site,
+    convId: candidate.convId,
+    capturedAt: candidate.capturedAt,
+    nativeTokens: nativeTokens,
+    serverTokens: serverTokens,
+    // Для AI Studio полная сетевая база — это base-канал; неполная — видимый DOM.
+    baseTokens: complete ? candidate.tokens : 0,
+    domTokens: complete ? 0 : candidate.tokens,
+    estimateTokens: 0,
+    bodyHash: candidate.bodyHash,
+    baseComplete: complete,
+    partial: candidate.partial === true,
+    modelId: modelId,
+    modelWindow: windowLimit,
+    displayLimit: candidate.limit,
+    fallbackLimit: candidate.limit,
+    accountLimit: null,
+    plan: null,
+    windowSource: 'catalog',
+    displaySource: 'fallback',
+    nativeSource: 'span.v3-token-count-value',
+    serverSource: 'network/server',
+    baseSource: 'base:complete',
+    domSource: 'dom:visible'
+  };
 }
 
