@@ -61,6 +61,8 @@ tools/*
 # он должен быть в git, иначе package.json ссылается на несуществующий файл в CI.
 !tools/jest-esbuild-transform.js
 !tools/mutation-check.js
+# ADR-002: архитектурный AST-линтер — часть CI (npm run lint:arch), не одноразовый скрипт.
+!tools/architecture-lint.mjs
 tools/key.pem
 # Прежний шаблон `tools/` (без внутреннего слэша) ловил каталог tools на ЛЮБОЙ
 # глубине; root-anchored `tools/*` этого не делает, поэтому вложенный служебный

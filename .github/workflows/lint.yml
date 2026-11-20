@@ -54,6 +54,12 @@ jobs:
       - name: ESLint baseline (blocking)
         run: npm run lint:baseline
 
+      # ADR-002 (2.2, фаза 0): AST-линтер архитектурных границ. Отдельный шаг, а не
+      # Jest: behavior-gate не должен расти, а проверка структурная (узлы, не строки).
+      # Правила и область — docs/decisions/architecture-lint.md.
+      - name: Architecture lint (AST, blocking)
+        run: npm run lint:arch
+
       # esbuild only transpiles — type-checking stays on tsc (Phase 1 contract).
       - name: Type-check
         run: npx tsc --noEmit
