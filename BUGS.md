@@ -83,20 +83,25 @@ reachedStart=false scrollEngaged=false`; `o40-emit-entry msgsIn=29 msgsOut=29`
 при net-каноне 33 за 34 с до этого. `K1` fix.json vs fix-after-f5.json equal —
 F5 не меняет экспорт.
 
-**Гипотезы.**
-1. **Dedupe overreach:** `prepareExportMessages`/`dedupeMessages` включает
-   глобальный дедуп по `usersN > assistantsN`; файловый узел даёт лишний user
-   (17u/16a), и две повторяющиеся Q/A-пары в хвосте схлопываются как «копии».
-   Тогда 29 — не потеря уникального текста, а срабатывание дедупа.
-2. **Stale base/turnsMap:** live-база/`lastBaseTexts` остаётся 29, хотя
-   `__aiCmNetMsgs` 33; проекция получает уже усечённый снимок.
+**Триаж (DSH, 2026-11-20): DUPLICATE-DEDUPE.** 4/4 отсутствующих текста
+MATCH в export #29 (смещения 0/2657/5923; хвост #29 = хвост #4). #29 —
+три ответа, склеенные в один (9 936 = 2 739+3 394+3 308); два дубля
+user-файлов (#30/#32) убраны дедупом. Потери уникального текста нет;
+дефект — границы ответов + политика dedupe. DOM: user-узлы не
+отрендерены (`user-chunk=0`), потому дубльность #30/#32 — вывод из
+арифметики (средняя уверенность).
 
-**Триаж (следующий).** Снять #30–#33 из DOM (роль, длина, нормализованный
-хэш) и сравнить с 29 сообщениями файла: если хэши уже есть в файле — это
-дедуп (гипотеза 1), если нет — потеря (гипотеза 2). Дополнительно поймать
-`dedupe removed=`/`prepareExportMessages` в debug-логе на экспорте.
-Артефакты: `acceptance/BIG-2026-11/2.2/BUG12-K6C.md`, `raw/bug12-k6c*.json/log`,
-`raw/export-…-fix-after-f5.json`.
+**Фикс (2.2).** `aiCmDedupeExportSource`: `aiCmMergeAssistantRuns` теперь
+выполняется **до** `prepareExportMessages`, а не после. Дубли user
+удаляются уже после склейки сегментов, поэтому три разных ответа,
+разделённые дублями user, не превращаются в один. Регресс:
+`tests/aistudio-export-boundaries.test.js` (2). Source-пины Gemini/O41
+обновлены на новый вызов (порядок `prepareExportMessages` → `dedupeMessages`
+сохранён).
+
+**Ожидание K6e:** 31 сообщение (33 − 2 дубля user), три assistant-ответа
+сохранены; `partial`/`dedupe:{removedUsers, foldedAssistants}` в файле —
+отдельное решение (схема JSON), не в этом фиксе.
 
 **Не виновен:** BUG-12 (роли закрыты: ROLES-FIXED, экспорт — префикс источника).
 

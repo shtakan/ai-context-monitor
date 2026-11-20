@@ -865,8 +865,8 @@ describe('E-2 (3): точка врезки в core/content.ts', () => {
     // гейт сервиса: не-Gemini выходит РАНЬШЕ — внутри-сообщенческая дедупликация не применяется
     expect(CONTENT_SRC).toContain("if (site !== 'gemini' && site !== 'aistudio') {");
     // единая точка входа пайплайна: порядок «внутри → меж» задан prepareExportMessages
-    expect(CONTENT_SRC).toContain('P.prepareExportMessages(messages, aiCmLogIntraDedupe)');
-    expect(CONTENT_SRC.indexOf('P.prepareExportMessages(messages, aiCmLogIntraDedupe)'))
+    expect(CONTENT_SRC).toContain('P.prepareExportMessages(');
+    expect(CONTENT_SRC.indexOf('P.prepareExportMessages('))
       .toBeLessThan(CONTENT_SRC.indexOf('return P.dedupeMessages(messages);'));
     // лог ровно того формата, что в задаче
     expect(helpers).toContain("'[AI CM][gemini] intra-dedupe removed=' + blocks + ' blocks in message role=' + role");

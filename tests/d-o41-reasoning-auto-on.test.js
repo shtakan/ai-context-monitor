@@ -562,7 +562,7 @@ describe('D-O41 R3: Gemini/AI Studio байтово прежний при ON и 
   test('R3 source-пины: ветка Gemini/AI Studio по-прежнему идёт через prepareExportMessages', () => {
     const dedupe = fnDecl(BASE_HANDLER_SRC, 'aiCmDedupeExportSource');
     expect(dedupe).toContain("if (site !== 'gemini' && site !== 'aistudio') {");
-    expect(dedupe).toContain('P.prepareExportMessages(messages, aiCmLogIntraDedupe)');
+    expect(dedupe).toContain('P.prepareExportMessages(');
     expect(PIPELINE_SRC).toContain('function prepareExportMessages(raw: unknown, onMessageDedupe?: MessageDedupeLogger | null)');
     // D-O41 (и его пересмотр) в подготовку Gemini-ветки не вмешивается
     const prep = fnDecl(PIPELINE_SRC, 'prepareExportMessages');
