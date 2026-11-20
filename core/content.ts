@@ -4984,6 +4984,11 @@ function aiCmAfterAistudioNetKick(): void {
   }
   if (typeof isInitialized !== 'undefined' && isInitialized && typeof processAndSend === 'function') {
     processAndSend();
+    // BUG-14: AI Studio принимает базу сетью РАНЬШЕ adapter-ветки (!baseSeen) и не шлёт
+    // 'ai-cm-full-history' — обе прежние точки планирования недостижимы. Здесь pct уже
+    // пересчитан processAndSend (lastPercentage), поэтому это единственная точка, где
+    // автоэкспорт планируется по свежему числу; гейты порога/полноты — в maybeAutoExport.
+    if (typeof aiCmScheduleAutoExport === 'function') aiCmScheduleAutoExport(lastPercentage);
   }
 }
 
