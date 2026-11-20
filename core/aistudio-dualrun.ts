@@ -47,6 +47,9 @@ export interface AiCmV2DualRunResult {
   firstRoleDiff: number;
   /** Все индексы, где роль старого и нового пути разошлась. */
   roleDiffs: number[];
+  /** Компактная последовательность ролей: 'u'/'a' (для сверки с экспортом). */
+  oldRoles: string;
+  newRoles: string;
   reasons: string[];
   newComplete: boolean;
   newReasons: string[];
@@ -115,13 +118,18 @@ function countRole(messages: Array<{ role: string }>, role: string): number {
  * смешано с текстом; roleHash отвечает ровно на вопрос «та же раскладка ролей».
  */
 export function roleSequenceHash(messages: Array<{ role?: string }> | null | undefined): string {
+  return fnv1a32(roleSequence(messages));
+}
+
+/** Компактная последовательность ролей: 'u' для user, 'a' для остальных. */
+export function roleSequence(messages: Array<{ role?: string }> | null | undefined): string {
   let seq = '';
   if (Array.isArray(messages)) {
     for (let i = 0; i < messages.length; i++) {
       seq += (messages[i] && messages[i].role === 'user') ? 'u' : 'a';
     }
   }
-  return fnv1a32(seq);
+  return seq;
 }
 
 function roleDifferences(
@@ -199,6 +207,8 @@ export function compareAistudioMessages(
     firstDiff: firstDiff,
     firstRoleDiff: roleDiffs.length ? roleDiffs[0] : -1,
     roleDiffs: roleDiffs,
+    oldRoles: roleSequence(oldNorm),
+    newRoles: roleSequence(thread.messages),
     reasons: reasons,
     newComplete: thread.completeness.complete,
     newReasons: thread.completeness.reasons.slice()
@@ -235,6 +245,7 @@ function logResult(result: AiCmV2DualRunResult, batch: CaptureBatch): void {
       a: result.oldAssistant,
       bodyHash: result.oldHash,
       roleHash: result.oldRoleHash,
+      roles: result.oldRoles,
       chars: result.oldChars
     },
     new: {
@@ -242,6 +253,7 @@ function logResult(result: AiCmV2DualRunResult, batch: CaptureBatch): void {
       a: result.newAssistant,
       bodyHash: result.newHash,
       roleHash: result.newRoleHash,
+      roles: result.newRoles,
       chars: result.newChars,
       complete: result.newComplete,
       reasons: result.newReasons

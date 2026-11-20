@@ -75,7 +75,8 @@ describe('accept-compare: K1/K2', () => {
       messages: 4,
       user: 2,
       assistant: 2,
-      roleHash: roleHashOf(doc.messages)
+      roleHash: roleHashOf(doc.messages),
+      roles: 'uaua'
     });
   });
 

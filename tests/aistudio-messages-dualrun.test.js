@@ -15,7 +15,8 @@ const {
   aiCmV2MessagesEnabled,
   installAistudioDualRun,
   resetAistudioDualRunForTests,
-  roleSequenceHash
+  roleSequenceHash,
+  roleSequence
 } = require('../core/aistudio-dualrun.ts');
 
 const DIR = path.join(__dirname, 'fixtures', 'aistudio');
@@ -64,6 +65,8 @@ describe('dual-run messages: сравнение старого пути и ка�
       expect(result.oldHash).toBe(result.newHash);
       expect(result.oldRoleHash).toBe(result.newRoleHash);
       expect(result.roleDiffs).toEqual([]);
+      expect(result.oldRoles).toBe(result.newRoles);
+      expect(result.oldRoles.length).toBe(result.oldUser + result.oldAssistant);
       expect(result.oldUser).toBe(result.newUser);
       expect(result.oldAssistant).toBe(result.newAssistant);
       expect(result.firstDiff).toBe(-1);

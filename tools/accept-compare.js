@@ -198,7 +198,8 @@ function roleReport(doc) {
     messages: messages.length,
     user: counts.user,
     assistant: counts.assistant,
-    roleHash: roleHashOf(messages)
+    roleHash: roleHashOf(messages),
+    roles: messages.map((m) => (m && m.role === 'user') ? 'u' : 'a').join('')
   };
 }
 
@@ -218,7 +219,8 @@ function main() {
       else {
         console.log('messages=' + report.messages +
           ' ' + report.user + 'u/' + report.assistant + 'a' +
-          ' roleHash=' + report.roleHash);
+          ' roleHash=' + report.roleHash +
+          ' roles=' + report.roles);
       }
       return 0;
     }
