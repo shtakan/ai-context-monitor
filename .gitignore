@@ -63,6 +63,8 @@ tools/*
 !tools/mutation-check.js
 # ADR-002: архитектурный AST-линтер — часть CI (npm run lint:arch), не одноразовый скрипт.
 !tools/architecture-lint.mjs
+# 2.2: машинные критерии K1/K2 для парных экспортов приёмки.
+!tools/accept-compare.js
 tools/key.pem
 # Прежний шаблон `tools/` (без внутреннего слэша) ловил каталог tools на ЛЮБОЙ
 # глубине; root-anchored `tools/*` этого не делает, поэтому вложенный служебный

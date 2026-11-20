@@ -14,7 +14,8 @@ const {
   aiCmV2AistudioDualRun,
   aiCmV2MessagesEnabled,
   installAistudioDualRun,
-  resetAistudioDualRunForTests
+  resetAistudioDualRunForTests,
+  roleSequenceHash
 } = require('../core/aistudio-dualrun.ts');
 
 const DIR = path.join(__dirname, 'fixtures', 'aistudio');
@@ -61,12 +62,36 @@ describe('dual-run messages: сравнение старого пути и ка�
       const result = compareAistudioMessages(oldMergedOf(file), batchOf(file));
       expect(result.verdict).toBe('same');
       expect(result.oldHash).toBe(result.newHash);
+      expect(result.oldRoleHash).toBe(result.newRoleHash);
+      expect(result.roleDiffs).toEqual([]);
       expect(result.oldUser).toBe(result.newUser);
       expect(result.oldAssistant).toBe(result.newAssistant);
       expect(result.firstDiff).toBe(-1);
       expect(result.reasons).toEqual([]);
     }
   );
+
+  test('roleHash ловит сдвиг ролей отдельно от текста (K2)', function () {
+    const shifted = oldMergedOf('back.json').map(function (m, i) {
+      if (i === 1) return { role: 'user', content: m.content };
+      if (i === 2) return { role: 'assistant', content: m.content };
+      return m;
+    });
+    const result = compareAistudioMessages(shifted, batchOf('back.json'));
+    expect(result.verdict).toBe('diff');
+    expect(result.oldRoleHash).not.toBe(result.newRoleHash);
+    expect(result.reasons).toContain('role-sequence');
+    expect(result.firstRoleDiff).toBe(1);
+    expect(result.roleDiffs.length).toBeGreaterThan(0);
+  });
+
+  test('roleSequenceHash зависит только от порядка ролей, не от текста', function () {
+    const a = roleSequenceHash([{ role: 'user', text: 'a' }, { role: 'assistant', text: 'b' }]);
+    const b = roleSequenceHash([{ role: 'user', text: 'совсем другой' }, { role: 'assistant', text: 'текст' }]);
+    const c = roleSequenceHash([{ role: 'assistant', text: 'a' }, { role: 'user', text: 'b' }]);
+    expect(a).toBe(b);
+    expect(a).not.toBe(c);
+  });
 
   test('сырой вход (без старого merge): retest-merge даёт diff 9A → 7A', function () {
     const doc = docOf('retest-merge.json');

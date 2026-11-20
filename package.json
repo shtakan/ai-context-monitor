@@ -13,6 +13,7 @@
     "lint:quiet": "eslint . --quiet",
     "lint:baseline": "eslint . --max-warnings 556",
     "lint:arch": "node tools/architecture-lint.mjs",
+    "accept:compare": "node tools/accept-compare.js",
     "test:mutation": "node tools/mutation-check.js"
   },
   "devDependencies": {

@@ -12,12 +12,12 @@
 ## 2. Метрики (финальный прогон 2026-11-19, после последнего коммита)
 
 - build: exit 0 (`npm run build:prod`); `dist/content.js` 320 983 B, sha256 `dadbb2ed522928e08a204165128104c9f7aa100e9186e646a43041dc93dd92bd` (prod)
-- tests: 272 suites / 4424 passed / 7 skipped / 0 failed (полный `npm test`) — `272/4424/7/0`
+- tests: 273 suites / 4432 passed / 7 skipped / 0 failed (полный `npm test`) — `273/4432/7/0`
 - tsc: exit 0, вывод пуст (`npx tsc --noEmit`); strict: exit 0, 0 ошибок (`npx tsc -p tsconfig.strict.json`); chrome-tsc: **exit 0, 0 ошибок** (`npx tsc -p tsconfig.chrome.json`); lint: 0 errors (`npx eslint . --quiet`, exit 0)
 
 ## 3. Текущая задача
 
-- **2.2 — фаза 0 + dual-run AI Studio (2026-11-20, `feature/2.2`):** контракты `types/{capture,canonical,metrics}.d.ts` (только типы); AST-линтер `tools/architecture-lint.mjs` (5 правил, ADR-002, CI вне Jest); фикстуры `tests/fixtures/aistudio/` + `expected.json`; `utils/messages/{canonicalize,reconcile}.ts` + 24 теста; `AistudioAdapter.capture()` + `core/aistudio-dualrun.ts` (обёртка `extractMessages`, флаг `aiCmV2Messages`, 12 тестов) — старый путь пишет файл, новый только измеряется. Гейты: jest 272/4424/7, tsc main+strict 0, lint:arch 0, `dist/content.js` 327 579 B. Дальше — живая приёмка dual-run по `acceptance/BIG-2026-11/2.2/LIVE-ACCEPTANCE-DUALRUN.md`, затем включение флага по умолчанию после пустого diff.
+- **2.2 — dual-run AI Studio + правки по живой приёмке (2026-11-20, `feature/2.2`):** контракты `types/{capture,canonical,metrics}.d.ts`; AST-линтер (ADR-002); фикстуры AI Studio + `expected.json`; `utils/messages/{canonicalize,reconcile}.ts`; `capture()` + `core/aistudio-dualrun.ts` (флаг `aiCmV2Messages`, `roleHash`, JSON-строка `v2-messages-json`); `tools/accept-compare.js` (K1/K2, игнор `exportedAt`); `docs/SITE-RECIPES.md`; live-программа переписана на K1–K5. Живая A–D: `verdict=same`, flagoff/after2 канонически равны; **BUG-12** — старый путь AI Studio путает роли после `[FILE:]` (2.2-канон не виновен). Гейты: jest 273/4432/7, tsc main+strict 0, lint:arch 0, `dist/content.js` 328 668 B sha256 `4c3eaf52…`. Блокер включения `messages` по умолчанию — триаж BUG-12.
 
 - **2.1.5 — финальная приёмка пройдена 2026-11-19** (8 провайдеров Chrome + Firefox smoke): GSA, DeepSeek, Qwen, Perplexity, ChatGPT, Gemini, Claude, AI Studio — **OK**. Закрыты BUG-02 (DeepSeek/Qwen stop, `6107bf4`/`9c9bc2f`), BUG-01 (Claude tool, `5192a60`), BUG-04 Gemini (`123913c`/`a4fdc03`) и AI Studio (`3821d59`), BUG-26/27/17 (AI Studio/Gemini), BUG-06 (app launcher); P3 `cfa315d` (шум на restricted). P2/P3 — цель 2.2.0. Счётчики 270/4388/7/0; prod `dist/content.js` 320 983 B sha256 `dadbb2ed…`; ZIP/AMO — `acceptance/2.1.5`.
 

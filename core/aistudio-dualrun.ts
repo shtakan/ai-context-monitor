@@ -19,7 +19,7 @@
 
 import type { CaptureBatch } from '../types/capture';
 import { canonicalizeBatch } from '../utils/messages/canonicalize';
-import { canonicalBody } from '../utils/canonical-body';
+import { canonicalBody, fnv1a32 } from '../utils/canonical-body';
 import { debugLog, swallowSoft } from '../utils/debug';
 
 /** Старое сообщение адаптера: { role, content }. */
@@ -33,14 +33,20 @@ export interface AiCmV2DualRunResult {
   verdict: 'same' | 'diff';
   oldHash: string;
   newHash: string;
+  oldRoleHash: string;
+  newRoleHash: string;
   oldChars: number;
   newChars: number;
   oldUser: number;
   oldAssistant: number;
   newUser: number;
   newAssistant: number;
-  /** Индекс первого расхождения; -1 — расхождений нет. */
+  /** Индекс первого расхождения текста/роли; -1 — расхождений нет. */
   firstDiff: number;
+  /** Индекс первого расхождения именно ролей; -1 — роли совпадают. */
+  firstRoleDiff: number;
+  /** Все индексы, где роль старого и нового пути разошлась. */
+  roleDiffs: number[];
   reasons: string[];
   newComplete: boolean;
   newReasons: string[];
@@ -103,6 +109,35 @@ function countRole(messages: Array<{ role: string }>, role: string): number {
   return n;
 }
 
+/**
+ * Хэш последовательности ролей: 'u'/'a' без текста. Нужен как отдельный
+ * критерий приёмки (K2): bodyHash чувствителен к роли, но его расхождение
+ * смешано с текстом; roleHash отвечает ровно на вопрос «та же раскладка ролей».
+ */
+export function roleSequenceHash(messages: Array<{ role?: string }> | null | undefined): string {
+  let seq = '';
+  if (Array.isArray(messages)) {
+    for (let i = 0; i < messages.length; i++) {
+      seq += (messages[i] && messages[i].role === 'user') ? 'u' : 'a';
+    }
+  }
+  return fnv1a32(seq);
+}
+
+function roleDifferences(
+  oldMessages: Array<{ role: string }>,
+  newMessages: Array<{ role: string }>
+): number[] {
+  const out: number[] = [];
+  const n = Math.max(oldMessages.length, newMessages.length);
+  for (let i = 0; i < n; i++) {
+    const a = oldMessages[i] ? oldMessages[i].role : '';
+    const b = newMessages[i] ? newMessages[i].role : '';
+    if (a !== b) out.push(i);
+  }
+  return out;
+}
+
 function firstDifference(
   oldMessages: Array<{ role: string; text: string }>,
   newMessages: Array<{ role: string; text: string }>
@@ -130,6 +165,9 @@ export function compareAistudioMessages(
   const oldBody = canonicalBody(batch.convId || '', oldNorm);
   const newBody = canonicalBody(thread.convId || '', thread.messages);
   const firstDiff = firstDifference(oldNorm, thread.messages);
+  const roleDiffs = roleDifferences(oldNorm, thread.messages);
+  const oldRoleHash = roleSequenceHash(oldNorm);
+  const newRoleHash = roleSequenceHash(thread.messages);
   const oldUser = countRole(oldNorm, 'user');
   const oldAssistant = countRole(oldNorm, 'assistant');
   const newUser = countRole(thread.messages, 'user');
@@ -140,13 +178,18 @@ export function compareAistudioMessages(
   if (oldBody.bodyHash !== newBody.bodyHash) reasons.push('body-hash');
   if (oldUser !== newUser) reasons.push('user-count');
   if (oldAssistant !== newAssistant) reasons.push('assistant-count');
+  if (oldRoleHash !== newRoleHash || roleDiffs.length > 0) reasons.push('role-sequence');
   if (firstDiff >= 0) reasons.push('first-diff');
   if (thread.completeness.missingUserTurns) reasons.push('missing-user-turns');
 
   return {
-    verdict: oldBody.bodyHash === newBody.bodyHash && oldNorm.length === thread.messages.length ? 'same' : 'diff',
+    verdict: oldBody.bodyHash === newBody.bodyHash &&
+      oldNorm.length === thread.messages.length &&
+      oldRoleHash === newRoleHash ? 'same' : 'diff',
     oldHash: oldBody.bodyHash,
     newHash: newBody.bodyHash,
+    oldRoleHash: oldRoleHash,
+    newRoleHash: newRoleHash,
     oldChars: oldBody.chars,
     newChars: newBody.chars,
     oldUser: oldUser,
@@ -154,6 +197,8 @@ export function compareAistudioMessages(
     newUser: newUser,
     newAssistant: newAssistant,
     firstDiff: firstDiff,
+    firstRoleDiff: roleDiffs.length ? roleDiffs[0] : -1,
+    roleDiffs: roleDiffs,
     reasons: reasons,
     newComplete: thread.completeness.complete,
     newReasons: thread.completeness.reasons.slice()
@@ -163,7 +208,8 @@ export function compareAistudioMessages(
 function logResult(result: AiCmV2DualRunResult, batch: CaptureBatch): void {
   const signature = [
     batch.convId || '', batch.kind, result.oldHash, result.newHash,
-    result.oldChars, result.newChars, result.firstDiff
+    result.oldRoleHash, result.newRoleHash, result.oldChars, result.newChars,
+    result.firstDiff, result.roleDiffs.join(',')
   ].join('|');
   if (signature === lastSignature) return;
   lastSignature = signature;
@@ -174,11 +220,43 @@ function logResult(result: AiCmV2DualRunResult, batch: CaptureBatch): void {
     ' old=' + result.oldUser + 'u/' + result.oldAssistant + 'a' +
     ' new=' + result.newUser + 'u/' + result.newAssistant + 'a' +
     ' oldHash=' + result.oldHash + ' newHash=' + result.newHash +
+    ' oldRoleHash=' + result.oldRoleHash + ' newRoleHash=' + result.newRoleHash +
     ' oldChars=' + result.oldChars + ' newChars=' + result.newChars);
+
+  // Машинный след для приёмки: одна JSON-строка на извлечение (K1/K2), без текстов.
+  debugLog('log', '[AI CM][v2-messages-json] ' + JSON.stringify({
+    t: new Date().toISOString(),
+    site: 'aistudio',
+    verdict: result.verdict,
+    src: batch.kind,
+    convId: batch.convId || '',
+    old: {
+      u: result.oldUser,
+      a: result.oldAssistant,
+      bodyHash: result.oldHash,
+      roleHash: result.oldRoleHash,
+      chars: result.oldChars
+    },
+    new: {
+      u: result.newUser,
+      a: result.newAssistant,
+      bodyHash: result.newHash,
+      roleHash: result.newRoleHash,
+      chars: result.newChars,
+      complete: result.newComplete,
+      reasons: result.newReasons
+    },
+    reasons: result.reasons,
+    firstDiff: result.firstDiff,
+    firstRoleDiff: result.firstRoleDiff,
+    roleDiffs: result.roleDiffs
+  }));
 
   if (result.verdict === 'diff') {
     debugLog('log',
       '[AI CM][v2-messages] diff site=aistudio first=' + result.firstDiff +
+      ' firstRole=' + result.firstRoleDiff +
+      ' roleDiffs=' + (result.roleDiffs.join(',') || '-') +
       ' reasons=' + result.reasons.join(',') +
       ' newComplete=' + (result.newComplete ? 1 : 0) +
       ' newReasons=' + (result.newReasons.join(',') || '-'));
