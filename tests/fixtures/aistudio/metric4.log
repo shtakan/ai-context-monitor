@@ -1,0 +1,7 @@
+# AI Studio — metric4 excerpt (sanitized)
+# Source: acceptance/BIG-2026-11/08-aistudio/raw/aistudio-metric4.log, 2026-11-18 20:44:04.
+# Sanitized: only metric lines kept; convId/URLs/extension id removed.
+# Bug shape (BIG-27): diag already has 4675, but badge-update still draws 679.
+20:44:04.222 [AI CM][diag] gsa-metric-src site=aistudio src=base-complete valueSrc=net baseSrc= note= msgs=12 countForTokens=12 textLen=2258 baseComplete=1 baseSeen=1 lastBounded=1 tokens=4675 baseTextLen=2258 threadId=
+20:44:04.223 [AI CM][trace] badge-update pct=0.5% tokens=679 model=Gemini 3.1 Pro
+20:44:04.223 📊 Gemini 3.1 Pro: 4675 / 128 000 (Авто) · окно 128 000 · 3.7% · serverTokens · по базе

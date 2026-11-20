@@ -1,0 +1,175 @@
+{
+  "schema": "ai-cm/aistudio-fixtures@1",
+  "generatedAt": "2026-11-20",
+  "source": "acceptance/BIG-2026-11/08-aistudio/raw (2026-11-18, build 2.1.4)",
+  "anonymization": "Синтетический тестовый тред из приёмки (OK / HTTP-кэш / Python / таблица / контрольная строка). PII, convId, URL и id расширения не переносились; тексты и метаданные снимков сохранены как факт.",
+  "hash": {
+    "message": "fnv1a32(role + '\\u0000' + text) -> 8 hex",
+    "body": "utils/canonical-body.ts canonicalBody('', canonicalMessages).bodyHash"
+  },
+  "notes": [
+    "back/settled/export-s1/export-s3 несут один и тот же тред; различаются только src и exportedAt, канон даёт один bodyHash.",
+    "fast — более ранняя генерация того же треда (6 265): те же 6 ходов, другие тексты и хэши.",
+    "retest-merge добавляет седьмой ход; 9 assistant-сегментов на входе канон склеивает в 7 (правило §3.2 п.3).",
+    "sources/artifacts = 0: AI Studio в этих снимках отдаёт только текст.",
+    "convId в исходных экспортах отсутствует, поэтому bodyHash считается с convId = ''."
+  ],
+  "fixtures": {
+    "back.json": {
+      "input": {
+        "messages": 14,
+        "user": 6,
+        "assistant": 8,
+        "src": "server",
+        "tokens": 3115,
+        "limit": 128000,
+        "percent": 2.4,
+        "partial": true,
+        "partialReason": "incomplete"
+      },
+      "canonical": {
+        "turns": 6,
+        "messages": 12,
+        "user": 6,
+        "assistant": 6,
+        "mergedAssistantSegments": 2,
+        "firstHash": "55228bbe",
+        "lastHash": "6e00f88a",
+        "bodyHash": "abc639b7:1616",
+        "chars": 1616,
+        "sources": 0,
+        "artifacts": 0
+      }
+    },
+    "settled.json": {
+      "input": {
+        "messages": 14,
+        "user": 6,
+        "assistant": 8,
+        "src": "dom",
+        "tokens": 3115,
+        "limit": 128000,
+        "percent": 2.4,
+        "partial": true,
+        "partialReason": "incomplete"
+      },
+      "canonical": {
+        "turns": 6,
+        "messages": 12,
+        "user": 6,
+        "assistant": 6,
+        "mergedAssistantSegments": 2,
+        "firstHash": "55228bbe",
+        "lastHash": "6e00f88a",
+        "bodyHash": "abc639b7:1616",
+        "chars": 1616,
+        "sources": 0,
+        "artifacts": 0
+      }
+    },
+    "fast.json": {
+      "input": {
+        "messages": 14,
+        "user": 6,
+        "assistant": 8,
+        "src": "dom",
+        "tokens": 6265,
+        "limit": 128000,
+        "percent": 4.9,
+        "partial": true,
+        "partialReason": "incomplete"
+      },
+      "canonical": {
+        "turns": 6,
+        "messages": 12,
+        "user": 6,
+        "assistant": 6,
+        "mergedAssistantSegments": 2,
+        "firstHash": "55228bbe",
+        "lastHash": "9bfbbd03",
+        "bodyHash": "c9869a09:3345",
+        "chars": 3345,
+        "sources": 0,
+        "artifacts": 0
+      }
+    },
+    "retest-merge.json": {
+      "input": {
+        "messages": 16,
+        "user": 7,
+        "assistant": 9,
+        "src": "dom",
+        "tokens": 3176,
+        "limit": 128000,
+        "percent": 2.5,
+        "partial": true,
+        "partialReason": "incomplete"
+      },
+      "canonical": {
+        "turns": 7,
+        "messages": 14,
+        "user": 7,
+        "assistant": 7,
+        "mergedAssistantSegments": 2,
+        "firstHash": "55228bbe",
+        "lastHash": "88025ea4",
+        "bodyHash": "5ce4ea34:1741",
+        "chars": 1741,
+        "sources": 0,
+        "artifacts": 0
+      }
+    },
+    "export-s3-new-thread.json": {
+      "input": {
+        "messages": 14,
+        "user": 6,
+        "assistant": 8,
+        "src": "server",
+        "tokens": 3115,
+        "limit": 128000,
+        "percent": 2.4,
+        "partial": true,
+        "partialReason": "incomplete"
+      },
+      "canonical": {
+        "turns": 6,
+        "messages": 12,
+        "user": 6,
+        "assistant": 6,
+        "mergedAssistantSegments": 2,
+        "firstHash": "55228bbe",
+        "lastHash": "6e00f88a",
+        "bodyHash": "abc639b7:1616",
+        "chars": 1616,
+        "sources": 0,
+        "artifacts": 0
+      }
+    },
+    "export-s1-cold-f5.json": {
+      "input": {
+        "messages": 14,
+        "user": 6,
+        "assistant": 8,
+        "src": "server",
+        "tokens": 3115,
+        "limit": 128000,
+        "percent": 2.4,
+        "partial": true,
+        "partialReason": "incomplete"
+      },
+      "canonical": {
+        "turns": 6,
+        "messages": 12,
+        "user": 6,
+        "assistant": 6,
+        "mergedAssistantSegments": 2,
+        "firstHash": "55228bbe",
+        "lastHash": "6e00f88a",
+        "bodyHash": "abc639b7:1616",
+        "chars": 1616,
+        "sources": 0,
+        "artifacts": 0
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+# AI Studio — metric5 excerpt (sanitized)
+# Source: acceptance/BIG-2026-11/08-aistudio/raw/aistudio-metric5.log, 2026-11-18 20:54–20:57.
+# Sanitized: only metric lines kept; convId -> conv-A/conv-B, URLs/extension id removed.
+# Expected sequence across the thread switch: 4675 (A) -> 5970 (A) -> 3176 (B) -> 5970 (A).
+# ARCHITECTURE-2.2 calls this file metric4.log; the full sequence exists only here (see README.md).
+20:54:24.571 [AI CM][diag] gsa-metric-src site=aistudio src=base-complete valueSrc=net baseSrc= note= msgs=12 countForTokens=12 textLen=2258 baseComplete=1 baseSeen=1 lastBounded=1 tokens=4675 baseTextLen=2258 threadId=
+20:54:24.572 [AI CM][trace] badge-update pct=3.7% tokens=4675 model=Gemini 3.1 Pro
+20:54:24.572 📊 Gemini 3.1 Pro: 4675 / 128 000 (Авто) · окно 128 000 · 3.7% · serverTokens · по базе
+20:55:57.701 [AI CM][diag] gsa-metric-src site=aistudio src=base-complete valueSrc=net baseSrc= note= msgs=14 countForTokens=14 textLen=2592 baseComplete=1 baseSeen=1 lastBounded=1 tokens=5970 baseTextLen=2592 threadId=
+20:55:57.701 [AI CM][trace] badge-update pct=4.7% tokens=5970 model=Gemini 3.1 Pro
+20:55:57.702 📊 Gemini 3.1 Pro: 5970 / 128 000 (Авто) · окно 128 000 · 4.7% · serverTokens · по базе
+20:56:27.287 [AI CM][diag] gsa-metric-src site=aistudio src=base-complete valueSrc=net baseSrc= note= msgs=18 countForTokens=18 textLen=1785 baseComplete=1 baseSeen=1 lastBounded=1 tokens=3176 baseTextLen=1785 threadId=
+20:56:27.287 [AI CM][trace] badge-update pct=2.5% tokens=3176 model=Gemini 3.1 Pro
+20:56:27.287 📊 Gemini 3.1 Pro: 3176 / 128 000 (Авто) · окно 128 000 · 2.5% · serverTokens · по базе
+20:57:14.386 [AI CM][diag] gsa-metric-src site=aistudio src=base-complete valueSrc=net baseSrc= note= msgs=14 countForTokens=14 textLen=2592 baseComplete=1 baseSeen=1 lastBounded=1 tokens=5970 baseTextLen=2592 threadId=
+20:57:14.386 [AI CM][trace] badge-update pct=4.7% tokens=5970 model=Gemini 3.1 Pro
+20:57:14.387 📊 Gemini 3.1 Pro: 5970 / 128 000 (Авто) · окно 128 000 · 4.7% · serverTokens · по базе

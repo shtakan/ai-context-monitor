@@ -44,6 +44,7 @@ Sanitized, committed fixtures (`tests/fixtures/`):
 | `deepseek-serverTokens.json` | DeepSeek response with `accumulated_token_usage` |
 | `perplexity-thread.json` | Perplexity thread payload |
 | `searchai-folwr.json` | Google AI Search folwr JSON |
+| `aistudio/*.json` | AI Studio 2.1.4 snapshots (back/settled/fast/retest-merge/export-s1/export-s3) + `expected.json` — эталон канона 2.2 (ходы, first/last hash, `bodyHash`); `aistudio/metric4.log`, `metric5.log` — метрические последовательности |
 
 **Live personal samples pattern:** larger "live" captures from real personal accounts are gitignored (`google-folwr-sample.txt`, `gemini-network-sample.txt`, `chatgpt-conversation-sample.json`, `gemini-head-sample.txt`). Test suites that need them skip automatically when the file is absent, so CI stays green without private data while the same tests run locally when samples exist.
 

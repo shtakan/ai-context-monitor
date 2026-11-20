@@ -106,6 +106,8 @@ commit-msg*.txt
 Протокол Правды.txt
 test_write.txt
 *.log
+# 2.2 fixtures: curated, sanitized AI Studio metric excerpts are part of the golden set.
+!tests/fixtures/aistudio/*.log
 # Handoff backups
 PROJECT_HANDOFF_*.md
 
