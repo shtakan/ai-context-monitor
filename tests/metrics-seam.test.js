@@ -124,15 +124,21 @@ describe('metrics/readiness: политика и запрет floor как фа�
     expect(pickMetricReading([partialNative, fullBase], 'reload-fuller').kind).toBe('base');
   });
 
-  test('floor никогда не settled; exact + complete = settled', function () {
+  test('floor/derived никогда не settled; exact/reported + complete = settled', function () {
     const floor = reading('estimate', 1000, 'floor', 'full');
+    const derived = reading('base', 683, 'derived', 'full');
     const exact = reading('native', 1000, 'exact', 'full');
+    const reported = reading('server', 1000, 'reported', 'full');
     const complete = { complete: true, reasons: [] };
     const incomplete = { complete: false, reasons: ['incomplete'] };
     expect(qualityForReading(floor, complete)).toBe('floor');
     expect(readinessForReading(floor, complete)).toBe('provisional');
+    // F1: base, посчитанная по символам, — оценка, а не факт (683 при 3 484).
+    expect(qualityForReading(derived, complete)).toBe('derived');
+    expect(readinessForReading(derived, complete)).toBe('provisional');
     expect(qualityForReading(exact, complete)).toBe('exact');
     expect(readinessForReading(exact, complete)).toBe('settled');
+    expect(readinessForReading(reported, complete)).toBe('settled');
     expect(readinessForReading(exact, incomplete)).toBe('provisional');
     expect(readinessForReading(null, incomplete)).toBe('collecting');
     expect(readinessForReading(null, complete)).toBe('no-data');
@@ -169,6 +175,16 @@ describe('metrics/snapshot: один снимок из чтений', () => {
     expect(out.readiness).toBe('settled');
     expect(out.bodyHash).toBe('body-hash');
     expect(out.limitModel.modelWindow).toBe(1048576);
+  });
+
+  test('F1: base derived 683 при complete=true — provisional, не settled', function () {
+    const out = snap({
+      readings: [reading('base', 683, 'derived', 'full')],
+      completeness: { complete: true, reasons: [] }
+    });
+    expect(out.tokens).toBe(683);
+    expect(out.quality).toBe('derived');
+    expect(out.readiness).toBe('provisional');
   });
 
   test('нет чтений: нули + floor, readiness по полноте (не факт)', function () {

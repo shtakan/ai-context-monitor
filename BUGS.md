@@ -182,4 +182,25 @@ Chrome-temp `f2a294ac-….tmp` (138 955 B, полный md-payload, H1 на ме
 `chrome.downloads.onCreated`. **Не виновны:** BUG-14 (fired подтверждён)
 и dedupe-маркер.
 
+---
+
+## BUG-16 (2.2, phase 2 dual-run) — readiness: derived подан как факт
+
+**Симптом (F1 живого dual-run, 2/2 reload):** base-чтение, посчитанное по
+символам, при `quality=derived` получало `readiness=settled`. На раннем
+reload — 627 токенов при фактических 3 228 (badge 0.5 % вместо 2.7 %), 683
+при 3 484; `msgs=24 textLen=1977 baseTextLen=1977 baseComplete=1` совпадали,
+различалось только число.
+
+**Корень.** `utils/metrics/readiness.ts:readinessForReading` давал `settled`
+по `coverage='full' + complete=true` без проверки точности чтения: derived
+(оценка по символам) и floor неотличимы от exact/reported.
+
+**Фикс.** `derived` и `floor` → всегда `provisional`; `settled` — только
+`exact` (native) или `reported` (server) при полном покрытии и complete=true.
+`quality=derived` остаётся честным (это не exact). Регресс:
+`tests/metrics-seam.test.js` (+ F1-кейс 683/complete → provisional).
+**Живой путь не менялся** (флаг `aiCmV2Metrics` off): это готовность нового
+шва, не поведение 2.1.5. Ретест: T1/T10-ранний → `derived/provisional`.
+
 

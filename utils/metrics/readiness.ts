@@ -101,7 +101,10 @@ export function readinessForReading(
   if (!reading) {
     return (completeness && completeness.complete === false) ? 'collecting' : 'no-data';
   }
-  if (reading.precision === 'floor') return 'provisional';
+  // settled — только для факта: native exact или server reported. derived (base/dom
+  // по символам) — оценка, даже при complete=true: F1 живой приёмки 2.2 показал
+  // 683 при фактических 3 484. floor — тем более provisional (I7).
+  if (reading.precision === 'derived' || reading.precision === 'floor') return 'provisional';
   if (reading.coverage !== 'full') return 'provisional';
   if (completeness && completeness.complete === true) return 'settled';
   return 'provisional';
