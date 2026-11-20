@@ -221,7 +221,7 @@ function aiCmPrepareReasoningForExport(messages: AiCmExportMessage[]): AiCmExpor
   return messages;
 }
 function aiCmCollectExportSource(): AiCmExportMessage[] {
-  var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null);
+  var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null); var aiCmV2CanonAis = (typeof aiCmV2AistudioExportSource === 'function') ? aiCmV2AistudioExportSource() : null; if (aiCmV2CanonAis && aiCmV2CanonAis.length) return aiCmSanitizeEmitUserTexts(aiCmV2CanonAis);
   var texts = lastBaseTexts || [];
   // O-37 (C): хелпер нормализации reasoning берём typeof-гардом ОДИН раз (он объявлен рядом,
   // в этом же модуле): в срез-песочницах тестов, где вырезана только эта функция, хелпера нет

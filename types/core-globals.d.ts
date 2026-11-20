@@ -191,6 +191,7 @@ declare function aiCmExportDedupeInfoAuto(
   sourceMessages: unknown,
   outputMessages: unknown
 ): { input: number; output: number; removedUsers: number; foldedAssistants: number } | undefined;
+declare function aiCmV2AistudioExportSource(): Array<{ role?: string; text?: string; reasoning?: string }> | null;
 declare function aiCmLoadProactiveFlag(): void;
 declare function debugLog(level: string, ...args: unknown[]): void;
 

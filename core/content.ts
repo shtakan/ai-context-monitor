@@ -5147,9 +5147,10 @@ try {
 // осознанно: любая новая строка выше сдвинула бы line-based catch/console
 // whitelists. esbuild/TS хойстят import сами; в песочницах строка снимается,
 // поэтому установка под typeof-гардом.
-import { installAistudioDualRun, aistudioDetailMessages, exportDedupeInfo } from './aistudio-dualrun.ts';
+import { installAistudioDualRun, aistudioDetailMessages, exportDedupeInfo, aiCmV2MessagesDefaultEnabled } from './aistudio-dualrun.ts';
 import { aiCmV2MetricsDualRun } from './metrics-dualrun.ts';
 import type { AiCmV2MetricsProbe } from './metrics-dualrun.ts';
+import { canonicalizeBatch, canonicalizeMessages } from '../utils/messages/canonicalize';
 
 try {
   if (typeof AistudioAdapter === 'function' && typeof installAistudioDualRun === 'function') {
@@ -5184,6 +5185,72 @@ function aiCmExportDedupeInfoAuto(sourceMessages: unknown, outputMessages: unkno
  * значения этого прохода (candidate) и глобалы контура; ни DOM, ни storage
  * здесь не трогаются — их снятие осталось в processAndSend.
  */
+/**
+ * 2.2/фаза 1 → default: источник сообщений AI Studio для экспорта — шов messages.
+ * capture() отдаёт сырой батч (сеть → DOM → пик), canonicalizeBatch склеивает
+ * соседние assistant-сегменты ОДНОГО хода и сохраняет дубли user как отдельные
+ * ходы. Дальше работает прежний aiCmDedupeExportSource: merge-before-dedupe
+ * (BUG-13) снимает дубли user, не склеивая разные ответы.
+ *
+ * Откат: sessionStorage['aiCmV2Messages']='0' или storage.aiCmV2.messages=false.
+ */
+function aiCmV2AistudioExportSource(): AiCmExportMessage[] | null {
+  try {
+    if (typeof currentAdapter === 'undefined' || !currentAdapter || currentAdapter.siteName !== 'aistudio') return null;
+    if (!aiCmV2MessagesDefaultEnabled()) return null;
+    const out: AiCmExportMessage[] = [];
+    // 1) Сырой сетевой снимок (33, ДО dedupe): канонизация склеивает только сегменты
+    // одного хода, дубли user остаются ходами — merge-before-dedupe их снимет позже.
+    const netSnap = (typeof aiCmNetMsgsAistudio !== 'undefined') ? aiCmNetMsgsAistudio : null;
+    if (netSnap && Array.isArray(netSnap.msgs) && netSnap.msgs.length > 0) {
+      const raw: Array<{ role: 'user' | 'assistant'; text: string; ordinal: number; nodeType: 'message' }> = [];
+      for (let i = 0; i < netSnap.msgs.length; i++) {
+        const m: { role?: string; text?: string; sections?: string } = netSnap.msgs[i] || {};
+        raw.push({
+          role: (m.role === 'user') ? 'user' : 'assistant',
+          text: String(m.text == null ? '' : m.text) + String(m.sections == null ? '' : m.sections),
+          ordinal: i,
+          nodeType: 'message'
+        });
+      }
+      const thread = canonicalizeMessages(raw, {
+        platform: 'aistudio',
+        convId: (typeof aiCmHistoryConvId === 'function') ? (aiCmHistoryConvId() || null) : null,
+        kind: 'net',
+        capturedAt: (typeof netSnap.ts === 'number' && netSnap.ts > 0) ? netSnap.ts : Date.now(),
+        complete: baseComplete === true
+      });
+      for (let t = 0; t < thread.messages.length; t++) {
+        const m = thread.messages[t];
+        if (!m || !m.text) continue;
+        const msg: AiCmExportMessage = { role: (m.role === 'user') ? 'user' : 'assistant', text: m.text };
+        if (typeof m.reasoning === 'string' && m.reasoning) msg.reasoning = m.reasoning;
+        out.push(msg);
+      }
+      return out.length ? out : null;
+    }
+    // 2) Сети/сырого снимка нет — сырой батч адаптера (DOM → пик), как в phase 1.
+    // lastDetailMessages сюда НЕ подставляем: после resync он может быть уже
+    // дедуплицирован (u,a,a,a), и merge-before-dedupe склеил бы разные ответы.
+    const cap = currentAdapter as unknown as { capture?: () => any };
+    if (typeof cap.capture !== 'function') return null;
+    const batch = cap.capture();
+    if (!batch || !Array.isArray(batch.messages) || batch.messages.length === 0) return null;
+    const thread = canonicalizeBatch(batch);
+    for (let t = 0; t < thread.messages.length; t++) {
+      const m = thread.messages[t];
+      if (!m || !m.text) continue;
+      const msg: AiCmExportMessage = { role: (m.role === 'user') ? 'user' : 'assistant', text: m.text };
+      if (typeof m.reasoning === 'string' && m.reasoning) msg.reasoning = m.reasoning;
+      out.push(msg);
+    }
+    return out.length ? out : null;
+  } catch (eAisExp) {
+    swallowSoft(eAisExp, 'content:v2-messages-export-source');
+    return null;
+  }
+}
+
 function aiCmV2MetricsProbe(
   candidate: AiCmContextSnapshot,
   modelId: string,

@@ -649,9 +649,9 @@ describe('O-7 D2: тумблер OFF — только вопросы и отве
     // OFF-путь = пайплайн: урезание секций → O-20 → снятие hidden (все три — там же)
     expect(PIPELINE_SRC).toContain('function stripReasoningSections(text: unknown): string');
     expect(PIPELINE_SRC).toContain('var bare = stripReasoningSections(raw);');
-    // единая точка выхода экспорта держит РОВНО 3 обращения к ней (пин O-20 жив)
+    // единая точка выхода экспорта держит РОВНО 4 обращения к ней (O-20 + ранний канон AI Studio)
     const collect = sliceSource(EXPORT_MGR_SRC, 'function aiCmCollectExportSource()', 'function aiCmExportBaseSource(');
-    expect(collect.match(/aiCmSanitizeEmitUserTexts\(/g).length).toBe(3);
+    expect(collect.match(/aiCmSanitizeEmitUserTexts\(/g).length).toBe(4);
     expect(BASE_HANDLER_SRC).toContain('return aiCmDedupeExportSource(aiCmCollectExportSource()).messages;');
   });
 

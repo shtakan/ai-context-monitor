@@ -121,6 +121,7 @@ export interface AiCmV2DualRunResult {
 }
 
 let storageFlag = false;
+let storageOff = false;
 let storageRequested = false;
 let lastSignature = '';
 let installed = false;
@@ -141,6 +142,22 @@ export function aiCmV2MessagesEnabled(): boolean {
   return sessionFlag() || storageFlag;
 }
 
+/**
+ * 2.2, включение messages по умолчанию для AI Studio. Откат — явный opt-out:
+ * sessionStorage['aiCmV2Messages']='0' или chrome.storage.local.aiCmV2.messages=false.
+ * Флаг '1' (dual-run) на default-путь не влияет: он лишь включает сравнение.
+ */
+export function aiCmV2MessagesDefaultEnabled(): boolean {
+  if (!storageRequested) loadStorageFlag();
+  try {
+    if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('aiCmV2Messages') === '0') return false;
+  } catch (eSessionOff) {
+    // private mode: opt-out из sessionStorage недоступен, default остаётся включённым
+    swallowSoft(eSessionOff, 'content:v2-messages-default-flag');
+  }
+  return !storageOff;
+}
+
 function loadStorageFlag(): void {
   if (storageRequested) return;
   storageRequested = true;
@@ -149,7 +166,9 @@ function loadStorageFlag(): void {
     chrome.storage.local.get('aiCmV2', function (data: Record<string, any>) {
       const cfg = data && data.aiCmV2;
       storageFlag = !!(cfg && cfg.messages === true);
+      storageOff = !!(cfg && cfg.messages === false);
       if (storageFlag) debugLog('log', '[AI CM][v2-messages] flag=on source=storage');
+      if (storageOff) debugLog('log', '[AI CM][v2-messages] default=off source=storage');
     });
   } catch (eFlag) {
     swallowSoft(eFlag, 'content:v2-messages-flag');
@@ -391,5 +410,6 @@ export function resetAistudioDualRunForTests(): void {
   installed = false;
   lastSignature = '';
   storageFlag = false;
+  storageOff = false;
   storageRequested = false;
 }
