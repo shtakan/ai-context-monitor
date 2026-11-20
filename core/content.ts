@@ -5157,3 +5157,23 @@ try {
   swallowSoft(eAisV2Install, 'content:v2-messages-install');
 }
 
+/**
+ * BUG-13 parity: маркер dedupe для АВТО-экспорта. Источник — lastDetailMessages
+ * (сетевой снимок ДО dedupe), выход — сообщения файла. Вызывается из
+ * core/export-manager.ts typeof-гардом; в срез-песочницах без content.ts ключа нет.
+ */
+function aiCmExportDedupeInfoAuto(sourceMessages: unknown, outputMessages: unknown): ReturnType<typeof exportDedupeInfo> {
+  try {
+    // Платформенный гейт живёт ЗДЕСЬ, а не в export-manager (тот файл не знает имён
+    // площадок). У прочих сайтов lastDetailMessages не является до-dedupe источником —
+    // счётчик был бы ложным, поэтому маркер только для AI Studio.
+    if (typeof currentAdapter === 'undefined' || !currentAdapter || currentAdapter.siteName !== 'aistudio') return undefined;
+    return exportDedupeInfo(
+      Array.isArray(sourceMessages) ? (sourceMessages as Array<{ role?: string }>) : null,
+      Array.isArray(outputMessages) ? (outputMessages as Array<{ role?: string }>) : null
+    );
+  } catch (eDdAuto) {
+    return undefined;
+  }
+}
+

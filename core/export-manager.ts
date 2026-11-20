@@ -1954,7 +1954,7 @@ function doAutoExportDownload(cid: any, percentage: number, reason: string, netS
           // typeof-гард: срез-песочницы без state.ts → ключей нет (байты прежние).
           partial: (snapPartAuto && snapPartAuto.partial === true) ? true : undefined,
           partialReason: (snapPartAuto && snapPartAuto.partial === true)
-            ? ((snapPartAuto.partialReason) || 'incomplete') : undefined, bodyProjection: autoProj || undefined,
+            ? ((snapPartAuto.partialReason) || 'incomplete') : undefined, bodyProjection: autoProj || undefined, dedupe: (typeof aiCmExportDedupeInfoAuto === 'function') ? aiCmExportDedupeInfoAuto(lastDetailMessages, msgs) : undefined,
           messages: msgs as import('../types/export').ExportMessage[]
         };
         var content = (fmt === 'md')

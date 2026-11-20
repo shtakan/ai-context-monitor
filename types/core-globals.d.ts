@@ -187,6 +187,10 @@ declare function aiCmQwenInitErrText(e: unknown): string;
 declare function aiCmQwenExportBaseTrusted(): boolean;
 declare function aiCmAutoExportTrustedBase(): boolean;
 declare function aiCmAutoExportTrustedBaseDiag(...args: unknown[]): void;
+declare function aiCmExportDedupeInfoAuto(
+  sourceMessages: unknown,
+  outputMessages: unknown
+): { input: number; output: number; removedUsers: number; foldedAssistants: number } | undefined;
 declare function aiCmLoadProactiveFlag(): void;
 declare function debugLog(level: string, ...args: unknown[]): void;
 

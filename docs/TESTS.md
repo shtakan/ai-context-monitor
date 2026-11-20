@@ -32,7 +32,7 @@ CI runs the same suite (plus syntax checks and `manifest.json` validation) in [.
 | `tests/accept-compare.test.js` | `tools/accept-compare.js` | K1 (каноническое равенство с игнором `exportedAt`), K2 (`roleHash` + счётчики), stable stringify, first diff path |
 | `tests/aistudio-export-roles.test.js` | `core/aistudio-dualrun.ts` + срезы `content.ts` | BUG-12: `aistudioDetailMessages` сохраняет роли/порядок/sections; `aiCmApplyAistudioNetBase` синхронизирует `lastDetailMessages`; `aiCmCollectExportSource` берёт роли из детали, не по индексу |
 | `tests/aistudio-export-boundaries.test.js` | `core/base-handler.ts` | BUG-13: merge assistant-сегментов идёт **до** dedupe; дубли user не склеивают разные ответы; настоящие подряд идущие сегменты склеиваются |
-| `tests/aistudio-export-dedupe.test.js` | `exportDedupeInfo` + `buildJsonFromHistory` | BUG-13: `removedUsers`/`foldedAssistants`; ключ `dedupe` появляется только при изменении счёта, иначе JSON прежний |
+| `tests/aistudio-export-dedupe.test.js` | `exportDedupeInfo` + `buildJsonFromHistory` + `aiCmExportDedupeInfoAuto` | BUG-13: `removedUsers`/`foldedAssistants`; ключ `dedupe` только при изменении счёта; авто-JSON получает тот же маркер, гейт платформы — в `content.ts`, не в export-manager |
 | `tests/aistudio-autoexport-schedule.test.js` | `core/content.ts` (`aiCmAfterAistudioNetKick`) | BUG-14: сетевой путь AI Studio планирует автоэкспорт после `processAndSend` со свежим `lastPercentage`; база применяется до kick |
 
 Helpers in `tests/helpers/*` wrap production parsers so tests exercise the exact shipped code.

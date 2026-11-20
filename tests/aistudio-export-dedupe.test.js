@@ -45,3 +45,43 @@ describe('BUG-13: dedupe-маркер снимка', () => {
     expect('dedupe' in without).toBe(false);
   });
 });
+
+describe('BUG-13 parity: dedupe-маркер авто-экспорта', () => {
+  const { moduleSource, contentSource } = require('./helpers/content-source.js');
+
+  function fnDecl(src, name) {
+    const start = src.indexOf('function ' + name + '(');
+    expect(start).toBeGreaterThan(-1);
+    let depth = 0;
+    for (let i = src.indexOf('{', start); i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}') {
+        depth--;
+        if (depth === 0) return src.slice(start, i + 1);
+      }
+    }
+    throw new Error('unbalanced declaration: ' + name);
+  }
+
+  const makeAutoInfo = new Function('ctx',
+    'with (ctx) { ' + fnDecl(contentSource, 'aiCmExportDedupeInfoAuto') + '\n return aiCmExportDedupeInfoAuto; }');
+
+  test('обёртка возвращает тот же dedupe-info, что ручной снимок', function () {
+    const autoInfo = makeAutoInfo({ exportDedupeInfo: exportDedupeInfo, currentAdapter: { siteName: 'aistudio' } });
+    expect(autoInfo(roles(17, 16), roles(15, 16)))
+      .toEqual({ input: 33, output: 31, removedUsers: 2, foldedAssistants: 0 });
+    expect(autoInfo(roles(2, 2), roles(2, 2))).toBeUndefined();
+  });
+
+  test('обёртка не ставит маркер прочим сайтам (гейт в content, не в export-manager)', function () {
+    const other = makeAutoInfo({ exportDedupeInfo: exportDedupeInfo, currentAdapter: { siteName: 'gemini' } });
+    expect(other(roles(17, 16), roles(15, 16))).toBeUndefined();
+  });
+
+  test('source: авто-файл читает маркер из lastDetailMessages, платформа не проникает в export-manager', function () {
+    const mgr = moduleSource('export-manager.ts');
+    const writer = fnDecl(mgr, 'aiCmWriteAutoExportFile');
+    expect(writer).toContain('aiCmExportDedupeInfoAuto(lastDetailMessages, msgs)');
+    expect(mgr).not.toContain('aistudio');
+  });
+});

@@ -145,6 +145,36 @@ claude/google-search), а adapter-ветка в `processAndSend` закрыта 
 Артефакты: `acceptance/BIG-2026-11/2.2/BUG14-TRIAGE.md`,
 `raw/autoexport-old-thread.log`, `raw/autoexport-fresh-thread.log`.
 
-**Не виновен:** BUG-12 (роли закрыты: ROLES-FIXED, экспорт — префикс источника).
+**Ретест (DSH, 2026-11-20 19:06): `AUTOEXPORT-FIRED`.** Сборка 329 541 B,
+sha256 `efca1631…`. `auto-export-decision verdict=fire reason=threshold pct=30.9`
+(`baseSeen=1 baseComplete=1 msgs=33`), `[AI CM][auto-export] fired … file=…md`,
+0 строк `skip reason=`; `o40-emit-entry msgsIn=31 msgsOut=31`, хвост `aaa`,
+31 (15u/16a). BUG-14 закрыт.
+
+**Паритет dedupe (2.2).** Авто-путь теперь пишет тот же
+`dedupe:{input,output,removedUsers,foldedAssistants}` в JSON-`hist`
+(источник — `lastDetailMessages`, гейт платформы живёт в `content.ts`,
+`export-manager` по-прежнему не знает имён площадок). MD/TXT байтово
+не меняются: маркер печатает только JSON-сборщик. Регресс:
+`tests/aistudio-export-dedupe.test.js` (+3).
+
+## BUG-15 (кандидат, P3) — авто-файл не финализируется в Downloads
+
+**Симптом (DSH, 2026-11-20 19:06).** После `fired` в Downloads остался только
+Chrome-temp `f2a294ac-….tmp` (138 955 B, полный md-payload, H1 на месте);
+финального `.md` нет, `chrome://downloads`/History за 19:06 пусты.
+
+**Уточнение по коду.** «Два триггера на одно имя» — это ДВЕ диагностические
+строки одного скачивания, не два старта: `export-manager` печатает
+`trigger=autoexport mime=md` перед стартом, `downloadBlob` — ту же строку с
+`mime=text/markdown`. Фактический старт один (`aiCmAutoExportStartDownload`
+→ `downloadBlob` → один `a.click()`), реестр имён резервирует имя один раз.
+
+**Вероятная причина.** Обрыв/закрытие automation-сессии до финализации
+download-менеджером (payload в temp полный). Код расширения байты не теряет.
+**Триаж (следующий):** повторить в обычном Chrome, вкладку не закрывать ≥10 с,
+проверить `chrome://downloads`; если `.md` появляется — среда, не баг. Если
+повторяется — снять `download trigger`/`download-blocked`/`chrome.downloads`
+события. **Не виновен:** BUG-14 (fired подтверждён) и dedupe-маркер.
 
 
