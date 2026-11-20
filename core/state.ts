@@ -712,6 +712,10 @@ interface AiCmContextSnapshot {
   model: string;
   modelName: string;
   src: 'dom' | 'net' | 'server';
+  /** 2.2/metrics: качество числа (только при флаге aiCmV2Metrics; иначе undefined). */
+  quality?: 'exact' | 'reported' | 'derived' | 'floor' | 'stale';
+  /** 2.2/metrics: готовность бейджа; provisional/collecting → число с «~». */
+  readiness?: 'no-data' | 'collecting' | 'provisional' | 'settled';
   tokens: number;
   percent: number;
   limit: number;
@@ -741,6 +745,8 @@ interface AiCmWidgetData {
   displayLimit: number;
   modelName: string;
   attachBreak: AiCmAttachBreak | null;
+  quality?: 'exact' | 'reported' | 'derived' | 'floor' | 'stale';
+  readiness?: 'no-data' | 'collecting' | 'provisional' | 'settled';
 }
 interface AiCmDetailMessage {
   role?: string;
@@ -804,7 +810,9 @@ function aiCmWidgetDataFromSnapshot(snap: AiCmContextSnapshot | null): AiCmWidge
     contextLimit: snap.contextLimit,
     displayLimit: snap.limit,
     modelName: snap.modelName,
-    attachBreak: snap.attachBreak || null
+    attachBreak: snap.attachBreak || null,
+    quality: snap.quality,
+    readiness: snap.readiness
   };
 }
 

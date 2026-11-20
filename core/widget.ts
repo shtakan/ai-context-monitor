@@ -972,7 +972,7 @@ function updateWidget(percentage: number, tokens: number, effectiveLimit: number
     (typeof lastBaseTexts !== 'undefined' && lastBaseTexts && lastBaseTexts.length > 0) ||
     (typeof adapterBaseSeen !== 'undefined' && adapterBaseSeen === true));
   var aiCmStalePlaceholder = (stale === true) && !aiCmAdapterBasePresent;
-  percentText.textContent = aiCmStalePlaceholder ? '—' : (percentage.toFixed(1) + '%');
+  percentText.textContent = aiCmStalePlaceholder ? '—' : ((typeof lastWidgetData !== 'undefined' && lastWidgetData && (lastWidgetData.readiness === 'provisional' || lastWidgetData.readiness === 'collecting' || lastWidgetData.quality === 'derived' || lastWidgetData.quality === 'floor' || lastWidgetData.quality === 'stale') ? '~' : '') + percentage.toFixed(1) + '%');
   // Critical #2 (п.2.3): доступное имя индикатора — процент и статус зоны, рядом с
   // видимым числом. Вызов защищён try/catch по образцу aiCmUpdateSourceIndicator выше:
   // updateWidget исполняется и в песочницах темы, где a11y-хелпера нет.

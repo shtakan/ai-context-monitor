@@ -529,7 +529,9 @@ describe('O-35 D: плейсхолдер «—» ставит ветка stale, 
     expect(CONTENT).toContain('scheduleStaleCheck(); // фиксируем момент загрузки страницы для 12с-проверки');
     // ФЛИП ФИКСА D1: «—» ставит ТОЛЬКО stale при отсутствии базы (число при базе адаптера цело)
     expect(WIDGET_SRC).toContain("var aiCmStalePlaceholder = (stale === true) && !aiCmAdapterBasePresent;");
-    expect(WIDGET_SRC).toContain("percentText.textContent = aiCmStalePlaceholder ? '—' : (percentage.toFixed(1) + '%');");
+    // 2.2/metrics: stale-ветка «—» прежняя; provisional добавляет «~» перед числом.
+    expect(WIDGET_SRC).toContain("percentText.textContent = aiCmStalePlaceholder ? '—' : (");
+    expect(WIDGET_SRC).toContain("+ percentage.toFixed(1) + '%');");
     // вход ветки — ровно три условия базы адаптера (v54: третье — признак «база принята
     // по convId» адаптерной записью, он же отпускает SPA-супрессию в content.js)
     expect(WIDGET_SRC).toContain('var aiCmAdapterBasePresent = ((typeof baseCount === \'number\' && baseCount > 0) ||');

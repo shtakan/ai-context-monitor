@@ -466,7 +466,9 @@ describe('Critical #1: регрессы (R-пины)', () => {
 
   test('R6: updateWidget по-прежнему печатает процент и обновляет доступное имя рядом с ним', () => {
     const updateSrc = extractFn(WIDGET_SRC, 'updateWidget');
-    expect(updateSrc).toContain("percentText.textContent = aiCmStalePlaceholder ? '—' : (percentage.toFixed(1) + '%');");
+    // 2.2/metrics: stale-ветка «—» прежняя; число может получить «~» при provisional.
+    expect(updateSrc).toContain("percentText.textContent = aiCmStalePlaceholder ? '—' : (");
+    expect(updateSrc).toContain("+ percentage.toFixed(1) + '%');");
     expect(updateSrc).toContain("aiCmSetWidgetA11yLabel(widgetElement.querySelector('.ai-widget-circle'), percentage)");
     expect(updateSrc).toContain('catch (eA11yW)');   // песочницы без хелпера остаются рабочими
   });

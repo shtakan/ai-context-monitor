@@ -3005,7 +3005,7 @@ function processAndSend(): void {
           : ((baseCompleteReason === 'missing-user-text') ? 'missing-user-text' : 'incomplete');
       }
       var aiCmSnapPrevAnomaly = (typeof lastTokensSnapshot !== 'undefined') ? lastTokensSnapshot : null;
-      lastTokensSnapshot = aiCmCommitContextSnapshot(lastTokensSnapshot, aiCmCtxSnapCandidate); if (typeof aiCmV2MetricsDualRun === 'function') aiCmV2MetricsDualRun(aiCmCtxSnapCandidate, aiCmV2MetricsProbe(aiCmCtxSnapCandidate, modelId, (svc === 'aistudio' && typeof aiCmAistudioNativePromptTokens === 'function') ? aiCmAistudioNativePromptTokens() : 0, metricServerTokens));
+      lastTokensSnapshot = aiCmCommitContextSnapshot(lastTokensSnapshot, aiCmCtxSnapCandidate); if (typeof aiCmV2MetricsDualRun === 'function') { var aiCmV2Res = aiCmV2MetricsDualRun(aiCmCtxSnapCandidate, aiCmV2MetricsProbe(aiCmCtxSnapCandidate, modelId, (svc === 'aistudio' && typeof aiCmAistudioNativePromptTokens === 'function') ? aiCmAistudioNativePromptTokens() : 0, metricServerTokens)); if (aiCmV2Res && lastTokensSnapshot && lastTokensSnapshot.tokens === aiCmV2Res.snapshot.tokens) { lastTokensSnapshot.quality = aiCmV2Res.snapshot.quality; lastTokensSnapshot.readiness = aiCmV2Res.snapshot.readiness; } }
       // S4 (D3): падение больше 10 п.п. при ПРИНЯТОМ коммите — не ошибка (число = текущее
       // измерение канонического тела), но повод для ОДНОЙ диагностической строки. В [ctx-snap]
       // и в шапку файла она не попадает: это content-trace, а не метрика.

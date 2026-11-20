@@ -35,6 +35,7 @@ CI runs the same suite (plus syntax checks and `manifest.json` validation) in [.
 | `tests/aistudio-export-dedupe.test.js` | `exportDedupeInfo` + `buildJsonFromHistory` + `aiCmExportDedupeInfoAuto` | BUG-13: `removedUsers`/`foldedAssistants`; ключ `dedupe` только при изменении счёта; авто-JSON получает тот же маркер, гейт платформы — в `content.ts`, не в export-manager |
 | `tests/aistudio-autoexport-schedule.test.js` | `core/content.ts` (`aiCmAfterAistudioNetKick`) | BUG-14: сетевой путь AI Studio планирует автоэкспорт после `processAndSend` со свежим `lastPercentage`; база применяется до kick |
 | `tests/metrics-seam.test.js` | `utils/metrics/{sources,limits,readiness,snapshot}.ts` + `core/metrics-dualrun.ts` | 2.2/фаза 2: native→server→base→dom→estimate; окно 1M ≠ порог 128k; `derived`/`floor` никогда не settled (F1: 683 при complete → provisional); `compare` называет поля; dual-run только AI Studio и только по флагу `aiCmV2Metrics` |
+| `tests/metrics-badge-provisional.test.js` | `core/widget.ts` + `aiCmWidgetDataFromSnapshot` | пункт 4: provisional/derived/floor/collecting → `~N%`; exact/settled и legacy без полей → прежний `N%`; решение из `lastWidgetData`, не из платформы |
 
 Helpers in `tests/helpers/*` wrap production parsers so tests exercise the exact shipped code.
 
