@@ -6,7 +6,7 @@
 ## 1. Репозиторий
 
 - workspace: ai-context-monitor-clean
-- branch: release/2.1.5; HEAD: `cfa315d` + release-коммит `chore(release): 2.1.5` (локально, не запушен); origin/main: `6175e58`; ahead: 22; behind: 0; тег `v2.1.4` → `d2194cc`, `v2.1.3` → `1e46a85`
+- branch: `feature/2.2`; HEAD: `216e3ef` (feat 2.2: messages canonicalize+reconcile); origin/main: `4e2916a`; ahead: 3; behind: 0; тег `v2.1.5` → `4e2916a`; тег `v2.1.4` → `d2194cc`, `v2.1.3` → `1e46a85`
 - version: `2.1.5` (manifest.json, package.json, package-lock.json, футер docs/index.html, PROJECT_HANDOFF L199); релизный коммит — ожидает публикации; tag `v2.1.5`/GitHub Release/AMO — за владельцем
 
 ## 2. Метрики (финальный прогон 2026-11-19, после последнего коммита)
@@ -16,6 +16,8 @@
 - tsc: exit 0, вывод пуст (`npx tsc --noEmit`); strict: exit 0, 0 ошибок (`npx tsc -p tsconfig.strict.json`); chrome-tsc: **exit 0, 0 ошибок** (`npx tsc -p tsconfig.chrome.json`); lint: 0 errors (`npx eslint . --quiet`, exit 0)
 
 ## 3. Текущая задача
+
+- **2.2 — фаза 0 (2026-11-20, `feature/2.2`):** контракты `types/{capture,canonical,metrics}.d.ts` (только типы); AST-линтер `tools/architecture-lint.mjs` (5 правил, ADR-002, CI вне Jest); фикстуры `tests/fixtures/aistudio/` + `expected.json`; `utils/messages/{canonicalize,reconcile}.ts` + 24 поведенческих теста, живой путь не подключён. Гейты: jest 271/4412/7, tsc main+strict 0, lint:arch 0, `dist/content.js` 320 983 B (без изменений). Дальше — dual-run AI Studio (фаза 1): `capture()` → `CaptureBatch`, сравнение старого массива с каноном, флаг `aiCmV2.messages`.
 
 - **2.1.5 — финальная приёмка пройдена 2026-11-19** (8 провайдеров Chrome + Firefox smoke): GSA, DeepSeek, Qwen, Perplexity, ChatGPT, Gemini, Claude, AI Studio — **OK**. Закрыты BUG-02 (DeepSeek/Qwen stop, `6107bf4`/`9c9bc2f`), BUG-01 (Claude tool, `5192a60`), BUG-04 Gemini (`123913c`/`a4fdc03`) и AI Studio (`3821d59`), BUG-26/27/17 (AI Studio/Gemini), BUG-06 (app launcher); P3 `cfa315d` (шум на restricted). P2/P3 — цель 2.2.0. Счётчики 270/4388/7/0; prod `dist/content.js` 320 983 B sha256 `dadbb2ed…`; ZIP/AMO — `acceptance/2.1.5`.
 
@@ -84,6 +86,7 @@
 
 - `PROJECT_HANDOFF.md` → только `Select-String -Pattern '<ID>'`; роадмап — строки 735–765
 - `docs/decisions/context-snapshot.md` (365 строки) — читать целиком при работе над ADR-001
+- `docs/decisions/architecture-lint.md` (ADR-002) — правила/область AST-линтера, baseline-политика, burn-down фазы 6
 - `docs/COORDINATION-RULES.md` (13.7 КБ) — читать адресатом
 - `CLINE_PROMPT_RULES.md`, `DHS_RULES.md` — читать адресатом
 - `CHANGELOG.md` — только в релизной задаче
