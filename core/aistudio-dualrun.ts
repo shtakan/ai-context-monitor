@@ -28,6 +28,39 @@ export interface AiCmV2OldMessage {
   content?: string;
 }
 
+/** Сообщение снимка AI Studio (window.__aiCmNetMsgs.msgs). */
+export interface AiCmAistudioSnapshotMessage {
+  role?: string;
+  text?: string;
+  sections?: string;
+  id?: string | number;
+}
+
+/**
+ * Роли и тексты базового снимка AI Studio для экспортной проекции.
+ *
+ * BUG-12: export-manager берёт роли из lastDetailMessages; без этой синхронизации
+ * он падал в чётностный фолбэк (j % 2) и переворачивал роли после файлового узла.
+ * Функция чистая: только маппинг role/text(+sections), без DOM/storage.
+ */
+export function aistudioDetailMessages(
+  snap: { msgs?: AiCmAistudioSnapshotMessage[] } | null | undefined
+): Array<{ role: 'user' | 'assistant'; text: string; id?: string }> {
+  const out: Array<{ role: 'user' | 'assistant'; text: string; id?: string }> = [];
+  const msgs = snap && Array.isArray(snap.msgs) ? snap.msgs : [];
+  for (let i = 0; i < msgs.length; i++) {
+    const m = msgs[i] || {};
+    const text = String(m.text == null ? '' : m.text) + String(m.sections == null ? '' : m.sections);
+    const rec: { role: 'user' | 'assistant'; text: string; id?: string } = {
+      role: (m.role === 'assistant' || m.role === 'model') ? 'assistant' : 'user',
+      text: text
+    };
+    if (m.id != null) rec.id = String(m.id);
+    out.push(rec);
+  }
+  return out;
+}
+
 /** Итог сравнения старого и нового представления одного треда. */
 export interface AiCmV2DualRunResult {
   verdict: 'same' | 'diff';

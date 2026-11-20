@@ -55,6 +55,28 @@ Monitor) либо лог `[AI CM][v2-messages-json]`.
 
 ---
 
+### bsk 0.5.0: параметры вызовов (проверено 2026-11-20)
+
+- `bsk_inspect read` в CLI **отсутствует** (`unrecognized subcommand 'read'`), хотя описан в
+  инструменте; DOM-чтение делать через `evaluate`.
+- `bsk_interact evaluate` требует одновременно `contextId` **и** `observationId` из последнего
+  `bsk_session sync` (по отдельности — ошибки `requires ... control context` /
+  `requires an unused strict observation`). `unverified` в CLI не принимается.
+- Один `evaluate` расходует наблюдение: перед каждым следующим действием — новый `sync`
+  (`maxTokens` 200–300, чтобы не тянуть AX-дерево в контекст).
+- `bsk_page reload` идёт по тому же правилу (`contextId` + `observationId`).
+- Для снятия console без чтения в контекст: `debug start` → `reload` → `debug export output=…`,
+  дальше разбор файла в shell. Кольцо console ограничено 100 записями, лишние считаются в
+  `run.dropped_console` — строки `[AI CM]` могут в него не попасть, проверять счётчиком.
+- `ms-chat-turn` / `[data-turn-role]` на AI Studio: 45 узлов (вложенные `text-chunk-host`),
+  не равно числу сообщений — для сверки ролей не годится без нормализации.
+
+### Роли в экспорте AI Studio (BUG-12)
+
+- `[FILE:]`-узел дублирует ход пользователя: длинный текст с содержимым файла + короткий дубль
+  первой строки. Экспортная проекция затем раздаёт роли по чётности индекса
+  (`core/content.ts:1065`), и весь хвост инвертируется. Источник (dual-run) при этом корректен.
+
 ## Общие правила
 
 - Тяжёлые ответы — в файл; в контекст ≤40 строк.

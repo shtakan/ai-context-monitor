@@ -5008,7 +5008,7 @@ function aiCmApplyAistudioNetBase(): void {
     if (!joined) return;
     baseText = joined;
     baseCount = snap.msgs.length;
-    lastBaseTexts = texts;
+    lastBaseTexts = texts; lastDetailMessages = (typeof aistudioDetailMessages === 'function') ? aistudioDetailMessages(snap) : null;
     // Пины v54 (badge-suppress) считают ровно одно вхождение присваивания baseSeen в content.
     // Скобки сохраняют поведение и не ломают source-пин: это осознанная форма.
     baseSeen = (true);
@@ -5142,7 +5142,7 @@ try {
 // осознанно: любая новая строка выше сдвинула бы line-based catch/console
 // whitelists. esbuild/TS хойстят import сами; в песочницах строка снимается,
 // поэтому установка под typeof-гардом.
-import { installAistudioDualRun } from './aistudio-dualrun.ts';
+import { installAistudioDualRun, aistudioDetailMessages } from './aistudio-dualrun.ts';
 
 try {
   if (typeof AistudioAdapter === 'function' && typeof installAistudioDualRun === 'function') {

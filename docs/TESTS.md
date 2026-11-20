@@ -30,6 +30,7 @@ CI runs the same suite (plus syntax checks and `manifest.json` validation) in [.
 | `tests/messages-canonicalize-aistudio.test.js` | `utils/messages/canonicalize.ts` + `reconcile.ts` | AI Studio golden (6/7 ходов, first/last hash, `bodyHash`); склейка 9→7; role/tool/reasoning/ordinal; dedupe; reconcile net>dom, text-divergence, filled, turn-mismatch |
 | `tests/aistudio-messages-dualrun.test.js` | `core/aistudio-dualrun.ts` + `AistudioAdapter.capture()` | old merge vs canonicalize: verdict `same` на всех фикстурах; `roleHash`/`role-sequence`; diff на сыром 9A; флаг sessionStorage не включает capture при off; установщик идемпотентен |
 | `tests/accept-compare.test.js` | `tools/accept-compare.js` | K1 (каноническое равенство с игнором `exportedAt`), K2 (`roleHash` + счётчики), stable stringify, first diff path |
+| `tests/aistudio-export-roles.test.js` | `core/aistudio-dualrun.ts` + срезы `content.ts` | BUG-12: `aistudioDetailMessages` сохраняет роли/порядок/sections; `aiCmApplyAistudioNetBase` синхронизирует `lastDetailMessages`; `aiCmCollectExportSource` берёт роли из детали, не по индексу |
 
 Helpers in `tests/helpers/*` wrap production parsers so tests exercise the exact shipped code.
 
