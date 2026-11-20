@@ -12,7 +12,7 @@
 ## 2. Метрики (финальный прогон 2026-11-19, после последнего коммита)
 
 - build: exit 0 (`npm run build:prod`); `dist/content.js` 320 983 B, sha256 `dadbb2ed522928e08a204165128104c9f7aa100e9186e646a43041dc93dd92bd` (prod)
-- tests: 270 suites / 4388 passed / 7 skipped / 0 failed (полный `npm test`) — `270/4388/7/0`
+- tests: 271 suites / 4412 passed / 7 skipped / 0 failed (полный `npm test`) — `271/4412/7/0`
 - tsc: exit 0, вывод пуст (`npx tsc --noEmit`); strict: exit 0, 0 ошибок (`npx tsc -p tsconfig.strict.json`); chrome-tsc: **exit 0, 0 ошибок** (`npx tsc -p tsconfig.chrome.json`); lint: 0 errors (`npx eslint . --quiet`, exit 0)
 
 ## 3. Текущая задача
