@@ -51,55 +51,98 @@ class AistudioAdapter extends GeminiAdapter {
    * Ходы диалога: все ms-cmark-node.v3-font-body, кроме вложенных в другой
    * ms-cmark-node (иначе текст реплики попал бы в счёт дважды — родитель и ребёнок).
    * Роль: класс user-chunk → 'user', иначе — 'assistant'.
+   *
+   * 2.2: сам разбор вынесен в _rawMessages(); extractMessages остаётся прежним
+   * контрактом (уже склеенные assistant-сегменты) и обёрткой для dual-run.
    */
   extractMessages(): Message[] {
     try {
-      // Сеть главнее DOM: полная история из $rpc (включая виртуализированные ходы).
-      // DOM остаётся фолбэком — как у Claude/Perplexity, где сеть и есть источник.
-      const netMessages = this._netMessages();
-      if (netMessages.length > 0) {
-        debugLog('log', `[AistudioAdapter] История из сети: ${netMessages.length} сообщений (DOM не читаем)`);
-        return this._mergeAssistantRuns(netMessages);
-      }
-
-
-      const messages: Message[] = [];
-
-      const nodes = document.querySelectorAll('ms-cmark-node.v3-font-body');
-
-      debugLog('log', `[AistudioAdapter] Найдено узлов реплик: ${nodes.length}`);
-
-      Array.prototype.forEach.call(nodes, (node, index) => {
-        try {
-          if (this._isNestedNode(node)) {
-            debugLog('log', `[AistudioAdapter] Пропуск вложенного узла #${index}`);
-            return;
-          }
-
-          const content = this._cleanText(this._readNodeText(node));
-          if (content.length === 0) return;
-
-          messages.push({ role: this._isUserChunk(node) ? 'user' : 'assistant', content });
-        } catch (nodeError) {
-          debugLog('error', `[AistudioAdapter] Ошибка обработки узла #${index}:`, nodeError);
-        }
-      });
-
-      debugLog('log', `[AistudioAdapter] Всего извлечено сообщений: ${messages.length}`);
-      // v2.0.34: виртуализированная лента после схлопывания короче уже виденного
-      // пика. Пик пишет core/content.js (dom-peak/сетевой кэш) — берём его, иначе
-      // экспорт теряет начало разговора.
-      const peak = this._domPeakMessages();
-      if (peak.length > messages.length) {
-        debugLog('log', `[AistudioAdapter] DOM короче пика: ${messages.length} < ${peak.length} — берём sessionStorage`);
-        return this._mergeAssistantRuns(peak);
-      }
-      return this._mergeAssistantRuns(messages);
-
+      const raw = this._rawMessages();
+      return this._mergeAssistantRuns(raw.messages);
     } catch (error) {
       debugLog('error', '[AistudioAdapter] Ошибка в extractMessages:', error);
       return [];
     }
+  }
+
+  /**
+   * Сырые сообщения источника ДО склейки assistant-сегментов (2.2, capture).
+   * Приоритет: сеть → DOM → пик из sessionStorage. Возвращает канал, чтобы
+   * CaptureBatch нёс правдивый провенанс (net/dom), а не «DOM по умолчанию».
+   */
+  _rawMessages(): { messages: Message[]; kind: string; source: string } {
+    // Сеть главнее DOM: полная история из $rpc (включая виртуализированные ходы).
+    // DOM остаётся фолбэком — как у Claude/Perplexity, где сеть и есть источник.
+    const netMessages = this._netMessages();
+    if (netMessages.length > 0) {
+      debugLog('log', `[AistudioAdapter] История из сети: ${netMessages.length} сообщений (DOM не читаем)`);
+      return { messages: netMessages, kind: 'net', source: 'net' };
+    }
+
+    const messages: Message[] = [];
+
+    const nodes = document.querySelectorAll('ms-cmark-node.v3-font-body');
+
+    debugLog('log', `[AistudioAdapter] Найдено узлов реплик: ${nodes.length}`);
+
+    Array.prototype.forEach.call(nodes, (node, index) => {
+      try {
+        if (this._isNestedNode(node)) {
+          debugLog('log', `[AistudioAdapter] Пропуск вложенного узла #${index}`);
+          return;
+        }
+
+        const content = this._cleanText(this._readNodeText(node));
+        if (content.length === 0) return;
+
+        messages.push({ role: this._isUserChunk(node) ? 'user' : 'assistant', content });
+      } catch (nodeError) {
+        debugLog('error', `[AistudioAdapter] Ошибка обработки узла #${index}:`, nodeError);
+      }
+    });
+
+    debugLog('log', `[AistudioAdapter] Всего извлечено сообщений: ${messages.length}`);
+    // v2.0.34: виртуализированная лента после схлопывания короче уже виденного
+    // пика. Пик пишет core/content.js (dom-peak/сетевой кэш) — берём его, иначе
+    // экспорт теряет начало разговора.
+    const peak = this._domPeakMessages();
+    if (peak.length > messages.length) {
+      debugLog('log', `[AistudioAdapter] DOM короче пика: ${messages.length} < ${peak.length} — берём sessionStorage`);
+      return { messages: peak, kind: 'dom', source: 'peak' };
+    }
+    return { messages, kind: 'dom', source: 'dom' };
+  }
+
+  /**
+   * 2.2 (ARCHITECTURE §3.1): сырой батч для шва messages. Не решает, что попадёт
+   * в тело, — только классифицирует узлы (nodeType='message') и отдаёт провенанс.
+   * Сеть и DOM возвращают один и тот же тред; какой источник полнее — решает
+   * reconcile, а не адаптер.
+   */
+  capture(): any {
+    const raw = this._rawMessages();
+    const loc = (typeof window !== 'undefined' && window && window.location)
+      ? window.location
+      : ((typeof location !== 'undefined') ? location : null);
+    const path = String((loc && loc.pathname) || '');
+    const m = path.match(/prompts\/([A-Za-z0-9_-]+)/);
+    const convId = (m && m[1] !== 'new_chat') ? m[1] : null;
+    const routeKey = m ? ('prompts/' + m[1]) : path;
+    return {
+      v: 1,
+      platform: 'aistudio',
+      kind: raw.kind,
+      convId,
+      routeKey,
+      capturedAt: Date.now(),
+      complete: true,
+      messages: raw.messages.map((msg, i) => ({
+        role: msg.role,
+        text: msg.content,
+        ordinal: i,
+        nodeType: 'message'
+      }))
+    };
   }
 
   /**

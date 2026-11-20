@@ -90,4 +90,31 @@ describe('AistudioAdapter: контракт extractMessages на живой ра
     expect(adapter.isOnDialogPage()).toBe(false);
     expect(adapter.extractMessages()).toEqual([]);
   });
+
+  test('capture: сырой батч без склейки, extractMessages склеивает сегменты', () => {
+    const doc = mount(
+      '<ms-cmark-node class="cmark-node v3-font-body user-chunk"><p>вопрос</p></ms-cmark-node>' +
+        '<ms-cmark-node class="cmark-node v3-font-body"><p>первый сегмент</p></ms-cmark-node>' +
+        '<ms-cmark-node class="cmark-node v3-font-body"><p>второй сегмент</p></ms-cmark-node>'
+    );
+
+    const { adapter } = loadAistudio(doc);
+
+    const merged = adapter.extractMessages();
+    expect(merged).toHaveLength(2);
+    expect(merged[0].role).toBe('user');
+    expect(merged[1].content).toContain('\n\n');
+
+    const batch = adapter.capture();
+    expect(batch.v).toBe(1);
+    expect(batch.platform).toBe('aistudio');
+    expect(batch.kind).toBe('dom');
+    expect(batch.convId).toBeNull();
+    expect(batch.routeKey).toBe('prompts/new_chat');
+    expect(batch.complete).toBe(true);
+    expect(batch.messages).toHaveLength(3);
+    expect(batch.messages.map(function (m) { return m.role; })).toEqual(['user', 'assistant', 'assistant']);
+    expect(batch.messages[0].nodeType).toBe('message');
+    expect(batch.messages.map(function (m) { return m.ordinal; })).toEqual([0, 1, 2]);
+  });
 });

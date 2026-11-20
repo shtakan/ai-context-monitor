@@ -28,6 +28,7 @@ CI runs the same suite (plus syntax checks and `manifest.json` validation) in [.
 | `tests/print/options-export-txt.test.js` | popup/options txt-export button | click downloads same messages as reference export; disabled when no history for active tab |
 | `tests/print/reference-text.test.js` | `buildReferenceText` | strict message order; markdown stripping (headings, bullets, bold/italic, quotes, rules, links, backticks); combined regression; single blank-line separators; LF endings, no BOM |
 | `tests/messages-canonicalize-aistudio.test.js` | `utils/messages/canonicalize.ts` + `reconcile.ts` | AI Studio golden (6/7 ходов, first/last hash, `bodyHash`); склейка 9→7; role/tool/reasoning/ordinal; dedupe; reconcile net>dom, text-divergence, filled, turn-mismatch |
+| `tests/aistudio-messages-dualrun.test.js` | `core/aistudio-dualrun.ts` + `AistudioAdapter.capture()` | old merge vs canonicalize: verdict `same` на всех фикстурах; diff на сыром 9A; флаг sessionStorage не включает capture при off; установщик идемпотентен |
 
 Helpers in `tests/helpers/*` wrap production parsers so tests exercise the exact shipped code.
 

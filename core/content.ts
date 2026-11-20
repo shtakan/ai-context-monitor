@@ -5138,3 +5138,17 @@ try {
   swallowSoft(eStopBind, 'content:qwen-stop-listener');
 }
 
+// 2.2 (фаза 1): dual-run messages для AI Studio. Импорт стоит В КОНЦЕ файла
+// осознанно: любая новая строка выше сдвинула бы line-based catch/console
+// whitelists. esbuild/TS хойстят import сами; в песочницах строка снимается,
+// поэтому установка под typeof-гардом.
+import { installAistudioDualRun } from './aistudio-dualrun.ts';
+
+try {
+  if (typeof AistudioAdapter === 'function' && typeof installAistudioDualRun === 'function') {
+    installAistudioDualRun(AistudioAdapter);
+  }
+} catch (eAisV2Install) {
+  swallowSoft(eAisV2Install, 'content:v2-messages-install');
+}
+
