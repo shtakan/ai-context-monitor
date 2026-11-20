@@ -55,7 +55,7 @@ function readTsconfig(file) {
   return JSON.parse(stripJsonComments(raw));
 }
 
-describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5/B6 + core B7/B8/B9/B10/B11 strict gate)', () => {
+describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5/B6 + utils/messages 2.2 + core B7/B8/B9/B10/B11 strict gate)', () => {
   test('exists and extends the main tsconfig', () => {
     expect(fs.existsSync(path.join(ROOT, 'tsconfig.strict.json'))).toBe(true);
     const cfg = readTsconfig('tsconfig.strict.json');
@@ -70,7 +70,7 @@ describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5/B6 + core B7/B8/
     expect(cfg.compilerOptions.emitDeclarationOnly).toBe(false);
   });
 
-  test('include covers types, adapters, the B1/B2/B3/B4/B5/B6 utils batch and the eight B7/B8/B9/B10/B11 core files', () => {
+  test('include covers types, adapters, the B1/B2/B3/B4/B5/B6 utils batch, utils/messages 2.2 and the eight B7/B8/B9/B10/B11 core files', () => {
     const cfg = readTsconfig('tsconfig.strict.json');
     expect(cfg.include).toContain('adapters/**/*.ts');
     expect(cfg.include).toContain('types/**/*.d.ts');
@@ -85,6 +85,8 @@ describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5/B6 + core B7/B8/
       'utils/google-search-folwr-parser.ts',
       'utils/export-emit-pipeline.ts',
       'utils/gemini-intercept-logic.ts',
+      'utils/messages/canonicalize.ts',
+      'utils/messages/reconcile.ts',
       'core/content.ts',
       'core/widget.ts',
       'core/state.ts',
@@ -100,6 +102,8 @@ describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5/B6 + core B7/B8/
     expect(cfg.include.some((p) => /^(utils|core)\//.test(p) && !p.endsWith('.ts'))).toBe(false);
     // The B7/B8/B9/B10 core batch is exactly the eight core entry points — a ninth would pull an unclean file in.
     expect(cfg.include.filter((p) => p.startsWith('core/'))).toHaveLength(8);
+    // 2.2 messages seams are explicit, strict-clean files — not a glob over utils/messages.
+    expect(cfg.include.filter((p) => p.startsWith('utils/messages/'))).toHaveLength(2);
     expect(cfg.include).not.toContain('utils/**/*.ts');
     expect(cfg.include).not.toContain('core/**/*.ts');
   });

@@ -20,6 +20,8 @@
     "utils/google-search-folwr-parser.ts",
     "utils/export-emit-pipeline.ts",
     "utils/gemini-intercept-logic.ts",
+    "utils/messages/canonicalize.ts",
+    "utils/messages/reconcile.ts",
     "core/content.ts",
     "core/widget.ts",
     "core/state.ts",
