@@ -3216,9 +3216,9 @@ function processAndSend(): void {
             sourceLabel: (function () { try { var si2 = aiCmSourceInfo(); return si2 ? si2.label : ''; } catch (eSi2) { return ''; } })(),
             // S2.3 (I4): метки частичности в payload/теле файла; при partial !== true
             // ключи не появляются (undefined → JSON.stringify их отбрасывает).
-            partial: (snapPartNet && snapPartNet.partial === true) ? true : undefined,
-            partialReason: (snapPartNet && snapPartNet.partial === true)
-              ? ((snapPartNet.partialReason) || 'incomplete') : undefined,
+            partial: (typeof aiCmExportPartialView === 'function') ? aiCmExportPartialView(snapPartNet).partial : ((snapPartNet && snapPartNet.partial === true) ? true : undefined),
+            partialReason: (typeof aiCmExportPartialView === 'function')
+              ? aiCmExportPartialView(snapPartNet).partialReason : ((snapPartNet && snapPartNet.partial === true) ? ((snapPartNet.partialReason) || 'incomplete') : undefined),
             messages: buildHistoryMessages()
           };
           var histPatch: Record<string, any> = { aiCmHistory: histSnapshot };
@@ -3311,8 +3311,8 @@ function processAndSend(): void {
               ? aiCmCanonicalConvId() : cidS24) : null;
           if (snapPartAd && snapPartAd.partial === true) {
             var partFieldsAd = {
-              partial: true,
-              partialReason: (snapPartAd.partialReason || 'incomplete')
+              partial: (typeof aiCmExportPartialView === 'function') ? aiCmExportPartialView(snapPartAd).partial : true,
+              partialReason: (typeof aiCmExportPartialView === 'function') ? aiCmExportPartialView(snapPartAd).partialReason : (snapPartAd.partialReason || 'incomplete')
             };
             Object.assign(histSnapshotS24, partFieldsAd);
             Object.assign(histPatchS24['aiCmHistory:' + window.location.hostname], partFieldsAd);
@@ -3586,9 +3586,9 @@ if (isExtensionValid()) {
             // файл и ручной экспорт байтово прежние.
             sourceTier: (typeof aiCmGetSourceTier === 'function') ? aiCmGetSourceTier() : undefined,
             // S2.3 (I4): частичность ручного файла; при partial !== true ключи не появляются.
-            partial: (snapPartMan && snapPartMan.partial === true) ? true : undefined,
-            partialReason: (snapPartMan && snapPartMan.partial === true)
-              ? ((snapPartMan.partialReason) || 'incomplete') : undefined,
+            partial: (typeof aiCmExportPartialView === 'function') ? aiCmExportPartialView(snapPartMan).partial : ((snapPartMan && snapPartMan.partial === true) ? true : undefined),
+            partialReason: (typeof aiCmExportPartialView === 'function')
+              ? aiCmExportPartialView(snapPartMan).partialReason : ((snapPartMan && snapPartMan.partial === true) ? ((snapPartMan.partialReason) || 'incomplete') : undefined),
             messages: buildHistoryMessages()
           });
         // BUG-J: у GSA холодная загрузка отдавала порядок new→old, а baseComplete при этом
@@ -5153,6 +5153,8 @@ import { aiCmV2MetricsDualRun } from './metrics-dualrun.ts';
 import type { AiCmV2MetricsProbe } from './metrics-dualrun.ts';
 import { canonicalizeBatch, canonicalizeMessages } from '../utils/messages/canonicalize';
 import { projectFileMessages } from '../utils/export/projection';
+import { derivePartial } from '../utils/export/completeness';
+import type { PartialReason } from '../utils/export/completeness';
 
 try {
   if (typeof AistudioAdapter === 'function' && typeof installAistudioDualRun === 'function') {
@@ -5265,6 +5267,15 @@ function aiCmExportProjectFileMessages(msgs: any, hooks: any): { messages: any[]
     return projectFileMessages(msgs, hooks);
   } catch (eProj) {
     return { messages: Array.isArray(msgs) ? msgs : [], mode: '' };
+  }
+}
+
+/** 2.2/фаза 4: мост к чистому completeness-шу для manual/auto путей. */
+function aiCmExportPartialView(source: any): { partial?: true; partialReason?: PartialReason } {
+  try {
+    return derivePartial(source);
+  } catch (ePart) {
+    return { partial: undefined, partialReason: undefined };
   }
 }
 

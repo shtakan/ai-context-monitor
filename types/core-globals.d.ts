@@ -196,6 +196,9 @@ declare function aiCmExportProjectFileMessages(
   msgs: unknown,
   hooks: unknown
 ): { messages: any[]; mode: '' | 'projected' };
+declare function aiCmExportPartialView(
+  source: unknown
+): { partial?: true; partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text' | 'stopped' | 'truncated' };
 declare function aiCmLoadProactiveFlag(): void;
 declare function debugLog(level: string, ...args: unknown[]): void;
 

@@ -783,9 +783,9 @@ function aiCmWriteCurrentHistory(): void {
       sourceTier: (typeof aiCmGetSourceTier === 'function') ? aiCmGetSourceTier() : undefined,
       // S2.3 (ADR-001): метки частичности в storage-снимке (его читает options при ручном
       // экспорте). undefined у полного снимка → ключей нет, прежние снимки байтово те же.
-      partial: (snapPartHist && snapPartHist.partial === true) ? true : undefined,
-      partialReason: (snapPartHist && snapPartHist.partial === true)
-        ? ((snapPartHist.partialReason) || 'incomplete') : undefined,
+      partial: (typeof aiCmExportPartialView === 'function') ? aiCmExportPartialView(snapPartHist).partial : ((snapPartHist && snapPartHist.partial === true) ? true : undefined),
+      partialReason: (typeof aiCmExportPartialView === 'function')
+        ? aiCmExportPartialView(snapPartHist).partialReason : ((snapPartHist && snapPartHist.partial === true) ? ((snapPartHist.partialReason) || 'incomplete') : undefined),
       messages: msgsWrite
     };
     var histPatch: Record<string, any> = { aiCmHistory: histSnapshot };
@@ -1952,9 +1952,9 @@ function doAutoExportDownload(cid: any, percentage: number, reason: string, netS
           // S2.3 (ADR-001): метки частичности в ТЕЛЕ авто-файла. Читатель тот же, что у
           // барьера (единственный владелец partial/partialReason), а не пересчёт.
           // typeof-гард: срез-песочницы без state.ts → ключей нет (байты прежние).
-          partial: (snapPartAuto && snapPartAuto.partial === true) ? true : undefined,
-          partialReason: (snapPartAuto && snapPartAuto.partial === true)
-            ? ((snapPartAuto.partialReason) || 'incomplete') : undefined, bodyProjection: autoProj || undefined, dedupe: (typeof aiCmExportDedupeInfoAuto === 'function') ? aiCmExportDedupeInfoAuto(lastDetailMessages, msgs) : undefined,
+          partial: (typeof aiCmExportPartialView === 'function') ? aiCmExportPartialView(snapPartAuto).partial : ((snapPartAuto && snapPartAuto.partial === true) ? true : undefined),
+          partialReason: (typeof aiCmExportPartialView === 'function')
+            ? aiCmExportPartialView(snapPartAuto).partialReason : ((snapPartAuto && snapPartAuto.partial === true) ? ((snapPartAuto.partialReason) || 'incomplete') : undefined), bodyProjection: autoProj || undefined, dedupe: (typeof aiCmExportDedupeInfoAuto === 'function') ? aiCmExportDedupeInfoAuto(lastDetailMessages, msgs) : undefined,
           messages: msgs as import('../types/export').ExportMessage[]
         };
         var content = (fmt === 'md')
@@ -2441,3 +2441,5 @@ function aiCmPlatformLabelForFile(site: string): string {
   };
   return labels[site] || site || 'AI Chat';
 }
+
+
