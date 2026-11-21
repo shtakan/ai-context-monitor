@@ -284,6 +284,9 @@
   "options_open_supported_site": {
     "message": "Open a supported site"
   },
+  "options_context_not_quota": {
+    "message": "Model context limit. Perplexity search quota is not context usage."
+  },
   "options_reload_page": {
     "message": "Reload the page"
   },

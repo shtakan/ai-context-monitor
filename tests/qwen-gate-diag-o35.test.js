@@ -577,9 +577,12 @@ describe('O-35 D: плейсхолдер «—» ставит ветка stale, 
     // читатель попапа: числа печатает; «—» только когда метки нет вовсе
     expect(OPTIONS_SRC).toContain("sourceEl.textContent = fromCache");
     expect(OPTIONS_SRC).toContain(": (state.sourceLabel || '—');");
-    expect(OPTIONS_SRC).toContain("tokensEl.textContent = (typeof state.tokens === 'number') ? state.tokens.toLocaleString() : '—';");
-    // предупреждение stale у qwen не показывается: chat.qwen.ai нет в detectChatSite → isChatHome=false
-    expect(OPTIONS_SRC).not.toContain("host.indexOf('chat.qwen.ai')");
+    expect(OPTIONS_SRC).toContain("var hasTokens = (typeof state.tokens === 'number') && isFinite(state.tokens) && state.tokens > 0;");
+    expect(OPTIONS_SRC).toContain("tokensEl.textContent = hasTokens ? state.tokens.toLocaleString() : '—';");
+    // предупреждение stale у qwen не показывается: chat.qwen.ai нет в detectChatSite → isChatHome=false;
+    // BUG-11 добавил qwen только в отдельный detectSupportedSite (текст «Нет данных»).
+    expect(fnDecl(OPTIONS_SRC, 'detectChatSite')).not.toContain("host.indexOf('chat.qwen.ai')");
+    expect(fnDecl(OPTIONS_SRC, 'detectSupportedSite')).toContain("host.indexOf('chat.qwen.ai')");
     expect(OPTIONS_SRC).toContain("var showStale = !!(state && state.stale === true && isChatHome(tabHost, tabPath));");
     // «нет данных» (O-14 removed) на qwen не срабатывал: попап показывал числа, а не showNoData
     expect(OPTIONS_SRC).toContain("function showNoData(message) {");

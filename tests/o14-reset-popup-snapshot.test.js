@@ -282,7 +282,7 @@ describe('O-14 D2: попап на removed-событие не держит ст
 
     fireChanged(m, { ['aiCmState:' + HOST]: { oldValue: liveState() } });
 
-    expect(document.getElementById('stat-site').textContent).toContain('Откройте');
+    expect(document.getElementById('stat-site').textContent).toContain('Нет данных');
     expect(document.getElementById('stat-model').textContent).toBe('—');
     expect(document.getElementById('stat-tokens').textContent).toBe('—');
     expect(document.getElementById('stat-limit').textContent).toBe('—');
@@ -296,7 +296,7 @@ describe('O-14 D2: попап на removed-событие не держит ст
     const m = mountOptions({ aiCmState: liveState() }, TAB_URL);
     fireChanged(m, { aiCmState: { oldValue: liveState() } });
     expect(document.getElementById('stat-model').textContent).toBe('—');
-    expect(document.getElementById('stat-site').textContent).toContain('Откройте');
+    expect(document.getElementById('stat-site').textContent).toContain('Нет данных');
   });
 
   test('D2: removed чужого хоста → экран активной вкладки не трогаем', () => {
@@ -333,5 +333,44 @@ describe('O-14 R2: ветка newValue байтово прежняя, removed-в
     const m = mountOptions({ ['aiCmState:' + HOST]: liveState() }, TAB_URL);
     fireChanged(m, { selectedModel: { newValue: 'gpt-5' } });
     expect(document.getElementById('stat-model').textContent).toBe('gpt-5');
+  });
+});
+
+describe('BUG-11: состояния UI попапа', () => {
+  test('живой поддерживаемый сайт без данных → «Нет данных», не «Откройте…»', () => {
+    mountOptions({}, 'https://gemini.google.com/app/abc');
+    expect(document.getElementById('stat-site').textContent).toBe('Нет данных');
+  });
+
+  test('неподдерживаемый хост → «Откройте поддерживаемый сайт»', () => {
+    mountOptions({}, 'https://example.com/page');
+    expect(document.getElementById('stat-site').textContent).toContain('Откройте поддерживаемый сайт');
+  });
+
+  test('0 токенов (лёгкий/пустой тред) → «—», а не «0%»', () => {
+    mountOptions({
+      ['aiCmState:' + HOST]: {
+        host: HOST, site: 'chatgpt', model: 'gpt-5', tokens: 0, limit: 128000,
+        percent: 0, updatedAt: Date.now(), stale: false
+      }
+    }, TAB_URL);
+    expect(document.getElementById('stat-tokens').textContent).toBe('—');
+    expect(document.getElementById('stat-percent').textContent).toBe('—');
+    expect(document.getElementById('stat-limit').textContent).not.toBe('—');
+  });
+
+  test('Perplexity: тултип про квоту поиска, а не контекст', () => {
+    const host = 'www.perplexity.ai';
+    mountOptions({
+      ['aiCmState:' + host]: {
+        host: host, site: 'perplexity', model: 'Sonar', tokens: 1000, limit: 128000,
+        percent: 0.8, updatedAt: Date.now(), stale: false
+      }
+    }, 'https://www.perplexity.ai/search/abc');
+    const pct = document.getElementById('stat-percent');
+    const lim = document.getElementById('stat-limit');
+    expect(pct.textContent).toBe('0.8%');
+    expect(pct.title).toMatch(/квот|quota|контекст|context/i);
+    expect(lim.title).toMatch(/квот|quota|контекст|context/i);
   });
 });

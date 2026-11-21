@@ -1291,10 +1291,12 @@ describe('M-4.4: локализация privacy/privacy.html и docs/index.html'
       //   (privacy_* — 87, словарь 271)
       // + Firefox/AMO docs: docs_btn_firefox — кнопка установки из Mozilla Add-ons (+1;
       //   docs_* — 43, словарь 272)
+      // + BUG-11: options_context_not_quota — тултип Perplexity «квота ≠ контекст»
+      //   (+1, словарь 273)
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('privacy_') === 0; }).length).toBe(87);
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('docs_') === 0; }).length).toBe(43);
-      expect(Object.keys(ru).length).toBe(272);
-      expect(Object.keys(en).length).toBe(272);
+      expect(Object.keys(ru).length).toBe(273);
+      expect(Object.keys(en).length).toBe(273);
     });
 
     test('ru-значения M-4.4 байтово равны тексту разметки, en — перевод без кириллицы', () => {

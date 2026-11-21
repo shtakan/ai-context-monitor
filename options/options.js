@@ -654,6 +654,38 @@ function detectChatSite(hostname) {
   return null;
 }
 
+/**
+ * BUG-11: поддерживаемый ли хост (все 8 площадок). В отличие от detectChatSite
+ * покрывает AI Studio, GSA и Qwen; isChatHome остаётся на прежнем узком списке.
+ * @param {string} hostname hostname вкладки
+ * @returns {string|null} site key или null
+ */
+function detectSupportedSite(hostname) {
+  if (!hostname) return null;
+  var host = String(hostname).toLowerCase();
+  if (host.indexOf('aistudio.google.com') !== -1) return 'aistudio';
+  if (host.indexOf('gemini.google.com') !== -1) return 'gemini';
+  if (host.indexOf('chatgpt.com') !== -1) return 'chatgpt';
+  if (host.indexOf('claude.ai') !== -1) return 'claude';
+  if (host.indexOf('perplexity.ai') !== -1) return 'perplexity';
+  if (host.indexOf('chat.deepseek.com') !== -1) return 'deepseek';
+  if (host.indexOf('chat.qwen.ai') !== -1) return 'qwen';
+  if (host === 'google.com' || host === 'www.google.com') return 'google_search';
+  return null;
+}
+
+/**
+ * BUG-11: на живом поддерживаемом сайте без данных показываем «Нет данных»,
+ * а не «Откройте поддерживаемый сайт» (этот текст — только для чужих вкладок).
+ * @param {string} hostname hostname активной вкладки
+ * @returns {string} текст состояния
+ */
+function noDataMessageForHost(hostname) {
+  return detectSupportedSite(hostname)
+    ? aiCmI18nMessage('options_no_data', 'Нет данных')
+    : aiCmI18nMessage('options_open_supported_site', 'Откройте поддерживаемый сайт');
+}
+
 function isChatHome(hostname, pathname) {
   var site = detectChatSite(hostname);
   if (!site) return false; // неизвестный хост → false (поведение как прежде)
@@ -663,11 +695,19 @@ function isChatHome(hostname, pathname) {
 function updateStatsFromState(state, tabHost, tabPath, fromCache) {
   siteEl.textContent = siteLabels[state.site] || state.site || '—';
   modelEl.textContent = state.model || '—';
-  tokensEl.textContent = (typeof state.tokens === 'number') ? state.tokens.toLocaleString() : '—';
+  // BUG-11: 0 токенов — это отсутствие данных, а не «0%» (лёгкий/пустой тред).
+  var hasTokens = (typeof state.tokens === 'number') && isFinite(state.tokens) && state.tokens > 0;
+  tokensEl.textContent = hasTokens ? state.tokens.toLocaleString() : '—';
   limitEl.textContent = (typeof state.limit === 'number') ? state.limit.toLocaleString() : '—';
   var p = state.percent || 0;
-  percentEl.textContent = p + '%';
-  percentEl.style.color = percentColor(p);
+  percentEl.textContent = hasTokens ? (p + '%') : '—';
+  percentEl.style.color = hasTokens ? percentColor(p) : '#8888aa';
+  // BUG-11: у Perplexity в UI есть квота поиска — она не про заполнение контекста.
+  var quotaHint = (state.site === 'perplexity')
+    ? aiCmI18nMessage('options_context_not_quota', 'Лимит контекста модели. Квота поиска Perplexity — не заполнение контекста.')
+    : '';
+  if (limitEl) limitEl.title = quotaHint;
+  if (percentEl) percentEl.title = quotaHint;
   // T1 (v1.16): источник истории — архив (первый ярус) или live (второй)
   // M-4.3: показанный из кэша прошлой беседы снапшот не выдаётся за live — метка
   // источника подменяется честной («кэш (прошлая беседа)»); у свежего снапшота
@@ -735,6 +775,8 @@ function showNoData(message) {
   limitEl.textContent = '—';
   percentEl.textContent = '—';
   percentEl.style.color = '#8888aa';
+  if (limitEl) limitEl.title = '';
+  if (percentEl) percentEl.title = '';
 }
 
 // v31: пометка времени для кэша «данные от HH:MM»
@@ -793,7 +835,7 @@ function loadStats() {
           var cachedAt = formatTime(cachedState.updatedAt);
           siteEl.textContent += aiCmI18nMessage('options_data_from', ' · данные от ' + cachedAt, [cachedAt]);
         } else {
-          showNoData(aiCmI18nMessage('options_open_supported_site', 'Откройте поддерживаемый сайт'));
+          showNoData(noDataMessageForHost(tabHost));
         }
       });
     });
@@ -835,7 +877,7 @@ try {
             (!!changes.aiCmState && !!(oldSnapshot && oldSnapshot.host === tabHost))));
         if (!removedForTab) return;
         cachedState = null;
-        showNoData(aiCmI18nMessage('options_open_supported_site', 'Откройте поддерживаемый сайт'));
+        showNoData(noDataMessageForHost(tabHost));
         updateStaleWarning(null, tabHost, '');
         // v2.0.34: снимок сброшен — кнопки снова зависят только от записи aiCmHistory.
         updateExportButtons();
@@ -930,7 +972,7 @@ function updateExportButtons() {
       // после перезагрузки content script запишет снимок в правильном порядке.
       exportHintEl.textContent = aiCmI18nMessage('options_reload_page', 'Обновите страницу');
     } else {
-      exportHintEl.textContent = aiCmI18nMessage('options_open_supported_site', 'Откройте поддерживаемый сайт');
+      exportHintEl.textContent = noDataMessageForHost(currentTabHost);
     }
   }
 }

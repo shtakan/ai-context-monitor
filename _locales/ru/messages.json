@@ -284,6 +284,9 @@
   "options_open_supported_site": {
     "message": "Откройте поддерживаемый сайт"
   },
+  "options_context_not_quota": {
+    "message": "Лимит контекста модели. Квота поиска Perplexity — не заполнение контекста."
+  },
   "options_reload_page": {
     "message": "Обновите страницу"
   },
