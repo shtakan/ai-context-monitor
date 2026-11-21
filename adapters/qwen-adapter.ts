@@ -629,6 +629,34 @@ class QwenAdapter extends BaseAdapter {
   }
 
   /**
+   * 2.2/фаза 3: сырой батч для шва messages (dual-run).
+   * Контейнеры уже сняты extractMessages(); hiddenReasoning в контракт
+   * RawMessage не входит — для сравнения состава берём role/text.
+   */
+  capture(): any {
+    let path = '';
+    try { path = String((typeof location !== 'undefined' && location && location.pathname) || ''); } catch (eCapPath) { path = ''; }
+    const m = path.match(/\/c\/([A-Za-z0-9_-]+)/);
+    const convId = m ? m[1] : null;
+    const raw = this.extractMessages();
+    return {
+      v: 1,
+      platform: 'qwen',
+      kind: 'dom',
+      convId: convId,
+      routeKey: m ? ('c/' + m[1]) : path,
+      capturedAt: Date.now(),
+      complete: true,
+      messages: raw.map((msg, i) => ({
+        role: msg.role,
+        text: msg.content,
+        ordinal: i,
+        nodeType: 'message'
+      }))
+    };
+  }
+
+  /**
    * Полный текст диалога: содержимое ходов, склеенное переводом строки.
    * Явное переопределение базового (у Qwen путь отбора узлов свой).
    */

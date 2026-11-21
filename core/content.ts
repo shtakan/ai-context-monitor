@@ -5148,6 +5148,7 @@ try {
 // whitelists. esbuild/TS хойстят import сами; в песочницах строка снимается,
 // поэтому установка под typeof-гардом.
 import { installAistudioDualRun, aistudioDetailMessages, exportDedupeInfo, aiCmV2MessagesDefaultEnabled } from './aistudio-dualrun.ts';
+import { installQwenDualRun } from './qwen-dualrun.ts';
 import { aiCmV2MetricsDualRun } from './metrics-dualrun.ts';
 import type { AiCmV2MetricsProbe } from './metrics-dualrun.ts';
 import { canonicalizeBatch, canonicalizeMessages } from '../utils/messages/canonicalize';
@@ -5155,6 +5156,9 @@ import { canonicalizeBatch, canonicalizeMessages } from '../utils/messages/canon
 try {
   if (typeof AistudioAdapter === 'function' && typeof installAistudioDualRun === 'function') {
     installAistudioDualRun(AistudioAdapter);
+  }
+  if (typeof QwenAdapter === 'function' && typeof installQwenDualRun === 'function') {
+    installQwenDualRun(QwenAdapter);
   }
 } catch (eAisV2Install) {
   swallowSoft(eAisV2Install, 'content:v2-messages-install');

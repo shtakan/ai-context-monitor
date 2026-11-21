@@ -139,7 +139,13 @@ function sessionFlag(): boolean {
  * (живой тумблер без перезагрузки), storage.local — один раз при установке.
  */
 export function aiCmV2MessagesEnabled(): boolean {
+  if (!storageRequested) loadStorageFlag();
   return sessionFlag() || storageFlag;
+}
+
+/** 2.2/фаза 3: прогрев storage-флага для второго потребителя (Qwen dual-run). */
+export function aiCmV2MessagesWarmFlag(): void {
+  if (!storageRequested) loadStorageFlag();
 }
 
 /**
