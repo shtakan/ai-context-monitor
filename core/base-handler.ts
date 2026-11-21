@@ -95,7 +95,7 @@ function aiCmDedupeExportSource(messages: AiCmExportMessage[]): AiCmDedupeResult
     // E-2.1: внутри-сообщенческая дедупликация идёт ПЕРВОЙ, меж-сообщенческая — второй;
     // порядок задан prepareExportMessages (единая точка входа пайплайна).
     if (typeof P.prepareExportMessages === 'function') {
-      var res18 = P.prepareExportMessages((site === 'aistudio' && typeof aiCmMergeAssistantRuns === 'function') ? aiCmMergeAssistantRuns(messages) : messages, aiCmLogIntraDedupe);
+      var res18 = P.prepareExportMessages((site === 'aistudio' && typeof aiCmMergeAssistantRuns === 'function') ? aiCmMergeAssistantRuns(messages) : messages, aiCmLogIntraDedupe, { collapseFileUserDuplicates: site === 'aistudio' });
       return { messages: res18.messages, removed: res18.removed };
     }
     if (typeof P.dedupeMessages === 'function') return P.dedupeMessages(messages);

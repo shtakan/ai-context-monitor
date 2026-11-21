@@ -9,6 +9,7 @@ const { exportDedupeInfo } = require('../core/aistudio-dualrun.ts');
 const loadEsm = require('./helpers/load-esm.js');
 
 const Builders = loadEsm.loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
+const P = loadEsm.loadEsmModule('utils/export-emit-pipeline.ts');
 
 function roles(user, assistant) {
   const out = [];
@@ -43,6 +44,79 @@ describe('BUG-13: dedupe-маркер снимка', () => {
       messages: [{ role: 'user', text: 'q' }]
     }, 'aistudio'));
     expect('dedupe' in without).toBe(false);
+  });
+});
+
+describe('BUG-13 остаток: файловый user-дубль (#19/#20)', () => {
+  const PROMPT = 'Завтра займусь починкой и диагностикой бага. Сейчас иногда полная история, а иногда нет.';
+  const RICH = PROMPT + '\n\n[FILE: export.md]\n# AI Context Monitor — экспорт истории\nтело файла';
+  function triple(short) {
+    return [
+      { role: 'user', text: RICH },
+      { role: 'user', text: short === undefined ? PROMPT : short },
+      { role: 'assistant', text: 'Ответ.' }
+    ];
+  }
+
+  test('option=true: текст + [FILE:] и следующий тот же текст без файла → один ход', function () {
+    const res = P.prepareExportMessages(triple(), null, { collapseFileUserDuplicates: true });
+    expect(res.messages).toHaveLength(2);
+    expect(res.messages[0].text).toBe(RICH);
+    expect(res.messages[1]).toEqual({ role: 'assistant', text: 'Ответ.' });
+    expect(res.removed).toBe(1);
+  });
+
+  test('option=false (прочие сайты): пара не трогается', function () {
+    const res = P.prepareExportMessages(triple(), null);
+    expect(res.messages).toHaveLength(3);
+    expect(res.messages[1].text).toBe(PROMPT);
+    expect(res.removed).toBe(0);
+  });
+
+  test('короткий текст не совпал с префиксом — пара остаётся', function () {
+    const res = P.prepareExportMessages(triple('Другой вопрос'), null, { collapseFileUserDuplicates: true });
+    expect(res.messages).toHaveLength(3);
+  });
+
+  test('у короткого хода есть artifacts — не копия, остаётся', function () {
+    const withArtifact = triple();
+    withArtifact[1].artifacts = [{ name: 'x.md', content: 'x' }];
+    const res = P.prepareExportMessages(withArtifact, null, { collapseFileUserDuplicates: true });
+    expect(res.messages).toHaveLength(3);
+    expect(res.messages[1].artifacts).toEqual([{ name: 'x.md', content: 'x' }]);
+  });
+
+  test('aiCmDedupeExportSource: правило включено только для aistudio', function () {
+    const { moduleSource } = require('./helpers/content-source.js');
+    const BASE = moduleSource('base-handler.ts');
+    function fnDecl(src, name) {
+      const start = src.indexOf('function ' + name + '(');
+      expect(start).toBeGreaterThan(-1);
+      let depth = 0;
+      for (let i = src.indexOf('{', start); i < src.length; i++) {
+        if (src[i] === '{') depth++;
+        else if (src[i] === '}') {
+          depth--;
+          if (depth === 0) return src.slice(start, i + 1);
+        }
+      }
+      throw new Error('unbalanced declaration: ' + name);
+    }
+    function run(site) {
+      const dedupe = new Function('ctx',
+        'with (ctx) { ' + fnDecl(BASE, 'aiCmDedupeExportSource') + '\n return aiCmDedupeExportSource; }')({
+        currentAdapter: { siteName: site },
+        AiCmExportEmitPipeline: P,
+        aiCmMergeAssistantRuns: function (m) { return m; },
+        aiCmLogIntraDedupe: function () { },
+        debugLog: function () { },
+        swallow: function () { }
+      });
+      return dedupe(triple());
+    }
+    expect(run('aistudio').messages).toHaveLength(2);
+    expect(run('aistudio').removed).toBe(1);
+    expect(run('gemini').messages).toHaveLength(3);
   });
 });
 

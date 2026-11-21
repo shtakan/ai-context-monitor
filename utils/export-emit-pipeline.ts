@@ -160,6 +160,15 @@ export interface PrepareExportResult {
   crossRemoved: number;
 }
 
+/** Опции подготовки: включение узких правил конкретной площадки. */
+export interface PrepareExportOptions {
+  /**
+   * AI Studio (BUG-13 остаток): схлопнуть user-дубль «текст + [FILE:]» и
+   * следующий user с тем же текстом без файла. Прочие сайты — false.
+   */
+  collapseFileUserDuplicates?: boolean;
+}
+
 /** Счётчик сообщений, у которых появились reasoning-поля. */
 export interface ReasoningApplyResult {
   changed: number;
@@ -1175,6 +1184,10 @@ export function dedupeMessages(messages: unknown): DedupeResult {
       // v1.18 (E-2.1): id ходов переносится — иначе набор id базы (baseIdSet) и запись
       // ленты рвутся после схлопывания. Потребители без id получают прежний {role,text}.
       if (m.id != null) keep.id = m.id;
+      // 2.2/фаза 4: секции не теряются на меж-сообщенческом дедупе.
+      if (Array.isArray(m.sources)) keep.sources = m.sources;
+      if (m.artifact && typeof m.artifact === 'object') keep.artifact = m.artifact;
+      if (Array.isArray(m.artifacts)) keep.artifacts = m.artifacts;
       out.push(keep);
     }
   } catch (e) { swallow(e, 'export-utils:dedupeMessages'); }
@@ -1745,10 +1758,49 @@ export function dedupeCrossRawCopies(messages: unknown): DedupeResult {
       // нормализации переводов строк и разделителей блоков для чужих путей).
       var keep: Message = { role: (m.role === 'user') ? 'user' : 'assistant', text: touched ? keptBlocks.join('\n\n') : text };
       if (m.id != null) keep.id = m.id;
+      if (Array.isArray(m.sources)) keep.sources = m.sources;
+      if (m.artifact && typeof m.artifact === 'object') keep.artifact = m.artifact;
+      if (Array.isArray(m.artifacts)) keep.artifacts = m.artifacts;
       out.push(keep);
     }
   } catch (e) {
     return { messages: Array.isArray(messages) ? messages : [], removed: 0 };
+  }
+  return { messages: out, removed: removed };
+}
+
+/**
+ * AI Studio (BUG-13 остаток): в сети вложение и текст запроса иногда лежат
+ * двумя user-строками — «prompt + [FILE: …]» и следом «prompt». Второй ход —
+ * точная копия текстовой части первого, без собственных секций/reasoning.
+ * Схлопываем ТОЛЬКО такую пару: префикс до `[FILE: ` совпал побайтово.
+ * @param {Message[]} messages сообщения после меж-сообщенческого дедупа
+ * @returns {{messages: Message[], removed: number}} результат
+ */
+function collapseFileUserDuplicates(messages: Message[]): { messages: Message[]; removed: number } {
+  var src = Array.isArray(messages) ? messages : [];
+  var out: Message[] = [];
+  var removed = 0;
+  for (var i = 0; i < src.length; i++) {
+    var cur = src[i];
+    if (!cur || typeof cur !== 'object') { out.push(cur); continue; }
+    out.push(cur);
+    var next = src[i + 1];
+    if (!next || typeof next !== 'object') continue;
+    if (cur.role !== 'user' || next.role !== 'user') continue;
+    // У короткого хода не должно быть собственных данных, иначе это не копия.
+    if (next.artifact || (Array.isArray(next.artifacts) && next.artifacts.length) ||
+      next.reasoning || (Array.isArray(next.sources) && next.sources.length)) continue;
+    var text = (typeof cur.text === 'string') ? cur.text : '';
+    var at = text.indexOf('\n\n[FILE: ');
+    if (at < 0) at = text.indexOf('\n[FILE: ');
+    if (at <= 0) continue;
+    var prefix = text.slice(0, at).replace(/\s+$/, '');
+    if (!prefix) continue;
+    var shortText = (typeof next.text === 'string') ? next.text : '';
+    if (shortText.trim() !== prefix.trim()) continue;
+    i++;
+    removed++;
   }
   return { messages: out, removed: removed };
 }
@@ -1771,9 +1823,11 @@ export function dedupeCrossRawCopies(messages: unknown): DedupeResult {
  * Возвращает { messages, intraRemoved, removed, crossRemoved }.
  * @param {Array} raw сырые сообщения
  * @param {*} onMessageDedupe колбэк лога
+ * @param {PrepareExportOptions} options узкие правила площадки
  * @returns {{messages: ExportMessage[], intraRemoved: number, removed: number, crossRemoved: number}} результат подготовки
  */
-export function prepareExportMessages(raw: unknown, onMessageDedupe?: MessageDedupeLogger | null): PrepareExportResult {
+export function prepareExportMessages(raw: unknown, onMessageDedupe?: MessageDedupeLogger | null, options?: PrepareExportOptions | null): PrepareExportResult {
+  var opts = options || {};
   var intraRemoved = 0;
   var out = [];
   try {
@@ -1799,10 +1853,14 @@ export function prepareExportMessages(raw: unknown, onMessageDedupe?: MessageDed
     }
   } catch (e) { out = Array.isArray(raw) ? raw : []; intraRemoved = 0; }
   var inter = dedupeMessages(out);
+  // BUG-13 остаток (AI Studio): файловый user-дубль после меж-сообщенческого дедупа.
+  var fileDup = (opts.collapseFileUserDuplicates === true)
+    ? collapseFileUserDuplicates(inter.messages)
+    : { messages: inter.messages, removed: 0 };
   // E-2.2: третий этап — сырые копии промпта МЕЖДУ сообщениями (пузырь реплики + карточка
   // плана Deep Research). Счётчик вырезанных копий суммируется в removed: потребитель
   // (core/content.js: aiCmLogDedupeRemoved) логирует именно его.
-  var cross = dedupeCrossRawCopies(inter.messages);
+  var cross = dedupeCrossRawCopies(fileDup.messages);
   // E-2.3: финальная гигиена ВЫХОДА — в тексте экспорта не должно остаться строк-остатков
   // разметки (одни '#', '##', '###'): маркер вырезанного raw-заголовка удаляется целиком,
   // включая оставшиеся символы решётки. Сообщения без таких строк сохраняются БАЙТОВО,
@@ -1824,7 +1882,7 @@ export function prepareExportMessages(raw: unknown, onMessageDedupe?: MessageDed
   return {
     messages: cleaned,
     intraRemoved: intraRemoved,
-    removed: inter.removed + cross.removed,
+    removed: inter.removed + fileDup.removed + cross.removed,
     crossRemoved: cross.removed
   };
 }
