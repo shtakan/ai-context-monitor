@@ -42,9 +42,12 @@ describe('Perplexity: метка [Image] остаётся в сообщении 
       expect(assistant).not.toContain('[source] image.jpg');
     });
 
-    it('настоящий веб-источник по-прежнему в конце ответа ассистента', () => {
+    it('настоящий веб-источник по-прежнему в ответе ассистента (полем sources)', () => {
       const result = parsePerplexityThread(fixture);
-      expect(result.messages[1].text).toContain('[source] Источник примера: Сниппет примера.');
+      expect(result.messages[1].text).not.toContain('[source]');
+      expect(result.messages[1].sources).toEqual([
+        { title: 'Источник примера', url: 'https://example.com/1', snippet: 'Сниппет примера.' }
+      ]);
     });
 
     it('соседний обмен без картинок не меняется', () => {

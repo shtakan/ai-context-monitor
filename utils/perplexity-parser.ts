@@ -13,12 +13,21 @@ import { swallowSoft } from './debug.ts';
 /** Роль автора сообщения в истории Perplexity. */
 export type PerplexityRole = 'user' | 'assistant';
 
+/** Источник ответа Perplexity — отдельные данные, не строки [source] в тексте. */
+export interface PerplexityThreadSource {
+  title?: string;
+  url?: string;
+  snippet?: string;
+}
+
 /** Сообщение истории Perplexity. */
 export interface PerplexityThreadMessage {
   /** Роль автора: user/assistant. */
   role: PerplexityRole;
   /** Текст сообщения. */
   text: string;
+  /** 2.2/фаза 4: источники ответа — отдельным полем (BUG-08). */
+  sources?: PerplexityThreadSource[];
 }
 
 /**
@@ -251,6 +260,7 @@ export function parsePerplexityThread(json: unknown): PerplexityThreadResult {
       var assistantPushed = false;
       if (Array.isArray(blocks)) {
         var assistantTextParts = [];
+        var assistantSources: PerplexityThreadSource[] = [];
         for (var j = 0; j < blocks.length; j++) {
           var block = blocks[j];
           if (!block || typeof block !== 'object') continue;
@@ -301,23 +311,29 @@ export function parsePerplexityThread(json: unknown): PerplexityThreadResult {
                 // пользователя, поэтому [source] сюда не попадает.
                 if (isAttachmentUrl(wrUrl)) continue;
                 if (!wrUrl && wrName && !wrSnippet && entryImageNames.indexOf(basenameOf(String(wrName))) !== -1) continue;
-                if (wrName || wrSnippet) {
-                  var wrText = (wrName ? wrName + ': ' : '') + (wrSnippet || '');
-                  if (wrText.trim()) assistantTextParts.push('[source] ' + wrText.trim());
-                }
+                // 2.2/фаза 4 (BUG-08): источник — данные, не строка [source] в теле.
+                var src: PerplexityThreadSource = {};
+                if (wrName) src.title = wrName;
+                if (wrUrl) src.url = wrUrl;
+                if (wrSnippet) src.snippet = wrSnippet;
+                if (src.title || src.url || src.snippet) assistantSources.push(src);
               }
             }
           }
         }
 
-        if (assistantTextParts.length > 0) {
+        if (assistantTextParts.length > 0 || assistantSources.length > 0) {
           var assistantText = assistantTextParts.join('\n').trim();
-          if (assistantText) {
-            pieces.push(assistantText);
-            ids.push(entryId + '_assistant');
-            count++;
-            lastText = assistantText;
-            messages.push({ role: 'assistant', text: assistantText });
+          if (assistantText || assistantSources.length > 0) {
+            if (assistantText) {
+              pieces.push(assistantText);
+              ids.push(entryId + '_assistant');
+              count++;
+              lastText = assistantText;
+            }
+            var assistantMsg: PerplexityThreadMessage = { role: 'assistant', text: assistantText };
+            if (assistantSources.length > 0) assistantMsg.sources = assistantSources;
+            messages.push(assistantMsg);
             assistantPushed = true;
           }
         }

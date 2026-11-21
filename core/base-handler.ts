@@ -72,7 +72,7 @@ function aiCmDedupeExportSource(messages: AiCmExportMessage[]): AiCmDedupeResult
         var mp = messages[p] || {};
         // FIX (Claude md): ход пользователя парсера Claude приходит ролью 'human' —
         // нормализуем её в 'user' здесь же, у входа в md (см. buildMdFromHistory).
-        var msg: AiCmExportMessage = { role: (mp.role === 'user' || mp.role === 'human') ? 'user' : 'assistant', text: (typeof mp.text === 'string') ? mp.text : '' };
+        var msg: AiCmExportMessage = { role: (mp.role === 'user' || mp.role === 'human') ? 'user' : 'assistant', text: (typeof mp.text === 'string') ? mp.text : '' }; if (Array.isArray(mp.sources)) msg.sources = mp.sources; if (mp.artifact && typeof mp.artifact === 'object') msg.artifact = mp.artifact; if (Array.isArray(mp.artifacts)) msg.artifacts = mp.artifacts;
         // Claude md (ДИАГНОСТИКА — только измерение под гейтом aiCmDebug): роль хода на входе
         // точки и после нормализации. Маркер claude-role-* SCOPED по сайту: живой замер идёт по
         // Claude-цепочке, а на прочих сайтах роль хода — не предмет этого маркера (чужие строки

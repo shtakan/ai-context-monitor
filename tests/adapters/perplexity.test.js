@@ -22,17 +22,20 @@ describe('Perplexity thread parser', () => {
       expect(result.messages[3].role).toBe('assistant');
     });
 
-    it('текст пользователя равен query_str; текст ассистента содержит и текст ответа, и snippet источника', () => {
+    it('текст ассистента — только ответ; источники — отдельным полем sources', () => {
       const result = parsePerplexityThread(fixture);
 
       // user #1
       expect(result.messages[0].text).toBe('Синтетический вопрос один?');
 
-      // assistant #1: текст ответа + сниппет источника
+      // assistant #1: текст ответа + источник полем
       const assistant1 = result.messages[1];
       expect(assistant1.role).toBe('assistant');
-      expect(assistant1.text).toContain('Синтетический ответ один.');
-      expect(assistant1.text).toContain('[source] Синтетический источник: Синтетический сниппет источника.');
+      expect(assistant1.text).toBe('Синтетический ответ один.');
+      expect(assistant1.text).not.toContain('[source]');
+      expect(assistant1.sources).toEqual([
+        { title: 'Синтетический источник', url: 'https://example.com/1', snippet: 'Синтетический сниппет источника.' }
+      ]);
 
       // user #2
       expect(result.messages[2].text).toBe('Синтетический вопрос два?');
@@ -42,8 +45,11 @@ describe('Perplexity thread parser', () => {
       expect(assistant2.role).toBe('assistant');
       expect(assistant2.text).toContain('Синтетический ответ два (часть 1).');
       expect(assistant2.text).toContain('Синтетический ответ два (часть 2).');
-      expect(assistant2.text).toContain('[source] Второй источник: Сниппет второго источника.');
-      expect(assistant2.text).toContain('[source] Третий источник: Сниппет третьего источника.');
+      expect(assistant2.text).not.toContain('[source]');
+      expect(assistant2.sources).toEqual([
+        { title: 'Второй источник', url: 'https://example.com/2', snippet: 'Сниппет второго источника.' },
+        { title: 'Третий источник', url: 'https://example.com/3', snippet: 'Сниппет третьего источника.' }
+      ]);
     });
 
     it('пустые entries → messages.length === 0', () => {
@@ -254,36 +260,39 @@ describe('Perplexity thread parser', () => {
       expect(result.messages).toHaveLength(1);
     });
 
-    it('источник без name и snippet → не попадает в ответ', () => {
+    it('источник только с url → попадает в sources (текст пустой)', () => {
       const result = parsePerplexityThread({
         'entries ': [{ 'query_str ': 'q', 'blocks ': [{ 'web_result_block ': { 'web_results': [{ 'url': 'https://x' }] } }] }]
       });
-      expect(result.messages).toHaveLength(1);
+      expect(result.messages).toHaveLength(2);
+      expect(result.messages[1].text).toBe('');
+      expect(result.messages[1].sources).toEqual([{ url: 'https://x' }]);
     });
 
-    it('источник только со snippet → [source] без имени', () => {
+    it('источник только со snippet → sources без title', () => {
       const result = parsePerplexityThread({
         'entries ': [{ 'query_str ': 'q', 'blocks ': [{ 'web_result_block ': { 'web_results': [{ 'snippet': 'сниппет' }] } }] }]
       });
       expect(result.messages).toHaveLength(2);
-      expect(result.messages[1].text).toBe('[source] сниппет');
+      expect(result.messages[1].text).toBe('');
+      expect(result.messages[1].sources).toEqual([{ snippet: 'сниппет' }]);
     });
 
-    it('источник только с name → [source] с именем (хвостовой пробел срезан trim)', () => {
+    it('источник только с name → sources с title', () => {
       const result = parsePerplexityThread({
         'entries ': [{ 'query_str ': 'q', 'blocks ': [{ 'web_result_block ': { 'web_results': [{ 'name': 'Источник' }] } }] }]
       });
-      expect(result.messages[1].text).toBe('[source] Источник:');
+      expect(result.messages[1].sources).toEqual([{ title: 'Источник' }]);
     });
 
-    it('источник с name и snippet → «имя: сниппет»', () => {
+    it('источник с name и snippet → title + snippet', () => {
       const result = parsePerplexityThread({
         'entries ': [{
           'query_str ': 'q',
           'blocks ': [{ 'web_result_block ': { 'web_results': [{ 'name': 'Источник', 'snippet': 'сниппет' }] } }]
         }]
       });
-      expect(result.messages[1].text).toBe('[source] Источник: сниппет');
+      expect(result.messages[1].sources).toEqual([{ title: 'Источник', snippet: 'сниппет' }]);
     });
 
     it('блоки с не-объектными wfBlock/wrBlock → getTrim на не-объекте, ответа нет', () => {

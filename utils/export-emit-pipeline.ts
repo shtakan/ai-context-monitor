@@ -955,6 +955,11 @@ export function normalizeExportMessages(raw: unknown): Message[] {
         aiCmDiagLine('claude-role-normalize', { inputRole: m.role, outputRole: norm.role });
       }
       if (typeof m.hiddenReasoning === 'string' && m.hiddenReasoning) norm.hiddenReasoning = m.hiddenReasoning;
+      // 2.2/фаза 4: секции — данные сообщения, не текст; сохраняем при нормализации.
+      if (Array.isArray(m.sources)) norm.sources = m.sources;
+      if (m.artifact && typeof m.artifact === 'object') norm.artifact = m.artifact;
+      if (Array.isArray(m.artifacts)) norm.artifacts = m.artifacts;
+      if (typeof m.turnId === 'string' && m.turnId) norm.turnId = m.turnId;
       out.push(norm);
     }
   } catch (e) { swallow(e, 'export-utils:normalizeExportMessages'); }
@@ -1780,6 +1785,10 @@ export function prepareExportMessages(raw: unknown, onMessageDedupe?: MessageDed
       var res = dedupeIntraMessage({ role: role, text: text });
       var next: Message = { role: role, text: res.text };
       if (m.id != null) next.id = m.id;
+      // 2.2/фаза 4: секции едут рядом с text, а не теряются в dedupe.
+      if (Array.isArray(m.sources)) next.sources = m.sources;
+      if (m.artifact && typeof m.artifact === 'object') next.artifact = m.artifact;
+      if (Array.isArray(m.artifacts)) next.artifacts = m.artifacts;
       out.push(next);
       if (res.removedBlocks > 0) {
         intraRemoved += res.removedBlocks;
@@ -1807,6 +1816,9 @@ export function prepareExportMessages(raw: unknown, onMessageDedupe?: MessageDed
       text: stripMarkerResidue(typeof mk.text === 'string' ? mk.text : '')
     };
     if (mk.id != null) clean.id = mk.id;
+    if (Array.isArray(mk.sources)) clean.sources = mk.sources;
+    if (mk.artifact && typeof mk.artifact === 'object') clean.artifact = mk.artifact;
+    if (Array.isArray(mk.artifacts)) clean.artifacts = mk.artifacts;
     cleaned.push(clean);
   }
   return {

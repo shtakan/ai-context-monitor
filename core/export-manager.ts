@@ -266,7 +266,7 @@ function aiCmCollectExportSource(): AiCmExportMessage[] {
         var dm = lastDetailMessages[i] || {};
         var r = dm.role || '';
         // FIX (Claude md): 'human' (парсер Claude) нормализуется в 'user' ровно как 'user'.
-        var msg: AiCmExportMessage = { role: (r === 'user' || r === 'human') ? 'user' : 'assistant', text: sanitizeGeminiText(texts[i]) };
+        var msg: AiCmExportMessage = { role: (r === 'user' || r === 'human') ? 'user' : 'assistant', text: sanitizeGeminiText(texts[i]) }; if (Array.isArray((dm as any).sources)) msg.sources = (dm as any).sources; if ((dm as any).artifact && typeof (dm as any).artifact === 'object') msg.artifact = (dm as any).artifact; if (Array.isArray((dm as any).artifacts)) msg.artifacts = (dm as any).artifacts;
         // Claude md (ДИАГНОСТИКА — только измерение под гейтом aiCmDebug): роль сетевого снимка
         // и роль после нормализации. Маркер claude-role-* SCOPED по сайту (currentAdapter):
         // живой замер идёт по Claude-цепочке, чужие сайты строку этого маркера не получают.
