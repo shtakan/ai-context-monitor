@@ -6,7 +6,7 @@
 ## 1. Репозиторий
 
 - workspace: ai-context-monitor-clean
-- branch: `feature/2.2`; HEAD: `4a05e00` + `chore(state)` сверху; origin/main: `4e2916a`; ahead: 84; behind: 0; тег `v2.1.5` → `4e2916a`; тег `v2.1.4` → `d2194cc`, `v2.1.3` → `1e46a85`
+- branch: `feature/2.2`; HEAD: `4a05e00` + `chore(state)` сверху; origin/main: `4e2916a`; ahead: 85; behind: 0; тег `v2.1.5` → `4e2916a`; тег `v2.1.4` → `d2194cc`, `v2.1.3` → `1e46a85`
 - version: `2.1.5` (manifest.json, package.json, package-lock.json, футер docs/index.html, PROJECT_HANDOFF L199); релизный коммит — ожидает публикации; tag `v2.1.5`/GitHub Release/AMO — за владельцем
 
 ## 2. Метрики (финальный прогон 2026-11-19, после последнего коммита)
@@ -69,7 +69,7 @@
 - релиз 2.1.4 2026-11-17: релизный коммит `c97122e` — 17 файлов (16 по прецеденту + `PROJECT_HANDOFF.md` L199, который был на 2.1.2 и требовался `docs-hygiene`), версия 2.1.4, CHANGELOG `[2.1.4]`, 7 пинов; счётчики 265/4355/7; prod `dist/content.js` 314 637 B, sha256 `2b86f83e…`; tag/Release — опубликованы, AMO — пакет готов
 - GitHub Release `v2.1.4` опубликован: тег `v2.1.4` → `d2194cc`, asset `ai-context-monitor-v2.1.4.zip` 3 418 475 B sha256 `5d119b…` (72 entry, 0 tsconfig/.map/backslash, manifest 2.1.4); appendix v138 A–D (`bd8afeb`/`a1acd28`/`09c4efc`/`d45975a`, пин корпуса 123 → 124); AMO 2.1.4 одобрена 2026-11-17 (0 ошибок / 7 предупреждений), видима всем; пакет — `acceptance/2.1.4`
 - docs(readme) 2026-11-17 (`36bca89`): README/README.en — Firefox/AMO, 8 платформ, каналы распространения; ссылка `https://addons.mozilla.org/firefox/addon/ai-context-monitor/`; docs-hygiene + i18n 93/93
-- P3 (не блокирует): шапка автоэкспорта MD — `Платформа: google_search`, ручного — `Google Search AI`; расхождение путей, к BUG-M не относится. `partialReason` при union исправлен 2026-11-21: конкретные `passive-incomplete:*` сохраняются (см. запись выше).
+- P3 MD-метка (закрыто 2026-11-21): авто- и ручной MD используют `Google Search AI` — авто через `aiCmPlatformLabelForFile`, ручной через `siteLabels`; живые `01-gsa/raw/*.md` и `11-final-2.1.5/01-gsa/raw/export-*.md` показывают `Платформа: Google Search AI`, расхождение не воспроизводится (BIG-05). `partialReason` при union исправлен 2026-11-21: конкретные `passive-incomplete:*` сохраняются (см. запись выше).
 - живая приёмка 2.1.3 (2026-11-17, артефакты `acceptance/2.1.3`): GSA — 16 сообщений (8u/8a), `partial` отсутствует, 6 437 / 5 %, old→new, имя без `[LOW CONFIDENCE]_`; Qwen — `qwen4-max`, limit 1 000 000, 12 (6u/6a), 25 415 / 2.5 %, `partial` отсутствует; лог: `gsa-latch point=set`, `baseComplete=1`, `badge-update … model=qwen4-max`
 - живая приёмка 2.1.2 (тред `e1020dba`): 165 сообщений, 99 229 / 77.5 %, «Ещё N» — 0, карточек файла нет
 - `RELEASE_CHECKLIST.md` — архив с 2026-11-16; гейт P0/P1 — в STANDARDS-MATRIX
