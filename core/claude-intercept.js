@@ -1076,7 +1076,7 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
         }
       }
 
-      var text = textParts.join('\n').trim();
+      var text = textParts.join('\n').trim(); var msgArtifacts = (sender === 'assistant') ? claudeArtifactsFromBlocks(blocks, msg) : [];
       // v50/v52: user-узел включается при непустых files ИЛИ attachments (pasted-чипы)
       var atts = (sender !== 'assistant' && Array.isArray(msg.attachments)) ? msg.attachments : [];
       var filesN = (sender !== 'assistant' && Array.isArray(msg.files)) ? msg.files.length : 0;
@@ -1093,9 +1093,9 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
           ' keys=' + nodeKeys +
           ' → ' + ((text || hasFiles) ? 'included' : 'skipped(no-text-no-files)'));
       }
-      if (text || hasFiles) {
+      if (text || hasFiles || msgArtifacts.length) {
         if (msg.uuid) uuidIdx[String(msg.uuid)] = resultMessages.length;
-        resultMessages.push({ role: sender === 'assistant' ? 'assistant' : 'human', text: text });
+        var resultMsg = { role: sender === 'assistant' ? 'assistant' : 'human', text: text }; if (msgArtifacts.length) resultMsg.artifacts = msgArtifacts; resultMessages.push(resultMsg);
         // attach-only узел кладёт пустую строку — параллельность pieces/ids сохранена,
         // пустая строка в экспорт не выводится (normalize отфильтрует)
         pieces.push(text);
@@ -1811,4 +1811,143 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
   }, 1500);
 
   console.log('[claude-intercept] перехватчик Claude установлен (GET истории + SSE completion → vf5 + bootstrap, MAIN world, document_start)');
+
+  // =====================================================================================
+  // BUG-09/фаза 4: artifact из tool-блоков Claude.
+  // Живая форма (fixture cb5317de…): в chat_messages НЕТ массива artifacts;
+  // метаданные лежат в tool_use(Artifact).structured_content и
+  // tool_result.display_content (artifact_id/published_artifact_id/title), а
+  // исходник — в tool_use(create_file).input.file_text. Собираем их в
+  // per-message artifacts[{name,mime,content,turnId}]; дальше секции/билдеры
+  // печатают artifacts верхнеуровнево, тело ответа не меняется.
+  // Функция объявлена в конце IIFE (hoisted): строки catch-пинов не сдвинуты.
+  // =====================================================================================
+  function claudeArtifactBaseName(path) {
+    var s = String(path == null ? '' : path);
+    var parts = s.split(/[\\/]/);
+    return parts.length ? String(parts[parts.length - 1] || '') : '';
+  }
+
+  function claudeArtifactMime(path, explicit) {
+    var mime = String(explicit == null ? '' : explicit).trim();
+    if (mime) return mime;
+    var p = String(path == null ? '' : path).toLowerCase();
+    if (/\.html?$/.test(p)) return 'text/html';
+    if (/\.svg$/.test(p)) return 'image/svg+xml';
+    if (/\.md$/.test(p)) return 'text/markdown';
+    if (/\.css$/.test(p)) return 'text/css';
+    if (/\.json$/.test(p)) return 'application/json';
+    if (/\.csv$/.test(p)) return 'text/csv';
+    if (/\.jsx?$/.test(p)) return 'text/javascript';
+    if (/\.tsx?$/.test(p)) return 'text/typescript';
+    if (/\.py$/.test(p)) return 'text/x-python';
+    return '';
+  }
+
+  function claudeArtifactsFromBlocks(blocks, msg) {
+    var list = Array.isArray(blocks) ? blocks : [];
+    var metas = [];
+    var files = [];
+
+    function asObj(v) { return (v && typeof v === 'object') ? v : null; }
+
+    function addMeta(raw) {
+      var o = asObj(raw);
+      if (!o) return;
+      var id = o.artifact_id || o.published_artifact_id || o.publishedArtifactId || '';
+      var title = (typeof o.title === 'string') ? o.title : ((typeof o.name === 'string') ? o.name : '');
+      var path = (typeof o.path === 'string') ? o.path : ((typeof o.file_path === 'string') ? o.file_path : '');
+      var url = o.published_url || o.open_url || o.url || '';
+      if (!id && !title) return;
+      metas.push({ id: String(id || ''), title: String(title || ''), path: String(path || ''), url: String(url || '') });
+    }
+
+    function scanMeta(value, depth) {
+      if (depth > 3 || !value || typeof value !== 'object') return;
+      if (Array.isArray(value)) {
+        for (var a = 0; a < value.length; a++) scanMeta(value[a], depth + 1);
+        return;
+      }
+      addMeta(value);
+      var keys = ['structured_content', 'display_content', 'artifact', 'file'];
+      for (var k = 0; k < keys.length; k++) {
+        if (value[keys[k]]) scanMeta(value[keys[k]], depth + 1);
+      }
+    }
+
+    function addFile(raw) {
+      var o = asObj(raw);
+      if (!o) return;
+      var content = (typeof o.file_text === 'string') ? o.file_text
+        : ((typeof o.content === 'string') ? o.content : '');
+      if (!content) return;
+      files.push({
+        path: String(o.path || o.file_path || o.filename || o.name || ''),
+        mime: String(o.content_type || o.mime || o.mime_type || ''),
+        content: content
+      });
+    }
+
+    for (var i = 0; i < list.length; i++) {
+      var b = list[i];
+      if (!b || typeof b !== 'object') continue;
+      if (b.type === 'tool_use') {
+        var input = asObj(b.input) || {};
+        var name = String(b.name || '');
+        if (name === 'create_file' || name === 'create_file_text' || name === 'createFile' || name === 'write_file') addFile(input);
+        if (b.structured_content) addMeta(b.structured_content);
+        if (input.structured_content) addMeta(input.structured_content);
+        if (name === 'Artifact') { addMeta(input); addMeta(b.structured_content); }
+      } else if (b.type === 'tool_result') {
+        if (b.display_content) scanMeta(b.display_content, 0);
+        if (b.structured_content) scanMeta(b.structured_content, 0);
+      }
+    }
+
+    // Метаданные одного артефакта могут прийти дважды (published_artifact_id в
+    // tool_result + artifact_id в Artifact): склеиваем по id и добираем поля.
+    var byKey = {};
+    var order = [];
+    for (var m = 0; m < metas.length; m++) {
+      var meta = metas[m];
+      var key = meta.id || (meta.title + '|' + meta.path);
+      if (!key) continue;
+      var cur = byKey[key];
+      if (!cur) {
+        byKey[key] = meta;
+        order.push(key);
+      } else {
+        if (!cur.title) cur.title = meta.title;
+        if (!cur.path) cur.path = meta.path;
+        if (!cur.url) cur.url = meta.url;
+      }
+    }
+
+    var usedFiles = {};
+    var out = [];
+    for (var oi = 0; oi < order.length; oi++) {
+      var item = byKey[order[oi]];
+      var file = null;
+      var fi;
+      if (item.path) {
+        for (fi = 0; fi < files.length; fi++) {
+          if (!usedFiles[fi] && files[fi].path === item.path) { file = files[fi]; usedFiles[fi] = true; break; }
+        }
+      }
+      if (!file) {
+        for (fi = 0; fi < files.length; fi++) {
+          if (!usedFiles[fi]) { file = files[fi]; usedFiles[fi] = true; break; }
+        }
+      }
+      var name = item.title || (file ? claudeArtifactBaseName(file.path) : '') || claudeArtifactBaseName(item.path) || item.id;
+      if (!name) continue;
+      var artifact = { name: name };
+      var mime = claudeArtifactMime(file ? file.path : item.path, file ? file.mime : '');
+      if (mime) artifact.mime = mime;
+      if (file && file.content) artifact.content = file.content;
+      if (msg && msg.uuid) artifact.turnId = String(msg.uuid);
+      out.push(artifact);
+    }
+    return out;
+  }
 })();

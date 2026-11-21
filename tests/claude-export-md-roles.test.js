@@ -839,6 +839,9 @@ function snapshotFromRaw(raw) {
     window: { dispatchEvent: function (ev) { ctx.__detail = ev.detail; } }
   };
   const src = fnDecl(CLAUDE_INTERCEPT_SRC, 'parseHistory') + '\n' +
+    fnDecl(CLAUDE_INTERCEPT_SRC, 'claudeArtifactBaseName') + '\n' +
+    fnDecl(CLAUDE_INTERCEPT_SRC, 'claudeArtifactMime') + '\n' +
+    fnDecl(CLAUDE_INTERCEPT_SRC, 'claudeArtifactsFromBlocks') + '\n' +
     fnDecl(CLAUDE_INTERCEPT_SRC, 'emitSnapshot') + '\n' +
     'var __parsed = parseHistory(__raw);\n' +
     'ctx.__parsed = __parsed;\n' +

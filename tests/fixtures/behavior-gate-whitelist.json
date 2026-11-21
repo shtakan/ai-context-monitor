@@ -223,6 +223,10 @@
     "count": 10,
     "reason": "legacy-pin"
   },
+  "tests/claude-artifact-capture.test.js": {
+    "count": 1,
+    "reason": "vm-harness"
+  },
   "tests/claude-badge-settle.test.js": {
     "count": 14,
     "reason": "legacy-pin"
