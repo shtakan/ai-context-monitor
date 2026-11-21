@@ -509,6 +509,30 @@ async function writeDebugClassic() {
   return DEBUG_CLASSIC;
 }
 
+// 2.2/фаза 3: ESM-шов messages/turns грузится в MAIN до core/gemini-ingest.js.
+// Исходник чистый (без import), поэтому classicIife отдаёт IIFE без require.
+const MESSAGES_TURNS_SOURCE = 'utils/messages/turns.ts';
+const MESSAGES_TURNS_CLASSIC = 'utils/messages/turns.js';
+const MESSAGES_TURNS_NS = '__aiCmMessagesTurnsClassic';
+
+/**
+ * dist/utils/messages/turns.js: classic-артефакт шва turns.
+ * Публикует и плоские имена (Object.assign из classicIife), и namespace
+ * globalThis.AiCmMessagesTurns, который читает core/gemini-ingest.js.
+ */
+async function writeMessagesTurnsClassic() {
+  const src = fs.readFileSync(abs(MESSAGES_TURNS_SOURCE), 'utf8').replace(/^\uFEFF/, '');
+  let classic = await classicIife(src, MESSAGES_TURNS_CLASSIC, MESSAGES_TURNS_NS);
+  classic += '\nglobalThis.AiCmMessagesTurns = ' + MESSAGES_TURNS_NS + ';\n';
+  if (/^\s*(?:import|export)\b/m.test(classic)) {
+    fail(MESSAGES_TURNS_CLASSIC + ': classic-артефакт всё ещё содержит import/export');
+  }
+  const to = path.join(DIST, MESSAGES_TURNS_CLASSIC);
+  await fsp.mkdir(path.dirname(to), { recursive: true });
+  await fsp.writeFile(to, classic, 'utf8');
+  return MESSAGES_TURNS_CLASSIC;
+}
+
 // Ph2, шаг gemini-batchexecute-parser.js: ESM-исходник и путь, под которым его ждут
 // регистрации world:'MAIN' в core/background.ts (регистрация ai-cm-gemini-intercept-v18).
 const PARSER_SOURCE = 'utils/gemini-batchexecute-parser.ts';
@@ -1023,6 +1047,9 @@ async function copyAssets() {
     // v12); ESM-исходник уходит в бандл SW статическим import'ом из core/background.ts,
     // а classic-артефакт для MAIN-мира выводит writeGeminiLogicClassic ниже.
     if (r === GEMINI_LOGIC_CLASSIC) continue;
+    // 2.2/фаза 3: utils/messages/turns.js — classic-артефакт ESM-шва,
+    // его выводит writeMessagesTurnsClassic() ниже, а не копирование исходника.
+    if (r === MESSAGES_TURNS_CLASSIC) continue;
     // TS migration, step 1: the runtime registration keeps its `.js` name while
     // the source it points at may be `.ts`; the dist artifact is still `<name>.js`.
     const source = scriptSourcePath(r);
@@ -1036,6 +1063,7 @@ async function copyAssets() {
     copied.push(toRel);
   }
   copied.push(await writeDebugClassic());
+  copied.push(await writeMessagesTurnsClassic());
   copied.push(await writeParserClassic());
   copied.push(await writeGsaParserClassic());
   copied.push(await writeGeminiLogicClassic());

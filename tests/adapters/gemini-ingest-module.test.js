@@ -273,19 +273,21 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
 });
 
 describe('Phase 3 шаг 12: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.ts — id -v18, gemini-files перед ingest, -v13 снят', () => {
+  test('S1: регистрация в core/background.ts — id -v19, messages/turns перед ingest, -v18 снят', () => {
     const bg = readFile('core/background.ts');
-    expect(bg).toContain("'ai-cm-gemini-intercept-v18'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v19'");
     expect(bg).toContain("'core/gemini-ingest.js'");
+    expect(bg).toContain("'utils/messages/turns.js'");
     // js[] собран ровно в этом порядке: sse → pagination → loader-scroll → files → ingest → ядро
     expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-active-refresh.js', 'core/gemini-state.js', 'core/gemini-intercept.js'");
     // модуль обязан грузиться РАНЬШЕ ядра: ядро связывает его при загрузке
+    expect(bg.indexOf("'utils/messages/turns.js'")).toBeLessThan(bg.indexOf("'core/gemini-ingest.js'"));
     expect(bg.indexOf("'core/gemini-files.js'")).toBeLessThan(bg.indexOf("'core/gemini-ingest.js'"));
     expect(bg.indexOf("'core/gemini-loader-scroll.js'")).toBeLessThan(bg.indexOf("'core/gemini-ingest.js'"));
     expect(bg.indexOf("'core/gemini-ingest.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
     // MV3 не перечитывает js[] под существующим id — прежний id обязан быть снят
-    // Phase 3, шаг 14: бамп -v17 → -v18, поэтому в unregister добавлен -v17.
-    expect(bg).toContain("'ai-cm-gemini-intercept-v11', 'ai-cm-gemini-intercept-v12', 'ai-cm-gemini-intercept-v13', 'ai-cm-gemini-intercept-v14', 'ai-cm-gemini-intercept-v15', 'ai-cm-gemini-intercept-v16', 'ai-cm-gemini-intercept-v17']");
+    // 2.2/фаза 3: бамп -v18 → -v19, поэтому в unregister добавлен -v18.
+    expect(bg).toContain("'ai-cm-gemini-intercept-v11', 'ai-cm-gemini-intercept-v12', 'ai-cm-gemini-intercept-v13', 'ai-cm-gemini-intercept-v14', 'ai-cm-gemini-intercept-v15', 'ai-cm-gemini-intercept-v16', 'ai-cm-gemini-intercept-v17', 'ai-cm-gemini-intercept-v18'");
   });
 
   test('S2: bind-контракт полон — 72 имени переданы ядром и все 72 используются модулем', () => {

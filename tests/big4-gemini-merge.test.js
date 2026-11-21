@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 
 const SRC = fs.readFileSync(path.join(__dirname, '..', 'core', 'gemini-ingest.js'), 'utf8');
+const { mergeTurnSegments } = require('../utils/messages/turns.ts');
 
 function fn(name) {
   const start = SRC.indexOf('function ' + name + '(');
@@ -25,7 +26,7 @@ function fn(name) {
   throw new Error('BIG-04: unbalanced declaration: ' + name);
 }
 
-const merge = new Function(fn('aiCmMergeTurnSegments') + '\nreturn aiCmMergeTurnSegments;')();
+const merge = mergeTurnSegments;
 
 describe('BIG-04: склейка сегментов хода Gemini', () => {
   test('несколько assistant подряд → один assistant с разделителем', () => {
@@ -62,6 +63,31 @@ describe('BIG-04: склейка сегментов хода Gemini', () => {
   test('не-массив возвращается как есть', () => {
     expect(merge(null)).toBe(null);
     expect(merge([])).toEqual([]);
+  });
+
+  test('Deep Research: разные turnId подряд — НЕ склеиваются', () => {
+    const out = merge([
+      { role: 'assistant', text: 'Отчёт 1', turnId: 'r_aaa' },
+      { role: 'assistant', text: 'Отчёт 2', turnId: 'r_bbb' },
+      { role: 'assistant', text: 'Отчёт 3', turnId: 'r_ccc' }
+    ]);
+    expect(out.map((m) => m.text)).toEqual(['Отчёт 1', 'Отчёт 2', 'Отчёт 3']);
+  });
+
+  test('тот же turnId / turnId отсутствует — прежняя склейка BIG-04', () => {
+    const same = merge([
+      { role: 'assistant', text: 'A', turnId: 'r_aaa' },
+      { role: 'assistant', text: 'B', turnId: 'r_aaa' }
+    ]);
+    expect(same).toHaveLength(1);
+    expect(same[0].text).toBe('A\n\nB');
+
+    const noIds = merge([
+      { role: 'assistant', text: 'A' },
+      { role: 'assistant', text: 'B' }
+    ]);
+    expect(noIds).toHaveLength(1);
+    expect(noIds[0].text).toBe('A\n\nB');
   });
 });
 

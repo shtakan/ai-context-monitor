@@ -1519,10 +1519,19 @@
   if (typeof window !== 'undefined') { window.AiCmGeminiIngest = Fn; }
 }());
 
-// BIG-04 (2.1.5): один ход = максимум user + assistant. splitTurnMessages может вернуть
-// несколько assistant-сегментов одного ответа (thinking/слои) — склеиваем подряд идущие
-// сегменты одной роли разделителем '\n\n'. Так 1 ответ = 1 assistant, а не 6.
+// BIG-04 (2.1.5) → 2.2/фаза 3: склейка сегментов хода переехала в шов
+// utils/messages/turns.ts. В MAIN-мир её привозит classic-артефакт
+// utils/messages/turns.js (build.mjs: writeMessagesTurnsClassic), который
+// публикует globalThis.AiCmMessagesTurns. Локальный legacy-фолбэк оставлен
+// для срез-песочниц тестов и старых регистраций, где артефакта нет.
 function aiCmMergeTurnSegments(segs) {
+  var api = (typeof globalThis !== 'undefined' && globalThis.AiCmMessagesTurns)
+    ? globalThis.AiCmMessagesTurns : null;
+  if (api && typeof api.mergeTurnSegments === 'function') return api.mergeTurnSegments(segs);
+  return aiCmMergeTurnSegmentsLegacy(segs);
+}
+
+function aiCmMergeTurnSegmentsLegacy(segs) {
   if (!Array.isArray(segs) || !segs.length) return segs;
   var out = [];
   for (var i = 0; i < segs.length; i++) {

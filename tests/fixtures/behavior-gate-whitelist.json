@@ -76,7 +76,7 @@
     "reason": "legacy-pin"
   },
   "tests/adapters/gemini-ingest-module.test.js": {
-    "count": 34,
+    "count": 36,
     "reason": "vm-harness"
   },
   "tests/adapters/gemini-loader-fired-after-await.test.js": {
