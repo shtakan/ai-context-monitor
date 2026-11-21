@@ -795,8 +795,14 @@ function loadStats() {
   try {
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
       var tab = tabs && tabs[0];
-      if (!tab || !tab.url) {
+      if (!tab) {
         showNoData(aiCmI18nMessage('options_no_active_tab', 'Нет активной вкладки'));
+        return;
+      }
+      if (!tab.url) {
+        // BUG-11/T2: вне host_permissions Chrome не отдаёт url — это чужой хост,
+        // а не «нет активной вкладки».
+        showNoData(aiCmI18nMessage('options_open_supported_site', 'Откройте поддерживаемый сайт'));
         return;
       }
 

@@ -347,6 +347,7 @@ function makeSpa(startConvId, startPath, over) {
 // Холодный вход: РЕАЛЬНЫЙ aiCmResetStaleStateOnChatlessChatGptUrl (core/content.ts)
 // =====================================================================================
 const CHATLESS_SCOPE = 'with (ctx) { ' +
+  fnDecl(CONTENT, 'aiCmIsChatlessUrlForSite') + '\n' +
   fnDecl(CONTENT, 'aiCmResetStaleStateOnChatlessChatGptUrl') +
   '\n return { run: aiCmResetStaleStateOnChatlessChatGptUrl }; }';
 const makeChatlessApi = new Function('ctx', CHATLESS_SCOPE);
@@ -468,13 +469,39 @@ describe('O-34 D2: прямой вход на URL без /c/<id> даёт пус
     expect(h.st.removed).toEqual([]);                     // снимок валидного чата не удаляется
   });
 
-  test('D2: гейт — только chatgpt; прочие сервисы байтово прежние (id в URL не обязателен)', () => {
-    ['gemini', 'google_search', 'claude', 'deepseek', 'perplexity'].forEach(function (site) {
+  test('D2: прочие сервисы байтово прежние (id в URL не обязателен)', () => {
+    ['google_search', 'claude', 'deepseek', 'perplexity'].forEach(function (site) {
       const h = makeChatless({ site: site, pathname: '/' });
       expect(h.run()).toBe(false);
       expect(h.resets).toEqual([]);
       expect(h.badgeResets).toEqual([]);
     });
+  });
+
+  test('D2 BUG-11: Gemini /app без id — сброс; /app/<id> — no-op', () => {
+    const home = makeChatless({ site: 'gemini', pathname: '/app' });
+    expect(home.run()).toBe(true);
+    expect(home.resets).toEqual(['/app']);
+    expect(home.badgeResets).toEqual(['BADGE_RESET']);
+
+    const chat = makeChatless({ site: 'gemini', pathname: '/app/' + ID1 });
+    expect(chat.run()).toBe(false);
+    expect(chat.resets).toEqual([]);
+    expect(chat.st.removed).toEqual([]);
+  });
+
+  test('D2 BUG-11: AI Studio /prompts/new_chat — сброс; /prompts/<id> — no-op', () => {
+    ['/prompts/new_chat', '/prompts', '/app/prompts/new_chat'].forEach(function (p) {
+      const h = makeChatless({ site: 'aistudio', pathname: p });
+      expect(h.run()).toBe(true);
+      expect(h.resets).toEqual([p]);
+      expect(h.badgeResets).toEqual(['BADGE_RESET']);
+    });
+
+    const chat = makeChatless({ site: 'aistudio', pathname: '/prompts/' + ID1 });
+    expect(chat.run()).toBe(false);
+    expect(chat.resets).toEqual([]);
+    expect(chat.st.removed).toEqual([]);
   });
 
   test('D2: дорисовки нет — супрессия взведена, контроль без неё рисует (стенд не вырожден)', () => {
@@ -507,8 +534,11 @@ describe('O-34 D2: прямой вход на URL без /c/<id> даёт пус
     // typeof-гард — конвенция сьюта для срез-песочниц частичного скоупа (initialize-стенд O-35)
     expect(init).toContain("if (typeof aiCmResetStaleStateOnChatlessChatGptUrl === 'function') {");
     const fn = fnDecl(CONTENT, 'aiCmResetStaleStateOnChatlessChatGptUrl');
-    expect(fn).toContain("currentAdapter.siteName !== 'chatgpt'");
-    expect(fn).toContain('if (getCurrentConvId()) return false;');
+    const helper = fnDecl(CONTENT, 'aiCmIsChatlessUrlForSite');
+    expect(helper).toContain("site === 'chatgpt'");
+    expect(helper).toContain("site === 'gemini'");
+    expect(helper).toContain("site === 'aistudio'");
+    expect(fn).toContain('aiCmIsChatlessUrlForSite(');
     expect(fn).toContain('resetConversationState();');
     expect(fn).toContain("chrome.runtime.sendMessage({ type: 'BADGE_RESET' })");
   });

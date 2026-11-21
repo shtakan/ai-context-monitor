@@ -413,8 +413,8 @@ window.addEventListener('ai-cm-conversation-changed', function () {
 // остаётся байтово прежним (как и щит O-1, скоуп которого тоже chatgpt).
 function aiCmResetStaleStateOnChatlessChatGptUrl(): boolean {
   try {
-    if (!currentAdapter || currentAdapter.siteName !== 'chatgpt') return false;
-    if (getCurrentConvId()) return false; // в URL есть /c/<id> — это разговор, сбрасывать нечего
+    if (!currentAdapter) return false; var site = currentAdapter.siteName;
+    if (!aiCmIsChatlessUrlForSite(site, String((typeof location !== 'undefined' && location && location.pathname) || ''), getCurrentConvId)) return false;
     resetConversationState();
     try { chrome.runtime.sendMessage({ type: 'BADGE_RESET' } as AiCmSwBadgeResetRequest).catch(function () { }); } catch (eBr) { }
     debugLog('log', '[AI CM][spa] O-34: URL без /c/<id> — состояние виджета и бейдж сброшены');
@@ -5318,5 +5318,21 @@ function aiCmV2MetricsProbe(
     baseSource: 'base:complete',
     domSource: 'dom:visible'
   };
+}
+
+/**
+ * BUG-11: URL без разговора для сайтов с явной домашней формой.
+ * chatgpt — по отсутствию /c/<id>; gemini — ровно /app; aistudio — /prompts
+ * и /prompts/new_chat. Остальные сайты сюда не входят (поведение прежнее).
+ * @param site siteName адаптера
+ * @param path pathname вкладки
+ * @param convIdFn функция текущего convId (вызывается только для chatgpt)
+ * @returns true — это дом/новый чат, состояние прошлой сессии надо сбросить
+ */
+function aiCmIsChatlessUrlForSite(site: string, path: string, convIdFn: (() => string | null) | null): boolean {
+  if (site === 'chatgpt') return !(typeof convIdFn === 'function' && convIdFn());
+  if (site === 'gemini') return /^\/app\/?$/.test(String(path || ''));
+  if (site === 'aistudio') return /^(?:\/app)?\/prompts(?:\/new_chat)?\/?$/.test(String(path || ''));
+  return false;
 }
 

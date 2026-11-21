@@ -216,7 +216,7 @@ function setupDom() {
   });
 }
 
-function createChromeMock(initialLocal, activeTabUrl) {
+function createChromeMock(initialLocal, activeTabUrl, tabWithoutUrl) {
   const store = Object.assign({}, initialLocal || {});
   const listeners = [];
   return {
@@ -241,7 +241,9 @@ function createChromeMock(initialLocal, activeTabUrl) {
         onChanged: { addListener: function (fn) { listeners.push(fn); } }
       },
       tabs: {
-        query: function (q, cb) { cb(activeTabUrl ? [{ id: 1, url: activeTabUrl }] : []); },
+        query: function (q, cb) {
+          cb(tabWithoutUrl ? [{ id: 1 }] : (activeTabUrl ? [{ id: 1, url: activeTabUrl }] : []));
+        },
         create: function () { },
         sendMessage: function (a, b, cb) { if (typeof cb === 'function') cb(undefined); }
       }
@@ -251,8 +253,8 @@ function createChromeMock(initialLocal, activeTabUrl) {
   };
 }
 
-function mountOptions(initialLocal, activeTabUrl) {
-  const m = createChromeMock(initialLocal, activeTabUrl);
+function mountOptions(initialLocal, activeTabUrl, tabWithoutUrl) {
+  const m = createChromeMock(initialLocal, activeTabUrl, tabWithoutUrl);
   global.chrome = m.chrome;
   require('./helpers/load-options.js').loadOptions();
   document.dispatchEvent(new Event('DOMContentLoaded'));
@@ -345,6 +347,12 @@ describe('BUG-11: состояния UI попапа', () => {
   test('неподдерживаемый хост → «Откройте поддерживаемый сайт»', () => {
     mountOptions({}, 'https://example.com/page');
     expect(document.getElementById('stat-site').textContent).toContain('Откройте поддерживаемый сайт');
+  });
+
+  test('T2: Chrome не отдал url (чужой хост) → «Откройте…», не «Нет активной вкладки»', () => {
+    mountOptions({}, null, true);
+    expect(document.getElementById('stat-site').textContent).toContain('Откройте поддерживаемый сайт');
+    expect(document.getElementById('stat-site').textContent).not.toContain('Нет активной вкладки');
   });
 
   test('0 токенов (лёгкий/пустой тред) → «—», а не «0%»', () => {
