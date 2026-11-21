@@ -2330,10 +2330,23 @@ function aiCmProjectFileMessages(msgs: AiCmExportMessage[], site: string) {
   // без моста возвращаем вход без проекции (пины этих срезов инжектируют мост сами).
   var project = (typeof aiCmExportProjectFileMessages === 'function') ? aiCmExportProjectFileMessages : null;
   if (!project) return { messages: Array.isArray(msgs) ? msgs : [], mode: '' };
+  // BUG-08/фаза 4: сервисные эхо-обёртки GSA снимаются только на проекции файла
+  // («Ответ в режиме ИИ…», «Вы отправили … запрос "Q"»); capture/метрики не трогаются.
+  var cleanText = null;
+  try {
+    var gsaEcho = (site === 'google_search' && typeof window !== 'undefined' && window.GoogleFolwrUtils) ? window.GoogleFolwrUtils : null;
+    if (gsaEcho && typeof gsaEcho.stripGsaUserEcho === 'function' && typeof gsaEcho.stripGsaAssistantEcho === 'function') {
+      var gsaUtils = gsaEcho;
+      cleanText = function (text: string, msg: AiCmExportMessage): string {
+        return (msg && (msg.role === 'user' || msg.role === 'human')) ? gsaUtils.stripGsaUserEcho(text) : gsaUtils.stripGsaAssistantEcho(text);
+      };
+    }
+  } catch (eGsaEcho) { cleanText = null; }
   return project(msgs, {
     includeHidden: (typeof aiCmIncludeHiddenInExport !== 'undefined') && aiCmIncludeHiddenInExport === true,
     hiddenEffective: (typeof aiCmHiddenExportEffectiveOn === 'function') ? aiCmHiddenExportEffectiveOn : null,
-    sanitize: (typeof aiCmSanitizeEmitUserTexts === 'function') ? aiCmSanitizeEmitUserTexts : null
+    sanitize: (typeof aiCmSanitizeEmitUserTexts === 'function') ? aiCmSanitizeEmitUserTexts : null,
+    cleanText: cleanText
   });
 }
 

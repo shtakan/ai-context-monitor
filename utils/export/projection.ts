@@ -24,6 +24,8 @@ export interface ProjectionHooks {
   hiddenEffective?: ((copies: ExportMessage[]) => boolean) | null;
   /** Единственная точка санации (aiCmSanitizeEmitUserTexts) или null. */
   sanitize?: ((messages: ExportMessage[]) => ExportMessage[]) | null;
+  /** Платформенная чистка текста файла (GSA-эхо); null/нет — текст не трогается. */
+  cleanText?: ((text: string, message: ExportMessage) => string) | null;
 }
 
 export interface ProjectionResult {
@@ -51,6 +53,15 @@ export function projectFileMessages(
     copies.push((m && typeof m === 'object') ? Object.assign({}, m) : m);
   }
   const h = hooks || {};
+  if (typeof h.cleanText === 'function') {
+    for (let c = 0; c < copies.length; c++) {
+      const m = copies[c];
+      if (!m || typeof m !== 'object') continue;
+      const text = (typeof m.text === 'string') ? m.text : '';
+      const cleaned = h.cleanText(text, m);
+      if (typeof cleaned === 'string' && cleaned !== text) m.text = cleaned;
+    }
+  }
   const hiddenEffective = (typeof h.hiddenEffective === 'function')
     ? (h.hiddenEffective(copies) === true)
     : (h.includeHidden === true);

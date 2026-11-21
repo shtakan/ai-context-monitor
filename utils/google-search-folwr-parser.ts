@@ -140,6 +140,9 @@ export interface GoogleFolwrUtilsApi {
   answerTextOf: typeof answerTextOf;
   answerDomNodes: typeof answerDomNodes;
   isCodeBlockElement: typeof isCodeBlockElement;
+  // BUG-08/фаза 4: снятие сервисных эхо-обёрток GSA при проекции файла.
+  stripGsaUserEcho: typeof stripGsaUserEcho;
+  stripGsaAssistantEcho: typeof stripGsaAssistantEcho;
 }
 
 /**
@@ -1187,6 +1190,84 @@ function answerWrapperParts(text: unknown): { question: string; body: string } |
 }
 
 // =====================================================================================
+// BUG-08/фаза 4: сервисные эхо-обёртки GSA не должны попадать в тело файла.
+// Живой захват: user = «Вы отправили 1 изображения и сделали запрос "Q"»,
+// assistant = «Ответ в режиме ИИ, исходные файлы: …, исходный запрос: "Q"\n\nA».
+// Обёртки остаются в turns — на них держатся identity/полнота; чистятся только
+// тексты сообщений ПРИ ПРОЕКЦИИ файла (metrics/бейдж байтово прежние).
+// =====================================================================================
+/**
+ * Снимает пользовательскую эхо-обёртку GSA: «Вы отправили … запрос "Q"» → Q.
+ * Меняет текст только при цельном совпадении (закрывающая кавычка в конце);
+ * иначе возвращает вход без изменений.
+ * @param {*} text Текст пользовательского хода.
+ * @returns {string} Чистый вопрос либо исходный текст.
+ */
+export function stripGsaUserEcho(text: unknown): string {
+  var t = String(text == null ? '' : text).trim();
+  if (!t) return t;
+  var m = /^Вы\s+отправили[\s\S]*?запрос\s*:?\s*"/i.exec(t.slice(0, 240));
+  if (!m) return t;
+  var rest = t.slice(m[0].length);
+  var close = rest.lastIndexOf('"');
+  if (close === -1) return t;
+  if (rest.slice(close + 1).trim()) return t;
+  var q = rest.slice(0, close).trim();
+  return q || t;
+}
+
+/**
+ * Разбор ответной эхо-обёртки GSA с необязательным сегментом «исходные файлы: …».
+ * answerWrapperParts ищет двоеточие только в первом сегменте и на такой форме
+ * останавливается; здесь опорная точка — слово «запрос" перед кавычкой вопроса.
+ * @param {string} text Текст ответа.
+ * @returns {{question: string, body: string}|null} Части обёртки либо null.
+ */
+function gsaAnswerEchoParts(text: string): { question: string; body: string } | null {
+  var m = /^Ответ\s+в\s+режиме\s+ИИ(?:[\s,]|$)[\s\S]*?запрос\s*:?\s*"/i.exec(text.slice(0, 300));
+  if (!m) return null;
+  var rest = text.slice(m[0].length);
+  var close = -1;
+  // Приоритет — кавычке, после которой тело начинается с новой строки: вопрос
+  // может содержать собственные кавычки («в папку "спам"…»).
+  for (var i = 0; i < rest.length; i++) {
+    if (rest.charAt(i) !== '"') continue;
+    var tail = rest.slice(i + 1);
+    if (/^[\r\n]/.test(tail) && isAnswerWrapperTail(tail)) { close = i; break; }
+  }
+  if (close === -1) {
+    for (var j = 0; j < rest.length; j++) {
+      if (rest.charAt(j) !== '"') continue;
+      if (isAnswerWrapperTail(rest.slice(j + 1))) { close = j; break; }
+    }
+  }
+  // Чистое эхо без тела: закрывающая кавычка в конце текста.
+  if (close === -1) {
+    var last = rest.lastIndexOf('"');
+    if (last !== -1 && !rest.slice(last + 1).trim()) close = last;
+  }
+  if (close === -1) return null;
+  var body = rest.slice(close + 1).replace(/^["»”']{0,2}/, '').replace(/^[\s.,:;-]+/, '');
+  return { question: rest.slice(0, close).trim(), body: body };
+}
+
+/**
+ * Снимает ответную эхо-обёртку GSA: «Ответ в режиме ИИ, … запрос: "Q"\n\nA» → A.
+ * Обёртка без тела ответа (чистое эхо) даёт пустую строку; проза, похожая на
+ * обёртку, но без кавычки-двоеточия, возвращается без изменений.
+ * @param {*} text Текст ответа.
+ * @returns {string} Тело ответа либо исходный текст.
+ */
+export function stripGsaAssistantEcho(text: unknown): string {
+  var t = String(text == null ? '' : text).trim();
+  if (!t) return t;
+  var wrapper = gsaAnswerEchoParts(t);
+  if (wrapper) return wrapper.body;
+  if (/^Ответ\s+в\s+режиме\s+ИИ(?:[\s,]|$)/i.test(t) && wrapperPrefix(t)) return '';
+  return t;
+}
+
+// =====================================================================================
 // BUG-G: A-only ход GSA — пользовательская реплика есть только в DOM-пузыре, а в
 // контейнере хода остался один h3.iMqumd с эхом-обёрткой («Ответ в режиме ИИ, исходный
 // запрос: "Q"»). Эхо — ТОЛЬКО валидатор пары: сам userText из него не синтезируется
@@ -1957,6 +2038,9 @@ if (typeof window !== 'undefined') {
     renderCodeBlock: renderCodeBlock,
     answerTextOf: answerTextOf,
     answerDomNodes: answerDomNodes,
-    isCodeBlockElement: isCodeBlockElement
+    isCodeBlockElement: isCodeBlockElement,
+    // BUG-08/фаза 4: эхо-обёртки GSA снимаются только на проекции файла.
+    stripGsaUserEcho: stripGsaUserEcho,
+    stripGsaAssistantEcho: stripGsaAssistantEcho
   };
 }
