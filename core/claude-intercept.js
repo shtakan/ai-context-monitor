@@ -1948,6 +1948,21 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
       if (msg && msg.uuid) artifact.turnId = String(msg.uuid);
       out.push(artifact);
     }
-    return out;
+    // Один артефакт может дать две мета-записи с разными ключами (id + title-only):
+    // склеиваем по name+mime+turnId, предпочитая запись с content. Две РАЗНЫЕ
+    // записи с непустым разным content не трогаем.
+    var merged = [];
+    var byKey = {};
+    for (var ai = 0; ai < out.length; ai++) {
+      var art = out[ai];
+      var akey = art.name + '\u0000' + (art.turnId || '');
+      var prev = byKey[akey];
+      if (!prev) { byKey[akey] = art; merged.push(art); continue; }
+      if (!prev.content && art.content) {
+        prev.content = art.content;
+        if (!prev.mime && art.mime) prev.mime = art.mime;
+      } else if (prev.content && art.content && prev.content !== art.content) merged.push(art);
+    }
+    return merged;
   }
 })();

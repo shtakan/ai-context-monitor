@@ -178,6 +178,45 @@ describe('Claude artifact capture (BUG-09)', () => {
     expect(parsed.text).not.toContain('artifact_id');
   });
 
+  test('title-only дубль метаданных склеивается с content-записью (оба порядка)', function () {
+    const titleOnly = {
+      type: 'tool_result',
+      display_content: {
+        type: 'file',
+        published_url: 'https://claude.ai/code/artifact/' + ART_ID,
+        title: 'Таймер 60 секунд',
+        owned_by_account: true
+      }
+    };
+    const withId = {
+      type: 'tool_use',
+      name: 'Artifact',
+      structured_content: {
+        artifact_id: ART_ID,
+        path: '/mnt/user-data/outputs/timer.html',
+        title: 'Таймер 60 секунд',
+        url: 'https://claude.ai/artifact/F2MaaTibQQAsAPXomYBsnt'
+      }
+    };
+    const fileBlock = {
+      type: 'tool_use',
+      name: 'create_file',
+      input: { path: '/mnt/user-data/outputs/timer.html', file_text: HTML }
+    };
+
+    const titleFirst = parse(rawWith([
+      { type: 'text', text: 'Готово.' }, fileBlock, titleOnly, withId
+    ]));
+    expect(titleFirst.messages[1].artifacts).toHaveLength(1);
+    expect(titleFirst.messages[1].artifacts[0].content).toBe(HTML);
+
+    const idFirst = parse(rawWith([
+      { type: 'text', text: 'Готово.' }, fileBlock, withId, titleOnly
+    ]));
+    expect(idFirst.messages[1].artifacts).toHaveLength(1);
+    expect(idFirst.messages[1].artifacts[0].content).toBe(HTML);
+  });
+
   test('create_file без artifact-метаданных не становится artifact', function () {
     const parsed = parse(rawWith([
       { type: 'text', text: 'Файл готов.' },
