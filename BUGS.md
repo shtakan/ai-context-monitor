@@ -297,4 +297,12 @@ source-пин, JSON-сборщик печатает переданную мод�
 **Не виновны:** BUG-17 (THREAD-STATE) и file-drain. `site`/`convId` в JSON
 не печатаются схемой `buildJsonFromHistory` — это не дефект модели.
 
+**Live (2026-11-21): MODEL-PARITY-OK.** Manual: тред `1gHphBl1b…`, бейдж
+`Gemini 3.8 Flash` → JSON `.model="Gemini 3.8 Flash"` (39 604 / 30.9 %).
+Auto: чат `1fFVoDy9…`, бейдж `Gemini 4 Hydrogen` → JSON
+`.model="Gemini 4 Hydrogen"` (1 545 / 1.2 %, src=server). `[model-detect]`:
+`raw="gemini-4-hydrogen" → id=gemini-4-hydrogen, имя=Gemini 4 Hydrogen`;
+слаги `gemini-3.8-flash` / `gemini-4-hydrogen`. Ни один путь не отдал
+«Gemini 3.1 Pro». BUG-20 закрыт.
+
 
