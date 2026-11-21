@@ -1105,6 +1105,44 @@
   installFetchHook();
   installXhrHook();
 
+  // 2.2/BUG-18: AI Studio не диспатчит ai-cm-conversation-changed, поэтому при SPA-переходе
+  // на новый чат content.js не сбрасывал бейдж — на /prompts/new_chat висело число прошлого
+  // треда. Патчим history в MAIN (где его зовёт роутер страницы) и шлём то же событие, что
+  // уже слушает content.js: сброс виджета/базы/латчей до первого снимка нового convId.
+  var lastRoutePath = (window.location && window.location.pathname) ? String(window.location.pathname) : '';
+  function aiCmEmitRouteChange() {
+    try {
+      var p = (window.location && window.location.pathname) ? String(window.location.pathname) : '';
+      if (p === lastRoutePath) return;
+      lastRoutePath = p;
+      window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));
+    } catch (eRoute) { soft(eRoute, 'aistudio-intercept:route-change'); }
+  }
+  try {
+    var routeHistory = (window && window.history) ? window.history : null;
+    if (routeHistory) {
+      var aiCmOrigPush = routeHistory.pushState;
+      if (typeof aiCmOrigPush === 'function') {
+        routeHistory.pushState = function () {
+          var r = aiCmOrigPush.apply(this, arguments);
+          aiCmEmitRouteChange();
+          return r;
+        };
+      }
+      var aiCmOrigReplace = routeHistory.replaceState;
+      if (typeof aiCmOrigReplace === 'function') {
+        routeHistory.replaceState = function () {
+          var r = aiCmOrigReplace.apply(this, arguments);
+          aiCmEmitRouteChange();
+          return r;
+        };
+      }
+    }
+    window.addEventListener('popstate', aiCmEmitRouteChange);
+  } catch (eRouteInstall) {
+    soft(eRouteInstall, 'aistudio-intercept:route-install');
+  }
+
   // v2.0.34: без строки установки «нет history loaded» не отличить от «хук не встал».
   // Гейт тот же, что у канала B: по умолчанию консоль страницы остаётся чистой.
   if (debugGateOn()) {

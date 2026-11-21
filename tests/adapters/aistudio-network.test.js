@@ -73,7 +73,9 @@ function makeSandbox(options) {
     dispatchEvent: function (ev) { events.push(ev); return true; },
     // fetch/XHR появляются ДО загрузки перехватчика — он снимает их на старте.
     fetch: opts.fetch,
-    XMLHttpRequest: opts.XMLHttpRequest
+    XMLHttpRequest: opts.XMLHttpRequest,
+    // BUG-18: history-патч проверяется отдельным тестом; в прочих песочницах undefined.
+    history: opts.history
   };
 
   const ctx = {
@@ -1235,5 +1237,35 @@ describe('AistudioAdapter: модель из сети вместо конста�
     expect(adapter.detectModel()).toBe(FALLBACK);
     sandbox.window.__aiCmNetModelSlug = '';
     expect(adapter.detectModel()).toBe(FALLBACK);
+  });
+});
+
+describe('Aistudio intercept: SPA-маршрут → ai-cm-conversation-changed (BUG-18)', () => {
+  test('pushState на новый путь шлёт одно событие, повтор пути — ноль', () => {
+    const history = { pushState: function () { }, replaceState: function () { } };
+    const sb = makeSandbox({ history: history });
+
+    sb.win.location.pathname = '/prompts/new_chat';
+    history.pushState({}, '', '/prompts/new_chat');
+    let route = sb.events.filter(function (e) { return e.type === 'ai-cm-conversation-changed'; });
+    expect(route).toHaveLength(1);
+
+    // тот же путь (replaceState с query-шумом) — события нет
+    history.replaceState({}, '', '/prompts/new_chat?x=1');
+    route = sb.events.filter(function (e) { return e.type === 'ai-cm-conversation-changed'; });
+    expect(route).toHaveLength(1);
+
+    sb.win.location.pathname = '/prompts/next';
+    history.pushState({}, '', '/prompts/next');
+    route = sb.events.filter(function (e) { return e.type === 'ai-cm-conversation-changed'; });
+    expect(route).toHaveLength(2);
+  });
+
+  test('popstate на новый путь шлёт событие', () => {
+    const history = { pushState: function () { }, replaceState: function () { } };
+    const sb = makeSandbox({ history: history });
+    sb.win.location.pathname = '/prompts/another';
+    sb.fire('popstate');
+    expect(sb.events.filter(function (e) { return e.type === 'ai-cm-conversation-changed'; })).toHaveLength(1);
   });
 });

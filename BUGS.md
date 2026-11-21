@@ -226,7 +226,7 @@ dedupe-маркер.
 
 ---
 
-## BUG-18 (кандидат, P3) — AI Studio: бейдж держит значение прошлого треда
+## BUG-18 (FIXED, P3) — AI Studio: бейдж держал значение прошлого треда
 
 **Симптом (live 2026-11-21, скрины):** переход в новый чат
 `/prompts/new_chat` — бейдж показывает **30.9 %** от предыдущего треда;
@@ -239,10 +239,14 @@ deepseek/perplexity/claude/page-intercept, не aistudio-intercept), а
 content-side проверки URL нет. Пока не пришёл первый `ai-cm-aistudio-net`
 с новым convId, `processAndSend` не вызывается — старый DOM-текст остаётся.
 
-**Триаж/фикс (отдельно):** при SPA-переходе на `/prompts/new_chat` (или
-смене convId в URL) вызывать `resetConversationState()`/рисовать `—` до
-первого снимка; варианты — `popstate` + лёгкий URL-вотчер в content.ts или
-эмит `ai-cm-conversation-changed` из aistudio-перехватчика. **Не виновны:**
-messages default, metrics (числа после замера верные), BUG-14.
+**Фикс (2.2).** `core/aistudio-intercept.js` (MAIN) патчит
+`history.pushState/replaceState` и слушает `popstate`: при смене
+`location.pathname` шлёт `ai-cm-conversation-changed`. Content-слушатель уже
+существует — он вызывает `resetConversationState()`, который рисует `—`,
+гасит снимок/базу/латчи прошлого треда. Событие только на реальную смену
+пути (query-шум и повтор того же path — ноль событий). Регресс:
+`tests/adapters/aistudio-network.test.js` (2: pushState/replaceState/popstate,
+дедуп пути). **Не виновны:** messages default, metrics (числа после замера
+верные), BUG-14.
 
 
