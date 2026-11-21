@@ -1071,7 +1071,7 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
         // получали готовый 'assistant') и все ходы Claude шли под '## Ассистент'.
         role: (r18 === 'user' || r18 === 'human') ? 'user' : 'assistant',
         text: sanitizeGeminiText(texts[d18]),
-        id: (rawMsgs18 && rawMsgs18[d18] && rawMsgs18[d18].id != null) ? String(rawMsgs18[d18].id) : String(ids[d18])
+        id: (rawMsgs18 && rawMsgs18[d18] && rawMsgs18[d18].id != null) ? String(rawMsgs18[d18].id) : String(ids[d18]), ...(rawMsgs18 && rawMsgs18[d18] && Array.isArray(rawMsgs18[d18].sources) ? { sources: rawMsgs18[d18].sources } : {}), ...(rawMsgs18 && rawMsgs18[d18] && rawMsgs18[d18].artifact && typeof rawMsgs18[d18].artifact === 'object' ? { artifact: rawMsgs18[d18].artifact } : {}), ...(rawMsgs18 && rawMsgs18[d18] && Array.isArray(rawMsgs18[d18].artifacts) ? { artifacts: rawMsgs18[d18].artifacts } : {})
       });
     }
     var ded18 = aiCmDedupeExportSource(preDedupe18);
@@ -1092,7 +1092,7 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
         : ((preDedupe18[e18] && preDedupe18[e18].id != null) ? String(preDedupe18[e18].id) : '');
       texts18.push(String(me18.text == null ? '' : me18.text));
       ids18.push(mid18);
-      msgs18.push({ role: me18.role, text: String(me18.text == null ? '' : me18.text), id: mid18 });
+      msgs18.push({ role: me18.role, text: String(me18.text == null ? '' : me18.text), id: mid18, ...(Array.isArray(me18.sources) ? { sources: me18.sources } : {}), ...(me18.artifact && typeof me18.artifact === 'object' ? { artifact: me18.artifact } : {}), ...(Array.isArray(me18.artifacts) ? { artifacts: me18.artifacts } : {}) });
     }
     lastBaseTexts = texts18;
     lastBaseIds = ids18;
@@ -2512,7 +2512,7 @@ function aiCmResyncMetricsAfterFlush(cid: string, reason?: string): boolean {
       var rt = texts[rmi];
       var rid = (rm.id != null) ? String(rm.id) : '';
       resyncIds.push(rid);
-      resyncMsgs.push({ role: (rm.role === 'user') ? 'user' : 'assistant', text: rt, id: rid });
+      resyncMsgs.push({ role: (rm.role === 'user') ? 'user' : 'assistant', text: rt, id: rid, ...(Array.isArray(rm.sources) ? { sources: rm.sources } : {}), ...(rm.artifact && typeof rm.artifact === 'object' ? { artifact: rm.artifact } : {}), ...(Array.isArray(rm.artifacts) ? { artifacts: rm.artifacts } : {}) });
     }
     aiCmBasePrepared = resyncMsgs;
     lastDetailMessages = resyncMsgs;
