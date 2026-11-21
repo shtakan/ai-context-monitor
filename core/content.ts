@@ -2998,11 +2998,11 @@ function processAndSend(): void {
         aiCmCtxSnapCandidate.baseComplete = baseComplete === true;
       }
       if (aiCmCtxSnapPartial) {
-        // BUG-H: ход без вопроса. BIG-02 (2.1.5): stop имеет приоритет над общей причиной —
-        // файл должен говорить «stopped», а не «incomplete».
-        aiCmCtxSnapCandidate.partialReason = (typeof aiCmCtxStopActive === 'function' && aiCmCtxStopActive())
-          ? 'stopped'
-          : ((baseCompleteReason === 'missing-user-text') ? 'missing-user-text' : 'incomplete');
+        // BUG-H: ход без вопроса. BIG-02: stop приоритетнее общей причины.
+        // P3 union: конкретную причину GSA (passive-incomplete:*) не сворачиваем —
+        // aiCmPartialReasonFromBase возвращает её как есть, файл говорит правду.
+        aiCmCtxSnapCandidate.partialReason = aiCmPartialReasonFromBase(
+          baseCompleteReason, (typeof aiCmCtxStopActive === 'function' && aiCmCtxStopActive()));
       }
       var aiCmSnapPrevAnomaly = (typeof lastTokensSnapshot !== 'undefined') ? lastTokensSnapshot : null;
       lastTokensSnapshot = aiCmCommitContextSnapshot(lastTokensSnapshot, aiCmCtxSnapCandidate); if (typeof aiCmV2MetricsDualRun === 'function') { var aiCmV2Res = aiCmV2MetricsDualRun(aiCmCtxSnapCandidate, aiCmV2MetricsProbe(aiCmCtxSnapCandidate, modelId, (svc === 'aistudio' && typeof aiCmAistudioNativePromptTokens === 'function') ? aiCmAistudioNativePromptTokens() : 0, metricServerTokens)); if (aiCmV2Res && lastTokensSnapshot && lastTokensSnapshot.tokens === aiCmV2Res.snapshot.tokens) { lastTokensSnapshot.quality = aiCmV2Res.snapshot.quality; lastTokensSnapshot.readiness = aiCmV2Res.snapshot.readiness; } }
@@ -5334,5 +5334,21 @@ function aiCmIsChatlessUrlForSite(site: string, path: string, convIdFn: (() => s
   if (site === 'gemini') return /^\/app\/?$/.test(String(path || ''));
   if (site === 'aistudio') return /^(?:\/app)?\/prompts(?:\/new_chat)?\/?$/.test(String(path || ''));
   return false;
+}
+
+/**
+ * P3 union: причина частичности файла из вердикта базы.
+ * stop приоритетнее; missing-user-text — значимая причина; прочие непустые
+ * причины GSA (passive-incomplete:stream/history-cursor/…) сохраняются как есть.
+ * @param baseReason вердикт базы (detail.historyCompleteReason)
+ * @param stopped активен ли stop
+ * @returns причина для partialReason
+ */
+function aiCmPartialReasonFromBase(baseReason: string, stopped: boolean): PartialReason {
+  if (stopped) return 'stopped';
+  var reason = String(baseReason || '');
+  if (reason.indexOf('missing-user-text') !== -1) return 'missing-user-text';
+  if (reason && reason !== 'complete' && reason !== 'passive-complete') return reason as PartialReason;
+  return 'incomplete';
 }
 

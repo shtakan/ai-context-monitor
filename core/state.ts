@@ -886,10 +886,11 @@ function aiCmCommitContextSnapshot(
     var held: AiCmContextSnapshot = Object.assign({}, prev);
     held.stale = !!(prev.bodyHash && next.bodyHash && prev.bodyHash !== next.bodyHash);
     held.partial = true;
+    // P3 union: причина из снимка не сворачивается в 'incomplete' — конкретика
+    // (passive-incomplete:stream/history-cursor/…) остаётся в файле.
     held.partialReason = held.stale
       ? 'stale'
-      : ((next.partial && (next.partialReason === 'missing-user-text'
-        || next.partialReason === 'stopped' || next.partialReason === 'truncated'))
+      : ((next.partial && next.partialReason && next.partialReason !== 'stale')
         ? next.partialReason : 'incomplete');
     return held;
   }
@@ -897,10 +898,11 @@ function aiCmCommitContextSnapshot(
   // BUG-H: 'missing-user-text' — значимая причина (ход без вопроса).
   // BIG-02 (2.1.5): 'stopped'/'truncated' — тоже значимые: обрыв ответа должен быть
   // виден в файле, а не нормализоваться в общий 'incomplete'.
-  if (next.partial) next.partialReason = (next.partialReason === 'missing-user-text'
-    || next.partialReason === 'stopped' || next.partialReason === 'truncated')
-    ? next.partialReason : 'incomplete';
-  else delete next.partialReason;
+  if (next.partial) {
+    // 'stale' — только причина окна сбора; принятый снимок её не несёт.
+    next.partialReason = (next.partialReason && next.partialReason !== 'stale')
+      ? next.partialReason : 'incomplete';
+  } else delete next.partialReason;
   var same = prev.convId === next.convId
     && prev.site === next.site
     && prev.model === next.model

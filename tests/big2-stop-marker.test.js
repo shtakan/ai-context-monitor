@@ -59,9 +59,9 @@ describe('BIG-02: stopped/truncated — значимые причины непо
     expect(out.partialReason).toBe('truncated');
   });
 
-  test('незначимая причина нормализуется в incomplete', () => {
+  test('конкретная причина shrank сохраняется (P3 union)', () => {
     const out = api.commit(snap(), snap({ partial: true, partialReason: 'shrank' }));
-    expect(out.partialReason).toBe('incomplete');
+    expect(out.partialReason).toBe('shrank');
   });
 });
 
