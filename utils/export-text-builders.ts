@@ -12,6 +12,8 @@
  */
 import { buildReferenceText } from './buildReferenceText.ts';
 import { aiCmDiagDownload, aiCmDiagDownloadBlocked } from './debug.ts';
+import { threadSections } from './export/sections.ts';
+import type { ExportArtifact, ExportSourceRef, ThreadSections } from './export/sections.ts';
 
 import type {
   ExportMessage,
@@ -339,6 +341,54 @@ function isProjected(history: ExportHistory): boolean {
   return (history as ExportHistoryProjected).bodyProjection === 'projected';
 }
 
+// 2.2/фаза 4: секции artifacts/sources — аддитивно и только при непустых
+// данных. Заголовки ASCII (машинный формат), без новых ключей _locales.
+function artifactTxt(a: ExportArtifact): string {
+  var head = a.name + (a.mime ? ' (' + a.mime + ')' : '');
+  return a.content ? head + '\n' + a.content : head;
+}
+
+function artifactMd(a: ExportArtifact): string {
+  var head = '### ' + a.name + (a.mime ? ' (' + a.mime + ')' : '');
+  return a.content ? head + '\n\n' + a.content : head;
+}
+
+function sourceTxt(s: ExportSourceRef): string {
+  var line = '- ' + s.title;
+  if (s.url) line += ' — ' + s.url;
+  if (s.snippet) line += ' — ' + s.snippet;
+  return line;
+}
+
+function sourceMd(s: ExportSourceRef): string {
+  var line = '- ';
+  line += s.url ? '[' + s.title + '](' + s.url + ')' : s.title;
+  if (s.snippet) line += ' — ' + s.snippet;
+  return line;
+}
+
+function exportSectionsTxt(sections: ThreadSections): string {
+  var blocks: string[] = [];
+  if (sections.artifacts.length) {
+    blocks.push('[ARTIFACTS]\n' + sections.artifacts.map(artifactTxt).join('\n\n'));
+  }
+  if (sections.sources.length) {
+    blocks.push('[SOURCES]\n' + sections.sources.map(sourceTxt).join('\n'));
+  }
+  return blocks.join('\n\n');
+}
+
+function exportSectionsMd(sections: ThreadSections): string {
+  var blocks: string[] = [];
+  if (sections.artifacts.length) {
+    blocks.push('## ARTIFACTS\n\n' + sections.artifacts.map(artifactMd).join('\n\n'));
+  }
+  if (sections.sources.length) {
+    blocks.push('## SOURCES\n\n' + sections.sources.map(sourceMd).join('\n'));
+  }
+  return blocks.join('\n\n');
+}
+
 /**
  * Собирает txt-экспорт истории.
  * @param {ExportHistory} history история экспорта
@@ -387,6 +437,9 @@ export function buildTxtFromHistory(history: ExportHistory): string {
   // (выше) — сразу под ней. mode='' → prefix пуст, ни одного нового байта.
   if (isProjected(hist)) prefix += '[AI-CM projection: applied]\n\n';
   if (prefix && out) out = prefix + out;
+  // 2.2/фаза 4: artifacts/sources — аддитивный блок в конце; пусто → байты прежние.
+  var sectionsTxt = exportSectionsTxt(threadSections(Array.isArray(messages) ? messages : []));
+  if (out && sectionsTxt) out = out + '\n\n' + sectionsTxt;
   return (out === null) ? '' : out;   // рендерер недоступен → прежний пустой файл
 }
 
@@ -499,6 +552,9 @@ export function buildMdFromHistory(history: ExportHistory, platform?: string): s
     lines.push(mdMarked ? markersMessageTextWithReasoning(msg, true) : messageTextWithReasoning(msg));
     lines.push('');
   }
+  // 2.2/фаза 4: artifacts/sources — аддитивный блок после сообщений; пусто → байты прежние.
+  var sectionsMd = (messages.length > 0) ? exportSectionsMd(threadSections(messages)) : '';
+  if (sectionsMd) lines.push(sectionsMd);
   return lines.join('\n');
 }
 
@@ -516,6 +572,7 @@ export function buildJsonFromHistory(history: ExportHistory, platform?: string):
   // json — данные снимка: значения берутся из истории как есть (их согласованность
   // обеспечивает export-manager одним снимком). Пересчёт здесь менял бы байты
   // машинного формата и ломал пины «метрики не пересчитываются».
+  var sections = threadSections(Array.isArray(h.messages) ? h.messages : []);
   return JSON.stringify({
     platform: (platform || 'AI Chat'),
     model: h.model || '',
@@ -539,7 +596,10 @@ export function buildJsonFromHistory(history: ExportHistory, platform?: string):
     // BUG-13: след dedupe (input/output/removedUsers/foldedAssistants).
     // undefined → ключ не появляется, байты прежних файлов не меняются.
     dedupe: h.dedupe,
-    messages: Array.isArray(h.messages) ? h.messages : []
+    messages: Array.isArray(h.messages) ? h.messages : [],
+    // 2.2/фаза 4: аддитивные секции; пусто → undefined → ключей в JSON нет.
+    artifacts: sections.artifacts.length ? sections.artifacts : undefined,
+    sources: sections.sources.length ? sections.sources : undefined
   }, null, 2);
 }
 
