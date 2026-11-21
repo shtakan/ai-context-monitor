@@ -208,7 +208,7 @@ reload — 627 токенов при фактических 3 228 (badge 0.5 % �
 
 ---
 
-## BUG-17 (кандидат, наблюдение) — AI Studio: тело файла не в текущей базе
+## BUG-17 (ЗАКРЫТ: THREAD-STATE, наблюдение) — AI Studio: тело файла не в текущей базе
 
 **Симптом (live 2026-11-21):** в экспорте 31/15u16a/`aaa` user #26 — 60
 символов (`[FILE: aistudio-…-11-08_19-03.md]`) вместо 22 882; сумма текста
@@ -223,6 +223,17 @@ legacy-экспорте 18:34 (до default-коммита) и в md 09:03. Зн
 ожидание 22 882 + сумма 109 176. Если тело снова 60 — дефект file-drain
 AI Studio, не messages. **Не виновны:** messages default, BUG-13/14,
 dedupe-маркер.
+
+**Ретест (live 2026-11-21, dist 2.1.5/2.2).** Свежий чат
+`1PouheUR5Lw6BdCtYkv5SFz9HWg2ZqsBy`, файл `bug17-marker.txt` (2731 B / 1916 симв.),
+ответ `OK`, 560 tokens. Дренаж: `aistudio-files-fetch-done … len=1916`,
+`textLen 41 → 1984`, `DRAW effectiveLen=1984`, `histKey=2|1984 verdict=write`;
+после F5 тело восстанавливается повторным drain. Экспорт
+`acceptance/BIG-2026-11/2.2/raw/bug17-body.json` (3145 B): user #0 = 1981 симв.,
+`[FILE: bug17-marker.txt]` + `BUG17-MARKER-2026-11-21` (поз. 65) + тело 1916 симв.
+целиком. **Вердикт: THREAD-STATE** — file-drain на свежем вложении работает;
+60-символьный случай 31/15u16a/`aaa` — состояние старого треда (вложение в снимке
+без тела), не дефект дренажа/messages. Отчёт: `BUG17-RETEST.md`.
 
 ---
 
@@ -254,5 +265,33 @@ content-side проверки URL нет. Пока не пришёл первы�
 `aiCmResetWidgetA11yLabel`: исходное доступное имя
 `content_a11y_circle_initial` («Открыть панель порога контекста»). Регресс:
 `tests/widget-reset-a11y.test.js` (3).
+
+**Live-подтверждение (2026-11-21): BUG19-A11Y-OK.** До первого замера label
+«Открыть панель порога контекста»; переход из чата 0.4 % в `/prompts/new_chat`
+сбрасывает label в исходный (до reload расширения держался «0.4 %» — несвежая
+сборка); после первого ответа нового треда (43 токена) label несёт его процент:
+«AI Context Monitor: 0.0 % контекста использовано, норма». Отчёт: `BUG17-RETEST.md`.
+
+---
+
+## BUG-20 (кандидат, P3) — AI Studio: модель в JSON ≠ модель на бейдже
+
+**Симптом (live 2026-11-21, `bug17-body.json`):** в шапке JSON
+`"model": "Gemini 3.1 Pro"`, а виджет того же хода показывает
+`Gemini 4 Hydrogen` (тред `1PouheUR5…`, файл-маркер, 560 tokens).
+
+**Вероятный корень.** Ручной снимок берёт
+`lastSnapshotModelName || lastResolvedModelId`, авто-путь —
+`ModelConfig.getModel(lastResolvedModelId)?.name`, а бейдж — `modelName`
+зафиксированного `lastTokensSnapshot`. Это три разных источника: если
+`resolveCurrentModel()` прошёл до прихода network-слага (`gemini-4-hydrogen`),
+`lastSnapshotModelName` остаётся старым (`Gemini 3.1 Pro`), хотя следующий
+проход уже обновил бейдж.
+
+**Триаж/фикс (отдельно):** выровнять `model` ручного JSON и авто-`hist` по
+`lastTokensSnapshot.modelName` (тот же снимок, что у бейджа), fallback —
+прежние выражения. Проверить, что `site`/`convId` в ручном JSON не теряются
+(в `bug17-body.json` они пустые — возможно, схема сборщика, не дефект).
+**Не виновны:** BUG-17 (THREAD-STATE) и file-drain.
 
 
