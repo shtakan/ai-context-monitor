@@ -249,4 +249,10 @@ content-side проверки URL нет. Пока не пришёл первы�
 дедуп пути). **Не виновны:** messages default, metrics (числа после замера
 верные), BUG-14.
 
+**BUG-19 (FIXED, a11y).** После сброса текст бейджа был `—`, но `aria-label`
+держал процент прошлого треда. `resetConversationState()` теперь вызывает
+`aiCmResetWidgetA11yLabel`: исходное доступное имя
+`content_a11y_circle_initial` («Открыть панель порога контекста»). Регресс:
+`tests/widget-reset-a11y.test.js` (3).
+
 

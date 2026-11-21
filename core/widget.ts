@@ -375,7 +375,7 @@ function resetConversationState(): void {
       circle.style.strokeDashoffset = String(C);
       circle.style.stroke = zoneColor(0);
     }
-    if (pt) pt.textContent = '—'; // v1.8.1: «—» вместо ложного 0.0% до первых данных
+    if (pt) pt.textContent = '—'; if (typeof aiCmResetWidgetA11yLabel === 'function') aiCmResetWidgetA11yLabel(widgetElement.querySelector('.ai-widget-circle')); // v1.8.1: «—» вместо ложного 0.0% до первых данных
     // O-35 (ДИАГНОСТИКА, только измерение): qwen-badge — плейсхолдер «—» ветви RESET
     // (сброс состояния виджета сигналом смены разговора). На qwen до фикса дефекта C
     // эта строка не появляется НИКОГДА: событие 'ai-cm-conversation-changed' не приходит.
@@ -1065,6 +1065,14 @@ function updateWidget(percentage: number, tokens: number, effectiveLimit: number
   // content.js (загружается ПОСЛЕ widget.js), поэтому гард по typeof — как у гейта
   // в createWidget: изолированные песочницы тестов виджета остаются рабочими.
   try { if (typeof aiCmRevealWidget === 'function') aiCmRevealWidget(); } catch (eRevW) { }
+}
+
+// BUG-19: сброс бейджа в «—» не должен оставлять aria-label прошлого треда.
+// Возвращаем исходное доступное имя (то же, что у circle до первого замера).
+function aiCmResetWidgetA11yLabel(circleEl: Element | null): void {
+  if (!circleEl || typeof circleEl.setAttribute !== 'function') return;
+  const i18n = (typeof aiCmI18nMessage === 'function') ? aiCmI18nMessage : function (key: string, fallback: string) { return fallback; };
+  circleEl.setAttribute('aria-label', i18n('content_a11y_circle_initial', 'Открыть панель порога контекста'));
 }
 
 // ========== v2.0 (этап 1/3): UMD-экспорт модуля ==========
