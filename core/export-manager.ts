@@ -2324,48 +2324,17 @@ function aiCmBuildCanonicalBody(convId: string | null): any {
 // mode='projected' — ТОЛЬКО при фактическом изменении тела (длина массива или любое поле
 // сообщения); иначе mode='' и ТОТ ЖЕ объект массива (ни одного нового байта).
 function aiCmProjectFileMessages(msgs: AiCmExportMessage[], site: string) {
-  var src = Array.isArray(msgs) ? msgs : [];
-  var copies = [];
-  for (var i = 0; i < src.length; i++) {
-    var m = src[i];
-    copies.push((m && typeof m === 'object') ? Object.assign({}, m) : m);
-  }
-  var userOn = (typeof aiCmIncludeHiddenInExport !== 'undefined') && aiCmIncludeHiddenInExport === true;
-  var hiddenEffective = (typeof aiCmHiddenExportEffectiveOn === 'function')
-    ? aiCmHiddenExportEffectiveOn(copies) : userOn;
-  // O-7/D-O41: эффективный OFF снимает поле reasoning у КАЖДОГО сайта (не только qwen):
-  // иначе deepseek-OFF оставлял reasoning в теле, и MD-рендер возвращал секции в файл.
-  if (!hiddenEffective) {
-    for (var r = 0; r < copies.length; r++) {
-      if (copies[r] && typeof copies[r] === 'object') delete copies[r].reasoning;
-    }
-  }
-  var out = (typeof aiCmSanitizeEmitUserTexts === 'function')
-    ? aiCmSanitizeEmitUserTexts(copies) : copies;
-  if (!Array.isArray(out)) out = copies;
-  var changed = (out.length !== src.length);
-  if (!changed) {
-    for (var j = 0; j < src.length; j++) {
-      var a = src[j] || {};
-      var b = out[j] || {};
-      var ka = Object.keys(a);
-      var kb = Object.keys(b);
-      // Сравнение по ВСЕМ полям без перечисления имён: тело изменено, если санация
-      // сняла/добавила/переписала любое поле (текст, reasoning, служебные захваты).
-      if (ka.length !== kb.length) { changed = true; break; }
-      for (var k = 0; k < ka.length; k++) {
-        var f = ka[k];
-        var va = a[f];
-        var vb = b[f];
-        var sa = (typeof va === 'string') ? va : JSON.stringify(va === undefined ? null : va);
-        var sb = (typeof vb === 'string') ? vb : JSON.stringify(vb === undefined ? null : vb);
-        if (sa !== sb) { changed = true; break; }
-      }
-      if (changed) break;
-    }
-  }
-  if (!changed) return { messages: src, mode: '' };
-  return { messages: out, mode: 'projected' };
+  // 2.2/фаза 4: тело вынесено в utils/export/projection.ts; зависимости — хуками,
+  // чтобы шов оставался чистым (DOM/storage/конвейер в него не импортируются).
+  // Мост — bare-функция content.ts (тот же classic-скоуп бандла); в срез-песочницах
+  // без моста возвращаем вход без проекции (пины этих срезов инжектируют мост сами).
+  var project = (typeof aiCmExportProjectFileMessages === 'function') ? aiCmExportProjectFileMessages : null;
+  if (!project) return { messages: Array.isArray(msgs) ? msgs : [], mode: '' };
+  return project(msgs, {
+    includeHidden: (typeof aiCmIncludeHiddenInExport !== 'undefined') && aiCmIncludeHiddenInExport === true,
+    hiddenEffective: (typeof aiCmHiddenExportEffectiveOn === 'function') ? aiCmHiddenExportEffectiveOn : null,
+    sanitize: (typeof aiCmSanitizeEmitUserTexts === 'function') ? aiCmSanitizeEmitUserTexts : null
+  });
 }
 
 // ========== v2.0 (этап 1/3): UMD-экспорт модуля ==========

@@ -5152,6 +5152,7 @@ import { installQwenDualRun } from './qwen-dualrun.ts';
 import { aiCmV2MetricsDualRun } from './metrics-dualrun.ts';
 import type { AiCmV2MetricsProbe } from './metrics-dualrun.ts';
 import { canonicalizeBatch, canonicalizeMessages } from '../utils/messages/canonicalize';
+import { projectFileMessages } from '../utils/export/projection';
 
 try {
   if (typeof AistudioAdapter === 'function' && typeof installAistudioDualRun === 'function') {
@@ -5252,6 +5253,18 @@ function aiCmV2AistudioExportSource(): AiCmExportMessage[] | null {
   } catch (eAisExp) {
     swallowSoft(eAisExp, 'content:v2-messages-export-source');
     return null;
+  }
+}
+
+/**
+ * 2.2/фаза 4: мост к чистому шву проекции файла. export-manager остаётся
+ * classic-скриптом; мост живёт здесь (тот же бандл-скоуп) и передаёт хуки.
+ */
+function aiCmExportProjectFileMessages(msgs: any, hooks: any): { messages: any[]; mode: '' | 'projected' } {
+  try {
+    return projectFileMessages(msgs, hooks);
+  } catch (eProj) {
+    return { messages: Array.isArray(msgs) ? msgs : [], mode: '' };
   }
 }
 

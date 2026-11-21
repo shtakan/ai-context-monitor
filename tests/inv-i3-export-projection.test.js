@@ -28,6 +28,7 @@ const ROOT = path.join(__dirname, '..');
 const P = loadEsm.loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = loadEsm.loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const Canonical = loadEsm.loadEsmModule('utils/canonical-body.ts');
+const Projection = loadEsm.loadEsmModule('utils/export/projection.ts');
 const EM_SRC = moduleSource('export-manager.ts');
 const CONTENT = moduleSource('content.ts');
 
@@ -75,9 +76,11 @@ function makeProjection(opts) {
     'aiCmIncludeHiddenInExport',
     'aiCmLogSanitizeSkip',
     'swallowSoft',
+    'aiCmExportProjectFileMessages',
     code
   );
-  return factory(P, Builders, { siteName: env.site }, env.userOn, function () { }, function () { });
+  return factory(P, Builders, { siteName: env.site }, env.userOn, function () { }, function () { },
+    function (msgs, hooks) { return Projection.projectFileMessages(msgs, hooks); });
 }
 
 /** История файла: метрики снимка неизменны, меняется только messages (+ bodyProjection). */
