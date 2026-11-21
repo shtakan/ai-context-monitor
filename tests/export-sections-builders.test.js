@@ -38,6 +38,12 @@ describe('export builders: sections', () => {
     const empty = JSON.parse(Builders.buildJsonFromHistory(history([{ role: 'user', text: 'q' }]), 'claude'));
     expect('artifacts' in empty).toBe(false);
     expect('sources' in empty).toBe(false);
+
+    // Секции — верхнеуровневые: в messages не остаётся транспортных копий.
+    expect(Object.keys(doc.messages[1]).sort()).toEqual(['role', 'text']);
+    expect('artifact' in doc.messages[1]).toBe(false);
+    expect('artifacts' in doc.messages[1]).toBe(false);
+    expect('sources' in doc.messages[1]).toBe(false);
   });
 
   test('MD: блоки ARTIFACTS/SOURCES после сообщений', function () {

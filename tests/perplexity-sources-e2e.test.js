@@ -64,6 +64,8 @@ describe('Perplexity sources: сквозной путь', () => {
       { title: 'Второй источник', url: 'https://example.com/2', snippet: 'Сниппет второго источника.' },
       { title: 'Третий источник', url: 'https://example.com/3', snippet: 'Сниппет третьего источника.' }
     ]);
+    expect(json.messages[1].sources).toBeUndefined();
+    expect(json.messages[3].sources).toBeUndefined();
     const md = Builders.buildMdFromHistory(h, 'Perplexity');
     expect(md).not.toContain('[source]');
     expect(md).toContain('## SOURCES');

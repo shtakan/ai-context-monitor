@@ -562,6 +562,39 @@ export function buildMdFromHistory(history: ExportHistory, platform?: string): s
 // (options/options.js buildJsonText): platform/model/exportedAt/tokens/limit/percent/messages.
 // Добавлен в общий сборщик, чтобы автоэкспорт по порогу умел json-формат селектора.
 /**
+ * Сообщения JSON без транспортных полей секций: sources/artifact(s) уже
+ * напечатаны верхнеуровневыми секциями (ARCHITECTURE-2.2 §3.4). Если секций
+ * в сообщениях нет — возвращается ТОТ ЖЕ массив (байты прежних файлов целы).
+ * @param {*} list сообщения снимка
+ * @returns {Array<*>} сообщения для JSON
+ */
+function jsonFileMessages(list: unknown): unknown[] {
+  var src: unknown[] = Array.isArray(list) ? list : [];
+  var hasSections = false;
+  for (var i = 0; i < src.length; i++) {
+    var m = src[i] as Record<string, unknown> | null;
+    if (m && typeof m === 'object' &&
+      (Object.prototype.hasOwnProperty.call(m, 'sources') ||
+        Object.prototype.hasOwnProperty.call(m, 'artifact') ||
+        Object.prototype.hasOwnProperty.call(m, 'artifacts'))) {
+      hasSections = true;
+      break;
+    }
+  }
+  if (!hasSections) return src;
+  var out: unknown[] = [];
+  for (var j = 0; j < src.length; j++) {
+    var item = src[j];
+    if (!item || typeof item !== 'object') { out.push(item); continue; }
+    var copy = Object.assign({}, item) as Record<string, unknown>;
+    delete copy.sources;
+    delete copy.artifact;
+    delete copy.artifacts;
+    out.push(copy);
+  }
+  return out;
+}
+/**
  * Собирает json-экспорт истории.
  * @param {ExportHistory} history история экспорта
  * @param {string} platform платформа
@@ -596,7 +629,7 @@ export function buildJsonFromHistory(history: ExportHistory, platform?: string):
     // BUG-13: след dedupe (input/output/removedUsers/foldedAssistants).
     // undefined → ключ не появляется, байты прежних файлов не меняются.
     dedupe: h.dedupe,
-    messages: Array.isArray(h.messages) ? h.messages : [],
+    messages: jsonFileMessages(h.messages),
     // 2.2/фаза 4: аддитивные секции; пусто → undefined → ключей в JSON нет.
     artifacts: sections.artifacts.length ? sections.artifacts : undefined,
     sources: sections.sources.length ? sections.sources : undefined
