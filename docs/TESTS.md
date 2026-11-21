@@ -39,6 +39,7 @@ CI runs the same suite (plus syntax checks and `manifest.json` validation) in [.
 | `tests/aistudio-messages-default.test.js` | `aiCmV2AistudioExportSource` + `capture()`/`canonicalizeBatch` + `aiCmDedupeExportSource` | messages default: канон первым в `aiCmCollectExportSource`; дубли user сняты, три ответа не склеены (BUG-13); opt-out `aiCmV2Messages='0'`; прочие сайты → null |
 | `tests/adapters/aistudio-network.test.js` | AI Studio network interceptor | history/usage parsing, file rows, model slug, dedupe, ResolveDriveResource; BUG-18: `pushState`/`replaceState`/`popstate` → `ai-cm-conversation-changed` на смену pathname, повтор пути — ноль событий |
 | `tests/widget-reset-a11y.test.js` | `core/widget.ts` (`resetConversationState`) | BUG-19: сброс в «—» возвращает `aria-label` к `content_a11y_circle_initial`, не держит процент прошлого треда; локализованный ключ; source-пин |
+| `tests/export-model-name-snapshot.test.js` | `core/content.ts` (manual) + `core/export-manager.ts` (auto) + `buildJsonFromHistory` | BUG-20: `model` ручного JSON и авто-файла берётся из `modelName` того же снимка, что бейдж; каталог/`lastSnapshotModelName` — фолбэк; JSON не пересчитывает model |
 
 Helpers in `tests/helpers/*` wrap production parsers so tests exercise the exact shipped code.
 

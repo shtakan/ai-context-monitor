@@ -274,7 +274,7 @@ content-side проверки URL нет. Пока не пришёл первы�
 
 ---
 
-## BUG-20 (кандидат, P3) — AI Studio: модель в JSON ≠ модель на бейдже
+## BUG-20 (FIXED, P3) — AI Studio: модель в JSON ≠ модель на бейдже
 
 **Симптом (live 2026-11-21, `bug17-body.json`):** в шапке JSON
 `"model": "Gemini 3.1 Pro"`, а виджет того же хода показывает
@@ -288,10 +288,13 @@ content-side проверки URL нет. Пока не пришёл первы�
 `lastSnapshotModelName` остаётся старым (`Gemini 3.1 Pro`), хотя следующий
 проход уже обновил бейдж.
 
-**Триаж/фикс (отдельно):** выровнять `model` ручного JSON и авто-`hist` по
-`lastTokensSnapshot.modelName` (тот же снимок, что у бейджа), fallback —
-прежние выражения. Проверить, что `site`/`convId` в ручном JSON не теряются
-(в `bug17-body.json` они пустые — возможно, схема сборщика, не дефект).
-**Не виновны:** BUG-17 (THREAD-STATE) и file-drain.
+**Фикс.** Ручной снимок и авто-`hist` берут `modelName` из ТОГО ЖЕ
+зафиксированного снимка, что у бейджа:
+`(snapPartMan && snapPartMan.modelName)` / `(snapR1Auto && snapR1Auto.modelName)`;
+прежние `lastSnapshotModelName`/каталог остаются фолбэком. Регресс:
+`tests/export-model-name-snapshot.test.js` (3: ручной source-пин, авто
+source-пин, JSON-сборщик печатает переданную модель).
+**Не виновны:** BUG-17 (THREAD-STATE) и file-drain. `site`/`convId` в JSON
+не печатаются схемой `buildJsonFromHistory` — это не дефект модели.
 
 

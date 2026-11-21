@@ -3570,7 +3570,7 @@ if (isExtensionValid()) {
             host: window.location.hostname,
             convId: curCidExp,
             site: (currentAdapter && currentAdapter.siteName) || '',
-            model: lastSnapshotModelName || (lastResolvedModelId || ''),
+            model: (snapPartMan && snapPartMan.modelName) ? snapPartMan.modelName : (lastSnapshotModelName || (lastResolvedModelId || '')),
             tokens: maxTokenCount,
             limit: computeEffectiveLimit(lastResolvedModelId),
             percent: pctExp,

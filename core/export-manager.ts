@@ -1939,7 +1939,7 @@ function doAutoExportDownload(cid: any, percentage: number, reason: string, netS
             ? aiCmCanonicalConvId() : (cid || '')) : null;
         var hist = {
           site: (currentAdapter && currentAdapter.siteName) || '',
-          model: ModelConfig.getModel(lastResolvedModelId || '')?.name || '',
+          model: (snapR1Auto && snapR1Auto.modelName) ? snapR1Auto.modelName : (ModelConfig.getModel(lastResolvedModelId || '')?.name || ''),
           tokens: snapTokens,
           limit: dispLimitAuto,
           percent: snapPercent,
