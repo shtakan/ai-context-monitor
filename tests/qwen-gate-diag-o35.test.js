@@ -522,7 +522,7 @@ describe('O-35 D: плейсхолдер «—» ставит ветка stale, 
 
   test('D: механизм stale — 12с без сетевого снимка при сообщениях в DOM', function () {
     const sched = fnDecl(BASE_HANDLER_SRC, 'scheduleStaleCheck');
-    expect(sched).toContain('if (isInitialized && !baseSeen) {');
+    expect(sched).toContain('if (isInitialized && !baseSeen && !aiCmStaleSuppressedForNewChat()) {');
     expect(sched).toContain('stale = true;');
     expect(sched).toContain('processAndSend();');
     expect(BASE_HANDLER_SRC).toContain('}, 12000);');

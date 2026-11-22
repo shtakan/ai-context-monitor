@@ -293,7 +293,7 @@ function scheduleStaleCheck(): void {
   stale = false;
   staleTimer = setTimeout(function () {
     staleTimer = null;
-    if (isInitialized && !baseSeen) {
+    if (isInitialized && !baseSeen && !aiCmStaleSuppressedForNewChat()) {
       var hasMessages = false;
       try {
         if (currentAdapter) {
@@ -622,4 +622,21 @@ function aiCmMergeAssistantRuns(messages: AiCmExportMessage[]): AiCmExportMessag
     }
   }
   return out;
+}
+
+/**
+ * BIG-02/UI: новый локальный чат ChatGPT (`local-chatgpt:…`) — ещё не диалог.
+ * Сообщения из DOM там могут быть остатком прошлого экрана, поэтому stale-
+ * предупреждение «сайт не отдаёт данные» на нём ложное. На реальном /c/<id>
+ * поведение прежнее (H8).
+ */
+function aiCmStaleSuppressedForNewChat(): boolean {
+  try {
+    if (typeof currentAdapter === 'undefined' || !currentAdapter) return false;
+    if (currentAdapter.siteName !== 'chatgpt') return false;
+    var cid = (typeof getCurrentConvId === 'function') ? (getCurrentConvId() || '') : '';
+    return !cid || cid.indexOf('local-chatgpt') === 0;
+  } catch (eLocal) {
+    return false;
+  }
 }
