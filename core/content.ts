@@ -1988,6 +1988,7 @@ function requestExactTokens(fullText: string, modelId: string | null): void {
           var calExact = response.totalTokens;
           aiCmDiagLine('o23-calibration', {
             model: apiModelId,
+            convId: (typeof getCurrentConvId === 'function') ? (getCurrentConvId() || '') : '',
             chars: fullText.length,
             cyr: calCyr,
             latin: calLatin,
@@ -1996,6 +1997,9 @@ function requestExactTokens(fullText: string, modelId: string | null): void {
             punct: calPunct,
             other: calOther,
             space: calSpace,
+            img: (typeof netAttachBreak !== 'undefined' && netAttachBreak && netAttachBreak.imgCount) ? netAttachBreak.imgCount : 0,
+            doc: (typeof netAttachBreak !== 'undefined' && netAttachBreak && netAttachBreak.docCount) ? netAttachBreak.docCount : 0,
+            attach: (typeof netAttachTokens !== 'undefined' && netAttachTokens > 0) ? netAttachTokens : 0,
             heuristic: calHeur,
             exact: calExact,
             ratio: calExact > 0 ? (calHeur / calExact).toFixed(4) : '(n/a)'

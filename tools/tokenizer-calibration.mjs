@@ -47,6 +47,7 @@ function parseLine(line) {
   for (const k of need) if (!(k in fields)) return null;
   const sample = {
     model: fields.model || '(unknown)',
+    convId: fields.convId || '',
     chars: Number(fields.chars),
     cyr: Number(fields.cyr),
     latin: Number(fields.latin),
@@ -55,6 +56,9 @@ function parseLine(line) {
     cjk: Number(fields.cjk),
     other: Number(fields.other),
     space: Number(fields.space),
+    img: Number(fields.img || 0),
+    doc: Number(fields.doc || 0),
+    attach: Number(fields.attach || 0),
     heuristic: Number(fields.heuristic),
     exact: Number(fields.exact)
   };
@@ -151,11 +155,16 @@ const files = inputs.flatMap(collectFiles);
 const samples = [];
 const seen = new Set();
 for (const file of files) {
-  const text = fs.readFileSync(file, 'utf8');
+  const buf = fs.readFileSync(file);
+  let text = buf.toString('utf8');
+  if (!text.includes(TAG)) {
+    const utf16 = buf.toString('utf16le');
+    if (utf16.includes(TAG)) text = utf16;
+  }
   for (const line of text.split(/\r?\n/)) {
     const s = parseLine(line);
     if (!s) continue;
-    const key = [s.chars, s.cyr, s.latin, s.digit, s.cjk, s.punct, s.other, s.space, s.exact].join('|');
+    const key = [s.model, s.chars, s.cyr, s.latin, s.digit, s.cjk, s.punct, s.other, s.space, s.exact].join('|');
     if (seen.has(key)) continue;
     seen.add(key);
     samples.push(s);
@@ -205,12 +214,19 @@ if (models.length > 1) {
   console.log('');
 }
 
+const attachSamples = samples.filter(s => s.img > 0 || s.doc > 0);
+if (attachSamples.length) {
+  console.log('note: ' + attachSamples.length + ' замер(ов) с вложениями — точный countTokens их не считает; ' +
+    'для чистых констант используйте серию без вложений (attach=0).');
+  console.log('');
+}
+
 console.log('## samples');
-console.log('| chars | cyr% | exact | heuristic | err |');
-console.log('|---:|---:|---:|---:|---:|');
+console.log('| chars | cyr% | exact | heuristic | err | img/doc |');
+console.log('|---:|---:|---:|---:|---:|---:|');
 for (const s of samples) {
   console.log('| ' + s.chars + ' | ' + (100 * s.cyr / s.chars).toFixed(1) + '% | ' +
-    s.exact + ' | ' + s.heuristic + ' | ' + pct(s.err) + ' |');
+    s.exact + ' | ' + s.heuristic + ' | ' + pct(s.err) + ' | ' + s.img + '/' + s.doc + ' |');
 }
 console.log('');
 
