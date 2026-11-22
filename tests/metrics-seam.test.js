@@ -76,6 +76,7 @@ describe('metrics/sources: чтения из уже снятых значени�
 describe('metrics/limits: окно, порог показа и лимит плана разделены', () => {
   test('AI Studio: окно 1M, порог 128k — два разных факта', function () {
     const model = resolveLimitModel({
+      site: 'aistudio',
       modelId: 'gemini-3.8-flash',
       modelWindow: 1048576,
       displayLimit: 128000,
@@ -86,7 +87,8 @@ describe('metrics/limits: окно, порог показа и лимит пла
     expect(model.modelWindow).toBe(1048576);
     expect(model.displayLimit).toBe(128000);
     expect(model.accountLimit).toBeNull();
-    expect(model.sources).toEqual(['catalog', 'fallback']);
+    // Порог 128k взят из каталога площадки, а не из legacy-fallback.
+    expect(model.sources).toEqual(['catalog']);
   });
 
   test('лимит плана урезает окно: displayLimit = min(window, account)', function () {

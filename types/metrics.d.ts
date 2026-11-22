@@ -71,6 +71,23 @@ export interface MetricReading {
 }
 
 /**
+ * Источник значения лимита. Порядок приоритета (2.2, фаза 5):
+ * API → каталог платформ/планов → настройки → fallback.
+ */
+export type LimitSource = 'api' | 'catalog' | 'settings' | 'fallback';
+
+/**
+ * Покомпонентный источник полей LimitModel. `null` — поле неизвестно,
+ * а не «взято из fallback»: это разные факты.
+ */
+export interface LimitProvenance {
+  modelWindow: LimitSource | null;
+  displayLimit: LimitSource | null;
+  accountLimit: LimitSource | null;
+  plan: LimitSource | null;
+}
+
+/**
  * Модель лимитов. Три подписи в UI/файле соответствуют трём разным фактам:
  * окно модели, порог показа и лимит плана (инвариант I9).
  */
@@ -80,6 +97,9 @@ export interface LimitModel {
   /** Окно модели в токенах (например, 1 048 576). */
   modelWindow: number;
 
+  /** true — окно известно (API/каталог); false — подставлен запасной порог. */
+  windowKnown?: boolean;
+
   /** Порог показа: min(modelWindow, accountLimit) либо ручной порог. */
   displayLimit: number;
 
@@ -88,8 +108,23 @@ export interface LimitModel {
 
   plan?: string | null;
 
-  /** Откуда взяты значения — в порядке фактического использования. */
-  sources: Array<'api' | 'catalog' | 'settings' | 'fallback'>;
+  /**
+   * Источники числовых значений (окно/лимит/порог) — в порядке фактического
+   * использования. Источник тарифа — отдельно в `provenance.plan`.
+   */
+  sources: LimitSource[];
+
+  /** Источник каждого поля: отделяет «неизвестно» от «fallback». */
+  provenance?: LimitProvenance;
+
+  /**
+   * Машиночитаемые пометки для UI/файла:
+   * `plan-unknown`, `account-limit-unknown`, `window-unknown`, `fallback-display`.
+   */
+  warnings?: string[];
+
+  /** Человекочитаемая пометка каталога: что известно и чего нет. */
+  sourceNote?: string;
 }
 
 /**

@@ -3,30 +3,51 @@
  *
  * Три факта разделены (I9): окно модели, порог показа и лимит плана. Старый
  * путь склеивал их в одно число (128 000 вместо окна 1M), поэтому фаза 2
- * начинает с явной модели лимитов, не меняя живой расчёт: displayLimit
- * приходит из legacy computeEffectiveLimit как «порог», а не как окно.
+ * ввела явную модель лимитов, а фаза 5 — каталог платформ/планов.
  *
- * Приоритет источников: явный displayLimit (ручной порог/legacy cap) →
- * min(modelWindow, accountLimit) → modelWindow → fallback.
+ * Приоритет источников: API → каталог → настройки → fallback.
+ *  - окно модели: API > исключение каталога > значение реестра моделей > площадка;
+ *  - лимит плана: API > тариф каталога > null;
+ *  - порог показа: ручной (settings) > min(окно, лимит) > порог площадки >
+ *    окно > fallback. Порог площадки — это НЕ окно и НЕ лимит аккаунта.
+ *
+ * `provenance` различает «неизвестно» (`null`) и «подставлен fallback»:
+ * это разные факты, и UI не имеет права показывать второй как первый.
  */
 
-import type { LimitModel } from '../../types/metrics';
+import type { LimitModel, LimitSource } from '../../types/metrics';
+import { lookupLimitCatalog } from './limit-catalog';
+import type { LimitCatalogHit } from './limit-catalog';
 
-export type LimitSource = 'api' | 'catalog' | 'settings' | 'fallback';
+export type { LimitSource } from '../../types/metrics';
 
 export interface LimitProbe {
+  /** Площадка (site id или хост) — для каталога платформ/планов. */
+  site?: string | null;
   modelId?: string;
+
   /** Окно модели в токенах (API/каталог), например AI Studio 1 048 576. */
   modelWindow?: number;
+  /** Откуда взято окно; отсутствие источника у непустого значения = 'catalog'. */
+  windowSource?: LimitSource;
+
   /** Лимит плана, если платформа его сообщает. null/undefined — неизвестен. */
   accountLimit?: number | null;
-  /** Явный порог показа (ручной pct/legacy cap), главнее окна и плана. */
+  /** Откуда взят лимит плана; по умолчанию — API. */
+  accountSource?: LimitSource;
+
+  /**
+   * Порог показа. `settings`/`api` — авторитетный факт; `fallback`/`catalog` —
+   * запасной, который не блокирует тарифный лимит каталога.
+   */
   displayLimit?: number | null;
-  plan?: string | null;
-  /** Откуда взято окно. */
-  windowSource?: LimitSource;
-  /** Откуда взят явный порог показа. */
+  /** Откуда взят порог; по умолчанию — настройки. */
   displaySource?: LimitSource;
+
+  plan?: string | null;
+  /** Откуда узнали тариф; по умолчанию — API/runtime-сигнал. */
+  planSource?: LimitSource;
+
   /** Запасной порог, если окно/план/ручной порог неизвестны. */
   fallbackLimit?: number;
 }
@@ -44,35 +65,134 @@ function pushSource(list: LimitSource[], source: LimitSource | null | undefined)
 /**
  * Собирает LimitModel. Никогда не бросает и не читает состояние.
  *
- * displayLimit НЕ пересчитывается из окна, если передан явно: в 2.2 это
- * сохраняет байтовый паритет со старым порогом (128 000). Разделение
- * «окно 1M / порог 128k» становится видимым в modelWindow/displayLimit.
+ * displayLimit собирается по приоритету: ручной/API-порог → min(окно, лимит)
+ * → порог площадки (128k у Gemini/GSA) → окно → fallback. Legacy-порог с
+ * source=fallback НЕ блокирует тариф каталога: иначе 128k заслонит 32K Free.
  */
 export function resolveLimitModel(probe: LimitProbe | null | undefined): LimitModel {
   const input = probe || {};
-  const modelWindow = positiveInt(input.modelWindow);
-  const accountLimit = positiveInt(input.accountLimit);
+  const hit: LimitCatalogHit = lookupLimitCatalog({
+    site: input.site,
+    plan: input.plan,
+    modelId: input.modelId
+  });
+
+  const probeWindow = positiveInt(input.modelWindow);
+  const probeWindowSource: LimitSource = input.windowSource || 'catalog';
+  const apiWindow = (probeWindow > 0 && probeWindowSource === 'api') ? probeWindow : 0;
+  const usableProbeWindow = (probeWindow > 0 && probeWindowSource !== 'fallback') ? probeWindow : 0;
+  const catalogModelWindow = positiveInt(hit.modelWindow);
+  const catalogSiteWindow = positiveInt(hit.siteWindow);
+
+  let modelWindow = 0;
+  let windowSource: LimitSource | null = null;
+  if (apiWindow > 0) {
+    modelWindow = apiWindow;
+    windowSource = 'api';
+  } else if (catalogModelWindow > 0) {
+    modelWindow = catalogModelWindow;
+    windowSource = 'catalog';
+  } else if (usableProbeWindow > 0) {
+    modelWindow = usableProbeWindow;
+    windowSource = probeWindowSource;
+  } else if (catalogSiteWindow > 0) {
+    modelWindow = catalogSiteWindow;
+    windowSource = 'catalog';
+  }
+
+  const probeAccount = positiveInt(input.accountLimit);
+  const probeAccountSource: LimitSource = input.accountSource || 'api';
+  const usableProbeAccount = (probeAccount > 0 && probeAccountSource !== 'fallback') ? probeAccount : 0;
+  const catalogAccount = hit.found.plan ? positiveInt(hit.accountLimit) : 0;
+
+  let accountLimit = 0;
+  let accountSource: LimitSource | null = null;
+  if (usableProbeAccount > 0) {
+    accountLimit = usableProbeAccount;
+    accountSource = probeAccountSource;
+  } else if (catalogAccount > 0) {
+    accountLimit = catalogAccount;
+    accountSource = 'catalog';
+  }
+
+  // Тариф приходит runtime-сигналом (API/DOM); каталог даёт только его лимит.
+  const plan = hit.plan;
+  const planSource: LimitSource | null = plan ? (input.planSource || 'api') : null;
+
   const explicitDisplay = positiveInt(input.displayLimit);
+  const displaySourceInput: LimitSource = input.displaySource || 'settings';
   const fallback = positiveInt(input.fallbackLimit);
 
+  // Ручной порог и API-порог — факты платформы/пользователя, они главнее.
+  // Legacy-порог с source=fallback/catalog НЕ блокирует тариф каталога:
+  // иначе 128k навсегда заслонит лимит Gemini Free 32K.
+  const manualDisplay = (explicitDisplay > 0 && displaySourceInput === 'settings') ? explicitDisplay : 0;
+  const apiDisplay = (explicitDisplay > 0 && displaySourceInput === 'api') ? explicitDisplay : 0;
+  const callerCatalogDisplay = (explicitDisplay > 0 && displaySourceInput === 'catalog') ? explicitDisplay : 0;
+  const callerFallbackDisplay = (explicitDisplay > 0 && displaySourceInput === 'fallback') ? explicitDisplay : 0;
+
   let displayLimit = 0;
-  if (explicitDisplay > 0) displayLimit = explicitDisplay;
-  else if (modelWindow > 0 && accountLimit > 0) displayLimit = Math.min(modelWindow, accountLimit);
-  else if (modelWindow > 0) displayLimit = modelWindow;
-  else if (fallback > 0) displayLimit = fallback;
+  let displaySource: LimitSource | null = null;
+  if (manualDisplay > 0) {
+    displayLimit = manualDisplay;
+    displaySource = 'settings';
+  } else if (apiDisplay > 0) {
+    displayLimit = apiDisplay;
+    displaySource = 'api';
+  } else if (modelWindow > 0 && accountLimit > 0) {
+    displayLimit = Math.min(modelWindow, accountLimit);
+    displaySource = (accountLimit <= modelWindow ? accountSource : windowSource) || 'catalog';
+  } else if (hit.displayThreshold > 0) {
+    // Порог площадки не выдаёт себя за окно: у Gemini/GSA это 128k при окне 1M.
+    displayLimit = hit.displayThreshold;
+    displaySource = 'catalog';
+  } else if (callerCatalogDisplay > 0) {
+    displayLimit = callerCatalogDisplay;
+    displaySource = 'catalog';
+  } else if (modelWindow > 0) {
+    displayLimit = modelWindow;
+    displaySource = windowSource;
+  } else if (callerFallbackDisplay > 0) {
+    displayLimit = callerFallbackDisplay;
+    displaySource = 'fallback';
+  } else if (fallback > 0) {
+    displayLimit = fallback;
+    displaySource = 'fallback';
+  }
+
+  // Совместимость с прежним контрактом: при полном отсутствии окна видимый
+  // порог остаётся числом, но provenance/windowKnown честно говорят, что это
+  // не окно модели.
+  const windowKnown = modelWindow > 0;
+  const modelWindowOut = windowKnown ? modelWindow : displayLimit;
 
   const sources: LimitSource[] = [];
-  if (modelWindow > 0) pushSource(sources, input.windowSource || 'catalog');
-  else pushSource(sources, 'fallback');
-  if (accountLimit > 0) pushSource(sources, 'api');
-  if (explicitDisplay > 0) pushSource(sources, input.displaySource || 'settings');
+  if (windowSource) pushSource(sources, windowSource);
+  if (accountSource) pushSource(sources, accountSource);
+  if (displaySource) pushSource(sources, displaySource);
+  if (sources.length === 0 && fallback > 0) pushSource(sources, 'fallback');
+
+  const warnings: string[] = [];
+  if (!windowKnown) warnings.push('window-unknown');
+  if (displaySource === 'fallback') warnings.push('fallback-display');
+  if (hit.hasPlans && !plan) warnings.push('plan-unknown');
+  if (!accountLimit) warnings.push('account-limit-unknown');
 
   return {
     modelId: (typeof input.modelId === 'string' && input.modelId) ? input.modelId : undefined,
-    modelWindow: modelWindow > 0 ? modelWindow : displayLimit,
+    modelWindow: modelWindowOut,
+    windowKnown: windowKnown,
     displayLimit: displayLimit,
     accountLimit: accountLimit > 0 ? accountLimit : null,
-    plan: (typeof input.plan === 'string' && input.plan) ? input.plan : null,
-    sources: sources
+    plan: plan,
+    sources: sources,
+    provenance: {
+      modelWindow: windowSource,
+      displayLimit: displaySource,
+      accountLimit: accountSource,
+      plan: planSource
+    },
+    warnings: warnings,
+    sourceNote: hit.note || undefined
   };
 }
