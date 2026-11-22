@@ -58,4 +58,7 @@ export interface Adapter {
 
   /** Текст последней отрендеренной реплики ассистента (DOM-перекрытие хвоста). */
   getLastAssistantText?(): string;
+
+  /** Видимые реплики ленты (DOM-дополнение, когда сеть ещё без ответа). */
+  getVisibleMessages?(): Array<{ role: string; text: string }>;
 }

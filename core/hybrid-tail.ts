@@ -395,6 +395,107 @@ function aiCmDomLastAssistant(): { text: string; id: string } {
   }
   return { text: '', id: '' };
 }
+/** Видимые сообщения ленты (ChatGPT) в форме экспорта; null — адаптер не даёт. */
+function aiCmDomVisibleMessages(): AiCmExportMessage[] | null {
+  try {
+    var anyAd: any = (typeof currentAdapter !== 'undefined') ? currentAdapter : null;
+    if (!anyAd || anyAd.siteName !== 'chatgpt') return null;
+    var raw = null;
+    if (typeof anyAd.getVisibleMessages === 'function') raw = anyAd.getVisibleMessages();
+    else if (typeof anyAd.extractMessages === 'function') raw = anyAd.extractMessages();
+    if (!Array.isArray(raw) || !raw.length) return null;
+    var out: AiCmExportMessage[] = [];
+    for (var i = 0; i < raw.length; i++) {
+      var m = raw[i] || {};
+      var role = (m.role === 'user' || m.role === 'human') ? 'user' : (m.role === 'assistant' ? 'assistant' : '');
+      var text = String((m.text != null) ? m.text : ((m.content != null) ? m.content : '')).trim();
+      if (role && text) out.push({ role: role, text: text });
+    }
+    return out.length ? out : null;
+  } catch (eVis) {
+    if (typeof swallowSoft === 'function') swallowSoft(eVis, 'hybrid-tail:dom-visible');
+    return null;
+  }
+}
+/** Сообщение ленты уже присутствует в базе (равенство или префикс по скелету). */
+function aiCmDomMsgInBase(msg: AiCmExportMessage, base: AiCmExportMessage[]): boolean {
+  var sk = aiCmTailSkel(String((msg && msg.text) || ''));
+  if (!sk) return false;
+  var role = (msg && msg.role === 'user') ? 'user' : 'assistant';
+  for (var i = base.length - 1; i >= 0; i--) {
+    var b = base[i] || {};
+    var bRole = (b.role === 'user' || b.role === 'human') ? 'user' : 'assistant';
+    if (bRole !== role) continue;
+    var bk = aiCmTailSkel(String(b.text || ''));
+    if (!bk) continue;
+    if (bk === sk || bk.indexOf(sk) === 0 || sk.indexOf(bk) === 0) return true;
+  }
+  return false;
+}
+/**
+ * Новые сообщения ленты после последнего сообщения сети. Сеть может отдать снимок
+ * с последней репликой пользователя, но без ответа (длинный стрим/canvas); тогда
+ * видимая лента — единственный источник ответа. Якорь — последнее сообщение базы:
+ * всё, что идёт после него в ленте, — новые ходы. Если реплика пользователя
+ * виртуализирована, допускаем один последний assistant, которого нет в базе.
+ */
+function aiCmDomNewSuffix(base: AiCmExportMessage[] | null): { messages: AiCmExportMessage[]; text: string; via: string } | null {
+  if (!Array.isArray(base) || !base.length) return null;
+  var dom = aiCmDomVisibleMessages();
+  if (!dom || !dom.length) return null;
+  var bi = base.length - 1;
+  while (bi >= 0 && !String((base[bi] && base[bi].text) || '').trim()) bi--;
+  if (bi < 0) return null;
+  var target = base[bi];
+  var targetRole = (target.role === 'user' || target.role === 'human') ? 'user' : 'assistant';
+  var targetSkel = aiCmTailSkel(String(target.text || ''));
+  if (!targetSkel) return null;
+  var di = -1;
+  for (var i = dom.length - 1; i >= 0; i--) {
+    if (dom[i].role !== targetRole) continue;
+    var sk = aiCmTailSkel(String(dom[i].text || ''));
+    if (!sk) continue;
+    if (sk === targetSkel ||
+      (targetRole === 'assistant' && (sk.indexOf(targetSkel) === 0 || targetSkel.indexOf(sk) === 0))) {
+      di = i;
+      break;
+    }
+  }
+  if (di < 0) {
+    if (targetRole !== 'user') return null;
+    // Без якоря (реплика user виртуализирована) дополняем только полную базу:
+    // иначе старый ход, не попавший в усечённую базу, выглядел бы новым.
+    if (typeof baseComplete !== 'undefined' && baseComplete !== true) return null;
+    // Берём последний ответ, которого в базе нет.
+    for (var j = dom.length - 1; j >= 0; j--) {
+      if (dom[j].role !== 'assistant') continue;
+      if (aiCmDomMsgInBase(dom[j], base)) return null;
+      var only = dom.slice(j);
+      return { messages: only, text: only.map(function (m) { return m.text; }).join('\n'), via: 'new-answer' };
+    }
+    return null;
+  }
+  var msgs = dom.slice(di + 1).filter(function (m) { return !!m.text; });
+  if (!msgs.length) return null;
+  return { messages: msgs, text: msgs.map(function (m) { return m.text; }).join('\n'), via: 'anchor' };
+}
+var lastSuffixDiagSig = '';
+function aiCmDiagDomSuffix(sfx: { messages: AiCmExportMessage[]; text: string; via: string }): void {
+  try {
+    if (typeof aiCmDiagLine !== 'function') return;
+    var sig = sfx.via + '|' + sfx.messages.length + '|' + sfx.text.length;
+    if (sig === lastSuffixDiagSig) return;
+    lastSuffixDiagSig = sig;
+    aiCmDiagLine('chatgpt-dom-suffix', {
+      via: sfx.via,
+      msgs: sfx.messages.length,
+      textLen: sfx.text.length
+    });
+  } catch (eSD) {
+    if (typeof swallowSoft === 'function') swallowSoft(eSD, 'hybrid-tail:dom-suffix-diag');
+  }
+}
+
 var lastOverlayDiagSig = '';
 function aiCmDiagFinalOverlay(index: number, before: string, text: string): void {
   try {
@@ -459,13 +560,26 @@ function aiCmFinalAssistantOverlay(
   // Якорь не найден: не подменяем ход угадыванием (canvas мог быть переписан целиком).
   return null;
 }
-/** Копия массива с заменой последнего assistant; при отсутствии перекрытия — тот же массив. */
-function aiCmApplyFinalAssistantOverlay(messages: AiCmExportMessage[] | null): AiCmExportMessage[] | null {
-  var ov = aiCmFinalAssistantOverlay(messages);
+/**
+ * Живой DOM-хвост для файла: новые ходы после последнего сообщения сети
+ * (сеть без ответа) или замена усечённого последнего assistant. Без изменений —
+ * тот же массив.
+ */
+function aiCmApplyLiveDomTail(messages: AiCmExportMessage[] | null): AiCmExportMessage[] | null {
+  var sfx = (typeof aiCmDomNewSuffix === 'function') ? aiCmDomNewSuffix(messages) : null;
+  if (sfx) {
+    aiCmDiagDomSuffix(sfx);
+    return (messages || []).concat(sfx.messages);
+  }
+  var ov = (typeof aiCmFinalAssistantOverlay === 'function') ? aiCmFinalAssistantOverlay(messages) : null;
   if (!ov) return messages;
   var out = (messages || []).slice();
   out[ov.index] = Object.assign({}, out[ov.index], { text: ov.text });
   return out;
+}
+/** Прежнее имя API (тесты/совместимость): теперь учитывает и новые ходы, и перекрытие. */
+function aiCmApplyFinalAssistantOverlay(messages: AiCmExportMessage[] | null): AiCmExportMessage[] | null {
+  return aiCmApplyLiveDomTail(messages);
 }
 
 function getEffectiveText(): string {
@@ -488,6 +602,15 @@ function getEffectiveText(): string {
     // текст, счётчик сообщений не меняется.
     var basePrepared = (typeof aiCmBasePrepared !== 'undefined' && Array.isArray(aiCmBasePrepared))
       ? aiCmBasePrepared : null;
+    // Сеть может не содержать последнего ответа вовсе (снимок с последней репликой user).
+    // Видимая лента даёт новые ходы после последнего сообщения базы — дописываем их.
+    var sfx = (typeof aiCmDomNewSuffix === 'function') ? aiCmDomNewSuffix(basePrepared) : null;
+    if (sfx) {
+      aiCmDiagDomSuffix(sfx);
+      return aiCmTailMetricBase(baseText) + '\n' + sfx.text;
+    }
+    // Иначе последний assistant может быть продолжением сетевого: стрим/canvas
+    // финализировался позже снимка. Это тот же ход — заменяем текст, счётчик прежний.
     var ov = (typeof aiCmFinalAssistantOverlay === 'function') ? aiCmFinalAssistantOverlay(basePrepared) : null;
     if (ov) {
       var baseEff = aiCmTailMetricBase(baseText);
@@ -505,7 +628,13 @@ function getEffectiveCount(fallbackCount: number): number {
     // Счётчик меряется тем же правилом, что и текст (см. комментарий выше) —
     // bounded-хвост новее базы это новые ходы разговора, а не дрейф DOM.
     var tail = computeTailFromDom();
-    if (!tail.count) return baseCount;
+    if (!tail.count) {
+      // ChatGPT: сеть без ответа, но лента уже показывает новые ходы.
+      var basePrepared = (typeof aiCmBasePrepared !== 'undefined' && Array.isArray(aiCmBasePrepared))
+        ? aiCmBasePrepared : null;
+      var sfx = (typeof aiCmDomNewSuffix === 'function') ? aiCmDomNewSuffix(basePrepared) : null;
+      return sfx ? (baseCount + sfx.messages.length) : baseCount;
+    }
     if (tail.bounded) return baseCount + tail.count;
     return baseCount; // O-32: неполный DOM не сокращает счётчик канонической базы
   }
@@ -526,6 +655,7 @@ var lastEffMsgsTailText = '';
 var lastEffMsgsBounded = false;
 var lastEffMsgsOverlayText = '';
 var lastEffMsgsOverlayIndex = -1;
+var lastEffMsgsSuffixText = '';
 var lastEffMsgsResult: AiCmExportMessage[] | null = null;
 
 function getEffectiveMessages(): AiCmExportMessage[] | null {
@@ -535,19 +665,24 @@ function getEffectiveMessages(): AiCmExportMessage[] | null {
   if (!base) return null;
   var tail = computeTailFromDom();
   var tailText = (tail.text && tail.bounded) ? tail.text : '';
-  var ov = tailText
+  var sfx = (tailText || typeof aiCmDomNewSuffix !== 'function') ? null : aiCmDomNewSuffix(base);
+  var sfxText = sfx ? sfx.text : '';
+  var ov = (tailText || sfx)
     ? null
     : ((typeof aiCmFinalAssistantOverlay === 'function') ? aiCmFinalAssistantOverlay(base) : null);
   var ovText = ov ? ov.text : '';
   var ovIndex = ov ? ov.index : -1;
   if (lastEffMsgsBaseRef === base && lastEffMsgsTailText === tailText &&
       lastEffMsgsBounded === !!tail.bounded &&
+      lastEffMsgsSuffixText === sfxText &&
       lastEffMsgsOverlayText === ovText && lastEffMsgsOverlayIndex === ovIndex) {
     return lastEffMsgsResult;
   }
   var result: AiCmExportMessage[];
   if (tailText) {
     result = base.concat(tail.messages);
+  } else if (sfx) {
+    result = base.concat(sfx.messages);
   } else if (ov) {
     result = base.slice();
     result[ov.index] = Object.assign({}, base[ov.index], { text: ov.text });
@@ -557,6 +692,7 @@ function getEffectiveMessages(): AiCmExportMessage[] | null {
   lastEffMsgsBaseRef = base;
   lastEffMsgsTailText = tailText;
   lastEffMsgsBounded = !!tail.bounded;
+  lastEffMsgsSuffixText = sfxText;
   lastEffMsgsOverlayText = ovText;
   lastEffMsgsOverlayIndex = ovIndex;
   lastEffMsgsResult = result;
@@ -587,6 +723,8 @@ function getEffectiveMessages(): AiCmExportMessage[] | null {
   Api.getEffectiveMessages = getEffectiveMessages;
   Api.aiCmFinalAssistantOverlay = aiCmFinalAssistantOverlay;
   Api.aiCmApplyFinalAssistantOverlay = aiCmApplyFinalAssistantOverlay;
+  Api.aiCmApplyLiveDomTail = aiCmApplyLiveDomTail;
+  Api.aiCmDomNewSuffix = aiCmDomNewSuffix;
   Api.aiCmDomLastAssistant = aiCmDomLastAssistant;
   if (typeof module !== 'undefined' && module.exports) module.exports = Api;
   if (typeof window !== 'undefined') window.AiCmHybridTail = Api;

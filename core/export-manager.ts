@@ -295,8 +295,8 @@ function aiCmCollectExportSource(): AiCmExportMessage[] {
     try {
       var aiCmTailApi = (typeof window !== 'undefined' && window && (window as any).AiCmHybridTail)
         ? (window as any).AiCmHybridTail : null;
-      if (aiCmTailApi && typeof aiCmTailApi.aiCmApplyFinalAssistantOverlay === 'function') {
-        var overlaid = aiCmTailApi.aiCmApplyFinalAssistantOverlay(out);
+      if (aiCmTailApi && typeof aiCmTailApi.aiCmApplyLiveDomTail === 'function') {
+        var overlaid = aiCmTailApi.aiCmApplyLiveDomTail(out);
         if (Array.isArray(overlaid) && overlaid.length) out = overlaid;
       }
     } catch (eOv) { swallowSoft(eOv, 'export-manager:final-assistant-overlay'); }

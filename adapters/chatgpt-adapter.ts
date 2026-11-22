@@ -414,6 +414,22 @@ class ChatGPTAdapter extends BaseAdapter {
   }
 
   /**
+   * Видимые реплики без диагностики — для DOM-дополнения хвоста (сеть может ещё
+   * не содержать ответа). Роли нормализованы, текст уже очищен от кнопок/префикса.
+   */
+  getVisibleMessages(): Array<{ role: string; text: string }> {
+    try {
+      const elements = this._findMessageElements();
+      const out: Array<{ role: string; text: string }> = [];
+      for (let i = 0; i < elements.length; i++) {
+        const text = this._extractText(elements[i].element).replace(CHATGPT_ANSWER_PREFIX_RE, '').trim();
+        if (text) out.push({ role: elements[i].role, text: text });
+      }
+      return out;
+    } catch (e) { swallowSoft(e, 'adapter:chatgpt:visible-messages'); return []; }
+  }
+
+  /**
    * Текст последней отрендеренной реплики ассистента (для DOM-перекрытия хвоста).
    * Живая разметка ChatGPT 2026-10 — `[data-turn-key]`, поэтому селекторы знает
    * только адаптер: повторять их в core/hybrid-tail нельзя. Пустая строка — нет реплики.

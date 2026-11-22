@@ -182,6 +182,88 @@ describe('ChatGPT: финальный assistant из DOM (тот же ход, п
   });
 });
 
+describe('ChatGPT: сеть без ответа — новые ходы из видимой ленты', () => {
+  const U2 = 'Новый вопрос после последнего снимка';
+  const ANSWER = 'Ответ, которого ещё нет в сети: длинный текст нового хода.';
+  const BASE_U = [
+    { id: 'u1', role: 'user', text: U1 },
+    { id: 'a1', role: 'assistant', text: A1_PART },
+    { id: 'u2', role: 'user', text: U2 }
+  ];
+
+  function scopeWithBase(base, visible) {
+    return installScope({
+      aiCmBasePrepared: base,
+      baseText: Canonical.canonicalBodyText(base),
+      baseCount: base.length,
+      baseSkelSet: new Set(base.map(function (m) { return Hybrid.aiCmTailSkel(m.text); })),
+      baseIdSet: new Set(base.map(function (m) { return m.id; })),
+      currentAdapter: {
+        siteName: 'chatgpt',
+        getLastAssistantText: function () { return visible[visible.length - 1].text; },
+        getVisibleMessages: function () { return visible; }
+      }
+    });
+  }
+
+  test('последняя реплика user видна: ответ после неё дописывается', function () {
+    render([]);
+    scopeWithBase(BASE_U, [{ role: 'user', text: U2 }, { role: 'assistant', text: ANSWER }]);
+
+    const sfx = Hybrid.aiCmDomNewSuffix(BASE_U);
+    expect(sfx).not.toBeNull();
+    expect(sfx.via).toBe('anchor');
+    expect(sfx.messages.map(function (m) { return m.text; })).toEqual([ANSWER]);
+
+    expect(Hybrid.getEffectiveText()).toBe(Canonical.canonicalBodyText(BASE_U) + '\n' + ANSWER);
+    expect(Hybrid.getEffectiveCount(BASE_U.length)).toBe(BASE_U.length + 1);
+    const messages = Hybrid.getEffectiveMessages();
+    expect(messages.length).toBe(BASE_U.length + 1);
+    expect(messages[messages.length - 1].text).toBe(ANSWER);
+  });
+
+  test('реплика user виртуализирована: новый assistant, которого нет в базе, не теряется', function () {
+    render([]);
+    scopeWithBase(BASE_U, [{ role: 'assistant', text: ANSWER }]);
+
+    const sfx = Hybrid.aiCmDomNewSuffix(BASE_U);
+    expect(sfx).not.toBeNull();
+    expect(sfx.via).toBe('new-answer');
+    expect(sfx.messages.map(function (m) { return m.text; })).toEqual([ANSWER]);
+  });
+
+  test('старый assistant из базы не считается новым ходом', function () {
+    render([]);
+    scopeWithBase(BASE_U, [{ role: 'assistant', text: A1_PART }]);
+
+    expect(Hybrid.aiCmDomNewSuffix(BASE_U)).toBeNull();
+  });
+
+  test('новая пара user+assistant после последнего assistant добавляется целиком', function () {
+    render([]);
+    scopeWithBase(BASE, [
+      { role: 'user', text: U1 },
+      { role: 'assistant', text: A1_PART },
+      { role: 'user', text: U2 },
+      { role: 'assistant', text: ANSWER }
+    ]);
+
+    const sfx = Hybrid.aiCmDomNewSuffix(BASE);
+    expect(sfx).not.toBeNull();
+    expect(sfx.messages.map(function (m) { return m.text; })).toEqual([U2, ANSWER]);
+  });
+
+  test('aiCmApplyLiveDomTail: файл получает новый ход, база не мутируется', function () {
+    render([]);
+    scopeWithBase(BASE_U, [{ role: 'user', text: U2 }, { role: 'assistant', text: ANSWER }]);
+
+    const out = Hybrid.aiCmApplyLiveDomTail(BASE_U);
+    expect(out.length).toBe(BASE_U.length + 1);
+    expect(out[out.length - 1].text).toBe(ANSWER);
+    expect(BASE_U.length).toBe(3);
+  });
+});
+
 describe('ChatGPT: метрики и тело снимка учитывают финальный текст', () => {
   test('getEffectiveText/getEffectiveMessages: последний assistant заменён, счётчик прежний', function () {
     render([{ id: 'u1', role: 'user', text: U1 }, { id: 'a1', role: 'assistant', text: A1_FULL }]);
