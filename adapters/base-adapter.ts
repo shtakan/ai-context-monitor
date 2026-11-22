@@ -157,6 +157,14 @@ class BaseAdapter implements Adapter {
       return [];
     }
   }
+
+  /**
+   * Сигнал платформы «контекст заполнен». База сигнала не знает; переопределяют
+   * адаптеры, у которых есть баннер (ChatGPT). Не путать с нашей оценкой токенов.
+   */
+  detectContextSaturation(): { active: boolean; reason: string } {
+    return { active: false, reason: '' };
+  }
 }
 
 // Экспортируем для использования в других скриптах

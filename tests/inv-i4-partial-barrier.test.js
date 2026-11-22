@@ -95,6 +95,7 @@ function writerSandbox(over) {
     maxTokenCount: 2593,
     displayLimit: 1000000,
     percentage: 42.5,
+    snapshotPercentage: 42.5,
     lastPercentage: 42.5,
     lastEmitConvId: CONV_ID,
     emitConvA: CONV_ID,

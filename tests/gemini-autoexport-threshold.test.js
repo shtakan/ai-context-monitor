@@ -460,7 +460,7 @@ describe('P1 D1: pct при загрузке не выгружает, пока �
     // внутри DRAW остаётся только tape-restore вызов (не отрисовка бейджа); pct-вызова нет
     expect(draw).not.toContain('maybeAutoExport(percentage);');
     // adapter-путь (AI Studio/Qwen, без ai-cm-full-history) планирует ту же проверку
-    expect(draw).toContain('aiCmScheduleAutoExport(percentage);');
+    expect(draw).toContain('aiCmScheduleAutoExport(snapshotPercentage);');
 
     const iListener = CONTENT.indexOf("window.addEventListener('ai-cm-full-history', function");
     const iProc = CONTENT.indexOf('function processAndSend(');

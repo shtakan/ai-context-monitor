@@ -69,6 +69,7 @@ const exportPdfBtn = /** @type {HTMLButtonElement|null} */ (document.getElementB
 const exportTxtBtn = /** @type {HTMLButtonElement|null} */ (document.getElementById('export-txt'));
 const exportHintEl = document.getElementById('export-hint');
 const staleWarningEl = document.getElementById('stale-warning');
+const saturationWarningEl = document.getElementById('saturation-warning');
 const exportDiagBtn = document.getElementById('export-diag');
 // T1 (v1.16): индикатор источника истории (архив — первый ярус / live — второй)
 const sourceEl = document.getElementById('stat-source');
@@ -748,6 +749,15 @@ function updateStatsFromState(state, tabHost, tabPath, fromCache) {
 }
 
 function updateStaleWarning(state, tabHost, tabPath) {
+  // BIG-02: платформа сообщила «контекст заполнен» — отдельное предупреждение,
+  // не подменяет stale-предупреждение и не сбрасывает число.
+  if (saturationWarningEl) {
+    var showSaturated = !!(state && state.saturated === true && isChatHome(tabHost, tabPath));
+    saturationWarningEl.textContent = showSaturated
+      ? aiCmI18nMessage('options_context_saturated', 'Платформа сообщает: контекст заполнен. Начните новый чат.')
+      : '';
+    saturationWarningEl.style.display = showSaturated ? 'block' : 'none';
+  }
   if (!staleWarningEl) return;
   // H8: stale липнет на home-страницах (диалог не открыт → baseSeen=false, но
   // DOM-эвристика >0). Предупреждение показываем ТОЛЬКО когда открыт реальный
@@ -806,6 +816,10 @@ function showNoData(message) {
   percentEl.style.color = '#8888aa';
   if (limitEl) limitEl.title = '';
   if (percentEl) percentEl.title = '';
+  if (saturationWarningEl) {
+    saturationWarningEl.textContent = '';
+    saturationWarningEl.style.display = 'none';
+  }
 }
 
 // v31: пометка времени для кэша «данные от HH:MM»

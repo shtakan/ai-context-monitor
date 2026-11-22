@@ -67,6 +67,7 @@ function snapshot(over) {
     accountLimit: null,
     limitPlan: null,
     limitWarnings: [],
+    saturated: false,
     attachBreak: null,
     chars: 4000,
     msgs: 12,
@@ -140,7 +141,8 @@ test('commit: смена любого поля сигнатуры → новый
     { baseComplete: false },
     { windowLimit: 1048576 },
     { accountLimit: 32768 },
-    { limitPlan: 'free' }
+    { limitPlan: 'free' },
+    { saturated: true }
   ];
   changes.forEach((change) => {
     const next = Object.assign({}, prev, change);

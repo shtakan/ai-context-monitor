@@ -774,6 +774,7 @@ function aiCmWriteCurrentHistory(): void {
       accountLimit: (snapR1Hist && (snapR1Hist.accountLimit === null || typeof snapR1Hist.accountLimit === 'number')) ? snapR1Hist.accountLimit : undefined,
       limitPlan: (snapR1Hist && (snapR1Hist.limitPlan === null || typeof snapR1Hist.limitPlan === 'string')) ? snapR1Hist.limitPlan : undefined,
       limitWarnings: (snapR1Hist && Array.isArray(snapR1Hist.limitWarnings)) ? snapR1Hist.limitWarnings : undefined,
+      saturated: (snapR1Hist && snapR1Hist.saturated === true) ? true : undefined,
       percent: histPct,
       // v1.9 (qwen): источник зафиксированного числа (dom|net|max|server|hold) — шапка
       // файла показывает его рядом с токенами. У прочих сервисов ключ отсутствует.
@@ -1935,7 +1936,11 @@ function doAutoExportDownload(cid: any, percentage: number, reason: string, netS
         var snapPercent = (snapR1Auto && typeof snapR1Auto.percent === 'number')
           ? snapR1Auto.percent
           : ((typeof percentage === 'number') ? percentage : 0);
-        if (dispLimitAuto > 0) {
+        if (snapR1Auto && snapR1Auto.saturated === true) {
+          // BIG-02: платформа сказала «контекст заполнен» — 100% из снимка,
+          // а не пересчёт от консервативного порога.
+          snapPercent = 100;
+        } else if (dispLimitAuto > 0) {
           var snapCalc = Math.round(snapTokens / dispLimitAuto * 1000) / 10;
           if (snapCalc !== snapPercent) snapPercent = snapCalc;
         }
@@ -1955,6 +1960,7 @@ function doAutoExportDownload(cid: any, percentage: number, reason: string, netS
           accountLimit: (snapR1Auto && (snapR1Auto.accountLimit === null || typeof snapR1Auto.accountLimit === 'number')) ? snapR1Auto.accountLimit : undefined,
           limitPlan: (snapR1Auto && (snapR1Auto.limitPlan === null || typeof snapR1Auto.limitPlan === 'string')) ? snapR1Auto.limitPlan : undefined,
           limitWarnings: (snapR1Auto && Array.isArray(snapR1Auto.limitWarnings)) ? snapR1Auto.limitWarnings : undefined,
+          saturated: (snapR1Auto && snapR1Auto.saturated === true) ? true : undefined,
           percent: snapPercent,
           // v1.9 (qwen): тот же источник, что у бейджа/панели (lastTokensSnapshot.src).
           src: (snapR1Auto && snapR1Auto.src) ? snapR1Auto.src : undefined,

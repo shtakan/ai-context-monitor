@@ -132,6 +132,8 @@ function makeCtx(over) {
     body: null,
     maxTokenCount: 0,
     percentage: 0,
+    snapshotPercentage: 0,
+    contextSaturated: false,
     displayLimit: 128000,
     effectiveLimit: 128000,
     contextLimit: 128000,

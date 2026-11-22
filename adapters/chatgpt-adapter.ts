@@ -412,4 +412,50 @@ class ChatGPTAdapter extends BaseAdapter {
     }
     return found; // null, если не нашли — это нормально
   }
+
+  /**
+   * Сигнал платформы «контекст заполнен» (BIG-02). Баннер ChatGPT стоит над
+   * композером и содержит заголовок «Контекстное окно заполнено» + кнопки
+   * «Новый чат»/«Перейти на Plus». Ищем не текст треда, а кликабельный контрол
+   * баннера: поднимаемся от кнопки вверх до общего контейнера с заголовком.
+   * Так сообщение пользователя, где встречается эта фраза, не даёт ложного 100%.
+   */
+  detectContextSaturation(): { active: boolean; reason: string } {
+    try {
+      const actionTexts = [
+        'новый чат', 'new chat',
+        'перейти на plus', 'upgrade to plus', 'upgrade plan', 'перейти на платный'
+      ];
+      const phrases = [
+        'контекстное окно заполнено',
+        'context window is full',
+        'you’ve reached the context limit',
+        "you've reached the context limit",
+        'conversation is too long'
+      ];
+      const controls = document.querySelectorAll('button, a, [role="button"]');
+      for (let i = 0; i < controls.length; i++) {
+        const control = controls[i];
+        const label = String(control.textContent || '').trim().toLowerCase();
+        if (!label || !actionTexts.some(function (t) { return label.indexOf(t) !== -1; })) continue;
+        let scope: Element | null = control.parentElement;
+        for (let depth = 0; depth < 7 && scope; depth++) {
+          // Не поднимаемся до body/html: иначе текст треда и кнопка «Новый чат»
+          // из сайдбара встретятся в общем предке и дадут ложный 100%.
+          if (scope === document.body || scope === document.documentElement) break;
+          const text = String(scope.textContent || '').toLowerCase();
+          // Контейнер баннера короткий; тело страницы/тред сюда не попадает.
+          if (text.length > 0 && text.length <= 1200) {
+            for (let p = 0; p < phrases.length; p++) {
+              if (text.indexOf(phrases[p]) !== -1) {
+                return { active: true, reason: 'chatgpt-context-full' };
+              }
+            }
+          }
+          scope = scope.parentElement;
+        }
+      }
+    } catch (e) { swallowSoft(e, 'adapter:chatgpt:context-saturation'); }
+    return { active: false, reason: '' };
+  }
 }

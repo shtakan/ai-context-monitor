@@ -2815,6 +2815,8 @@ function processAndSend(): void {
       messageCount = baseCount;
     }
     const modelId = resolveCurrentModel();
+    // 2.2/фаза 5: баннер платформы (ChatGPT) — авторитетнее нашей оценки токенов.
+    const contextSaturated = aiCmChatGptContextSaturated();
     const effective = getEffectiveText(); // обновляет lastBounded
     let fullText;
     let countForTokens;
@@ -2950,8 +2952,10 @@ function processAndSend(): void {
       lastBounded = false;
     }
     const percentage = displayLimit > 0 ? Math.round((maxTokenCount / displayLimit) * 1000) / 10 : 0;
-    const hasChanged = percentage !== lastPercentage;
-    lastPercentage = percentage;
+    // BIG-02: баннер «контекст заполнен» → 100% и предупреждение; токены остаются измеренными.
+    const snapshotPercentage = contextSaturated ? 100 : percentage;
+    const hasChanged = snapshotPercentage !== lastPercentage;
+    lastPercentage = snapshotPercentage;
     // v2.6 (R1, Шаг 2): ЕДИНСТВЕННАЯ запись снимка метрики — именно здесь, после строгого
     // удержания бейджа, когда maxTokenCount и percentage окончательны. Все потребители числа
     // (панель GET_STATS, шапка файла экспорта в core/export-manager.ts) читают tokens/percent/
@@ -3006,7 +3010,10 @@ function processAndSend(): void {
           : (ModelConfig.getModel(modelId)?.name || modelId),
         src: aiCmMetricValueSrc as AiCmContextSnapshot['src'],
         tokens: maxTokenCount,
-        percent: percentage,
+        percent: snapshotPercentage,
+        // BIG-02: платформа сообщила «контекст заполнен» — файл/попап несут метку,
+        // даже если наша оценка ниже порога.
+        saturated: contextSaturated ? true : undefined,
         limit: displayLimit,
         effectiveLimit: effectiveLimit,
         contextLimit: contextLimit,
@@ -3105,7 +3112,7 @@ function processAndSend(): void {
           ts: Date.now(),
           event: 'badge-update',
           reason: badgeSuppressActive ? 'spa-suppress' : (aiCmLoaderFreeze ? 'loader-freeze' : 'draw'),
-          pct: percentage, tokens: maxTokenCount, stale: (stale === true) ? 1 : 0,
+          pct: snapshotPercentage, tokens: maxTokenCount, stale: (stale === true) ? 1 : 0,
           baseSeen: (baseSeen === true) ? 1 : 0, baseComplete: (baseComplete === true) ? 1 : 0,
           // O-35 (v54): признак «база принята адаптером» — объясняет baseCount=0 в живом
           // логе: baseCount/netBaseMsgs описывают СЕТЕВУЮ базу, адаптерная живёт здесь.
@@ -3126,11 +3133,11 @@ function processAndSend(): void {
     // путь снятия супрессии) не является принятием базы; проверка порога перенесена в
     // aiCmScheduleAutoExport и запускается событием базы / adapter-записью (дебаунс 500 мс).
     // Фаза B: проактивные пороги 70/85/95 → SW (бейдж + opt-in уведомления)
-    sendThresholdPct(percentage);
+    sendThresholdPct(snapshotPercentage);
     if (hasChanged) {
       const tagPct = aiCmActivePct();
       const tag = (tagPct != null) ? ('порог ' + tagPct + '% от Авто') : 'Авто';
-      debugLog('log', `📊 ${ModelConfig.getModel(modelId)?.name || modelId}: ${maxTokenCount} / ${displayLimit.toLocaleString()} (${tag}) · окно ${contextLimit.toLocaleString()} · ${percentage}%` + (netAttachTokens > 0 ? ` · вложения≈${netAttachTokens}` : '') + (metricServerTokens > 0 ? ' · serverTokens' : '') + (baseComplete ? ' · по базе' : ''));
+      debugLog('log', `📊 ${ModelConfig.getModel(modelId)?.name || modelId}: ${maxTokenCount} / ${displayLimit.toLocaleString()} (${tag}) · окно ${contextLimit.toLocaleString()} · ${snapshotPercentage}%` + (contextSaturated ? ' · платформа: контекст заполнен' : '') + (netAttachTokens > 0 ? ` · вложения≈${netAttachTokens}` : '') + (metricServerTokens > 0 ? ' · serverTokens' : '') + (baseComplete ? ' · по базе' : ''));
     }
 
     // Снапшот для попапа в chrome.storage.local.
@@ -3155,6 +3162,7 @@ function processAndSend(): void {
             accountLimit: stateNumbers.accountLimit,
             limitPlan: stateNumbers.limitPlan,
             limitWarnings: stateNumbers.limitWarnings,
+            saturated: stateNumbers.saturated === true ? true : undefined,
             percent: stateNumbers.percentage,
             updatedAt: Date.now(),
             stale: stale,
@@ -3241,7 +3249,7 @@ function processAndSend(): void {
             msgOrder: 2,
             tokens: maxTokenCount,
             limit: displayLimit,
-            percent: percentage,
+            percent: snapshotPercentage,
             updatedAt: Date.now(),
             // v63: low-confidence база (sanity-фолбэк без proof) — options.js ставит префикс [LOW CONFIDENCE]_
             isLowConfidenceBase: aiCmLowConfidenceByConv[emitConvA] === true,
@@ -3298,7 +3306,7 @@ function processAndSend(): void {
           adapterBaseSeen = true;
           // P1: adapter-путь (AI Studio/Qwen, без ai-cm-full-history) принял базу — та же
           // отложенная проверка порога, что и у сетевого пути.
-          if (typeof aiCmScheduleAutoExport === 'function') aiCmScheduleAutoExport(percentage);
+          if (typeof aiCmScheduleAutoExport === 'function') aiCmScheduleAutoExport(snapshotPercentage);
           debugLog('log', '[AI CM][trace] history-write source=adapter site=' + (currentAdapter.siteName || '') +
             ' convId=' + cidS24 + ' msgs=' + msgsS24.length);
           // O-35 (ДИАГНОСТИКА, только измерение): qwen-adapter — запись истории путём
@@ -3327,7 +3335,7 @@ function processAndSend(): void {
             model: lastSnapshotModelName || (ModelConfig.getModel(modelId)?.name || modelId),
             tokens: maxTokenCount,
             limit: displayLimit,
-            percent: percentage,
+            percent: snapshotPercentage,
             updatedAt: Date.now(),
             // v81 (2.5): полный DOM-адаптер НЕ помечается low-confidence автоматически
             isLowConfidenceBase: false,
@@ -3364,7 +3372,7 @@ function processAndSend(): void {
           modelName: ModelConfig.getModel(modelId)?.name || modelId,
           tokenCount: maxTokenCount,
           contextLimit: effectiveLimit,
-          percentage,
+          percentage: snapshotPercentage,
           messageCount,
           timestamp: Date.now()
         }
@@ -5427,4 +5435,22 @@ try {
     });
   }
 } catch (eWire) { swallowSoft(eWire, 'content:gemini-plan-wire'); }
+
+/**
+ * 2.2/фаза 5: платформенный сигнал «контекст заполнен» (сейчас только ChatGPT).
+ * Наша оценка токенов может быть ниже реального лимита плана; баннер платформы
+ * авторитетнее — он даёт 100% и предупреждение, не меняя измеренные токены.
+ */
+function aiCmChatGptContextSaturated(): boolean {
+  try {
+    if (typeof currentAdapter === 'undefined' || !currentAdapter) return false;
+    if (currentAdapter.siteName !== 'chatgpt') return false;
+    if (typeof currentAdapter.detectContextSaturation !== 'function') return false;
+    var sat = currentAdapter.detectContextSaturation();
+    return !!(sat && sat.active);
+  } catch (eSat) {
+    swallowSoft(eSat, 'content:context-saturation');
+    return false;
+  }
+}
 

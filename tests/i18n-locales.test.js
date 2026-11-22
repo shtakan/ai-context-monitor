@@ -1298,10 +1298,12 @@ describe('M-4.4: локализация privacy/privacy.html и docs/index.html'
       //   в «Порог показа» без изменения числа ключей.
       // + 2.2/фаза 5: тариф Gemini — options_plan_label / options_plan_auto /
       //   options_plan_hint (+3, словарь 279).
+      // + BIG-02: сигнал платформы «контекст заполнен» — content_tooltip_saturated,
+      //   options_context_saturated (+2, словарь 281).
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('privacy_') === 0; }).length).toBe(87);
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('docs_') === 0; }).length).toBe(43);
-      expect(Object.keys(ru).length).toBe(279);
-      expect(Object.keys(en).length).toBe(279);
+      expect(Object.keys(ru).length).toBe(281);
+      expect(Object.keys(en).length).toBe(281);
     });
 
     test('ru-значения M-4.4 байтово равны тексту разметки, en — перевод без кириллицы', () => {

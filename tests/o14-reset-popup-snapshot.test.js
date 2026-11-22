@@ -199,7 +199,7 @@ const DOM_IDS = [
   'stat-site', 'stat-model', 'stat-tokens', 'stat-window', 'stat-limit', 'stat-account', 'stat-percent',
   'model-select', 'custom-limit', 'show-widget', 'api-key', 'toggle-api-key',
   'exact-count', 'debugLogs', 'export-md', 'export-json', 'export-pdf', 'export-txt',
-  'export-hint', 'stale-warning', 'export-diag', 'reset-limit',
+  'export-hint', 'stale-warning', 'saturation-warning', 'export-diag', 'reset-limit',
   'aiCmAutoExport', 'aiCmAutoExportPct', 'aiCmAutoExportFmt',
   'aiCmProactive', 'aiCmProactiveNotify',
   'aiCmProactiveLow', 'aiCmProactiveMedium', 'aiCmProactiveHigh',
@@ -341,6 +341,19 @@ describe('O-14 D2: попап на removed-событие не держит ст
     expect(document.getElementById('stat-window').textContent).toBe((1050000).toLocaleString());
     expect(document.getElementById('stat-limit').textContent).toBe((128000).toLocaleString());
     expect(document.getElementById('stat-account').textContent).toBe('неизвестен');
+  });
+
+  test('BIG-02: баннер платформы → 100% и предупреждение в попапе', () => {
+    const saturated = Object.assign(liveState(), {
+      tokens: 63077,
+      limit: 128000,
+      percent: 100,
+      saturated: true
+    });
+    mountOptions({ ['aiCmState:' + HOST]: saturated }, TAB_URL);
+    expect(document.getElementById('stat-percent').textContent).toBe('100%');
+    expect(document.getElementById('saturation-warning').style.display).toBe('block');
+    expect(document.getElementById('saturation-warning').textContent).toContain('контекст заполнен');
   });
 
   test('2.2/фаза 5: тариф Gemini загружается и пишется в sync', () => {

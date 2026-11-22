@@ -729,6 +729,8 @@ interface AiCmContextSnapshot {
   limitPlan?: string | null;
   /** 2.2/фаза 5: plan-unknown/account-limit-unknown/window-unknown/fallback-display. */
   limitWarnings?: string[];
+  /** BIG-02: платформа сообщила «контекст заполнен» — процент принудительно 100. */
+  saturated?: boolean;
   attachBreak?: AiCmAttachBreak | null;
   chars?: number;
   msgs?: number;
@@ -756,6 +758,8 @@ interface AiCmWidgetData {
   accountLimit?: number | null;
   limitPlan?: string | null;
   limitWarnings?: string[];
+  /** BIG-02: платформа сообщила «контекст заполнен». */
+  saturated?: boolean;
   modelName: string;
   attachBreak: AiCmAttachBreak | null;
   quality?: 'exact' | 'reported' | 'derived' | 'floor' | 'stale';
@@ -826,6 +830,7 @@ function aiCmWidgetDataFromSnapshot(snap: AiCmContextSnapshot | null): AiCmWidge
     accountLimit: (snap.accountLimit === null || typeof snap.accountLimit === 'number') ? snap.accountLimit : undefined,
     limitPlan: (snap.limitPlan === null || typeof snap.limitPlan === 'string') ? snap.limitPlan : undefined,
     limitWarnings: Array.isArray(snap.limitWarnings) ? snap.limitWarnings : undefined,
+    saturated: snap.saturated === true ? true : undefined,
     modelName: snap.modelName,
     attachBreak: snap.attachBreak || null,
     quality: snap.quality,
@@ -851,6 +856,7 @@ function aiCmStatePatchFromSnapshot(snap: AiCmContextSnapshot | null): Partial<A
     accountLimit: d.accountLimit,
     limitPlan: d.limitPlan,
     limitWarnings: d.limitWarnings,
+    saturated: d.saturated,
     modelName: d.modelName,
     attachBreak: d.attachBreak
   };
@@ -935,6 +941,7 @@ function aiCmCommitContextSnapshot(
     && (prev.windowLimit || 0) === (next.windowLimit || 0)
     && (prev.accountLimit === undefined ? null : prev.accountLimit) === (next.accountLimit === undefined ? null : next.accountLimit)
     && (prev.limitPlan || '') === (next.limitPlan || '')
+    && (prev.saturated === true) === (next.saturated === true)
     && prev.partial === next.partial
     && prev.partialReason === next.partialReason
     && (prev.baseComplete === true) === (next.baseComplete === true)

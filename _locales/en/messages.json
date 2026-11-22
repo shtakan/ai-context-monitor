@@ -68,6 +68,9 @@
   "content_tooltip_window": {
     "message": "Model window: $1"
   },
+  "content_tooltip_saturated": {
+    "message": "Context full (platform signal)"
+  },
   "content_source_label": {
     "message": "Source: $1"
   },
@@ -304,6 +307,9 @@
   },
   "options_context_not_quota": {
     "message": "Model context limit. Perplexity search quota is not context usage."
+  },
+  "options_context_saturated": {
+    "message": "The platform reports the context is full. Start a new chat."
   },
   "options_reload_page": {
     "message": "Reload the page"

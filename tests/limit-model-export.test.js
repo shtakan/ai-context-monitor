@@ -73,6 +73,25 @@ describe('phase 5 limits in export', () => {
     expect('limitWarnings' in oldDoc).toBe(false);
   });
 
+  test('BIG-02: баннер платформы даёт 100% и метку context-saturated', function () {
+    const saturated = baseHistory({
+      tokens: 63077,
+      limit: 128000,
+      percent: 49.3,
+      saturated: true
+    });
+    const md = Builders.buildMdFromHistory(saturated, 'ChatGPT');
+    expect(md).toContain('(100%)');
+    expect(md).toContain('context-saturated: 1');
+    const doc = JSON.parse(Builders.buildJsonFromHistory(saturated, 'chatgpt'));
+    expect(doc.percent).toBe(100);
+    expect(doc.saturated).toBe(true);
+
+    const plain = JSON.parse(Builders.buildJsonFromHistory(baseHistory(), 'chatgpt'));
+    expect('saturated' in plain).toBe(false);
+    expect(plain.percent).toBe(39.1);
+  });
+
   test('TXT не меняется: три подписи живут в MD/JSON, а не в эталонном теле', function () {
     const plain = Builders.buildTxtFromHistory(baseHistory());
     const withLimits = Builders.buildTxtFromHistory(baseHistory({

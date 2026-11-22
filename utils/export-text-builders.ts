@@ -488,7 +488,11 @@ function exportTokenSnapshot(history: ExportHistory): { tokens: number; limit: n
   var tokens = (typeof h.tokens === 'number') ? h.tokens : 0;
   var limit = (typeof h.limit === 'number') ? h.limit : 0;
   var percent = (typeof h.percent === 'number') ? h.percent : 0;
-  if (limit > 0) {
+  // BIG-02: платформа сказала «контекст заполнен» — 100% не пересчитывается
+  // из нашей консервативной оценки (иначе файл снова покажет 49%).
+  if (h.saturated === true) {
+    percent = 100;
+  } else if (limit > 0) {
     var calc = Math.round(tokens / limit * 1000) / 10;
     if (calc !== percent) percent = calc;
   }
@@ -527,6 +531,8 @@ export function buildMdFromHistory(history: ExportHistory, platform?: string): s
   // Старый снимок без новых полей → ни одного нового байта (аддитивность).
   var limitLines = exportLimitLines(h);
   for (var li = 0; li < limitLines.length; li++) lines.push(limitLines[li]);
+  // BIG-02: платформенный сигнал «контекст заполнен» — машинная ASCII-метка.
+  if (h.saturated === true) lines.push('context-saturated: 1');
   // v1.9 (qwen): источник зафиксированного числа — отдельной ASCII-строкой сразу под
   // токенами (dom|net|max|server|hold). Ключ аддитивный: у прочих сервисов src нет →
   // ни одного нового байта. Локализуемое сообщение не заводим: это машинная метка,
@@ -646,7 +652,8 @@ export function buildJsonFromHistory(history: ExportHistory, platform?: string):
     exportedAt: new Date().toISOString(),
     tokens: (typeof h.tokens === 'number') ? h.tokens : 0,
     limit: (typeof h.limit === 'number') ? h.limit : 0,
-    percent: (typeof h.percent === 'number') ? h.percent : 0,
+    // BIG-02: платформенный сигнал сильнее консервативной оценки токенов.
+    percent: (h.saturated === true) ? 100 : ((typeof h.percent === 'number') ? h.percent : 0),
     // 2.2/фаза 5: три факта лимита. undefined → ключа нет (старые снимки),
     // null у accountLimit — явное «лимит аккаунта неизвестен».
     modelWindow: h.windowLimit,
@@ -654,6 +661,8 @@ export function buildJsonFromHistory(history: ExportHistory, platform?: string):
     accountLimit: h.accountLimit,
     limitPlan: h.limitPlan,
     limitWarnings: (Array.isArray(h.limitWarnings) && h.limitWarnings.length) ? h.limitWarnings : undefined,
+    // BIG-02: платформенный сигнал; undefined у обычного снимка — ключа нет.
+    saturated: (h.saturated === true) ? true : undefined,
     // v1.9 (qwen): аддитивное поле источника числа. undefined → JSON.stringify ключ НЕ
     // добавляет, байты прежних платформ не меняются.
     src: h.src,

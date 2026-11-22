@@ -468,7 +468,7 @@ describe('O-1 R3: автоэкспорт не тронут', () => {
     expect(draw).not.toContain('maybeAutoExport(percentage);');
     const badgeBranch = draw.indexOf('} else if (aiCmBadgeHoldActive()) {');
     expect(badgeBranch).toBeGreaterThan(-1);
-    expect(draw.indexOf('aiCmScheduleAutoExport(percentage);')).toBeGreaterThan(badgeBranch);
+    expect(draw.indexOf('aiCmScheduleAutoExport(snapshotPercentage);')).toBeGreaterThan(badgeBranch);
     expect(fnDecl(CONTENT, 'maybeAutoExport')).toContain('P.shouldSkipAutoExport({');
     // skip-строки автоэкспорта — на месте
     expect(MGR_SRC).toContain("skip reason=already-fired convId=");

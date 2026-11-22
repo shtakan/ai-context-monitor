@@ -565,6 +565,6 @@ describe('O-33 R5: O-11/O-31/O-27/O-15…O-20/O-28/O-9 — маркеры и б�
     const iHold = draw.indexOf('} else if (aiCmBadgeHoldActive()) {');
     expect(iHold).toBeGreaterThan(-1);
     // P1: автоэкспорт планируется только по принятию базы; adapter-путь — вне ветвления щита
-    expect(draw.indexOf('aiCmScheduleAutoExport(percentage);')).toBeGreaterThan(iHold);
+    expect(draw.indexOf('aiCmScheduleAutoExport(snapshotPercentage);')).toBeGreaterThan(iHold);
   });
 });

@@ -15,6 +15,15 @@ export interface ExtractedMessage {
   content: string;
 }
 
+/**
+ * Сигнал платформы «контекст заполнен» (баннер/алерт), независимый от нашей
+ * оценки токенов. `active=false` — сигнала нет; `reason` — машинная метка.
+ */
+export interface ContextSaturation {
+  active: boolean;
+  reason: string;
+}
+
 /** Публичный интерфейс адаптера сайта (паттерн Strategy). */
 export interface Adapter {
   /** Название сайта (BaseAdapter: 'base', переопределяется в наследниках). */
@@ -43,4 +52,7 @@ export interface Adapter {
 
   /** Название модели ИИ по DOM (если возможно) или null. */
   detectModel(): string | null;
+
+  /** Сигнал платформы «контекст заполнен»; null/undefined — адаптер не умеет. */
+  detectContextSaturation?(): ContextSaturation | null;
 }

@@ -79,6 +79,7 @@ function snapshot(over) {
     accountLimit: null,
     limitPlan: null,
     limitWarnings: ['account-limit-unknown'],
+    saturated: true,
     attachBreak: null,
     chars: 4000,
     msgs: 2,
@@ -103,6 +104,7 @@ describe('INV-I1 A: мапперы отдают снимок 1:1 и не счи�
     expect(d.windowLimit).toBe(1050000);
     expect(d.accountLimit).toBeNull();
     expect(d.limitPlan).toBeNull();
+    expect(d.saturated).toBe(true);
     expect(d.modelName).toBe('GPT-5');
     expect(d.attachBreak).toBeNull();
     expect(Math.round(d.tokenEstimate / d.effectiveLimit * 1000) / 10).toBe(0.1);
@@ -120,6 +122,7 @@ describe('INV-I1 A: мапперы отдают снимок 1:1 и не счи�
       accountLimit: null,
       limitPlan: null,
       limitWarnings: ['account-limit-unknown'],
+      saturated: true,
       modelName: 'GPT-5',
       attachBreak: null
     });

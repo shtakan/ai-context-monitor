@@ -312,7 +312,7 @@ describe('v54 R: шесть платформ — гейт и бейдж при �
     // P1/O-33: вызов автоэкспорта вынесен из отрисовки бейджа в точки принятия базы;
     // adapter-путь планирует ту же проверку (дебаунс 500 мс) отдельно от ветвления бейджа
     expect(DRAW).not.toContain('maybeAutoExport(percentage);');
-    expect(DRAW).toContain('aiCmScheduleAutoExport(percentage);');
+    expect(DRAW).toContain('aiCmScheduleAutoExport(snapshotPercentage);');
     expect(fnDecl(CONTENT, 'aiCmScheduleAutoExport')).toContain('AI_CM_AUTOEXPORT_DEBOUNCE_MS');
     expect(fnDecl(CONTENT, 'maybeAutoExport')).toContain('P.shouldSkipAutoExport({');
     // новое состояние в автоэкспорт-контур не проникает вовсе

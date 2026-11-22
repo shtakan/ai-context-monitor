@@ -68,6 +68,9 @@
   "content_tooltip_window": {
     "message": "Окно модели: $1"
   },
+  "content_tooltip_saturated": {
+    "message": "Контекст заполнен платформой"
+  },
   "content_source_label": {
     "message": "Источник: $1"
   },
@@ -304,6 +307,9 @@
   },
   "options_context_not_quota": {
     "message": "Лимит контекста модели. Квота поиска Perplexity — не заполнение контекста."
+  },
+  "options_context_saturated": {
+    "message": "Платформа сообщает: контекст заполнен. Начните новый чат."
   },
   "options_reload_page": {
     "message": "Обновите страницу"

@@ -1013,6 +1013,12 @@ function updateWidget(percentage: number, tokens: number, effectiveLimit: number
       // 2.2/фаза 5: 0 — окно неизвестно (не подставляем 128k и не печатаем «0»).
       i18n('content_tooltip_window', `Окно модели: ${contextLimit > 0 ? contextLimit.toLocaleString() : '—'}`, [contextLimit > 0 ? contextLimit.toLocaleString() : '—'])
     ];
+    // BIG-02: платформенный баннер «контекст заполнен» — отдельная строка тултипа.
+    try {
+      if (typeof lastTokensSnapshot !== 'undefined' && lastTokensSnapshot && lastTokensSnapshot.saturated === true) {
+        lines.push(i18n('content_tooltip_saturated', 'Контекст заполнен платформой'));
+      }
+    } catch (eSatW) { swallowSoft(eSatW, 'widget:tooltip-saturation'); }
     // O-35 (B1, фикс): серверный usage Qwen — ОТДЕЛЬНЫЕ строки reasoning и output.
     // Источник — netQwenUsage из общего лексического скоупа контент-скрипта (state.js):
     // тот же паттерн, что у stale/baseSeen/baseCount (widget.js:498 читает их напрямую),

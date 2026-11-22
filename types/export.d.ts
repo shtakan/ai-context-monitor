@@ -128,6 +128,9 @@ export interface ExportHistory {
   /** 2.2/фаза 5: машинные причины неизвестности. */
   limitWarnings?: string[];
 
+  /** BIG-02: платформа сообщила «контекст заполнен» — процент 100, метка в файле. */
+  saturated?: boolean;
+
   /** Процент заполнения. */
   percent?: number;
 
