@@ -681,7 +681,7 @@
       "file": "core/export-manager.ts",
       "category": "best-effort-guard",
       "lines": [
-        1066
+        1077
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var d = ev && (ev as any).detail; if (!d) return; aiCmGsaProbeRunning ="
     },
@@ -689,7 +689,7 @@
       "file": "core/export-manager.ts",
       "category": "cleanup-guard",
       "lines": [
-        653
+        664
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: if (!aiCmPendingHistWrite) return; if (cid && aiCmPendingHistWrite.convI"
     },
@@ -698,8 +698,8 @@
       "category": "debug-instrumentation",
       "lines": [
         261,
-        1148,
-        2078
+        1159,
+        2089
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof aiCmDiagLine === 'function' && typeof aiCmDiagOn === 'functio"
     },
@@ -707,8 +707,8 @@
       "file": "core/export-manager.ts",
       "category": "defensive-assignment",
       "lines": [
-        961,
-        1872
+        972,
+        1883
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: aiCmIncludeHiddenInExport = !!(data && data.aiCmIncludeHiddenInExport =="
     },
@@ -716,7 +716,7 @@
       "file": "core/export-manager.ts",
       "category": "feature-detect",
       "lines": [
-        2047
+        2058
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var BdiagDl = (typeof AiCmExportBuilders !== 'undefined') ? AiCmExportBu"
     },
@@ -724,11 +724,11 @@
       "file": "core/export-manager.ts",
       "category": "guard-clause",
       "lines": [
-        476,
-        829,
-        896,
-        1257,
-        1677
+        487,
+        840,
+        907,
+        1268,
+        1688
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (used && file) used[file] = 1;"
     },
@@ -736,8 +736,8 @@
       "file": "core/export-manager.ts",
       "category": "host-api-guard",
       "lines": [
-        945,
-        970
+        956,
+        981
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.storage.onChanged.addListener(function (changes: AiCmStorageChang"
     },
@@ -745,8 +745,8 @@
       "file": "core/export-manager.ts",
       "category": "local-helper-guard",
       "lines": [
-        484,
-        1917
+        495,
+        1928
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmLatchCacheReady();"
     },

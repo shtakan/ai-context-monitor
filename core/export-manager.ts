@@ -289,6 +289,17 @@ function aiCmCollectExportSource(): AiCmExportMessage[] {
       }
     }
     if (prepareReasoning) prepareReasoning(out);   // O-37 (C): размышление — отдельным полем ДО санации
+    // ChatGPT: сетевой снимок мог быть снят до финализации последнего ответа (canvas/стрим).
+    // Если DOM показывает продолжение того же хода (id из кэша базы, текст — префикс),
+    // отдаём финальный текст. Прочие сайты и отсутствие модуля — поведение прежнее 1:1.
+    try {
+      var aiCmTailApi = (typeof window !== 'undefined' && window && (window as any).AiCmHybridTail)
+        ? (window as any).AiCmHybridTail : null;
+      if (aiCmTailApi && typeof aiCmTailApi.aiCmApplyFinalAssistantOverlay === 'function') {
+        var overlaid = aiCmTailApi.aiCmApplyFinalAssistantOverlay(out);
+        if (Array.isArray(overlaid) && overlaid.length) out = overlaid;
+      }
+    } catch (eOv) { swallowSoft(eOv, 'export-manager:final-assistant-overlay'); }
     // O-7 (Qwen): OFF-путь очищает поле reasoning, чтобы сборщики txt/md не вставляли
     // секции [REASONING] безусловно: applyReasoningExportFields переводит размышление хода
     // в отдельное поле ДО stripReasoningSections, и рендер видит msg.reasoning независимо

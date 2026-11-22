@@ -287,6 +287,155 @@ function aiCmTailMetricBase(fallback: string): string {
 // найдена граница базы (`stopFound` в computeTailFromDom), т.е. это ровно новые ходы.
 // Инварианты O-32 сохранены: неполный (unbounded) DOM базу не подменяет, пустой хвост не
 // добавляет ничего, `baseSeen=false` по-прежнему отдаёт пустую строку.
+/**
+ * Последний assistant в DOM может быть ДОПИСАННЫМ продолжением последнего assistant
+ * в сети: серверный снимок взят в момент стрима (или до финализации canvas/textdoc),
+ * а финальный абзац пришёл позже. При `baseComplete=true` и виртуализированной ленте
+ * `tail.bounded=false`, поэтому обычный tail не применяется; при этом сам узел хода уже
+ * лежит в базе, т.е. в tail.messages его тоже нет. Берём последний assistant прямо из DOM.
+ *
+ * Совпадение проверяется по «сравнительной» форме (без markdown/пробелов/регистра):
+ * сеть отдаёт markdown, лента — уже отрендеренный текст. Для продолжения дописываем к
+ * СЕТЕВОМУ тексту только новый хвост DOM — прежняя часть сохраняет разметку.
+ */
+function aiCmWordNorm(w: string): string {
+  return String(w || '').toLowerCase()
+    .replace(/[*_`#>|]/g, '')
+    .replace(/^[()\[\]{}"'«».,;:!?—–-]+/, '')
+    .replace(/[()\[\]{}"'«».,;:!?—–-]+$/, '');
+}
+function aiCmWordSpans(s: string): { w: string; start: number; end: number }[] {
+  var re = /\S+/g;
+  var m: RegExpExecArray | null;
+  var out: { w: string; start: number; end: number }[] = [];
+  while ((m = re.exec(String(s || ''))) !== null) {
+    out.push({ w: m[0], start: m.index, end: m.index + m[0].length });
+  }
+  return out;
+}
+/** Сколько символов слова DOM покрывают `needNorm` нормализованных символов (без разметки). */
+function aiCmPrefixCharCut(tok: string, needNorm: number): number {
+  var kept = 0;
+  var p = 0;
+  for (; p < tok.length; p++) {
+    if (!/[*_`#>|]/.test(tok.charAt(p))) kept++;
+    if (kept >= needNorm) { p++; break; }
+  }
+  return p;
+}
+/**
+ * Конец сетевого префикса в DOM по ЯКОРЮ из последних слов базы.
+ * Полное сравнение «весь текст — префикс» не годится: сеть отдаёт markdown и служебные
+ * маркеры (`:::writing{...}` для canvas), а лента рендерит их без разметки. Последние
+ * слова текста при этом совпадают буквально. Последнее слово может быть обрезано сетью
+ * посреди слова — тогда режем DOM внутри соответствующего слова.
+ * @returns индекс в raw DOM или -1, если якорь не найден (DOM — не тот же ход).
+ */
+function aiCmDomAnchorCut(before: string, after: string): number {
+  var bw = aiCmWordSpans(before);
+  var dw = aiCmWordSpans(after);
+  if (bw.length < 4 || dw.length < 4) return -1;
+  var maxL = Math.min(10, bw.length, dw.length);
+  for (var L = maxL; L >= 4; L--) {
+    var baseStart = bw.length - L;
+    var need: string[] = [];
+    for (var t = 0; t < L; t++) need.push(aiCmWordNorm(bw[baseStart + t].w));
+    if (!need[L - 1]) continue;
+    for (var j = dw.length - 1; j >= L - 1; j--) {
+      var ok = true;
+      for (var q = 0; q < L - 1; q++) {
+        if (aiCmWordNorm(dw[j - (L - 1) + q].w) !== need[q]) { ok = false; break; }
+      }
+      if (!ok) continue;
+      var lastNorm = aiCmWordNorm(dw[j].w);
+      if (!lastNorm) continue;
+      var full = need[L - 1];
+      if (lastNorm === full) return dw[j].end;
+      if (lastNorm.indexOf(full) === 0) {
+        var p = aiCmPrefixCharCut(dw[j].w, full.length);
+        if (p > 0) return dw[j].start + p;
+      }
+    }
+  }
+  return -1;
+}
+/** Последний assistant-узел ленты: { text, id }. Пустой text — узла нет. */
+function aiCmDomLastAssistant(): { text: string; id: string } {
+  var found = findMessageNodes();
+  var nodes = found.nodes || [];
+  for (var k = nodes.length - 1; k >= 0; k--) {
+    var role = '';
+    try { role = (nodes[k].getAttribute && nodes[k].getAttribute('data-message-author-role')) || ''; } catch (eRole) { role = ''; }
+    if (!role) {
+      var isUser = false;
+      try {
+        isUser = !!(nodes[k].matches && nodes[k].matches('.user-query,.query-text')) ||
+          !!(nodes[k].querySelector && nodes[k].querySelector('.user-query,.query-text'));
+      } catch (eUser) { isUser = false; }
+      role = isUser ? 'user' : 'assistant';
+    }
+    if (role !== 'assistant') continue;
+    var txt = '';
+    try { txt = (nodes[k].innerText || nodes[k].textContent || '').trim(); } catch (eTxt) { txt = ''; }
+    txt = aiCmStripChromeLines(txt);
+    var id = '';
+    try { id = (nodes[k].getAttribute && nodes[k].getAttribute('data-message-id')) || ''; } catch (eId) { id = ''; }
+    return { text: txt, id: String(id || '').trim() };
+  }
+  return { text: '', id: '' };
+}
+/**
+ * Перекрытие последнего assistant: сетевой текст — префикс видимого DOM-текста,
+ * DOM длиннее и относится к тому же ходу (id из baseIdSet, когда id-кэш есть).
+ * @returns { index, before, text } — индекс в базе, сетевой текст и итоговый текст хода.
+ */
+function aiCmFinalAssistantOverlay(
+  baseMsgs: AiCmExportMessage[] | null
+): { index: number; before: string; text: string } | null {
+  try {
+    if (typeof currentAdapter === 'undefined' || !currentAdapter || currentAdapter.siteName !== 'chatgpt') return null;
+  } catch (eAd) { return null; }
+  if (!Array.isArray(baseMsgs) || !baseMsgs.length) return null;
+  var bi = baseMsgs.length - 1;
+  while (bi >= 0 && baseMsgs[bi] && baseMsgs[bi].role !== 'assistant') bi--;
+  if (bi < 0) return null;
+  var before = String((baseMsgs[bi] && baseMsgs[bi].text) || '');
+  if (!before) return null;
+  var dom = aiCmDomLastAssistant();
+  var after = dom.text;
+  if (!after || after.length <= before.length) return null;
+  // Чужой (более новый) ход не подменяет базу: id есть в кэше id базы → это тот же ход.
+  if (dom.id && baseIdSet && baseIdSet.size > 0 && !baseIdSet.has(dom.id)) return null;
+  if (after.indexOf(before) === 0) return { index: bi, before: before, text: after };
+  // Canvas-документ в сети закрыт маркером ':::'. Якорь считаем по телу: сам маркер
+  // в ленте не рендерится, а финальный абзац может быть дописан ПЕРЕД ним.
+  var anchorText = before;
+  var trailer = '';
+  var tm = before.match(/(?:\s*:::\s*)+$/);
+  if (tm && tm.index && tm.index > 0) {
+    anchorText = before.slice(0, tm.index).replace(/\s+$/, '');
+    trailer = before.slice(tm.index);
+  }
+  var cut = aiCmDomAnchorCut(anchorText, after);
+  if (cut > 0 && cut < after.length) {
+    var appended = after.slice(cut);
+    var text = anchorText + appended;
+    // Один закрывающий маркер: если DOM его не отдал — возвращаем сетевой.
+    if (trailer && !/(?:\s*:::\s*)+$/.test(appended)) text += trailer;
+    return { index: bi, before: before, text: text };
+  }
+  // Якорь не найден: не подменяем ход угадыванием (canvas мог быть переписан целиком).
+  return null;
+}
+/** Копия массива с заменой последнего assistant; при отсутствии перекрытия — тот же массив. */
+function aiCmApplyFinalAssistantOverlay(messages: AiCmExportMessage[] | null): AiCmExportMessage[] | null {
+  var ov = aiCmFinalAssistantOverlay(messages);
+  if (!ov) return messages;
+  var out = (messages || []).slice();
+  out[ov.index] = Object.assign({}, out[ov.index], { text: ov.text });
+  return out;
+}
+
 function getEffectiveText(): string {
   if (baseSeen && baseText) {
     var tail = computeTailFromDom();
@@ -301,10 +450,21 @@ function getEffectiveText(): string {
     }
     // источник базы = сеть, он стабилен → монотонный максимум безвреден (прежнее значение).
     lastBounded = baseComplete ? true : tail.bounded;
-    if (!tail.text) return aiCmTailMetricBase(baseText); // хвоста нет — метрики по канонической базе
-    if (tail.bounded) return aiCmTailMetricBase(baseText) + '\n' + tail.text;
-    // DOM неполон: его видимый кусок НЕ заменяет базу (было `return tail.text`).
-    return aiCmTailMetricBase(baseText);
+    if (tail.bounded && tail.text) return aiCmTailMetricBase(baseText) + '\n' + tail.text;
+    // DOM неполон (или хвоста нет), но последний assistant может быть продолжением
+    // сетевого: стрим/canvas финализировался позже снимка. Это тот же ход — заменяем
+    // текст, счётчик сообщений не меняется.
+    var basePrepared = (typeof aiCmBasePrepared !== 'undefined' && Array.isArray(aiCmBasePrepared))
+      ? aiCmBasePrepared : null;
+    var ov = (typeof aiCmFinalAssistantOverlay === 'function') ? aiCmFinalAssistantOverlay(basePrepared) : null;
+    if (ov) {
+      var baseEff = aiCmTailMetricBase(baseText);
+      var before = ov.before;
+      if (baseEff.length >= before.length && baseEff.slice(baseEff.length - before.length) === before) {
+        return baseEff.slice(0, baseEff.length - before.length) + ov.text;
+      }
+    }
+    return aiCmTailMetricBase(baseText); // хвоста нет — метрики по канонической базе
   }
   return '';
 }
@@ -332,6 +492,8 @@ function getEffectiveCount(fallbackCount: number): number {
 var lastEffMsgsBaseRef: AiCmExportMessage[] | null = null;
 var lastEffMsgsTailText = '';
 var lastEffMsgsBounded = false;
+var lastEffMsgsOverlayText = '';
+var lastEffMsgsOverlayIndex = -1;
 var lastEffMsgsResult: AiCmExportMessage[] | null = null;
 
 function getEffectiveMessages(): AiCmExportMessage[] | null {
@@ -341,14 +503,30 @@ function getEffectiveMessages(): AiCmExportMessage[] | null {
   if (!base) return null;
   var tail = computeTailFromDom();
   var tailText = (tail.text && tail.bounded) ? tail.text : '';
+  var ov = tailText
+    ? null
+    : ((typeof aiCmFinalAssistantOverlay === 'function') ? aiCmFinalAssistantOverlay(base) : null);
+  var ovText = ov ? ov.text : '';
+  var ovIndex = ov ? ov.index : -1;
   if (lastEffMsgsBaseRef === base && lastEffMsgsTailText === tailText &&
-      lastEffMsgsBounded === !!tail.bounded) {
+      lastEffMsgsBounded === !!tail.bounded &&
+      lastEffMsgsOverlayText === ovText && lastEffMsgsOverlayIndex === ovIndex) {
     return lastEffMsgsResult;
   }
-  var result = tailText ? base.concat(tail.messages) : base;
+  var result: AiCmExportMessage[];
+  if (tailText) {
+    result = base.concat(tail.messages);
+  } else if (ov) {
+    result = base.slice();
+    result[ov.index] = Object.assign({}, base[ov.index], { text: ov.text });
+  } else {
+    result = base;
+  }
   lastEffMsgsBaseRef = base;
   lastEffMsgsTailText = tailText;
   lastEffMsgsBounded = !!tail.bounded;
+  lastEffMsgsOverlayText = ovText;
+  lastEffMsgsOverlayIndex = ovIndex;
   lastEffMsgsResult = result;
   return result;
 }
@@ -375,6 +553,9 @@ function getEffectiveMessages(): AiCmExportMessage[] | null {
   Api.getEffectiveText = getEffectiveText;
   Api.getEffectiveCount = getEffectiveCount;
   Api.getEffectiveMessages = getEffectiveMessages;
+  Api.aiCmFinalAssistantOverlay = aiCmFinalAssistantOverlay;
+  Api.aiCmApplyFinalAssistantOverlay = aiCmApplyFinalAssistantOverlay;
+  Api.aiCmDomLastAssistant = aiCmDomLastAssistant;
   if (typeof module !== 'undefined' && module.exports) module.exports = Api;
   if (typeof window !== 'undefined') window.AiCmHybridTail = Api;
 })();
