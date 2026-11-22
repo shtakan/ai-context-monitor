@@ -63,6 +63,10 @@ function snapshot(over) {
     limit: 10000,
     effectiveLimit: 10000,
     contextLimit: 10000,
+    windowLimit: 10000,
+    accountLimit: null,
+    limitPlan: null,
+    limitWarnings: [],
     attachBreak: null,
     chars: 4000,
     msgs: 12,
@@ -133,7 +137,10 @@ test('commit: смена любого поля сигнатуры → новый
     { bodyHash: 'hash-2' },
     { site: 'aistudio' },
     { model: 'qwen3-coder' },
-    { baseComplete: false }
+    { baseComplete: false },
+    { windowLimit: 1048576 },
+    { accountLimit: 32768 },
+    { limitPlan: 'free' }
   ];
   changes.forEach((change) => {
     const next = Object.assign({}, prev, change);

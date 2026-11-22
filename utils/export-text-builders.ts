@@ -453,6 +453,36 @@ export function buildTxtFromHistory(history: ExportHistory): string {
  * @param {ExportHistory} history история экспорта
  * @returns {{tokens: number, limit: number, percent: number}} согласованный снимок
  */
+/**
+ * 2.2/фаза 5: три факта лимита отдельными ASCII-строками шапки MD.
+ * Старые снимки без полей не добавляют ни одного байта; null — «unknown»,
+ * а не 0 и не 128k. Локализуемые литералы не заводим (гейт EXPORT_HEADER_LITERALS).
+ * @param {ExportHistory} history история экспорта
+ * @returns {string[]} строки шапки
+ */
+function exportLimitLines(history: ExportHistory): string[] {
+  var h = history || {};
+  var lines: string[] = [];
+  if (typeof h.windowLimit === 'number' && h.windowLimit > 0) {
+    lines.push('model-window: ' + h.windowLimit);
+  }
+  if (typeof h.displayLimit === 'number' && h.displayLimit > 0) {
+    lines.push('display-limit: ' + h.displayLimit);
+  }
+  if (h.accountLimit === null) {
+    lines.push('account-limit: unknown');
+  } else if (typeof h.accountLimit === 'number' && h.accountLimit > 0) {
+    lines.push('account-limit: ' + h.accountLimit);
+  }
+  if (typeof h.limitPlan === 'string' && h.limitPlan) {
+    lines.push('limit-plan: ' + h.limitPlan);
+  }
+  if (Array.isArray(h.limitWarnings) && h.limitWarnings.length) {
+    lines.push('limit-warnings: ' + h.limitWarnings.join(','));
+  }
+  return lines;
+}
+
 function exportTokenSnapshot(history: ExportHistory): { tokens: number; limit: number; percent: number } {
   var h = history || {};
   var tokens = (typeof h.tokens === 'number') ? h.tokens : 0;
@@ -493,6 +523,10 @@ export function buildMdFromHistory(history: ExportHistory, platform?: string): s
   } else {
     lines.push(aiCmI18nMessage('export_md_tokens', 'Токены: ' + tokens + ' / ' + limit + ' (' + percent + '%)', [String(tokens), String(limit), String(percent)]));
   }
+  // 2.2/фаза 5: окно модели, порог показа и лимит аккаунта — разными строками.
+  // Старый снимок без новых полей → ни одного нового байта (аддитивность).
+  var limitLines = exportLimitLines(h);
+  for (var li = 0; li < limitLines.length; li++) lines.push(limitLines[li]);
   // v1.9 (qwen): источник зафиксированного числа — отдельной ASCII-строкой сразу под
   // токенами (dom|net|max|server|hold). Ключ аддитивный: у прочих сервисов src нет →
   // ни одного нового байта. Локализуемое сообщение не заводим: это машинная метка,
@@ -613,6 +647,13 @@ export function buildJsonFromHistory(history: ExportHistory, platform?: string):
     tokens: (typeof h.tokens === 'number') ? h.tokens : 0,
     limit: (typeof h.limit === 'number') ? h.limit : 0,
     percent: (typeof h.percent === 'number') ? h.percent : 0,
+    // 2.2/фаза 5: три факта лимита. undefined → ключа нет (старые снимки),
+    // null у accountLimit — явное «лимит аккаунта неизвестен».
+    modelWindow: h.windowLimit,
+    displayLimit: h.displayLimit,
+    accountLimit: h.accountLimit,
+    limitPlan: h.limitPlan,
+    limitWarnings: (Array.isArray(h.limitWarnings) && h.limitWarnings.length) ? h.limitWarnings : undefined,
     // v1.9 (qwen): аддитивное поле источника числа. undefined → JSON.stringify ключ НЕ
     // добавляет, байты прежних платформ не меняются.
     src: h.src,

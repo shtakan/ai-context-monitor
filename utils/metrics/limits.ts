@@ -144,10 +144,11 @@ export function resolveLimitModel(probe: LimitProbe | null | undefined): LimitMo
     displaySource = (accountLimit <= modelWindow ? accountSource : windowSource) || 'catalog';
   } else if (hit.displayThreshold > 0) {
     // Порог площадки не выдаёт себя за окно: у Gemini/GSA это 128k при окне 1M.
-    displayLimit = hit.displayThreshold;
+    // Но порог не может быть больше окна: у GPT-4 (8K) действует 8K, а не 128K.
+    displayLimit = (modelWindow > 0) ? Math.min(modelWindow, hit.displayThreshold) : hit.displayThreshold;
     displaySource = 'catalog';
   } else if (callerCatalogDisplay > 0) {
-    displayLimit = callerCatalogDisplay;
+    displayLimit = (modelWindow > 0) ? Math.min(modelWindow, callerCatalogDisplay) : callerCatalogDisplay;
     displaySource = 'catalog';
   } else if (modelWindow > 0) {
     displayLimit = modelWindow;

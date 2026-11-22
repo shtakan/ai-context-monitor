@@ -767,6 +767,13 @@ function aiCmWriteCurrentHistory(): void {
       msgOrder: 2,
       tokens: histTokens,
       limit: histLimit,
+      // 2.2/фаза 5: окно модели / порог показа / лимит аккаунта — три подписи.
+      // Нет снимка (срез-песочница) → undefined, старые байты файла не меняются.
+      windowLimit: (snapR1Hist && typeof snapR1Hist.windowLimit === 'number') ? snapR1Hist.windowLimit : undefined,
+      displayLimit: histLimit,
+      accountLimit: (snapR1Hist && (snapR1Hist.accountLimit === null || typeof snapR1Hist.accountLimit === 'number')) ? snapR1Hist.accountLimit : undefined,
+      limitPlan: (snapR1Hist && (snapR1Hist.limitPlan === null || typeof snapR1Hist.limitPlan === 'string')) ? snapR1Hist.limitPlan : undefined,
+      limitWarnings: (snapR1Hist && Array.isArray(snapR1Hist.limitWarnings)) ? snapR1Hist.limitWarnings : undefined,
       percent: histPct,
       // v1.9 (qwen): источник зафиксированного числа (dom|net|max|server|hold) — шапка
       // файла показывает его рядом с токенами. У прочих сервисов ключ отсутствует.
@@ -1942,6 +1949,12 @@ function doAutoExportDownload(cid: any, percentage: number, reason: string, netS
           model: (snapR1Auto && snapR1Auto.modelName) ? snapR1Auto.modelName : (ModelConfig.getModel(lastResolvedModelId || '')?.name || ''),
           tokens: snapTokens,
           limit: dispLimitAuto,
+          // 2.2/фаза 5: те же три подписи, что в попапе и MD/JSON.
+          windowLimit: (snapR1Auto && typeof snapR1Auto.windowLimit === 'number') ? snapR1Auto.windowLimit : undefined,
+          displayLimit: dispLimitAuto,
+          accountLimit: (snapR1Auto && (snapR1Auto.accountLimit === null || typeof snapR1Auto.accountLimit === 'number')) ? snapR1Auto.accountLimit : undefined,
+          limitPlan: (snapR1Auto && (snapR1Auto.limitPlan === null || typeof snapR1Auto.limitPlan === 'string')) ? snapR1Auto.limitPlan : undefined,
+          limitWarnings: (snapR1Auto && Array.isArray(snapR1Auto.limitWarnings)) ? snapR1Auto.limitWarnings : undefined,
           percent: snapPercent,
           // v1.9 (qwen): тот же источник, что у бейджа/панели (lastTokensSnapshot.src).
           src: (snapR1Auto && snapR1Auto.src) ? snapR1Auto.src : undefined,

@@ -333,7 +333,7 @@ describe('инварианты доступности: цвета, раскла�
     expect(optionsHtml).toContain('<a href="privacy/privacy.html" id="privacy-link" target="_blank" rel="noopener">');
     expect(optionsHtml).toContain('<a href="../docs/index.html" id="help-link" target="_blank" rel="noopener">');
     // options.js: логика настроек на месте (aria-правки её не касаются)
-    expect(optionsJs).toContain("chrome.storage.sync.get(['selectedModel', 'customLimit', 'showWidget']");
+    expect(optionsJs).toContain("chrome.storage.sync.get(['selectedModel', 'customLimit', 'showWidget', 'aiCmGeminiPlan']");
     expect(optionsJs).toContain('chrome.storage.sync.set({ customLimit: value });');
     // Аудит #12 (Major, options): из aria- в options.js допустимо РОВНО одно присваивание —
     // состояние кнопки-глаза #toggle-api-key. Любое другое aria- (и focus-visible) — регрессия.

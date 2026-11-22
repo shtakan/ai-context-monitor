@@ -75,6 +75,10 @@ function snapshot(over) {
     limit: 1000000,
     effectiveLimit: 1000000,
     contextLimit: 1000000,
+    windowLimit: 1050000,
+    accountLimit: null,
+    limitPlan: null,
+    limitWarnings: ['account-limit-unknown'],
     attachBreak: null,
     chars: 4000,
     msgs: 2,
@@ -96,12 +100,15 @@ describe('INV-I1 A: мапперы отдают снимок 1:1 и не счи�
     expect(d.displayLimit).toBe(1000000);
     expect(d.effectiveLimit).toBe(1000000);
     expect(d.contextLimit).toBe(1000000);
+    expect(d.windowLimit).toBe(1050000);
+    expect(d.accountLimit).toBeNull();
+    expect(d.limitPlan).toBeNull();
     expect(d.modelName).toBe('GPT-5');
     expect(d.attachBreak).toBeNull();
     expect(Math.round(d.tokenEstimate / d.effectiveLimit * 1000) / 10).toBe(0.1);
   });
 
-  test('patch: те же 7 полей; null-снимок → пустой объект, а не нули', () => {
+  test('patch: те же поля + три факта лимита; null-снимок → пустой объект, а не нули', () => {
     const p = api.patch(snapshot());
     expect(p).toEqual({
       percentage: 7.7,
@@ -109,6 +116,10 @@ describe('INV-I1 A: мапперы отдают снимок 1:1 и не счи�
       displayLimit: 1000000,
       effectiveLimit: 1000000,
       contextLimit: 1000000,
+      windowLimit: 1050000,
+      accountLimit: null,
+      limitPlan: null,
+      limitWarnings: ['account-limit-unknown'],
       modelName: 'GPT-5',
       attachBreak: null
     });

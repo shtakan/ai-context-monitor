@@ -23,6 +23,11 @@ import { Tokenizer } from '../utils/tokenizer.ts';
 // объявления import хойстятся, поэтому второй импорт в них не нужен (и был бы
 // дублирующим объявлением имени в одном модуле).
 import { ModelConfig } from '../utils/model-config.ts';
+// 2.2/фаза 5: единый резолвер лимитов (окно модели / порог показа / лимит плана).
+// Живой расчёт процента сохраняется: при неизвестном тарифе резолвер даёт те же
+// 128k, что и ModelConfig.getEffectiveLimit, но окно модели больше не подменяется
+// порогом (GSA/Gemini показывают 1M).
+import { resolveLimitModel } from '../utils/metrics/limits.ts';
 // ESM (Roadmap Ph2): utils/export-text-builders.ts переведён на ES-модуль и втягивается
 // этим import'ом в общий бандл контент-скрипта (строка из manifest.content_scripts удалена).
 // Идентификатор AiCmExportBuilders намеренно тот же: его разделяют core/export-manager.js,
@@ -2873,9 +2878,26 @@ function processAndSend(): void {
     // числа для diag/шапки файла (dom|net|server), а не режим удержания.
     var aiCmMetricValueSrc = (typeof aiCmBaseSource !== 'undefined' && aiCmBaseSource)
       ? aiCmBaseSource : (baseComplete ? 'net' : 'dom');
-    const contextLimit = ModelConfig.getContextLimit(modelId);
-    const effectiveLimit = ModelConfig.getEffectiveLimit(modelId);
-    const displayLimit = computeEffectiveLimit(modelId);
+    // 2.2/фаза 5: три факта из одного резолвера. modelWindow — настоящее окно
+    // (API/каталог/исключение), displayLimit — порог показа (128k у Gemini/GSA),
+    // accountLimit — лимит тарифа (null, пока тариф не определён).
+    // Процент сохраняется байтово: autoLimit совпадает с прежним getEffectiveLimit,
+    // а ручной pct применяется тем же ModelConfig.applyLimitPct.
+    var limitModelRecord = ModelConfig.getModel(modelId);
+    var limitModel = resolveLimitModel({
+      site: svc,
+      modelId: modelId,
+      // Тариф Gemini — из настроек; у остальных площадок подтверждённой таблицы нет.
+      plan: (svc === 'gemini') ? aiCmGeminiPlan : null,
+      modelWindow: limitModelRecord ? ModelConfig.getContextLimit(modelId) : 0,
+      windowSource: 'catalog',
+      displayLimit: ModelConfig.getEffectiveLimit(modelId),
+      displaySource: 'fallback',
+      fallbackLimit: 128000
+    });
+    const contextLimit = limitModel.windowKnown ? limitModel.modelWindow : 0;
+    const effectiveLimit = limitModel.displayLimit;
+    const displayLimit = ModelConfig.applyLimitPct(effectiveLimit, aiCmActivePct());
     // O-32 (ДИАГНОСТИКА, только измерение): ИСТОЧНИК значения бейджа одним маркером —
     // видно, каким путём получено число (полная база / канонический пол базы + DOM-хвост /
     // канонический пол базы / DOM-адаптер). Печать —
@@ -2988,6 +3010,12 @@ function processAndSend(): void {
         limit: displayLimit,
         effectiveLimit: effectiveLimit,
         contextLimit: contextLimit,
+        // 2.2/фаза 5: три подписи в снимке/файле. accountLimit=null — «неизвестен»,
+        // а не «0» и не «128k». windowLimit=0 — окно неизвестно.
+        windowLimit: contextLimit,
+        accountLimit: limitModel.accountLimit,
+        limitPlan: limitModel.plan,
+        limitWarnings: limitModel.warnings,
         attachBreak: netAttachBreak || null,
         partial: aiCmCtxSnapPartial
       };
@@ -3121,6 +3149,12 @@ function processAndSend(): void {
             model: stateNumbers.modelName,
             tokens: stateNumbers.tokenEstimate,
             limit: stateNumbers.displayLimit,
+            // 2.2/фаза 5: попап показывает окно модели и лимит аккаунта отдельно
+            // от порога показа. null/0 — честное «неизвестно», не подмена.
+            windowLimit: stateNumbers.windowLimit,
+            accountLimit: stateNumbers.accountLimit,
+            limitPlan: stateNumbers.limitPlan,
+            limitWarnings: stateNumbers.limitWarnings,
             percent: stateNumbers.percentage,
             updatedAt: Date.now(),
             stale: stale,
@@ -5351,4 +5385,46 @@ function aiCmPartialReasonFromBase(baseReason: string, stopped: boolean): Partia
   if (reason && reason !== 'complete' && reason !== 'passive-complete') return reason as PartialReason;
   return 'incomplete';
 }
+
+// ============================================================================================
+// 2.2/фаза 5: тариф Gemini — из настроек (storage.sync.aiCmGeminiPlan).
+//
+// Каталог знает подтверждённые тарифы Gemini: Free 32K / AI Plus 128K / AI Pro и Ultra 1M.
+// Тариф — единственный источник accountLimit, который нельзя вывести из модели: окно
+// модели (1M) одно и то же, а лимит аккаунта зависит от плана. Пусто/auto = тариф
+// неизвестен, accountLimit=null и предупреждение plan-unknown — без подмены 128K.
+// ============================================================================================
+var aiCmGeminiPlan: string | null = null;
+
+/** Нормализует значение настройки: пусто/auto → null («неизвестен»). */
+function aiCmGeminiPlanFromStorage(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  var v = value.trim();
+  return (v && v !== 'auto') ? v : null;
+}
+
+function aiCmLoadGeminiPlan(): void {
+  try {
+    if (!isExtensionValid() || typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.sync) return;
+    chrome.storage.sync.get(['aiCmGeminiPlan'], function (d: Record<string, unknown> | null | undefined) {
+      try {
+        aiCmGeminiPlan = aiCmGeminiPlanFromStorage(d && d.aiCmGeminiPlan);
+        // Тариф пришёл после первого прохода — пересчитываем, иначе бейдж
+        // останется на accountLimit=unknown до следующего события.
+        if (typeof isInitialized !== 'undefined' && isInitialized) processAndSend();
+      } catch (eRead) { swallowSoft(eRead, 'content:gemini-plan-read'); }
+    });
+  } catch (eLoad) { swallowSoft(eLoad, 'content:gemini-plan-load'); }
+}
+
+try {
+  aiCmLoadGeminiPlan();
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener(function (changes: Record<string, { newValue?: unknown }>, area: string) {
+      if (area !== 'sync' || !changes || !changes.aiCmGeminiPlan) return;
+      aiCmGeminiPlan = aiCmGeminiPlanFromStorage(changes.aiCmGeminiPlan.newValue);
+      try { processAndSend(); } catch (eChange) { swallowSoft(eChange, 'content:gemini-plan-change'); }
+    });
+  }
+} catch (eWire) { swallowSoft(eWire, 'content:gemini-plan-wire'); }
 

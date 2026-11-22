@@ -101,8 +101,17 @@
   "options_stat_tokens": {
     "message": "Токены:"
   },
+  "options_stat_window": {
+    "message": "Окно модели:"
+  },
   "options_stat_limit": {
-    "message": "Лимит:"
+    "message": "Порог показа:"
+  },
+  "options_stat_account": {
+    "message": "Лимит аккаунта:"
+  },
+  "options_account_unknown": {
+    "message": "неизвестен"
   },
   "options_stat_fill": {
     "message": "Заполнение:"
@@ -115,6 +124,15 @@
   },
   "options_model_auto": {
     "message": "Автоопределение"
+  },
+  "options_plan_label": {
+    "message": "Тариф Gemini:"
+  },
+  "options_plan_auto": {
+    "message": "Авто (не знаю)"
+  },
+  "options_plan_hint": {
+    "message": "Окно модели — 1M. Тариф задаёт лимит аккаунта; «Авто» = лимит неизвестен."
   },
   "options_limit_label": {
     "message": "Лимит контекста:"

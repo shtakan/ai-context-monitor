@@ -721,6 +721,14 @@ interface AiCmContextSnapshot {
   limit: number;
   effectiveLimit: number;
   contextLimit: number;
+  /** 2.2/фаза 5: настоящее окно модели; 0 — неизвестно. */
+  windowLimit?: number;
+  /** 2.2/фаза 5: лимит тарифа; null — неизвестен (не «0»). */
+  accountLimit?: number | null;
+  /** 2.2/фаза 5: тариф (free/ai-plus/ai-pro/…); null — не определён. */
+  limitPlan?: string | null;
+  /** 2.2/фаза 5: plan-unknown/account-limit-unknown/window-unknown/fallback-display. */
+  limitWarnings?: string[];
   attachBreak?: AiCmAttachBreak | null;
   chars?: number;
   msgs?: number;
@@ -743,6 +751,11 @@ interface AiCmWidgetData {
   effectiveLimit: number;
   contextLimit: number;
   displayLimit: number;
+  /** 2.2/фаза 5: три факта для попапа/файла. */
+  windowLimit?: number;
+  accountLimit?: number | null;
+  limitPlan?: string | null;
+  limitWarnings?: string[];
   modelName: string;
   attachBreak: AiCmAttachBreak | null;
   quality?: 'exact' | 'reported' | 'derived' | 'floor' | 'stale';
@@ -809,6 +822,10 @@ function aiCmWidgetDataFromSnapshot(snap: AiCmContextSnapshot | null): AiCmWidge
     effectiveLimit: snap.effectiveLimit,
     contextLimit: snap.contextLimit,
     displayLimit: snap.limit,
+    windowLimit: (typeof snap.windowLimit === 'number') ? snap.windowLimit : undefined,
+    accountLimit: (snap.accountLimit === null || typeof snap.accountLimit === 'number') ? snap.accountLimit : undefined,
+    limitPlan: (snap.limitPlan === null || typeof snap.limitPlan === 'string') ? snap.limitPlan : undefined,
+    limitWarnings: Array.isArray(snap.limitWarnings) ? snap.limitWarnings : undefined,
     modelName: snap.modelName,
     attachBreak: snap.attachBreak || null,
     quality: snap.quality,
@@ -830,6 +847,10 @@ function aiCmStatePatchFromSnapshot(snap: AiCmContextSnapshot | null): Partial<A
     displayLimit: d.displayLimit,
     effectiveLimit: d.effectiveLimit,
     contextLimit: d.contextLimit,
+    windowLimit: d.windowLimit,
+    accountLimit: d.accountLimit,
+    limitPlan: d.limitPlan,
+    limitWarnings: d.limitWarnings,
     modelName: d.modelName,
     attachBreak: d.attachBreak
   };
@@ -910,6 +931,10 @@ function aiCmCommitContextSnapshot(
     && prev.tokens === next.tokens
     && prev.percent === next.percent
     && prev.limit === next.limit
+    // 2.2/фаза 5: смена окна/тарифа публикуется даже при том же проценте.
+    && (prev.windowLimit || 0) === (next.windowLimit || 0)
+    && (prev.accountLimit === undefined ? null : prev.accountLimit) === (next.accountLimit === undefined ? null : next.accountLimit)
+    && (prev.limitPlan || '') === (next.limitPlan || '')
     && prev.partial === next.partial
     && prev.partialReason === next.partialReason
     && (prev.baseComplete === true) === (next.baseComplete === true)

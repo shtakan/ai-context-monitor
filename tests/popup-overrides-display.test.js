@@ -320,7 +320,7 @@ describe('H19: options — поле «Лимит контекста» = % от �
 
   test('options.js пишет selectedModel/customLimit в chrome.storage.sync', () => {
     const src = fs.readFileSync(OPTIONS_JS, 'utf8');
-    expect(src).toContain("chrome.storage.sync.get(['selectedModel', 'customLimit', 'showWidget']");
+    expect(src).toContain("chrome.storage.sync.get(['selectedModel', 'customLimit', 'showWidget', 'aiCmGeminiPlan']");
     expect(src).toContain('chrome.storage.sync.set({ selectedModel: modelSelect.value });');
     expect(src).toContain('chrome.storage.sync.set({ customLimit: value });');
   });

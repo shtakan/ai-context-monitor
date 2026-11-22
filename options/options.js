@@ -44,9 +44,12 @@ console.log('AI Context Monitor: Настройки загружены');
 const siteEl = document.getElementById('stat-site');
 const modelEl = document.getElementById('stat-model');
 const tokensEl = document.getElementById('stat-tokens');
+const windowEl = document.getElementById('stat-window');
 const limitEl = document.getElementById('stat-limit');
+const accountEl = document.getElementById('stat-account');
 const percentEl = document.getElementById('stat-percent');
 const modelSelect = /** @type {HTMLSelectElement|null} */ (document.getElementById('model-select'));
+const geminiPlanSelect = /** @type {HTMLSelectElement|null} */ (document.getElementById('gemini-plan'));
 const customLimit = /** @type {HTMLInputElement|null} */ (document.getElementById('custom-limit'));
 const showWidget = /** @type {HTMLInputElement|null} */ (document.getElementById('show-widget'));
 const apiKeyInput = /** @type {HTMLInputElement|null} */ (document.getElementById('api-key'));
@@ -119,13 +122,15 @@ var siteLabels = {
 };
 
 // Загружаем настройки
-chrome.storage.sync.get(['selectedModel', 'customLimit', 'showWidget'], function (
-  /** @type {{ selectedModel?: string, customLimit?: number, showWidget?: boolean }} */ data
+chrome.storage.sync.get(['selectedModel', 'customLimit', 'showWidget', 'aiCmGeminiPlan'], function (
+  /** @type {{ selectedModel?: string, customLimit?: number, showWidget?: boolean, aiCmGeminiPlan?: string }} */ data
 ) {
   if (data.selectedModel) modelSelect.value = data.selectedModel;
   // customLimit хранится числом (null — «авто»); сеттер value всё равно приводит к строке.
   if (data.customLimit) customLimit.value = String(data.customLimit);
   if (data.showWidget !== undefined) showWidget.checked = data.showWidget;
+  // 2.2/фаза 5: тариф Gemini — источник accountLimit; пусто/auto = «неизвестен».
+  if (geminiPlanSelect && data.aiCmGeminiPlan) geminiPlanSelect.value = data.aiCmGeminiPlan;
 });
 
 // ========== M-7: BYOK-ключ — ТОЛЬКО chrome.storage.session ==========
@@ -317,6 +322,13 @@ if (!aiCmByokUiDisabled) aiCmLoadByokKey();
 
 modelSelect && modelSelect.addEventListener('change', function () {
   chrome.storage.sync.set({ selectedModel: modelSelect.value });
+});
+
+// 2.2/фаза 5: тариф Gemini (storage.sync). content слушает изменение и пересчитывает
+// лимит аккаунта/процент без F5. 'auto' пишем как пустую строку — «неизвестен».
+geminiPlanSelect && geminiPlanSelect.addEventListener('change', function () {
+  var plan = geminiPlanSelect.value === 'auto' ? '' : geminiPlanSelect.value;
+  chrome.storage.sync.set({ aiCmGeminiPlan: plan });
 });
 
 // H20: дебаунс поля «Лимит контекста» (~500мс) до записи в chrome.storage.sync.
@@ -692,13 +704,28 @@ function isChatHome(hostname, pathname) {
   return chatDialogPathBySite[site].test(String(pathname || ''));
 }
 
+/**
+ * 2.2/фаза 5: лимит аккаунта — отдельный факт от порога показа.
+ * null — «неизвестен» (тариф не определён), undefined — старый снимок → «—».
+ * @param {number|null|undefined} value лимит аккаунта
+ * @returns {string} текст для попапа
+ */
+function formatAccountLimit(value) {
+  if (typeof value === 'number' && isFinite(value) && value > 0) return value.toLocaleString();
+  if (value === null) return aiCmI18nMessage('options_account_unknown', 'неизвестен');
+  return '—';
+}
+
 function updateStatsFromState(state, tabHost, tabPath, fromCache) {
   siteEl.textContent = siteLabels[state.site] || state.site || '—';
   modelEl.textContent = state.model || '—';
   // BUG-11: 0 токенов — это отсутствие данных, а не «0%» (лёгкий/пустой тред).
   var hasTokens = (typeof state.tokens === 'number') && isFinite(state.tokens) && state.tokens > 0;
   tokensEl.textContent = hasTokens ? state.tokens.toLocaleString() : '—';
+  // 2.2/фаза 5: окно модели и лимит аккаунта — разными строками, порог показа — отдельно.
+  if (windowEl) windowEl.textContent = (typeof state.windowLimit === 'number' && state.windowLimit > 0) ? state.windowLimit.toLocaleString() : '—';
   limitEl.textContent = (typeof state.limit === 'number') ? state.limit.toLocaleString() : '—';
+  if (accountEl) accountEl.textContent = formatAccountLimit(state.accountLimit);
   var p = state.percent || 0;
   percentEl.textContent = hasTokens ? (p + '%') : '—';
   percentEl.style.color = hasTokens ? percentColor(p) : '#8888aa';
@@ -772,7 +799,9 @@ function showNoData(message) {
   siteEl.textContent = message || aiCmI18nMessage('options_no_data', 'Нет данных');
   modelEl.textContent = '—';
   tokensEl.textContent = '—';
+  if (windowEl) windowEl.textContent = '—';
   limitEl.textContent = '—';
+  if (accountEl) accountEl.textContent = '—';
   percentEl.textContent = '—';
   percentEl.style.color = '#8888aa';
   if (limitEl) limitEl.title = '';

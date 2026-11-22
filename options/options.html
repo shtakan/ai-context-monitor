@@ -32,8 +32,16 @@
         <span class="stat-value" id="stat-tokens">—</span>
       </div>
       <div class="stat-row">
-        <span class="stat-label" data-i18n="options_stat_limit">Лимит:</span>
+        <span class="stat-label" data-i18n="options_stat_window">Окно модели:</span>
+        <span class="stat-value" id="stat-window">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label" data-i18n="options_stat_limit">Порог показа:</span>
         <span class="stat-value" id="stat-limit">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label" data-i18n="options_stat_account">Лимит аккаунта:</span>
+        <span class="stat-value" id="stat-account">—</span>
       </div>
       <div class="stat-row highlight">
         <span class="stat-label" data-i18n="options_stat_fill">Заполнение:</span>
@@ -136,6 +144,18 @@
       <div class="section checkbox-row">
         <input type="checkbox" id="debugLogs">
         <label for="debugLogs" data-i18n="options_debug_logs">Подробные логи</label>
+      </div>
+
+      <div class="section">
+        <label class="label" for="gemini-plan" data-i18n="options_plan_label">Тариф Gemini:</label>
+        <select id="gemini-plan" aria-describedby="gemini-plan-hint">
+          <option value="auto" data-i18n="options_plan_auto">Авто (не знаю)</option>
+          <option value="free">Free — 32K</option>
+          <option value="ai-plus">AI Plus — 128K</option>
+          <option value="ai-pro">AI Pro — 1M</option>
+          <option value="ultra">Ultra — 1M</option>
+        </select>
+        <span class="hint" id="gemini-plan-hint" data-i18n="options_plan_hint">Окно модели — 1M. Тариф задаёт лимит аккаунта; «Авто» = лимит неизвестен.</span>
       </div>
 
       <!-- v1.20 (M-1): смысловая группа «Автоэкспорт чатов».

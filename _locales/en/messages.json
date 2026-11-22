@@ -101,8 +101,17 @@
   "options_stat_tokens": {
     "message": "Tokens:"
   },
+  "options_stat_window": {
+    "message": "Model window:"
+  },
   "options_stat_limit": {
-    "message": "Limit:"
+    "message": "Display threshold:"
+  },
+  "options_stat_account": {
+    "message": "Account limit:"
+  },
+  "options_account_unknown": {
+    "message": "unknown"
   },
   "options_stat_fill": {
     "message": "Usage:"
@@ -115,6 +124,15 @@
   },
   "options_model_auto": {
     "message": "Auto-detect"
+  },
+  "options_plan_label": {
+    "message": "Gemini plan:"
+  },
+  "options_plan_auto": {
+    "message": "Auto (don't know)"
+  },
+  "options_plan_hint": {
+    "message": "The model window is 1M. The plan sets the account limit; Auto means the limit is unknown."
   },
   "options_limit_label": {
     "message": "Context limit:"

@@ -135,6 +135,15 @@ function makeCtx(over) {
     displayLimit: 128000,
     effectiveLimit: 128000,
     contextLimit: 128000,
+    // 2.2/фаза 5: writer-блок читает три факта из резолвера (он сам — выше среза).
+    limitModel: {
+      windowKnown: true,
+      modelWindow: 128000,
+      displayLimit: 128000,
+      accountLimit: null,
+      plan: null,
+      warnings: ['account-limit-unknown']
+    },
     modelId: 'gpt-5',
     ModelConfig: { getModel: function () { return { name: 'GPT-5' }; } },
     currentAdapter: { siteName: 'chatgpt' },
@@ -214,6 +223,11 @@ describe('S2.2 empty-chat: пустой чат не публикует нуле�
     expect(snap).not.toBeNull();
     expect(snap.tokens).toBe(1);
     expect(snap.percent).toBe(0);
+    // 2.2/фаза 5: writer переносит три факта из резолвера в снимок.
+    expect(snap.windowLimit).toBe(128000);
+    expect(snap.accountLimit).toBeNull();
+    expect(snap.limitPlan).toBeNull();
+    expect(snap.limitWarnings).toEqual(['account-limit-unknown']);
   });
 
   test('кейс 4: гейт не по body — пустое тело, но текст есть', () => {

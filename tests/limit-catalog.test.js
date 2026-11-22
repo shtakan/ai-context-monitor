@@ -15,6 +15,7 @@ const {
   lookupLimitCatalog
 } = require('../utils/metrics/limit-catalog.ts');
 const { resolveLimitModel } = require('../utils/metrics/limits.ts');
+const { ModelConfig } = require('../utils/model-config.ts');
 
 describe('limit-catalog: нормализация площадок и тарифов', () => {
   test('хост/URL сводятся к site id, неизвестное не теряется', function () {
@@ -233,6 +234,17 @@ describe('limits: API → каталог → настройки → fallback', (
     expect(v3.displayLimit).toBe(128000);
   });
 
+  test('порог площадки не больше окна: GPT-4 8K не получает 128K', function () {
+    const model = resolveLimitModel({
+      site: 'chatgpt',
+      modelId: 'gpt-4',
+      modelWindow: 8192,
+      windowSource: 'catalog'
+    });
+    expect(model.modelWindow).toBe(8192);
+    expect(model.displayLimit).toBe(8192);
+  });
+
   test('полный fallback: число есть, но окно помечено неизвестным', function () {
     const model = resolveLimitModel({ fallbackLimit: 128000 });
     expect(model.modelWindow).toBe(128000);
@@ -247,5 +259,40 @@ describe('limits: API → каталог → настройки → fallback', (
     const model = resolveLimitModel({ modelWindow: 1048576, displayLimit: 128000 });
     expect(model.displayLimit).toBe(128000);
     expect(model.provenance && model.provenance.displayLimit).toBe('settings');
+  });
+
+  test('живой паритет: auto-порог совпадает с getEffectiveLimit на всех площадках', function () {
+    const cases = [
+      ['chatgpt', 'gpt-5.5'],
+      ['chatgpt', 'gpt-4'],
+      ['gemini', 'gemini-3.1-pro'],
+      ['gemini', 'gemini-3.6-flash'],
+      ['google_search', 'gemini-search-default'],
+      ['aistudio', 'gemini-2.5-pro'],
+      ['claude', 'claude-sonnet-5-5'],
+      ['claude', 'claude-haiku-4-5'],
+      ['claude', 'claude-sonnet-4-5'],
+      ['deepseek', 'deepseek-v4.1-flash'],
+      ['deepseek', 'deepseek-v3'],
+      ['qwen', 'qwen3.8-max'],
+      ['qwen', 'qwen3.7-plus'],
+      ['perplexity', 'sonar-pro'],
+      ['perplexity', 'sonar-reasoning']
+    ];
+    cases.forEach(function (pair) {
+      const site = pair[0];
+      const modelId = pair[1];
+      const legacyAuto = ModelConfig.getEffectiveLimit(modelId);
+      const model = resolveLimitModel({
+        site: site,
+        modelId: modelId,
+        modelWindow: ModelConfig.getContextLimit(modelId),
+        windowSource: 'catalog',
+        displayLimit: legacyAuto,
+        displaySource: 'fallback',
+        fallbackLimit: 128000
+      });
+      expect([site, modelId, model.displayLimit]).toEqual([site, modelId, legacyAuto]);
+    });
   });
 });

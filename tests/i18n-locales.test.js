@@ -1293,10 +1293,15 @@ describe('M-4.4: локализация privacy/privacy.html и docs/index.html'
       //   docs_* — 43, словарь 272)
       // + BUG-11: options_context_not_quota — тултип Perplexity «квота ≠ контекст»
       //   (+1, словарь 273)
+      // + 2.2/фаза 5: три подписи лимитов — options_stat_window, options_stat_account,
+      //   options_account_unknown (+3, словарь 276); options_stat_limit переименован
+      //   в «Порог показа» без изменения числа ключей.
+      // + 2.2/фаза 5: тариф Gemini — options_plan_label / options_plan_auto /
+      //   options_plan_hint (+3, словарь 279).
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('privacy_') === 0; }).length).toBe(87);
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('docs_') === 0; }).length).toBe(43);
-      expect(Object.keys(ru).length).toBe(273);
-      expect(Object.keys(en).length).toBe(273);
+      expect(Object.keys(ru).length).toBe(279);
+      expect(Object.keys(en).length).toBe(279);
     });
 
     test('ru-значения M-4.4 байтово равны тексту разметки, en — перевод без кириллицы', () => {

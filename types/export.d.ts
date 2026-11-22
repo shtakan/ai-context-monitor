@@ -110,8 +110,23 @@ export interface ExportHistory {
   /** Число токенов снимка. */
   tokens?: number;
 
-  /** Эффективный лимит снимка. */
+  /** Эффективный лимит снимка (порог показа, от которого считается процент). */
   limit?: number;
+
+  /** 2.2/фаза 5: настоящее окно модели; 0/undefined — неизвестно. */
+  windowLimit?: number;
+
+  /** 2.2/фаза 5: порог показа (дубль limit для явной подписи в файле). */
+  displayLimit?: number;
+
+  /** 2.2/фаза 5: лимит тарифа; null — неизвестен. */
+  accountLimit?: number | null;
+
+  /** 2.2/фаза 5: тариф (free/ai-plus/ai-pro/ultra); null — не определён. */
+  limitPlan?: string | null;
+
+  /** 2.2/фаза 5: машинные причины неизвестности. */
+  limitWarnings?: string[];
 
   /** Процент заполнения. */
   percent?: number;

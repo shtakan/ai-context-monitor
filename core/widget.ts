@@ -1010,7 +1010,8 @@ function updateWidget(percentage: number, tokens: number, effectiveLimit: number
       i18n('content_tooltip_model', `Модель: ${esc(modelName)}`, [esc(modelName)]),
       i18n('content_tooltip_tokens', `Токены: ${tokens.toLocaleString()}`, [tokens.toLocaleString()]),
       limLine,
-      i18n('content_tooltip_window', `Окно модели: ${contextLimit.toLocaleString()}`, [contextLimit.toLocaleString()])
+      // 2.2/фаза 5: 0 — окно неизвестно (не подставляем 128k и не печатаем «0»).
+      i18n('content_tooltip_window', `Окно модели: ${contextLimit > 0 ? contextLimit.toLocaleString() : '—'}`, [contextLimit > 0 ? contextLimit.toLocaleString() : '—'])
     ];
     // O-35 (B1, фикс): серверный usage Qwen — ОТДЕЛЬНЫЕ строки reasoning и output.
     // Источник — netQwenUsage из общего лексического скоупа контент-скрипта (state.js):

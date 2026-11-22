@@ -58,6 +58,10 @@ function liveState() {
     model: 'gpt-5',
     tokens: 50992,
     limit: 128000,
+    windowLimit: 1050000,
+    accountLimit: null,
+    limitPlan: null,
+    limitWarnings: ['account-limit-unknown'],
     percent: 39.8,
     updatedAt: Date.now(),
     stale: true
@@ -192,13 +196,14 @@ describe('O-14 D3/R3: реальный resetConversationState — удалён �
 // =====================================================================================
 
 const DOM_IDS = [
-  'stat-site', 'stat-model', 'stat-tokens', 'stat-limit', 'stat-percent',
+  'stat-site', 'stat-model', 'stat-tokens', 'stat-window', 'stat-limit', 'stat-account', 'stat-percent',
   'model-select', 'custom-limit', 'show-widget', 'api-key', 'toggle-api-key',
   'exact-count', 'debugLogs', 'export-md', 'export-json', 'export-pdf', 'export-txt',
   'export-hint', 'stale-warning', 'export-diag', 'reset-limit',
   'aiCmAutoExport', 'aiCmAutoExportPct', 'aiCmAutoExportFmt',
   'aiCmProactive', 'aiCmProactiveNotify',
-  'aiCmProactiveLow', 'aiCmProactiveMedium', 'aiCmProactiveHigh'
+  'aiCmProactiveLow', 'aiCmProactiveMedium', 'aiCmProactiveHigh',
+  'gemini-plan'
 ];
 
 function setupDom() {
@@ -207,23 +212,40 @@ function setupDom() {
   document.body.appendChild(versionEl);
   DOM_IDS.forEach(function (id) {
     const isNumber = id === 'aiCmProactiveLow' || id === 'aiCmProactiveMedium' || id === 'aiCmProactiveHigh';
-    const el = isNumber ? document.createElement('input') : document.createElement('div');
+    const isSelect = id === 'gemini-plan' || id === 'model-select';
+    const el = isSelect ? document.createElement('select') : (isNumber ? document.createElement('input') : document.createElement('div'));
     el.id = id;
     if (isNumber) el.type = 'number';
     if (id === 'aiCmAutoExportPct') el.value = '90';
+    if (id === 'gemini-plan') {
+      ['auto', 'free', 'ai-plus', 'ai-pro', 'ultra'].forEach(function (value) {
+        const opt = document.createElement('option');
+        opt.value = value;
+        el.appendChild(opt);
+      });
+    }
     if (id === 'export-md' || id === 'export-json' || id === 'export-pdf' || id === 'export-txt') el.disabled = true;
     document.body.appendChild(el);
   });
 }
 
-function createChromeMock(initialLocal, activeTabUrl, tabWithoutUrl) {
+function createChromeMock(initialLocal, activeTabUrl, tabWithoutUrl, initialSync) {
   const store = Object.assign({}, initialLocal || {});
+  const syncStore = Object.assign({}, initialSync || {});
+  const syncSets = [];
   const listeners = [];
   return {
     chrome: {
       runtime: { getManifest: function () { return { version: '2.0.10' }; }, getURL: function () { return 'print.html'; }, lastError: null, sendMessage: function () { } },
       storage: {
-        sync: { get: function (keys, cb) { cb({}); }, set: function () { } },
+        sync: {
+          get: function (keys, cb) {
+            const out = {};
+            (keys || []).forEach(function (k) { out[k] = syncStore[k]; });
+            cb(out);
+          },
+          set: function (obj) { syncSets.push(obj); Object.assign(syncStore, obj); }
+        },
         local: {
           get: function (keys, cb) {
             if (typeof keys === 'string') keys = [keys];
@@ -249,12 +271,14 @@ function createChromeMock(initialLocal, activeTabUrl, tabWithoutUrl) {
       }
     },
     store: store,
+    syncStore: syncStore,
+    syncSets: syncSets,
     listeners: listeners
   };
 }
 
-function mountOptions(initialLocal, activeTabUrl, tabWithoutUrl) {
-  const m = createChromeMock(initialLocal, activeTabUrl, tabWithoutUrl);
+function mountOptions(initialLocal, activeTabUrl, tabWithoutUrl, initialSync) {
+  const m = createChromeMock(initialLocal, activeTabUrl, tabWithoutUrl, initialSync);
   global.chrome = m.chrome;
   require('./helpers/load-options.js').loadOptions();
   document.dispatchEvent(new Event('DOMContentLoaded'));
@@ -287,7 +311,9 @@ describe('O-14 D2: попап на removed-событие не держит ст
     expect(document.getElementById('stat-site').textContent).toContain('Нет данных');
     expect(document.getElementById('stat-model').textContent).toBe('—');
     expect(document.getElementById('stat-tokens').textContent).toBe('—');
+    expect(document.getElementById('stat-window').textContent).toBe('—');
     expect(document.getElementById('stat-limit').textContent).toBe('—');
+    expect(document.getElementById('stat-account').textContent).toBe('—');
     expect(document.getElementById('stat-percent').textContent).toBe('—');
     const warn = document.getElementById('stale-warning');
     expect(warn.style.display).toBe('none');
@@ -308,6 +334,22 @@ describe('O-14 D2: попап на removed-событие не держит ст
 
     fireChanged(m, { aiCmState: { oldValue: { host: OTHER_HOST } } });
     expect(document.getElementById('stat-model').textContent).toBe('gpt-5');
+  });
+
+  test('2.2/фаза 5: окно модели и лимит аккаунта — отдельные строки попапа', () => {
+    mountOptions({ ['aiCmState:' + HOST]: liveState() }, TAB_URL);
+    expect(document.getElementById('stat-window').textContent).toBe((1050000).toLocaleString());
+    expect(document.getElementById('stat-limit').textContent).toBe((128000).toLocaleString());
+    expect(document.getElementById('stat-account').textContent).toBe('неизвестен');
+  });
+
+  test('2.2/фаза 5: тариф Gemini загружается и пишется в sync', () => {
+    const m = mountOptions({}, TAB_URL, false, { aiCmGeminiPlan: 'free' });
+    const plan = document.getElementById('gemini-plan');
+    expect(plan.value).toBe('free');
+    plan.value = 'ai-plus';
+    plan.dispatchEvent(new Event('change'));
+    expect(m.syncSets).toContainEqual({ aiCmGeminiPlan: 'ai-plus' });
   });
 
   test('D2: после removed новый снимок (newValue) снова печатается — кэш не залип', () => {
