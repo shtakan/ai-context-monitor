@@ -3616,6 +3616,20 @@ if (isExtensionValid()) {
             tokens: maxTokenCount,
             limit: computeEffectiveLimit(lastResolvedModelId),
             percent: pctExp,
+            // BIG-02: платформенный сигнал едет в файл тем же снимком, что у бейджа.
+            // Без него MD заново считал 68 893/128 000 = 53.8 % и терял метку.
+            saturated: ((snapPartMan && snapPartMan.saturated === true) ||
+              (typeof lastTokensSnapshot !== 'undefined' && lastTokensSnapshot && lastTokensSnapshot.saturated === true))
+              ? true : undefined,
+            // 2.2/фаза 5: те же три факта лимита, что у авто-пути.
+            windowLimit: (snapPartMan && typeof snapPartMan.windowLimit === 'number' && snapPartMan.windowLimit > 0)
+              ? snapPartMan.windowLimit
+              : ((snapPartMan && typeof snapPartMan.contextLimit === 'number' && snapPartMan.contextLimit > 0) ? snapPartMan.contextLimit : undefined),
+            displayLimit: (snapPartMan && typeof snapPartMan.effectiveLimit === 'number' && snapPartMan.effectiveLimit > 0)
+              ? snapPartMan.effectiveLimit : undefined,
+            accountLimit: (snapPartMan && typeof snapPartMan.accountLimit !== 'undefined') ? snapPartMan.accountLimit : undefined,
+            limitPlan: (snapPartMan && typeof snapPartMan.limitPlan === 'string' && snapPartMan.limitPlan) ? snapPartMan.limitPlan : undefined,
+            limitWarnings: (snapPartMan && Array.isArray(snapPartMan.limitWarnings)) ? snapPartMan.limitWarnings : undefined,
             // v1.9 (qwen): источник числа (dom|net|max|server|hold) — тот же снимок,
             // что у бейджа/истории. Без него ручной MD/JSON терял metric-src/src.
             src: (typeof lastTokensSnapshot !== 'undefined' && lastTokensSnapshot && lastTokensSnapshot.src) ? lastTokensSnapshot.src : undefined,

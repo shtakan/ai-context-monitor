@@ -229,6 +229,49 @@ describe('inv-i3 (S5): MD и JSON одного нажатия — один ка�
     expect(fileBody).toContain('Живой вопрос');
   });
 
+  test('(vi) ChatGPT saturated: ручной файл получает 100 %, context-saturated и три факта лимита', function () {
+    const snap = {
+      modelName: 'GPT-6', src: 'net', tokens: 68893, percent: 53.8, limit: 128000,
+      effectiveLimit: 128000, contextLimit: 1050000, windowLimit: 1050000,
+      accountLimit: null, limitPlan: 'free', limitWarnings: ['account-limit-unknown'],
+      saturated: true, partial: false
+    };
+    const live = [
+      { role: 'user', text: 'Вопрос' },
+      { role: 'assistant', text: 'Ответ' }
+    ];
+    const sb = manualSandbox({
+      currentAdapter: { siteName: 'chatgpt' },
+      window: { location: { hostname: 'chatgpt.com' } },
+      baseComplete: true,
+      maxTokenCount: 68893,
+      lastPercentage: 100,
+      lastTokensSnapshot: snap,
+      computeEffectiveLimit: function () { return 128000; },
+      aiCmReadContextSnapshot: function () { return snap; },
+      buildHistoryMessages: function () { return live.map(function (m) { return Object.assign({}, m); }); },
+      aiCmUnionFileMessages: function () { return live.map(function (m) { return Object.assign({}, m); }); },
+      aiCmBuildCanonicalBody: function () { return { messages: live.map(function (m) { return Object.assign({}, m); }) }; }
+    });
+    runSlice(MANUAL_CODE, sb.ctx);
+    const data = sb.resp[0].data;
+    expect(data.saturated).toBe(true);
+    expect(data.percent).toBe(100);
+    expect(data.windowLimit).toBe(1050000);
+    expect(data.displayLimit).toBe(128000);
+    expect(data.accountLimit).toBeNull();
+    expect(data.limitPlan).toBe('free');
+    expect(data.limitWarnings).toEqual(['account-limit-unknown']);
+
+    const md = loadPopup().buildMdText(data);
+    expect(md).toContain('Токены: 68893 / 128000 (100%)');
+    expect(md).toContain('context-saturated: 1');
+    expect(md).toContain('model-window: 1050000');
+    expect(md).toContain('display-limit: 128000');
+    expect(md).toContain('account-limit: unknown');
+    expect(md).toContain('limit-plan: free');
+  });
+
   test('(iv) gemini: sourceTier в JSON, platform === сырому ключу, MD-шапка по-прежнему локализована', function () {
     const mod = loadPopup();
     const hist = {

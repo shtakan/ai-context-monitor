@@ -222,6 +222,18 @@ export interface AiCmManualSnapshot {
   tokens: number;
   limit: number;
   percent: number;
+  /** BIG-02: платформа сообщила «контекст заполнен» — 100 % и метка в файле. */
+  saturated?: boolean;
+  /** 2.2/фаза 5: настоящее окно модели; 0/undefined — неизвестно. */
+  windowLimit?: number;
+  /** 2.2/фаза 5: порог показа (128k и т.п.). */
+  displayLimit?: number;
+  /** 2.2/фаза 5: лимит тарифа; null — неизвестен. */
+  accountLimit?: number | null;
+  /** 2.2/фаза 5: тариф (free/ai-plus/…); null — не определён. */
+  limitPlan?: string | null;
+  /** 2.2/фаза 5: предупреждения резолвера лимитов. */
+  limitWarnings?: string[];
   /** Источник числа (dom|net|max|server|hold), если он известен. */
   src?: string;
   updatedAt: number;
