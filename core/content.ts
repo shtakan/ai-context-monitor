@@ -1971,6 +1971,37 @@ function requestExactTokens(fullText: string, modelId: string | null): void {
       lastCountTokensConvId = getCurrentConvId() || '';
       // Шаг 4: успешный ответ снимает отметку отказа — держание эвристики для этого текста кончилось.
       lastCountTokensErrorText = '';
+      // O-23 (калибровка 2.0): одна строка на каждый точный ответ API — тот же fullText,
+      // что ушёл в countTokens, и эвристика Tokenizer по нему. По этим строкам можно
+      // пересчитать константы без догадок по баннерам платформы.
+      try {
+        if (typeof aiCmDiagLine === 'function' && typeof Tokenizer !== 'undefined' && Tokenizer &&
+            typeof Tokenizer.countTokens === 'function') {
+          var calCyr = (fullText.match(/[\u0400-\u04FF]/g) || []).length;
+          var calCjk = (fullText.match(/[\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]/g) || []).length;
+          var calLatin = (fullText.match(/[A-Za-z]/g) || []).length;
+          var calDigit = (fullText.match(/[0-9]/g) || []).length;
+          var calSpace = (fullText.match(/\s/g) || []).length;
+          var calPunct = (fullText.match(/[.,!?;:()\[\]{}"'«»\-—]/g) || []).length;
+          var calOther = Math.max(0, fullText.length - calCyr - calCjk - calLatin - calDigit - calSpace - calPunct);
+          var calHeur = Tokenizer.countTokens(fullText);
+          var calExact = response.totalTokens;
+          aiCmDiagLine('o23-calibration', {
+            model: apiModelId,
+            chars: fullText.length,
+            cyr: calCyr,
+            latin: calLatin,
+            digit: calDigit,
+            cjk: calCjk,
+            punct: calPunct,
+            other: calOther,
+            space: calSpace,
+            heuristic: calHeur,
+            exact: calExact,
+            ratio: calExact > 0 ? (calHeur / calExact).toFixed(4) : '(n/a)'
+          });
+        }
+      } catch (eCal) { swallowSoft(eCal, 'content:o23-calibration'); }
       netServerTokens = response.totalTokens;
       console.log('[exact-tokens] countTokens вернул ' + response.totalTokens + ' токенов для модели ' + apiModelId);
       logTextProbe('post-ok:' + response.totalTokens, fullText);
