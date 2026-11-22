@@ -414,6 +414,23 @@ class ChatGPTAdapter extends BaseAdapter {
   }
 
   /**
+   * Текст последней отрендеренной реплики ассистента (для DOM-перекрытия хвоста).
+   * Живая разметка ChatGPT 2026-10 — `[data-turn-key]`, поэтому селекторы знает
+   * только адаптер: повторять их в core/hybrid-tail нельзя. Пустая строка — нет реплики.
+   */
+  getLastAssistantText(): string {
+    try {
+      const elements = this._findMessageElements();
+      for (let i = elements.length - 1; i >= 0; i--) {
+        if (elements[i].role !== 'assistant') continue;
+        const text = this._extractText(elements[i].element).replace(CHATGPT_ANSWER_PREFIX_RE, '').trim();
+        if (text) return text;
+      }
+    } catch (e) { swallowSoft(e, 'adapter:chatgpt:last-assistant'); }
+    return '';
+  }
+
+  /**
    * Сигнал платформы «контекст заполнен» (BIG-02). Баннер ChatGPT стоит над
    * композером и содержит заголовок «Контекстное окно заполнено» + кнопки
    * «Новый чат»/«Перейти на Plus». Ищем не текст треда, а кликабельный контрол

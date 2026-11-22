@@ -55,4 +55,7 @@ export interface Adapter {
 
   /** Сигнал платформы «контекст заполнен»; null/undefined — адаптер не умеет. */
   detectContextSaturation?(): ContextSaturation | null;
+
+  /** Текст последней отрендеренной реплики ассистента (DOM-перекрытие хвоста). */
+  getLastAssistantText?(): string;
 }

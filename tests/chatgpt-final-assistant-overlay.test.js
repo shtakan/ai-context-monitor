@@ -148,6 +148,16 @@ describe('ChatGPT: финальный assistant из DOM (тот же ход, п
     expect(ov.text).toBe(body + ' Финальный абзац, которого не было в снимке.\n:::');
   });
 
+  test('новая разметка ChatGPT: текст берётся из адаптера, а не из общих селекторов', function () {
+    document.body.innerHTML = '';
+    installScope({
+      currentAdapter: { siteName: 'chatgpt', getLastAssistantText: function () { return A1_FULL; } }
+    });
+
+    const ov = Hybrid.aiCmFinalAssistantOverlay(BASE);
+    expect(ov).toEqual({ index: 1, before: A1_PART, text: A1_FULL });
+  });
+
   test('DOM-узел с чужим id (новый ход) не подменяет базу', function () {
     render([{ id: 'u1', role: 'user', text: U1 }, { id: 'a2', role: 'assistant', text: A1_FULL }]);
     installScope({});

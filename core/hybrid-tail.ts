@@ -361,6 +361,17 @@ function aiCmDomAnchorCut(before: string, after: string): number {
 }
 /** Последний assistant-узел ленты: { text, id }. Пустой text — узла нет. */
 function aiCmDomLastAssistant(): { text: string; id: string } {
+  // Живая разметка ChatGPT (2026-10) — [data-turn-key]; селекторы знает только адаптер.
+  try {
+    var adapterAny: any = currentAdapter;
+    if (typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName === 'chatgpt' &&
+        adapterAny && typeof adapterAny.getLastAssistantText === 'function') {
+      var advText = String(adapterAny.getLastAssistantText() || '').trim();
+      if (advText) return { text: aiCmStripChromeLines(advText), id: '' };
+    }
+  } catch (eAdv) {
+    if (typeof swallowSoft === 'function') swallowSoft(eAdv, 'hybrid-tail:adapter-last-assistant');
+  }
   var found = findMessageNodes();
   var nodes = found.nodes || [];
   for (var k = nodes.length - 1; k >= 0; k--) {
@@ -384,6 +395,23 @@ function aiCmDomLastAssistant(): { text: string; id: string } {
   }
   return { text: '', id: '' };
 }
+var lastOverlayDiagSig = '';
+function aiCmDiagFinalOverlay(index: number, before: string, text: string): void {
+  try {
+    if (typeof aiCmDiagLine !== 'function') return;
+    var sig = index + '|' + before.length + '|' + text.length;
+    if (sig === lastOverlayDiagSig) return;
+    lastOverlayDiagSig = sig;
+    aiCmDiagLine('chatgpt-final-overlay', {
+      index: index,
+      baseLen: before.length,
+      domLen: text.length,
+      delta: text.length - before.length
+    });
+  } catch (eOD) {
+    if (typeof swallowSoft === 'function') swallowSoft(eOD, 'hybrid-tail:final-overlay-diag');
+  }
+}
 /**
  * Перекрытие последнего assistant: сетевой текст — префикс видимого DOM-текста,
  * DOM длиннее и относится к тому же ходу (id из baseIdSet, когда id-кэш есть).
@@ -406,7 +434,10 @@ function aiCmFinalAssistantOverlay(
   if (!after || after.length <= before.length) return null;
   // Чужой (более новый) ход не подменяет базу: id есть в кэше id базы → это тот же ход.
   if (dom.id && baseIdSet && baseIdSet.size > 0 && !baseIdSet.has(dom.id)) return null;
-  if (after.indexOf(before) === 0) return { index: bi, before: before, text: after };
+  if (after.indexOf(before) === 0) {
+    aiCmDiagFinalOverlay(bi, before, after);
+    return { index: bi, before: before, text: after };
+  }
   // Canvas-документ в сети закрыт маркером ':::'. Якорь считаем по телу: сам маркер
   // в ленте не рендерится, а финальный абзац может быть дописан ПЕРЕД ним.
   var anchorText = before;
@@ -422,6 +453,7 @@ function aiCmFinalAssistantOverlay(
     var text = anchorText + appended;
     // Один закрывающий маркер: если DOM его не отдал — возвращаем сетевой.
     if (trailer && !/(?:\s*:::\s*)+$/.test(appended)) text += trailer;
+    aiCmDiagFinalOverlay(bi, before, text);
     return { index: bi, before: before, text: text };
   }
   // Якорь не найден: не подменяем ход угадыванием (canvas мог быть переписан целиком).
