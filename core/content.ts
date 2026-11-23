@@ -1843,6 +1843,7 @@ function resolveCurrentModel(): string {
   const rawFromNet = detectedModelSlug || '';
   const snapNetId = rawFromNet ? ModelConfig.resolveModelId(rawFromNet) : null;
   let uiRaw = '';
+  let uiAuto = false;
   try {
     if ((window.location.hostname || '').indexOf('gemini.google.com') !== -1) {
       // v49: передаём сетевую версию — приоритет (b) для DOM-сигнала без номера версии
@@ -1853,12 +1854,14 @@ function resolveCurrentModel(): string {
         modelConfig: ModelConfig,
         cache: geminiUiModelByFamily
       }, snapNetId) || '';
+      uiAuto = !!(uiRaw && typeof GeminiUiModel.isAutoUiModelText === 'function' &&
+        GeminiUiModel.isAutoUiModelText(uiRaw));
     }
-  } catch (e) { uiRaw = ''; }
+  } catch (e) { uiRaw = ''; uiAuto = false; }
   const uiResolved = uiRaw ? ModelConfig.resolveModelId(uiRaw) : null;
   if (uiRaw && !uiResolved) uiRaw = ''; // «Авто»/нераспознанный UI-сигнал → фолбэк на сеть/DOM
 
-  const rawFromDom = (rawFromNet || uiRaw) ? '' : (currentAdapter!.detectModel() || '');
+  const rawFromDom = (rawFromNet || uiRaw || uiAuto) ? '' : (currentAdapter!.detectModel() || '');
   const rawSnapshot = ((typeof aiCmAistudioDomSlug === 'function') ? aiCmAistudioDomSlug() : '') || rawFromNet || rawFromDom || '';
   const snapModelId = rawSnapshot ? ModelConfig.resolveModelId(rawSnapshot) : null;
 
@@ -1883,6 +1886,10 @@ function resolveCurrentModel(): string {
   let path;
   if (modelId) {
     path = rawSrc || 'дефолт';
+  } else if (uiAuto && !rawFromNet && !popupModelId) {
+    // UI явно показывает «Авто», сети нет: не подставляем скрытый/дефолтный ярлык модели.
+    modelId = 'gemini-auto';
+    path = 'dom(auto)';
   } else {
     modelId = ModelConfig.getDefaultModel(currentAdapter!.siteName);
     path = raw ? ((rawFromNet ? 'сеть' : 'DOM') + '→дефолт(не распознан)') : 'дефолт';
@@ -1892,6 +1899,7 @@ function resolveCurrentModel(): string {
       path = (rawSrc || 'сеть') + '→siteDefaults(вне каталога)';
     }
   }
+  if (modelId === 'gemini-auto') lastSnapshotModelName = (ModelConfig.getModel('gemini-auto')?.name || 'Gemini (auto)');
   // v1.18 (F7): GSA — сеть может не дать slug вовсе (детектор GSA молчит, если в ответе нет
   // model:"…"), и имя модели снапшота оставалось пустым → сегмент модели в имени файла
   // автоэкспорта падал в фолбэк 'model'. Заполняем ОДНОЙ точкой ЗДЕСЬ — ровно той моделью,
@@ -2674,6 +2682,8 @@ function aiCmTryGeminiDomBase(): boolean {
     if (typeof aiCmBaseSource !== 'undefined') aiCmBaseSource = 'dom';
     aiCmBaseConfirmedByConv[cid] = 1;
     aiCmAdapterBaseCount = prepared.length;
+    // База пришла из DOM — прежний stale («интеграция могла устареть») больше не актуален.
+    if (typeof scheduleStaleCheck === 'function') scheduleStaleCheck();
     debugLog('log', '[AI CM][gemini] dom-base ' + (refreshing ? 'refresh' : 'trusted') +
       ' convId=' + cid + ' msgs=' + prepared.length + ' textLen=' + baseText.length);
     return true;

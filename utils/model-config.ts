@@ -210,6 +210,13 @@ export const ModelConfig: ModelConfig = {
       description: 'Предыдущее поколение'
     },
     // ---- Gemini: канонические ключи (дефолты/шапка) ----
+    // ---- Gemini: режим веб-UI «Авто» (конкретная модель не выбрана) ----
+    'gemini-auto': {
+      name: 'Gemini (Авто)',
+      provider: 'Google',
+      contextLimit: 1048576,
+      description: 'Gemini web, режим Авто: конкретная модель не выбрана; API-окно 1 048 576, порог показа 128 000'
+    },
     'gemini-2.5-pro': {
       name: 'Gemini 2.5 Pro',
       provider: 'Google',
@@ -808,6 +815,7 @@ export const ModelConfig: ModelConfig = {
     if (!modelId) return 'gemini-flash-latest';
     // Прямые известные ключи -> API id
     var map: Record<string, string> = {
+      'gemini-auto': 'gemini-flash-latest', // веб-режим «Авто» — API-слаг не определён
       'gemini-2.5-pro': 'gemini-2.5-pro',
       'gemini-2.5-flash': 'gemini-2.5-flash',
       'gemini-search-default': 'gemini-flash-latest', // токенизатор общий, дефолт GSA → стабильная модель

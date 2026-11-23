@@ -138,6 +138,12 @@ export function probeGeminiUiPickerPrimaryText(
   snapModelId: string | null
 ): string {
   const nodes = deps.document.querySelectorAll('.picker-primary-text');
+  // «Авто» приоритетнее любого конкретного имени: в DOM могут остаться скрытые
+  // ярлыки прошлой модели (2.5 Pro), а видимый пикер показывает «Авто».
+  for (let a = 0; a < nodes.length; a++) {
+    const autoText = normalizeUiModelText(nodes[a].textContent);
+    if (autoText && autoText.length <= 60 && isAutoUiModelText(autoText)) return GEMINI_UI_AUTO_NAME;
+  }
   for (let i = 0; i < nodes.length; i++) {
     const text = normalizeUiModelText(nodes[i].textContent);
     if (!text || text.length > 60) continue;
@@ -227,6 +233,7 @@ export function probeGeminiUiButton(deps: GeminiUiModelDeps, snapModelId: string
   const btn = deps.document.querySelector('button.input-area-switch');
   if (!btn || !btn.textContent) return '';
   const text = normalizeUiModelText(btn.textContent);
+  if (isAutoUiModelText(text)) return GEMINI_UI_AUTO_NAME;
   const m = text.match(GEMINI_UI_MODEL_RE);
   if (!m) return '';
   const fam = modelFamilyOf(m[0]);

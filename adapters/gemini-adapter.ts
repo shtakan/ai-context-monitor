@@ -109,7 +109,7 @@ class GeminiAdapter extends BaseAdapter {
       if (modelIndicator) {
         const modelText = modelIndicator.textContent.trim();
         debugLog('log', `[GeminiAdapter] Обнаружена модель: ${modelText}`);
-        return modelText || this.defaultModel;
+        return modelText || '';
       }
 
       const savedModel = localStorage.getItem('gemini-selected-model');
@@ -118,12 +118,12 @@ class GeminiAdapter extends BaseAdapter {
         return savedModel;
       }
 
-      debugLog('log', `[GeminiAdapter] Использую модель по умолчанию: ${this.defaultModel}`);
-      return this.defaultModel;
+      debugLog('log', '[GeminiAdapter] модель не определена — отдаю пусто (решит content)');
+      return '';
 
     } catch (error) {
       debugLog('error', '[GeminiAdapter] Ошибка в detectModel:', error);
-      return this.defaultModel;
+      return '';
     }
   }
 

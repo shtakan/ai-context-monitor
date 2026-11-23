@@ -269,6 +269,14 @@ describe('Gemini UI model: probeGeminiUiPickerPrimaryText (.picker-primary-text)
     }
   });
 
+  it('скрытый старый ярлык 2.5 Pro не перебивает видимое «Авто»', function () {
+    const config = makeConfig({ defaults: { flash: 'gemini-3.6-flash' } });
+    const deps = makeDeps(mount(pickerHtml('Gemini 2.5 Pro') + pickerHtml('Авто')), config, {});
+    expect(ui.probeGeminiUiPickerPrimaryText(deps, null)).toBe(ui.GEMINI_UI_AUTO_NAME);
+    expect(deps.cache).toEqual({});
+    expect(config.calls.def.length).toBe(0);
+  });
+
   it('служебная подпись и пустой пикер → "" (фолбэк на другие слои)', function () {
     expect(ui.probeGeminiUiPickerPrimaryText(makeDeps(mount(pickerHtml('Выбрать модель'))), null)).toBe('');
     expect(ui.probeGeminiUiPickerPrimaryText(makeDeps(mount(pickerHtml(''))), null)).toBe('');

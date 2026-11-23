@@ -29,6 +29,7 @@ function run(over) {
     { role: 'user', content: 'Вопрос нового чата' },
     { role: 'assistant', content: 'Ответ нового чата' }
   ];
+  const ctxStale = { calls: 0 };
   const ctx = {
     baseSeen: false,
     baseComplete: false,
@@ -49,11 +50,12 @@ function run(over) {
     aiCmAdapterBaseCount: 0,
     canonicalBodyText: function (list) { return list.map(function (m) { return m.text; }).join('\n'); },
     debugLog: function () { },
-    swallowSoft: function () { }
+    swallowSoft: function () { },
+    scheduleStaleCheck: function () { ctxStale.calls++; }
   };
   Object.assign(ctx, (over && over.ctx) || {});
   const fn = new Function('ctx', 'with (ctx) {\n' + fnDecl(SRC, 'aiCmTryGeminiDomBase') + '\nreturn aiCmTryGeminiDomBase();\n}')(ctx);
-  return { ret: fn, ctx: ctx };
+  return { ret: fn, ctx: ctx, stale: ctxStale };
 }
 
 describe('Gemini: DOM-база нового чата (no-older-history)', () => {
@@ -69,6 +71,7 @@ describe('Gemini: DOM-база нового чата (no-older-history)', () => 
     expect(r.ctx.aiCmBasePrepared.map(function (m) { return m.text; })).toEqual([
       'Вопрос нового чата', 'Ответ нового чата'
     ]);
+    expect(r.stale.calls).toBe(1);
   });
 
   test('без сигнала loader база НЕ поднимается', () => {

@@ -175,13 +175,13 @@ describe('resolveCurrentModel: лестница попап → DOM → сеть 
     expect(t.ctx.geminiUiModelByFamily).toEqual({});
   });
 
-  test('6) «Авто» в пикере: метка не превращается в слаг, без сети — дефолт сайта', function () {
+  test('6) «Авто» в пикере: отдельная запись gemini-auto, без сети — не 2.5 Pro', function () {
     mount(DOM_PICKER_AUTO);
     const t = makeCtx({});
 
-    expect(makeResolve(t.ctx).run()).toBe('gemini-2.5-flash');
-    expect(t.ctx.lastModelSourceSig).toBe('snapshot|gemini-2.5-flash');
-    expect(t.logs[0]).toContain('путь=дефолт');
+    expect(makeResolve(t.ctx).run()).toBe('gemini-auto');
+    expect(t.ctx.lastModelSourceSig).toBe('snapshot|gemini-auto');
+    expect(t.logs[0]).toContain('путь=dom(auto)');
     // «Авто» — режим, а не модель: кэш семьи не заполняется выдуманным именем
     expect(t.ctx.geminiUiModelByFamily).toEqual({});
     expect(t.debugs[0]).not.toContain('model-source=dom');
