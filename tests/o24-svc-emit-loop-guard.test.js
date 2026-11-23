@@ -123,7 +123,9 @@ function chatCtx(opts) {
     baseText: (o.baseText === undefined) ? BASE_TEXT : o.baseText,
     effective: (o.effective === undefined) ? BASE_TEXT : o.effective,
     fired: Object.assign(Object.create(null), o.fired || {}),
-    calls: 0
+    calls: 0,
+    inits: 0,
+    initialized: (o.isInitialized === undefined) ? true : o.isInitialized === true
   };
   return {
     state: state,
@@ -140,10 +142,13 @@ function chatCtx(opts) {
       get baseCount() { return state.baseCount; },
       get baseSeen() { return state.baseSeen; },
       get baseText() { return state.baseText; },
+      get isInitialized() { return state.initialized; },
       getEffectiveText: function () { return state.effective; },
       getCurrentConvId: function () { return state.convId; },
       debugLog: function () { },
       aiCmDiagLine: function () { },
+      swallowSoft: function () { },
+      tryInit: function () { state.inits++; },
       processAndSend: function () { state.calls++; }
     }
   };
@@ -247,6 +252,22 @@ describe('O-24 (F6): D-пины сигнатурного гарда в MutationO
     expect(obs.fire([mut('characterData', window.document.createTextNode('шум'))])).toBeNull();
     jest.advanceTimersByTime(3000);
     expect(st.state.calls).toBe(2);
+  });
+
+  test('D4: до инициализации observer зовёт tryInit, а не processAndSend', function () {
+    const st = chatCtx({ isInitialized: false });
+    const obs = makeObserver(st.ctx);
+    const first = msgNode('первый ход нового чата после отправки', 'first');
+    expect(obs.fire([mut('childList', window.document.body, [first])])).toBeNull();
+    jest.advanceTimersByTime(3000);
+    expect(st.state.inits).toBe(1);
+    expect(st.state.calls).toBe(0);
+
+    // tryInit нашёл узлы → initialized; следующая мутация идёт обычным путём.
+    st.state.initialized = true;
+    expect(obs.fire([mut('characterData', window.document.createTextNode('ответ'))])).toBeNull();
+    jest.advanceTimersByTime(3000);
+    expect(st.state.calls).toBe(1);
   });
 
   test('D3: мутации внутри #ai-context-widget не триггерят hasNewText (гул виджета)', function () {

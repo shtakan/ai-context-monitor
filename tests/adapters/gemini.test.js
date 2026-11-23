@@ -101,6 +101,24 @@ describe('Gemini batchexecute parser', () => {
       expect(tc.text).not.toMatch(/\$AVuibg/);
     });
 
+    it('extractStreamUserTurn: новый RPC aPya6c с тем же ходом пользователя', () => {
+      const line = JSON.stringify([['wrb.fr', 'aPya6c', userInner, null, null, null, 'generic']]);
+      const t = L.extractStreamUserTurn(")]}'\n12\n" + line + '\n');
+      expect(t).not.toBeNull();
+      expect(t.role).toBe('me');
+      expect(t.text).toBe('Проверка стрим-инжеста пользователя');
+    });
+
+    it('extractStreamModelTurn: новый RPC TUa2Cd с тем же ходом модели', () => {
+      const line = JSON.stringify([['wrb.fr', 'TUa2Cd', modelRcInner, null, null, null, 'generic']]);
+      const t = L.extractStreamModelTurn(")]}'\n9\n" + line + '\n');
+      expect(t).not.toBeNull();
+      expect(t.role).toBe('model');
+      expect(t.id).toBe('rc_c9396ed660e63e2a');
+      expect(t.turnId).toBe('c_f47e2edd3b51953a');
+      expect(t.text).toBe('Ответ модели в стриме');
+    });
+
     it('walker\'ы устойчивы к мусорному вводу (мусор → null)', () => {
       expect(L.extractStreamUserTurn('')).toBeNull();
       expect(L.extractStreamModelTurn(')]}\'\ngarbage\n')).toBeNull();

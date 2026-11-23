@@ -1886,7 +1886,7 @@ function streamCollectText(node: any, seen: Record<string, number>, out: string[
 // (числовой «постоянный» или c_/r_), текст — все не-junk строки в поддереве тройки.
 export function extractStreamUserTurn(raw: string): StreamTurn | null {
   try {
-    var fr = streamLastFrame(raw, { I4z33b: 1 });
+    var fr = streamLastFrame(raw, { I4z33b: 1, aPya6c: 1 });
     if (!fr) return null;
     var meNode: any[] | null = null;
     (function walk(n: any) {
@@ -1916,7 +1916,7 @@ export function extractStreamUserTurn(raw: string): StreamTurn | null {
 // rc_*/r_* в поддереве entry, текст — не-junk строки entry.
 export function extractStreamModelTurn(raw: string): StreamTurn | null {
   try {
-    var fr = streamLastFrame(raw, { Bsxleb: 1 });
+    var fr = streamLastFrame(raw, { Bsxleb: 1, TUa2Cd: 1 });
     if (!fr) return null;
     var entry: any[] | null = null;
     (function walk(n: any) {

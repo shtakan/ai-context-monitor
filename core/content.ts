@@ -402,6 +402,9 @@ window.addEventListener('ai-cm-conversation-changed', function () {
     }
   } catch (eQspaSh) { }
   aiCmQwenSpaReshoot();
+  // Новый/SPA-чат: если контур ещё не инициализирован, поднимаем observer, который
+  // дождётся первого хода и вызовет tryInit (иначе бейдж не появится до F5).
+  if (typeof aiCmEnsureInitObserver === 'function') aiCmEnsureInitObserver();
 });
 
 // ===== O-34 (N1): холодный вход на URL БЕЗ разговора =====
@@ -1604,6 +1607,9 @@ async function initialize(): Promise<void> {
       // за 7.5с от загрузки документа; SPA-вход позже (живой лог 17:50:32 — через 42с) её
       // уже не застаёт, и единственным мостом остаётся reshoot (500/1500/3000).
       try { aiCmQwenInitDiag('initialize-ladder', { delays: '2000,4000,6000', scheduled: 3 }); } catch (eQi21) { }
+      // Лестница истекла бы до первого хода в новом чате — держим observer, который
+      // позовёт tryInit на появление текста (новый чат Gemini, SPA-вход после 7.5с).
+      if (typeof aiCmEnsureInitObserver === 'function') aiCmEnsureInitObserver();
     }
     try { aiCmQwenInitDiag('initialize-exit', { ret: 1 }); } catch (eQi22) { }
   } catch (eInitialize) {
@@ -1788,6 +1794,15 @@ function startObserving(): void {
       const delay = Math.min(800 + (mutationCount * 300), 3000);
       updateTimer = setTimeout(() => {
         mutationCount = 0;
+        // До инициализации DOM-мутации — единственный сигнал, что в чате появились ходы
+        // (живой дефект 2026-11-23: новый чат Gemini, loader ушёл в no-older-history,
+        // сетевой парсер ходов не нашёл, isInitialized остался false → бейджа нет).
+        if (!isInitialized) {
+          if (typeof tryInit === 'function') {
+            try { tryInit(); } catch (eInitObs) { swallowSoft(eInitObs, 'content:observer-tryinit'); }
+          }
+          return;
+        }
         processAndSend();
       }, delay);
     }
@@ -1797,6 +1812,22 @@ function startObserving(): void {
   });
   // v48: subtree-наблюдение покрывает и кнопку button.input-area-switch — смена
   // выбранной модели меняет её текст (childList/characterData) → пересчёт pct.
+}
+/**
+ * Наблюдатель ДО инициализации: ловит первый ход, появившийся после создания нового
+ * чата/SPA-перехода. Иначе на Gemini новый чат остаётся без бейджа: loader завершился
+ * (no-older-history), сетевой парсер ходов не нашёл, а повторные tryInit уже истекли.
+ */
+function aiCmEnsureInitObserver(): void {
+  if (isInitialized) return;
+  if (typeof currentAdapter === 'undefined' || !currentAdapter) return;
+  if (typeof startObserving !== 'function') return;
+  try {
+    if (typeof currentAdapter.isOnDialogPage === 'function' && !currentAdapter.isOnDialogPage()) return;
+    startObserving();
+  } catch (eEnsureObs) {
+    if (typeof swallowSoft === 'function') swallowSoft(eEnsureObs, 'content:ensure-init-observer');
+  }
 }
 // ========== ОПРЕДЕЛЕНИЕ МОДЕЛИ (v47: UI-приоритет + 3 слоя фолбэка) ==========
 // T1 (часть 1): логика UI-детектора Gemini (регэксп, checked-пункт меню, кнопка

@@ -34,8 +34,8 @@
   // batchexecute-запросы генерации не проходят isIngestRpc. Walker'ы — в utils/gemini-intercept-logic.js
   // (extractStreamUserTurn / extractStreamModelTurn). Дедуп — через turnsMap внутри существующего ingest;
   // курсор пагинации, loader и основной пайплайн (src=passive/vf5/pag) НЕ трогаем.
-  var STREAM_USER_RPCIDS = { I4z33b: 1 };
-  var STREAM_MODEL_RPCIDS = { Bsxleb: 1 };
+  var STREAM_USER_RPCIDS = { I4z33b: 1, aPya6c: 1 };
+  var STREAM_MODEL_RPCIDS = { Bsxleb: 1, TUa2Cd: 1 };
 
   function isHistoryRpc(url) {
     return !!url && url.indexOf('batchexecute') !== -1 && url.indexOf('hNvQHb') !== -1;
