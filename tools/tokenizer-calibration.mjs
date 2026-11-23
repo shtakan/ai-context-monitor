@@ -5,13 +5,15 @@
  * Вход: один или несколько .log-файлов (или каталог), где есть строки
  * `[AI CM][diag] o23-calibration ...` (пишется core/content.ts при каждом
  * успешном BYOK countTokens). Одна строка = один и тот же fullText:
- * точное число API и эвристика Tokenizer.
+ * точное число API и production-оценка Tokenizer.
+ * Новые строки содержат `estimate=` (v3); старые — `heuristic=` (v2/эвристика),
+ * тул понимает оба варианта.
  *
  * Запуск:
  *   node tools/tokenizer-calibration.mjs <log|dir> [ещё...]
  *
  * Что печатает:
- *   - по каждому замеру: chars, cyr%, exact, heuristic, ошибка эвристики;
+ *   - по каждому замеру: chars, cyr%, exact, estimate, ошибка оценки;
  *   - сводку: сколько замеров, суммарные chars/exact, медиану/перцентили ошибки;
  *   - МНК-подгонку коэффициентов по классам символов и предлагаемые константы;
  *   - holdout-проверку подгонки (чётные замеры → нечётные).
@@ -43,8 +45,10 @@ function parseLine(line) {
   let m;
   const tail = line.slice(at + TAG.length);
   while ((m = re.exec(tail)) !== null) fields[m[1]] = m[2];
-  const need = ['chars', 'cyr', 'latin', 'digit', 'cjk', 'punct', 'other', 'space', 'heuristic', 'exact'];
+  const need = ['chars', 'cyr', 'latin', 'digit', 'cjk', 'punct', 'other', 'space', 'exact'];
   for (const k of need) if (!(k in fields)) return null;
+  const estimateField = ('estimate' in fields) ? fields.estimate : fields.heuristic;
+  if (estimateField === undefined) return null;
   const sample = {
     model: fields.model || '(unknown)',
     convId: fields.convId || '',
@@ -59,13 +63,13 @@ function parseLine(line) {
     img: Number(fields.img || 0),
     doc: Number(fields.doc || 0),
     attach: Number(fields.attach || 0),
-    heuristic: Number(fields.heuristic),
+    estimate: Number(estimateField),
     v2: Number.isFinite(Number(fields.v2)) ? Number(fields.v2) : null,
     exact: Number(fields.exact)
   };
   if (!Number.isFinite(sample.chars) || sample.chars < 200) return null;
-  if (!(sample.exact > 0) || !(sample.heuristic > 0)) return null;
-  sample.err = (sample.heuristic - sample.exact) / sample.exact;
+  if (!(sample.exact > 0) || !(sample.estimate > 0)) return null;
+  sample.err = (sample.estimate - sample.exact) / sample.exact;
   return sample;
 }
 
@@ -185,15 +189,15 @@ console.log('files: ' + files.join(', '));
 console.log('samples: ' + samples.length);
 const totalChars = samples.reduce((a, s) => a + s.chars, 0);
 const totalExact = samples.reduce((a, s) => a + s.exact, 0);
-const totalHeur = samples.reduce((a, s) => a + s.heuristic, 0);
+const totalEstimate = samples.reduce((a, s) => a + s.estimate, 0);
 const totalCyr = samples.reduce((a, s) => a + s.cyr, 0);
 console.log('weighted chars/token: ' + (totalChars / totalExact).toFixed(4));
-console.log('weighted heuristic/exact: ' + (totalHeur / totalExact).toFixed(4) + ' (error ' + pct((totalHeur - totalExact) / totalExact) + ')');
+console.log('weighted estimate/exact: ' + (totalEstimate / totalExact).toFixed(4) + ' (error ' + pct((totalEstimate - totalExact) / totalExact) + ')');
 console.log('cyrillic share: ' + pct(totalCyr / totalChars));
 console.log('');
 
 const errs = samples.map(s => s.err);
-console.log('heuristic error: mean ' + pct(mean(errs)) +
+console.log('estimate error: mean ' + pct(mean(errs)) +
   ' | median ' + pct(quantile(errs, 0.5)) +
   ' | p10 ' + pct(quantile(errs, 0.1)) +
   ' | p90 ' + pct(quantile(errs, 0.9)) +
@@ -201,7 +205,7 @@ console.log('heuristic error: mean ' + pct(mean(errs)) +
   ' | max ' + pct(Math.max(...errs)));
 console.log('');
 
-// Shadow-режим v2: строки o23-calibration содержат v2= рядом с heuristic/exact.
+// Shadow-режим v2 (старые логи): строки o23-calibration содержат v2= рядом с estimate/exact.
 const shadow = samples.filter(s => s.v2 !== null && s.v2 > 0);
 if (shadow.length) {
   const v2err = shadow.map(s => (s.v2 - s.exact) / s.exact);
@@ -210,7 +214,7 @@ if (shadow.length) {
   console.log('shadow v2: mean ' + pct(mean(v2err)) +
     ' | MAE ' + pct(mean(v2abs)) +
     ' | max ' + pct(Math.max(...v2abs)) +
-    ' | old heuristic MAE on same points ' + pct(mean(oldAbs)));
+    ' | estimate MAE on same points ' + pct(mean(oldAbs)));
   console.log('');
 }
 
@@ -221,9 +225,9 @@ if (models.length > 1) {
     const list = samples.filter(s => s.model === model);
     const chars = list.reduce((a, s) => a + s.chars, 0);
     const exact = list.reduce((a, s) => a + s.exact, 0);
-    const heur = list.reduce((a, s) => a + s.heuristic, 0);
+    const est = list.reduce((a, s) => a + s.estimate, 0);
     console.log('- ' + model + ': n=' + list.length + ', chars/token=' + (chars / exact).toFixed(4) +
-      ', heuristic/exact=' + (heur / exact).toFixed(4));
+      ', estimate/exact=' + (est / exact).toFixed(4));
   }
   console.log('');
 }
@@ -237,21 +241,21 @@ if (attachSamples.length) {
 
 console.log('## samples');
 if (shadow.length) {
-  console.log('| chars | cyr% | exact | heuristic | err | v2 | err2 | img/doc |');
+  console.log('| chars | cyr% | exact | estimate | err | v2 | err2 | img/doc |');
   console.log('|---:|---:|---:|---:|---:|---:|---:|---:|');
 } else {
-  console.log('| chars | cyr% | exact | heuristic | err | img/doc |');
+  console.log('| chars | cyr% | exact | estimate | err | img/doc |');
   console.log('|---:|---:|---:|---:|---:|---:|');
 }
 for (const s of samples) {
   if (shadow.length) {
     const err2 = s.v2 !== null ? pct((s.v2 - s.exact) / s.exact) : '—';
     console.log('| ' + s.chars + ' | ' + (100 * s.cyr / s.chars).toFixed(1) + '% | ' +
-      s.exact + ' | ' + s.heuristic + ' | ' + pct(s.err) + ' | ' +
+      s.exact + ' | ' + s.estimate + ' | ' + pct(s.err) + ' | ' +
       (s.v2 === null ? '—' : s.v2) + ' | ' + err2 + ' | ' + s.img + '/' + s.doc + ' |');
   } else {
     console.log('| ' + s.chars + ' | ' + (100 * s.cyr / s.chars).toFixed(1) + '% | ' +
-      s.exact + ' | ' + s.heuristic + ' | ' + pct(s.err) + ' | ' + s.img + '/' + s.doc + ' |');
+      s.exact + ' | ' + s.estimate + ' | ' + pct(s.err) + ' | ' + s.img + '/' + s.doc + ' |');
   }
 }
 console.log('');

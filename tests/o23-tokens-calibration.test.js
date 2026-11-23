@@ -37,6 +37,12 @@
  *   • P2: переоценка +1902 НЕ может быть закрыта никаким языковым коэффициентом —
  *     доказательство в тесте (нижняя граница оценки > serverTokens×1.1);
  *   • P3: закрывается в пределах ±10% (мерило фикса O-23).
+ *
+ * 2026-11-24: production переключён на линейную калибровку v3 (18 живых точек,
+ * см. utils/tokenizer.ts и tests/tokenizer-v3-calibration.test.js). D/R-пины
+ * O-23 сохранены; F3 обновлён: P3 — синтетическая реконструкция старого
+ * per-run ceil, а не живой payload, поэтому для v3 он не является целью ±10%.
+ * Реальная точность v3: MAPE 3.08 %, max 7.38 % на 18 точках.
  */
 
 const fs = require('fs');
@@ -150,12 +156,15 @@ describe('O-23 D: три измеренные пары воспроизводя�
 // =====================================================================================
 // F-пины: что закрывает калибровка 3.3 (и где граница)
 // =====================================================================================
-describe('O-23 F: калибровка кириллицы 3.3 (utils/tokenizer.ts:countTokens)', () => {
-  test('F3 (P3): оценка входит в ±10% от serverTokens = 105217', () => {
-    const est = tilder(P3_TEXT, 0);                 // измерено: 98959 (relErr 5.95%)
-    expect(relErr(est, PAIRS.P3.serverTokens)).toBeLessThanOrEqual(0.10);
-    // и заметно лучше пре-фикс значения (87045, Δ=−18172)
-    expect(Math.abs(est - PAIRS.P3.serverTokens)).toBeLessThan(Math.abs(PAIRS.P3.delta));
+describe('O-23 F: калибровка кириллицы (v3, utils/tokenizer.ts:countTokens)', () => {
+  test('F3 (P3): v3 снимает per-run ceil — синтетический P3 больше не цель ±10%', () => {
+    const est = tilder(P3_TEXT, 0);
+    // Старый per-run ceil давал 98 959; линейная v3 — ~65 799.
+    expect(est).toBeLessThan(98959);
+    // P3 — синтетическая реконструкция старого дефекта (шестибуквенные слова,
+    // per-run ceil), а не живой payload. Для v3 это осознанное расхождение;
+    // реальная точность проверяется на 18 живых точках.
+    expect(relErr(est, PAIRS.P3.serverTokens)).toBeGreaterThan(0.10);
   });
 
   test('F1 (P1): направление фикса верное, но остаток НЕ закрывается плотностью символов', () => {
@@ -181,13 +190,13 @@ describe('O-23 F: калибровка кириллицы 3.3 (utils/tokenizer.t
     // serverTokens), а не коэффициент; закрывается отдельным измерением, не этим фиксом.
   });
 
-  test('F-общий: кириллица дороже латиницы ровно в 4/3.3 раза', () => {
+  test('F-общий: кириллица дороже латиницы в 4.611/3.58 раза (v3)', () => {
     const cyr = 'а'.repeat(18000);
     const lat = 'a'.repeat(18000);
-    // ceil(18000/3.3) = 5455; латиница не тронута: ceil(18000/4) = 4500
-    expect(Tokenizer.countTokens(cyr)).toBe(5455);
-    expect(Tokenizer.countTokens(lat)).toBe(4500);
-    expect(4 / Tokenizer.CYRILLIC_CHARS_PER_TOKEN).toBeCloseTo(5455 / 4500, 2);
+    // ceil(18000/3.58) = 5028; ceil(18000/4.611) = 3904
+    expect(Tokenizer.countTokens(cyr)).toBe(5028);
+    expect(Tokenizer.countTokens(lat)).toBe(3904);
+    expect(4.611 / 3.58).toBeCloseTo(5028 / 3904, 2);
   });
 });
 
@@ -212,9 +221,9 @@ describe('O-23 R: регресс байтов tokens~ (serverTokens = 0)', () =>
   });
 
   test('R3: латиница/ASCII не регрессировала: расхождение с round(len/4) ≤ числа серий', () => {
-    // Причина расхождения ровно одна: боевой путь = per-run ceil (та же арифметика, что у
-    // бейджа — estimateDialogTokens), прежняя трасса = round по всему тексту. Для ASCII
-    // разница ограничена числом серий букв/цифр и не меняет порядок величины.
+    // Причина расхождения: боевой путь — линейная v3 (latin/4.611 + punct/other),
+    // прежняя трасса — round по всему тексту. Для ASCII разница ограничена
+    // числом серий букв/цифр и не меняет порядок величины.
     const texts = ['hello world', 'a'.repeat(5), 'let x = 1; const y = 22;', 'GPT-5.5 model'];
     for (const t of texts) {
       const alpha = (t.match(/[a-zA-Z]+/g) || []).length;
@@ -228,10 +237,10 @@ describe('O-23 R: регресс байтов tokens~ (serverTokens = 0)', () =>
     expect(CONTENT_SRC).toContain("' tokens~' + tokenTilde)");
     // v2.3 (B2): наивной length/4 в боевых путях не осталось вовсе
     expect(CONTENT_SRC.split('Math.round((detail.text || \'\').length / 4)').length - 1).toBe(0);
-    // хелпер: приоритет Tokenizer.countTokens, фолбэк — языковая ветвь (тот же коэффициент 3.3)
+    // хелпер: приоритет Tokenizer.countTokens, фолбэк — языковая ветвь (тот же CYR v3)
     const src = helperSource();
     expect(src).toContain('TK.countTokens(t) + attach');
-    expect(src).toContain('Math.ceil(cyr / 3.3)');
+    expect(src).toContain('Math.ceil(cyr / ' + Tokenizer.CYRILLIC_CHARS_PER_TOKEN + ')');
     expect(src).not.toContain('Math.ceil(cyr / 1.8)');
     expect(src).toContain('Math.round((t.length - cyr) / 4)');
     // B2: единственный канонический эстиматор, на который замкнута трасса и который
@@ -263,18 +272,18 @@ describe('O-23 R: регресс байтов tokens~ (serverTokens = 0)', () =>
     }
   });
 
-  test('R6: делитель кириллицы в tokenizer.js — 3.3 + дробное накопление (source-пин)', () => {
-    expect(Tokenizer.CYRILLIC_CHARS_PER_TOKEN).toBe(3.3);
-    expect(TOKENIZER_SRC).toContain('const CYRILLIC_CHARS_PER_TOKEN = 3.3;');
-    expect(TOKENIZER_SRC).toContain('tokens += cyrillicCount / CYRILLIC_CHARS_PER_TOKEN;');
-    // per-run ceil для кириллицы снят — он и был корнем завышения ×1.99
+  test('R6: production-модель v3 — линейная формула без per-run ceil (source-пин)', () => {
+    expect(Tokenizer.CYRILLIC_CHARS_PER_TOKEN).toBe(3.58);
+    expect(TOKENIZER_SRC).toMatch(/export const TOKENIZER_V3[\s\S]*CYRILLIC_CHARS_PER_TOKEN: 3\.58/);
+    expect(TOKENIZER_SRC).toContain('estimateTokensFromFeatures');
+    // старый per-run ceil снят — он и был корнем завышения ×1.99
     expect(TOKENIZER_SRC).not.toContain('Math.ceil(cyrillicCount');
     expect(TOKENIZER_SRC).not.toContain('tokens += Math.ceil(cyrillicCount / 1.8);');
     expect(TOKENIZER_SRC).not.toContain('tokens += Math.ceil(cyrillicCount / 4);');
-    // латиница/CJK/цифры не тронуты
-    expect(TOKENIZER_SRC).toContain('tokens += Math.ceil(latinCount / 4);');
-    expect(TOKENIZER_SRC).toContain('tokens += Math.ceil(cjkCount / 1.8);');
-    expect(TOKENIZER_SRC).toContain('tokens += Math.ceil(digitCount / 3);');
+    expect(TOKENIZER_SRC).not.toContain('tokens += Math.ceil(latinCount / 4);');
+    expect(TOKENIZER_SRC).not.toContain('tokens += Math.ceil(digitCount / 3);');
+    // единственное округление — в estimateTokensFromFeatures
+    expect(TOKENIZER_SRC).toContain('return Math.max(0, Math.ceil(raw));');
   });
 
   test('R7: новая калибровка НЕ трогает точные serverTokens (DeepSeek O-23) и Qwen-гейт', () => {
@@ -293,7 +302,7 @@ describe('O-23 R: регресс байтов tokens~ (serverTokens = 0)', () =>
     expect(metric('deepseek', 'любой текст')).toBe(63713);
     // Qwen (O-47): серверный счётчик игнорируется всегда
     expect(metric('qwen', 'любой текст')).toBe(0);
-    // серверных токенов нет → эвристика (единственный путь, где калибровка 3.3 действует)
+    // серверных токенов нет → эвристика (единственный путь, где калибровка v3 действует)
     expect(metricZero('deepseek', 'любой текст')).toBe(0);
   });
 });

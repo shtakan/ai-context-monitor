@@ -592,11 +592,11 @@ function aiCmGsaResetStaleStateOnChatlessDoc(): boolean {
 
 // O-23 (F5, фикс корня 1): tokens~ в трассе badge-recv считался упрощённой эвристикой
 // Math.round(text.length / 4) — для кириллицы это систематическая НЕДООЦЕНКА. Источник истины —
-// Tokenizer.countTokens (языково-зависимый, utils/tokenizer.ts); упрощённая эвристика остаётся
-// ТОЛЬКО фолбэком для песочниц без Tokenizer и сама получает языковую ветвь: кириллица ÷3.3
-// (глобальная калибровка O-23 по живым замерам 112854 симв → 29517 ток. и 216881 → 63713 ток.;
-// коэффициент обязан совпадать с Tokenizer.CYRILLIC_CHARS_PER_TOKEN — пин-тест калибровки),
-// остальное ÷4. Для ASCII-текста фолбэк байтово равен прежнему Math.round(length/4) —
+// Tokenizer.countTokens (линейная калибровка v3, utils/tokenizer.ts); упрощённая эвристика
+// остаётся ТОЛЬКО фолбэком для песочниц без Tokenizer и сама получает языковую ветвь:
+// кириллица ÷3.58 (калиброванный CYR v3; коэффициент обязан совпадать с
+// Tokenizer.CYRILLIC_CHARS_PER_TOKEN — пин-тест калибровки), остальное ÷4.
+// Для ASCII-текста фолбэк байтово равен прежнему Math.round(length/4) —
 // регресс-пин R1 (tests/o23-tokens-calibration.test.js).
 function aiCmEstimateTokensTilde(text: string, attachTokens?: number): number {
   var t = (typeof text === 'string') ? text : '';
@@ -608,14 +608,14 @@ function aiCmEstimateTokensTilde(text: string, attachTokens?: number): number {
     try { result = TK.countTokens(t) + attach; tkOk = true; } catch (eTk) { swallowSoft(eTk, 'content:aiCmEstimateTokensTilde'); /* ниже — фолбэк */ }
   }
   if (!tkOk) {
-    var cyr = (t.match(/[а-яёА-ЯЁ]/g) || []).length;
-    result = Math.ceil(cyr / 3.3) + Math.round((t.length - cyr) / 4) + attach;
+    var cyr = (t.match(/[\u0400-\u04FF]/g) || []).length;
+    result = Math.ceil(cyr / 3.58) + Math.round((t.length - cyr) / 4) + attach;
   }
   // O-23 (измерение): доля кириллицы и итог tokens~ — только под гейтом aiCmDebug.
   // Значения не влияют на возврат: строка печатается после расчёта и до return.
   if (typeof aiCmDiagOn === 'function' && aiCmDiagOn()) {
     try {
-      var cyrDiag = (t.match(/[а-яёА-ЯЁ]/g) || []).length;
+      var cyrDiag = (t.match(/[\u0400-\u04FF]/g) || []).length;
       var cyrillicPct = t.length ? (cyrDiag / t.length * 100).toFixed(1) : '0.0';
       aiCmDiagLine('o23-cyrillic-share', {
         textLen: t.length, cyrillicPct: cyrillicPct,
@@ -629,11 +629,11 @@ function aiCmEstimateTokensTilde(text: string, attachTokens?: number): number {
 // v2.3 (B2): ЕДИНЫЙ канонический эстиматор токенов диалога — единственная точка,
 // через которую считает и бейдж (processAndSend / GET_STATS через
 // Tokenizer.estimateDialogTokens), и трасса badge-recv. Внутри — тот же
-// Tokenizer.countTokens (кириллица ÷3.3 по O-23, см. utils/tokenizer.ts) плюс
+// Tokenizer.countTokens (линейная калибровка v3, см. utils/tokenizer.ts) плюс
 // служебные 4 токена на ход. Латинская эвристика Math.round(length / 4) из боевых
 // путей убрана: на русском тексте она систематически занижала оценку, из-за чего
 // бейдж показывал заниженный процент (B2). Фолбэк для песочниц без Tokenizer —
-// языковая ветвь aiCmEstimateTokensTilde (та же ÷3.3 на кириллице).
+// языковая ветвь aiCmEstimateTokensTilde (тот же CYR 3.58).
 function aiCmCanonicalTokens(text: string, attachTokens?: number, messageCount?: number): number {
   var attach = (typeof attachTokens === 'number' && attachTokens > 0) ? attachTokens : 0;
   var msgs = (typeof messageCount === 'number' && messageCount > 0) ? messageCount : 0;
@@ -2018,16 +2018,15 @@ function requestExactTokens(fullText: string, modelId: string | null): void {
       lastCountTokensConvId = getCurrentConvId() || '';
       // Шаг 4: успешный ответ снимает отметку отказа — держание эвристики для этого текста кончилось.
       lastCountTokensErrorText = '';
-      // O-23 (калибровка 2.0): одна строка на каждый точный ответ API — тот же fullText,
-      // что ушёл в countTokens, и эвристика Tokenizer по нему. По этим строкам можно
-      // пересчитать константы без догадок по баннерам платформы.
+      // O-23 (калибровка 3.0): одна строка на каждый точный ответ API — тот же fullText,
+      // что ушёл в countTokens, и production-оценка Tokenizer (линейная v3) по нему.
+      // По этим строкам можно пересчитать константы без догадок по баннерам платформы.
       try {
         if (typeof aiCmDiagLine === 'function' && typeof Tokenizer !== 'undefined' && Tokenizer &&
             typeof Tokenizer.countTokens === 'function' &&
-            typeof Tokenizer.countTokenizerFeatures === 'function' &&
-            typeof Tokenizer.countTokensV2 === 'function') {
-          // Shadow-режим v2: одна и та же классификация для лога и оценки.
-          // countTokensV2 — кандидат, countTokens — работающий бейдж; exact — истина.
+            typeof Tokenizer.countTokenizerFeatures === 'function') {
+          // Общая классификация для лога и оценки: если фит и production
+          // разойдутся по корзинам, строка снова станет бесполезной.
           var calFeat = Tokenizer.countTokenizerFeatures(fullText);
           var calCyr = calFeat.cyr;
           var calCjk = calFeat.cjk;
@@ -2036,8 +2035,7 @@ function requestExactTokens(fullText: string, modelId: string | null): void {
           var calPunct = calFeat.punct;
           var calOther = calFeat.other;
           var calSpace = (fullText.match(/\s/g) || []).length;
-          var calHeur = Tokenizer.countTokens(fullText);
-          var calV2 = Tokenizer.countTokensV2(fullText);
+          var calEstimate = Tokenizer.countTokens(fullText);
           var calExact = response.totalTokens;
           aiCmDiagLine('o23-calibration', {
             model: apiModelId,
@@ -2053,11 +2051,9 @@ function requestExactTokens(fullText: string, modelId: string | null): void {
             img: (typeof netAttachBreak !== 'undefined' && netAttachBreak && netAttachBreak.imgCount) ? netAttachBreak.imgCount : 0,
             doc: (typeof netAttachBreak !== 'undefined' && netAttachBreak && netAttachBreak.docCount) ? netAttachBreak.docCount : 0,
             attach: (typeof netAttachTokens !== 'undefined' && netAttachTokens > 0) ? netAttachTokens : 0,
-            heuristic: calHeur,
-            v2: calV2,
+            estimate: calEstimate,
             exact: calExact,
-            ratio: calExact > 0 ? (calHeur / calExact).toFixed(4) : '(n/a)',
-            ratio2: calExact > 0 ? (calV2 / calExact).toFixed(4) : '(n/a)'
+            ratio: calExact > 0 ? (calEstimate / calExact).toFixed(4) : '(n/a)'
           });
         }
       } catch (eCal) { swallowSoft(eCal, 'content:o23-calibration'); }
