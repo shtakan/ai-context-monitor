@@ -123,6 +123,38 @@ describe('Gemini: DOM-база нового чата (no-older-history)', () => 
     expect(shrink.ctx.baseCount).toBe(4);
   });
 
+  test('refresh принимает длинный чат до 120 ходов и не берёт 121+', () => {
+    const long = [];
+    for (let i = 0; i < 48; i++) long.push({ role: i % 2 ? 'assistant' : 'user', content: 'ход ' + i });
+    const ok48 = run({
+      messages: long,
+      ctx: {
+        baseSeen: true,
+        baseComplete: true,
+        baseCount: 40,
+        baseText: 'старая база',
+        aiCmBaseSource: 'dom'
+      }
+    });
+    expect(ok48.ret).toBe(true);
+    expect(ok48.ctx.baseCount).toBe(48);
+
+    const huge = [];
+    for (let i = 0; i < 121; i++) huge.push({ role: i % 2 ? 'assistant' : 'user', content: 'ход ' + i });
+    const tooBig = run({
+      messages: huge,
+      ctx: {
+        baseSeen: true,
+        baseComplete: true,
+        baseCount: 40,
+        baseText: 'старая база',
+        aiCmBaseSource: 'dom'
+      }
+    });
+    expect(tooBig.ret).toBe(false);
+    expect(tooBig.ctx.baseCount).toBe(40);
+  });
+
   test('сетевая база не подменяется DOM-обновлением', () => {
     const r = run({
       ctx: {

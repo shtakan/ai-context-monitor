@@ -2659,8 +2659,10 @@ function aiCmTryGeminiDomBase(): boolean {
     if (refreshing && (typeof aiCmBaseSource === 'undefined' || aiCmBaseSource !== 'dom')) return false;
     var raw: any[] = currentAdapter.extractMessages() || [];
     if (!raw.length) return false;
-    // Первичная база — только короткий чат. Обновление — с запасом до 40, но без сжатия.
-    if (raw.length > (refreshing ? 40 : 20)) return false;
+    // Первичная база — только короткий чат. Обновление — с запасом до 120, но без сжатия.
+    // 40 было мало: живой чат 47–48 ходов замирал на 40, если сетевой hNvQHb
+    // вернул BardError 1167 и vf5 не догнал (acceptance 18_59_2, 2026-11-23).
+    if (raw.length > (refreshing ? 120 : 20)) return false;
     var prepared: AiCmExportMessage[] = [];
     var texts: string[] = [];
     var ids: string[] = [];
