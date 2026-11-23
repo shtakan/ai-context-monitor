@@ -1844,8 +1844,10 @@ function resolveCurrentModel(): string {
   const snapNetId = rawFromNet ? ModelConfig.resolveModelId(rawFromNet) : null;
   let uiRaw = '';
   let uiAuto = false;
+  let geminiHost = false;
   try {
-    if ((window.location.hostname || '').indexOf('gemini.google.com') !== -1) {
+    geminiHost = (window.location.hostname || '').indexOf('gemini.google.com') !== -1;
+    if (geminiHost) {
       // v49: передаём сетевую версию — приоритет (b) для DOM-сигнала без номера версии
       // T1: UI-слой живёт в utils/gemini-ui-model.ts — DI: документ, реестр моделей
       // и общий кэш семьи передаются аргументами (модуль втянут import'ом выше).
@@ -1888,6 +1890,11 @@ function resolveCurrentModel(): string {
     path = rawSrc || 'дефолт';
   } else if (uiAuto && !rawFromNet && !popupModelId) {
     // UI явно показывает «Авто», сети нет: не подставляем скрытый/дефолтный ярлык модели.
+    modelId = 'gemini-auto';
+    path = 'dom(auto)';
+  } else if (geminiHost && site === 'gemini' && !popupModelId && !rawFromNet && !rawFromDom && !uiRaw) {
+    // После F5 UI-пикер может ещё не отрисоваться: Gemini web по умолчанию «Авто»,
+    // не показываем устаревший 2.5 Flash/Pro как факт.
     modelId = 'gemini-auto';
     path = 'dom(auto)';
   } else {

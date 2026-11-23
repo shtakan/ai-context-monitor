@@ -17,7 +17,7 @@ describe('Gemini (Авто) в каталоге моделей', () => {
     expect(ModelConfig.getEffectiveLimit('gemini-auto')).toBe(128000);
   });
 
-  test('siteDefaults Gemini остаётся прежним (авто — только явный UI-сигнал)', () => {
+  test('siteDefaults Gemini остаётся прежним (авто — отдельная запись)', () => {
     expect(ModelConfig.getDefaultModel('gemini')).toBe('gemini-2.5-flash');
   });
 
