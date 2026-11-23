@@ -479,15 +479,19 @@ describe('O-34 D2: прямой вход на URL без /c/<id> даёт пус
   });
 
   test('D2 BUG-11: Gemini /app без id — сброс; /app/<id> — no-op', () => {
-    const home = makeChatless({ site: 'gemini', pathname: '/app' });
-    expect(home.run()).toBe(true);
-    expect(home.resets).toEqual(['/app']);
-    expect(home.badgeResets).toEqual(['BADGE_RESET']);
+    ['/app', '/app/', '/u/1/app', '/u/0/app/', '/u/12/app'].forEach(function (p) {
+      const home = makeChatless({ site: 'gemini', pathname: p });
+      expect(home.run()).toBe(true);
+      expect(home.resets).toEqual([p]);
+      expect(home.badgeResets).toEqual(['BADGE_RESET']);
+    });
 
-    const chat = makeChatless({ site: 'gemini', pathname: '/app/' + ID1 });
-    expect(chat.run()).toBe(false);
-    expect(chat.resets).toEqual([]);
-    expect(chat.st.removed).toEqual([]);
+    ['/app/' + ID1, '/u/1/app/' + ID1].forEach(function (p) {
+      const chat = makeChatless({ site: 'gemini', pathname: p });
+      expect(chat.run()).toBe(false);
+      expect(chat.resets).toEqual([]);
+      expect(chat.st.removed).toEqual([]);
+    });
   });
 
   test('D2 BUG-11: AI Studio /prompts/new_chat — сброс; /prompts/<id> — no-op', () => {

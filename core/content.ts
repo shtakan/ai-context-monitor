@@ -5549,7 +5549,7 @@ function aiCmV2MetricsProbe(
  */
 function aiCmIsChatlessUrlForSite(site: string, path: string, convIdFn: (() => string | null) | null): boolean {
   if (site === 'chatgpt') return !(typeof convIdFn === 'function' && convIdFn());
-  if (site === 'gemini') return /^\/app\/?$/.test(String(path || ''));
+  if (site === 'gemini') return /^(?:\/u\/\d+)?\/app\/?$/.test(String(path || ''));
   if (site === 'aistudio') return /^(?:\/app)?\/prompts(?:\/new_chat)?\/?$/.test(String(path || ''));
   return false;
 }
