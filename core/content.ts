@@ -364,6 +364,7 @@ window.addEventListener('ai-cm-conversation-changed', function () {
   // O-35 (B2, фикс): счётчик DOM-адаптерной базы ПОКИНУТОГО чата не перетекает в новый —
   // метка «Источник» нового разговора до первого пересъёма снова пуста (как и было).
   aiCmAdapterBaseCount = 0;
+  aiCmGeminiDomBaseTrusted = {};
   // (в, v2.0.30): SPA-возврат на ранее открытый разговор AI Studio — снимок из
   // sessionStorage снова главнее виртуализированного DOM (A→B→A без новой сети).
   // Сброс выше уже удалил запись покинутого разговора, эта строка читает новую.
@@ -2170,6 +2171,27 @@ function aiCmArchiveCountFor(convId: string): number {
 // отличить «живой ярус из адаптера» (baseSeen=false: у qwen после F5/SPA сети нет вовсе)
 // от «данных нет совсем». Сбрасывается сигналом смены разговора.
 var aiCmAdapterBaseCount: number = 0;
+// Новый чат Gemini: loader подтвердил «старшей истории нет» → видимая DOM-лента = весь чат.
+// Флаг по convId; сбрасывается при смене разговора. Нужен, когда сетевой RPC не распарсился.
+var aiCmGeminiDomBaseTrusted: Record<string, boolean> = {};
+window.addEventListener('ai-cm-gemini-no-older-history', function (ev: Event) {
+  try {
+    var d = (ev as CustomEvent).detail;
+    var cid = (d && d.convId) ? String(d.convId) : '';
+    if (!cid) return;
+    aiCmGeminiDomBaseTrusted[cid] = true;
+    try {
+      if (typeof aiCmDiagLine === 'function') {
+        aiCmDiagLine('gemini-dom-base', { event: 'no-older-history', convId: cid });
+      }
+    } catch (eDbg) { if (typeof swallowSoft === 'function') swallowSoft(eDbg, 'content:gemini-dom-base-diag'); }
+    if (!isInitialized) {
+      try { tryInit(); } catch (eTi) { swallowSoft(eTi, 'content:gemini-dom-base-tryinit'); }
+    } else {
+      processAndSend();
+    }
+  } catch (eNoHist) { swallowSoft(eNoHist, 'content:gemini-no-older-history'); }
+});
 function aiCmAdapterBaseSeen(): boolean {
   return (!baseSeen) && ((typeof aiCmAdapterBaseCount === 'number' && aiCmAdapterBaseCount > 0) ||
     (typeof baseCount === 'number' && baseCount > 0) ||
@@ -2605,8 +2627,57 @@ function aiCmResyncMetricsAfterFlush(cid: string, reason?: string): boolean {
   } catch (eRs) { swallowSoft(eRs, 'content:metrics-resync'); return false; }
 }
 
+/**
+ * Новый чат Gemini без сетевой базы: если loader подтвердил отсутствие старшей истории,
+ * видимая лента — весь разговор. Собираем её как обычную базу (canonical body), чтобы
+ * бейдж/попап/экспорт работали без F5. Только короткие чаты (<= 20 сообщений): длинный
+ * виртуализированный DOM иначе дал бы заниженный процент.
+ */
+function aiCmTryGeminiDomBase(): boolean {
+  try {
+    if (baseSeen) return false;
+    if (typeof currentAdapter === 'undefined' || !currentAdapter || currentAdapter.siteName !== 'gemini') return false;
+    var cid = (typeof getCurrentConvId === 'function') ? (getCurrentConvId() || '') : '';
+    if (!cid || !aiCmGeminiDomBaseTrusted[cid]) return false;
+    if (typeof currentAdapter.extractMessages !== 'function') return false;
+    var raw: any[] = currentAdapter.extractMessages() || [];
+    if (!raw.length || raw.length > 20) return false;
+    var prepared: AiCmExportMessage[] = [];
+    var texts: string[] = [];
+    var ids: string[] = [];
+    for (var i = 0; i < raw.length; i++) {
+      var m = raw[i] || {};
+      var text = String((m.content != null) ? m.content : ((m.text != null) ? m.text : '')).trim();
+      if (!text) continue;
+      var id = 'dom-' + i;
+      prepared.push({ role: (m.role === 'user' || m.role === 'human') ? 'user' : 'assistant', text: text, id: id });
+      texts.push(text);
+      ids.push(id);
+    }
+    if (!prepared.length) return false;
+    aiCmBasePrepared = prepared;
+    lastBaseTexts = texts;
+    lastBaseIds = ids;
+    lastDetailMessages = prepared;
+    baseCount = prepared.length;
+    baseText = (typeof canonicalBodyText === 'function') ? canonicalBodyText(prepared) : texts.join('\n');
+    baseSeen = (true);
+    baseComplete = true;
+    if (typeof aiCmBaseSource !== 'undefined') aiCmBaseSource = 'dom';
+    aiCmBaseConfirmedByConv[cid] = 1;
+    aiCmAdapterBaseCount = prepared.length;
+    debugLog('log', '[AI CM][gemini] dom-base trusted convId=' + cid +
+      ' msgs=' + prepared.length + ' textLen=' + baseText.length);
+    return true;
+  } catch (eDomBase) {
+    swallowSoft(eDomBase, 'content:gemini-dom-base-build');
+    return false;
+  }
+}
 function processAndSend(): void {
   if (!currentAdapter) return;
+  // Новый чат Gemini: до сетевой базы поднимаем подтверждённую DOM-базу (no-older-history).
+  if (typeof aiCmTryGeminiDomBase === 'function') aiCmTryGeminiDomBase();
 
   // O-27 (c): на не-чат документе GSA (captcha/«подозрительный трафик») база/pct прошлого
   // документа гасятся ДО расчёта pct и вызова автоэкспорта — прошлое состояние вердикта

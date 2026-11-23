@@ -1021,6 +1021,13 @@
         } else {
           D.loaderDoneMap[convId] = true;
           debugLog('log', '[AI CM][Gemini][loader] loader-skipped reason=no-older-history convId=' + convId + ' msgs=' + D.baseSize());
+          // Явный сигнал в ISOLATED: старшей истории нет, видимая лента = весь этот чат.
+          // Нужен для нового чата, где сетевой RPC не распарсился и базы иначе не будет.
+          try {
+            window.dispatchEvent(new CustomEvent('ai-cm-gemini-no-older-history', {
+              detail: { convId: convId }
+            }));
+          } catch (eNoHistEv) { if (typeof swallowSoft === 'function') swallowSoft(eNoHistEv, 'gemini:loader:no-older-history-event'); }
           return;
         }
       }
