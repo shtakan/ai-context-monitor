@@ -7,7 +7,7 @@
     "adapters"
   ],
   "definition": "Молчаливый catch = тело после вырезания комментариев содержит только пробелы, ИЛИ ровно один no-op (void 0; / return; / continue; / break;). Комментарий-только тело тоже молчаливое (комментарии маскируются в пробелы).",
-  "totalEntries": 416,
+  "totalEntries": 417,
   "groups": [
     {
       "file": "adapters/claude-adapter.ts",
@@ -111,9 +111,9 @@
       "file": "core/background.ts",
       "category": "debug-instrumentation",
       "lines": [
-        552,
-        1201,
-        1219
+        557,
+        1206,
+        1224
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: chrome.action.setBadgeText({ text: '', tabId: tabIdR }); debugLog('log',"
     },
@@ -121,7 +121,7 @@
       "file": "core/background.ts",
       "category": "defensive-assignment",
       "lines": [
-        1120
+        1125
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: errText = await response.text();"
     },
@@ -129,7 +129,7 @@
       "file": "core/background.ts",
       "category": "guard-clause",
       "lines": [
-        932
+        937
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: for (var k in (all || {})) { if (k.indexOf(AI_CM_FIRED_SESSION_PREFIX) ="
     },
@@ -142,13 +142,13 @@
         82,
         84,
         87,
-        331,
-        381,
-        468,
-        485,
-        671,
-        747,
-        749
+        336,
+        386,
+        473,
+        490,
+        676,
+        752,
+        754
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: void chrome.runtime.lastError;"
     },
@@ -929,8 +929,8 @@
       "file": "core/gemini-intercept.js",
       "category": "debug-instrumentation",
       "lines": [
-        155,
-        957
+        157,
+        964
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: debugLog('log', '[gemini-files] ' + String(tag || '') + ' ' + JSON.strin"
     },
@@ -938,8 +938,8 @@
       "file": "core/gemini-intercept.js",
       "category": "event-guard",
       "lines": [
-        64,
-        342
+        66,
+        344
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed'));"
     },
@@ -947,8 +947,8 @@
       "file": "core/gemini-intercept.js",
       "category": "guard-clause",
       "lines": [
-        191,
-        257
+        193,
+        259
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -956,7 +956,7 @@
       "file": "core/gemini-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        1159
+        1167
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: setTimeout(function () { maybeStartLoader(); }, 1000);"
     },
@@ -1088,7 +1088,7 @@
       "file": "core/gemini-rpc.js",
       "category": "debug-instrumentation",
       "lines": [
-        191
+        203
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof bodyStr !== 'string' || !bodyStr) return; var params = new UR"
     },
@@ -1096,9 +1096,10 @@
       "file": "core/gemini-rpc.js",
       "category": "guard-clause",
       "lines": [
-        89,
-        127,
-        135
+        93,
+        131,
+        139,
+        389
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiInterceptLogic && wind"
     },
@@ -1106,8 +1107,8 @@
       "file": "core/gemini-rpc.js",
       "category": "parse-guard",
       "lines": [
-        53,
-        68
+        57,
+        72
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: u = decodeURIComponent(url);"
     },
@@ -1141,12 +1142,12 @@
       "file": "core/gemini-sse.js",
       "category": "debug-instrumentation",
       "lines": [
-        161,
-        181,
-        191,
-        196,
-        284,
-        286
+        163,
+        183,
+        193,
+        198,
+        286,
+        288
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (this.__aiCm) this.__aiCm.headers[k] = v;"
     },
@@ -1155,8 +1156,8 @@
       "category": "defensive-assignment",
       "lines": [
         56,
-        170,
-        273
+        172,
+        275
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: ct = resp.headers.get('content-type') || '';"
     },
@@ -1164,8 +1165,8 @@
       "file": "core/gemini-sse.js",
       "category": "guard-clause",
       "lines": [
-        69,
-        123
+        71,
+        125
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof Request !== 'undefined' && input instanceof Request) { input."
     },

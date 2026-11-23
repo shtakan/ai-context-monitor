@@ -537,9 +537,9 @@ describe('Phase 3 шаг 13.2: D-пины — API, размещение связ
 });
 
 describe('Phase 3 шаг 13.2: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.ts — id -v19, модуль между overlay и ядром, -v18 снят', () => {
+  test('S1: регистрация в core/background.ts — id -v20, модуль между overlay и ядром, -v18 снят', () => {
     const bg = readFile('core/background.ts');
-    expect(bg).toContain("'ai-cm-gemini-intercept-v19'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v20'");
     expect(bg).toContain("'core/gemini-archive.js'");
     // js[] собран ровно в этом порядке: … loader-scroll → files → ingest → overlay → archive → oracle → ядро
     expect(bg).toContain("'core/gemini-sse.js', 'core/pagination/pagination.js', 'core/gemini-loader-scroll.js', 'core/gemini-files.js', 'core/gemini-payload.js', 'core/gemini-ingest.js', 'core/gemini-overlay.js', 'core/gemini-archive.js', 'core/gemini-oracle.js', 'core/gemini-diag-dump.js', 'core/gemini-spa-lifecycle.js', 'core/gemini-active-refresh.js', 'core/gemini-state.js', 'core/gemini-intercept.js'");
@@ -552,11 +552,11 @@ describe('Phase 3 шаг 13.2: S-пины проводки модуля', () => 
     expect(bg).toContain("'ai-cm-gemini-intercept-v9'");
     expect(bg).toContain("'ai-cm-gemini-intercept-v8'");
     // лог регистрации бампнут вместе с id
-    expect(bg).toContain('(v19) зарегистрирован');
+    expect(bg).toContain('(v20) зарегистрирован');
     expect(bg).not.toContain('(v11) зарегистрирован');
     // лог обязан стоять РЯДОМ со своей регистрацией, а не быть унаследованным текстом
-    expect(bg.indexOf("await registerSafe('ai-cm-gemini-intercept-v19'"))
-      .toBeLessThan(bg.indexOf('(v19) зарегистрирован'));
+    expect(bg.indexOf("await registerSafe('ai-cm-gemini-intercept-v20'"))
+      .toBeLessThan(bg.indexOf('(v20) зарегистрирован'));
   });
 
   test('S2: bind-контракт полон — ни одна зависимость кластера не потеряна', () => {
@@ -624,7 +624,8 @@ describe('Phase 3 шаг 13.2: S-пины проводки модуля', () => 
     const hits = ACTIVE.split('\n').reduce((acc, l, i) => (l.indexOf(VF5_TAIL) !== -1 ? acc.concat(i + 1) : acc), []);
     // Фикс получателя нативного fetch (originalFetch.call(window, …)) добавил
     // 6 строк выше точки выхода — 95 → 101.
-    expect(hits).toEqual([101]);
+    // Сетевой снимок нового чата: ensureActiveMeta добавил 2 строки выше — 101 → 103.
+    expect(hits).toEqual([103]);
     expect(lineOf(CORE, 'aiCmGeminiArchive.__bind('))
       .toBeGreaterThan(lineOf(CORE, 'aiCmGeminiActiveRefresh.__bind('));
   });

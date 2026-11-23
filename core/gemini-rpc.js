@@ -37,8 +37,12 @@
   var STREAM_USER_RPCIDS = { I4z33b: 1, aPya6c: 1 };
   var STREAM_MODEL_RPCIDS = { Bsxleb: 1, TUa2Cd: 1 };
 
+  function isBatchexecuteRpc(url) {
+    return !!url && url.indexOf('batchexecute') !== -1;
+  }
+
   function isHistoryRpc(url) {
-    return !!url && url.indexOf('batchexecute') !== -1 && url.indexOf('hNvQHb') !== -1;
+    return isBatchexecuteRpc(url) && url.indexOf('hNvQHb') !== -1;
   }
 
   // v50: инкрементальный фид текущего чата. В открытом чате новый ход (user+ответ) приходит
@@ -145,6 +149,14 @@
   function parseReqIdFromUrl(url) {
     var m = url.match(/[?&]_reqid=(\d+)/);
     return m ? parseInt(m[1], 10) : 0;
+  }
+
+  /** Строка из window.WIZ_global_data (MAIN-мир Gemini): at/bl/f.sid для активного RPC. */
+  function wizStr(field) {
+    try {
+      var w = (typeof window !== 'undefined') ? window.WIZ_global_data : null;
+      return (w && typeof w[field] === 'string') ? w[field] : '';
+    } catch (e) { return ''; }
   }
 
   // v20: извлечение convId из тела batchexecute POST-запроса.
@@ -279,41 +291,111 @@
     return best;
   }
 
+  function buildWizBaseUrl(convId) {
+    try {
+      var origin = (typeof location !== 'undefined' && location.origin) ? location.origin : 'https://gemini.google.com';
+      var path = (typeof location !== 'undefined' && location.pathname) ? location.pathname : ('/u/1/app/' + convId);
+      var bl = wizStr('cfb2h');
+      var sid = wizStr('FdrFJe');
+      var hl = 'en';
+      try { hl = String(document.documentElement.lang || navigator.language || 'en').split('-')[0] || 'en'; } catch (eHl) { hl = 'en'; }
+      var u = origin + '/_/BardChatUi/data/batchexecute?rpcids=hNvQHb&source-path=' + encodeURIComponent(path);
+      if (bl) u += '&bl=' + encodeURIComponent(bl);
+      if (sid) u += '&f.sid=' + encodeURIComponent(sid);
+      u += '&hl=' + encodeURIComponent(hl) + '&rt=c';
+      return u;
+    } catch (eWizUrl) { return ''; }
+  }
+
+  /**
+   * Перед активным hNvQHb: добрать at/headers/url из WIZ_global_data, если в новом чате
+   * ещё не было ни одного hNvQHb-запроса. at = SNlM0e, bl = cfb2h, f.sid = FdrFJe.
+   */
+  function ensureActiveMeta() {
+    try {
+      if (!D) return false;
+      var cid = (typeof D.getConvId === 'function') ? (D.getConvId() || '') : '';
+      if (!D.lastAtEncoded) D.lastAtEncoded = wizStr('SNlM0e');
+      // Обязательный минимум подтверждён разведкой: form-urlencoded + x-same-domain.
+      var hOk = { ct: false, sd: false };
+      for (var hk in D.lastHeaders) {
+        var hl = String(hk).toLowerCase();
+        if (hl === 'content-type') hOk.ct = true;
+        else if (hl === 'x-same-domain') hOk.sd = true;
+      }
+      if (!hOk.ct || !hOk.sd) {
+        var hf = {};
+        for (var fk in D.lastHeaders) hf[fk] = D.lastHeaders[fk];
+        if (!hOk.ct) hf['content-type'] = 'application/x-www-form-urlencoded;charset=UTF-8';
+        if (!hOk.sd) hf['x-same-domain'] = '1';
+        D.lastHeaders = hf;
+      }
+      if (!D.lastBaseUrl && cid) D.lastBaseUrl = buildWizBaseUrl(cid);
+      return !!(D.lastAtEncoded && D.lastBaseUrl && D.lastHeaders);
+    } catch (eEnsure) { return false; }
+  }
+
   function rememberSiteMeta(url, headers, bodyStr) {
-    if (!isHistoryRpc(url)) return;
-    diagCursorFromBody(bodyStr); // v72diag: курсор тела запроса (только лог)
+    // Шаблон активного RPC запоминаем с ЛЮБОГО batchexecute, а не только hNvQHb:
+    // в новом чате history-RPC ещё нет, но at/headers/base нужны уже после первого ответа.
+    if (!isBatchexecuteRpc(url)) return;
+    if (isHistoryRpc(url)) diagCursorFromBody(bodyStr); // v72diag: курсор тела запроса (только лог)
     if (headers) {
       var keys = Object.keys(headers);
-      if (keys.length) D.lastHeaders = headers;
+      if (keys.length) {
+        // Не теряем заголовки истории при более бедном наборе у соседнего RPC.
+        var merged = {};
+        for (var mk in D.lastHeaders) merged[mk] = D.lastHeaders[mk];
+        for (var i = 0; i < keys.length; i++) merged[keys[i]] = headers[keys[i]];
+        D.lastHeaders = merged;
+      }
     }
     var at = parseAtFromBody(bodyStr);
     if (at) D.lastAtEncoded = at;
-    D.lastBaseUrl = url;
+    // Предпочитаем настоящий history-URL; иначе любой batchexecute (buildActiveUrl заменит rpcids).
+    if (!D.lastBaseUrl || isHistoryRpc(url)) D.lastBaseUrl = url;
     var rid = parseReqIdFromUrl(url);
     if (rid) D.lastReqId = rid;
   }
 
   function buildActiveBodyWith(token) {
     var convId = D.getConvId();
+    var at = D.lastAtEncoded || wizStr('SNlM0e');
+    if (!convId || !at) return '';
     var slots = ['c_' + convId, 10, token, 1, [0], [4], null, 1];
     var inner = JSON.stringify(slots);
     var outer = [[['hNvQHb', inner, null, 'generic']]];
-    return 'f.req=' + encodeURIComponent(JSON.stringify(outer)) + '&at=' + D.lastAtEncoded + '&';
+    return 'f.req=' + encodeURIComponent(JSON.stringify(outer)) + '&at=' + at + '&';
   }
 
   function buildActiveBody() { return buildActiveBodyWith(null); }
 
   function buildActiveUrl() {
     D.activeSeq++;
-    var base = D.lastReqId || 1000000;
-    var next = base + D.activeSeq * 7;
-    if (/_reqid=\d+/.test(D.lastBaseUrl)) return D.lastBaseUrl.replace(/_reqid=\d+/, '_reqid=' + next);
-    return D.lastBaseUrl + (D.lastBaseUrl.indexOf('?') === -1 ? '?' : '&') + '_reqid=' + next;
+    // lastBaseUrl может быть любым batchexecute нового чата — для снимка нужен hNvQHb.
+    var base = D.lastBaseUrl;
+    if (!base) return '';
+    if (/[?&]rpcids=/.test(base)) base = base.replace(/([?&])rpcids=[^&]*/, '$1rpcids=hNvQHb');
+    else base += (base.indexOf('?') === -1 ? '?' : '&') + 'rpcids=hNvQHb';
+    // source-path несёт chat-path: после ответа новый чат уже /app/<convId>, а шаблон
+    // мог быть снят с запроса до смены URL.
+    try {
+      var path = (typeof location !== 'undefined' && location.pathname) ? location.pathname : '';
+      if (path) {
+        var encPath = encodeURIComponent(path);
+        if (/[?&]source-path=/.test(base)) base = base.replace(/([?&])source-path=[^&]*/, '$1source-path=' + encPath);
+        else base += (base.indexOf('?') === -1 ? '?' : '&') + 'source-path=' + encPath;
+      }
+    } catch (ePath) { /* ignore */ }
+    var next = (D.lastReqId || 1000000) + D.activeSeq * 7;
+    if (/_reqid=\d+/.test(base)) return base.replace(/_reqid=\d+/, '_reqid=' + next);
+    return base + (base.indexOf('?') === -1 ? '?' : '&') + '_reqid=' + next;
   }
 
   // ---- экспорт (UMD-паттерн: браузер + Node для тестов) ----
   var Api = {
     __bind: __bind,
+    isBatchexecuteRpc: isBatchexecuteRpc,
     isHistoryRpc: isHistoryRpc,
     isConversationFeedRpc: isConversationFeedRpc,
     isIngestRpc: isIngestRpc,
@@ -330,6 +412,7 @@
     shadowCursorFromRest: shadowCursorFromRest,
     captureModelSlugFromBody: captureModelSlugFromBody,
     rememberSiteMeta: rememberSiteMeta,
+    ensureActiveMeta: ensureActiveMeta,
     buildActiveBodyWith: buildActiveBodyWith,
     buildActiveBody: buildActiveBody,
     buildActiveUrl: buildActiveUrl,

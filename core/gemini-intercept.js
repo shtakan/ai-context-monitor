@@ -39,6 +39,7 @@
   // activeSeq/lastAtEncoded/lastBaseUrl/lastHeaders/lastReqId (геттеры+сеттеры): эти пять
   // переменных читает и восстанавливает не только кластер, поэтому копией их отдавать нельзя.
   var aiCmGeminiRpc = (typeof window !== 'undefined' && window.AiCmGeminiRpc) || null;
+  var isBatchexecuteRpc = null;
   var isHistoryRpc = null;
   var isIngestRpc = null;
   var streamRpcidOf = null;
@@ -48,6 +49,7 @@
   var convIdFromBody = null;
   var shadowCursorFromRest = null;
   var rememberSiteMeta = null;
+  var ensureActiveMeta = null;
   var captureModelSlugFromBody = null;
   var buildActiveBodyWith = null;
   var buildActiveBody = null;
@@ -535,6 +537,7 @@
       get lastHeaders() { return lastHeaders; }, set lastHeaders(v) { lastHeaders = v; },
       get lastReqId() { return lastReqId; }, set lastReqId(v) { lastReqId = v; },
     });
+    isBatchexecuteRpc = aiCmGeminiRpc.isBatchexecuteRpc;
     isHistoryRpc = aiCmGeminiRpc.isHistoryRpc;
     isIngestRpc = aiCmGeminiRpc.isIngestRpc;
     streamRpcidOf = aiCmGeminiRpc.streamRpcidOf;
@@ -544,12 +547,14 @@
     convIdFromBody = aiCmGeminiRpc.convIdFromBody;
     shadowCursorFromRest = aiCmGeminiRpc.shadowCursorFromRest;
     rememberSiteMeta = aiCmGeminiRpc.rememberSiteMeta;
+    ensureActiveMeta = aiCmGeminiRpc.ensureActiveMeta;
     buildActiveBodyWith = aiCmGeminiRpc.buildActiveBodyWith;
     buildActiveBody = aiCmGeminiRpc.buildActiveBody;
     buildActiveUrl = aiCmGeminiRpc.buildActiveUrl;
   } else {
     debugLog('log', '[gemini-intercept] core/gemini-rpc.js не подключён — ' +
       'опознание RPC и метаданные запроса недоступны (проверьте регистрацию content script)');
+    isBatchexecuteRpc = function () { return false; };
     isHistoryRpc = function () { return false; };
     isIngestRpc = function () { return false; };
     streamRpcidOf = function () { return ''; };
@@ -559,6 +564,7 @@
     convIdFromBody = function () { return ''; };
     shadowCursorFromRest = function () { return null; };
     rememberSiteMeta = function () { };
+    ensureActiveMeta = function () { return false; };
     captureModelSlugFromBody = function () { return ''; };
     buildActiveBodyWith = function () { return ''; };
     buildActiveBody = function () { return ''; };
@@ -593,6 +599,7 @@
       ingest: aiCmIngestFwd,
       getConvId: getConvId,
       // Алиасы соседних модулей (rpc/diag): к этому моменту уже назначены выше.
+      isBatchexecuteRpc: isBatchexecuteRpc,
       isHistoryRpc: isHistoryRpc,
       isIngestRpc: isIngestRpc,
       convIdFromBody: convIdFromBody,
@@ -1011,6 +1018,7 @@
       isStaleReqTag: isStaleReqTag,
       buildActiveUrl: buildActiveUrl,
       buildActiveBody: buildActiveBody,
+      ensureActiveMeta: ensureActiveMeta,
       originalFetch: originalFetch,
       aiCmIngestFwd: aiCmIngestFwd,
       debugLog: debugLog,

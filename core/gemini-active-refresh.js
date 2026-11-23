@@ -59,6 +59,8 @@
   // ---- BIND-зона: активный дозапрос vf5 и дедуп выходящего массива ----
   function activeRefresh(reason, rebuild) {
     if (activeDisabled || activeBusy) return;
+    // Новый чат: hNvQHb ещё не было — at/bl/f.sid берём из WIZ_global_data.
+    if (typeof ensureActiveMeta === 'function') ensureActiveMeta();
     var convId = getConvId();
     // v59: тег запроса на момент отправки — гард при обработке ответа
     var reqTagVf5 = captureReqTag();

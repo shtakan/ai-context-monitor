@@ -172,9 +172,11 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
     // Phase 3, шаг 14: все 15 связок __bind собраны в единую секцию перед
     // installNetworkHooks() — якоря rpc/sse/pagination уехали вниз и стоят подряд
     // (529/593/652). Пересчитаны по факту: сама проводка форвардеров не менялась.
-    expect(linesOf(CORE, 'ingest: aiCmIngestFwd,')).toEqual([529, 593, 652]);
-    expect(linesOf(CORE, 'handleOuter: aiCmHandleOuterFwd,')).toEqual([571]);
-    expect(linesOf(CORE, 'emitBaseSnapshot: aiCmEmitBaseSnapshotFwd,')).toEqual([651]);
+    // Сетевой снимок нового чата: алиас isBatchexecuteRpc добавил +2/+6/+7 строк
+    // в rpc/sse/главный блок — якоря 531/599/659, handleOuter 577, emit 658.
+    expect(linesOf(CORE, 'ingest: aiCmIngestFwd,')).toEqual([531, 599, 659]);
+    expect(linesOf(CORE, 'handleOuter: aiCmHandleOuterFwd,')).toEqual([577]);
+    expect(linesOf(CORE, 'emitBaseSnapshot: aiCmEmitBaseSnapshotFwd,')).toEqual([658]);
 
     // алиасы ядра заполняются из модуля сразу после __bind — форвардер обязан быть
     // подставлен ДО того, как ранние блоки начнут звать ingest (иначе null-вызов)
@@ -216,7 +218,8 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
     // модуль: тело activeRefresh, строка 95 (ядро 1410 больше не существует)
     // Фикс получателя нативного fetch добавил выше неё шесть строк
     // (originalFetch.call(window, …) — Illegal invocation) — 95 → 101.
-    expect(linesOf(ACTIVE, VF5_TAIL)).toEqual([101]);
+    // Сетевой снимок нового чата: ensureActiveMeta добавил 2 строки выше — 101 → 103.
+    expect(linesOf(ACTIVE, VF5_TAIL)).toEqual([103]);
   });
 
   test('R-D №4: счётчик emitBaseSnapshot() — ядро 1, конкатенация 9', () => {
@@ -273,9 +276,9 @@ describe('Phase 3 шаг 12: R-D пины кластера ingest (core/gemini-i
 });
 
 describe('Phase 3 шаг 12: S-пины проводки модуля', () => {
-  test('S1: регистрация в core/background.ts — id -v19, messages/turns перед ingest, -v18 снят', () => {
+  test('S1: регистрация в core/background.ts — id -v20, messages/turns перед ingest, -v18 снят', () => {
     const bg = readFile('core/background.ts');
-    expect(bg).toContain("'ai-cm-gemini-intercept-v19'");
+    expect(bg).toContain("'ai-cm-gemini-intercept-v20'");
     expect(bg).toContain("'core/gemini-ingest.js'");
     expect(bg).toContain("'utils/messages/turns.js'");
     // js[] собран ровно в этом порядке: sse → pagination → loader-scroll → files → ingest → ядро
@@ -286,8 +289,8 @@ describe('Phase 3 шаг 12: S-пины проводки модуля', () => {
     expect(bg.indexOf("'core/gemini-loader-scroll.js'")).toBeLessThan(bg.indexOf("'core/gemini-ingest.js'"));
     expect(bg.indexOf("'core/gemini-ingest.js'")).toBeLessThan(bg.indexOf("'core/gemini-intercept.js'"));
     // MV3 не перечитывает js[] под существующим id — прежний id обязан быть снят
-    // 2.2/фаза 3: бамп -v18 → -v19, поэтому в unregister добавлен -v18.
-    expect(bg).toContain("'ai-cm-gemini-intercept-v11', 'ai-cm-gemini-intercept-v12', 'ai-cm-gemini-intercept-v13', 'ai-cm-gemini-intercept-v14', 'ai-cm-gemini-intercept-v15', 'ai-cm-gemini-intercept-v16', 'ai-cm-gemini-intercept-v17', 'ai-cm-gemini-intercept-v18'");
+    // 2.2/фаза 3: бамп -v18 → -v19, затем -v19 → -v20; оба прежних id снимаются.
+    expect(bg).toContain("'ai-cm-gemini-intercept-v11', 'ai-cm-gemini-intercept-v12', 'ai-cm-gemini-intercept-v13', 'ai-cm-gemini-intercept-v14', 'ai-cm-gemini-intercept-v15', 'ai-cm-gemini-intercept-v16', 'ai-cm-gemini-intercept-v17', 'ai-cm-gemini-intercept-v18', 'ai-cm-gemini-intercept-v19'");
   });
 
   test('S2: bind-контракт полон — 72 имени переданы ядром и все 72 используются модулем', () => {

@@ -59,7 +59,9 @@
         var diagInputType = (typeof input === 'string') ? 'url-string' : ((typeof Request !== 'undefined' && input instanceof Request) ? 'Request' : 'other');
         var diagInitBody = (init && init.body) ? (typeof init.body === 'string' ? 'string' : 'other') : 'absent';
 
-        if (D.isHistoryRpc(url)) {
+        // Шаблон активного hNvQHb нужен и новому чату, где history-RPC ещё не было:
+        // at/base/headers снимаем с любого batchexecute, не только hNvQHb.
+        if (D.isBatchexecuteRpc(url)) {
           var hdrs = D.captureHeadersFromInit(input, init);
           var bodyStr = '';
           try {
@@ -201,7 +203,7 @@
         var info = this.__aiCm || {}; var url = info.url || '';
         // v2.0.20: слаг модели из тела запроса (строковое тело XHR — batchexecute-полезная нагрузка)
         if (typeof body === 'string') D.captureModelSlugFromBody(body);
-        if (D.isHistoryRpc(url)) {
+        if (D.isBatchexecuteRpc(url)) {
           D.rememberSiteMeta(url, info.headers || {}, typeof body === 'string' ? body : '');
         }
         // v20: сохраняем reqConvId в this.__aiCm для использования в load-обработчике
