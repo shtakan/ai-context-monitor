@@ -2023,15 +2023,21 @@ function requestExactTokens(fullText: string, modelId: string | null): void {
       // пересчитать константы без догадок по баннерам платформы.
       try {
         if (typeof aiCmDiagLine === 'function' && typeof Tokenizer !== 'undefined' && Tokenizer &&
-            typeof Tokenizer.countTokens === 'function') {
-          var calCyr = (fullText.match(/[\u0400-\u04FF]/g) || []).length;
-          var calCjk = (fullText.match(/[\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]/g) || []).length;
-          var calLatin = (fullText.match(/[A-Za-z]/g) || []).length;
-          var calDigit = (fullText.match(/[0-9]/g) || []).length;
+            typeof Tokenizer.countTokens === 'function' &&
+            typeof Tokenizer.countTokenizerFeatures === 'function' &&
+            typeof Tokenizer.countTokensV2 === 'function') {
+          // Shadow-режим v2: одна и та же классификация для лога и оценки.
+          // countTokensV2 — кандидат, countTokens — работающий бейдж; exact — истина.
+          var calFeat = Tokenizer.countTokenizerFeatures(fullText);
+          var calCyr = calFeat.cyr;
+          var calCjk = calFeat.cjk;
+          var calLatin = calFeat.latin;
+          var calDigit = calFeat.digit;
+          var calPunct = calFeat.punct;
+          var calOther = calFeat.other;
           var calSpace = (fullText.match(/\s/g) || []).length;
-          var calPunct = (fullText.match(/[.,!?;:()\[\]{}"'«»\-—]/g) || []).length;
-          var calOther = Math.max(0, fullText.length - calCyr - calCjk - calLatin - calDigit - calSpace - calPunct);
           var calHeur = Tokenizer.countTokens(fullText);
+          var calV2 = Tokenizer.countTokensV2(fullText);
           var calExact = response.totalTokens;
           aiCmDiagLine('o23-calibration', {
             model: apiModelId,
@@ -2048,8 +2054,10 @@ function requestExactTokens(fullText: string, modelId: string | null): void {
             doc: (typeof netAttachBreak !== 'undefined' && netAttachBreak && netAttachBreak.docCount) ? netAttachBreak.docCount : 0,
             attach: (typeof netAttachTokens !== 'undefined' && netAttachTokens > 0) ? netAttachTokens : 0,
             heuristic: calHeur,
+            v2: calV2,
             exact: calExact,
-            ratio: calExact > 0 ? (calHeur / calExact).toFixed(4) : '(n/a)'
+            ratio: calExact > 0 ? (calHeur / calExact).toFixed(4) : '(n/a)',
+            ratio2: calExact > 0 ? (calV2 / calExact).toFixed(4) : '(n/a)'
           });
         }
       } catch (eCal) { swallowSoft(eCal, 'content:o23-calibration'); }

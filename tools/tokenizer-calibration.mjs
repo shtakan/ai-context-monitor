@@ -60,6 +60,7 @@ function parseLine(line) {
     doc: Number(fields.doc || 0),
     attach: Number(fields.attach || 0),
     heuristic: Number(fields.heuristic),
+    v2: Number.isFinite(Number(fields.v2)) ? Number(fields.v2) : null,
     exact: Number(fields.exact)
   };
   if (!Number.isFinite(sample.chars) || sample.chars < 200) return null;
@@ -152,8 +153,7 @@ if (!inputs.length) {
 }
 
 const files = inputs.flatMap(collectFiles);
-const samples = [];
-const seen = new Set();
+const byKey = new Map();
 for (const file of files) {
   const buf = fs.readFileSync(file);
   let text = buf.toString('utf8');
@@ -165,11 +165,12 @@ for (const file of files) {
     const s = parseLine(line);
     if (!s) continue;
     const key = [s.model, s.chars, s.cyr, s.latin, s.digit, s.cjk, s.punct, s.other, s.space, s.exact].join('|');
-    if (seen.has(key)) continue;
-    seen.add(key);
-    samples.push(s);
+    const prev = byKey.get(key);
+    // Тот же замер из старого лога (без v2) и нового (с v2) — оставляем с v2.
+    if (!prev || (prev.v2 === null && s.v2 !== null)) byKey.set(key, s);
   }
 }
+const samples = [...byKey.values()];
 
 if (!samples.length) {
   console.error('o23-calibration: замеров не найдено (нужен включённый Подробный лог + BYOK).');
@@ -200,6 +201,19 @@ console.log('heuristic error: mean ' + pct(mean(errs)) +
   ' | max ' + pct(Math.max(...errs)));
 console.log('');
 
+// Shadow-режим v2: строки o23-calibration содержат v2= рядом с heuristic/exact.
+const shadow = samples.filter(s => s.v2 !== null && s.v2 > 0);
+if (shadow.length) {
+  const v2err = shadow.map(s => (s.v2 - s.exact) / s.exact);
+  const v2abs = v2err.map(Math.abs);
+  const oldAbs = shadow.map(s => Math.abs(s.err));
+  console.log('shadow v2: mean ' + pct(mean(v2err)) +
+    ' | MAE ' + pct(mean(v2abs)) +
+    ' | max ' + pct(Math.max(...v2abs)) +
+    ' | old heuristic MAE on same points ' + pct(mean(oldAbs)));
+  console.log('');
+}
+
 const models = [...new Set(samples.map(s => s.model))];
 if (models.length > 1) {
   console.log('## by model');
@@ -222,11 +236,23 @@ if (attachSamples.length) {
 }
 
 console.log('## samples');
-console.log('| chars | cyr% | exact | heuristic | err | img/doc |');
-console.log('|---:|---:|---:|---:|---:|---:|');
+if (shadow.length) {
+  console.log('| chars | cyr% | exact | heuristic | err | v2 | err2 | img/doc |');
+  console.log('|---:|---:|---:|---:|---:|---:|---:|---:|');
+} else {
+  console.log('| chars | cyr% | exact | heuristic | err | img/doc |');
+  console.log('|---:|---:|---:|---:|---:|---:|');
+}
 for (const s of samples) {
-  console.log('| ' + s.chars + ' | ' + (100 * s.cyr / s.chars).toFixed(1) + '% | ' +
-    s.exact + ' | ' + s.heuristic + ' | ' + pct(s.err) + ' | ' + s.img + '/' + s.doc + ' |');
+  if (shadow.length) {
+    const err2 = s.v2 !== null ? pct((s.v2 - s.exact) / s.exact) : '—';
+    console.log('| ' + s.chars + ' | ' + (100 * s.cyr / s.chars).toFixed(1) + '% | ' +
+      s.exact + ' | ' + s.heuristic + ' | ' + pct(s.err) + ' | ' +
+      (s.v2 === null ? '—' : s.v2) + ' | ' + err2 + ' | ' + s.img + '/' + s.doc + ' |');
+  } else {
+    console.log('| ' + s.chars + ' | ' + (100 * s.cyr / s.chars).toFixed(1) + '% | ' +
+      s.exact + ' | ' + s.heuristic + ' | ' + pct(s.err) + ' | ' + s.img + '/' + s.doc + ' |');
+  }
 }
 console.log('');
 

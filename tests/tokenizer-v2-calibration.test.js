@@ -7,7 +7,8 @@
  * Production-путь НЕ переключён: `Tokenizer.countTokens` по-прежнему 3.3/4/3/0.43/1.
  *
  * Replay фиксирует, что линейная модель воспроизводит exact на всех 14 точках
- * (MAPE < 3 %, max < 7 %). Живая проверка и переключение — отдельным шагом.
+ * (MAPE < 3 %, max < 7 %). Shadow-режим (`v2=` в o23-calibration) считает v2
+ * рядом со старым countTokens, не меняя бейдж; переключение — после живых чатов.
  */
 
 const T = require('./helpers/load-esm.js').loadEsmModule('utils/tokenizer.ts');
@@ -46,6 +47,13 @@ describe('Tokenizer v2: линейная калибровка по 14 точка
     expect(T.countTokensV2('Привет, мир!')).toBeGreaterThan(0);
     // Линейная модель не должна давать отрицательных значений на коротком тексте.
     expect(T.countTokensV2('a')).toBeGreaterThanOrEqual(0);
+  });
+
+  test('корзины v2 совпадают с o23-calibration: «»/— — пунктуация, не other', () => {
+    const f = T.Tokenizer.countTokenizerFeatures('«Да» — нет! A1 中');
+    expect(f).toEqual({ cyr: 5, latin: 1, digit: 1, cjk: 1, punct: 4, other: 0 });
+    // Оценка по тексту обязана совпадать с оценкой по тем же агрегатам.
+    expect(T.countTokensV2('«Да» — нет! A1 中')).toBe(T.estimateTokensFromFeatures(f));
   });
 
   test('replay-точки покрывают и прозу, и плотные таблицы', () => {

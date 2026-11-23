@@ -77,6 +77,31 @@ export function estimateTokensFromFeatures(f: TokenizerFeatureCounts): number {
   return Math.max(0, Math.ceil(raw));
 }
 
+/**
+ * Классификация символов для v2 — ровно те же корзины, что пишет
+ * `o23-calibration` в core/content.ts: полный кириллический блок,
+ * CJK, ASCII-латиница/цифры, пробелы, пунктуация с «»/—, остальное — other.
+ *
+ * Отдельная от production `_getCharType` намеренно: там пунктуация без «»/—
+ * и кириллица только русская, менять её до переключения нельзя (бейдж).
+ * Благодаря общей классификации shadow-строка `v2=` и фит считают одно и то же.
+ */
+export function countTokenizerFeatures(text: string): TokenizerFeatureCounts {
+  const f: TokenizerFeatureCounts = { cyr: 0, latin: 0, digit: 0, cjk: 0, punct: 0, other: 0 };
+  if (!text) return f;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (/[\u0400-\u04FF]/.test(ch)) f.cyr++;
+    else if (/[\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]/.test(ch)) f.cjk++;
+    else if (/[A-Za-z]/.test(ch)) f.latin++;
+    else if (/[0-9]/.test(ch)) f.digit++;
+    else if (/\s/.test(ch)) continue;
+    else if (/[.,!?;:()\[\]{}"'«»\-—]/.test(ch)) f.punct++;
+    else f.other++;
+  }
+  return f;
+}
+
 export const Tokenizer = {
   CYRILLIC_CHARS_PER_TOKEN: CYRILLIC_CHARS_PER_TOKEN,
 
@@ -178,18 +203,12 @@ export const Tokenizer = {
    */
   countTokensV2(text: string): number {
     if (!text || text.length === 0) return 0;
-    const f: TokenizerFeatureCounts = { cyr: 0, latin: 0, digit: 0, cjk: 0, punct: 0, other: 0 };
-    for (let i = 0; i < text.length; i++) {
-      const type = this._getCharType(text[i]);
-      if (type === 'space') continue;
-      if (type === 'cyrillic') f.cyr++;
-      else if (type === 'latin') f.latin++;
-      else if (type === 'digit') f.digit++;
-      else if (type === 'cjk') f.cjk++;
-      else if (type === 'punctuation') f.punct++;
-      else f.other++;
-    }
-    return estimateTokensFromFeatures(f);
+    return estimateTokensFromFeatures(countTokenizerFeatures(text));
+  },
+
+  /** Агрегаты классов для v2/shadow (те же корзины, что в o23-calibration). */
+  countTokenizerFeatures(text: string): TokenizerFeatureCounts {
+    return countTokenizerFeatures(text);
   },
 
   // countTokensFast удалён в v1.1 — дублировал логику countTokens и не вызывался нигде.
