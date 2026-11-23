@@ -2635,13 +2635,17 @@ function aiCmResyncMetricsAfterFlush(cid: string, reason?: string): boolean {
  */
 function aiCmTryGeminiDomBase(): boolean {
   try {
-    if (baseSeen) return false;
     if (typeof currentAdapter === 'undefined' || !currentAdapter || currentAdapter.siteName !== 'gemini') return false;
     var cid = (typeof getCurrentConvId === 'function') ? (getCurrentConvId() || '') : '';
     if (!cid || !aiCmGeminiDomBaseTrusted[cid]) return false;
     if (typeof currentAdapter.extractMessages !== 'function') return false;
+    var refreshing = baseSeen;
+    // Обновлять можно только DOM-базу: сетевую не подменяем видимым куском.
+    if (refreshing && (typeof aiCmBaseSource === 'undefined' || aiCmBaseSource !== 'dom')) return false;
     var raw: any[] = currentAdapter.extractMessages() || [];
-    if (!raw.length || raw.length > 20) return false;
+    if (!raw.length) return false;
+    // Первичная база — только короткий чат. Обновление — с запасом до 40, но без сжатия.
+    if (raw.length > (refreshing ? 40 : 20)) return false;
     var prepared: AiCmExportMessage[] = [];
     var texts: string[] = [];
     var ids: string[] = [];
@@ -2655,19 +2659,23 @@ function aiCmTryGeminiDomBase(): boolean {
       ids.push(id);
     }
     if (!prepared.length) return false;
+    var nextText = (typeof canonicalBodyText === 'function') ? canonicalBodyText(prepared) : texts.join('\n');
+    // DOM виртуализирован и отдал меньше, чем уже есть в базе — не сжимаем.
+    if (refreshing && prepared.length < baseCount) return false;
+    if (refreshing && prepared.length === baseCount && nextText.length <= baseText.length) return false;
     aiCmBasePrepared = prepared;
     lastBaseTexts = texts;
     lastBaseIds = ids;
     lastDetailMessages = prepared;
     baseCount = prepared.length;
-    baseText = (typeof canonicalBodyText === 'function') ? canonicalBodyText(prepared) : texts.join('\n');
+    baseText = nextText;
     baseSeen = (true);
     baseComplete = true;
     if (typeof aiCmBaseSource !== 'undefined') aiCmBaseSource = 'dom';
     aiCmBaseConfirmedByConv[cid] = 1;
     aiCmAdapterBaseCount = prepared.length;
-    debugLog('log', '[AI CM][gemini] dom-base trusted convId=' + cid +
-      ' msgs=' + prepared.length + ' textLen=' + baseText.length);
+    debugLog('log', '[AI CM][gemini] dom-base ' + (refreshing ? 'refresh' : 'trusted') +
+      ' convId=' + cid + ' msgs=' + prepared.length + ' textLen=' + baseText.length);
     return true;
   } catch (eDomBase) {
     swallowSoft(eDomBase, 'content:gemini-dom-base-build');

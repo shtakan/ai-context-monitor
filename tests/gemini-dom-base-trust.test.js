@@ -85,6 +85,55 @@ describe('Gemini: DOM-база нового чата (no-older-history)', () => 
     expect(r.ctx.baseSeen).toBe(false);
   });
 
+  test('DOM-база обновляется при новых ходах (refresh), но не сжимается', () => {
+    const r = run({
+      messages: [
+        { role: 'user', content: 'Вопрос 1' },
+        { role: 'assistant', content: 'Ответ 1' },
+        { role: 'user', content: 'Вопрос 2' },
+        { role: 'assistant', content: 'Ответ 2' }
+      ],
+      ctx: {
+        baseSeen: true,
+        baseComplete: true,
+        baseCount: 2,
+        baseText: 'Вопрос 1\nОтвет 1',
+        aiCmBaseSource: 'dom'
+      }
+    });
+    expect(r.ret).toBe(true);
+    expect(r.ctx.baseCount).toBe(4);
+    expect(r.ctx.baseText).toContain('Ответ 2');
+
+    // Виртуализация отдала меньше — база не сжимается.
+    const shrink = run({
+      messages: [{ role: 'user', content: 'Вопрос 1' }],
+      ctx: {
+        baseSeen: true,
+        baseComplete: true,
+        baseCount: 4,
+        baseText: 'Вопрос 1\nОтвет 1\nВопрос 2\nОтвет 2',
+        aiCmBaseSource: 'dom'
+      }
+    });
+    expect(shrink.ret).toBe(false);
+    expect(shrink.ctx.baseCount).toBe(4);
+  });
+
+  test('сетевая база не подменяется DOM-обновлением', () => {
+    const r = run({
+      ctx: {
+        baseSeen: true,
+        baseComplete: true,
+        baseCount: 2,
+        baseText: 'сеть',
+        aiCmBaseSource: 'net'
+      }
+    });
+    expect(r.ret).toBe(false);
+    expect(r.ctx.baseText).toBe('сеть');
+  });
+
   test('пустая лента и не-Gemini — отказ', () => {
     expect(run({ messages: [] }).ret).toBe(false);
     expect(run({ ctx: { currentAdapter: { siteName: 'chatgpt', extractMessages: function () { return [{ role: 'user', content: 'x' }]; } } } }).ret).toBe(false);
