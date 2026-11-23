@@ -32,6 +32,51 @@ type CharType = 'cyrillic' | 'cjk' | 'latin' | 'digit' | 'space' | 'punctuation'
 /** Калибровка O-23: символов на токен для кириллицы. */
 const CYRILLIC_CHARS_PER_TOKEN = 3.3;
 
+/**
+ * Экспериментальная линейная калибровка v2 (14 чистых точек Gemini, 2026-11-23).
+ *
+ * В отличие от production-`countTokens`, здесь НЕТ per-run `Math.ceil`:
+ * токены копятся линейно по классам символов, округление одно — в конце.
+ * Пространства бесплатны, как и в текущей модели.
+ *
+ * Кандидат получен МНК по 14 точкам (9 обычных + Unicode + 3 плотные таблицы).
+ * Свободный член намеренно 0: с CONST=-7.43 короткие тексты уходили в ноль.
+ * Без CONST: replay MAPE 1.85 %, max 5.41 %, нечётная половина 1.23 %.
+ * Production-путь пока НЕ переключён: сначала replay-тест и живая проверка.
+ */
+export const TOKENIZER_V2 = {
+  CYRILLIC_CHARS_PER_TOKEN: 3.9343,
+  LATIN_CHARS_PER_TOKEN: 3.8414,
+  DIGIT_CHARS_PER_TOKEN: 0.7959,
+  PUNCT_TOKENS_PER_CHAR: 0.7205,
+  CJK_CHARS_PER_TOKEN: 1.8,
+  OTHER_TOKENS_PER_CHAR: 1.0741,
+  CONST_TOKENS: 0
+} as const;
+
+/** Агрегаты классов символов для replay-проверки линейной модели. */
+export interface TokenizerFeatureCounts {
+  cyr: number;
+  latin: number;
+  digit: number;
+  cjk: number;
+  punct: number;
+  other: number;
+}
+
+/** Линейная оценка токенов по агрегатам классов (чистая функция). */
+export function estimateTokensFromFeatures(f: TokenizerFeatureCounts): number {
+  const raw =
+    f.cyr / TOKENIZER_V2.CYRILLIC_CHARS_PER_TOKEN +
+    f.latin / TOKENIZER_V2.LATIN_CHARS_PER_TOKEN +
+    f.digit / TOKENIZER_V2.DIGIT_CHARS_PER_TOKEN +
+    f.punct * TOKENIZER_V2.PUNCT_TOKENS_PER_CHAR +
+    f.cjk / TOKENIZER_V2.CJK_CHARS_PER_TOKEN +
+    f.other * TOKENIZER_V2.OTHER_TOKENS_PER_CHAR +
+    TOKENIZER_V2.CONST_TOKENS;
+  return Math.max(0, Math.ceil(raw));
+}
+
 export const Tokenizer = {
   CYRILLIC_CHARS_PER_TOKEN: CYRILLIC_CHARS_PER_TOKEN,
 
@@ -127,6 +172,26 @@ export const Tokenizer = {
     return Math.ceil(tokens);
   },
 
+  /**
+   * Экспериментальный линейный счётчик v2. Не используется production-путём
+   * (content.ts остаётся на countTokens), пока не пройдены replay и живая проверка.
+   */
+  countTokensV2(text: string): number {
+    if (!text || text.length === 0) return 0;
+    const f: TokenizerFeatureCounts = { cyr: 0, latin: 0, digit: 0, cjk: 0, punct: 0, other: 0 };
+    for (let i = 0; i < text.length; i++) {
+      const type = this._getCharType(text[i]);
+      if (type === 'space') continue;
+      if (type === 'cyrillic') f.cyr++;
+      else if (type === 'latin') f.latin++;
+      else if (type === 'digit') f.digit++;
+      else if (type === 'cjk') f.cjk++;
+      else if (type === 'punctuation') f.punct++;
+      else f.other++;
+    }
+    return estimateTokensFromFeatures(f);
+  },
+
   // countTokensFast удалён в v1.1 — дублировал логику countTokens и не вызывался нигде.
 
   /**
@@ -153,6 +218,11 @@ export const Tokenizer = {
 /** Приблизительный подсчёт токенов (named-экспорт, делегирует Tokenizer.countTokens). */
 export function countTokens(text: string): number {
   return Tokenizer.countTokens(text);
+}
+
+/** Экспериментальный линейный счётчик v2 (named-экспорт). */
+export function countTokensV2(text: string): number {
+  return Tokenizer.countTokensV2(text);
 }
 
 /** Токены диалога с накладными расходами (named-экспорт, делегирует Tokenizer.estimateDialogTokens). */
