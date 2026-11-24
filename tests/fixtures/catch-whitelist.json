@@ -307,7 +307,7 @@
         624,
         2784,
         2924,
-        4111
+        4117
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cyrDiag = (t.match(/[а-яёА-ЯЁ]/g) || []).length; var cyrillicPct = t"
     },
@@ -355,9 +355,9 @@
         2935,
         2959,
         2968,
-        3991,
-        4017,
-        4019
+        3997,
+        4023,
+        4025
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
     },
@@ -386,8 +386,8 @@
         1339,
         2877,
         2900,
-        3973,
-        3979
+        3979,
+        3985
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
     },
@@ -445,7 +445,7 @@
       "file": "core/content.ts",
       "category": "parse-guard",
       "lines": [
-        4053
+        4059
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof AiCmExportBuilders !== 'undefined') ? AiCmExportB"
     },

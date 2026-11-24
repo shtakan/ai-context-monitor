@@ -3775,6 +3775,12 @@ if (isExtensionValid()) {
         var snapPartMan = (typeof aiCmReadContextSnapshot === 'function')
           ? aiCmReadContextSnapshot((typeof aiCmCanonicalConvId === 'function')
             ? aiCmCanonicalConvId() : curCidExp) : null;
+        // 2.2/шаг 5: ручной файл печатает ТОТ ЖЕ порог, что бейдж/попап.
+        // snapPartMan.limit уже учитывает тариф каталога (Gemini Free 32K) и
+        // ручной процент; computeEffectiveLimit — запасной путь без снимка.
+        var manualDisplayLimit = (snapPartMan && typeof snapPartMan.limit === 'number' && snapPartMan.limit > 0)
+          ? snapPartMan.limit
+          : computeEffectiveLimit(lastResolvedModelId);
         var manualSnapshot: AiCmManualSnapshot = /** @type {AiCmManualSnapshot} */
           ({
             host: window.location.hostname,
@@ -3782,7 +3788,7 @@ if (isExtensionValid()) {
             site: (currentAdapter && currentAdapter.siteName) || '',
             model: (snapPartMan && snapPartMan.modelName) ? snapPartMan.modelName : (lastSnapshotModelName || (lastResolvedModelId || '')),
             tokens: maxTokenCount,
-            limit: computeEffectiveLimit(lastResolvedModelId),
+            limit: manualDisplayLimit,
             percent: pctExp,
             // BIG-02: платформенный сигнал едет в файл тем же снимком, что у бейджа.
             // Без него MD заново считал 68 893/128 000 = 53.8 % и терял метку.
@@ -3793,8 +3799,8 @@ if (isExtensionValid()) {
             windowLimit: (snapPartMan && typeof snapPartMan.windowLimit === 'number' && snapPartMan.windowLimit > 0)
               ? snapPartMan.windowLimit
               : ((snapPartMan && typeof snapPartMan.contextLimit === 'number' && snapPartMan.contextLimit > 0) ? snapPartMan.contextLimit : undefined),
-            displayLimit: (snapPartMan && typeof snapPartMan.effectiveLimit === 'number' && snapPartMan.effectiveLimit > 0)
-              ? snapPartMan.effectiveLimit : undefined,
+            displayLimit: (snapPartMan && typeof snapPartMan.limit === 'number' && snapPartMan.limit > 0)
+              ? snapPartMan.limit : undefined,
             accountLimit: (snapPartMan && typeof snapPartMan.accountLimit !== 'undefined') ? snapPartMan.accountLimit : undefined,
             limitPlan: (snapPartMan && typeof snapPartMan.limitPlan === 'string' && snapPartMan.limitPlan) ? snapPartMan.limitPlan : undefined,
             limitWarnings: (snapPartMan && Array.isArray(snapPartMan.limitWarnings)) ? snapPartMan.limitWarnings : undefined,

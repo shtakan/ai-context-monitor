@@ -226,7 +226,7 @@ export interface AiCmManualSnapshot {
   saturated?: boolean;
   /** 2.2/фаза 5: настоящее окно модели; 0/undefined — неизвестно. */
   windowLimit?: number;
-  /** 2.2/фаза 5: порог показа (128k и т.п.). */
+  /** 2.2/фаза 5: порог показа с учётом тарифа и ручного процента. */
   displayLimit?: number;
   /** 2.2/фаза 5: лимит тарифа; null — неизвестен. */
   accountLimit?: number | null;

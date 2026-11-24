@@ -272,6 +272,102 @@ describe('inv-i3 (S5): MD и JSON одного нажатия — один ка�
     expect(md).toContain('limit-plan: free');
   });
 
+  test('(vii) Gemini Free: ручной файл считает от тарифных 32K, а не от 128K', function () {
+    const snap = {
+      modelName: 'Gemini 3.6 Flash', src: 'net', tokens: 16000, percent: 48.8, limit: 32768,
+      effectiveLimit: 32768, contextLimit: 1048576, windowLimit: 1048576,
+      accountLimit: 32768, limitPlan: 'free', limitWarnings: [],
+      saturated: false, partial: false
+    };
+    const live = [
+      { role: 'user', text: 'Вопрос' },
+      { role: 'assistant', text: 'Ответ' }
+    ];
+    const sb = manualSandbox({
+      currentAdapter: { siteName: 'gemini' },
+      window: { location: { hostname: 'gemini.google.com' } },
+      baseComplete: true,
+      maxTokenCount: 16000,
+      lastPercentage: 48.8,
+      lastTokensSnapshot: snap,
+      // Legacy-порог намеренно 128K: ручной файл не должен печатать его вместо 32K.
+      computeEffectiveLimit: function () { return 128000; },
+      aiCmReadContextSnapshot: function () { return snap; },
+      buildHistoryMessages: function () { return live.map(function (m) { return Object.assign({}, m); }); },
+      aiCmUnionFileMessages: function () { return live.map(function (m) { return Object.assign({}, m); }); },
+      aiCmBuildCanonicalBody: function () { return { messages: live.map(function (m) { return Object.assign({}, m); }) }; }
+    });
+    runSlice(MANUAL_CODE, sb.ctx);
+    const data = sb.resp[0].data;
+    expect(data.limit).toBe(32768);
+    expect(data.displayLimit).toBe(32768);
+
+    const mod = loadPopup();
+    const md = mod.buildMdText(data);
+    expect(md).toContain('Токены: 16000 / 32768 (48.8%)');
+    expect(md).toContain('model-window: 1048576');
+    expect(md).toContain('display-limit: 32768');
+    expect(md).toContain('account-limit: 32768');
+    expect(md).toContain('limit-plan: free');
+    const json = JSON.parse(mod.buildJsonText(data));
+    expect(json.limit).toBe(32768);
+    expect(json.displayLimit).toBe(32768);
+    expect(json.accountLimit).toBe(32768);
+  });
+
+  test('(viii) GSA и Gemini Auto: 1M окно, 128K порог, лимит аккаунта unknown', function () {
+    const cases = [
+      {
+        site: 'google_search', host: 'www.google.com',
+        warnings: ['account-limit-unknown']
+      },
+      {
+        site: 'gemini', host: 'gemini.google.com',
+        warnings: ['plan-unknown', 'account-limit-unknown']
+      }
+    ];
+    cases.forEach(function (c) {
+      const snap = {
+        modelName: 'Gemini 3.6 Flash', src: 'net', tokens: 20000, percent: 15.6, limit: 128000,
+        effectiveLimit: 128000, contextLimit: 1048576, windowLimit: 1048576,
+        accountLimit: null, limitPlan: null, limitWarnings: c.warnings,
+        saturated: false, partial: false
+      };
+      const live = [
+        { role: 'user', text: 'Вопрос' },
+        { role: 'assistant', text: 'Ответ' }
+      ];
+      const sb = manualSandbox({
+        currentAdapter: { siteName: c.site },
+        window: { location: { hostname: c.host } },
+        baseComplete: true,
+        maxTokenCount: 20000,
+        lastPercentage: 15.6,
+        lastTokensSnapshot: snap,
+        computeEffectiveLimit: function () { return 128000; },
+        aiCmReadContextSnapshot: function () { return snap; },
+        buildHistoryMessages: function () { return live.map(function (m) { return Object.assign({}, m); }); },
+        aiCmUnionFileMessages: function () { return live.map(function (m) { return Object.assign({}, m); }); },
+        aiCmBuildCanonicalBody: function () { return { messages: live.map(function (m) { return Object.assign({}, m); }) }; }
+      });
+      runSlice(MANUAL_CODE, sb.ctx);
+      const data = sb.resp[0].data;
+      expect(data.accountLimit).toBeNull();
+      expect(data.limitPlan == null).toBe(true);
+      const mod = loadPopup();
+      const md = mod.buildMdText(data);
+      expect(md).toContain('Токены: 20000 / 128000 (15.6%)');
+      expect(md).toContain('model-window: 1048576');
+      expect(md).toContain('display-limit: 128000');
+      expect(md).toContain('account-limit: unknown');
+      expect(md).not.toContain('limit-plan:');
+      expect(md).toContain('limit-warnings: ' + c.warnings.join(','));
+      const json = JSON.parse(mod.buildJsonText(data));
+      expect(json.accountLimit).toBeNull();
+      expect('limitPlan' in json).toBe(false);
+    });
+  });
+
   test('(iv) gemini: sourceTier в JSON, platform === сырому ключу, MD-шапка по-прежнему локализована', function () {
     const mod = loadPopup();
     const hist = {
