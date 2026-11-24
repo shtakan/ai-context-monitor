@@ -171,3 +171,19 @@ GET https://files.deepseeksvc.com/api/file?file_id=<id>&state=<signed_path>&ty=r
 - **Правило остановки:** механика шага не ясна после 3 вызовов → стоп, запись в
   `docs/SITE-RECIPES.md` («не проверено»), возврат к задаче.
 
+
+---
+
+## §11. Уроки 2.2: bsk 0.5.0 + Windows UIA (2026-11-24)
+
+- **CLI 0.5.0:** команда `bsk tab ...`, не `bsk tabs ...`; `bsk press --ref @eN Enter` (без `--key`); `bsk wait-ms 12000` (без `--session`).
+- **Сессия:** `bsk session start --browser <id> --no-focus --name <name>` создаёт Agent Window и возвращает id (у нас `tksw`). `--no-focus` не крадёт фокус, но для UIA-кликов окно потом нужно поднять.
+- **`bsk navigate` в 0.5.0** требует `--observation <id>` из `bsk sync --json` (верхний `observation_id`), иначе `needs an explicit current observation`.
+- **`chrome://` и `chrome-extension://` bsk не обслуживает.** Reload расширения и попап — только Windows UIA.
+- Если активна `chrome://extensions`, bsk падает `page frames cannot be observed`; переключитесь на web-вкладку или закройте chrome-вкладку.
+- **Окна Chrome могут быть свёрнуты/перекрыты.** Перед UIA — `ShowWindow(SW_RESTORE)` + `SetForegroundWindow`; проверять `GetForegroundWindow`.
+- **Кнопка расширения на панели** может называться `AI Context Monitor\n<tooltip>`; искать `-like "AI Context Monitor*"`, а не точное имя.
+- **Попап** — отдельное окно 268x614. UIA видит offscreen-контролы, но клик по ним требует прокрутки; клик за пределами окна закрывает попап.
+- **Тариф Gemini в попапе:** `<select id="gemini-plan">`; надёжно — `SetFocus` + стрелки (`Home`, `Down`), не `ValuePattern.SetValue` (no-op).
+- **Экспорт:** кнопки `export-md`/`export-json` поддерживают `InvokePattern`; после клика Chrome открывает Save As — принять `Enter`, файл появляется в последней папке (у нас `tokenizer-calibration/exports`).
+- **UIA-хелперы** (вне репозитория): `C:\Temp\opencode\` — `open-aicm-popup.ps1`, `dump-popup.ps1`, `click-at.ps1`, `capture-popup.ps1`, `send-keys.ps1`, `invoke-popup-button.ps1`.
