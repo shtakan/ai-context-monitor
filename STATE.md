@@ -6,14 +6,14 @@
 ## 1. Репозиторий
 
 - workspace: ai-context-monitor-clean
-- branch: `feature/2.2`; HEAD: релизный коммит 2.2.0 (поверх `584e980`); origin/main: `4e2916a`; ahead: 118 (до релизного коммита); behind: 0; тег `v2.1.5` → `4e2916a`; тег `v2.1.4` → `d2194cc`, `v2.1.3` → `1e46a85`
-- version: `2.2.0` (manifest.json, package.json, package-lock.json, футер docs/index.html); релизный коммит — 2.2.0; tag `v2.2.0`/GitHub Release/AMO — за владельцем
+- branch: `feature/2.2`; HEAD: `a17cd1c` (chore(release): 2.2.0); origin/main: `a17cd1c`; ahead: 0; behind: 0; тег `v2.2.0` → `a17cd1c` (annotated `ab9e7b7`); тег `v2.1.5` → `4e2916a`; тег `v2.1.4` → `d2194cc`, `v2.1.3` → `1e46a85`
+- version: `2.2.0` (manifest.json, package.json, package-lock.json, футер docs/index.html); GitHub Release `v2.2.0` (ZIP #55, 3.28 MB) опубликован; AMO 2.2.0 одобрена 2026-11-24 (0 ошибок / 7 предупреждений)
 
-## 2. Метрики (финальный прогон 2026-11-22, после последнего коммита)
+## 2. Метрики (финальный прогон 2026-11-25 на `a17cd1c`)
 
-- build: exit 0 (`npm run build:prod`); `dist/content.js` 361 366 B, sha256 `c3bb3b531b22db23d91482e8459838c5c9ccc644733572d45c468c7834882075` (prod); `dist/options.js` 71 038 B, sha256 `684d0aa685f5450d5c02284fe88704d3f2e643f0f7fbcff3bce21f8354915e99`; MAIN `dist/core/claude-intercept.js` 45 334 B, sha256 `590c763cfa6891db4ec8483485760e3966435058a98178d84f494099f7f4da2a`
-- tests: 293 suites / 4571 passed / 7 skipped / 0 failed (полный `npm test`) — `293/4571/7/0`
-- tsc: exit 0, вывод пуст (`npx tsc --noEmit`); strict: exit 0, 0 ошибок (`npx tsc -p tsconfig.strict.json`); chrome-tsc: **exit 0, 0 ошибок** (`npx tsc -p tsconfig.chrome.json`); lint: 0 errors (`npx eslint . --quiet`, exit 0); lint:arch: 0 (323 файла)
+- build: exit 0 (`npm run build:prod`); `dist/content.js` 371 842 B, sha256 `d5bf2b850824ec863ca644a8f724191c25b3c3621e731c313e86de4cae87fe76`; `dist/core/page-intercept.js` 19 981 B, sha256 `43e7477a6e4c395c819cc8bc861118110626a13eb6ebc89f912048478107251d`; `dist/background.js` 59 930 B, sha256 `3d94c1a3ac9b0396d1d6cd7325c66517dc82878773c20973311fb76a6b83a103`; `dist-firefox/content.js` байтово совпадает с `dist/content.js`
+- tests: 300 suites / 4653 passed / 7 skipped / 0 failed (полный `npm test`) — `300/4653/7/0`
+- tsc: exit 0 (`npx tsc --noEmit`); strict: exit 0 (`npx tsc -p tsconfig.strict.json`); chrome-tsc: exit 0 (`npx tsc -p tsconfig.chrome.json`); lint: 0 errors (`npx eslint . --quiet`, exit 0); lint:arch: 0 (325 файлов)
 
 ## 3. Текущая задача
 
