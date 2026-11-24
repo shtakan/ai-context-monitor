@@ -6,8 +6,8 @@
 ## 1. Репозиторий
 
 - workspace: ai-context-monitor-clean
-- branch: `feature/2.2`; HEAD: `6719b50` + `chore(state)` сверху; origin/main: `4e2916a`; ahead: 94; behind: 0; тег `v2.1.5` → `4e2916a`; тег `v2.1.4` → `d2194cc`, `v2.1.3` → `1e46a85`
-- version: `2.1.5` (manifest.json, package.json, package-lock.json, футер docs/index.html, PROJECT_HANDOFF L199); релизный коммит — ожидает публикации; tag `v2.1.5`/GitHub Release/AMO — за владельцем
+- branch: `feature/2.2`; HEAD: релизный коммит 2.2.0 (поверх `584e980`); origin/main: `4e2916a`; ahead: 118 (до релизного коммита); behind: 0; тег `v2.1.5` → `4e2916a`; тег `v2.1.4` → `d2194cc`, `v2.1.3` → `1e46a85`
+- version: `2.2.0` (manifest.json, package.json, package-lock.json, футер docs/index.html); релизный коммит — 2.2.0; tag `v2.2.0`/GitHub Release/AMO — за владельцем
 
 ## 2. Метрики (финальный прогон 2026-11-22, после последнего коммита)
 

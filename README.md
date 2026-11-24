@@ -7,7 +7,7 @@
 
 Chrome и Edge устанавливаются из GitHub Releases (шаги ниже); Firefox — из [Mozilla Add-ons](https://addons.mozilla.org/firefox/addon/ai-context-monitor/). Публикация в Edge Add-ons отложена.
 
-1. Скачайте архив `ai-context-monitor-v2.1.5.zip` со страницы релиза: <https://github.com/shtakan/ai-context-monitor/releases/tag/v2.1.5>
+1. Скачайте архив `ai-context-monitor-v2.2.0.zip` со страницы релиза: <https://github.com/shtakan/ai-context-monitor/releases/tag/v2.2.0>
 2. Распакуйте архив в любую папку.
 3. **Microsoft Edge**: откройте `edge://extensions`, включите **«Режим разработчика»**, нажмите **«Загрузить распакованное расширение»** и выберите папку распаковки.
 4. **Google Chrome**: откройте `chrome://extensions` и выполните те же действия.
@@ -85,7 +85,7 @@ service worker (core/background.js)
 npm test
 ```
 
-Запускает Jest — **as of v2.1.5 (2026-11-19): 270 suites / 4388 tests**, зелёный в CI. Счётчики — это датированный снимок дерева v2.1.5; актуальные числа — те, что печатает `npm test` в строке `Tests: ... total`. Обезличенные фикстуры лежат в `tests/fixtures`. Личные («живые») снятые сэмплы исключены через gitignore — тесты, которым они нужны, автоматически пропускаются, если этих файлов нет.
+Запускает Jest — **as of v2.2.0 (2026-11-24): 300 suites / 4653 tests**, зелёный в CI. Счётчики — это датированный снимок дерева v2.2.0; актуальные числа — те, что печатает `npm test` в строке `Tests: ... total`. Обезличенные фикстуры лежат в `tests/fixtures`. Личные («живые») снятые сэмплы исключены через gitignore — тесты, которым они нужны, автоматически пропускаются, если этих файлов нет.
 
 ## Приватность
 
