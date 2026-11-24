@@ -36,7 +36,10 @@ const { spawnSync } = require('node:child_process');
 const lib = require('./live-limit-test-lib.js');
 
 const ROOT = path.resolve(__dirname, '..');
-const DEFAULT_OUT = path.join(ROOT, 'acceptance', 'BIG-2026-11', '2.2', 'live-limit-test');
+// Acceptance-дерево лежит рядом с репозиторием (рабочая область
+// Prompts/): Prompts/acceptance/..., а не внутри ai-context-monitor-clean.
+// При другой раскладке путь переопределяется через --out.
+const DEFAULT_OUT = path.resolve(ROOT, '..', 'acceptance', 'BIG-2026-11', '2.2', 'live-limit-test');
 const CHATGPT_URL = 'https://chatgpt.com/';
 const WIDGET_TOOLTIP = '#ai-context-widget .ai-widget-tooltip';
 const WIDGET_TEXT = '#ai-context-widget .ai-widget-text';
