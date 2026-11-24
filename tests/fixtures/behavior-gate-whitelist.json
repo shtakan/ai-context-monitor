@@ -530,5 +530,9 @@
   "tests/options-checkjs.test.js": {
     "count": 2,
     "reason": "static-linter"
+  },
+  "tests/chatgpt-active-refresh-race.test.js": {
+    "count": 17,
+    "reason": "static-linter"
   }
 }

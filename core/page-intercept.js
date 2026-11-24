@@ -93,6 +93,14 @@ import {
   // ---- v13: состояние для switch-refetch (in-memory cache ChatGPT) ----
   var lastLoadedConvId = '';
   var switchRefetchTimer = null;
+  var lastSnapshotCount = 0;
+  var lastSnapshotLastRole = '';
+
+  // ---- v15: follow-up после отправки (длинный стрим может завершиться позже 2.5с) ----
+  var postSendFollowUpTimer = null;
+  var postSendFollowUpAttempt = 0;
+  var postSendBaselineCount = -1;
+  var activeHttpRetryCount = 0;
 
   var activeRetryCount = 0;       // счётчик ретраев activeRefresh при устаревшем JSON (последнее — user)
   var passiveGetInFlight = false; // флаг: пассивный GET полного снимка для текущего чата ещё в полёте
@@ -108,6 +116,13 @@ import {
   function resetForNewConversation() {
     lastSnapshotUrl = null;
     lastLoadedConvId = '';
+    lastSnapshotCount = 0;
+    lastSnapshotLastRole = '';
+    postSendBaselineCount = -1;
+    postSendFollowUpAttempt = 0;
+    activeHttpRetryCount = 0;
+    try { clearTimeout(postSendFollowUpTimer); } catch (e) { /* ignore */ }
+    postSendFollowUpTimer = null;
     dirty = false;
     refreshBusy = false;
     activeDisabled = false;
@@ -308,6 +323,8 @@ import {
   function emitSnapshot(parsed, when) {
     if (!parsed.text) return;
     lastLoadedConvId = currentConvId;
+    lastSnapshotCount = parsed.count || 0;
+    lastSnapshotLastRole = parsed.lastRole || '';
     console.log('[ai-cm-intercept] head="' + (parsed.firstUserHead || '') + '" stripped=' + (parsed.strippedMarkers || 0));
     // Диагностика: роли и длины последних 3 сообщений распарсенного JSON (до попадания в базу).
     // Показывает, есть ли ответ ассистента в самом JSON или бэкенд отдал устаревшую версию.
@@ -360,10 +377,86 @@ import {
     }).catch(function () { });
   }
 
+  // v15: не ходим активным GET на placeholder/пустой convId (после account switch
+  // ChatGPT сначала живёт как local-chatgpt, реальный id приходит позже).
+  function isRealConvId(id) {
+    var s = String(id || '');
+    if (!s || /^local-chatgpt$/i.test(s)) return false;
+    return /^[A-Za-z0-9_-]{16,}$/.test(s);
+  }
+
+  // v15: lastSnapshotUrl мог остаться от прошлого чата/аккаунта; для активного
+  // снимка берём его только если convId совпадает с текущим, иначе строим URL.
+  function snapshotUrlForConv(url, convId) {
+    if (!isRealConvId(convId)) return null;
+    var clean = String(url || '').split('?')[0];
+    if (clean && convIdFromBackendUrl(clean) === convId) return clean;
+    return location.origin + '/backend-api/conversation/' + convId;
+  }
+
+  // v15: после отправки длинный ответ может завершиться позже первого 2.5с-снимка.
+  // Держим follow-up, пока в истории не появится assistant после нового хода.
+  var postSendFollowUpDelays = [8000, 18000, 35000, 60000];
+  function schedulePostSendFollowUp() {
+    try { clearTimeout(postSendFollowUpTimer); } catch (e) { /* ignore */ }
+    postSendBaselineCount = lastSnapshotCount;
+    postSendFollowUpAttempt = 0;
+    function tick() {
+      postSendFollowUpTimer = null;
+      if (activeDisabled) return;
+      if (postSendBaselineCount >= 0 && lastSnapshotCount > postSendBaselineCount &&
+          lastSnapshotLastRole === 'assistant') {
+        postSendBaselineCount = -1;
+        return;
+      }
+      if (!isRealConvId(currentConvId)) {
+        // Реальный id ещё не пришёл — не спамим 400 local-chatgpt; повторим позже.
+        if (postSendFollowUpAttempt < postSendFollowUpDelays.length) {
+          postSendFollowUpTimer = setTimeout(tick, postSendFollowUpDelays[postSendFollowUpAttempt]);
+          postSendFollowUpAttempt++;
+        }
+        return;
+      }
+      activeRefresh('follow-up после ответа #' + (postSendFollowUpAttempt + 1));
+      postSendFollowUpAttempt++;
+      if (postSendFollowUpAttempt < postSendFollowUpDelays.length) {
+        postSendFollowUpTimer = setTimeout(tick, postSendFollowUpDelays[postSendFollowUpAttempt]);
+      } else {
+        postSendBaselineCount = -1;
+      }
+    }
+    postSendFollowUpTimer = setTimeout(tick, postSendFollowUpDelays[0]);
+  }
+
+  // v15: точно ждём завершения тела POST /f/conversation (clone().text()),
+  // затем просим активный снимок. Follow-up выше — страховка, если clone недоступен.
+  function scheduleActiveAfterResponse(responsePromise) {
+    try {
+      responsePromise.then(function (resp) {
+        if (!resp || !resp.ok) return;
+        var copy;
+        try { copy = resp.clone(); } catch (e) { return; }
+        try {
+          copy.text().then(function () {
+            scheduleActive('после завершения ответа', 800);
+          }, function () { /* тело не дочиталось — сработает follow-up */ });
+        } catch (e) { /* ignore */ }
+      }, function () { /* ignore */ });
+    } catch (e) { /* ignore */ }
+  }
+
   // ---- «виртуальный F5»: активный GET полного снимка заголовками сайта ----
   function activeRefresh(reason) {
     if (activeDisabled || refreshBusy) return;
-    var baseUrl = lastSnapshotUrl || (currentConvId ? (location.origin + '/backend-api/conversation/' + currentConvId) : null);
+    if (!isRealConvId(currentConvId)) {
+      dirty = true;
+      if (!loggedActiveStatus) {
+        loggedActiveStatus = true;
+        debugLog('log', '[virtual-f5] активный запрос отложен: ждём реальный convId (сейчас ' + (currentConvId || '(пусто)') + ')');
+      }
+      return;
+    }
+    var baseUrl = snapshotUrlForConv(lastSnapshotUrl, currentConvId);
     if (!baseUrl || !lastHeaders || !hasAuth(lastHeaders)) {
       if (!loggedActiveStatus) { loggedActiveStatus = true; debugLog('log', '[virtual-f5] активный запрос отложен: нет адреса/пропуска пока'); }
       return;
@@ -383,14 +476,34 @@ import {
           console.log('[virtual-f5] первый активный запрос: статус ' + resp.status + ' (пропуск=' + (hasAuth(lastHeaders) ? 'да' : 'нет') + ')');
         }
         if (!resp || !resp.ok) {
-          activeDisabled = true;
-          // 404 (разговор удалён/не найден) — молча, без спама ошибкой в консоль.
-          if (!(resp && resp.status === 404)) {
-            debugLog('log', '[virtual-f5] не прошёл (статус ' + (resp ? resp.status : 'none') +
-              ') → остаёмся на пассивной ловле + DOM-хвост (поведение как раньше)');
+          var status = resp ? resp.status : 0;
+          // 401/403 — пропуск протух: дальше только пассивная ловля + DOM-хвост.
+          if (status === 401 || status === 403) {
+            activeDisabled = true;
+            if (!loggedActiveStatus) {
+              loggedActiveStatus = true;
+              debugLog('log', '[virtual-f5] нет доступа (' + status + ') → пассивная ловля + DOM-хвост');
+            }
+            return null;
+          }
+          // 400/404/5xx часто означают «чат ещё не создан/не догрузился»:
+          // не выключаем активный путь, а повторяем с backoff (максимум 2 раза).
+          if (activeHttpRetryCount < 2) {
+            activeHttpRetryCount++;
+            dirty = true;
+            var httpDelay = (activeHttpRetryCount === 1) ? 1500 : 4000;
+            setTimeout(function () { activeRefresh('ретрай HTTP ' + status); }, httpDelay);
+          } else {
+            activeDisabled = true;
+            if (!loggedActiveStatus) {
+              loggedActiveStatus = true;
+              debugLog('log', '[virtual-f5] не прошёл (статус ' + status +
+                ') после ретраев → пассивная ловля + DOM-хвост');
+            }
           }
           return null;
         }
+        activeHttpRetryCount = 0;
         console.log('[virtual-f5] ✓ работает — realtime теперь по полному снимку без F5 (' + reason + ')');
         return resp.json();
       })
@@ -418,9 +531,18 @@ import {
         }
       })
       .catch(function (err) {
-        if (!loggedActiveStatus) { loggedActiveStatus = true; }
-        activeDisabled = true;
-        debugLog('log', '[virtual-f5] ошибка активного запроса: ' + err + ' → остаёмся на пассивной ловле + DOM-хвост');
+        // Сетевой сбой не должен навсегда выключать активный путь: 2 ретрая,
+        // затем — пассивная ловля + DOM-хвост.
+        if (activeHttpRetryCount < 2) {
+          activeHttpRetryCount++;
+          dirty = true;
+          var netDelay = (activeHttpRetryCount === 1) ? 1500 : 4000;
+          setTimeout(function () { activeRefresh('ретрай после сетевой ошибки'); }, netDelay);
+        } else {
+          activeDisabled = true;
+          if (!loggedActiveStatus) { loggedActiveStatus = true; }
+          debugLog('log', '[virtual-f5] ошибка активного запроса: ' + err + ' → пассивная ловля + DOM-хвост');
+        }
       })
       .finally(function () { refreshBusy = false; });
   }
@@ -433,7 +555,7 @@ import {
 
   // ---- отложенный фолбэк активного снимка (для аккаунтов, где сайт не делает пассивный GET) ----
   function fallbackSnapshot(convId) {
-    if (!convId) return;
+    if (!isRealConvId(convId)) return;
     // Пропуск: пассивный снимок для текущего convId уже получен
     if (lastLoadedConvId === convId) {
       console.log('[ai-cm-intercept] fallback: пропуск (пассивный снимок уже получен)');
@@ -469,7 +591,7 @@ import {
   function scheduleFallback(convId, delay) {
     try { clearTimeout(fallbackTimer); } catch (e) { /* ignore */ }
     fallbackTimer = setTimeout(function () {
-      if (!convId) return;
+      if (!isRealConvId(convId)) return;
       fallbackSnapshot(convId);
     }, delay);
   }
@@ -479,7 +601,7 @@ import {
     try { clearTimeout(switchRefetchTimer); } catch (e) { /* ignore */ }
     switchRefetchTimer = setTimeout(function () {
       try {
-        if (currentConvId && currentConvId !== lastLoadedConvId && lastHeaders && hasAuth(lastHeaders)) {
+        if (isRealConvId(currentConvId) && currentConvId !== lastLoadedConvId && lastHeaders && hasAuth(lastHeaders)) {
           activeRefresh('переключение чата (сайт не сходил в сеть)');
         }
       } catch (e) { swallow(e, 'page-intercept:switchRefetch-timer'); }
@@ -550,7 +672,11 @@ import {
     }
 
     // триггеры обмена → планируем «виртуальный F5» (даём серверу время зафиксировать)
-    if (isSendPost(url, method)) scheduleActive('после отправки', 2500);
+    if (isSendPost(url, method)) {
+      scheduleActive('после отправки', 2500);
+      schedulePostSendFollowUp();
+      scheduleActiveAfterResponse(responsePromise);
+    }
     if (isStreamEnd(url, method)) scheduleActive('после конца ответа', 2000);
 
     return responsePromise;
