@@ -40,7 +40,12 @@ const DEFAULT_OUT = path.join(ROOT, 'acceptance', 'BIG-2026-11', '2.2', 'live-li
 const CHATGPT_URL = 'https://chatgpt.com/';
 const WIDGET_TOOLTIP = '#ai-context-widget .ai-widget-tooltip';
 const WIDGET_TEXT = '#ai-context-widget .ai-widget-text';
-const COMPOSER = '#prompt-textarea';
+// ChatGPT 2026-11: #prompt-textarea больше нет, композер — div.ProseMirror.
+const COMPOSER = '#prompt-textarea, div.ProseMirror[contenteditable="true"], div[contenteditable="true"][role="textbox"]';
+// Старый и новый маркеры сообщений: в билде 2026-11 data-message-author-role
+// отсутствует, роль видна по data-content-search-unit-key="<conv>:N:assistant".
+const USER_SEL = '[data-message-author-role="user"], [data-content-search-unit-key$=":user"]';
+const ASSISTANT_SEL = '[data-message-author-role="assistant"], [data-content-search-unit-key$=":assistant"]';
 
 // ---------------------------------------------------------------------------
 // Мелкие утилиты
@@ -222,7 +227,7 @@ function consoleTexts(session, limit) {
   if (r.status !== 0) return [];
   try {
     const j = JSON.parse(r.text);
-    const items = Array.isArray(j) ? j : (j && j.items) || [];
+    const items = Array.isArray(j) ? j : (j && (j.items || j.entries)) || [];
     return items.map(function (i) { return String((i && i.text) || ''); });
   } catch (e) {
     return [];
@@ -232,7 +237,7 @@ function consoleTexts(session, limit) {
 function composerState(session) {
   const v = evaluate(session,
     '(() => {' +
-    ' const el = document.querySelector(' + JSON.stringify(COMPOSER) + ') || document.querySelector(\'div[contenteditable="true"]\');' +
+    ' const el = document.querySelector(' + JSON.stringify(COMPOSER) + ');' +
     ' return { found: !!el, len: el ? String(el.innerText || el.textContent || "").length : 0 };' +
     '})()');
   return (v && typeof v === 'object') ? v : { found: false, len: 0 };
@@ -241,8 +246,8 @@ function composerState(session) {
 function messageCounts(session) {
   const v = evaluate(session,
     '(() => ({' +
-    ' user: document.querySelectorAll(\'[data-message-author-role="user"]\').length,' +
-    ' assistant: document.querySelectorAll(\'[data-message-author-role="assistant"]\').length' +
+    ' user: document.querySelectorAll(' + JSON.stringify(USER_SEL) + ').length,' +
+    ' assistant: document.querySelectorAll(' + JSON.stringify(ASSISTANT_SEL) + ').length' +
     '}))()');
   return (v && typeof v === 'object') ? v : { user: 0, assistant: 0 };
 }
@@ -250,7 +255,7 @@ function messageCounts(session) {
 function lastAssistantText(session) {
   const v = evaluate(session,
     '(() => {' +
-    ' const a = [...document.querySelectorAll(\'[data-message-author-role="assistant"]\')];' +
+    ' const a = [...document.querySelectorAll(' + JSON.stringify(ASSISTANT_SEL) + ')];' +
     ' const el = a[a.length - 1];' +
     ' return el ? String(el.innerText || "").slice(-4000) : "";' +
     '})()');
@@ -297,17 +302,34 @@ function insertText(session, text) {
 
   // Запасной путь для небольших кусков: штатный bsk fill.
   if (text.length <= 18000) {
-    const f = bsk(['fill', '--selector', COMPOSER, '--value', text], {
-      session: session,
-      allowFail: true,
-      timeout: 120000
-    });
-    if (f.status === 0) {
+    if (fillComposer(session, text)) {
       const after = composerState(session);
       if (after.len >= Math.floor(text.length * 0.9)) return { ok: true, len: after.len, via: 'fill' };
     }
   }
   return { ok: false, reason: res.reason || 'insert-mismatch', len: res.len, expected: text.length };
+}
+
+function pressEnterInComposer(session) {
+  const sels = ['#prompt-textarea', 'div.ProseMirror[contenteditable="true"]', 'div[contenteditable="true"]'];
+  for (let i = 0; i < sels.length; i++) {
+    const r = bsk(['press', 'Enter', '--selector', sels[i]], { session: session, allowFail: true, timeout: 60000 });
+    if (r.status === 0) return true;
+  }
+  return false;
+}
+
+function fillComposer(session, text) {
+  const sels = ['#prompt-textarea', 'div.ProseMirror', 'div[contenteditable="true"]'];
+  for (let i = 0; i < sels.length; i++) {
+    const r = bsk(['fill', '--selector', sels[i], '--value', text], {
+      session: session,
+      allowFail: true,
+      timeout: 120000
+    });
+    if (r.status === 0) return true;
+  }
+  return false;
 }
 
 function sendMessage(session, text, opts) {
@@ -318,12 +340,16 @@ function sendMessage(session, text, opts) {
   if (!ins.ok) {
     return { sent: false, tooLong: false, reason: ins.reason || 'insert-failed' };
   }
-  bsk(['press', 'Enter', '--selector', COMPOSER], { session: session, allowFail: true, timeout: 60000 });
+  pressEnterInComposer(session);
   sleep(800);
   let after = messageCounts(session);
   if (after.user <= before.user) {
     evaluate(session,
-      '(() => { const b = document.querySelector(\'[data-testid="send-button"]\'); if (b) { b.click(); return true; } return false; })()');
+      '(() => {' +
+      ' const b = document.querySelector(\'[data-testid="send-button"]\') ||' +
+      '  [...document.querySelectorAll("button")].find(x => /отправить|send/i.test((x.getAttribute("aria-label") || "") + " " + (x.innerText || "")));' +
+      ' if (b) { b.click(); return true; } return false;' +
+      '})()');
     sleep(1500);
     after = messageCounts(session);
   }
@@ -342,7 +368,7 @@ function waitForReply(session, beforeAssistant, timeoutMs) {
   while (Date.now() < deadline) {
     const st = evaluate(session,
       '(() => {' +
-      ' const a = [...document.querySelectorAll(\'[data-message-author-role="assistant"]\')];' +
+      ' const a = [...document.querySelectorAll(' + JSON.stringify(ASSISTANT_SEL) + ')];' +
       ' return {' +
       '  count: a.length,' +
       '  streaming: !!document.querySelector(\'[data-testid="stop-button"]\'),' +
@@ -423,47 +449,34 @@ function lastModelFromConsole(session) {
 }
 
 /**
- * Авторитетное свидетельство, какой slug реально обслужил чат:
- * читаем историю разговора и смотрим metadata.model_slug.
- * Для очень больших тредов пропускаем — ответ весит мегабайты.
+ * Какой slug реально обслужил чат. Брать из DOM нельзя: расширение само
+ * схлопывает gpt-6-mini в GPT-6 по префиксу. Поэтому читаем его же
+ * console-лог, где model-detect печатает сетевой raw-slug.
+ *
+ * В билде ChatGPT 2026-11 REST-запрос истории отдаёт 404
+ * (`conversation_inaccessible`), поэтому console — основной источник.
  */
-function servedSlugs(session, tokens) {
-  if (tokens > 60000) {
-    return { skipped: true, reason: 'thread-too-large-for-cheap-fetch', slugs: [] };
+function servedModel(session) {
+  const lines = consoleTexts(session, 300);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    let m = lines[i].match(/\[model-detect\][^\n]*путь=сеть,\s*raw="([^"]+)"/);
+    if (m) return { slug: m[1], source: 'console:model-detect-network' };
+    m = lines[i].match(/model_slug=([A-Za-z0-9._-]+)/);
+    if (m) return { slug: m[1], source: 'console:ai-cm-intercept' };
   }
-  const v = evaluate(session,
-    '(async () => {' +
-    ' const m = location.pathname.match(/\\/c\\/([0-9a-f-]+)/i);' +
-    ' if (!m) return { convId: null, slugs: [] };' +
-    ' const r = await fetch("/backend-api/conversation/" + m[1], { credentials: "include" });' +
-    ' if (!r.ok) return { convId: m[1], error: r.status, slugs: [] };' +
-    ' const j = await r.json();' +
-    ' const counts = {};' +
-    ' const map = j && j.mapping ? j.mapping : {};' +
-    ' for (const k of Object.keys(map)) {' +
-    '  const msg = map[k] && map[k].message;' +
-    '  const s = msg && msg.metadata && msg.metadata.model_slug;' +
-    '  if (s) counts[s] = (counts[s] || 0) + 1;' +
-    ' }' +
-    ' return {' +
-    '  convId: m[1],' +
-    '  title: (j && j.title) || "",' +
-    '  slugs: Object.keys(counts).map(s => ({ slug: s, count: counts[s] }))' +
-    ' };' +
-    '})()', { timeout: 120000, allowFail: true });
-  return (v && typeof v === 'object') ? v : { convId: null, slugs: [] };
+  return { slug: '', source: 'none' };
 }
 
 function pickerOptions(session) {
   const v = evaluate(session,
     '(async () => {' +
-    ' const clickModelButton = () => {' +
-    '  const btns = [...document.querySelectorAll("button")];' +
-    '  const b = btns.find(x => /^(chatgpt|gpt|выбрать модель|select model|модель)/i.test(String(x.innerText || "").trim()));' +
-    '  if (b) { b.click(); return String(b.innerText || "").trim(); }' +
-    '  return "";' +
-    ' };' +
-    ' const opener = clickModelButton();' +
+    ' const controls = [...document.querySelectorAll(\'button,[role="button"],[aria-haspopup]\')];' +
+    ' const modelish = controls.find(x => {' +
+    '  const s = (x.innerText || "") + " " + (x.getAttribute("aria-label") || "") + " " + (x.getAttribute("data-testid") || "");' +
+    '  return /gpt|модел|model/i.test(s) && !/размышл|reason|голос|voice|дикт|dikt/i.test(s);' +
+    ' });' +
+    ' let opener = "";' +
+    ' if (modelish) { modelish.click(); opener = String(modelish.innerText || modelish.getAttribute("aria-label") || "").trim(); }' +
     ' await new Promise(r => setTimeout(r, 600));' +
     ' const nodes = [...document.querySelectorAll(\'[role="menuitemradio"],[role="menuitem"],[data-testid*="model"]\')];' +
     ' const options = [];' +
@@ -478,11 +491,11 @@ function pickerOptions(session) {
     '   checked: n.getAttribute("aria-checked") || ""' +
     '  });' +
     ' }' +
-    ' return { opener: opener, options: options.slice(0, 40) };' +
+    ' return { available: !!modelish || options.length > 0, opener: opener, options: options.slice(0, 40) };' +
     '})()');
   // закрыть меню
   bsk(['press', 'Escape'], { session: session, allowFail: true, timeout: 30000 });
-  return (v && typeof v === 'object') ? v : { opener: '', options: [] };
+  return (v && typeof v === 'object') ? v : { available: false, opener: '', options: [] };
 }
 
 function chatgptModels(session) {
@@ -506,10 +519,12 @@ function chatgptModels(session) {
 function inferSeparable(recon, models) {
   const options = (recon && recon.options) || [];
   if (options.some(function (o) { return /mini/i.test(o.text); })) return true;
+  const hasMiniSlug = (models || []).some(function (m) { return m.slug === 'gpt-6-mini'; });
+  // В меню вообще нет управляющего элемента модели => выбрать mini нельзя.
+  if (recon && recon.available === false && hasMiniSlug) return false;
   if (!options.length) return null;
   const gpt6 = options.filter(function (o) { return /gpt-?6/i.test(o.text); });
   if (gpt6.length >= 2) return null; // два пункта GPT-6 — нужны testid/описания
-  const hasMiniSlug = (models || []).some(function (m) { return m.slug === 'gpt-6-mini'; });
   // Один пункт GPT-6, отдельного mini в меню нет => выбрать mini нельзя.
   if (gpt6.length === 1 && hasMiniSlug) return false;
   return null;
@@ -563,17 +578,20 @@ function cmdRecon(opts) {
     log('  ' + m.slug + ' | ' + m.title + ' | max_tokens=' + m.max_tokens + ' | reasoning=' + m.reasoning_type);
   }
   const picker = pickerOptions(session);
-  log('picker opener: ' + (picker.opener || '(не найден)'));
+  log('picker available: ' + picker.available + '; opener: ' + (picker.opener || '(не найден)'));
   for (const o of picker.options) {
     log('  option: ' + o.text + (o.testid ? ' [' + o.testid + ']' : '') + (o.checked ? ' checked=' + o.checked : ''));
   }
+  const served = servedModel(session);
+  log('served (последний model-detect в табе): ' + (served.slug || '(n/a)') + ' [' + served.source + ']');
   const recon = {
     ts: new Date().toISOString(),
     session: session,
     models: models,
     picker: picker,
+    served: served,
     separable: inferSeparable(picker, models.models),
-    note: 'separable=true — в меню есть отдельный пункт mini; false — отдельного пункта нет; null — по DOM не доказать, нужен прогон.'
+    note: 'separable=true — в меню есть отдельный пункт mini; false — управляющего элемента модели нет; null — по DOM не доказать, нужен прогон.'
   };
   const out = path.join(opts.out, 'recon-' + stamp() + '.json');
   ensureDir(opts.out);
@@ -660,10 +678,9 @@ function runTrial(session, point, opts, n) {
     }
   }
 
-  const served = servedSlugs(session, tokens);
+  const served = servedModel(session);
   log('  итог: tokens=' + tokens + ' saturation=' + saturated +
-    ' probe=' + probe.verdict + ' served=' +
-    ((served.slugs || []).map(function (s) { return s.slug + ':' + s.count; }).join(',') || '(n/a)'));
+    ' probe=' + probe.verdict + ' served=' + (served.slug || '(n/a)') + ' [' + served.source + ']');
 
   return {
     n: n,
@@ -707,13 +724,13 @@ function selectModelOption(session, label) {
 }
 
 function warnIfWrongModel(trial, opts) {
-  const slugs = (trial.served && trial.served.slugs) || [];
-  if (!slugs.length) {
+  const served = trial.served || {};
+  if (!served.slug) {
     log('  ВНИМАНИЕ: slug обслужившей модели не получен; проверьте вручную, что это gpt-6-mini.');
     return;
   }
-  if (!slugs.some(function (s) { return s.slug === 'gpt-6-mini'; })) {
-    log('  ВНИМАНИЕ: чат обслужил ' + slugs.map(function (s) { return s.slug; }).join(', ') +
+  if (served.slug !== 'gpt-6-mini') {
+    log('  ВНИМАНИЕ: чат обслужил ' + served.slug +
       ', а не gpt-6-mini. Замер относится не к mini.');
     if (!opts.modelOption) {
       log('  Укажите --model-option "<пункт меню>" или выберите mini вручную перед прогоном.');
@@ -857,8 +874,8 @@ function writeRunReport(opts, state, trials, recon, final, decision) {
   md.push('| # | Цель | Измерено | Slug | Метки | Вердикт |');
   md.push('|---|---|---|---|---|---|');
   for (const t of trials) {
-    const slugs = ((t.served && t.served.slugs) || []).map(function (s) { return s.slug + ':' + s.count; }).join(', ');
-    md.push('| ' + t.n + ' | ' + t.point + ' | ' + t.tokens + ' | ' + (slugs || '—') + ' | ' +
+    const slugs = (t.served && t.served.slug) || '-';
+    md.push('| ' + t.n + ' | ' + t.point + ' | ' + t.tokens + ' | ' + slugs + ' | ' +
       (t.probe && t.probe.verdict) + ' | ' + t.kind + ' (' + t.relation + ') |');
   }
   md.push('');

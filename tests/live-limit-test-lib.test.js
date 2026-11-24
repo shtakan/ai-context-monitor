@@ -221,6 +221,10 @@ describe('live-limit-test: CLI-помощники', function () {
   test('separable: меню не прочиталось => неизвестно', function () {
     expect(cli.inferSeparable({ options: [] }, [{ slug: 'gpt-6-mini' }])).toBeNull();
   });
+
+  test('separable: управляющего элемента модели нет => выбрать нельзя', function () {
+    expect(cli.inferSeparable({ available: false, options: [] }, [{ slug: 'gpt-6-mini' }])).toBe(false);
+  });
 });
 
 describe('live-limit-test: план', function () {

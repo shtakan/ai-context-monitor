@@ -187,3 +187,20 @@ GET https://files.deepseeksvc.com/api/file?file_id=<id>&state=<signed_path>&ty=r
 - **Тариф Gemini в попапе:** `<select id="gemini-plan">`; надёжно — `SetFocus` + стрелки (`Home`, `Down`), не `ValuePattern.SetValue` (no-op).
 - **Экспорт:** кнопки `export-md`/`export-json` поддерживают `InvokePattern`; после клика Chrome открывает Save As — принять `Enter`, файл появляется в последней папке (у нас `tokenizer-calibration/exports`).
 - **UIA-хелперы** (вне репозитория): `C:\Temp\opencode\` — `open-aicm-popup.ps1`, `dump-popup.ps1`, `click-at.ps1`, `capture-popup.ps1`, `send-keys.ps1`, `invoke-popup-button.ps1`.
+---
+
+## §12. ChatGPT 2026-11: композер, сообщения, console
+
+- **Композер:** `#prompt-textarea` больше нет. Рабочий селектор —
+  `div.ProseMirror[contenteditable]`. `bsk fill --selector "div.ProseMirror"` и
+  `bsk press --selector "div.ProseMirror" Enter` работают.
+- **Сообщения:** `[data-message-author-role]` больше нет. Роль видна по
+  `[data-content-search-unit-key$=":user"]` и `...=":assistant"`.
+- **Разные ключи JSON:** `bsk read --json` кладёт элементы в `items`,
+  а `bsk console --json` — в `entries`. Парсер, который ждёт только `items`,
+  молча получает пустоту.
+- **REST-история:** `/backend-api/conversation/<id>` может отдавать 404
+  `conversation_inaccessible`. Сетевой slug надёжнее брать из console:
+  `[model-detect] путь=сеть, raw="gpt-6"`.
+- **Выбора модели в UI нет:** в композере только «Размышление», вложения,
+  диктовка, голос. `picker available: false` — это факт билда, а не сбой bsk.
