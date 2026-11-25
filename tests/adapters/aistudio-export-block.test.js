@@ -263,7 +263,7 @@ describe('AI Studio: проводка фикса и границы R1', () => {
     expect(ingest).toContain('aiCmNetReadyAistudio[readyKey] = true;');
     expect(ingest).toContain('historyComplete: !shrunk');
     // предикат: ветка aistudio узкая — флаг И база адаптера
-    const trusted = fnDecl(CONTENT_SRC, 'aiCmAutoExportTrustedBase');
+    const trusted = fnDecl(CONTENT, 'aiCmAutoExportTrustedBase');
     expect(trusted).toContain("currentAdapter.siteName === 'aistudio'");
     expect(trusted).toContain('adapterBaseSeen === true');
     expect(trusted).toContain('aiCmNetReadyAistudio[cidReady] === true');

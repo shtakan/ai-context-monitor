@@ -72,8 +72,8 @@ const DIAG_PREFIX = '[AI CM][diag] auto-export';
 const SCOPE = 'with (ctx) { ' +
   fnDecl(DEBUG_SRC, 'aiCmDiagOn') + '\n' +
   fnDecl(DEBUG_SRC, 'aiCmDiagLine') + '\n' +
-  fnDecl(CONTENT_ONLY, 'aiCmAutoExportTrustedBase') + '\n' +
-  fnDecl(CONTENT_ONLY, 'aiCmAutoExportTrustedBaseDiag') + '\n' +
+  fnDecl(CONTENT, 'aiCmAutoExportTrustedBase') + '\n' +
+  fnDecl(CONTENT, 'aiCmAutoExportTrustedBaseDiag') + '\n' +
   fnDecl(MGR_SRC, 'aiCmAutoExportConvId') + '\n' +
   fnDecl(MGR_SRC, 'aiCmAutoExportBasePendingLog') + '\n' +
   fnDecl(MGR_SRC, 'aiCmExportBaseSource') + '\n' +
@@ -437,12 +437,12 @@ describe('O-59: SPA-возврат в уже экспортированный ч
 // =====================================================================================
 describe('O-37 A: проводка и границы (source-пины)', () => {
   test('content.js: предикат доверия — qwen И база адаптера ТЕКУЩЕГО чата (тот же смысл, что D1)', () => {
-    const fn = fnDecl(CONTENT_ONLY, 'aiCmAutoExportTrustedBase');
+    const fn = fnDecl(CONTENT, 'aiCmAutoExportTrustedBase');
     expect(fn).toContain("currentAdapter.siteName === 'qwen'");
     expect(fn).toContain('adapterBaseSeen === true');
     expect(fn).toContain('return false;');
     // предикат ручного экспорта (O-36/D1) не переписан
-    expect(fnDecl(CONTENT_ONLY, 'aiCmQwenExportBaseTrusted')).toContain('adapterBaseSeen === true');
+    expect(fnDecl(CONTENT, 'aiCmQwenExportBaseTrusted')).toContain('adapterBaseSeen === true');
   });
 
   test('export-manager.js: поле передаётся typeof-гардом; сам признак в модуль не проникает (пин v54)', () => {
@@ -475,7 +475,7 @@ describe('O-37 A: проводка и границы (source-пины)', () => {
     const w = fnDecl(MGR_SRC, 'doAutoExportDownload');
     expect(w).toContain("typeof aiCmAutoExportTrustedBaseDiag === 'function'");
     expect(w).toContain('aiCmAutoExportTrustedBaseDiag(reason, cid, percentage);');
-    const diagFn = fnDecl(CONTENT_ONLY, 'aiCmAutoExportTrustedBaseDiag');
+    const diagFn = fnDecl(CONTENT, 'aiCmAutoExportTrustedBaseDiag');
     expect(diagFn).toContain("if (typeof aiCmDiagLine !== 'function') return false;");
     expect(diagFn).toContain("aiCmDiagLine('auto-export'");
     expect(diagFn).toContain('adapterBaseSeen:');

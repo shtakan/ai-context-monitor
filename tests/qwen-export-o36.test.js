@@ -324,7 +324,7 @@ describe('O-36 D1: имя файла qwen без префикса [LOW CONFIDENC
       adapterBaseSeen: !!(over && over.adapterBaseSeen === true)
     };
     if (over && over.noAdapterBaseSeen === true) delete ctx.adapterBaseSeen;
-    const fn = new Function('ctx', 'with (ctx) { ' + fnDecl(CONTENT_ONLY, 'aiCmQwenExportBaseTrusted') +
+    const fn = new Function('ctx', 'with (ctx) { ' + fnDecl(CONTENT, 'aiCmQwenExportBaseTrusted') +
       '\n return aiCmQwenExportBaseTrusted; }')(ctx);
     return fn();
   }
@@ -367,7 +367,7 @@ describe('O-36 D1: имя файла qwen без префикса [LOW CONFIDENC
     expect(iClear).toBeGreaterThan(iRule);
     expect(iSend).toBeGreaterThan(iClear);             // и ДО ответа: попап видит уже снятый флаг
     // хелпер объявлен в том же файле (на боевом пути определён всегда)
-    expect(CONTENT_ONLY).toContain('function aiCmQwenExportBaseTrusted() {');
+    expect(CONTENT).toContain('function aiCmQwenExportBaseTrusted() {');
     // правило узкое: снимается только низкая достоверность, baseComplete не подменяется
     expect(CONTENT_ONLY).not.toContain('baseComplete = true; // O-36');
     // снимок ручного экспорта остаётся единственным носителем решения (payload = тот же объект)
