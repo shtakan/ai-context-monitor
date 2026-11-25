@@ -45,13 +45,10 @@ jobs:
         continue-on-error: false
         run: npm run lint
 
-      # П.5: baseline-гейт. В отличие от warn-only шага выше порог `--max-warnings`
-      # делает шаг блокирующим: превышение baseline валит CI (exit 1), т.е. новый
-      # дефект класса ESLint больше не может проехать незамеченным.
-      # Измерено после П.5: 34 неиспользуемые директивы убраны (590 → 556),
-      # no-func-assign в core/deepseek-sse.js погашен inline-директивой (556 → 555).
-      # Пин 556 оставлен по плану: один warning запаса, регрессия с +2 уже красная.
-      - name: ESLint baseline (blocking)
+      # П.5 → ratchet 2026-11-25: порог `--max-warnings 0`. Два остаточных
+      # no-redeclare в core/claude-intercept.js устранены, baseline 556 снят.
+      # Любое новое предупреждение теперь валит CI, а не копится в запасе.
+      - name: ESLint ratchet (blocking, 0 warnings)
         run: npm run lint:baseline
 
       # ADR-002 (2.2, фаза 0): AST-линтер архитектурных границ. Отдельный шаг, а не

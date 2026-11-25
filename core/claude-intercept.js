@@ -1939,9 +1939,9 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
           if (!usedFiles[fi]) { file = files[fi]; usedFiles[fi] = true; break; }
         }
       }
-      var name = item.title || (file ? claudeArtifactBaseName(file.path) : '') || claudeArtifactBaseName(item.path) || item.id;
-      if (!name) continue;
-      var artifact = { name: name };
+      var artifactName = item.title || (file ? claudeArtifactBaseName(file.path) : '') || claudeArtifactBaseName(item.path) || item.id;
+      if (!artifactName) continue;
+      var artifact = { name: artifactName };
       var mime = claudeArtifactMime(file ? file.path : item.path, file ? file.mime : '');
       if (mime) artifact.mime = mime;
       if (file && file.content) artifact.content = file.content;
@@ -1952,12 +1952,12 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
     // склеиваем по name+mime+turnId, предпочитая запись с content. Две РАЗНЫЕ
     // записи с непустым разным content не трогаем.
     var merged = [];
-    var byKey = {};
+    var mergedByKey = {};
     for (var ai = 0; ai < out.length; ai++) {
       var art = out[ai];
       var akey = art.name + '\u0000' + (art.turnId || '');
-      var prev = byKey[akey];
-      if (!prev) { byKey[akey] = art; merged.push(art); continue; }
+      var prev = mergedByKey[akey];
+      if (!prev) { mergedByKey[akey] = art; merged.push(art); continue; }
       if (!prev.content && art.content) {
         prev.content = art.content;
         if (!prev.mime && art.mime) prev.mime = art.mime;
