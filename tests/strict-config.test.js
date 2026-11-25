@@ -70,7 +70,7 @@ describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5/B6 + utils/messa
     expect(cfg.compilerOptions.emitDeclarationOnly).toBe(false);
   });
 
-  test('include covers types, adapters, the B1/B2/B3/B4/B5/B6 utils batch, utils/messages 2.2 and the eight B7/B8/B9/B10/B11 core files', () => {
+  test('include covers types, adapters, the B1/B2/B3/B4/B5/B6 utils batch, utils/messages 2.2 and the nine core files', () => {
     const cfg = readTsconfig('tsconfig.strict.json');
     expect(cfg.include).toContain('adapters/**/*.ts');
     expect(cfg.include).toContain('types/**/*.d.ts');
@@ -93,6 +93,7 @@ describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5/B6 + utils/messa
       'core/base-handler.ts',
       'core/hybrid-tail.ts',
       'core/export-manager.ts',
+      'core/content-url.ts',
       'core/background.ts',
       'core/gemini-diag-dump.ts',
     ]) {
@@ -100,8 +101,8 @@ describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5/B6 + utils/messa
     }
     // Only the in-track B1–B10 files are in scope: no globs over the rest of utils/core.
     expect(cfg.include.some((p) => /^(utils|core)\//.test(p) && !p.endsWith('.ts'))).toBe(false);
-    // The B7/B8/B9/B10 core batch is exactly the eight core entry points — a ninth would pull an unclean file in.
-    expect(cfg.include.filter((p) => p.startsWith('core/'))).toHaveLength(8);
+    // The strict core batch is exactly the nine core entry points — a tenth would pull an unclean file in.
+    expect(cfg.include.filter((p) => p.startsWith('core/'))).toHaveLength(9);
     // 2.2 messages seams are explicit, strict-clean files — not a glob over utils/messages.
     expect(cfg.include.filter((p) => p.startsWith('utils/messages/'))).toHaveLength(2);
     expect(cfg.include).not.toContain('utils/**/*.ts');

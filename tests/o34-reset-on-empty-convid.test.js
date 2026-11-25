@@ -659,17 +659,17 @@ describe('O-34 R3: пины проводки и границ', () => {
   test('R3: новое решение живёт ровно в двух точках (парсер + перехватчик), дублей нет', () => {
     const files = [
       'utils/chatgpt-conversation-parser.ts', 'core/page-intercept.js', 'core/content.ts',
-      'core/widget.ts', 'core/state.ts', 'core/export-manager.ts', 'utils/export-emit-pipeline.ts',
-      'utils/tokenizer.ts', 'manifest.json'
+      'core/content-url.ts', 'core/widget.ts', 'core/state.ts', 'core/export-manager.ts',
+      'utils/export-emit-pipeline.ts', 'utils/tokenizer.ts', 'manifest.json'
     ];
     const withSymbol = files.filter(function (rel) {
       return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')).indexOf('shouldResetConversationOnNav') !== -1;
     });
     expect(withSymbol).toEqual(['utils/chatgpt-conversation-parser.ts', 'core/page-intercept.js']);
     const withHelper = files.filter(function (rel) {
-      return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')).indexOf('aiCmResetStaleStateOnChatlessChatGptUrl') !== -1;
+      return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')).indexOf('function aiCmResetStaleStateOnChatlessChatGptUrl') !== -1;
     });
-    expect(withHelper).toEqual(['core/content.ts']);
+    expect(withHelper).toEqual(['core/content-url.ts']);
   });
 
   test('R3: utils/tokenizer.ts и core/export-manager.ts не тронуты; manifest.json не менялся', () => {

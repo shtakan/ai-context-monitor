@@ -30,6 +30,7 @@ const MESSAGES = raw('types/messages.d.ts');
 const BACKGROUND = raw('core/background.ts');
 const STATE = raw('core/state.ts');
 const CONTENT = raw('core/content.ts');
+const CONTENT_URL = raw('core/content-url.ts');
 
 /** Число вхождений подстроки (парные места отправки: BADGE_RESET ×2). */
 function count(haystack, needle) {
@@ -134,8 +135,9 @@ describe('C1: core/content.ts — отправители типизирован�
 
   it('THRESHOLD_PCT и BADGE_RESET: ассерты на месте, отправка прежняя', () => {
     expect(CONTENT).toContain('} as AiCmSwThresholdPctRequest).catch(function () { });');
-    expect(count(CONTENT, "{ type: 'BADGE_RESET' } as AiCmSwBadgeResetRequest")).toBe(2);
-    expect(count(CONTENT, "chrome.runtime.sendMessage({ type: 'BADGE_RESET' } as AiCmSwBadgeResetRequest)")).toBe(2);
+    const contentAll = CONTENT + '\n' + CONTENT_URL;
+    expect(count(contentAll, "{ type: 'BADGE_RESET' } as AiCmSwBadgeResetRequest")).toBe(2);
+    expect(count(contentAll, "chrome.runtime.sendMessage({ type: 'BADGE_RESET' } as AiCmSwBadgeResetRequest)")).toBe(2);
   });
 
   it('CONTEXT_UPDATE получил форму AiCmBroadcast, отправка прежняя', () => {

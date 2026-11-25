@@ -32,6 +32,7 @@
     "core/base-handler.ts",
     "core/hybrid-tail.ts",
     "core/export-manager.ts",
+    "core/content-url.ts",
     "core/background.ts",
     "core/gemini-diag-dump.ts",
     "core/page-intercept.js"
