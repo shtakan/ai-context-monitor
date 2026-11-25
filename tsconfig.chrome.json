@@ -23,6 +23,7 @@
     "core/content-url.ts",
     "core/content-diag.ts",
     "core/content-pdf.ts",
+    "core/content-aistudio.ts",
     "core/background.ts",
     "core/gemini-diag-dump.ts",
     "core/page-intercept.js"

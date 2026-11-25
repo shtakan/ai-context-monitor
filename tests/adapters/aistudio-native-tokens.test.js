@@ -20,7 +20,8 @@ const fs = require('fs');
 const { readCore } = require('../helpers/core-src.js');
 const path = require('path');
 
-const CONTENT_SRC = readCore('core/content.ts');
+const CONTENT_SRC = readCore('core/content-aistudio.ts');
+const CONTENT_CORE = readCore('core/content.ts');
 const START_MARK = 'var AI_CM_AISTUDIO_TOKENS_LABELS';
 const END_TEXT = '* AI Studio: кэш разобранной истории';
 
@@ -169,15 +170,15 @@ describe('content.js: нативный счётчик токенов AI Studio �
 /** Вырезать функцию из core/content.ts по балансу фигурных скобок. */
 function extractFunction(name) {
   const head = 'function ' + name + '(';
-  const from = CONTENT_SRC.indexOf(head);
+  const from = CONTENT_CORE.indexOf(head);
   if (from < 0) throw new Error('function not found: ' + name);
-  const open = CONTENT_SRC.indexOf('{', from);
+  const open = CONTENT_CORE.indexOf('{', from);
   let depth = 0;
-  for (let i = open; i < CONTENT_SRC.length; i++) {
-    if (CONTENT_SRC[i] === '{') depth++;
-    else if (CONTENT_SRC[i] === '}') {
+  for (let i = open; i < CONTENT_CORE.length; i++) {
+    if (CONTENT_CORE[i] === '{') depth++;
+    else if (CONTENT_CORE[i] === '}') {
       depth--;
-      if (depth === 0) return CONTENT_SRC.slice(from, i + 1);
+      if (depth === 0) return CONTENT_CORE.slice(from, i + 1);
     }
   }
   throw new Error('unbalanced function: ' + name);

@@ -3,7 +3,7 @@
  *
  * `tsconfig.strict.json` is the incremental strict-typing track: `types/**`, the
  * TypeScript adapters, the leaf `utils/*.ts` batches (B1 + B2 + B3 + B4 + B5 + B6) and
- * the eleven `core/*.ts` files of the core batches (B7 closed six of them, B8 `core/widget.ts`
+ * the twelve `core/*.ts` files of the core batches (B7 closed six of them, B8 `core/widget.ts`
  * 38 → 0, B9 `core/background.ts` 59 → 0, B10 `core/export-manager.ts` 77 → 0, B11
  * `core/content.ts` 100 → 0 — the core track is closed and the strict total is 0). The strict run stays
  * a small, reviewable batch while the main `tsconfig.json` keeps `strict: false` for
@@ -70,7 +70,7 @@ describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5/B6 + utils/messa
     expect(cfg.compilerOptions.emitDeclarationOnly).toBe(false);
   });
 
-  test('include covers types, adapters, the B1/B2/B3/B4/B5/B6 utils batch, utils/messages 2.2 and the eleven core files', () => {
+  test('include covers types, adapters, the B1/B2/B3/B4/B5/B6 utils batch, utils/messages 2.2 and the twelve core files', () => {
     const cfg = readTsconfig('tsconfig.strict.json');
     expect(cfg.include).toContain('adapters/**/*.ts');
     expect(cfg.include).toContain('types/**/*.d.ts');
@@ -96,6 +96,7 @@ describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5/B6 + utils/messa
       'core/content-url.ts',
       'core/content-diag.ts',
       'core/content-pdf.ts',
+      'core/content-aistudio.ts',
       'core/background.ts',
       'core/gemini-diag-dump.ts',
     ]) {
@@ -103,8 +104,8 @@ describe('tsconfig.strict.json (adapters + utils B1/B2/B3/B4/B5/B6 + utils/messa
     }
     // Only the in-track B1–B10 files are in scope: no globs over the rest of utils/core.
     expect(cfg.include.some((p) => /^(utils|core)\//.test(p) && !p.endsWith('.ts'))).toBe(false);
-    // The strict core batch is exactly the eleven core entry points - a twelfth would pull an unclean file in.
-    expect(cfg.include.filter((p) => p.startsWith('core/'))).toHaveLength(11);
+    // The strict core batch is exactly the twelve core entry points - a thirteenth would pull an unclean file in.
+    expect(cfg.include.filter((p) => p.startsWith('core/'))).toHaveLength(12);
     // 2.2 messages seams are explicit, strict-clean files — not a glob over utils/messages.
     expect(cfg.include.filter((p) => p.startsWith('utils/messages/'))).toHaveLength(2);
     expect(cfg.include).not.toContain('utils/**/*.ts');

@@ -72,6 +72,7 @@
     "core/content-url.ts",
     "core/content-diag.ts",
     "core/content-pdf.ts",
+    "core/content-aistudio.ts",
     "core/content.ts"
   ],
   "run_at": "document_idle"

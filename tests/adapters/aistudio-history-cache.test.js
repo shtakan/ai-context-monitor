@@ -24,14 +24,14 @@ const fs = require('fs');
 const { readCore } = require('../helpers/core-src.js');
 const path = require('path');
 
-const CONTENT_SRC = readCore('core/content.ts');
+const CONTENT_SRC = readCore('core/content-aistudio.ts');
 const START_MARK = 'var aiCmNetMsgsAistudio = null;';
-const END_MARK = 'aiCmAistudioHistoryCacheRestore();';
+const END_MARK = '// [aistudio-bridge:end]';
 
 function extractCacheSection() {
   const from = CONTENT_SRC.indexOf(START_MARK);
   const to = CONTENT_SRC.indexOf(END_MARK, from);
-  if (from < 0 || to < 0) throw new Error('cache section not found in core/content.ts');
+  if (from < 0 || to < 0) throw new Error('cache section not found in core/content-aistudio.ts');
   return CONTENT_SRC.slice(from, to + END_MARK.length);
 }
 

@@ -25,7 +25,11 @@ const STRIPPED = new Set([
   'core/base-handler.ts',
   'core/hybrid-tail.ts',
   'core/export-manager.ts',
-  'core/content.ts'
+  'core/content.ts',
+  'core/content-url.ts',
+  'core/content-diag.ts',
+  'core/content-pdf.ts',
+  'core/content-aistudio.ts'
 ]);
 
 /**

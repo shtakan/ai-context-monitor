@@ -35,6 +35,7 @@ const { contentSource: CONTENT, readSource } = require('../helpers/content-sourc
 
 const ROOT = path.join(__dirname, '..', '..');
 const CONTENT_SRC = readCore('core/content.ts');
+const AISTUDIO_SRC = readCore('core/content-aistudio.ts');
 const WIDGET_SRC = readSource('core/widget.ts');
 const MGR_SRC = read('core/export-manager.ts');
 const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
@@ -164,7 +165,7 @@ describe('AI Studio (Вариант A): доверие к базе адапте�
 // 2. Ingest: флаг взводится РОВНО полным снимком текущего пути
 // =====================================================================================
 const START_MARK = 'var aiCmNetMsgsAistudio = null;';
-const END_MARK = 'aiCmAistudioHistoryCacheRestore();';
+const END_MARK = '// [aistudio-bridge:end]';
 
 /** Минимальное окно AI Studio (то, что читает срез сети/кэша). */
 function makeWin(pathname) {
@@ -178,11 +179,11 @@ function makeWin(pathname) {
 }
 
 function loadIngest(win) {
-  const from = CONTENT_SRC.indexOf(START_MARK);
-  const to = CONTENT_SRC.indexOf(END_MARK, from);
+  const from = AISTUDIO_SRC.indexOf(START_MARK);
+  const to = AISTUDIO_SRC.indexOf(END_MARK, from);
   expect(from).toBeGreaterThan(-1);
   expect(to).toBeGreaterThan(from);
-  const section = CONTENT_SRC.slice(from, to + END_MARK.length);
+  const section = AISTUDIO_SRC.slice(from, to + END_MARK.length);
   const factory = new Function(
     'window', 'sessionStorage', 'netServerTokens', 'debugLog', 'swallowSoft', 'aiCmBridgeDetail',
     'detectedModelSlug',
@@ -254,10 +255,10 @@ describe('AI Studio: взвод флага полноты в aiCmIngestAistudioN
 // =====================================================================================
 describe('AI Studio: проводка фикса и границы R1', () => {
   test('content.js: флаг+ключ+сброс и взвод только при !shrunk', () => {
-    expect(CONTENT_SRC).toContain('var aiCmNetReadyAistudio = {};');
-    expect(CONTENT_SRC).toContain('function aiCmNetReadyKey()');
-    expect(CONTENT_SRC).toContain('function aiCmNetReadyAistudioReset()');
-    const ingest = fnDecl(CONTENT_SRC, 'aiCmIngestAistudioNet');
+    expect(AISTUDIO_SRC).toContain('var aiCmNetReadyAistudio = {};');
+    expect(AISTUDIO_SRC).toContain('function aiCmNetReadyKey()');
+    expect(AISTUDIO_SRC).toContain('function aiCmNetReadyAistudioReset()');
+    const ingest = fnDecl(AISTUDIO_SRC, 'aiCmIngestAistudioNet');
     expect(ingest).toContain('if (!shrunk) {');
     expect(ingest).toContain('aiCmNetReadyAistudio[readyKey] = true;');
     expect(ingest).toContain('historyComplete: !shrunk');

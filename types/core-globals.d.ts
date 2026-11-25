@@ -50,6 +50,12 @@ declare var aiCmRequestEmitTimer: any;
 /** Сброс признака полноты сети AI Studio (вызов из resetConversationState). */
 declare function aiCmNetReadyAistudioReset(): boolean;
 
+/** Доводка инициализации/пересчёт после сетевого снимка AI Studio (content.ts). */
+declare function aiCmAfterAistudioNetKick(): void;
+
+/** Запись сетевого снимка AI Studio в общую базу метрики (content.ts). */
+declare function aiCmApplyAistudioNetBase(): void;
+
 /** Сброс кэша предыдущего разговора AI Studio при смене чата. */
 declare function aiCmAistudioHistoryCacheClear(): boolean;
 
