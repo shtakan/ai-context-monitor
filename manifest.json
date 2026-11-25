@@ -70,6 +70,7 @@
     "core/hybrid-tail.ts",
     "core/export-manager.ts",
     "core/content-url.ts",
+    "core/content-diag.ts",
     "core/content.ts"
   ],
   "run_at": "document_idle"

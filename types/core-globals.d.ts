@@ -211,7 +211,7 @@ declare function swallowSoft(error: unknown, tag: string): void;
 declare function aiCmDiagWarn(tag: string, message: string, detail?: unknown): void;
 declare function aiCmDiagDownload(trigger: string, content: unknown, fileName: string, extra?: unknown): boolean;
 declare function aiCmDiagDownloadBlocked(trigger: string, content: unknown, fileName: string, reason: string, extra?: unknown): boolean;
-declare function __aiCmSetDebugLogs(v: boolean): void;
+declare function __aiCmSetDebugLogs(v: unknown): void;
 declare function __aiCmGetLogRing(): string[];
 
 // Window-поля: трассировка/UMD-глобали (прецедент types/globals.d.ts — any до Фазы 3).

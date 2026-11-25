@@ -301,6 +301,15 @@
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: v = decodeURIComponent(v.replace(/\\+/g, ' '));"
     },
     {
+      "file": "core/content-diag.ts",
+      "category": "event-guard",
+      "lines": [
+        72,
+        78
+      ],
+      "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
+    },
+    {
       "file": "core/content-url.ts",
       "category": "host-api-guard",
       "lines": [
@@ -315,7 +324,7 @@
         501,
         2661,
         2801,
-        3994
+        3927
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cyrDiag = (t.match(/[а-яёА-ЯЁ]/g) || []).length; var cyrillicPct = t"
     },
@@ -363,9 +372,9 @@
         2812,
         2836,
         2845,
-        3874,
-        3900,
-        3902
+        3807,
+        3833,
+        3835
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
     },
@@ -393,9 +402,7 @@
         1207,
         1216,
         2754,
-        2777,
-        3856,
-        3862
+        2777
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
     },
@@ -452,7 +459,7 @@
       "file": "core/content.ts",
       "category": "parse-guard",
       "lines": [
-        3936
+        3869
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof AiCmExportBuilders !== 'undefined') ? AiCmExportB"
     },

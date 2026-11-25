@@ -31,6 +31,7 @@ const BACKGROUND = raw('core/background.ts');
 const STATE = raw('core/state.ts');
 const CONTENT = raw('core/content.ts');
 const CONTENT_URL = raw('core/content-url.ts');
+const CONTENT_DIAG = raw('core/content-diag.ts');
 
 /** Число вхождений подстроки (парные места отправки: BADGE_RESET ×2). */
 function count(haystack, needle) {
@@ -212,10 +213,10 @@ describe('C2: core/content.ts — слушатель, diag и broadcast', () => 
   });
 
   it('handleAiCmDiag отвечает AiCmDiagResponse, дамп — AiCmDiagPayload', () => {
-    expect(CONTENT).toContain('function handleAiCmDiag(sendResponse: (response?: AiCmDiagResponse) => void): void {');
-    expect(CONTENT).toContain('var diag: AiCmDiagPayload = {');
-    expect(CONTENT).toContain("type AiCmDiagPayload = import('../types/messages').AiCmDiagPayload;");
-    expect(CONTENT).toContain("type AiCmDiagResponse = import('../types/messages').AiCmDiagResponse;");
+    expect(CONTENT_DIAG).toContain('function handleAiCmDiag(sendResponse: (response?: AiCmDiagResponse) => void): void {');
+    expect(CONTENT_DIAG).toContain('var diag: AiCmDiagPayload = {');
+    expect(CONTENT_DIAG).toContain("type AiCmDiagPayload = import('../types/messages').AiCmDiagPayload;");
+    expect(CONTENT_DIAG).toContain("type AiCmDiagResponse = import('../types/messages').AiCmDiagResponse;");
   });
 
   it('manualSnapshot объявлен AiCmManualSnapshot, ответ прежний', () => {
