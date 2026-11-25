@@ -21,7 +21,7 @@ const { readCore } = require('../helpers/core-src.js');
 const path = require('path');
 
 const CONTENT_SRC = readCore('core/content-aistudio.ts');
-const CONTENT_CORE = readCore('core/content.ts');
+const METRIC_SRC = readCore('core/content-metrics.ts');
 const START_MARK = 'var AI_CM_AISTUDIO_TOKENS_LABELS';
 const END_TEXT = '* AI Studio: кэш разобранной истории';
 
@@ -167,18 +167,18 @@ describe('content.js: нативный счётчик токенов AI Studio �
  * адаптеры не должны измениться)
  * ------------------------------------------------------------------ */
 
-/** Вырезать функцию из core/content.ts по балансу фигурных скобок. */
+/** Вырезать функцию из core/content-metrics.ts по балансу фигурных скобок. */
 function extractFunction(name) {
   const head = 'function ' + name + '(';
-  const from = CONTENT_CORE.indexOf(head);
+  const from = METRIC_SRC.indexOf(head);
   if (from < 0) throw new Error('function not found: ' + name);
-  const open = CONTENT_CORE.indexOf('{', from);
+  const open = METRIC_SRC.indexOf('{', from);
   let depth = 0;
-  for (let i = open; i < CONTENT_CORE.length; i++) {
-    if (CONTENT_CORE[i] === '{') depth++;
-    else if (CONTENT_CORE[i] === '}') {
+  for (let i = open; i < METRIC_SRC.length; i++) {
+    if (METRIC_SRC[i] === '{') depth++;
+    else if (METRIC_SRC[i] === '}') {
       depth--;
-      if (depth === 0) return CONTENT_CORE.slice(from, i + 1);
+      if (depth === 0) return METRIC_SRC.slice(from, i + 1);
     }
   }
   throw new Error('unbalanced function: ' + name);

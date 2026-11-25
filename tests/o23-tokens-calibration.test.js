@@ -52,6 +52,7 @@ const path = require('path');
 const Tokenizer = require('./helpers/load-esm.js').loadEsm('utils/tokenizer.ts');
 
 const CONTENT_SRC = readCore('core/content.ts');
+const METRICS_SRC = readCore('core/content-metrics.ts');
 const TOKENIZER_SRC = fs.readFileSync(path.join(__dirname, '..', 'utils', 'tokenizer.ts'), 'utf8');
 
 // =====================================================================================
@@ -70,11 +71,11 @@ function legacyTilde(text, attachTokens) {
 
 // Боевой хелпер из core/content.ts — извлекается ИЗ ИСХОДНИКА, логика не копируется.
 function helperSource() {
-  const start = CONTENT_SRC.indexOf('function aiCmEstimateTokensTilde(');
-  if (start < 0) throw new Error('aiCmEstimateTokensTilde не найден в core/content.ts');
-  const end = CONTENT_SRC.indexOf('\n}', start);
+  const start = METRICS_SRC.indexOf('function aiCmEstimateTokensTilde(');
+  if (start < 0) throw new Error('aiCmEstimateTokensTilde не найден в core/content-metrics.ts');
+  const end = METRICS_SRC.indexOf('\n}', start);
   if (end < 0) throw new Error('не найден конец aiCmEstimateTokensTilde');
-  return CONTENT_SRC.slice(start, end + 2);
+  return METRICS_SRC.slice(start, end + 2);
 }
 function makeHelper(tokenizer) {
   return new Function('Tokenizer', helperSource() + '\nreturn aiCmEstimateTokensTilde;')(tokenizer);
@@ -245,8 +246,8 @@ describe('O-23 R: регресс байтов tokens~ (serverTokens = 0)', () =>
     expect(src).toContain('Math.round((t.length - cyr) / 4)');
     // B2: единственный канонический эстиматор, на который замкнута трасса и который
     // делегирует бейджному Tokenizer.estimateDialogTokens (один и тот же счётчик).
-    expect(CONTENT_SRC).toContain('function aiCmCanonicalTokens(text, attachTokens, messageCount)');
-    const canon = CONTENT_SRC.slice(CONTENT_SRC.indexOf('function aiCmCanonicalTokens('));
+    expect(METRICS_SRC).toContain('function aiCmCanonicalTokens(text, attachTokens, messageCount)');
+    const canon = METRICS_SRC.slice(METRICS_SRC.indexOf('function aiCmCanonicalTokens('));
     expect(canon.slice(0, 900)).toContain('Tokenizer.estimateDialogTokens(text, msgs) + attach');
     expect(canon.slice(0, 1200)).toContain('aiCmEstimateTokensTilde(text, attach) + msgs * 4');
   });
@@ -257,8 +258,8 @@ describe('O-23 R: регресс байтов tokens~ (serverTokens = 0)', () =>
     // v2.6 (R1): решение теперь в ЕДИНОЙ функции aiCmTokenSnapshot — серверный счётчик
     // авторитетен ровно в одном месте, а бейдж и панель зовут эту функцию (два пути).
     const decision = 'var tokens = serverTokens > 0 ? serverTokens : aiCmCanonicalTokens(text, 0, msgs);';
-    expect(CONTENT_SRC.split(decision).length - 1).toBe(1);
-    const snapCalls = CONTENT_SRC.match(/aiCmTokenSnapshot\(/g) || [];
+    expect(METRICS_SRC.split(decision).length - 1).toBe(1);
+    const snapCalls = (CONTENT_SRC + '\n' + METRICS_SRC).match(/aiCmTokenSnapshot\(/g) || [];
     expect(snapCalls.length).toBe(2);            // S2.2: объявление + processAndSend; GET_STATS — маппер
     // и оба пути действительно читают серверное число из снимка, а не вычисляют эвристику сами
     expect(CONTENT_SRC.split('const metricServerTokens = tokenSnap.serverTokens;').length - 1).toBe(1);
@@ -289,10 +290,10 @@ describe('O-23 R: регресс байтов tokens~ (serverTokens = 0)', () =>
   test('R7: новая калибровка НЕ трогает точные serverTokens (DeepSeek O-23) и Qwen-гейт', () => {
     // Ограничение задачи: DeepSeek/Qwen не ломаются, потому что эвристика — только fallback.
     // Проверяется по боевому коду счётчика: вырезаем aiCmMetricServerTokens из исходника.
-    const start = CONTENT_SRC.indexOf('function aiCmMetricServerTokens(');
+    const start = METRICS_SRC.indexOf('function aiCmMetricServerTokens(');
     expect(start).toBeGreaterThan(-1);
-    const end = CONTENT_SRC.indexOf('\n}', start);
-    const src = CONTENT_SRC.slice(start, end + 2);
+    const end = METRICS_SRC.indexOf('\n}', start);
+    const src = METRICS_SRC.slice(start, end + 2);
     const noExact = function () { return 0; };
     const metric = new Function('netServerTokens', 'aiCmExactTokensFor',
       src + '\nreturn aiCmMetricServerTokens;')(63713, noExact);

@@ -31,7 +31,8 @@ const STRIPPED = new Set([
   'core/content-pdf.ts',
   'core/content-aistudio.ts',
   'core/content-autoexport.ts',
-  'core/content-byok.ts'
+  'core/content-byok.ts',
+  'core/content-metrics.ts'
 ]);
 
 /**

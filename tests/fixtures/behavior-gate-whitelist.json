@@ -68,7 +68,7 @@
     "reason": "vm-harness"
   },
   "tests/adapters/gemini-files-module.test.js": {
-    "count": 13,
+    "count": 14,
     "reason": "vm-harness"
   },
   "tests/adapters/gemini-h13-inner-cursor.test.js": {

@@ -27,6 +27,7 @@ const H = require('./helpers/content-source.js');
 
 const ROOT = H.ROOT;
 const CONTENT = readCore('core/content.ts');
+const METRICS = readCore('core/content-metrics.ts');
 const WIDGET = read('core/widget.ts');
 const MGR = read('core/export-manager.ts');
 
@@ -277,7 +278,7 @@ const SCALE_GATE = 'baseComplete === true) && serverTokens === 0';
 
 /** Срез единой точки расчёта — РЕАЛЬНЫЕ байты aiCmTokenSnapshot (v2.6/R1). */
 function snapshotSnippet() {
-  const src = sliceFunction(CONTENT, 'aiCmTokenSnapshot');
+  const src = sliceFunction(METRICS, 'aiCmTokenSnapshot');
   expect(src.indexOf(SCALE_GATE)).toBeGreaterThan(-1);
   return src;
 }
@@ -438,8 +439,8 @@ describe('v98: масштаб по netEffectiveLen только при baseCompl
   test('D6: source-пин — гейт стоит в ЕДИНОЙ точке расчёта, а её зовут ОБА пути (бейдж и панель)', () => {
     // v2.6 (R1): прежние два независимых среза схлопнуты в одну функцию aiCmTokenSnapshot;
     // гейт масштаба обязан остаться ровно один (иначе пути снова разойдутся).
-    expect(CONTENT.split(SCALE_GATE).length - 1).toBe(1);
-    expect(CONTENT.split('aiCmTokenSnapshot(').length - 1).toBe(2);   // объявление + бейдж
+    expect(METRICS.split(SCALE_GATE).length - 1).toBe(1);
+    expect((CONTENT + '\n' + METRICS).split('aiCmTokenSnapshot(').length - 1).toBe(2);   // объявление + бейдж
     // неохраняемой формы (масштаб без вердикта полноты) в исходнике не осталось
     expect(CONTENT).not.toContain('if (metricServerTokens === 0 && netEffectiveLen > 0');
     // масштаб идёт ДО добавки доли вложений (вложения добавляются к готовому числу)

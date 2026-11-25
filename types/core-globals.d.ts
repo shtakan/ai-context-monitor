@@ -158,7 +158,7 @@ declare function aiCmResyncMetricsAfterFlush(cid: string, reason?: string): bool
 
 declare function aiCmI18nMessage(key: string, fallback: string, substitutions?: unknown[]): string;
 declare function aiCmEstimateTokensTilde(text: string, attachTokens?: number): number;
-declare function aiCmMetricServerTokens(svc: string | null): number;
+declare function aiCmMetricServerTokens(svc: string | null, text: string): number;
 declare function aiCmSourceInfo(): { kind: string; label: string } | null;
 declare function aiCmUpdateSourceIndicator(): void;
 declare function aiCmDomTextSig(): string;
@@ -178,7 +178,7 @@ declare function getCurrentConvId(): string | null;
 // (core/state.ts: aiCmCanonicalConvId = aiCmAutoExportConvId() || getCurrentConvId() || '').
 declare function aiCmCanonicalConvId(): string;
 declare function aiCmAssignAdapterByHost(): BaseAdapter | null;
-declare function resolveCurrentModel(): { modelId: string | null; fam: string | null; variant: string | null };
+declare function resolveCurrentModel(): string;
 declare function geminiParserVersion(): string;
 declare function getAccountIndex(): string;
 declare function geminiTapeKey(convId: string): string;

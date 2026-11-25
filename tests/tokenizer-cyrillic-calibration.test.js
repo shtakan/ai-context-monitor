@@ -102,7 +102,7 @@ describe('Tokenizer — калибровка v3 (18 живых точек, ли�
     expect(tkSrc).toContain('CYRILLIC_CHARS_PER_TOKEN: 3.58');
     expect(tkSrc).toContain('f.cyr / TOKENIZER_V3.CYRILLIC_CHARS_PER_TOKEN');
     // фолбэк aiCmEstimateTokensTilde (песочницы без Tokenizer) обязан нести тот же коэффициент
-    const contentSrc = fs.readFileSync(path.join(__dirname, '..', 'core', 'content.ts'), 'utf8');
+    const contentSrc = fs.readFileSync(path.join(__dirname, '..', 'core', 'content-metrics.ts'), 'utf8');
     expect(contentSrc).toContain('Math.ceil(cyr / ' + Tokenizer.CYRILLIC_CHARS_PER_TOKEN + ')');
   });
 });

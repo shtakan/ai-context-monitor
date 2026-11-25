@@ -38,6 +38,7 @@
     "core/content-aistudio.ts",
     "core/content-autoexport.ts",
     "core/content-byok.ts",
+    "core/content-metrics.ts",
     "core/background.ts",
     "core/gemini-diag-dump.ts",
     "core/page-intercept.js"

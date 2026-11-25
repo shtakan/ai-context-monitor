@@ -310,6 +310,14 @@
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
     },
     {
+      "file": "core/content-metrics.ts",
+      "category": "best-effort-guard",
+      "lines": [
+        41
+      ],
+      "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cyrDiag = (t.match(/[а-яёА-ЯЁ]/g) || []).length; var cyrillicPct = t"
+    },
+    {
       "file": "core/content-url.ts",
       "category": "host-api-guard",
       "lines": [
@@ -321,10 +329,9 @@
       "file": "core/content.ts",
       "category": "best-effort-guard",
       "lines": [
-        501,
-        2340,
-        2480,
-        3511
+        2181,
+        2321,
+        3352
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cyrDiag = (t.match(/[а-яёА-ЯЁ]/g) || []).length; var cyrillicPct = t"
     },
@@ -332,7 +339,7 @@
       "file": "core/content.ts",
       "category": "cleanup-guard",
       "lines": [
-        2058
+        1932
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: if (aiCmBadgeHoldTimer) return; aiCmBadgeHoldTimer = setTimeout(function"
     },
@@ -340,41 +347,41 @@
       "file": "core/content.ts",
       "category": "debug-instrumentation",
       "lines": [
-        651,
-        1184,
-        1290,
-        1295,
-        1298,
-        1301,
-        1303,
-        1304,
-        1305,
-        1324,
+        525,
+        1058,
+        1164,
+        1169,
+        1172,
+        1175,
+        1177,
+        1178,
+        1179,
+        1198,
+        1200,
+        1205,
+        1240,
+        1247,
+        1255,
+        1258,
+        1318,
         1326,
         1331,
-        1366,
-        1373,
-        1381,
-        1384,
-        1444,
-        1452,
-        1457,
-        1462,
-        1469,
-        1475,
-        1493,
-        1498,
-        1504,
-        1506,
-        1511,
-        1933,
-        2304,
-        2491,
-        2515,
-        2524,
-        3391,
-        3417,
-        3419
+        1336,
+        1343,
+        1349,
+        1367,
+        1372,
+        1378,
+        1380,
+        1385,
+        1807,
+        2145,
+        2332,
+        2356,
+        2365,
+        3232,
+        3258,
+        3260
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
     },
@@ -382,8 +389,8 @@
       "file": "core/content.ts",
       "category": "defensive-assignment",
       "lines": [
-        850,
-        859
+        724,
+        733
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: aiCmPartialSoftByConv[softKey63] = (detail.partialSoft === true);"
     },
@@ -391,7 +398,7 @@
       "file": "core/content.ts",
       "category": "dom-read-guard",
       "lines": [
-        1969
+        1843
       ],
       "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: var info = aiCmSourceInfo(); aiCmSourceLabelNow = info ? info.label : ''"
     },
@@ -399,10 +406,10 @@
       "file": "core/content.ts",
       "category": "event-guard",
       "lines": [
-        1172,
-        1181,
-        2433,
-        2456
+        1046,
+        1055,
+        2274,
+        2297
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
     },
@@ -410,7 +417,7 @@
       "file": "core/content.ts",
       "category": "feature-detect",
       "lines": [
-        2657
+        2498
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var metricSrc = baseComplete ? 'base-complete' : (lastBounded ? 'base-fl"
     },
@@ -423,16 +430,16 @@
         344,
         388,
         404,
-        641,
-        667,
-        752,
-        904,
-        1130,
-        2007,
-        2855,
-        2939,
-        2956,
-        3054
+        515,
+        541,
+        626,
+        778,
+        1004,
+        1881,
+        2696,
+        2780,
+        2797,
+        2895
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -442,7 +449,7 @@
       "lines": [
         92,
         354,
-        3139
+        2980
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.runtime.sendMessage({ type: 'BADGE_RESET' }).catch(function () {"
     },
@@ -451,7 +458,7 @@
       "category": "local-helper-guard",
       "lines": [
         351,
-        3227
+        3068
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmCancelDeferredHistWrite('');"
     },
@@ -459,7 +466,7 @@
       "file": "core/content.ts",
       "category": "parse-guard",
       "lines": [
-        3453
+        3294
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof AiCmExportBuilders !== 'undefined') ? AiCmExportB"
     },

@@ -26,6 +26,7 @@ const PARSER_SRC = require('../helpers/load-esm.js').loadAsClassic('utils/gemini
 const INGEST_SRC = fs.readFileSync(path.join(ROOT, 'core', 'gemini-ingest.js'), 'utf8');
 const read = function (rel) { return readCore(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8')); };
 const CONTENT_SRC = read('core/content.ts');
+const METRICS_SRC = read('core/content-metrics.ts');
 
 /** Вырезает `function <name>(…) { … }` по балансу скобок (для чистых хелперов). */
 function fnSource(src, name) {
@@ -820,8 +821,8 @@ describe('v2.1: дедуп ходов/вложений и метрика без 
     // v2.6 (R1): оба пути метрики (бейдж и GET_STATS) зовут ОДНУ функцию aiCmTokenSnapshot,
     // а внутри неё — единственный вызов хелпера пула: прибавка считается ровно один раз.
     expect([
-      CONTENT_SRC.split('aiCmTokenSnapshot(').length - 1,                                      // объявление + 2 пути
-      CONTENT_SRC.split('var attachAdd = aiCmAttachPendingTokens(text, attach, attachBreak);').length - 1
+      (CONTENT_SRC + '\n' + METRICS_SRC).split('aiCmTokenSnapshot(').length - 1,                // объявление + 2 пути
+      METRICS_SRC.split('var attachAdd = aiCmAttachPendingTokens(text, attach, attachBreak);').length - 1
     ]).toEqual([2, 1]);
     // прежних двух копий (по одной на путь) больше нет
     expect(
@@ -832,7 +833,7 @@ describe('v2.1: дедуп ходов/вложений и метрика без 
     expect(CONTENT_SRC).not.toContain("indexOf('[FILE:') === -1");
     expect(CONTENT_SRC).not.toMatch(/(^|\n)\s*tokenEstimate \+= netAttachTokens;/);
 
-    const pending = new Function('return (' + fnSource(CONTENT_SRC, 'aiCmAttachPendingTokens') + ');')();
+    const pending = new Function('return (' + fnSource(METRICS_SRC, 'aiCmAttachPendingTokens') + ');')();
 
     // все файлы отрендерены — добавки нет (двойного счёта нет)
     expect(pending('Вопрос\n\n[FILE: a.txt]\nтело\n\n[FILE: b.txt]\nтело', 2860, { imgCount: 0, docCount: 2 })).toBe(0);
@@ -966,7 +967,7 @@ describe('v2.8: крупное вложение в секции — только
 
   test('v2.9: метка капа (label-only) не списывает вес вложения из пула', function () {
 
-    const pending = new Function('return (' + fnSource(CONTENT_SRC, 'aiCmAttachPendingTokens') + ');')();
+    const pending = new Function('return (' + fnSource(METRICS_SRC, 'aiCmAttachPendingTokens') + ');')();
     const h = makeHarness();
     const cap = h.Fn.constants.sectionTextCap;
     // крупный файл: в тексте только метка «[FILE: имя (размер)]», тела нет
