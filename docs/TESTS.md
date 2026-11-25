@@ -89,9 +89,15 @@ Automated cell = representative test name; `manual (Chrome)` = verified by hand 
 
 ```bash
 npm install
-npm test        # Jest - as of v2.2.0 (2026-11-24): 300 suites / 4653 tests
+npm test        # Jest - as of 2.3 Stage 1 (2026-11-25): 301 suites / 4656 tests
 ```
 
 CI (`.github/workflows/lint.yml`) additionally runs `node --check` over all JS files and validates `manifest.json` before executing the test suite.
+
+**Observation (2026-11-25):** на полном прогоне Jest иногда печатает
+`A worker process has failed to exit gracefully and has been force exited`,
+при этом все suites/tests проходят. Это не блокер и не воспроизводится
+стабильно; при повторяемости запускать `npx jest --detectOpenHandles` и искать
+незакрытые таймеры/хендлы. Пометка добавлена по итогам 2.2.0/2.3 Stage 1.
 
 | `google-folwr-open.html` | Google AI Search folwr-open HTML stream |
