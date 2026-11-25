@@ -79,7 +79,7 @@ declare const ModelConfig: {
   getDefaultModel(siteName: string): string | null;
   getContextLimit(modelId: string): number;
   getEffectiveLimit(modelId: string): number;
-  getGeminiApiModelId(modelId: string): string;
+  getGeminiApiModelId(modelId: string | null | undefined): string;
 };
 
 // Ph2, шаг tokenizer.js: utils/tokenizer.ts переведён на ES-модуль (UMD-хвост снят),
@@ -164,6 +164,10 @@ declare function aiCmUpdateSourceIndicator(): void;
 declare function aiCmDomTextSig(): string;
 declare function aiCmSiteConvFired(): boolean;
 declare function requestExactTokens(fullText: string, modelId: string | null): void;
+declare const Tokenizer: typeof import('../utils/tokenizer').Tokenizer;
+declare function aiCmIsFirefox(): boolean;
+declare function aiCmSwByokHasKey(): Promise<boolean>;
+declare function aiCmByokFlag(hasKey: boolean): string;
 declare function processAndSend(): void;
 declare function sendThresholdPct(pct: number): void;
 declare function handleAiCmDiag(sendResponse: (response?: unknown) => void): boolean;

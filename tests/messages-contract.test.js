@@ -32,6 +32,7 @@ const STATE = raw('core/state.ts');
 const CONTENT = raw('core/content.ts');
 const CONTENT_URL = raw('core/content-url.ts');
 const CONTENT_DIAG = raw('core/content-diag.ts');
+const CONTENT_BYOK = raw('core/content-byok.ts');
 
 /** Число вхождений подстроки (парные места отправки: BADGE_RESET ×2). */
 function count(haystack, needle) {
@@ -130,8 +131,8 @@ describe('C1: core/state.ts — generic aiCmSwAsk', () => {
 
 describe('C1: core/content.ts — отправители типизированы', () => {
   it('COUNT_TOKENS: объект и колбэк-ответ получили форму union', () => {
-    expect(CONTENT).toContain('} as AiCmSwCountTokensRequest, function (response: AiCmSwCountTokensResponse) {');
-    expect(CONTENT).toContain("type AiCmSwCountTokensRequest = import('../types/messages').AiCmSwCountTokensRequest;");
+    expect(CONTENT_BYOK).toContain('} as AiCmSwCountTokensRequest, function (response: AiCmSwCountTokensResponse) {');
+    expect(CONTENT_BYOK).toContain("type AiCmSwCountTokensRequest = import('../types/messages').AiCmSwCountTokensRequest;");
   });
 
   it('THRESHOLD_PCT и BADGE_RESET: ассерты на месте, отправка прежняя', () => {

@@ -19,6 +19,7 @@ const vm = require('vm');
 const ROOT = path.join(__dirname, '..');
 const OPTIONS_HTML = fs.readFileSync(path.join(ROOT, 'options', 'options.html'), 'utf8');
 const CONTENT_SRC = readCore('core/content.ts');
+const BYOK_SRC = readCore('core/content-byok.ts');
 const RU = JSON.parse(fs.readFileSync(path.join(ROOT, '_locales', 'ru', 'messages.json'), 'utf8'));
 const EN = JSON.parse(fs.readFileSync(path.join(ROOT, '_locales', 'en', 'messages.json'), 'utf8'));
 
@@ -285,7 +286,7 @@ describe('BYOK-sync: content.js — без ключа флаг точного с
   test('все потребители флага дополнительно требуют наличия ключа (страховка)', () => {
     // Точный подсчёт, удержание эвристики и сетевой путь COUNT_TOKENS — все под двойным
     // условием exactCountEnabled && geminiApiKey, поэтому пустой ключ не включает API-счёт.
-    const guards = CONTENT_SRC.match(/!exactCountEnabled \|\| !geminiApiKey/g) || [];
+    const guards = BYOK_SRC.match(/!exactCountEnabled \|\| !geminiApiKey/g) || [];
     expect(guards.length).toBeGreaterThanOrEqual(2);
     expect(CONTENT_SRC).toContain('isGeminiSvc && exactCountEnabled && geminiApiKey');
   });
