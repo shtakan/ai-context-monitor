@@ -22,6 +22,7 @@
     "core/export-manager.ts",
     "core/content-url.ts",
     "core/content-diag.ts",
+    "core/content-pdf.ts",
     "core/background.ts",
     "core/gemini-diag-dump.ts",
     "core/page-intercept.js"

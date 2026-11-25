@@ -6,7 +6,7 @@
  * старте, и Port вкладки рвётся посреди разбора — мост отдавал pdf-aborted при
  * живых байтах (5 МБ уже в странице).
  *
- * ЧТО ПИНУЕТСЯ. Мост core/content.ts (секция между маркерами [pdf-bridge:start]
+ * ЧТО ПИНУЕТСЯ. Мост core/content-pdf.ts (секция между маркерами [pdf-bridge:start]
  * и [pdf-bridge:end]) исполняется в vm-песочнице вместе с настоящим
  * core/pdf-bytes.js, поэтому проверяется не текст, а поведение:
  *
@@ -47,7 +47,7 @@ const zlib = require('zlib');
 const { DecompressionStream: RealDecompressionStream } = require('stream/web');
 
 const ROOT = path.join(__dirname, '..', '..');
-const CONTENT_PATH = path.join(ROOT, 'core', 'content.ts');
+const CONTENT_PATH = path.join(ROOT, 'core', 'content-pdf.ts');
 const BYTES_PATH = path.join(ROOT, 'core', 'pdf-bytes.js');
 const BROKER_PATH = path.join(ROOT, 'core', 'pdf-parser.js');
 const PARSER_PATH = path.join(ROOT, 'utils', 'gemini-batchexecute-parser.ts');
@@ -58,15 +58,15 @@ const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 
   '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 const FIREFOX_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0';
 
-/** Секция моста из боевого core/content.ts (маркеры — часть контракта). */
+/** Секция моста из боевого core/content-pdf.ts (маркеры — часть контракта). */
 function readBridgeSource() {
   // Маркеры живут в trivia над EOF-блоком типов, поэтому режем СЫРОЙ файл:
   // типы снимаем со среза — участок исполняется в песочнице new Function.
   const src = fs.readFileSync(CONTENT_PATH, 'utf8');
   const a = src.indexOf(START_MARK);
   const b = src.indexOf(END_MARK);
-  if (a < 0 || b <= a) throw new Error('в core/content.ts нет маркеров ' + START_MARK + ' / ' + END_MARK);
-  return stripTypesKeepComments(src.slice(a + START_MARK.length, b), 'core/content.ts');
+  if (a < 0 || b <= a) throw new Error('в core/content-pdf.ts нет маркеров ' + START_MARK + ' / ' + END_MARK);
+  return stripTypesKeepComments(src.slice(a + START_MARK.length, b), 'core/content-pdf.ts');
 }
 
 function FakeCustomEvent(type, init) {
