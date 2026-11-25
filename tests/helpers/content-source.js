@@ -23,31 +23,30 @@ const { stripTypesKeepComments } = require('./read-module-source.js');
 
 const ROOT = path.join(__dirname, '..', '..');
 
-const MODULES = [
-  'core/state.ts',
-  'core/widget.ts',
-  'core/base-handler.ts',
-  'core/hybrid-tail.ts',
-  'core/export-manager.ts'
-];
+const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
+const CONTENT_SCRIPTS = manifest.content_scripts[0].js;
 const CONTENT_JS = 'core/content.ts';
+
+/**
+ * Core-модули контент-скрипта — из manifest, а не из ручного списка. Порядок
+ * `content_scripts[0].js` и есть порядок общего лексического скоупа; ручной
+ * список разъезжался бы с ним при добавлении нового `content-*.ts`.
+ */
+const MODULES = CONTENT_SCRIPTS.filter(function (rel) {
+  return rel.indexOf('core/') === 0 && rel !== CONTENT_JS;
+});
 
 /** Пути (от корня репозитория) всех файлов контент-скрипта в порядке manifest.json. */
 const SOURCES = MODULES.concat([CONTENT_JS]);
 
 /**
- * Модули Core Wave 1, ставшие `.ts`: их читают и как текст (source-level пины),
+ * Core-модули, ставшие `.ts`: их читают и как текст (source-level пины),
  * и как код (песочницы `new Function`), поэтому типы снимаются, а комментарии
  * остаются — текст совпадает с до-миграционным.
  */
-const TS_EXECUTABLE = new Set([
-  'core/state.ts',
-  'core/widget.ts',
-  'core/base-handler.ts',
-  'core/hybrid-tail.ts',
-  'core/export-manager.ts',
-  'core/content.ts'
-]);
+const TS_EXECUTABLE = new Set(SOURCES.filter(function (rel) {
+  return /\.tsx?$/.test(rel);
+}));
 
 /** Исходник файла: для мигрированных `.ts` — в исполнимой форме. */
 function readSource(rel) {
@@ -73,5 +72,6 @@ function moduleSource(name) {
 const contentSource = SOURCES.map(readExecutable).join('\n');
 
 module.exports = {
-  ROOT, MODULES, CONTENT_JS, SOURCES, readSource, readExecutable, moduleSource, contentSource
+  ROOT, CONTENT_SCRIPTS, MODULES, CONTENT_JS, SOURCES,
+  readSource, readExecutable, moduleSource, contentSource
 };

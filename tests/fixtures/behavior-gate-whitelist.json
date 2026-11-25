@@ -534,5 +534,13 @@
   "tests/chatgpt-active-refresh-race.test.js": {
     "count": 17,
     "reason": "static-linter"
+  },
+  "tests/helpers/content-source.js": {
+    "count": 1,
+    "reason": "vm-harness"
+  },
+  "tests/content-modules-order.test.js": {
+    "count": 1,
+    "reason": "static-linter"
   }
 }

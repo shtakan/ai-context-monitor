@@ -63,6 +63,8 @@ tools/*
 !tools/mutation-check.js
 # ADR-002: архитектурный AST-линтер — часть CI (npm run lint:arch), не одноразовый скрипт.
 !tools/architecture-lint.mjs
+# 2.3 Stage 0: move-only приёмка декомпозиции content.ts — проектный инструмент.
+!tools/content-function-hash.mjs
 # 2.2: машинные критерии K1/K2 для парных экспортов приёмки.
 !tools/accept-compare.js
 !tools/live-limit-test.js
