@@ -437,7 +437,7 @@ describe('O-1 R2: SPA-держание (conv-changed) не тронуто', () =
     // прежнее (для chatgpt это ровно прежние состояния: щит отпускает запись базы)
     const draw = fnDecl(CONTENT, 'processAndSend');
     expect(draw).toContain('var badgeSuppressActive = (badgeSuppressed && !baseSeen && !adapterBaseSeen);');
-    expect(draw).toContain('if (badgeSuppressActive) {');
+    expect(draw).toContain("if (badgePolicy.reason === 'spa-suppress') {");
     const drawSrc = WIDGET_SRC;
     expect(drawSrc).toContain('badgeSuppressed = true; // v1.8.1: до первого badge-recv нового convId бейдж не обновляем');
   });
@@ -447,9 +447,9 @@ describe('O-1 R2: SPA-держание (conv-changed) не тронуто', () =
     // поведения SPA-держания (badgeSuppressed) и скрытой загрузки (aiCmLoaderFreeze)
     const draw = fnDecl(CONTENT, 'processAndSend');
     const iSupp = draw.indexOf('var badgeSuppressActive = (badgeSuppressed && !baseSeen && !adapterBaseSeen);');
-    const iSuppIf = draw.indexOf('if (badgeSuppressActive) {');
-    const iFreeze = draw.indexOf('} else if (aiCmLoaderFreeze) {');
-    const iHold = draw.indexOf('} else if (aiCmBadgeHoldActive()) {');
+    const iSuppIf = draw.indexOf("if (badgePolicy.reason === 'spa-suppress') {");
+    const iFreeze = draw.indexOf("} else if (badgePolicy.reason === 'loader-freeze') {");
+    const iHold = draw.indexOf("} else if (badgePolicy.reason === 'badge-hold') {");
     const iUpd = draw.indexOf('updateWidget(badgeData.percentage, badgeData.tokenEstimate, badgeData.effectiveLimit');
     expect(iSupp).toBeGreaterThan(-1);
     expect(iSuppIf).toBeGreaterThan(iSupp);
@@ -466,7 +466,7 @@ describe('O-1 R3: автоэкспорт не тронут', () => {
   test('R3: maybeAutoExport вне ветвления щита, его skip-строки и латч прежние', () => {
     const draw = fnDecl(CONTENT, 'processAndSend');
     expect(draw).not.toContain('maybeAutoExport(percentage);');
-    const badgeBranch = draw.indexOf('} else if (aiCmBadgeHoldActive()) {');
+    const badgeBranch = draw.indexOf("} else if (badgePolicy.reason === 'badge-hold') {");
     expect(badgeBranch).toBeGreaterThan(-1);
     expect(draw.indexOf('aiCmScheduleAutoExport(snapshotPercentage);')).toBeGreaterThan(badgeBranch);
     expect(fnDecl(CONTENT, 'maybeAutoExport')).toContain('P.shouldSkipAutoExport({');

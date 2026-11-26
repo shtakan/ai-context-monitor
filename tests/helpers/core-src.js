@@ -31,6 +31,7 @@ const STRIPPED = new Set([
   'core/content-pdf.ts',
   'core/content-aistudio.ts',
   'core/content-autoexport.ts',
+  'core/content-threshold-policy.ts',
   'core/content-model.ts',
   'core/content-resync.ts',
   'core/content-snapshot-policy.ts',

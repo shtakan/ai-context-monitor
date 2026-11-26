@@ -169,7 +169,7 @@ function makeBadge() {
   new Function('ctx', 'with (ctx) { ' + fnDecl(WIDGET_SRC, 'updateWidget') +
     '\n var realUpdateWidget = updateWidget;' +
     '\n ctx.updateWidget = function () { ctx.calls.push(Array.prototype.slice.call(arguments)); return realUpdateWidget.apply(null, arguments); }; }')(ctx);
-  const branch = 'if (badgeData) ' + blockAt(CONTENT, '} else if (badgeData) {');
+  const branch = 'if (badgeData) ' + blockAt(CONTENT, '} else if (badgePolicy.draw && badgeData) {');
   const draw = new Function('ctx', 'with (ctx) { ' + branch + ' }');
   return { ctx: ctx, el: el, calls: calls, draw: draw };
 }

@@ -444,7 +444,8 @@ function loadScheduler(over) {
   ctxOver.autoExportDebouncePct = -1;
   ctxOver.autoExportDebounceCid = '';
   ctxOver.aiCmLatchSet = function () { };
-  const schedSrc = fnDecl(CONTENT, 'aiCmScheduleAutoExport');
+  const schedSrc = fnDecl(H.moduleSource('content-threshold-policy.ts'), 'resolveAutoExportSchedulePolicy') + '\n' +
+    fnDecl(CONTENT, 'aiCmScheduleAutoExport');
   const h = loadManager({
     ctx: ctxOver,
     extra: schedSrc + '\nctx.__p1ScheduleAutoExport = aiCmScheduleAutoExport;'

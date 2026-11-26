@@ -298,15 +298,15 @@ describe('Шаг 4: при BYOK без точного числа эвристи�
     expect(draw).toContain(GATE);
     const iGate = draw.indexOf(GATE);
     // S4/D3: метрической ветки держания больше нет — во всём content.ts она одна (отрисовка)
-    expect(CONTENT.split('} else if (byokHeuristicHold) {').length - 1).toBe(1);
+    expect(CONTENT.split("} else if (badgePolicy.reason === 'byok-hold') {").length - 1).toBe(1);
     // число присваивается ДО отрисовки и не зависит от держания: единственное присваивание
     const iMetric = draw.indexOf('maxTokenCount = tokenEstimate;');
     expect(iMetric).toBeGreaterThan(iGate);
     expect(draw.indexOf('const snapshotPercentage = snapshotPolicy.snapshotPercentage;', iMetric)).toBeGreaterThan(iMetric);
     expect(draw.slice(iGate, iMetric)).not.toContain('else if (byokHeuristicHold)');
     // ветка отрисовки: после щита O-1 и до updateWidget, без единой записи в виджет
-    const iDrawHold = draw.indexOf('} else if (byokHeuristicHold) {', iGate);
-    expect(iDrawHold).toBeGreaterThan(draw.indexOf('} else if (aiCmBadgeHoldActive()) {'));
+    const iDrawHold = draw.indexOf("} else if (badgePolicy.reason === 'byok-hold') {", iGate);
+    expect(iDrawHold).toBeGreaterThan(draw.indexOf("} else if (badgePolicy.reason === 'badge-hold') {"));
     const drawHold = branchBody(draw, iDrawHold);
     const drawHoldCode = drawHold.split('\n').filter(function (l) { return l.trim().indexOf('//') !== 0; }).join('\n');
     expect(drawHoldCode).not.toContain('updateWidget');

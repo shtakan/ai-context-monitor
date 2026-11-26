@@ -209,7 +209,7 @@ describe('v2.6 (R1) D5/D6: снимок метрики фиксируется О
     // все «держащие» ветки на месте: супрессия SPA, заморозка лоадера, щит O-1, BYOK
     ['[content-trace] badge-suppress', '[content-trace] badge-freeze', '[content-trace] byok-hold']
       .forEach(function (marker) { expect(draw).toContain(marker); });
-    expect(draw).toContain('} else if (aiCmBadgeHoldActive()) {');
+    expect(draw).toContain("} else if (badgePolicy.reason === 'badge-hold') {");
     // и на разморозке лоадера слушатель по-прежнему рисует накопленное значение
     expect(CONTENT).toContain('if (!aiCmLoaderFreeze && unfreezeData) {');
     expect(CONTENT).toContain('updateWidget(d.percentage, d.tokenEstimate, d.effectiveLimit, d.contextLimit, d.displayLimit, d.modelName, d.attachBreak);');

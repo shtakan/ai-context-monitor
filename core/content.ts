@@ -2648,27 +2648,38 @@ function processAndSend(): void {
     // нет вовсе, базу пишет history-write source=adapter). Вердикт считается один раз и уходит
     // в ту же диагностику qwen-badge (reason=spa-suppress) — гейт и строка не расходятся.
     var badgeSuppressActive = (badgeSuppressed && !baseSeen && !adapterBaseSeen);
-    if (badgeSuppressActive) {
+    // 2.4 Stage 4: порядок веток — чистый предикат в core/content-threshold-policy.ts;
+    // здесь остаются только вызовы/log-строки.
+    var badgePolicy = resolveBadgePolicy({
+      badgeSuppressed: badgeSuppressed === true,
+      baseSeen: baseSeen === true,
+      adapterBaseSeen: adapterBaseSeen === true,
+      loaderFreeze: aiCmLoaderFreeze === true,
+      badgeHold: aiCmBadgeHoldActive() === true,
+      byokHeuristicHold: byokHeuristicHold === true,
+      hasWidgetData: !!badgeData
+    });
+    if (badgePolicy.reason === 'spa-suppress') {
       // v1.8.1: после RESET до первого badge-recv НЕ эмитим дефолтную модель с нулями
       // (иначе 1–2с показывается ложная «Gemini 2.5 Pro» и 0%); бейдж остаётся «—».
       debugLog('log', '[content-trace] badge-suppress: пропуск updateWidget до первого снимка нового convId');
-    } else if (aiCmLoaderFreeze) {
+    } else if (badgePolicy.reason === 'loader-freeze') {
       // v30.9: во время скрытой загрузки молча копим последнее значение (без updateWidget);
       // на разморозке слушатель ai-cm-loader-freeze отрисует его принудительно (lastWidgetData
       // заполнен выше — ветка только не рисует).
       debugLog('log', '[content-trace] badge-freeze: скрытая загрузка лоадера — значение накоплено, виджет держится');
-    } else if (aiCmBadgeHoldActive()) {
+    } else if (badgePolicy.reason === 'badge-hold') {
       // O-1: первой записи базы ChatGPT на этом документе ещё нет — бейдж держим (виджет
       // скрыт с создания): не показываем ни placeholder «—», ни заниженную DOM-оценку после
       // F5 (в т.ч. при пустом convId). Отпускание — записью базы ИЛИ фолбэком
       // AI_CM_BADGE_HOLD_FALLBACK_MS (aiCmArmBadgeHoldFallback → aiCmBadgeHoldRelease(reason, true)
       // → processAndSend), то есть рисование гарантировано и на снятии щита.
-    } else if (byokHeuristicHold) {
+    } else if (badgePolicy.reason === 'byok-hold') {
       // Шаг 4: BYOK включён, но точного числа для ЭТОГО текста ещё нет — updateWidget не зовём:
       // бейдж держит предыдущее значение (на свежей странице — плейсхолдер «—»), а не завышенную
       // эвристику. Точное значение отрисует ответ countTokens через processAndSend.
       debugLog('log', '[content-trace] byok-hold: точного числа для текста ещё нет — бейдж держим');
-    } else if (badgeData) {
+    } else if (badgePolicy.draw && badgeData) {
       // S2.2: единственный источник чисел — снимок; при null-снимке updateWidget не зовём,
       // чтобы не стереть текущий рендер и не напечатать 0/«0.0 %».
       updateWidget(badgeData.percentage, badgeData.tokenEstimate, badgeData.effectiveLimit,
@@ -2991,8 +3002,13 @@ function aiCmLoadProactiveFlag(): void {
 }
 function sendThresholdPct(pct: number): void {
   try {
-    if (!isExtensionValid() || !aiCmProactiveEnabled) return;
-    if (typeof pct !== 'number' || !(pct >= 0)) return;
+    // 2.4 Stage 4: чистый предикат отправки pct — в core/content-threshold-policy.ts.
+    var thresholdPolicy = resolveThresholdPolicy({
+      extensionValid: isExtensionValid(),
+      proactiveEnabled: aiCmProactiveEnabled === true,
+      percentage: pct
+    });
+    if (!thresholdPolicy.send) return;
     var cid = lastEmitConvId || getCurrentConvId() || '';
     var siteName = (currentAdapter && currentAdapter.siteName) ? currentAdapter.siteName : '';
     chrome.runtime.sendMessage({

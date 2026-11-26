@@ -21,8 +21,12 @@ var autoExportDebouncePct: number = -1;
 var autoExportDebounceCid: string = '';
 function aiCmScheduleAutoExport(percentage: number): void {
   try {
-    if (!autoExportSettings || autoExportSettings.enabled !== true) return;
-    if (typeof percentage !== 'number' || !isFinite(percentage) || percentage < 0) return;
+    // 2.4 Stage 4: чистый предикат планирования — в core/content-threshold-policy.ts.
+    var schedulePolicy = resolveAutoExportSchedulePolicy({
+      enabled: !!(autoExportSettings && autoExportSettings.enabled === true),
+      percentage: percentage
+    });
+    if (!schedulePolicy.schedule) return;
     autoExportDebouncePct = percentage;
     autoExportDebounceCid = (typeof aiCmAutoExportConvId === 'function') ? (aiCmAutoExportConvId() || '') : '';
     if (autoExportDebounceTimer !== null) clearTimeout(autoExportDebounceTimer);

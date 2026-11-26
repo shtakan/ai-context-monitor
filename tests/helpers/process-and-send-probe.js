@@ -32,6 +32,8 @@ function fnDecl(src, name) {
 
 const PROCESS_SRC = fnDecl(contentSource, 'processAndSend');
 const SNAPSHOT_POLICY_SRC = fnDecl(moduleSource('content-snapshot-policy.ts'), 'resolveSnapshotPolicy');
+const THRESHOLD_POLICY_SRC = fnDecl(moduleSource('content-threshold-policy.ts'), 'resolveBadgePolicy') + '\n' +
+  fnDecl(moduleSource('content-threshold-policy.ts'), 'resolveThresholdPolicy');
 
 function makeProbe(over) {
   const o = over || {};
@@ -297,7 +299,7 @@ function makeProbe(over) {
     NaN: NaN,
     undefined: undefined
   };
-  const fn = new Function('ctx', 'with (ctx) { ' + SNAPSHOT_POLICY_SRC + '\n' + PROCESS_SRC + '\n return processAndSend; }')(ctx);
+  const fn = new Function('ctx', 'with (ctx) { ' + SNAPSHOT_POLICY_SRC + '\n' + THRESHOLD_POLICY_SRC + '\n' + PROCESS_SRC + '\n return processAndSend; }')(ctx);
 
   function run(patch) {
     if (patch && typeof patch === 'object') {

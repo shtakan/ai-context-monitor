@@ -193,7 +193,7 @@ describe('v54 D: гейт badge-suppress — читаемое состояние
     expect((WIDGET_SRC.match(/adapterBaseSeen = true;/g) || [])).toHaveLength(0);
     expect((CONTENT_ONLY.match(/adapterBaseSeen = false;/g) || [])).toHaveLength(0);
     // порядок в DRAW: вердикт гейта считается ДО ветвления (одна строка на гейт и диагностику)
-    expect(DRAW.indexOf(SUPPRESS_DECL)).toBeLessThan(DRAW.indexOf('if (badgeSuppressActive) {'));
+    expect(DRAW.indexOf(SUPPRESS_DECL)).toBeLessThan(DRAW.indexOf('var badgePolicy = resolveBadgePolicy({'));
     expect(DRAW).toContain("reason: badgeSuppressActive ? 'spa-suppress'");
   });
 
@@ -305,7 +305,7 @@ describe('v54 R: шесть платформ — гейт и бейдж при �
     expect((CONTENT_ONLY.match(/aiCmBadgeHoldSpent = true/g) || [])).toHaveLength(1);
     expect((CONTENT_ONLY.match(/var AI_CM_BADGE_HOLD_FALLBACK_MS = 10000;/g) || [])).toHaveLength(1);
     // гейт SPA-супрессии стоит в цепочке РАНЬШЕ щита O-1 (порядок ветвей прежний)
-    expect(DRAW.indexOf('if (badgeSuppressActive) {')).toBeLessThan(DRAW.indexOf('} else if (aiCmBadgeHoldActive()) {'));
+    expect(DRAW.indexOf("if (badgePolicy.reason === 'spa-suppress') {")).toBeLessThan(DRAW.indexOf("} else if (badgePolicy.reason === 'badge-hold') {"));
   });
 
   test('R: семантики O-33 (автоэкспорт ждёт базу) и O-14 (reset чистит ровно снимок) живы', function () {
