@@ -19,6 +19,7 @@
  */
 
 const CONTENT = require('./helpers/content-source.js').contentSource;
+const CONTENT_MODEL = require('./helpers/content-source.js').moduleSource('content-model.ts');
 const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 
@@ -37,7 +38,8 @@ function fnDecl(src, name) {
   throw new Error('unbalanced declaration: ' + name);
 }
 
-const SCOPE = 'with (ctx) { ' + fnDecl(CONTENT, 'resolveCurrentModel') +
+const SCOPE = 'with (ctx) { ' + fnDecl(CONTENT_MODEL, 'resolveModelDecision') + '\n' +
+  fnDecl(CONTENT, 'resolveCurrentModel') +
   ' return { run: resolveCurrentModel }; }';
 const makeResolve = new Function('ctx', SCOPE);
 

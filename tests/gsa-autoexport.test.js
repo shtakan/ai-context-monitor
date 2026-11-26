@@ -29,6 +29,7 @@ const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-te
 
 const ROOT = path.join(__dirname, '..');
 const CONTENT = require('./helpers/content-source.js').contentSource;
+const CONTENT_MODEL = require('./helpers/content-source.js').moduleSource('content-model.ts');
 const INTERCEPT = fs.readFileSync(path.join(ROOT, 'core', 'google-search-intercept.js'), 'utf8');
 const OPTIONS_HTML = fs.readFileSync(path.join(ROOT, 'options', 'options.html'), 'utf8');
 const OPTIONS_JS = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
@@ -383,7 +384,8 @@ describe('F4/F5: doAutoExportDownload GSA (реальный код)', () => {
 // =====================================================================================
 describe('F7: заполнение модели снапшота GSA (реальный resolveCurrentModel)', () => {
   const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.ts');
-  const SCOPE = 'with (ctx) { ' + fnDecl(CONTENT, 'resolveCurrentModel') +
+  const SCOPE = 'with (ctx) { ' + fnDecl(CONTENT_MODEL, 'resolveModelDecision') + '\n' +
+    fnDecl(CONTENT, 'resolveCurrentModel') +
     ' return { run: resolveCurrentModel }; }';
   const makeResolve = new Function('ctx', SCOPE);
 

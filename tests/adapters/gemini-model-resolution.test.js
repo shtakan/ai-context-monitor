@@ -30,6 +30,7 @@ const ui = loadEsmModule('utils/gemini-ui-model.ts');
 const parser = loadEsmModule('utils/gemini-batchexecute-parser.ts');
 const Rpc = require('../../core/gemini-rpc.js');
 const CONTENT = require('../helpers/content-source.js').contentSource;
+const CONTENT_MODEL = require('../helpers/content-source.js').moduleSource('content-model.ts');
 
 // Рез по балансу фигурных скобок (тот же приём, что в tests/gsa-autoexport.test.js).
 function fnDecl(src, name) {
@@ -46,7 +47,8 @@ function fnDecl(src, name) {
   throw new Error('unbalanced declaration: ' + name);
 }
 
-const SCOPE = 'with (ctx) { ' + fnDecl(CONTENT, 'resolveCurrentModel') +
+const SCOPE = 'with (ctx) { ' + fnDecl(CONTENT_MODEL, 'resolveModelDecision') + '\n' +
+  fnDecl(CONTENT, 'resolveCurrentModel') +
   ' return { run: resolveCurrentModel }; }';
 const makeResolve = new Function('ctx', SCOPE);
 

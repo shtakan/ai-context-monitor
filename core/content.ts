@@ -1595,33 +1595,28 @@ function resolveCurrentModel(): string {
   const raw = popupModelId || uiRaw || rawSnapshot || '';
   // Источник raw для path/source: та же лестница приоритетов (без повторов).
   const rawSrc = popupModelId ? 'попап' : (uiRaw ? 'dom' : (rawSnapshot ? (rawFromNet ? 'сеть' : 'DOM') : ''));
-  const rawResolvedId = raw ? ModelConfig.resolveModelId(raw) : null;
+  // 2.4 Stage 1: чистое решение модели — в core/content-model.ts (без DOM/chrome/
+  // ModelConfig внутри); здесь только сбор сигналов и побочные эффекты.
+  var decision = resolveModelDecision({
+    site: (currentAdapter && currentAdapter.siteName) || '',
+    popupModelId: popupModelId,
+    raw: raw,
+    rawSrc: rawSrc,
+    rawFromNet: rawFromNet,
+    rawFromDom: rawFromDom,
+    rawSnapshot: rawSnapshot,
+    uiRaw: uiRaw,
+    uiAuto: uiAuto,
+    geminiHost: geminiHost,
+    defaultModel: ModelConfig.getDefaultModel(currentAdapter!.siteName),
+    resolveModelId: function (value: string) { return ModelConfig.resolveModelId(value); }
+  });
   // BUG-02: «сигнал есть, а модели нет в каталоге» — отдельное состояние. Лимиты берутся
   // из siteDefaults (modelId ниже), а отображаемое имя остаётся распознанным слагом.
   var site = (currentAdapter && currentAdapter.siteName) || '';
-  var unknownModel = !!raw && !rawResolvedId;
-  let modelId = rawResolvedId;
-  let path;
-  if (modelId) {
-    path = rawSrc || 'дефолт';
-  } else if (uiAuto && !rawFromNet && !popupModelId) {
-    // UI явно показывает «Авто», сети нет: не подставляем скрытый/дефолтный ярлык модели.
-    modelId = 'gemini-auto';
-    path = 'dom(auto)';
-  } else if (geminiHost && site === 'gemini' && !popupModelId && !rawFromNet && !rawFromDom && !uiRaw) {
-    // После F5 UI-пикер может ещё не отрисоваться: Gemini web по умолчанию «Авто»,
-    // не показываем устаревший 2.5 Flash/Pro как факт.
-    modelId = 'gemini-auto';
-    path = 'dom(auto)';
-  } else {
-    modelId = ModelConfig.getDefaultModel(currentAdapter!.siteName);
-    path = raw ? ((rawFromNet ? 'сеть' : 'DOM') + '→дефолт(не распознан)') : 'дефолт';
-    // BUG-02: путь честно называет, откуда число лимита (siteDefaults), только там, где
-    // распознанный слаг показывается в файле/бейдже; прочие сайты — байтово прежний path.
-    if (unknownModel && (site === 'google_search' || site === 'qwen')) {
-      path = (rawSrc || 'сеть') + '→siteDefaults(вне каталога)';
-    }
-  }
+  var unknownModel = decision.unknownModel;
+  let modelId = decision.modelId;
+  let path = decision.path;
   if (modelId === 'gemini-auto') lastSnapshotModelName = (ModelConfig.getModel('gemini-auto')?.name || 'Gemini (auto)');
   // v1.18 (F7): GSA — сеть может не дать slug вовсе (детектор GSA молчит, если в ответе нет
   // model:"…"), и имя модели снапшота оставалось пустым → сегмент модели в имени файла
@@ -1637,7 +1632,7 @@ function resolveCurrentModel(): string {
       ? String(raw).trim().slice(0, 64)
       : (ModelConfig.getModel(modelId)?.name || modelId);
   }
-  const source = rawSrc === 'попап' ? 'popup' : (rawSrc === 'dom' ? 'dom' : 'snapshot');
+  const source = decision.source;
   if (modelId !== lastResolvedModelId) {
     lastResolvedModelId = modelId;
     const ctx = ModelConfig.getContextLimit(modelId);
