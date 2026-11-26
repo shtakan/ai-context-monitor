@@ -42,6 +42,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const H = require('./helpers/content-source.js');
 const CONTENT = H.contentSource;
+const PUBLISH = H.readSource('core/content-publish.js');
 const WIDGET_SRC = H.moduleSource('core/widget.ts');
 
 // E.2a.2b.4b: хелпер swallow из utils/debug.ts (его нет в eval-песочнице: срез
@@ -468,7 +469,8 @@ describe('O-1 R3: автоэкспорт не тронут', () => {
     expect(draw).not.toContain('maybeAutoExport(percentage);');
     const badgeBranch = draw.indexOf("} else if (badgePolicy.reason === 'badge-hold') {");
     expect(badgeBranch).toBeGreaterThan(-1);
-    expect(draw.indexOf('aiCmScheduleAutoExport(snapshotPercentage);')).toBeGreaterThan(badgeBranch);
+    expect(draw.indexOf('aiCmPublishAfterMetric(')).toBeGreaterThan(badgeBranch);
+    expect(PUBLISH).toContain('aiCmScheduleAutoExport(snapshotPercentage);');
     expect(fnDecl(CONTENT, 'maybeAutoExport')).toContain('P.shouldSkipAutoExport({');
     // skip-строки автоэкспорта — на месте
     expect(MGR_SRC).toContain("skip reason=already-fired convId=");

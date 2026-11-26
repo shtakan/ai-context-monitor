@@ -337,9 +337,7 @@
       "file": "core/content.ts",
       "category": "best-effort-guard",
       "lines": [
-        2181,
-        2321,
-        3326
+        2860
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cyrDiag = (t.match(/[а-яёА-ЯЁ]/g) || []).length; var cyrillicPct = t"
     },
@@ -383,13 +381,11 @@
         1380,
         1385,
         1802,
-        2145,
-        2332,
-        2356,
-        2365,
-        3206,
-        3232,
-        3234
+        2137,
+        2146,
+        2740,
+        2766,
+        2768
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
     },
@@ -415,19 +411,9 @@
       "category": "event-guard",
       "lines": [
         1046,
-        1055,
-        2274,
-        2297
+        1055
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
-    },
-    {
-      "file": "core/content.ts",
-      "category": "feature-detect",
-      "lines": [
-        2504
-      ],
-      "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var metricSrc = baseComplete ? 'base-complete' : (lastBounded ? 'base-fl"
     },
     {
       "file": "core/content.ts",
@@ -444,10 +430,7 @@
         778,
         1004,
         1876,
-        2714,
-        2798,
-        2815,
-        2913
+        2472
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -457,7 +440,7 @@
       "lines": [
         92,
         354,
-        2998
+        2532
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.runtime.sendMessage({ type: 'BADGE_RESET' }).catch(function () {"
     },
@@ -473,7 +456,7 @@
       "file": "core/content.ts",
       "category": "parse-guard",
       "lines": [
-        3268
+        2802
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof AiCmExportBuilders !== 'undefined') ? AiCmExportB"
     },
@@ -1613,6 +1596,44 @@
         735
       ],
       "reason": "timing-guard: отмена таймера/подписки: обработчик мог быть снят хостом или гонкой; пример: aiCmSafeBottomObserver.disconnect();"
+    },
+    {
+      "file": "core/content-tape-restore.js",
+      "category": "best-effort-guard",
+      "lines": [
+        24,
+        117,
+        140,
+        164,
+        175
+      ],
+      "reason": "best-effort-guard: ?????????????? ????? Gemini: ???? regex ????/????????/??????? ?? ?????? ?????? ?????? processAndSend; ??????: try { var m = location.pathname.match(...) } catch (e) { }"
+    },
+    {
+      "file": "core/content-publish.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        80,
+        97,
+        195
+      ],
+      "reason": "debug-instrumentation: ??????????????? sourceInfo/JSON ? ?????????? ??????: ???? ?????? ?????? ?? ?????? ?? ????/???????; ??????: (function () { try { var si = aiCmSourceInfo(); return si ? si.kind : ''; } catch (eSi) { return ''; } })()"
+    },
+    {
+      "file": "core/content-process-prelude.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        44
+      ],
+      "reason": "debug-instrumentation: svc-emit-trace ?????????? ??? ?????????? ??????; ???? ???????????????? extractMessages ?? ?????? ?????? ?? ??????; ??????: } catch (eS1) { }"
+    },
+    {
+      "file": "core/content-metric-diag.js",
+      "category": "debug-instrumentation",
+      "lines": [
+        32
+      ],
+      "reason": "debug-instrumentation: gsa-metric-src ? ?????? read-only ??? ????????? ??????? ??? aiCmDebug; ??????: } catch (eMetricSrc) { }"
     }
   ]
 }

@@ -21,7 +21,11 @@
 const loadEsm = require('./helpers/load-esm.js');
 const { moduleSource } = require('./helpers/content-source.js');
 
-const CONTENT = moduleSource('content.ts');
+const CONTENT = [
+  moduleSource('content.ts'),
+  moduleSource('content-publish.js'),
+  moduleSource('content-process-prelude.js')
+].join('\n');
 const WIDGET = moduleSource('widget.ts');
 
 /** Рез функции по балансу фигурных скобок. */
@@ -127,8 +131,8 @@ describe('I6: чтение снимка по каноническому convId',
         expect(after).toMatch(/aiCmCanonicalConvId/);
       }
     });
-    // 2.4 Stage 5: ручной путь получает convId уже канонизированным от module-host,
-    // поэтому прямых вызовов aiCmReadContextSnapshot( в content.ts на один меньше.
+    // 2.4 Stage 5/8: ручной путь получает convId канонизированным, а popup/история
+    // переехали в content-publish.js; 4 вызова content.ts + 2 publish + 3 export-manager.
     expect(total).toBe(9);
     const MANUAL = require('./helpers/content-source.js').readSource('core/content-manual-export.ts');
     expect(MANUAL).toContain('host.getCanonicalConvId(curCidExp)');

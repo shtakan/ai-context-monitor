@@ -34,6 +34,7 @@ const H = require('./helpers/content-source.js');
 const ROOT = path.join(__dirname, '..');
 const CONTENT = H.contentSource;                                    // модули + content.js (единый скоуп)
 const CONTENT_ONLY = readCore('core/content.ts');
+const PUBLISH_SRC = H.readSource('core/content-publish.js');
 const WIDGET_SRC = H.moduleSource('core/widget.ts');
 const STATE_SRC = H.moduleSource('core/state.ts');
 // R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
@@ -95,14 +96,14 @@ const suppressVerdict = new Function('ctx', 'with (ctx) { ' + SUPPRESS_DECL + '\
 
 // Блок записи базы путём адаптера (единственный писатель состояния) — текстом из исходника
 const ADAPTER_BRANCH = (function () {
-  const i = CONTENT_ONLY.indexOf('var cidS24 = getCurrentConvId()');
+  const i = PUBLISH_SRC.indexOf('var cidS24 = getCurrentConvId()');
   expect(i).toBeGreaterThan(-1);
   // E.2a.2b.3: якорь укорочен до стабильного префикса '} catch (eS24) {' — тело catch
   // теперь swallow(eS24, …). Индекс начала тот же, поэтому срез ADAPTER_BRANCH
   // байт-идентичен прежнему: пин по-прежнему покрывает всю ветку до catch.
-  const j = CONTENT_ONLY.indexOf('} catch (eS24) {', i);
+  const j = PUBLISH_SRC.indexOf('} catch (eS24) {', i);
   expect(j).toBeGreaterThan(i);
-  return CONTENT_ONLY.slice(i, j);
+  return PUBLISH_SRC.slice(i, j);
 })();
 
 // ---------------------------------------------------------------------------------
@@ -178,7 +179,7 @@ describe('v54 D: гейт badge-suppress — читаемое состояние
     expect(STATE_SRC).toContain('let adapterBaseSeen = false;');
     expect((STATE_SRC.match(/adapterBaseSeen = /g) || [])).toHaveLength(1);
     // единственный взвод — в блоке history-write source=adapter
-    expect((CONTENT_ONLY.match(/adapterBaseSeen = true;/g) || [])).toHaveLength(1);
+    expect((PUBLISH_SRC.match(/adapterBaseSeen = true;/g) || [])).toHaveLength(1);
     expect(ADAPTER_BRANCH).toContain('adapterBaseSeen = true;');
     expect(ADAPTER_BRANCH.indexOf('adapterBaseSeen = true;')).toBeGreaterThan(ADAPTER_BRANCH.indexOf('lastHistoryWroteKey = histKeyS24;'));
     // взвод стоит ВНУТРИ ветки фактической записи (msgs>0 и новый ключ), а не рядом с ней
@@ -312,7 +313,8 @@ describe('v54 R: шесть платформ — гейт и бейдж при �
     // P1/O-33: вызов автоэкспорта вынесен из отрисовки бейджа в точки принятия базы;
     // adapter-путь планирует ту же проверку (дебаунс 500 мс) отдельно от ветвления бейджа
     expect(DRAW).not.toContain('maybeAutoExport(percentage);');
-    expect(DRAW).toContain('aiCmScheduleAutoExport(snapshotPercentage);');
+    expect(DRAW).toContain('aiCmPublishAfterMetric(');
+    expect(PUBLISH_SRC).toContain('aiCmScheduleAutoExport(snapshotPercentage);');
     expect(fnDecl(CONTENT, 'aiCmScheduleAutoExport')).toContain('AI_CM_AUTOEXPORT_DEBOUNCE_MS');
     expect(fnDecl(CONTENT, 'maybeAutoExport')).toContain('P.shouldSkipAutoExport({');
     // новое состояние в автоэкспорт-контур не проникает вовсе

@@ -242,7 +242,7 @@ describe('S-1: копии ветки /app/ в core/content.ts синхрониз
   });
 
   test('ни одной голой копии в core/content.ts; ровно 4 синхронизированные', () => {
-    const src = fs.readFileSync(path.join(__dirname, '..', 'core', 'content.ts'), 'utf8');
+    const src = require('./helpers/content-source.js').contentSource;
     expect(src).not.toContain(LEGACY);
     expect(src.split(CANON).length - 1).toBe(4);
   });

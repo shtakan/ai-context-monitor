@@ -38,6 +38,8 @@ const H = require('./helpers/content-source.js');
 
 const ROOT = path.join(__dirname, '..');
 const CONTENT = H.contentSource;
+const PUBLISH = H.readSource('core/content-publish.js');
+const PRELUDE = H.readSource('core/content-process-prelude.js');
 // R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
 const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
@@ -184,24 +186,24 @@ describe('O-35 B2-терминал: D-пины (SPA-пересъём базы б
     // 3) база уходит в aiCmHistory ТОЛЬКО ниже гарда — новый путь гарда её пропускает
     const draw = fnDecl(CONTENT, 'processAndSend');
     const iGuard = draw.indexOf('&& !aiCmAdapterBaseSeen()) {');
-    const iWrite = draw.indexOf('history-write source=adapter');
     expect(iGuard).toBeGreaterThan(-1);
-    expect(iWrite).toBeGreaterThan(iGuard);
-    expect(draw).toContain("histPatchS24['aiCmHistory:' + window.location.hostname]");
+    expect(draw.indexOf('aiCmPublishAfterMetric(')).toBeGreaterThan(iGuard);
+    expect(PUBLISH).toContain("histPatchS24['aiCmHistory:' + window.location.hostname]");
     // 4) v54: та же ветка отпускает SPA-супрессию бейджа → число вместо «—»
-    expect(draw).toContain('adapterBaseSeen = true;');
+    expect(PUBLISH).toContain('adapterBaseSeen = true;');
     expect(draw).toContain('var badgeSuppressActive = (badgeSuppressed && !baseSeen && !adapterBaseSeen);');
   });
 
   test('D3: локализация корня (b): svc-emit-trace печатается ВЫШЕ гарда — «тишина» в логе = processAndSend не вызван', function () {
     const draw = fnDecl(CONTENT, 'processAndSend');
-    const iTrace = draw.indexOf('[AI CM][svc-emit-trace]');
+    const iTrace = PRELUDE.indexOf('[AI CM][svc-emit-trace]');
     const iGuard = draw.indexOf('&& !aiCmAdapterBaseSeen()) {');
     expect(iTrace).toBeGreaterThan(-1);
     expect(iGuard).toBeGreaterThan(-1);
     // Порядок строк — доказательство: отсутствие svc-emit-trace в живом логе 17:49-17:50
     // означало «проход не входил вовсе» (вариант b), а не падение внутри прохода (вариант c).
-    expect(iTrace).toBeLessThan(iGuard);
+    expect(draw.indexOf('aiCmProcessPrelude()')).toBeGreaterThan(-1);
+    expect(draw.indexOf('aiCmProcessPrelude()')).toBeLessThan(iGuard);
     // Корень (a) — исключение до tryInit — не подтверждён: до tryInit только детект адаптера,
     // а в reactivation-ветке НЕТ голого catch вокруг него (исключение логируется, а не глотается).
     const resh = fnDecl(CONTENT, 'aiCmQwenSpaReshoot');

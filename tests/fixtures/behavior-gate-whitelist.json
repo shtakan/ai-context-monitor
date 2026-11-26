@@ -47,10 +47,6 @@
     "count": 8,
     "reason": "legacy-pin"
   },
-  "tests/adapters/deepseek-o22-dispatch-dedupe.test.js": {
-    "count": 6,
-    "reason": "legacy-pin"
-  },
   "tests/adapters/firefox-pdf-fallback.test.js": {
     "count": 10,
     "reason": "vm-harness"
@@ -280,7 +276,7 @@
     "reason": "legacy-pin"
   },
   "tests/export-emit-pipeline.test.js": {
-    "count": 11,
+    "count": 10,
     "reason": "legacy-pin"
   },
   "tests/export-manager-invariants.test.js": {

@@ -22,7 +22,7 @@
 
 const H = require('./helpers/content-source.js');
 
-const CONTENT = H.readSource('core/content.ts');
+const CONTENT = H.contentSource;
 const STATE = H.readExecutable('core/state.ts');
 
 const HOST = 'chatgpt.com';

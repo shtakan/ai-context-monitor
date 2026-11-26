@@ -40,6 +40,7 @@ const path = require('path');
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('./helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const { contentSource: CONTENT } = require('./helpers/content-source.js');
+const PUBLISH = require('./helpers/content-source.js').readSource('core/content-publish.js');
 
 const ROOT = path.join(__dirname, '..');
 const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipeline.ts'), 'utf8');
@@ -565,6 +566,7 @@ describe('O-33 R5: O-11/O-31/O-27/O-15…O-20/O-28/O-9 — маркеры и б�
     const iHold = draw.indexOf("} else if (badgePolicy.reason === 'badge-hold') {");
     expect(iHold).toBeGreaterThan(-1);
     // P1: автоэкспорт планируется только по принятию базы; adapter-путь — вне ветвления щита
-    expect(draw.indexOf('aiCmScheduleAutoExport(snapshotPercentage);')).toBeGreaterThan(iHold);
+    expect(draw.indexOf('aiCmPublishAfterMetric(')).toBeGreaterThan(iHold);
+    expect(PUBLISH).toContain('aiCmScheduleAutoExport(snapshotPercentage);');
   });
 });

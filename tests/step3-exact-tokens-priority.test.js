@@ -50,6 +50,7 @@
 const H = require('./helpers/content-source.js');
 
 const CONTENT = H.contentSource;
+const PUBLISH = H.readSource('core/content-publish.js');
 
 /** Срез объявления по балансу фигурных скобок (конвенция сьюта). */
 function fnDecl(src, name) {
@@ -313,7 +314,8 @@ describe('Шаг 4: при BYOK без точного числа эвристи�
     expect(drawHoldCode).not.toContain('lastWidgetData');
     expect(drawHoldCode).not.toContain('maxTokenCount');
     expect(draw.indexOf('updateWidget(badgeData.percentage')).toBeGreaterThan(iDrawHold);
-    expect(draw.indexOf('aiCmScheduleAutoExport(snapshotPercentage);')).toBeGreaterThan(iDrawHold);
+    expect(draw.indexOf('aiCmPublishAfterMetric(')).toBeGreaterThan(iDrawHold);
+    expect(PUBLISH).toContain('aiCmScheduleAutoExport(snapshotPercentage);');
   });
 
   test('S14: успех/отказ countTokens управляют держанием, сброс чата чистит отметку', () => {

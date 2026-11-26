@@ -454,10 +454,13 @@ describe('O-27: source-пины (где живёт гарантия)', () => {
     expect(fnDecl(CONTENT, 'aiCmGsaResetStaleStateOnChatlessDoc')).toContain('resetConversationState()');
     // вызов — на входе DRAW (до расчёта pct и до maybeAutoExport)
     const draw = fnDecl(CONTENT, 'processAndSend');
-    expect(draw).toContain('aiCmGsaResetStaleStateOnChatlessDoc();');
+    const prelude = require('./helpers/content-source.js').readSource('core/content-process-prelude.js');
+    const publish = require('./helpers/content-source.js').readSource('core/content-publish.js');
+    expect(prelude).toContain('aiCmGsaResetStaleStateOnChatlessDoc();');
+    expect(draw).toContain('aiCmProcessPrelude()');
     expect(draw).not.toContain('maybeAutoExport(percentage);');
-    expect(draw.indexOf('aiCmGsaResetStaleStateOnChatlessDoc();'))
-      .toBeLessThan(draw.indexOf('aiCmScheduleAutoExport(snapshotPercentage);'));
+    expect(draw.indexOf('aiCmProcessPrelude()')).toBeLessThan(draw.indexOf('aiCmPublishAfterMetric('));
+    expect(publish).toContain('aiCmScheduleAutoExport(snapshotPercentage);');
   });
 
   test('export-manager: гейт получает site + факты чат-страницы', () => {

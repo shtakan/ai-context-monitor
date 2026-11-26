@@ -209,6 +209,10 @@ declare function aiCmExportProjectFileMessages(
 declare function aiCmExportNativeChain(
   input: unknown
 ): { messages: Array<{ role: string; text: string }>; partial?: boolean; partialReason?: string } | null;
+declare function aiCmProcessTapeRestore(): void;
+declare function aiCmPublishAfterMetric(host: Record<string, unknown>): void;
+declare function aiCmProcessPrelude(): unknown[] | null;
+declare function aiCmLogMetricSource(host: Record<string, unknown>): void;
 declare function aiCmExportPartialView(
   source: unknown
 ): { partial?: true; partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text' | 'stopped' | 'truncated' };

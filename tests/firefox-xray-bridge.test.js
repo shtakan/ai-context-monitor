@@ -67,13 +67,13 @@ const BRIDGES = [
   },
   {
     event: 'ai-cm-restored-history',
-    from: 'core/content.ts',
+    from: 'core/content-tape-restore.js',
     payload: ['convId: convId,', 'turns: entry.turns,', 'meta: entry.meta || {}'],
     key: 'turns'
   },
   {
     event: 'ai-cm-cache-refresh',
-    from: 'core/content.ts',
+    from: 'core/content-tape-restore.js',
     payload: ['convId: convId'],
     key: 'convId'
   },

@@ -43,7 +43,7 @@ function fnDecl(src, name) {
  * tests/perplexity-o9-signature.test.js (manual). Срез без state.ts видит
  * `typeof aiCmReadContextSnapshot === 'undefined'` → меток нет (байты прежние).
  */
-const CONTENT = moduleSource('content.ts');
+const CONTENT = moduleSource('content-publish.js');
 const BH = moduleSource('base-handler.ts');
 const NET_END = "} catch (e) { swallowSoft(e, 'content:processAndSend-history-write'); }";
 const ADAPTER_END = "} catch (eS24) { swallowSoft(eS24, 'content:processAndSend-history-write-adapter'); }";

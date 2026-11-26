@@ -37,6 +37,7 @@ const H = require('./helpers/content-source.js');
 const ROOT = path.join(__dirname, '..');
 const MGR_SRC = read('core/export-manager.ts');
 const CONTENT = H.contentSource;   // state/widget/base-handler/hybrid-tail/export-manager + content.js
+const PUBLISH = H.readSource('core/content-publish.js');
 
 const CID = 'e292103e4b521dae';                 // живой convId Gemini из fixture H21
 const OTHER = '1984298ffe185ef1';
@@ -461,7 +462,8 @@ describe('P1 D1: pct при загрузке не выгружает, пока �
     // внутри DRAW остаётся только tape-restore вызов (не отрисовка бейджа); pct-вызова нет
     expect(draw).not.toContain('maybeAutoExport(percentage);');
     // adapter-путь (AI Studio/Qwen, без ai-cm-full-history) планирует ту же проверку
-    expect(draw).toContain('aiCmScheduleAutoExport(snapshotPercentage);');
+    expect(draw).toContain('aiCmPublishAfterMetric(');
+    expect(PUBLISH).toContain('aiCmScheduleAutoExport(snapshotPercentage);');
 
     const iListener = CONTENT.indexOf("window.addEventListener('ai-cm-full-history', function");
     const iProc = CONTENT.indexOf('function processAndSend(');

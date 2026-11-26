@@ -31,6 +31,7 @@ const BACKGROUND = raw('core/background.ts');
 const STATE = raw('core/state.ts');
 const CONTENT = raw('core/content.ts');
 const MANUAL = raw('core/content-manual-export.ts');
+const PUBLISH = raw('core/content-publish.js');
 const CONTENT_URL = raw('core/content-url.ts');
 const CONTENT_DIAG = raw('core/content-diag.ts');
 const CONTENT_BYOK = raw('core/content-byok.ts');
@@ -144,7 +145,7 @@ describe('C1: core/content.ts — отправители типизирован�
   });
 
   it('CONTEXT_UPDATE получил форму AiCmBroadcast, отправка прежняя', () => {
-    expect(CONTENT).toContain('} as AiCmBroadcast).catch(() => { });');
+    expect(PUBLISH).toContain('}).catch(() => { });');
     expect(CONTENT).toContain("type AiCmBroadcast = import('../types/messages').AiCmBroadcast;");
   });
 });

@@ -88,7 +88,7 @@ describe('export/completeness: derivePartial', () => {
   });
 
   test('source: manual/auto/current-history используют мост', function () {
-    const content = moduleSource('content.ts');
+    const content = require('./helpers/content-source.js').contentSource;
     const mgr = moduleSource('export-manager.ts');
     const contentCalls = (content.match(/aiCmExportPartialView\(/g) || []).length;
     expect(contentCalls).toBeGreaterThanOrEqual(4); // net + adapter + manual + declaration

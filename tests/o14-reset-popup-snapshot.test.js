@@ -136,7 +136,7 @@ describe('O-14 D1: структурный пин — remove живёт в resetC
     const decl = fnDecl(WIDGET_SRC, 'resetConversationState');
     expect(decl).toContain("chrome.storage.local.remove(['aiCmState', 'aiCmState:' + window.location.hostname])");
     // host берётся из того же источника, что в записи core/content.ts (statePatch-ключ)
-    const contentSrc = fs.readFileSync(path.join(ROOT, 'core', 'content.ts'), 'utf8');
+    const contentSrc = fs.readFileSync(path.join(ROOT, 'core', 'content-publish.js'), 'utf8');
     expect(contentSrc).toContain("statePatch['aiCmState:' + window.location.hostname] = stateSnapshot;");
     // никакой другой чистки storage в resetConversationState не появилось
     expect(decl.match(/storage\.local\.remove/g)).toHaveLength(1);

@@ -36,6 +36,7 @@ const PIPELINE_SRC = fs.readFileSync(path.join(ROOT, 'utils', 'export-emit-pipel
 const MGR_SRC = read('core/export-manager.ts');
 const WIDGET_SRC = readSource('core/widget.ts');
 const CONTENT_ONLY = readCore('core/content.ts');
+const PUBLISH_SRC = require('./helpers/content-source.js').readSource('core/content-publish.js');
 // R1 (Ph2): utils/debug.ts — ESM-модуль, поэтому песочнице нужен classic-срез без
 // `export`-префиксов (loadAsClassic снимает их и разворачивает import'ы).
 const DEBUG_SRC = require('./helpers/load-esm.js').loadAsClassic('utils/debug.ts');
@@ -506,11 +507,11 @@ describe('O-60: изоляция истории qwen по явному convId', 
   const ADAPTER_START = 'var svcS24 = getServiceKey();';
   const ADAPTER_END = '} catch (eS24) {';
   const ADAPTER_BRANCH = (function () {
-    const s = CONTENT_ONLY.indexOf(ADAPTER_START);
-    const e = CONTENT_ONLY.indexOf(ADAPTER_END, s);
+    const s = PUBLISH_SRC.indexOf(ADAPTER_START);
+    const e = PUBLISH_SRC.indexOf(ADAPTER_END, s);
     expect(s).toBeGreaterThan(-1);
     expect(e).toBeGreaterThan(s);
-    return CONTENT_ONLY.slice(s, e);
+    return PUBLISH_SRC.slice(s, e);
   })();
   const makeAdapter = new Function('ctx', 'with (ctx) { ' + ADAPTER_BRANCH + '\n }');
 
@@ -562,7 +563,7 @@ describe('O-60: изоляция истории qwen по явному convId', 
     expect(h.diag.filter(function (d) { return d.kind === 'qwen-adapter'; })).toEqual([]);
     expect(h.traces.join('\n')).not.toContain('history-write source=adapter');
     // source-пин: запись требует явный convId (условие в конце — пины v54 не сдвинуты)
-    expect(CONTENT_ONLY).toContain("histKeyS24 !== lastHistoryWroteKey && cidS24 !== ''");
+    expect(PUBLISH_SRC).toContain("histKeyS24 !== lastHistoryWroteKey && cidS24 !== ''");
   });
 
   test('R1: нормальный чат /c/<id> пишет историю с явным convId', () => {
