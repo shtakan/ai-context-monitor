@@ -227,6 +227,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
   var sse = null;                 // активный стрим или null
   var turns = [];                 // assistant-ходы: [{key, order, model, answer, reasoning, text, userKey}]
   var userTurns = [];             // user-ходы: [{key, text}] — пары по parentId/fid запроса
+  var lastParsedSummary = [];     // BUG-24 (диагностика): последний разбор истории — ключи/роли/длины
   var turnSeq = 0;
   var dispatchSig = null;
   var lastDispatchResult = false;
@@ -847,6 +848,12 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
   function applyHistoryPayload(payload, meta) {
     var m = meta || {}; var pgRaw = payload && payload.data && payload.data.chat && payload.data.chat.history ? payload.data.chat.history.pagination : null; var fullDoc = (m.full === true) || (typeof isFullHistoryUrl === 'function' && isFullHistoryUrl(m.url) && !pgRaw); /* O-57: полная история принята → страницу пагинации не применяем (до парсинга и recordTurn) */ if (fullHistoryBlocksPage(m.chatId || currentChatId || lastReqChatId, m.url, m)) return skipFullHistoryPage(m);
     var parsed = parseQwenHistory(payload);
+    // BUG-24 (диагностика): что именно пришло в разборе — до записи turns/userTurns.
+    try {
+      lastParsedSummary = parsed.messages.map(function (pm) {
+        return { k: String(pm.key || '').slice(0, 36), r: pm.role, len: String(pm.text || '').length, files: (pm.files ? pm.files.length : 0) };
+      });
+    } catch (eParsedSum) { swallow(eParsedSum, 'qwen:parsed-summary'); }
     if (!parsed.messages.length) {
       diagTag('qwen-history', { ts: Date.now(), event: 'skip', reason: 'no-messages', url: m.url || '' });
       return { added: 0, foreign: false };
@@ -1942,6 +1949,8 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     },
     startPagination: function (payload, meta) { return startQwenPagination(meta || {}, payload, 0); },
     turns: function () { return turns; },
+    userTurns: function () { return userTurns; },
+    lastParsed: function () { return lastParsedSummary; },
     // R2: снимок файлового состояния (очередь/тексты вложений) — только чтение.
     files: function () { return aiCmQwenFiles ? aiCmQwenFiles.qfStats() : null; },
     usage: function () { return sse ? sse.usage : null; },
