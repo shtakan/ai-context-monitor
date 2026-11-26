@@ -222,7 +222,8 @@ describe('Two-Tier S1–S3: source-пины проводки', function () {
     // typeof-гард — контракт срез-песочниц тестов, а не ослабление метки.
     const SITE = "sourceTier: (typeof aiCmGetSourceTier === 'function') ? aiCmGetSourceTier() : undefined,";
     expect(MGR_SRC.split(SITE).length - 1).toBe(2);
-    expect(CONTENT_ONLY).toContain('aiCmGetSourceTier()');
-    expect(CONTENT_ONLY).toContain('sourceTier:');
+    const MANUAL_SRC = fs.readFileSync(path.join(ROOT, 'core', 'content-manual-export.ts'), 'utf8');
+    expect(MANUAL_SRC).toContain('sourceTier: (typeof host.getSourceTier === \'function\') ? host.getSourceTier() : undefined,');
+    expect(CONTENT_ONLY).toContain('host.getSourceTier = function () { return aiCmGetSourceTier(); };');
   });
 });

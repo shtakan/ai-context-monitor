@@ -140,7 +140,7 @@
     "reason": "legacy-pin"
   },
   "tests/adapters/o49-gemini-deepresearch-lowconfidence.test.js": {
-    "count": 9,
+    "count": 13,
     "reason": "legacy-pin"
   },
   "tests/adapters/o50-gemini-char-frame-slice.test.js": {
@@ -304,7 +304,7 @@
     "reason": "legacy-pin"
   },
   "tests/gemini-source-tier.test.js": {
-    "count": 13,
+    "count": 14,
     "reason": "legacy-pin"
   },
   "tests/gsa-autoexport-o11-name-collision.test.js": {

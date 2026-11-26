@@ -310,6 +310,14 @@
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
     },
     {
+      "file": "core/content-manual-export.ts",
+      "category": "local-helper-guard",
+      "lines": [
+        129
+      ],
+      "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmCancelDeferredHistWrite('');"
+    },
+    {
       "file": "core/content-metrics.ts",
       "category": "best-effort-guard",
       "lines": [
@@ -331,7 +339,7 @@
       "lines": [
         2181,
         2321,
-        3375
+        3326
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cyrDiag = (t.match(/[а-яёА-ЯЁ]/g) || []).length; var cyrillicPct = t"
     },
@@ -379,9 +387,9 @@
         2332,
         2356,
         2365,
-        3255,
-        3281,
-        3283
+        3206,
+        3232,
+        3234
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
     },
@@ -457,8 +465,7 @@
       "file": "core/content.ts",
       "category": "local-helper-guard",
       "lines": [
-        351,
-        3091
+        351
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmCancelDeferredHistWrite('');"
     },
@@ -466,7 +473,7 @@
       "file": "core/content.ts",
       "category": "parse-guard",
       "lines": [
-        3317
+        3268
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof AiCmExportBuilders !== 'undefined') ? AiCmExportB"
     },

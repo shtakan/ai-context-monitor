@@ -12,10 +12,10 @@ const Builders = loadEsm.loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExp
 
 describe('BUG-20: model из снимка бейджа', () => {
   test('ручной снимок предпочитает modelName зафиксированного снимка', function () {
-    const content = moduleSource('content.ts');
-    expect(content).toContain('model: (snapPartMan && snapPartMan.modelName) ? snapPartMan.modelName :');
+    const manual = moduleSource('content-manual-export.ts');
+    expect(manual).toContain('model: (snapPartMan && snapPartMan.modelName) ? snapPartMan.modelName :');
     // старый источник остаётся фолбэком, а не единственным
-    expect(content).toContain('lastSnapshotModelName || (lastResolvedModelId');
+    expect(manual).toContain('host.getSnapshotModelName() || (host.getResolvedModelId()');
   });
 
   test('авто-файл предпочитает modelName того же snapR1Auto', function () {

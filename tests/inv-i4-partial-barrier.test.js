@@ -47,15 +47,11 @@ const CONTENT = moduleSource('content.ts');
 const BH = moduleSource('base-handler.ts');
 const NET_END = "} catch (e) { swallowSoft(e, 'content:processAndSend-history-write'); }";
 const ADAPTER_END = "} catch (eS24) { swallowSoft(eS24, 'content:processAndSend-history-write-adapter'); }";
-const MAN_START = "if (message.type === 'aiCmExportCurrent') {";
-const MAN_END = "if (message.type === 'GET_STATS') {";
+const { runManualExport } = require('./helpers/manual-export-runner.js');
 // Писатели: сетевой (histSnapshot) и DOM-адаптерный (histSnapshotS24) — целиком, с гейтом
 // deferred-записи; `try {` среза открывается здесь же (регион начинается внутри try).
 const NET_CODE = 'try { ' + region(CONTENT, 'var snapPartNet = (typeof aiCmReadContextSnapshot', NET_END);
 const ADAPTER_CODE = 'try { ' + region(CONTENT, 'var svcS24 = getServiceKey();', ADAPTER_END);
-// Ручной ответ: тот же срез, что у O-9/O-49, но вызываем его один раз (sendResponse — шпион).
-const MANUAL_CODE = 'var run = function () {\n' +
-  CONTENT.slice(CONTENT.indexOf(MAN_START), CONTENT.indexOf(MAN_END)) + '\n}; run();';
 // Отложенный писатель — фактический автор aiCmHistory при baseComplete !== true.
 const DEFERRED_CODE = '(' + fnDecl(MGR, 'aiCmWriteCurrentHistory') + ')();';
 // Реальный aiCmHostHistoryRecord (core/base-handler.ts:22): per-host копия = Object.assign + ts.
@@ -477,7 +473,7 @@ describe('S2.3 inv-i4: барьер partial (ADR-001)', function () {
       message: { type: 'aiCmExportCurrent' },
       sendResponse: function (r) { resp.push(r); }
     });
-    runSlice(MANUAL_CODE, sb.ctx);
+    runManualExport(sb.ctx);
 
     expect(resp).toHaveLength(1);
     const data = resp[0].data;
@@ -525,7 +521,7 @@ describe('S2.3 inv-i4: барьер partial (ADR-001)', function () {
       message: { type: 'aiCmExportCurrent' },
       sendResponse: function (r) { resp.push(r); }
     });
-    runSlice(MANUAL_CODE, man.ctx);
+    runManualExport(man.ctx);
     expect(resp[0].data.partial).toBeUndefined();
     expect(resp[0].data.partialReason).toBeUndefined();
     openOptionsExportGate({ history: null });

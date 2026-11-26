@@ -744,7 +744,7 @@ describe('Step D.10: source-пины связки (ingest -> files -> kernel -> 
   const kernel = DS.readSource('core/deepseek-intercept.js');
   const bg = DS.readSource('core/background.ts');
   const baseHandler = DS.readSource('core/base-handler.ts');
-  const content = DS.readSource('core/content.ts');
+  const content = DS.readSource('core/content-manual-export.ts');
   const exporter = DS.readSource('core/export-manager.ts');
 
   test('S1: ingest зовёт модуль в ACCEPT-ветке, но ПОСЛЕ turnsMap и ДО emitBaseSnapshot', () => {
@@ -777,7 +777,7 @@ describe('Step D.10: source-пины связки (ingest -> files -> kernel -> 
     expect(baseHandler).toContain("reason: 'file-queue-timeout'");
     expect(baseHandler).toContain('ai-cm-deepseek-files-state-request');
     expect(baseHandler).toContain('ai-cm-deepseek-files-drain');
-    expect(content).toContain('aiCmExportFilesThenNetSync(curCidExp, replyManualExport)');
+    expect(content).toContain('host.filesThenNetSync(curCidExp, replyManualExport)');
     expect(exporter).toContain('aiCmExportFilesThenNetSync(cid, selfSync)');
   });
 

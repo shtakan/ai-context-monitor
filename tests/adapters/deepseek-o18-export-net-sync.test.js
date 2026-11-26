@@ -33,6 +33,7 @@ const { JSDOM, VirtualConsole } = require('jsdom');
 const P = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('../helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const CONTENT = require('../helpers/content-source.js').contentSource;
+const MANUAL_SRC = require('../helpers/content-source.js').moduleSource('content-manual-export.ts');
 
 const ROOT = path.join(__dirname, '..', '..');
 // Step D.1: ядро декомпозировано — диагностика уехала в core/deepseek-diag.js, поэтому
@@ -463,18 +464,18 @@ describe('O-18: source-пины проводки экспортного доза
     expect(BASE_HANDLER_SRC).toContain("window.dispatchEvent(new CustomEvent('ai-cm-deepseek-net-sync'");
     expect(BASE_HANDLER_SRC).toContain("reason: 'timeout'");
     // ручной экспорт: flush → дамп → дозапрос (колбэк replyManualExport) → сборка базы
-    const iHandler = CONTENT.indexOf("message.type === 'aiCmExportCurrent'");
-    const iFlush = CONTENT.indexOf('aiCmFlushLiveStreamForExport(curCidExp);', iHandler);
-    const iDump = CONTENT.indexOf("aiCmDumpTurnsSnapshot('snapshot-at-manual'", iHandler);
-    const iSync = CONTENT.indexOf('aiCmExportNetSyncThen(curCidExp, replyManualExport);', iHandler);
+    const iHandler = MANUAL_SRC.indexOf('function aiCmHandleManualExport(');
+    const iFlush = MANUAL_SRC.indexOf('host.flushLiveStream(curCidExp);', iHandler);
+    const iDump = MANUAL_SRC.indexOf("host.dumpTurnsSnapshot('snapshot-at-manual'", iHandler);
+    const iSync = MANUAL_SRC.indexOf('host.netSyncThen(curCidExp, replyManualExport);', iHandler);
     expect(iFlush).toBeGreaterThan(iHandler);
     expect(iSync).toBeGreaterThan(iFlush);
     expect(iSync).toBeGreaterThan(iDump);
     // байты файла собираются ТОЛЬКО в колбэке дозапроса (buildHistoryMessages внутри replyManualExport)
-    const reply = CONTENT.slice(CONTENT.indexOf('var replyManualExport = function () {', iHandler),
-      CONTENT.indexOf('if (typeof aiCmExportNetSyncThen ===', iHandler));
-    expect(reply).toContain('messages: buildHistoryMessages()');
-    expect(CONTENT).toContain('isLowConfidenceBase: (baseComplete !== true),');
+    const reply = MANUAL_SRC.slice(MANUAL_SRC.indexOf('var replyManualExport = function () {', iHandler),
+      MANUAL_SRC.indexOf('var route = resolveManualExportRoute({', iHandler));
+    expect(reply).toContain('messages: host.getMessages()');
+    expect(reply).toContain('isLowConfidenceBase: (host.isBaseComplete() !== true),');
     // автоэкспорт: гейт O-16 → дозапрос → (повторный вход) → композиция файла
     const dl = fnDecl(EXPORT_MGR_SRC, 'doAutoExportDownload');
     const iDefer = dl.indexOf('aiCmDeferAutoExportOnLiveStream(cid, percentage)');

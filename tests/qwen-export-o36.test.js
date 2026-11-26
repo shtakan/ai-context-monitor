@@ -36,6 +36,7 @@ const H = require('./helpers/content-source.js');
 const ROOT = path.join(__dirname, '..');
 const CONTENT = H.contentSource;                                                    // модули + content.js (единый скоуп)
 const CONTENT_ONLY = readCore('core/content.ts');
+const MANUAL_SRC = H.readSource('core/content-manual-export.ts');
 const OPTIONS_SRC = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
 const MGR_SRC = read('core/export-manager.ts');
 
@@ -167,7 +168,8 @@ describe('O-36 D2: txt qwen — маркеры USER:/ASSISTANT: перед ка�
     expect(Builders.aiCmTxtRoleMarkerSites).toEqual(['qwen']);
     // ручной путь (content.js → options.js) и автоэкспорт кладут в hist РОВНО site адаптера —
     // тем самым предикат видит 'qwen' на обеих дорогах (иначе маркеров не было бы вовсе)
-    expect(CONTENT_ONLY).toContain("site: (currentAdapter && currentAdapter.siteName) || '',");
+    expect(MANUAL_SRC).toContain('site: site,');
+    expect(CONTENT_ONLY).toContain("getSiteName: function () { return (currentAdapter && currentAdapter.siteName) || ''; },");
     expect(MGR_SRC).toContain("site: (currentAdapter && currentAdapter.siteName) || '',");
   });
 });
@@ -358,20 +360,20 @@ describe('O-36 D1: имя файла qwen без префикса [LOW CONFIDENC
   });
 
   test('проводка в content.js: живой флаг v1.14.1 сохранён, правило применено ДО ответа попапу', function () {
-    const iFlag = CONTENT_ONLY.indexOf('isLowConfidenceBase: (baseComplete !== true),');
-    const iRule = CONTENT_ONLY.indexOf('if (typeof aiCmQwenExportBaseTrusted === \'function\' && aiCmQwenExportBaseTrusted()) {');
-    const iClear = CONTENT_ONLY.indexOf('manualSnapshot.isLowConfidenceBase = false;');
-    const iSend = CONTENT_ONLY.indexOf('sendResponse({ data: manualSnapshot });');
+    const iFlag = MANUAL_SRC.indexOf('isLowConfidenceBase: (host.isBaseComplete() !== true),');
+    const iRule = MANUAL_SRC.indexOf('if (typeof host.isQwenExportBaseTrusted === \'function\' && host.isQwenExportBaseTrusted()) {');
+    const iClear = MANUAL_SRC.indexOf('manualSnapshot.isLowConfidenceBase = false;');
+    const iSend = MANUAL_SRC.indexOf('sendResponse({ data: manualSnapshot }');
     expect(iFlag).toBeGreaterThan(-1);                 // R-пин прежних сьютов (low-confidence-prefix и др.)
     expect(iRule).toBeGreaterThan(iFlag);              // правило — ПОСЛЕ живого флага
     expect(iClear).toBeGreaterThan(iRule);
     expect(iSend).toBeGreaterThan(iClear);             // и ДО ответа: попап видит уже снятый флаг
-    // хелпер объявлен в том же файле (на боевом пути определён всегда)
+    // хелпер объявлен в своём модуле (на боевом пути определён всегда)
     expect(CONTENT).toContain('function aiCmQwenExportBaseTrusted() {');
     // правило узкое: снимается только низкая достоверность, baseComplete не подменяется
-    expect(CONTENT_ONLY).not.toContain('baseComplete = true; // O-36');
+    expect(MANUAL_SRC).not.toContain('baseComplete = true; // O-36');
     // снимок ручного экспорта остаётся единственным носителем решения (payload = тот же объект)
-    expect(CONTENT_ONLY).toContain('sendResponse({ data: manualSnapshot });');
+    expect(MANUAL_SRC).toContain('sendResponse({ data: manualSnapshot }');
   });
 
   test('R-пин: правило префикса options.js и маска имён O-11 не тронуты', function () {

@@ -11,6 +11,7 @@ const path = require('path');
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 
 const contentSrc = require('./helpers/content-source.js').contentSource;
+const manualSrc = require('./helpers/content-source.js').moduleSource('content-manual-export.ts');
 
 // ---- б) «НЕ трогать»: путь A автоэкспорта и buildExportFileName без изменений ----
 describe('НЕ трогать: неизменность путей', () => {
@@ -28,17 +29,15 @@ describe('НЕ трогать: неизменность путей', () => {
 // ---- источник: фиксированная правка именно там, где были дыры B и C ----
 describe('источник content.js: живой флаг baseComplete', () => {
   test('баг B: ответ aiCmExportCurrent содержит isLowConfidenceBase = (baseComplete !== true)', () => {
-    const handler = contentSrc.slice(contentSrc.indexOf("'aiCmExportCurrent'"));
-    expect(handler).toContain('isLowConfidenceBase: (baseComplete !== true)');
+    expect(manualSrc).toContain('isLowConfidenceBase: (host.isBaseComplete() !== true)');
   });
 
   test('BUG-J: у GSA живой baseComplete уступает partial снимка (и только у GSA)', () => {
-    const handler = contentSrc.slice(contentSrc.indexOf("'aiCmExportCurrent'"));
+    const handler = manualSrc;
     // переопределение стоит ПОСЛЕ присваивания живым baseComplete и ДО qwen-исключения
-    const assignAt = handler.indexOf('isLowConfidenceBase: (baseComplete !== true)');
-    const gsaAt = handler.indexOf(
-      "if (((currentAdapter && currentAdapter.siteName) || '') === 'google_search' && snapPartMan) {");
-    const qwenAt = handler.indexOf('aiCmQwenExportBaseTrusted()');
+    const assignAt = handler.indexOf('isLowConfidenceBase: (host.isBaseComplete() !== true)');
+    const gsaAt = handler.indexOf("if (site === 'google_search' && snapPartMan) {");
+    const qwenAt = handler.indexOf('host.isQwenExportBaseTrusted()');
     expect(assignAt).toBeGreaterThan(-1);
     expect(gsaAt).toBeGreaterThan(assignAt);
     expect(qwenAt).toBeGreaterThan(gsaAt);

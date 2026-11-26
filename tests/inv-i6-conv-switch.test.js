@@ -110,7 +110,7 @@ describe('I6: чтение снимка по каноническому convId',
     expect(api.read(A).tokens).toBe(12345);
   });
 
-  test('снимок чата A не читается после перехода на B — все 10 call sites передают helper', function () {
+  test('снимок чата A не читается после перехода на B — все call sites передают helper', function () {
     const api = makeApi();
     api.set(snapshot({ convId: A }));
     const consumers = ['content.ts', 'export-manager.ts'].map(function (file) {
@@ -127,7 +127,12 @@ describe('I6: чтение снимка по каноническому convId',
         expect(after).toMatch(/aiCmCanonicalConvId/);
       }
     });
-    expect(total).toBe(10);
+    // 2.4 Stage 5: ручной путь получает convId уже канонизированным от module-host,
+    // поэтому прямых вызовов aiCmReadContextSnapshot( в content.ts на один меньше.
+    expect(total).toBe(9);
+    const MANUAL = require('./helpers/content-source.js').readSource('core/content-manual-export.ts');
+    expect(MANUAL).toContain('host.getCanonicalConvId(curCidExp)');
+    expect(MANUAL).toContain('host.readSnapshot(snapConvId)');
     // поведенчески: те же четыре «безаргументных» потребителя получают null на чужом чате
     expect(api.read(B)).toBeNull();
     expect(api.read(B)).toBeNull();

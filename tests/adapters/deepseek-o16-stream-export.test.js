@@ -35,6 +35,7 @@ const { JSDOM, VirtualConsole } = require('jsdom');
 const P = require('../helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Builders = require('../helpers/load-esm.js').loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const CONTENT = require('../helpers/content-source.js').contentSource;
+const MANUAL_SRC = require('../helpers/content-source.js').moduleSource('content-manual-export.ts');
 
 const ROOT = path.join(__dirname, '..', '..');
 // Step D.1: ядро декомпозировано — диагностика уехала в core/deepseek-diag.js, поэтому
@@ -444,9 +445,9 @@ describe('O-16: source-пины проводки (перехватчик + эк�
   });
 
   test('ручной экспорт: flush вызывается ДО buildHistoryMessages()', () => {
-    const iHandler = CONTENT.indexOf("message.type === 'aiCmExportCurrent'");
-    const iFlush = CONTENT.indexOf('aiCmFlushLiveStreamForExport(curCidExp);', iHandler);
-    const iBuild = CONTENT.indexOf('messages: buildHistoryMessages()', iHandler);
+    const iHandler = MANUAL_SRC.indexOf('function aiCmHandleManualExport(');
+    const iFlush = MANUAL_SRC.indexOf('host.flushLiveStream(curCidExp);', iHandler);
+    const iBuild = MANUAL_SRC.indexOf('messages: host.getMessages()', iHandler);
     expect(iHandler).toBeGreaterThan(-1);
     expect(iFlush).toBeGreaterThan(iHandler);
     expect(iBuild).toBeGreaterThan(iFlush);

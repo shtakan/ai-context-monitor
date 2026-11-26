@@ -19,8 +19,9 @@
 const P = require('./helpers/load-esm.js').loadEsmModule('utils/export-emit-pipeline.ts');
 const Parser = require('./helpers/load-esm.js').loadEsmModule('utils/perplexity-parser.ts');
 const { readSource } = require('./helpers/content-source.js');
+const { runManualExport } = require('./helpers/manual-export-runner.js');
 
-const CONTENT = readSource('core/content.ts');
+const MANUAL_SRC = readSource('core/content-manual-export.ts');
 const BASE_HANDLER = readSource('core/base-handler.ts');
 const EXPORT_MGR = readSource('core/export-manager.ts');
 
@@ -42,11 +43,6 @@ function fnDecl(src, name) {
   throw new Error('unbalanced declaration: ' + name);
 }
 
-// Регион РЕАЛЬНОГО обработчика aiCmExportCurrent (ручной экспорт md/txt из options/print).
-const MANUAL_START = CONTENT.indexOf("if (message.type === 'aiCmExportCurrent') {");
-const MANUAL_END = CONTENT.indexOf("if (message.type === 'GET_STATS') {");
-const MANUAL = CONTENT.slice(MANUAL_START, MANUAL_END);
-
 // Песочница ручного экспорта: функции, которые обязаны быть НАСТОЯЩИМИ (base-handler +
 // export-manager), остальное — состояние/заглушки через ctx. `window` — jsdom-мир, поэтому
 // CustomEvent-мост turns-snap работает по-настоящему (Perplexity на запрос не отвечает).
@@ -63,8 +59,8 @@ const SCOPE = 'with (ctx) { ' +
   fnDecl(EXPORT_MGR, 'aiCmLogSanitizeSkip') + '\n' +
   fnDecl(EXPORT_MGR, 'aiCmSanitizeEmitUserTexts') + '\n' +
   fnDecl(EXPORT_MGR, 'aiCmCollectExportSource') + '\n' +
-  'var run = function (message, sendResponse) {' + MANUAL + '}; return { run: run }; }';
-const makeManualExport = new Function('ctx', SCOPE);
+  'return { buildHistoryMessages: buildHistoryMessages, aiCmDumpTurnsSnapshot: aiCmDumpTurnsSnapshot }; }';
+const makeManualScope = new Function('ctx', SCOPE);
 
 const PERP_QUERY_1 = 'Первый вопрос Perplexity';
 const PERP_ANSWER_1 = 'Первый ответ Perplexity.';
@@ -126,14 +122,17 @@ function perplexityCtx(over) {
   };
   Object.assign(ctx, over || {});
   window.AiCmExportEmitPipeline = P;
-  const api = makeManualExport(ctx);
+  const api = makeManualScope(ctx);
+  ctx.buildHistoryMessages = api.buildHistoryMessages;
+  ctx.aiCmDumpTurnsSnapshot = api.aiCmDumpTurnsSnapshot;
+  ctx.sendResponse = function (resp) { sent.push(resp); };
   return {
     ctx: ctx,
     snap: snap,
     logs: logs,
     sent: sent,
     run: function () {
-      api.run({ type: 'aiCmExportCurrent' }, function (resp) { sent.push(resp); });
+      runManualExport(ctx);
       return sent[sent.length - 1];
     },
     dumpLine: function () {
@@ -314,9 +313,9 @@ describe('O-9-подпись: DeepSeek O-17 не тронут — мост turns
 // =====================================================================================
 describe('O-9-подпись: source-пины правки', () => {
   test('точка ручного экспорта передаёт КАНОНИЧЕСКУЮ базу (buildHistoryMessages), а не null', () => {
-    expect(MANUAL).toContain("aiCmDumpTurnsSnapshot('snapshot-at-manual', curCidExp, buildHistoryMessages());");
-    expect(MANUAL).not.toContain("aiCmDumpTurnsSnapshot('snapshot-at-manual', curCidExp, null);");
-    expect(CONTENT.match(/aiCmDumpTurnsSnapshot\(/g).length).toBe(1);   // других путей не задето
+    expect(MANUAL_SRC).toContain("host.dumpTurnsSnapshot('snapshot-at-manual', curCidExp, host.getMessages());");
+    expect(MANUAL_SRC).not.toContain("'snapshot-at-manual', curCidExp, null");
+    expect(MANUAL_SRC.match(/dumpTurnsSnapshot\(/g).length).toBe(1);   // других путей не задето
   });
 
   test('base-handler: приоритет моста и семантика дефолтов байтово прежние', () => {

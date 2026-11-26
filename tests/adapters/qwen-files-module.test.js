@@ -529,7 +529,7 @@ describe('R2: source-пины связки (перехватчик, регист
   const intercept = read('core/qwen-intercept.js');
   const background = read('core/background.ts');
   const baseHandler = read('core/base-handler.ts');
-  const content = read('core/content.ts');
+  const content = read('core/content-manual-export.ts');
   const exportManager = read('core/export-manager.ts');
 
   test('parseQwenHistory отдаёт вложения, applyHistoryPayload ставит их в очередь', function () {
@@ -563,7 +563,7 @@ describe('R2: source-пины связки (перехватчик, регист
   test('экспорт ждёт очередь: aiCmFilesDrainSite в base-handler и обеих точках снятия', function () {
     expect(baseHandler).toContain('function aiCmFilesDrainSite()');
     expect(baseHandler).toContain('Api.aiCmFilesDrainSite = aiCmFilesDrainSite;');
-    expect(content).toContain('aiCmExportFilesDrainThen(curCidExp, replyManualExport, 6000);');
+    expect(content).toContain('host.filesDrainThen(curCidExp, replyManualExport, 6000);');
     expect(exportManager).toContain('aiCmExportFilesDrainThen(cid, selfSync, 6000);');
   });
 

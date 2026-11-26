@@ -30,7 +30,8 @@ const Builders = loadEsm.loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExp
 const Canonical = loadEsm.loadEsmModule('utils/canonical-body.ts');
 const Projection = loadEsm.loadEsmModule('utils/export/projection.ts');
 const EM_SRC = moduleSource('export-manager.ts');
-const CONTENT = moduleSource('content.ts');
+const MANUAL_SRC = moduleSource('content-manual-export.ts');
+const { runManualExport } = require('./helpers/manual-export-runner.js');
 
 const LABEL = '[AI-CM projection: applied]';
 const CONV_ID = 'conv-i3-export-projection';
@@ -181,15 +182,10 @@ const RAW_DS_SECTIONS = [
   { role: 'assistant', text: '[REASONING]\nДумал так\n\n[ANSWER]\nОтвет' }
 ];
 
-// ===== ручной путь: РЕАЛЬНЫЙ участок core/content.ts (MANUAL-регион) =====
-const MAN_START = "if (message.type === 'aiCmExportCurrent') {";
-const MAN_END = "if (message.type === 'GET_STATS') {";
-const MANUAL_CODE = 'var run = function () {\n' +
-  CONTENT.slice(CONTENT.indexOf(MAN_START), CONTENT.indexOf(MAN_END)) + '\n}; run();';
+// ===== ручной путь: РЕАЛЬНЫЙ core/content-manual-export.ts (Stage 5) =====
+// Вызывается через tests/helpers/manual-export-runner.js: тот собирает dependency
+// object из того же ctx-словаря, что использовали срезы content.ts.
 
-function runSlice(code, ctx) {
-  return new Function('ctx', 'with (ctx) { ' + code + '\n }')(ctx);
-}
 
 /**
  * Песочница ручного экспорта: РЕАЛЬНЫЙ MANUAL-регион с инжектированной проекцией.
@@ -326,7 +322,7 @@ describe('inv-i3 (S5.1): проекция «канонический масси�
     expect(pBase.mode).toBe('projected');
 
     const sb = manualSandbox({ canon: canon, api: api, baseComplete: true });
-    runSlice(MANUAL_CODE, sb.ctx);
+    runManualExport(sb.ctx);
     expect(sb.resp).toHaveLength(1);
     const data = sb.resp[0].data;
     expect(data.bodyProjection).toBe('projected');
@@ -361,7 +357,7 @@ describe('inv-i3 (S5.1): проекция «канонический масси�
       union: unionRaw,
       snapshot: { partial: true, partialReason: 'stale' }
     });
-    runSlice(MANUAL_CODE, sb.ctx);
+    runManualExport(sb.ctx);
     const data = sb.resp[0].data;
     expect(data.partial).toBe(true);
     expect(data.partialReason).toBe('stale');
@@ -457,7 +453,7 @@ describe('inv-i3 (S5.1): проекция «канонический масси�
 
     // Ровно 4 вызова: ручной union + ручной обычный + авто base-union + авто обычный.
     const emCalls = (EM_SRC.match(/aiCmProjectFileMessages\(/g) || []).length - 1; // минус декларация
-    const ctCalls = (CONTENT.match(/aiCmProjectFileMessages\(/g) || []).length;
+    const ctCalls = (MANUAL_SRC.match(/host\.projectFileMessages\(/g) || []).length;
     expect(emCalls).toBe(2);
     expect(ctCalls).toBe(2);
   });
@@ -580,7 +576,7 @@ describe('inv-i3 (S5.1): проекция «канонический масси�
       const canon = api.canon(RAW_QWEN, 'qwen');
       const auto = api.project(Canonical.canonicalBody(CONV_ID, canon).messages, 'qwen');
       const sb = manualSandbox({ canon: canon, api: api, baseComplete: true });
-      runSlice(MANUAL_CODE, sb.ctx);
+      runManualExport(sb.ctx);
       expect(sb.resp).toHaveLength(1);
       expect(sb.resp[0].data.messages).toEqual(auto.messages);
       expect(sb.resp[0].data.bodyProjection).toBe(auto.mode);
@@ -593,7 +589,7 @@ describe('inv-i3 (S5.1): проекция «канонический масси�
       ];
       const unionAuto = api.project(api.canon(unionRaw, 'qwen'), 'qwen');
       const sbU = manualSandbox({ api: api, baseComplete: false, union: unionRaw, snapshot: { partial: true } });
-      runSlice(MANUAL_CODE, sbU.ctx);
+      runManualExport(sbU.ctx);
       expect(sbU.resp).toHaveLength(1);
       expect(sbU.resp[0].data.messages).toEqual(unionAuto.messages);
       expect(sbU.resp[0].data.bodyProjection).toBe(unionAuto.mode);

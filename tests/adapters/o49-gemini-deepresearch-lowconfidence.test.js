@@ -41,7 +41,7 @@ const BASE_HANDLER_SRC = read('core/base-handler.ts');
 global.swallow = function () { };
 // Step E.2c-B2b-3b (swallowSoft): канал B из utils/debug.ts — вне eval-песочницы так же, как swallow.
 global.swallowSoft = function () { };
-const CONTENT_SRC = fs.readFileSync(path.join(ROOT, 'core', 'content.ts'), 'utf8');
+const MANUAL_SRC = fs.readFileSync(path.join(ROOT, 'core', 'content-manual-export.ts'), 'utf8');
 const OPTIONS_SRC = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
 const GEMINI_SRC = require('../helpers/gemini-intercept-source.js').geminiSource;
 
@@ -217,11 +217,10 @@ describe('O-49 D1: Deep Research + isLowConfidenceBase=true → в снимке/
   });
 
   test('ручной экспорт (content.js): снимок ответа добирается той же точкой', () => {
-    const manual = sliceSource(CONTENT_SRC, "if (message.type === 'aiCmExportCurrent')", "if (message.type === 'GET_STATS')");
-    expect(manual).toContain("messages: buildHistoryMessages()");       // прежняя сборка сохранена
-    expect(manual).toContain('aiCmUnionFileMessages(curCidExp, manualSnapshot.messages');
-    expect(manual).toContain('manualSnapshot.isLowConfidenceBase === true');
-    expect(manual).toContain('sendResponse({ data: manualSnapshot } as AiCmContentResponse);');
+    expect(MANUAL_SRC).toContain('messages: host.getMessages()');       // прежняя сборка сохранена
+    expect(MANUAL_SRC).toContain('host.unionFileMessages(curCidExp, manualSnapshot.messages');
+    expect(MANUAL_SRC).toContain('manualSnapshot.isLowConfidenceBase === true');
+    expect(MANUAL_SRC).toContain('sendResponse({ data: manualSnapshot } as AiCmExportCurrentResponse);');
   });
 });
 

@@ -3056,6 +3056,95 @@ loadExportHiddenSetting();
 
 // ===== v2.0 (этап 1/3): widget.js ← createWidget, updateWidget =====
 
+/**
+ * 2.4 Stage 5: dependency object ручного экспорта. Значения читаются лениво —
+ * снимок/baseComplete/модель должны быть СВЕЖИМИ после ожидания file-drain/net-sync.
+ * Необязательные хелперы не попадают в host, если их нет в текущем срезе: модуль
+ * видит те же typeof-гарды, что стояли здесь до выноса.
+ */
+function aiCmManualExportHost(sendResponse: (response?: AiCmContentResponse) => void) {
+  var host: Record<string, any> = {
+    getCurrentConvId: function () { return getCurrentConvId() || ''; },
+    getHostname: function () { return window.location.hostname; },
+    getSiteName: function () { return (currentAdapter && currentAdapter.siteName) || ''; },
+    getResolvedModelId: function () { return lastResolvedModelId || ''; },
+    getSnapshotModelName: function () { return lastSnapshotModelName || ''; },
+    getTokenCount: function () { return maxTokenCount; },
+    getPercentage: function () { return lastPercentage; },
+    getTokenSnapshot: function () {
+      return (typeof lastTokensSnapshot !== 'undefined' && lastTokensSnapshot) ? lastTokensSnapshot : null;
+    },
+    isBaseComplete: function () { return baseComplete === true; },
+    getMessages: function () { return buildHistoryMessages(); },
+    getLastDetailMessages: function () { return (typeof lastDetailMessages !== 'undefined') ? lastDetailMessages : null; },
+    getEffectiveLimit: function (modelId: string) { return computeEffectiveLimit(modelId); },
+    flushLiveStream: function (convId: string) { aiCmFlushLiveStreamForExport(convId); },
+    dumpTurnsSnapshot: function (tag: string, convId: string, messages: AiCmExportMessage[]) {
+      aiCmDumpTurnsSnapshot(tag, convId, messages);
+    },
+    swallowSoft: function (error: unknown, reason: string) { swallowSoft(error, reason); },
+    debugLog: function (level: string, message: string) { debugLog(level, message); },
+    getCanonicalConvId: function (fallback: string) {
+      return (typeof aiCmCanonicalConvId === 'function') ? (aiCmCanonicalConvId() || fallback) : fallback;
+    }
+  };
+  if (typeof aiCmReadContextSnapshot === 'function') {
+    // Функция передаётся как есть: convId уже канонизирован в content-manual-export.ts.
+    host.readSnapshot = aiCmReadContextSnapshot;
+  }
+  if (typeof aiCmGetSourceTier === 'function') {
+    host.getSourceTier = function () { return aiCmGetSourceTier(); };
+  }
+  if (typeof aiCmExportPartialView === 'function') {
+    host.partialView = function (snapshot: unknown) { return aiCmExportPartialView(snapshot); };
+  }
+  if (typeof aiCmQwenExportBaseTrusted === 'function') {
+    host.isQwenExportBaseTrusted = function () { return aiCmQwenExportBaseTrusted(); };
+  }
+  if (typeof aiCmUnionFileMessages === 'function') {
+    host.unionFileMessages = function (convId: string, messages: AiCmExportMessage[], lowConfidence: boolean) {
+      return aiCmUnionFileMessages(convId, messages, lowConfidence);
+    };
+  }
+  if (typeof aiCmCanonicalizeMessages === 'function') {
+    host.canonicalizeMessages = function (messages: AiCmExportMessage[], site: string) {
+      return aiCmCanonicalizeMessages(messages, site);
+    };
+  }
+  if (typeof aiCmProjectFileMessages === 'function') {
+    host.projectFileMessages = function (messages: AiCmExportMessage[], site: string) {
+      return aiCmProjectFileMessages(messages, site);
+    };
+  }
+  if (typeof aiCmBuildCanonicalBody === 'function') {
+    host.buildCanonicalBody = function (convId: string) { return aiCmBuildCanonicalBody(convId); };
+  }
+  if (typeof exportDedupeInfo === 'function') {
+    host.dedupeInfo = function (detail: AiCmExportMessage[] | null, messages: AiCmExportMessage[]) {
+      return exportDedupeInfo(detail, messages);
+    };
+  }
+  if (typeof aiCmExportNetSyncSite === 'function') {
+    host.isNetSyncSite = function () { return aiCmExportNetSyncSite() === true; };
+  }
+  if (typeof aiCmExportFilesThenNetSync === 'function') {
+    host.filesThenNetSync = function (convId: string, cb: () => void) { aiCmExportFilesThenNetSync(convId, cb); };
+  }
+  if (typeof aiCmExportNetSyncThen === 'function') {
+    host.netSyncThen = function (convId: string, cb: () => void) { aiCmExportNetSyncThen(convId, cb); };
+  }
+  var filesApi = (typeof window !== 'undefined' && window.AiCmBaseHandler) ? window.AiCmBaseHandler : null;
+  if (filesApi && typeof filesApi.aiCmFilesDrainSite === 'function') {
+    host.isFilesDrainSite = function () { return filesApi.aiCmFilesDrainSite() === true; };
+  }
+  if (filesApi && typeof filesApi.aiCmExportFilesDrainThen === 'function') {
+    host.filesDrainThen = function (convId: string, cb: () => void, timeoutMs: number) {
+      filesApi.aiCmExportFilesDrainThen(convId, cb, timeoutMs);
+    };
+  }
+  return host;
+}
+
 // ========== СЛУШАТЕЛЬ POPUP ==========
 if (isExtensionValid()) {
   chrome.runtime.onMessage.addListener((message: AiCmContentRequest, sender: unknown, sendResponse: (response?: AiCmContentResponse) => void) => {
@@ -3070,147 +3159,9 @@ if (isExtensionValid()) {
       return true;
     }
     if (message.type === 'aiCmExportCurrent') {
-      // v1.13.1: ручной/принудительный экспорт — снимок ТОЛЬКО текущего convId.
-      // После SPA-перехода lastBaseTexts сброшены (resetConversationState) → messages=[]
-      // (файл-заглушка); НИКОГДА не отдаём историю предыдущего разговора.
-      var curCidExp = getCurrentConvId() || '';
-      // O-16: если у DeepSeek прямо сейчас читается тело ответа (SSE ещё не закрыт),
-      // сначала СИНХРОННО сбрасываем незакрытый буфер потока в memory-базу — иначе в
-      // файл уйдёт ход ассистента, обрезанный на текущем чанке. Мост синхронный:
-      // flush → finalizeRealtimeTurn → EMIT ai-cm-full-history → lastBaseTexts обновлены
-      // ДО buildHistoryMessages() ниже.
-      try { aiCmFlushLiveStreamForExport(curCidExp); } catch (eFlushExp) { swallowSoft(eFlushExp, 'content:aiCmAutoExportTrustedBaseDiag-flush'); }
-      var pctExp = (typeof lastPercentage === 'number' && lastPercentage >= 0) ? lastPercentage : 0;
-      // v61diag: дамп turnsMap в момент ручного экспорта (md/txt из options).
-      // O-9-подпись: источник подписи — КАНОНИЧЕСКАЯ база текущего снимка, ровно тот же
-      // массив, что уходит в файл (buildHistoryMessages() → detail.messages/lastBaseTexts).
-      // Раньше третьим аргументом шёл null, и у сервисов без MAIN-моста turns-snap
-      // (Perplexity: перехватчик на ai-cm-turns-snap-request не отвечает) подпись печатала
-      // msgs=0 firstText="" при живой истории. Приоритет моста не тронут: ответил MAIN
-      // (Gemini/DeepSeek O-17) — печатаются ЕГО числа, фолбэк не подставляется.
-      try { aiCmDumpTurnsSnapshot('snapshot-at-manual', curCidExp, buildHistoryMessages()); } catch (eDumpM) { }
-      // O-18 (фаза 2): ПЕРЕД композицией файла — сетевой дозапрос истории текущего чата
-      // (только DeepSeek; таймаут 3 с внутри aiCmExportNetSyncThen). Перехватчик сам решает,
-      // нужен ли запрос, и сам выбирает текст по ходам (EQUAL → live, MIDDLE-HOLE/TAIL-CUT →
-      // сеть, ONE-SIDE → live + маркер). Не дождались/сети нет → прежний live-путь БЕЗ
-      // изменения байтов файла; isLowConfidenceBase и порядок [REASONING]/[ANSWER] не тронуты.
-      var replyManualExport = function () {
-        // S2.3 (ADR-001, I4): ручной файл (MD/JSON) несёт те же метки, что и авто-путь —
-        // из того же снимка. typeof-гард: срез-песочницы без state.ts → меток нет.
-        var snapPartMan = (typeof aiCmReadContextSnapshot === 'function')
-          ? aiCmReadContextSnapshot((typeof aiCmCanonicalConvId === 'function')
-            ? aiCmCanonicalConvId() : curCidExp) : null;
-        // 2.2/шаг 5: ручной файл печатает ТОТ ЖЕ порог, что бейдж/попап.
-        // snapPartMan.limit уже учитывает тариф каталога (Gemini Free 32K) и
-        // ручной процент; computeEffectiveLimit — запасной путь без снимка.
-        var manualDisplayLimit = (snapPartMan && typeof snapPartMan.limit === 'number' && snapPartMan.limit > 0)
-          ? snapPartMan.limit
-          : computeEffectiveLimit(lastResolvedModelId);
-        var manualSnapshot: AiCmManualSnapshot = /** @type {AiCmManualSnapshot} */
-          ({
-            host: window.location.hostname,
-            convId: curCidExp,
-            site: (currentAdapter && currentAdapter.siteName) || '',
-            model: (snapPartMan && snapPartMan.modelName) ? snapPartMan.modelName : (lastSnapshotModelName || (lastResolvedModelId || '')),
-            tokens: maxTokenCount,
-            limit: manualDisplayLimit,
-            percent: pctExp,
-            // BIG-02: платформенный сигнал едет в файл тем же снимком, что у бейджа.
-            // Без него MD заново считал 68 893/128 000 = 53.8 % и терял метку.
-            saturated: ((snapPartMan && snapPartMan.saturated === true) ||
-              (typeof lastTokensSnapshot !== 'undefined' && lastTokensSnapshot && lastTokensSnapshot.saturated === true))
-              ? true : undefined,
-            // 2.2/фаза 5: те же три факта лимита, что у авто-пути.
-            windowLimit: (snapPartMan && typeof snapPartMan.windowLimit === 'number' && snapPartMan.windowLimit > 0)
-              ? snapPartMan.windowLimit
-              : ((snapPartMan && typeof snapPartMan.contextLimit === 'number' && snapPartMan.contextLimit > 0) ? snapPartMan.contextLimit : undefined),
-            displayLimit: (snapPartMan && typeof snapPartMan.limit === 'number' && snapPartMan.limit > 0)
-              ? snapPartMan.limit : undefined,
-            accountLimit: (snapPartMan && typeof snapPartMan.accountLimit !== 'undefined') ? snapPartMan.accountLimit : undefined,
-            limitPlan: (snapPartMan && typeof snapPartMan.limitPlan === 'string' && snapPartMan.limitPlan) ? snapPartMan.limitPlan : undefined,
-            limitWarnings: (snapPartMan && Array.isArray(snapPartMan.limitWarnings)) ? snapPartMan.limitWarnings : undefined,
-            // v1.9 (qwen): источник числа (dom|net|max|server|hold) — тот же снимок,
-            // что у бейджа/истории. Без него ручной MD/JSON терял metric-src/src.
-            src: (typeof lastTokensSnapshot !== 'undefined' && lastTokensSnapshot && lastTokensSnapshot.src) ? lastTokensSnapshot.src : undefined,
-            updatedAt: Date.now(),
-            // v1.14.1: живой флаг — ручной as-is экспорт при baseComplete=0 получает
-            // префикс [LOW CONFIDENCE]_ (options.js:378), после base-complete — без префикса.
-            isLowConfidenceBase: (baseComplete !== true),
-            // Two-Tier (v89): метка достоверности источника — рядом с прочими метаданными
-            // снимка. undefined у прочих сервисов/без моста → в storage ключ не появляется,
-            // файл и ручной экспорт байтово прежние.
-            sourceTier: (typeof aiCmGetSourceTier === 'function') ? aiCmGetSourceTier() : undefined,
-            // S2.3 (I4): частичность ручного файла; при partial !== true ключи не появляются.
-            partial: (typeof aiCmExportPartialView === 'function') ? aiCmExportPartialView(snapPartMan).partial : ((snapPartMan && snapPartMan.partial === true) ? true : undefined),
-            partialReason: (typeof aiCmExportPartialView === 'function')
-              ? aiCmExportPartialView(snapPartMan).partialReason : ((snapPartMan && snapPartMan.partial === true) ? ((snapPartMan.partialReason) || 'incomplete') : undefined),
-            messages: buildHistoryMessages()
-          });
-        // BUG-J: у GSA холодная загрузка отдавала порядок new→old, а baseComplete при этом
-        // уже 1 — префикс врал бы вместе с телом файла. Для GSA достоверность ручного файла
-        // определяется partial снимка (тот же источник, что у метки partial выше); прочие
-        // сайты видят БАЙТОВО прежнее живое значение baseComplete (v1.14.1).
-        if (((currentAdapter && currentAdapter.siteName) || '') === 'google_search' && snapPartMan) {
-          manualSnapshot.isLowConfidenceBase = (snapPartMan.partial === true);
-        }
-        // O-36 (D1): у сервиса без сети (qwen) база подтверждена записью DOM-адаптера —
-        // префикс низкой достоверности ей не полагается (см. aiCmQwenExportBaseTrusted).
-        // Прочие сайты: флаг остаётся живым значением baseComplete (байтово прежнее имя).
-        // typeof-гард: срез-песочницы тестов ручного экспорта (MANUAL-регион без этого
-        // хелпера) видят прежнее поведение 1:1 — как у прочих точек контура qwen.
-        if (typeof aiCmQwenExportBaseTrusted === 'function' && aiCmQwenExportBaseTrusted()) {
-          manualSnapshot.isLowConfidenceBase = false;
-        }
-        // O-49: при низкой достоверности базы (isLowConfidenceBase=true) локальный снимок
-        // EMIT может нести только последние ходы (as-is/таймаут, tolerant-salvage O-48) —
-        // добираем объединённой базой (архив + live) через ту же точку, что и снимок истории
-        // (aiCmUnionFileMessages: гард «строго полнее» внутри, не-Gemini → без изменений).
-        // При baseComplete=1 (обычный чат) вызов не делает ничего — байты снимка прежние (R3).
-        try {
-          if (typeof aiCmUnionFileMessages === 'function') {
-            manualSnapshot.messages = aiCmUnionFileMessages(curCidExp, manualSnapshot.messages,
-              manualSnapshot.isLowConfidenceBase === true);
-          }
-        } catch (eO49m) { debugLog('log', '[AI CM][export] silent-catch replyManualExport(O-49 union): ' + ((eO49m instanceof Error && eO49m.message) || String(eO49m))); }
-        // S1.3 (inv-i3) + S5 (I3c'): файл ручного экспорта строится из ОДНОГО канонического
-        // массива — drop контейнеров и reasoning применяются РОВНО один раз, на этапе массива,
-        // поэтому MD-тело и JSON-тело одного нажатия равны (tests/inv-i3-manual-md-json.test.js).
-        if (manualSnapshot.isLowConfidenceBase === true) {
-          // Union-путь (объединение архив+live): канонизируем сам массив объединения, затем
-          // применяем проекцию файла (S5.1); файл остаётся исключением только из I3a (partial).
-          if (typeof aiCmCanonicalizeMessages === 'function') {
-            manualSnapshot.messages = aiCmCanonicalizeMessages(manualSnapshot.messages,
-              manualSnapshot.site || '');
-          }
-          if (typeof aiCmProjectFileMessages === 'function') { var projMU = aiCmProjectFileMessages(manualSnapshot.messages, manualSnapshot.site || ''); manualSnapshot.messages = projMU.messages; var snapProjU = manualSnapshot as typeof manualSnapshot & { bodyProjection?: string }; snapProjU.bodyProjection = projMU.mode; }
-        } else if (typeof aiCmBuildCanonicalBody === 'function') {
-          // Обычный чат: массив файла = массив тела снимка ([ctx-snap]); проекция — только файл.
-          var canonManual = aiCmBuildCanonicalBody(curCidExp);
-          if (canonManual && canonManual.messages.length) manualSnapshot.messages = canonManual.messages;
-          if (typeof aiCmProjectFileMessages === 'function') { var projMn = aiCmProjectFileMessages(manualSnapshot.messages, manualSnapshot.site || ''); manualSnapshot.messages = projMn.messages; var snapProjM = manualSnapshot as typeof manualSnapshot & { bodyProjection?: string }; snapProjM.bodyProjection = projMn.mode; }
-        }
-        manualSnapshot.dedupe = (typeof exportDedupeInfo === 'function') ? exportDedupeInfo(lastDetailMessages, manualSnapshot.messages) : undefined; sendResponse({ data: manualSnapshot } as AiCmContentResponse);
-      };
-      // R2: площадки с очередью вложений (DeepSeek — свой модуль, Qwen — core/qwen-files.js)
-      // дожидаются текста файлов ДО композиции: у Qwen это только дренаж (6000 мс: файлы
-      // качаются по одному, конкурентность 2, кап 10 с на файл), у DeepSeek порядок прежний —
-      // дренаж, затем net-sync. Дренажные хелперы берём с UMD-зеркала base-handler
-      // (window.AiCmBaseHandler): в types/ они не объявлены (types/ — запрещённая зона правки),
-      // а bare-имена давали бы tsc TS2304. typeof-гард сохранён: срез-песочницы тестов ручного
-      // экспорта (MANUAL-регион без base-handler) видят прежнее поведение 1:1.
-      const filesApiM = (typeof window !== 'undefined' && window.AiCmBaseHandler) ? window.AiCmBaseHandler : null;
-      const drainSiteM = (filesApiM && typeof filesApiM.aiCmFilesDrainSite === 'function')
-        ? filesApiM.aiCmFilesDrainSite() === true : false;
-      const netSiteM = (typeof aiCmExportNetSyncSite === 'function') ? aiCmExportNetSyncSite() : false;
-      if (netSiteM && typeof aiCmExportFilesThenNetSync === 'function') {
-        aiCmExportFilesThenNetSync(curCidExp, replyManualExport);
-      } else if (netSiteM && typeof aiCmExportNetSyncThen === 'function') {
-        aiCmExportNetSyncThen(curCidExp, replyManualExport);
-      } else if (drainSiteM && filesApiM && typeof filesApiM.aiCmExportFilesDrainThen === 'function') {
-        filesApiM.aiCmExportFilesDrainThen(curCidExp, replyManualExport, 6000);
-      } else {
-        replyManualExport();
-      }
+      // 2.4 Stage 5: слушатель и сборка manualSnapshot вынесены в
+      // core/content-manual-export.ts; здесь остаётся только явный dependency object.
+      aiCmHandleManualExport(sendResponse, aiCmManualExportHost(sendResponse));
       return true;
     }
     if (message.type === 'GET_STATS') {
@@ -3557,7 +3508,6 @@ type AiCmContentRequest = import('../types/messages').AiCmContentRequest;
 type AiCmContentResponse = import('../types/messages').AiCmContentResponse;
 type AiCmDiagPayload = import('../types/messages').AiCmDiagPayload;
 type AiCmDiagResponse = import('../types/messages').AiCmDiagResponse;
-type AiCmManualSnapshot = import('../types/messages').AiCmManualSnapshot;
 type AiCmBroadcast = import('../types/messages').AiCmBroadcast;
 
 // BIG-02 (2.1.5): остановленная генерация считается неполнотой, даже если база «полная».

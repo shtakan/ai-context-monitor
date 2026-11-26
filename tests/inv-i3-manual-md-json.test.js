@@ -8,9 +8,9 @@
  * защитный проход сборщиков на каноническом входе тождественен (доказано (v)).
  *
  * Тест поведенческий: реальные utils/export-text-builders.ts, реальный
- * options/options.js в jsdom-стенде попапа и РЕАЛЬНЫЙ участок core/content.ts
- * (MANUAL-регион, ручной ответ aiCmExportCurrent) в песочнице with(ctx) —
- * прецедент tests/inv-i4-partial-barrier.test.js. Массив объединения (union-путь)
+ * options/options.js в jsdom-стенде попапа и РЕАЛЬНЫЙ core/content-manual-export.ts
+ * (ручной ответ aiCmExportCurrent, Stage 5) через dependency object — прецедент
+ * tests/inv-i4-partial-barrier.test.js. Массив объединения (union-путь)
  * канонизируется тем же aiCmCanonicalizeMessages, что у тела снимка.
  */
 
@@ -21,14 +21,9 @@ const { loadOptions } = require('./helpers/load-options.js');
 
 const Builders = loadEsm.loadEsmGlobal('utils/export-text-builders.ts', 'AiCmExportBuilders');
 const Canonical = loadEsm.loadEsmModule('utils/canonical-body.ts');
-const CONTENT = moduleSource('content.ts');
 const EM_SRC = moduleSource('export-manager.ts');
+const { runManualExport } = require('./helpers/manual-export-runner.js');
 const CONV_ID = 'conv-i3-manual-md-json';
-
-const MAN_START = "if (message.type === 'aiCmExportCurrent') {";
-const MAN_END = "if (message.type === 'GET_STATS') {";
-const MANUAL_CODE = 'var run = function () {\n' +
-  CONTENT.slice(CONTENT.indexOf(MAN_START), CONTENT.indexOf(MAN_END)) + '\n}; run();';
 
 /** Декларация функции по балансу фигурных скобок (конвенция сьюта). */
 function fnDecl(src, name) {
@@ -51,10 +46,6 @@ const canonicalizeMessages = new Function(
   'AiCmExportBuilders',
   fnDecl(EM_SRC, 'aiCmCanonicalizeMessages') + '\nreturn aiCmCanonicalizeMessages;'
 )(Builders);
-
-function runSlice(code, ctx) {
-  return new Function('ctx', 'with (ctx) { ' + code + '\n }')(ctx);
-}
 
 /**
  * Песочница MANUAL-региона core/content.ts: baseComplete=false (низкая достоверность),
@@ -206,7 +197,7 @@ describe('inv-i3 (S5): MD и JSON одного нажатия — один ка�
 
   test('(iii) low-confidence/union: массив = канонизация объединения, MD === JSON, файл шире снимка', function () {
     const sb = manualSandbox({});
-    runSlice(MANUAL_CODE, sb.ctx);
+    runManualExport(sb.ctx);
     expect(sb.resp).toHaveLength(1);
     const data = sb.resp[0].data;
 
@@ -253,7 +244,7 @@ describe('inv-i3 (S5): MD и JSON одного нажатия — один ка�
       aiCmUnionFileMessages: function () { return live.map(function (m) { return Object.assign({}, m); }); },
       aiCmBuildCanonicalBody: function () { return { messages: live.map(function (m) { return Object.assign({}, m); }) }; }
     });
-    runSlice(MANUAL_CODE, sb.ctx);
+    runManualExport(sb.ctx);
     const data = sb.resp[0].data;
     expect(data.saturated).toBe(true);
     expect(data.percent).toBe(100);
@@ -297,7 +288,7 @@ describe('inv-i3 (S5): MD и JSON одного нажатия — один ка�
       aiCmUnionFileMessages: function () { return live.map(function (m) { return Object.assign({}, m); }); },
       aiCmBuildCanonicalBody: function () { return { messages: live.map(function (m) { return Object.assign({}, m); }) }; }
     });
-    runSlice(MANUAL_CODE, sb.ctx);
+    runManualExport(sb.ctx);
     const data = sb.resp[0].data;
     expect(data.limit).toBe(32768);
     expect(data.displayLimit).toBe(32768);
@@ -350,7 +341,7 @@ describe('inv-i3 (S5): MD и JSON одного нажатия — один ка�
         aiCmUnionFileMessages: function () { return live.map(function (m) { return Object.assign({}, m); }); },
         aiCmBuildCanonicalBody: function () { return { messages: live.map(function (m) { return Object.assign({}, m); }) }; }
       });
-      runSlice(MANUAL_CODE, sb.ctx);
+      runManualExport(sb.ctx);
       const data = sb.resp[0].data;
       expect(data.accountLimit).toBeNull();
       expect(data.limitPlan == null).toBe(true);

@@ -30,6 +30,7 @@ const MESSAGES = raw('types/messages.d.ts');
 const BACKGROUND = raw('core/background.ts');
 const STATE = raw('core/state.ts');
 const CONTENT = raw('core/content.ts');
+const MANUAL = raw('core/content-manual-export.ts');
 const CONTENT_URL = raw('core/content-url.ts');
 const CONTENT_DIAG = raw('core/content-diag.ts');
 const CONTENT_BYOK = raw('core/content-byok.ts');
@@ -221,9 +222,9 @@ describe('C2: core/content.ts — слушатель, diag и broadcast', () => 
   });
 
   it('manualSnapshot объявлен AiCmManualSnapshot, ответ прежний', () => {
-    expect(CONTENT).toContain('var manualSnapshot: AiCmManualSnapshot = /** @type {AiCmManualSnapshot} */');
-    expect(CONTENT).toContain("type AiCmManualSnapshot = import('../types/messages').AiCmManualSnapshot;");
-    expect(CONTENT).toContain('sendResponse({ data: manualSnapshot } as AiCmContentResponse);');
+    expect(MANUAL).toContain('var manualSnapshot: AiCmManualSnapshot = /** @type {AiCmManualSnapshot} */');
+    expect(MANUAL).toContain("type AiCmManualSnapshot = import('../types/messages').AiCmManualSnapshot;");
+    expect(MANUAL).toContain('sendResponse({ data: manualSnapshot } as AiCmExportCurrentResponse);');
   });
 
   it('нет подавлений типов', () => {
