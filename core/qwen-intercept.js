@@ -765,8 +765,8 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     return { phases: phases, keysSeen: keysSeen, otherChars: otherChars, otherItems: otherItems, extrasNodes: extrasNodes, extrasChars: extrasChars, samples: samples };
   }
   function parseQwenHistory(payload) {
-    var nodes = [], chain = false, fullParsed = (typeof qwenParseFullChain === 'function') ? qwenParseFullChain(payload) : null;
-    if (fullParsed && fullParsed.nodes && fullParsed.nodes.length) { nodes = fullParsed.nodes; chain = true; } else { try { walkHistoryMessages(payload, nodes, 0, []); } catch (eWalk) { nodes = []; } }
+    var nodes = [], chain = false, chainTruncated = false, fullParsed = (typeof qwenParseFullChain === 'function') ? qwenParseFullChain(payload) : null;
+    if (fullParsed && fullParsed.nodes && fullParsed.nodes.length) { nodes = fullParsed.nodes; chain = true; chainTruncated = fullParsed.truncated === true; } else { try { walkHistoryMessages(payload, nodes, 0, []); } catch (eWalk) { nodes = []; } }
     var messages = [];
     var seen = {};
     var chatId = '';
@@ -836,7 +836,8 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       nodes: nodes.length,
       duplicates: duplicates,
       thinkingDuplicates: thinkingDuplicates,
-      reasoningMessages: reasoningMessages, chain: chain
+      reasoningMessages: reasoningMessages, chain: chain,
+      truncated: chainTruncated
     };
   }
 
@@ -937,6 +938,9 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         // v97 (диагностика qwen-mcp-diag): вклад extras в текст этого хода.
         toolChars: msg.toolChars || 0
       });
+      // BUG-23: ход пришёл из истории (не из SSE) — при полной истории такие ходы
+      // сверяются с активной цепочкой и лишние (из усечённой страницы) удаляются.
+      if (rec && rec.turn) rec.turn.fromHistory = true;
       // R2/R4: вложения хода — в очередь core/qwen-files.js. Ключ — userKey ИМЕННО
       // этого хода (rec.turn.userKey): emitSnapshot достаёт пользовательский блок
       // через userTextOf, а filesOnly-ход ассистента подавляется при сборке снимка.
@@ -977,6 +981,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         finished: true,
         filesOnly: true
       });
+      if (recU && recU.turn) recU.turn.fromHistory = true;
       if (recU && recU.turn && recU.turn.userKey) {
         enqueueHistoryFiles(pendingUserFiles, recU, 'user');
       }
@@ -1001,6 +1006,24 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       });
     }
     // O-53/O-55: страница истории (цикл ИЛИ публичный ?cursor=) — ПЕРЕД собранными, все ходы.
+    // BUG-23: полная история доказала ветвление (chain=1, truncated=0) — снимаем
+    // history-ходы, которых нет в активной цепочке. Иначе синтетический ход из
+    // усечённой страницы (userKey h:…) остаётся в конце и попадает в экспорт.
+    // Живой поток и file-only заглушки не трогаем.
+    if (fullDoc && parsed.chain === true && parsed.truncated !== true) {
+      var keepKeys = {};
+      for (var ki = 0; ki < parsed.messages.length; ki++) {
+        var km = parsed.messages[ki];
+        if (km && km.key) keepKeys[km.key] = 1;
+      }
+      for (var ti = turns.length - 1; ti >= 0; ti--) {
+        var tt = turns[ti];
+        if (!tt || tt.fromHistory !== true) continue;
+        if (tt.filesOnly === true || (typeof tt.key === 'string' && tt.key.indexOf('file-only:') === 0)) continue;
+        if (typeof sse !== 'undefined' && sse && sse.responseId && sse.responseId === tt.key) continue;
+        if (!keepKeys[tt.key]) turns.splice(ti, 1);
+      }
+    }
     if (created.length) renumberHistoryPage(pageTurns, m.paginate, m.url); if (fullDoc && parsed.chain === true && typeof reindexByChain === 'function') reindexByChain(pageTurns); if (fullDoc && pq && typeof pqAbort === 'function') pqAbort('full-history');
     // O-53: пагинация стартует ДО emit — первый снимок сразу честно неполный
     // (historyComplete=false), а не «полный, но потом вдруг нет» (дефект базовой страницы).
@@ -2049,8 +2072,9 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       if (!curNode || visited.indexOf(curNode) !== -1) { truncated = true; break; }
       visited.push(curNode); seq.push(curNode); cur = parentIdOf(curNode);
     }
-    if (!seq.length) return { nodes: [] };
+    if (!seq.length) return { nodes: [], truncated: truncated };
     seq.reverse();
+    var chainLen = seq.length;
     for (var i = 0; i < keys.length; i++) {
       var extra = byKey[keys[i]];
       if (visited.indexOf(extra) === -1) {
@@ -2058,7 +2082,32 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         seq.push(truncated ? extra : markOffChain(extra));
       }
     }
-    return { nodes: seq };
+    // BUG-23 (диагностика): какой лист выбран, дошла ли цепочка до корня и сколько
+    // узлов ушло в хвост. Без этих полей нельзя отличить «старый currentId» от
+    // «truncated-цепочки» — оба случая дают лишний ход в конце экспорта.
+    try {
+      var offCount = 0;
+      for (var oi = 0; oi < seq.length; oi++) { if (seq[oi] && seq[oi].offChain === true) offCount++; }
+      function idTail(from, to) {
+        var out = [];
+        for (var ti = from; ti < to && ti < seq.length; ti++) {
+          var tid = nodeIdOf(seq[ti]);
+          out.push(String(tid || '').slice(0, 8));
+        }
+        return out.join(',');
+      }
+      diagTag('qwen-chain', {
+        cur: String(found.currentId || '').slice(0, 8),
+        chain: chainLen,
+        total: keys.length,
+        extra: seq.length - chainLen,
+        truncated: truncated ? 1 : 0,
+        off: offCount,
+        chainTail: idTail(Math.max(0, chainLen - 3), chainLen),
+        tail: idTail(Math.max(0, seq.length - 3), seq.length)
+      });
+    } catch (eChainDiag) { swallow(eChainDiag, 'qwen:chain-diag'); }
+    return { nodes: seq, truncated: truncated };
   }
   // Полный документ: order = позиция в цепочке; ходы вне цепочки — после неё.
   function reindexByChain(pageTurns) {
