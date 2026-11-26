@@ -534,7 +534,8 @@ describe('R2: source-пины связки (перехватчик, регист
 
   test('parseQwenHistory отдаёт вложения, applyHistoryPayload ставит их в очередь', function () {
     expect(intercept).toContain('function historyFilesOf(node)');
-    expect(intercept).toContain('files: historyFilesOf(node)');
+    expect(intercept).toContain('var nodeFiles = historyFilesOf(node);');
+    expect(intercept).toContain('files: nodeFiles');
     expect(intercept).toContain('pendingUserFiles = Array.isArray(msg.files) ? msg.files : [];');
     expect(intercept).toContain('aiCmQwenFiles.qfEnqueueUserFiles(chatId, rec.turn.userKey, pendingUserFiles);');
   });

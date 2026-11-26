@@ -168,7 +168,12 @@ function aiCmGeminiTurnsSnapshotSync(): AiCmTurnsSnapshot | null {
 // экспорт после F5 мог взять устаревшую базу (266) при полном парсере (268).
 // Мост — те же window-CustomEvent, что у Gemini turns-snap; таймаутов нет: MAIN
 // отвечает синхронно в том же потоке. Нет моста/ответа — null, поведение прежнее.
-function aiCmQwenExportSnapshotSync(): { messages?: AiCmExportMessage[]; chatId?: string; missingUserTurns?: number } | null {
+function aiCmQwenExportSnapshotSync(): {
+  messages?: AiCmExportMessage[];
+  chatId?: string;
+  missingUserTurns?: number;
+  native?: { nodes?: unknown[]; currentId?: string; linear?: boolean } | null;
+} | null {
   try {
     var resp: any = null;
     var h = function (ev: Event) { resp = (ev as CustomEvent).detail; };

@@ -227,6 +227,10 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
   var sse = null;                 // активный стрим или null
   var turns = [];                 // assistant-ходы: [{key, order, model, answer, reasoning, text, userKey}]
   var userTurns = [];             // user-ходы: [{key, text}] — пары по parentId/fid запроса
+  // Stage 6: последняя ПОЛНАЯ нативная цепочка (chat.history.messages + currentId).
+  // Это не turns: узлы платформы с parentId, включая abandoned (offChain) — файл
+  // выбирает активную ветку сам (utils/export/native-chain.ts).
+  var lastNativeChain = null;
   var lastParsedSummary = [];     // BUG-24 (диагностика): последний разбор истории — ключи/роли/длины
   var turnSeq = 0;
   var dispatchSig = null;
@@ -769,19 +773,25 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     var nodes = [], chain = false, chainTruncated = false, fullParsed = (typeof qwenParseFullChain === 'function') ? qwenParseFullChain(payload) : null;
     if (fullParsed && fullParsed.nodes && fullParsed.nodes.length) { nodes = fullParsed.nodes; chain = true; chainTruncated = fullParsed.truncated === true; } else { try { walkHistoryMessages(payload, nodes, 0, []); } catch (eWalk) { nodes = []; } }
     var messages = [];
+    // Stage 6: узлы для buildNativeChain. В отличие от messages сюда попадают и
+    // abandoned-узлы (offChain), чтобы активную ветку выбрал чистый коллектор
+    // по currentId/parentId, а не порядок словаря.
+    var nativeNodes = [];
     var seen = {};
     var chatId = '';
     var duplicates = 0;
     var thinkingDuplicates = 0;
     var reasoningMessages = 0;
     for (var i = 0; i < nodes.length; i++) {
-      var node = nodes[i]; if (node.offChain === true) continue;   // O-61: abandoned — не в messages, но в nodes (диагностика)
+      var node = nodes[i];
+      var nodeOffChain = node.offChain === true;
       var role = (node.role === 'user') ? 'user' : ((node.role === 'assistant') ? 'assistant' : '');
       if (!role) continue;
-      if (!chatId) chatId = historyChatIdOf(node);
+      if (!chatId && !nodeOffChain) chatId = historyChatIdOf(node);
       var list = contentListOf(node) || [];
       var thinking = historyThinkingOf(list); var nodeReasoning = (typeof qwenReasoningOf === 'function') ? qwenReasoningOf(node) : '';
-      if (thinking.occurrences > 1) thinkingDuplicates++;
+      var reasoningText = nodeReasoning || thinking.text || '';
+      if (!nodeOffChain && thinking.occurrences > 1) thinkingDuplicates++;
       // Диагностика qwen-mcp-diag: сколько символов хода дал tool-вклад extras. Счётчик
       // пополняется здесь же, где текст собирается, — иначе пришлось бы угадывать по подстроке.
       var toolStats = { toolChars: 0 };
@@ -797,6 +807,30 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         text = text ? (text + '\n' + nodeTools) : nodeTools;
       }
       var id = historyMessageId(node, role);
+      // id узла для parentId-цепочки: платформенный node.id, а не fid/response_id
+      // (historyMessageId выбирает ключ хода; parentId всегда ссылается на node.id).
+      var chainId = (typeof node.id === 'string' && node.id) ? node.id : id;
+      var chainParentId = (typeof node.parentId === 'string' && node.parentId)
+        ? node.parentId
+        : ((typeof node.parent_id === 'string' && node.parent_id) ? node.parent_id : null);
+      var nodeFiles = historyFilesOf(node);
+      if (chainId) {
+        nativeNodes.push({
+          id: chainId,
+          parentId: chainParentId,
+          role: role,
+          text: text,
+          reasoning: reasoningText,
+          hiddenReasoning: reasoningText,
+          files: nodeFiles,
+          // Ключ очереди вложений (msg.key/recordTurn userKey), а не node.id:
+          // по нему qfSectionsFor отдаёт текст файлов при сборке снимка.
+          fileKey: id,
+          offChain: nodeOffChain ? true : undefined
+        });
+      }
+      // O-61: abandoned — не в messages/turns, но остаётся в nativeNodes для коллектора.
+      if (nodeOffChain) continue;
       var dedupeKey = id || (role + '\u0000' + text + '\u0000' + (nodeReasoning || thinking.text));
       if (seen[dedupeKey] === 1) { duplicates++; continue; }   // первое вхождение побеждает
       seen[dedupeKey] = 1;
@@ -811,7 +845,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         parentId: (typeof node.parent_id === 'string') ? node.parent_id
           : ((typeof node.parentId === 'string') ? node.parentId : ''),
         // R2: вложения хода. Уходят в core/qwen-files.js уже на recordTurn (ниже).
-        files: historyFilesOf(node),
+        files: nodeFiles,
         // v97 (диагностика qwen-mcp-diag): символы tool-вклада extras в тексте хода.
         toolChars: toolStats.toolChars
       });
@@ -834,6 +868,8 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     return {
       chatId: chatId,
       messages: messages,
+      nativeNodes: nativeNodes,
+      currentId: (fullParsed && typeof fullParsed.currentId === 'string') ? fullParsed.currentId : '',
       nodes: nodes.length,
       duplicates: duplicates,
       thinkingDuplicates: thinkingDuplicates,
@@ -1032,6 +1068,32 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       }
     }
     if (created.length) renumberHistoryPage(pageTurns, m.paginate, m.url); if (fullDoc && parsed.chain === true && typeof reindexByChain === 'function') reindexByChain(pageTurns); if (fullDoc && pq && typeof pqAbort === 'function') pqAbort('full-history');
+    // Stage 6: нативную цепочку запоминаем ТОЛЬКО для полного документа, где разбор
+    // словаря доказал активную ветку. turnCount фиксирует состояние turns в момент
+    // приёмки: если позже придёт живой ход, native устареет и файл возьмёт turns-путь.
+    // Битый parentId/цикл (truncated) не запоминаем — цепочка не доказана.
+    if (fullDoc && parsed.chain === true && parsed.truncated !== true &&
+        parsed.nativeNodes && parsed.nativeNodes.length &&
+        (!currentChatId || !chatId || String(chatId) === String(currentChatId))) {
+      // typeof-гард: срез-песочницы qwen-тестов объявляют только список FNS, без этого
+      // состояния — там ветка просто не исполняется (поведение прежнее).
+      if (typeof lastNativeChain !== 'undefined') {
+        // Число assistant-узлов активной ветки — эталон свежести. Если в turns позже
+        // появится живой ход, их станет больше и native будет отвергнут (turns-фолбэк).
+        var nativeAssistantCount = 0;
+        for (var ni = 0; ni < parsed.nativeNodes.length; ni++) {
+          var nn = parsed.nativeNodes[ni];
+          if (nn && nn.offChain !== true && nn.role === 'assistant') nativeAssistantCount++;
+        }
+        lastNativeChain = {
+          chatId: chatId,
+          nodes: parsed.nativeNodes,
+          currentId: parsed.currentId || '',
+          turnCount: nativeAssistantCount,
+          ts: Date.now()
+        };
+      }
+    }
     // O-53: пагинация стартует ДО emit — первый снимок сразу честно неполный
     // (historyComplete=false), а не «полный, но потом вдруг нет» (дефект базовой страницы).
     var paginating = false, fullPending = false;
@@ -1309,13 +1371,57 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
   // Синхронный CustomEvent (как Gemini turns-snap): контент-скрипт ждёт ответ сразу.
   function exportSnapshot() {
     var d = buildSnapshotData();
+    var snapshotChatId = currentChatId || lastReqChatId || '';
+    // Stage 6: полная нативная цепочка текущего чата. Отдаём узлы как есть (вместе
+    // с offChain), а активную ветку выбирает buildNativeChain в ISOLATED-мире.
+    var native = null;
+    var nativeFresh = (typeof lastNativeChain === 'undefined' || !lastNativeChain ||
+      typeof lastNativeChain.turnCount !== 'number');
+    if (!nativeFresh && typeof turns !== 'undefined' && turns) {
+      // filesOnly-заглушки не дают assistant-узла в истории — их не считаем.
+      var expectedTurns = 0;
+      for (var nt = 0; nt < turns.length; nt++) {
+        if (turns[nt] && turns[nt].filesOnly !== true) expectedTurns++;
+      }
+      nativeFresh = expectedTurns <= lastNativeChain.turnCount;
+    }
+    if (typeof lastNativeChain !== 'undefined' && lastNativeChain && nativeFresh &&
+        lastNativeChain.nodes && lastNativeChain.nodes.length &&
+        (!lastNativeChain.chatId || !snapshotChatId ||
+          String(lastNativeChain.chatId) === String(snapshotChatId))) {
+      // R2: текст вложений живёт в core/qwen-files.js и приходит асинхронно, поэтому
+      // накладываем его в момент экспорта (как buildSnapshotData), а не при парсинге.
+      var nativeNodes = [];
+      for (var nni = 0; nni < lastNativeChain.nodes.length; nni++) {
+        var nn = lastNativeChain.nodes[nni];
+        var sec = '';
+        if (nn && nn.role === 'user' && lastNativeChain.chatId &&
+            typeof aiCmQwenFiles !== 'undefined' && aiCmQwenFiles) {
+          try { sec = aiCmQwenFiles.qfSectionsFor(lastNativeChain.chatId, nn.fileKey || nn.id) || ''; }
+          catch (eNativeFiles) { if (typeof swallow === 'function') swallow(eNativeFiles, 'qwen:native-files-sections'); }
+        }
+        if (!sec) { nativeNodes.push(nn); continue; }
+        var nodeCopy = {};
+        for (var nk in nn) {
+          if (Object.prototype.hasOwnProperty.call(nn, nk)) nodeCopy[nk] = nn[nk];
+        }
+        nodeCopy.text = nodeCopy.text ? (nodeCopy.text + sec) : sec.replace(/^\n\n/, '');
+        nativeNodes.push(nodeCopy);
+      }
+      native = {
+        nodes: nativeNodes,
+        currentId: lastNativeChain.currentId || '',
+        linear: false
+      };
+    }
     return {
       messages: d.messages,
       count: d.messages.length,
       text: d.pieces.join('\n'),
       modelSlug: d.lastModel || '',
-      chatId: currentChatId || lastReqChatId || '',
-      missingUserTurns: d.missingUserBlocks
+      chatId: snapshotChatId,
+      missingUserTurns: d.missingUserBlocks,
+      native: native
     };
   }
 
@@ -1910,6 +2016,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       if (sse) { sse.ended = true; sse = null; }   // ход старого чата не дописывается в новый
       turns = [];
       userTurns = [];
+      lastNativeChain = null;
       turnSeq = 0;
       dispatchSig = null;
       // R2: файловое состояние принадлежит ОДНОМУ чату — очередь и тексты вложений не
@@ -2117,7 +2224,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       }
     }
     try { scan(payload, 0); } catch (eScan) { swallow(eScan, 'qwen:full-chain-scan'); }
-    if (!found) return { nodes: [] };
+    if (!found) return { nodes: [], currentId: '' };
     var byKey = {}, byId = {}, keys = [];
     for (var key in found.messages) {
       if (!Object.prototype.hasOwnProperty.call(found.messages, key)) continue;
@@ -2147,7 +2254,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       if (!curNode || visited.indexOf(curNode) !== -1) { truncated = true; break; }
       visited.push(curNode); seq.push(curNode); cur = parentIdOf(curNode);
     }
-    if (!seq.length) return { nodes: [], truncated: truncated };
+    if (!seq.length) return { nodes: [], truncated: truncated, currentId: found.currentId };
     seq.reverse();
     var chainLen = seq.length;
     for (var i = 0; i < keys.length; i++) {
@@ -2182,7 +2289,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         tail: idTail(Math.max(0, seq.length - 3), seq.length)
       });
     } catch (eChainDiag) { swallow(eChainDiag, 'qwen:chain-diag'); }
-    return { nodes: seq, truncated: truncated };
+    return { nodes: seq, truncated: truncated, currentId: found.currentId };
   }
   // Полный документ: order = позиция в цепочке; ходы вне цепочки — после неё.
   function reindexByChain(pageTurns) {

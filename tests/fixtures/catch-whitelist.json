@@ -165,8 +165,8 @@
       "file": "core/base-handler.ts",
       "category": "debug-instrumentation",
       "lines": [
-        255,
-        297
+        260,
+        302
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var v = info && info.verdicts ? JSON.stringify(info.verdicts) : '{}'; va"
     },
@@ -174,7 +174,7 @@
       "file": "core/base-handler.ts",
       "category": "logging-guard",
       "lines": [
-        220
+        225
       ],
       "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: aiCmLogNetSyncResult(convId, info || {});"
     },
@@ -182,9 +182,9 @@
       "file": "core/base-handler.ts",
       "category": "timing-guard",
       "lines": [
-        218,
-        219,
-        311
+        223,
+        224,
+        316
       ],
       "reason": "timing-guard: отмена таймера/подписки: обработчик мог быть снят хостом или гонкой; пример: clearTimeout(timer);"
     },
@@ -709,7 +709,7 @@
       "file": "core/export-manager.ts",
       "category": "best-effort-guard",
       "lines": [
-        1130
+        1149
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var d = ev && (ev as any).detail; if (!d) return; aiCmGsaProbeRunning ="
     },
@@ -717,7 +717,7 @@
       "file": "core/export-manager.ts",
       "category": "cleanup-guard",
       "lines": [
-        717
+        736
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: if (!aiCmPendingHistWrite) return; if (cid && aiCmPendingHistWrite.convI"
     },
@@ -725,9 +725,9 @@
       "file": "core/export-manager.ts",
       "category": "debug-instrumentation",
       "lines": [
-        312,
-        1212,
-        2142
+        331,
+        1231,
+        2161
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: if (typeof aiCmDiagLine === 'function' && typeof aiCmDiagOn === 'functio"
     },
@@ -735,8 +735,8 @@
       "file": "core/export-manager.ts",
       "category": "defensive-assignment",
       "lines": [
-        1025,
-        1936
+        1044,
+        1955
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: aiCmIncludeHiddenInExport = !!(data && data.aiCmIncludeHiddenInExport =="
     },
@@ -744,7 +744,7 @@
       "file": "core/export-manager.ts",
       "category": "feature-detect",
       "lines": [
-        2111
+        2130
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var BdiagDl = (typeof AiCmExportBuilders !== 'undefined') ? AiCmExportBu"
     },
@@ -752,11 +752,11 @@
       "file": "core/export-manager.ts",
       "category": "guard-clause",
       "lines": [
-        540,
-        893,
-        960,
-        1321,
-        1741
+        559,
+        912,
+        979,
+        1340,
+        1760
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (used && file) used[file] = 1;"
     },
@@ -764,8 +764,8 @@
       "file": "core/export-manager.ts",
       "category": "host-api-guard",
       "lines": [
-        1009,
-        1034
+        1028,
+        1053
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.storage.onChanged.addListener(function (changes: AiCmStorageChang"
     },
@@ -773,8 +773,8 @@
       "file": "core/export-manager.ts",
       "category": "local-helper-guard",
       "lines": [
-        548,
-        1981
+        567,
+        2000
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmLatchCacheReady();"
     },
@@ -1439,7 +1439,7 @@
       "lines": [
         120,
         209,
-        368
+        372
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: iterator.return();"
     },
@@ -1450,9 +1450,9 @@
         74,
         77,
         144,
-        1850,
-        1882,
-        1897
+        1956,
+        1988,
+        2003
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: for (var i = 0; i < diagRing.length; i++) printDiag(diagRing[i][0], diag"
     },
@@ -1460,8 +1460,8 @@
       "file": "core/qwen-intercept.js",
       "category": "event-guard",
       "lines": [
-        1934,
-        1964
+        2041,
+        2071
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); dis"
     },
@@ -1486,9 +1486,9 @@
       "file": "core/qwen-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        1951,
-        1959,
-        1963
+        2058,
+        2066,
+        2070
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkChatChange();"
     },

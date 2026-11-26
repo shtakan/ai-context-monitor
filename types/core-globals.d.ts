@@ -206,6 +206,9 @@ declare function aiCmExportProjectFileMessages(
   msgs: unknown,
   hooks: unknown
 ): { messages: any[]; mode: '' | 'projected' };
+declare function aiCmExportNativeChain(
+  input: unknown
+): { messages: Array<{ role: string; text: string }>; partial?: boolean; partialReason?: string } | null;
 declare function aiCmExportPartialView(
   source: unknown
 ): { partial?: true; partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text' | 'stopped' | 'truncated' };

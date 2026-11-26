@@ -3654,6 +3654,7 @@ import { canonicalizeBatch, canonicalizeMessages } from '../utils/messages/canon
 import { projectFileMessages } from '../utils/export/projection';
 import { derivePartial } from '../utils/export/completeness';
 import type { PartialReason } from '../utils/export/completeness';
+import { buildNativeChain } from '../utils/export/native-chain';
 
 try {
   if (typeof AistudioAdapter === 'function' && typeof installAistudioDualRun === 'function') {
@@ -3775,6 +3776,19 @@ function aiCmExportPartialView(source: any): { partial?: true; partialReason?: P
     return derivePartial(source);
   } catch (ePart) {
     return { partial: undefined, partialReason: undefined };
+  }
+}
+
+/**
+ * 2.4 Stage 6: мост к чистому сборщику активной цепочки. MAIN-перехватчик Qwen
+ * отдаёт native { nodes, currentId }; export-manager выбирает этот путь, только
+ * если цепочка доказана (partial=false). Любой сбой — null → старый turns-путь.
+ */
+function aiCmExportNativeChain(input: any): any {
+  try {
+    return buildNativeChain(input);
+  } catch (eNative) {
+    return null;
   }
 }
 

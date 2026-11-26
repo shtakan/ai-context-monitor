@@ -160,7 +160,7 @@
     "reason": "legacy-pin"
   },
   "tests/adapters/qwen-files-module.test.js": {
-    "count": 24,
+    "count": 25,
     "reason": "vm-harness"
   },
   "tests/adapters/qwen-mcp-sync.test.js": {

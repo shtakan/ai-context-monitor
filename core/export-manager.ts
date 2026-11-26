@@ -254,6 +254,18 @@ function aiCmLogQwenExportSource(messages: AiCmExportMessage[], source: string):
     });
   } catch (eQes) { swallowSoft(eQes, 'export:qwen-export-source-diag'); }
 }
+function aiCmQwenNativeFileMessages(qSnap: any): AiCmExportMessage[] | null {
+  // Stage 6: активная нативная цепочка имеет приоритет над turns-снимком. Берём её,
+  // только если чистый коллектор доказал цепочку: partial=false и есть сообщения.
+  // Иначе null — вызывающий продолжает старым путём (turns/DOM) без изменения байтов.
+  if (!qSnap || !qSnap.native || typeof qSnap.native !== 'object') return null;
+  if (!Array.isArray(qSnap.native.nodes) || !qSnap.native.nodes.length) return null;
+  if (typeof aiCmExportNativeChain !== 'function') return null;
+  var built = aiCmExportNativeChain(qSnap.native);
+  if (!built || built.partial === true) return null;
+  if (!Array.isArray(built.messages) || !built.messages.length) return null;
+  return built.messages as AiCmExportMessage[];
+}
 function aiCmCollectExportSource(): AiCmExportMessage[] {
   var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null); var aiCmV2CanonAis = (typeof aiCmV2AistudioExportSource === 'function') ? aiCmV2AistudioExportSource() : null; if (aiCmV2CanonAis && aiCmV2CanonAis.length) return aiCmSanitizeEmitUserTexts(aiCmV2CanonAis);
   // BUG-24: Qwen — приоритет живой цепочке turns/userTurns. lastBaseTexts мог остаться
@@ -264,10 +276,17 @@ function aiCmCollectExportSource(): AiCmExportMessage[] {
     if (typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName === 'qwen' &&
         typeof aiCmQwenExportSnapshotSync === 'function') {
       var qSnap = aiCmQwenExportSnapshotSync();
-      var qMsgs = (qSnap && Array.isArray(qSnap.messages)) ? qSnap.messages : null;
       var qCurCid = (typeof getCurrentConvId === 'function') ? (getCurrentConvId() || '') : '';
-      if (qMsgs && qMsgs.length > (Array.isArray(lastBaseTexts) ? lastBaseTexts.length : 0) &&
-          (!qSnap.chatId || !qCurCid || String(qSnap.chatId) === String(qCurCid))) {
+      var qChatOk = !!(qSnap && (!qSnap.chatId || !qCurCid || String(qSnap.chatId) === String(qCurCid)));
+      // Stage 6: доказанная активная цепочка (parentId/currentId) — приоритетный источник.
+      var qNativeMsgs = (qChatOk && typeof aiCmQwenNativeFileMessages === 'function')
+        ? aiCmQwenNativeFileMessages(qSnap) : null;
+      if (qNativeMsgs && qChatOk) {
+        if (typeof aiCmLogQwenExportSource === 'function') aiCmLogQwenExportSource(qNativeMsgs, 'qwen-native');
+        return aiCmSanitizeEmitUserTexts(qNativeMsgs);
+      }
+      var qMsgs = (qSnap && Array.isArray(qSnap.messages)) ? qSnap.messages : null;
+      if (qMsgs && qMsgs.length > (Array.isArray(lastBaseTexts) ? lastBaseTexts.length : 0) && qChatOk) {
         if (typeof aiCmLogQwenExportSource === 'function') aiCmLogQwenExportSource(qMsgs, 'qwen-live');
         return aiCmSanitizeEmitUserTexts(qMsgs);
       }
@@ -2370,22 +2389,27 @@ function aiCmCanonicalizeMessages(list: AiCmExportMessage[] | null, site: string
 function aiCmBuildCanonicalBody(convId: string | null): any {
   var list = (typeof getEffectiveMessages === 'function') ? getEffectiveMessages() : null;
   if (!list && typeof buildHistoryMessages === 'function') list = buildHistoryMessages();
-  if (!list || !list.length) return null;
   var site = (typeof currentAdapter !== 'undefined' && currentAdapter) ? currentAdapter.siteName : '';
   // BUG-24: ручной экспорт Qwen — приоритет живому снимку turns/userTurns. Иначе
   // getEffectiveMessages() отдаёт aiCmBasePrepared прошлого emit (266) при полной
-  // текущей цепочке (268). Как и в collect, только если снимок строго полнее.
+  // текущей цепочке (268). Stage 6: доказанная нативная цепочка важнее длины.
   try {
     if (site === 'qwen' && typeof aiCmQwenExportSnapshotSync === 'function') {
       var qCanon = aiCmQwenExportSnapshotSync();
+      var qCanonCid = (typeof getCurrentConvId === 'function') ? (getCurrentConvId() || convId || '') : (convId || '');
+      var qCanonChatOk = !!(qCanon && (!qCanon.chatId || !qCanonCid || String(qCanon.chatId) === String(qCanonCid)));
+      // Stage 6: нативная цепочка важнее длины — она и есть активная ветка платформы.
+      var qCanonNative = (qCanonChatOk && typeof aiCmQwenNativeFileMessages === 'function')
+        ? aiCmQwenNativeFileMessages(qCanon) : null;
       var qCanonMsgs = (qCanon && Array.isArray(qCanon.messages)) ? qCanon.messages : null;
-      var qCanonCid = (typeof getCurrentConvId === 'function') ? (getCurrentConvId() || '') : (convId || '');
-      if (qCanonMsgs && qCanonMsgs.length > list.length &&
-          (!qCanon.chatId || !qCanonCid || String(qCanon.chatId) === String(qCanonCid))) {
+      if (qCanonNative && qCanonChatOk) {
+        list = qCanonNative;
+      } else if (qCanonMsgs && list && qCanonMsgs.length > list.length && qCanonChatOk) {
         list = qCanonMsgs;
       }
     }
   } catch (eQCanon) { swallowSoft(eQCanon, 'export:qwen-canonical-live'); }
+  if (!list || !list.length) return null;
   // BUG-24 (диагностика): ручной файл получает массив отсюда, а не напрямую из collect.
   if (typeof aiCmLogQwenExportSource === 'function') aiCmLogQwenExportSource(list, 'canonical');
   // Мемо: тот же массив + чат + сайт → тот же объект body (идентичность messages).
