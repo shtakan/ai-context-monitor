@@ -61,9 +61,13 @@ import { setIntervalVisible, fetchGuarded } from '../utils/intercept-common.ts';
 import {
   getConvIdFromPath,
   orderChatGPTMapping,
+  orderChatGPTMappingFromCurrent,
   sanitizeChatGPTText,
   shouldResetConversationOnNav
 } from '../utils/chatgpt-conversation-parser.ts';
+// Stage 6: общий сборщик активной цепочки. Для ChatGPT лист — current_node,
+// parentId — node.parent; abandoned-ветки отбрасывает сам коллектор.
+import { buildNativeChain } from '../utils/export/native-chain.ts';
 (function () {
   if (window.__aiCmInterceptInstalled) return;
   window.__aiCmInterceptInstalled = true;
@@ -247,7 +251,13 @@ import {
     var strippedMarkers = 0; var firstUserHead = '';
     // v1.5.2: линеаризуем mapping по parent/children (не по порядку ключей и не по create_time),
     // чтобы первый user+assistant не терялся и порядок был хронологическим.
-    var orderedKeys = orderChatGPTMapping(mapping);
+    // Stage 6: если сайт дал current_node, берём ТОЛЬКО его ветку (abandoned/regenerated
+    // ходы в базу и файл не попадают); нет/битый лист — прежний DFS-фолбэк.
+    var activeKeys = orderChatGPTMappingFromCurrent(mapping, data && data.current_node);
+    var chainMode = activeKeys ? 'current' : 'dfs';
+    var orderedKeys = activeKeys || orderChatGPTMapping(mapping);
+    var nativeNodes = [];
+    var nativeIdSet = {};
     var sanitizeText = sanitizeChatGPTText;
     function countMarkers(s) {
       if (typeof s !== 'string') return 0;
@@ -306,9 +316,44 @@ import {
       var meta = msg.metadata || {};
       var slug = meta.model_slug || meta.model || '';
       if (text) {
+        if (activeKeys) {
+          var nativeId = (node && node.id != null) ? String(node.id) : String(key);
+          var nativeParent = (node && node.parent != null) ? String(node.parent) : null;
+          // Фильтрованные system/tool-узлы не входят в цепочку: первый user
+          // становится корнем, иначе коллектор увидит обрыв parentId.
+          if (nativeParent && !nativeIdSet[nativeParent]) nativeParent = null;
+          nativeNodes.push({
+            id: nativeId,
+            parentId: nativeParent,
+            role: role,
+            text: text
+          });
+          nativeIdSet[nativeId] = true;
+        }
         if (!firstUserHead && role === 'user') firstUserHead = text.slice(0, 40);
         pieces.push(text); ids.push(String(key)); roles.push(role); count++; lastText = text; lastRole = role;
         if (slug) lastModelSlug = slug;
+      }
+    }
+    // Stage 6: сообщения файла/базы — из общего сборщика активной цепочки. Если
+    // current_node отсутствует/цепочка доказанно порвана (partial), остаётся
+    // прежний activeKeys/DFS-разбор: данные не теряются.
+    var nativeBuilt = null;
+    if (activeKeys) {
+      nativeBuilt = buildNativeChain({
+        nodes: nativeNodes,
+        currentId: String((data && data.current_node) || ''),
+        linear: false
+      });
+      if (nativeBuilt && nativeBuilt.partial !== true && nativeBuilt.messages.length) {
+        pieces = nativeBuilt.messages.map(function (m) { return m.text; });
+        ids = nativeBuilt.messages.map(function (m) { return String(m.id == null ? '' : m.id); });
+        roles = nativeBuilt.messages.map(function (m) { return m.role; });
+        count = pieces.length;
+        lastText = pieces[pieces.length - 1] || '';
+        lastRole = roles[roles.length - 1] || '';
+      } else {
+        nativeBuilt = null;
       }
     }
     // лог изображений (однократно при первом обнаружении)
@@ -318,7 +363,7 @@ import {
         ', добавлено токенов: ' + attachBreak.imgTokens +
         ' (по ' + IMAGE_DEFAULT_TOKENS + ' ток/изобр, high-detail оценка OpenAI 1024×1024)');
     }
-    return { text: pieces.join('\n'), count: count, lastText: lastText, lastModelSlug: lastModelSlug, pieces: pieces, ids: ids, roles: roles, lastRole: lastRole, imgCount: imgCount, imgTokens: imgTokens, strippedMarkers: strippedMarkers, firstUserHead: firstUserHead, nodeCount: nodeCount };
+    return { text: pieces.join('\n'), count: count, lastText: lastText, lastModelSlug: lastModelSlug, pieces: pieces, ids: ids, roles: roles, lastRole: lastRole, imgCount: imgCount, imgTokens: imgTokens, strippedMarkers: strippedMarkers, firstUserHead: firstUserHead, nodeCount: nodeCount, chainMode: chainMode, native: nativeBuilt ? { nodes: nativeNodes, currentId: String((data && data.current_node) || ''), linear: false } : null };
   }
   function emitSnapshot(parsed, when) {
     if (!parsed.text) return;
@@ -357,6 +402,7 @@ import {
           text: parsed.text, count: parsed.count, lastMessageText: parsed.lastText,
           modelSlug: parsed.lastModelSlug, messageTexts: parsed.pieces, messageIds: parsed.ids,
           messages: messages,
+          native: parsed.native || null,
           attachTokens: attachTokens,
           attachBreak: { imgTokens: attachBreak.imgTokens, docTokens: attachBreak.docTokens, imgCount: attachBreak.imgCount, docCount: attachBreak.docCount },
           historyComplete: true,

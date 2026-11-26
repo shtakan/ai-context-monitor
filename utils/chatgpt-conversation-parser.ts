@@ -278,6 +278,52 @@ export function orderChatGPTMapping(mapping: any): string[] {
 }
 
 /**
+ * Активная ветка ChatGPT: от `current_node` к корню по `parent`.
+ *
+ * `orderChatGPTMapping` обходит ВСЕ ветки DFS (нужен архиву), поэтому после
+ * редактирования/регенерации в экспорт попадали abandoned-ходы. Здесь — только
+ * предки текущего листа, oldest→newest. Битый current_node/parent/цикл → null:
+ * вызывающий сохраняет прежний DFS-фолбэк.
+ * @param {Record<string, any>|null|undefined} mapping Объект mapping разговора.
+ * @param {string|null|undefined} currentNode id листа (current_node).
+ * @returns {string[]|null} Ключи mapping активной ветки или null.
+ */
+export function orderChatGPTMappingFromCurrent(mapping: any, currentNode: string | null | undefined): string[] | null {
+  try {
+    var curId = String(currentNode || '');
+    if (!curId || !mapping || typeof mapping !== 'object') return null;
+    var keys = Object.keys(mapping);
+    if (!keys.length) return null;
+    var byId: Record<string, string> = {};
+    for (var i = 0; i < keys.length; i++) {
+      var node = mapping[keys[i]];
+      var nid = (node && node.id != null) ? String(node.id) : keys[i];
+      byId[nid] = keys[i];
+    }
+    var curKey = byId[curId] || (mapping[curId] ? curId : '');
+    if (!curKey) return null;
+    var out: string[] = [];
+    var seen: Record<string, boolean> = {};
+    while (curKey) {
+      if (seen[curKey]) return null;             // цикл
+      seen[curKey] = true;
+      out.push(curKey);
+      var n = mapping[curKey];
+      if (!n || n.parent == null) break;
+      var pid = String(n.parent);
+      var parentKey = byId[pid] || (mapping[pid] ? pid : '');
+      if (!parentKey) return null;               // обрыв цепочки
+      curKey = parentKey;
+    }
+    out.reverse();
+    return out;
+  } catch (eOrderCurrent) {
+    swallowSoft(eOrderCurrent, 'chatgpt-parser:order-current');
+    return null;
+  }
+}
+
+/**
  * Полный парсер (для тестов и потенциального переиспользования): messages в
  * хронологическом порядке, голова = первый user, с санацией маркеров.
  * @param {any} json Сырой ответ ChatGPT (mapping/model_slug/tokens).

@@ -16,6 +16,14 @@ const { readCore } = require('./helpers/core-src.js');
 const N = loadEsmModule('utils/export/native-chain.ts');
 const QWEN_CLASSIC = loadAsClassic('core/qwen-intercept.js');
 const MGR_SRC = readCore('core/export-manager.ts');
+const PAGE_SRC = fs.readFileSync(path.join(__dirname, '..', 'core', 'page-intercept.js'), 'utf8');
+const CHATGPT_PARSER = loadEsmModule('utils/chatgpt-conversation-parser.ts');
+const DEEPSEEK_SCOPE = { window: {} };
+new Function('window', 'self', 'console', loadAsClassic('core/deepseek-parse.js'))(
+  DEEPSEEK_SCOPE.window, DEEPSEEK_SCOPE.window, console
+);
+const DEEPSEEK_PARSE = DEEPSEEK_SCOPE.window.AiCmDeepseekParse;
+DEEPSEEK_PARSE.__bind({});
 const QWEN_FIXTURE = path.join(
   __dirname, '..', '..',
   'acceptance', 'BIG-2026-11', '2.3', 'live', '2026-11-25',
@@ -214,6 +222,115 @@ describe('Stage 6 native-chain: выбор источника в export-manager'
     expect(canon).toContain('aiCmQwenNativeFileMessages(qCanon)');
     expect(canon.indexOf('aiCmQwenNativeFileMessages(qCanon)'))
       .toBeLessThan(canon.indexOf('qCanonMsgs.length > list.length'));
+  });
+});
+
+describe('Stage 6 native-chain: ChatGPT current_node', () => {
+  function makeTurn(id, parent, role, text) {
+    return {
+      id: id,
+      parent: parent,
+      children: [],
+      message: { author: { role: role }, content: { parts: [text] }, create_time: 0 }
+    };
+  }
+  function mappingWithBranch() {
+    const mapping = {};
+    mapping.root = { id: 'root', parent: null, children: ['u1'], message: { author: { role: 'system' }, content: { parts: [''] } } };
+    mapping.u1 = makeTurn('u1', 'root', 'user', 'Q1');
+    mapping.a1 = makeTurn('a1', 'u1', 'assistant', 'A1');
+    mapping.u2 = makeTurn('u2', 'a1', 'user', 'Q2');
+    mapping.a2 = makeTurn('a2', 'u2', 'assistant', 'A2');
+    mapping.ux = makeTurn('ux', 'a1', 'user', 'ABANDONED Q');
+    mapping.ax = makeTurn('ax', 'ux', 'assistant', 'ABANDONED A');
+    mapping.u1.children = ['a1'];
+    mapping.a1.children = ['u2', 'ux'];
+    mapping.u2.children = ['a2'];
+    mapping.ux.children = ['ax'];
+    return mapping;
+  }
+  function parseHistoryForTest() {
+    const ctx = {
+      orderChatGPTMapping: CHATGPT_PARSER.orderChatGPTMapping,
+      orderChatGPTMappingFromCurrent: CHATGPT_PARSER.orderChatGPTMappingFromCurrent,
+      sanitizeChatGPTText: CHATGPT_PARSER.sanitizeChatGPTText,
+      buildNativeChain: N.buildNativeChain,
+      IMAGE_DEFAULT_TOKENS: 85,
+      attachSeen: {}, attachBreak: { imgTokens: 0, docTokens: 0, imgCount: 0, docCount: 0 },
+      attachTokens: 0, loggedAttach: false, swallow: function () {}
+    };
+    return new Function(
+      'ctx',
+      'with (ctx) { ' + fnDecl(PAGE_SRC, 'parseHistory') + '\n return parseHistory; }'
+    )(ctx);
+  }
+
+  test('active branch: только предки current_node, abandoned не входят', () => {
+    const parse = parseHistoryForTest();
+    const parsed = parse({ mapping: mappingWithBranch(), current_node: 'a2' });
+    expect(parsed.chainMode).toBe('current');
+    expect(parsed.count).toBe(4);
+    expect(parsed.pieces).toEqual(['Q1', 'A1', 'Q2', 'A2']);
+    expect(parsed.roles).toEqual(['user', 'assistant', 'user', 'assistant']);
+    expect(parsed.native.nodes).toHaveLength(4);
+    expect(parsed.native.currentId).toBe('a2');
+  });
+
+  test('переключение на abandoned-ветку делает её активной', () => {
+    const parse = parseHistoryForTest();
+    const parsed = parse({ mapping: mappingWithBranch(), current_node: 'ax' });
+    expect(parsed.pieces).toEqual(['Q1', 'A1', 'ABANDONED Q', 'ABANDONED A']);
+    expect(parsed.count).toBe(4);
+  });
+
+  test('без current_node — прежний DFS-фолбэк и native=null', () => {
+    const parse = parseHistoryForTest();
+    const parsed = parse({ mapping: mappingWithBranch() });
+    expect(parsed.chainMode).toBe('dfs');
+    expect(parsed.count).toBe(6);
+    expect(parsed.native).toBe(null);
+  });
+
+  test('source-пин: page-intercept спрашивает current_node и общий сборщик', () => {
+    expect(PAGE_SRC).toContain('orderChatGPTMappingFromCurrent(mapping, data && data.current_node)');
+    expect(PAGE_SRC).toContain("import { buildNativeChain } from '../utils/export/native-chain.ts';");
+    expect(PAGE_SRC).toContain('nativeBuilt = buildNativeChain({');
+  });
+});
+
+describe('Stage 6 native-chain: DeepSeek parent_id', () => {
+  function dsMsg(id, parent, role) {
+    return { message_id: id, parent_id: parent, role: role, fragments: [] };
+  }
+
+  test('buildActiveChain: только предки current_message_id, abandoned не входят', () => {
+    const byId = {
+      u1: dsMsg('u1', null, 'USER'),
+      a1: dsMsg('a1', 'u1', 'ASSISTANT'),
+      u2: dsMsg('u2', 'a1', 'USER'),
+      a2: dsMsg('a2', 'u2', 'ASSISTANT'),
+      ux: dsMsg('ux', 'a1', 'USER'),
+      ax: dsMsg('ax', 'ux', 'ASSISTANT')
+    };
+    const active = DEEPSEEK_PARSE.buildActiveChain({ current_message_id: 'a2' }, byId);
+    expect(active.chain.map(function (m) { return m.message_id; })).toEqual(['u1', 'a1', 'u2', 'a2']);
+    expect(active.truncated).toBe(false);
+    expect(active.reachedRoot).toBe(true);
+    expect(active.chain.map(function (m) { return m.role; }))
+      .toEqual(['USER', 'ASSISTANT', 'USER', 'ASSISTANT']);
+
+    const other = DEEPSEEK_PARSE.buildActiveChain({ current_message_id: 'ax' }, byId);
+    expect(other.chain.map(function (m) { return m.message_id; })).toEqual(['u1', 'a1', 'ux', 'ax']);
+  });
+
+  test('обрыв parent_id: truncated=true, reachedRoot=false (дозапрос/фолбэк)', () => {
+    const cut = DEEPSEEK_PARSE.buildActiveChain(
+      { current_message_id: 'a2' },
+      { a2: dsMsg('a2', 'u2', 'ASSISTANT'), u2: dsMsg('u2', 'gone', 'USER') }
+    );
+    expect(cut.chain.map(function (m) { return m.message_id; })).toEqual(['u2', 'a2']);
+    expect(cut.truncated).toBe(true);
+    expect(cut.reachedRoot).toBe(false);
   });
 });
 

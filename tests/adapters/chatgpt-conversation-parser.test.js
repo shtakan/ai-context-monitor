@@ -4,6 +4,7 @@ const {
     getConvIdFromPath,
     shouldResetChatConversation,
     orderChatGPTMapping,
+    orderChatGPTMappingFromCurrent,
     sanitizeChatGPTText,
     parseChatGPTConversation
 } = require('../helpers/load-esm.js').loadEsmModule('utils/chatgpt-conversation-parser.ts');
@@ -115,6 +116,31 @@ describe('ChatGPT линеаризация mapping (потеря первого 
         const allText = result.messages.map(m => m.content).join('\n');
         expect(allText).not.toMatch(/\[entity\]/);
         expect(allText).not.toMatch(/\[cite:/);
+    });
+
+    it('orderChatGPTMappingFromCurrent: только ветка current_node, abandoned не входит', () => {
+        const mapping = {};
+        mapping['root'] = { id: 'root', parent: null, children: ['u1'], message: { author: { role: 'system' }, content: { parts: [''] } } };
+        mapping['u1'] = makeTurn('u1', 'root', 'user', 'Q1');
+        mapping['a1'] = makeTurn('a1', 'u1', 'assistant', 'A1');
+        mapping['u2'] = makeTurn('u2', 'a1', 'user', 'Q2');
+        mapping['a2'] = makeTurn('a2', 'u2', 'assistant', 'A2');
+        mapping['ux'] = makeTurn('ux', 'a1', 'user', 'ABANDONED Q');
+        mapping['ax'] = makeTurn('ax', 'ux', 'assistant', 'ABANDONED A');
+        mapping['u1'].children = ['a1'];
+        mapping['a1'].children = ['u2', 'ux'];
+        mapping['u2'].children = ['a2'];
+        mapping['ux'].children = ['ax'];
+
+        expect(orderChatGPTMappingFromCurrent(mapping, 'a2'))
+            .toEqual(['root', 'u1', 'a1', 'u2', 'a2']);
+        expect(orderChatGPTMappingFromCurrent(mapping, 'ax'))
+            .toEqual(['root', 'u1', 'a1', 'ux', 'ax']);
+        // Нет/битый лист → null (вызывающий оставляет DFS-фолбэк).
+        expect(orderChatGPTMappingFromCurrent(mapping, '')).toBe(null);
+        expect(orderChatGPTMappingFromCurrent(mapping, 'ghost')).toBe(null);
+        mapping['u1'].parent = 'ghost';
+        expect(orderChatGPTMappingFromCurrent(mapping, 'a2')).toBe(null);
     });
 });
 

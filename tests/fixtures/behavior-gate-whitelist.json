@@ -542,5 +542,9 @@
   "tests/content-modules-order.test.js": {
     "count": 1,
     "reason": "static-linter"
+  },
+  "tests/native-chain-stage6.test.js": {
+    "count": 4,
+    "reason": "static-linter"
   }
 }
