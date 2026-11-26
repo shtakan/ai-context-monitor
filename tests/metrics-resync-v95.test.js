@@ -27,6 +27,7 @@ const H = require('./helpers/content-source.js');
 
 const ROOT = H.ROOT;
 const CONTENT = readCore('core/content.ts');
+const RESYNC = readCore('core/content-resync.ts');
 const METRICS = readCore('core/content-metrics.ts');
 const WIDGET = read('core/widget.ts');
 const MGR = read('core/export-manager.ts');
@@ -72,7 +73,8 @@ function runResync(over) {
     swallowSoft: function () { }
   };
   Object.assign(ctx, over.ctx || {});
-  const body = sliceFunction(CONTENT, 'aiCmResyncMetricsAfterFlush');
+  const body = sliceFunction(RESYNC, 'resolveResyncDecision') + '\n' +
+    sliceFunction(CONTENT, 'aiCmResyncMetricsAfterFlush');
   const fn = new Function('ctx', 'with (ctx) { ' + body + '\n return aiCmResyncMetricsAfterFlush; }')(ctx);
   const ret = fn(over.cid === undefined ? CID : over.cid, over.reason || 'loader-stop');
   return { ctx, logs, sent, ret, snapshotCalls };

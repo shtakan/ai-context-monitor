@@ -1951,13 +1951,6 @@ function aiCmResyncMetricsAfterFlush(cid: string, reason?: string): boolean {
     var rawKnown = (typeof aiCmNetRawCount === 'number') && (typeof aiCmNetRawCountUsed === 'number');
     var rawCount = rawKnown ? aiCmNetRawCount : 0;
     var prevRaw = rawKnown ? aiCmNetRawCountUsed : 0;
-    var rawUnchanged = !rawKnown || (rawCount === prevRaw);
-    if (msgs.length < prevCount) {
-      // Финальный срез не может быть короче уже принятого — защита от просадки бейджа.
-      debugLog('log', '[AI CM][export] metrics-resync skip reason=shrink convId=' + cid +
-        ' final=' + msgs.length + ' current=' + prevCount);
-      return false;
-    }
     var texts = [];
     for (var i = 0; i < msgs.length; i++) {
       var mi = /** @type {any} */ (msgs[i]);
@@ -1967,16 +1960,30 @@ function aiCmResyncMetricsAfterFlush(cid: string, reason?: string): boolean {
     // histKey — ТА ЖЕ форма, что у штатной записи истории (content.js: baseCount + '|' + baseText.length),
     // иначе дедуп ниже сравнивал бы несравнимое и ресинк либо не срабатывал, либо дублировал запись.
     var newKey = msgs.length + '|' + joined.length;
-    var sameCount = (msgs.length === prevCount);
     // v97/v1.9: длина УЖЕ ПРИНЯТОЙ базы против длины финального среза. Гард по msgs.length
-    // (выше) не видит случай «столько же сообщений, но текст короче» — именно так терялся
-    // вклад MCP-панелей (живой замер: 268 503 → 249 856 при 88→88). Ниже короткий срез
-    // отклоняется; diag фиксирует факт и вердикт shrink-length.
+    // не видит случай «столько же сообщений, но текст короче» — именно так терялся
+    // вклад MCP-панелей (живой замер: 268 503 → 249 856 при 88→88).
     var prevLen = (typeof baseText === 'string') ? baseText.length : 0;
     var newLen = joined.length;
-    var shrinkLength = prevLen > 0 && newLen < prevLen;
-    // v96 (баг 34.6%): пропуск — только если не изменились НИ histKey, НИ счётчик ДО дедупликации.
-    var canSkip = sameCount && (newKey === lastHistoryWroteKey) && rawUnchanged;
+    // 2.4 Stage 2: чистое решение — в core/content-resync.ts; здесь сбор среза,
+    // state-записи и processAndSend.
+    var decision = resolveResyncDecision({
+      finalCount: msgs.length,
+      previousCount: prevCount,
+      finalLength: newLen,
+      previousLength: prevLen,
+      newKey: newKey,
+      lastHistoryWroteKey: (typeof lastHistoryWroteKey === 'string') ? lastHistoryWroteKey : null,
+      rawKnown: rawKnown,
+      rawCount: rawCount,
+      previousRawCount: prevRaw
+    });
+    if (decision.shrinkCount) {
+      // Финальный срез не может быть короче уже принятого — защита от просадки бейджа.
+      debugLog('log', '[AI CM][export] metrics-resync skip reason=shrink convId=' + cid +
+        ' final=' + msgs.length + ' current=' + prevCount);
+      return false;
+    }
     try {
       if (typeof aiCmDiagLine === 'function') {
         aiCmDiagLine('o22-metrics-resync', {
@@ -1985,22 +1992,21 @@ function aiCmResyncMetricsAfterFlush(cid: string, reason?: string): boolean {
           prevLen: prevLen, newLen: newLen,
           histKey: newKey, lastKey: (typeof lastHistoryWroteKey !== 'undefined') ? lastHistoryWroteKey : undefined,
           rawMsgs: rawCount, prevRawMsgs: prevRaw,
-          verdict: shrinkLength ? 'shrink-length' : (canSkip ? 'skip' : (rawUnchanged ? 'resync' : 'resync-raw'))
+          verdict: decision.verdict
         });
       }
     } catch (eRsD) { swallowSoft(eRsD, 'content:metrics-resync-diag'); }
-    if (shrinkLength) {
-      // v1.9 (ветка B): гард по ДЛИНЕ, симметричный гарду по msgs.length выше. Живой
+    if (decision.shrinkLength) {
+      // v1.9 (ветка B): гард по ДЛИНЕ, симметричный гарду по msgs.length. Живой
       // замер 6eed4c3f: сеть принесла те же 88 сообщений, но joined.length упал
       // 268 503 → 249 856 — выпали MCP-результаты, и принятый короткий срез замораживал
       // бейдж/шапку файла на 92 197 токенов. Короткий срез не принимаем: остаётся уже
-      // измеренная база, а бейдж не проседает (следующая реальная запись сравнит живой
-      // histKey с прежним ключом и пересчитает метрику).
+      // измеренная база, а бейдж не проседает.
       debugLog('log', '[AI CM][export] metrics-resync skip reason=shrink-length convId=' + cid +
         ' prevLen=' + prevLen + ' newLen=' + newLen);
       return false;
     }
-    if (canSkip) {
+    if (decision.canSkip) {
       debugLog('log', '[AI CM][export] metrics-resync skip reason=same convId=' + cid + ' histKey=' + newKey);
       return false; // срез уже финальный
     }
@@ -2027,8 +2033,7 @@ function aiCmResyncMetricsAfterFlush(cid: string, reason?: string): boolean {
     // v96 (баг 34.6%): сырой счётчик вырос, а дедуп вернул ПРЕЖНИЙ срез (histKey совпал) —
     // ключ СНИМАЕМ, чтобы следующий processAndSend не отсеялся дедупом histKey и пересчитал
     // метрики. Для нормального роста ключ обновляется как раньше (лишней записи истории нет).
-    var keyRepeated = (newKey === lastHistoryWroteKey);
-    lastHistoryWroteKey = (rawUnchanged || !keyRepeated) ? newKey : null;
+    lastHistoryWroteKey = (decision.rawUnchanged || !decision.keyRepeated) ? newKey : null;
     if (rawKnown) aiCmNetRawCountUsed = rawCount;
     debugLog('log', '[AI CM][export] metrics-resync reason=' + (reason || '(none)') + ' convId=' + cid +
       ' msgs=' + prevCount + '->' + msgs.length + ' histKey=' + newKey +
