@@ -165,8 +165,9 @@ describe('R1: emitSnapshot — partialSoft аддитивен и не ослаб
     };
     ctx.window = { dispatchEvent: function (ev) { ctx.dispatched.push(ev); return true; } };
     const SCOPE = 'with (ctx) { ' + fnDecl(INTERCEPT_SRC, 'recordTurn') + '\n' +
+      fnDecl(INTERCEPT_SRC, 'buildSnapshotData') + '\n' +
       fnDecl(INTERCEPT_SRC, 'emitSnapshot') +
-      '\n return { recordTurn: recordTurn, emitSnapshot: emitSnapshot }; }';
+      '\n return { recordTurn: recordTurn, emitSnapshot: emitSnapshot, buildSnapshotData: buildSnapshotData }; }';
     const api = new Function('ctx', SCOPE)(ctx);
     ctx.turns = [{ key: 'q1', order: 0, text: 'A' }];
     return { ctx: ctx, emitSnapshot: api.emitSnapshot };

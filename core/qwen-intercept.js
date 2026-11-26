@@ -1240,23 +1240,21 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     return '';
   }
 
-  function emitSnapshot(s) {
-    var usage = s.usage || {};
-    var serverTokens = (typeof usage.input === 'number' && usage.input > 0) ? usage.input : 0;
-    // O-53: полнота приходит из источника снимка. Дефолт — true: живой SSE авторитетен
-    // (контракт O-35/O-39 не меняется), неполноту объявляет только пагинация истории.
-    var complete = (s.complete !== false);
-    var sig = buildSignature(serverTokens, s.complete, (s.partialSoft === true && complete === false));
-    if (sig !== null && dispatchSig !== null && sig === dispatchSig) {
-      diagLine('emit-skip', { reason: 'same-signature' });
-      return lastDispatchResult;
-    }
+  // BUG-24: чистая сборка сообщений из ТЕКУЩИХ turns/userTurns, без диспатча и без
+  // записи dispatchSig. Её использует и emitSnapshot (сетевой снимок), и мост
+  // exportSnapshot (ручной/авто-экспорт): файл больше не зависит от того, успел ли
+  // последний emit получить полную историю.
+  function buildSnapshotData() {
     var pieces = [];
     var messages = [];
     var reasonings = [];
     var ids = [];
     var reasoningTurns = 0;
     var lastModel = '';
+    // BUG-24: ход с userKey, но без user-блока (нет текста и нет секций вложений) —
+    // это разрыв пары, а не легитимный пустой ход. Снимок с таким разрывом не может
+    // объявлять себя полным: иначе ручной экспорт молча отдаёт A→A и теряет реплику.
+    var missingUserBlocks = 0;
     // O-54: пагинация перенумеровывает старые страницы в отрицательные order (assignPageOrders),
     // поэтому порядок добавления в turns уже НЕ равен хронологии: снимок собираем по order
     // (старые → новые). Без сортировки файл начинался с 10 последних турнов, а старые
@@ -1271,7 +1269,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       var fileSec = '';
       if (typeof aiCmQwenFiles !== 'undefined' && aiCmQwenFiles && t.userKey) {
         try { fileSec = aiCmQwenFiles.qfSectionsFor(currentChatId, t.userKey) || ''; }
-        catch (eFileSec) { swallow(eFileSec, 'qwen:files-sections'); }
+        catch (eFileSec) { if (typeof swallow === 'function') swallow(eFileSec, 'qwen:files-sections'); }
       }
       if (userText || fileSec) {
         var userBlock = userText ? (userText + fileSec) : fileSec.replace(/^\n\n/, '');
@@ -1279,6 +1277,10 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         ids.push('u:' + t.userKey);
         messages.push({ role: 'user', text: userBlock, reasoning: '' });
         reasonings.push('');
+      } else if (t.userKey) {
+        // userKey есть, но ни текста, ни файлов — пара неполная (BUG-24). Пустой userKey
+        // (например, живой ход без prompt) разрывом не считаем: сопоставлять нечего.
+        missingUserBlocks++;
       }
       // R4: у filesOnly-хода ответа нет — пустой assistant-блок не пишем (иначе в MD
       // висел бы «### ASSISTANT» без текста, а в TXT — пустая роль). Модель хода при
@@ -1295,6 +1297,54 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         messages.push(msg);
         reasonings.push(t.reasoning || '');
       }
+    }
+    return {
+      pieces: pieces, messages: messages, reasonings: reasonings, ids: ids,
+      reasoningTurns: reasoningTurns, lastModel: lastModel, missingUserBlocks: missingUserBlocks,
+      sortedTurns: sortedTurns
+    };
+  }
+
+  // Мост для ISOLATED-мира: отдать файлу сообщения из ТЕКУЩЕГО состояния turns/userTurns.
+  // Синхронный CustomEvent (как Gemini turns-snap): контент-скрипт ждёт ответ сразу.
+  function exportSnapshot() {
+    var d = buildSnapshotData();
+    return {
+      messages: d.messages,
+      count: d.messages.length,
+      text: d.pieces.join('\n'),
+      modelSlug: d.lastModel || '',
+      chatId: currentChatId || lastReqChatId || '',
+      missingUserTurns: d.missingUserBlocks
+    };
+  }
+
+  function emitSnapshot(s) {
+    var usage = s.usage || {};
+    var serverTokens = (typeof usage.input === 'number' && usage.input > 0) ? usage.input : 0;
+    // O-53: полнота приходит из источника снимка. Дефолт — true: живой SSE авторитетен
+    // (контракт O-35/O-39 не меняется), неполноту объявляет только пагинация истории.
+    var complete = (s.complete !== false);
+    var sig = buildSignature(serverTokens, s.complete, (s.partialSoft === true && complete === false));
+    if (sig !== null && dispatchSig !== null && sig === dispatchSig) {
+      diagLine('emit-skip', { reason: 'same-signature' });
+      return lastDispatchResult;
+    }
+    var snap = buildSnapshotData();
+    var pieces = snap.pieces;
+    var messages = snap.messages;
+    var reasonings = snap.reasonings;
+    var ids = snap.ids;
+    var reasoningTurns = snap.reasoningTurns;
+    var lastModel = snap.lastModel;
+    var missingUserBlocks = snap.missingUserBlocks;
+    var sortedTurns = snap.sortedTurns;
+    // BUG-24: разрыв пары отменяет заявку «история полная» — даже если страница/пагинация
+    // сама считает себя завершённой. Мягкий финал (partialSoft) сохраняется как есть:
+    // это отдельный признак «продолжать нечем», а не подтверждение полноты.
+    if (missingUserBlocks > 0 && complete) {
+      complete = false;
+      diagLine('missing-user-blocks', { n: missingUserBlocks });
     }
     var text = pieces.join('\n');
     if (!text) { diagLine('emit-skip', { reason: 'empty-text' }); return false; }
@@ -1316,9 +1366,14 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       // которых сервер отдаёт только по курсору (O-53 добирает их и объявляет конец сам).
       historyComplete: complete,
       reachedRoot: complete,
+      // BUG-24: число ходов с userKey без user-блока. 0 — пары полные; >0 — снимок
+      // честно неполный (complete=false выше), даже если страница считала себя последней.
+      missingUserTurns: missingUserBlocks,
       // partial — диагностика неполной базы для UI/экспорта: сколько страниц добрано и почему
-      // остановились (in-progress/error/no-gain/page-cap/time-cap/cursor-loop).
-      partial: complete ? null : (s.partial || { pages: 0, reason: 'in-progress' }),
+      // остановились (in-progress/error/no-gain/page-cap/time-cap/cursor-loop/missing-user-text).
+      partial: complete ? null : (s.partial || (missingUserBlocks > 0
+        ? { pages: 0, reason: 'missing-user-text' }
+        : { pages: 0, reason: 'in-progress' })),
       // R1: мягкий финал (time-cap/page-cap/no-gain) — база неполная, но продолжать нечем:
       // автоэкспорт разрешён с префиксом [LOW CONFIDENCE]_. Аддитивное булево: у прочих
       // сайтов и у честного/промежуточного снимка — false (O-54 не ослабляется).
@@ -1368,7 +1423,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         textLen: detail.text.length,
         lens: diagTurnLens.length ? diagTurnLens.join(',') : '(none)'
       });
-    } catch (eMcpDiag) { swallow(eMcpDiag, 'qwen:mcp-diag'); }
+    } catch (eMcpDiag) { if (typeof swallow === 'function') swallow(eMcpDiag, 'qwen:mcp-diag'); }
     try {
       window.dispatchEvent(new CustomEvent('ai-cm-full-history', { detail: detail }));
       dispatchSig = sig;
@@ -1951,6 +2006,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     turns: function () { return turns; },
     userTurns: function () { return userTurns; },
     lastParsed: function () { return lastParsedSummary; },
+    exportSnapshot: exportSnapshot,
     // R2: снимок файлового состояния (очередь/тексты вложений) — только чтение.
     files: function () { return aiCmQwenFiles ? aiCmQwenFiles.qfStats() : null; },
     usage: function () { return sse ? sse.usage : null; },
@@ -1962,6 +2018,16 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       endStream('bridge');
     }
   };
+
+  // BUG-24: синхронный мост «дай сообщения из текущих turns/userTurns». Контент-скрипт
+  // дергает его в момент ручного/авто-экспорта, поэтому файл не зависит от последнего emit.
+  try {
+    window.addEventListener('ai-cm-qwen-export-snapshot-request', function () {
+      try {
+        window.dispatchEvent(new CustomEvent('ai-cm-qwen-export-snapshot-response', { detail: exportSnapshot() }));
+      } catch (eExportResp) { if (typeof swallow === 'function') swallow(eExportResp, 'qwen:export-bridge-response'); }
+    });
+  } catch (eExportBridge) { if (typeof swallow === 'function') swallow(eExportBridge, 'qwen:export-bridge'); }
 
   diagLine('installed', { chat: String(currentChatId || '').slice(0, 8) });
   console.log('[qwen-intercept] перехватчик Qwen установлен (только нативные запросы страницы, ' +

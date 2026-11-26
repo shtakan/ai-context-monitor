@@ -163,6 +163,25 @@ function aiCmGeminiTurnsSnapshotSync(): AiCmTurnsSnapshot | null {
     return resp;
   } catch (e) { return null; }
 }
+// BUG-24: синхронный снимок Qwen из MAIN-мира — сообщения собираются из ТЕКУЩИХ
+// turns/userTurns, а не из lastBaseTexts/aiCmBasePrepared последнего emit. Ручной
+// экспорт после F5 мог взять устаревшую базу (266) при полном парсере (268).
+// Мост — те же window-CustomEvent, что у Gemini turns-snap; таймаутов нет: MAIN
+// отвечает синхронно в том же потоке. Нет моста/ответа — null, поведение прежнее.
+function aiCmQwenExportSnapshotSync(): { messages?: AiCmExportMessage[]; chatId?: string; missingUserTurns?: number } | null {
+  try {
+    var resp: any = null;
+    var h = function (ev: Event) { resp = (ev as CustomEvent).detail; };
+    window.addEventListener('ai-cm-qwen-export-snapshot-response', h, { once: true });
+    window.dispatchEvent(new CustomEvent('ai-cm-qwen-export-snapshot-request'));
+    window.removeEventListener('ai-cm-qwen-export-snapshot-response', h);
+    return resp;
+  } catch (eQwenSnap) {
+    if (typeof swallowSoft === 'function') swallowSoft(eQwenSnap, 'base-handler:qwen-export-snapshot');
+    return null;
+  }
+}
+
 // ================= O-18 (фаза 2): сетевой дозапрос истории в момент экспорта =================
 // Перед КОМПОЗИЦИЕЙ файла (автоэкспорт и ручной экспорт) DeepSeek-перехватчик в MAIN-мире
 // получает шанс дозапросить history_messages текущего чата. Решение «нужен ли дозапрос» и

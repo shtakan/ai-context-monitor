@@ -272,7 +272,8 @@ describe('O-20 (3): aiCmCollectExportSource — единая точка эмит
     expect(fnSrc).toContain('return aiCmSanitizeEmitUserTexts(out);');
     expect(fnSrc).toContain('if (norm.length > 0 && hasRoles) return aiCmSanitizeEmitUserTexts(norm);');
     // 2.2 messages-default: +1 ранний возврат канонического источника AI Studio.
-    expect(fnSrc.match(/aiCmSanitizeEmitUserTexts\(/g).length).toBe(4);
+    // BUG-24: +1 ранний возврат живого снимка Qwen (turns/userTurns).
+    expect(fnSrc.match(/aiCmSanitizeEmitUserTexts\(/g).length).toBe(5);
     // база buildHistoryMessages (пин E-2 в core/base-handler.ts) не переписана — дедуп на месте
     expect(BASE_HANDLER_SRC).toContain('return aiCmDedupeExportSource(aiCmCollectExportSource()).messages;');
   });

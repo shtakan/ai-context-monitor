@@ -242,6 +242,15 @@ export function dropContainerMessages(list: ExportMessage[]): ExportMessage[] {
   for (var t = 0; t < src.length; t++) texts.push(messageTextForMarkers(src[t]));
   var keep = [];
   for (var c = 0; c < src.length; c++) {
+    // BUG-24 (Qwen): контейнер-стена — это узел DOM-адаптера с ролью assistant.
+    // Реплика пользователя не может быть контейнером: живой дефект — короткие
+    // user-сообщения (147/417 знаков) содержали две другие реплики целиком и по
+    // относительным порогам ошибочно снимались, файл терял реальные ходы.
+    var candidateMsg = src[c] || {};
+    if (candidateMsg.role === 'user' || candidateMsg.role === 'human') {
+      keep.push(src[c]);
+      continue;
+    }
     var candidate = texts[c];
     var contained = 0;
     var covered = 0;

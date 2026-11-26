@@ -111,13 +111,15 @@ function containerNodes() {
   const nodes = [];
   ['c1', 'c2'].forEach(function () {
     const wall = document.createElement('div');
-    wall.className = 'message-bubble';
+    // Живой артефакт O-37: узлы-контейнеры имели роль assistant (комментарий правила).
+    // BUG-24: user-реплики контейнерами не считаются — фикстура обязана это отражать.
+    wall.className = 'message-bubble qwen-chat-message-assistant';
     wall.textContent = WALL;
     document.body.appendChild(wall);
     nodes.push(wall);
   });
   const group = document.createElement('div');
-  group.className = 'message-bubble';
+  group.className = 'message-bubble qwen-chat-message-assistant';
   group.innerHTML = htmlReal();
   document.body.appendChild(group);
   nodes.push(group);
@@ -210,6 +212,23 @@ describe('O-37 O36.2-D: extractMessages отбрасывает узлы-конт
     expect(noHelper.extractMessages()).toHaveLength(REAL.length);  // узлы как есть (73 реплики)
     // набор второй ступени собирается и в этом режиме — правило снимает 3 контейнера
     expect(containerNodes()).toHaveLength(3);
+  });
+
+  test('BUG-24: короткая user-реплика, цитирующая две другие, не считается контейнером', function () {
+    // Живой дефект: user-сообщения 147 и 417 знаков целиком содержали две другие
+    // короткие реплики и по относительным порогам проходили как «стена» — файл терял
+    // реальные ходы. Абсолютный пол длины (4 КБ) защищает такие реплики.
+    const a = 'Cargo.toml:20: tauri-plugin-window-state = "2.5.0"';
+    const b = 'Cargo.toml:21: tray-icon = { version = "0.25" }';
+    const quoted = a + '\n' + b;
+    const list = [
+      { role: 'assistant', text: a },
+      { role: 'assistant', text: b },
+      { role: 'user', text: quoted }
+    ];
+    const kept = Builders.aiCmDropContainerMessages(list);
+    expect(kept).toHaveLength(3);
+    expect(kept[2].text).toBe(quoted);
   });
 
   test('R1b: контейнер-узел в массиве снимается ОБЩИМ правилом сборщиков (защита O-36.2)', function () {

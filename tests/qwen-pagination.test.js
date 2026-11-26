@@ -65,8 +65,9 @@ function makeTurnStore() {
   };
   ctx.window = { dispatchEvent: function (ev) { ctx.dispatched.push(ev); return true; } };
   const SCOPE = 'with (ctx) { ' + fnDecl(INTERCEPT_SRC, 'recordTurn') + '\n' +
+    fnDecl(INTERCEPT_SRC, 'buildSnapshotData') + '\n' +
     fnDecl(INTERCEPT_SRC, 'emitSnapshot') +
-    '\n return { recordTurn: recordTurn, emitSnapshot: emitSnapshot }; }';
+    '\n return { recordTurn: recordTurn, emitSnapshot: emitSnapshot, buildSnapshotData: buildSnapshotData }; }';
   const api = new Function('ctx', SCOPE)(ctx);
   return { ctx: ctx, recordTurn: api.recordTurn, emitSnapshot: api.emitSnapshot };
 }
@@ -107,7 +108,7 @@ function makeHistoryStore(opts) {
   const FNS = ['contentListOf', 'isHistoryMessageNode', 'walkHistoryMessages', 'historyMessageId',
     'thinkingTextOf', 'historyThinkingOf', 'historyAnswerOf', 'historyUsageOf', 'historyChatIdOf',
     'findHistoryChatId', 'historyFilesOf', 'parseQwenHistory', 'composeTurnText', 'recordTurn',
-    'buildSignature', 'userTextOf', 'emitSnapshot', 'applyHistoryPayload', 'renumberHistoryPage',
+    'buildSignature', 'userTextOf', 'buildSnapshotData', 'emitSnapshot', 'applyHistoryPayload', 'renumberHistoryPage',
     // O-56: полная история — распознавание формы URL, парсер словаря и хронология по parentId.
     'isFullHistoryUrl', 'reindexByChain', 'qwenParseFullChain', 'qwenThinkingItem',
     'qwenReasoningOf', 'qwenContentText',
@@ -493,6 +494,36 @@ describe('O-54: emitSnapshot — ходы в снимке идут по order (o
     expect(live.turn.order).toBe(6);                    // turns.length дал бы 2 — меньше уже выданного 5
     store.emitSnapshot({ complete: true });
     expect(store.ctx.dispatched[0].detail.messageTexts).toEqual(['A', 'B', 'C']);
+  });
+});
+
+describe('BUG-24: разрыв пары user/assistant в снимке Qwen', function () {
+  test('ход с userKey без user-блока отменяет «история полная»', function () {
+    const store = makeTurnStore();
+    store.ctx.userTextOf = function (key) { return key === 'u1' ? 'Q1' : ''; };
+    store.ctx.turns = [
+      { key: 'a1', order: 0, text: 'A1', userKey: 'u1' },
+      { key: 'a2', order: 1, text: 'A2', userKey: 'u2' }   // u2 отсутствует в userTurns
+    ];
+    expect(store.emitSnapshot({ complete: true })).toBe(true);
+    const detail = store.ctx.dispatched[0].detail;
+    expect(detail.historyComplete).toBe(false);
+    expect(detail.partial).toEqual({ pages: 0, reason: 'missing-user-text' });
+    expect(detail.missingUserTurns).toBe(1);
+  });
+
+  test('полные пары не трогают вердикт полноты', function () {
+    const store = makeTurnStore();
+    store.ctx.userTextOf = function (key) { return key === 'u1' ? 'Q1' : (key === 'u2' ? 'Q2' : ''); };
+    store.ctx.turns = [
+      { key: 'a1', order: 0, text: 'A1', userKey: 'u1' },
+      { key: 'a2', order: 1, text: 'A2', userKey: 'u2' }
+    ];
+    expect(store.emitSnapshot({ complete: true })).toBe(true);
+    const detail = store.ctx.dispatched[0].detail;
+    expect(detail.historyComplete).toBe(true);
+    expect(detail.partial).toBeNull();
+    expect(detail.missingUserTurns).toBe(0);
   });
 });
 

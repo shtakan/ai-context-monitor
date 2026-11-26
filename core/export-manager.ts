@@ -220,8 +220,59 @@ function aiCmPrepareReasoningForExport(messages: AiCmExportMessage[]): AiCmExpor
   } catch (ePrep) { swallowSoft(ePrep, 'export:aiCmPrepareReasoningForExport'); }
   return messages;
 }
+// BUG-24 (диагностика): что реально уходит в файл на выходе точки сбора. Живой экспорт
+// Qwen дал 266 сообщений против нативных 268 при полном парсере (134/134), поэтому нужен
+// замер ДО и ПОСЛЕ сборки: число/роли/разрывы A→A и наличие обеих спорных реплик.
+// Печать — каноническим aiCmDiagLine (гейт aiCmDebug), сигнатура гасит повторы.
+var lastQwenExportSourceSig: string | null = null;
+function aiCmLogQwenExportSource(messages: AiCmExportMessage[], source: string): void {
+  try {
+    if (!(typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName === 'qwen')) return;
+    if (typeof aiCmDiagLine !== 'function') return;
+    var list = Array.isArray(messages) ? messages : [];
+    var users = 0, assistants = 0, runs = 0, hasCargo20 = false, hasIndexError = false;
+    var prevRole = '';
+    for (var i = 0; i < list.length; i++) {
+      var m = list[i] || {};
+      var role = (m.role === 'user' || m.role === 'human') ? 'user' : 'assistant';
+      if (role === 'user') users++; else assistants++;
+      if (i > 0 && role === prevRole) runs++;
+      prevRole = role;
+      var norm = String(m.text == null ? '' : m.text).replace(/\s+/g, ' ').trim();
+      if (norm.indexOf('Cargo.toml:20:tauri-plugin-window-state') === 0) hasCargo20 = true;
+      // ASCII-маркер той же реплики: сама строка ошибки локализована платформой, а команда
+      // `$lines[20]` — уникальный признак второго потерянного user-сообщения (BUG-24).
+      if (norm.indexOf('$lines[20]') >= 0) hasIndexError = true;
+    }
+    var sig = [list.length, users, assistants, runs, hasCargo20 ? 1 : 0, hasIndexError ? 1 : 0, source].join('|');
+    if (sig === lastQwenExportSourceSig) return;
+    lastQwenExportSourceSig = sig;
+    aiCmDiagLine('qwen-export-source', {
+      msgs: list.length, users: users, assistants: assistants, runs: runs,
+      hasCargo20: hasCargo20 ? 1 : 0, hasIndexError: hasIndexError ? 1 : 0,
+      source: source
+    });
+  } catch (eQes) { swallowSoft(eQes, 'export:qwen-export-source-diag'); }
+}
 function aiCmCollectExportSource(): AiCmExportMessage[] {
   var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null); var aiCmV2CanonAis = (typeof aiCmV2AistudioExportSource === 'function') ? aiCmV2AistudioExportSource() : null; if (aiCmV2CanonAis && aiCmV2CanonAis.length) return aiCmSanitizeEmitUserTexts(aiCmV2CanonAis);
+  // BUG-24: Qwen — приоритет живой цепочке turns/userTurns. lastBaseTexts мог остаться
+  // от неполного emit после F5 (live: 266 при полном парсере 268); мост отдаёт текущий
+  // снимок. Берём его только если он СТРОГО полнее базы и совпадает с текущим чатом —
+  // иначе сохраняется прежний путь с DOM-обогащениями (MCP-панели и т.п.).
+  try {
+    if (typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName === 'qwen' &&
+        typeof aiCmQwenExportSnapshotSync === 'function') {
+      var qSnap = aiCmQwenExportSnapshotSync();
+      var qMsgs = (qSnap && Array.isArray(qSnap.messages)) ? qSnap.messages : null;
+      var qCurCid = (typeof getCurrentConvId === 'function') ? (getCurrentConvId() || '') : '';
+      if (qMsgs && qMsgs.length > (Array.isArray(lastBaseTexts) ? lastBaseTexts.length : 0) &&
+          (!qSnap.chatId || !qCurCid || String(qSnap.chatId) === String(qCurCid))) {
+        if (typeof aiCmLogQwenExportSource === 'function') aiCmLogQwenExportSource(qMsgs, 'qwen-live');
+        return aiCmSanitizeEmitUserTexts(qMsgs);
+      }
+    }
+  } catch (eQwenLive) { swallowSoft(eQwenLive, 'export:qwen-live-snapshot'); }
   var texts = lastBaseTexts || [];
   // O-37 (C): хелпер нормализации reasoning берём typeof-гардом ОДИН раз (он объявлен рядом,
   // в этом же модуле): в срез-песочницах тестов, где вырезана только эта функция, хелпера нет
@@ -322,6 +373,7 @@ function aiCmCollectExportSource(): AiCmExportMessage[] {
         if (out[ri] && typeof out[ri] === 'object') delete out[ri].reasoning;
       }
     }
+    if (typeof aiCmLogQwenExportSource === 'function') aiCmLogQwenExportSource(out, 'network');
     return aiCmSanitizeEmitUserTexts(out);
   }
   // v82 (D2): ветка DOM-адаптера — ТОЛЬКО при baseSeen=false
@@ -367,6 +419,7 @@ function aiCmCollectExportSource(): AiCmExportMessage[] {
     }
   } catch (eA) { swallow(eA, 'export:aiCmCollectExportSource-dom-adapter'); }
   if (prepareReasoning) prepareReasoning(out);   // O-37 (C): фолбэк чередования ролей — то же правило
+  if (typeof aiCmLogQwenExportSource === 'function') aiCmLogQwenExportSource(out, 'adapter');
   return aiCmSanitizeEmitUserTexts(out);
 }
 
@@ -2319,6 +2372,22 @@ function aiCmBuildCanonicalBody(convId: string | null): any {
   if (!list && typeof buildHistoryMessages === 'function') list = buildHistoryMessages();
   if (!list || !list.length) return null;
   var site = (typeof currentAdapter !== 'undefined' && currentAdapter) ? currentAdapter.siteName : '';
+  // BUG-24: ручной экспорт Qwen — приоритет живому снимку turns/userTurns. Иначе
+  // getEffectiveMessages() отдаёт aiCmBasePrepared прошлого emit (266) при полной
+  // текущей цепочке (268). Как и в collect, только если снимок строго полнее.
+  try {
+    if (site === 'qwen' && typeof aiCmQwenExportSnapshotSync === 'function') {
+      var qCanon = aiCmQwenExportSnapshotSync();
+      var qCanonMsgs = (qCanon && Array.isArray(qCanon.messages)) ? qCanon.messages : null;
+      var qCanonCid = (typeof getCurrentConvId === 'function') ? (getCurrentConvId() || '') : (convId || '');
+      if (qCanonMsgs && qCanonMsgs.length > list.length &&
+          (!qCanon.chatId || !qCanonCid || String(qCanon.chatId) === String(qCanonCid))) {
+        list = qCanonMsgs;
+      }
+    }
+  } catch (eQCanon) { swallowSoft(eQCanon, 'export:qwen-canonical-live'); }
+  // BUG-24 (диагностика): ручной файл получает массив отсюда, а не напрямую из collect.
+  if (typeof aiCmLogQwenExportSource === 'function') aiCmLogQwenExportSource(list, 'canonical');
   // Мемо: тот же массив + чат + сайт → тот же объект body (идентичность messages).
   if (lastCanonList === list && lastCanonConv === convId && lastCanonSite === site) {
     return lastCanonBody;
