@@ -626,7 +626,7 @@ describe('O-35 B (после O-47): проводка серверного usage 
   });
 
   test('B: шаг 3 — бейдж: серверный счётчик авторитетен (кроме Qwen) и сбрасывает максимум', function () {
-    expect(CONTENT).toContain('if (metricServerTokens > 0) {');
+    expect(CONTENT).toContain('var aiCmMetricValueSrc = snapshotPolicy.metricValueSrc;');
     expect(CONTENT).toContain('maxTokenCount = tokenEstimate;');
     expect(CONTENT).toContain("(metricServerTokens > 0 ? ' · serverTokens' : '')");
   });

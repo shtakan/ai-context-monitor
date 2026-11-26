@@ -13,7 +13,7 @@
  * остаются undefined, поэтому их typeof-гарды ведут себя как в живом коде.
  */
 
-const { contentSource } = require('./content-source.js');
+const { contentSource, moduleSource } = require('./content-source.js');
 
 /** Срез функции по балансу фигурных скобок. */
 function fnDecl(src, name) {
@@ -31,6 +31,7 @@ function fnDecl(src, name) {
 }
 
 const PROCESS_SRC = fnDecl(contentSource, 'processAndSend');
+const SNAPSHOT_POLICY_SRC = fnDecl(moduleSource('content-snapshot-policy.ts'), 'resolveSnapshotPolicy');
 
 function makeProbe(over) {
   const o = over || {};
@@ -296,7 +297,7 @@ function makeProbe(over) {
     NaN: NaN,
     undefined: undefined
   };
-  const fn = new Function('ctx', 'with (ctx) { ' + PROCESS_SRC + '\n return processAndSend; }')(ctx);
+  const fn = new Function('ctx', 'with (ctx) { ' + SNAPSHOT_POLICY_SRC + '\n' + PROCESS_SRC + '\n return processAndSend; }')(ctx);
 
   function run(patch) {
     if (patch && typeof patch === 'object') {

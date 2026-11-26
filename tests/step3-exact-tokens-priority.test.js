@@ -302,7 +302,7 @@ describe('Шаг 4: при BYOK без точного числа эвристи�
     // число присваивается ДО отрисовки и не зависит от держания: единственное присваивание
     const iMetric = draw.indexOf('maxTokenCount = tokenEstimate;');
     expect(iMetric).toBeGreaterThan(iGate);
-    expect(draw.indexOf('const percentage = displayLimit', iMetric)).toBeGreaterThan(iMetric);
+    expect(draw.indexOf('const snapshotPercentage = snapshotPolicy.snapshotPercentage;', iMetric)).toBeGreaterThan(iMetric);
     expect(draw.slice(iGate, iMetric)).not.toContain('else if (byokHeuristicHold)');
     // ветка отрисовки: после щита O-1 и до updateWidget, без единой записи в виджет
     const iDrawHold = draw.indexOf('} else if (byokHeuristicHold) {', iGate);

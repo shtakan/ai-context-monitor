@@ -417,7 +417,7 @@
       "file": "core/content.ts",
       "category": "feature-detect",
       "lines": [
-        2498
+        2504
       ],
       "reason": "feature-detect: capability-probe: отсутствие API — штатная ветка, не ошибка; пример: var metricSrc = baseComplete ? 'base-complete' : (lastBounded ? 'base-fl"
     },

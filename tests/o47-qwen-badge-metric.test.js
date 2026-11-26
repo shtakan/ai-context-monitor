@@ -195,7 +195,7 @@ describe('O-47 B: badge/pct Qwen — только tokens~ (эвристика) �
     const snapCalls = CONTENT.match(/aiCmTokenSnapshot\(/g) || [];
     expect(snapCalls.length).toBe(2);                                        // объявление + бейдж
     // авторитетная ветка бейджа и метка лога тоже читают метрику, а не сырое поле
-    expect(CONTENT).toContain('if (metricServerTokens > 0) {');
+    expect(CONTENT).toContain('var aiCmMetricValueSrc = snapshotPolicy.metricValueSrc;');
     expect(CONTENT).toContain("(metricServerTokens > 0 ? ' · serverTokens' : '')");
     // диагностика qwen-badge печатает ОБА числа (ingest и метрику) — правило проверяемо в живом логе
     expect(CONTENT).toContain('metricServerTokens: (typeof metricServerTokens === \'number\') ? metricServerTokens : 0,');

@@ -2438,13 +2438,6 @@ function processAndSend(): void {
     // aiCmMetricServerTokens внутри снимка, поэтому ветки максимума ниже срабатывают ровно как
     // при серверном числе.
     const byokHeuristicHold = aiCmHeuristicHoldForByok(svc, fullText);
-    let tokenEstimate = tokenSnap.tokens;
-    // S4 (ADR-001 §7 п.4 / D3): число — ТЕКУЩЕЕ измерение канонического тела. Монотонного
-    // максимума и high-water по длине текста больше нет: укоротившаяся (но каноническая)
-    // база даёт меньшее число — это D3, а не регресс. aiCmMetricValueSrc — только ИСТОЧНИК
-    // числа для diag/шапки файла (dom|net|server), а не режим удержания.
-    var aiCmMetricValueSrc = (typeof aiCmBaseSource !== 'undefined' && aiCmBaseSource)
-      ? aiCmBaseSource : (baseComplete ? 'net' : 'dom');
     // 2.2/фаза 5: три факта из одного резолвера. modelWindow — настоящее окно
     // (API/каталог/исключение), displayLimit — порог показа (128k у Gemini/GSA),
     // accountLimit — лимит тарифа (null, пока тариф не определён).
@@ -2462,9 +2455,22 @@ function processAndSend(): void {
       displaySource: 'fallback',
       fallbackLimit: 128000
     });
-    const contextLimit = limitModel.windowKnown ? limitModel.modelWindow : 0;
-    const effectiveLimit = limitModel.displayLimit;
-    const displayLimit = ModelConfig.applyLimitPct(effectiveLimit, aiCmActivePct());
+    // 2.4 Stage 3: чистое решение метрики — в core/content-snapshot-policy.ts.
+    var snapshotPolicy = resolveSnapshotPolicy({
+      tokenSnap: { tokens: tokenSnap.tokens, serverTokens: metricServerTokens },
+      limitModel: limitModel,
+      baseSource: (typeof aiCmBaseSource !== 'undefined') ? aiCmBaseSource : '',
+      baseComplete: baseComplete === true,
+      contextSaturated: contextSaturated === true,
+      activePct: aiCmActivePct(),
+      lastPercentage: (typeof lastPercentage === 'number') ? lastPercentage : -1,
+      applyLimitPct: function (limit: number, pct: number | null) { return ModelConfig.applyLimitPct(limit, pct); }
+    });
+    var tokenEstimate = snapshotPolicy.tokenEstimate;
+    var aiCmMetricValueSrc = snapshotPolicy.metricValueSrc;
+    const contextLimit = snapshotPolicy.contextLimit;
+    const effectiveLimit = snapshotPolicy.effectiveLimit;
+    const displayLimit = snapshotPolicy.displayLimit;
     // O-32 (ДИАГНОСТИКА, только измерение): ИСТОЧНИК значения бейджа одним маркером —
     // видно, каким путём получено число (полная база / канонический пол базы + DOM-хвост /
     // канонический пол базы / DOM-адаптер). Печать —
@@ -2502,11 +2508,6 @@ function processAndSend(): void {
     // при byokHeuristicHold бейдж держит предыдущий рисунок (см. ветвление отрисовки ниже),
     // но само число всё равно равно текущему измерению.
     maxTokenCount = tokenEstimate;
-    if (metricServerTokens > 0) {
-      // точное число из countTokens авторитетно — не удерживаем завышенную эвристику
-      // (у AI Studio в metricServerTokens приходит счётчик шапки чата — он тоже авторитетен)
-      aiCmMetricValueSrc = 'server';
-    }
     // O-32 (фикс C, НЕ про число): на раздутой базе (сеть заявляет больше сообщений, чем
     // реально отдаёт DOM) снимаем DOM-границу, чтобы следующий проход снова мерил источник
     // с нуля. Это про сборку канонического текста; монотонности здесь больше нет.
@@ -2516,10 +2517,9 @@ function processAndSend(): void {
       aiCmDomListS1.length > 0 && baseCount > aiCmDomListS1.length) {
       lastBounded = false;
     }
-    const percentage = displayLimit > 0 ? Math.round((maxTokenCount / displayLimit) * 1000) / 10 : 0;
     // BIG-02: баннер «контекст заполнен» → 100% и предупреждение; токены остаются измеренными.
-    const snapshotPercentage = contextSaturated ? 100 : percentage;
-    const hasChanged = snapshotPercentage !== lastPercentage;
+    const snapshotPercentage = snapshotPolicy.snapshotPercentage;
+    const hasChanged = snapshotPolicy.hasChanged;
     lastPercentage = snapshotPercentage;
     // v2.6 (R1, Шаг 2): ЕДИНСТВЕННАЯ запись снимка метрики — именно здесь, после строгого
     // удержания бейджа, когда maxTokenCount и percentage окончательны. Все потребители числа

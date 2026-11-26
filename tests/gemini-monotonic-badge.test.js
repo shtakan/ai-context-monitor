@@ -41,7 +41,7 @@ function metricMaxBranch() {
   expect(iStart).toBeGreaterThan(-1);
   expect(draw.indexOf('useMonotonic')).toBe(-1);
   expect(draw.indexOf('badge-strict-hold')).toBe(-1);
-  const iEnd = draw.indexOf('const percentage = displayLimit > 0', iStart);
+  const iEnd = draw.indexOf('const snapshotPercentage = snapshotPolicy.snapshotPercentage;', iStart);
   expect(iEnd).toBeGreaterThan(iStart);
   return draw.slice(iStart, iEnd);
 }
@@ -162,7 +162,7 @@ describe('пины контракта (строки, которые нельзя
     expect(CONTENT).not.toContain('badge-strict-hold');
     expect(CONTENT).toContain('updateWidget(badgeData.percentage, badgeData.tokenEstimate, badgeData.effectiveLimit,');
     expect(CONTENT).toContain('badgeData.contextLimit, badgeData.displayLimit, badgeData.modelName, badgeData.attachBreak);');
-    expect(CONTENT).toContain('const percentage = displayLimit > 0 ? Math.round((maxTokenCount / displayLimit) * 1000) / 10 : 0;');
+    expect(CONTENT).toContain('const snapshotPercentage = snapshotPolicy.snapshotPercentage;');
   });
 
   test('между цепочкой и percentage нет удержания — только присваивание измерения', () => {
@@ -170,7 +170,7 @@ describe('пины контракта (строки, которые нельзя
     expect(BRANCH).not.toContain('strictHoldTokens');
     const iAssign = BRANCH.indexOf('maxTokenCount = tokenEstimate;');
     expect(iAssign).toBeGreaterThan(-1);
-    expect(BRANCH.indexOf('if (metricServerTokens > 0) {', iAssign)).toBeGreaterThan(iAssign);
+    expect(BRANCH.indexOf('lastBounded = false;', iAssign)).toBeGreaterThan(iAssign);
   });
 });
 

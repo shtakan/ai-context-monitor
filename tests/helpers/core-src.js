@@ -33,6 +33,7 @@ const STRIPPED = new Set([
   'core/content-autoexport.ts',
   'core/content-model.ts',
   'core/content-resync.ts',
+  'core/content-snapshot-policy.ts',
   'core/content-byok.ts',
   'core/content-metrics.ts'
 ]);

@@ -58,7 +58,7 @@ function metricMaxBranch() {
   const iStart = draw.indexOf('maxTokenCount = tokenEstimate;');
   expect(iStart).toBeGreaterThan(-1);
   expect(draw.indexOf('useMonotonic')).toBe(-1);
-  const iEnd = draw.indexOf('const percentage = displayLimit > 0', iStart);
+  const iEnd = draw.indexOf('const snapshotPercentage = snapshotPolicy.snapshotPercentage;', iStart);
   expect(iEnd).toBeGreaterThan(iStart);
   return draw.slice(iStart, iEnd);
 }

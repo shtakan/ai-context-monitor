@@ -260,7 +260,7 @@ describe('H19: интеграция — badge EMIT содержит displayLimit
     expect(src).toContain("'[AI CM][trace] badge-update pct=' + percentage + '% tokens=' + tokens + ' model=' + modelName");
     expect(src).toContain('updateWidget(badgeData.percentage, badgeData.tokenEstimate, badgeData.effectiveLimit,');
     expect(src).toContain('limit: displayLimit,');
-    expect(src).toContain('const percentage = displayLimit > 0 ? Math.round((maxTokenCount / displayLimit) * 1000) / 10 : 0;');
+    expect(src).toContain('const snapshotPercentage = snapshotPolicy.snapshotPercentage;');
     // v2.0.13: зоны кольца — из настроенных порогов (aiCmProactiveThresholds), дефолт 70/95
     expect(src).toContain(
       "function zoneColor(p) {\n" +

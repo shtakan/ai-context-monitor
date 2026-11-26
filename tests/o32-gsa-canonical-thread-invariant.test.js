@@ -513,7 +513,7 @@ describe('O-32 (6): число = текущее измерение (D3), ист�
   test('source-пин: useMonotonic удалён, есть единственное присваивание текущей оценки', () => {
     expect(CONTENT).not.toContain('useMonotonic');
     expect(CONTENT).toContain('maxTokenCount = tokenEstimate;');
-    expect(CONTENT).toContain("var aiCmMetricValueSrc = (typeof aiCmBaseSource !== 'undefined' && aiCmBaseSource)");
+    expect(CONTENT).toContain('var aiCmMetricValueSrc = snapshotPolicy.metricValueSrc;');
     expect(CONTENT).toContain("aiCmDiagLine('gsa-metric-src'");
     expect(CONTENT).toContain("var metricSrc = baseComplete ? 'base-complete' : (lastBounded ? 'base-floor+dom-tail' : 'base-floor');");
     expect(CONTENT).toContain("note: (!baseComplete && baseCount > 0) ? 'incomplete-canonical-floor' : ''");
