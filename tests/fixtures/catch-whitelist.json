@@ -331,7 +331,7 @@
       "lines": [
         2181,
         2321,
-        3352
+        3359
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cyrDiag = (t.match(/[а-яёА-ЯЁ]/g) || []).length; var cyrillicPct = t"
     },
@@ -379,9 +379,9 @@
         2332,
         2356,
         2365,
-        3232,
-        3258,
-        3260
+        3239,
+        3265,
+        3267
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
     },
@@ -436,10 +436,10 @@
         778,
         1004,
         1881,
-        2696,
-        2780,
-        2797,
-        2895
+        2703,
+        2787,
+        2804,
+        2902
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -449,7 +449,7 @@
       "lines": [
         92,
         354,
-        2980
+        2987
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: chrome.runtime.sendMessage({ type: 'BADGE_RESET' }).catch(function () {"
     },
@@ -458,7 +458,7 @@
       "category": "local-helper-guard",
       "lines": [
         351,
-        3068
+        3075
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: aiCmCancelDeferredHistWrite('');"
     },
@@ -466,7 +466,7 @@
       "file": "core/content.ts",
       "category": "parse-guard",
       "lines": [
-        3294
+        3301
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof AiCmExportBuilders !== 'undefined') ? AiCmExportB"
     },

@@ -2591,10 +2591,17 @@ function processAndSend(): void {
         attachBreak: netAttachBreak || null,
         partial: aiCmCtxSnapPartial
       };
-      if (ctxSnapBodyOk || (ctxSnapSite === 'aistudio' && baseSeen === true && baseComplete === true && !!fullText)) {
+      // BUG-22: qwen с полной сетевой базой публикует аддитивные поля так же, как
+      // aistudio. DOM-тело не совпадает с effective (сеть), bodyHash не выставлялся,
+      // commit уходил в «окно сбора» и бейдж застревал на старом числе (3761/0.4 %
+      // против 118.6 % в метрике).
+      var ctxSnapNetFallback = (ctxSnapSite === 'aistudio' || ctxSnapSite === 'qwen')
+        && baseSeen === true && baseComplete === true && !!fullText;
+      if (ctxSnapBodyOk || ctxSnapNetFallback) {
         aiCmCtxSnapCandidate.chars = ctxSnapBodyOk ? body.chars : String(fullText).length;
         aiCmCtxSnapCandidate.msgs = ctxSnapBodyOk ? body.msgs : (countForTokens || baseCount || 0);
-        aiCmCtxSnapCandidate.bodyHash = ctxSnapBodyOk ? body.bodyHash : ((typeof aiCmDiagHash6 === 'function') ? ('ai' + aiCmDiagHash6('aistudio', String(fullText))) : ('len' + String(String(fullText).length)));
+        var ctxSnapFallbackHash = (ctxSnapSite === 'qwen') ? 'qw' : 'ai';
+        aiCmCtxSnapCandidate.bodyHash = ctxSnapBodyOk ? body.bodyHash : ((typeof aiCmDiagHash6 === 'function') ? (ctxSnapFallbackHash + aiCmDiagHash6(ctxSnapSite, String(fullText))) : ('len' + String(String(fullText).length)));
         aiCmCtxSnapCandidate.baseComplete = baseComplete === true;
       }
       if (aiCmCtxSnapPartial) {
