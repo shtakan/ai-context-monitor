@@ -1,6 +1,6 @@
 {
   "schema": "ai-cm/catch-whitelist@1",
-  "generatedFrom": "253a980",
+  "generatedFrom": "5d2f607",
   "scope": [
     "core",
     "utils",
@@ -321,7 +321,7 @@
       "file": "core/content-manual-export.ts",
       "category": "best-effort-guard",
       "lines": [
-        129
+        133
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: host.dumpTurnsSnapshot('snapshot-at-manual', curCidExp, host.getMessages"
     },

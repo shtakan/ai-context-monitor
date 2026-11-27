@@ -281,7 +281,10 @@ function aiCmPdfPortAttempt(id: string, attempt: number): void {
   try {
     port = chrome.runtime.connect({ name: 'ai-cm-pdf:' + id });
   } catch (ePort) {
-    aiCmPdfLog('connect', ePort);
+    // Гонка: контекст умер между проверкой id и connect. Это не сбой PDF-моста,
+    // поэтому не пишем warn в консоль/errors — только ring-диагностика.
+    var portErrText = String((ePort && (ePort as any).message) || ePort);
+    if (portErrText.indexOf('Extension context invalidated') === -1) aiCmPdfLog('connect', ePort);
     aiCmPdfAfterPort(id, 'pdf-unavailable', false);
     return;
   }
