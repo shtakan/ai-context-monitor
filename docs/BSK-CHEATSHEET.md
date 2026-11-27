@@ -6,7 +6,7 @@
 
 **В релизный ZIP не входит** (фильтр `\.md$` в `.github/workflows/release.yml:110`).
 
-**Версия:** 1.1 (2026-11-20: добавлены границы `chrome://`/`chrome-extension://`, кодировка, смерть сессии; рецепты сайтов — `docs/SITE-RECIPES.md`).
+**Версия:** 1.2 (2026-11-27: команды приведены к текущему CLI `bsk session/tab/debug`, добавлена ссылка на `docs/BROWSER-MEDIATORS.md`; 1.1 — 2026-11-20: границы `chrome://`/`chrome-extension://`, кодировка, смерть сессии).
 
 ---
 
@@ -57,14 +57,15 @@ $fs.CopyTo($ms); $fs.Close(); $txt = [Text.Encoding]::UTF8.GetString($ms.ToArray
 
 | Команда | Смысл |
 |---|---|
-| `bsk_session start --browser <id> --no-focus` | новая сессия (`mnkk`), окно Agent Window |
-| `bsk_session list` / `stop` | список / закрытие |
-| `bsk_tabs list --scope user` | вкладки пользователя (id, url, active) |
-| `bsk_tabs borrow <tabId>` | вкладка пользователя → в Agent Window |
-| `bsk_tabs create url=…` / `select` / `close` | своя вкладка |
-| `bsk_tabs return <tabId>` | вернуть вкладку пользователю |
+| `bsk session start --browser <id> --no-focus` | новая сессия, окно Agent Window |
+| `bsk session list` / `bsk session stop <id>` | список / закрытие |
+| `bsk tab list --session <s> --scope user` | вкладки пользователя (id, url, title) |
+| `bsk tab borrow <tabId> --session <s>` | вкладка пользователя → в Agent Window |
+| `bsk tab create --url <url>` / `select` / `close` | своя вкладка |
+| `bsk tab return <tabId> --session <s>` | вернуть вкладку пользователю |
 
-Правило: одна задача — одна вкладка; все `bsk_*` вызовы идут с `tabId` этой вкладки.
+Правило: одна задача — одна вкладка; действия идут с `--session <s>` (и
+`--tab-id`, если вкладка не активна).
 
 ---
 
@@ -89,7 +90,7 @@ $fs.CopyTo($ms); $fs.Close(); $txt = [Text.Encoding]::UTF8.GetString($ms.ToArray
 - Уже на уровне webRequest: `decoded_bytes > 65536*4 (262 144)` → `response_body = {state:"omitted", reason:"body_limit"}`.
 - CDP-путь: base64 длиннее `65536*6` → тоже `omitted/body_limit`.
 - Флаг `redacted:true` ставится, если санитайзер переписал текст; из-за него **`debug replay` не работает**: `provide or remove redacted header: authorization`.
-- `budget` в `bsk_inspect` — до 262 144 байт JSON на ответ; `max_chars.max = 16384`.
+- `--budget` в `bsk debug` — 4 096…262 144 байт JSON на ответ; `--max-chars` ≤ 16 384.
 - Следствие: тела `history_messages` (>80 KB) через перехват **не читаются**. Доказательства строятся по метаданным: `decoded_bytes`, `initiator`, имена запросов, `debug export` в файл (там тела тоже `truncated`, но структура и заголовки доступны).
 
 ---
@@ -97,12 +98,12 @@ $fs.CopyTo($ms); $fs.Close(); $txt = [Text.Encoding]::UTF8.GetString($ms.ToArray
 ## §6. Рабочий цикл перехвата
 
 ```text
-bsk_inspect debug debugAction=start  (вкладка задачи, имя run-а)
-→ действие: bsk_interact click target=@e61 / bsk_page reload
-→ bsk_inspect debug debugAction=requests  (kind=business)
-→ bsk_inspect debug debugAction=export output=<файл вне репозитория>
+bsk debug start --session <s> --name <run>        (вкладка задачи)
+→ действие: bsk click @e61 --session <s> / bsk reload --session <s>
+→ bsk debug requests --session <s> --kind business
+→ bsk debug export --session <s> --json > <файл вне репозитория>
 → анализ в shell: python/jq/grep, в контекст ≤20 строк
-→ bsk_inspect debug debugAction=stop
+→ bsk debug stop --session <s>
 ```
 
 Экспорт — один JSON: `{version, saved_at, run, requests, operations, console, pages, rules, replays, performance}`; у запроса: `request_headers`, `response_body{state, reason, text, chars, redacted}`. Второй `debug start` без `stop` падает: `stop the task's current capture before selecting another tab`.
