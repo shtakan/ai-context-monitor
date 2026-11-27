@@ -1,5 +1,41 @@
 # Changelog
 
+## Unreleased (2.4.0)
+
+### Added
+
+- **Нативный экспорт по активной цепочке:** Qwen (`currentId` + `parentId`) и
+  ChatGPT (`mapping` + `current_node`); DeepSeek уже на `parent_id`; линейные
+  адаптеры (Claude/Perplexity/GSA) без изменений.
+- **Qwen JSON:** `files[]` — безопасный манифест (`id`, `name`, `file_type`,
+  `type`, `file_class`, `size`, `status`); raw signed URL, вложенный `file` и
+  транспортные поля в файл не пишутся.
+- **Браузерная рутина:** `bsk` по умолчанию, CDP — ниша; глобальная инструкция
+  `browser-mediators/GLOBAL.md`, проектная схема `docs/BROWSER-MEDIATORS.md`.
+
+### Changed
+
+- **`content.ts` 3 924 → 3 005:** Stage 0–9, move-only выносы
+  `content-model`, `content-resync`, `content-manual-export`,
+  `content-observer`, `content-archive`, Stage 8 effect clusters.
+- **`processAndSend` 845 → 397:** чистые решения и effect-кластеры вынесены без
+  изменения поведения.
+- **PDF Firefox:** в мёртвом extension-контексте `connect` больше не пишет
+  `Extension context invalidated` в console/errors; локальный pdf.js-fallback
+  подтверждён живьём.
+
+### Fixed
+
+- 2.3 live: BUG-22 (полная база Qwen → бейдж), BUG-23 (stale-ход в усечённой
+  странице), BUG-24 (user-реплики-контейнеры Qwen).
+- AI Studio PDF/диагностика: повтор после F5, метки и MD↔JSON совпадают.
+- Qwen live PDF: после F5 вложение попадает в экспорт (`[FILE: …]`).
+
+### Tests
+
+- 309 suites / 4743 passed / 7 skipped; eslint 0 errors; catch-hygiene 13/13;
+  architecture-lint 0; `build:prod` зелёный.
+
 ## [2.2.0] - 2026-11-24
 
 ### Added
