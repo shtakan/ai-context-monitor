@@ -2,10 +2,13 @@
  * core/content-model.ts — 2.4 Stage 1: чистое решение «какая модель текущего чата».
  *
  * Classic-скрипт manifest.content_scripts[0].js ПЕРЕД core/content.ts: общий
- * лексический скоуп. Модуль НЕ читает DOM, chrome, ModelConfig и глобальное
- * состояние: все сигналы и резолверы приходят явными входами. Обёртка
- * `resolveCurrentModel()` в content.ts собирает сигналы (попап → DOM(UI) → сеть),
- * зовёт это решение и применяет побочные эффекты (lastSnapshotModelName, логи).
+ * лексический скоуп.
+ *
+ * 2.4 Stage 1: чистое решение `resolveModelDecision` не читает DOM/chrome/
+ * ModelConfig — все сигналы и резолверы приходят явными входами.
+ * 2.4 Stage 9: обёртка `resolveCurrentModel()` перенесена сюда move-only из
+ * content.ts. Она собирает сигналы (попап → DOM(UI) → сеть), зовёт решение и
+ * применяет побочные эффекты (lastSnapshotModelName, логи) в общем скоупе.
  *
  * Лестница приоритетов сохранена байтово:
  *   попап → DOM(UI) → сеть/снимок → дефолт сайта.
@@ -104,8 +107,120 @@ function resolveModelDecision(input: AiCmModelDecisionInput): AiCmModelDecision 
   };
 }
 
-// UMD/глобальный мост для content.ts и срез-песочниц: функция остаётся в общем
+// ========== ОПРЕДЕЛЕНИЕ МОДЕЛИ (v47: UI-приоритет + 3 слоя фолбэка) ==========
+// T1 (часть 1): логика UI-детектора Gemini (регэксп, checked-пункт меню, кнопка
+// композера, семейный резолвер) вынесена в utils/gemini-ui-model.ts — чистый модуль
+// с DI (document/ModelConfig/кэш передаются аргументами) и jest-пинами
+// (tests/adapters/gemini-ui-model.test.js). Здесь остаются только кэш «последнее
+// точное имя по семейству» и вызов детектора в resolveCurrentModel ниже.
+const geminiUiModelByFamily: Record<string, string> = {}; // 'pro'|'flash'|'ultra' -> последнее точное имя из UI
+let lastModelSourceSig: string = '';
+function resolveCurrentModel(): string {
+  // v2.0.33: лестница — попап → DOM(uiRaw) → сеть; «Авто» не резолвится и уступает сети.
+  const rawFromNet = detectedModelSlug || '';
+  const snapNetId = rawFromNet ? ModelConfig.resolveModelId(rawFromNet) : null;
+  let uiRaw = '';
+  let uiAuto = false;
+  let geminiHost = false;
+  try {
+    geminiHost = (window.location.hostname || '').indexOf('gemini.google.com') !== -1;
+    if (geminiHost) {
+      // v49: передаём сетевую версию — приоритет (b) для DOM-сигнала без номера версии
+      // T1: UI-слой живёт в utils/gemini-ui-model.ts — DI: документ, реестр моделей
+      // и общий кэш семьи передаются аргументами (модуль втянут import'ом выше).
+      uiRaw = GeminiUiModel.detectSelectedModelFromDom({
+        document: document,
+        modelConfig: ModelConfig,
+        cache: geminiUiModelByFamily
+      }, snapNetId) || '';
+      uiAuto = !!(uiRaw && typeof GeminiUiModel.isAutoUiModelText === 'function' &&
+        GeminiUiModel.isAutoUiModelText(uiRaw));
+    }
+  } catch (e) { uiRaw = ''; uiAuto = false; }
+  const uiResolved = uiRaw ? ModelConfig.resolveModelId(uiRaw) : null;
+  if (uiRaw && !uiResolved) uiRaw = ''; // «Авто»/нераспознанный UI-сигнал → фолбэк на сеть/DOM
+
+  const rawFromDom = (rawFromNet || uiRaw || uiAuto) ? '' : (currentAdapter!.detectModel() || '');
+  const rawSnapshot = ((typeof aiCmAistudioDomSlug === 'function') ? aiCmAistudioDomSlug() : '') || rawFromNet || rawFromDom || '';
+  const snapModelId = rawSnapshot ? ModelConfig.resolveModelId(rawSnapshot) : null;
+
+  // v47: экспорт остаётся на модели снимка — запоминаем её имя отдельно
+  if (snapModelId) {
+    lastSnapshotModelName = ModelConfig.getModel(snapModelId)?.name || snapModelId;
+  }
+
+  // H19: явный выбор модели в дропдауне попапа авторитетен для лимита и токенизации.
+  // Лестница: попап → DOM(UI) → сеть. «Автоопределение» (popupModelId === null/'')
+  // уступает явному UI-сигналу, а если UI показывает «Авто» — уступает сети, поэтому
+  // ручной выбор пользователя не перебивается сетью, а «Авто» не подставляет ложный слаг.
+  const raw = popupModelId || uiRaw || rawSnapshot || '';
+  // Источник raw для path/source: та же лестница приоритетов (без повторов).
+  const rawSrc = popupModelId ? 'попап' : (uiRaw ? 'dom' : (rawSnapshot ? (rawFromNet ? 'сеть' : 'DOM') : ''));
+  // 2.4 Stage 1: чистое решение модели — в core/content-model.ts (без DOM/chrome/
+  // ModelConfig внутри); здесь только сбор сигналов и побочные эффекты.
+  var decision = resolveModelDecision({
+    site: (currentAdapter && currentAdapter.siteName) || '',
+    popupModelId: popupModelId,
+    raw: raw,
+    rawSrc: rawSrc,
+    rawFromNet: rawFromNet,
+    rawFromDom: rawFromDom,
+    rawSnapshot: rawSnapshot,
+    uiRaw: uiRaw,
+    uiAuto: uiAuto,
+    geminiHost: geminiHost,
+    defaultModel: ModelConfig.getDefaultModel(currentAdapter!.siteName),
+    resolveModelId: function (value: string) { return ModelConfig.resolveModelId(value); }
+  });
+  // BUG-02: «сигнал есть, а модели нет в каталоге» — отдельное состояние. Лимиты берутся
+  // из siteDefaults (modelId ниже), а отображаемое имя остаётся распознанным слагом.
+  var site = (currentAdapter && currentAdapter.siteName) || '';
+  var unknownModel = decision.unknownModel;
+  let modelId = decision.modelId;
+  let path = decision.path;
+  if (modelId === 'gemini-auto') lastSnapshotModelName = (ModelConfig.getModel('gemini-auto')?.name || 'Gemini (auto)');
+  // v1.18 (F7): GSA — сеть может не дать slug вовсе (детектор GSA молчит, если в ответе нет
+  // model:"…"), и имя модели снапшота оставалось пустым → сегмент модели в имени файла
+  // автоэкспорта падал в фолбэк 'model'. Заполняем ОДНОЙ точкой ЗДЕСЬ — ровно той моделью,
+  // что показывает badge-update: ModelConfig.getModel(modelId)?.name, где modelId идёт по
+  // пути попап → DOM → сеть → дефолт сайта ('gemini-search-default' = «Gemini (Search AI)»).
+  // Для прочих сайтов (в т.ч. Gemini) поведение прежнее — присваивание не выполняется.
+  // BUG-02: Qwen + распознанный слаг вне каталога — в файл/бейдж идёт САМ слаг (лимит
+  // остаётся дефолтом сайта); без сигнала Qwen по-прежнему ничего не заполняет, а у GSA
+  // и у Qwen с сигналом из каталога — каталожное имя (поведение прежнее).
+  if (currentAdapter && (site === 'google_search' || (site === 'qwen' && unknownModel))) {
+    lastSnapshotModelName = (site === 'qwen')
+      ? String(raw).trim().slice(0, 64)
+      : (ModelConfig.getModel(modelId)?.name || modelId);
+  }
+  const source = decision.source;
+  if (modelId !== lastResolvedModelId) {
+    lastResolvedModelId = modelId;
+    const ctx = ModelConfig.getContextLimit(modelId);
+    const eff = ModelConfig.getEffectiveLimit(modelId);
+    console.log('[model-detect] путь=' + path +
+      (raw ? ', raw="' + raw + '"' : '') +
+      ' → id=' + modelId + ', имя=' + (ModelConfig.getModel(modelId)?.name || modelId) +
+      ', окно=' + ctx.toLocaleString() + ', порог потери деталей=' + eff.toLocaleString());
+  }
+  // v47: debug-лог источника модели (бейдж/попап/лимит)
+  const srcSig = source + '|' + modelId;
+  if (srcSig !== lastModelSourceSig) {
+    lastModelSourceSig = srcSig;
+    debugLog('log', source === 'popup'
+      ? '[model-detect] H19 popup raw="' + popupRawModel + '" → id=' + modelId + ' · model-source=popup'
+      : (source === 'dom'
+        ? '[model-detect] v48 dom raw="' + uiRaw + '" → id=' + modelId + ' · model-source=dom'
+        : '[model-detect] v47 model-source=snapshot' +
+          (rawSnapshot ? ', снимок="' + rawSnapshot + '"' : '') +
+          ' → id=' + modelId));
+  }
+  return modelId;
+}
+
+// UMD/глобальный мост для content.ts и срез-песочниц: функции остаются в общем
 // лексическом скоупе classic-скриптов, Api — для тестов/диагностики.
+
 (function () {
   var Api: any = {};
   Api.resolveModelDecision = resolveModelDecision;

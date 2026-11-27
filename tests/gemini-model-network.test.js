@@ -5,7 +5,7 @@
  *   D2 utils/model-config.ts:resolveModelId — авто-регистрация НОВОГО слаг-а: запись
  *      создаётся, когда словарь слаг ещё не покрывает (Pro → 128 000, Flash/Flash Lite →
  *      1 048 576), существующие ключи не подменяются.
- *   D3 core/content.ts:resolveCurrentModel — лестница попап → DOM (uiRaw) → сеть
+ *   D3 core/content-model.ts:resolveCurrentModel - лестница попап → DOM (uiRaw) → сеть
  *      (rawSnapshot): ручной выбор пользователя не перебивается сетью (H19), а
  *      явный UI-сигнал (v2.0.33) приоритетнее сети. Режим «Авто» в каталог не
  *      резолвится и уступает сети — ложный слаг из имени файла не подставляется.
@@ -24,6 +24,8 @@ const Rpc = require('../core/gemini-rpc.js');
 const ModelConfig = require('./helpers/load-esm.js').loadEsm('utils/model-config.ts');
 
 const CONTENT = fs.readFileSync(path.join(__dirname, '..', 'core', 'content.ts'), 'utf8');
+// 2.4 Stage 9: resolveCurrentModel перенесена move-only в core/content-model.ts.
+const MODEL_SRC = require('./helpers/content-source.js').moduleSource('content-model.ts');
 
 describe('D1: captureModelSlugFromBody — слаг модели из тела сети', () => {
   test('flash-lite из тела ответа → полный слаг (lite не отрезается до flash)', () => {
@@ -183,8 +185,8 @@ describe('D4: мост MAIN world → content.js (событие ai-cm-model-slu
 
 describe('D3: лестница приоритета модели в content.js — попап → DOM → сеть', () => {
   test('raw = popupModelId → uiRaw → rawSnapshot (H19: ручной выбор первый, затем явный UI)', () => {
-    expect(CONTENT).toContain("const raw = popupModelId || uiRaw || rawSnapshot || '';");
-    const fn = CONTENT.slice(CONTENT.indexOf('function resolveCurrentModel()'));
+    expect(MODEL_SRC).toContain("const raw = popupModelId || uiRaw || rawSnapshot || '';");
+    const fn = MODEL_SRC.slice(MODEL_SRC.indexOf('function resolveCurrentModel()'));
     const line = fn.slice(fn.indexOf("const raw = "), fn.indexOf('let modelId'));
     const iPopup = line.indexOf('popupModelId');
     const iUi = line.indexOf('uiRaw');
@@ -197,16 +199,16 @@ describe('D3: лестница приоритета модели в content.js �
   test('источник raw идёт той же лестницей: попап → DOM → сеть', () => {
     // rawSrc обязан совпадать с raw, иначе бейдж/снимок получат модель одного источника,
     // а path/source назовут другой (H19: попап авторитетен для лимита и токенизации).
-    expect(CONTENT).toContain("const rawSrc = popupModelId ? 'попап' : (uiRaw ? 'dom' : (rawSnapshot ? (rawFromNet ? 'сеть' : 'DOM') : ''));");
+    expect(MODEL_SRC).toContain("const rawSrc = popupModelId ? 'попап' : (uiRaw ? 'dom' : (rawSnapshot ? (rawFromNet ? 'сеть' : 'DOM') : ''));");
   });
 
   test('порядок DOM над сетью сохранён (смысл v2.0.33)', () => {
-    const fn = CONTENT.slice(CONTENT.indexOf('function resolveCurrentModel()'));
+    const fn = MODEL_SRC.slice(MODEL_SRC.indexOf('function resolveCurrentModel()'));
     const line = fn.slice(fn.indexOf("const raw = "), fn.indexOf('let modelId'));
     expect(line.indexOf('uiRaw')).toBeLessThan(line.indexOf('rawSnapshot'));
   });
 
   test('прежний порядок «сеть первой» не остался в живом коде', () => {
-    expect(CONTENT).not.toContain("const raw = rawSnapshot || uiRaw || popupModelId || '';");
+    expect(MODEL_SRC).not.toContain("const raw = rawSnapshot || uiRaw || popupModelId || '';");
   });
 });

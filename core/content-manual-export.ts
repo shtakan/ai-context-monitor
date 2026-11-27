@@ -7,9 +7,13 @@
  * сетевого дозапроса, канонизация массива, проекция файла и dedupe.
  *
  * Состояние, adapter и host-API приходят через dependency object AiCmManualExportHost:
- * модуль не читает DOM/chrome/state напрямую. Точки вызова (chrome.runtime.onMessage)
- * и побочные эффекты (sendResponse, drain/net-sync) остаются в content.ts и
- * base-handler/export-manager.
+ * сам обработчик не читает DOM/chrome/state напрямую. Точки вызова
+ * (chrome.runtime.onMessage) и побочные эффекты (sendResponse, drain/net-sync)
+ * остаются в content.ts и base-handler/export-manager.
+ *
+ * 2.4 Stage 9: сборщик host-объекта `aiCmManualExportHost` перенесён сюда
+ * move-only из content.ts — ему нужны те же state/adapter-геттеры, но в общем
+ * лексическом скоупе classic-скриптов, без новых глобальных API.
  */
 
 type AiCmManualExportMessage = import('../types/export').ExportMessage;
@@ -261,6 +265,95 @@ function aiCmHandleManualExport(
   } else {
     replyManualExport();
   }
+}
+
+/**
+ * 2.4 Stage 5: dependency object ручного экспорта. Значения читаются лениво —
+ * снимок/baseComplete/модель должны быть СВЕЖИМИ после ожидания file-drain/net-sync.
+ * Необязательные хелперы не попадают в host, если их нет в текущем срезе: модуль
+ * видит те же typeof-гарды, что стояли здесь до выноса.
+ */
+function aiCmManualExportHost(sendResponse: (response?: AiCmContentResponse) => void) {
+  var host: Record<string, any> = {
+    getCurrentConvId: function () { return getCurrentConvId() || ''; },
+    getHostname: function () { return window.location.hostname; },
+    getSiteName: function () { return (currentAdapter && currentAdapter.siteName) || ''; },
+    getResolvedModelId: function () { return lastResolvedModelId || ''; },
+    getSnapshotModelName: function () { return lastSnapshotModelName || ''; },
+    getTokenCount: function () { return maxTokenCount; },
+    getPercentage: function () { return lastPercentage; },
+    getTokenSnapshot: function () {
+      return (typeof lastTokensSnapshot !== 'undefined' && lastTokensSnapshot) ? lastTokensSnapshot : null;
+    },
+    isBaseComplete: function () { return baseComplete === true; },
+    getMessages: function () { return buildHistoryMessages(); },
+    getLastDetailMessages: function () { return (typeof lastDetailMessages !== 'undefined') ? lastDetailMessages : null; },
+    getEffectiveLimit: function (modelId: string) { return computeEffectiveLimit(modelId); },
+    flushLiveStream: function (convId: string) { aiCmFlushLiveStreamForExport(convId); },
+    dumpTurnsSnapshot: function (tag: string, convId: string, messages: AiCmExportMessage[]) {
+      aiCmDumpTurnsSnapshot(tag, convId, messages);
+    },
+    swallowSoft: function (error: unknown, reason: string) { swallowSoft(error, reason); },
+    debugLog: function (level: string, message: string) { debugLog(level, message); },
+    getCanonicalConvId: function (fallback: string) {
+      return (typeof aiCmCanonicalConvId === 'function') ? (aiCmCanonicalConvId() || fallback) : fallback;
+    }
+  };
+  if (typeof aiCmReadContextSnapshot === 'function') {
+    // Функция передаётся как есть: convId уже канонизирован в content-manual-export.ts.
+    host.readSnapshot = aiCmReadContextSnapshot;
+  }
+  if (typeof aiCmGetSourceTier === 'function') {
+    host.getSourceTier = function () { return aiCmGetSourceTier(); };
+  }
+  if (typeof aiCmExportPartialView === 'function') {
+    host.partialView = function (snapshot: unknown) { return aiCmExportPartialView(snapshot); };
+  }
+  if (typeof aiCmQwenExportBaseTrusted === 'function') {
+    host.isQwenExportBaseTrusted = function () { return aiCmQwenExportBaseTrusted(); };
+  }
+  if (typeof aiCmUnionFileMessages === 'function') {
+    host.unionFileMessages = function (convId: string, messages: AiCmExportMessage[], lowConfidence: boolean) {
+      return aiCmUnionFileMessages(convId, messages, lowConfidence);
+    };
+  }
+  if (typeof aiCmCanonicalizeMessages === 'function') {
+    host.canonicalizeMessages = function (messages: AiCmExportMessage[], site: string) {
+      return aiCmCanonicalizeMessages(messages, site);
+    };
+  }
+  if (typeof aiCmProjectFileMessages === 'function') {
+    host.projectFileMessages = function (messages: AiCmExportMessage[], site: string) {
+      return aiCmProjectFileMessages(messages, site);
+    };
+  }
+  if (typeof aiCmBuildCanonicalBody === 'function') {
+    host.buildCanonicalBody = function (convId: string) { return aiCmBuildCanonicalBody(convId); };
+  }
+  if (typeof exportDedupeInfo === 'function') {
+    host.dedupeInfo = function (detail: AiCmExportMessage[] | null, messages: AiCmExportMessage[]) {
+      return exportDedupeInfo(detail, messages);
+    };
+  }
+  if (typeof aiCmExportNetSyncSite === 'function') {
+    host.isNetSyncSite = function () { return aiCmExportNetSyncSite() === true; };
+  }
+  if (typeof aiCmExportFilesThenNetSync === 'function') {
+    host.filesThenNetSync = function (convId: string, cb: () => void) { aiCmExportFilesThenNetSync(convId, cb); };
+  }
+  if (typeof aiCmExportNetSyncThen === 'function') {
+    host.netSyncThen = function (convId: string, cb: () => void) { aiCmExportNetSyncThen(convId, cb); };
+  }
+  var filesApi = (typeof window !== 'undefined' && window.AiCmBaseHandler) ? window.AiCmBaseHandler : null;
+  if (filesApi && typeof filesApi.aiCmFilesDrainSite === 'function') {
+    host.isFilesDrainSite = function () { return filesApi.aiCmFilesDrainSite() === true; };
+  }
+  if (filesApi && typeof filesApi.aiCmExportFilesDrainThen === 'function') {
+    host.filesDrainThen = function (convId: string, cb: () => void, timeoutMs: number) {
+      filesApi.aiCmExportFilesDrainThen(convId, cb, timeoutMs);
+    };
+  }
+  return host;
 }
 
 // Глобальный мост для content.ts и срез-песочниц.

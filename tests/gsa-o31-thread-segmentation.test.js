@@ -286,7 +286,9 @@ describe('O-31 (б): экспорт — канонический состав с
 
   test('content.js: чужой снимок отбрасывается ДО присвоений базы (source-пин)', () => {
     const iGuard = CONTENT.indexOf('!aiCmSnapshotIsCurrentThread(detail.threadId, domTid31)');
-    const iBase = CONTENT.indexOf('lastBaseTexts = texts;');
+    // 2.4 Stage 9: metrics-resync тоже пишет lastBaseTexts (модуль идёт раньше
+    // content.ts), поэтому ищем приём базы ПОСЛЕ гарда, как в живом потоке.
+    const iBase = CONTENT.indexOf('lastBaseTexts = texts;', iGuard);
     expect(iGuard).toBeGreaterThan(-1);
     expect(iBase).toBeGreaterThan(iGuard);                   // гард стоит выше приёма базы
     expect(CONTENT).toContain('function aiCmSnapshotIsCurrentThread(emitThreadId, domThreadId)');

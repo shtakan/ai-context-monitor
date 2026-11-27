@@ -478,7 +478,9 @@ describe('O-24 (F6): source-пины точек фикса', function () {
     expect(CONTENT).toContain('aiCmLastDomEmitSig = sig;');
     // писателей aiCmLastDomEmitSig в content.js ровно три: канал v55, observer O-24 и его
     // сброс на смене чата; state.js — только объявление и UMD-аксессор
-    const content = H.readSource(H.CONTENT_JS);
+    // 2.4 Stage 9: observer вынесен в core/content-observer.js. Считаем писателей
+    // ровно в этих двух файлах (state.ts содержит объявление и UMD-сеттер).
+    const content = H.readSource(H.CONTENT_JS) + '\n' + H.moduleSource('content-observer.js');
     expect((content.match(/aiCmLastDomEmitSig = /g) || []).length).toBe(3);
     expect((content.match(/aiCmLastDomEmitSig = sig;/g) || []).length).toBe(2);
     // латч читается как O-38 (site|convId) и observer его НЕ мутирует

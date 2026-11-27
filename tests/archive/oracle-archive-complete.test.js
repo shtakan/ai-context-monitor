@@ -259,8 +259,10 @@ describe('T1: проводка ISOLATED → MAIN и запрет внешних 
     expect(OPTIONS_HTML).not.toContain('../utils/perplexity-parser.ts');
   });
 
-  test('manifest.json НЕ изменён: архив не добавлен в content_scripts/host_permissions', () => {
-    expect(MANIFEST).not.toContain('archive');
+  test('manifest.json НЕ изменён: архиво-импорт не добавлен в content_scripts/host_permissions', () => {
+    // 2.4 Stage 9: core/content-archive.js — runtime-восстановление тира ISOLATED,
+    // а не options-модуль архиво-импорта; последний в manifest не попадает.
+    expect(MANIFEST).not.toContain('archive-import');
     const m = JSON.parse(MANIFEST);
     expect(m.version).toBe('2.2.0');
     expect(m.content_scripts[0].js).not.toContain('utils/archive-import.ts');

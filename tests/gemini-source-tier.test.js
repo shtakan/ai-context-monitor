@@ -35,7 +35,6 @@ const buildReferenceText = require('./helpers/load-esm.js').loadEsm('utils/build
 
 const ROOT = path.join(__dirname, '..');
 const MGR_SRC = read('core/export-manager.ts');
-const CONTENT_ONLY = fs.readFileSync(path.join(ROOT, 'core', 'content.ts'), 'utf8');
 
 const MERGED = '[MERGED: ARCHIVE+LIVE]';
 const ARCHIVE = '[ARCHIVE]';
@@ -224,6 +223,6 @@ describe('Two-Tier S1–S3: source-пины проводки', function () {
     expect(MGR_SRC.split(SITE).length - 1).toBe(2);
     const MANUAL_SRC = fs.readFileSync(path.join(ROOT, 'core', 'content-manual-export.ts'), 'utf8');
     expect(MANUAL_SRC).toContain('sourceTier: (typeof host.getSourceTier === \'function\') ? host.getSourceTier() : undefined,');
-    expect(CONTENT_ONLY).toContain('host.getSourceTier = function () { return aiCmGetSourceTier(); };');
+    expect(MANUAL_SRC).toContain('host.getSourceTier = function () { return aiCmGetSourceTier(); };');
   });
 });

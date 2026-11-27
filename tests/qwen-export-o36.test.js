@@ -35,7 +35,6 @@ const H = require('./helpers/content-source.js');
 
 const ROOT = path.join(__dirname, '..');
 const CONTENT = H.contentSource;                                                    // модули + content.js (единый скоуп)
-const CONTENT_ONLY = readCore('core/content.ts');
 const MANUAL_SRC = H.readSource('core/content-manual-export.ts');
 const OPTIONS_SRC = fs.readFileSync(path.join(ROOT, 'options', 'options.js'), 'utf8');
 const MGR_SRC = read('core/export-manager.ts');
@@ -169,7 +168,7 @@ describe('O-36 D2: txt qwen — маркеры USER:/ASSISTANT: перед ка�
     // ручной путь (content.js → options.js) и автоэкспорт кладут в hist РОВНО site адаптера —
     // тем самым предикат видит 'qwen' на обеих дорогах (иначе маркеров не было бы вовсе)
     expect(MANUAL_SRC).toContain('site: site,');
-    expect(CONTENT_ONLY).toContain("getSiteName: function () { return (currentAdapter && currentAdapter.siteName) || ''; },");
+    expect(MANUAL_SRC).toContain("getSiteName: function () { return (currentAdapter && currentAdapter.siteName) || ''; },");
     expect(MGR_SRC).toContain("site: (currentAdapter && currentAdapter.siteName) || '',");
   });
 });

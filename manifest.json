@@ -80,6 +80,8 @@
     "core/content-publish.js",
     "core/content-process-prelude.js",
     "core/content-metric-diag.js",
+    "core/content-observer.js",
+    "core/content-archive.js",
     "core/content-model.ts",
     "core/content-resync.ts",
     "core/content-snapshot-policy.ts",

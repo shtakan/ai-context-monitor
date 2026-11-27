@@ -179,6 +179,9 @@ declare function getCurrentConvId(): string | null;
 declare function aiCmCanonicalConvId(): string;
 declare function aiCmAssignAdapterByHost(): BaseAdapter | null;
 declare function resolveCurrentModel(): string;
+declare function startObserving(): void;
+// 2.4 Stage 9: host-объект ручного экспорта живёт в core/content-manual-export.ts.
+declare function aiCmManualExportHost(sendResponse: (response?: unknown) => void): Record<string, any>;
 declare function geminiParserVersion(): string;
 declare function getAccountIndex(): string;
 declare function geminiTapeKey(convId: string): string;

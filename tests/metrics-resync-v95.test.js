@@ -74,7 +74,7 @@ function runResync(over) {
   };
   Object.assign(ctx, over.ctx || {});
   const body = sliceFunction(RESYNC, 'resolveResyncDecision') + '\n' +
-    sliceFunction(CONTENT, 'aiCmResyncMetricsAfterFlush');
+    sliceFunction(RESYNC, 'aiCmResyncMetricsAfterFlush');
   const fn = new Function('ctx', 'with (ctx) { ' + body + '\n return aiCmResyncMetricsAfterFlush; }')(ctx);
   const ret = fn(over.cid === undefined ? CID : over.cid, over.reason || 'loader-stop');
   return { ctx, logs, sent, ret, snapshotCalls };

@@ -296,11 +296,11 @@
     "reason": "legacy-pin"
   },
   "tests/gemini-model-network.test.js": {
-    "count": 10,
+    "count": 7,
     "reason": "legacy-pin"
   },
   "tests/gemini-source-tier.test.js": {
-    "count": 14,
+    "count": 13,
     "reason": "legacy-pin"
   },
   "tests/gsa-autoexport-o11-name-collision.test.js": {

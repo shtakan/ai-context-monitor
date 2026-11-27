@@ -53,7 +53,7 @@ const BRIDGES = [
   },
   {
     event: 'ai-cm-archive-restore',
-    from: 'core/content.ts',
+    from: 'core/content-archive.js',
     payload: [
       'convId: convId,',
       'messages: rec.messages,',
