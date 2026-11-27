@@ -9,7 +9,8 @@
 > `content.ts` 3 005, `processAndSend` 397; Jest 309/4743 (7 skipped);
 > eslint 0 errors; catch-hygiene 13/13; architecture-lint 0;
 > `build`/`build:prod` зелёные. Версия manifest/package: 2.4.0;
-> релиз готовится. Точки входа: `docs/README.md`,
+> релиз `v2.4.0` опубликован 2026-11-27, AMO 2.4.0 одобрена.
+> Точки входа: `docs/README.md`,
 > `acceptance/BIG-2026-11/2.4/PLAN-2.4.md`, `RELEASE-2.4.md`,
 > `STAGE9-CONTENT-3200.md`, `QWEN-JSON-FILES.md`.
 > История ниже сохранена как архив; актуальные детали — по ссылкам выше.

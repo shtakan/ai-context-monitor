@@ -8,8 +8,9 @@
 - workspace: `ai-context-monitor-clean`
 - branch: `feature/2.2`; HEAD `bfaa2e6`; `origin/feature/2.2` = `bfaa2e6`;
   ahead 0; behind 0
-- version: `2.4.0` (`manifest.json`, `package.json`); релиз готовится
-- теги: `v2.2.1` → `231a3fb`; `v2.2.0` → `ab9e7b7`
+- version: `2.4.0` (`manifest.json`, `package.json`); релиз `v2.4.0`
+  опубликован 2026-11-27, AMO 2.4.0 одобрена
+- теги: `v2.4.0` → `f8c2a33`; `v2.2.1` → `231a3fb`; `v2.2.0` → `ab9e7b7`
 - `main` = `a17cd1c` (не синхронизирован с docs by design)
 
 ## 2. Метрики 2.4 (2026-11-27)
