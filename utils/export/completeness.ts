@@ -16,7 +16,8 @@ export type PartialReason =
   | 'shrank'
   | 'missing-user-text'
   | 'stopped'
-  | 'truncated';
+  | 'truncated'
+  | 'history-not-finalized';
 
 /** Минимальная форма читателя снимка (AiCmContextSnapshot совместима). */
 export interface PartialSource {
@@ -36,7 +37,8 @@ export const PARTIAL_REASONS: PartialReason[] = [
   'shrank',
   'missing-user-text',
   'stopped',
-  'truncated'
+  'truncated',
+  'history-not-finalized'
 ];
 
 /**

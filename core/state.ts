@@ -737,7 +737,7 @@ interface AiCmContextSnapshot {
   bodyHash?: string;
   baseComplete?: boolean;
   partial: boolean;
-  partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text' | 'stopped' | 'truncated';
+  partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text' | 'stopped' | 'truncated' | 'history-not-finalized';
   stale?: boolean;
   ageMs?: number;
 }

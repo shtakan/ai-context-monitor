@@ -165,8 +165,8 @@
       "file": "core/base-handler.ts",
       "category": "debug-instrumentation",
       "lines": [
-        260,
-        302
+        262,
+        304
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: var v = info && info.verdicts ? JSON.stringify(info.verdicts) : '{}'; va"
     },
@@ -174,7 +174,7 @@
       "file": "core/base-handler.ts",
       "category": "logging-guard",
       "lines": [
-        225
+        227
       ],
       "reason": "logging-guard: best-effort запись в диагностический журнал — потеря строки не наблюдаема; пример: aiCmLogNetSyncResult(convId, info || {});"
     },
@@ -182,9 +182,9 @@
       "file": "core/base-handler.ts",
       "category": "timing-guard",
       "lines": [
-        223,
-        224,
-        316
+        225,
+        226,
+        318
       ],
       "reason": "timing-guard: отмена таймера/подписки: обработчик мог быть снят хостом или гонкой; пример: clearTimeout(timer);"
     },
@@ -397,7 +397,7 @@
       "file": "core/content.ts",
       "category": "best-effort-guard",
       "lines": [
-        2420
+        2425
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cidArcCh = getCurrentConvId() || ''; if (cidArcCh) { var archKeyCh ="
     },
@@ -405,7 +405,7 @@
       "file": "core/content.ts",
       "category": "cleanup-guard",
       "lines": [
-        1690
+        1695
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: if (aiCmBadgeHoldTimer) return; aiCmBadgeHoldTimer = setTimeout(function"
     },
@@ -414,37 +414,37 @@
       "category": "debug-instrumentation",
       "lines": [
         525,
-        1058,
-        1164,
+        1063,
         1169,
-        1172,
-        1175,
+        1174,
         1177,
-        1178,
-        1179,
-        1198,
-        1200,
+        1180,
+        1182,
+        1183,
+        1184,
+        1203,
         1205,
-        1240,
-        1247,
-        1255,
-        1258,
-        1318,
-        1326,
+        1210,
+        1245,
+        1252,
+        1260,
+        1263,
+        1323,
         1331,
         1336,
-        1343,
-        1349,
-        1367,
+        1341,
+        1348,
+        1354,
         1372,
-        1378,
-        1380,
+        1377,
+        1383,
         1385,
-        1785,
-        1794,
-        2300,
-        2326,
-        2328
+        1390,
+        1790,
+        1799,
+        2305,
+        2331,
+        2333
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
     },
@@ -452,8 +452,8 @@
       "file": "core/content.ts",
       "category": "defensive-assignment",
       "lines": [
-        724,
-        733
+        729,
+        738
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: aiCmPartialSoftByConv[softKey63] = (detail.partialSoft === true);"
     },
@@ -461,7 +461,7 @@
       "file": "core/content.ts",
       "category": "dom-read-guard",
       "lines": [
-        1601
+        1606
       ],
       "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: var info = aiCmSourceInfo(); aiCmSourceLabelNow = info ? info.label : ''"
     },
@@ -469,8 +469,8 @@
       "file": "core/content.ts",
       "category": "event-guard",
       "lines": [
-        1046,
-        1055
+        1051,
+        1060
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
     },
@@ -486,10 +486,10 @@
         515,
         541,
         626,
-        778,
-        1004,
-        1639,
-        2120
+        783,
+        1009,
+        1644,
+        2125
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -499,7 +499,7 @@
       "lines": [
         92,
         354,
-        2180
+        2185
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: if (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.g"
     },
@@ -515,7 +515,7 @@
       "file": "core/content.ts",
       "category": "parse-guard",
       "lines": [
-        2362
+        2367
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof AiCmExportBuilders !== 'undefined') ? AiCmExportB"
     },
@@ -1499,9 +1499,9 @@
         74,
         77,
         144,
-        1956,
-        1988,
-        2003
+        2027,
+        2059,
+        2074
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: for (var i = 0; i < diagRing.length; i++) printDiag(diagRing[i][0], diag"
     },
@@ -1509,8 +1509,8 @@
       "file": "core/qwen-intercept.js",
       "category": "event-guard",
       "lines": [
-        2041,
-        2071
+        2112,
+        2142
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); dis"
     },
@@ -1535,9 +1535,9 @@
       "file": "core/qwen-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        2058,
-        2066,
-        2070
+        2129,
+        2137,
+        2141
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkChatChange();"
     },

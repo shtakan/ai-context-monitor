@@ -218,7 +218,7 @@ declare function aiCmProcessPrelude(): unknown[] | null;
 declare function aiCmLogMetricSource(host: Record<string, unknown>): void;
 declare function aiCmExportPartialView(
   source: unknown
-): { partial?: true; partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text' | 'stopped' | 'truncated' };
+): { partial?: true; partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text' | 'stopped' | 'truncated' | 'history-not-finalized' };
 declare function aiCmLoadProactiveFlag(): void;
 declare function debugLog(level: string, ...args: unknown[]): void;
 

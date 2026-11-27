@@ -696,6 +696,11 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
   baseCompleteReason = (typeof detail.historyCompleteReason === 'string' && detail.historyCompleteReason)
     ? detail.historyCompleteReason
     : (newBaseComplete ? 'complete' : 'incomplete');
+  // BUG-25: история Qwen прочитана полностью, но её последний assistant ещё done=false
+  // (после F5 живой SSE-ход потерян, а платформа не дописала ответ). Файл не должен
+  // молча объявлять себя полным: причина едет в снимок/шапку как history-not-finalized.
+  // baseComplete при этом НЕ понижается: данные истории получены все, экспорт разрешён.
+  if (detail.tailPending === true) baseCompleteReason = 'history-not-finalized';
   // v83: снимок сети применён — заказ на снимок закрыт (страховка, если MAIN потерял 'end').
   if (typeof aiCmNetSnapshotPendingEnd === 'function') {
     aiCmNetSnapshotPendingEnd((currentAdapter && currentAdapter.siteName) || '');
@@ -1966,7 +1971,7 @@ function processAndSend(): void {
       var aiCmCtxSnapBodyTrusted = aiCmAutoExportTrustedBase() === true
         || (typeof aiCmGsaNetworkCompleteIs === 'function'
           && aiCmGsaNetworkCompleteIs(ctxSnapSite, ctxSnapConvId) === true);
-      var aiCmCtxSnapPartial = aiCmSnapshotPartial(baseComplete === true, aiCmCtxSnapBodyTrusted) || (typeof aiCmCtxStopActive === 'function' && aiCmCtxStopActive());
+      var aiCmCtxSnapPartial = aiCmSnapshotPartial(baseComplete === true, aiCmCtxSnapBodyTrusted) || (typeof aiCmCtxStopActive === 'function' && aiCmCtxStopActive()) || (typeof baseCompleteReason !== 'undefined' && baseCompleteReason === 'history-not-finalized');
       var aiCmCtxSnapCandidate: AiCmContextSnapshot = {
         convId: ctxSnapConvId,
         capturedAt: Date.now(),

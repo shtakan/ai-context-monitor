@@ -446,7 +446,8 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       if (typeof s.toolChars === 'number') existing.toolChars = s.toolChars;
       // R4: повторное применение той же страницы не должно оставлять на ходе флаг
       // «только вложение», если настоящий ответ уже пришёл.
-      existing.filesOnly = (s.filesOnly === true && !s.answer && !s.reasoning);
+      if (s.pending === true) existing.pending = true; else delete existing.pending;
+      existing.filesOnly = (s.filesOnly === true && !s.answer && !s.reasoning && s.pending !== true);
       return { turn: existing, created: false };
     }
     // R4: заглушка «только вложение» (file-only:...), созданная на прошлой странице,
@@ -469,7 +470,8 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       fileOnly.answer = s.answer || '';
       fileOnly.reasoning = s.reasoning || '';
       fileOnly.text = composeTurnText(fileOnly.answer, fileOnly.reasoning);
-      fileOnly.filesOnly = (s.filesOnly === true && !s.answer && !s.reasoning);
+      if (s.pending === true) fileOnly.pending = true; else delete fileOnly.pending;
+      fileOnly.filesOnly = (s.filesOnly === true && !s.answer && !s.reasoning && s.pending !== true);
       return { turn: fileOnly, created: false };
     }
     // R4: ту же страницу «только вложение» могли применить ПОВТОРНО уже после того,
@@ -498,10 +500,11 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       answer: s.answer,
       reasoning: s.reasoning,
       text: composeTurnText(s.answer, s.reasoning),
-      filesOnly: s.filesOnly === true,
+      filesOnly: (s.filesOnly === true && s.pending !== true),
       // v97 (диагностика qwen-mcp-diag): 0 — ход собран из SSE (extras там не читаются).
       toolChars: (typeof s.toolChars === 'number') ? s.toolChars : 0
     };
+    if (s.pending === true) added.pending = true;
     turns.push(added);
     return { turn: added, created: true };
   }
@@ -782,11 +785,21 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     var duplicates = 0;
     var thinkingDuplicates = 0;
     var reasoningMessages = 0;
+    // BUG-25: Qwen может отдать последний assistant ещё не финализированным
+    // (done=false, content/content_list пусты) — особенно после F5, когда живой
+    // SSE-ход потерян, а история ещё не дописана. Это НЕ пустой завершённый ход
+    // (R4): такой узел обязан дойти до снимка с флагом pending, иначе файл молча
+    // теряет последний ответ и объявляет себя полным (55 из 56 сообщений).
+    var pendingMessages = 0;
+    var lastAssistantPending = false;
     for (var i = 0; i < nodes.length; i++) {
       var node = nodes[i];
       var nodeOffChain = node.offChain === true;
       var role = (node.role === 'user') ? 'user' : ((node.role === 'assistant') ? 'assistant' : '');
       if (!role) continue;
+      var nodePending = (role === 'assistant' && node.done === false);
+      if (!nodeOffChain && role === 'assistant') lastAssistantPending = nodePending;
+      if (nodePending && !nodeOffChain) pendingMessages++;
       if (!chatId && !nodeOffChain) chatId = historyChatIdOf(node);
       var list = contentListOf(node) || [];
       var thinking = historyThinkingOf(list); var nodeReasoning = (typeof qwenReasoningOf === 'function') ? qwenReasoningOf(node) : '';
@@ -826,6 +839,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
           // Ключ очереди вложений (msg.key/recordTurn userKey), а не node.id:
           // по нему qfSectionsFor отдаёт текст файлов при сборке снимка.
           fileKey: id,
+          pending: nodePending ? true : undefined,
           offChain: nodeOffChain ? true : undefined
         });
       }
@@ -847,7 +861,9 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         // R2: вложения хода. Уходят в core/qwen-files.js уже на recordTurn (ниже).
         files: nodeFiles,
         // v97 (диагностика qwen-mcp-diag): символы tool-вклада extras в тексте хода.
-        toolChars: toolStats.toolChars
+        toolChars: toolStats.toolChars,
+        // BUG-25: ход истории ещё не финализирован платформой (done=false).
+        pending: nodePending ? true : undefined
       });
     }
     if (!chatId) chatId = findHistoryChatId(payload, 0, []) || ((payload && payload.data && payload.data.id) || '');
@@ -865,12 +881,25 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         samples: (shape.samples.join('|') || '(none)').slice(0, 500)
       });
     } catch (eShape) { swallow(eShape, 'qwen:payload-shape'); }
+    // BUG-25 (диагностика, только измерение): хвост истории не финализирован.
+    // Строка живёт под гейтом aiCmDebug; без него — ни вызова, ни строки.
+    if (pendingMessages > 0 || lastAssistantPending) {
+      try {
+        diagTag('qwen-history-tail', {
+          ts: Date.now(), pending: pendingMessages, last: lastAssistantPending ? 1 : 0,
+          chain: chain ? 1 : 0, doneFalse: pendingMessages > 0 ? 1 : 0,
+          currentId: String((fullParsed && fullParsed.currentId) || '').slice(0, 8)
+        });
+      } catch (eTailDiag) { swallow(eTailDiag, 'qwen:history-tail-diag'); }
+    }
     return {
       chatId: chatId,
       messages: messages,
       nativeNodes: nativeNodes,
       currentId: (fullParsed && typeof fullParsed.currentId === 'string') ? fullParsed.currentId : '',
       nodes: nodes.length,
+      pendingMessages: pendingMessages,
+      lastAssistantPending: lastAssistantPending,
       duplicates: duplicates,
       thinkingDuplicates: thinkingDuplicates,
       reasoningMessages: reasoningMessages, chain: chain,
@@ -949,10 +978,14 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       if (msg.role !== 'assistant') continue;
       var msgFiles = Array.isArray(msg.files) ? msg.files : [];
       var turnFiles = pendingUserFiles.concat(msgFiles);
+      var msgPending = msg.pending === true;
       var filesOnly = !msg.text && !msg.reasoning;
       // R4: пустой ход по-прежнему не пишется, НО вложения — достаточная причина для хода
       // (раньше безусловный continue терял и файл, и user-блок).
-      if (filesOnly && !turnFiles.length) continue;
+      // BUG-25: пустой ход с done=false — не завершённый ответ, а ещё не дописанный
+      // историей. Его нельзя молча выбрасывать: снимок обязан сохранить ход и
+      // пометить его pending (в файле — пустой assistant + partial-reason).
+      if (filesOnly && !turnFiles.length && !msgPending) continue;
       var fileSource = (pendingUserFiles.length && msgFiles.length) ? 'both'
         : (msgFiles.length ? 'assistant' : 'user');
       if (msg.usage) lastUsage = msg.usage;
@@ -975,9 +1008,10 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         frames: 1,
         reasoningFrames: msg.reasoning ? 1 : 0,
         answerFrames: msg.text ? 1 : 0,
-        ended: true,
-        finished: true,
+        ended: !msgPending,
+        finished: !msgPending,
         filesOnly: filesOnly,
+        pending: msgPending,
         // v97 (диагностика qwen-mcp-diag): вклад extras в текст этого хода.
         toolChars: msg.toolChars || 0
       });
@@ -990,7 +1024,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       if (rec && rec.turn && rec.turn.userKey) {
         enqueueHistoryFiles(turnFiles, rec, fileSource);
       }
-      if (filesOnly) filesOnlyTurns++;
+      if (filesOnly && !msgPending) filesOnlyTurns++;
       // Ход обработан — pending относится ровно к нему. Без сброса хвост вложений
       // уезжал бы в следующий assistant.
       pendingUserKey = '';
@@ -1313,6 +1347,9 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     var ids = [];
     var reasoningTurns = 0;
     var lastModel = '';
+    // BUG-25: последний assistant-ход истории ещё не финализирован. Флаг едет в
+    // detail/снимок: файл получает partialReason=history-not-finalized, а не молчит.
+    var tailPending = false;
     // BUG-24: ход с userKey, но без user-блока (нет текста и нет секций вложений) —
     // это разрыв пары, а не легитимный пустой ход. Снимок с таким разрывом не может
     // объявлять себя полным: иначе ручной экспорт молча отдаёт A→A и теряет реплику.
@@ -1348,7 +1385,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       // висел бы «### ASSISTANT» без текста, а в TXT — пустая роль). Модель хода при
       // этом не теряем: она нужна шапке экспорта, хотя текста ответа нет.
       if (t.model) lastModel = t.model;
-      if (!t.filesOnly || t.text) {
+      if (!t.filesOnly || t.text || t.pending === true) {
         pieces.push(t.text);
         ids.push(t.key);
         var msg = { role: 'assistant', text: t.text, reasoning: t.reasoning || '' };
@@ -1358,12 +1395,15 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         if (t.reasoning) { msg.hiddenReasoning = t.reasoning; reasoningTurns++; }
         messages.push(msg);
         reasonings.push(t.reasoning || '');
+        // Флаг относится РОВНО к последнему assistant-блоку: более поздний
+        // завершённый ответ снимает pending (история дописалась/пришёл SSE).
+        tailPending = (t.pending === true);
       }
     }
     return {
       pieces: pieces, messages: messages, reasonings: reasonings, ids: ids,
       reasoningTurns: reasoningTurns, lastModel: lastModel, missingUserBlocks: missingUserBlocks,
-      sortedTurns: sortedTurns
+      tailPending: tailPending, sortedTurns: sortedTurns
     };
   }
 
@@ -1377,6 +1417,9 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     var native = null;
     var nativeFresh = (typeof lastNativeChain === 'undefined' || !lastNativeChain ||
       typeof lastNativeChain.turnCount !== 'number');
+    // BUG-25 (диагностика): ПОЧЕМУ native-цепочка не попала в файл. Без причины
+    // нельзя отличить «нет полной истории» от «turns ушли вперёд».
+    var nativeFreshReason = nativeFresh ? 'no-native' : 'fresh';
     if (!nativeFresh && typeof turns !== 'undefined' && turns) {
       // filesOnly-заглушки не дают assistant-узла в истории — их не считаем.
       var expectedTurns = 0;
@@ -1384,6 +1427,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         if (turns[nt] && turns[nt].filesOnly !== true) expectedTurns++;
       }
       nativeFresh = expectedTurns <= lastNativeChain.turnCount;
+      if (!nativeFresh) nativeFreshReason = 'stale-turns';
     }
     if (typeof lastNativeChain !== 'undefined' && lastNativeChain && nativeFresh &&
         lastNativeChain.nodes && lastNativeChain.nodes.length &&
@@ -1414,6 +1458,28 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         linear: false
       };
     }
+    if (native) nativeFreshReason = 'used';
+    else if (nativeFresh && lastNativeChain) {
+      // nativeFresh=true, но узлов нет/чат не тот — в файл уйдёт turns-путь.
+      nativeFreshReason = (!lastNativeChain.nodes || !lastNativeChain.nodes.length)
+        ? 'no-nodes' : 'chat-mismatch';
+    }
+    // BUG-25 (диагностика): хвост и источник последнего assistant-хода — под гейтом.
+    try {
+      var lastSource = '';
+      for (var ls = 0; ls < turns.length; ls++) {
+        if (turns[ls] && turns[ls].filesOnly !== true) {
+          lastSource = (turns[ls].pending === true)
+            ? 'pending' : ((turns[ls].fromHistory === true) ? 'history' : 'live');
+        }
+      }
+      diagTag('qwen-export-snapshot', {
+        ts: Date.now(), msgs: d.messages.length,
+        tailPending: d.tailPending === true ? 1 : 0,
+        native: native ? 1 : 0, nativeFresh: nativeFreshReason,
+        lastSource: lastSource || '(none)'
+      });
+    } catch (eSnapDiag) { swallow(eSnapDiag, 'qwen:export-snapshot-diag'); }
     return {
       messages: d.messages,
       count: d.messages.length,
@@ -1421,6 +1487,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       modelSlug: d.lastModel || '',
       chatId: snapshotChatId,
       missingUserTurns: d.missingUserBlocks,
+      tailPending: d.tailPending === true,
       native: native
     };
   }
@@ -1475,6 +1542,10 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       // BUG-24: число ходов с userKey без user-блока. 0 — пары полные; >0 — снимок
       // честно неполный (complete=false выше), даже если страница считала себя последней.
       missingUserTurns: missingUserBlocks,
+      // BUG-25: последний assistant истории ещё не финализирован (done=false).
+      // baseComplete остаётся true (история прочитана), но файл обязан нести
+      // partialReason=history-not-finalized — молча терять ход запрещено.
+      tailPending: snap.tailPending === true,
       // partial — диагностика неполной базы для UI/экспорта: сколько страниц добрано и почему
       // остановились (in-progress/error/no-gain/page-cap/time-cap/cursor-loop/missing-user-text).
       partial: complete ? null : (s.partial || (missingUserBlocks > 0

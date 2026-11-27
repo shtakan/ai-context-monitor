@@ -56,7 +56,8 @@ export type PartialReason =
   | 'shrank'
   | 'missing-user-text'
   | 'stopped'
-  | 'truncated';
+  | 'truncated'
+  | 'history-not-finalized';
 
 /**
  * Полнота треда. Отдельная ось от точности метрики (см. MetricQuality):

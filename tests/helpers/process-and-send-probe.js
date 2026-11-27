@@ -110,7 +110,9 @@ function makeProbe(over) {
     baseText: state.baseText,
     lastBaseTexts: state.lastBaseTexts || [],
     lastDetailMessages: state.lastDetailMessages || null,
-    baseCompleteReason: state.baseComplete ? 'complete' : 'incomplete',
+    baseCompleteReason: (typeof state.baseCompleteReason === 'string' && state.baseCompleteReason)
+      ? state.baseCompleteReason
+      : (state.baseComplete ? 'complete' : 'incomplete'),
     lastEmitConvId: cid,
     adapterBaseSeen: state.adapterBaseSeen === true,
     badgeSuppressed: state.badgeSuppressed === true,

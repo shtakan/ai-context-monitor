@@ -240,7 +240,7 @@ export interface AiCmManualSnapshot {
   isLowConfidenceBase: boolean;
   sourceTier?: string;
   partial?: boolean;
-  partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text' | 'stopped' | 'truncated';
+  partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text' | 'stopped' | 'truncated' | 'history-not-finalized';
   /** Режим проекции файла (S5.1); появляется только после проекции. */
   bodyProjection?: string;
   /** BUG-13: след dedupe (input/output/removedUsers/foldedAssistants). */

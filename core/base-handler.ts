@@ -172,6 +172,8 @@ function aiCmQwenExportSnapshotSync(): {
   messages?: AiCmExportMessage[];
   chatId?: string;
   missingUserTurns?: number;
+  /** BUG-25: последний assistant истории ещё не финализирован (done=false). */
+  tailPending?: boolean;
   native?: { nodes?: unknown[]; currentId?: string; linear?: boolean } | null;
 } | null {
   try {

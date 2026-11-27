@@ -147,7 +147,7 @@ export interface ExportHistory {
   partial?: boolean;
 
   /** S2.3 (ADR-001): причина частичности (словарь расширяется только здесь). */
-  partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text' | 'stopped' | 'truncated';
+  partialReason?: 'incomplete' | 'stale' | 'shrank' | 'missing-user-text' | 'stopped' | 'truncated' | 'history-not-finalized';
 
   /**
    * 2.2/BUG-13: след dedupe в снимке. input/output — сообщений до/после,
