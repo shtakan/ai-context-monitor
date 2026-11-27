@@ -5,7 +5,7 @@
 **Правила браузерных задач:** docs/BROWSER-TASK-PROTOCOL.md, docs/BSK-CHEATSHEET.md.
 
 > **АКТУАЛЬНО 2026-11-27 (2.4 код завершён, релиз 2.4.0 не выпущен).**
-> Ветка `feature/2.2`, HEAD `a48d3e5`, `origin/feature/2.2` = `a48d3e5`.
+> Ветка `feature/2.2`, HEAD `33164cd`, `origin/feature/2.2` = `33164cd`.
 > `content.ts` 3 005, `processAndSend` 397; Jest 309/4743 (7 skipped);
 > eslint 0 errors; catch-hygiene 13/13; architecture-lint 0;
 > `build`/`build:prod` зелёные. Версия manifest/package: 2.2.0;

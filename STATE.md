@@ -6,7 +6,7 @@
 ## 1. Репозиторий
 
 - workspace: `ai-context-monitor-clean`
-- branch: `feature/2.2`; HEAD `a48d3e5`; `origin/feature/2.2` = `a48d3e5`;
+- branch: `feature/2.2`; HEAD `33164cd`; `origin/feature/2.2` = `33164cd`;
   ahead 0; behind 0
 - version: `2.2.0` (`manifest.json`, `package.json`); релиз 2.4.0 не выпущен
 - теги: `v2.2.1` → `231a3fb`; `v2.2.0` → `ab9e7b7`
