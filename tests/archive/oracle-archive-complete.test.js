@@ -264,7 +264,7 @@ describe('T1: проводка ISOLATED → MAIN и запрет внешних 
     // а не options-модуль архиво-импорта; последний в manifest не попадает.
     expect(MANIFEST).not.toContain('archive-import');
     const m = JSON.parse(MANIFEST);
-    expect(m.version).toBe('2.2.0');
+    expect(m.version).toBe('2.4.0');
     expect(m.content_scripts[0].js).not.toContain('utils/archive-import.ts');
     // 10 — прежние 9 + chat.qwen.ai (O-35); архив в хосты так и не добавлен
     expect(m.host_permissions.length).toBe(10);
