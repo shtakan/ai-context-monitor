@@ -617,8 +617,37 @@ export function buildMdFromHistory(history: ExportHistory, platform?: string): s
  * @param {*} list сообщения снимка
  * @returns {Array<*>} сообщения для JSON
  */
-function jsonFileMessages(list: unknown): unknown[] {
+/**
+ * Qwen: безопасный манифест вложений для JSON.
+ *
+ * В `files[]` Qwen лежит raw signed URL (`cdn.qwenlm.ai/...?key=<JWT>`) и
+ * вложенный `file` с `user_id`; сам URL нужен только внутреннему
+ * core/qwen-files.js для скачивания текста и в файл попадать не должен.
+ * В JSON остаются только метаданные, по которым вложение можно опознать.
+ * undefined/пусто → поле не пишется (байты остальных платформ не меняются).
+ */
+function qwenSafeFileManifest(files: unknown): unknown[] {
+  var src = Array.isArray(files) ? files : [];
+  var out: unknown[] = [];
+  for (var i = 0; i < src.length; i++) {
+    var f = src[i] as Record<string, unknown> | null;
+    if (!f || typeof f !== 'object') continue;
+    var item: Record<string, unknown> = {};
+    if (f.id !== undefined && f.id !== null) item.id = f.id;
+    if (typeof f.name === 'string' && f.name) item.name = f.name;
+    if (typeof f.file_type === 'string' && f.file_type) item.file_type = f.file_type;
+    if (typeof f.type === 'string' && f.type) item.type = f.type;
+    if (typeof f.file_class === 'string' && f.file_class) item.file_class = f.file_class;
+    if (typeof f.size === 'number' || typeof f.size === 'string') item.size = f.size;
+    if (typeof f.status === 'string' && f.status) item.status = f.status;
+    if (Object.keys(item).length) out.push(item);
+  }
+  return out;
+}
+
+function jsonFileMessages(list: unknown, site?: string): unknown[] {
   var src: unknown[] = Array.isArray(list) ? list : [];
+  var qwen = site === 'qwen';
   var hasSections = false;
   for (var i = 0; i < src.length; i++) {
     var m = src[i] as Record<string, unknown> | null;
@@ -630,15 +659,22 @@ function jsonFileMessages(list: unknown): unknown[] {
       break;
     }
   }
-  if (!hasSections) return src;
+  if (!hasSections && !qwen) return src;
   var out: unknown[] = [];
   for (var j = 0; j < src.length; j++) {
     var item = src[j];
     if (!item || typeof item !== 'object') { out.push(item); continue; }
-    var copy = Object.assign({}, item) as Record<string, unknown>;
+    var rec = item as Record<string, unknown>;
+    if (!hasSections && !(qwen && Array.isArray(rec.files))) { out.push(item); continue; }
+    var copy = Object.assign({}, rec) as Record<string, unknown>;
     delete copy.sources;
     delete copy.artifact;
     delete copy.artifacts;
+    if (qwen && Array.isArray(copy.files)) {
+      var safeFiles = qwenSafeFileManifest(copy.files);
+      if (safeFiles.length) copy.files = safeFiles;
+      else delete copy.files;
+    }
     out.push(copy);
   }
   return out;
@@ -688,7 +724,7 @@ export function buildJsonFromHistory(history: ExportHistory, platform?: string):
     // BUG-13: след dedupe (input/output/removedUsers/foldedAssistants).
     // undefined → ключ не появляется, байты прежних файлов не меняются.
     dedupe: h.dedupe,
-    messages: jsonFileMessages(h.messages),
+    messages: jsonFileMessages(h.messages, h.site),
     // 2.2/фаза 4: аддитивные секции; пусто → undefined → ключей в JSON нет.
     artifacts: sections.artifacts.length ? sections.artifacts : undefined,
     sources: sections.sources.length ? sections.sources : undefined
