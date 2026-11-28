@@ -408,6 +408,15 @@ window.addEventListener('ai-cm-conversation-changed', function () {
   if (typeof aiCmEnsureInitObserver === 'function') aiCmEnsureInitObserver();
 });
 
+// BUG-25 (follow-up): после SPA-сброса поднимаем журнал live-tail уже для
+// нового convId. Слушатель стоит ПОСЛЕ основного reset-слушателя, чтобы
+// source-пины O-34 (первый ai-cm-conversation-changed) не меняли смысл.
+window.addEventListener('ai-cm-conversation-changed', function () {
+  try {
+    if (typeof aiCmLiveTailRestore === 'function') setTimeout(aiCmLiveTailRestore, 0);
+  } catch (eLiveTailSpa) { swallowSoft(eLiveTailSpa, 'content:liveTailSpa'); }
+});
+
   // v30.8: сигнал лоадера «скроллер скрыт/восстановлен» — для заморозки бейджа
   window.addEventListener('ai-cm-loader-freeze', function (/** @type {CustomEvent} */ ev: CustomEvent) {
     try {

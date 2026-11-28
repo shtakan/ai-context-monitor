@@ -219,6 +219,61 @@ describe('BUG-25: done=false хвост истории не теряется м�
     expect(lastEvent(st).tailPending).toBe(false);
   });
 
+  test('live-tail журнал: восстановленный ответ заполняет pending-ход', async () => {
+    await apply(historyPayload([userNode(), assistantNode({ done: false })]), { url: URL_PAGE });
+    const B = window.__aiCmQwenBridge;
+    expect(B.exportSnapshot().tailPending).toBe(true);
+
+    window.dispatchEvent(new window.CustomEvent('ai-cm-qwen-live-tail-restore', {
+      detail: JSON.stringify({
+        v: 1,
+        site: 'qwen',
+        chatId: CHAT_ID,
+        responseId: RESPONSE_ID,
+        userKey: 'fid-bug25',
+        userPrompt: 'Прочитай PDF и назови маркер',
+        answer: 'Маркер: MARKER-7F3A9C',
+        reasoning: '',
+        ts: Date.now()
+      })
+    }));
+    await settle(4);
+
+    expect(B.turns()).toHaveLength(1);
+    expect(B.turns()[0].pending).toBe(false);
+    expect(B.turns()[0].answer).toBe('Маркер: MARKER-7F3A9C');
+    expect(B.turns()[0].recoveredFrom).toBe('live-tail');
+    const snap = B.exportSnapshot();
+    expect(snap.tailPending).toBe(false);
+    expect(snap.recoveredLiveTail).toBe(true);
+    expect(snap.messages).toHaveLength(2);
+    expect(snap.messages[1].text).toBe('Маркер: MARKER-7F3A9C');
+  });
+
+  test('live-tail журнал: чужой/несовпавший вопрос не подменяет pending-ход', async () => {
+    await apply(historyPayload([userNode(), assistantNode({ done: false })]), { url: URL_PAGE });
+    const B = window.__aiCmQwenBridge;
+
+    window.dispatchEvent(new window.CustomEvent('ai-cm-qwen-live-tail-restore', {
+      detail: JSON.stringify({
+        v: 1,
+        site: 'qwen',
+        chatId: CHAT_ID,
+        responseId: 'other-response',
+        userKey: 'other-user',
+        userPrompt: 'Совсем другой вопрос',
+        answer: 'Чужой ответ',
+        reasoning: '',
+        ts: Date.now()
+      })
+    }));
+    await settle(4);
+
+    expect(B.turns()[0].pending).toBe(true);
+    expect(B.turns()[0].answer).toBe('');
+    expect(B.exportSnapshot().tailPending).toBe(true);
+  });
+
   test('R4 не сломан: завершённый пустой assistant (done не false) по-прежнему без блока', async () => {
     const st = await apply(historyPayload([userNode(), assistantNode({})]), { url: URL_PAGE });
     const B = window.__aiCmQwenBridge;

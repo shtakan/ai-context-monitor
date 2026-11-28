@@ -202,6 +202,8 @@ declare function geminiTapeKey(convId: string): string;
 declare function aiCmIsWidgetNode(node: Node | null): boolean;
 declare function aiCmH23Site(): boolean;
 declare function aiCmLoadArchiveTier(convId: string, reason: string): void;
+// BUG-25 follow-up: журнал live-tail Qwen (core/content-archive.js).
+declare function aiCmLiveTailRestore(): void;
 declare function logTextProbe(label: string, text: string): void;
 declare function aiCmBadgeHoldActive(): boolean;
 declare function aiCmDomThreadId(): string | null;

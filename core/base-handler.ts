@@ -174,6 +174,8 @@ function aiCmQwenExportSnapshotSync(): {
   missingUserTurns?: number;
   /** BUG-25: последний assistant истории ещё не финализирован (done=false). */
   tailPending?: boolean;
+  /** BUG-25 follow-up: pending-ход восстановлен из журнала live-tail. */
+  recoveredLiveTail?: boolean;
   native?: { nodes?: unknown[]; currentId?: string; linear?: boolean } | null;
 } | null {
   try {

@@ -232,6 +232,10 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
   // выбирает активную ветку сам (utils/export/native-chain.ts).
   var lastNativeChain = null;
   var lastParsedSummary = [];     // BUG-24 (диагностика): последний разбор истории — ключи/роли/длины
+  // BUG-25 (follow-up): последний живой ответ, сохранённый в chrome.storage.local
+  // до F5. Применяется ТОЛЬКО к пустому pending-ходу с тем же responseId/userKey/
+  // вопросом; непустую историю не перезаписывает.
+  var restoredLiveTail = null;
   var turnSeq = 0;
   var dispatchSig = null;
   var lastDispatchResult = false;
@@ -410,12 +414,109 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       diagLine('record-error', { err: String(eRec && eRec.message || eRec).slice(0, 80) });
       return;
     }
+    // BUG-25 (follow-up): живой ход завершён — отдаём ISOLATED-миру последний
+    // ответ для журнала chrome.storage.local. Без URL/вложений, только текст.
+    if (typeof dispatchLiveTail === 'function') dispatchLiveTail(s);
     emitSnapshot(s);
   }
 
   function composeTurnText(answer, reasoning) {
     if (!reasoning) return answer;
     return REASONING_TAG + '\n' + reasoning + '\n\n' + ANSWER_TAG + '\n' + answer;
+  }
+
+  // BUG-25 (follow-up): нормализация текста для сверки вопроса журнала с историей.
+  function liveTailNorm(value) {
+    return String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
+  }
+
+  // Живой ход завершён → отдать ISOLATED-миру запись журнала. Только текст,
+  // без URL/вложений: безопасный манифест сохраняется.
+  function dispatchLiveTail(s) {
+    try {
+      if (!s || (!s.answer && !s.reasoning)) return;
+      var chatId = s.chatId || currentChatId || '';
+      if (!chatId) return;
+      var detail = {
+        v: 1,
+        site: 'qwen',
+        chatId: String(chatId),
+        responseId: String(s.responseId || ''),
+        userKey: String(s.userKey || ''),
+        userPrompt: String(s.userPrompt || ''),
+        answer: String(s.answer || ''),
+        reasoning: String(s.reasoning || ''),
+        model: String(s.model || ''),
+        ts: Date.now()
+      };
+      window.dispatchEvent(new CustomEvent('ai-cm-qwen-live-tail', { detail: JSON.stringify(detail) }));
+    } catch (eLiveTail) { swallow(eLiveTail, 'qwen:live-tail-dispatch'); }
+  }
+
+  // Подставить сохранённый живой ответ в пустой pending-ход. Никогда не трогает
+  // завершённый/непустой ход; сверяет chatId, responseId/userKey/текст вопроса.
+  function applyRestoredTailToTurn(turn) {
+    try {
+      var t = restoredLiveTail;
+      if (!t || !turn || turn.pending !== true) return false;
+      if (turn.text || turn.answer) return false;
+      if (t.site && t.site !== 'qwen') return false;
+      if (t.chatId && currentChatId && String(t.chatId) !== String(currentChatId)) return false;
+      if (typeof t.ts === 'number' && t.ts > 0 && Date.now() - t.ts > 24 * 60 * 60 * 1000) {
+        restoredLiveTail = null;
+        return false;
+      }
+      if (!t.answer && !t.reasoning) return false;
+      var keyMatch = !!(t.responseId && turn.key && String(t.responseId) === String(turn.key));
+      var userKeyMatch = !!(t.userKey && turn.userKey && String(t.userKey) === String(turn.userKey));
+      var prompt = turn.userKey ? userTextOf(turn.userKey) : '';
+      var promptMatch = !!(t.userPrompt && prompt && liveTailNorm(t.userPrompt) === liveTailNorm(prompt));
+      if (!keyMatch && !userKeyMatch && !promptMatch) return false;
+      turn.answer = String(t.answer || '');
+      turn.reasoning = String(t.reasoning || '');
+      turn.text = composeTurnText(turn.answer, turn.reasoning);
+      turn.pending = false;
+      turn.filesOnly = false;
+      turn.recoveredFrom = 'live-tail';
+      restoredLiveTail = null;
+      diagTag('qwen-live-tail', {
+        ts: Date.now(), event: 'merged', chat: String(currentChatId || '').slice(0, 8),
+        response: String(t.responseId || '').slice(0, 8),
+        answerLen: turn.answer.length, reasoningLen: turn.reasoning.length
+      });
+      try {
+        setTimeout(function () {
+          try {
+            window.dispatchEvent(new CustomEvent('ai-cm-qwen-live-tail-merged', {
+              detail: JSON.stringify({ chatId: currentChatId || '', responseId: turn.key || '' })
+            }));
+          } catch (eMergedLater) { swallow(eMergedLater, 'qwen:live-tail-merged-event'); }
+        }, 0);
+      } catch (eMergedTimer) { swallow(eMergedTimer, 'qwen:live-tail-merged-timer'); }
+      return true;
+    } catch (eApplyTail) {
+      swallow(eApplyTail, 'qwen:live-tail-merge');
+      return false;
+    }
+  }
+
+  // Поздний restore: журнал пришёл после записи pending-хода — ищем его по turns.
+  function mergeRestoredLiveTail() {
+    if (!restoredLiveTail) return false;
+    for (var i = 0; i < turns.length; i++) {
+      if (applyRestoredTailToTurn(turns[i])) return true;
+    }
+    return false;
+  }
+
+  // История финализировала ответ — журнал больше не нужен. responseId в detail
+  // не даёт стереть запись нового live-хода страницей старого хода.
+  function clearLiveTail(chatId, responseId) {
+    try {
+      window.dispatchEvent(new CustomEvent('ai-cm-qwen-live-tail-clear', {
+        detail: JSON.stringify({ chatId: String(chatId || ''), responseId: String(responseId || '') })
+      }));
+    } catch (eClearTail) { swallow(eClearTail, 'qwen:live-tail-clear'); }
   }
 
   // O-53: возвращает { turn, created } — пагинации нужно знать, какие ходы добавлены
@@ -448,6 +549,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       // «только вложение», если настоящий ответ уже пришёл.
       if (s.pending === true) existing.pending = true; else delete existing.pending;
       existing.filesOnly = (s.filesOnly === true && !s.answer && !s.reasoning && s.pending !== true);
+      if (typeof applyRestoredTailToTurn === 'function') applyRestoredTailToTurn(existing);
       return { turn: existing, created: false };
     }
     // R4: заглушка «только вложение» (file-only:...), созданная на прошлой странице,
@@ -472,6 +574,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       fileOnly.text = composeTurnText(fileOnly.answer, fileOnly.reasoning);
       if (s.pending === true) fileOnly.pending = true; else delete fileOnly.pending;
       fileOnly.filesOnly = (s.filesOnly === true && !s.answer && !s.reasoning && s.pending !== true);
+      if (typeof applyRestoredTailToTurn === 'function') applyRestoredTailToTurn(fileOnly);
       return { turn: fileOnly, created: false };
     }
     // R4: ту же страницу «только вложение» могли применить ПОВТОРНО уже после того,
@@ -505,6 +608,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       toolChars: (typeof s.toolChars === 'number') ? s.toolChars : 0
     };
     if (s.pending === true) added.pending = true;
+    if (typeof applyRestoredTailToTurn === 'function') applyRestoredTailToTurn(added);
     turns.push(added);
     return { turn: added, created: true };
   }
@@ -935,6 +1039,17 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       diagTag('qwen-history', { ts: Date.now(), event: 'skip', reason: 'other-chat', url: m.url || '' });
       return { added: 0, foreign: true };
     }
+    // BUG-25 (follow-up): если последний assistant этой страницы уже финализирован,
+    // запись журнала для него больше не нужна. responseId в clear-событии защищает
+    // журнал нового live-хода от стирания страницей старого.
+    try {
+      for (var ct = parsed.messages.length - 1; ct >= 0; ct--) {
+        var ctm = parsed.messages[ct];
+        if (!ctm || ctm.role !== 'assistant') continue;
+        if ((ctm.text || ctm.reasoning) && typeof clearLiveTail === 'function') clearLiveTail(chatId, ctm.key);
+        break;
+      }
+    } catch (eClearScan) { swallow(eClearScan, 'qwen:live-tail-clear-scan'); }
     var pendingUserKey = '';
     var pendingUserText = '';
     // R2: вложения ТЕКУЩЕГО вопроса. Очередь вложений ставится после recordTurn: только там
@@ -1073,6 +1188,8 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       diagTag('qwen-history', { ts: Date.now(), event: 'skip', reason: 'no-turns', url: m.url || '' });
       return { added: 0, foreign: false };
     }
+    // BUG-25 (follow-up): журнал мог прийти после записи pending-хода — добираем.
+    if (typeof mergeRestoredLiveTail === 'function') mergeRestoredLiveTail();
     // Дубль reasoning в payload — ИЗМЕРЕНИЕ, не поведение: парсер уже взял первое вхождение,
     // второй копии в тексте нет. Строка живёт только под гейтом aiCmDebug (канон diagTag).
     if (parsed.duplicates > 0 || parsed.thinkingDuplicates > 0) {
@@ -1350,6 +1467,9 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     // BUG-25: последний assistant-ход истории ещё не финализирован. Флаг едет в
     // detail/снимок: файл получает partialReason=history-not-finalized, а не молчит.
     var tailPending = false;
+    // BUG-25 (follow-up): ход восстановлен из журнала live-tail — native-цепочку
+    // не используем, иначе она перекроет восстановленный текст пустым узлом.
+    var recoveredLiveTail = false;
     // BUG-24: ход с userKey, но без user-блока (нет текста и нет секций вложений) —
     // это разрыв пары, а не легитимный пустой ход. Снимок с таким разрывом не может
     // объявлять себя полным: иначе ручной экспорт молча отдаёт A→A и теряет реплику.
@@ -1398,18 +1518,20 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         // Флаг относится РОВНО к последнему assistant-блоку: более поздний
         // завершённый ответ снимает pending (история дописалась/пришёл SSE).
         tailPending = (t.pending === true);
+        if (t.recoveredFrom === 'live-tail') recoveredLiveTail = true;
       }
     }
     return {
       pieces: pieces, messages: messages, reasonings: reasonings, ids: ids,
       reasoningTurns: reasoningTurns, lastModel: lastModel, missingUserBlocks: missingUserBlocks,
-      tailPending: tailPending, sortedTurns: sortedTurns
+      tailPending: tailPending, recoveredLiveTail: recoveredLiveTail, sortedTurns: sortedTurns
     };
   }
 
   // Мост для ISOLATED-мира: отдать файлу сообщения из ТЕКУЩЕГО состояния turns/userTurns.
   // Синхронный CustomEvent (как Gemini turns-snap): контент-скрипт ждёт ответ сразу.
   function exportSnapshot() {
+    if (typeof mergeRestoredLiveTail === 'function') mergeRestoredLiveTail();
     var d = buildSnapshotData();
     var snapshotChatId = currentChatId || lastReqChatId || '';
     // Stage 6: полная нативная цепочка текущего чата. Отдаём узлы как есть (вместе
@@ -1458,7 +1580,11 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         linear: false
       };
     }
-    if (native) nativeFreshReason = 'used';
+    if (d.recoveredLiveTail === true) {
+      // Восстановленный live-tail важнее native: native-узел ещё пустой pending.
+      native = null;
+      nativeFreshReason = 'live-tail';
+    } else if (native) nativeFreshReason = 'used';
     else if (nativeFresh && lastNativeChain) {
       // nativeFresh=true, но узлов нет/чат не тот — в файл уйдёт turns-путь.
       nativeFreshReason = (!lastNativeChain.nodes || !lastNativeChain.nodes.length)
@@ -1488,6 +1614,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       chatId: snapshotChatId,
       missingUserTurns: d.missingUserBlocks,
       tailPending: d.tailPending === true,
+      recoveredLiveTail: d.recoveredLiveTail === true,
       native: native
     };
   }
@@ -1546,6 +1673,8 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       // baseComplete остаётся true (история прочитана), но файл обязан нести
       // partialReason=history-not-finalized — молча терять ход запрещено.
       tailPending: snap.tailPending === true,
+      // BUG-25 (follow-up): pending-ход восстановлен из журнала live-tail.
+      recoveredLiveTail: snap.recoveredLiveTail === true,
       // partial — диагностика неполной базы для UI/экспорта: сколько страниц добрано и почему
       // остановились (in-progress/error/no-gain/page-cap/time-cap/cursor-loop/missing-user-text).
       partial: complete ? null : (s.partial || (missingUserBlocks > 0
@@ -2206,6 +2335,35 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       } catch (eExportResp) { if (typeof swallow === 'function') swallow(eExportResp, 'qwen:export-bridge-response'); }
     });
   } catch (eExportBridge) { if (typeof swallow === 'function') swallow(eExportBridge, 'qwen:export-bridge'); }
+
+  // BUG-25 (follow-up): журнал live-tail из chrome.storage.local. ISOLATED-мир
+  // присылает последний завершённый живой ход; применяем его только к пустому
+  // pending-ходу. detail — JSON-строка (Xray Firefox, как у archive-restore).
+  try {
+    window.addEventListener('ai-cm-qwen-live-tail-restore', function (ev) {
+      var d = ev && ev.detail;
+      if (typeof d === 'string') { try { d = JSON.parse(d); } catch (eTailParse) { swallow(eTailParse, 'qwen:live-tail-restore-parse'); return; } }
+      if (!d || typeof d !== 'object' || (d.site && d.site !== 'qwen')) return;
+      if (d.chatId && currentChatId && String(d.chatId) !== String(currentChatId)) return;
+      if (!d.answer && !d.reasoning) return;
+      if (typeof d.ts === 'number' && d.ts > 0 && Date.now() - d.ts > 24 * 60 * 60 * 1000) return;
+      restoredLiveTail = d;
+      diagTag('qwen-live-tail', {
+        ts: Date.now(), event: 'restore', chat: String(currentChatId || '').slice(0, 8),
+        response: String(d.responseId || '').slice(0, 8),
+        answerLen: String(d.answer || '').length, reasoningLen: String(d.reasoning || '').length
+      });
+      mergeRestoredLiveTail();
+    });
+  } catch (eTailRestore) { if (typeof swallow === 'function') swallow(eTailRestore, 'qwen:live-tail-restore-listener'); }
+  // Запрос журнала: content-скрипт мог зарегистрировать слушатель позже установки
+  // перехватчика. Повторный запрос безопасен — restore идемпотентен.
+  try {
+    setTimeout(function () {
+      try { window.dispatchEvent(new CustomEvent('ai-cm-qwen-live-tail-request')); }
+      catch (eTailReq) { if (typeof swallow === 'function') swallow(eTailReq, 'qwen:live-tail-request'); }
+    }, 0);
+  } catch (eTailTimer) { swallow(eTailTimer, 'qwen:live-tail-request-timer'); }
 
   diagLine('installed', { chat: String(currentChatId || '').slice(0, 8) });
   console.log('[qwen-intercept] перехватчик Qwen установлен (только нативные запросы страницы, ' +
