@@ -184,6 +184,40 @@ function aiCmSanitizeEmitUserTexts(messages: AiCmExportMessage[]): AiCmExportMes
     return (res && Array.isArray(res.messages)) ? res.messages : messages;
   } catch (e) { return messages; }
 }
+// Qwen: вложение в тексте хода — секция «\n\n[FILE: имя]\n<текст документа>».
+// Токены документа обязаны считаться (контекст), но в экспорт тело документа не
+// кладём: пользователь может вернуться в чат и открыть/скачать файл. Поэтому на
+// ВЫХОДЕ экспорта (после санации O-7/O-40) тело заменяется меткой. Метрики и
+// baseText не затрагиваются: они читают detail.text/lastBaseTexts до этой точки.
+// Метки с уже готовой причиной («— текст не получен», «— mime, size») не трогаем.
+function aiCmStripQwenAttachmentBodies(messages: AiCmExportMessage[]): AiCmExportMessage[] {
+  if (!Array.isArray(messages)) return messages;
+  var sectionRe = /(^|\n\n)\[FILE: ((?:(?! — )[^\]\n])+)\]\n([\s\S]*?)(?=\n\n\[FILE: |$)/g;
+  for (var i = 0; i < messages.length; i++) {
+    var m = messages[i];
+    if (!m || typeof m.text !== 'string' || m.text.indexOf('[FILE: ') === -1) continue;
+    var next = m.text.replace(sectionRe, function (all, lead, name, body) {
+      if (!body) return all;
+      return lead + '[FILE: ' + name + ' — вложение; текст не включён в экспорт]';
+    });
+    if (next !== m.text) m.text = next;
+  }
+  return messages;
+}
+// Единая точка выхода экспорта: санация O-7/O-40 + Qwen-проекция вложений.
+// typeof-гард — для срез-песочниц, где helper вырезан: поведение прежнее 1:1.
+function aiCmFinalizeExportMessages(messages: AiCmExportMessage[]): AiCmExportMessage[] {
+  var sanitized = (typeof aiCmSanitizeEmitUserTexts === 'function')
+    ? aiCmSanitizeEmitUserTexts(messages) : messages;
+  try {
+    if (typeof currentAdapter !== 'undefined' && currentAdapter && currentAdapter.siteName === 'qwen') {
+      return aiCmStripQwenAttachmentBodies(sanitized);
+    }
+  } catch (eQwenBody) {
+    if (typeof swallowSoft === 'function') swallowSoft(eQwenBody, 'export:qwen-attachment-bodies');
+  }
+  return sanitized;
+}
 // v81: единая точка источников сообщений для экспорта — приоритет:
 // detail.messages (последний EMIT) → lastBaseTexts с ролями → currentAdapter.extractMessages()
 // (нормализация к {role,text}) → фолбэк чередования ролей. Используется в
@@ -267,7 +301,7 @@ function aiCmQwenNativeFileMessages(qSnap: any): AiCmExportMessage[] | null {
   return built.messages as AiCmExportMessage[];
 }
 function aiCmCollectExportSource(): AiCmExportMessage[] {
-  var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null); var aiCmV2CanonAis = (typeof aiCmV2AistudioExportSource === 'function') ? aiCmV2AistudioExportSource() : null; if (aiCmV2CanonAis && aiCmV2CanonAis.length) return aiCmSanitizeEmitUserTexts(aiCmV2CanonAis);
+  var P = (typeof AiCmExportEmitPipeline !== 'undefined' && AiCmExportEmitPipeline) ? AiCmExportEmitPipeline : ((typeof window !== 'undefined' && window.AiCmExportEmitPipeline) ? window.AiCmExportEmitPipeline : null); var aiCmV2CanonAis = (typeof aiCmV2AistudioExportSource === 'function') ? aiCmV2AistudioExportSource() : null; var finalizeExport = (typeof aiCmFinalizeExportMessages === 'function') ? aiCmFinalizeExportMessages : aiCmSanitizeEmitUserTexts; if (aiCmV2CanonAis && aiCmV2CanonAis.length) return finalizeExport(aiCmV2CanonAis);
   // BUG-24: Qwen — приоритет живой цепочке turns/userTurns. lastBaseTexts мог остаться
   // от неполного emit после F5 (live: 266 при полном парсере 268); мост отдаёт текущий
   // снимок. Берём его только если он СТРОГО полнее базы и совпадает с текущим чатом —
@@ -283,12 +317,12 @@ function aiCmCollectExportSource(): AiCmExportMessage[] {
         ? aiCmQwenNativeFileMessages(qSnap) : null;
       if (qNativeMsgs && qChatOk) {
         if (typeof aiCmLogQwenExportSource === 'function') aiCmLogQwenExportSource(qNativeMsgs, 'qwen-native');
-        return aiCmSanitizeEmitUserTexts(qNativeMsgs);
+        return finalizeExport(qNativeMsgs);
       }
       var qMsgs = (qSnap && Array.isArray(qSnap.messages)) ? qSnap.messages : null;
       if (qMsgs && qMsgs.length > (Array.isArray(lastBaseTexts) ? lastBaseTexts.length : 0) && qChatOk) {
         if (typeof aiCmLogQwenExportSource === 'function') aiCmLogQwenExportSource(qMsgs, 'qwen-live');
-        return aiCmSanitizeEmitUserTexts(qMsgs);
+        return finalizeExport(qMsgs);
       }
     }
   } catch (eQwenLive) { swallowSoft(eQwenLive, 'export:qwen-live-snapshot'); }
@@ -393,7 +427,7 @@ function aiCmCollectExportSource(): AiCmExportMessage[] {
       }
     }
     if (typeof aiCmLogQwenExportSource === 'function') aiCmLogQwenExportSource(out, 'network');
-    return aiCmSanitizeEmitUserTexts(out);
+    return finalizeExport(out);
   }
   // v82 (D2): ветка DOM-адаптера — ТОЛЬКО при baseSeen=false
   try {
@@ -421,7 +455,7 @@ function aiCmCollectExportSource(): AiCmExportMessage[] {
         });
       }
       if (prepareReasoning) prepareReasoning(norm);   // O-37 (C): то же для DOM-базы (поле захвата)
-      if (norm.length > 0 && hasRoles) return aiCmSanitizeEmitUserTexts(norm);
+      if (norm.length > 0 && hasRoles) return finalizeExport(norm);
       // фолбэк чередования ролей (роль в адаптере отсутствует)
       // O-39: копируем ВСЕ дополнительные поля из norm[n2] кроме role и text (уже установлены),
       // чтобы служебные поля захвата (например, размышление DOM-адаптера O-35) доехали до файла.
@@ -439,7 +473,7 @@ function aiCmCollectExportSource(): AiCmExportMessage[] {
   } catch (eA) { swallow(eA, 'export:aiCmCollectExportSource-dom-adapter'); }
   if (prepareReasoning) prepareReasoning(out);   // O-37 (C): фолбэк чередования ролей — то же правило
   if (typeof aiCmLogQwenExportSource === 'function') aiCmLogQwenExportSource(out, 'adapter');
-  return aiCmSanitizeEmitUserTexts(out);
+  return finalizeExport(out);
 }
 
 // T1-fix#3 (v1.16.3): источник сообщений файла автоэкспорта — ОБЪЕДИНЁННАЯ база MAIN

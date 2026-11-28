@@ -450,7 +450,7 @@ describe('O-39 S: пины проводки', () => {
   test('S1 точка сбора: копия dm.reasoning в сетевой ветке и единая точка санации', () => {
     const fn = fnDecl(MGR_SRC, 'aiCmCollectExportSource');
     expect(fn).toContain("if (typeof dm.reasoning === 'string' && dm.reasoning) msg.reasoning = dm.reasoning;");
-    expect(fn).toContain('return aiCmSanitizeEmitUserTexts(out);');
+    expect(fn).toContain('return finalizeExport(out);');
   });
 
   test('S2 точка сбора: for-in копия доп. полей в DOM-фолбэке (без строкового литерала поля)', () => {

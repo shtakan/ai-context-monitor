@@ -443,6 +443,10 @@
     "count": 17,
     "reason": "legacy-pin"
   },
+  "tests/qwen-attachment-export-marker.test.js": {
+    "count": 1,
+    "reason": "legacy-pin"
+  },
   "tests/qwen-autoexport-trusted-base-o37.test.js": {
     "count": 7,
     "reason": "legacy-pin"

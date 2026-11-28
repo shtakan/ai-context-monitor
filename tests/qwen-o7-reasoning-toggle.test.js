@@ -255,7 +255,7 @@ describe('O-7/Qwen R2: source-пины OFF-очистки', () => {
     expect(fn.indexOf('if (prepareReasoning) prepareReasoning(out);'))
       .toBeLessThan(fn.indexOf('if (!hiddenExportOn && reasoningExportSite && reasoningExportSite()) {'));
     expect(fn.indexOf('if (!hiddenExportOn && reasoningExportSite && reasoningExportSite()) {'))
-      .toBeLessThan(fn.indexOf('return aiCmSanitizeEmitUserTexts(out);'));
+      .toBeLessThan(fn.indexOf('return finalizeExport(out);'));
   });
 });
 

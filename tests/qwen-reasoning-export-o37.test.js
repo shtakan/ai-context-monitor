@@ -331,8 +331,8 @@ describe('O-37 C: проводка (source-пины)', () => {
     expect(fn).toContain('if (prepareReasoning) prepareReasoning(norm);');
     expect(fnDecl(MGR_SRC, 'aiCmPrepareReasoningForExport')).toContain('P.applyReasoningExportFields(messages, aiCmReasoningExportSite());');
     // единственная точка санации и её три вызова не переписаны (пин O-20)
-    expect(fn).toContain('return aiCmSanitizeEmitUserTexts(out);');
-    expect(fn).toContain('if (norm.length > 0 && hasRoles) return aiCmSanitizeEmitUserTexts(norm);');
+    expect(fn).toContain('return finalizeExport(out);');
+    expect(fn).toContain('if (norm.length > 0 && hasRoles) return finalizeExport(norm);');
   });
 
   test('предикат сайта — в export-manager.js (в пайплайне имён платформ почти нет)', () => {

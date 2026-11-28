@@ -277,7 +277,7 @@ describe('O-49 R1: санация O-20/O-40/O-42 работает на пути 
   test('санация стоит ВНУТРИ единой точки сбора (обе ветки) — путь записи не обходит её', () => {
     const collect = sliceSource(EXPORT_MGR_SRC, 'function aiCmCollectExportSource()', 'function aiCmExportBaseSource(');
     // выход каждой ветки единой точки (сеть + DOM-адаптер) идёт через aiCmSanitizeEmitUserTexts
-    expect(collect.match(/return aiCmSanitizeEmitUserTexts\(out\);/g).length).toBe(2);
+    expect(collect.match(/return finalizeExport\(out\);/g).length).toBe(2);
     expect(EXPORT_MGR_SRC).toContain('P.sanitizeEmitMessages(messages)');
   });
 });

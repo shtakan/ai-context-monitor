@@ -1909,7 +1909,7 @@ describe('O-40 (R): байтовые регрессии', () => {
       EXPORT_MGR_SRC.indexOf('function aiCmCollectExportSource()'),
       EXPORT_MGR_SRC.indexOf('function aiCmExportBaseSource(')
     );
-    expect(emitSrc.match(/aiCmSanitizeEmitUserTexts\(/g).length).toBe(6);
+    expect(emitSrc.match(/finalizeExport\(/g).length).toBe(6);
     // ON-путь (сырой режим) по-прежнему обходит санацию — нового тумблера нет
     expect(EXPORT_MGR_SRC).toContain('if (aiCmIncludeHiddenInExport === true) {');
     expect(EXPORT_MGR_SRC).toContain('P.includeHiddenExportBlocks(messages)');

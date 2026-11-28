@@ -652,7 +652,7 @@ describe('O-7 D2: тумблер OFF — только вопросы и отве
     // единая точка выхода экспорта держит РОВНО 5 обращений к ней (O-20 + ранний канон AI Studio
     // + ранний живой снимок Qwen, BUG-24; + нативная цепочка Qwen, Stage 6)
     const collect = sliceSource(EXPORT_MGR_SRC, 'function aiCmCollectExportSource()', 'function aiCmExportBaseSource(');
-    expect(collect.match(/aiCmSanitizeEmitUserTexts\(/g).length).toBe(6);
+    expect(collect.match(/finalizeExport\(/g).length).toBe(6);
     expect(BASE_HANDLER_SRC).toContain('return aiCmDedupeExportSource(aiCmCollectExportSource()).messages;');
   });
 
