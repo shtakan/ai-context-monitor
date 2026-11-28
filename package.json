@@ -23,7 +23,7 @@
     "globals": "^17.14.0",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
-    "pdfjs-dist": "4.8.69",
+    "pdfjs-dist": "6.5.438",
     "typescript": "^5.6.0"
   },
   "jest": {
