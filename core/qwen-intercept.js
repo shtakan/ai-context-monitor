@@ -519,6 +519,15 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     } catch (eClearTail) { swallow(eClearTail, 'qwen:live-tail-clear'); }
   }
 
+  // BUG-25 (follow-up): попросить ISOLATED прочитать журнал. Вызывается после
+  // применения истории: к этому моменту currentChatId уже известен, а pending-ход
+  // создан — restore listener сам вызовет mergeRestoredLiveTail().
+  function requestLiveTail() {
+    try {
+      window.dispatchEvent(new CustomEvent('ai-cm-qwen-live-tail-request'));
+    } catch (eReqTail) { swallow(eReqTail, 'qwen:live-tail-request'); }
+  }
+
   // O-53: возвращает { turn, created } — пагинации нужно знать, какие ходы добавлены
   // ИМЕННО этой страницей (их order перенумеровывается под более старую страницу).
   function recordTurn(s) {
@@ -1190,6 +1199,9 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     }
     // BUG-25 (follow-up): журнал мог прийти после записи pending-хода — добираем.
     if (typeof mergeRestoredLiveTail === 'function') mergeRestoredLiveTail();
+    // И просим ISOLATED прочитать журнал: к этому моменту pending-ход уже создан,
+    // restore listener сольёт текст, даже если стартовый restore был слишком ранним.
+    if (typeof requestLiveTail === 'function') requestLiveTail();
     // Дубль reasoning в payload — ИЗМЕРЕНИЕ, не поведение: парсер уже взял первое вхождение,
     // второй копии в тексте нет. Строка живёт только под гейтом aiCmDebug (канон diagTag).
     if (parsed.duplicates > 0 || parsed.thinkingDuplicates > 0) {

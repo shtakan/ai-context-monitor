@@ -1020,6 +1020,13 @@ window.addEventListener('ai-cm-full-history', function (/** @type {CustomEvent} 
   // P1: база принята и pct пересчитан — единственная точка проверки автоэкспорта для
   // сетевого пути (дебаунс гасит серию эмитов во время догрузки/скролла).
   if (typeof aiCmScheduleAutoExport === 'function') aiCmScheduleAutoExport(lastPercentage);
+  // BUG-25 (follow-up): история применена — повторный шанс прочитать журнал
+  // live-tail. typeof-гард для срез-песочниц без content-archive.js.
+  try {
+    if (typeof aiCmLiveTailRestore === 'function' && typeof setTimeout === 'function') {
+      setTimeout(aiCmLiveTailRestore, 0);
+    }
+  } catch (eLiveTailHist) { swallowSoft(eLiveTailHist, 'content:liveTailHistory'); }
 });
 
 // =============================================================================

@@ -21,6 +21,7 @@ const KEY = 'aiCmLiveTail:qwen:' + CHAT_ID;
 
 let store;
 let restoreEvents;
+let api;
 
 beforeAll(function () {
   jest.useFakeTimers();
@@ -41,8 +42,9 @@ beforeAll(function () {
     },
     runtime: { lastError: null }
   };
-  const src = loadAsClassic('core/content-archive.js');
-  new Function(
+  const src = loadAsClassic('core/content-archive.js') +
+    '\nreturn { restore: aiCmLiveTailRestore };';
+  api = new Function(
     'window', 'chrome', 'currentAdapter', 'getCurrentConvId',
     'debugLog', 'swallowSoft', 'setTimeout',
     src
@@ -97,6 +99,17 @@ describe('BUG-25 live-tail journal: chrome.storage.local', () => {
     expect(restoreEvents[0].chatId).toBe(CHAT_ID);
   });
 
+  test('повторный restore читает журнал (поздний старт адаптера)', function () {
+    window.dispatchEvent(new window.CustomEvent('ai-cm-qwen-live-tail', {
+      detail: JSON.stringify(liveTurn())
+    }));
+    expect(restoreEvents).toHaveLength(0);
+
+    api.restore();
+    expect(restoreEvents).toHaveLength(1);
+    expect(restoreEvents[0].answer).toBe('Маркер: MARKER-7F3A9C');
+  });
+
   test('TTL: запись старше 24 ч не отдаётся и удаляется', function () {
     store[KEY] = liveTurn({ ts: Date.now() - 25 * 60 * 60 * 1000 });
     window.dispatchEvent(new window.CustomEvent('ai-cm-qwen-live-tail-request'));
@@ -109,6 +122,11 @@ describe('BUG-25 live-tail journal: chrome.storage.local', () => {
 
     window.dispatchEvent(new window.CustomEvent('ai-cm-qwen-live-tail-clear', {
       detail: JSON.stringify({ chatId: CHAT_ID, responseId: 'resp-other' })
+    }));
+    expect(store[KEY]).toBeTruthy();
+
+    window.dispatchEvent(new window.CustomEvent('ai-cm-qwen-live-tail-clear', {
+      detail: JSON.stringify({ chatId: CHAT_ID })
     }));
     expect(store[KEY]).toBeTruthy();
 

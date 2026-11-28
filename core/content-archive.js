@@ -164,7 +164,7 @@ function aiCmLiveTailClear(detail) {
       try {
         var rec = data && data[key];
         if (!rec) return;
-        if (d.responseId && rec.responseId && String(d.responseId) !== String(rec.responseId)) return;
+        if (rec.responseId && (!d.responseId || String(d.responseId) !== String(rec.responseId))) return;
         chrome.storage.local.remove(key);
       } catch (eClearCb) { swallowSoft(eClearCb, 'content:liveTailClear-cb'); }
     });
@@ -190,3 +190,4 @@ try {
 
 // Страховка на холодную загрузку: content.ts назначает адаптер позже этого файла.
 try { setTimeout(aiCmLiveTailRestore, 1500); } catch (eLiveTailInit) { swallowSoft(eLiveTailInit, 'content:liveTailInit'); }
+try { setTimeout(aiCmLiveTailRestore, 5000); } catch (eLiveTailInit2) { swallowSoft(eLiveTailInit2, 'content:liveTailInit2'); }

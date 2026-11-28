@@ -397,7 +397,7 @@
       "file": "core/content.ts",
       "category": "best-effort-guard",
       "lines": [
-        2434
+        2441
       ],
       "reason": "best-effort-guard: локальный best-effort шаг; наблюдаемого побочного эффекта нет; пример: var cidArcCh = getCurrentConvId() || ''; if (cidArcCh) { var archKeyCh ="
     },
@@ -405,7 +405,7 @@
       "file": "core/content.ts",
       "category": "cleanup-guard",
       "lines": [
-        1704
+        1711
       ],
       "reason": "cleanup-guard: best-effort очистка структуры/ссылки: ключа может уже не быть; пример: if (aiCmBadgeHoldTimer) return; aiCmBadgeHoldTimer = setTimeout(function"
     },
@@ -414,37 +414,37 @@
       "category": "debug-instrumentation",
       "lines": [
         534,
-        1072,
-        1178,
-        1183,
-        1186,
-        1189,
-        1191,
-        1192,
+        1079,
+        1185,
+        1190,
         1193,
-        1212,
-        1214,
+        1196,
+        1198,
+        1199,
+        1200,
         1219,
-        1254,
+        1221,
+        1226,
         1261,
-        1269,
-        1272,
-        1332,
-        1340,
-        1345,
-        1350,
+        1268,
+        1276,
+        1279,
+        1339,
+        1347,
+        1352,
         1357,
-        1363,
-        1381,
-        1386,
-        1392,
-        1394,
+        1364,
+        1370,
+        1388,
+        1393,
         1399,
-        1799,
-        1808,
-        2314,
-        2340,
-        2342
+        1401,
+        1406,
+        1806,
+        1815,
+        2321,
+        2347,
+        2349
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: aiCmQwenInitDiag('reshoot-awake-send', {});"
     },
@@ -461,7 +461,7 @@
       "file": "core/content.ts",
       "category": "dom-read-guard",
       "lines": [
-        1615
+        1622
       ],
       "reason": "dom-read-guard: чтение DOM по селектору: узел мог исчезнуть при SPA-перерисовке; пример: var info = aiCmSourceInfo(); aiCmSourceLabelNow = info ? info.label : ''"
     },
@@ -469,8 +469,8 @@
       "file": "core/content.ts",
       "category": "event-guard",
       "lines": [
-        1060,
-        1069
+        1067,
+        1076
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-request-emit'));"
     },
@@ -488,8 +488,8 @@
         635,
         792,
         1018,
-        1653,
-        2134
+        1660,
+        2141
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof window !== 'undefined' && window.GeminiBatchexecuteParser &&"
     },
@@ -499,7 +499,7 @@
       "lines": [
         92,
         354,
-        2194
+        2201
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: if (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.g"
     },
@@ -515,7 +515,7 @@
       "file": "core/content.ts",
       "category": "parse-guard",
       "lines": [
-        2376
+        2383
       ],
       "reason": "parse-guard: недоверенный/частичный ввод; битый фрагмент отбрасывается; пример: var BdiagHot = (typeof AiCmExportBuilders !== 'undefined') ? AiCmExportB"
     },
@@ -1499,9 +1499,9 @@
         74,
         77,
         144,
-        2156,
-        2188,
-        2203
+        2168,
+        2200,
+        2215
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: for (var i = 0; i < diagRing.length; i++) printDiag(diagRing[i][0], diag"
     },
@@ -1509,8 +1509,8 @@
       "file": "core/qwen-intercept.js",
       "category": "event-guard",
       "lines": [
-        2241,
-        2271
+        2253,
+        2270
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); dis"
     },
@@ -1535,9 +1535,9 @@
       "file": "core/qwen-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        2258,
-        2266,
-        2270
+        2278,
+        2282,
+        2283
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkChatChange();"
     },
