@@ -111,9 +111,9 @@
       "file": "core/background.ts",
       "category": "debug-instrumentation",
       "lines": [
-        557,
-        1206,
-        1224
+        559,
+        1250,
+        1268
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: chrome.action.setBadgeText({ text: '', tabId: tabIdR }); debugLog('log',"
     },
@@ -121,7 +121,7 @@
       "file": "core/background.ts",
       "category": "defensive-assignment",
       "lines": [
-        1125
+        1127
       ],
       "reason": "defensive-assignment: защитное присваивание: нечитаемый/неожиданный источник, значение остаётся прежним; пример: errText = await response.text();"
     },
@@ -129,7 +129,7 @@
       "file": "core/background.ts",
       "category": "guard-clause",
       "lines": [
-        937
+        939
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: for (var k in (all || {})) { if (k.indexOf(AI_CM_FIRED_SESSION_PREFIX) ="
     },
@@ -146,9 +146,9 @@
         386,
         473,
         490,
-        676,
-        752,
-        754
+        678,
+        754,
+        756
       ],
       "reason": "host-api-guard: best-effort host/browser API; нет пути восстановления; пример: void chrome.runtime.lastError;"
     },

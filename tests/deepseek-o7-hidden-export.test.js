@@ -1348,17 +1348,17 @@ describe('O-7 R4: i18n и a11y тумблера «Включать reasoning и 
 /* =====================================================================================
  * R5: version-hygiene / changelog-format — версия и CHANGELOG не тронуты
  * ===================================================================================== */
-describe('O-7 R5: релиз v2.4.0 — версия во всех точках вывода, верх CHANGELOG — [2.4.0]', () => {
-  test('версия 2.4.0 во всех точках вывода (манифест/пакет/лок)', () => {
-    expect(manifest.version).toBe('2.4.0');
-    expect(pkg.version).toBe('2.4.0');
-    expect(lock.version).toBe('2.4.0');
-    expect(lock.packages[''].version).toBe('2.4.0');
+describe('O-7 R5: релиз v2.4.1 — версия во всех точках вывода, верх CHANGELOG — [2.4.1]', () => {
+  test('версия 2.4.1 во всех точках вывода (манифест/пакет/лок)', () => {
+    expect(manifest.version).toBe('2.4.1');
+    expect(pkg.version).toBe('2.4.1');
+    expect(lock.version).toBe('2.4.1');
+    expect(lock.packages[''].version).toBe('2.4.1');
   });
 
-  test('верхняя запись CHANGELOG — [2.4.0]; прежние секции не переписаны', () => {
+  test('верхняя запись CHANGELOG — [2.4.1]; прежние секции не переписаны', () => {
     const top = changelog.split(/\r?\n/).find(function (l) { return l.indexOf('## [') === 0; });
-    expect(top).toBe('## [2.4.0] - 2026-11-27');
+    expect(top).toBe('## [2.4.1] - 2026-11-28');
     expect(changelog).not.toContain('aiCmIncludeHiddenInExport');
     expect(changelog).not.toContain('Включать reasoning и инъекции DeepSeek++ в экспорт');
   });

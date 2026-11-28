@@ -6,7 +6,7 @@
 
 ---
 
-## BUG-25 (OPEN, P2) — Qwen: финальный assistant не попадает в экспорт после F5 (`done=false`)
+## BUG-25 (CLOSED, P2) — Qwen: финальный assistant не попадает в экспорт после F5 (`done=false`)
 
 **Обнаружено:** 2026-11-27, live smoke 2.4 / PDF Firefox, чат
 `https://chat.qwen.ai/c/ab45dc99-cbab-435e-b0d3-f0440f6422df`.
@@ -38,6 +38,21 @@
 `done=false` — короткий retry/ожидание; рассмотреть merge последнего живого
 assistant с post-F5 вложением; добавить диагностическую строку
 `qwen-history done=false` и live-пин.
+
+**Закрытие (2026-11-28).** Реализовано в `feature/2.2`:
+`ebb0dab` (pending-assistant + `partialReason=history-not-finalized`),
+`a85e54e` (per-conversation журнал `aiCmLiveTail:qwen:<convId>`),
+`e85e063` (restore после истории + retry),
+`b99fa34` (opt-out в options),
+`bee8fb8` (sweep просроченных записей).
+Журнал хранит только текст ответа: TTL 24 ч, cap 256 КБ, без URL/JWT/вложений;
+merge идёт только в пустой pending-ход по chatId + responseId/userKey/вопросу,
+native-цепочка при восстановленном тексте не используется.
+Live-подтверждение в Chrome: save → F5 → автоматический restore → merge,
+`tailPending=false`, `recoveredLiveTail=true`, `recoveredFrom='live-tail'`.
+Evidence: `acceptance/BIG-2026-11/2.4/live-bug25/`, отчёт
+`acceptance/BIG-2026-11/2.4/BUG-25-FIX.md`. Регрессии закрыты
+`tests/qwen-bug25-tail-pending.test.js` и `tests/qwen-live-tail-journal.test.js`.
 
 ---
 

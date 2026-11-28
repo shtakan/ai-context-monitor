@@ -3,14 +3,15 @@
 
 A Chrome, Microsoft Edge (Chromium) and Firefox extension (Manifest V3) that shows in real time how full the AI context window of your conversation is, across eight platforms. When a chat grows too long, models start losing details — AI Context Monitor warns you before that happens and can save the whole conversation automatically.
 
-> **Version 2.4.0.** Branch `feature/2.2` contains Stage 0–9 and native export;
-> release 2.4.0 is being prepared. The instructions below refer to 2.4.0.
+> **Version 2.4.1.** Branch `feature/2.2` contains Stage 0–9, native export
+> and the BUG-25 fix (last Qwen answer lost after F5).
+> The instructions below refer to 2.4.1.
 
 ## Manual install
 
 Chrome and Edge install from GitHub Releases (steps below); Firefox installs from [Mozilla Add-ons](https://addons.mozilla.org/firefox/addon/ai-context-monitor/). Publication in Edge Add-ons is postponed.
 
-1. Download the `ai-context-monitor-v2.4.0.zip` archive from the release page: <https://github.com/shtakan/ai-context-monitor/releases/tag/v2.4.0>
+1. Download the `ai-context-monitor-v2.4.1.zip` archive from the release page: <https://github.com/shtakan/ai-context-monitor/releases/tag/v2.4.1>
 2. Unpack the archive into any folder.
 3. **Microsoft Edge**: open `edge://extensions`, enable **Developer mode**, click **Load unpacked** and select the unpacked folder.
 4. **Google Chrome**: open `chrome://extensions` and do the same.

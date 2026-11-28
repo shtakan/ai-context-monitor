@@ -500,7 +500,7 @@
     "reason": "legacy-pin"
   },
   "tests/storage-ttl.test.js": {
-    "count": 2,
+    "count": 3,
     "reason": "vm-harness"
   },
   "tests/swallow-soft.test.js": {
