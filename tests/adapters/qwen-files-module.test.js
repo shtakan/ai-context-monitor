@@ -310,7 +310,7 @@ describe('R2: загрузка тела файла', function () {
     h.Fn.enqueueUserFiles(CHAT, 'u-2', [textFile({ id: 'j2', name: 'b.json', file_type: 'application/json' })]);
     h.fetchCalls[1].resolve(makeRes({ body: '{"code":403,"message":"forbidden"}' }));
     await flush();
-    expect(h.Fn.sectionsFor(CHAT, 'u-2')).toContain('[FILE: b.json — текст не получен: api-403]');
+    expect(h.Fn.sectionsFor(CHAT, 'u-2')).toContain('[FILE: b.json — текст не получен: api-403');
   });
 
   test('страница логина вместо файла отсекается (html-instead-of-file)', async function () {
@@ -331,12 +331,14 @@ describe('R2: загрузка тела файла', function () {
     h.Fn.enqueueUserFiles(CHAT, 'u-1', [textFile({ id: 'e1', name: 'one.txt' })]);
     h.fetchCalls[0].resolve(makeRes({ ok: false, status: 404 }));
     await flush();
-    expect(h.Fn.sectionsFor(CHAT, 'u-1')).toContain('[FILE: one.txt — текст не получен: http-404]');
+    h.fetchCalls[1].resolve(makeRes({ ok: false, status: 404 }));
+    await flush();
+    expect(h.Fn.sectionsFor(CHAT, 'u-1')).toContain('[FILE: one.txt — текст не получен: http-404');
 
     h.Fn.enqueueUserFiles(CHAT, 'u-2', [textFile({ id: 'e2', name: 'two.txt' })]);
     h.tick(10000);
     await flush();
-    expect(h.Fn.sectionsFor(CHAT, 'u-2')).toContain('[FILE: two.txt — текст не получен: timeout]');
+    expect(h.Fn.sectionsFor(CHAT, 'u-2')).toContain('[FILE: two.txt — текст не получен: timeout');
     // отложенный ре-эмит — тоже «в полёте»; после его срабатывания очередь пуста
     h.tick(250);
     expect(h.Fn.pendingCount()).toBe(0);
@@ -391,6 +393,38 @@ describe('R2: жёсткий кап 200 000 символов на файл', fun
     h.fetchCalls[h.fetchCalls.length - 1].resolve(makeRes({ headers: { 'content-type': 'text/plain' }, body: 'c' }));
     await flush();
     expect(h.Fn.sectionsFor(CHAT, 'u-last')).toContain('[FILE: last.txt — текст не получен: chat-cap]');
+  });
+});
+
+describe('R2: маркер в снапшоте + полный счёт токенов', function () {
+  test('markerSectionsFor не отдаёт тело, attachTokensFor считает полное тело', async function () {
+    const h = makeHarness();
+    h.Fn.enqueueUserFiles(CHAT, 'u-1', [textFile({ id: 'big', name: 'big.txt' })]);
+    h.fetchCalls[0].resolve(makeRes({ headers: { 'content-type': 'text/plain' }, body: 'a'.repeat(250000) }));
+    await flush();
+
+    const marker = h.Fn.markerSectionsFor(CHAT, 'u-1');
+    expect(marker).toContain('[FILE: big.txt — вложение; текст не включён в экспорт]');
+    expect(marker).not.toContain('aaaa');
+    // legacy-секция для старых потребителей по-прежнему содержит тело (cap 200k)
+    expect(h.Fn.sectionsFor(CHAT, 'u-1')).toContain('aaaa');
+    // токены — по ПОЛНОМУ телу (250k), а не по усечённому cap-тексту
+    const fullTokens = h.Fn.countTokens('a'.repeat(250000));
+    expect(h.Fn.attachTokensFor(CHAT, 'u-1')).toBe(fullTokens);
+    expect(h.Fn.attachTokensFor(CHAT, 'u-1')).toBe(62500);
+  });
+
+  test('провал загрузки: метка с причиной, токенов нет', async function () {
+    const h = makeHarness();
+    h.Fn.enqueueUserFiles(CHAT, 'u-1', [textFile({ id: 'lost', name: 'lost.txt' })]);
+    h.fetchCalls[0].resolve(makeRes({ ok: false, status: 404, body: '' }));
+    await flush();
+    h.fetchCalls[1].resolve(makeRes({ ok: false, status: 404, body: '' }));
+    await flush();
+
+    expect(h.Fn.markerSectionsFor(CHAT, 'u-1')).toContain('[FILE: lost.txt — текст не получен: http-404');
+    expect(h.Fn.markerSectionsFor(CHAT, 'u-1')).toContain('токены оценены по размеру');
+    expect(h.Fn.attachTokensFor(CHAT, 'u-1')).toBeGreaterThan(0);
   });
 });
 

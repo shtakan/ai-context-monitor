@@ -1478,7 +1478,7 @@
       "category": "guard-clause",
       "lines": [
         129,
-        371
+        420
       ],
       "reason": "guard-clause: ветка-гард: условие не выполнено — штатный выход, восстанавливать нечего; пример: if (typeof aiCmDiagLine === 'function') { aiCmDiagLine('qwen-files-' + t"
     },
@@ -1499,9 +1499,9 @@
         74,
         77,
         144,
-        2168,
-        2200,
-        2215
+        2193,
+        2225,
+        2240
       ],
       "reason": "debug-instrumentation: диагностическая телеметрия: её сбой не влияет на пользовательский путь; пример: for (var i = 0; i < diagRing.length; i++) printDiag(diagRing[i][0], diag"
     },
@@ -1509,8 +1509,8 @@
       "file": "core/qwen-intercept.js",
       "category": "event-guard",
       "lines": [
-        2253,
-        2270
+        2278,
+        2295
       ],
       "reason": "event-guard: best-effort нотификация слушателей: подписчиков может не быть; пример: window.dispatchEvent(new CustomEvent('ai-cm-conversation-changed')); dis"
     },
@@ -1535,9 +1535,9 @@
       "file": "core/qwen-intercept.js",
       "category": "local-helper-guard",
       "lines": [
-        2278,
-        2282,
-        2283
+        2303,
+        2307,
+        2308
       ],
       "reason": "local-helper-guard: локальный best-effort вызов соседнего хелпера; его отказ не меняет основного потока; пример: checkChatChange();"
     },

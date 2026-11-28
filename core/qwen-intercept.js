@@ -1451,6 +1451,11 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
         if (typeof aiCmQwenFiles !== 'undefined' && aiCmQwenFiles && t.userKey) {
           try { parts.push('f:' + aiCmQwenFiles.qfSectionLength(currentChatId, t.userKey)); }
           catch (eSigSec) { parts.push('f:0'); }
+          try {
+            if (typeof aiCmQwenFiles.qfAttachTokensFor === 'function') {
+              parts.push('d:' + (aiCmQwenFiles.qfAttachTokensFor(currentChatId, t.userKey) || 0));
+            }
+          } catch (eSigDoc) { parts.push('d:0'); }
         }
       }
       return parts.join('|');
@@ -1476,6 +1481,10 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     var ids = [];
     var reasoningTurns = 0;
     var lastModel = '';
+    // R2 (2.4.1): токены документов считаются отдельно (qfAttachTokensFor), а в
+    // тексте хода остаётся только метка вложения. Так полный текст не раздувает
+    // снапшот/экспорт, но контекст учитывается полностью.
+    var attachTokens = 0;
     // BUG-25: последний assistant-ход истории ещё не финализирован. Флаг едет в
     // detail/снимок: файл получает partialReason=history-not-finalized, а не молчит.
     var tailPending = false;
@@ -1498,10 +1507,22 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       // в экспорте файл стоит рядом с сообщением, к которому он приложен. Ход из одних
       // вложений (без текста вопроса) тоже попадает в базу — ради этого файла он и нужен.
       var fileSec = '';
+      var fileTokens = 0;
       if (typeof aiCmQwenFiles !== 'undefined' && aiCmQwenFiles && t.userKey) {
-        try { fileSec = aiCmQwenFiles.qfSectionsFor(currentChatId, t.userKey) || ''; }
-        catch (eFileSec) { if (typeof swallow === 'function') swallow(eFileSec, 'qwen:files-sections'); }
+        try {
+          if (typeof aiCmQwenFiles.qfMarkerSectionsFor === 'function') {
+            fileSec = aiCmQwenFiles.qfMarkerSectionsFor(currentChatId, t.userKey) || '';
+            if (typeof aiCmQwenFiles.qfAttachTokensFor === 'function') {
+              fileTokens = aiCmQwenFiles.qfAttachTokensFor(currentChatId, t.userKey) || 0;
+            }
+          } else {
+            // Совместимость со старым модулем в срез-песочницах: полная секция,
+            // токены уже внутри текста — отдельно не добавляем.
+            fileSec = aiCmQwenFiles.qfSectionsFor(currentChatId, t.userKey) || '';
+          }
+        } catch (eFileSec) { if (typeof swallow === 'function') swallow(eFileSec, 'qwen:files-sections'); }
       }
+      attachTokens += fileTokens;
       if (userText || fileSec) {
         var userBlock = userText ? (userText + fileSec) : fileSec.replace(/^\n\n/, '');
         pieces.push(userBlock);
@@ -1536,7 +1557,8 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
     return {
       pieces: pieces, messages: messages, reasonings: reasonings, ids: ids,
       reasoningTurns: reasoningTurns, lastModel: lastModel, missingUserBlocks: missingUserBlocks,
-      tailPending: tailPending, recoveredLiveTail: recoveredLiveTail, sortedTurns: sortedTurns
+      tailPending: tailPending, recoveredLiveTail: recoveredLiveTail, sortedTurns: sortedTurns,
+      attachTokens: attachTokens
     };
   }
 
@@ -1627,6 +1649,7 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       missingUserTurns: d.missingUserBlocks,
       tailPending: d.tailPending === true,
       recoveredLiveTail: d.recoveredLiveTail === true,
+      attachTokens: d.attachTokens || 0,
       native: native
     };
   }
@@ -1671,7 +1694,9 @@ import { fetchGuarded } from '../utils/intercept-common.ts';
       messages: messages,
       reasoningTexts: reasonings,
       reasoningTurns: reasoningTurns,
-      attachTokens: 0,
+      attachTokens: snap.attachTokens || 0,
+      // Qwen: документы уже посчитаны в attachTokens и отрендерены метками.
+      // Нулевые счётчики не дают aiCmAttachPendingTokens добавить пул повторно.
       attachBreak: { imgTokens: 0, docTokens: 0, imgCount: 0, docCount: 0 },
       // O-53: полнота снимка. Живой SSE — полная база по построению (контракт O-35/O-39);
       // история может быть НЕПОЛНОЙ: базовая страница Qwen — это 10 последних турнов, старше

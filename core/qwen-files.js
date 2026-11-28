@@ -204,6 +204,54 @@
     return mime + ', ' + qfBytes(ref.size) + '; текст не извлекается';
   }
 
+  // Полный текст документа нужен метрике, но в снапшот/экспорт идёт только
+  // метка. Токены считаем один раз при получении тела — до возможного cap —
+  // чтобы документ учитывался в контексте полностью.
+  function qfCountTokens(text) {
+    var t = qfStr(text);
+    if (!t) return 0;
+    try {
+      if (typeof window !== 'undefined' && window.Tokenizer &&
+          typeof window.Tokenizer.countTokens === 'function') {
+        return window.Tokenizer.countTokens(t);
+      }
+    } catch (eTk) { qfWarn('qwen:files:tokens', '[qwen-files] tokenizer:', eTk); }
+    var cyr = (t.match(/[\u0400-\u04FF]/g) || []).length;
+    return Math.ceil(cyr / 3.58) + Math.round((t.length - cyr) / 4);
+  }
+
+  // Метка вложения для снапшота: тело документа не включается, но токены
+  // (rec.tokens) остаются в метрике через qfAttachTokensFor.
+  function qfMarkerSection(rec) {
+    var name = qfStr(rec && rec.name) || 'attachment';
+    if (rec && rec.ok === true) {
+      return '\n\n[FILE: ' + name + ' — вложение; текст не включён в экспорт]';
+    }
+    return qfSection(rec);
+  }
+
+  function qfMarkerSectionsFor(chatId, userKey) {
+    var m = qfMsgs[qfKey(chatId, userKey)];
+    if (!m || !m.refs.length) return '';
+    var out = '';
+    for (var i = 0; i < m.refs.length; i++) {
+      var rec = m.recs[m.refs[i].fileKey];
+      if (rec) out += qfMarkerSection(rec);
+    }
+    return out;
+  }
+
+  function qfAttachTokensFor(chatId, userKey) {
+    var m = qfMsgs[qfKey(chatId, userKey)];
+    if (!m || !m.refs.length) return 0;
+    var n = 0;
+    for (var i = 0; i < m.refs.length; i++) {
+      var rec = m.recs[m.refs[i].fileKey];
+      if (rec && qfNum(rec.tokens) > 0) n += qfNum(rec.tokens);
+    }
+    return n;
+  }
+
   // Секция вложения в тексте хода. Провал догрузки НЕ прячет файл: в экспорт едет
   // метка с причиной, иначе по файлу нельзя понять, что вложение вообще было.
   // ВНИМАНИЕ: url/подпись сюда не попадают ни при каком исходе.
@@ -220,7 +268,8 @@
       return '\n\n[FILE: ' + name + ' — ' + rec.note + (noteReason ? ': ' + noteReason : '') + ']';
     }
     var reason = qfStr(rec && rec.reason);
-    return '\n\n[FILE: ' + name + ' — текст не получен' + (reason ? ': ' + reason : '') + ']';
+    return '\n\n[FILE: ' + name + ' — текст не получен' + (reason ? ': ' + reason : '') +
+      (rec && rec.estimated === true ? '; токены оценены по размеру' : '') + ']';
   }
 
   // ===== СЕКЦИЯ 4: КАРТА СООБЩЕНИЙ (чтение для экспорта) =====
@@ -460,6 +509,31 @@
     });
   }
 
+  function qfEstimateTokensFromSize(size) {
+    var bytes = qfNum(size);
+    return bytes > 0 ? Math.max(1, Math.round(bytes / 4)) : 0;
+  }
+
+  // 404/403 на предподписанную CDN-ссылку: один повтор с credentials:'include'
+  // и cache:'reload'. Если CDN ждёт cookie/свежий кэш — это лечит; если ссылка
+  // действительно мертва — возвращаем исходный ответ, решение принимает вызывающий.
+  function qfFetchWithFallback(fetchImpl, url, opts) {
+    function once(o) {
+      try { return Promise.resolve(fetchImpl(url, o)); }
+      catch (eOnce) { return Promise.reject(eOnce); }
+    }
+    return once(opts).then(function (res) {
+      if (res && res.ok === true) return res;
+      var status = res && res.status;
+      if (status !== 404 && status !== 403) return res;
+      var retry = { method: 'GET', credentials: 'include', cache: 'reload' };
+      if (opts && opts.signal) retry.signal = opts.signal;
+      return once(retry).then(function (res2) {
+        return (res2 && res2.ok === true) ? res2 : (res2 || res);
+      }, function () { return res; });
+    });
+  }
+
   function qfFetchText(item) {
     var fetchImpl = qfFetchImpl();
     if (!fetchImpl) return Promise.resolve({ ok: false, reason: 'no-fetch', text: '' });
@@ -491,7 +565,7 @@
         done({ ok: false, reason: 'timeout', text: '' });
       }, QF_TIMEOUT_MS);
       var p;
-      try { p = fetchImpl(url, opts); } catch (eFetch) {
+      try { p = qfFetchWithFallback(fetchImpl, url, opts); } catch (eFetch) {
         qfWarn('qwen:files:fetch', '[qwen-files] fetch вложения упал:', eFetch);
         done({ ok: false, reason: 'fetch-throw', text: '' });
         return;
@@ -531,6 +605,8 @@
       reason: ok ? '' : (qfStr(res.reason) || 'empty'),
       truncated: ok ? (res.truncated === true) : false,
       chars: ok ? qfStr(res.text).length : 0,
+      tokens: ok ? (qfNum(res.tokens) || qfCountTokens(res.text)) : qfNum(res.tokens),
+      estimated: ok ? false : (res.estimated === true),
       at: item.doneAt || 0
     };
   }
@@ -553,6 +629,9 @@
     item.result = (res && typeof res === 'object') ? res : { ok: false, reason: 'empty', text: '' };
     var ok = item.result.ok === true && qfStr(item.result.text) !== '';
     if (ok) {
+      // Токены — по ПОЛНОМУ телу до cap/усечения: документ занимает контекст
+      // целиком, даже если в памяти храним только первые QF_TEXT_CAP символов.
+      item.result.tokens = qfCountTokens(item.result.text);
       // Кап ЧАТА: суммарный текст вложений одного разговора не больше QF_TOTAL_CAP.
       var cid = qfStr(item.chatId);
       var used = qfCharsByChat[cid] || 0;
@@ -572,6 +651,14 @@
       }
     }
     if (!ok) {
+      var failReason = qfStr(item.result.reason);
+      // Если тело не получено (404/timeout/network), но размер файла известен —
+      // даём оценку токенов по размеру и явно помечаем её. Иначе бейдж молча
+      // теряет документ (живой кейс Chrome 14.6 % против Firefox 22.3 %).
+      if (qfNum(item.size) > 0 && /^(http-|timeout|network|reject|body-error)/.test(failReason)) {
+        item.result.tokens = qfEstimateTokensFromSize(item.size);
+        item.result.estimated = true;
+      }
       item.state = 'failed';
       // Провал не должен «залипать» в дедупе: следующий снимок обязан попробовать снова.
       if (qfQueueByKey[item.dedupeKey] === item) delete qfQueueByKey[item.dedupeKey];
@@ -807,6 +894,8 @@
 
   Fn.qfEnqueueUserFiles = qfEnqueueUserFiles;
   Fn.qfSectionsFor = qfSectionsFor;
+  Fn.qfMarkerSectionsFor = qfMarkerSectionsFor;
+  Fn.qfAttachTokensFor = qfAttachTokensFor;
   Fn.qfSectionLength = qfSectionLength;
   Fn.qfPendingCount = qfPendingCount;
   Fn.qfReset = qfReset;
@@ -814,7 +903,10 @@
   // Короткие алиасы и юниты для тестов/диагностики (боевой путь пользуется qf-именами).
   Fn.enqueueUserFiles = qfEnqueueUserFiles;
   Fn.sectionsFor = qfSectionsFor;
+  Fn.markerSectionsFor = qfMarkerSectionsFor;
+  Fn.attachTokensFor = qfAttachTokensFor;
   Fn.sectionLength = qfSectionLength;
+  Fn.countTokens = qfCountTokens;
   Fn.pendingCount = qfPendingCount;
   Fn.reset = qfReset;
   Fn.stats = qfStats;

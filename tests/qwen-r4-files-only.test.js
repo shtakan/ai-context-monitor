@@ -49,7 +49,7 @@ const FILE = {
   type: 'file',
   url: FILE_URL
 };
-const FILE_SECTION = '[FILE: PROTOCOL.md]';
+const FILE_SECTION = '[FILE: PROTOCOL.md — вложение; текст не включён в экспорт]';
 
 // ---- фикстуры измеренных форм -------------------------------------------------------
 function userNode(opts) {
@@ -240,7 +240,8 @@ describe('R4 A/F: пустой assistant с вложениями вопроса'
     expect(d.modelSlug).toBe(MODEL);
     expect(d.messages[0].text).toContain('[Вложение]');
     expect(d.messages[0].text).toContain(FILE_SECTION);
-    expect(d.messages[0].text).toContain('Step 1: keep the turn.');
+    expect(d.messages[0].text).not.toContain('Step 1: keep the turn.');
+    expect(d.attachTokens).toBeGreaterThan(0);
 
     const txt = txtOf(d);
     const md = mdOf(d);
@@ -319,7 +320,7 @@ describe('R4 C: сообщение только с вложением без о�
     expect(d.messages.map(function (m) { return m.role; })).toEqual(['user']);
     expect(d.messages[0].text).toContain('[Вложение]');
     expect(d.messages[0].text).toContain(FILE_SECTION);
-    expect(d.messages[0].text).toContain('Step 1: keep the turn.');
+    expect(d.messages[0].text).not.toContain('Step 1: keep the turn.');
     expect(mdOf(d)).not.toContain('### ASSISTANT');
   });
 
@@ -341,7 +342,7 @@ describe('R4 C: сообщение только с вложением без о�
     const d = lastEvent(st);
     expect(d.messages.filter(function (m) { return m.role === 'user'; })).toHaveLength(1);
     expect(d.messages.filter(function (m) { return m.role === 'assistant'; })).toHaveLength(0);
-    expect((d.text.match(/\[FILE: PROTOCOL\.md\]/g) || [])).toHaveLength(1);
+    expect((d.text.match(/\[FILE: PROTOCOL\.md — вложение/g) || [])).toHaveLength(1);
   });
 
   test('C/adoption: настоящий ответ забирает file-only заглушку, второй user-блок не появляется', async () => {
@@ -447,7 +448,8 @@ describe('R4 E: files[] ассистента не теряются', () => {
     expect(d.messages.map(function (m) { return m.role; })).toEqual(['user']);
     expect(d.messages[0].text).toContain('hi');
     expect(d.messages[0].text).toContain(FILE_SECTION);
-    expect(d.messages[0].text).toContain('Step 1: keep the turn.');
+    expect(d.messages[0].text).not.toContain('Step 1: keep the turn.');
+    expect(d.attachTokens).toBeGreaterThan(0);
     expect(mdOf(d)).not.toContain('### ASSISTANT');
   });
 });
