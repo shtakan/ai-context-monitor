@@ -637,7 +637,7 @@
       var used = qfCharsByChat[cid] || 0;
       var room = QF_TOTAL_CAP - used;
       if (room <= 0) {
-        item.result = { ok: false, reason: 'chat-cap', text: '' };
+        item.result = { ok: false, reason: 'chat-cap', text: '', tokens: item.result.tokens };
         ok = false;
       } else {
         var capped = qfCapText(item.result.text);
