@@ -55,7 +55,7 @@ function aiCmLoadArchiveTier(convId, reason) {
             }));
             debugLog('log', '[AI CM][archive-restore] dispatched convId=' + convId +
               ' msgs=' + rec.messages.length);
-          } catch (eD) { }
+          } catch (eD) { /* best-effort */ }
         }
         aiCmUpdateSourceIndicator();
       } catch (eInner) { swallowSoft(eInner, 'content:aiCmLoadArchiveTier'); }

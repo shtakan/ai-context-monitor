@@ -77,7 +77,7 @@ function aiCmPublishAfterMetric(host) {
             src: (typeof aiCmDiagStack === 'function') ? aiCmDiagStack(1) : ''
           });
         }
-      } catch (eO22d) { }
+      } catch (eO22d) { /* best-effort */ }
       if (histKey !== lastHistoryWroteKey) {
         lastHistoryWroteKey = histKey;
         // v54: trace записи экспорта — источник ВСЕГДА сеть текущего convId
@@ -94,7 +94,7 @@ function aiCmPublishAfterMetric(host) {
               histKey: histKey, sinceSpaResetMs: aiCmQwenSpaResetAt ? (Date.now() - aiCmQwenSpaResetAt) : -1
             });
           }
-        } catch (eQadN) { }
+        } catch (eQadN) { /* best-effort */ }
         try {
           // S2.3 (ADR-001, I4): частичность берём из ЕДИНОГО снимка — того же читателя,
           // что использует барьер автоэкспорта. typeof-гард: срез-песочницы без state.ts
@@ -192,7 +192,7 @@ function aiCmPublishAfterMetric(host) {
                 histKey: histKeyS24, sinceSpaResetMs: aiCmQwenSpaResetAt ? (Date.now() - aiCmQwenSpaResetAt) : -1
               });
             }
-          } catch (eQadA) { }
+          } catch (eQadA) { /* best-effort */ }
           var histSnapshotS24 = {
             host: window.location.hostname,
             convId: cidS24 || ((typeof aiCmHistoryConvId === 'function') ? aiCmHistoryConvId() : ''),

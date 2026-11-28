@@ -41,7 +41,7 @@ function aiCmProcessPrelude() {
         ' histWritePath=' + histWritePathS1 +
         ' adapter=' + adapterFlagS1);
     }
-  } catch (eS1) { }
+  } catch (eS1) { /* best-effort */ }
 
   // v2.0.31 (AI Studio): снапшот адаптера в sessionStorage на КАЖДОМ росте msgs.
   // Пик DOM (в замере — 6 реплик) живёт мгновение: лента схлопывается до 2 узлов, и

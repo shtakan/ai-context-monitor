@@ -182,6 +182,20 @@ declare function resolveCurrentModel(): string;
 declare function startObserving(): void;
 // 2.4 Stage 9: host-объект ручного экспорта живёт в core/content-manual-export.ts.
 declare function aiCmManualExportHost(sendResponse: (response?: unknown) => void): Record<string, any>;
+// 2.4 Stage 3–5: чистые policy-модули — classic-скрипты манифеста, не входят в
+// tsconfig include. tsc видит только вызовы из content.ts/content-autoexport.ts,
+// поэтому объявляем их ambient-формами (поведение не меняется).
+declare function resolveAutoExportSchedulePolicy(input: {
+  enabled: boolean;
+  percentage: number;
+}): { schedule: boolean };
+declare function resolveSnapshotPolicy(input: unknown): any;
+declare function resolveBadgePolicy(input: unknown): { draw: boolean; reason: string };
+declare function resolveThresholdPolicy(input: unknown): { send: boolean };
+declare function aiCmHandleManualExport(
+  sendResponse: (response?: unknown) => void,
+  host: Record<string, any>
+): void;
 declare function geminiParserVersion(): string;
 declare function getAccountIndex(): string;
 declare function geminiTapeKey(convId: string): string;

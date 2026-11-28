@@ -29,5 +29,5 @@ function aiCmLogMetricSource(host) {
         threadId: lastThreadId || ''
       });
     }
-  } catch (eMetricSrc) { }
+  } catch (eMetricSrc) { /* best-effort */ }
 }

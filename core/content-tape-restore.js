@@ -21,7 +21,7 @@ function aiCmProcessTapeRestore() {
       try {
         var m = location.pathname.match(/\/app\/(?!prompts(?:\/|$)|new(?:\/|$)|apikey(?:\/|$))([A-Za-z0-9_-]+)/);
         convId = m ? m[1] : '';
-      } catch (e) { }
+      } catch (e) { /* best-effort */ }
       if (convId) {
         // v82 (D8.2): диагностика фактического ключа load (времязависимый account index!)
         debugLog('log', '[AI CM][tape-restore] key=' + geminiTapeKey(convId));
@@ -114,7 +114,7 @@ function aiCmProcessTapeRestore() {
                 meta: entry.meta || {}
               })
             }));
-          } catch (e) { }
+          } catch (e) { /* best-effort */ }
           } // v82 (D9-A): конец else (дедуп dispatch)
           // v79: tape-restore применён — проверяем автоэкспорт при любом переходе полноты
           // (гейты внутри maybeAutoExport: not-complete → skip без fired, не вредит).
@@ -137,7 +137,7 @@ function aiCmProcessTapeRestore() {
                 // v2.0.29 (Xray/Firefox): detail — СТРОКОЙ JSON; MAIN разбирает её
                 // aiCmBridgeDetail (core/gemini-archive.js).
                 window.dispatchEvent(new CustomEvent('ai-cm-cache-refresh', { detail: JSON.stringify({ convId: convId }) }));
-              } catch (e2) { }
+              } catch (e2) { /* best-effort */ }
             }, 2000);
           }
         });
@@ -161,7 +161,7 @@ function aiCmProcessTapeRestore() {
       try {
         var mD8 = location.pathname.match(/\/app\/(?!prompts(?:\/|$)|new(?:\/|$)|apikey(?:\/|$))([A-Za-z0-9_-]+)/);
         cidD8 = mD8 ? mD8[1] : '';
-      } catch (eD8) { }
+      } catch (eD8) { /* best-effort */ }
       if (cidD8 && restoredTapeLoaded &&
           aiCmTapeAccountIdx[cidD8] !== undefined &&
           String(aiCmTapeAccountIdx[cidD8]) !== String(getAccountIndex())) {
@@ -172,5 +172,5 @@ function aiCmProcessTapeRestore() {
         restoredTapeLoaded = false; // следующий processAndSend повторит штатный restore
       }
     }
-  } catch (eD8b) { }
+  } catch (eD8b) { /* best-effort */ }
 }
