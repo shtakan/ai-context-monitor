@@ -37,6 +37,8 @@ live-хвосты Firefox/Chrome opt-out.
 - 2.3: 8 площадок PASS.
 - 2.4 smoke: Gemini, ChatGPT, Qwen, AI Studio, Claude, Perplexity, GSA — PASS.
 - PDF Chrome: PASS; PDF Firefox: PASS (pdf.js local fallback на Qwen после F5).
+- BUG-25 Chrome live: pending → F5 → auto restore → merge; opt-out
+  off/on проверен end-to-end 2026-11-28.
 - BYOK exact-off AI Studio / exact-on Gemini: PASS.
 - Диагностика AI Studio: PASS.
 
@@ -54,6 +56,6 @@ live-хвосты Firefox/Chrome opt-out.
   закрыто pending-assistant + live-tail журналом (BUG-25, CLOSED).
 - PDF Firefox: temporary add-on; профиль-копия `C:\Temp\firefox-aicm`.
 - Firefox: автоматический live-tail restore и opt-out live ещё не проверены
-  (unit-тесты и Chrome live есть).
+  (unit-тесты и Chrome live есть; Chrome opt-out подтверждён 2026-11-28).
 - Dependabot: 5 PR (eslint 10, globals 17.14, TS 7, jsdom 30, pdfjs 6) ждут
   rebase/проверки; мажорные требуют отдельного решения.
