@@ -265,6 +265,78 @@ describe('M-8: prune TTL истории — core/background.ts', () => {
   });
 });
 
+describe('BUG-25: sweep журнала live-tail — core/background.ts', () => {
+  const LIVE_TTL_MS = 86400000; // 24 часа
+
+  function liveTailFixture(now) {
+    return {
+      'aiCmLiveTail:qwen:old-chat': {
+        v: 1, site: 'qwen', chatId: 'old-chat', responseId: 'r-old',
+        answer: 'old', ts: now - 25 * 60 * 60 * 1000
+      },
+      'aiCmLiveTail:qwen:fresh-chat': {
+        v: 1, site: 'qwen', chatId: 'fresh-chat', responseId: 'r-fresh',
+        answer: 'fresh', ts: now - 60 * 60 * 1000
+      },
+      // без ts — форма не считается просроченной, не удаляем
+      'aiCmLiveTail:qwen:legacy-chat': { v: 1, site: 'qwen', chatId: 'legacy-chat', answer: 'legacy' },
+      // живая запись истории: её удаляет только aiCmPruneHistory по своим правилам
+      'aiCmHistory:fresh.example': { host: 'fresh.example', ts: now - DAY_MS },
+      // чужой префикс — live-tail sweep не читает
+      'aiCmState:old.example': { host: 'old.example', percent: 10 }
+    };
+  }
+
+  test('константа TTL = 24 часа и вызовы в onStartup/onInstalled', () => {
+    expect(LIVE_TTL_MS).toBe(86400000);
+    expect(BG_SRC).toContain('var AI_CM_LIVE_TAIL_TTL_MS = 86400000;');
+    const installed = BG_SRC.slice(BG_SRC.indexOf('chrome.runtime.onInstalled.addListener'), BG_SRC.indexOf('if (chrome.runtime.onStartup)'));
+    const startup = BG_SRC.slice(BG_SRC.indexOf('if (chrome.runtime.onStartup)'), BG_SRC.indexOf('chrome.runtime.onMessage.addListener'));
+    expect(installed).toContain('aiCmLiveTailPrune();');
+    expect(startup).toContain('aiCmLiveTailPrune();');
+  });
+
+  test('onStartup: старше 24 ч → удалена, свежая и без ts — живы, чужие ключи не тронуты', () => {
+    const now = Date.now();
+    const storage = makeStorage(liveTailFixture(now));
+    const bg = loadBackground(storage);
+
+    bg.listeners.startup[0]();
+
+    expect(storage.removed).toEqual(['aiCmLiveTail:qwen:old-chat']);
+    expect(storage.store['aiCmLiveTail:qwen:fresh-chat']).toBeTruthy();
+    expect(storage.store['aiCmLiveTail:qwen:legacy-chat']).toBeTruthy();
+    expect(storage.store['aiCmHistory:fresh.example']).toBeTruthy();
+    expect(storage.store['aiCmState:old.example']).toBeTruthy();
+    expect(bg.logsText()).toContain('[AI CM][live-tail] sweep removed=1');
+  });
+
+  test('onInstalled: тот же sweep-контур', () => {
+    const now = Date.now();
+    const storage = makeStorage(liveTailFixture(now));
+    const bg = loadBackground(storage);
+
+    bg.listeners.installed[0]();
+
+    expect(storage.removed).toEqual(['aiCmLiveTail:qwen:old-chat']);
+    expect(storage.store['aiCmLiveTail:qwen:fresh-chat']).toBeTruthy();
+    expect(bg.logsText()).toContain('[AI CM][live-tail] sweep removed=1');
+  });
+
+  test('просрочки нет → removed=0, remove не вызывается', () => {
+    const now = Date.now();
+    const storage = makeStorage({
+      'aiCmLiveTail:qwen:fresh-chat': { v: 1, site: 'qwen', chatId: 'fresh-chat', answer: 'x', ts: now - 1000 }
+    });
+    const bg = loadBackground(storage);
+
+    bg.listeners.startup[0]();
+
+    expect(storage.removed).toEqual([]);
+    expect(bg.logsText()).toContain('[AI CM][live-tail] sweep removed=0');
+  });
+});
+
 describe('M-8: запись истории несёт ts — core/content.ts', () => {
   test('все per-host записи идут через aiCmHostHistoryRecord (3 точки)', () => {
     const writes = CONTENT_SRC.match(

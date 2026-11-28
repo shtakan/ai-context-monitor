@@ -511,6 +511,7 @@ chrome.runtime.onInstalled.addListener(() => {
     showPercentage: true
   });
   aiCmPruneHistory(); // M-8: TTL per-host истории — чистка при установке/обновлении
+  aiCmLiveTailPrune(); // BUG-25: sweep просроченного журнала live-tail
   aiCmMigrateByokToSession(); // M-7: plaintext-ключ BYOK из local → session (и стирание с диска)
   ensureInterceptor();
 });
@@ -518,6 +519,7 @@ chrome.runtime.onInstalled.addListener(() => {
 if (chrome.runtime.onStartup) {
   chrome.runtime.onStartup.addListener(() => {
     aiCmPruneHistory(); // M-8: TTL per-host истории — чистка при старте браузера
+    aiCmLiveTailPrune(); // BUG-25: sweep просроченного журнала live-tail
     aiCmMigrateByokToSession(); // M-7: plaintext-ключ BYOK из local → session (и стирание с диска)
     ensureInterceptor();
   });
@@ -1188,6 +1190,48 @@ function aiCmPruneHistory() {
     });
   } catch (e2) {
     aiCmDiagWarn('background:pruneHistory', '[AI CM][storage] prune error:', e2);
+  }
+}
+
+// BUG-25: sweep журнала live-tail (aiCmLiveTail:<site>:<convId>).
+// Content-скрипт Qwen пишет запись на ход и удаляет её при чтении текущего
+// чата, opt-out и финализации. Записи чатов, которые больше не открывались,
+// остаются навсегда — здесь чистим всё старше 24 ч на старте/обновлении.
+// Запись без ts (чужая/старая форма) не трогаем: оснований считать её
+// просроченной нет. Префикс с двоеточием не пересекается с aiCmHistory:*.
+var AI_CM_LIVE_TAIL_TTL_MS = 86400000; // 24 часа
+var AI_CM_LIVE_TAIL_KEY_PREFIX = 'aiCmLiveTail:';
+
+function aiCmLiveTailEntryStale(rec: Record<string, unknown> | null | undefined, now: number): boolean {
+  var ts = (rec && typeof rec.ts === 'number') ? rec.ts : null;
+  if (ts == null) return false;
+  return (now - ts) > AI_CM_LIVE_TAIL_TTL_MS;
+}
+
+function aiCmLiveTailPrune() {
+  try {
+    if (!chrome.storage || !chrome.storage.local || typeof chrome.storage.local.get !== 'function') return;
+    chrome.storage.local.get(null, function (all: Record<string, unknown>) {
+      try {
+        var now = Date.now();
+        var stale: string[] = [];
+        var keys = (all && typeof all === 'object') ? Object.keys(all) : [];
+        for (var i = 0; i < keys.length; i++) {
+          var key = keys[i];
+          if (key.indexOf(AI_CM_LIVE_TAIL_KEY_PREFIX) !== 0) continue;
+          if (aiCmLiveTailEntryStale(all[key] as Record<string, unknown>, now)) stale.push(key);
+        }
+        if (!stale.length) { console.log('[AI CM][live-tail] sweep removed=0'); return; }
+        if (typeof chrome.storage.local.remove !== 'function') return;
+        chrome.storage.local.remove(stale, function () {
+          console.log('[AI CM][live-tail] sweep removed=' + stale.length);
+        });
+      } catch (e) {
+        aiCmDiagWarn('background:liveTailPrune', '[AI CM][live-tail] sweep error:', e);
+      }
+    });
+  } catch (e2) {
+    aiCmDiagWarn('background:liveTailPrune', '[AI CM][live-tail] sweep error:', e2);
   }
 }
 
