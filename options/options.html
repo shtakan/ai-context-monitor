@@ -229,6 +229,12 @@
           <label for="aiCmIncludeHiddenInExport" data-i18n="options_export_hidden_label">Включать reasoning и инъекции соседних расширений (DeepSeek++, Better DeepSeek) в экспорт</label>
         </div>
         <span class="hint" data-i18n="options_export_hidden_hint">Выключено: в файл попадают только вопросы и ответы, без размышлений и инъекций соседних расширений (DeepSeek++, Better DeepSeek). Включено: размышления и инъекции попадают в экспорт.</span>
+        <!-- BUG-25 follow-up: opt-out локального журнала последнего live-ответа Qwen. -->
+        <div class="checkbox-row export-hidden-row">
+          <input type="checkbox" id="aiCmLiveTail" checked title="Локальный журнал последнего live-ответа Qwen; по умолчанию включён" data-i18n-title="options_live_tail_title">
+          <label for="aiCmLiveTail" data-i18n="options_live_tail_label">Восстанавливать последний ответ после перезагрузки (Qwen)</label>
+        </div>
+        <span class="hint" data-i18n="options_live_tail_hint">Хранит только последний завершённый ответ Qwen в chrome.storage.local (TTL 24 ч, до 256 КБ, без URL и вложений). Выключено — журнал не пишется и не читается, сохранённые записи удаляются.</span>
         <span class="hint" id="export-hint" data-i18n="options_open_supported_site">Откройте поддерживаемый сайт</span>
       </div>
 

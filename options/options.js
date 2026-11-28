@@ -400,6 +400,37 @@ try {
   });
 } catch (eHiddenSync) { aiCmPopupDiagLine('hidden-sync', { err: String(eHiddenSync) }); }
 
+// BUG-25 follow-up: opt-out локального журнала live-tail Qwen (по умолчанию ВКЛ).
+// Ключ aiCmLiveTailEnabled читает core/content-archive.js; при выключении
+// удаляем все накопленные записи aiCmLiveTail:*.
+const liveTailCheckbox = /** @type {HTMLInputElement|null} */ (document.getElementById('aiCmLiveTail'));
+function aiCmLiveTailRemoveAll() {
+  try {
+    chrome.storage.local.get(null, function (all) {
+      try {
+        var keys = Object.keys(all || {}).filter(function (k) { return k.indexOf('aiCmLiveTail:') === 0; });
+        if (keys.length) chrome.storage.local.remove(keys);
+      } catch (eKeys) { aiCmPopupDiagLine('live-tail-clear', { err: String(eKeys) }); }
+    });
+  } catch (eClear) { aiCmPopupDiagLine('live-tail-clear', { err: String(eClear) }); }
+}
+chrome.storage.local.get(['aiCmLiveTailEnabled'], function (data) {
+  if (liveTailCheckbox) liveTailCheckbox.checked = !(data && data.aiCmLiveTailEnabled === false);
+});
+liveTailCheckbox && liveTailCheckbox.addEventListener('change', function () {
+  chrome.storage.local.set({ aiCmLiveTailEnabled: liveTailCheckbox.checked });
+  if (!liveTailCheckbox.checked) aiCmLiveTailRemoveAll();
+});
+try {
+  chrome.storage.onChanged.addListener(function (changes, areaName) {
+    if (areaName !== 'local') return;
+    if (changes.aiCmLiveTailEnabled && liveTailCheckbox) {
+      liveTailCheckbox.checked = changes.aiCmLiveTailEnabled.newValue !== false;
+      if (liveTailCheckbox.checked === false) aiCmLiveTailRemoveAll();
+    }
+  });
+} catch (eLiveTailSync) { aiCmPopupDiagLine('live-tail-sync', { err: String(eLiveTailSync) }); }
+
 // Фаза B: проактивные пороги (aiCmProactive / aiCmProactiveNotify, chrome.storage.local).
 // Дефолты: aiCmProactive = ON, aiCmProactiveNotify = OFF.
 const proactiveCheckbox = /** @type {HTMLInputElement|null} */ (document.getElementById('aiCmProactive'));

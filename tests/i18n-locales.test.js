@@ -1302,8 +1302,8 @@ describe('M-4.4: локализация privacy/privacy.html и docs/index.html'
       //   options_context_saturated (+2, словарь 281).
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('privacy_') === 0; }).length).toBe(87);
       expect(Object.keys(ru).filter(function (k) { return k.indexOf('docs_') === 0; }).length).toBe(43);
-      expect(Object.keys(ru).length).toBe(281);
-      expect(Object.keys(en).length).toBe(281);
+      expect(Object.keys(ru).length).toBe(284);
+      expect(Object.keys(en).length).toBe(284);
     });
 
     test('ru-значения M-4.4 байтово равны тексту разметки, en — перевод без кириллицы', () => {

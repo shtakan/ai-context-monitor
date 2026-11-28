@@ -22,22 +22,31 @@ const KEY = 'aiCmLiveTail:qwen:' + CHAT_ID;
 let store;
 let restoreEvents;
 let api;
+let settingHandlers;
 
 beforeAll(function () {
   jest.useFakeTimers();
   store = {};
   restoreEvents = [];
+  settingHandlers = [];
   const fakeChrome = {
     storage: {
       local: {
         set: function (obj, cb) { Object.assign(store, obj); if (cb) cb(); },
         get: function (keys, cb) {
           const out = {};
-          const list = Array.isArray(keys) ? keys : [keys];
+          const list = Array.isArray(keys) ? keys : (keys === null ? Object.keys(store) : [keys]);
           for (const k of list) if (Object.prototype.hasOwnProperty.call(store, k)) out[k] = store[k];
           cb(out);
         },
-        remove: function (key, cb) { delete store[key]; if (cb) cb(); }
+        remove: function (key, cb) {
+          const list = Array.isArray(key) ? key : [key];
+          for (const k of list) delete store[k];
+          if (cb) cb();
+        }
+      },
+      onChanged: {
+        addListener: function (fn) { settingHandlers.push(fn); }
       }
     },
     runtime: { lastError: null }
@@ -145,5 +154,33 @@ describe('BUG-25 live-tail journal: chrome.storage.local', () => {
     store[KEY] = liveTurn({ chatId: 'other-chat' });
     window.dispatchEvent(new window.CustomEvent('ai-cm-qwen-live-tail-request'));
     expect(restoreEvents).toHaveLength(0);
+  });
+
+  test('opt-out: false останавливает save/restore и удаляет текущую запись', function () {
+    window.dispatchEvent(new window.CustomEvent('ai-cm-qwen-live-tail', {
+      detail: JSON.stringify(liveTurn())
+    }));
+    expect(store[KEY]).toBeTruthy();
+
+    settingHandlers.forEach(function (fn) {
+      fn({ aiCmLiveTailEnabled: { newValue: false } }, 'local');
+    });
+    expect(store[KEY]).toBeUndefined();
+
+    window.dispatchEvent(new window.CustomEvent('ai-cm-qwen-live-tail', {
+      detail: JSON.stringify(liveTurn())
+    }));
+    expect(store[KEY]).toBeUndefined();
+
+    window.dispatchEvent(new window.CustomEvent('ai-cm-qwen-live-tail-request'));
+    expect(restoreEvents).toHaveLength(0);
+
+    settingHandlers.forEach(function (fn) {
+      fn({ aiCmLiveTailEnabled: { newValue: true } }, 'local');
+    });
+    window.dispatchEvent(new window.CustomEvent('ai-cm-qwen-live-tail', {
+      detail: JSON.stringify(liveTurn())
+    }));
+    expect(store[KEY]).toBeTruthy();
   });
 });

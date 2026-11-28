@@ -74,6 +74,30 @@ function aiCmLoadArchiveTier(convId, reason) {
 var AI_CM_LIVE_TAIL_PREFIX = 'aiCmLiveTail:';
 var AI_CM_LIVE_TAIL_TTL_MS = 24 * 60 * 60 * 1000;
 var AI_CM_LIVE_TAIL_MAX_CHARS = 256 * 1024;
+// Opt-out (options UI): default ON. undefined/true — журнал работает,
+// false — не пишем/не читаем и удаляем текущую запись.
+var aiCmLiveTailEnabled = true;
+
+function aiCmLiveTailApplySetting(value) {
+  aiCmLiveTailEnabled = !(value === false);
+}
+try {
+  if (chrome && chrome.storage && chrome.storage.local) {
+    chrome.storage.local.get(['aiCmLiveTailEnabled'], function (data) {
+      try { aiCmLiveTailApplySetting(data && data.aiCmLiveTailEnabled); }
+      catch (eReadSetting) { swallowSoft(eReadSetting, 'content:liveTailSetting-read'); }
+    });
+    if (chrome.storage.onChanged && typeof chrome.storage.onChanged.addListener === 'function') {
+      chrome.storage.onChanged.addListener(function (changes, areaName) {
+        try {
+          if (areaName !== 'local' || !changes || !changes.aiCmLiveTailEnabled) return;
+          aiCmLiveTailApplySetting(changes.aiCmLiveTailEnabled.newValue);
+          if (!aiCmLiveTailEnabled) aiCmLiveTailRemove(aiCmLiveTailConvId());
+        } catch (eSettingChange) { swallowSoft(eSettingChange, 'content:liveTailSetting-change'); }
+      });
+    }
+  }
+} catch (eLiveTailSetting) { swallowSoft(eLiveTailSetting, 'content:liveTailSetting'); }
 
 function aiCmLiveTailSite() {
   try {
@@ -94,6 +118,7 @@ function aiCmLiveTailParse(detail) {
 }
 function aiCmLiveTailSave(detail) {
   try {
+    if (!aiCmLiveTailEnabled) return;
     var d = aiCmLiveTailParse(detail);
     if (!d || typeof d !== 'object') return;
     var site = String(d.site || aiCmLiveTailSite());
@@ -126,6 +151,7 @@ function aiCmLiveTailSave(detail) {
 }
 function aiCmLiveTailRestore() {
   try {
+    if (!aiCmLiveTailEnabled) return;
     var site = aiCmLiveTailSite();
     if (site !== 'qwen') return;
     var convId = aiCmLiveTailConvId();
@@ -169,6 +195,17 @@ function aiCmLiveTailClear(detail) {
       } catch (eClearCb) { swallowSoft(eClearCb, 'content:liveTailClear-cb'); }
     });
   } catch (eClear) { swallowSoft(eClear, 'content:liveTailClear'); }
+}
+// Opt-out: удалить запись текущего чата безусловно (нельзя сверить responseId —
+// пользователь выключил журнал, а не финализировал конкретный ход).
+function aiCmLiveTailRemove(convId) {
+  try {
+    var site = aiCmLiveTailSite();
+    if (site !== 'qwen') return;
+    var cid = String(convId || aiCmLiveTailConvId());
+    if (!cid) return;
+    chrome.storage.local.remove(aiCmLiveTailKey(site, cid));
+  } catch (eRemove) { swallowSoft(eRemove, 'content:liveTailRemove'); }
 }
 
 try {

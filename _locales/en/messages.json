@@ -281,6 +281,15 @@
   "options_export_hidden_hint": {
     "message": "Off: only questions and answers go into the file, without reasoning or injections of neighboring extensions (DeepSeek++, Better DeepSeek). On: reasoning and injections go into the export."
   },
+  "options_live_tail_label": {
+    "message": "Restore the last answer after reload (Qwen)"
+  },
+  "options_live_tail_title": {
+    "message": "Local journal of the last Qwen live answer; enabled by default"
+  },
+  "options_live_tail_hint": {
+    "message": "Stores only the last completed Qwen answer in chrome.storage.local (24 h TTL, up to 256 KB, no URLs or attachments). Off — the journal is neither written nor read, and saved records are removed."
+  },
   "options_archive_legend": {
     "message": "Archives (first history tier)"
   },
